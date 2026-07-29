@@ -7,7 +7,8 @@
  *  ② 按优先序解析：装了谁用谁，优先序换一下就换后端，**不改任何调用点**；
  *  ③ 一个都没装 → `undefined`（partial activation 的「没装就没有」，不是残废降级）；
  *  ④ `mountMemoryAdapter` 不传 `store` 时回落到默认树后端，且每个动词逐字转发 → 行为零变化；
- *  ⑤ 传 `store` 且解析到 `memory-files` 时，capture / recall 两端口确实落到文件后端。
+ *  ⑤ 传 `store` 且解析到 `memory-files` 时，capture / recall 两端口确实落到文件后端；
+ *  ⑥ **角色门（批二）**：`derived-index` 角色的后端**不会**被解析成权威后端，派生索引另有解析口。
  */
 
 import assert from 'node:assert/strict'
@@ -16,6 +17,7 @@ import { KernelModuleHost } from '@velaros-ai/core/kernel/host'
 
 import { createMemoryFilesBackend, MemoryFilesBackendId } from '../files'
 import { createInMemoryMemoryFilesIo } from '../files/Io'
+import { createMemoryVectorBackend, MemoryVectorBackendId } from '../vector'
 import {
   createMemoryTreeStoreBackend,
   type MemoryDomain,
@@ -29,11 +31,12 @@ import {
   listRegisteredMemoryStoreBackends,
   memoryStoreCapabilityId,
   MemoryStoreCapabilityNamespace,
+  resolveMemoryDerivedIndexBackends,
   resolveMemoryStoreBackend,
 } from './MemoryStoreCapability'
 import { mountMemoryAdapter } from './mount'
 
-const ExpectedAssertionCount = 32
+const ExpectedAssertionCount = 37
 let assertionCount = 0
 
 function check(ok: unknown, message: string): asserts ok {
@@ -288,10 +291,50 @@ async function probeFilesRouting(): Promise<void> {
   await host.dispose()
 }
 
+// ── ⑥ 角色门:派生索引永远当不成权威后端 ────────────────────────────────────
+async function probeDerivedIndexRoleGate(): Promise<void> {
+  const filesBackend = createFilesBackend()
+  const vectorBackend = createMemoryVectorBackend({
+    embedder: {
+      identity: 'probe:none',
+      dimensions: 1,
+      // 角色门在解析期就判完了,一次嵌入都不会发生。
+      embed: () => Promise.reject(new Error('unreachable')),
+    },
+  })
+
+  const host = new KernelModuleHost({ apiVersion: 1 })
+  host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
+  host.registerModule(createMemoryStoreKernelModule({ backend: vectorBackend }))
+  await host.start()
+
+  equal(
+    listRegisteredMemoryStoreBackends(host, ['files', 'vector']).length,
+    2,
+    '权威档与派生档并存注册(叠加语义的前提)',
+  )
+  equal(
+    resolveMemoryStoreBackend({ registry: host, preference: ['vector', 'files'] })?.descriptor.id,
+    MemoryFilesBackendId,
+    '权威解析跳过派生索引,哪怕优先序里点名了它',
+  )
+  equal(
+    resolveMemoryStoreBackend({ registry: host, preference: ['vector'] }),
+    undefined,
+    '只有派生索引在册 = 没有权威层 = 缺席(而不是拿不持内容的索引冒充权威)',
+  )
+  const derivedBackends = resolveMemoryDerivedIndexBackends(host, ['files', 'vector'])
+  equal(derivedBackends.length, 1, '派生解析只收 derived-index 角色')
+  equal(derivedBackends[0].descriptor.id, MemoryVectorBackendId, '解析到 vector')
+
+  await host.dispose()
+}
+
 await probeTokenShape()
 await probeRegistryResolution()
 await probeDefaultFallback()
 await probeFilesRouting()
+await probeDerivedIndexRoleGate()
 
 assert.equal(
   assertionCount,

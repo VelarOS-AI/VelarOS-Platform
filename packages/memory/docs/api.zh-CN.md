@@ -20,6 +20,11 @@ npm install @velaros-ai/memory
 
 - `@velaros-ai/memory`：运行时、领域类型、scope、工具契约。
 - `@velaros-ai/memory/contracts`：浏览器安全的纯类型领域 DTO。
+- `@velaros-ai/memory/backend`：实现无关的后端窄动词端口 `MemoryStoreBackend`、派生索引契约
+  与叠加编排 `createLayeredMemoryStoreBackend`。
+- `@velaros-ai/memory/files`：bundled 默认档 `memory-files`（权威层；宿主注入路径与文件 IO）。
+- `@velaros-ai/memory/vector`：**市场可选**档 `memory-vector`（派生索引；宿主注入嵌入端口与索引存储）。
+  不在 bundled 恒装清单里——新用户开箱 files-only，装了才有语义召回，卸了只掉索引。
 - `@velaros-ai/memory/cli`：命令行入口。
 
 不应从 `dist/` 或源码目录深层导入。

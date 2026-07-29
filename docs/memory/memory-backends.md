@@ -5,7 +5,8 @@
 > 判决与边界以那两处为准；**本文只记 Platform 仓里判决落到了哪些文件、留了哪些接缝**。
 > 冲突时以上游为准，改本文。
 >
-> 日期：2026-07-29 · 状态：**批一已落地**（端口收口 + `memory-files` 默认后端）
+> 日期：2026-07-30 · 状态：**批一 + 批二已落地**（端口收口 + `memory-files` 默认后端 +
+> `memory-vector` 可选派生索引 + 叠加编排）
 
 ## 一句话
 
@@ -56,14 +57,18 @@ SQLite FTS + 树路径。包清单里的 `@lancedb/lancedb` 只服务 `src/knowl
 （工作区知识域，按 kernel-contract §8 不在本次后端判决范围内），`check:memory-boundaries`
 机械禁止主干与 adapter-kernel 触达它。
 
-因此 §15.7 裁决三「向量层降位为派生索引」在记忆域是**批二要新建**的 `memory-vector`，
-不是要拆掉某段现存代码。批一只在两处留了接缝注释与 `TODO(批二)`：
+因此 §15.7 裁决三「向量层降位为派生索引」在记忆域是**批二新建**的 `memory-vector`，
+不是拆掉某段现存代码。批一留的两处 `TODO(批二)` 接缝**已在批二清除**，落点如下：
 
-| seam | 位置 | 批二要做什么 |
+| seam | 批一留在哪 | 批二的真身 |
 | --- | --- | --- |
-| **双写** | `MemoryStoreBackend.captureBatch` 文档 | 权威后端先落地，派生索引再消费同一批 input；派生写失败不回滚权威写入 |
-| **并联** | `MemoryStoreBackend.recall` 文档 | 语义命中回权威后端取全文；索引只持指针与向量，不持内容副本 |
-| **角色** | `MemoryBackendRole = 'authority' \| 'derived-index'` | vector 以 `derived-index` 入场；卸载只删索引 |
+| **双写** | `MemoryStoreBackend.captureBatch` 文档 | `backend/Layered.ts` — 权威层先落地，派生层消费落地**结果**（`MemoryEvidenceRecord` 才带指针）；派生写失败只记诊断 |
+| **并联** | `MemoryStoreBackend.recall` 文档 | 同上 — 语义命中回权威层 `getItem` 取全文；孤儿当场剔除并异步清理 |
+| **角色** | `MemoryBackendRole` | `vector` 以 `derived-index` 入场；`resolveMemoryStoreBackend` 加了**角色门**（权威解析一律跳过派生索引） |
+
+**这道门为什么必须有**：派生索引不持内容。它被当权威层用 = 用户以为记忆写进去了、其实什么都没存。
+角色门把「只装了 vector 没装 files」变成「没有权威层 → 缺席」，而不是静默丢数据；`memory-vector`
+自己的 `capture` 是第二道门（当场抛错，不返回一个安静的 `inserted: false`）。
 
 ## 二、token / 契约的安身处与判据
 
@@ -128,6 +133,99 @@ id: … · scope: … · stableKey: … · source: … · status: active · crea
   「没装就没有」，不是降级分支。
 - **零宿主假设**：目录路径与文件 IO 全部注入；包内不认识 userData，也不认识仓根。
 
+## 三·二、`memory-vector` API 面（批二）
+
+入口：`@velaros-ai/memory/vector`（**不在 bundled 恒装清单里**——新用户开箱 files-only，§九 9.6）
+
+```ts
+createMemoryVectorBackend({
+  embedder,            // MemoryEmbedder，宿主注入(BYOK):{ identity, dimensions, embed(texts) }
+  store,               // MemoryVectorIndexStore;缺省纯内存,持久化用 createFileVectorIndexStore
+  embedBatchSize,      // 默认 64
+  minimumSimilarity,   // 默认 0.2(地板以下不如空手)
+}): MemoryDerivedIndexBackend
+```
+
+### 存储选型裁决（依赖剖面）
+
+**落在注入的文本 IO 上（一份 base64 Float32 索引文件）+ 内存暴力余弦**，不是 LanceDB、不是 sqlite-vec：
+
+| 候选 | 判据 | 结论 |
+| --- | --- | --- |
+| LanceDB | `check:memory-boundaries` **机械禁止** Memory 主干 import `@lancedb/lancedb` / `apache-arrow`（那是 knowledge 切片的）。为向量索引松这道门 = 把 §九「把向量库请出记忆默认档」反着做一遍 | 否 |
+| sqlite-vec | 一条**新的平台原生依赖**。派生索引必须装得起也卸得掉，成本落在所有用户身上而收益只落在装了它的人身上 | 否 |
+| 文件 + 暴力余弦 | 个人记忆是 10²–10³ 条（权威层是一堆 markdown），不是代码库索引。1000 条 × 1536 维余弦是几毫秒；ANN 在这个量级买的是复杂度不是速度 | **取** |
+
+**这不构成锁死**：检索与存储隔在 `MemoryVectorIndexStore` 端口后，换 ANN 库只换那一格实现，
+后端与契约一行不动。落盘文件是纯派生物——格式随时可换（版本戳对不上就整份重建），因此它
+不需要宽容解析、不需要迁移器；权威层那三条硬要求（人可读 / 可手改 / 可 diff）在这里一条都不适用。
+
+### 派生索引语义的机械化（`backend/DerivedIndex.ts`）
+
+§九 9.2 / 9.4 的产品判决在这里变成可调用、可探针的动词，而不是实现者的自觉：
+
+| 判决 | 机械落点 |
+| --- | --- |
+| 索引只持指针与向量，不持内容副本 | `MemoryVectorIndexRecord` 只有 `{ id, scopeType, scopeId, updatedAt, vector }`；探针断言序列化后的索引里搜不到任何正文 |
+| 重建代替迁移（schema / 嵌入模型变更） | `MemoryDerivedIndexVersion = { schema, embedding }` + `isStale()`；两段分开是因为它们由不同的人改动（包作者 vs 用户换模型） |
+| 卸载只删派生数据 | `dropIndex()` **签名上就够不着权威层**；探针比对卸载前后权威 markdown 逐字节未变 |
+| 不吃原始证据 | `descriptor.verbs` **不声明 `capture`** → `supportsMemoryBackendVerb(vector,'capture') === false` 机械可查；`indexEvidence(records)` 才是双写的第二写 |
+| 全量重建的枚举 | `MemoryAuthorityEnumeration` 独立端口（**不进窄端口六动词面**）；`memory-files` 结构上自带 `listAll()`，装上索引即可重建，宿主不必再注入 |
+
+**为什么不用 `recall('')` 当枚举**：普通召回有 `limit` 与「按需全文」上限（一次最多读 24 份），
+那是**性能承诺**不是缺陷。拿它当枚举会重建出一份看起来在工作的残缺索引——残缺索引比没有索引更坏。
+
+### 叠加编排（`backend/Layered.ts`）
+
+```ts
+const store = createLayeredMemoryStoreBackend({
+  authority: filesBackend,          // 权威层恒在
+  derived: [vectorBackend],         // 派生层可摘,可零个
+  onDerivedFailure: (f) => log(f),  // 派生失败只进诊断
+})
+```
+
+- **capture 双写**：`authority.captureBatch()` 先落地 → 把返回的 `MemoryEvidenceRecord[]` 交派生层。
+  吃落地结果而不是原始 input，是因为**只有权威层能分配指针**；也因此不需要按下标去配对 input 与结果。
+- **recall 并联**：词法一路（权威层）+ 语义一路（派生层指针 → `authority.getItem` 回捞全文），
+  **交错合并**而不是按分数排序——索引行匹配分与余弦相似度不在一个量纲上，把它们放进一个 `sort`
+  是在编造一个没人定义过的可比性。交错保住了「装了 vector 只会变好，不会把词法命中挤没」。
+- **孤儿**：权威层认不出的指针不进结果，并被异步清出索引。这一条同时覆盖「权威层删了这条」与
+  「派生层指针来自别的 id 空间」——后者不值得写第二套逻辑，让它退化成「派生层零贡献」正是缺席时的既定行为。
+- **身份**：叠加**不产生第三个后端**，`descriptor.id` 就是权威层的 id；派生层只在 `inspect().details`
+  里以 `derived:<id>` / `derived:<id>:stale` 露面。
+
+### mod 化包装样例
+
+后端经既有 token 族注册，**零轴变更**（§九 9.3）——`velaros.mod.json` 里没有任何记忆专属字段：
+
+```json
+{
+  "module": {
+    "id": "velaros.memory-vector",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "provides": [{ "id": "velaros.memory.store.vector", "version": "1.0.0" }],
+    "requires": [],
+    "permissions": ["memory:read", "memory:write"],
+    "isolation": "in-process",
+    "entry": "./index.js"
+  },
+  "agent": {
+    "id": "velaros.memory-vector",
+    "version": "1.0.0",
+    "manifestSchemaVersion": 1,
+    "engines": { "velaros": "^1.0.0", "agent": "^1.0.0" },
+    "trust": "bundled-official",
+    "contributes": {}
+  }
+}
+```
+
+entry 里做的就是 `createMemoryStoreKernelModule({ backend: createMemoryVectorBackend({ embedder, store }) })`
+——**与 `memory-files` 用的是同一个工厂**。「默认已注册后端」和「市场装的后端」在注册路径上没有第二套机制，
+这正是 §九「零轴变更」要检验的东西。
+
 ## 四、宿主接入点清单（批三要用）
 
 批一**没有改动任何宿主**（Desktop 仍走默认树后端，行为零变化）。批三迁移权威层时要动的位置：
@@ -141,6 +239,8 @@ id: … · scope: … · stableKey: … · source: … · status: active · crea
 | ⑤ | 默认 files-only 开关位 | `configService.systemConfig.memory.*`（`memory.enabled` / `backgroundGrowth` / `capture.*` 已在此） | 新增后端优先序配置项；新用户开箱 `['files']`，装了 vector 后 `['files','vector']`（§九 9.6） |
 | ⑥ | 诊断面 | 记忆设置页 / `memory/Ipc.ts` | 展示 `adapter.storeDescriptor` 与 `listRegisteredMemoryStoreBackends(...)`（「装了哪些记忆后端」） |
 | ⑦ | 树档治理面 | `MemoryService`（warmup / Dream 调度 / 树版本 / 完整性校验） | files-only 宿主不该被迫开 SQLite 记忆树 → `mount` 的 `domain` 需改可选（已在代码里留 `TODO(批三)`） |
+| ⑧ | **派生索引装配**（批二产出） | 同 ① / ② | 装了 vector mod 时：`resolveMemoryDerivedIndexBackends(host, ['vector'])` → `createLayeredMemoryStoreBackend({ authority, derived })`，把结果当 `store` 用。没装 = `derived: []` = 与纯权威层逐字等价 |
+| ⑨ | **嵌入端口实现**（批二产出） | 宿主模型层（BYOK 的嵌入模型选择已在 Desktop 侧） | 实现 `MemoryEmbedder`：`identity` 必须包含 provider + 模型 + 维度（它进版本戳，换模型即重建）；索引存储用 `createFileVectorIndexStore({ io: createNodeMemoryFilesIo(), directory })`，目录独立于权威层目录，卸载即整目录可删 |
 
 Workbench 侧同理，唯一差别是项目根天然可得，全局面按其 userData 约定注入。
 
@@ -151,16 +251,18 @@ Workbench 侧同理，唯一差别是项目根天然可得，全局面按其 use
 | `check:memory-boundaries` | `scripts/memory/checkProductBoundaries.mjs` | 三切片方向矩阵：主干不得触达 knowledge / adapter-kernel；适配器不得触达 knowledge；全切片宿主无关 |
 | `check:core-semantic-vocabulary` | `scripts/core/check-semantic-vocabulary.mjs` | 内核本体出现 `memory` 一词即红（token 因此不能住 core） |
 | `probe:files`（70 断言） | `packages/memory/src/files/memory-files-probe.ts` | 写入→索引→召回往返（含按需全文/幂等）、宽容 frontmatter、双作用域（含只读根与动态根）、归档语义、后端自述 |
-| `probe:store-capability`（32 断言） | `packages/memory/src/adapter-kernel/memory-store-capability-probe.ts` | token 族形状、两档并存注册、优先序切换、缺席与版本不匹配、默认回落的逐字转发、解析到 files 时两端口确实改道 |
+| `probe:vector`（56 断言） | `packages/memory/src/vector/memory-vector-probe.ts` | 后端自述与「不吃原始证据」、双写（含索引无内容副本 / 向量已归一）、派生层炸了不影响权威层、并联回捞全文、孤儿清理、rebuild 幂等 + 版本戳、换嵌入模型即过期、**卸载零损失**（权威 markdown 逐字节未变）、索引落盘往返 |
+| `probe:store-capability`（37 断言） | `packages/memory/src/adapter-kernel/memory-store-capability-probe.ts` | token 族形状、两档并存注册、优先序切换、缺席与版本不匹配、默认回落的逐字转发、解析到 files 时两端口确实改道、**派生索引角色门**（vector 当不成权威后端 + 派生解析口） |
 
-两条探针均为**构造级**（bun 直驱，IO 注入，不落真实文件、不开 SQLite），已挂进
-根 `probe:memory` → `check:gates` → `bun run check`。
+三条探针均为**构造级**（bun 直驱，IO 与嵌入端口注入，不落真实文件、不开 SQLite、不发一次网络请求），
+已挂进根 `probe:memory` → `check:gates` → `bun run check`。
 
 ## 六、批次进度（对齐 §九 9.7）
 
 - **P0'** 判决并入文档 —— 已完成（上游两文 + 本文）。
 - **批一** `memory-files` 落地 + 端口收窄 —— **本批完成**。
-- **批二** `memory-vector` 作为市场 mod —— 就绪：token 族、`derived-index` 角色、双写/并联 seam
-  与「未注册即缺席」语义均已在位；`resolveMemoryStoreBackend({preference:['vector']})` 现在返回
-  `undefined` 并有探针锁住。批二只需新增一个后端实现 + 叠加编排，**不需要再改端口形状**。
+- **批二** `memory-vector` 作为市场 mod —— **本批完成**：`./vector` 切片（后端 + 两种索引存储）、
+  `backend/DerivedIndex.ts`（派生索引语义机械化）、`backend/Layered.ts`（双写 + 并联）、
+  权威解析的角色门、`probe:vector`。窄端口形状**一行未改**——判决说的「不需要再改端口形状」成立。
+  欠账：Desktop 侧接线（见第四节 ⑧⑨）与真实嵌入端口实现（宿主侧，BYOK）。
 - **批三** 迁移既有记忆数据 → files 权威层，旧地基物理删除 —— 接入点见第四节。

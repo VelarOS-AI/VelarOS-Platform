@@ -33,6 +33,7 @@ export {
   MemoryStoreCapabilityNamespace,
   type MemoryStoreCapabilityRegistry,
   type MemoryStoreCapabilityService,
+  resolveMemoryDerivedIndexBackends,
   resolveMemoryStoreBackend,
   type ResolveMemoryStoreBackendInput,
 } from './MemoryStoreCapability'
