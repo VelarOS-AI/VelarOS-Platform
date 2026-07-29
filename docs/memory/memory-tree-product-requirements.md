@@ -1,5 +1,14 @@
 # VelarOS 记忆树产品需求
 
+> **⚑ 后端 mod 化定位（2026-07-29 判决，先读这条）**：本文的**产品需求一条未改**，但它描述的
+> 记忆树已从「记忆库本体」改判为**三档后端里的未来档** `memory-tree`。默认档 = `memory-files`
+> （markdown 权威层，bundled 恒装），增强档 = `memory-vector`（市场可选派生索引）；三档**叠加**，
+> 不是三选一。读本文的产品目标时请把「记忆树 = 存储实现」的隐含前提换成
+> 「记忆树 = 一个后端档 + 一套产品语义」。
+> 判决全文见 VelarOS-Desktop 仓 `docs/kernel-contract.md` §15.7 与
+> `docs/mod-architecture-blueprint.md` §九；Platform 侧落位见
+> [记忆后端 mod 化实现地图](./memory-backends.md)。
+>
 > 状态：产品需求基线已经第二 / 四 / 六轮修订（第三、五轮独立评审的全部 P0 / P1 已处理；第五轮确认产品裁决无需重开，第六轮修订全部为架构层补丁），修订点见 [记忆树修订记录](./memory-tree-revision-notes.md)、[第三轮](./memory-tree-third-round-review.md)与[第五轮评审报告](./memory-tree-fifth-round-review.md)，待复核后重新冻结；工程方案待制定，尚未开始实现
 > 日期：2026-07-13
 > 本文是记忆树重构的产品需求基线，描述用户目标、产品需求和边界，不替代最终工程设计。
