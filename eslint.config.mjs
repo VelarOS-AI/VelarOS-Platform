@@ -22,6 +22,11 @@ import uiConfig from './eslint/ui.config.mjs'
 
 const RepoRoot = import.meta.dirname
 
+// 各域裸路径 glob 的落位改写:源仓写 tests/ 开头的 glob 指自己的测试树,导入后住 tests/<domain>/。
+// 其余裸 glob(packages/ 前缀、dist/node_modules 通配等)在新仓语义不变,原样透传。
+const remapDomainPaths = (domain) => (pattern) =>
+  /^tests\//.test(pattern) ? pattern.replace(/^tests\//, `tests/${domain}/`) : pattern
+
 /** 各域的作用域 glob。html-artifacts 源仓无 eslint 门,故不参与(见下方全局 ignores)。 */
 const Domains = [
   {
@@ -106,10 +111,12 @@ function anchorLanguageOptions(languageOptions) {
   }
 }
 
-function scopeDomain({ config, globs, remap }) {
-  const mapPattern = remap ?? ((pattern) => pattern)
+function scopeDomain({ name, config, globs, remap }) {
+  const mapPattern = remap ?? remapDomainPaths(name)
   return config.map((entry) => {
-    if (isGlobalIgnores(entry)) return entry
+    // 纯全局 ignores 保持全局,但域私有的裸路径(如 memory 的 `tests/**`)必须落到本域子树,
+    // 否则一个域的忽略会误伤别的域。
+    if (isGlobalIgnores(entry)) return { ignores: entry.ignores.map(mapPattern) }
     const scoped = { ...entry }
     scoped.files = entry.files
       ? entry.files.flatMap((pattern) =>

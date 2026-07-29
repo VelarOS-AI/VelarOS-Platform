@@ -10,16 +10,16 @@ import { test } from 'node:test'
 import {
   createMemoryRuntime,
   MemoryRuntime,
-} from '../../../../packages/memory/dist/index.js'
+} from '../../../../../packages/memory/dist/index.js'
 import {
   createKnowledgeRuntime,
   KnowledgeRuntime,
   VectorFailureMonitor,
-} from '../../../../packages/knowledge/dist/index.js'
+} from '../../../../../packages/knowledge/dist/index.js'
 import {
   MemoryAdapterRuntime,
   mountMemoryAdapter,
-} from '../../../../packages/memory-adapter-kernel/dist/index.js'
+} from '../../../../../packages/memory-adapter-kernel/dist/index.js'
 
 test('package roots expose class-first runtimes while retaining factories', () => {
   const databaseProvider = () => {

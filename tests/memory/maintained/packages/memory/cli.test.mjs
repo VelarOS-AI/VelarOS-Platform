@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const cliPath = new URL('../../../../packages/memory/dist/cli.js', import.meta.url)
+const cliPath = new URL('../../../../../packages/memory/dist/cli.js', import.meta.url)
 const cliFilePath = fileURLToPath(cliPath)
 
 test('memory cli lists tools', async () => {
