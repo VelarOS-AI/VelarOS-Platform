@@ -13,7 +13,7 @@ export const CapabilityOwners = [
     owner: 'workspace',
     packages: [
       {
-        directory: 'workspace',
+        directory: 'capabilities/workspace',
         name: '@velaros-ai/workspace',
         version: '1.2.5',
         entrySubpaths: ['.'],
@@ -56,7 +56,7 @@ export const CapabilityOwners = [
     owner: 'system',
     packages: [
       {
-        directory: 'system-tools',
+        directory: 'capabilities/system-tools',
         name: '@velaros-ai/system-tools',
         version: '0.2.8',
         entrySubpaths: ['.'],
@@ -70,7 +70,7 @@ export const CapabilityOwners = [
     owner: 'office',
     packages: [
       {
-        directory: 'office-tools',
+        directory: 'capabilities/office-tools',
         name: '@velaros-ai/office-tools',
         version: '0.2.7',
         entrySubpaths: ['.'],
@@ -84,7 +84,7 @@ export const CapabilityOwners = [
     owner: 'composition',
     packages: [
       {
-        directory: 'cli',
+        directory: 'capabilities/cli',
         name: '@velaros-ai/cli',
         version: '0.2.10',
         entrySubpaths: ['.'],

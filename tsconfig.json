@@ -37,10 +37,10 @@
         "./packages/browser/src/tools/*"
       ],
       "@velaros-ai/cli": [
-        "./packages/cli/src/index.ts"
+        "./packages/capabilities/cli/src/index.ts"
       ],
       "@velaros-ai/cli/*": [
-        "./packages/cli/src/*"
+        "./packages/capabilities/cli/src/*"
       ],
       "@velaros-ai/computer/runtime": [
         "./packages/computer/src/runtime/index.ts"
@@ -100,16 +100,16 @@
         "./packages/memory/src/*"
       ],
       "@velaros-ai/office-tools": [
-        "./packages/office-tools/src/index.ts"
+        "./packages/capabilities/office-tools/src/index.ts"
       ],
       "@velaros-ai/office-tools/*": [
-        "./packages/office-tools/src/*"
+        "./packages/capabilities/office-tools/src/*"
       ],
       "@velaros-ai/system-tools": [
-        "./packages/system-tools/src/index.ts"
+        "./packages/capabilities/system-tools/src/index.ts"
       ],
       "@velaros-ai/system-tools/*": [
-        "./packages/system-tools/src/*"
+        "./packages/capabilities/system-tools/src/*"
       ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"
@@ -118,10 +118,10 @@
         "./packages/ui/src/*"
       ],
       "@velaros-ai/workspace": [
-        "./packages/workspace/src/index.ts"
+        "./packages/capabilities/workspace/src/index.ts"
       ],
       "@velaros-ai/workspace/*": [
-        "./packages/workspace/src/*"
+        "./packages/capabilities/workspace/src/*"
       ]
     }
   },

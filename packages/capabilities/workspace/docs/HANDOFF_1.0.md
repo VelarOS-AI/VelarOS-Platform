@@ -36,11 +36,11 @@ bun run scripts:run release:1.0
 
 主要入口：
 
-- `packages/workspace/src/Workspace.tool.ts`：agent 工具 schema 与描述。
-- `packages/workspace/src/agent-tools.ts`：工具执行适配层。
-- `packages/workspace/src/tool-schema.ts`：expanded / compact JSON schema 生成。
-- `packages/workspace/src/mcp/index.ts`：MCP-like server。
-- `packages/workspace/src/velaros/index.ts`：Velaros bridge。
+- `packages/capabilities/workspace/src/Workspace.tool.ts`：agent 工具 schema 与描述。
+- `packages/capabilities/workspace/src/agent-tools.ts`：工具执行适配层。
+- `packages/capabilities/workspace/src/tool-schema.ts`：expanded / compact JSON schema 生成。
+- `packages/capabilities/workspace/src/mcp/index.ts`：MCP-like server。
+- `packages/capabilities/workspace/src/velaros/index.ts`：Velaros bridge。
 - `src/main/tools/collections/workspace/Kernel.tool.ts`：桌面端 VelaTool 包装。
 - `src/main/tools/ToolRegistry.ts`：桌面端工具转 AI SDK ToolSet。
 
@@ -52,9 +52,9 @@ CLI 入口仍建议作为黑盒测试 / 离线自动化 / 多进程验证入口�
 
 主要入口：
 
-- `packages/workspace/src/cli/runner.ts`
-- `packages/workspace/src/cli/tool-commands.ts`
-- `packages/workspace/src/cli/workspace-factory.ts`
+- `packages/capabilities/workspace/src/cli/runner.ts`
+- `packages/capabilities/workspace/src/cli/tool-commands.ts`
+- `packages/capabilities/workspace/src/cli/workspace-factory.ts`
 
 CLI 已覆盖：
 
@@ -187,14 +187,14 @@ batch 依赖语义已修正：`dependsOn` 表示依赖任务必须成功完成�
 修复：
 
 - `packages/core/src/utils/ToolInputBounds.ts` 新增 `withReadBoundJsonSchemaConstraints`。
-- `packages/workspace/src/tool-schema.ts` 在 expanded / compact schema 生成时补上 read 边界约束。
+- `packages/capabilities/workspace/src/tool-schema.ts` 在 expanded / compact schema 生成时补上 read 边界约束。
 - `src/main/tools/ToolRegistry.ts` 在 AI SDK schema 输出时补上同样约束。
 
 覆盖：
 
 - `bun run scripts:run check:architecture`
 - `bun run typecheck`
-- `packages/workspace/test/workspace.test.mjs`
+- `packages/capabilities/workspace/test/workspace.test.mjs`
 
 ### AI SDK record schema 修复
 
@@ -214,7 +214,7 @@ batch 依赖语义已修正：`dependsOn` 表示依赖任务必须成功完成�
 
 修复：
 
-- `packages/workspace/src/core/file-store.ts` 对不需要完整内容的大文件使用流式 hash + 首块二进制判断。
+- `packages/capabilities/workspace/src/core/file-store.ts` 对不需要完整内容的大文件使用流式 hash + 首块二进制判断。
 - `maxChars/maxBytes` 前缀读取走 `readLimitedTextPrefix`，避免整文件进内存。
 
 注意：按 `range` 读取超大文本时，当前仍会落到完整文本读取后再 `sliceLines`。这不是 1.0 阻断项，但如果 2.0 做更强大文件能力，应把行窗口读取改成流式按行扫描。
@@ -229,7 +229,7 @@ batch 依赖语义已修正：`dependsOn` 表示依赖任务必须成功完成�
 
 修复：
 
-- `packages/workspace/src/batch/runner.ts` 维护 `failedTaskIds`。
+- `packages/capabilities/workspace/src/batch/runner.ts` 维护 `failedTaskIds`。
 - dependent 遇到失败依赖时返回 `DEPENDENCY_FAILED`。
 - 无依赖任务仍可继续执行。
 
@@ -275,8 +275,8 @@ schema 黑盒探针可用：
 bun --conditions=source - <<'EOF'
 import '@velaros-ai/core/extensions'
 import Ajv from 'ajv'
-import { WorkspaceAgentToolSpecs } from './packages/workspace/src/Workspace.tool.ts'
-import { createWorkspaceToolSchemaBundle, schemaToInputSchema } from './packages/workspace/src/tool-schema.ts'
+import { WorkspaceAgentToolSpecs } from './packages/capabilities/workspace/src/Workspace.tool.ts'
+import { createWorkspaceToolSchemaBundle, schemaToInputSchema } from './packages/capabilities/workspace/src/tool-schema.ts'
 
 const ajv = new Ajv({ strict: false, allErrors: true })
 const tools = new Map(WorkspaceAgentToolSpecs.map((tool) => [tool.name, tool]))
@@ -320,33 +320,33 @@ compact batch bad= false good= true
 
 核心实现：
 
-- `packages/workspace/src/core/workspace.ts`
-- `packages/workspace/src/core/file-store.ts`
-- `packages/workspace/src/batch/runner.ts`
-- `packages/workspace/src/patch/text-strategy.ts`
-- `packages/workspace/src/patch/jsts-strategy.ts`
-- `packages/workspace/src/patch/json-strategy.ts`
+- `packages/capabilities/workspace/src/core/workspace.ts`
+- `packages/capabilities/workspace/src/core/file-store.ts`
+- `packages/capabilities/workspace/src/batch/runner.ts`
+- `packages/capabilities/workspace/src/patch/text-strategy.ts`
+- `packages/capabilities/workspace/src/patch/jsts-strategy.ts`
+- `packages/capabilities/workspace/src/patch/json-strategy.ts`
 
 工具契约：
 
-- `packages/workspace/src/Workspace.tool.ts`
-- `packages/workspace/src/agent-tools.ts`
-- `packages/workspace/src/tool-schema.ts`
-- `packages/workspace/test/fixtures/workspace-tool-schema-contract.json`
+- `packages/capabilities/workspace/src/Workspace.tool.ts`
+- `packages/capabilities/workspace/src/agent-tools.ts`
+- `packages/capabilities/workspace/src/tool-schema.ts`
+- `packages/capabilities/workspace/test/fixtures/workspace-tool-schema-contract.json`
 
 桥接：
 
-- `packages/workspace/src/mcp/index.ts`
-- `packages/workspace/src/velaros/index.ts`
+- `packages/capabilities/workspace/src/mcp/index.ts`
+- `packages/capabilities/workspace/src/velaros/index.ts`
 - `src/main/tools/collections/workspace/Kernel.tool.ts`
 - `src/main/tools/collections/workspace/KernelTools.ts`
 - `src/main/tools/ToolRegistry.ts`
 
 测试：
 
-- `packages/workspace/test/workspace.test.mjs`
-- `packages/workspace/test/cli-runner.test.mjs`
-- `packages/workspace/test/production.test.mjs`
+- `packages/capabilities/workspace/test/workspace.test.mjs`
+- `packages/capabilities/workspace/test/cli-runner.test.mjs`
+- `packages/capabilities/workspace/test/production.test.mjs`
 - `bun run scripts:run check:architecture`
 - `bun run typecheck`
 

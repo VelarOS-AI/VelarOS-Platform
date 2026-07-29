@@ -52,10 +52,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "generate:schema-bundle": "bun scripts/generate-schema-bundle.mjs",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
     "test": "bun run build && bun test test",
-    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system-tools"
+    "prepack": "node ../../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system-tools"
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
@@ -68,7 +68,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
-    "directory": "packages/system-tools"
+    "directory": "packages/capabilities/system-tools"
   },
   "publishConfig": {
     "access": "restricted",

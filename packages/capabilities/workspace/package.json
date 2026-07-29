@@ -146,7 +146,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
-    "directory": "packages/workspace"
+    "directory": "packages/capabilities/workspace"
   },
   "publishConfig": {
     "access": "restricted",

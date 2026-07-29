@@ -50,7 +50,7 @@ const RequiredApiDocumentationSections = [
 // modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录)。
 const PortableContracts = [
   {
-    packageDirectory: 'workspace',
+    packageDirectory: 'capabilities/workspace',
     packageName: '@velaros-ai/workspace',
     exportKey: './contracts',
     contractsFile: 'src/contracts.ts',
@@ -72,7 +72,7 @@ const PortableContracts = [
     ]),
   },
   {
-    packageDirectory: 'system-tools',
+    packageDirectory: 'capabilities/system-tools',
     packageName: '@velaros-ai/system-tools',
     exportKey: './contracts',
     contractsFile: 'src/contracts.ts',
@@ -394,17 +394,17 @@ requirePublicTypeContracts('browser', 'src/core/index.ts', 'src/core/types.ts', 
   'BrowserActionPolicyConfig',
   'BrowserAutomationMode',
 ])
-requirePublicTypeContracts('workspace', 'src/index.ts', 'src/workspace-contracts.ts', [
+requirePublicTypeContracts('capabilities/workspace', 'src/index.ts', 'src/workspace-contracts.ts', [
   'WorkspaceGitRemoteActionOptions',
   'WorkspaceRootEntry',
 ])
-requirePublicTypeContracts('office-tools', 'src/index.ts', 'src/OfficeContracts.ts', [
+requirePublicTypeContracts('capabilities/office-tools', 'src/index.ts', 'src/OfficeContracts.ts', [
   'OfficeEnvironmentInspection',
   'OfficeRuntimePlatform',
 ])
 
 const officeContractsSource = readFileSync(
-  resolve(PackagesRoot, 'office-tools/src/OfficeContracts.ts'),
+  resolve(PackagesRoot, 'capabilities/office-tools/src/OfficeContracts.ts'),
   'utf8',
 )
 if (/\bNodeJS\./u.test(officeContractsSource)) {

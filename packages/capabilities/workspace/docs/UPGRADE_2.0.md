@@ -11,7 +11,7 @@
 ## 0. 给执行者的须知（务必先读）
 
 1. **这是大版本升级，允许破坏对外类型契约，但不允许破坏「面向模型的工具语义契约」**：
-   - ✅ 可以改：内核内部实现、`WorkspaceKernel` TS 类型、错误类型、`packages/workspace` 内部结构。
+   - ✅ 可以改：内核内部实现、`WorkspaceKernel` TS 类型、错误类型、`packages/capabilities/workspace` 内部结构。
    - ❌ 不可以改：`ws_*` 这些 agent 工具的**参数语义、调用流程**。工具名已从旧的 `velaros_workspace_*` 收敛为 `ws_*`，不要恢复旧别名或旧长名前缀。桌面端 `src/main/tools/collections/workspace/` 依赖当前常量源。
 
 2. **项目级规则红线（违反会被门禁拦截，且属于明令禁止）**：
@@ -32,7 +32,7 @@
 4. **代码风格**：内核代码注释用中文，面向模型的工具文案用中文（沿用现状）。不要加无意义的「逐行解说」注释。
 
 5. **两条来自 1.0 交接文档的硬性流程**（违反会导致门禁假绿或漂移）：
-   - **schema 契约 fixture 是门禁**：`packages/workspace/test/fixtures/workspace-tool-schema-contract.json` 是 1.0 冻结的模型契约。涉及工具/operation/schema 的改动若导致该 fixture 变化，必须确认是「有意变更」而非「无意漂移」，并保持 compact bundle 体积在预算内（1.0 为 40,000 chars 预算，当前 ~38,590）。
+   - **schema 契约 fixture 是门禁**：`packages/capabilities/workspace/test/fixtures/workspace-tool-schema-contract.json` 是 1.0 冻结的模型契约。涉及工具/operation/schema 的改动若导致该 fixture 变化，必须确认是「有意变更」而非「无意漂移」，并保持 compact bundle 体积在预算内（1.0 为 40,000 chars 预算，当前 ~38,590）。
    - **改 core 后必须先 build core**：若改了 `packages/core/src/utils/ToolInputBounds.ts` 等 core 文件，由于 workspace 可能从 dist 引用 core，需先 `npm --workspace @velaros-ai/core run build` 再跑 workspace 测试。
    - 同时遵守 1.0 交接约束：`.tool.ts` 只放工具+schema 结构（工具函数放外部模块）；描述里不得出现静态 workspace 工具名（用 `wsTool.*` 动态常量）；不得恢复旧工具别名；不得把结构化 `editOperationSchema` 拆成模型不可见的散装描述。
 
@@ -303,7 +303,7 @@
 ### 8.4 任务 R — 批处理 schema 去重
 - **现状**：`Kernel.tool.ts`（~2200 行）批处理 op 的 schema 重复声明了 read/search/prepare 等形状。
 - **目标**：从单工具 canonical schema 派生批处理 schema，消除漂移。
-- **验收标准**：`packages/workspace/test/fixtures/workspace-tool-schema-contract.json` 契约测试更新且通过；schema bundle 预算检查通过。
+- **验收标准**：`packages/capabilities/workspace/test/fixtures/workspace-tool-schema-contract.json` 契约测试更新且通过；schema bundle 预算检查通过。
 
 ---
 

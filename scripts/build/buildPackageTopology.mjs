@@ -27,13 +27,31 @@ function collectVelarosDeps(manifest) {
   return [...names].sort()
 }
 
+// packages/ 下的包目录:顶层包 + 一层分组目录(如 capabilities/<pkg>)里的包。
+function listPackageDirectories() {
+  const found = []
+  for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    if (existsSync(resolve(PACKAGES_DIR, entry.name, 'package.json'))) {
+      found.push(entry.name)
+      continue
+    }
+    for (const nested of readdirSync(resolve(PACKAGES_DIR, entry.name), { withFileTypes: true })) {
+      if (!nested.isDirectory()) continue
+      if (existsSync(resolve(PACKAGES_DIR, entry.name, nested.name, 'package.json'))) {
+        found.push(`${entry.name}/${nested.name}`)
+      }
+    }
+  }
+  return found
+}
+
 function scanPackages() {
   const byName = new Map()
   const byDir = new Map()
 
-  for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    const manifestPath = resolve(PACKAGES_DIR, entry.name, 'package.json')
+  for (const directory of listPackageDirectories()) {
+    const manifestPath = resolve(PACKAGES_DIR, directory, 'package.json')
     if (!existsSync(manifestPath)) continue
 
     let manifest
@@ -46,13 +64,16 @@ function scanPackages() {
 
     const node = {
       name: manifest.name,
-      dir: resolve(PACKAGES_DIR, entry.name),
-      dirName: entry.name,
+      dir: resolve(PACKAGES_DIR, directory),
+      dirName: directory,
       deps: collectVelarosDeps(manifest),
       hasBuild: Boolean(manifest.scripts && manifest.scripts.build),
     }
     byName.set(node.name, node)
-    byDir.set(entry.name, node.name)
+    byDir.set(directory, node.name)
+    // 分组目录下的包也允许用裸目录名寻址(--for workspace)。
+    const bare = directory.includes('/') ? directory.slice(directory.indexOf('/') + 1) : null
+    if (bare && !byDir.has(bare)) byDir.set(bare, node.name)
   }
 
   return { byDir, byName }
