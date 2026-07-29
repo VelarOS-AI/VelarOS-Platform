@@ -2,6 +2,7 @@ import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/Too
 
 import { memoryTools as rawMemoryTools } from './tools/memory'
 
+export * from './backend'
 export * from './memory-tree'
 export { MemoryTreeDomain as MemoryDomain } from './memory-tree'
 export * from './MemoryScope'
