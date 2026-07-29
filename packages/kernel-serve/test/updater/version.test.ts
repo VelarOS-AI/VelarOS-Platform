@@ -7,7 +7,7 @@ import {
   KernelUpdaterError,
   parseKernelVersion,
   satisfiesKernelVersionRange,
-} from '../src'
+} from '../../src/updater'
 
 describe('Kernel version matching', () => {
   test('parses semantic versions and rejects everything else', () => {

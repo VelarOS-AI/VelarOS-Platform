@@ -335,7 +335,7 @@ export default [
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel-client', '@velaros-ai/kernel-client/*', '@velaros-ai/kernel-updater', '**/src/host/*', '**/src/runtime/*'],
+              group: ['@velaros-ai/kernel-client', '@velaros-ai/kernel-client/*', '@velaros-ai/kernel-serve/updater', '**/src/host/*', '**/src/runtime/*'],
               message:
                 'kernel-sdk 只定义 Mod 契约;不得依赖 Client、Updater 或 Kernel 内部实现。',
             },

@@ -11,7 +11,7 @@ import {
   KernelUpdateLock,
   KernelUpdateLockError,
   withKernelUpdateLock,
-} from '../src'
+} from '../../src/updater'
 
 import { createTemporaryDirectories } from './support'
 

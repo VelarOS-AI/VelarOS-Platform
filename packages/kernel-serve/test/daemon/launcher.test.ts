@@ -15,7 +15,7 @@ import {
   type KernelVersionTarget,
 } from '@velaros-ai/kernel-client'
 
-import { KernelLocalDaemon } from '../src/daemon'
+import { KernelLocalDaemon } from '../../src/daemon/daemon'
 
 const temporaryDirectories: string[] = []
 const runningDaemons: KernelLocalDaemon[] = []

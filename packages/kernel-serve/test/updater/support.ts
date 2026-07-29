@@ -6,7 +6,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { KernelFetch } from '../src'
+import type { KernelFetch } from '../../src/updater'
 
 export function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text)

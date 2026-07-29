@@ -13,7 +13,7 @@ import {
   parseKernelUpdateManifest,
   selectKernelArtifact,
   UnverifiedKernelArtifactSignatureVerifier,
-} from '../src'
+} from '../../src/updater'
 
 import {
   artifactOf,

@@ -29,8 +29,8 @@ import {
   SocketKernelTransport,
 } from '@velaros-ai/kernel-client'
 
-import { KernelDaemonError, KernelLocalDaemon } from '../src/daemon'
-import { KernelLocalRpcServer } from '../src/rpc'
+import { KernelDaemonError, KernelLocalDaemon } from '../../src/daemon/daemon'
+import { KernelLocalRpcServer } from '../../src/daemon/rpc'
 
 const EchoToken = createCapabilityToken('test.rpc.echo')
 const RpcAuthToken = 'test-auth-token-0123456789-abcdefgh'

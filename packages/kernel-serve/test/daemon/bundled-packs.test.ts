@@ -11,9 +11,9 @@ import {
   createBundledModPack,
   registerBundledPacks,
   toBundledPackRecords,
-} from '../src/daemon/bundled-packs'
-import { KernelModLoader, persistModIndex } from '../src/daemon/mod-loader'
-import { KernelModStore, registerSystemModPacks } from '../src/daemon/mod-store'
+} from '../../src/daemon/daemon/bundled-packs'
+import { KernelModLoader, persistModIndex } from '../../src/daemon/daemon/mod-loader'
+import { KernelModStore, registerSystemModPacks } from '../../src/daemon/daemon/mod-store'
 
 const directories: string[] = []
 

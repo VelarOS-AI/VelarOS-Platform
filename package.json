@@ -19,8 +19,7 @@
     "domainPackages": {
       "kernel": [
         "kernel-client",
-        "kernel-daemon",
-        "kernel-updater"
+        "kernel-serve"
       ],
       "agent": [
         "agent"
@@ -126,8 +125,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel-client": "workspace:*",
-    "@velaros-ai/kernel-daemon": "workspace:*",
-    "@velaros-ai/kernel-updater": "workspace:*",
+    "@velaros-ai/kernel-serve": "workspace:*",
     "@velaros-ai/memory": "workspace:*",
     "@velaros-ai/model": "workspace:*",
     "@velaros-ai/office-tools": "workspace:*",

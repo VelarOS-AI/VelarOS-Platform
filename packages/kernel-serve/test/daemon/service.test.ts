@@ -14,7 +14,7 @@ import {
 import { KernelService } from '@velaros-ai/core/kernel/runtime'
 import { KernelClient } from '@velaros-ai/kernel-client'
 
-import { InProcessKernelTransport } from '../src/internal'
+import { InProcessKernelTransport } from '../../src/daemon/internal'
 
 const CallableToken = createCapabilityToken('test.callable', '1.2.0')
 const PlainToken = createCapabilityToken('test.plain')

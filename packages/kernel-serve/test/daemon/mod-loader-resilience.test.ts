@@ -6,9 +6,9 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { createDefaultKernelDaemonPaths } from '@velaros-ai/kernel-client/contracts'
 
-import { bootKernelDaemon } from '../src/daemon/boot'
-import { KernelModLoader } from '../src/daemon/mod-loader'
-import { type KernelModPackRecord, KernelModStore } from '../src/daemon/mod-store'
+import { bootKernelDaemon } from '../../src/daemon/daemon/boot'
+import { KernelModLoader } from '../../src/daemon/daemon/mod-loader'
+import { type KernelModPackRecord, KernelModStore } from '../../src/daemon/daemon/mod-store'
 
 const directories: string[] = []
 

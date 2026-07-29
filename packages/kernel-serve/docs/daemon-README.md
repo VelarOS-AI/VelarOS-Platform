@@ -1,4 +1,4 @@
-# `@velaros-ai/kernel-daemon`
+# `@velaros-ai/kernel-serve/daemon`
 
 `velaros serve` 部署模式的配件:把 `@velaros-ai/core` 里的 **Kernel 库**装成本机进程。
 
@@ -28,7 +28,7 @@
 | `@velaros-ai/core/kernel` | Kernel 库本体(本包的唯一内核依赖) |
 | `@velaros-ai/core/kernel/abi` | Mod 开发面 |
 | `@velaros-ai/kernel-client` | 瘦客户端接入面(共享 serve 模式的连线契约) |
-| `@velaros-ai/kernel-updater` | 共享 Runtime 的安装 / 切换 / 回滚 |
+| `@velaros-ai/kernel-serve/updater` | 共享 Runtime 的安装 / 切换 / 回滚 |
 
 ## 两种 pack:bundled 是编译期,installed 才是运行时
 
@@ -47,7 +47,7 @@
 
 ```ts
 import { createWorkspaceKernelModule } from '@velaros-ai/workspace'
-import { bootKernelDaemon, createBundledModPack, toBundledPackRecords } from '@velaros-ai/kernel-daemon'
+import { bootKernelDaemon, createBundledModPack, toBundledPackRecords } from '@velaros-ai/kernel-serve/daemon'
 
 await bootKernelDaemon({
   kernelVersion,

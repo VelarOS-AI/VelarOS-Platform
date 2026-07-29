@@ -2,7 +2,7 @@
 //
 // 本目录是 VelarOS 内核基础层的唯一实现：module ABI + module host + capability registry
 // + 权限 broker + 事件流 + namespaced state + KernelService 运行态。它是**库**不是进程——
-// 进程形态（daemon / serve 的 RPC 前脸、launcher）住在 `@velaros-ai/kernel-daemon`，
+// 进程形态（daemon / serve 的 RPC 前脸、launcher）住在 `@velaros-ai/kernel-serve/daemon`，
 // 内核本体对进程一无所知（arch 门机械锁死 core 不得依赖 kernel-daemon / kernel-client）。
 //
 // 四个消费面：

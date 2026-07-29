@@ -3,12 +3,12 @@
 //
 // P2 库化后的拓扑:内核本体住 core,进程形态住 kernel 域三包。
 //   packages/core/src/kernel  Kernel 库本体(abi / protocol / contracts / host / runtime)——是库不是进程
-//   packages/kernel-client    瘦客户端与 serve 模式的接入入口
-//   packages/kernel-daemon    serve 部署模式的配件(daemon / 本机 RPC 前脸 / 进程内传输)
-//   packages/kernel-updater   共享 Runtime 的安装/切换/回滚
+//   packages/kernel-client         瘦客户端与 serve 模式的接入入口
+//   packages/kernel-serve/src/daemon   serve 部署模式的配件(daemon / 本机 RPC 前脸 / 进程内传输)
+//   packages/kernel-serve/src/updater  共享 Runtime 的安装/切换/回滚
 //
 // 七道防线:
-//  ① 包集合冻结:Kernel 域只能是上述三个包(内核本体归 core 域)。
+//  ① 包集合冻结:Kernel 域只能是 kernel-client 与 kernel-serve 两个包(内核本体归 core 域)。
 //  ② host 无关:四处源码根都禁 import electron / @electron/* / Desktop 传输 / renderer·main 别名。
 //  ③ 依赖方向:**core 不得依赖 kernel-daemon / kernel-client**(库不知进程,P2 新增反向约束);
 //     client 不得依赖 daemon 内部实现与 updater;updater 不得依赖 client/内核本体/daemon;
@@ -31,8 +31,12 @@ const UpdateBaseline = process.env.VELAROS_ARCH_BASELINE_UPDATE === '1'
 
 const SourceExtensions = new Set(['.ts', '.tsx'])
 
-/** Kernel 域的三个包(目录名即包名后缀)。内核本体已并入 core 域,不在此列。 */
-const PublicPackages = ['kernel-client', 'kernel-daemon', 'kernel-updater']
+/** Kernel 域的两个包(目录名即包名后缀)。内核本体已并入 core 域,不在此列。 */
+const PublicPackages = ['kernel-client', 'kernel-serve']
+
+/** kernel-serve 的 updater 切片:相对 import 触达 daemon 切片即违规(合包后的方向看守)。 */
+const UpdaterReachesDaemonPattern =
+  /(?:from\s+|import\s*\(|require\()\s*['"]\.{1,2}(?:\/\.\.)*\/daemon(?:\/[^'"]*)?['"]/
 
 /** 内核本体的源码根(core 域,但受同一套 Kernel 边界约束)。 */
 const KernelLibraryRoot = 'packages/core/src/kernel'
@@ -219,14 +223,13 @@ function scanDependencyDirection() {
       ['packages/core/src'],
       (line) =>
         importsPackage(line, [
-          '@velaros-ai/kernel-daemon',
+          '@velaros-ai/kernel-serve',
           '@velaros-ai/kernel-client',
-          '@velaros-ai/kernel-updater',
         ]),
       (file, line) => ({
         rule: 'core-kernel-process-independence',
         fingerprint: `core-kernel-process-independence::${file}:${line}`,
-        message: `${file}:${line}: 内核本体(core)是库不是进程,不得依赖 kernel-daemon / kernel-client / kernel-updater(宪章 §15.1 原则一)。`,
+        message: `${file}:${line}: 内核本体(core)是库不是进程,不得依赖 kernel-serve / kernel-client(宪章 §15.1 原则一)。`,
       }),
     ),
   )
@@ -237,14 +240,11 @@ function scanDependencyDirection() {
       ['packages/kernel-client/src'],
       (line) =>
         InternalImplementationPattern.test(line)
-        || importsPackage(line, [
-          '@velaros-ai/kernel-daemon',
-          '@velaros-ai/kernel-updater',
-        ]),
+        || importsPackage(line, ['@velaros-ai/kernel-serve']),
       (file, line) => ({
         rule: 'client-dependency-direction',
         fingerprint: `client-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: kernel-client 不得依赖 kernel-daemon(RPC/Daemon/Launcher 内部实现)或 Updater。`,
+        message: `${file}:${line}: kernel-client 不得依赖 kernel-serve(RPC/Daemon/Launcher 内部实现与 Updater)。`,
       }),
     ),
   )
@@ -252,35 +252,29 @@ function scanDependencyDirection() {
   // kernel-updater 只管字节与版本指针,不参与能力调用。
   violations.push(
     ...scanLines(
-      ['packages/kernel-updater/src'],
+      ['packages/kernel-serve/src/updater'],
       (line) =>
         InternalImplementationPattern.test(line)
+        || UpdaterReachesDaemonPattern.test(line)
         || importsPackage(line, [
           '@velaros-ai/kernel-client',
-          '@velaros-ai/kernel-daemon',
+          '@velaros-ai/kernel-serve',
           '@velaros-ai/core',
         ]),
       (file, line) => ({
         rule: 'updater-dependency-direction',
         fingerprint: `updater-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: kernel-updater 只负责安装/切换/回滚,不得依赖 Client、Daemon 或内核本体。`,
+        message: `${file}:${line}: kernel-serve 的 updater 切片只负责安装/切换/回滚,不得依赖 Client、daemon 切片或内核本体。`,
       }),
     ),
   )
 
   // package.json 层面的同一约束(声明即违规,不必等到 import)。
+  // 注:updater 合包后没有独立清单,它的「不得依赖 Client/Daemon/core」全部由上面的**源码层**
+  // 规则(含相对 import 触达 daemon 切片)看守;清单层只剩 client 与 core 两条。
   const manifestBans = {
-    'kernel-client': ['@velaros-ai/kernel-daemon', '@velaros-ai/kernel-updater'],
-    'kernel-updater': [
-      '@velaros-ai/kernel-client',
-      '@velaros-ai/kernel-daemon',
-      '@velaros-ai/core',
-    ],
-    core: [
-      '@velaros-ai/kernel-client',
-      '@velaros-ai/kernel-daemon',
-      '@velaros-ai/kernel-updater',
-    ],
+    'kernel-client': ['@velaros-ai/kernel-serve'],
+    core: ['@velaros-ai/kernel-client', '@velaros-ai/kernel-serve'],
   }
   for (const [packageName, banned] of Object.entries(manifestBans)) {
     const manifestPath = resolve(RepoRoot, 'packages', packageName, 'package.json')

@@ -12,8 +12,7 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/html-artifacts": "workspace:*",
         "@velaros-ai/kernel-client": "workspace:*",
-        "@velaros-ai/kernel-daemon": "workspace:*",
-        "@velaros-ai/kernel-updater": "workspace:*",
+        "@velaros-ai/kernel-serve": "workspace:*",
         "@velaros-ai/memory": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/office-tools": "workspace:*",
@@ -156,26 +155,15 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/kernel-daemon": {
-      "name": "@velaros-ai/kernel-daemon",
+    "packages/kernel-serve": {
+      "name": "@velaros-ai/kernel-serve",
       "version": "0.3.2",
       "bin": {
-        "velaros-kernel-daemon": "./dist/main.js",
+        "velaros-kernel-daemon": "./dist/daemon/main.js",
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel-client": "workspace:*",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/kernel-updater": {
-      "name": "@velaros-ai/kernel-updater",
-      "version": "0.1.0",
-      "dependencies": {
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -910,9 +898,7 @@
 
     "@velaros-ai/kernel-client": ["@velaros-ai/kernel-client@workspace:packages/kernel-client"],
 
-    "@velaros-ai/kernel-daemon": ["@velaros-ai/kernel-daemon@workspace:packages/kernel-daemon"],
-
-    "@velaros-ai/kernel-updater": ["@velaros-ai/kernel-updater@workspace:packages/kernel-updater"],
+    "@velaros-ai/kernel-serve": ["@velaros-ai/kernel-serve@workspace:packages/kernel-serve"],
 
     "@velaros-ai/memory": ["@velaros-ai/memory@workspace:packages/memory"],
 

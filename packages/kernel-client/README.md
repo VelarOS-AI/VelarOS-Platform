@@ -24,4 +24,4 @@ await client.dispose()
 
 ## What is deliberately not here
 
-No module host, no capability routing, no permission broker, no daemon lifecycle, no process management, and no host-specific (Electron, renderer, IPC) code. 内核本体在 `@velaros-ai/core/kernel`,进程装配在 `@velaros-ai/kernel-daemon`。 Installing and upgrading the shared runtime belongs to `@velaros-ai/kernel-updater`.
+No module host, no capability routing, no permission broker, no daemon lifecycle, no process management, and no host-specific (Electron, renderer, IPC) code. 内核本体在 `@velaros-ai/core/kernel`,进程装配在 `@velaros-ai/kernel-serve/daemon`。 Installing and upgrading the shared runtime belongs to `@velaros-ai/kernel-serve/updater`.

@@ -10,8 +10,8 @@ import {
 } from '@velaros-ai/core/kernel/abi'
 import { KernelClient } from '@velaros-ai/kernel-client'
 
-import { bootKernelDaemon } from '../src/daemon/boot'
-import { InProcessKernelTransport } from '../src/internal/in-process-transport'
+import { bootKernelDaemon } from '../../src/daemon/daemon/boot'
+import { InProcessKernelTransport } from '../../src/daemon/internal/in-process-transport'
 
 const directories: string[] = []
 

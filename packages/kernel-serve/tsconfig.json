@@ -1,4 +1,5 @@
 {
+  "//": "两切片(daemon / updater)合成单一编译单元。updater 切片导入时不带 types:[node] 之外的差异,故直接取 daemon 侧的严格配置。",
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
