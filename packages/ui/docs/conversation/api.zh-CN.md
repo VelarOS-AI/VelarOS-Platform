@@ -144,7 +144,15 @@ export function ToolMessage({ block }: { block: ToolCall }) {
 ## 扩展点
 
 - 用独立 `ToolRendererRegistry` 注册应用工具卡。
-- 用 Render Slots 注入业务卡片。
+- 用 Render Slots 的**增强槽**注入业务卡片（必填，缺注入即不显示，正文不受影响）。
+- 用 Render Slots 的**替换槽** `messageMarkdown` / `messageCodeBlock` 换掉内置的正文 markdown 渲染器
+  与围栏代码块渲染器。两格是 `ConversationRenderSlots` 上的**可选**属性，语义与增强槽相反：不提供 =
+  官方内置件原行为；提供后由替换件全权渲染那一格。props 由官方件真实入参收窄
+  （`ConversationMarkdownSlotProps` = `{ text, isStreaming }`；`ConversationCodeBlockSlotProps` =
+  `{ language, code, isStreaming }`），不透传内部形状。
+  - `text` 是官方渲染器逐字消费的那份正文；`isStreaming` 只用于静态呈现，替换件**不得自带揭示层**
+    （屏显节奏的唯一权威是 `ChatStreamPacer`）。
+  - 失败方向恒为官方件：替换件返回 `null`（弃权）、渲染抛错、或围栏正文取不到，都回落内置实现。
 - 用端口 Provider 接入任意传输、Store 和权限系统。
 - 用 `ChatStreamPacerOptions` 接入浏览器帧、测试时钟或自定义调度器。
 - 用 `contracts` 子路径共享纯类型而不加载 React 组件。

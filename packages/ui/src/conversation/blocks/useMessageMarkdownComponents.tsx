@@ -32,11 +32,13 @@ import {
   normalizeMessageMarkdownFileReference,
   resolveMessageMarkdownHrefTarget,
 } from '../markdown/messageMarkdownLinks.utils'
+import { useConversationRenderSlots } from '../render-slots'
+import { ReplaceableRenderSlot } from '../render-slots/ReplaceableRenderSlot'
 
 import styles from './MessageBubble.module.css'
 
 import type { HtmlArtifactBlock as HtmlArtifactContentBlock } from '#contracts'
-import { isString } from '#internal/runtime'
+import { isEmpty, isString } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
 const NonExpandableCodeBlockLanguages = new Set(['mermaid'])
@@ -294,10 +296,55 @@ function ExpandableCodeBlockFrame({
   )
 }
 
+/** 官方代码块渲染的三条分支（mermaid 直渲 / 可运行 HTML / 可展开框），原样抽出以便充当替换槽的回落。 */
+function renderOfficialCodeBlock({
+  blockChild,
+  language,
+  code,
+  isStreaming,
+}: {
+  blockChild: ReactElement
+  language: string
+  code: string
+  isStreaming: boolean
+}): ReactElement {
+  if (NonExpandableCodeBlockLanguages.has(language)) return blockChild
+
+  if (isRenderableHtmlCodeBlockLanguage(language))
+    return (
+      <RenderableHtmlCodeBlockFrame code={code} isStreaming={isStreaming}>
+        {blockChild}
+      </RenderableHtmlCodeBlockFrame>
+    )
+
+  return (
+    <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
+      {blockChild}
+    </ExpandableCodeBlockFrame>
+  )
+}
+
+/**
+ * 替换槽专用的围栏正文提取：官方路径只认「children 就是一整串字符串」（`readCodeText`），因为它拿
+ * 正文只为数行数，数不出来还有 DOM 实测兜底。替换件没有兜底——正文是它唯一的输入，所以这里穿透
+ * 数组与元素节点把文本拼回来。**只在槽位存在时调用**，官方路径逐字节不变。
+ */
+function extractCodeBlockText(children: unknown): string {
+  if (isString(children)) return children
+  if (Array.isArray(children))
+    return children.map((child) => extractCodeBlockText(child)).join('')
+  if (React.isValidElement(children))
+    return extractCodeBlockText((children.props as { children?: unknown }).children)
+
+  return ''
+}
+
 function MarkdownPreWithExpandableCode({
   children,
   isStreaming = false,
 }: React.ComponentPropsWithoutRef<'pre'> & { isStreaming?: boolean }): ReactElement {
+  const slots = useConversationRenderSlots()
+
   if (!React.isValidElement(children)) return <>{children}</>
 
   const childElement = children as React.ReactElement<Record<string, unknown>>
@@ -309,23 +356,27 @@ function MarkdownPreWithExpandableCode({
   const blockChild = React.cloneElement(childElement, {
     'data-block': 'true',
   })
+  const official = renderOfficialCodeBlock({
+    blockChild,
+    language,
+    code: readCodeText(childProps.children),
+    isStreaming,
+  })
 
-  if (NonExpandableCodeBlockLanguages.has(language)) return blockChild
+  const slot = slots.messageCodeBlock
+  if (!slot) return official
 
-  if (isRenderableHtmlCodeBlockLanguage(language))
-    return (
-      <RenderableHtmlCodeBlockFrame
-        code={readCodeText(childProps.children)}
-        isStreaming={isStreaming}
-      >
-        {blockChild}
-      </RenderableHtmlCodeBlockFrame>
-    )
+  const code = extractCodeBlockText(childProps.children)
+  // 取不到围栏正文 = 替换件唯一的输入缺席，替换就没有意义：回落官方（失败方向恒为官方实现）。
+  if (isEmpty(code)) return official
 
   return (
-    <ExpandableCodeBlockFrame code={readCodeText(childProps.children)} isStreaming={isStreaming}>
-      {blockChild}
-    </ExpandableCodeBlockFrame>
+    <ReplaceableRenderSlot
+      scope="conversation.message.codeBlock"
+      render={slot}
+      props={{ language, code, isStreaming }}
+      fallback={official}
+    />
   )
 }
 

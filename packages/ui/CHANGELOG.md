@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `@velaros-ai/ui/conversation/render-slots` 增两格**替换槽**：`messageMarkdown` / `messageCodeBlock`
+  （+ props 契约 `ConversationMarkdownSlotProps` / `ConversationCodeBlockSlotProps`）。两格为**可选**
+  属性，缺席 = 官方内置件原行为；替换件弃权（返回 `null`）或渲染抛错一律回落官方件。
+
 ## [0.2.2] — 第三方包边界与接口文档
 
 ### Added

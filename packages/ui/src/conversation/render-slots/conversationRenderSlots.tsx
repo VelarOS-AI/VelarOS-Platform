@@ -49,12 +49,55 @@ export type ConversationStickyDockContent =
     }
 
 /**
+ * `messageMarkdown` 替换槽的 props。
+ *
+ * 由 `MessageMarkdownBlock` / `StreamingTextBlock`（`../blocks/MessageMarkdownBlocks`）的真实入参
+ * **收窄**而来：只留替换件真正需要的两位，不透传 `TextBlock` / 运行标记等内部形状——props 越宽，
+ * 本包被冻结的内部形状越多。
+ *
+ * - `text` 是**官方渲染器逐字消费的那份正文**（`prepareStreamdownMarkdownText` 的产物：目录树补围栏、
+ *   裸 `$` 转义），替换件因此拿到与被替换件完全相同的输入；
+ * - `isStreaming` 是**消息是否仍在流式产出**，只用于调整静态呈现（尾标记 / 占位）。替换件**不得自带
+ *   揭示层**：屏显节奏的唯一权威是 `ChatStreamPacer`，第二层逐字动画只会与它打架。
+ *
+ * v1 已知边界：运行标记（成本 / 状态尾标）由官方件在正文内联渲染，不在本 props 内——整块被替换时
+ * 它随之缺席。要保留它得把内部投影透传出去，那正是本契约拒绝做的事。
+ */
+export interface ConversationMarkdownSlotProps {
+  /** 已按流式规则准备好的 markdown 正文。 */
+  text: string
+  /** 该消息是否仍在流式产出。 */
+  isStreaming: boolean
+}
+
+/**
+ * `messageCodeBlock` 替换槽的 props。
+ *
+ * 由 `useMessageMarkdownComponents(...)` 内 `ExpandableCodeBlockFrame` / `RenderableHtmlCodeBlockFrame`
+ * 的真实入参收窄而来。语言原样给出（含 `mermaid` / `html` 这些官方走专用分支的值），替换件自己判
+ * 要不要接管——闭集判定留在官方分支里，替换件就永远拿不到新语言。
+ */
+export interface ConversationCodeBlockSlotProps {
+  /** 代码围栏的语言标注（小写；无标注为空串）。 */
+  language: string
+  code: string
+  /** 该代码块是否仍在流式产出（尾块未闭合时为真）。 */
+  isStreaming: boolean
+}
+
+/**
  * 会话渲染 render-slot 契约（§12.9 封闭）：**有限具名集合**，非任意 children 洞。
  *
  * 管线组件（`MessageContentBlock` / `AssistantMessageBubble`）不硬 import 宿主专属的黑名单卡件
  * （能力自动批准 / 定时任务提案 / 旗标任务建议 / 浏览器截图组），而是经此注入面消费——每个 slot
  * 是一个具名、带类型 props 的渲染函数。宿主在装配点提供实现（`desktopConversationRenderSlots`）。
  * 缺注入时各 slot 默认渲染 `null`（这些卡是渲染增强，缺失即不显示，不影响正文），宿主装配后即生效。
+ *
+ * **两类 slot 语义相反，别混**：
+ * - **增强槽**（下面绝大多数，必填 + 默认 `() => null`）：缺席 = 那张卡不显示，正文照旧；
+ * - **替换槽**（`messageMarkdown` / `messageCodeBlock`，**可选**）：缺席 = **官方内置件逐字节原行为**。
+ *   替换槽必须可选而不是「必填 + 默认返回 null」——后者会让「宿主忘了填」与「渲染空白」长得一模一样，
+ *   而这两格空白掉的是消息正文本身。可选性就是那道机械防线：不写它 = 官方实现。
  */
 export interface ConversationRenderSlots {
   capabilityAutoApprovalNotice: (props: {
@@ -131,6 +174,26 @@ export interface ConversationRenderSlots {
    * `ChatMessageRenderFailureAlert`（含 staleModuleRecovery 自愈耦合，留宿主）；缺注入时直接透传 children。
    */
   renderMessageBoundary: (props: { message: ChatMessage; children: ReactNode }) => ReactElement
+  /**
+   * **替换槽**：消息正文 markdown 渲染器（官方件 = `MessageMarkdownBlock` / `StreamingTextBlock`）。
+   *
+   * 缺席（`undefined`）= 官方原路径，连官方件的 lazy 分包都照旧按需加载；注入后 `MessageContentBlock`
+   * 在**硬 lazy-import 那一层**就改道，替换件生效时官方 markdown 分包根本不会被拉起——这才是「替换」
+   * 而不是「套一层」。
+   *
+   * 三条失败路径统一回落官方件：返回 `null`（声明本次不替换）/ 渲染抛错（错误边界捕获）/ 槽位缺席。
+   * 思考块（`ThinkingBlock`）**不在本槽范围**：它有自己的折叠、翻译与流式呈现，用正文替换件顶上去
+   * 只会丢功能。
+   */
+  messageMarkdown?: (props: ConversationMarkdownSlotProps) => Nullable<ReactElement>
+  /**
+   * **替换槽**：markdown 围栏代码块渲染器（官方件 = `ExpandableCodeBlockFrame` /
+   * `RenderableHtmlCodeBlockFrame` / mermaid 直渲分支）。高亮、图表、可运行都在这一格里换。
+   *
+   * 缺席 = 官方原路径。取不到围栏正文时也回落官方——替换件唯一的输入没有，替换就没有意义。
+   * 行内代码（`inlineCode`）不属于本槽：它是句中片段，不是块级渲染器。
+   */
+  messageCodeBlock?: (props: ConversationCodeBlockSlotProps) => Nullable<ReactElement>
 }
 
 /** 浏览器截图组展示模式（渲染侧单源，desktop 组件消费此定义）。 */
@@ -138,6 +201,12 @@ export type BrowserScreenshotDisplayMode = 'original' | 'model-debug'
 
 export type ConversationWorkerThreadVariant = 'default' | 'side'
 
+/**
+ * 缺注入时的默认面：增强槽一律 `() => null`（卡不显示，正文照旧）。
+ *
+ * **替换槽刻意不在这里出现**——给 `messageMarkdown` / `messageCodeBlock` 填一个 `() => null` 默认值
+ * 等于把「没人替换」写成「替换成空白」，正文会整块消失。缺席就是缺席，由调用点判 `undefined` 走官方件。
+ */
 const defaultConversationRenderSlots: ConversationRenderSlots = {
   capabilityAutoApprovalNotice: () => null,
   scheduledTaskProposal: () => null,
