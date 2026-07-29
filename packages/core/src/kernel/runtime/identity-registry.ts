@@ -38,7 +38,7 @@ function assertIdentityPart(value: string, label: string): void {
 /**
  * Product-neutral ownership registry for active session and run identities.
  *
- * It deliberately stores no conversation, workspace, model, or tool state.
+ * It deliberately stores no product state — only identity and ownership edges.
  * Closing a session also finishes its active child runs so service shutdown can
  * clean the complete identity graph deterministically.
  */

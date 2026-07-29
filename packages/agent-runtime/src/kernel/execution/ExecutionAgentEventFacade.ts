@@ -1,6 +1,6 @@
-import { chatStreamProtocol } from '@velaros-ai/core/chat-stream'
 import type { AgentEvent, ExecutionRecord, StreamTurnContextPayload } from '@velaros-ai/core/types'
 
+import { chatStreamProtocol } from '../../chat/stream'
 import {
   ExecutionAgentEventLedger,
   type ExecutionRecords,

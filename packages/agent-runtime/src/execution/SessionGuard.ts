@@ -99,4 +99,5 @@ class SourceSessionGuard {
 
 export { SourceSessionGuard }
 import { toNullable } from '@velaros-ai/core'
-import { readChatStreamSourceSessionId } from '@velaros-ai/core/chat-stream'
+
+import { readChatStreamSourceSessionId } from '../chat/stream'

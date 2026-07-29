@@ -1,7 +1,6 @@
 import type { ModelMessage } from 'ai'
 
 import { isArray, isBlank, isEmpty, isNonBlankString,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
-import { createChatStreamScopeKey, readChatStreamSourceSessionId } from '@velaros-ai/core/chat-stream'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ChatSendRequest,
@@ -13,6 +12,7 @@ import type {
   UserActionCardResult,
 } from '@velaros-ai/core/types'
 
+import { createChatStreamScopeKey, readChatStreamSourceSessionId } from '../../chat/stream'
 import type {
   KernelBackgroundJobManager,
   KernelBackgroundJobOutputSnapshot,

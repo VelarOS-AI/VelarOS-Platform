@@ -19,10 +19,6 @@
       "types": "./dist/assert.d.ts",
       "import": "./dist/assert.js"
     },
-    "./chat-stream": {
-      "types": "./dist/chat-stream/index.d.ts",
-      "import": "./dist/chat-stream/index.js"
-    },
     "./cli": {
       "types": "./dist/cli/index.d.ts",
       "import": "./dist/cli/index.js"

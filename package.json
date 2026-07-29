@@ -76,6 +76,7 @@
     "lint": "eslint . --max-warnings=0",
     "check:kernel-schemas": "bun scripts/kernel/check-schemas.mjs",
     "check:kernel-arch": "bun scripts/kernel/check-arch-boundaries.mjs",
+    "check:core-semantic-vocabulary": "bun scripts/core/check-semantic-vocabulary.mjs",
     "check:agent-schemas": "bun scripts/agent/check-schemas.mjs",
     "check:agent-arch": "bun scripts/agent/check-arch-boundaries.mjs",
     "check:capabilities-schemas": "bun scripts/capabilities/check-schemas.mjs",
@@ -91,7 +92,7 @@
     "check:ui-form-closure": "node scripts/ui/check/uiComponentFormClosure.mjs",
     "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
     "build:component-library": "vite build --config component-library/vite.config.ts",
-    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
     "check": "bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
     "test:suites": "bun run test:memory && bun run test:ui"
   },

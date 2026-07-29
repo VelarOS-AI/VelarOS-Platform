@@ -1,5 +1,4 @@
 import { isEmpty,isPresent } from '@velaros-ai/core'
-import { createChatStreamScopeKey } from '@velaros-ai/core/chat-stream'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ExecutionPendingInteractionKind,
@@ -10,6 +9,7 @@ import type {
   ToolConfirmationDecisionOptions,
 } from '@velaros-ai/core/types'
 
+import { createChatStreamScopeKey } from '../../chat/stream'
 import type {
   ExecutionInteractions,
   ExecutionRecords,

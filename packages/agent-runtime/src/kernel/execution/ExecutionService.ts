@@ -1,7 +1,6 @@
 import type { ModelMessage } from 'ai'
 
 import { isBlank,isEmpty, Log, toNullable } from '@velaros-ai/core'
-import { createChatStreamScopeKey } from '@velaros-ai/core/chat-stream'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ExecutionProvideInputRequest,
@@ -14,6 +13,7 @@ import type {
   ToolExecutionPlanUpdate,
 } from '@velaros-ai/core/types'
 
+import { createChatStreamScopeKey } from '../../chat/stream'
 import {
   ExecutionGuidanceQueue,
   type ExecutionIdFactory,

@@ -1,7 +1,6 @@
 import type { ModelMessage } from 'ai'
 
 import { isBlank, isString } from '@velaros-ai/core'
-import { createChatStreamScopeKey } from '@velaros-ai/core/chat-stream'
 import { AppError } from '@velaros-ai/core/error'
 import type { Logger } from '@velaros-ai/core/logger'
 import type {
@@ -13,6 +12,7 @@ import type {
 import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
+import { createChatStreamScopeKey } from '../../chat/stream'
 import type { ExecutionRecords, ExecutionStore, SourceSessionGuard } from '../../execution'
 
 import type { ExecutionEventBus } from './ExecutionEventBus'

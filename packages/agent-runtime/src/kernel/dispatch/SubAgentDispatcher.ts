@@ -9,7 +9,6 @@ import { randomUUID } from 'node:crypto'
 import type { ModelMessage } from 'ai'
 
 import { isBoolean, isEmpty, isFunction, Log, optionalWhen, toNullable,toOptional, truncate } from '@velaros-ai/core'
-import { createChatStreamScopeKey } from '@velaros-ai/core/chat-stream'
 import { AppError } from '@velaros-ai/core/error'
 import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/core/tool-contract'
 import type {
@@ -36,6 +35,7 @@ import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityDelegationPolicy,
 } from '../../capabilities'
+import { createChatStreamScopeKey } from '../../chat/stream'
 import {
   type SubAgentGuidanceRelayRegistry,
   type SubAgentGuidanceRelayWorkerHandle,

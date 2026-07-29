@@ -1,4 +1,4 @@
-import type { ChatStreamEvent, ChatStreamSnapshotItem } from '../types'
+import type { ChatStreamEvent, ChatStreamSnapshotItem } from '@velaros-ai/core/types'
 
 export type ChatStreamLogEntry = ChatStreamSnapshotItem
 
