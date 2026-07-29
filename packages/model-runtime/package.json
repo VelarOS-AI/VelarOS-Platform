@@ -1,0 +1,88 @@
+{
+  "name": "@velaros-ai/model-runtime",
+  "version": "0.4.6",
+  "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "model-provider",
+    "provider-adapter",
+    "ai-sdk",
+    "dependency-injection",
+    "velaros"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "import": "./dist/catalog.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./provider-scripts/node": {
+      "types": "./dist/provider-scripts/node.d.ts",
+      "import": "./dist/provider-scripts/node.js"
+    },
+    "./ProviderScriptContextWindow": {
+      "types": "./dist/ProviderScriptContextWindow.d.ts",
+      "import": "./dist/ProviderScriptContextWindow.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "test:kernel-module": "bun test test/kernel-module.test.ts",
+    "test": "bun run build && bun test test",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/google": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.53",
+    "@ai-sdk/provider": "3.0.8",
+    "ai": "^6.0.168",
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/kernel-sdk": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Model.git",
+    "directory": "packages/model-runtime"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Model/tree/main/packages/model-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Model/issues"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}
