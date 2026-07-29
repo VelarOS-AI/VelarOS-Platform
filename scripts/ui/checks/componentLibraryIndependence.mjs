@@ -6,7 +6,11 @@ const packageScopes = [
   {
     label: 'component library',
     source: 'component-library/src',
-    manifest: 'package.json',
+    // 源仓 VelarOS-UI 里,仓根 package.json 就是组件图鉴自己的 manifest,所以拿它当依赖面来查。
+    // 并入 VelarOS-Platform 后仓根是整列火车的 manifest(挂着全部 23 个平台包),这个代理关系
+    // 不再成立——图鉴没有自己的 manifest,故本 scope 只保留 source import 检查(那才是实质防线:
+    // component-library/src 只许 import UI 两包)。两个 UI 包自己的 manifest 检查照旧。
+    manifest: undefined,
     allowedVelarosPackages: new Set([
       '@velaros-ai/conversation-ui',
       '@velaros-ai/ui',
@@ -80,6 +84,7 @@ async function readManifest(relativeManifest) {
 }
 
 async function findForbiddenManifestDependencies(scope) {
+  if (!scope.manifest) return []
   const manifest = await readManifest(scope.manifest)
   const dependencyGroups = [
     manifest.dependencies ?? {},
