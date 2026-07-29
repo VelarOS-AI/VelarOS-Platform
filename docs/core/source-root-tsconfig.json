@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@velaros-ai/core": ["./packages/core/src/index.ts"],
+      "@velaros-ai/core/*": ["./packages/core/src/*"]
+    }
+  },
+  "files": []
+}
