@@ -1,6 +1,5 @@
 # `@velaros-ai/kernel-updater`
 
-中文接口文档：[docs/api.zh-CN.md](docs/api.zh-CN.md)
 
 Installs, activates, and rolls back the shared VelarOS Kernel runtime on a
 user's machine.

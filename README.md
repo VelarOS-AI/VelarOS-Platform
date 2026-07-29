@@ -26,7 +26,6 @@ eslint/<domain>.config.mjs 各源仓 eslint 规则集原样保留
 eslint.config.mjs          根共享基座:只做域作用域收敛 + 根锚定,不重写规则
 tsconfig.json              共享基座:全平台包的 paths 单源
 tsconfig.eslint.json       eslint 类型感知用的全仓 program
-internal/kernel-daemon/    Kernel 仓根 src/test/packs(daemon 内部基础设施,待 P2 库化)
 component-library/         UI 组件图鉴(源自 VelarOS-UI)
 tests/<domain>/            各源仓根级测试树
 docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考古用)
@@ -42,11 +41,11 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | 域 | 包 | 版本 | 源仓 |
 | --- | --- | --- | --- |
 | kernel | `@velaros-ai/kernel-client` | 0.3.0 | VelarOS-Kernel |
-| kernel | `@velaros-ai/kernel-sdk` | 0.2.2 | VelarOS-Kernel |
+| kernel | `@velaros-ai/kernel-daemon` | 0.3.2 | VelarOS-Kernel |
 | kernel | `@velaros-ai/kernel-updater` | 0.1.0 | VelarOS-Kernel |
 | agent | `@velaros-ai/agent-protocol` | 0.4.0 | VelarOS-Agent |
 | agent | `@velaros-ai/agent-runtime` | 0.5.0 | VelarOS-Agent |
-| core | `@velaros-ai/core` | 0.3.2 | VelarOS-Core |
+| core | `@velaros-ai/core` | 0.3.2 | VelarOS-Core + VelarOS-Kernel |
 | model | `@velaros-ai/model-runtime` | 0.4.6 | VelarOS-Model |
 | capabilities | `@velaros-ai/workspace` | 1.2.5 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/browser-core` | 0.2.6 | VelarOS-Capabilities |
@@ -102,11 +101,12 @@ bun run build            # 按依赖拓扑逐包构建(23 包)
 bun run typecheck        # 逐包 typecheck
 bun run test             # 逐包 test
 bun run lint             # 全仓 eslint(域规则集各自生效)
-bun run check            # 总门:build + typecheck + kernel-daemon + lint + test + test:suites + 各域门
+bun run check            # 总门:build + typecheck + lint + test + test:suites + 各域门
 bun run check:gates      # 只跑各域质量门
 ```
 
-域门单跑:`check:kernel-schemas` `check:kernel-arch` `check:agent-schemas` `check:agent-arch`
+域门单跑:`check:kernel-schemas` `check:kernel-arch` `check:core-semantic-vocabulary`
+`check:agent-schemas` `check:agent-arch`
 `check:capabilities-schemas` `check:capabilities-arch` `check:model-arch` `check:memory-boundaries`
 `check:memory-knowledge-profile` `probe:memory` `check:ui-form-closure` `check:ui-color-literal`
 `check:ui-package-contracts` `check:ui-component-library`。
@@ -114,13 +114,29 @@ bun run check:gates      # 只跑各域质量门
 > `postinstall` 会跑 `electron-rebuild -f -w better-sqlite3`:memory 的探针与 knowledge profile
 > 集成测试跑在 Electron 上,原生模块 ABI 必须匹配(沿用 VelarOS-Memory 源仓的做法)。
 
+## Kernel 的形态(P2 已落)
+
+内核**是库不是进程**(宪章 §15.1 原则一 / §15.4「一个身份」):
+
+| 位置 | 是什么 |
+| --- | --- |
+| `packages/core/src/kernel/` | **Kernel 库本体**:`abi`(Mod 开发面)/ `protocol`(wire 调用信封,唯一事实来源)/ `contracts`(服务面契约)/ `host`(module host + capability registry + 权限 broker + 事件流 + 状态)/ `runtime`(KernelService) |
+| `packages/kernel-daemon/` | **serve 部署模式的配件**:daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / `packs/` |
+| `packages/kernel-client/` | 瘦客户端与 serve 模式的接入面 |
+| `packages/kernel-updater/` | 共享 Runtime 的安装、切换、回滚 |
+
+依赖方向由 `check:kernel-arch` 锁死:**core 不得依赖 kernel-daemon / kernel-client / kernel-updater**
+(库不知进程);反向依赖 core 合法。`check:core-semantic-vocabulary` 另外禁止内核认识
+聊天 / 浏览器 / 工作区 / 记忆 / 办公 / 桌面控制这类具体域词。
+
 ## 已知欠账(P2 及以后)
 
-1. **Kernel daemon 库化**:`internal/kernel-daemon/` 是 VelarOS-Kernel 仓根 `src/` 平移而来的私有
-   基础设施(daemon / host / rpc / runtime / protocol,约 5.3k 行),尚未成包。切分建议见下。
-2. **`internal/kernel-daemon/packs/` 的 sibling 解析**:pack entry 仍按拆仓形态 import
-   `VelarOS-Capabilities/packages/<cap>/dist/index.js`(`pack-resolve.mjs` 回落到 Kernel 仓的父目录)。
-   合仓后能力包就在 `packages/<cap>/dist`,这条解析要改成同仓路径,属 P2 daemon 库化的一部分。
+1. **领域语义逐出 core 未做完**:`check:core-semantic-vocabulary` 的「待逐出清单」列了余量
+   (最大一块是 `packages/core/src/types/index.ts`,1310 行聊天/执行/IPC 载荷);
+   数据契约去 `agent-protocol`,运行时行为去 `agent-runtime`。清单只减不增。
+2. **`importSibling` 未退役**:`packages/kernel-daemon/packs/` 的 pack entry 路径 P2 已改成同仓
+   `packages/<cap>/dist`,但「按磁盘布局找 dist」这套机制本身要在 P4 换成 workspace 直连
+   (宪章 §15.2 层间铁律)。
 3. **发布流水线**:`.github/workflows/release-packages.yml` 目前只做 tag 身份核验 + 全量门;
    一次性发布 23 个包的火车发布器,以及各域 `scripts/<domain>/release/publish-packages.mjs`
    的合并,随版本推进方案一起做。
