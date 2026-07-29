@@ -24,10 +24,24 @@ export {
   type MemoryCapabilityService,
 } from './kernel-module'
 export {
+  createMemoryStoreCapabilityToken,
+  createMemoryStoreKernelModule,
+  type CreateMemoryStoreKernelModuleOptions,
+  DefaultMemoryStoreCapabilityVersion,
+  listRegisteredMemoryStoreBackends,
+  memoryStoreCapabilityId,
+  MemoryStoreCapabilityNamespace,
+  type MemoryStoreCapabilityRegistry,
+  type MemoryStoreCapabilityService,
+  resolveMemoryStoreBackend,
+  type ResolveMemoryStoreBackendInput,
+} from './MemoryStoreCapability'
+export {
   type MemoryAdapterConfigPort,
   type MemoryAdapterHostContextPort,
   type MemoryAdapterMount,
   MemoryAdapterRuntime,
+  type MemoryAdapterStorePort,
   mountMemoryAdapter,
   type MountMemoryAdapterInput,
 } from './mount'

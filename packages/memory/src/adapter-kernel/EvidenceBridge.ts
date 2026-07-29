@@ -1,7 +1,10 @@
 import { isArray, isBlank, isEmpty, isFiniteNumber,isNonBlankString, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { MemoryDomain, MemoryEvidenceInput } from '..'
+// 值导入必须指向具体模块：`from '..'` 在 dist 里会解析成目录 import
+// （fix-esm-extensions 只改写带 `/` 的相对说明符），Node ESM 直接报 ERR_UNSUPPORTED_DIR_IMPORT。
+import { type MemoryStoreBackend, supportsMemoryBackendVerb } from '../backend/Contract'
+import type { MemoryEvidenceInput } from '../memory-tree/Types'
 
 import type {
   MemoryHostScopeResolver,
@@ -54,13 +57,17 @@ interface ExecutionObservationInput {
  *
  * Renderer 不再判断“什么值得记”，这里只把获授权的原始事件规范化为 Evidence；
  * 去重由 `(source_type, source_id)` 保证，意义提炼由 MemoryDream 负责。
+ *
+ * 写入落到哪个后端由 capability token 解析决定（`./MemoryStoreCapability`）。本桥只认窄端口
+ * 的 capture / dream / govern 三个动词：后端没有整理管线（如 `memory-files`）时 dream 动词
+ * 缺席，采集照常，不走「降级」分支。
  */
 export class MemoryEvidenceBridge {
   private readonly log = Log.tag('MemoryEvidenceBridge')
   private pending: Promise<void> = Promise.resolve()
 
   constructor(
-    private readonly domain: MemoryDomain,
+    private readonly store: MemoryStoreBackend,
     private readonly options: MemoryEvidenceBridgeOptions
   ) {}
 
@@ -213,8 +220,8 @@ export class MemoryEvidenceBridge {
   public markSessionSourceDeleted(sessionId: string): void {
     const normalized = sessionId.trim()
     if (isBlank(normalized)) return
-    this.enqueueAction(() => {
-      this.domain.setSessionEvidenceEligibility(normalized, 'source_deleted')
+    this.enqueueAction(async () => {
+      await this.store.governSourceEligibility?.(normalized, 'source_deleted')
     })
   }
 
@@ -252,18 +259,23 @@ export class MemoryEvidenceBridge {
   }
 
   private enqueue(inputs: MemoryEvidenceInput[]): void {
-    this.enqueueAction(() => {
-      const captured = this.domain.captureEvidenceBatch(inputs, false)
-      if (captured.insertedCount > 0 && (this.options.isGrowthEnabled?.() ?? true)) {
-        this.domain.runDream({ trigger: 'immediate', maxEvidence: 25 })
+    this.enqueueAction(async () => {
+      // `consolidate: false` = 由本桥自己决定何时触发整理（与直连 domain 时逐字一致）。
+      const captured = await this.store.captureBatch(inputs, { consolidate: false })
+      if (
+        captured.insertedCount > 0
+        && (this.options.isGrowthEnabled?.() ?? true)
+        && supportsMemoryBackendVerb(this.store, 'dream')
+      ) {
+        await this.store.dream?.({ trigger: 'immediate', maxEvidence: 25 })
       }
     })
   }
 
-  private enqueueAction(action: () => void): void {
+  private enqueueAction(action: () => void | Promise<void>): void {
     this.pending = this.pending
-      .then(() => {
-        action()
+      .then(async () => {
+        await action()
       })
       .catch((error) => {
         this.log.warn('memory evidence capture failed', AppError.from(error))
