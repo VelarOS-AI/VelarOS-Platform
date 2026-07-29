@@ -15,7 +15,7 @@ import Database from 'better-sqlite3'
 import type {
   KnowledgeEmbeddingProviderId,
   KnowledgeRecord,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 import {
   buildDocumentRevisionKey,
   KnowledgeEmbeddingProfileIsolationMigration,
@@ -24,7 +24,7 @@ import {
   KnowledgeRows,
   KnowledgeVectorQuery,
   KnowledgeVectors,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 
 let storagePath = ''
 

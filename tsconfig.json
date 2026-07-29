@@ -84,17 +84,17 @@
       "@velaros-ai/kernel-updater/*": [
         "./packages/kernel-updater/src/*"
       ],
-      "@velaros-ai/knowledge": [
-        "./packages/knowledge/src/index.ts"
+      "@velaros-ai/memory/knowledge": [
+        "./packages/memory/src/knowledge/index.ts"
       ],
-      "@velaros-ai/knowledge/*": [
-        "./packages/knowledge/src/*"
+      "@velaros-ai/memory/knowledge/*": [
+        "./packages/memory/src/knowledge/*"
       ],
       "@velaros-ai/memory": [
         "./packages/memory/src/index.ts"
       ],
-      "@velaros-ai/memory-adapter-kernel": [
-        "./packages/memory-adapter-kernel/src/index.ts"
+      "@velaros-ai/memory/adapter-kernel": [
+        "./packages/memory/src/adapter-kernel/index.ts"
       ],
       "@velaros-ai/memory/*": [
         "./packages/memory/src/*"

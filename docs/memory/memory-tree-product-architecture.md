@@ -1,6 +1,6 @@
 # VelarOS 记忆树产品愿景与重构架构
 
-> 状态：候选技术架构已经第二 / 四 / 六轮修订。第六轮并入第五轮独立评审的七项最小补丁包：schema 逐表去明文 + 列级分类矩阵、五物理根、加密 index generation、privacy generation + 披露闸门、normalized erasure targets、DEK / keyring / root 三层密钥、物化基点权威表与双哈希规范。修订点见 [记忆树修订记录](./memory-tree-revision-notes.md)、[第三轮](./memory-tree-third-round-review.md) 与 [第五轮评审报告](./memory-tree-fifth-round-review.md)。工程实施已完成 S0 规范冻结、S1 物理根 / keyring / DEK、S2 独立 authority schema/open/migrate、S3 diff/snapshot/base/checkpoint 权威链、S4 Evidence/Dream CAS 管线、S5 统一意义模型/信任封顶/确定性投影、S6 两段式 Erasure Saga、S7 Evidence 只读重灌/治理 deny/parity 切权判定器，以及 S8 package-owned 组合根和同步查询门面；R-memory 已建立独立仓，并把工作区知识域劈为 `@velaros-ai/knowledge`，长期记忆保持为瘦身后的 `@velaros-ai/memory`。S7/S8 只完成可验证迁移与完整读写组合能力；Desktop 权威指针切换和旧表 drop 仍锁在“同一报告摘要的真机回执 + 用户明示签字”双闸门之后。后续切片仍以 [现行冻结规范](./memory-tree-spec-freeze.md) 为准。
+> 状态：候选技术架构已经第二 / 四 / 六轮修订。第六轮并入第五轮独立评审的七项最小补丁包：schema 逐表去明文 + 列级分类矩阵、五物理根、加密 index generation、privacy generation + 披露闸门、normalized erasure targets、DEK / keyring / root 三层密钥、物化基点权威表与双哈希规范。修订点见 [记忆树修订记录](./memory-tree-revision-notes.md)、[第三轮](./memory-tree-third-round-review.md) 与 [第五轮评审报告](./memory-tree-fifth-round-review.md)。工程实施已完成 S0 规范冻结、S1 物理根 / keyring / DEK、S2 独立 authority schema/open/migrate、S3 diff/snapshot/base/checkpoint 权威链、S4 Evidence/Dream CAS 管线、S5 统一意义模型/信任封顶/确定性投影、S6 两段式 Erasure Saga、S7 Evidence 只读重灌/治理 deny/parity 切权判定器，以及 S8 package-owned 组合根和同步查询门面；R-memory 已建立独立仓，并把工作区知识域劈为 `@velaros-ai/memory/knowledge`，长期记忆保持为瘦身后的 `@velaros-ai/memory`。S7/S8 只完成可验证迁移与完整读写组合能力；Desktop 权威指针切换和旧表 drop 仍锁在“同一报告摘要的真机回执 + 用户明示签字”双闸门之后。后续切片仍以 [现行冻结规范](./memory-tree-spec-freeze.md) 为准。
 > 日期：2026-07-13
 > 适用范围：VelarOS 桌面产品、`packages/memory`、记忆后台任务、Memory 页面与相关设置
 > 本文是后续大规模重构的候选技术架构；已确认需求以 [记忆树产品需求](./memory-tree-product-requirements.md) 为准，当前代码行为仍以现有模块文档为准。
@@ -1266,10 +1266,10 @@ Evidence（权威事实来源）
 | `MemoryGraphTimeline` 时间泳道                                                              | 删除                   | 时间能力进入树年轮和分支聚焦                                                                                         |
 | 前端临时相似度连线（`useMemoryGraphLinks`）                                                 | 删除为权威关系         | 只有持久化且带证据的 lineage 才能影响树                                                                              |
 | `Embeddings` / `EmbeddingApi` / provider 跟随与生成门禁（`EmbeddingChatProviderContext`）   | 复用                   | 干净的注入式基础设施；向量行 runtime 版本元数据延续现有行级 reindex 思路                                             |
-| `packages/knowledge/src/shared/**`（HybridQuery / Indexing / VectorStats）                  | 已迁至 Knowledge       | 混合融合评分与索引复用判定属于工作区知识检索                                                                         |
+| `packages/memory/src/knowledge/shared/**`（HybridQuery / Indexing / VectorStats）                  | 已迁至 Knowledge       | 混合融合评分与索引复用判定属于工作区知识检索                                                                         |
 | `DeterministicCurator` 的确定性脱敏正则                                                     | 重构后复用             | 作为确定性隐私入口（secret redaction + privacy classification）的种子实现                                            |
 | `TurnRecallCoordinator` + `MemoryRelevanceSelector`（turn-context 第八源 `memory.recall`）  | 复用形态               | “同步零 LLM、异步严格选择注入”正是新召回性能契约的原型；数据源改为树路径 facade                                      |
-| `packages/knowledge/src/knowledge/**`（知识域）                                             | 已拆为独立包           | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
+| `packages/memory/src/knowledge/knowledge/**`（知识域）                                             | 已拆为独立包           | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
 | 测试版 v1 存储基线                                                                          | 已落地                 | 直接创建当前 authority schema；开发期旧数据不转换、不备份、不带入正式迁移链                                          |
 | Electron `safeStorage`（现有 CloudAccountTokenStore 用法）                                  | 只作 seed              | 适合保护单个 wrapping root，不等同于十万级 per-blob DEK 的完整 ContentKeyService                                     |
 | renderer 侧自动沉淀（`useChatMemoryBridge` 计划构建）                                       | 删除                   | 采集职责移到 main 侧 `MemoryEvidenceBridge`；renderer 不再决定“什么值得记”，浏览器与系统空间会话因此首次获得平等采集 |
@@ -1307,7 +1307,7 @@ apps/desktop/src/renderer/src/features/memory/
   detail/            # 按需右侧抽屉
 ```
 
-`packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
+`packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/memory/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
 
 ## 相邻记忆机制边界
 

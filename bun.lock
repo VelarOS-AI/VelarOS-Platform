@@ -15,9 +15,7 @@
         "@velaros-ai/kernel-client": "workspace:*",
         "@velaros-ai/kernel-daemon": "workspace:*",
         "@velaros-ai/kernel-updater": "workspace:*",
-        "@velaros-ai/knowledge": "workspace:*",
         "@velaros-ai/memory": "workspace:*",
-        "@velaros-ai/memory-adapter-kernel": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/office-tools": "workspace:*",
         "@velaros-ai/system-tools": "workspace:*",
@@ -208,11 +206,12 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/knowledge": {
-      "name": "@velaros-ai/knowledge",
+    "packages/memory": {
+      "name": "@velaros-ai/memory",
       "version": "0.3.5",
       "bin": {
-        "velaros-knowledge": "./dist/cli.js",
+        "velaros-memory": "./dist/cli.js",
+        "velaros-knowledge": "./dist/knowledge/cli.js",
       },
       "dependencies": {
         "@lancedb/lancedb": "^0.27.2",
@@ -223,35 +222,6 @@
       },
       "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/memory": {
-      "name": "@velaros-ai/memory",
-      "version": "0.3.5",
-      "bin": {
-        "velaros-memory": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "better-sqlite3": "^12.9.0",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/better-sqlite3": "^7.6.13",
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/memory-adapter-kernel": {
-      "name": "@velaros-ai/memory-adapter-kernel",
-      "version": "0.3.5",
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/memory": "workspace:*",
-      },
-      "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
       },
@@ -964,11 +934,7 @@
 
     "@velaros-ai/kernel-updater": ["@velaros-ai/kernel-updater@workspace:packages/kernel-updater"],
 
-    "@velaros-ai/knowledge": ["@velaros-ai/knowledge@workspace:packages/knowledge"],
-
     "@velaros-ai/memory": ["@velaros-ai/memory@workspace:packages/memory"],
-
-    "@velaros-ai/memory-adapter-kernel": ["@velaros-ai/memory-adapter-kernel@workspace:packages/memory-adapter-kernel"],
 
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 

@@ -5,7 +5,7 @@ import test from 'node:test'
 
 const adapterEntry = pathToFileURL(resolve(
   import.meta.dirname,
-  '../../../../../packages/memory-adapter-kernel/dist/index.js',
+  '../../../../../packages/memory/dist/adapter-kernel/index.js',
 )).href
 const { MemoryEvidenceBridge } = await import(adapterEntry)
 

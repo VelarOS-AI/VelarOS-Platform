@@ -1,7 +1,7 @@
 import type {
   MemoryEvidenceInput,
   MemoryScopeId,
-} from '@velaros-ai/memory'
+} from '..'
 
 export interface MemoryHostScopeInput {
   sessionId: string

@@ -1,4 +1,4 @@
-# `@velaros-ai/memory-adapter-kernel` 接口文档
+# `@velaros-ai/memory/adapter-kernel` 接口文档
 
 ## 定位与非目标
 
@@ -8,14 +8,14 @@ Dream 调度。它不实现 Electron、Desktop IPC、聊天数据库、Workspace
 ## 安装
 
 ```bash
-npm install @velaros-ai/memory-adapter-kernel @velaros-ai/memory
+npm install @velaros-ai/memory/adapter-kernel @velaros-ai/memory
 ```
 
 包以 ESM 发布，要求 Node.js 20 或更高版本。
 
 ## 公共入口
 
-唯一入口是 `@velaros-ai/memory-adapter-kernel`。所有公共类、ports 和 Kernel module 工厂
+唯一入口是 `@velaros-ai/memory/adapter-kernel`。所有公共类、ports 和 Kernel module 工厂
 都由根入口导出。
 
 ## 核心类与接口
@@ -53,7 +53,7 @@ npm install @velaros-ai/memory-adapter-kernel @velaros-ai/memory
 import {
   MemoryAdapterRuntime,
   type MountMemoryAdapterInput,
-} from '@velaros-ai/memory-adapter-kernel'
+} from '@velaros-ai/memory/adapter-kernel'
 
 declare const input: MountMemoryAdapterInput
 

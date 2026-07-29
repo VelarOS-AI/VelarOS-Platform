@@ -15,10 +15,10 @@ meaning model, versioned tree projection, recall, erasure, and memory tools.
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/knowledge`, `@velaros-ai/agent`,
+This package must not depend on `@velaros-ai/memory/knowledge`, `@velaros-ai/agent`,
 Desktop IPC, renderer code, or app-specific prompt feature manifests. Hosts inject
 the database and system APIs. Workspace knowledge and embeddings live in
-`@velaros-ai/knowledge`.
+`@velaros-ai/memory/knowledge`.
 
 Memory scope ids and helpers are owned here (`MemoryScopeId`,
 `buildProjectMemoryScope`, `buildSiteMemoryScope`). Product context selection

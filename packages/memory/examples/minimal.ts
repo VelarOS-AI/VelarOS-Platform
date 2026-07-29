@@ -1,7 +1,7 @@
 import {
   DefaultMemoryRuntime,
   type MemoryTreeRuntimeProviders,
-} from '@velaros-ai/memory'
+} from '../src'
 
 declare const providers: MemoryTreeRuntimeProviders
 

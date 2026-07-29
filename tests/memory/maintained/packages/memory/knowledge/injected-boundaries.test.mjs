@@ -8,7 +8,7 @@ import {
   EmbeddingApi,
   Embeddings,
   KnowledgeWorkspace,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 
 test('embedding runtime is fully resolved by the injected host port', async () => {
   const requests = []

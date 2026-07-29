@@ -1,7 +1,8 @@
 import { isEmpty,Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
-import type { MemoryDomain, MemoryRecallItem } from '@velaros-ai/memory'
+
+import type { MemoryDomain, MemoryRecallItem } from '..'
 
 import type { MemoryHostScopeResolver } from './HostContracts'
 

@@ -10,9 +10,9 @@ const GateRelativePath = 'scripts/checks/packageConsumerGate.mjs'
 const NoSiblingSourceFiles = [
   GateRelativePath,
   'tsconfig.eslint.json',
-  'packages/knowledge/tsconfig.json',
   'packages/memory/tsconfig.json',
-  'packages/memory-adapter-kernel/tsconfig.json',
+  'packages/memory/tsconfig.json',
+  'packages/memory/tsconfig.json',
 ]
 const MaintainedConsumerRelativePath =
   'tests/memory/maintained/packages/memory/package-consumer.test.mjs'

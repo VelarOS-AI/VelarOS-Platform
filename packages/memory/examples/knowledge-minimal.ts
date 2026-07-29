@@ -1,7 +1,7 @@
 import {
   DefaultKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
-} from '@velaros-ai/knowledge'
+} from '../src/knowledge'
 
 declare const providers: KnowledgeRuntimeProviders
 

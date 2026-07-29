@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 
-const cliPath = new URL('../../../../../packages/knowledge/dist/cli.js', import.meta.url)
+const cliPath = new URL('../../../../../../packages/memory/dist/knowledge/cli.js', import.meta.url)
 
 test('knowledge cli lists only knowledge tools', async () => {
   const { runKnowledgeCli } = await import(cliPath.href)

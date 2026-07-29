@@ -15,11 +15,11 @@ import {
   createKnowledgeRuntime,
   KnowledgeRuntime,
   VectorFailureMonitor,
-} from '../../../../../packages/knowledge/dist/index.js'
+} from '../../../../../packages/memory/dist/knowledge/index.js'
 import {
   MemoryAdapterRuntime,
   mountMemoryAdapter,
-} from '../../../../../packages/memory-adapter-kernel/dist/index.js'
+} from '../../../../../packages/memory/dist/adapter-kernel/index.js'
 
 test('package roots expose class-first runtimes while retaining factories', () => {
   const databaseProvider = () => {

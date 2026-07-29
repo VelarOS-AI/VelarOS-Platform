@@ -1,7 +1,7 @@
 import {
   MemoryAdapterRuntime,
   type MountMemoryAdapterInput,
-} from '@velaros-ai/memory-adapter-kernel'
+} from '../src/adapter-kernel'
 
 declare const input: MountMemoryAdapterInput
 

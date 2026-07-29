@@ -1,4 +1,4 @@
-import type { MemoryDomain } from '@velaros-ai/memory'
+import type { MemoryDomain } from '..'
 
 import { MemoryEvidenceBridge } from './EvidenceBridge'
 import type { MemoryHostScopeResolver } from './HostContracts'

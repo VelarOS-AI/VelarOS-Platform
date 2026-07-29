@@ -1,6 +1,7 @@
 import { isArray, isBlank, isEmpty, isFiniteNumber,isNonBlankString, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { MemoryDomain, MemoryEvidenceInput } from '@velaros-ai/memory'
+
+import type { MemoryDomain, MemoryEvidenceInput } from '..'
 
 import type {
   MemoryHostScopeResolver,

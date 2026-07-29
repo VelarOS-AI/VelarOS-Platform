@@ -1,10 +1,10 @@
-# @velaros-ai/memory-adapter-kernel
+# @velaros-ai/memory/adapter-kernel
 
 中文接口文档：[`docs/api.zh-CN.md`](docs/api.zh-CN.md)
 
 ## Responsibility
 
-`@velaros-ai/memory-adapter-kernel` is the **only** legal bidirectional glue point between the kernel
+`@velaros-ai/memory/adapter-kernel` is the **only** legal bidirectional glue point between the kernel
 (`@velaros-ai/agent`) and the memory product (`@velaros-ai/memory`). It owns the three host
 strategy services that turn kernel/session activity into memory-product calls and vice versa:
 
@@ -36,7 +36,7 @@ The host wires memory in one call. `mountMemoryAdapter(input)` receives the memo
 narrow host ports and returns the three-port host attachment points:
 
 ```ts
-import { mountMemoryAdapter } from '@velaros-ai/memory-adapter-kernel'
+import { mountMemoryAdapter } from '@velaros-ai/memory/adapter-kernel'
 
 const memory = mountMemoryAdapter({
   domain: memoryRuntime.memoryDomainService,
@@ -76,4 +76,4 @@ violations).
 
 ## Public Imports
 
-- `@velaros-ai/memory-adapter-kernel`
+- `@velaros-ai/memory/adapter-kernel`

@@ -11,7 +11,7 @@ import type {
   KnowledgeEmbeddingProviderId,
   KnowledgeRecord,
   KnowledgeVectorIndexRecord,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
@@ -19,7 +19,7 @@ import {
   KnowledgeIndexStatuses,
   KnowledgeMutation,
   KnowledgeVectorQuery,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 import { unique } from '@velaros-ai/core'
 
 const workspaceRoot = '/tmp/profile-isolation'

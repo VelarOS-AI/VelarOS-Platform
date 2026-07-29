@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 用途：锁定 Memory、Knowledge、Kernel 适配器三包及宿主无关边界。
+// 用途：锁定 @velaros-ai/memory 三切片（主干 / knowledge / adapter-kernel）的职责与宿主无关边界。
 
 import {
   existsSync,
@@ -7,7 +7,7 @@ import {
   readdirSync,
   statSync,
 } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
@@ -44,34 +44,45 @@ const ProductToolNames = [
   'workspace_add_root',
 ]
 
+// P7a 合包后:Memory 产品是**一个安装单元、三个切片**(主干 / knowledge / adapter-kernel)。
+// 包清单层再也承载不了「主干不得依赖向量域」——knowledge 切片自己就要 lancedb;边界因此整条
+// 下沉到**切片源码层**:每条规则只扫自己的源码子树,跨切片访问按 forbiddenReach / mustStayInSlice
+// 方向矩阵裁决(相对说明符解析成绝对路径后比对)。这是「记忆与上下文永不合并」的接缝在合包后的
+// 落点,方向与合包前逐条等价,不是放宽。
+const MemoryPackageRoot = 'packages/memory'
 const ProductRules = [
   {
-    label: 'Memory',
-    packageRoot: 'packages/memory',
+    label: 'Memory 主干',
+    sourceRoot: 'src',
+    excludeRoots: ['src/knowledge', 'src/adapter-kernel'],
     forbidden: [
-      '@velaros-ai/knowledge',
+      '@velaros-ai/memory/knowledge',
       '@lancedb/lancedb',
       'apache-arrow',
     ],
-    message: 'Memory 包不得包含或依赖 Knowledge/向量域。',
+    forbiddenReach: ['src/knowledge', 'src/adapter-kernel'],
+    message: 'Memory 主干不得包含或依赖 Knowledge/向量域(也不得反向依赖 Kernel 适配器)。',
   },
   {
-    label: 'Knowledge',
-    packageRoot: 'packages/knowledge',
-    forbidden: [
-      '@velaros-ai/memory',
-      '@velaros-ai/memory-adapter-kernel',
-    ],
-    message: 'Knowledge 包不得反向依赖长期记忆树或 Kernel 适配器。',
+    label: 'Knowledge 切片',
+    sourceRoot: 'src/knowledge',
+    excludeRoots: [],
+    forbidden: ['@velaros-ai/memory'],
+    forbiddenReach: [],
+    // 合包前 Knowledge 是独立包,物理上够不着记忆树;等价约束 = 相对说明符不得逃出本切片。
+    mustStayInSlice: true,
+    message: 'Knowledge 切片不得反向依赖长期记忆树或 Kernel 适配器。',
   },
   {
-    label: 'Memory Kernel 适配器',
-    packageRoot: 'packages/memory-adapter-kernel',
+    label: 'Memory Kernel 适配器切片',
+    sourceRoot: 'src/adapter-kernel',
+    excludeRoots: [],
     forbidden: [
-      '@velaros-ai/knowledge',
+      '@velaros-ai/memory/knowledge',
       '@lancedb/lancedb',
       'apache-arrow',
     ],
+    forbiddenReach: ['src/knowledge'],
     message: 'Memory Kernel 适配器不得依赖 Knowledge/向量域。',
   },
 ]
@@ -79,6 +90,8 @@ const PortableContractRules = [
   {
     packageName: '@velaros-ai/memory',
     packageRoot: 'packages/memory',
+    exportKey: './contracts',
+    contractsFile: 'src/contracts.ts',
     sourceModules: new Map([
       ['./memory-tree/Types.js', {
         path: 'src/memory-tree/Types.ts',
@@ -91,11 +104,13 @@ const PortableContractRules = [
     ],
   },
   {
-    packageName: '@velaros-ai/knowledge',
-    packageRoot: 'packages/knowledge',
+    packageName: '@velaros-ai/memory/knowledge',
+    packageRoot: 'packages/memory',
+    exportKey: './knowledge/contracts',
+    contractsFile: 'src/knowledge/contracts.ts',
     sourceModules: new Map([
       ['./knowledge/domain/Types.js', {
-        path: 'src/knowledge/domain/Types.ts',
+        path: 'src/knowledge/knowledge/domain/Types.ts',
         allowedImports: new Set(['../../Constants']),
       }],
     ]),
@@ -114,26 +129,21 @@ export function collectProductBoundaryViolations(
 ) {
   const violations = []
 
+  const packageRoot = resolve(repoRoot, MemoryPackageRoot)
+  const manifestPath = resolve(packageRoot, 'package.json')
+  if (!existsSync(manifestPath)) {
+    violations.push(`${MemoryPackageRoot}/package.json：缺少包清单。`)
+    return violations
+  }
+
   for (const rule of ProductRules) {
-    const packageRoot = resolve(repoRoot, rule.packageRoot)
-    const manifestPath = resolve(packageRoot, 'package.json')
-    if (!existsSync(manifestPath)) {
-      violations.push(`${rule.packageRoot}/package.json：缺少包清单。`)
-      continue
-    }
+    const sliceRoot = resolve(packageRoot, rule.sourceRoot)
+    const excluded = rule.excludeRoots.map((entry) => resolve(packageRoot, entry))
+    const forbiddenReach = rule.forbiddenReach.map((entry) => resolve(packageRoot, entry))
 
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-    for (const section of DependencySections) {
-      for (const dependency of Object.keys(manifest[section] ?? {})) {
-        if (!matchesAnySpecifier(dependency, rule.forbidden)) continue
-        violations.push(
-          `${relative(repoRoot, manifestPath)}：${section} 中的 ${dependency} 违反边界；${rule.message}`,
-        )
-      }
-    }
-
-    for (const file of walkFiles(resolve(packageRoot, 'src'))) {
+    for (const file of walkFiles(sliceRoot)) {
       if (!SourceFilePattern.test(file)) continue
+      if (excluded.some((entry) => file.startsWith(`${entry}/`))) continue
       const source = readFileSync(file, 'utf8')
       for (const toolName of ProductToolNames) {
         if (!source.includes(toolName)) continue
@@ -157,6 +167,18 @@ export function collectProductBoundaryViolations(
             `${relative(repoRoot, file)}：import ${specifier} 违反边界；${rule.label} 必须自持领域 DTO，并通过宿主端口注入 Model/Workspace/Chat 语义。`,
           )
         }
+        if (!specifier.startsWith('.')) continue
+        const reached = resolve(dirname(file), specifier)
+        if (rule.mustStayInSlice && !reached.startsWith(`${sliceRoot}/`)) {
+          violations.push(
+            `${relative(repoRoot, file)}：相对 import ${specifier} 逃出 ${rule.sourceRoot}/ 切片；${rule.message}`,
+          )
+        }
+        if (forbiddenReach.some((entry) => reached.startsWith(`${entry}/`))) {
+          violations.push(
+            `${relative(repoRoot, file)}：相对 import ${specifier} 触达禁止切片；${rule.message}`,
+          )
+        }
       }
     }
   }
@@ -173,19 +195,20 @@ export function collectPortableContractViolations(
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'package.json'), 'utf8'),
     )
-    const contractsExport = manifest.exports?.['./contracts']
+    const contractsExport = manifest.exports?.[rule.exportKey]
+    const contractsDist = `./dist/${rule.contractsFile.replace(/^src\//u, '').replace(/\.ts$/u, '')}`
     if (
-      contractsExport?.types !== './dist/contracts.d.ts'
-      || contractsExport?.import !== './dist/contracts.js'
+      contractsExport?.types !== `${contractsDist}.d.ts`
+      || contractsExport?.import !== `${contractsDist}.js`
     ) {
       violations.push(
-        `${rule.packageName}/contracts：必须显式发布 dist/contracts.d.ts 与 dist/contracts.js。`,
+        `${rule.packageName}/contracts：必须显式发布 ${contractsDist}.d.ts 与 ${contractsDist}.js。`,
       )
     }
 
-    const contractsPath = resolve(packageRoot, 'src/contracts.ts')
+    const contractsPath = resolve(packageRoot, rule.contractsFile)
     if (!existsSync(contractsPath)) {
-      violations.push(`${rule.packageName}/contracts：缺少 src/contracts.ts。`)
+      violations.push(`${rule.packageName}/contracts：缺少 ${rule.contractsFile}。`)
       continue
     }
 
@@ -359,7 +382,7 @@ function run() {
     return
   }
 
-  process.stdout.write('Memory 产品边界检查通过：三包职责与宿主边界无漂移。\n')
+  process.stdout.write('Memory 产品边界检查通过：三切片职责与宿主边界无漂移。\n')
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined

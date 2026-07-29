@@ -4,7 +4,7 @@ import {
   type KnowledgeRuntimeProviders,
   VectorFailureMonitor,
   type VectorFailureMonitorOptions,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 import {
   createMemoryRuntime,
   MemoryRuntime,
@@ -16,7 +16,7 @@ import {
   type MemoryAdapterConfigPort,
   type MemoryAdapterHostContextPort,
   type MountMemoryAdapterInput,
-} from '@velaros-ai/memory-adapter-kernel'
+} from '@velaros-ai/memory/adapter-kernel'
 
 declare const memoryProviders: MemoryTreeRuntimeProviders
 declare const knowledgeProviders: KnowledgeRuntimeProviders

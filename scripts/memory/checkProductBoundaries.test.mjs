@@ -15,10 +15,10 @@ import {
 
 test('extracts static, dynamic, export, and require module specifiers without scanning comments', () => {
   const source = `
-    // import '@velaros-ai/knowledge'
+    // import '@velaros-ai/memory/knowledge'
     import value from '@velaros-ai/core'
     export type { Item } from '@velaros-ai/memory'
-    const dynamic = import('@velaros-ai/knowledge/query')
+    const dynamic = import('@velaros-ai/memory/knowledge/query')
     const legacy = require('electron/main')
   `
 
@@ -26,7 +26,7 @@ test('extracts static, dynamic, export, and require module specifiers without sc
     extractModuleSpecifiers(source).sort(),
     [
       '@velaros-ai/core',
-      '@velaros-ai/knowledge/query',
+      '@velaros-ai/memory/knowledge/query',
       '@velaros-ai/memory',
       'electron/main',
     ],
@@ -37,9 +37,9 @@ test('checks actual @velaros-ai package scopes in source and package manifests',
   const repoRoot = mkdtempSync(join(tmpdir(), 'velaros-memory-boundary-'))
   writePackage(repoRoot, 'memory', {
     dependencies: {
-      '@velaros-ai/knowledge': '^0.2.0',
+      '@velaros-ai/memory/knowledge': '^0.2.0',
     },
-    source: "import type { Knowledge } from '@velaros-ai/knowledge/types'",
+    source: "import type { Knowledge } from '@velaros-ai/memory/knowledge/types'",
   })
   writePackage(repoRoot, 'knowledge', {
     source: "const memory = import('@velaros-ai/memory')",
@@ -53,8 +53,8 @@ test('checks actual @velaros-ai package scopes in source and package manifests',
 
   const violations = collectProductBoundaryViolations(repoRoot)
   assert.equal(violations.length, 5)
-  assert.ok(violations.some((item) => item.includes('dependencies 中的 @velaros-ai/knowledge')))
-  assert.ok(violations.some((item) => item.includes('import @velaros-ai/knowledge/types')))
+  assert.ok(violations.some((item) => item.includes('dependencies 中的 @velaros-ai/memory/knowledge')))
+  assert.ok(violations.some((item) => item.includes('import @velaros-ai/memory/knowledge/types')))
   assert.ok(violations.some((item) => item.includes('import @velaros-ai/memory')))
   assert.ok(violations.some((item) => item.includes('import electron')))
   assert.ok(violations.some((item) => item.includes('import @velaros-ai/core/types')))

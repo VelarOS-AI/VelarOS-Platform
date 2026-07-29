@@ -1,4 +1,4 @@
-# @velaros-ai/knowledge
+# @velaros-ai/memory/knowledge
 
 中文接口文档：[`docs/api.zh-CN.md`](docs/api.zh-CN.md)
 
@@ -7,9 +7,9 @@
 
 ## Public Imports
 
-- `@velaros-ai/knowledge`
-- `@velaros-ai/knowledge/contracts` — browser-safe, type-only Knowledge DTOs
-- `@velaros-ai/knowledge/cli`
+- `@velaros-ai/memory/knowledge`
+- `@velaros-ai/memory/knowledge/contracts` — browser-safe, type-only Knowledge DTOs
+- `@velaros-ai/memory/knowledge/cli`
 
 ## Boundary
 

@@ -40,16 +40,16 @@ const PackageSpecifications = [
     },
   },
   {
-    name: '@velaros-ai/knowledge',
-    directory: resolve(RepositoryRoot, 'packages/knowledge'),
+    name: '@velaros-ai/memory/knowledge',
+    directory: resolve(RepositoryRoot, 'packages/memory'),
     example: 'knowledge.ts',
     expectedDependencies: {
       '@velaros-ai/core': '^0.3.2',
     },
   },
   {
-    name: '@velaros-ai/memory-adapter-kernel',
-    directory: resolve(RepositoryRoot, 'packages/memory-adapter-kernel'),
+    name: '@velaros-ai/memory/adapter-kernel',
+    directory: resolve(RepositoryRoot, 'packages/memory'),
     example: 'memory-adapter-kernel.ts',
     expectedDependencies: {
       '@velaros-ai/core': '^0.3.2',
@@ -363,7 +363,7 @@ async function auditPackageRoot(
     )) {
       assert.equal(manifest.dependencies?.[name], version)
     }
-    if (specification.name === '@velaros-ai/memory-adapter-kernel') {
+    if (specification.name === '@velaros-ai/memory/adapter-kernel') {
       assert.equal(manifest.dependencies?.['@velaros-ai/memory'], rootVersion)
     }
     assert.ok(manifest.files.includes('docs'))
@@ -516,10 +516,10 @@ async function writeConsumerProject(consumerDirectory) {
     `import assert from 'node:assert/strict'
 
 const memory = await import('@velaros-ai/memory')
-const knowledge = await import('@velaros-ai/knowledge')
-const adapter = await import('@velaros-ai/memory-adapter-kernel')
+const knowledge = await import('@velaros-ai/memory/knowledge')
+const adapter = await import('@velaros-ai/memory/adapter-kernel')
 const memoryCli = await import('@velaros-ai/memory/cli')
-const knowledgeCli = await import('@velaros-ai/knowledge/cli')
+const knowledgeCli = await import('@velaros-ai/memory/knowledge/cli')
 
 assert.equal(typeof memory.DefaultMemoryRuntime, 'function')
 assert.equal(typeof memory.MemoryRuntime, 'function')
@@ -538,9 +538,9 @@ async function writeCombinedConsumer(consumerDirectory) {
   await writeFile(
     join(consumerDirectory, 'combined-consumer.ts'),
     `import { isBlank } from '@velaros-ai/core'
-import * as Knowledge from '@velaros-ai/knowledge'
+import * as Knowledge from '@velaros-ai/memory/knowledge'
 import * as Memory from '@velaros-ai/memory'
-import * as MemoryAdapter from '@velaros-ai/memory-adapter-kernel'
+import * as MemoryAdapter from '@velaros-ai/memory/adapter-kernel'
 import * as UI from '@velaros-ai/ui'
 import type { Nullable as UiNullable } from '@velaros-ai/ui/utility-types'
 

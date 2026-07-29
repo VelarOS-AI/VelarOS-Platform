@@ -6,7 +6,7 @@ import {
   createMemoryKernelModule,
   MemoryCapability,
   type MemoryCapabilityService,
-} from '../src'
+} from '../../src/adapter-kernel'
 
 describe('memory kernel module', () => {
   test('exposes a bounded read-only callable surface', async () => {

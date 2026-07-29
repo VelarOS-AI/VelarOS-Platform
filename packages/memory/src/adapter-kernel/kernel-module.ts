@@ -5,11 +5,12 @@ import {
   type KernelCallableCapabilityService,
   type KernelModuleDefinition,
 } from '@velaros-ai/core/kernel/abi'
+
 import type {
   MemoryDomain,
   MemoryEvidenceCategory,
   MemoryRecallOptions,
-} from '@velaros-ai/memory'
+} from '..'
 
 export interface MemoryCapabilityService
   extends KernelCallableCapabilityService {}

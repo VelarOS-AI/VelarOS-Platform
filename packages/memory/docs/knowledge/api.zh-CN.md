@@ -1,4 +1,4 @@
-# `@velaros-ai/knowledge` 接口文档
+# `@velaros-ai/memory/knowledge` 接口文档
 
 ## 定位与非目标
 
@@ -9,7 +9,7 @@
 ## 安装
 
 ```bash
-npm install @velaros-ai/knowledge
+npm install @velaros-ai/memory/knowledge
 ```
 
 完整运行时以 ESM 发布，要求 Node.js 20 或更高版本。LanceDB 与
@@ -18,9 +18,9 @@ npm install @velaros-ai/knowledge
 
 ## 公共入口
 
-- `@velaros-ai/knowledge`：运行时、领域、embedding、存储和注入端口。
-- `@velaros-ai/knowledge/contracts`：浏览器安全的纯类型领域 DTO。
-- `@velaros-ai/knowledge/cli`：命令行入口。
+- `@velaros-ai/memory/knowledge`：运行时、领域、embedding、存储和注入端口。
+- `@velaros-ai/memory/knowledge/contracts`：浏览器安全的纯类型领域 DTO。
+- `@velaros-ai/memory/knowledge/cli`：命令行入口。
 
 只使用清单公开的入口，不要深层导入 `dist/knowledge/**`。
 
@@ -31,7 +31,7 @@ import type {
   KnowledgeReindexResult,
   KnowledgeWorkspaceSyncOptions,
   KnowledgeWorkspaceSyncResult,
-} from '@velaros-ai/knowledge/contracts'
+} from '@velaros-ai/memory/knowledge/contracts'
 ```
 
 `/contracts` 的运行时 JavaScript 为空，不会加载 SQLite、LanceDB、Apache Arrow、
@@ -74,7 +74,7 @@ baseURL 与 `configured` 状态。
 import {
   DefaultKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
-} from '@velaros-ai/knowledge'
+} from '@velaros-ai/memory/knowledge'
 
 declare const providers: KnowledgeRuntimeProviders
 

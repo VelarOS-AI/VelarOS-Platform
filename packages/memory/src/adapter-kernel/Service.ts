@@ -1,5 +1,6 @@
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+
 import type {
   MemoryDomain,
   MemoryDreamRunOptions,
@@ -12,7 +13,7 @@ import type {
   MemoryTreeDiagnostics,
   MemoryTreeIntegrityReport,
   MemoryTreeState,
-} from '@velaros-ai/memory'
+} from '..'
 
 import { MemoryDreamScheduler } from './DreamScheduler'
 import type { HostIdleSignalPort } from './HostSignals'
