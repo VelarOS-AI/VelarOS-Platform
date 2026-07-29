@@ -34,8 +34,7 @@
       "capabilities": [
         "browser",
         "cli",
-        "computer-runtime",
-        "computer-tools",
+        "computer",
         "office-tools",
         "system-tools",
         "workspace"
@@ -126,8 +125,7 @@
     "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/browser": "workspace:*",
     "@velaros-ai/cli": "workspace:*",
-    "@velaros-ai/computer-runtime": "workspace:*",
-    "@velaros-ai/computer-tools": "workspace:*",
+    "@velaros-ai/computer": "workspace:*",
     "@velaros-ai/conversation-ui": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/html-artifacts": "workspace:*",

@@ -1,4 +1,5 @@
 {
+  "//": "两切片(runtime / tools)合成单一编译单元:两者导入时的编译选项完全一致,原样保留。",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

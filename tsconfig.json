@@ -42,17 +42,17 @@
       "@velaros-ai/cli/*": [
         "./packages/cli/src/*"
       ],
-      "@velaros-ai/computer-runtime": [
-        "./packages/computer-runtime/src/index.ts"
+      "@velaros-ai/computer/runtime": [
+        "./packages/computer/src/runtime/index.ts"
       ],
-      "@velaros-ai/computer-runtime/*": [
-        "./packages/computer-runtime/src/*"
+      "@velaros-ai/computer/runtime/*": [
+        "./packages/computer/src/runtime/*"
       ],
-      "@velaros-ai/computer-tools": [
-        "./packages/computer-tools/src/index.ts"
+      "@velaros-ai/computer/tools": [
+        "./packages/computer/src/tools/index.ts"
       ],
-      "@velaros-ai/computer-tools/*": [
-        "./packages/computer-tools/src/*"
+      "@velaros-ai/computer/tools/*": [
+        "./packages/computer/src/tools/*"
       ],
       "@velaros-ai/conversation-ui": [
         "./packages/conversation-ui/src/index.ts"

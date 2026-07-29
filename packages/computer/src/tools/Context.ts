@@ -1,5 +1,6 @@
-import type { ComputerAvailability } from '@velaros-ai/computer-runtime'
 import { AppError } from '@velaros-ai/core/error'
+
+import type { ComputerAvailability } from '../runtime'
 
 import type { ComputerToolContext } from './Types'
 

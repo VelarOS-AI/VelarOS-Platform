@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ComputerResourceRuntimeRegistry } from '../src'
+import { ComputerResourceRuntimeRegistry } from '../../src/runtime'
 
 describe('ComputerResourceRuntimeRegistry', () => {
   test('owns isolated, idempotent resource state', () => {

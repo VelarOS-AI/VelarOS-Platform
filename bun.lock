@@ -8,8 +8,7 @@
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/browser": "workspace:*",
         "@velaros-ai/cli": "workspace:*",
-        "@velaros-ai/computer-runtime": "workspace:*",
-        "@velaros-ai/computer-tools": "workspace:*",
+        "@velaros-ai/computer": "workspace:*",
         "@velaros-ai/conversation-ui": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/html-artifacts": "workspace:*",
@@ -115,22 +114,10 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/computer-runtime": {
-      "name": "@velaros-ai/computer-runtime",
+    "packages/computer": {
+      "name": "@velaros-ai/computer",
       "version": "0.2.6",
       "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/computer-tools": {
-      "name": "@velaros-ai/computer-tools",
-      "version": "0.2.6",
-      "dependencies": {
-        "@velaros-ai/computer-runtime": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "zod": "^4.3.6",
       },
@@ -963,9 +950,7 @@
 
     "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
 
-    "@velaros-ai/computer-runtime": ["@velaros-ai/computer-runtime@workspace:packages/computer-runtime"],
-
-    "@velaros-ai/computer-tools": ["@velaros-ai/computer-tools@workspace:packages/computer-tools"],
+    "@velaros-ai/computer": ["@velaros-ai/computer@workspace:packages/computer"],
 
     "@velaros-ai/conversation-ui": ["@velaros-ai/conversation-ui@workspace:packages/conversation-ui"],
 

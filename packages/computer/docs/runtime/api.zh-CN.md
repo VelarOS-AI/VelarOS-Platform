@@ -1,4 +1,4 @@
-# @velaros-ai/computer-runtime 中文接口文档
+# @velaros-ai/computer/runtime 中文接口文档
 
 ## 定位与非目标
 
@@ -9,7 +9,7 @@
 ## 安装
 
 ```bash
-npm install @velaros-ai/computer-runtime
+npm install @velaros-ai/computer/runtime
 ```
 
 要求 Node.js 20 及以上。默认 helper 使用随包资源中的 Python runtime；自定义 sidecar 不要求 Python。
@@ -25,7 +25,7 @@ import {
   encodeComputerRequest,
   decodeComputerResponse,
   type ComputerRuntimePort,
-} from '@velaros-ai/computer-runtime'
+} from '@velaros-ai/computer/runtime'
 ```
 
 ## 核心类与接口
@@ -61,7 +61,7 @@ import {
 ## 最小第三方示例
 
 ```ts
-import { ComputerSidecarManager } from '@velaros-ai/computer-runtime'
+import { ComputerSidecarManager } from '@velaros-ai/computer/runtime'
 
 const manager = new ComputerSidecarManager({
   resolveHelper: () => ({

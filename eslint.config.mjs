@@ -58,8 +58,7 @@ const Domains = [
     globs: [
       'packages/browser/**',
       'packages/cli/**',
-      'packages/computer-runtime/**',
-      'packages/computer-tools/**',
+      'packages/computer/**',
       'packages/office-tools/**',
       'packages/system-tools/**',
       'packages/workspace/**',

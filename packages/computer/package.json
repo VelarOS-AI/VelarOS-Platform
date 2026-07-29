@@ -1,7 +1,7 @@
 {
-  "name": "@velaros-ai/computer-tools",
+  "name": "@velaros-ai/computer",
   "version": "0.2.6",
-  "description": "Host-injected computer observation and input-control tools for AI agents.",
+  "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
   "license": "UNLICENSED",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
@@ -10,37 +10,40 @@
   },
   "keywords": [
     "computer-use",
-    "agent-tools",
+    "sidecar",
     "desktop-automation",
     "input-control",
     "ai-agent"
-  ],
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "docs"
   ],
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
   },
+  "type": "module",
+  "exports": {
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "runtime",
+    "README.md",
+    "docs"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
-    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/computer-tools"
+    "test": "bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/computer"
   },
   "dependencies": {
-    "@velaros-ai/computer-runtime": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "zod": "^4.3.6"
   },
@@ -51,7 +54,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
-    "directory": "packages/computer-tools"
+    "directory": "packages/computer"
   },
   "publishConfig": {
     "access": "restricted",

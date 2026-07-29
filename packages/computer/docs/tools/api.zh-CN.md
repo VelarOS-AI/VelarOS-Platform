@@ -1,4 +1,4 @@
-# @velaros-ai/computer-tools 中文接口文档
+# @velaros-ai/computer/tools 中文接口文档
 
 ## 定位与非目标
 
@@ -9,7 +9,7 @@
 ## 安装
 
 ```bash
-npm install @velaros-ai/computer-tools @velaros-ai/computer-runtime @velaros-ai/core zod
+npm install @velaros-ai/computer/tools @velaros-ai/computer/runtime @velaros-ai/core zod
 ```
 
 要求 Node.js 20 及以上。
@@ -23,7 +23,7 @@ import {
   ComputerControlCapability,
   type ComputerToolContext,
   type ToolComputerApi,
-} from '@velaros-ai/computer-tools'
+} from '@velaros-ai/computer/tools'
 ```
 
 ## 核心类与接口
@@ -49,7 +49,7 @@ import {
 ## 最小第三方示例
 
 ```ts
-import { computerTools, type ToolComputerApi } from '@velaros-ai/computer-tools'
+import { computerTools, type ToolComputerApi } from '@velaros-ai/computer/tools'
 
 const computer: ToolComputerApi = {
   ensureAvailable: () => remoteComputer.status(),

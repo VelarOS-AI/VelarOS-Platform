@@ -1,16 +1,16 @@
-# @velaros-ai/computer-runtime
+# @velaros-ai/computer/runtime
 
-[中文接口文档](./docs/api.zh-CN.md)
+[中文接口文档](./api.zh-CN.md)
 
 ## Responsibility
 
-`@velaros-ai/computer-runtime` owns the OS-level desktop-control sidecar for VelarOS Computer Use (Phase 1). It spawns a Python helper process, speaks a line-delimited JSON stdio protocol, correlates request/response pairs, manages the sidecar lifecycle (lazy start / dispose), selects the platform helper (macOS / Windows / Linux), and reports graceful "unavailable" status when Python, dependencies, a display, or OS permissions are missing.
+`@velaros-ai/computer/runtime` owns the OS-level desktop-control sidecar for VelarOS Computer Use (Phase 1). It spawns a Python helper process, speaks a line-delimited JSON stdio protocol, correlates request/response pairs, manages the sidecar lifecycle (lazy start / dispose), selects the platform helper (macOS / Windows / Linux), and reports graceful "unavailable" status when Python, dependencies, a display, or OS permissions are missing.
 
 The Python helpers and their `requirements*.txt` ship under `runtime/` and are bundled as app resources via the sidecar packaging pattern.
 
 ## Public Imports
 
-- `@velaros-ai/computer-runtime`
+- `@velaros-ai/computer/runtime`
 
 Key exports: `ComputerSidecarManager`, `resolveComputerHelper`, `encodeComputerRequest` / `decodeComputerResponse`, and the `Computer*` result/availability types.
 
@@ -31,7 +31,7 @@ response (stdout): {"id": <number>, "ok": true,  "result": <any>}\n
 ## Example
 
 ```ts
-import { ComputerSidecarManager } from '@velaros-ai/computer-runtime'
+import { ComputerSidecarManager } from '@velaros-ai/computer/runtime'
 
 const manager = new ComputerSidecarManager()
 const availability = await manager.ensureAvailable()

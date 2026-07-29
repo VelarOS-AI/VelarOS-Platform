@@ -1,3 +1,10 @@
+import {
+  defineToolRuntimeSpec,
+  type DefineToolRuntimeSpecInput,
+  type ToolContractRuntimeSpec,
+} from '@velaros-ai/core/tool-contract'
+import type { ToolExecutionApi, ToolPermission } from '@velaros-ai/core/types'
+
 import type {
   ComputerAvailability,
   ComputerClickResult,
@@ -6,13 +13,7 @@ import type {
   ComputerScreenshot,
   ComputerScreenSize,
   ComputerTypeResult,
-} from '@velaros-ai/computer-runtime'
-import {
-  defineToolRuntimeSpec,
-  type DefineToolRuntimeSpecInput,
-  type ToolContractRuntimeSpec,
-} from '@velaros-ai/core/tool-contract'
-import type { ToolExecutionApi, ToolPermission } from '@velaros-ai/core/types'
+} from '../runtime'
 
 /**
  * Desktop-control API surface a tool sees. The host (ToolContext) adapts the

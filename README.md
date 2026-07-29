@@ -48,8 +48,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | model | `@velaros-ai/model` | 0.4.6 | VelarOS-Model |
 | capabilities | `@velaros-ai/workspace` | 1.2.5 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/browser`(`/core` `/tools` `/composition` `/runtime`) | 0.2.6 | VelarOS-Capabilities |
-| capabilities | `@velaros-ai/computer-runtime` | 0.2.6 | VelarOS-Capabilities |
-| capabilities | `@velaros-ai/computer-tools` | 0.2.6 | VelarOS-Capabilities |
+| capabilities | `@velaros-ai/computer`(`/runtime` `/tools`) | 0.2.6 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/system-tools` | 0.2.8 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/office-tools` | 0.2.7 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/cli` | 0.2.10 | VelarOS-Capabilities |

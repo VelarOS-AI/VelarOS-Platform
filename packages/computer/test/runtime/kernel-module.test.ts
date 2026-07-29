@@ -10,7 +10,7 @@ import {
   type ComputerRuntimeCapabilityService,
   type ComputerRuntimePort,
   createComputerKernelModule,
-} from '../src'
+} from '../../src/runtime'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,
