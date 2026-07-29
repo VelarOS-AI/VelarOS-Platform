@@ -30,21 +30,21 @@ afterEach(() => {
 })
 
 describe('pack resolve', () => {
-  test('falls back to the directory that holds the Kernel repo', () => {
+  test('falls back to the workspace packages/ directory that holds this package', () => {
     delete process.env.VELAROS_PACKAGES_ROOT
     const root = packResolve.resolvePackagesRoot(PackResolveUrl)
 
     expect(root).toBe(resolve(KernelRoot, '..'))
     expect(join(root, basename(KernelRoot))).toBe(KernelRoot)
-    // Regression: landing inside the Kernel repo made every sibling dist ENOENT.
+    // Regression: landing inside the package itself made every capability dist ENOENT.
     expect(root.startsWith(`${KernelRoot}${sep}`)).toBe(false)
     expect(root).not.toBe(KernelRoot)
   })
 
-  test('resolves sibling capability dists as peers of the Kernel repo', () => {
+  test('resolves capability dists as workspace siblings of this package', () => {
     delete process.env.VELAROS_PACKAGES_ROOT
     const root = packResolve.resolvePackagesRoot(PackResolveUrl)
-    const entry = 'VelarOS-Capabilities/packages/workspace/dist/index.js'
+    const entry = 'workspace/dist/index.js'
 
     expect(packResolve.resolveSiblingPackageDist(root, entry))
       .toBe(resolve(KernelRoot, '..', entry))

@@ -5,8 +5,10 @@ import { fileURLToPath } from 'node:url'
 import type { KernelModPackRecord } from './mod-store'
 import { type KernelModStore,registerSystemModPacks } from './mod-store'
 
-const KernelRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const DefaultPacksDirectory = join(KernelRoot, 'packs')
+// `../..` 从 src/daemon(或构建后的 dist/daemon)走回 kernel-daemon 包根,packs/ 就在那里
+// ——P2 从 internal/kernel-daemon 平移到 packages/kernel-daemon 后这句算式依然成立。
+const KernelDaemonPackageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const DefaultPacksDirectory = join(KernelDaemonPackageRoot, 'packs')
 
 export interface SystemPackDescriptor {
   readonly id: string
@@ -21,7 +23,8 @@ export interface SystemPackDescriptor {
  * Built-in system packs shipped next to the Kernel process.
  *
  * agent/model/browser start as transitional stubs so equal consumers see a
- * catalog; workspace/computer/system-tools cold-start when sibling dists exist.
+ * catalog; workspace/computer/system-tools cold-start when the workspace sibling
+ * package dists (`<repo>/packages/<cap>/dist`) exist.
  */
 export const DefaultSystemPackDescriptors: readonly SystemPackDescriptor[] = [
   {
