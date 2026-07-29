@@ -44,7 +44,7 @@ describe('Workspace Agent tools boundary', () => {
       'peerDependencies',
       'optionalDependencies',
     ]) {
-      expect(PackageManifest[section]?.['@velaros-ai/agent-runtime']).toBeUndefined()
+      expect(PackageManifest[section]?.['@velaros-ai/agent']).toBeUndefined()
     }
   })
 

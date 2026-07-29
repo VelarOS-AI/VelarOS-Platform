@@ -5,7 +5,7 @@
 ## Responsibility
 
 `@velaros-ai/memory-adapter-kernel` is the **only** legal bidirectional glue point between the kernel
-(`@velaros-ai/agent-runtime`) and the memory product (`@velaros-ai/memory`). It owns the three host
+(`@velaros-ai/agent`) and the memory product (`@velaros-ai/memory`). It owns the three host
 strategy services that turn kernel/session activity into memory-product calls and vice versa:
 
 - **`MemoryEvidenceBridge`** — session/execution/workspace events → `capture` (the capture port).
@@ -69,7 +69,7 @@ implementation lives in `apps/desktop` glue; headless hosts inject a constant im
   contracts before they cross the boundary.
 - It **must not** import `electron` / `@electron/*`, Desktop IPC (`@velaros-ai/ipc`), or any
   `apps/desktop` renderer/main path. The `HostIdleSignalPort` implementation is injected by the host.
-- `@velaros-ai/agent-runtime` (the kernel) **must not** import this package or `@velaros-ai/memory`.
+- `@velaros-ai/agent` (the kernel) **must not** import this package or `@velaros-ai/memory`.
 
 These rules are enforced by the `velaros/memory-product-boundary` arch-guard ratchet (baseline: zero
 violations).

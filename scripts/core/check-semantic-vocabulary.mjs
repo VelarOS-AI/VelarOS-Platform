@@ -67,22 +67,22 @@ const SenseExemptions = [
  * 规则② 待逐出清单。key=相对 packages/core/src 的路径,value=去向与判据。
  *
  * 判据(宪章 §15.4「去留判据」):类型或行为里出现域名词的出核。
- *  - **数据契约** → `@velaros-ai/agent-protocol`
- *  - **运行时行为** → `@velaros-ai/agent-runtime`
+ *  - **数据契约** → `@velaros-ai/agent/protocol`
+ *  - **运行时行为** → `@velaros-ai/agent`
  * 清单是 P2 未做完的余量,不是长期豁免:每搬走一个就从这里删一行,清单归零即墙全面生效。
  */
 const EvictionQueue = new Map([
-  ['types/index.ts', 'agent-protocol —— 聊天/执行/IPC 事件载荷全集(1.3k 行),core 里最大的一块域语义'],
-  ['types/chatRuntime.ts', 'agent-protocol —— 聊天运行态数据契约'],
-  ['types/agent.ts', 'agent-protocol —— agent 会话/回合数据契约'],
-  ['types/tool.ts', 'agent-protocol —— 工具调用数据契约'],
-  ['types/storage.ts', 'agent-protocol —— 会话存储数据契约'],
-  ['types/turnContext.ts', 'agent-protocol —— 回合上下文数据契约'],
-  ['constants/chatStorage.ts', 'agent-protocol —— 会话存储布局常量'],
-  ['constants/promptFeatures.ts', 'agent-protocol —— 提示词特性开关常量'],
-  ['constants/typedFieldAsserts.ts', 'agent-protocol —— 聊天字段断言器'],
-  ['utils/resolveStoredChatSession.ts', 'agent-runtime —— 会话读取归一化行为'],
-  ['utils/resolveChatSendRequest.ts', 'agent-runtime —— 发送请求归一化行为'],
+  ['types/index.ts', 'agent/protocol —— 聊天/执行/IPC 事件载荷全集(1.3k 行),core 里最大的一块域语义'],
+  ['types/chatRuntime.ts', 'agent/protocol —— 聊天运行态数据契约'],
+  ['types/agent.ts', 'agent/protocol —— agent 会话/回合数据契约'],
+  ['types/tool.ts', 'agent/protocol —— 工具调用数据契约'],
+  ['types/storage.ts', 'agent/protocol —— 会话存储数据契约'],
+  ['types/turnContext.ts', 'agent/protocol —— 回合上下文数据契约'],
+  ['constants/chatStorage.ts', 'agent/protocol —— 会话存储布局常量'],
+  ['constants/promptFeatures.ts', 'agent/protocol —— 提示词特性开关常量'],
+  ['constants/typedFieldAsserts.ts', 'agent/protocol —— 聊天字段断言器'],
+  ['utils/resolveStoredChatSession.ts', 'agent —— 会话读取归一化行为'],
+  ['utils/resolveChatSendRequest.ts', 'agent —— 发送请求归一化行为'],
 ])
 
 const SourceExtensions = new Set(['.ts', '.tsx'])
@@ -169,7 +169,7 @@ function main() {
     for (const message of violations) console.error(`  ${message}`)
     console.error(
       '\n判据(宪章 §15.4):只认识「模块/能力/权限/事件/状态/引用/错误」的才留在内核基础层;'
-      + '认识具体域名词的一律出核——数据契约去 agent-protocol,运行时行为去 agent-runtime 或对应域包。',
+      + '认识具体域名词的一律出核——数据契约去 agent/protocol,运行时行为去 agent 或对应域包。',
     )
     process.exit(1)
   }

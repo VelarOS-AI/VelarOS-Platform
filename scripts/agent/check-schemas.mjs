@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { AgentWorkflowRuntime,agentWorkflowSchema } from '@velaros-ai/agent-runtime'
+import { AgentWorkflowRuntime,agentWorkflowSchema } from '@velaros-ai/agent'
 import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -18,7 +18,7 @@ const RepoRoot = resolve(HERE, '../..')
 const WorkflowRuntimePath = join(
   RepoRoot,
   'packages',
-  'agent-runtime',
+  'agent',
   'src',
   'workflow',
   'AgentWorkflowRuntime.ts'

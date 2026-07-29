@@ -15,7 +15,7 @@ meaning model, versioned tree projection, recall, erasure, and memory tools.
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/knowledge`, `@velaros-ai/agent-runtime`,
+This package must not depend on `@velaros-ai/knowledge`, `@velaros-ai/agent`,
 Desktop IPC, renderer code, or app-specific prompt feature manifests. Hosts inject
 the database and system APIs. Workspace knowledge and embeddings live in
 `@velaros-ai/knowledge`.

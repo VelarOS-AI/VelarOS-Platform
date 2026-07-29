@@ -43,8 +43,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | kernel | `@velaros-ai/kernel-client` | 0.3.0 | VelarOS-Kernel |
 | kernel | `@velaros-ai/kernel-daemon` | 0.3.2 | VelarOS-Kernel |
 | kernel | `@velaros-ai/kernel-updater` | 0.1.0 | VelarOS-Kernel |
-| agent | `@velaros-ai/agent-protocol` | 0.4.0 | VelarOS-Agent |
-| agent | `@velaros-ai/agent-runtime` | 0.5.0 | VelarOS-Agent |
+| agent | `@velaros-ai/agent` | 0.5.0 | VelarOS-Agent |
 | core | `@velaros-ai/core` | 0.3.2 | VelarOS-Core + VelarOS-Kernel |
 | model | `@velaros-ai/model-runtime` | 0.4.6 | VelarOS-Model |
 | capabilities | `@velaros-ai/workspace` | 1.2.5 | VelarOS-Capabilities |
@@ -73,7 +72,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | --- | --- | --- | --- |
 | core | VelarOS-Core | `62cd3ec5e204e00fc9bb5e4bc79b9498a6f20a68` | chore: lock workspace dependencies for standalone core build |
 | kernel | VelarOS-Kernel | `aa9fdfca155134117cf77da841871fe76d957d09` | fix(daemon): pack 加载改逐 pack 隔离 |
-| agent | VelarOS-Agent | `25a454baf3d73f18ea9580db5167dcf8793dca19` | chore(release): agent-runtime 0.5.0 / agent-protocol 0.4.0 |
+| agent | VelarOS-Agent | `25a454baf3d73f18ea9580db5167dcf8793dca19` | chore(release): agent-runtime 0.5.0 / agent-protocol 0.4.0(P7a 已合并为 `@velaros-ai/agent`) |
 | model | VelarOS-Model | `3ef17b0ed35c24256146251b75f1f2e220f9d9f1` | Merge PR #14 codex/model-composition-cloud-contract-0.4.6 |
 | capabilities | VelarOS-Capabilities | `ff464693026688a1d2b522ca23e3a75443c6e456` | Merge PR #19 codex/office-platform-contract-0.2.7 |
 | memory | VelarOS-Memory | `a7aa33441d4a952f5f7c6150c145c9dbc6c83dad` | Merge PR #15 codex/memory-knowledge-contracts |
@@ -133,7 +132,7 @@ bun run check:gates      # 只跑各域质量门
 
 1. **领域语义逐出 core 未做完**:`check:core-semantic-vocabulary` 的「待逐出清单」列了余量
    (最大一块是 `packages/core/src/types/index.ts`,1310 行聊天/执行/IPC 载荷);
-   数据契约去 `agent-protocol`,运行时行为去 `agent-runtime`。清单只减不增。
+   数据契约去 `agent/protocol`,运行时行为去 `agent` 主干。清单只减不增。
 2. **serve 模式还没有能力宿主**:P4 已把 `importSibling` 与 `packs/` 整体退役——bundled pack 现在
    是编译期常量,daemon 自己只编进 sidecar 目录桩,具体能力(workspace / computer / system-tools)
    由**宿主的构建图**经 `bootKernelDaemon({ modPacks })` 注入(依赖方向 ⑤→④→③→②,宪章 §15.2)。

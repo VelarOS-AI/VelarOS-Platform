@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "purpose": "VelarOS Agent two-package boundary: agent-protocol wire contracts and the agent-runtime execution engine stay host-agnostic, concrete capabilities stay injected, and the baseline remains empty.",
+  "purpose": "VelarOS Agent package boundary: the ./protocol wire contracts and the agent execution engine stay host-agnostic, concrete capabilities stay injected, and the baseline remains empty.",
   "generatedAt": "2026-07-27T00:00:00.000Z",
   "fingerprints": []
 }

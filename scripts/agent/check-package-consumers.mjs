@@ -474,7 +474,7 @@ console.info(${JSON.stringify(record.manifest.name)} + ' CLI contract passed')
 async function createAmbientConflictConsumer(packagesByName, consumersRoot) {
   const consumerRoot = await mkdtemp(path.join(consumersRoot, 'ambient-conflict-'))
   const consumerNodeModules = path.join(consumerRoot, 'node_modules')
-  const agentRuntimeName = '@velaros-ai/agent-runtime'
+  const agentRuntimeName = '@velaros-ai/agent'
   const coreName = '@velaros-ai/core'
   const closure = internalDependencyClosure(agentRuntimeName, packagesByName)
   await mkdir(path.join(consumerNodeModules, '@velaros-ai'), { recursive: true })
@@ -585,7 +585,7 @@ void [new AppError('TEST', ids.createExecutionId()), probe, uiConflictProbe]
     { stdio: 'inherit' },
   )
   run(process.execPath, ['runtime.mjs'], consumerRoot, { stdio: 'inherit' })
-  console.info('core + agent-runtime + ambient UI tarball conflict probe passed')
+  console.info('core + agent + ambient UI tarball conflict probe passed')
 }
 
 const packageDirectories = (await readdir(packagesRoot, { withFileTypes: true }))

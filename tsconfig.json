@@ -6,17 +6,11 @@
       "@catalog/*": [
         "./component-library/src/componentLibrary/*"
       ],
-      "@velaros-ai/agent-protocol": [
-        "./packages/agent-protocol/src/index.ts"
+      "@velaros-ai/agent": [
+        "./packages/agent/src/index.ts"
       ],
-      "@velaros-ai/agent-protocol/*": [
-        "./packages/agent-protocol/src/*"
-      ],
-      "@velaros-ai/agent-runtime": [
-        "./packages/agent-runtime/src/index.ts"
-      ],
-      "@velaros-ai/agent-runtime/*": [
-        "./packages/agent-runtime/src/*"
+      "@velaros-ai/agent/*": [
+        "./packages/agent/src/*"
       ],
       "@velaros-ai/browser-composition": [
         "./packages/browser-composition/src/index.ts"

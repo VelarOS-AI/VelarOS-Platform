@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
-// 用途:Agent 两包架构边界哨兵。agent-runtime + agent-protocol 是可注入的 Agent 能力；具体能力必须在仓外注入。
+// 用途:Agent 单包架构边界哨兵。@velaros-ai/agent(主干 runtime + ./protocol 线协议切片)是可注入的
+// Agent 能力；具体能力必须在仓外注入。
 //
 // 七道防线(基线=零违规):
-//  ① Agent 两包必须 host 无关——禁 import electron / @electron/* / Desktop 传输 @velaros-ai/ipc /
+//  ① Agent 包必须 host 无关——禁 import electron / @electron/* / Desktop 传输 @velaros-ai/ipc /
 //     renderer·main 别名(@components|@features|@hooks|@pages|@styles|@shared|@/|@preload|@main)。
 //  ② 审批端口教义(源 velaros/require-approval-port-for-confirmation,宪章 §4 ApprovalPort 默认 deny):
 //     审批动词 awaitConfirmation / awaitConfirmationDecision 必须经 ctx.approval.*;写在 ctx.execution
 //     接收面(含 `!`/`?.`)上即报——execution 为空的宿主上会崩溃或 fail-open 放行敏感操作。
-//  ③ 两包都禁止反向 import 任何具体能力实现。
+//  ③ 全包禁止反向 import 任何具体能力实现。
 //  ④ Agent turn 能力快照:Solo/Query 每轮必须在首个异步准备动作前捕获一次工具注册表，
 //     provider request 与执行策略必须消费同一份 turnToolRegistry。
 //  ⑤ 领域语义与观测语义必须由 capability 注入。
@@ -28,15 +29,9 @@ const SourceExtensions = new Set(['.ts', '.tsx'])
 
 // Agent 簇包(相对仓根的 package 目录);均须 host 无关、零 Electron。
 // core / kernel-* 不在本仓(已拆出为注册表依赖),其边界棘轮由各自仓自持,不并入本表。
-const KernelClusterPackages = [
-  'packages/agent-runtime',
-  'packages/agent-protocol',
-]
+const KernelClusterPackages = ['packages/agent']
 
-const MinimalKernelPackages = [
-  'packages/agent-runtime',
-  'packages/agent-protocol',
-]
+const MinimalKernelPackages = ['packages/agent']
 
 // 禁止的 host 耦合 import。每个分支都以闭合引号收尾,避免误伤 `electron-store` 之类前缀同形的包名。
 const ForbiddenHostImportPattern =
@@ -217,7 +212,7 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
   const violations = []
   const contracts = [
     {
-      file: 'packages/agent-runtime/src/agent/SoloLoop.ts',
+      file: 'packages/agent/src/agent/SoloLoop.ts',
       orderedMarkers: [
         'const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)',
         'const resolvedRoleRuntime = await this.runtimeHelper.resolveRoleRuntime(',
@@ -228,12 +223,12 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
       ],
     },
     {
-      file: 'packages/agent-runtime/src/agent/SoloRunPlanPreparer.ts',
+      file: 'packages/agent/src/agent/SoloRunPlanPreparer.ts',
       orderedMarkers: [],
       requiredMarkers: ['capabilityRevision: input.toolRegistry.getCapabilityRevision?.()'],
     },
     {
-      file: 'packages/agent-runtime/src/agent/QueryLoop.ts',
+      file: 'packages/agent/src/agent/QueryLoop.ts',
       orderedMarkers: [
         'const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)',
         'const { systemPrompt } = await this.runContextHelper.buildSystemPrompt({',
@@ -244,7 +239,7 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
       ],
     },
     {
-      file: 'packages/agent-runtime/src/tools/ExecutionPolicy.ts',
+      file: 'packages/agent/src/tools/ExecutionPolicy.ts',
       orderedMarkers: [],
       requiredMarkers: ['this.toolRegistry.getCurrentRegistrationSignature'],
     },
@@ -274,19 +269,19 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
 function scanConcreteSemanticInjectionBoundary() {
   const violations = []
   const forbiddenConcreteFiles = [
-    'packages/agent-runtime/src/agent/run-context/BrowserActionPolicy.ts',
-    'packages/agent-runtime/src/agent/runner/WorkbenchEditorControlPolicy.ts',
-    'packages/agent-runtime/src/team/model-selection.ts',
-    'packages/agent-runtime/src/prompts/segments/browser.ts',
-    'packages/agent-runtime/src/prompts/segments/workspace.ts',
-    'packages/agent-runtime/src/tools/BrowserTargetActionRecovery.ts',
-    'packages/agent-runtime/src/tools/BrowserToolResultEnhancer.ts',
-    'packages/agent-runtime/src/agent/runner/RunnerSandbox.ts',
-    'packages/agent-runtime/src/tool-library/WorkspaceCapabilityPort.ts',
-    'packages/agent-runtime/src/agent/CodingContext.ts',
-    'packages/agent-runtime/src/agent/CodingContextPolicy.ts',
-    'packages/agent-runtime/src/reminders/producers.ts',
-    'packages/agent-runtime/src/reminders/renderers.ts',
+    'packages/agent/src/agent/run-context/BrowserActionPolicy.ts',
+    'packages/agent/src/agent/runner/WorkbenchEditorControlPolicy.ts',
+    'packages/agent/src/team/model-selection.ts',
+    'packages/agent/src/prompts/segments/browser.ts',
+    'packages/agent/src/prompts/segments/workspace.ts',
+    'packages/agent/src/tools/BrowserTargetActionRecovery.ts',
+    'packages/agent/src/tools/BrowserToolResultEnhancer.ts',
+    'packages/agent/src/agent/runner/RunnerSandbox.ts',
+    'packages/agent/src/tool-library/WorkspaceCapabilityPort.ts',
+    'packages/agent/src/agent/CodingContext.ts',
+    'packages/agent/src/agent/CodingContextPolicy.ts',
+    'packages/agent/src/reminders/producers.ts',
+    'packages/agent/src/reminders/renderers.ts',
   ]
   for (const file of forbiddenConcreteFiles) {
     if (!existsSync(resolve(RepoRoot, file))) continue
@@ -298,8 +293,8 @@ function scanConcreteSemanticInjectionBoundary() {
   }
 
   const neutralPolicyFiles = [
-    'packages/agent-runtime/src/agent/control-plane/SessionToolAllocator.ts',
-    'packages/agent-runtime/src/tools/ToolArgsSchemaValidator.ts',
+    'packages/agent/src/agent/control-plane/SessionToolAllocator.ts',
+    'packages/agent/src/tools/ToolArgsSchemaValidator.ts',
   ]
   const concreteLiteralPattern =
     /['"`][^'"`\n]*(?:browser|workspace|workbench|memory|knowledge|office|computer|model)[_-][a-z0-9_-]+[^'"`\n]*['"`]/iu
@@ -334,7 +329,7 @@ function scanConcreteSemanticInjectionBoundary() {
     'workspaceSandbox',
     'AgentSurfaceRegistry',
   ]
-  for (const packageDir of ['packages/agent-runtime']) {
+  for (const packageDir of ['packages/agent']) {
     const sourceDir = resolve(RepoRoot, packageDir, 'src')
     for (const file of collectSourceFiles(sourceDir)) {
       const relativeFile = normalizeSeparators(relative(RepoRoot, file))
@@ -354,7 +349,7 @@ function scanConcreteSemanticInjectionBoundary() {
 
   const concreteRuntimeLiteralPattern =
     /['"`][^'"`\n]*(?:browser|workspace|workbench|memory|knowledge|computer)[_:-][a-z0-9_-]+[^'"`\n]*['"`]/iu
-  const agentRuntimeSourceDir = resolve(RepoRoot, 'packages/agent-runtime/src')
+  const agentRuntimeSourceDir = resolve(RepoRoot, 'packages/agent/src')
   for (const file of collectSourceFiles(agentRuntimeSourceDir)) {
     const relativeFile = normalizeSeparators(relative(RepoRoot, file))
     const lines = stripCodeComments(readFileSync(file, 'utf8')).split('\n')
@@ -385,46 +380,46 @@ function scanConcreteSemanticInjectionBoundary() {
 
   const requiredInjectionMarkers = [
     {
-      file: 'packages/agent-runtime/src/tools/Executor.ts',
+      file: 'packages/agent/src/tools/Executor.ts',
       markers: ['resolveToolResultMiddlewares(this.ctx.capabilityPorts)'],
     },
     {
-      file: 'packages/agent-runtime/src/tools/ExecutionPolicy.ts',
+      file: 'packages/agent/src/tools/ExecutionPolicy.ts',
       markers: ['resolveToolValidationHintProviders(', 'capabilityPorts?: AgentRuntimeCapabilityPorts'],
     },
     {
-      file: 'packages/agent-runtime/src/agent/control-plane/SessionToolAllocator.ts',
+      file: 'packages/agent/src/agent/control-plane/SessionToolAllocator.ts',
       markers: ['resolveToolAllocationMetadata(options.capabilityPorts)'],
     },
     {
-      file: 'packages/agent-runtime/src/agent/PromptState.ts',
+      file: 'packages/agent/src/agent/PromptState.ts',
       markers: ['resolveCapabilityPromptSegments(toolContext.capabilityPorts, runtimeSnapshot)'],
     },
     {
-      file: 'packages/agent-runtime/src/team/model-router.ts',
+      file: 'packages/agent/src/team/model-router.ts',
       markers: ['constructor(private readonly routing: TeamModelRoutingPort)'],
     },
     {
-      file: 'packages/agent-runtime/src/agent/runner/AgentRunner.ts',
+      file: 'packages/agent/src/agent/runner/AgentRunner.ts',
       markers: ['surfaceProfileProvider: AgentSurfaceProfileProvider'],
     },
     {
-      file: 'packages/agent-runtime/src/agent/QueryLoop.ts',
+      file: 'packages/agent/src/agent/QueryLoop.ts',
       markers: ['resolveCapabilityDelegationPolicy(args.parentCtx.capabilityPorts)'],
     },
     {
-      file: 'packages/agent-runtime/src/kernel/dispatch/SubAgentDispatcher.ts',
+      file: 'packages/agent/src/kernel/dispatch/SubAgentDispatcher.ts',
       markers: ['resolveCapabilityDelegationPolicy(this.capabilityPorts)'],
     },
     {
-      file: 'packages/agent-protocol/src/external-agent-bridge.ts',
+      file: 'packages/agent/src/protocol/external-agent-bridge.ts',
       markers: [
         'ExternalAgentBridgeProtocolDescriptor',
         'transportVersion: ExternalAgentBridgeProtocolVersion',
       ],
     },
     {
-      file: 'packages/agent-protocol/src/observability.ts',
+      file: 'packages/agent/src/protocol/observability.ts',
       markers: [
         'CapabilitySpanSchema',
         "category: z.literal('capability')",
@@ -433,7 +428,7 @@ function scanConcreteSemanticInjectionBoundary() {
       ],
     },
     {
-      file: 'packages/agent-runtime/src/kernel/observability/execution-span-scope.ts',
+      file: 'packages/agent/src/kernel/observability/execution-span-scope.ts',
       markers: ['recordCapabilitySpan(', 'ExecutionCapabilitySpanRecorder'],
     },
   ]
@@ -449,10 +444,10 @@ function scanConcreteSemanticInjectionBoundary() {
   }
 
   const neutralObservabilityFiles = [
-    'packages/agent-protocol/src/observability.ts',
-    'packages/agent-runtime/src/kernel/observability/execution-span-debug.ts',
-    'packages/agent-runtime/src/kernel/observability/execution-span-scope.ts',
-    'packages/agent-runtime/src/kernel/observability/index.ts',
+    'packages/agent/src/protocol/observability.ts',
+    'packages/agent/src/kernel/observability/execution-span-debug.ts',
+    'packages/agent/src/kernel/observability/execution-span-scope.ts',
+    'packages/agent/src/kernel/observability/index.ts',
   ]
   const retiredConcreteObservationPattern =
     /\b(?:MemorySpan(?:Schema)?|ExecutionSpanDebugMemory|recordMemorySpan|recordAttentionOutcomeMirror|ExecutionSpanOutcomeMirror)\b|category:\s*z\.literal\(['"]memory['"]\)|category\s*===\s*['"]memory['"]/u
@@ -601,7 +596,7 @@ function main() {
   if (fresh.length === 0) {
     const exempt = currentFingerprints.length
     console.log(
-      `[arch-boundaries] 通过。Agent 两包集合 + host import + 审批端口 + 具体能力注入 + Agent turn 能力快照 + 领域语义注入:0 条新违规${
+      `[arch-boundaries] 通过。Agent 包集合 + host import + 审批端口 + 具体能力注入 + Agent turn 能力快照 + 领域语义注入:0 条新违规${
         exempt > 0 ? `(${exempt} 条存量入基线冻结)` : '(现状零违规)'
       }。`,
     )

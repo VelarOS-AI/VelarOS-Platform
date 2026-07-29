@@ -28,7 +28,7 @@ const InternalImport =
 const ElectronImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*)['"]/
 const ConcreteKernelPathImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent-runtime(?:\/[^'"]*)?|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
+  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent(?:\/[^'"]*)?|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g
 const ConcreteCoreTypeName = /\b(?:Browser|Workspace|Workbench|Model|Memory|Knowledge)[A-Z_a-z0-9]*/
@@ -270,7 +270,7 @@ for (const expected of CapabilityPackages) {
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {
     for (const [name, version] of Object.entries(dependencies)) {
-      if (name === '@velaros-ai/agent-runtime') {
+      if (name === '@velaros-ai/agent') {
         fail(`${expected.name}: capability packages must not depend on Agent runtime`)
       }
       const internal = KnownByName.get(name)

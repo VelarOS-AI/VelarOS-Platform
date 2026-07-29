@@ -3,7 +3,7 @@
 > 状态：三轮修订均已并入需求与架构文档；第三轮与第五轮独立评审（均 NEEDS REVISION）的全部 P0 / P1 已处理，等待下一轮（第七轮）独立评审复核
 > 日期：2026-07-13
 > 本文是第二轮架构复审的修订索引：记录每项修订的动因、证据与影响面，供下一轮独立评审快速定位分歧点。修订内容本身以 [记忆树产品需求](./memory-tree-product-requirements.md) 与 [记忆树产品愿景与重构架构](./memory-tree-product-architecture.md) 的正文为准。
-> 本轮复审同时完成了一次全代码库现状侦察（`packages/memory`、`apps/desktop/src/main/memory`、`packages/agent-runtime`、渲染层、存储与迁移基建），侦察结论摘录于文末。
+> 本轮复审同时完成了一次全代码库现状侦察（`packages/memory`、`apps/desktop/src/main/memory`、`packages/agent`、渲染层、存储与迁移基建），侦察结论摘录于文末。
 
 > **2026-07-14 后续裁决变更（覆盖本文相关历史条目）**：R-017 的「首次启动记忆告知门」整体撤销——`pending_notice` 状态机、告知屏、告知确认时间、`notice_version` 重新告知政策全部移除。隐私知情由产品级隐私协议在用户使用产品之前一次性覆盖，应用内不再单独设记忆告知门；自动记忆运行态只保留 `enabled`（默认，从首次使用即开始）/ `disabled`（设置里关闭）。下文中一切「首次告知 / pending_notice / 首次启动 gate」的历史修订条目均以此裁决为准，视为已撤销。
 

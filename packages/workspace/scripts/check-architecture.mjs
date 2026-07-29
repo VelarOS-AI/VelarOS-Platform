@@ -54,8 +54,8 @@ for (const section of [
   'peerDependencies',
   'optionalDependencies',
 ]) {
-  if (manifest[section]?.['@velaros-ai/agent-runtime']) {
-    fail(`@velaros-ai/agent-runtime must not appear in ${section}`)
+  if (manifest[section]?.['@velaros-ai/agent']) {
+    fail(`@velaros-ai/agent must not appear in ${section}`)
   }
 }
 if (

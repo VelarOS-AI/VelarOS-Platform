@@ -44,7 +44,7 @@ const Domains = [
   {
     name: 'agent',
     config: agentConfig,
-    globs: ['packages/agent-protocol/**', 'packages/agent-runtime/**'],
+    globs: ['packages/agent/**'],
   },
   { name: 'core', config: coreConfig, globs: ['packages/core/**'] },
   {

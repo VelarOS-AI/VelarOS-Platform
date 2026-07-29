@@ -1274,7 +1274,7 @@ Evidence（权威事实来源）
 | Electron `safeStorage`（现有 CloudAccountTokenStore 用法）                                  | 只作 seed              | 适合保护单个 wrapping root，不等同于十万级 per-blob DEK 的完整 ContentKeyService                                     |
 | renderer 侧自动沉淀（`useChatMemoryBridge` 计划构建）                                       | 删除                   | 采集职责移到 main 侧 `MemoryEvidenceBridge`；renderer 不再决定“什么值得记”，浏览器与系统空间会话因此首次获得平等采集 |
 | `save_memory` 绕过 curation 的直写路径                                                      | 删除                   | 现状工具直写与 IPC / 自动路径各走一套合并规则，正是被禁的平行写入管线；新工具只能提交证据与提案                      |
-| 编码记忆辅助器（`packages/agent-runtime/src/agent/memory/**`，hash-id project / task 记忆） | 删除，由树路径召回取代 | 其唯一写入口（approve 候选）的生产者已消失，属半死链路；编码 prompt 段改由树召回供给                                 |
+| 编码记忆辅助器（`packages/agent/src/agent/memory/**`，hash-id project / task 记忆） | 删除，由树路径召回取代 | 其唯一写入口（approve 候选）的生产者已消失，属半死链路；编码 prompt 段改由树召回供给                                 |
 | `recall_context` / `distill_context` 句柄体系                                               | 保持独立               | 会话内工作记忆，与长期树分层（见“相邻记忆机制边界”）                                                                 |
 | 每文件夹记忆入口（`FolderMemoryView`）                                                      | 删除                   | 会话级视图由树的作用域过滤与分支聚焦承接                                                                             |
 | `CodeGraphCanvas` 自绘 canvas 模式                                                          | 参考范本               | 无三方图形库前提下的 canvas 2D 自绘、DPR、动画循环与命中检测范式与树 renderer 同构                                   |
@@ -1314,7 +1314,7 @@ apps/desktop/src/renderer/src/features/memory/
 现状代码存在四套彼此独立的“记忆”机制，重构必须明确各自去向，防止树变成第五套：
 
 1. **长期记忆（`packages/memory` + `apps/desktop/src/main/memory`）**：本文的重构对象，整体替换为统一意义模型。
-2. **编码会话记忆辅助器（`packages/agent-runtime/src/agent/memory/**`）**：读旧 MemoryRecord 拼 prompt 段；其唯一写入口的生产者已消失，整体删除，能力由树路径召回接管。
+2. **编码会话记忆辅助器（`packages/agent/src/agent/memory/**`）**：读旧 MemoryRecord 拼 prompt 段；其唯一写入口的生产者已消失，整体删除，能力由树路径召回接管。
 3. **句柄召回体系（`recall_context` / `distill_context` / 折叠桩）**：会话内工作记忆，存储在聊天存档，与长期记忆不共享任何状态。**保持独立**——它管理的是单会话的注意力，不是跨会话的认知。两者唯一的正式交点是采集：达到显著性门槛的会话事件经 `MemoryEvidenceBridge` 进入证据层；蒸馏便签中沉没于存档的重要事实由此获得进入长期层的通道，而不是把句柄体系并入树。
 4. **回合自动召回注入（`TurnRecallCoordinator`，turn-context 第八源）**：形态保留（异步、零阻塞、每会话去重、chips 可划掉），数据源从旧混合检索切换到树路径 facade。
 

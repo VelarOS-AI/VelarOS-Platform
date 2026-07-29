@@ -5,8 +5,7 @@
     "": {
       "name": "velaros-platform",
       "dependencies": {
-        "@velaros-ai/agent-protocol": "workspace:*",
-        "@velaros-ai/agent-runtime": "workspace:*",
+        "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/browser-composition": "workspace:*",
         "@velaros-ai/browser-core": "workspace:*",
         "@velaros-ai/browser-runtime": "workspace:*",
@@ -61,23 +60,11 @@
         "vite": "^8.1.5",
       },
     },
-    "packages/agent-protocol": {
-      "name": "@velaros-ai/agent-protocol",
-      "version": "0.4.0",
-      "dependencies": {
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/agent-runtime": {
-      "name": "@velaros-ai/agent-runtime",
+    "packages/agent": {
+      "name": "@velaros-ai/agent",
       "version": "0.5.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@velaros-ai/agent-protocol": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "ai": "^6.0.168",
         "execa": "^9.6.1",
@@ -1008,9 +995,7 @@
 
     "@upsetjs/venn.js": ["@upsetjs/venn.js@2.0.0", "", { "optionalDependencies": { "d3-selection": "^3.0.0", "d3-transition": "^3.0.1" } }, "sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw=="],
 
-    "@velaros-ai/agent-protocol": ["@velaros-ai/agent-protocol@workspace:packages/agent-protocol"],
-
-    "@velaros-ai/agent-runtime": ["@velaros-ai/agent-runtime@workspace:packages/agent-runtime"],
+    "@velaros-ai/agent": ["@velaros-ai/agent@workspace:packages/agent"],
 
     "@velaros-ai/browser-composition": ["@velaros-ai/browser-composition@workspace:packages/browser-composition"],
 

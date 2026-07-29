@@ -26,7 +26,7 @@ High-level project discovery, runtime diagnosis, and split open/runtime tools li
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/agent-runtime`, product IPC, Electron APIs, renderer UI, or Workspace registry operations. It defines tools over an injected system API; Workspace root registration, removal, activation, and switching belong exclusively to the Workspace capability and host composition.
+This package must not depend on `@velaros-ai/agent`, product IPC, Electron APIs, renderer UI, or Workspace registry operations. It defines tools over an injected system API; Workspace root registration, removal, activation, and switching belong exclusively to the Workspace capability and host composition.
 
 The package also ships a local Node.js `SystemKernel` implementation for CLI and tests. Electron hosts can adapt their richer domain service to the same `SystemToolSystemApi` contract.
 

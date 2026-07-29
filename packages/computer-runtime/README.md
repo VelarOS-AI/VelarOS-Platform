@@ -16,7 +16,7 @@ Key exports: `ComputerSidecarManager`, `resolveComputerHelper`, `encodeComputerR
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/agent-runtime`, the tool packages, or product IPC. It only manages the helper process and the wire protocol. The host owns a single long-lived `ComputerSidecarManager` and injects it into the tool context.
+This package must not depend on `@velaros-ai/agent`, the tool packages, or product IPC. It only manages the helper process and the wire protocol. The host owns a single long-lived `ComputerSidecarManager` and injects it into the tool context.
 
 ## Protocol
 

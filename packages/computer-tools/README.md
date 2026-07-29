@@ -14,7 +14,7 @@ Key exports: `computerTools`, the `ComputerObserveCapability` / `ComputerControl
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/agent-runtime` or product IPC. It defines tools and their context contracts only. Runtime execution (sidecar ownership), the confirmation flow, and UI are composed by the host. The whole `computer-control` tool category is off by default and is opt-in like browser mode.
+This package must not depend on `@velaros-ai/agent` or product IPC. It defines tools and their context contracts only. Runtime execution (sidecar ownership), the confirmation flow, and UI are composed by the host. The whole `computer-control` tool category is off by default and is opt-in like browser mode.
 
 ## Example
 

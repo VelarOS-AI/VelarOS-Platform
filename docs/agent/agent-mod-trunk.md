@@ -13,7 +13,7 @@
         只解析窄 KernelModuleDescriptor { id, version, apiVersion, provides, requires, permissions, isolation }
         管 pack 的安装/启停/发现，永不解析领域贡献轴
 
-第二级  Agent 领域 Loader（本仓 packages/agent-runtime/src/mods/）
+第二级  Agent 领域 Loader（本仓 packages/agent/src/mods/）
         解析 AgentModManifest，把贡献分发进九个注册面 + 拦截 seam
 ```
 
@@ -25,17 +25,17 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 
 | 文件 | 职责 |
 | --- | --- |
-| `packages/agent-protocol/src/mods.ts`（子路径 `@velaros-ai/agent-protocol/mods`） | manifest 数据契约：zod schema、贡献轴闭集、seam 闭集、semver 判定、`parseAgentModManifest` |
-| `packages/agent-runtime/src/mods/AgentModRegistry.ts` | 九轴贡献注册面 + generation 快照 + 两阶段 + stale-reject |
-| `packages/agent-runtime/src/mods/AgentModSeams.ts` | 拦截 seam 注册面与派发器（异常隔离、权限不可旁路） |
-| `packages/agent-runtime/src/mods/AgentModLoader.ts` | discover→validate→resolve→activate→deactivate 生命周期 |
-| `packages/agent-runtime/src/mods/AgentModProjection.ts` | 快照 → 各领域消费面的纯函数投影 |
-| `packages/agent-runtime/src/mods/BuiltinAgentMod.ts` | 随包官方内置轴 = 第一个 bundled mod（自食狗粮） |
-| `packages/agent-runtime/src/mods/AgentModHostAssembly.ts` | 宿主组装入口：Kernel pack 清单 → Loader |
-| `packages/agent-runtime/src/mods/index.ts` | 唯一门面（再经 `src/index.ts` 出包） |
+| `packages/agent/src/protocol/mods.ts`（子路径 `@velaros-ai/agent/protocol/mods`） | manifest 数据契约：zod schema、贡献轴闭集、seam 闭集、semver 判定、`parseAgentModManifest` |
+| `packages/agent/src/mods/AgentModRegistry.ts` | 九轴贡献注册面 + generation 快照 + 两阶段 + stale-reject |
+| `packages/agent/src/mods/AgentModSeams.ts` | 拦截 seam 注册面与派发器（异常隔离、权限不可旁路） |
+| `packages/agent/src/mods/AgentModLoader.ts` | discover→validate→resolve→activate→deactivate 生命周期 |
+| `packages/agent/src/mods/AgentModProjection.ts` | 快照 → 各领域消费面的纯函数投影 |
+| `packages/agent/src/mods/BuiltinAgentMod.ts` | 随包官方内置轴 = 第一个 bundled mod（自食狗粮） |
+| `packages/agent/src/mods/AgentModHostAssembly.ts` | 宿主组装入口：Kernel pack 清单 → Loader |
+| `packages/agent/src/mods/index.ts` | 唯一门面（再经 `src/index.ts` 出包） |
 
-探针：`packages/agent-protocol/test/mods.test.ts`、`packages/agent-runtime/test/mods.test.ts`（构造级，bun 直驱）、
-`packages/agent-runtime/test/modSeamToolChain.test.ts`（装配面到工具缝的端到端回归门，见「派发点 ≠ 接线」）。
+探针：`packages/agent/test/protocol/mods.test.ts`、`packages/agent/test/mods.test.ts`（构造级，bun 直驱）、
+`packages/agent/test/modSeamToolChain.test.ts`（装配面到工具缝的端到端回归门，见「派发点 ≠ 接线」）。
 
 ## Manifest 形状
 
@@ -147,7 +147,7 @@ import {
   type AgentModPackReader,
   projectAgentModTools,
   projectAgentModPromptSegments,
-} from '@velaros-ai/agent-runtime'
+} from '@velaros-ai/agent'
 
 const host: AgentModHostProfile = {
   hostId: 'desktop',

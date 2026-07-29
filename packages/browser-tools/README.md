@@ -13,7 +13,7 @@
 
 ## Boundary
 
-This package must not depend on `@velaros-ai/agent-runtime` or product IPC. It defines tools and their context contracts only. Runtime execution, session ownership, and UI are composed by the host.
+This package must not depend on `@velaros-ai/agent` or product IPC. It defines tools and their context contracts only. Runtime execution, session ownership, and UI are composed by the host.
 
 ## Example
 
