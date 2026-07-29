@@ -11,7 +11,11 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // 导入 Platform 后根 node_modules/@types 含 bun(kernel-client 依赖),显式收窄回源仓的 @types 视野。
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src/**/*.ts"

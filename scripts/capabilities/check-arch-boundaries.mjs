@@ -16,7 +16,7 @@ import {
   RepositoryUrl,
 } from './capability-owners.mjs'
 
-const RepoRoot = resolve(import.meta.dir, '..')
+const RepoRoot = resolve(import.meta.dir, '../..')
 const PackagesRoot = resolve(RepoRoot, 'packages')
 const SourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
 const KnownByName = new Map(CapabilityPackages.map((item) => [item.name, item]))

@@ -1,0 +1,32 @@
+{
+  "//": "eslint 类型感知解析用的全仓 program。各源仓 tsconfig.eslint.json 的并集(见 docs/<domain>/source-root-tsconfig.eslint.json)。",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "composite": false,
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node", "bun"]
+  },
+  "include": [
+    "types/velaros-globals.d.ts",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "packages/**/*.d.ts",
+    "component-library/**/*.ts",
+    "component-library/**/*.tsx",
+    "internal/kernel-daemon/src/**/*.ts",
+    "internal/kernel-daemon/test/**/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "**/node_modules", "**/dist"]
+}

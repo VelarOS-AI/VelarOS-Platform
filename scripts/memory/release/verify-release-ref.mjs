@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const repoRoot = resolve(import.meta.dirname, '../..')
+const repoRoot = resolve(import.meta.dirname, '../../..')
 const rootManifest = JSON.parse(
   readFileSync(resolve(repoRoot, 'package.json'), 'utf8'),
 )

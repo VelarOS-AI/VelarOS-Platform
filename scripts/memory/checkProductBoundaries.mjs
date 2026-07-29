@@ -110,7 +110,7 @@ const PortableContractRules = [
 ]
 
 export function collectProductBoundaryViolations(
-  repoRoot = resolve(import.meta.dirname, '..'),
+  repoRoot = resolve(import.meta.dirname, '../..'),
 ) {
   const violations = []
 
@@ -165,7 +165,7 @@ export function collectProductBoundaryViolations(
 }
 
 export function collectPortableContractViolations(
-  repoRoot = resolve(import.meta.dirname, '..'),
+  repoRoot = resolve(import.meta.dirname, '../..'),
 ) {
   const violations = []
   for (const rule of PortableContractRules) {

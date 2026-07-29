@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-const repositoryRoot = resolve(import.meta.dirname, '..')
+const repositoryRoot = resolve(import.meta.dirname, '../..')
 const packagesRoot = join(repositoryRoot, 'packages')
 const removedCoreModules = [
   'CommandExecutionPolicy',

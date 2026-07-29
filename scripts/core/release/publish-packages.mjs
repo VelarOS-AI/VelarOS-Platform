@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const dryRun = process.argv.includes('--dry-run')
 const registry = 'https://npm.pkg.github.com'
 

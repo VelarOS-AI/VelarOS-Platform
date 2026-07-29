@@ -21,7 +21,7 @@ import ts from 'typescript'
 import { CapabilityPackages } from './capability-owners.mjs'
 import { InstalledPackageResolver } from './lib/installed-package-resolver.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesRoot = path.join(repositoryRoot, 'packages')
 const viteCli = path.join(repositoryRoot, 'node_modules', 'vite', 'bin', 'vite.js')
 const capabilityPackageNames = new Set(CapabilityPackages.map(({ name }) => name))

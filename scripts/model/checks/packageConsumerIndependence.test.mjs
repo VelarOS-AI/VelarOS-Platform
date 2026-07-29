@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
-const RepositoryRoot = resolve(import.meta.dirname, '../..')
+const RepositoryRoot = resolve(import.meta.dirname, '../../..')
 const GateRelativePath = 'scripts/check-package-consumer.mjs'
 
 test('consumer gate contains no sibling repository sources', async () => {

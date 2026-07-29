@@ -20,7 +20,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const RepoRoot = resolve(HERE, '..')
+const RepoRoot = resolve(HERE, '../..')
 const BaselinePath = join(RepoRoot, 'baselines', 'arch-boundaries-baseline.json')
 const UpdateBaseline = process.env.VELAROS_ARCH_BASELINE_UPDATE === '1'
 

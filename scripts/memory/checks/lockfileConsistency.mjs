@@ -51,7 +51,7 @@ export class LockfileConsistencyValidator {
   #semverEvaluator
 
   constructor({
-    repositoryRoot = resolve(import.meta.dirname, '../..'),
+    repositoryRoot = resolve(import.meta.dirname, '../../..'),
     semverEvaluator = new BunSemverEvaluator(),
   } = {}) {
     this.#repositoryRoot = repositoryRoot

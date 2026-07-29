@@ -45,12 +45,12 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/memory/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/memory/build/copy-velaros-globals-to-dist.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/knowledge"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.27.2",
-    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/core": "workspace:*",
     "apache-arrow": "^18.1.0",
     "better-sqlite3": "^12.9.0",
     "zod": "^4.3.6"

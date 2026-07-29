@@ -105,7 +105,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "node ../../scripts/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-css-assets-to-dist.mjs && node ../../scripts/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/ui/build/copy-velaros-globals-to-dist.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/conversation-ui"
   },
   "dependencies": {
@@ -114,7 +114,7 @@
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
-    "@velaros-ai/html-artifacts": "^0.1.2",
+    "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/ui": "workspace:*",
     "ahooks": "^3.9.7",
     "streamdown": "^2.5.0"

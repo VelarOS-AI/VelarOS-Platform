@@ -1,0 +1,91 @@
+{
+  "name": "velaros-platform",
+  "version": "0.6.0",
+  "private": true,
+  "description": "VelarOS 平台侧单版本火车 monorepo:kernel / agent / core / model / capabilities / memory / ui / html-artifacts 全部平台包的唯一家。",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "packageManager": "bun@1.3.13",
+  "workspaces": [
+    "packages/*"
+  ],
+  "velaros": {
+    "trainVersion": "0.6.0",
+    "trainNote": "根 version 是火车版本号;各包版本在首次里程碑发布前保留导入时的现值,见 README「版本方案」。",
+    "domainVersions": {
+      "kernel": "0.3.2",
+      "agent": "0.5.0",
+      "core": "0.3.2",
+      "model": "0.4.6",
+      "capabilities": "0.2.7",
+      "memory": "0.3.5",
+      "ui": "0.2.2",
+      "html-artifacts": "0.1.3"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build/buildPackageTopology.mjs",
+    "typecheck": "node scripts/run-workspace-script.mjs typecheck",
+    "test": "node scripts/run-workspace-script.mjs test",
+    "lint": "eslint . --max-warnings=0",
+    "build:kernel-daemon": "rm -rf internal/kernel-daemon/dist && tsc -p internal/kernel-daemon/tsconfig.build.json && node scripts/kernel/build/fix-esm-extensions.mjs internal/kernel-daemon/dist",
+    "typecheck:kernel-daemon": "tsc --noEmit -p internal/kernel-daemon/tsconfig.src.json",
+    "test:kernel-daemon": "bun test internal/kernel-daemon/test",
+    "check:kernel-schemas": "bun scripts/kernel/check-schemas.mjs",
+    "check:kernel-arch": "bun scripts/kernel/check-arch-boundaries.mjs",
+    "check:agent-schemas": "bun scripts/agent/check-schemas.mjs",
+    "check:agent-arch": "bun scripts/agent/check-arch-boundaries.mjs",
+    "check:capabilities-schemas": "bun scripts/capabilities/check-schemas.mjs",
+    "check:capabilities-arch": "bun scripts/capabilities/check-arch-boundaries.mjs",
+    "check:model-arch": "bun scripts/model/check-arch-boundaries.mjs",
+    "check:memory-boundaries": "node scripts/memory/checkProductBoundaries.mjs",
+    "check:memory-knowledge-profile": "node scripts/memory/checks/knowledgeProfileIntegrationTest.mjs",
+    "test:memory": "bun test tests/memory/maintained/packages/memory/EmbeddingProfileIsolation.test.ts && node --test tests/memory/maintained/packages/memory/*.mjs tests/memory/maintained/packages/knowledge/*.mjs",
+    "probe:memory": "bun run --cwd packages/memory probe:storage-v2 && bun run --cwd packages/memory probe:authority-v2 && bun run --cwd packages/memory probe:tree-store-v2 && bun run --cwd packages/memory probe:ingest-dream-v2 && bun run --cwd packages/memory probe:meaning-curation-v2 && bun run --cwd packages/memory probe:erasure-saga-v2 && bun run --cwd packages/memory probe:evidence-replay-v2 && bun run --cwd packages/memory probe:query-runtime-v2",
+    "test:ui": "bun test tests/ui",
+    "check:ui-component-library": "node scripts/ui/component-library/generateComponentApi.mjs && node scripts/ui/checks/componentLibraryDocsFreshness.mjs && node scripts/ui/checks/componentLibraryIndependence.mjs",
+    "check:ui-package-contracts": "node scripts/ui/checks/packageContracts.mjs",
+    "check:ui-form-closure": "node scripts/ui/check/uiComponentFormClosure.mjs",
+    "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
+    "build:component-library": "vite build --config component-library/vite.config.ts",
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
+    "check": "bun run build && bun run typecheck && bun run typecheck:kernel-daemon && bun run lint && bun run test && bun run check:gates"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@eslint/js": "^9.39.4",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/node": "^4.3.3",
+    "@tailwindcss/typography": "^0.5.20",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/bun": "^1.3.13",
+    "@types/node": "^22.19.17",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "electron": "^41.10.2",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "streamdown": "^2.5.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.0",
+    "vite": "^8.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git"
+  }
+}

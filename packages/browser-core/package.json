@@ -42,7 +42,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
     "test": "bun run build && bun run test:built",
     "test:built": "bun test test/*.test.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser-core"
@@ -52,7 +52,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/core": "workspace:*",
     "gifenc": "^1.0.3"
   },
   "repository": {

@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const RepositoryRoot = resolve(import.meta.dirname, '../..')
+const RepositoryRoot = resolve(import.meta.dirname, '../../..')
 const TypeScriptCli = resolve(RepositoryRoot, 'node_modules/typescript/bin/tsc')
 const ViteCli = resolve(RepositoryRoot, 'node_modules/vite/bin/vite.js')
 const PortablePackages = [

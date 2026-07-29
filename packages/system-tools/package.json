@@ -52,14 +52,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "generate:schema-bundle": "bun scripts/generate-schema-bundle.mjs",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
     "test": "bun run build && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system-tools"
   },
   "dependencies": {
-    "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

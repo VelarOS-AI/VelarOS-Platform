@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 
-const repositoryRoot = path.resolve(import.meta.dirname, '../..')
+const repositoryRoot = path.resolve(import.meta.dirname, '../../..')
 const packageScopes = [
   {
     label: 'component library',

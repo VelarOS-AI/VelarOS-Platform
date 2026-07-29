@@ -24,7 +24,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/agent/build/fix-esm-extensions.mjs dist && node ../../scripts/agent/build/copy-velaros-globals-to-dist.mjs",
     "test": "bun run build && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-runtime"
   },
@@ -32,8 +32,8 @@
     "ai": "^6.0.168",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/agent-protocol": "workspace:*",
-    "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*",
     "execa": "^9.6.1",
     "typescript": "^5.7.0",
     "zod": "^4.3.6"

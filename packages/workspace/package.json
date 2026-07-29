@@ -135,8 +135,8 @@
     "globals": "^17.6.0"
   },
   "dependencies": {
-    "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
     "iconv-lite": "^0.7.2",

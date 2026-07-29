@@ -14,7 +14,7 @@ import { AgentWorkflowRuntime,agentWorkflowSchema } from '@velaros-ai/agent-runt
 import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const RepoRoot = resolve(HERE, '..')
+const RepoRoot = resolve(HERE, '../..')
 const WorkflowRuntimePath = join(
   RepoRoot,
   'packages',

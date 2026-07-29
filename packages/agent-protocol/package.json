@@ -51,7 +51,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/agent/build/fix-esm-extensions.mjs dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-protocol"

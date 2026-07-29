@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process'
 import { assertLockfileConsistency } from './lockfileConsistency.mjs'
 
 const ScriptDirectory = dirname(fileURLToPath(import.meta.url))
-const RepositoryRoot = resolve(ScriptDirectory, '../..')
+const RepositoryRoot = resolve(ScriptDirectory, '../../..')
 const TypeScriptCli =
   process.env.VELAROS_TYPESCRIPT_CLI
   ?? resolve(RepositoryRoot, 'node_modules/typescript/bin/tsc')

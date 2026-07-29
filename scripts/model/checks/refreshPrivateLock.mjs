@@ -17,7 +17,7 @@ export class GroupedPrivateLockRefresher {
   #validator
 
   constructor({
-    repositoryRoot = resolve(import.meta.dirname, '../..'),
+    repositoryRoot = resolve(import.meta.dirname, '../../..'),
     runUpdate = runBunUpdate,
     validator,
   } = {}) {

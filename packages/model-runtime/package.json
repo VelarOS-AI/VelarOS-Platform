@@ -54,7 +54,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/model/build/fix-esm-extensions.mjs dist && node ../../scripts/model/build/copy-velaros-globals-to-dist.mjs",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
     "test": "bun run build && bun test test",
     "prepack": "bun run build"
@@ -65,8 +65,8 @@
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/provider": "3.0.8",
     "ai": "^6.0.168",
-    "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/kernel-sdk": "^0.2.2"
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

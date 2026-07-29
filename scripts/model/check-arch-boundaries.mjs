@@ -4,7 +4,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packageDirectory = path.join(root, 'packages/model-runtime')
 const manifestPath = path.join(packageDirectory, 'package.json')
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))

@@ -8,7 +8,7 @@ import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
 
 import { CapabilityOwners } from './capability-owners.mjs'
 
-const RepoRoot = resolve(import.meta.dir, '..')
+const RepoRoot = resolve(import.meta.dir, '../..')
 let failed = false
 const BrowserBaselinePath = resolve(
   RepoRoot,

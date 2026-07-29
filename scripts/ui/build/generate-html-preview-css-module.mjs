@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '../..')
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 const sourceDirectory = join(
   repositoryRoot,
   'packages/conversation-ui/src/html-preview'

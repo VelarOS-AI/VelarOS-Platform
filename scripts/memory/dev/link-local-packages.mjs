@@ -2,7 +2,7 @@ import { access, lstat, mkdir, readdir, readFile, readlink, rm, symlink } from '
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const projectsRoot = path.dirname(root)
 const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))

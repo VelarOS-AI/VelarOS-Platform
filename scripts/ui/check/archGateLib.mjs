@@ -11,7 +11,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-export const RepoRoot = resolve(HERE, '../..')
+export const RepoRoot = resolve(HERE, '../../..')
 export const UiSourceDir = resolve(RepoRoot, 'packages/ui/src')
 export const UpdateBaseline = process.env.VELAROS_UI_GATE_BASELINE_UPDATE === '1'
 

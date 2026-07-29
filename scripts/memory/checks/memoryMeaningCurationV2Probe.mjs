@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-const repoRoot = resolve(import.meta.dirname, '..', '..')
+const repoRoot = resolve(import.meta.dirname, '..', '..', '..')
 const buildDir = mkdtempSync(join(repoRoot, '.memory-meaning-curation-probe-'))
 const outputFile = join(buildDir, 'meaning-curation-v2-probe.mjs')
 const entryFile = join(

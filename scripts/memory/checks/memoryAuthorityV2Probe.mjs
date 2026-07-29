@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-const repoRoot = resolve(import.meta.dirname, '..', '..')
+const repoRoot = resolve(import.meta.dirname, '..', '..', '..')
 // bundle 必须落在 repo 内，ESM 才会沿父目录解析本仓原生 better-sqlite3；
 // finally 恒清理，不把探针产物留进 worktree。
 const buildDir = mkdtempSync(join(repoRoot, '.memory-authority-probe-'))

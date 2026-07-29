@@ -36,12 +36,12 @@
   "scripts": {
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser-composition"
   },
   "dependencies": {
     "@velaros-ai/browser-core": "workspace:*",
-    "@velaros-ai/core": "^0.3.2"
+    "@velaros-ai/core": "workspace:*"
   },
   "peerDependencies": {
     "@types/react": "^19.0.0",
