@@ -1,0 +1,101 @@
+{
+  "name": "@velaros-ai/browser",
+  "version": "0.2.6",
+  "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "keywords": [
+    "browser",
+    "cdp",
+    "automation",
+    "chromium",
+    "ai-agent"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "exports": {
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "default": "./dist/core/index.js"
+    },
+    "./core/contracts": {
+      "types": "./dist/core/contracts.d.ts",
+      "import": "./dist/core/contracts.js"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
+    },
+    "./tools/cli": {
+      "types": "./dist/tools/cli.d.ts",
+      "import": "./dist/tools/cli.js"
+    },
+    "./composition": {
+      "types": "./dist/composition/index.d.ts",
+      "import": "./dist/composition/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "README.md",
+    "docs"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "generate:schema-bundle": "bun scripts/generate-tools-schema-bundle.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/tools/cli.js && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
+    "test": "bun run build && bun run test:built",
+    "test:built": "bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "gifenc": "^1.0.3",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@types/react": "^19.0.0",
+    "electron": ">=41.0.0",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "electron": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@types/react": "^19.0.0",
+    "electron": "^41.10.2",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/browser"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

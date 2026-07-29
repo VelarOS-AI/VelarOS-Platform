@@ -32,10 +32,7 @@
         "model"
       ],
       "capabilities": [
-        "browser-composition",
-        "browser-core",
-        "browser-runtime",
-        "browser-tools",
+        "browser",
         "cli",
         "computer-runtime",
         "computer-tools",
@@ -127,10 +124,7 @@
   },
   "dependencies": {
     "@velaros-ai/agent": "workspace:*",
-    "@velaros-ai/browser-composition": "workspace:*",
-    "@velaros-ai/browser-core": "workspace:*",
-    "@velaros-ai/browser-runtime": "workspace:*",
-    "@velaros-ai/browser-tools": "workspace:*",
+    "@velaros-ai/browser": "workspace:*",
     "@velaros-ai/cli": "workspace:*",
     "@velaros-ai/computer-runtime": "workspace:*",
     "@velaros-ai/computer-tools": "workspace:*",

@@ -56,10 +56,7 @@ const Domains = [
     name: 'capabilities',
     config: capabilitiesConfig,
     globs: [
-      'packages/browser-composition/**',
-      'packages/browser-core/**',
-      'packages/browser-runtime/**',
-      'packages/browser-tools/**',
+      'packages/browser/**',
       'packages/cli/**',
       'packages/computer-runtime/**',
       'packages/computer-tools/**',

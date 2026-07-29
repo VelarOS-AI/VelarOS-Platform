@@ -12,29 +12,29 @@
       "@velaros-ai/agent/*": [
         "./packages/agent/src/*"
       ],
-      "@velaros-ai/browser-composition": [
-        "./packages/browser-composition/src/index.ts"
+      "@velaros-ai/browser/composition": [
+        "./packages/browser/src/composition/index.ts"
       ],
-      "@velaros-ai/browser-composition/*": [
-        "./packages/browser-composition/src/*"
+      "@velaros-ai/browser/composition/*": [
+        "./packages/browser/src/composition/*"
       ],
-      "@velaros-ai/browser-core": [
-        "./packages/browser-core/src/index.ts"
+      "@velaros-ai/browser/core": [
+        "./packages/browser/src/core/index.ts"
       ],
-      "@velaros-ai/browser-core/*": [
-        "./packages/browser-core/src/*"
+      "@velaros-ai/browser/core/*": [
+        "./packages/browser/src/core/*"
       ],
-      "@velaros-ai/browser-runtime": [
-        "./packages/browser-runtime/src/index.ts"
+      "@velaros-ai/browser/runtime": [
+        "./packages/browser/src/runtime/index.ts"
       ],
-      "@velaros-ai/browser-runtime/*": [
-        "./packages/browser-runtime/src/*"
+      "@velaros-ai/browser/runtime/*": [
+        "./packages/browser/src/runtime/*"
       ],
-      "@velaros-ai/browser-tools": [
-        "./packages/browser-tools/src/index.ts"
+      "@velaros-ai/browser/tools": [
+        "./packages/browser/src/tools/index.ts"
       ],
-      "@velaros-ai/browser-tools/*": [
-        "./packages/browser-tools/src/*"
+      "@velaros-ai/browser/tools/*": [
+        "./packages/browser/src/tools/*"
       ],
       "@velaros-ai/cli": [
         "./packages/cli/src/index.ts"

@@ -6,10 +6,7 @@
       "name": "velaros-platform",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
-        "@velaros-ai/browser-composition": "workspace:*",
-        "@velaros-ai/browser-core": "workspace:*",
-        "@velaros-ai/browser-runtime": "workspace:*",
-        "@velaros-ai/browser-tools": "workspace:*",
+        "@velaros-ai/browser": "workspace:*",
         "@velaros-ai/cli": "workspace:*",
         "@velaros-ai/computer-runtime": "workspace:*",
         "@velaros-ai/computer-tools": "workspace:*",
@@ -76,65 +73,30 @@
         "@types/node": "^22.19.17",
       },
     },
-    "packages/browser-composition": {
-      "name": "@velaros-ai/browser-composition",
-      "version": "0.2.5",
-      "dependencies": {
-        "@velaros-ai/browser-core": "workspace:*",
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/react": "^19.0.0",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@types/react": "^19.0.0",
-        "react": "^19.0.0",
-      },
-    },
-    "packages/browser-core": {
-      "name": "@velaros-ai/browser-core",
+    "packages/browser": {
+      "name": "@velaros-ai/browser",
       "version": "0.2.6",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "gifenc": "^1.0.3",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/browser-runtime": {
-      "name": "@velaros-ai/browser-runtime",
-      "version": "0.2.5",
-      "dependencies": {
-        "@velaros-ai/browser-core": "workspace:*",
-        "@velaros-ai/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "electron": "^41.10.2",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "electron": ">=41.0.0",
-      },
-    },
-    "packages/browser-tools": {
-      "name": "@velaros-ai/browser-tools",
-      "version": "0.2.5",
-      "bin": {
-        "velaros-browser": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@velaros-ai/browser-core": "workspace:*",
-        "@velaros-ai/core": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
+        "@types/react": "^19.0.0",
+        "electron": "^41.10.2",
         "typescript": "^5.7.0",
       },
+      "peerDependencies": {
+        "@types/react": "^19.0.0",
+        "electron": ">=41.0.0",
+        "react": "^19.0.0",
+      },
+      "optionalPeers": [
+        "@types/react",
+        "electron",
+        "react",
+      ],
     },
     "packages/cli": {
       "name": "@velaros-ai/cli",
@@ -997,13 +959,7 @@
 
     "@velaros-ai/agent": ["@velaros-ai/agent@workspace:packages/agent"],
 
-    "@velaros-ai/browser-composition": ["@velaros-ai/browser-composition@workspace:packages/browser-composition"],
-
-    "@velaros-ai/browser-core": ["@velaros-ai/browser-core@workspace:packages/browser-core"],
-
-    "@velaros-ai/browser-runtime": ["@velaros-ai/browser-runtime@workspace:packages/browser-runtime"],
-
-    "@velaros-ai/browser-tools": ["@velaros-ai/browser-tools@workspace:packages/browser-tools"],
+    "@velaros-ai/browser": ["@velaros-ai/browser@workspace:packages/browser"],
 
     "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
 

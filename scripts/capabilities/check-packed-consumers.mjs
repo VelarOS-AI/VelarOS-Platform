@@ -104,7 +104,7 @@ Object.assign(globalThis, { __velarosWorkspaceContractsBrowserGate: {
     },
   ],
   [
-    '@velaros-ai/browser-core',
+    '@velaros-ai/browser/core',
     {
       bundleName: 'browser-core-contracts',
       source: `import {
@@ -120,7 +120,7 @@ Object.assign(globalThis, { __velarosWorkspaceContractsBrowserGate: {
   type BrowserPageNavigationAction,
   type BrowserPagePreviewFrame,
   type BrowserViewportOptions,
-} from '@velaros-ai/browser-core/contracts'
+} from '@velaros-ai/browser/core/contracts'
 
 export interface BrowserContractsTypeFixture {
   mode: BrowserAutomationMode
@@ -763,7 +763,7 @@ async function createCombinedConflictConsumer(
   kernelPackages,
   consumersRoot,
 ) {
-  const targetName = '@velaros-ai/browser-runtime'
+  const targetName = '@velaros-ai/browser/runtime'
   const targetRecord = packagesByName.get(targetName)
   const consumerRoot = await mkdtemp(path.join(consumersRoot, 'combined-conflict-'))
   const consumerNodeModules = path.join(consumerRoot, 'node_modules')
@@ -804,7 +804,7 @@ void [AppError, BrowserSessionManager, probe, uiConflictProbe]
     `await Promise.all([
   import('@velaros-ai/core'),
   import('@velaros-ai/kernel-sdk'),
-  import('@velaros-ai/browser-core'),
+  import('@velaros-ai/browser/core'),
   import('${targetName}'),
   import('@velaros-ai/ui-conflict-probe'),
 ])

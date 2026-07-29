@@ -113,7 +113,7 @@ for (const packageDir of packageDirs) {
   await import(pathToFileURL(resolve(packageDir, entry)).href)
 }
 
-const browserCore = await import(pathToFileURL(join(packagesRoot, 'browser-core', 'dist', 'index.js')).href)
+const browserCore = await import(pathToFileURL(join(packagesRoot, 'browser', 'dist', 'core', 'index.js')).href)
 const workspace = await import(pathToFileURL(join(packagesRoot, 'workspace', 'dist', 'index.js')).href)
 const system = await import(pathToFileURL(join(packagesRoot, 'system-tools', 'dist', 'index.js')).href)
 if (browserCore.getRelativePathInsideRoot('/tmp/root', '/tmp/root/file') !== 'file') {

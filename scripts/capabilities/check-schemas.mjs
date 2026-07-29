@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 
 import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
 
-import { CapabilityOwners } from './capability-owners.mjs'
+import { CapabilityOwners, capabilitySchemaEntry } from './capability-owners.mjs'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
 let failed = false
@@ -19,8 +19,9 @@ const BrowserBaselinePath = resolve(
 const BrowserBundlePath = resolve(
   RepoRoot,
   'packages',
-  'browser-tools',
+  'browser',
   'dist',
+  'tools',
   'schema-bundle.json',
 )
 
@@ -61,8 +62,7 @@ for (const owner of CapabilityOwners) {
         RepoRoot,
         'packages',
         capability.directory,
-        'dist',
-        'index.js',
+        capabilitySchemaEntry(capability),
       )
       const exports = await import(pathToFileURL(modulePath).href)
       for (const exportName of capability.schemaExports) {
@@ -95,7 +95,7 @@ for (const owner of CapabilityOwners) {
 
 if (!existsSync(BrowserBundlePath)) {
   console.error(
-    `❌ @velaros-ai/browser-tools: missing dist schema bundle (${BrowserBundlePath})`,
+    `❌ @velaros-ai/browser/tools: missing dist schema bundle (${BrowserBundlePath})`,
   )
   failed = true
 } else {
@@ -104,7 +104,7 @@ if (!existsSync(BrowserBundlePath)) {
     (collection) => collection.label === 'browser-tools',
   )
   if (!browserCollection) {
-    console.error('❌ @velaros-ai/browser-tools: schema bundle has no browser-tools collection')
+    console.error('❌ @velaros-ai/browser/tools: schema bundle has no browser-tools collection')
     failed = true
   } else {
     const current = {

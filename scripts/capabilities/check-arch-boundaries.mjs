@@ -6,6 +6,7 @@ import {
   statSync,
 } from 'node:fs'
 import {
+  dirname,
   extname,
   relative,
   resolve,
@@ -45,10 +46,14 @@ const RequiredApiDocumentationSections = [
   '## 扩展点',
   '## 兼容策略',
 ]
+// 可移植契约入口:exportKey = package.json exports 键,contractsFile = 对应源文件(合包在切片下),
+// modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录)。
 const PortableContracts = [
   {
     packageDirectory: 'workspace',
     packageName: '@velaros-ai/workspace',
+    exportKey: './contracts',
+    contractsFile: 'src/contracts.ts',
     modules: new Set([
       './workspace-contracts.js',
       './workspace-root-source.js',
@@ -56,8 +61,10 @@ const PortableContracts = [
     ]),
   },
   {
-    packageDirectory: 'browser-core',
-    packageName: '@velaros-ai/browser-core',
+    packageDirectory: 'browser',
+    packageName: '@velaros-ai/browser/core',
+    exportKey: './core/contracts',
+    contractsFile: 'src/core/contracts.ts',
     modules: new Set([
       './types.js',
       './BrowserAddressHelper.js',
@@ -67,19 +74,41 @@ const PortableContracts = [
   {
     packageDirectory: 'system-tools',
     packageName: '@velaros-ai/system-tools',
+    exportKey: './contracts',
+    contractsFile: 'src/contracts.ts',
     modules: new Set(['./SystemContracts.js']),
   },
 ]
+
+// packages/ 下的包目录:顶层包 + 一层分组目录(如 capabilities/<pkg>)里的包。
+function listPackageDirectories() {
+  const found = []
+  for (const entry of readdirSync(PackagesRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    if (existsSync(resolve(PackagesRoot, entry.name, 'package.json'))) {
+      found.push(entry.name)
+      continue
+    }
+    for (const nested of readdirSync(resolve(PackagesRoot, entry.name), { withFileTypes: true })) {
+      if (!nested.isDirectory()) continue
+      if (existsSync(resolve(PackagesRoot, entry.name, nested.name, 'package.json'))) {
+        found.push(`${entry.name}/${nested.name}`)
+      }
+    }
+  }
+  return found
+}
 
 const failures = []
 const fail = (message) => failures.push(message)
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 
-function requirePublicTypeContracts(packageDirectory, contractsFile, typeNames) {
+function requirePublicTypeContracts(packageDirectory, rootSourceFile, contractsFile, typeNames) {
   const packageRoot = resolve(PackagesRoot, packageDirectory)
-  const rootSource = readFileSync(resolve(packageRoot, 'src/index.ts'), 'utf8')
+  const rootSourcePath = resolve(packageRoot, rootSourceFile)
+  const rootSource = readFileSync(rootSourcePath, 'utf8')
   const contractsSource = readFileSync(resolve(packageRoot, contractsFile), 'utf8')
-  const contractsSpecifier = `./${relative(resolve(packageRoot, 'src'), resolve(packageRoot, contractsFile))
+  const contractsSpecifier = `./${relative(dirname(rootSourcePath), resolve(packageRoot, contractsFile))
     .split('\\')
     .join('/')
     .replace(/\.ts$/u, '')}`
@@ -98,19 +127,26 @@ function requirePublicTypeContracts(packageDirectory, contractsFile, typeNames) 
   }
 }
 
-function requirePortableContractsEntry({ packageDirectory, packageName, modules }) {
+function requirePortableContractsEntry({
+  packageDirectory,
+  packageName,
+  exportKey,
+  contractsFile,
+  modules,
+}) {
   const packageRoot = resolve(PackagesRoot, packageDirectory)
   const manifest = readJson(resolve(packageRoot, 'package.json'))
+  const distBase = `./${contractsFile.replace(/^src\//u, '').replace(/\.ts$/u, '')}`
   if (
-    manifest.exports?.['./contracts']?.types !== './dist/contracts.d.ts'
-    || manifest.exports?.['./contracts']?.import !== './dist/contracts.js'
+    manifest.exports?.[exportKey]?.types !== `./dist/${distBase.slice(2)}.d.ts`
+    || manifest.exports?.[exportKey]?.import !== `./dist/${distBase.slice(2)}.js`
   ) {
-    fail(`${packageName}/contracts must publish explicit types and import targets`)
+    fail(`${packageName} ${exportKey} must publish explicit types and import targets`)
   }
 
-  const contractsPath = resolve(packageRoot, 'src/contracts.ts')
+  const contractsPath = resolve(packageRoot, contractsFile)
   if (!existsSync(contractsPath)) {
-    fail(`${packageName}/contracts is missing src/contracts.ts`)
+    fail(`${packageName} ${exportKey} is missing ${contractsFile}`)
     return
   }
 
@@ -124,10 +160,13 @@ function requirePortableContractsEntry({ packageDirectory, packageName, modules 
   }
 
   const portableSources = [
-    ['contracts.ts', contractsSource],
+    [contractsFile, contractsSource],
     ...[...modules].map((specifier) => {
       const relativePath = specifier.replace(/^\.\//u, '').replace(/\.js$/u, '.ts')
-      return [relativePath, readFileSync(resolve(packageRoot, 'src', relativePath), 'utf8')]
+      return [
+        relativePath,
+        readFileSync(resolve(dirname(contractsPath), relativePath), 'utf8'),
+      ]
     }),
   ]
   const hostDependencyImport =
@@ -165,14 +204,11 @@ const RootManifest = readJson(resolve(RepoRoot, 'package.json'))
 const RegisteredDirectories = [
   ...(RootManifest.velaros?.domainPackages?.capabilities ?? []),
 ].sort()
+const PackageDirectories = listPackageDirectories()
 const WorkspacePackageNames = new Set(
-  readdirSync(PackagesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(resolve(PackagesRoot, entry.name, 'package.json')))
-    .map((entry) => readJson(resolve(PackagesRoot, entry.name, 'package.json')).name),
+  PackageDirectories.map((directory) => readJson(resolve(PackagesRoot, directory, 'package.json')).name),
 )
-const actualDirectories = readdirSync(PackagesRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && existsSync(resolve(PackagesRoot, entry.name, 'package.json')))
-  .map((entry) => entry.name)
+const actualDirectories = PackageDirectories
   .filter((name) => RegisteredDirectories.includes(name))
   .sort()
 if (JSON.stringify(RegisteredDirectories) !== JSON.stringify(ExpectedDirectories)) {
@@ -229,12 +265,19 @@ for (const expected of CapabilityPackages) {
   if (!isOpenSourceWorkspace && manifest.files?.includes('LICENSE')) {
     fail(`${expected.name}: restricted package must not publish a LICENSE file`)
   }
-  if (
-    typeof manifest.exports?.['.'] !== 'object'
-    || typeof manifest.exports['.'].types !== 'string'
-    || typeof manifest.exports['.'].import !== 'string'
-  ) {
-    fail(`${expected.name}: root exports must declare types and import targets`)
+  // 入口冻结:合包按切片子路径给入口(无根导出——切片运行面互斥),单入口包仍是 '.'。
+  for (const entrySubpath of expected.entrySubpaths) {
+    const entry = manifest.exports?.[entrySubpath]
+    if (
+      typeof entry !== 'object'
+      || typeof entry.types !== 'string'
+      || typeof entry.import !== 'string'
+    ) {
+      fail(`${expected.name}: exports["${entrySubpath}"] must declare types and import targets`)
+    }
+  }
+  if (expected.entrySubpaths.includes('.') !== Boolean(manifest.exports?.['.'])) {
+    fail(`${expected.name}: root export presence must match the owners table entrySubpaths`)
   }
   if (
     manifest.publishConfig?.access !== 'restricted'
@@ -297,7 +340,9 @@ for (const expected of CapabilityPackages) {
     }
   }
 
-  for (const path of walk(resolve(packageRoot, 'src'))) {
+  const sourceRoot = resolve(packageRoot, 'src')
+  const electronAllowedRoots = expected.electronRoots.map((slice) => resolve(sourceRoot, slice))
+  for (const path of walk(sourceRoot)) {
     const source = readFileSync(path, 'utf8')
     if (ForbiddenHostImport.test(source)) {
       fail(`${expected.name}: host import in ${relative(packageRoot, path)}`)
@@ -319,9 +364,11 @@ for (const expected of CapabilityPackages) {
     }
     if (
       ElectronImport.test(source)
-      && expected.name !== '@velaros-ai/browser-runtime'
+      && !electronAllowedRoots.some((root) => path.startsWith(`${root}/`))
     ) {
-      fail(`${expected.name}: only browser-runtime may import Electron (${relative(packageRoot, path)})`)
+      fail(
+        `${expected.name}: only ${expected.electronRoots.map((slice) => `src/${slice}`).join(' / ') || '(none)'} may import Electron (${relative(packageRoot, path)})`,
+      )
     }
     for (const match of source.matchAll(new RegExp(InternalImport.source, 'g'))) {
       const imported = KnownByName.get(match[1])
@@ -343,15 +390,15 @@ for (const contracts of PortableContracts) {
   requirePortableContractsEntry(contracts)
 }
 
-requirePublicTypeContracts('browser-core', 'src/types.ts', [
+requirePublicTypeContracts('browser', 'src/core/index.ts', 'src/core/types.ts', [
   'BrowserActionPolicyConfig',
   'BrowserAutomationMode',
 ])
-requirePublicTypeContracts('workspace', 'src/workspace-contracts.ts', [
+requirePublicTypeContracts('workspace', 'src/index.ts', 'src/workspace-contracts.ts', [
   'WorkspaceGitRemoteActionOptions',
   'WorkspaceRootEntry',
 ])
-requirePublicTypeContracts('office-tools', 'src/OfficeContracts.ts', [
+requirePublicTypeContracts('office-tools', 'src/index.ts', 'src/OfficeContracts.ts', [
   'OfficeEnvironmentInspection',
   'OfficeRuntimePlatform',
 ])
