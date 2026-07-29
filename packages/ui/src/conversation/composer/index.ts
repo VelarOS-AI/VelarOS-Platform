@@ -1,5 +1,5 @@
 /**
- * `@velaros-ai/conversation-ui/composer` — 会话输入框第五原子（pass-5 renderer 収官战役収尾）。
+ * `@velaros-ai/ui/conversation/composer` — 会话输入框第五原子（pass-5 renderer 収官战役収尾）。
  *
  * 聊天页最后一块渲染件入包：输入框 / 附件槽 / 发送控件 / 队列草稿 UI / 模型·推理选择 / 「+」菜单 /
  * skill·评论·下一步补全菜单 / 语音输入。数据 + 会话层回调经 `ChatComposerControl` 投影穿过（主注入面），

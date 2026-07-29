@@ -12,8 +12,8 @@ export default defineComponentLibraryEntry({
     layer: 'Business',
     status: 'ready',
     domain: 'Tool result',
-    source: '@velaros-ai/conversation-ui',
-    origin: 'packages/conversation-ui/src/blocks',
+    source: '@velaros-ai/ui/conversation',
+    origin: 'packages/ui/src/conversation/blocks',
     exampleMode: 'fixture',
     usage:
       'Use for compact, grouped summaries of tool activity in chat, debug or workbench surfaces.',

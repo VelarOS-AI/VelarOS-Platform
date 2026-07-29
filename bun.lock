@@ -9,7 +9,6 @@
         "@velaros-ai/browser": "workspace:*",
         "@velaros-ai/cli": "workspace:*",
         "@velaros-ai/computer": "workspace:*",
-        "@velaros-ai/conversation-ui": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/html-artifacts": "workspace:*",
         "@velaros-ai/kernel-client": "workspace:*",
@@ -122,28 +121,6 @@
       "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
-      },
-    },
-    "packages/conversation-ui": {
-      "name": "@velaros-ai/conversation-ui",
-      "version": "0.2.2",
-      "dependencies": {
-        "@phosphor-icons/react": "^2.1.10",
-        "@radix-ui/react-dialog": "^1.1.15",
-        "@streamdown/cjk": "^1.0.3",
-        "@streamdown/code": "^1.1.1",
-        "@streamdown/math": "^1.0.2",
-        "@velaros-ai/html-artifacts": "workspace:*",
-        "@velaros-ai/ui": "workspace:*",
-        "ahooks": "^3.9.7",
-        "streamdown": "^2.5.0",
-      },
-      "devDependencies": {
-        "@types/react": "^19.0.0",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "react": "^19.0.0",
       },
     },
     "packages/core": {
@@ -293,10 +270,15 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@radix-ui/react-tabs": "^1.1.13",
         "@radix-ui/react-tooltip": "^1.2.8",
+        "@streamdown/cjk": "^1.0.3",
+        "@streamdown/code": "^1.1.1",
+        "@streamdown/math": "^1.0.2",
+        "@velaros-ai/html-artifacts": "workspace:*",
         "ahooks": "^3.9.7",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "react-day-picker": "^9.14.0",
+        "streamdown": "^2.5.0",
         "tailwind-merge": "^3.5.0",
       },
       "devDependencies": {
@@ -921,8 +903,6 @@
     "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
 
     "@velaros-ai/computer": ["@velaros-ai/computer@workspace:packages/computer"],
-
-    "@velaros-ai/conversation-ui": ["@velaros-ai/conversation-ui@workspace:packages/conversation-ui"],
 
     "@velaros-ai/core": ["@velaros-ai/core@workspace:packages/core"],
 

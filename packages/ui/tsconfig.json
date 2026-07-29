@@ -1,17 +1,22 @@
 {
+  "//": "两切片(ui 主干 / conversation)合成单一编译单元:编译选项取并集(target/lib 取 conversation 侧更高的 ES2023);#contracts 与 #internal/* 是 conversation 切片的包内私有入口,映射到源码。",
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
     "baseUrl": "../..",
     "noEmit": true,
     "paths": {
+      "#contracts": ["./packages/ui/src/conversation/contracts/index.ts"],
+      "#internal/*": ["./packages/ui/src/conversation/internal/*"],
       "@velaros-ai/ui": ["./packages/ui/src/index.ts"],
-      "@velaros-ai/ui/*": ["./packages/ui/src/*"]
+      "@velaros-ai/ui/*": ["./packages/ui/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]

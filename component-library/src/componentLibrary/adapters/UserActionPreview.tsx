@@ -8,7 +8,7 @@ import {
   type UserActionCardView,
   type UserActionEntry,
   type UserActionResolution,
-} from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
 
 type UserActionBlock = {
   type: 'user-action-card'

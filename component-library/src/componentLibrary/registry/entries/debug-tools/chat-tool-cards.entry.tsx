@@ -19,8 +19,8 @@ export default defineComponentLibraryEntry({
     layer: 'Feature',
     status: 'ready',
     domain: 'Tool result',
-    source: '@velaros-ai/conversation-ui',
-    origin: 'packages/conversation-ui/src/tool-render',
+    source: '@velaros-ai/ui/conversation',
+    origin: 'packages/ui/src/conversation/tool-render',
     exampleMode: 'fixture',
     usage:
       'ToolCallBlock 按 block.toolName 路由到各 renderer(command / default / plan / goal / file-change 等)。这里平铺每族的 running / success / error 等状态形态与 compact / full 密度。',

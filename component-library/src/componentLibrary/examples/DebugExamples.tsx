@@ -6,7 +6,7 @@ import { useI18n } from '@catalog/i18n'
 import { CheckCircleIcon, ClockIcon } from '@phosphor-icons/react'
 import type { ComponentProps, ReactElement } from 'react'
 
-import { ToolCallBlock } from '@velaros-ai/conversation-ui/tool-render/ToolCallBlock'
+import { ToolCallBlock } from '@velaros-ai/ui/conversation/tool-render/ToolCallBlock'
 import { Stack } from '@velaros-ai/ui/primitives/layout/Stack'
 import { CompactToolRow } from '@velaros-ai/ui/product/layout/CompactToolRow'
 

@@ -12,8 +12,8 @@ export default defineComponentLibraryEntry({
     layer: 'Feature',
     status: 'ready',
     domain: 'Chat Composer',
-    source: '@velaros-ai/conversation-ui/composer',
-    origin: 'packages/conversation-ui/src/composer',
+    source: '@velaros-ai/ui/conversation/composer',
+    origin: 'packages/ui/src/conversation/composer',
     exampleMode: 'fixture',
     usage:
       'Use to review queued guidance ordering, one-line truncation, immediate guidance, return-to-input editing, and deletion.',

@@ -6,7 +6,10 @@
     "emitDeclarationOnly": false,
     "noEmit": false,
     "outDir": "dist",
-    "paths": {},
+    "paths": {
+      "#contracts": ["./packages/ui/src/conversation/contracts/index.ts"],
+      "#internal/*": ["./packages/ui/src/conversation/internal/*"]
+    },
     "rootDir": "src",
     "sourceMap": true
   }

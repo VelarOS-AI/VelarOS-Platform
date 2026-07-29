@@ -18,8 +18,8 @@ export default defineComponentLibraryEntry({
     layer: 'Feature',
     status: 'ready',
     domain: 'Tool result',
-    source: '@velaros-ai/conversation-ui',
-    origin: 'packages/conversation-ui/src/tool-render/richOutput',
+    source: '@velaros-ai/ui/conversation',
+    origin: 'packages/ui/src/conversation/tool-render/richOutput',
     exampleMode: 'fixture',
     usage:
       '富输出工具卡共用 RichToolOutputCard 壳(collapsible),按 toolName 路由:web_search / web_read / produce_artifact / search_memories / get_git_commits。',

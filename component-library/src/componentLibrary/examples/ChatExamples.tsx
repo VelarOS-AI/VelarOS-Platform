@@ -11,11 +11,11 @@ import {
   type ChatStatusRuntime,
   type ConversationMessageRunMarker,
   MessageBubble,
-} from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
 import {
   ChatInput,
   type ChatInputQueuedDraft,
-} from '@velaros-ai/conversation-ui/composer'
+} from '@velaros-ai/ui/conversation/composer'
 import { Badge } from '@velaros-ai/ui/primitives/display/Badge'
 import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 import { Stack } from '@velaros-ai/ui/primitives/layout/Stack'

@@ -16,7 +16,7 @@ export default defineComponentLibraryEntry({
     layer: 'UI',
     status: 'ready',
     domain: 'Brand',
-    source: '@velaros-ai/conversation-ui',
+    source: '@velaros-ai/ui/conversation',
     usage:
       'Product sail mark: StartupIntro wraps a larger steady mark with sliding wind lines inside appStartupSailScene; SidebarHeader uses tiny+steady inside the ghost brand Button when collapsed; EmptyState stacks large+steady with sliding wind lines above WorkspaceSessionControl.',
     avoid:

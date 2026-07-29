@@ -11,21 +11,23 @@ const packageScopes = [
     // 不再成立——图鉴没有自己的 manifest,故本 scope 只保留 source import 检查(那才是实质防线:
     // component-library/src 只许 import UI 两包)。两个 UI 包自己的 manifest 检查照旧。
     manifest: undefined,
-    allowedVelarosPackages: new Set([
-      '@velaros-ai/conversation-ui',
-      '@velaros-ai/ui',
-    ]),
-  },
-  {
-    label: '@velaros-ai/ui',
-    source: 'packages/ui/src',
-    manifest: 'packages/ui/package.json',
+    // 说明符按包名归一(@velaros-ai/ui/conversation → @velaros-ai/ui),所以两切片写一个包名即可。
     allowedVelarosPackages: new Set(['@velaros-ai/ui']),
   },
   {
-    label: '@velaros-ai/conversation-ui',
-    source: 'packages/conversation-ui/src',
-    manifest: 'packages/conversation-ui/package.json',
+    // P7a 合包后 conversation 是 ui 包的一个切片:**源码面**仍按切片分别设防,
+    // 主干切片扫描时排除 src/conversation。
+    label: '@velaros-ai/ui(主干切片)',
+    source: 'packages/ui/src',
+    excludeSources: ['packages/ui/src/conversation'],
+    manifest: undefined,
+    allowedVelarosPackages: new Set(['@velaros-ai/ui']),
+  },
+  {
+    label: '@velaros-ai/ui/conversation(切片)',
+    source: 'packages/ui/src/conversation',
+    // **清单面**只有一份(合包只有一个 package.json),挂在本 scope 上,允许集 = 两切片并集。
+    manifest: 'packages/ui/package.json',
     allowedVelarosPackages: new Set([
       '@velaros-ai/html-artifacts',
       '@velaros-ai/ui',
@@ -65,7 +67,9 @@ function packageName(specifier) {
 
 async function findForbiddenSourceImports(scope) {
   const absoluteDirectory = path.join(repositoryRoot, scope.source)
-  const files = await sourceFiles(absoluteDirectory)
+  const excluded = (scope.excludeSources ?? []).map((entry) => path.join(repositoryRoot, entry))
+  const files = (await sourceFiles(absoluteDirectory))
+    .filter((file) => !excluded.some((entry) => file.startsWith(`${entry}${path.sep}`)))
   const violations = []
 
   for (const file of files) {

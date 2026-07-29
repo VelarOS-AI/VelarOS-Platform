@@ -1,7 +1,7 @@
 import { toOptional } from '@catalog/catalogPrimitives'
 import type { ComponentProps, ReactElement } from 'react'
 
-import { ToolCallBlock } from '@velaros-ai/conversation-ui/tool-render/ToolCallBlock'
+import { ToolCallBlock } from '@velaros-ai/ui/conversation/tool-render/ToolCallBlock'
 import { Stack } from '@velaros-ai/ui/primitives/layout/Stack'
 
 const SESSION_ID = 'component-library-session'

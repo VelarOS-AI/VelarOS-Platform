@@ -53,8 +53,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | capabilities | `@velaros-ai/office-tools` | 0.2.7 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/cli` | 0.2.10 | VelarOS-Capabilities |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | VelarOS-Memory |
-| ui | `@velaros-ai/ui` | 0.2.2 | VelarOS-UI |
-| ui | `@velaros-ai/conversation-ui` | 0.2.2 | VelarOS-UI |
+| ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | VelarOS-UI |
 | html-artifacts | `@velaros-ai/html-artifacts` | 0.1.3 | VelarOS-HTML-Artifacts |
 
 ## 源仓考古指引

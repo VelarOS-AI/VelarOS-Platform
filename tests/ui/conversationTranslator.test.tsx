@@ -7,11 +7,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   ConversationLocalizationProvider,
   useConversationTranslatorRuntime,
-} from '../../packages/conversation-ui/src/i18n'
+} from '../../packages/ui/src/conversation/i18n'
 import {
   conversationTranslate,
   ConversationTranslatorRuntime,
-} from '../../packages/conversation-ui/src/i18n/conversationTranslator'
+} from '../../packages/ui/src/conversation/i18n/conversationTranslator'
 
 function createTranslator(prefix: string) {
   return {
