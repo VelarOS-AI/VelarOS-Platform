@@ -52,7 +52,7 @@ async function writeHealthyPack(
   return specifier
 }
 
-/** Pack entry that reproduces the sibling-dist failure: throws while importing. */
+/** Installed pack entry that throws while importing (the runtime failure surface). */
 async function writeThrowingPack(
   directory: string,
   fileName: string,

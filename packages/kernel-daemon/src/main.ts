@@ -3,7 +3,10 @@
 //
 // 装载路径（优先级）:
 // 1. VELAROS_KERNEL_MODULES — JSON 清单（动态 import）
-// 2. ModStore：VELAROS_KERNEL_SYSTEM_PACKS + AUTO system packs + 用户索引
+// 2. ModStore：编译期 bundled packs + VELAROS_KERNEL_SYSTEM_PACKS + 用户索引
+//
+// bundled 是编译期的（宪章 §15.2）：本进程编进来的只有 sidecar 目录桩，具体能力的 bundled
+// pack 由宿主的构建图注入（`bootKernelDaemon({ modPacks })`，见 daemon/bundled-packs.ts）。
 //
 // 外部产品一律通过 kernel-client：connect → openCapabilitySession → session.call。
 import {
@@ -14,7 +17,7 @@ import {
   KernelModStore,
   loadKernelModulesFromManifest,
   loadModIndexIntoStore,
-  maybeRegisterDefaultSystemPacks,
+  registerBundledPacks,
   registerSystemModPacks,
 } from './daemon'
 
@@ -31,7 +34,7 @@ const modStorePaths = createDefaultKernelModStorePaths(
 )
 const modStore = new KernelModStore(modStorePaths)
 await loadModIndexIntoStore(modStore)
-await maybeRegisterDefaultSystemPacks(modStore)
+registerBundledPacks(modStore)
 
 if (systemPacksJson !== undefined && systemPacksJson.length > 0) {
   const parsed = JSON.parse(systemPacksJson) as unknown

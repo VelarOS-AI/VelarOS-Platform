@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import type { KernelModuleDefinition } from '@velaros-ai/core/kernel/abi'
 
 import {
+  BundledSpecifierScheme,
   type KernelModPackKind,
   type KernelModPackLoadFailure,
   type KernelModPackRecord,
@@ -30,11 +31,16 @@ export class KernelModLoader {
   /**
    * Loads every enabled pack with **per-pack isolation**.
    *
-   * A pack entry is arbitrary third-party-ish code behind a top-level `await`
-   * (system packs import sibling capability dists); letting one bad import
-   * bubble out of here took the whole Kernel process down with it. A failure now
-   * costs exactly that one capability: it is logged, recorded on the store as a
-   * failed pack, and returned in {@link LoadModsResult.failures} — never swallowed.
+   * An installed pack entry is arbitrary third-party code behind a top-level
+   * `await`; letting one bad import bubble out of here took the whole Kernel
+   * process down with it. A failure now costs exactly that one capability: it is
+   * logged, recorded on the store as a failed pack, and returned in
+   * {@link LoadModsResult.failures} — never swallowed.
+   *
+   * Since P4 the runtime failure surface is **installed packs only**: bundled
+   * packs carry their module from the build graph (see `bundled-packs.ts`), so a
+   * broken one is a red build, not a degraded boot. The isolation stays as-is —
+   * it is the installed channel's contract, not the bundled one's.
    *
    * Clients see the gap as "enabled in mods.list but absent from handshake
    * modules"; the readable reason lives in the Kernel log until the mods wire
@@ -78,6 +84,17 @@ function describeLoadFailure(error: unknown): string {
 async function loadPackModule(
   pack: KernelModPackRecord,
 ): Promise<KernelModuleDefinition> {
+  // Bundled pack: the module came in through the build graph, so there is
+  // nothing to resolve or import — `specifier` is only its identity.
+  if (pack.module !== undefined) return pack.module
+  if (pack.specifier.startsWith(BundledSpecifierScheme)) {
+    // Orphan: the persisted index still lists a bundled pack that this build no
+    // longer compiles in. Its identity URI is not importable — say so, do not
+    // let it fall through into a nonsensical file-path import.
+    throw new Error(
+      `Mod pack "${pack.id}" is a bundled pack that is no longer compiled into this Kernel build ("${pack.specifier}")`,
+    )
+  }
   const resolved = isAbsolute(pack.specifier)
     ? pack.specifier
     : resolve(process.cwd(), pack.specifier)
@@ -204,13 +221,21 @@ export async function loadModIndexIntoStore(
   }
 }
 
+/**
+ * Writes the pack index (identity + enabled bit).
+ *
+ * A bundled pack's `module` is a live object graph, not data — it is dropped
+ * here on purpose: the index persists *decisions* (which packs the user turned
+ * off), while the payload always comes back from the build graph.
+ */
 export async function persistModIndex(store: KernelModStore): Promise<void> {
   const indexPath = store.paths.indexPath
   if (indexPath === undefined) return
   await mkdir(resolve(indexPath, '..'), { recursive: true })
+  const packs = store.list().map(({ module: _module, ...record }) => record)
   await writeFile(
     indexPath,
-    `${JSON.stringify({ packs: store.list() }, null, 2)}\n`,
+    `${JSON.stringify({ packs }, null, 2)}\n`,
     { encoding: 'utf8', mode: 0o600 },
   )
 }

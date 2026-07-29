@@ -1,17 +1,38 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
+import type { KernelModuleDefinition } from '@velaros-ai/core/kernel/abi'
 import type { KernelModPackKind } from '@velaros-ai/core/kernel/protocol'
 
 export type { KernelModPackKind }
+
+/**
+ * Scheme marking a `specifier` as a bundled pack identity rather than a path.
+ *
+ * Keeps the two pack channels mechanically apart on the wire: anything under
+ * this scheme is compile-time and must never be handed to an importer.
+ */
+export const BundledSpecifierScheme = 'bundled:'
 
 export interface KernelModPackRecord {
   readonly id: string
   readonly kind: KernelModPackKind
   readonly version: string
-  /** Absolute path or file URL to the module entry that exports KernelModuleDefinition. */
+  /**
+   * Installed pack: absolute path / file URL to the entry exporting a
+   * KernelModuleDefinition. Bundled pack: the `bundled:<moduleId>` identity URI,
+   * which is never imported (see {@link KernelModPackRecord.module}).
+   */
   readonly specifier: string
   readonly exportName?: string
+  /**
+   * Compile-time module instance — bundled packs only.
+   *
+   * Present = the pack arrived through the build graph, so "loading" it is a
+   * field read: no IO, no runtime failure mode (a broken bundled pack fails the
+   * build instead). Absent = installed pack, loaded by importing `specifier`.
+   */
+  readonly module?: KernelModuleDefinition
   readonly enabled: boolean
   /** Capability ids this pack claims to provide (for discovery before load). */
   readonly provides: readonly string[]
@@ -125,9 +146,11 @@ export class KernelModStore {
 }
 
 /**
- * Register system packs from a JSON payload without importing capability packages.
+ * Register system packs — either compile-time bundled (`module` in hand) or a
+ * JSON payload of importable entries, without importing capability packages here.
  *
- * Shape: `[{ "id", "version", "specifier", "exportName"?, "provides": string[], "enabled"? }]`
+ * Shape: `[{ "id", "version", "specifier", "exportName"?, "module"?,
+ * "provides": string[], "enabled"? }]`
  *
  * Enabled-state precedence: explicit `enabled` in the payload → whatever the
  * store already holds (the persisted mod index, loaded before registration) →
@@ -141,6 +164,7 @@ export function registerSystemModPacks(
     readonly version: string
     readonly specifier: string
     readonly exportName?: string
+    readonly module?: KernelModuleDefinition
     readonly provides: readonly string[]
     readonly enabled?: boolean
   }>,
@@ -152,6 +176,7 @@ export function registerSystemModPacks(
       version: pack.version,
       specifier: pack.specifier,
       ...(pack.exportName === undefined ? {} : { exportName: pack.exportName }),
+      ...(pack.module === undefined ? {} : { module: pack.module }),
       enabled: pack.enabled ?? store.get(pack.id)?.enabled ?? true,
       provides: [...pack.provides],
     })

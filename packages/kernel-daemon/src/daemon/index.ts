@@ -1,6 +1,6 @@
 export * from './boot'
+export * from './bundled-packs'
 export * from './daemon'
 export * from './mod-loader'
 export * from './mod-store'
 export * from './module-manifest'
-export * from './system-packs'

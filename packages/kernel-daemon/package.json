@@ -21,7 +21,6 @@
   },
   "files": [
     "dist",
-    "packs",
     "README.md"
   ],
   "scripts": {

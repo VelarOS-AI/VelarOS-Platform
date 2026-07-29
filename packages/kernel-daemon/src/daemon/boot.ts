@@ -32,7 +32,14 @@ export interface BootKernelDaemonOptions {
   readonly kernelVersion: string
   /** Explicit module definitions (tests / composition roots). */
   readonly modules?: readonly KernelModuleDefinition[]
-  /** Pre-registered mod packs loaded when `modules` is omitted. */
+  /**
+   * Pre-registered mod packs loaded when `modules` is omitted.
+   *
+   * This is the injection point for a host's **compile-time bundled capability
+   * packs**: statically import the capability's `create*KernelModule()`, wrap it
+   * with `createBundledModPack` / `toBundledPackRecords`, pass it here. The
+   * Kernel side stays capability-agnostic (§15.2 依赖方向单向 ⑤→④→③→②).
+   */
   readonly modPacks?: readonly KernelModPackRecord[]
   readonly modStorePaths?: KernelModStorePaths
   readonly paths?: KernelDaemonPaths

@@ -121,7 +121,7 @@ bun run check:gates      # 只跑各域质量门
 | 位置 | 是什么 |
 | --- | --- |
 | `packages/core/src/kernel/` | **Kernel 库本体**:`abi`(Mod 开发面)/ `protocol`(wire 调用信封,唯一事实来源)/ `contracts`(服务面契约)/ `host`(module host + capability registry + 权限 broker + 事件流 + 状态)/ `runtime`(KernelService) |
-| `packages/kernel-daemon/` | **serve 部署模式的配件**:daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / `packs/` |
+| `packages/kernel-daemon/` | **serve 部署模式的配件**:daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / 编译期 bundled pack 清单 |
 | `packages/kernel-client/` | 瘦客户端与 serve 模式的接入面 |
 | `packages/kernel-updater/` | 共享 Runtime 的安装、切换、回滚 |
 
@@ -134,9 +134,10 @@ bun run check:gates      # 只跑各域质量门
 1. **领域语义逐出 core 未做完**:`check:core-semantic-vocabulary` 的「待逐出清单」列了余量
    (最大一块是 `packages/core/src/types/index.ts`,1310 行聊天/执行/IPC 载荷);
    数据契约去 `agent-protocol`,运行时行为去 `agent-runtime`。清单只减不增。
-2. **`importSibling` 未退役**:`packages/kernel-daemon/packs/` 的 pack entry 路径 P2 已改成同仓
-   `packages/<cap>/dist`,但「按磁盘布局找 dist」这套机制本身要在 P4 换成 workspace 直连
-   (宪章 §15.2 层间铁律)。
+2. **serve 模式还没有能力宿主**:P4 已把 `importSibling` 与 `packs/` 整体退役——bundled pack 现在
+   是编译期常量,daemon 自己只编进 sidecar 目录桩,具体能力(workspace / computer / system-tools)
+   由**宿主的构建图**经 `bootKernelDaemon({ modPacks })` 注入(依赖方向 ⑤→④→③→②,宪章 §15.2)。
+   Platform 内暂无 `velaros serve` 宿主包,所以这条注入线眼下只有契约与测试,没有生产消费者。
 3. **发布流水线**:`.github/workflows/release-packages.yml` 目前只做 tag 身份核验 + 全量门;
    一次性发布 23 个包的火车发布器,以及各域 `scripts/<domain>/release/publish-packages.mjs`
    的合并,随版本推进方案一起做。
