@@ -1,5 +1,5 @@
 /**
- * @velaros-ai/conversation-ui — 聊天渲染门面包。
+ * @velaros-ai/ui/conversation — 聊天渲染门面包。
  *
  * 用户新 UI 的会话渲染件：消息块管线、工具卡族、流式起搏、以及宿主能力注入端口。
  * 底座（CardKit / ActionCard / 原语）留在 @velaros-ai/ui，本包消费之；本包零 rendererIpc、

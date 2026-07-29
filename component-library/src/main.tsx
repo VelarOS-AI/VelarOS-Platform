@@ -10,11 +10,11 @@ import {
   type ConversationBlockHooks,
   ConversationBlockHooksProvider,
   emptyChatToolRenderCapabilities,
-} from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
 import {
   ConversationComposerPortProvider,
   emptyConversationComposerPort,
-} from '@velaros-ai/conversation-ui/composer'
+} from '@velaros-ai/ui/conversation/composer'
 
 import './catalog.css'
 

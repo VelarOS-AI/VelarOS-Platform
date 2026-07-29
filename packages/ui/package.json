@@ -1,7 +1,7 @@
 {
   "name": "@velaros-ai/ui",
   "version": "0.2.2",
-  "description": "A reusable React component library with accessible primitives, application shells, and design tokens.",
+  "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20"
@@ -357,7 +357,80 @@
     "./utils/filePresentation": {
       "types": "./dist/utils/filePresentation.d.ts",
       "import": "./dist/utils/filePresentation.js"
-    }
+    },
+    "./conversation": {
+      "types": "./dist/conversation/index.d.ts",
+      "import": "./dist/conversation/index.js"
+    },
+    "./conversation/composer": {
+      "types": "./dist/conversation/composer/index.d.ts",
+      "import": "./dist/conversation/composer/index.js"
+    },
+    "./conversation/contracts": {
+      "types": "./dist/conversation/contracts/index.d.ts",
+      "import": "./dist/conversation/contracts/index.js"
+    },
+    "./conversation/artifacts": {
+      "types": "./dist/conversation/artifacts/index.d.ts",
+      "import": "./dist/conversation/artifacts/index.js"
+    },
+    "./conversation/html-preview": {
+      "types": "./dist/conversation/html-preview/index.d.ts",
+      "import": "./dist/conversation/html-preview/index.js"
+    },
+    "./conversation/html-preview/htmlPreviewConstants": {
+      "types": "./dist/conversation/html-preview/htmlPreviewConstants.d.ts",
+      "import": "./dist/conversation/html-preview/htmlPreviewConstants.js"
+    },
+    "./conversation/html-preview/htmlPreviewDocument": {
+      "types": "./dist/conversation/html-preview/htmlPreviewDocument.d.ts",
+      "import": "./dist/conversation/html-preview/htmlPreviewDocument.js"
+    },
+    "./conversation/i18n": {
+      "types": "./dist/conversation/i18n/index.d.ts",
+      "import": "./dist/conversation/i18n/index.js"
+    },
+    "./conversation/markdown": {
+      "types": "./dist/conversation/markdown/index.d.ts",
+      "import": "./dist/conversation/markdown/index.js"
+    },
+    "./conversation/markdown/streamdownMarkdown.config": {
+      "types": "./dist/conversation/markdown/streamdownMarkdown.config.d.ts",
+      "import": "./dist/conversation/markdown/streamdownMarkdown.config.js"
+    },
+    "./conversation/markdown/streamingMarkdownFlush.utils": {
+      "types": "./dist/conversation/markdown/streamingMarkdownFlush.utils.d.ts",
+      "import": "./dist/conversation/markdown/streamingMarkdownFlush.utils.js"
+    },
+    "./conversation/render-slots": {
+      "types": "./dist/conversation/render-slots/index.d.ts",
+      "import": "./dist/conversation/render-slots/index.js"
+    },
+    "./conversation/status": {
+      "types": "./dist/conversation/status/index.d.ts",
+      "import": "./dist/conversation/status/index.js"
+    },
+    "./conversation/stream": {
+      "types": "./dist/conversation/stream/index.d.ts",
+      "import": "./dist/conversation/stream/index.js"
+    },
+    "./conversation/tool-render": {
+      "types": "./dist/conversation/tool-render/index.d.ts",
+      "import": "./dist/conversation/tool-render/index.js"
+    },
+    "./conversation/tool-render/ToolCallBlock": {
+      "types": "./dist/conversation/tool-render/ToolCallBlock.d.ts",
+      "import": "./dist/conversation/tool-render/ToolCallBlock.js"
+    },
+    "./conversation/tool-render/command/CommandToolRenderDetails": {
+      "types": "./dist/conversation/tool-render/command/CommandToolRenderDetails.d.ts",
+      "import": "./dist/conversation/tool-render/command/CommandToolRenderDetails.js"
+    },
+    "./conversation/tool-render/command/commandToolRender.shared": {
+      "types": "./dist/conversation/tool-render/command/commandToolRender.shared.d.ts",
+      "import": "./dist/conversation/tool-render/command/commandToolRender.shared.js"
+    },
+    "./conversation/blocks/MessageBubble.module.css": "./dist/conversation/blocks/MessageBubble.module.css"
   },
   "files": [
     "dist",
@@ -383,10 +456,15 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@streamdown/cjk": "^1.0.3",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
+    "@velaros-ai/html-artifacts": "workspace:*",
     "ahooks": "^3.9.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "react-day-picker": "^9.14.0",
+    "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
@@ -397,12 +475,22 @@
     "dev": "bun run --cwd ../.. dev",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/ui/build/copy-velaros-globals-to-dist.mjs",
+    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/ui/build/copy-velaros-globals-to-dist.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/ui"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-UI.git",
     "directory": "packages/ui"
+  },
+  "imports": {
+    "#contracts": {
+      "types": "./dist/conversation/contracts/index.d.ts",
+      "default": "./dist/conversation/contracts/index.js"
+    },
+    "#internal/*": {
+      "types": "./dist/conversation/internal/*.d.ts",
+      "default": "./dist/conversation/internal/*.js"
+    }
   }
 }

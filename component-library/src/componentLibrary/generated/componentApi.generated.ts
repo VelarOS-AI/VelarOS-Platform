@@ -1107,6 +1107,405 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     }
   ],
+  ChatAwaitingInputCard: [
+    {
+      "name": "ChatAwaitingInputCard.question",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<string>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatAwaitingInputCard.onSubmit",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(answer: string) => void | Promise<void>",
+      "recommended": "Required"
+    }
+  ],
+  ChatComposer: [
+    {
+      "name": "ChatComposer.control",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatComposerControl",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatComposer.density",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"compact\"",
+      "defaultValue": "'default'"
+    }
+  ],
+  ChatConfirmationCard: [
+    {
+      "name": "ChatConfirmationCard.message",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<string>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConfirmationCard.onApprove",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConfirmationCard.onReject",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(rejectionMessage?: LooseOptional<string>) => void",
+      "recommended": "Required"
+    }
+  ],
+  ChatConversationPane: [
+    {
+      "name": "ChatConversationPane.browserScreenshotDisplayMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "BrowserScreenshotDisplayMode",
+      "defaultValue": "'original'"
+    },
+    {
+      "name": "ChatConversationPane.conversation",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ConversationView",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConversationPane.conversationRefreshKey",
+      "description": "对话代际刷新键：仅用于 remount 消息区，避免连带卸载输入区（如分支面板）。",
+      "type": "string | number"
+    },
+    {
+      "name": "ChatConversationPane.composer",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ChatConversationPane.followLocked",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConversationPane.preflightUserActionCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<UserActionCardType>"
+    },
+    {
+      "name": "ChatConversationPane.scrollRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "import(\"/Users/example/WebstormProjects/VelarOS-Platform/node_modules/.bun/@types+react@19.2.17/node_modules/@types/react/index\").RefObject<Nullable<HTMLDivElement>>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConversationPane.streamSlot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ChatConversationPane.variant",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"side\"",
+      "defaultValue": "'default'"
+    },
+    {
+      "name": "ChatConversationPane.onOpenBrowserLink",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((url: string) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.onOpenFileChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entry: FileChangeSummaryListEntry) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.selectedWorkerThreadId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>",
+      "defaultValue": "null"
+    },
+    {
+      "name": "ChatConversationPane.onOpenWorkerThread",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((threadId: string) => void)"
+    },
+    {
+      "name": "ChatConversationPane.onOpenWorkspacePath",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => unknown)"
+    },
+    {
+      "name": "ChatConversationPane.onReviewFileChanges",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entries: FileChangeSummaryListEntry[]) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.onResolveConfirmation",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((approved: boolean, rejectionMessage?: LooseOptional<string>, options?: { userActionCardResults?: UserActionCardResult[]; }) => void)"
+    },
+    {
+      "name": "ChatConversationPane.onSubmitInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((answer: string) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.onContinueGoal",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((input: string) => unknown | Promise<unknown>)"
+    },
+    {
+      "name": "ChatConversationPane.onRewindToMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((messageId: string, options?: { restoreFiles?: boolean; }) => Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.onTranslateThinkingBlock",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: { messageId: string; blockIndex: number; text: string; }) => Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.onDismissStickyDockItem",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((itemId: string) => void)"
+    },
+    {
+      "name": "ChatConversationPane.onFollowLockedChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(locked: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatConversationPane.onResolvePreflightUserActionCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((result: UserActionCardResult) => void)"
+    }
+  ],
+  ChatConversationSkeleton: [
+    {
+      "name": "ChatConversationSkeleton.variant",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"side\"",
+      "defaultValue": "'default'"
+    },
+    {
+      "name": "ChatConversationSkeleton.composer",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ReactElement<unknown, string | import(\"/Users/example/WebstormProjects/VelarOS-Platform/node_modules/.bun/@types+react@19.2.17/node_modules/@types/react/index\").JSXElementConstructor<any>>>"
+    }
+  ],
+  ChatInput: [
+    {
+      "name": "ChatInput.control",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputControl",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInput.density",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"compact\"",
+      "defaultValue": "'default'"
+    }
+  ],
+  ChatInputActionRow: [
+    {
+      "name": "ChatInputActionRow.leading",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ChatInputActionRow.trailing",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    }
+  ],
+  ChatInputCore: [
+    {
+      "name": "ChatInputCore.filePreview",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ChatInputCore.topSlot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ChatInputCore.inputArea",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    }
+  ],
+  ChatInputFunctionBar: [
+    {
+      "name": "ChatInputFunctionBar.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.placement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerFunctionBarChipPlacement",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.planModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.proposalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.goalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.capabilityControls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]"
+    },
+    {
+      "name": "ChatInputFunctionBar.onClearPlanMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.onClearProposalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.onClearGoalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.browserElementSelections",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "BrowserElementSelection[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.onRemoveBrowserElementSelection",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ChatInputFunctionBar.turnContextDeltas",
+      "description": "环境回合上下文待附加 delta（已减去 dismissed）；发送时冻结进消息。",
+      "type": "TurnContextDelta[]"
+    },
+    {
+      "name": "ChatInputFunctionBar.workbenchCurrentFilePath",
+      "description": "Workbench 当前可见文件；稳定状态只显示一枚，不参与历史 delta 分组。",
+      "type": "string"
+    },
+    {
+      "name": "ChatInputFunctionBar.onDismissTurnContextDelta",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ChatInputFunctionBar.activePluginOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPromptFeatureGroupOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.activeSkillOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputSkillOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.activeCommentOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputCommentMentionOption[]"
+    },
+    {
+      "name": "ChatInputFunctionBar.onRemoveCommentSelection",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ChatInputFunctionBar.onOpenSkillDetail",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputSkillDetailHandler"
+    },
+    {
+      "name": "ChatInputFunctionBar.lockedPromptFeatures",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatPromptFeatureId[]"
+    },
+    {
+      "name": "ChatInputFunctionBar.updatePromptFeatureGroup",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputFunctionBar.updateSelectedSkill",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(skillId: string, selected: boolean) => void",
+      "recommended": "Required"
+    }
+  ],
+  ChatInputQueuePanel: [
+    {
+      "name": "ChatInputQueuePanel.queuedDrafts",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputQueuedDraft[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputQueuePanel.isQueueDraining",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputQueuePanel.isStreaming",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatInputQueuePanel.onQueuedDraftMove",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string, direction: \"up\" | \"down\") => void)"
+    },
+    {
+      "name": "ChatInputQueuePanel.onQueuedDraftRemove",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ChatInputQueuePanel.onQueuedDraftGuide",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatInputQueuePanel.onQueuedDraftReturnToInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    }
+  ],
   ChatInteractionNotice: [
     {
       "name": "ChatInteractionNotice.tone",
@@ -1133,6 +1532,238 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ChatInteractionNotice.actions",
       "description": "Auto-generated from TypeScript props.",
       "type": "ReactNode"
+    }
+  ],
+  ChatNoticeCard: [
+    {
+      "name": "ChatNoticeCard.runtime",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatStatusRuntime",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatNoticeCard.notice",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ChatNoticeMeta>"
+    },
+    {
+      "name": "ChatNoticeCard.actions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    }
+  ],
+  ChatScrollNavigator: [
+    {
+      "name": "ChatScrollNavigator.followLocked",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigator.onFollowLockedChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(locked: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigator.scrollRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "RefObject<Nullable<HTMLDivElement>>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigator.transcriptNavigationRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "RefObject<Nullable<ChatTranscriptNavigationHandle>>"
+    }
+  ],
+  ChatTranscript: [
+    {
+      "name": "ChatTranscript.browserScreenshotDisplayMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "BrowserScreenshotDisplayMode"
+    },
+    {
+      "name": "ChatTranscript.messages",
+      "description": "已经过 useChatTranscriptWindow 切片的窗口消息，全量渲染。",
+      "type": "ChatMessage[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatTranscript.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatTranscript.itemClassName",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ChatTranscript.pricingCatalog",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ModelPricingCatalog>"
+    },
+    {
+      "name": "ChatTranscript.getQuestionMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ChatMessage>)"
+    },
+    {
+      "name": "ChatTranscript.getIsGuidedInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => boolean)"
+    },
+    {
+      "name": "ChatTranscript.getIsStreaming",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => boolean)"
+    },
+    {
+      "name": "ChatTranscript.getRunMarker",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ConversationMessageRunMarker>)"
+    },
+    {
+      "name": "ChatTranscript.getInlineNotice",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ChatInlineNoticeMeta>)"
+    },
+    {
+      "name": "ChatTranscript.inlineNoticeRuntimeSource",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ChatInlineNoticeRuntimeSource>"
+    },
+    {
+      "name": "ChatTranscript.showToolDetails",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatTranscript.hidePlanToolBlocks",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatTranscript.hiddenPlanToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "ChatTranscript.hideGoalToolBlocks",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatTranscript.planUpdateIndexByToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlyMap<string, number>"
+    },
+    {
+      "name": "ChatTranscript.latestPlanUpdateToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "ChatTranscript.activeWorkspaceRoot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "ChatTranscript.workspaceRoots",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceRootEntry[]"
+    },
+    {
+      "name": "ChatTranscript.canShowFileChangeSummary",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatTranscript.billingModel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<{ provider: ChatProviderId; model: string; }>"
+    },
+    {
+      "name": "ChatTranscript.getRuntimeCostContexts",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => ConversationTurnContextView[])"
+    },
+    {
+      "name": "ChatTranscript.getGoalCompletionSummary",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<GoalCompletionActivitySummary>)"
+    },
+    {
+      "name": "ChatTranscript.renderActivityLeadingElement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ReactElement>)"
+    },
+    {
+      "name": "ChatTranscript.renderBeforeMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ReactNode>)"
+    },
+    {
+      "name": "ChatTranscript.renderAfterMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((message: ChatMessage) => Nullable<ReactNode>)"
+    },
+    {
+      "name": "ChatTranscript.renderAfterToolCall",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((block: ToolCallBlockType) => Nullable<ReactNode>)"
+    },
+    {
+      "name": "ChatTranscript.onOpenBrowserLink",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((url: string) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.onOpenFileChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entry: FileChangeSummaryListEntry) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.onOpenWorkspacePath",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => unknown)"
+    },
+    {
+      "name": "ChatTranscript.onReviewFileChanges",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entries: FileChangeSummaryListEntry[]) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.activeUserActionCardIds",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly string[]"
+    },
+    {
+      "name": "ChatTranscript.onResolveUserActionCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: UserActionCardResult) => void | Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.onRewindToMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((messageId: string, options?: { restoreFiles?: boolean; }) => Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.onTranslateThinkingBlock",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: { messageId: string; blockIndex: number; text: string; }) => Promise<void>)"
+    },
+    {
+      "name": "ChatTranscript.canRewindToMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatTranscript.canChooseRewindFiles",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
     }
   ],
   Checkbox: [
@@ -1252,6 +1883,67 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((itemId: string) => void)"
     }
   ],
+  CommandToolRenderDetails: [
+    {
+      "name": "CommandToolRenderDetails.block",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolCallBlock",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.cwd",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<string>",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.result",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<WorkspaceCommandResult>",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.backgroundProcess",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<WorkspaceBackgroundProcessInfo>",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.stdout",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.stderr",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.locale",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "AppLocale",
+      "recommended": "Required"
+    },
+    {
+      "name": "CommandToolRenderDetails.onTerminateBackgroundTask",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void | Promise<void>)"
+    },
+    {
+      "name": "CommandToolRenderDetails.isTerminatingBackgroundTask",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "CommandToolRenderDetails.backgroundTaskTerminated",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    }
+  ],
   CompactToolRow: [
     {
       "name": "CompactToolRow.icon",
@@ -1299,6 +1991,1023 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "\"neutral\" | \"success\" | \"warning\" | \"error\" | \"running\"",
       "defaultValue": "'neutral'"
+    }
+  ],
+  ComposerActiveChip: [
+    {
+      "name": "ComposerActiveChip.chipDataPluginId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ComposerActiveChip.chipDataSkillId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ComposerActiveChip.tone",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"experimental\"",
+      "defaultValue": "'default'"
+    },
+    {
+      "name": "ComposerActiveChip.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChip.label",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ComposerActiveChip.icon",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ComposerActiveChip.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ComposerActiveChip.onActivate",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void)"
+    },
+    {
+      "name": "ComposerActiveChip.onRemove",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void)"
+    },
+    {
+      "name": "ComposerActiveChip.activateAriaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ComposerActiveChip.removeAriaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ComposerActiveChip.showRemoveButton",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    }
+  ],
+  ComposerActiveChipsBar: [
+    {
+      "name": "ComposerActiveChipsBar.leading",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "ComposerActiveChipsBar.placement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerFunctionBarChipPlacement",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.planModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.proposalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.goalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.capabilityControls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onClearPlanMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onClearProposalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onClearGoalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.browserElementSelections",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "BrowserElementSelection[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onRemoveBrowserElementSelection",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ComposerActiveChipsBar.turnContextDeltas",
+      "description": "环境回合上下文待附加 delta（已减去 dismissed）；发送时冻结进消息。",
+      "type": "TurnContextDelta[]"
+    },
+    {
+      "name": "ComposerActiveChipsBar.workbenchCurrentFilePath",
+      "description": "Workbench 当前可见文件；稳定状态只显示一枚，不参与历史 delta 分组。",
+      "type": "string"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onDismissTurnContextDelta",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ComposerActiveChipsBar.activePluginOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPromptFeatureGroupOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.activeSkillOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputSkillOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.activeCommentOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputCommentMentionOption[]"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onRemoveCommentSelection",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void)"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onOpenSkillDetail",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputSkillDetailHandler"
+    },
+    {
+      "name": "ComposerActiveChipsBar.lockedPromptFeatures",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatPromptFeatureId[]"
+    },
+    {
+      "name": "ComposerActiveChipsBar.updatePromptFeatureGroup",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerActiveChipsBar.updateSelectedSkill",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(skillId: string, selected: boolean) => void",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenu: [
+    {
+      "name": "ComposerAddMenu.chrome",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuChromeProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenu.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuMenuProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenu.attachments",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuAttachmentsProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenu.features",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuFeaturesProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenu.capabilityControls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]"
+    },
+    {
+      "name": "ComposerAddMenu.density",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"compact\""
+    }
+  ],
+  ComposerAddMenuAttachments: [
+    {
+      "name": "ComposerAddMenuAttachments.showAddFilesItem",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuAttachments.onSelectFilesClick",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenuChrome: [
+    {
+      "name": "ComposerAddMenuChrome.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuChrome.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey, params?: Record<string, string | number>) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuChrome.anchorMenuLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenuFeatures: [
+    {
+      "name": "ComposerAddMenuFeatures.showSkillsSubmenu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.showQuickPromptsSubmenu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.showRenderingSubmenu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.showPluginsSubmenu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.canTogglePlanFeature",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.planModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updatePlanMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.canToggleProposalFeature",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.proposalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updateProposalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.canToggleWorkbenchEditorControl",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.workbenchEditorControlActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updateWorkbenchEditorControl",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((enabled: boolean) => void)"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.canToggleGoalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.goalModeActive",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updateGoalMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.availableSkills",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputSkillOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.quickPrompts",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputManualTestPromptOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.renderingOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPromptFeatureGroupOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.pluginOptions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPromptFeatureGroupOption[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.selectedPromptFeatures",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlySet<ChatPromptFeatureId>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updatePromptFeatureGroup",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.selectedSkillIdSet",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlySet<string>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.updateSelectedSkill",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(skillId: string, enabled: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.handleSelectQuickPrompt",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(option: ChatInputManualTestPromptOption) => void",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenuMenu: [
+    {
+      "name": "ComposerAddMenuMenu.menuOpen",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuMenu.onMenuOpenChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(open: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuMenu.activeSubmenuId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<ComposerSubmenuId>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuMenu.onActiveSubmenuChangeFromCascading",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(submenuId: Nullable<string>) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuMenu.onCloseSubmenus",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenuPrimaryPanel: [
+    {
+      "name": "ComposerAddMenuPrimaryPanel.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "import(\"/Users/example/WebstormProjects/VelarOS-Platform/packages/ui/src/index\").CascadingMenuRenderProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey, params?: Record<string, string | number>) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.SubmenuDisclosureIcon",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComponentType<{ size?: number; className?: string; }>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.attachments",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuAttachmentsProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.features",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuFeaturesProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuPrimaryPanel.capabilityControls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]",
+      "recommended": "Required"
+    }
+  ],
+  ComposerAddMenuSubmenuSections: [
+    {
+      "name": "ComposerAddMenuSubmenuSections.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "import(\"/Users/example/WebstormProjects/VelarOS-Platform/packages/ui/src/index\").CascadingMenuRenderProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuSubmenuSections.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuSubmenuSections.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey, params?: Record<string, string | number>) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuSubmenuSections.activeSubmenuId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<ComposerSubmenuId>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuSubmenuSections.features",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerAddMenuFeaturesProps",
+      "recommended": "Required"
+    }
+  ],
+  ComposerCapabilityControls: [
+    {
+      "name": "ComposerCapabilityControls.controls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCapabilityControls.placement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"toolbar\" | \"model-menu\"",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCapabilityControls.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    }
+  ],
+  ComposerCapabilityMenuItems: [
+    {
+      "name": "ComposerCapabilityMenuItems.controls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatComposerCapabilityControl[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCapabilityMenuItems.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "import(\"/Users/example/WebstormProjects/VelarOS-Platform/packages/ui/src/index\").CascadingMenuRenderProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCapabilityMenuItems.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    }
+  ],
+  ComposerCommentMentionMenu: [
+    {
+      "name": "ComposerCommentMentionMenu.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "UseComposerCommentMentionMenuReturn",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCommentMentionMenu.header",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerCommentMentionMenu.deleteLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    }
+  ],
+  ComposerDropOverlay: [
+    {
+      "name": "ComposerDropOverlay.active",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerDropOverlay.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerDropOverlay.hint",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    }
+  ],
+  ComposerFilePreview: [
+    {
+      "name": "ComposerFilePreview.files",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly File[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.imageOpenPreviewLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.removeFileLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.onPreviewImageSubsetIndex",
+      "description": "图片子集内的索引，与图片来源文件列表平行。",
+      "type": "(imageSubsetIndex: number) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.onRemoveFileAtFilesIndex",
+      "description": "完整文件数组内的索引，用于移除文件。",
+      "type": "(filesIndex: number) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerFilePreview.onOpenFile",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((file: File) => void | Promise<void>)"
+    }
+  ],
+  ComposerModelRunSelector: [
+    {
+      "name": "ComposerModelRunSelector.t",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: MessageKey) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerModelRunSelector.modelSelector",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatComposerModelSelectorControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.reasoning",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatComposerReasoningControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.runProfile",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputRunProfileControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.thinkingDepth",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputThinkingDepthControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.thinkingVisibility",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputThinkingVisibilityControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.pureChat",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPureChatControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.capabilityControls",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatComposerCapabilityControl[]"
+    },
+    {
+      "name": "ComposerModelRunSelector.density",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"compact\""
+    }
+  ],
+  ComposerNextStepSuggestionMenu: [
+    {
+      "name": "ComposerNextStepSuggestionMenu.suggestions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatSuggestionItem[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerNextStepSuggestionMenu.selectedId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "ComposerNextStepSuggestionMenu.onSelect",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((suggestion: ChatSuggestionItem) => void)"
+    },
+    {
+      "name": "ComposerNextStepSuggestionMenu.label",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerNextStepSuggestionMenu.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    }
+  ],
+  ComposerSlashSkillMenu: [
+    {
+      "name": "ComposerSlashSkillMenu.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "UseComposerSlashSkillMenuReturn",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerSlashSkillMenu.header",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    }
+  ],
+  ComposerTierSlider: [
+    {
+      "name": "ComposerTierSlider.value",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "T",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerTierSlider.options",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerTierSliderOption<T>[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerTierSlider.onChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(value: T) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerTierSlider.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ComposerTierSlider.ariaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    }
+  ],
+  ComposerToolbarLeading: [
+    {
+      "name": "ComposerToolbarLeading.density",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"compact\""
+    },
+    {
+      "name": "ComposerToolbarLeading.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.fileInputRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.RefObject<Nullable<HTMLInputElement>>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.onHiddenFileInputChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(event: ChangeEvent<HTMLInputElement>) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.showHiddenFileInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.canShowComposerMenu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.addMenuProps",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "Nullable<ComposerAddMenuProps>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.attachFileLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.onFallbackAttachClick",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarLeading.activeChips",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "ComposerToolbarLeading.leftActions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "ComposerToolbarLeading.bottomSlot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    }
+  ],
+  ComposerToolbarRight: [
+    {
+      "name": "ComposerToolbarRight.chrome",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerToolbarRightChromeProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRight.submitSlot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "ComposerToolbarRight.voice",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerToolbarRightVoiceProps",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRight.primaryAction",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ComposerToolbarRightPrimaryActionProps",
+      "recommended": "Required"
+    }
+  ],
+  ComposerToolbarRightChrome: [
+    {
+      "name": "ComposerToolbarRightChrome.rightActions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    }
+  ],
+  ComposerToolbarRightPrimaryAction: [
+    {
+      "name": "ComposerToolbarRightPrimaryAction.showButton",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.kind",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatInputPrimaryActionKind",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.pending",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.buttonClassName",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.onSendClick",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.onStop",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void | Promise<void>)"
+    }
+  ],
+  ComposerToolbarRightVoice: [
+    {
+      "name": "ComposerToolbarRightVoice.showVoiceInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.voiceInputLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.voiceInputTitle",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.voiceInputDisabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.isVoiceListening",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.voiceInputSupported",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.voiceButtonClassName",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerToolbarRightVoice.onToggleVoiceInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    }
+  ],
+  ComposerVirtualPastePreview: [
+    {
+      "name": "ComposerVirtualPastePreview.references",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly ChatVirtualPasteReference[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.showInInputLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.removeLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.formatMeta",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(reference: ChatVirtualPasteReference) => string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.onInsertMarker",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(reference: ChatVirtualPasteReference) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerVirtualPastePreview.onRemove",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(id: string) => void",
+      "recommended": "Required"
     }
   ],
   CopyButton: [
@@ -1468,6 +3177,30 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "DataTable.bodyMaxHeight",
       "description": "限制表格块高度，可传像素数字或样式长度。\n与主体滚动组合时由内部主体滚动；否则在表格包裹层产生纵向溢出。",
       "type": "string | number"
+    }
+  ],
+  DefaultToolRender: [
+    {
+      "name": "DefaultToolRender.block",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolCallBlockType",
+      "recommended": "Required"
+    },
+    {
+      "name": "DefaultToolRender.compact",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "DefaultToolRender.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "DefaultToolRender.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => string)"
     }
   ],
   DeleteOutlineIconButton: [
@@ -1671,6 +3404,64 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "'md'"
     }
   ],
+  FileChangeSummaryList: [
+    {
+      "name": "FileChangeSummaryList.entries",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "FileChangeSummaryListEntry[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "FileChangeSummaryList.expandedKeys",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlySet<string>",
+      "recommended": "Required"
+    },
+    {
+      "name": "FileChangeSummaryList.onToggleEntry",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(key: string) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "FileChangeSummaryList.onOpenEntry",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entry: FileChangeSummaryListEntry) => void)"
+    },
+    {
+      "name": "FileChangeSummaryList.onToggleEntryChanges",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entry: FileChangeSummaryListEntry) => void)"
+    },
+    {
+      "name": "FileChangeSummaryList.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => string)"
+    }
+  ],
+  FileChangeToolRender: [
+    {
+      "name": "FileChangeToolRender.block",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolCallBlock",
+      "recommended": "Required"
+    },
+    {
+      "name": "FileChangeToolRender.compact",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "FileChangeToolRender.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "FileChangeToolRender.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => string)"
+    }
+  ],
   FileTypeIcon: [
     {
       "name": "FileTypeIcon.fileName",
@@ -1827,6 +3618,156 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "HoverRevealRowTarget.onMouseLeave",
       "description": "Auto-generated from TypeScript props.",
       "type": "React.MouseEventHandler<TElement>",
+      "recommended": "Required"
+    }
+  ],
+  HtmlPreviewFrame: [
+    {
+      "name": "HtmlPreviewFrame.html",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewFrame.artifactId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "HtmlPreviewFrame.fillHost",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "HtmlPreviewFrame.fitViewportWidth",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "HtmlPreviewFrame.patches",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly HtmlArtifactRenderPatch[]",
+      "defaultValue": "[]"
+    },
+    {
+      "name": "HtmlPreviewFrame.patchRevision",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "defaultValue": "patches.length"
+    },
+    {
+      "name": "HtmlPreviewFrame.initialHeight",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewFrame.reloadKey",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewFrame.protocolText",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "HtmlPreviewFrame.sizeLockReady",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "true"
+    },
+    {
+      "name": "HtmlPreviewFrame.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    }
+  ],
+  HtmlPreviewToolbar: [
+    {
+      "name": "HtmlPreviewToolbar.copyLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.copiedLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.copyValue",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.downloadLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.previewLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "HtmlPreviewToolbar.reloadLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.showCode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.showCodeLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.hideCodeLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.actionButtonClassName",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.onDownload",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.onOpenPreview",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void)"
+    },
+    {
+      "name": "HtmlPreviewToolbar.onReload",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "HtmlPreviewToolbar.onToggleCode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
       "recommended": "Required"
     }
   ],
@@ -2103,6 +4044,301 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "强制静态（不测量、不滚动），如打字机重命名期间。",
       "type": "boolean",
       "defaultValue": "false"
+    }
+  ],
+  MessageActionRow: [
+    {
+      "name": "MessageActionRow.item",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ConversationActionItem",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageActionRow.displayTitle",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "MessageActionRow.onClick",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((item: ConversationActionItem) => void)"
+    },
+    {
+      "name": "MessageActionRow.onReveal",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((item: ConversationActionItem) => void)"
+    },
+    {
+      "name": "MessageActionRow.revealLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "defaultValue": "'Open containing folder'"
+    }
+  ],
+  MessageBubble: [
+    {
+      "name": "MessageBubble.browserScreenshotDisplayMode",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "BrowserScreenshotDisplayMode"
+    },
+    {
+      "name": "MessageBubble.message",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatMessage",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageBubble.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageBubble.questionMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ChatMessage>"
+    },
+    {
+      "name": "MessageBubble.isGuidedInput",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.isStreaming",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.runMarker",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ConversationMessageRunMarker>"
+    },
+    {
+      "name": "MessageBubble.inlineNotice",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ChatInlineNoticeMeta>"
+    },
+    {
+      "name": "MessageBubble.inlineNoticeRuntimeSource",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ChatInlineNoticeRuntimeSource>"
+    },
+    {
+      "name": "MessageBubble.showToolDetails",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.hidePlanToolBlocks",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.hiddenPlanToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "MessageBubble.hideGoalToolBlocks",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.planUpdateIndexByToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlyMap<string, number>"
+    },
+    {
+      "name": "MessageBubble.latestPlanUpdateToolCallId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "MessageBubble.activeWorkspaceRoot",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "MessageBubble.workspaceRoots",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceRootEntry[]"
+    },
+    {
+      "name": "MessageBubble.canShowFileChangeSummary",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.billingModel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<{ provider: ChatProviderId; model: string; }>"
+    },
+    {
+      "name": "MessageBubble.pricingCatalog",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ModelPricingCatalog>"
+    },
+    {
+      "name": "MessageBubble.runtimeCostContexts",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ConversationTurnContextView[]"
+    },
+    {
+      "name": "MessageBubble.goalCompletionSummary",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<GoalCompletionActivitySummary>"
+    },
+    {
+      "name": "MessageBubble.activityLeadingElement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ReactElement<unknown, string | import(\"/Users/example/WebstormProjects/VelarOS-Platform/node_modules/.bun/@types+react@19.2.17/node_modules/@types/react/index\").JSXElementConstructor<any>>>"
+    },
+    {
+      "name": "MessageBubble.renderAfterToolCall",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((block: ToolCallBlockType) => Nullable<ReactNode>)"
+    },
+    {
+      "name": "MessageBubble.onOpenBrowserLink",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((url: string) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.onOpenFileChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entry: FileChangeSummaryListEntry) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.onOpenWorkspacePath",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => unknown)"
+    },
+    {
+      "name": "MessageBubble.onReviewFileChanges",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((entries: FileChangeSummaryListEntry[]) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.activeUserActionCardIds",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly string[]"
+    },
+    {
+      "name": "MessageBubble.onResolveUserActionCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: UserActionCardResult) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.onRewindToMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((messageId: string, options?: { restoreFiles?: boolean; }) => Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.onTranslateThinkingBlock",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: { messageId: string; blockIndex: number; text: string; }) => Promise<void>)"
+    },
+    {
+      "name": "MessageBubble.canRewindToMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageBubble.canChooseRewindFiles",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    }
+  ],
+  MessageContentBlock: [
+    {
+      "name": "MessageContentBlock.block",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ContentBlock",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageContentBlock.isStreaming",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageContentBlock.autoCollapseThinking",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "MessageContentBlock.animateStreamingText",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageContentBlock.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageContentBlock.messageId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "MessageContentBlock.runMarker",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ConversationMessageRunMarker>"
+    },
+    {
+      "name": "MessageContentBlock.planUpdateIndex",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number"
+    },
+    {
+      "name": "MessageContentBlock.blockIndex",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number"
+    },
+    {
+      "name": "MessageContentBlock.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => string)"
+    },
+    {
+      "name": "MessageContentBlock.onOpenBrowserLink",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((url: string) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageContentBlock.onOpenWorkspacePath",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => unknown)"
+    },
+    {
+      "name": "MessageContentBlock.activeUserActionCardIds",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "readonly string[]"
+    },
+    {
+      "name": "MessageContentBlock.onResolveUserActionCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: UserActionCardResult) => void | Promise<void>)"
+    },
+    {
+      "name": "MessageContentBlock.consumedScheduledTaskProposalIds",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReadonlySet<string>"
+    },
+    {
+      "name": "MessageContentBlock.onScheduledTaskProposalConsumed",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((proposalId: string) => void)"
+    },
+    {
+      "name": "MessageContentBlock.onTranslateThinkingBlock",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((request: { messageId: string; blockIndex: number; text: string; }) => Promise<void>)"
     }
   ],
   NumberInput: [
@@ -2434,6 +4670,133 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "\"success\" | \"warning\" | \"error\" | \"info\" | null",
       "defaultValue": "'info'"
+    }
+  ],
+  RichCardCollapsibleShell: [
+    {
+      "name": "RichCardCollapsibleShell.rootRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((instance: HTMLDivElement | null) => void | (() => void | { [UNDEFINED_VOID_ONLY]: never; }) | React.DO_NOT_USE_OR_YOU_WILL_BE_FIRED_CALLBACK_REF_RETURN_VALUES[keyof React.DO_NOT_USE_OR_YOU_WILL_BE_FIRED_CALLBACK_REF_RETURN_VALUES]) | React.RefObject<Nullable<HTMLDivElement>>",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.tone",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "RichCardCollapsibleTone",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.isExpanded",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.icon",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "RichCardCollapsibleShell.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.subtitle",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "RichCardCollapsibleShell.badge",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "RichCardCollapsibleShell.collapseAriaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.onToggleExpand",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.actions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "RichCardCollapsibleShell.shouldRenderBody",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.shouldShowBody",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.bodyHeight",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichCardCollapsibleShell.bodyRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((instance: HTMLDivElement | null) => void | (() => void | { [UNDEFINED_VOID_ONLY]: never; }) | React.DO_NOT_USE_OR_YOU_WILL_BE_FIRED_CALLBACK_REF_RETURN_VALUES[keyof React.DO_NOT_USE_OR_YOU_WILL_BE_FIRED_CALLBACK_REF_RETURN_VALUES]) | React.RefObject<Nullable<HTMLDivElement>>",
+      "recommended": "Required"
+    }
+  ],
+  RichToolOutputCard: [
+    {
+      "name": "RichToolOutputCard.icon",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "RichToolOutputCard.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "RichToolOutputCard.subtitle",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "RichToolOutputCard.badge",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "RichToolOutputCard.toolBlock",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolCallBlock"
+    },
+    {
+      "name": "RichToolOutputCard.tone",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "RichCardCollapsibleTone",
+      "defaultValue": "'neutral'"
+    },
+    {
+      "name": "RichToolOutputCard.compact",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "RichToolOutputCard.actions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
     }
   ],
   Row: [
@@ -2965,6 +5328,41 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "4"
     }
   ],
+  ToolCallBlock: [
+    {
+      "name": "ToolCallBlock.block",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolCallBlockType",
+      "recommended": "Required"
+    },
+    {
+      "name": "ToolCallBlock.compact",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "ToolCallBlock.sessionId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "ToolCallBlock.planUpdateIndex",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number"
+    },
+    {
+      "name": "ToolCallBlock.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((path: string) => string)"
+    },
+    {
+      "name": "ToolCallBlock.registry",
+      "description": "Optional application-owned registry. Defaults to the bundled shared registry.",
+      "type": "ToolRendererRegistry",
+      "defaultValue": "ToolRenderRegistry"
+    }
+  ],
   ToolDisclosureCard: [
     {
       "name": "ToolDisclosureCard.statusTone",
@@ -3041,6 +5439,39 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "boolean"
     }
   ],
+  ToolModelImageCard: [
+    {
+      "name": "ToolModelImageCard.image",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolModelImage",
+      "recommended": "Required"
+    },
+    {
+      "name": "ToolModelImageCard.index",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "recommended": "Required"
+    },
+    {
+      "name": "ToolModelImageCard.onOpen",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(index: number) => void",
+      "recommended": "Required"
+    }
+  ],
+  ToolResultSummaryList: [
+    {
+      "name": "ToolResultSummaryList.items",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ToolResultSummaryItem[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ToolResultSummaryList.emptyLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    }
+  ],
   TooltipContent: [
     {
       "name": "TooltipContent.arrowClassName",
@@ -3103,6 +5534,62 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "UiLocalizationMessages",
       "recommended": "Required"
+    }
+  ],
+  VelarSailMark: [
+    {
+      "name": "VelarSailMark.animated",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "true"
+    },
+    {
+      "name": "VelarSailMark.decorative",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "true"
+    },
+    {
+      "name": "VelarSailMark.motion",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "VelarSailMarkMotion",
+      "defaultValue": "'intro'"
+    },
+    {
+      "name": "VelarSailMark.showWindLines",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "true"
+    },
+    {
+      "name": "VelarSailMark.size",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "VelarSailMarkSize",
+      "defaultValue": "'large'"
+    },
+    {
+      "name": "VelarSailMark.windLineMotion",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "VelarSailMarkWindLineMotion",
+      "defaultValue": "'animated'"
+    }
+  ],
+  WidgetToolShell: [
+    {
+      "name": "WidgetToolShell.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "WidgetToolShell.actions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
+      "name": "WidgetToolShell.rootRef",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.Ref<HTMLDivElement>"
     }
   ],
   WorkspaceSpaceIcon: [

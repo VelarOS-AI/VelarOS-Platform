@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 const sourceDirectory = join(
   repositoryRoot,
-  'packages/conversation-ui/src/html-preview'
+  'packages/ui/src/conversation/html-preview'
 )
 const designCss = readFileSync(
   join(sourceDirectory, 'htmlPreviewSandboxDesign.css'),

@@ -193,14 +193,14 @@ export const disclosureRecommendations = [
         </div>
       </div>
     ),
-    code: `// packages/conversation-ui/src/tool-render/widget/WidgetToolRender.tsx
+    code: `// packages/ui/src/conversation/tool-render/widget/WidgetToolRender.tsx
 <WidgetToolShell title={title} actions={<HtmlPreviewToolbar ... />}>
   <div className={styles.frameShell}>
     <HtmlPreviewFrame ... />
   </div>
 </WidgetToolShell>
 
-// packages/conversation-ui/src/tool-render/widget/WidgetToolShell.tsx
+// packages/ui/src/conversation/tool-render/widget/WidgetToolShell.tsx
 <div className={styles.shell}>
   <header className={styles.header}>
     <div className={styles.title}>{title}</div>

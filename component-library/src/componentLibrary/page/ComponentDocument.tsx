@@ -7,7 +7,7 @@ import {
   STREAMDOWN_MARKDOWN_CONTROLS,
   STREAMDOWN_MARKDOWN_LINK_SAFETY,
   STREAMDOWN_MARKDOWN_PLUGINS,
-} from '@velaros-ai/conversation-ui/markdown/streamdownMarkdown.config'
+} from '@velaros-ai/ui/conversation/markdown/streamdownMarkdown.config'
 import { List } from '@velaros-ai/ui/primitives/layout/List'
 
 import { resolveComponentLibraryEntryDisplayName } from '../models/componentLibraryLocalization'

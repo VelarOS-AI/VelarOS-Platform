@@ -21,13 +21,13 @@
 
 ### Changed
 
-- `@velaros-ai/conversation-ui` 的消息、工具、运行态和宿主动作类型改为包内纯展示 DTO/ports；
+- `@velaros-ai/ui/conversation` 的消息、工具、运行态和宿主动作类型改为包内纯展示 DTO/ports；
   Result、计时器、JSON 读取、工具视觉目录与 composer feature 目录全部由 UI 仓自持。
 - `@velaros-ai/ui` 的所有受支持组件深路径改为显式 exports，继续保留现有组件根门面与视觉行为。
 
 ### Removed
 
-- 删除 `@velaros-ai/conversation-ui` 对 `@velaros-ai/core` 的依赖与全部源码 import。
+- 删除 `@velaros-ai/ui/conversation` 对 `@velaros-ai/core` 的依赖与全部源码 import。
 - `@velaros-ai/ui` 不再发布 `src`，并移除开放式 `./*` export。
 
 ### Guarded

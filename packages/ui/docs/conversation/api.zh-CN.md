@@ -1,4 +1,4 @@
-# `@velaros-ai/conversation-ui` 中文 API
+# `@velaros-ai/ui/conversation` 中文 API
 
 ## 定位与非目标
 
@@ -12,7 +12,7 @@ Model、Electron IPC、路由器或 Desktop Store。
 ## 安装
 
 ```bash
-npm install @velaros-ai/conversation-ui @velaros-ai/ui react
+npm install @velaros-ai/ui/conversation @velaros-ai/ui react
 ```
 
 按需引入 UI 令牌和会话组件使用的 CSS。宿主若启用 HTML 预览，需要让构建器支持动态 `import()`。
@@ -128,8 +128,8 @@ React Provider 的生命周期由宿主组合根拥有。卸载会话面前应�
 ## 最小第三方示例
 
 ```tsx
-import { ToolCallBlock, ToolRendererRegistry } from '@velaros-ai/conversation-ui/tool-render'
-import type { ToolCallBlock as ToolCall } from '@velaros-ai/conversation-ui/contracts'
+import { ToolCallBlock, ToolRendererRegistry } from '@velaros-ai/ui/conversation/tool-render'
+import type { ToolCallBlock as ToolCall } from '@velaros-ai/ui/conversation/contracts'
 
 const renderers = new ToolRendererRegistry()
 renderers.register('weather', WeatherToolCard)

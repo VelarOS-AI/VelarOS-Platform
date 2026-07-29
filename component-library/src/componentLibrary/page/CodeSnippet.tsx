@@ -7,7 +7,7 @@ import {
   STREAMDOWN_MARKDOWN_CONTROLS,
   STREAMDOWN_MARKDOWN_LINK_SAFETY,
   STREAMDOWN_MARKDOWN_PLUGINS,
-} from '@velaros-ai/conversation-ui/markdown'
+} from '@velaros-ai/ui/conversation/markdown'
 
 import styles from '@catalog/styles/ComponentLibraryPage.module.css'
 

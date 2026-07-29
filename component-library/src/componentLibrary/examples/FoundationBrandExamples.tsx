@@ -5,7 +5,7 @@ import {
   VelarSailMark,
   type VelarSailMarkMotion,
   type VelarSailMarkSize,
-} from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 import { Center } from '@velaros-ai/ui/primitives/layout/Center'
@@ -32,7 +32,7 @@ import {
   VelarSailMark,
   type VelarSailMarkMotion,
   type VelarSailMarkSize,
-} from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
 
 export function VelarSailMarkInteractiveDemo() {
   const [size, setSize] = useState<VelarSailMarkSize>('small')

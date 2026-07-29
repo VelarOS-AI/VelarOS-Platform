@@ -3,8 +3,8 @@ import { type ReactElement, useState } from 'react'
 import {
   FileChangeSummaryList,
   type FileChangeSummaryListEntry,
-} from '@velaros-ai/conversation-ui'
-import { buildFileDiffSummary } from '@velaros-ai/conversation-ui'
+} from '@velaros-ai/ui/conversation'
+import { buildFileDiffSummary } from '@velaros-ai/ui/conversation'
 
 const GREETER_BEFORE = `export function greet(name) {
   return 'Hi ' + name

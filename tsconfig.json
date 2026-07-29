@@ -54,11 +54,11 @@
       "@velaros-ai/computer/tools/*": [
         "./packages/computer/src/tools/*"
       ],
-      "@velaros-ai/conversation-ui": [
-        "./packages/conversation-ui/src/index.ts"
+      "@velaros-ai/ui/conversation": [
+        "./packages/ui/src/conversation/index.ts"
       ],
-      "@velaros-ai/conversation-ui/*": [
-        "./packages/conversation-ui/src/*"
+      "@velaros-ai/ui/conversation/*": [
+        "./packages/ui/src/conversation/*"
       ],
       "@velaros-ai/core": [
         "./packages/core/src/index.ts"

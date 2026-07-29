@@ -17,6 +17,7 @@ const requiredDocumentSections = [
   '扩展点',
   '兼容策略',
 ]
+const UiPackageDirectories = ['ui']
 const utilityTypeModule = '@velaros-ai/ui/utility-types'
 const utilityTypeNames = [
   'JsonStringifyReplacer',
@@ -27,7 +28,8 @@ const utilityTypeNames = [
   'PlainObject',
 ]
 
-for (const packageName of ['ui', 'conversation-ui']) {
+// P7a 合包后 UI 只剩一个发布单元(conversation 是它的 ./conversation 切片)。
+for (const packageName of UiPackageDirectories) {
   await verifyPackage(path.join(repositoryRoot, 'packages', packageName))
 }
 await verifyExternalConsumer()
@@ -96,7 +98,7 @@ async function verifyExternalConsumer() {
   const temporary = await mkdtemp(path.join(tmpdir(), 'velaros-ui-consumer-'))
   try {
     const packageTarballs = []
-    for (const packageName of ['ui', 'conversation-ui']) {
+    for (const packageName of UiPackageDirectories) {
       const packageDirectory = path.join(repositoryRoot, 'packages', packageName)
       capture(
         'bun',
@@ -107,8 +109,10 @@ async function verifyExternalConsumer() {
     for (const file of await readdir(temporary)) {
       if (file.endsWith('.tgz')) packageTarballs.push(path.join(temporary, file))
     }
-    if (packageTarballs.length !== 2) {
-      throw new Error(`Expected two UI tarballs, received ${packageTarballs.length}`)
+    if (packageTarballs.length !== UiPackageDirectories.length) {
+      throw new Error(
+        `Expected ${UiPackageDirectories.length} UI tarball(s), received ${packageTarballs.length}`
+      )
     }
     const installTargets = [
       ...packageTarballs,
@@ -145,11 +149,11 @@ async function verifyExternalConsumer() {
       path.join(temporary, 'consumer.tsx'),
       [
         "import * as UI from '@velaros-ai/ui'",
-        "import * as Conversation from '@velaros-ai/conversation-ui'",
+        "import * as Conversation from '@velaros-ai/ui/conversation'",
         ...(await buildEveryExportTypeImports()),
-        "import { ToolCallBlock, ToolRendererRegistry } from '@velaros-ai/conversation-ui/tool-render'",
-        "import type { ChatStreamEvent, ToolCallBlock as ToolCall } from '@velaros-ai/conversation-ui/contracts'",
-        "import type { ChatStreamPacerOptions } from '@velaros-ai/conversation-ui/stream'",
+        "import { ToolCallBlock, ToolRendererRegistry } from '@velaros-ai/ui/conversation/tool-render'",
+        "import type { ChatStreamEvent, ToolCallBlock as ToolCall } from '@velaros-ai/ui/conversation/contracts'",
+        "import type { ChatStreamPacerOptions } from '@velaros-ai/ui/conversation/stream'",
         'const registry = new ToolRendererRegistry()',
         'const block = null as unknown as ToolCall',
         'const options = null as unknown as ChatStreamPacerOptions<ChatStreamEvent>',
@@ -210,7 +214,7 @@ async function verifyExternalConsumer() {
       [
         '--input-type=module',
         '--eval',
-        "await import('@velaros-ai/conversation-ui/contracts'); await import('@velaros-ai/conversation-ui/stream')",
+        "await import('@velaros-ai/ui/conversation/contracts'); await import('@velaros-ai/ui/conversation/stream')",
       ],
       temporary
     )
@@ -235,13 +239,13 @@ async function packLocalHtmlArtifactsDependency(destination) {
   )
   const conversationManifest = JSON.parse(
     await readFile(
-      path.join(repositoryRoot, 'packages/conversation-ui/package.json'),
+      path.join(repositoryRoot, 'packages/ui/package.json'),
       'utf8'
     )
   )
   const requiredVersion =
     conversationManifest.dependencies?.['@velaros-ai/html-artifacts']
-  // 单版本火车:conversation-ui 对 html-artifacts 写 workspace:*,由同仓包直接满足,
+  // 单版本火车:conversation 切片对 html-artifacts 写 workspace:*,由同仓包直接满足,
   // 无版本可比;仍校验包名,防止打错包。
   const isWorkspaceSpec = requiredVersion === 'workspace:*'
   const normalizedRequiredVersion = requiredVersion?.replace(/^[~^]/u, '')
@@ -274,7 +278,7 @@ async function packLocalHtmlArtifactsDependency(destination) {
 async function buildEveryExportTypeImports() {
   const imports = []
   let index = 0
-  for (const packageName of ['ui', 'conversation-ui']) {
+  for (const packageName of UiPackageDirectories) {
     const packageDirectory = path.join(repositoryRoot, 'packages', packageName)
     const packageManifest = JSON.parse(
       await readFile(path.join(packageDirectory, 'package.json'), 'utf8')

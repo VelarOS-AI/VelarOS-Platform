@@ -16,7 +16,7 @@ export default defineComponentLibraryEntry({
     layer: 'Feature',
     status: 'ready',
     domain: 'Chat Conversation',
-    source: '@velaros-ai/conversation-ui',
+    source: '@velaros-ai/ui/conversation',
     origin: 'components/chat/conversation',
     exampleMode: 'fixture',
     usage: 'Use to review runtime notices and loading states shown around the conversation stream.',

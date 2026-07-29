@@ -9,16 +9,16 @@ import { CheckIcon, GearIcon, WrenchIcon, XCircleIcon } from '@phosphor-icons/re
 import type { ComponentProps } from 'react'
 
 import {
-  type ToolResultSummaryItem,
-  ToolResultSummaryList,
-} from '@velaros-ai/conversation-ui'
-import { ToolCallBlock } from '@velaros-ai/conversation-ui/tool-render/ToolCallBlock'
-import {
   ChatInteractionNotice,
   InteractionSuggestionCard,
   SessionStickyDock,
   type SessionStickyDockItem,
 } from '@velaros-ai/ui'
+import {
+  type ToolResultSummaryItem,
+  ToolResultSummaryList,
+} from '@velaros-ai/ui/conversation'
+import { ToolCallBlock } from '@velaros-ai/ui/conversation/tool-render/ToolCallBlock'
 import { Badge } from '@velaros-ai/ui/primitives/display/Badge'
 import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 import { Panel } from '@velaros-ai/ui/primitives/layout/Panel'
@@ -257,7 +257,7 @@ export function InteractionSuggestionCardExample() {
 
 const sessionStickyDockExampleCode = `
 import { SessionStickyDock, type SessionStickyDockItem } from '@velaros-ai/ui'
-import { ToolCallBlock } from '@velaros-ai/conversation-ui/tool-render/ToolCallBlock'
+import { ToolCallBlock } from '@velaros-ai/ui/conversation/tool-render/ToolCallBlock'
 import type { ComponentProps } from 'react'
 
 const planToolBlock: ComponentProps<typeof ToolCallBlock>['block'] = {

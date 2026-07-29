@@ -11,7 +11,7 @@ import {
 import {
   configureConversationTranslator,
   ConversationLocalizationProvider,
-} from '@velaros-ai/conversation-ui/i18n'
+} from '@velaros-ai/ui/conversation/i18n'
 import {
   type UiLocalizationMessages,
   UiLocalizationProvider,

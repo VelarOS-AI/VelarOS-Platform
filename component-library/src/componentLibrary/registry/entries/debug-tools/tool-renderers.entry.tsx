@@ -12,8 +12,8 @@ export default defineComponentLibraryEntry({
     layer: 'Feature',
     status: 'ready',
     domain: 'Debug / Tool output',
-    source: '@velaros-ai/conversation-ui',
-    origin: 'packages/conversation-ui/src/tool-render',
+    source: '@velaros-ai/ui/conversation',
+    origin: 'packages/ui/src/conversation/tool-render',
     exampleMode: 'fixture',
     usage:
       'Use shared compact rows and disclosure cards for command, plan (update_plan), file and rich tool output.',
@@ -30,7 +30,7 @@ export default defineComponentLibraryEntry({
       {
         name: 'ToolCallBlock.block',
         description:
-          'For update_plan ToolCallBlocks, routing dispatches from ToolCallBlock to PlanToolRender (see packages/conversation-ui/src/tool-render/plan).',
+          'For update_plan ToolCallBlocks, routing dispatches from ToolCallBlock to PlanToolRender (see packages/ui/src/conversation/tool-render/plan).',
         type: 'ToolCallBlock',
       },
       {

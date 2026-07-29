@@ -77,7 +77,6 @@ const Domains = [
     config: uiConfig,
     globs: [
       'packages/ui/**',
-      'packages/conversation-ui/**',
       'component-library/**',
       'tests/ui/**',
     ],
