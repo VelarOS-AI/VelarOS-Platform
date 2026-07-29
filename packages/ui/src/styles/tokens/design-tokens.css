@@ -1,0 +1,18 @@
+/**
+ * Design tokens entry — semantic CSS custom properties for `@velaros-ai/ui`.
+ *
+ * 色彩体系（§12.9 双色种子）：
+ * - 两个可配置**种子**：`--velar-primary`（主题色）+ `--velar-accent`（副色）——唯一手设品牌色。
+ * - 品牌**派生**语义令牌（--primary / --accent / --control-* / --shell-* / --memory-accent-* …）
+ *   全部由双种子经 color-mix / rgba 派生；组件只引语义令牌，禁裸色值（arch-guard 执法）。
+ * - 中性墨色（--background / --foreground / --border …）与语义状态调色板（--status-*）是固定语义令牌，
+ *   刻意不随品牌种子走。
+ * - UI base（--ui-font-* / --ui-radius-* / --ui-space-* / --ui-border-* / --ui-shadow-*）与 Feature
+ *   域令牌（--workbench-* / --dt-*）。
+ *
+ * 换肤：设 `data-velar-preset` 或改数据根 `ui-color-seeds.json`（详见 seed-presets.css / docs/ui-color-seeds.md）。
+ */
+
+@import './theme-light.css';
+@import './theme-dark.css';
+@import './seed-presets.css';

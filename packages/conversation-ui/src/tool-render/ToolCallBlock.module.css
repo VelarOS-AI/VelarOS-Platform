@@ -1,0 +1,67 @@
+@reference "../styles/tailwind-reference.css";
+
+.runningStatusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--status-green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+  animation: tool-running-dot 1.8s ease-in-out infinite;
+}
+
+.toolIcon {
+  @apply text-muted-foreground;
+}
+
+.toolName {
+  @apply font-mono text-[10px] text-muted-foreground;
+}
+
+.sections {
+  @apply w-full;
+}
+
+.section {
+  @apply w-full;
+}
+
+.sectionLabel {
+  @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+}
+
+.errorLabel {
+  color: var(--status-red);
+}
+
+.code {
+  @apply mt-1 whitespace-pre-wrap break-all bg-white/72 px-3 py-2.5 font-mono text-[11px] leading-6 text-foreground;
+  border-radius: var(--ui-radius-control);
+}
+
+.errorCode {
+  color: var(--status-red);
+}
+
+.mutedText {
+  @apply text-[11px] leading-6 text-muted-foreground;
+}
+
+@keyframes tool-running-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+    opacity: 0.76;
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--status-green) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runningStatusDot {
+    animation: none;
+  }
+}

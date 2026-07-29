@@ -1,0 +1,180 @@
+.catalog-preview-additions {
+  color: var(--status-green);
+}
+
+.catalog-preview-deletions {
+  color: var(--status-red);
+}
+
+.catalog-sidebar-preview {
+  display: grid;
+  width: min(100%, 280px);
+  min-height: 340px;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--background-panel);
+  box-shadow: var(--ui-shadow-card);
+}
+
+.catalog-sidebar-preview > header,
+.catalog-sidebar-preview > footer {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-sm);
+  padding: var(--ui-space-md);
+  border-color: var(--border);
+  background: var(--background);
+}
+
+.catalog-sidebar-preview > header {
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-sidebar-preview > footer {
+  border-top: 1px solid var(--border);
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-body-sm);
+}
+
+.catalog-sidebar-preview-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--ui-radius-control);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.catalog-sidebar-preview nav {
+  display: grid;
+  align-content: start;
+  gap: var(--ui-space-xs);
+  padding: var(--ui-space-sm);
+}
+
+.catalog-sidebar-preview nav button {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--ui-space-sm);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  color: var(--foreground-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.catalog-sidebar-preview nav button:hover,
+.catalog-sidebar-preview nav button[data-active='true'] {
+  color: var(--foreground);
+  background: var(--control-themed-bg);
+}
+
+.catalog-sidebar-preview nav small {
+  color: var(--foreground-tertiary);
+}
+
+.catalog-sidebar-preview-status,
+.catalog-browser-chat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ui-radius-round);
+  background: var(--status-amber);
+}
+
+.catalog-browser-chat-pane {
+  width: min(100%, 420px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--background);
+  box-shadow: var(--ui-shadow-card);
+}
+
+.catalog-browser-chat-pane > header,
+.catalog-browser-chat-pane > header > div {
+  display: flex;
+  align-items: center;
+}
+
+.catalog-browser-chat-pane > header {
+  min-height: 44px;
+  justify-content: space-between;
+  padding: 0 var(--ui-space-sm) 0 var(--ui-space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-browser-chat-pane > header > div {
+  gap: var(--ui-space-sm);
+}
+
+.catalog-browser-chat-dot {
+  background: var(--status-green);
+}
+
+.catalog-debug-timeline article {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: var(--ui-space-sm);
+}
+
+.catalog-debug-timeline-rail {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--ui-radius-round);
+  color: var(--status-green);
+  background: var(--status-green-soft);
+}
+
+.catalog-debug-timeline article[data-tone='running'] .catalog-debug-timeline-rail {
+  color: var(--status-amber);
+  background: var(--status-amber-soft);
+}
+
+.catalog-debug-timeline article > div {
+  display: grid;
+  gap: var(--ui-space-xs);
+  min-width: 0;
+  padding: 2px 0 var(--ui-space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-debug-timeline article header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-md);
+}
+
+.catalog-debug-timeline time {
+  color: var(--foreground-tertiary);
+  font-size: var(--ui-font-caption);
+}
+
+.catalog-debug-timeline-content {
+  padding-top: var(--ui-space-xs);
+}
+
+.catalog-settings-tabs-frame {
+  min-height: 190px;
+  padding: var(--ui-space-md);
+}
+
+.catalog-settings-tabs-frame header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-md);
+  margin-bottom: var(--ui-space-md);
+}
+
+.catalog-settings-tabs-frame h3 {
+  margin: 0;
+  font-size: var(--ui-font-heading);
+}

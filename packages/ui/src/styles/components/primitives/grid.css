@@ -1,0 +1,67 @@
+/* @velaros-no-tailwind */
+
+.velar-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+}
+
+.velar-grid-gap-none {
+  gap: 0;
+}
+
+.velar-grid-gap-xs {
+  gap: var(--ui-space-1);
+}
+
+.velar-grid-gap-sm {
+  gap: var(--ui-space-2);
+}
+
+.velar-grid-gap-md {
+  gap: var(--ui-space-3);
+}
+
+.velar-grid-gap-lg {
+  gap: var(--ui-space-4);
+}
+
+.velar-grid-gap-xl {
+  gap: var(--ui-space-6);
+}
+
+.velar-grid-align-start {
+  align-items: flex-start;
+}
+
+.velar-grid-align-center {
+  align-items: center;
+}
+
+.velar-grid-align-end {
+  align-items: flex-end;
+}
+
+.velar-grid-align-stretch {
+  align-items: stretch;
+}
+
+.velar-grid-justify-start {
+  justify-content: flex-start;
+}
+
+.velar-grid-justify-center {
+  justify-content: center;
+}
+
+.velar-grid-justify-end {
+  justify-content: flex-end;
+}
+
+.velar-grid-justify-between {
+  justify-content: space-between;
+}
+
+.velar-grid-inline-grid {
+  display: inline-grid;
+}

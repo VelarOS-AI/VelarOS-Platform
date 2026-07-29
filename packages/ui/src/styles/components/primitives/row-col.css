@@ -1,0 +1,69 @@
+/* @velaros-no-tailwind */
+
+.velar-row-col-row {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+}
+
+.velar-row-col-gap-none {
+  gap: 0;
+}
+
+.velar-row-col-gap-xs {
+  gap: var(--ui-space-1);
+}
+
+.velar-row-col-gap-sm {
+  gap: var(--ui-space-2);
+}
+
+.velar-row-col-gap-md {
+  gap: var(--ui-space-3);
+}
+
+.velar-row-col-gap-lg {
+  gap: var(--ui-space-4);
+}
+
+.velar-row-col-gap-xl {
+  gap: var(--ui-space-6);
+}
+
+.velar-row-col-align-top {
+  align-items: flex-start;
+}
+
+.velar-row-col-align-middle {
+  align-items: center;
+}
+
+.velar-row-col-align-bottom {
+  align-items: flex-end;
+}
+
+.velar-row-col-align-stretch {
+  align-items: stretch;
+}
+
+.velar-row-col-justify-start {
+  justify-content: flex-start;
+}
+
+.velar-row-col-justify-center {
+  justify-content: center;
+}
+
+.velar-row-col-justify-end {
+  justify-content: flex-end;
+}
+
+.velar-row-col-justify-between {
+  justify-content: space-between;
+}
+
+.velar-row-col-col {
+  min-width: 0;
+  grid-column: span var(--velar-col-span, 24);
+}

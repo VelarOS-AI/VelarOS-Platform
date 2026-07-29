@@ -1,0 +1,44 @@
+/* @velaros-no-tailwind */
+
+.velar-link-link {
+  cursor: pointer;
+  text-underline-offset: 4px;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  text-decoration-thickness: 1px;
+}
+
+.velar-link-link:hover {
+  text-decoration-line: underline;
+}
+
+.velar-link-variant-default {
+  color: var(--status-blue);
+}
+
+.velar-link-variant-default:hover {
+  color: rgba(var(--status-blue-rgb), 0.85);
+}
+
+.velar-link-variant-muted {
+  color: var(--foreground-secondary);
+}
+
+.velar-link-variant-muted:hover {
+  color: var(--foreground);
+}
+
+.velar-link-variant-danger {
+  color: var(--destructive);
+}
+
+.velar-link-variant-danger:hover {
+  opacity: 0.88;
+}
+
+.velar-link-inline {
+  display: inline;
+}
+
+.velar-link-block {
+  display: inline-block;
+}

@@ -1,0 +1,443 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  width: 100%;
+  min-width: 0;
+}
+
+.shell {
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--ui-radius-panel);
+  background: var(--background-panel-strong, var(--background));
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  background: color-mix(
+    in srgb,
+    var(--background-panel) 92%,
+    var(--background-panel-strong, var(--background))
+  );
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--ui-font-body-md);
+  font-weight: 600;
+  line-height: var(--ui-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  min-width: 0;
+  padding: 0;
+}
+
+.actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.actionButton {
+  flex: 0 0 auto;
+  opacity: 0.72;
+  transition: opacity 150ms ease;
+}
+
+.shell:hover .actionButton,
+.shell:focus-within .actionButton {
+  opacity: 1;
+}
+
+.frameShell {
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
+  background: color-mix(in srgb, var(--background-panel) 58%, transparent);
+}
+
+/* 无壳制品：不加卡片包装,直接和聊天页融为一体;工具按钮悬浮右上角、hover 才显。 */
+.chromelessRoot {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.floatingActions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ui-radius-control);
+  background: color-mix(
+    in srgb,
+    var(--background-panel-strong, var(--background)) 72%,
+    transparent
+  );
+  backdrop-filter: blur(6px);
+  /* 默认隐藏,悬浮制品才显露右上角工具组。 */
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.chromelessRoot:hover .floatingActions,
+.chromelessRoot:focus-within .floatingActions {
+  opacity: 1;
+}
+
+.chromelessFrameShell {
+  overflow: visible;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+}
+
+/* 用户提前收起全屏生成层后，流式制品固定在稳定视口内继续更新。
+   高度只跟宿主视口有关，不接受 iframe 增量测量，避免半成品持续向内收缩。 */
+.streamingInlineShell {
+  position: relative;
+  width: 100%;
+  height: clamp(320px, 52vh, 520px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--ui-radius-panel);
+  background: var(--background);
+}
+
+.streamingInlineStatus {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--ui-radius-control);
+  background: color-mix(
+    in srgb,
+    var(--background-panel-strong, var(--background)) 78%,
+    transparent
+  );
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+  backdrop-filter: blur(12px);
+}
+
+/* 渲染真损坏时的不打扰内联提示：细条、次要色，仅一句说明 + 重试链接。 */
+.renderErrorNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  background: var(--surface-settings-card);
+}
+
+.renderErrorText {
+  min-width: 0;
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-compact);
+}
+
+.frameHost {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: transparent;
+}
+
+.frameHostFill {
+  height: 100%;
+}
+
+.frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  transform-origin: top left;
+  transition: opacity 150ms ease;
+}
+
+.codeSource {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--background) 56%, transparent);
+  color: var(--foreground);
+  font-family:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.62;
+
+  /* 软换行:pre 不换行会把长行在卡片右缘硬切、横向滚动条又常被悬浮 composer 挡住,
+     看起来像"源码显示不完整"(真机误报)。保留换行符、长行折行,内容永不横向裁切。 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.codeSourceCode {
+  font: inherit;
+}
+
+.codeTokenText {
+  color: inherit;
+}
+
+.codeTokenPunctuation {
+  color: color-mix(in srgb, var(--foreground-secondary) 82%, var(--foreground));
+}
+
+.codeTokenTag {
+  color: #22863a;
+}
+
+.codeTokenAttr {
+  color: #6f42c1;
+}
+
+.codeTokenString {
+  color: #032f62;
+}
+
+.codeTokenStyleSelector {
+  color: #6f42c1;
+}
+
+.codeTokenStyleProperty {
+  color: #005cc5;
+}
+
+.codeTokenStyleValue {
+  color: #032f62;
+}
+
+.codeTokenStyleAtRule {
+  color: #d73a49;
+}
+
+.codeTokenScriptKeyword {
+  color: #d73a49;
+}
+
+.codeTokenScriptString {
+  color: #032f62;
+}
+
+.codeTokenScriptNumber {
+  color: #005cc5;
+}
+
+.codeTokenCodeComment {
+  color: color-mix(in srgb, var(--foreground-secondary) 72%, transparent);
+}
+
+.codeTokenCodePunctuation {
+  color: color-mix(in srgb, var(--foreground-secondary) 82%, var(--foreground));
+}
+
+.codeTokenComment {
+  color: color-mix(in srgb, var(--foreground-secondary) 72%, transparent);
+}
+
+.codeTokenDoctype {
+  color: #735c0f;
+}
+
+:global(html[data-theme='dark']) .codeTokenTag {
+  color: #7ee787;
+}
+
+:global(html[data-theme='dark']) .codeTokenAttr {
+  color: #d2a8ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenString {
+  color: #a5d6ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenStyleSelector {
+  color: #d2a8ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenStyleProperty {
+  color: #79c0ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenStyleValue {
+  color: #a5d6ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenStyleAtRule {
+  color: #ff7b72;
+}
+
+:global(html[data-theme='dark']) .codeTokenScriptKeyword {
+  color: #ff7b72;
+}
+
+:global(html[data-theme='dark']) .codeTokenScriptString {
+  color: #a5d6ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenScriptNumber {
+  color: #79c0ff;
+}
+
+:global(html[data-theme='dark']) .codeTokenDoctype {
+  color: #ffa657;
+}
+
+.stateRoot {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--surface-settings-card);
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+  box-shadow: none;
+}
+
+.runningDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.72;
+  animation: html-preview-running-dot 1.2s ease-in-out infinite;
+}
+
+.generationStatusDot {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+/* HTML 实时预览生成层：页面占满整个窗口；标题、状态和关闭按钮以玻璃控件悬浮其上。 */
+.generationOverlay {
+  background: var(--background);
+  backdrop-filter: none;
+}
+
+.generationContent {
+  display: block;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.generationTopBar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  align-items: flex-start;
+  padding: 14px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgb(5 7 16 / 54%), transparent);
+}
+
+.generationMeta {
+  width: fit-content;
+  max-width: min(70vw, 720px);
+  flex: 0 1 auto;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: var(--ui-radius-control);
+  background: rgb(9 11 22 / 58%);
+  color: white;
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.generationTitle {
+  color: white;
+}
+
+.generationSubtitle {
+  color: rgb(255 255 255 / 72%);
+}
+
+.generationCloseButton {
+  background: rgb(9 11 22 / 58%);
+  color: white;
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.generationCloseButton:hover {
+  background: rgb(9 11 22 / 78%);
+  color: white;
+}
+
+.generationViewport {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.generationFrame {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runningDot {
+    animation: none;
+  }
+}
+
+@keyframes html-preview-running-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--foreground) 18%, transparent);
+    opacity: 0.62;
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--foreground) 0%, transparent);
+    opacity: 1;
+  }
+}

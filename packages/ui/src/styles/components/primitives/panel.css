@@ -1,0 +1,30 @@
+/* @velaros-no-tailwind */
+
+.velar-panel {
+  border-style: solid;
+  border-width: 1px;
+  border-radius: var(--ui-radius-panel);
+}
+
+.velar-panel-variant-default {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(15, 15, 15, 0.08);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(18px);
+}
+
+.velar-panel-variant-muted {
+  background: rgba(255, 255, 255, 0.68);
+  border-color: rgba(15, 15, 15, 0.06);
+}
+
+.velar-panel-variant-strong {
+  background: #ffffff;
+  border-color: rgba(15, 15, 15, 0.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.velar-panel-variant-inset {
+  background: rgba(17, 17, 17, 0.04);
+  border-color: transparent;
+}

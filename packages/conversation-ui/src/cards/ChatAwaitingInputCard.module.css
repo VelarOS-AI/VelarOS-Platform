@@ -1,0 +1,129 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  @apply flex w-full min-w-0;
+  max-width: min(860px, 100%);
+  padding: 6px 2px;
+  background: transparent;
+}
+
+.column {
+  @apply flex min-w-0 flex-1 flex-col gap-2;
+}
+
+.topRow {
+  @apply flex min-w-0 items-start gap-3;
+}
+
+.body {
+  @apply min-w-0 flex-1;
+}
+
+.title {
+  @apply font-semibold text-foreground;
+  font-size: var(--ui-font-body);
+}
+
+.description {
+  @apply mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground;
+  font-size: var(--ui-font-body-sm);
+  line-height: 18px;
+}
+
+.actions {
+  @apply shrink-0;
+}
+
+.textarea {
+  @apply min-w-0;
+  min-height: var(--ui-control-height-sm);
+  max-height: 112px;
+  overflow-y: auto;
+  padding-block: 4px;
+  padding-inline: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--input);
+}
+
+.textarea:focus-visible {
+  border-bottom-color: rgba(var(--status-blue-rgb), 0.35);
+  box-shadow: none;
+}
+
+.limitMessage,
+.limitMessageError {
+  font-size: 11px;
+  line-height: var(--ui-line-compact);
+}
+
+.limitMessage {
+  color: var(--foreground-tertiary);
+}
+
+.limitMessageError {
+  color: var(--status-red);
+}
+
+.continueText {
+  height: 28px;
+  padding-inline: 8px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--foreground-secondary);
+  box-shadow: none;
+}
+
+.continueText:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--foreground);
+}
+
+.sendText {
+  height: 28px;
+  padding-inline: 8px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--status-blue);
+  box-shadow: none;
+}
+
+.sendText:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: color-mix(in srgb, var(--status-blue) 78%, var(--foreground));
+}
+
+.spinIcon {
+  animation: awaiting-input-spin 0.9s linear infinite;
+}
+
+@media (max-width: 640px) {
+  .topRow {
+    flex-wrap: wrap;
+  }
+
+  .description {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinIcon {
+    animation: none;
+  }
+}
+
+@keyframes awaiting-input-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,90 @@
+/* @velaros-no-tailwind */
+
+.velar-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--ui-radius-panel);
+}
+
+.velar-card-bordered {
+  border-style: solid;
+  border-width: 1px;
+  border-color: rgba(15, 15, 15, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(18px);
+}
+
+.velar-card-borderless {
+  border-style: solid;
+  border-width: 0px;
+  background-color: transparent;
+  box-shadow: none;
+backdrop-filter: none;
+-webkit-backdrop-filter: none;
+}
+
+.velar-card-size-default .velar-card-header {
+  padding-inline: var(--ui-space-card-x, 14px);
+  padding-block: 12px 10px;
+}
+
+.velar-card-size-default .velar-card-body {
+  padding-inline: var(--ui-space-card-x, 14px);
+  padding-block: 0 14px;
+}
+
+.velar-card-size-default .velar-card-body-no-header {
+  padding-block: 14px;
+}
+
+.velar-card-size-sm .velar-card-header {
+  padding-inline: 12px;
+  padding-block: 10px 8px;
+}
+
+.velar-card-size-sm .velar-card-body {
+  padding-inline: 12px;
+  padding-block: 0 12px;
+}
+
+.velar-card-size-sm .velar-card-body-no-header {
+  padding-block: 12px;
+}
+
+.velar-card-header {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+  border-color: rgba(15, 15, 15, 0.06);
+}
+
+.velar-card-title {
+  min-width: 0;
+  flex: 1;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+  color: var(--foreground);
+}
+
+.velar-card-extra {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
+}
+
+.velar-card-body {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}

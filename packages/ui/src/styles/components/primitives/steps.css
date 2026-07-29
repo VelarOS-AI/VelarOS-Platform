@@ -1,0 +1,168 @@
+/* @velaros-no-tailwind */
+
+.velar-steps-spin-glyph {
+  animation: var(--animate-spin);
+}
+
+.velar-steps {
+  min-width: 0;
+}
+
+.velar-steps-horizontal {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.velar-steps-step {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ui-space-1);
+}
+
+.velar-steps-step:first-child .velar-steps-track-before {
+  opacity: 0%;
+}
+
+.velar-steps-step:last-child .velar-steps-track-after {
+  opacity: 0%;
+}
+
+.velar-steps-track-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.velar-steps-icon-cell {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.velar-steps-track-before, .velar-steps-track-after {
+  height: 1px;
+  min-width: 0;
+  flex: 1;
+  background-color: var(--border);
+}
+
+.velar-steps-track-before-done, .velar-steps-track-after-done {
+  background: rgba(var(--status-blue-rgb), 0.45);
+}
+
+.velar-steps-track-before-error, .velar-steps-track-after-error {
+  background: rgba(220, 38, 38, 0.45);
+}
+
+.velar-steps-icon {
+  display: flex;
+  width: var(--ui-space-6);
+  height: var(--ui-space-6);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(infinity * 1px);
+  border-style: solid;
+  border-width: 1px;
+  font-size: var(--ui-font-caption);
+  font-weight: var(--font-weight-semibold);
+  border-color: rgba(15, 15, 15, 0.14);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--foreground-secondary);
+}
+
+.velar-steps-icon-wait {
+  background-color: var(--background);
+  color: var(--muted-foreground);
+}
+
+.velar-steps-icon-process {
+  border-color: rgba(var(--status-blue-rgb), 0.5);
+  color: var(--status-blue);
+  background: var(--status-blue-soft);
+}
+
+.velar-steps-icon-finish {
+  border-color: rgba(21, 128, 61, 0.35);
+  color: var(--status-green);
+  background: var(--status-green-soft);
+}
+
+.velar-steps-icon-error {
+  border-color: rgba(220, 38, 38, 0.35);
+  color: var(--status-red);
+  background: var(--status-red-soft);
+}
+
+.velar-steps-copy {
+  display: flex;
+  max-width: 10rem;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  @media (width >= 40rem) {
+    max-width: none;
+  }
+}
+
+.velar-steps-title {
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.velar-steps-description {
+  font-size: var(--ui-font-xs);
+  line-height: var(--ui-line-xs);
+  color: var(--foreground-secondary);
+}
+
+.velar-steps-vertical {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+}
+
+.velar-steps-vertical-step {
+  display: flex;
+  min-width: 0;
+  gap: var(--ui-space-3);
+}
+
+.velar-steps-vertical-rail {
+  display: flex;
+  width: var(--ui-space-6);
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.velar-steps-vertical-line {
+  margin-top: var(--ui-space-1);
+  width: 1px;
+  flex: 1;
+  background-color: var(--border);
+}
+
+.velar-steps-vertical-line-done {
+  background: rgba(var(--status-blue-rgb), 0.45);
+}
+
+.velar-steps-vertical-line-error {
+  background: rgba(220, 38, 38, 0.45);
+}
+
+.velar-steps-vertical-body {
+  min-width: 0;
+  flex: 1;
+  padding-bottom: var(--ui-space-1);
+}

@@ -1,0 +1,98 @@
+/* @velaros-no-tailwind */
+
+.velar-flex {
+  display: flex;
+  min-width: 0;
+}
+
+.velar-flex-row {
+  flex-direction: row;
+}
+
+.velar-flex-column {
+  flex-direction: column;
+}
+
+.velar-flex-gap-none {
+  gap: 0;
+}
+
+.velar-flex-gap-xs {
+  gap: var(--ui-space-1);
+}
+
+.velar-flex-gap-sm {
+  gap: var(--ui-space-2);
+}
+
+.velar-flex-gap-md {
+  gap: var(--ui-space-3);
+}
+
+.velar-flex-gap-lg {
+  gap: var(--ui-space-4);
+}
+
+.velar-flex-gap-xl {
+  gap: var(--ui-space-6);
+}
+
+.velar-flex-align-start {
+  align-items: flex-start;
+}
+
+.velar-flex-align-center {
+  align-items: center;
+}
+
+.velar-flex-align-end {
+  align-items: flex-end;
+}
+
+.velar-flex-align-stretch {
+  align-items: stretch;
+}
+
+.velar-flex-align-baseline {
+  align-items: baseline;
+}
+
+.velar-flex-justify-start {
+  justify-content: flex-start;
+}
+
+.velar-flex-justify-center {
+  justify-content: center;
+}
+
+.velar-flex-justify-end {
+  justify-content: flex-end;
+}
+
+.velar-flex-justify-between {
+  justify-content: space-between;
+}
+
+.velar-flex-justify-around {
+  justify-content: space-around;
+}
+
+.velar-flex-justify-evenly {
+  justify-content: space-evenly;
+}
+
+.velar-flex-wrap-nowrap {
+  flex-wrap: nowrap;
+}
+
+.velar-flex-wrap-wrap {
+  flex-wrap: wrap;
+}
+
+.velar-flex-wrap-reverse {
+  flex-wrap: wrap-reverse;
+}
+
+.velar-flex-inline-flex {
+  display: inline-flex;
+}

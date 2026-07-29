@@ -1,0 +1,154 @@
+/* @velaros-no-tailwind */
+
+.velar-time-picker-root {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast),
+    box-shadow var(--ui-transition-fast);
+  outline: none;
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-time-picker-size-default {
+  height: var(--ui-control-height-sm);
+  padding-inline: var(--ui-space-control-x-sm);
+  font-size: var(--ui-font-body);
+}
+
+.velar-time-picker-size-sm {
+  height: var(--ui-control-height-xs);
+  padding-inline: 11px;
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-time-picker-variant-default {
+  border: 1px solid rgba(15, 15, 15, 0.09);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.velar-time-picker-variant-default:hover {
+  border-color: rgba(15, 15, 15, 0.13);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.velar-time-picker-variant-default:focus-visible,
+.velar-time-picker-variant-default[data-open='true'] {
+  border-color: rgba(var(--status-blue-rgb), 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 0 0 4px rgba(var(--status-blue-rgb), 0.08);
+}
+
+.velar-time-picker-variant-ghost {
+  border: 1px solid transparent;
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.velar-time-picker-variant-ghost:hover {
+  background: rgba(17, 17, 17, 0.055);
+}
+
+.velar-time-picker-variant-ghost:focus-visible,
+.velar-time-picker-variant-ghost[data-open='true'] {
+  border-color: rgba(15, 15, 15, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.velar-time-picker-root:disabled {
+  cursor: default;
+  opacity: 50%;
+}
+
+.velar-time-picker-trigger {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--ui-line-tight);
+}
+
+.velar-time-picker-placeholder .velar-time-picker-trigger {
+  color: var(--muted-foreground);
+}
+
+.velar-time-picker-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.velar-time-picker-root:focus-within .velar-time-picker-icon,
+.velar-time-picker-root:focus-visible .velar-time-picker-icon,
+.velar-time-picker-root[data-open='true'] .velar-time-picker-icon {
+  color: var(--foreground);
+}
+
+.velar-time-picker-popover {
+  z-index: 70;
+  min-width: 160px;
+  padding: var(--ui-space-2);
+}
+
+.velar-time-picker-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-2);
+}
+
+.velar-time-picker-column {
+  display: flex;
+  max-height: 184px;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.velar-time-picker-option {
+  display: flex;
+  min-height: 30px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--ui-font-body-sm);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  outline: none;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-time-picker-option:hover,
+.velar-time-picker-option:focus-visible {
+  background: rgba(15, 15, 15, 0.055);
+}
+
+.velar-time-picker-option-selected,
+.velar-time-picker-option-selected:hover,
+.velar-time-picker-option-selected:focus-visible {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}

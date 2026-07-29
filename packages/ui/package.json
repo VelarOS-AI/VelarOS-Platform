@@ -1,0 +1,408 @@
+{
+  "name": "@velaros-ai/ui",
+  "version": "0.2.2",
+  "description": "A reusable React component library with accessible primitives, application shells, and design tokens.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles/tokens/design-tokens.css": "./dist/styles/tokens/design-tokens.css",
+    "./utility-types": {
+      "types": "./dist/types/utilityTypes.d.ts",
+      "import": "./dist/types/utilityTypes.js"
+    },
+    "./styles/tokens/theme-light.css": "./dist/styles/tokens/theme-light.css",
+    "./styles/tokens/theme-dark.css": "./dist/styles/tokens/theme-dark.css",
+    "./styles/components/index.css": "./dist/styles/components/index.css",
+    "./styles/components/product.css": "./dist/styles/components/product.css",
+    "./hooks/usePointerResize": {
+      "types": "./dist/hooks/usePointerResize.d.ts",
+      "import": "./dist/hooks/usePointerResize.js"
+    },
+    "./i18n/UiLocalizationProvider": {
+      "types": "./dist/i18n/UiLocalizationProvider.d.ts",
+      "import": "./dist/i18n/UiLocalizationProvider.js"
+    },
+    "./lib/cn": {
+      "types": "./dist/lib/cn.d.ts",
+      "import": "./dist/lib/cn.js"
+    },
+    "./lib/styleUtils": {
+      "types": "./dist/lib/styleUtils.d.ts",
+      "import": "./dist/lib/styleUtils.js"
+    },
+    "./primitives/buttons/Button": {
+      "types": "./dist/primitives/buttons/Button.d.ts",
+      "import": "./dist/primitives/buttons/Button.js"
+    },
+    "./primitives/buttons/IconButton": {
+      "types": "./dist/primitives/buttons/IconButton.d.ts",
+      "import": "./dist/primitives/buttons/IconButton.js"
+    },
+    "./primitives/display/Badge": {
+      "types": "./dist/primitives/display/Badge.d.ts",
+      "import": "./dist/primitives/display/Badge.js"
+    },
+    "./primitives/display/Empty": {
+      "types": "./dist/primitives/display/Empty.d.ts",
+      "import": "./dist/primitives/display/Empty.js"
+    },
+    "./primitives/display/FileTypeIcon": {
+      "types": "./dist/primitives/display/FileTypeIcon.d.ts",
+      "import": "./dist/primitives/display/FileTypeIcon.js"
+    },
+    "./primitives/display/Label": {
+      "types": "./dist/primitives/display/Label.d.ts",
+      "import": "./dist/primitives/display/Label.js"
+    },
+    "./primitives/display/Link": {
+      "types": "./dist/primitives/display/Link.d.ts",
+      "import": "./dist/primitives/display/Link.js"
+    },
+    "./primitives/display/MarqueeText": {
+      "types": "./dist/primitives/display/MarqueeText.d.ts",
+      "import": "./dist/primitives/display/MarqueeText.js"
+    },
+    "./primitives/display/Paragraph": {
+      "types": "./dist/primitives/display/Paragraph.d.ts",
+      "import": "./dist/primitives/display/Paragraph.js"
+    },
+    "./primitives/display/Progress": {
+      "types": "./dist/primitives/display/Progress.d.ts",
+      "import": "./dist/primitives/display/Progress.js"
+    },
+    "./primitives/display/RenderErrorBoundary": {
+      "types": "./dist/primitives/display/RenderErrorBoundary.d.ts",
+      "import": "./dist/primitives/display/RenderErrorBoundary.js"
+    },
+    "./primitives/display/Result": {
+      "types": "./dist/primitives/display/Result.d.ts",
+      "import": "./dist/primitives/display/Result.js"
+    },
+    "./primitives/display/Skeleton": {
+      "types": "./dist/primitives/display/Skeleton.d.ts",
+      "import": "./dist/primitives/display/Skeleton.js"
+    },
+    "./primitives/display/Spin": {
+      "types": "./dist/primitives/display/Spin.d.ts",
+      "import": "./dist/primitives/display/Spin.js"
+    },
+    "./primitives/display/Tag": {
+      "types": "./dist/primitives/display/Tag.d.ts",
+      "import": "./dist/primitives/display/Tag.js"
+    },
+    "./primitives/display/Text": {
+      "types": "./dist/primitives/display/Text.d.ts",
+      "import": "./dist/primitives/display/Text.js"
+    },
+    "./primitives/display/Title": {
+      "types": "./dist/primitives/display/Title.d.ts",
+      "import": "./dist/primitives/display/Title.js"
+    },
+    "./primitives/forms/Calendar": {
+      "types": "./dist/primitives/forms/Calendar.d.ts",
+      "import": "./dist/primitives/forms/Calendar.js"
+    },
+    "./primitives/forms/Checkbox": {
+      "types": "./dist/primitives/forms/Checkbox.d.ts",
+      "import": "./dist/primitives/forms/Checkbox.js"
+    },
+    "./primitives/forms/Input": {
+      "types": "./dist/primitives/forms/Input.d.ts",
+      "import": "./dist/primitives/forms/Input.js"
+    },
+    "./primitives/forms/NumberInput": {
+      "types": "./dist/primitives/forms/NumberInput.d.ts",
+      "import": "./dist/primitives/forms/NumberInput.js"
+    },
+    "./primitives/forms/Picker": {
+      "types": "./dist/primitives/forms/Picker.d.ts",
+      "import": "./dist/primitives/forms/Picker.js"
+    },
+    "./primitives/forms/RadioGroup": {
+      "types": "./dist/primitives/forms/RadioGroup.d.ts",
+      "import": "./dist/primitives/forms/RadioGroup.js"
+    },
+    "./primitives/forms/SegmentedControl": {
+      "types": "./dist/primitives/forms/SegmentedControl.d.ts",
+      "import": "./dist/primitives/forms/SegmentedControl.js"
+    },
+    "./primitives/forms/Select": {
+      "types": "./dist/primitives/forms/Select.d.ts",
+      "import": "./dist/primitives/forms/Select.js"
+    },
+    "./primitives/forms/Switch": {
+      "types": "./dist/primitives/forms/Switch.d.ts",
+      "import": "./dist/primitives/forms/Switch.js"
+    },
+    "./primitives/forms/TextSelect": {
+      "types": "./dist/primitives/forms/TextSelect.d.ts",
+      "import": "./dist/primitives/forms/TextSelect.js"
+    },
+    "./primitives/forms/Textarea": {
+      "types": "./dist/primitives/forms/Textarea.d.ts",
+      "import": "./dist/primitives/forms/Textarea.js"
+    },
+    "./primitives/forms/TimePicker": {
+      "types": "./dist/primitives/forms/TimePicker.d.ts",
+      "import": "./dist/primitives/forms/TimePicker.js"
+    },
+    "./primitives/forms/calendarDate": {
+      "types": "./dist/primitives/forms/calendarDate.d.ts",
+      "import": "./dist/primitives/forms/calendarDate.js"
+    },
+    "./primitives/layout/Breadcrumb": {
+      "types": "./dist/primitives/layout/Breadcrumb.d.ts",
+      "import": "./dist/primitives/layout/Breadcrumb.js"
+    },
+    "./primitives/layout/Card": {
+      "types": "./dist/primitives/layout/Card.d.ts",
+      "import": "./dist/primitives/layout/Card.js"
+    },
+    "./primitives/layout/Center": {
+      "types": "./dist/primitives/layout/Center.d.ts",
+      "import": "./dist/primitives/layout/Center.js"
+    },
+    "./primitives/layout/CollapsibleBlockFrame": {
+      "types": "./dist/primitives/layout/CollapsibleBlockFrame.d.ts",
+      "import": "./dist/primitives/layout/CollapsibleBlockFrame.js"
+    },
+    "./primitives/layout/DataTable": {
+      "types": "./dist/primitives/layout/DataTable.d.ts",
+      "import": "./dist/primitives/layout/DataTable.js"
+    },
+    "./primitives/layout/DescriptionList": {
+      "types": "./dist/primitives/layout/DescriptionList.d.ts",
+      "import": "./dist/primitives/layout/DescriptionList.js"
+    },
+    "./primitives/layout/Disclosure": {
+      "types": "./dist/primitives/layout/Disclosure.d.ts",
+      "import": "./dist/primitives/layout/Disclosure.js"
+    },
+    "./primitives/layout/Divider": {
+      "types": "./dist/primitives/layout/Divider.d.ts",
+      "import": "./dist/primitives/layout/Divider.js"
+    },
+    "./primitives/layout/Flex": {
+      "types": "./dist/primitives/layout/Flex.d.ts",
+      "import": "./dist/primitives/layout/Flex.js"
+    },
+    "./primitives/layout/Grid": {
+      "types": "./dist/primitives/layout/Grid.d.ts",
+      "import": "./dist/primitives/layout/Grid.js"
+    },
+    "./primitives/layout/HoverRevealRow": {
+      "types": "./dist/primitives/layout/HoverRevealRow.d.ts",
+      "import": "./dist/primitives/layout/HoverRevealRow.js"
+    },
+    "./primitives/layout/Inline": {
+      "types": "./dist/primitives/layout/Inline.d.ts",
+      "import": "./dist/primitives/layout/Inline.js"
+    },
+    "./primitives/layout/List": {
+      "types": "./dist/primitives/layout/List.d.ts",
+      "import": "./dist/primitives/layout/List.js"
+    },
+    "./primitives/layout/ListGroup": {
+      "types": "./dist/primitives/layout/ListGroup.d.ts",
+      "import": "./dist/primitives/layout/ListGroup.js"
+    },
+    "./primitives/layout/Panel": {
+      "types": "./dist/primitives/layout/Panel.d.ts",
+      "import": "./dist/primitives/layout/Panel.js"
+    },
+    "./primitives/layout/RowCol": {
+      "types": "./dist/primitives/layout/RowCol.d.ts",
+      "import": "./dist/primitives/layout/RowCol.js"
+    },
+    "./primitives/layout/ScrollArea": {
+      "types": "./dist/primitives/layout/ScrollArea.d.ts",
+      "import": "./dist/primitives/layout/ScrollArea.js"
+    },
+    "./primitives/layout/Separator": {
+      "types": "./dist/primitives/layout/Separator.d.ts",
+      "import": "./dist/primitives/layout/Separator.js"
+    },
+    "./primitives/layout/Space": {
+      "types": "./dist/primitives/layout/Space.d.ts",
+      "import": "./dist/primitives/layout/Space.js"
+    },
+    "./primitives/layout/Stack": {
+      "types": "./dist/primitives/layout/Stack.d.ts",
+      "import": "./dist/primitives/layout/Stack.js"
+    },
+    "./primitives/layout/Steps": {
+      "types": "./dist/primitives/layout/Steps.d.ts",
+      "import": "./dist/primitives/layout/Steps.js"
+    },
+    "./primitives/layout/Tabs": {
+      "types": "./dist/primitives/layout/Tabs.d.ts",
+      "import": "./dist/primitives/layout/Tabs.js"
+    },
+    "./primitives/overlays/AnchoredPopover": {
+      "types": "./dist/primitives/overlays/AnchoredPopover.d.ts",
+      "import": "./dist/primitives/overlays/AnchoredPopover.js"
+    },
+    "./primitives/overlays/CascadingMenu": {
+      "types": "./dist/primitives/overlays/CascadingMenu.d.ts",
+      "import": "./dist/primitives/overlays/CascadingMenu.js"
+    },
+    "./primitives/overlays/Dialog": {
+      "types": "./dist/primitives/overlays/Dialog.d.ts",
+      "import": "./dist/primitives/overlays/Dialog.js"
+    },
+    "./primitives/overlays/ImagePreviewDialog": {
+      "types": "./dist/primitives/overlays/ImagePreviewDialog.d.ts",
+      "import": "./dist/primitives/overlays/ImagePreviewDialog.js"
+    },
+    "./primitives/overlays/Popover": {
+      "types": "./dist/primitives/overlays/Popover.d.ts",
+      "import": "./dist/primitives/overlays/Popover.js"
+    },
+    "./primitives/overlays/SettingsPanelDialog": {
+      "types": "./dist/primitives/overlays/SettingsPanelDialog.d.ts",
+      "import": "./dist/primitives/overlays/SettingsPanelDialog.js"
+    },
+    "./primitives/overlays/Tooltip": {
+      "types": "./dist/primitives/overlays/Tooltip.d.ts",
+      "import": "./dist/primitives/overlays/Tooltip.js"
+    },
+    "./product/buttons/CopyButton": {
+      "types": "./dist/product/buttons/CopyButton.d.ts",
+      "import": "./dist/product/buttons/CopyButton.js"
+    },
+    "./product/buttons/DeleteOutlineIconButton": {
+      "types": "./dist/product/buttons/DeleteOutlineIconButton.d.ts",
+      "import": "./dist/product/buttons/DeleteOutlineIconButton.js"
+    },
+    "./product/display/ChatInteractionNotice": {
+      "types": "./dist/product/display/ChatInteractionNotice.d.ts",
+      "import": "./dist/product/display/ChatInteractionNotice.js"
+    },
+    "./product/display/WorkspaceSpaceIcon": {
+      "types": "./dist/product/display/WorkspaceSpaceIcon.d.ts",
+      "import": "./dist/product/display/WorkspaceSpaceIcon.js"
+    },
+    "./product/display/WorkspaceSpaceStatusIcon": {
+      "types": "./dist/product/display/WorkspaceSpaceStatusIcon.d.ts",
+      "import": "./dist/product/display/WorkspaceSpaceStatusIcon.js"
+    },
+    "./product/display/chatNoticePresentation": {
+      "types": "./dist/product/display/chatNoticePresentation.d.ts",
+      "import": "./dist/product/display/chatNoticePresentation.js"
+    },
+    "./product/layout/ActionCard": {
+      "types": "./dist/product/layout/ActionCard.d.ts",
+      "import": "./dist/product/layout/ActionCard.js"
+    },
+    "./product/layout/AppShell": {
+      "types": "./dist/product/layout/AppShell.d.ts",
+      "import": "./dist/product/layout/AppShell.js"
+    },
+    "./product/layout/BusinessDataTable": {
+      "types": "./dist/product/layout/BusinessDataTable.d.ts",
+      "import": "./dist/product/layout/BusinessDataTable.js"
+    },
+    "./product/layout/BusinessSurface": {
+      "types": "./dist/product/layout/BusinessSurface.d.ts",
+      "import": "./dist/product/layout/BusinessSurface.js"
+    },
+    "./product/layout/CardKit": {
+      "types": "./dist/product/layout/CardKit.d.ts",
+      "import": "./dist/product/layout/CardKit.js"
+    },
+    "./product/layout/CollapsibleNav": {
+      "types": "./dist/product/layout/CollapsibleNav.d.ts",
+      "import": "./dist/product/layout/CollapsibleNav.js"
+    },
+    "./product/layout/CompactToolRow": {
+      "types": "./dist/product/layout/CompactToolRow.d.ts",
+      "import": "./dist/product/layout/CompactToolRow.js"
+    },
+    "./product/layout/InteractionSuggestionCard": {
+      "types": "./dist/product/layout/InteractionSuggestionCard.d.ts",
+      "import": "./dist/product/layout/InteractionSuggestionCard.js"
+    },
+    "./product/layout/SessionStickyDock": {
+      "types": "./dist/product/layout/SessionStickyDock.d.ts",
+      "import": "./dist/product/layout/SessionStickyDock.js"
+    },
+    "./product/layout/Settings": {
+      "types": "./dist/product/layout/Settings.d.ts",
+      "import": "./dist/product/layout/Settings.js"
+    },
+    "./product/layout/ToolDisclosureCard": {
+      "types": "./dist/product/layout/ToolDisclosureCard.d.ts",
+      "import": "./dist/product/layout/ToolDisclosureCard.js"
+    },
+    "./product/layout/TopBarControlFrame": {
+      "types": "./dist/product/layout/TopBarControlFrame.d.ts",
+      "import": "./dist/product/layout/TopBarControlFrame.js"
+    },
+    "./product/menus/BusinessCascadingMenu": {
+      "types": "./dist/product/menus/BusinessCascadingMenu.d.ts",
+      "import": "./dist/product/menus/BusinessCascadingMenu.js"
+    },
+    "./utils/filePresentation": {
+      "types": "./dist/utils/filePresentation.d.ts",
+      "import": "./dist/utils/filePresentation.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "docs"
+  ],
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "ahooks": "^3.9.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react-day-picker": "^9.14.0",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0"
+  },
+  "scripts": {
+    "dev": "bun run --cwd ../.. dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/ui"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-UI.git",
+    "directory": "packages/ui"
+  }
+}

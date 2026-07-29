@@ -1,0 +1,68 @@
+/* @velaros-no-tailwind */
+
+.velar-tabs-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-control);
+  background: var(--background-muted);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background-panel-strong) 64%, transparent);
+}
+
+.velar-tabs-trigger {
+  display: inline-flex;
+  box-sizing: border-box;
+  min-width: 52px;
+  height: var(--ui-control-height-sm);
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1);
+  padding-inline: var(--ui-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-secondary);
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    box-shadow var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
+  outline-style: none;
+  font-size: var(--ui-font-body-md);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.velar-tabs-trigger:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--background-panel-strong) 42%, transparent);
+}
+
+.velar-tabs-trigger:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.velar-tabs-trigger[data-state='active'],
+.velar-tabs-trigger[data-state='active']:hover {
+  border-color: var(--border);
+  background: var(--background-panel-strong);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.velar-tabs-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.velar-tabs-content {
+  margin-top: var(--ui-space-3);
+  outline-style: none;
+}

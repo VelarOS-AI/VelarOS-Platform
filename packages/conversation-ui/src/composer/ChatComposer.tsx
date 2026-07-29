@@ -1,0 +1,152 @@
+import { type ReactElement } from 'react'
+
+import { useConversationI18n } from '../i18n'
+
+import { ChatInput, type ChatInputChromeControl, type ChatInputControl } from './ChatInput'
+import type { ModelSelectOption } from './chatInputTypes'
+import {
+  type ChatComposerCapabilityControl,
+  ComposerCapabilityControls,
+} from './ComposerCapabilityControls'
+import { ComposerModelRunSelector } from './ComposerModelRunSelector'
+
+export interface ChatComposerProviderModelSelectOption {
+  value: string
+  label: string
+  description?: string
+  defaultModel: string
+  models: ModelSelectOption[]
+}
+
+export interface ChatComposerModelSelectorControl {
+  label: string
+  /** 仅用于界面目录的身份；不要求它是已注册的 API Provider。 */
+  provider: string
+  model: string
+  providers: ChatComposerProviderModelSelectOption[]
+  disabled?: boolean
+  onChange: (provider: string, model: string) => void
+}
+
+/**
+ * 厂商动态推理档位。档位 ID 与显示文案都由适配器提供，Composer 只负责统一渲染。
+ */
+export interface ChatComposerReasoningControl {
+  label: string
+  hint: string
+  value: string
+  summaryLabel?: string
+  options: Array<{
+    value: string
+    label: string
+    description?: string
+  }>
+  disabled?: boolean
+  onChange: (value: string) => void
+}
+
+/** 与聊天输入控制形态一致，但外壳控制由聊天组合器控制合入。 */
+export type ChatComposerInputControl = Omit<ChatInputControl, 'chrome'> & {
+  chrome?: Pick<ChatInputChromeControl, 'hideSubmit' | 'submitSlot' | 'beforeInput' | 'afterInput'>
+}
+
+export interface ChatComposerSlots {
+  beforeInput?: React.ReactNode
+  afterInput?: React.ReactNode
+  toolbarLeading?: React.ReactNode
+  toolbarTrailing?: React.ReactNode
+  footer?: React.ReactNode
+  /**
+   * 上下文用量指示器插槽（宿主注入 `ChatContextUsageIndicator`）。该指示器读会话运行态（宿主耦合），
+   * 故由宿主经插槽提供，包内壳只负责在工具条右侧固定位放置。
+   */
+  contextUsageIndicator?: React.ReactNode
+}
+
+export interface ChatComposerControl {
+  scopeKey?: string
+  input: ChatComposerInputControl
+  modelSelector?: ChatComposerModelSelectorControl
+  reasoning?: ChatComposerReasoningControl
+  leftSlot?: React.ReactNode
+  rightSlot?: React.ReactNode
+  bottomSlot?: React.ReactNode
+  /** 厂商无关的官网能力声明；仅专用工作区注入，现有工作区默认不传。 */
+  capabilityControls?: ChatComposerCapabilityControl[]
+  /** 结构化 UI 插槽；旧 left/right/bottomSlot 继续兼容。 */
+  slots?: ChatComposerSlots
+}
+
+interface ChatComposerProps {
+  control: ChatComposerControl
+  density?: 'default' | 'compact'
+}
+
+export function ChatComposer({ control, density = 'default' }: ChatComposerProps): ReactElement {
+  const { t } = useConversationI18n()
+  const {
+    input,
+    modelSelector,
+    reasoning,
+    leftSlot,
+    rightSlot,
+    bottomSlot,
+    capabilityControls = [],
+    slots,
+  } = control
+
+  const combinedModelRunSelectorAction = !!(
+    modelSelector ||
+    reasoning ||
+    input.runProfile ||
+    input.thinkingDepth ||
+    input.thinkingVisibility ||
+    input.pureChat
+  ) && (
+    <ComposerModelRunSelector
+      t={t}
+      modelSelector={modelSelector}
+      reasoning={reasoning}
+      runProfile={input.runProfile}
+      thinkingDepth={input.thinkingDepth}
+      thinkingVisibility={input.thinkingVisibility}
+      pureChat={input.pureChat}
+      capabilityControls={capabilityControls}
+      density={density}
+    />
+  )
+
+  const chatInputControl: ChatInputControl = {
+    ...input,
+    chrome: {
+      ...input.chrome,
+      leftActions: (
+        <>
+          {combinedModelRunSelectorAction}
+          <ComposerCapabilityControls
+            controls={capabilityControls}
+            placement="toolbar"
+            disabled={input.input.disabled}
+          />
+          {slots?.toolbarLeading}
+          {leftSlot}
+        </>
+      ),
+      rightActions: (
+        <>
+          {rightSlot}
+          {slots?.toolbarTrailing}
+          {slots?.contextUsageIndicator}
+        </>
+      ),
+      beforeInput: slots?.beforeInput ?? input.chrome?.beforeInput,
+      afterInput: slots?.afterInput ?? input.chrome?.afterInput,
+      bottomSlot: slots?.footer ?? bottomSlot,
+      menuCapabilityControls: capabilityControls.filter(
+        (capability) => capability.placement === 'add-menu'
+      ),
+    },
+  }
+
+  return <ChatInput key={control.scopeKey} density={density} control={chatInputControl} />
+}

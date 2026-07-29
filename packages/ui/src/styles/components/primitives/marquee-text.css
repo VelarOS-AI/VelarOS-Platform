@@ -1,0 +1,65 @@
+/* @velaros-no-tailwind */
+/* Velar UI global layer — pure CSS + design tokens (no Tailwind @apply). */
+
+.velar-marquee-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.velar-marquee-text-track {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  transform: translateX(0);
+}
+
+.velar-marquee-text-item {
+  color: inherit;
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.velar-marquee-text[data-marquee-active='true'] .velar-marquee-text-track {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: none;
+  animation: velar-marquee-text-loop var(--velar-marquee-text-duration) linear infinite;
+  will-change: transform;
+}
+
+.velar-marquee-text[data-marquee-active='true'] .velar-marquee-text-item {
+  flex: 0 0 auto;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.velar-marquee-text-gap {
+  flex: 0 0 var(--velar-marquee-text-gap-distance);
+  width: var(--velar-marquee-text-gap-distance);
+}
+
+@keyframes velar-marquee-text-loop {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(calc(-1 * var(--velar-marquee-text-loop-distance)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velar-marquee-text[data-marquee-active='true'] .velar-marquee-text-track {
+    animation: none;
+    transform: translateX(0);
+  }
+}

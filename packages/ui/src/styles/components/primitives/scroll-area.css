@@ -1,0 +1,20 @@
+/* @velaros-no-tailwind */
+
+.velar-scroll-area {
+  min-height: 0;
+  min-width: 0;
+}
+
+.velar-scroll-area-axis-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.velar-scroll-area-axis-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.velar-scroll-area-axis-both {
+  overflow: auto;
+}

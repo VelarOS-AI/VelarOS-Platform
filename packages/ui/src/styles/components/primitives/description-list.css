@@ -1,0 +1,59 @@
+/* @velaros-no-tailwind */
+
+.velar-description-list {
+  min-width: 0;
+}
+
+.velar-description-list-bordered {
+  :where(& > :not(:last-child)) {
+    border-bottom: var(--ui-border-width-default) solid var(--border);
+  }
+  overflow: hidden;
+  border-radius: calc(var(--radius) - 4px);
+  border-style: solid;
+  border-width: 1px;
+  border-color: rgba(15, 15, 15, 0.08);
+}
+
+.velar-description-list-cols1 .velar-description-list-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.velar-description-list-cols2 .velar-description-list-row {
+    grid-template-columns: 140px minmax(0, 1fr);
+  }
+
+.velar-description-list-row {
+  display: grid;
+  min-width: 0;
+  column-gap: var(--ui-space-4);
+  row-gap: var(--ui-space-1);
+  padding-block: var(--ui-space-control-y);
+  padding-inline: var(--ui-space-control-x-sm);
+}
+
+.velar-description-list-cols2 .velar-description-list-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+.velar-description-list-bordered .velar-description-list-row {
+  padding-inline: var(--ui-space-3);
+  border-color: rgba(15, 15, 15, 0.06);
+}
+
+.velar-description-list-term {
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-default);
+  color: var(--foreground-secondary);
+}
+
+.velar-description-list-detail {
+  min-width: 0;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+  color: var(--foreground);
+}
+
+.velar-description-list-cols2 .velar-description-list-row.velar-description-list-span-full {
+  grid-template-columns: minmax(0, 1fr);
+}

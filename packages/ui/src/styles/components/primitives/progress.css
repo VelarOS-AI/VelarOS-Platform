@@ -1,0 +1,56 @@
+/* @velaros-no-tailwind */
+
+.velar-progress-track {
+  height: 6px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: calc(infinity * 1px);
+  background: rgba(17, 17, 17, 0.08);
+}
+
+.velar-progress-fill {
+  height: 100%;
+  border-radius: calc(infinity * 1px);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  background: rgba(var(--status-blue-rgb), 0.85);
+}
+
+.velar-progress-indeterminate {
+  animation: var(--animate-pulse);
+  width: 40%;
+  animation: velar-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes velar-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.velar-progress-size-sm .velar-progress-track {
+  height: var(--ui-space-1);
+}
+
+.velar-progress-size-md .velar-progress-track {
+  height: 6px;
+}
+
+.velar-progress-tone-neutral .velar-progress-fill {
+  background: rgba(15, 15, 15, 0.35);
+}
+
+.velar-progress-tone-success .velar-progress-fill {
+  background: var(--status-green);
+}
+
+.velar-progress-tone-warning .velar-progress-fill {
+  background: var(--status-amber);
+}
+
+.velar-progress-tone-error .velar-progress-fill {
+  background: var(--status-red);
+}

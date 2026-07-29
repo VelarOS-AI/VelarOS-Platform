@@ -1,0 +1,135 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type React from 'react'
+
+import type { ChatInputCommentMentionOption } from '../chatInputTypes'
+
+import { isEmpty } from '#internal/runtime'
+
+/** 输入值是否处于 `@` 评论调用形态：以 `@` 开头的单行短查询（仅第一个位置生效）。 */
+export function isCommentMentionQuery(value: string): boolean {
+  return value.startsWith('@') && !value.includes('\n') && value.length <= 64
+}
+
+/** 按 `@` 后的查询词过滤评论（定位/正文，不区分大小写）。 */
+export function filterCommentMentionOptions(
+  comments: readonly ChatInputCommentMentionOption[],
+  query: string
+): ChatInputCommentMentionOption[] {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return [...comments]
+
+  return comments.filter((comment) =>
+    `${comment.label}\n${comment.body}`.toLowerCase().includes(normalized)
+  )
+}
+
+interface UseComposerCommentMentionMenuInput {
+  value: string
+  disabled: boolean
+  available: readonly ChatInputCommentMentionOption[]
+  selectedIds: readonly string[]
+  onToggleSelected: (id: string, selected: boolean) => void
+  onDelete: (id: string) => void
+  clearInput: () => void
+}
+
+export interface UseComposerCommentMentionMenuReturn {
+  open: boolean
+  items: ChatInputCommentMentionOption[]
+  selectedIdSet: Set<string>
+  highlightedIndex: number
+  setHighlightedIndex: (index: number) => void
+  selectItem: (id: string) => void
+  deleteItem: (id: string) => void
+  /** 返回 true 表示按键已被评论菜单消费，调用方不要再走发送等默认行为。 */
+  handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean
+}
+
+/**
+ * 聊天输入 `@` 行内评论菜单（与 `/` 技能菜单同款交互）：
+ * 输入以 `@` 开头即弹出所有评论列表，随查询过滤；↑↓ 移动、Enter/点击切换选中、Esc 关闭。
+ * 选中 = 评论进入 selectedIds（chips 条显示），同时清掉输入框里的 `@query`；列表项可就地删除评论。
+ */
+export function useComposerCommentMentionMenu({
+  value,
+  disabled,
+  available,
+  selectedIds,
+  onToggleSelected,
+  onDelete,
+  clearInput,
+}: UseComposerCommentMentionMenuInput): UseComposerCommentMentionMenuReturn {
+  const [dismissed, setDismissed] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+
+  const query = isCommentMentionQuery(value) ? value.slice(1) : null
+  const items = useMemo(
+    () => (query === null ? [] : filterCommentMentionOptions(available, query)),
+    [available, query]
+  )
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const open = !disabled && !dismissed && query !== null && !isEmpty(items)
+
+  // 输入变化时复位：重新打开、重置高亮到第一项。
+  useEffect(() => {
+    setDismissed(false)
+    setHighlightedIndex(0)
+  }, [value])
+
+  const selectItem = useCallback(
+    (id: string): void => {
+      onToggleSelected(id, !selectedIdSet.has(id))
+      clearInput()
+    },
+    [clearInput, onToggleSelected, selectedIdSet]
+  )
+
+  const deleteItem = useCallback(
+    (id: string): void => {
+      onDelete(id)
+    },
+    [onDelete]
+  )
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!open) return false
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault()
+          setHighlightedIndex((index) => (index + 1) % items.length)
+          return true
+        case 'ArrowUp':
+          event.preventDefault()
+          setHighlightedIndex((index) => (index - 1 + items.length) % items.length)
+          return true
+        case 'Enter': {
+          if (event.nativeEvent.isComposing) return false
+          event.preventDefault()
+          const item = items[Math.min(highlightedIndex, items.length - 1)]
+          if (item) selectItem(item.id)
+          return true
+        }
+        case 'Escape':
+          event.preventDefault()
+          setDismissed(true)
+          return true
+        default:
+          return false
+      }
+    },
+    [highlightedIndex, items, open, selectItem]
+  )
+
+  return {
+    open,
+    items,
+    selectedIdSet,
+    highlightedIndex,
+    setHighlightedIndex,
+    selectItem,
+    deleteItem,
+    handleKeyDown,
+  }
+}

@@ -1,0 +1,15 @@
+@reference "../../catalog.css";
+
+/* AppShell 示例：utility 类集中在模块内，避免在 TSX 中拼接长 className。 */
+
+.shellPreview {
+  @apply min-w-0 rounded-md border border-border bg-background;
+}
+
+.appShellSidebar {
+  @apply absolute left-0 top-0 z-10 box-border flex h-full flex-col border-r border-border bg-muted/50 p-2 text-[11px] leading-tight text-muted-foreground;
+}
+
+.appShellHeader {
+  @apply flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] text-muted-foreground;
+}

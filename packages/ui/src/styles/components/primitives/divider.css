@@ -1,0 +1,66 @@
+/* @velaros-no-tailwind */
+
+.velar-divider {
+  margin: 0;
+  min-width: 0;
+  flex-shrink: 0;
+  border-style: solid;
+  border-width: 0px;
+}
+
+.velar-divider-horizontal {
+  width: 100%;
+}
+
+.velar-divider-horizontal-plain {
+  height: 1px;
+  background: var(--border);
+}
+
+.velar-divider-horizontal-dashed {
+  height: 0;
+  border-block-start: 1px dashed var(--border);
+}
+
+.velar-divider-with-label {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+}
+
+.velar-divider-line {
+  min-width: 0;
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.velar-divider-line-dashed {
+  height: 0;
+  border-block-start: 1px dashed var(--border);
+  background: transparent;
+}
+
+.velar-divider-label {
+  flex-shrink: 0;
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-default);
+  color: var(--foreground-secondary);
+}
+
+.velar-divider-vertical {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  min-height: 1em;
+  background: var(--border);
+}
+
+.velar-divider-vertical-dashed {
+  display: inline-block;
+  width: 0;
+  align-self: stretch;
+  min-height: 1em;
+  border-inline-start: 1px dashed var(--border);
+  background: transparent;
+}

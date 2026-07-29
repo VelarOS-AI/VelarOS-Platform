@@ -1,0 +1,225 @@
+@reference "../../styles/tailwind-reference.css";
+
+.root {
+  @apply my-2 w-full overflow-hidden;
+  --plan-surface: var(--surface-interaction-card);
+  --plan-running-fg: var(--status-green);
+  --plan-running-soft: var(--status-green-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background-panel) 90%, transparent) !important;
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  box-shadow: none !important;
+}
+
+.root.running {
+  background: var(--plan-surface) !important;
+}
+
+.compactRoot {
+  @apply my-0;
+  --disclosure-summary-padding-x: 12px;
+  --disclosure-summary-padding-y: 8px;
+  --disclosure-content-padding-x: 12px;
+  --disclosure-content-padding-y: 4px;
+}
+
+.toolIcon {
+  color: var(--muted-foreground);
+}
+
+.plainRoot {
+  @apply my-0 w-full min-w-0 overflow-hidden;
+  --plan-surface: var(--surface-interaction-card);
+  --plan-running-fg: var(--status-green);
+  --plan-running-soft: var(--status-green-soft);
+  padding: 10px 12px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-panel) 90%, transparent);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.plainRootCompact {
+  padding: 8px 10px 7px;
+}
+
+.plainRoot.running {
+  background: var(--plan-surface);
+}
+
+.plainRoot.success {
+  background: color-mix(in srgb, var(--status-green) 5%, transparent);
+}
+
+.plainRoot.error {
+  background: color-mix(in srgb, var(--status-red) 5.5%, transparent);
+}
+
+.plainHeader {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.plainIcon {
+  @apply inline-flex h-5 w-5 shrink-0 items-center justify-center;
+  color: var(--muted-foreground);
+}
+
+.plainIcon svg,
+.toolIcon {
+  display: block;
+}
+
+.plainTitleGroup {
+  @apply flex min-w-0 flex-1 flex-col gap-0.5;
+}
+
+.plainTitleRow {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.plainTitle {
+  @apply shrink-0 text-[12px] font-semibold leading-5 text-foreground;
+}
+
+.plainBody {
+  @apply mt-2 min-w-0;
+}
+
+.body {
+  @apply w-full pb-2;
+}
+
+.currentHeaderSummary {
+  @apply block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-5;
+  max-width: clamp(180px, 56vw, 820px);
+  color: var(--foreground);
+}
+
+.currentInlineDetail {
+  @apply block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] leading-5;
+  color: var(--foreground-secondary);
+}
+
+.currentDetail {
+  @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] leading-5;
+  color: var(--foreground-secondary);
+}
+
+.explanation {
+  @apply mt-2 text-[12px] leading-5 text-foreground/80;
+}
+
+.empty {
+  @apply mt-2 text-[12px] leading-5 text-muted-foreground;
+}
+
+.planList {
+  @apply mt-2 flex flex-col gap-2;
+}
+
+.planListCompact {
+  @apply gap-1.5;
+}
+
+.planStep {
+  @apply grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-2 px-0 py-1;
+}
+
+.stepIcon {
+  @apply mt-1 inline-flex h-4 w-4 items-center justify-center;
+  color: var(--foreground-tertiary);
+}
+
+.stepBody {
+  @apply min-w-0;
+}
+
+.stepHeader {
+  @apply flex min-w-0 items-start justify-between gap-2;
+}
+
+.stepTitle {
+  @apply min-w-0 break-words text-[12px] font-medium leading-5 text-foreground;
+}
+
+.stepStatus {
+  @apply shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium;
+  background: var(--background-muted);
+  color: var(--foreground-secondary);
+}
+
+.stepObjective {
+  @apply mt-0.5 whitespace-pre-wrap break-words text-[11px] leading-5 text-foreground/70;
+}
+
+.planStepRunning .stepIcon,
+.planStepRunning .stepStatus {
+  color: var(--plan-running-fg);
+}
+
+.planStepRunning .stepStatus {
+  background: var(--plan-running-soft);
+}
+
+.planStepCompleted .stepIcon,
+.planStepCompleted .stepStatus {
+  color: var(--status-green);
+}
+
+.planStepCompleted .stepStatus {
+  background: var(--status-green-soft);
+}
+
+.planStepFailed .stepIcon,
+.planStepFailed .stepStatus {
+  color: var(--status-red);
+}
+
+.planStepFailed .stepStatus {
+  background: var(--status-red-soft);
+}
+
+.planStepSkipped .stepIcon,
+.planStepSkipped .stepStatus {
+  color: var(--status-amber);
+}
+
+.planStepSkipped .stepStatus {
+  background: var(--status-amber-soft);
+}
+
+.runningStatusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--plan-running-fg);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+  animation: plan-running-dot 1.8s ease-in-out infinite;
+}
+
+.errorText {
+  @apply whitespace-pre-wrap break-words text-[12px] leading-5;
+  color: var(--status-red);
+}
+
+@keyframes plan-running-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+    opacity: 0.76;
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--status-green) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runningStatusDot {
+    animation: none;
+  }
+}

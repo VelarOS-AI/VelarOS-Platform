@@ -1,0 +1,16 @@
+/* @velaros-no-tailwind */
+
+.velar-popover-content {
+  z-index: 50;
+  min-width: 220px;
+  border-style: solid;
+  border-width: 1px;
+  background-color: var(--popover);
+  padding: var(--ui-space-2);
+  color: var(--foreground);
+  outline-style: none;
+  border-radius: var(--ui-radius-overlay);
+  border-color: var(--border);
+  box-shadow: 0 24px 56px rgba(15, 15, 15, 0.12);
+  animation: rise-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}

@@ -1,0 +1,339 @@
+@reference "../../styles/tailwind-reference.css";
+
+.root {
+  overflow: hidden;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--ui-radius-panel);
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background) 56%, transparent);
+}
+
+.neutral {
+  color: var(--foreground);
+}
+
+.running {
+  border-color: var(--border);
+}
+
+/* 完成态状态样式:与紧凑行的 tone 背景保持一致(velar-compact-tool-row-success/warning/error)。 */
+.success {
+  border-color: color-mix(in srgb, var(--status-green) 16%, transparent);
+  background: color-mix(in srgb, var(--status-green-soft) 42%, var(--background));
+}
+
+.warning {
+  border-color: color-mix(in srgb, var(--status-amber) 16%, transparent);
+  background: color-mix(in srgb, var(--status-amber-soft) 42%, var(--background));
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--status-red) 18%, transparent);
+  background: color-mix(in srgb, var(--status-red-soft) 78%, var(--background));
+}
+
+.header {
+  display: flex;
+  min-height: 36px;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--background) 62%, transparent);
+}
+
+.collapsed .header {
+  border-bottom: 0;
+}
+
+.headerButton {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--foreground-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headerButton:hover {
+  color: var(--foreground);
+}
+
+.headerButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.leadingIcon,
+.caret {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: currentColor;
+  opacity: 0.78;
+}
+
+.titleGroup {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.titleRow {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.titleText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  font-weight: 500;
+  line-height: var(--ui-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  max-width: 120px;
+  overflow: hidden;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+}
+
+.actionButton {
+  opacity: 0.72;
+  transition: opacity 150ms ease;
+}
+
+.root:hover .actionButton,
+.root:focus-within .actionButton {
+  opacity: 1;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.bodyPlaceholder {
+  width: 100%;
+  min-height: 1px;
+}
+
+.answer {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: 1.62;
+  white-space: pre-wrap;
+}
+
+.emptyState {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--foreground-tertiary);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+}
+
+.resultList,
+.memoryList,
+.commitList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.searchItem {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--ui-radius-control);
+  appearance: none;
+  background: color-mix(in srgb, var(--background) 62%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.searchItem:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--background) 90%, transparent);
+}
+
+.searchMeta,
+.itemMeta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.itemHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.itemTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  font-weight: 500;
+  line-height: var(--ui-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemDescription {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-body-sm);
+  line-height: 1.5;
+}
+
+.artifactPanel,
+.memoryItem,
+.commitItem {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--background) 62%, transparent);
+}
+
+.artifactPanel,
+.memoryItem {
+  flex-direction: column;
+}
+
+.pathText {
+  overflow: hidden;
+  color: var(--foreground-tertiary);
+  font-family:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inlineCode {
+  max-width: 110px;
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--background-muted);
+  color: var(--foreground-tertiary);
+  font-family:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 10px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitItem {
+  align-items: flex-start;
+}
+
+.commitHash {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--background-muted);
+  color: var(--foreground-secondary);
+  font-family:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+}
+
+.commitBody {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.spinIcon {
+  animation: rich-output-spin 900ms linear infinite;
+}
+
+@media (max-width: 560px) {
+  .header {
+    gap: 4px;
+  }
+
+  .badge {
+    max-width: 88px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinIcon {
+    animation: none;
+  }
+}
+
+@keyframes rich-output-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

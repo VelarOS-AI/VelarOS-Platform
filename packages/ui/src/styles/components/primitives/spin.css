@@ -1,0 +1,55 @@
+/* @velaros-no-tailwind */
+
+.velar-spin-wrapper {
+  position: relative;
+  min-width: 0;
+}
+
+.velar-spin-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.velar-spin-spin-only {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  color: var(--muted-foreground);
+}
+
+.velar-spin-icon-sm-root {
+  gap: 6px;
+}
+
+.velar-spin-icon {
+  flex-shrink: 0;
+  animation: var(--animate-spin);
+  color: var(--foreground);
+  width: 22px;
+  height: 22px;
+}
+
+.velar-spin-icon-sm {
+  width: 16px;
+  height: 16px;
+}
+
+.velar-spin-tip {
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-default);
+  color: var(--foreground-secondary);
+}
+
+.velar-spin-content-dim {
+  pointer-events: none;
+  opacity: 60%;
+}

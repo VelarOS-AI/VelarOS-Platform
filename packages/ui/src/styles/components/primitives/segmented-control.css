@@ -1,0 +1,57 @@
+/* @velaros-no-tailwind */
+
+.velar-segmented-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 0;
+  padding: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--background-muted);
+  box-shadow: none;
+}
+
+.velar-segmented-control-item {
+  box-sizing: border-box;
+  min-width: 52px;
+  height: var(--ui-control-height-sm);
+  padding-inline: var(--ui-space-3);
+  padding-block: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-control-sm);
+  color: var(--foreground-secondary);
+  background: transparent;
+  font-size: var(--ui-font-body-md);
+  font-weight: var(--font-weight-medium);
+  box-shadow: none;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
+}
+
+.velar-segmented-control-item:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.velar-segmented-control-active,
+.velar-segmented-control-active:hover {
+  border-color: var(--border);
+  background: var(--background-panel-strong);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.velar-segmented-control-inactive {
+  color: var(--muted-foreground);
+}
+
+.velar-segmented-control-inactive:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--background-panel-strong) 42%, transparent);
+  transform: none;
+}

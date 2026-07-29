@@ -1,0 +1,36 @@
+/* @velaros-no-tailwind */
+
+.velar-paragraph {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}
+
+.velar-paragraph-tone-default {
+  color: var(--foreground);
+}
+
+.velar-paragraph-tone-secondary {
+  color: var(--foreground-secondary);
+}
+
+.velar-paragraph-tone-muted {
+  color: var(--muted-foreground);
+}
+
+.velar-paragraph-spacing-none {
+  margin-bottom: 0;
+}
+
+.velar-paragraph-spacing-sm {
+  margin-block-end: 0.5rem;
+}
+
+.velar-paragraph-spacing-md {
+  margin-block-end: 0.75rem;
+}
+
+.velar-paragraph-spacing-lg {
+  margin-block-end: 1rem;
+}

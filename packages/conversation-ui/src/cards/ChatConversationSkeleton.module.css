@@ -1,0 +1,158 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  @apply relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  background: var(--card);
+}
+
+.messageList {
+  @apply flex-1 overflow-y-auto overflow-x-hidden;
+  scrollbar-gutter: stable both-edges;
+}
+
+.messageListInner {
+  @apply mx-auto flex w-full max-w-[48rem] flex-col gap-5 px-4 pb-44 pt-6;
+}
+
+.messageListInnerSide {
+  @apply max-w-none gap-3 px-3 pb-36 pt-4;
+}
+
+.row {
+  @apply flex w-full min-w-0;
+}
+
+.rowUser {
+  @apply justify-end;
+}
+
+.bubble {
+  width: min(88%, 42rem);
+  min-height: 96px;
+  border-radius: 18px;
+  background: linear-gradient(
+    90deg,
+    var(--background-muted),
+    var(--background-muted-strong),
+    var(--background-muted)
+  );
+  background-size: 220% 100%;
+  animation: chat-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+/* 动态骨架：高度由内联 style 控制，不设固定 min-height */
+.bubbleDynamic {
+  min-height: unset;
+  transition: none;
+}
+
+/* 单条消息的包装容器，保证 thinking 标记在气泡上方 */
+.messageGroup {
+  @apply flex flex-col;
+  gap: 6px;
+}
+
+/* thinking 折叠标记：细线占位，不展示内容 */
+.thinkingMarker {
+  width: min(44%, 18rem);
+  height: 20px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--background-muted) 70%, transparent),
+    color-mix(in srgb, var(--background-muted-strong) 65%, transparent),
+    color-mix(in srgb, var(--background-muted) 70%, transparent)
+  );
+  background-size: 220% 100%;
+  animation: chat-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+.bubbleCompact {
+  width: min(66%, 32rem);
+  min-height: 68px;
+}
+
+.bubbleUser {
+  width: min(58%, 30rem);
+  min-height: 56px;
+  border-radius: 18px;
+}
+
+.inputDock {
+  @apply pointer-events-none absolute bottom-0 left-0 right-0 z-10;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card) 0%, transparent) 0%,
+    color-mix(in srgb, var(--card) 88%, transparent) 24%,
+    var(--card) 100%
+  );
+}
+
+.inputDockInner {
+  @apply mx-auto w-full max-w-[48rem] px-4 pb-5 pt-10;
+}
+
+.inputDockInnerSide {
+  @apply max-w-none px-3 pb-3 pt-8;
+}
+
+.composer {
+  min-height: 116px;
+  border: 1px solid var(--input);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: 0 18px 54px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.composerLine {
+  width: 42%;
+  height: 15px;
+  margin: 18px 20px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--background-muted),
+    var(--background-muted-strong),
+    var(--background-muted)
+  );
+  background-size: 220% 100%;
+  animation: chat-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+.composerControls {
+  @apply mt-7 flex items-center justify-between px-5;
+}
+
+.composerPill,
+.composerButton {
+  height: 30px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+}
+
+.composerPill {
+  width: 112px;
+}
+
+.composerButton {
+  width: 30px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble,
+  .composerLine {
+    animation: none;
+  }
+}
+
+@keyframes chat-skeleton-shimmer {
+  0%,
+  100% {
+    background-position: 120% 0;
+  }
+
+  50% {
+    background-position: -120% 0;
+  }
+}

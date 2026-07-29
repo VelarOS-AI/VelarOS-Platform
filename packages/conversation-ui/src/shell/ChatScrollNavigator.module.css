@@ -1,0 +1,113 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  @apply pointer-events-none absolute z-20 flex flex-col items-center gap-2;
+  --scroll-navigator-theme-color: var(--primary);
+  --scroll-navigator-collapsed-background: color-mix(
+    in srgb,
+    var(--scroll-navigator-theme-color) 24%,
+    var(--card)
+  );
+  --scroll-navigator-collapsed-opacity: 0.48;
+  --scroll-navigator-collapsed-visible-width: 30%;
+  top: 50%;
+  right: max(12px, calc((100% - 48rem - 88px) / 4));
+  transform: translateY(-50%);
+  transition:
+    right 160ms ease-out,
+    opacity 160ms ease-out,
+    transform 160ms ease-out;
+  will-change: transform;
+}
+
+.followLayer {
+  @apply pointer-events-auto p-1;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(16px);
+  transition: background 160ms ease-out;
+}
+
+.rail {
+  @apply pointer-events-auto flex flex-col p-1;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(16px);
+  transition: background 160ms ease-out;
+}
+
+.button {
+  @apply flex h-9 w-9 shrink-0 items-center justify-center p-0 text-muted-foreground shadow-none;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.rail .button:first-child {
+  border-top-left-radius: 999px;
+  border-top-right-radius: 999px;
+}
+
+.rail .button:last-child {
+  border-bottom-left-radius: 999px;
+  border-bottom-right-radius: 999px;
+}
+
+.rail .button:hover {
+  transform: none;
+  color: var(--foreground);
+  background: var(--background-muted);
+}
+
+.rail .button:active {
+  transform: none;
+}
+
+.rail .button:disabled {
+  opacity: 0.3;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.followButton {
+  border-radius: 999px;
+}
+
+.followLayer .followButtonActive,
+.followLayer .followButtonActive:hover {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+@media (max-width: 980px) {
+  .root {
+    right: 10px;
+  }
+}
+
+@media (hover: hover) {
+  @container chat-conversation-body (max-width: 640px) {
+    .root {
+      right: 0;
+      opacity: var(--scroll-navigator-collapsed-opacity);
+      transform: translateY(-50%)
+        translateX(calc(100% - var(--scroll-navigator-collapsed-visible-width)));
+    }
+
+    .root:hover,
+    .root:focus-within {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+
+    .root:not(:hover):not(:focus-within) .rail,
+    .root:not(:hover):not(:focus-within) .followLayer {
+      background: var(--scroll-navigator-collapsed-background);
+    }
+  }
+}

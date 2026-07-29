@@ -1,0 +1,13 @@
+/* @velaros-no-tailwind */
+
+.velar-hover-reveal-row {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  width: max-content;
+  box-sizing: border-box;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}

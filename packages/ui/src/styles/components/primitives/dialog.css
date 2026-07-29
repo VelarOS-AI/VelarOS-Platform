@@ -1,0 +1,72 @@
+/* @velaros-no-tailwind */
+
+.velar-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: color-mix(in srgb, #000 18%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-black) 18%, transparent);
+  }
+  backdrop-filter: blur(2px);
+-webkit-backdrop-filter: blur(2px);
+animation: fade-in 160ms ease;
+}
+
+.velar-dialog-content {
+  position: fixed;
+  top: calc(1 / 2 * 100%);
+  left: calc(1 / 2 * 100%);
+  z-index: 50;
+  width: min(92vw, 34rem);
+  transform: translate(-50%, -50%);
+border-style: solid;
+  border-width: 1px;
+  background-color: var(--color-white);
+  color: var(--foreground);
+  outline-style: none;
+  border-radius: var(--ui-radius-overlay);
+  padding-inline: var(--ui-space-card-x);
+  padding-block: var(--ui-space-control-y);
+  border-color: rgba(15, 15, 15, 0.08);
+  box-shadow: 0 28px 72px rgba(15, 15, 15, 0.14);
+  animation: center-rise-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.velar-dialog-content.velar-confirm-dialog {
+  width: var(--ui-confirm-dialog-width);
+}
+
+.velar-dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 40px;
+}
+
+.velar-dialog-footer {
+  margin-top: var(--ui-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
+}
+
+.velar-dialog-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+  font-size: var(--ui-font-heading);
+}
+
+.velar-dialog-description {
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}
+
+.velar-dialog-close-button {
+  position: absolute;
+  top: var(--ui-space-3);
+  right: var(--ui-space-3);
+  color: var(--muted-foreground);
+}

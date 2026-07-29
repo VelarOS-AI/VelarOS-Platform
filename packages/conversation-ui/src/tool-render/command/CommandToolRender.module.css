@@ -1,0 +1,175 @@
+@reference "../../styles/tailwind-reference.css";
+
+.runningStatusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--status-green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+  animation: command-running-dot 1.8s ease-in-out infinite;
+}
+
+.terminalIcon {
+  color: var(--foreground-tertiary);
+}
+
+.statusBadge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold;
+  margin-left: auto;
+
+  &.running {
+    background: var(--status-green-soft);
+    color: var(--status-green);
+  }
+
+  &.success {
+    background: var(--status-green-soft);
+    color: var(--status-green);
+  }
+
+  &.warning {
+    background: var(--status-amber-soft);
+    color: var(--status-amber);
+  }
+
+  &.error {
+    background: var(--status-red-soft);
+    color: var(--status-red);
+  }
+}
+
+.cardHeaderMeta {
+  @apply ml-auto inline-flex shrink-0 items-center gap-1.5;
+}
+
+.headerTerminateButton {
+  @apply inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold;
+  max-width: 96px;
+  border-color: color-mix(in srgb, var(--status-red) 25%, transparent);
+  color: var(--status-red);
+  background: var(--background-elevated);
+}
+
+.headerTerminateButton span {
+  @apply truncate;
+}
+
+.headerTerminateButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--status-red) 42%, transparent);
+  background: color-mix(in srgb, var(--status-red) 6%, transparent);
+}
+
+.headerTerminateButton:disabled {
+  opacity: 0.62;
+}
+
+.purpose {
+  @apply text-[12px] leading-5 text-foreground;
+}
+
+.commandLine {
+  @apply block whitespace-pre-wrap break-all px-3 py-2 font-mono text-[12px] leading-5 text-foreground;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 67%, transparent);
+  background: var(--muted);
+}
+
+.sections {
+  @apply w-full;
+}
+
+.metaGrid {
+  @apply grid gap-2;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.metaItem {
+  @apply min-w-0 rounded-[10px] px-3 py-2;
+  background: var(--surface-settings-card);
+}
+
+.metaLabel {
+  @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+}
+
+.metaValue {
+  @apply mt-1 text-[12px] leading-5 text-foreground;
+  word-break: break-word;
+}
+
+.section {
+  @apply w-full;
+}
+
+.sectionLabel {
+  @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+}
+
+.errorLabel {
+  color: var(--status-red);
+}
+
+.code {
+  @apply mt-1 whitespace-pre-wrap break-all px-3 py-2.5 font-mono text-[11px] leading-6 text-foreground;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+}
+
+.errorCode {
+  color: var(--status-red);
+}
+
+.backgroundInfoRow {
+  @apply mt-1 flex items-start gap-2;
+}
+
+.backgroundInfoCode {
+  @apply mt-0 min-w-0 flex-1;
+}
+
+.backgroundTerminateButton {
+  @apply h-8 shrink-0 gap-1 px-2 text-[11px] font-semibold;
+  border-color: color-mix(in srgb, var(--status-red) 25%, transparent);
+  color: var(--status-red);
+  background: color-mix(in srgb, var(--background-elevated) 96%, transparent);
+}
+
+.backgroundTerminateButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--status-red) 42%, transparent);
+  background: color-mix(in srgb, var(--status-red) 6%, transparent);
+}
+
+.spinIcon {
+  animation: command-spin 0.8s linear infinite;
+}
+
+@keyframes command-running-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-green) 18%, transparent);
+    opacity: 0.76;
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--status-green) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+@keyframes command-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runningStatusDot {
+    animation: none;
+  }
+
+  .spinIcon {
+    animation: none;
+  }
+}

@@ -1,0 +1,203 @@
+/* @velaros-no-tailwind */
+
+.velar-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-style: solid;
+  border-width: 1px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+  &:disabled {
+    pointer-events: none;
+  }
+  &:disabled {
+    opacity: 45%;
+  }
+  & svg {
+    pointer-events: none;
+  }
+  & svg {
+    flex-shrink: 0;
+  }
+  & svg:not([class*='size-']) {
+    width: var(--ui-space-4);
+    height: var(--ui-space-4);
+  }
+  font-size: var(--ui-font-body);
+  box-shadow: none;
+  border-radius: var(--ui-radius-control);
+}
+
+.velar-button:hover {
+  transform: none;
+}
+
+.velar-button:focus-visible {
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.14);
+}
+
+.velar-button:active {
+  transform: none;
+  opacity: 0.82;
+}
+
+.velar-button-variant-default {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  --velar-button-base-background: var(--primary);
+  --velar-button-hover-background: color-mix(in srgb, var(--primary) 88%, white);
+  background: var(--velar-button-base-background);
+}
+
+.velar-button-variant-default:hover {
+  background: var(--velar-button-hover-background);
+  box-shadow: none;
+}
+
+.velar-button-variant-destructive {
+  border-color: transparent;
+  color: var(--color-white);
+  --velar-button-base-background: #dc2626;
+  --velar-button-hover-background: color-mix(in srgb, #dc2626 88%, white);
+  background: var(--velar-button-base-background);
+}
+
+.velar-button-variant-destructive:hover {
+  background: var(--velar-button-hover-background);
+  box-shadow: none;
+}
+
+.velar-button-variant-destructive-outline {
+  box-shadow: none;
+--velar-button-base-background: transparent;
+  background: var(--velar-button-base-background);
+  color: var(--destructive);
+  border: 1px solid rgba(220, 38, 38, 0.42);
+}
+
+.velar-button-variant-destructive-outline:hover {
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  color: var(--destructive);
+  border-color: rgba(220, 38, 38, 0.55);
+}
+
+.velar-button-variant-destructive-ghost {
+  border-color: transparent;
+  box-shadow: none;
+--velar-button-base-background: transparent;
+  background: var(--velar-button-base-background);
+  color: var(--destructive);
+}
+
+.velar-button-variant-destructive-ghost:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+}
+
+.velar-button-variant-outline {
+  color: var(--foreground);
+  --velar-button-base-background: var(--control-themed-bg);
+  background: var(--velar-button-base-background);
+  border-color: transparent;
+}
+
+.velar-button-variant-outline:hover {
+  background: var(--control-themed-hover-bg);
+}
+
+.velar-button-variant-secondary {
+  color: var(--foreground);
+  --velar-button-base-background: var(--control-themed-bg);
+  background: var(--velar-button-base-background);
+  border-color: transparent;
+}
+
+.velar-button-variant-secondary:hover {
+  background: var(--control-themed-hover-bg);
+}
+
+.velar-button-variant-ghost {
+  border-color: transparent;
+  color: var(--foreground);
+  box-shadow: none;
+--velar-button-base-background: transparent;
+  background: var(--velar-button-base-background);
+}
+
+.velar-button-variant-ghost:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.velar-button-variant-link {
+  border-color: transparent;
+  padding: 0;
+  color: var(--foreground);
+  box-shadow: none;
+--velar-button-base-background: transparent;
+  background: var(--velar-button-base-background);
+}
+
+.velar-button-variant-link:hover {
+  color: var(--foreground-secondary);
+}
+
+.velar-button.velar-button-hover-background-none:hover {
+  background: var(--velar-button-base-background, transparent);
+}
+
+.velar-button-size-default {
+  height: var(--ui-control-height-sm);
+  padding-inline: var(--ui-space-control-x);
+}
+
+.velar-button-size-sm {
+  height: var(--ui-control-height-xs);
+  padding-inline: var(--ui-space-control-x-sm);
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-button-size-lg {
+  height: var(--ui-control-height-md);
+  padding-inline: 16px;
+  font-size: var(--ui-font-body-lg);
+}
+
+.velar-button-size-block {
+  height: auto;
+  min-height: 0;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  white-space: normal;
+}
+
+.velar-button-size-icon {
+  width: var(--ui-icon-button-md);
+  height: var(--ui-icon-button-md);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-button-size-icon-sm {
+  width: var(--ui-icon-button-sm);
+  height: var(--ui-icon-button-sm);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-button-size-icon-lg {
+  width: var(--ui-control-height-md);
+  height: var(--ui-control-height-md);
+  border-radius: var(--ui-radius-control);
+}

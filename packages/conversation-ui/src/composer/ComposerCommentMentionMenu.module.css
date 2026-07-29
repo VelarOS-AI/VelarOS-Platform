@@ -1,0 +1,109 @@
+@reference "../styles/tailwind-reference.css";
+
+.panel {
+  border-bottom: 1px solid var(--chat-input-menu-divider, var(--border));
+  background: var(--card);
+}
+
+.header {
+  padding: 8px 14px 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.list {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px 8px;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--chat-input-comment-mention-bg, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover,
+.itemHighlighted {
+  background: var(--chat-input-comment-mention-hover-bg, rgba(245, 158, 11, 0.1));
+}
+
+.itemSelected {
+  background: var(--chat-input-comment-mention-selected-bg, rgba(245, 158, 11, 0.18));
+}
+
+.itemSelected:hover,
+.itemSelected.itemHighlighted {
+  background: var(--chat-input-comment-mention-selected-bg, rgba(245, 158, 11, 0.18));
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.item:hover .itemIcon,
+.itemSelected .itemIcon,
+.itemHighlighted .itemIcon {
+  color: var(--chat-input-comment-mention-selected-fg, var(--chat-input-comment-accent, #b45309));
+}
+
+.itemMain {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.itemLabel {
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--ui-line-compact);
+}
+
+.itemDescription {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: var(--ui-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deleteButton {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.deleteButton:hover {
+  background: var(--chat-input-comment-accent-soft, rgba(245, 158, 11, 0.1));
+  color: var(--chat-input-comment-accent, #b45309);
+}
+
+.item:hover .deleteButton,
+.itemSelected .deleteButton,
+.itemHighlighted .deleteButton {
+  color: var(--chat-input-comment-accent, #b45309);
+}

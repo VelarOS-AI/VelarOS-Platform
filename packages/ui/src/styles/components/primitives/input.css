@@ -1,0 +1,61 @@
+/* @velaros-no-tailwind */
+
+.velar-input {
+  width: 100%;
+  min-width: 0;
+  color: var(--foreground);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+  &:disabled {
+    pointer-events: none;
+  }
+  &:disabled {
+    opacity: 50%;
+  }
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-input-size-default {
+  height: var(--ui-control-height-sm);
+  padding-inline: var(--velar-input-padding-inline, var(--ui-space-control-x-sm));
+  padding-inline-start: var( --velar-input-padding-inline-start, var(--velar-input-padding-inline, var(--ui-space-control-x-sm)) );
+  padding-inline-end: var( --velar-input-padding-inline-end, var(--velar-input-padding-inline, var(--ui-space-control-x-sm)) );
+  font-size: var(--ui-font-body);
+}
+
+.velar-input-size-sm {
+  height: var(--ui-control-height-xs);
+  padding-inline: var(--velar-input-padding-inline, 11px);
+  padding-inline-start: var( --velar-input-padding-inline-start, var(--velar-input-padding-inline, 11px) );
+  padding-inline-end: var( --velar-input-padding-inline-end, var(--velar-input-padding-inline, 11px) );
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-input-variant-default {
+  border-style: solid;
+  border-width: 0;
+  background: var(--control-themed-bg);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.velar-input-variant-default:focus-visible {
+  background: var(--control-themed-open-bg);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.velar-input-variant-ghost {
+  border-style: solid;
+  border-width: 1px;
+  border-color: transparent;
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.velar-input-variant-ghost:focus-visible {
+  border-color: rgba(15, 15, 15, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}

@@ -1,0 +1,1546 @@
+/* @velaros-no-tailwind */
+/* Velar UI global layer — pure CSS + design tokens (no Tailwind @apply). */
+
+/* ─── Cross-product top bar controls ─────────────────────────────────────── */
+
+.velar-topbar-control-frame {
+  position: relative;
+  display: inline-flex;
+  height: 36px;
+  max-width: min(520px, 48vw);
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--control-gray-bg);
+  color: var(--foreground);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+  transform: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.velar-topbar-control-frame:hover,
+.velar-topbar-control-frame:active,
+.velar-topbar-control-frame-busy {
+  background: var(--control-gray-bg);
+  transform: none;
+}
+
+.velar-topbar-control-frame-accent::before {
+  content: '';
+  width: 3px;
+  flex-shrink: 0;
+  align-self: stretch;
+  margin: 5px 4px 5px 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 76%, transparent);
+}
+
+.velar-topbar-control-frame-muted {
+  color: var(--muted-foreground);
+}
+
+.velar-topbar-control-frame-plain {
+  max-width: none;
+  overflow: visible;
+  background: transparent;
+}
+
+.velar-topbar-control-main {
+  display: inline-flex;
+  height: 100%;
+  min-width: 0;
+  max-width: min(480px, 46vw);
+  flex: 1 1 auto;
+}
+
+.velar-topbar-control-main-button {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  border: 0;
+  border-radius: var(--ui-radius-control-sm);
+  outline: none;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  text-align: left;
+  transform: none;
+}
+
+.velar-topbar-control-main-button:hover:not(:disabled),
+.velar-topbar-control-main-button:focus-visible {
+  background: var(--control-gray-hover-bg);
+  transform: none;
+}
+
+.velar-topbar-control-main-button:active {
+  transform: none;
+}
+
+.velar-topbar-control-action-group {
+  display: inline-flex;
+  height: 100%;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.velar-topbar-control-divider {
+  display: block;
+  width: 1px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: 0 2px 0 1px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.velar-topbar-control-action-button {
+  border: 0;
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.velar-topbar-control-action-button:hover:not(:disabled),
+.velar-topbar-control-action-button:focus-visible,
+.velar-topbar-control-action-button:active {
+  transform: none;
+}
+
+.velar-topbar-control-panel,
+.velar-topbar-control-panel[data-slot='popover-content'],
+.velar-topbar-control-panel .velar-cascading-menu-submenu-panel {
+  border-radius: var(--ui-radius-control);
+  background: var(--control-gray-bg);
+}
+
+
+.velar-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  border-radius: var(--ui-radius-round);
+  border: 0;
+  background: transparent;
+  color: var(--foreground-tertiary);
+  box-shadow: none;
+  transform: none;
+}
+
+.velar-copy-button:hover {
+  background: rgba(17, 17, 17, 0.05);
+  color: var(--foreground);
+  transform: none;
+}
+
+.velar-copy-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.velar-copy-button-copied {
+  border-color: transparent;
+  background: rgba(21, 128, 61, 0.1);
+  color: var(--status-green);
+  box-shadow: none;
+}
+
+.velar-action-card {
+  --action-card-accent: var(--foreground-tertiary);
+  --action-card-accent-soft: var(--surface-subtle);
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--ui-space-3);
+  max-width: 760px;
+  padding: 12px;
+  border-radius: var(--ui-radius-panel);
+  background: var(--surface-interaction-card);
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.velar-action-card-flat {
+  background: var(--surface-interaction-card);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.velar-action-card-chromeless {
+  background: var(--surface-interaction-card);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.velar-action-card-tone-neutral {
+  --action-card-accent: var(--foreground-tertiary);
+  --action-card-accent-soft: var(--surface-subtle);
+}
+
+.velar-action-card-tone-info {
+  --action-card-accent: var(--status-blue);
+  --action-card-accent-soft: var(--status-blue-soft);
+}
+
+.velar-action-card-tone-success {
+  --action-card-accent: var(--status-green);
+  --action-card-accent-soft: var(--status-green-soft);
+}
+
+.velar-action-card-tone-warning {
+  --action-card-accent: var(--status-amber);
+  --action-card-accent-soft: var(--status-amber-soft);
+}
+
+.velar-action-card-tone-error {
+  --action-card-accent: var(--status-red);
+  --action-card-accent-soft: var(--status-red-soft);
+}
+
+.velar-action-card-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--ui-radius-control);
+  background: var(--action-card-accent-soft);
+  color: var(--action-card-accent);
+}
+
+.velar-action-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--ui-space-3);
+}
+
+.velar-action-card-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.velar-action-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  font-size: var(--ui-font-body);
+  font-weight: 650;
+  line-height: var(--ui-line-xs);
+}
+
+.velar-action-card-description, .velar-action-card-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+}
+
+.velar-action-card-description {
+  margin-top: 3px;
+}
+
+.velar-action-card-content {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.velar-action-card-code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border: 1px solid rgba(15, 15, 15, 0.07);
+  border-radius: var(--ui-radius-control);
+  background: rgba(17, 17, 17, 0.035);
+  color: var(--foreground);
+  font-size: var(--ui-font-xs);
+  line-height: 17px;
+}
+
+.velar-action-card-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.velar-action-card-action-button {
+  border-color: transparent;
+  background: transparent !important;
+  color: var(--foreground-tertiary);
+  box-shadow: none !important;
+}
+
+.velar-action-card-action-button:hover {
+  background: rgba(17, 17, 17, 0.05) !important;
+  color: var(--foreground-secondary);
+}
+
+.velar-action-card-action-button-danger {
+  color: var(--destructive);
+}
+
+.velar-action-card-action-button-danger:hover {
+  background: rgba(220, 38, 38, 0.09) !important;
+  color: var(--destructive);
+}
+
+  .velar-action-card {
+    align-items: flex-start;
+  }
+
+  .velar-action-card-body {
+    width: 100%;
+  }
+
+  .velar-action-card-actions {
+    flex-shrink: 0;
+  }
+
+/* ─── ActionCard 富卡：stack 布局 / dismiss / muted ─────────────────────────── */
+
+/* stack：图标顶对齐、标题换行、正文纵向堆叠——取代各卡的 align-items/title-nowrap
+   覆盖与 grid+display:contents hack。 */
+.velar-action-card-stack {
+  align-items: flex-start;
+}
+
+.velar-action-card-stack .velar-action-card-icon {
+  margin-top: 1px;
+}
+
+.velar-action-card-stack .velar-action-card-body {
+  align-items: flex-start;
+}
+
+.velar-action-card-stack .velar-action-card-title,
+.velar-action-card-stack .velar-action-card-description {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+/* 关键：content 区子项必须能收缩到 0，否则长不可断内容（绝对路径/长 token）
+   会撑破卡宽横向溢出。单列 minmax(0,1fr) + 子项 min-width:0 兜住所有 stack 卡。 */
+.velar-action-card-stack .velar-action-card-content {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.velar-action-card-stack .velar-action-card-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.velar-action-card-compact {
+  padding: 10px 12px;
+}
+
+.velar-action-card-muted {
+  opacity: 0.68;
+}
+
+.velar-action-card-dismissable {
+  position: relative;
+}
+
+.velar-action-card-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--ui-radius-control);
+  background: transparent;
+  color: var(--foreground-tertiary);
+  cursor: pointer;
+  transition: background var(--ui-transition-fast), color var(--ui-transition-fast);
+}
+
+.velar-action-card-dismiss:hover {
+  background: rgba(17, 17, 17, 0.06);
+  color: var(--foreground-secondary);
+}
+
+/* ─── CardKit 零件 ─────────────────────────────────────────────────────────── */
+
+/* tone → (soft 底, solid 字)。零件盒统一从这套变量取色，消除各卡 20+ 份 --status-* 死值。 */
+.velar-card-pill-neutral {
+  --card-accent: var(--foreground-tertiary);
+  --card-accent-soft: var(--surface-subtle);
+}
+.velar-card-pill-info {
+  --card-accent: var(--status-blue);
+  --card-accent-soft: var(--status-blue-soft);
+}
+.velar-card-pill-success {
+  --card-accent: var(--status-green);
+  --card-accent-soft: var(--status-green-soft);
+}
+.velar-card-pill-warning {
+  --card-accent: var(--status-amber);
+  --card-accent-soft: var(--status-amber-soft);
+}
+.velar-card-pill-error {
+  --card-accent: var(--status-red);
+  --card-accent-soft: var(--status-red-soft);
+}
+
+.velar-card-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-accent-soft);
+  color: var(--card-accent);
+  font-size: var(--ui-font-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.velar-card-pill-mini {
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.velar-card-meta {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  color: var(--foreground-tertiary);
+  font-size: var(--ui-font-xs);
+  line-height: var(--ui-line-compact);
+}
+
+.velar-card-meta > :not(.velar-card-meta-icon) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.velar-card-meta-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.velar-card-disclosure {
+  font-size: var(--ui-font-xs);
+}
+
+.velar-card-disclosure-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--ui-radius-control);
+  color: var(--foreground-secondary);
+  font-size: var(--ui-font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--ui-transition-fast);
+}
+
+.velar-card-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.velar-card-disclosure-summary:hover {
+  color: var(--foreground);
+}
+
+.velar-card-disclosure-caret {
+  flex-shrink: 0;
+  transition: transform var(--ui-transition-fast);
+}
+
+.velar-card-disclosure[open] .velar-card-disclosure-caret {
+  transform: rotate(90deg);
+}
+
+.velar-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.velar-card-footer-right {
+  justify-content: flex-end;
+}
+
+.velar-card-footer-between {
+  justify-content: space-between;
+}
+
+.velar-card-result {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--ui-radius-control);
+  background: var(--card-accent-soft);
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-relaxed);
+  white-space: pre-wrap;
+}
+
+.velar-card-result.velar-card-pill-error {
+  color: var(--card-accent);
+}
+
+/* 文字动作按钮：ghost + tone 配色（对齐确认卡：正向绿、拒绝红、中性灰）。 */
+.velar-card-text-button.velar-button {
+  gap: 5px;
+  min-width: 0;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.velar-card-text-button.velar-button:hover,
+.velar-card-text-button.velar-button:focus-visible {
+  background: transparent;
+  transform: none;
+}
+
+.velar-card-text-button-approve.velar-button {
+  color: var(--status-green);
+}
+.velar-card-text-button-approve.velar-button:hover,
+.velar-card-text-button-approve.velar-button:focus-visible {
+  color: color-mix(in srgb, var(--status-green) 82%, var(--foreground));
+}
+
+.velar-card-text-button-reject.velar-button {
+  color: var(--status-red);
+}
+.velar-card-text-button-reject.velar-button:hover,
+.velar-card-text-button-reject.velar-button:focus-visible {
+  color: color-mix(in srgb, var(--status-red) 82%, var(--foreground));
+}
+
+.velar-card-text-button-neutral.velar-button {
+  color: var(--foreground-secondary);
+}
+.velar-card-text-button-neutral.velar-button:hover,
+.velar-card-text-button-neutral.velar-button:focus-visible {
+  color: var(--foreground);
+}
+
+.velar-card-text-button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.velar-app-shell {
+  overflow: hidden;
+  background: transparent;
+}
+
+.velar-app-shell:not(.velar-app-shell-root-embedded) {
+  height: 100vh;
+}
+
+.velar-app-shell-root-embedded {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.velar-app-shell-main {
+  display: flex;
+  flex-direction: column;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  background: var(--background);
+  &.velar-app-shell-expanded {
+    margin-left: var(--shell-sidebar-expanded-width);
+  }
+  &.velar-app-shell-collapsed {
+    margin-left: var(--shell-sidebar-collapsed-width);
+  }
+}
+
+@media (max-width: 900px) {
+  .velar-app-shell:not(.velar-app-shell-root-embedded) .velar-app-shell-main.velar-app-shell-expanded {
+    margin-left: 0;
+  }
+}
+
+.velar-app-shell:not(.velar-app-shell-root-embedded) .velar-app-shell-main {
+  height: 100vh;
+}
+
+.velar-app-shell-root-embedded .velar-app-shell-main {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: auto;
+}
+
+.velar-app-shell-content {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  background: var(--background);
+}
+
+.velar-business-surface-surface-base {
+  border-style: solid;
+  border-width: 0px;
+  color: var(--foreground);
+  outline-style: none;
+  border-radius: var(--ui-radius-panel);
+  box-shadow: none;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.velar-business-surface-padded {
+  padding: 14px;
+}
+
+.velar-business-surface-variant-default {
+  background: rgba(15, 15, 15, 0.035);
+}
+
+.velar-business-surface-variant-code {
+  max-height: 18rem;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--ui-font-body-sm);
+  background: rgba(15, 15, 15, 0.04);
+}
+
+.velar-business-surface-variant-danger {
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.velar-collapsible-nav {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.velar-collapsible-nav-group {
+  min-width: 0;
+}
+
+.velar-collapsible-nav-group-button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  padding: 7px 8px;
+  color: var(--foreground-tertiary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.velar-collapsible-nav-group-button:hover {
+  background: rgba(15, 15, 15, 0.04);
+  color: var(--foreground-secondary);
+}
+
+.velar-collapsible-nav-group-button[aria-expanded='true'] .velar-collapsible-nav-group-caret {
+  transform: rotate(90deg);
+}
+
+.velar-collapsible-nav-group-caret {
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+}
+
+.velar-collapsible-nav-group-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.velar-collapsible-nav-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ui-font-caption);
+  font-weight: 650;
+  line-height: var(--ui-line-compact);
+}
+
+.velar-collapsible-nav-group-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: var(--ui-line-compact);
+}
+
+.velar-collapsible-nav-group-count, .velar-collapsible-nav-item-count {
+  flex-shrink: 0;
+  color: var(--foreground-tertiary);
+  font-size: var(--ui-font-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--ui-line-compact);
+}
+
+.velar-collapsible-nav-item-list {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin-top: 2px;
+  padding-left: 12px;
+}
+
+.velar-collapsible-nav-item-button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  padding: 7px 9px;
+  color: var(--foreground-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.velar-collapsible-nav-item-button:hover {
+  background: rgba(15, 15, 15, 0.04);
+  color: var(--foreground);
+}
+
+.velar-collapsible-nav-item-button[data-selected='true'], .velar-collapsible-nav-item-button[data-selected='true']:hover {
+  background: var(--status-blue-surface);
+  color: var(--status-blue-contrast);
+}
+
+.velar-collapsible-nav-item-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.velar-collapsible-nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font-size: var(--ui-font-body-sm);
+  font-weight: 550;
+  line-height: var(--ui-line-compact);
+}
+
+.velar-collapsible-nav-item-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground-tertiary);
+  font-size: 10px;
+  line-height: var(--ui-line-compact);
+}
+
+.velar-collapsible-nav-item-button[data-selected='true'] .velar-collapsible-nav-item-description {
+  color: #386ec8;
+}
+
+.velar-compact-tool-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-2);
+  padding-inline: var(--ui-space-3);
+  padding-block: var(--ui-space-2);
+  flex-wrap: nowrap;
+  position: relative;
+  overflow: visible;
+  border-radius: var(--ui-radius-control);
+  background: rgba(15, 23, 42, 0.04);
+}
+
+/* 行内 detail 溢出时的全文气泡（BubbleTooltip portal 到 body，免疫祖先 overflow 剪裁）。 */
+.velar-compact-tool-row-detail-tooltip {
+  max-width: min(560px, 92vw);
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.velar-compact-tool-row-neutral {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.velar-compact-tool-row-running {
+  background: rgba(var(--status-blue-rgb), 0.055);
+}
+
+.velar-compact-tool-row-success {
+  background: rgba(21, 128, 61, 0.055);
+}
+
+.velar-compact-tool-row-warning {
+  background: rgba(217, 119, 6, 0.04);
+}
+
+.velar-compact-tool-row-error {
+  background: rgba(220, 38, 38, 0.05);
+}
+
+.velar-compact-tool-row-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.velar-compact-tool-row-label {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  max-width: min(28rem, 48%);
+  line-height: 1.35;
+}
+
+.velar-compact-tool-row-detail {
+  display: block;
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: var(--ui-space-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  }
+}
+
+.velar-compact-tool-row-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  color: var(--foreground);
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, var(--foreground) 75%, transparent);
+  }
+  z-index: 2;
+  transition: opacity 150ms ease;
+}
+
+.velar-compact-tool-row-action-slot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  width: 24px;
+  opacity: 0;
+  transform: translateX(4px);
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.velar-compact-tool-row-action-slot-overlay {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 3;
+  transform: translate(4px, -50%);
+}
+
+.velar-compact-tool-row-action-slot > button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  box-shadow: none;
+}
+
+.velar-compact-tool-row-action-slot > button svg:not([class*='size-']) {
+  width: 12px;
+  height: 12px;
+}
+
+.velar-compact-tool-row:hover .velar-compact-tool-row-action-slot, .velar-compact-tool-row:focus-within .velar-compact-tool-row-action-slot {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.velar-compact-tool-row:hover .velar-compact-tool-row-action-slot-overlay, .velar-compact-tool-row:focus-within .velar-compact-tool-row-action-slot-overlay {
+  transform: translate(0, -50%);
+}
+
+.velar-compact-tool-row:has(.velar-compact-tool-row-action-slot-overlay):hover .velar-compact-tool-row-count,
+.velar-compact-tool-row:has(.velar-compact-tool-row-action-slot-overlay):focus-within .velar-compact-tool-row-count {
+  opacity: 0;
+}
+
+.velar-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.velar-settings-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-1);
+  padding-inline: var(--ui-space-1);
+}
+
+.velar-settings-section-title-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-settings-section-title {
+  min-width: 0;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  font-size: 18px;
+}
+
+.velar-settings-section-title-addon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
+}
+
+.velar-settings-section-description {
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-settings-card {
+  --settings-card-padding-x: 16px;
+  --settings-card-padding-y: 14px;
+  --settings-card-padding-y-compact: 12px;
+  --settings-card-padding-y-tight: 10px;
+  --settings-card-padding-y-roomy: 18px;
+  --settings-card-gap: 10px;
+  --settings-card-divider-color: var(--surface-subtle);
+  --settings-row-control-width: min(100%, 212px);
+  overflow: hidden;
+  border: none;
+  border-radius: var(--ui-radius-panel);
+  background: var(--surface-settings-card);
+  box-shadow: none;
+}
+
+.velar-settings-card-overflow-visible {
+  overflow: visible;
+}
+
+.velar-settings-row {
+  position: relative;
+  display: grid;
+  gap: var(--settings-card-gap);
+  padding-inline: var(--settings-card-padding-x);
+  padding-block: var(--settings-card-padding-y);
+  grid-template-columns: minmax(0, 1.45fr) minmax(160px, 228px);
+}
+
+.velar-settings-card > .velar-settings-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--settings-card-padding-x);
+  right: var(--settings-card-padding-x);
+  height: 1px;
+  background: var(--settings-card-divider-color);
+}
+
+.velar-settings-row-meta {
+  min-width: 0;
+}
+
+.velar-settings-row-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-settings-row-title {
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+  font-size: var(--ui-font-body);
+}
+
+.velar-settings-row-action {
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-settings-row-description {
+  margin-top: var(--ui-space-1);
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-compact);
+}
+
+.velar-settings-row-control {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.velar-settings-row-control > [data-slot='select-trigger'], .velar-settings-row-control > [data-slot='input'], .velar-settings-row-control > [data-slot='textarea'], .velar-settings-row-control > [data-slot='text-select'], .velar-settings-row-control [data-slot='select-trigger'], .velar-settings-row-control [data-slot='input'], .velar-settings-row-control [data-slot='textarea'], .velar-settings-row-control [data-slot='text-select'] {
+  width: var(--settings-row-control-width);
+}
+
+.velar-settings-row-control [data-slot='text-select'] [data-slot='input'] {
+  width: 100%;
+}
+
+.velar-settings-row-control > [data-slot='number-input'] {
+  width: auto;
+  max-width: var(--settings-row-control-width);
+}
+
+@media (max-width: 960px) {
+  .velar-settings-row {
+    grid-template-columns: 1fr;
+  }
+
+  .velar-settings-row-control {
+    justify-content: flex-start;
+  }
+
+  .velar-settings-row-control > [data-slot='select-trigger'], .velar-settings-row-control > [data-slot='input'], .velar-settings-row-control > [data-slot='textarea'], .velar-settings-row-control > [data-slot='text-select'], .velar-settings-row-control [data-slot='select-trigger'], .velar-settings-row-control [data-slot='input'], .velar-settings-row-control [data-slot='textarea'], .velar-settings-row-control [data-slot='text-select'] {
+    width: 100%;
+  }
+
+  .velar-settings-row-control > [data-slot='number-input'] {
+    width: auto;
+    max-width: 100%;
+  }
+}
+
+.velar-tool-disclosure-card {
+  margin-block: 0;
+  width: 100%;
+  overflow: hidden;
+  --disclosure-summary-padding-x: 12px;
+  --disclosure-summary-padding-y: 12px;
+  --disclosure-content-padding-x: 12px;
+  --disclosure-content-padding-y: 4px;
+  border-radius: 14px;
+  border: 0 !important;
+  background: rgba(250, 250, 250, 0.98) !important;
+  box-shadow: none !important;
+}
+
+.velar-tool-disclosure-card[data-tone='running'] {
+  background: rgba(var(--status-blue-rgb), 0.045) !important;
+}
+
+.velar-tool-disclosure-card[data-tone='success'] {
+  background: rgba(21, 128, 61, 0.04) !important;
+}
+
+.velar-tool-disclosure-card[data-tone='warning'] {
+  background: rgba(217, 119, 6, 0.05) !important;
+}
+
+.velar-tool-disclosure-card[data-tone='error'] {
+  background: rgba(220, 38, 38, 0.05) !important;
+}
+
+.velar-tool-disclosure-card-header-layout {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+}
+
+.velar-tool-disclosure-card-header-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.velar-tool-disclosure-card-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.velar-tool-disclosure-card-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-tertiary);
+}
+
+.velar-tool-disclosure-card-status-icon-running {
+  color: var(--status-green);
+}
+
+.velar-tool-disclosure-card-status-icon-success {
+  color: var(--status-green);
+}
+
+.velar-tool-disclosure-card-status-icon-warning {
+  color: var(--status-amber);
+}
+
+.velar-tool-disclosure-card-status-icon-error {
+  color: var(--status-red);
+}
+
+.velar-tool-disclosure-card-leading-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-tertiary);
+}
+
+.velar-tool-disclosure-card-title-label {
+  min-width: 0;
+  overflow: visible;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  white-space: normal;
+  color: var(--foreground);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.velar-tool-disclosure-card-status-icon + .velar-tool-disclosure-card-leading-icon, .velar-tool-disclosure-card-status-icon + .velar-tool-disclosure-card-title-label, .velar-tool-disclosure-card-leading-icon + .velar-tool-disclosure-card-title-label {
+  margin-left: 0.5rem;
+}
+
+.velar-tool-disclosure-card-meta {
+  margin-left: var(--ui-space-2);
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-tool-disclosure-card-subtitle {
+  margin-top: var(--ui-space-2);
+  min-width: 0;
+  font-size: 12px;
+  color: var(--foreground-secondary);
+}
+
+/* ─── Chat interaction notice (business) ─────────────────────────────────── */
+/* @apply 展开：flex items-start gap-3 border → 下列裸 CSS（gap-3=0.75rem、border=1px solid）。 */
+
+.velar-chat-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border-style: solid;
+  border-width: 1px;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ui-radius-control);
+  padding-inline: var(--ui-space-control-x);
+  padding-block: var(--ui-space-control-y);
+  box-shadow: var(--shadow-xs);
+}
+
+.velar-chat-notice-icon {
+  margin-top: 0.125rem;
+  display: flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+}
+
+.velar-chat-notice-body {
+  min-width: 0;
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.velar-chat-notice-title {
+  font-weight: 600;
+  color: var(--foreground);
+  font-size: var(--ui-font-body);
+}
+
+.velar-chat-notice-description {
+  margin-top: 0.25rem;
+  white-space: pre-wrap;
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}
+
+.velar-chat-notice-actions {
+  margin-top: 0.75rem;
+}
+
+.velar-chat-notice-running {
+  background: var(--status-green-soft);
+  border-color: color-mix(in srgb, var(--status-green) 16%, transparent);
+  color: var(--status-green);
+  animation: velar-chat-notice-breathe 2.6s ease-in-out infinite;
+}
+
+.velar-chat-notice-running .velar-chat-notice-title,
+.velar-chat-notice-running .velar-chat-notice-description {
+  color: color-mix(in srgb, var(--status-green) 78%, var(--foreground));
+}
+
+.velar-chat-notice-running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--card) 55%, transparent), transparent);
+  pointer-events: none;
+  animation: velar-chat-notice-shine 3.8s ease-in-out infinite;
+}
+
+.velar-chat-notice-warning {
+  background: var(--status-amber-soft);
+  border-color: color-mix(in srgb, var(--status-amber) 14%, transparent);
+}
+
+.velar-chat-notice-warning .velar-chat-notice-icon {
+  background: color-mix(in srgb, var(--status-amber) 12%, transparent);
+  color: var(--status-amber);
+}
+
+.velar-chat-notice-error {
+  background: var(--status-red-soft);
+  border-color: color-mix(in srgb, var(--status-red) 14%, transparent);
+}
+
+.velar-chat-notice-error .velar-chat-notice-icon {
+  background: color-mix(in srgb, var(--status-red) 12%, transparent);
+  color: var(--status-red);
+}
+
+@keyframes velar-chat-notice-breathe {
+  0%,
+  100% {
+    box-shadow: var(--shadow-xs);
+  }
+
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-green) 6%, transparent);
+  }
+}
+
+@keyframes velar-chat-notice-shine {
+  0%,
+  70%,
+  100% {
+    transform: translateX(-120%);
+  }
+
+  32% {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velar-chat-notice-running,
+  .velar-chat-notice-running::after {
+    animation: none;
+  }
+}
+
+/* ─── Session sticky dock (business) ─────────────────────────────────────── */
+/*
+ * @apply 展开：
+ *   fabric        flex min-w-0 flex-col
+ *   fabric-inner  flex min-w-0 flex-col gap-3 px-2   (gap-3=0.75rem、px-2=0.5rem)
+ *   trigger       flex min-w-0 cursor-pointer items-center justify-center
+ *   trigger-center relative flex shrink-0 items-center justify-center text-neutral-400
+ *                 （text-neutral-400 → --muted-foreground：§12.9 双色种子禁裸色值）
+ *   trigger-flip  flex items-center justify-center
+ *   item          min-w-0
+ */
+
+.velar-session-sticky-dock {
+  --sticky-dock-safe-top: 0.5rem;
+  --sticky-dock-pane-top-padding: 1.5rem;
+  --sticky-dock-trigger-size: 2.5rem;
+
+  position: sticky;
+  top: var(--sticky-dock-safe-top);
+  z-index: 12;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  height: 0;
+  min-height: 0;
+  flex: 0 0 0;
+  overflow: visible;
+  pointer-events: none;
+  /* 抵消消息列表顶 padding，同时给顶栏留出一小段安全距离。 */
+  margin-top: calc(var(--sticky-dock-safe-top) - var(--sticky-dock-pane-top-padding));
+  margin-bottom: -1rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.velar-session-sticky-dock-side {
+  --sticky-dock-pane-top-padding: 1rem;
+}
+
+.velar-session-sticky-dock-layer {
+  position: relative;
+  width: 100%;
+  height: 0;
+  overflow: visible;
+}
+
+.velar-session-sticky-dock-curtain {
+  position: absolute;
+  z-index: 11;
+  left: 0;
+  right: 0;
+  top: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.velar-session-sticky-dock-curtain:not(.velar-session-sticky-dock-curtain-open) {
+  min-height: var(--sticky-dock-trigger-size);
+  overflow: hidden;
+}
+
+.velar-session-sticky-dock-curtain.velar-session-sticky-dock-curtain-open {
+  overflow: visible;
+}
+
+.velar-session-sticky-dock-fabric-clip {
+  min-height: 0;
+  max-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  transition: max-height 0.82s cubic-bezier(0.22, 1, 0.4, 1);
+  will-change: max-height;
+}
+
+.velar-session-sticky-dock-curtain-open .velar-session-sticky-dock-fabric-clip {
+  max-height: min(62vh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.velar-session-sticky-dock-fabric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.velar-session-sticky-dock-curtain-open .velar-session-sticky-dock-fabric {
+  padding: 0.5rem 0.75rem 0.875rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.velar-session-sticky-dock-fabric-inner {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-inline: 0.5rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  transform-origin: top center;
+  transition: transform 0.82s cubic-bezier(0.22, 1, 0.4, 1);
+  will-change: transform;
+}
+
+.velar-session-sticky-dock-curtain:not(.velar-session-sticky-dock-curtain-open) .velar-session-sticky-dock-fabric-inner {
+  transform: translate3d(0, -100%, 0);
+}
+
+.velar-session-sticky-dock-curtain.velar-session-sticky-dock-curtain-open .velar-session-sticky-dock-fabric-inner {
+  transform: translate3d(0, 0, 0);
+}
+
+.velar-session-sticky-dock-trigger {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  top: -0.25rem;
+  bottom: auto;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  width: var(--sticky-dock-trigger-size);
+  height: var(--sticky-dock-trigger-size);
+  padding: 0;
+  background: transparent;
+  border: none;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  perspective: 640px;
+  perspective-origin: 50% 0%;
+  transition: top 0.82s cubic-bezier(0.22, 1, 0.4, 1);
+  will-change: top;
+}
+
+.velar-session-sticky-dock-curtain.velar-session-sticky-dock-curtain-open .velar-session-sticky-dock-trigger {
+  top: calc(100% - 0.25rem);
+}
+
+.velar-session-sticky-dock-trigger-center {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  width: var(--sticky-dock-trigger-size);
+  height: var(--sticky-dock-trigger-size);
+  margin: 0;
+  padding: 0;
+}
+
+.velar-session-sticky-dock-trigger-flip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotateX(0deg);
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  transition: transform 0.82s cubic-bezier(0.22, 1, 0.4, 1);
+  will-change: transform;
+}
+
+.velar-session-sticky-dock-trigger-flip-open {
+  transform: rotateX(180deg);
+}
+
+.velar-session-sticky-dock-chevron {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  opacity: 0.72;
+  transform: scaleY(0.78);
+  transform-origin: center;
+}
+
+.velar-session-sticky-dock-item {
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--background-elevated) 92%, var(--status-green-soft));
+  backdrop-filter: blur(26px) saturate(1.12);
+  -webkit-backdrop-filter: blur(26px) saturate(1.12);
+}
+
+.velar-session-sticky-dock-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velar-session-sticky-dock-trigger,
+  .velar-session-sticky-dock-fabric-clip,
+  .velar-session-sticky-dock-fabric-inner,
+  .velar-session-sticky-dock-trigger-flip {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* ─── Workspace space status icon (business) ─────────────────────────────── */
+/* 无 @apply：原 Sidebar.module.css 纯 CSS 迁入，tone 提升为封闭 variant。 */
+
+.velar-space-status-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+
+.velar-space-status-icon-running {
+  color: var(--status-green);
+}
+
+.velar-space-status-icon-paused {
+  color: var(--status-amber);
+}

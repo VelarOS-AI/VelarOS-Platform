@@ -1,0 +1,91 @@
+/* @velaros-no-tailwind */
+
+.velar-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-style: solid;
+  border-width: 0px;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  border-radius: var(--ui-radius-round);
+  background: var(--control-themed-open-bg);
+  box-shadow: none;
+}
+
+.velar-switch-size-default {
+  height: 30px;
+  width: 52px;
+  padding: 2px;
+}
+
+.velar-switch-size-sm {
+  height: 24px;
+  width: 42px;
+  padding: 2px;
+}
+
+.velar-switch-size-xs {
+  height: 20px;
+  width: 34px;
+  padding: 2px;
+}
+
+.velar-switch:hover {
+  background: var(--control-themed-hover-bg);
+}
+
+.velar-switch:focus-visible {
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.velar-switch[data-state='checked'] {
+  background: var(--control-switch-checked);
+  box-shadow: none;
+}
+
+.velar-switch[data-state='checked']:hover {
+  background: var(--control-switch-checked-hover);
+}
+
+.velar-switch[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.velar-switch-tone-neutral[data-state='checked'] {
+  background: var(--control-switch-checked);
+}
+
+.velar-switch-thumb {
+  display: block;
+  background-color: var(--color-white);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  border-radius: var(--ui-radius-round);
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12), 0 2px 6px rgba(15, 15, 15, 0.08);
+}
+
+.velar-switch-size-sm .velar-switch-thumb {
+  width: 20px;
+  height: 20px;
+}
+
+.velar-switch-size-xs .velar-switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.velar-switch[data-state='checked'] .velar-switch-thumb {
+  transform: translateX(22px);
+}
+
+.velar-switch-size-sm[data-state='checked'] .velar-switch-thumb {
+  transform: translateX(18px);
+}
+
+.velar-switch-size-xs[data-state='checked'] .velar-switch-thumb {
+  transform: translateX(14px);
+}

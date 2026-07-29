@@ -1,0 +1,85 @@
+/* @velaros-no-tailwind */
+
+.velar-number-input {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  border-radius: var(--ui-radius-control-sm);
+  border: 1px solid rgba(15, 15, 15, 0.09);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.velar-number-input:focus-within {
+  border-color: rgba(var(--status-blue-rgb), 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 0 0 4px rgba(var(--status-blue-rgb), 0.08);
+}
+
+.velar-number-input-spin {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 0;
+  border-left: 1px solid rgba(15, 15, 15, 0.08);
+}
+
+.velar-number-input .velar-number-input-step {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-style: solid;
+  border-width: 0px;
+  padding: 0;
+  flex: 1 1 50%;
+  min-height: 0;
+  width: 2rem;
+  min-width: 2rem;
+  border-radius: 0;
+  background: rgba(17, 17, 17, 0.04);
+  color: rgba(15, 15, 15, 0.72);
+  transition: background 0.15s ease;
+}
+
+.velar-number-input .velar-number-input-step:hover:not(:disabled) {
+  background: rgba(17, 17, 17, 0.08);
+  color: rgba(15, 15, 15, 0.88);
+}
+
+.velar-number-input .velar-number-input-step:disabled {
+  opacity: 0.45;
+}
+
+.velar-number-input .velar-number-input-step-up {
+  border-bottom: 1px solid rgba(15, 15, 15, 0.08);
+}
+
+.velar-number-input .velar-number-input-field.velar-input {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 4.5rem;
+  min-width: 4.5rem;
+  max-width: 4.5rem;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  text-align: center;
+}
+
+.velar-number-input .velar-number-input-field.velar-input:focus, .velar-number-input .velar-number-input-field.velar-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.velar-number-input[data-size='sm'] .velar-number-input-field.velar-input {
+  width: 3.75rem;
+  min-width: 3.75rem;
+  max-width: 3.75rem;
+}

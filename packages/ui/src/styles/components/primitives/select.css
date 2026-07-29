@@ -1,0 +1,273 @@
+/* @velaros-no-tailwind */
+
+.velar-select-trigger {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-control-y);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  font-size: var(--ui-font-body);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.velar-select-variant-default {
+  border-style: solid;
+  border-width: 0;
+  border-radius: var(--ui-radius-control-sm);
+  padding-inline: var(--ui-space-control-x);
+  background: var(--control-themed-bg);
+  border-color: transparent;
+}
+
+.velar-select-variant-default:hover {
+  background: var(--control-themed-hover-bg);
+}
+
+.velar-select-variant-default[data-state='open'] {
+  background: var(--control-themed-open-bg);
+  border-color: transparent;
+}
+
+.velar-select-trigger[data-placeholder] {
+  color: var(--foreground-secondary);
+}
+
+.velar-select-trigger[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.56;
+  box-shadow: none;
+}
+
+.velar-select-variant-default[data-disabled], .velar-select-variant-bare[data-disabled] {
+  background: var(--control-themed-disabled-bg);
+}
+
+.velar-select-variant-bare {
+  border-style: solid;
+  border-width: 1px;
+  border-color: transparent;
+  border-radius: var(--ui-radius-round);
+  padding-inline: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.velar-select-variant-bare:hover, .velar-select-variant-bare[data-state='open'] {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04), 0 10px 24px rgba(15, 15, 15, 0.1);
+}
+
+.velar-select-variant-bare:focus-visible {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04), 0 10px 24px rgba(15, 15, 15, 0.1), 0 0 0 4px rgba(15, 15, 15, 0.05);
+}
+
+.velar-select-variant-default[data-disabled]:hover, .velar-select-variant-bare[data-disabled]:hover, .velar-select-variant-bare[data-disabled]:focus-visible, .velar-select-variant-bare[data-disabled][data-state='open'] {
+  border-color: transparent;
+  background: var(--control-themed-disabled-bg);
+  box-shadow: none;
+}
+
+.velar-select-size-default {
+  height: var(--ui-control-height-md);
+}
+
+.velar-select-size-sm {
+  height: var(--ui-control-height-sm);
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-select-size-xs {
+  height: var(--ui-control-height-xs);
+  gap: var(--ui-space-control-y-sm);
+  padding-inline: 11px;
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-select-trigger-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-select-trigger-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+}
+
+.velar-select-trigger-caret {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.velar-select-trigger[data-tone='danger'] .velar-select-trigger-content {
+  color: var(--destructive);
+}
+
+.velar-select-size-xs .velar-select-trigger-icon img {
+  width: 16px;
+  height: 16px;
+}
+
+.velar-select-size-xs .velar-select-trigger-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.velar-select-content {
+  z-index: 50;
+  overflow: hidden;
+  border-style: solid;
+  border-width: 1px;
+  background-color: var(--color-white);
+  padding: 6px;
+  outline-style: none;
+  min-width: var(--radix-select-trigger-width);
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, calc(100dvh - 24px));
+  border-radius: var(--ui-radius-overlay);
+  border-color: rgba(15, 15, 15, 0.08);
+  box-shadow: 0 24px 56px rgba(15, 15, 15, 0.12);
+  animation: rise-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.velar-select-content[data-size='xs'] {
+  padding: 4px;
+  border-radius: var(--ui-radius-control);
+  box-shadow: 0 18px 42px rgba(15, 15, 15, 0.12);
+}
+
+.velar-select-viewport {
+  display: flex;
+  max-height: inherit;
+  flex-direction: column;
+  gap: var(--ui-space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.velar-select-content[data-size='xs'] .velar-select-viewport {
+  gap: 2px;
+}
+
+.velar-select-item {
+  position: relative;
+  display: flex;
+  min-height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  color: var(--foreground);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  border-radius: var(--ui-radius-control-sm);
+  padding-inline: var(--ui-space-control-x-sm);
+  padding-block: 8px;
+  font-size: var(--ui-font-body);
+}
+
+.velar-select-item:hover, .velar-select-item[data-highlighted] {
+  background: var(--control-gray-hover-bg);
+}
+
+.velar-select-item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item {
+  min-height: 30px;
+  padding-inline: 10px;
+  padding-block: 5px;
+  font-size: var(--ui-font-body-sm);
+}
+
+.velar-select-item-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-content {
+  gap: 7px;
+}
+
+.velar-select-item-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-icon img {
+  width: 16px;
+  height: 16px;
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.velar-select-item-meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-meta {
+  gap: 4px;
+}
+
+.velar-select-item-label {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+  line-height: 1.35;
+}
+
+.velar-select-item-description {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-description {
+  font-size: var(--ui-font-xs);
+  line-height: 1.35;
+}
+
+.velar-select-item-indicator {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--foreground);
+}
+
+.velar-select-item[data-tone='danger'] .velar-select-item-label,
+.velar-select-item[data-tone='danger'] .velar-select-item-indicator {
+  color: var(--destructive);
+}
+
+.velar-select-content[data-size='xs'] .velar-select-item-indicator svg {
+  width: 14px;
+  height: 14px;
+}

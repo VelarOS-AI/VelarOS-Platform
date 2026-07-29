@@ -1,0 +1,147 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  @apply flex w-full min-w-0 items-center gap-3;
+  max-width: min(860px, 100%);
+  padding: 10px 12px;
+  border-radius: var(--ui-radius-control);
+  background: var(--surface-interaction-card);
+  box-shadow: none;
+}
+
+.installRoot:global(.velar-action-card) {
+  padding: 10px 12px;
+  border-radius: var(--ui-radius-control);
+  border: 0;
+  background: var(--surface-interaction-card);
+  box-shadow: none;
+}
+
+.icon {
+  @apply mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center;
+  border-radius: 8px;
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+}
+
+.body {
+  @apply min-w-0 flex-1;
+}
+
+.title {
+  @apply font-semibold text-foreground;
+  font-size: var(--ui-font-body);
+}
+
+.description {
+  @apply mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground;
+  font-size: var(--ui-font-body-sm);
+  line-height: 18px;
+}
+
+.installIcon:global(.velar-action-card-icon) {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-blue) 10%, var(--card));
+  color: var(--status-blue);
+}
+
+.installTitleLine {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.installTitleLine span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installDetailRow {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.installCommand {
+  @apply min-w-0 font-mono;
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: var(--ui-line-xs);
+}
+
+.installExplanation {
+  @apply min-w-0 text-muted-foreground;
+  flex: 1 1 18rem;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}
+
+.actions {
+  @apply shrink-0;
+  margin-left: auto;
+}
+
+.rejectPanel {
+  @apply mt-3;
+}
+
+.rejectLabel {
+  @apply mb-1.5 block font-medium text-foreground;
+  font-size: var(--ui-font-body-sm);
+}
+
+.rejectTextarea {
+  min-height: 78px;
+}
+
+.reject {
+  height: 28px;
+  padding-inline: 8px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.actions .reject:global(.velar-button) {
+  color: var(--status-red);
+}
+
+.actions .reject:global(.velar-button:hover),
+.actions .reject:global(.velar-button:focus-visible) {
+  color: color-mix(in srgb, var(--status-red) 82%, var(--foreground));
+  background: transparent;
+}
+
+.approve {
+  height: 28px;
+  padding-inline: 8px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.actions .approve:global(.velar-button) {
+  color: var(--status-green);
+}
+
+.actions .approve:global(.velar-button:hover),
+.actions .approve:global(.velar-button:focus-visible) {
+  color: color-mix(in srgb, var(--status-green) 82%, var(--foreground));
+  background: transparent;
+}

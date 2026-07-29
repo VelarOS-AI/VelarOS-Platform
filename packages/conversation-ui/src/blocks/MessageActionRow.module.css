@@ -1,0 +1,282 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  @apply my-2 flex w-full min-w-0 items-center gap-2 rounded-[10px] px-3 py-2 text-left;
+  --row-bg: color-mix(in srgb, var(--status-green) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-green) 11%, var(--card));
+  --icon-fg: var(--status-green);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+  --message-action-file-blue: #2563eb;
+  position: relative;
+  overflow: hidden;
+  background: var(--row-bg);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--foreground) 3.5%, transparent);
+  animation: action-row-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    background 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  background: var(--row-bg-hover);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--foreground) 5.5%, transparent);
+  transform: translateY(-1px);
+}
+
+.clickable::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-115%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--card) 55%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.clickable:hover::after {
+  animation: action-row-shine 950ms ease;
+}
+
+.clickable:focus-visible {
+  outline: 2px solid rgba(var(--status-blue-rgb), 0.22);
+  outline-offset: 2px;
+}
+
+.iconWrap {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full;
+  color: var(--icon-fg);
+  background: var(--icon-bg);
+}
+
+.iconWrap svg {
+  color: var(--icon-fg);
+}
+
+.content {
+  @apply flex min-w-0 flex-1 items-center overflow-hidden;
+}
+
+.actionSlot {
+  @apply flex shrink-0 items-center justify-end;
+  width: 30px;
+}
+
+.revealButton {
+  @apply inline-flex items-center justify-center border-0 p-0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--icon-fg);
+  background: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--icon-fg) 10%, transparent);
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+  pointer-events: auto;
+}
+
+.revealButton:hover {
+  color: var(--icon-fg);
+  background: color-mix(in srgb, var(--icon-fg) 18%, var(--card));
+}
+
+.revealButton:focus-visible {
+  outline: 2px solid rgba(var(--status-blue-rgb), 0.24);
+  outline-offset: 2px;
+}
+
+.created {
+  --row-bg: color-mix(in srgb, var(--status-green) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-green) 11%, var(--card));
+  --icon-fg: var(--status-green);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.written,
+.modified {
+  --row-bg: color-mix(in srgb, var(--status-teal) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-teal) 11%, var(--card));
+  --icon-fg: var(--status-teal);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.deleted {
+  --row-bg: color-mix(in srgb, var(--status-red) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-red) 11%, var(--card));
+  --icon-fg: var(--status-red);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.deleted .title,
+.deleted .detail {
+  opacity: 0.82;
+}
+
+.moved {
+  --row-bg: color-mix(in srgb, var(--status-amber) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-amber) 11%, var(--card));
+  --icon-fg: var(--status-amber);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.opened {
+  --row-bg: color-mix(in srgb, var(--status-blue) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-blue) 11%, var(--card));
+  --icon-fg: var(--status-blue);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.revealed {
+  --row-bg: color-mix(in srgb, var(--status-violet) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-violet) 11%, var(--card));
+  --icon-fg: var(--status-violet);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.log {
+  --row-bg: color-mix(in srgb, var(--status-blue) 8%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-blue) 12%, var(--card));
+  --icon-fg: var(--status-blue-contrast);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.file {
+}
+
+.fileKindGeneric {
+  --icon-fg: var(--message-action-file-blue);
+}
+
+.fileKindArchive {
+  --row-bg: color-mix(in srgb, var(--status-amber) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-amber) 11%, var(--card));
+  --icon-fg: var(--status-amber);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.fileKindAudio {
+  --row-bg: color-mix(in srgb, var(--status-violet) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-violet) 11%, var(--card));
+  --icon-fg: var(--status-violet);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.fileKindCode {
+  --row-bg: color-mix(in srgb, var(--status-violet) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-violet) 11%, var(--card));
+  --icon-fg: var(--status-violet);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindCsv {
+  --row-bg: color-mix(in srgb, var(--status-green) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-green) 11%, var(--card));
+  --icon-fg: var(--status-green);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.fileKindDocument {
+  --icon-fg: var(--message-action-file-blue);
+}
+
+.fileKindHtml {
+  --row-bg: color-mix(in srgb, var(--status-amber) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-amber) 11%, var(--card));
+  --icon-fg: var(--status-amber);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 13%, var(--card));
+}
+
+.fileKindImage {
+  --row-bg: color-mix(in srgb, var(--status-teal) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-teal) 11%, var(--card));
+  --icon-fg: var(--status-teal);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindMarkdown {
+  --row-bg: color-mix(in srgb, var(--status-teal) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-teal) 11%, var(--card));
+  --icon-fg: var(--status-teal);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindPdf {
+  --row-bg: color-mix(in srgb, var(--status-red) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-red) 11%, var(--card));
+  --icon-fg: var(--status-red);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindPresentation {
+  --row-bg: color-mix(in srgb, var(--status-amber) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-amber) 11%, var(--card));
+  --icon-fg: var(--status-amber);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindSpreadsheet {
+  --row-bg: color-mix(in srgb, var(--status-green) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-green) 11%, var(--card));
+  --icon-fg: var(--status-green);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.fileKindText {
+  --icon-fg: var(--message-action-file-blue);
+}
+
+.fileKindVideo {
+  --row-bg: color-mix(in srgb, var(--status-red) 7%, var(--card));
+  --row-bg-hover: color-mix(in srgb, var(--status-red) 11%, var(--card));
+  --icon-fg: var(--status-red);
+  --icon-bg: color-mix(in srgb, var(--icon-fg) 12%, var(--card));
+}
+
+.title {
+  @apply min-w-0 truncate text-[13px] font-medium leading-6 text-foreground;
+}
+
+.detail {
+  @apply min-w-0 truncate text-[12px] leading-6 text-muted-foreground;
+}
+
+@keyframes action-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes action-row-shine {
+  to {
+    transform: translateX(115%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .clickable:hover::after {
+    animation: none;
+  }
+
+  .clickable:hover {
+    transform: none;
+  }
+}

@@ -1,0 +1,56 @@
+import type {
+  StreamTurnContextPayload,
+  WorkspaceCheckpointDiffFailure,
+  WorkspaceCheckpointFileDiff,
+} from '#contracts'
+
+/**
+ * `ConversationRunMarkerView` — 消息运行标记的**渲染切片投影**（MessageStatusMarker / 气泡状态角标消费）。
+ *
+ * §12.8：只承载渲染读取的字段（status/detail/turnCount/turnKind），不整桶宿主 `ChatMessageRunMarker`
+ * （goalMode / workspaceCheckpointDiff / timestamp 等运行态字段留宿主）。status/turnKind 值域镜像宿主枚举。
+ */
+export type ConversationRunMarkerStatus =
+  | 'completed'
+  | 'aborted'
+  | 'failed'
+  | 'awaiting-confirmation'
+  | 'awaiting-input'
+
+export type ConversationRunMarkerTurnKind = 'turn' | 'totalTurns'
+
+export interface ConversationRunMarkerView {
+  status: ConversationRunMarkerStatus
+  detail: Nullable<string>
+  turnCount: Nullable<number>
+  turnKind: Nullable<ConversationRunMarkerTurnKind>
+}
+
+/**
+ * `ConversationMessageRunMarker` — 气泡渲染模型 + memo 相等比较 + transcript 派生所读的运行标记结构面
+ * （在 `ConversationRunMarkerView` 之上追加 memo/duration/文件变更卡真正读到的字段）。宿主
+ * `ChatMessageRunMarker` 结构可赋值（超型）。窄叶子视图仍是 `ConversationRunMarkerView`（状态角标 / slot）。
+ */
+export interface ConversationMessageRunMarker extends ConversationRunMarkerView {
+  messageId: string
+  goalMode?: boolean
+  workspaceCheckpointDiff?: {
+    capturedAt: number
+    changes: WorkspaceCheckpointFileDiff[]
+    failedRoots: WorkspaceCheckpointDiffFailure[]
+    error: Nullable<string>
+  }
+  timestamp: number
+}
+
+/**
+ * `ConversationTurnContextView` — 回合上下文的**渲染切片投影**（成本估算 messageCostEstimate 消费）。
+ *
+ * §12.8：只承载成本估算读取的字段（turn/timestamp/roleRuntimeModel），不整桶宿主
+ * `ChatTurnContextSnapshot`（systemPrompt / promptSegments / messages 等重字段留宿主）。
+ */
+export interface ConversationTurnContextView {
+  turn: number
+  timestamp: number
+  roleRuntimeModel: StreamTurnContextPayload['roleRuntimeModel']
+}

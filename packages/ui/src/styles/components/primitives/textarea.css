@@ -1,0 +1,72 @@
+/* @velaros-no-tailwind */
+
+.velar-textarea {
+  width: 100%;
+  resize: none;
+  color: var(--foreground);
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  outline-style: none;
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+  &:disabled {
+    pointer-events: none;
+  }
+  &:disabled {
+    opacity: 50%;
+  }
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-textarea-size-default {
+  padding-inline: var(--ui-space-control-x-sm);
+  padding-block: var(--ui-space-control-y-sm);
+  font-size: var(--ui-font-body);
+  line-height: var(--ui-line-relaxed);
+}
+
+.velar-textarea-size-sm {
+  padding-inline: 11px;
+  padding-block: 8px;
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+}
+
+.velar-textarea-variant-default {
+  border-style: solid;
+  border-width: 0;
+  background: var(--control-themed-bg);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.velar-textarea-variant-default:focus-visible {
+  background: var(--control-themed-open-bg);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.velar-textarea-variant-ghost {
+  border-style: solid;
+  border-width: 1px;
+  border-color: transparent;
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.velar-textarea-variant-ghost:focus-visible {
+  border-color: rgba(15, 15, 15, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.velar-textarea-variant-bare {
+  border-radius: 0;
+  border-style: none;
+  box-shadow: none;
+background: transparent;
+}
+
+.velar-textarea-variant-bare:focus-visible {
+  border-style: none;
+  box-shadow: none;
+background: transparent;
+}

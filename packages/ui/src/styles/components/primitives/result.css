@@ -1,0 +1,60 @@
+/* @velaros-no-tailwind */
+
+.velar-result {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  padding-inline: var(--ui-space-4);
+  padding-block: 32px;
+  text-align: center;
+}
+
+.velar-result-icon-wrap {
+  margin-bottom: var(--ui-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.velar-result-title {
+  margin-bottom: var(--ui-space-1);
+  max-width: var(--container-md);
+  font-size: var(--ui-font-heading);
+  line-height: var(--ui-line-compact);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.velar-result-subtitle {
+  max-width: var(--container-md);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-default);
+  color: var(--foreground-secondary);
+}
+
+.velar-result-extra {
+  margin-top: var(--ui-space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+}
+
+.velar-result-tone-success .velar-result-icon-wrap {
+  color: var(--status-green);
+}
+
+.velar-result-tone-error .velar-result-icon-wrap {
+  color: var(--status-red);
+}
+
+.velar-result-tone-warning .velar-result-icon-wrap {
+  color: var(--status-amber);
+}
+
+.velar-result-tone-info .velar-result-icon-wrap {
+  color: var(--status-blue);
+}

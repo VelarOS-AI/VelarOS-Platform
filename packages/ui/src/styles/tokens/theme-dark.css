@@ -1,0 +1,8 @@
+/**
+ * Dark theme tokens — placeholder for future theme switching.
+ * Override semantic / UI tokens here when dark mode is implemented.
+ */
+
+[data-theme='dark'] {
+  /* TODO: populate dark theme values in a follow-up PR. */
+}

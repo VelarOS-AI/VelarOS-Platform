@@ -1,0 +1,264 @@
+/**
+ * Light theme tokens for `@velaros-ai/ui`.
+ * Applied on `:root` and `[data-theme="light"]`.
+ */
+
+:root,
+[data-theme='light'] {
+  /*
+   * ── 双色种子（§12.9）· 全产品唯一可配置的两个品牌色 ────────────────────────
+   * `--velar-primary`（主题色）与 `--velar-accent`（副色）是仅有的两个手设品牌色值。
+   * 下方所有品牌相关令牌都从这两个种子派生（`color-mix` / `rgba(var(--…-rgb))`）——
+   * 换这两个色，全产品品牌色跟着走。官方预置组合见 `seed-presets.css`，用户配置接口
+   * 形状见 `docs/ui-color-seeds.md`（改文件即生效，对齐 model-assignment-config 模式）。
+   * 中性墨色（surface/ink）与语义状态调色板（green/red/amber/…）是**固定语义令牌**，
+   * 刻意不随品牌种子走：改品牌色不应给所有表面染色，也不应让「危险红」变成品牌色相。
+   */
+  --velar-primary: #333366;
+  --velar-primary-rgb: 51, 51, 102;
+  --velar-accent: #333366;
+  --velar-accent-rgb: 51, 51, 102;
+
+  --background: #ffffff;
+  --background-elevated: rgba(255, 255, 255, 0.92);
+  --background-panel: #f7f7f8;
+  --background-panel-strong: #ffffff;
+  --background-muted: rgba(17, 17, 17, 0.045);
+  --background-muted-strong: rgba(17, 17, 17, 0.085);
+  --control-gray-bg: #f7f7f7;
+  --control-gray-hover-bg: color-mix(in srgb, var(--primary) 7%, transparent);
+  --control-gray-inset-hover-bg: #ffffff;
+  --foreground: oklch(0.18 0 0);
+  --foreground-secondary: oklch(0.42 0 0);
+  --foreground-tertiary: oklch(0.58 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.18 0 0);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.18 0 0);
+  /* 品牌主色语义别名：从主题种子派生（历史令牌名 --primary 保留为兼容别名）。 */
+  --primary: var(--velar-primary);
+  --primary-rgb: var(--velar-primary-rgb);
+  --primary-foreground: #ffffff;
+  --secondary: rgba(17, 17, 17, 0.04);
+  --secondary-foreground: oklch(0.24 0 0);
+  --muted: rgba(17, 17, 17, 0.04);
+  --muted-foreground: oklch(0.56 0 0);
+  --accent: color-mix(in srgb, var(--primary) 6%, transparent);
+  --accent-foreground: oklch(0.24 0 0);
+  --destructive: oklch(0.61 0.22 24);
+  --border: rgba(15, 15, 15, 0.09);
+  --border-strong: rgba(15, 15, 15, 0.14);
+  --input: rgba(15, 15, 15, 0.08);
+  --ring: rgba(var(--primary-rgb), 0.3);
+
+  --ui-radius-overlay: 12px;
+  --ui-radius-panel: 10px;
+  --ui-radius-control: 8px;
+  --ui-radius-control-sm: 6px;
+  --ui-radius-chip: 6px;
+  --ui-radius-pill: 8px;
+  --ui-radius-round: 1000px;
+  /** Tailwind bridge alias — canonical radii are `--ui-radius-*`. */
+  --radius: var(--ui-radius-panel);
+
+  --ui-border-width-default: 1px;
+  --ui-border-width-strong: 1.5px;
+  --ui-border-style: solid;
+
+  --ui-transition-fast: 150ms ease;
+  --ui-transition-default: 200ms ease;
+  --ui-transition-slow: 300ms ease;
+
+  --status-blue-rgb: var(--primary-rgb);
+  --status-blue-contrast-rgb: var(--primary-rgb);
+  --status-blue-strong-rgb: var(--primary-rgb);
+  --status-blue-muted-rgb: var(--primary-rgb);
+  --status-blue: rgb(var(--status-blue-rgb));
+  --status-blue-contrast: rgb(var(--status-blue-contrast-rgb));
+  --status-blue-strong: rgb(var(--status-blue-strong-rgb));
+  --status-blue-muted: rgb(var(--status-blue-muted-rgb));
+  --status-blue-surface: #f3f4f6;
+  --status-blue-selection-bg: #e5e7eb;
+  --status-blue-selection-inactive: #f0f1f3;
+  --status-blue-soft: rgba(var(--status-blue-rgb), 0.11);
+  --control-checked-rgb: var(--primary-rgb);
+  --control-checked: var(--primary);
+  --control-checked-border: color-mix(in srgb, var(--primary) 34%, white);
+  --control-checked-surface: color-mix(in srgb, var(--primary) 10%, white);
+  --control-switch-checked: var(--primary);
+  --control-switch-checked-hover: color-mix(in srgb, var(--primary) 88%, black);
+  --control-themed-bg: color-mix(in srgb, var(--primary) 5%, var(--color-white));
+  --control-themed-hover-bg: color-mix(in srgb, var(--primary) 7%, var(--color-white));
+  --control-themed-open-bg: color-mix(in srgb, var(--primary) 9%, var(--color-white));
+  --control-themed-disabled-bg: color-mix(in srgb, var(--primary) 3%, var(--color-white));
+  --control-themed-border: color-mix(in srgb, var(--primary) 14%, rgba(15, 15, 15, 0.08));
+  --chat-user-bubble-bg: color-mix(in srgb, var(--primary) 4%, var(--color-white));
+  /* 二级强调（记忆图谱等）从副色种子派生；默认预置副色 = 主题色，故视觉等价。 */
+  --memory-accent-rgb: var(--velar-accent-rgb);
+  --memory-accent-contrast-rgb: var(--velar-accent-rgb);
+  --memory-accent: rgb(var(--memory-accent-rgb));
+  --memory-accent-contrast: rgb(var(--memory-accent-contrast-rgb));
+  --memory-accent-soft: rgba(var(--memory-accent-rgb), 0.2);
+  --shell-sidebar-bg: rgba(255, 255, 255, 0.28);
+  --shell-sidebar-border: rgba(15, 15, 15, 0.028);
+  --shell-sidebar-hover-bg: color-mix(in srgb, var(--primary) 6%, transparent);
+  --shell-sidebar-active-bg: color-mix(in srgb, var(--primary) 5%, transparent);
+  --shell-sidebar-backdrop-filter: blur(26px) saturate(1.12);
+  --shell-sidebar-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.42), 1px 0 18px rgba(15, 15, 15, 0.035);
+  --shell-sidebar-expanded-width: 288px;
+  --shell-sidebar-collapsed-width: 78px;
+  --shell-sidebar-item-height: 36px;
+  --shell-sidebar-item-radius: 8px;
+  --shell-sidebar-item-padding-x: 12px;
+  --shell-sidebar-item-gap: 8px;
+  --shell-sidebar-folder-padding-start: 14px;
+  --shell-sidebar-session-padding-start: 17px;
+  --shell-sidebar-row-action-padding-end: 6px;
+  --shell-sidebar-row-actions-width: 52px;
+  --shell-sidebar-action-size: 24px;
+  --shell-sidebar-folder-chevron-size: 10px;
+  --shell-sidebar-folder-icon-size: 14px;
+  --shell-sidebar-action-icon-size: 13px;
+  --status-green: #15803d;
+  --status-green-soft: rgba(21, 128, 61, 0.1);
+  --status-red: #dc2626;
+  --status-red-soft: rgba(220, 38, 38, 0.1);
+  --status-amber: #d97706;
+  --status-amber-soft: rgba(217, 119, 6, 0.1);
+  --status-violet: #7c3aed;
+  --status-violet-soft: rgba(124, 58, 237, 0.11);
+  --status-slate: #3f5f97;
+  --status-slate-soft: rgba(63, 95, 151, 0.12);
+  --status-teal: #0f766e;
+  --status-teal-soft: rgba(15, 118, 110, 0.11);
+  --status-emerald: #047857;
+  --status-emerald-soft: rgba(4, 120, 87, 0.11);
+
+  --brand-chrome-red-rgb: 234, 67, 53;
+  --brand-chrome-yellow-rgb: 251, 188, 4;
+  --brand-chrome-green-rgb: 52, 168, 83;
+  --brand-chrome-blue-rgb: 66, 133, 244;
+  --brand-chrome-red: rgb(var(--brand-chrome-red-rgb));
+  --brand-chrome-yellow: rgb(var(--brand-chrome-yellow-rgb));
+  --brand-chrome-green: rgb(var(--brand-chrome-green-rgb));
+  --brand-chrome-blue: rgb(var(--brand-chrome-blue-rgb));
+  --brand-chrome-fg: #1a73e8;
+  --brand-chrome-soft-gradient: linear-gradient(
+    90deg,
+    rgba(var(--brand-chrome-blue-rgb), 0.13),
+    rgba(var(--brand-chrome-green-rgb), 0.12) 34%,
+    rgba(var(--brand-chrome-yellow-rgb), 0.16) 68%,
+    rgba(var(--brand-chrome-red-rgb), 0.12)
+  );
+  --brand-chrome-blue-ring: rgba(var(--brand-chrome-blue-rgb), 0.16);
+
+  --shadow-xs: 0 2px 2px rgba(15, 15, 15, 0.04);
+  --shadow-sm: 0 10px 30px rgba(15, 15, 15, 0.05);
+  --shadow-md: 0 24px 60px rgba(15, 15, 15, 0.08);
+  --ui-shadow-overlay: var(--shadow-md);
+  --ui-shadow-popover: var(--shadow-sm);
+  --ui-shadow-inset-focus: inset 0 0 0 1px var(--ring);
+
+  --scrollbar-thumb: rgba(15, 15, 15, 0.18);
+  --scrollbar-thumb-hover: rgba(15, 15, 15, 0.32);
+  --scrollbar-track: transparent;
+
+  --ui-font-title-xl: 24px;
+  --ui-font-title-lg: 22px;
+  --ui-font-heading: 14px;
+  --ui-font-body-md: 14px;
+  --ui-font-body-lg: 14px;
+  --ui-font-body: 12px;
+  --ui-font-body-sm: 12px;
+  --ui-font-caption: 10px;
+  --ui-font-xs: 10px;
+
+  --ui-line-relaxed: 1.65;
+  --ui-line-default: 1.55;
+  --ui-line-compact: 1.45;
+  --ui-line-sm: 1.4;
+  --ui-line-xs: 1.35;
+  --ui-line-tight: 1.2;
+
+  --ui-control-height-lg: 44px;
+  --ui-control-height-md: 40px;
+  --ui-control-height-sm: 36px;
+  --ui-control-height-xs: 32px;
+  --ui-icon-button-md: 36px;
+  --ui-icon-button-sm: 32px;
+  --ui-confirm-dialog-width: clamp(340px, 24vw, 460px);
+
+  --ui-space-page: 16px;
+  --ui-space-section: 20px;
+  --ui-space-card-x: 20px;
+  --ui-space-card-y: 18px;
+  --ui-space-card-compact: 16px;
+  --ui-space-control-x: 14px;
+  --ui-space-control-x-sm: 12px;
+  --ui-space-control-y: 10px;
+  --ui-space-control-y-sm: 8px;
+
+  /* 通用间距梯度（page/feature 优先使用，避免裸 px gap/padding） */
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+
+  /* Memory / 指标 tone（映射页面硬编码 rgb） */
+  --ui-metric-ok: var(--status-green);
+  --ui-metric-warn: var(--status-amber);
+  --ui-metric-hot: #f97316;
+  --ui-metric-muted: var(--foreground-tertiary);
+  --ui-metric-chunks: var(--memory-accent);
+  --ui-metric-kind-user: var(--memory-accent);
+  --ui-metric-kind-project: var(--memory-accent);
+  --ui-metric-kind-task: var(--memory-accent);
+
+  --surface-subtle: rgba(15, 15, 15, 0.055);
+  --surface-settings-card: rgba(17, 17, 17, 0.028);
+  /** 对话内轻量交互卡片（等待确认、用户动作卡等），无阴影、弱于 settings-card。 */
+  --surface-interaction-card: rgba(17, 17, 17, 0.014);
+
+  /* Workbench derives from global semantics so chrome matches Chat shell / sidebar. */
+  --workbench-bg: var(--background);
+  --workbench-surface: var(--card);
+  --workbench-surface-muted: var(--background-panel);
+  --workbench-toolbar: var(--background-panel);
+  --workbench-control-bg: var(--background-muted-strong);
+  --workbench-border: var(--border);
+  --workbench-border-soft: color-mix(in oklab, var(--border) 42%, transparent);
+  --workbench-hover: var(--accent);
+  --workbench-active: var(--status-blue-soft);
+  --workbench-active-soft: color-mix(in oklab, var(--status-blue) 14%, var(--card));
+  --workbench-active-fg: var(--status-blue);
+  --workbench-selection-inactive: var(--muted);
+  --workbench-focus: var(--status-blue);
+  --workbench-text: var(--foreground);
+  --workbench-text-muted: var(--muted-foreground);
+  /* Main shell sidebar nav chip + workbench icon rails (selected / hover). */
+  --chrome-rail-selected-bg: color-mix(in srgb, var(--primary) 10%, transparent);
+  --chrome-rail-hover-bg: color-mix(in srgb, var(--primary) 6%, transparent);
+  /* Workbench lists, tabs, menus: primary selected row fill (= rail gray). */
+  --workbench-selection-bg: var(--chrome-rail-selected-bg);
+  /* Softer row state (e.g. secondary selection in staged lists). */
+  --workbench-selection-secondary-bg: var(--background-muted);
+  /* Active tab top accent + inset focus cue (neutral chrome vs status neutral). */
+  --workbench-tab-accent-line: rgba(15, 15, 15, 0.22);
+  --workbench-focus-inset-ring: rgba(15, 15, 15, 0.24);
+  --workbench-radius-xs: 2px;
+  --workbench-radius-sm: var(--ui-radius-control-sm);
+  --workbench-radius: var(--ui-radius-control);
+  --workbench-radius-lg: var(--ui-radius-panel);
+
+  --dt-border-split: #f0f0f0;
+  --dt-header-bg: #fafafa;
+  --dt-header-color: rgba(0, 0, 0, 0.88);
+  --dt-cell-color: rgba(0, 0, 0, 0.88);
+  --dt-row-hover: #fafafa;
+  --dt-row-selected: #f5f5f5;
+  --dt-row-selected-hover: #ebebeb;
+  --dt-radius: var(--ui-radius-control);
+}

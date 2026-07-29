@@ -1,0 +1,40 @@
+/* @velaros-no-tailwind */
+
+.velar-title {
+  margin: 0;
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+}
+
+.velar-title-level1 {
+  font-size: var(--ui-font-title-xl);
+  line-height: var(--ui-line-tight);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.velar-title-level2 {
+  font-size: var(--ui-font-title-lg);
+  line-height: var(--ui-line-tight);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.velar-title-level3 {
+  font-size: var(--ui-font-heading);
+  line-height: var(--ui-line-compact);
+  font-weight: 600;
+}
+
+.velar-title-level4 {
+  font-size: var(--ui-font-body-md);
+  line-height: var(--ui-line-compact);
+  font-weight: 600;
+}
+
+.velar-title-level5 {
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-sm);
+  font-weight: 600;
+}

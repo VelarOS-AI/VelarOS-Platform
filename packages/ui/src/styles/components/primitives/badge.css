@@ -1,0 +1,45 @@
+/* @velaros-no-tailwind */
+
+.velar-badge {
+  display: inline-flex;
+  width: fit-content;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
+  border-style: solid;
+  border-width: 1px;
+  padding-inline: var(--ui-space-control-y);
+  padding-block: var(--ui-space-1);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  border-radius: var(--ui-radius-chip);
+}
+
+.velar-badge-variant-default {
+  border-color: transparent;
+  color: var(--color-white);
+  background: #171717;
+}
+
+.velar-badge-variant-secondary {
+  color: var(--foreground);
+  background: rgba(17, 17, 17, 0.06);
+  border-color: transparent;
+}
+
+.velar-badge-variant-destructive {
+  border-color: transparent;
+  color: var(--color-white);
+  background: var(--status-red);
+}
+
+.velar-badge-variant-outline {
+  background-color: color-mix(in srgb, #fff 80%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-white) 80%, transparent);
+  }
+  color: var(--foreground);
+  border-color: rgba(15, 15, 15, 0.09);
+}

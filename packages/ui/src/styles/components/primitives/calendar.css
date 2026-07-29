@@ -1,0 +1,304 @@
+/* @velaros-no-tailwind */
+
+.velar-calendar {
+  width: 276px;
+  color: var(--foreground);
+}
+
+.velar-calendar-day-picker {
+  position: relative;
+  width: 100%;
+}
+
+.velar-calendar-months,
+.velar-calendar-month {
+  width: 100%;
+}
+
+.velar-calendar-header {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 36px;
+  padding-bottom: var(--ui-space-2);
+}
+
+.velar-calendar-month-label {
+  color: var(--foreground);
+  font-size: var(--ui-font-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--ui-line-tight);
+}
+
+.velar-calendar-nav {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.velar-calendar-nav-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  pointer-events: auto;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-calendar-nav-button:hover {
+  border-color: rgba(15, 15, 15, 0.08);
+  background: rgba(15, 15, 15, 0.045);
+  color: var(--foreground);
+}
+
+.velar-calendar-nav-button:focus-visible {
+  border-color: rgba(var(--status-blue-rgb), 0.24);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(var(--status-blue-rgb), 0.08);
+}
+
+.velar-calendar-nav-button:disabled,
+.velar-calendar-nav-button[aria-disabled='true'] {
+  cursor: default;
+  opacity: 50%;
+  pointer-events: none;
+}
+
+.velar-calendar-chevron {
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+}
+
+.velar-calendar-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.velar-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding-block: var(--ui-space-1);
+}
+
+.velar-calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: 4px;
+}
+
+.velar-calendar-weekday {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-tertiary);
+  font-size: var(--ui-font-caption);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--ui-line-tight);
+}
+
+.velar-calendar-day-cell {
+  width: 100%;
+  height: 36px;
+  text-align: center;
+}
+
+.velar-calendar-day-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--ui-font-body-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  outline: none;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-calendar-day-button:hover {
+  background: rgba(15, 15, 15, 0.055);
+}
+
+.velar-calendar-day-button:focus-visible {
+  border-color: rgba(var(--status-blue-rgb), 0.28);
+  box-shadow: 0 0 0 3px rgba(var(--status-blue-rgb), 0.08);
+}
+
+.velar-calendar-day-adjacent .velar-calendar-day-button {
+  color: var(--foreground-tertiary);
+}
+
+.velar-calendar-day-today .velar-calendar-day-button {
+  border-color: rgba(15, 15, 15, 0.16);
+}
+
+.velar-calendar-day-selected .velar-calendar-day-button,
+.velar-calendar-day-selected .velar-calendar-day-button:hover {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.velar-calendar-range-start,
+.velar-calendar-range-middle,
+.velar-calendar-range-end {
+  background: var(--background-muted);
+}
+
+.velar-calendar-range-start {
+  border-radius: var(--ui-radius-control-sm) 0 0 var(--ui-radius-control-sm);
+}
+
+.velar-calendar-range-end {
+  border-radius: 0 var(--ui-radius-control-sm) var(--ui-radius-control-sm) 0;
+}
+
+.velar-calendar-range-start.velar-calendar-range-end {
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-calendar-range-middle .velar-calendar-day-button,
+.velar-calendar-range-middle .velar-calendar-day-button:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--foreground);
+  border-radius: 0;
+}
+
+.velar-calendar-day-disabled .velar-calendar-day-button {
+  cursor: default;
+  color: var(--foreground-tertiary);
+  opacity: 50%;
+}
+
+.velar-calendar-day-hidden {
+  visibility: hidden;
+}
+
+.velar-calendar-date-picker-trigger {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  height: var(--ui-control-height-sm);
+  cursor: pointer;
+  align-items: center;
+  gap: var(--ui-space-2);
+  border: 0;
+  background: rgba(255, 255, 255, 0.82);
+  padding-inline: var(--ui-space-control-x-sm);
+  color: var(--foreground);
+  box-shadow: none;
+  outline: none;
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast),
+    box-shadow var(--ui-transition-fast);
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-calendar-date-picker-trigger:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.velar-calendar-date-picker-trigger:focus-visible {
+  box-shadow: 0 0 0 4px rgba(var(--status-blue-rgb), 0.08);
+}
+
+.velar-calendar-date-picker-trigger:disabled {
+  cursor: default;
+  opacity: 50%;
+}
+
+.velar-calendar-date-picker-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.velar-calendar-date-range-picker-trigger {
+  justify-content: space-between;
+}
+
+.velar-calendar-date-range-picker-icons {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
+  color: var(--muted-foreground);
+}
+
+.velar-calendar-date-range-picker-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform var(--ui-transition-fast);
+}
+
+.velar-calendar-date-range-picker-trigger[aria-expanded='true']
+  .velar-calendar-date-range-picker-chevron {
+  transform: rotate(180deg);
+}
+
+.velar-calendar-date-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ui-font-body);
+  line-height: var(--ui-line-tight);
+}
+
+.velar-calendar-date-picker-trigger-placeholder .velar-calendar-date-picker-label {
+  color: var(--muted-foreground);
+}
+
+.velar-calendar-date-picker-popover {
+  z-index: 70;
+  padding: var(--ui-space-3);
+}
+
+.velar-calendar-date-picker-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  padding-top: var(--ui-space-2);
+}
+
+.velar-calendar-date-picker-actions-single {
+  justify-content: flex-end;
+}
+
+.velar-calendar-date-picker-action {
+  height: var(--ui-control-height-xs);
+  box-shadow: none;
+}

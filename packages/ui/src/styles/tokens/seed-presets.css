@@ -1,0 +1,52 @@
+/**
+ * 双色种子预置组合（§12.9）· 官方 preset。
+ *
+ * 每个 preset = 两个种子值（主题色 + 副色）+ 一个名字。通过在文档根节点设置
+ * `data-velar-preset="<name>"` 激活；不设置时走 `:root` 默认（= velar-indigo，单色）。
+ *
+ * 唯一可配置面就是这四个种子令牌（hex + 配套 rgb 三元组，供 `rgba(var(--…-rgb), α)` 使用）；
+ * 其余颜色全部从种子派生，切换 preset 即让全产品品牌色跟着走。
+ *
+ * 用户自定义：复制任一 preset 到数据根的 `ui-color-seeds.json`（改文件即生效，接口形状见
+ * `docs/ui-color-seeds.md`）。本文件只承载官方 preset 与种子值——是裸色值的合法住所（令牌层）。
+ */
+
+/* velar-indigo —— 默认，单色靛蓝（主题色 = 副色，视觉等价现状）。 */
+:root[data-velar-preset='velar-indigo'] {
+  --velar-primary: #333366;
+  --velar-primary-rgb: 51, 51, 102;
+  --velar-accent: #333366;
+  --velar-accent-rgb: 51, 51, 102;
+}
+
+/* graphite-blue —— 石墨主色 + 亮蓝副色。 */
+:root[data-velar-preset='graphite-blue'] {
+  --velar-primary: #2f3540;
+  --velar-primary-rgb: 47, 53, 64;
+  --velar-accent: #3b82f6;
+  --velar-accent-rgb: 59, 130, 246;
+}
+
+/* forest-amber —— 森林绿主色 + 琥珀副色。 */
+:root[data-velar-preset='forest-amber'] {
+  --velar-primary: #2f4a3a;
+  --velar-primary-rgb: 47, 74, 58;
+  --velar-accent: #d97706;
+  --velar-accent-rgb: 217, 119, 6;
+}
+
+/* plum-rose —— 紫李主色 + 玫红副色。 */
+:root[data-velar-preset='plum-rose'] {
+  --velar-primary: #4a2f52;
+  --velar-primary-rgb: 74, 47, 82;
+  --velar-accent: #db2777;
+  --velar-accent-rgb: 219, 39, 119;
+}
+
+/* slate-teal —— 石板蓝主色 + 青碧副色。 */
+:root[data-velar-preset='slate-teal'] {
+  --velar-primary: #334155;
+  --velar-primary-rgb: 51, 65, 85;
+  --velar-accent: #0f766e;
+  --velar-accent-rgb: 15, 118, 110;
+}

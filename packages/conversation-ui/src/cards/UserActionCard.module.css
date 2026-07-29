@@ -1,0 +1,707 @@
+@reference "../styles/tailwind-reference.css";
+
+.cardFrame {
+  --dismiss-button-size: 20px;
+
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  overflow: visible;
+}
+
+.cardFrameChoice {
+  max-width: 100%;
+}
+
+.cardConsumed {
+  opacity: 0.68;
+}
+
+.card.card:global(.velar-action-card) {
+  padding: 10px 12px;
+  border-radius: var(--ui-radius-control);
+}
+
+.cardIcon:global(.velar-action-card-icon) {
+  align-self: flex-start;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.cardIconInfo:global(.velar-action-card-icon) {
+  background: color-mix(in srgb, var(--control-checked) 10%, transparent);
+  color: var(--status-blue);
+}
+
+.cardIconWarning:global(.velar-action-card-icon) {
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+}
+
+.cardIconSuccess:global(.velar-action-card-icon) {
+  background: var(--status-green-soft);
+  color: var(--status-green);
+}
+
+.cardIconDanger:global(.velar-action-card-icon) {
+  background: var(--status-red-soft);
+  color: var(--status-red);
+}
+
+.cardIconPlugin:global(.velar-action-card-icon) {
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+}
+
+.cardIconPlan:global(.velar-action-card-icon) {
+  background: var(--status-green-soft);
+  color: var(--status-green);
+}
+
+.cardIconTarget:global(.velar-action-card-icon) {
+  background: var(--status-red-soft);
+  color: var(--status-red);
+}
+
+.cardIconTool:global(.velar-action-card-icon) {
+  background: color-mix(in srgb, var(--control-checked) 10%, transparent);
+  color: var(--status-blue);
+}
+
+.cardIconWorkspace:global(.velar-action-card-icon) {
+  background: var(--status-green-soft);
+  color: var(--status-green);
+}
+
+.cardIconMemory:global(.velar-action-card-icon) {
+  background: var(--status-violet-soft);
+  color: var(--status-violet);
+}
+
+.cardIconInput:global(.velar-action-card-icon) {
+  background: color-mix(in srgb, var(--status-teal) 12%, transparent);
+  color: var(--status-teal);
+}
+
+.dismissButton {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dismiss-button-size);
+  height: var(--dismiss-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--background-muted);
+  color: var(--foreground-tertiary);
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.dismissButton:hover {
+  background: var(--background-muted-strong);
+  color: var(--foreground);
+}
+
+.dismissButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.card :global(.velar-action-card-body) {
+  align-items: center;
+}
+
+.choiceCard :global(.velar-action-card-body) {
+  position: relative;
+  align-items: stretch;
+}
+
+.choiceCard :global(.velar-action-card-main) {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 选择卡的动作区（跳过）脱离流、绝对定位到右上角，让选项列表占满整卡宽度。 */
+.choiceCard :global(.velar-action-card-actions) {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.card :global(.velar-action-card-title) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+/* 可点标题：整行点开侧边栏文档预览；右侧侧边栏图标示意可点。 */
+.openableTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.openableTitleText {
+  overflow-wrap: anywhere;
+}
+
+.openableTitleIcon {
+  flex: none;
+  color: var(--color-text-tertiary);
+  transition: color 0.12s ease;
+}
+
+.openableTitle:hover .openableTitleText,
+.openableTitle:focus-visible .openableTitleText {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.openableTitle:hover .openableTitleIcon,
+.openableTitle:focus-visible .openableTitleIcon {
+  color: var(--color-accent-foreground);
+}
+
+.card :global(.velar-action-card-description) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.card:hover :global(.velar-action-card-description),
+.card:focus-within :global(.velar-action-card-description) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.inputPanel {
+  @apply grid gap-2;
+  margin-top: 8px;
+}
+
+.inputLine {
+  width: 100%;
+}
+
+.inputActions {
+  @apply flex items-center justify-end gap-1.5;
+}
+
+.actions {
+  gap: 2px;
+}
+
+.choiceActionList {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.choiceActionButton {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.choiceActionButton:hover:not(:disabled),
+.choiceActionButton:focus-visible {
+  background: var(--background-muted);
+}
+
+.choiceActionButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.choiceActionButton:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.choiceActionButtonReject {
+  color: var(--foreground-secondary);
+}
+
+.choiceActionIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--background-muted-strong);
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.choiceActionButton:hover:not(:disabled) .choiceActionIndex,
+.choiceActionButton:focus-visible .choiceActionIndex {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.choiceActionLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.preflightActionButton:global(.velar-action-card-action-button) {
+  color: var(--status-green);
+  background: transparent !important;
+  border-color: transparent;
+  box-shadow: none !important;
+}
+
+.preflightActionButton:global(.velar-action-card-action-button:hover),
+.preflightActionButton:global(.velar-action-card-action-button:focus-visible) {
+  color: color-mix(in srgb, var(--status-green) 82%, var(--foreground));
+  background: transparent !important;
+  transform: none;
+}
+
+.preflightActionButtonReject:global(.velar-action-card-action-button) {
+  color: var(--status-red);
+}
+
+.preflightActionButtonReject:global(.velar-action-card-action-button:hover),
+.preflightActionButtonReject:global(.velar-action-card-action-button:focus-visible) {
+  color: color-mix(in srgb, var(--status-red) 86%, var(--foreground));
+}
+
+/* 动作区里的文字按钮（确认/取消/跳过…）贴合内容宽度，配对紧凑（对齐确认卡）。 */
+.actionTextButton,
+.skipTextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 30px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: transparent;
+  box-shadow: none;
+}
+
+.actionTextButton,
+.inputTextButton,
+.skipTextButton {
+  justify-content: center;
+  font-weight: 650;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* approve/reject 文字钮配色已迁至 CardKit 的 CardTextButton（velar-card-text-button-*）。 */
+.actionTextButton:global(.velar-button):hover:not(:disabled),
+.actionTextButton:global(.velar-button):focus-visible {
+  background: transparent;
+  transform: none;
+}
+
+.actionTextButtonIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.actions .skipTextButton:global(.velar-button) {
+  color: var(--foreground-secondary);
+}
+
+.actions .skipTextButton:global(.velar-button:hover),
+.actions .skipTextButton:global(.velar-button:focus-visible),
+.inputActions .skipTextButton:global(.velar-button:hover),
+.inputActions .skipTextButton:global(.velar-button:focus-visible) {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.formStack,
+.formGrid,
+.formCompact {
+  @apply grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+/* 紧凑网格：短字段自动并排，长字段（.formFieldFull）独占整行，减少大片留白。 */
+.formCompact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 10px 14px;
+}
+
+.formFieldFull {
+  grid-column: 1 / -1;
+}
+
+/* 表单卡：无图标/标题/描述，只有表单内容 + 右下角提交按钮。 */
+.formCardPanel {
+  @apply grid w-full min-w-0;
+  max-width: 760px;
+  padding: 12px 14px;
+  border-radius: var(--ui-radius-panel);
+  background: var(--surface-interaction-card);
+}
+
+.formCardPanel > .formStack:first-child,
+.formCardPanel > .formGrid:first-child,
+.formCardPanel > .formCompact:first-child {
+  margin-top: 0;
+}
+
+/* 表单卡的提交按钮：内容下方、右下角。 */
+.formSubmitRow {
+  @apply flex justify-end;
+  margin-top: 12px;
+}
+
+.formGrid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.formField {
+  @apply grid min-w-0;
+  gap: 5px;
+}
+
+.formLabelRow {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.formLabel {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.formRequired {
+  flex: 0 0 auto;
+  color: var(--status-red);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.formTextarea {
+  min-height: 58px;
+}
+
+.formHelp,
+.formError {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.formHelp {
+  color: var(--foreground-tertiary);
+}
+
+.formError {
+  color: var(--status-red);
+}
+
+.formOptionGroup {
+  @apply grid;
+  gap: 7px;
+}
+
+.formOptionRow,
+.formCheckboxRow {
+  @apply flex min-w-0 items-start gap-2;
+  color: var(--foreground-secondary);
+}
+
+.formOptionText {
+  @apply grid min-w-0;
+  gap: 2px;
+}
+
+.formOptionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.formOptionRecommended {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-blue) 14%, transparent);
+  color: var(--status-blue);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.formOptionDescription {
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.wizardPanel {
+  @apply grid;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background-muted) 40%, transparent);
+}
+
+.wizardQuestionBlock {
+  @apply grid;
+  gap: 8px;
+}
+
+.wizardQuestionRow {
+  @apply flex min-w-0 items-baseline gap-2;
+}
+
+.wizardQuestionNo {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.wizardQuestion {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.wizardQuestionTag {
+  flex: 0 0 auto;
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.optionButtons {
+  @apply grid;
+  gap: 6px;
+}
+
+.optionButton {
+  @apply flex min-w-0 items-start;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.optionLetter {
+  @apply flex items-center justify-center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--background-muted-strong);
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.optionButtonSelected .optionLetter {
+  background: var(--status-blue);
+  color: var(--background);
+}
+
+.optionBody {
+  @apply grid min-w-0;
+  gap: 3px;
+}
+
+.optionButton:hover:not(:disabled) {
+  background: var(--background-muted);
+}
+
+.optionButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.optionButton:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.optionButtonSelected,
+.optionButtonSelected:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--status-blue) 7%, transparent);
+}
+
+.optionButtonHeader {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.optionButtonLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.optionButtonSelected .optionButtonLabel {
+  color: var(--status-blue);
+}
+
+.optionButtonDesc {
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.wizardStepRow {
+  @apply flex items-center justify-between gap-3;
+}
+
+.wizardStepLabel {
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.wizardDots {
+  @apply flex items-center gap-1.5;
+}
+
+.wizardDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--background-muted-strong);
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.wizardDotDone {
+  background: color-mix(in srgb, var(--status-blue) 55%, transparent);
+}
+
+.wizardDotActive {
+  background: var(--status-blue);
+  transform: scale(1.35);
+}
+
+.wizardNav {
+  @apply flex items-center gap-2;
+  margin-top: 2px;
+}
+
+.wizardNavSpacer {
+  flex: 1 1 auto;
+}
+
+.timeoutTrack {
+  @apply overflow-hidden;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--input);
+}
+
+.timeoutFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--action-card-accent, var(--status-blue));
+  transform-origin: left center;
+  animation-name: user-action-timeout-fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.timeoutFillPaused {
+  animation-play-state: paused;
+}
+
+@keyframes user-action-timeout-fill {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeoutFill {
+    animation: none;
+  }
+}
+.artifactButton {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 8px;
+  padding-inline: 0;
+  color: var(--color-accent-foreground);
+}

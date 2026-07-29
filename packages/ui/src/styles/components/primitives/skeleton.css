@@ -1,0 +1,43 @@
+/* @velaros-no-tailwind */
+
+.velar-skeleton {
+  border-radius: calc(var(--radius) - 4px);
+  background-color: var(--muted);
+  animation: velar-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes velar-skeleton-pulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+.velar-skeleton-text {
+  height: var(--ui-space-3);
+  width: 100%;
+  max-width: 100%;
+}
+
+.velar-skeleton-text-sm {
+  height: var(--ui-space-control-y);
+}
+
+.velar-skeleton-text-lg {
+  height: var(--ui-space-4);
+}
+
+.velar-skeleton-circular {
+  border-radius: calc(infinity * 1px);
+  aspect-ratio: 1;
+}
+
+.velar-skeleton-rectangular {
+  border-radius: var(--ui-radius-control-sm);
+}
+
+.velar-skeleton-rounded {
+  border-radius: var(--ui-radius-panel);
+}

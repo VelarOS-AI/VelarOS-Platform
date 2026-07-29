@@ -1,0 +1,19 @@
+/* @velaros-no-tailwind */
+
+.velar-label {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  font-size: var(--text-sm);
+  line-height: var(--ui-line-sm);
+  line-height: 1;
+  font-weight: var(--font-weight-medium);
+  -webkit-user-select: none;
+  user-select: none;
+  &:is(:where(.peer):disabled ~ *) {
+    cursor: not-allowed;
+  }
+  &:is(:where(.peer):disabled ~ *) {
+    opacity: 50%;
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "paths": {
+      "#contracts": ["./packages/conversation-ui/src/contracts/index.ts"],
+      "#internal/*": ["./packages/conversation-ui/src/internal/*"]
+    },
+    "rootDir": "src",
+    "sourceMap": true
+  }
+}

@@ -1,0 +1,171 @@
+@reference "../styles/tailwind-reference.css";
+
+/* pass-4 収口：从宿主 god 样式表 ChatWindow.module.css 抽出 ChatConversationPane 实际用到的类。
+   过渡期沿用 @apply（同 tool-render / cards 批），彻底自包含归样式翻译专批。 */
+
+.chatPane {
+  @apply relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card;
+  isolation: isolate;
+  will-change: opacity;
+  animation: session-pane-enter 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chatPaneSide {
+  @apply border-0;
+}
+
+.conversationBody {
+  @apply relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  container-name: chat-conversation-body;
+  container-type: inline-size;
+}
+
+.messageList {
+  @apply flex-1 overflow-y-auto overflow-x-hidden;
+  background: var(--background);
+  scrollbar-gutter: stable both-edges;
+}
+
+.messageListInner {
+  @apply mx-auto flex w-full max-w-[48rem] flex-col gap-5 px-4 pb-44 pt-6;
+  padding-bottom: max(11rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
+}
+
+.messageListInnerSide {
+  @apply max-w-none gap-3 px-3 pb-36 pt-4;
+  padding-bottom: max(9rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
+}
+
+.messageSequence {
+  @apply flex flex-col gap-2;
+}
+
+.loadMoreSentinel {
+  min-height: 1px;
+  @apply flex items-center justify-center py-2 opacity-50 text-[12px];
+}
+
+.streamSlot {
+  @apply flex min-w-0 flex-col;
+}
+
+.thinkingRow {
+  @apply flex justify-center;
+}
+
+.thinkingText {
+  @apply inline-flex items-center gap-2 px-0 py-0 text-[12px];
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: var(--foreground-tertiary);
+}
+
+.thinkingText p {
+  margin: 0;
+  color: var(--foreground-tertiary);
+  background: linear-gradient(
+    104deg,
+    color-mix(in srgb, var(--foreground-tertiary) 72%, transparent) 0%,
+    color-mix(in srgb, var(--foreground-tertiary) 72%, transparent) 36%,
+    color-mix(in srgb, var(--card) 96%, transparent) 50%,
+    color-mix(in srgb, var(--foreground-tertiary) 72%, transparent) 64%,
+    color-mix(in srgb, var(--foreground-tertiary) 72%, transparent) 100%
+  );
+  background-size: 240% 100%;
+  background-position: 120% 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: thinking-text-shine 4.2s ease-in-out infinite;
+}
+
+.thinkingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ui-radius-round);
+  background: color-mix(in srgb, var(--foreground-tertiary) 78%, transparent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--foreground-tertiary) 28%, transparent);
+  animation: thinking-dot-pulse 2.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.inputDock {
+  @apply pointer-events-none absolute bottom-0 left-0 right-0 z-10;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card) 0%, transparent) 0%,
+    color-mix(in srgb, var(--card) 88%, transparent) 24%,
+    var(--card) 100%
+  );
+}
+
+.inputDockInner {
+  @apply pointer-events-none mx-auto w-full max-w-[48rem] px-4 pb-5 pt-10;
+  will-change: opacity;
+  animation: session-input-enter 380ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+.inputDockSurface {
+  @apply pointer-events-auto w-full;
+}
+
+.inputDockInnerSide {
+  @apply max-w-none px-3 pb-3 pt-8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatPane,
+  .inputDockInner,
+  .thinkingDot,
+  .thinkingText p {
+    animation: none;
+  }
+
+  .thinkingText p {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+@keyframes session-pane-enter {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-text-shine {
+  0%,
+  100% {
+    background-position: 120% 0;
+  }
+
+  44% {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes thinking-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--foreground-tertiary) 18%, transparent);
+    opacity: 0.76;
+  }
+
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--foreground-tertiary) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+@keyframes session-input-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

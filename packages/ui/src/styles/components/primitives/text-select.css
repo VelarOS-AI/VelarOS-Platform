@@ -1,0 +1,100 @@
+/* @velaros-no-tailwind */
+
+.velar-text-select-root {
+  position: relative;
+  width: var(--velar-text-select-control-width, min(100%, 212px));
+  max-width: 100%;
+}
+
+.velar-text-select-input {
+  width: 100%;
+  height: var(--ui-control-height-sm);
+  padding-inline-end: 34px;
+  font-weight: var(--font-weight-medium);
+  background: var(--control-themed-bg);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.velar-text-select-input:hover {
+  background: var(--control-themed-hover-bg);
+}
+
+.velar-text-select-input:focus-visible {
+  background: var(--control-themed-open-bg);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.velar-text-select-input[data-state='open'] {
+  background: var(--control-themed-open-bg);
+  border-color: transparent;
+}
+
+.velar-text-select-caret {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  z-index: 1;
+  pointer-events: none;
+  color: var(--muted-foreground);
+  transform: translateY(-50%);
+}
+
+.velar-text-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 40;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--ui-radius-overlay);
+  background: var(--color-white);
+  box-shadow: 0 20px 44px rgba(15, 15, 15, 0.14);
+}
+
+.velar-text-select-menu-inner {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+}
+
+.velar-text-select-option {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  min-width: 0;
+  cursor: pointer;
+  align-items: center;
+  border: 0;
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  color: var(--foreground);
+  padding: 7px 10px;
+  text-align: left;
+  transition:
+    background-color var(--ui-transition-fast),
+    color var(--ui-transition-fast);
+}
+
+.velar-text-select-option:hover,
+.velar-text-select-option:focus-visible,
+.velar-text-select-option[aria-selected='true'] {
+  background: var(--control-gray-hover-bg);
+  outline: none;
+}
+
+.velar-text-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ui-font-body-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--ui-line-compact);
+}

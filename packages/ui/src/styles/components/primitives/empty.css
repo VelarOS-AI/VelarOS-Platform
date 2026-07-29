@@ -1,0 +1,58 @@
+/* @velaros-no-tailwind */
+
+.velar-empty {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-block: var(--ui-space-section);
+  padding-inline: var(--ui-space-card-x);
+}
+
+.velar-empty-image {
+  margin-bottom: var(--ui-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.velar-empty-image-sm {
+  min-height: 40px;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.velar-empty-image-md {
+  min-height: 56px;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.velar-empty-image-lg {
+  min-height: 72px;
+  font-size: 56px;
+  line-height: 1;
+}
+
+.velar-empty-title {
+  margin-bottom: var(--ui-space-1);
+  max-width: var(--container-sm);
+  color: var(--muted-foreground);
+}
+
+.velar-empty-description {
+  max-width: var(--container-sm);
+  color: var(--muted-foreground);
+}
+
+.velar-empty-footer {
+  margin-top: var(--ui-space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+}

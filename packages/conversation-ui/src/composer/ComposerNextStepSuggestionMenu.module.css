@@ -1,0 +1,76 @@
+@reference "../styles/tailwind-reference.css";
+
+.panel {
+  --composer-suggestion-accent: var(--primary);
+  --composer-suggestion-bg: color-mix(in srgb, var(--primary) 6%, transparent);
+  --composer-suggestion-bg-strong: color-mix(in srgb, var(--primary) 11%, transparent);
+  border-bottom: 1px solid var(--chat-input-menu-divider, var(--border));
+  background: var(--card);
+}
+
+.list {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--composer-suggestion-bg);
+}
+
+.item:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.itemSelected,
+.itemSelected:hover {
+  background: var(--composer-suggestion-bg-strong);
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.itemPrompt {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--ui-font-body-sm);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--ui-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemArrow {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition:
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.item:hover .itemArrow,
+.itemSelected .itemArrow {
+  color: var(--composer-suggestion-accent);
+  transform: translateX(2px);
+}

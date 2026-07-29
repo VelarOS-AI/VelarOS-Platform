@@ -1,0 +1,830 @@
+/* @velaros-no-tailwind */
+
+.root {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 184px;
+  height: 120px;
+  --velar-sail-scale: 1;
+  --velar-sail-duration: 2600ms;
+  --velar-sail-steady-duration: 3200ms;
+  --velar-brand-ink: #181818;
+  --velar-brand-shadow: var(--velar-brand-ink);
+  --velar-brand-wind: var(--velar-brand-ink);
+  --velar-ink: var(--velar-brand-ink);
+  --velar-ink-soft: color-mix(in srgb, var(--velar-brand-ink) 82%, transparent);
+  --velar-ink-muted: color-mix(in srgb, var(--velar-brand-ink) 58%, transparent);
+  --velar-mast-ink: var(--velar-brand-ink);
+  --velar-mast-ink-soft: color-mix(in srgb, var(--velar-brand-ink) 76%, transparent);
+  --velar-sail-ink: var(--velar-brand-ink);
+  --velar-sail-ink-soft: color-mix(in srgb, var(--velar-brand-ink) 78%, white);
+  --velar-sail-highlight: white;
+  --velar-sail-line: white;
+  --velar-hull-ink: var(--velar-brand-ink);
+  --velar-hull-ink-soft: color-mix(in srgb, var(--velar-brand-ink) 78%, white);
+  --velar-hull-highlight: white;
+  --velar-hull-shadow: color-mix(in srgb, var(--velar-brand-ink) 54%, transparent);
+  --velar-paper-edge: white;
+  color: var(--velar-ink);
+}
+
+.small {
+  width: 118px;
+  height: 88px;
+  --velar-sail-scale: 0.82;
+}
+
+.splash {
+  width: 232px;
+  height: 150px;
+  --velar-sail-scale: 1.24;
+}
+
+.tiny {
+  width: 28px;
+  height: 28px;
+}
+
+.tinySvg {
+  display: block;
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+  filter: drop-shadow(0 5px 8px color-mix(in srgb, var(--velar-brand-shadow) 12%, transparent));
+}
+
+.tinyBoat,
+.tinySail,
+.tinySailLine {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tinyMast,
+.tinySailLine,
+.tinyHullLight {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.tinyMast {
+  stroke: var(--velar-mast-ink);
+  stroke-width: 2.1;
+}
+
+.tinySail {
+  fill: var(--velar-sail-ink);
+}
+
+.tinySailLine {
+  stroke: var(--velar-paper-edge);
+  stroke-width: 1.2;
+}
+
+.tinyHull {
+  fill: var(--velar-hull-ink);
+}
+
+.tinyHullLight {
+  stroke: color-mix(in srgb, var(--velar-hull-highlight) 52%, transparent);
+  stroke-width: 1.1;
+}
+
+.body {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  filter: drop-shadow(0 22px 42px color-mix(in srgb, var(--velar-brand-shadow) 14%, transparent));
+  transform: scale(var(--velar-sail-scale));
+  opacity: 1;
+  z-index: 2;
+}
+
+.mast,
+.mainSail,
+.hull {
+  opacity: 1;
+}
+
+.intro {
+  animation: velar-sail-scene var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite
+    both;
+}
+
+.mast {
+  position: absolute;
+  left: 43px;
+  top: 10px;
+  width: 3px;
+  height: 66px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--velar-mast-ink), var(--velar-mast-ink-soft));
+  transform-origin: bottom center;
+}
+
+.mast::after {
+  position: absolute;
+  top: 7px;
+  bottom: 8px;
+  left: 1px;
+  width: 1px;
+  border-radius: 999px;
+  background: var(--velar-paper-edge);
+  content: '';
+}
+
+.sail {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+  background: var(--velar-sail-ink);
+  transform-origin: left bottom;
+}
+
+.mainSail {
+  left: 47px;
+  top: 12px;
+  width: 44px;
+  height: 58px;
+  border-radius: 6px 24px 20px 5px;
+  background:
+    linear-gradient(
+      118deg,
+      color-mix(in srgb, var(--velar-sail-highlight) 34%, transparent) 0 1px,
+      transparent 2px 22%
+    ),
+    linear-gradient(
+      142deg,
+      var(--velar-sail-ink) 0%,
+      var(--velar-sail-ink-soft) 58%,
+      var(--velar-sail-ink) 100%
+    );
+  background-position:
+    0 0,
+    0 0;
+  background-size:
+    100% 100%,
+    132% 100%;
+  clip-path: polygon(0 0, 30% 5%, 58% 16%, 83% 30%, 100% 48%, 72% 58%, 48% 70%, 22% 85%, 0 100%);
+  clip-path: path('M 0 0 C 22 6 39 17 44 30 C 28 36 14 44 0 58 Z');
+}
+
+.mainSail::before {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  width: 22px;
+  height: 44px;
+  border-left: 1.5px solid color-mix(in srgb, var(--velar-sail-line) 62%, transparent);
+  border-radius: 58% 42% 48% 52%;
+  content: '';
+  transform: rotate(7deg);
+}
+
+.mainSail::after {
+  position: absolute;
+  top: 13px;
+  right: 9px;
+  width: 7px;
+  height: 31px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--velar-sail-highlight) 58%, transparent),
+    transparent 78%
+  );
+  content: '';
+  opacity: 0.56;
+  transform: rotate(13deg);
+}
+
+.hull {
+  position: absolute;
+  left: 13px;
+  bottom: 8px;
+  width: 70px;
+  height: 18px;
+  border-radius: 7px 7px 20px 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velar-hull-highlight) 34%, transparent) 0 1px,
+      transparent 2px 28%
+    ),
+    linear-gradient(180deg, var(--velar-hull-ink-soft) 0%, var(--velar-hull-ink) 74%);
+  box-shadow: inset 0 -5px 8px var(--velar-hull-shadow);
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+}
+
+.hull::before {
+  position: absolute;
+  top: 4px;
+  left: 10px;
+  right: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--velar-paper-edge) 86%, transparent);
+  content: '';
+  opacity: 0.9;
+}
+
+.hull::after {
+  position: absolute;
+  top: 1px;
+  left: 36px;
+  width: 1px;
+  height: 15px;
+  background: color-mix(in srgb, var(--velar-hull-highlight) 44%, transparent);
+  content: '';
+  transform: rotate(6deg);
+}
+
+.windLine {
+  position: absolute;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--velar-brand-wind) 22%, transparent),
+    transparent
+  );
+  opacity: 0;
+}
+
+.windLineOne {
+  top: 31px;
+  width: 96px;
+}
+
+.windLineTwo {
+  top: 54px;
+  width: 132px;
+}
+
+.windLineThree {
+  top: 78px;
+  width: 78px;
+}
+
+.intro .body {
+  animation: velar-vessel-intro-bob var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1)
+    infinite both;
+}
+
+.intro .mast {
+  animation: velar-sail-mast var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .mainSail {
+  animation: velar-sail-main var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .mainSail::before {
+  animation: velar-sail-cloth-line var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1)
+    infinite both;
+}
+
+.intro .mainSail::after {
+  animation: velar-sail-cloth-light var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1)
+    infinite both;
+}
+
+.intro .hull {
+  animation: velar-sail-hull var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .windLineOne {
+  animation: velar-wind-one var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .windLineTwo {
+  animation: velar-wind-two var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) 180ms infinite
+    both;
+}
+
+.intro .windLineThree {
+  animation: velar-wind-three var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) 360ms
+    infinite both;
+}
+
+.intro .tinyBoat {
+  animation: velar-tiny-boat var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .tinySail {
+  animation: velar-tiny-sail var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite both;
+}
+
+.intro .tinySailLine {
+  animation: velar-tiny-sail-line var(--velar-sail-duration) cubic-bezier(0.2, 0.8, 0.2, 1) infinite
+    both;
+}
+
+.steady {
+  contain: layout paint style;
+  isolation: isolate;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.steadyActive {
+  animation: velar-sail-steady-float 3600ms cubic-bezier(0.37, 0, 0.63, 1) both;
+  will-change: transform;
+}
+
+.steady .body {
+  filter: none;
+  animation: velar-vessel-steady-bob var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .mast {
+  opacity: 1;
+  animation: velar-sail-steady-mast var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .mainSail {
+  opacity: 1;
+  animation: velar-sail-steady-main var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .mainSail::before {
+  animation: velar-sail-steady-cloth-line var(--velar-sail-steady-duration) ease-in-out infinite
+    both;
+}
+
+.steady .mainSail::after {
+  animation: velar-sail-steady-cloth-light 4200ms ease-in-out infinite both;
+}
+
+.steady .hull {
+  opacity: 1;
+  animation: velar-sail-steady-hull var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .windLineOne {
+  animation: velar-wind-steady-one 2100ms ease-in-out infinite both;
+}
+
+.steady .windLineTwo {
+  animation: velar-wind-steady-two 2400ms ease-in-out 240ms infinite both;
+}
+
+.steady .windLineThree {
+  animation: velar-wind-steady-three 2600ms ease-in-out 420ms infinite both;
+}
+
+.slidingWindLines .windLine {
+  left: 50%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--velar-brand-wind) 18%, transparent) 18%,
+    color-mix(in srgb, var(--velar-brand-wind) 38%, transparent) 50%,
+    color-mix(in srgb, var(--velar-brand-wind) 18%, transparent) 82%,
+    transparent 100%
+  );
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+.slidingWindLines .windLineOne {
+  opacity: 0.28;
+  animation-name: velar-wind-slide;
+  animation-duration: 2800ms;
+  animation-delay: -420ms;
+}
+
+.slidingWindLines .windLineTwo {
+  opacity: 0.34;
+  animation-name: velar-wind-slide;
+  animation-duration: 3200ms;
+  animation-delay: -1180ms;
+}
+
+.slidingWindLines .windLineThree {
+  opacity: 0.24;
+  animation-name: velar-wind-slide;
+  animation-duration: 3600ms;
+  animation-delay: -1880ms;
+}
+
+.steady .tinyBoat {
+  animation: velar-tiny-boat var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .tinySail {
+  animation: velar-tiny-sail var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .tinySailLine {
+  animation: velar-tiny-sail-line var(--velar-sail-steady-duration) ease-in-out infinite both;
+}
+
+.steady .body {
+  transform: scale(var(--velar-sail-scale));
+}
+
+.still .body {
+  filter: none;
+}
+
+.still {
+  contain: layout paint style;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.still .windLine {
+  display: none;
+}
+
+@keyframes velar-sail-scene {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.9);
+    filter: blur(5px);
+  }
+  22% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  76% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+    filter: blur(2px);
+  }
+}
+
+@keyframes velar-sail-mast {
+  0% {
+    transform: scaleY(0.28);
+    opacity: 0;
+  }
+  24% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  68% {
+    transform: skewX(-2deg);
+  }
+  100% {
+    transform: skewX(0deg);
+    opacity: 0;
+  }
+}
+
+@keyframes velar-vessel-intro-bob {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) rotate(0deg) scale(calc(var(--velar-sail-scale) * 0.96));
+  }
+  24% {
+    opacity: 1;
+    transform: translateY(0) rotate(-0.5deg) scale(var(--velar-sail-scale));
+  }
+  52% {
+    transform: translateY(-3px) rotate(-1deg) scale(var(--velar-sail-scale));
+  }
+  76% {
+    opacity: 1;
+    transform: translateY(1px) rotate(0.4deg) scale(var(--velar-sail-scale));
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-7px) rotate(0deg) scale(calc(var(--velar-sail-scale) * 0.98));
+  }
+}
+
+@keyframes velar-sail-main {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.42) skewY(12deg) translateX(-10px);
+    border-radius: 6px 10px 18px 5px;
+    background-position:
+      0 0,
+      0 0;
+  }
+  24% {
+    opacity: 1;
+    transform: scaleX(1.08) skewY(-7deg) translateX(1px);
+    border-radius: 6px 30px 22px 5px;
+    background-position:
+      0 0,
+      16% 0;
+  }
+  48% {
+    transform: scaleX(0.96) skewY(4deg);
+    border-radius: 6px 21px 18px 5px;
+    background-position:
+      0 0,
+      4% 0;
+  }
+  72% {
+    opacity: 1;
+    transform: scaleX(1.04) skewY(-3deg);
+    border-radius: 6px 26px 20px 5px;
+    background-position:
+      0 0,
+      12% 0;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(0.94) skewY(0deg) translateY(-4px);
+    background-position:
+      0 0,
+      8% 0;
+  }
+}
+
+@keyframes velar-sail-cloth-line {
+  0% {
+    opacity: 0;
+    transform: translateX(-4px) rotate(3deg) scaleY(0.86);
+  }
+  28% {
+    opacity: 0.84;
+    transform: translateX(1px) rotate(9deg) scaleY(1.05);
+  }
+  54% {
+    opacity: 0.62;
+    transform: translateX(4px) rotate(4deg) scaleY(0.95);
+  }
+  78% {
+    opacity: 0.78;
+    transform: translateX(2px) rotate(8deg) scaleY(1.04);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(6px) rotate(5deg) scaleY(0.92);
+  }
+}
+
+@keyframes velar-sail-cloth-light {
+  0% {
+    opacity: 0;
+    transform: translateX(-7px) rotate(9deg) scaleY(0.84);
+  }
+  30% {
+    opacity: 0.48;
+    transform: translateX(-1px) rotate(14deg) scaleY(1.08);
+  }
+  56% {
+    opacity: 0.72;
+    transform: translateX(3px) rotate(10deg) scaleY(0.94);
+  }
+  78% {
+    opacity: 0.5;
+    transform: translateX(1px) rotate(15deg) scaleY(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(7px) rotate(12deg) scaleY(0.88);
+  }
+}
+
+@keyframes velar-sail-hull {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scaleX(0.68);
+  }
+  26% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(2px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-3px) translateX(6px);
+  }
+}
+
+@keyframes velar-wind-one {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translateX(-100px);
+  }
+  32% {
+    opacity: 0.72;
+  }
+  62% {
+    opacity: 0.34;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(114px);
+  }
+}
+
+@keyframes velar-wind-two {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateX(-122px);
+  }
+  42% {
+    opacity: 0.68;
+  }
+  76% {
+    opacity: 0.22;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(130px);
+  }
+}
+
+@keyframes velar-wind-three {
+  0%,
+  28% {
+    opacity: 0;
+    transform: translateX(-90px);
+  }
+  52% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(106px);
+  }
+}
+
+@keyframes velar-vessel-steady-bob {
+  0%,
+  100% {
+    transform: translateY(1px) rotate(0deg) scale(var(--velar-sail-scale));
+  }
+  50% {
+    transform: translateY(-3px) rotate(-0.8deg) scale(var(--velar-sail-scale));
+  }
+}
+
+@keyframes velar-tiny-boat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(-0.8deg);
+  }
+}
+
+@keyframes velar-tiny-sail {
+  0%,
+  100% {
+    transform: scaleX(1) skewY(0deg);
+  }
+  50% {
+    transform: scaleX(1.08) skewY(-3deg);
+  }
+}
+
+@keyframes velar-tiny-sail-line {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateX(1.5px) rotate(4deg);
+  }
+}
+
+@keyframes velar-sail-steady-float {
+  0%,
+  16%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  52% {
+    transform: translateY(-4px) rotate(-0.42deg);
+  }
+  76% {
+    transform: translateY(0.8px) rotate(0.12deg);
+  }
+}
+
+@keyframes velar-sail-steady-mast {
+  0%,
+  100% {
+    transform: skewX(0deg);
+  }
+  50% {
+    transform: skewX(-1.5deg);
+  }
+}
+
+@keyframes velar-sail-steady-main {
+  0%,
+  100% {
+    transform: scaleX(1) skewY(0deg);
+  }
+  50% {
+    transform: scaleX(1.06) skewY(-3deg);
+  }
+}
+
+@keyframes velar-sail-steady-cloth-line {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateX(0) rotate(7deg) scaleY(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateX(3px) rotate(10deg) scaleY(1.08);
+  }
+}
+
+@keyframes velar-sail-steady-cloth-light {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateX(-2px) rotate(12deg) scaleY(0.96);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateX(4px) rotate(15deg) scaleY(1.1);
+  }
+}
+
+@keyframes velar-sail-steady-hull {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes velar-wind-slide {
+  0% {
+    transform: translateX(-17rem);
+  }
+  100% {
+    transform: translateX(17rem);
+  }
+}
+
+@keyframes velar-wind-steady-one {
+  0%,
+  14% {
+    opacity: 0;
+    transform: translateX(-96px);
+  }
+  36% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(118px);
+  }
+}
+
+@keyframes velar-wind-steady-two {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateX(-124px);
+  }
+  42% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(132px);
+  }
+}
+
+@keyframes velar-wind-steady-three {
+  0%,
+  22% {
+    opacity: 0;
+    transform: translateX(-88px);
+  }
+  52% {
+    opacity: 0.36;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(108px);
+  }
+}

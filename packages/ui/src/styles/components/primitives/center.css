@@ -1,0 +1,17 @@
+/* @velaros-no-tailwind */
+
+.velar-center {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.velar-center-block {
+  width: 100%;
+}
+
+.velar-center-inline {
+  display: inline-flex;
+  width: auto;
+}

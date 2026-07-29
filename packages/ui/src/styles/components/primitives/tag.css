@@ -1,0 +1,96 @@
+/* @velaros-no-tailwind */
+
+.velar-tag-lead-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  opacity: 80%;
+}
+
+.velar-tag {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  border-radius: calc(var(--radius) - 4px);
+  border-style: solid;
+  border-width: 1px;
+  padding-inline: 6px;
+  padding-block: 0;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--ui-font-caption);
+  line-height: var(--ui-line-xs);
+  border-radius: var(--ui-radius-chip);
+}
+
+.velar-tag-variant-default {
+  background: rgba(17, 17, 17, 0.06);
+  border-color: rgba(15, 15, 15, 0.1);
+  color: var(--foreground);
+}
+
+.velar-tag-variant-secondary {
+  background: var(--secondary);
+  border-color: transparent;
+  color: var(--secondary-foreground);
+}
+
+.velar-tag-variant-outline {
+  background-color: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.velar-tag-variant-success {
+  background: var(--status-green-soft);
+  border-color: transparent;
+  color: var(--status-green);
+}
+
+.velar-tag-variant-warning {
+  background: var(--status-amber-soft);
+  border-color: transparent;
+  color: var(--status-amber);
+}
+
+.velar-tag-variant-error {
+  background: var(--status-red-soft);
+  border-color: transparent;
+  color: var(--status-red);
+}
+
+.velar-tag-variant-info {
+  background: var(--status-blue-soft);
+  border-color: transparent;
+  color: var(--status-blue);
+}
+
+.velar-tag-close {
+  display: flex;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  padding: 2px;
+  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  margin-inline-end: -2px;
+  color: var(--muted-foreground);
+}
+
+.velar-tag-close:hover {
+  background: rgba(17, 17, 17, 0.08);
+  color: var(--foreground);
+}
+
+.velar-tag-close:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.velar-tag-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

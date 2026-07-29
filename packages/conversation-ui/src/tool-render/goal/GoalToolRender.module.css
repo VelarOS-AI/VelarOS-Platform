@@ -1,0 +1,64 @@
+@reference "../../styles/tailwind-reference.css";
+
+.root {
+  @apply my-2 flex w-full min-w-0 items-center gap-2 overflow-hidden;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-panel) 90%, transparent);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.plainRoot {
+  @apply my-0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.compactRoot {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.running {
+  background: var(--surface-interaction-card);
+}
+
+.success {
+  background: color-mix(in srgb, var(--status-green) 5%, transparent);
+}
+
+.root.error {
+  background: color-mix(in srgb, var(--status-red) 5.5%, transparent);
+}
+
+.icon {
+  @apply inline-flex h-5 w-5 shrink-0 items-center justify-center;
+  color: var(--muted-foreground);
+}
+
+.icon svg {
+  display: block;
+}
+
+.title {
+  @apply shrink-0 text-[12px] font-semibold leading-5 text-foreground;
+}
+
+.status {
+  @apply shrink-0 text-[12px] font-medium leading-5;
+  color: var(--foreground-secondary);
+}
+
+.objective,
+.errorText {
+  @apply min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] leading-5;
+}
+
+.objective {
+  color: var(--foreground-secondary);
+}
+
+.errorText {
+  color: var(--status-red);
+}
