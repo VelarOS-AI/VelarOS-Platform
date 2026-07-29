@@ -3010,6 +3010,40 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     }
   ],
+  ConversationCodeBlockSlot: [
+    {
+      "name": "ConversationCodeBlockSlot.language",
+      "description": "代码围栏的语言标注（小写；无标注为空串）。",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ConversationCodeBlockSlot.code",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ConversationCodeBlockSlot.isStreaming",
+      "description": "该代码块是否仍在流式产出（尾块未闭合时为真）。",
+      "type": "boolean",
+      "recommended": "Required"
+    }
+  ],
+  ConversationMarkdownSlot: [
+    {
+      "name": "ConversationMarkdownSlot.text",
+      "description": "已按流式规则准备好的 markdown 正文。",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ConversationMarkdownSlot.isStreaming",
+      "description": "该消息是否仍在流式产出。",
+      "type": "boolean",
+      "recommended": "Required"
+    }
+  ],
   CopyButton: [
     {
       "name": "CopyButton.value",

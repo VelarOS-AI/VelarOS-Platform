@@ -48,6 +48,13 @@
   旗标任务 / 浏览器截图组 / worker 线程面板）+ **block-dispatch viewmodel 容器**（`systemToolInstall` /
   `askUser` / `userActionCard`——包内 MessageContentBlock 分发到宿主薄容器，wizard 判定 + onActionComplete
   构造在包内，localStorage 可见性谓词在宿主 `userActionCard` slot 实现内应用）+ `messageFileChangeSummary`。
+  **两类 slot 语义相反**：上述全为**增强槽**（必填，缺注入 = 那张卡不显示，正文照旧）；另有两格
+  **替换槽** `messageMarkdown` / `messageCodeBlock`（**可选**，缺席 = 官方内置件逐字节原行为），
+  props 契约 `ConversationMarkdownSlotProps` / `ConversationCodeBlockSlotProps` 由官方件真实入参收窄
+  （不透传 `TextBlock` / 运行标记等内部形状）。改道点分别开在 `MessageContentBlock` 对
+  `MessageMarkdownBlocks` 的硬 lazy-import 处（替换件生效时官方 markdown 分包不被拉起）与
+  `useMessageMarkdownComponents` 的围栏渲染器处；替换件返回 `null` / 渲染抛错 / 围栏正文取不到，
+  一律回落官方件（错误边界刻意不带 `resetKeys`，避免流式期把一次崩溃放大成每帧重试风暴）。
 - 根门面（`.`）：气泡族 `MessageBubble`（+ User/Assistant 气泡、Segments、Footer、StatusMarker、
   InlineRuntimeNotice、UserAttachmentGallery，pass-3b1）+ 单块分发器 `MessageContentBlock` /
   `MessageMarkdownBlocks` / `useMessageMarkdownComponents`（pass-3b2，包内相对消费，不进门面）+ 消息动作行、

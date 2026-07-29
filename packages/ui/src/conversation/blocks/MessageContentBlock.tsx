@@ -1,8 +1,10 @@
 import { lazy, memo, type ReactElement, Suspense, useEffect, useRef, useState } from 'react'
 
+import { prepareStreamdownMarkdownText } from '../markdown/streamdownMarkdownSource.utils'
 import type { UserActionResolution } from '../projection'
 import { useTimerScope } from '../react-hooks/useTimerScope'
 import { type ConversationRenderSlots,useConversationRenderSlots } from '../render-slots'
+import { ReplaceableRenderSlot } from '../render-slots/ReplaceableRenderSlot'
 import { shouldRenderToolBlockCompact } from '../tool-render/messageBubbleToolModel'
 
 import { shouldUseLiveTextRenderer } from './liveTextRendererMode'
@@ -266,6 +268,39 @@ function DeferredMessageMarkdownBlock({
   )
 }
 
+/**
+ * `messageMarkdown` 替换槽的改道点 —— 就开在**官方件的硬 lazy-import 那一层**。
+ *
+ * 开在这里而不是 `MessageMarkdownBlocks` 内部，是因为「替换 markdown 渲染器」的全部意义就是不再
+ * 为它付钱：官方件是 `lazy()` 分包（Streamdown + 高亮 + 数学），在此改道则替换件生效时那个分包
+ * 根本不会被拉起；开在包内部则永远先加载一遍被替换掉的东西。
+ *
+ * `text` 给的是官方件逐字消费的那份（`prepareStreamdownMarkdownText` 产物），替换件与被替换件输入
+ * 逐字节相同。该函数只在槽位存在时才调用——槽位缺席这条路上零额外计算，官方件自己 `useMemo` 照旧。
+ */
+function renderReplaceableMarkdown({
+  slot,
+  block,
+  isStreaming,
+  official,
+}: {
+  slot: ConversationRenderSlots['messageMarkdown']
+  block: TextBlock
+  isStreaming: boolean
+  official: ReactElement
+}): ReactElement {
+  if (!slot) return official
+
+  return (
+    <ReplaceableRenderSlot
+      scope="conversation.message.markdown"
+      render={slot}
+      props={{ text: prepareStreamdownMarkdownText(block.text), isStreaming }}
+      fallback={official}
+    />
+  )
+}
+
 function MessageContentBlockInner({
   block,
   isStreaming,
@@ -323,30 +358,42 @@ function MessageContentBlockInner({
   if (useLiveTextRenderer) {
     hasRenderedLiveTextRef.current = true
 
-    return (
-      <Suspense fallback={<PlainTextBlockFallback block={block} />}>
-        <LazyStreamingTextBlock
-          block={block}
-          animateText={isStreaming && animateStreamingText}
-          isMessageStreaming={isStreaming}
-          tailMarker={!isStreaming && runMarker ? runMarker : null}
-          formatPathForDisplay={formatPathForDisplay}
-          onOpenBrowserLink={onOpenBrowserLink}
-          onOpenWorkspacePath={onOpenWorkspacePath}
-        />
-      </Suspense>
-    )
+    return renderReplaceableMarkdown({
+      slot: slots.messageMarkdown,
+      block,
+      isStreaming,
+      official: (
+        <Suspense fallback={<PlainTextBlockFallback block={block} />}>
+          <LazyStreamingTextBlock
+            block={block}
+            animateText={isStreaming && animateStreamingText}
+            isMessageStreaming={isStreaming}
+            tailMarker={!isStreaming && runMarker ? runMarker : null}
+            formatPathForDisplay={formatPathForDisplay}
+            onOpenBrowserLink={onOpenBrowserLink}
+            onOpenWorkspacePath={onOpenWorkspacePath}
+          />
+        </Suspense>
+      ),
+    })
   }
 
-  return (
-    <DeferredMessageMarkdownBlock
-      block={block}
-      tailMarker={runMarker}
-      formatPathForDisplay={formatPathForDisplay}
-      onOpenBrowserLink={onOpenBrowserLink}
-      onOpenWorkspacePath={onOpenWorkspacePath}
-    />
-  )
+  // 走到这里必然 `isStreaming === false`（`shouldUseLiveTextRenderer` 对 streaming 恒真），
+  // 因此替换件在这条路上拿到的 `isStreaming` 只可能是 false。
+  return renderReplaceableMarkdown({
+    slot: slots.messageMarkdown,
+    block,
+    isStreaming,
+    official: (
+      <DeferredMessageMarkdownBlock
+        block={block}
+        tailMarker={runMarker}
+        formatPathForDisplay={formatPathForDisplay}
+        onOpenBrowserLink={onOpenBrowserLink}
+        onOpenWorkspacePath={onOpenWorkspacePath}
+      />
+    ),
+  })
 }
 
 function areTextBlockPropsEqual(

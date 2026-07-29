@@ -1,5 +1,7 @@
 export type {
   BrowserScreenshotDisplayMode,
+  ConversationCodeBlockSlotProps,
+  ConversationMarkdownSlotProps,
   ConversationRenderSlots,
   ConversationStickyDockContent,
   ConversationWorkerThreadVariant,
