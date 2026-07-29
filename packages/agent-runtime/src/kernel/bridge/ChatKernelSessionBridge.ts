@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isBlank, isEmpty, isNonBlankString,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ChatSendRequest,
@@ -12,7 +12,6 @@ import type {
   UserActionCardResult,
 } from '@velaros-ai/core/types'
 
-import { createChatStreamScopeKey, readChatStreamSourceSessionId } from '../../chat/stream'
 import type {
   KernelBackgroundJobManager,
   KernelBackgroundJobOutputSnapshot,
@@ -460,9 +459,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     // = AgentRunner config.sessionId = 原始 request.sessionId），而本类对外可使用宿主组合的 scope key。
     // 两者不一致会导致 job 对 read/wait/drain/隐式等待全部「不可见」。
     // 这里统一回退到原始 source sessionId，确保注册与查询用同一个 key。
-    const jobSessionId = isNonBlankString(sessionId)
-      ? readChatStreamSourceSessionId(sessionId)
-      : sessionId
+    const jobSessionId = sessionId
     // 停滞/完成/失败/取消通知全部走 task.lifecycle 账本，由 turn-context 双投递点
     // （pre-send chips / mid-run note）恰好一次送达；不再有 run-start internalFollowUps 特例。
     this.backgroundJobManager.recordStalledJobs({ sessionId: jobSessionId })
@@ -495,16 +492,14 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     return this.rememberScope(payload.sessionId)
   }
 
+  // scope key 就是 source sessionId 本身(P2 清掉了 createChatStreamScopeKey 这层恒等转发)。
   private rememberScope(sessionId: string): string {
-    const scopeId = createChatStreamScopeKey(sessionId)
-    this.scopeSources.set(scopeId, { sessionId })
-    return scopeId
+    this.scopeSources.set(sessionId, { sessionId })
+    return sessionId
   }
 
   private resolveScopeSource(scopeId: string): KernelScopeSource {
-    return this.scopeSources.get(scopeId) ?? {
-      sessionId: readChatStreamSourceSessionId(scopeId),
-    }
+    return this.scopeSources.get(scopeId) ?? { sessionId: scopeId }
   }
 
   private resolveCancelScopeIds(source: KernelScopeSource): string[] {
@@ -515,7 +510,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       }
     }
     for (const scopeId of this.pendingRuns.keys()) {
-      if (readChatStreamSourceSessionId(scopeId) === source.sessionId) {
+      if (scopeId === source.sessionId) {
         scopeIds.add(scopeId)
       }
     }

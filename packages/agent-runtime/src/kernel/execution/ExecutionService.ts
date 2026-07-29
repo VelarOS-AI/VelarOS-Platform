@@ -13,7 +13,6 @@ import type {
   ToolExecutionPlanUpdate,
 } from '@velaros-ai/core/types'
 
-import { createChatStreamScopeKey } from '../../chat/stream'
 import {
   ExecutionGuidanceQueue,
   type ExecutionIdFactory,
@@ -298,7 +297,7 @@ class ExecutionService {
     message: ModelMessage
   }, authorization?: { assertCurrent(): void }): Promise<void> {
     authorization?.assertCurrent()
-    const sourceScopeId = createChatStreamScopeKey(request.sessionId)
+    const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
     if (!executionId) {
       throw new AppError('VALIDATION', '当前会话没有正在运行的执行，无法发送引导。')
@@ -362,7 +361,7 @@ class ExecutionService {
     threadId: string
     reason?: LooseOptional<string>
   }): { aborted: boolean } {
-    const sourceScopeId = createChatStreamScopeKey(request.sessionId)
+    const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
     if (!executionId) {
       throw new AppError('VALIDATION', '当前会话没有正在运行的执行，无法中断子智能体。')
@@ -396,7 +395,7 @@ class ExecutionService {
     threadId: string
     message: string
   }): { relayed: boolean } {
-    const sourceScopeId = createChatStreamScopeKey(request.sessionId)
+    const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
     if (!executionId) {
       throw new AppError('VALIDATION', '当前会话没有正在运行的执行，无法向子智能体发送引导。')
@@ -477,7 +476,7 @@ class ExecutionService {
   public abortSourceSession(
     sourceSessionId: string,
   ): boolean {
-    const sourceScopeId = createChatStreamScopeKey(sourceSessionId)
+    const sourceScopeId = sourceSessionId
     const executionId = this.sourceSessionGuard.abort(sourceScopeId, '用户停止了运行。')
     if (!executionId) return false
 

@@ -1,10 +1,10 @@
 import type { KernelModuleDefinition } from '@velaros-ai/core/kernel/abi'
 import {
-  createSidecarIsolationAdapter,
   type KernelHostBridgeRegistry,
   KernelModuleHost,
   type KernelModuleIsolationAdapter,
   parseHostBridgeEndpoint,
+  SidecarIsolationAdapter,
 } from '@velaros-ai/core/kernel/host'
 import {
   AllowLoadedKernelClientAccessBroker,
@@ -88,7 +88,7 @@ export async function bootKernelDaemon(
   const isolationAdapters = [
     ...(options.isolationAdapters ?? []),
     ...(options.hostBridges?.toIsolationAdapters() ?? []),
-    createSidecarIsolationAdapter({
+    new SidecarIsolationAdapter({
       endpoint: hostBridgeEndpoint,
       allowOfflineFallback: true,
     }),

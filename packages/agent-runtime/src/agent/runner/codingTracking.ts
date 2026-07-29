@@ -2,7 +2,6 @@
 // 逻辑与原 AgentRunner 内联实现逐字节一致，仅按域拆出为纯函数。
 import { normalizeSessionLineageId } from '@velaros-ai/core/utils/sessionLineage'
 
-import { createChatStreamScopeKey } from '../../chat/stream'
 import type { AgentExecutionConfig } from '../RuntimeConfiguration'
 
 /**
@@ -29,5 +28,5 @@ export function resolveSubAgentExecutionKey(args: {
 }): string {
   const executionId = args.executionId?.trim()
   if (executionId) return executionId
-  return createChatStreamScopeKey(args.sessionId)
+  return args.sessionId
 }

@@ -63,7 +63,7 @@ class SourceSessionGuard {
     const abortedExecutionIds: string[] = []
 
     for (const [sourceScopeId, current] of this.activeExecutions.entries()) {
-      if (readChatStreamSourceSessionId(sourceScopeId) !== sourceSessionId) continue
+      if (sourceScopeId !== sourceSessionId) continue
 
       current.abortController.abort(reason)
       abortedExecutionIds.push(current.executionId)
@@ -100,4 +100,3 @@ class SourceSessionGuard {
 export { SourceSessionGuard }
 import { toNullable } from '@velaros-ai/core'
 
-import { readChatStreamSourceSessionId } from '../chat/stream'

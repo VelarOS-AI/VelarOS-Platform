@@ -9,7 +9,6 @@ import type {
   ToolConfirmationDecisionOptions,
 } from '@velaros-ai/core/types'
 
-import { createChatStreamScopeKey } from '../../chat/stream'
 import type {
   ExecutionInteractions,
   ExecutionRecords,
@@ -171,7 +170,7 @@ class ExecutionInteractionFacade {
     sourceSessionId: string,
     statuses: Array<ExecutionRecord['status']>,
   ): Nullable<ExecutionRecord> {
-    const sourceScopeId = createChatStreamScopeKey(sourceSessionId)
+    const sourceScopeId = sourceSessionId
     const activeExecutionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
     if (activeExecutionId) {
       const activeExecution = this.store.require(activeExecutionId)

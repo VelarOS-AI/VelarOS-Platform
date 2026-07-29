@@ -35,7 +35,6 @@ import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityDelegationPolicy,
 } from '../../capabilities'
-import { createChatStreamScopeKey } from '../../chat/stream'
 import {
   type SubAgentGuidanceRelayRegistry,
   type SubAgentGuidanceRelayWorkerHandle,
@@ -208,7 +207,7 @@ function resolveSubAgentExecutionKey(args: {
 }): string {
   const executionId = args.executionId?.trim()
   if (executionId) return executionId
-  return createChatStreamScopeKey(args.sessionId)
+  return args.sessionId
 }
 
 function sameStringSet(left: readonly string[], right: readonly string[]): boolean {

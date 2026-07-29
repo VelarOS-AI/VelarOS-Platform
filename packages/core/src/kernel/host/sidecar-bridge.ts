@@ -475,12 +475,6 @@ async function discoverBridgeOperations(
   return found
 }
 
-export function createSidecarIsolationAdapter(
-  options: SidecarIsolationAdapterOptions,
-): KernelModuleIsolationAdapter {
-  return new SidecarIsolationAdapter(options)
-}
-
 export function parseHostBridgeEndpoint(
   value: string | undefined,
 ): HostBridgeEndpoint | undefined {

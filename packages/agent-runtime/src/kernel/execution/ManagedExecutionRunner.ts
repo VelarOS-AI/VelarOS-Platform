@@ -12,7 +12,6 @@ import type {
 import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
-import { createChatStreamScopeKey } from '../../chat/stream'
 import type { ExecutionRecords, ExecutionStore, SourceSessionGuard } from '../../execution'
 
 import type { ExecutionEventBus } from './ExecutionEventBus'
@@ -142,7 +141,7 @@ class ManagedExecutionRunner {
       sourceSessionId: params.sourceSessionId,
       messages: params.messages,
     })
-    const sourceScopeId = createChatStreamScopeKey(params.sourceSessionId)
+    const sourceScopeId = params.sourceSessionId
     // member=session：一个成员会话即一个 source scope，单活跃执行。
     const { abortController, generation, supersededExecutionId } = sourceSessionGuard.start(
       sourceScopeId,
