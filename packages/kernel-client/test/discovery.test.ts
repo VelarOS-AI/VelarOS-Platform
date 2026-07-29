@@ -3,12 +3,13 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { KernelProtocolVersion } from '@velaros-ai/core/kernel/protocol'
+
 import { createDefaultKernelDaemonPaths } from '../src/contracts'
 import {
   connectToKernelDaemon,
   discoverKernelDaemon,
 } from '../src/discovery'
-import { KernelProtocolVersion } from '../src/protocol'
 
 import {
   descriptorFor,

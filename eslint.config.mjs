@@ -34,13 +34,12 @@ const Domains = [
     config: kernelConfig,
     globs: [
       'packages/kernel-client/**',
-      'packages/kernel-sdk/**',
+      'packages/kernel-daemon/**',
       'packages/kernel-updater/**',
-      'internal/kernel-daemon/**',
     ],
-    // Kernel 仓根 src/ 与 test/ 导入后住在 internal/kernel-daemon/ 下,规则里的裸路径需同步。
+    // Kernel 仓根 src/ 与 test/ 的裸路径规则,P2 库化后落在 kernel-daemon 包下(内核本体已并入 core 域)。
     remap: (pattern) =>
-      /^(?:src|test)\//.test(pattern) ? `internal/kernel-daemon/${pattern}` : pattern,
+      /^(?:src|test)\//.test(pattern) ? `packages/kernel-daemon/${pattern}` : pattern,
   },
   {
     name: 'agent',
@@ -148,7 +147,6 @@ export default [
       // dist-in-src:.js/.d.ts 是 tsc 产物(与 .ts 源同目录),不是源码。
       'packages/*/src/**/*.js',
       'packages/*/src/**/*.d.ts',
-      'internal/kernel-daemon/dist/**',
       path.basename(import.meta.filename),
     ],
   },

@@ -23,8 +23,6 @@
     "packages/**/*.d.ts",
     "component-library/**/*.ts",
     "component-library/**/*.tsx",
-    "internal/kernel-daemon/src/**/*.ts",
-    "internal/kernel-daemon/test/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx"
   ],

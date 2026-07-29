@@ -6,7 +6,7 @@ import {
   type KernelModuleDefinition,
   type KernelModuleHealth,
   type ScopeRef,
-} from '@velaros-ai/kernel-sdk'
+} from '@velaros-ai/core/kernel/abi'
 
 /**
  * Product-owned Agent runtime injected at composition time.

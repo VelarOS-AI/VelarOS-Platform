@@ -3,8 +3,9 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { KernelProtocolVersion } from '@velaros-ai/core/kernel/protocol'
+
 import { KernelClient } from '../src/KernelClient'
-import { KernelProtocolVersion } from '../src/protocol'
 import { SocketKernelTransport } from '../src/socket-transport'
 
 import {

@@ -29,11 +29,10 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-runtime"
   },
   "dependencies": {
-    "ai": "^6.0.168",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/agent-protocol": "workspace:*",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*",
+    "ai": "^6.0.168",
     "execa": "^9.6.1",
     "typescript": "^5.7.0",
     "zod": "^4.3.6"

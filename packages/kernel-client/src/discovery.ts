@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
 
 import {
+  type KernelHandshake,
+  KernelProtocolVersion,
+  negotiateKernelProtocol,
+} from '@velaros-ai/core/kernel/protocol'
+
+import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
   type KernelDaemonPaths,
@@ -8,11 +14,6 @@ import {
 } from './contracts/descriptor'
 import { KernelClientError } from './errors'
 import { KernelClient } from './KernelClient'
-import {
-  type KernelHandshake,
-  KernelProtocolVersion,
-  negotiateKernelProtocol,
-} from './protocol'
 import { SocketKernelTransport } from './socket-transport'
 
 export interface ConnectedKernelDaemon {

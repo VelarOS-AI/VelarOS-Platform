@@ -1,16 +1,17 @@
-import type { KernelServiceHealth } from './contracts/health'
+import type { KernelServiceHealth } from '@velaros-ai/core/kernel/contracts'
+import {
+  type KernelHandshake,
+  KernelProtocolVersion,
+  type ModsInstallFromDirectoryResponse,
+  type ModsListResponse,
+  type ModsSetEnabledResponse,
+} from '@velaros-ai/core/kernel/protocol'
+
 import {
   type CapabilitySession,
   type OpenCapabilitySessionInput,
   openCapabilitySessionOnTransport,
 } from './CapabilitySession'
-import type {
-  KernelHandshake,
-  ModsInstallFromDirectoryResponse,
-  ModsListResponse,
-  ModsSetEnabledResponse,
-} from './protocol'
-import { KernelProtocolVersion } from './protocol'
 import type {
   KernelClientEventHandler,
   KernelClientTransport,

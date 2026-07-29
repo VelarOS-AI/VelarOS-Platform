@@ -46,8 +46,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*"
+    "@velaros-ai/core": "workspace:*"
   },
   "repository": {
     "type": "git",

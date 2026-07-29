@@ -9,8 +9,8 @@
     "rootDir": "src",
     "sourceMap": true,
     "paths": {
-      "@velaros-ai/kernel-sdk": [
-        "../kernel-sdk/dist/index.d.ts"
+      "@velaros-ai/core/*": [
+        "../core/dist/*"
       ]
     },
     "types": [

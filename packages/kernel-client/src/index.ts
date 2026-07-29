@@ -8,9 +8,9 @@ export * from './discovery'
 export * from './errors'
 export * from './KernelClient'
 export * from './KernelLauncher'
-export * from './protocol'
 export * from './socket-transport'
 export * from './transport'
+export * from '@velaros-ai/core/kernel/protocol'
 
 // 0.2.x 的 `KernelDaemonError` 在 0.3 统一为 `KernelClientError`；保留旧名以减少调用点改动。
 export { KernelClientError as KernelDaemonError } from './errors'

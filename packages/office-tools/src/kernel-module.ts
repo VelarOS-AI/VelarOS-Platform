@@ -8,7 +8,7 @@ import {
   type KernelCallableCapabilityService,
   type KernelModuleDefinition,
   type ScopeRef,
-} from '@velaros-ai/kernel-sdk'
+} from '@velaros-ai/core/kernel/abi'
 
 import { officeTools } from './Collection'
 import type { OfficeToolContext, VelaTool } from './officeShared'

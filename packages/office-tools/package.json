@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
+    "@velaros-ai/core": "workspace:*",
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
@@ -57,9 +58,7 @@
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "5.4.394",
     "pptxgenjs": "^4.0.1",
-    "zod": "^4.3.6",
-    "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

@@ -48,8 +48,7 @@
   },
   "dependencies": {
     "@velaros-ai/browser-core": "workspace:*",
-    "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*"
+    "@velaros-ai/core": "workspace:*"
   },
   "peerDependencies": {
     "electron": ">=41.0.0"

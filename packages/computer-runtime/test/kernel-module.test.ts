@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/kernel-sdk'
+} from '@velaros-ai/core/kernel/abi'
 
 import {
   ComputerCapability,

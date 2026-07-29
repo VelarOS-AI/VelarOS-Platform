@@ -5,7 +5,7 @@ import {
   defineKernelModule,
   type KernelCallableCapabilityService,
   type KernelModuleDefinition,
-} from '@velaros-ai/kernel-sdk'
+} from '@velaros-ai/core/kernel/abi'
 
 import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 

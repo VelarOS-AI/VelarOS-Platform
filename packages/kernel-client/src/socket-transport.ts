@@ -3,18 +3,11 @@ import {
   type Socket,
 } from 'node:net'
 
-import type { KernelRpcEndpoint } from './contracts/endpoint'
-import type { KernelServiceHealth } from './contracts/health'
 import type {
+  KernelServiceHealth,
   OpenKernelSessionInput,
   StartKernelRunInput,
-} from './contracts/identity-inputs'
-import type {
-  KernelRpcEventFrame,
-  KernelRpcMethod,
-  KernelRpcResponse,
-} from './contracts/rpc-frames'
-import { KernelRpcClientError } from './errors'
+} from '@velaros-ai/core/kernel/contracts'
 import {
   type CapabilityCallRequest,
   type CapabilityCallResponse,
@@ -40,7 +33,15 @@ import {
   type ModsSetEnabledRequest,
   type ModsSetEnabledResponse,
   ModsSetEnabledResponseSchema,
-} from './protocol'
+} from '@velaros-ai/core/kernel/protocol'
+
+import type { KernelRpcEndpoint } from './contracts/endpoint'
+import type {
+  KernelRpcEventFrame,
+  KernelRpcMethod,
+  KernelRpcResponse,
+} from './contracts/rpc-frames'
+import { KernelRpcClientError } from './errors'
 import type {
   KernelClientEventHandler,
   KernelClientTransport,

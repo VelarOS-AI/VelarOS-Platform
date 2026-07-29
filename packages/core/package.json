@@ -1,7 +1,7 @@
 {
   "name": "@velaros-ai/core",
   "version": "0.3.2",
-  "description": "Shared contracts, errors, constants, and runtime helpers for VelarOS packages.",
+  "description": "VelarOS 内核基础层:Kernel 库本体(module ABI / module host / capability registry / 权限 broker / 事件流 / namespaced state / wire 协议)+ 跨域共享契约、错误、日志与运行时工具。",
   "license": "UNLICENSED",
   "sideEffects": false,
   "engines": {
@@ -19,25 +19,57 @@
       "types": "./dist/assert.d.ts",
       "import": "./dist/assert.js"
     },
+    "./chat-stream": {
+      "types": "./dist/chat-stream/index.d.ts",
+      "import": "./dist/chat-stream/index.js"
+    },
     "./cli": {
       "types": "./dist/cli/index.d.ts",
       "import": "./dist/cli/index.js"
-    },
-    "./error": {
-      "types": "./dist/error.d.ts",
-      "import": "./dist/error.js"
-    },
-    "./result": {
-      "types": "./dist/result.d.ts",
-      "import": "./dist/result.js"
     },
     "./constants/*": {
       "types": "./dist/constants/*.d.ts",
       "import": "./dist/constants/*.js"
     },
+    "./error": {
+      "types": "./dist/error.d.ts",
+      "import": "./dist/error.js"
+    },
+    "./kernel": {
+      "types": "./dist/kernel/index.d.ts",
+      "import": "./dist/kernel/index.js"
+    },
+    "./kernel/abi": {
+      "types": "./dist/kernel/abi/index.d.ts",
+      "import": "./dist/kernel/abi/index.js"
+    },
+    "./kernel/contracts": {
+      "types": "./dist/kernel/contracts/index.d.ts",
+      "import": "./dist/kernel/contracts/index.js"
+    },
+    "./kernel/host": {
+      "types": "./dist/kernel/host/index.d.ts",
+      "import": "./dist/kernel/host/index.js"
+    },
+    "./kernel/protocol": {
+      "types": "./dist/kernel/protocol/index.d.ts",
+      "import": "./dist/kernel/protocol/index.js"
+    },
+    "./kernel/runtime": {
+      "types": "./dist/kernel/runtime/index.d.ts",
+      "import": "./dist/kernel/runtime/index.js"
+    },
     "./logger": {
       "types": "./dist/logger/index.d.ts",
       "import": "./dist/logger/index.js"
+    },
+    "./result": {
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js"
+    },
+    "./tool-contract": {
+      "types": "./dist/tool-contract/index.d.ts",
+      "import": "./dist/tool-contract/index.js"
     },
     "./types": {
       "types": "./dist/types/index.d.ts",
@@ -47,17 +79,9 @@
       "types": "./dist/types/*.d.ts",
       "import": "./dist/types/*.js"
     },
-    "./tool-contract": {
-      "types": "./dist/tool-contract/index.d.ts",
-      "import": "./dist/tool-contract/index.js"
-    },
     "./utils/*": {
       "types": "./dist/utils/*.d.ts",
       "import": "./dist/utils/*.js"
-    },
-    "./chat-stream": {
-      "types": "./dist/chat-stream/index.d.ts",
-      "import": "./dist/chat-stream/index.js"
     }
   },
   "files": [
@@ -67,10 +91,11 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/core/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/core/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-snapshot",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test",
-    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core"
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core",
+    "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
   },
   "dependencies": {
     "gpt-tokenizer": "^3.0.1",
@@ -82,7 +107,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Kernel.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/core"
   },
   "publishConfig": {

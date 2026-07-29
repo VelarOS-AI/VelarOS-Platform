@@ -6,7 +6,8 @@ import {
   type CapabilitySessionOpenRequest,
   type CapabilitySessionOpenResponse,
   KernelProtocolVersion,
-} from './protocol'
+} from '@velaros-ai/core/kernel/protocol'
+
 import type { KernelClientTransport } from './transport'
 
 export interface OpenCapabilitySessionInput {

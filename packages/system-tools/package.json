@@ -59,7 +59,6 @@
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

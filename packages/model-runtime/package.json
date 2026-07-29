@@ -64,9 +64,8 @@
     "@ai-sdk/google": "^3.0.64",
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/provider": "3.0.8",
-    "ai": "^6.0.168",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*"
+    "ai": "^6.0.168"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

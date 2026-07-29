@@ -19,7 +19,7 @@
     "domainPackages": {
       "kernel": [
         "kernel-client",
-        "kernel-sdk",
+        "kernel-daemon",
         "kernel-updater"
       ],
       "agent": [
@@ -74,9 +74,6 @@
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test",
     "lint": "eslint . --max-warnings=0",
-    "build:kernel-daemon": "rm -rf internal/kernel-daemon/dist && tsc -p internal/kernel-daemon/tsconfig.build.json && node scripts/kernel/build/fix-esm-extensions.mjs internal/kernel-daemon/dist",
-    "typecheck:kernel-daemon": "tsc --noEmit -p internal/kernel-daemon/tsconfig.src.json",
-    "test:kernel-daemon": "bun test internal/kernel-daemon/test",
     "check:kernel-schemas": "bun scripts/kernel/check-schemas.mjs",
     "check:kernel-arch": "bun scripts/kernel/check-arch-boundaries.mjs",
     "check:agent-schemas": "bun scripts/agent/check-schemas.mjs",
@@ -95,8 +92,8 @@
     "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
     "build:component-library": "vite build --config component-library/vite.config.ts",
     "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
-    "check": "bun run build && bun run typecheck && bun run typecheck:kernel-daemon && bun run lint && bun run test && bun run test:suites && bun run check:gates",
-    "test:suites": "bun run test:memory && bun run test:ui && bun run test:kernel-daemon"
+    "check": "bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
+    "test:suites": "bun run test:memory && bun run test:ui"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
@@ -142,7 +139,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel-client": "workspace:*",
-    "@velaros-ai/kernel-sdk": "workspace:*",
+    "@velaros-ai/kernel-daemon": "workspace:*",
     "@velaros-ai/kernel-updater": "workspace:*",
     "@velaros-ai/knowledge": "workspace:*",
     "@velaros-ai/memory": "workspace:*",
