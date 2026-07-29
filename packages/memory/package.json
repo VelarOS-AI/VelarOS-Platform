@@ -35,6 +35,10 @@
       "types": "./dist/cli.d.ts",
       "import": "./dist/cli.js"
     },
+    "./backend": {
+      "types": "./dist/backend/index.d.ts",
+      "import": "./dist/backend/index.js"
+    },
     "./knowledge": {
       "types": "./dist/knowledge/index.d.ts",
       "import": "./dist/knowledge/index.js"
