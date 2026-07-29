@@ -2,7 +2,7 @@ import { isEmpty,Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
 
-import type { MemoryDomain, MemoryRecallItem } from '..'
+import type { MemoryRecallItem, MemoryStoreBackend } from '..'
 
 import type { MemoryHostScopeResolver } from './HostContracts'
 
@@ -22,7 +22,11 @@ const RecallLedgerMaxEntries = 16
 const InjectedSessionsMax = 128
 
 export interface MemoryTurnRecallDeps {
-  recall: MemoryDomain['recall']
+  /**
+   * 召回动词。由 capability token 解析出的后端提供——本协调器不认识后端是树、文件还是
+   * 并联了向量索引，只认窄端口的 `recall`。
+   */
+  recall: MemoryStoreBackend['recall']
   /** 自动记忆总开关；关闭后不采集也不注入召回。 */
   isEnabled?: () => boolean
   isAutomaticDeepRecallEnabled?: () => boolean

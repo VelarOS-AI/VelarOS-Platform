@@ -79,6 +79,7 @@
     "probe:query-runtime-v2": "node ../../scripts/memory/checks/memoryQueryRuntimeV2Probe.mjs",
     "probe:storage-v2": "bun --conditions=source src/memory-tree/v2/storage/storage-v2-probe.ts",
     "probe:files": "bun --conditions=source src/files/memory-files-probe.ts",
+    "probe:store-capability": "bun --conditions=source src/adapter-kernel/memory-store-capability-probe.ts",
     "probe:tree-store-v2": "node ../../scripts/memory/checks/memoryTreeStoreV2Probe.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/memory"
   },
