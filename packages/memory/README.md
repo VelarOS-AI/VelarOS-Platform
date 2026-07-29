@@ -7,10 +7,23 @@
 `@velaros-ai/memory` owns Evidence-grounded long-term memory, MemoryDream, the unified
 meaning model, versioned tree projection, recall, erasure, and memory tools.
 
+## Pluggable backends
+
+Memory storage is **backend-pluggable** (kernel-contract §15.7 / mod-architecture-blueprint §九).
+`./backend` holds the implementation-agnostic verb port (`MemoryStoreBackend`); `./files` ships the
+bundled default authority tier (`memory-files`: markdown + frontmatter + a `MEMORY.md` index);
+the existing SQLite memory tree is wrapped verbatim as the `tree` backend. The Kernel adapter
+resolves one backend through the `velaros.memory.store.<backendId>` capability token family and
+falls back to the tree backend when no backend mod is registered — behaviour is unchanged for hosts
+that do not opt in. Wiring map, host attachment points and batch progress:
+[`docs/memory/memory-backends.md`](../../docs/memory/memory-backends.md).
+
 ## Public Imports
 
 - `@velaros-ai/memory`
 - `@velaros-ai/memory/contracts` — browser-safe, type-only Memory DTOs
+- `@velaros-ai/memory/backend` — implementation-agnostic backend verb port + tree backend wrapper
+- `@velaros-ai/memory/files` — the `memory-files` bundled default backend (Node host injects paths + IO)
 - `@velaros-ai/memory/cli`
 
 ## Boundary

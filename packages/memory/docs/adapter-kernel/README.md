@@ -54,6 +54,35 @@ turnContextFanIn.register(memory.turnRecall.createTurnContextSource())
 // memory.evidenceBridge → chat capture; memory.service → IPC/warmup/close
 ```
 
+## Backend resolution (`velaros.memory.store.*`)
+
+Since the memory-backend mod judgment (kernel-contract §15.7 / blueprint §九), the adapter no longer
+talks to the memory tree directly for capture and recall. It resolves **one `MemoryStoreBackend`**
+(the implementation-agnostic verb port in `@velaros-ai/memory/backend`) through a capability token
+family:
+
+```ts
+host.registerModule(createMemoryStoreKernelModule({ backend: createMemoryFilesBackend({ roots, io }) }))
+// …
+const memory = mountMemoryAdapter({
+  domain,                                        // still the tree governance facade (warmup / Dream)
+  store: { registry: host, preference: ['files', 'tree'] },
+  /* idleSignal, config, hostContext … */
+})
+memory.storeDescriptor.id // 'files'
+```
+
+- **one token per backend tier** (`velaros.memory.store.files` / `.tree` / `.vector`): the kernel
+  service store allows a single active service per capability id, and the three tiers must be able to
+  **stack**, not replace one another;
+- omitting `store` falls back to wrapping `domain` as the `tree` backend, forwarding every verb
+  verbatim — the behaviour-preserving default;
+- resolving nothing yields `undefined` — partial activation's "absent, not degraded" semantics;
+- the capture bridge and turn-recall coordinator consume only the narrow port, so a backend without a
+  consolidation pipeline (e.g. `memory-files`) simply has no `dream` verb.
+
+Wiring map and host attachment points: [`docs/memory/memory-backends.md`](../../../../docs/memory/memory-backends.md).
+
 ## Host signal port
 
 `MemoryDreamScheduler` needs three host runtime readings (system idle seconds, on-battery, foreground
