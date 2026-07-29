@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@velaros-ai/kernel-client": ["./packages/kernel-client/src/index.ts"],
+      "@velaros-ai/kernel-client/contracts": ["./packages/kernel-client/src/contracts/index.ts"],
+      "@velaros-ai/kernel-client/protocol": ["./packages/kernel-client/src/protocol/index.ts"],
+      "@velaros-ai/kernel-sdk": ["./packages/kernel-sdk/src/index.ts"],
+      "@velaros-ai/kernel-sdk/*": ["./packages/kernel-sdk/src/*"],
+      "@velaros-ai/kernel-updater": ["./packages/kernel-updater/src/index.ts"],
+      "@velaros-ai/kernel-updater/*": ["./packages/kernel-updater/src/*"]
+    }
+  },
+  "files": []
+}

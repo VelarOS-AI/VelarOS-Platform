@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "purpose": "Kernel 三包边界(package set + host neutrality + dependency direction + protocol single source + approval port + concrete capability injection + release identity);基线必须保持零。",
+  "generatedAt": "2026-07-27T00:00:00.000Z",
+  "fingerprints": []
+}

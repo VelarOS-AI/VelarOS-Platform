@@ -1,0 +1,58 @@
+{
+  "name": "velaros-kernel",
+  "version": "0.3.2",
+  "private": true,
+  "description": "VelarOS shared kernel: product-facing client, module SDK, runtime updater, and the internal protocol, host, runtime, RPC, daemon, and launcher infrastructure.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "packageManager": "bun@1.3.13",
+  "scripts": {
+    "build:packages": "node scripts/build/buildPackageTopology.mjs",
+    "build:kernel": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist",
+    "build": "bun run build:packages && bun run build:kernel",
+    "typecheck:packages": "node scripts/run-workspace-script.mjs typecheck",
+    "typecheck:kernel": "tsc --noEmit -p tsconfig.src.json",
+    "typecheck": "bun run typecheck:packages && bun run typecheck:kernel",
+    "test:packages": "node scripts/run-workspace-script.mjs test",
+    "test:kernel": "bun test ./test/",
+    "test": "bun run test:packages && bun run test:kernel",
+    "lint": "eslint . --max-warnings=0",
+    "check:schemas": "bun scripts/check-schemas.mjs",
+    "check:arch": "bun scripts/check-arch-boundaries.mjs",
+    "check:consumer": "node scripts/check-package-consumers.mjs",
+    "check": "bun run build && bun run typecheck && bun run test && bun run lint && bun run check:schemas && bun run check:arch && bun run check:consumer",
+    "link:local": "node scripts/dev/link-local-packages.mjs",
+    "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
+    "release:packages": "node scripts/release/publish-packages.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/bun": "^1.3.13",
+    "@types/node": "^22.19.17",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@velaros-ai/kernel-client": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*",
+    "@velaros-ai/kernel-updater": "workspace:*"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Kernel.git"
+  }
+}

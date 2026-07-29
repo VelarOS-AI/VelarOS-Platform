@@ -1,0 +1,1579 @@
+{
+  "package": "@velaros-ai/kernel-client",
+  "protocolVersion": 2,
+  "schemas": {
+    "CapabilityCallError": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityCallFailure": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "callId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "error"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable",
+            "details"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "callId",
+        "status",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityCallRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "callId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilityId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ownerModuleId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "ownerModuleId",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {}
+      },
+      "required": [
+        "protocolVersion",
+        "callId",
+        "sessionId",
+        "capabilityId",
+        "operation",
+        "scope",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityCallResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "number",
+              "const": 2
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "const": "ok"
+            },
+            "output": {}
+          },
+          "required": [
+            "protocolVersion",
+            "callId",
+            "status",
+            "output"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "number",
+              "const": 2
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "details": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "retryable",
+                "details"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "callId",
+            "status",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CapabilityCallSuccess": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "callId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "output": {}
+      },
+      "required": [
+        "protocolVersion",
+        "callId",
+        "status",
+        "output"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityIsolation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "in-process",
+        "worker",
+        "sidecar"
+      ]
+    },
+    "CapabilityRequireItem": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "capabilityId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operations": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ownerModuleId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "ownerModuleId",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "capabilityId",
+        "operations",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityRequirement": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "versionRange": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "versionRange"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilitySessionCloseRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilitySessionCloseResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "closed"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilitySessionOpenFailure": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "status": {
+          "type": "string",
+          "const": "error"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable",
+            "details"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "status",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilitySessionOpenRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "requires": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "capabilityId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operations": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "ownerModuleId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "ownerModuleId",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "capabilityId",
+              "operations",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "requires"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilitySessionOpenResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "number",
+              "const": 2
+            },
+            "status": {
+              "type": "string",
+              "const": "ok"
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requires": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "capabilityId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operations": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "scope": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "ownerModuleId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ownerModuleId",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "capabilityId",
+                  "operations",
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "status",
+            "sessionId",
+            "requires"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "number",
+              "const": 2
+            },
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "details": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "retryable",
+                "details"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "status",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CapabilitySessionOpenSuccess": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "capabilityId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operations": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "ownerModuleId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "ownerModuleId",
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "capabilityId",
+              "operations",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "status",
+        "sessionId",
+        "requires"
+      ],
+      "additionalProperties": false
+    },
+    "CapabilityToken": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "KernelHandshake": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "kernelVersion": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "apiVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "provides": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "versionRange": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "versionRange"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "optionalRequires": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "versionRange": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "versionRange"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "isolation": {
+                "type": "string",
+                "enum": [
+                  "in-process",
+                  "worker",
+                  "sidecar"
+                ]
+              },
+              "catalogRevision": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "apiVersion",
+              "provides",
+              "requires",
+              "optionalRequires",
+              "permissions",
+              "isolation",
+              "catalogRevision"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "kernelVersion",
+        "modules"
+      ],
+      "additionalProperties": false
+    },
+    "KernelModPackDescriptor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "contrib"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "provides": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "specifier": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "version",
+        "enabled",
+        "provides",
+        "specifier"
+      ],
+      "additionalProperties": false
+    },
+    "KernelModPackKind": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "system",
+        "user",
+        "contrib"
+      ]
+    },
+    "KernelModuleDescriptor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "apiVersion": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "provides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "versionRange": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "versionRange"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "optionalRequires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "versionRange": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "versionRange"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "isolation": {
+          "type": "string",
+          "enum": [
+            "in-process",
+            "worker",
+            "sidecar"
+          ]
+        },
+        "catalogRevision": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "apiVersion",
+        "provides",
+        "requires",
+        "optionalRequires",
+        "permissions",
+        "isolation",
+        "catalogRevision"
+      ],
+      "additionalProperties": false
+    },
+    "KernelRunIdentity": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerModuleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generation": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "startedAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "ownerModuleId",
+        "sessionId",
+        "generation",
+        "startedAt"
+      ],
+      "additionalProperties": false
+    },
+    "KernelSessionIdentity": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerModuleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ownerModuleId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "ownerModuleId",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "ownerModuleId",
+        "scope",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "ModsInstallFromDirectoryRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "directory"
+      ],
+      "additionalProperties": false
+    },
+    "ModsInstallFromDirectoryResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "pack": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "system",
+                "user",
+                "contrib"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "provides": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "specifier": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "version",
+            "enabled",
+            "provides",
+            "specifier"
+          ],
+          "additionalProperties": false
+        },
+        "reloadRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "pack",
+        "reloadRequired"
+      ],
+      "additionalProperties": false
+    },
+    "ModsListRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        }
+      },
+      "required": [
+        "protocolVersion"
+      ],
+      "additionalProperties": false
+    },
+    "ModsListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "user",
+                  "contrib"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "provides": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "specifier": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version",
+              "enabled",
+              "provides",
+              "specifier"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "packs"
+      ],
+      "additionalProperties": false
+    },
+    "ModsSetEnabledRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "id",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "ModsSetEnabledResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 2
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "reloadRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "ok",
+        "reloadRequired"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceRef": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerModuleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ownerModuleId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "ownerModuleId",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mediaType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "ownerModuleId",
+        "scope",
+        "mediaType"
+      ],
+      "additionalProperties": false
+    },
+    "ScopeRef": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerModuleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "ownerModuleId",
+        "kind"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
