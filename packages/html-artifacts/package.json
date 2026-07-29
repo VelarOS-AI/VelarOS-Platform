@@ -1,0 +1,79 @@
+{
+  "name": "@velaros-ai/html-artifacts",
+  "version": "0.1.3",
+  "description": "A framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime.",
+  "keywords": [
+    "ai",
+    "artifact",
+    "html",
+    "iframe",
+    "streaming"
+  ],
+  "license": "MIT",
+  "author": "Error-Zhang",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts/issues"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./sandbox": {
+      "types": "./dist/sandbox.d.ts",
+      "import": "./dist/sandbox.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md",
+    "docs"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "demo": "npm run build && vite demo",
+    "demo:build": "npm run build && vite build demo --outDir ../demo-dist --emptyOutDir",
+    "check:dist": "npm run build && node scripts/check-dist.mjs",
+    "check:package-contract": "npm run build && node scripts/check-package-contract.mjs",
+    "check": "npm run typecheck && npm test && npm run demo:build && npm run check:package-contract && npm run check:dist",
+    "release:dry-run": "npm run check && node scripts/prepare-release.mjs --dry-run",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^7.3.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Interactive streaming demo for VelarOS HTML Artifacts."
+    />
+    <title>VelarOS HTML Artifacts — Streaming Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>VelarOS HTML Artifacts</span>
+      </a>
+      <a href="https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts">GitHub ↗</a>
+    </header>
+
+    <main>
+      <section class="intro">
+        <p class="eyebrow">Open-source streaming runtime</p>
+        <h1>Watch incomplete model output become a stable interface.</h1>
+        <p>
+          The parser waits for safe HTML, CSS, and script boundaries. The host streams those patches
+          into a sandboxed iframe and keeps the surrounding layout stable.
+        </p>
+      </section>
+
+      <section class="playground" aria-label="Streaming artifact playground">
+        <div class="playground-toolbar">
+          <div>
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status">Ready</span>
+          </div>
+          <button id="run" type="button">Replay stream</button>
+        </div>
+        <div class="panes">
+          <div class="preview-pane">
+            <p class="pane-label">Sandboxed result</p>
+            <div id="frame-host"></div>
+          </div>
+          <div class="protocol-pane">
+            <p class="pane-label">Incoming protocol</p>
+            <pre id="protocol-log" aria-live="polite"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="facts">
+        <article><strong>Closed boundaries</strong><span>No half tags, rules, or scripts execute.</span></article>
+        <article><strong>Host-agnostic</strong><span>No React, Electron, or model-provider dependency.</span></article>
+        <article><strong>Sandbox first</strong><span>Capabilities remain outside the generated document.</span></article>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
