@@ -75,6 +75,26 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 `package.json` / `tsconfig.json` / `tsconfig.eslint.json` 原样留在 `docs/<domain>/source-root-*.json`,
 根共享基座就是从它们并集来的。
 
+## 面向 mod 开发者
+
+想给 VelarOS 加一个工具、一段提示词、一个工作区或一块设置区,从
+**[docs/mod-dev/](docs/mod-dev/README.md)** 开始:
+
+| 文档 | 一句话 |
+| --- | --- |
+| [README](docs/mod-dev/README.md) | mod 是什么:分节信封 `velaros.mod.json` / 两级注册机 / 生命周期 / 信任级 / partial activation |
+| [getting-started](docs/mod-dev/getting-started.md) | 最小 mod → 本地安装 → 启停 → 诊断四态与全部诊断码;**含现状与限制** |
+| [axes/](docs/mod-dev/axes/README.md) | 九根 agent 轴 + 两族 ui 轴,一轴一文;[spaces.md](docs/mod-dev/axes/spaces.md) 是自定义工作区开发专章 |
+| [seams](docs/mod-dev/seams.md) | 拦截 seam:15 个 kind、4 个已接线、权限不可旁路 |
+| [capabilities](docs/mod-dev/capabilities.md) | capability token + 权限 broker;记忆后端当案例 |
+| [integration](docs/mod-dev/integration.md) | MCP / velar-hooks / 旧插件市场 三者的定位边界 |
+| [distribution](docs/mod-dev/distribution.md) | bundled / installed / 市场 / 整合包 + 认证模型 |
+| [conventions](docs/mod-dev/conventions.md) | 数据生命周期 / `ownerModId` / i18n / 语义词汇墙 / 文档-代码漂移清单 |
+
+判决源不在本仓:架构裁决住 VelarOS-Desktop 的 `docs/mod-architecture-blueprint.md`(蓝图 v6)
+与 `docs/kernel-contract.md` §15;本套件是参考手册,冲突时以那两份为准。
+本仓侧的落地形态与残余清单见 [docs/agent/agent-mod-trunk.md](docs/agent/agent-mod-trunk.md)。
+
 ## 版本方案(单版本火车)
 
 - 仓根 `version` = **火车版本号**,起 `0.6.0`。
