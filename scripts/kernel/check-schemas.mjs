@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
-const BaselinePath = join(RepoRoot, 'baselines', 'kernel-wire-schema-snapshot.json')
+const BaselinePath = join(RepoRoot, 'baselines', 'kernel', 'kernel-wire-schema-snapshot.json')
 const SnapshotPath = join(
   RepoRoot,
   'packages',

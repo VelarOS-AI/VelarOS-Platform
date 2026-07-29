@@ -13,6 +13,7 @@ let failed = false
 const BrowserBaselinePath = resolve(
   RepoRoot,
   'baselines',
+  'capabilities',
   'browser-input-schemas.json',
 )
 const BrowserBundlePath = resolve(

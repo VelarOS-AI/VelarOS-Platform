@@ -241,10 +241,13 @@ async function packLocalHtmlArtifactsDependency(destination) {
   )
   const requiredVersion =
     conversationManifest.dependencies?.['@velaros-ai/html-artifacts']
+  // 单版本火车:conversation-ui 对 html-artifacts 写 workspace:*,由同仓包直接满足,
+  // 无版本可比;仍校验包名,防止打错包。
+  const isWorkspaceSpec = requiredVersion === 'workspace:*'
   const normalizedRequiredVersion = requiredVersion?.replace(/^[~^]/u, '')
   if (
     manifest.name !== '@velaros-ai/html-artifacts' ||
-    manifest.version !== normalizedRequiredVersion
+    (!isWorkspaceSpec && manifest.version !== normalizedRequiredVersion)
   ) {
     throw new Error(
       `Local HTML Artifacts package ${manifest.name}@${manifest.version} does not satisfy ${requiredVersion}`

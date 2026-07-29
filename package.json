@@ -15,6 +15,48 @@
   "velaros": {
     "trainVersion": "0.6.0",
     "trainNote": "根 version 是火车版本号;各包版本在首次里程碑发布前保留导入时的现值,见 README「版本方案」。",
+    "//domainPackages": "各域的包目录单源。域架构门(check:*-arch)据此把「包集合冻结」收敛到本域,新增包必须同时登记此处与该域的 owners 表。",
+    "domainPackages": {
+      "kernel": [
+        "kernel-client",
+        "kernel-sdk",
+        "kernel-updater"
+      ],
+      "agent": [
+        "agent-protocol",
+        "agent-runtime"
+      ],
+      "core": [
+        "core"
+      ],
+      "model": [
+        "model-runtime"
+      ],
+      "capabilities": [
+        "browser-composition",
+        "browser-core",
+        "browser-runtime",
+        "browser-tools",
+        "cli",
+        "computer-runtime",
+        "computer-tools",
+        "office-tools",
+        "system-tools",
+        "workspace"
+      ],
+      "memory": [
+        "knowledge",
+        "memory",
+        "memory-adapter-kernel"
+      ],
+      "ui": [
+        "conversation-ui",
+        "ui"
+      ],
+      "html-artifacts": [
+        "html-artifacts"
+      ]
+    },
     "domainVersions": {
       "kernel": "0.3.2",
       "agent": "0.5.0",
@@ -27,6 +69,7 @@
     }
   },
   "scripts": {
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build": "node scripts/build/buildPackageTopology.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test",
@@ -51,8 +94,9 @@
     "check:ui-form-closure": "node scripts/ui/check/uiComponentFormClosure.mjs",
     "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
     "build:component-library": "vite build --config component-library/vite.config.ts",
-    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
-    "check": "bun run build && bun run typecheck && bun run typecheck:kernel-daemon && bun run lint && bun run test && bun run check:gates"
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-package-contracts && bun run check:ui-component-library",
+    "check": "bun run build && bun run typecheck && bun run typecheck:kernel-daemon && bun run lint && bun run test && bun run test:suites && bun run check:gates",
+    "test:suites": "bun run test:memory && bun run test:ui && bun run test:kernel-daemon"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
@@ -83,6 +127,32 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.0",
     "vite": "^8.1.5"
+  },
+  "dependencies": {
+    "@velaros-ai/agent-protocol": "workspace:*",
+    "@velaros-ai/agent-runtime": "workspace:*",
+    "@velaros-ai/browser-composition": "workspace:*",
+    "@velaros-ai/browser-core": "workspace:*",
+    "@velaros-ai/browser-runtime": "workspace:*",
+    "@velaros-ai/browser-tools": "workspace:*",
+    "@velaros-ai/cli": "workspace:*",
+    "@velaros-ai/computer-runtime": "workspace:*",
+    "@velaros-ai/computer-tools": "workspace:*",
+    "@velaros-ai/conversation-ui": "workspace:*",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/html-artifacts": "workspace:*",
+    "@velaros-ai/kernel-client": "workspace:*",
+    "@velaros-ai/kernel-sdk": "workspace:*",
+    "@velaros-ai/kernel-updater": "workspace:*",
+    "@velaros-ai/knowledge": "workspace:*",
+    "@velaros-ai/memory": "workspace:*",
+    "@velaros-ai/memory-adapter-kernel": "workspace:*",
+    "@velaros-ai/model-runtime": "workspace:*",
+    "@velaros-ai/office-tools": "workspace:*",
+    "@velaros-ai/system-tools": "workspace:*",
+    "@velaros-ai/ui": "workspace:*",
+    "@velaros-ai/workspace": "workspace:*",
+    "better-sqlite3": "^12.9.0"
   },
   "repository": {
     "type": "git",

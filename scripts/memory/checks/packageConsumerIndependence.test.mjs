@@ -15,7 +15,7 @@ const NoSiblingSourceFiles = [
   'packages/memory-adapter-kernel/tsconfig.json',
 ]
 const MaintainedConsumerRelativePath =
-  'tests/maintained/packages/memory/package-consumer.test.mjs'
+  'tests/memory/maintained/packages/memory/package-consumer.test.mjs'
 
 test('consumer and TypeScript boundaries contain no sibling repository sources', async () => {
   for (const relativePath of NoSiblingSourceFiles) {
@@ -66,7 +66,7 @@ test('consumer gate runs from a copied repository without sibling repositories',
         join(copiedRepository, 'bun.lock')
       ),
       copyDirectoryWithoutDependencies('packages', copiedRepository),
-      copyDirectoryWithoutDependencies('tests/consumer', copiedRepository),
+      copyDirectoryWithoutDependencies('tests/memory/consumer', copiedRepository),
     ])
     await copyScript('scripts/checks/lockfileConsistency.mjs', copiedRepository)
     await copyScript(GateRelativePath, copiedRepository)

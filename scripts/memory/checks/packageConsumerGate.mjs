@@ -493,7 +493,7 @@ async function writeConsumerProject(consumerDirectory) {
     )
   )
   await copyFile(
-    resolve(RepositoryRoot, 'tests/consumer/package-api.ts'),
+    resolve(RepositoryRoot, 'tests/memory/consumer/package-api.ts'),
     join(consumerDirectory, 'package-api.ts')
   )
 

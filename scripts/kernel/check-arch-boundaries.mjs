@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
-const BaselinePath = join(RepoRoot, 'baselines', 'arch-boundaries-baseline.json')
+const BaselinePath = join(RepoRoot, 'baselines', 'kernel', 'arch-boundaries-baseline.json')
 const UpdateBaseline = process.env.VELAROS_ARCH_BASELINE_UPDATE === '1'
 
 const SourceExtensions = new Set(['.ts', '.tsx'])
@@ -142,13 +142,27 @@ function scanLines(roots, test, build) {
 }
 
 // —— 防线① 包集合冻结 ——
+// VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
+// 「Kernel 域的包集合」。域包清单单源 = 仓根 package.json 的 velaros.domainPackages.kernel;
+// 两处必须一致,新增 Kernel 包要同时登记 PublicPackages 与该清单,漏登即红。
+const DomainPackageDirectories =
+  JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8')).velaros
+    ?.domainPackages?.kernel ?? []
+
 function scanPackageSet() {
   const owned = new Set(PublicPackages)
+  const registered = new Set(DomainPackageDirectories)
   const actual = readdirSync(resolve(RepoRoot, 'packages'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+    // 只看本域:已登记的,加上任何未登记却自称 kernel-* 的偷渡包。
+    .filter((name) => registered.has(name) || /^kernel-/u.test(name))
     .sort()
-  const unexpected = actual.filter((name) => !owned.has(name))
+  const unregistered = [...owned].filter((name) => !registered.has(name))
+  const unexpected = [
+    ...actual.filter((name) => !owned.has(name)),
+    ...unregistered.map((name) => `${name}(未登记进仓根 velaros.domainPackages.kernel)`),
+  ]
   const missing = [...owned].filter((name) => !actual.includes(name))
   const violations = []
   if (unexpected.length > 0) {
@@ -370,10 +384,10 @@ function scanReleaseIdentityBoundary() {
   const contracts = [
     {
       file: '.github/workflows/release-packages.yml',
-      markers: ["if: github.ref_type == 'tag'", 'node scripts/release/verify-release-ref.mjs'],
+      markers: ["if: github.ref_type == 'tag'", 'node scripts/kernel/release/verify-release-ref.mjs'],
     },
     {
-      file: 'scripts/release/verify-release-ref.mjs',
+      file: 'scripts/kernel/release/verify-release-ref.mjs',
       markers: [
         'const expectedTag = `v${rootManifest.version}`',
         "!['push', 'workflow_dispatch'].includes(eventName)",
@@ -383,7 +397,7 @@ function scanReleaseIdentityBoundary() {
       ],
     },
     {
-      file: 'scripts/release/publish-packages.mjs',
+      file: 'scripts/kernel/release/publish-packages.mjs',
       markers: [
         "runForOutput('git', ['rev-parse', 'HEAD'], root)",
         "['status', '--porcelain', '--untracked-files=all']",

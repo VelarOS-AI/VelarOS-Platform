@@ -158,10 +158,28 @@ function dependencyEntries(manifest) {
   ]
 }
 
+// VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
+// 「capabilities 域的包集合」。域包清单单源 = 仓根 package.json 的
+// velaros.domainPackages.capabilities;新增能力包必须同时登记该清单与 capability-owners.mjs。
+const RootManifest = readJson(resolve(RepoRoot, 'package.json'))
+const RegisteredDirectories = [
+  ...(RootManifest.velaros?.domainPackages?.capabilities ?? []),
+].sort()
+const WorkspacePackageNames = new Set(
+  readdirSync(PackagesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(resolve(PackagesRoot, entry.name, 'package.json')))
+    .map((entry) => readJson(resolve(PackagesRoot, entry.name, 'package.json')).name),
+)
 const actualDirectories = readdirSync(PackagesRoot, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && existsSync(resolve(PackagesRoot, entry.name, 'package.json')))
   .map((entry) => entry.name)
+  .filter((name) => RegisteredDirectories.includes(name))
   .sort()
+if (JSON.stringify(RegisteredDirectories) !== JSON.stringify(ExpectedDirectories)) {
+  fail(
+    `package registry drift: velaros.domainPackages.capabilities = ${RegisteredDirectories.join(', ')}, owners table = ${ExpectedDirectories.join(', ')}`,
+  )
+}
 if (JSON.stringify(actualDirectories) !== JSON.stringify(ExpectedDirectories)) {
   fail(
     `package set drift: expected ${ExpectedDirectories.join(', ')}, got ${actualDirectories.join(', ')}`,
@@ -252,6 +270,9 @@ for (const expected of CapabilityPackages) {
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {
     for (const [name, version] of Object.entries(dependencies)) {
+      if (name === '@velaros-ai/agent-runtime') {
+        fail(`${expected.name}: capability packages must not depend on Agent runtime`)
+      }
       const internal = KnownByName.get(name)
       if (internal) {
         if (version !== 'workspace:*') {
@@ -262,17 +283,16 @@ for (const expected of CapabilityPackages) {
         }
         continue
       }
+      // 单版本火车:core / kernel-sdk 等平台包已与能力包同仓,写死注册表范围的旧规则(^0.3.2 /
+      // ^0.2.2)前提消失——同仓依赖一律 workspace:*,发布时由包管理器代换成具体版本。
+      if (WorkspacePackageNames.has(name)) {
+        if (version !== 'workspace:*') {
+          fail(`${expected.name}: platform ${section} dependency ${name} must use workspace:* (single version train)`)
+        }
+        continue
+      }
       if (version === 'workspace:*') {
         fail(`${expected.name}: external ${section} dependency ${name} cannot use workspace:*`)
-      }
-      if (name === '@velaros-ai/core' && version !== '^0.3.2') {
-        fail(`${expected.name}: @velaros-ai/core must use ^0.3.2`)
-      }
-      if (name === '@velaros-ai/kernel-sdk' && version !== '^0.2.2') {
-        fail(`${expected.name}: @velaros-ai/kernel-sdk must use ^0.2.2`)
-      }
-      if (name === '@velaros-ai/agent-runtime') {
-        fail(`${expected.name}: capability packages must not depend on Agent runtime`)
       }
     }
   }

@@ -13,6 +13,7 @@ const outputFile = join(buildDir, 'knowledge-profile-integration.test.mjs')
 const entryFile = join(
   repoRoot,
   'tests',
+  'memory',
   'maintained',
   'packages',
   'memory',

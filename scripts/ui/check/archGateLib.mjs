@@ -65,7 +65,7 @@ export function stripTsComments(source) {
 }
 
 function baselinePath(rule) {
-  return resolve(RepoRoot, 'baselines', `${rule}-baseline.json`)
+  return resolve(RepoRoot, 'baselines', 'ui', `${rule}-baseline.json`)
 }
 
 function loadBaseline(rule) {
@@ -83,7 +83,7 @@ export function runRatchet(rule, title, entries) {
   const fingerprints = [...new Set(entries.map((e) => e.fingerprint))].sort()
 
   if (UpdateBaseline) {
-    mkdirSync(resolve(RepoRoot, 'baselines'), { recursive: true })
+    mkdirSync(resolve(RepoRoot, 'baselines', 'ui'), { recursive: true })
     writeFileSync(
       baselinePath(rule),
       `${JSON.stringify(

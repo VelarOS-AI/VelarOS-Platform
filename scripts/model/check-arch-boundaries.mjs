@@ -16,10 +16,15 @@ const expected = {
   repository: 'git+https://github.com/VelarOS-AI/VelarOS-Model.git',
 }
 
+// VelarOS-Platform 单版本火车:仓根 version 是火车版本号,各包在首次里程碑发布前保留导入时的
+// 域版本。锁步对象因此从 rootManifest.version 改为 velaros.domainVersions.model(单源),
+// 火车推进时改这一处即可。
+const expectedPackageVersion =
+  rootManifest.velaros?.domainVersions?.model ?? rootManifest.version
 if (manifest.name !== expected.name) failures.push(`package name must be ${expected.name}`)
-if (manifest.version !== rootManifest.version) {
+if (manifest.version !== expectedPackageVersion) {
   failures.push(
-    `package version ${manifest.version} must match root version ${rootManifest.version}`,
+    `package version ${manifest.version} must match train domain version ${expectedPackageVersion}`,
   )
 }
 if (manifest.repository?.url !== expected.repository) {
@@ -46,14 +51,19 @@ const dependencySections = [
   'peerDependencies',
   'optionalDependencies',
 ]
+// 单版本火车:core / kernel-sdk 已与 model-runtime 同仓,同仓依赖一律 workspace:*
+// (发布时由包管理器代换成具体版本),旧的注册表范围锁(^0.3.2 / ^0.2.2)前提消失。
 const allowedVelarosDependencies = new Map([
-  ['@velaros-ai/core', '^0.3.2'],
-  ['@velaros-ai/kernel-sdk', '^0.2.2'],
+  ['@velaros-ai/core', 'workspace:*'],
+  ['@velaros-ai/kernel-sdk', 'workspace:*'],
 ])
 
 for (const section of dependencySections) {
   for (const [name, version] of Object.entries(manifest[section] ?? {})) {
-    if (/^(workspace:|file:|link:|portal:)/.test(version)) {
+    if (/^(file:|link:|portal:)/.test(version)) {
+      failures.push(`${section}.${name} must not use local dependency spec ${version}`)
+    }
+    if (version.startsWith('workspace:') && !allowedVelarosDependencies.has(name)) {
       failures.push(`${section}.${name} must not use local dependency spec ${version}`)
     }
     if (!name.startsWith('@velaros-ai/')) continue

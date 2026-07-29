@@ -37,7 +37,7 @@ test(
           join(copiedRepository, 'bun.lock')
         ),
         copyDirectoryWithoutDependencies('packages', copiedRepository),
-        copyDirectoryWithoutDependencies('tests/consumer', copiedRepository),
+        copyDirectoryWithoutDependencies('tests/model/consumer', copiedRepository),
       ])
       await copyScript('scripts/checks/lockfileConsistency.mjs', copiedRepository)
       await copyScript(GateRelativePath, copiedRepository)
