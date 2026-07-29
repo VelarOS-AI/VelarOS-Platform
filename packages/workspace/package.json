@@ -1,0 +1,156 @@
+{
+  "name": "@velaros-ai/workspace",
+  "version": "1.2.5",
+  "description": "Standalone injectable Workspace capability for VelarOS products and agents.",
+  "type": "module",
+  "license": "MIT",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "bin": {
+    "velaros-workspace": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "import": "./dist/plugins/index.js"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "import": "./dist/providers/index.js"
+    },
+    "./agent-tools": {
+      "types": "./dist/agent-tools.d.ts",
+      "import": "./dist/agent-tools.js"
+    },
+    "./agent": {
+      "types": "./dist/agent-runtime/index.d.ts",
+      "import": "./dist/agent-runtime/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./plugins/jsts": {
+      "types": "./dist/plugins/jsts.d.ts",
+      "import": "./dist/plugins/jsts.js"
+    },
+    "./plugins/tree-sitter": {
+      "types": "./dist/plugins/tree-sitter.d.ts",
+      "import": "./dist/plugins/tree-sitter.js"
+    },
+    "./plugins/validation": {
+      "types": "./dist/plugins/validation.d.ts",
+      "import": "./dist/plugins/validation.js"
+    },
+    "./velaros": {
+      "types": "./dist/velaros/index.d.ts",
+      "import": "./dist/velaros/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/evals.d.ts",
+      "import": "./dist/testing/evals.js"
+    },
+    "./presets": {
+      "types": "./dist/presets/index.d.ts",
+      "import": "./dist/presets/index.js"
+    },
+    "./plugins/lsp": {
+      "types": "./dist/plugins/lsp.d.ts",
+      "import": "./dist/plugins/lsp.js"
+    },
+    "./plugins/typescript": {
+      "types": "./dist/plugins/typescript/index.d.ts",
+      "import": "./dist/plugins/typescript/index.js"
+    },
+    "./result": {
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "node scripts/build/clean-package.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node scripts/build/copy-velaros-globals-to-dist.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:kernel-module": "bun test test/kernel-module.test.ts test/approval-context.test.ts",
+    "lint": "eslint . --max-warnings=0",
+    "test:run": "bun test test",
+    "test": "bun run build && bun run test:run",
+    "check:arch": "node scripts/check-architecture.mjs",
+    "check": "bun run build && bun run typecheck && bun run lint && bun run check:arch && bun run test:run",
+    "prepack": "bun run build",
+    "pack:local": "npm pack --pack-destination .",
+    "test:eval": "bun run build && bun test test/eval.test.mjs",
+    "preflight": "bun run check && bun run test:eval"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "agent",
+    "workspace",
+    "ai-agent",
+    "code-editing",
+    "transaction",
+    "patch",
+    "plugin",
+    "velaros"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.19.17",
+    "@types/picomatch": "^3.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "diff": "^8.0.4",
+    "execa": "^9.6.1",
+    "iconv-lite": "^0.7.2",
+    "picomatch": "^4.0.3",
+    "typescript": "^5.0.0",
+    "zod": "^4.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/workspace"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

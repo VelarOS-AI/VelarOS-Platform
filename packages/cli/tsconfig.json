@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@velaros-ai/office-tools/cli": ["./packages/office-tools/src/cli.ts"],
+      "@velaros-ai/system-tools/cli": ["./packages/system-tools/src/cli.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "../office-tools/src/**/*.d.ts"]
+}

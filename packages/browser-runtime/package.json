@@ -1,0 +1,66 @@
+{
+  "name": "@velaros-ai/browser-runtime",
+  "version": "0.2.5",
+  "description": "Electron-backed browser session and automation runtime for host applications.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "keywords": [
+    "browser",
+    "electron",
+    "automation",
+    "runtime",
+    "ai-agent"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "test": "bun test test/kernel-module.test.ts",
+    "test:built": "bun test test/kernel-module.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser-runtime"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "electron": "^41.10.2",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@velaros-ai/browser-core": "workspace:*",
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/kernel-sdk": "^0.2.2"
+  },
+  "peerDependencies": {
+    "electron": ">=41.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/browser-runtime"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

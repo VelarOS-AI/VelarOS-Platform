@@ -1,0 +1,69 @@
+{
+  "name": "@velaros-ai/cli",
+  "version": "0.2.10",
+  "description": "Extensible command-line router for composing capability package namespaces.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "keywords": [
+    "cli",
+    "command-router",
+    "agent",
+    "automation",
+    "velaros"
+  ],
+  "type": "module",
+  "bin": {
+    "velaros": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "test": "bun run build && bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/cli"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/office-tools": "workspace:*",
+    "@velaros-ai/system-tools": "workspace:*",
+    "@velaros-ai/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

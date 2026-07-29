@@ -1,0 +1,60 @@
+{
+  "name": "@velaros-ai/computer-tools",
+  "version": "0.2.6",
+  "description": "Host-injected computer observation and input-control tools for AI agents.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "keywords": [
+    "computer-use",
+    "agent-tools",
+    "desktop-automation",
+    "input-control",
+    "ai-agent"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/computer-tools"
+  },
+  "dependencies": {
+    "@velaros-ai/computer-runtime": "workspace:*",
+    "@velaros-ai/core": "^0.3.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/computer-tools"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

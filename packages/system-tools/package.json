@@ -1,0 +1,78 @@
+{
+  "name": "@velaros-ai/system-tools",
+  "version": "0.2.8",
+  "description": "Host-injected filesystem, process, shell, discovery, and runtime-diagnostic tools.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+  },
+  "keywords": [
+    "system",
+    "filesystem",
+    "shell",
+    "agent-tools",
+    "automation"
+  ],
+  "type": "module",
+  "bin": {
+    "velaros-system": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./platform-compatibility": {
+      "types": "./dist/SystemPlatformCompatibility.d.ts",
+      "import": "./dist/SystemPlatformCompatibility.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "generate:schema-bundle": "bun scripts/generate-schema-bundle.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
+    "test:kernel-module": "bun test test/kernel-module.test.ts",
+    "test": "bun run build && bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system-tools"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "directory": "packages/system-tools"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

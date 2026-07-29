@@ -1,0 +1,45 @@
+{
+  "name": "velaros-capabilities",
+  "version": "0.2.7",
+  "private": true,
+  "description": "Injectable workspace, browser, computer, system, office, and CLI capabilities for the VelarOS ecosystem.",
+  "packageManager": "bun@1.3.13",
+  "scripts": {
+    "build": "node scripts/build/buildPackageTopology.mjs",
+    "typecheck": "node scripts/run-workspace-script.mjs typecheck",
+    "lint": "eslint . --max-warnings=0",
+    "test": "node scripts/run-workspace-script.mjs test:built && bun test packages/computer-runtime/test packages/system-tools/test packages/office-tools/test packages/cli/test packages/workspace/test",
+    "check:schemas": "bun scripts/check-schemas.mjs",
+    "check:arch": "bun scripts/check-arch-boundaries.mjs",
+    "check:packages": "bun test scripts/test/installed-package-resolver.test.mjs && node scripts/check-packed-consumers.mjs",
+    "check:core-0.3": "node scripts/check-core-0.3-runtime.mjs",
+    "check": "bun run build && bun run typecheck && bun run lint && bun run check:schemas && bun run check:arch && bun run test && bun run check:packages",
+    "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
+    "release:packages": "node scripts/release/publish-packages.mjs"
+  },
+  "devDependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.19.17",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0",
+    "react": "^19.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^7.3.1"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git"
+  }
+}
