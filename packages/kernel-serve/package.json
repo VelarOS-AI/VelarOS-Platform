@@ -1,34 +1,37 @@
 {
-  "name": "@velaros-ai/kernel-daemon",
+  "name": "@velaros-ai/kernel-serve",
   "version": "0.3.2",
-  "description": "serve 部署模式的配件:把 @velaros-ai/core 的 Kernel 库装成本机进程(daemon 生命周期 / local RPC 前脸 / ModStore / 进程内传输)。",
+  "description": "serve 部署模式的两件配件:把 @velaros-ai/core 的 Kernel 库装成本机进程的 daemon 切片(生命周期 / local RPC 前脸 / ModStore / 进程内传输),以及共享 Runtime 的安装/切换/回滚 updater 切片。",
   "license": "UNLICENSED",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "bin": {
-    "velaros-kernel-daemon": "./dist/main.js"
-  },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "./daemon": {
+      "types": "./dist/daemon/index.d.ts",
+      "import": "./dist/daemon/index.js"
+    },
+    "./updater": {
+      "types": "./dist/updater/index.d.ts",
+      "import": "./dist/updater/index.js"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "docs"
   ],
+  "bin": {
+    "velaros-kernel-daemon": "./dist/daemon/main.js"
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test",
-    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/kernel-daemon"
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/kernel-serve"
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
@@ -42,7 +45,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
-    "directory": "packages/kernel-daemon"
+    "directory": "packages/kernel-serve"
   },
   "publishConfig": {
     "access": "restricted",

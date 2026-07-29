@@ -13,7 +13,7 @@ import {
   type KernelUpdaterOptions,
   parseKernelActivePointer,
   readKernelActivePointer,
-} from '../src'
+} from '../../src/updater'
 
 import {
   artifactOf,

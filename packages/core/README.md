@@ -8,7 +8,7 @@
 - `src/kernel/**` —— 内核本体:module ABI、wire 协议、服务面契约、module host
   (capability registry / 权限 broker / 事件流 / namespaced state)与 KernelService 运行态。
   它是**库不是进程**:进程形态(daemon 生命周期、本机 RPC 前脸)住在
-  `@velaros-ai/kernel-daemon`,arch 门机械锁死 core 不得反向依赖它与 kernel-client。
+  `@velaros-ai/kernel-serve/daemon`,arch 门机械锁死 core 不得反向依赖它与 kernel-client。
 - 其余目录 —— 任何域都需要的跨域基建:错误、结果、日志、断言、守卫与纯工具。
 
 它不含产品 DTO、Electron IPC、具体能力实现或 UI。**领域语义禁止入核**:

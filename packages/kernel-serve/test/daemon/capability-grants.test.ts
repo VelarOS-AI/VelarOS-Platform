@@ -26,9 +26,9 @@ import {
   installModPackFromDirectory,
   KernelModLoader,
   KernelModStore,
-} from '../src/daemon'
-import { InProcessKernelTransport } from '../src/internal'
-import { KernelLocalRpcServer } from '../src/rpc'
+} from '../../src/daemon/daemon'
+import { InProcessKernelTransport } from '../../src/daemon/internal'
+import { KernelLocalRpcServer } from '../../src/daemon/rpc'
 
 const Token = createCapabilityToken('test.grants')
 const AuthToken = 'grant-auth-token-0123456789-abcdefgh'

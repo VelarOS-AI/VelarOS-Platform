@@ -1,4 +1,4 @@
-# `@velaros-ai/kernel-updater`
+# `@velaros-ai/kernel-serve/updater`
 
 
 Installs, activates, and rolls back the shared VelarOS Kernel runtime on a
@@ -23,7 +23,7 @@ It owns bytes on disk and one pointer. It never invokes a capability, never
 starts or stops a Kernel process, and knows nothing about product UI.
 
 ```ts
-import { KernelUpdater } from '@velaros-ai/kernel-updater'
+import { KernelUpdater } from '@velaros-ai/kernel-serve/updater'
 
 const updater = new KernelUpdater({
   manifestSource: 'https://updates.example.com/kernel.json',

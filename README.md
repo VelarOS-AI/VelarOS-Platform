@@ -41,8 +41,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | 域 | 包 | 版本 | 源仓 |
 | --- | --- | --- | --- |
 | kernel | `@velaros-ai/kernel-client` | 0.3.0 | VelarOS-Kernel |
-| kernel | `@velaros-ai/kernel-daemon` | 0.3.2 | VelarOS-Kernel |
-| kernel | `@velaros-ai/kernel-updater` | 0.1.0 | VelarOS-Kernel |
+| kernel | `@velaros-ai/kernel-serve`(`/daemon` `/updater`) | 0.3.2 | VelarOS-Kernel |
 | agent | `@velaros-ai/agent` | 0.5.0 | VelarOS-Agent |
 | core | `@velaros-ai/core` | 0.3.2 | VelarOS-Core + VelarOS-Kernel |
 | model | `@velaros-ai/model` | 0.4.6 | VelarOS-Model |
@@ -113,9 +112,9 @@ bun run check:gates      # 只跑各域质量门
 | 位置 | 是什么 |
 | --- | --- |
 | `packages/core/src/kernel/` | **Kernel 库本体**:`abi`(Mod 开发面)/ `protocol`(wire 调用信封,唯一事实来源)/ `contracts`(服务面契约)/ `host`(module host + capability registry + 权限 broker + 事件流 + 状态)/ `runtime`(KernelService) |
-| `packages/kernel-daemon/` | **serve 部署模式的配件**:daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / 编译期 bundled pack 清单 |
+| `packages/kernel-serve/` | **serve 部署模式的配件**:daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / 编译期 bundled pack 清单 |
 | `packages/kernel-client/` | 瘦客户端与 serve 模式的接入面 |
-| `packages/kernel-updater/` | 共享 Runtime 的安装、切换、回滚 |
+| `packages/kernel-serve/` | 共享 Runtime 的安装、切换、回滚 |
 
 依赖方向由 `check:kernel-arch` 锁死:**core 不得依赖 kernel-daemon / kernel-client / kernel-updater**
 (库不知进程);反向依赖 core 合法。`check:core-semantic-vocabulary` 另外禁止内核认识

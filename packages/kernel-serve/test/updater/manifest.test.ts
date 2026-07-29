@@ -11,7 +11,7 @@ import {
   resolveKernelArtifactTarget,
   selectKernelArtifact,
   selectKernelManifestVersion,
-} from '../src'
+} from '../../src/updater'
 
 import {
   artifactOf,
