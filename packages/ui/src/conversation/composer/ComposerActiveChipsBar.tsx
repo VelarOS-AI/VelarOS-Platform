@@ -261,13 +261,7 @@ function ComposerActiveChipsBarInner({
                 />,
               ]
             : []),
-          ...groupTurnContextChips(
-            (turnContextDeltas ?? []).filter(
-              (delta) =>
-                delta.sourceId !== 'workspace.editor-focus' &&
-                delta.sourceId !== 'workspace.editor-selection'
-            )
-          ).map((group) => (
+          ...groupTurnContextChips(turnContextDeltas ?? []).map((group) => (
             <ComposerActiveChip
               key={`${slot}-${group.id}`}
               className={resolveComposerFunctionBarChipClassName(slot)}

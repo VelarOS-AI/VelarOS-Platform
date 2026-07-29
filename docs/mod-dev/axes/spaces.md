@@ -187,7 +187,7 @@ export interface SpaceDescriptor {
 | `iconId` | `'folder-open'` |
 | `identityStrategy` | 对应 `binding: 'root'` ≈ **`'path'`**：同一根复用同一成员，落 `selectOrCreateFolderMemberSession` 的 `rootPath` 比对 |
 | `toolCategoryIds` | 默认集 `['general', 'workspace-inspect', 'workspace-edit', 'workspace-execute']` |
-| `turnContextSourceIds` | `['workspace.editor-focus', 'workspace.editor-selection', 'workspace.filesystem-touches', 'workspace.project-roots', 'task.lifecycle', 'memory.recall']` |
+| `turnContextSourceIds` | `['workspace.filesystem-touches', 'workspace.project-roots', 'task.lifecycle', 'memory.recall']` |
 | `boundCapabilityIds`（概念） | 编辑器。❌ **无 capability id 清单**——绑定是隐式的 |
 | `memoryScope` | `'project-root'` → `` `project:${activeProjectRoot}` ``（`buildProjectMemoryScope`） |
 

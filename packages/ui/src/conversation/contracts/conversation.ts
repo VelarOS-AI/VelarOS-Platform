@@ -521,8 +521,6 @@ export interface BrowserElementSelection {
 }
 
 export type TurnContextSourceId =
-  | 'workspace.editor-focus'
-  | 'workspace.editor-selection'
   | 'workspace.filesystem-touches'
   | 'workspace.project-roots'
   | 'task.lifecycle'
