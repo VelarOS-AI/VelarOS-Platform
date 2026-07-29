@@ -1,0 +1,76 @@
+{
+  "name": "@velaros-ai/knowledge",
+  "version": "0.3.5",
+  "description": "Workspace knowledge ingestion, text/vector retrieval, and agent-facing knowledge tools for VelarOS-compatible runtimes.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "knowledge-base",
+    "rag",
+    "vector-search",
+    "lancedb",
+    "sqlite",
+    "velaros"
+  ],
+  "type": "module",
+  "bin": {
+    "velaros-knowledge": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/knowledge"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "^0.27.2",
+    "@velaros-ai/core": "^0.3.2",
+    "apache-arrow": "^18.1.0",
+    "better-sqlite3": "^12.9.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Memory.git",
+    "directory": "packages/knowledge"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Memory/tree/main/packages/knowledge#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Memory/issues"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

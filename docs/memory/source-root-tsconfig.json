@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/memory" },
+    { "path": "./packages/knowledge" },
+    { "path": "./packages/memory-adapter-kernel" }
+  ]
+}

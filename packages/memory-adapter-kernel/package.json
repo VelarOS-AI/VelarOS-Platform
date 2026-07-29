@@ -1,0 +1,61 @@
+{
+  "name": "@velaros-ai/memory-adapter-kernel",
+  "version": "0.3.5",
+  "description": "Kernel↔memory three-port glue for VelarOS-compatible runtimes: turn-context source, capture bridge, and Dream scheduling. Ships with the memory product.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent-memory",
+    "dependency-injection",
+    "kernel-adapter",
+    "velaros"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "test": "bun test test/kernel-module.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/memory-adapter-kernel"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "@velaros-ai/kernel-sdk": "^0.2.2",
+    "@velaros-ai/memory": "0.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Memory.git",
+    "directory": "packages/memory-adapter-kernel"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Memory/tree/main/packages/memory-adapter-kernel#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Memory/issues"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

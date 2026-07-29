@@ -1,0 +1,82 @@
+{
+  "name": "@velaros-ai/memory",
+  "version": "0.3.5",
+  "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent-memory",
+    "long-term-memory",
+    "retrieval",
+    "sqlite",
+    "velaros"
+  ],
+  "type": "module",
+  "bin": {
+    "velaros-memory": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/build/copy-velaros-globals-to-dist.mjs",
+    "test": "bun run build && node --test ../../tests/maintained/packages/memory/*.mjs",
+    "probe:authority-v2": "node ../../scripts/checks/memoryAuthorityV2Probe.mjs",
+    "probe:ingest-dream-v2": "node ../../scripts/checks/memoryIngestDreamV2Probe.mjs",
+    "probe:meaning-curation-v2": "node ../../scripts/checks/memoryMeaningCurationV2Probe.mjs",
+    "probe:erasure-saga-v2": "node ../../scripts/checks/memoryErasureSagaV2Probe.mjs",
+    "probe:evidence-replay-v2": "node ../../scripts/checks/memoryEvidenceReplayV2Probe.mjs",
+    "probe:query-runtime-v2": "node ../../scripts/checks/memoryQueryRuntimeV2Probe.mjs",
+    "probe:storage-v2": "bun --conditions=source src/memory-tree/v2/storage/storage-v2-probe.ts",
+    "probe:tree-store-v2": "node ../../scripts/checks/memoryTreeStoreV2Probe.mjs",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/memory"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "^0.3.2",
+    "better-sqlite3": "^12.9.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Memory.git",
+    "directory": "packages/memory"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Memory/tree/main/packages/memory#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Memory/issues"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}
