@@ -164,8 +164,102 @@ describe('agent mod loader', () => {
     const diagnostic = report.diagnostics.find(
       (item) => item.code === 'mod.pack-unreadable'
     )
-    expect(diagnostic?.message).toContain('velaros.agent.mod.json')
+    expect(diagnostic?.message).toContain('velaros.mod.json')
     expect(diagnostic?.message).toContain('ENOENT')
+  })
+
+  test('读 velaros.mod.json 取 agent 节装载，module/ui 两节读都不读', async () => {
+    const { report } = await assembleAgentMods({
+      host: createHost(),
+      bundled: [],
+      packs: [
+        {
+          id: 'pack.enveloped',
+          version: '1.0.0',
+          enabled: true,
+          provides: ['velaros.agent'],
+          specifier: '/packs/enveloped',
+        },
+      ],
+      reader: {
+        readManifest: ({ manifestFileName }) => {
+          expect(manifestFileName).toBe('velaros.mod.json')
+          return {
+            module: {
+              id: 'probe.mod',
+              version: '0.1.0',
+              apiVersion: 1,
+              provides: ['velaros.agent'],
+            },
+            agent: createManifest({
+              contributes: { skills: [{ id: 'skill.one', name: 'One' }] },
+            }),
+            // 壳级节：agent 侧不解析，它的形状怎么变都不该影响装载。
+            ui: { pages: [{ id: 'page.one', renderer: 'whatever' }] },
+          }
+        },
+      },
+    })
+
+    expect(report.rejected).toEqual([])
+    expect(report.activated.map((state) => state.modId)).toEqual(['probe.mod'])
+    expect(report.activated[0]?.activeAxes).toEqual(['skills'])
+  })
+
+  test('「读不出文件」与「文件在但没有 agent 节」是两个不同诊断', async () => {
+    const { report } = await assembleAgentMods({
+      host: createHost(),
+      bundled: [],
+      packs: [
+        {
+          id: 'pack.no-agent-section',
+          version: '1.0.0',
+          enabled: true,
+          provides: ['velaros.agent'],
+          specifier: '/packs/no-agent-section',
+        },
+      ],
+      reader: {
+        readManifest: () => ({
+          module: {
+            id: 'probe.mod',
+            version: '0.1.0',
+            apiVersion: 1,
+            provides: ['velaros.agent'],
+          },
+        }),
+      },
+    })
+
+    expect(report.activated).toEqual([])
+    const codes = report.diagnostics.map((item) => item.code)
+    expect(codes).toContain('mod.pack-no-agent-section')
+    expect(codes).not.toContain('mod.pack-unreadable')
+  })
+
+  test('信封本身非法（缺 module 节）拒载并留信封诊断', async () => {
+    const { report } = await assembleAgentMods({
+      host: createHost(),
+      bundled: [],
+      packs: [
+        {
+          id: 'pack.bad-envelope',
+          version: '1.0.0',
+          enabled: true,
+          provides: ['velaros.agent'],
+          specifier: '/packs/bad-envelope',
+        },
+      ],
+      reader: {
+        readManifest: () => ({ agent: createManifest() }),
+      },
+    })
+
+    expect(report.activated).toEqual([])
+    const diagnostic = report.diagnostics.find(
+      (item) => item.code === 'mod.envelope-invalid'
+    )
+    expect(diagnostic?.modId).toBe('pack.bad-envelope')
   })
 })
 

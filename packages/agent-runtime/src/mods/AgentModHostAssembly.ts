@@ -3,8 +3,11 @@
 // 两级注册机的接缝就在这里：
 //  第一级 Kernel Module Host 只认窄 descriptor，它把「装了哪些 pack、在哪个目录」告诉宿主；
 //  第二级 Agent Loader 只认领域 manifest。宿主（各产品装配层）在中间做三件事：
-//  按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.agent.mod.json`
+//  按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.mod.json`、**取 agent 节**
 //  → 连同运行态绑定喂给 Loader。
+//
+// 分节单文件（蓝图 v6 §8.3）：一个 mod 一个 `velaros.mod.json`，`module` 节归 Kernel、
+// `agent` 节归本主干、`ui` 节归产品壳。本文件只取 agent 节，另外两节读都不读。
 //
 // 本文件刻意**不 import kernel 协议包**：pack descriptor 以结构化契约（鸭子类型）声明，
 // 字段与 `KernelModPackDescriptor` 一一对应（id/kind/version/enabled/provides/specifier）。
@@ -13,8 +16,9 @@
 // IO 全部经 `AgentModPackReader` 注入：主干零文件系统依赖，宿主决定怎么读、读不读得动。
 import type { AgentModDiagnostic } from '@velaros-ai/agent-protocol'
 import {
-  AgentModPackManifestFileName,
   AgentModPackProvidesId,
+  parseVelarosModEnvelope,
+  VelarosModManifestFileName,
 } from '@velaros-ai/agent-protocol'
 
 import type {
@@ -43,13 +47,20 @@ interface AgentModPackDescriptorLike {
 
 /** pack 读取端口：宿主实现 IO，主干只负责编排与判定。 */
 interface AgentModPackReader {
-  /** 读 pack 目录下的 Agent 轴 manifest；不存在或读失败应抛错（拒载而非静默跳过）。 */
+  /**
+   * 读 pack 目录下的分节单文件 manifest（整份 `velaros.mod.json`，不是某一节）；
+   * 不存在或读失败应抛错（拒载而非静默跳过）。取 agent 节是本主干的事。
+   */
   readManifest(input: {
     packDirectory: string
     manifestFileName: string
     descriptor: AgentModPackDescriptorLike
   }): Promise<unknown> | unknown
-  /** 装载 pack 的运行态绑定（工具实体 / 钩子 handler 等）；纯数据 mod 可不实现。 */
+  /**
+   * 装载 pack 的运行态绑定（工具实体 / 钩子 handler 等）；纯数据 mod 可不实现。
+   *
+   * `manifest` 是**整份信封**（宿主装载代码时可能要用 `module` 节的寻址字段），不是 agent 节。
+   */
   loadBindings?(input: {
     packDirectory: string
     manifest: unknown
@@ -99,27 +110,58 @@ async function discoverAgentModPackages(input: {
       continue
     }
 
+    let raw: unknown
     try {
-      const manifest = await input.reader.readManifest({
+      raw = await input.reader.readManifest({
         packDirectory: descriptor.specifier,
-        manifestFileName: AgentModPackManifestFileName,
+        manifestFileName: VelarosModManifestFileName,
         descriptor,
       })
+    } catch (error) {
+      // 「文件读不出来」与「文件在但没有 agent 节」是两种病，诊断分开报：前者去查安装/权限，
+      // 后者去查 pack 的 provides 与 manifest 内容对不对得上。
+      diagnostics.push({
+        code: 'mod.pack-unreadable',
+        message: `pack「${descriptor.id}」的 ${VelarosModManifestFileName} 读取失败，拒载：${readErrorMessage(error)}`,
+        modId: descriptor.id,
+        origin: descriptor.specifier,
+      })
+      continue
+    }
+
+    const envelope = parseVelarosModEnvelope(raw, { origin: descriptor.specifier })
+    if (!envelope.ok) {
+      for (const diagnostic of envelope.diagnostics) {
+        diagnostics.push({ ...diagnostic, modId: diagnostic.modId ?? descriptor.id })
+      }
+      continue
+    }
+    if (envelope.envelope.agent === undefined) {
+      diagnostics.push({
+        code: 'mod.pack-no-agent-section',
+        message: `pack「${descriptor.id}」的 provides 含 ${AgentModPackProvidesId}，但 ${VelarosModManifestFileName} 里没有 agent 节，拒载。`,
+        modId: descriptor.id,
+        origin: descriptor.specifier,
+      })
+      continue
+    }
+
+    try {
       const bindings = await input.reader.loadBindings?.({
         packDirectory: descriptor.specifier,
-        manifest,
+        manifest: raw,
         descriptor,
       })
       packages.push({
         source: 'pack',
         origin: descriptor.specifier,
-        manifest,
+        manifest: envelope.envelope.agent,
         ...(bindings ? { bindings } : {}),
       })
     } catch (error) {
       diagnostics.push({
-        code: 'mod.pack-unreadable',
-        message: `pack「${descriptor.id}」的 ${AgentModPackManifestFileName} 读取失败，拒载：${readErrorMessage(error)}`,
+        code: 'mod.pack-bindings-unloadable',
+        message: `pack「${descriptor.id}」的运行态绑定装载失败，拒载：${readErrorMessage(error)}`,
         modId: descriptor.id,
         origin: descriptor.specifier,
       })

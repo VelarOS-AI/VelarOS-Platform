@@ -178,11 +178,73 @@ const segments = projectAgentModPromptSegments(snapshot)
 - 宿主从 kernel-client 的 `mods/list` 拿到 `KernelModPackDescriptor { id, kind, version, enabled, provides, specifier }`。
 - **筛选**：`enabled === true` 且 `provides` 含 `AgentModPackProvidesId`（= `'velaros.agent'`，与 `AgentCapability` 令牌同值）
   的 pack 才归 Agent 轴；其余留诊断跳过（`mod.pack-disabled` / `mod.pack-not-agent-axis`），不静默丢。
-- **布局**：`specifier` 指向 pack 包目录，其中必须有 `AgentModPackManifestFileName`（= `velaros.agent.mod.json`）。
-  读不出即拒载（`mod.pack-unreadable`），不静默跳过。
+- **布局**：`specifier` 指向 pack 包目录，其中必须有 `VelarosModManifestFileName`（= `velaros.mod.json`，
+  见下节「分节单文件」）。读不出即拒载（`mod.pack-unreadable`）；文件在但没有 `agent` 节是另一种病，
+  另给 `mod.pack-no-agent-section`——两者都不静默跳过。
 - **IO 全注入**：`AgentModPackReader.readManifest` / `loadBindings` 由宿主实现。主干零 fs 依赖，
   因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；主干也**不 import kernel 协议包**，
-  pack descriptor 以结构化契约声明。
+  pack descriptor 以结构化契约声明。`readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
+
+### 分节单文件 `velaros.mod.json`（蓝图 v6 §8.3）
+
+一个 mod = 一个 manifest 文件，内分三节，**各 owner 只读各节**：
+
+| 节 | 读者 | 内容 |
+| --- | --- | --- |
+| `module` | **Kernel** | 窄 module descriptor：`id` / `version` / `apiVersion` / `provides` / `requires` / `optionalRequires` / `permissions` / `isolation` + 装载寻址 `entry` / `exportName` |
+| `agent` | **Agent 主干** | 九轴 manifest（本文上半部分那一份，**内容零变化**，只是搬进信封） |
+| `ui` | **产品壳** | 壳级轴；Agent 侧**不解析**，读都不读 |
+
+```json
+{
+  "module": {
+    "id": "acme.notes",
+    "version": "1.2.0",
+    "apiVersion": 1,
+    "provides": [{ "id": "velaros.agent", "version": "1.0.0" }],
+    "requires": [],
+    "permissions": ["workspace:read"],
+    "isolation": "in-process",
+    "entry": "./index.js"
+  },
+  "agent": {
+    "id": "acme.notes",
+    "version": "1.2.0",
+    "manifestSchemaVersion": 1,
+    "engines": { "velaros": "^1.0.0", "agent": "^1.0.0" },
+    "trust": "marketplace-signed",
+    "contributes": {
+      "tools": [{ "name": "notes_search", "categoryId": "notes" }]
+    }
+  },
+  "ui": { "pages": [{ "id": "acme.notes.page" }] }
+}
+```
+
+要点：
+
+- **节的闭集**：`strictObject`，发明第四节即拒载——否则「谁读它」没有答案。
+- **形态层宽容**：`provides` / `requires` 的条目写裸 id 字符串等价于 `{ id }`，`version` 缺省 `1.0.0`；
+  语义层零宽容（非法枚举、未知字段照旧拒载）。
+- **唯一的跨节动作是身份复核**：`module.id` 与 `agent.id` 不一致 → `mod.envelope-id-mismatch` 拒载
+  （安装器按前者落盘、注册机按后者记账，两个身份之后永远对不上）。
+  两节都带 `id`/`version` 是已知冗余，等 agent 节瘦身时按蓝图「跨节元数据留顶层」收拢。
+- **把整份信封当 agent 节喂给 `parseAgentModManifest`** 会得到专门的 `mod.manifest-is-envelope` 诊断，
+  而不是难懂的「未知字段 module」。
+- **clean break**：旧文件名 `velaros.agent.mod.json` 与常量 `AgentModPackManifestFileName` 已删除，
+  不留兼容。
+
+#### 宿主迁移（Desktop / Workbench reader）
+
+reader 侧改动只有两点，其余零变：
+
+1. 文件名常量换成 `VelarosModManifestFileName`（`velaros.mod.json`）——多数宿主的 reader 直接用
+   `readManifest({ manifestFileName })` 传进来的值，改完 import 名即可；
+2. 宿主如果**自己**从 manifest 里读身份（如 Desktop `AgentModPackStore` 的 `readManifestIdentity`
+   读顶层 `id`/`version`），改成读 `module` 节。
+
+Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然拿到 agent 节，`AgentModPackage.manifest`
+的语义没动。
 
 ### 数据生命周期
 

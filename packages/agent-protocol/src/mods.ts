@@ -328,8 +328,13 @@ type AgentModContributes = z.infer<typeof AgentModContributesSchema>
 /** manifest 自身 schema 版本：演进通道，加字段靠它平滑（蓝图 §3.2）。 */
 const AgentModManifestSchemaVersion = 1 as const
 
-/** pack 目录内的 Agent 轴 manifest 文件名（宿主组装入口按此名读取）。 */
-const AgentModPackManifestFileName = 'velaros.agent.mod.json'
+/**
+ * pack 目录内的**分节单文件 manifest** 文件名（宿主组装入口按此名读取）。
+ *
+ * 蓝图 v6 §8.3：一个 mod = 一个 `velaros.mod.json`，内分 `module` / `agent` / `ui` 三节。
+ * 旧的 `velaros.agent.mod.json` 已 clean break 退役，不留文件名兼容。
+ */
+const VelarosModManifestFileName = 'velaros.mod.json'
 
 /**
  * Kernel pack descriptor 的 `provides` 里代表「本 pack 含 Agent 轴贡献」的能力 id。
@@ -389,6 +394,129 @@ const AgentModManifestSchema = z.strictObject({
 })
 type AgentModManifest = z.infer<typeof AgentModManifestSchema>
 
+// ─── 分节单文件信封 velaros.mod.json（蓝图 v6 §8.3） ─────────────────────────
+//
+// 铁律 —— **各 owner 只读各节**：
+//   `module` → Kernel 读（窄 module descriptor：谁、什么版本、提供/依赖什么能力、怎么隔离）
+//   `agent`  → Agent 主干读（本文件上半部分的九轴 manifest，原样搬进信封，内容零变化）
+//   `ui`     → 产品壳读（Agent 侧**不解析**，这里只留位置与不透明性）
+//
+// 「不透明信封」在这里比透传更强：不是「读了但不解释」，而是**根本不读别人那一节**。
+// 唯一的跨节动作是身份复核（module.id ↔ agent.id），因为一个 mod 不能有两个身份。
+//
+// 为什么单文件而不是三文件：签名 / 版本 / 回滚要覆盖的产物只有一份，「这个 mod 的完整声明
+// 是什么」才有单一答案；读取权按节切就够挡住「加载器重新长成上帝对象」。
+
+/** 标量 id → `{ id }`（形态层宽容；语义零宽容）。 */
+function tolerantCapabilityRef<TSchema extends z.ZodTypeAny>(schema: TSchema) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' ? { id: value } : value),
+    schema
+  )
+}
+
+/** 能力令牌的 JSON 形态（对齐 core/kernel/abi 的 `CapabilityToken`）。 */
+const VelarosModCapabilityTokenSchema = z.strictObject({
+  id: TrimmedIdSchema,
+  version: TrimmedIdSchema.default('1.0.0'),
+})
+
+/** 能力依赖的 JSON 形态（对齐 core/kernel/abi 的 `CapabilityRequirement`）。 */
+const VelarosModCapabilityRequirementSchema = z.strictObject({
+  id: TrimmedIdSchema,
+  versionRange: SemverRangeSchema.optional(),
+})
+
+/**
+ * `module` 节 —— **Kernel 拥有**，形状对齐 `KernelModuleManifest`（单一事实来源在
+ * `@velaros-ai/core/kernel/abi`；本文件只是它的磁盘 JSON 投影，不是第二个定义）。
+ *
+ * `entry` / `exportName` 是 Kernel 侧的**装载寻址**：pack 目录里哪一个文件导出这个模块。
+ * 它们只对 installed pack 有意义（bundled pack 走构建图，没有寻址问题）。
+ *
+ * 本 schema 住在 agent-protocol 而不是 core，是因为**依赖方向**：契约层（①）不得反向依赖
+ * Kernel 库（②）。Kernel 侧读同一节时用它自己的窄读取器——两个 owner 各读各节，正是 §8.3
+ * 要的形状。
+ */
+const VelarosModModuleSectionSchema = z.strictObject({
+  id: TrimmedIdSchema,
+  version: SemverVersionSchema,
+  apiVersion: z.number().int().positive(),
+  provides: tolerantArray(
+    tolerantCapabilityRef(VelarosModCapabilityTokenSchema)
+  ).default([]),
+  requires: tolerantArray(
+    tolerantCapabilityRef(VelarosModCapabilityRequirementSchema)
+  ).default([]),
+  optionalRequires: tolerantArray(
+    tolerantCapabilityRef(VelarosModCapabilityRequirementSchema)
+  ).default([]),
+  permissions: tolerantArray(TrimmedIdSchema).default([]),
+  isolation: z.enum(['in-process', 'worker', 'sidecar']).default('in-process'),
+  entry: TrimmedIdSchema.optional(),
+  exportName: TrimmedIdSchema.optional(),
+})
+type VelarosModModuleSection = z.infer<typeof VelarosModModuleSectionSchema>
+
+/**
+ * 信封本体。
+ *
+ * `strictObject` 是有意的：节的闭集由官方演进，mod 不能发明第四节——否则「谁读它」就没有答案。
+ * `agent` / `ui` 声明成 `unknown`：信封层只负责**分节与路由**，节内容归各自 owner 校验。
+ */
+const VelarosModEnvelopeSchema = z.strictObject({
+  module: VelarosModModuleSectionSchema,
+  agent: z.unknown().optional(),
+  ui: z.unknown().optional(),
+})
+type VelarosModEnvelope = z.infer<typeof VelarosModEnvelopeSchema>
+
+type VelarosModEnvelopeParseResult =
+  | { ok: true; envelope: VelarosModEnvelope }
+  | { ok: false; diagnostics: readonly AgentModDiagnostic[] }
+
+/**
+ * 解析一份 `velaros.mod.json` 的**信封**：校验分节形状与 `module` 节，其余节原样交还。
+ *
+ * 刻意不碰 `agent` / `ui` 的内容——取到节之后由各自 owner 校验（Agent 侧走
+ * {@link parseAgentModManifest}）。
+ */
+function parseVelarosModEnvelope(
+  input: unknown,
+  options: ParseAgentModManifestOptions = {}
+): VelarosModEnvelopeParseResult {
+  const origin = options.origin
+  const parsed = VelarosModEnvelopeSchema.safeParse(input)
+  if (!parsed.success) return {
+      ok: false,
+      diagnostics: parsed.error.issues.map((issue) => ({
+        code: 'mod.envelope-invalid',
+        message: issue.message,
+        path: issue.path.join('.') || '<root>',
+        origin,
+      })),
+    }
+
+  const envelope = parsed.data
+  // 身份复核：这是唯一一处跨节动作。一个 mod 只能有一个身份，两节各报一个 id 是事故形态
+  // （安装器按 module.id 落盘，Agent 注册机按 agent.id 记账，之后二者永远对不上）。
+  const agentId = readOptionalModId(envelope.agent)
+  if (agentId !== undefined && agentId !== envelope.module.id) return {
+      ok: false,
+      diagnostics: [
+        {
+          code: 'mod.envelope-id-mismatch',
+          message: `module 节的 id「${envelope.module.id}」与 agent 节的 id「${agentId}」不一致；一个 mod 只能有一个身份。`,
+          path: 'agent.id',
+          modId: envelope.module.id,
+          origin,
+        },
+      ],
+    }
+
+  return { ok: true, envelope }
+}
+
 // ─── 诊断与解析 ──────────────────────────────────────────────────────────────
 
 /** 可读诊断：拒载/缺席/跳过一律经此上报，绝不静默。 */
@@ -413,6 +541,16 @@ function readOptionalModId(input: unknown): string | undefined {
   if (typeof input !== 'object' || input === null) return undefined
   const id = Reflect.get(input, 'id')
   return typeof id === 'string' && id.trim() !== '' ? id.trim() : undefined
+}
+
+/** 形态判定：有 `module` 节且没有九轴 manifest 必填字段 = 这是信封不是 agent 节。 */
+function looksLikeVelarosModEnvelope(input: unknown): boolean {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false
+  return (
+    typeof Reflect.get(input, 'module') === 'object' &&
+    Reflect.get(input, 'module') !== null &&
+    Reflect.get(input, 'manifestSchemaVersion') === undefined
+  )
 }
 
 /** 列出 manifest 实际声明了条目的贡献轴。 */
@@ -447,6 +585,19 @@ function parseAgentModManifest(
 ): AgentModManifestParseResult {
   const origin = options.origin
   const modId = readOptionalModId(input)
+  // 常见误用：把整个信封当成 agent 节喂进来。默认报错会是「未知字段 module」，指不到病因，
+  // 所以在这里说清楚该做什么。
+  if (looksLikeVelarosModEnvelope(input)) return {
+      ok: false,
+      diagnostics: [
+        {
+          code: 'mod.manifest-is-envelope',
+          message: `传入的是分节单文件 ${VelarosModManifestFileName} 信封，不是 agent 节；请先取 \`envelope.agent\` 再解析。`,
+          path: '<root>',
+          origin,
+        },
+      ],
+    }
   const parsed = AgentModManifestSchema.safeParse(input)
   if (!parsed.success) return {
       ok: false,
@@ -506,7 +657,6 @@ export {
   AgentModHookContributionSchema,
   AgentModManifestSchema,
   AgentModManifestSchemaVersion,
-  AgentModPackManifestFileName,
   AgentModPackProvidesId,
   AgentModPromptSegmentContributionSchema,
   AgentModSeamKinds,
@@ -521,8 +671,14 @@ export {
   isSemverRangeParsable,
   listAgentModDeclaredAxes,
   parseAgentModManifest,
+  parseVelarosModEnvelope,
   readAgentModContributionKey,
   satisfiesSemverRange,
+  VelarosModCapabilityRequirementSchema,
+  VelarosModCapabilityTokenSchema,
+  VelarosModEnvelopeSchema,
+  VelarosModManifestFileName,
+  VelarosModModuleSectionSchema,
 }
 export type {
   AgentModContributes,
@@ -543,4 +699,7 @@ export type {
   AgentModTrustLevel,
   AgentModTurnContextSourceContribution,
   ParseAgentModManifestOptions,
+  VelarosModEnvelope,
+  VelarosModEnvelopeParseResult,
+  VelarosModModuleSection,
 }

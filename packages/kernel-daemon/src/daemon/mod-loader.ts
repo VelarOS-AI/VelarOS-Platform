@@ -121,47 +121,64 @@ function isKernelModuleDefinition(
     && typeof activate === 'function'
 }
 
+/** Pack manifest file name — one sectioned file per mod (blueprint v6 §8.3). */
+export const VelarosModManifestFileName = 'velaros.mod.json'
+
 /**
  * Install a user/contrib pack directory into the store index.
  *
- * Expects `<packDir>/mod.json`:
- * `{ "id", "version", "kind"?: "user"|"contrib", "specifier"?: "./entry.js",
- *    "exportName"?: "default", "provides": string[], "enabled"?: boolean }`
+ * Reads `<packDir>/velaros.mod.json` and **only its `module` section** — the
+ * Kernel owns that section; `agent` / `ui` belong to the Agent trunk and the
+ * product shell and are not even looked at here. That read-permission split is
+ * the mechanical defence against the loader growing back into a god object.
+ *
+ * `module`: `{ "id", "version", "apiVersion", "provides": (string | {id})[],
+ *   "entry"?: "./entry.js", "exportName"?: "default", … }`
+ *
+ * Install-time state (kind / enabled) is the installer's call, not the mod's:
+ * a pack cannot declare itself contrib or pre-disabled.
  */
 export async function installModPackFromDirectory(
   store: KernelModStore,
   packDirectory: string,
+  kind: KernelModPackKind = 'user',
 ): Promise<KernelModPackRecord> {
   const absolute = isAbsolute(packDirectory)
     ? packDirectory
     : resolve(process.cwd(), packDirectory)
-  const manifestPath = join(absolute, 'mod.json')
+  const manifestPath = join(absolute, VelarosModManifestFileName)
   const raw = await readFile(manifestPath, 'utf8')
   let parsed: unknown
   try {
     parsed = JSON.parse(raw) as unknown
   } catch (error) {
-    throw new Error(`Invalid mod.json at ${manifestPath}`, { cause: error })
+    throw new Error(`Invalid ${VelarosModManifestFileName} at ${manifestPath}`, {
+      cause: error,
+    })
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`mod.json root must be an object: ${manifestPath}`)
+    throw new Error(
+      `${VelarosModManifestFileName} root must be an object: ${manifestPath}`,
+    )
   }
-  const id = readRequiredString(parsed, 'id')
-  const version = readRequiredString(parsed, 'version')
-  const kindValue = Reflect.get(parsed, 'kind')
-  const kind: KernelModPackKind =
-    kindValue === 'contrib' ? 'contrib' : 'user'
-  const specifierValue = Reflect.get(parsed, 'specifier')
-  const relativeSpecifier = typeof specifierValue === 'string'
-    && specifierValue.trim().length > 0
-    ? specifierValue.trim()
+  const moduleSection = Reflect.get(parsed, 'module')
+  if (
+    typeof moduleSection !== 'object'
+    || moduleSection === null
+    || Array.isArray(moduleSection)
+  ) {
+    throw new Error(
+      `${VelarosModManifestFileName} must declare a "module" section: ${manifestPath}`,
+    )
+  }
+  const id = readRequiredString(moduleSection, 'id')
+  const version = readRequiredString(moduleSection, 'version')
+  const entryValue = Reflect.get(moduleSection, 'entry')
+  const relativeSpecifier = typeof entryValue === 'string'
+    && entryValue.trim().length > 0
+    ? entryValue.trim()
     : './index.js'
-  const exportNameValue = Reflect.get(parsed, 'exportName')
-  const providesInput = Reflect.get(parsed, 'provides')
-  if (!Array.isArray(providesInput) || providesInput.some((item) => typeof item !== 'string')) {
-    throw new Error(`mod.json "provides" must be a string array: ${manifestPath}`)
-  }
-  const enabledValue = Reflect.get(parsed, 'enabled')
+  const exportNameValue = Reflect.get(moduleSection, 'exportName')
   const pack: KernelModPackRecord = {
     id,
     kind,
@@ -170,8 +187,8 @@ export async function installModPackFromDirectory(
     ...(typeof exportNameValue === 'string' && exportNameValue.trim().length > 0
       ? { exportName: exportNameValue.trim() }
       : {}),
-    enabled: enabledValue !== false,
-    provides: providesInput as string[],
+    enabled: true,
+    provides: readCapabilityIds(moduleSection, manifestPath),
   }
   await access(pack.specifier)
   store.register(pack)
@@ -255,10 +272,41 @@ export async function loadModulesCompat(
   return loaded.modules
 }
 
+/**
+ * Reads capability ids from the module section's `provides`.
+ *
+ * Tolerant in shape only: a bare id string and a `{ id, version }` token both
+ * mean the same capability. Anything else is a manifest error, not a default.
+ */
+function readCapabilityIds(
+  moduleSection: object,
+  manifestPath: string,
+): readonly string[] {
+  const provides = Reflect.get(moduleSection, 'provides')
+  if (provides === undefined) return []
+  if (!Array.isArray(provides)) {
+    throw new Error(
+      `${VelarosModManifestFileName} "module.provides" must be an array: ${manifestPath}`,
+    )
+  }
+  return provides.map((entry) => {
+    if (typeof entry === 'string' && entry.trim().length > 0) return entry.trim()
+    if (typeof entry === 'object' && entry !== null) {
+      const id = Reflect.get(entry, 'id')
+      if (typeof id === 'string' && id.trim().length > 0) return id.trim()
+    }
+    throw new Error(
+      `${VelarosModManifestFileName} "module.provides" entries must be a capability id or {id}: ${manifestPath}`,
+    )
+  })
+}
+
 function readRequiredString(input: object, field: string): string {
   const value = Reflect.get(input, field)
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`mod.json field "${field}" must be a non-empty string`)
+    throw new Error(
+      `${VelarosModManifestFileName} field "module.${field}" must be a non-empty string`,
+    )
   }
   return value.trim()
 }

@@ -45,14 +45,16 @@ describe('mods RPC', () => {
 `,
     )
     await writeFile(
-      join(packDir, 'mod.json'),
+      join(packDir, 'velaros.mod.json'),
       JSON.stringify({
-        id: 'user.echo',
-        version: '1.0.0',
-        kind: 'user',
-        specifier: './index.mjs',
-        provides: ['test.user.echo'],
-        enabled: true,
+        module: {
+          id: 'user.echo',
+          version: '1.0.0',
+          apiVersion: 1,
+          entry: './index.mjs',
+          // Shape tolerance: a bare capability id means the same as {id, version}.
+          provides: ['test.user.echo'],
+        },
       }),
     )
 
