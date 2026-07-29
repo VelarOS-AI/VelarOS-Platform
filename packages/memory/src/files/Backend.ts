@@ -25,6 +25,7 @@ import type {
   MemoryBackendStats,
   MemoryStoreBackend,
 } from '../backend/Contract'
+import type { MemoryAuthorityEnumeration } from '../backend/DerivedIndex'
 import type {
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
@@ -317,6 +318,26 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       ?? { path: parsed.path, name: parsed.path, description: '' }
     const loaded = this.loadEntry(root, entry)
     return loaded ? this.toRecallItem(root, entry, loaded.document, 'scope') : null
+  }
+
+  /**
+   * 权威层全量枚举（`MemoryAuthorityEnumeration` 端口，批二）——派生索引重建的唯一正当入口。
+   *
+   * 为什么不用 `recall('')` 代替：普通召回有 `limit` 与「按需全文」上限（一次最多读 24 份），
+   * 那是**性能承诺**，不是缺陷。拿它当枚举会重建出一份看起来在工作的残缺索引，而残缺索引比
+   * 没有索引更坏。因此枚举是一个独立方法，逐条 yield（不把整个记忆库先堆进数组）。
+   *
+   * 含已归档条目：归档只是退出普通召回，内容仍在权威层——派生索引把它一并收下，
+   * `includeDormant` 的深层召回才不会因为「索引里没有」而失灵。
+   */
+  public *listAll(): Iterable<MemoryRecallItem> {
+    for (const root of this.listRoots()) {
+      for (const entry of this.listCandidateEntries(root, true)) {
+        const loaded = this.loadEntry(root, entry)
+        if (!loaded) continue
+        yield this.toRecallItem(root, entry, loaded.document, 'scope')
+      }
+    }
   }
 
   public inspect(): MemoryBackendStats {
@@ -634,9 +655,14 @@ function optionalTags(
   return joined ? { tags: joined } : {}
 }
 
-/** 构造一个 `memory-files` 后端。所有路径由宿主注入；包内不认识 userData 或仓根。 */
+/**
+ * 构造一个 `memory-files` 后端。所有路径由宿主注入；包内不认识 userData 或仓根。
+ *
+ * 返回类型带上 `MemoryAuthorityEnumeration`：本档**自带全量枚举**，因此叠加编排（批二）不需要
+ * 宿主再注入一个枚举源，装上派生索引即可重建。
+ */
 export function createMemoryFilesBackend(
   options: MemoryFilesBackendOptions,
-): MemoryStoreBackend {
+): MemoryStoreBackend & MemoryAuthorityEnumeration {
   return new MemoryFilesBackend(options)
 }

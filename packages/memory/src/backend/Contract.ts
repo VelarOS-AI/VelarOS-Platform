@@ -38,9 +38,9 @@ export type MemoryBackendAwaitable<T> = T | Promise<T>
  * - `authority`：权威层，记忆内容的唯一真相住在这里（`memory-files`；迁移完成前是 `memory-tree`）。
  * - `derived-index`：派生索引，丢了能重建，不是权威内容（`memory-vector`）。
  *
- * TODO(批二)：`memory-vector` 以 `derived-index` 入场后，capture 走双写、recall 走并联
- * （语义命中 → 回权威后端取全文），卸载只删派生索引、权威内容零丢失。本批只落角色标注，
- * 不实改任何向量链路。
+ * 角色不只是标签，是**解析期的安全判据**：`resolveMemoryStoreBackend` 一律跳过 `derived-index`
+ * ——派生索引不持内容，被当成权威层用等于静默丢数据。派生索引的动词面见 `./DerivedIndex`，
+ * 两层怎么叠见 `./Layered`。
  */
 export type MemoryBackendRole = 'authority' | 'derived-index'
 
@@ -105,8 +105,9 @@ export interface MemoryStoreBackend {
   /**
    * capture：批量证据入库。
    *
-   * TODO(批二)：装了 `memory-vector` 后此处是**双写**接缝——权威后端先落地，派生索引再消费
-   * 同一批 input；派生写失败不得回滚权威写入（派生物可重建）。
+   * **双写接缝**（§九 9.2，实现在 `./Layered`）：装了派生索引后，权威后端先落地，派生索引再
+   * 消费落地**结果**（`MemoryEvidenceRecord` 才带得动权威层分配的指针）；派生写失败只记诊断，
+   * 不回滚权威写入——派生物可重建，为一个索引回滚用户刚说的话是本末倒置。
    */
   captureBatch(
     inputs: readonly MemoryEvidenceInput[],
@@ -116,8 +117,9 @@ export interface MemoryStoreBackend {
   /**
    * recall：按查询召回。
    *
-   * TODO(批二)：装了 `memory-vector` 后此处是**并联**接缝——语义命中回权威后端取全文，
-   * 索引永远只持有指针与向量、不持有内容副本（否则「删索引」就变成了删内容）。
+   * **并联接缝**（§九 9.2，实现在 `./Layered`）：语义命中拿到的是指针，回权威后端 `getItem`
+   * 取全文；索引永远只持有指针与向量、不持有内容副本（否则「删索引」就变成了删内容）。
+   * 权威层认不出的指针即孤儿，当场剔除并清理。
    */
   recall(
     query: string,

@@ -118,10 +118,15 @@ export interface ResolveMemoryStoreBackendInput {
 }
 
 /**
- * 按优先序解析后端。
+ * 按优先序解析**权威层**后端。
  *
  * 一个都没注册时返回 `undefined`——这就是 partial activation 的「没装就没有」（§15.7 裁决二）：
  * 该轴缺席、诊断可见，不是残废降级，也不在这里编造一个空后端。
+ *
+ * **角色门（批二）**：`derived-index` 角色的后端一律跳过，哪怕优先序里点名了它。派生索引不持
+ * 内容（§九 9.2），被当成权威层用 = 用户以为记忆写进去了、其实什么都没存。这条门让
+ * 「只装了 vector 没装 files」退化成「没有权威层 → 缺席」，而不是退化成静默丢数据。
+ * 派生索引的正当入口是 {@link resolveMemoryDerivedIndexBackends} + 叠加编排。
  */
 export function resolveMemoryStoreBackend(
   input: ResolveMemoryStoreBackendInput,
@@ -129,9 +134,34 @@ export function resolveMemoryStoreBackend(
   for (const backendId of input.preference) {
     const token = createMemoryStoreCapabilityToken(backendId, input.capabilityVersion)
     const service = input.registry.getOptionalService(token)
-    if (service?.backend) return service.backend
+    if (service?.backend && service.backend.descriptor.role !== 'derived-index') {
+      return service.backend
+    }
   }
   return undefined
+}
+
+/**
+ * 解析已注册的**派生索引**后端（叠加编排的第二层，§九 9.2）。
+ *
+ * 与权威解析是两个函数而不是一个带 role 参数的函数：权威层是**单选**（谁是真相），派生层是
+ * **多选且可空**（装了几个加速器）。把两种基数塞进一个函数只会让调用点每次都要判断返回的是
+ * 哪一种。
+ */
+export function resolveMemoryDerivedIndexBackends(
+  registry: MemoryStoreCapabilityRegistry,
+  backendIds: readonly string[],
+  capabilityVersion?: string,
+): readonly MemoryStoreBackend[] {
+  const backends: MemoryStoreBackend[] = []
+  for (const backendId of backendIds) {
+    const token = createMemoryStoreCapabilityToken(backendId, capabilityVersion)
+    const service = registry.getOptionalService(token)
+    if (service?.backend && service.backend.descriptor.role === 'derived-index') {
+      backends.push(service.backend)
+    }
+  }
+  return backends
 }
 
 /** 枚举已注册后端的自述，供宿主诊断面（「装了哪些记忆后端」）使用。 */
