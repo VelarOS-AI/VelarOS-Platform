@@ -22,7 +22,7 @@
         "@velaros-ai/knowledge": "workspace:*",
         "@velaros-ai/memory": "workspace:*",
         "@velaros-ai/memory-adapter-kernel": "workspace:*",
-        "@velaros-ai/model-runtime": "workspace:*",
+        "@velaros-ai/model": "workspace:*",
         "@velaros-ai/office-tools": "workspace:*",
         "@velaros-ai/system-tools": "workspace:*",
         "@velaros-ai/ui": "workspace:*",
@@ -307,8 +307,8 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/model-runtime": {
-      "name": "@velaros-ai/model-runtime",
+    "packages/model": {
+      "name": "@velaros-ai/model",
       "version": "0.4.6",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
@@ -1029,7 +1029,7 @@
 
     "@velaros-ai/memory-adapter-kernel": ["@velaros-ai/memory-adapter-kernel@workspace:packages/memory-adapter-kernel"],
 
-    "@velaros-ai/model-runtime": ["@velaros-ai/model-runtime@workspace:packages/model-runtime"],
+    "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 
     "@velaros-ai/office-tools": ["@velaros-ai/office-tools@workspace:packages/office-tools"],
 

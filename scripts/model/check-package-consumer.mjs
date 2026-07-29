@@ -36,8 +36,8 @@ const UtilityTypeNames = [
 
 const PackageSpecifications = [
   {
-    name: '@velaros-ai/model-runtime',
-    directory: resolve(RepositoryRoot, 'packages/model-runtime'),
+    name: '@velaros-ai/model',
+    directory: resolve(RepositoryRoot, 'packages/model'),
     expectedDependencies: {
       '@velaros-ai/core': '^0.3.2',
       '@velaros-ai/kernel-sdk': '^0.2.2',
@@ -506,7 +506,7 @@ async function writeConsumerProject(consumerDirectory) {
   await copyFile(
     join(
       consumerDirectory,
-      'node_modules/@velaros-ai/model-runtime/examples/minimal.ts'
+      'node_modules/@velaros-ai/model/examples/minimal.ts'
     ),
     join(consumerDirectory, 'examples/model-runtime.ts')
   )
@@ -514,12 +514,12 @@ async function writeConsumerProject(consumerDirectory) {
     join(consumerDirectory, 'runtime-import.mjs'),
     `import assert from 'node:assert/strict'
 
-const runtime = await import('@velaros-ai/model-runtime')
-const catalog = await import('@velaros-ai/model-runtime/catalog')
-const contracts = await import('@velaros-ai/model-runtime/contracts')
-const nodeRuntime = await import('@velaros-ai/model-runtime/node')
+const runtime = await import('@velaros-ai/model')
+const catalog = await import('@velaros-ai/model/catalog')
+const contracts = await import('@velaros-ai/model/contracts')
+const nodeRuntime = await import('@velaros-ai/model/node')
 const contextWindow = await import(
-  '@velaros-ai/model-runtime/ProviderScriptContextWindow'
+  '@velaros-ai/model/ProviderScriptContextWindow'
 )
 
 assert.deepEqual(Object.keys(contracts), [])
@@ -555,9 +555,9 @@ assert.equal(typeof contextWindow.resolveProviderScriptContextWindow, 'function'
 async function writeBrowserBundleGate(consumerDirectory) {
   await writeFile(
     join(consumerDirectory, 'browser-entry.ts'),
-    `import * as ModelCatalog from '@velaros-ai/model-runtime/catalog'
-import * as ModelContracts from '@velaros-ai/model-runtime/contracts'
-import * as ModelRuntime from '@velaros-ai/model-runtime'
+    `import * as ModelCatalog from '@velaros-ai/model/catalog'
+import * as ModelContracts from '@velaros-ai/model/contracts'
+import * as ModelRuntime from '@velaros-ai/model'
 
 globalThis['__velarosModelRuntimeBrowserGate'] = {
   ModelCatalog,
@@ -623,7 +623,7 @@ async function writeCombinedConsumer(consumerDirectory) {
   await writeFile(
     join(consumerDirectory, 'combined-consumer.ts'),
     `import { isBlank } from '@velaros-ai/core'
-import * as ModelRuntime from '@velaros-ai/model-runtime'
+import * as ModelRuntime from '@velaros-ai/model'
 import * as UI from '@velaros-ai/ui'
 import type { Nullable as UiNullable } from '@velaros-ai/ui/utility-types'
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-const packageDirectory = path.join(root, 'packages/model-runtime')
+const packageDirectory = path.join(root, 'packages/model')
 const dryRun = process.argv.includes('--dry-run')
 const registry = 'https://npm.pkg.github.com'
 
@@ -45,7 +45,7 @@ if (parsedLock.error) {
   throw new Error(`Unable to parse bun.lock: TypeScript diagnostic ${parsedLock.error.code}`)
 }
 
-if (manifest.name !== '@velaros-ai/model-runtime') {
+if (manifest.name !== '@velaros-ai/model') {
   throw new Error(`Refusing to publish unexpected package ${manifest.name}`)
 }
 if (rootManifest.version !== manifest.version) {
@@ -60,7 +60,7 @@ if (manifest.publishConfig?.access !== 'restricted') {
   throw new Error(`${manifest.name} must remain restricted`)
 }
 
-const lockedWorkspace = parsedLock.config.workspaces?.['packages/model-runtime']
+const lockedWorkspace = parsedLock.config.workspaces?.['packages/model']
 if (!lockedWorkspace) {
   throw new Error(`${manifest.name} is missing from bun.lock; run bun install before publishing`)
 }

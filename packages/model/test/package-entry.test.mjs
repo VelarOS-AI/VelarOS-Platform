@@ -9,10 +9,10 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 test('package entry resolves through dist exports', async () => {
-  const runtime = await import('@velaros-ai/model-runtime')
-  const catalog = await import('@velaros-ai/model-runtime/catalog')
-  const contracts = await import('@velaros-ai/model-runtime/contracts')
-  const nodeRuntime = await import('@velaros-ai/model-runtime/node')
+  const runtime = await import('@velaros-ai/model')
+  const catalog = await import('@velaros-ai/model/catalog')
+  const contracts = await import('@velaros-ai/model/contracts')
+  const nodeRuntime = await import('@velaros-ai/model/node')
 
   assert.deepEqual(Object.keys(contracts), [])
   assert.equal(typeof catalog.LocalModelEnvironment, 'function')

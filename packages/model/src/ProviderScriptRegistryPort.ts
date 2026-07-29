@@ -25,7 +25,7 @@ export interface ProviderScriptDescriptor {
  * Browser-safe contract consumed by the model domain.
  *
  * Loading JavaScript from disk is a host responsibility. Node hosts provide
- * this port through `@velaros-ai/model-runtime/provider-scripts/node`.
+ * this port through `@velaros-ai/model/provider-scripts/node`.
  */
 export interface ProviderScriptRegistryPort {
   supportsProvider(provider: ChatProviderId): boolean

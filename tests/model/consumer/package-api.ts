@@ -10,25 +10,25 @@ import {
   type ModelRequestTransport,
   VelarCloudModelRuntime,
   VelarModelAdapter,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model'
 import {
   LocalModelEnvironment,
   OllamaProviderId,
   OpenRouterFreeModelId,
-} from '@velaros-ai/model-runtime/catalog'
+} from '@velaros-ai/model/catalog'
 import type {
   AgentProviderRuntimeConfig,
   ModelProviderAdapterKind,
   ModelProviderPreset,
   ModelSelection,
-} from '@velaros-ai/model-runtime/contracts'
+} from '@velaros-ai/model/contracts'
 import {
   createModelAdapterRegistry,
   createModelRuntimeComposition,
   DefaultModelRuntimeComposition,
   type ModelRuntimeComposition,
   type ProviderScriptRegistryOptions,
-} from '@velaros-ai/model-runtime/node'
+} from '@velaros-ai/model/node'
 
 declare const requestOptions: ModelRequestClientOptions
 declare const legacyRequestOptions: ModelRequestServiceOptions

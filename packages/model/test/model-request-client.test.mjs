@@ -11,7 +11,7 @@ import { test } from 'bun:test'
 import {
   ModelRequestClient,
   ModelRequestService,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model'
 
 test('accepts a third-party transport and preserves caller endpoint', async () => {
   const envelopes = []

@@ -5,14 +5,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const packageDirectory = path.join(root, 'packages/model-runtime')
+const packageDirectory = path.join(root, 'packages/model')
 const manifestPath = path.join(packageDirectory, 'package.json')
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
 const rootManifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
 const failures = []
 
 const expected = {
-  name: '@velaros-ai/model-runtime',
+  name: '@velaros-ai/model',
   repository: 'git+https://github.com/VelarOS-AI/VelarOS-Model.git',
 }
 

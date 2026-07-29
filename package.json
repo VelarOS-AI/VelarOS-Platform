@@ -29,7 +29,7 @@
         "core"
       ],
       "model": [
-        "model-runtime"
+        "model"
       ],
       "capabilities": [
         "browser-composition",
@@ -143,7 +143,7 @@
     "@velaros-ai/knowledge": "workspace:*",
     "@velaros-ai/memory": "workspace:*",
     "@velaros-ai/memory-adapter-kernel": "workspace:*",
-    "@velaros-ai/model-runtime": "workspace:*",
+    "@velaros-ai/model": "workspace:*",
     "@velaros-ai/office-tools": "workspace:*",
     "@velaros-ai/system-tools": "workspace:*",
     "@velaros-ai/ui": "workspace:*",

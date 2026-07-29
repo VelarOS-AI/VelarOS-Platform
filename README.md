@@ -45,7 +45,7 @@ docs/<domain>/             各源仓文档 + 导入时的源仓根 manifest(考�
 | kernel | `@velaros-ai/kernel-updater` | 0.1.0 | VelarOS-Kernel |
 | agent | `@velaros-ai/agent` | 0.5.0 | VelarOS-Agent |
 | core | `@velaros-ai/core` | 0.3.2 | VelarOS-Core + VelarOS-Kernel |
-| model | `@velaros-ai/model-runtime` | 0.4.6 | VelarOS-Model |
+| model | `@velaros-ai/model` | 0.4.6 | VelarOS-Model |
 | capabilities | `@velaros-ai/workspace` | 1.2.5 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/browser-core` | 0.2.6 | VelarOS-Capabilities |
 | capabilities | `@velaros-ai/browser-tools` | 0.2.5 | VelarOS-Capabilities |

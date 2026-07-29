@@ -2,10 +2,10 @@ import {
   ModelRequestClient,
   type ModelRequestLanguageModel,
   type ModelRequestTransport,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model'
 import {
   DefaultModelRuntimeComposition,
-} from '@velaros-ai/model-runtime/node'
+} from '@velaros-ai/model/node'
 
 declare const transport: ModelRequestTransport
 declare const model: ModelRequestLanguageModel

@@ -36,10 +36,10 @@ describe('Agent Model boundary', () => {
     const packageJson = JSON.parse(
       readFileSync(join(PackageRoot, 'package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> }
-    expect(packageJson.dependencies?.['@velaros-ai/model-runtime']).toBeUndefined()
+    expect(packageJson.dependencies?.['@velaros-ai/model']).toBeUndefined()
 
     const offenders = listTypeScriptFiles(join(PackageRoot, 'src')).filter((path) =>
-      readFileSync(path, 'utf8').includes('@velaros-ai/model-runtime')
+      readFileSync(path, 'utf8').includes('@velaros-ai/model')
     )
     expect(offenders).toEqual([])
   })

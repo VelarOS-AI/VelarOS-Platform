@@ -1,5 +1,5 @@
 {
-  "name": "@velaros-ai/model-runtime",
+  "name": "@velaros-ai/model",
   "version": "0.4.6",
   "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
   "license": "UNLICENSED",
@@ -74,9 +74,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Model.git",
-    "directory": "packages/model-runtime"
+    "directory": "packages/model"
   },
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Model/tree/main/packages/model-runtime#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Model/tree/main/packages/model#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Model/issues"
   },

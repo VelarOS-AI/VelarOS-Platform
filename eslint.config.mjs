@@ -50,7 +50,7 @@ const Domains = [
   {
     name: 'model',
     config: modelConfig,
-    globs: ['packages/model-runtime/**', 'tests/model/**'],
+    globs: ['packages/model/**', 'tests/model/**'],
   },
   {
     name: 'capabilities',

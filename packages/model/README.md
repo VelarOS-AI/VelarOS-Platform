@@ -1,4 +1,4 @@
-# @velaros-ai/model-runtime
+# @velaros-ai/model
 
 中文接口文档：[`docs/api.zh-CN.md`](docs/api.zh-CN.md)
 
@@ -10,7 +10,7 @@ Computer, System, Office, Browser, Memory, or Desktop implementations.
 
 ## Responsibility
 
-`@velaros-ai/model-runtime` owns provider ids and manifests, model catalogs,
+`@velaros-ai/model` owns provider ids and manifests, model catalogs,
 auth and explicitly injected environment resolution, OpenRouter routing,
 context-window metadata, provider adapters, provider-script contracts, runtime model resolution,
 request options, embedding-model selection, provider runtime availability, and
@@ -18,17 +18,17 @@ the backend auxiliary model request service.
 
 ## Public Imports
 
-- `@velaros-ai/model-runtime/contracts` — type-only public contracts with an
+- `@velaros-ai/model/contracts` — type-only public contracts with an
   empty JavaScript module.
-- `@velaros-ai/model-runtime/catalog` — pure provider catalogs, manifests, and
+- `@velaros-ai/model/catalog` — pure provider catalogs, manifests, and
   explicitly injected local-model environment resolution.
-- `@velaros-ai/model-runtime` — portable/browser-safe contracts and runtime APIs.
-- `@velaros-ai/model-runtime/node` — Node host composition, VM adapters, and
+- `@velaros-ai/model` — portable/browser-safe contracts and runtime APIs.
+- `@velaros-ai/model/node` — Node host composition, VM adapters, and
   filesystem-backed provider-script registry, including the only default
   `process.env` adapter.
-- `@velaros-ai/model-runtime/provider-scripts/node` — narrow Node provider-script
+- `@velaros-ai/model/provider-scripts/node` — narrow Node provider-script
   loader entry for hosts that assemble their own composition.
-- `@velaros-ai/model-runtime/ProviderScriptContextWindow` — stable portable
+- `@velaros-ai/model/ProviderScriptContextWindow` — stable portable
   context-window helper.
 
 ## Boundary
@@ -58,8 +58,8 @@ default composition performs the Node-specific environment wiring behind the
 ```ts
 import {
   createModelKernelModule,
-} from '@velaros-ai/model-runtime'
-import { createModelRuntimeComposition } from '@velaros-ai/model-runtime/node'
+} from '@velaros-ai/model'
+import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
 const models = createModelRuntimeComposition()
 const modelModule = createModelKernelModule({

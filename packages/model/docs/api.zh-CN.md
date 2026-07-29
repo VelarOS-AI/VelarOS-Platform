@@ -1,4 +1,4 @@
-# `@velaros-ai/model-runtime` 接口文档
+# `@velaros-ai/model` 接口文档
 
 ## 定位与非目标
 
@@ -9,7 +9,7 @@ Desktop 配置或密钥持久化。
 ## 安装
 
 ```bash
-npm install @velaros-ai/model-runtime
+npm install @velaros-ai/model
 ```
 
 包以 ESM 发布并基于 AI SDK 6。默认入口可以进入浏览器、renderer 和 worker
@@ -17,17 +17,17 @@ npm install @velaros-ai/model-runtime
 
 ## 公共入口
 
-- `@velaros-ai/model-runtime/contracts`：纯类型契约入口，导出的 JavaScript 为空。
+- `@velaros-ai/model/contracts`：纯类型契约入口，导出的 JavaScript 为空。
   UI、配置层和跨进程协议应优先从这里导入类型。
-- `@velaros-ai/model-runtime/catalog`：纯 catalog 与显式环境解析入口，只包含
+- `@velaros-ai/model/catalog`：纯 catalog 与显式环境解析入口，只包含
   `ModelCatalog`、`ProviderManifest` 和 `LocalModelEnvironment` 的公开能力。
-- `@velaros-ai/model-runtime`：可移植、browser-safe 的公共 API，包含契约、catalog、
+- `@velaros-ai/model`：可移植、browser-safe 的公共 API，包含契约、catalog、
   policy、adapter、请求客户端与依赖注入端口；为 0.4.x 调用方保留兼容导出。
-- `@velaros-ai/model-runtime/node`：Node 宿主的默认 composition、adapter registry、
+- `@velaros-ai/model/node`：Node 宿主的默认 composition、adapter registry、
   provider-script registry、VM adapter 和 `NodeLocalModelEnvironment`。
-- `@velaros-ai/model-runtime/provider-scripts/node`：只需要 provider-script loader 时使用的
+- `@velaros-ai/model/provider-scripts/node`：只需要 provider-script loader 时使用的
   窄 Node 入口。
-- `@velaros-ai/model-runtime/ProviderScriptContextWindow`：稳定的上下文窗口兼容入口。
+- `@velaros-ai/model/ProviderScriptContextWindow`：稳定的上下文窗口兼容入口。
 
 不应从 `dist/` 目录深层导入。
 
@@ -91,7 +91,7 @@ Ollama 环境覆盖时，创建一个明确的环境对象：
 import {
   LocalModelEnvironment,
   OllamaEnvNames,
-} from '@velaros-ai/model-runtime/catalog'
+} from '@velaros-ai/model/catalog'
 
 const environment = new LocalModelEnvironment({
   [OllamaEnvNames.baseURL]: applicationSettings.ollamaBaseURL,
@@ -117,7 +117,7 @@ const model = environment.resolveOllamaChatModel('qwen3:8b')
 通过接口类型持有 composition 时也可以直接配置宿主独占的 Velar Cloud 连接：
 
 ```ts
-import type { ModelRuntimeComposition } from '@velaros-ai/model-runtime/node'
+import type { ModelRuntimeComposition } from '@velaros-ai/model/node'
 
 declare const models: ModelRuntimeComposition
 
@@ -140,10 +140,10 @@ import {
   ModelRequestClient,
   type ModelRequestLanguageModel,
   type ModelRequestTransport,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model'
 import {
   DefaultModelRuntimeComposition,
-} from '@velaros-ai/model-runtime/node'
+} from '@velaros-ai/model/node'
 
 declare const transport: ModelRequestTransport
 declare const model: ModelRequestLanguageModel
