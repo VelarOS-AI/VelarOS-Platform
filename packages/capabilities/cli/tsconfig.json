@@ -7,10 +7,10 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": "../..",
+    "baseUrl": "../../..",
     "paths": {
-      "@velaros-ai/office-tools/cli": ["./packages/office-tools/src/cli.ts"],
-      "@velaros-ai/system-tools/cli": ["./packages/system-tools/src/cli.ts"]
+      "@velaros-ai/office-tools/cli": ["./packages/capabilities/office-tools/src/cli.ts"],
+      "@velaros-ai/system-tools/cli": ["./packages/capabilities/system-tools/src/cli.ts"]
     }
   },
   "include": ["src/**/*.ts", "../office-tools/src/**/*.d.ts"]

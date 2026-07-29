@@ -10,7 +10,8 @@
   "type": "module",
   "packageManager": "bun@1.3.13",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/capabilities/*"
   ],
   "velaros": {
     "trainVersion": "0.6.0",
@@ -32,11 +33,11 @@
       ],
       "capabilities": [
         "browser",
-        "cli",
-        "computer",
-        "office-tools",
-        "system-tools",
-        "workspace"
+        "capabilities/cli",
+        "capabilities/office-tools",
+        "capabilities/system-tools",
+        "capabilities/workspace",
+        "computer"
       ],
       "memory": [
         "memory"

@@ -93,7 +93,7 @@
         "react",
       ],
     },
-    "packages/cli": {
+    "packages/capabilities/cli": {
       "name": "@velaros-ai/cli",
       "version": "0.2.10",
       "bin": {
@@ -108,6 +108,74 @@
       "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
+      },
+    },
+    "packages/capabilities/office-tools": {
+      "name": "@velaros-ai/office-tools",
+      "version": "0.2.7",
+      "bin": {
+        "velaros-office": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@napi-rs/canvas": "^1.0.0",
+        "@velaros-ai/core": "workspace:*",
+        "docx": "^9.6.1",
+        "exceljs": "^4.4.0",
+        "jszip": "^3.10.1",
+        "mammoth": "^1.12.0",
+        "pdf-lib": "1.17.1",
+        "pdfjs-dist": "5.4.394",
+        "pptxgenjs": "^4.0.1",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
+      },
+    },
+    "packages/capabilities/system-tools": {
+      "name": "@velaros-ai/system-tools",
+      "version": "0.2.8",
+      "bin": {
+        "velaros-system": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
+      },
+    },
+    "packages/capabilities/workspace": {
+      "name": "@velaros-ai/workspace",
+      "version": "1.2.5",
+      "bin": {
+        "velaros-workspace": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "diff": "^8.0.4",
+        "execa": "^9.6.1",
+        "iconv-lite": "^0.7.2",
+        "picomatch": "^4.0.3",
+        "typescript": "^5.0.0",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@eslint/js": "^9.39.4",
+        "@types/node": "^22.19.17",
+        "@types/picomatch": "^3.0.1",
+        "@typescript-eslint/eslint-plugin": "^8.59.3",
+        "@typescript-eslint/parser": "^8.59.3",
+        "eslint": "^9.39.4",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-eslint-comments": "^3.2.0",
+        "eslint-plugin-simple-import-sort": "^13.0.0",
+        "eslint-plugin-unicorn": "^64.0.0",
+        "eslint-plugin-unused-imports": "^4.4.1",
+        "globals": "^17.6.0",
       },
     },
     "packages/computer": {
@@ -207,44 +275,6 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/office-tools": {
-      "name": "@velaros-ai/office-tools",
-      "version": "0.2.7",
-      "bin": {
-        "velaros-office": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@napi-rs/canvas": "^1.0.0",
-        "@velaros-ai/core": "workspace:*",
-        "docx": "^9.6.1",
-        "exceljs": "^4.4.0",
-        "jszip": "^3.10.1",
-        "mammoth": "^1.12.0",
-        "pdf-lib": "1.17.1",
-        "pdfjs-dist": "5.4.394",
-        "pptxgenjs": "^4.0.1",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
-    "packages/system-tools": {
-      "name": "@velaros-ai/system-tools",
-      "version": "0.2.8",
-      "bin": {
-        "velaros-system": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
     "packages/ui": {
       "name": "@velaros-ai/ui",
       "version": "0.2.2",
@@ -276,36 +306,6 @@
       "peerDependencies": {
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-      },
-    },
-    "packages/workspace": {
-      "name": "@velaros-ai/workspace",
-      "version": "1.2.5",
-      "bin": {
-        "velaros-workspace": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "diff": "^8.0.4",
-        "execa": "^9.6.1",
-        "iconv-lite": "^0.7.2",
-        "picomatch": "^4.0.3",
-        "typescript": "^5.0.0",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@eslint/js": "^9.39.4",
-        "@types/node": "^22.19.17",
-        "@types/picomatch": "^3.0.1",
-        "@typescript-eslint/eslint-plugin": "^8.59.3",
-        "@typescript-eslint/parser": "^8.59.3",
-        "eslint": "^9.39.4",
-        "eslint-config-prettier": "^10.1.8",
-        "eslint-plugin-eslint-comments": "^3.2.0",
-        "eslint-plugin-simple-import-sort": "^13.0.0",
-        "eslint-plugin-unicorn": "^64.0.0",
-        "eslint-plugin-unused-imports": "^4.4.1",
-        "globals": "^17.6.0",
       },
     },
   },
@@ -888,7 +888,7 @@
 
     "@velaros-ai/browser": ["@velaros-ai/browser@workspace:packages/browser"],
 
-    "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
+    "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/capabilities/cli"],
 
     "@velaros-ai/computer": ["@velaros-ai/computer@workspace:packages/computer"],
 
@@ -904,13 +904,13 @@
 
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 
-    "@velaros-ai/office-tools": ["@velaros-ai/office-tools@workspace:packages/office-tools"],
+    "@velaros-ai/office-tools": ["@velaros-ai/office-tools@workspace:packages/capabilities/office-tools"],
 
-    "@velaros-ai/system-tools": ["@velaros-ai/system-tools@workspace:packages/system-tools"],
+    "@velaros-ai/system-tools": ["@velaros-ai/system-tools@workspace:packages/capabilities/system-tools"],
 
     "@velaros-ai/ui": ["@velaros-ai/ui@workspace:packages/ui"],
 
-    "@velaros-ai/workspace": ["@velaros-ai/workspace@workspace:packages/workspace"],
+    "@velaros-ai/workspace": ["@velaros-ai/workspace@workspace:packages/capabilities/workspace"],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 

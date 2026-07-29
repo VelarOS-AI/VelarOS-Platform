@@ -16,10 +16,28 @@ if (!scriptName) {
   process.exit(2)
 }
 
+// packages/ 下的包目录:顶层包 + 一层分组目录(如 capabilities/<pkg>)里的包。
+function listPackageDirectories() {
+  const found = []
+  for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    if (existsSync(resolve(PACKAGES_DIR, entry.name, 'package.json'))) {
+      found.push(entry.name)
+      continue
+    }
+    for (const nested of readdirSync(resolve(PACKAGES_DIR, entry.name), { withFileTypes: true })) {
+      if (!nested.isDirectory()) continue
+      if (existsSync(resolve(PACKAGES_DIR, entry.name, nested.name, 'package.json'))) {
+        found.push(`${entry.name}/${nested.name}`)
+      }
+    }
+  }
+  return found.sort((a, b) => a.localeCompare(b))
+}
+
 let failed = false
-for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-  if (!entry.isDirectory()) continue
-  const dir = resolve(PACKAGES_DIR, entry.name)
+for (const directory of listPackageDirectories()) {
+  const dir = resolve(PACKAGES_DIR, directory)
   const manifestPath = resolve(dir, 'package.json')
   if (!existsSync(manifestPath)) continue
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))

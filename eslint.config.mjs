@@ -56,11 +56,11 @@ const Domains = [
     config: capabilitiesConfig,
     globs: [
       'packages/browser/**',
-      'packages/cli/**',
+      'packages/capabilities/cli/**',
       'packages/computer/**',
-      'packages/office-tools/**',
-      'packages/system-tools/**',
-      'packages/workspace/**',
+      'packages/capabilities/office-tools/**',
+      'packages/capabilities/system-tools/**',
+      'packages/capabilities/workspace/**',
     ],
   },
   {
