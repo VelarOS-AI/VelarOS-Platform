@@ -10,8 +10,12 @@ import type { ToolCallBlock } from '#contracts'
  * 未注册的工具回退到默认的 ToolCallBlock 组件。
  *
  * 使用方式：
- *   // 在 tool-render registration 文件中声明
- *   defineToolRenderRegistration({ toolNames: ['bash'], component: CommandToolRender })
+ *   // 在 tool-render registration 文件中声明并默认导出（没有 define* 包装器，就是一份字面量）
+ *   const registration: ToolRenderRegistration = {
+ *     toolNames: CommandToolNames,
+ *     component: LazyCommandToolRender,
+ *   }
+ *   export default registration
  *
  *   // 在 MessageBubble 中消费
  *   const Component = ToolRenderRegistry.get(block.toolName)

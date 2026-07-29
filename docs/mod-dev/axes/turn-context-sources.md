@@ -60,7 +60,7 @@ manifest 上的 `spaces` 与运行时的 `scopes` **今天没有翻译层**—�
 （`apps/desktop/src/main/chat/turncontext/FanIn.ts`）。
 详见 [spaces.md §三](./spaces.md#三turncontextsourceids两道门不是一道)。
 
-## Desktop 现有的六个源（参考）
+## Desktop 现有的六个源（参考，2026-07-30 核对）
 
 | id | producer | `scopes` |
 | --- | --- | --- |
@@ -68,15 +68,13 @@ manifest 上的 `spaces` 与运行时的 `scopes` **今天没有翻译层**—�
 | `browser.current-page` | `createBrowserCurrentPageSource`（`main/chat/turncontext/BrowserCurrentPageSource.ts`） | `[Browser]` |
 | `workspace.filesystem-touches` | `createTurnContextSources()`（`main/workspace/domain/signals/Coordinator.ts`） | `[Project]` |
 | `browser.manual-activity` | `packages/browser/src/core/BrowserActivityCoordinator.ts` | `['browser']` |
-| `memory.recall` | `MemoryTurnRecallCoordinator.createTurnContextSource`（`packages/memory/src/adapter-kernel/TurnRecallCoordinator.ts`） | 宿主注入；Desktop 传三空间全集，`rendererVisible: false` |
-| `task.lifecycle` | `packages/agent/src/kernel/background-jobs.ts` | `[]` |
+| `memory.recall` | `MemoryTurnRecallCoordinator.createTurnContextSource`（`packages/memory/src/adapter-kernel/TurnRecallCoordinator.ts`） | 宿主注入；`rendererVisible: false` |
+| `task.lifecycle` | `packages/agent/src/kernel/background-jobs.ts` | 宿主注入（必填，空数组直接抛） |
 
 注册点集中在 `apps/desktop/src/main/bootstrap/composition/chat.ts`。
 
-> **两条现状提醒**（写新源前值得知道）：
-> ① `task.lifecycle` 声明 `scopes: []`，gate2 恒 false ——三个空间的 gate1 白名单都列了它，
-> 但 FanIn 会把它过滤掉；
-> ② `workspace.editor-focus` / `workspace.editor-selection` 在 gate1 白名单与渲染层 id 允许表里，
-> 但**没有对应的 producer**。
-> 两条都记录在 [conventions.md 的文档-代码漂移清单](../conventions.md#附文档-代码漂移清单)。
+> **跨空间源一律不要手写 `scopes`**：Desktop 用
+> `resolveTurnContextSourceScopes(sourceId)`（`apps/desktop/src/shared/capabilities/DesktopTurnContextPolicy.ts`）
+> 从 gate1 白名单反查后注入，两道门永远同底。`task.lifecycle` 曾因空间化重构把常量数组降级成 `[]`，
+> gate2 恒 false 让整条 task delta 通道静默失联（已修，`scripts/checks/kernelAssembly.mjs` ⑥ 锁）。
 </content>

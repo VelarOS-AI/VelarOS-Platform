@@ -5594,9 +5594,9 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
   ],
   WorkspaceSpaceIcon: [
     {
-      "name": "WorkspaceSpaceIcon.space",
+      "name": "WorkspaceSpaceIcon.iconName",
       "description": "Auto-generated from TypeScript props.",
-      "type": "WorkspaceSpaceKind",
+      "type": "WorkspaceSpaceIconName",
       "recommended": "Required"
     },
     {
@@ -5612,16 +5612,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "WorkspaceSpaceIcon.renderBrowserIcon",
-      "description": "browser 分类的品牌图标注入点：由宿主提供，本库不直依产品品牌资产。",
+      "description": "browser 图标名的品牌资产注入点：由宿主提供，本库不直依产品品牌资产。",
       "type": "(props: { size: number; }) => ReactElement",
       "recommended": "Required"
     }
   ],
   WorkspaceSpaceStatusIcon: [
     {
-      "name": "WorkspaceSpaceStatusIcon.space",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "WorkspaceSpaceKind",
+      "name": "WorkspaceSpaceStatusIcon.iconName",
+      "description": "空间 descriptor 声明的图标语义名（宿主查表后递入，本库不认识空间枚举）。",
+      "type": "WorkspaceSpaceIconName",
       "recommended": "Required"
     },
     {
@@ -5638,7 +5638,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "WorkspaceSpaceStatusIcon.renderBrowserIcon",
-      "description": "browser 分类的品牌图标注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。",
+      "description": "browser 图标名的品牌资产注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。",
       "type": "(props: { size: number; }) => ReactElement",
       "recommended": "Required"
     }

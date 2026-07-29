@@ -184,6 +184,8 @@ const segments = projectAgentModPromptSegments(snapshot)
 - **IO 全注入**：`AgentModPackReader.readManifest` / `loadBindings` 由宿主实现。主干零 fs 依赖，
   因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；主干也**不 import kernel 协议包**，
   pack descriptor 以结构化契约声明。`readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
+  **实装状态（2026-07-30）**：Desktop 的 `createDesktopAgentModPackReader()` 只实现了 `readManifest`，
+  `loadBindings` 尚无宿主实现——外部 pack 的绑定通道（`tools` / `hooks`）因此还不通，待 P5/W3 补齐。
 
 ### 分节单文件 `velaros.mod.json`（蓝图 v6 §8.3）
 

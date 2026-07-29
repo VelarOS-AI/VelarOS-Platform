@@ -1,6 +1,6 @@
 import { isEmpty, isPresent, toOptional } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
-import type { TurnContextDeltaSource } from '@velaros-ai/core/types'
+import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { type TurnContextAppendHub, TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
 
@@ -321,11 +321,21 @@ class KernelBackgroundJobManager {
   /**
    * 环境回合上下文 source adapter：delta=任务完成/失败（finish 时定稿），
    * anchors=当前运行中任务；peek 同步纯内存。
+   *
+   * `scopes` 由宿主装配显式注入（本包不认识产品空间词表）：后台任务与空间无关，
+   * 宿主应把「声明了 task.lifecycle 的全部空间」传进来。**必填**——曾因空间化重构
+   * 把常量数组降级成 `[]`，让 FanIn gate2（`source.scopes.includes(space)`）恒 false，
+   * 整条 task delta 通道静默失联；留成可选参数就是把同一个坑再挖一遍。
    */
-  public createTurnContextSource(): TurnContextDeltaSource {
+  public createTurnContextSource(
+    scopes: readonly CapabilityScopeId[],
+  ): TurnContextDeltaSource {
+    if (isEmpty(scopes))
+      throw new Error('task.lifecycle turn-context source requires at least one capability scope')
+
     return {
       id: 'task.lifecycle',
-      scopes: [],
+      scopes: [...scopes],
       peekCached: (input) => {
         const running = [...this.jobs.values()].filter(
           (job) => job.sessionId === input.sessionId && job.status === 'running',

@@ -9,23 +9,21 @@ import { type ReactElement } from 'react'
 
 import { cn } from '../../lib/cn'
 
-import {
-  WorkspaceSpaceIcon,
-  type WorkspaceSpaceKind,
-} from './WorkspaceSpaceIcon'
+import { WorkspaceSpaceIcon, type WorkspaceSpaceIconName } from './WorkspaceSpaceIcon'
 
 export type WorkspaceSpaceStatusTone = 'default' | 'running' | 'paused'
 
 export interface WorkspaceSpaceStatusIconProps {
-  space: WorkspaceSpaceKind
+  /** 空间 descriptor 声明的图标语义名（宿主查表后递入，本库不认识空间枚举）。 */
+  iconName: WorkspaceSpaceIconName
   running?: boolean
   tone?: WorkspaceSpaceStatusTone
-  /** browser 分类的品牌图标注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。 */
+  /** browser 图标名的品牌资产注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。 */
   renderBrowserIcon: (props: { size: number }) => ReactElement
 }
 
 export function WorkspaceSpaceStatusIcon({
-  space,
+  iconName,
   running = false,
   tone = running ? 'running' : 'default',
   renderBrowserIcon,
@@ -41,7 +39,7 @@ export function WorkspaceSpaceStatusIcon({
       aria-hidden="true"
     >
       <WorkspaceSpaceIcon
-        space={space}
+        iconName={iconName}
         size={11}
         weight="bold"
         renderBrowserIcon={renderBrowserIcon}
