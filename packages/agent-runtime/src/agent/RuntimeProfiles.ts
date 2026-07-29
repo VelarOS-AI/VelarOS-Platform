@@ -1,0 +1,146 @@
+import { isNotUndefined, isNumber } from '@velaros-ai/core'
+import {
+  assertRunProfileId,
+  parseOptionalRunProfileSelectionId,
+} from '@velaros-ai/core/constants/typedFieldAsserts'
+import type {
+  RunProfileDefinition,
+  RunProfileId,
+  RunProfileRuntimePolicy,
+  RunProfileSelectionId,
+  ToolSurfaceProfileId,
+} from '@velaros-ai/core/types'
+
+const AutoRunProfileSelectionId: RunProfileSelectionId = 'auto'
+const DefaultRunProfileSelectionId: RunProfileSelectionId = AutoRunProfileSelectionId
+const DefaultToolSurfaceProfileId = 'guided' as const satisfies ToolSurfaceProfileId
+const UnknownContextWindowFallback = 128_000
+const BalancedContextWindowThreshold = 192_000
+const ExpandedContextWindowThreshold = 1_000_000
+
+const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
+  compact: {
+    id: 'compact',
+    label: 'Compact',
+    description: 'Bounded runtime profile for smaller context windows.',
+    budget: {
+      maxToolCount: 64,
+      maxSystemPromptChars: 80_000,
+      maxToolSchemaChars: 220_000,
+    },
+    defaults: {
+      thinkingDepth: 'fast',
+      toolSurfaceProfile: 'guided',
+      modelRequestPolicy: { temperature: 0.15, topP: 0.85, maxOutputTokens: 8192 },
+    },
+    automaticToolCategories: [],
+  },
+  balanced: {
+    id: 'balanced',
+    label: 'Balanced',
+    description: 'Default runtime profile for medium and large context windows.',
+    budget: {
+      maxToolCount: 160,
+      maxSystemPromptChars: 220_000,
+      maxToolSchemaChars: 360_000,
+    },
+    defaults: {
+      thinkingDepth: 'balanced',
+      toolSurfaceProfile: 'direct',
+      modelRequestPolicy: { temperature: 0.2, topP: 0.9, maxOutputTokens: 16_384 },
+    },
+    automaticToolCategories: [],
+  },
+  expanded: {
+    id: 'expanded',
+    label: 'Expanded',
+    description: 'Unbounded runtime profile for very large context windows.',
+    budget: {
+      maxToolCount: null,
+      maxSystemPromptChars: null,
+      maxToolSchemaChars: null,
+    },
+    defaults: {
+      thinkingDepth: 'deep',
+      toolSurfaceProfile: 'expert',
+      modelRequestPolicy: { temperature: 0.25, topP: 0.95, maxOutputTokens: 32_768 },
+    },
+    automaticToolCategories: [],
+  },
+}
+
+function resolveRunProfilePolicyForRuntime(input: {
+  requested?: LooseOptional<unknown>
+  contextWindow?: LooseOptional<number>
+  model?: LooseOptional<string>
+}): RunProfileRuntimePolicy {
+  const explicitSelection = parseOptionalRunProfileSelectionId(
+    input.requested,
+    'runProfile.requested'
+  )
+  const requested = explicitSelection ?? DefaultRunProfileSelectionId
+  const contextWindow = isNumber(input.contextWindow)
+    ? input.contextWindow
+    : UnknownContextWindowFallback
+  let profile: RunProfileId
+  let reason: string
+
+  if (isNotUndefined(explicitSelection) && explicitSelection !== AutoRunProfileSelectionId) {
+    profile = assertRunProfileId(explicitSelection, 'runProfile.requested')
+    reason = 'explicit'
+  } else if (contextWindow < BalancedContextWindowThreshold) {
+    profile = 'compact'
+    reason = `context-window<${BalancedContextWindowThreshold}`
+  } else if (contextWindow >= ExpandedContextWindowThreshold) {
+    profile = 'expanded'
+    reason = `context-window>=${ExpandedContextWindowThreshold}`
+  } else {
+    profile = 'balanced'
+    reason = 'context-window-default'
+  }
+
+  const definition = RunProfileDefinitions[profile]
+  return {
+    requested,
+    profile,
+    reason,
+    contextWindow,
+    defaults: definition.defaults,
+    budget: definition.budget,
+  }
+}
+
+function resolveRunProfileForRuntime(input: {
+  requested?: LooseOptional<unknown>
+  contextWindow?: LooseOptional<number>
+  model?: LooseOptional<string>
+}): { profile: RunProfileId; reason: string } {
+  const policy = resolveRunProfilePolicyForRuntime(input)
+  return { profile: policy.profile, reason: policy.reason }
+}
+
+const ToolSurfaceFallbackChains: Record<
+  ToolSurfaceProfileId,
+  readonly ToolSurfaceProfileId[]
+> = {
+  preset: ['preset', 'guided', 'direct'],
+  guided: ['guided', 'preset', 'direct'],
+  direct: ['direct'],
+  expert: ['expert', 'direct'],
+}
+
+function getToolSurfaceFallbackChain(
+  profile: ToolSurfaceProfileId
+): readonly ToolSurfaceProfileId[] {
+  return ToolSurfaceFallbackChains[profile] ?? [DefaultToolSurfaceProfileId, 'direct']
+}
+
+export {
+  AutoRunProfileSelectionId,
+  DefaultRunProfileSelectionId,
+  DefaultToolSurfaceProfileId,
+  getToolSurfaceFallbackChain,
+  resolveRunProfileForRuntime,
+  resolveRunProfilePolicyForRuntime,
+  RunProfileDefinitions,
+}

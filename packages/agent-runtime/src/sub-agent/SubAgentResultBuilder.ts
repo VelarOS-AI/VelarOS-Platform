@@ -1,0 +1,87 @@
+import type {
+  SubAgentTaskArtifacts,
+  SubAgentTaskResult,
+  SubAgentTaskResultStatus,
+  SubAgentToolDigestEntry,
+  SubAgentUsage,
+  SubAgentWindDownReason,
+  TeamModelSelectionTrace,
+} from '@velaros-ai/core/types'
+
+import type { CodingSessionSnapshot } from '../reminders/types'
+
+interface BuildSubAgentTaskResultInput {
+  threadId: string
+  text: string
+  status: SubAgentTaskResultStatus
+  windDownReason?: SubAgentWindDownReason
+  codingSnapshot?: CodingSessionSnapshot
+  modelTrace?: TeamModelSelectionTrace
+  toolDigest?: SubAgentToolDigestEntry[]
+  structuredOutput?: unknown
+  usage?: SubAgentUsage
+}
+
+function buildArtifactsFromSnapshot(
+  snapshot: CodingSessionSnapshot | undefined
+): SubAgentTaskArtifacts | undefined {
+  if (!snapshot) return undefined
+
+  const artifacts: SubAgentTaskArtifacts = {}
+  if (snapshot.modifiedPaths.length > 0) {
+    artifacts.changed_paths = [...snapshot.modifiedPaths]
+  }
+  if (snapshot.latestVerificationStatus) {
+    artifacts.verification = {
+      status:
+        snapshot.latestVerificationStatus === 'passed'
+          ? 'passed'
+          : snapshot.latestVerificationStatus === 'failed' ||
+              snapshot.latestVerificationStatus === 'timed-out'
+            ? 'failed'
+            : 'skipped',
+      command: snapshot.activeVerificationFailure?.command,
+    }
+  }
+  if (!artifacts.changed_paths && !artifacts.verification) return undefined
+  return artifacts
+}
+
+function buildSubAgentTaskResult(input: BuildSubAgentTaskResultInput): SubAgentTaskResult {
+  const summary = input.text.trim() || '子智能体已完成，但没有返回文本。'
+  return {
+    thread_id: input.threadId,
+    status: input.status,
+    summary,
+    structured_output: input.structuredOutput,
+    usage: input.usage,
+    artifacts: buildArtifactsFromSnapshot(input.codingSnapshot),
+    tool_digest: input.toolDigest,
+    model_trace: input.modelTrace,
+    wind_down_reason: input.windDownReason,
+  }
+}
+
+function formatSubAgentToolResult(result: SubAgentTaskResult): string {
+  const payload = JSON.stringify(result)
+  return `${result.summary}\n\n<subagent-result type="application/json">\n${payload}\n</subagent-result>`
+}
+
+function parseSubAgentToolResult(value: string): Nullable<SubAgentTaskResult> {
+  const match = value.match(
+    /<subagent-result type="application\/json">\s*([\s\S]*?)\s*<\/subagent-result>/
+  )
+  if (!match?.[1]) return null
+  try {
+    return JSON.parse(match[1]) as SubAgentTaskResult
+  } catch {
+    return null
+  }
+}
+
+export {
+  buildSubAgentTaskResult,
+  formatSubAgentToolResult,
+  parseSubAgentToolResult,
+}
+export type { BuildSubAgentTaskResultInput }
