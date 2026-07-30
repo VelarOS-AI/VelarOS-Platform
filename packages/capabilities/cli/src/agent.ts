@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 
-import { isString,optionalWhen } from '@velaros-ai/core'
+import { isString, optionalWhen } from '@velaros-ai/core'
 import {
   formatVelarosCliError,
   formatVelarosCliSuccess,
@@ -120,7 +120,7 @@ interface AgentTaskStatusResult {
 function readAgentTaskStatus(args: string[], cwd: string): AgentTaskStatusResult {
   const workspaceRoot = resolve(readOption(args, '--workspace-root') ?? cwd)
   const taskId = readOption(args, '--task-id')
-  const full = hasFlag(args, '--full')
+  const full = args.includes('--full')
   const taskJsonPath = resolveTaskJsonPath(workspaceRoot, taskId)
   const ledger = readJsonRecord(taskJsonPath)
   const resultRecord = optionalRecord(ledger.result)
@@ -136,6 +136,20 @@ function readAgentTaskStatus(args: string[], cwd: string): AgentTaskStatusResult
   }
 }
 
+/**
+ * 把「命令行 / 指针文件给的任务标识」解析成一个磁盘路径。
+ *
+ * 导览（§5.3b ④安全门）
+ * - **挡什么**：`velaros agent status` 会把解析到的 JSON 原样打回 stdout。任务标识有两条来源都不
+ *   受信——`--task-id` 来自命令行，`latest-task.json` 的 `taskId`/`taskJsonPath` 来自**仓库里的
+ *   文件**（克隆一个恶意仓库就能塞）。不设门的话它就是一个「读任意文件并打印」的原语。
+ * - **门为什么在这一层**：这是唯一一处把外部标识拼进 `resolve()` 的地方；放到读文件处就晚了
+ *   （那时已经分不清路径是怎么来的）。
+ * - **两条轴都要挡，且判据不同**：`taskId` 是**目录名**，只许是单段名字（`assertSafeTaskId`）；
+ *   `taskJsonPath` 是**相对路径**，允许多段，所以只能按「解析后是否仍在 workspaceRoot 内」判
+ *   （`assertPathWithinWorkspace`）。曾经只挡了前者——后者是 2026-07-30 Q3b 补上的缺口。
+ * - **失败方向**：任何存疑一律拒（exitCode 2），不做「清洗后继续」。
+ */
 function resolveTaskJsonPath(workspaceRoot: string, taskId: Nullable<string>): string {
   if (taskId) {
     assertSafeTaskId(taskId)
@@ -145,7 +159,8 @@ function resolveTaskJsonPath(workspaceRoot: string, taskId: Nullable<string>): s
   const latestPath = resolve(workspaceRoot, TaskArtifactRoot, 'latest-task.json')
   const latest = readJsonRecord(latestPath)
   const taskJsonPath = readString(latest, 'taskJsonPath')
-  if (taskJsonPath) return resolve(workspaceRoot, taskJsonPath)
+  if (taskJsonPath)
+    return assertPathWithinWorkspace(resolve(workspaceRoot, taskJsonPath), workspaceRoot, latestPath)
 
   const latestTaskId = readString(latest, 'taskId')
   if (!latestTaskId) {
@@ -165,6 +180,25 @@ function assertSafeTaskId(taskId: string): void {
   }
 }
 
+function assertPathWithinWorkspace(
+  resolvedPath: string,
+  workspaceRoot: string,
+  latestPath: string
+): string {
+  const relativePath = relative(workspaceRoot, resolvedPath)
+  const escapesRoot =
+    relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)
+  if (escapesRoot) {
+    throw new VelarosCliError(
+      'INVALID_TASK_POINTER',
+      'Latest agent task pointer escapes the workspace root.',
+      2,
+      { latestPath, resolvedPath, workspaceRoot }
+    )
+  }
+  return resolvedPath
+}
+
 function readOption(args: string[], name: string): Nullable<string> {
   const index = args.indexOf(name)
   if (index === -1) return null
@@ -175,10 +209,6 @@ function readOption(args: string[], name: string): Nullable<string> {
     })
   }
   return value
-}
-
-function hasFlag(args: string[], name: string): boolean {
-  return args.includes(name)
 }
 
 function readJsonRecord(path: string): Record<string, unknown> {
