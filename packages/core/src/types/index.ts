@@ -982,6 +982,17 @@ export interface ChatFolderRegistryEntry {
     resourceId?: string
     metadata?: Record<string, unknown>
   }>
+  /**
+   * folder 级执行体绑定。缺省 = Velar Solo；存在 = 该 folder 的全部成员都由指定外部引擎执行。
+   *
+   * 这是主进程从 folders.json 读取的权威路由声明，不得由 renderer 的 space 或发送载荷覆盖。
+   * 绑定创建后不可变；切换执行体必须新建 folder，避免一条会话混入两种执行账本。
+   */
+  executionBinding?: LooseOptional<{
+    kind: 'engine'
+    engineId: 'claude-code' | 'codex'
+    workspaceRoot: string
+  }>
   createdAt: number
   updatedAt: number
   /** 成员会话 id（每个成员一个固定工作区）。 */
