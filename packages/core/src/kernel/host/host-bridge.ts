@@ -5,6 +5,7 @@ import type {
   KernelModuleLifecycle,
 } from '../abi'
 
+import { KernelHostError } from './errors'
 import type {
   ExternalKernelModuleIsolation,
   KernelModuleIsolationAdapter,
@@ -32,25 +33,6 @@ export interface KernelHostBridge {
 }
 
 /**
- * Adapts a product-registered {@link KernelHostBridge} into the Host isolation
- * adapter surface.
- */
-export class HostBridgeIsolationAdapter implements KernelModuleIsolationAdapter {
-  public readonly isolation: ExternalKernelModuleIsolation
-
-  public constructor(private readonly bridge: KernelHostBridge) {
-    this.isolation = bridge.isolation
-  }
-
-  public activate(
-    module: KernelModuleDefinition,
-    context: KernelModuleActivateContext,
-  ): Awaitable<KernelModuleLifecycle | void> {
-    return this.bridge.activate(module, context)
-  }
-}
-
-/**
  * Registry of HostBridges keyed by bridge id (typically capability or module id).
  */
 export class KernelHostBridgeRegistry {
@@ -58,7 +40,10 @@ export class KernelHostBridgeRegistry {
 
   public register(bridge: KernelHostBridge): void {
     if (bridge.id.trim().length === 0) {
-      throw new Error('HostBridge id must not be empty')
+      throw new KernelHostError(
+        'INVALID_MANIFEST',
+        'HostBridge id must not be empty',
+      )
     }
     this.bridges.set(bridge.id, bridge)
   }
@@ -71,8 +56,14 @@ export class KernelHostBridgeRegistry {
     return [...this.bridges.values()]
   }
 
-  /** Build isolation adapters for every registered bridge. */
+  /**
+   * Expose registered bridges as isolation adapters.
+   *
+   * `KernelHostBridge` already carries the adapter surface (`isolation` + `activate`),
+   * so no wrapper object is built: an adapter class that only forwarded both members
+   * added a hop without adding meaning.
+   */
   public toIsolationAdapters(): readonly KernelModuleIsolationAdapter[] {
-    return this.list().map((bridge) => new HostBridgeIsolationAdapter(bridge))
+    return this.list()
   }
 }

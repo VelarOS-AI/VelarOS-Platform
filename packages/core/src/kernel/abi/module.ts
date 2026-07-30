@@ -82,6 +82,25 @@ export type KernelModuleHealthStatus =
   | 'degraded'
   | 'unhealthy'
 
+/**
+ * Module lifecycle states owned by the host state machine.
+ *
+ * Declared here because both the host and the service-facing contracts speak it;
+ * duplicating the union let a new state reach the host while the wire view stayed
+ * silently stale.
+ */
+export type KernelModuleStatus =
+  | 'registered'
+  | 'activating'
+  | 'active'
+  | 'readying'
+  | 'ready'
+  | 'suspending'
+  | 'suspended'
+  | 'disposing'
+  | 'disposed'
+  | 'failed'
+
 export interface KernelModuleHealth {
   readonly status: KernelModuleHealthStatus
   readonly message?: string

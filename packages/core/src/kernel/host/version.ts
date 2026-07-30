@@ -6,17 +6,6 @@ interface SemanticVersion {
   readonly patch: number
 }
 
-function parseNumericPart(value: string, source: string): number {
-  if (!/^\d+$/.test(value)) {
-    throw new KernelHostError(
-      'INVALID_VERSION',
-      `Invalid semantic version "${source}"`,
-    )
-  }
-
-  return Number(value)
-}
-
 function parseSemanticVersion(
   source: string,
   errorCode: 'INVALID_VERSION' | 'INVALID_VERSION_RANGE' = 'INVALID_VERSION',
@@ -30,10 +19,12 @@ function parseSemanticVersion(
     )
   }
 
+  // The capture groups are `\d+`, so the parts are digits by construction — no second
+  // validation pass here (boundary parses once, callers trust the result).
   return {
-    major: parseNumericPart(match[1]!, source),
-    minor: parseNumericPart(match[2]!, source),
-    patch: parseNumericPart(match[3]!, source),
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
   }
 }
 
