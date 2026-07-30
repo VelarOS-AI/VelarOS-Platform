@@ -1,8 +1,6 @@
 import { first, isBlank, isEmpty, isNumber } from '@velaros-ai/core'
 
 import type { ChatProviderId } from './ModelContracts'
-
-
 import {
   DirectOpenAICompatibleProviderIds,
   OpenRouterCompatibleProviderIds,

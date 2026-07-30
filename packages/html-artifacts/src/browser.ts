@@ -1,8 +1,8 @@
 import {
   DEFAULT_HTML_ARTIFACT_HEIGHT,
-  HtmlArtifactProtocolParser,
   type HtmlArtifactProtocolEvent,
   type HtmlArtifactProtocolLimits,
+  HtmlArtifactProtocolParser,
   type HtmlArtifactSnapshot,
 } from './protocol.js'
 import { normalizeHtmlArtifactExternalUrl } from './security.js'
@@ -97,29 +97,27 @@ export class DomHtmlArtifactEnvironment implements HtmlArtifactBrowserEnvironmen
     private readonly browserDocument: Document = document
   ) {}
 
-  createBridgeId(): string {
+  public createBridgeId(): string {
     const cryptoApi = globalThis.crypto
-    if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
-      return cryptoApi.randomUUID()
-    }
+    if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
 
     this.fallbackId += 1
     return `${Date.now().toString(36)}-${this.fallbackId.toString(36)}`
   }
 
-  createIframe(): HTMLIFrameElement {
+  public createIframe(): HTMLIFrameElement {
     return this.browserDocument.createElement('iframe')
   }
 
-  addMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
+  public addMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
     this.browserWindow.addEventListener('message', listener)
   }
 
-  removeMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
+  public removeMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
     this.browserWindow.removeEventListener('message', listener)
   }
 
-  scrollBy(deltaX: number, deltaY: number): void {
+  public scrollBy(deltaX: number, deltaY: number): void {
     this.browserWindow.scrollBy({ left: deltaX, top: deltaY })
   }
 }
@@ -226,9 +224,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
 
   readonly getSnapshot = (
     artifactId = this.latestArtifactId ?? ''
-  ): HtmlArtifactSnapshot | null => {
-    return this.parser.getSnapshot(artifactId)
-  }
+  ): HtmlArtifactSnapshot | null => this.parser.getSnapshot(artifactId)
 
   readonly reset = (): void => {
     this.assertActive()

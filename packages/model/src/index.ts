@@ -2,24 +2,13 @@ export type { ResolvedAgentModelRuntime } from './AgentModelResolver'
 export { AgentModelResolver } from './AgentModelResolver'
 export type { AgentProvider } from './AgentModelRuntime'
 export { AgentModelRuntime } from './AgentModelRuntime'
-export * from './EmbeddingModelSelection'
-export * from './LocalModelEnvironment'
-export * from './ModelCatalog'
-export type * from './ModelContracts'
-export {
-  ModelProviderCollection,
-  type ModelProviderAvailabilityOptions,
-  type ModelProviderCollectionOptions,
-  type ModelProviderConfiguredInput,
-  type ModelProviderPreset,
-} from './ModelProviderCollection'
-export * from './ProviderManifest'
 export {
   AiSdkModelRequestTransport,
   type AiSdkModelRequestTransportOptions,
 } from './AiSdkModelRequestTransport'
 export { AnthropicModelAdapter } from './AnthropicModelAdapter'
 export { DeepSeekModelAdapter } from './DeepSeekModelAdapter'
+export * from './EmbeddingModelSelection'
 export { GoogleModelAdapter } from './GoogleModelAdapter'
 export {
   createModelKernelModule,
@@ -28,6 +17,7 @@ export {
   type ModelRegistryPort,
   type ModelRuntimeCapabilityService,
 } from './kernel-module'
+export * from './LocalModelEnvironment'
 export {
   type EmbeddingRequest,
   type LanguageModelFactory,
@@ -35,16 +25,20 @@ export {
   type ModelAdapterConfig,
 } from './ModelAdapter'
 export type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
+export * from './ModelCatalog'
+export type * from './ModelContracts'
 export {
-  type ProviderScriptDescriptor,
-  type ProviderScriptRegistryPort,
-  type ProviderScriptRuntimeMetadata,
-} from './ProviderScriptRegistryPort'
+  type ModelProviderAvailabilityOptions,
+  ModelProviderCollection,
+  type ModelProviderCollectionOptions,
+  type ModelProviderConfiguredInput,
+  type ModelProviderPreset,
+} from './ModelProviderCollection'
 export { applyModelRequestPolicy } from './ModelRequestPolicy'
 export {
   ModelRequestClient,
-  ModelRequestService,
   type ModelRequestClientOptions,
+  ModelRequestService,
   type ModelRequestServiceOptions,
 } from './ModelRequestService'
 export type {
@@ -73,8 +67,14 @@ export {
   mergeSessionPromptCacheProviderOptions,
   resolveSessionPromptCacheKey,
 } from './PromptCacheModelOptions'
+export * from './ProviderManifest'
 export { ProviderRawStreamText } from './ProviderRawStreamText'
 export * from './ProviderRuntimeAvailability'
+export {
+  type ProviderScriptDescriptor,
+  type ProviderScriptRegistryPort,
+  type ProviderScriptRuntimeMetadata,
+} from './ProviderScriptRegistryPort'
 export { readProviderCacheWriteInputTokens } from './ProviderStreamUsage'
 export {
   applyThinkingDepthProviderOptions,
@@ -86,7 +86,7 @@ export {
 } from './ThinkingDepthModelOptions'
 export {
   VelarCloudModelRuntime,
-  type VelarCloudModelRuntimeBinding,
   velarCloudModelRuntime,
+  type VelarCloudModelRuntimeBinding,
 } from './VelarCloudModelRuntime'
 export { VelarModelAdapter } from './VelarModelAdapter'

@@ -5,7 +5,6 @@
  * script loading, VM adapters, and the default runtime composition.
  */
 export * from './index'
-export { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 export {
   createLegacyModelAdapterRegistry,
   createModelAdapterRegistry,
@@ -13,10 +12,11 @@ export {
 } from './ModelAdapterRegistry'
 export {
   createModelRuntimeComposition,
+  type CreateModelRuntimeCompositionOptions,
   DefaultModelRuntimeComposition,
   ModelRuntimeComposition,
-  type CreateModelRuntimeCompositionOptions,
 } from './ModelRuntimeComposition'
+export { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 export {
   type ProviderScriptDefinition,
   type ProviderScriptHelpers,

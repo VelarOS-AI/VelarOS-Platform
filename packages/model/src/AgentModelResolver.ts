@@ -3,14 +3,14 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { LocalModelEnvironment, OllamaProviderId } from './LocalModelEnvironment'
+import type { LanguageModelFactory } from './ModelAdapter'
+import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 import {
   isOpenRouterCompatibleProvider,
   OpenRouterAutoModelId,
   OpenRouterFreeModelId,
   resolveModelContextWindow,
 } from './ModelCatalog'
-import type { LanguageModelFactory } from './ModelAdapter'
-import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
@@ -24,8 +24,8 @@ import type {
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { resolveProviderScriptContextWindow } from './ProviderScriptContextWindow'
 import {
-  type ProviderScriptRuntimeMetadata,
   type ProviderScriptRegistryPort,
+  type ProviderScriptRuntimeMetadata,
 } from './ProviderScriptRegistryPort'
 import { createThinkingDepthProviderOptions } from './ThinkingDepthModelOptions'
 
@@ -304,9 +304,7 @@ class AgentModelResolver {
     model: string,
     openRouterConfig: OpenRouterRoutingConfig
   ): { model: string; requestOptions?: ModelRequestOptions } {
-    if (!isOpenRouterCompatibleProvider(providerId)) {
-      return { model: this.providers.resolveModel(providerId, model) }
-    }
+    if (!isOpenRouterCompatibleProvider(providerId)) return { model: this.providers.resolveModel(providerId, model) }
 
     const requestedModel = model.trim()
     if (
@@ -315,19 +313,15 @@ class AgentModelResolver {
         openRouterConfig.useFreeModelsForDebug
         && (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId)
       )
-    ) {
-      return {
+    ) return {
         model: OpenRouterFreeModelId,
         requestOptions: { openRouter: { useFreeModelsForDebug: true } },
       }
-    }
 
-    if (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId) {
-      return {
+    if (isBlank(requestedModel) || requestedModel === OpenRouterAutoModelId) return {
         model: OpenRouterAutoModelId,
         requestOptions: { openRouter: { allowedModels: [] } },
       }
-    }
 
     return { model: requestedModel }
   }

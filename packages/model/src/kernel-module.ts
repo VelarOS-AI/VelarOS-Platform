@@ -1,7 +1,5 @@
 import { isNonBlankString, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-
-import type { ChatProviderId } from './ModelContracts'
 import {
   createCapabilityToken,
   createKernelCallableCapability,
@@ -11,6 +9,7 @@ import {
 } from '@velaros-ai/core/kernel/abi'
 
 import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
+import type { ChatProviderId } from './ModelContracts'
 
 export type ModelRegistryPort = ModelAdapterRegistryPort
 

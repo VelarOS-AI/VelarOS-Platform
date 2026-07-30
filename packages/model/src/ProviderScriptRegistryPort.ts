@@ -1,3 +1,4 @@
+import type { ModelAdapterConfig } from './ModelAdapter'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
@@ -6,7 +7,6 @@ import type {
   ProviderScriptManifest,
   ValidateProviderRuntimeRequest,
 } from './ModelContracts'
-import type { ModelAdapterConfig } from './ModelAdapter'
 
 export interface ProviderScriptRuntimeMetadata {
   model?: LooseOptional<string>

@@ -178,9 +178,7 @@ export function parseMemoryFileDocument(
 function encodeValue(value: string): string {
   const normalized = value.replaceAll('\n', ' ').trim()
   if (normalized.length === 0) return "''"
-  if (/^[#&*!|>%@`[{]/u.test(normalized) || normalized !== value) {
-    return `'${normalized.replaceAll("'", "''")}'`
-  }
+  if (/^[#&*!|>%@`[{]/u.test(normalized) || normalized !== value) return `'${normalized.replaceAll("'", "''")}'`
   return normalized
 }
 

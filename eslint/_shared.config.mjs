@@ -1,0 +1,350 @@
+// VelarOS-Platform eslint 共享规则基座。
+//
+// 由来:并仓时八个源仓的 eslint 配置原样搬进 eslint/<domain>.config.mjs,规则集因此被复制了七份。
+// QH 批门覆盖审计实测出这份复制的代价——同一条法条在各包待遇不同,而且没人看得出来:
+//   memory 域少 28 条(velaros-style 两条、@typescript-eslint 八条、no-lonely-if / prefer-template …),
+//   model 域少 44 条(整个 unicorn / simple-import-sort / velaros-style 族都没有),
+//   html-artifacts 干脆整包在根 ignores 里(零条规则)。
+// 这三个域现改为引用本基座,规则集有了单一权威源。agent / capabilities / core / kernel / ui 五域
+// 的 commonRules 与本文件逐字相同(md5 已核对,ui 只差 import 分组一处),迁移到本基座是纯机械动作,
+// 留给后续批次做——本批只动缺门的三个域,避免与并行实例撞车。
+//
+// 本基座只放「域无关」的部分:全局变量表、本地风格插件、公共规则集、TS 面规则、.d.ts 面豁免。
+// 域私有的 ignores / 路径豁免 / no-restricted-imports 留在各域配置里。
+import js from '@eslint/js'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+import tsParser from '@typescript-eslint/parser'
+import prettierConfig from 'eslint-config-prettier'
+import eslintComments from 'eslint-plugin-eslint-comments'
+import simpleImportSort from 'eslint-plugin-simple-import-sort'
+import unicorn from 'eslint-plugin-unicorn'
+import unusedImports from 'eslint-plugin-unused-imports'
+import globals from 'globals'
+
+export const commonGlobals = {
+  ...globals.browser,
+  ...globals.node,
+  ...globals.es2024,
+}
+
+export const localStylePlugin = {
+  rules: {
+    'explicit-public-methods': {
+      meta: {
+        type: 'layout',
+        fixable: 'code',
+        messages: {
+          missingPublic: '类方法必须显式写 public。',
+        },
+        schema: [],
+      },
+      create(context) {
+        const sourceCode = context.sourceCode
+
+        return {
+          'MethodDefinition, TSAbstractMethodDefinition'(node) {
+            if (
+              node.kind !== 'method' ||
+              node.accessibility ||
+              node.key?.type === 'PrivateIdentifier'
+            ) return
+
+            context.report({
+              node,
+              messageId: 'missingPublic',
+              fix(fixer) {
+                const decorators = node.decorators ?? []
+                const insertBefore = decorators.length
+                  ? sourceCode.getTokenAfter(decorators.at(-1))
+                  : sourceCode.getFirstToken(node)
+
+                return insertBefore
+                  ? fixer.insertTextBefore(insertBefore, 'public ')
+                  : null
+              },
+            })
+          },
+        }
+      },
+    },
+    'no-braced-return-guard': {
+      meta: {
+        type: 'layout',
+        fixable: 'code',
+        messages: {
+          unneededBraces: '单语句 return guard 不要包裹大括号。',
+        },
+        schema: [],
+      },
+      create(context) {
+        const sourceCode = context.sourceCode
+
+        return {
+          IfStatement(node) {
+            const block = node.consequent
+            if (node.alternate || block?.type !== 'BlockStatement') return
+            const statement = block.body[0]
+            if (block.body.length !== 1 || statement?.type !== 'ReturnStatement') return
+            if (sourceCode.getCommentsInside(block).length > 0) return
+
+            context.report({
+              node: block,
+              messageId: 'unneededBraces',
+              fix(fixer) {
+                return fixer.replaceText(block, sourceCode.getText(statement))
+              },
+            })
+          },
+        }
+      },
+    },
+  },
+}
+
+export const commonPlugins = {
+  'eslint-comments': eslintComments,
+  'simple-import-sort': simpleImportSort,
+  unicorn,
+  'unused-imports': unusedImports,
+  'velaros-style': localStylePlugin,
+}
+
+export const commonRules = {
+  'array-callback-return': 'error',
+  'arrow-body-style': ['error', 'as-needed'],
+  'curly': ['error', 'multi-line', 'consistent'],
+  'default-case-last': 'error',
+  'dot-notation': 'off',
+  'eqeqeq': ['error', 'smart'],
+  'eslint-comments/no-unused-disable': 'error',
+  'eslint-comments/require-description': [
+    'error',
+    { ignore: ['eslint-enable'] },
+  ],
+  'no-array-constructor': 'error',
+  'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
+  'no-else-return': ['error', { allowElseIf: false }],
+  'no-empty': ['error', { allowEmptyCatch: true }],
+  'no-lonely-if': 'error',
+  'no-nested-ternary': 'off',
+  'no-new-object': 'error',
+  'no-param-reassign': ['error', { props: false }],
+  'no-restricted-syntax': 'off',
+  'no-return-await': 'error',
+  'no-unneeded-ternary': 'error',
+  'no-useless-computed-key': 'error',
+  'no-useless-concat': 'error',
+  'no-useless-rename': 'error',
+  'no-var': 'error',
+  'object-shorthand': ['error', 'always'],
+  'one-var': ['error', 'never'],
+  'prefer-const': ['error', { destructuring: 'all' }],
+  'prefer-object-spread': 'error',
+  'prefer-template': 'error',
+  'simple-import-sort/exports': 'error',
+  'simple-import-sort/imports': [
+    'error',
+    {
+      groups: [
+        // Side-effect imports 在插件内以 \\u0000 为前缀参与匹配(见 eslint-plugin-simple-import-sort)。
+        // 扩展入口须全局最先;勿删此组以免 autofix 把 @shared/extensions 排到 ./ 相对 import 之后。
+        ['^\\u0000@shared/extensions$', '^\\u0000@velaros-ai/core/extensions$'],
+        ['^\\u0000dotenv/'],
+        ['^\\u0000'],
+        ['^node:'],
+        ['^react$', '^react-dom', '^@?\\w'],
+        ['^@velaros-ai/'],
+        ['^@shared/', '^@components/', '^@features/', '^@hooks/', '^@pages/', '^@styles/', '^@utils/', '^@/'],
+        ['^\\.\\.(?!/?$)', '^\\.\\./?$'],
+        ['^\\./(?=.*/)(?!/?$)', '^\\.(?!/?$)', '^\\./?$'],
+        ['^.+\\.s?css$'],
+      ],
+    },
+  ],
+  'unicorn/consistent-function-scoping': 'off',
+  'unicorn/error-message': 'error',
+  'unicorn/explicit-length-check': 'off',
+  'unicorn/no-array-for-each': 'off',
+  'unicorn/no-await-expression-member': 'off',
+  'unicorn/no-empty-file': 'error',
+  'unicorn/no-for-loop': 'off',
+  'unicorn/no-lonely-if': 'off',
+  'unicorn/no-negated-condition': 'off',
+  'unicorn/no-new-array': 'error',
+  'unicorn/no-typeof-undefined': 'error',
+  'unicorn/prefer-array-find': 'off',
+  'unicorn/prefer-array-flat-map': 'error',
+  'unicorn/prefer-at': 'off',
+  'unicorn/prefer-code-point': 'off',
+  'unicorn/prefer-includes': 'error',
+  'unicorn/prefer-logical-operator-over-ternary': 'off',
+  'unicorn/prefer-modern-dom-apis': 'off',
+  'unicorn/prefer-node-protocol': 'error',
+  'unicorn/prefer-number-properties': 'off',
+  'unicorn/prefer-query-selector': 'off',
+  'unicorn/prefer-string-replace-all': 'off',
+  'unused-imports/no-unused-imports': 'error',
+  'velaros-style/no-braced-return-guard': 'error',
+}
+
+/** TS 面在 commonRules 之上的增量(与 core / agent / kernel / capabilities 域逐字相同)。 */
+export const commonTypescriptRules = {
+  'no-undef': 'off',
+  'no-array-constructor': 'off',
+  'no-implied-eval': 'off',
+  'no-return-await': 'off',
+  'no-unused-vars': 'off',
+  '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
+  '@typescript-eslint/consistent-type-assertions': 'off',
+  '@typescript-eslint/consistent-type-definitions': 'off',
+  '@typescript-eslint/consistent-type-imports': [
+    'error',
+    {
+      disallowTypeAnnotations: false,
+      fixStyle: 'inline-type-imports',
+      prefer: 'type-imports',
+    },
+  ],
+  '@typescript-eslint/no-array-constructor': 'error',
+  '@typescript-eslint/no-confusing-non-null-assertion': 'error',
+  '@typescript-eslint/no-duplicate-enum-values': 'error',
+  '@typescript-eslint/no-empty-object-type': [
+    'error',
+    { allowInterfaces: 'with-single-extends' },
+  ],
+  '@typescript-eslint/no-explicit-any': 'off',
+  '@typescript-eslint/no-floating-promises': [
+    'error',
+    { ignoreIIFE: true, ignoreVoid: true },
+  ],
+  '@typescript-eslint/no-implied-eval': 'error',
+  '@typescript-eslint/no-inferrable-types': 'off',
+  '@typescript-eslint/no-misused-promises': 'off',
+  '@typescript-eslint/no-non-null-assertion': 'off',
+  '@typescript-eslint/no-redundant-type-constituents': 'off',
+  // This rule can autofix guarded non-null assertions inside callbacks into TS errors
+  // (for example optionalWhenLazy(value, () => value!)). TypeScript is the safer guard here.
+  '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+  '@typescript-eslint/no-unused-vars': 'off',
+  '@typescript-eslint/prefer-for-of': 'off',
+  '@typescript-eslint/prefer-nullish-coalescing': 'off',
+  '@typescript-eslint/return-await': ['error', 'in-try-catch'],
+  '@typescript-eslint/unified-signatures': 'error',
+  'velaros-style/explicit-public-methods': 'error',
+  'no-redeclare': 'off',
+  'unused-imports/no-unused-vars': [
+    'error',
+    {
+      args: 'after-used',
+      argsIgnorePattern: '^_',
+      vars: 'all',
+      varsIgnorePattern: '^_',
+    },
+  ],
+}
+
+/** `.d.ts` 面的豁免(ambient 声明与类型信息不可用的现实)。 */
+export const declarationFileRules = {
+  '@typescript-eslint/no-explicit-any': 'off',
+  '@typescript-eslint/no-empty-object-type': 'off',
+  '@typescript-eslint/no-floating-promises': 'off',
+  '@typescript-eslint/no-implied-eval': 'off',
+  '@typescript-eslint/no-misused-promises': 'off',
+  '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+  '@typescript-eslint/return-await': 'off',
+  'unicorn/no-empty-file': 'off',
+  // ambient 全局增强必须用 `declare var`(与 extensions.ts 的全局 var 对齐);no-var 的 autofix
+  // 会把它改成 block-scoped 的 let,导致与全局声明冲突而编译失败。.d.ts 内一律关闭该规则。
+  'no-var': 'off',
+}
+
+/**
+ * 组装一个域的标准 flat config(五块:全局 ignores / js 推荐 / JS 面 / TS 面 / .d.ts 面 + prettier)。
+ *
+ * @param {object} options
+ * @param {string} options.rootDir            parserOptions.tsconfigRootDir(根配置会改写回仓根)。
+ * @param {string[]} [options.ignores]        域私有的 ignores。
+ * @param {object} [options.tsRulesBase]      铺在 commonRules 之前的基座(如 tsPlugin 的 recommended)。
+ * @param {object} [options.tsRules]          域私有的 TS 面增量,最后覆盖。
+ * @param {object} [options.declarationRules] 域私有的 .d.ts 面增量。
+ * @param {Array} [options.extraBlocks]       追加在标准块之后、prettier 之前的自定义块。
+ */
+export function createDomainConfig({
+  rootDir,
+  ignores = [],
+  tsRulesBase = {},
+  tsRules = {},
+  declarationRules = {},
+  extraBlocks = [],
+}) {
+  return [
+    {
+      ignores: [
+        '**/.git/**',
+        '**/.claude/**',
+        '**/.vite/**',
+        '**/.velaros/**',
+        '**/dist/**',
+        '**/node_modules/**',
+        '**/out/**',
+        'scripts/**',
+        '**/*.config.cjs',
+        'bun.lock',
+        ...ignores,
+      ],
+    },
+    js.configs.recommended,
+    {
+      files: ['**/*.{js,mjs,cjs}'],
+      languageOptions: {
+        ecmaVersion: 'latest',
+        globals: commonGlobals,
+        sourceType: 'module',
+      },
+      plugins: commonPlugins,
+      rules: {
+        ...commonRules,
+        'no-undef': 'error',
+        'unicorn/prefer-module': 'off',
+      },
+    },
+    {
+      files: ['**/*.{ts,tsx}'],
+      languageOptions: {
+        ecmaVersion: 'latest',
+        globals: commonGlobals,
+        parser: tsParser,
+        parserOptions: {
+          project: './tsconfig.eslint.json',
+          tsconfigRootDir: rootDir,
+        },
+        sourceType: 'module',
+      },
+      plugins: {
+        ...commonPlugins,
+        '@typescript-eslint': tsPlugin,
+      },
+      rules: {
+        ...tsRulesBase,
+        ...commonRules,
+        ...commonTypescriptRules,
+        ...tsRules,
+      },
+    },
+    {
+      files: ['**/*.d.ts'],
+      languageOptions: {
+        parser: tsParser,
+        parserOptions: {
+          project: false,
+        },
+      },
+      rules: {
+        ...declarationFileRules,
+        ...declarationRules,
+      },
+    },
+    ...extraBlocks,
+    prettierConfig,
+  ]
+}

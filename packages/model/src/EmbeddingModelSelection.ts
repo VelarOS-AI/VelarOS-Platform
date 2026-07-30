@@ -1,5 +1,5 @@
-import type { ModelProviderCollection } from './ModelProviderCollection'
 import type { BuiltInChatProviderId, ChatProviderId } from './ModelContracts'
+import type { ModelProviderCollection } from './ModelProviderCollection'
 import type { ModelProviderAdapterKind } from './ProviderManifest'
 
 const EmbeddingAdapterKinds = new Set<ModelProviderAdapterKind>([
@@ -49,9 +49,7 @@ function getEmbeddingCandidateScore(model: string): number {
     normalized.includes('bge')
     || normalized.includes('nomic')
     || normalized.includes('jina')
-  ) {
-    return 60
-  }
+  ) return 60
   if (/(^|[-_/])e5($|[-_/])/u.test(normalized)) return 55
 
   return 0

@@ -1,9 +1,9 @@
 import type { ToolSet } from 'ai'
 
 import { isNonBlankString } from '@velaros-ai/core'
-import type { ModelRequestOptions } from './ModelContracts'
 
 import { AiSdkModelRequestTransport } from './AiSdkModelRequestTransport'
+import type { ModelRequestOptions } from './ModelContracts'
 import { applyModelRequestPolicy } from './ModelRequestPolicy'
 import type {
   ModelRequestGenerateText,

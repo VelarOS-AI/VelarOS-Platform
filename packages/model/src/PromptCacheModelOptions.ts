@@ -7,6 +7,7 @@ import type {
 import type { LanguageModel, ModelMessage } from 'ai'
 
 import { isEmpty,isPlainObject, isPresent, isString } from '@velaros-ai/core'
+
 import type { ModelRequestOptions } from './ModelContracts'
 
 /**

@@ -164,11 +164,9 @@ export function supportsMemoryBackendVerb(
   if (!backend.descriptor.verbs.includes(verb)) return false
   if (verb === 'erase') return typeof backend.erase === 'function'
   if (verb === 'dream') return typeof backend.dream === 'function'
-  if (verb === 'govern') {
-    return (
+  if (verb === 'govern') return (
       typeof backend.governSourceEligibility === 'function'
       || typeof backend.governEvidenceEligibility === 'function'
     )
-  }
   return true
 }

@@ -1,12 +1,12 @@
 import type {
+  AgentProviderRuntimeConfig,
+  ChatProviderId,
+} from './ModelContracts'
+import type {
   ModelProviderAvailabilityOptions,
   ModelProviderCollection,
   ModelProviderConfiguredInput,
 } from './ModelProviderCollection'
-import type {
-  AgentProviderRuntimeConfig,
-  ChatProviderId,
-} from './ModelContracts'
 
 export type ProviderRuntimeAvailabilityOptions = ModelProviderAvailabilityOptions
 export type ProviderRuntimeConfiguredInput = ModelProviderConfiguredInput

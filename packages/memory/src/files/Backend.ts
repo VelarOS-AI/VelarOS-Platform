@@ -369,9 +369,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const parsed = parseEntryId(id)
     if (!parsed) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
     const root = this.listRoots().find((candidate) => candidate.scopeId === parsed.scopeId)
-    if (!root || root.readOnly) {
-      return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
-    }
+    if (!root || root.readOnly) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
 
     const absolutePath = this.io.join(root.directory, parsed.path)
     const raw = this.io.readTextFile(absolutePath)
@@ -507,9 +505,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     stableKey: string,
   ): string | undefined {
     for (const entry of entries) {
-      if (this.loadDocument(root, entry.path)?.attributes.stableKey === stableKey) {
-        return entry.path
-      }
+      if (this.loadDocument(root, entry.path)?.attributes.stableKey === stableKey) return entry.path
     }
     return undefined
   }
@@ -523,9 +519,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const taken = new Set(entries.map((entry) => entry.path))
     for (let suffix = 0; suffix < 1000; suffix += 1) {
       const path = `${this.entriesDirectoryName}/${suffix === 0 ? base : `${base}-${suffix + 1}`}.md`
-      if (!taken.has(path) && this.io.readTextFile(this.io.join(root.directory, path)) === null) {
-        return path
-      }
+      if (!taken.has(path) && this.io.readTextFile(this.io.join(root.directory, path)) === null) return path
     }
     return `${this.entriesDirectoryName}/${base}-${hash(title)}.md`
   }

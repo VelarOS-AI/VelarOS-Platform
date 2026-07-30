@@ -4,8 +4,8 @@ import {
   createModelAdapterRegistry,
   type ModelAdapterRegistry,
 } from './ModelAdapterRegistry'
-import { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 import { ModelProviderCollection } from './ModelProviderCollection'
+import { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 import {
   ProviderScriptRegistry,
   type ProviderScriptRegistryOptions,

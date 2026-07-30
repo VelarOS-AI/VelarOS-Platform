@@ -3,7 +3,7 @@ import {
   type LanguageModelFactory,
   ModelAdapter,
   type ModelAdapterConfig,
-  ModelProviderCollection,
+  type ModelProviderCollection,
   ModelRequestClient,
   type ModelRequestClientOptions,
   type ModelRequestServiceOptions,

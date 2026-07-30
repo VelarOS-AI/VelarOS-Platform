@@ -1,9 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
-import type { ChatProviderId } from './ModelContracts'
-
 import type { LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
+import type { ChatProviderId } from './ModelContracts'
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 

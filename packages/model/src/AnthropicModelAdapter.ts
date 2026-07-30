@@ -1,9 +1,8 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 
-import type { ChatProviderId } from './ModelContracts'
-
 import type { LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
+import type { ChatProviderId } from './ModelContracts'
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 import { applyThinkingDepthProviderOptions } from './ThinkingDepthModelOptions'

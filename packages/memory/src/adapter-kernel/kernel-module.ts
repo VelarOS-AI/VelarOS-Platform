@@ -238,9 +238,7 @@ export function createMemoryKernelModule(
               && claim !== null
               && claim.scopeType !== 'global'
               && claim.scopeId !== scope.id
-            ) {
-              return null
-            }
+            ) return null
             return claim
           },
         },
