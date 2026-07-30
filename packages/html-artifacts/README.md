@@ -1,29 +1,39 @@
-# VelarOS HTML Artifacts
+# @velaros-ai/html-artifacts
 
-[![CI](https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts/actions/workflows/ci.yml/badge.svg)](https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-111111.svg)](./LICENSE)
+**把模型的增量文本流,直接变成一个实时、隔离的 HTML 界面。**
 
-Turn an incremental model text stream into a live, sandboxed HTML interface.
+本仓唯一的 MIT 开源包(html-artifacts 域,住 `packages/html-artifacts`)。
+它是零运行时依赖的浏览器库:统一负责协议解析、iframe 生命周期、补丁传输、
+受限高度协商、链接校验和资源清理——接入方不用自己拼 `postMessage` 和流式渲染那一摊。
 
-VelarOS HTML Artifacts is a dependency-free browser runtime with a small TypeScript API. It owns the protocol parser, iframe lifecycle, patch transport, bounded height negotiation, link validation, and cleanup so an application does not have to assemble those pieces itself.
+不依赖 React、Electron、Agent Loop,也不绑定任何一家模型 API。
 
-[中文文档](./README.zh-CN.md)
+## 分区
 
-## Install
+| 入口 | 内容 |
+| --- | --- |
+| `@velaros-ai/html-artifacts` | 包根,绝大多数应用只需要它:`mountHtmlArtifact()` / `HtmlArtifactRuntime` + 协议 + 沙箱原语 |
+| `@velaros-ai/html-artifacts/protocol` | 与渲染器无关的增量协议解析器(自定义宿主用) |
+| `@velaros-ai/html-artifacts/sandbox` | iframe 文档构造、高度适配、URL 安全原语 |
+| `@velaros-ai/html-artifacts/browser` | 浏览器宿主实现(挂载 / 控制器 / DOM 环境) |
+| `@velaros-ai/html-artifacts/runtime` | `./sandbox` 的兼容别名,保留不动 |
 
-`@velaros-ai/html-artifacts` is a public package hosted on GitHub Packages. GitHub's
-npm registry currently still requires authentication to install public packages:
-use a personal access token (classic) with at least `read:packages` locally, or the
-repository-authorized `GITHUB_TOKEN` in GitHub Actions. Map the `@velaros-ai` scope
-to `https://npm.pkg.github.com`, provide the token, then install:
+## 安装
+
+`@velaros-ai/html-artifacts` 是托管在 GitHub Packages 上的**公开包(public package)**。
+GitHub 的 npm registry 目前安装公开包**仍然需要认证**:
+本地用至少带 `read:packages` 权限的 personal access token(classic),
+CI 用已获仓库授权的 `GITHUB_TOKEN`。把 `@velaros-ai` scope 映射到
+`https://npm.pkg.github.com`,提供 token 后:
 
 ```bash
 npm install @velaros-ai/html-artifacts
 ```
 
-The repository versions `dist/`, so npm, pnpm, Bun, and Yarn can consume the Git dependency without running a build script.
+> 在 VelarOS-Platform 单仓内,`dist/` 不入版本库(仓根 `.gitignore` 忽略 `dist/`),
+> 由构建产出;走 npm 包的消费方拿到的是发布时打进 tarball 的 `dist/`。
 
-## Quick start
+## 快速开始
 
 ```ts
 import { mountHtmlArtifact } from '@velaros-ai/html-artifacts'
@@ -40,77 +50,55 @@ const artifact = mountHtmlArtifact(container, {
 
 await artifact.consume(modelTextStream)
 
-// When the surrounding view is destroyed:
+// 外层视图销毁时:
 artifact.dispose()
 ```
 
-`modelTextStream` may be an `AsyncIterable<string>` from any model provider. The library does not depend on React, Electron, an agent loop, or a particular API client.
+`modelTextStream` 可以是任意模型服务给的 `AsyncIterable<string>`。
 
-The mount call creates one `sandbox="allow-scripts"` iframe inside the target element. Generated code stays inside that iframe. Capabilities such as opening a link or sending a new prompt are explicit callbacks owned by the host.
+挂载会在目标元素内创建**一个 `sandbox="allow-scripts"` 的 iframe**。
+生成的代码只能在沙箱里跑;打开链接、继续提问这类能力是**宿主显式授权的回调**,
+不是沙箱自己的权力。
 
-## Manual streaming
+## 三件必须理解的机制
 
-Use `consume()` for the common case. Use `write()` and `finish()` when your transport already has its own stream loop:
+### 1. 流边界:chunk 可以停在任何地方
+
+Chunk 可以断在半个 HTML 标签、CSS 规则、脚本或 Base64 载荷中间。
+**只有完整、安全的协议边界才会被送进 iframe。**
+应用已有自己的流循环时,用 `write()` + `finish()` 代替 `consume()`:
 
 ```ts
-const artifact = mountHtmlArtifact(container, { maxHeight: 720 })
-
-for await (const chunk of modelTextStream) {
-  artifact.write(chunk)
-}
+for await (const chunk of modelTextStream) artifact.write(chunk)
 artifact.finish()
 
-// Reuse the same iframe for a later response.
-artifact.reset()
-
-// Remove the iframe and every host listener.
-artifact.dispose()
+artifact.reset()    // 复用同一个 iframe 接下一次回答
+artifact.dispose()  // 移除 iframe 与全部宿主监听器
 ```
 
-Chunks may end in the middle of a tag, CSS rule, script, or Base64 payload. Only safe protocol boundaries are emitted to the iframe runtime.
+### 2. 高度:绝对值,单向
 
-## Host callbacks
+iframe 运行时上报的是**去重后的绝对内容高度**,宿主直接应用——
+不加 padding,也不把 viewport 增长反馈回测量过程(那正是无限撑高的来源)。
+`maxHeight` 在 iframe 内部和浏览器宿主层**两侧都生效**:
+超高内容或 `100vh` 这类 viewport 耦合页面会留在沙箱里滚动,不会把外层页面顶穿。
 
 ```ts
-const artifact = mountHtmlArtifact(container, {
-  onMarkdown(text) {
-    appendToTranscript(text)
-  },
-  onPrompt(prompt) {
-    sendToModel(prompt)
-  },
-  onLink(url) {
-    openTrustedUrl(url)
-  },
-  onMessage(payload) {
-    handleArtifactMessage(payload)
-  },
-  onEvent(event) {
-    recordProtocolEvent(event)
-  },
-  onError(error) {
-    reportArtifactError(error)
-  },
-})
+mountHtmlArtifact(container, { initialHeight: 360, minHeight: 1, maxHeight: 720 })
 ```
 
-HTTP and HTTPS are the only link protocols allowed by default. Invalid or active URLs are reported through `onError` and never reach `onLink`.
+### 3. 链接:默认只放行 http / https
 
-## Stable sizing
+无效或主动执行型 URL(`javascript:` 一类)通过 `onError` 上报,**永远不会到达 `onLink`**。
 
-```ts
-const artifact = mountHtmlArtifact(container, {
-  initialHeight: 360,
-  minHeight: 1,
-  maxHeight: 720,
-})
-```
+## 宿主回调
 
-The iframe runtime publishes a deduplicated absolute content height. The host applies that exact value without adding padding or feeding viewport growth back into the measurement. `maxHeight` is enforced in both the iframe runtime and the browser host; taller or viewport-coupled documents scroll inside the sandbox instead of growing the outer page forever.
+`onMarkdown` / `onPrompt` / `onLink` / `onMessage` / `onEvent` / `onError`。
+这六个是沙箱与外界之间的全部通道——**没有隐式能力**。
 
-## Artifact protocol
+## Artifact 协议
 
-The v1 wire format is deliberately small:
+v1 线格式刻意保持很小:
 
 ```html
 <artifact version="1" id="profile-card" title="Profile card">
@@ -121,73 +109,35 @@ The v1 wire format is deliberately small:
 </artifact>
 ```
 
-Use `encoding="base64"` when a patch payload itself contains protocol closing tags.
+patch 载荷本身含有协议闭合标签时,用 `encoding="base64"`。
 
-## Advanced APIs
+解析器面(`/protocol`)提供两种形态:面向对象的 `HtmlArtifactProtocolParser`,
+以及函数式的 `createHtmlArtifactProtocolStreamState` / `applyHtmlArtifactProtocolChunk` /
+`finalizeHtmlArtifactProtocol`。`HtmlArtifactProtocolLimits` 用于给不可信或异常超长的流设资源上限。
 
-Most applications should only use `mountHtmlArtifact()` from the package root. Two lower-level entry points are available for custom hosts:
+## 边界:本包不负责什么
 
-```ts
-// Renderer-neutral incremental parser.
-import {
-  applyHtmlArtifactProtocolChunk,
-  createHtmlArtifactProtocolStreamState,
-  finalizeHtmlArtifactProtocol,
-} from '@velaros-ai/html-artifacts/protocol'
+只维护**可复用的流式协议与沙箱机制**。
+不含模型提示词、聊天状态、Agent 调度、Electron IPC、产品 UI、权限、
+Widget、Memory 或 VelarOS Kernel 内部实现。
 
-// iframe document, sizing, and URL primitives.
-import {
-  buildHtmlArtifactShellDocument,
-  normalizeHtmlArtifactExternalUrl,
-  resolveHtmlArtifactFrameFit,
-} from '@velaros-ai/html-artifacts/sandbox'
-```
+通用修复先落在这里;产品只消费确定版本,自己那一层适配留在产品侧。
 
-`@velaros-ai/html-artifacts/runtime` remains as a compatibility alias for `./sandbox`.
-
-## API
-
-### `mountHtmlArtifact(target, options?)`
-
-Mounts a managed artifact iframe and returns an `HtmlArtifactController`.
-
-Important options:
-
-- `initialHeight`, `minHeight`, `maxHeight`: bounded iframe sizing.
-- `sandbox`: iframe sandbox tokens; defaults to `allow-scripts`.
-- `designCss`, `rootId`, `title`, `className`: host presentation hooks.
-- `protocolLimits`: resource limits for untrusted or unexpectedly large streams.
-- `onMarkdown`, `onPrompt`, `onLink`, `onMessage`, `onEvent`, `onError`: host callbacks.
-
-Controller methods:
-
-- `consume(stream)`: consume an iterable of text chunks and return the latest protocol snapshot.
-- `write(chunk)`: parse and render one chunk.
-- `finish()`: flush an interrupted final chunk.
-- `getSnapshot(id?)`: read the latest parser snapshot.
-- `reset()`: clear parser and iframe content while keeping the mount alive.
-- `dispose()`: remove the iframe and all listeners.
-
-## Design boundary
-
-This repository owns reusable streaming and sandbox mechanics. It intentionally does not include model prompts, chat state, agent orchestration, Electron IPC, product UI, permissions, Widget, memory, or VelarOS Kernel internals.
-
-The public repository is the source of truth. Generic fixes land here first; products consume an exact released version and keep only their product-specific adapter.
-
-## Development
+## 开发
 
 ```bash
-npm install
-npm run check
+npm run check     # typecheck + Node 测试 + 生产 demo 构建 + 包契约 + dist 检查
 npm run demo
 ```
 
-`npm run check` runs TypeScript validation, Node tests, a production demo build, and a package dry run.
+包级门:`check:package-contract`(元数据 / exports / 文档 / 运行时导入 / 严格外部类型)
+与 `check:dist`;两者由仓根 `check:html-artifacts-package` 挂进 `check:gates`。
 
-## Security
+## 安全
 
-Generated HTML is untrusted input. Read [SECURITY.md](./SECURITY.md) before changing sandbox, script, URL, or bridge behavior.
+生成的 HTML 属于**不可信输入**。改沙箱、脚本、URL 或消息桥之前,
+先读 [SECURITY.md](./SECURITY.md)。
 
-## License
+## 许可证
 
-MIT © 2026 Error-Zhang
+MIT © 2026 Error-Zhang(见 [LICENSE](./LICENSE))。

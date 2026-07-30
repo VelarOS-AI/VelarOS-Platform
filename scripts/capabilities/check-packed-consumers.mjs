@@ -55,18 +55,6 @@ const forbiddenPublishedPathFragments = [
   '/Users/example',
   'WebstormProjects',
 ]
-const requiredDocumentationSections = [
-  '## 定位与非目标',
-  '## 安装',
-  '## 公共入口',
-  '## 核心类与接口',
-  '## 生命周期/并发',
-  '## 依赖注入',
-  '## 错误模型',
-  '## 最小第三方示例',
-  '## 扩展点',
-  '## 兼容策略',
-]
 const portableContractsFixtures = new Map([
   [
     '@velaros-ai/workspace',
@@ -289,19 +277,13 @@ function assertManifestQuality(manifest, directoryName) {
 async function assertDocumentation(packageDirectory, packageName) {
   const readme = await readFile(path.join(packageDirectory, 'README.md'), 'utf8')
   assert(
-    readme.includes('[中文接口文档](./docs/api.zh-CN.md)'),
-    `${packageName}: README must link docs/api.zh-CN.md`,
+    /[\u4e00-\u9fff]/.test(readme),
+    `${packageName}: README.md must be written in Chinese`,
   )
-  const documentation = await readFile(
-    path.join(packageDirectory, 'docs', 'api.zh-CN.md'),
-    'utf8',
+  assert(
+    readme.length >= 400,
+    `${packageName}: README.md is ${readme.length} characters — too thin to describe the package`,
   )
-  for (const section of requiredDocumentationSections) {
-    assert(
-      documentation.includes(section),
-      `${packageName}: API documentation is missing ${section}`,
-    )
-  }
 }
 
 function importedHelperTypes(sourceFile) {
@@ -891,7 +873,6 @@ try {
     await assertNoAmbientHelperTypes(manifest.name, inspectionDirectory)
     await assertNoUserSpecificPaths(manifest.name, inspectionDirectory)
     await access(path.join(inspectionDirectory, 'README.md'), fsConstants.R_OK)
-    await access(path.join(inspectionDirectory, 'docs', 'api.zh-CN.md'), fsConstants.R_OK)
     packagesByName.set(manifest.name, {
       name: manifest.name,
       directoryName: expected.directory,

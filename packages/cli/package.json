@@ -33,8 +33,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "docs"
+    "README.md"
   ],
   "sideEffects": false,
   "engines": {

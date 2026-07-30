@@ -40,7 +40,6 @@
   "files": [
     "dist",
     "README.md",
-    "docs",
     "velaros.mod.json"
   ],
   "scripts": {

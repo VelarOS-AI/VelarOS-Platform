@@ -1,22 +1,91 @@
 # @velaros-ai/browser/tools
 
-[中文接口文档](./api.zh-CN.md)
+> `@velaros-ai/browser` 的一个导入切片(`packages/browser/src/tools`)。包总览见
+> [包 README](../../README.md)。
 
-## Responsibility
+## 这个切片是什么
 
-`@velaros-ai/browser/tools` owns agent-facing browser tools and browser recipes. It depends on injected browser context/runtime capabilities and exposes tool collections that a host can register with an agent runtime.
+面向 agent 的**浏览器工具定义**:工具名、zod 输入 schema、能力声明、工具上下文契约,
+以及浏览器 recipe(可复跑的操作序列)。
 
-## Public Imports
+工具经 `ToolBrowserApi` 调用宿主的浏览器,**不直接依赖 Electron**,
+所以同一套工具可以跑在内嵌 WebView 上,也可以跑在外部 CDP 浏览器、Playwright 或自研 runtime 上。
+
+## 公共入口
 
 - `@velaros-ai/browser/tools`
-- `@velaros-ai/browser/tools/cli`
+- `@velaros-ai/browser/tools/cli` —— 工具 CLI 入口
 
-## Boundary
+## 工具面覆盖什么
 
-This package must not depend on `@velaros-ai/agent` or product IPC. It defines tools and their context contracts only. Runtime execution, session ownership, and UI are composed by the host.
+六十余个工具,分这些族:
 
-## Example
+| 族 | 代表工具 |
+| --- | --- |
+| 会话与站点 | `enter_browser_site` / `leave_browser_site` / `get_browser_site_context` / `browser_show_page` / `browser_switch_page_target` |
+| 检查 | `browser_inspect_page` / `browser_query_elements` / `browser_observe_actions` / `browser_get_element_bounds` |
+| 交互 | `browser_act` / `browser_click_coordinates` / `browser_type_text` / `browser_press_key` / `browser_scroll_page` |
+| 等待 | `browser_wait_for_page` / `browser_wait_for_selector` / `browser_wait_for_pending_event` |
+| 页面数据与抽取 | `browser_extract` / `browser_extract_table` / `browser_extract_list` / `browser_paginate_extract` / `browser_read_page_storage` |
+| 网络与诊断 | `browser_list_network_events` / `browser_get_network_response_body` / `browser_list_console_events` / `browser_list_page_errors` |
+| 挂起事件 | `browser_handle_dialog` / `browser_handle_download` / `browser_handle_permission` / `browser_list_pending_events` |
+| 截图 / 录屏 / 导出 | `browser_capture_screenshot` / `browser_capture_region` / `browser_screencast` / `browser_export_page` |
+| 上传与取资源 | `browser_upload_file` / `browser_fetch_resource` |
+| 性能 | `browser_performance` |
+| recipe 与用户脚本 | `browser_recipe` / `browser_generate_recipe_skeleton` / `browser_rerun_recipe_from_run` / `browser_user_scripts` |
+
+## 主要导出
+
+- `browserTools` —— 按工具名索引的不可变工具定义集合。
+- `ToolBrowserApi` —— **已绑定到当前 session** 的浏览器能力端口(全仓唯一权威契约)。
+- `BrowserToolContext` —— 单次执行的 browser、`abortSignal` 与宿主附加上下文。
+- `VelaTool` —— 名称 / schema / 权限 / 能力元数据 / `execute()` 的结构契约。
+
+## 依赖注入
+
+第三方宿主**只需实现 `ToolBrowserApi`**。可以用 `CdpBrowserRuntime.bindBrowserApi()`
+(其返回面由 `src/tools/CdpBrowserRuntimeContract.ts` 在**编译期**保证满足本契约),
+也可以把 Playwright、远程浏览器服务或自研 runtime 适配成同一接口。
 
 ```ts
-import { browserTools } from '@velaros-ai/browser/tools'
+import {
+  browserTools,
+  type BrowserToolContext,
+  type ToolBrowserApi,
+} from '@velaros-ai/browser/tools'
+
+const browser: ToolBrowserApi = createPlaywrightBrowserAdapter(page)
+
+for (const tool of Object.values(browserTools)) {
+  thirdPartyAgent.registerTool({
+    name: tool.name,
+    schema: tool.schema,
+    execute: (input, signal) => {
+      const context: BrowserToolContext = { browser, abortSignal: signal, execution: null }
+      return tool.execute(input, context)
+    },
+  })
+}
 ```
+
+## 生命周期与并发
+
+工具定义**无状态**,进程内可复用。宿主为每次调用创建或解析一个绑定当前 session 的
+`BrowserToolContext`。取消经 `AbortSignal` 传递;真正的动作串行化由注入的 browser runtime 负责,
+不在工具层做。
+
+## 错误模型
+
+Zod 在**最外层**校验输入,工具内部**不重复归一化同一输入**。
+无活动会话、权限不足、执行失败由宿主 API 抛 `AppError` 或等价结构化错误;
+agent 运行时应保留错误码与 cause。
+
+## 边界
+
+不依赖 `@velaros-ai/agent`、不碰产品 IPC、不创建浏览器、不保存会话、不管 UI。
+本切片只定义工具与其 context 契约;运行时执行、会话所有权与界面都由宿主组合。
+
+## 扩展点
+
+新增浏览器工具要沿用现有工具 contract:声明权限、effect、并发语义与 zod schema。
+**宿主专属操作不进默认 `browserTools`**——在应用侧组合自己的额外集合。

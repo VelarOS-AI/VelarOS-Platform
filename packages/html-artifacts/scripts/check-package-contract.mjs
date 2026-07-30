@@ -7,33 +7,12 @@ import { fileURLToPath } from 'node:url'
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(await readFile(path.join(repositoryRoot, 'package.json'), 'utf8'))
 const readme = await readFile(path.join(repositoryRoot, 'README.md'), 'utf8')
-const chineseReadme = await readFile(
-  path.join(repositoryRoot, 'README.zh-CN.md'),
-  'utf8'
-)
-const documentation = await readFile(
-  path.join(repositoryRoot, 'docs/api.zh-CN.md'),
-  'utf8'
-)
-const requiredDocumentSections = [
-  '定位与非目标',
-  '安装',
-  '公共入口',
-  '核心类与接口',
-  '生命周期/并发',
-  '依赖注入',
-  '错误模型',
-  '最小第三方示例',
-  '扩展点',
-  '兼容策略',
-]
 
 for (const field of ['description', 'license', 'repository']) {
   if (!manifest[field]) throw new Error(`${manifest.name} is missing package.json#${field}`)
 }
 if (!manifest.engines?.node) throw new Error(`${manifest.name} is missing a Node.js engine range`)
 if (manifest.sideEffects === undefined) throw new Error(`${manifest.name} must declare sideEffects`)
-if (!manifest.files?.includes('docs')) throw new Error(`${manifest.name} does not publish docs`)
 if (manifest.publishConfig?.access !== 'public') {
   throw new Error(`${manifest.name} must publish with public access`)
 }
@@ -47,29 +26,16 @@ const privatePackageClaims = [
   /私有[^\n]{0,80}@velaros-ai/u,
   /@velaros-ai[^\n]{0,80}私有/u,
 ]
-for (const [fileName, contents] of [
-  ['README.md', readme],
-  ['README.zh-CN.md', chineseReadme],
-  ['docs/api.zh-CN.md', documentation],
-]) {
-  for (const pattern of privatePackageClaims) {
-    if (pattern.test(contents)) {
-      throw new Error(`${fileName} must not describe the public package or scope as private`)
-    }
+// 本包是全仓唯一的公开包，最要紧的一条是「别把自己写成私有的」——装不上的人会照文档去申请
+// 根本不需要的权限。文档合并成单份中文 README 后（2026-07-30 判决废除 api.zh-CN 与双语 README），
+// 这条断言跟着收到 README.md 一处；章节标题不再钉，理由见 scripts/capabilities/check-arch-boundaries.mjs。
+for (const pattern of privatePackageClaims) {
+  if (pattern.test(readme)) {
+    throw new Error('README.md must not describe the public package or scope as private')
   }
 }
-if (!readme.includes('public package') || !readme.includes('read:packages')) {
+if (!readme.includes('公开包') || !readme.includes('read:packages')) {
   throw new Error('README.md must document public package visibility and GitHub npm authentication')
-}
-if (!chineseReadme.includes('公开包') || !chineseReadme.includes('read:packages')) {
-  throw new Error(
-    'README.zh-CN.md must document public package visibility and GitHub npm authentication'
-  )
-}
-for (const section of requiredDocumentSections) {
-  if (!documentation.includes(`## ${section}`)) {
-    throw new Error(`${manifest.name} API documentation is missing "${section}"`)
-  }
 }
 
 for (const [publicPath, declaration] of Object.entries(manifest.exports ?? {})) {
@@ -152,11 +118,7 @@ try {
       'utf8'
     )
   )
-  for (const requiredFile of [
-    'README.md',
-    'README.zh-CN.md',
-    'docs/api.zh-CN.md',
-  ]) {
+  for (const requiredFile of ['README.md']) {
     await access(
       path.join(
         temporaryDirectory,

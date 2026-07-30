@@ -5,18 +5,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-const requiredDocumentSections = [
-  '定位与非目标',
-  '安装',
-  '公共入口',
-  '核心类与接口',
-  '生命周期/并发',
-  '依赖注入',
-  '错误模型',
-  '最小第三方示例',
-  '扩展点',
-  '兼容策略',
-]
+// README 门只钉「存在 + 确实是中文 + 有实质内容」，刻意不钉章节标题——理由同
+// scripts/capabilities/check-arch-boundaries.mjs：钉形状钉不住内容，手抄签名必然与代码脱节。
+const MinimumReadmeCharacters = 400
+const ChineseCharacter = /[一-鿿]/
 const UiPackageDirectories = ['ui']
 const utilityTypeModule = '@velaros-ai/ui/utility-types'
 const utilityTypeNames = [
@@ -47,18 +39,14 @@ async function verifyPackage(packageDirectory) {
   if (manifest.sideEffects === undefined) {
     throw new Error(`${manifest.name} must declare package.json#sideEffects`)
   }
-  if (!manifest.files?.includes('docs')) throw new Error(`${manifest.name} does not publish docs`)
-
-  const apiDocument = path.join(packageDirectory, 'docs/api.zh-CN.md')
-  const documentation = await readFile(apiDocument, 'utf8')
-  for (const section of requiredDocumentSections) {
-    if (!documentation.includes(`## ${section}`)) {
-      throw new Error(`${manifest.name} API documentation is missing "${section}"`)
-    }
-  }
   const readme = await readFile(path.join(packageDirectory, 'README.md'), 'utf8')
-  if (!readme.includes('./docs/api.zh-CN.md')) {
-    throw new Error(`${manifest.name} README must link the Chinese API documentation`)
+  if (!ChineseCharacter.test(readme)) {
+    throw new Error(`${manifest.name} README.md must be written in Chinese`)
+  }
+  if (readme.length < MinimumReadmeCharacters) {
+    throw new Error(
+      `${manifest.name} README.md is ${readme.length} characters — too thin to describe the package`
+    )
   }
 
   for (const [publicPath, declaration] of Object.entries(manifest.exports ?? {})) {
@@ -84,7 +72,7 @@ async function verifyPackage(packageDirectory) {
     if (files.split('\n').includes('package/dist/velaros-globals.d.ts')) {
       throw new Error(`${manifest.name} tarball leaks dist/velaros-globals.d.ts`)
     }
-    for (const requiredFile of ['package/package.json', 'package/README.md', 'package/docs/api.zh-CN.md']) {
+    for (const requiredFile of ['package/package.json', 'package/README.md']) {
       if (!files.split('\n').includes(requiredFile)) {
         throw new Error(`${manifest.name} tarball is missing ${requiredFile}`)
       }

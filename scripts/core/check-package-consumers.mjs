@@ -21,18 +21,9 @@ import ts from 'typescript'
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesRoot = path.join(repositoryRoot, 'packages')
 const packageScope = '@velaros-ai/'
-const requiredDocumentationSections = [
-  '## 定位与非目标',
-  '## 安装',
-  '## 公共入口',
-  '## 核心类与接口',
-  '## 生命周期/并发',
-  '## 依赖注入',
-  '## 错误模型',
-  '## 最小第三方示例',
-  '## 扩展点',
-  '## 兼容策略',
-]
+// README 门只钉「确实是中文」，不钉章节标题：钉形状钉不住内容，手抄签名必然与代码脱节
+// （2026-07-30 判决废除 docs/api.zh-CN.md，README 改中文重写）。
+const ChineseCharacter = /[\u4e00-\u9fff]/
 
 function run(command, args, cwd, options = {}) {
   const result = spawnSync(command, args, {
@@ -599,18 +590,11 @@ try {
     const manifest = await readJson(path.join(packageDirectory, 'package.json'))
     assertPackageMetadata(manifest, directoryName)
 
-    const documentation = await readFile(
-      path.join(packageDirectory, 'docs', 'api.zh-CN.md'),
-      'utf8',
-    )
     const readme = await readFile(path.join(packageDirectory, 'README.md'), 'utf8')
     assert(
-      readme.includes('docs/api.zh-CN.md'),
-      `${manifest.name}: README must link the Chinese API documentation`,
+      ChineseCharacter.test(readme),
+      `${manifest.name}: README.md must be written in Chinese`,
     )
-    for (const section of requiredDocumentationSections) {
-      assert(documentation.includes(section), `${manifest.name}: docs are missing "${section}"`)
-    }
 
     const before = new Set(await readdir(packedDirectory))
     run(
@@ -653,7 +637,6 @@ try {
     await readFile(path.join(inspectionDirectory, 'dist', 'index.js'))
     await readFile(path.join(inspectionDirectory, 'dist', 'index.d.ts'))
     await readFile(path.join(inspectionDirectory, 'README.md'))
-    await readFile(path.join(inspectionDirectory, 'docs', 'api.zh-CN.md'))
     await assertNoAmbientHelperTypes(manifest.name, inspectionDirectory)
 
     packagesByName.set(manifest.name, {
