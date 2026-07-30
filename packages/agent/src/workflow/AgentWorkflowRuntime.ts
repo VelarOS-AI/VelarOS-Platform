@@ -1,3 +1,34 @@
+// 域：声明式多 Agent Workflow 的 **IR 解释器**。输入是一份已通过 schema 校验的
+// `AgentWorkflowDefinition`，输出是逐步骤结果树；唯一的对外副作用是注入的 `dispatch` 端口。
+//
+// ## 安全不变量（有门守着，改前先看）
+// 解释器**没有通用代码执行能力**：无 fs / net / process / require / import / Electron，
+// 表达式只有 `valueAtPath` 取值与 `comparePredicate` 六个比较算子。`check:agent-schemas` 防线②
+// 按正则扫本文件源码来钉死这条——加一个动态导入或 require 调用会当场喊红。**该门连注释一起扫**，
+// 所以连"举个反例"都不能把那些调用形状写进本文件。这不是洁癖：Workflow 的 IR 由模型生成，
+// 任何"顺手加个求值"都等于把任意代码执行交给模型。
+//
+// ## 控制流与状态
+// `run` 顺序执行 steps，输出以 stepId 存进 `outputs` 供后续 reducer 引用（`validateDefinition`
+// 保证只能引用**更早**的 step，因此不存在环）。六种 operation 分两族：
+//  - **派发族**（parallel / pipeline / repeat）——会真的派子 Agent，受三条预算约束；
+//  - **归约族**（filter / dedupe / majority_vote）——纯函数，只读 `outputs`，不派任何 Agent。
+// 步骤状态三态 completed / partial / failed，`resolveRunStatus` 按 aborted > budget_exhausted >
+// failed > partial 的**严重度**归并成 run 状态（不是取最后一步）。
+//
+// ## 三条预算与两种终止
+// `maxAgents`（整次上限）在 `dispatch` 处逐次扣减并抛 `WorkflowBudgetExhaustedError`；
+// `maxConcurrency` 由 `mapWithConcurrency` 的固定 runner 数实现；`maxRounds` 限 repeat 轮次。
+// 三者都先与模块常量取 `min` 再用——**声明值只能调小不能调大**，模型写 `max_agents: 999` 会被
+// 钳到 8 并在结果的 `effective_limits` 里如实回报（静默钳制会让模型以为自己拿到了 999）。
+// 中断（`WorkflowAbortedError`）与预算耗尽是两种不同终止：前者是外部信号，后者是自限，
+// 二者都在 `run` 的 catch 里落成该步骤的终态并**停止后续步骤**，不重试。
+//
+// ## 已知缺口（不是本层能单独修的）
+// `pipeline` 在 fail_fast 或中断时，尚未启动的 item 会从 `laneResults` 里被整条丢掉；
+// 同样情形下 `parallel` 会补一条 `status:'skipped'` 的占位。两者不对称，模型看 pipeline 结果时
+// 无法区分"这个 item 没跑"与"这个 item 不存在"。补齐要改模型面输出形状，需与消费方一起定。
+
 import {
   isArray,
   isFalse,

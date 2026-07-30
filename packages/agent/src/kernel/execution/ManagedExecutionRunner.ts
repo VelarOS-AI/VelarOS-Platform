@@ -100,6 +100,21 @@ interface ManagedExecutionRunnerDependencies {
  * ## 与 `ExecutionService` 关系
  * `ExecutionService` 持有本 `runner` 并传入 `records`/`store`/`guard` 等依赖；
  * 所有 chat execution host 均通过 `runManagedExecution` 进入此处。
+ *
+ * ## 三条时序不变量（错一条就是难查的串台）
+ *  1. **`generation` 是 finally 的准入证**。同一 source scope 单活跃执行，新执行会顶掉旧的；
+ *     旧执行的 finally 仍会跑，`sourceSessionGuard.finish(scope, generation)` 靠代次判等
+ *     防止它把**新**执行的 guard 清掉。去掉 generation 的症状是"发第二条消息后第一条收尾，
+ *     第二条随即失去互斥"。
+ *  2. **`finalizeExecutionGuidance` 刻意调两次**。成功路径先调一次，是为了把"回调返回了但还有
+ *     已接纳的运行时输入没消费"变成显式 INVARIANT（这类输入丢了不会报错，只是用户说的话没生效）；
+ *     finally 再调一次覆盖抛出/中断路径。它必须幂等，改成只留一处会漏掉其中一类路径。
+ *  3. **终态判定先于 complete**。回调正常返回不等于成功：先看 abortSignal，再看记录是否仍
+ *     `running`，只有仍在 running 才 complete——否则会把已被中断/失败的执行改写成完成。
+ *
+ * ## 失败方向
+ * 收尾期的每一件事（终态通知、guard 释放、输入清理、listener 解绑、协作者注销）都在 finally 里
+ * 且各自不抛：收尾漏一步的代价是**该会话此后永久占着互斥位**，比丢一条通知严重得多。
  */
 class ManagedExecutionRunner {
   constructor(private readonly dependencies: ManagedExecutionRunnerDependencies) {}

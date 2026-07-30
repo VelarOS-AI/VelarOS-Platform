@@ -98,6 +98,14 @@ class SkillMarketClient {
     }
   }
 
+  /**
+   * 安装单个技能：拉 manifest → 下载正文 →（有 sha256 就校验）→ 写入文件仓库。
+   *
+   * **刻意不抛**：失败落进 `installStates` 的 `failed` 相并 `notify()`，调用方从订阅里读结果。
+   * 理由是安装是 UI 驱动的长动作，卡片要能显示 installing/failed 三态，而不是靠调用点 try/catch
+   * 拼出同样的状态机。副作用是 `await install(id)` 正常返回**不代表装上了**——判断成功要看
+   * `listCatalog()` 的 `installState` 或订阅推送，别把 resolve 当成功信号。
+   */
   public async install(id: string): Promise<void> {
     this.installStates.set(id, { phase: 'installing' })
     this.notify()

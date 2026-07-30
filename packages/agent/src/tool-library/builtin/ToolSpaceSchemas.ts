@@ -1,3 +1,25 @@
+// 域：工具空间三个控制工具的**模型面 schema 单源**。改这里等于改模型看到的参数契约，
+// 改前先读 Desktop `docs/agent-execution-hardening.md §1`（工具参数宽容八铁律）。
+//
+// ## 组织
+// 五个 op 各有一份精确 schema（find/page/map/read/replace），`toolSpaceSchema` 把它们并成按 `op`
+// 判别的联合——**执行侧只认这份联合**。另有一层"查询门面" `toolSpaceQueryMethodSchema`：
+// tool_map 对模型暴露的是这层宽松形状（所有字段可选 + op 可省），进门后由
+// `parseToolSpaceQueryMethodInput` 归一成联合里的精确形状。
+//
+// ## 两条宽容判据（都是实测失败模式换来的，别顺手收严）
+//  1. **一律 `.strip()`，不用 `.strict()`**：模型常把某个 op 的合法过滤键带到另一个 op 上
+//     （典型：read 带 toolOsStates）。strict 会硬报 Unrecognized key 让模型循环重试，strip 静默
+//     丢弃不属于本 op 的键、按有效参数执行，核心意图仍达成。
+//  2. **op 可以省，按字段反推**：省略 op 且带了 query → 按 find 解析，否则按 map。不这样推断的话
+//     `tool_map({query})` 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，模型白花
+//     一轮改 op——这是高频可观测的失败模式。
+//
+// ## 一个必须一起改的地方
+// 门面层（`toolSpaceQueryMethodObjectSchema`）与五份精确 schema 是**两份字段清单**：门面加了字段
+// 而精确层没加，该字段会在归一时被 strip 静默丢掉；反过来精确层加了必填而门面没暴露，模型永远
+// 传不进来。加字段时两处同改，并用 `parseToolSpaceQueryByOp` 的 superRefine 通路验证报错可读。
+
 import { z } from 'zod'
 
 import { isEmpty,isNotUndefined } from '@velaros-ai/core'

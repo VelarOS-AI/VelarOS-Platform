@@ -1,3 +1,34 @@
+// 域：工具页目录（ContextOS 工具空间的模型面实现）。tool_map / tool_read / tool_replace 三个
+// 控制工具的全部业务都落在本文件，`Categories.tool.ts` 只做 schema 绑定与转发。
+//
+// ## 从哪读起
+// 一次调用的骨架是 `runToolSpace` → `ToolSpaceOpHandlers[op]`，五个 op 各自独立：
+//   find（打分检索）/ page（平铺分页）/ map（按分类展开）/ read（读技能正文）/ replace（换入换出）。
+// 五个 op 共享三块底座：`buildToolDiscoveryCards`（唯一的页来源，来自 tool-space-resolver）、
+// `expandToolCategoryFilterInput`（分类/域过滤展开）、`buildToolActivationGuide`（"这张页怎么用起来"）。
+//
+// ## 关键不变量
+//  1. **本文件不认识任何具体能力**。分类 id、域 id、工具名全部来自宿主注入的描述符；出现在这里的
+//     只有形状与流程。语义中立门（`check:agent-arch` 防线⑤）连注释一起扫，改这里时别写具体产品词。
+//  2. **页是唯一真相，激活指引是纯派生**。`ToolDiscoveryCard.availability / reasons` 由 resolver 定，
+//     本文件只把它翻译成"下一步调什么"。反过来在这里推断可用性会与 resolver 打架。
+//  3. **换入是下一轮生效**（`effectiveTurn:'next'`）。replace 只改会话的工具驻留/能力状态，真实
+//     schema 要等下一轮 AI SDK tools 重建才暴露——除非目标本轮已驻留，那条快路径由
+//     `alreadyResidentTools` 明说（不说的代价实测是模型连续四轮重复换入同一个已可用的工具）。
+//  4. **模型面输出形状是契约**。若干字段（`categoryKind` / `parentCategoryId` / `subCategoryIds` /
+//     `recommendedPageIn` / `recommendedTools` / `userActionHint`）在本层恒为常量——它们要表达的知识
+//     属于注入侧描述符的表达力。保留字段是为了让消费方免于分支；各自现场都标了恒常的理由，
+//     别当成"没写完的洞"补一张本地表。
+//
+// ## 非显然的妥协
+//  - find 的打分是**加权子串命中**而非向量检索：工具页总量是十到百量级，一次 find 要在同一回合内
+//    出结果，引入检索模型的延迟与依赖都不划算。权重表（name 32 > id 24 > schema 18 …）是可调旋钮，
+//    真正影响召回的是 `ToolSearchTerms` 的同义词/词干/中文 n-gram 扩展。
+//  - find 结果按最高分的 30% 做低置信截断（`ToolFindLowConfidenceScoreRatio`），并把丢弃条数
+//    回报给模型——不截断时长尾噪音会把"看起来相关"的页塞满上下文。
+//  - map 的 `maxToolsPerCategory` 会被行预算（`ToolMapTargetToolRows`）**主动压低**，并在
+//    `filters.parameterAdjustments` 里说明压了什么；静默压低会让模型以为自己看到了全部。
+
 import { type z } from 'zod'
 
 import { isArray, isBoolean, isEmpty, isNumber, isPlainObject, isPresent, isString, optionalWhen, optionalWhenLazy,toNullable } from '@velaros-ai/core'
