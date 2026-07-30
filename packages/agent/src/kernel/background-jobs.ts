@@ -1,3 +1,30 @@
+// 域：后台任务（子 Agent / 长命令等）的**生命周期账本 + 输出缓冲**，以及它们回灌给回合上下文的
+// `task.lifecycle` delta 源。
+//
+// ## ① 生命周期状态机
+// `running → completed | failed | cancelled`，**终态不可再迁移**（`requireRunning` 撞终态抛
+// `CONFLICT` 并把 `jobStatus` 放进 context 供调用方结构化判定）。终态任务不立即删除：它们还要被
+// `wait_background_jobs` / `read_background_job_output` 读到。回收由**两条独立闸**共同负责——
+// TTL（`terminalJobTtlMs`，**负值刻意合法 = 永不按时间清理**）与条数上限（`terminalJobLimit`）。
+// 只有 TTL 会让"一次跑很多短任务"撑爆内存；只有条数上限会让"一个终态任务留一整天"。两条都要。
+//
+// ## ② 输出缓冲：两级存储 + 一个易错的偏移量
+// 内存环形缓冲（`outputByJob` + `outputBaseOffsetByJob`）保最近 `outputMaxChars` 字符；宿主注入
+// `outputStore` 时输出同时落盘，任务收尾后**释放内存副本**（`releaseCachedOutputIfArtifactBacked`）。
+// **`baseOffset` 是已丢弃的字符数，不是数组下标**：读取时必须 `slice(offset - baseOffset)`，
+// 把这里写成 `slice(offset)` 会在缓冲发生过截断后返回错位的内容——而且只在长输出任务上才复现。
+// 消费式读取（`consume: true`）推进 `outputReadOffsetByJob` 实现增量读；快照式读取不推进。
+// 两种模式共用一个函数正是为了保证"增量与快照看到的是同一份内容"。
+//
+// ## ③ 并发与时序
+// `waitForSession` 把等待者挂进 `waiters` 集合，任何状态迁移后 `notifyWaiters` 全量重扫。
+// 注册后**必须立刻自查一次**（`check()`）：任务可能在 await 之前就已收敛，漏掉这次自查等待者会
+// 永远挂着。超时可选——缺席 = 无限等，是刻意的（见 `normalizeWaitTimeoutMs` 的判据）。
+//
+// ## ④ 取消的传递性
+// 取消一个会话要连带取消它派生出的整棵任务树（子 Agent 会以父任务 id 或父会话 id 再起任务），
+// 故走 `collectLineageClosure` 的不动点闭包而不是一趟 filter。判据见该方法。
+//
 import {
   isEmpty,
   isFiniteNumber,

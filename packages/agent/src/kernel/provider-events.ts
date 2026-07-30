@@ -1,3 +1,25 @@
+// 域：一次 provider 生成回合的**事件归约器**（把流式事件收敛成一份可落盘、可回放的回合快照）。
+//
+// ## 状态机与合法迁移
+// 回合只有 `pending → completed` 一条边，且**必须先 `turn-started`**：所有其它事件都过
+// `assertStarted`。工具子状态机同理 `pending → succeeded | failed`，`requirePendingTool` 把
+// 「没开始过」与「已收敛过」两种误用都挡在写入之前。
+//
+// **为什么这些是抛错而不是容错**：归约器是快照的唯一生产者，一旦允许乱序写入，产出的快照就会与真实
+// 回合不一致——而快照正是事后唯一能复原「模型那一轮到底看到/做了什么」的证据。证据错了比没有更坏，
+// 所以这里选 fail-fast（§2.8 运行期不变量破损立刻炸）。
+//
+// ## 中断路径是唯一的例外，且刻意收在一处
+// 流被中止时会留下 pending 的工具调用，此时直接 `complete()` 必然抛错。`completeProviderTurnSnapshot`
+// 捕获该错误、把 pending 工具标记为 failed 并记一条诊断，再重新收敛——这条降级**只在显式传入
+// `interruptPendingTools` 时发生**，正常路径仍然是严格的。
+// `emitCompletedProviderTurnSnapshot` 是其上的单源发射器：StreamTurn / QueryTurn 曾各抄一份逐字
+// 相同的「收敛 + 发射 + 吞错」，快照 bug 绝不冒泡进回合主路这条纪律现在只有一个落地点。
+//
+// ## 快照是拷贝，不是视图
+// `snapshot()` / `buildRequestSnapshot` / `cloneTool` 全部浅拷贝出去。读侧（观测、调试面板、账本）
+// 会长期持有这些对象；返回内部引用会让归约器后续的写入把已发出的快照一起改掉。
+//
 import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 export type ProviderTurnStatus = 'pending' | 'completed'

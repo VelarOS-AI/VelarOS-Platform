@@ -1,3 +1,28 @@
+// 域：system prompt 的**段注册表与组合器**——决定「哪些段进这一轮的提示词、以什么顺序、算不算稳定」。
+//
+// ## ① 段序即字节序（算法不变量）
+// 组合结果直接决定 system prompt 的字节。排序键是 `(priority, id)`，其中 id 的比较**必须**走
+// `compareStableStrings`（码元序）而不是 locale 相关比较——否则同一份配置在不同机器上生成不同字节的
+// 提示词，前缀缓存跨机器全失效，且表现为「有的机器贵有的机器便宜」，没人会想到是排序。
+// 同 priority 靠 id 兜底而不是靠注册顺序，是为了让「换个装配顺序」不改变输出。
+//
+// ## ② stable / dynamic 是**前缀缓存契约**，不是分类标签
+// `stableParts` 会被放在提示词前半、逐轮字节不变，供 provider 侧前缀缓存命中；`dynamicParts` 放后半。
+// 把一个逐轮变化的段标成 `stable`，代价不是"分类不准"，而是**整段稳定前缀每轮失效**——成本以 token
+// 计、静默发生。判据：这个段的渲染结果在同一会话内会不会随轮次变？会 → dynamic。
+//
+// ## ③ 跳过一定要留痕（§2.6）
+// 被 suppress / 被配置关停 / 谓词不满足 / 渲染为空，四种情况都进 `skipped` 并带 reason。
+// 「某段没进提示词」与「某段不存在」在调试时长得完全一样，reason 是唯一能区分二者的东西。
+//
+// ## ④ 三条关停通道的优先级是固定的
+// `suppressions`（运行时临时）> `overrides`（持久化配置）> `when`（谓词）。运行时压制必须能盖过用户
+// 配置，否则「本轮临时关掉某段」这个动作会被持久配置悄悄推翻。
+//
+// ## ⑤ `clone()` 的存在理由
+// ContextBuilder 会派生变体（子 Agent / 不同 surface）；共享同一注册表会让一次 `suppress` 泄漏到别的
+// 变体上。clone 复制定义与压制态、共享 provider 引用（provider 是无状态加载器）。
+//
 import type { PromptSegmentOverride } from '@velaros-ai/core/types'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
