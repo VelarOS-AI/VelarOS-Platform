@@ -45,7 +45,7 @@ export type ToolDiscoveryRisk = ToolSpacePageRisk
 export type ToolSchemaState = ToolDiscoverySchemaState
 export type ToolNextAction = ToolDiscoveryNextAction
 export type ToolSchemaPolicy = ToolSpaceSchemaPolicy
-export type ToolDiscoveryReason = ToolSpaceReason
+type ToolDiscoveryReason = ToolSpaceReason
 
 export type ToolDiscoveryCard = ToolSpacePage
 
