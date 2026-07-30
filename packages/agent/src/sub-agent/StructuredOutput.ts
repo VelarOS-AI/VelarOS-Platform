@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isRecord } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { AgentOutputJsonSchema } from '@velaros-ai/core/types'
 
@@ -47,10 +47,6 @@ interface CompiledSubAgentOutputSchema {
 type StructuredOutputParseResult =
   | { success: true; data: unknown }
   | { success: false; issues: string[] }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function assertIntegerBound(
   value: unknown,

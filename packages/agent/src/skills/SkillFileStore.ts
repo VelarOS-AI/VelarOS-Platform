@@ -105,6 +105,8 @@ function listSkillDirResources(baseDir: string): string[] {
     try {
       entries = readdirSync(dir, { withFileTypes: true })
     } catch {
+      // arch-guard:silent-catch-ok 目录不可读（权限/竞态删除）只应让**这一层**缺席，不该让整棵
+      // 资源枚举失败——技能目录是用户可随手改动的普通目录，一个坏子目录不配否决整个技能。
       return
     }
     for (const entry of entries) {
