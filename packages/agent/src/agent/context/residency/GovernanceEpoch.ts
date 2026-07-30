@@ -47,11 +47,6 @@ import { buildContextSkeleton } from './skeleton'
 
 const log = logRuntime.tag('GovernanceEpoch')
 
-/** 认定"陈旧"的最小轮距：可重取记录至少落后当前轮这么多轮才进 I0 候选。 */
-const StaleRefetchableTurnDistance = 2
-/** 低锚密度阈值（每千字符锚点数）。低于此值的段落信息密度不足以占住全文位。 */
-const LowAnchorDensityPerKiloChar = 2
-
 /** epoch 未执行的原因。 */
 export type GovernanceEpochSkipReason =
   /** 占用未到触发水位，且模型也没请求。 */
@@ -401,9 +396,10 @@ function collectCandidates(
     if (residency !== 'INLINE' && residency !== 'EXCERPT') continue
 
     const superseded = pendingEvictIds.has(record.id)
-    const stale = record.refetchable && latestTurn - record.turn >= StaleRefetchableTurnDistance
+    const stale =
+      record.refetchable && latestTurn - record.turn >= config.eviction.staleRefetchableTurnDistance
     const density = anchorDensityPerKiloChar(record.anchors.length, record.bytes.full)
-    const lowDensity = density < LowAnchorDensityPerKiloChar
+    const lowDensity = density < config.eviction.lowAnchorDensityPerKiloChar
 
     if (!superseded && !stale && !lowDensity) continue
 
