@@ -1,0 +1,553 @@
+// 域：工具空间的**三个只读 op**——find（按意图检索）/ page（平铺分页）/ map（按分类展开）。
+// 三者共享同一条流水线：取页（ToolSpaceActivation）→ 过滤（分类/域/kind/运行态）→ 排序分页 →
+// 翻译成模型面 ref。差别只在中间那一段：find 交给 ToolSpaceSearch 打分，page 直排，map 分组。
+//
+// ## 从哪读起
+// 先看 `summarizeToolSpacePageRef`——三个 op 的返回条目都由它产出，它决定了模型看到的页形状。
+// 然后按 op 各读一个入口函数：`searchToolDiscoveryCards` / `pageToolDiscoveryCards` /
+// `mapToolDiscoveryCards`。`expandToolCategoryFilterInput` 与 `filterToolSpaceCards` 是三者共用的
+// 过滤前置，`buildToolSpaceStatusSummary` 是三者共用的统计尾巴。
+//
+// ## 关键不变量
+//  1. **回带的过滤器必须与实际过滤同源**。`expandedCategoryIds` 先算一次再分别传给过滤和返回值，
+//     不许两处各算一遍——模型靠这个字段判断自己的域名有没有拼错。
+//  2. **压低参数必须明说**。map 的 `maxToolsPerCategory` 会被行预算（`ToolMapTargetToolRows`）主动
+//     压低，并在 `filters.parameterAdjustments` 里说明压了什么；静默压低会让模型以为看到了全部。
+//  3. **模型面输出形状是契约**。`categoryKind` / `parentCategoryId` / `subCategoryIds` 在本层恒为
+//     叶子常量——分类树属于注入侧描述符的表达力。保留字段是为了让消费方免于分支；现场都标了
+//     恒常的理由，别当成"没写完的洞"补一张本地表。
+//  4. 本文件不认识任何具体能力，只有形状与流程。语义中立门（`check:agent-arch` 防线⑤）连注释一起扫。
+//
+// ## 非显然的妥协
+//  - find 结果按最高分的 30%（`ToolFindLowConfidenceScoreRatio`）做低置信截断，并把丢弃条数
+//    回报给模型——不截断时长尾噪音会把"看起来相关"的页塞满上下文。
+//  - 游标是纯偏移量字符串：页集合在同一会话内由同一份注入描述符生成，偏移量足够稳定，
+//    换成不透明游标只会多一层无人能读的编码。
+
+import { type z } from 'zod'
+
+import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
+import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '@velaros-ai/core/types'
+
+import { compareStableStrings } from '../../agent/context/residency/determinism'
+import {
+  buildToolSpaceCategoryFilter,
+  PluginBackedToolCategoryIds,
+  ToolDiscoveryAvailabilityValues,
+} from '../../tools'
+import type { KernelToolContext as ToolContext } from '../KernelToolContext'
+
+import { splitSearchTerms } from './ToolSearchTerms'
+import {
+  activationCapabilityIdForCategory,
+  buildToolActivationRef,
+  buildToolDiscoveryCards,
+  summarizeReasonRef,
+  type ToolDiscoveryCard,
+} from './ToolSpaceActivation'
+import {
+  ToolDiscoveryKindValues,
+  type toolSpaceFindSchema,
+  type toolSpaceMapSchema,
+  type toolSpacePageSchema,
+} from './ToolSpaceSchemas'
+import {
+  buildMatchSignals,
+  buildToolSearchScoreContext,
+  scoreCard,
+  ToolFindLowConfidenceScoreRatio,
+  type ToolSearchResultEntry,
+} from './ToolSpaceSearch'
+
+const ToolMapTargetToolRows = 32
+
+const ToolOsStateValues = [
+  'resident',
+  'loadable',
+  'needs_setup',
+  'unavailable',
+] as const satisfies readonly ToolOsState[]
+
+type ToolMapCategoryKind = 'bundle' | 'leaf'
+
+/**
+ * 分类过滤输入 → 实际分类清单：显式 categoryIds 原样保留，domainIds 展开成同域的全部分类。
+ *
+ * 域归属只存在于宿主注入的分类描述符（`toolOs.domain`），本层不认识任何具体域 id——它只做
+ * 「按注入数据分组」这一件事，因此新增域零改动。展开顺序 = 显式分类在前、域展开在后，去重后
+ * 保持首次出现序（结果会作为 `filters.expandedCategoryIds` 回给模型，顺序稳定才可对账）。
+ *
+ * **域 id 无一命中时刻意不收敛成空集**：空清单在下游 `buildToolSpaceCategoryFilter` 里等于
+ * 「不过滤」，与只传空 categoryIds 同形。失败方向选「多给」而不是「一个都不给」——模型拼错域名
+ * 时还能从全量结果里找到目标工具，而返回空会让它以为系统里根本没有这类能力。
+ * 拼错与否可由回带的 `expandedCategoryIds` 为空判定。
+ */
+function expandToolCategoryFilterInput(
+  ctx: ToolContext,
+  input: {
+    categoryIds: readonly ToolCategoryId[]
+    domainIds?: readonly ToolCategoryDomainId[]
+  }
+): ToolCategoryId[] {
+  const result: ToolCategoryId[] = []
+  const seen = new Set<ToolCategoryId>()
+  const append = (categoryId: ToolCategoryId): void => {
+    if (seen.has(categoryId)) return
+    seen.add(categoryId)
+    result.push(categoryId)
+  }
+
+  for (const categoryId of input.categoryIds) append(categoryId)
+  if (!input.domainIds || isEmpty(input.domainIds)) return result
+
+  const requestedDomains = new Set<ToolCategoryDomainId>(input.domainIds)
+  for (const [categoryId, domainId] of categoryDomainEntries(ctx)) {
+    if (requestedDomains.has(domainId)) append(categoryId)
+  }
+
+  return result
+}
+
+/** 分类 → 注入描述符声明的域 id（与工具页构建同一 scope，保证展开结果都能对应上真实页）。 */
+function categoryDomainEntries(ctx: ToolContext): Array<[ToolCategoryId, ToolCategoryDomainId]> {
+  return ctx
+    .listToolCategories('catalog')
+    .map((overview): [ToolCategoryId, ToolCategoryDomainId] => [
+      overview.category.id,
+      overview.category.toolOs.domain,
+    ])
+}
+
+function categoryDomainById(ctx: ToolContext): Map<ToolCategoryId, ToolCategoryDomainId> {
+  return new Map(categoryDomainEntries(ctx))
+}
+
+function summarizeToolAccessRef(card: ToolDiscoveryCard) {
+  return {
+    finalState: card.access.finalState,
+    toolOsState: card.access.toolOsState,
+    nextAction: card.access.nextAction,
+    gates: card.access.gates,
+  }
+}
+
+function summarizeToolSpacePageRef(
+  card: ToolDiscoveryCard,
+  options: { includeAccess?: boolean } = {}
+) {
+  const includeAccess = options.includeAccess ?? true
+  return {
+    id: card.id,
+    kind: card.kind,
+    name: card.name,
+    categoryId: card.categoryId,
+    summary: card.summary,
+    availability: card.availability,
+    toolOsState: card.toolOsState,
+    risk: card.risk,
+    schemaState: card.schemaState,
+    schemaPolicy: card.schemaPolicy,
+    nextAction: card.nextAction,
+    resident: card.resident,
+    access: optionalWhen(includeAccess, summarizeToolAccessRef(card)),
+    reasons: card.reasons.map(summarizeReasonRef),
+    activation: buildToolActivationRef(card),
+  }
+}
+
+function buildToolSpaceStatusSummary(cards: readonly ToolDiscoveryCard[]) {
+  const byKind = Object.fromEntries(
+    ToolDiscoveryKindValues.map((kind) => [kind, cards.filter((card) => card.kind === kind).length])
+  )
+  return {
+    total: cards.length,
+    totalPages: cards.length,
+    totalTools: byKind.tool,
+    totalCapabilities: byKind.capability,
+    totalPlugins: byKind.plugin,
+    byKind,
+    byAvailability: Object.fromEntries(
+      ToolDiscoveryAvailabilityValues.map((availability) => [
+        availability,
+        cards.filter((card) => card.availability === availability).length,
+      ])
+    ),
+    byToolOsState: Object.fromEntries(
+      ToolOsStateValues.map((state) => [
+        state,
+        cards.filter((card) => card.toolOsState === state).length,
+      ])
+    ),
+  }
+}
+
+export function searchToolDiscoveryCards(
+  ctx: ToolContext,
+  input: z.output<typeof toolSpaceFindSchema>
+) {
+  const terms = splitSearchTerms(input.query)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
+  const categoryFilter = buildToolSpaceCategoryFilter(expandedCategoryIds)
+  const kindFilter = input.kind === 'all' ? null : input.kind
+  const toolOsStateFilter = isEmpty(input.toolOsStates) ? null : new Set(input.toolOsStates)
+  const cards = buildToolDiscoveryCards(ctx)
+  const scoreContext = buildToolSearchScoreContext(ctx, cards)
+  const domainCards = cards
+    .filter((card) => !kindFilter || card.kind === kindFilter)
+    .filter((card) => !toolOsStateFilter || toolOsStateFilter.has(card.toolOsState))
+    .filter((card) => !categoryFilter || categoryFilter.has(card.categoryId))
+  const scored = domainCards
+    .map((card) => ({ card, score: scoreCard(card, terms, scoreContext) }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score
+      return compareStableStrings(left.card.name, right.card.name)
+    })
+  const topScore = scored[0]?.score ?? 0
+  const confidenceCutoffScore = Math.ceil(topScore * ToolFindLowConfidenceScoreRatio)
+  const relevantScored = confidenceCutoffScore > 0
+    ? scored.filter((entry) => entry.score >= confidenceCutoffScore)
+    : scored
+  const lowConfidenceDiscarded = scored.length - relevantScored.length
+
+  const offset = parseToolSpaceCursor(input.cursor)
+  const page = relevantScored.slice(offset, offset + input.limit)
+  const nextOffset = offset + page.length
+  const hasMore = nextOffset < relevantScored.length
+  const nextCursor = hasMore ? String(nextOffset) : null
+  const statusSummary = {
+    ...buildToolSpaceStatusSummary(domainCards),
+    scope: 'search_domain' as const,
+    matchedTotal: relevantScored.length,
+    lowConfidenceDiscarded,
+    confidenceCutoffScore,
+    matchedStatusSummary: buildToolSpaceStatusSummary(relevantScored.map((entry) => entry.card)),
+  }
+  return {
+    op: 'find' as const,
+    query: input.query,
+    filters: {
+      kind: input.kind,
+      categoryIds: input.categoryIds,
+      domainIds: input.domainIds,
+      toolOsStates: input.toolOsStates,
+      expandedCategoryIds,
+      limit: input.limit,
+      cursor: toNullable(input.cursor),
+    },
+    page: {
+      returnedPageCount: page.length,
+      matchedTotal: relevantScored.length,
+      lowConfidenceDiscarded,
+      confidenceCutoffScore,
+      hasMore,
+      nextCursor,
+    },
+    pages: page.map(
+      ({ card, score }) =>
+        ({
+          ...summarizeToolSpacePageRef(card),
+          score,
+          matchSignals: buildMatchSignals(card, terms, scoreContext),
+        }) satisfies ToolSearchResultEntry
+    ),
+    statusSummary,
+    hasMore,
+    nextCursor,
+    message: '这是工具页索引；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用。',
+  }
+}
+
+function parseToolSpaceCursor(cursor: Nullable<string> | undefined): number {
+  if (!cursor) return 0
+
+  const value = Number(cursor)
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0
+}
+
+/** 调用方先算好 `expandedCategoryIds` 再传入：同一次请求里展开一次，且回带的过滤器与实际过滤同源。 */
+function filterToolSpaceCards(
+  cards: ToolDiscoveryCard[],
+  expandedCategoryIds: readonly ToolCategoryId[],
+  input: {
+    kind: 'tool' | 'capability' | 'plugin' | 'all'
+    toolOsStates?: ToolOsState[]
+  }
+): ToolDiscoveryCard[] {
+  const categoryFilter = buildToolSpaceCategoryFilter(expandedCategoryIds)
+  const kindFilter = input.kind === 'all' ? null : input.kind
+  const toolOsStateFilter =
+    !input.toolOsStates || isEmpty(input.toolOsStates)
+      ? null
+      : new Set<ToolOsState>(input.toolOsStates)
+
+  return cards
+    .filter((card) => !kindFilter || card.kind === kindFilter)
+    .filter((card) => !toolOsStateFilter || toolOsStateFilter.has(card.toolOsState))
+    .filter((card) => !categoryFilter || categoryFilter.has(card.categoryId))
+    .sort((left, right) => {
+      if (left.kind !== right.kind) return compareStableStrings(left.kind, right.kind)
+      if (left.categoryId !== right.categoryId) return compareStableStrings(left.categoryId, right.categoryId)
+      return compareStableStrings(left.name, right.name)
+    })
+}
+
+export function pageToolDiscoveryCards(
+  ctx: ToolContext,
+  input: z.output<typeof toolSpacePageSchema>
+) {
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
+  const cards = filterToolSpaceCards(buildToolDiscoveryCards(ctx), expandedCategoryIds, input)
+  const offset = parseToolSpaceCursor(input.cursor)
+  const page = cards.slice(offset, offset + input.limit)
+  const nextOffset = offset + page.length
+
+  return {
+    op: 'page' as const,
+    filters: {
+      kind: input.kind,
+      categoryIds: input.categoryIds,
+      domainIds: input.domainIds,
+      toolOsStates: input.toolOsStates,
+      expandedCategoryIds,
+      limit: input.limit,
+      cursor: toNullable(input.cursor),
+    },
+    page: {
+      returnedPageCount: page.length,
+      totalPageCount: cards.length,
+      hasMore: nextOffset < cards.length,
+      nextCursor: nextOffset < cards.length ? String(nextOffset) : null,
+    },
+    pages: page.map((card) => summarizeToolSpacePageRef(card)),
+    statusSummary: buildToolSpaceStatusSummary(cards),
+    message: '这是工具页索引；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用。',
+  }
+}
+
+function summarizeToolSpaceMapPage(card: ToolDiscoveryCard) {
+  return summarizeToolSpacePageRef(card, { includeAccess: false })
+}
+
+function effectiveToolMapToolsPerCategory(input: z.output<typeof toolSpaceMapSchema>): number {
+  const categoryLimit = Math.max(1, input.categoryLimit)
+  const rowBudgetForCategory = Math.max(1, Math.floor(ToolMapTargetToolRows / categoryLimit))
+  return Math.min(input.maxToolsPerCategory, rowBudgetForCategory)
+}
+
+function toolMapParameterAdjustments(
+  input: z.output<typeof toolSpaceMapSchema>,
+  effectiveMaxToolsPerCategory: number
+) {
+  if (effectiveMaxToolsPerCategory === input.maxToolsPerCategory) return []
+
+  return [
+    {
+      parameter: 'maxToolsPerCategory',
+      requested: input.maxToolsPerCategory,
+      effective: effectiveMaxToolsPerCategory,
+      reason: 'category_row_budget',
+      message:
+        'maxToolsPerCategory was capped by the map row budget; use categoryIds or tool_map(op:"page") to inspect a category in full.',
+    },
+  ]
+}
+
+function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryCard[]) {
+  const visibleToolNames = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
+  const showUserActionTool = cards.find((card) => card.id === 'tool:show_user_action_cards')
+  const kernelTools = cards
+    .filter((card) => card.kind === 'tool' && visibleToolNames.has(card.name))
+    .map((card) => ({ name: card.name, visible: true }))
+
+  return {
+    fixedToolSpace: { kernelTools },
+    stateLegend: [
+      {
+        toolOsState: 'resident',
+        availability: 'visible',
+        meaning: '工具已驻留在本轮 AI SDK tools 中。',
+        nextStep: 'call_tool',
+      },
+      {
+        toolOsState: 'loadable',
+        availability: 'loadable',
+        meaning: '已授权或可通过 tool_replace 申请/换入；不需要把它当作权限分类。',
+        nextStep: 'follow page.activation.method',
+      },
+      {
+        toolOsState: 'needs_setup',
+        availability: 'requires_user_action',
+        meaning: '存在能力提供方声明的前置 setup 或用户动作。',
+        nextStep: 'follow page.activation.dependencies',
+      },
+      {
+        toolOsState: 'unavailable',
+        availability: 'unavailable',
+        meaning: '当前运行态不可用或被策略阻止，通常需要替代方案。',
+        nextStep: '查看 reasons，改用替代工具',
+      },
+    ],
+    dependencyRules: [
+      {
+        id: 'capability-before-hidden-tools',
+        appliesToAvailability: ['requires_approval'],
+        requiredBefore: ['tool_call', 'page_in_tool'],
+        status: 'per_page',
+        prerequisite: {
+          id: 'capability:*',
+          kind: 'capability',
+          pageId: 'capability:<category>',
+          availability: 'requires_approval',
+          pageIn: ['capability:<category>'],
+          nextTool: 'tool_replace',
+        },
+      },
+      {
+        id: 'plugin-before-plugin-tools',
+        appliesToCategoryIds: [...PluginBackedToolCategoryIds],
+        requiredBefore: ['capability_activation', 'tool_call'],
+        status: showUserActionTool?.availability === 'visible' ? 'ready' : 'load_tool_entry',
+        prerequisite: {
+          id: 'plugin_user_action',
+          kind: 'plugin',
+          pageId: showUserActionTool?.id ?? 'tool:show_user_action_cards',
+          availability: showUserActionTool?.availability ?? 'unavailable',
+          pageIn:
+            showUserActionTool && showUserActionTool.availability !== 'visible'
+              ? ['tool:show_user_action_cards']
+              : [],
+          nextTool: 'show_user_action_cards',
+        },
+      },
+    ],
+  }
+}
+
+export function mapToolDiscoveryCards(
+  ctx: ToolContext,
+  input: z.output<typeof toolSpaceMapSchema>
+) {
+  const allCards = buildToolDiscoveryCards(ctx)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
+  const filteredCards = filterToolSpaceCards(allCards, expandedCategoryIds, input)
+  const grouped = new Map<ToolCategoryId, ToolDiscoveryCard[]>()
+
+  for (const card of filteredCards) {
+    const list = grouped.get(card.categoryId) ?? []
+    list.push(card)
+    grouped.set(card.categoryId, list)
+  }
+
+  const orderedCategoryEntries = [...grouped.entries()].sort(
+    ([left], [right]) => compareStableStrings(left, right)
+  )
+
+  const categoryOffset = parseToolSpaceCursor(input.cursor)
+  const pagedCategoryEntries = orderedCategoryEntries.slice(
+    categoryOffset,
+    categoryOffset + input.categoryLimit
+  )
+  const nextCategoryOffset = categoryOffset + pagedCategoryEntries.length
+  const effectiveMaxToolsPerCategory = effectiveToolMapToolsPerCategory(input)
+  const parameterAdjustments = toolMapParameterAdjustments(input, effectiveMaxToolsPerCategory)
+  // 域 id 是 domainIds 过滤的取值集合，必须从这里可见——否则模型只能猜域名，猜错就静默拿到全量。
+  const domainByCategoryId = categoryDomainById(ctx)
+
+  const categories = pagedCategoryEntries.map(([categoryId, cards]) => {
+    const capability = cards.find((card) => card.kind === 'capability')
+    const tools = cards.filter((card) => card.kind === 'tool')
+    const plugins = cards.filter((card) => card.kind === 'plugin')
+    const visibleTools = tools.slice(0, effectiveMaxToolsPerCategory)
+    const toolNames = tools.map((card) => card.name).sort(compareStableStrings)
+    const definition = capability
+      ? {
+          label: capability.name,
+          description: capability.description,
+          toolOs: {
+            domain: domainByCategoryId.get(categoryId) ?? 'injected',
+            defaultState: capability.toolOsState,
+          },
+        }
+      : undefined
+
+    return {
+      categoryId,
+      // 本层的分类表是**平的**：父子关系属于能力描述符的表达力，中立执行主链不持有分类树，
+      // 因此这四个字段恒为叶子常量。字段保留是模型面形状契约（消费方按固定形状读），不是待填的洞；
+      // 真要支持分类树，改法是让注入侧的描述符带上父子指针，不是在这里加一张本地表。
+      categoryKind: 'leaf' as ToolMapCategoryKind,
+      parentCategoryId: null,
+      subCategoryIds: [] as ToolCategoryId[],
+      label: definition?.label ?? categoryId,
+      summary: toNullable(definition?.description),
+      toolOs: toNullable(definition?.toolOs),
+      statusSummary: buildToolSpaceStatusSummary(cards),
+      childStatusSummary: null,
+      capability: capability ? summarizeToolSpaceMapPage(capability) : null,
+      activation: capability
+        ? buildToolActivationRef(capability)
+        : {
+            method: 'inspect_reasons' as const,
+            pageIn: [],
+            capabilityId: activationCapabilityIdForCategory(categoryId),
+            nextTool: 'tool_map',
+            dependencies: [],
+          },
+      toolNames,
+      tools: visibleTools.map(summarizeToolSpaceMapPage),
+      plugins: plugins.map(summarizeToolSpaceMapPage),
+      totalToolCount: tools.length,
+      totalToolNameCount: toolNames.length,
+      childToolCount: 0,
+      toolsReturnedCount: visibleTools.length,
+      hasMoreTools: visibleTools.length < tools.length,
+      hiddenToolCount: Math.max(0, tools.length - visibleTools.length),
+      toolPage:
+        visibleTools.length < tools.length
+          ? {
+              tool: 'tool_page' as const,
+              categoryIds: [categoryId],
+              kind: 'tool' as const,
+            }
+          : null,
+    }
+  })
+  const truncatedInCategories = categories
+    .filter((category) => category.hasMoreTools)
+    .map((category) => category.categoryId)
+
+  return {
+    op: 'map' as const,
+    filters: {
+      kind: input.kind,
+      categoryIds: input.categoryIds,
+      domainIds: input.domainIds,
+      toolOsStates: input.toolOsStates,
+      expandedCategoryIds,
+      categoryLimit: input.categoryLimit,
+      cursor: toNullable(input.cursor),
+      maxToolsPerCategory: input.maxToolsPerCategory,
+      effectiveMaxToolsPerCategory,
+      parameterAdjusted: !isEmpty(parameterAdjustments),
+      parameterAdjustments,
+    },
+    page: {
+      returnedCategoryCount: categories.length,
+      totalCategoryCount: orderedCategoryEntries.length,
+      hasMore: nextCategoryOffset < orderedCategoryEntries.length,
+      nextCursor:
+        nextCategoryOffset < orderedCategoryEntries.length ? String(nextCategoryOffset) : null,
+      returnedCategoryIds: categories.map((category) => category.categoryId),
+      remainingCategoryIds: orderedCategoryEntries
+        .slice(nextCategoryOffset)
+        .map(([categoryId]) => categoryId),
+      truncatedInCategories,
+    },
+    statusSummary: buildToolSpaceStatusSummary(filteredCards),
+    guide: buildToolSpaceMapGuide(ctx, allCards),
+    categories,
+    message:
+      '这是分页工具页索引；每个分类附带完整 toolNames，详细状态页仍按 maxToolsPerCategory 展开；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用；需要更多分类时用 page.nextCursor 继续。',
+  }
+}
