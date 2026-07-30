@@ -1,5 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import { type ComputerHelperLaunchSpec, resolveComputerHelper } from './ComputerHelperResolver'
 import {
   decodeComputerResponse,
@@ -17,8 +19,6 @@ import type {
   ComputerScreenSize,
   ComputerTypeResult,
 } from './types'
-
-type Nullable<T> = T | null
 
 /** manager 依赖的最小子进程接口，测试中可注入替身。 */
 export interface ComputerSidecarProcess {
@@ -52,7 +52,19 @@ interface PendingRequest {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
+/** stderr 只留尾部这么多字节：它唯一的用途是给启动失败当 detail，不是日志缓冲区。 */
+const STDERR_TAIL_LIMIT = 8_000
+/** helper 启动完成时主动发来的握手行用 id=0，与任何真实请求 id（从 1 递增）不冲突。 */
+const READY_HANDSHAKE_ID = 0
 
+/**
+ * 默认 spawner。两处形态是刻意的：
+ * - **argv 直传、不过 shell**：解释器与脚本路径都由 `ComputerHelperResolver` 从固定布局算出，
+ *   不拼命令行字符串，也就没有注入面（`shell: true` 会把整条路径变成可注入的命令）。
+ * - **继承父进程 env**：helper 是随插件分发的自包含 venv，需要 PATH/HOME 等定位系统 API 与
+ *   显示会话；这里只额外钉死两个 Python 行为开关（不缓冲、不写 .pyc）以保证 stdio 协议实时、
+ *   且不往插件目录里落编译产物。
+ */
 function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess {
   const child: ChildProcessWithoutNullStreams = spawn(
     spec.pythonCommand,
@@ -71,6 +83,34 @@ function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess 
  *
  * 负责懒启动平台脚本、完成握手、关联请求响应、报告可用性并释放资源。
  * 在调用动作或 ensureAvailable 前不会自动启动，测试和 CI 中导入没有副作用。
+ *
+ * 导览（§5.3b ②状态机与生命周期 / ③并发与时序 / ⑥非显然的妥协）
+ *
+ * **状态机**：`idle`(child=null, startPromise=null, ready=false) → `starting`(startPromise 在飞)
+ * → `ready`(收到 id=0 握手) → `dead`(进程退出 / dispose)。三个字段是同一个状态的三个投影，
+ * 必须一起迁移——**唯一合法的回到 idle 的路径是 `teardown()`**，别在别处单独改 `ready` 或
+ * `child`，否则会造出「ready=true 但 child 已死」这种没有出口的假状态。
+ * `disposed` 是终态：置位后不再有任何迁移，`start()`/`request()` 一律直接拒。
+ *
+ * **两个曾经真实存在的死锁（2026-07-30 Q3b 修复，别改回去）**：
+ * 1. `start()` 失败后若不把 `startPromise` 归零，后续每次 `start()` 都会拿到**同一个已拒绝的
+ *    promise**——一次瞬时失败（helper 未装 / spawn 抛错）就把 sidecar 永久钉死，用户装好插件
+ *    也活不过来，只能重启应用。异步失败走 `onFail → teardown()` 归零；**同步**失败走 `start()`
+ *    尾部那段带身份校验的 `catch`（executor 体在 `this.startPromise = …` 赋值**之前**就跑完了，
+ *    那时 teardown 清的是上一轮的值）。
+ * 2. `exit` 事件在 ready **之后**到达时 `onFail` 已 settled、不会再 teardown，于是 `ready` 停在
+ *    true、`child` 指着死进程：后续每个请求都写进死管道再干等一整个超时，且永不重启。所以
+ *    `exit` 处理器结尾无条件 `teardown()`（幂等），把状态机拉回 idle，下一次请求自然重启。
+ *
+ * **时序与关联**：请求 id 从 1 单调递增、不复用；每个请求自带超时租约（`requestTimeoutMs`），
+ * 到点就从 `pending` 摘除并拒绝——所以**响应迟到时找不到 pending 会被静默丢弃**，这是设计而非
+ * 缺陷（迟到的结果对调用方已无意义）。进程死亡时 `rejectAllPending` 一次性清账，不留悬挂 promise。
+ *
+ * **失败方向**：`ensureAvailable()` 永不抛，把一切失败翻译成结构化 `ComputerAvailability`
+ * （上层据此引导用户装插件或授权）；`request()` 则一律抛——动作类调用没有「降级」这一说。
+ *
+ * **妥协**：不做重启退避/自动重连。sidecar 死了就回 idle，等下一次调用重新拉起；桌面控制是
+ * 低频人工触发的能力，重试策略留给调用方比在这里内建一套更可预期。
  */
 export class ComputerSidecarManager {
   private readonly resolveHelper: () => Nullable<ComputerHelperLaunchSpec>
@@ -117,8 +157,8 @@ export class ComputerSidecarManager {
     } catch (error) {
       return {
         available: false,
-        reason: this.classifyStartError(error as Error),
-        detail: (error as Error).message,
+        reason: this.classifyStartError(error),
+        detail: AppError.getMessage(error),
       }
     }
 
@@ -136,7 +176,7 @@ export class ComputerSidecarManager {
       return {
         available: false,
         reason: 'dependencies-missing',
-        detail: (error as Error).message,
+        detail: AppError.getMessage(error),
       }
     }
   }
@@ -175,14 +215,20 @@ export class ComputerSidecarManager {
     command: ComputerCommand,
     payload: Record<string, unknown>
   ): Promise<TResult> {
-    if (this.disposed) throw new Error('Computer sidecar has been disposed')
+    if (this.disposed) throw new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar has been disposed')
     await this.start()
 
     const id = this.nextRequestId++
     return new Promise<TResult>((resolvePromise, rejectPromise) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        rejectPromise(new Error(`Computer sidecar request "${command}" timed out`))
+        rejectPromise(
+          new AppError('TIMEOUT', `Computer sidecar request "${command}" timed out`, undefined, {
+            command,
+            requestId: id,
+            timeoutMs: this.requestTimeoutMs,
+          })
+        )
       }, this.requestTimeoutMs)
 
       this.pending.set(id, {
@@ -196,21 +242,27 @@ export class ComputerSidecarManager {
       } catch (error) {
         clearTimeout(timer)
         this.pending.delete(id)
-        rejectPromise(error as Error)
+        rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_WRITE_FAILED'))
       }
     })
   }
 
   /** 幂等启动 sidecar，并等待 ready 握手。 */
   public start(): Promise<void> {
-    if (this.disposed) return Promise.reject(new Error('Computer sidecar has been disposed'))
+    if (this.disposed)
+      return Promise.reject(
+        new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar has been disposed')
+      )
     if (this.ready) return Promise.resolve()
     if (this.startPromise) return this.startPromise
 
-    this.startPromise = new Promise<void>((resolvePromise, rejectPromise) => {
+    const startPromise = new Promise<void>((resolvePromise, rejectPromise) => {
       const spec = this.resolveHelper()
       if (!spec) {
-        rejectPromise(new Error('Desktop-control helper script was not found.'))
+        // 消息文本被 classifyStartError 按关键字分类，改词会改可用性判定，别润色。
+        rejectPromise(
+          new AppError('COMPUTER_HELPER_MISSING', 'Desktop-control helper script was not found.')
+        )
         return
       }
 
@@ -218,7 +270,7 @@ export class ComputerSidecarManager {
       try {
         child = this.spawnProcess(spec)
       } catch (error) {
-        rejectPromise(error as Error)
+        rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_SPAWN_FAILED'))
         return
       }
       this.child = child
@@ -242,8 +294,8 @@ export class ComputerSidecarManager {
       })
       child.stderr.on('data', (chunk) => {
         this.stderrBuffer += String(chunk)
-        if (this.stderrBuffer.length > 8_000) {
-          this.stderrBuffer = this.stderrBuffer.slice(-8_000)
+        if (this.stderrBuffer.length > STDERR_TAIL_LIMIT) {
+          this.stderrBuffer = this.stderrBuffer.slice(-STDERR_TAIL_LIMIT)
         }
       })
       child.on('error', (error) => {
@@ -255,18 +307,35 @@ export class ComputerSidecarManager {
         const reason =
           this.stderrBuffer.trim() ||
           `Computer sidecar exited before becoming ready (code ${code ?? 'null'}).`
-        onFail(new Error(reason))
-        this.rejectAllPending(new Error('Computer sidecar exited.'))
+        onFail(new AppError('COMPUTER_SIDECAR_EXITED', reason, undefined, { exitCode: code }))
+        this.rejectAllPending(
+          new AppError('COMPUTER_SIDECAR_EXITED', 'Computer sidecar exited.', undefined, {
+            exitCode: code,
+          })
+        )
+        // ready 之后才退出时 onFail 已 settled、不会再 teardown，状态机会卡在「ready=true 但进程
+        // 已死」——后续每个请求写进死管道再干等一整个超时，且永不重启。teardown 幂等，无条件调用
+        // 把状态机拉回 idle，下一次请求自然重新拉起 sidecar。
+        this.teardown()
       })
     })
 
-    return this.startPromise
+    this.startPromise = startPromise
+    // 同步失败路径的归零点：executor 体在上面这行赋值**之前**就已跑完，onFail → teardown() 那时
+    // 清的是上一轮的值。不补这一手，一次瞬时启动失败就把 sidecar 永久钉死（详见类头导览）。
+    // 身份校验保证不会误清掉后来那一轮的 startPromise。
+    void startPromise.catch(() => {
+      if (this.startPromise === startPromise) this.startPromise = null
+    })
+    return startPromise
   }
 
   /** 终止 sidecar，并拒绝仍在进行中的请求。 */
   public dispose(): void {
     this.disposed = true
-    this.rejectAllPending(new Error('Computer sidecar disposed.'))
+    this.rejectAllPending(
+      new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar disposed.')
+    )
     this.teardown()
   }
 
@@ -280,18 +349,21 @@ export class ComputerSidecarManager {
       try {
         response = decodeComputerResponse(line)
       } catch (error) {
-        this.log(`failed to decode sidecar line: ${(error as Error).message}`)
+        // 坏帧只丢这一行、不拖垮链路：helper 的 print 调试输出混进 stdout 是常态，
+        // 为一行噪音杀掉整个 sidecar 会把可恢复问题升级成不可用。留痕后继续读下一行。
+        this.log(`failed to decode sidecar line: ${AppError.getMessage(error)}`)
         continue
       }
 
-      // id=0 是启动时发出的 ready 握手。
-      if (response.id === 0) {
+      if (response.id === READY_HANDSHAKE_ID) {
         onReady()
         continue
       }
 
+      // id 缺失（helper 主动推的非应答行）无从关联，丢弃。
       if (response.id === null) continue
       const pending = this.pending.get(response.id)
+      // 找不到 pending = 该请求已超时摘除，迟到的结果对调用方已无意义（见类头导览「时序与关联」）。
       if (!pending) continue
       this.pending.delete(response.id)
       clearTimeout(pending.timer)
@@ -299,13 +371,17 @@ export class ComputerSidecarManager {
       if (response.ok) {
         pending.resolve(response.result)
       } else {
-        pending.reject(new Error(`${response.error.code}: ${response.error.message}`))
+        pending.reject(
+          new AppError('COMPUTER_HELPER_ERROR', `${response.error.code}: ${response.error.message}`, undefined, {
+            helperErrorCode: response.error.code,
+          })
+        )
       }
     }
   }
 
-  private classifyStartError(error: Error): ComputerAvailability['reason'] {
-    const message = error.message.toLowerCase()
+  private classifyStartError(error: unknown): ComputerAvailability['reason'] {
+    const message = AppError.getMessage(error).toLowerCase()
     if (message.includes('enoent') || message.includes('not found')) return 'python-missing'
     if (message.includes('modulenotfounderror') || message.includes('no module named'))
       return 'dependencies-missing'
@@ -326,6 +402,7 @@ export class ComputerSidecarManager {
     this.pending.clear()
   }
 
+  /** 把状态机拉回 idle 的**唯一**出口；幂等，重复调用安全（进程可能已自行退出）。 */
   private teardown(): void {
     this.ready = false
     this.startPromise = null
@@ -333,12 +410,12 @@ export class ComputerSidecarManager {
       try {
         this.child.stdin.end()
       } catch {
-        // 忽略释放阶段的 best-effort 失败。
+        // arch-guard:silent-catch-ok 释放阶段 best-effort：进程可能已退出，管道关闭失败无补救动作也无诊断价值。
       }
       try {
         this.child.kill('SIGTERM')
       } catch {
-        // 忽略释放阶段的 best-effort 失败。
+        // arch-guard:silent-catch-ok 同上——kill 已退出的进程不是错误，只是竞态。
       }
       this.child = null
     }
