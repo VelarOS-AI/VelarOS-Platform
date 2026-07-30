@@ -29,6 +29,7 @@ import { RichToolOutputCard } from '../RichToolOutputCard.section'
 import styles from '../RichOutputToolRender.module.css'
 
 import type { ToolCallBlock } from '#contracts'
+import { openExternalUrl } from '#internal/externalNavigation'
 import { isPresent, isTrue, optionalWhen } from '#internal/runtime'
 
 export const WebReadToolRender = memo(function WebReadToolRender({
@@ -84,7 +85,9 @@ export const WebReadToolRender = memo(function WebReadToolRender({
             size="icon-sm"
             variant="ghost"
             className={styles.actionButton}
-            onClick={() => url && window.open(url, '_blank', 'noopener,noreferrer')}
+            onClick={() => {
+              openExternalUrl(url)
+            }}
           >
             <ArrowSquareOutIcon size={14} />
           </IconButton>

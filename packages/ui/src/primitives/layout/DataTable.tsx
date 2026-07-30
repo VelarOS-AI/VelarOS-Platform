@@ -237,7 +237,12 @@ function DataTableInner<T>({
   data,
   getRowKey,
   emptySlot,
-  emptyIcon,
+  // 解构默认值**只对 `undefined` 生效、不对 `null` 生效**——这正是 prop 契约要的三态：
+  // 省略 = 默认表格图标；显式传 `null` = 隐藏图标走完全自定义空状态；传节点 = 用它。
+  // 此前默认值写在渲染分支里的 `emptyIcon ?? <TableIcon/>`，而那条分支被
+  // `isPresent(emptyIcon)` 守着，`??` 永不触发：省略时既没有图标也没有 empty-state 外框，
+  // 与文档承诺相反，且省略与显式 null 无法区分。
+  emptyIcon = <TableIcon size={40} strokeWidth={1.15} className={'velar-data-table-empty-icon'} aria-hidden />,
   loading,
   loadingSlot,
   size = 'md',
@@ -509,14 +514,7 @@ function DataTableInner<T>({
                 <td colSpan={colCount} className={'velar-data-table-empty-cell'}>
                   {isPresent(emptyIcon) ? (
                     <div className={'velar-data-table-empty-state'}>
-                      {emptyIcon ?? (
-                        <TableIcon
-                          size={40}
-                          strokeWidth={1.15}
-                          className={'velar-data-table-empty-icon'}
-                          aria-hidden
-                        />
-                      )}
+                      {emptyIcon}
                       {isPresent(emptySlot) && !isFalse(emptySlot) && (
                         <div className={'velar-data-table-empty-slot-wrap'}>{emptySlot}</div>
                       )}

@@ -27,8 +27,15 @@ const switchVariants = cva('velar-switch', {
   },
 })
 
+/**
+ * `checked` 必填 = **只做受控**；`defaultChecked` 一并 Omit，否则会经 `{...props}` 透给
+ * Radix Root，与 `checked` 同时存在形成受控/非受控双态。判据同 Checkbox。
+ */
 export interface SwitchProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>, 'onCheckedChange'>,
+  extends Omit<
+      React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>,
+      'onCheckedChange' | 'defaultChecked'
+    >,
     VariantProps<typeof switchVariants> {
   checked: boolean
   onCheckedChange?: (checked: boolean) => void
