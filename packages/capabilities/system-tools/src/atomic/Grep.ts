@@ -64,6 +64,10 @@ function buildMatcher(input: AtomicGrepInput): (line: string) => Iterable<number
   }
 
   const needle = input.caseSensitive ? input.pattern : input.pattern.toLowerCase()
+  // 空 needle 会让游标永不推进而无限 yield。入参 schema 有 `min(1)` 兜着，但**依赖外层校验的
+  // 防御不是防御**——本函数是内部可复用件，schema 只守工具入口那一条路。这里挡住，让空模式
+  // 退化成"零匹配"而不是挂死进程。
+  if (isEmpty(needle)) return () => []
   return function* matchLiteral(line: string) {
     const haystack = input.caseSensitive ? line : line.toLowerCase()
     let index = 0
