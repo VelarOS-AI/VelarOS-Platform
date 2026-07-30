@@ -47,8 +47,8 @@ if (versionConstant !== manifest.version) {
 if (manifest.repository?.url !== 'git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git') {
   fail('repository URL must point to VelarOS-Capabilities')
 }
-if (manifest.repository?.directory !== 'packages/capabilities/workspace') {
-  fail('repository.directory must be packages/capabilities/workspace')
+if (manifest.repository?.directory !== 'packages/workspace') {
+  fail('repository.directory must be packages/workspace')
 }
 if (
   manifest.exports?.['./agent']?.import !== './dist/agent-runtime/index.js'

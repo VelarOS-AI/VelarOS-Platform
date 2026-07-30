@@ -54,9 +54,9 @@ Recommended inspect sequence:
 ```json
 [
   { "tool": "ws_search", "input": { "query": "buildEvidencePack", "maxResults": 5 } },
-  { "tool": "ws_file_stat", "input": { "path": "packages/capabilities/workspace/src/core/workspace.ts" } },
-  { "tool": "ws_read", "input": { "path": "packages/capabilities/workspace/src/core/workspace.ts", "range": { "startLine": 450, "endLine": 540 } } },
-  { "tool": "ws_resolve_target", "input": { "path": "packages/capabilities/workspace/src/core/workspace.ts", "target": { "exactSnippet": "buildEvidencePack" } } },
+  { "tool": "ws_file_stat", "input": { "path": "packages/workspace/src/core/workspace.ts" } },
+  { "tool": "ws_read", "input": { "path": "packages/workspace/src/core/workspace.ts", "range": { "startLine": 450, "endLine": 540 } } },
+  { "tool": "ws_resolve_target", "input": { "path": "packages/workspace/src/core/workspace.ts", "target": { "exactSnippet": "buildEvidencePack" } } },
   { "tool": "ws_build_evidence", "input": { "target": { "targetId": "target_x" }, "include": { "currentWindow": true } } }
 ]
 ```

@@ -27,21 +27,13 @@ function collectVelarosDeps(manifest) {
   return [...names].sort()
 }
 
-// packages/ 下的包目录:顶层包 + 一层分组目录(如 capabilities/<pkg>)里的包。
+// packages/ 下的包目录:一律平铺一层(2026-07-30 QI 批把 capabilities/ 的四个包提到顶层后,
+// 这里不再需要「顶层 + 一层分组目录」的两级扫描特例;新包直接放 packages/<pkg>/)。
 function listPackageDirectories() {
   const found = []
   for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    if (existsSync(resolve(PACKAGES_DIR, entry.name, 'package.json'))) {
-      found.push(entry.name)
-      continue
-    }
-    for (const nested of readdirSync(resolve(PACKAGES_DIR, entry.name), { withFileTypes: true })) {
-      if (!nested.isDirectory()) continue
-      if (existsSync(resolve(PACKAGES_DIR, entry.name, nested.name, 'package.json'))) {
-        found.push(`${entry.name}/${nested.name}`)
-      }
-    }
+    if (existsSync(resolve(PACKAGES_DIR, entry.name, 'package.json'))) found.push(entry.name)
   }
   return found
 }

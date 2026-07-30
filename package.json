@@ -10,8 +10,7 @@
   "type": "module",
   "packageManager": "bun@1.3.13",
   "workspaces": [
-    "packages/*",
-    "packages/capabilities/*"
+    "packages/*"
   ],
   "velaros": {
     "trainVersion": "0.6.0",
@@ -33,12 +32,12 @@
       ],
       "capabilities": [
         "browser",
-        "capabilities/cli",
-        "capabilities/office-tools",
-        "capabilities/system-tools",
-        "capabilities/workspace",
+        "cli",
         "computer",
-        "game"
+        "game",
+        "office-tools",
+        "system-tools",
+        "workspace"
       ],
       "memory": [
         "memory"
@@ -93,7 +92,7 @@
     "check:code-style:fix": "arch-guard run --fix",
     "check:code-style:baseline": "arch-guard baseline update",
     "check:html-artifacts-package": "bun run --cwd packages/html-artifacts check:package-contract && bun run --cwd packages/html-artifacts check:dist",
-    "check:workspace-arch": "bun run --cwd packages/capabilities/workspace check:arch",
+    "check:workspace-arch": "bun run --cwd packages/workspace check:arch",
     "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:workspace-arch",
     "check": "bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
     "test:suites": "bun run test:memory && bun run test:ui"
@@ -111,7 +110,7 @@
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
-    "@velaros-ai/arch-guard": "^0.2.0",
+    "@velaros-ai/arch-guard": "file:../VelarOS-Arch-Guard",
     "@vitejs/plugin-react": "^6.0.4",
     "electron": "^41.10.2",
     "eslint": "^9.39.4",

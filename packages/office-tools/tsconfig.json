@@ -10,7 +10,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": "../../..",
+    "baseUrl": "../..",
     "paths": {}
   },
   "include": [

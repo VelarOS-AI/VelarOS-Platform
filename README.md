@@ -17,8 +17,7 @@ VelarOS-Cloud       云服务(entitlement / 账号 / 设备座位)
 ## 布局
 
 ```
-packages/<pkg>/            平台包,平铺(唯一例外见下)
-packages/capabilities/<pkg>/  capabilities 域的四个包,多嵌一层
+packages/<pkg>/            平台包,一律平铺(无例外)
 scripts/build/…            全仓共享:构建拓扑排序
 scripts/run-workspace-script.mjs  全仓共享:逐包跑同名 script
 scripts/<domain>/…         各域自带的脚本,按域隔离
@@ -33,11 +32,14 @@ tests/<domain>/            各域根级测试树
 docs/<domain>/             各域文档;**总入口 [docs/readme.md](docs/readme.md)**
 ```
 
-`workspaces` = `["packages/*", "packages/capabilities/*"]`,共 **14 个平台包**(下表)。
+`workspaces` = `["packages/*"]`,共 **15 个平台包**(下表)。
 
 **为什么平铺而不是 `packages/<domain>/<pkg>`**:包内 tsconfig 大量写 `baseUrl: "../.."` +
 `paths: ["./packages/<pkg>/src/index.ts"]`,package.json 构建脚本写 `../../scripts/…`。平铺让这些
 相对路径逐字成立,导入零改写;分域再嵌一层则要改写每个包的 tsconfig 与构建脚本。
+**域不是目录,是 `velaros.domainPackages` 里的一行声明**——`cli` / `office-tools` /
+`system-tools` / `workspace` 四个包 2026-07-30(QI 批)已从 `packages/capabilities/` 提到顶层,
+和其余能力包(browser / computer / game)平级;两级扫描的特例随之消失。
 capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: "../../.."`)。域归属不靠目录,
 由仓根 `package.json` 的 `velaros.domainPackages` 声明,各域架构门据此把「包集合冻结」收敛到本域。
 
@@ -53,12 +55,12 @@ capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: 
 | agent | `@velaros-ai/agent` | 0.5.0 | `packages/agent` |
 | core | `@velaros-ai/core` | 0.3.2 | `packages/core` |
 | model | `@velaros-ai/model` | 0.4.6 | `packages/model` |
-| capabilities | `@velaros-ai/workspace` | 1.2.5 | `packages/capabilities/workspace` |
+| capabilities | `@velaros-ai/workspace` | 1.2.5 | `packages/workspace` |
 | capabilities | `@velaros-ai/browser`(`/core` `/tools` `/composition` `/runtime`) | 0.2.6 | `packages/browser` |
 | capabilities | `@velaros-ai/computer`(`/runtime` `/tools`) | 0.2.6 | `packages/computer` |
-| capabilities | `@velaros-ai/system-tools` | 0.2.8 | `packages/capabilities/system-tools` |
-| capabilities | `@velaros-ai/office-tools` | 0.2.7 | `packages/capabilities/office-tools` |
-| capabilities | `@velaros-ai/cli` | 0.2.10 | `packages/capabilities/cli` |
+| capabilities | `@velaros-ai/system-tools` | 0.2.8 | `packages/system-tools` |
+| capabilities | `@velaros-ai/office-tools` | 0.2.7 | `packages/office-tools` |
+| capabilities | `@velaros-ai/cli` | 0.2.10 | `packages/cli` |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | `packages/memory` |
 | ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | `packages/ui` |
 | html-artifacts | `@velaros-ai/html-artifacts` | 0.1.3 | `packages/html-artifacts` |
@@ -195,18 +197,12 @@ bun run check:gates      # 只跑各域质量门
    → **落点**:`scripts/agent/check-schemas.mjs` 加第四道防线,照 kernel 的形状把
    `agent/protocol` 的 span schema 快照进 `baselines/agent/`。上游记录见 Desktop 仓
    `docs/kernel-observability.md`。
-7. **arch-guard 的 44 条 `velaros/code-style/*` 在本仓一个包都不跑**(门覆盖审计实测,
-   存量 **1122 条**违规 / 命中 24 条检查;逐包数字见
-   [docs/gate-coverage-matrix.md](docs/gate-coverage-matrix.md) §3)。这不是纪律松,是门没铺过来:
-   这批 check 住 Desktop 的 `packages/arch-guard-velaros`(`private: true`、从未发布,且
-   Desktop `docs/package-extraction-map.md` 明确登记为「Desktop 自持」),引擎
-   `@velaros-ai/arch-guard` 虽是公开包但插件不是。
-   → **落点(需人拍板)**:①把 `checks/code-style/` 劈成公共包两仓共依(判据单源,最干净);
-   ②整包发布 `@velaros/arch-guard-velaros`(会把 Desktop 专属检查一并带进来);
-   ③推翻 extraction-map 判决整体迁进 Platform。
-   **不要**复制一份 check 进本仓(判据立刻双源),**也不要**做成「sibling 在就跑」的 best-effort
-   探针(没挂链的门等于没有门,还多骗一层安全感)。
-8. **两个包的检查脚本写了但没挂链**:`packages/html-artifacts` 的 `check:dist` /
-   `check:package-contract`、`packages/capabilities/workspace` 的 `check:arch`(118 行)
-   都只在各自包内 `check` 脚本里,根 `check:gates` 不跑——`bun run check` 与 CI 都碰不到。
-   → **落点**:两行,挂进根 `check:gates`。
+7. ~~**arch-guard 的 44 条 `velaros/code-style/*` 在本仓一个包都不跑**~~ → **已闭合(QI 批
+   2026-07-30)**:按「劈公共包」出路处置——37 条语言级规则迁进
+   `@velaros-ai/arch-guard/checks/code-style`(两仓共依、判据单源、谁都不留副本),7 条认识产品
+   概念的仍归 Desktop 私有插件。本仓门 `bun run check:code-style` 已挂进 `check:gates`,存量
+   **1915 条**冻结在 `.arch-guard/baseline.json`(口径与 QH 的 1122 不同:那次被 Desktop 硬编码
+   的扫描根收窄,`packages/capabilities/**` 等根本没进面)。详见
+   [docs/gate-coverage-matrix.md](docs/gate-coverage-matrix.md) §3。
+8. ~~**两个包的检查脚本写了但没挂链**~~ → **已闭合(QI 批)**:`check:html-artifacts-package`
+   与 `check:workspace-arch` 已挂进根 `check:gates`。
