@@ -8,7 +8,13 @@ import type { SessionEntry } from '../../protocol'
 /** 引擎负责分配、追加输入不得携带的基字段。 */
 type EngineAssignedField = 'id' | 'parentId' | 'createdAt'
 
-/** 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `type` 的收窄能力。 */
+/**
+ * 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `type` 的收窄能力。
+ *
+ * 与 `observability/ExecutionSpanRecorder.ts` 的同名类型是**刻意的两份**：为两行纯类型别名新建
+ * 共享模块（或塞进全局 `types/velaros-globals.d.ts`）的成本高于收益——前者多一层 import 边，
+ * 后者与该文件"全局面只减不增、运行时符号已迁出"的既定方向相反。改一处时记得另一处同形。
+ */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 
 /**

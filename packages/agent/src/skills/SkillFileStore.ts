@@ -174,7 +174,7 @@ class SkillFileStore {
         // 目录式技能连同资源文件一起进指纹（资源增删改也应触发重载）。
         const resourceVersion =
           basename(filePath) === SkillDirEntryFileName
-            ? this.listSkillResources(dirname(filePath))
+            ? listSkillDirResources(dirname(filePath))
                 .map((rel) => {
                   const resourceStats = statSync(join(dirname(filePath), rel), {
                     throwIfNoEntry: false,
@@ -428,10 +428,6 @@ class SkillFileStore {
     }
   }
 
-  private listSkillResources(baseDir: string): string[] {
-    return listSkillDirResources(baseDir)
-  }
-
   /** 读取目录式技能的捆绑资源；路径必须命中该技能已枚举的资源清单（天然防目录穿越）。 */
   public readSkillResource(id: string, resourcePath: string): Nullable<string> {
     const record = this.get(id)
@@ -473,7 +469,7 @@ class SkillFileStore {
         argumentHint: data['argument-hint']?.trim() || null,
         allowedTools: parseFrontmatterList(data['allowed-tools']),
         baseDir,
-        resourcePaths: baseDir ? this.listSkillResources(baseDir) : [],
+        resourcePaths: baseDir ? listSkillDirResources(baseDir) : [],
       }
       if (isEmpty(record.markdown)) return null
 
