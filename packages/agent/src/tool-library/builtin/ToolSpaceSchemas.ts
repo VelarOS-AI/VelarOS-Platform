@@ -45,7 +45,6 @@ const ToolOsStateValues = [
 const toolDiscoveryToolOsStateSchema = z.enum(ToolOsStateValues)
 
 export const toolAvailabilitySchema = z.enum(ToolDiscoveryAvailabilityValues)
-export const toolDiscoveryKindSchema = z.enum(ToolDiscoveryKindValues)
 
 function isChineseOrEnglishToolSearchQuery(query: string): boolean {
   return ToolFindQueryHasSearchLanguage.test(query) && ToolFindQueryAllowedCharacters.test(query)
@@ -457,119 +456,6 @@ export const toolSpaceReplaceMethodSchema = toolSpaceReplaceSchema
     })
   })
 
-const toolBatchSchema = z.object({
-  action: z
-    .enum(['plan', 'discover', 'import', 'replace', 'remove'])
-    .describe(parameterDescription({ description: '批量工具管理动作。' })),
-  queries: z
-    .array(
-      z
-        .string()
-        .trim()
-        .min(1)
-        .max(240)
-        .refine(isChineseOrEnglishToolSearchQuery, {
-          message:
-            'tool_batch queries 只允许使用中文或英文搜索词；数字和工具名常用符号可以作为辅助内容。',
-        })
-    )
-    .max(6)
-    .default([])
-    .describe(parameterDescription({ description: '批量搜索的任务意图、工具名或能力名。' })),
-  categoryIds: z
-    .array(toolDiscoveryCategorySchema)
-    .max(8)
-    .default([])
-    .describe(parameterDescription({ description: '要批量发现、导入或移除的工具分类。' })),
-  domainIds: z
-    .array(toolDiscoveryDomainSchema)
-    .max(8)
-    .default([])
-    .describe(
-      parameterDescription({
-        description:
-          '要批量发现、导入或移除的 ToolOS v2 能力域；domain 不是权限边界，会展开为现有工具分类。',
-      })
-    ),
-  toolOsStates: z
-    .array(toolDiscoveryToolOsStateSchema)
-    .max(4)
-    .default([])
-    .describe(
-      parameterDescription({
-        description:
-          '要批量匹配的工具页运行态 toolOsState；常用于一次性发现 loadable 或 needs_setup 页。',
-      })
-    ),
-  pageIds: z
-    .array(z.string().trim().min(1).max(180))
-    .max(20)
-    .default([])
-    .describe(parameterDescription({ description: '要批量导入、替换或移除的工具页 id。' })),
-  pageIn: z
-    .array(z.string().trim().min(1).max(180))
-    .max(20)
-    .default([])
-    .describe(parameterDescription({ description: '显式换入的工具页 id。' })),
-  pageOut: z
-    .array(z.string().trim().min(1).max(180))
-    .max(20)
-    .default([])
-    .describe(parameterDescription({ description: '显式换出的工具页 id。' })),
-  kinds: z
-    .array(toolDiscoveryKindSchema)
-    .max(3)
-    .default(['tool', 'capability', 'plugin'])
-    .describe(parameterDescription({ description: '批量匹配的页类型。' })),
-  maxMatchesPerQuery: z
-    .number()
-    .int()
-    .min(1)
-    .max(12)
-    .default(4)
-    .describe(parameterDescription({ description: '每个 query 最多导入或返回多少个候选页。' })),
-  maxToolsPerCategory: z
-    .number()
-    .int()
-    .min(1)
-    .max(40)
-    .default(12)
-    .describe(
-      parameterDescription({
-        description:
-          '每个分类最多返回多少个工具页；map 路径可能按 category_row_budget 动态降低实际值，并通过 parameterAdjusted/parameterAdjustments 返回调整详情。',
-      })
-    ),
-  dryRun: z
-    .boolean()
-    .default(false)
-    .describe(parameterDescription({ description: '为 true 时只计划，不改变会话工具状态。' })),
-  reason: z
-    .string()
-    .trim()
-    .min(1)
-    .max(240)
-    .describe(parameterDescription({ description: '为什么需要这次批量工具管理。' })),
-}).strip()
-
-export const toolBatchMethodSchema = toolBatchSchema.superRefine((value, issueCtx) => {
-  const targetCount =
-    value.queries.length +
-    value.categoryIds.length +
-    value.domainIds.length +
-    value.toolOsStates.length +
-    value.pageIds.length +
-    value.pageIn.length +
-    value.pageOut.length
-  if (targetCount > 0) return
-  issueCtx.addIssue({
-    code: 'custom',
-    message:
-      'tool_batch 至少需要 queries、categoryIds、domainIds、toolOsStates、pageIds、pageIn 或 pageOut 一个目标。',
-    path: ['queries'],
-  })
-})
-
 export const toolSpaceSchema = z.discriminatedUnion('op', [
   toolSpaceFindSchema,
   toolSpacePageSchema,
@@ -584,5 +470,4 @@ export type ToolSpacePageInput = z.output<typeof toolSpacePageSchema>
 export type ToolSpaceMapInput = z.output<typeof toolSpaceMapSchema>
 export type ToolSpaceReadInput = z.output<typeof toolSpaceReadSchema>
 export type ToolSpaceReplaceInput = z.output<typeof toolSpaceReplaceSchema>
-export type ToolBatchInput = z.output<typeof toolBatchMethodSchema>
 export type ToolSpaceOperationInput = z.output<typeof toolSpaceSchema>

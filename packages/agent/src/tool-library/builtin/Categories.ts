@@ -32,7 +32,6 @@
 import { type z } from 'zod'
 
 import { isArray, isBoolean, isEmpty, isNumber, isPlainObject, isPresent, isString, optionalWhen, optionalWhenLazy,toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentSkillDescriptor,
   ChatPromptFeatureId,
@@ -75,13 +74,12 @@ import {
   splitSearchTerms,
 } from './ToolSearchTerms'
 import {
-  type toolBatchMethodSchema,
   ToolDiscoveryKindValues,
-  toolSpaceFindSchema,
+  type toolSpaceFindSchema,
   type toolSpaceMapSchema,
   type toolSpacePageSchema,
   type toolSpaceReadSchema,
-  toolSpaceReplaceSchema,
+  type toolSpaceReplaceSchema,
   type toolSpaceSchema,
 } from './ToolSpaceSchemas'
 
@@ -89,8 +87,6 @@ export type { ToolSpaceInput } from './ToolSpaceSchemas'
 export {
   parseToolSpaceQueryMethodInput,
   toolAvailabilitySchema,
-  toolBatchMethodSchema,
-  toolDiscoveryKindSchema,
   toolSpaceFindMethodSchema,
   toolSpaceMapMethodSchema,
   toolSpacePageMethodSchema,
@@ -686,244 +682,6 @@ function summarizeToolSpacePageRef(
     access: optionalWhen(includeAccess, summarizeToolAccessRef(card)),
     reasons: card.reasons.map(summarizeReasonRef),
     activation: buildToolActivationRef(card),
-  }
-}
-
-type ToolBatchPageSummary = ReturnType<typeof summarizeToolSpacePageRef>
-
-interface ToolBatchCategorySummary {
-  categoryId: ToolCategoryId
-  categoryLabel: string
-  totalPages: number
-  returnedPageCount: number
-  pages: ToolBatchPageSummary[]
-}
-
-interface ToolBatchQueryResult {
-  query: string
-  pages: ToolSearchResultEntry[]
-}
-
-interface ToolBatchResolvedTargets {
-  matchedCards: ToolDiscoveryCard[]
-  explicitPageIds: string[]
-  expandedCategoryIds: ToolCategoryId[]
-  missingPageIds: string[]
-  queryResults: ToolBatchQueryResult[]
-  resolvedPageIn: string[]
-  resolvedPageOut: string[]
-}
-
-function uniqueToolSpaceIds(ids: readonly string[]): string[] {
-  return [
-    ...new Set(
-      ids
-        .map((id) => id.trim())
-        .filter((id) => !isEmpty(id))
-    ),
-  ]
-}
-
-function summarizeToolBatchPage(card: ToolDiscoveryCard): ToolBatchPageSummary {
-  return summarizeToolSpacePageRef(card)
-}
-
-function groupToolBatchPages(
-  cards: readonly ToolDiscoveryCard[],
-  maxToolsPerCategory: number
-): ToolBatchCategorySummary[] {
-  const grouped = new Map<ToolCategoryId, ToolDiscoveryCard[]>()
-  for (const card of cards) {
-    const entries = grouped.get(card.categoryId) ?? []
-    entries.push(card)
-    grouped.set(card.categoryId, entries)
-  }
-
-  return [...grouped.entries()]
-    .sort(([left], [right]) => compareStableStrings(left, right))
-    .map(([categoryId, categoryCards]) => {
-      const sortedCards = [...categoryCards].sort((left, right) => compareStableStrings(left.name, right.name))
-      const returnedCards = sortedCards.slice(0, maxToolsPerCategory)
-      return {
-        categoryId,
-        categoryLabel: categoryId,
-        totalPages: sortedCards.length,
-        returnedPageCount: returnedCards.length,
-        pages: returnedCards.map(summarizeToolBatchPage),
-      }
-    })
-}
-
-function pageIdsForCategories(
-  cards: readonly ToolDiscoveryCard[],
-  categoryIds: readonly ToolCategoryId[],
-  kinds: readonly ToolDiscoveryKind[],
-  maxToolsPerCategory: number,
-  toolOsStates: readonly ToolOsState[] = []
-): string[] {
-  const categoryFilter = buildToolSpaceCategoryFilter([...categoryIds])
-  if (!categoryFilter) return []
-
-  const kindFilter = new Set<ToolDiscoveryKind>(kinds)
-  const toolOsStateFilter = isEmpty(toolOsStates) ? null : new Set<ToolOsState>(toolOsStates)
-  const grouped = new Map<ToolCategoryId, ToolDiscoveryCard[]>()
-  for (const card of cards) {
-    if (
-      !categoryFilter.has(card.categoryId) ||
-      !kindFilter.has(card.kind) ||
-      (toolOsStateFilter && !toolOsStateFilter.has(card.toolOsState))
-    ) {
-      continue
-    }
-    const entries = grouped.get(card.categoryId) ?? []
-    entries.push(card)
-    grouped.set(card.categoryId, entries)
-  }
-
-  const pageIds: string[] = []
-  for (const categoryId of [...grouped.keys()].sort(compareStableStrings)) {
-    const sortedCards = [...(grouped.get(categoryId) ?? [])].sort((left, right) =>
-      compareStableStrings(left.name, right.name)
-    )
-    pageIds.push(...sortedCards.slice(0, maxToolsPerCategory).map((card) => card.id))
-  }
-  return uniqueToolSpaceIds(pageIds)
-}
-
-function capabilityPageIdsForCategories(
-  cardsById: ReadonlyMap<string, ToolDiscoveryCard>,
-  categoryIds: readonly ToolCategoryId[],
-  toolOsStates: readonly ToolOsState[] = []
-): string[] {
-  const toolOsStateFilter = isEmpty(toolOsStates) ? null : new Set<ToolOsState>(toolOsStates)
-  return uniqueToolSpaceIds(
-    categoryIds
-      .map(activationCapabilityIdForCategory)
-      .filter((id) => {
-        if (!toolOsStateFilter) return true
-        const card = cardsById.get(id)
-        return !!card && toolOsStateFilter.has(card.toolOsState)
-      })
-  )
-}
-
-function addCardsById(
-  target: Map<string, ToolDiscoveryCard>,
-  cardsById: ReadonlyMap<string, ToolDiscoveryCard>,
-  ids: readonly string[]
-): void {
-  for (const id of ids) {
-    const card = cardsById.get(id)
-    if (card) {
-      target.set(card.id, card)
-    }
-  }
-}
-
-function resolveToolBatchTargets(
-  ctx: ToolContext,
-  input: z.output<typeof toolBatchMethodSchema>
-): ToolBatchResolvedTargets {
-  const cards = buildToolDiscoveryCards(ctx)
-  const cardsById = new Map(cards.map((card) => [card.id, card]))
-  const matchedCardsById = new Map<string, ToolDiscoveryCard>()
-  const explicitPageIds = uniqueToolSpaceIds([...input.pageIds, ...input.pageIn, ...input.pageOut])
-  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
-  const categoryCapabilityPageIds = capabilityPageIdsForCategories(
-    cardsById,
-    expandedCategoryIds,
-    input.toolOsStates
-  )
-  const categoryPageIds = pageIdsForCategories(
-    cards,
-    expandedCategoryIds,
-    input.kinds,
-    input.maxToolsPerCategory,
-    input.toolOsStates
-  )
-  const stateOnlyPageIds =
-    isEmpty(expandedCategoryIds) && !isEmpty(input.toolOsStates)
-      ? pageIdsForCategories(
-          cards,
-          [...new Set(cards.map((card) => card.categoryId))],
-          input.kinds,
-          input.maxToolsPerCategory,
-          input.toolOsStates
-        )
-      : []
-
-  addCardsById(matchedCardsById, cardsById, explicitPageIds)
-  addCardsById(matchedCardsById, cardsById, categoryCapabilityPageIds)
-  addCardsById(matchedCardsById, cardsById, categoryPageIds)
-  addCardsById(matchedCardsById, cardsById, stateOnlyPageIds)
-
-  const queryResults = input.queries.map((query) => {
-    const result = searchToolDiscoveryCards(
-      ctx,
-      toolSpaceFindSchema.parse({
-        op: 'find',
-        query,
-        kind: input.kinds.length === 1 ? input.kinds[0] : 'all',
-        categoryIds: [],
-        domainIds: input.domainIds,
-        toolOsStates: input.toolOsStates,
-        limit: input.maxMatchesPerQuery,
-      })
-    )
-    addCardsById(
-      matchedCardsById,
-      cardsById,
-      result.pages.map((page) => page.id)
-    )
-    return {
-      query,
-      pages: result.pages,
-    }
-  })
-  const queryPageIds = queryResults.flatMap((entry) => entry.pages.map((page) => page.id))
-  const explicitPageIn = uniqueToolSpaceIds([...input.pageIds, ...input.pageIn])
-  const explicitPageOut = uniqueToolSpaceIds(input.pageOut)
-
-  return {
-    matchedCards: [...matchedCardsById.values()],
-    explicitPageIds,
-    expandedCategoryIds,
-    missingPageIds: explicitPageIds.filter((id) => !cardsById.has(id)),
-    queryResults,
-    resolvedPageIn:
-      input.action === 'remove'
-        ? []
-        : uniqueToolSpaceIds([
-            ...categoryCapabilityPageIds,
-            ...(isEmpty(input.toolOsStates) ? [] : categoryPageIds),
-            ...explicitPageIn,
-            ...queryPageIds,
-            ...stateOnlyPageIds,
-          ]),
-    resolvedPageOut:
-      input.action === 'remove'
-        ? uniqueToolSpaceIds([
-            ...categoryCapabilityPageIds,
-            ...stateOnlyPageIds,
-            ...input.pageIds,
-            ...input.pageOut,
-          ])
-        : explicitPageOut,
-  }
-}
-
-function summarizeToolBatchFilters(
-  input: z.output<typeof toolBatchMethodSchema>,
-  resolved: ToolBatchResolvedTargets
-) {
-  return {
-    kinds: input.kinds,
-    categoryIds: input.categoryIds,
-    domainIds: input.domainIds,
-    toolOsStates: input.toolOsStates,
-    expandedCategoryIds: resolved.expandedCategoryIds,
-    maxMatchesPerQuery: input.maxMatchesPerQuery,
-    maxToolsPerCategory: input.maxToolsPerCategory,
   }
 }
 
@@ -1630,10 +1388,9 @@ function buildReplaceNextTurnHint(input: {
   return '没有新的工具页被换入；请回到 tool_map(op:"find") 或 tool_map(op:"page") 重新确认目标页，再用 tool_replace 换入。'
 }
 
-async function planToolSpaceReplacement(
+export async function replaceToolSpacePages(
   ctx: ToolContext,
-  input: z.output<typeof toolSpaceReplaceSchema>,
-  options: { apply: boolean }
+  input: z.output<typeof toolSpaceReplaceSchema>
 ) {
   ctx.abortSignal.throwIfAborted()
 
@@ -1737,24 +1494,18 @@ async function planToolSpaceReplacement(
   enabledCapabilities.length = 0
   if (!isEmpty(categoriesToEnable)) {
     if (ctx.requestToolCategoryAccess) {
-      if (options.apply) {
-        const result = await ctx.requestToolCategoryAccess(categoriesToEnable, input.reason)
-        enabledCapabilities.push(...result.enabledCategories)
-        if (!result.approved) {
-          requiresApproval.push(...pageIn.filter((id) => id.startsWith('capability:')))
-        }
-      } else {
-        enabledCapabilities.push(...categoriesToEnable)
+      const result = await ctx.requestToolCategoryAccess(categoriesToEnable, input.reason)
+      enabledCapabilities.push(...result.enabledCategories)
+      if (!result.approved) {
+        requiresApproval.push(...pageIn.filter((id) => id.startsWith('capability:')))
       }
     } else {
-      if (options.apply) {
-        ctx.codingSession.enableToolCategories(categoriesToEnable, input.reason)
-      }
+      ctx.codingSession.enableToolCategories(categoriesToEnable, input.reason)
       enabledCapabilities.push(...categoriesToEnable)
     }
   }
   const finalPromptFeaturesToEnable = [...new Set(promptFeaturesToEnable)]
-  if (!isEmpty(finalPromptFeaturesToEnable) && options.apply) {
+  if (!isEmpty(finalPromptFeaturesToEnable)) {
     ctx.codingSession.enablePromptFeatures?.(finalPromptFeaturesToEnable, input.reason)
   }
 
@@ -1772,7 +1523,7 @@ async function planToolSpaceReplacement(
   // (真机:跨 run 恢复生效后模型仍连续 4 轮重复换入同一工具,因为结果从不说已可用)。
   const visibleNow = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
   const alreadyResidentTools = preparedTools.filter((name) => visibleNow.has(name))
-  if (!isEmpty(preparedTools) && options.apply) {
+  if (!isEmpty(preparedTools)) {
     ctx.codingSession.enableToolNames(preparedTools, input.reason)
   }
 
@@ -1794,10 +1545,10 @@ async function planToolSpaceReplacement(
     requiresUserAction.push(id)
   }
 
-  if (!isEmpty(disabledCapabilities) && options.apply) {
+  if (!isEmpty(disabledCapabilities)) {
     ctx.codingSession.disableToolCategories([...new Set(disabledCapabilities)], input.reason)
   }
-  if (!isEmpty(pageOutTools) && options.apply) {
+  if (!isEmpty(pageOutTools)) {
     ctx.codingSession.disableToolNames?.([...new Set(pageOutTools)], input.reason)
   }
 
@@ -1849,26 +1600,11 @@ async function planToolSpaceReplacement(
       requiresUserActionDetails,
       skippedPageDetails,
     }),
-    message: options.apply
-      ? alreadyResidentTools.length === preparedTools.length && !isEmpty(alreadyResidentTools)
+    message:
+      alreadyResidentTools.length === preparedTools.length && !isEmpty(alreadyResidentTools)
         ? `换入目标已全部驻留(${alreadyResidentTools.join('、')}),本轮即可直接调用,无需再 tool_replace。`
-        : 'ContextOS 工具页替换已处理。'
-      : 'ContextOS 工具页替换计划已生成；dry-run 未改变会话工具状态。',
+        : 'ContextOS 工具页替换已处理。',
   }
-}
-
-export async function replaceToolSpacePages(
-  ctx: ToolContext,
-  input: z.output<typeof toolSpaceReplaceSchema>
-) {
-  return planToolSpaceReplacement(ctx, input, { apply: true })
-}
-
-async function previewToolSpacePagesReplacement(
-  ctx: ToolContext,
-  input: z.output<typeof toolSpaceReplaceSchema>
-) {
-  return planToolSpaceReplacement(ctx, input, { apply: false })
 }
 
 const ToolSpaceOpHandlers = {
@@ -1890,74 +1626,4 @@ export async function runToolSpace(ctx: ToolContext, input: z.output<typeof tool
     input: z.output<typeof toolSpaceSchema>,
   ) => unknown
   return handler(ctx, input)
-}
-
-export async function runToolBatch(
-  ctx: ToolContext,
-  input: z.output<typeof toolBatchMethodSchema>
-) {
-  ctx.abortSignal.throwIfAborted()
-  const resolved = resolveToolBatchTargets(ctx, input)
-  const dryRun = input.dryRun || input.action === 'plan'
-  const matchedPages = resolved.matchedCards.map(summarizeToolBatchPage)
-  const groupedByCategory = groupToolBatchPages(resolved.matchedCards, input.maxToolsPerCategory)
-
-  if (input.action === 'discover') return {
-      action: input.action,
-      dryRun,
-      filters: summarizeToolBatchFilters(input, resolved),
-      queryResults: resolved.queryResults,
-      matchedPages,
-      groupedByCategory,
-      resolvedPageIn: resolved.resolvedPageIn,
-      resolvedPageOut: resolved.resolvedPageOut,
-      missingPageIds: resolved.missingPageIds,
-      blockedBy: [],
-      nextTurnHint:
-        '这是批量发现结果；需要下一轮暴露工具时用 tool_batch(action:"import" 或 "replace")。',
-      message: 'ContextOS 批量工具发现已处理。',
-    }
-
-  if (
-    input.action === 'plan' ||
-    input.action === 'import' ||
-    input.action === 'replace' ||
-    input.action === 'remove'
-  ) {
-    const replaceInput = toolSpaceReplaceSchema.parse({
-      op: 'replace',
-      pageIn: input.action === 'remove' ? [] : resolved.resolvedPageIn,
-      pageOut: input.action === 'import' ? [] : resolved.resolvedPageOut,
-      reason: input.reason,
-    })
-    const replaceResult =
-      dryRun || input.action === 'plan'
-        ? await previewToolSpacePagesReplacement(ctx, replaceInput)
-        : await replaceToolSpacePages(ctx, replaceInput)
-
-    return {
-      action: input.action,
-      dryRun,
-      filters: summarizeToolBatchFilters(input, resolved),
-      queryResults: resolved.queryResults,
-      matchedPages,
-      groupedByCategory,
-      resolvedPageIn: replaceInput.pageIn,
-      resolvedPageOut: replaceInput.pageOut,
-      missingPageIds: resolved.missingPageIds,
-      replaceResult,
-      blockedBy: replaceResult.blockedBy,
-      nextTurnHint: replaceResult.nextTurnHint,
-      message:
-        dryRun || input.action === 'plan'
-          ? 'ContextOS 批量工具计划已生成；未改变会话工具状态。'
-          : 'ContextOS 批量工具替换已处理。',
-    }
-  }
-
-  const unsupportedAction: never = input.action
-  throw new AppError(
-    'VALIDATION',
-    `Unsupported tool_batch action: ${String(unsupportedAction)}`
-  )
 }
