@@ -371,7 +371,6 @@ export function ChatConversationPane({
     messageRunMarkerMap,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,
-    latestPlanUpdateToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
     guidedInputMessageIds,
@@ -664,7 +663,6 @@ export function ChatConversationPane({
               hideGoalToolBlocks={hideGoalToolBlocks}
               hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              latestPlanUpdateToolCallId={latestPlanUpdateToolCallId}
               activeWorkspaceRoot={activeWorkspaceRoot}
               workspaceRoots={workspaceRoots}
               canShowFileChangeSummary={supportsWorkspaceFiles}
@@ -696,7 +694,6 @@ export function ChatConversationPane({
                 hideGoalToolBlocks={hideGoalToolBlocks}
                 hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
                 planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-                latestPlanUpdateToolCallId={latestPlanUpdateToolCallId}
                 activeWorkspaceRoot={activeWorkspaceRoot}
                 workspaceRoots={workspaceRoots}
                 canShowFileChangeSummary={supportsWorkspaceFiles}

@@ -124,7 +124,6 @@ export function AssistantMessageBubble({
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  latestPlanUpdateToolCallId?: LooseOptional<string>
   activeWorkspaceRoot?: LooseOptional<string>
   workspaceRoots?: WorkspaceRootEntry[]
   canShowFileChangeSummary?: boolean

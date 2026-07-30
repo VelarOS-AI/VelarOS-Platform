@@ -43,7 +43,6 @@ interface MessageBubbleProps {
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  latestPlanUpdateToolCallId?: LooseOptional<string>
   activeWorkspaceRoot?: LooseOptional<string>
   workspaceRoots?: WorkspaceRootEntry[]
   canShowFileChangeSummary?: boolean
@@ -167,7 +166,6 @@ function arePlanToolRenderPropsEqual(
 ): boolean {
   if (!hasPlanToolBlock(prev.message) && !hasPlanToolBlock(next.message)) return true
 
-  if (prev.latestPlanUpdateToolCallId !== next.latestPlanUpdateToolCallId) return false
 
   for (const block of prev.message.blocks) {
     if (block.type !== 'tool-call') continue
@@ -219,7 +217,6 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       hiddenPlanToolCallId={props.hiddenPlanToolCallId}
       hideGoalToolBlocks={props.hideGoalToolBlocks}
       planUpdateIndexByToolCallId={props.planUpdateIndexByToolCallId}
-      latestPlanUpdateToolCallId={props.latestPlanUpdateToolCallId}
       activeWorkspaceRoot={props.activeWorkspaceRoot}
       workspaceRoots={props.workspaceRoots}
       canShowFileChangeSummary={props.canShowFileChangeSummary}
