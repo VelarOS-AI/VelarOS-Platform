@@ -53,6 +53,8 @@ interface SkillFileStoreDependencies {
 }
 
 const DisabledSkillStateFileName = '.disabled-skills.json'
+/** 目录式技能的入口文件名（<id>/SKILL.md）；扫描、指纹、资源枚举、解析、删除共用这一个字面量。 */
+const SkillDirEntryFileName = 'SKILL.md'
 
 /**
  * 解析 markdown 头部的 `---` frontmatter。
@@ -114,7 +116,7 @@ function listSkillDirResources(baseDir: string): string[] {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name
       if (entry.isDirectory()) {
         walk(join(dir, entry.name), rel, depth + 1)
-      } else if (entry.isFile() && rel !== 'SKILL.md') {
+      } else if (entry.isFile() && rel !== SkillDirEntryFileName) {
         resources.push(rel)
       }
     }
@@ -171,7 +173,7 @@ class SkillFileStore {
         const stats = statSync(filePath, { throwIfNoEntry: false })
         // 目录式技能连同资源文件一起进指纹（资源增删改也应触发重载）。
         const resourceVersion =
-          basename(filePath) === 'SKILL.md'
+          basename(filePath) === SkillDirEntryFileName
             ? this.listSkillResources(dirname(filePath))
                 .map((rel) => {
                   const resourceStats = statSync(join(dirname(filePath), rel), {
@@ -217,19 +219,16 @@ class SkillFileStore {
 
   /** 读取单个技能的原始文件内容（含 frontmatter），导出用。 */
   public readRaw(id: string): string {
-    const filePath = this.filePathOf(id)
-    if (!existsSync(filePath)) {
+    const filePath = this.resolveExistingPath(id)
+    if (!filePath) {
       throw new AppError('VALIDATION', `技能不存在：${id}`)
     }
     return readFileSync(filePath, 'utf8')
   }
 
   public get(id: string): Nullable<SkillFileRecord> {
-    const filePath = this.filePathOf(id)
-    if (existsSync(filePath)) return this.parseFile(filePath)
-    // 目录式技能：<id>/SKILL.md。
-    const dirStylePath = join(this.dir(), this.normalizeSkillId(id), 'SKILL.md')
-    return existsSync(dirStylePath) ? this.parseFile(dirStylePath) : null
+    const filePath = this.resolveExistingPath(id)
+    return filePath ? this.parseFile(filePath) : null
   }
 
   /**
@@ -280,10 +279,22 @@ class SkillFileStore {
     return this.saveContent(content)
   }
 
+  /**
+   * 卸载技能 = 删除其磁盘存在（"文件在即已安装"的对偶）。
+   *
+   * 目录式技能必须连目录一起删：捆绑资源属于这个技能，只删 SKILL.md 会留下一个半截目录，
+   * 下次扫描把它当"无 SKILL.md 的普通目录"跳过——表现是列表里没了、磁盘上还在、再装同 id 时
+   * 撞上旧资源。此前这里只认平铺路径，目录式技能删除是静默 no-op（列表刷新后原样还在）。
+   */
   public remove(id: string): void {
-    const filePath = this.filePathOf(id)
-    if (!existsSync(filePath)) return
-    rmSync(filePath, { force: true })
+    const filePath = this.resolveExistingPath(id)
+    if (!filePath) return
+
+    if (basename(filePath) === SkillDirEntryFileName) {
+      rmSync(dirname(filePath), { force: true, recursive: true })
+    } else {
+      rmSync(filePath, { force: true })
+    }
     this.parseCache.delete(filePath)
     const disabledSkillIds = this.readDisabledSkillIds()
     if (disabledSkillIds.delete(this.normalizeSkillId(id))) {
@@ -344,6 +355,21 @@ class SkillFileStore {
     return join(this.dir(), `${safe}.md`)
   }
 
+  /**
+   * id → 磁盘上真实存在的技能入口文件；两种形态都要认（平铺 `<id>.md` / 目录式 `<id>/SKILL.md`），
+   * 平铺优先（与 scanFiles 的枚举序一致，同 id 双形态时读到同一份）。不存在返回 null。
+   *
+   * 读/删/导出必须共用这一个解析器：各写一份的代价是"某个入口只认平铺"，症状是功能对目录式技能
+   * 单方面失效且不报错。
+   */
+  private resolveExistingPath(id: string): Nullable<string> {
+    const flatPath = this.filePathOf(id)
+    if (existsSync(flatPath)) return flatPath
+
+    const dirStylePath = join(this.dir(), this.normalizeSkillId(id), SkillDirEntryFileName)
+    return existsSync(dirStylePath) ? dirStylePath : null
+  }
+
   private disabledStatePath(): string {
     return join(this.dir(), DisabledSkillStateFileName)
   }
@@ -391,7 +417,7 @@ class SkillFileStore {
         }
         // 目录式技能：<id>/SKILL.md + 捆绑资源（Claude Code 同款渐进披露第三层）。
         if (entry.isDirectory()) {
-          const skillFilePath = join(root, entry.name, 'SKILL.md')
+          const skillFilePath = join(root, entry.name, SkillDirEntryFileName)
           if (existsSync(skillFilePath)) files.push(skillFilePath)
         }
       }
@@ -429,7 +455,7 @@ class SkillFileStore {
 
     try {
       const { data, body } = parseFrontmatter(readFileSync(filePath, 'utf8'))
-      const isDirStyle = basename(filePath) === 'SKILL.md'
+      const isDirStyle = basename(filePath) === SkillDirEntryFileName
       const baseDir = isDirStyle ? dirname(filePath) : null
       const id = isDirStyle ? basename(dirname(filePath)) : basename(filePath, '.md')
       const parsedPriority = Number.parseInt(data.priority ?? '', 10)

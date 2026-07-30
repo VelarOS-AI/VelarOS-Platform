@@ -186,20 +186,56 @@ interface ToolActivationRef {
   dependencies: ToolDependencyRef[]
 }
 
-function expandToolCategoryFilterInput(input: {
-  categoryIds: readonly ToolCategoryId[]
-  domainIds?: readonly ToolCategoryDomainId[]
-}): ToolCategoryId[] {
+/**
+ * 分类过滤输入 → 实际分类清单：显式 categoryIds 原样保留，domainIds 展开成同域的全部分类。
+ *
+ * 域归属只存在于宿主注入的分类描述符（`toolOs.domain`），本层不认识任何具体域 id——它只做
+ * 「按注入数据分组」这一件事，因此新增域零改动。展开顺序 = 显式分类在前、域展开在后，去重后
+ * 保持首次出现序（结果会作为 `filters.expandedCategoryIds` 回给模型，顺序稳定才可对账）。
+ *
+ * **域 id 无一命中时刻意不收敛成空集**：空清单在下游 `buildToolSpaceCategoryFilter` 里等于
+ * 「不过滤」，与只传空 categoryIds 同形。失败方向选「多给」而不是「一个都不给」——模型拼错域名
+ * 时还能从全量结果里找到目标工具，而返回空会让它以为系统里根本没有这类能力。
+ * 拼错与否可由回带的 `expandedCategoryIds` 为空判定。
+ */
+function expandToolCategoryFilterInput(
+  ctx: ToolContext,
+  input: {
+    categoryIds: readonly ToolCategoryId[]
+    domainIds?: readonly ToolCategoryDomainId[]
+  }
+): ToolCategoryId[] {
   const result: ToolCategoryId[] = []
   const seen = new Set<ToolCategoryId>()
-  for (const categoryId of input.categoryIds) {
-    if (!seen.has(categoryId)) {
-      seen.add(categoryId)
-      result.push(categoryId)
-    }
+  const append = (categoryId: ToolCategoryId): void => {
+    if (seen.has(categoryId)) return
+    seen.add(categoryId)
+    result.push(categoryId)
+  }
+
+  for (const categoryId of input.categoryIds) append(categoryId)
+  if (!input.domainIds || isEmpty(input.domainIds)) return result
+
+  const requestedDomains = new Set<ToolCategoryDomainId>(input.domainIds)
+  for (const [categoryId, domainId] of categoryDomainEntries(ctx)) {
+    if (requestedDomains.has(domainId)) append(categoryId)
   }
 
   return result
+}
+
+/** 分类 → 注入描述符声明的域 id（与工具页构建同一 scope，保证展开结果都能对应上真实页）。 */
+function categoryDomainEntries(ctx: ToolContext): Array<[ToolCategoryId, ToolCategoryDomainId]> {
+  return ctx
+    .listToolCategories('catalog')
+    .map((overview): [ToolCategoryId, ToolCategoryDomainId] => [
+      overview.category.id,
+      overview.category.toolOs.domain,
+    ])
+}
+
+function categoryDomainById(ctx: ToolContext): Map<ToolCategoryId, ToolCategoryDomainId> {
+  return new Map(categoryDomainEntries(ctx))
 }
 
 export {
@@ -784,7 +820,7 @@ function resolveToolBatchTargets(
   const cardsById = new Map(cards.map((card) => [card.id, card]))
   const matchedCardsById = new Map<string, ToolDiscoveryCard>()
   const explicitPageIds = uniqueToolSpaceIds([...input.pageIds, ...input.pageIn, ...input.pageOut])
-  const expandedCategoryIds = expandToolCategoryFilterInput(input)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
   const categoryCapabilityPageIds = capabilityPageIdsForCategories(
     cardsById,
     expandedCategoryIds,
@@ -1021,7 +1057,7 @@ export function searchToolDiscoveryCards(
   input: z.output<typeof toolSpaceFindSchema>
 ) {
   const terms = splitSearchTerms(input.query)
-  const expandedCategoryIds = expandToolCategoryFilterInput(input)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
   const categoryFilter = buildToolSpaceCategoryFilter(expandedCategoryIds)
   const kindFilter = input.kind === 'all' ? null : input.kind
   const toolOsStateFilter = isEmpty(input.toolOsStates) ? null : new Set(input.toolOsStates)
@@ -1100,16 +1136,16 @@ function parseToolSpaceCursor(cursor: Nullable<string> | undefined): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0
 }
 
+/** 调用方先算好 `expandedCategoryIds` 再传入：同一次请求里展开一次，且回带的过滤器与实际过滤同源。 */
 function filterToolSpaceCards(
   cards: ToolDiscoveryCard[],
+  expandedCategoryIds: readonly ToolCategoryId[],
   input: {
     kind: 'tool' | 'capability' | 'plugin' | 'all'
-    categoryIds: ToolCategoryId[]
-    domainIds?: ToolCategoryDomainId[]
     toolOsStates?: ToolOsState[]
   }
 ): ToolDiscoveryCard[] {
-  const categoryFilter = buildToolSpaceCategoryFilter(expandToolCategoryFilterInput(input))
+  const categoryFilter = buildToolSpaceCategoryFilter(expandedCategoryIds)
   const kindFilter = input.kind === 'all' ? null : input.kind
   const toolOsStateFilter =
     !input.toolOsStates || isEmpty(input.toolOsStates)
@@ -1131,8 +1167,8 @@ export function pageToolDiscoveryCards(
   ctx: ToolContext,
   input: z.output<typeof toolSpacePageSchema>
 ) {
-  const expandedCategoryIds = expandToolCategoryFilterInput(input)
-  const cards = filterToolSpaceCards(buildToolDiscoveryCards(ctx), input)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
+  const cards = filterToolSpaceCards(buildToolDiscoveryCards(ctx), expandedCategoryIds, input)
   const offset = parseToolSpaceCursor(input.cursor)
   const page = cards.slice(offset, offset + input.limit)
   const nextOffset = offset + page.length
@@ -1264,8 +1300,8 @@ export function mapToolDiscoveryCards(
   input: z.output<typeof toolSpaceMapSchema>
 ) {
   const allCards = buildToolDiscoveryCards(ctx)
-  const expandedCategoryIds = expandToolCategoryFilterInput(input)
-  const filteredCards = filterToolSpaceCards(allCards, input)
+  const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
+  const filteredCards = filterToolSpaceCards(allCards, expandedCategoryIds, input)
   const grouped = new Map<ToolCategoryId, ToolDiscoveryCard[]>()
 
   for (const card of filteredCards) {
@@ -1286,6 +1322,8 @@ export function mapToolDiscoveryCards(
   const nextCategoryOffset = categoryOffset + pagedCategoryEntries.length
   const effectiveMaxToolsPerCategory = effectiveToolMapToolsPerCategory(input)
   const parameterAdjustments = toolMapParameterAdjustments(input, effectiveMaxToolsPerCategory)
+  // 域 id 是 domainIds 过滤的取值集合，必须从这里可见——否则模型只能猜域名，猜错就静默拿到全量。
+  const domainByCategoryId = categoryDomainById(ctx)
 
   const categories = pagedCategoryEntries.map(([categoryId, cards]) => {
     const capability = cards.find((card) => card.kind === 'capability')
@@ -1297,7 +1335,10 @@ export function mapToolDiscoveryCards(
       ? {
           label: capability.name,
           description: capability.description,
-          toolOs: { domain: 'injected', defaultState: capability.toolOsState },
+          toolOs: {
+            domain: domainByCategoryId.get(categoryId) ?? 'injected',
+            defaultState: capability.toolOsState,
+          },
         }
       : undefined
     const subCategoryIds = subCategoryIdsForCategory(categoryId)

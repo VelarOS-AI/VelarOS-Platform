@@ -17,6 +17,7 @@ import {
   findCurrentGoalArtifact,
   type GoalConstraint,
   type GoalStep,
+  MinBlockedAuditTurns,
   toGoalSnapshot,
 } from './Goals'
 import { planStatusSchema } from './Plans'
@@ -119,7 +120,8 @@ const getGoal = defineVelaTool<Record<string, never>>({
     return {
       status: goal?.status ?? 'none',
       goal,
-      minimumBlockedAuditTurns: 3,
+      // 阈值单源：与 assertCanBlockGoal 的门共用常量，避免这里报 3、门按别的数拦。
+      minimumBlockedAuditTurns: MinBlockedAuditTurns,
     }
   },
 })
