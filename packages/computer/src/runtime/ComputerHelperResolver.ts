@@ -2,12 +2,12 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, join, resolve } from 'node:path'
 
+import { isNonBlankString, isString } from '@velaros-ai/core'
+
 import {
   type ComputerResourceRuntime,
   computerResourceRuntime,
 } from './ComputerResourceRuntime'
-
-type Nullable<T> = T | null
 
 /** 平台包目录名前缀（与 packageComputerUseResources.mjs / 插件产物一致）。 */
 const PackageNamePrefix = 'computeruse'
@@ -15,6 +15,8 @@ const PackageNamePrefix = 'computeruse'
 const ToolDirName = 'computer-use'
 /** 该插件在 AppResourcePluginId 中的 id。 */
 const PluginId = 'computeruse'
+/** 读不到平台包 package.json 时的占位版本；只影响展示，不影响可用性判定。 */
+const UnknownPackageVersion = '0.0.0'
 
 /** 当前平台 Python helper 脚本与解释器的解析结果。 */
 export interface ComputerHelperLaunchSpec {
@@ -52,7 +54,7 @@ function helperScriptName(platform: NodeJS.Platform): Nullable<string> {
 
 function readElectronResourcesPath(): Nullable<string> {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
-  return resourcesPath && resourcesPath.trim() ? resourcesPath : null
+  return isNonBlankString(resourcesPath) ? resourcesPath : null
 }
 
 function readEnvironmentResourceRoots(): string[] {
@@ -88,6 +90,21 @@ function buildDefaultResourceRoots(resourceRuntime: ComputerResourceRuntime): st
  * Computer Use 现按需安装：未安装（找不到带 venv 的平台包）时返回 null，
  * 由 sidecar 报告 helper-missing、上层引导用户到插件市场安装。
  * 不再回落到系统 Python 自行装依赖，避免污染用户机器。
+ *
+ * 导览（§5.3b ④安全门 / ⑤跨层接缝 / ⑥非显然的妥协）
+ * - **「只认自包含 venv」是安全门，不是打包偏好**（`resolvePythonCommand`）。回落到系统 Python
+ *   意味着运行时得靠 `pip install` 自行补依赖——那等于让 agent 往用户机器上装东西，且解释器与
+ *   第三方包的来源完全不可控。所以缺 venv 一律判「未安装」，把补救动作交给用户驱动的插件安装。
+ *   唯一放行口是显式 `VELAROS_COMPUTER_PYTHON`（开发者自证），不是自动探测。
+ * - **`resolve()` 与 `resolveIgnoringDisabled()` 的分工**是刻意的两问：前者答「现在能不能用」
+ *   （尊重用户停用开关），后者答「物理上装了没有」（供设置页/插件管理显示状态）。合并成一个会
+ *   让「用户主动关掉」和「根本没装」长得一样，两者需要的引导文案完全不同。
+ * - **根目录顺序即优先级**（`buildDefaultResourceRoots`）：`VELAROS_COMPUTER_RESOURCE_ROOT` 一旦
+ *   设置就**整组接管**（不与默认根合并——测试与打包排障需要一个确定的、不受宿主状态影响的根集）；
+ *   否则依次是用户按需安装根（装完即时生效）→ 应用打包资源 → 开发期 `out/resources`。
+ * - **跨层接缝**：本类只回答「helper 在哪、用哪个解释器」，**不验证解释器能否启动**——那是
+ *   `ComputerSidecarManager` 的事。方向不能反：resolver 不许 spawn 进程，否则「查询状态」这个
+ *   本该廉价的动作会带上启动开销与副作用。
  */
 class ComputerHelperResolver {
   private readonly configuredResourceRoots: Nullable<string[]>
@@ -152,9 +169,11 @@ class ComputerHelperResolver {
   private readPackageVersion(packageRoot: string): string {
     try {
       const pkg = require(join(packageRoot, 'package.json')) as { version?: unknown }
-      return typeof pkg.version === 'string' ? pkg.version : '0.0.0'
+      return isString(pkg.version) ? pkg.version : UnknownPackageVersion
     } catch {
-      return '0.0.0'
+      // arch-guard:silent-catch-ok 版本号只用于展示；读不到不影响能否启动 helper，
+      // 为它把「已安装」判成「未安装」是更坏的失败方向。
+      return UnknownPackageVersion
     }
   }
 }
