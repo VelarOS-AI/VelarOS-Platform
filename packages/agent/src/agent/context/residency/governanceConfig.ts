@@ -62,8 +62,9 @@ export interface ContextDistillAdaptiveConfig {
    * ② 段落价值密度：锚点密度上限（每千字符）。
    *
    * 锚点密集的段落规则骨架已经抽得很好，LLM 加不了多少值。**默认值刻意高于 I0 的
-   * `LowAnchorDensityPerKiloChar`（2）**：I2 规划发生在 I0 之后，密度低于 2 的叙事早被 I0 逐出
-   * 并折进骨架了，能活到 I2 面前的段落密度必然 ≥ 2。两条阈值取同一个数，等于把 I2 永久关死。
+   * {@link ContextEvictionConfig.lowAnchorDensityPerKiloChar}（2）**：I2 规划发生在 I0 之后，
+   * 密度低于 2 的叙事早被 I0 逐出并折进骨架了，能活到 I2 面前的段落密度必然 ≥ 2。两条阈值取同一
+   * 个数，等于把 I2 永久关死——B4 扫参同时动这两个旋钮时，这条关系必须一起维持。
    */
   maxAnchorDensityPerKiloChar: number
   /**
@@ -99,6 +100,25 @@ export interface ContextDistillConfig {
   adaptive: ContextDistillAdaptiveConfig
 }
 
+/**
+ * I0 机械逐出的选段阈值（B3 起进配置面，B4 扫参对象）。
+ *
+ * 这两个数原先是 `GovernanceEpoch.ts` 里的模块常量。搬进来的理由不是"配置越多越好"，而是
+ * **它们决定了 I0 从账本里挑走哪些记录**——离线重放要拿同一本账本跑不同的选段策略，写死在
+ * 代码里的阈值等于把这一维实验钉死。默认值逐字沿用原常量，行为零变化。
+ */
+export interface ContextEvictionConfig {
+  /**
+   * 低锚密度阈值（每千字符锚点数）。低于此值的段落信息密度不足以占住全文位。
+   *
+   * 与 {@link ContextDistillAdaptiveConfig.maxAnchorDensityPerKiloChar}（默认 6）共同划出 I2
+   * 吃的那条带：`(本值, 6]`。把本值调到 ≥ 6 等于让 I0 先把 I2 的口粮全吃掉。
+   */
+  lowAnchorDensityPerKiloChar: number
+  /** 认定"陈旧"的最小轮距：可重取记录至少落后当前轮这么多轮才进 I0 候选。 */
+  staleRefetchableTurnDistance: number
+}
+
 export interface ContextGovernanceConfig {
   /** 治理窗口上限：G = min(模型窗口, cap)。 */
   cap: number
@@ -112,6 +132,8 @@ export interface ContextGovernanceConfig {
   minEpochSavingPercent: number
   admission: ContextAdmissionConfig
   instruments: ContextInstrumentConfig
+  /** I0 机械逐出的选段阈值。 */
+  eviction: ContextEvictionConfig
   /** I2 蒸馏的成本护栏与 adaptive 判据（档位在 `instruments.distill`）。 */
   distillation: ContextDistillConfig
   /** 活动尾的 context-dashboard 块（模型本体感知）。 */
@@ -133,6 +155,8 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   // B2 起默认 'aux'（设计 §7 的终态默认）：宿主没注入蒸馏器时它自动退化为纯机械
   // （`skipReason: 'no-distiller'`），所以默认开档对 headless / 测试 / 无模型环境是安全的。
   instruments: { skeleton: true, distill: 'aux' },
+  // 逐字沿用 B1 起 `GovernanceEpoch.ts` 里的模块常量值：搬进配置面是为了 B4 能扫，不是改行为。
+  eviction: { lowAnchorDensityPerKiloChar: 2, staleRefetchableTurnDistance: 2 },
   distillation: {
     maxSegmentsPerEpoch: 1,
     maxInputChars: 48_000,
@@ -172,6 +196,33 @@ export const ContextGovernancePresets = {
 
 export type ContextGovernancePresetName = keyof typeof ContextGovernancePresets
 
+export const ContextGovernancePresetNames = Object.keys(
+  ContextGovernancePresets
+) as ContextGovernancePresetName[]
+
+/**
+ * 反查：当前生效配置对应哪条实验臂。
+ *
+ * B3 电池必须能**从活着的治理器**读回"我现在跑的是哪条臂"——只断言"我发过 set_arm 请求"
+ * 等于用意图冒充事实，一次静默失败的配置写入就会把整个矩阵变成同一条臂的四份重复数据。
+ * 判据只看 `instruments`：预设本来就只改这两个字段，其余旋钮（B4 扫参）不改变臂身份。
+ * 返回 null = 器械组合不属于任何预设（自定义配置），这本身也是必须能被看见的事实。
+ */
+export function resolveContextGovernanceArmName(
+  config: ContextGovernanceConfig
+): Nullable<ContextGovernancePresetName> {
+  for (const name of ContextGovernancePresetNames) {
+    const preset = ContextGovernancePresets[name].instruments
+    if (
+      preset.skeleton === config.instruments.skeleton &&
+      preset.distill === config.instruments.distill
+    )
+      return name
+  }
+
+  return null
+}
+
 export interface ContextGovernanceConfigInput {
   cap?: LooseOptional<number>
   tailProtectTurns?: LooseOptional<number>
@@ -186,6 +237,10 @@ export interface ContextGovernanceConfigInput {
   instruments?: LooseOptional<{
     skeleton?: LooseOptional<boolean>
     distill?: LooseOptional<string>
+  }>
+  eviction?: LooseOptional<{
+    lowAnchorDensityPerKiloChar?: LooseOptional<number>
+    staleRefetchableTurnDistance?: LooseOptional<number>
   }>
   distillation?: LooseOptional<{
     maxSegmentsPerEpoch?: LooseOptional<number>
@@ -254,6 +309,21 @@ export function resolveContextGovernanceConfig(
     instruments: {
       skeleton: input?.instruments?.skeleton ?? defaults.instruments.skeleton,
       distill: resolveDistillInstrument(input?.instruments?.distill),
+    },
+    eviction: {
+      // 密度阈值是小数保真的（0.5 与 1 是两条不同的选段策略），轮距是整数。
+      lowAnchorDensityPerKiloChar: clampNumber(
+        input?.eviction?.lowAnchorDensityPerKiloChar,
+        defaults.eviction.lowAnchorDensityPerKiloChar,
+        0,
+        1_000
+      ),
+      staleRefetchableTurnDistance: clampInteger(
+        input?.eviction?.staleRefetchableTurnDistance,
+        defaults.eviction.staleRefetchableTurnDistance,
+        0,
+        1_000
+      ),
     },
     distillation: resolveDistillationConfig(input?.distillation),
     dashboard: input?.dashboard ?? defaults.dashboard,

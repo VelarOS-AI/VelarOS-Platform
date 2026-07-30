@@ -303,6 +303,7 @@ function buildStreamGovernanceState(
   if (!handoff) return undefined
 
   const report = compiledRequest.governanceEpoch
+  const distill = report?.distill
   return {
     epoch: compiledRequest.governanceEpochSeq ?? 0,
     occupancyPercent: toNullable(compiledRequest.governanceOccupancyPercent),
@@ -312,6 +313,25 @@ function buildStreamGovernanceState(
     recentSavingPercents: [...handoff.recentSavingPercents],
     lastEpochAfterPercent: handoff.lastEpochAfterPercent,
     handoffReason: handoff.reason,
+    // 没跑 epoch 的轮次也给一份零值块（而不是缺席）：与 governance 块整体缺席不同，这里
+    // "本轮没有 epoch" 是确定的事实，零值就是它的忠实表示，消费方不必区分两种 undefined。
+    distill: {
+      mode: distill?.mode ?? 'off',
+      appliedProducts: distill?.appliedProducts ?? 0,
+      appliedByInstrument: { ...(distill?.appliedByInstrument ?? { distill: 0, skeleton: 0 }) },
+      planned: distill?.planned === true,
+      skipReason: distill?.skipReason ?? null,
+      totals: {
+        ...(distill?.totals ?? {
+          requested: 0,
+          accepted: 0,
+          rejected: 0,
+          timedOut: 0,
+          failed: 0,
+          staleDropped: 0,
+        }),
+      },
+    },
   }
 }
 

@@ -136,6 +136,43 @@ export interface StreamContextGovernanceState {
   /** 最近一次 epoch 之后的占用百分比；从未跑过 epoch 时为 null。 */
   lastEpochAfterPercent: Nullable<number>
   handoffReason: Nullable<string>
+  /**
+   * I2 蒸馏的逐轮分账。
+   *
+   * **水位触发的 epoch 不经任何 hook**：`compact_session` 只能透出手动请求的那一次，而手动
+   * 那次恰恰是实验里最少见的一类。逐轮流事件是自动 epoch 的唯一出口，所以 RQ3 的因变量必须
+   * 在这里也有一份。未跑 epoch 的轮次全为零值/`null`——零不是"没数据"，是"这轮什么都没落地"。
+   */
+  distill: StreamContextDistillState
+}
+
+/**
+ * 逐轮 I2 分账（{@link StreamContextGovernanceState} 的一块）。
+ *
+ * `mode` / `skipReason` 刻意是 `string` 而不是联合类型：档位与跳过原因的权威联合住在
+ * `@velaros-ai/agent` 的治理层，core 是它下游的契约包，复制一份联合等于给同一个枚举做两份
+ * 定义，漂移时消费方还以为自己拿到了强类型。这里只承诺"是个可读的标签"。
+ */
+export interface StreamContextDistillState {
+  /** 档位标签：`off` | `aux` | `main` | `adaptive`。 */
+  mode: string
+  /** 本轮 epoch 应用的产物条数（0 = 本轮没有产物落地）。 */
+  appliedProducts: number
+  /** 应用产物的器械分布：`distill` = 模型产物过验证，`skeleton` = 拒收后的规则回落。 */
+  appliedByInstrument: { distill: number; skeleton: number }
+  /** 本轮 epoch 之后是否规划了新的蒸馏。 */
+  planned: boolean
+  /** 未规划的原因标签（`off` / `no-distiller` / `in-flight` / `target-reached` / `no-segment` / `not-worth` …）。 */
+  skipReason: Nullable<string>
+  /** 会话累计计数（跨 epoch 单调，采样任意一轮都能看到全貌）。 */
+  totals: {
+    requested: number
+    accepted: number
+    rejected: number
+    timedOut: number
+    failed: number
+    staleDropped: number
+  }
 }
 
 export interface StreamContextUsageEstimatePayload extends ContextUsageEstimate {
