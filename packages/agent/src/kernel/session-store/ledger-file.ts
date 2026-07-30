@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
 import { isArray, isEmpty, isRecord } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { type SessionEntry, SessionEntrySchema } from '../../protocol'
 import { truncateJsonlToLineCount } from '../jsonl-file'
@@ -60,7 +61,7 @@ export function parseLedgerText(raw: string, path: string): LedgerReadResult {
     }
     const isLastLine = index === lines.length - 1
     if (isLastLine) return { entries, truncatedTail: true }
-    throw new Error(
+    throw new AppError('INVARIANT', 
       `session ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
     )
   }

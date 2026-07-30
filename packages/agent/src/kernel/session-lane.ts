@@ -1,4 +1,5 @@
 import { isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 export type KernelInputDelivery = 'queue' | 'steer'
@@ -89,10 +90,10 @@ function isSameAdmission(
 
 function assertInputContent(input: AdmitKernelSessionInput): void {
   if (!input.sessionId.trim()) {
-    throw new Error('Kernel session input requires a sessionId')
+    throw new AppError('VALIDATION', 'Kernel session input requires a sessionId')
   }
   if (!input.content.trim()) {
-    throw new Error('Kernel session input requires non-empty content')
+    throw new AppError('VALIDATION', 'Kernel session input requires non-empty content')
   }
 }
 
@@ -121,7 +122,12 @@ export class InMemoryKernelSessionInputStore implements KernelSessionInputStore 
     for (const input of cloneSnapshot(snapshot).inputs) {
       const sessionInputs = this.inputsBySession.get(input.sessionId) ?? []
       if (seenIds.has(input.id)) {
-        throw new Error(`Kernel session input "${input.id}" is duplicated in snapshot`)
+        throw new AppError(
+          'VALIDATION',
+          `Kernel session input "${input.id}" is duplicated in snapshot`,
+          undefined,
+          { inputId: input.id }
+        )
       }
       seenIds.add(input.id)
       sessionInputs.push(input)
@@ -146,14 +152,14 @@ export class InMemoryKernelSessionInputStore implements KernelSessionInputStore 
       const existing = this.findInputById(input.id)
       if (existing) {
         if (isSameAdmission(existing, input, role, delivery)) return cloneInput(existing)
-        throw new Error(`Kernel session input "${input.id}" is already admitted`)
+        throw new AppError('INVARIANT', `Kernel session input "${input.id}" is already admitted`)
       }
     }
 
     const seq = (this.seqBySession.get(input.sessionId) ?? 0) + 1
     const id = input.id ?? `${input.sessionId}:input:${seq}`
     if (this.findInputById(id)) {
-      throw new Error(`Kernel session input "${id}" is already admitted`)
+      throw new AppError('INVARIANT', `Kernel session input "${id}" is already admitted`)
     }
     const sessionInputs = this.inputsBySession.get(input.sessionId) ?? []
 

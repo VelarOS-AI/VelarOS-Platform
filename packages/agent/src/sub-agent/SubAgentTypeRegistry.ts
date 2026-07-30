@@ -1,3 +1,4 @@
+import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentRoleId,
   CustomSubAgentDefinition,
@@ -40,7 +41,7 @@ function resolveSubAgentTypeConfig(
   subagentType: SubAgentTypeId
 ): ResolvedSubAgentTypeConfig {
   const descriptor = provider.getDescriptor(subagentType)
-  if (!descriptor) throw new Error(`unknown injected sub-agent type: ${subagentType}`)
+  if (!descriptor) throw new AppError('NOT_FOUND', `unknown injected sub-agent type: ${subagentType}`)
   const { id, ...faces } = descriptor
   return { subagentType: id, ...faces }
 }

@@ -8,6 +8,8 @@ import { existsSync } from 'node:fs'
 import { type FileHandle, mkdir, open, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import type { ExecutionSpan } from '../../protocol'
 import { truncateJsonlToLineCount } from '../jsonl-file'
 import { SerialWriteQueue } from '../session-store'
@@ -69,7 +71,7 @@ export class ExecutionSpanLedger {
   public append(span: ExecutionSpan): void {
     this.assertOpen()
     void this.writeQueue.enqueue(async () => {
-      if (!this.appendHandle) throw new Error(`execution span ledger append handle is closed: ${this.path}`)
+      if (!this.appendHandle) throw new AppError('INVARIANT', `execution span ledger append handle is closed: ${this.path}`)
       await this.appendHandle.write(serializeSpanLine(span))
       await this.appendHandle.datasync() // 崩溃安全：每条落盘后 fsync 数据页
     })
@@ -92,6 +94,6 @@ export class ExecutionSpanLedger {
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error(`execution span ledger is closed: ${this.path}`)
+    if (this.closed) throw new AppError('INVARIANT', `execution span ledger is closed: ${this.path}`)
   }
 }

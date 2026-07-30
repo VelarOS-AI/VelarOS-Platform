@@ -20,6 +20,7 @@ import { type FileHandle, mkdir, open, readFile, writeFile } from 'node:fs/promi
 import { dirname } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { truncateJsonlToLineCount } from '../jsonl-file'
 import { canonicalJsonStringify, SerialWriteQueue } from '../session-store'
@@ -84,7 +85,7 @@ export function parsePromptAuditText(raw: string, path: string): PromptAuditRead
       continue
     }
     if (index === lines.length - 1) return { records, truncatedTail: true }
-    throw new Error(
+    throw new AppError('INVARIANT', 
       `prompt audit ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
     )
   }
@@ -157,7 +158,7 @@ export class PromptAuditLedger {
     this.assertOpen()
     void this.writeQueue.enqueue(async () => {
       if (!this.appendHandle) {
-        throw new Error(`prompt audit ledger append handle is closed: ${this.path}`)
+        throw new AppError('INVARIANT', `prompt audit ledger append handle is closed: ${this.path}`)
       }
       await this.appendHandle.write(serializePromptAuditLine(record))
       await this.appendHandle.datasync()
@@ -179,6 +180,6 @@ export class PromptAuditLedger {
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error(`prompt audit ledger is closed: ${this.path}`)
+    if (this.closed) throw new AppError('INVARIANT', `prompt audit ledger is closed: ${this.path}`)
   }
 }

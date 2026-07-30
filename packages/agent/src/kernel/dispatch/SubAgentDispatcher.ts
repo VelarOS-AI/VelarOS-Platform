@@ -777,8 +777,13 @@ class SubAgentDispatcher {
     try {
       this.backgroundJobManager.fail(jobId, { error: truncate(errorMessage.trim(), 2_000) })
     } catch (error) {
-      if (String(error).includes('already cancelled')) return
-      this.log.warn('sub-agent background job failure update failed', AppError.from(error))
+      const appError = AppError.from(error)
+      // 用户取消后台任务与子 Agent 抛错回灌是两条独立赛道，谁先到不确定：取消先到时这里必然撞
+      // 「任务已终态」冲突——那是正常竞态不是故障，不该刷 warn。判据走 code + context.jobStatus
+      // （KernelBackgroundJobManager 的结构化契约），**不许 sniff message 文案**：文案一改这条
+      // 静默失效，只表现为日志噪音，没有任何门会喊红。
+      if (appError.code === 'CONFLICT' && appError.context.jobStatus === 'cancelled') return
+      this.log.warn('sub-agent background job failure update failed', appError)
     }
   }
 
