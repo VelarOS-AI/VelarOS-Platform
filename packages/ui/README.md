@@ -115,7 +115,7 @@ const SaveButton = (props: Pick<ButtonProps, 'disabled'>) => (
     (文件头 `@velaros-no-tailwind`)——**不许在组件里写 Tailwind 工具类**,
     消费方不对 `node_modules` 跑 Tailwind 时那些类根本不存在。
 14. 颜色只引语义令牌,**禁裸 hex/rgb/hsl**(有门 `check:ui-color-literal`)。
-    间距 / 圆角 / 字号走 `--ui-*` 档位,见 [velaros 简约风格](./docs/velaros-style.zh-CN.md)。
+    间距 / 圆角 / 字号走 `--ui-*` 档位,见 [velaros 简约风格](./docs/velaros-style.md)。
 15. 组件写的每个 `velar-*` 修饰类都要**真的有 CSS 规则**(现有 4 条悬空,见欠账)。
 
 **F. 文档与门面**
@@ -152,7 +152,7 @@ const SaveButton = (props: Pick<ButtonProps, 'disabled'>) => (
 在 `styles/tokens/seed-presets.css`,经 `data-velar-preset` 激活。
 
 **怎么用这些令牌**(克制的调色 / 层次靠间距与边框而非阴影 / 圆角与密度档位 / 暗色对称规则)
-见 [velaros 简约风格](./docs/velaros-style.zh-CN.md) —— 每条带判据与反例,末尾有自查清单。
+见 [velaros 简约风格](./docs/velaros-style.md) —— 每条带判据与反例,末尾有自查清单。
 
 ## CSS 命名
 
