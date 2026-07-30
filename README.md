@@ -195,3 +195,18 @@ bun run check:gates      # 只跑各域质量门
    → **落点**:`scripts/agent/check-schemas.mjs` 加第四道防线,照 kernel 的形状把
    `agent/protocol` 的 span schema 快照进 `baselines/agent/`。上游记录见 Desktop 仓
    `docs/kernel-observability.md`。
+7. **arch-guard 的 44 条 `velaros/code-style/*` 在本仓一个包都不跑**(门覆盖审计实测,
+   存量 **1122 条**违规 / 命中 24 条检查;逐包数字见
+   [docs/gate-coverage-matrix.md](docs/gate-coverage-matrix.md) §3)。这不是纪律松,是门没铺过来:
+   这批 check 住 Desktop 的 `packages/arch-guard-velaros`(`private: true`、从未发布,且
+   Desktop `docs/package-extraction-map.md` 明确登记为「Desktop 自持」),引擎
+   `@velaros-ai/arch-guard` 虽是公开包但插件不是。
+   → **落点(需人拍板)**:①把 `checks/code-style/` 劈成公共包两仓共依(判据单源,最干净);
+   ②整包发布 `@velaros/arch-guard-velaros`(会把 Desktop 专属检查一并带进来);
+   ③推翻 extraction-map 判决整体迁进 Platform。
+   **不要**复制一份 check 进本仓(判据立刻双源),**也不要**做成「sibling 在就跑」的 best-effort
+   探针(没挂链的门等于没有门,还多骗一层安全感)。
+8. **两个包的检查脚本写了但没挂链**:`packages/html-artifacts` 的 `check:dist` /
+   `check:package-contract`、`packages/capabilities/workspace` 的 `check:arch`(118 行)
+   都只在各自包内 `check` 脚本里,根 `check:gates` 不跑——`bun run check` 与 CI 都碰不到。
+   → **落点**:两行,挂进根 `check:gates`。

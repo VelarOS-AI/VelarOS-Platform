@@ -274,21 +274,24 @@ not import each other's pages or feature implementations.
    直接替换；②为反复出现的阴影 / 遮罩 rgba 抽语义令牌（如 `--ui-shadow-*` / overlay tint）；
    ③文件类型品牌色抽成一族 `--brand-file-*` 令牌。收敛随 renderer 收割批推进（不在组件正规化批内）。
 
-3. **门覆盖面缺口**（QU 深读实测，五路侦察一致命中）：Platform 的 `eslint/ui.config.mjs`
-   **既未启用 `react-hooks/exhaustive-deps`，也未加载 `arch-guard-velaros` 插件**，所以
-   code-standard 附录 A 里那 44 条 `velaros/code-style/*`（缺席值八条族、`forbid-swallowed-errors`、
-   `forbid-trivial-function-wrapper`、`require-chinese-comments`、`prefer-is-plain-object-*`、
-   `forbid-iszh-locale-copy-ternary` …）在本包**一条都不跑**。Desktop 侧这些族接近零违规而本包
-   成片存在，**不是纪律松，是门没铺过来**（§6.3「没挂链的门等于没有门」）。
-   建议优先级最高的补门项：`exhaustive-deps`（warn + 基线棘轮）→ arch-guard code-style 族。
-4. **门口径盲区**（两条，判据上是违规但机械上看不见）：
-   ① `check:ui-color-literal` 的 CSS 扫描面只有 `styles/components/**`，**`*.module.css` 不在面内**
-   （实测 `HtmlPreview.module.css` 有 22 条裸色值完全隐形）；而 `htmlPreviewDesignCss.generated.ts`
-   是**构建产物**却贡献了 314 条基线里的 60 条（19%），重新生成即触发棘轮红——生成物钉进人工基线
-   是错配，应豁免生成物、纳入 module.css。
-   ② `check:ui-form-closure` 只认名字以 `Props` 结尾的声明，**内联对象字面量 props**（CardKit 六件）、
-   `Pick<X,'className'>` 转发、以及**导出 className 拼接函数**（`TopBarControlFrame` 四个
-   `getXxxClassName`，Desktop 侧 11 个文件在用）全部在扫描面外，约 11 条同类逃生口不计入 99。
+3. **门覆盖面缺口**（QU 深读实测发现，QH 批处置）：
+   - ✅ **已补**：`react-hooks/exhaustive-deps` 已铺到本包（warn + 基线棘轮
+     `check:ui-hook-deps`，存量 15 条 / 11 文件冻结在 `baselines/ui/react-hook-deps.json`）。
+   - ⏳ **仍缺（结构性阻塞，需人拍板）**：code-standard 附录 A 那 44 条 `velaros/code-style/*`
+     （缺席值八条族、`forbid-swallowed-errors`、`forbid-trivial-function-wrapper`、
+     `require-chinese-comments`、`prefer-is-plain-object-*` …）在本包**一条都不跑**——
+     实测本包存量 145 条违规 / 21 条检查失败（全 Platform 最高的失败检查数）。
+     根因是这批 check 住 Desktop 的 `arch-guard-velaros`（private、未发布、extraction-map
+     登记为「Desktop 自持」），不是纪律松。三条出路与全仓逐包数字见
+     [`docs/gate-coverage-matrix.md`](../../docs/gate-coverage-matrix.md) §3。
+4. ✅ **门口径盲区已修**（QH 批，两条；基线按新口径重算，不是违规增加）：
+   ① `check:ui-color-literal` 的 CSS 面从 `styles/components/**` 扩为「全部 `src/**.css` 减令牌层」
+   （补进 `*.module.css` 8 文件 73 条 + html-preview 沙箱样式表 60 条），并豁免 `*.generated.*`
+   构建产物（旧基线里那 60 条产物指纹已移除，改记账其源 CSS）。基线 314 → **387**。
+   ② `check:ui-form-closure` 的契约面从「名字以 `Props` 结尾的声明」扩为
+   「`*Props` 声明 ∪ 全部参数类型标注 ∪ 导出的 `*ClassName` 函数」，补进内联对象字面量 props、
+   `Pick<X,'className'>` / `Omit<DOM,…> & {className?}` 转发、`getXxxClassName` 拼接函数。
+   基线 99 → **114**（passthrough 48 / dom-spread 62 / classname-helper 4）。
 5. **悬空 `velar-*` 类名 4 条**（TSX 里写了、CSS 全仓无定义）：
    `velar-calendar-nav-button-{next,previous}`、`velar-number-input-step-down`、
    `velar-switch-tone-default`。无门覆盖；建议加一条"类名↔CSS 规则"的构造级探针。
