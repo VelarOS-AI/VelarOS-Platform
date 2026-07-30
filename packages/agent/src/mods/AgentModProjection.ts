@@ -7,10 +7,7 @@ import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'
-import type {
-  AgentModSpaceContribution,
-  AgentModTurnContextSourceContribution,
-} from '../protocol'
+import type { AgentModSpaceContribution, AgentModTurnContextSourceContribution } from '../protocol'
 import type { AgentSkillDefinition } from '../skills'
 import type { SubAgentTypeDescriptor } from '../sub-agent'
 import type { VelaTool } from '../tool-library'
@@ -20,8 +17,8 @@ import type { AgentModRegistrySnapshot } from './AgentModRegistry'
 /** 工具名 → 工具实体（主键即工具名，全宿主唯一由 Loader 保证）。 */
 function projectAgentModTools(
   snapshot: AgentModRegistrySnapshot
-): Record<string, VelaTool<any>> {
-  const tools: Record<string, VelaTool<any>> = {}
+): Record<string, VelaTool<any, any>> {
+  const tools: Record<string, VelaTool<any, any>> = {}
   for (const record of snapshot.tools) {
     if (!record.payload) continue
     tools[record.key] = record.payload
@@ -70,9 +67,7 @@ function projectAgentModToolCategories(
   return categories
 }
 
-function projectAgentModSkills(
-  snapshot: AgentModRegistrySnapshot
-): AgentSkillDefinition[] {
+function projectAgentModSkills(snapshot: AgentModRegistrySnapshot): AgentSkillDefinition[] {
   return snapshot.skills
     .map((record) => record.payload)
     .filter((payload): payload is AgentSkillDefinition => payload !== null)
@@ -95,9 +90,7 @@ function projectAgentModExecutionModes(
 }
 
 /** 纯数据轴：直接返回声明（无运行态载荷）。 */
-function projectAgentModSpaces(
-  snapshot: AgentModRegistrySnapshot
-): AgentModSpaceContribution[] {
+function projectAgentModSpaces(snapshot: AgentModRegistrySnapshot): AgentModSpaceContribution[] {
   return snapshot.spaces.map((record) => record.declaration)
 }
 

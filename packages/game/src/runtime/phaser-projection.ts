@@ -81,7 +81,7 @@ export interface VelarosGamePageApi {
       readonly repeat?: number
       readonly settleFrames?: number
       readonly captureAfter?: boolean
-    },
+    }
   ) => Promise<GameInputResult>
   readonly selectEntity: (entityId: string) => GameRuntimeEntitySnapshot
   readonly setOverlayVisible: (visible: boolean) => void
@@ -102,7 +102,7 @@ interface ProjectionBridge {
 }
 
 function isDynamicBody(
-  body: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | null | undefined,
+  body: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | null | undefined
 ): body is Phaser.Physics.Arcade.Body {
   return Boolean(body && 'velocity' in body && 'blocked' in body)
 }
@@ -126,15 +126,24 @@ type SpriteAnchor =
 
 function anchorOrigin(anchor: SpriteAnchor): readonly [number, number] {
   switch (anchor) {
-    case 'top-left': return [0, 0]
-    case 'top': return [0.5, 0]
-    case 'top-right': return [1, 0]
-    case 'left': return [0, 0.5]
-    case 'right': return [1, 0.5]
-    case 'bottom-left': return [0, 1]
-    case 'bottom': return [0.5, 1]
-    case 'bottom-right': return [1, 1]
-    case 'center': return [0.5, 0.5]
+    case 'top-left':
+      return [0, 0]
+    case 'top':
+      return [0.5, 0]
+    case 'top-right':
+      return [1, 0]
+    case 'left':
+      return [0, 0.5]
+    case 'right':
+      return [1, 0.5]
+    case 'bottom-left':
+      return [0, 1]
+    case 'bottom':
+      return [0.5, 1]
+    case 'bottom-right':
+      return [1, 1]
+    case 'center':
+      return [0.5, 0.5]
   }
 }
 
@@ -155,8 +164,12 @@ function normalizePhaserKeyBinding(binding: string): string {
   return binding.replace(/(?:Left|Right)$/u, '').toUpperCase()
 }
 
-function browserKeyBinding(binding: string): { readonly code: string; readonly key: string } {
-  if (/^Key[A-Z]$/u.test(binding)) return { code: binding, key: binding.slice('Key'.length).toLowerCase() }
+function browserKeyBinding(binding: string): {
+  readonly code: string
+  readonly key: string
+} {
+  if (/^Key[A-Z]$/u.test(binding))
+    return { code: binding, key: binding.slice('Key'.length).toLowerCase() }
   if (/^Digit[0-9]$/u.test(binding)) return { code: binding, key: binding.slice('Digit'.length) }
   if (binding === 'Space') return { code: 'Space', key: ' ' }
   return { code: binding, key: binding }
@@ -177,7 +190,7 @@ function browserKeyCode(binding: string): number {
   if (known !== undefined) return known
   if (/^Key[A-Z]$/u.test(binding)) return binding.codePointAt(3) ?? 0
   if (/^Digit[0-9]$/u.test(binding)) return binding.codePointAt(5) ?? 0
-  return binding.length === 1 ? binding.toUpperCase().codePointAt(0) ?? 0 : 0
+  return binding.length === 1 ? (binding.toUpperCase().codePointAt(0) ?? 0) : 0
 }
 
 function dispatchKeyboardInput(binding: string, type: 'keydown' | 'keyup'): void {
@@ -217,7 +230,7 @@ function createProjectionSceneClass(
   options: PhaserGameRuntimeOptions,
   diagnostics: GameRuntimeDiagnostics,
   onReady: (bridge: ProjectionBridge) => void,
-  onFailure: (error: unknown) => void,
+  onFailure: (error: unknown) => void
 ) {
   return class GameProjectionScene extends PhaserRuntime.Scene implements ProjectionBridge {
     private readonly records = new Map<string, RuntimeEntityRecord>()
@@ -246,9 +259,14 @@ function createProjectionSceneClass(
         this.bindInputActions()
 
         for (const entity of options.scene.entities) {
+          const object = this.createEntityObject(entity)
+          object.setInteractive()
+          object.on('pointerdown', () => {
+            this.selectEntity(entity.id)
+          })
           this.records.set(entity.id, {
             manifest: entity,
-            object: this.createEntityObject(entity),
+            object,
           })
         }
         this.configureCamera()
@@ -276,7 +294,8 @@ function createProjectionSceneClass(
     }
 
     public query(request: GameRuntimeQuery = { select: 'scene' }): GameRuntimeQueryResult {
-      if (request.select === undefined || request.select === 'scene') return {
+      if (request.select === undefined || request.select === 'scene')
+        return {
           select: 'scene',
           scene: options.scene.id,
           running: true,
@@ -287,7 +306,14 @@ function createProjectionSceneClass(
             : null,
           elapsedMs: Date.now() - this.startedAt,
         }
-      if (request.select === 'entity') return {
+      if (request.select === 'selection')
+        return {
+          select: 'selection',
+          entity:
+            this.selectedEntityId === null ? null : this.entitySnapshot(this.selectedEntityId),
+        }
+      if (request.select === 'entity')
+        return {
           select: 'entity',
           entity: this.entitySnapshot(request.entityId, request.components),
         }
@@ -319,16 +345,16 @@ function createProjectionSceneClass(
         }
       }
 
-      const averageFrame = this.frameTimes.length > 0
-        ? this.frameTimes.reduce((sum, value) => sum + value, 0) / this.frameTimes.length
-        : null
+      const averageFrame =
+        this.frameTimes.length > 0
+          ? this.frameTimes.reduce((sum, value) => sum + value, 0) / this.frameTimes.length
+          : null
       return {
         select: 'perf',
         fps: {
           average: averageFrame && averageFrame > 0 ? Math.round(1000 / averageFrame) : null,
-          minimum: this.frameTimes.length > 0
-            ? Math.round(1000 / Math.max(...this.frameTimes))
-            : null,
+          minimum:
+            this.frameTimes.length > 0 ? Math.round(1000 / Math.max(...this.frameTimes)) : null,
         },
         frameMs: {
           p50: percentile(this.frameTimes, 0.5),
@@ -393,9 +419,7 @@ function createProjectionSceneClass(
       for (const [action, bindings] of Object.entries(options.project.input.actions)) {
         this.actionKeys.set(
           action,
-          bindings.map((binding) => (
-            this.input.keyboard!.addKey(normalizePhaserKeyBinding(binding))
-          )),
+          bindings.map((binding) => this.input.keyboard!.addKey(normalizePhaserKeyBinding(binding)))
         )
       }
     }
@@ -409,7 +433,7 @@ function createProjectionSceneClass(
       const object = this.createVisual(components, x, y)
       object.setName(entity.id)
       const rotation = transform.rotation
-      object.setRotation(typeof rotation === 'number' ? rotation : rotation?.z ?? 0)
+      object.setRotation(typeof rotation === 'number' ? rotation : (rotation?.z ?? 0))
       object.setScale(transform.scale?.x ?? 1, transform.scale?.y ?? 1)
       const layerIndex = Math.max(0, options.project.layers.indexOf(components.layer ?? ''))
       object.setDepth(layerIndex * 100_000 + (components.order ?? 0))
@@ -426,15 +450,11 @@ function createProjectionSceneClass(
       for (const record of this.records.values()) {
         const camera = record.manifest.components.camera
         if (camera?.kind !== 'follow') continue
-        const targetId = camera.target
-          ? gameReferenceId(camera.target)
-          : record.manifest.id
+        const targetId = camera.target ? gameReferenceId(camera.target) : record.manifest.id
         const target = this.records.get(targetId)
         if (!target) {
           this.reportError(
-            new Error(
-              `实体 ${record.manifest.id} 的 camera.target 找不到 entity:${targetId}。`,
-            ),
+            new Error(`实体 ${record.manifest.id} 的 camera.target 找不到 entity:${targetId}。`)
           )
           continue
         }
@@ -459,19 +479,22 @@ function createProjectionSceneClass(
         })
         return this.add.rectangle(x, y, 32, 32, 0xf43f5e) as RuntimeGameObject
       }
-      if (visual?.kind === 'text') return this.add.text(x, y, visual.text ?? '', {
+      if (visual?.kind === 'text')
+        return this.add.text(x, y, visual.text ?? '', {
           color: visual.color ?? '#ffffff',
           fontSize: `${visual.size ?? 24}px`,
         }) as RuntimeGameObject
       if (visual?.kind === 'shape') {
         const color = hexColor(visual.color, 0x8b5cf6)
-        if (visual.shape === 'circle') return this.add.circle(x, y, visual.radius ?? 16, color) as RuntimeGameObject
-        if (visual.shape === 'ellipse') return this.add.ellipse(
+        if (visual.shape === 'circle')
+          return this.add.circle(x, y, visual.radius ?? 16, color) as RuntimeGameObject
+        if (visual.shape === 'ellipse')
+          return this.add.ellipse(
             x,
             y,
             visual.width ?? 32,
             visual.height ?? 24,
-            color,
+            color
           ) as RuntimeGameObject
         if (visual.shape === 'triangle') {
           const width = visual.width ?? 32
@@ -485,7 +508,7 @@ function createProjectionSceneClass(
             height,
             width,
             height,
-            color,
+            color
           ) as RuntimeGameObject
         }
         return this.add.rectangle(
@@ -493,7 +516,7 @@ function createProjectionSceneClass(
           y,
           visual.width ?? 32,
           visual.height ?? 32,
-          color,
+          color
         ) as RuntimeGameObject
       }
       return this.add.rectangle(x, y, 16, 16, 0xffffff, 0.001) as RuntimeGameObject
@@ -541,7 +564,7 @@ function createProjectionSceneClass(
         for (let right = left + 1; right < objects.length; right += 1) {
           this.physics.add.collider(
             objects[left] as Phaser.Types.Physics.Arcade.ArcadeColliderType,
-            objects[right] as Phaser.Types.Physics.Arcade.ArcadeColliderType,
+            objects[right] as Phaser.Types.Physics.Arcade.ArcadeColliderType
           )
         }
       }
@@ -569,9 +592,9 @@ function createProjectionSceneClass(
         if (!script?.module) continue
         const factory = scripts[script.module]
         if (!factory) {
-          this.reportError(new Error(
-            `实体 ${record.manifest.id} 引用了未注册脚本模块 ${script.module}。`,
-          ))
+          this.reportError(
+            new Error(`实体 ${record.manifest.id} 引用了未注册脚本模块 ${script.module}。`)
+          )
           continue
         }
         try {
@@ -597,15 +620,11 @@ function createProjectionSceneClass(
           if (x !== undefined) record.object.body.velocity.x = x
           if (y !== undefined) record.object.body.velocity.y = y
         },
-        isBlocked: (side) => (
-          isDynamicBody(record.object.body) ? record.object.body.blocked[side] : false
-        ),
-        isActionDown: (action) => (
-          this.actionKeys.get(action)?.some((key) => key.isDown) ?? false
-        ),
-        getEntity: (entityId) => (
-          this.records.has(entityId) ? this.entitySnapshot(entityId) : null
-        ),
+        isBlocked: (side) =>
+          isDynamicBody(record.object.body) ? record.object.body.blocked[side] : false,
+        isActionDown: (action) => this.actionKeys.get(action)?.some((key) => key.isDown) ?? false,
+        getEntity: (entityId) =>
+          this.records.has(entityId) ? this.entitySnapshot(entityId) : null,
         getState: (key) => this.sharedState.get(key),
         setState: (key, value) => {
           this.sharedState.set(key, value)
@@ -619,13 +638,16 @@ function createProjectionSceneClass(
         this.overlayGraphics = this.add.graphics().setDepth(2_000_000_000).setScrollFactor(0)
       }
       if (overlay.logs) {
-        this.overlayText = this.add.text(12, 12, '', {
-          color: '#e2e8f0',
-          backgroundColor: '#0f172acc',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: '12px',
-          padding: { x: 8, y: 6 },
-        }).setDepth(2_000_000_001).setScrollFactor(0)
+        this.overlayText = this.add
+          .text(12, 12, '', {
+            color: '#e2e8f0',
+            backgroundColor: '#0f172acc',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: '12px',
+            padding: { x: 8, y: 6 },
+          })
+          .setDepth(2_000_000_001)
+          .setScrollFactor(0)
       }
     }
 
@@ -640,7 +662,7 @@ function createProjectionSceneClass(
             graphics.lineStyle(
               entityId === this.selectedEntityId ? 2 : 1,
               entityId === this.selectedEntityId ? 0xa78bfa : 0x22d3ee,
-              0.9,
+              0.9
             )
             const bounds = record.object.getBounds()
             graphics.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
@@ -664,12 +686,12 @@ function createProjectionSceneClass(
 
     private entitySnapshot(
       entityId: string,
-      componentFilter?: readonly string[],
+      componentFilter?: readonly string[]
     ): GameRuntimeEntitySnapshot {
       const record = this.records.get(entityId)
       if (!record) {
         throw new Error(
-          `找不到 entity:${entityId}。可用实体：${[...this.records.keys()].join(', ') || '(empty)'}`,
+          `找不到 entity:${entityId}。可用实体：${[...this.records.keys()].join(', ') || '(empty)'}`
         )
       }
       const body = record.object.body
@@ -681,21 +703,25 @@ function createProjectionSceneClass(
           rotation: record.object.rotation,
           scale: { x: record.object.scaleX, y: record.object.scaleY },
         },
-        ...(body ? {
-          body: {
-            ...record.manifest.components.body,
-            ...(isDynamicBody(body) ? {
-              velocity: { x: body.velocity.x, y: body.velocity.y },
-              blocked: { ...body.blocked },
-            } : {}),
-          },
-        } : {}),
+        ...(body
+          ? {
+              body: {
+                ...record.manifest.components.body,
+                ...(isDynamicBody(body)
+                  ? {
+                      velocity: { x: body.velocity.x, y: body.velocity.y },
+                      blocked: { ...body.blocked },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
       }
       const components = componentFilter
         ? Object.fromEntries(
-            componentFilter.flatMap((key) => (
+            componentFilter.flatMap((key) =>
               Object.hasOwn(runtimeComponents, key) ? [[key, runtimeComponents[key]]] : []
-            )),
+            )
           )
         : runtimeComponents
       return {
@@ -727,7 +753,7 @@ export class PhaserGameRuntime {
     private readonly bridge: ProjectionBridge,
     private readonly diagnostics: GameRuntimeDiagnostics,
     private readonly removeWindowCapture: () => void,
-    private readonly inputActions: Readonly<Record<string, readonly string[]>>,
+    private readonly inputActions: Readonly<Record<string, readonly string[]>>
   ) {}
 
   public query(request?: GameRuntimeQuery): GameRuntimeQueryResult {
@@ -748,7 +774,7 @@ export class PhaserGameRuntime {
       readonly repeat?: number
       readonly settleFrames?: number
       readonly captureAfter?: boolean
-    } = {},
+    } = {}
   ): Promise<GameInputResult> {
     const repeat = Math.min(20, Math.max(1, Math.round(options.repeat ?? 1)))
     const droppedSteps: Array<{ index: number; reason: string }> = []
@@ -811,13 +837,11 @@ export class PhaserGameRuntime {
       }
     }
 
-    await waitForFrames(
-      Math.min(120, Math.max(0, Math.round(options.settleFrames ?? 4))),
-    )
+    await waitForFrames(Math.min(120, Math.max(0, Math.round(options.settleFrames ?? 4))))
     const stateAfter = options.captureAfter
-      ? this.bridge.query({ select: 'scene' }) as GameRuntimeSceneSnapshot & {
-        readonly select: 'scene'
-      }
+      ? (this.bridge.query({ select: 'scene' }) as GameRuntimeSceneSnapshot & {
+          readonly select: 'scene'
+        })
       : undefined
     return {
       appliedSteps,
@@ -837,19 +861,21 @@ export class PhaserGameRuntime {
   private dispatchPointerInput(
     type: 'pointerdown' | 'pointermove' | 'pointerup',
     x: number,
-    y: number,
+    y: number
   ): void {
     const canvas = this.game.canvas
     const bounds = canvas.getBoundingClientRect()
-    canvas.dispatchEvent(new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      clientX: bounds.left + x,
-      clientY: bounds.top + y,
-      pointerId: 1,
-      pointerType: 'mouse',
-      ...(type === 'pointerup' ? { button: 0, buttons: 0 } : { button: 0, buttons: 1 }),
-    }))
+    canvas.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: bounds.left + x,
+        clientY: bounds.top + y,
+        pointerId: 1,
+        pointerType: 'mouse',
+        ...(type === 'pointerup' ? { button: 0, buttons: 0 } : { button: 0, buttons: 1 }),
+      })
+    )
   }
 
   public destroy(): void {
@@ -863,7 +889,7 @@ export class PhaserGameRuntime {
 }
 
 export async function createPhaserGameRuntime(
-  options: PhaserGameRuntimeOptions,
+  options: PhaserGameRuntimeOptions
 ): Promise<PhaserGameRuntime> {
   const PhaserRuntime = (await import('phaser')).default
   const diagnostics = new GameRuntimeDiagnostics()
@@ -879,7 +905,7 @@ export async function createPhaserGameRuntime(
     options,
     diagnostics,
     (bridge) => resolveBridge(bridge),
-    (error) => rejectBridge(error),
+    (error) => rejectBridge(error)
   )
   const game = new PhaserRuntime.Game({
     type: PhaserRuntime.AUTO,
@@ -906,7 +932,7 @@ export async function createPhaserGameRuntime(
       bridge,
       diagnostics,
       removeWindowCapture,
-      options.project.input.actions,
+      options.project.input.actions
     )
     const pageApi: VelarosGamePageApi = {
       query: (request) => runtime.query(request),

@@ -88,6 +88,20 @@ export class ToolRendererRegistry {
     return this.registry.has(toolName)
   }
 
+  /**
+   * Remove one renderer without disturbing unrelated registrations.
+   *
+   * When `component` is supplied, ownership must still match. This makes hot-disable safe for
+   * bundled capabilities: a stale cleanup cannot remove a renderer installed later by another
+   * composition root.
+   */
+  public unregister(toolName: string, component?: ToolRenderComponent): boolean {
+    const normalizedName = toolName.trim()
+    if (!normalizedName) return false
+    if (component && this.registry.get(normalizedName) !== component) return false
+    return this.registry.delete(normalizedName)
+  }
+
   /** 清除应用级扩展并保留可选的 fallback，便于测试和热重载安全重建。 */
   public clear(options: { keepFallback?: boolean } = {}): void {
     this.registry.clear()

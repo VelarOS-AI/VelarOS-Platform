@@ -30,13 +30,30 @@ export interface GameRuntimeSceneSnapshot {
 
 export type GameRuntimeQuery =
   | { readonly select?: 'scene' }
-  | { readonly select: 'entities'; readonly limit?: number; readonly offset?: number }
-  | { readonly select: 'entity'; readonly entityId: string; readonly components?: readonly string[] }
-  | { readonly select: 'errors'; readonly limit?: number; readonly offset?: number }
+  | { readonly select: 'selection' }
+  | {
+      readonly select: 'entities'
+      readonly limit?: number
+      readonly offset?: number
+    }
+  | {
+      readonly select: 'entity'
+      readonly entityId: string
+      readonly components?: readonly string[]
+    }
+  | {
+      readonly select: 'errors'
+      readonly limit?: number
+      readonly offset?: number
+    }
   | { readonly select: 'perf' }
 
 export type GameRuntimeQueryResult =
   | (GameRuntimeSceneSnapshot & { readonly select: 'scene' })
+  | {
+      readonly select: 'selection'
+      readonly entity: GameRuntimeEntitySnapshot | null
+    }
   | {
       readonly select: 'entities'
       readonly entities: readonly GameRuntimeEntitySnapshot[]
@@ -55,13 +72,23 @@ export type GameRuntimeQueryResult =
     }
   | {
       readonly select: 'perf'
-      readonly fps: { readonly average: number | null; readonly minimum: number | null }
-      readonly frameMs: { readonly p50: number | null; readonly p95: number | null }
+      readonly fps: {
+        readonly average: number | null
+        readonly minimum: number | null
+      }
+      readonly frameMs: {
+        readonly p50: number | null
+        readonly p95: number | null
+      }
       readonly entityCount: number
     }
 
 export type GameInputStep =
-  | { readonly action: 'press'; readonly logicalAction: string; readonly ms?: number }
+  | {
+      readonly action: 'press'
+      readonly logicalAction: string
+      readonly ms?: number
+    }
   | { readonly action: 'key_down'; readonly key: string }
   | { readonly action: 'key_up'; readonly key: string }
   | { readonly action: 'tap'; readonly x: number; readonly y: number }
@@ -95,7 +122,12 @@ export interface GameStopResult {
 
 export interface GameScreenshotRequest {
   readonly label?: string
-  readonly region?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+  readonly region?: {
+    readonly x: number
+    readonly y: number
+    readonly width: number
+    readonly height: number
+  }
   readonly waitFrames?: number
   readonly overlay?: boolean
 }
@@ -110,7 +142,10 @@ export interface GameScreenshotResult {
 
 export interface GameInputResult {
   readonly appliedSteps: number
-  readonly droppedSteps: ReadonlyArray<{ readonly index: number; readonly reason: string }>
+  readonly droppedSteps: ReadonlyArray<{
+    readonly index: number
+    readonly reason: string
+  }>
   readonly stateAfter?: GameRuntimeSceneSnapshot
 }
 
@@ -123,6 +158,10 @@ export interface GameRuntimePort {
   readonly query: (request: GameRuntimeQuery) => Promise<GameRuntimeQueryResult>
   readonly input: (
     steps: readonly GameInputStep[],
-    options?: { readonly repeat?: number; readonly settleFrames?: number; readonly captureAfter?: boolean },
+    options?: {
+      readonly repeat?: number
+      readonly settleFrames?: number
+      readonly captureAfter?: boolean
+    }
   ) => Promise<GameInputResult>
 }

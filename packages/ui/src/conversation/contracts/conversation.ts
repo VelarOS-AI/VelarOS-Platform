@@ -42,11 +42,7 @@ export type ExecutionTaskStatus =
   | 'completed'
   | 'failed'
 export type MicrophonePermissionStatus =
-  | 'granted'
-  | 'denied'
-  | 'not-determined'
-  | 'restricted'
-  | 'unknown'
+  'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown'
 
 export type ChatPromptFeatureId =
   | 'plan'
@@ -67,6 +63,7 @@ export type ToolCategoryId =
   | 'general'
   | 'web'
   | 'browser'
+  | 'game'
   | 'memory'
   | 'knowledge'
   | 'office'
@@ -306,13 +303,7 @@ export type UserActionCardActionIcon =
   | 'memory'
 
 export type UserActionFormFieldType =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'select'
-  | 'radio'
-  | 'checkbox'
-  | 'checkboxes'
+  'text' | 'textarea' | 'number' | 'select' | 'radio' | 'checkbox' | 'checkboxes'
 export type UserActionFormValue = string | number | boolean | string[]
 
 export interface UserActionFormOption {
@@ -352,10 +343,19 @@ interface UserActionCardActionBase {
 }
 
 export type UserActionCardAction =
-  | (UserActionCardActionBase & { kind: 'enable_prompt_features'; promptFeatures: string[] })
+  | (UserActionCardActionBase & {
+      kind: 'enable_prompt_features'
+      promptFeatures: string[]
+    })
   | (UserActionCardActionBase & { kind: 'acknowledge' })
-  | (UserActionCardActionBase & { kind: 'reject'; input?: UserActionCardTextInput })
-  | (UserActionCardActionBase & { kind: 'submit_input'; input: UserActionCardTextInput })
+  | (UserActionCardActionBase & {
+      kind: 'reject'
+      input?: UserActionCardTextInput
+    })
+  | (UserActionCardActionBase & {
+      kind: 'submit_input'
+      input: UserActionCardTextInput
+    })
   | (UserActionCardActionBase & { kind: 'submit_form' })
 
 export interface UserActionCardResult {
@@ -527,6 +527,9 @@ export type TurnContextSourceId =
   | 'browser.manual-activity'
   | 'browser.current-page'
   | 'memory.recall'
+  | 'game.runtime-errors'
+  | 'game.selection'
+  | 'game.scene-state'
 
 export interface TurnContextDelta {
   id: string
@@ -548,9 +551,7 @@ export interface ChatMessage {
   browserElementSelections?: BrowserElementSelection[]
   turnContext?: {
     receipt: {
-      observedThrough: Partial<
-        Record<TurnContextSourceId, { generation: string; seq: number }>
-      >
+      observedThrough: Partial<Record<TurnContextSourceId, { generation: string; seq: number }>>
       includedDeltaIds: string[]
       dismissedDeltaIds: string[]
       anchorGeneration: string
@@ -608,10 +609,7 @@ export interface ModelPricingCatalog {
 }
 
 export type ChatContextUsageAccountingSource =
-  | 'provider'
-  | 'provider-count'
-  | 'gateway-cost'
-  | 'local-estimate'
+  'provider' | 'provider-count' | 'gateway-cost' | 'local-estimate'
 export type ChatContextUsageAccountingConfidence = 'high' | 'medium' | 'low'
 
 export interface StreamUsageTelemetryPayload {
@@ -875,12 +873,7 @@ export interface WorkspaceCheckpointDiffFailure {
 }
 
 export type ChatGoalLifecycleAction =
-  | 'resume'
-  | 'pause'
-  | 'block'
-  | 'complete'
-  | 'cancel'
-  | 'remove'
+  'resume' | 'pause' | 'block' | 'complete' | 'cancel' | 'remove'
 
 export interface ActiveContextArtifact {
   id: string

@@ -12,31 +12,36 @@ import type {
   GameStopResult,
 } from '../core/index.js'
 
-import {
-  type GameApprovedProcessHost,
-  GameDevServerController,
-} from './dev-server.js'
+import { type GameApprovedProcessHost, GameDevServerController } from './dev-server.js'
 
 export interface GameRuntimePageHost {
-  readonly open: (input: {
-    readonly url: string
-    readonly scene: string
-  }) => Promise<void>
+  readonly open: (input: { readonly url: string; readonly scene: string }) => Promise<void>
   readonly close: () => Promise<void>
-  readonly screenshot: (
-    request: GameScreenshotRequest,
-  ) => Promise<GameScreenshotResult>
-  readonly query: (
-    request: GameRuntimeQuery,
-  ) => Promise<GameRuntimeQueryResult>
+  readonly screenshot: (request: GameScreenshotRequest) => Promise<GameScreenshotResult>
+  readonly query: (request: GameRuntimeQuery) => Promise<GameRuntimeQueryResult>
   readonly input: (
     steps: readonly GameInputStep[],
     options?: {
       readonly repeat?: number
       readonly settleFrames?: number
       readonly captureAfter?: boolean
-    },
+    }
   ) => Promise<GameInputResult>
+}
+
+export interface GameRuntimeObserver {
+  readonly onRun?: (result: GameRunResult) => void
+  readonly onStop?: (result: GameStopResult) => void
+  readonly onQuery?: (request: GameRuntimeQuery, result: GameRuntimeQueryResult) => void
+  readonly onInput?: (result: GameInputResult) => void
+}
+
+function notifyObserver(callback: (() => void) | undefined): void {
+  try {
+    callback?.()
+  } catch {
+    // Observation is best-effort and must never change a game operation's result.
+  }
 }
 
 /**
@@ -51,12 +56,9 @@ export class GameProjectRuntime implements GameRuntimePort {
     project: GameProjectManifest,
     processHost: GameApprovedProcessHost,
     private readonly pageHost: GameRuntimePageHost,
+    private readonly observer?: GameRuntimeObserver
   ) {
-    this.devServer = new GameDevServerController(
-      projectRoot,
-      project,
-      processHost,
-    )
+    this.devServer = new GameDevServerController(projectRoot, project, processHost)
   }
 
   public isAvailable(): boolean {
@@ -90,6 +92,7 @@ export class GameProjectRuntime implements GameRuntimePort {
         scene: result.scene,
       })
       this.pageOpen = true
+      notifyObserver(() => this.observer?.onRun?.(result))
       return result
     } catch (error) {
       this.pageOpen = false
@@ -112,21 +115,20 @@ export class GameProjectRuntime implements GameRuntimePort {
     }
     const result = await this.devServer.stop(force)
     if (pageCloseError) throw pageCloseError
+    notifyObserver(() => this.observer?.onStop?.(result))
     return result
   }
 
-  public async screenshot(
-    request: GameScreenshotRequest,
-  ): Promise<GameScreenshotResult> {
+  public async screenshot(request: GameScreenshotRequest): Promise<GameScreenshotResult> {
     this.requireRunning('game_screenshot')
     return this.pageHost.screenshot(request)
   }
 
-  public async query(
-    request: GameRuntimeQuery,
-  ): Promise<GameRuntimeQueryResult> {
+  public async query(request: GameRuntimeQuery): Promise<GameRuntimeQueryResult> {
     this.requireRunning('game_query_state')
-    return this.pageHost.query(request)
+    const result = await this.pageHost.query(request)
+    notifyObserver(() => this.observer?.onQuery?.(request, result))
+    return result
   }
 
   public async input(
@@ -135,10 +137,12 @@ export class GameProjectRuntime implements GameRuntimePort {
       readonly repeat?: number
       readonly settleFrames?: number
       readonly captureAfter?: boolean
-    },
+    }
   ): Promise<GameInputResult> {
     this.requireRunning('game_input')
-    return this.pageHost.input(steps, options)
+    const result = await this.pageHost.input(steps, options)
+    notifyObserver(() => this.observer?.onInput?.(result))
+    return result
   }
 
   private requireRunning(operation: string): void {
