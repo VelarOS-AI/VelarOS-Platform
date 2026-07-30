@@ -26,6 +26,66 @@ component classes, and design token CSS for renderer surfaces. It must stay inde
 renderer features, IPC, storage, app-specific business models, and all other VelarOS runtime
 packages. The repository gate rejects direct Kernel, Desktop, Workbench, or HTML Artifacts imports.
 
+## 出版级清单（一个组件"算不算做好了"的判据）
+
+这一节是**可核对的验收表**，不是口号。新增或改动组件时逐条对；做不到的要在源文件头写明**为什么**
+（判据注释，§5.3），不要默默留空——留空与"刻意不做"长得一样，这正是本节要消灭的歧义。
+
+**A. 形态（有门，`check:ui-form-closure`）**
+
+1. **variant 是封闭枚举**，用 `cva` 表达（现状 36/59 primitives 走 cva）。可枚举的东西不写
+   `string`；`velar-x-size-${size}` 这类**模板拼接类名绕过一切静态审计**，别用。
+2. **不开 `className` / `style` 逃生口，不做 `ComponentProps` 全展开**。需要单点特殊外貌 →
+   消费方本地外貌层组合，**禁回灌组件库**。存量 99 条冻结在 baseline，只降不升。
+3. **导出一个 `*Props` 命名的 props 类型**。门只认这个后缀——写成内联对象字面量 props 的组件
+   （如 CardKit 六件）等于把自己从门的扫描面里摘出去，那不是合规，是隐身。
+
+**B. 受控形态**
+
+4. 本库取向是**纯受控**：`value`/`checked` 必填 + `onXChange`。选了纯受控就要把
+   `defaultValue`/`defaultChecked` **一并 `Omit`**，否则它会经 `{...props}` 漏进底层元素，
+   与受控值并存（React 告警 + 行为未定义）。
+5. 要做**双模**（受控 + 非受控）就三件齐全：`value?` + `defaultValue?` + `onChange?`，且用一个
+   `isControlled` 判定统一收口。范本 = `primitives/layout/Disclosure.tsx`。
+6. **不许有影子 state**：内部 draft 与外部 value 两个 owner 必然长出 `useEffect` 同步补丁链
+   （§4.2）。真需要中间态（输入法、半成品数字）就把"何时提交"写成判决注释。
+
+**C. 可达性**
+
+7. 交互件必须键盘可达：原生 `<button>`/`<input>` 优先；自造的浮层/菜单/选择器要给
+   `role` + `aria-expanded`/`aria-haspopup`/`aria-controls`，列表型要 `aria-activedescendant`
+   与方向键遍历。**半套 ARIA（有 role 无键盘）比没有更坏**——它对屏幕阅读器承诺了做不到的事。
+8. **`aria-hidden` 不许包住可聚焦内容**：那会造出"看得见、能 Tab 到、读不出来"的元素。
+9. 纯装饰图标一律 `aria-hidden`；有语义的图标按钮必须有 `label` → `aria-label`。
+
+**D. 身份与性能**
+
+10. **纯展示组件默认 `memo()`**；传给 memo 组件的对象/回调要引用稳定，否则 memo 是纯开销。
+11. **`memo()` / `forwardRef()` 包出来的组件必须显式挂 `displayName`**：包装后 devtools 里是匿名的。
+    泛型件因 `as` 断言会连 displayName 一起抹掉，更要补（见 `List` / `Select` / `SegmentedControl`）。
+    **不要依赖 Radix 透传的 displayName**——生产构建可能不带，devtools 会显示 `Anonymous`。
+12. 表单件应转发 `ref`（聚焦、校验定位、表单库注册都要）。**现状缺口最大的一条**：
+    `Checkbox`/`Switch`/`Select`/`RadioGroup`/`NumberInput`/`Picker`/`TextSelect` 均未转发。
+
+**E. 样式契约**
+
+13. 样式住 `styles/components/**`，组件只给类名。**组件 CSS 是 pure CSS + design tokens**
+    （文件头 `@velaros-no-tailwind`）——**不许在组件里写 Tailwind 工具类**，消费方不对
+    `node_modules` 跑 Tailwind 时那些类根本不存在。
+14. 颜色只引语义令牌，禁裸 hex/rgb/hsl（有门 `check:ui-color-literal`）。间距/圆角/字号走
+    `--ui-*` 档位，见 [velaros 简约风格](./docs/velaros-style.zh-CN.md)。
+15. 组件写的每个 `velar-*` 修饰类都要**真的有 CSS 规则**。（**已知欠账 4 条**：
+    `velar-calendar-nav-button-{next,previous}`、`velar-number-input-step-down`、
+    `velar-switch-tone-default` —— 类名在 TSX 里，CSS 全仓无定义。无门覆盖，见 Backlog。）
+
+**F. 文档与门面**
+
+16. 文件头一句话责任注释 + variant 闭集 + 样式引用（现状 primitives 58/59、product 19/19）。
+17. 进 `package.json#exports` 子路径（现状 77/77 齐）、进本文组件索引表、进 component-library 图鉴。
+18. 复杂核心件补 §5.3b 导览（不变量 / 时序 / 安全门 / 为什么不那样）。**本库最该补而未补的**：
+    `Popover`（坐标系与嵌套层协议）、`CascadingMenu`（三条关闭通道竞态）、`DataTable`
+    （三条状态轴的所有权非对称）、`lib/runtime.ts`（为何 fork 而不依赖 core）、`lib/timerScope.ts`。
+
 ## Component Index
 
 分区法则（§12「一包一义」/ 命名一致性）：**primitives** = 跨产品复用、无业务语义的原子；
@@ -50,8 +110,10 @@ packages. The repository gate rejects direct Kernel, Desktop, Workbench, or HTML
 | `FileTypeIcon` | 按文件类型渲染带品牌色的文件图标         |
 | `Label`        | 表单字段标签                            |
 | `Link`         | 行内文本链接                            |
+| `MarqueeText`  | 溢出时横向滚动的单行文本                 |
 | `Paragraph`    | 正文段落文本                            |
 | `Progress`     | 线性进度条                              |
+| `RenderErrorBoundary` | 渲染错误边界（坏一格降级一格，不拖垮整页）|
 | `Result`       | 结果态大块反馈（成功 / 失败 / 信息）     |
 | `Skeleton`     | 加载骨架占位                            |
 | `Spin`         | 旋转加载指示器                          |
@@ -122,7 +184,10 @@ packages. The repository gate rejects direct Kernel, Desktop, Workbench, or HTML
 | `CompactToolRow`            | 紧凑工具调用行                                   |
 | `ToolDisclosureCard`        | 工具披露卡                                       |
 | `InteractionSuggestionCard` | 交互建议卡（AI 引导选项）                        |
-| `Settings`                  | 设置页版式（分节 + 设置行）                      |
+| `Settings`（Section/Card/Row） | 设置页版式（分节 + 设置卡 + 设置行）          |
+| `SessionStickyDock`         | 会话内吸顶停靠条                                 |
+| `ChatInteractionNotice`     | 对话内交互提示条（tone 三档）                    |
+| `WorkspaceSpaceIcon` / `WorkspaceSpaceStatusIcon` | 空间图标 / 空间状态图标        |
 | `TopBarControlFrame`        | 跨产品顶栏控制视觉框架                           |
 | `CopyButton` / `DeleteOutlineIconButton` | 复制 / 描边删除 图标动作按钮        |
 | `BusinessCascadingMenu`     | 无状态业务级级联菜单组合（Desktop 与 Workbench 共用）|
@@ -141,8 +206,13 @@ packages. The repository gate rejects direct Kernel, Desktop, Workbench, or HTML
 | UI base        | `--ui-radius-*` / `--ui-space-*` / `--ui-border-*` / `--ui-shadow-*` / `--ui-font-*` | 布局与 chrome |
 | Theme          | `[data-theme="light"]` / `[data-theme="dark"]`    | 主题切换（dark 当前为占位）        |
 
-令牌入口 `styles/tokens/design-tokens.css`（@import `theme-light.css` + `theme-dark.css` +
-`seed-presets.css`）。官方预置组合（`velar-indigo` 默认 / `graphite-blue` / `forest-amber` /
+**怎么用这些令牌**（克制的调色 / 层次靠间距与边框而非阴影 / 圆角与密度档位 / 暗色对称规则）
+见 [velaros 简约风格](./docs/velaros-style.zh-CN.md) —— 每条带判据与反例，末尾有自查清单。
+
+令牌入口 `styles/tokens/design-tokens.css`（@import `foundation.css` + `theme-light.css` +
+`theme-dark.css` + `seed-presets.css`；后者只准覆盖前者）。`foundation.css` 承载**主题无关地基**
+（字重 / 字号档 / 容器宽 / 动画 / 绝对中性色），取值对齐 Tailwind v4 默认主题——它的存在是为了
+让本包发布的 CSS **自包含**，不再依赖消费方恰好装了 Tailwind（详见该文件头判决）。官方预置组合（`velar-indigo` 默认 / `graphite-blue` / `forest-amber` /
 `plum-rose` / `slate-teal`）见 `styles/tokens/seed-presets.css`，经 `data-velar-preset` 激活；
 用户自定义种子的配置接口形状见 [`docs/ui-color-seeds.md`](../../docs/ui-color-seeds.md)（改文件即生效）。
 
@@ -203,5 +273,26 @@ not import each other's pages or feature implementations.
    与 `utils/filePresentation.ts`（文件类型品牌色）。分批：①把可映射到现有语义令牌的裸色值
    直接替换；②为反复出现的阴影 / 遮罩 rgba 抽语义令牌（如 `--ui-shadow-*` / overlay tint）；
    ③文件类型品牌色抽成一族 `--brand-file-*` 令牌。收敛随 renderer 收割批推进（不在组件正规化批内）。
+
+3. **门覆盖面缺口**（QU 深读实测，五路侦察一致命中）：Platform 的 `eslint/ui.config.mjs`
+   **既未启用 `react-hooks/exhaustive-deps`，也未加载 `arch-guard-velaros` 插件**，所以
+   code-standard 附录 A 里那 44 条 `velaros/code-style/*`（缺席值八条族、`forbid-swallowed-errors`、
+   `forbid-trivial-function-wrapper`、`require-chinese-comments`、`prefer-is-plain-object-*`、
+   `forbid-iszh-locale-copy-ternary` …）在本包**一条都不跑**。Desktop 侧这些族接近零违规而本包
+   成片存在，**不是纪律松，是门没铺过来**（§6.3「没挂链的门等于没有门」）。
+   建议优先级最高的补门项：`exhaustive-deps`（warn + 基线棘轮）→ arch-guard code-style 族。
+4. **门口径盲区**（两条，判据上是违规但机械上看不见）：
+   ① `check:ui-color-literal` 的 CSS 扫描面只有 `styles/components/**`，**`*.module.css` 不在面内**
+   （实测 `HtmlPreview.module.css` 有 22 条裸色值完全隐形）；而 `htmlPreviewDesignCss.generated.ts`
+   是**构建产物**却贡献了 314 条基线里的 60 条（19%），重新生成即触发棘轮红——生成物钉进人工基线
+   是错配，应豁免生成物、纳入 module.css。
+   ② `check:ui-form-closure` 只认名字以 `Props` 结尾的声明，**内联对象字面量 props**（CardKit 六件）、
+   `Pick<X,'className'>` 转发、以及**导出 className 拼接函数**（`TopBarControlFrame` 四个
+   `getXxxClassName`，Desktop 侧 11 个文件在用）全部在扫描面外，约 11 条同类逃生口不计入 99。
+5. **悬空 `velar-*` 类名 4 条**（TSX 里写了、CSS 全仓无定义）：
+   `velar-calendar-nav-button-{next,previous}`、`velar-number-input-step-down`、
+   `velar-switch-tone-default`。无门覆盖；建议加一条"类名↔CSS 规则"的构造级探针。
+6. **孤儿样式**：`styles/components/primitives/transient-popup.css` 被 `index.css` @import，
+   但两仓源码零引用其类名。
 
 进度看板对齐 [`docs/debt-census-2026-07.md`](../../docs/debt-census-2026-07.md) 口径（棘轮只降不升）。

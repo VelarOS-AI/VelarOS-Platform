@@ -30,17 +30,16 @@ const resultVariants = cva('velar-result', {
 })
 
 function DefaultResultIcon({ tone }: { tone: NonNullable<VariantProps<typeof resultVariants>['tone']> }): React.ReactElement {
-  const cls = 'shrink-0'
   const size = 36
   switch (tone) {
     case 'success':
-      return <CheckCircleIcon className={cls} size={size} weight="duotone" aria-hidden />
+      return <CheckCircleIcon size={size} weight="duotone" aria-hidden />
     case 'warning':
-      return <WarningCircleIcon className={cls} size={size} weight="duotone" aria-hidden />
+      return <WarningCircleIcon size={size} weight="duotone" aria-hidden />
     case 'error':
-      return <XCircleIcon className={cls} size={size} weight="duotone" aria-hidden />
+      return <XCircleIcon size={size} weight="duotone" aria-hidden />
     default:
-      return <InfoIcon className={cls} size={size} weight="duotone" aria-hidden />
+      return <InfoIcon size={size} weight="duotone" aria-hidden />
   }
 }
 
