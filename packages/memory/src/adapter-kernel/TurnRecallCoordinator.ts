@@ -20,6 +20,8 @@ const RecallMaxInjectPerTurn = 3
 const RecallLedgerMaxEntries = 16
 /** 已注入去重集的会话数上限，超出按插入序淘汰。 */
 const InjectedSessionsMax = 128
+/** 引擎发送前可等待召回的硬预算；超时后本轮跳过，不阻塞发送、不重试。 */
+const AwaitableRecallTimeoutMs = 2_000
 
 export interface MemoryTurnRecallDeps {
   /**
@@ -40,6 +42,11 @@ export interface MemoryTurnRecallInput {
   query: string
   workspaceRoot?: LooseOptional<string>
   contextId?: LooseOptional<string>
+}
+
+/** 供外部引擎 prompt 前缀消费的只读召回结果；空数组表示关闭、跳过、失败或超时。 */
+export interface MemoryTurnRecallResult {
+  summaries: string[]
 }
 
 /**
@@ -86,7 +93,7 @@ export class MemoryTurnRecallCoordinator {
     if (this.inFlightSessions.has(input.sessionId)) return
 
     this.inFlightSessions.add(input.sessionId)
-    void this.recall(input, query)
+    void this.recall(input, query, true)
       .catch((error) => {
         log.debug('turn memory recall failed; skipping injection', {
           sessionId: input.sessionId,
@@ -96,6 +103,51 @@ export class MemoryTurnRecallCoordinator {
       .finally(() => {
         this.inFlightSessions.delete(input.sessionId)
       })
+  }
+
+  /**
+   * 外部引擎发送前的可等待入口。
+   *
+   * 与 Solo 的 {@link notifyUserMessage} 完全分离：调用方最多等待 2 秒；关闭、并发、失败或超时
+   * 都返回空结果，绝不拦发送且本轮不重试。召回项直接回给引擎 prompt，不写 turn-context
+   * 账本，避免同一份记忆再被下一轮上下文源重复投递。
+   */
+  public async recallUserMessage(
+    input: MemoryTurnRecallInput,
+    timeoutMs = AwaitableRecallTimeoutMs
+  ): Promise<MemoryTurnRecallResult> {
+    if (!(this.deps.isEnabled?.() ?? true)) return { summaries: [] }
+    const query = input.query.trim().slice(0, RecallQueryMaxChars)
+    if (query.length < RecallMinQueryChars || this.inFlightSessions.has(input.sessionId))
+      return { summaries: [] }
+
+    this.inFlightSessions.add(input.sessionId)
+    let expired = false
+    let timer: Nullable<ReturnType<typeof setTimeout>> = null
+    const recallTask = this.recall(input, query, false, () => expired)
+      .then((summaries) => ({ summaries }))
+      .catch((error) => {
+        log.debug('awaitable turn memory recall failed; skipping injection', {
+          sessionId: input.sessionId,
+          error: AppError.getMessage(error),
+        })
+        return { summaries: [] }
+      })
+      .finally(() => {
+        this.inFlightSessions.delete(input.sessionId)
+      })
+
+    const result = await Promise.race([
+      recallTask,
+      new Promise<MemoryTurnRecallResult>((resolve) => {
+        timer = setTimeout(() => {
+          expired = true
+          resolve({ summaries: [] })
+        }, Math.min(timeoutMs, AwaitableRecallTimeoutMs))
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+    return result
   }
 
   /** 环境回合上下文 source adapter：纯内存读账本，无 IO。 */
@@ -116,7 +168,12 @@ export class MemoryTurnRecallCoordinator {
     this.injectedIdsBySession.delete(sessionId)
   }
 
-  private async recall(input: MemoryTurnRecallInput, query: string): Promise<void> {
+  private async recall(
+    input: MemoryTurnRecallInput,
+    query: string,
+    appendToLedger: boolean,
+    isExpired: () => boolean = () => false
+  ): Promise<string[]> {
     const scope = this.deps.resolveScope({
       sessionId: input.sessionId,
       workspaceRoot: input.workspaceRoot,
@@ -140,19 +197,26 @@ export class MemoryTurnRecallCoordinator {
         deep: true,
       })
     }
+    if (isExpired()) return []
 
     const injectedIds = this.injectedIdsFor(input.sessionId)
     const freshCandidates = candidates.filter((candidate) => !injectedIds.has(candidate.id))
-    if (isEmpty(freshCandidates)) return
+    if (isEmpty(freshCandidates)) return []
 
+    const summaries: string[] = []
     for (const memory of freshCandidates.slice(0, RecallMaxInjectPerTurn)) {
       injectedIds.add(memory.id)
-      this.ledgers.append(input.sessionId, {
-        label: `记忆：${this.truncate(memory.title, 16)}`,
-        summaryText: this.formatSummary(memory),
-        inspect: { tool: 'get_memory', argsHint: { id: memory.id } },
-      })
+      const summaryText = this.formatSummary(memory)
+      summaries.push(summaryText)
+      if (appendToLedger) {
+        this.ledgers.append(input.sessionId, {
+          label: `记忆：${this.truncate(memory.title, 16)}`,
+          summaryText,
+          inspect: { tool: 'get_memory', argsHint: { id: memory.id } },
+        })
+      }
     }
+    return summaries
   }
 
   private formatSummary(memory: MemoryRecallItem): string {
