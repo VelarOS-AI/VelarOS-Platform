@@ -10,7 +10,17 @@
  */
 import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
-/** I2 蒸馏档位。`off`=纯机械；`aux`=辅助模型（默认）；`main`=主模型；`adaptive`=按需（论文主臂）。 */
+/**
+ * I2 蒸馏档位 —— 论文 RQ3 的三条实验臂，同一条代码路径，差异只在"什么时刻肯花这一跳"。
+ *
+ *  - `off`：从不花（A0/A1 臂，纯机械）。
+ *  - `aux`（默认）/ `main`：**机械器械没达标就花**（A2-distill-always），差别只是宿主拿辅助模型
+ *    还是主模型去跑。
+ *  - `adaptive`：在 `aux` 的前提上再过三道判据——缺口够大 / 段落价值密度够高 / 预计节省 ≥ 调用
+ *    成本的若干倍（A3，论文主臂，阈值见 {@link ContextDistillAdaptiveConfig}）。
+ *
+ * 四档都不会在"机械器械已经达标"时花这一跳：那时候段落根本不必折，蒸馏就没有对照物。
+ */
 export type ContextDistillInstrument = 'off' | 'aux' | 'main' | 'adaptive'
 
 export interface ContextAdmissionConfig {
@@ -37,6 +47,58 @@ export interface ContextInstrumentConfig {
   distill: ContextDistillInstrument
 }
 
+/**
+ * adaptive 档的三道判据（论文 RQ3 的机制本体）。
+ *
+ * 三个阈值一个都不写死在逻辑里：它们**就是**"什么时刻值得一次 LLM 调用"这个研究问题的自由度，
+ * 写死等于把结论钉在代码里再去测它。全部列为 B4 扫参对象。
+ */
+export interface ContextDistillAdaptiveConfig {
+  /** ① 机械器械（I0+I1）跑完后距目标水位至少还差这么多百分点（占 G），才认为骨架不足以达标。 */
+  minShortfallPercent: number
+  /** ② 段落价值密度：叙事字符量下限——太短的段落省不出调用成本。 */
+  minNarrativeChars: number
+  /**
+   * ② 段落价值密度：锚点密度上限（每千字符）。
+   *
+   * 锚点密集的段落规则骨架已经抽得很好，LLM 加不了多少值。**默认值刻意高于 I0 的
+   * `LowAnchorDensityPerKiloChar`（2）**：I2 规划发生在 I0 之后，密度低于 2 的叙事早被 I0 逐出
+   * 并折进骨架了，能活到 I2 面前的段落密度必然 ≥ 2。两条阈值取同一个数，等于把 I2 永久关死。
+   */
+  maxAnchorDensityPerKiloChar: number
+  /**
+   * ③ 预计（摊销后）节省 token / 预计调用成本 token 的最小倍数。
+   *
+   * 节省是**每次请求都省**的经常性收益，调用成本是**一次性**支出，两者不同量纲，直接比是错的。
+   * 所以先按 {@link amortizationRequests} 把节省摊到若干次请求上，再和成本比。
+   */
+  minSavingToCostRatio: number
+  /**
+   * ③ 摊销窗口：预计到下一个 epoch 之前还要发多少次请求。
+   *
+   * 这是"这次蒸馏能省几遍"的估计值——设成 1 就是要求一次调用当场回本（几乎不可能：输入里本来
+   * 就装着整个段落），设得过大则任何段落都值得蒸。B4 扫参对象。
+   */
+  amortizationRequests: number
+}
+
+/** I2 蒸馏的成本护栏与产物规格（档位之外的全部旋钮）。 */
+export interface ContextDistillConfig {
+  /** 每个 epoch 最多规划几段蒸馏（并发仍恒为 1，多出来的排队）。 */
+  maxSegmentsPerEpoch: number
+  /** 单次蒸馏的输入字符上限（沿用 v1 `MaxSummarizerInputChars` 的 48K）。 */
+  maxInputChars: number
+  /** 产物正文的目标字符数。 */
+  targetChars: number
+  /** 单次蒸馏超时（毫秒），到点回落 I1 骨架。 */
+  timeoutMs: number
+  /** 必须逐字保留的锚点条数上限（提示词里明示，产物按此逐条验证）。 */
+  maxRequiredAnchors: number
+  /** 段落进入蒸馏的最小字符数。 */
+  minSegmentChars: number
+  adaptive: ContextDistillAdaptiveConfig
+}
+
 export interface ContextGovernanceConfig {
   /** 治理窗口上限：G = min(模型窗口, cap)。 */
   cap: number
@@ -50,6 +112,8 @@ export interface ContextGovernanceConfig {
   minEpochSavingPercent: number
   admission: ContextAdmissionConfig
   instruments: ContextInstrumentConfig
+  /** I2 蒸馏的成本护栏与 adaptive 判据（档位在 `instruments.distill`）。 */
+  distillation: ContextDistillConfig
   /** 活动尾的 context-dashboard 块（模型本体感知）。 */
   dashboard: boolean
   /**
@@ -66,9 +130,24 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   epochTargetPercent: 40,
   minEpochSavingPercent: 10,
   admission: { inlineMaxChars: 24_000, userInlineMaxChars: 48_000, excerptMaxChars: 24_000 },
-  // distill 默认 'off' 到 B2 落地为止：I2 尚未实现，默认到一条恒降级路径只会刷警告。
-  // B2 交付后本默认切 'aux'（设计 §7 的终态默认）。
-  instruments: { skeleton: true, distill: 'off' },
+  // B2 起默认 'aux'（设计 §7 的终态默认）：宿主没注入蒸馏器时它自动退化为纯机械
+  // （`skipReason: 'no-distiller'`），所以默认开档对 headless / 测试 / 无模型环境是安全的。
+  instruments: { skeleton: true, distill: 'aux' },
+  distillation: {
+    maxSegmentsPerEpoch: 1,
+    maxInputChars: 48_000,
+    targetChars: 2_400,
+    timeoutMs: 45_000,
+    maxRequiredAnchors: 24,
+    minSegmentChars: 4_000,
+    adaptive: {
+      minShortfallPercent: 5,
+      minNarrativeChars: 8_000,
+      maxAnchorDensityPerKiloChar: 6,
+      minSavingToCostRatio: 1.5,
+      amortizationRequests: 5,
+    },
+  },
   dashboard: true,
   epochBatching: true,
 }
@@ -107,6 +186,21 @@ export interface ContextGovernanceConfigInput {
   instruments?: LooseOptional<{
     skeleton?: LooseOptional<boolean>
     distill?: LooseOptional<string>
+  }>
+  distillation?: LooseOptional<{
+    maxSegmentsPerEpoch?: LooseOptional<number>
+    maxInputChars?: LooseOptional<number>
+    targetChars?: LooseOptional<number>
+    timeoutMs?: LooseOptional<number>
+    maxRequiredAnchors?: LooseOptional<number>
+    minSegmentChars?: LooseOptional<number>
+    adaptive?: LooseOptional<{
+      minShortfallPercent?: LooseOptional<number>
+      minNarrativeChars?: LooseOptional<number>
+      maxAnchorDensityPerKiloChar?: LooseOptional<number>
+      minSavingToCostRatio?: LooseOptional<number>
+      amortizationRequests?: LooseOptional<number>
+    }>
   }>
   dashboard?: LooseOptional<boolean>
   epochBatching?: LooseOptional<boolean>
@@ -161,6 +255,7 @@ export function resolveContextGovernanceConfig(
       skeleton: input?.instruments?.skeleton ?? defaults.instruments.skeleton,
       distill: resolveDistillInstrument(input?.instruments?.distill),
     },
+    distillation: resolveDistillationConfig(input?.distillation),
     dashboard: input?.dashboard ?? defaults.dashboard,
     epochBatching: input?.epochBatching ?? defaults.epochBatching,
   }
@@ -182,6 +277,69 @@ export function resolveGovernanceWindowTokens(
   return Math.min(Math.floor(modelWindowTokens), config.cap)
 }
 
+/**
+ * 蒸馏护栏的宽容解析。
+ *
+ * 两条语义不变量在这里兜住，而不是靠调用方自觉：
+ *  - `targetChars` 必须严格小于 `maxInputChars`——目标比输入还大，产物永远过不了"不比原段落短"
+ *    那道验证，等于配置一手把 I2 关死；
+ *  - `minSegmentChars` 不得超过 `maxInputChars`——否则永远选不出段。
+ */
+function resolveDistillationConfig(
+  input: ContextGovernanceConfigInput['distillation']
+): ContextDistillConfig {
+  const defaults = DefaultContextGovernanceConfig.distillation
+  const maxInputChars = clampInteger(input?.maxInputChars, defaults.maxInputChars, 1_000, 1_000_000)
+  const targetChars = Math.min(
+    clampInteger(input?.targetChars, defaults.targetChars, 200, 100_000),
+    Math.max(200, Math.floor(maxInputChars / 2))
+  )
+
+  return {
+    maxSegmentsPerEpoch: clampInteger(input?.maxSegmentsPerEpoch, defaults.maxSegmentsPerEpoch, 1, 8),
+    maxInputChars,
+    targetChars,
+    timeoutMs: clampInteger(input?.timeoutMs, defaults.timeoutMs, 100, 600_000),
+    maxRequiredAnchors: clampInteger(input?.maxRequiredAnchors, defaults.maxRequiredAnchors, 0, 200),
+    minSegmentChars: Math.min(
+      clampInteger(input?.minSegmentChars, defaults.minSegmentChars, 0, 1_000_000),
+      maxInputChars
+    ),
+    adaptive: {
+      minShortfallPercent: clampNumber(
+        input?.adaptive?.minShortfallPercent,
+        defaults.adaptive.minShortfallPercent,
+        0,
+        100
+      ),
+      minNarrativeChars: clampInteger(
+        input?.adaptive?.minNarrativeChars,
+        defaults.adaptive.minNarrativeChars,
+        0,
+        1_000_000
+      ),
+      maxAnchorDensityPerKiloChar: clampNumber(
+        input?.adaptive?.maxAnchorDensityPerKiloChar,
+        defaults.adaptive.maxAnchorDensityPerKiloChar,
+        0,
+        1_000
+      ),
+      minSavingToCostRatio: clampNumber(
+        input?.adaptive?.minSavingToCostRatio,
+        defaults.adaptive.minSavingToCostRatio,
+        0,
+        1_000
+      ),
+      amortizationRequests: clampInteger(
+        input?.adaptive?.amortizationRequests,
+        defaults.adaptive.amortizationRequests,
+        1,
+        1_000
+      ),
+    },
+  }
+}
+
 function resolveDistillInstrument(value: LooseOptional<string>): ContextDistillInstrument {
   const normalized = value?.trim().toLowerCase()
   const matched = DistillInstruments.find((instrument) => instrument === normalized)
@@ -196,6 +354,17 @@ function clampInteger(
 ): number {
   if (!isPresent(value) || !isFiniteNumber(value)) return fallback
   return Math.min(max, Math.max(min, Math.floor(value)))
+}
+
+/** 小数保真的钳制（比率类阈值不能取整——1.5 取整成 1 就换了一个策略）。 */
+function clampNumber(
+  value: LooseOptional<number>,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (!isPresent(value) || !isFiniteNumber(value)) return fallback
+  return Math.min(max, Math.max(min, value))
 }
 
 function clampPercent(value: LooseOptional<number>, fallback: number): number {

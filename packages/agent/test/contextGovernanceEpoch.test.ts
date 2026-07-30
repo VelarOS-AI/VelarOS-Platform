@@ -333,7 +333,7 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
     assert.equal(ledger.residencyOf(skeleton.id), 'INLINE')
   })
 
-  void test('distill 档位非 off 时显式记为"降级为骨架"，不静默', () => {
+  void test('没有待落地产物时 epoch 的 I2 分账全零，档位仍照实记账', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 0,
       minEpochSavingPercent: 1,
@@ -351,7 +351,8 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
       at: 1,
       modelRequested: true,
     })
-    assert.equal(report.distillDowngradedToSkeleton, true)
+    assert.equal(report.distill.mode, 'adaptive')
+    assert.equal(report.distill.appliedProducts, 0)
     assert.equal(report.byInstrument.distill, 0)
   })
 

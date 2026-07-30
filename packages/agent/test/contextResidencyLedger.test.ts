@@ -408,6 +408,7 @@ void describe('context residency ledger · governance config (§7)', () => {
       minEpochSavingPercent: 0,
       admission: { inlineMaxChars: 1 },
       instruments: { distill: 'nope' },
+      distillation: { targetChars: 999_999, minSegmentChars: 999_999, maxInputChars: 20_000 },
     })
 
     assert.equal(resolved.cap, 1_000)
@@ -416,7 +417,13 @@ void describe('context residency ledger · governance config (§7)', () => {
     assert.equal(resolved.epochTargetPercent, 99)
     assert.equal(resolved.minEpochSavingPercent, 1)
     assert.equal(resolved.admission.inlineMaxChars, 200)
-    assert.equal(resolved.instruments.distill, 'off')
+    // 未知档位回落**默认档**（B2 起 'aux'）：把手滑的配置解释成"关掉治理"比解释成"用默认策略"危险。
+    assert.equal(resolved.instruments.distill, 'aux')
+    // 蒸馏护栏的两条语义不变量：目标不得 ≥ 输入的一半（否则产物永远过不了"更短"那道验证），
+    // 段落下限不得超过输入上限（否则永远选不出段）。
+    assert.equal(resolved.distillation.maxInputChars, 20_000)
+    assert.equal(resolved.distillation.targetChars, 10_000)
+    assert.equal(resolved.distillation.minSegmentChars, 20_000)
   })
 
   void test('defaults match the design sheet and excerpt budget tracks the admission threshold', () => {

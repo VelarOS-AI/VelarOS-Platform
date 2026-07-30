@@ -126,7 +126,7 @@ export function buildContextSkeleton(input: ContextSkeletonInput): Nullable<Cont
   const members = [...input.members].sort((left, right) => left.seq - right.seq)
   if (isEmpty(members)) return null
 
-  const anchors = collectSkeletonAnchors(members)
+  const anchors = collectContextAnchorUnion(members)
   const fields = collectSkeletonFields(members, anchors)
   const lines = SkeletonFieldOrder.map((field) => renderSkeletonField(field, fields[field])).filter(
     (line): line is string => Boolean(line)
@@ -134,10 +134,8 @@ export function buildContextSkeleton(input: ContextSkeletonInput): Nullable<Cont
   if (isEmpty(lines) && isEmpty(anchors)) return null
 
   const memberIds = members.map((member) => member.id)
-  const anchorLine = isEmpty(anchors)
-    ? null
-    : `- 锚点：${anchors.slice(0, MaxSkeletonAnchors).join(' | ')}`
-  const recallLine = renderRecallLine(members)
+  const anchorLine = renderContextAnchorLine(anchors)
+  const recallLine = renderContextRecallLine(members)
   const header = `${SkeletonHeaderPrefix} epoch=${input.epoch} members=${members.length}]`
   const text = clampSkeletonText(
     [header, ...lines, anchorLine, recallLine].filter((line): line is string => Boolean(line)).join('\n')
@@ -151,7 +149,13 @@ export function isContextSkeletonText(value: string): boolean {
   return value.trimStart().startsWith(SkeletonHeaderPrefix)
 }
 
-function collectSkeletonAnchors(members: readonly ContextRecord[]): string[] {
+/**
+ * 成员锚点并集（归一 + 去重 + 码元序）。
+ *
+ * I1 骨架与 I2 蒸馏共用同一份：锚点在准入期就抽好存在记录元数据上，两档器械读的必须是同一批，
+ * 否则"蒸馏产物少了哪个锚点"这个判断会拿另一套口径去问。
+ */
+export function collectContextAnchorUnion(members: readonly ContextRecord[]): string[] {
   const seen = new Set<string>()
   for (const member of members) {
     for (const anchor of member.anchors) {
@@ -161,6 +165,32 @@ function collectSkeletonAnchors(members: readonly ContextRecord[]): string[] {
   }
 
   return [...seen].sort(compareStableStrings)
+}
+
+/** 锚点行（I1/I2 共用）。空集不写空行——一条只有标签的行是纯噪声。 */
+export function renderContextAnchorLine(anchors: readonly string[]): Nullable<string> {
+  if (isEmpty(anchors)) return null
+
+  return `- 锚点：${anchors.slice(0, MaxSkeletonAnchors).join(' | ')}`
+}
+
+/**
+ * 无损指针行（P5，I1/I2 共用）：列出成员里**真能召回**的引用。
+ * 纯叙事成员没有 ref，不写空指引——给一个召不回的指针只会换来一次空转召回。
+ */
+export function renderContextRecallLine(members: readonly ContextRecord[]): Nullable<string> {
+  const refs: string[] = []
+  const seen = new Set<string>()
+  for (const member of members) {
+    const ref = member.excerpt?.ref ?? member.payloadRef ?? member.toolCallId
+    if (!ref || seen.has(ref)) continue
+    seen.add(ref)
+    refs.push(ref)
+    if (refs.length >= MaxSkeletonRecallRefs) break
+  }
+  if (isEmpty(refs)) return null
+
+  return `- 召回：${refs.join(' | ')}（recall_context）`
 }
 
 function collectSkeletonFields(
@@ -267,22 +297,6 @@ function renderSkeletonField(field: ContextSkeletonField, items: readonly string
   if (isEmpty(items)) return null
 
   return `- ${SkeletonFieldLabels[field]}：${items.join(' | ')}`
-}
-
-/** 无损指针行（P5）：列出成员里**真能召回**的引用；纯叙事成员没有 ref，不写空指引。 */
-function renderRecallLine(members: readonly ContextRecord[]): Nullable<string> {
-  const refs: string[] = []
-  const seen = new Set<string>()
-  for (const member of members) {
-    const ref = member.excerpt?.ref ?? member.payloadRef ?? member.toolCallId
-    if (!ref || seen.has(ref)) continue
-    seen.add(ref)
-    refs.push(ref)
-    if (refs.length >= MaxSkeletonRecallRefs) break
-  }
-  if (isEmpty(refs)) return null
-
-  return `- 召回：${refs.join(' | ')}（recall_context）`
 }
 
 function clampSkeletonText(text: string): string {
