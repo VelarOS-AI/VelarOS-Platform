@@ -1,5 +1,5 @@
-import type { HtmlArtifactRenderPatch } from './protocol.js'
 import { HTML_ARTIFACT_HEIGHT_CONTROLLER_FACTORY_SOURCE } from './height-controller.js'
+import type { HtmlArtifactRenderPatch } from './protocol.js'
 
 export type HtmlArtifactContentKind = 'html' | 'svg'
 

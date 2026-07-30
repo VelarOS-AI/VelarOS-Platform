@@ -22,9 +22,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 function normalizeVectorFailureKey(scope: string, message: string): string {
-  if (/invalid_issuer|valid issuer|401 Unauthorized/i.test(message)) {
-    return `${scope}:embedding-auth-invalid-issuer`
-  }
+  if (/invalid_issuer|valid issuer|401 Unauthorized/i.test(message)) return `${scope}:embedding-auth-invalid-issuer`
 
   if (/authorization|api[_ -]?key|401/i.test(message)) return `${scope}:embedding-auth`
 

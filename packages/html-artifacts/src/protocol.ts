@@ -152,20 +152,20 @@ export class HtmlArtifactProtocolParser {
     })
   }
 
-  write(chunk: string): HtmlArtifactProtocolEvent[] {
+  public write(chunk: string): HtmlArtifactProtocolEvent[] {
     return applyHtmlArtifactProtocolChunk(this.currentState, chunk)
   }
 
-  finish(): HtmlArtifactProtocolEvent[] {
+  public finish(): HtmlArtifactProtocolEvent[] {
     return finalizeHtmlArtifactProtocol(this.currentState)
   }
 
-  getSnapshot(artifactId: string): HtmlArtifactSnapshot | null {
+  public getSnapshot(artifactId: string): HtmlArtifactSnapshot | null {
     const snapshot = this.currentState.artifactsById[artifactId]
     return snapshot ? { ...snapshot } : null
   }
 
-  reset(): void {
+  public reset(): void {
     this.currentState = createHtmlArtifactProtocolStreamState(this.options)
   }
 }

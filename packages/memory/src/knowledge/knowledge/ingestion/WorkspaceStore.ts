@@ -882,9 +882,7 @@ class KnowledgeWorkspace {
     })
     if (hostDecision === false) return false
 
-    if (isDirectory && (name.startsWith('.') || DEFAULT_HIDDEN_DIRECTORIES.has(name))) {
-      return false
-    }
+    if (isDirectory && (name.startsWith('.') || DEFAULT_HIDDEN_DIRECTORIES.has(name))) return false
     return name !== '.DS_Store' && !name.endsWith('.map')
   }
 

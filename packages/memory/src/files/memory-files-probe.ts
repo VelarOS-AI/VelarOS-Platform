@@ -58,7 +58,7 @@ function createBackend(io: InMemoryMemoryFilesIo, roots = [GlobalRoot, ProjectRo
 }
 
 // ── ① 写入 → 索引 → 召回往返 ────────────────────────────────────────────────
-function probeRoundTrip(): void {
+async function probeRoundTrip(): Promise<void> {
   const io = createInMemoryMemoryFilesIo()
   const backend = createBackend(io)
 
@@ -133,7 +133,7 @@ function probeRoundTrip(): void {
   )
 
   // 未命中的条目不该被读进召回结果——索引行匹配是第一道闸。
-  backend.capture(
+  await backend.capture(
     evidence({ title: '完全无关的主题', content: '数据库连接池调参笔记。', scopeId: 'global' }),
   )
   const narrowed = backend.recall('回复风格', { limit: 5 }) as Array<{ title: string }>
@@ -154,7 +154,7 @@ function probeRoundTrip(): void {
 }
 
 // ── ② frontmatter 宽容解析 ─────────────────────────────────────────────────
-function probeForgivingFrontmatter(): void {
+async function probeForgivingFrontmatter(): Promise<void> {
   const missing = parseMemoryFileDocument('# 手写标题\n\n这是第一段描述。\n\n第二段。', 'fallback')
   check(!missing.hadFrontmatter, '无 frontmatter 时 hadFrontmatter=false')
   equal(missing.name, '手写标题', '缺 name 时取正文首个标题')
@@ -202,12 +202,12 @@ function probeForgivingFrontmatter(): void {
 }
 
 // ── ③ 作用域双轨 ───────────────────────────────────────────────────────────
-function probeDualScope(): void {
+async function probeDualScope(): Promise<void> {
   const io = createInMemoryMemoryFilesIo()
   const backend = createBackend(io)
 
-  backend.capture(evidence({ title: '全局偏好', content: '全局内容。', scopeId: 'global' }))
-  backend.capture(
+  await backend.capture(evidence({ title: '全局偏好', content: '全局内容。', scopeId: 'global' }))
+  await backend.capture(
     evidence({
       title: '项目约定',
       content: '本仓提交前必跑 check。',
@@ -252,7 +252,7 @@ function probeDualScope(): void {
     roots: [GlobalRoot, { ...ProjectRoot, readOnly: true }],
     io: readOnlyIo,
   })
-  readOnlyBackend.capture(
+  await readOnlyBackend.capture(
     evidence({
       title: '想写进只读根',
       content: '内容。',
@@ -269,9 +269,9 @@ function probeDualScope(): void {
   let activeRoots: MemoryFilesScopeRoot[] = [GlobalRoot]
   const dynamicIo = createInMemoryMemoryFilesIo()
   const dynamic = createMemoryFilesBackend({ roots: () => activeRoots, io: dynamicIo })
-  dynamic.capture(evidence({ title: '第一处', content: 'a' }))
+  await dynamic.capture(evidence({ title: '第一处', content: 'a' }))
   activeRoots = [ProjectRoot]
-  dynamic.capture(evidence({ title: '第二处', content: 'b' }))
+  await dynamic.capture(evidence({ title: '第二处', content: 'b' }))
   const dynamicFiles = dynamicIo.snapshot()
   check('/userData/memory/entries/第一处.md' in dynamicFiles, '切换前写全局根')
   check(
@@ -281,7 +281,7 @@ function probeDualScope(): void {
 }
 
 // ── ④ 归档语义 ─────────────────────────────────────────────────────────────
-function probeArchive(): void {
+async function probeArchive(): Promise<void> {
   const io = createInMemoryMemoryFilesIo()
   const backend = createBackend(io, [GlobalRoot])
   const captured = backend.capture(
@@ -312,7 +312,7 @@ function probeArchive(): void {
 }
 
 // ── 后端自述 ───────────────────────────────────────────────────────────────
-function probeDescriptor(): void {
+async function probeDescriptor(): Promise<void> {
   const backend = createBackend(createInMemoryMemoryFilesIo())
   equal(backend.descriptor.id, 'files', '后端 id 为 files')
   equal(backend.descriptor.role, 'authority', 'files 是权威层')
@@ -326,11 +326,11 @@ function probeDescriptor(): void {
   equal(stats.pendingCount, 0, '文件后端写入即最终态，无待整理队列')
 }
 
-probeRoundTrip()
-probeForgivingFrontmatter()
-probeDualScope()
-probeArchive()
-probeDescriptor()
+await probeRoundTrip()
+await probeForgivingFrontmatter()
+await probeDualScope()
+await probeArchive()
+await probeDescriptor()
 
 assert.equal(
   assertionCount,

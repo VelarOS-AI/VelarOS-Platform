@@ -9,9 +9,9 @@ import type { ModelAdapter } from './ModelAdapter'
 import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 import type { ChatProviderId } from './ModelContracts'
 import type { ModelProviderCollection } from './ModelProviderCollection'
+import { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 import { OpenAICompatibleModelAdapter } from './OpenAICompatibleModelAdapter'
 import { OpenAIModelAdapter } from './OpenAIModelAdapter'
-import { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
 import {
   ProviderScriptModelAdapter,
   type ProviderScriptRegistry,

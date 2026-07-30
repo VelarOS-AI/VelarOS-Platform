@@ -115,11 +115,9 @@ export function buildTextMatchSnippet(query: string, source: TextSnippetSource):
     source.tags.trim(),
   ].find((value) => !isBlank(value))
 
-  if (!matchedField && !fallbackField) {
-    return isBlank(source.summary)
+  if (!matchedField && !fallbackField) return isBlank(source.summary)
       ? truncate(source.content, KnowledgeIndexConfig.TEXT_SNIPPET_LENGTH)
       : source.summary
-  }
 
   return trimSnippetAroundMatch(matchedField ?? fallbackField ?? '', terms)
 }
@@ -169,9 +167,7 @@ function trimSnippetAroundMatch(value: string, terms: string[]): string {
       .sort((left, right) => left - right)
   )
 
-  if (!isNumber(firstMatchIndex)) {
-    return truncate(value, KnowledgeIndexConfig.TEXT_SNIPPET_LENGTH)
-  }
+  if (!isNumber(firstMatchIndex)) return truncate(value, KnowledgeIndexConfig.TEXT_SNIPPET_LENGTH)
 
   // 起点向前挪一点，结果里能看到命中词前后的语义。
   const start = Math.max(

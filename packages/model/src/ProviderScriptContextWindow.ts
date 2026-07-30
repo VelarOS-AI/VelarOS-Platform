@@ -2,7 +2,6 @@ import { isPlainObject, toOptional, trimmedStringOrEmpty } from '@velaros-ai/cor
 
 import { resolveProviderModelContextWindow } from './ModelCatalog'
 import type { ChatProviderId } from './ModelContracts'
-
 import {
   type ProviderScriptRuntimeMetadata,
   toPositiveInteger,

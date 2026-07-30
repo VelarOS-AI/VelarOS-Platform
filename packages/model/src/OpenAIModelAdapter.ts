@@ -3,6 +3,8 @@ import { createOpenAI, type OpenAIProviderSettings } from '@ai-sdk/openai'
 import { isArray,isBlank, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
+import { ModelAdapter } from './ModelAdapter'
 import {
   isOpenRouterCompatibleProvider,
   OpenRouterAutoModelId,
@@ -13,9 +15,6 @@ import type {
   ModelRequestOptions,
   OpenRouterProviderRoutingPreferences,
 } from './ModelContracts'
-
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
-import { ModelAdapter } from './ModelAdapter'
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 import {

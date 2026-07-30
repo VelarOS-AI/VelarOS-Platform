@@ -15,9 +15,9 @@ import type {
 } from './ModelContracts'
 import {
   getModelProviderOperationalManifest,
-  ModelProviderOperationalManifests,
   type ModelProviderAdapterKind,
   type ModelProviderOperationalManifest,
+  ModelProviderOperationalManifests,
 } from './ProviderManifest'
 import type { ProviderScriptRegistryPort } from './ProviderScriptRegistryPort'
 
@@ -104,8 +104,7 @@ export class ModelProviderCollection {
 
   public requireCatalog(provider: ChatProviderId): SharedProviderCatalog {
     const script = this.providerScripts.getProviderScript(provider)
-    if (script) {
-      return {
+    if (script) return {
         provider,
         defaultModel: script.manifest.defaultModel,
         models: script.manifest.models.map((model) => ({
@@ -113,7 +112,6 @@ export class ModelProviderCollection {
           contextWindow: model.contextWindow,
         })),
       }
-    }
 
     const manifest = getModelProviderOperationalManifest(provider)
     const catalog = getSharedProviderCatalog(provider)
@@ -139,9 +137,7 @@ export class ModelProviderCollection {
 
     const requestedModel = currentModel?.trim() ?? ''
     const models = script.manifest.models.map((model) => model.id)
-    if (requestedModel && models.includes(requestedModel)) {
-      return { model: requestedModel, didFallback: false }
-    }
+    if (requestedModel && models.includes(requestedModel)) return { model: requestedModel, didFallback: false }
 
     return {
       model: script.manifest.defaultModel,
@@ -241,9 +237,7 @@ export class ModelProviderCollection {
       this.findRuntimeConfig(providerRuntimeConfigs, runtimeConfig.provider)
       ?? runtimeConfig
     const manifest = this.requireOperationalManifest(runtimeConfig.provider)
-    if (manifest.adapterKind === 'custom-js') {
-      return !isBlank(config.adapter?.source ?? runtimeConfig.adapter?.source ?? '')
-    }
+    if (manifest.adapterKind === 'custom-js') return !isBlank(config.adapter?.source ?? runtimeConfig.adapter?.source ?? '')
     if (manifest.apiKeyOptional) return true
     if (!isBlank(apiKeyOverride ?? '')) return true
     if (!isBlank(runtimeConfig.apiKey)) return true

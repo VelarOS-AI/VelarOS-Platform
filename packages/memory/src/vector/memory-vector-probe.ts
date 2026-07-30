@@ -55,7 +55,7 @@ function createFakeEmbedder(identity: string, dimensions = FakeEmbeddingDimensio
     embed(texts: readonly string[]): Promise<ReadonlyArray<readonly number[]>> {
       embedder.calls += 1
       return Promise.resolve(texts.map((text) => {
-        const vector = new Array<number>(dimensions).fill(0)
+        const vector: number[] = Array.from({ length: dimensions }, () => 0)
         for (const token of tokenize(text)) {
           vector[hashToken(token) % dimensions] += 1
         }
@@ -119,7 +119,7 @@ function createStack(embedderIdentity = 'fake:v1') {
 }
 
 // ── 后端自述与「不吃原始证据」（⑥） ─────────────────────────────────────────
-function probeDescriptor(): void {
+async function probeDescriptor(): Promise<void> {
   const { derived } = createStack()
 
   equal(derived.descriptor.id, 'vector', '后端 id 为 vector')
@@ -133,7 +133,8 @@ function probeDescriptor(): void {
 
   let captureThrew = false
   try {
-    derived.capture(evidence('x', 'y'))
+    // 契约上 capture 是 awaitable(同步实现也可能换成异步),await 才能同时兜住同步抛与 reject。
+    await derived.capture(evidence('x', 'y'))
   } catch {
     captureThrew = true
   }
@@ -361,7 +362,7 @@ function magnitude(vector: Float32Array): number {
   return Math.sqrt(sum)
 }
 
-probeDescriptor()
+await probeDescriptor()
 await probeDualWrite()
 await probeDerivedFailureIsolation()
 await probeParallelRecall()

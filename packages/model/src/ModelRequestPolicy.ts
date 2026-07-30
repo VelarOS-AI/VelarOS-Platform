@@ -1,4 +1,5 @@
 import { isFiniteNumber } from '@velaros-ai/core'
+
 import type { ModelRequestOptions } from './ModelContracts'
 
 type ModelRequestPolicyTarget = {

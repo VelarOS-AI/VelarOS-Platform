@@ -2,10 +2,9 @@ import { createOpenAI } from '@ai-sdk/openai'
 
 import { isPlainObject, isString, Log } from '@velaros-ai/core'
 
-import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from './ModelContracts'
-
 import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
+import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from './ModelContracts'
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 import { mergeOpenRouterReasoning } from './ThinkingDepthModelOptions'

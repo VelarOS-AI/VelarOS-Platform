@@ -15,6 +15,7 @@ import path from 'node:path'
 import agentConfig from './eslint/agent.config.mjs'
 import capabilitiesConfig from './eslint/capabilities.config.mjs'
 import coreConfig from './eslint/core.config.mjs'
+import htmlArtifactsConfig from './eslint/html-artifacts.config.mjs'
 import kernelConfig from './eslint/kernel.config.mjs'
 import memoryConfig from './eslint/memory.config.mjs'
 import modelConfig from './eslint/model.config.mjs'
@@ -27,7 +28,7 @@ const RepoRoot = import.meta.dirname
 const remapDomainPaths = (domain) => (pattern) =>
   /^tests\//.test(pattern) ? pattern.replace(/^tests\//, `tests/${domain}/`) : pattern
 
-/** 各域的作用域 glob。html-artifacts 源仓无 eslint 门,故不参与(见下方全局 ignores)。 */
+/** 各域的作用域 glob。 */
 const Domains = [
   {
     name: 'kernel',
@@ -80,6 +81,11 @@ const Domains = [
       'component-library/**',
       'tests/ui/**',
     ],
+  },
+  {
+    name: 'html-artifacts',
+    config: htmlArtifactsConfig,
+    globs: ['packages/html-artifacts/**'],
   },
 ]
 
@@ -135,8 +141,6 @@ export default [
       'eslint/**',
       'docs/**',
       'baselines/**',
-      // html-artifacts 源仓(VelarOS-HTML-Artifacts)不带 eslint 门,导入后维持无门现状。
-      'packages/html-artifacts/**',
       // dist-in-src:.js/.d.ts 是 tsc 产物(与 .ts 源同目录),不是源码。
       'packages/*/src/**/*.js',
       'packages/*/src/**/*.d.ts',

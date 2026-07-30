@@ -134,9 +134,7 @@ export function resolveMemoryStoreBackend(
   for (const backendId of input.preference) {
     const token = createMemoryStoreCapabilityToken(backendId, input.capabilityVersion)
     const service = input.registry.getOptionalService(token)
-    if (service?.backend && service.backend.descriptor.role !== 'derived-index') {
-      return service.backend
-    }
+    if (service?.backend && service.backend.descriptor.role !== 'derived-index') return service.backend
   }
   return undefined
 }

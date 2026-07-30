@@ -2,6 +2,7 @@ import type { LanguageModel } from 'ai'
 
 import { isBlank } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
@@ -9,7 +10,6 @@ import type {
   ReasoningLevel,
   ThinkingDepth,
 } from './ModelContracts'
-
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import type { ProviderScriptRuntimeMetadata } from './ProviderScriptRegistryPort'
 
