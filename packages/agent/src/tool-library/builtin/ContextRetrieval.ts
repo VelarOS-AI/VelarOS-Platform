@@ -4,8 +4,6 @@ import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/core/utils/ToolDescription'
 
-import { DynamicHandlesMarker } from '../../agent/history/contextOSMessage'
-
 const MAX_CHARS_MIN = 1_000
 const MAX_CHARS_MAX = 30_000
 
@@ -13,182 +11,6 @@ const MAX_CHARS_MAX = 30_000
 function clampMaxChars(value: number): number {
   return Math.min(MAX_CHARS_MAX, Math.max(MAX_CHARS_MIN, Math.round(value)))
 }
-
-export const searchConversationHistorySchema = z.object({
-  query: z
-    .string()
-    .min(1)
-    .max(240)
-    .describe(
-      parameterDescription({
-        description: '搜索较早可见聊天轮次的聚焦查询。',
-        notes: ['可用文件名、错误、决策或用户意图关键词。'],
-      })
-    ),
-  maxResults: z
-    .number()
-    .transform((value) => Math.min(20, Math.max(1, Math.round(value))))
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少条匹配消息。',
-        notes: ['默认 8。'],
-      })
-    ),
-  maxChars: z
-    .number()
-    .int()
-    .transform(clampMaxChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '每条返回片段的最大字符数。',
-        notes: ['默认 8000，保持有界。'],
-      })
-    ),
-})
-
-export const readEvidenceSchema = z.object({
-  evidenceId: z
-    .string()
-    .min(1)
-    .describe(
-      parameterDescription({
-        description: 'Context OS debug view 或 pinned evidence block 里的 evidence id。',
-      })
-    ),
-  maxChars: z
-    .number()
-    .int()
-    .transform(clampMaxChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少 evidence 摘录字符。',
-        notes: ['默认 8000。'],
-      })
-    ),
-})
-
-export const readToolPayloadSchema = z.object({
-  toolCallId: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '要读取保存 payload 的 tool call id。',
-        notes: ['不要包含 tool: 前缀。'],
-      })
-    ),
-  payloadRef: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '要读取的内容寻址 payload 引用。',
-        notes: ['例如 ctx-payload:session:hash；优先于 toolCallId。'],
-      })
-    ),
-  jsonPath: z
-    .string()
-    .min(1)
-    .max(1_000)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '只取回工具 payload 内某个 JSON path 对应的子树。',
-        notes: ['用于读取序列化截断节点给出的 jsonPath，例如 $.files[0].snapshot。'],
-      })
-    ),
-  reason: z
-    .string()
-    .min(1)
-    .max(240)
-    .describe(
-      parameterDescription({
-        description: '为什么现在需要这份保存的工具 payload。',
-      })
-    ),
-  maxChars: z
-    .number()
-    .int()
-    .transform(clampMaxChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少字符。',
-        notes: ['默认 8000；只有聚焦需求才提高上限。'],
-      })
-    ),
-}).refine((input) => Boolean(input.toolCallId || input.payloadRef), {
-  message: 'toolCallId 或 payloadRef 至少提供一个。',
-})
-
-export const searchTerminalOutputSchema = z.object({
-  query: z
-    .string()
-    .min(1)
-    .max(240)
-    .describe(
-      parameterDescription({
-        description: '搜索已保存内部终端日志的聚焦查询。',
-        notes: ['可用错误文本、命令名或文件路径。'],
-      })
-    ),
-  maxResults: z
-    .number()
-    .transform((value) => Math.min(20, Math.max(1, Math.round(value))))
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少条匹配日志片段。',
-        notes: ['默认 8。'],
-      })
-    ),
-  maxChars: z
-    .number()
-    .int()
-    .transform(clampMaxChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '提取片段前每条日志最多读取多少字符。',
-        notes: ['默认 8000。'],
-      })
-    ),
-})
-
-export const retrieveChatContextSchema = z.object({
-  handleId: z.string().min(1).describe(
-    // 直接引用注入侧 marker 常量，确保 schema describe 跟实际产物里看到的字面量一致。
-    parameterDescription({
-      description: `${DynamicHandlesMarker} 段里展示的动态上下文句柄。`,
-      notes: ['例如 message:12 或 tool:call_abc。'],
-    })
-  ),
-  reason: z
-    .string()
-    .min(1)
-    .max(240)
-    .describe(
-      parameterDescription({
-        description: '为什么现在需要这段已压缩上下文。',
-      })
-    ),
-  maxChars: z
-    .number()
-    .int()
-    .transform(clampMaxChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少字符。',
-        notes: ['默认 8000；只有聚焦需求才提高上限。'],
-      })
-    ),
-})
 
 export const recallContextSchema = z
   .object({
@@ -313,11 +135,6 @@ export const recallContextSchema = z
   })
 
 export type RecallContextInput = z.infer<typeof recallContextSchema>
-export type SearchConversationHistoryInput = z.infer<typeof searchConversationHistorySchema>
-export type ReadEvidenceInput = z.infer<typeof readEvidenceSchema>
-export type ReadToolPayloadInput = z.infer<typeof readToolPayloadSchema>
-export type SearchTerminalOutputInput = z.infer<typeof searchTerminalOutputSchema>
-export type RetrieveChatContextInput = z.infer<typeof retrieveChatContextSchema>
 
 /** recall 精确取回的 refKind 前缀判别:模型可省略 refKind,系统按 ref 形状推断。 */
 export function inferRecallRefKind(
