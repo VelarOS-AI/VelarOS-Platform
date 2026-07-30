@@ -224,10 +224,7 @@ async function verifyExternalConsumer() {
 }
 
 async function packLocalHtmlArtifactsDependency(destination) {
-  const packageDirectory = path.join(
-    path.dirname(repositoryRoot),
-    'VelarOS-HTML-Artifacts'
-  )
+  const packageDirectory = path.join(repositoryRoot, 'packages', 'html-artifacts')
   try {
     await access(path.join(packageDirectory, 'package.json'))
   } catch {
