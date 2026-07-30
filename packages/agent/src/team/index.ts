@@ -4,11 +4,6 @@ export type {
   TeamModelRouteResult,
   TeamModelRoutingPort,
 } from './model-router'
-export {
-  TeamModelRouter,
-  TeamModelRouter as TeamRouter,
-} from './model-router'
-export {
-  WriteLeaseCoordinator as TeamWriteLeaseCoordinator,
-  WriteLeaseCoordinator,
-} from './WriteLease'
+export { TeamModelRouter } from './model-router'
+export type { CapabilityWriteLease } from './WriteLease'
+export { WriteLeaseCoordinator } from './WriteLease'

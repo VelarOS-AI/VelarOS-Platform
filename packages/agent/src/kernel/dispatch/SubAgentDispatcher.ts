@@ -210,6 +210,11 @@ function resolveSubAgentExecutionKey(args: {
   return args.sessionId
 }
 
+/** 工具分类去重（保序）。只做去重——不做展开、不做只读收窄，那两件事分别归类型配置与执行门。 */
+function dedupeToolCategories(categories: readonly ToolCategoryId[]): ToolCategoryId[] {
+  return [...new Set<ToolCategoryId>(categories)]
+}
+
 function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   const rightSet = new Set(right)
@@ -288,7 +293,8 @@ class SubAgentDispatcher {
     const dispatchMode = request.input.mode ?? 'sync'
     const requestedThreadId = request.input.threadId?.trim()
 
-    if (requestedThreadId && request.input.interrupt) return this.handleInterruptDispatch(request, executionKey, requestedThreadId, dispatchMode)
+    if (requestedThreadId && request.input.interrupt)
+      return this.handleInterruptDispatch(request, executionKey, requestedThreadId)
 
     const existingSession = requestedThreadId
       ? this.sessionStore.getSession(requestedThreadId)
@@ -326,11 +332,7 @@ class SubAgentDispatcher {
       : toOptional(customAgent?.readonly)
     const readonlyMode = resolveReadonlyMode(baseTypeConfig.readonlyDefault, readonlyOverride)
     const typeConfig = this.resolveEffectiveTypeConfig(baseTypeConfig, readonlyMode)
-    const initialToolCategories = this.resolveInitialToolCategories(
-      dispatchRequest,
-      typeConfig,
-      readonlyMode
-    )
+    const initialToolCategories = this.resolveInitialToolCategories(dispatchRequest, typeConfig)
 
     if (isResume && requestedThreadId) {
       const resumeIdentityError = this.validateResumeIdentity(
@@ -799,8 +801,7 @@ class SubAgentDispatcher {
   private handleInterruptDispatch(
     request: SubAgentDispatchRequest,
     executionKey: string,
-    threadId: string,
-    _dispatchMode: 'sync' | 'async'
+    threadId: string
   ): string {
     const aborted = this.abortWorker(executionKey, threadId, 'Sub-agent interrupted via dispatch_agent')
     const session = this.sessionStore.getSession(threadId)
@@ -1416,28 +1417,17 @@ class SubAgentDispatcher {
 
   private resolveInitialToolCategories(
     request: SubAgentDispatchRequest,
-    typeConfig: ResolvedSubAgentTypeConfig,
-    readonlyMode: boolean
+    typeConfig: ResolvedSubAgentTypeConfig
   ): ToolCategoryId[] {
     switch (request.input.toolScope ?? 'type_default') {
       case 'inherit':
-        return this.normalizeToolCategories(
-          request.parentCtx.codingSession.getEnabledToolCategories(),
-          readonlyMode
-        )
+        return dedupeToolCategories(request.parentCtx.codingSession.getEnabledToolCategories())
       case 'custom':
-        return this.normalizeToolCategories(request.input.toolCategories ?? [], readonlyMode)
+        return dedupeToolCategories(request.input.toolCategories ?? [])
       case 'type_default':
       default:
-        return this.normalizeToolCategories([...typeConfig.toolCategories], readonlyMode)
+        return dedupeToolCategories([...typeConfig.toolCategories])
     }
-  }
-
-  private normalizeToolCategories(
-    categories: readonly ToolCategoryId[],
-    _readonlyMode: boolean
-  ): ToolCategoryId[] {
-    return this.expandAndDedupeToolCategories(categories)
   }
 
   private async requestToolCategoriesForSubAgent(
@@ -1445,7 +1435,7 @@ class SubAgentDispatcher {
     categories: ToolCategoryId[],
     reason: string
   ): Promise<SubAgentToolCategoryRequestResult> {
-    const expandedRequest = this.expandAndDedupeToolCategories(categories)
+    const expandedRequest = dedupeToolCategories(categories)
     const blockedCategories = expandedRequest.filter((categoryId) =>
       this.isBlockedToolCategory(categoryId)
     )
@@ -1499,10 +1489,6 @@ class SubAgentDispatcher {
           ? `主智能体已处理请求，但子智能体永不开放这些工具分类：${blockedCategories.join(', ')}。其他未开放分类：${skippedCategories.filter((categoryId) => !blockedCategories.includes(categoryId)).join(', ') || '无'}。`
           : `主智能体只开放了部分工具分类，未开放：${skippedCategories.join(', ')}。`,
     }
-  }
-
-  private expandAndDedupeToolCategories(categories: readonly ToolCategoryId[]): ToolCategoryId[] {
-    return [...new Set<ToolCategoryId>(categories)]
   }
 
   private isBlockedToolCategory(categoryId: ToolCategoryId): boolean {

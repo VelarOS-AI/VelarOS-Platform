@@ -85,7 +85,7 @@ function getExtension(filename: string): string {
   return filename.slice(index)
 }
 
-function isVerificationPath(path: string): boolean {
+function isVerificationRelevantPath(path: string): boolean {
   const filename = getPortableBasename(path)
   if (!filename) return false
 
@@ -95,12 +95,10 @@ function isVerificationPath(path: string): boolean {
   )
 }
 
-function hasRelevantVerificationPaths(paths: string[]): boolean {
+function hasVerificationRelevantModifiedPaths(paths: string[]): boolean {
   if (isEmpty(paths)) return true
 
-  return paths.some(isVerificationPath)
+  return paths.some(isVerificationRelevantPath)
 }
 
-export { hasRelevantVerificationPaths, isVerificationPath }
-export { hasRelevantVerificationPaths as hasVerificationRelevantModifiedPaths }
-export { isVerificationPath as isVerificationRelevantPath }
+export { hasVerificationRelevantModifiedPaths, isVerificationRelevantPath }

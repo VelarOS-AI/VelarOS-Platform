@@ -67,5 +67,5 @@ class WriteLeaseCoordinator {
   }
 }
 
+export type { CapabilityWriteLease }
 export { WriteLeaseCoordinator }
-export { WriteLeaseCoordinator as TeamWriteLeaseCoordinator }

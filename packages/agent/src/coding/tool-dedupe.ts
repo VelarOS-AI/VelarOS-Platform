@@ -66,7 +66,7 @@ function buildToolFingerprint(
 }
 
 /**
- * ToolCallDeduper — 拦截幂等工具的“重复刷屏”行为。
+ * CodingToolCallDeduper — 拦截幂等工具的“重复刷屏”行为。
  *
  * 背景：模型有时会连续多次发出完全相同的 tool_replace/read/map / update_plan，
  * 既浪费 token 又会让用户看到大段重复输出。这里基于规范化后的入参指纹来：
@@ -77,7 +77,7 @@ function buildToolFingerprint(
  * fingerprint 规范化通过 `normalizeToolCallFingerprintValue` 对对象 key 排序，
  * 保证模型用不同 key 顺序生成的参数仍可命中同一指纹。
  */
-class ToolCallDeduper {
+class CodingToolCallDeduper {
   private readonly lastIdempotentToolCallFingerprints = new Map<string, string>()
   private readonly promptFeaturePolicy: RuntimePromptFeaturePolicy
 
@@ -168,7 +168,5 @@ class ToolCallDeduper {
   }
 }
 
-export { buildToolFingerprint,ToolCallDeduper }
+export { buildToolFingerprint,CodingToolCallDeduper }
 export type { CodingToolCallDeduperOptions }
-export { ToolCallDeduper as CodingToolCallDeduper }
-export { buildToolFingerprint as buildIdempotentToolCallFingerprint }

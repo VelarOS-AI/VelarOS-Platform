@@ -1,4 +1,4 @@
-import { isPresent } from '@velaros-ai/core'
+import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 
@@ -110,17 +110,17 @@ function normalizeOptionalLabel(value: LooseOptional<string>): Nullable<string> 
 }
 
 function normalizeOptionalNonNegativeInteger(value: LooseOptional<number>): Nullable<number> {
-  if (!isPresent(value) || !Number.isFinite(value) || value < 0) return null
+  if (!isFiniteNumber(value) || value < 0) return null
   return Math.floor(value)
 }
 
 function normalizeNonNegativeInteger(value: number): number {
-  if (!Number.isFinite(value)) return 0
+  if (!isFiniteNumber(value)) return 0
   return Math.max(0, Math.floor(value))
 }
 
 function normalizePercent(value: number): number {
-  if (!Number.isFinite(value)) return 0
+  if (!isFiniteNumber(value)) return 0
   return Math.min(100, Math.max(0, value))
 }
 

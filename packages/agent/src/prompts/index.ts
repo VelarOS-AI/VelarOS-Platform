@@ -3,7 +3,6 @@ export {
   BuiltInPromptCatalog,
   createBuiltInPromptRegistry,
   createBuiltInPromptSegments,
-  BuiltInPromptCatalog as PromptCatalog,
 } from './catalog'
 export type {
   PromptBudgetOptions,
@@ -15,7 +14,7 @@ export type {
   PromptSegmentSource,
   PromptSegmentStability,
 } from './registry'
-export { PromptRegistry, PromptRegistry as PromptSegments } from './registry'
+export { PromptRegistry } from './registry'
 export type {
   RuntimePromptSnapshot,
   RuntimePromptToolCategorySummary,

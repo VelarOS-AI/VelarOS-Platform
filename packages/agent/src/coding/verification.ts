@@ -2,12 +2,8 @@ import type {
   CapabilityValidationInterpreter,
   CapabilityValidationStatus,
 } from '../capabilities'
-
-interface CapabilityValidationFailure {
-  command: string
-  status: 'failed' | 'timed-out'
-  issues: string[]
-}
+// 失败形状单源住 reminders/types（coding → reminders 是既有依赖方向，反过来会成环）。
+import type { CapabilityValidationFailure } from '../reminders'
 
 interface CapabilityValidationCollectionResult {
   latestVerificationStatus: CapabilityValidationStatus
@@ -20,7 +16,7 @@ interface CapabilityValidationCollectionResult {
  * Agent Runtime never knows command tool names, validation-plan schemas, or
  * platform command syntax.
  */
-class Verification {
+class CodingSessionVerificationHelper {
   constructor(
     private readonly interpreters: readonly CapabilityValidationInterpreter[] = []
   ) {}
@@ -71,12 +67,8 @@ class Verification {
     if (!matchers.length) return cited.trim() === observed.trim()
     return matchers.some((interpreter) => interpreter.evidenceMatches?.(cited, observed))
   }
-
-  public formatVerificationStatus(status: CapabilityValidationStatus): string {
-    return status
-  }
 }
 
-export type { CapabilityValidationCollectionResult, CapabilityValidationFailure }
-export { Verification }
-export { Verification as CodingSessionVerificationHelper }
+export type { CapabilityValidationCollectionResult }
+export type { CapabilityValidationFailure } from '../reminders'
+export { CodingSessionVerificationHelper }

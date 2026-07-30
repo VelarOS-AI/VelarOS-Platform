@@ -92,7 +92,7 @@ interface PromptCompositionResult {
  * - providers 可按当前上下文动态生成段。
  * - suppressions/overrides 可以禁用某些段。
  */
-class SegmentRegistry {
+class PromptRegistry {
   /** 静态 prompt 段定义。 */
   private readonly definitions = new Map<string, PromptSegmentDefinition>()
   /** 动态 prompt 段 provider。 */
@@ -193,8 +193,8 @@ class SegmentRegistry {
   }
 
   /** 克隆注册表，供 ContextBuilder 链式变体隔离修改。 */
-  public clone(): SegmentRegistry {
-    const clone = new SegmentRegistry([...this.definitions.values()])
+  public clone(): PromptRegistry {
+    const clone = new PromptRegistry([...this.definitions.values()])
     for (const provider of this.providers.values()) {
       clone.registerProvider(provider)
     }
@@ -237,7 +237,7 @@ class SegmentRegistry {
   }
 }
 
-export { SegmentRegistry }
+export { PromptRegistry }
 export type {
   PromptBudgetOptions,
   PromptCompositionResult,
@@ -249,4 +249,3 @@ export type {
   PromptSegmentSource,
   PromptSegmentStability,
 }
-export { SegmentRegistry as PromptRegistry }

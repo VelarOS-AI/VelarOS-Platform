@@ -103,23 +103,29 @@ function cloneTool(tool: ProviderTurnToolSnapshot): ProviderTurnToolSnapshot {
   return { ...tool }
 }
 
-function cloneRequest(request: ProviderTurnRequestSnapshot): ProviderTurnRequestSnapshot {
+/**
+ * 请求快照的**唯一构造器**（事件入账与快照外发共用）。
+ *
+ * 全部可选字段一律浅拷贝而非引用透传：快照要在回合收敛后仍可被读侧安全持有，
+ * 引用透传会让调用方后续改自己的对象时把已发出的快照一起改掉。
+ * 出核统一 `Nullable`（`toNullable`），入参两种缺席形态都收——归一只在这一处发生（§1.5）。
+ */
+function buildRequestSnapshot(source: {
+  availableToolNames: readonly string[]
+  toolChoiceName?: LooseOptional<string>
+  requestFingerprint?: ProviderRequestFingerprint
+  toolSchemaChars?: Record<string, number>
+  toolSchemaHashes?: Record<string, string>
+  contextUsage?: ProviderTurnRequestSnapshot['contextUsage']
+}): ProviderTurnRequestSnapshot {
   const snapshot: ProviderTurnRequestSnapshot = {
-    availableToolNames: [...request.availableToolNames],
-    toolChoiceName: toNullable(request.toolChoiceName),
+    availableToolNames: [...source.availableToolNames],
+    toolChoiceName: toNullable(source.toolChoiceName),
   }
-  if (request.requestFingerprint) {
-    snapshot.requestFingerprint = { ...request.requestFingerprint }
-  }
-  if (request.toolSchemaChars) {
-    snapshot.toolSchemaChars = { ...request.toolSchemaChars }
-  }
-  if (request.toolSchemaHashes) {
-    snapshot.toolSchemaHashes = { ...request.toolSchemaHashes }
-  }
-  if (request.contextUsage) {
-    snapshot.contextUsage = { ...request.contextUsage }
-  }
+  if (source.requestFingerprint) snapshot.requestFingerprint = { ...source.requestFingerprint }
+  if (source.toolSchemaChars) snapshot.toolSchemaChars = { ...source.toolSchemaChars }
+  if (source.toolSchemaHashes) snapshot.toolSchemaHashes = { ...source.toolSchemaHashes }
+  if (source.contextUsage) snapshot.contextUsage = { ...source.contextUsage }
   return snapshot
 }
 
@@ -160,22 +166,7 @@ export class ProviderTurnEventReducer {
       }
       case 'request': {
         this.assertStarted()
-        this.request = {
-          availableToolNames: [...event.availableToolNames],
-          toolChoiceName: toNullable(event.toolChoiceName),
-        }
-        if (event.requestFingerprint) {
-          this.request.requestFingerprint = { ...event.requestFingerprint }
-        }
-        if (event.toolSchemaChars) {
-          this.request.toolSchemaChars = { ...event.toolSchemaChars }
-        }
-        if (event.toolSchemaHashes) {
-          this.request.toolSchemaHashes = { ...event.toolSchemaHashes }
-        }
-        if (event.contextUsage) {
-          this.request.contextUsage = { ...event.contextUsage }
-        }
+        this.request = buildRequestSnapshot(event)
         return
       }
       case 'assistant-text-delta': {
@@ -305,7 +296,7 @@ export class ProviderTurnEventReducer {
       diagnostics: this.diagnostics.map((diagnostic) => ({ ...diagnostic })),
     }
     if (isPresent(this.request)) {
-      snapshot.request = cloneRequest(this.request)
+      snapshot.request = buildRequestSnapshot(this.request)
     }
     if (isPresent(this.usage)) {
       snapshot.usage = { ...this.usage }

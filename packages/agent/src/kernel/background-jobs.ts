@@ -1,4 +1,11 @@
-import { isEmpty, isPresent, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isFiniteNumber,
+  isPositiveNumber,
+  isPresent,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
@@ -127,11 +134,7 @@ class KernelBackgroundJobManager {
     this.stalledAfterMs = Math.max(0, Math.floor(options.stalledAfterMs ?? 0))
     this.terminalJobTtlMs = normalizeTerminalJobTtlMs(options.terminalJobTtlMs)
     this.terminalJobLimit = normalizeTerminalJobLimit(options.terminalJobLimit)
-    const outputMaxChars = options.outputMaxChars ?? DefaultOutputMaxChars
-    this.outputMaxChars =
-      Number.isFinite(outputMaxChars) && outputMaxChars > 0
-        ? Math.floor(outputMaxChars)
-        : DefaultOutputMaxChars
+    this.outputMaxChars = normalizeOutputMaxChars(options.outputMaxChars)
     this.outputStore = options.outputStore
     this.onTerminal = options.onTerminal
   }
@@ -186,9 +189,8 @@ class KernelBackgroundJobManager {
     input: { at?: number } = {}
   ): KernelBackgroundJob {
     const job = this.requireJob(id)
-    const chunk = output.toString()
-    if (!isEmpty(chunk)) {
-      this.appendOutputChunk(id, chunk)
+    if (!isEmpty(output)) {
+      this.appendOutputChunk(id, output)
     }
     if (job.status === 'running') {
       job.lastVisibleOutputAt = input.at ?? this.now()
@@ -279,27 +281,14 @@ class KernelBackgroundJobManager {
 
   public cancelSession(sessionId: string): number {
     const now = this.now()
-    const pending = new Set([assertNonBlank(sessionId, 'sessionId')])
-    const cancelledIds = new Set<string>()
-    let cancelledCount = 0
-
-    while (true) {
-      const batch = [...this.jobs.values()].filter(
-        (job) =>
-          job.status === 'running' &&
-          !cancelledIds.has(job.id) &&
-          this.matchesCancelLineage(job, pending)
-      )
-      if (isEmpty(batch)) break
-
-      for (const job of batch) {
-        this.cancelJob(job, now)
-        cancelledIds.add(job.id)
-        pending.add(job.id)
-        pending.add(job.sessionId)
-        cancelledCount += 1
-      }
+    const closure = this.collectLineageClosure(
+      assertNonBlank(sessionId, 'sessionId'),
+      (job) => job.status === 'running'
+    )
+    for (const job of closure.jobs) {
+      this.cancelJob(job, now)
     }
+    const cancelledCount = closure.jobs.length
     if (cancelledCount > 0) {
       this.notifyWaiters()
       this.pruneTerminalJobs()
@@ -367,21 +356,9 @@ class KernelBackgroundJobManager {
 
   public dropSession(sessionId: string): number {
     const normalizedSessionId = assertNonBlank(sessionId, 'sessionId')
-    const pending = new Set([normalizedSessionId])
-    const droppedIds = new Set<string>()
-
-    while (true) {
-      const batch = [...this.jobs.values()].filter(
-        (job) => !droppedIds.has(job.id) && this.matchesCancelLineage(job, pending)
-      )
-      if (isEmpty(batch)) break
-
-      for (const job of batch) {
-        droppedIds.add(job.id)
-        pending.add(job.id)
-        pending.add(job.sessionId)
-      }
-    }
+    const closure = this.collectLineageClosure(normalizedSessionId, () => true)
+    const droppedIds = new Set(closure.jobs.map((job) => job.id))
+    const pending = closure.sessionKeys
 
     for (const jobId of droppedIds) {
       this.dropJobState(jobId)
@@ -530,7 +507,7 @@ class KernelBackgroundJobManager {
     }
   }
 
-  private appendTerminalOutput(id: string, output: string | undefined): void {
+  private appendTerminalOutput(id: string, output: LooseOptional<string>): void {
     const terminalOutput = output?.trim()
     if (!terminalOutput) return
 
@@ -568,7 +545,7 @@ class KernelBackgroundJobManager {
       })
     } catch (error) {
       this.outputStoreDisabledJobs.add(id)
-      this.outputStoreErrorByJob.set(id, getErrorMessage(error))
+      this.outputStoreErrorByJob.set(id, AppError.getMessage(error))
       logRuntime.tag('KernelBackgroundJobManager').warn('background job output artifact write failed', {
         jobId: id,
         error,
@@ -694,7 +671,41 @@ class KernelBackgroundJobManager {
     return {
       output,
       truncated: baseOffset > 0,
-      omittedChars: baseOffset > 0 ? baseOffset : undefined,
+      omittedChars: optionalWhen(isPositiveNumber, baseOffset),
+    }
+  }
+
+  /**
+   * 谱系传递闭包：从一个 sessionId 出发，把它、它派生的任务、以及那些任务自己的子会话全收进来。
+   *
+   * **为什么必须迭代到不动点**：子 Agent 会以「父任务 id」或「父会话 id」作 parentSessionId 再起任务，
+   * 深度不定。一趟 filter 只抓得到直接子代，孙代会漏 → 取消父会话时孙任务变孤儿常驻（用户看到
+   * 「已取消」而输出还在涨）。每轮把新命中的 `job.id` 与 `job.sessionId` 一并加进种子集，直到不再新增。
+   * 终止性：`visited` 单调增长且上界 = jobs 总数。
+   *
+   * cancel 与 drop 共用本闭包，只在 `accept` 上分叉（cancel 只动 running、drop 动全部）——两个遍历
+   * 此前是逐字复制的两份，改一份忘另一份就会长出「取消收干净了但 drop 漏孙代」的偏斜。
+   */
+  private collectLineageClosure(
+    seedSessionId: string,
+    accept: (job: KernelBackgroundJob) => boolean
+  ): { jobs: KernelBackgroundJob[]; sessionKeys: Set<string> } {
+    const sessionKeys = new Set([seedSessionId])
+    const visited = new Set<string>()
+    const jobs: KernelBackgroundJob[] = []
+
+    for (;;) {
+      const batch = [...this.jobs.values()].filter(
+        (job) => !visited.has(job.id) && accept(job) && this.matchesCancelLineage(job, sessionKeys)
+      )
+      if (isEmpty(batch)) return { jobs, sessionKeys }
+
+      for (const job of batch) {
+        visited.add(job.id)
+        jobs.push(job)
+        sessionKeys.add(job.id)
+        sessionKeys.add(job.sessionId)
+      }
     }
   }
 
@@ -743,10 +754,6 @@ class InMemoryKernelBackgroundJobOutputStore implements KernelBackgroundJobOutpu
     return this.read({ jobId: input.jobId, offset: 0 })
   }
 
-  public get(jobId: string): Nullable<KernelBackgroundJobStoredOutput> {
-    return this.readAll({ jobId })
-  }
-
   public dropJob(jobId: string): void {
     this.outputs.delete(jobId)
     this.sessionByJob.delete(jobId)
@@ -766,25 +773,31 @@ function formatDuration(ms: number): string {
   return `${seconds}s`
 }
 
-function trimOptional(value: string | undefined): string | undefined {
+/** 收进来什么缺席形态都行，出去只有一种：省略位的 `undefined`（§1.5 边界归一一次）。 */
+function trimOptional(value: LooseOptional<string>): string | undefined {
   const trimmed = value?.trim()
   return toOptional(trimmed)
 }
 
 function normalizeReadOffset(offset: number, length: number): number {
-  if (!Number.isFinite(offset)) return 0
+  if (!isFiniteNumber(offset)) return 0
   return Math.max(0, Math.min(Math.floor(offset), length))
 }
 
-function normalizeTerminalJobTtlMs(ttlMs: number | undefined): number {
-  if (!isPresent(ttlMs)) return DefaultTerminalJobTtlMs
-  if (!Number.isFinite(ttlMs)) return DefaultTerminalJobTtlMs
+/** 输出缓冲上限：非有限或非正一律回落缺省（0 会让整条输出链恒空，属坏配置不是合法配置）。 */
+function normalizeOutputMaxChars(maxChars: LooseOptional<number>): number {
+  if (!isFiniteNumber(maxChars) || maxChars <= 0) return DefaultOutputMaxChars
+  return Math.floor(maxChars)
+}
+
+/** 终态任务保留时长：**负值刻意合法**（= 永不按 TTL 清理，见 shouldPruneTerminalJob）。 */
+function normalizeTerminalJobTtlMs(ttlMs: LooseOptional<number>): number {
+  if (!isFiniteNumber(ttlMs)) return DefaultTerminalJobTtlMs
   return Math.floor(ttlMs)
 }
 
-function normalizeTerminalJobLimit(limit: number | undefined): number {
-  if (!isPresent(limit)) return DefaultTerminalJobLimit
-  if (!Number.isFinite(limit)) return DefaultTerminalJobLimit
+function normalizeTerminalJobLimit(limit: LooseOptional<number>): number {
+  if (!isFiniteNumber(limit)) return DefaultTerminalJobLimit
   return Math.max(0, Math.floor(limit))
 }
 
@@ -795,15 +808,14 @@ function compareTerminalJobs(left: KernelBackgroundJob, right: KernelBackgroundJ
   return compareStableStrings(left.id, right.id)
 }
 
-function normalizeWaitTimeoutMs(timeoutMs: number | undefined): number | undefined {
+/**
+ * wait 超时：**缺席与非有限值语义相反**，不可合并——缺席 = 无限等（等到任务真的收敛），
+ * 非有限（NaN/Infinity）= 立即返回快照（0），因为那是调用方传了坏值，无限等会挂死父 Agent。
+ */
+function normalizeWaitTimeoutMs(timeoutMs: LooseOptional<number>): LooseOptional<number> {
   if (!isPresent(timeoutMs)) return undefined
-  if (!Number.isFinite(timeoutMs)) return 0
+  if (!isFiniteNumber(timeoutMs)) return 0
   return Math.max(0, Math.floor(timeoutMs))
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
 }
 
 function appendArtifactError(output: string, error: LooseOptional<string>): string {

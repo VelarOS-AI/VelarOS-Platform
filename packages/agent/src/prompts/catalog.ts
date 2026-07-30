@@ -1,7 +1,7 @@
 import { isTrue } from '@velaros-ai/core'
 
 import type { PromptSegmentDefinition } from './registry'
-import { SegmentRegistry } from './registry'
+import { PromptRegistry } from './registry'
 
 export interface BuiltInPromptOptions {
   /**
@@ -143,9 +143,8 @@ function createBuiltInPromptSegments(
 }
 
 /** 创建带内置段的 SegmentRegistry。 */
-function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): SegmentRegistry {
-  return new SegmentRegistry(createBuiltInPromptSegments(options))
+function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistry {
+  return new PromptRegistry(createBuiltInPromptSegments(options))
 }
 
-export { createBuiltInPromptRegistry, createBuiltInPromptSegments, PromptCatalog }
-export { PromptCatalog as BuiltInPromptCatalog }
+export { PromptCatalog as BuiltInPromptCatalog, createBuiltInPromptRegistry, createBuiltInPromptSegments }

@@ -6,14 +6,12 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
 import { type ExecutionSpan, ExecutionSpanSchema } from '../../protocol'
+import { JSONL_LINE_SEPARATOR, parseJsonlWithTailTolerance } from '../jsonl-file'
 import { canonicalJsonStringify } from '../session-store'
 
 /** 账本行分隔符：始终以 `\n` 结尾写入，便于崩溃时区分「完整行」与「半截尾行」。 */
-export const SPAN_LEDGER_LINE_SEPARATOR = '\n'
+export const SPAN_LEDGER_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
 
 /** 读取账本的结果：解析出的 span 序列 + 是否发生过尾行截断修复。 */
 export interface SpanLedgerReadResult {
@@ -42,24 +40,13 @@ export async function readSpanLedgerFile(path: string): Promise<SpanLedgerReadRe
 
 /** {@link readSpanLedgerFile} 的纯文本内核，抽出便于单点复用与 harness 断言。 */
 export function parseSpanLedgerText(raw: string, path: string): SpanLedgerReadResult {
-  const lines = raw.split(SPAN_LEDGER_LINE_SEPARATOR)
-  // 以分隔符结尾时最后一段是空串，非账本行；去掉尾部空串再逐行解析。
-  while (!isEmpty(lines) && isEmpty(lines[lines.length - 1])) lines.pop()
-
-  const spans: ExecutionSpan[] = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const parsed = tryParseSpanLine(lines[index])
-    if (parsed) {
-      spans.push(parsed)
-      continue
-    }
-    const isLastLine = index === lines.length - 1
-    if (isLastLine) return { spans, truncatedTail: true }
-    throw new AppError('INVARIANT', 
-      `execution span ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
-    )
-  }
-  return { spans, truncatedTail: false }
+  const parsed = parseJsonlWithTailTolerance({
+    raw,
+    path,
+    ledgerLabel: 'execution span ledger',
+    parseLine: tryParseSpanLine,
+  })
+  return { spans: parsed.records, truncatedTail: parsed.truncatedTail }
 }
 
 /** 解析单行为 span；不可解析或不满足 schema 时返回 null，由调用方按尾行/中段区分处理。 */

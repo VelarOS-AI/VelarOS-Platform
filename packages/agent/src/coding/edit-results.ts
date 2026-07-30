@@ -1,8 +1,8 @@
 import { isArray, isEmpty, isFalse, isObject, isString,isTrue } from '@velaros-ai/core'
 
-import { hasRelevantVerificationPaths } from './paths'
+import { hasVerificationRelevantModifiedPaths } from './paths'
 
-class EditResults {
+class CodingSessionEditResultHelper {
   private readonly editTools: Set<string>
   private readonly nonCodeMutationTools: Set<string>
 
@@ -31,7 +31,7 @@ class EditResults {
     if (!this.editTools.has(toolName)) return false
 
     const modifiedPaths = this.extractModifiedPaths(result)
-    return !isEmpty(modifiedPaths) && !hasRelevantVerificationPaths(modifiedPaths)
+    return !isEmpty(modifiedPaths) && !hasVerificationRelevantModifiedPaths(modifiedPaths)
   }
 
   public extractModifiedPaths(result: unknown): string[] {
@@ -74,5 +74,4 @@ class EditResults {
   }
 }
 
-export { EditResults }
-export { EditResults as CodingSessionEditResultHelper }
+export { CodingSessionEditResultHelper }

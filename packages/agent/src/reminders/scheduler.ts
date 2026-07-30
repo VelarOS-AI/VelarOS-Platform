@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros-ai/core'
+import { isNull, toNullable } from '@velaros-ai/core'
 
 import type {
   ReminderScope,
@@ -24,7 +24,7 @@ export interface RuntimeReminderConsumeResult {
  * 该调度器是每会话实例。编码会话跟踪器内部持有一个；
  * 其它编排器需要时也可以为特定能力作用域独立构造。
  */
-export class ReminderScheduler {
+export class RuntimeReminderScheduler {
   private readonly producers = new Map<string, RuntimeReminderProducer>()
   /** producer id -> 已发 key 集合；key 由 scope 派生（version 号 / 'one-shot'）。 */
   private readonly issued = new Map<string, Set<string>>()
@@ -98,7 +98,7 @@ export class ReminderScheduler {
   private selectCandidate(
     trigger: ReminderTrigger,
     input: RuntimeReminderInput
-  ): Nullable<{ producer: RuntimeReminderProducer; scopeKey: string; text: string }> {
+  ): Nullable<{ producer: RuntimeReminderProducer; scopeKey: Nullable<string>; text: string }> {
     const matched = [...this.producers.values()]
       .filter((producer) => producer.triggers.includes(trigger))
       .sort((left, right) => left.priority - right.priority)
@@ -115,7 +115,7 @@ export class ReminderScheduler {
   private evaluateProducer(
     producer: RuntimeReminderProducer,
     input: RuntimeReminderInput
-  ): Nullable<{ scopeKey: string; text: string }> {
+  ): Nullable<{ scopeKey: Nullable<string>; text: string }> {
     const scopeKey = this.resolveScopeKey(producer.scope, input)
     if (this.hasIssued(producer.id, scopeKey)) return null
 
@@ -127,7 +127,13 @@ export class ReminderScheduler {
     return { scopeKey, text }
   }
 
-  private resolveScopeKey(scope: ReminderScope, input: RuntimeReminderInput): string {
+  /**
+   * scope → 去重键。`null` = **本 scope 不参与去重**（`always`：每次匹配都重新渲染）。
+   *
+   * 曾用 `floating:${Math.random()}` 前缀把「不去重」编码进字符串、再靠 `startsWith` 嗅回来——
+   * 控制流藏在字符串里，且给一个纯判定函数塞了随机源（§3.4 纯函数优先）。现在语义直接进类型。
+   */
+  private resolveScopeKey(scope: ReminderScope, input: RuntimeReminderInput): Nullable<string> {
     switch (scope) {
       case 'one-shot':
         return 'one-shot'
@@ -135,21 +141,18 @@ export class ReminderScheduler {
         return `edit-version:${input.editVersion}`
       case 'always':
       default:
-        return `floating:${Math.random()}`
+        return null
     }
   }
 
-  private hasIssued(producerId: string, scopeKey: string): boolean {
-    if (scopeKey.startsWith('floating:')) {
-      // always scope 每次都视为未发，永远不命中已发标记。
-      return false
-    }
+  private hasIssued(producerId: string, scopeKey: Nullable<string>): boolean {
+    if (isNull(scopeKey)) return false
 
     return !!this.issued.get(producerId)?.has(scopeKey)
   }
 
-  private markIssued(producer: RuntimeReminderProducer, scopeKey: string): void {
-    if (scopeKey.startsWith('floating:')) return
+  private markIssued(producer: RuntimeReminderProducer, scopeKey: Nullable<string>): void {
+    if (isNull(scopeKey)) return
 
     let bucket = this.issued.get(producer.id)
     if (!bucket) {
@@ -160,4 +163,3 @@ export class ReminderScheduler {
     bucket.add(scopeKey)
   }
 }
-export { ReminderScheduler as RuntimeReminderScheduler }

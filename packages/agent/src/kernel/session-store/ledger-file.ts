@@ -7,14 +7,17 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
-import { isArray, isEmpty, isRecord } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isArray, isRecord } from '@velaros-ai/core'
 
 import { type SessionEntry, SessionEntrySchema } from '../../protocol'
-import { truncateJsonlToLineCount } from '../jsonl-file'
+import {
+  JSONL_LINE_SEPARATOR,
+  parseJsonlWithTailTolerance,
+  truncateJsonlToLineCount,
+} from '../jsonl-file'
 
 /** 账本行分隔符：始终以 `\n` 结尾写入，便于崩溃时区分「完整行」与「半截尾行」。 */
-export const LEDGER_LINE_SEPARATOR = '\n'
+export const LEDGER_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
 
 /** 读取账本的结果：解析出的 entry 序列 + 是否发生过尾行截断修复。 */
 export interface LedgerReadResult {
@@ -48,24 +51,13 @@ export async function readLedgerFile(path: string): Promise<LedgerReadResult> {
 
 /** {@link readLedgerFile} 的纯文本内核，抽出便于单点复用与推理。 */
 export function parseLedgerText(raw: string, path: string): LedgerReadResult {
-  const lines = raw.split(LEDGER_LINE_SEPARATOR)
-  // 以分隔符结尾时最后一段是空串，非账本行；去掉尾部空串再逐行解析。
-  while (!isEmpty(lines) && isEmpty(lines[lines.length - 1])) lines.pop()
-
-  const entries: SessionEntry[] = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const parsed = tryParseEntryLine(lines[index])
-    if (parsed) {
-      entries.push(parsed)
-      continue
-    }
-    const isLastLine = index === lines.length - 1
-    if (isLastLine) return { entries, truncatedTail: true }
-    throw new AppError('INVARIANT', 
-      `session ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
-    )
-  }
-  return { entries, truncatedTail: false }
+  const parsed = parseJsonlWithTailTolerance({
+    raw,
+    path,
+    ledgerLabel: 'session ledger',
+    parseLine: tryParseEntryLine,
+  })
+  return { entries: parsed.records, truncatedTail: parsed.truncatedTail }
 }
 
 /** 解析单行为 entry；不可解析或不满足 schema 时返回 null，由调用方按尾行/中段区分处理。 */

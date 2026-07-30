@@ -1,4 +1,4 @@
-import { isString, toNullable } from '@velaros-ai/core'
+import { isFiniteNumber, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -69,7 +69,7 @@ function isLowSurrogate(codeUnit: number): boolean {
 
 function normalizeProjectionChars(value: LooseOptional<number>): number {
   const candidate = value ?? DefaultProjectionChars
-  if (!Number.isFinite(candidate)) return DefaultProjectionChars
+  if (!isFiniteNumber(candidate)) return DefaultProjectionChars
   return Math.max(0, Math.floor(candidate))
 }
 
