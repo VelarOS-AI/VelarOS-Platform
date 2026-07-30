@@ -12,6 +12,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node
 
 import { z } from 'zod'
 
+import { isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   defineToolRuntimeSpec,
@@ -60,7 +61,6 @@ export type OfficeToolPermission =
   | 'memory:write'
 
 // Office 仅声明自己消费的结构端口；宿主可用 Workspace 决策实现该端口，但 Office 不依赖其包。
-import { isObject } from '@velaros-ai/core'
 export interface OfficeWorkspaceApi {
   getRootPath: () => string
   runInDirectory: <T>(cwd: string, action: () => Promise<T>) => Promise<T>
@@ -205,6 +205,31 @@ export const outputPathSchema = z
     })
   )
 
+// ─── Markdown 表格原语 ──────────────────────────────────────────────────────────
+
+/**
+ * 解析单行 Markdown 表格，保留中间空单元格并去掉首尾管道。
+ *
+ * 单源判据（§3.7）：wordTool 与 spreadsheetTool 曾各留一份**逐字相同**的拷贝（spreadsheetTool
+ * 文件头当年写着「从 wordTool 内联一份轻量版本」）。两份对"什么算表格行"的判定必须一致，
+ * 否则同一段 Markdown 生成的 Word 表格与 Excel 表格会开始分叉。要改判定就改这里一处。
+ */
+export function parseMarkdownTableRow(line: string): Nullable<string[]> {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) return null
+  let cells = trimmed.split('|')
+  if (trimmed.startsWith('|')) cells = cells.slice(1)
+  if (trimmed.endsWith('|')) cells = cells.slice(0, -1)
+  const normalized = cells.map((cell) => cell.trim())
+  return normalized.length >= 2 ? normalized : null
+}
+
+/** 判断 Markdown 表格分隔行，例如 | --- | :---: |。 */
+export function isMarkdownTableSeparator(line: string): boolean {
+  const row = parseMarkdownTableRow(line)
+  return !!row?.length && row.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+}
+
 // ─── Path & workspace helpers ──────────────────────────────────────────────────
 
 /**
@@ -216,7 +241,7 @@ export function toolRequiresWorkspace(ctx: ToolContext): boolean {
   try {
     return !!ctx.workspace.getRootPath()
   } catch {
-    // 无任何可用根（未激活工作区）时执行根解析会抛错——此时工具确实不可用。
+    // arch-guard:silent-catch-ok 无任何可用根（未激活工作区）时执行根解析会抛错，等价于"工具不可用"，不是故障。
     return false
   }
 }
@@ -257,7 +282,16 @@ export function normalizeExtensionPath(
   return resolvedPath
 }
 
-/** 确认 Office 输入/输出路径位于工作区内，且不进入内部保留目录。 */
+/**
+ * 确认 Office 输入/输出路径位于工作区内。
+ *
+ * 判据（§5.3b ④安全门）——这是整个 office 能力**唯一**的路径包含门：所有工具的读写路径
+ * 都必须先经 `normalizeExtensionPath` / `resolveOfficeInputPathWithExtensions` 落到这里。
+ * 挡的是 `../` 穿越与绝对路径逃逸——注意入参允许绝对路径（用户经常直接粘），所以不能靠
+ * "是否相对路径"判断，必须 **resolve 之后再算相对关系**（`getRelativePathInsideOfficeRoot`）。
+ * 绕过它写盘 = 模型可以往用户主目录任意位置落文件，因此新增写入路径的工具一律走上面两个入口，
+ * 不要自己 `resolve` 完就用。
+ */
 export function assertOfficePathInsideWorkspace(
   rootPath: string,
   resolvedPath: string,
@@ -267,7 +301,6 @@ export function assertOfficePathInsideWorkspace(
   if (!relativePath) {
     throw new AppError('PERMISSION', `路径超出工作区范围：${originalPath}`)
   }
-
 }
 
 /** 准备 Office 输出路径：校验扩展名、覆盖策略并创建父目录。 */
@@ -341,7 +374,7 @@ export async function getFileStats(
   try {
     return await stat(path)
   } catch (error) {
-    if (isObject(error) && (error as { code?: unknown }).code === 'ENOENT') return null
+    if (isPlainObject(error) && error.code === 'ENOENT') return null
     throw error
   }
 }
@@ -476,7 +509,7 @@ export async function findGeneratedOfficeFile(
   if (expectedStats?.isFile()) return expectedPath
 
   // 有些外部工具会改变输出文件名，兜底找目录里的第一个同类产物。
-  const entries = await readdir(tempDir).catch(() => [])
+  const entries = await readdir(tempDir).catch(() => [] /* arch-guard:silent-catch-ok 临时目录不可读等价于没有产物，由调用方按 null 处理 */)
   const generatedEntry = entries.find(
     (entry) => extname(entry).toLowerCase() === normalizedExtension
   )
@@ -565,7 +598,7 @@ export async function normalizeWordInputToDocx(input: {
     '.docx'
   )
   if (!generatedDocx) {
-    throw new AppError('EXECUTION', 'DOC 转 DOCX 命令已结束，但没有生成 DOCX 文件。')
+    throw new AppError('EXECUTION_FAILED', 'DOC 转 DOCX 命令已结束，但没有生成 DOCX 文件。')
   }
 
   return {

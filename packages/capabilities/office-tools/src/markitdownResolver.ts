@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, join, resolve } from 'node:path'
 
+import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import {
@@ -21,6 +22,7 @@ export interface MarkItDownBinaryResolverOptions {
 }
 
 const require = createRequire(typeof __filename === 'string' ? __filename : import.meta.url)
+const MarkItDownResolverLog = logRuntime.tag('MarkItDownBinaryResolver')
 
 function readElectronResourcesPath(): Nullable<string> {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
@@ -116,9 +118,11 @@ class MarkItDownBinaryResolver {
 
   private readPackageVersion(packageRoot: string): string {
     try {
-      const pkg = require(join(packageRoot, 'package.json')) as Record<string, unknown>
+      const pkg: unknown = require(join(packageRoot, 'package.json'))
       return readString(asRecord(pkg), 'version') ?? '0.0.0'
-    } catch {
+    } catch (error) {
+      // arch-guard:silent-catch-ok 版本号只用于诊断展示，读不到时回落占位值不影响可用性判定。
+      MarkItDownResolverLog.debug('读取 MarkItDown 包版本失败，使用占位版本号', { error })
       return '0.0.0'
     }
   }

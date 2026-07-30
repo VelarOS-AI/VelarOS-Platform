@@ -9,7 +9,7 @@ import ExcelJS, { type CellValue } from 'exceljs'
 import JSZip from 'jszip'
 import { z } from 'zod'
 
-import { isArray,isEmpty, isObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray,isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/core/utils/ToolDescription'
@@ -549,20 +549,12 @@ export function extractDrawingText(xml: string): string[] {
 export function cellValueToText(value: CellValue): string {
   if (!isPresent(value)) return ''
   if (value instanceof Date) return value.toISOString().slice(0, 10)
-  if (!isObject(value)) return String(value)
-  const record = value as {
-    text?: unknown
-    result?: unknown
-    formula?: unknown
-    richText?: unknown
-  }
-  if (isString(record.text)) return record.text
-  if (isPresent(record.result)) return cellValueToText(record.result as CellValue)
-  if (isString(record.formula)) return `=${record.formula}`
-  if (isArray(record.richText)) {
-    const richText = record.richText as Array<{ text?: unknown }>
-    return richText.map((part) => String(part.text ?? '')).join('')
-  }
+  if (!isPlainObject(value)) return String(value)
+  if (isString(value.text)) return value.text
+  if (isPresent(value.result)) return cellValueToText(value.result as CellValue)
+  if (isString(value.formula)) return `=${value.formula}`
+  if (isArray(value.richText))
+    return value.richText.map((part) => (isPlainObject(part) ? String(part.text ?? '') : '')).join('')
   return JSON.stringify(value)
 }
 
@@ -574,6 +566,17 @@ export function getOfficePartNumber(name: string): number {
   return Number(name.match(/(\d+)\.xml$/)?.[1] ?? 0)
 }
 
+/**
+ * 剥掉转换产物里的可执行内容。
+ *
+ * 判据（§5.3b ④安全门 / ⑥非显然妥协）——mammoth 的输出会被写成 `.html` 落到用户工作区，
+ * 用户随后**在浏览器里打开它**；文档本身可能来自邮件或下载，因此必须当不可信内容处理。
+ * 这里是正则剥离而不是真正的 HTML 解析器：判据是威胁模型有限（file:// 本地页面、无凭据、
+ * 无同源资源可偷）+ 不想为预览引入一个 DOM 解析依赖。**替代方案（引 sanitize-html）被否**
+ * 是因为它会把这个按需能力的体积成本摊到整包上。
+ * 边界：这条防线只针对"文档里夹带脚本"，**不足以**用来渲染任意来源的 HTML；
+ * 若将来把预览产物挂进应用内 webview（同源、有凭据），必须换成真解析器再谈。
+ */
 export function sanitizePreviewHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')

@@ -161,7 +161,7 @@ const convertWordToPdf = defineOfficeTool<ConvertWordToPdfInput>({
           `${basename(normalizedInputPath, extname(normalizedInputPath))}.pdf`
         )
         if (!generatedPdf)
-          throw new AppError('EXECUTION', 'Word 转 PDF 命令已结束，但没有生成 PDF 文件。')
+          throw new AppError('EXECUTION_FAILED', 'Word 转 PDF 命令已结束，但没有生成 PDF 文件。')
         return {
           ...(await copyOfficeOutput(output, generatedPdf, 'pdf')),
           converter: libreOffice.name,
@@ -338,7 +338,7 @@ const createLatexPdf = defineOfficeTool<CreateLatexPdfInput>({
           `${basename(source.path, extname(source.path))}.pdf`
         )
         if (!generatedPdf)
-          throw new AppError('EXECUTION', 'LaTeX 编译命令已结束，但没有生成 PDF 文件。')
+          throw new AppError('EXECUTION_FAILED', 'LaTeX 编译命令已结束，但没有生成 PDF 文件。')
         return {
           ...(await copyOfficeOutput(output, generatedPdf, 'pdf')),
           sourcePath: source.path,

@@ -2,8 +2,7 @@
  * spreadsheetTool.ts
  *
  * Excel (.xlsx) 工作簿生成工具。
- * 依赖：officeShared（共享类型 + 路径辅助）
- * 复用了 parseMarkdownTableRow / isMarkdownTableSeparator（从 wordTool 内联一份轻量版本）
+ * 依赖：officeShared（共享类型、路径辅助与 Markdown 表格原语）
  */
 import ExcelJS from 'exceljs'
 import { type z } from 'zod'

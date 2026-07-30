@@ -2,20 +2,21 @@
  * spreadsheetTool.ts
  *
  * Excel (.xlsx) 工作簿生成工具。
- * 依赖：officeShared（共享类型 + 路径辅助）
- * 复用了 parseMarkdownTableRow / isMarkdownTableSeparator（从 wordTool 内联一份轻量版本）
+ * 依赖：officeShared（共享类型、路径辅助与 Markdown 表格原语）
  */
 import type { CellValue, Workbook } from 'exceljs'
 import { z } from 'zod'
 
-import { isArray, isBoolean, isEmpty, isNonBlankString, isNumber, isObject, isPresent, isString, optionalWhenLazy, toNullable,trimmedStringOrEmpty } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isNonBlankString, isNumber, isPlainObject, isPresent, isString, optionalWhenLazy, toNullable,trimmedStringOrEmpty } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/core/utils/ToolDescription'
 
 import {
+  isMarkdownTableSeparator,
   outputPathSchema,
+  parseMarkdownTableRow,
 } from './officeShared'
 
 export const log = logRuntime.tag('SpreadsheetTool')
@@ -327,7 +328,7 @@ export function parseStringifiedSpreadsheetSheets(
     const parsed = JSON.parse(content)
     if (!isArray(parsed) || isEmpty(parsed)) return null
     const looksLikeSheets = parsed.every(
-      (item) => isObject(item) && !isArray(item) && isArray((item as { rows?: unknown }).rows)
+      (item) => isPlainObject(item) && isArray(item.rows)
     )
     if (!looksLikeSheets) return null
 
@@ -337,7 +338,9 @@ export function parseStringifiedSpreadsheetSheets(
     }))
     const validated = spreadsheetSheetArraySchema.safeParse(withNames)
     return validated.success ? (validated.data as SpreadsheetSheetInput[]) : null
-  } catch {
+  } catch (error) {
+    // JSON 不合法说明这段内容本来就不是序列化 sheets，回落到文本表格解析路径。
+    log.debug('解析序列化 sheets JSON 失败，回落文本表格解析', { error })
     return null
   }
 }
@@ -387,11 +390,7 @@ export function parseJsonSpreadsheetRows(content: string): Nullable<ExcelCellInp
   if (!/^(?:\[|{)/.test(content)) return null
   try {
     const parsed = JSON.parse(content)
-    const rows = isArray(parsed)
-      ? parsed
-      : isObject(parsed)
-        ? (parsed as { rows?: unknown }).rows
-        : null
+    const rows = isArray(parsed) ? parsed : isPlainObject(parsed) ? parsed.rows : null
     if (!isArray(rows)) return null
     return rows
       .slice(0, 100_000)
@@ -412,39 +411,22 @@ export function parseMarkdownSpreadsheetRows(content: string): Nullable<ExcelCel
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-  const separatorIndex = lines.findIndex((line) => isMarkdownTableSeparatorLine(line))
+  const separatorIndex = lines.findIndex((line) => isMarkdownTableSeparator(line))
   if (separatorIndex <= 0) return null
   const tableLines: string[] = []
   for (let index = separatorIndex - 1; index < lines.length; index += 1) {
     const line = trimmedStringOrEmpty(lines[index])
-    if (isMarkdownTableSeparatorLine(line)) continue
-    if (!parseMarkdownTableRowLine(line)) break
+    if (isMarkdownTableSeparator(line)) continue
+    if (!parseMarkdownTableRow(line)) break
     tableLines.push(line)
   }
   const rows = tableLines
     .slice(0, 100_000)
     .map((line) =>
-      (parseMarkdownTableRowLine(line) ?? []).slice(0, 1000).map(coerceSpreadsheetTextCell)
+      (parseMarkdownTableRow(line) ?? []).slice(0, 1000).map(coerceSpreadsheetTextCell)
     )
     .filter((row) => row.length > 0)
   return !isEmpty(rows) ? rows : null
-}
-
-// 解析单行 Markdown 表格，保留中间空单元格并去掉首尾管道。
-export function parseMarkdownTableRowLine(line: string): Nullable<string[]> {
-  const trimmed = line.trim()
-  if (!trimmed.includes('|')) return null
-  let cells = trimmed.split('|')
-  if (trimmed.startsWith('|')) cells = cells.slice(1)
-  if (trimmed.endsWith('|')) cells = cells.slice(0, -1)
-  const normalized = cells.map((c) => c.trim())
-  return normalized.length >= 2 ? normalized : null
-}
-
-// Markdown 表头分隔线形如 | --- | :---: |，用于识别表格块。
-export function isMarkdownTableSeparatorLine(line: string): boolean {
-  const row = parseMarkdownTableRowLine(line)
-  return !!row?.length && row.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
 }
 
 // 轻量 CSV/TSV 行解析器，处理双引号包裹字段和 "" 转义。
@@ -478,7 +460,7 @@ export function parseDelimitedSpreadsheetLine(line: string, delimiter: string): 
 export function coerceSpreadsheetDynamicCell(value: unknown): ExcelCellInput {
   if (isString(value) || isNumber(value) || isBoolean(value) || !isPresent(value)) return value
   if (value instanceof Date) return { dateValue: value.toISOString() }
-  if (isObject(value)) return value
+  if (isPlainObject(value)) return value
   return String(value ?? '')
 }
 
@@ -530,15 +512,12 @@ export function applyExcelFill(target: { fill?: object }, fill?: ExcelFill): voi
         [],
     }
   } else {
+    // 判别联合在 else 分支已收窄到 pattern 变体，直接读字段即可（原先五处断言是多余的）。
     target.fill = {
       type: 'pattern',
-      pattern: (fill as { type: 'pattern'; pattern?: string }).pattern ?? 'solid',
-      fgColor: optionalWhenLazy((fill as { fgColor?: string }).fgColor, () => ({
-        argb: toArgbColor((fill as { fgColor?: string }).fgColor!),
-      })),
-      bgColor: optionalWhenLazy((fill as { bgColor?: string }).bgColor, () => ({
-        argb: toArgbColor((fill as { bgColor?: string }).bgColor!),
-      })),
+      pattern: fill.pattern ?? 'solid',
+      fgColor: optionalWhenLazy(fill.fgColor, () => ({ argb: toArgbColor(fill.fgColor!) })),
+      bgColor: optionalWhenLazy(fill.bgColor, () => ({ argb: toArgbColor(fill.bgColor!) })),
     }
   }
 }
@@ -577,7 +556,7 @@ export type ExcelCellBuildResult = {
 
 // 将一个工具层单元格转换为 ExcelJS 能写入的值和样式。
 export function buildExcelCellValue(cell: ExcelCellInput): ExcelCellBuildResult {
-  if (!isPresent(cell) || !isObject(cell)) {
+  if (!isPresent(cell) || !isPlainObject(cell)) {
     // 简单字符串以 = 开头时按公式写入，保持用户常见的 Excel 输入习惯。
     if (isString(cell) && cell.startsWith('=') && cell.length > 1)
       return { excelValue: { formula: cell.slice(1) }, cellStyle: {} }
@@ -631,9 +610,7 @@ export function applyAutoWidths(sheet: ReturnType<Workbook['addWorksheet']>): vo
     let maxLength = 10
     column.eachCell?.({ includeEmpty: true }, (cell) => {
       const cellValue = cell.value
-      const cellRecord = isObject(cellValue)
-        ? (cellValue as { formula?: unknown })
-        : null
+      const cellRecord = isPlainObject(cellValue) ? cellValue : null
       const text =
         cellRecord && isPresent(cellRecord.formula)
           ? `=${String(cellRecord.formula)}`
