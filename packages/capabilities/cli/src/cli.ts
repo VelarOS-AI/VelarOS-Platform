@@ -2,13 +2,12 @@
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { type VelarosCliRunResult } from '@velaros-ai/core/cli'
-
 import {
   createVelarosCliRouter,
   type CreateVelarosCliRouterOptions,
   runVelarosCli,
   type VelarosCliNamespaceRunner,
+  type VelarosCliNamespaceRunResult,
   VelarosCliRouter,
 } from './router.js'
 
@@ -17,6 +16,7 @@ export {
   type CreateVelarosCliRouterOptions,
   runVelarosCli,
   type VelarosCliNamespaceRunner,
+  type VelarosCliNamespaceRunResult,
   VelarosCliRouter,
 }
 
@@ -28,7 +28,7 @@ function isDirectCliEntry(): boolean {
 export async function main(
   argv = process.argv.slice(2),
   cwd = process.cwd()
-): Promise<VelarosCliRunResult> {
+): Promise<VelarosCliNamespaceRunResult> {
   const result = await runVelarosCli(argv, { cwd })
   const stream = result.exitCode === 0 ? process.stdout : process.stderr
   stream.write(result.text)

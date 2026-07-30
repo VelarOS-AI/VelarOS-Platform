@@ -4,5 +4,6 @@ export {
   main,
   runVelarosCli,
   type VelarosCliNamespaceRunner,
+  type VelarosCliNamespaceRunResult,
   VelarosCliRouter,
 } from './cli.js'
