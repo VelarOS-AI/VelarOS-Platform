@@ -35,12 +35,13 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
     '每个 tool 页包含 toolOsState 与 activation：resident 可直接调用，loadable 按 activation.method 换入，needs_setup 先处理 dependencies。',
   ],
   usage: [
-    '查全局或分类时省略 op；按意图搜索时传 op="find" 和 query；用 domainIds/toolOsStates 缩小范围；判断下一步优先读 toolOsState。',
+    '查全局或分类时省略 op；按意图搜索时传 op="find" 和 query；用 categoryIds/toolOsStates 缩小范围；判断下一步优先读 toolOsState。',
+    'domainIds 的合法取值来自本工具返回的 categories[].toolOs.domain；没先看过就不要凭猜传域名。',
   ],
   examples: [
-    { kind: 'all', domainIds: ['documents'], toolOsStates: ['loadable'] },
-    { op: 'find', query: 'read document', domainIds: ['documents'] },
-    { kind: 'tool', domainIds: ['analysis'], toolOsStates: ['loadable'] },
+    { kind: 'all', toolOsStates: ['loadable'] },
+    { op: 'find', query: 'read document' },
+    { kind: 'tool', toolOsStates: ['loadable'] },
   ],
   notes: [
     '这是首选查询入口：先看结构化状态清单、依赖关系和一类激活路径，再决定是否 tool_replace。',
