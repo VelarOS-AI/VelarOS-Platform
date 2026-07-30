@@ -1,4 +1,5 @@
 import { isEmpty, isPresent, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -93,7 +94,7 @@ const DefaultTerminalJobLimit = 200
 function assertNonBlank(value: string, label: string): string {
   const trimmed = value.trim()
   if (!trimmed) {
-    throw new Error(`Kernel background job requires ${label}`)
+    throw new AppError('VALIDATION', `Kernel background job requires ${label}`, undefined, { label })
   }
   return trimmed
 }
@@ -146,7 +147,7 @@ class KernelBackgroundJobManager {
     const startedAt = input.startedAt ?? this.now()
 
     if (this.jobs.has(id)) {
-      throw new Error(`Kernel background job "${id}" already exists`)
+      throw new AppError('INVARIANT', `Kernel background job "${id}" already exists`, undefined, { jobId: id })
     }
 
     const job: KernelBackgroundJob = {
@@ -333,7 +334,10 @@ class KernelBackgroundJobManager {
     scopes: readonly CapabilityScopeId[],
   ): TurnContextDeltaSource {
     if (isEmpty(scopes))
-      throw new Error('task.lifecycle turn-context source requires at least one capability scope')
+      throw new AppError(
+        'VALIDATION',
+        'task.lifecycle turn-context source requires at least one capability scope'
+      )
 
     return {
       id: 'task.lifecycle',
@@ -602,7 +606,14 @@ class KernelBackgroundJobManager {
   private requireRunning(id: string): KernelBackgroundJob {
     const job = this.requireJob(id)
     if (job.status !== 'running') {
-      throw new Error(`Kernel background job "${id}" is already ${job.status}`)
+      // context.jobStatus 是**结构化契约**：调用方（SubAgentDispatcher.failSubAgentBackgroundJob）要区分
+      // 「任务已被取消所以收尾更新无意义」与真失败，必须读 code+context，不许回去 sniff message 文案。
+      throw new AppError(
+        'CONFLICT',
+        `Kernel background job "${id}" is already ${job.status}`,
+        undefined,
+        { jobId: id, jobStatus: job.status }
+      )
     }
     return job
   }
@@ -610,7 +621,9 @@ class KernelBackgroundJobManager {
   private requireJob(id: string): KernelBackgroundJob {
     const job = this.jobs.get(id)
     if (!job) {
-      throw new Error(`Kernel background job "${id}" does not exist`)
+      throw new AppError('NOT_FOUND', `Kernel background job "${id}" does not exist`, undefined, {
+        jobId: id,
+      })
     }
     return job
   }

@@ -1,3 +1,4 @@
+import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentWorkflowAgentCall,
   AgentWorkflowAgentResult,
@@ -42,9 +43,9 @@ class WorkflowAbortedError extends Error {}
 
 function boundedClone<T>(value: T, label: string): T {
   const serialized = JSON.stringify(value)
-  if (serialized === undefined) throw new Error(`${label} 不是可序列化 JSON。`)
+  if (serialized === undefined) throw new AppError('VALIDATION', `${label} 不是可序列化 JSON。`)
   if (new TextEncoder().encode(serialized).byteLength > MaxWorkflowValueBytes) {
-    throw new Error(`${label} 超过 ${MaxWorkflowValueBytes} 字节上限。`)
+    throw new AppError('VALIDATION', `${label} 超过 ${MaxWorkflowValueBytes} 字节上限。`)
   }
   return JSON.parse(serialized) as T
 }
@@ -94,7 +95,7 @@ function comparePredicate(item: unknown, predicate: AgentWorkflowPredicate): boo
 }
 
 function asArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} 必须解析为数组。`)
+  if (!Array.isArray(value)) throw new AppError('VALIDATION', `${label} 必须解析为数组。`)
   return value
 }
 
@@ -189,10 +190,10 @@ class AgentWorkflowRuntime {
   }
 
   private validateDefinition(definition: AgentWorkflowDefinition): void {
-    if (definition.steps.length === 0) throw new Error('Workflow 至少需要一个 step。')
+    if (definition.steps.length === 0) throw new AppError('VALIDATION', 'Workflow 至少需要一个 step。')
     const ids = new Set<string>()
     for (const step of definition.steps) {
-      if (ids.has(step.id)) throw new Error(`Workflow step id 重复：${step.id}。`)
+      if (ids.has(step.id)) throw new AppError('VALIDATION', `Workflow step id 重复：${step.id}。`)
       this.validateSourceReference(step, ids)
       ids.add(step.id)
     }
@@ -203,7 +204,7 @@ class AgentWorkflowRuntime {
     if (step.operation !== 'filter' && step.operation !== 'dedupe' && step.operation !== 'majority_vote') return
     if (priorIds.has(step.source.step_id)) return
     const available = [...priorIds]
-    throw new Error(
+    throw new AppError('VALIDATION', 
       `step "${step.id}" 引用了尚不可用的 source "${step.source.step_id}"。可用 step id：${available.join(', ') || '（无）'}。`
     )
   }
@@ -359,11 +360,11 @@ class AgentWorkflowRuntime {
     stepId: string
   ): unknown {
     if (!outputs.has(source.step_id)) {
-      throw new Error(`step "${stepId}" 找不到 source "${source.step_id}"。`)
+      throw new AppError('VALIDATION', `step "${stepId}" 找不到 source "${source.step_id}"。`)
     }
     const value = valueAtPath(outputs.get(source.step_id), source.path)
     if (value === undefined) {
-      throw new Error(`step "${stepId}" 的 source path 不存在：${source.path?.join('.') || '（根）'}。`)
+      throw new AppError('VALIDATION', `step "${stepId}" 的 source path 不存在：${source.path?.join('.') || '（根）'}。`)
     }
     return value
   }

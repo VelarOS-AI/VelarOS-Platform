@@ -7,6 +7,7 @@
 //   - **调用方零 spanId 记账**：run→turn→{model,tool,capability,policy} 的父子指针由 scope 内部管理，
 //     生产侧（SoloLoop / ToolExecutor）只声明「开一个什么 span」，拿回一个非抛出 handle 供收敛。
 //   - **只落已完成 span**：进行中 span 驻 recorder 内存，收敛才 emit + 校验 + 落账本（读侧无半态）。
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {
@@ -290,7 +291,7 @@ export class LedgerExecutionSpanScopeFactory
     const existing = this.promptAuditLedgers.get(sessionId)
     if (existing) return existing
     const resolve = this.resolvePromptAuditPath
-    if (!resolve) throw new Error('prompt audit path resolver not configured')
+    if (!resolve) throw new AppError('INVARIANT', 'prompt audit path resolver not configured')
     const opened = PromptAuditLedger.open(resolve(sessionId), this.warn)
     this.promptAuditLedgers.set(sessionId, opened)
     return opened

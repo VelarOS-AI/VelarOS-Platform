@@ -8,6 +8,8 @@
 //   - **校验即契约**：组装后必过 `ExecutionSpanSchema.parse`，绝不 emit 坏 span（边界解析一次，宪章 §12.5）。
 import { randomUUID } from 'node:crypto'
 
+import { AppError } from '@velaros-ai/core/error'
+
 import {
   emptyExecutionSpanMetrics,
   type ExecutionSpan,
@@ -63,7 +65,7 @@ export class OpenExecutionSpan {
 
   /** 收敛并落定本 span：组装 → 校验 → emit，返回完整记录。 */
   public end(outcome: ExecutionSpanOutcome = {}): ExecutionSpan {
-    if (this.ended) throw new Error(`execution span ${this.spanId} already ended`)
+    if (this.ended) throw new AppError('INVARIANT', `execution span ${this.spanId} already ended`)
     this.ended = true
 
     const endedAt = this.now()

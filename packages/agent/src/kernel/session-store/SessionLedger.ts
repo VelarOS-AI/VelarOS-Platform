@@ -11,6 +11,7 @@ import { type FileHandle, mkdir, open, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { type SessionEntry, SessionEntrySchema } from '../../protocol'
 
@@ -68,7 +69,7 @@ export class SessionStore {
     if (existsSync(path)) {
       const existing = await readLedgerFile(path)
       if (!isEmpty(existing.entries)) {
-        throw new Error(`session ledger already exists and is non-empty: ${sessionId}`)
+        throw new AppError('INVARIANT', `session ledger already exists and is non-empty: ${sessionId}`)
       }
     }
     return this.seedLedger(sessionId, path, [], [])
@@ -77,7 +78,9 @@ export class SessionStore {
   /** 打开既有会话账本；不存在时抛错。开档时容忍并回写修复半截尾行。 */
   public async open(sessionId: string): Promise<SessionLedger> {
     const path = this.locator.resolveLedgerPath(sessionId)
-    if (!existsSync(path)) throw new Error(`session ledger not found: ${sessionId}`)
+    if (!existsSync(path)) throw new AppError('NOT_FOUND', `session ledger not found: ${sessionId}`, undefined, {
+        sessionId,
+      })
     return this.hydrate(sessionId, path)
   }
 
@@ -112,7 +115,7 @@ export class SessionStore {
     if (!existsSync(path)) await writeFile(path, '')
     // 双开断言（P1-10）：同一账本文件已持有 append handle 时拒绝再开——两个 'a' 模式 handle 并发写会交错撕裂行。
     if (this.openLedgerPaths.has(path)) {
-      throw new Error(`session ledger already has an open append handle: ${sessionId} (${path})`)
+      throw new AppError('INVARIANT', `session ledger already has an open append handle: ${sessionId} (${path})`)
     }
     this.openLedgerPaths.add(path)
     const context: SessionLedgerContext = {
@@ -142,7 +145,7 @@ export class SessionStore {
     if (existsSync(path)) {
       const existing = await readLedgerFile(path)
       if (!isEmpty(existing.entries)) {
-        throw new Error(`cannot fork into existing non-empty session ledger: ${newSessionId}`)
+        throw new AppError('INVARIANT', `cannot fork into existing non-empty session ledger: ${newSessionId}`)
       }
     }
     await mkdir(dirname(path), { recursive: true })
@@ -217,7 +220,12 @@ export class SessionLedger {
     this.assertOpen()
     return this.writeQueue.enqueue(async () => {
       if (!this.entries.some((entry) => entry.id === entryId)) {
-        throw new Error(`cannot branch: entry ${entryId} not found in session ${this.ctx.sessionId}`)
+        throw new AppError(
+          'NOT_FOUND',
+          `cannot branch: entry ${entryId} not found in session ${this.ctx.sessionId}`,
+          undefined,
+          { sessionId: this.ctx.sessionId, entryId }
+        )
       }
       this.currentLeaf = entryId
     })
@@ -275,12 +283,12 @@ export class SessionLedger {
   }
 
   private async writeLine(entry: SessionEntry): Promise<void> {
-    if (!this.appendHandle) throw new Error(`session ledger ${this.ctx.sessionId} append handle is closed`)
+    if (!this.appendHandle) throw new AppError('INVARIANT', `session ledger ${this.ctx.sessionId} append handle is closed`)
     await this.appendHandle.write(serializeLedgerLine(entry))
     await this.appendHandle.datasync() // 崩溃安全：每条落盘后 fsync 数据页
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error(`session ledger ${this.ctx.sessionId} is closed`)
+    if (this.closed) throw new AppError('INVARIANT', `session ledger ${this.ctx.sessionId} is closed`)
   }
 }

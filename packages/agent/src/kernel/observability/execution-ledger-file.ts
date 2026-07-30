@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
 import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { type ExecutionSpan, ExecutionSpanSchema } from '../../protocol'
 import { canonicalJsonStringify } from '../session-store'
@@ -54,7 +55,7 @@ export function parseSpanLedgerText(raw: string, path: string): SpanLedgerReadRe
     }
     const isLastLine = index === lines.length - 1
     if (isLastLine) return { spans, truncatedTail: true }
-    throw new Error(
+    throw new AppError('INVARIANT', 
       `execution span ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
     )
   }

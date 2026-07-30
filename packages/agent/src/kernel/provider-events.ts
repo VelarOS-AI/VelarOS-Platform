@@ -153,7 +153,7 @@ export class ProviderTurnEventReducer {
     switch (event.type) {
       case 'turn-started': {
         if (this.started) {
-          throw new Error(`Provider turn "${this.options.turnId}" has already started`)
+          throw new AppError('INVARIANT', `Provider turn "${this.options.turnId}" has already started`)
         }
         this.started = true
         return
@@ -191,7 +191,7 @@ export class ProviderTurnEventReducer {
       case 'tool-started': {
         this.assertStarted()
         if (this.tools.has(event.toolCallId)) {
-          throw new Error(`Provider turn tool call "${event.toolCallId}" already exists`)
+          throw new AppError('INVARIANT', `Provider turn tool call "${event.toolCallId}" already exists`)
         }
         const tool: ProviderTurnToolSnapshot = {
           toolCallId: event.toolCallId,
@@ -249,7 +249,7 @@ export class ProviderTurnEventReducer {
 
     const unsettled = [...this.tools.values()].find((tool) => tool.status === 'pending')
     if (unsettled) {
-      throw new Error(
+      throw new AppError('INVARIANT', 
         `Provider turn "${this.options.turnId}" has unsettled tool call "${unsettled.toolCallId}"`
       )
     }
@@ -315,7 +315,7 @@ export class ProviderTurnEventReducer {
 
   private assertStarted(): void {
     if (!this.started) {
-      throw new Error(`Provider turn "${this.options.turnId}" has not started`)
+      throw new AppError('INVARIANT', `Provider turn "${this.options.turnId}" has not started`)
     }
   }
 
@@ -323,10 +323,10 @@ export class ProviderTurnEventReducer {
     this.assertStarted()
     const tool = this.tools.get(toolCallId)
     if (!tool) {
-      throw new Error(`Provider turn tool call "${toolCallId}" was not started`)
+      throw new AppError('INVARIANT', `Provider turn tool call "${toolCallId}" was not started`)
     }
     if (tool.status !== 'pending') {
-      throw new Error(`Provider turn tool call "${toolCallId}" is already settled`)
+      throw new AppError('INVARIANT', `Provider turn tool call "${toolCallId}" is already settled`)
     }
     return tool
   }
