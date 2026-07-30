@@ -183,7 +183,7 @@ function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string 
     '- 如果还没有目标，先调用 create_goal 创建本次目标。',
     '- 如果目标尚未完成，继续读取、修改、执行或验证。',
     '- 如果目标已经真正完成，调用 update_goal({status:"complete"}) 后再收尾。',
-    '- 如果确实受阻，必须满足连续 blocked audit 后才能调用 update_goal({status:"blocked"})。',
+    '- 如果确认存在无法继续推进的真实阻碍，可以自行调用 update_goal({status:"blocked"}) 后再收尾；不需要等待多轮审计。',
   ].join('\n')
 }
 

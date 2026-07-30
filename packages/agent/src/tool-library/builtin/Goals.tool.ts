@@ -8,7 +8,6 @@ import { defineVelaTool } from '../defineVelaTool'
 
 import { directiveTypeSchema } from './ActiveDirectives'
 import {
-  assertCanBlockGoal,
   assertGoalCanComplete,
   buildGoalStateUpsertInput,
   buildGoalTerminalUpsertInput,
@@ -17,7 +16,6 @@ import {
   findCurrentGoalArtifact,
   type GoalConstraint,
   type GoalStep,
-  MinBlockedAuditTurns,
   toGoalSnapshot,
 } from './Goals'
 import { planStatusSchema } from './Plans'
@@ -120,8 +118,6 @@ const getGoal = defineVelaTool<Record<string, never>>({
     return {
       status: goal?.status ?? 'none',
       goal,
-      // 阈值单源：与 assertCanBlockGoal 的门共用常量，避免这里报 3、门按别的数拦。
-      minimumBlockedAuditTurns: MinBlockedAuditTurns,
     }
   },
 })
@@ -237,13 +233,17 @@ const updateGoal = defineVelaTool<{
   summary: '更新当前 session 的统一目标状态，或把目标标记为完成/受阻。',
   suitable: [
     '需要同步目标、步骤或约束状态。',
-    '目标已实际完成，或同一阻塞条件已经连续审计多轮后仍无法推进。',
+    '目标已实际完成，或模型确认存在无法继续推进的真实阻碍。',
   ],
-  forbidden: ['不要用它创建目标；不要在第一次卡住时直接标记 blocked。'],
+  forbidden: [
+    '不要用它创建目标。',
+    '不要仅因为任务困难、耗时、结果不确定或希望获得澄清就草率标记 blocked。',
+  ],
   usage: [
     '维护步骤最省心:传完整 steps 列表(每步带 status),这一项就能同步全部步骤;想改哪步就改它的 status。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题,别自造 id);host 标记 completed 并推进下一个 pending。steps 与 complete_step 可一起传。',
-    'status=complete 宣布目标完成:未收尾的 pending/in_progress 步骤会被自动标完成,不用逐个 complete_step;status=blocked 需满足连续阻塞审计阈值。',
+    'status=complete 宣布目标完成:未收尾的 pending/in_progress 步骤会被自动标完成,不用逐个 complete_step。',
+    'status=blocked 宣布目标受阻:模型确认缺少必要授权、用户输入或外部状态等真实阻碍导致无法继续推进时,可以自行调用,不需要等待多轮审计。',
     '所有字段都不传则视为读取当前目标、不报错。',
   ],
   examples: [
@@ -262,7 +262,7 @@ const updateGoal = defineVelaTool<{
             description: '目标终态；不传时仅更新目标状态字段。',
             values: [
               'complete：目标已经真正完成。',
-              'blocked：连续阻塞审计达到阈值后仍无法推进。',
+              'blocked：模型确认存在无法继续推进的真实阻碍。',
             ],
           })
         ),
@@ -366,10 +366,6 @@ const updateGoal = defineVelaTool<{
     if (input.status === 'complete') {
       assertGoalCanComplete(current)
     }
-    if (input.status === 'blocked') {
-      assertCanBlockGoal(current)
-    }
-
     const updatedArtifact = input.status
       ? await ctx.activeContext.upsertActiveContextArtifact(
           buildGoalTerminalUpsertInput({

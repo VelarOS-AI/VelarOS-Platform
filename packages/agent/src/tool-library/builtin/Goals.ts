@@ -11,7 +11,6 @@ import type { StepEngineOptions } from './StepRefs'
 import { completeSteps } from './StepRefs'
 
 const GoalArtifactId = 'active-goal'
-const MinBlockedAuditTurns = 3
 
 type GoalStatus = 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
 
@@ -266,22 +265,6 @@ function buildGoalTerminalUpsertInput(input: {
   }
 }
 
-/**
- * 受阻审计闸：连续 N 轮都没能收尾才允许标 blocked（避免"第一次卡住就宣告受阻"）。
- *
- * 计数器 `blockedAuditTurns` 的**唯一写入方**是收尾门（`SoloGoalLifecycle.recordCompletionAttempt`，
- * 每次收尾未通过 +1）。本文件只读不写——此前这里还留着一份同义的 upsert 构造器，与收尾门那份
- * 逐字同义却零消费者，已随 Q2c 删除。要改计数规则去收尾门改，别在这里复活第二份。
- */
-function assertCanBlockGoal(goal: GoalSnapshot): void {
-  if (goal.blockedAuditTurns >= MinBlockedAuditTurns) return
-
-  throw new AppError(
-    'VALIDATION',
-    `Blocked audit requires at least ${MinBlockedAuditTurns} consecutive goal turns before marking blocked. Current audit count: ${goal.blockedAuditTurns}.`
-  )
-}
-
 function assertGoalCanComplete(goal: GoalSnapshot): void {
   const unresolvedSteps = goal.steps.filter((step) => !isResolvedGoalStep(step))
   if (isEmpty(unresolvedSteps)) return
@@ -297,7 +280,6 @@ function assertGoalCanComplete(goal: GoalSnapshot): void {
 }
 
 export {
-  assertCanBlockGoal,
   assertGoalCanComplete,
   buildGoalStateUpsertInput,
   buildGoalTerminalUpsertInput,
@@ -306,7 +288,6 @@ export {
   findCurrentGoalArtifact,
   GoalArtifactId,
   isGoalArtifact,
-  MinBlockedAuditTurns,
   toGoalSnapshot,
 }
 export type {
