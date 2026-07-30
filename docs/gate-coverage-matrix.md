@@ -3,9 +3,10 @@
 > **什么时候该读它**:①想知道「我改的这个包,到底有哪些门在管着我」;②要给某个包补门之前——
 > 先看这里有没有别的包已经在跑同一条判据;③怀疑「这条规则我们不是有门吗,怎么没拦住」时。
 >
-> **一句话结论**:Platform 的 eslint 面在 2026-07-30 之后已与 Desktop 对齐(见 §1),
-> 但 **Desktop 的 44 条 `velaros/code-style/*`(arch-guard)在本仓一个包都不跑**(见 §3),
-> 实测存量 1122 条违规。这不是纪律松,是门没铺过来。
+> **一句话结论**:Platform 的 eslint 面已与 Desktop 对齐(见 §1);arch-guard 写法门也已铺过来
+> ——**QI 批(2026-07-30)劈包完成**,37 条语言级 `code-style/*` 由公开包
+> `@velaros-ai/arch-guard/checks/code-style` 提供,两仓共依同一份判据,本仓门名
+> `check:code-style`,存量 1915 条冻结进 `.arch-guard/baseline.json`,新增即红(见 §3)。
 >
 > 数据全部**实测得来**,不是读配置推断:eslint 面用 `ESLint#calculateConfigForFile` 取每个包的
 > 生效规则表;arch-guard 面用 Desktop 的插件按 `rootDir` 指向本仓逐包跑 `--no-baseline`。
@@ -77,84 +78,82 @@
 | ui | `check:ui-hook-deps` | `react-hooks/exhaustive-deps` 棘轮 + `--quiet` 吞噬护栏 | `baselines/ui/react-hook-deps.json` |
 | ui | `check:ui-package-contracts` | 包导出契约 | — |
 | ui | `check:ui-component-library` | 图鉴生成物新鲜度 / 独立性 | — |
-| **html-artifacts** | **无** | 包内有 `check` / `check:dist` / `check:package-contract`,**没挂进根链** | — |
-| **workspace** | **无** | 包内有 `check` / `check:arch`(118 行),**没挂进根链** | — |
+| 全仓 | `check:code-style` | 语言级写法门(公开包 37 条,见 §3) | `.arch-guard/baseline.json`(1915 条) |
+| html-artifacts | `check:html-artifacts-package` | 包导出契约 + dist 产物(QI 批挂链) | — |
+| workspace | `check:workspace-arch` | 单包形态 + host/capability 边界(QI 批挂链) | — |
 | **game** | 只被 `check:capabilities-arch` 的包集合冻结覆盖 | 无自己的 schema / 架构门 | — |
 
-> **缺口 A**:`html-artifacts` 与 `capabilities/workspace` 各自带着**已经写好**的检查脚本,但两者都
-> 只在包内 `check` 脚本里,根 `check:gates` 不跑它们——CI 与 `bun run check` 都碰不到。
-> 这是「门写了但没挂链」的典型,处置成本极低(两行脚本),留给后续批次。
+> **缺口 A 已闭合**(QI 批 2026-07-30):`html-artifacts` 的 `check:package-contract` + `check:dist`
+> 与 `capabilities/workspace` 的 `check:arch` 已分别包成 `check:html-artifacts-package` /
+> `check:workspace-arch` 挂进根 `check:gates`。教训留档:**门写了但没挂链等于没有门,还多骗一层
+> 安全感**——新写检查脚本时同一批就要挂链。
 
 ---
 
-## 3. arch-guard `velaros/code-style/*` —— 全仓零覆盖(最大缺口)
+## 3. arch-guard 写法门 —— 已接门(QI 批 2026-07-30)
 
-Desktop 侧有 **44 条** `velaros/code-style/*` 检查(缺席值八条族、`forbid-swallowed-errors`、
-`forbid-trivial-function-wrapper`、`require-chinese-comments`、`prefer-is-plain-object-*`、
-`forbid-raw-timers`、`forbid-console` …),由 `bun run check:architecture` 执行。
-**Platform 一个包都不跑**(本仓没有 `arch-guard.config.mjs`,也没有 `.arch-guard/`)。
+**门**:`bun run check:code-style`(= `arch-guard verify`,已挂进根 `check:gates`)。
+配置 `arch-guard.config.mjs`,基线 `.arch-guard/baseline.json`,逐条看用 `check:code-style:report`,
+收缩基线用 `check:code-style:baseline`。
 
-### 3.1 实测存量(把 Desktop 的插件按 `rootDir` 指向本仓逐包跑,`--no-baseline`)
+### 3.1 判据从哪来(单源)
 
-| 包 | 总违规 | error | warning | 失败检查数 |
-| --- | ---: | ---: | ---: | ---: |
-| `core` | 233 | 161 | 71 | 11 |
-| `memory` | 163 | 127 | 36 | 2 |
-| `ui` | 145 | 122 | 21 | 21 |
-| `capabilities/system-tools` | 123 | 114 | 9 | 1 |
-| `agent` | 116 | 11 | 105 | 1 |
-| `kernel-serve` | 63 | 5 | 58 | 2 |
-| `game` | 55 | 48 | 7 | 2 |
-| `html-artifacts` | 52 | 30 | 22 | 1 |
-| `browser` | 38 | 9 | 29 | 1 |
-| `computer` | 38 | 4 | 34 | 1 |
-| `capabilities/workspace` | 25 | 3 | 22 | 1 |
-| `kernel-client` | 24 | 1 | 23 | 1 |
-| `model` | 24 | 0 | 24 | 0 |
-| `capabilities/office-tools` | 18 | 11 | 7 | 1 |
-| `capabilities/cli` | 5 | 0 | 5 | 0 |
-| **合计** | **1122** | **646** | **473** | 24/44 条检查命中 |
+Desktop 原有的 44 条 `velaros/code-style/*` 已按判据分家:
 
-按检查聚合(命中数 ≥ 10 的):
+| 族 | 条数 | 住在哪 | 谁在跑 |
+| --- | ---: | --- | --- |
+| **语言级通用**(缺席值表达 / 守卫单源 / 早返 / 表驱动 / 恒等转发 / 冗余严格比较 / 吞错 / React 条件渲染 / 注释团队语言…) | **37** | 公开包 `@velaros-ai/arch-guard/checks/code-style`,id `code-style/*` | **两仓**(Desktop 经私有插件、本仓经 `arch-guard.config.mjs` 直装) |
+| **产品专属**(前后端强转分层 / unknown JSON 单源 / 注入式全局 / i18n 文案 / 桌面入口 extensions / `AppError` 具体类型 / `ToolContext` 能力面) | 7 | Desktop 私有插件,id 仍 `velaros/code-style/*` | 只有 Desktop |
+
+规则本体**不硬编码任何仓库坐标**——扫描面(`scanRoots` / `runtimeRoots` / `frontendRoots` /
+`skipPatterns` / `allowFiles`)由 `createCodeStyleDefaults()` 从本仓配置一处注入。改判据只改公开包,
+**两仓都不许留副本**。
+
+### 3.2 接门当天的存量(冻结基线)
+
+`arch-guard verify --no-baseline` 实测:**1915 条**(1805 error / 87 warning / 23 info),24/37 条检查命中。
+按检查聚合(≥ 20 条):
 
 | 命中 | 检查 |
 | ---: | --- |
-| 472 | `require-chinese-comments` |
-| 377 | `prefer-loose-optional` |
-| 69 | `forbid-redundant-strict-literal-comparison` |
-| 36 | `forbid-raw-runtime-type-guards` |
-| 35 | `prefer-emptiness-helpers` |
-| 28 | `forbid-explicit-undefined-union` |
-| 20 | `forbid-nullish-churn` |
-| 17 | `require-error-logging` |
-| 16 | `prefer-is-plain-object-over-guarded-record-cast` |
-| 13 | `forbid-console` |
+| 420 | `code-style/forbid-redundant-strict-literal-comparison` |
+| 380 | `code-style/prefer-loose-optional` |
+| 255 | `code-style/forbid-raw-runtime-type-guards` |
+| 178 | `code-style/prefer-emptiness-helpers` |
+| 136 | `code-style/forbid-explicit-undefined-union` |
+| 115 | `code-style/forbid-nullish-churn` |
+| 84 | `code-style/require-chinese-comments` |
+| 82 | `code-style/require-error-logging` |
+| 67 | `code-style/prefer-is-plain-object-over-guarded-record-cast` |
+| 44 | `code-style/forbid-swallowed-errors` |
+| 26 | `code-style/prefer-is-plain-object-over-object-array-guard` |
+| 23 | `code-style/prefer-table-branching` |
+| 20 | `code-style/forbid-raw-timers` |
 
-> `ui` 的「21 条检查失败」是全仓最高——不是 ui 纪律最差,是它的代码形态(React + 大量缺席值分支)
-> 最贴这批规则的靶面。反过来 `model` / `capabilities/cli` 零 error,只有 warning 级命中。
+> **与 QH 批 1122 条的差异**:QH 用 Desktop 插件测量,那套规则被 Desktop 的 `RuntimeSourceRoots`
+> 硬编码收窄,`packages/capabilities/**` 等根本没进扫描面;现在坐标由本仓声明(`runtimeRoots:
+> ['packages/']`),覆盖面变全,数字随之上升。**同一批代码,量的是更大的面。**
+> 另一处反向差异:`require-chinese-comments` 从 472 降到 84——公开 API JSDoc 分档豁免
+> (见下)把「写给外部消费者的英文 API 文档」从违规里摘了出去。
 
-### 3.2 为什么本仓跑不了(结构性阻塞,需要裁决)
+### 3.3 `require-chinese-comments` 的分档(主控裁决)
 
-这 44 条住 Desktop 的 `packages/arch-guard-velaros`——`private: true`、**从未发布**,而且
-Desktop `docs/package-extraction-map.md` 明确把它登记为「**Desktop 自持**」。
-引擎 `@velaros-ai/arch-guard` 是公开 GitHub 包(本仓可以直接依赖),**插件不是**。
-于是只有三条出路,都需要人拍板:
+- **`src/**` 实现代码注释仍须中文**(团队语言判据与「发布给谁」无关);
+- **豁免面**:挂在**导出声明及其成员**上的 `/** */` JSDoc 块(那是外部 mod / 包消费者读的 API 文档,
+  英文合理),由规则的 `exemptExportedJsDoc` 选项实现、默认开;README / docs / CHANGELOG 本来就在
+  扫描面外(门只扫 `.ts/.tsx`);
+- **本仓 severity 钉 error**(默认 warning 拦不住新增),存量 84 条冻结,**新增即红**。
 
-1. **把 `arch-guard-velaros` 的 `checks/code-style/` 劈出来发成公共包**
-   (如 `@velaros-ai/code-style-checks`),两仓共同依赖。判据单源,成本最高但唯一干净。
-2. **整包发布 `@velaros/arch-guard-velaros`**(GH Packages)。最省事,但会把 Desktop 专属的
-   架构 / legacy 检查(含 `apps/desktop/src` 硬编码路径)一起带进 Platform 的依赖面。
-3. **推翻 extraction-map 的「Desktop 自持」判决**,把插件整体迁进 Platform。
+### 3.4 扫描面与豁免(改门前必读)
 
-**不要做的**:把 44 条 check 复制一份进 Platform——判据立刻双源,漂移是时间问题。
-**也不要做的**:做成「sibling 检出在就跑、不在就跳过」的 best-effort 探针——那正是
-「没挂链的门等于没有门,还多骗一层安全感」。
-
-> 铺法建议(裁决之后):arch-guard 自带 `.arch-guard/baseline.json` 棘轮,1122 条存量一次冻结,
-> 新增即红;`require-chinese-comments` 需要单独议——Platform 是对外发布的库,英文注释与英文
-> README 是有意为之,这条在本仓的判据可能与 Desktop 不同。
-
----
+- `files.roots = ['packages']`,`extensions = ['.ts','.tsx']`;`dist` / `test` / `tests` /
+  `__tests__` / `examples` / `scripts` / `probes` / 生成物 / `*.d.ts` 全在面外。
+- `frontendRoots = ['packages/ui/src/','packages/html-artifacts/src/']`:JSX 类规则只扫这两处。
+- 守卫 / 缺席值 helper 的**实现本体**(`core/src/typeGuards.ts`、`core/src/logger/`、
+  `utils/optionalWhen.ts`、`utils/mapDefined.ts`)不能套用自身 autofix,已在 `skipPatterns` 豁免;
+  `core/src/utils/TimerScope.ts` 在 `forbid-raw-timers` 的 `allowFiles` 里。
+- **负向自检**(接门时做过):在 `packages/core/src` 注入一条新违规 → `check:code-style` FAIL;
+  删掉 → PASS。基线不会替新增违规背书。
 
 ## 4. 已知的门口径盲区(判据上是违规,机械上看不见)
 
@@ -196,3 +195,7 @@ Object.entries(cfg.rules).filter(([, v]) => (Array.isArray(v) ? v[0] : v) !== 'o
 
 - 2026-07-30 QH 批:首次实测建表;补 `ui` 的 `exhaustive-deps`、`memory` / `model` /
   `html-artifacts` 三域规则集;修两条门口径盲区。arch-guard 缺口待裁决。
+- 2026-07-30 QI 批:arch-guard 缺口按「劈公共包」出路闭合——37 条语言级规则进
+  `@velaros-ai/arch-guard/checks/code-style`(两仓共依、判据单源),本仓立 `check:code-style`
+  并冻结 1915 条存量;`require-chinese-comments` 分档(公开 API JSDoc 豁免)并钉 error;
+  §2 缺口 A 的两个包内检查挂进根 `check:gates`。
