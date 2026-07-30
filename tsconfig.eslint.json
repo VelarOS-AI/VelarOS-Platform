@@ -1,5 +1,5 @@
 {
-  "//": "eslint 类型感知解析用的全仓 program。各源仓 tsconfig.eslint.json 的并集(见 docs/<domain>/source-root-tsconfig.eslint.json)。",
+  "//": "eslint 类型感知解析用的全仓 program。并仓时由各退役源仓 tsconfig.eslint.json 取并集而来;源仓原件的取证路径见 README「源仓考古指引」。",
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowJs": false,

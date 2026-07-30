@@ -6,6 +6,11 @@ agent 的运行时行为。
 > **权威关系**：本套件是**参考手册**，不是判决源。架构判决住 **VelarOS-Desktop 仓**的
 > `docs/mod-architecture-blueprint.md`（蓝图 v6）与 `docs/kernel-contract.md`（§15 进程拓扑判决）。
 > 两者冲突时以那两份为准，改本套件。
+>
+> **宿主侧接线**：本套件写的是 **mod 作者面**（平台包提供什么）。同一条链的**宿主那一半**——Desktop
+> 怎么装配 loader、安装器与市场入口怎么接、MCP 工具服务器的判决——住 Desktop 仓
+> `docs/desktop-agent-mod-wiring.md`。写 mod 读这里，改宿主读那里，两份互为上下游。
+>
 > 本套件的每个 API 名 / 字段名 / 文件名都对得上本仓 `packages/**` 或 Desktop 仓的真实代码；
 > 判决已定但尚未实装的部分一律标注「**契约已定，实装批次 X**」，不当成能用的东西写。
 
