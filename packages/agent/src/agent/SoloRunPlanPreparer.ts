@@ -23,6 +23,7 @@ import {
 } from '../capabilities'
 import { isExecutionModeSelected } from '../execution-modes'
 
+import { compareStableStrings } from './context/residency/determinism'
 import {
   type AgentRunPlan,
   agentRunPlanComposer,
@@ -353,7 +354,7 @@ function toolCategorySummary(
     })
   }
 
-  return summary.sort((left, right) => left.id.localeCompare(right.id))
+  return summary.sort((left, right) => compareStableStrings(left.id, right.id))
 }
 
 function sumPositiveRecordValues(values: LooseOptional<Readonly<Record<string, number>>>): number {

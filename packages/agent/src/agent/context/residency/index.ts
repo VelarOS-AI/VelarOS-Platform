@@ -1,20 +1,25 @@
 /**
- * 驻留账本（上下文治理 v2 · V2-B0）的目录出口。
+ * 驻留账本 + 治理器（上下文治理 v2 · B0 机器 + B1 决策）的目录出口。
  *
- * 本批只提供**机器**：记录模型、只追加账本、准入钩子、确定性投影、摄入适配器、迁移事件日志、
- * 配置面。治理决策（epoch 状态机 / I0 逐出 / I1 骨架 / I2 蒸馏）归 V2-B1 的 Governor——它挂在
- * `ContextResidencyLedger.migrate` 与 `projectContextLedger` 之间，B0 不预埋任何触发逻辑。
+ * 分工没有第三层：
+ *  - **机器**（B0）：记录模型、只追加账本、准入钩子、确定性投影、摄入适配器、迁移事件、配置面。
+ *  - **决策**（B1）：`GovernanceEpoch` 状态机（I0 逐出 / I1 规则骨架）、`ContextGovernanceSession`
+ *    的跨回合状态与 fault / 转交信号、`dashboard` 尾块。
  *
- * 现役链路（`ProviderRequestCompiler` 六 stage + `history/*` 压缩族）**未被本批改动一行**：
- * B0 是纯新增模块，运行时行为零变化。
+ * B1 起本目录是 `ProviderRequestCompiler` 的**历史组装单口**：会话历史摄入账本、投影出 provider
+ * 消息，v1 的注意力路由 / microCompaction / 聚合预算 / 语义摘要器四条旁路已随本批下线。
  */
 export * from './admission'
 export * from './anchors'
+export * from './ContextGovernanceSession'
 export * from './ContextRecord'
+export * from './dashboard'
 export * from './determinism'
 export * from './governanceConfig'
+export * from './GovernanceEpoch'
 export * from './ingest'
 export * from './messageFacts'
 export * from './migrationLog'
 export * from './projection'
 export * from './ResidencyLedger'
+export * from './skeleton'

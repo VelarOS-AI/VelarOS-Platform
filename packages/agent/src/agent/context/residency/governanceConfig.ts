@@ -17,6 +17,12 @@ export interface ContextAdmissionConfig {
   /** 工具结果超过该字符数直接以 EXCERPT 准入（沿用 v1 句柄化现值 24K）。 */
   inlineMaxChars: number
   /**
+   * 单条 user 正文超过该字符数直接以 EXCERPT 准入（v1 `MaxUserMessageInlineChars` 安全阀，
+   * 48K，语义逐字对齐）。与工具结果分开一档：一条用户指令的信息密度远高于一份工具输出，
+   * 用同一个 24K 门会把长需求书当日志砍。
+   */
+  userInlineMaxChars: number
+  /**
    * EXCERPT 摘录的字符预算。默认等于 `inlineMaxChars`——**这就是 v1 现行语义**
    * （`tool-output-store` 的 preview 预算 == 句柄化阈值），B0 不动它。
    * 单列成旋钮是为了 B1 能扫参：两者相等时 25K 的结果只省 1K，是个已知的钝角。
@@ -59,8 +65,10 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   epochTriggerPercent: 70,
   epochTargetPercent: 40,
   minEpochSavingPercent: 10,
-  admission: { inlineMaxChars: 24_000, excerptMaxChars: 24_000 },
-  instruments: { skeleton: true, distill: 'aux' },
+  admission: { inlineMaxChars: 24_000, userInlineMaxChars: 48_000, excerptMaxChars: 24_000 },
+  // distill 默认 'off' 到 B2 落地为止：I2 尚未实现，默认到一条恒降级路径只会刷警告。
+  // B2 交付后本默认切 'aux'（设计 §7 的终态默认）。
+  instruments: { skeleton: true, distill: 'off' },
   dashboard: true,
   epochBatching: true,
 }
@@ -93,6 +101,7 @@ export interface ContextGovernanceConfigInput {
   minEpochSavingPercent?: LooseOptional<number>
   admission?: LooseOptional<{
     inlineMaxChars?: LooseOptional<number>
+    userInlineMaxChars?: LooseOptional<number>
     excerptMaxChars?: LooseOptional<number>
   }>
   instruments?: LooseOptional<{
@@ -135,6 +144,12 @@ export function resolveContextGovernanceConfig(
     ),
     admission: {
       inlineMaxChars,
+      userInlineMaxChars: clampInteger(
+        input?.admission?.userInlineMaxChars,
+        defaults.admission.userInlineMaxChars,
+        1_000,
+        2_000_000
+      ),
       excerptMaxChars: clampInteger(
         input?.admission?.excerptMaxChars,
         inlineMaxChars,

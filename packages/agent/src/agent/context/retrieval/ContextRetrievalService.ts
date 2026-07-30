@@ -20,7 +20,8 @@ import {
   normalizeSessionLineageIdList,
 } from '@velaros-ai/core/utils/sessionLineage'
 
-import type { ContextAttentionSessionRegistry } from '../ContextAttentionSessionRegistry'
+import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
+import { compareStableStrings } from '../residency/determinism'
 
 import { chatSearchRanking } from './search/Ranking'
 import { chatSearchText } from './search/Text'
@@ -124,8 +125,11 @@ class ChatContextRetrievalService {
   constructor(
     payloadStore: RetrievalPayloadStorePort,
     stateStore: RetrievalStateStorePort,
-    /** 注意力路由会话状态登记处；召回结果经此回学给下一轮路由。 */
-    private readonly contextAttentionSessions: ContextAttentionSessionRegistry,
+    /**
+     * 治理会话登记处；每次召回都是一次**缺页（fault）**，经此记进驻留账本。
+     * fault 率是策略好坏的核心信号，也是 epoch 排序里"高者缓降"的输入（设计 §4C）。
+     */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry,
     /** 检索索引存储端口；宿主注入文件系统实现（落盘策略与新鲜度指纹在宿主侧）。 */
     private readonly indexStore: ChatContextRetrievalIndexStore,
     options: ChatContextRetrievalServiceOptions = {}
@@ -193,10 +197,7 @@ class ChatContextRetrievalService {
         repeated,
         retrievalCount,
       })
-      this.contextAttentionSessions.recordRecallOutcome(sessionId, {
-        ref: handleId,
-        found: payload.found,
-      })
+      if (payload.found) this.governanceSessions.recordFault(sessionId, handleId)
       return payload
     }
 
@@ -209,14 +210,10 @@ class ChatContextRetrievalService {
         repeated,
         retrievalCount,
       })
-      this.contextAttentionSessions.recordRecallOutcome(sessionId, {
-        ref: handleId,
-        found: payload.found,
-      })
+      if (payload.found) this.governanceSessions.recordFault(sessionId, handleId)
       return payload
     }
 
-    this.contextAttentionSessions.recordRecallOutcome(sessionId, { ref: handleId, found: false })
     // 铁律1:匹配失败必须列出有效项供自纠,并自动把 ref 当 query 兜底搜一轮——
     // 把"召回失败→模型盲猜重试"的抖动收敛成一次往返。
     const validHandleSamples = await this.listValidHandleSamples(sessionId)
@@ -547,7 +544,7 @@ class ChatContextRetrievalService {
     const sortedItems = items.sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score
 
-      return left.logPath.localeCompare(right.logPath)
+      return compareStableStrings(left.logPath, right.logPath)
     })
     const returnedItems = sortedItems.slice(0, maxResults)
     const totalLogReferences = index.toolPayloads.reduce(
@@ -685,7 +682,7 @@ class ChatContextRetrievalService {
     return candidates
       .sort((left, right) => {
         if (right.ranking.score !== left.ranking.score) return right.ranking.score - left.ranking.score
-        return left.toolPayload.handleId.localeCompare(right.toolPayload.handleId)
+        return compareStableStrings(left.toolPayload.handleId, right.toolPayload.handleId)
       })
       .slice(0, this.terminalOutputPayloadCandidateLimit)
       .map((item) => item.toolPayload)

@@ -7,6 +7,7 @@ import type {
   ToolDescriptor,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityCategoryDefinitions,
@@ -182,11 +183,11 @@ class ToolRegistry {
     }
 
     return [...grouped.keys()]
-      .sort((left, right) => left.localeCompare(right))
+      .sort(compareStableStrings)
       .map((categoryId) => {
         const category = resolveCategoryDefinition(categoryId, ctx.capabilityPorts)
         const tools = (grouped.get(categoryId) ?? []).sort((left, right) =>
-          left.name.localeCompare(right.name)
+          compareStableStrings(left.name, right.name)
         )
         return {
           category,
@@ -275,10 +276,10 @@ class ToolRegistry {
       })
     }
 
-    return [...grouped.keys()].sort((left, right) => left.localeCompare(right)).map((categoryId) => {
+    return [...grouped.keys()].sort(compareStableStrings).map((categoryId) => {
       const category = resolveCategoryDefinition(categoryId, capabilityPorts)
       const tools = (grouped.get(categoryId) ?? []).sort((left, right) => {
-        const nameOrder = left.name.localeCompare(right.name)
+        const nameOrder = compareStableStrings(left.name, right.name)
         if (nameOrder !== 0) return nameOrder
 
         const statusOrder =
@@ -286,7 +287,7 @@ class ToolRegistry {
           (right.registrationStatus === 'overridden' ? 1 : 0)
         if (statusOrder !== 0) return statusOrder
 
-        return (left.providerId ?? '').localeCompare(right.providerId ?? '')
+        return compareStableStrings(left.providerId ?? '', right.providerId ?? '')
       })
       return {
         category,

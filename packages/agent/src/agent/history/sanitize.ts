@@ -1,9 +1,18 @@
-import { createHash } from 'node:crypto'
-
+/**
+ * provider 回放前的历史**结构清洗**（不是压缩）。
+ *
+ * B1 分界：本文件曾同时兼着三条 v1 压缩路径 —— aggregate tool-result budget（280K 总预算截断）、
+ * conversation 级 micro-compact、超大 user 正文安全阀。三条全部随上下文治理 v2 下线：
+ *  - 预算与降级归**驻留账本**（准入规则 + GovernanceEpoch），唯一治理点，可解释可回放；
+ *  - 48K user 安全阀升格为准入层的 kind 感知规则（语义逐字对齐，见 `residency/admission`）。
+ *
+ * 留在这里的是**救命逻辑，一行不动**：孤儿 tool-result 剥除、tool-call 组回填/移除、二进制/图片
+ * 剪枝、非法代理对修复、provider 私有 metadata 剥离。历史上一次结构损坏就能永久锁死会话
+ * （每次 send 都被 `assertValidModelHistory` 拦下），所以这条路径与压缩策略必须分开演化。
+ */
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
-import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString, optionalWhenLazy,toNullable, toOptional } from '@velaros-ai/core'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
 import {
   compactToolInputForModel,
   deserializeSerializedToolResult,
@@ -12,32 +21,14 @@ import {
 } from '@velaros-ai/core/utils/toolResultSerialization'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import { buildContextRefEnvelope, isFoldStubText } from '../context/contextRefEnvelope'
-import { buildToolPayloadRefOccurrenceKey } from '../context/ToolPayloadReferencePlanner'
-
 import {
-  enforceConversationScopedToolResultBudget,
-  enforceOversizedUserTextSafetyValve,
   isFailureLikeToolResultValue,
   type UserTextPayloadReference,
 } from './microCompaction'
 
-const sanitizeLog = logRuntime.tag('HistorySanitize')
-
 interface ModelHistorySanitizationResult {
   history: ModelMessage[]
   changedMessages: number
-}
-
-/**
- * 扩展自 {@link ModelHistorySanitizationResult}，仅在顶层 sanitize 入口返回时使用。
- * 多了一组 aggregate tool-result budget 截断的诊断字段，方便上层做可观测/告警。
- */
-interface ModelHistorySanitizationOutcome extends ModelHistorySanitizationResult {
-  /** aggregate tool-result budget 触发的截断条数（=0 表示未截断）。 */
-  toolResultsTruncated: number
-  /** 截断节省的总字节数（替换前 - 替换后）。 */
-  toolResultBytesSaved: number
 }
 
 interface ModelMessageSanitizationResult {
@@ -47,21 +38,6 @@ interface ModelMessageSanitizationResult {
 
 interface ModelMessageSanitizationOptions {
   skipToolResultBudget?: boolean
-}
-
-interface ToolResultReference {
-  messageIndex: number
-  partIndex: number
-  toolCallId: Nullable<string>
-  toolName: Nullable<string>
-  value: string
-}
-
-interface AggregateToolResultBudgetResult {
-  history: ModelMessage[]
-  changedMessages: number
-  truncatedCount: number
-  bytesSaved: number
 }
 
 interface AssistantToolCallNameCandidate {
@@ -90,11 +66,7 @@ export interface SanitizeModelHistoryOptions {
    * 供应方回放前必须替换工具结果正文的工具调用标识。
    * 编码编排器用它避免原始发现阶段输出流入变更、验证和综合阶段。
    */
-  /** 跳过 conversation 级 micro-compact（例如 compiler reclaim 已处理时）。 */
-  skipConversationScopedToolCompaction?: boolean
-  /** 跳过超大 user 正文安全阀。 */
-  skipOversizedUserTextSafetyValve?: boolean
-  /** 已持久化的超大 user 正文 payload 引用，按 messageIndex 索引。 */
+  /** 已持久化的超大 user 正文 payload 引用，按 messageIndex 索引（准入层的 payloadRef 来源）。 */
   userTextPayloadRefs?: readonly UserTextPayloadReference[]
   /** 已持久化的工具结果 payload 引用，按 toolCallId 或 message/part occurrence key 索引。 */
   toolResultPayloadRefs?: Readonly<Record<string, string>>
@@ -102,22 +74,6 @@ export interface SanitizeModelHistoryOptions {
   stripProviderSpecificMetadata?: boolean
 }
 
-/**
- * 历史工具结果总预算上限。
- *
- * 设计逻辑：
- * - 当前轮（最近 MinRecentToolResultsToProtect 条）始终豁免，不受此预算截断。
- * - 超出预算的历史结果才被压缩成 {__truncated, originalLength} 摘要。
- * - 调大此值可让历史保留更多细节，但会消耗更多 context window token。
- * 280_000 约对应 70K tokens，适合 200K context 模型（留余量给系统提示+当前回复）。
- */
-const MaxModelHistoryToolResultsSerializedLength = 280_000
-
-/**
- * 当前轮最近 N 条工具结果强制豁免 aggregate budget 截断。
- * 无论 budget 多紧张，最新的这几条结果都保持完整，确保 Agent 能看到刚执行的工具输出。
- */
-const MinRecentToolResultsToProtect = 20
 const MaxRecentToolResultContentImagesToKeep = 1
 
 const HistoricalImagePlaceholder = '[historical image omitted before provider replay]'
@@ -1018,216 +974,6 @@ function compactToolResultOutputValue(value: string): string {
   return serializeToolResultForModel(deserializeSerializedToolResult(value))
 }
 
-function buildHistoryBudgetToolResultSummary(reference: ToolResultReference): string {
-  // B3:有 toolCallId 即升级统一信封;没有则保留旧 __truncated 形
-  // (旧键嗅探永久兜底——core toolResultSerialization 也独立生产该键)。
-  if (reference.toolCallId) return JSON.stringify(
-      buildContextRefEnvelope({
-        __contextRef: 'history-budget-truncated',
-        ref: reference.toolCallId,
-        toolCallId: reference.toolCallId,
-        toolName: toOptional(reference.toolName),
-        excerpt: reference.value.slice(0, 200),
-        excerptKind: 'head',
-        excerptTruncated: true,
-        originalLength: reference.value.length,
-        retrieval: {
-          tool: 'recall_context',
-          args: {
-            ref: reference.toolCallId,
-            refKind: 'tool-payload',
-            reason: 'need full historical tool result',
-            maxChars: 8_000,
-          },
-        },
-      })
-    )
-  return JSON.stringify({
-    __truncated: true,
-    originalLength: reference.value.length,
-  })
-}
-
-function hashToolResultPayload(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
-function buildHistoryBudgetToolPayloadReference(
-  reference: ToolResultReference,
-  payloadRef: string
-): string {
-  // B2:统一信封(共享 builder)。
-  return JSON.stringify(buildContextRefEnvelope({
-    __contextRef: 'tool-payload-ref',
-    ref: payloadRef,
-    toolCallId: toOptional(reference.toolCallId),
-    toolName: toOptional(reference.toolName),
-    payloadRef,
-    payloadHash: hashToolResultPayload(reference.value),
-    originalLength: reference.value.length,
-    retrieval: {
-      tool: 'recall_context',
-      args: {
-        ref: payloadRef,
-        refKind: 'payload-ref',
-        reason: 'need full historical tool result',
-        maxChars: 8_000,
-      },
-    },
-  }))
-}
-
-function readTextToolResultReference(
-  part: unknown,
-  messageIndex: number,
-  partIndex: number
-): Nullable<ToolResultReference> {
-  if (!isRecord(part) || part.type !== 'tool-result' || !isRecord(part.output)) return null
-
-  const outputType = part.output.type
-  const outputValue = part.output.value
-  if (outputType !== 'text' || !isString(outputValue)) return null
-
-  return {
-    messageIndex,
-    partIndex,
-    toolCallId: isString(part.toolCallId) ? part.toolCallId : null,
-    toolName: isString(part.toolName) ? part.toolName : null,
-    value: outputValue,
-  }
-}
-
-function collectToolResultReferences(history: ModelMessage[]): ToolResultReference[] {
-  const references: ToolResultReference[] = []
-
-  history.forEach((message, messageIndex) => {
-    if (!isArray(message.content)) return
-
-    message.content.forEach((part, partIndex) => {
-      const reference = readTextToolResultReference(part, messageIndex, partIndex)
-      if (!reference) return
-      if (isFailureLikeToolResultValue(reference.value)) return
-
-      references.push(reference)
-    })
-  })
-
-  return references
-}
-
-function isAlreadyBudgetedToolResultReference(value: string): boolean {
-  // 统一嗅探(B1):任意代际折叠桩(含 __kernelRef/__contextSummary)都视为已折叠,
-  // 预算回收不再把别层的桩再压一层。
-  return isFoldStubText(value)
-}
-
-function resolveAggregateToolResultPayloadRef(
-  reference: ToolResultReference,
-  payloadRefs?: Readonly<Record<string, string>>
-): Nullable<string> {
-  if (!payloadRefs) return null
-
-  const occurrenceRef =
-    payloadRefs[buildToolPayloadRefOccurrenceKey(reference.messageIndex, reference.partIndex)]
-  if (occurrenceRef) return occurrenceRef
-
-  if (reference.toolCallId) return toNullable(payloadRefs[reference.toolCallId])
-  return null
-}
-
-function enforceAggregateToolResultBudget(
-  history: ModelMessage[],
-  payloadRefs?: Readonly<Record<string, string>>
-): AggregateToolResultBudgetResult {
-  const references = collectToolResultReferences(history)
-  if (isEmpty(references)) return { history, changedMessages: 0, truncatedCount: 0, bytesSaved: 0 }
-
-  // 最近 MinRecentToolResultsToProtect 条结果强制豁免，确保当前轮工具输出始终可见。
-  const protectedCount = Math.min(MinRecentToolResultsToProtect, references.length)
-  const protectedIndexes = new Set(
-    references
-      .slice(references.length - protectedCount)
-      .map((_, i) => references.length - protectedCount + i)
-  )
-
-  let usedSerializedLength = 0
-  const replacements = new Map<string, string>()
-  let bytesSaved = 0
-
-  // 先把受保护的条目计入 budget（不压缩），再从最旧的开始压缩超出部分。
-  for (let index = references.length - 1; index >= 0; index -= 1) {
-    const reference = references[index]
-
-    // 受保护的最近结果：始终保留，直接计入 budget
-    if (protectedIndexes.has(index)) {
-      usedSerializedLength += reference.value.length
-      continue
-    }
-
-    // 已经是截断摘要的旧结果：按摘要实际长度计入，不重复压缩
-    if (isAlreadyBudgetedToolResultReference(reference.value)) {
-      usedSerializedLength += reference.value.length
-      continue
-    }
-
-    if (
-      usedSerializedLength + reference.value.length <=
-      MaxModelHistoryToolResultsSerializedLength
-    ) {
-      usedSerializedLength += reference.value.length
-      continue
-    }
-
-    const payloadRef = resolveAggregateToolResultPayloadRef(reference, payloadRefs)
-    const replacement = payloadRef
-      ? buildHistoryBudgetToolPayloadReference(reference, payloadRef)
-      : buildHistoryBudgetToolResultSummary(reference)
-    usedSerializedLength += replacement.length
-    bytesSaved += reference.value.length - replacement.length
-    replacements.set(`${reference.messageIndex}:${reference.partIndex}`, replacement)
-  }
-
-  if (!replacements.size) return { history, changedMessages: 0, truncatedCount: 0, bytesSaved: 0 }
-
-  let changedMessages = 0
-  const nextHistory = history.map((message, messageIndex) => {
-    if (!isArray(message.content)) return message
-
-    let changed = false
-    const nextContent = message.content.map((part, partIndex) => {
-      const replacement = replacements.get(`${messageIndex}:${partIndex}`)
-      const partRecord = isRecord(part) ? (part as Record<string, unknown>) : null
-      const outputValue = partRecord ? partRecord.output : null
-      const outputRecord = isRecord(outputValue) ? outputValue : null
-      if (!replacement || !partRecord || !outputRecord) return part
-
-      changed = true
-      return {
-        ...partRecord,
-        output: {
-          ...outputRecord,
-          value: replacement,
-        },
-      }
-    })
-
-    if (!changed) return message
-
-    changedMessages += 1
-    return {
-      ...message,
-      content: nextContent as ModelMessage['content'],
-    } as ModelMessage
-  })
-
-  return {
-    history: nextHistory,
-    changedMessages,
-    truncatedCount: replacements.size,
-    bytesSaved,
-  }
-}
-
 function sanitizeToolResultPart(part: ToolResultPart): {
   part: ToolResultPart
   changed: boolean
@@ -1382,7 +1128,7 @@ export function sanitizeModelMessage(
 export function sanitizeModelHistory(
   history: ModelMessage[],
   options?: SanitizeModelHistoryOptions
-): ModelHistorySanitizationOutcome {
+): ModelHistorySanitizationResult {
   let changedMessages = 0
   const prunedHistory = pruneHistoricalBinaryPartsForProvider(history)
   changedMessages += prunedHistory.changedMessages
@@ -1412,70 +1158,9 @@ export function sanitizeModelHistory(
     changedMessages += strippedProviderMetadata.changedMessages
   }
 
-  if (!options?.skipOversizedUserTextSafetyValve) {
-    const payloadRefsByMessageIndex = optionalWhenLazy(
-      options?.userTextPayloadRefs && !isEmpty((options.userTextPayloadRefs as UserTextPayloadReference[])),
-      () =>
-        new Map(
-          (options?.userTextPayloadRefs ?? []).map((reference) => [
-            reference.messageIndex,
-            reference,
-          ])
-        )
-    )
-    const userTextSafety = enforceOversizedUserTextSafetyValve(
-      workingHistory,
-      undefined,
-      payloadRefsByMessageIndex
-    )
-    if (userTextSafety.changedMessages > 0) {
-      workingHistory = userTextSafety.history
-      changedMessages += userTextSafety.changedMessages
-      if (userTextSafety.truncatedCount > 0) {
-        sanitizeLog.warn('超大 user 正文已截断', {
-          truncatedCount: userTextSafety.truncatedCount,
-        })
-      }
-    }
-  }
-
-  if (!options?.skipConversationScopedToolCompaction) {
-    const microCompact = enforceConversationScopedToolResultBudget(workingHistory)
-    if (microCompact.changedMessages > 0) {
-      workingHistory = microCompact.history
-      changedMessages += microCompact.changedMessages
-      if (microCompact.compactedCount > 0) {
-        sanitizeLog.info('conversation 级 tool-result micro-compact 已应用', {
-          compactedCount: microCompact.compactedCount,
-        })
-      }
-    }
-  }
-
-  const aggregateBudget = enforceAggregateToolResultBudget(
-    changedMessages > 0 ? workingHistory : history,
-    options?.toolResultPayloadRefs
-  )
-
-  if (aggregateBudget.truncatedCount > 0) {
-    // 主链路截断属于"模型已经看不到这部分历史工具输出"的不可逆事件，至少要在文件日志里留痕，
-    // 方便定位"为什么 Agent 突然忘了之前 grep 的内容"这类问题。
-    sanitizeLog.warn('工具结果总预算超限，已截断旧结果', {
-      truncatedCount: aggregateBudget.truncatedCount,
-      bytesSaved: aggregateBudget.bytesSaved,
-      budgetCharsCap: MaxModelHistoryToolResultsSerializedLength,
-      protectedRecentCount: MinRecentToolResultsToProtect,
-    })
-  }
-
   return {
-    history:
-      changedMessages > 0 || aggregateBudget.changedMessages > 0
-        ? aggregateBudget.history
-        : history,
-    changedMessages: changedMessages + aggregateBudget.changedMessages,
-    toolResultsTruncated: aggregateBudget.truncatedCount,
-    toolResultBytesSaved: aggregateBudget.bytesSaved,
+    history: changedMessages > 0 ? workingHistory : history,
+    changedMessages,
   }
 }
 export { sanitizeModelHistory as sanitizeModelHistoryForProvider }

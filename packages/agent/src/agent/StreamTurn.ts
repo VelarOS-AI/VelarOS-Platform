@@ -25,9 +25,10 @@ import {
 } from '../kernel'
 import type { ToolExecutionPolicyRegistry } from '../tools'
 
+import { compareStableStrings } from './context/residency/determinism'
 import {
   compileProviderSendRequest,
-  type ContextAttentionSessionRegistry,
+  type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
 } from './context'
@@ -67,6 +68,8 @@ import {
 } from './stream'
 
 const PromptCacheMinStableSystemChars = 2000
+/** 系统提示词 dynamic 层尾块的固定标签（逐轮同形，只有正文变）。 */
+const DynamicPromptLayerMarker = '[system prompt · dynamic layer (current turn)]'
 const MaxStreamContinuationRecoveryAttempts = 1
 const MaxOutputTruncationRecoveryAttempts = 2
 const MaxReasoningOnlyVisibleAnswerRecoveryAttempts = 2
@@ -97,27 +100,50 @@ function createLinkedAbortScope(parentSignal: AbortSignal): LinkedAbortScope {
 interface SystemPromptDelivery {
   system?: string
   leadingMessages: ModelMessage[]
+  /** 系统提示词 dynamic 层：排在历史**之后**的活动尾块（P7-1）。 */
+  tailBlocks: ModelMessage[]
 }
 
+/**
+ * 系统提示词投递（P7-1 的修复点）。
+ *
+ * 旧形态把 dynamic 层作为**第二条 system 消息插在稳定前缀与历史之间**。那一层里有
+ * `runtime.datetime`（`new Date().toLocaleString()`），逐请求变字节 —— 稳定前缀本身还能命中缓存，
+ * 但它后面的**整段历史**每一轮都被踢出缓存。在 input:output ≈ 100:1 的 agent 负载上，这是把
+ * 最贵的一段反复重算。
+ *
+ * 新形态：稳定层留在前缀（带缓存断点），dynamic 层整体下沉到活动尾。
+ *
+ * **为什么尾块是 user 角色而不是 system**：provider 只接受开头连续的 system 段（Anthropic 对被
+ * user/assistant 隔开的第二段 system 直接报错）。尾块与既有 retained-context 注入同形——
+ * user 角色 + 显式标签，内容仍是原样的 `<layer name="dynamic">` XML，模型的解析规则不变。
+ */
 function buildSystemPromptDelivery(
   systemPrompt: string,
   stableCutoff: LooseOptional<number>
 ): SystemPromptDelivery {
-  if (!isPositiveNumber(stableCutoff)) return { system: systemPrompt, leadingMessages: [] }
+  if (!isPositiveNumber(stableCutoff))
+    return { system: systemPrompt, leadingMessages: [], tailBlocks: [] }
 
   const cutoff = Math.min(Math.floor(stableCutoff), systemPrompt.length)
   const stablePart = systemPrompt.slice(0, cutoff)
   const dynamicPart = systemPrompt.slice(cutoff)
 
   if (stablePart.length < PromptCacheMinStableSystemChars)
-    return { system: systemPrompt, leadingMessages: [] }
+    return { system: systemPrompt, leadingMessages: [], tailBlocks: [] }
 
-  const leadingMessages: ModelMessage[] = [createPromptCacheSystemMessage(stablePart)]
-  if (!isEmpty(dynamicPart)) {
-    leadingMessages.push({ role: 'system', content: dynamicPart })
+  return {
+    leadingMessages: [createPromptCacheSystemMessage(stablePart)],
+    tailBlocks: isEmpty(dynamicPart.trim()) ? [] : [buildDynamicPromptLayerMessage(dynamicPart)],
   }
+}
 
-  return { leadingMessages }
+/** dynamic 层尾块。标签固定，正文逐字保留（不重新格式化，否则金标轨迹比对失效）。 */
+function buildDynamicPromptLayerMessage(dynamicPart: string): ModelMessage {
+  return {
+    role: 'user',
+    content: [DynamicPromptLayerMarker, dynamicPart].join('\n'),
+  }
 }
 
 type StreamTurnProvider = (modelId: string, options?: AgentModelRequestOptions) => LanguageModel
@@ -240,14 +266,14 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     private readonly connectionRetryHelper: AgentConnectionRetryHelper,
     /** assistant/tool 历史拼接工具。 */
     private readonly turnHistoryHelper: AgentTurnHistoryHelper,
-    /** 注意力路由会话状态登记处（宿主级单实例，跨回合粘滞/回学/回放共享一份，必传）。 */
-    private readonly contextAttentionSessions: ContextAttentionSessionRegistry,
+    /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry,
     /** 后端统一模型请求层。 */
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()
   ) {
     this.streamConsumerHelper = new StreamConsumer(toolRegistry)
-    this.requestCompiler = new ProviderRequestCompiler(this.contextAttentionSessions)
+    this.requestCompiler = new ProviderRequestCompiler(this.governanceSessions)
   }
 
   /** 执行单个 stream turn。 */
@@ -312,9 +338,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     historyToolNames: providerToolNamePlan.historyToolNames,
                   }
                 )
-                const providerAvailableToolNames = Object.keys(aiTools).sort((left, right) =>
-                  left.localeCompare(right)
-                )
+                // P7 确定性序列化：工具清单顺序直接进 prompt 字节，禁 locale 相关比较。
+                const providerAvailableToolNames = Object.keys(aiTools).sort(compareStableStrings)
                 const contextWorkingSetInputs = await this.turnRequestHelper.resolveContextWorkingSetInputs(
                   args.toolContext
                 )
@@ -335,6 +360,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
                     rawHistoryMessages: args.history,
                     leadingMessages: systemDelivery.leadingMessages,
+                    tailBlocks: systemDelivery.tailBlocks,
                     phase: 'stream',
                     turn: args.turn,
                     reasoningLanguage: args.reasoningLanguage,
@@ -345,7 +371,6 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     toolSchemaChars,
                     availableToolNames: providerAvailableToolNames,
                     toolChoiceName,
-                    toolPayloadReferenceBudgetChars: 8_000,
                     activeTask: contextWorkingSetInputs.activeTask,
                     pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
                     contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,

@@ -14,7 +14,6 @@ import {
   estimateContextUsage,
 } from '@velaros-ai/core/utils/contextUsage'
 
-import type { ContextAttentionRouterResult } from '../../ContextAttentionRouter'
 import {
   type ContextLedgerEntry,
   type ContextWorkingSetBlock,
@@ -30,6 +29,7 @@ import type {
   ProviderRequestPressureKind,
   ProviderRequestZoneDiagnostic,
 } from '../../ProviderRequestCompiler'
+import { compareStableStrings } from '../../residency/determinism'
 import { sumPositive } from '../messageScan'
 
 /** 区分令牌压力与工具 schema 压力，混合两者为 mixed。 */
@@ -68,7 +68,7 @@ export function buildZoneDiagnostics(
       (left, right) =>
         right.overBudgetTokens - left.overBudgetTokens ||
         right.priority - left.priority ||
-        left.zone.localeCompare(right.zone)
+        compareStableStrings(left.zone, right.zone)
     )
     .map((zone) => ({
       zone: zone.zone,
@@ -84,8 +84,6 @@ export function runBudgetStage(params: {
   input: CompileProviderRequestInput
   providerMessages: ModelMessage[]
   classifiedBlocks: readonly ContextWorkingSetBlock[]
-  attentionRoute: Nullable<ContextAttentionRouterResult>
-  dedupeLedger: readonly ContextLedgerEntry[]
 }): {
   estimate: ContextUsageEstimate
   ledger: ContextLedgerEntry[]
@@ -111,25 +109,18 @@ export function runBudgetStage(params: {
       calibrationFactor: params.input.calibrationFactor ?? estimateOptions.calibrationFactor,
     }
   )
-  const ledger: ContextLedgerEntry[] = [
-    // 保留上下文追加在尾部（不移动既有 message:<index>），故块 id 直接对齐注意力账目——
-    // 追加块拿到全新尾部编号，注意力路由（跑在注入前的消息上）无其账目，自然默认 inline。
-    ...params.classifiedBlocks.map((block) => ({
-      id: block.id,
-      zone: block.zone,
-      chars: block.chars,
-      estimatedTokens: block.estimatedTokens,
-      action:
-        params.attentionRoute?.ledgerActionsByBlockId.get(block.id)?.action ??
-        ('inline' as const),
-      reason:
-        params.attentionRoute?.ledgerActionsByBlockId.get(block.id)?.reason ??
-        'compiler preserves provider payload block',
-      hash: block.hash,
-      ref: block.payloadRef,
-    })),
-    ...params.dedupeLedger,
-  ]
+  // B1 起账目一律 inline：块正文已是**账本投影后**的最终形态，降级发生在治理 epoch 里、
+  // 由迁移事件记账，不再由本 stage 二次标注（v1 的注意力账目与去重账目已随本批下线）。
+  const ledger: ContextLedgerEntry[] = params.classifiedBlocks.map((block) => ({
+    id: block.id,
+    zone: block.zone,
+    chars: block.chars,
+    estimatedTokens: block.estimatedTokens,
+    action: 'inline' as const,
+    reason: 'compiler preserves provider payload block',
+    hash: block.hash,
+    ref: block.payloadRef,
+  }))
   const budgetAllocation = ContextWorkingSetBudgetGovernor.allocate({
     contextWindow: estimate.contextWindow,
     usableContextWindow: estimate.usableContextWindow,

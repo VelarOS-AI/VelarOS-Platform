@@ -14,6 +14,8 @@ import { isArray, isBlank, isEmpty,isString, stringifyPretty, trimmedStringOrEmp
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 /** 单个技能文件的解析结果（frontmatter + 正文）。 */
 interface SkillFileRecord {
   /** slug = 文件名（不含 .md），也是全链路引用的 skill id。 */
@@ -157,7 +159,7 @@ class SkillFileStore {
       const record = this.parseFile(filePath)
       if (record) records.push(record)
     }
-    return records.sort((left, right) => left.id.localeCompare(right.id))
+    return records.sort((left, right) => compareStableStrings(left.id, right.id))
   }
 
   /** 内容版本指纹：任何文件的增删或 mtime/大小变化都会改变。 */

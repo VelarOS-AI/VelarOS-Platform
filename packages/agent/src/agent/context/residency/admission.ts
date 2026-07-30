@@ -120,16 +120,20 @@ export function admitContextRecord(
   const dedupeKey = resolveDedupeKey(classification, input, options.classifier)
   const refetchable = resolveRefetchable(classification, input, options.classifier, dedupeKey)
   const pinned = resolvePinned(classification, input, options.classifier)
-  const oversize = input.kind === 'tool-result' && chars > config.admission.inlineMaxChars
+  const oversize = resolveOversizeKind(input.kind, chars, config)
   const id = createContextRecordId(options.seq)
   const excerpt = oversize
     ? buildRecordExcerpt({
         id,
+        kind: input.kind,
         text,
         toolCallId: identity.toolCallId,
         payloadRef: input.payloadRef,
         toolName: identity.toolName,
-        maxChars: config.admission.excerptMaxChars,
+        maxChars:
+          oversize === 'user-text'
+            ? config.admission.userInlineMaxChars
+            : config.admission.excerptMaxChars,
       })
     : null
   const admittedResidency: ContextResidency = oversize ? 'EXCERPT' : 'INLINE'
@@ -197,15 +201,27 @@ export function sliceHeadTailExcerpt(text: string, maxChars: number): string {
   return `${head}${ExcerptTruncationMarker}${tail}`
 }
 
+/** 超长档：工具结果走 `inlineMaxChars`，user 正文走 `userInlineMaxChars`（v1 48K 安全阀）。 */
+function resolveOversizeKind(
+  kind: ContextRecordKind,
+  chars: number,
+  config: ContextGovernanceConfig
+): Nullable<'tool-result' | 'user-text'> {
+  if (kind === 'tool-result' && chars > config.admission.inlineMaxChars) return 'tool-result'
+  if (kind === 'user' && chars > config.admission.userInlineMaxChars) return 'user-text'
+
+  return null
+}
+
 function buildRecordExcerpt(input: {
   id: string
+  kind: ContextRecordKind
   text: string
   toolCallId: Nullable<string>
   toolName: Nullable<string>
   payloadRef: LooseOptional<string>
   maxChars: number
 }): ContextRecordExcerpt {
-  const excerptText = sliceHeadTailExcerpt(input.text, input.maxChars)
   const ref = input.payloadRef?.trim() || input.toolCallId || input.id
   const refKind = input.payloadRef?.trim()
     ? 'payload-ref'
@@ -213,6 +229,21 @@ function buildRecordExcerpt(input: {
       ? 'tool-payload'
       : 'context-handle'
 
+  // user 正文的摘录逐字沿用 v1 安全阀形态：头部摘录 + 一行取回提示（非 JSON 信封）。
+  // 投影期 user 记录只换正文不换角色，所以这里存的就是最终要贴进消息的文本。
+  if (input.kind === 'user') {
+    const head = sliceHead(input.text, Math.max(0, input.maxChars - 200)).trimEnd()
+    return {
+      text: buildUserTextSafetyValveText(input.text.length, head, ref, refKind),
+      kind: 'text',
+      truncated: head.length < input.text.length,
+      ref,
+      refKind,
+      reason: 'need the full user message',
+    }
+  }
+
+  const excerptText = sliceHeadTailExcerpt(input.text, input.maxChars)
   return {
     text: excerptText,
     kind: 'head',
@@ -221,6 +252,19 @@ function buildRecordExcerpt(input: {
     refKind,
     reason: input.toolName ? `need full ${input.toolName} output` : 'need the full record',
   }
+}
+
+function buildUserTextSafetyValveText(
+  originalLength: number,
+  excerpt: string,
+  ref: string,
+  refKind: ContextRecordExcerpt['refKind']
+): string {
+  return [
+    excerpt,
+    '',
+    `[user text truncated before provider replay; originalLength=${originalLength}; use recall_context(ref:"${ref}", refKind:"${refKind}") for the full text.]`,
+  ].join('\n')
 }
 
 function resolveToolIdentity(input: ContextAdmissionInput): {

@@ -4,7 +4,7 @@ import { type AppError } from '@velaros-ai/core/error'
 
 import { KernelContextEpochGuard } from '../kernel'
 
-import type { ContextAttentionSessionRegistry } from './context'
+import type { ContextGovernanceSessionRegistry } from './context'
 import { sanitizeHistoryForProvider } from './history'
 import {
   AgentTurnHistoryHelper,
@@ -58,18 +58,19 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
 
   constructor(
     private readonly toolRegistry: TurnRunnerToolRegistry<TToolContext>,
-    private readonly contextAttentionSessions: ContextAttentionSessionRegistry
+    /** 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。 */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry
   ) {
     this.queryTurnHelper = new QueryTurn(
       toolRegistry,
       this.turnHistoryHelper,
-      this.contextAttentionSessions
+      this.governanceSessions
     )
     this.streamTurnHelper = new StreamTurn(
       toolRegistry,
       this.connectionRetryHelper,
       this.turnHistoryHelper,
-      this.contextAttentionSessions
+      this.governanceSessions
     )
   }
 

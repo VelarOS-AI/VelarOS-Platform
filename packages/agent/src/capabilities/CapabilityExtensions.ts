@@ -7,6 +7,7 @@ import type {
   ToolCategoryId,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { PromptSegmentDefinition } from '../prompts/registry'
 
 /**
@@ -334,7 +335,7 @@ export function resolveCapabilityCategoryDefinitions(
 }
 
 function byPriority<T extends { priority?: number; id: string }>(left: T, right: T): number {
-  return (left.priority ?? 0) - (right.priority ?? 0) || left.id.localeCompare(right.id)
+  return (left.priority ?? 0) - (right.priority ?? 0) || compareStableStrings(left.id, right.id)
 }
 
 export function resolveToolResultMiddlewares(

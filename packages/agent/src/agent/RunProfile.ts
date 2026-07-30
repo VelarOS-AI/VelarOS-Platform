@@ -7,6 +7,7 @@ import type {
   ToolExposureTier,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from './context/residency/determinism'
 import {
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
@@ -140,7 +141,8 @@ function sortToolsByBudgetPriority(
 
     if (leftExposure.categoryRank !== rightExposure.categoryRank) return leftExposure.categoryRank - rightExposure.categoryRank
 
-    return left.localeCompare(right)
+    // P7-2：同档位内的工具序进 prompt 字节，禁 locale 相关比较。
+    return compareStableStrings(left, right)
   })
 }
 

@@ -1,21 +1,33 @@
 /**
  * ProviderRequestCompiler——Ring 1 治理管线（ContextAssembler 官方实现）的装配入口 + 公共契约。
  *
- * 宪章 §2 结构：出核前必过的 Ring 0 地板（`providerRequest/floor`：指纹 + 不变量）与可替换的
- * Ring 1 六 stage 物理分家——本文件只做**装配编排**与**公共契约类型**，逐 stage 逻辑各住其文件：
- *   ① history-sanitize   providerRequest/stages/historySanitizeStage（孤儿自愈）
- *   ② attention          providerRequest/stages/attentionStage（ContextAttentionRouter）
+ * ## B1 换心：五条压缩路径 → 一条账本路径
+ * v1 的六 stage 里有四条各自在改写历史（注意力路由逐轮打分折叠、microCompaction 最近 N 条窗口、
+ * tool-result 去重/句柄化、回收阶梯 pass 间重压），彼此不知情，且**每条都在重写消息视图**——
+ * 前缀字节一变，整条下游 KV 缓存全灭。B1 把它们整体换成一条路：
+ *
+ *   会话历史 → `ContextGovernanceSession.syncHistory`（增量摄入驻留账本）
+ *           → 轮边界 `governTurn`（唯一治理点：需要时跑一次 GovernanceEpoch）
+ *           → `projectContextLedger`（确定性投影，唯一 prompt 组装口）
+ *
+ * 剩下的 stage 各守其位、语义不变：
+ *   ① history-sanitize   providerRequest/stages/historySanitizeStage（孤儿自愈，救命逻辑，保留）
  *   ③ retained-context   providerRequest/stages/retainedContextStage（provider-visible blocks）
- *   ④ compaction         providerRequest/stages/compactionStage（microCompaction 边界 + 回收）
- *   ⑤ tool-result-rewrite providerRequest/stages/toolResultRewriteStage（去重 / 折叠）
- *   ⑥ budget             providerRequest/stages/budgetStage（预算钳制）
- * 跨 stage 共享 scratch（providerRequest/pipeline）承载单次扫描结果，禁止各 stage 重复全量扫描。
- * 行为逐字节不变：这是结构手术不是重设计。
+ *   ⑥ budget             providerRequest/stages/budgetStage（预算钳制 + 出核决策）
+ *
+ * ## 行为对齐（切换的验收线）
+ * 治理未触发时（低占用），账本全是准入态 INLINE，投影输出与摄入的消息**同一批对象、同一顺序**
+ * ——编译器出口逐字节等价于切换前的"清洗后历史"。只有 epoch 真正跑过，投影才与输入不同。
+ *
+ * ## 活动尾（P7-1 的落点）
+ * `tailBlocks` 是易变内容的唯一合法位置：系统提示词的 dynamic 层、context-dashboard、
+ * retained-context 一律排在历史之后。它们放前缀里就是每请求一次全历史缓存失效。
  */
 import type { ModelMessage } from 'ai'
 
+import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import type { ChatContextDebugTraceEntry } from '@velaros-ai/core/types'
 import type {
   ContextUsageEstimate,
   EstimateContextUsageOptions,
@@ -33,28 +45,12 @@ import {
   createProviderRequestScratch,
   resolveSharedToolReferenceScan,
 } from './providerRequest/pipeline'
-import {
-  buildAttentionRewriteSignals,
-  runAttentionStage,
-} from './providerRequest/stages/attentionStage'
 import { runBudgetStage } from './providerRequest/stages/budgetStage'
-import { runProviderRequestCompactionStage } from './providerRequest/stages/compactionStage'
 import { applyHistoryStructureRepair } from './providerRequest/stages/historySanitizeStage'
 import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
 } from './providerRequest/stages/retainedContextStage'
-import {
-  buildToolResultRewriteSignals,
-  dedupeToolResultMessages,
-} from './providerRequest/stages/toolResultRewriteStage'
-import type { ContextAttentionRouterMode } from './ContextAttentionPolicyEngine'
-import type {
-  ContextAttentionReplayRecord,
-  ContextAttentionReplayRecorder,
-} from './ContextAttentionReplayRecorder'
-import { ContextAttentionRouter } from './ContextAttentionRouter'
-import type { ContextAttentionSessionRegistry } from './ContextAttentionSessionRegistry'
 import type { ContextLedgerEntry } from './ContextLedger'
 import {
   type ContextActiveTaskInput,
@@ -68,11 +64,12 @@ import type {
   ContextWorkingSetZoneId,
 } from './ContextWorkingSetZones'
 import {
-  buildInitialReclaimState,
-  type ProviderRequestReclaimState,
-  reclaimPolicyEquals,
-  resolveNextReclaimState,
-} from './ProviderRequestReclaim'
+  buildContextDashboardMessage,
+  type ContextGovernanceSession,
+  ContextGovernanceSessionRegistry,
+  type GovernanceEpochReport,
+  projectContextLedger,
+} from './residency'
 
 export {
   collectProviderRequestHistoryToolNames,
@@ -81,17 +78,19 @@ export {
 
 const log = logRuntime.tag('ProviderRequestCompiler')
 
+/** 无 sessionId 时的一次性治理会话键：账本仍生效，只是不与任何真实会话共享跨回合状态。 */
+const EphemeralGovernanceSessionId = '__ephemeral-governance-session__'
+
 export interface CompileProviderRequestInput {
   model: string
   systemPrompt: string
   messages: ModelMessage[]
-  /** 会话标识；提供后注意力路由启用跨回合粘滞与回放落盘。 */
+  /** 会话标识；提供后治理账本跨回合存活（缺省则本轮一次性账本，治理退化为纯准入）。 */
   sessionId?: string
   availableToolNames?: readonly string[]
   toolChoiceName?: LooseOptional<string>
   toolSchemaChars?: Record<string, number>
   toolPayloadRefsByToolCallId?: Record<string, string>
-  toolPayloadReferenceBudgetChars?: LooseOptional<number>
   retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
   activeTask?: LooseOptional<ContextActiveTaskInput>
   pinnedEvidence?: readonly ContextPinnedEvidenceInput[]
@@ -101,9 +100,11 @@ export interface CompileProviderRequestInput {
   reservedOutputTokens?: LooseOptional<number>
   safetyMarginPercent?: LooseOptional<number>
   calibrationFactor?: LooseOptional<number>
-  /** 测试/回放评测用的显式覆盖；生产默认 active，不走配置。 */
-  contextAttentionRouterMode?: ContextAttentionRouterMode | 'off'
-  contextAttentionReplayRecorder?: LooseOptional<ContextAttentionReplayRecorder>
+  /**
+   * 活动尾块：系统提示词 dynamic 层、turn-context 增量等**逐轮易变**的注入内容。
+   * 排在账本投影之后，永不进稳定前缀（P7-1）。
+   */
+  tailBlocks?: readonly ModelMessage[]
   historyRewriteSignals?: readonly ProviderHistoryRewriteSignal[]
 }
 
@@ -136,9 +137,10 @@ export interface CompiledProviderRequest {
   estimate: ContextUsageEstimate
   decision: ProviderRequestCompileDecision
   requestFingerprint: ProviderRequestFingerprint
-  reclaimAttempts?: number
-  attentionTrace?: ChatContextDebugTraceEntry[]
-  attentionReplayRecord?: ContextAttentionReplayRecord
+  /** 本轮跑过的治理 epoch 报告；未触发时为 null。 */
+  governanceEpoch?: Nullable<GovernanceEpochReport>
+  /** 治理后的投影占用（token）与驻留态计数，供调试面与 scoreboard 消费。 */
+  governanceOccupancyPercent?: Nullable<number>
   historyRewriteFingerprint?: string
 }
 
@@ -149,124 +151,59 @@ export interface ProviderHistoryRewriteSignal {
 
 export class ProviderRequestCompiler {
   private readonly workingSetOS = new ContextWorkingSetOS()
-  private readonly contextAttentionRouter = new ContextAttentionRouter()
 
-  constructor(private readonly contextAttentionSessions: ContextAttentionSessionRegistry) {}
+  constructor(
+    /**
+     * 治理会话登记处（宿主级单实例，账本跨回合的家）。缺省自建一份——单宿主进程里这等价于
+     * 注入，多宿主同进程装配才需要显式共享同一份实例。
+     */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry = new ContextGovernanceSessionRegistry()
+  ) {}
 
   public compile(input: CompileProviderRequestInput): CompiledProviderRequest {
-    const result = this.compileInternal(
-      input,
-      buildInitialReclaimState(input.toolPayloadReferenceBudgetChars)
-    )
-    this.persistReplayRecord(input, result)
-    return result
+    return this.compileInternal(input)
   }
 
   /**
-   * 编译并在 okToSend=false 时按 zone reclaimOrder 迭代回收（stage ④），直到可发送或耗尽阶梯。
+   * 编译入口（保留 `compileWithReclaim` 名以免调用面大改）。
+   *
+   * B1 起**没有回收阶梯**：压力的唯一出路是轮边界的 GovernanceEpoch，epoch 之后仍超预算说明
+   * 该开新会话（转交信号），不是再压一遍。v1 的 pass 间回收每次都全量重编译并重写历史视图，
+   * 是"缓存毁灭者"里最贵的一条。
    */
   public compileWithReclaim(input: CompileProviderRequestInput): CompiledProviderRequest {
-    let reclaimState = buildInitialReclaimState(input.toolPayloadReferenceBudgetChars)
-    let reclaimAttempts = 0
-    const maxReclaimAttempts = 8
-    let result = this.compileInternal(
-      {
-        ...input,
-        messages: input.messages,
-        toolPayloadReferenceBudgetChars: reclaimState.referenceBudgetChars,
-      },
-      reclaimState
-    )
-
-    while (!result.decision.okToSend && reclaimAttempts < maxReclaimAttempts) {
-      const nextState = resolveNextReclaimState(reclaimState, result.decision.zoneDiagnostics)
-      // 状态不动点早停：解析器已无更紧档位（返回 null 或策略等值）→ 再压是逐字节相同的全量
-      // 编译，直接停在当前结果（原实现只判 nextState 非 null，最缺预算时会做多至 7 次相同编译）。
-      if (!nextState || reclaimPolicyEquals(nextState, reclaimState)) break
-
-      reclaimState = nextState
-      reclaimAttempts += 1
-      const compaction = runProviderRequestCompactionStage({
-        originalMessages: input.messages,
-        reclaimState,
-        attempts: reclaimAttempts,
-      })
-      result = this.compileInternal(
-        {
-          ...input,
-          messages: compaction.messages,
-          toolPayloadReferenceBudgetChars: reclaimState.referenceBudgetChars,
-          historyRewriteSignals: [
-            ...(input.historyRewriteSignals ?? []),
-            ...compaction.rewriteSignals,
-          ],
-        },
-        reclaimState
-      )
-    }
-
-    // 只落最终 attempt 的回放记录：中间 reclaim pass 都不出核，落盘只应记真正发送的那次请求。
-    this.persistReplayRecord(input, result)
-    return {
-      ...result,
-      reclaimAttempts,
-    }
+    return this.compileInternal(input)
   }
 
-  /**
-   * 把最终编译结果的注意力回放记录落盘（异步缓冲，非编译热路径）。只在 compile / compileWithReclaim
-   * 收敛后各调用一次——中间 reclaim pass 不落盘，避免每 pass 一次冗余磁盘写。
-   */
-  private persistReplayRecord(
-    input: CompileProviderRequestInput,
-    result: CompiledProviderRequest
-  ): void {
-    if (!result.attentionReplayRecord) return
-
-    const recorder =
-      input.contextAttentionReplayRecorder ??
-      this.contextAttentionSessions.resolveReplayRecorder(input.sessionId)
-    if (!recorder) return
-
-    try {
-      recorder.record({
-        ...result.attentionReplayRecord,
-        requestFingerprint: result.requestFingerprint,
-      })
-    } catch (error) {
-      log.warn('context attention replay record failed; continuing without persistence', {
-        error: String(error),
-      })
-    }
-  }
-
-  private compileInternal(
-    input: CompileProviderRequestInput,
-    reclaimState: ProviderRequestReclaimState
-  ): CompiledProviderRequest {
+  private compileInternal(input: CompileProviderRequestInput): CompiledProviderRequest {
     const scratch = createProviderRequestScratch()
+    const at = Date.now()
 
-    // stage ⑤：tool-result 改写 / 去重。
-    const toolResultDedupe = dedupeToolResultMessages(input.messages, {
-      payloadRefsByToolCallId: input.toolPayloadRefsByToolCallId,
-      referenceBudgetChars: Math.max(
-        0,
-        Math.floor(
-          input.toolPayloadReferenceBudgetChars ??
-            reclaimState.referenceBudgetChars ??
-            Number.POSITIVE_INFINITY
-        )
-      ),
-    })
-
-    // stage ①：编译前结构自愈（可观测告警）。
-    const sanitizedMessages = applyHistoryStructureRepair(toolResultDedupe.messages, { log: true })
+    // stage ①：编译前结构自愈（孤儿 tool-result 会永久锁死会话，这条是救命逻辑）。
+    const sanitizedMessages = applyHistoryStructureRepair(input.messages, { log: true })
     assertValidModelHistory(sanitizedMessages, { phase: 'compile', turn: null })
 
-    // 工作集分类：为注意力（②）与保留上下文（③）提供 blocks 单源。
-    const initialClassified = this.workingSetOS.classify({
+    // 账本单口：摄入 → 轮边界治理 → 确定性投影。
+    //
+    // **稳定前缀不进账本**：开头那串 system 消息是系统提示词稳定层，工具清单一变它就变。若把它
+    // 当普通记录摄入，前缀比对每次都会在第 0 条分叉 → 整本账本重建 → 驻留态、faultCount、epoch
+    // 号全部清零。它本来就该走投影的 `stablePrefix` 通道（设计 §3 的三段布局）。
+    const { stablePrefix, body } = partitionStablePrefix(sanitizedMessages)
+    const governance = this.runGovernance(input, body, at)
+    const projection = projectContextLedger({
+      records: governance.session.ledger.list(),
+      residency: governance.session.ledger.residencyVector(),
+      budget: {
+        tailProtectTurns: governance.session.config.tailProtectTurns,
+        budgetTokens: governance.budgetTokens,
+      },
+      stablePrefix,
+    })
+
+    // 工作集分类：为保留上下文（③）与预算（⑥）提供 blocks 单源。
+    const classified = this.workingSetOS.classify({
       systemPrompt: input.systemPrompt,
-      messages: sanitizedMessages,
+      messages: projection.messages,
       toolSchemaChars: input.toolSchemaChars,
       retrievalHandles: input.retrievalHandles,
       activeTask: input.activeTask,
@@ -274,30 +211,17 @@ export class ProviderRequestCompiler {
       resourceState: input.resourceState,
     })
 
-    // stage ②：attention（含跨回合粘滞与回学，回写会话动作）。
-    const attentionRoute = runAttentionStage({
-      messages: sanitizedMessages,
-      blocks: initialClassified.blocks,
-      input,
-      router: this.contextAttentionRouter,
-      sessions: this.contextAttentionSessions,
-    })
-
-    // stage ③：保留上下文注入。
-    const providerVisibleMessages = withProviderVisibleRetainedContext(
-      attentionRoute?.messages ?? sanitizedMessages,
-      initialClassified.blocks
+    // stage ③ + 活动尾：保留上下文、dashboard、宿主 tailBlocks 一律排在账本投影之后。
+    const retained = withProviderVisibleRetainedContext(projection.messages, classified.blocks)
+    const tailBlocks = this.buildTailBlocks(input, governance, projection.stats.projectedTokens)
+    const providerMessages = applyHistoryStructureRepair(
+      isEmpty(tailBlocks) ? retained.messages : [...retained.messages, ...tailBlocks],
+      { log: false }
     )
-
-    // stage ①（末处）：注意力/保留重排后可能再引孤儿，最终校验前静默自愈一次。
-    const providerMessages = applyHistoryStructureRepair(providerVisibleMessages.messages, {
-      log: false,
-    })
     const historyRewriteFingerprint = buildProviderHistoryRewriteFingerprint([
       ...(input.historyRewriteSignals ?? []),
-      ...buildToolResultRewriteSignals(toolResultDedupe.ledger),
-      ...buildRetainedContextRewriteSignals(providerVisibleMessages),
-      ...buildAttentionRewriteSignals(attentionRoute, sanitizedMessages),
+      ...buildGovernanceRewriteSignals(governance.report, projection.stats.ledgerFingerprint),
+      ...buildRetainedContextRewriteSignals(retained),
     ])
     assertValidModelHistory(providerMessages, { phase: 'compile', turn: null })
 
@@ -309,37 +233,11 @@ export class ProviderRequestCompiler {
     )
     assertProviderRequestInvariants(input, requestFingerprint, 'compile')
 
-    // 工作集分类单遍（classify 是喂 ②③⑥ 的隐形第七 stage，收敛复用而非盲跑两遍）：
-    // classify 是「消息序列 + 系统提示 + 工具面 + 注入上下文」的纯函数。当治理管线未真正改写消息
-    // （路由未折叠任一消息 && 无保留上下文注入 && 末处结构自愈无改动）时，providerMessages 与
-    // sanitizedMessages 逐字节相同，第二次 classify 必然产出与 initialClassified 逐字节相同的块，
-    // 直接复用首遍结果。只有消息真被改写（折叠/摘要/保留注入/自愈）时才需第二次 classify 以让
-    // 预算账本对齐改写后的块正文。attentionRoute 为 null（router off）沿用原有复用行为。
-    const providerMessagesUnchanged =
-      !!attentionRoute &&
-      attentionRoute.messages === sanitizedMessages &&
-      !providerVisibleMessages.retainedMessage &&
-      providerMessages === providerVisibleMessages.messages
-    const classified =
-      !attentionRoute || providerMessagesUnchanged
-        ? initialClassified
-        : this.workingSetOS.classify({
-            systemPrompt: input.systemPrompt,
-            messages: providerMessages,
-            toolSchemaChars: input.toolSchemaChars,
-            retrievalHandles: input.retrievalHandles,
-            activeTask: input.activeTask,
-            pinnedEvidence: input.pinnedEvidence,
-            resourceState: input.resourceState,
-          })
-
     // stage ⑥：budget 钳制（估算 + 账本 + 分配 + 决策）。
     const budget = runBudgetStage({
       input,
       providerMessages,
       classifiedBlocks: classified.blocks,
-      attentionRoute,
-      dedupeLedger: toolResultDedupe.ledger,
     })
 
     return {
@@ -349,9 +247,124 @@ export class ProviderRequestCompiler {
       estimate: budget.estimate,
       decision: budget.decision,
       requestFingerprint,
-      attentionTrace: attentionRoute?.trace,
-      attentionReplayRecord: attentionRoute?.replayRecord,
+      governanceEpoch: governance.report,
+      governanceOccupancyPercent: projection.stats.occupancyPercent,
       historyRewriteFingerprint,
     }
   }
+
+  /**
+   * 摄入 + 轮边界治理。
+   *
+   * sessionId 缺省时用一次性会话：账本仍然生效（准入规则照跑），只是跨回合状态不留 ——
+   * 无身份的编译（测试 / 一次性查询）不该在 registry 里留状态。
+   */
+  private runGovernance(
+    input: CompileProviderRequestInput,
+    messages: ModelMessage[],
+    at: number
+  ): {
+    session: ContextGovernanceSession
+    report: Nullable<GovernanceEpochReport>
+    budgetTokens: number
+  } {
+    const session =
+      this.governanceSessions.resolve(input.sessionId?.trim() || EphemeralGovernanceSessionId)
+    if (!session) throw new AppError('INVARIANT', '治理会话解析失败：sessionId 归一后仍为空')
+
+    const sync = session.syncHistory({
+      messages,
+      at,
+      payloadRefsByToolCallId: input.toolPayloadRefsByToolCallId,
+    })
+    if (sync.rebuilt) {
+      log.info('governance ledger rebuilt: provider history prefix diverged', {
+        sessionId: input.sessionId,
+        messages: messages.length,
+      })
+    }
+
+    const report = session.governTurn({
+      at,
+      modelWindowTokens: input.contextWindow ?? input.contextUsageOptions?.contextWindow,
+    })
+    const budgetTokens = resolveBudgetTokens(session, input)
+    return { session, report, budgetTokens }
+  }
+
+  private buildTailBlocks(
+    input: CompileProviderRequestInput,
+    governance: { session: ContextGovernanceSession; budgetTokens: number },
+    projectedTokens: number
+  ): ModelMessage[] {
+    const blocks = [...(input.tailBlocks ?? [])]
+    if (!governance.session.config.dashboard) return blocks
+
+    const ledger = governance.session.ledger
+    const dashboard = buildContextDashboardMessage({
+      epoch: governance.session.epoch,
+      stats: ledger.stats(),
+      records: ledger.list(),
+      residency: ledger.residencyVector(),
+      projectedTokens,
+      budgetTokens: governance.budgetTokens,
+    })
+    if (dashboard) blocks.push(dashboard)
+    return blocks
+  }
+}
+
+/**
+ * 切出稳定前缀：开头**连续**的 system 消息。
+ *
+ * 只认开头那一段是有依据的——provider 侧本来也只接受开头连续的 system 段（被 user/assistant
+ * 隔开的第二段 system 会被直接拒），所以"开头连续的 system 消息"与"稳定前缀"在结构上同义。
+ */
+function partitionStablePrefix(messages: readonly ModelMessage[]): {
+  stablePrefix: ModelMessage[]
+  body: ModelMessage[]
+} {
+  let index = 0
+  while (index < messages.length && messages[index].role === 'system') index += 1
+
+  return { stablePrefix: messages.slice(0, index), body: messages.slice(index) }
+}
+
+function resolveBudgetTokens(
+  session: ContextGovernanceSession,
+  input: CompileProviderRequestInput
+): number {
+  const modelWindow = input.contextWindow ?? input.contextUsageOptions?.contextWindow
+  const cap = session.config.cap
+  if (typeof modelWindow !== 'number' || !Number.isFinite(modelWindow) || modelWindow <= 0) return cap
+
+  return Math.min(Math.floor(modelWindow), cap)
+}
+
+/**
+ * 治理改写签名。
+ *
+ * 只有 epoch 真正应用了迁移才算"历史被改写"——`ledgerFingerprint` 是账本段的内容指纹，进签名
+ * 后前缀漂移一眼可判（缓存回归的探针）。未触发 epoch 的轮次不产签名，指纹保持为 undefined，
+ * 与切换前"没有任何 stage 改写历史"的语义一致。
+ */
+function buildGovernanceRewriteSignals(
+  report: Nullable<GovernanceEpochReport>,
+  ledgerFingerprint: string
+): ProviderHistoryRewriteSignal[] {
+  if (!report?.applied) return []
+
+  return [
+    {
+      kind: 'governance-epoch',
+      details: {
+        epoch: report.epoch,
+        trigger: report.trigger,
+        migrationCount: report.migrationCount,
+        byInstrument: report.byInstrument,
+        savedTokens: report.savedTokens,
+        ledgerFingerprint,
+      },
+    },
+  ]
 }

@@ -6,6 +6,8 @@ import type {
   ChatPromptFeatureId,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 import type { AgentSkillDefinition, AgentSkillProvider } from './AgentSkillProvider'
 
 /**
@@ -222,7 +224,7 @@ class AgentSkillRepository {
       .filter((skill) =>
         this.isSkillVisibleForPromptFeatures(skill, selectedSkillIds, promptFeatures)
       )
-      .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))
+      .sort((left, right) => left.priority - right.priority || compareStableStrings(left.id, right.id))
   }
 
   /**

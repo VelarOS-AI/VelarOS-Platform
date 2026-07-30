@@ -15,6 +15,8 @@ import type {
   ToolSurfaceProfileId,
 } from '@velaros-ai/core/types'
 
+import type { ContextGovernanceConfigInput } from './context/residency/governanceConfig'
+
 /**
  * Product-owned model configuration is deliberately opaque to Agent Runtime.
  * Model packages own provider ids, credentials, catalogs and fallback policy.
@@ -35,6 +37,14 @@ export interface AgentSystemRuntimeConfig {
     maxConcurrentSubAgents?: number
     maxSubAgentsPerExecution?: number
   }
+  /**
+   * 上下文治理配置（v2 §7 配置面）。宿主可传入，缺省全部走默认值兜底
+   * （`resolveContextGovernanceConfig` 宽容解析：越界钳制不拒绝，一个手滑的值不打死治理链路）。
+   *
+   * 实验臂 = 同一引擎的预设（A0-truncation / A1-mechanical / A2-distill-always / A3-adaptive），
+   * 不是第二条实现路径——见 `ContextGovernancePresets`。
+   */
+  contextGovernance?: LooseOptional<ContextGovernanceConfigInput>
   /** Product-owned provider collection context; Agent Runtime only forwards it. */
   modelRuntimeContext?: unknown
 }

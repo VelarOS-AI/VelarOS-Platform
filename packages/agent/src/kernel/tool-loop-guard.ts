@@ -1,6 +1,8 @@
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 export interface KernelToolLoopGuardInput {
   toolName: string
   args: Record<string, unknown>
@@ -17,7 +19,7 @@ function stableStringify(value: unknown): string {
 
   if (isPlainObject(value)) {
     const entries = Object.keys(value)
-      .sort((left, right) => left.localeCompare(right))
+      .sort((left, right) => compareStableStrings(left, right))
       .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
     return `{${entries.join(',')}}`
   }

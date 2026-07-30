@@ -1,6 +1,7 @@
 import { logRuntime } from '@velaros-ai/core/logger'
 import type { ToolCategoryId } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from './context/residency/determinism'
 import type { AgentRoleDefinition } from './RoleTypes'
 
 interface AgentRoleToolCategoryResolver {
@@ -58,7 +59,8 @@ class AgentRolePolicy {
       }
     })
 
-    return [...categories].sort((left, right) => left.localeCompare(right))
+    // P7-2：类目序进工具清单渲染，禁 locale 相关比较。
+    return [...categories].sort(compareStableStrings)
   }
 }
 
