@@ -37,7 +37,8 @@
         "capabilities/office-tools",
         "capabilities/system-tools",
         "capabilities/workspace",
-        "computer"
+        "computer",
+        "game"
       ],
       "memory": [
         "memory"
@@ -124,6 +125,7 @@
     "@velaros-ai/cli": "workspace:*",
     "@velaros-ai/computer": "workspace:*",
     "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/game": "workspace:*",
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel-client": "workspace:*",
     "@velaros-ai/kernel-serve": "workspace:*",

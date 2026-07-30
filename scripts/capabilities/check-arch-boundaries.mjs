@@ -28,6 +28,10 @@ const InternalImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](@velaros-ai\/[^/'"]+)/
 const ElectronImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*)['"]/
+const GameRendererImport =
+  /(?:from\s+|import\s*\(|require\()\s*['"](?:phaser(?:\/[^'"]*)?|@babylonjs\/[^'"]*)['"]/
+const RelativeModuleImport =
+  /(?:from\s+|import\s*\(|require\()\s*['"](\.\.?\/[^'"]+)['"]/g
 const ConcreteKernelPathImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent(?:\/[^'"]*)?|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =
@@ -369,6 +373,28 @@ for (const expected of CapabilityPackages) {
       fail(
         `${expected.name}: only ${expected.electronRoots.map((slice) => `src/${slice}`).join(' / ') || '(none)'} may import Electron (${relative(packageRoot, path)})`,
       )
+    }
+    if (expected.owner === 'game') {
+      const sourceSlice = relative(sourceRoot, path).split('/')[0]
+      if (sourceSlice === 'core' && GameRendererImport.test(source)) {
+        fail(`${expected.name}: renderer import leaked into core (${relative(packageRoot, path)})`)
+      }
+      const allowedSliceImports = {
+        core: new Set(['core']),
+        runtime: new Set(['core', 'runtime']),
+        tools: new Set(['core', 'tools']),
+        composition: new Set(['core', 'runtime', 'tools', 'composition']),
+      }
+      for (const match of source.matchAll(RelativeModuleImport)) {
+        const targetPath = resolve(dirname(path), match[1])
+        if (!targetPath.startsWith(`${sourceRoot}/`)) continue
+        const targetSlice = relative(sourceRoot, targetPath).split('/')[0]
+        if (!allowedSliceImports[sourceSlice]?.has(targetSlice)) {
+          fail(
+            `${expected.name}: ${sourceSlice} cannot import ${targetSlice} (${relative(packageRoot, path)})`,
+          )
+        }
+      }
     }
     for (const match of source.matchAll(new RegExp(InternalImport.source, 'g'))) {
       const imported = KnownByName.get(match[1])
