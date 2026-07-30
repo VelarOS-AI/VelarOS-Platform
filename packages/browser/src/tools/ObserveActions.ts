@@ -1,6 +1,6 @@
 import { isEmpty,isNonBlankString } from '@velaros-ai/core'
 
-import type { BrowserElementTargetHint, BrowserObserveActionsResult, BrowserObservedActionCandidate, BrowserObservedActionInput, BrowserObservedActionKind, BrowserObservedActionPreview, BrowserObservedActionSource, BrowserPageAction, BrowserPageFormField, BrowserPageInspection } from '../core'
+import { type BrowserElementTargetHint, type BrowserObserveActionsResult, type BrowserObservedActionCandidate, type BrowserObservedActionInput, type BrowserObservedActionKind, type BrowserObservedActionPreview, type BrowserObservedActionSource, type BrowserPageAction, type BrowserPageFormField, type BrowserPageInspection, clampInteger } from '../core'
 
 interface ObserveActionDraft {
   method: BrowserObservedActionKind
@@ -40,10 +40,9 @@ export function buildObserveActionsResult(
   }
 }
 
-export function clampObserveActionLimit(limit: number | undefined): number {
-  if (!Number.isFinite(limit)) return 20
-
-  return Math.min(Math.max(Math.round(limit as number), 1), 80)
+/** observe_actions 的候选条数上界：域内常量集中在这里，钳制算法走全包单源 `clampInteger`。 */
+export function clampObserveActionLimit(limit: LooseOptional<number>): number {
+  return clampInteger(limit, 1, 80, 20)
 }
 
 function buildObserveActionDrafts(inspection: BrowserPageInspection): ObserveActionDraft[] {

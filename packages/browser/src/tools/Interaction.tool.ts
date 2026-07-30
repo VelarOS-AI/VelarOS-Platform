@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isNumber, isPresent, isString, numberOrNull, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { optionalWhenLazy } from '@velaros-ai/core/utils/optionalWhen'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
@@ -1144,7 +1145,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
         })
       default:
         parsed satisfies never
-        throw new Error('Unsupported browser_act action.')
+        throw new AppError('VALIDATION', 'Unsupported browser_act action.')
     }
   },
 })

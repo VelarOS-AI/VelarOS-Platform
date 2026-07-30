@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { stringifyPretty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import { BrowserPageScriptBuilder, buildBrowserPageSnapshotName } from '../core'
@@ -180,7 +181,7 @@ const browserExportPage = defineBrowserTool<{
         }
       case 'region': {
         if (!args.selector?.trim()) {
-          throw new Error('kind=region 必须提供 selector。')
+          throw new AppError('VALIDATION', 'kind=region 必须提供 selector。')
         }
         return {
           kind: args.kind,
@@ -245,7 +246,7 @@ const browserExportPage = defineBrowserTool<{
         }
       }
       default:
-        throw new Error(`不支持的导出类型：${String(args.kind)}`)
+        throw new AppError('VALIDATION', `不支持的导出类型：${String(args.kind)}`)
     }
   },
 })

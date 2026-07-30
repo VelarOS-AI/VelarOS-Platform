@@ -1,4 +1,5 @@
 import { buildBrowserInlineInferenceToolkitSnippet } from './browserInlineInferenceToolkit'
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserWaitForSelectorOptions } from './types'
 
 /** 构造等待 selector 出现/可见的页面脚本。 */
@@ -8,7 +9,7 @@ class BrowserWaitForSelectorScriptBuilder {
     const payload = JSON.stringify({
       selector: options.selector,
       state: this.resolveWaitState(options),
-      timeoutMs: this.clampInteger(options.timeoutMs, 1, 60_000, 5_000),
+      timeoutMs: clampInteger(options.timeoutMs, 1, 60_000, 5_000),
     })
 
     return `(() => {
@@ -182,16 +183,6 @@ class BrowserWaitForSelectorScriptBuilder {
     return 'attached'
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 }
 
 export { BrowserWaitForSelectorScriptBuilder }

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -50,7 +50,10 @@ export class CdpPageDataEngine {
     protected readonly diagnosticsLimits: BrowserDiagnosticsLimits
   ) {}
 
-  // ---- kernel 桥接:保持搬入方法体零改写 ----
+  // ---- kernel 桥接 ----
+  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
+  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
+  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
   protected getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
     return this.kernel.getExternalPageSession(sessionId)
   }
@@ -418,10 +421,9 @@ export class CdpPageDataEngine {
           tagName: readBoundedString(item.tagName, 32),
           attribute: readBoundedString(item.attribute, 32),
           alt: readBoundedString(item.alt, 240),
-          width: optionalWhen(isFiniteNumber, item.width) ? Math.round(item.width as number) : null,
-          height: optionalWhen(isFiniteNumber, item.height)
-            ? Math.round(item.height as number)
-            : null,
+          // 保留原语义：非有限值与 0 都记为缺席（0 尺寸的媒体项对调用方无意义）。
+          width: mediaDimension(item.width),
+          height: mediaDimension(item.height),
         }
       })
       .filter((entry): entry is BrowserMediaSourceItem => !!entry)
@@ -853,4 +855,13 @@ export class CdpPageDataEngine {
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
     return result
   }
+}
+
+/**
+ * 媒体项尺寸归一：非有限值与 0 都记为缺席。0 宽/高的媒体项对调用方没有可用信息，
+ * 保持与旧实现一致的「假值即 null」语义，避免把占位元素当成真实媒体。
+ */
+function mediaDimension(value: unknown): Nullable<number> {
+  const parsed = readFiniteNumber(value)
+  return parsed ? Math.round(parsed) : null
 }

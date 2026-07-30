@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 
 import electron from 'electron'
 
-import { isArray, isFalse, isNumber, isObject, isPlainObject, isString, isTrue,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import { isArray, isFalse, isNumber, isObject, isPlainObject, isPresent, isString, isTrue,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -369,7 +369,10 @@ export class BrowserScreenshotEngine {
     }
   }
 
-  // ---- kernel 桥接:保持搬入方法体零改写 ----
+  // ---- kernel 桥接 ----
+  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
+  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
+  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
   private getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
     return this.kernel.getExternalPageSession(sessionId)
   }
@@ -1547,11 +1550,12 @@ export class BrowserScreenshotEngine {
     const x = readFiniteNumber(value.x)
     const y = readFiniteNumber(value.y)
 
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+    // readFiniteNumber 已保证有限，缺席即非法坐标。
+    if (!isPresent(x) || !isPresent(y)) return null
 
     return {
-      x: Math.round(x as number),
-      y: Math.round(y as number),
+      x: Math.round(x),
+      y: Math.round(y),
       pressed: !!value.pressed,
     }
   }

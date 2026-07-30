@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { AppError } from '@velaros-ai/core/error'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import { BrowserControlCapability } from './Capabilities'
@@ -145,7 +146,7 @@ const browserPerformance = defineBrowserTool<{
     // schema 已保证:action 缺失只在带 insight 字段时被推断补全,否则 superRefine 拦下;
     // 这里的空值分支只是类型收窄兜底。
     const action = args.action
-    if (!action) throw new Error('Unsupported browser_performance action.')
+    if (!action) throw new AppError('VALIDATION', 'Unsupported browser_performance action.')
 
     switch (action) {
       case 'start_trace':
@@ -164,7 +165,7 @@ const browserPerformance = defineBrowserTool<{
         return ctx.browser.captureHeapSnapshot({ path: args.path })
       default:
         action satisfies never
-        throw new Error('Unsupported browser_performance action.')
+        throw new AppError('VALIDATION', 'Unsupported browser_performance action.')
     }
   },
 })

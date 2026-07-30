@@ -121,7 +121,8 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     try {
       this.webContents.debugger.detach()
     } catch {
-      // 页面销毁竞态；静默。
+      // arch-guard:silent-catch-ok detach 与页面销毁天然竞态：isAttached() 通过到真正 detach 之间
+      // 页面可能已经没了。这是清理路径，抛出去没有任何调用方能处理。
     }
   }
 
