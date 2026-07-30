@@ -1,19 +1,20 @@
 # Agent Mod 主干（两级注册机的第二级）
 
-> 权威设计上游：VelarOS-Desktop `docs/mod-architecture-blueprint.md`（蓝图 v5）——裁决 9、
+> 权威设计上游：VelarOS-Desktop `docs/mod-architecture-blueprint.md`（蓝图 v6）——裁决 9、
 > §3.1 四层模型、§3.2 领域 Mod Manifest、§3.4 两级注册机、§3.7 数据生命周期。
-> 本文只记录 **VelarOS-Agent 仓内的落地形态**；与蓝图冲突时以蓝图为准，落地偏离在本文「偏离与理由」一节显式登记。
+> 本文只记录 **`packages/agent` 这一侧的落地形态**；与蓝图冲突时以蓝图为准，落地偏离在本文「偏离与理由」一节显式登记。
+> 宿主侧怎么接见 Desktop 仓 `docs/desktop-agent-mod-wiring.md`；外部 mod 开发者面见 [../mod-dev/](../mod-dev/README.md)。
 
 ## 为什么主干住在这里
 
-所有顶层应用（Desktop / Workbench / Extension / CLI）都需要 agent，因此**领域轴的注册机住 Agent 仓**。
+所有顶层应用（Desktop / Workbench / Extension / CLI）都需要 agent，因此**领域轴的注册机住 agent 域**。
 
 ```
-第一级  Kernel Module Host（VelarOS-Kernel）
+第一级  Kernel Module Host（packages/core/src/kernel/host/）
         只解析窄 KernelModuleDescriptor { id, version, apiVersion, provides, requires, permissions, isolation }
         管 pack 的安装/启停/发现，永不解析领域贡献轴
 
-第二级  Agent 领域 Loader（本仓 packages/agent/src/mods/）
+第二级  Agent 领域 Loader（packages/agent/src/mods/）
         解析 AgentModManifest，把贡献分发进九个注册面 + 拦截 seam
 ```
 
@@ -286,7 +287,8 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 
 - 壳级 UI 轴（pages / settingsRenderers / surfaces / tours）——按裁决归产品壳，不进 Agent manifest。
 - 蓝图 §3.3 的 `memoryScope`（记忆作用域策略）——那是具体能力包的语义，不属 Agent 中立主干；
-  应由该能力包自己的领域 manifest 轴承载。本仓的架构哨兵也禁止 Agent 两包出现具体能力词汇。
+  应由该能力包自己的领域 manifest 轴承载。`check:agent-arch` 的架构哨兵也禁止 `packages/agent`
+  (含 `protocol` 子路径)出现具体能力词汇。
 - `locale` 运行时合并链、`entitlements` 核验、`budget` 消费：字段形状已定，消费方随各自里程碑。
 - 签名验签 / 版本化寻址 / 回滚：属第一级（Kernel pack 管道）的增强，不在本主干。
 - 数据 `ownerModId` 归属索引与 uninstall 两段式清理：归宿主与数据 owner。
@@ -298,5 +300,5 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 | --- | --- | --- |
 | `contributes.promptFeatures` | `contributes.promptSegments` | 主干实际的领域轴是 prompt 段注册表（`PromptRegistry`），特性 id 是段的激活谓词输入，不是独立注册面 |
 | `SpaceContribution.memoryScope` | 未落 | 具体能力语义，见残余清单 |
-| `engines` 双轴 | 三字段（velaros / agent / shell） | 蓝图 §3.4 v5 要求领域 manifest 另声明 capability API 版本；velaros+shell 仍是那「双轴」 |
+| `engines` 双轴 | 三字段（velaros / agent / shell） | 蓝图 §3.4 要求领域 manifest 另声明 capability API 版本；velaros+shell 仍是那「双轴」 |
 | 依赖求解 | 无 | 裁决 4：不写依赖求解器；semver 判定只做大版本兼容判定，复杂 range 属 npm 职责 |

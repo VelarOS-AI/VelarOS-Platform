@@ -66,7 +66,7 @@ bundled pack 走构建图，没有寻址问题。
 
 > **单一事实来源在 `@velaros-ai/core/kernel/abi`**；
 > `packages/agent/src/protocol/mods.ts` 里那份是它的**磁盘 JSON 投影，不是第二个定义**。
-> schema 住 agent-protocol 而不是 core，是因为**依赖方向**：契约层不得反向依赖 Kernel 库。
+> schema 住 `@velaros-ai/agent/protocol` 而不是 core，是因为**依赖方向**：契约层不得反向依赖 Kernel 库。
 > Kernel 侧读同一节时用它自己的窄读取器——各读各节，正是分节信封要的形状。
 
 ### `isolation` 是部署轴，不是架构轴
