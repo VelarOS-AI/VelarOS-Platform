@@ -411,9 +411,8 @@ class StreamDiagnosticRecorder {
   private readNestedNumber(value: unknown, path: string[]): Nullable<number> {
     let current = value
     for (const key of path) {
-      if (!current || !isObject(current)) return null
-
-      current = (current as Record<string, unknown>)[key]
+      if (!isPlainObject(current)) return null
+      current = current[key]
     }
 
     return this.readNumber(current)
