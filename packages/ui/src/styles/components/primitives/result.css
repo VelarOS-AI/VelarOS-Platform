@@ -18,6 +18,13 @@
   color: var(--muted-foreground);
 }
 
+/* 图标不被 flex 压缩。此前写在 TSX 里的 Tailwind 工具类 `shrink-0`——本包组件 CSS 声明为
+   pure CSS + design tokens（文件头 @velaros-no-tailwind），消费方不对 node_modules 跑
+   Tailwind 时那个类根本不存在，图标会被压扁。样式归 CSS，组件只给类名。 */
+.velar-result-icon-wrap > * {
+  flex: none;
+}
+
 .velar-result-title {
   margin-bottom: var(--ui-space-1);
   max-width: var(--container-md);
