@@ -3,8 +3,8 @@
 // 文件收集 / 注释剥离 / 棘轮基线读写与报告。两门自 monorepo arch-guard-velaros 随 U2 拆仓退役
 // (指纹基线型棘轮门无法改读 sibling),按「各仓自持自己的质量门」判例收编进本仓自持。
 //
-// 棘轮语义:门以现状为基线(baselines/<rule>-baseline.json 冻结存量违规),新增违规即红,存量修复
-// 后基线条目自然 stale(不阻塞)。有意扩基线:VELAROS_UI_GATE_BASELINE_UPDATE=1 node scripts/check/<门>.mjs。
+// 棘轮语义:门以现状为基线(baselines/ui/<rule>-baseline.json 冻结存量违规),新增违规即红,存量修复
+// 后基线条目自然 stale(不阻塞)。有意扩基线:VELAROS_UI_GATE_BASELINE_UPDATE=1 node scripts/ui/check/<门>.mjs。
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -32,6 +32,12 @@ export function collectFiles(dir, extensions) {
     if (dot >= 0 && extensions.has(full.slice(dot))) out.push(full)
   }
   return out
+}
+
+// 构建产物(`scripts/ui/build/*.mjs` 产出的 `*.generated.*`)不进任何门的扫描面:它由源文件推导,
+// 把它的违规钉进人工基线等于「重新生成即红」,而真正该记账的源文件反倒可能在面外。只记账源。
+export function isGeneratedArtifact(file) {
+  return /\.generated\.[^./\\]+$/.test(file)
 }
 
 export function isInsideDirectory(file, dir) {
@@ -116,7 +122,7 @@ export function runRatchet(rule, title, entries) {
   console.error(`[${rule}] 失败:${fresh.length} 条新违规(§12.9 棘轮只减不增):`)
   for (const e of fresh) console.error(`  ${e.message}`)
   console.error(
-    `\n若为有意的形态/令牌变化,修复违规;确需入基线时 VELAROS_UI_GATE_BASELINE_UPDATE=1 node scripts/check/${rule === 'ui-component-form-closure' ? 'uiComponentFormClosure' : 'uiColorLiteralClosure'}.mjs 重生成并在提交信息说明。`,
+    `\n若为有意的形态/令牌变化,修复违规;确需入基线时 VELAROS_UI_GATE_BASELINE_UPDATE=1 node scripts/ui/check/${rule === 'ui-component-form-closure' ? 'uiComponentFormClosure' : 'uiColorLiteralClosure'}.mjs 重生成并在提交信息说明。`,
   )
   return false
 }
