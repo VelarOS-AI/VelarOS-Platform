@@ -137,7 +137,7 @@ export const TypeGuards = {
     return Array.isArray(value)
   },
 
-  /** `Array.isArray(value) && !value.isEmpty`。 */
+  /** `Array.isArray(value)` 且长度非零。 */
   isNonEmptyArray(value: unknown): value is unknown[] {
     return Array.isArray(value) && !isEmpty(value)
   },

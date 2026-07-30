@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
+import { AppError } from '../error.js'
 import { Log } from '../logger/index.js'
-import { isArray, isNotUndefined, isObject,isRecord, isString } from '../typeGuards.js'
+import { isArray, isNotUndefined, isPresent, isRecord, isString } from '../typeGuards.js'
 import { toNullable } from '../utils/nullish.js'
 import { optionalWhen } from '../utils/optionalWhen.js'
 
@@ -90,12 +91,17 @@ function parseToolCollectionCommand(argv: readonly string[]): string {
   })
 }
 
-async function runParsedToolCollectionCommand<TContext>(input: {
+/** 单条已解析命令的执行入参（三个执行分支共用一份形状，别再逐处内联同形对象类型）。 */
+interface ToolCollectionCommandInput<TContext> {
   argv: string[]
   command: string
   cwd: string
   options: RunToolCollectionCliOptions<TContext>
-}): Promise<{ result: unknown; text?: string }> {
+}
+
+async function runParsedToolCollectionCommand<TContext>(
+  input: ToolCollectionCommandInput<TContext>
+): Promise<{ result: unknown; text?: string }> {
   switch (input.command) {
     case 'help':
       validateCliArgs({
@@ -135,12 +141,9 @@ async function runParsedToolCollectionCommand<TContext>(input: {
   }
 }
 
-async function runToolCall<TContext>(input: {
-  argv: string[]
-  command: string
-  cwd: string
-  options: RunToolCollectionCliOptions<TContext>
-}): Promise<{ result: unknown }> {
+async function runToolCall<TContext>(
+  input: ToolCollectionCommandInput<TContext>
+): Promise<{ result: unknown }> {
   validateCliArgs({
     command: 'tools call',
     detailsCommand: 'tools.call',
@@ -170,12 +173,9 @@ async function runToolCall<TContext>(input: {
   return { result: await executeTool(input.options, input.cwd, toolName, args) }
 }
 
-async function runToolWorkflow<TContext>(input: {
-  argv: string[]
-  command: string
-  cwd: string
-  options: RunToolCollectionCliOptions<TContext>
-}): Promise<{ result: unknown }> {
+async function runToolWorkflow<TContext>(
+  input: ToolCollectionCommandInput<TContext>
+): Promise<{ result: unknown }> {
   validateCliArgs({
     command: 'tools workflow',
     detailsCommand: 'tools.workflow',
@@ -218,7 +218,7 @@ async function executeTool<TContext>(
   args: Record<string, unknown>
 ): Promise<unknown> {
   const tool = options.tools[toolName]
-  if (!tool) {
+  if (!isPresent(tool)) {
     throw new VelarosCliError('UNKNOWN_TOOL', `Unknown tool: ${toolName}`, 2, { toolName })
   }
 
@@ -240,7 +240,7 @@ async function executeTool<TContext>(
   if (!parsed.success) {
     throw new VelarosCliError('ARGUMENT_ERROR', `${toolName} schema rejected input.`, 2, {
       toolName,
-      error: formatSchemaError(parsed.error),
+      error: AppError.getMessage(parsed.error),
     })
   }
 
@@ -292,7 +292,7 @@ function resolveToolAvailability<TContext>(
   context: TContext
 ): VelarosCliToolAvailability {
   const explicitAvailability = options.resolveToolAvailability?.({ name, tool, context })
-  if (explicitAvailability) return explicitAvailability
+  if (isPresent(explicitAvailability)) return explicitAvailability
 
   const available = tool.isAvailable ? tool.isAvailable(context) : true
   return available
@@ -333,9 +333,4 @@ function schemaToJson(schema: unknown): unknown {
     Log.tag('VelarosCli').debug('Zod schema 转 JSON schema 失败', { error })
     return null
   }
-}
-
-function formatSchemaError(error: unknown): unknown {
-  if (isObject(error) && 'message' in error) return String((error as { message: unknown }).message)
-  return String(error)
 }

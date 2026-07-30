@@ -7,7 +7,8 @@
  *
  * 只放真正静态的进程级事实；会话级/易变状态仍走 turn-context 与 runtime snapshot。
  */
-import { isPresent } from '../typeGuards.js'
+import { isNotUndefined, isPresent } from '../typeGuards'
+
 export interface AppRuntimeFacts {
   /** 应用版本号，如 "0.3.1"。 */
   appVersion: Nullable<string>
@@ -29,10 +30,15 @@ const facts: AppRuntimeFacts = {
   velarHookEndpointFilePath: null,
 }
 
-/** main 启动时写入（可多次调用增量补全，如 hooks 端口在 http server 起来后才知道）。 */
+/**
+ * main 启动时写入（可多次调用增量补全，如 hooks 端口在 http server 起来后才知道）。
+ *
+ * 只有省略位（`undefined`）被跳过；显式传 `null` 表示「清空这项事实」，必须写入。
+ */
 export function configureAppRuntimeFacts(next: Partial<AppRuntimeFacts>): void {
-  for (const [key, value] of Object.entries(next) as Array<[keyof AppRuntimeFacts, Nullable<string>]>) {
-    if (value !== undefined) facts[key] = value
+  const entries = Object.entries(next) as Array<[keyof AppRuntimeFacts, Nullable<string>]>
+  for (const [key, value] of entries) {
+    if (isNotUndefined(value)) facts[key] = value
   }
 }
 

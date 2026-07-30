@@ -1,7 +1,7 @@
-import { isTrue } from '../typeGuards.js'
+import { isFiniteNumber, isString, isTrue } from '../typeGuards'
 import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../types'
 
-import { toNullable } from './nullish.js'
+import { toNullable } from './nullish'
 
 const GoalArtifactId = 'active-goal'
 
@@ -26,25 +26,39 @@ function isGoalArtifact(artifact: ActiveContextArtifact): boolean {
   return artifact.kind === 'requirement' && isTrue(artifact.metadata?.goal)
 }
 
+/**
+ * 目标生命周期状态闭集。
+ *
+ * `satisfies` 与联合类型咬合：往 {@link GoalLifecycleStatus} 加一档而忘了加进本表即编译红，
+ * 不会像旧的逐值 `===` 链那样静默把新状态判成 `active`。
+ */
+const GoalLifecycleStatusValues = [
+  'active',
+  'paused',
+  'complete',
+  'blocked',
+  'cancelled',
+  'removed',
+] as const satisfies readonly GoalLifecycleStatus[]
+
+const GoalLifecycleStatusSet = new Set<string>(GoalLifecycleStatusValues)
+
+function isGoalLifecycleStatus(value: unknown): value is GoalLifecycleStatus {
+  return isString(value) && GoalLifecycleStatusSet.has(value)
+}
+
 function normalizeGoalLifecycleStatus(
   value: unknown,
   artifactStatus: ActiveContextArtifact['status']
 ): GoalLifecycleStatus {
-  if (
-    value === 'active' ||
-    value === 'paused' ||
-    value === 'complete' ||
-    value === 'blocked' ||
-    value === 'cancelled' ||
-    value === 'removed'
-  )
-    return value
+  if (isGoalLifecycleStatus(value)) return value
   if (artifactStatus === 'archived') return 'removed'
+
   return artifactStatus === 'completed' ? 'complete' : 'active'
 }
 
 function readGoalBlockedAuditTurns(value: unknown): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(Number(value))) : 1
+  return isFiniteNumber(value) ? Math.max(0, Math.floor(value)) : 1
 }
 
 function getGoalLifecycleStatus(artifact: ActiveContextArtifact): GoalLifecycleStatus {

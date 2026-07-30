@@ -1,4 +1,4 @@
-import { isBoolean } from '../typeGuards.js'
+import { isBoolean, isPresent } from '../typeGuards.js'
 import { isEmpty } from '../utils/array.js'
 
 import { LogAssertionError, LogError } from './errors.js'
@@ -144,7 +144,7 @@ export class LogRuntime implements GlobalLog {
 
   public removeTransport(id: string): boolean {
     const transport = this.transports.get(id)
-    if (!transport) return false
+    if (!isPresent(transport)) return false
 
     this.transports.delete(id)
     this.track(transport.dispose?.(), transport.id)
@@ -168,7 +168,7 @@ export class LogRuntime implements GlobalLog {
     const flushTasks = filterDefined(
       Array.from(this.transports.values(), (transport) => transport.flush?.())
     )
-    if (flushTasks.length) {
+    if (!isEmpty(flushTasks)) {
       await Promise.allSettled(flushTasks)
     }
   }
@@ -179,7 +179,7 @@ export class LogRuntime implements GlobalLog {
     const disposeTasks = filterDefined(
       Array.from(this.transports.values(), (transport) => transport.dispose?.())
     )
-    if (disposeTasks.length) {
+    if (!isEmpty(disposeTasks)) {
       await Promise.allSettled(disposeTasks)
     }
   }

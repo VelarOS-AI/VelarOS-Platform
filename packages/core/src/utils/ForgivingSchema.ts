@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import { isPlainObject, isString } from '../typeGuards'
+import { isArray, isPlainObject, isPresent, isString } from '../typeGuards'
+
+import { isEmpty } from './array'
+import { clampRounded } from './number'
+import { isBlank } from './string'
 
 /**
  * 宽容 schema 原语(战役一沉淀的铁律代码化;新工具优先用这套词汇,别手写硬拒)。
@@ -22,7 +26,7 @@ import { isPlainObject, isString } from '../typeGuards'
 
 /** 铁律③:整数数量参数钳制。超界收敛到边界并可经 buildAppliedAdjustments 回显,永不硬拒。 */
 export function clampedInt(min: number, max: number): z.ZodType<number, number> {
-  return z.number().transform((value) => Math.min(max, Math.max(min, Math.round(value))))
+  return z.number().transform((value) => clampRounded(value, min, max))
 }
 
 /** 铁律⑤:可选参数带缺省——比 zod .default 多一层语义:缺省值本身进 describe 提示。 */
@@ -33,7 +37,7 @@ export function withDefaultNote<T extends z.ZodType>(
 ): z.ZodType<NonNullable<z.output<T>>> {
   return schema
     .optional()
-    .transform((value) => (value === undefined || value === null ? defaultValue : value))
+    .transform((value) => (isPresent(value) ? value : defaultValue))
     .describe(note)
 }
 
@@ -45,10 +49,13 @@ export function preferFirst<T>(
   input: Record<string, unknown>,
   keys: readonly string[]
 ): { value: T | undefined; usedKey: string | undefined; ignoredKeys: string[] } {
-  const present = keys.filter((key) => input[key] !== undefined && input[key] !== null && input[key] !== '')
+  const present = keys.filter((key) => {
+    const value = input[key]
+    return isPresent(value) && value !== ''
+  })
   const usedKey = present[0]
   return {
-    value: usedKey ? (input[usedKey] as T) : undefined,
+    value: isPresent(usedKey) ? (input[usedKey] as T) : undefined,
     usedKey,
     ignoredKeys: present.slice(1),
   }
@@ -56,10 +63,10 @@ export function preferFirst<T>(
 
 /** 铁律②(空输入):空数组/空对象输入视为 no-op 而不是错误——返回统一判定。 */
 export function emptyIsNoop(value: unknown): boolean {
-  if (value === undefined || value === null) return true
-  if (Array.isArray(value)) return value.length === 0
-  if (isString(value)) return value.trim().length === 0
-  if (isPlainObject(value)) return Object.keys(value).length === 0
+  if (!isPresent(value)) return true
+  if (isArray(value)) return isEmpty(value)
+  if (isString(value)) return isBlank(value)
+  if (isPlainObject(value)) return isEmpty(Object.keys(value))
   return false
 }
 
@@ -73,7 +80,7 @@ export function inferActionFromFields(
   map: Record<string, readonly string[]>
 ): string | undefined {
   const hits = Object.entries(map).filter(([, fields]) =>
-    fields.some((field) => input[field] !== undefined && input[field] !== null)
+    fields.some((field) => isPresent(input[field]))
   )
   return hits.length === 1 ? hits[0]![0] : undefined
 }
@@ -88,7 +95,7 @@ export interface AppliedAdjustment {
 export function buildAppliedAdjustments(
   adjustments: readonly AppliedAdjustment[]
 ): { appliedAdjustments: AppliedAdjustment[] } | Record<string, never> {
-  return adjustments.length > 0 ? { appliedAdjustments: [...adjustments] } : {}
+  return isEmpty(adjustments) ? {} : { appliedAdjustments: [...adjustments] }
 }
 
 /**
@@ -100,7 +107,7 @@ export function buildValidItemsHint(
   items: readonly string[],
   maxItems = 10
 ): string {
-  if (items.length === 0) return `${label}:当前为空。`
+  if (isEmpty(items)) return `${label}:当前为空。`
   const shown = items.slice(0, maxItems)
   const lines = shown.map((item, index) => `${index + 1}. ${item}`)
   const suffix = items.length > shown.length ? `\n(另有 ${items.length - shown.length} 项未列出)` : ''

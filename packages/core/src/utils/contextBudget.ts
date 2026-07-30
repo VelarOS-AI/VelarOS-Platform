@@ -13,15 +13,11 @@
  * 估算用量的百分比改对 `usableContextWindow` 计量后，压缩水位（90%）会更早、更安全地触发。
  * 这些参数全部是“可选调优”：调用方不传时退化为旧行为（`usable == contextWindow`）。
  *
- * 实现说明：本模块是“零依赖叶子工具”，可能在副作用扩展（全局 isFiniteNumber / Number.prototype.clamp）
- * 装载之前被独立 import（例如单测直接引用），因此显式从 typeGuards 取 isFiniteNumber，并用 Math 夹值，
- * 不依赖运行时全局扩展的装载顺序。
+ * 实现说明：本模块只依赖具名导入的叶子原语（`isFiniteNumber` / `clamp`），不依赖任何副作用装载顺序。
  */
 import { isFiniteNumber } from '../typeGuards'
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
+import { clamp } from './number'
 
 /** 默认安全余量百分比：吸收本地估算与供应方计费口径的偏差。 */
 export const DefaultContextSafetyMarginPercent = 4
@@ -70,7 +66,7 @@ export function resolveReservedOutputTokens(
   if (!isFiniteNumber(contextWindow) || contextWindow <= 0) return MinOutputReserveTokens
 
   const ratioReserve = Math.round(contextWindow * DefaultOutputReserveRatio)
-  return Math.floor(clampNumber(ratioReserve, MinOutputReserveTokens, MaxOutputReserveTokens))
+  return Math.floor(clamp(ratioReserve, MinOutputReserveTokens, MaxOutputReserveTokens))
 }
 
 /** 由窗口、输出预留、安全余量计算输入侧可用额度（至少 1）。 */
@@ -81,7 +77,7 @@ export function resolveUsableContextWindow(input: {
 }): number {
   if (!isFiniteNumber(input.contextWindow) || input.contextWindow <= 0) return 1
 
-  const margin = clampNumber(input.safetyMarginPercent, 0, 90)
+  const margin = clamp(input.safetyMarginPercent, 0, 90)
   const afterMargin = Math.floor(input.contextWindow * (1 - margin / 100))
   const reserved = Math.max(0, Math.floor(input.reservedOutputTokens))
   return Math.max(1, afterMargin - reserved)
@@ -96,7 +92,7 @@ export function resolveContextWindowBudget(
       ? Math.floor(input.contextWindow)
       : 1
   const safetyMarginPercent = isFiniteNumber(input.safetyMarginPercent)
-    ? clampNumber(input.safetyMarginPercent, 0, 90)
+    ? clamp(input.safetyMarginPercent, 0, 90)
     : DefaultContextSafetyMarginPercent
   const reservedOutputTokens = resolveReservedOutputTokens(
     contextWindow,

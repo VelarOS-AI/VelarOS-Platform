@@ -1,26 +1,15 @@
 import { normalizePromptFeatures } from '../constants/promptFeatures'
-import {
-  resolveStoredChatSessionKind,
-} from '../constants/typedFieldAsserts'
+import { resolveStoredChatSessionKind } from '../constants/typedFieldAsserts'
 import { AppError } from '../error'
-import { isArray, isBoolean, isPresent, isString } from '../typeGuards.js'
+import { isArray, isBoolean, isNonBlankString, isPresent, isString } from '../typeGuards'
 import type { ChatPromptFeatureId, StoredChatSession } from '../types'
 
-function resolveStoredGoalMode(value: unknown): boolean {
+/** 磁盘布尔开关：缺席按 false，存在但非布尔一律抛 VALIDATION（坏数据不静默当 false）。 */
+function resolveStoredBoolean(value: unknown, field: string): boolean {
   if (!isPresent(value)) return false
 
   if (!isBoolean(value)) {
-    throw new AppError('VALIDATION', `无效的 StoredChatSession.goalMode：${String(value)}`)
-  }
-
-  return value
-}
-
-function resolveStoredPureChatMode(value: unknown): boolean {
-  if (!isPresent(value)) return false
-
-  if (!isBoolean(value)) {
-    throw new AppError('VALIDATION', `无效的 StoredChatSession.pureChatMode：${String(value)}`)
+    throw new AppError('VALIDATION', `无效的 ${field}：${String(value)}`)
   }
 
   return value
@@ -36,14 +25,17 @@ function resolveStoredPromptFeatures(value: unknown): ChatPromptFeatureId[] {
 
 /** 从磁盘 JSON 恢复 session 级强类型字段：缺省用默认，存在但非法则抛 VALIDATION。 */
 function resolveStoredChatSessionFields(stored: Partial<StoredChatSession>) {
-  const storedPureChatMode = resolveStoredPureChatMode(stored.pureChatMode)
-  const rawScope = stored.scope
-  const scope = isString(rawScope) && rawScope.trim() ? rawScope.trim() : 'default'
-  const pureChatMode = storedPureChatMode
+  const pureChatMode = resolveStoredBoolean(
+    stored.pureChatMode,
+    'StoredChatSession.pureChatMode'
+  )
+  const scope = isNonBlankString(stored.scope) ? stored.scope.trim() : 'default'
 
   return {
     kind: resolveStoredChatSessionKind(stored.kind, 'chat', 'StoredChatSession.kind'),
-    goalMode: pureChatMode ? false : resolveStoredGoalMode(stored.goalMode),
+    goalMode: pureChatMode
+      ? false
+      : resolveStoredBoolean(stored.goalMode, 'StoredChatSession.goalMode'),
     promptFeatures: pureChatMode ? [] : resolveStoredPromptFeatures(stored.promptFeatures),
     scope,
     pureChatMode,

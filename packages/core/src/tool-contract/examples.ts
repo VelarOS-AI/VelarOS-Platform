@@ -49,8 +49,9 @@ class ToolContractExampleRegistry {
     return this.examplesByToolName.get(toolName)
   }
 
+  /** 返回副本：注册表在工具定义期持续被写入，快照必须与后续写入解耦。 */
   public snapshot(): ReadonlyMap<string, ReadonlyArray<Record<string, unknown>>> {
-    return this.examplesByToolName
+    return new Map(this.examplesByToolName)
   }
 }
 

@@ -1,4 +1,6 @@
-import { isFunction, isObject,isPresent } from '../typeGuards.js'
+import { AppError } from '../error'
+import { isFunction, isObject, isPresent } from '../typeGuards'
+
 type TimerScopeKind = 'animation-frame' | 'interval' | 'timeout'
 
 type TimerCallback = () => void
@@ -77,36 +79,24 @@ function readHostMethod<Host extends object, Key extends keyof Host>(
   return isFunction(value) ? value.bind(host) : value
 }
 
+/**
+ * 逐方法取注入宿主，缺席回落运行时默认。
+ *
+ * 注入方法一律经 {@link readHostMethod} 绑定回 source，测试替身写成对象方法也不会丢 `this`。
+ */
 function buildTimerHost(override?: Partial<TimerHost>): TimerHost {
   const defaults = getDefaultTimerHost()
   const source: Partial<TimerHost> = override ?? {}
-  const hasOverride = (key: keyof TimerHost): boolean => !!source[key]
 
   return {
-    setTimeout:
-      hasOverride('setTimeout')
-        ? (readHostMethod(source, 'setTimeout') ?? defaults.setTimeout)
-        : defaults.setTimeout,
-    clearTimeout:
-      hasOverride('clearTimeout')
-        ? (readHostMethod(source, 'clearTimeout') ?? defaults.clearTimeout)
-        : defaults.clearTimeout,
-    setInterval:
-      hasOverride('setInterval')
-        ? (readHostMethod(source, 'setInterval') ?? defaults.setInterval)
-        : defaults.setInterval,
-    clearInterval:
-      hasOverride('clearInterval')
-        ? (readHostMethod(source, 'clearInterval') ?? defaults.clearInterval)
-        : defaults.clearInterval,
+    setTimeout: readHostMethod(source, 'setTimeout') ?? defaults.setTimeout,
+    clearTimeout: readHostMethod(source, 'clearTimeout') ?? defaults.clearTimeout,
+    setInterval: readHostMethod(source, 'setInterval') ?? defaults.setInterval,
+    clearInterval: readHostMethod(source, 'clearInterval') ?? defaults.clearInterval,
     requestAnimationFrame:
-      hasOverride('requestAnimationFrame')
-        ? readHostMethod(source, 'requestAnimationFrame')
-        : defaults.requestAnimationFrame,
+      readHostMethod(source, 'requestAnimationFrame') ?? defaults.requestAnimationFrame,
     cancelAnimationFrame:
-      hasOverride('cancelAnimationFrame')
-        ? readHostMethod(source, 'cancelAnimationFrame')
-        : defaults.cancelAnimationFrame,
+      readHostMethod(source, 'cancelAnimationFrame') ?? defaults.cancelAnimationFrame,
   }
 }
 
@@ -298,14 +288,12 @@ class TimerScope {
     }
 
     const controller = new AbortController()
+    // 外部中止与作用域释放走同一条中止转发：两个来源、同一语义，不需要两份回调。
     const relayAbort = (): void => {
       controller.abort(createAbortError())
     }
-    const relayDispose = (): void => {
-      controller.abort(createAbortError())
-    }
     options.signal?.addEventListener('abort', relayAbort, { once: true })
-    this.disposeController.signal.addEventListener('abort', relayDispose, { once: true })
+    this.disposeController.signal.addEventListener('abort', relayAbort, { once: true })
 
     const timeout = this.after(
       timeoutMs,
@@ -329,7 +317,7 @@ class TimerScope {
       return await Promise.race([Promise.resolve(task(controller.signal)), abortWaiter])
     } finally {
       options.signal?.removeEventListener('abort', relayAbort)
-      this.disposeController.signal.removeEventListener('abort', relayDispose)
+      this.disposeController.signal.removeEventListener('abort', relayAbort)
       timeout.cancel()
     }
   }
@@ -345,12 +333,12 @@ class TimerScope {
 
     const cancel = (): boolean => {
       latestArgs = null
-      const cancelled =!!lease?.cancel()
+      const cancelled = !!lease?.cancel()
       lease = null
       return cancelled
     }
     const flush = (): void => {
-      if (!latestArgs) return
+      if (!isPresent(latestArgs)) return
 
       const args = latestArgs
       lease?.cancel()
@@ -365,7 +353,7 @@ class TimerScope {
     }) as DebouncedTimerCallback<Args>
 
     Object.defineProperty(debounced, 'pending', {
-      get: () =>!!lease?.active,
+      get: () => !!lease?.active,
     })
     debounced.cancel = cancel
     debounced.dispose = () => {
@@ -410,13 +398,13 @@ class TimerScope {
 
   private assertActive(): void {
     if (this.disposed) {
-      throw new Error(`${this.name} 已释放。`)
+      throw new AppError('INVARIANT', `${this.name} 已释放。`)
     }
   }
 
   private assertAnimationFrameSupport(): void {
     if (!this.host.requestAnimationFrame || !this.host.cancelAnimationFrame) {
-      throw new Error(`${this.name} 当前运行环境不支持原生 requestAnimationFrame。`)
+      throw new AppError('PLATFORM', `${this.name} 当前运行环境不支持原生 requestAnimationFrame。`)
     }
   }
 

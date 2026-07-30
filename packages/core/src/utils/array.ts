@@ -1,10 +1,10 @@
 /**
  * 数组语义化辅助（显式函数形式）。
  *
- * 历史上这些能力以 `Array.prototype` 扩展形式提供（`packages/core/src/extensions.ts`）；为避免作为
- * npm 库嵌入时污染宿主全局原型，改为具名导出，调用点显式 `import`。
+ * 一律具名导出、调用点显式 `import`：本包作为 npm 库嵌入宿主，禁改 `globalThis` 与内建原型
+ * （原 `Array.prototype` 扩展入口已按宪章处决清单拔除，勿复活）。
  *
- * `isEmpty` 同时覆盖字符串与数组（二者皆有 `length`），沿用原扩展在 `Array` / `String` 两个原型上的一致语义。
+ * `isEmpty` 同时覆盖字符串与数组（二者皆有 `length`），两侧语义一致。
  */
 
 /** 是否为空数组 / 空字符串。 */
