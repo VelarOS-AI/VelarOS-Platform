@@ -42,7 +42,7 @@ interface AgentModContributionRecord<TDeclaration = unknown, TPayload = unknown>
 
 /** 各轴的运行态载荷类型；纯数据轴为 `never`（payload 恒 null）。 */
 interface AgentModAxisPayloadMap {
-  tools: VelaTool<any>
+  tools: VelaTool<any, any>
   toolCategories: ToolCategoryDefinition
   promptSegments: PromptSegmentDefinition
   skills: AgentSkillDefinition
@@ -65,11 +65,10 @@ interface AgentModAxisDeclarationMap {
   hooks: AgentModHookContribution
 }
 
-type AgentModAxisRecord<TAxis extends AgentModContributionAxisName> =
-  AgentModContributionRecord<
-    AgentModAxisDeclarationMap[TAxis],
-    AgentModAxisPayloadMap[TAxis]
-  >
+type AgentModAxisRecord<TAxis extends AgentModContributionAxisName> = AgentModContributionRecord<
+  AgentModAxisDeclarationMap[TAxis],
+  AgentModAxisPayloadMap[TAxis]
+>
 
 /** 一份按 generation 冻结的注册表投影；跨 generation 使用即 stale。 */
 interface AgentModRegistrySnapshot {
@@ -146,10 +145,7 @@ class AgentModRegistry {
     return this.axes.get(axis)?.has(key) === true
   }
 
-  public findOwner(
-    axis: AgentModContributionAxisName,
-    key: string
-  ): Nullable<string> {
+  public findOwner(axis: AgentModContributionAxisName, key: string): Nullable<string> {
     return this.axes.get(axis)?.get(key)?.modId ?? null
   }
 

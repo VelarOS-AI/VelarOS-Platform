@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  createGameBundledModDefinition,
   createGameCapability,
   createGameCapabilityDescriptor,
+  GameModId,
+  GameTurnContextCoordinator,
 } from '../dist/composition/index.js'
 import {
   GameProjectDirectories,
@@ -48,18 +51,52 @@ describe('@velaros-ai/game partition entries', () => {
 
   test('fails closed until the host injects project-scoped ports', async () => {
     const capability = createGameCapability()
-    const context = capability.createToolContext(
-      new AbortController().signal,
-    )
+    const context = capability.createToolContext(new AbortController().signal)
 
     expect(capability.toolApi.isProjectAvailable()).toBe(false)
     expect(capability.tools.game_run.isAvailable?.(context)).toBe(false)
-    await expect(capability.toolApi.runtime.run({})).rejects.toThrow(
-      '宿主没有为当前会话注入',
-    )
+    await expect(capability.toolApi.runtime.run({})).rejects.toThrow('宿主没有为当前会话注入')
     expect(await capability.toolApi.runtime.stop()).toEqual({
       status: 'stopped',
       wasRunning: false,
     })
+  })
+
+  test('ships as a default-disabled official mod with one game-space identity', () => {
+    const pack = createGameBundledModDefinition()
+    expect(pack.id).toBe(GameModId)
+    expect(pack.defaultEnabled).toBe(false)
+    expect(pack.specifier).toBe('bundled:velaros.game')
+    expect(pack.bindings.tools).toBeDefined()
+    expect(pack.bindings.toolCategories.game.id).toBe('game')
+  })
+
+  test('projects selection through the game-owned turn-context source', () => {
+    const coordinator = new GameTurnContextCoordinator()
+    const selection = coordinator
+      .createSources(['game'])
+      .find((source) => source.id === 'game.selection')
+    expect(selection).toBeDefined()
+
+    coordinator.observeSelection('session-1', 'player')
+    const snapshot = selection!.peekCached({
+      sessionId: 'session-1',
+      afterSeq: 0,
+      generation: null,
+    })
+    expect(snapshot.deltas).toHaveLength(1)
+    expect(snapshot.deltas[0]?.inspect).toEqual({
+      tool: 'game_query_state',
+      argsHint: { select: 'entity', entityId: 'player' },
+    })
+
+    coordinator.clearSession('session-1')
+    expect(
+      selection!.peekCached({
+        sessionId: 'session-1',
+        afterSeq: 0,
+        generation: null,
+      }).deltas
+    ).toEqual([])
   })
 })

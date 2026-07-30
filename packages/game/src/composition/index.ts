@@ -26,14 +26,13 @@ import {
   type GameManagedDevProcess,
   GameProjectRuntime,
   type GameRuntimeDescriptor,
+  type GameRuntimeObserver,
   type GameRuntimePageHost,
 } from '../runtime/index.js'
-import {
-  type GameToolContext,
-  GameToolNames,
-  gameTools,
-  type ToolGameApi,
-} from '../tools/index.js'
+import { type GameToolContext, GameToolNames, gameTools, type ToolGameApi } from '../tools/index.js'
+
+export * from './mod.js'
+export * from './turn-context.js'
 
 export interface GameCapabilityDescriptor {
   readonly id: 'game'
@@ -54,10 +53,13 @@ export interface CreateGameProjectCapabilityOptions {
   readonly documents: GameManifestDocumentStore
   readonly processHost: GameApprovedProcessHost
   readonly pageHost: GameRuntimePageHost
+  readonly observer?: GameRuntimeObserver
 }
 
-export interface CreateGameProjectCapabilityFromTextOptions
-  extends Omit<CreateGameProjectCapabilityOptions, 'project'> {
+export interface CreateGameProjectCapabilityFromTextOptions extends Omit<
+  CreateGameProjectCapabilityOptions,
+  'project'
+> {
   readonly projectText: string
   readonly sourceName?: string
 }
@@ -66,18 +68,13 @@ export interface GameCapability {
   readonly descriptor: GameCapabilityDescriptor
   readonly tools: typeof gameTools
   readonly toolApi: ToolGameApi
-  readonly updateProjectFromText?: (
-    projectText: string,
-    sourceName?: string,
-  ) => void
+  readonly updateProjectFromText?: (projectText: string, sourceName?: string) => void
   readonly createToolContext: (abortSignal: AbortSignal) => GameToolContext
 }
 
 export class GameCapabilityUnavailableError extends Error {
   public constructor(operation: string) {
-    super(
-      `${operation} 不可用：宿主没有为当前会话注入游戏工程运行时与权限端口。`,
-    )
+    super(`${operation} 不可用：宿主没有为当前会话注入游戏工程运行时与权限端口。`)
     this.name = 'GameCapabilityUnavailableError'
   }
 }
@@ -87,9 +84,7 @@ class UnavailableGameSceneEditor implements GameSceneEditorPort {
     return false
   }
 
-  public async edit(
-    _request: GameManifestEditRequest,
-  ): Promise<GameManifestEditResult> {
+  public async edit(_request: GameManifestEditRequest): Promise<GameManifestEditResult> {
     throw new GameCapabilityUnavailableError('game_scene_edit')
   }
 }
@@ -111,15 +106,11 @@ class UnavailableGameRuntime implements GameRuntimePort {
     return { status: 'stopped', wasRunning: false }
   }
 
-  public async screenshot(
-    _request: GameScreenshotRequest,
-  ): Promise<GameScreenshotResult> {
+  public async screenshot(_request: GameScreenshotRequest): Promise<GameScreenshotResult> {
     throw new GameCapabilityUnavailableError('game_screenshot')
   }
 
-  public async query(
-    _request: GameRuntimeQuery,
-  ): Promise<GameRuntimeQueryResult> {
+  public async query(_request: GameRuntimeQuery): Promise<GameRuntimeQueryResult> {
     throw new GameCapabilityUnavailableError('game_query_state')
   }
 
@@ -129,7 +120,7 @@ class UnavailableGameRuntime implements GameRuntimePort {
       readonly repeat?: number
       readonly settleFrames?: number
       readonly captureAfter?: boolean
-    },
+    }
   ): Promise<GameInputResult> {
     throw new GameCapabilityUnavailableError('game_input')
   }
@@ -153,14 +144,10 @@ export function createGameCapabilityDescriptor(): GameCapabilityDescriptor {
  * Missing ports remain invisible and fail closed. The host owns project/session lifecycle,
  * filesystem confinement, process approval, browser control, and disposal.
  */
-export function createGameCapability(
-  options: CreateGameCapabilityOptions = {},
-): GameCapability {
+export function createGameCapability(options: CreateGameCapabilityOptions = {}): GameCapability {
   const editor = options.editor ?? UnavailableEditor
   const runtime = options.runtime ?? UnavailableRuntime
-  const isProjectAvailable =
-    options.isProjectAvailable ??
-    (() => false)
+  const isProjectAvailable = options.isProjectAvailable ?? (() => false)
   const toolApi: ToolGameApi = Object.freeze({
     isProjectAvailable,
     editor,
@@ -177,19 +164,20 @@ export function createGameCapability(
 }
 
 export function createGameManifestEditor(
-  documents: GameManifestDocumentStore,
+  documents: GameManifestDocumentStore
 ): GameSceneEditorPort {
   return new GameManifestWorkspaceEditor(documents)
 }
 
 export function createGameProjectCapability(
-  options: CreateGameProjectCapabilityOptions,
+  options: CreateGameProjectCapabilityOptions
 ): GameCapability {
   const runtime = new GameProjectRuntime(
     options.projectRoot,
     options.project,
     options.processHost,
     options.pageHost,
+    options.observer
   )
   const editor = new GameManifestWorkspaceEditor(options.documents)
   const synchronizedEditor: GameSceneEditorPort = {
@@ -202,10 +190,7 @@ export function createGameProjectCapability(
           throw new Error('game.project.json 在语义编辑后不可读取。')
         }
         runtime.updateProject(
-          parseGameProjectManifestText(
-            projectDocument.text,
-            projectDocument.path,
-          ).value,
+          parseGameProjectManifestText(projectDocument.text, projectDocument.path).value
         )
       }
       return result
@@ -220,22 +205,19 @@ export function createGameProjectCapability(
     ...capability,
     updateProjectFromText: (projectText: string, sourceName?: string) =>
       runtime.updateProject(
-        parseGameProjectManifestText(
-          projectText,
-          sourceName ?? 'game.project.json',
-        ).value,
+        parseGameProjectManifestText(projectText, sourceName ?? 'game.project.json').value
       ),
   })
 }
 
 export function createGameProjectCapabilityFromText(
-  options: CreateGameProjectCapabilityFromTextOptions,
+  options: CreateGameProjectCapabilityFromTextOptions
 ): GameCapability {
   return createGameProjectCapability({
     ...options,
     project: parseGameProjectManifestText(
       options.projectText,
-      options.sourceName ?? 'game.project.json',
+      options.sourceName ?? 'game.project.json'
     ).value,
   })
 }
@@ -247,5 +229,6 @@ export type {
   GameManifestDocumentChange,
   GameManifestDocumentStore,
   GameProjectManifest,
+  GameRuntimeObserver,
   GameRuntimePageHost,
 }

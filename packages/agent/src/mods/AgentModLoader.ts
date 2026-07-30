@@ -29,17 +29,20 @@ import type { AgentSkillDefinition } from '../skills'
 import type { SubAgentTypeDescriptor } from '../sub-agent'
 import type { VelaTool } from '../tool-library'
 
-import type {
-  AgentModAxisRecord,
-  AgentModRegistrySnapshot,
-} from './AgentModRegistry'
+import type { AgentModAxisRecord, AgentModRegistrySnapshot } from './AgentModRegistry'
 import { AgentModRegistry } from './AgentModRegistry'
 import type { AgentModSeamHandler } from './AgentModSeams'
 import { AgentModSeamDispatcher } from './AgentModSeams'
 
-/** 运行态绑定：manifest 条目主键 → 该条目的运行态载荷。 */
+/**
+ * 运行态绑定：manifest 条目主键 → 该条目的运行态载荷。
+ *
+ * Loader 只校验、登记和投影工具对象，不执行它；工具上下文由最终宿主的 ToolRegistry 决定。
+ * 因此这里刻意不把动态 pack 的工具钉成 KernelToolContext，否则带宿主扩展槽的官方工具只能
+ * 靠不安全强转进来。
+ */
 interface AgentModBindings {
-  readonly tools?: Readonly<Record<string, VelaTool<any>>>
+  readonly tools?: Readonly<Record<string, VelaTool<any, any>>>
   readonly toolCategories?: Readonly<Record<string, ToolCategoryDefinition>>
   readonly promptSegments?: Readonly<Record<string, PromptSegmentDefinition>>
   readonly skills?: Readonly<Record<string, AgentSkillDefinition>>
@@ -105,10 +108,7 @@ interface AgentModLoadReport {
 const DefaultAllowedTrustLevels: readonly AgentModTrustLevel[] = ['bundled-official']
 
 /** 必须有运行态载荷的轴：缺绑定=拒载（绝不静默降级成空贡献）。 */
-const PayloadRequiredAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
-  'tools',
-  'hooks',
-])
+const PayloadRequiredAxes: ReadonlySet<AgentModContributionAxisName> = new Set(['tools', 'hooks'])
 
 /** 纯数据轴：不接受运行态载荷（代码钩子白名单之外）。 */
 const DataOnlyAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
@@ -169,13 +169,9 @@ class AgentModLoader {
   }) {
     this.host = options.host
     this.registry = options.registry ?? new AgentModRegistry()
-    this.seams =
-      options.seams ??
-      new AgentModSeamDispatcher({ onDiagnostic: options.onDiagnostic })
+    this.seams = options.seams ?? new AgentModSeamDispatcher({ onDiagnostic: options.onDiagnostic })
     this.supportedAxes = new Set(options.host.supportedAxes)
-    this.allowedTrustLevels = new Set(
-      options.host.allowedTrustLevels ?? DefaultAllowedTrustLevels
-    )
+    this.allowedTrustLevels = new Set(options.host.allowedTrustLevels ?? DefaultAllowedTrustLevels)
   }
 
   /** 装载一批候选包；重复调用会在既有注册表之上继续追加（id/主键冲突照样拒载）。 */
@@ -225,10 +221,7 @@ class AgentModLoader {
       generation: this.registry.generation,
       activated: Object.freeze([...this.activated.values()]),
       rejected: Object.freeze([...this.rejected]),
-      diagnostics: Object.freeze([
-        ...this.diagnostics,
-        ...this.seams.listDiagnostics(),
-      ]),
+      diagnostics: Object.freeze([...this.diagnostics, ...this.seams.listDiagnostics()]),
     })
   }
 
@@ -249,7 +242,8 @@ class AgentModLoader {
     const parsed = parseAgentModManifest(candidate.manifest, {
       origin: candidate.origin,
     })
-    if (!parsed.ok) return {
+    if (!parsed.ok)
+      return {
         ok: false,
         rejection: {
           modId: parsed.diagnostics[0]?.modId ?? null,
@@ -298,9 +292,7 @@ class AgentModLoader {
       )
     }
 
-    const shellRange = this.host.shellId
-      ? manifest.engines.shell?.[this.host.shellId]
-      : undefined
+    const shellRange = this.host.shellId ? manifest.engines.shell?.[this.host.shellId] : undefined
     if (shellRange && this.host.shellVersion) {
       if (!satisfiesSemverRange(this.host.shellVersion, shellRange)) {
         fail(
@@ -365,9 +357,14 @@ class AgentModLoader {
       }
     }
 
-    if (diagnostics.length > 0) return {
+    if (diagnostics.length > 0)
+      return {
         ok: false,
-        rejection: { modId: manifest.id, origin: candidate.origin, diagnostics },
+        rejection: {
+          modId: manifest.id,
+          origin: candidate.origin,
+          diagnostics,
+        },
       }
 
     return {
@@ -413,8 +410,7 @@ class AgentModLoader {
           const owner = axisClaims.get(key) ?? this.registry.findOwner(axis, key)
           if (!owner) continue
           diagnostics.push({
-            code:
-              axis === 'tools' ? 'mod.tool-name-conflict' : 'mod.contribution-conflict',
+            code: axis === 'tools' ? 'mod.tool-name-conflict' : 'mod.contribution-conflict',
             message: `${axis} 主键「${key}」与 mod「${owner}」冲突；${axis === 'tools' ? '工具名全宿主唯一' : '轴内主键全宿主唯一'}，拒载。`,
             path: `contributes.${axis}`,
             modId,
@@ -465,7 +461,11 @@ class AgentModLoader {
 
     for (const entry of readAxisEntries(mod.manifest, 'hooks')) {
       if (!mod.activeAxes.includes('hooks')) break
-      const declaration = entry as { id: string; seam: never; priority?: number }
+      const declaration = entry as {
+        id: string
+        seam: never
+        priority?: number
+      }
       const handler = Reflect.get(
         readBindingRecord(mod.bindings, 'hooks'),
         declaration.id

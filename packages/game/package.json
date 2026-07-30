@@ -40,7 +40,8 @@
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "docs",
+    "velaros.mod.json"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

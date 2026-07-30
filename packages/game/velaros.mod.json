@@ -1,0 +1,117 @@
+{
+  "module": {
+    "id": "velaros.game",
+    "version": "0.1.0",
+    "apiVersion": 1,
+    "provides": ["velaros.game", "velaros.agent"],
+    "requires": [],
+    "optionalRequires": [],
+    "permissions": [],
+    "isolation": "in-process"
+  },
+  "agent": {
+    "id": "velaros.game",
+    "version": "0.1.0",
+    "publisher": "VelarOS",
+    "displayName": "VelarOS AI Game Engine",
+    "description": "VelarOS official game workspace, tools, runtime and turn context.",
+    "manifestSchemaVersion": 1,
+    "engines": {
+      "velaros": "*",
+      "agent": "*"
+    },
+    "trust": "bundled-official",
+    "requiredAxes": ["tools", "toolCategories", "spaces", "turnContextSources"],
+    "contributes": {
+      "toolCategories": [
+        {
+          "id": "game",
+          "label": "Game",
+          "description": "Declarative game project editing, runtime observation and input validation.",
+          "order": 45
+        }
+      ],
+      "tools": [
+        {
+          "name": "game_scene_edit",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        },
+        {
+          "name": "game_run",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        },
+        {
+          "name": "game_stop",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        },
+        {
+          "name": "game_screenshot",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        },
+        {
+          "name": "game_query_state",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        },
+        {
+          "name": "game_input",
+          "categoryId": "game",
+          "residentInSpaces": ["game"]
+        }
+      ],
+      "spaces": [
+        {
+          "id": "game",
+          "descriptor": {
+            "label": "Game",
+            "hint": "Edit, run and observe the current game project",
+            "startTitle": "Start building a game",
+            "order": 40,
+            "localeKey": "workspace.space.game"
+          },
+          "iconId": "game",
+          "identityStrategy": "path",
+          "surfaceProfileId": "game",
+          "boundCapabilityIds": ["velaros.game"],
+          "toolCategoryIds": ["game"],
+          "residentToolNames": [
+            "game_scene_edit",
+            "game_run",
+            "game_stop",
+            "game_screenshot",
+            "game_query_state",
+            "game_input"
+          ],
+          "turnContextSourceIds": ["game.runtime-errors", "game.selection", "game.scene-state"]
+        }
+      ],
+      "turnContextSources": [
+        {
+          "id": "game.runtime-errors",
+          "label": "Game errors",
+          "spaces": ["game"],
+          "rendererVisible": true,
+          "priority": 60
+        },
+        {
+          "id": "game.selection",
+          "label": "Game selection",
+          "spaces": ["game"],
+          "rendererVisible": true,
+          "priority": 61
+        },
+        {
+          "id": "game.scene-state",
+          "label": "Game scene",
+          "spaces": ["game"],
+          "rendererVisible": true,
+          "priority": 62
+        }
+      ]
+    }
+  }
+}
