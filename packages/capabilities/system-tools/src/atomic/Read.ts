@@ -5,6 +5,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import {
   decodeSystemTextBuffer,
+  readErrnoCode,
   readSystemTextFile,
   resolveSystemPathInput,
   truncateToChars,
@@ -236,8 +237,7 @@ async function openSystemTextFileForRead(resolvedPath: string) {
 function normalizeReadError(err: unknown, resolvedPath: string): Error {
   if (err instanceof AppError) return err
 
-  const code = (err as NodeJS.ErrnoException).code
-  switch (code) {
+  switch (readErrnoCode(err)) {
     case 'ENOENT':
       return new AppError('NOT_FOUND', `File not found: ${resolvedPath}`)
     case 'EACCES':
@@ -246,6 +246,6 @@ function normalizeReadError(err: unknown, resolvedPath: string): Error {
     case 'EISDIR':
       return new AppError('VALIDATION', `Path is a directory, not a file: ${resolvedPath}`)
     default:
-      return err instanceof Error ? err : new Error(String(err))
+      return err instanceof Error ? err : new AppError('UNKNOWN', String(err))
   }
 }

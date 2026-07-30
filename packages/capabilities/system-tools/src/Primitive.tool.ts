@@ -323,8 +323,9 @@ const bash = defineSystemTool<{
     ctx.abortSignal.throwIfAborted()
     assertBashCwdOutsideActiveWorkspace(cwd, ctx)
     const plan = analyzeCommandExecution(command)
-    const shouldRunInBackground =
-      background || ((background ?? true) && plan.shouldStartInBackground)
+    // 显式 background 永远优先；只有省略时才由命令形态推断（等价于原先的
+    // `background || ((background ?? true) && …)`，但把"显式 false 必须压过推断"这条判据写在形状里）。
+    const shouldRunInBackground = background ?? plan.shouldStartInBackground
 
     if (shouldRunInBackground && !ctx.system.canStartBackgroundCommands()) {
       throw new AppError('PERMISSION', '当前未允许模型启动长期运行的命令。')
