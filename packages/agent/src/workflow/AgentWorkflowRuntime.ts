@@ -24,10 +24,12 @@
 // 中断（`WorkflowAbortedError`）与预算耗尽是两种不同终止：前者是外部信号，后者是自限，
 // 二者都在 `run` 的 catch 里落成该步骤的终态并**停止后续步骤**，不重试。
 //
-// ## 已知缺口（不是本层能单独修的）
-// `pipeline` 在 fail_fast 或中断时，尚未启动的 item 会从 `laneResults` 里被整条丢掉；
-// 同样情形下 `parallel` 会补一条 `status:'skipped'` 的占位。两者不对称，模型看 pipeline 结果时
-// 无法区分"这个 item 没跑"与"这个 item 不存在"。补齐要改模型面输出形状，需与消费方一起定。
+// ## 一条必须成对维护的约定
+// `parallel` 与 `pipeline` 在 fail_fast 或中断时，都为**未启动**的条目补一条 `status:'skipped'`
+// 的占位（前者按 call、后者按 item），带上跳过原因。缺了占位，模型无法区分"这条没跑"与
+// "这条不存在"，也就无从判断要不要重跑。给两者之一加新的提前退出路径时，占位要一起补。
+// 注意占位也会进 `outputs`：下游 filter / dedupe / majority_vote 读到的数组里含 skipped 条目，
+// 需要时按 `status` 自行滤除。
 
 import {
   isArray,
@@ -319,7 +321,16 @@ class AgentWorkflowRuntime {
           },
           () => stop || !!this.abortSignal?.aborted
         )
-        const laneResults = lanes.filter((lane) => lane !== undefined)
+        // 未启动的 item 补 skipped 占位（与 parallel 同形）：直接丢弃的话，模型看结果时无法区分
+        // "这个 item 因 fail_fast/中断没跑"与"这个 item 根本不存在"，也就无从判断要不要重跑。
+        // items 整体已在 IR 校验时过 boundedClone，逐项再克隆不会新增超限失败。
+        const laneResults = lanes.map((lane, itemIndex) => lane ?? {
+          item_index: itemIndex,
+          status: 'skipped',
+          input: boundedClone(step.items[itemIndex], `pipeline item ${itemIndex + 1}`),
+          stages: [],
+          summary: stop ? '因 fail_fast 跳过。' : '因父执行中断跳过。',
+        })
         this.assertCanContinue()
         output = laneResults
         const completed = laneResults.filter((lane) => lane.status === 'completed').length
