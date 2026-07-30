@@ -14,15 +14,25 @@ export interface RuntimeReminderConsumeResult {
 }
 
 /**
- * 运行时提醒调度器。
+ * 运行时提醒调度器：**每触发点最多注入一条**提醒的仲裁者。
  *
- * - 接收声明式生产器注册。
- * - 消费时挑选最高优先级、范围满足、条件谓词通过且渲染非空的生产器。
- * - 按范围做去重：每编辑版本以编辑版本为键；一次性提醒永久标记；始终提醒不去重。
- * - 查看与消费等价，但不更新已发标记，用于“先看再决定要不要走”的场景。
+ * ## 为什么是「选一条」而不是「全发」
+ * 提醒是插进模型上下文的软指令。一次塞多条会互相冲突（"先去验证" vs "先去检查改动"），模型只会挑一条
+ * 执行、另一条变成纯 token 浪费；更糟的是它们每轮都可能重新命中，累积成噪音。所以调度器按 priority
+ * 取**第一条**可注入的就返回。新增 producer 时要问的是「它该排在谁前面」，不是「它该不该发」。
  *
- * 该调度器是每会话实例。编码会话跟踪器内部持有一个；
- * 其它编排器需要时也可以为特定能力作用域独立构造。
+ * ## 生命周期：scope 决定一条提醒能发几次
+ *  - `one-shot`：整个会话一次；
+ *  - `per-edit-version`：每批新编辑一次（`editVersion` 变化即自动解锁，不需要谁去 reset）；
+ *  - `always`：不去重（`resolveScopeKey` 返回 null）。
+ * **`peek` 与 `consume` 必须走同一条选择逻辑**（`selectCandidate`），只在标不标「已发」上分叉——两条
+ * 各写一份判定，会长出「peek 说有、consume 拿到 null」这种没人能复现的偏差。
+ *
+ * ## 与 tracker 旁路状态的关系
+ * scope 去重只管本调度器自己的账；调用方还有 `reminderIssuedForCurrentEdits` 一类旁路标记，靠
+ * `finalizeReminderConsumeResult(producerId)` 同步。**consume 成功后必须调它**，否则两套账会漂移。
+ *
+ * 每会话一实例；生命周期跟着会话走，不跨会话共享（`issued` 是会话内的已发账）。
  */
 export class RuntimeReminderScheduler {
   private readonly producers = new Map<string, RuntimeReminderProducer>()

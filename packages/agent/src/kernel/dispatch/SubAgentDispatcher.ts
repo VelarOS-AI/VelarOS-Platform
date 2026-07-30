@@ -4,6 +4,37 @@
 // 本体 host 无关，只认端口不认实现（见 ./host-ports）：Desktop 在 execution/Runtime.ts 注入具体
 // AgentRunner / ConfigService / 协作协调器 / 自定义 agent 注册表——它们结构上满足端口。文案格式化见
 // ./result-format，指令拼装见 ./instruction，并发闸见 ./concurrency，进展账本/摘要见 ./SubAgentProgress*。
+//
+// ## 从哪读起
+// `dispatch()` 是唯一入口，顺序做四件事：**解析身份/类型 → 过三道闸 → 建会话与事件面 → 交给
+// `runWorker`**。`runWorker` 之后的链路是 `runWithOptionalWriteLease`（解析路由，唯一转换器）→
+// `executeWithRoute`（路由降级 + 写租约）→ `runRouteWithTransientRetry`（网络重试）。
+//
+// ## ① 三道闸是**三件不同的事**，刻意不合并
+//  1. **并发闸**（每 executionKey 一个 Semaphore，缺省 4）——限制同时在跑几个，超出排队不拒绝；
+//  2. **总量闸**（`DefaultMaxSubAgentsPerExecution` = 32）——限制一次执行总共派几个，超出**拒绝**；
+//  3. **熔断闸**（`SubAgentProgressLedger`）——限制「同一件事反复派」，按提示词指纹硬拦、按同目标往返软提醒。
+// 合并任意两条都会丢掉一类保护：并发闸挡不住「串行派 500 个」，总量闸挡不住「原样重发 3 次」，
+// 熔断闸挡不住「一次并发 50 个把机器打满」。三条各自独立计数、独立回收（`clearExecution`）。
+//
+// ## ② 并发与时序（改这些会破什么）
+//  - **信号量必须在 `finally` 释放**。`runWorker` 的 try 覆盖了从 `acquire()` 之后到全部收尾的
+//    整段；任何一条提前 return 绕过 finally，都会永久漏掉一个槽位——症状是「派了几次子 Agent 之后
+//    再派就一直不动」，且重启才恢复。同一 finally 还负责摘 relay 注册与清取消标记，三件事必须同生共死。
+//  - **取消可能早于 worker 注册**。用户点取消时 worker 或许还卡在 `acquire()` 排队。
+//    `cancelAsyncWorker` 先把 key 记进 `cancelledAsyncThreads`，`runWorker` 在 `registerWorker` 之后
+//    **立刻自查并消费**该标记（`delete` 返回 true 即 abort）——这个「注册后自查」就是二者的会合点。
+//    去掉它，取消会在 worker 真正启动前丢失，表现为「点了取消但子 Agent 照跑完」。
+//  - **executionKey 必须由 `resolveSubAgentExecutionKey` 单源解析**：dispatch 与 AgentRunner 的
+//    clearExecution 用同一函数，key 漂移会让清理误伤别的执行、或漏清导致计数永不归零。
+//  - **中断不算失败**。`isAbortError` 在重试、路由降级、健康度反馈三处都先判：把中断喂给
+//    `markFailure` 会污染 provider 健康度（用户按一次停止，模型被判定为「不可用」）。
+//
+// ## ③ 续跑（resume）的身份校验为什么这么严
+// `validateResumeIdentity` 逐项比对 execution / parent session / 类型 / 自定义 agent id / readonly /
+// tool_scope / 工具分类集合 / model / route_category。判据：续跑 = **复用一段既有对话历史**，任何一项
+// 不一致都意味着这段历史是在另一套前提下产生的，接着跑会让模型带着错误前提工作——那类错误既不报错也
+// 不好查。失败方向选「拒绝并要求新派」。
 import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
