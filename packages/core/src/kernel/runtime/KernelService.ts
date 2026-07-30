@@ -283,7 +283,7 @@ export class KernelService {
         this.status === 'idle',
       )
 
-    const capability = this.findCapability(request)
+    const capability = this.findCapabilityById(request.capabilityId)
     if (capability === undefined)
       return failure(
         request.callId,
@@ -392,12 +392,6 @@ export class KernelService {
         !signal.aborted,
       )
     }
-  }
-
-  private findCapability(request: CapabilityCallRequest):
-    | { readonly token: { readonly id: string; readonly version: string } }
-    | undefined {
-    return this.findCapabilityById(request.capabilityId)
   }
 
   private findCapabilityById(capabilityId: string):

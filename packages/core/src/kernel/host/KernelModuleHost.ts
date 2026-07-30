@@ -7,6 +7,7 @@ import type {
   KernelModuleLifecycle,
   KernelModuleManifest,
   KernelModulePermissionRequest,
+  KernelModuleStatus,
   KernelPermissionBroker,
   KernelPermissionDecision,
   KernelRegistration,
@@ -42,17 +43,7 @@ import {
   type KernelStateBackend,
 } from './state-store'
 
-export type KernelModuleStatus =
-  | 'registered'
-  | 'activating'
-  | 'active'
-  | 'readying'
-  | 'ready'
-  | 'suspending'
-  | 'suspended'
-  | 'disposing'
-  | 'disposed'
-  | 'failed'
+export type { KernelModuleStatus } from '../abi'
 
 export interface KernelModuleSnapshot {
   readonly manifest: KernelModuleManifest
