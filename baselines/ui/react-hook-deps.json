@@ -1,0 +1,13 @@
+{
+  "packages/ui/src/conversation/artifacts/HtmlArtifactBlock.tsx": 1,
+  "packages/ui/src/conversation/blocks/AssistantMessageBubble.tsx": 1,
+  "packages/ui/src/conversation/cards/FileChangeSummaryList.tsx": 1,
+  "packages/ui/src/conversation/cards/UserActionCard.tsx": 1,
+  "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx": 1,
+  "packages/ui/src/conversation/react-hooks/useIntersectionObserver.ts": 1,
+  "packages/ui/src/conversation/shell/useQueuedLiveStatusText.ts": 2,
+  "packages/ui/src/lib/useIntersectionObserver.ts": 1,
+  "packages/ui/src/primitives/overlays/CascadingMenu.tsx": 4,
+  "packages/ui/src/primitives/overlays/ImagePreviewDialog.tsx": 1,
+  "packages/ui/src/primitives/overlays/Popover.tsx": 1
+}
