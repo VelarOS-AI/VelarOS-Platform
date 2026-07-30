@@ -7,16 +7,13 @@ type ModelRequestPolicyTarget = {
   maxOutputTokens?: number
 }
 
-function isFinitePolicyNumber(value: unknown): value is number {
-  return isFiniteNumber(value)
-}
-
+/** 调用方显式给的值优先；策略只在缺席或非有限数时兜底，不覆盖显式意图。 */
 function applyPolicyNumber(
   current: number | undefined,
   policyValue: number | undefined
 ): number | undefined {
-  if (isFinitePolicyNumber(current)) return current
-  return isFinitePolicyNumber(policyValue) ? policyValue : current
+  if (isFiniteNumber(current)) return current
+  return isFiniteNumber(policyValue) ? policyValue : current
 }
 
 function applyModelRequestPolicy<TRequest extends object>(

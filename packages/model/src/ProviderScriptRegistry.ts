@@ -9,7 +9,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 
-import { isArray, isBlank, isBoolean, isEmpty,isFunction, isPlainObject, isPresent, isString, optionalWhen, toNullable, toOptional, trimmedStringOrEmpty } from '@velaros-ai/core'
+import { isArray, isBlank, isBoolean, isEmpty,isFunction, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable, toOptional, trimmedStringOrEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import type {
@@ -164,6 +164,27 @@ function resolveProviderScriptDevConfigCandidates(
   return [join(cwd, '.velaros/dev.json'), join(homeDir, '.velaros/dev.json')]
 }
 
+/**
+ * 导览（§5.3b ④安全门 / ②生命周期 / ⑥非显然妥协）——磁盘 provider script 的加载与执行。
+ *
+ * **信任模型（改这个文件前必须先认同这一条）**：这里用 `runInThisContext` / `require` 执行脚本，
+ * 脚本因此拿到**与宿主进程同权**的能力（fs、网络、`hostRequire` 拿宿主 node_modules）。这是刻意的
+ * ——provider script 要能自带 SDK、读证书、开系统浏览器做 OAuth，沙箱化会直接废掉这个能力。
+ * 换取安全的前提只有一条：**入口必须是显式登记**。当前两个入口各自的门是：
+ * - `.velaros/dev.json`（`configPaths`）——开发者本机文件，产品分发包里不存在；
+ * - `registerSource()`——**内存注册，本方法不做任何鉴权**，来源鉴权/签名/解密全部由调用方负责
+ *   （插件安装链）。往这里加"从网络拉一段源码就注册"的便捷入口 = 打开远程代码执行。
+ * 用户随手上传的 JS 走的是另一条路（`UserJsModelAdapter` 的 VM 沙箱），别把两者的判据互相借用。
+ *
+ * **加载生命周期**：`loaded` 是一次性闸（懒加载，首次公开方法触发 `ensureLoaded`）；
+ * 任何会改变来源的操作（`configureHost` / `configureSources` / `reload`）都必须走
+ * `resetLoadedState()` 把 `loaded`、`activeConfigPath`、`scripts` 三者一起清零——只清其中一个会留下
+ * "指向旧 config 的已加载脚本"这种半态。
+ *
+ * **失败方向**：加载期任一脚本抛错即整体抛（§2.8 判据边界——provider script 是显式登记的，
+ * 静默跳过会让"我明明配了却没生效"变成不可诊断）；而运行期的 host bridge 缺席只降级记账
+ * （`openExternal` 警告 / userData 与 version 回退默认值），因为宿主可能还没注入完。
+ */
 class ProviderScriptRegistry implements ProviderScriptRegistryPort {
   private cwd: string
   private homeDir: string
@@ -349,7 +370,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
     signal?: AbortSignal
   ): Promise<unknown> {
     const script = this.requireProviderScript(provider)
-    if (!script?.definition.fetchTavily)
+    if (!script.definition.fetchTavily)
       throw new AppError('VALIDATION', `${provider} provider script 未提供 fetchTavily。`)
 
     return script.definition.fetchTavily({
@@ -538,7 +559,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
   private getUserDataPath(): string {
     try {
       const path = this.hostBridge.getUserDataPath?.()
-      if (path && !isBlank(path)) return path
+      if (isNonBlankString(path)) return path
     } catch (error) {
       ProviderScriptLog.debug('provider script host userData path unavailable', { error })
     }

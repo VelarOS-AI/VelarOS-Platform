@@ -1,5 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
+import { isPlainObject, isString, Log } from '@velaros-ai/core'
+
 import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from './ModelContracts'
 
 import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
@@ -17,11 +19,11 @@ function injectVelarThinkingRouting(
   reasoningLevel?: LooseOptional<ReasoningLevel>
 ): VelarFetchInit {
   if (!thinkingDepth && !reasoningLevel) return init
-  if (typeof init?.body !== 'string') return init
+  if (!isString(init?.body)) return init
 
   try {
     const body = JSON.parse(init.body)
-    if (!body || typeof body !== 'object' || Array.isArray(body)) return init
+    if (!isPlainObject(body)) return init
 
     return {
       ...init,
@@ -30,7 +32,9 @@ function injectVelarThinkingRouting(
         reasoning: mergeOpenRouterReasoning(body.reasoning, thinkingDepth, reasoningLevel),
       }),
     }
-  } catch {
+  } catch (error) {
+    // 注入失败一律保留原始请求体：宁可这一轮不带 reasoning，也不能让路由参数把请求打坏（§2.4）。
+    Log.tag('VelarModelAdapter').debug('注入 Velar reasoning 路由失败，保留原始请求体', { error })
     return init
   }
 }

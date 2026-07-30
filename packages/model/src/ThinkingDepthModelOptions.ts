@@ -6,7 +6,7 @@ import type {
 } from '@ai-sdk/provider'
 import type { LanguageModel } from 'ai'
 
-import { isNumber, isPlainObject, isString } from '@velaros-ai/core'
+import { isFiniteNumber, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from './ModelContracts'
 
@@ -16,8 +16,23 @@ type ProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']
 const DefaultThinkingDepth: ThinkingDepth = 'balanced'
 /** ultra 档无显式 maxOutputTokens 时使用的 thinking budget 下限。 */
 const UltraReasoningBudgetFloor = 16_000
-/** ultra 档相对 maxOutputTokens 的预算系数与硬上限。 */
+/** ultra 档 thinking budget 的硬上限。 */
 const UltraReasoningBudgetCeil = 24_000
+/** ultra 档相对 maxOutputTokens 的预算系数。 */
+const UltraReasoningBudgetRatio = 0.6
+/** 非 ultra 档相对 maxOutputTokens 的预算系数基线（再乘各档 multiplier）。 */
+const ThinkingBudgetRatio = 0.35
+
+/**
+ * 是否拿到了可按比例换算的输出预算。
+ *
+ * 判据：缺席、`NaN`/`Infinity` 与 **0** 都必须走各档常量兜底——0 直接按比例算会得出
+ * 0 budget，等于悄悄关掉 reasoning（§2.4 失败方向）。负数**刻意仍走比例路径**：
+ * 结果被下游 `Math.max(1024, …)` 的下限兜住，本批不改既有行为，真要拒的话该在入口挡（见报告）。
+ */
+function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is number {
+  return isFiniteNumber(maxOutputTokens) && maxOutputTokens !== 0
+}
 
 function requireThinkingDepth(depth?: LooseOptional<ThinkingDepth>): ThinkingDepth {
   return depth === 'fast' || depth === 'balanced' || depth === 'deep'
@@ -83,10 +98,9 @@ function resolveReasoningBudget(
   const base = resolveThinkingBudget(maxOutputTokens, effectiveDepth)
   if (level !== 'ultra') return base
 
-  const boosted =
-    maxOutputTokens && Number.isFinite(maxOutputTokens)
-      ? Math.min(UltraReasoningBudgetCeil, Math.floor(maxOutputTokens * 0.6))
-      : UltraReasoningBudgetFloor
+  const boosted = hasUsableOutputBudget(maxOutputTokens)
+    ? Math.min(UltraReasoningBudgetCeil, Math.floor(maxOutputTokens * UltraReasoningBudgetRatio))
+    : UltraReasoningBudgetFloor
   return Math.max(base, boosted)
 }
 
@@ -96,7 +110,7 @@ function resolveThinkingBudget(
 ): number {
   const normalizedDepth = requireThinkingDepth(depth)
 
-  if (!maxOutputTokens || !Number.isFinite(maxOutputTokens)) {
+  if (!hasUsableOutputBudget(maxOutputTokens)) {
     switch (normalizedDepth) {
       case 'fast':
         return 2048
@@ -115,7 +129,7 @@ function resolveThinkingBudget(
         : 1
   const maxBudget = normalizedDepth === 'deep' ? 12_000 : 8192
 
-  return Math.max(1024, Math.min(maxBudget, Math.floor(maxOutputTokens * 0.35 * multiplier)))
+  return Math.max(1024, Math.min(maxBudget, Math.floor(maxOutputTokens * ThinkingBudgetRatio * multiplier)))
 }
 
 function mergeOpenRouterReasoning(

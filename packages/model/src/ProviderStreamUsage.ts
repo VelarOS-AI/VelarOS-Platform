@@ -1,4 +1,11 @@
-import { isFiniteNumber,isObject, isPresent } from '@velaros-ai/core'
+import { isFiniteNumber,isPlainObject, isPresent } from '@velaros-ai/core'
+
+/**
+ * 从 AI SDK 的 usage 分片里读「缓存写入 token」。
+ *
+ * 判据（§5.3b ⑥非显然妥协）——各家把同一语义塞在**不同深度**的 providerMetadata 路径下且互不重叠，
+ * 所以这里是一张按序试探的路径表而不是 provider 分支：命中第一条即返回。新增服务商 = 往表里加一行。
+ */
 const ProviderCacheWriteInputTokenPaths = [
   ['providerMetadata', 'anthropic', 'cacheCreationInputTokens'],
   ['providerMetadata', 'vertex', 'cacheCreationInputTokens'],
@@ -18,9 +25,9 @@ function readProviderCacheWriteInputTokens(part: unknown): Nullable<number> {
 function readNestedNumber(value: unknown, path: readonly string[]): Nullable<number> {
   let current = value
   for (const key of path) {
-    if (!current || !isObject(current)) return null
+    if (!isPlainObject(current)) return null
 
-    current = (current as Record<string, unknown>)[key]
+    current = current[key]
   }
 
   return isFiniteNumber(current) ? current : null

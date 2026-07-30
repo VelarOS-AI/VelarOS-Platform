@@ -103,9 +103,9 @@ class OpenAICompatibleModelAdapter extends ModelAdapter {
 
     try {
       const body = JSON.parse(init.body)
-      if (!this.isRecord(body)) return init
+      if (!isPlainObject(body)) return init
 
-      const options = this.isRecord(body.options) ? body.options : {}
+      const options = isPlainObject(body.options) ? body.options : {}
       return {
         ...init,
         body: JSON.stringify({
@@ -128,10 +128,6 @@ class OpenAICompatibleModelAdapter extends ModelAdapter {
     const url = input instanceof Request ? input.url : isString(input) ? input : input.toString()
 
     return /\/chat\/completions(?:\?|$)/u.test(url)
-  }
-
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return isPlainObject(value)
   }
 }
 

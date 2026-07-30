@@ -1,4 +1,4 @@
-import { isBlank, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -15,7 +15,6 @@ import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
   ModelRequestOptions,
-  ModelRequestPolicy,
   ModelRuntimeContext,
   ModelSelection,
   OpenRouterRoutingConfig,
@@ -54,6 +53,20 @@ type ResolutionTraceEntry = ResolvedAgentModelRuntime['resolutionTrace'][number]
  * Resolves one explicit product selection against this composition's provider
  * collection. Fallback is restricted to another model of the same provider;
  * this resolver never switches providers.
+ *
+ * 导览（§5.3b ⑥非显然妥协 / ③时序）——回退面刻意做窄。
+ *
+ * **只换模型不换 provider**：provider 不可用时抛 `createUnavailableProviderError` 并给出自救动作
+ * （§2.7），而不是悄悄换一家。判据是计费与数据流向——自动跨 provider 回退会让用户的密钥、
+ * 隐私边界与账单在他不知情时改变。要放宽必须先有产品裁决，不是在这里加一个 `?? fallbackProvider`。
+ *
+ * **三个"模型名"不是一个东西，别合并**：`resolvedModel.model`（目录解析结果）、
+ * `externalModel`（回给产品显示与记账的名字）、`runtimeModel`（真正发给服务商的名字）。
+ * provider script 可以把前者映射成另一个后端模型，这时三者会分叉——上下文窗口按 runtimeModel 查，
+ * UI 与 trace 按 externalModel 显示。
+ *
+ * **provider script 元数据失败不阻断**（§2.8）：`resolveProviderScriptRuntimeMetadata` 捕获异常后
+ * 回落成"按本地目录估算窗口"并把原因写进 `fallbackReason` 一路带到 trace，让用户看得见降级发生过。
  */
 class AgentModelResolver {
   private readonly log = logRuntime.tag('AgentModelResolver')
@@ -212,7 +225,7 @@ class AgentModelResolver {
         ...entry,
         model: externalModel,
         providerModel: runtimeModel,
-        ...(isBlank(reason) ? {} : { reason }),
+        reason: optionalWhen(!isBlank(reason), reason),
       }
     })
 
@@ -251,20 +264,17 @@ class AgentModelResolver {
 
   private mergeModelRequestOptions(
     requestOptions: ModelRequestOptions | undefined,
-    providerOptions: Nullable<Record<string, unknown>>,
-    requestPolicy?: LooseOptional<ModelRequestPolicy>
+    providerOptions: Nullable<Record<string, unknown>>
   ): ModelRequestOptions | undefined {
-    if (!providerOptions && !requestPolicy) return requestOptions
+    if (!providerOptions) return requestOptions
 
     return {
       ...(requestOptions ?? {}),
-      requestPolicy: requestOptions?.requestPolicy ?? toOptional(requestPolicy),
-      providerOptions: providerOptions
-        ? {
-            ...(requestOptions?.providerOptions ?? {}),
-            ...providerOptions,
-          }
-        : requestOptions?.providerOptions,
+      requestPolicy: requestOptions?.requestPolicy,
+      providerOptions: {
+        ...(requestOptions?.providerOptions ?? {}),
+        ...providerOptions,
+      },
     }
   }
 

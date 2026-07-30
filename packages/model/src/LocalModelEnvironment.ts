@@ -1,6 +1,7 @@
 import { isBlank, toNullable } from '@velaros-ai/core'
 
 import type { ChatProviderId } from './ModelContracts'
+import { toPositiveInteger } from './ProviderScriptRegistryPort'
 
 export const OllamaProviderId = 'ollama' satisfies ChatProviderId
 
@@ -80,13 +81,7 @@ export class LocalModelEnvironment implements ModelEnvironmentPort {
   }
 
   private readPositiveInteger(name: string): Nullable<number> {
-    const raw = this.readString(name)
-    if (!raw) return null
-
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed <= 0) return null
-
-    return Math.floor(parsed)
+    return toPositiveInteger(this.readString(name))
   }
 }
 
