@@ -1,3 +1,31 @@
+// 域：聊天面 → 内核会话通道的**跨层接缝**。宿主的一次"发消息/中断/回答/批准"落在这里，
+// 经内核控制面（controller + 输入账本 + 运行协调器 + 后台 job 管理器）排队、去重、唤醒，
+// 最终回调宿主注入的执行协调器真正跑一轮。
+//
+// ## 谁拥有什么（方向铁律）
+//  - **内核侧**拥有输入账本（谁先谁后、能不能插队）、运行态（在跑没在跑）、后台 job 生命周期；
+//  - **宿主侧**拥有一轮执行怎么跑、事件怎么渲染。桥自己**不持有业务状态**，只有一个 `pendingRuns`
+//    队列——"已被账本接纳、等着被 drain 消费"的那批 run。
+//  - `TRenderTarget` 对桥完全不透明：桥从不检查它，只原样透传。桥里出现任何对渲染目标的判断
+//    都是越界，正确落点在宿主协调器。
+//
+// ## 时序：send 为什么是两段
+// `send` 先 `admit`（写入账本、拿到单调 seq）再 `wake`（异步驱动 drain），顺序不可反——
+// 反了表现为"发了消息但 AI 没反应"。`enqueue` 必须早于 `controller.send`，否则 wake 可能在
+// run 入队前就跑到 drain、什么也没捞到；失败路径的 `removePending` 是这条早入队的对偶。
+// `drain` 是**串行消费**：每次 shift 一条、跑完再取下一条，`promoteSteers` / `promoteNextQueued`
+// 在每条之前重放一次，保证插话（steer）总是先于排队消息生效。
+//
+// ## sessionId 是全链路唯一键
+// 本类**不做任何 id 映射**：账本键、pendingRuns 键、后台 job 注册键、宿主 source session 全是
+// 同一个 `sessionId`。历史上这里有一层 scope key 映射，去掉后留下的恒等管道已在 Q2c 清除。
+// 若将来真要引入"一个会话多个作用域"，加映射的正确落点是这里，而且要同时覆盖**四处**
+// （send / cancel / 后台 job 闭包 / controller 回调），只改一处会让 job 与运行态互相看不见。
+//
+// ## 缺省即安全
+// `inputStore` / `runCoordinator` / `policy` / `backgroundJobManager` 全部可注入、缺省用内存实现，
+// 让 headless 与探针零装配即可跑；内存实现的语义与持久实现一致，缺省不改变行为、只改变持久性。
+
 import type { ModelMessage } from 'ai'
 
 import { isArray, isBlank, isEmpty,isPresent, isString, Log, toNullable } from '@velaros-ai/core'

@@ -58,6 +58,18 @@ function createDirectiveArtifactId(value: string): string {
   return `active-directive:${digest}`
 }
 
+/**
+ * 指令 id 归并：**调用方传的 id 不会被原样当作 artifact id**（这是最容易踩的一点）。
+ *
+ * 三段判定，顺序即优先级：
+ *  1. 传了 id 且**确实存在**这条 artifact → 就用它（更新既有指令）；
+ *  2. 没传 id → 按归一化标题找既有同名指令（活跃优先、其次最近更新）→ 复用其 id。
+ *     这一段是幂等的关键：模型重述同一条指令时不该长出第二份。
+ *  3. 都不命中 → 由 `id:<传入值>` 或 `title:<标题>` 派生**哈希 id**。
+ * 第 3 段决定了"传一个没见过的 id"得到的是该 id 的哈希而非该 id 本身——好处是同一个陌生 id
+ * 反复调用稳定收敛到同一条 artifact，坏处是调用方不能假设自己能指定字面 id。
+ * 标题归一（NFKC + 折叠空白 + 小写）让全角/半角、多空格的同一句话归到一条。
+ */
 function resolveDirectiveArtifactId(
   input: { id?: string; title: string },
   artifacts: ActiveContextArtifact[]

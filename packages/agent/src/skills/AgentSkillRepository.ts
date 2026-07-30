@@ -21,6 +21,19 @@ import type { AgentSkillDefinition, AgentSkillProvider } from './AgentSkillProvi
  *
  * 每次按角色列出技能或读取技能文档时都会重载，
  * 这是 trade-off：用户在运行时调整技能配置可以即时生效，代价是 hot path 上有少量重复构建。
+ *
+ * ## 可见性漏斗与那条逃生口（改一处必须改两处）
+ * `getDefinitionsForRole` 是唯一的过滤漏斗：角色 → 启用 → 作用域 → 资源根 → prompt feature。
+ * 其上有一条**显式选中的逃生口**（`getDefinitionForRoleIgnoringSpace`）：用户亲手选的技能跳过
+ * 作用域过滤（作用域收敛的是"泛化索引"，不是权限；enabled 与资源根精筛仍然生效）。
+ * 这条逃生口在**注入侧**（`getSkillMarkdownForRole`）与**读取侧**（`readSkillForRole`）各接了一次，
+ * 两处必须同形——只补注入侧会让提示词里写着"必须先读 skill:x"而 tool_read 回 404，
+ * 选中意图断在半路且没有任何报错；只补读取侧则是选了却不提示，用户完全无感。
+ *
+ * ## 注入方式由 skillKind 决定，不是由来源决定
+ * `role` 类技能注入全文常驻（只应由受信任的内置角色供应方产出），`capability` 类一律只注入
+ * `skill:<id>` 指针、正文按需 tool_read。把某个来源整体升格成全文注入等于把它的 token 成本
+ * 变成每轮固定开销。
  */
 class AgentSkillRepository {
   private readonly skillsById = new Map<string, AgentSkillDefinition>()
