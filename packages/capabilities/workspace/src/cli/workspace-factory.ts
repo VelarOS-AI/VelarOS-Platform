@@ -66,51 +66,34 @@ async function restoreWorkspaceCliState(workspace: Workspace): Promise<void> {
   }
   if (parsed.schemaVersion !== WorkspaceCliStateSchemaVersion) return
 
-  const statefulWorkspace = workspaceStateMaps(workspace)
-  statefulWorkspace.targets = new Map(stateEntriesById(parsed.targets, 'targetId'))
-  statefulWorkspace.evidence = new Map(stateEntriesById(parsed.evidence, 'evidenceId'))
-  statefulWorkspace.transactions = new Map(stateEntriesById(parsed.transactions, 'transactionId'))
+  workspace.restoreSessionState({
+    targets: stateRecordsWithId(parsed.targets, 'targetId'),
+    evidence: stateRecordsWithId(parsed.evidence, 'evidenceId'),
+    transactions: stateRecordsWithId(parsed.transactions, 'transactionId'),
+  })
 }
 
 function exportWorkspaceCliState(workspace: Workspace): WorkspaceCliState {
-  const statefulWorkspace = workspaceStateMaps(workspace)
-  return {
-    schemaVersion: WorkspaceCliStateSchemaVersion,
-    targets: [...statefulWorkspace.targets.values()],
-    evidence: [...statefulWorkspace.evidence.values()],
-    transactions: [...statefulWorkspace.transactions.values()],
-  }
+  return { schemaVersion: WorkspaceCliStateSchemaVersion, ...workspace.exportSessionState() }
 }
 
 function workspaceCliStatePath(root: string): string {
   return join(root, WorkspaceCliStateDir, WorkspaceCliStateFile)
 }
 
-function stateEntriesById(values: unknown, idKey: string): Array<[string, any]> {
+/**
+ * 从磁盘状态文件里挑出「是对象且带非空 id」的条目。
+ *
+ * 这是磁盘 → 内核的反序列化边界：损坏或半写的条目**逐条跳过**而不是整体拒绝——一条坏事务
+ * 不该让整个 CLI 会话失忆。返回值的元素类型由调用点声明，本函数只保证 id 存在（§1.4 白名单①）。
+ */
+function stateRecordsWithId<T>(values: unknown, idKey: string): T[] {
   if (!isArray(values)) return []
-  const entries: Array<[string, any]> = []
+  const records: T[] = []
   for (const value of values) {
-    if (!isStateRecord(value)) continue
+    if (!isPlainObject(value)) continue
     const idValue = value[idKey]
-    if (isString(idValue) && idValue) {
-      entries.push([idValue, value])
-    }
+    if (isString(idValue) && idValue) records.push(value as T)
   }
-  return entries
-}
-
-function isStateRecord(value: unknown): value is Record<string, any> {
-  return isPlainObject(value)
-}
-
-function workspaceStateMaps(workspace: Workspace): {
-  targets: Map<string, any>
-  evidence: Map<string, any>
-  transactions: Map<string, any>
-} {
-  return workspace as unknown as {
-    targets: Map<string, any>
-    evidence: Map<string, any>
-    transactions: Map<string, any>
-  }
+  return records
 }

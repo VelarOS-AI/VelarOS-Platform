@@ -33,8 +33,16 @@ const fail = (message) => failures.push(message)
 if (manifest.name !== '@velaros-ai/workspace') {
   fail(`package name must be @velaros-ai/workspace, got ${manifest.name}`)
 }
-if (manifest.version !== '1.2.3') {
-  fail(`package version must be 1.2.3, got ${manifest.version}`)
+// 断言「版本单源」而不是钉死某个字面量版本号：`WORKSPACE_PACKAGE_VERSION` 会被写进 kernel
+// module manifest 与全部内置插件的 version 字段，与 package.json 漂移时，宿主看到的是一个
+// 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
+// 1.2.5），红成常态的门等于没有门。
+const versionConstantSource = readFileSync(resolve(SourceRoot, 'core/defaults.ts'), 'utf8')
+const versionConstant = /WORKSPACE_PACKAGE_VERSION\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
+if (versionConstant !== manifest.version) {
+  fail(
+    `WORKSPACE_PACKAGE_VERSION (${versionConstant ?? 'not found'}) must match package.json version (${manifest.version})`,
+  )
 }
 if (manifest.repository?.url !== 'git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git') {
   fail('repository URL must point to VelarOS-Capabilities')

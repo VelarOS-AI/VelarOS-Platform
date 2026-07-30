@@ -16,6 +16,7 @@ import {
   type VelarosWorkspaceBridge,
 } from './velaros/index.js'
 import type { AgentToolDefinition } from './agent-tools.js'
+import { WorkspaceError } from './errors.js'
 import { WorkspaceKernelToolNames as wsTool } from './workspace-tool-names.js'
 
 export interface WorkspaceBridgeResolver {
@@ -77,19 +78,26 @@ function isLegacyWorkspaceOptions(
   return 'root' in options
 }
 
+/**
+ * 能力入口的**唯一**入参解析点（§1.8 边界解析一次）。
+ *
+ * 这里刻意用 `.strict()`：kernel 能力调用来自宿主之外，多余字段意味着调用方与本版本的
+ * schema 已经不同步，静默丢弃会让「参数没生效」表现成「功能没实现」。失败信息也刻意**不带
+ * zod 的字段级细节**——能力边界的错误会回流给不受信调用方，暴露内部 schema 形状没有收益。
+ */
 function parseWorkspaceToolInput(
   tool: AgentToolDefinition,
   input: unknown,
 ): unknown {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    throw new Error('Workspace capability input is invalid')
+    throw new WorkspaceError('INVALID_INPUT', 'Workspace capability input is invalid')
   }
   const schema = tool.schema instanceof z.ZodObject
     ? tool.schema.strict()
     : tool.schema
   const parsed = schema.safeParse(input)
   if (!parsed.success) {
-    throw new Error('Workspace capability input is invalid')
+    throw new WorkspaceError('INVALID_INPUT', 'Workspace capability input is invalid')
   }
   return parsed.data
 }
@@ -100,7 +108,11 @@ function findWorkspaceTool(
 ): AgentToolDefinition {
   const tool = bridge.tools.find((candidate) => candidate.name === operation)
   if (tool === undefined) {
-    throw new Error('Workspace capability operation is unavailable')
+    throw new WorkspaceError(
+      'NOT_SUPPORTED',
+      'Workspace capability operation is unavailable',
+      { operation },
+    )
   }
   return tool
 }
@@ -124,8 +136,12 @@ function assertSingleWorkspaceSource(
     options.workspace,
   ].filter((source) => source !== undefined).length
   if (sourceCount !== 1) {
-    throw new Error(
+    // 三选一而非「优先级回落」：多源同时给出时无法判断谁是权威 bridge，安静挑一个会让
+    // 宿主以为自己注入的那个生效了。装配期 fail-fast 好过运行期改错了工作区。
+    throw new WorkspaceError(
+      'INVALID_INPUT',
       'Workspace kernel module requires exactly one resolver, bridge, or workspace option',
+      { sourceCount },
     )
   }
 }

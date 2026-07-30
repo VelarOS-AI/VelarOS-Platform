@@ -1,6 +1,6 @@
 import { first, isEmpty, isFalse,isPresent } from '@velaros-ai/core'
 
-import { toErrorObject } from "../errors.js";
+import { toErrorObject, WorkspaceError } from "../errors.js";
 import type { BatchConflict, BatchInput, BatchResult, BatchTask, BatchTaskResult } from "../types/batch.js";
 import type { PreparedTransaction } from "../types/edit.js";
 
@@ -41,7 +41,7 @@ async function execute(kernel: BatchKernelLike, task: BatchTask): Promise<any> {
     case "validate": return kernel.validate(op.input);
     case "rollback": return kernel.rollback(op.input);
     case "custom": return op.run();
-    default: throw new Error("未知批处理操作");
+    default: throw new WorkspaceError("NOT_SUPPORTED", "未知批处理操作", { task });
   }
 }
 

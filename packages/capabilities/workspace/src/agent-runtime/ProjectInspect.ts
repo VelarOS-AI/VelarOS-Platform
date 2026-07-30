@@ -1,8 +1,10 @@
 
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 
-import { isArray, isEmpty, isObject, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { isArray, isObject, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
+
+import { isPathInsideWorkspaceRoot } from '../path-containment.js'
 
 import type { VelaTool } from './Types'
 
@@ -10,11 +12,6 @@ export const log = logRuntime.tag('ProjectInspectTools')
 
 export type JsonObject = Record<string, any>
 type ProjectInfoToolContext = Parameters<VelaTool<Record<string, never>>['execute']>[1]
-
-function isSameOrChild(rootPath: string, targetPath: string): boolean {
-  const rel = relative(resolve(rootPath), resolve(targetPath))
-  return isEmpty(rel) || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
-}
 
 export function resolveSandboxSourceProjectRoot(
   ctx: ProjectInfoToolContext,
@@ -27,7 +24,7 @@ export function resolveSandboxSourceProjectRoot(
     ? resolve(cwd)
     : resolve(ctx.workspace.getRootPath(), cwd)
   const sourceRoot = resolve(sandbox.sourceRoot)
-  return isSameOrChild(sourceRoot, requestedRoot) ? requestedRoot : null
+  return isPathInsideWorkspaceRoot(sourceRoot, requestedRoot) ? requestedRoot : null
 }
 
 export async function buildJsTsProjectProfileForRoot(

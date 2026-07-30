@@ -11,8 +11,8 @@ function getMatcher(pattern: string): (input: string) => boolean {
   const cached = matcherCache.get(pattern);
   if (cached) return cached;
 
+  // picomatch 的返回值类型上非空，编译失败它自己抛；此处不再补一层不可达的防御分支。
   const matcher = picomatch(pattern, { dot: true, nocase: false });
-  if (!matcher) throw new Error(`Failed to compile glob pattern: ${pattern}`);
   matcherCache.set(pattern, matcher);
   return matcher;
 }

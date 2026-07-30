@@ -75,7 +75,7 @@ export function createNodeCommandProvider(): CommandProvider {
           stderr,
           error: result.failed ? result : undefined,
         });
-        const missingCommand = toolRequirements?.some((item) => item.kind === "missing-command") ?? false;
+        const missingCommand = !!toolRequirements?.some((item) => item.kind === "missing-command");
         return {
           exitCode: missingCommand
             ? 127

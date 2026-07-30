@@ -1,3 +1,42 @@
+// 域：工作区内核——把「一次编辑意图」变成「可预览、可校验、可回滚的磁盘写入」的事务机器。
+//
+// **为什么需要这份导览**：本文件是四条互相咬合的机制的交汇处（事务生命周期 / 写锁 / 多文件
+// 原子性 / rebase），任一条单独读都会得出错误结论——比如只看 `applyEdit` 会以为写盘失败就
+// 完了，实际它带一层逆序还原。
+//
+// ## 组织（读的顺序）
+//  1. `prepareTransaction` → 意图 → 补丁，**不碰磁盘**；规模/受保护文件门在这里；
+//  2. `buildTransactionContentOverlay` → 把已暂存补丁重放成"内存中的未来文件内容"，供
+//     validator / fixer 在写盘前看到暂存态；
+//  3. `applyEdit` → 取写锁 → 逐补丁校验 base revision（不匹配则试 rebase）→ 写盘；
+//  4. `rollback` → 逆序还原；`discardTransaction` → 丢弃未应用事务。
+//
+// ## 事务状态机（`StoredTransaction.status`）
+//   prepared ──amendEdit/fixTransaction──▶ prepared
+//      │  └─validate(ok)──▶ validated ──applyEdit──▶ applied ──rollback──▶ rolled_back
+//      └─discardTransaction──▶（从表中消失）
+// `rolled_back` 可以再 `applyEdit` 一次（"重做"路径，见 `isRestoringRolledBackTransaction`）；
+// `applied` 不能重复 apply，也不能 amend/discard。**终态事务不删，只按 LRU 淘汰**，因为
+// rollback 需要它的 `patches[].oldContent`。
+//
+// ## 关键不变量（改这些会破什么）
+//  - **写锁覆盖 `tx.changedFiles` 全集，且 apply/rollback 全程持锁**：锁按路径粒度、公平排队
+//    （见 lock-manager）。锁只在**进程内**有效——它防的是同一内核的并发事务互相踩，不防外部
+//    编辑器；外部编辑靠 base revision 检查兜。
+//  - **base revision 不匹配 → 先试 rebase，再失败才抛**：只有 `QueueRebaseFriendlyOperations`
+//    里那些"靠锚点定位、不依赖绝对偏移"的操作允许 rebase。把 `create_file`/`delete_file`
+//    放进这个集合会让"文件已被别人改过"被静默覆盖。
+//  - **多文件写入原子化靠逆序还原，不是靠事务日志**：`captureApplyRestoreState` 在写盘前抓
+//    每个路径的原始正文，任一补丁失败即按 `writtenOrder` 逆序回写。二进制/超限文件抓不到正文
+//    （`restorable: false`），此时**记账告警而不是静默跳过**——这是已知的部分原子性边界。
+//  - **`rollback` 有前置全量预检**：任何非 create 补丁缺 `oldContent` 就整体拒绝。少了这一步，
+//    `patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
+//  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
+//    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
+//
+// ## 内存治理（为什么有一堆 Max* 常量）
+// 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限按插入顺序
+// 淘汰最旧项；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
 import * as path from "node:path";
 
 import { isArray,isEmpty, isFalse, isNotNull, isNull, isObject, isPresent, isString, isUndefined, optionalWhen, toOptional } from "@velaros-ai/core";
@@ -20,7 +59,7 @@ import type { FileAdapterFactory, WorkspaceSymbol } from "../types/adapter.js";
 import type { BatchInput, BatchMetrics, BatchResult } from "../types/batch.js";
 import type { Diagnostic, DiffResult, Range, WorkspaceStatus } from "../types/common.js";
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from "../types/context.js";
-import type { AmendEditInput, ApplyEditInput, ApplyResult, EditIntent, PreparedPatch,PreparedTransaction, PrepareEditInput, RollbackInput, RollbackResult } from "../types/edit.js";
+import type { AmendEditInput, ApplyEditInput, ApplyResult, EditIntent, EditOperation, PreparedPatch,PreparedTransaction, PrepareEditInput, RollbackInput, RollbackResult } from "../types/edit.js";
 import type { FixInput, FixResult, WorkspaceFixer } from "../types/fix.js";
 import type { WorkspaceHook } from "../types/hook.js";
 import type { FileListEntry, FileStatInput, FileStatResult,ObserveInput, ReadInput, ReadResult, SearchHit,SearchInput, SearchResult } from "../types/io.js";
@@ -55,6 +94,15 @@ function resolveEvidenceTargetRange(
   if (isPresent(inputRange.startOffset)) range.startOffset = inputRange.startOffset;
   if (isPresent(inputRange.endOffset)) range.endOffset = inputRange.endOffset;
   return range;
+}
+
+/**
+ * 取出编辑原语作用的文件路径。`rename_file` 用 `from`/`to` 而非 `path`；符号类与 `custom`
+ * 原语本身不带路径，靠 `targetId` 反查——所以这里返回缺席是正常路径，不是错误。
+ */
+function operationPath(operation: EditOperation): string | undefined {
+  if (operation.type === "rename_file") return operation.from;
+  return "path" in operation ? operation.path : undefined;
 }
 
 function symbolIdentityKey(symbol: WorkspaceSymbol): string {
@@ -153,7 +201,12 @@ const QueueRebaseFriendlyOperations = new Set<string>([
 
 type StagedFileContent = Nullable<string>;
 
-type StoredTransaction = Omit<PreparedTransaction, "status"> & {
+/**
+ * 内核内存表里事务的真实形状：比 `PreparedTransaction` 多出三个终态与 `appliedAt`。
+ * `PreparedTransaction.status` 被钉成字面量 `"prepared"`，只描述「刚 prepare 完」那一瞬，
+ * 不足以表达生命周期；对外 API 暂未跟进（见 `getTransaction` 的欠账说明），本类型是内部真相。
+ */
+export type StoredTransaction = Omit<PreparedTransaction, "status"> & {
   status: PreparedTransaction["status"] | "applied" | "validated" | "rolled_back";
   appliedAt?: number;
 };
@@ -165,6 +218,20 @@ const MaxRetainedTerminalTransactions = 200;
 const DefaultImplicitSearchExcludeGlobs = ["node_modules/**", ".git/**", "dist/**", "coverage/**"] as const;
 // 全部事务（含已准备未应用的）总量兜底；正常 prepare→apply 不受影响。
 const MaxRetainedTransactions = 1000;
+
+/**
+ * 内核三张内存表的整体快照，供 CLI 把「一次进程内的会话」持久化到磁盘再恢复。
+ *
+ * 这是**唯一**允许外部读写 `targets` / `evidence` / `transactions` 的接缝。它存在的原因是
+ * CLI 是多进程的（每条命令一个进程），而事务模型天然跨命令：`prepare` 与 `apply` 必须在两次
+ * 进程里看到同一张事务表。没有这个接缝，CLI 侧只能强转穿透 private 字段——那既绕过类型系统，
+ * 又让内核的字段重命名变成远端崩溃。
+ */
+export interface WorkspaceSessionState {
+  targets: ResolvedTarget[];
+  evidence: EvidencePack[];
+  transactions: StoredTransaction[];
+}
 
 /** applyEdit 失败回滚所需的单个路径原始状态。 */
 interface ApplyRestoreState {
@@ -932,6 +999,23 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     });
   }
 
+  /**
+   * 给 validator / fixer 的读文件入口：事务暂存态优先，缺席才落到磁盘。
+   * 暂存值为 `null` 表示「本事务把这个文件删了」，要读成"不存在"（undefined）而不是空串——
+   * 空串会让校验器把删文件当成"清空文件"来验。
+   */
+  private createOverlayFileReader(
+    contentByPath: Map<string, StagedFileContent>,
+  ): (pathValue: string) => Promise<string | undefined> {
+    return async (pathValue: string) => {
+      if (contentByPath.has(pathValue)) {
+        const stagedContent = contentByPath.get(pathValue);
+        return isNull(stagedContent) ? undefined : stagedContent;
+      }
+      return (await this.read({ path: pathValue })).content;
+    };
+  }
+
   private async buildTransactionContentOverlay(
     transactionId?: string,
   ): Promise<TransactionContentOverlay> {
@@ -1002,8 +1086,7 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     for (const intent of processed.operations) {
       const target = this.getTarget(intent.targetId);
       let snapshot: FileSnapshot | undefined;
-      const op: any = intent.operation;
-      const pathForOp = target?.path ?? op.path ?? op.from;
+      const pathForOp = target?.path ?? operationPath(intent.operation);
       if (pathForOp) {
         const hasOverlay = !!options.contentOverlay?.has(pathForOp);
         const stagedContent = optionalWhen(hasOverlay, (options.contentOverlay?.get(pathForOp)));
@@ -1047,11 +1130,7 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     const changedLines = preparedPatches.reduce((sum, p) => sum + p.changedLines, 0);
     const risk = "low" as const;
 
-    if (changedFiles.length > this.policy.maxChangedFilesPerTransaction) throw new WorkspaceError("SCOPE_VIOLATION", `变更文件过多：${changedFiles.length}`);
-    if (changedLines > this.policy.maxChangedLinesPerTransaction) throw new WorkspaceError("SCOPE_VIOLATION", `变更行数过多：${changedLines}`);
-    for (const file of changedFiles) {
-      if (matchesAny(file, this.policy.protectedFiles)) throw new WorkspaceError("PROTECTED_FILE", `受保护文件被修改：${file}`);
-    }
+    this.assertScopeWithinPolicy(changedFiles, changedLines);
 
     const tx: PreparedTransaction = {
       transactionId: id("tx"),
@@ -1081,14 +1160,19 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     tx.risk = "low";
   }
 
-  private assertTransactionScope(tx: PreparedTransaction): void {
-    if (tx.changedFiles.length > this.policy.maxChangedFilesPerTransaction) {
-      throw new WorkspaceError("SCOPE_VIOLATION", `变更文件过多：${tx.changedFiles.length}`);
+  /**
+   * 事务规模与受保护文件的**唯一**判定点：prepare（首次成型）与 amend（追加后重算）都走它。
+   * 判据：两条路径此前各写了一份完全相同的三项检查，任何一侧改阈值/加规则都会留下另一侧的
+   * 缺口——而缺口只在「amend 把事务撑过阈值」这种少见路径上暴露。
+   */
+  private assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void {
+    if (changedFiles.length > this.policy.maxChangedFilesPerTransaction) {
+      throw new WorkspaceError("SCOPE_VIOLATION", `变更文件过多：${changedFiles.length}`);
     }
-    if (tx.changedLines > this.policy.maxChangedLinesPerTransaction) {
-      throw new WorkspaceError("SCOPE_VIOLATION", `变更行数过多：${tx.changedLines}`);
+    if (changedLines > this.policy.maxChangedLinesPerTransaction) {
+      throw new WorkspaceError("SCOPE_VIOLATION", `变更行数过多：${changedLines}`);
     }
-    for (const file of tx.changedFiles) {
+    for (const file of changedFiles) {
       if (matchesAny(file, this.policy.protectedFiles)) throw new WorkspaceError("PROTECTED_FILE", `受保护文件被修改：${file}`);
     }
   }
@@ -1126,7 +1210,8 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     if (tx.appliedAt || tx.status === "applied" || tx.status === "rolled_back") {
       throw new WorkspaceError("INVALID_INPUT", `只能修补尚未应用的事务：${input.transactionId}`);
     }
-    const preparedTx = tx as PreparedTransaction;
+    // 同一个 Map value 的两种视图：`tx` 带终态字段用于上面的守卫，`preparedTx` 是收窄后的对外形状。
+    const preparedTx = this.getTransaction(input.transactionId)!;
     await this.decide("amend_edit", tx.changedFiles, input, tx.risk);
     const overlay = await this.buildTransactionContentOverlay(input.transactionId);
     if (!isEmpty(overlay.diagnostics)) {
@@ -1165,7 +1250,7 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     };
     preparedTx.status = "prepared";
     this.refreshTransactionSummary(preparedTx);
-    this.assertTransactionScope(preparedTx);
+    this.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines);
     await this.hooks.emit("AfterPrepareEdit", this, preparedTx);
     this.journal.record({ actor: "system", action: "amend_edit", transactionId: preparedTx.transactionId, outputSummary: `${input.operations.length} amendment operation(s)`, risk: preparedTx.risk });
     return preparedTx;
@@ -1173,7 +1258,7 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
 
   /** 在事务暂存内容上运行修复器，并把修复转成事务修订。 */
   public async fixTransaction(input: FixInput): Promise<FixResult> {
-    const tx = this.transactions.get(input.transactionId) as PreparedTransaction | undefined;
+    const tx = this.getTransaction(input.transactionId);
     if (!tx) throw new WorkspaceError("INVALID_INPUT", `未知事务：${input.transactionId}`);
     await this.decide("amend_edit", tx.changedFiles, input, tx.risk);
     const originalOverlay = await this.buildTransactionContentOverlay(input.transactionId);
@@ -1189,16 +1274,10 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     const mutableContent = new Map(originalOverlay.contentByPath);
     // fixer 在事务暂存态上工作，最后只把真实变化转成 amendment。
     const ctx = {
-      getTransaction: (idValue: string) => this.transactions.get(idValue) as PreparedTransaction | undefined,
+      getTransaction: (idValue: string) => this.getTransaction(idValue),
       root: this.root,
       providers: this.providers,
-      readFile: async (pathValue: string) => {
-        if (mutableContent.has(pathValue)) {
-          const stagedContent = mutableContent.get(pathValue);
-          return isNull(stagedContent) ? undefined : stagedContent;
-        }
-        return (await this.read({ path: pathValue })).content;
-      },
+      readFile: this.createOverlayFileReader(mutableContent),
     };
 
     const paths = input.paths ?? tx.changedFiles;
@@ -1377,17 +1456,11 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     const overlay = await this.buildTransactionContentOverlay(input.transactionId);
     // validator 优先读取事务暂存内容，再回退到当前工作区文件。
     const ctx = {
-      getTransaction: (idValue: string) => this.transactions.get(idValue) as PreparedTransaction | undefined,
+      getTransaction: (idValue: string) => this.getTransaction(idValue),
       root: this.root,
       policy: this.policy,
       providers: this.providers,
-      readFile: async (pathValue: string) => {
-        if (overlay.contentByPath.has(pathValue)) {
-          const stagedContent = overlay.contentByPath.get(pathValue);
-          return isNull(stagedContent) ? undefined : stagedContent;
-        }
-        return (await this.read({ path: pathValue })).content;
-      },
+      readFile: this.createOverlayFileReader(overlay.contentByPath),
     };
     let result = await this.validators.validate(input, ctx);
     if (!isEmpty(overlay.diagnostics)) {
@@ -1520,7 +1593,39 @@ export class Workspace implements WorkspaceKernel, RegistrySink {
     return this.journal.list();
   }
 
-  /** 读取指定事务的当前内存状态。 */
+  /** 导出目标 / 证据 / 事务三张内存表，供 CLI 跨进程持久化（见 `WorkspaceSessionState`）。 */
+  public exportSessionState(): WorkspaceSessionState {
+    return {
+      targets: [...this.targets.values()],
+      evidence: [...this.evidence.values()],
+      transactions: [...this.transactions.values()],
+    };
+  }
+
+  /**
+   * 用外部快照整体替换三张内存表。**替换而非合并**：CLI 的状态文件是这个内核实例内存态的
+   * 全部真相，合并会让上一条命令删掉的事务复活。
+   * 快照来源可信（本机 CLI 自己写的文件、schemaVersion 已在调用方校过），这里不再重复校验。
+   */
+  public restoreSessionState(state: WorkspaceSessionState): void {
+    this.targets = new Map(state.targets.map((target) => [target.targetId, target]));
+    this.evidence = new Map(state.evidence.map((pack) => [pack.evidenceId, pack]));
+    this.transactions = new Map(state.transactions.map((tx) => [tx.transactionId, tx]));
+  }
+
+  /**
+   * 读取指定事务的当前内存状态。
+   *
+   * **这是 StoredTransaction → PreparedTransaction 的唯一 cast 点**（§1.4 白名单③：闭集字面量
+   * 收窄）。内存表存的是 `StoredTransaction`，它把 `status` 从字面量 `"prepared"` 放宽成含
+   * `applied` / `validated` / `rolled_back` 的联合；其余字段形状完全一致。所有消费者（内置
+   * validator、typescript validator、工具中间件的 preflight）只读 `patches` / `changedFiles`，
+   * 没有一个读 `status`，所以这个宽窄差目前不产生错判。
+   *
+   * **欠账**：`PreparedTransaction.status` 是字面量类型这件事本身是错的——它让公开返回值在
+   * 类型上宣称 `"prepared"` 而运行时可能是终态。修法是把 status 放宽进类型（跨仓 API 形状变更，
+   * 见 Q3a 报告的待协调清单），**不是**在调用点再补一次 cast。
+   */
   public getTransaction(idValue: string): PreparedTransaction | undefined {
     return this.transactions.get(idValue) as PreparedTransaction | undefined;
   }

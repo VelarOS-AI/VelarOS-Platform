@@ -1,7 +1,8 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 
-import { isEmpty,isPlainObject, isPresent } from '@velaros-ai/core'
+import {isPlainObject, isPresent } from '@velaros-ai/core'
 
+import { isPathInsideWorkspaceRoot } from '../path-containment.js'
 import { isProjectWorkspaceRootSource } from '../workspace-root-source.js'
 
 import type { VelaTool, WorkspaceAuthorizationDecision } from './Types'
@@ -74,21 +75,13 @@ async function prepareWorkspaceAccess(
   cwd: string
 ): Promise<Nullable<WorkspaceAuthorizationDecision>> {
   const targetPath = isAbsolute(cwd) ? resolve(cwd) : resolve(ctx.workspace.getRootPath(), cwd)
-  if (isSameOrChild(ctx.workspace.getRootPath(), targetPath)) return null
+  if (isPathInsideWorkspaceRoot(ctx.workspace.getRootPath(), targetPath)) return null
 
   const authorization = await ctx.workspace.prepareMutationWorkspace({
     cwd,
     operation: '通过显式 cwd 执行工作区工具',
   })
   return authorization.approved ? null : authorization
-}
-
-function isSameOrChild(rootPath: string, targetPath: string): boolean {
-  const relativePath = relative(resolve(rootPath), resolve(targetPath))
-  return (
-    isEmpty(relativePath) ||
-    (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
-  )
 }
 
 /** 判断当前是否有活动项目工作区。 */
