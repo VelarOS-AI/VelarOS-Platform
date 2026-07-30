@@ -79,21 +79,29 @@ class LocalSpeechCapture {
       },
       video: false,
     })
-    const context = new AudioContext()
-    const source = context.createMediaStreamSource(stream)
-    const processor = context.createScriptProcessor(ScriptProcessorBufferSize, 1, 1)
-    const silentSink = context.createGain()
-    silentSink.gain.value = 0
+    // 拿到 stream 之后、capture 构造成功之前的**任何**抛出都必须把麦克风轨道关掉：
+    // 这段区间里没有实例可供调用方 stop()，调用方的 catch 只能报错、够不着 stream。
+    // 漏掉 = 系统录音指示灯常亮、麦克风被占用，且用户无从关闭（§2.4 失败方向）。
+    try {
+      const context = new AudioContext()
+      const source = context.createMediaStreamSource(stream)
+      const processor = context.createScriptProcessor(ScriptProcessorBufferSize, 1, 1)
+      const silentSink = context.createGain()
+      silentSink.gain.value = 0
 
-    const capture = new LocalSpeechCapture(stream, context, source, processor, silentSink)
-    processor.onaudioprocess = (event) => {
-      capture.chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+      const capture = new LocalSpeechCapture(stream, context, source, processor, silentSink)
+      processor.onaudioprocess = (event) => {
+        capture.chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+      }
+      source.connect(processor)
+      processor.connect(silentSink)
+      silentSink.connect(context.destination)
+      await context.resume()
+      return capture
+    } catch (error) {
+      for (const track of stream.getTracks()) track.stop()
+      throw error
     }
-    source.connect(processor)
-    processor.connect(silentSink)
-    silentSink.connect(context.destination)
-    await context.resume()
-    return capture
   }
 
   public async stop(): Promise<string> {

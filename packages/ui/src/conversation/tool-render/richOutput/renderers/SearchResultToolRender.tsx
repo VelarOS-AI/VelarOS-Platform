@@ -26,6 +26,7 @@ import { RichToolOutputCard } from '../RichToolOutputCard.section'
 import styles from '../RichOutputToolRender.module.css'
 
 import type { ToolCallBlock } from '#contracts'
+import { openExternalUrl } from '#internal/externalNavigation'
 
 export const SearchResultToolRender = memo(function SearchResultToolRender({
   block,
@@ -81,9 +82,7 @@ export const SearchResultToolRender = memo(function SearchResultToolRender({
                   size="block"
                   className={styles.searchItem}
                   onClick={() => {
-                    if (item.url) {
-                      window.open(item.url, '_blank', 'noopener,noreferrer')
-                    }
+                    openExternalUrl(item.url)
                   }}
                 >
                   <span className={styles.searchMeta}>

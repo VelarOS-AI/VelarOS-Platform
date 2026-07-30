@@ -14,7 +14,7 @@ import {
 import { cva,type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/cn'
-import { isPresent } from '../../lib/runtime'
+import { isPresent, optionalWhenLazy } from '../../lib/runtime'
 const resultVariants = cva('velar-result', {
   variants: {
     tone: {
@@ -67,7 +67,10 @@ export const Result = memo(
     ...props
   }: ResultProps): React.ReactElement => {
     const t = tone ?? 'info'
-    const leading = icon ?? (showIcon && <DefaultResultIcon tone={t} />)
+    // 不能写 `icon ?? (showIcon && <Icon/>)`：`showIcon=false` 时该式求得 `false`，
+    // 而 `isPresent(false)` 为真（`false != null`），于是渲染出一个空的图标容器——
+    // 它的尺寸与间距还在，版式塌不掉。用 optionalWhenLazy 让「不显示」真的表达为缺席。
+    const leading = icon ?? optionalWhenLazy(showIcon, () => <DefaultResultIcon tone={t} />)
 
     return (
       <div data-slot="result" className={cn(resultVariants({ tone }), className)} {...props}>

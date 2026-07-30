@@ -1,4 +1,13 @@
-import { lazy, memo, type ReactElement, Suspense, useEffect, useRef, useState } from 'react'
+import {
+  lazy,
+  memo,
+  type ReactElement,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import { prepareStreamdownMarkdownText } from '../markdown/streamdownMarkdownSource.utils'
 import type { UserActionResolution } from '../projection'
@@ -323,6 +332,24 @@ function MessageContentBlockInner({
   const hasRenderedLiveTextRef = useRef(false)
   const slots = useConversationRenderSlots()
 
+  const useLiveTextRenderer =
+    block.type === 'text' &&
+    !isBlank(block.text) &&
+    shouldUseLiveTextRenderer({
+      isStreaming,
+      animateStreamingText,
+      hasRenderedLiveText: hasRenderedLiveTextRef.current,
+    })
+
+  // 「本块已走过 live 渲染器」是**跨渲染的持久事实**，必须等 commit 之后才落笔：
+  // 写在渲染体里会被 StrictMode 的双渲染、以及并发模式下被丢弃的渲染污染——那些渲染的
+  // 结果不上屏，flag 却已置真，于是块被永久锁死在 live 分支。放进 layout effect 后语义不变：
+  // 首次决定走 live 的那一帧本来就是靠 isStreaming 判出来的，flag 只影响其后的帧。
+  // 判定必须整体前置到所有早返之前，否则就是条件调用 hook（rules-of-hooks）。
+  useLayoutEffect(() => {
+    if (useLiveTextRenderer) hasRenderedLiveTextRef.current = true
+  }, [useLiveTextRenderer])
+
   if (block.type !== 'text') {
     const renderer = getStructuredBlockRenderer(block.type)
     if (!renderer) return null
@@ -349,16 +376,7 @@ function MessageContentBlockInner({
 
   if (isBlank(block.text)) return null
 
-  const useLiveTextRenderer = shouldUseLiveTextRenderer({
-    isStreaming,
-    animateStreamingText,
-    hasRenderedLiveText: hasRenderedLiveTextRef.current,
-  })
-
-  if (useLiveTextRenderer) {
-    hasRenderedLiveTextRef.current = true
-
-    return renderReplaceableMarkdown({
+  if (useLiveTextRenderer) return renderReplaceableMarkdown({
       slot: slots.messageMarkdown,
       block,
       isStreaming,
@@ -376,7 +394,6 @@ function MessageContentBlockInner({
         </Suspense>
       ),
     })
-  }
 
   // 走到这里必然 `isStreaming === false`（`shouldUseLiveTextRenderer` 对 streaming 恒真），
   // 因此替换件在这条路上拿到的 `isStreaming` 只可能是 false。

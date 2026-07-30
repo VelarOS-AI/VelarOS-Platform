@@ -35,7 +35,6 @@ import type {
 } from './composerAddMenu.types'
 import { ComposerMenuItemBody, ComposerMenuSwitchIndicator } from './ComposerMenuItemChrome'
 
-import { isPresent } from '#internal/runtime'
 
 export interface ComposerAddMenuPrimaryPanelProps {
   menu: BusinessCascadingMenuRenderProps
@@ -275,7 +274,10 @@ export function ComposerAddMenuPrimaryPanel({
     >
       {COMPOSER_PRIMARY_PANEL_SLOT_ORDER.map((slot) => {
         const node = primaryPanelSlotNode(slot)
-        return isPresent(node) && <Fragment key={slot}>{node}</Fragment>
+        // 不能用 `isPresent(node)`：各 slot 分支写的是 `cond && <JSX/>`，关闭时求得的是
+        // `false` 而非 null/undefined，而 `isPresent(false)` 为真——本意「过滤掉不渲染的槽」
+        // 实际是每个关闭的槽都造一个空 Fragment。判真值才是这个表达式要的语义。
+        return node ? <Fragment key={slot}>{node}</Fragment> : null
       })}
     </div>
   )

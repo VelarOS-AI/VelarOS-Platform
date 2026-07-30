@@ -21,8 +21,16 @@ const checkboxVariants = cva('velar-checkbox', {
   },
 })
 
+/**
+ * `checked` 必填 = **只做受控**。`defaultChecked` 必须一并 Omit：不 Omit 时它会经
+ * `{...props}` 透给原生 input，与 `checked` 同时存在——React 告警且行为未定义。
+ * 「只做受控」是形态判决，不是漏了默认值。
+ */
 export interface CheckboxProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'type' | 'onChange'>,
+  extends Omit<
+      InputHTMLAttributes<HTMLInputElement>,
+      'size' | 'type' | 'onChange' | 'defaultChecked'
+    >,
     VariantProps<typeof checkboxVariants> {
   checked: boolean
   /** 三态表头复选框，例如表格全选。 */

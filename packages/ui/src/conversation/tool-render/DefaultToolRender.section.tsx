@@ -18,6 +18,7 @@ import styles from './ToolCallBlock.module.css'
 
 import type { ToolCallBlock as ToolCallBlockType } from '#contracts'
 import { isEmpty,isPresent, optionalWhenLazy } from '#internal/runtime'
+import { asRecord } from '#internal/unknownJsonRecord'
 
 const cx = StyleUtils.bindCx(styles)
 
@@ -60,6 +61,11 @@ export const DefaultToolRender = memo(
     const statusLabel = getToolStatusLabel(block, locale, translatorRuntime)
     const displayName =
       block.title?.trim() || getToolDisplayName(block.toolName, locale, translatorRuntime)
+    // `args` 契约上是必填对象，但 block 来自流式 reducer 与磁盘归档（§1.8 外部输入边界），
+    // 实际可能是 null/标量。这里必须归一而不是裸 `Object.keys(block.args)`——
+    // **本组件是整个降级链的终点**：未知工具、坏 payload 最后都落到它。它一抛异常，
+    // §2.4「坏输入降级成占位」就当场失效，整条消息随之消失（包内无逐卡错误边界）。
+    const safeArgs = asRecord(block.args) ?? {}
     const argsText = formatUnknownPayload(block.args)
     const formattedArgs = truncateForDisplay(
       argsText,
@@ -129,7 +135,7 @@ export const DefaultToolRender = memo(
         defaultOpen={false}
       >
         <Stack className={styles.sections} gap="sm">
-          {!isEmpty(Object.keys(block.args)) && (
+          {!isEmpty(Object.keys(safeArgs)) && (
             <Stack className={styles.section} gap="xs">
               <Paragraph spacing="none" className={styles.sectionLabel}>
                 {t('debug.toolArgs')}

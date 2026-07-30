@@ -139,6 +139,12 @@ export function useComposerSlashSkillMenu({
     (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
       if (!open) return false
 
+      // 输入法组合期（拼音候选框开着）**整条键盘链让路**：↑↓ 是 IME 选候选词的键、
+      // Esc 是取消组合的键。此前只有 Enter 判了 isComposing，方向键与 Esc 裸 preventDefault，
+      // 于是用中文过滤菜单时候选列表动不了、Esc 关不掉组合。判定必须在 switch 之前一次做完，
+      // 不能逐 case 补——逐 case 补就是下一个键再漏一次。
+      if (event.nativeEvent.isComposing) return false
+
       switch (event.key) {
         case 'ArrowDown':
           event.preventDefault()
@@ -153,7 +159,6 @@ export function useComposerSlashSkillMenu({
           )
           return true
         case 'Enter': {
-          if (event.nativeEvent.isComposing) return false
           event.preventDefault()
           const selectionIndex = resolveSlashSkillSelectionIndex(highlightedIndex, items.length)
           const item = items[selectionIndex]

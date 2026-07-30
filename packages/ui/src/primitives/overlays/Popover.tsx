@@ -237,7 +237,13 @@ export function Popover({ children, onOpenChange, open }: PopoverProps): ReactEl
 export const PopoverAnchor = forwardRef<HTMLElement, PopoverAnchorProps>(
   ({ asChild = false, children, ...props }, ref): ReactElement => {
     const { setAnchorElement } = usePopoverContext('PopoverAnchor')
-    const childRef = optionalWhen((isValidElement(children)), (children as ReactElement<{ ref?: Ref<HTMLElement> }>).props.ref)
+    // `optionalWhen` 是**急求值**（第二参在调用前就算完），非元素 children 会先命中
+    // `undefined.ref` 而不是被条件挡住——非 asChild 分支本来就允许纯文本 children，
+    // 那条路径曾 100% 抛 TypeError。这里用 `isValidElement` 的收窄结果直接取，
+    // 谓词与收窄绑成一件事（§1.10），顺带消掉断言。同款正解见 Tooltip.tsx 的 `optionalWhenLazy`。
+    const childRef = isValidElement<{ ref?: Ref<HTMLElement> }>(children)
+      ? children.props.ref
+      : undefined
     const composedRef = useMemo(
       () => composeRefs<HTMLElement>(ref, setAnchorElement),
       [ref, setAnchorElement]
