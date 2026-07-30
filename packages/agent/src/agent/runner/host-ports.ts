@@ -51,19 +51,6 @@ export interface RunnerModelRuntimePort extends RunnerModelCapabilityPort {
     log: ScopedLog
   ): void
   emitDone(events: ExecutionEventBus): void
-  emitContextCompaction(
-    input: {
-      turn: number
-      estimatedTokensBefore: number
-      estimatedTokensAfter: number
-      percentBefore: number
-      percentAfter: number
-      removedMessages: number
-      passes: number
-      targetPercent: number
-    },
-    events: ExecutionEventBus
-  ): void
   emitAbort(events: ExecutionEventBus, message?: string): void
 }
 
@@ -155,7 +142,6 @@ export interface RunnerBuildToolContextArgs {
   codingSession: object
   sessionContext?: {
     evidenceLedger?: readonly ChatContextEvidenceRecord[]
-    contextViewActive?: boolean
   }
   roleState: {
     getAllowedToolNames: () => string[]

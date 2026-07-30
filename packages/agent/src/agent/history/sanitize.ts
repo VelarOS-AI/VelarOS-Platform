@@ -21,10 +21,19 @@ import {
 } from '@velaros-ai/core/utils/toolResultSerialization'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import {
-  isFailureLikeToolResultValue,
-  type UserTextPayloadReference,
-} from './microCompaction'
+/**
+ * 超大 user 正文的全保真层引用（`UserTextPayloadPlanner` 落盘后回填给清洗层，
+ * 截断信封才能指向 payloadRef 而不是只留一句"已截断"）。
+ *
+ * 原住 v1 `history/microCompaction.ts`；该文件随治理 v2 拆除，此形状是
+ * {@link SanitizeModelHistoryOptions} 的一部分，跟着清洗层走。
+ */
+interface UserTextPayloadReference {
+  messageIndex: number
+  payloadRef: string
+  hash: string
+  originalChars: number
+}
 
 interface ModelHistorySanitizationResult {
   history: ModelMessage[]
@@ -974,6 +983,43 @@ function compactToolResultOutputValue(value: string): string {
   return serializeToolResultForModel(deserializeSerializedToolResult(value))
 }
 
+function hasFailureLikeTextPrefix(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return normalized.startsWith('error:') || normalized.startsWith('blocked:')
+}
+
+function parseJsonFailureCandidate(value: string): Nullable<unknown> {
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('"') && !trimmed.startsWith('{')) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    // arch-guard:silent-catch-ok 非法 JSON 工具输出按普通文本处理。
+    return null
+  }
+}
+
+/**
+ * 工具结果正文是否是「失败样」的。
+ *
+ * 失败结果不做正文压缩/折叠——错误原文是模型自纠的唯一线索，压掉它就等于让模型对着
+ * 一句"[已折叠]"猜刚才为什么失败。原住 v1 `history/microCompaction.ts`，随该文件拆除迁来。
+ */
+function isFailureLikeToolResultValue(value: string): boolean {
+  if (hasFailureLikeTextPrefix(value)) return true
+
+  const parsed = parseJsonFailureCandidate(value)
+  if (isString(parsed)) return hasFailureLikeTextPrefix(parsed)
+  if (!isRecord(parsed)) return false
+
+  if (isString(parsed.error) && !isBlank(parsed.error.trim())) return true
+  if (!isString(parsed.status)) return false
+
+  const status = parsed.status.trim().toLowerCase()
+  return status === 'failed' || status === 'blocked' || status === 'error'
+}
+
 function sanitizeToolResultPart(part: ToolResultPart): {
   part: ToolResultPart
   changed: boolean
@@ -1165,3 +1211,4 @@ export function sanitizeModelHistory(
 }
 export { sanitizeModelHistory as sanitizeModelHistoryForProvider }
 export { sanitizeModelMessage as sanitizeModelMessageForProvider }
+export type { UserTextPayloadReference }

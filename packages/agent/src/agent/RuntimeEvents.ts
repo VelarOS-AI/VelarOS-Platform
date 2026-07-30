@@ -8,21 +8,10 @@ interface AgentRuntimeEventBus {
   emitRuntime(event: ChatRuntimeEvent): void
 }
 
-interface AgentRuntimeContextCompactionPayload {
-  turn: number
-  estimatedTokensBefore: number
-  estimatedTokensAfter: number
-  percentBefore: number
-  percentAfter: number
-  removedMessages: number
-  passes: number
-  targetPercent: number
-}
-
 /**
  * 智能体循环运行时事件辅助器。
  *
- * 把中断、步数上限、上下文压缩和错误映射留在宿主运行时接线之外。
+ * 把中断、步数上限和错误映射留在宿主运行时接线之外。
  * 宿主只需要提供带运行时事件发送能力的事件总线。
  */
 class AgentRuntimeEvents {
@@ -47,13 +36,6 @@ class AgentRuntimeEvents {
 
   public emitDone(events: AgentRuntimeEventBus): void {
     events.emitRuntime(ChatRuntimeEvents.done())
-  }
-
-  public emitContextCompaction(
-    input: AgentRuntimeContextCompactionPayload,
-    events: AgentRuntimeEventBus
-  ): void {
-    events.emitRuntime(ChatRuntimeEvents.contextCompaction(input))
   }
 
   public emitAbort(events: AgentRuntimeEventBus, message = '运行被终止'): void {
@@ -88,4 +70,4 @@ class AgentRuntimeEvents {
 }
 
 export { AgentRuntimeEvents }
-export type { AgentRuntimeContextCompactionPayload, AgentRuntimeEventBus }
+export type { AgentRuntimeEventBus }

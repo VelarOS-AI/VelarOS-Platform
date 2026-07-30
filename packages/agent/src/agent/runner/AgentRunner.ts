@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import { isEmpty, isPresent, isTrue, Log, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isTrue, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
 import { ChatRuntimeEvents } from '@velaros-ai/core/types'
@@ -232,7 +232,6 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
         codingSession,
         sessionContext: {
           evidenceLedger: sessionContextSnapshot.evidenceLedger,
-          contextViewActive: isPresent(sessionContextSnapshot.contextView),
         },
         roleState: {
           getAllowedToolNames: () => resolution.allowedTools,

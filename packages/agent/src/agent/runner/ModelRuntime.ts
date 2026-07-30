@@ -49,22 +49,6 @@ class ModelRuntime implements RunnerModelRuntimePort {
     this.runtimeEvents.emitDone(events)
   }
 
-  public emitContextCompaction(
-    input: {
-      turn: number
-      estimatedTokensBefore: number
-      estimatedTokensAfter: number
-      percentBefore: number
-      percentAfter: number
-      removedMessages: number
-      passes: number
-      targetPercent: number
-    },
-    events: ExecutionEventBus
-  ): void {
-    this.runtimeEvents.emitContextCompaction(input, events)
-  }
-
   public emitAbort(events: ExecutionEventBus, message = '运行被终止'): void {
     this.runtimeEvents.emitAbort(events, message)
   }

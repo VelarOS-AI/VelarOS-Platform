@@ -2,8 +2,8 @@ import type { ModelMessage } from 'ai'
 
 import type { ChatContextEvidenceRecord } from '@velaros-ai/core/types'
 
-import { repairHistoryStructureForProvider } from './compaction'
 import { mapInternalFollowUpsForProvider } from './internalMessages'
+import { repairHistoryStructureForProvider } from './repair'
 import {
   sanitizeModelHistory,
   type SanitizeModelHistoryOptions,
@@ -17,8 +17,6 @@ interface AgentHistoryToolContext {
   codingSession: unknown
   sessionId?: string
   evidenceLedger?: readonly ChatContextEvidenceRecord[]
-  /** Context OS 派生视图已激活时，跳过 conversation 级 fold，避免与 view compaction 重复。 */
-  contextViewActive?: boolean
 }
 
 function sanitizeHistoryForProvider(

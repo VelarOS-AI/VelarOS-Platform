@@ -8,7 +8,6 @@ import {
   sanitizeHistoryForProvider,
   type SanitizeModelHistoryOptions,
 } from '../history'
-import { OversizedUserTextSafetyValveChars } from '../history/microCompaction'
 import { markLatestUserMessagePromptCacheBreakpoint } from '../model'
 import { applyReasoningLanguagePreferenceToLatestUserMessage } from '../reasoning-language'
 
@@ -19,7 +18,11 @@ import type {
   ProviderRequestCompiler,
 } from './ProviderRequestCompiler'
 import { buildToolPayloadRefsForProviderMessages } from './ToolPayloadReferencePlanner'
-import { UserTextPayloadPlanner, type UserTextPayloadReference } from './UserTextPayloadPlanner'
+import {
+  OversizedUserTextSafetyValveChars,
+  UserTextPayloadPlanner,
+  type UserTextPayloadReference,
+} from './UserTextPayloadPlanner'
 
 export interface CompileProviderSendRequestInput
   extends Omit<CompileProviderRequestInput, 'messages' | 'toolPayloadRefsByToolCallId'> {

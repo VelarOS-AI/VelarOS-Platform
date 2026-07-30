@@ -1,23 +1,16 @@
-import type { ModelMessage } from 'ai'
-
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { ToolDescriptor } from '@velaros-ai/core/types'
-import type { EstimateContextUsageOptions } from '@velaros-ai/core/utils/contextUsage'
 
-import { type ContextWorkingSetBudgetAllocation, ContextWorkingSetBudgetGovernor } from './context'
+import {
+  type ContextGovernanceSessionRegistry,
+  type ContextWorkingSetBudgetAllocation,
+  ContextWorkingSetBudgetGovernor,
+} from './context'
 import type { ContextDegradeAction } from './ContextDegradeLadder'
-import type {
-  DropHistoryToFallbackArgs,
-  DropHistoryToFallbackResult,
-  EmergencyCompactArgs,
-  EmergencyCompactResult,
-  SemanticCompactArgs,
-  SemanticCompactResult,
-  SemanticHistorySummarizeFn,
-} from './LoopHistory'
 import { applyRunProfileToolExposure } from './RunProfile'
 
 interface SoloContextDegradeToolContext {
+  sessionId?: LooseOptional<string>
   setCurrentVisibleToolNames: (toolNames: string[]) => void
   codingSession: {
     getToolUsageScores?: () => Readonly<Record<string, number>>
@@ -31,33 +24,21 @@ interface SoloContextDegradeToolRegistry<TContext> {
   ) => Record<string, number>
 }
 
-interface SoloContextDegradeHistoryHelper<TEvents> {
-  emergencyCompact(input: EmergencyCompactArgs<TEvents>): EmergencyCompactResult
-  semanticCompact(input: SemanticCompactArgs<TEvents>): Promise<SemanticCompactResult>
-  dropHistoryToFallback(input: DropHistoryToFallbackArgs): DropHistoryToFallbackResult
-}
-
 interface ApplySoloContextDegradeActionContext<
   TContext extends SoloContextDegradeToolContext = SoloContextDegradeToolContext,
-  TEvents = unknown,
 > {
-  loopHistory: SoloContextDegradeHistoryHelper<TEvents>
+  /** 治理会话登记处：`govern-epoch` 级的落点（缺页 = 强开一次 epoch）。 */
+  governanceSessions: ContextGovernanceSessionRegistry
   toolRegistry: SoloContextDegradeToolRegistry<TContext>
   log: Pick<ScopedLog, 'warn'>
-  roleRuntime: { model: string }
-  systemPrompt: string
-  history: ModelMessage[]
+  roleRuntime: { model: string; contextWindow?: LooseOptional<number> }
   turn: number
-  events: TEvents
-  contextUsageOptions: EstimateContextUsageOptions
   baseAllowedTools: string[]
   protectedTools: string[]
   enabledToolDescriptors: ToolDescriptor[]
   zoneAllocation: ContextWorkingSetBudgetAllocation
   toolContext: TContext
   currentAllowedTools: string[]
-  summarize: SemanticHistorySummarizeFn
-  signal: AbortSignal
   onToolsNarrowed: (next: string[]) => void
 }
 
@@ -65,51 +46,28 @@ interface ApplySoloContextDegradeActionContext<
  * 执行一级 solo 缺页降级动作；返回 true 表示该级真正改变了状态（可以重试本轮），
  * 返回 false 表示该级无法腾出空间，调用方应继续走下一级阶梯。
  */
-async function applySoloContextDegradeAction<
-  TContext extends SoloContextDegradeToolContext,
-  TEvents,
->(
+function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolContext>(
   action: ContextDegradeAction,
-  ctx: ApplySoloContextDegradeActionContext<TContext, TEvents>
-): Promise<boolean> {
+  ctx: ApplySoloContextDegradeActionContext<TContext>
+): boolean {
   switch (action.kind) {
-    case 'compact-soft':
-    case 'compact-hard': {
-      const recovery = ctx.loopHistory.emergencyCompact({
-        mode: 'solo',
-        model: ctx.roleRuntime.model,
-        systemPrompt: ctx.systemPrompt,
-        history: ctx.history,
-        turn: ctx.turn,
-        events: ctx.events,
-        contextUsageOptions: ctx.contextUsageOptions,
-        targetPercent: action.targetPercent,
+    case 'govern-epoch': {
+      // 缺页 = 请求治理器强开一次 epoch。语义与模型调 distill_context / 宿主 compact_session 一致：
+      // 绕过水位触发线，但反空转、尾保护、达标即停一条不减——压不下去时返回 false 交给下一级。
+      const report = ctx.governanceSessions.requestEpoch(ctx.toolContext.sessionId, {
+        modelWindowTokens: ctx.roleRuntime.contextWindow,
       })
-      if (recovery.recovered) {
-        ctx.log.warn('solo loop recovered context overflow via compaction', {
+      if (report?.applied) {
+        ctx.log.warn('solo loop recovered context overflow via governance epoch', {
           turn: ctx.turn,
           level: action.level,
-          targetPercent: action.targetPercent,
-          removedMessages: recovery.removedMessages,
-          percentBefore: recovery.percentBefore,
-          percentAfter: recovery.percentAfter,
+          epoch: report.epoch,
+          savingPercent: report.savingPercent,
+          beforePercent: report.beforePercent,
+          afterPercent: report.afterPercent,
         })
       }
-      return recovery.recovered
-    }
-    case 'semantic-compact': {
-      const semantic = await ctx.loopHistory.semanticCompact({
-        mode: 'solo',
-        model: ctx.roleRuntime.model,
-        systemPrompt: ctx.systemPrompt,
-        history: ctx.history,
-        turn: ctx.turn,
-        events: ctx.events,
-        contextUsageOptions: ctx.contextUsageOptions,
-        summarize: ctx.summarize,
-        signal: ctx.signal,
-      })
-      return semantic.compacted
+      return !!report?.applied
     }
     case 'narrow-tools': {
       const profile = action.narrowToProfile ?? 'compact'
@@ -139,14 +97,6 @@ async function applySoloContextDegradeAction<
       })
       return true
     }
-    case 'drop-history': {
-      const dropped = ctx.loopHistory.dropHistoryToFallback({
-        mode: 'solo',
-        history: ctx.history,
-        turn: ctx.turn,
-      })
-      return dropped.dropped
-    }
     default:
       return false
   }
@@ -155,7 +105,6 @@ async function applySoloContextDegradeAction<
 export { applySoloContextDegradeAction }
 export type {
   ApplySoloContextDegradeActionContext,
-  SoloContextDegradeHistoryHelper,
   SoloContextDegradeToolContext,
   SoloContextDegradeToolRegistry,
 }
