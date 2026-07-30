@@ -1,4 +1,4 @@
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
@@ -395,9 +395,13 @@ function createRunDeferred(): KernelSessionRunDeferred {
   return { promise, resolve, reject }
 }
 
-function maxSeq(left: number | undefined, right: number | undefined): number | undefined {
-  if (!isPresent(left)) return right
-  if (!isPresent(right)) return left
+/** 收两种缺席形态，出去只有省略位的 `undefined`（`interruptSeq?: number` 的存储形状）。 */
+function maxSeq(
+  left: LooseOptional<number>,
+  right: LooseOptional<number>
+): number | undefined {
+  if (!isPresent(left)) return toOptional(right)
+  if (!isPresent(right)) return toOptional(left)
   return Math.max(left, right)
 }
 
@@ -598,7 +602,7 @@ export class KernelSessionRunCoordinator {
   }
 
   private coalesce(
-    left: KernelSessionRunDemand | undefined,
+    left: LooseOptional<KernelSessionRunDemand>,
     right: KernelSessionRunDemand
   ): KernelSessionRunDemand {
     if (!left) return right
@@ -625,21 +629,21 @@ export class KernelSessionRunCoordinator {
     return coalesced
   }
 
-  private acceptsWake(entry: KernelSessionRunEntry, seq: number | undefined): boolean {
+  private acceptsWake(entry: KernelSessionRunEntry, seq: LooseOptional<number>): boolean {
     return (
       !entry.stopping ||
       (isPresent(entry.interruptSeq) && isPresent(seq) && seq > entry.interruptSeq)
     )
   }
 
-  private isAfterInterrupt(sessionId: string, seq: number | undefined): boolean {
+  private isAfterInterrupt(sessionId: string, seq: LooseOptional<number>): boolean {
     const latest = this.interruptSeqBySession.get(sessionId)
     return !isPresent(latest) || (isPresent(seq) && seq > latest)
   }
 
   private suppressPendingAtOrBefore(
     entry: KernelSessionRunEntry,
-    seq: number | undefined
+    seq: LooseOptional<number>
   ): void {
     const pending = entry.pending
     if (!pending) return

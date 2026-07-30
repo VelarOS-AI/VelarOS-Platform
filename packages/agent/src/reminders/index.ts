@@ -1,9 +1,7 @@
 export type { RuntimeReminderConsumeResult } from './scheduler'
-export {
-  RuntimeReminderScheduler as ReminderScheduler,
-  RuntimeReminderScheduler,
-} from './scheduler'
+export { RuntimeReminderScheduler } from './scheduler'
 export type {
+  CapabilityValidationFailure,
   CodingSessionSnapshot,
   ReminderCapabilityResolver,
   ReminderScope,

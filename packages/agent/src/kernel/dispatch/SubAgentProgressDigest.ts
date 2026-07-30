@@ -1,4 +1,4 @@
-import { isEmpty,truncate } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, truncate } from '@velaros-ai/core'
 import type { AgentEvent } from '@velaros-ai/core/types'
 
 /** 单个子 Agent 的进展摘要行数上限；超过后停记并留一条说明，防止撑爆 job 输出。 */
@@ -7,7 +7,7 @@ const MaxDigestLines = 200
 /** 从工具入参里挑一个最有信息量的短提示（第一个非空字符串值）。 */
 function pickArgsHint(args: Record<string, unknown>): Nullable<string> {
   for (const value of Object.values(args)) {
-    if (typeof value === 'string' && value.trim()) return truncate(value.trim(), 60)
+    if (isNonBlankString(value)) return truncate(value.trim(), 60)
   }
   return null
 }
@@ -70,7 +70,8 @@ class SubAgentProgressDigestRecorder {
     try {
       this.sink?.(chunk)
     } catch {
-      // job 可能已被清理；进展摘要属尽力而为，不影响子 Agent 主流程。
+      // arch-guard:silent-catch-ok job 可能已被清理（父执行结束早于子 Agent 收尾）；进展摘要是
+      // 尽力而为的旁路，写不进去就永久摘掉 sink，绝不冒泡进子 Agent 主流程。
       this.sink = null
     }
   }

@@ -7,6 +7,7 @@
 //   - **调用方零 spanId 记账**：run→turn→{model,tool,capability,policy} 的父子指针由 scope 内部管理，
 //     生产侧（SoloLoop / ToolExecutor）只声明「开一个什么 span」，拿回一个非抛出 handle 供收敛。
 //   - **只落已完成 span**：进行中 span 驻 recorder 内存，收敛才 emit + 校验 + 落账本（读侧无半态）。
+import { toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -201,25 +202,15 @@ export class LedgerExecutionSpanScopeFactory
     agentName: Nullable<string>
     dispatchSource: Nullable<string>
   }): RunSpanScope {
-    // 账本 append 为 fire-and-forget（sink 友好，产 span 侧零 await）；失败吞掉不冒泡。
-    const append = (span: ExecutionSpan): void => {
-      const ledger = this.ledgerFor(input.sessionId)
-      void ledger
-        .then((handle) => handle.append(span))
-        .catch((error) => this.warn('execution span append failed', { error: String(error) }))
-    }
-    const recorder = new ExecutionSpanRecorder({
-      emit: append,
-      now: this.now,
-      ...(this.nextSpanId ? { nextSpanId: this.nextSpanId } : {}),
-    })
+    const append = this.appendToLedger(input.sessionId, 'execution span append failed')
+    const recorder = this.createRecorder(append)
     // D3：prompt 审计写路径（同 fire-and-forget 纪律）；未装配 sidecar 时为 null → recordPromptAudit no-op。
     const promptAuditAppend = this.resolvePromptAuditPath
       ? (record: PromptAuditRecord): void => {
           const ledger = this.promptAuditLedgerFor(input.sessionId)
           void ledger
             .then((handle) => handle.append(record))
-            .catch((error) => this.warn('prompt audit append failed', { error: String(error) }))
+            .catch((error) => this.warn('prompt audit append failed', { error: AppError.getMessage(error) }))
         }
       : null
     return new LedgerRunSpanScope(recorder, input, this.warn, this.now, promptAuditAppend)
@@ -231,17 +222,8 @@ export class LedgerExecutionSpanScopeFactory
     input: CapabilitySpanInput
   ): void {
     try {
-      const append = (span: ExecutionSpan): void => {
-        const ledger = this.ledgerFor(sessionId)
-        void ledger
-          .then((handle) => handle.append(span))
-          .catch((error) => this.warn('capability span append failed', { error: String(error) }))
-      }
-      const recorder = new ExecutionSpanRecorder({
-        emit: append,
-        now: this.now,
-        ...(this.nextSpanId ? { nextSpanId: this.nextSpanId } : {}),
-      })
+      const append = this.appendToLedger(sessionId, 'capability span append failed')
+      const recorder = this.createRecorder(append)
       recorder.record(
         {
           category: 'capability',
@@ -255,7 +237,7 @@ export class LedgerExecutionSpanScopeFactory
         }
       )
     } catch (error) {
-      this.warn('capability span failed', { error: String(error) })
+      this.warn('capability span failed', { error: AppError.getMessage(error) })
     }
   }
 
@@ -279,6 +261,25 @@ export class LedgerExecutionSpanScopeFactory
     ])
   }
 
+  /** 装配一台录制器（时钟与 id 工厂来自注入端口；缺省交由录制器自己回落系统实现）。 */
+  private createRecorder(emit: (span: ExecutionSpan) => void): ExecutionSpanRecorder {
+    return new ExecutionSpanRecorder({
+      emit,
+      now: this.now,
+      // 内部持 Nullable、对外端口收可选：null↔undefined 只在这一处归一（§1.5）。
+      nextSpanId: toOptional(this.nextSpanId),
+    })
+  }
+
+  /** 账本 append 为 fire-and-forget（sink 友好，产 span 侧零 await）；失败吞掉不冒泡。 */
+  private appendToLedger(sessionId: string, label: string): (span: ExecutionSpan) => void {
+    return (span) => {
+      void this.ledgerFor(sessionId)
+        .then((handle) => handle.append(span))
+        .catch((error) => this.warn(label, { error: AppError.getMessage(error) }))
+    }
+  }
+
   private ledgerFor(sessionId: string): Promise<ExecutionSpanLedger> {
     const existing = this.ledgers.get(sessionId)
     if (existing) return existing
@@ -299,6 +300,21 @@ export class LedgerExecutionSpanScopeFactory
 }
 
 // ── scope 实现（父子指针内部记账，动词内失败隔离） ────────────────────────────────────
+
+/**
+ * 生产侧动词的**失败隔离单源**：任一 span 操作抛出都吞成 warn + null。
+ *
+ * 这是「纯旁路」纪律（见文件头）唯一的落地点——SoloLoop / ToolExecutor 侧才敢直呼不设防。
+ * 两个 scope 实现共用同一份，别再各自 try/catch 一遍（改隔离语义要一处改完）。
+ */
+function runIsolatedSpanOp<T>(warn: SpanLedgerWarn, fn: () => T, label: string): Nullable<T> {
+  try {
+    return fn()
+  } catch (error) {
+    warn(`execution span scope: ${label} failed`, { error: AppError.getMessage(error) })
+    return null
+  }
+}
 
 class LedgerRunSpanScope implements RunSpanScope {
   private readonly runSpan: ReturnType<ExecutionSpanRecorder['open']>
@@ -360,12 +376,7 @@ class LedgerRunSpanScope implements RunSpanScope {
   }
 
   private safe<T>(fn: () => T, label: string): Nullable<T> {
-    try {
-      return fn()
-    } catch (error) {
-      this.warn(`execution span scope: ${label} failed`, { error: String(error) })
-      return null
-    }
+    return runIsolatedSpanOp(this.warn, fn, label)
   }
 }
 
@@ -547,12 +558,7 @@ class LedgerTurnSpanScope implements TurnSpanScope {
   }
 
   private safe<T>(fn: () => T, label: string): Nullable<T> {
-    try {
-      return fn()
-    } catch (error) {
-      this.warn(`execution span scope: ${label} failed`, { error: String(error) })
-      return null
-    }
+    return runIsolatedSpanOp(this.warn, fn, label)
   }
 }
 

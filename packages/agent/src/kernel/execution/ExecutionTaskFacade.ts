@@ -1,4 +1,6 @@
 import type {
+  ExecutionTaskExecutionAdvice,
+  ExecutionTaskPlanStep,
   ExecutionTaskRecord,
   ToolExecutionPlanUpdate,
 } from '@velaros-ai/core/types'
@@ -34,11 +36,14 @@ class ExecutionTaskFacade {
     return execution.tasks.find((task) => task.id === currentTaskId)!
   }
 
-  public getCurrentPlan(executionId: string) {
+  public getCurrentPlan(executionId: string): ExecutionTaskPlanStep[] {
     return this.records.getCurrentPlan(executionId)
   }
 
-  public updateCurrentPlan(executionId: string, input: ToolExecutionPlanUpdate) {
+  public updateCurrentPlan(
+    executionId: string,
+    input: ToolExecutionPlanUpdate
+  ): ExecutionTaskPlanStep[] {
     return this.records.updateCurrentPlan(executionId, input)
   }
 
@@ -48,7 +53,7 @@ class ExecutionTaskFacade {
     return this.getCurrentTask(executionId).recommendedAction
   }
 
-  public getCurrentExecutionAdvice(executionId: string) {
+  public getCurrentExecutionAdvice(executionId: string): Nullable<ExecutionTaskExecutionAdvice> {
     return this.routingCoordinator.resolveExecutionAdvice(this.getCurrentTask(executionId))
   }
 }

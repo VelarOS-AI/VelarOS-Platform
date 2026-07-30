@@ -19,15 +19,19 @@ import { existsSync } from 'node:fs'
 import { type FileHandle, mkdir, open, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isArray, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { truncateJsonlToLineCount } from '../jsonl-file'
+import {
+  JSONL_LINE_SEPARATOR,
+  parseJsonlWithTailTolerance,
+  truncateJsonlToLineCount,
+} from '../jsonl-file'
 import { canonicalJsonStringify, SerialWriteQueue } from '../session-store'
 
 import type { SpanLedgerWarn } from './ExecutionSpanLedger'
 
-const PROMPT_AUDIT_LINE_SEPARATOR = '\n'
+const PROMPT_AUDIT_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
 
 /**
  * 一条 prompt 审计记录：一次 provider 请求的重内容快照，靠 `requestFingerprint` 关联回同回合的 model span。
@@ -74,22 +78,12 @@ export async function readPromptAuditFile(path: string): Promise<PromptAuditRead
 
 /** {@link readPromptAuditFile} 的纯文本内核，供 harness 断言单点复用。 */
 export function parsePromptAuditText(raw: string, path: string): PromptAuditReadResult {
-  const lines = raw.split(PROMPT_AUDIT_LINE_SEPARATOR)
-  while (!isEmpty(lines) && isEmpty(lines[lines.length - 1])) lines.pop()
-
-  const records: PromptAuditRecord[] = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const parsed = tryParsePromptAuditLine(lines[index])
-    if (parsed) {
-      records.push(parsed)
-      continue
-    }
-    if (index === lines.length - 1) return { records, truncatedTail: true }
-    throw new AppError('INVARIANT', 
-      `prompt audit ledger corrupted at interior line ${index + 1} of ${lines.length} (${path})`
-    )
-  }
-  return { records, truncatedTail: false }
+  return parseJsonlWithTailTolerance({
+    raw,
+    path,
+    ledgerLabel: 'prompt audit ledger',
+    parseLine: tryParsePromptAuditLine,
+  })
 }
 
 function tryParsePromptAuditLine(line: string): Nullable<PromptAuditRecord> {
@@ -102,14 +96,13 @@ function tryParsePromptAuditLine(line: string): Nullable<PromptAuditRecord> {
 }
 
 function isValidPromptAuditRecord(value: unknown): value is PromptAuditRecord {
-  if (typeof value !== 'object' || value === null) return false
-  const record = value as Record<string, unknown>
+  if (!isPlainObject(value)) return false
   return (
-    typeof record.capturedAt === 'number' &&
-    typeof record.sessionId === 'string' &&
-    typeof record.runId === 'string' &&
-    typeof record.systemPrompt === 'string' &&
-    Array.isArray(record.promptSegments)
+    isFiniteNumber(value.capturedAt) &&
+    isString(value.sessionId) &&
+    isString(value.runId) &&
+    isString(value.systemPrompt) &&
+    isArray(value.promptSegments)
   )
 }
 

@@ -40,14 +40,20 @@ function buildFailureBatchKey(batch: readonly KernelToolFailureBatchEntry[]): st
   )
 }
 
+/**
+ * 「写型」判定：**只认声明，不认名字**。
+ *
+ * `toolName` / `args` 是刻意收下但**不参与判定**的——调用点按与 {@link KernelToolLoopGuardInput}
+ * 一致的形状统一传入，判定却必须只看工具自己声明的权限位与 `writeScopes`。一旦回落成按名字猜
+ * （`startsWith('write')` 之类），mod 贡献的工具和改过名的内置工具会立刻误判，而误判方向是
+ * **放过**（写型当只读 → 重复写闸不生效），属失败方向不安全。
+ */
 function isKernelWriteLikeTool(input: {
   toolName: string
   args?: LooseOptional<Record<string, unknown>>
   permissions?: LooseOptional<readonly string[]>
   capabilities?: LooseOptional<ToolCapabilitySchema>
 }): boolean {
-  void input.toolName
-  void input.args
   if (input.permissions?.some((permission) => permission.endsWith(':write'))) return true
   return !!input.capabilities?.writeScopes?.length
 }

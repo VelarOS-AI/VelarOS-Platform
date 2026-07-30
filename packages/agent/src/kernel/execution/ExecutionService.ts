@@ -20,6 +20,7 @@ import type {
   ExecutionProvideInputRequest,
   ExecutionRecord,
   ExecutionResolveConfirmationRequest,
+  ExecutionTaskExecutionAdvice,
   ExecutionTaskRecord,
   StreamStatePayload,
   StreamTurnContextPayload,
@@ -565,7 +566,7 @@ class ExecutionService {
   }
 
   /** 根据当前任务解析执行建议。 */
-  public getCurrentExecutionAdvice(executionId: string) {
+  public getCurrentExecutionAdvice(executionId: string): Nullable<ExecutionTaskExecutionAdvice> {
     return this.taskFacade.getCurrentExecutionAdvice(executionId)
   }
 

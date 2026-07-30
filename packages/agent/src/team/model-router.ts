@@ -36,7 +36,7 @@ export interface TeamModelRoutingPort {
   ): LooseOptional<TeamModelRouteResult>
 }
 
-class TeamRouter {
+class TeamModelRouter {
   constructor(private readonly routing: TeamModelRoutingPort) {}
 
   public resolve(
@@ -64,5 +64,4 @@ class TeamRouter {
   }
 }
 
-export { TeamRouter }
-export { TeamRouter as TeamModelRouter }
+export { TeamModelRouter }
