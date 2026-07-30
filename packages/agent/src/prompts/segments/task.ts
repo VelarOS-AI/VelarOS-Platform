@@ -42,7 +42,11 @@ export function createTaskRuntimePromptSegments(
       source: 'runtime',
       priority: PromptSegmentPriority.runtimeAdvice + 1,
       when: () => snapshot.goalMode,
-      text: '当前执行绑定到持久目标；按任务账本持续推进，并在真正达成或阻塞时更新目标状态。',
+      text: [
+        '当前执行绑定到持久目标；按任务账本持续推进，并在真正达成或受阻时更新目标状态。',
+        '模型确认存在缺少必要授权、用户输入或外部状态等真实阻碍，已经无法继续推进时，可以自行调用 update_goal({status:"blocked"})；不需要等待多轮审计。',
+        '不要仅因为任务困难、耗时、结果不确定或希望获得澄清就标记受阻。',
+      ].join('\n'),
     }),
   ]
 }
