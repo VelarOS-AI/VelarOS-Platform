@@ -23,15 +23,23 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import type { ContextRecordClassifier } from './admission'
 import type { ContextRecord } from './ContextRecord'
 import { stableFingerprint } from './determinism'
+import { type ContextDistiller, planContextDistillation } from './distill'
+import { ContextDistillRunner } from './distillRunner'
 import {
   type ContextGovernanceConfig,
   type ContextGovernanceConfigInput,
   resolveContextGovernanceConfig,
   resolveGovernanceWindowTokens,
 } from './governanceConfig'
-import { type GovernanceEpochReport, measureProjectedTokens, runGovernanceEpoch } from './GovernanceEpoch'
+import {
+  type GovernanceEpochReport,
+  measureProjectedTokens,
+  runGovernanceEpoch,
+  shouldOpenGovernanceEpoch,
+} from './GovernanceEpoch'
 import { planHistoryIngest } from './ingest'
 import type { ContextMigrationEventSink } from './migrationLog'
+import { measureLedgerProjection } from './projection'
 import { ContextResidencyLedger } from './ResidencyLedger'
 
 /** 模型声明阶段边界的工具名（语义升格为"请求开一次 epoch"，见设计 §5.2）。 */
@@ -74,6 +82,17 @@ export interface ContextGovernanceSyncResult {
   appendedCount: number
 }
 
+export interface ContextGovernanceSessionOptions {
+  /**
+   * I2 蒸馏器解析器（晚绑）。
+   *
+   * 传的是**解析函数**而不是实例：registry 是宿主级单实例，在装配 Phase 0 就造出来，而模型运行时
+   * 要到执行栈那一步才有。传实例意味着"注册表建好那一刻蒸馏器必须已经存在"，那就把装配顺序钉死了。
+   */
+  resolveDistiller?: LooseOptional<() => Nullable<ContextDistiller>>
+  sessionId?: LooseOptional<string>
+}
+
 /** 单会话治理状态。 */
 export class ContextGovernanceSession {
   public readonly config: ContextGovernanceConfig
@@ -81,17 +100,30 @@ export class ContextGovernanceSession {
   private ingestedFingerprints: string[] = []
   private nextTurn = 0
   private epochSeq = 0
+  /**
+   * 账本代数：每整本重建一次 +1。
+   *
+   * 蒸馏产物带着规划时的代数出门，落地前逐条核对——记录 id 是按序号发的，重建后同一个
+   * `ctx-r000003` 已经是另一条消息，没有这个护栏就会把上一段历史的摘要贴到这一段上。
+   */
+  private ledgerGeneration = 0
   private readonly reports: GovernanceEpochReport[] = []
   private lastEpochRequestRecordId: Nullable<string> = null
+  private readonly distillRunner: ContextDistillRunner
   public updatedAt = 0
 
   public constructor(
     config: ContextGovernanceConfig,
     private readonly classifier: Nullable<ContextRecordClassifier>,
-    private readonly sink: Nullable<ContextMigrationEventSink>
+    private readonly sink: Nullable<ContextMigrationEventSink>,
+    options: ContextGovernanceSessionOptions = {}
   ) {
     this.config = config
     this.ledgerRef = this.createLedger()
+    this.distillRunner = new ContextDistillRunner({
+      resolveDistiller: options.resolveDistiller ?? ((): Nullable<ContextDistiller> => null),
+      sessionId: options.sessionId?.trim() || null,
+    })
   }
 
   public get ledger(): ContextResidencyLedger {
@@ -170,21 +202,90 @@ export class ContextGovernanceSession {
 
     const budgetTokens = resolveGovernanceWindowTokens(this.config, input.modelWindowTokens)
     const startedAt = Date.now()
+    const epoch = this.epochSeq + 1
+    // 只在 epoch 真的会开时才把待落地产物交出去：epoch 拿到就会消费，而它若以 below-trigger
+    // 当场返回，这批已经付过钱的产物就白丢了。
+    const willOpen = shouldOpenGovernanceEpoch({
+      ledger: this.ledgerRef,
+      config: this.config,
+      budgetTokens,
+      modelRequested,
+    })
     const raw = runGovernanceEpoch({
       ledger: this.ledgerRef,
       config: this.config,
       budgetTokens,
-      epoch: this.epochSeq + 1,
+      epoch,
       at: input.at,
       modelRequested,
+      pendingDistills: willOpen ? this.distillRunner.takePending(this.ledgerGeneration) : [],
+      ledgerGeneration: this.ledgerGeneration,
     })
     // 耗时在**跑完之后**测量并回填：epoch 是纯函数（不取时钟），时钟只归调用方。
-    const report: GovernanceEpochReport = { ...raw, durationMs: Math.max(0, Date.now() - startedAt) }
+    const report: GovernanceEpochReport = {
+      ...raw,
+      distill: { ...raw.distill, ...this.scheduleDistillation(raw, budgetTokens, epoch) },
+      durationMs: Math.max(0, Date.now() - startedAt),
+    }
     // 只有真正应用了迁移才推进 epoch 号：跳过的 epoch 不是一代，dashboard 上的号必须与
     // "缓存被重建过几次"一一对应，否则模型看到号在涨却没有任何东西变短。
     if (report.applied) this.epochSeq += 1
     this.pushReport(report)
     return report
+  }
+
+  /**
+   * 规划下一次蒸馏（**不 await**：回合永远不等模型）。
+   *
+   * 规划在 epoch **之后**：判据里的"机械器械跑完仍差多少"要拿 I0/I1 之后的实际占用去算，
+   * 在 epoch 之前问等于拿旧数问新账。产物落到下一个边界，是 P4「每 epoch 恰好一次缓存重建」
+   * 的直接后果，也是调研里 sleep-time compute 的形态。
+   */
+  private scheduleDistillation(
+    report: GovernanceEpochReport,
+    budgetTokens: number,
+    epoch: number
+  ): Pick<GovernanceEpochReport['distill'], 'planned' | 'skipReason' | 'gate' | 'totals'> {
+    // 未触发的 epoch 不规划：没跑器械就没有"机械没达标"这回事。
+    if (report.trigger === null)
+      return { planned: false, skipReason: null, gate: null, totals: this.distillRunner.totals() }
+
+    const measurement = measureLedgerProjection({
+      records: this.ledgerRef.list(),
+      residency: this.ledgerRef.residencyVector(),
+      budget: { tailProtectTurns: this.config.tailProtectTurns, budgetTokens },
+    })
+    const plan = planContextDistillation({
+      ledger: this.ledgerRef,
+      config: this.config,
+      budgetTokens,
+      projectedTokens: measurement.projectedTokens,
+      tailProtectedRecordIds: measurement.tailProtectedRecordIds,
+      epoch,
+      generation: this.ledgerGeneration,
+      hasDistiller: this.distillRunner.hasDistiller(),
+      busy: this.distillRunner.busy,
+      pendingCount: this.distillRunner.pendingCount,
+      maxPendingProducts: this.distillRunner.maxPendingProducts,
+    })
+    this.distillRunner.schedule(plan.requests, this.config)
+
+    return {
+      planned: !isEmpty(plan.requests),
+      skipReason: plan.skipReason,
+      gate: plan.gate,
+      totals: this.distillRunner.totals(),
+    }
+  }
+
+  /**
+   * 等在飞的蒸馏落地（测试与 headless 实验用）。
+   *
+   * 产品路径**永不** await 它——那就退回 v1 的内联阻塞了。它存在只是为了让断言电池不必靠
+   * sleep 猜时序。
+   */
+  public whenDistillSettled(): Promise<void> {
+    return this.distillRunner.settled()
   }
 
   /**
@@ -276,6 +377,9 @@ export class ContextGovernanceSession {
     this.ingestedFingerprints = []
     this.nextTurn = 0
     this.lastEpochRequestRecordId = null
+    // 代数 +1 并清空在途蒸馏：新一代的 id 与旧产物指向的完全不是同一批记录。
+    this.ledgerGeneration += 1
+    this.distillRunner.reset()
   }
 
   private createLedger(): ContextResidencyLedger {
@@ -296,6 +400,11 @@ export interface ContextGovernanceSessionRegistryOptions {
   sinkFactory?: LooseOptional<(sessionId: string) => Nullable<ContextMigrationEventSink>>
   /** 最大跟踪会话数；超出按 updatedAt 淘汰最旧。 */
   maxTrackedSessions?: LooseOptional<number>
+  /**
+   * I2 蒸馏器（宿主注入的一次辅助模型调用）。缺省 = 治理退化为纯机械：
+   * 档位仍按配置记账，但每次规划都以 `no-distiller` 跳过，不会静默假装蒸馏过。
+   */
+  distiller?: LooseOptional<ContextDistiller>
 }
 
 /**
@@ -309,16 +418,29 @@ export class ContextGovernanceSessionRegistry {
   private readonly classifier: Nullable<ContextRecordClassifier>
   private readonly sinkFactory: Nullable<(sessionId: string) => Nullable<ContextMigrationEventSink>>
   private readonly maxTrackedSessions: number
+  private distiller: Nullable<ContextDistiller>
 
   public constructor(options: ContextGovernanceSessionRegistryOptions = {}) {
     this.config = resolveContextGovernanceConfig(options.config)
     this.classifier = toNullable(options.classifier)
     this.sinkFactory = toNullable(options.sinkFactory)
     this.maxTrackedSessions = options.maxTrackedSessions ?? DefaultMaxTrackedSessions
+    this.distiller = toNullable(options.distiller)
   }
 
   public governanceConfig(): ContextGovernanceConfig {
     return this.config
+  }
+
+  /**
+   * 晚绑 I2 蒸馏器。
+   *
+   * 与 `configure` 的"只影响新会话"相反，蒸馏器**立刻对全部会话生效**：它不是策略参数而是能力
+   * 供给，换它不改变任何阈值，也就不会让同一本账本前后半段按两套规则治理。会话持有的是解析
+   * 函数（`() => this.distiller`），所以晚到的注入能穿到已存在的会话。
+   */
+  public setDistiller(distiller: LooseOptional<ContextDistiller>): void {
+    this.distiller = toNullable(distiller)
   }
 
   /**
@@ -344,7 +466,8 @@ export class ContextGovernanceSessionRegistry {
     const created = new ContextGovernanceSession(
       this.config,
       this.classifier,
-      this.sinkFactory?.(key) ?? null
+      this.sinkFactory?.(key) ?? null,
+      { resolveDistiller: () => this.distiller, sessionId: key }
     )
     this.sessions.set(key, created)
     this.evictOldestSessionsBeyondLimit()
