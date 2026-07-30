@@ -9,6 +9,31 @@ import type { LanguageModel, ModelMessage } from 'ai'
 import { isEmpty,isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import type { ModelRequestOptions } from './ModelContracts'
 
+/**
+ * 提示词缓存断点的**内部协议**与出线翻译。
+ *
+ * 导览（§5.3b ①算法协议 / ⑤跨层接缝）——上游（Agent/宿主）只会说一句"这里是缓存断点"，
+ * 各家服务商的线上写法却完全不同。本文件是这套内部标记与线上字段之间的**唯一翻译层**。
+ *
+ * **协议**：内部标记全部住在 `providerOptions.velaros` 命名空间下，只有两个键——
+ * `promptCacheBreakpoint`（消息级断点）与 `promptCacheKey`（会话级缓存键）。
+ *
+ * **不变量（改这里先确认这三条还成立）**：
+ * 1. `velaros` 命名空间**绝不能出线**。`applyPromptCacheCallOptions` 在
+ *    `doGenerate`/`doStream` 前把它整个剥掉并翻译成 `anthropic.cacheControl` /
+ *    `openai.promptCacheKey`；漏剥会让服务商收到未知字段而整请求 400。
+ * 2. **同一轮只有最后一条 user 消息带断点**。`markLatestUserMessagePromptCacheBreakpoint`
+ *    先清掉历史 user 消息上的陈旧断点再打新的——Anthropic 的 breakpoint 数量有硬上限，
+ *    残留旧断点会让新断点被拒，缓存命中率反而归零。
+ * 3. **调用方显式写的线上字段永远赢**。`hasExplicitProviderPromptCacheKey` /
+ *    `hasProviderWireCacheControl` 命中时本层不覆盖也不追加——这是"产品默认值不得压过显式意图"。
+ *
+ * **为什么包一层 LanguageModel 而不是在装配处改 options**：断点要跟着**每一次** doGenerate/doStream
+ * 走，而 options 是逐轮构造的；包装模型让翻译落在唯一必经之路上，装配处漏接线也不会静默失效。
+ *
+ * **会话缓存键**：`resolveSessionPromptCacheKey` 用 FNV-1a 哈希 + 可读前缀。哈希只为**稳定分桶**，
+ * 不承担安全语义（会话 id 不该原样出线），所以换算法只影响命中率、不影响正确性。
+ */
 const SessionPromptCacheKeyHashSeed = 0x811c9dc5
 const SessionPromptCacheKeyHashPrime = 0x01000193
 const SessionPromptCacheKeyPrefixMaxChars = 48

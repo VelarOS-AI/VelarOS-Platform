@@ -5,7 +5,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 
-import { isBlank, isFunction, isObject, isPresent,isString, isUndefined, Log } from '@velaros-ai/core'
+import { isBlank, isFunction, isPlainObject, isPresent,isString, isUndefined, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import type { ChatProviderId } from './ModelContracts'
@@ -206,7 +206,32 @@ JSON.stringify(globalThis.__velarosUserAdapterValue__)
   { filename: UserAdapterFilename }
 )
 
-/** 用户上传 JS adapter，用于接入未内置的模型供应商。 */
+/**
+ * 用户上传 JS adapter，用于接入未内置的模型供应商。
+ *
+ * 导览（§5.3b ④安全门 / ⑥非显然妥协）——**这里跑的是用户随手贴进设置页的代码，一律当敌意输入**。
+ *
+ * 隔离由四层叠成，缺一层都能被逃逸，改动前先看这四条各挡什么：
+ * 1. **空原型 context**（`createContext(Object.create(null))`）——脚本拿不到宿主 realm 的
+ *    `globalThis`，也就拿不到 `process` / `require` / `Buffer`。
+ * 2. **函数硬化**（`hardenFunction` / `hardenExposedFunction`）——把暴露进去的每个函数的
+ *    `constructor` 置空并断原型链。不做这步，脚本可以走
+ *    `helpers.createOpenAI.constructor('return process')()` 拿回宿主 realm，隔离等于没有。
+ * 3. **JSON 单向搬运**（`cloneValueForVm` / `cloneValueFromVm`）——跨边界只传 JSON 可序列化的值，
+ *    且**在对侧 realm 内**做 parse/stringify。直接传对象引用会把宿主原型链一起递过去。
+ * 4. **1s 执行墙**（`UserAdapterExecutionTimeoutMs`）——`Script.runInContext` 的 timeout 只能打断
+ *    同步死循环；`runVmScript` 结尾那道事后时长复核是兜住"timeout 没能生效"的情形（§0.1 条三）。
+ *
+ * **与 `ProviderScriptRegistry` 的对照（别把两者混为一谈）**：那边是开发者显式在
+ * `.velaros/dev.json` 登记的脚本，用 `runInThisContext` 以**宿主全权**执行；这边是普通用户上传的，
+ * 所以必须沙箱。两者都叫"provider script"，信任级完全相反。
+ *
+ * **产物只认描述符**：VM 里返回的不是 LanguageModel 而是
+ * `__velarosCustomAdapterDescriptor` 三元组（provider kind / modelId / settings），
+ * 真正的 SDK 实例在宿主侧由 `createLanguageModelFromDescriptor` 构造——脚本因此永远碰不到
+ * 真实 fetch 与 apiKey 载体。新增可用 provider = 扩 `UserAdapterProviderKind` 闭集，
+ * **不是**放宽描述符校验。
+ */
 class UserJsModelAdapter extends ModelAdapter {
   private readonly evaluatedAdapterCache = new Map<string, EvaluatedUserAdapter>()
 
@@ -258,12 +283,7 @@ class UserJsModelAdapter extends ModelAdapter {
         'Custom adapter model factory 执行失败'
       )
       return applyPromptCacheProviderOptions(
-        this.createLanguageModelFromDescriptor(
-          adapter,
-          config,
-          descriptor,
-          'Custom adapter model factory 执行失败'
-        )
+        this.createLanguageModelFromDescriptor(config, descriptor)
       )
     }
   }
@@ -323,10 +343,9 @@ class UserJsModelAdapter extends ModelAdapter {
       })
       this.runVmScript(script, context)
 
-      const result = context.module.exports
       const evaluated = {
         context,
-        exports: result && isObject(result) ? result : context.module.exports,
+        exports: context.module.exports,
         helpers: context.helpers,
       }
       this.rememberEvaluatedAdapter(cacheKey, evaluated)
@@ -431,13 +450,13 @@ class UserJsModelAdapter extends ModelAdapter {
   }
 
   private createLanguageModelFromDescriptor(
-    adapter: EvaluatedUserAdapter,
     config: ModelAdapterConfig,
-    descriptor: unknown,
-    errorPrefix: string
+    descriptor: unknown
   ): LanguageModel {
-    void adapter
-    const normalized = normalizeLanguageModelDescriptor(descriptor, errorPrefix)
+    const normalized = normalizeLanguageModelDescriptor(
+      descriptor,
+      'Custom adapter model factory 执行失败'
+    )
     const settings = normalizeProviderSettings(config, normalized.settings)
 
     switch (normalized.providerKind) {
@@ -463,22 +482,18 @@ class UserJsModelAdapter extends ModelAdapter {
       timeout: UserAdapterExecutionTimeoutMs,
     }) as T
     const durationMs = Date.now() - startedAt
+    // V8 的 timeout 只打断同步执行；这道事后复核兜住"墙没生效"的情形，超时一律当失败（§0.1 条三）。
     if (durationMs > UserAdapterExecutionTimeoutMs) {
-      throw new Error(`Script execution timed out after ${durationMs}ms.`)
+      throw new AppError(
+        'TIMEOUT',
+        `Custom adapter 脚本执行超时（${durationMs}ms > ${UserAdapterExecutionTimeoutMs}ms）。`
+      )
     }
     return result
   }
 
   private normalizeEmbeddingRequest(value: unknown, errorPrefix: string): EmbeddingRequest {
-    if (!isObject(value)) {
-      throw new AppError(
-        'VALIDATION',
-        `${errorPrefix}：Custom adapter createEmbeddingRequest must return a JSON-safe { url, headers, body } request.`
-      )
-    }
-
-    const request = value as Record<string, unknown>
-    if (!isString(request.url)) {
+    if (!isPlainObject(value) || !isString(value.url)) {
       throw new AppError(
         'VALIDATION',
         `${errorPrefix}：Custom adapter createEmbeddingRequest must return a JSON-safe { url, headers, body } request.`
@@ -486,9 +501,9 @@ class UserJsModelAdapter extends ModelAdapter {
     }
 
     return {
-      url: request.url,
-      headers: normalizeStringRecord(request.headers, `${errorPrefix}：Embedding headers`),
-      body: request.body,
+      url: value.url,
+      headers: normalizeStringRecord(value.headers, `${errorPrefix}：Embedding headers`),
+      body: value.body,
     }
   }
 }
@@ -571,7 +586,7 @@ function normalizeLanguageModelDescriptor(
   value: unknown,
   errorPrefix: string
 ): UserAdapterLanguageModelDescriptor {
-  const descriptor = isObject(value) ? (value as Record<string, unknown>) : null
+  const descriptor = isPlainObject(value) ? value : null
   if (
     !descriptor ||
     descriptor.__velarosCustomAdapterDescriptor !== 'language-model' ||
@@ -589,7 +604,7 @@ function normalizeLanguageModelDescriptor(
     __velarosCustomAdapterDescriptor: 'language-model',
     providerKind: descriptor.providerKind,
     modelId: descriptor.modelId,
-    settings: isObject(descriptor.settings)
+    settings: isPlainObject(descriptor.settings)
       ? normalizeStringRecord(descriptor.settings, errorPrefix)
       : {},
   }
@@ -608,7 +623,7 @@ function normalizeProviderSettings(
 
 function normalizeStringRecord(value: unknown, errorPrefix: string): Record<string, string> {
   if (!isPresent(value)) return {}
-  if (!isObject(value)) {
+  if (!isPlainObject(value)) {
     throw new AppError('VALIDATION', `${errorPrefix} must be an object with string values.`)
   }
 

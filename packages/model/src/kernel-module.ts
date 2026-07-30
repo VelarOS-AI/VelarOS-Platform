@@ -1,3 +1,6 @@
+import { isNonBlankString, isPlainObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
 import type { ChatProviderId } from './ModelContracts'
 import {
   createCapabilityToken,
@@ -23,20 +26,37 @@ export interface CreateModelKernelModuleOptions {
 export const ModelCapability =
   createCapabilityToken<ModelRuntimeCapabilityService>('velaros.model')
 
+/** wire 面入参上限：provider id 是标识符不是载荷，越界一律拒。 */
+const MaxWireProviderIdChars = 128
+
+function invalidCapabilityInput(detail: string): AppError {
+  return new AppError('VALIDATION', `Model capability input is invalid: ${detail}`)
+}
+
+/**
+ * 判据（§5.3b ④安全门）——wire 面唯一的入参解析点，**只认恰好一个 `provider` 键**。
+ *
+ * 多余的键一律拒而不是忽略：这条通道对外可调用，宽进等于允许"多传一个字段就能改行为"，
+ * 且日后给 `supports_provider` 加轴时，旧客户端的错拼字段会静默被当默认值。长度上限挡的是
+ * 拿 id 当载荷灌进来。四条判据各自给独立诊断（§2.7）——原先四条共用一句话，等于没有诊断。
+ */
 function parseProviderInput(input: unknown): ChatProviderId {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    throw new Error('Model capability input is invalid')
+  if (!isPlainObject(input)) throw invalidCapabilityInput('expected an object payload')
+
+  const keys = Object.keys(input)
+  if (keys.length !== 1) {
+    throw invalidCapabilityInput(
+      `expected exactly one "provider" key, received [${keys.join(', ')}]`
+    )
   }
-  const record = input as Record<string, unknown>
-  if (
-    Object.keys(record).length !== 1
-    || typeof record.provider !== 'string'
-    || record.provider.trim().length === 0
-    || record.provider.length > 128
-  ) {
-    throw new Error('Model capability input is invalid')
+  if (!isNonBlankString(input.provider)) {
+    throw invalidCapabilityInput('"provider" must be a non-blank string')
   }
-  return record.provider as ChatProviderId
+  if (input.provider.length > MaxWireProviderIdChars) {
+    throw invalidCapabilityInput(`"provider" exceeds ${MaxWireProviderIdChars} characters`)
+  }
+
+  return input.provider as ChatProviderId
 }
 
 function createModelCapabilityService(
@@ -82,7 +102,7 @@ export function createModelKernelModule(
   options: CreateModelKernelModuleOptions,
 ): KernelModuleDefinition {
   if (!options?.registry) {
-    throw new Error('Model kernel module requires an injected registry')
+    throw new AppError('VALIDATION', 'Model kernel module requires an injected registry')
   }
 
   return defineKernelModule({

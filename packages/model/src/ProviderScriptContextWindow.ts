@@ -1,3 +1,5 @@
+import { isPlainObject, toOptional, trimmedStringOrEmpty } from '@velaros-ai/core'
+
 import { resolveProviderModelContextWindow } from './ModelCatalog'
 import type { ChatProviderId } from './ModelContracts'
 
@@ -21,16 +23,16 @@ interface ConcreteProviderModelConfig {
 function readConcreteProviderModelConfig(
   value: unknown
 ): ConcreteProviderModelConfig | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const record = value as Record<string, unknown>
-  const provider = typeof record.provider === 'string' ? record.provider.trim() : ''
-  const model = typeof record.model === 'string' ? record.model.trim() : ''
+  if (!isPlainObject(value)) return undefined
+
+  const provider = trimmedStringOrEmpty(value.provider)
+  const model = trimmedStringOrEmpty(value.model)
   if (!provider || !model) return undefined
 
   return {
     provider,
     model,
-    contextWindow: toPositiveInteger(record.contextWindow),
+    contextWindow: toPositiveInteger(value.contextWindow),
   }
 }
 
@@ -54,9 +56,7 @@ export function resolveProviderScriptContextWindow(
 
   if (input.metadata?.contextWindow) return input.metadata.contextWindow
 
-  const resolvedFallback = resolveProviderModelContextWindow(
-    input.providerId,
-    input.runtimeModel
+  return toOptional(
+    resolveProviderModelContextWindow(input.providerId, input.runtimeModel)
   )
-  return resolvedFallback === null ? undefined : resolvedFallback
 }
