@@ -78,7 +78,6 @@ const SupportPackageSpecifications = [
 const RequiredPublishedFiles = [
   'package.json',
   'README.md',
-  'docs/api.zh-CN.md',
   'examples/minimal.ts',
   'dist/index.js',
   'dist/index.d.ts',

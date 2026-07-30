@@ -48,7 +48,6 @@
   "files": [
     "dist",
     "README.md",
-    "docs",
     "examples"
   ],
   "scripts": {

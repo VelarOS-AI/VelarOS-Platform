@@ -37,19 +37,14 @@ const ConcreteKernelPathImport =
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g
 const ConcreteCoreTypeName = /\b(?:Browser|Workspace|Workbench|Model|Memory|Knowledge)[A-Z_a-z0-9]*/
-const RequiredPackageFiles = ['dist', 'README.md', 'docs']
-const RequiredApiDocumentationSections = [
-  '## 定位与非目标',
-  '## 安装',
-  '## 公共入口',
-  '## 核心类与接口',
-  '## 生命周期/并发',
-  '## 依赖注入',
-  '## 错误模型',
-  '## 最小第三方示例',
-  '## 扩展点',
-  '## 兼容策略',
-]
+const RequiredPackageFiles = ['dist', 'README.md']
+// README 门只钉「存在 + 确实是中文 + 有实质内容」，刻意不钉章节标题。
+// 上一版钉的是 docs/api.zh-CN.md 必须存在且含 10 个固定标题——那是在机械执行**文档形状**，
+// 而形状钉得住、内容钉不住：签名逐条抄进 markdown 必然与代码脱节（cli 的旧文档甚至手抄了
+// 兄弟包的具体版本号，而实际依赖全是 workspace:*）。用户 2026-07-30 判决整套 api.zh-CN 废除、
+// README 改中文重写，本门随之改口径：证明包有人写文档，别再规定它长什么样。
+const MinimumReadmeCharacters = 400
+const ChineseCharacter = /[一-鿿]/
 // 可移植契约入口:exportKey = package.json exports 键,contractsFile = 对应源文件(合包在切片下),
 // modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录)。
 const PortableContracts = [
@@ -283,21 +278,18 @@ for (const expected of CapabilityPackages) {
   }
 
   const readmePath = resolve(packageRoot, 'README.md')
-  const documentationPath = resolve(packageRoot, 'docs/api.zh-CN.md')
   const licensePath = resolve(packageRoot, 'LICENSE')
-  if (!existsSync(readmePath) || !readFileSync(readmePath, 'utf8').includes(
-    '[中文接口文档](./docs/api.zh-CN.md)',
-  )) {
-    fail(`${expected.name}: README must link docs/api.zh-CN.md`)
-  }
-  if (!existsSync(documentationPath)) {
-    fail(`${expected.name}: missing docs/api.zh-CN.md`)
+  if (!existsSync(readmePath)) {
+    fail(`${expected.name}: missing README.md`)
   } else {
-    const documentation = readFileSync(documentationPath, 'utf8')
-    for (const section of RequiredApiDocumentationSections) {
-      if (!documentation.includes(section)) {
-        fail(`${expected.name}: API documentation is missing ${section}`)
-      }
+    const readme = readFileSync(readmePath, 'utf8')
+    if (!ChineseCharacter.test(readme)) {
+      fail(`${expected.name}: README.md must be written in Chinese`)
+    }
+    if (readme.length < MinimumReadmeCharacters) {
+      fail(
+        `${expected.name}: README.md is ${readme.length} characters — too thin to describe the package`,
+      )
     }
   }
   if (isOpenSourceWorkspace && !existsSync(licensePath)) {

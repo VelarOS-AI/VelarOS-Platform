@@ -1,452 +1,193 @@
 # @velaros-ai/workspace
 
-[中文接口文档](./docs/api.zh-CN.md)
+> **位置**:VelarOS-Platform 单版本火车 · `capabilities` 域 · 目录 `packages/workspace`。
+> 它是**事务式本地工作区能力**:让产品与 agent 安全地观察和修改一个本地项目,
+> **而不让模型直接覆盖文件**。域归属由仓根 `package.json` 的 `velaros.domainPackages` 声明。
 
-`@velaros-ai/workspace` is the standalone Workspace subsystem for **VelarOS**. It gives products and agents a safe, transaction-based way to inspect and edit a local project without letting the model directly overwrite files.
+## 这个包解决什么问题
 
-This repository intentionally publishes exactly one package. The transaction engine,
-providers, CLI, plugins and optional Agent integration are subpath exports of
-`@velaros-ai/workspace`; there is no second `workspace-agent-tools` package.
+给模型一把 `write_file` 是最快的做法,也是最危险的做法:它会覆盖并发修改、
+写坏没读过的部分、失败后留下半截文件、而且事后无从回滚。
 
-The package is designed as an injectable **Workspace capability**, not as an agent brain.
-VelarOS Kernel or another host owns model calls, memory, long-term context, policy
-orchestration and UI. Workspace owns file facts, snapshots, target resolution, patch
-transactions, validation, rollback, batch execution and plugin extension points.
+本包的答案是**把编辑变成事务**:先解析目标(路径 / 符号 / 范围)→ 拿到 target id →
+准备补丁并生成 diff → 校验 → 应用 → 需要时回滚。全过程有快照、有 revision、有审计日志。
+模型看到的是「我要把 `AuthService.refreshToken` 换成这段」,而不是「我要把这个文件整个重写」。
 
-## Responsibility
+这就是本包的中心判决:**不要把裸 `write_file` / `replace_lines` 暴露给模型**。
 
-`@velaros-ai/workspace` owns the transaction-safe workspace kernel: file snapshots, target resolution, edit preparation/application, validation, rollback, provider contracts, plugins, CLI, MCP-like adapters and test helpers.
+## 对外分区
 
-## Public Imports
+| 子路径 | 一句话职责 |
+| --- | --- |
+| `@velaros-ai/workspace` | 事务内核:快照、目标解析、编辑生命周期、校验、回滚、批处理、注册表 |
+| `./contracts` | **浏览器安全**的 DTO、工具名与根来源规则(不含 fs / 命令 / provider) |
+| `./presets` | `createRecommendedWorkspace` —— 带推荐插件的开箱装配 |
+| `./providers` | 宿主策略端口的默认实现与辅助 |
+| `./plugins` | 插件总入口 |
+| `./plugins/{typescript,jsts}` | JS/TS AST 符号发现与符号级补丁 |
+| `./plugins/validation` | Prettier / ESLint / `tsc` / 自定义校验器 |
+| `./plugins/{tree-sitter,lsp}` | 注入式 provider 插件(本包**不自带**原生解析器与语言服务器) |
+| `./agent-tools` | **通用协议工具面**(`createAgentTools`):16 个 `ws_*`,第三方与 MCP 走这里 |
+| `./agent` | **VelarOS 口味的工具族**(自带 `WorkspaceToolContext`),见下节 |
+| `./mcp` | MCP 风格的工具适配器 |
+| `./velaros` | 可选的 VelarOS 宿主 bridge |
+| `./cli` | `velaros-workspace` 命令行 |
+| `./testing` | 测试辅助 |
+| `./result` | `WorkspaceResult` 与 `asWorkspaceResult()` 异常→结果适配 |
 
-- `@velaros-ai/workspace`
-- `@velaros-ai/workspace/contracts` — browser-safe DTOs, root-source rules and tool names
-- `@velaros-ai/workspace/plugins`
-- `@velaros-ai/workspace/providers`
-- `@velaros-ai/workspace/agent-tools`
-- `@velaros-ai/workspace/agent`
-- `@velaros-ai/workspace/cli`
-- `@velaros-ai/workspace/plugins/jsts`
-- `@velaros-ai/workspace/plugins/tree-sitter`
-- `@velaros-ai/workspace/plugins/validation`
-- `@velaros-ai/workspace/plugins/lsp`
-- `@velaros-ai/workspace/plugins/typescript`
-- `@velaros-ai/workspace/velaros`
-- `@velaros-ai/workspace/mcp`
-- `@velaros-ai/workspace/testing`
-- `@velaros-ai/workspace/presets`
-- `@velaros-ai/workspace/result`
+**本仓刻意只发布这一个包**:事务引擎、providers、CLI、插件与可选的 agent 集成全是它的子路径导出,
+**没有第二个 `workspace-agent-tools` 包**。
 
-## Boundary
+## 两套工具面的区别(容易混)
 
-This package must stay independently publishable and repository-independent. It must not
-own product IPC, Electron UI, agent loop orchestration, memory/knowledge storage, model
-adapters, or product state. Hosts compose those capabilities around Workspace through
-providers. The optional `@velaros-ai/workspace/agent` export adapts those ports to the
-host's generic Agent extension points without moving Workspace ownership into
-Kernel. Workspace owns its public file/project DTOs, tool names, root-source
-rules, visibility/indexing policy, verification failure shape, sandbox
-lifecycle port, and Agent-facing Workspace capability port.
+| | `./agent-tools` | `./agent` |
+| --- | --- | --- |
+| 面向 | 第三方 / MCP / 通用宿主 | VelarOS 自己的 agent 运行时 |
+| 上下文 | 直接吃 `WorkspaceKernel` | 自带 `WorkspaceToolContext`(注入根、授权、系统 API) |
+| 编辑入口 | 完整事务协议:`ws_prepare_edit` → `ws_apply_edit`(+ `ws_amend_edit` / `ws_commit_edit`) | **`ws_edit` 一步聚合单入口** |
+| 额外族 | 无 | 代码分析、编辑日志、命令执行、Git、项目速览、重构 |
 
-Renderer、Web Worker、RPC schema 和纯前端测试应从
-`@velaros-ai/workspace/contracts` 导入共享契约。该入口不会引入文件系统、命令执行、
-provider 实现或其他 Node.js 宿主能力；完整事务运行时仍从包根入口导入。
+**`./agent` 面已经删掉了「准备事务 → 提交事务」的两步仪式**(`ws_prepare_edit` /
+`ws_amend_edit` / `ws_apply_edit` 不再对模型可见)。理由:它们的真实价值——准备事务、
+原子多文件改——已被常驻的 `ws_edit` 完整覆盖,模型不该被迫手动走多轮协议。
+底层 kernel 方法与门控机器仍在,供 `ws_edit` 内部复用。
+**要一次原子改多个文件,就把多个 operation 放进同一次 `ws_edit` 的 `operations` 数组**,
+它们在同一事务里顺序应用、一起成功或一起失败。
 
-## What this version includes
+## 核心概念
 
-This build is intended to be usable as a serious first production integration point:
+**一个 `Workspace` 永久绑定一个绝对根目录。** 每个根建独立实例,不存在进程级项目状态。
 
-- transaction-safe workspace kernel;
-- snapshot/revision system;
-- read, search, symbol listing and target resolution;
-- prepare/apply/validate/rollback edit lifecycle;
-- base-revision checks, per-file write queues and conservative replay for safe queued edits;
-- batch DAG execution with bounded concurrency, dependency handling, atomic rollback and resource conflict checks;
-- audit journal;
-- hook, pipeline, adapter, patch strategy and validator registries;
-- provider boundary for Velaros policy/context/approval/file filtering/secret redaction/command execution/sandbox/telemetry;
-- agent-safe tool surface;
-- MCP-like tool adapter;
-- Velaros bridge;
-- text, JSON, Markdown and generic code adapters;
-- JS/TS code plugin with AST-backed symbol discovery, method/function/class/interface/type/import resolution and symbol patching;
-- optional Tree-sitter provider plugin;
-- optional LSP provider plugin;
-- command validation plugin for Prettier, ESLint, `tsc` and custom validators;
-- CLI;
-- tests and examples.
+**目标解析(target resolution)**。编辑之前先把「路径 + 符号 / 查询 / 范围」解析成一个
+target id,并声明期望匹配数。解析不到或有歧义,拿到的是 `TARGET_NOT_FOUND` / `AMBIGUOUS_TARGET`,
+而不是一次猜测性的错误编辑。
 
-## Install
+**base revision 与并发**。写入经每文件队列串行,应用时比对准备补丁的 base revision 与当前文件
+revision。能安全重放就重放(结果里给 `rebasedFiles`),否则返回 `BASE_REVISION_MISMATCH`,
+要求调用方重读并重新准备事务。
 
-```bash
-npm install @velaros-ai/workspace
-```
+> 只有在**已知或很可能有同文件并发**时才刻意去挑「重放友好」的操作(唯一 `oldText`、
+> 唯一 `anchorText`、符号操作、import 操作、自然的 append / prepend)。
+> 单 agent 常规编辑就用最能表达意图的那个操作,不必自我设限。
 
-For local development:
+**推荐的观察顺序**:`ws_list_files` / `ws_search` 定位 → `ws_file_stat` 拿轻量元数据 →
+`ws_read`(带 `range` / `maxBytes` / 分页)有界读取 → `ws_resolve_target` → `ws_build_evidence`
+打包上下文、revision 与引用。
 
-```bash
-npm install
-npm run build
-npm test
-```
+**批处理**。`runBatch` 支持依赖 DAG、有界并发、资源元数据、读写 / 写写冲突检测,
+以及可选的原子回滚。
 
-## Quick start
+**紧凑 schema bundle**。`createWorkspaceToolSchemaBundle()` 把公共操作结构提到 `$defs` 发一次,
+而不是在每个工具 schema 里重复——面向模型的工具发现载荷因此小得多。CLI 的
+`tools list` 返回同一形状。
+
+## 典型用法
 
 ```ts
-import { createRecommendedWorkspace } from '@velaros-ai/workspace'
+import { createRecommendedWorkspace, WorkspaceError } from '@velaros-ai/workspace'
 
 const workspace = await createRecommendedWorkspace({
-  root: process.cwd(),
+  root: '/srv/customer-project',
+  providers: {
+    approval: { approve: (request) => myPolicyUi.confirm(request) },
+  },
 })
 
 const target = await workspace.resolveTarget({
   path: 'src/auth.ts',
-  target: {
-    symbol: {
-      kind: 'method',
-      container: 'AuthService',
-      name: 'refreshToken',
-    },
-  },
+  target: { symbol: { kind: 'method', container: 'AuthService', name: 'refreshToken' } },
   expectedMatches: 1,
 })
-
-if (target.status !== 'resolved') throw new Error(target.reason)
+if (target.status !== 'resolved') throw new WorkspaceError('TARGET_NOT_FOUND', target.reason)
 
 const tx = await workspace.prepareEdit({
-  operations: [
-    {
-      targetId: target.target.targetId,
-      operation: {
-        type: 'replace_symbol',
-        replacement: `refreshToken(token: string) {
-  if (!token) return ""
-  return verify(token)
-}`,
-      },
-    },
-  ],
+  operations: [{
+    targetId: target.target.targetId,
+    operation: { type: 'replace_symbol', replacement: '/* … */' },
+  }],
 })
-
-console.log(tx.diff)
-
+console.log(tx.diff)                                    // 先看 diff
 await workspace.applyEdit({ transactionId: tx.transactionId })
 await workspace.validate({ transactionId: tx.transactionId, checks: ['typescript.syntax'] })
 ```
 
-## Velaros Agent OS integration
-
-```ts
-import {
-  createVelarosWorkspaceBridge,
-  typescriptPlugin,
-  validationPlugin,
-} from '@velaros-ai/workspace'
-
-const bridge = await createVelarosWorkspaceBridge({
-  root: process.cwd(),
-  velaros,
-  autoRegisterTools: true,
-  plugins: [typescriptPlugin(), validationPlugin({ eslint: true, tsc: true })],
-})
-
-// Velaros receives tools and can expose them to agents.
-const { workspace, tools, mcp } = bridge
-```
-
-The bridge maps Velaros providers into workspace providers:
-
-- `policy`
-- `approval`
-- `fileFilter`
-- `secretRedaction`
-- `context`
-- `command`
-- `sandbox`
-- `telemetry`
-- `logger`
-
-## Agent tool flow
-
-Do not expose raw `write_file` or `replace_lines` tools to models. Use the workspace protocol:
-
-```text
-list_files/search
-  -> file_stat
-  -> bounded read
-  -> resolve_target
-  -> build_evidence
-  -> prepare_edit
-  -> review diff
-  -> apply_edit
-  -> validate
-  -> rollback if needed
-```
-
-```ts
-import { createAgentTools } from '@velaros-ai/workspace'
-
-const tools = createAgentTools(workspace)
-```
-
-For model-facing discovery payloads, prefer the compact schema bundle so common
-operation structures are emitted once under `$defs` instead of repeated in every
-tool schema:
-
-```ts
-import { createAgentTools, createWorkspaceToolSchemaBundle } from '@velaros-ai/workspace'
-
-const bundle = createWorkspaceToolSchemaBundle(createAgentTools(workspace))
-// bundle.tools[*].inputSchema may reference bundle.$defs through #/$defs/...
-```
-
-The exported tools include:
-
-- `ws_status`
-- `ws_read`
-- `ws_file_stat`
-- `ws_list_files`
-- `ws_search`
-- `ws_symbols`
-- `ws_resolve_target`
-- `ws_build_evidence`
-- `ws_prepare_edit`
-- `ws_amend_edit`
-- `ws_commit_edit`
-- `ws_apply_edit`
-- `ws_validate`
-- `ws_rollback`
-- `ws_diff`
-- `ws_run_batch`
-
-Recommended inspect flow:
-
-1. `ws_list_files` or `ws_search` to locate candidates.
-2. `ws_file_stat` for lightweight metadata before content reads.
-3. `ws_read` with `range`, `maxBytes`, or pagination for bounded content.
-4. `ws_resolve_target` to turn a path/query/range into a target id.
-5. `ws_build_evidence` to package nearby context, revision, and citation.
-
-`ws_commit_edit` uses the same operation shape as
-`ws_prepare_edit`, but performs prepare + overlay validation +
-low-risk apply in one call. `ws_amend_edit` appends follow-up
-operations to an existing transaction. When you do not pass a resolved
-`targetId`, put the path inside `operation.path`:
+没有解析过的 `targetId` 时,把路径放进 `operation.path`:
 
 ```json
-{
-  "operations": [
-    {
-      "operation": {
-        "type": "replace_text",
-        "path": "src/auth.ts",
-        "oldText": "return false",
-        "newText": "return true"
-      }
-    }
-  ]
-}
+{ "operations": [{ "operation": {
+  "type": "replace_text", "path": "src/auth.ts",
+  "oldText": "return false", "newText": "return true"
+} }] }
 ```
 
-### Concurrent edits
-
-The kernel coordinates overlapping writes at `apply_edit` time. Same-file applies wait in a per-file queue, then compare the prepared patch base revision with the current file revision. If the operation can be safely replayed against the latest snapshot, the apply result includes `rebasedFiles`; otherwise the kernel returns `BASE_REVISION_MISMATCH` and the owning agent must re-read and prepare a fresh transaction.
-
-Agents should only prefer replay-friendly operations when same-file concurrency is known or likely. In normal single-agent editing, use the operation that best expresses the change. When another session or team worker may edit the same path, prefer unique `oldText`, unique `anchorText`, symbol operations, import operations, or natural `append_text` / `prepend_text` edits when they fit.
-
-## Plugin usage
-
-### JS/TS AST plugin
+插件按需装:
 
 ```ts
-import { createWorkspace, typescriptPlugin } from '@velaros-ai/workspace'
+import { createWorkspace, typescriptPlugin, validationPlugin } from '@velaros-ai/workspace'
 
 const workspace = await createWorkspace({
   root: process.cwd(),
-  plugins: [typescriptPlugin()],
+  plugins: [typescriptPlugin(), validationPlugin({ prettier: true, eslint: true, tsc: true })],
 })
 ```
 
-Supported JS/TS operations:
+## 边界:本包不负责什么
 
-- list symbols;
-- resolve functions, methods, classes, interfaces, types, variables and imports;
-- replace symbol;
-- insert before/after symbol;
-- add named/default/namespace/side-effect imports;
-- remove imports;
-- syntax validation.
+**核心拥有**:文件快照与 revision、读 / 搜索派发、目标解析协议、evidence-pack 协议、
+补丁事务生命周期、应用与回滚、锁与冲突检测、批处理、插件注册表、审计日志、错误分类法。
 
-### Command validation plugin
+**核心不拥有**(这些是 provider 或 plugin):
 
-```ts
-import { validationPlugin } from '@velaros-ai/workspace'
+- 模型调用、长期记忆、全局上下文编排、产品 UI;
+- 项目特定的权限策略;
+- **原生 Tree-sitter 解析器**、**语言服务器生命周期**(本包只定义注入口);
+- 沙箱 / worktree 实现;
+- 领域特定的文档适配器。
 
-const workspace = await createWorkspace({
-  root: process.cwd(),
-  plugins: [
-    validationPlugin({
-      prettier: true,
-      eslint: true,
-      tsc: true,
-    }),
-  ],
-})
-```
+另外:不拥有产品 IPC、Electron UI、agent 循环编排、记忆 / 知识存储、模型适配器、产品状态。
+`./velaros` 只是**可选**的宿主 adapter——核心 `Workspace` 可被任意 Node.js 应用直接使用。
 
-Command execution can be routed through Velaros by providing a `command` provider.
+renderer、Web Worker、RPC schema 与纯前端测试从 `./contracts` 取共享契约;
+该入口不引入文件系统、命令执行、provider 实现或其他 Node 宿主能力。
 
-### Tree-sitter provider plugin
+## 与相邻包的关系
 
-Workspace does not bundle native Tree-sitter parsers. You inject a provider:
+- 上游只有 `@velaros-ai/core` 与少量通用库(`diff` / `execa` / `picomatch` / `iconv-lite` / `zod` / `typescript`)。
+- 与 `@velaros-ai/agent` 是**被注入关系**:本包不 import 它。
+  `./agent` 子入口把 Workspace 的端口适配到宿主的通用 agent 扩展点,
+  **不把 Workspace 的所有权搬进内核**。
+- `src/kernel-module.ts` 提供可选的 Kernel 模块适配器(`createWorkspaceKernelModule`)。
+- 姐妹能力包:`@velaros-ai/browser`、`@velaros-ai/computer`。
 
-```ts
-import { treeSitterPlugin } from '@velaros-ai/workspace/plugins/tree-sitter'
+## 错误模型
 
-const workspace = await createWorkspace({
-  root,
-  plugins: [
-    treeSitterPlugin({
-      provider: {
-        id: 'my-tree-sitter',
-        listSymbols({ content }) {
-          return []
-        },
-      },
-    }),
-  ],
-})
-```
+失败用 `WorkspaceError`,带稳定 `code`、`message`、`details` 与建议的下一步动作。
+常见码:`INVALID_INPUT`、`PERMISSION_DENIED`、`BASE_REVISION_MISMATCH`、`TARGET_NOT_FOUND`、
+`AMBIGUOUS_TARGET`、`PROTECTED_FILE`、`SCOPE_VIOLATION`。
 
-### LSP provider plugin
+`asWorkspaceResult()` 在 RPC 或函数式边界把异常转成 `WorkspaceResult`;
+**核心类内部不重复做 DTO 转换**。
 
-Workspace does not own language servers. Velaros or your runtime can inject one:
-
-```ts
-import { lspPlugin } from '@velaros-ai/workspace/plugins/lsp'
-
-const workspace = await createWorkspace({
-  root,
-  plugins: [
-    lspPlugin({
-      provider: {
-        async listSymbols({ path, content }) {
-          return []
-        },
-        async diagnostics({ path, content }) {
-          return []
-        },
-      },
-    }),
-  ],
-})
-```
-
-## Batch concurrency
-
-```ts
-const result = await workspace.runBatch({
-  concurrency: 4,
-  atomic: true,
-  tasks: [
-    { id: 'read-a', op: { kind: 'read', input: { path: 'src/a.ts' } } },
-    { id: 'read-b', op: { kind: 'read', input: { path: 'src/b.ts' } } },
-    {
-      id: 'validate',
-      dependsOn: ['read-a', 'read-b'],
-      op: { kind: 'validate', input: { paths: ['src/a.ts', 'src/b.ts'] } },
-    },
-  ],
-})
-```
-
-Batch supports:
-
-- dependencies;
-- bounded concurrency;
-- resource metadata;
-- conflict detection for overlapping read/write or write/write resources;
-- optional atomic rollback of applied transactions.
-
-## CLI
-
-Human-friendly commands:
+## 本地开发与门
 
 ```bash
-velaros-workspace status
-velaros-workspace read src/index.ts --start 1 --end 40
-velaros-workspace search refreshToken
-velaros-workspace symbols src/auth.ts
-velaros-workspace resolve src/auth.ts --symbol refreshToken --kind function
-velaros-workspace prepare-edit --input edit.json
-velaros-workspace commit-edit --input edit.json
-velaros-workspace validate --paths src/auth.ts
+bun run --cwd packages/workspace build
+bun run --cwd packages/workspace check       # build + typecheck + lint + check:arch + test
+bun run --cwd packages/workspace preflight   # check + test:eval
 ```
 
-Machine-oriented commands return stable JSON envelopes by default:
+`check:arch`(= `scripts/check-architecture.mjs`)已挂进仓根 `check:gates`,
+锁「本仓只有一个独立 `@velaros-ai/workspace` 包」与 Workspace 自有的 Agent adapter 契约 / 宿主能力边界。
 
-```bash
-velaros-workspace tools list
-velaros-workspace tools call ws_read --args-json '{"path":"src/index.ts","maxBytes":4000}'
-velaros-workspace tools workflow --steps-file workflow.json
-```
+## 更多文档
 
-`tools list` returns the same compact schema bundle shape as
-`createWorkspaceToolSchemaBundle`: `schemaVersion`, top-level `$defs`, and
-`tools`. This keeps large edit operation schemas model-visible without sending
-the same structure repeatedly.
+- [架构](docs/ARCHITECTURE.md) · [VelarOS 集成](docs/VELAROS_INTEGRATION.md) · [Agent 协议](docs/AGENT_INTEGRATION.md)
+- [JS/TS 插件](docs/JSTS_PLUGIN.md) · [批处理并发](docs/BATCH_CONCURRENCY.md) · [插件编写](docs/PLUGIN_AUTHORING.md)
+- [生产就绪度](docs/PRODUCTION_READINESS.md)
 
-Every human command also supports `--json` for scripted use.
+> 这些是并仓前随包带来的历史文档,**英文、未逐条修实**,与本 README 冲突时以本 README 与代码为准。
 
-## 1.0 release gate
+## 兼容策略
 
-Before publishing a 1.0 candidate, run:
-
-```bash
-npm --workspace @velaros-ai/workspace run preflight:1.0
-```
-
-The gate runs the workspace package tests, eval tests, compact schema budget
-check, tool file boundary tests, the changed-file tool boundary arch guard, and
-a whitespace diff check for the workspace and arch-guard changes.
-
-## Package boundaries
-
-Core owns:
-
-- file snapshots and revisions;
-- read/search dispatch;
-- target resolution protocol;
-- evidence-pack protocol;
-- patch transaction lifecycle;
-- apply/rollback;
-- locks and conflict checks;
-- batch execution;
-- plugin registries;
-- audit journal;
-- error taxonomy.
-
-Core does not own:
-
-- model calls;
-- long-term memory;
-- global Velaros context orchestration;
-- product UI;
-- project-specific permission policy;
-- native Tree-sitter parsers;
-- language server lifecycle;
-- sandbox/worktree implementation;
-- domain-specific document adapters.
-
-Those are providers or plugins.
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Velaros integration](docs/VELAROS_INTEGRATION.md)
-- [Agent protocol](docs/AGENT_INTEGRATION.md)
-- [JS/TS plugin](docs/JSTS_PLUGIN.md)
-- [Batch concurrency](docs/BATCH_CONCURRENCY.md)
-- [Plugin authoring](docs/PLUGIN_AUTHORING.md)
-- [Production readiness](docs/PRODUCTION_READINESS.md)
-- [API reference](docs/API.md)
+保持 1.x 公共入口、工具名与事务语义兼容。符号结果新增了规范的 `range`,
+同时保留原顶层 line / column 字段。破坏事务状态机、错误码或工具 schema 的变更需要新主版本。
