@@ -165,7 +165,7 @@
 
 .openableTitleIcon {
   flex: none;
-  color: var(--color-text-tertiary);
+  color: var(--foreground-tertiary);
   transition: color 0.12s ease;
 }
 

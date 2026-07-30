@@ -1,8 +1,25 @@
 /**
- * Dark theme tokens — placeholder for future theme switching.
- * Override semantic / UI tokens here when dark mode is implemented.
+ * 暗色主题令牌 —— **当前为空占位**，`[data-theme='dark']` 不覆盖任何值。
+ *
+ * 现状口径（别被文件名骗了）：设 `data-theme="dark"` 目前**没有任何视觉效果**，产品实际只有亮色。
+ * 这不是「快做完了」，是还没开始——写进这里免得下一个读者以为暗色已经可用。
+ *
+ * 落地时的对称规则（§5.3b ⑥：这些是判决，不是待办清单）：
+ * 1. 只允许覆盖**语义令牌**（`--background*` / `--foreground*` / `--border*` / `--card` / `--muted`
+ *    / `--status-*-soft` / `--shadow-*`），**禁止**覆盖双色种子 `--velar-primary` / `--velar-accent`
+ *    ——品牌色跨主题恒定，暗色下靠调「表面与前景」拉出对比度，不靠换品牌色。
+ * 2. 覆盖必须**成对**：改了某个表面就要改它的前景与边框（对比度是三者的关系，不是单值属性）。
+ *    只改一半会让亮色下勉强够用的对比度在暗色下塌掉。
+ * 3. `--ui-radius-*` / `--ui-space-*` / `--ui-font-*` / `--ui-border-*` 一律**不随主题变**
+ *    ——密度与形状是产品性格，不是主题变量。
+ * 4. 阴影在暗色下**不是「更黑的阴影」**：暗色表面靠边框与表面亮度分层，`--shadow-*` 应整体减弱
+ *    （见 docs/velaros-style.zh-CN.md「层次靠间距与边框，不靠阴影堆叠」）。
+ * 5. `foundation.css` 的绝对中性色（`--color-white` / `--color-black`）**永不覆盖**——它们的语义
+ *    就是「纯白 / 纯黑」；需要随主题走的地方本来就该引 `--card` / `--background` 而不是它们。
+ *
+ * TODO[QU-01]: 暗色主题值待落地；落地前本文件保持空占位，不放半套值（半套暗色比没有暗色更坏）。
  */
 
 [data-theme='dark'] {
-  /* TODO: populate dark theme values in a follow-up PR. */
+  /* 刻意留空，见文件头。 */
 }

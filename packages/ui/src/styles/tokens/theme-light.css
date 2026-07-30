@@ -51,12 +51,16 @@
   --input: rgba(15, 15, 15, 0.08);
   --ring: rgba(var(--primary-rgb), 0.3);
 
+  /*
+   * 圆角档位：四档 12 / 10 / 8 / 6 + 全圆。语义名按「构件体量」选档，不按外观挑数值——
+   * chip 与 pill 是 control 两档的语义别名（值单源，避免改档时一半构件跟一半不跟）。
+   */
   --ui-radius-overlay: 12px;
   --ui-radius-panel: 10px;
   --ui-radius-control: 8px;
   --ui-radius-control-sm: 6px;
-  --ui-radius-chip: 6px;
-  --ui-radius-pill: 8px;
+  --ui-radius-chip: var(--ui-radius-control-sm);
+  --ui-radius-pill: var(--ui-radius-control);
   --ui-radius-round: 1000px;
   /** Tailwind bridge alias — canonical radii are `--ui-radius-*`. */
   --radius: var(--ui-radius-panel);
@@ -164,15 +168,27 @@
   --scrollbar-thumb-hover: rgba(15, 15, 15, 0.32);
   --scrollbar-track: transparent;
 
-  --ui-font-title-xl: 24px;
-  --ui-font-title-lg: 22px;
-  --ui-font-heading: 14px;
-  --ui-font-body-md: 14px;
-  --ui-font-body-lg: 14px;
-  --ui-font-body: 12px;
-  --ui-font-body-sm: 12px;
-  --ui-font-caption: 10px;
-  --ui-font-xs: 10px;
+  /*
+   * 字号：五档梯子（值单源）+ 九个语义名（用途单源）。
+   * 分开的理由：9 个语义名此前各自写死字面量，落在同一档的（14px 三个 / 12px 两个 / 10px 两个）
+   * 会在调档时静默劈叉——改「正文」不改「小正文」，界面就出现两种 12px 语义各走各的。
+   * 选名一律按**用途**（heading / body / caption），不按数值；要调密度改梯子，不改语义名。
+   */
+  --ui-font-size-xl: 24px;
+  --ui-font-size-lg: 22px;
+  --ui-font-size-md: 14px;
+  --ui-font-size-sm: 12px;
+  --ui-font-size-xs: 10px;
+
+  --ui-font-title-xl: var(--ui-font-size-xl);
+  --ui-font-title-lg: var(--ui-font-size-lg);
+  --ui-font-heading: var(--ui-font-size-md);
+  --ui-font-body-md: var(--ui-font-size-md);
+  --ui-font-body-lg: var(--ui-font-size-md);
+  --ui-font-body: var(--ui-font-size-sm);
+  --ui-font-body-sm: var(--ui-font-size-sm);
+  --ui-font-caption: var(--ui-font-size-xs);
+  --ui-font-xs: var(--ui-font-size-xs);
 
   --ui-line-relaxed: 1.65;
   --ui-line-default: 1.55;
@@ -189,23 +205,27 @@
   --ui-icon-button-sm: 32px;
   --ui-confirm-dialog-width: clamp(340px, 24vw, 460px);
 
-  --ui-space-page: 16px;
-  --ui-space-section: 20px;
-  --ui-space-card-x: 20px;
-  --ui-space-card-y: 18px;
-  --ui-space-card-compact: 16px;
-  --ui-space-control-x: 14px;
-  --ui-space-control-x-sm: 12px;
-  --ui-space-control-y: 10px;
-  --ui-space-control-y-sm: 8px;
-
-  /* 通用间距梯度（page/feature 优先使用，避免裸 px gap/padding） */
+  /*
+   * 间距：4px 步进的六档梯子（值单源），page/feature 层优先直接用梯子，避免裸 px gap/padding。
+   * 下面的语义名是梯子的用途别名；`control-x`(14) / `control-y`(10) / `card-y`(18) 刻意不在梯子上
+   * ——它们是控件内部的光学补偿值（图标与文字的视觉居中），强行对齐 4px 步进会让控件变形。
+   */
   --ui-space-1: 4px;
   --ui-space-2: 8px;
   --ui-space-3: 12px;
   --ui-space-4: 16px;
   --ui-space-5: 20px;
   --ui-space-6: 24px;
+
+  --ui-space-page: var(--ui-space-4);
+  --ui-space-section: var(--ui-space-5);
+  --ui-space-card-x: var(--ui-space-5);
+  --ui-space-card-y: 18px;
+  --ui-space-card-compact: var(--ui-space-4);
+  --ui-space-control-x: 14px;
+  --ui-space-control-x-sm: var(--ui-space-3);
+  --ui-space-control-y: 10px;
+  --ui-space-control-y-sm: var(--ui-space-2);
 
   /* Memory / 指标 tone（映射页面硬编码 rgb） */
   --ui-metric-ok: var(--status-green);

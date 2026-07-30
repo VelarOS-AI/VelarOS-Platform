@@ -11,8 +11,12 @@
  *   域令牌（--workbench-* / --dt-*）。
  *
  * 换肤：设 `data-velar-preset` 或改数据根 `ui-color-seeds.json`（详见 seed-presets.css / docs/ui-color-seeds.md）。
+ *
+ * 导入顺序（后者只准覆盖前者，禁反向依赖）：foundation（主题无关地基，自包含判决见该文件头）
+ * → theme-light（默认主题）→ theme-dark（主题覆盖）→ seed-presets（种子覆盖）。
  */
 
+@import './foundation.css';
 @import './theme-light.css';
 @import './theme-dark.css';
 @import './seed-presets.css';

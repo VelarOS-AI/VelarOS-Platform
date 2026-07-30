@@ -979,7 +979,7 @@
 
 .composerModelMenuItemMeta {
   margin-inline-start: auto;
-  color: var(--color-text-tertiary);
+  color: var(--foreground-tertiary);
   white-space: nowrap;
 }
 
@@ -1641,14 +1641,14 @@
 .providerCapabilityButton {
   min-height: 1.75rem;
   border-radius: 0.65rem;
-  color: var(--color-text-secondary);
+  color: var(--foreground-secondary);
   gap: 0.35rem;
   white-space: nowrap;
 }
 
 .providerCapabilityButton[data-active='true'] {
-  color: var(--color-accent-primary);
-  background: color-mix(in srgb, var(--color-accent-primary) 10%, transparent);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 .providerCapabilityChoice,
@@ -1656,7 +1656,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: var(--color-text-secondary);
+  color: var(--foreground-secondary);
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -1666,7 +1666,7 @@
   max-width: 10rem;
   border: 0;
   outline: 0;
-  color: var(--color-text-primary);
+  color: var(--foreground);
   background: transparent;
   font: inherit;
 }

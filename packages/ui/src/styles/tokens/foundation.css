@@ -1,0 +1,70 @@
+/**
+ * 主题无关的基础常量令牌 —— `@velaros-ai/ui` 的**自包含地基**。
+ *
+ * ── 导览（§5.3b ⑥ 非显然的妥协 / ⑤ 跨层接缝）─────────────────────────────────
+ * **这个文件解决什么问题**：本包发布的 `styles/components/**.css` 被 README 声明为
+ * 「pure CSS + design tokens」，但实测有 13 个变量（74 处引用）**包内从未声明**，
+ * 一直靠消费方恰好装了 Tailwind v4 的默认主题在兜底：
+ *   `--font-weight-{normal,medium,semibold}`、`--color-{white,black}`、`--text-{xs,sm}`、
+ *   `--container-{sm,md}`、`--animate-{spin,pulse}`、`--font-mono`。
+ * 现有两个消费方（Desktop renderer / component-library）都装了 Tailwind，所以**症状潜伏**；
+ * 但任何按 README「Public Imports」示例只引本包 CSS 的第三方消费方会得到：
+ * 控件表面塌成透明（`background-color: var(--color-white)` 失效）、字重全塌回 400、
+ * 加载动画不转、表格与空状态的 max-width 失效——**而且不报错**（无效 var() 静默回落）。
+ * 更坏的一处在令牌层自身：`--control-themed-bg` 等四个令牌用 `color-mix(…, var(--color-white))`
+ * 派生，缺席时整条 `color-mix()` 成为 guaranteed-invalid，令牌值直接消失并向下级联。
+ *
+ * **为什么这样而不那样**：
+ * - 取值**逐字对齐 Tailwind v4 默认主题**（`tailwindcss/theme.css`），因此在已装 Tailwind 的
+ *   消费方里两份声明同值、层叠先后无所谓——**本文件落地当天零视觉变化**，这是刻意的。
+ * - 否决「改用 `--ui-*` 自有命名并批量重写 74 处引用」：那会把一次「补声明」的零风险修复
+ *   变成跨 30 个 CSS 文件的改写面。命名归一是后续独立批次的事，先把地基补上。
+ * - 否决「在 README 里写明依赖 Tailwind」：那等于把包的自包含性判给消费方，与 §12「门面收口」
+ *   相悖——发布物的样式不该依赖未声明的外部词汇表。
+ *
+ * **改它会破什么**：这些值与 Tailwind 默认主题绑定。若上游 Tailwind 改了默认值而此处不跟，
+ * 同一产品内会出现「本包组件」与「Tailwind 工具类」两套字重/字号，是典型的静默漂移。
+ * 动这些值前先确认 `tailwindcss/theme.css` 的对应值。
+ *
+ * 裸色值在令牌层是合法住所（§12.9，`check:ui-color-literal` 只扫 `styles/components/**`）。
+ */
+
+:root {
+  /* 绝对中性色：不参与主题派生，语义上就是「纯白 / 纯黑」（遮罩前景、控件底片）。 */
+  --color-white: #fff;
+  --color-black: #000;
+
+  /* 字重档位。 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Tailwind 字号档位：本包组件 CSS 里与 `--ui-font-*` 并存的第二套，收敛计划见 docs/velaros-style.zh-CN.md。 */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+
+  /* 容器最大宽度档位（表格 / 空状态的读宽约束）。 */
+  --container-sm: 24rem;
+  --container-md: 28rem;
+
+  /* 等宽字体栈（代码片段 / 技能名）。 */
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+
+  /* 动画简写。配套 keyframes 在本文件底部声明——只给令牌不给 keyframes 等于没补。 */
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
