@@ -54,7 +54,7 @@ const RequiredApiDocumentationSections = [
 // modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录)。
 const PortableContracts = [
   {
-    packageDirectory: 'capabilities/workspace',
+    packageDirectory: 'workspace',
     packageName: '@velaros-ai/workspace',
     exportKey: './contracts',
     contractsFile: 'src/contracts.ts',
@@ -76,7 +76,7 @@ const PortableContracts = [
     ]),
   },
   {
-    packageDirectory: 'capabilities/system-tools',
+    packageDirectory: 'system-tools',
     packageName: '@velaros-ai/system-tools',
     exportKey: './contracts',
     contractsFile: 'src/contracts.ts',
@@ -84,21 +84,13 @@ const PortableContracts = [
   },
 ]
 
-// packages/ 下的包目录:顶层包 + 一层分组目录(如 capabilities/<pkg>)里的包。
+// packages/ 下的包目录:一律平铺一层(2026-07-30 QI 批把 capabilities/ 的四个包提到顶层后,
+// 这里不再需要「顶层 + 一层分组目录」的两级扫描特例;新包直接放 packages/<pkg>/)。
 function listPackageDirectories() {
   const found = []
   for (const entry of readdirSync(PackagesRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    if (existsSync(resolve(PackagesRoot, entry.name, 'package.json'))) {
-      found.push(entry.name)
-      continue
-    }
-    for (const nested of readdirSync(resolve(PackagesRoot, entry.name), { withFileTypes: true })) {
-      if (!nested.isDirectory()) continue
-      if (existsSync(resolve(PackagesRoot, entry.name, nested.name, 'package.json'))) {
-        found.push(`${entry.name}/${nested.name}`)
-      }
-    }
+    if (existsSync(resolve(PackagesRoot, entry.name, 'package.json'))) found.push(entry.name)
   }
   return found
 }
@@ -420,17 +412,17 @@ requirePublicTypeContracts('browser', 'src/core/index.ts', 'src/core/types.ts', 
   'BrowserActionPolicyConfig',
   'BrowserAutomationMode',
 ])
-requirePublicTypeContracts('capabilities/workspace', 'src/index.ts', 'src/workspace-contracts.ts', [
+requirePublicTypeContracts('workspace', 'src/index.ts', 'src/workspace-contracts.ts', [
   'WorkspaceGitRemoteActionOptions',
   'WorkspaceRootEntry',
 ])
-requirePublicTypeContracts('capabilities/office-tools', 'src/index.ts', 'src/OfficeContracts.ts', [
+requirePublicTypeContracts('office-tools', 'src/index.ts', 'src/OfficeContracts.ts', [
   'OfficeEnvironmentInspection',
   'OfficeRuntimePlatform',
 ])
 
 const officeContractsSource = readFileSync(
-  resolve(PackagesRoot, 'capabilities/office-tools/src/OfficeContracts.ts'),
+  resolve(PackagesRoot, 'office-tools/src/OfficeContracts.ts'),
   'utf8',
 )
 if (/\bNodeJS\./u.test(officeContractsSource)) {

@@ -2,7 +2,7 @@ export const RepositoryUrl =
   'git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git'
 
 // P7a 合并后的能力包清单。字段语义:
-//   directory      相对 packages/ 的目录(可含一层分组前缀,如 capabilities/workspace)
+//   directory      相对 packages/ 的目录(平铺一层,如 workspace)
 //   entrySubpaths  package.json exports 里必须带 types+import 的入口键;单入口包写 ['.'],
 //                  合包写各切片子路径(合包**没有**根导出:切片运行面互斥,禁止混进同一个口)
 //   sourceRoots    各切片的 src 子目录(相对 src/);单切片包写 ['']
@@ -13,7 +13,7 @@ export const CapabilityOwners = [
     owner: 'workspace',
     packages: [
       {
-        directory: 'capabilities/workspace',
+        directory: 'workspace',
         name: '@velaros-ai/workspace',
         version: '1.2.5',
         entrySubpaths: ['.'],
@@ -70,7 +70,7 @@ export const CapabilityOwners = [
     owner: 'system',
     packages: [
       {
-        directory: 'capabilities/system-tools',
+        directory: 'system-tools',
         name: '@velaros-ai/system-tools',
         version: '0.2.8',
         entrySubpaths: ['.'],
@@ -84,7 +84,7 @@ export const CapabilityOwners = [
     owner: 'office',
     packages: [
       {
-        directory: 'capabilities/office-tools',
+        directory: 'office-tools',
         name: '@velaros-ai/office-tools',
         version: '0.2.7',
         entrySubpaths: ['.'],
@@ -98,7 +98,7 @@ export const CapabilityOwners = [
     owner: 'composition',
     packages: [
       {
-        directory: 'capabilities/cli',
+        directory: 'cli',
         name: '@velaros-ai/cli',
         version: '0.2.10',
         entrySubpaths: ['.'],

@@ -14,6 +14,10 @@ import {
  * **存量策略**：接门当天的存量一次冻结进 `.arch-guard/baseline.json`（棘轮：只减不增），
  * 新增违规即红。修掉存量后跑 `bun run check:code-style:baseline` 收缩基线。
  *
+ * **依赖现状(临时)**：`devDependencies` 里的 `@velaros-ai/arch-guard` 暂指 `file:../VelarOS-Arch-Guard`
+ * ——含 `checks/code-style` 入口的 **0.2.0 尚未发版**（npm / GH Packages 上只有 0.1.x）。
+ * 主控发布 0.2.0 后改回 `"^0.2.0"`，这条 sibling 路径依赖即可拆除。
+ *
  * 常用命令：
  *   bun run check:code-style            # 门（compact 一行结论，CI / agent 友好）
  *   bun run check:code-style:report     # 逐条列出违规
