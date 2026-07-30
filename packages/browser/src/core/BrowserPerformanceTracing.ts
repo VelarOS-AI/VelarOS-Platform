@@ -142,7 +142,8 @@ export class CdpTraceCollector {
         await this.transport.send('IO.close', { handle: complete.stream }).catch(() => undefined)
       }
     } catch {
-      // 页面可能已销毁；清理路径静默。
+      // arch-guard:silent-catch-ok 停 trace 属清理路径：页面/标签页可能已销毁，此时唯一正确的
+      // 行为就是继续走 finally 释放本地状态；把它抛出去只会掩盖调用方真正关心的那个错误。
     } finally {
       this.cleanup()
     }

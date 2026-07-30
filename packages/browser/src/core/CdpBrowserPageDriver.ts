@@ -1,3 +1,30 @@
+// 域：外部浏览器（Chrome / CloakBrowser）的页面驱动——纯 CDP 实现的 `BrowserPageDriver`。
+//
+// **为什么需要这份导览**：本文件是「一个 CDP target = 一个 driver 实例」这条不变量的载体，
+// 同时承载订阅生命周期、下载状态机、对话框拦截与诊断缓冲四条独立时序。任一条单独读都会得出
+// 错误结论——最典型的是以为 `switchPageTarget` 在切换当前实例，实际它新建了一个。
+//
+// ## 两份实现、一条接口
+// `BrowserPageDriver` 有两个实现：本文件（外部浏览器，CDP WebSocket）与
+// `runtime/ElectronWebContentsBrowserPageDriver`（内嵌 WebContents，`webContents.debugger`）。
+// 上层 engine 只认接口，**新增页面能力必须两边都落**，否则外部/内嵌两种浏览器行为分叉。
+//
+// ## 生命周期与不变量（改这些会破什么）
+//  - **实例绑定 target，不可重绑**：`switchPageTarget` **返回一个新 driver**（对新 target 重新
+//    connect），不是把自己指向新页面。理由：事件订阅、下载表、诊断缓冲全是 per-target 状态，
+//    就地重绑必然残留上一个 target 的事件。调用方必须替换自己持有的引用。
+//  - **构造即订阅、`dispose` 即退订**：四组订阅（诊断 / 网络 / 下载 / 对话框）在构造函数里一次
+//    装好，退订函数进 `eventUnsubscribers`；transport 关闭会回调 `dispose`——socket 断开与显式
+//    dispose 因此走同一条清理路径，`destroyed` 标志保证幂等。漏退订 = transport 复用时事件串台。
+//  - **本地页面状态是影子不是权威**：`currentUrl` / `currentTitle` / `currentZoomFactor` 只在我们
+//    自己发起的操作后更新；页面自发跳转不会同步。需要真值的地方必须显式回读。
+//  - **对话框必须被拦截并主动处置**：收到 `Page.javascriptDialogOpening` 后不 handle，页面会
+//    **永久卡死**（alert 阻塞渲染主线程）。这是本驱动最容易被误删的一段。
+//  - **诊断缓冲有界**：console / exception / 网络记录写入定长缓冲，长会话不得无界增长。
+//
+// ## 类型边界
+// CDP 是无 schema 的 JSON-RPC，`transport.send<T>()` 的 `T` 是**断言不是校验**（§1.4 白名单②，
+// 无泛型的原生驱动返回）。所以每个 `normalize*` 私有方法都必须自己收窄，不能假设字段存在。
 import { copyFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 

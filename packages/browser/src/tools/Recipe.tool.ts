@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { AppError } from '@velaros-ai/core/error'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import { browserRecipeSchema, parseBrowserRecipeInput } from './BrowserRecipeSchema'
@@ -545,7 +546,7 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
         )
       default:
         parsed satisfies never
-        throw new Error('Unsupported browser_recipe action.')
+        throw new AppError('VALIDATION', 'Unsupported browser_recipe action.')
     }
   },
 })

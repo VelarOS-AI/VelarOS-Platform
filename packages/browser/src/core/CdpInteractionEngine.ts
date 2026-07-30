@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isEmpty, isNumber, isPlainObject, isString, toNullable, toOptional } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, isString, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -57,7 +57,10 @@ export class CdpInteractionEngine {
     ) => void>
   ) {}
 
-  // ---- kernel 桥接:保持搬入方法体零改写 ----
+  // ---- kernel 桥接 ----
+  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
+  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
+  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
   protected getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
     return this.kernel.getExternalPageSession(sessionId)
   }
@@ -805,10 +808,11 @@ export class CdpInteractionEngine {
     }
   }
 
-  private clampZoomStep(value: number | undefined, fallback: number): number {
-    if (!Number.isFinite(value)) return fallback
+  /** 缩放步长与 `clampZoomFactor` 同形不同界（步长 0.05–0.5，因子 0.25–3），刻意各自成立。 */
+  private clampZoomStep(value: LooseOptional<number>, fallback: number): number {
+    if (!isFiniteNumber(value)) return fallback
 
-    const normalized = Math.round((value as number) * 100) / 100
+    const normalized = Math.round(value * 100) / 100
     return Math.min(Math.max(normalized, 0.05), 0.5)
   }
 

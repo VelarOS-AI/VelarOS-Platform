@@ -5,7 +5,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserDomStabilityOptions, BrowserPageStabilityResult } from '../core'
+import { type BrowserDomStabilityOptions, type BrowserPageStabilityResult, clampInteger } from '../core'
 
 /** Electron 导航被取消时的错误码。 */
 const BrowserNavigationAbortErrorCode = -3
@@ -522,9 +522,9 @@ class BrowserPageWaiter {
 
     abortSignal?.throwIfAborted()
 
-    const stableFrames = this.clampInteger(options.stableFrames, 3, 16, 5)
-    const sampleIntervalMs = this.clampInteger(options.sampleIntervalMs, 16, 250, 80)
-    const maxWaitMs = this.clampInteger(options.maxWaitMs, 250, 8000, 2500)
+    const stableFrames = clampInteger(options.stableFrames, 3, 16, 5)
+    const sampleIntervalMs = clampInteger(options.sampleIntervalMs, 16, 250, 80)
+    const maxWaitMs = clampInteger(options.maxWaitMs, 250, 8000, 2500)
 
     try {
       const result = (await webContents.executeJavaScript(
@@ -671,8 +671,8 @@ class BrowserPageWaiter {
     return {
       stable: reason === 'stable',
       reason,
-      durationMs: this.clampInteger(result.durationMs, 0, 60_000, 0),
-      frames: this.clampInteger(result.frames, 0, 10_000, 0),
+      durationMs: clampInteger(result.durationMs, 0, 60_000, 0),
+      frames: clampInteger(result.frames, 0, 10_000, 0),
     }
   }
 
@@ -683,17 +683,6 @@ class BrowserPageWaiter {
       durationMs: 0,
       frames: 0,
     }
-  }
-
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
   }
 }
 

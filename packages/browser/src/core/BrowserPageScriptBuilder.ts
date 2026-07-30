@@ -30,7 +30,12 @@ import type {
 /**
  * 浏览器页面脚本构造门面。
  *
- * ElectronBrowserRuntime 只依赖这一层，不直接知道每种页面脚本的具体构造类。
+ * ElectronBrowserRuntime 与四个 engine 只依赖这一层，不直接知道每种页面脚本的具体构造类。
+ *
+ * **别把它当「零价值转发层」删掉**（判决，防复辟）：这里每个方法确实只有一行，但门面是
+ * 架构面而不是函数面——它把 14 个构造类收成 engine 构造函数里的**一个**注入依赖。删掉的
+ * 代价是每个 engine 各 import 14 个 builder，且新增一种页面脚本要改 N 处装配。§3.2 的恒等
+ * 转发禁令针对「没有域含义的一行函数」，这里适用的是 §1.9 门面收口。
  */
 class BrowserPageScriptBuilder {
   private readonly actionEffectScriptBuilder = new BrowserActionEffectScriptBuilder()

@@ -1,5 +1,6 @@
 import { isNumber } from '@velaros-ai/core'
 
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserPageScrollOptions } from './types'
 
 /** 构造页面滚动脚本。 */
@@ -8,9 +9,9 @@ class BrowserPageScrollScriptBuilder {
   public buildScrollScript(options: BrowserPageScrollOptions): string {
     const payload = JSON.stringify({
       direction: options.direction ?? 'down',
-      amount: this.clampInteger(options.amount, 1, 5000, 600),
-      x: this.clampInteger(options.x, -10000, 10000, 0),
-      y: this.clampInteger(options.y, -10000, 10000, 0),
+      amount: clampInteger(options.amount, 1, 5000, 600),
+      x: clampInteger(options.x, -10000, 10000, 0),
+      y: clampInteger(options.y, -10000, 10000, 0),
       hasExplicitX:isNumber(options.x),
       hasExplicitY:isNumber(options.y),
     })
@@ -56,16 +57,6 @@ class BrowserPageScrollScriptBuilder {
     })()`
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 }
 
 export { BrowserPageScrollScriptBuilder }

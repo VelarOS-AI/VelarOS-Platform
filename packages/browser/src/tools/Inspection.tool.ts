@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import type { BrowserElementQueryResult, BrowserObserveActionsResult, BrowserPageDiagnostics } from '../core'
@@ -875,7 +876,7 @@ const browserCaptureRegion = defineBrowserTool<{
     requireActiveBrowserSite(ctx)
 
     if (!selector?.trim() && !(Number.isFinite(x) && Number.isFinite(y) && width && height)) {
-      throw new Error('browser_capture_region 需要 selector 或完整的 x/y/width/height。')
+      throw new AppError('VALIDATION', 'browser_capture_region 需要 selector 或完整的 x/y/width/height。')
     }
 
     return ctx.browser.captureScreenshot(

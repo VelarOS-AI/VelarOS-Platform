@@ -1,3 +1,31 @@
+// 域：Electron 宿主侧的浏览器运行时装配根——会话表 + 四个领域 engine 的组装与编排。
+//
+// **为什么需要这份导览**：本文件是「装配 + 门面」，不是「实现」。真正的页面能力分散在四个
+// engine 里，读者最容易在这里找错地方（想改截图逻辑却往 runtime 加分支）。
+//
+// ## engine 四分与 kernel 接缝（跨层接缝）
+//   performance（trace / insight / 堆快照）
+//   screenshot （截图 / 标注 / 模型图 / diff / 预览流）
+//   interaction（target action / 自愈 / 键鼠合成 / viewport / zoom）
+//   pageData   （检查 / 存储 / 网络数据 / 媒体 / 诊断 / 上传 / 导出 / 等待）
+// **方向铁律**：engine 只能经 `this.kernel`（`BrowserRuntimeKernel`）回取会话与共享工具，
+// **不许反向持有 runtime**。这条窄接缝是拆分的全部意义——runtime 曾是 5797 行单体，engine
+// 一旦能反向抓 runtime，几个月内就会长回去。新增页面能力应落在**某个 engine 内**，runtime
+// 只加一行转发；若一条能力不属于任何 engine，先问它是不是第五个域。
+//
+// ## 并发与时序（改这些会破什么）
+//  - **同一 session 的 WebContents 操作串行**：全部经 `actionQueue`。Electron 的 webContents
+//    在导航中途接受新指令会得到不可预期的结果，串行是这里唯一的正确性来源。
+//  - **`latestPresentationTargets` 只留最新**：renderer 的 URL 同步可能在 agent 导航仍占队列时
+//    连续触发 present；不做「只留最新」，旧请求出队后会把页面拉回旧 URL（真机踩过的振荡）。
+//  - **`activityCoordinator` 是构造期单例依赖**：广播总线由宿主装配注入，刻意**不并入**
+//    `options` 回调袋——并进去会经 `setOptions` / `setCallbacks` 被反复重放。
+//
+// ## 三种页面后端，一条驱动接口（非显然的妥协）
+// 内嵌 WebContents / 外部 Chrome（CDP）/ 后台 CloakBrowser 都收敛到 `BrowserPageDriver`。
+// 外部会话住 `externalPageSessions`，不占 Electron WebContents。两类会话的状态刷新路径
+// （`refreshPageDriverSessionState` vs `refreshExternalPageState`）刻意分开：内嵌侧拿得到
+// Electron 原生事件，外部侧只能靠 CDP 回读，强行合并会让其中一侧退化成轮询。
 import electron from 'electron'
 
 import { AppError } from '@velaros-ai/core/error'

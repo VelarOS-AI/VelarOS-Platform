@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { isNonBlankString, isPresent } from '@velaros-ai/core'
+import { isFunction, isNonBlankString, isPlainObject, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -235,18 +235,32 @@ class CloakBrowserLauncher {
   }
 }
 
+/**
+ * 动态加载的外部 runtime 没有类型，只能在**加载边界**校验一次形状（§1.8）。
+ * 用真守卫而非 `as unknown as`：擦掉类型再捏一个的写法会让「资源包缺件」以
+ * `launch is not a function` 的形态在很远的调用点炸出来，看不出是安装问题。
+ */
+function isCloakBrowserModule(value: unknown): value is CloakBrowserModule {
+  return isPlainObject(value) && isFunction(value.launch)
+}
+
 const defaultLoadCloakBrowserModule = async (
   runtime: CloakBrowserRuntimeSpec
 ): Promise<CloakBrowserModule> => {
-  try {
-    return (await import(pathToFileURL(runtime.moduleEntry).href)) as unknown as CloakBrowserModule
-  } catch (error) {
-    throw new AppError(
+  const loadFailure = (error?: unknown): AppError =>
+    new AppError(
       'VALIDATION',
       '内置 CloakBrowser runtime 加载失败。请确认资源包包含 cloakbrowser 与 playwright-core。',
       error
     )
+  let loaded: unknown
+  try {
+    loaded = await import(pathToFileURL(runtime.moduleEntry).href)
+  } catch (error) {
+    throw loadFailure(error)
   }
+  if (!isCloakBrowserModule(loaded)) throw loadFailure()
+  return loaded
 }
 
 export {

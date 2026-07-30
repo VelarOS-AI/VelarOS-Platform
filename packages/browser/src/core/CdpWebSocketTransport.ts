@@ -1,3 +1,16 @@
+// 域：CDP 的 JSON-RPC over WebSocket 传输层——外部浏览器驱动与浏览器进程之间唯一的字节通道。
+//
+// ## 协议不变量（改这些会破什么）
+//  - **`id` 单调自增且不复用**：CDP 靠 `id` 把响应配回请求。复用或重置会让两个在飞命令拿到
+//    对方的结果——症状是「截图返回了 cookie」这类无法定位的错乱。
+//  - **每个在飞请求都带超时租约**：浏览器进程可能不回包就卡住（页面被 alert 阻塞是最常见的
+//    一种）。没有超时就是永不 settle 的 Promise，上层串行队列随之整体挂死。
+//  - **socket 关闭必须 `rejectAll`**：断开时所有在飞 Promise 一次性拒绝，不能留在 map 里等超时
+//    ——那会把「连接没了」延迟成 N 秒后的一串超时错误，丢掉可读诊断。
+//  - **`send<T>` 的 `T` 是断言不是校验**：CDP 无 schema，这里是全包 CDP 响应类型的**唯一**收口
+//    点（§1.4 白名单②）。调用方的类型安全感到此为止，字段存在性要自己判。
+//  - **坏帧不炸链路**：解析失败转成 `AppError` 返回值而非抛出——一个畸形事件包不该终结整条
+//    会话（失败方向：降级且可查，而不是整体消失）。
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'

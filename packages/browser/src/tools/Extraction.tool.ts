@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { stringifyPretty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
@@ -495,7 +496,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
         )
       default:
         parsed satisfies never
-        throw new Error('Unsupported browser_extract action.')
+        throw new AppError('VALIDATION', 'Unsupported browser_extract action.')
     }
   },
 })

@@ -1,3 +1,4 @@
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserPageStorageOptions } from './types'
 
 /** 构造读取页面 storage/cookie 的脚本。 */
@@ -8,8 +9,8 @@ class BrowserPageStorageScriptBuilder {
       includeLocalStorage: options.includeLocalStorage ?? true,
       includeSessionStorage: options.includeSessionStorage ?? true,
       includeCookies: !!options.includeCookies,
-      limit: this.clampInteger(options.limit, 1, 300, 100),
-      maxValueChars: this.clampInteger(options.maxValueChars, 1, 50_000, 4_000),
+      limit: clampInteger(options.limit, 1, 300, 100),
+      maxValueChars: clampInteger(options.maxValueChars, 1, 50_000, 4_000),
     })
 
     return `(() => {
@@ -68,16 +69,6 @@ class BrowserPageStorageScriptBuilder {
     })()`
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 }
 
 export { BrowserPageStorageScriptBuilder }

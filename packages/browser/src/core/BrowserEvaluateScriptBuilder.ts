@@ -1,3 +1,4 @@
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserEvaluateScriptOptions } from './types'
 
 /**
@@ -43,8 +44,8 @@ class BrowserEvaluateScriptBuilder {
 
     const payload = JSON.stringify({
       mode,
-      timeoutMs: this.clampInteger(options.timeoutMs, 1, 30_000, 5_000),
-      maxResultChars: this.clampInteger(options.maxResultChars, 1, 200_000, 20_000),
+      timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000),
+      maxResultChars: clampInteger(options.maxResultChars, 1, 200_000, 20_000),
     })
 
     // 页面返回值可能包含 DOM、Error、循环引用等，脚本内会先 simplify 再 JSON 化。
@@ -177,16 +178,6 @@ ${functionBody}
     })()`
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 }
 
 export { BrowserEvaluateScriptBuilder, precheckBrowserInlineScriptSyntax }

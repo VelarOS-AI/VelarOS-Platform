@@ -1,3 +1,22 @@
+// 域：浏览器会话表与 WebContents 事件面——会话生命周期、站点上下文同步、权限与对话框门。
+//
+// ## 会话生命周期（状态机）
+//   （renderer 建 webview）→ `attachWebContents` 登记 → 事件桥注入 → `notifyPageReady`
+//   → `syncSessionSiteContext` 持续跟随导航 → `closeSession` / `dispose` 摘除
+// `waitForSession` 存在是因为**工具调用可能早于 renderer 挂载**：agent 先发 navigate、webview
+// 还没 attach。所以取会话是「等一小会儿」而不是「立即失败」，超时才报错。
+//
+// ## 安全门：权限请求（失败方向）
+// 页面发起的权限请求（摄像头 / 麦克风 / 剪贴板 / 通知…）一律经 `handlePermissionRequest`：
+//  - **有归属会话** → 挂进 `pendingEvents`，由上层（模型或用户）裁决后再 callback；
+//  - **无归属会话**（不受管的 webContents）→ 走 `resolveUnmanagedPermissionRequest`；
+//  - **宿主没注入策略、或策略自身抛异常 → 一律 deny**（`isTrue(undefined) === false`）。
+// 这条 deny 地板是刻意的：默认允许的门在「忘了接线」时看起来一切正常，直到出事。改成
+// `?? true` 之类的回落等于把整个权限面关掉。每次裁决都写一条诊断事件——降级必须留痕。
+//
+// ## 时序坑
+//  - 事件桥脚本（用户活动 / 同视图导航）必须在**每次导航后**重注入：document 换了就没了；
+//  - `failedMainFrameNavigations` 记住主框架失败，避免把失败页当成「已就绪」继续跑动作。
 import type electron from 'electron'
 
 import { isNumber, isPlainObject, isString,isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
@@ -53,6 +72,12 @@ interface BrowserDialogEventSource {
 
 const BrowserUserActivityConsolePrefix = '__VELAROS_BROWSER_USER_ACTIVITY__:'
 
+/**
+ * Electron 的 `WebContents` 类型里没有 `dialog` 事件（它是运行时存在、d.ts 未声明的一条），
+ * 这里把断言收在**一个具名点**上（§1.4 白名单②：无泛型的原生驱动面）。
+ * 不做运行时校验是刻意的：真缺这个事件时页面会因 alert 卡死，那是必须暴露的故障，
+ * 不该被一个"看起来能跑"的降级掩盖。
+ */
 function asBrowserDialogEventSource(value: unknown): BrowserDialogEventSource {
   return value as BrowserDialogEventSource
 }

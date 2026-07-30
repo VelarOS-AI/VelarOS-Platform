@@ -1,3 +1,4 @@
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserElementQueryOptions } from './types'
 
 /** 构造在页面内查询元素详情的脚本。 */
@@ -25,9 +26,9 @@ class BrowserElementQueryScriptBuilder {
         20
       ),
       includeHtml: !!options.includeHtml,
-      limit: this.clampInteger(options.limit, 1, 100, 50),
-      maxTextChars: this.clampInteger(options.maxTextChars, 1, 20000, 2000),
-      maxHtmlChars: this.clampInteger(options.maxHtmlChars, 1, 50000, 5000),
+      limit: clampInteger(options.limit, 1, 100, 50),
+      maxTextChars: clampInteger(options.maxTextChars, 1, 20000, 2000),
+      maxHtmlChars: clampInteger(options.maxHtmlChars, 1, 50000, 5000),
     })
 
     // 返回脚本字符串，由 Electron webContents.executeJavaScript 在页面上下文执行。
@@ -265,16 +266,6 @@ class BrowserElementQueryScriptBuilder {
     })()`
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 }
 
 export { BrowserElementQueryScriptBuilder }

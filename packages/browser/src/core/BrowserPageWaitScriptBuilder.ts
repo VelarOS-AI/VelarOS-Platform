@@ -1,6 +1,7 @@
 import { isEmpty,isString, toNullable } from '@velaros-ai/core'
 
 import { precheckBrowserInlineScriptSyntax } from './BrowserEvaluateScriptBuilder'
+import { clampInteger } from './BrowserRuntimeInternals'
 import type { BrowserPageWaitOptions } from './types'
 
 /** 构造页面等待脚本。 */
@@ -8,9 +9,9 @@ class BrowserPageWaitScriptBuilder {
   public buildPageWaitScript(options: BrowserPageWaitOptions): string {
     const functionExpression = this.normalizeString(options.functionExpression)
     const payload = JSON.stringify({
-      durationMs: this.clampInteger(options.durationMs, 0, 60_000, 0),
+      durationMs: clampInteger(options.durationMs, 0, 60_000, 0),
       loadState: toNullable(options.loadState),
-      timeoutMs: this.clampInteger(options.timeoutMs, 1, 60_000, 5_000),
+      timeoutMs: clampInteger(options.timeoutMs, 1, 60_000, 5_000),
       urlPattern: this.normalizeString(options.urlPattern),
       functionExpression,
       text: this.normalizeString(options.text),
@@ -225,16 +226,6 @@ class BrowserPageWaitScriptBuilder {
     })()`
   }
 
-  private clampInteger(
-    value: number | undefined,
-    min: number,
-    max: number,
-    fallback: number
-  ): number {
-    if (!Number.isFinite(value)) return fallback
-
-    return Math.min(Math.max(Math.round(value as number), min), max)
-  }
 
   private normalizeString(value: string | undefined): Nullable<string> {
     if (!isString(value)) return null

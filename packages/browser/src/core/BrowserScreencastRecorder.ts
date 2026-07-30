@@ -159,7 +159,8 @@ export class CdpScreencastRecorder {
     try {
       this.consumer.onFrame?.(frame)
     } catch {
-      // UI 消费者失败不能卡住 CDP screencast 的 ack/后续帧。
+      // arch-guard:silent-catch-ok 帧消费者是 UI 侧回调，它失败不能卡住 CDP screencast 的 ack；
+      // 不 ack 会让浏览器停止推帧，等于一个渲染错误直接终结整段录制。
     }
     if (this.capturedFrameCount >= maxFrames) {
       this.frameLimitReached = true
