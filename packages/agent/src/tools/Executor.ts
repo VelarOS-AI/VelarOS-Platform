@@ -1,4 +1,28 @@
 
+// 域：工具执行中枢（模型发出工具调用 → 结果回到历史之间的全部编排）。
+//
+// **为什么需要这份导览**：本文件同时是五条链的交汇点，任何一条读者都可能从别处跳进来——
+// 并发编排 / 策略与审批门 / mod seam 派发 / 结果中间件与证据账本 / 观测 span。
+// 五条互相有顺序要求，读单条会得出错误结论。
+//
+// ## 组织（读的顺序）
+//  1. `PendingTool` / `ToolResult`：一次工具调用的全生命周期状态与其唯一出口形状；
+//  2. `enqueue` 一族：流式片段一到就入队开跑（不等模型流收尾），并发安全者并行、有副作用者串行；
+//  3. `runOne`：单次执行的**顺序契约**（见下）；
+//  4. `finalizeResult`：**唯一终结点**——所有成功/失败/中止路径都必须经它收敛。
+//
+// ## 关键不变量（改这些会破什么）
+//  - **`finalizeResult` 单点终结**：span 单开单闭、证据入账、结果中间件、事件发射都挂在它上面。
+//    绕过它直接 return 结果 = span 泄漏 + 证据丢账 + 前端收不到终态。
+//  - **顺序：`tool-call:before` seam → 策略/审批门 → 参数校验 → 执行**。seam 只能「拦下」或
+//    「改写入参」，改写后的入参**照样走完整策略门**；把 seam 挪到门之后 = mod 可绕过审批。
+//  - **结果按接收顺序输出**（不按完成顺序）：消息历史必须与模型看到的调用顺序一致，否则
+//    下一轮上下文里工具结果与调用错位。
+//  - **同轮失败即取消其余**：一个工具报错时同轮其他执行中的工具被取消，避免半成品副作用叠加。
+//  - **span 是纯旁路**：观测失败不得冒泡进执行主路（端口缺省时 `spanHandle` 恒空）。
+//
+// 派发点与 seam 闭集见 `../mods/AgentModSeams.ts` 与 docs/agent-mod-trunk.md；
+// 策略门与审批语义见 `./ExecutionPolicy.ts`。
 import { isArray,isEmpty, isPlainObject, isPresent, isString, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
