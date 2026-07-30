@@ -4,6 +4,8 @@ import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { type TurnContextAppendHub, TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 export type KernelBackgroundJobStatus = 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface StartKernelBackgroundJobInput {
@@ -777,7 +779,7 @@ function compareTerminalJobs(left: KernelBackgroundJob, right: KernelBackgroundJ
   const completedOrder =
     (left.completedAt ?? left.startedAt) - (right.completedAt ?? right.startedAt)
   if (completedOrder !== 0) return completedOrder
-  return left.id.localeCompare(right.id)
+  return compareStableStrings(left.id, right.id)
 }
 
 function normalizeWaitTimeoutMs(timeoutMs: number | undefined): number | undefined {

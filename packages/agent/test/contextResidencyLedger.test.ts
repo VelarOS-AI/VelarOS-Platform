@@ -416,7 +416,7 @@ void describe('context residency ledger · governance config (§7)', () => {
     assert.equal(resolved.epochTargetPercent, 99)
     assert.equal(resolved.minEpochSavingPercent, 1)
     assert.equal(resolved.admission.inlineMaxChars, 200)
-    assert.equal(resolved.instruments.distill, 'aux')
+    assert.equal(resolved.instruments.distill, 'off')
   })
 
   void test('defaults match the design sheet and excerpt budget tracks the admission threshold', () => {

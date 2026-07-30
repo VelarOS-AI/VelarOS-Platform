@@ -25,6 +25,7 @@ export interface CompileProviderSendRequestInput
   extends Omit<CompileProviderRequestInput, 'messages' | 'toolPayloadRefsByToolCallId'> {
   sessionId: string
   rawHistoryMessages: ModelMessage[]
+  /** 稳定前缀消息（系统提示词稳定层 + 缓存断点）。逐轮字节不变，账本不摄入它们之外的东西。 */
   leadingMessages?: readonly ModelMessage[]
   phase: 'stream' | 'query'
   turn?: LooseOptional<number>

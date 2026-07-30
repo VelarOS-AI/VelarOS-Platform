@@ -13,6 +13,8 @@ import type {
   AgentWorkflowValueRef,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 const MaxWorkflowAgents = 8
 const MaxWorkflowConcurrency = 4
 const MaxWorkflowRounds = 6
@@ -65,7 +67,7 @@ function valueAtPath(value: unknown, path: AgentWorkflowValuePath = []): unknown
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
       .join(',')}}`
   return JSON.stringify(value) ?? 'undefined'

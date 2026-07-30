@@ -9,6 +9,8 @@ import { isArray, isObject, isString } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { isRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import { compareStableStrings } from '../residency/determinism'
+
 const log = logRuntime.tag('ProviderRequestMessageScan')
 
 /** 单次扫描的中间结果：工具引用面 + 折叠句柄计数，作为共享 scratch 的扫描位。 */
@@ -30,10 +32,15 @@ export function sumPositive(values: Iterable<number>): number {
   return total
 }
 
-/** 去重去空 + trim + 本地化排序，稳定指纹里的工具名/调用 id 序列。 */
+/**
+ * 去重去空 + trim + **码元序**排序，稳定指纹里的工具名/调用 id 序列。
+ *
+ * P7-2：原实现用 `localeCompare`，排序结果随 ICU 数据与 locale 变化 —— 同一份请求在两台机器上
+ * 会算出不同指纹，缓存命中判定与金标轨迹比对同时失真。
+ */
 export function sortedStrings(values: Iterable<string>): string[] {
   return [...new Set([...values].filter((value) => value.trim()).map((value) => value.trim()))].sort(
-    (left, right) => left.localeCompare(right)
+    compareStableStrings
   )
 }
 

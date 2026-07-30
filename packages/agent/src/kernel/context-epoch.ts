@@ -1,5 +1,7 @@
 import { isPresent } from '@velaros-ai/core'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 import type { ProviderTurnEventReducer } from './provider-events'
 
 export type KernelContextEpochPhase = 'stream' | 'query'
@@ -91,9 +93,10 @@ export interface RecordKernelContextEpochDiagnosticOptions {
   current?: LooseOptional<boolean>
 }
 
+/** P7-2：epoch 指纹里的清单序必须 locale 无关（码元序），否则同一份上下文跨机器判成"变了"。 */
 function sortedUnique(values: readonly string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) =>
-    left.localeCompare(right)
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort(
+    compareStableStrings
   )
 }
 

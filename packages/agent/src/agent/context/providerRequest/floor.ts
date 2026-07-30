@@ -12,6 +12,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ProviderRequestFingerprint } from '../../../kernel/provider-events'
 import type { CompileProviderRequestInput } from '../ProviderRequestCompiler'
+import { compareStableStrings } from '../residency/determinism'
 
 import { shortHash } from './contentHash'
 import { sortedStrings, sumPositive, type ToolReferenceScan } from './messageScan'
@@ -33,7 +34,7 @@ export function normalizeToolSchemaCharEntries(
   return Object.entries(toolSchemaChars ?? {})
     .map(([toolName, chars]) => [toolName.trim(), Number.isFinite(chars) ? Math.max(0, chars) : 0] as [string, number])
     .filter(([toolName]) => !isBlank(toolName))
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareStableStrings(left, right))
 }
 
 /**

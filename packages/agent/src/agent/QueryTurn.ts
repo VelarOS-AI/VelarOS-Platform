@@ -39,9 +39,10 @@ import {
 } from '../tools'
 import { ToolExecutor, type ToolExecutorEvents } from '../tools'
 
+import { compareStableStrings } from './context/residency/determinism'
 import {
   compileProviderSendRequest,
-  type ContextAttentionSessionRegistry,
+  type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
 } from './context'
@@ -203,14 +204,14 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
   constructor(
     private readonly toolRegistry: QueryTurnToolRegistry<TToolContext>,
     private readonly turnHistoryHelper: AgentTurnHistoryHelper,
-    /** 注意力路由会话状态登记处（宿主级单实例，跨回合粘滞/回学/回放共享一份，必传）。 */
-    private readonly contextAttentionSessions: ContextAttentionSessionRegistry,
+    /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry,
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()
   ) {
     this.executionPolicy = new ToolExecutionPolicy(toolRegistry)
     this.streamConsumerHelper = new StreamConsumer(toolRegistry)
-    this.requestCompiler = new ProviderRequestCompiler(this.contextAttentionSessions)
+    this.requestCompiler = new ProviderRequestCompiler(this.governanceSessions)
   }
 
   public async executeQueryTurn(
@@ -345,9 +346,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         toolSchemaChars: args.toolSchemaChars,
         historyToolNames: providerToolNamePlan.historyToolNames,
       })
-      const providerAvailableToolNames = Object.keys(aiTools).sort((left, right) =>
-        left.localeCompare(right)
-      )
+      // P7 确定性序列化：工具清单顺序直接进 prompt 字节，禁 locale 相关比较。
+      const providerAvailableToolNames = Object.keys(aiTools).sort(compareStableStrings)
       const contextWorkingSetInputs = await this.turnRequestHelper.resolveContextWorkingSetInputs(
         args.toolContext
       )
@@ -375,7 +375,6 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           systemPrompt: args.systemPrompt,
           toolSchemaChars,
           availableToolNames: providerAvailableToolNames,
-          toolPayloadReferenceBudgetChars: 8_000,
           activeTask: contextWorkingSetInputs.activeTask,
           pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
           contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,

@@ -1,5 +1,6 @@
 import type { PromptSegmentOverride } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { AgentChatRuntimeConfig } from '../agent/RuntimeConfiguration'
 /** Prompt 段稳定性：stable 适合缓存，dynamic 每轮可能变化。 */
 type PromptSegmentStability = 'stable' | 'dynamic'
@@ -215,7 +216,8 @@ class SegmentRegistry {
     return [...definitions.values()].sort((left, right) => {
       if (left.priority !== right.priority) return left.priority - right.priority
 
-      return left.id.localeCompare(right.id)
+      // P7-2：段序即 prompt 字节序，禁 locale 相关比较。
+      return compareStableStrings(left.id, right.id)
     })
   }
 

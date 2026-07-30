@@ -1,4 +1,6 @@
 import { isPresent } from '@velaros-ai/core'
+
+import { compareStableStrings } from '../agent/context/residency/determinism'
 export type KernelInputDelivery = 'queue' | 'steer'
 export type KernelInputRole = 'user' | 'system' | 'assistant' | 'tool'
 export type KernelInputStatus = 'admitted' | 'promoted' | 'cancelled'
@@ -104,7 +106,7 @@ function cloneSnapshot(
 
 function sortInputs(inputs: KernelAdmittedInput[]): KernelAdmittedInput[] {
   return inputs.sort((left, right) => {
-    const sessionOrder = left.sessionId.localeCompare(right.sessionId)
+    const sessionOrder = compareStableStrings(left.sessionId, right.sessionId)
     if (sessionOrder !== 0) return sessionOrder
     return left.seq - right.seq
   })

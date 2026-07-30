@@ -9,6 +9,7 @@
 //
 // 闭集在 `@velaros-ai/agent/protocol` 的 mods 契约（`AgentModSeamKinds`）——mod 只能挂接，
 // 不能发明新钩子。当前**真接线**的派发点见 docs/agent-mod-trunk.md；其余 kind 只有注册面与类型。
+import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { AgentModDiagnostic, AgentModSeamKind } from '../protocol'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
@@ -214,7 +215,7 @@ class AgentModSeamDispatcher {
     })
     bucket.sort((left, right) =>
       left.priority === right.priority
-        ? left.id.localeCompare(right.id)
+        ? compareStableStrings(left.id, right.id)
         : left.priority - right.priority
     )
     this.handlers.set(input.seam, bucket)

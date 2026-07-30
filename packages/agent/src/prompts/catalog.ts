@@ -30,6 +30,15 @@ const PromptCatalog = {
   },
 } as const
 
+/** 本地时区、分钟精度、格式固定的时间戳（`YYYY-MM-DD HH:mm`）。 */
+function formatMinutePrecisionLocalTime(now: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return [
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+    `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+  ].join(' ')
+}
+
 /** 创建内置基础 prompt 段。 */
 function createBuiltInPromptSegments(
   options: BuiltInPromptOptions = {}
@@ -70,7 +79,11 @@ function createBuiltInPromptSegments(
       stability: 'dynamic',
       source: 'runtime',
       priority: 9020,
-      render: () => `当前时间：${new Date().toLocaleString()}`,
+      // P7-1 粒度钝化：原实现是 `toLocaleString()`（**带秒**且随 locale 变格式）——同一分钟内的
+      // 两次请求也会产出不同字节。段本身已随 dynamic 层整体下沉到活动尾（不再挤在稳定前缀与
+      // 历史之间，见 `StreamTurn.buildSystemPromptDelivery`），钝化到分钟再消掉尾块自身逐请求
+      // 漂移的那一档；格式钉死本地时区的分钟位，与 locale / ICU 数据无关（P7 确定性序列化）。
+      render: () => `当前时间：${formatMinutePrecisionLocalTime(new Date())}`,
     },
     {
       id: 'runtime.visual-widget-tools',

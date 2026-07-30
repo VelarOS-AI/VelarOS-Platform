@@ -10,6 +10,7 @@ import type {
   ToolOsState,
 } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from '../../agent/context/residency/determinism'
 import { expandCapabilityCategoryIds } from '../../capabilities'
 import {
   buildPluginEntries,
@@ -695,9 +696,9 @@ function groupToolBatchPages(
   }
 
   return [...grouped.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareStableStrings(left, right))
     .map(([categoryId, categoryCards]) => {
-      const sortedCards = [...categoryCards].sort((left, right) => left.name.localeCompare(right.name))
+      const sortedCards = [...categoryCards].sort((left, right) => compareStableStrings(left.name, right.name))
       const returnedCards = sortedCards.slice(0, maxToolsPerCategory)
       return {
         categoryId,
@@ -736,9 +737,9 @@ function pageIdsForCategories(
   }
 
   const pageIds: string[] = []
-  for (const categoryId of [...grouped.keys()].sort((left, right) => left.localeCompare(right))) {
+  for (const categoryId of [...grouped.keys()].sort(compareStableStrings)) {
     const sortedCards = [...(grouped.get(categoryId) ?? [])].sort((left, right) =>
-      left.name.localeCompare(right.name)
+      compareStableStrings(left.name, right.name)
     )
     pageIds.push(...sortedCards.slice(0, maxToolsPerCategory).map((card) => card.id))
   }
@@ -1035,7 +1036,7 @@ export function searchToolDiscoveryCards(
     .filter((entry) => entry.score > 0)
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score
-      return left.card.name.localeCompare(right.card.name)
+      return compareStableStrings(left.card.name, right.card.name)
     })
   const topScore = scored[0]?.score ?? 0
   const confidenceCutoffScore = Math.ceil(topScore * ToolFindLowConfidenceScoreRatio)
@@ -1120,9 +1121,9 @@ function filterToolSpaceCards(
     .filter((card) => !toolOsStateFilter || toolOsStateFilter.has(card.toolOsState))
     .filter((card) => !categoryFilter || categoryFilter.has(card.categoryId))
     .sort((left, right) => {
-      if (left.kind !== right.kind) return left.kind.localeCompare(right.kind)
-      if (left.categoryId !== right.categoryId) return left.categoryId.localeCompare(right.categoryId)
-      return left.name.localeCompare(right.name)
+      if (left.kind !== right.kind) return compareStableStrings(left.kind, right.kind)
+      if (left.categoryId !== right.categoryId) return compareStableStrings(left.categoryId, right.categoryId)
+      return compareStableStrings(left.name, right.name)
     })
 }
 
@@ -1274,7 +1275,7 @@ export function mapToolDiscoveryCards(
   }
 
   const orderedCategoryEntries = [...grouped.entries()].sort(
-    ([left], [right]) => left.localeCompare(right)
+    ([left], [right]) => compareStableStrings(left, right)
   )
 
   const categoryOffset = parseToolSpaceCursor(input.cursor)
@@ -1291,7 +1292,7 @@ export function mapToolDiscoveryCards(
     const tools = cards.filter((card) => card.kind === 'tool')
     const plugins = cards.filter((card) => card.kind === 'plugin')
     const visibleTools = tools.slice(0, effectiveMaxToolsPerCategory)
-    const toolNames = tools.map((card) => card.name).sort((left, right) => left.localeCompare(right))
+    const toolNames = tools.map((card) => card.name).sort(compareStableStrings)
     const definition = capability
       ? {
           label: capability.name,

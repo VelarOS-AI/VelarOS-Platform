@@ -16,7 +16,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isArray, isFiniteNumber, isRecord } from '@velaros-ai/core'
+import { isArray, isFiniteNumber, isRecord, isString } from '@velaros-ai/core'
 
 import { buildContextRefEnvelope } from '../contextRefEnvelope'
 
@@ -101,7 +101,7 @@ export function projectContextLedger(
     const isTailProtected = record.turn >= tailFloorTurn
     if (isTailProtected) tailProtectedRecordIds.push(record.id)
 
-    const effective: ContextResidency = isTailProtected ? 'INLINE' : declared
+    const effective = resolveEffectiveResidency(record, declared, isTailProtected)
     const rendered = renderRecord(record, effective)
     if (rendered.kind === 'excerpt') excerptCount += 1
     if (rendered.kind === 'tombstone') tombstoneCount += 1
@@ -142,6 +142,75 @@ export function projectContextLedger(
       ledgerFingerprint: stableFingerprint(ledgerMessages),
     },
   }
+}
+
+export interface ContextProjectionMeasurement {
+  projectedChars: number
+  projectedTokens: number
+  /** 尾保护窗口内（恒 INLINE，治理器不得选中）的记录 id。 */
+  tailProtectedRecordIds: Set<string>
+}
+
+/**
+ * 投影度量（不产消息，只算占用）。
+ *
+ * 治理器每次试探降级都要问"现在投影多大"，用 {@link projectContextLedger} 去算等于每次迭代
+ * 重建一遍消息数组。这里与投影**共用同一条尾保护规则与同一份 `residentChars`**，所以度量与
+ * 真实投影恒等 —— 唯一的替代方案（治理器自己写一份占用公式）会立刻长出第二套尾保护语义。
+ */
+export function measureLedgerProjection(input: {
+  records: readonly ContextRecord[]
+  residency: ContextResidencyVector
+  budget: ContextProjectionBudget
+}): ContextProjectionMeasurement {
+  const tailFloorTurn = resolveTailFloorTurn(input.records, input.budget.tailProtectTurns)
+  const charsPerToken = input.budget.charsPerToken ?? 4
+  const tailProtectedRecordIds = new Set<string>()
+  let projectedChars = 0
+
+  for (const record of input.records) {
+    const declared = input.residency.get(record.id) ?? record.admittedResidency
+    const isTailProtected = record.turn >= tailFloorTurn
+    if (isTailProtected) tailProtectedRecordIds.add(record.id)
+
+    const effective = resolveEffectiveResidency(record, declared, isTailProtected)
+    // 隐藏记录（被 summary 代表的非工具成员）不占字符：与投影的 `hidden` 分支同判。
+    if (!record.message) continue
+    if (isHiddenInProjection(record, effective)) continue
+
+    projectedChars += residentChars(record, effective)
+  }
+
+  return {
+    projectedChars,
+    projectedTokens: estimateResidencyTokens(projectedChars, charsPerToken),
+    tailProtectedRecordIds,
+  }
+}
+
+/**
+ * 有效驻留态：尾保护窗口内恒 INLINE；**无摘录素材的 EXCERPT 回落 INLINE**。
+ *
+ * 后一条不是宽容而是对齐：`renderExcerptMessage` 拿不到信封时会原样投影全文，度量若仍按
+ * `bytes.excerpt`（此时是 0）算，治理器会以为省下了全部字符 —— 一次"省了但没省"的 epoch。
+ */
+function resolveEffectiveResidency(
+  record: ContextRecord,
+  declared: ContextResidency,
+  isTailProtected: boolean
+): ContextResidency {
+  if (isTailProtected) return 'INLINE'
+  if (declared === 'EXCERPT' && !record.excerpt) return 'INLINE'
+
+  return declared
+}
+
+/** 该记录在给定驻留态下是否**整条消失**（与 `renderRecord` 的 hidden 分支同判）。 */
+function isHiddenInProjection(record: ContextRecord, residency: ContextResidency): boolean {
+  if (residency === 'INLINE' || residency === 'EXCERPT') return false
+  if (record.kind === 'tool-result' || record.kind === 'tool-call') return false
+
+  return residency === 'SUMMARIZED'
 }
 
 /** 尾保护窗口的起始轮：最新轮往回数 `tailProtectTurns` 轮。 */
@@ -189,6 +258,15 @@ function renderRecord(record: ContextRecord, residency: ContextResidency): Rende
 }
 
 function renderExcerptMessage(record: ContextRecord, message: ModelMessage): Nullable<ModelMessage> {
+  // user 记录（48K 安全阀）：**角色不可改写**。把正文换成 v1 同形的"摘录 + 存储提示"纯文本，
+  // 信封 JSON 留给工具结果——把一条用户指令渲染成 assistant JSON 会同时丢角色与可读性。
+  if (record.kind === 'user') {
+    const excerptText = record.excerpt?.text
+    if (!excerptText) return null
+
+    return rewriteUserTextParts(message, excerptText)
+  }
+
   const envelope = buildExcerptEnvelope(record)
   if (!envelope) return null
 
@@ -196,6 +274,22 @@ function renderExcerptMessage(record: ContextRecord, message: ModelMessage): Nul
   if (record.kind === 'tool-result') return rewriteToolResultOutputs(message, () => serialized)
 
   return { role: 'assistant', content: serialized }
+}
+
+/** 改写 user 消息的文本正文（字符串正文与 text 片段两种形态），角色与其余片段逐字保留。 */
+function rewriteUserTextParts(message: ModelMessage, value: string): ModelMessage {
+  if (message.role !== 'user') return message
+  if (isString(message.content)) return { ...message, content: value } as ModelMessage
+  if (!isArray(message.content)) return message
+
+  let replaced = false
+  const content = (message.content as unknown[]).map((part) => {
+    if (replaced || !isRecord(part) || part.type !== 'text') return part
+    replaced = true
+    return { ...part, text: value }
+  })
+
+  return replaced ? ({ ...message, content } as ModelMessage) : message
 }
 
 /**

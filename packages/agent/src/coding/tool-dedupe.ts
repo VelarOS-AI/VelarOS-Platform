@@ -2,6 +2,7 @@ import { isArray, isEmpty, isObject } from '@velaros-ai/core'
 import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
 import { normalizeUnknownStringArray as readStringArray } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
 import {
   defaultRuntimePromptFeaturePolicy,
   type RuntimePromptFeaturePolicy,
@@ -28,7 +29,7 @@ function normalizeToolCallFingerprintValue(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([key, nestedValue]) => [key, normalizeToolCallFingerprintValue(nestedValue)])
   )
 }

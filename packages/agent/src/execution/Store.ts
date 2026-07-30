@@ -16,6 +16,8 @@ import type {
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import { compareStableStrings } from '../agent/context/residency/determinism'
+
 type ExecutionStateListener = (payload: StreamStatePayload) => void
 type ExecutionDebugListener = (payload: StreamExecutionGraphPayload) => void
 
@@ -711,7 +713,7 @@ class ExecutionStore {
           const createdAtDelta = right.createdAt - left.createdAt
           if (createdAtDelta !== 0) return createdAtDelta
 
-          return right.id.localeCompare(left.id)
+          return compareStableStrings(right.id, left.id)
         })
         .slice(0, this.recordRetentionLimit)
         .map((execution) => execution.id)

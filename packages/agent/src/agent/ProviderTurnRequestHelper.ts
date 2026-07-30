@@ -6,6 +6,7 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { ChatRuntimeEvent } from '@velaros-ai/core/types'
 import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 
+import { compareStableStrings } from './context/residency/determinism'
 import {
   buildToolPayloadRefsForProviderMessages,
   collectProviderRequestHistoryToolNames,
@@ -122,8 +123,9 @@ class ProviderTurnRequestHelper {
     if (!allowTools) return { historyToolNames }
 
     return {
-      providerToolNames: [...new Set([...allowTools, ...historyToolNames])].sort((left, right) =>
-        left.localeCompare(right)
+      // P7 确定性序列化：工具清单顺序进 prompt 字节，必须与 locale / ICU 数据无关。
+      providerToolNames: [...new Set([...allowTools, ...historyToolNames])].sort(
+        compareStableStrings
       ),
       historyToolNames,
     }
@@ -279,10 +281,10 @@ class ProviderTurnRequestHelper {
         pressureKind: compiledRequest.decision.pressureKind,
         ledger: compiledRequest.ledger,
         zoneDiagnostics: compiledRequest.decision.zoneDiagnostics,
-        reclaimAttempts: compiledRequest.reclaimAttempts ?? 0,
+        // B1：回收阶梯已下线（压力的唯一出路是轮边界的 GovernanceEpoch），恒 0；
+        // 注意力 trace / replay 随注意力路由一并退役，治理可观测改由迁移事件流 + epoch 报告承载。
+        reclaimAttempts: 0,
         requestFingerprint: compiledRequest.requestFingerprint,
-        attentionTrace: compiledRequest.attentionTrace,
-        attentionReplayRecord: compiledRequest.attentionReplayRecord,
       })
     )
   }

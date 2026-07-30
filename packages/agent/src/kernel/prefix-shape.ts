@@ -1,5 +1,7 @@
 import { isEmpty, isPresent,isString } from '@velaros-ai/core'
 
+import { compareStableStrings, stableStringify } from '../agent/context/residency/determinism'
+
 import type { ProviderTurnEventReducer } from './provider-events'
 
 export interface KernelPrefixShapeInput {
@@ -48,8 +50,16 @@ export interface RecordKernelPrefixShapeDiagnosticInput {
   }
 }
 
+/**
+ * 前缀形状哈希（P7-3）。
+ *
+ * 名字里的 stable 过去只是愿望：`JSON.stringify` 按**插入序**输出键，同一份 toolSchemaChars
+ * 由不同代码路径构造出来键序就不同，哈希跟着变 —— 于是"前缀变了"的诊断会报出根本不存在的漂移。
+ * 现在走 `stableStringify`（逐层键排序 + 丢 undefined），同内容必同字节必同哈希。
+ * FNV-1a 32 位保持不变：这是**诊断指纹**不是安全摘要，量级足够且短。
+ */
 function stableHash(value: unknown): string {
-  const text = isString(value) ? value : JSON.stringify(value)
+  const text = isString(value) ? value : stableStringify(value)
   let hash = 2166136261
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index)
@@ -115,19 +125,18 @@ class KernelPrefixShapeTracker {
 }
 
 function buildKernelPrefixShape(input: KernelPrefixShapeInput): KernelPrefixShape {
-  const toolNames = [...new Set(input.availableToolNames)].sort((left, right) =>
-    left.localeCompare(right)
-  )
+  // P7-2：工具清单顺序进哈希也进 prompt，禁 locale 相关比较（ICU 数据一变顺序就变）。
+  const toolNames = [...new Set(input.availableToolNames)].sort(compareStableStrings)
   const toolSchemaChars = Object.fromEntries(
     Object.entries(input.toolSchemaChars ?? {})
       .filter(([toolName]) => toolNames.includes(toolName))
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([toolName, chars]) => [toolName, Math.max(0, chars)])
   )
   const toolSchemaHashes = Object.fromEntries(
     Object.entries(input.toolSchemaHashes ?? {})
       .filter(([toolName]) => toolNames.includes(toolName))
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([toolName, hash]) => [toolName, hash])
   )
   const systemHash = stableHash(input.systemPrompt)
