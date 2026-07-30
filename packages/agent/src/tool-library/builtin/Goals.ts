@@ -266,28 +266,13 @@ function buildGoalTerminalUpsertInput(input: {
   }
 }
 
-function buildGoalCompletionAttemptUpsertInput(
-  artifact: ActiveContextArtifact
-): ActiveContextUpsertInput {
-  const previous = toGoalSnapshot(artifact)
-  return {
-    id: artifact.id,
-    kind: 'requirement',
-    scope: artifact.scope,
-    status: 'active',
-    resourceId: artifact.resourceId,
-    title: artifact.title,
-    content: artifact.content,
-    sourceMessageId: artifact.sourceMessageId,
-    metadata: {
-      ...(artifact.metadata ?? {}),
-      goal: true,
-      goalStatus: 'active',
-      blockedAuditTurns: previous.blockedAuditTurns + 1,
-    },
-  }
-}
-
+/**
+ * 受阻审计闸：连续 N 轮都没能收尾才允许标 blocked（避免"第一次卡住就宣告受阻"）。
+ *
+ * 计数器 `blockedAuditTurns` 的**唯一写入方**是收尾门（`SoloGoalLifecycle.recordCompletionAttempt`，
+ * 每次收尾未通过 +1）。本文件只读不写——此前这里还留着一份同义的 upsert 构造器，与收尾门那份
+ * 逐字同义却零消费者，已随 Q2c 删除。要改计数规则去收尾门改，别在这里复活第二份。
+ */
 function assertCanBlockGoal(goal: GoalSnapshot): void {
   if (goal.blockedAuditTurns >= MinBlockedAuditTurns) return
 
@@ -314,7 +299,6 @@ function assertGoalCanComplete(goal: GoalSnapshot): void {
 export {
   assertCanBlockGoal,
   assertGoalCanComplete,
-  buildGoalCompletionAttemptUpsertInput,
   buildGoalStateUpsertInput,
   buildGoalTerminalUpsertInput,
   buildGoalUpsertInput,
