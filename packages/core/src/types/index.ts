@@ -699,28 +699,6 @@ export interface ChatCompactContextCapabilityTruth {
   externallyTouchedResourceIds: readonly string[]
 }
 
-export interface ChatCompactContextRequest {
-  sessionId: string
-  messages: SerializedMessage[]
-  sourceMessageCount: number
-  sourceLastMessageId?: LooseOptional<string>
-  sourceLastMessageTimestamp?: LooseOptional<number>
-  parentViewId?: LooseOptional<string>
-  trigger: ChatContextCompactionTrigger
-  model?: string
-  contextWindow?: LooseOptional<number>
-  systemPromptAppend?: LooseOptional<string>
-  evidenceLedger?: ChatContextEvidenceRecord[]
-  capabilityTruth?: ChatCompactContextCapabilityTruth
-}
-
-export interface ChatCompactContextResponse {
-  compacted: boolean
-  view: Nullable<ChatSessionContextView>
-  estimatedBefore: ContextUsageEstimate
-  skippedReason?: 'below-threshold' | 'no-reduction' | 'empty-history'
-}
-
 export interface ChatAbortRequest {
   sessionId: string
 }
@@ -1250,11 +1228,6 @@ export interface ChatHookProvideGuidanceEvent {
 /** hook bridge_ping：主进程探测 renderer hook 桥活性的 ping 事件；renderer 收到后以同 nonce 回 pong。 */
 export interface ChatHookBridgePingEvent {
   nonce: string
-}
-
-/** hook compact_session：驱动 renderer 对目标会话执行一次真实的手动上下文压缩。 */
-export interface ChatHookCompactSessionEvent {
-  sessionId: string
 }
 
 /**
