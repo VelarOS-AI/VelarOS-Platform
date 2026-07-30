@@ -1661,11 +1661,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "ReadonlyMap<string, number>"
     },
     {
-      "name": "ChatTranscript.latestPlanUpdateToolCallId",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "LooseOptional<string>"
-    },
-    {
       "name": "ChatTranscript.activeWorkspaceRoot",
       "description": "Auto-generated from TypeScript props.",
       "type": "LooseOptional<string>"
@@ -4181,11 +4176,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "MessageBubble.planUpdateIndexByToolCallId",
       "description": "Auto-generated from TypeScript props.",
       "type": "ReadonlyMap<string, number>"
-    },
-    {
-      "name": "MessageBubble.latestPlanUpdateToolCallId",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "LooseOptional<string>"
     },
     {
       "name": "MessageBubble.activeWorkspaceRoot",
