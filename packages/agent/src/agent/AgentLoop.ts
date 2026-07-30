@@ -1,3 +1,16 @@
+// 域：Agent 回合循环的**唯一引擎**（198 行；主会话与子 agent 两个面共用它）。
+//
+// **为什么只有一个引擎**：历史上主会话（SoloLoop）与子 agent（QueryLoop）各自带一份流消费
+// 复制体，四处分叉长期不同步（同一个中止/护栏 bug 要修两遍且常只修一遍）。B5 批把两者
+// 收成「一个引擎 + 两层薄壳」：引擎持有回合推进与护栏，壳只提供各自的 surface 实现
+// （见 `LoopSurface`）。**加新的循环面时写壳，不复制引擎**。
+//
+// ## 关键不变量（改这些会破什么）
+//  - **四护栏单源**：wind-down 判定、溢出处理、中止落在轮首、span 审计各只有一份实现。
+//    在壳里重写任何一条 = 两个面行为漂移，而漂移只会在真机长跑里暴露。
+//  - **中止只在轮首生效**：轮内中止会留下半成品工具结果 → 历史结构出现孤儿片段 →
+//    下一轮 provider 校验拒收整条会话（曾导致会话永久锁死，见 history-orphan 自愈判决）。
+//  - **surface 不得持有回合状态**：状态归引擎，壳只做 IO 与投影；壳存状态 = 两份真相。
 import { toNullable } from '@velaros-ai/core'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '@velaros-ai/core/types'
