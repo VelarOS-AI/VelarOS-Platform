@@ -38,6 +38,117 @@ interface WorkerExecutionStreamOptions {
   dag?: LooseOptional<StreamWorkerThreadPayload['dag']>
 }
 
+/** worker 线程事件里随事件类型变化的那几个字段；其余字段全部由线程身份信封给定。 */
+type WorkerThreadProjection = Pick<StreamWorkerThreadPayload, 'event'> &
+  Partial<Pick<StreamWorkerThreadPayload, 'timestamp' | 'text' | 'summary' | 'chatEvent'>>
+
+/**
+ * 线程身份信封：worker 线程事件里**与事件类型无关**的那部分。
+ *
+ * 收成一处的理由不是省行数，是**改一个字段不能只改对八分之一**：这些字段是前端认领同一条线程
+ * （threadId / activationId）与定位其在计划树中位置（taskId / nodeId / dag）的依据，逐分支各抄
+ * 一份时漏抄任一字段的症状是"某类事件的气泡挂错线程/挂不上"，且只在跑到那类事件时才出现。
+ */
+function workerThreadEnvelope(
+  options: WorkerExecutionStreamOptions
+): Omit<StreamWorkerThreadPayload, 'event' | 'timestamp'> {
+  return {
+    kind: 'worker-thread',
+    threadId: options.threadId,
+    activationId: toNullable(options.activationId),
+    taskId: toNullable(options.taskId),
+    nodeId: toNullable(options.nodeId),
+    title: options.title,
+    agentName: toNullable(options.agentName),
+    roleId: toNullable(options.roleId),
+    phase: toNullable(options.phase),
+    status: 'running',
+    capabilityTarget: toNullable(options.capabilityTarget),
+    dag: toNullable(options.dag),
+  }
+}
+
+/**
+ * agent 事件 → worker 线程投影；返回 null 表示这类事件不进线程详情（静默丢弃）。
+ *
+ * 白名单而非黑名单：worker 的输出默认**不**冒到主聊天流（主会话只听协调者/汇总者），所以新增
+ * 事件类型的缺省是"不透出"，要透出必须在这里显式登记。
+ * `tool-progress` / `tool-metadata` 用事件自带 timestamp（它们是有序增量，用接收时刻会让
+ * 乱序到达的分片在 UI 上排错序），其余用接收时刻。
+ */
+function projectWorkerThreadEvent(event: AgentEvent): Nullable<WorkerThreadProjection> {
+  switch (event.type) {
+    case 'text-delta':
+      return { event: 'delta', text: event.text }
+    case 'reasoning-delta':
+      return {
+        event: 'chat-event',
+        chatEvent: { type: 'reasoning-delta', id: event.id, text: event.text },
+      }
+    case 'tool-start':
+      return {
+        event: 'chat-event',
+        chatEvent: {
+          type: 'tool-start',
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+          categoryId: event.categoryId,
+        },
+      }
+    case 'tool-progress':
+      return {
+        event: 'chat-event',
+        timestamp: event.timestamp,
+        chatEvent: {
+          type: 'tool-progress',
+          toolCallId: event.toolCallId,
+          chunk: event.chunk,
+          timestamp: event.timestamp,
+        },
+      }
+    case 'tool-metadata':
+      return {
+        event: 'chat-event',
+        timestamp: event.timestamp,
+        chatEvent: {
+          type: 'tool-metadata',
+          toolCallId: event.toolCallId,
+          title: event.title,
+          metadata: event.metadata,
+          timestamp: event.timestamp,
+        },
+      }
+    case 'tool-done':
+      return {
+        event: 'chat-event',
+        chatEvent: {
+          type: 'tool-done',
+          toolCallId: event.toolCallId,
+          result: event.result,
+          error: event.error,
+          effects: event.effects,
+          evidence: event.evidence,
+          modelImage: event.modelImage,
+        },
+      }
+    case 'notice':
+      return {
+        event: 'chat-event',
+        chatEvent: { type: 'notice', kind: event.kind, payload: event.payload },
+      }
+    case 'runtime':
+      if (event.payload.kind !== 'reconnecting') return null
+      return {
+        event: 'chat-event',
+        summary: `Reconnecting (${event.payload.attempt})`,
+        chatEvent: { type: 'runtime-state', payload: event.payload },
+      }
+    default:
+      return null
+  }
+}
+
 /**
  * 执行事件总线。
  *
@@ -78,173 +189,33 @@ class ExecutionEventBus {
    *
    * worker 的工具调用、turn context 和原始输出不直接渲染到主聊天流；
    * 主会话只看协调者/汇总者的声音。这里仅透出宿主资源刷新副作用，
-   * 让文件树、git 摘要等外层 UI 仍能知道子线程改过文件。
+   * 让文件树、版本状态摘要等外层 UI 仍能知道子线程改过资源。
+   *
+   * **两条上浮通道的顺序是契约**（父总线上的先后就是 UI 上的先后）：
+   *  1. 先发 worker 线程事件（线程详情里的时间线）；
+   *  2. 再发 contextInvalidated 的 tool-done 上浮（父侧据此作废在途上下文）。
+   * 反过来会让父级先收到"上下文已失效"、后收到造成失效的那条工具事件。
+   *
+   * `options` 缺席 = 不接线程详情：此时**只**保留 contextInvalidated 上浮，其余一律静默丢弃。
+   * 这条正确性通道与"要不要渲染线程"无关，不能一起关掉。
    */
   public forWorkerExecution(options?: WorkerExecutionStreamOptions): ExecutionEventBus {
     return new ExecutionEventBus({
       agent: (event) => {
-        if (event.type === 'text-delta' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'delta',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            text: event.text,
-          })
-          return
-        }
+        if (options) {
+          // 建议任务卡要渲染在主会话流里（用户在那里决策），不能只埋进
+          // 子 agent 的 worker 线程详情——上浮为父级 notice；主会话侧按
+          // suggestion id 去重，双份不会产生重复卡。
+          if (event.type === 'notice' && event.kind === 'flagged-task') this.emitNotice(event)
 
-        if (event.type === 'reasoning-delta' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            chatEvent: {
-              type: 'reasoning-delta',
-              id: event.id,
-              text: event.text,
-            },
-          })
-          return
-        }
-
-        if (event.type === 'tool-start' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            chatEvent: {
-              type: 'tool-start',
-              toolCallId: event.toolCallId,
-              toolName: event.toolName,
-              args: event.args,
-              categoryId: event.categoryId,
-            },
-          })
-          return
-        }
-
-        if (event.type === 'tool-progress' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: event.timestamp ?? Date.now(),
-            chatEvent: {
-              type: 'tool-progress',
-              toolCallId: event.toolCallId,
-              chunk: event.chunk,
-              timestamp: event.timestamp,
-            },
-          })
-          return
-        }
-
-        if (event.type === 'tool-metadata' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: event.timestamp ?? Date.now(),
-            chatEvent: {
-              type: 'tool-metadata',
-              toolCallId: event.toolCallId,
-              title: event.title,
-              metadata: event.metadata,
-              timestamp: event.timestamp,
-            },
-          })
-          return
-        }
-
-        if (event.type === 'tool-done' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            chatEvent: {
-              type: 'tool-done',
-              toolCallId: event.toolCallId,
-              result: event.result,
-              error: event.error,
-              effects: event.effects,
-              evidence: event.evidence,
-              modelImage: event.modelImage,
-            },
-          })
-
-          if (!event.effects?.contextInvalidated) return
-
-          this.emitAgent({
-            type: 'tool-done',
-            toolCallId: `worker:${event.toolCallId}`,
-            result: null,
-            effects: event.effects,
-          })
-          return
+          const projection = projectWorkerThreadEvent(event)
+          if (projection) {
+            this.emitWorkerThread({
+              ...workerThreadEnvelope(options),
+              ...projection,
+              timestamp: projection.timestamp ?? Date.now(),
+            })
+          }
         }
 
         if (event.type === 'tool-done' && event.effects?.contextInvalidated) {
@@ -254,64 +225,7 @@ class ExecutionEventBus {
             result: null,
             effects: event.effects,
           })
-          return
         }
-
-        if (event.type === 'notice' && options) {
-          // 建议任务卡要渲染在主会话流里（用户在那里决策），不能只埋进
-          // 子 agent 的 worker 线程详情——上浮为父级 notice；主会话侧按
-          // suggestion id 去重，双份不会产生重复卡。
-          if (event.kind === 'flagged-task') this.emitNotice(event)
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            chatEvent: {
-              type: 'notice',
-              kind: event.kind,
-              payload: event.payload,
-            },
-          })
-          return
-        }
-
-        if (event.type === 'runtime' && event.payload.kind === 'reconnecting' && options) {
-          this.emitWorkerThread({
-            kind: 'worker-thread',
-            event: 'chat-event',
-            threadId: options.threadId,
-            activationId: toNullable(options.activationId),
-            taskId: toNullable(options.taskId),
-            nodeId: toNullable(options.nodeId),
-            title: options.title,
-            agentName: toNullable(options.agentName),
-            roleId: toNullable(options.roleId),
-            phase: toNullable(options.phase),
-            status: 'running',
-            capabilityTarget: toNullable(options.capabilityTarget),
-            dag: toNullable(options.dag),
-            timestamp: Date.now(),
-            summary: `Reconnecting (${event.payload.attempt})`,
-            chatEvent: {
-              type: 'runtime-state',
-              payload: event.payload,
-            },
-          })
-          return
-        }
-
-        return
       },
     })
   }

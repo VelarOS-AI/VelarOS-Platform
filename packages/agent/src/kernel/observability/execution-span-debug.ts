@@ -12,6 +12,7 @@
 // 段并列（片 1 加数据源标注双源核对），完整替换随 D3 prompt 审计侧信道落地（片 2+）。
 import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
 
+import { compareStableStrings } from '../../agent/context/residency/determinism'
 import type {
   CapabilitySpan,
   ExecutionSpan,
@@ -150,7 +151,7 @@ export function projectExecutionSpanDebug(
   // turn span 是执行观测的逐轮锚：其父可能是 run span，也可能因活读父未落盘而成孤儿——两者都投。
   const turnSpans = spans
     .filter((span): span is Extract<ExecutionSpan, { category: 'turn' }> => span.category === 'turn')
-    .sort((a, b) => (a.startedAt !== b.startedAt ? a.startedAt - b.startedAt : compareId(a.spanId, b.spanId)))
+    .sort(compareSpansChronologically)
 
   const turns: ExecutionSpanDebugTurn[] = turnSpans.map((turnSpan) =>
     projectTurn(turnSpan, childSpans(turnSpan.spanId), full, promptAuditByFingerprint)
@@ -161,7 +162,7 @@ export function projectExecutionSpanDebug(
       (span): span is CapabilitySpan =>
         span.category === 'capability' && span.parentSpanId === null
     )
-    .sort((a, b) => (a.startedAt !== b.startedAt ? a.startedAt - b.startedAt : compareId(a.spanId, b.spanId)))
+    .sort(compareSpansChronologically)
     .map((span) => ({
       capabilityId: span.capabilityId,
       operationId: span.operationId,
@@ -172,7 +173,7 @@ export function projectExecutionSpanDebug(
 
   const runs = spans
     .filter((span): span is Extract<ExecutionSpan, { category: 'run' }> => span.category === 'run')
-    .sort((a, b) => (a.startedAt !== b.startedAt ? a.startedAt - b.startedAt : compareId(a.spanId, b.spanId)))
+    .sort(compareSpansChronologically)
     .map(
       (runSpan): ExecutionSpanDebugRun => ({
         runId: runSpan.runId,
@@ -286,6 +287,15 @@ function pickModelSpan(children: readonly ExecutionSpan[]): Nullable<ModelSpan> 
   )
 }
 
-function compareId(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0
+/**
+ * span 排序的唯一谓词：开始时刻升序，**同刻按 spanId 码元序**。
+ *
+ * 平手键不是装饰：同一毫秒内开出的 span 很常见（一轮里 model/tool span 连开），没有平手键时
+ * `Array#sort` 的相对序由输入顺序决定，同一份账本在两台机器上能投出不同的 turns 顺序，
+ * 而这份投影正是 get_debug / agent-lab 的对账输入。用码元序（`compareStableStrings` 单源）而非
+ * `localeCompare`，理由同 determinism 模块：后者随 ICU 数据与 locale 变化。
+ */
+function compareSpansChronologically(left: ExecutionSpan, right: ExecutionSpan): number {
+  if (left.startedAt !== right.startedAt) return left.startedAt - right.startedAt
+  return compareStableStrings(left.spanId, right.spanId)
 }

@@ -62,8 +62,8 @@ interface KernelChatRunOptions {
 }
 
 /**
- * 宿主执行协调器窄接口：桥只需要 `run` 一个动词，`TRenderTarget` 是对桥不透明的
- * 传输/渲染目标句柄对桥完全不透明；桥从不检查它，只透传给宿主。
+ * 宿主执行协调器窄接口：桥只需要 `run` 一个动词。
+ * `TRenderTarget` 是传输/渲染目标句柄，对桥完全不透明——桥从不检查它，只原样透传给宿主。
  */
 interface KernelChatExecutionCoordinator<TRenderTarget> {
   run(
@@ -98,10 +98,6 @@ interface PendingKernelChatRun<TRenderTarget> {
   payload: ChatSendRequest
 }
 
-interface KernelScopeSource {
-  sessionId: string
-}
-
 interface KernelSessionAuthorization {
   assertCurrent(): void
 }
@@ -125,7 +121,6 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   private readonly policy: KernelSessionPolicy
   private readonly backgroundJobManager: KernelBackgroundJobManager
   private readonly pendingRuns = new Map<string, Array<PendingKernelChatRun<TRenderTarget>>>()
-  private readonly scopeSources = new Map<string, KernelScopeSource>()
   private nextInputId = 1
 
   constructor(private readonly options: ChatKernelSessionBridgeOptions<TRenderTarget>) {
@@ -142,7 +137,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   public async send(renderTarget: TRenderTarget, payload: ChatSendRequest): Promise<void> {
-    const scopeId = this.rememberPayloadScope(payload)
+    const scopeId = payload.sessionId
     const input = this.buildSendInput(payload, scopeId)
     if (!isPresent(input)) {
       void this.runExecutionCoordinator(renderTarget, payload)
@@ -159,18 +154,8 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
   }
 
-  public async cancel(
-    input: string | { sessionId: string }
-  ): Promise<KernelCancelResult> {
-    const source = isString(input) ? { sessionId: input } : { sessionId: input.sessionId }
-    const scopeIds = this.resolveCancelScopeIds(source)
-    const results = await Promise.all(
-      scopeIds.map((scopeId) => this.controller.cancel({ sessionId: scopeId }))
-    )
-
-    return {
-      aborted: results.some((result) => result.aborted),
-    }
+  public async cancel(input: string | { sessionId: string }): Promise<KernelCancelResult> {
+    return this.controller.cancel({ sessionId: isString(input) ? input : input.sessionId })
   }
 
   public async provideGuidance(
@@ -178,11 +163,10 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     message: ModelMessage,
     authorization?: KernelSessionAuthorization
   ): Promise<void> {
-    const scopeId = this.rememberScope(payload.sessionId)
     const content = payload.message.textBlocks.join('\n').trim()
     const input = {
-      id: payload.message.messageId ?? this.createInputId(scopeId),
-      sessionId: scopeId,
+      id: payload.message.messageId ?? this.createInputId(payload.sessionId),
+      sessionId: payload.sessionId,
       role: 'user' as const,
       content,
       delivery: this.policy.resolveDelivery({ kind: 'guidance' }),
@@ -226,16 +210,12 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   public async answer(payload: ExecutionProvideInputRequest): Promise<void> {
-    await this.controller.answer({
-      ...payload,
-      sessionId: this.rememberScope(payload.sessionId),
-    } satisfies KernelControllerAnswerInput)
+    await this.controller.answer({ ...payload } satisfies KernelControllerAnswerInput)
   }
 
   public async approve(payload: ExecutionResolveConfirmationRequest): Promise<void> {
-    const scopeId = this.rememberScope(payload.sessionId)
     await this.controller.approve({
-      sessionId: scopeId,
+      sessionId: payload.sessionId,
       approved: payload.approved,
       rejectionMessage: payload.rejectionMessage,
       approvalPayload: payload.userActionCardResults,
@@ -243,9 +223,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   public async runtimeStatus(sessionId: string): Promise<KernelRuntimeStatus> {
-    return this.controller.runtimeStatus({
-      sessionId: this.rememberScope(sessionId),
-    })
+    return this.controller.runtimeStatus({ sessionId })
   }
 
   public pendingInteraction(
@@ -289,39 +267,34 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
         await this.inputStore.promoteSteers(input.sessionId)
       },
       answer: async (input) => {
-        const source = this.resolveScopeSource(input.sessionId)
         this.options.executionService.provideInputForSourceSession({
-          sessionId: source.sessionId,
+          sessionId: input.sessionId,
           answer: input.answer,
         })
       },
       approve: async (input) => {
-        const source = this.resolveScopeSource(input.sessionId)
         this.options.executionService.resolveConfirmationForSourceSession({
-          sessionId: source.sessionId,
+          sessionId: input.sessionId,
           approved: input.approved,
           rejectionMessage: input.rejectionMessage,
           userActionCardResults: input.approvalPayload,
         })
       },
       runtimeStatus: async (target) => {
-        const source = this.resolveScopeSource(target.sessionId)
         const queuedInputs = await this.inputStore.countPending(target.sessionId)
         return this.policy.resolveRuntimeStatus({
           hasPendingConfirmation:
             this.options.executionService.hasPendingInteractionForSourceSession(
-              source.sessionId,
+              target.sessionId,
               'confirmation'
             ),
           hasPendingInput: this.options.executionService.hasPendingInteractionForSourceSession(
-            source.sessionId,
+            target.sessionId,
             'input'
           ),
           running:
             this.runCoordinator.isRunning(target.sessionId) ||
-            this.options.executionService.isRunningForSourceSession(
-              source.sessionId
-            ),
+            this.options.executionService.isRunningForSourceSession(target.sessionId),
           cancelRequested: false,
           queuedInputs,
           backgroundJobs: this.backgroundJobManager.runningForSession(target.sessionId).length,
@@ -331,10 +304,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
         this.runCoordinator.interrupt(target.sessionId)
         this.clearPending(target.sessionId)
         this.backgroundJobManager.cancelSession(target.sessionId)
-        const source = this.resolveScopeSource(target.sessionId)
-        const aborted = this.options.executionService.abortSourceSession(
-          source.sessionId
-        )
+        const aborted = this.options.executionService.abortSourceSession(target.sessionId)
         try {
           await this.inputStore.cancel(target.sessionId)
         } finally {
@@ -445,29 +415,29 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     payload: ChatSendRequest
   ): Promise<void> {
     try {
-      const options = this.buildExecutionRunOptions(this.rememberPayloadScope(payload))
+      const options = this.buildExecutionRunOptions(payload.sessionId)
       await this.options.executionCoordinator.run(renderTarget, payload, options)
     } catch (error) {
       this.log.error('聊天执行异步失败', AppError.from(error))
     }
   }
 
-  private buildExecutionRunOptions(
-    sessionId: string
-  ): KernelChatRunOptions | undefined {
-    // 子 agent 后台 job 注册在「原始 source sessionId」下（SubAgentDispatcher 用 parentCtx.sessionId
-    // = AgentRunner config.sessionId = 原始 request.sessionId），而本类对外可使用宿主组合的 scope key。
-    // 两者不一致会导致 job 对 read/wait/drain/隐式等待全部「不可见」。
-    // 这里统一回退到原始 source sessionId，确保注册与查询用同一个 key。
-    const jobSessionId = sessionId
+  /**
+   * 后台 job 生命周期闭包：**注册键与查询键必须是同一个 sessionId**。
+   *
+   * 子 agent 的后台 job 由 SubAgentDispatcher 以 `parentCtx.sessionId`（= AgentRunner config.sessionId
+   * = 原始 request.sessionId）注册。这里读/等/取消一律用同一个 `sessionId` 参数，两者错开一次的症状是
+   * job 对 read/wait/drain/隐式等待**全部不可见**——不报错，只是永远查不到。
+   */
+  private buildExecutionRunOptions(sessionId: string): KernelChatRunOptions {
     // 停滞/完成/失败/取消通知全部走 task.lifecycle 账本，由 turn-context 双投递点
     // （pre-send chips / mid-run note）恰好一次送达；不再有 run-start internalFollowUps 特例。
-    this.backgroundJobManager.recordStalledJobs({ sessionId: jobSessionId })
+    this.backgroundJobManager.recordStalledJobs({ sessionId })
     const options: KernelChatRunOptions = {
       // 隐式等待：模型想收尾时若本会话仍有后台子 agent 在跑，阻塞等它们完成（waitForSession 对
       // 当下仍在运行的 job 会阻塞，返回其快照；无在跑 job 时立即返回 []）。返回是否等过 → 决定是否续跑。
       awaitPendingBackgroundJobs: async () => {
-        const snapshots = await this.backgroundJobManager.waitForSession(jobSessionId, {})
+        const snapshots = await this.backgroundJobManager.waitForSession(sessionId, {})
         return snapshots.length > 0
       },
       readBackgroundJobOutput: async (input) => {
@@ -475,52 +445,19 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
           input.mode === 'snapshot'
             ? this.backgroundJobManager.snapshotOutputForSession.bind(this.backgroundJobManager)
             : this.backgroundJobManager.readOutputForSession.bind(this.backgroundJobManager)
-        return reader(jobSessionId, input.jobId)
+        return reader(sessionId, input.jobId)
       },
       waitBackgroundJobs: async (input) =>
-        this.backgroundJobManager.waitForSession(jobSessionId, input),
+        this.backgroundJobManager.waitForSession(sessionId, input),
       cancelBackgroundJob: async (input) => {
-        const job = this.backgroundJobManager.cancelForSession(jobSessionId, input.jobId)
+        const job = this.backgroundJobManager.cancelForSession(sessionId, input.jobId)
         if (!job) return null
-        return this.backgroundJobManager.snapshotOutputForSession(jobSessionId, job.id)
+        return this.backgroundJobManager.snapshotOutputForSession(sessionId, job.id)
       },
     }
     return options
   }
 
-  private rememberPayloadScope(payload: ChatSendRequest): string {
-    return this.rememberScope(payload.sessionId)
-  }
-
-  // scope key 就是 source sessionId 本身(P2 清掉了 createChatStreamScopeKey 这层恒等转发)。
-  private rememberScope(sessionId: string): string {
-    this.scopeSources.set(sessionId, { sessionId })
-    return sessionId
-  }
-
-  private resolveScopeSource(scopeId: string): KernelScopeSource {
-    return this.scopeSources.get(scopeId) ?? { sessionId: scopeId }
-  }
-
-  private resolveCancelScopeIds(source: KernelScopeSource): string[] {
-    const scopeIds = new Set<string>()
-    for (const [scopeId, scopeSource] of this.scopeSources) {
-      if (scopeSource.sessionId === source.sessionId) {
-        scopeIds.add(scopeId)
-      }
-    }
-    for (const scopeId of this.pendingRuns.keys()) {
-      if (scopeId === source.sessionId) {
-        scopeIds.add(scopeId)
-      }
-    }
-
-    if (scopeIds.size === 0) {
-      scopeIds.add(this.rememberScope(source.sessionId))
-    }
-
-    return [...scopeIds]
-  }
 }
 
 export { ChatKernelSessionBridge }

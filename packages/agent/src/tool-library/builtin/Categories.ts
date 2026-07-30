@@ -331,18 +331,6 @@ function activationCapabilityIdForCategory(categoryId: ToolCategoryId): string {
   return `capability:${categoryId}`
 }
 
-function subCategoryIdsForCategory(_categoryId: ToolCategoryId): ToolCategoryId[] {
-  return []
-}
-
-function parentCategoryIdForCategory(_categoryId: ToolCategoryId): Nullable<ToolCategoryId> {
-  return null
-}
-
-function categoryKindForCategory(categoryId: ToolCategoryId): ToolMapCategoryKind {
-  return isEmpty(subCategoryIdsForCategory(categoryId)) ? 'leaf' : 'bundle'
-}
-
 function activationCapabilityIdForCard(card: ToolDiscoveryCard): Nullable<string> {
   if (card.kind === 'plugin') return null
   return activationCapabilityIdForCategory(card.categoryId)
@@ -358,10 +346,6 @@ function hasReason(
   code: string
 ): boolean {
   return card.reasons.some((reason) => reason.layer === layer && reason.code === code)
-}
-
-function isControlRoleToolPage(card: ToolDiscoveryCard): boolean {
-  return card.kind === 'tool' && hasReason(card, 'runtime', 'control_tool')
 }
 
 function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide[] {
@@ -471,14 +455,8 @@ function buildActivationFlow(input: {
       flow.push(
         `tool_replace(pageIn:["${input.card.id}"]) 启用该能力；下一轮重新查看具体工具页状态，再按目标工具 activation 调用。`
       )
-    } else if (isControlRoleToolPage(input.card)) {
-      flow.push(
-        `tool_replace(pageIn:["${input.card.id}"])，下一轮直接调用 ${input.card.name}。`
-      )
     } else {
-      flow.push(
-        `tool_replace(pageIn:["${input.card.id}"])，下一轮直接调用 ${input.card.name}。`
-      )
+      flow.push(`tool_replace(pageIn:["${input.card.id}"])，下一轮直接调用 ${input.card.name}。`)
     }
   } else if (input.method === 'request_approval') {
     const target = input.pageIn[0] ?? input.card.id
@@ -658,10 +636,9 @@ function summarizeToolAccessRef(card: ToolDiscoveryCard) {
 
 function summarizeToolSpacePageRef(
   card: ToolDiscoveryCard,
-  optionsOrIndex: { includeAccess?: boolean } | number = {}
+  options: { includeAccess?: boolean } = {}
 ) {
-  const includeAccess =
-    isNumber(optionsOrIndex) ? true : (optionsOrIndex.includeAccess ?? true)
+  const includeAccess = options.includeAccess ?? true
   return {
     id: card.id,
     kind: card.kind,
@@ -945,10 +922,6 @@ function buildToolSpaceStatusSummary(cards: readonly ToolDiscoveryCard[]) {
   }
 }
 
-function isSchemaPlainObject(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value)
-}
-
 function collectSchemaSearchText(value: unknown, output: string[], depth = 0): void {
   if (depth > 6 || output.length > 240) return
   if (isString(value)) {
@@ -966,7 +939,7 @@ function collectSchemaSearchText(value: unknown, output: string[], depth = 0): v
     }
     return
   }
-  if (!isSchemaPlainObject(value)) return
+  if (!isPlainObject(value)) return
   for (const [key, item] of Object.entries(value)) {
     output.push(key)
     output.push(...splitIdentifierSearchTerm(key))
@@ -983,8 +956,7 @@ function schemaSearchText(
   return pieces.join(' ')
 }
 
-function activationSearchText(card: ToolDiscoveryCard): string {
-  const activation = buildToolActivationGuide(card)
+function activationSearchText(activation: ToolActivationGuide): string {
   return [
     activation.method,
     activation.summary,
@@ -1021,7 +993,7 @@ function buildToolSearchScoreContext(
     schemaTextById.set(card.id, schemaSearchText(readToolInputSchema(ctx, card)))
 
     const activation = buildToolActivationGuide(card)
-    const activationText = activationSearchText(card)
+    const activationText = activationSearchText(activation)
     activationTextById.set(card.id, activationText)
 
     for (const dependency of activation.dependencies) {
@@ -1190,7 +1162,7 @@ export function pageToolDiscoveryCards(
       hasMore: nextOffset < cards.length,
       nextCursor: nextOffset < cards.length ? String(nextOffset) : null,
     },
-    pages: page.map(summarizeToolSpacePageRef),
+    pages: page.map((card) => summarizeToolSpacePageRef(card)),
     statusSummary: buildToolSpaceStatusSummary(cards),
     message: '这是工具页索引；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用。',
   }
@@ -1341,20 +1313,20 @@ export function mapToolDiscoveryCards(
           },
         }
       : undefined
-    const subCategoryIds = subCategoryIdsForCategory(categoryId)
-    const childCards = subCategoryIds.flatMap((subCategoryId) => grouped.get(subCategoryId) ?? [])
-    const childTools = childCards.filter((card) => card.kind === 'tool')
 
     return {
       categoryId,
-      categoryKind: categoryKindForCategory(categoryId),
-      parentCategoryId: parentCategoryIdForCategory(categoryId),
-      subCategoryIds,
+      // 本层的分类表是**平的**：父子关系属于能力描述符的表达力，中立执行主链不持有分类树，
+      // 因此这四个字段恒为叶子常量。字段保留是模型面形状契约（消费方按固定形状读），不是待填的洞；
+      // 真要支持分类树，改法是让注入侧的描述符带上父子指针，不是在这里加一张本地表。
+      categoryKind: 'leaf' as ToolMapCategoryKind,
+      parentCategoryId: null,
+      subCategoryIds: [] as ToolCategoryId[],
       label: definition?.label ?? categoryId,
       summary: toNullable(definition?.description),
       toolOs: toNullable(definition?.toolOs),
       statusSummary: buildToolSpaceStatusSummary(cards),
-      childStatusSummary: isEmpty(subCategoryIds) ? null : buildToolSpaceStatusSummary(childCards),
+      childStatusSummary: null,
       capability: capability ? summarizeToolSpaceMapPage(capability) : null,
       activation: capability
         ? buildToolActivationRef(capability)
@@ -1370,7 +1342,7 @@ export function mapToolDiscoveryCards(
       plugins: plugins.map(summarizeToolSpaceMapPage),
       totalToolCount: tools.length,
       totalToolNameCount: toolNames.length,
-      childToolCount: childTools.length,
+      childToolCount: 0,
       toolsReturnedCount: visibleTools.length,
       hasMoreTools: visibleTools.length < tools.length,
       hiddenToolCount: Math.max(0, tools.length - visibleTools.length),
@@ -1522,11 +1494,6 @@ export async function readRequestedSkillPages(
   }
 }
 
-function protectedCategoryIds(categoryIds: readonly ToolCategoryId[]): ToolCategoryId[] {
-  void categoryIds
-  return []
-}
-
 type ToolSpaceReplacePageDetail = Pick<
   ToolDiscoveryCard,
   | 'id'
@@ -1611,21 +1578,19 @@ function buildPreparedToolExamples(
   return examples
 }
 
+/**
+ * 换入结果 → 给模型的下一步提示。分支序即优先级：**有进展先说进展**，没进展时按"能自己解开的
+ * 阻塞"（授权/用户动作）优先于"只能换个思路"（reasons/重新查页）。
+ * 一条都不落空是硬要求——返回空串等于让模型自己猜下一步，实测会退化成重复 page-in 同一张不可用页。
+ */
 function buildReplaceNextTurnHint(input: {
   preparedTools: readonly string[]
   enabledCapabilities: readonly ToolCategoryId[]
   requiresApprovalDetails: readonly ToolSpaceReplacePageDetail[]
   requiresUserActionDetails: readonly ToolSpaceReplacePageDetail[]
   skippedPageDetails: readonly ToolSpaceReplacePageDetail[]
-  recommendedPageIn: readonly string[]
-  recommendedTools: readonly string[]
-  userActionHint: Nullable<string>
 }): string {
   if (!isEmpty(input.preparedTools) || !isEmpty(input.enabledCapabilities)) return '工具页替换已记录；下一轮 AI SDK tools 会按动态工具空间预算暴露实际可调用工具 schema。preparedToolExamples 给出了每个换入工具的正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
-
-  if (!isEmpty(input.recommendedTools)) return `没有新的工具页被换入；目标页不可用。下一步直接调用 ${input.recommendedTools.join(', ')}，不要重复 page-in unavailable targets。`
-
-  if (!isEmpty(input.recommendedPageIn)) return `没有新的工具页被换入；目标页不可用。先 tool_replace(pageIn:${JSON.stringify(input.recommendedPageIn)}) 换入推荐页，下一轮调用真实工具；不要重复 page-in unavailable targets。`
 
   if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails)) return '没有新的工具页被换入；请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
 
@@ -1790,13 +1755,9 @@ async function planToolSpaceReplacement(
       continue
     }
     if (card.kind === 'capability') {
-      const categories = expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
-      const protectedCategories = protectedCategoryIds(categories)
-      const toDisable = categories.filter((categoryId) => !protectedCategories.includes(categoryId))
-      if (!isEmpty(toDisable)) {
-        disabledCapabilities.push(...toDisable)
-      }
-      skippedPages.push(...protectedCategories.map((categoryId) => `capability:${categoryId}`))
+      // 「不可关停的分类」是具体产品策略，由注入侧在 requestToolCategoryAccess / 描述符层表达；
+      // 本层无保护名单，展开出的分类一律可关。
+      disabledCapabilities.push(...expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId]))
       continue
     }
     requiresUserAction.push(id)
@@ -1812,11 +1773,7 @@ async function planToolSpaceReplacement(
   const requiresApprovalDetails = summarizeReplacePages(requiresApproval, cardsById)
   const requiresUserActionDetails = summarizeReplacePages(requiresUserAction, cardsById)
   const skippedPageDetails = summarizeReplacePages(skippedPages, cardsById)
-  const unavailableTargetDetails = skippedPageDetails
-  const recommendedPageIn: string[] = []
-  const recommendedTools: string[] = []
   const preparedToolSet = new Set(preparedTools)
-  const enabledCapabilitySetForResult = new Set(enabledCapabilities)
 
   return {
     op: 'replace' as const,
@@ -1835,10 +1792,13 @@ async function planToolSpaceReplacement(
     requiresUserActionDetails,
     skippedPages: [...new Set(skippedPages)],
     skippedPageDetails,
+    // unavailableTargets / recommendedPageIn / recommendedTools / userActionHint 是模型面形状契约的
+    // 一部分：本层没有"推荐替代页"的知识（那是能力描述符的表达力），故恒为空；字段保留让消费方
+    // 无需分支。skipped 与 unavailable 在本层是同一件事，两个名字都对外保留。
     unavailableTargets: [...new Set(skippedPages)],
-    unavailableTargetDetails,
-    recommendedPageIn,
-    recommendedTools,
+    unavailableTargetDetails: skippedPageDetails,
+    recommendedPageIn: [] as string[],
+    recommendedTools: [] as string[],
     userActionHint: null,
     blockedBy: [
       ...new Set(
@@ -1853,13 +1813,10 @@ async function planToolSpaceReplacement(
     activeThisTurn: false,
     nextTurnHint: buildReplaceNextTurnHint({
       preparedTools: [...preparedToolSet],
-      enabledCapabilities: [...enabledCapabilitySetForResult],
+      enabledCapabilities: [...new Set(enabledCapabilities)],
       requiresApprovalDetails,
       requiresUserActionDetails,
       skippedPageDetails,
-      recommendedPageIn,
-      recommendedTools,
-      userActionHint: null,
     }),
     message: options.apply
       ? alreadyResidentTools.length === preparedTools.length && !isEmpty(alreadyResidentTools)
