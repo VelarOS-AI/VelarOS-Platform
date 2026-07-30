@@ -230,27 +230,18 @@ const workspaceListFiles = defineWorkspaceAgentTool(wsTool.listFiles, {
       const view = input.view ?? 'flat'
 
       if (hasFilters) {
-        const {
-          confirmRisk: _confirmRisk,
-          cwd: _cwd,
-          exclude: _exclude,
-          excludePresets: _excludePresets,
-          limit: _limit,
-          maxDepth: _maxDepth,
-          recursive: _recursive,
-          view: _view,
-          ...discoveryInput
-        } = input
-        void _confirmRisk
-        void _cwd
-        void _exclude
-        void _excludePresets
-        void _limit
-        void _maxDepth
-        void _recursive
-        void _view
+        // 显式列字段而不是「rest 剩余展开 + 一串 void 消变量」：这是工具入参 → 端口契约的
+        // 跨边界映射，按 §3.7 应当可审计；rest 形态还会把将来新增的 schema 字段悄悄漏给端口。
+        // limit ×8 是发现模式的过采样窗口，端口内过滤后再由下面的 limitResults 裁到 limit。
         const entries = await ctx.workspace.findFiles({
-          ...discoveryInput,
+          path: input.path,
+          query: input.query,
+          glob: input.glob,
+          extensions: input.extensions,
+          include: input.include,
+          excludeGitignored: input.excludeGitignored,
+          entryTypes: input.entryTypes,
+          pathMatchMode: input.pathMatchMode,
           exclude,
           limit: input.limit * 8,
           maxDepth: input.maxDepth ?? 12,

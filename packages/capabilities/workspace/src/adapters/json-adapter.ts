@@ -1,3 +1,5 @@
+import { AppError } from "@velaros-ai/core/error";
+
 import type { FileAdapter, FileAdapterFactory } from "../types/adapter.js";
 import type { FileSnapshot } from "../types/snapshot.js";
 import { ext } from "../utils/path.js";
@@ -21,7 +23,7 @@ export function jsonAdapterFactory(): FileAdapterFactory {
           } catch (error) {
             return {
               ok: false,
-              diagnostics: [{ severity: "error", message: `JSON 解析失败：${(error as Error).message}`, path: snapshot.path, source: "core.json" }],
+              diagnostics: [{ severity: "error", message: `JSON 解析失败：${AppError.getMessage(error)}`, path: snapshot.path, source: "core.json" }],
             };
           }
         },
@@ -32,7 +34,7 @@ export function jsonAdapterFactory(): FileAdapterFactory {
           } catch (error) {
             return {
               ok: false,
-              diagnostics: [{ severity: "error", message: `JSON 校验失败：${(error as Error).message}`, path: snapshot.path, source: "core.json" }],
+              diagnostics: [{ severity: "error", message: `JSON 校验失败：${AppError.getMessage(error)}`, path: snapshot.path, source: "core.json" }],
               checks: [{ id: "core.json", ok: false }],
             };
           }

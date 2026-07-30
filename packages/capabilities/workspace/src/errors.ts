@@ -1,3 +1,10 @@
+// 域：workspace 包的错误信封（稳定 reason 闭集 + 领域错误类 + thrown value 归一化）。
+//
+// **为什么不是 `AppError`**：本包是可独立发布、可脱离 velaros 宿主消费的能力包，错误面必须
+// 自持；`WorkspaceError` 承担的是同一件事——**带机器可读 code**（`reason`）+ 结构化 details +
+// **可执行的下一步**（`suggestedNextAction`），这三样是 agent 自救所需的全部信息。裸
+// `new Error` 只有一句英文，模型看到只能重试。新增失败形态时先往 `WorkspaceErrorCode`
+// 闭集加一项，别用 `INVALID_INPUT` 兜底掉真实原因。
 import { isNull, isUndefined } from "@velaros-ai/core";
 
 /** workspace 工具和 CLI 输出使用的稳定、机器可读错误原因。 */
@@ -42,8 +49,12 @@ export class WorkspaceError extends Error {
   }
 }
 
-/** 将任意 thrown value 归一化成 JSON 安全的错误对象。 */
-export function toErrorObject(error: any): Record<string, any> {
+/**
+ * 将任意 thrown value 归一化成 JSON 安全的错误对象。
+ * 入参写 `unknown` 而非 `any`：throw 出来的真的可能是任何值（含 null / undefined / 字符串），
+ * `unknown` 会强制本函数把每种形态都显式收窄一遍——那正是它存在的理由。
+ */
+export function toErrorObject(error: unknown): Record<string, any> {
   if (error instanceof WorkspaceError) return {
       name: error.name,
       reason: error.reason,

@@ -10,6 +10,7 @@ import {
 import type { WorkspaceKernel } from './core/workspace.js'
 import type { BatchTask } from './types/batch.js'
 import type { ReadInput } from './types/io.js'
+import { WorkspaceError } from './errors.js'
 import type { batchTaskSchema } from './tool-schemas.js'
 import type { RunBatchToolInput } from './tool-schemas.js'
 import { WorkspaceAgentToolSpecs } from './Workspace.tool.js'
@@ -155,8 +156,10 @@ function normalizeAgentBatchTask(
     case 'rollback':
       return { id, dependsOn, op: { kind: 'rollback', input: task.op.input } }
     default: {
+      // `never` 赋值是编译期穷举咬合：往 batch op 闭集加一种而忘了在这里接线 → 当场红，
+      // 不会退化成运行期静默跳过（§1.7 物理穷举）。
       const unknownOp: never = task.op
-      throw new Error(`未知批处理操作: ${(unknownOp as { kind: string }).kind}`)
+      throw new WorkspaceError('NOT_SUPPORTED', '未知批处理操作', { op: unknownOp })
     }
   }
 }

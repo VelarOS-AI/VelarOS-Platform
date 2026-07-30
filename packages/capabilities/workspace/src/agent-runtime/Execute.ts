@@ -1,8 +1,14 @@
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+// 域：shell 执行前的「这条命令要不要先切/借工作区」判定。
+//
+// 跨层接缝：工具层（Execute.tool）只问"要不要弹授权"，本模块答"目标 cwd 在不在当前 root 内、
+// 是不是一个已登记或看起来像项目的目录"。**根内判定统一走 `path-containment`**——这个包里
+// 曾有三份逐字复制的 `isSameOrChild`，任一份漂移都会变成"某条路径悄悄免了授权"。
+import { dirname, isAbsolute, resolve } from 'node:path'
 
 import { isEmpty,isString } from '@velaros-ai/core'
 
 import { isShellCommandReadOnly } from '../command-execution-policy.js'
+import { isPathInsideWorkspaceRoot } from '../path-containment.js'
 import { isProjectWorkspaceRootSource } from '../workspace-root-source.js'
 
 import {
@@ -28,7 +34,7 @@ export async function shouldPrepareExternalProjectMutation(
 
   const targetPath = resolveCommandCwd(ctx, cwd)
   const currentRoot = resolve(ctx.workspace.getRootPath())
-  if (isSameOrChild(currentRoot, targetPath)) return false
+  if (isPathInsideWorkspaceRoot(currentRoot, targetPath)) return false
 
   return (
     isKnownProjectWorkspacePath(ctx, targetPath) || (await isLikelyProjectDirectory(ctx, targetPath))
@@ -49,7 +55,7 @@ export function isKnownProjectWorkspacePath(
       (entry) =>
         isProjectWorkspaceRootSource(entry.source) &&
         isString(entry.path) &&
-        isSameOrChild(entry.path, targetPath)
+        isPathInsideWorkspaceRoot(entry.path, targetPath)
     )
 }
 
@@ -78,12 +84,4 @@ export async function isLikelyProjectDirectory(
     refresh: true,
   })
   return !isEmpty(projects)
-}
-
-export function isSameOrChild(rootPath: string, targetPath: string): boolean {
-  const relativePath = relative(resolve(rootPath), resolve(targetPath))
-  return (
-    isEmpty(relativePath) ||
-    (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
-  )
 }

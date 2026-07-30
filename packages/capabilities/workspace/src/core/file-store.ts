@@ -1,4 +1,25 @@
+// 域：工作区底层文件系统网关——所有读/写/列举都必须经过它，没有第二条通往 fs 的路。
+//
+// ## 从哪读起
+//  1. `authorize`：**唯一**的准入点（根内约束 → deny glob → fileFilter），返回归一后的
+//     `{ abs, rel }`。下面所有公开方法都以它开头；绕过它 = 绕过全部边界。
+//  2. `snapshot` / `read`：读路径，附带 revision 与文本编码/二进制判定。
+//  3. `write` / `remove` / `rename`：写路径。
+//  4. `listFiles` / `observe`：遍历路径，含 gitignore 过滤。
+//
+// ## 安全门（挡什么、为什么门在这一层）
+//  - **两段式根内约束**：`toAbs` 拦词法穿越（`../`），`assertConfinedToRoot` 对 realpath 结果
+//    再拦一次软链逃逸。门放在 FileStore 而不是各调用点，是因为「新增一个调用点忘了检查」
+//    在上层是查不出来的，在这里则不可能发生——上层拿不到 abs 路径。
+//  - **deny glob 优先于 fileFilter provider**：`skipFileFilter` 只关宿主注入的可见性过滤器
+//    （apply/rollback 需要写回自己刚写过、但对模型不可见的文件），**永远关不掉
+//    `policy.readDeny/writeDeny`**。把 deny 判定挪到 skipFileFilter 之后 = 宿主一个
+//    `skipFileFilter: true` 就能写 `.env`。
+//  - **已知且刻意接受的 TOCTOU**：authorize 与真正的 write 之间存在时间窗，期间新建的软链
+//    能逃逸。修它要 `openat` + `O_NOFOLLOW` 逐级打开（Node 无跨平台原语），代价远高于收益：
+//    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
 import { createHash } from "node:crypto";
+import type { BigIntStats } from "node:fs";
 import { mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
@@ -12,7 +33,7 @@ import type { FileSnapshot, WorkspaceSnapshot } from "../types/snapshot.js";
 import { type GitignoreRule,isGitignored, readGitignoreRules } from "../utils/gitignore.js";
 import { matchesAny } from "../utils/glob.js";
 import { metadataFingerprint, metadataRevisionFor, revisionFor,sha256 } from "../utils/hash.js";
-import { normalizeRel,toAbs, toRel } from "../utils/path.js";
+import { isInsideRoot,normalizeRel,toAbs, toRel } from "../utils/path.js";
 import {
   decodeWorkspaceTextBuffer,
   detectWorkspaceTextEncoding,
@@ -44,12 +65,13 @@ interface LineWindowReadResult {
 
 type FileStoreAction = "read" | "write" | "search" | "observe";
 
-function isInsideRoot(rootAbs: string, abs: string): boolean {
-  if (abs === rootAbs) return true;
-  const boundary = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep;
-  return abs.startsWith(boundary);
-}
-
+/**
+ * 把路径解析到「最近一个真实存在的祖先」的 realpath，再把尚不存在的尾巴拼回去。
+ *
+ * 为什么不能直接 `realpath(abs)`：写入路径在检查时通常还不存在（create_file），realpath 会
+ * 直接抛 ENOENT——那样要么放行未检查的路径（失败方向不安全），要么写不了新文件。逐级上溯
+ * 保证「祖先目录里有软链指向 root 外」也能被下面的根内判定抓到。
+ */
 async function realPathPreservingMissing(absPath: string): Promise<string> {
   let current = path.resolve(absPath);
   let tail = "";
@@ -352,12 +374,12 @@ export class FileStore {
     action: FileStoreAction,
     options?: { skipFileFilter?: boolean }
   ): Promise<boolean> {
-    // deny glob 先于自定义 provider 执行，确保硬性策略优先。
+    // 顺序是安全语义的一部分：deny glob 是硬策略，必须先判且 skipFileFilter 关不掉；
+    // fileFilter 只是宿主注入的可见性过滤器，apply/rollback 写回时可以显式跳过。
     const deny = action === "write" ? this.policy.writeDeny : this.policy.readDeny;
     if (matchesAny(rel, deny)) return false;
-    return !(!options?.skipFileFilter &&
-      this.fileFilter &&
-      !(await this.fileFilter.shouldInclude({ path: rel, action })));
+    if (options?.skipFileFilter || !this.fileFilter) return true;
+    return this.fileFilter.shouldInclude({ path: rel, action });
   }
 
   private getRealRoot(): Promise<string> {
@@ -392,7 +414,7 @@ export class FileStore {
       skipFileFilter: options?.skipFileFilter,
     });
     // 用 bigint stat 一次拿到纳秒级 mtime：metadata 模式据此区分相邻写入，content 模式仍按毫秒计算保持兼容。
-    let st: any;
+    let st: BigIntStats;
     try {
       st = await stat(abs, { bigint: true });
     } catch {

@@ -1,5 +1,27 @@
 /**
- * commit_edit 门控与编排：从 Kernel.tool 抽离，统一 needs_model_review 语义。
+ * 域：`ws_edit` 单入口的门控与编排——模型的一次调用 → 内核多轮事务协议之间的**唯一**翻译层。
+ *
+ * ## 跨层接缝：谁拥有什么
+ * 模型侧只看到"一步写盘"。真正的 prepare → validate → (autoFix) → apply 四段协议在这里跑完；
+ * 分步事务工具（ws_prepare_edit / ws_apply_edit）已从模型面移除，所以**这里是模型能触达内核
+ * 事务机的全部路径**。往这里加旁路 = 绕过下面所有门。
+ *
+ * ## 顺序契约（谁必须早于谁）
+ *   拆分(split) → prepare → validate(+autoFix 后复验) → 预算/风险审核 → 逐组 apply
+ * 审核门必须在 apply **之前**：`needs_model_review` 的语义是"没写盘，你确认后再来"。把审核挪到
+ * apply 之后 = 模型看到的 diff 已经落盘，确认失去意义。
+ *
+ * ## 关键不变量（改这些会破什么）
+ *  - **本工具无状态**：不保留上一次的待提交事务。所以"确认"必须是**带相同 operations 重发 +
+ *    confirmRisk**，不是空 operations 再调一次。空 operations 被显式拦截并给出恢复路径——
+ *    否则模型会拿到一个 changed:true 的幻影成功。
+ *  - **auto 拆分只在 SCOPE_VIOLATION 上触发，且只降解一级**：多操作组炸了就摊成单操作组重试；
+ *    单操作组再炸就如实返回。这保证 `pendingGroups` 的原地改写一定收敛（组只会变小，且长度
+ *    为 1 时不再拆）。
+ *  - **多组 apply 失败必须逆序回滚已应用组**：一次 ws_edit 在模型眼里是一个原子动作，留下
+ *    "前两组写了、第三组没写"是最坏失败模式。回滚本身失败只记账不掩盖原始错误。
+ *  - **验证失败 → 不 apply**：`failedGroups` 非空直接返回 review 结果，任何 confirmRisk 都不
+ *    绕过校验失败（confirmRisk 只解风险/预算类拦截）。
  */
 import { isEmpty, Log } from '@velaros-ai/core'
 import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'

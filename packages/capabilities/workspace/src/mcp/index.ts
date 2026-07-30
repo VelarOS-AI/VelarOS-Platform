@@ -2,6 +2,7 @@ import type { ToolDescriptionDetail } from "@velaros-ai/core/utils/ToolDescripti
 
 import { type AgentToolDefinition, createAgentTools,type CreateAgentToolsOptions } from "../agent-tools.js";
 import type { WorkspaceKernel } from "../core/workspace.js";
+import { WorkspaceError } from "../errors.js";
 import {
   createWorkspaceToolSchemaBundle,
   schemaToInputSchema,
@@ -65,7 +66,7 @@ export function createMcpLikeServer(
     },
     async callTool(name: string, args?: any): Promise<any> {
       const tool = tools.get(name);
-      if (!tool) throw new Error(`未知 MCP workspace 工具：${name}`);
+      if (!tool) throw new WorkspaceError("NOT_SUPPORTED", `未知 MCP workspace 工具：${name}`, { name });
       return tool.execute(args ?? {});
     },
   };
