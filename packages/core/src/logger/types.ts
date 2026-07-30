@@ -57,7 +57,6 @@ export interface LogEventRecord {
 }
 
 export type LogRecord = LogMessageRecord | LogEventRecord
-export type LogEntry = LogMessageRecord
 
 export interface LogTransport {
   id: string

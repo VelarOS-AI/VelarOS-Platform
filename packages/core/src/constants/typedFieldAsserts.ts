@@ -1,11 +1,9 @@
 import { AppError } from '../error'
-import { isString } from '../typeGuards'
-import { isArray,isPresent } from '../typeGuards.js'
+import { isArray, isPresent, isString } from '../typeGuards'
 import type { RunProfileId, RunProfileSelectionId, ToolSurfaceProfileId } from '../types'
 import type { ChatPromptFeatureId } from '../types/agent'
 import type { ReasoningLevel, ThinkingDepth } from '../types/team'
-import { isBlank } from '../utils/string.js'
-
+import { isBlank } from '../utils/string'
 
 /** 磁盘 session kind：前端只保留普通聊天会话。 */
 export type StoredChatSessionKind = 'chat'

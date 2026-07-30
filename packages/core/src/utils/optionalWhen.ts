@@ -1,9 +1,9 @@
 import {
-  TypeGuards,
   type VelarosRuntimeTypeGuardName,
   VelarosRuntimeTypeGuardNames,
   VelarosTypeGuardName,
-} from '../typeGuards.js'
+  type VelarTypeGuards,
+} from '../typeGuards'
 
 /**
  * 条件为真时返回 `value`，否则返回 `undefined` 或显式 fallback。
@@ -17,61 +17,27 @@ import {
  */
 type AnyFunction = (...args: any[]) => unknown
 type OptionalWhenTypeGuard<T> = (value: unknown) => value is T
-type OptionalWhenKnownTypeGuard =
-  | typeof TypeGuards.isNull
-  | typeof TypeGuards.isNotNull
-  | typeof TypeGuards.isUndefined
-  | typeof TypeGuards.isNotUndefined
-  | typeof TypeGuards.isPresent
-  | typeof TypeGuards.isBoolean
-  | typeof TypeGuards.isTrue
-  | typeof TypeGuards.isFalse
-  | typeof TypeGuards.isString
-  | typeof TypeGuards.isNonBlankString
-  | typeof TypeGuards.isNumber
-  | typeof TypeGuards.isPositiveNumber
-  | typeof TypeGuards.isFiniteNumber
-  | typeof TypeGuards.isFunction
-  | typeof TypeGuards.isBigInt
-  | typeof TypeGuards.isSymbol
-  | typeof TypeGuards.isObject
-  | typeof TypeGuards.isRecord
-  | typeof TypeGuards.isPlainObject
-  | typeof TypeGuards.isArray
-  | typeof TypeGuards.isNonEmptyArray
+/**
+ * 可当守卫传入的谓词闭集，**由 `VelarosRuntimeTypeGuardNames` 派生**。
+ *
+ * 早期版本把这 21 个守卫在本文件里又抄了两份（一份类型联合、一份运行时 Set）。三份清单同义
+ * 不同源，新增守卫只要漏改一处就会出现「类型允许但运行时抛 TypeError」的裂缝，故改为单源派生。
+ */
+type OptionalWhenKnownTypeGuard = VelarTypeGuards[VelarosRuntimeTypeGuardName]
 type OptionalWhenGuardedValue<T> = T extends OptionalWhenTypeGuard<infer Value> ? Value : never
 type NonFunctionCondition<T> = T extends AnyFunction ? never : T
 
-const OptionalWhenTypeGuardFunctions = new Set<Function>([
-  TypeGuards.isNull,
-  TypeGuards.isNotNull,
-  TypeGuards.isUndefined,
-  TypeGuards.isNotUndefined,
-  TypeGuards.isPresent,
-  TypeGuards.isBoolean,
-  TypeGuards.isTrue,
-  TypeGuards.isFalse,
-  TypeGuards.isString,
-  TypeGuards.isNonBlankString,
-  TypeGuards.isNumber,
-  TypeGuards.isPositiveNumber,
-  TypeGuards.isFiniteNumber,
-  TypeGuards.isFunction,
-  TypeGuards.isBigInt,
-  TypeGuards.isSymbol,
-  TypeGuards.isObject,
-  TypeGuards.isRecord,
-  TypeGuards.isPlainObject,
-  TypeGuards.isArray,
-  TypeGuards.isNonEmptyArray,
-])
 const OptionalWhenTypeGuardNames = new Set<VelarosRuntimeTypeGuardName>(
   VelarosRuntimeTypeGuardNames,
 )
 
+/**
+ * 只认 `TypeGuards` 家的谓词：靠 `typeGuards.ts` 打在函数上的注册符号品牌识别。
+ *
+ * 品牌用 `Symbol.for` 注册符号，故比函数身份比较更稳（双份模块副本下仍成立）。
+ */
 function isOptionalWhenTypeGuard<T>(value: unknown): value is OptionalWhenTypeGuard<T> {
   if (typeof value !== 'function') return false
-  if (OptionalWhenTypeGuardFunctions.has(value)) return true
   const typeGuardName = (value as { [VelarosTypeGuardName]?: unknown })[VelarosTypeGuardName]
   return (
     typeof typeGuardName === 'string' &&

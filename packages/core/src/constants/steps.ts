@@ -1,4 +1,6 @@
-import { isFiniteNumber } from '../typeGuards.js'
+import { isFiniteNumber } from '../typeGuards'
+import { clampRounded } from '../utils/number'
+
 export const MinExecutionStepCount = 1
 export const MaxExecutionStepCount = 100
 export const DefaultTeamWorkerStepCount = 50
@@ -15,7 +17,7 @@ export function normalizeExecutionStepCount(
 }
 
 export function clampExecutionStepCount(value: number): number {
-  return Math.min(MaxExecutionStepCount, Math.max(MinExecutionStepCount, Math.round(value)))
+  return clampRounded(value, MinExecutionStepCount, MaxExecutionStepCount)
 }
 
 export function normalizeTeamStepCount(
@@ -28,5 +30,5 @@ export function normalizeTeamStepCount(
 }
 
 export function clampTeamStepCount(value: number): number {
-  return Math.min(MaxTeamStepCount, Math.max(MinExecutionStepCount, Math.round(value)))
+  return clampRounded(value, MinExecutionStepCount, MaxTeamStepCount)
 }

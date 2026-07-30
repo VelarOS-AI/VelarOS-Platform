@@ -1,8 +1,8 @@
 /**
  * Nullish 归一化辅助（显式函数形式）。
  *
- * 历史上以 `globalThis.toNullable` / `globalThis.toOptional` 形式提供（`packages/core/src/extensions.ts`）；
- * 为避免作为 npm 库嵌入时污染宿主全局，改为具名导出，调用点显式 `import`。
+ * 一律具名导出：本包作为 npm 库嵌入宿主，禁往 `globalThis` 挂运行时原语。
+ * 这两个函数是 null↔undefined 的**唯一合法转换点**，只允许在层边界各用一次，禁往返链。
  */
 
 /** 将 `undefined` / `null` 归一化为 `null`。 */

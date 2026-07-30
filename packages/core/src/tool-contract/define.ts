@@ -1,4 +1,5 @@
-import { isObject } from '../typeGuards'
+import { AppError } from '../error'
+import { isObject, isPresent } from '../typeGuards'
 import { structureToolDescriptionForModel } from '../utils/ToolDescription'
 
 import {
@@ -39,9 +40,29 @@ function validateToolContractExamples(
       })
       .join('; ')
 
-    throw new Error(
+    throw new AppError(
+      'VALIDATION',
       `Tool contract ${toolName} example does not satisfy schema: ${JSON.stringify(example)} (${issues})`
     )
+  }
+}
+
+/**
+ * 从契约输入里摘出描述规格。
+ *
+ * `DefineTool*Input` 与 surface 输入都 `extends ToolContractDescriptionSpec`，八个字段同名同义；
+ * 逐字段抄三遍会在新增描述字段时静默漏掉某一处，故收成单一摘取点。
+ */
+function pickToolDescriptionSpec(input: ToolContractDescriptionSpec): ToolContractDescriptionSpec {
+  return {
+    role: input.role,
+    summary: input.summary,
+    suitable: input.suitable,
+    forbidden: input.forbidden,
+    protocol: input.protocol,
+    usage: input.usage,
+    examples: input.examples,
+    notes: input.notes,
   }
 }
 
@@ -68,16 +89,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
   input: DefineToolContractInput<TInput, TContext>,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): ToolContractSpec<TInput, TContext> {
-  const descriptionSpec: ToolContractDescriptionSpec = {
-    role: input.role,
-    summary: input.summary,
-    suitable: input.suitable,
-    forbidden: input.forbidden,
-    protocol: input.protocol,
-    usage: input.usage,
-    examples: input.examples,
-    notes: input.notes,
-  }
+  const descriptionSpec = pickToolDescriptionSpec(input)
   validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
   return {
     name: input.name,
@@ -104,6 +116,44 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
   }
 }
 
+/**
+ * 逐 surface 校验示例并把描述规格编译成模型面文案。
+ *
+ * 与主契约同一条流水线（校验示例 → 摘描述规格 → 生成描述），故不在此重写第二套规则；
+ * surface 缺席时原样透传，让 `defineToolRuntimeSpec` 的 `surfaces` 保持「未声明」而非空对象。
+ */
+function buildToolRuntimeSurfaces<
+  TInput extends Record<string, unknown>,
+  TContext,
+>(
+  input: Pick<DefineToolRuntimeSpecInput<TInput, TContext>, 'name' | 'category' | 'surfaces'>,
+  examples: ToolContractExampleRegistry
+): Record<string, ToolContractSurface<any, TInput, TContext> | undefined> | undefined {
+  if (!isPresent(input.surfaces)) return undefined
+
+  return Object.fromEntries(
+    Object.entries(input.surfaces).map(([profile, surface]) => {
+      if (!isPresent(surface)) return [profile, surface]
+
+      const surfaceName = `${input.name}.${profile}`
+      validateToolContractExamples(surfaceName, surface.schema, surface.examples)
+      return [
+        profile,
+        {
+          description: buildToolContractDescription(
+            surfaceName,
+            input.category,
+            pickToolDescriptionSpec(surface),
+            examples
+          ),
+          schema: surface.schema,
+          normalize: surface.normalize,
+        } satisfies ToolContractSurface<any, TInput, TContext>,
+      ]
+    })
+  )
+}
+
 function defineToolRuntimeSpec<
   TInput extends Record<string, unknown>,
   TContext = unknown,
@@ -113,49 +163,11 @@ function defineToolRuntimeSpec<
   input: DefineToolRuntimeSpecInput<TInput, TContext, TResult, TPermission>,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission> {
-  const descriptionSpec: ToolContractDescriptionSpec = {
-    role: input.role,
-    summary: input.summary,
-    suitable: input.suitable,
-    forbidden: input.forbidden,
-    protocol: input.protocol,
-    usage: input.usage,
-    examples: input.examples,
-    notes: input.notes,
-  }
+  const descriptionSpec = pickToolDescriptionSpec(input)
   validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
 
-  const surfaces = input.surfaces
-    ? (Object.fromEntries(
-        Object.entries(input.surfaces).map(([profile, surface]) => {
-          if (!surface) return [profile, surface]
-          validateToolContractExamples(`${input.name}.${profile}`, surface.schema, surface.examples)
-          const surfaceSpec: ToolContractDescriptionSpec = {
-            role: surface.role,
-            summary: surface.summary,
-            suitable: surface.suitable,
-            forbidden: surface.forbidden,
-            protocol: surface.protocol,
-            usage: surface.usage,
-            examples: surface.examples,
-            notes: surface.notes,
-          }
-          return [
-            profile,
-            {
-              description: buildToolContractDescription(
-                `${input.name}.${profile}`,
-                input.category,
-                surfaceSpec,
-                examples
-              ),
-              schema: surface.schema,
-              normalize: surface.normalize,
-            } satisfies ToolContractSurface<any, TInput, TContext>,
-          ]
-        })
-      ) as ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission>['surfaces'])
-    : undefined
+  const surfaces = buildToolRuntimeSurfaces<TInput, TContext>(input, examples) as
+    ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission>['surfaces']
 
   return {
     name: input.name,

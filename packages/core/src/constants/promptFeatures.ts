@@ -1,13 +1,14 @@
 import type { ChatPromptFeatureId } from '../types'
+import { isBlank } from '../utils/string'
 
 /**
- * Kernel treats prompt-feature ids as opaque host capability ids.
+ * 内核只把 prompt-feature id 当作不透明的宿主能力 id。
  *
- * Concrete manifests, labels, category mappings, availability policy, and tool
- * gates are owned by capability packages and injected into Agent Runtime.
+ * 具体清单、文案、分类映射、可用性策略与工具门由能力包持有，注入 Agent Runtime；
+ * 本层只做去重与丢弃空白 id，不认识任何具体 feature 语义。
  */
 export function normalizePromptFeatures(
   features: readonly ChatPromptFeatureId[] = []
 ): ChatPromptFeatureId[] {
-  return [...new Set(features.filter((feature) => feature.trim()))]
+  return [...new Set(features.filter((feature) => !isBlank(feature)))]
 }

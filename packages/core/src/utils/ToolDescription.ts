@@ -1,7 +1,8 @@
+import { AppError } from '../error'
 import { isNumber, isString } from '../typeGuards'
 import type { ToolCategoryId } from '../types/tool'
 
-import { isBlank } from './string.js'
+import { isBlank } from './string'
 
 type NonEmptyDescriptionItems = readonly [string, ...string[]]
 
@@ -68,8 +69,16 @@ const StructuredParameterDescriptionSectionOrder: ReadonlyMap<string, number> = 
 
 const OptionalParameterListSections: ReadonlySet<string> = new Set(['取值', '用法', '注意'])
 
+const DescriptionSectionPrefix = '描述：'
+
 function normalizeDescriptionText(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
+}
+
+/** 取分节标题（`适合：` → `适合`）；首行不是分节标题时返回空串。 */
+function readSectionTitle(block: string): string {
+  const firstLine = block.split('\n')[0] ?? ''
+  return firstLine.endsWith('：') ? firstLine.slice(0, -1) : ''
 }
 
 function normalizeListItems(items: readonly string[]): string[] {
@@ -116,24 +125,50 @@ function isStructuredListSection(block: string): boolean {
   return lines.slice(1).every((line) => line.startsWith('- ') && !isBlank(line.slice(2).trim()))
 }
 
-function isStructuredToolDescription(description: string): boolean {
+/**
+ * 结构化描述的语法（分节顺序 / 允许分节 / 必需分节）。
+ *
+ * 工具描述与参数描述用同一部语法、只换这三张表；此前两份校验各写一遍 28 行，
+ * 语法改一处必漏另一处，故收成单一校验器 + 两张语法表。
+ */
+interface StructuredDescriptionGrammar {
+  sectionOrder: ReadonlyMap<string, number>
+  allowedSections: ReadonlyArray<ReadonlySet<string>>
+  requiredSections: ReadonlySet<string>
+}
+
+const ToolDescriptionGrammar: StructuredDescriptionGrammar = {
+  sectionOrder: StructuredToolDescriptionSectionOrder,
+  allowedSections: [RequiredListSections, OptionalToolListSections],
+  requiredSections: RequiredListSections,
+}
+
+const ParameterDescriptionGrammar: StructuredDescriptionGrammar = {
+  sectionOrder: StructuredParameterDescriptionSectionOrder,
+  allowedSections: [OptionalParameterListSections],
+  requiredSections: new Set<string>(),
+}
+
+function isStructuredDescription(
+  description: string,
+  grammar: StructuredDescriptionGrammar
+): boolean {
   const trimmed = description.trim()
-  if (!trimmed.startsWith('描述：')) return false
+  if (!trimmed.startsWith(DescriptionSectionPrefix)) return false
 
   const blocks = trimmed.split(/\n{2,}/)
-  const descriptionText = blocks[0]?.slice('描述：'.length).trim() ?? ''
+  const descriptionText = blocks[0]?.slice(DescriptionSectionPrefix.length).trim() ?? ''
   if (descriptionText.length === 0) return false
 
   const seenSections = new Set<string>(['描述'])
-  let previousOrder = StructuredToolDescriptionSectionOrder.get('描述') ?? 0
+  let previousOrder = grammar.sectionOrder.get('描述') ?? 0
 
   for (const block of blocks.slice(1)) {
-    const firstLine = block.split('\n')[0] ?? ''
-    const section = firstLine.endsWith('：') ? firstLine.slice(0, -1) : ''
-    const sectionOrder = StructuredToolDescriptionSectionOrder.get(section)
+    const section = readSectionTitle(block)
+    const sectionOrder = grammar.sectionOrder.get(section)
     if (
       !isNumber(sectionOrder) ||
-      (!RequiredListSections.has(section) && !OptionalToolListSections.has(section)) ||
+      !grammar.allowedSections.some((sections) => sections.has(section)) ||
       seenSections.has(section) ||
       sectionOrder < previousOrder ||
       !isStructuredListSection(block)
@@ -143,41 +178,19 @@ function isStructuredToolDescription(description: string): boolean {
     previousOrder = sectionOrder
   }
 
-  for (const section of StructuredToolDescriptionSections) {
-    if (!OptionalToolListSections.has(section) && !seenSections.has(section)) return false
+  for (const section of grammar.requiredSections) {
+    if (!seenSections.has(section)) return false
   }
 
   return true
 }
 
+function isStructuredToolDescription(description: string): boolean {
+  return isStructuredDescription(description, ToolDescriptionGrammar)
+}
+
 function isStructuredParameterDescription(description: string): boolean {
-  const trimmed = description.trim()
-  if (!trimmed.startsWith('描述：')) return false
-
-  const blocks = trimmed.split(/\n{2,}/)
-  const descriptionText = blocks[0]?.slice('描述：'.length).trim() ?? ''
-  if (descriptionText.length === 0) return false
-
-  const seenSections = new Set<string>(['描述'])
-  let previousOrder = StructuredParameterDescriptionSectionOrder.get('描述') ?? 0
-
-  for (const block of blocks.slice(1)) {
-    const firstLine = block.split('\n')[0] ?? ''
-    const section = firstLine.endsWith('：') ? firstLine.slice(0, -1) : ''
-    const sectionOrder = StructuredParameterDescriptionSectionOrder.get(section)
-    if (
-      !isNumber(sectionOrder) ||
-      !OptionalParameterListSections.has(section) ||
-      seenSections.has(section) ||
-      sectionOrder < previousOrder ||
-      !isStructuredListSection(block)
-    ) return false
-
-    seenSections.add(section)
-    previousOrder = sectionOrder
-  }
-
-  return true
+  return isStructuredDescription(description, ParameterDescriptionGrammar)
 }
 
 function parseListSectionItems(block: string): string[] {
@@ -261,55 +274,44 @@ function structureToolDescriptionForModel(
 type ToolDescriptionDetail = 'full' | 'compact'
 
 /**
- * 把一段“完整结构化工具描述”压缩成 tier-1 精简版：
- * - 保留 `描述：` 段落与分节顺序；
- * - 保留 `强制流程：`（这是被刻意强制的执行门禁，必须完整保留）；
- * - 其余建议性分节（适合/禁止/用法/示例/注意）只保留第一条要点。
+ * 渐进式披露的压缩内核：保留 `描述：` 段落与分节顺序，逐节只留首条要点。
  *
- * 结果仍是合法的结构化描述（每个必需分节至少保留一条），因此可继续通过
- * `isStructuredToolDescription` 校验与各宿主的分类整理流程。非结构化输入原样返回。
+ * `keepInFullSection` 是**不许压缩的那一节**——它承载模型做对事所必需的硬信息
+ * （工具的强制流程门禁、参数的合法取值枚举），压掉就等于删约束。
+ * 结果仍是合法结构化描述（每个必需分节至少留一条），可继续过 `isStructured*` 校验。
+ * 非结构化输入原样返回。
  */
-function compactStructuredToolDescription(description: string): string {
+function compactStructuredDescription(
+  description: string,
+  isStructured: (value: string) => boolean,
+  keepInFullSection: string
+): string {
   const trimmed = description.trim()
-  if (!isStructuredToolDescription(trimmed)) return trimmed
+  if (!isStructured(trimmed)) return trimmed
 
-  const blocks = trimmed.split(/\n{2,}/)
-  return blocks
+  return trimmed
+    .split(/\n{2,}/)
     .map((block, index) => {
       if (index === 0) return block
+
       const lines = block.split('\n')
       const title = lines[0] ?? ''
-      if (title === '强制流程：') return block
+      if (title === keepInFullSection) return block
+
       const firstBullet = lines.slice(1).find((line) => line.startsWith('- '))
       return isString(firstBullet) ? `${title}\n${firstBullet}` : block
     })
     .join('\n\n')
 }
 
-/**
- * 把一段“完整结构化参数描述”压缩成 tier-1 精简版：
- * - 保留 `描述：` 段落与分节顺序；
- * - 保留 `取值：`（枚举/合法取值说明是模型选对入参的依据，必须完整保留）；
- * - 其余建议性分节（用法/注意）只保留第一条要点。
- *
- * 结果仍是合法的结构化参数描述，可继续通过 `isStructuredParameterDescription`。
- * 非结构化输入原样返回。
- */
-function compactStructuredParameterDescription(description: string): string {
-  const trimmed = description.trim()
-  if (!isStructuredParameterDescription(trimmed)) return trimmed
+/** 工具描述 tier-1 精简版：`强制流程：` 完整保留，其余分节各留首条。 */
+function compactStructuredToolDescription(description: string): string {
+  return compactStructuredDescription(description, isStructuredToolDescription, '强制流程：')
+}
 
-  const blocks = trimmed.split(/\n{2,}/)
-  return blocks
-    .map((block, index) => {
-      if (index === 0) return block
-      const lines = block.split('\n')
-      const title = lines[0] ?? ''
-      if (title === '取值：') return block
-      const firstBullet = lines.slice(1).find((line) => line.startsWith('- '))
-      return isString(firstBullet) ? `${title}\n${firstBullet}` : block
-    })
-    .join('\n\n')
+/** 参数描述 tier-1 精简版：`取值：` 完整保留，其余分节各留首条。 */
+function compactStructuredParameterDescription(description: string): string {
+  return compactStructuredDescription(description, isStructuredParameterDescription, '取值：')
 }
 
 function structureToolDescriptionsForCategory<
@@ -320,7 +322,10 @@ function structureToolDescriptionsForCategory<
     Object.entries(tools).map(([name, tool]) => {
       const description = tool.description.trim()
       if (!isStructuredToolDescription(description)) {
-        throw new Error(`Tool ${categoryId}/${name} description is not fully structured`)
+        throw new AppError(
+          'VALIDATION',
+          `Tool ${categoryId}/${name} description is not fully structured`
+        )
       }
 
       return [

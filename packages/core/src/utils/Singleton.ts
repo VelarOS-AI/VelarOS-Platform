@@ -16,11 +16,9 @@ abstract class Singleton {
 
   protected constructor() {
     const singletonType = new.target
-    if (!singletonType) return
-
     if (Singleton.instantiatedTypes.has(singletonType)) {
       throw new AppError(
-        'UNKNOWN',
+        'INVARIANT',
         `${singletonType.name} is a singleton and has already been instantiated. Import the exported instance instead of calling new ${singletonType.name}().`,
       )
     }

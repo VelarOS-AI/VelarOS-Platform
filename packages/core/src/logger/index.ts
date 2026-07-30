@@ -1,13 +1,12 @@
 export { LogAssertionError, LogError } from './errors'
-export { Loggable,Logger } from './Logger'
-export { logRuntime as Log,LoggerFactory,logRuntime } from './manager'
+export { Logger } from './Logger'
+export { logRuntime as Log, LoggerFactory, logRuntime } from './manager'
 export { LogRuntime } from './runtime'
 export { createCallbackTransport, createMemoryTransport } from './transports'
 export type {
   CallbackTransportOptions,
   GlobalLog,
   LogContext,
-  LogEntry,
   LogEnvironment,
   LogErrorOptions,
   LogEventRecord,

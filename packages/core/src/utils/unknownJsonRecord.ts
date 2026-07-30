@@ -1,11 +1,10 @@
 /**
  * 将 JSON 载荷收敛为普通 record，并安全读取原始字段。
  */
-import { isRecord } from '../typeGuards'
-import { isArray,isBoolean, isFiniteNumber, isString } from '../typeGuards.js'
+import { isArray, isBoolean, isFiniteNumber, isPresent, isRecord, isString } from '../typeGuards'
 
-import { optionalWhen } from './optionalWhen.js'
-import { isBlank } from './string.js'
+import { optionalWhen } from './optionalWhen'
+import { isBlank } from './string'
 
 /** 非 null 的纯对象（不含数组），形如 `{ ... }` 时为 true。 */
 export { isPlainObject, isRecord } from '../typeGuards'
@@ -22,10 +21,7 @@ export function readString(
   record: LooseOptional<Record<string, unknown>>,
   key: string
 ): Nullable<string> {
-  if (!record || !isString(record[key])) return null
-
-  const value = String(record[key]).trim()
-  return isBlank(value) ? null : value
+  return readStringScalar(record?.[key])
 }
 
 /**
@@ -35,10 +31,10 @@ export function readStringPreserveOuterWhitespace(
   record: LooseOptional<Record<string, unknown>>,
   key: string
 ): Nullable<string> {
-  if (!record || !isString(record[key])) return null
+  const value = record?.[key]
+  if (!isString(value)) return null
 
-  const value = String(record[key])
-  return isBlank(value.trim()) ? null : value
+  return isBlank(value) ? null : value
 }
 
 /** 读取 JSON 字符串叶子：trim，并用 `isBlank` 丢弃空白。 */
@@ -52,7 +48,7 @@ export function readStringScalar(value: unknown): Nullable<string> {
 export function readFirstString(...values: unknown[]): Nullable<string> {
   for (const value of values) {
     const text = readStringScalar(value)
-    if (text) return text
+    if (isPresent(text)) return text
   }
 
   return null
@@ -106,12 +102,13 @@ export function readStringArray(
   record: LooseOptional<Record<string, unknown>>,
   key: string
 ): string[] {
-  if (!record || !isArray(record[key])) return []
+  const value = record?.[key]
+  if (!isArray(value)) return []
 
-  return record[key]
-    .filter((value): value is string => isString(value))
-    .map((value) => value.trim())
-    .filter((value) => !isBlank(value))
+  return value
+    .filter((entry): entry is string => isString(entry))
+    .map((entry) => entry.trim())
+    .filter((entry) => !isBlank(entry))
 }
 
 /** 每个元素若为 string 则保留（不做 trim / 空白过滤）。 */
@@ -123,10 +120,11 @@ export function readRecordsArray(
   record: LooseOptional<Record<string, unknown>>,
   key: string
 ): Array<Record<string, unknown>> {
-  if (!record || !isArray(record[key])) return []
+  const value = record?.[key]
+  if (!isArray(value)) return []
 
-  return record[key].flatMap((item) => {
+  return value.flatMap((item) => {
     const itemRecord = asRecord(item)
-    return itemRecord ? [itemRecord] : []
+    return isPresent(itemRecord) ? [itemRecord] : []
   })
 }

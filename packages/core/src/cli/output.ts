@@ -1,3 +1,4 @@
+import { AppError } from '../error.js'
 import { stringifyPretty } from '../utils/json.js'
 
 import {
@@ -41,8 +42,10 @@ export function formatVelarosCliSuccess(input: FormatVelarosCliSuccessInput): Ve
 
 export function normalizeVelarosCliError(error: unknown): VelarosCliError {
   if (error instanceof VelarosCliError) return error
-  if (error instanceof Error) return new VelarosCliError('EXECUTION_ERROR', error.message, 1)
-  return new VelarosCliError('EXECUTION_ERROR', String(error), 1)
+
+  // 取消息一律走 AppError.getMessage 单源：它已覆盖 Error / 序列化错误 / 嵌套 cause /
+  // 脱敏与循环引用，本地再写一份 `instanceof Error ? .message : String(...)` 只会更弱。
+  return new VelarosCliError('EXECUTION_ERROR', AppError.getMessage(error), 1)
 }
 
 export function formatVelarosCliError(error: unknown, json: boolean): VelarosCliRunResult {

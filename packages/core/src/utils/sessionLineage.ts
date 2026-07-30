@@ -1,26 +1,31 @@
-import { unique } from './array.js'
+import { isString } from '../typeGuards'
+
+import { isEmpty, unique } from './array'
+import { isBlank } from './string'
+
+/** 上下文裁剪留下的深度占位串不是真 id，归一化时必须丢弃，否则会被当成一条谱系。 */
 const DepthLimitPlaceholderPattern = /^\[Depth limit reached\b[^\]]*\]$/i
 
 function normalizeSessionLineageId(value: LooseOptional<string>): string {
-  if (typeof value !== 'string') return ''
+  if (!isString(value) || isBlank(value)) return ''
+
   const trimmed = value.trim()
-  if (!trimmed) return ''
-  if (DepthLimitPlaceholderPattern.test(trimmed)) return ''
-  return trimmed
+  return DepthLimitPlaceholderPattern.test(trimmed) ? '' : trimmed
 }
 
 function normalizeSessionLineageIdList(
   values: LooseOptional<ReadonlyArray<LooseOptional<string>>>,
   fallback?: LooseOptional<string>
 ): string[] {
-  const sourceValues = values && values.length > 0 ? values : []
-  const normalized = unique(sourceValues
-    .map((value) => normalizeSessionLineageId(value))
-    .filter((value) => value.length > 0))
-  if (normalized.length > 0) return normalized
+  const normalized = unique(
+    (values ?? [])
+      .map((value) => normalizeSessionLineageId(value))
+      .filter((value) => !isEmpty(value))
+  )
+  if (!isEmpty(normalized)) return normalized
 
   const fallbackId = normalizeSessionLineageId(fallback)
-  return fallbackId ? [fallbackId] : []
+  return isEmpty(fallbackId) ? [] : [fallbackId]
 }
 
 export { normalizeSessionLineageId, normalizeSessionLineageIdList }

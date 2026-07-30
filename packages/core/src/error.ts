@@ -78,7 +78,7 @@ export class AppError extends Error {
     return {
       code: this.code,
       message: this.message,
-      context: optionalWhen((!isEmpty(Object.keys(this.context))), this.context),
+      context: optionalWhen(!isEmpty(Object.keys(this.context)), this.context),
     }
   }
 
@@ -222,7 +222,7 @@ export class AppError extends Error {
   }
 
   private static isSerializedError(value: unknown): value is SerializedError {
-    if (!isObject(value) || !isPresent(value)) return false
+    if (!isObject(value)) return false
 
     const record = value as Record<string, unknown>
     return (

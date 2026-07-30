@@ -17,9 +17,11 @@
 
 ## Public Imports
 
+与 `package.json` 的 `exports` 表一一对应(改一处必改两处):
+
 - `@velaros-ai/core`
 - `@velaros-ai/core/cli`
-- `@velaros-ai/core/types`
+- `@velaros-ai/core/types` / `@velaros-ai/core/types/*`
 - `@velaros-ai/core/constants/*`
 - `@velaros-ai/core/utils/*`
 - `@velaros-ai/core/logger`
@@ -28,9 +30,11 @@
 - `@velaros-ai/core/result`
 - `@velaros-ai/core/tool-contract`
 - `@velaros-ai/core/kernel` —— 内核本体(宿主装配用:abi + contracts + host + runtime)
-- `@velaros-ai/core/kernel/abi` —— **Mod 开发面**(module ABI / capability token / 权限 / 事件 / 状态)
+- `@velaros-ai/core/kernel/abi` —— **Mod 开发面**(module ABI / capability token / 权限 / 事件 / 状态 / 模块生命周期状态)
 - `@velaros-ai/core/kernel/protocol` —— wire 协议契约(调用信封,唯一事实来源)
 - `@velaros-ai/core/kernel/contracts` —— 服务面契约(健康度、identity 入参)
+- `@velaros-ai/core/kernel/host` —— module host 实现(注册/激活/回滚/服务租约/事件流/命名空间状态)
+- `@velaros-ai/core/kernel/runtime` —— KernelService 运行态(协议门面、identity 注册表、能力会话账本)
 
 ## Boundary
 
@@ -50,3 +54,20 @@ intervals, animation frames, debounce callbacks, sleeps, and async timeouts thro
 callers can cancel or dispose related work together.
 
 所有运行时能力都通过 ESM 具名导出，不修改宿主的 `globalThis` 或内建原型。缺席值归一到 JSON/IPC 边界的 `null` 用 **`toNullable`**，普通可选字段用 **`toOptional`** 表达 `value ?? undefined`。命名空间形式请 `import { TypeGuards } from '@velaros-ai/core'`；单个守卫可直接 `import { isPresent } from '@velaros-ai/core'`。
+
+## 包内单源清单(改前先看，别再造第二份)
+
+这些位置各自是某类逻辑的**唯一实现**，本包内曾出现同义多份并已收口；新代码一律调用，不要在本地重写：
+
+| 单源 | 位置 | 曾散落的形态 |
+| --- | --- | --- |
+| 运行时类型判定 | `typeGuards.ts`（`TypeGuards` + 具名守卫 + 注册符号品牌） | 各处内联 `typeof` / `=== null` / `Array.isArray` |
+| 数量钳制 | `utils/number.ts` 的 `clamp` / `clampRounded` | 六份 `Math.min(max, Math.max(min, Math.round(v)))` 变体 |
+| 错误取消息 | `AppError.getMessage` | 本地 `instanceof Error ? .message : String(...)` |
+| 工具描述语法 | `utils/ToolDescription.ts` 的 `isStructuredDescription` + 两张语法表 | 工具面/参数面各一份 28 行校验器 |
+| 描述规格摘取 | `tool-contract/define.ts` 的 `pickToolDescriptionSpec` | 三处逐字段抄 8 个同名字段 |
+| 模块生命周期状态 | `kernel/abi/module.ts` 的 `KernelModuleStatus` | host 与 contracts 各一份十值联合 |
+| `optionalWhen` 守卫闭集 | 由 `VelarosRuntimeTypeGuardNames` 派生 | 额外的类型联合 + 运行时 Set 各抄一份 |
+
+日志器不提供任何 `globalThis` 兜底：拿 scoped logger 一律 `logRuntime.tag(scope)`（或门面别名 `Log.tag`）。
+旧的 `Loggable` 基类读 `globalThis.Log`、而本包早已不再写全局，等于永久静默 no-op，已删除。

@@ -1,11 +1,20 @@
 import { Log } from '../logger/index.js'
-import { isArray, isNumber, isObject, isPlainObject, isPresent, isString } from '../typeGuards'
-import { isNull, isUndefined, numberOrNull } from '../typeGuards.js'
+import {
+  isArray,
+  isNull,
+  isNumber,
+  isObject,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+  numberOrNull,
+} from '../typeGuards'
 
-import { isEmpty } from './array.js'
+import { isEmpty } from './array'
 import { mapDefined } from './mapDefined'
-import { toOptional } from './nullish.js'
-import { optionalWhenLazy } from './optionalWhen.js'
+import { toOptional } from './nullish'
+import { optionalWhenLazy } from './optionalWhen'
 import { readFirstString } from './unknownJsonRecord'
 
 interface ToolResultCompactionLimits {
@@ -76,7 +85,7 @@ const ModelToolInputLimits: ToolInputCompactionLimits = {
 const LargeToolInputFieldThreshold = 240
 const WidgetCodeModelReplayMaxLength = 8_000
 
-const LARGE_TOOL_INPUT_KEYS = new Set([
+const LargeToolInputKeys = new Set([
   'content',
   'data',
   'image',
@@ -91,7 +100,7 @@ const LARGE_TOOL_INPUT_KEYS = new Set([
   'replace',
 ])
 
-const TOOL_INPUT_KEYS_WITHOUT_PREVIEW = new Set(['widget_code'])
+const ToolInputKeysWithoutPreview = new Set(['widget_code'])
 
 function isToolSpaceProtocolResult(result: unknown): boolean {
   if (!isPlainObject(result)) return false
@@ -238,7 +247,7 @@ function cloneToolResult(
  * 文件内容、diff 等大字段的 key 集合。
  * 展示侧保留这些字段的细节，模型侧仍会按预算压缩，避免工具结果撑爆上下文。
  */
-const LARGE_CONTENT_KEYS = new Set([
+const LargeContentKeys = new Set([
   'content',
   'diff',
   'stdout',
@@ -265,7 +274,7 @@ function trimToolResultStrings(
 
   if (isString(value)) {
     // 大内容字段豁免 maxStringLength，不在此处截断
-    if (preserveLargeContent && parentKey && LARGE_CONTENT_KEYS.has(parentKey)) return value
+    if (preserveLargeContent && parentKey && LargeContentKeys.has(parentKey)) return value
     return value.length > maxStringLength ? `${value.slice(0, maxStringLength)}…` : value
   }
 
@@ -370,7 +379,7 @@ function looksLikeBinaryPayload(value: string): boolean {
 
 function summarizeToolInputString(value: string, key: string | undefined): string {
   const field = key ? `"${key}"` : 'string'
-  if (key && TOOL_INPUT_KEYS_WITHOUT_PREVIEW.has(key)) return `[omitted ${value.length} chars from ${field}]`
+  if (key && ToolInputKeysWithoutPreview.has(key)) return `[omitted ${value.length} chars from ${field}]`
 
   const preview = value.slice(0, 160).replaceAll(/\s+/g, ' ').trim()
 
@@ -432,7 +441,7 @@ function compactToolInputValue(
 
     const isLikelyLargeToolField =
       !!parentKey &&
-      LARGE_TOOL_INPUT_KEYS.has(parentKey) &&
+      LargeToolInputKeys.has(parentKey) &&
       value.length > LargeToolInputFieldThreshold
 
     if (

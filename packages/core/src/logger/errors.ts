@@ -1,10 +1,9 @@
 import { AppError, type ErrorCode } from '../error.js'
 
-import type { LogContext, LogErrorOptions } from './types.js'
+import type { LogErrorOptions } from './types.js'
 
 export class LogError extends AppError {
   readonly scope: string
-  readonly context: LogContext
 
   constructor(
     scope: string,
@@ -12,6 +11,7 @@ export class LogError extends AppError {
     options: LogErrorOptions = {},
     fallbackCode: ErrorCode = 'LOG_FAILURE'
   ) {
+    // context 由 AppError 持有（`LogContext` 与 `ErrorContext` 同形），此处不再复制第二份。
     super(
       options.code ?? fallbackCode,
       `[${scope}] ${message}`,
@@ -20,7 +20,6 @@ export class LogError extends AppError {
     )
     this.name = 'LogError'
     this.scope = scope
-    this.context = options.context ?? {}
   }
 }
 

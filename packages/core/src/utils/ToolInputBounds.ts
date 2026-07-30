@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { isArray, isNumber, isPlainObject, isString } from '../typeGuards'
 
+import { clampRounded } from './number'
 import {
   isStructuredParameterDescription,
   renderParameterDescription as parameterDescription,
@@ -9,6 +10,10 @@ import {
 
 /**
  * 工具输入边界校验文案。
+ *
+ * 数量类参数一律走 {@link clampRounded} 钳制而非拒绝——模型给大值是「尽量多」的合理意图，
+ * 结果仍有界；硬拒只会烧一轮重试。上下界写进参数描述保住模型可见性
+ * （transform 后 JSON Schema 不再带 minimum/maximum）。
  *
  * 这些提示会返回给模型/前端，目的是强制读文件、递归遍历、全文搜索都带上上限，
  * 避免一次工具调用吞掉过多上下文或扫完整个仓库。
@@ -154,23 +159,13 @@ function normalizeParameterDescription(description: string): string {
     : parameterDescription({ description })
 }
 
-/**
- * 通用数量钳制:取整,收进 [min,max]。
- * 铁律:数量/大小类参数超限一律钳制而非拒绝——模型给大值是"尽量多"的合理意图,
- * 结果仍有界;硬拒只会烧一轮重试。上下界写进参数描述保住模型可见性
- * (transform 后 JSON Schema 不再带 minimum/maximum)。
- */
-function clampInt(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Math.round(value)))
-}
-
 function requiredResultLimit(max: number, description: string) {
   // 可选 + 以 max 为默认上限:省略按 max 兜底,超限钳到 max(结果仍有界),
   // 消除"首漏 limit 报 schema 错"与"limit 给大即整调用报废"两个门槛。
   // 名字保留 required 仅为兼容既有引用,语义是"有界结果上限"。
   return z
     .number()
-    .transform((value) => clampInt(value, 1, max))
+    .transform((value) => clampRounded(value,1, max))
     .default(max)
     .describe(normalizeParameterDescription(description))
 }
@@ -179,7 +174,7 @@ function requiredResultLimit(max: number, description: string) {
 function requiredPositiveMaxDepth(max: number, description: string) {
   return z
     .number()
-    .transform((value) => clampInt(value, 1, max))
+    .transform((value) => clampRounded(value,1, max))
     .describe(normalizeParameterDescription(description))
 }
 
@@ -187,7 +182,7 @@ function requiredPositiveMaxDepth(max: number, description: string) {
 function requiredNonNegativeMaxDepth(max: number, description: string) {
   return z
     .number()
-    .transform((value) => clampInt(value, 0, max))
+    .transform((value) => clampRounded(value,0, max))
     .describe(normalizeParameterDescription(description))
 }
 
@@ -209,7 +204,7 @@ function optionalReadEndLine(description: string) {
 function optionalReadMaxChars(max: number, description: string) {
   return z
     .number()
-    .transform((value) => Math.min(max, Math.max(1, Math.round(value))))
+    .transform((value) => clampRounded(value, 1, max))
     .optional()
     .describe(normalizeParameterDescription(description))
 }

@@ -5,11 +5,11 @@
  * 渲染层用 Result.unwrap() 或 Result.match() 消费。
  *
  * 使用方式：
- *   / 主进程
+ *   // 主进程
  *   return Result.ok(data)
  *   return Result.fail(new AppError('NETWORK', '超时'))
  *
- *   / 渲染层
+ *   // 渲染层
  *   const result = await rendererIpc.someDomain.xxx()
  *   Result.match(result, { ok: (data) => ..., fail: (err) => ... })
  */
