@@ -42,11 +42,13 @@ import {
 import {
   dirname,
   getFileStats,
+  isMarkdownTableSeparator,
   mkdir,
   normalizeExtensionPath,
   type OfficeOutput,
   type OfficeToolContext,
   outputPathSchema,
+  parseMarkdownTableRow,
   writeOfficeBuffer,
 } from './officeShared'
 
@@ -602,23 +604,6 @@ export function parseMarkdownTableAt(
     },
     nextIndex,
   }
-}
-
-/** 解析单行 Markdown 表格。 */
-export function parseMarkdownTableRow(line: string): Nullable<string[]> {
-  const trimmed = line.trim()
-  if (!trimmed.includes('|')) return null
-  let cells = trimmed.split('|')
-  if (trimmed.startsWith('|')) cells = cells.slice(1)
-  if (trimmed.endsWith('|')) cells = cells.slice(0, -1)
-  const normalized = cells.map((c) => c.trim())
-  return normalized.length >= 2 ? normalized : null
-}
-
-/** 判断 Markdown 表格分隔行，例如 | --- | :---: |。 */
-export function isMarkdownTableSeparator(line: string): boolean {
-  const row = parseMarkdownTableRow(line)
-  return !!row?.length && row.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
 }
 
 // ─── DOM builders ───────────────────────────────────────────────────────────────
@@ -1241,6 +1226,26 @@ export async function appendWordDocumentBuffer(
   const mergedBuffer = await existingZip.generateAsync({ type: 'nodebuffer' })
   return writeOfficeBuffer(prepared, mergedBuffer, 'docx')
 }
+
+/**
+ * ── OOXML 追加写的四条不变量（§5.3b ①算法与协议）──────────────────────────────
+ *
+ * 追加模式不重排版整篇文档，而是**把新片段的 XML 直接缝进已有 .docx 的 zip 里**。这么做的原因是
+ * 读回再重排会丢掉原文档里 docx 库不认识的一切（样式、编号、页眉页脚、批注）。代价是必须自己
+ * 守住 OOXML 的四条结构约束——下面每个 helper 各守一条，改任意一处前先确认还成立：
+ *
+ * 1. **`w:sectPr` 必须留在 body 末尾**。它是整节的排版设置（纸张、页边距、页眉引用）；
+ *    被复制到中间或被新内容挤到后面，Word 会判定文档损坏或分节错乱。故取片段时剔除它
+ *    （`extractWordBodyChildrenXml`），插入时插到它**之前**（`insertWordBodyChildrenXml`）。
+ * 2. **relationship id 是每文档局部的**。片段里的 `rId3` 与原文档的 `rId3` 毫不相干，
+ *    直接合并会让超链接指向错误目标、图片错位。故 `mergeWordDocumentRelationships` 逐条重发号
+ *    （`rIdAppendN`，同时避开已有的 `rIdN`）并同步改写片段正文里的 `r:id/r:embed/r:link`。
+ * 3. **只合并被真正引用的 relationship**（`wordChildrenReferenceRelationship`）。docx 库会给片段
+ *    带一堆默认关系，全并进去会在原文档里留下悬空条目。
+ * 4. **结构不完整一律拒绝，不"尽力而为"**：找不到 `w:body`、`w:sectPr` 不闭合、`</Relationships>`
+ *    缺失，全部抛 VALIDATION。这里的失败方向必须是"不写"——半写成功的 .docx 打不开，
+ *    而用户的原文档已经被覆盖（§2.4 最坏失败模式决定设计）。
+ */
 
 /** 提取 document.xml body 中除 sectPr 外的内容。 */
 export function extractWordBodyChildrenXml(documentXml: string): string {

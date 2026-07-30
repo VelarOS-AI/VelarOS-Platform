@@ -60,6 +60,17 @@ export type PdfjsNodeGlobals = {
   Path2D?: unknown
 }
 
+/**
+ * 以 pdfjs 需要的那一面看待全局作用域。
+ *
+ * 判据（§1.4）：`typeof globalThis` 里没有这三个浏览器全局的声明（本包不引 DOM lib——引了会
+ * 让整个 Node 侧类型面凭空多出一整套浏览器 API）。所以这里在**唯一一处**把全局收窄成
+ * 「可选三成员」的视图，其余代码只跟这个视图打交道，不再各自断言。
+ */
+function readPdfjsNodeGlobals(): PdfjsNodeGlobals {
+  return globalThis
+}
+
 // 确保 Node 进程拥有 pdfjs 需要的 DOMMatrix/ImageData/Path2D 全局对象。
 /** 提供覆盖文本提取路径所需的最小 DOMMatrix 替身。 */
 export function makeDOMMatrixStub() {
@@ -127,7 +138,7 @@ export function makeDOMMatrixStub() {
  * 2. 如果安装了画布模块，再升级为真实实现以增强图像处理支持。
  */
 export async function ensurePdfjsNodeGlobals(): Promise<void> {
-  const g = globalThis as unknown as PdfjsNodeGlobals
+  const g = readPdfjsNodeGlobals()
 
   // 先安装内联替身；这条路径不依赖外部原生模块。
   if (!g.DOMMatrix) g.DOMMatrix = makeDOMMatrixStub()
