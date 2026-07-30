@@ -69,8 +69,9 @@
 | 文档 | 什么时候该读它 |
 | --- | --- |
 | [mod-dev/conventions.md](./mod-dev/conventions.md) | 写 mod 或改本仓 mod 相关代码时的硬规则:数据生命周期与 `ownerModId` 归属、i18n、**语义词汇墙**(内核不得认识具体域词)、依赖方向;文末附**文档-代码漂移清单**(8 条 + 2 个疑似运行时缺陷的处置记录) |
-| [../README.md](../README.md)「常用命令」 | 要跑门时:`check` 总门的组成,以及 `check:gates` 里那 15 个域门(`check:kernel-arch` / `check:agent-schemas` / `check:memory-boundaries` / `probe:memory` …)怎么单跑 |
-| `eslint/<domain>.config.mjs` + 根 `eslint.config.mjs` | 想知道某条 lint 规则为什么只对某个域生效:根基座只做域作用域收敛与根锚定,不重写规则 |
+| [gate-coverage-matrix.md](./gate-coverage-matrix.md) | ①想知道「我改的这个包到底有哪些门管着我」;②要给某个包补门之前(先看有没有别的包已在跑同一判据);③怀疑「这条规则我们不是有门吗,怎么没拦住」时。**包 × 门族实测矩阵**,含 arch-guard 44 条在本仓零覆盖的结构性缺口与三条出路 |
+| [../README.md](../README.md)「常用命令」 | 要跑门时:`check` 总门的组成,以及 `check:gates` 里那些域门(`check:kernel-arch` / `check:agent-schemas` / `check:memory-boundaries` / `probe:memory` …)怎么单跑 |
+| `eslint/_shared.config.mjs` + `eslint/<domain>.config.mjs` + 根 `eslint.config.mjs` | 想知道某条 lint 规则为什么只对某个域生效:公共规则集住 `_shared`(单源),域配置只放私有增量,根基座做域作用域收敛与根锚定 |
 
 > 本仓没有自己的写码规范文档——写码尺子是 Desktop 仓 `docs/code-standard.md`(见 §二)。
 
@@ -155,6 +156,10 @@ Desktop 仓 `docs/kernel-contract.md` §12 九条法 + `docs/package-extraction-
 
 ### 跑门 / 门红了
 [../README.md](../README.md)「常用命令」→ 对应域门脚本在 `scripts/<domain>/`,基线在 `baselines/<domain>/`
+
+### 补一道门 / 怀疑某条规则没人在跑
+[gate-coverage-matrix.md](./gate-coverage-matrix.md)(先查现状与已知缺口,别重复造门)→
+根 `package.json` 的 `check:gates`(**唯一挂链处**,不挂进去等于没有门)
 
 ---
 
