@@ -33,41 +33,12 @@ export type {
 } from './ContextDegradeLadder'
 export {
   contextDegradeStaircaseLength,
-  HardCompactionTargetPercent,
   resolveContextDegradeAction,
-  SoftCompactionTargetPercent,
 } from './ContextDegradeLadder'
 export type { ExtractToolEvidenceInput } from './ContextEvidenceLedger'
 export { ContextEvidenceLedger, contextEvidenceLedger } from './ContextEvidenceLedger'
 export type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput } from './ContextPhase'
 export { resolveAgentContextPhase } from './ContextPhase'
-export type {
-  ContextBudgetLaneDefinition,
-  ContextBudgetLaneId,
-  ContextPipelineDefinition,
-  ContextPipelineProfileId,
-  ContextPipelineStageDefinition,
-  ContextPipelineStageId,
-} from './ContextPipelineFactory'
-export { ContextPipelineFactory, contextPipelineFactory } from './ContextPipelineFactory'
-export {
-  resolveAutoCompactionPercent,
-  resolveContextPipelineThresholds,
-  resolveSemanticPreSummaryPercent,
-} from './ContextPipelineThresholds'
-export type { BuildContextRetrievalHandlesInput } from './ContextRetrievalPlanner'
-export { ContextRetrievalPlanner, contextRetrievalPlanner } from './ContextRetrievalPlanner'
-export type {
-  SemanticSummaryRequest,
-  SemanticSummaryResult,
-  SummarizerCandidateRuntime,
-} from './ContextSemanticSummarizer'
-export {
-  MaxSummarizerInputChars,
-  resolveSummarizerLanguageModel,
-  summarizeOlderHistory,
-  summarizeOlderHistoryWithTitle,
-} from './ContextSemanticSummarizer'
 export {
   ContextUsageCalibrator,
   DefaultCalibrationFactor,
@@ -94,22 +65,10 @@ export {
   normalizeIntentText,
 } from './IntentSignals'
 export type {
-  AgentLoopContextCompactionPayload,
-  AgentLoopLogger,
-  AgentLoopRuntime,
   AgentLoopToolDescriptor,
   AgentLoopToolRegistry,
-  DropHistoryToFallbackArgs,
-  DropHistoryToFallbackResult,
-  EmergencyCompactArgs,
-  EmergencyCompactResult,
-  PrepareAgentLoopHistoryArgs,
-  PrepareAgentLoopHistoryResult,
-  SemanticCompactArgs,
-  SemanticCompactResult,
-  SemanticHistorySummarizeFn,
-} from './LoopHistory'
-export { AgentLoopHistoryManager } from './LoopHistory'
+} from './LoopContextUsage'
+export { AgentLoopContextUsageManager } from './LoopContextUsage'
 export type {
   CreateSubAgentContextArgs,
   ResolveSoloLoopToolsArgs,
@@ -221,12 +180,11 @@ export type {
   AgentExecutionConfig,
   AgentSystemRuntimeConfig,
 } from './RuntimeConfiguration'
-export type { AgentRuntimeContextCompactionPayload, AgentRuntimeEventBus } from './RuntimeEvents'
+export type { AgentRuntimeEventBus } from './RuntimeEvents'
 export { AgentRuntimeEvents } from './RuntimeEvents'
 export type { AgentRuntimeInputPort, AgentRuntimeInputResult } from './RuntimeInputPort'
 export type {
   ApplySoloContextDegradeActionContext,
-  SoloContextDegradeHistoryHelper,
   SoloContextDegradeToolContext,
   SoloContextDegradeToolRegistry,
 } from './SoloContextDegradeActionExecutor'
@@ -280,12 +238,6 @@ export {
   HtmlArtifactMinimumOutputTokens,
   resolveSoloTurnModelRequestOptions,
 } from './SoloModelRequestOptions'
-export type {
-  PrepareSoloPromptHistoryInput,
-  PrepareSoloPromptHistoryResult,
-  SoloPromptHistoryHelper,
-} from './SoloPromptHistoryPreparer'
-export { prepareSoloPromptHistory } from './SoloPromptHistoryPreparer'
 export type {
   PrepareSoloRunPlanForTurnInput,
   PrepareSoloRunPlanForTurnResult,

@@ -1,17 +1,3 @@
-export type {
-  ContextUsageEstimate,
-  HistoryCompactionPolicy,
-  HistoryCompactionResult,
-  HistorySanitizationIssue,
-  HistorySanitizationResult,
-  SemanticCompactionPlan,
-  SemanticSummaryValidationResult,
-} from './compaction'
-export {
-  AgentHistoryHelper,
-  AgentHistoryHelper as HistoryHelper,
-  repairHistoryStructureForProvider,
-} from './compaction'
 export type { ParsedContextOSGeneratedMessage } from './contextOSMessage'
 export {
   buildContextOSGeneratedAssistantMessage,
@@ -42,19 +28,8 @@ export {
   AgentHistoryMessageHelper,
   AgentHistoryMessageHelper as HistoryMessages,
 } from './messages'
-export type { UserTextPayloadReference } from './microCompaction'
-export type {
-  ConversationScopedToolCompactionResult,
-  OversizedUserTextCompactionResult,
-} from './microCompaction'
-export {
-  ContextDistillToolName,
-  enforceConversationScopedToolResultBudget,
-  enforceOversizedUserTextSafetyValve,
-  MaxUserMessageInlineChars,
-  MinRecentToolResultsPerConversation,
-  OversizedUserTextSafetyValveChars,
-} from './microCompaction'
+export type { HistorySanitizationIssue, HistorySanitizationResult } from './repair'
+export { repairHistoryStructureForProvider } from './repair'
 export type {
   AgentHistoryToolContext,
   ModelHistoryRequestPhase,
@@ -63,6 +38,7 @@ export type {
 export {
   sanitizeHistoryForProvider,
 } from './request'
+export type { UserTextPayloadReference } from './sanitize'
 export {
   isReplayUnsafeAssistantMessage,
   sanitizeModelHistory,
@@ -75,7 +51,6 @@ export {
   AgentHistorySummarySections,
   AgentHistorySummarySections as SummarySectionsHelper,
 } from './sections'
-export { SemanticPreSummaryCache } from './SemanticPreSummaryCache'
 export type { AgentHistoryTurn } from './summary'
 export {
   AgentHistorySummaryHelper,

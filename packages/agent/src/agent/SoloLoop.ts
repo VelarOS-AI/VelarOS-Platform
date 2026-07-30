@@ -60,6 +60,7 @@ import {
   executeLoopTurnWithContextOverflowRecovery,
   runAgentLoop,
 } from './AgentLoop'
+import type { ContextGovernanceSessionRegistry } from './context'
 import { resolveAgentContextPhase } from './ContextPhase'
 import { recoveryRunPlanner, SessionToolAllocator, type ToolAllocatorRequest } from './control-plane'
 import {
@@ -67,14 +68,12 @@ import {
   type AgentExecutionLimits,
   resolveAgentExecutionLimits,
 } from './ExecutionLimits'
-import type { AgentHistoryHelper, AgentTurnToolExecutor } from './history'
+import type { AgentTurnToolExecutor } from './history'
 import { createInternalFollowUpMessage } from './history'
 import {
-  AgentLoopHistoryManager,
-  type AgentLoopRuntime,
+  AgentLoopContextUsageManager,
   type AgentLoopToolRegistry,
-  type SemanticHistorySummarizeFn,
-} from './LoopHistory'
+} from './LoopContextUsage'
 import {
   type AgentLoopSurface,
   loopContinue,
@@ -91,7 +90,6 @@ import type {
   AgentSystemRuntimeConfig,
 } from './RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
-import { createSemanticHistorySummarizer } from './SemanticSummarizeBuilder'
 import { applySoloContextDegradeAction } from './SoloContextDegradeActionExecutor'
 import {
   createSoloFinishingGateBlockTracker,
@@ -105,7 +103,6 @@ import {
   buildSoloToolSchemaTelemetry,
 } from './SoloLoopTelemetryBuilder'
 import { resolveSoloTurnModelRequestOptions } from './SoloModelRequestOptions'
-import { prepareSoloPromptHistory } from './SoloPromptHistoryPreparer'
 import { prepareSoloRunPlanForTurn } from './SoloRunPlanPreparer'
 import { consumeSoloRuntimeGuidance } from './SoloRuntimeGuidance'
 import { runSoloToolSpaceBootstrapFallback } from './SoloToolSpaceBootstrapFallback'
@@ -174,7 +171,7 @@ type SoloLoopToolContext = StreamTurnToolContext &
     }>
   }
 
-interface SoloLoopRuntime<TEvents extends SoloLoopEvents> extends AgentLoopRuntime<TEvents> {
+interface SoloLoopRuntime<TEvents extends SoloLoopEvents> {
   resolveRoleRuntime(
     selection: unknown,
     runtimeContext?: unknown
@@ -348,7 +345,7 @@ class SoloStreamLoop<
   TEvents extends SoloLoopEvents = SoloLoopEvents,
 > {
   private readonly log = logRuntime.tag('SoloStreamLoop')
-  private readonly loopHistory: AgentLoopHistoryManager<TEvents, TContext>
+  private readonly contextUsage: AgentLoopContextUsageManager<TContext>
   private readonly toolSpaceBootstrapStates = new Map<string, ToolSpaceBootstrapState>()
   private readonly toolAllocators = new Map<string, SessionToolAllocator>()
   private readonly executionLimits: AgentExecutionLimits
@@ -358,8 +355,11 @@ class SoloStreamLoop<
     private readonly runtimeHelper: SoloLoopRuntime<TEvents>,
     /** 执行单轮模型调用并维护 assistant/tool 历史。 */
     private readonly turnHelper: SoloLoopTurnRunner<TContext, TEvents>,
-    /** history 清洗、fallback、压缩和上下文水位判断。 */
-    historyHelper: AgentHistoryHelper,
+    /**
+     * 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。
+     * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
+     */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry,
     /** 构建 system prompt、turn context payload 和上下文片段。 */
     private readonly runContextHelper: SoloLoopRunContext<TContext>,
     /** 用于估算工具 schema 占用并生成 AI SDK tool set。 */
@@ -379,12 +379,7 @@ class SoloStreamLoop<
     private readonly seams: LooseOptional<AgentModSeamDispatcher> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
-    this.loopHistory = new AgentLoopHistoryManager(
-      historyHelper,
-      runtimeHelper,
-      toolRegistry,
-      this.log
-    )
+    this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
   }
 
   private getSessionStateKey(sessionId: LooseOptional<string>): string {
@@ -576,7 +571,7 @@ class SoloStreamLoop<
         promptBudget,
         contextPhase: contextPhaseDecision.phase,
       })
-      const contextUsageOptions = this.loopHistory.buildContextUsageOptions(
+      const contextUsageOptions = this.contextUsage.buildContextUsageOptions(
         roleRuntime.model,
         args.toolContext,
         allowedTools,
@@ -584,26 +579,14 @@ class SoloStreamLoop<
         toolSchemaChars,
         turnToolRegistry
       )
-
-      // 语义摘要器：默认复用主对话模型；设置页指定了可用的摘要模型时改用之，否则自动 fallback。
-      // 解析链与 QueryLoop 共用 createSemanticHistorySummarizer（唯一差异 = resolveRoleRuntime 入参形态）。
-      const semanticSummarize: SemanticHistorySummarizeFn = createSemanticHistorySummarizer({
-        roleRuntime,
-        sessionId: args.toolContext.sessionId,
-      })
-
-      const { predictedInputTokens } = await prepareSoloPromptHistory({
-        loopHistory: this.loopHistory,
-        model: roleRuntime.model,
+      // 送核前的用量估算：只用来喂 MMU 校准闭环（下面 recordActualUsage）。历史本身**一律不改写**
+      // ——降级判决整条住驻留账本，编译期投影唯一执行。
+      const predictedInputTokens = this.contextUsage.estimateUsage(
+        roleRuntime.model,
         systemPrompt,
-        history: args.history,
-        turn,
-        events: args.events,
-        contextUsageOptions,
-        toolContext: args.toolContext,
-        summarize: semanticSummarize,
-        signal: args.abortController.signal,
-      })
+        args.history,
+        contextUsageOptions
+      ).estimatedTokens
       this.log.info('prompt build end', {
         turn,
         promptSegments: promptSegments.length,
@@ -724,25 +707,19 @@ class SoloStreamLoop<
             }),
           resolveAction: (attempt) =>
             recoveryRunPlanner.resolveContextOverflowAction(runPlan.recovery, attempt),
-          applyAction: (action) =>
+          applyAction: async (action) =>
             applySoloContextDegradeAction(action, {
-              loopHistory: this.loopHistory,
+              governanceSessions: this.governanceSessions,
               toolRegistry: turnToolRegistry,
               log: this.log,
               roleRuntime,
-              systemPrompt,
-              history: args.history,
               turn,
-              events: args.events,
-              contextUsageOptions,
               baseAllowedTools,
               protectedTools,
               enabledToolDescriptors,
               zoneAllocation,
               toolContext: args.toolContext,
               currentAllowedTools: allowedTools,
-              summarize: semanticSummarize,
-              signal: args.abortController.signal,
               onToolsNarrowed: (next) => {
                 allowedTools = next
               },
@@ -766,7 +743,7 @@ class SoloStreamLoop<
           skippedPromptSegments,
         })
         // MMU 反馈：用供应方真实输入 token 校准本模型的估算系数。
-        this.loopHistory.recordActualUsage(
+        this.contextUsage.recordActualUsage(
           roleRuntime.model,
           predictedInputTokens,
           toNullable(turnResult.inputTokens)

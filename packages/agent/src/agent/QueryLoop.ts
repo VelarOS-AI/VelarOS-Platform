@@ -31,6 +31,7 @@ import {
   executeLoopTurnWithContextOverflowRecovery,
   runAgentLoop,
 } from './AgentLoop'
+import type { ContextGovernanceSessionRegistry } from './context'
 import { resolveContextDegradeAction } from './ContextDegradeLadder'
 import {
   type AgentExecutionLimitOverrides,
@@ -38,16 +39,13 @@ import {
   resolveAgentExecutionLimits,
 } from './ExecutionLimits'
 import {
-  type AgentHistoryHelper,
   type AgentHistoryToolContext,
   createInternalFollowUpMessage,
 } from './history'
 import {
-  AgentLoopHistoryManager,
-  type AgentLoopRuntime,
+  AgentLoopContextUsageManager,
   type AgentLoopToolRegistry,
-  type SemanticHistorySummarizeFn,
-} from './LoopHistory'
+} from './LoopContextUsage'
 import {
   buildSubAgentInstruction,
   createSubAgentContext,
@@ -80,7 +78,6 @@ import type {
   AgentChatRuntimeConfig,
   AgentSystemRuntimeConfig,
 } from './RuntimeConfiguration'
-import { createSemanticHistorySummarizer } from './SemanticSummarizeBuilder'
 import { isReasoningOnlyEmptyResponseError } from './stream'
 import {
   type AgentTurnCapabilitySnapshotSource,
@@ -162,7 +159,7 @@ interface QueryLoopRoleRuntime {
   fallbackReason?: LooseOptional<string>
 }
 
-interface QueryLoopRuntime<TEvents extends QueryTurnEvents> extends AgentLoopRuntime<TEvents> {
+interface QueryLoopRuntime {
   createAgentProvider(input: unknown): QueryTurnProvider
   resolveRoleRuntime(
     selection: unknown,
@@ -232,16 +229,19 @@ class QueryLoop<
   TSignals = unknown,
 > {
   private readonly log = logRuntime.tag('QueryLoop')
-  private readonly loopHistory: AgentLoopHistoryManager<TEvents, TContext>
+  private readonly contextUsage: AgentLoopContextUsageManager<TContext>
   private readonly executionLimits: AgentExecutionLimits
 
   constructor(
     /** 模型 runtime 和连接错误处理。 */
-    private readonly runtimeHelper: QueryLoopRuntime<TEvents>,
+    private readonly runtimeHelper: QueryLoopRuntime,
     /** 执行单轮非流式模型调用。 */
     private readonly turnHelper: QueryLoopTurnRunner<TContext, TEvents>,
-    /** history 清洗、fallback 和压缩。 */
-    historyHelper: AgentHistoryHelper,
+    /**
+     * 治理会话登记处（宿主级单实例，与主面同一份）。
+     * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
+     */
+    private readonly governanceSessions: ContextGovernanceSessionRegistry,
     /** 构建子 Agent system prompt。 */
     private readonly runContextHelper: QueryLoopRunContext<TContext, TSignals>,
     /** 解析目标角色能力。 */
@@ -265,12 +265,7 @@ class QueryLoop<
     private readonly seams: LooseOptional<AgentModSeamDispatcher> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
-    this.loopHistory = new AgentLoopHistoryManager(
-      historyHelper,
-      runtimeHelper,
-      toolRegistry,
-      this.log
-    )
+    this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
   }
 
   /**
@@ -457,7 +452,7 @@ class QueryLoop<
         thinkingDepth: args.opts.runtimeOverride?.thinkingDepth ?? args.systemConfig.thinkingDepth,
         goalMode: turnCapDisabled,
       })
-      const contextUsageOptions = this.loopHistory.buildContextUsageOptions(
+      const contextUsageOptions = this.contextUsage.buildContextUsageOptions(
         roleRuntime.model,
         turnToolContext,
         allowedToolsForTurn,
@@ -465,49 +460,14 @@ class QueryLoop<
         toolSchemaChars,
         turnToolRegistry
       )
-
-      // 语义摘要器：默认复用子 Agent 模型；设置页指定可用摘要模型时改用之，否则自动 fallback。
-      // 解析链与主面共用 createSemanticHistorySummarizer（唯一差异 = resolveRoleRuntime 入参形态：
-      // 子 Agent 侧要补 systemPromptAppend:'' 满足 AgentChatRuntimeConfig 入参）。
-      const semanticSummarize: SemanticHistorySummarizeFn = createSemanticHistorySummarizer({
-        roleRuntime,
-        sessionId: args.parentCtx.sessionId,
-      })
-
-      // 子 Agent 也需要清洗/压缩 history，只是不一定有事件总线可通知 UI。
-      const preparedHistory = this.loopHistory.prepareHistory({
-        mode: 'query',
-        model: roleRuntime.model,
+      // 送核前的用量估算：只喂 MMU 校准闭环（下面 recordActualUsage）。子 Agent 的历史同样**不在
+      // loop 层改写**——清洗与降级各归其位（结构自愈在编译前，降级在驻留账本的 epoch）。
+      const predictedInputTokens = this.contextUsage.estimateUsage(
+        roleRuntime.model,
         systemPrompt,
         history,
-        turn,
-        events: args.opts.events,
-        contextUsageOptions,
-        toolContext: turnToolContext,
-      })
-      // 多级压缩第二级：高水位时把较老历史升级为语义摘要；带无进展冷却,成本封顶。
-      let predictedInputTokens = preparedHistory.estimate.estimatedTokens
-      if (
-        this.loopHistory.shouldAttemptSemanticCompaction(
-          preparedHistory.estimate.percent,
-          history.length
-        )
-      ) {
-        const semantic = await this.loopHistory.semanticCompact({
-          mode: 'query',
-          model: roleRuntime.model,
-          systemPrompt,
-          history,
-          turn,
-          events: args.opts.events,
-          contextUsageOptions,
-          summarize: semanticSummarize,
-          signal: args.parentCtx.abortSignal,
-        })
-        if (semantic.compacted) {
-          predictedInputTokens = semantic.estimatedTokensAfter
-        }
-      }
+        contextUsageOptions
+      ).estimatedTokens
 
       // 观测（护栏 4，机制单源在 AgentLoop）：本轮 = 子 Agent 的 turn span（run 的子）；provider 请求 =
       // model span（turn 的子，usage 收敛在此）。turn scope 兼作 tool span 开启器注入本轮 QueryTurn 的
@@ -553,52 +513,25 @@ class QueryLoop<
                 seams: this.seams,
               }),
             resolveAction: (attempt) => resolveContextDegradeAction('query', attempt),
+            // 缺页降级：query 链只有「强开一次 epoch」这一级（无运行档工具暴露可收窄），
+            // 压不下去即 surrender —— 尾保护是投影级硬不变量，不设压尾旁路。
             applyAction: async (action) => {
-              switch (action.kind) {
-                case 'drop-history':
-                  return this.loopHistory.dropHistoryToFallback({
-                    mode: 'query',
-                    history,
-                    turn,
-                  }).dropped
-                case 'semantic-compact':
-                  return (
-                    await this.loopHistory.semanticCompact({
-                      mode: 'query',
-                      model: roleRuntime.model,
-                      systemPrompt,
-                      history,
-                      turn,
-                      events: args.opts.events,
-                      contextUsageOptions,
-                      summarize: semanticSummarize,
-                      signal: args.parentCtx.abortSignal,
-                    })
-                  ).compacted
-                default: {
-                  const recovery = this.loopHistory.emergencyCompact({
-                    mode: 'query',
-                    model: roleRuntime.model,
-                    systemPrompt,
-                    history,
-                    turn,
-                    events: args.opts.events,
-                    contextUsageOptions,
-                    targetPercent: action.targetPercent,
-                  })
-                  if (recovery.recovered) {
-                    this.log.warn('sub-agent recovered context overflow via compaction', {
-                      turn,
-                      level: action.level,
-                      targetPercent: action.targetPercent,
-                      removedMessages: recovery.removedMessages,
-                      percentBefore: recovery.percentBefore,
-                      percentAfter: recovery.percentAfter,
-                    })
-                  }
-                  return recovery.recovered
-                }
+              if (action.kind !== 'govern-epoch') return false
+
+              const report = this.governanceSessions.requestEpoch(args.parentCtx.sessionId, {
+                modelWindowTokens: roleRuntime.contextWindow,
+              })
+              if (report?.applied) {
+                this.log.warn('sub-agent recovered context overflow via governance epoch', {
+                  turn,
+                  level: action.level,
+                  epoch: report.epoch,
+                  savingPercent: report.savingPercent,
+                  beforePercent: report.beforePercent,
+                  afterPercent: report.afterPercent,
+                })
               }
+              return !!report?.applied
             },
             surrenderLogMessage: 'sub-agent exhausted context degrade ladder; surrendering',
             log: this.log,
@@ -654,7 +587,7 @@ class QueryLoop<
       })
 
       // MMU 反馈：用供应方真实输入 token 校准本模型的估算系数。
-      this.loopHistory.recordActualUsage(
+      this.contextUsage.recordActualUsage(
         roleRuntime.model,
         predictedInputTokens,
         toNullable(result.inputTokens)

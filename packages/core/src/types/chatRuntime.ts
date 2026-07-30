@@ -12,18 +12,6 @@ export interface StreamPhasePayload {
   teamPhase: TeamExecutionPhase
 }
 
-export interface StreamContextCompactionPayload {
-  kind: 'context-compaction'
-  turn: number
-  estimatedTokensBefore: number
-  estimatedTokensAfter: number
-  percentBefore: number
-  percentAfter: number
-  removedMessages: number
-  passes: number
-  targetPercent: number
-}
-
 export type ChatContextUsageAccountingSource =
   | 'provider'
   | 'provider-count'
@@ -223,7 +211,6 @@ export interface StreamAwaitingInputPayload {
 
 export type ChatRuntimeEvent =
   | StreamPhasePayload
-  | StreamContextCompactionPayload
   | StreamUsageTelemetryPayload
   | StreamContextUsageEstimatePayload
   | StreamTurnStartPayload
@@ -264,7 +251,6 @@ export type StreamFailureRuntimeStateKind = (typeof STREAM_FAILURE_RUNTIME_STATE
 /** 契约测试与 bridge exhaustive switch 用的完整 kind 列表。 */
 export const ALL_STREAM_RUNTIME_STATE_KINDS = [
   'phase',
-  'context-compaction',
   'usage-telemetry',
   'context-usage-estimate',
   'turn-start',
@@ -283,15 +269,6 @@ export const ChatRuntimeEvents = {
     return {
       kind: 'phase',
       teamPhase,
-    }
-  },
-
-  contextCompaction(
-    payload: Omit<StreamContextCompactionPayload, 'kind'>
-  ): StreamContextCompactionPayload {
-    return {
-      kind: 'context-compaction',
-      ...payload,
     }
   },
 

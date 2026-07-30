@@ -4,7 +4,7 @@ import type { ModelMessage } from 'ai'
 
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { UserTextPayloadReference } from '../history/microCompaction'
+import type { UserTextPayloadReference } from '../history/sanitize'
 
 import {
   type ContextPayloadStore,
@@ -13,6 +13,15 @@ import {
 } from './ContextPayloadStore'
 
 export type { UserTextPayloadReference }
+
+/**
+ * 单条 user 正文超过该字符数就把全文落进 PayloadStore，请求里只留摘录 + payloadRef。
+ *
+ * 48K 是 v1 `MaxUserMessageInlineChars` 安全阀的现值，逐字沿用；治理 v2 的准入层用同一数值
+ * 做 EXCERPT 判据（`residency/governanceConfig` 的 `admission.userInlineMaxChars`）。两处是
+ * 同一语义的两个消费者：这里决定"存不存盘"，那里决定"投影里放多少"。
+ */
+export const OversizedUserTextSafetyValveChars = 48_000
 
 export interface PersistUserTextPayloadsResult {
   references: UserTextPayloadReference[]

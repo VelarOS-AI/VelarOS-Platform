@@ -119,7 +119,6 @@ export interface KernelToolContext {
   contextPayloadStore?: ContextPayloadStore
   evidenceLedger?: readonly ChatContextEvidenceRecord[]
   runtimeEvidence?: ToolRuntimeEvidenceApi
-  contextViewActive?: boolean
   role: ToolRoleApi
   approval: ApprovalPort
   interaction: InteractionPort

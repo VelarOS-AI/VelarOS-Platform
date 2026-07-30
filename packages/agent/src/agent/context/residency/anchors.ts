@@ -5,8 +5,9 @@
  * 硬事实。所以这些"关键场"必须在准入时用规则抽走并逐字留在记录元数据里，后续 I1 骨架与 I2
  * 蒸馏的锚点验证都读这一份，不再各抽各的。
  *
- * 语义来源：v1 `history/compaction.ts` 的 `FileAnchorPattern` / `CommandAnchorPatterns` /
- * `CommandAnchorStopWords`（那套正则在真机上是好的，逐字吸收）；v2 追加数字锚与标识符锚——
+ * 语义来源：v1 `history/compaction.ts`（已于 B1c 删除）的 `FileAnchorPattern` /
+ * `CommandAnchorPatterns` / `CommandAnchorStopWords`（那套正则在真机上是好的，逐字吸收）；
+ * v2 追加数字锚与标识符锚——
  * v1 只抽路径与命令，退出码/端口/行号/符号名靠 LLM 记，正是老化最快的一档。
  *
  * 依赖纪律：不 import v1 压缩模块（B1 判死），正则在本文件单源。

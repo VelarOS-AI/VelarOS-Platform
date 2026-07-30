@@ -10,7 +10,7 @@ import type { ModelMessage } from 'ai'
 
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { repairHistoryStructureForProvider } from '../../../history/compaction'
+import { repairHistoryStructureForProvider } from '../../../history/repair'
 
 const log = logRuntime.tag('ProviderRequestCompiler')
 

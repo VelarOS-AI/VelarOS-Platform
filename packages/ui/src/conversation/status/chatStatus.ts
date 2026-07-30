@@ -5,7 +5,7 @@ import {
 } from '../i18n/conversationTranslator'
 
 import type { AppLocale, TeamExecutionPhase } from '#contracts'
-import { isBlank, isEmpty, isNumber, isPresent, optionalWhenLazy, truncate } from '#internal/runtime'
+import { isBlank, isEmpty, isPresent, optionalWhenLazy, truncate } from '#internal/runtime'
 
 export type ChatStatusTone = 'idle' | 'running' | 'success' | 'warning' | 'error'
 
@@ -28,8 +28,6 @@ export interface ChatStatusRuntime {
   teamPhase: Nullable<TeamExecutionPhase>
   activeTurn: Nullable<number>
   completedTurns: number
-  isContextCompacting: boolean
-  lastContextCompactionAt: Nullable<number>
   lastError: Nullable<string>
   connectionRetryAttempt: Nullable<number>
   connectionRetryMaxAttempts: Nullable<number>
@@ -65,12 +63,6 @@ interface ChatInlineNoticeOptions {
   now?: number
 }
 
-type ContextCompactionRuntime = Pick<
-  ChatStatusRuntime,
-  'status' | 'isContextCompacting' | 'lastContextCompactionAt'
->
-
-export const ContextCompactionVisualDurationMs = 1200
 type ConversationTranslate = ConversationTranslator['translate']
 
 const STATUS_LABEL_KEYS: Record<ChatRunStatus, ConversationMessageKey> = {
@@ -119,20 +111,6 @@ function getInlineTeamPhaseLabelKey(phase: TeamExecutionPhase): ConversationMess
   return TEAM_PHASE_LABEL_KEYS[phase]
 }
 
-export function isContextCompactionVisible(
-  runtime: ContextCompactionRuntime,
-  now = Date.now()
-): boolean {
-  if (runtime.status !== 'running') return false
-
-  if (runtime.isContextCompacting) return true
-
-  return (
-    isNumber(runtime.lastContextCompactionAt) &&
-    now - runtime.lastContextCompactionAt < ContextCompactionVisualDurationMs
-  )
-}
-
 function getReconnectingLabel(
   runtime: ChatStatusRuntime,
   locale: AppLocale,
@@ -170,9 +148,6 @@ function getChatStatusDetail(
 ): string | undefined {
   if (runtime.status === 'running' && isPresent(runtime.connectionRetryAttempt))
     return getReconnectingLabel(runtime, locale, conversationTranslate)
-
-  if (isContextCompactionVisible(runtime))
-    return conversationTranslate(locale, 'status.contextCompacting')
 
   if (runtime.teamPhase)
     return conversationTranslate(locale, TEAM_PHASE_LABEL_KEYS[runtime.teamPhase])
@@ -303,10 +278,7 @@ function buildRunningInlineNoticeText(
   options: ChatInlineNoticeOptions | undefined,
   conversationTranslate: ConversationTranslate
 ): string {
-  const isCompacting = isContextCompactionVisible(runtime, options?.now)
-  const liveSummary = isCompacting
-    ? conversationTranslate(locale, 'status.contextCompacting')
-    : options?.liveTraceSummary?.trim() || null
+  const liveSummary = options?.liveTraceSummary?.trim() || null
   const parts: string[] = []
   const appendPart = (value: LooseOptional<string>): void => {
     if (!value || isBlank(value) || parts.includes(value)) return
