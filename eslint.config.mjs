@@ -61,6 +61,7 @@ const Domains = [
       'packages/capabilities/office-tools/**',
       'packages/capabilities/system-tools/**',
       'packages/capabilities/workspace/**',
+      'packages/game/**',
     ],
   },
   {
