@@ -72,7 +72,6 @@ export interface ChatTranscriptProps {
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  latestPlanUpdateToolCallId?: LooseOptional<string>
   activeWorkspaceRoot?: LooseOptional<string>
   workspaceRoots?: WorkspaceRootEntry[]
   canShowFileChangeSummary?: boolean
@@ -120,7 +119,6 @@ function ChatTranscriptInner({
   hiddenPlanToolCallId = null,
   hideGoalToolBlocks = false,
   planUpdateIndexByToolCallId,
-  latestPlanUpdateToolCallId,
   activeWorkspaceRoot,
   workspaceRoots,
   canShowFileChangeSummary = true,
@@ -172,7 +170,6 @@ function ChatTranscriptInner({
               hiddenPlanToolCallId={hiddenPlanToolCallId}
               hideGoalToolBlocks={hideGoalToolBlocks}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              latestPlanUpdateToolCallId={latestPlanUpdateToolCallId}
               activeWorkspaceRoot={activeWorkspaceRoot}
               workspaceRoots={workspaceRoots}
               canShowFileChangeSummary={canShowFileChangeSummary}

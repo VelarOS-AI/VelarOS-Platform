@@ -462,17 +462,6 @@ export function buildMessageRenderSegments(
   return messageSegments
 }
 
-export function messageSegmentHasSupersededPlanUpdate(
-  segment: MessageRenderSegment,
-  latestPlanUpdateToolCallId?: LooseOptional<string>
-): boolean {
-  if (!latestPlanUpdateToolCallId || segment.kind !== 'activity-group') return false
-
-  return segment.blocks.some(
-    (block) => block.toolName === 'update_plan' && block.toolCallId !== latestPlanUpdateToolCallId
-  )
-}
-
 function messageSegmentHasStartedText(segment: MessageRenderSegment): boolean {
   return (
     segment.kind === 'segment' &&
@@ -480,10 +469,6 @@ function messageSegmentHasStartedText(segment: MessageRenderSegment): boolean {
     segment.segment.block.type === 'text' &&
     !isBlank(segment.segment.block.text)
   )
-}
-
-export function hasVisibleTextSegment(segments: MessageRenderSegment[]): boolean {
-  return segments.some(messageSegmentHasStartedText)
 }
 
 function messageSegmentIsThinking(segment: MessageRenderSegment): boolean {
@@ -542,43 +527,6 @@ export function getProcessedActivitySummaryBoundaryIndex(
   return summaryTextIndex
 }
 
-export function hasStartedTextAfterSegment(
-  segments: MessageRenderSegment[],
-  index: number
-): boolean {
-  return hasLaterMessageSegment(segments, index, messageSegmentHasStartedText)
-}
-
-function messageSegmentHasStartedToolActivity(segment: MessageRenderSegment): boolean {
-  return segment.kind === 'activity-group' && !isEmpty(segment.blocks)
-}
-
-export function hasStartedToolActivityAfterSegment(
-  segments: MessageRenderSegment[],
-  index: number
-): boolean {
-  return hasLaterMessageSegment(segments, index, messageSegmentHasStartedToolActivity)
-}
-
-export function hasStartedThinkingAfterSegment(
-  segments: MessageRenderSegment[],
-  index: number
-): boolean {
-  return hasLaterMessageSegment(segments, index, messageSegmentIsThinking)
-}
-
-function hasLaterMessageSegment(
-  segments: MessageRenderSegment[],
-  index: number,
-  predicate: (segment: MessageRenderSegment) => boolean
-): boolean {
-  for (let cursor = index + 1; cursor < segments.length; cursor += 1) {
-    const segment = segments[cursor]
-    if (segment && predicate(segment)) return true
-  }
-
-  return false
-}
 
 function formatGoalCompletionActivityLabel(
   summary: GoalCompletionActivitySummary,

@@ -14,7 +14,6 @@ export interface ChatTranscriptDerivedIndexes {
   latestCompletedAssistantMessage: Nullable<ChatMessage>
   latestCompletedAssistantMessageId: Nullable<string>
   planUpdateIndexByToolCallId: Map<string, number>
-  latestPlanUpdateToolCallId: Nullable<string>
   assistantQuestionMap: Map<string, ChatMessage>
   guidedInputMessageIds: Set<string>
   activeAwaitingInputMessageId: Nullable<string>
@@ -33,7 +32,6 @@ export function buildChatTranscriptDerivedIndexes({
 
   let latestAssistantMessage: Nullable<ChatMessage> = null
   let latestCompletedAssistantMessage: Nullable<ChatMessage> = null
-  let latestPlanUpdateToolCallId: Nullable<string> = null
   let activeAwaitingInputMessageId: Nullable<string> = null
   let latestUserMessage: Nullable<ChatMessage> = null
   let previousMessage: Nullable<ChatMessage> = null
@@ -44,7 +42,6 @@ export function buildChatTranscriptDerivedIndexes({
       if (block.type !== 'tool-call' || block.toolName !== 'update_plan') continue
 
       planUpdateIndexByToolCallId.set(block.toolCallId, planUpdateIndex)
-      latestPlanUpdateToolCallId = block.toolCallId
       planUpdateIndex += 1
     }
 
@@ -90,7 +87,6 @@ export function buildChatTranscriptDerivedIndexes({
     latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId: latestCompletedAssistantMessage?.id ?? null,
     planUpdateIndexByToolCallId,
-    latestPlanUpdateToolCallId,
     assistantQuestionMap,
     guidedInputMessageIds,
     activeAwaitingInputMessageId,

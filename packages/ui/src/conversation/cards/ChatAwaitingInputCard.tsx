@@ -7,13 +7,13 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Textarea } from '@velaros-ai/ui/primitives/forms/Textarea'
 import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 
-import { useConversationI18n } from '../i18n'
-
 import {
   ChatComposerInputMaxChars,
   ChatComposerInputWarningChars,
   clampChatComposerInput,
-} from './chatComposerLimits'
+} from '../composer/utils/chatComposerLimits'
+import { useConversationI18n } from '../i18n'
+
 import { useAutoFocus } from './useAutoFocus'
 import { useAutoResize } from './useAutoResize'
 

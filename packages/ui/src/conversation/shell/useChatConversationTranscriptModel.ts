@@ -117,7 +117,6 @@ export interface UseChatConversationTranscriptModelReturn {
   latestCompletedAssistantMessageId: Nullable<string>
   runtimeCostContextMap: Map<string, ConversationTurnContextView[]>
   planUpdateIndexByToolCallId: Map<string, number>
-  latestPlanUpdateToolCallId: Nullable<string>
   assistantQuestionMap: Map<string, ChatMessage>
   goalCompletionSummaryByMessageId: Map<string, GoalCompletionActivitySummary>
   guidedInputMessageIds: Set<string>
@@ -150,7 +149,6 @@ export function useChatConversationTranscriptModel({
     latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId,
     planUpdateIndexByToolCallId,
-    latestPlanUpdateToolCallId,
     assistantQuestionMap,
     guidedInputMessageIds,
     activeAwaitingInputMessageId,
@@ -261,7 +259,6 @@ export function useChatConversationTranscriptModel({
     latestCompletedAssistantMessageId,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,
-    latestPlanUpdateToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
     guidedInputMessageIds,
