@@ -8,7 +8,7 @@ import {
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { resolveSystemPathInput } from './Filesystem.js'
+import { readErrnoCode, resolveSystemPathInput } from './Filesystem.js'
 import { shouldSkipSystemSearchProtectedDirectory } from './SystemSearchVisibility.js'
 
 export interface AtomicListDirInput {
@@ -51,8 +51,7 @@ async function collectEntries(
   try {
     names = await readdir(currentPath)
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    switch (code) {
+    switch (readErrnoCode(err)) {
       case 'ENOENT':
         throw new AppError('NOT_FOUND', `Directory not found: ${currentPath}`)
       case 'EACCES':

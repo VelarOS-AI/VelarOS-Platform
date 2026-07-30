@@ -7,6 +7,24 @@ import type { ToolContext } from '../Types.js'
 
 import { resolveSystemPathInput } from './Filesystem.js'
 
+/**
+ * atomic 工具（write/edit/bash）的三道路径闸。
+ *
+ * 导览（§5.3b ④安全门 / ⑤跨层接缝）——atomic 工具**不受工作区根约束**（这是它们存在的理由：
+ * 处理工作区之外的系统文件），所以工作区那套包含检查在这里帮不上忙，必须换三道各自独立的闸：
+ * 1. `isSensitiveSystemMutationPath` + `confirmSensitiveSystemMutation` —— 写系统目录、主目录
+ *    dotfile/dot 目录、LaunchAgents/Startup 前必须过 ApprovalPort。**缺席即拒绝**：宿主没注入
+ *    execution 通道时按 deny 处理，绝不对 `~/.ssh`、`/etc` fail-open（§2.2 地板）。
+ * 2. `assertAtomicWritePathOutsideActiveWorkspace` —— **反向**闸：路径在 active workspace root
+ *    **内**时拒绝，逼调用方改用 workspace 编辑工具。判据是那条链路有工作区自己的授权、
+ *    快照与撤销；从 atomic 侧绕进去等于让项目文件的改动逃过工作区账本。
+ * 3. `assertBashCwdOutsideActiveWorkspace` —— 同一条判据的 cwd 版本，且**未显式给 cwd 也拒**：
+ *    默认 cwd 可能恰好落在工作区内，静默继承会把上面那条闸变成看运气。
+ *
+ * 临时目录（`/tmp` 系与 `tmpdir()`）**始终豁免**第 1 条，与 bash 的 sandbox cwd 口径一致；
+ * Windows 路径一律按大小写不敏感比较（`comparisonPath`），否则 `C:\WINDOWS` 能绕过 `C:\Windows`。
+ */
+
 interface SensitiveSystemMutationPathOptions {
   platform?: NodeJS.Platform
   homeDir?: string

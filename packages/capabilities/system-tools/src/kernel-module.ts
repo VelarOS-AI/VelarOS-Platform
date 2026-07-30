@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isPlainObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import {
   createCapabilityToken,
   createKernelCallableCapability,
@@ -38,16 +40,30 @@ export interface SystemToolsCapabilityService
 export const SystemToolsCapability =
   createCapabilityToken<SystemToolsCapabilityService>('velaros.system.tools')
 
+function invalidCapabilityInput(detail: string): AppError {
+  return new AppError('VALIDATION', `System capability input is invalid: ${detail}`)
+}
+
+/**
+ * 判据（§5.3b ④安全门）——wire 面唯一入参解析点，object schema 一律 **strict**。
+ *
+ * 系统工具的入参里有 `path`、`cwd`、`command`、`overwrite` 这类直接决定"动哪个文件/跑什么"的轴；
+ * 非 strict 会让未知键静默穿过 zod，落成"看起来生效了其实被忽略"。拒绝时把 zod 的字段路径原样
+ * 带出（§2.7）——原先无论哪个字段错都只回同一句话，等于没有诊断。
+ */
 function parseToolInput(tool: VelaTool, input: unknown): Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    throw new Error('System capability input is invalid')
-  }
+  if (!isPlainObject(input)) throw invalidCapabilityInput('expected an object payload')
+
   const schema = tool.schema instanceof z.ZodObject
     ? tool.schema.strict()
     : tool.schema
   const parsed = schema.safeParse(input)
   if (!parsed.success) {
-    throw new Error('System capability input is invalid')
+    throw invalidCapabilityInput(
+      parsed.error.issues
+        .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+        .join('; ')
+    )
   }
   return parsed.data
 }
@@ -79,7 +95,10 @@ function createSystemCallableOperations(
           abortSignal: signal,
         }
         if (tool.isAvailable?.(toolContext) === false) {
-          throw new Error('System capability operation is unavailable')
+          throw new AppError(
+            'UNAVAILABLE',
+            `System capability operation "${operation}" is unavailable in the resolved context.`
+          )
         }
         signal.throwIfAborted()
         return tool.execute(parsed, toolContext)

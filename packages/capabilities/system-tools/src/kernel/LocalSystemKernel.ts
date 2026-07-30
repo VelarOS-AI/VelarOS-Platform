@@ -5,7 +5,7 @@ import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'no
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
-import { isEmpty, isObject,isPresent, Log, toNullable } from '@velaros-ai/core'
+import { isEmpty, isPlainObject,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -358,8 +358,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     }
   }
 
-  public listCommandRuns(options: SystemCommandRunQueryOptions = {}): SystemCommandRunRecord[] {
-    void options
+  public listCommandRuns(_options: SystemCommandRunQueryOptions = {}): SystemCommandRunRecord[] {
     return []
   }
 
@@ -831,6 +830,22 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     }
   }
 
+  /**
+   * 跑一条 shell 命令并抓取输出。
+   *
+   * 导览（§5.3b ③并发时序 / ②生命周期）——这里同时有四个可能"先到"的事件：
+   * 子进程 close、超时、外部 abort、spawn error。约束如下，改动前逐条确认还成立：
+   * - **`settled` 是唯一的终态闸**：四条路径都必须先看它。少一处检查就会出现
+   *   "已 resolve 又 reject"（Node 会静默忽略，症状是超时后拿到一个空结果却没有 timedOut 标记）。
+   * - **`terminating` 单独一个闸**：超时与 abort 可能相继触发，两次进入升级流程会排两个
+   *   SIGKILL 定时器。
+   * - **升级顺序固定 SIGTERM → 等 `FORCE_KILL_DELAY_MS` → SIGKILL**，且 SIGKILL 定时器
+   *   `unref`：进程已经退出时它不能吊住 Node 事件循环。
+   * - **abort 监听必须在每条终态路径上摘掉**，否则一个长会话的 AbortSignal 会累积监听器。
+   *
+   * 输出**在累积时就按 `maxOutputChars` 截断**（`appendOutput`），不是最后再切——长跑命令的
+   * stdout 可以是无上限的，先攒后切等于把内存交给被调用方决定。
+   */
   private runShellCapture(
     command: string,
     cwd: string,
@@ -838,7 +853,6 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       timeoutMs?: number
       maxOutputChars?: number
       abortSignal?: AbortSignal
-      tolerateFailure?: boolean
     } = {}
   ): Promise<{
     exitCode: Nullable<number>
@@ -940,18 +954,15 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         maxBuffer: MAX_PLATFORM_COMMAND_BUFFER,
       })
     } catch (error) {
-      const maybeError = error as NodeJS.ErrnoException & {
-        stdout?: string
-        stderr?: string
-        code?: number | string
-      }
-
+      // lsof 在"没有任何匹配"时以 exit 1 且空 stderr 结束——这不是失败，是空结果集。
+      // 判据必须三条齐（调用方要求容忍 + 确实是 lsof + stderr 为空），否则真的执行失败会被吞掉。
+      const failure = isPlainObject(error) ? error : null
       if (
         options.tolerateLsofEmptyResult &&
         commandSpec.file === 'lsof' &&
-        String(maybeError.code) === '1' &&
-        !maybeError.stderr?.trim()
-      ) return { stdout: maybeError.stdout ?? '' }
+        String(failure?.code) === '1' &&
+        !(isString(failure?.stderr) ? failure.stderr.trim() : '')
+      ) return { stdout: isString(failure?.stdout) ? failure.stdout : '' }
 
       throw new AppError('PLATFORM', `平台命令执行失败：${commandSpec.file}`, error)
     }
@@ -975,6 +986,17 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return this.platformTools.getTerminateCommand(pid, force)
   }
 
+  /**
+   * 终止整棵进程树。
+   *
+   * 判据（§5.3b ⑥非显然妥协）——**杀单个 pid 不够**：命令是通过 shell 起的，真正干活的是它的子进程；
+   * 只杀 shell 会留下孤儿（真机症状：终止后端口仍被占）。所以优先用平台的树终止命令
+   * （Windows `taskkill /T`），POSIX 上退回"给进程组发信号"（`getProcessKillPid` 返回负 pid）。
+   *
+   * **失败回退的判据**：进程组信号失败且 `killPid !== pid` 时才退回杀单进程——说明进程组不存在
+   * （detached 没生效），此时杀单进程仍比什么都不做好；若两者本就是同一个 pid，
+   * 说明这就是单进程失败，必须把错误抛出去，不能重试同一件事然后假装成功。
+   */
   private killProcessTree(pid: number, signal: NodeJS.Signals): void {
     if (!pid) return
 
@@ -1015,7 +1037,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     try {
       this.killProcessTree(pid, signal)
     } catch (error) {
-      if (isObject(error) && ((error as NodeJS.ErrnoException).code === 'ESRCH' || (error as NodeJS.ErrnoException).errno === 3)) return
+      if (this.isProcessMissingError(error)) return
 
       log.warn('failed to reap command process tree', {
         pid,
@@ -1052,9 +1074,8 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     const probeCommand = this.hostPlatform === 'win32'
       ? `where ${this.platformTools.quoteShellArg(name)}`
       : `command -v ${this.platformTools.quoteShellArg(name)}`
-    const result = await this.runShellCapture(probeCommand, homedir(), {
-      tolerateFailure: true,
-    })
+    // 探测命令失败即"命令不存在"，由下面的 exitCode 判定表达，不需要额外的容忍开关。
+    const result = await this.runShellCapture(probeCommand, homedir())
     const commandPath = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] : null
     return {
       available: Boolean(commandPath),
@@ -1196,12 +1217,14 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return this.isProcessAlive(task.pid) ? 'running' : 'exited'
   }
 
+  /** ESRCH = "进程不存在"。数值 errno 3 是同一个含义的另一种呈现（部分平台只给 errno 不给 code）。 */
   private isProcessMissingError(error: unknown): boolean {
-    return isObject(error) && 'code' in error && error.code === 'ESRCH'
+    if (!isPlainObject(error)) return false
+    return error.code === 'ESRCH' || error.errno === 3
   }
 
   private isProcessPermissionError(error: unknown): boolean {
-    return isObject(error) && 'code' in error && error.code === 'EPERM'
+    return isPlainObject(error) && error.code === 'EPERM'
   }
 
   private async unsupported<T>(capability: string): Promise<T> {

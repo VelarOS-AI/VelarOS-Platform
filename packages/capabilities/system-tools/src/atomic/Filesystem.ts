@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { writeFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
@@ -24,6 +24,19 @@ export interface SystemTextFileContent {
   buffer: Buffer
   content: string
   encoding: SystemTextEncoding
+}
+
+/**
+ * 读取 Node fs 错误的 errno 字符串码。
+ *
+ * 单源判据（§1.6/§3.7）：catch 到的值是 `unknown`，各处曾各写一份
+ * `(err as NodeJS.ErrnoException).code` 把类型系统关掉。fs 错误码是本包**分流失败方向**的唯一依据
+ * （ENOENT→NOT_FOUND、EACCES/EPERM→PERMISSION、EISDIR→VALIDATION），判定散开就会逐渐不一致。
+ * 认不出的形状返回 null，调用方一律走"原样抛出"分支，不猜。
+ */
+export function readErrnoCode(error: unknown): Nullable<string> {
+  if (!isPlainObject(error)) return null
+  return isString(error.code) ? error.code : null
 }
 
 export function resolveSystemPathInput(path: string): string {
@@ -56,7 +69,7 @@ export async function writeSystemFileAtomically(
   try {
     await writeFileAtomically(resolvedPath, contentBuffer, { mode })
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
+    const code = readErrnoCode(err)
     if (code === 'EACCES' || code === 'EPERM') {
       throw new AppError('PERMISSION', `Permission denied writing file: ${resolvedPath}`)
     }
@@ -69,8 +82,7 @@ async function readRawSystemFileBuffer(resolvedPath: string): Promise<Buffer> {
   try {
     contentBuffer = await readFile(resolvedPath)
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    switch (code) {
+    switch (readErrnoCode(err)) {
       case 'ENOENT': {
         throw new AppError('NOT_FOUND', `File not found: ${resolvedPath}`)
       }
