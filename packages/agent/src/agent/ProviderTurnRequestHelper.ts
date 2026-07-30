@@ -3,7 +3,7 @@ import type { ModelMessage, ToolSet } from 'ai'
 import { isEmpty, isFunction, isPlainObject, isString, isTrue, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
-import type { ChatRuntimeEvent } from '@velaros-ai/core/types'
+import type { ChatRuntimeEvent, StreamContextGovernanceState } from '@velaros-ai/core/types'
 import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 
 import { compareStableStrings } from './context/residency/determinism'
@@ -281,12 +281,37 @@ class ProviderTurnRequestHelper {
         pressureKind: compiledRequest.decision.pressureKind,
         ledger: compiledRequest.ledger,
         zoneDiagnostics: compiledRequest.decision.zoneDiagnostics,
-        // B1：回收阶梯已下线（压力的唯一出路是轮边界的 GovernanceEpoch），恒 0；
-        // 注意力 trace / replay 随注意力路由一并退役，治理可观测改由迁移事件流 + epoch 报告承载。
-        reclaimAttempts: 0,
         requestFingerprint: compiledRequest.requestFingerprint,
+        // 治理状态是 main 侧治理器的**只读**投影：renderer 靠它布防转交卡，不再自行采样水位。
+        // B1 起送核门失去回收阶梯的二次挽救，转交是压力的唯一出路，所以这条必须逐轮到达壳侧。
+        governance: buildStreamGovernanceState(compiledRequest),
       })
     )
+  }
+}
+
+/**
+ * 编译结果 → 流事件里的治理状态块。
+ *
+ * 编译器没持有治理会话（一次性编译 / 旧调用面）时返回 undefined：宁可让壳侧"这轮没有治理状态"，
+ * 也不要伪造一个 `handoffArmed:false` 的默认块——布防看门分不清"没信号"和"信号说别布防"。
+ */
+function buildStreamGovernanceState(
+  compiledRequest: CompiledProviderRequest
+): LooseOptional<StreamContextGovernanceState> {
+  const handoff = compiledRequest.governanceHandoff
+  if (!handoff) return undefined
+
+  const report = compiledRequest.governanceEpoch
+  return {
+    epoch: compiledRequest.governanceEpochSeq ?? 0,
+    occupancyPercent: toNullable(compiledRequest.governanceOccupancyPercent),
+    epochApplied: report?.applied === true,
+    epochSavingPercent: report ? report.savingPercent : null,
+    handoffArmed: handoff.armed,
+    recentSavingPercents: [...handoff.recentSavingPercents],
+    lastEpochAfterPercent: handoff.lastEpochAfterPercent,
+    handoffReason: handoff.reason,
   }
 }
 

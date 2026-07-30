@@ -67,6 +67,7 @@ import {
   buildContextDashboardMessage,
   type ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
+  type ContextHandoffSignal,
   type GovernanceEpochReport,
   projectContextLedger,
 } from './residency'
@@ -139,8 +140,15 @@ export interface CompiledProviderRequest {
   requestFingerprint: ProviderRequestFingerprint
   /** 本轮跑过的治理 epoch 报告；未触发时为 null。 */
   governanceEpoch?: Nullable<GovernanceEpochReport>
+  /** 会话累计已应用的 epoch 代数（跳过的 epoch 不计代，与 dashboard 上的号同源）。 */
+  governanceEpochSeq?: LooseOptional<number>
   /** 治理后的投影占用（token）与驻留态计数，供调试面与 scoreboard 消费。 */
   governanceOccupancyPercent?: Nullable<number>
+  /**
+   * 转交信号（设计 §4）。B1 起送核门失去回收阶梯的二次挽救，**压力的唯一出路是转交**，
+   * 所以这条信号必须沿编译结果一路出到壳侧的布防看门，不能只留在治理器内部。
+   */
+  governanceHandoff?: Nullable<ContextHandoffSignal>
   historyRewriteFingerprint?: string
 }
 
@@ -248,7 +256,9 @@ export class ProviderRequestCompiler {
       decision: budget.decision,
       requestFingerprint,
       governanceEpoch: governance.report,
+      governanceEpochSeq: governance.session.epoch,
       governanceOccupancyPercent: projection.stats.occupancyPercent,
+      governanceHandoff: governance.session.handoffSignal(),
       historyRewriteFingerprint,
     }
   }

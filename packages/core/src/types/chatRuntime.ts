@@ -126,13 +126,28 @@ export interface StreamContextUsageLedgerEntry {
   zoneOverBudgetTokens?: number
 }
 
-export interface StreamContextAttentionTraceEntry {
-  stage: string
-  action: 'inline' | 'summarize' | 'handle' | 'drop' | 'skip' | 'estimate' | 'retain'
-  target: string
-  reason: string
-  score?: LooseOptional<number>
-  metadata?: Record<string, unknown>
+/**
+ * 上下文治理（v2 驻留账本）逐轮状态：main 进程的治理器是唯一权威，本块是它推给渲染层的**只读**投影。
+ *
+ * 渲染层因此不需要（也不允许）自己判断"该压了吗/该转交了吗"——v1 把 80% 水位监视放在 React
+ * effect 里的那条路已随治理回内核一并下线。转交卡的布防信号就是这里的 `handoffArmed`。
+ */
+export interface StreamContextGovernanceState {
+  /** 已应用过的治理 epoch 代数（= 缓存被重建过几次）。 */
+  epoch: number
+  /** 本轮治理后的账本投影占用百分比（占治理窗口 G）。 */
+  occupancyPercent: Nullable<number>
+  /** 本轮是否真的跑了一次 epoch 并应用了迁移。 */
+  epochApplied: boolean
+  /** 本轮 epoch 的节省率（未跑 epoch 时为 null）。 */
+  epochSavingPercent: Nullable<number>
+  /** 转交信号：连续低收益 epoch 且压不下去 → 建议开新会话续跑。 */
+  handoffArmed: boolean
+  /** 最近若干次 epoch 的节省率（新→旧），转交判据的原始证据。 */
+  recentSavingPercents: number[]
+  /** 最近一次 epoch 之后的占用百分比；从未跑过 epoch 时为 null。 */
+  lastEpochAfterPercent: Nullable<number>
+  handoffReason: Nullable<string>
 }
 
 export interface StreamContextUsageEstimatePayload extends ContextUsageEstimate {
@@ -143,10 +158,9 @@ export interface StreamContextUsageEstimatePayload extends ContextUsageEstimate 
   pressureKind: StreamContextUsagePressureKind
   ledger: StreamContextUsageLedgerEntry[]
   zoneDiagnostics?: StreamContextUsageZoneDiagnostic[]
-  reclaimAttempts?: number
   requestFingerprint?: unknown
-  attentionTrace?: StreamContextAttentionTraceEntry[]
-  attentionReplayRecord?: unknown
+  /** 治理状态投影（v2）。编译器未持有治理会话时缺省。 */
+  governance?: LooseOptional<StreamContextGovernanceState>
   timestamp: number
 }
 

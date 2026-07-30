@@ -146,10 +146,29 @@ export class ContextGovernanceSession {
     at: number
     modelWindowTokens?: LooseOptional<number>
   }): Nullable<GovernanceEpochReport> {
+    return this.runEpoch(input, this.consumeModelEpochRequest())
+  }
+
+  /**
+   * 手动开一次 epoch（宿主的 `compact_session` 落点）。
+   *
+   * 语义与模型调 `distill_context` 完全一致——**请求开一次 epoch**，绕过水位触发线，但反空转、
+   * 尾保护、达标即停等器械纪律一条不减。手动不等于强拆：压不下去的出路仍是转交，不是压尾。
+   */
+  public requestEpoch(input: {
+    at: number
+    modelWindowTokens?: LooseOptional<number>
+  }): Nullable<GovernanceEpochReport> {
+    return this.runEpoch(input, true)
+  }
+
+  private runEpoch(
+    input: { at: number; modelWindowTokens?: LooseOptional<number> },
+    modelRequested: boolean
+  ): Nullable<GovernanceEpochReport> {
     if (isEmpty(this.ledgerRef.list())) return null
 
     const budgetTokens = resolveGovernanceWindowTokens(this.config, input.modelWindowTokens)
-    const modelRequested = this.consumeModelEpochRequest()
     const startedAt = Date.now()
     const raw = runGovernanceEpoch({
       ledger: this.ledgerRef,
@@ -348,6 +367,22 @@ export class ContextGovernanceSessionRegistry {
   /** 转交信号（B1b 的 handoff 布防数据源）。 */
   public handoffSignal(sessionId: LooseOptional<string>): Nullable<ContextHandoffSignal> {
     return this.peek(sessionId)?.handoffSignal() ?? null
+  }
+
+  /**
+   * 手动开一次 epoch（宿主 hook 的落点）。用 `peek` 而不是 `resolve`：从没编译过的会话没有账本，
+   * 为了"压一下"凭空建一本空账本只会产出一份没有信息的报告。
+   */
+  public requestEpoch(
+    sessionId: LooseOptional<string>,
+    input: { at?: LooseOptional<number>; modelWindowTokens?: LooseOptional<number> } = {}
+  ): Nullable<GovernanceEpochReport> {
+    return (
+      this.peek(sessionId)?.requestEpoch({
+        at: input.at ?? Date.now(),
+        modelWindowTokens: input.modelWindowTokens,
+      }) ?? null
+    )
   }
 
   /** 最近若干次 epoch 报告（scoreboard / 调试面数据源）。 */
