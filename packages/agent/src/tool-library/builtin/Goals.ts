@@ -1,4 +1,4 @@
-import { isArray, isEmpty,isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty,isFiniteNumber, isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ActiveContextArtifact,
@@ -64,21 +64,26 @@ function isGoalArtifact(artifact: ActiveContextArtifact): boolean {
   return artifact.kind === 'requirement' && isTrue(artifact.metadata?.goal)
 }
 
+const GoalStatusValues = [
+  'active',
+  'paused',
+  'complete',
+  'blocked',
+  'cancelled',
+  'removed',
+] as const satisfies readonly GoalStatus[]
+const GoalStatusSet = new Set<unknown>(GoalStatusValues)
+
+/** metadata 里的目标状态优先；缺席/坏值时从 artifact 生命周期回落（归档→removed）。 */
 function normalizeGoalStatus(value: unknown, artifactStatus: ActiveContextArtifact['status']): GoalStatus {
-  if (
-    value === 'complete' ||
-    value === 'blocked' ||
-    value === 'active' ||
-    value === 'paused' ||
-    value === 'cancelled' ||
-    value === 'removed'
-  ) return value
+  if (GoalStatusSet.has(value)) return value as GoalStatus
   if (artifactStatus === 'archived') return 'removed'
   return artifactStatus === 'completed' ? 'complete' : 'active'
 }
 
+/** 缺席回落 1 而不是 0：第一次进入受阻审计的那一轮本身就该计数。 */
 function readBlockedAuditTurns(value: unknown): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(Number(value))) : 1
+  return isFiniteNumber(value) ? Math.max(0, Math.floor(value)) : 1
 }
 
 function isGoalStep(value: unknown): value is GoalStep {
@@ -114,11 +119,11 @@ function readGoalConstraints(value: unknown): GoalConstraint[] {
 
 function toGoalSnapshot(artifact: ActiveContextArtifact): GoalSnapshot {
   const metadata = artifact.metadata ?? {}
-  const tokenBudget = Number.isFinite(metadata.tokenBudget)
-    ? Math.max(1, Math.floor(Number(metadata.tokenBudget)))
+  const tokenBudget = isFiniteNumber(metadata.tokenBudget)
+    ? Math.max(1, Math.floor(metadata.tokenBudget))
     : null
-  const terminalAt = Number.isFinite(metadata.terminalAt)
-    ? Math.max(0, Math.floor(Number(metadata.terminalAt)))
+  const terminalAt = isFiniteNumber(metadata.terminalAt)
+    ? Math.max(0, Math.floor(metadata.terminalAt))
     : null
 
   return {

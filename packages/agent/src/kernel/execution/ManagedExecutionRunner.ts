@@ -308,8 +308,8 @@ class ManagedExecutionRunner {
 }
 
 function resolveAbortReason(reason: unknown): string {
-  if (isString(reason) && !isBlank(reason.trim())) return reason
-  if (reason instanceof Error && !isBlank(reason.message.trim())) return reason.message
+  if (isString(reason) && !isBlank(reason)) return reason
+  if (reason instanceof Error && !isBlank(reason.message)) return reason.message
   return '运行被终止'
 }
 

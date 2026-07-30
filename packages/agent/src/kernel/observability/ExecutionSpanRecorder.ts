@@ -21,7 +21,11 @@ import {
 /** 引擎负责分配、开 span 时不得携带的字段。 */
 type EngineAssignedSpanField = 'spanId' | 'startedAt' | 'endedAt' | 'status' | 'metrics'
 
-/** 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `category` 的收窄能力。 */
+/**
+ * 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `category` 的收窄能力。
+ *
+ * 与 `session-store/ports.ts` 的同名类型是**刻意的两份**（判据见那一处的注释）；改一处时记得另一处同形。
+ */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 
 /**

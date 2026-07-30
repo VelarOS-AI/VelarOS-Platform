@@ -1,19 +1,17 @@
 import { z } from 'zod'
 
 import { isEmpty } from '@velaros-ai/core'
-import type {
-  SubAgentTypeId,
-  ToolCategoryId,
-} from '@velaros-ai/core/types'
+import type { SubAgentTypeId } from '@velaros-ai/core/types'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/core/utils/ToolDescription'
 
-const SubAgentBlockedToolCategorySet = new Set<ToolCategoryId>()
-const subAgentToolCategorySchema = z.string().trim().min(1).max(120).refine(
-  (categoryId) => !SubAgentBlockedToolCategorySet.has(categoryId),
-  { message: 'This category cannot be delegated.' }
-)
+/**
+ * 子 Agent 授权用的分类 id：本层只校形状。可委派性由注入的 capability delegation policy 在执行期判
+ * （与 `AgentWorkflow.ts` 同一裁决）。此前挂的恒空黑名单 + 永真 refine 已删——空壳门会让读者误以为
+ * 委派边界在 schema 层把着。
+ */
+const subAgentToolCategorySchema = z.string().trim().min(1).max(120)
 
 const teamModelRouteCategorySchema = z.string().trim().min(1).max(80)
 

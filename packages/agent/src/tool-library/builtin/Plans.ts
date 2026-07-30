@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { isEmpty } from '@velaros-ai/core'
 import type { ExecutionTaskPlanStep, ToolExecutionPlanItemStatus } from '@velaros-ai/core/types'
 
 import type { StepEngineOptions } from './StepRefs'
@@ -58,7 +57,7 @@ interface PlanStepCompletionResult {
 export function resolvePlanLifecycle(input: UpdatePlanInput): 'active' | 'completed' | 'archived' {
   if (input.lifecycle === 'completed' || input.lifecycle === 'archived') return input.lifecycle
 
-  const hasSteps = !!input.plan && !isEmpty(input.plan)
+  const hasSteps = !!input.plan?.length
   const allTerminal = hasSteps && input.plan!.every(
     (step) =>
       step.status === 'completed' || step.status === 'skipped' || step.status === 'failed'

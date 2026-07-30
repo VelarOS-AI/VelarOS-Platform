@@ -5,7 +5,6 @@ import type {
   AgentWorkflowAgentCall,
   AgentWorkflowDefinition,
   AgentWorkflowStep,
-  ToolCategoryId,
 } from '@velaros-ai/core/types'
 import {
   clampedInt,
@@ -21,11 +20,14 @@ const workflowPathSegmentSchema = z.union([
 const workflowPathSchema = z.array(workflowPathSegmentSchema).max(8)
 const workflowRootPathSchema = workflowPathSchema.default([])
 const workflowOutputSchema = z.record(z.string().trim().min(1).max(120), z.unknown())
-const blockedToolCategories = new Set<ToolCategoryId>()
-const workflowToolCategorySchema = z.string().trim().min(1).max(120).refine(
-  (categoryId) => !blockedToolCategories.has(categoryId),
-  { message: 'This category cannot be delegated.' }
-)
+/**
+ * 委派用的分类 id：本层只校形状，**不判允不允许委派**。
+ *
+ * 可委派性是具体产品策略，由注入的 capability delegation policy 在执行期判（`check:agent-schemas`
+ * 防线②把这条写成了断言）。此前这里挂着一个恒空的黑名单 Set + 永远返回 true 的 refine——
+ * 空壳门比没有门更坏：读者会以为委派边界在这一层把着。
+ */
+const workflowToolCategorySchema = z.string().trim().min(1).max(120)
 
 const workflowAgentCallSchema: z.ZodType<AgentWorkflowAgentCall> = z.object({
   id: z.string().trim().min(1).max(80),
