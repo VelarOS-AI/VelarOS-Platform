@@ -35,6 +35,13 @@ type PendingInputResolvers = Map<string, PendingInputResolver>
 type PendingConfirmationResolvers = Map<string, PendingConfirmationResolver>
 type PendingInteractionKind = 'confirmation' | 'input'
 
+/** 拒绝确认时给模型/执行账的那句话：固定前缀 + 用户理由（有才拼）。 */
+function buildConfirmationDenialMessage(rejectionMessage: Nullable<string>): string {
+  return rejectionMessage
+    ? `用户拒绝了本次确认请求：${rejectionMessage}`
+    : '用户拒绝了本次确认请求。'
+}
+
 /**
  * 执行交互协调器。
  *
@@ -194,6 +201,7 @@ class ExecutionInteractions {
     const execution = this.records.getExecution(executionId)
     const resolver = this.pendingConfirmationResolvers.get(executionId)
     const normalizedResponseMessage = rejectionMessage?.trim() || null
+    const denialMessage = buildConfirmationDenialMessage(normalizedResponseMessage)
 
     if (resolver) {
       this.pendingConfirmationResolvers.delete(executionId)
@@ -201,7 +209,18 @@ class ExecutionInteractions {
         resolver.resolve({ approved: true, message: normalizedResponseMessage })
       } else if (resolver.rejectTerminatesExecution) {
         // 普通确认拒绝会让 awaitConfirmation 抛 EXECUTION_DENIED。
-        resolver.reject(new AppError('EXECUTION_DENIED', '用户拒绝了本次确认请求。'))
+        //
+        // **理由必须随错误一起走**：终止型确认（权限闸 / 危险命令闸 / request_confirmation）
+        // 没有卡结果这条结构化通路，`message` 是用户那句话到达模型的**唯一**载体——
+        // 工具面把 EXECUTION_DENIED 映成 `tool_denied` 时读的正是 `error.message`。
+        // 丢掉它，"别在生产库上跑，改成 dry-run" 这种正是模型该收到的下一步指令就永远
+        // 到不了模型，而 headless 回执还照报 `rejectionMessageSent:true`。
+        resolver.reject(
+          new AppError('EXECUTION_DENIED', denialMessage, undefined, {
+            executionId,
+            rejectionMessage: normalizedResponseMessage,
+          })
+        )
       } else {
         // decision 模式把拒绝作为结构化结果返回，执行继续。
         resolver.resolve({ approved: false, message: normalizedResponseMessage })
@@ -218,20 +237,14 @@ class ExecutionInteractions {
         return updatedExecution
       }
 
-      // 终止型拒绝会把 execution/task 标记为 failed。
+      // 终止型拒绝会把 execution/task 标记为 failed；失败原因带上用户那句话，
+      // 否则事后翻执行账只能看到一句无差别的"用户拒绝了"，分不出他到底要求了什么。
       const failedExecution = this.records.transition(executionId, 'failed')
-      this.records.failTask(
-        failedExecution.id,
-        failedExecution.currentTaskId,
-        '用户拒绝了本次确认请求。'
-      )
+      this.records.failTask(failedExecution.id, failedExecution.currentTaskId, denialMessage)
 
       this.records.clearAwaitingConfirmation(executionId)
       this.records.clearAwaitingInput(executionId)
-      const updatedExecution = this.records.setExecutionError(
-        executionId,
-        '用户拒绝了本次确认请求。'
-      )
+      const updatedExecution = this.records.setExecutionError(executionId, denialMessage)
       this.emitExecutionDebug(executionId)
       return updatedExecution
     }
