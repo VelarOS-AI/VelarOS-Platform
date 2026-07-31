@@ -86,13 +86,6 @@
       "file": "packages/game/src/runtime/diagnostics.ts"
     },
     {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "f5995e46d2870710",
-      "message": "packages/game/src/runtime/diagnostics.ts:94: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
       "checkId": "code-style/forbid-double-cast-bridge",
       "ruleId": "code-style/forbid-double-cast-bridge/double-cast-bridge",
       "fingerprint": "19eb49ffaf467d96",
@@ -1796,13 +1789,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "d99d926c67d570c3",
-      "message": "packages/game/src/composition/turn-context.ts:91: \"result.entity?.id ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/game/src/composition/turn-context.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "de0dbe3ad2cd4b5b",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:319: \"input.identityChange ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
@@ -3036,13 +3022,6 @@
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "528ca4c636a6d7dd",
-      "message": "packages/agent/src/agent/context/contextRefEnvelope.ts:113: \"typeof record.__contextRef === 'string'\" — use isString(record.__contextRef).",
-      "file": "packages/agent/src/agent/context/contextRefEnvelope.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "528ca4c636a6d7dd",
       "message": "packages/agent/src/agent/context/contextRefEnvelope.ts:113: \"typeof record.ref === 'string'\" — use isString(record.ref).",
       "file": "packages/agent/src/agent/context/contextRefEnvelope.ts"
     },
@@ -3547,13 +3526,6 @@
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "daf92bf72bf131fd",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:467: \"typeof input['identity'] !== 'string'\" — use !isString(input['identity']).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "daf92bf72bf131fd",
       "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:467: \"typeof input['matchRoot'] !== 'string'\" — use !isString(input['matchRoot']).",
       "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
     },
@@ -3885,13 +3857,6 @@
       "fingerprint": "5e422f485c8144f3",
       "message": "packages/system-tools/src/kernel-module.ts:97: \"tool.isAvailable?.(toolContext) === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/system-tools/src/kernel-module.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
-      "fingerprint": "6b08a1fc622b9031",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:168: \"permissions.accessibility === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -4268,13 +4233,6 @@
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "3203c465ff860698",
-      "message": "packages/system-tools/src/SystemProcessParsers.ts:97: \"pid === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/system-tools/src/SystemProcessParsers.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "3203c465ff860698",
       "message": "packages/system-tools/src/SystemProcessParsers.ts:97: \"ppid === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/system-tools/src/SystemProcessParsers.ts"
     },
@@ -4555,13 +4513,6 @@
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "94acd9d0d1f3235c",
-      "message": "packages/agent/src/agent/QueryLoop.ts:408: \"usageInputTokens === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/QueryLoop.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "94acd9d0d1f3235c",
       "message": "packages/agent/src/agent/QueryLoop.ts:408: \"usageOutputTokens === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/agent/QueryLoop.ts"
     },
@@ -4571,13 +4522,6 @@
       "fingerprint": "95878af9122c24b2",
       "message": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts:307: \"prototype !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "95c4ec8eadc6f461",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:465: \"v2.payload_blob_ref !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -4800,13 +4744,6 @@
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "c582acb138934db0",
-      "message": "packages/kernel-client/src/KernelLauncher.ts:179: \"child.exitCode !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/kernel-client/src/KernelLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "c582acb138934db0",
       "message": "packages/kernel-client/src/KernelLauncher.ts:179: \"child.signalCode !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/kernel-client/src/KernelLauncher.ts"
     },
@@ -4856,22 +4793,8 @@
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "d11a26a58de7faae",
-      "message": "packages/game/src/runtime/dev-server.ts:95: \"this.process !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/runtime/dev-server.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "d11a26a58de7faae",
       "message": "packages/game/src/runtime/dev-server.ts:95: \"this.ready !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/game/src/runtime/dev-server.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "d156313d38a939da",
-      "message": "packages/kernel-client/src/KernelLauncher.ts:70: \"child.exitCode !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/kernel-client/src/KernelLauncher.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -5019,20 +4942,6 @@
       "fingerprint": "f61ee70d72b0d184",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:769: \"raw === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "f7a0d6491ca1eaaf",
-      "message": "packages/agent/src/agent/QueryLoop.ts:406: \"usageInputTokens === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/QueryLoop.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "f7a0d6491ca1eaaf",
-      "message": "packages/agent/src/agent/QueryLoop.ts:406: \"usageOutputTokens === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/QueryLoop.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -7670,13 +7579,6 @@
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "3770ea71b922a4de",
-      "message": "packages/memory/src/vector/Backend.ts:120: \"entry.id.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/vector/Backend.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "3770ea71b922a4de",
       "message": "packages/memory/src/vector/Backend.ts:120: \"entry.text.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/vector/Backend.ts"
     },
@@ -8705,13 +8607,6 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "24a7fed35c23e7b1",
-      "message": "packages/agent/src/agent/stream/recorder.ts:407: `current` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：current as Record<string, unknown>",
-      "file": "packages/agent/src/agent/stream/recorder.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "26dff0853cbfb911",
       "message": "packages/agent/src/agent/retry.ts:507: `error` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：error as Record<string, unknown>",
       "file": "packages/agent/src/agent/retry.ts"
@@ -9443,13 +9338,6 @@
       "fingerprint": "05a5d5dc751365c6",
       "message": "packages/system-tools/src/SystemContracts.ts:119: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "0652eef48a4986d9",
-      "message": "packages/game/src/core/schemas.ts:272: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/core/schemas.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -10364,13 +10252,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "6549915523b041fd",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:872: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "66254e279c9c519b",
       "message": "packages/system-tools/src/SystemContracts.ts:207: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
@@ -10673,20 +10554,6 @@
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "872d995e81b7af20",
-      "message": "packages/system-tools/src/SystemContracts.ts:360: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/system-tools/src/SystemContracts.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "872d995e81b7af20",
-      "message": "packages/system-tools/src/SystemContracts.ts:360: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/system-tools/src/SystemContracts.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "872d995e81b7af20",
       "message": "packages/system-tools/src/SystemContracts.ts:360: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
     },
@@ -10757,13 +10624,6 @@
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "8eb9dcde2c8c2ffc",
-      "message": "packages/core/src/utils/nullish.ts:9: \"T | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/core/src/utils/nullish.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "8eb9dcde2c8c2ffc",
       "message": "packages/core/src/utils/nullish.ts:9: \"T | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/core/src/utils/nullish.ts"
     },
@@ -10773,13 +10633,6 @@
       "fingerprint": "8f4636d4cbef0a8c",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:207: \"PreparedBlobV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "8f6eb2948271a29f",
-      "message": "packages/core/src/utils/ForgivingSchema.ts:51: \"T | undefined\" hand-writes a nullish type union. Use \"?\" to express absence explicitly.",
-      "file": "packages/core/src/utils/ForgivingSchema.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -10857,13 +10710,6 @@
       "fingerprint": "96c76c046dc01eb2",
       "message": "packages/browser/src/core/BrowserPlatformCompatibility.ts:9: \"BrowserCommandSpec | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/browser/src/core/BrowserPlatformCompatibility.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "97cc05d9db6b7638",
-      "message": "packages/game/src/composition/turn-context.ts:39: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/composition/turn-context.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -11004,13 +10850,6 @@
       "fingerprint": "a652793f88df3ad9",
       "message": "packages/system-tools/src/SystemContracts.ts:386: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "a6f9cea361081840",
-      "message": "packages/game/src/composition/turn-context.ts:102: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/composition/turn-context.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -11226,13 +11065,6 @@
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "c03d871c131069c7",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:768: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c03d871c131069c7",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:768: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
@@ -11242,13 +11074,6 @@
       "fingerprint": "c265ca7c0b2c4f39",
       "message": "packages/memory/src/memory-tree/v2/IdentityKeys.ts:32: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/IdentityKeys.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c2c3961bcb4b90ed",
-      "message": "packages/html-artifacts/src/frame-fit.ts:18: \"number | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/html-artifacts/src/frame-fit.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -11452,13 +11277,6 @@
       "fingerprint": "dc7a371ca0bb85fc",
       "message": "packages/memory/src/memory-tree/v2/ErasureSaga.ts:165: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/ErasureSaga.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "dd8bab5921de00e5",
-      "message": "packages/html-artifacts/src/protocol.ts:288: \"string | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/html-artifacts/src/protocol.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -11757,13 +11575,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "f8e66543c05aba63",
-      "message": "packages/agent/src/agent/ExecutionLimits.ts:54: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/agent/src/agent/ExecutionLimits.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "f942305b6bb443ef",
       "message": "packages/system-tools/src/SystemContracts.ts:379: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
@@ -11899,34 +11710,6 @@
       "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
       "fingerprint": "0f106ea436288aaa",
       "message": "packages/system-tools/src/Primitive.tool.ts:421: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/system-tools/src/Primitive.tool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "0f106ea436288aaa",
-      "message": "packages/system-tools/src/Primitive.tool.ts:421: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/system-tools/src/Primitive.tool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "0f106ea436288aaa",
-      "message": "packages/system-tools/src/Primitive.tool.ts:421: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/system-tools/src/Primitive.tool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "129c0fa0546dac78",
-      "message": "packages/system-tools/src/Primitive.tool.ts:426: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/system-tools/src/Primitive.tool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "129c0fa0546dac78",
-      "message": "packages/system-tools/src/Primitive.tool.ts:426: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
       "file": "packages/system-tools/src/Primitive.tool.ts"
     },
     {

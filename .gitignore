@@ -11,3 +11,5 @@ coverage/
 .vite/
 demo-dist/
 *.tsbuildinfo
+.velaros-workspace
+.idea
