@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/core",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "VelarOS 内核基础层:Kernel 库本体(module ABI / module host / capability registry / 权限 broker / 事件流 / namespaced state / wire 协议)+ 跨域共享契约、错误、日志与运行时工具。",
   "license": "UNLICENSED",
   "sideEffects": false,

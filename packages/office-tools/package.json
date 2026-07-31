@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/office-tools",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Host-injected office document, spreadsheet, presentation, LaTeX/PDF, and PDF editing tools.",
   "license": "UNLICENSED",
   "author": "VelarOS",

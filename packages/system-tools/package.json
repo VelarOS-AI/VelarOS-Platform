@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/system-tools",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Host-injected filesystem, process, shell, discovery, and runtime-diagnostic tools.",
   "license": "UNLICENSED",
   "author": "VelarOS",

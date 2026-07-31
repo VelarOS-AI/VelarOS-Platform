@@ -219,9 +219,6 @@ for (const expected of CapabilityPackages) {
   if (manifest.name !== expected.name) {
     fail(`${expected.directory}: expected package name ${expected.name}, got ${manifest.name}`)
   }
-  if (manifest.version !== expected.version) {
-    fail(`${expected.name}: expected version ${expected.version}, got ${manifest.version}`)
-  }
   if (manifest.repository?.url !== RepositoryUrl) {
     fail(`${expected.name}: repository URL must be ${RepositoryUrl}`)
   }

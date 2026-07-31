@@ -1,6 +1,9 @@
 import type { CorePolicy } from "../types/policy.js";
 
-export const WORKSPACE_PACKAGE_VERSION = "1.2.5";
+// 与 package.json#version 手工同步，由 check:workspace-arch 机械对齐（漂移即红）。
+// 留字面量而不从 package.json 读：本包会被打进消费方 bundle，ESM 里 import JSON 要
+// resolveJsonModule + 打包器配合，代价大于一条门；而这条门刚抓到过一次真实漂移，说明它够用。
+export const WORKSPACE_PACKAGE_VERSION = "1.2.6";
 
 /** 保守默认值：有界读取、revision 防护、事务范围限制，并且不隐式要求审批。 */
 export const DEFAULT_CORE_POLICY: CorePolicy = {

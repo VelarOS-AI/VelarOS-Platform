@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/cli",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Extensible command-line router for composing capability package namespaces.",
   "license": "UNLICENSED",
   "author": "VelarOS",
