@@ -7,6 +7,7 @@ import {
   type GameManifestEditRequest,
   type GameManifestEditResult,
   GameManifestWorkspaceEditor,
+  GameProjectFileName,
   type GameProjectManifest,
   type GameRunRequest,
   type GameRunResult,
@@ -33,6 +34,7 @@ import { type GameToolContext, GameToolNames, gameTools, type ToolGameApi } from
 
 export * from './mod.js'
 export * from './turn-context.js'
+export { GameProjectFileName }
 
 export interface GameCapabilityDescriptor {
   readonly id: 'game'
@@ -184,10 +186,10 @@ export function createGameProjectCapability(
     isAvailable: () => editor.isAvailable(),
     edit: async (request) => {
       const result = await editor.edit(request)
-      if (result.changedFiles.includes('game.project.json')) {
-        const projectDocument = await options.documents.read('game.project.json')
+      if (result.changedFiles.includes(GameProjectFileName)) {
+        const projectDocument = await options.documents.read(GameProjectFileName)
         if (!projectDocument) {
-          throw new Error('game.project.json 在语义编辑后不可读取。')
+          throw new Error(`${GameProjectFileName} 在语义编辑后不可读取。`)
         }
         runtime.updateProject(
           parseGameProjectManifestText(projectDocument.text, projectDocument.path).value
@@ -205,7 +207,7 @@ export function createGameProjectCapability(
     ...capability,
     updateProjectFromText: (projectText: string, sourceName?: string) =>
       runtime.updateProject(
-        parseGameProjectManifestText(projectText, sourceName ?? 'game.project.json').value
+        parseGameProjectManifestText(projectText, sourceName ?? GameProjectFileName).value
       ),
   })
 }
@@ -217,7 +219,7 @@ export function createGameProjectCapabilityFromText(
     ...options,
     project: parseGameProjectManifestText(
       options.projectText,
-      options.sourceName ?? 'game.project.json'
+      options.sourceName ?? GameProjectFileName
     ).value,
   })
 }
