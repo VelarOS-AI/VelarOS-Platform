@@ -31,7 +31,7 @@ export type ChatProviderId =
 
 export type ReasoningLevel = 'off' | 'low' | 'medium' | 'high' | 'ultra'
 export type RunProfileSelectionId = 'auto' | 'compact' | 'balanced' | 'expanded'
-export type WorkspaceSpaceKind = 'project' | 'browser' | 'system' | 'game'
+export type WorkspaceSpaceKind = 'project' | 'browser' | 'system' | 'game' | 'engine'
 export type AgentRoleId = 'chat' | 'operator' | 'architect' | 'coder' | 'browser' | 'primary-agent'
 export type ExecutionTaskStatus =
   | 'pending'
