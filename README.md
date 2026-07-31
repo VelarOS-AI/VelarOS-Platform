@@ -171,9 +171,12 @@ bun run check:gates      # 只跑各域质量门
    是编译期常量,daemon 自己只编进 sidecar 目录桩,具体能力(workspace / computer / system-tools)
    由**宿主的构建图**经 `bootKernelDaemon({ modPacks })` 注入(依赖方向 ⑤→④→③→②,宪章 §15.2)。
    Platform 内暂无 `velaros serve` 宿主包,所以这条注入线眼下只有契约与测试,没有生产消费者。
-3. **发布流水线**:`.github/workflows/release-packages.yml` 目前只做 tag 身份核验 + 全量门;
-   一次性发布全部包的火车发布器,以及各域 `scripts/<domain>/release/publish-packages.mjs`
-   的合并,随版本推进方案一起做。
+3. ~~**发布流水线**~~ **已接线(2026-08)**:七份逐仓 `scripts/<domain>/release/*` 已合成一条
+   `scripts/release/`(`releaseTopology.mjs` 发布清单单源 + `verify-release-ref.mjs` 预检 +
+   `publish-packages.mjs` 发布器),`release-packages.yml` 在质量门之后接上 publish 步骤。
+   **仍未做**的是版本推进本身:各包版本保留导入时现值,统一对齐火车号留到首次里程碑
+   (见上「版本方案」);发布器因此**不**校验「包版本 == 仓根 version」,理由写在
+   `scripts/release/releaseTopology.mjs` 文件头。本地验明用 `bun run release:dry-run`。
 4. **消费者独立性门未接线**:各域的 `check:consumer` / `check:packages` / `check:lock`
    (打 tarball 后装到临时工程验证可独立消费)需要 npm registry 与逐包 pack,本批未挂进 `check`;
    脚本已随包迁入 `scripts/<domain>/`,路径已修好,接线时可直接用。

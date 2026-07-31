@@ -15,7 +15,6 @@ export const CapabilityOwners = [
       {
         directory: 'workspace',
         name: '@velaros-ai/workspace',
-        version: '1.2.5',
         entrySubpaths: ['.'],
         sourceRoots: [''],
         electronRoots: [],
@@ -29,7 +28,6 @@ export const CapabilityOwners = [
       {
         directory: 'browser',
         name: '@velaros-ai/browser',
-        version: '0.2.6',
         entrySubpaths: ['./core', './tools', './composition', './runtime'],
         sourceRoots: ['core', 'tools', 'composition', 'runtime'],
         electronRoots: ['runtime'],
@@ -43,7 +41,6 @@ export const CapabilityOwners = [
       {
         directory: 'computer',
         name: '@velaros-ai/computer',
-        version: '0.2.6',
         entrySubpaths: ['./runtime', './tools'],
         sourceRoots: ['runtime', 'tools'],
         electronRoots: [],
@@ -58,7 +55,6 @@ export const CapabilityOwners = [
       {
         directory: 'game',
         name: '@velaros-ai/game',
-        version: '0.1.0',
         entrySubpaths: ['./core', './runtime', './tools', './composition'],
         sourceRoots: ['core', 'runtime', 'tools', 'composition'],
         electronRoots: [],
@@ -72,7 +68,6 @@ export const CapabilityOwners = [
       {
         directory: 'system-tools',
         name: '@velaros-ai/system-tools',
-        version: '0.2.8',
         entrySubpaths: ['.'],
         sourceRoots: [''],
         electronRoots: [],
@@ -86,7 +81,6 @@ export const CapabilityOwners = [
       {
         directory: 'office-tools',
         name: '@velaros-ai/office-tools',
-        version: '0.2.7',
         entrySubpaths: ['.'],
         sourceRoots: [''],
         electronRoots: [],
@@ -100,7 +94,6 @@ export const CapabilityOwners = [
       {
         directory: 'cli',
         name: '@velaros-ai/cli',
-        version: '0.2.10',
         entrySubpaths: ['.'],
         sourceRoots: [''],
         electronRoots: [],

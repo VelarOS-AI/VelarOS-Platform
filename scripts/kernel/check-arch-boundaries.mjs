@@ -375,15 +375,26 @@ function scanConcreteCapabilityDirection() {
 }
 
 // —— 防线⑦ 发布必须绑定精确源码身份并发布已验明的同一 tarball ——
+//
+// 2026-08 合并:并仓前每域各核验自己那套 scripts/<domain>/release/*(七份功能等价的副本),
+// 现在全域共用 scripts/release/ 一条链,故契约指向那一份。**核验的语义一条没减,反而多一条**:
+// 旧 workflow 只有身份核验、没有 publish 步骤,所以「发布链存在」当时无法机械断言;
+// 现在 workflow 必须同时出现 verify 与 publish 两步,漏接 publish 即红。
+// 门与被核验文件刻意**不共享代码**:每域独立按字面标记核对,任何一域的门被改弱不会连带放过其它域
+// (失败方向优先于去重——这里的重复是防线冗余,不是待清理的债)。
 function scanReleaseIdentityBoundary() {
   const violations = []
   const contracts = [
     {
       file: '.github/workflows/release-packages.yml',
-      markers: ["if: github.ref_type == 'tag'", 'node scripts/kernel/release/verify-release-ref.mjs'],
+      markers: [
+        "if: github.ref_type == 'tag'",
+        'node scripts/release/verify-release-ref.mjs',
+        'node scripts/release/publish-packages.mjs',
+      ],
     },
     {
-      file: 'scripts/kernel/release/verify-release-ref.mjs',
+      file: 'scripts/release/verify-release-ref.mjs',
       markers: [
         'const expectedTag = `v${rootManifest.version}`',
         "!['push', 'workflow_dispatch'].includes(eventName)",
@@ -393,10 +404,13 @@ function scanReleaseIdentityBoundary() {
       ],
     },
     {
-      file: 'scripts/kernel/release/publish-packages.mjs',
+      file: 'scripts/release/publish-packages.mjs',
       markers: [
         "runForOutput('git', ['rev-parse', 'HEAD'], root)",
         "['status', '--porcelain', '--untracked-files=all']",
+        // 发布器自己也必须核验运行时 ref 就是那个 tag(并仓前只有 model 那份这么做,
+        // 另外六份仅把 `v${version}` 当标签写进日志、从不核验)。
+        'process.env.GITHUB_REF === expectedRef',
         "['pm', 'pack', '--destination', packDirectory, '--ignore-scripts']",
         'sourceSha,',
         'fileName: tarballs[0]',

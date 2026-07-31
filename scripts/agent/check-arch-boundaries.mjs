@@ -466,6 +466,13 @@ function scanConcreteSemanticInjectionBoundary() {
 }
 
 // —— 防线⑥ 发布必须绑定精确源码身份并发布已验明的同一 tarball ——
+//
+// 2026-08 合并:并仓前每域各核验自己那套 scripts/<domain>/release/*(七份功能等价的副本),
+// 现在全域共用 scripts/release/ 一条链,故契约指向那一份。**核验的语义一条没减,反而多两条**:
+// ① 旧 workflow 没有 publish 步骤,「发布链存在」当时无法机械断言,现在漏接 publish 即红;
+// ② 发布器必须自己核验运行时 ref 就是那个 tag(并仓前只有 model 那份这么做)。
+// 门与 kernel 域那份刻意**不共享代码**:每域独立按字面标记核对,一域的门被改弱不会连带放过其它域
+// (失败方向优先于去重——这里的重复是防线冗余,不是待清理的债)。
 function scanReleaseIdentityBoundary() {
   const violations = []
   const contracts = [
@@ -473,11 +480,12 @@ function scanReleaseIdentityBoundary() {
       file: '.github/workflows/release-packages.yml',
       markers: [
         "if: github.ref_type == 'tag'",
-        'node scripts/agent/release/verify-release-ref.mjs',
+        'node scripts/release/verify-release-ref.mjs',
+        'node scripts/release/publish-packages.mjs',
       ],
     },
     {
-      file: 'scripts/agent/release/verify-release-ref.mjs',
+      file: 'scripts/release/verify-release-ref.mjs',
       markers: [
         'const expectedTag = `v${rootManifest.version}`',
         "!['push', 'workflow_dispatch'].includes(eventName)",
@@ -487,10 +495,11 @@ function scanReleaseIdentityBoundary() {
       ],
     },
     {
-      file: 'scripts/agent/release/publish-packages.mjs',
+      file: 'scripts/release/publish-packages.mjs',
       markers: [
         "runForOutput('git', ['rev-parse', 'HEAD'], root)",
         "['status', '--porcelain', '--untracked-files=all']",
+        'process.env.GITHUB_REF === expectedRef',
         "['pm', 'pack', '--destination', packDirectory, '--ignore-scripts']",
         'sourceSha,',
         'fileName: tarballs[0]',
@@ -502,7 +511,18 @@ function scanReleaseIdentityBoundary() {
   ]
 
   for (const contract of contracts) {
-    const source = readFileSync(resolve(RepoRoot, contract.file), 'utf8')
+    const contractPath = resolve(RepoRoot, contract.file)
+    // 文件缺失要报成违规,不能让 readFileSync 抛 ENOENT 把整个门炸成崩溃——崩溃的门读不出
+    // 「缺了什么」,而删掉发布脚本恰恰是最需要被清楚拦下的那种改动(kernel 域那份一直有此分支)。
+    if (!existsSync(contractPath)) {
+      violations.push({
+        rule: 'release-artifact-identity',
+        fingerprint: `release-artifact-identity::missing::${contract.file}`,
+        message: `${contract.file}: 发布身份门文件缺失。`,
+      })
+      continue
+    }
+    const source = readFileSync(contractPath, 'utf8')
     const missing = contract.markers.filter((marker) => !source.includes(marker))
     if (missing.length === 0) continue
     violations.push({

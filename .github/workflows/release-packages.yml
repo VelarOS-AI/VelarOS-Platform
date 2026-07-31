@@ -1,13 +1,18 @@
-# 单版本火车的发布身份门。
+# 单版本火车的发布流水线:标签身份核验 → 全量质量门 → 一次发布全部已声明的包。
 #
-# 现状(P1):本流水线只做「标签身份核验 + 全量质量门」。真正的发布动作(一次打包并发布 23 个包)
-# 属 P2 —— 各域从源仓带来的 scripts/<domain>/release/publish-packages.mjs 仍是逐仓形态,
-# 合并成一台火车的发布器要连同版本推进方案一起定,故此处刻意不接 publish 步骤。
+# 三段顺序不可换:身份最便宜,先失败在它上面;质量门必须在发布之前(发出去不可撤回);
+# 发布器自己再复核一遍身份与工作树,不依赖前两步的善意。
 #
-# 身份契约(kernel / agent 的 check:*-arch 防线会逐条核验本文件与各域 release 脚本的标记):
+# 身份契约(kernel / agent 的 check:*-arch 防线会逐条核验本文件与 scripts/release/ 两个脚本的标记):
 #   · 只在 tag 上运行;
-#   · 发布前必须由 verify-release-ref.mjs 把 tag 绑死到仓根 version;
-#   · 发布的必须是同一份已验明的 tarball(由各域 publish-packages.mjs 的 pack→校验→publish 保证)。
+#   · 发布前必须由 scripts/release/verify-release-ref.mjs 把 tag 绑死到仓根 version;
+#   · 发布的必须是同一份已验明的 tarball(由 scripts/release/publish-packages.mjs 的
+#     pack→校验→publish 保证:publish 的第一参数是那份 tarball 的路径,不是包目录)。
+#
+# 发布器与验证器都只有**一份**:并仓前七个源仓各带一套 scripts/<domain>/release/*,并仓后它们
+# 枚举的是同一个 packages/、跑的是同一套校验(已功能等价),2026-08 合成 scripts/release/。
+# 合并判据、各域独有护栏的去处、以及被丢弃的「包版本 == 仓根 version」锁步断言的理由,
+# 见 scripts/release/releaseTopology.mjs 文件头。
 
 name: Release packages
 
@@ -37,11 +42,10 @@ jobs:
       - run: bun install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # 各域验证器读的都是同一份仓根 package.json,tag 必须等于 v<火车版本号>。
-      - run: node scripts/kernel/release/verify-release-ref.mjs
-      - run: node scripts/agent/release/verify-release-ref.mjs
-      - run: node scripts/core/release/verify-release-ref.mjs
-      - run: node scripts/model/release/verify-release-ref.mjs
-      - run: node scripts/capabilities/release/verify-release-ref.mjs
-      - run: node scripts/memory/release/verify-release-ref.mjs
+      # 验证器读的是仓根 package.json:tag 必须等于 v<火车版本号>,且发布集合必须与
+      # velaros.domainPackages 对齐、各包版本与 bun.lock 一致。
+      - run: node scripts/release/verify-release-ref.mjs
       - run: bun run check
+      - run: node scripts/release/publish-packages.mjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

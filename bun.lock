@@ -35,7 +35,7 @@
         "@types/react-dom": "^19.0.0",
         "@typescript-eslint/eslint-plugin": "^8.59.3",
         "@typescript-eslint/parser": "^8.59.3",
-        "@velaros-ai/arch-guard": "file:../VelarOS-Arch-Guard",
+        "@velaros-ai/arch-guard": "^0.2.0",
         "@vitejs/plugin-react": "^6.0.4",
         "electron": "^41.10.2",
         "eslint": "^9.39.4",
@@ -97,7 +97,7 @@
     },
     "packages/cli": {
       "name": "@velaros-ai/cli",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "bin": {
         "velaros": "./dist/cli.js",
       },
@@ -126,7 +126,7 @@
     },
     "packages/core": {
       "name": "@velaros-ai/core",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "dependencies": {
         "gpt-tokenizer": "^3.0.1",
         "zod": "^4.3.6",
@@ -151,7 +151,7 @@
     },
     "packages/html-artifacts": {
       "name": "@velaros-ai/html-artifacts",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "devDependencies": {
         "typescript": "^5.7.0",
         "vite": "^7.3.2",
@@ -188,7 +188,7 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "bin": {
         "velaros-memory": "./dist/cli.js",
         "velaros-knowledge": "./dist/knowledge/cli.js",
@@ -224,7 +224,7 @@
     },
     "packages/office-tools": {
       "name": "@velaros-ai/office-tools",
-      "version": "0.2.7",
+      "version": "0.2.8",
       "bin": {
         "velaros-office": "./dist/cli.js",
       },
@@ -247,7 +247,7 @@
     },
     "packages/system-tools": {
       "name": "@velaros-ai/system-tools",
-      "version": "0.2.8",
+      "version": "0.2.9",
       "bin": {
         "velaros-system": "./dist/cli.js",
       },
@@ -262,7 +262,7 @@
     },
     "packages/ui": {
       "name": "@velaros-ai/ui",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "dependencies": {
         "@phosphor-icons/react": "^2.1.10",
         "@radix-ui/react-dialog": "^1.1.15",
@@ -295,7 +295,7 @@
     },
     "packages/workspace": {
       "name": "@velaros-ai/workspace",
-      "version": "1.2.5",
+      "version": "1.2.6",
       "bin": {
         "velaros-workspace": "./dist/cli.js",
       },
@@ -901,7 +901,7 @@
 
     "@velaros-ai/agent": ["@velaros-ai/agent@workspace:packages/agent"],
 
-    "@velaros-ai/arch-guard": ["@velaros-ai/arch-guard@file:../VelarOS-Arch-Guard", { "dependencies": { "picomatch": "^4.0.3", "typescript": "^5.7.0" }, "devDependencies": { "@types/node": "^22.19.17", "@types/picomatch": "^3.0.1" }, "bin": { "arch-guard": "bin/arch-guard.mjs" } }],
+    "@velaros-ai/arch-guard": ["@velaros-ai/arch-guard@0.2.0", "https://npm.pkg.github.com/download/@velaros-ai/arch-guard/0.2.0/ccd97ecead2547d49bf16306a03d9c0495869777", { "dependencies": { "picomatch": "^4.0.3", "typescript": "^5.7.0" }, "bin": { "arch-guard": "bin/arch-guard.mjs" } }, "sha512-9DUv9dm0zEtlQi1CljKwQvogqsyrgUTpfu94bS7UpkA3g5AN/cy5SCx7G+8+b5WjY8fk4EQLKp5+0/N5rww/eg=="],
 
     "@velaros-ai/browser": ["@velaros-ai/browser@workspace:packages/browser"],
 
