@@ -14,7 +14,7 @@
     "version": "0.1.0",
     "publisher": "VelarOS",
     "displayName": "VelarOS AI Game Engine",
-    "description": "VelarOS official game workspace, tools, runtime and turn context.",
+    "description": "VelarOS 官方游戏工程空间、工具、运行态与回合上下文。",
     "manifestSchemaVersion": 1,
     "engines": {
       "velaros": "*",
@@ -27,7 +27,7 @@
         {
           "id": "game",
           "label": "Game",
-          "description": "Declarative game project editing, runtime observation and input validation.",
+          "description": "声明式游戏工程编辑、运行、观察与输入验证。",
           "order": 45
         }
       ],
@@ -68,8 +68,8 @@
           "id": "game",
           "descriptor": {
             "label": "Game",
-            "hint": "Edit, run and observe the current game project",
-            "startTitle": "Start building a game",
+            "hint": "编辑、运行并观察当前游戏工程",
+            "startTitle": "开始构建游戏",
             "order": 40,
             "localeKey": "workspace.space.game"
           },
@@ -92,21 +92,21 @@
       "turnContextSources": [
         {
           "id": "game.runtime-errors",
-          "label": "Game errors",
+          "label": "游戏运行报错",
           "spaces": ["game"],
           "rendererVisible": true,
           "priority": 60
         },
         {
           "id": "game.selection",
-          "label": "Game selection",
+          "label": "游戏实体选择",
           "spaces": ["game"],
           "rendererVisible": true,
           "priority": 61
         },
         {
           "id": "game.scene-state",
-          "label": "Game scene",
+          "label": "游戏场景状态",
           "spaces": ["game"],
           "rendererVisible": true,
           "priority": 62

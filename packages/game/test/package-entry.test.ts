@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, test } from 'bun:test'
 
 import {
@@ -6,6 +8,7 @@ import {
   createGameCapabilityDescriptor,
   GameModId,
   GameTurnContextCoordinator,
+  GameTurnContextSourceIds,
 } from '../dist/composition/index.js'
 import {
   GameProjectDirectories,
@@ -69,6 +72,33 @@ describe('@velaros-ai/game partition entries', () => {
     expect(pack.specifier).toBe('bundled:velaros.game')
     expect(pack.bindings.tools).toBeDefined()
     expect(pack.bindings.toolCategories.game.id).toBe('game')
+  })
+
+  test('locks the packaged mod manifest to the runtime definition', () => {
+    const packaged = JSON.parse(
+      readFileSync(new URL('../velaros.mod.json', import.meta.url), 'utf8')
+    ) as {
+      module: { id: string; version: string }
+      agent: { id: string; version: string }
+    }
+    const pack = createGameBundledModDefinition()
+
+    expect(packaged.agent).toEqual(pack.manifest)
+    expect(packaged.module.id).toBe(pack.id)
+    expect(packaged.module.version).toBe(packaged.agent.version)
+  })
+
+  test('derives scopes independently for every game turn-context source', () => {
+    const coordinator = new GameTurnContextCoordinator()
+    const resolved: string[] = []
+    const sources = coordinator.createSources((sourceId) => {
+      resolved.push(sourceId)
+      return sourceId === 'game.selection' ? ['game'] : []
+    })
+
+    expect(resolved).toEqual([...GameTurnContextSourceIds])
+    expect(sources.find((source) => source.id === 'game.selection')?.scopes).toEqual(['game'])
+    expect(sources.find((source) => source.id === 'game.scene-state')?.scopes).toEqual([])
   })
 
   test('projects selection through the game-owned turn-context source', () => {

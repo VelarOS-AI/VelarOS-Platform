@@ -75,10 +75,10 @@ const GameAgentModManifest = Object.freeze({
       id,
       label:
         id === 'game.runtime-errors'
-          ? 'Game errors'
+          ? '游戏运行报错'
           : id === 'game.selection'
-            ? 'Game selection'
-            : 'Game scene',
+            ? '游戏实体选择'
+            : '游戏场景状态',
       spaces: [GameWorkspaceSpaceId],
       rendererVisible: true,
       priority: 60 + index,

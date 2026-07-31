@@ -1,3 +1,4 @@
+import { isFunction, toNullable } from '@velaros-ai/core'
 import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
 import {
   type TurnContextAppendHub,
@@ -16,7 +17,11 @@ import type {
 
 import { GameTurnContextSourceIds } from './mod.js'
 
-type GameTurnContextSourceId = (typeof GameTurnContextSourceIds)[number]
+export type GameTurnContextSourceId = (typeof GameTurnContextSourceIds)[number]
+export type GameTurnContextScopeResolver = (
+  sourceId: GameTurnContextSourceId
+) => readonly CapabilityScopeId[]
+type NullableString = ReturnType<typeof toNullable<string>>
 
 function errorSignature(error: GameRuntimeErrorRecord): string {
   return `${error.source}:${error.signature}:${error.count}:${error.lastAt}`
@@ -36,7 +41,7 @@ export class GameTurnContextCoordinator {
   private readonly ledgers: Record<GameTurnContextSourceId, TurnContextSessionLedgers>
   private readonly lastErrors = new Map<string, string>()
   private readonly lastScenes = new Map<string, string>()
-  private readonly lastSelections = new Map<string, string | null>()
+  private readonly lastSelections = new Map<string, NullableString>()
 
   public constructor(appendHub?: TurnContextAppendHub) {
     this.ledgers = Object.fromEntries(
@@ -47,10 +52,12 @@ export class GameTurnContextCoordinator {
     ) as Record<GameTurnContextSourceId, TurnContextSessionLedgers>
   }
 
-  public createSources(scopes: readonly CapabilityScopeId[]): readonly TurnContextDeltaSource[] {
+  public createSources(
+    scopes: readonly CapabilityScopeId[] | GameTurnContextScopeResolver
+  ): readonly TurnContextDeltaSource[] {
     return GameTurnContextSourceIds.map((sourceId) => ({
       id: sourceId,
-      scopes,
+      scopes: isFunction(scopes) ? scopes(sourceId) : scopes,
       rendererVisible: true,
       peekCached: (input) => ({
         ...this.ledgers[sourceId].peek(input.sessionId, input),
@@ -74,8 +81,8 @@ export class GameTurnContextCoordinator {
   public observeStop(sessionId: string, _result: GameStopResult): void {
     this.lastScenes.delete(sessionId)
     this.ledgers['game.scene-state'].append(sessionId, {
-      label: 'Game stopped',
-      summaryText: 'Game runtime stopped.',
+      label: '游戏已停止',
+      summaryText: '游戏运行态已停止。',
       inspect: { tool: 'game_run' },
     })
   }
@@ -88,7 +95,7 @@ export class GameTurnContextCoordinator {
     if (result.select === 'scene') this.observeScene(sessionId, result)
     if (result.select === 'errors') this.observeErrors(sessionId, result.errors)
     if (result.select === 'selection') {
-      this.observeSelection(sessionId, result.entity?.id ?? null)
+      this.observeSelection(sessionId, toNullable(result.entity?.id))
     }
     if (request.select === 'entity' && result.select === 'entity') {
       this.observeSelection(sessionId, result.entity.id)
@@ -99,14 +106,14 @@ export class GameTurnContextCoordinator {
     if (result.stateAfter) this.observeScene(sessionId, result.stateAfter)
   }
 
-  public observeSelection(sessionId: string, entityId: string | null): void {
+  public observeSelection(sessionId: string, entityId: NullableString): void {
     if (this.lastSelections.get(sessionId) === entityId) return
     this.lastSelections.set(sessionId, entityId)
     this.ledgers['game.selection'].append(sessionId, {
-      label: entityId ? `Selected ${entityId}` : 'Selection cleared',
+      label: entityId ? `已选择 ${entityId}` : '已清除实体选择',
       summaryText: entityId
-        ? `The user selected game entity "${entityId}".`
-        : 'The user cleared the game entity selection.',
+        ? `用户选择了游戏实体“${entityId}”。`
+        : '用户清除了游戏实体选择。',
       inspect: entityId
         ? { tool: 'game_query_state', argsHint: { select: 'entity', entityId } }
         : { tool: 'game_query_state', argsHint: { select: 'selection' } },
@@ -130,8 +137,8 @@ export class GameTurnContextCoordinator {
     if (errors.length === 0) {
       if (previous) {
         this.ledgers['game.runtime-errors'].append(sessionId, {
-          label: 'Game errors cleared',
-          summaryText: 'The game runtime error list is now empty.',
+          label: '游戏报错已清零',
+          summaryText: '游戏运行态报错列表现已为空。',
           inspect: { tool: 'game_query_state', argsHint: { select: 'errors' } },
         })
       }
@@ -139,8 +146,8 @@ export class GameTurnContextCoordinator {
     }
     const latest = errors[0]!
     this.ledgers['game.runtime-errors'].append(sessionId, {
-      label: `${errors.length} game error${errors.length === 1 ? '' : 's'}`,
-      summaryText: `Game runtime reported ${errors.length} error(s). Latest: ${latest.message}`,
+      label: `${errors.length} 条游戏报错`,
+      summaryText: `游戏运行态报告了 ${errors.length} 条报错，最新一条：${latest.message}`,
       inspect: { tool: 'game_query_state', argsHint: { select: 'errors' } },
     })
   }
@@ -150,10 +157,10 @@ export class GameTurnContextCoordinator {
     if (this.lastScenes.get(sessionId) === signature) return
     this.lastScenes.set(sessionId, signature)
     this.ledgers['game.scene-state'].append(sessionId, {
-      label: `${scene.scene} · ${scene.entityCount} entities`,
-      summaryText: `Game scene "${scene.scene}" is ${
-        scene.running ? 'running' : 'stopped'
-      } with ${scene.entityCount} entities.`,
+      label: `${scene.scene} · ${scene.entityCount} 个实体`,
+      summaryText: `游戏场景“${scene.scene}”当前${
+        scene.running ? '正在运行' : '已停止'
+      }，包含 ${scene.entityCount} 个实体。`,
       inspect: { tool: 'game_query_state', argsHint: { select: 'scene' } },
     })
   }
