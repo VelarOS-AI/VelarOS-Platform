@@ -1,3 +1,4 @@
+import { isArray, isEmpty, isPlainObject, isPresent } from '@velaros-ai/core'
 import type { AppliedAdjustment } from '@velaros-ai/core/utils/ForgivingSchema'
 
 import { formatGameManifest } from './formatter.js'
@@ -37,7 +38,7 @@ export type GameManifestEditOperation =
   | {
       readonly action: 'set_entity'
       readonly entityId: string
-      readonly from?: GameReference<'prefab'> | null
+      readonly from?: LooseOptional<GameReference<'prefab'>>
       readonly components?: Readonly<Record<string, unknown>>
     }
   | { readonly action: 'remove_entity'; readonly entityId: string }
@@ -90,6 +91,14 @@ export interface GameManifestDocumentChange {
   readonly path: string
   readonly text: string
   readonly expectedRevision: string
+  /**
+   * 该路径尚不存在，本次写入即创建（宿主必须以「不存在」为前提做原子创建）。
+   *
+   * 判决：用显式字段而不是把 `expectedRevision` 留空当哨兵——哨兵会让「读到空文件」与
+   * 「文件不存在」在写入端长得一样，冲突检测于是变成一道假门。`create` 为真时
+   * `expectedRevision` 只是留痕，不参与比对。
+   */
+  readonly create?: boolean
 }
 
 /**
@@ -99,7 +108,7 @@ export interface GameManifestDocumentChange {
  * The editor supplies the revision it read so concurrent human/agent edits fail closed.
  */
 export interface GameManifestDocumentStore {
-  readonly read: (path: string) => Promise<GameManifestDocument | null>
+  readonly read: (path: string) => Promise<Nullable<GameManifestDocument>>
   readonly list: (directory: 'prefabs') => Promise<readonly GameManifestDocument[]>
   readonly writeBatch: (changes: readonly GameManifestDocumentChange[]) => Promise<void>
 }
@@ -123,11 +132,33 @@ interface LoadedWorkspace {
   assets: ParsedDocument<GameAssetsManifest>
   warnings: string[]
   adjustments: AppliedAdjustment[]
+  /** 本次装载中「磁盘上还不存在、由自举基线顶上」的清单路径；提交时一律写成创建。 */
+  bootstrapPaths: Set<string>
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+/**
+ * 空工程根的自举基线。
+ *
+ * 判决（为什么在编辑器里而不是在宿主装配期落盘）：清单编辑器是工程清单的**唯一写者**，
+ * 把「工程还不存在」这件事交给它处理，六个 game 工具的可用性就只依赖一次显式编辑，
+ * 而不是依赖某个装配路径上的隐式副作用（那种副作用一旦漏在某条路径上，表现为
+ * 「工具全部隐身、模型反复搜索」——正是本轮真机抓到的形态）。
+ *
+ * 基线刻意最小：解析器对缺席字段全部给默认值（canvas 960x540、layers 三层、
+ * assets 指向 `assets/assets.json`），所以这里只写解析器**没有**默认值的 `name`。
+ * 工程名与其余配置由模型随后 `set_project` 覆盖。
+ */
+const GameProjectBootstrapText = `{
+  "name": "game",
+  "schemaChannel": "v0"
 }
+`
+const GameAssetsBootstrapText = `{
+  "assets": []
+}
+`
+/** 自举文档的占位 revision：`create` 为真时宿主不比对它（见 GameManifestDocumentChange）。 */
+const GameBootstrapRevision = ''
 
 function cloneRecord<T>(value: T): T {
   return structuredClone(value)
@@ -143,7 +174,7 @@ function withoutKey(
 }
 
 function requireDocument(
-  document: GameManifestDocument | null,
+  document: Nullable<GameManifestDocument>,
   path: string,
 ): GameManifestDocument {
   if (document) {
@@ -168,7 +199,7 @@ function requireDocument(
 function assertProjectDocumentPath(path: string, expectedDirectory?: string): void {
   if (
     !GameProjectRelativePathSchema.safeParse(path).success ||
-    (expectedDirectory !== undefined &&
+    (isPresent(expectedDirectory) &&
       !path.startsWith(`${expectedDirectory}/`))
   ) {
     throw new GameManifestError(
@@ -217,8 +248,8 @@ function replaceEntityReferences(
   nextReference: GameReference<'entity'>,
 ): unknown {
   if (value === oldReference) return nextReference
-  if (Array.isArray(value)) return value.map((item) => replaceEntityReferences(item, oldReference, nextReference))
-  if (!isRecord(value)) return value
+  if (isArray(value)) return value.map((item) => replaceEntityReferences(item, oldReference, nextReference))
+  if (!isPlainObject(value)) return value
   return Object.fromEntries(
     Object.entries(value).map(([key, nested]) => [
       key,
@@ -360,15 +391,18 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
     ]
     const changes = documents.flatMap((document): GameManifestDocumentChange[] => {
       const next = after.get(document.path)
-      if (
-        next === undefined ||
-        !before.has(document.path) ||
-        next === before.get(document.path)
-      ) return []
+      if (!isPresent(next)) return []
+      // 自举路径无条件提交：它在磁盘上还不存在，「文本没变」不代表「不用写」。
+      // 少了这一条，首次编辑只会落下 game.project.json，而它指向的资产清单仍缺席。
+      if (workspace.bootstrapPaths.has(document.path))
+        return [
+          { path: document.path, text: next, expectedRevision: document.revision, create: true },
+        ]
+      if (!before.has(document.path) || next === before.get(document.path)) return []
       return [{ path: document.path, text: next, expectedRevision: document.revision }]
     })
 
-    if (!request.dryRun && changes.length > 0) {
+    if (!request.dryRun && !isEmpty(changes)) {
       await this.store.writeBatch(changes)
     }
 
@@ -380,14 +414,32 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
       diffSummary,
       warnings: [...new Set(workspace.warnings)],
       appliedAdjustments: workspace.adjustments,
-      dryRun: request.dryRun ?? false,
+      dryRun: !!request.dryRun,
     }
   }
 
+  /**
+   * 读一份清单；缺席且给了自举基线时回内存基线并登记进 `bootstrapPaths`。
+   *
+   * 不给基线（`bootstrapText` 省略）时保持原语义：缺席即 INVALID_REFERENCE 带自救提示。
+   */
+  private async readOrBootstrap(
+    bootstrapPaths: Set<string>,
+    path: string,
+    bootstrapText?: string,
+  ): Promise<GameManifestDocument> {
+    const stored = await this.store.read(path)
+    if (stored || !bootstrapText) return requireDocument(stored, path)
+    bootstrapPaths.add(path)
+    return { path, text: bootstrapText, revision: GameBootstrapRevision }
+  }
+
   private async loadWorkspace(): Promise<LoadedWorkspace> {
-    const projectDocument = requireDocument(
-      await this.store.read('game.project.json'),
+    const bootstrapPaths = new Set<string>()
+    const projectDocument = await this.readOrBootstrap(
+      bootstrapPaths,
       'game.project.json',
+      GameProjectBootstrapText,
     )
     const projectResult = parseGameProjectManifestText(
       projectDocument.text,
@@ -402,6 +454,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
       assets: {} as ParsedDocument<GameAssetsManifest>,
       warnings: [...projectResult.warnings],
       adjustments: [...projectResult.appliedAdjustments],
+      bootstrapPaths,
     }
 
     for (const scenePath of projectResult.value.scenes) {
@@ -422,9 +475,12 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
       collectParseResult(workspace, parsed)
     }
 
-    const assetsDocument = requireDocument(
-      await this.store.read(projectResult.value.assets),
+    // 资产清单只在**工程本身也是自举出来的**时候一并自举：工程已存在却缺资产清单是真的
+    // 损坏，继续走原来的 INVALID_REFERENCE 带自救提示，不能用一份空清单把它盖过去。
+    const assetsDocument = await this.readOrBootstrap(
+      bootstrapPaths,
       projectResult.value.assets,
+      bootstrapPaths.has('game.project.json') ? GameAssetsBootstrapText : undefined,
     )
     const assetsResult = parseGameAssetsManifestText(
       assetsDocument.text,
@@ -629,10 +685,13 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
         )
         const patch = {
           id: operation.entityId,
+          // `from` 的 undefined（未提供、保持原值）与 null（显式清除继承）语义不同：isPresent
+          // 会把两者并成一个分支，等于把「清除继承」这条操作静默吞掉。缺席即整键不出现，
+          // 因此也不能改成 optionalWhen（那会留下一个 `from: undefined` 的键进 merge patch）。
+          // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：undefined 与 null 语义不同，见上。
           ...(operation.from === undefined ? {} : { from: operation.from }),
-          ...(operation.components === undefined
-            ? {}
-            : { components: operation.components }),
+          // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：缺席须整键不出现，不能留 undefined 键进 merge patch。
+          ...(operation.components === undefined ? {} : { components: operation.components }),
         }
         if (index < 0) scene.entities.push(patch)
         else {
@@ -711,6 +770,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
           const next = applyGameMergePatch(current ?? {}, operation.values)
           entity.components = {
             ...(entity.components ?? {}),
+            // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：缺席须整键不出现，不能留 undefined 键进组件表。
             ...(next === undefined ? {} : { [operation.component]: next }),
           }
           summaries.push(
@@ -722,7 +782,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
           return
         }
         if (target.startsWith('prefab:')) {
-          if (operation.entityId !== undefined) {
+          if (isPresent(operation.entityId)) {
             throw new GameManifestError(
               'INVALID_MANIFEST',
               'prefab 的 set_component 不接收 entityId；target 已唯一指定 prefab。',
@@ -733,7 +793,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
             prefab.components[operation.component] ?? {},
             operation.values,
           )
-          if (next !== undefined) {
+          if (isPresent(next)) {
             prefab.components = {
               ...prefab.components,
               [operation.component]: next,
@@ -771,7 +831,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
           return
         }
         if (target.startsWith('prefab:')) {
-          if (operation.entityId !== undefined) {
+          if (isPresent(operation.entityId)) {
             throw new GameManifestError(
               'INVALID_MANIFEST',
               'prefab 的 remove_component 不接收 entityId；target 已唯一指定 prefab。',

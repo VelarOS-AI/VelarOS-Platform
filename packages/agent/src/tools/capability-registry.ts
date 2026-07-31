@@ -1,3 +1,4 @@
+import { toNullable } from '@velaros-ai/core'
 import type { ToolDescriptor } from '@velaros-ai/core/types'
 
 import { decideToolCategoryAccess, type ToolCategoryUnavailableReason } from './access-policy'
@@ -88,6 +89,8 @@ function reasonsForToolPage(input: {
   activeCategory: boolean
   availability: ToolDiscoveryAvailability
   pluginBacked: boolean
+  /** 工具自报的不可用原因；缺席时才退到泛化文案。 */
+  runtimeUnavailableReason: Nullable<string>
 }): ToolCapabilityReason[] {
   const reasons: ToolCapabilityReason[] = []
 
@@ -105,7 +108,15 @@ function reasonsForToolPage(input: {
   }
 
   if (!input.runtimeAvailable) {
-    reasons.push(reason('runtime', 'unavailable', '工具注册存在，但当前运行态不可用。'))
+    // 工具自报的原因优先：泛化的「当前运行态不可用」在页表里等于「此路不通」，模型据此会去搜
+    // 别的工具或退回手搓。带上「缺什么、谁来解除」才让「留在发现层」这条判决真的成立。
+    reasons.push(
+      reason(
+        'runtime',
+        'unavailable',
+        input.runtimeUnavailableReason ?? '工具注册存在，但当前运行态不可用。'
+      )
+    )
   }
 
   if (input.visible) {
@@ -177,6 +188,10 @@ class ToolCapabilityRegistry {
       const activeCategory = ctx.codingSession.hasActiveToolCategoryAccess(entry.categoryId)
       const runtimeAvailable = entry.tool.isAvailable ? entry.tool.isAvailable(ctx) : true
       if (!runtimeAvailable && entry.tool.hideWhenUnavailable) continue
+      // 只在真的不可用时问原因：可用路径上不该为了一句文案多跑一次工具自己的探测。
+      const runtimeUnavailableReason = runtimeAvailable
+        ? null
+        : toNullable(entry.tool.unavailableReason?.(ctx))
 
       const visible = visibleNames.has(name)
       const pluginBacked = isPluginBackedToolCategory(entry.categoryId)
@@ -221,6 +236,7 @@ class ToolCapabilityRegistry {
           activeCategory,
           availability,
           pluginBacked,
+          runtimeUnavailableReason,
         }),
       })
     }

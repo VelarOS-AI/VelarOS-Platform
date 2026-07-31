@@ -73,6 +73,18 @@ export interface ToolContractRuntimeSpec<
   /** 运行依赖不存在时不进入工具发现目录。 */
   hideWhenUnavailable?: boolean
   isAvailable?: (ctx: TContext) => boolean
+  /**
+   * `isAvailable` 为假时给发现层（`tool_map` 页表）的**具体原因**。
+   *
+   * 判据：`hideWhenUnavailable: false` 的意思是「留在发现层让模型看见」，而页表原来只有一句
+   * 泛化的「工具注册存在，但当前运行态不可用。」——模型据此只会判定「此路不通」，然后去搜别的
+   * 工具或退回手搓，与整族隐身的结局相同。留在发现层要成立，就必须同时给出**为什么不可用、
+   * 谁来解除**。返回 null = 没有比泛化文案更具体的可说的。
+   *
+   * 注意分工：模型自己能解除的前置**不该**走这里（那种前置根本不该进 `isAvailable`，应当在
+   * 执行期回可执行错误）；这里说的是「需要用户动手」那一档，如没绑工程根、插件没装。
+   */
+  unavailableReason?: (ctx: TContext) => Nullable<string>
   isConcurrencySafe?: (input: TInput) => boolean
   execute: ToolContractExecute<TInput, TContext, TResult>
 }
@@ -105,6 +117,8 @@ export interface DefineToolRuntimeSpecInput<
   outputInline?: boolean
   hideWhenUnavailable?: boolean
   isAvailable?: (ctx: TContext) => boolean
+  /** 见 ToolContractRuntimeSpec.unavailableReason：不可用时给发现层的具体原因。 */
+  unavailableReason?: (ctx: TContext) => Nullable<string>
   isConcurrencySafe?: (input: TInput) => boolean
   execute: ToolContractExecute<TInput, TContext, TResult>
 }
@@ -123,6 +137,8 @@ export interface DefineToolContractInput<
   exposure?: ToolExposurePolicy
   hideWhenUnavailable?: boolean
   isAvailable?: (ctx: TContext) => boolean
+  /** 见 ToolContractRuntimeSpec.unavailableReason：不可用时给发现层的具体原因。 */
+  unavailableReason?: (ctx: TContext) => Nullable<string>
   isConcurrencySafe?: (input: TInput) => boolean
   execute: (input: TInput, ctx: TContext) => Promise<unknown> | unknown
 }

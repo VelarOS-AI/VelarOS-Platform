@@ -1373,6 +1373,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "ChatInputFunctionBar.goalModeLabel",
+      "description": "目标模式 chip 的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。",
+      "type": "string"
+    },
+    {
       "name": "ChatInputFunctionBar.capabilityControls",
       "description": "Auto-generated from TypeScript props.",
       "type": "readonly ChatComposerCapabilityControl[]"
@@ -2095,6 +2100,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "ComposerActiveChipsBar.goalModeLabel",
+      "description": "目标模式 chip 的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。",
+      "type": "string"
+    },
+    {
       "name": "ComposerActiveChipsBar.capabilityControls",
       "description": "Auto-generated from TypeScript props.",
       "type": "readonly ChatComposerCapabilityControl[]"
@@ -2345,6 +2355,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
       "recommended": "Required"
+    },
+    {
+      "name": "ComposerAddMenuFeatures.goalModeCopy",
+      "description": "目标模式开关的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。",
+      "type": "ChatInputGoalModeCopy"
     },
     {
       "name": "ComposerAddMenuFeatures.updateGoalMode",
@@ -2649,6 +2664,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ComposerModelRunSelector.modelSelector",
       "description": "Auto-generated from TypeScript props.",
       "type": "ChatComposerModelSelectorControl"
+    },
+    {
+      "name": "ComposerModelRunSelector.modelRunSummary",
+      "description": "摘要按钮文案覆盖（宿主给的如实摘要优先于包内回落，见 ChatComposerModelRunSummary）。",
+      "type": "ChatComposerModelRunSummary"
     },
     {
       "name": "ComposerModelRunSelector.reasoning",

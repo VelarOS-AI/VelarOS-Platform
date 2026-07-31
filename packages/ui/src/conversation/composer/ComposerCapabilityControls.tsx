@@ -91,10 +91,17 @@ function CapabilityChoiceControl({
   disabled: boolean
   inMenu: boolean
 }): ReactElement {
+  // 选项正文（`choice.description`）此前**一格都没渲染**：声明方写了「这一档到底会发生什么」，
+  // 界面上一个字都看不到。安全相关的档（外部引擎的审批档）尤其不能这样——一个 label 撑不起
+  // 「未预批准即拒」与「越界即失败」的差别。当前选中项的正文提到 label 上，逐项正文落 option
+  // 的原生 title，两处都不新造组件。
+  const selectedChoice = (control.choices ?? []).find(
+    (choice) => isString(control.value) && choice.id === control.value
+  )
   return (
     <label
       className={inMenu ? styles.providerCapabilityMenuChoice : styles.providerCapabilityChoice}
-      title={control.description || control.label}
+      title={selectedChoice?.description || control.description || control.label}
     >
       <span>{control.label}</span>
       <select
@@ -104,7 +111,7 @@ function CapabilityChoiceControl({
         onChange={(event) => control.onChange?.(event.target.value)}
       >
         {(control.choices ?? []).map((choice) => (
-          <option key={choice.id} value={choice.id}>
+          <option key={choice.id} value={choice.id} title={choice.description}>
             {choice.label}
           </option>
         ))}

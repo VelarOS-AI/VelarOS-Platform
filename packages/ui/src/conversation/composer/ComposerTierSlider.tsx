@@ -5,6 +5,13 @@ import styles from './ChatInput.module.css'
 export interface ComposerTierSliderOption<T extends string> {
   value: T
   label: string
+  /**
+   * 档位说明（落在刻度的原生 title 上）。
+   *
+   * 动态档位的说明由适配器提供（外部引擎逐档上报，如 codex 的 `supportedReasoningEfforts`），
+   * 此前一格都没渲染——声明方写了每一档是什么意思，界面上一个字都看不到。
+   */
+  description?: string
 }
 
 export interface ComposerTierSliderProps<T extends string> {
@@ -66,6 +73,7 @@ export function ComposerTierSlider<T extends string>({
             }
             disabled={disabled}
             tabIndex={-1}
+            title={option.description}
             onClick={() => handleSelect(index)}
           >
             {option.label}

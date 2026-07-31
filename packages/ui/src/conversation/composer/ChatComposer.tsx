@@ -19,13 +19,33 @@ export interface ChatComposerProviderModelSelectOption {
 }
 
 export interface ChatComposerModelSelectorControl {
+  /** 菜单里这一段的段头文案；不传时用包内的「模型」。 */
   label: string
+  /**
+   * 段头旁的说明气泡（外部执行体自报「这份目录是谁给的」时传）。
+   *
+   * 不传就不渲染气泡：**不替它编一句包内文案**——目录来源是宿主/执行体的事实，包内猜一句
+   * 会把「引擎自报的模型」说成 Velar 自己的模型。
+   */
+  hint?: string
   /** 仅用于界面目录的身份；不要求它是已注册的 API Provider。 */
   provider: string
   model: string
   providers: ChatComposerProviderModelSelectOption[]
   disabled?: boolean
   onChange: (provider: string, model: string) => void
+}
+
+/**
+ * 模型/运行档摘要按钮的文案覆盖。
+ *
+ * 判据：这颗按钮在没有 `modelSelector` 时回落包内的「选择模型 / 自动」，而外部执行体会话里
+ * 「选择模型」是一句做不到的承诺——目录问不到时用户一格都选不了。宿主此时传一份如实的摘要
+ * （执行体名 + 目录为什么没有），包内不再替它编。不传即保持原回落，Velar 会话零变化。
+ */
+export interface ChatComposerModelRunSummary {
+  primaryLabel: string
+  secondaryLabel?: string
 }
 
 /**
@@ -67,6 +87,8 @@ export interface ChatComposerControl {
   scopeKey?: string
   input: ChatComposerInputControl
   modelSelector?: ChatComposerModelSelectorControl
+  /** 摘要按钮文案覆盖；只在宿主能给出比包内回落更真的一份时传。 */
+  modelRunSummary?: ChatComposerModelRunSummary
   reasoning?: ChatComposerReasoningControl
   leftSlot?: React.ReactNode
   rightSlot?: React.ReactNode
@@ -87,6 +109,7 @@ export function ChatComposer({ control, density = 'default' }: ChatComposerProps
   const {
     input,
     modelSelector,
+    modelRunSummary,
     reasoning,
     leftSlot,
     rightSlot,
@@ -106,6 +129,7 @@ export function ChatComposer({ control, density = 'default' }: ChatComposerProps
     <ComposerModelRunSelector
       t={t}
       modelSelector={modelSelector}
+      modelRunSummary={modelRunSummary}
       reasoning={reasoning}
       runProfile={input.runProfile}
       thinkingDepth={input.thinkingDepth}

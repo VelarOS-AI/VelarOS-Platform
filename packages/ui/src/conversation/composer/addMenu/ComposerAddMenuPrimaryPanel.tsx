@@ -69,6 +69,7 @@ export function ComposerAddMenuPrimaryPanel({
     updateWorkbenchEditorControl,
     canToggleGoalMode,
     goalModeActive,
+    goalModeCopy,
     updateGoalMode,
   },
 }: ComposerAddMenuPrimaryPanelProps): ReactElement {
@@ -201,8 +202,8 @@ export function ComposerAddMenuPrimaryPanel({
             >
               <TargetIcon size={14} />
               <ComposerMenuItemBody
-                label={t('chat.composerGoalMode')}
-                help={t('chat.composerGoalModeHint')}
+                label={goalModeCopy?.label ?? t('chat.composerGoalMode')}
+                help={goalModeCopy?.hint ?? t('chat.composerGoalModeHint')}
               />
               <ComposerMenuSwitchIndicator checked={goalModeActive} />
             </Button>

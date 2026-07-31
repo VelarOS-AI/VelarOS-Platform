@@ -23,6 +23,7 @@ import {
 import type { ConversationMessageKey as MessageKey } from '../i18n'
 
 import type {
+  ChatComposerModelRunSummary,
   ChatComposerModelSelectorControl,
   ChatComposerProviderModelSelectOption,
   ChatComposerReasoningControl,
@@ -64,6 +65,8 @@ interface ComposerThinkingDepthOption {
 export interface ComposerModelRunSelectorProps {
   t: (key: MessageKey) => string
   modelSelector?: ChatComposerModelSelectorControl
+  /** 摘要按钮文案覆盖（宿主给的如实摘要优先于包内回落，见 ChatComposerModelRunSummary）。 */
+  modelRunSummary?: ChatComposerModelRunSummary
   reasoning?: ChatComposerReasoningControl
   runProfile?: ChatInputRunProfileControl
   thinkingDepth?: ChatInputThinkingDepthControl
@@ -144,6 +147,7 @@ function MenuSectionHeader({ label, hint }: { label: string; hint: string }): Re
 function ComposerModelRunSelectorImpl({
   t,
   modelSelector,
+  modelRunSummary,
   reasoning,
   runProfile,
   thinkingDepth,
@@ -175,10 +179,12 @@ function ComposerModelRunSelectorImpl({
   const selectedModelLabel = modelSelector
     ? getSelectedModelLabel(visibleProvider, visibleModel)
     : t('chat.selectModel')
+  // 宿主给的摘要优先：没有模型目录时包内回落的「选择模型」是一句做不到的承诺（用户点开是空菜单）。
   const selectedModelDisplayLabel =
-    modelSelector && visibleProvider
+    modelRunSummary?.primaryLabel ??
+    (modelSelector && visibleProvider
       ? `${visibleProvider.label} / ${selectedModelLabel}`
-      : selectedModelLabel
+      : selectedModelLabel)
   const visibleRunProfileValue =
     runProfile?.value === 'expanded' && !composerPort.experimentalFeaturesEnabled
       ? 'balanced'
@@ -194,7 +200,9 @@ function ComposerModelRunSelectorImpl({
         visibleRunProfileOptions.find((option) => option.value === visibleRunProfileValue)
           ?.labelKey ?? 'chat.composerRunProfile_auto'
       )
-    : (selectedReasoningLabel ?? t('chat.composerRunProfile_auto'))
+    : (selectedReasoningLabel ??
+      modelRunSummary?.secondaryLabel ??
+      t('chat.composerRunProfile_auto'))
   const modelMenuCapabilityControls = capabilityControls.filter(
     (control) => control.placement === 'model-menu'
   )
@@ -333,11 +341,19 @@ function ComposerModelRunSelectorImpl({
               </div>
             )}
 
-            {!!modelSelector && (
-              <Text className={styles.composerModelRunMenuHeader}>
-                {t('chat.composerModelSection')}
-              </Text>
-            )}
+            {!!modelSelector &&
+              // 段头文案与说明气泡都由控件自报（外部执行体的目录来源要说清楚是谁给的）；
+              // 只在宿主没给说明时退回包内的纯段头，不替它编一句「模型来自哪里」。
+              (modelSelector.hint ? (
+                <MenuSectionHeader
+                  label={modelSelector.label || t('chat.composerModelSection')}
+                  hint={modelSelector.hint}
+                />
+              ) : (
+                <Text className={styles.composerModelRunMenuHeader}>
+                  {modelSelector.label || t('chat.composerModelSection')}
+                </Text>
+              ))}
 
             {modelSelector
               ? modelSelector.providers.map((providerOption) => {

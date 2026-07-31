@@ -98,6 +98,8 @@ export interface ComposerActiveChipsBarProps {
   planModeActive: boolean
   proposalModeActive: boolean
   goalModeActive: boolean
+  /** 目标模式 chip 的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。 */
+  goalModeLabel?: string
   capabilityControls?: readonly ChatComposerCapabilityControl[]
   onClearPlanMode: () => void
   onClearProposalMode: () => void
@@ -127,6 +129,7 @@ function ComposerActiveChipsBarInner({
   planModeActive,
   proposalModeActive,
   goalModeActive,
+  goalModeLabel,
   capabilityControls = [],
   onClearPlanMode,
   onClearProposalMode,
@@ -198,12 +201,12 @@ function ComposerActiveChipsBarInner({
                   key="goal-mode"
                   className={resolveComposerFunctionBarChipClassName(slot)}
                   chipDataPluginId="goal-mode"
-                  title={t('chat.composerGoalMode')}
-                  label={t('chat.composerGoalMode')}
+                  title={goalModeLabel ?? t('chat.composerGoalMode')}
+                  label={goalModeLabel ?? t('chat.composerGoalMode')}
                   icon={<TargetIcon size={12} weight="bold" />}
                   disabled={disabled}
                   onRemove={onClearGoalMode}
-                  removeAriaLabel={t('chat.composerGoalMode')}
+                  removeAriaLabel={goalModeLabel ?? t('chat.composerGoalMode')}
                 />,
               ]
             : []),

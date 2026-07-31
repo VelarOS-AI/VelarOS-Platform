@@ -21,6 +21,7 @@ export type {
 export type {
   ChatComposerControl,
   ChatComposerInputControl,
+  ChatComposerModelRunSummary,
   ChatComposerModelSelectorControl,
   ChatComposerProviderModelSelectOption,
   ChatComposerReasoningControl,
@@ -34,6 +35,7 @@ export type {
   ChatInputExecutionControl,
   ChatInputFeaturesControl,
   ChatInputFieldControl,
+  ChatInputGoalModeCopy,
   ChatInputQueueControl,
   ChatInputStreamingControl,
   ChatInputSuggestionControl,

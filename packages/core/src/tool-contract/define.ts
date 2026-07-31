@@ -111,6 +111,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
     exposure: input.exposure,
     hideWhenUnavailable: input.hideWhenUnavailable,
     isAvailable: input.isAvailable,
+    unavailableReason: input.unavailableReason,
     isConcurrencySafe: input.isConcurrencySafe,
     execute: input.execute,
   }
@@ -186,6 +187,7 @@ function defineToolRuntimeSpec<
     outputInline: input.outputInline,
     hideWhenUnavailable: input.hideWhenUnavailable,
     isAvailable: input.isAvailable,
+    unavailableReason: input.unavailableReason,
     isConcurrencySafe: input.isConcurrencySafe,
     execute: input.execute,
   }

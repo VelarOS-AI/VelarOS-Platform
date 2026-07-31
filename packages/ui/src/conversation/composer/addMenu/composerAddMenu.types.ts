@@ -1,4 +1,5 @@
 import type { ConversationMessageKey as MessageKey } from '../../i18n'
+import type { ChatInputGoalModeCopy } from '../ChatInput'
 import type {
   ChatInputManualTestPromptOption,
   ChatInputPromptFeatureGroupOption,
@@ -44,6 +45,8 @@ export interface ComposerAddMenuFeaturesProps {
   updateWorkbenchEditorControl?: (enabled: boolean) => void
   canToggleGoalMode: boolean
   goalModeActive: boolean
+  /** 目标模式开关的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。 */
+  goalModeCopy?: ChatInputGoalModeCopy
   updateGoalMode: (enabled: boolean) => void
   availableSkills: ChatInputSkillOption[]
   quickPrompts: ChatInputManualTestPromptOption[]

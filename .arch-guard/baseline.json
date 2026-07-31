@@ -2006,13 +2006,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "41a31af9d08aef70",
-      "message": "packages/game/src/core/editor.ts:220: \"Array.isArray(value)\" — use isArray(value).",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
       "fingerprint": "43253b3b6471b72a",
       "message": "packages/model/src/PromptCacheModelOptions.ts:215: \"Array.isArray(prompt)\" — use isArray(prompt).",
       "file": "packages/model/src/PromptCacheModelOptions.ts"
@@ -5380,13 +5373,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "2885ffc348de0358",
-      "message": "packages/game/src/core/editor.ts:364: \"next === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "28c2cef77b4d03a1",
       "message": "packages/kernel-serve/src/daemon/internal/in-process-transport.ts:190: \"result === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/kernel-serve/src/daemon/internal/in-process-transport.ts"
@@ -5467,13 +5453,6 @@
       "fingerprint": "32dd623d73bdbc44",
       "message": "packages/kernel-serve/src/updater/KernelUpdater.ts:303: \"local !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/kernel-serve/src/updater/KernelUpdater.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "35e9b5c17b955c19",
-      "message": "packages/game/src/core/editor.ts:725: \"operation.entityId !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -5737,13 +5716,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "63a7c3764598ddf4",
-      "message": "packages/game/src/core/editor.ts:714: \"next === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "63cb2c244d4b081e",
       "message": "packages/workspace/src/kernel-module.ts:173: \"options.workspace === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/workspace/src/kernel-module.ts"
@@ -5891,13 +5863,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "7721b86840310341",
-      "message": "packages/game/src/core/editor.ts:774: \"operation.entityId !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "77fccf30e15d9b08",
       "message": "packages/core/src/kernel/host/sidecar-bridge.ts:438: \"known[operation] !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/core/src/kernel/host/sidecar-bridge.ts"
@@ -5971,13 +5936,6 @@
       "fingerprint": "83fdf7cd9240b103",
       "message": "packages/core/src/kernel/host/KernelModuleHost.ts:490: \"invalid === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/core/src/kernel/host/KernelModuleHost.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "84c969d0862e2c21",
-      "message": "packages/game/src/core/editor.ts:632: \"operation.from === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -6339,13 +6297,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "c53833fcaed46423",
-      "message": "packages/game/src/core/editor.ts:633: \"operation.components === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "c556992efe0161ad",
       "message": "packages/core/src/kernel/host/KernelModuleHost.ts:633: \"record.error === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/core/src/kernel/host/KernelModuleHost.ts"
@@ -6486,13 +6437,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "db9d9f603cd1a446",
-      "message": "packages/game/src/core/editor.ts:171: \"expectedDirectory !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "dcfaf6334ec56d41",
       "message": "packages/game/src/runtime/phaser-projection.ts:620: \"x !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/game/src/runtime/phaser-projection.ts"
@@ -6594,13 +6538,6 @@
       "fingerprint": "f2780a1a8d6e3f5f",
       "message": "packages/memory/src/adapter-kernel/kernel-module.ts:237: \"scope !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/adapter-kernel/kernel-module.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "f31d23af145719a8",
-      "message": "packages/game/src/core/editor.ts:736: \"next !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -7137,13 +7074,6 @@
     {
       "checkId": "code-style/prefer-double-bang-over-nullish-false",
       "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
-      "fingerprint": "10b0afda26add6c8",
-      "message": "packages/game/src/core/editor.ts:383: \"request.dryRun ?? false\" — `?? false` 作 boolean 归一时请改为 `!!request.dryRun`（可 `arch-guard run --fix`）。",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/prefer-double-bang-over-nullish-false",
-      "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
       "fingerprint": "18f63fcb90ac1d6d",
       "message": "packages/core/src/kernel/host/state-store.ts:31: \"this.namespaces.get(namespace)?.delete(key) ?? false\" — `?? false` 作 boolean 归一时请改为 `!!this.namespaces.get(namespace)?.delete(key)`（可 `arch-guard run --fix`）。",
       "file": "packages/core/src/kernel/host/state-store.ts"
@@ -7406,13 +7336,6 @@
       "fingerprint": "183dfed09051342f",
       "message": "packages/core/src/kernel/runtime/identity-registry.ts:31: \"value.trim().length > 0\" checks emptiness through .length. Prefer **`!isBlank(base)`** (isBlank is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/core/src/kernel/runtime/identity-registry.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "1b10625087b921ab",
-      "message": "packages/ui/src/conversation/composer/ChatInput.tsx:539: \"filesRef.current.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/ui/src/conversation/composer/ChatInput.tsx"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -7812,13 +7735,6 @@
       "fingerprint": "71d892d7201cb618",
       "message": "packages/memory/src/memory-tree/v2/DreamRuns.ts:325: \"input.ops.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/DreamRuns.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "74db50487510cfb3",
-      "message": "packages/ui/src/conversation/composer/ChatInput.tsx:588: \"value.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/ui/src/conversation/composer/ChatInput.tsx"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -8306,23 +8222,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "dc85eb426d220ce9",
-      "message": "packages/game/src/tools/Tools.ts:320: \"validSteps.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/game/src/tools/Tools.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "e0d75ece006ee0eb",
       "message": "packages/core/src/kernel/runtime/KernelService.ts:460: \"type.trim().length === 0\" checks emptiness through .length. Prefer **`isBlank(base)`** (isBlank is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/core/src/kernel/runtime/KernelService.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "e1980640025f725f",
-      "message": "packages/game/src/core/editor.ts:371: \"changes.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -9058,13 +8960,6 @@
       "fingerprint": "c91cd1a0d2b98cab",
       "message": "packages/kernel-serve/src/daemon/rpc/server-frames.ts:52: \"typeof input === 'object' && input !== null && !Array.isArray(input)\" — 请用 `isPlainObject(input)` 收敛 isObject/!isArray 组合（可 `arch-guard run --fix`）。",
       "file": "packages/kernel-serve/src/daemon/rpc/server-frames.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
-      "ruleId": "code-style/prefer-is-plain-object-over-object-array-guard/prefer-is-plain-object",
-      "fingerprint": "fe524d2b67b3ba80",
-      "message": "packages/game/src/core/editor.ts:129: \"typeof value === 'object' && value !== null && !Array.isArray(value)\" — 请用 `isPlainObject(value)` 收敛 isObject/!isArray 组合（可 `arch-guard run --fix`）。",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
@@ -10189,13 +10084,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "5ffc2ad8d0612f5a",
-      "message": "packages/game/src/core/editor.ts:102: \"GameManifestDocument | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "607d4145e4334169",
       "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:78: \"StorageStepHooksV2 | undefined\" hand-writes a nullish type union. Use \"?\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
@@ -10360,13 +10248,6 @@
       "fingerprint": "7385508a02e55892",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:242: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "74b192927a141603",
-      "message": "packages/game/src/core/editor.ts:146: \"GameManifestDocument | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -11512,13 +11393,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "f29cb2fa77fc9eb0",
-      "message": "packages/game/src/core/editor.ts:40: \"GameReference<'prefab'> | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/core/editor.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "f494e39459480372",
       "message": "packages/system-tools/src/SystemContracts.ts:179: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/system-tools/src/SystemContracts.ts"
@@ -11991,13 +11865,6 @@
       "fingerprint": "cecbf330249b0f8e",
       "message": "packages/model/src/ThinkingDepthModelOptions.ts:143: \"level\" maps 3 outcomes through repeated if branches ('off', 'ultra'). Use switch for repeated explicit outcomes.",
       "file": "packages/model/src/ThinkingDepthModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "e42c4ed0561eb734",
-      "message": "packages/game/src/core/editor.ts:302: \"target\" maps 2 outcomes through repeated if branches ('project', 'assets'). Use switch for repeated explicit outcomes.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",

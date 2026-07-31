@@ -1,5 +1,6 @@
 import { type z } from 'zod'
 
+import { isEmpty } from '@velaros-ai/core'
 import {
   type AppliedAdjustment,
   buildAppliedAdjustments,
@@ -33,12 +34,66 @@ class GameToolStateError extends Error {
   }
 }
 
-function isGameProjectAvailable(context: GameToolContext): boolean {
-  return context.game.isProjectAvailable()
+/**
+ * 「这条会话接入了游戏能力」—— **六个工具共用的唯一可用性门**。
+ *
+ * 判据（别再往里合取运行态，这是 2026-08 第二次事故的判决）：宿主的 `ctx.game` 是**每一轮
+ * 只装配一次**的快照（`AgentRunner` 在轮开头调一次 `buildToolContext`）。把「工程已存在」或
+ * 「运行时已就绪」合进 `isAvailable`，后果是同一轮里模型刚用 `game_scene_edit` 把工程建出来，
+ * `game_run` 仍然整轮不在工具清单里，换页也过同一道门，于是「建完工程仍然跑不起来」。
+ * 更糟的是可用性在轮内翻转还会与轮规划快照的失效判据（注册指纹，不含运行态）打架。
+ *
+ * 所以前置条件一律在**执行期**给可执行错误（见 `requireProject` / `requireRunning`），
+ * 不由发现层隐身表达。真正该隐身的只有「用户没给工程根 / 扩展没启用」——那是用户动手的门，
+ * 此时宿主注入的是不可用的编辑器端口，本函数如实回假。
+ *
+ * 端口选编辑器，是因为它是宿主注入游戏能力时必给的那一格（缺它连自举都做不了）。
+ */
+function isGameSessionAvailable(context: GameToolContext): boolean {
+  return context.game.editor.isAvailable()
 }
 
-function isGameRuntimeAvailable(context: GameToolContext): boolean {
-  return isGameProjectAvailable(context) && context.game.runtime.isAvailable()
+/**
+ * 不可用时给发现层的原因 —— 这一档只剩「需要**用户**动手」，所以必须点名让用户做什么。
+ *
+ * 页表原来只有一句泛化的「工具注册存在，但当前运行态不可用。」，模型读到就判「此路不通」，
+ * 于是去搜别的工具或退回 show_widget 手搓（实测 8 次 tool_map、59 秒）。
+ */
+function gameSessionUnavailableReason(): string {
+  return '游戏能力未接入本会话：需要为该会话选一个工程根目录，并确认游戏 mod 已启用。这一步要用户在界面上完成，模型无法自行解除。'
+}
+
+/**
+ * 六个 game 工具一律**不隐身**（2026-08 真机事故的判决，别再改回 true）。
+ *
+ * 事故形态：全部 `hideWhenUnavailable: true` + 可用性合取 `isProjectAvailable()`，空工程根上
+ * 于是整族从发现层消失——模型在 game 空间连搜 8 次 `tool_map`（game / 3d / scene / cube /
+ * engine）零命中、耗时 59 秒，最后退回 `show_widget` 手搓 Three.js。
+ *
+ * 判据：`hideWhenUnavailable` 的正当用途是「需要**用户**动手才能获得的能力」（computer-control
+ * 要先装插件并授系统权限），隐身是为了不让模型对着自己解决不了的门空转。这里要动手的是模型
+ * 自己（先建工程），正解因此是**留在发现层 + 给可执行原因**：模型看到「game 工具在、缺一个
+ * 工程」，而不是得出「这个产品没有游戏能力」。
+ *
+ * 第二轮补齐（原来只做了一半）：留在发现层还不够——`isAvailable` 里合取「工程已存在」时，页表
+ * 给出的信号是「不可用 / 无下一步」，语义上等于「此路不通」。现在六个工具共用
+ * `isGameSessionAvailable` 这一道会话级门，工程前置改由执行期的 `requireProject` 给可执行
+ * 错误；剩下真正需要用户动手的那一档（没绑工程根 / 扩展没启用）经工具自己的
+ * `unavailableReason` 把原因带到页表上，而不是留一句泛化的「当前运行态不可用」。
+ */
+const GameToolHiddenWhenUnavailable = false
+
+/**
+ * 工程前置：缺工程清单时给**可执行**错误，而不是让工具从发现层消失。
+ *
+ * 错误正文必须包含自救动作（用哪个工具、传什么参数）：模型读到「不可用」只会去搜别的工具或
+ * 退回手搓，读到「先用 game_scene_edit(target='project') 建工程」才会自举。
+ */
+function requireProject(context: GameToolContext): void {
+  if (context.game.isProjectAvailable()) return
+  throw new GameToolStateError(
+    '工程根还没有 game.project.json：先调用 game_scene_edit(target="project", operations=[]) 建工程与资产清单，再重试本工具。'
+  )
 }
 
 function requireRunning(context: GameToolContext): void {
@@ -66,7 +121,9 @@ export const gameSceneEditTool = defineGameTool<
   ],
   usage: [
     'set_entity 是 upsert + merge patch；显式 null 清除字段，数组整体替换。',
-    '空 operations 是成功的 no-op，不会重写文件。',
+    '空 operations 是成功的 no-op，不会重写已有文件。',
+    '工程根还没有 game.project.json 时，用 target="project" 调用本工具即创建工程与资产清单'
+      + '（operations 可以为空）；建完再编场景。',
   ],
   examples: [
     {
@@ -96,13 +153,14 @@ export const gameSceneEditTool = defineGameTool<
   notes: [
     '写入由宿主提供的工程根受限、revision 原子文档端口完成。',
     '全部修改在写盘前重新解析并验证引用、继承与碰撞层。',
+    '空工程根上首次编辑会一并创建 game.project.json 与资产清单，之后 game_run 等工具才可用。',
   ],
   schema: GameSceneEditSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: GameManifestEditCapability,
-  hideWhenUnavailable: true,
-  isAvailable: (context) =>
-    isGameProjectAvailable(context) && context.game.editor.isAvailable(),
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
@@ -136,11 +194,13 @@ export const gameRunTool = defineGameTool<z.output<typeof GameRunSchema>>({
   schema: GameRunSchema,
   permissions: ['fs:read', 'process:exec', 'browser:control'],
   capabilities: GameRunCapability,
-  hideWhenUnavailable: true,
-  isAvailable: isGameRuntimeAvailable,
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
+    requireProject(context)
     const {
       appliedAdjustments: schemaAdjustments,
       ...request
@@ -172,8 +232,9 @@ export const gameStopTool = defineGameTool<z.output<typeof GameStopSchema>>({
   schema: GameStopSchema,
   permissions: ['process:exec'],
   capabilities: GameRunCapability,
-  hideWhenUnavailable: true,
-  isAvailable: isGameRuntimeAvailable,
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => false,
   execute: async ({ force }, context) => {
     context.abortSignal.throwIfAborted()
@@ -207,11 +268,13 @@ export const gameScreenshotTool = defineGameTool<
   schema: GameScreenshotSchema,
   permissions: ['browser:control', 'screen:capture', 'fs:write'],
   capabilities: GameScreenshotCapability,
-  hideWhenUnavailable: true,
-  isAvailable: isGameRuntimeAvailable,
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
+    requireProject(context)
     requireRunning(context)
     return context.game.runtime.screenshot(input)
   },
@@ -247,11 +310,13 @@ export const gameQueryStateTool = defineGameTool<
   schema: GameQueryStateSchema,
   permissions: ['browser:control'],
   capabilities: GameObserveCapability,
-  hideWhenUnavailable: true,
-  isAvailable: isGameRuntimeAvailable,
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
+    requireProject(context)
     requireRunning(context)
     return context.game.runtime.query(input as GameRuntimeQuery)
   },
@@ -292,11 +357,13 @@ export const gameInputTool = defineGameTool<z.output<typeof GameInputSchema>>({
   schema: GameInputSchema,
   permissions: ['browser:control', 'input:control'],
   capabilities: GameInputCapability,
-  hideWhenUnavailable: true,
-  isAvailable: isGameRuntimeAvailable,
+  hideWhenUnavailable: GameToolHiddenWhenUnavailable,
+  isAvailable: isGameSessionAvailable,
+  unavailableReason: gameSessionUnavailableReason,
   isConcurrencySafe: () => false,
   execute: async ({ steps, repeat, settleFrames, captureAfter }, context) => {
     context.abortSignal.throwIfAborted()
+    requireProject(context)
     requireRunning(context)
 
     const validSteps: GameInputStep[] = []
@@ -317,7 +384,7 @@ export const gameInputTool = defineGameTool<z.output<typeof GameInputSchema>>({
       }
     }
 
-    if (validSteps.length === 0) return {
+    if (isEmpty(validSteps)) return {
         appliedSteps: 0,
         droppedSteps,
         ...(captureAfter

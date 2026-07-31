@@ -134,9 +134,23 @@ export interface ChatInputQueueControl {
   onQueuedDraftRunNow?: (id: string) => void | Promise<void>
 }
 
+/** 目标模式开关的文案（外部执行体自报其原生机制时传；不传则用包内的「目标模式」）。 */
+export interface ChatInputGoalModeCopy {
+  label: string
+  hint: string
+}
+
 export interface ChatInputExecutionControl {
   goalMode?: boolean
   onGoalModeChange?: (enabled: boolean) => void
+  /**
+   * 开关的显示文案覆盖。
+   *
+   * 判据：外部执行体的「目标模式」是它自己的原生档（Claude Code 的 plan / Codex 的 thread goal，
+   * 两家本轮都只读），与 Velar 的「持续推进直到目标完成」语义相反。包内文案只描述 Velar 的机制，
+   * 所以由声明方给文案，包内**不替它编**——渲染错的那句比不渲染坏得多。
+   */
+  goalModeCopy?: ChatInputGoalModeCopy
 }
 
 export interface ChatInputFeaturesControl {
@@ -327,6 +341,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   const executionControl = control.execution
   const goalMode = !!executionControl?.goalMode
   const onGoalModeChange = executionControl?.onGoalModeChange
+  const goalModeCopy = executionControl?.goalModeCopy
   // 按「数据 vs 回调」拆成两组取用：features 域字段较多，混取会把状态与动作摊平成一大坨局部变量。
   const {
     browserElementSelections = EmptyBrowserElementSelections,
@@ -550,12 +565,15 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     setHighlightedFollowUpSuggestionIndex(NoNextStepSuggestionHighlightIndex)
   }, [followUpSuggestions])
 
+  // 附件从「有」变成「没有」时才收起下一步建议菜单；依赖表挂这个派生布尔而不是 files 身份，
+  // 宿主每帧重建 files 数组也不会让这条 effect 反复跑。
+  const hasAttachedFiles = !isEmpty(files)
   useEffect(() => {
-    if (!dismissFollowUpSuggestionsWhenFilesClear || files.length > 0) return
+    if (!dismissFollowUpSuggestionsWhenFilesClear || hasAttachedFiles) return
 
     setDismissFollowUpSuggestionsWhenFilesClear(false)
     dismissFollowUpSuggestionMenu()
-  }, [dismissFollowUpSuggestionsWhenFilesClear, files.length])
+  }, [dismissFollowUpSuggestionsWhenFilesClear, hasAttachedFiles])
 
   const completeFollowUpSuggestion = (suggestion: ChatSuggestionItem): void => {
     onSelectFollowUpSuggestion?.(suggestion.id)
@@ -585,7 +603,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
       highlightedFollowUpSuggestionIndex,
       visibleFollowUpSuggestions.length,
       followUpSuggestionMenuOpen,
-      value.length === 0,
+      isEmpty(value),
       onFilesChange ? files.length : 0
     )
     if (action.kind === 'ignore') return false
@@ -1033,6 +1051,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     updateWorkbenchEditorControl: handleWorkbenchEditorControlChange,
     canToggleGoalMode: !!onGoalModeChange,
     goalModeActive: goalMode,
+    goalModeCopy,
     updateGoalMode: handleGoalModeChange,
     canTogglePlugins: !!onPromptFeaturesChange,
     pluginOptions,
@@ -1145,6 +1164,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
             planModeActive={selectedPromptFeatures.has('plan')}
             proposalModeActive={selectedPromptFeatures.has('proposal')}
             goalModeActive={goalMode}
+            goalModeLabel={goalModeCopy?.label}
             onClearPlanMode={handleClearPlanMode}
             onClearProposalMode={handleClearProposalMode}
             onClearGoalMode={handleClearGoalMode}
@@ -1306,6 +1326,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                 planModeActive={selectedPromptFeatures.has('plan')}
                 proposalModeActive={selectedPromptFeatures.has('proposal')}
                 goalModeActive={goalMode}
+                goalModeLabel={goalModeCopy?.label}
                 onClearPlanMode={handleClearPlanMode}
                 onClearProposalMode={handleClearProposalMode}
                 onClearGoalMode={handleClearGoalMode}
