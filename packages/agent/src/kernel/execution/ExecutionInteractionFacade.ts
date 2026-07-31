@@ -1,4 +1,4 @@
-import { isEmpty,isPresent } from '@velaros-ai/core'
+import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ExecutionPendingInteractionKind,
@@ -155,11 +155,22 @@ class ExecutionInteractionFacade {
 
     // 卡结果必须进 decision.message:读卡结果决定语义的工具(如 proposal_review 要求
     // actionKind==='acknowledge' 才算批准)靠 readActionCardResults(decision.message) 解析。
-    // UI 自己把同一份 JSON 借道 rejectionMessage 传输;这里以结构化字段为真源统一序列化,
-    // headless 调用方(hook resolve_confirmation 带 cardResults)不必知道借道约定——
-    // 否则校验通过后卡结果被丢,approve 也会被这类工具判成退回。
+    // 这里以结构化的 `userActionCardResults` 为**唯一真源**统一序列化;UI 曾把同一份 JSON
+    // 借道 rejectionMessage 传输,那条历史约定已经删掉——留着只会让下游把一坨 JSON 当成
+    // 用户写的拒绝理由读。所有调用方(UI / headless 的 hook resolve_confirmation)现在都只
+    // 填结构化字段,不必知道任何借道约定;否则校验通过后卡结果被丢,approve 也会被这类工具
+    // 判成退回。
+    //
+    // `rejectionMessage` **一并进同一个信封**,不做二选一:两者都显式给的调用方原本会静默
+    // 丢掉拒绝理由(模型只收到一坨 JSON,永远不知道为什么被拒)。并存是安全的——解析端
+    // `readActionCardResults` 按 key 取 `userActionCardResults`,忽略信封里的未知键;而只给
+    // 理由不给卡结果的老路径仍走裸字符串,不把纯文本理由包成 JSON 增加下游解析负担。
     const message = !isEmpty(resultCardIds)
-      ? JSON.stringify({ userActionCardResults: request.userActionCardResults })
+      ? JSON.stringify({
+          userActionCardResults: request.userActionCardResults,
+          // undefined 会被 JSON.stringify 直接略过，所以缺席即不出现在信封里。
+          rejectionMessage: toOptional(request.rejectionMessage),
+        })
       : request.rejectionMessage
 
     return this.resolveConfirmation(execution.id, request.approved, message)

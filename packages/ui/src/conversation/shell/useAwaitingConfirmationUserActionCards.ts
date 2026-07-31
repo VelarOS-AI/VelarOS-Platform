@@ -81,8 +81,15 @@ export function useAwaitingConfirmationUserActionCards({
 
         if (allSettled) {
           const approved = results.every((entry) => entry.approved)
-          const message = JSON.stringify({ userActionCardResults: results })
-          onResolveConfirmation(approved, message, { userActionCardResults: results })
+          // 第二参数是**用户写的拒绝理由**，不是卡结果的运输通道。
+          //
+          // 这里曾经把 `JSON.stringify({ userActionCardResults })` 借道 rejectionMessage 传下去
+          // （内核当年只认 message 一条通路）。借道早已冗余——`resolveConfirmationForSourceSession`
+          // 现在以结构化的 `userActionCardResults` 为真源统一序列化信封；继续借道只会让下游把
+          // 「一坨 JSON」当成用户的理由读（proposal_review 的 feedback 就这么被写进过方案制品）。
+          // 卡片阶段的理由住在**每张卡自己的** `result.message` 里，整体理由本来就不存在，
+          // 所以这里正确的取值是缺席。
+          onResolveConfirmation(approved, undefined, { userActionCardResults: results })
         }
 
         return next
