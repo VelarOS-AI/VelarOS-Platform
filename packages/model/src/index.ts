@@ -75,7 +75,6 @@ export {
   type ProviderScriptRegistryPort,
   type ProviderScriptRuntimeMetadata,
 } from './ProviderScriptRegistryPort'
-export { readProviderCacheWriteInputTokens } from './ProviderStreamUsage'
 export {
   applyThinkingDepthProviderOptions,
   createThinkingDepthProviderOptions,

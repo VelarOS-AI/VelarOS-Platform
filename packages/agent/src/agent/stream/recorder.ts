@@ -235,25 +235,20 @@ class StreamDiagnosticRecorder {
       diagnostics.totalTokens,
       this.readNestedNumber(usage, ['totalTokens'])
     )
+    // 键名对齐 ai@6 LanguageModelUsage:细分键是单数 Token(inputTokenDetails/outputTokenDetails)。
+    // usage 由 asLanguageModelUsage 严格构造,表外键永不出现;顶层 reasoningTokens/cachedInputTokens 是废弃兼容位。
     diagnostics.reasoningTokens = this.maxNullableNumber(
       diagnostics.reasoningTokens,
-      this.readNestedNumber(usage, ['reasoningTokens']) ??
-        this.readNestedNumber(usage, ['outputTokensDetails', 'reasoningTokens']) ??
-        this.readNestedNumber(usage, ['completionTokensDetails', 'reasoningTokens'])
+      this.readNestedNumber(usage, ['outputTokenDetails', 'reasoningTokens']) ??
+        this.readNestedNumber(usage, ['reasoningTokens'])
     )
     diagnostics.visibleOutputTokens = this.deriveVisibleOutputTokens(
       diagnostics.outputTokens,
       diagnostics.reasoningTokens
     )
     const cacheReadInputTokens =
-      this.readNestedNumber(usage, ['cacheReadInputTokens']) ??
-      this.readNestedNumber(usage, ['cachedInputTokens']) ??
       this.readNestedNumber(usage, ['inputTokenDetails', 'cacheReadTokens']) ??
-      this.readNestedNumber(usage, ['inputTokensDetails', 'cacheReadTokens']) ??
-      this.readNestedNumber(usage, ['inputTokensDetails', 'cachedTokens']) ??
-      this.readNestedNumber(usage, ['promptTokenDetails', 'cacheReadTokens']) ??
-      this.readNestedNumber(usage, ['promptTokensDetails', 'cacheReadTokens']) ??
-      this.readNestedNumber(usage, ['promptTokensDetails', 'cachedTokens'])
+      this.readNestedNumber(usage, ['cachedInputTokens'])
     diagnostics.cacheReadInputTokens = this.maxNullableNumber(
       toNullable(diagnostics.cacheReadInputTokens),
       cacheReadInputTokens
@@ -264,11 +259,7 @@ class StreamDiagnosticRecorder {
     )
     diagnostics.cacheWriteInputTokens = this.maxNullableNumber(
       toNullable(diagnostics.cacheWriteInputTokens),
-      this.readNestedNumber(usage, ['cacheWriteInputTokens']) ??
-        this.readNestedNumber(usage, ['inputTokenDetails', 'cacheWriteTokens']) ??
-        this.readNestedNumber(usage, ['inputTokensDetails', 'cacheWriteTokens']) ??
-        this.readNestedNumber(usage, ['promptTokenDetails', 'cacheWriteTokens']) ??
-        this.readNestedNumber(usage, ['promptTokensDetails', 'cacheWriteTokens']) ??
+      this.readNestedNumber(usage, ['inputTokenDetails', 'cacheWriteTokens']) ??
         readProviderCacheWriteInputTokens(part)
     )
     diagnostics.costUsd = this.maxNullableNumber(
