@@ -36,6 +36,9 @@ import { type GameToolContext, GameToolNames, gameTools, type ToolGameApi } from
 export * from './mod.js'
 export * from './turn-context.js'
 export { GameProjectFileName }
+// 宿主舞台在「工程还没跑起来」时要如实说清工程长什么样，而领域解析不许在壳里复制一份。
+export type { GameProjectOverview, GameSceneOverview } from '../core/index.js'
+export { summarizeGameProject } from '../core/index.js'
 
 export interface GameCapabilityDescriptor {
   readonly id: 'game'

@@ -1,5 +1,6 @@
 import { isEmpty, isNotNull, isNull, isTrue, isUndefined } from '@velaros-ai/core'
 
+import { GameDefaultDevCommand, GameDefaultDevPort } from '../core/overview.js'
 import type {
   GameRunRequest,
   GameRunResult,
@@ -179,9 +180,9 @@ export class GameDevServerController {
     if (this.process) await this.stop(false)
 
     const server = this.project.dev.server
-    const requestedPort = server?.port ?? 5173
+    const requestedPort = server?.port ?? GameDefaultDevPort
     const process = await this.processHost.startApproved({
-      command: server?.command ?? 'bun run dev',
+      command: server?.command ?? GameDefaultDevCommand,
       cwd: this.projectRoot,
       requestedPort,
       permission: 'process:exec',

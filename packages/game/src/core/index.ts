@@ -9,6 +9,7 @@ export type GameSchemaChannel = typeof GameSchemaChannel
 export * from './editor.js'
 export * from './formatter.js'
 export * from './manifest-parser.js'
+export * from './overview.js'
 export * from './ports.js'
 export * from './references.js'
 export * from './resolver.js'
