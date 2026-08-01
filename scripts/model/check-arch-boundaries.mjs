@@ -16,15 +16,18 @@ const expected = {
   repository: 'git+https://github.com/VelarOS-AI/VelarOS-Model.git',
 }
 
-// VelarOS-Platform 单版本火车:仓根 version 是火车版本号,各包在首次里程碑发布前保留导入时的
-// 域版本。锁步对象因此从 rootManifest.version 改为 velaros.domainVersions.model(单源),
-// 火车推进时改这一处即可。
-const expectedPackageVersion =
-  rootManifest.velaros?.domainVersions?.model ?? rootManifest.version
+// 版本锁步已于 2026-08-02 丢弃:包版本各自独立走 semver(见 README「版本方案」与
+// scripts/release/releaseTopology.mjs 文件头的「两根轴」)。把 model 钉到某个仓库级版本
+// 只会让它没法自己发补丁。这里改锁**平台代**——「同属一代、互相兼容」才是本仓要担保的东西,
+// 具体版本号是 model 自己的事。一致性由 releaseTopology 不变量④对全部包统一核验,
+// 本域门保留一条同义断言,是因为域门刻意不共享代码(一域被改弱不连带放过其它域)。
+const expectedPlatform = rootManifest.velaros?.platform
 if (manifest.name !== expected.name) failures.push(`package name must be ${expected.name}`)
-if (manifest.version !== expectedPackageVersion) {
+if (!expectedPlatform) {
+  failures.push('root manifest must declare velaros.platform')
+} else if (manifest.velaros?.platform !== expectedPlatform) {
   failures.push(
-    `package version ${manifest.version} must match train domain version ${expectedPackageVersion}`,
+    `package platform generation ${manifest.velaros?.platform ?? 'missing'} must match root ${expectedPlatform}`,
   )
 }
 if (manifest.repository?.url !== expected.repository) {

@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/html-artifacts",
   "version": "0.1.4",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "A framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime.",
   "keywords": [
     "ai",

@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/workspace",
   "version": "1.2.6",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Standalone injectable Workspace capability for VelarOS products and agents.",
   "type": "module",
   "license": "MIT",

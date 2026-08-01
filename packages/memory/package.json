@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/memory",
   "version": "0.3.6",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
   "license": "UNLICENSED",
   "sideEffects": false,

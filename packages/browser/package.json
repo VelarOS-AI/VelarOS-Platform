@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/browser",
   "version": "0.2.6",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
   "license": "UNLICENSED",
   "author": "VelarOS",

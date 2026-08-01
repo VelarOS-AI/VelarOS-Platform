@@ -487,11 +487,14 @@ function scanReleaseIdentityBoundary() {
     {
       file: 'scripts/release/verify-release-ref.mjs',
       markers: [
-        'const expectedTag = `v${rootManifest.version}`',
+        // tag 方案 2026-08-02 从「只认 v<火车号>」扩成「整列 v<火车号> 或 单包 <名>@<版本>」,
+        // 判据随之从字面比对搬进 resolveReleaseSelection(单源)。核验的语义没减:仍要求
+        // 事件合法、ref 是 tag、ref 与 refName 互相印证、且 tag 能解析出确定的发布范围。
+        'resolveReleaseSelection(rootManifest, ordered, refName)',
         "!['push', 'workflow_dispatch'].includes(eventName)",
         "refType !== 'tag'",
-        'ref !== `refs/tags/${expectedTag}`',
-        'refName !== expectedTag',
+        'ref !== `refs/tags/${refName}`',
+        "selection.kind === 'unknown'",
       ],
     },
     {

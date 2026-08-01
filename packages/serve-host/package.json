@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/serve-host",
   "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Independent headless Velar Host composition root for Kernel clients and the VelarOS browser extension.",
   "license": "UNLICENSED",
   "type": "module",

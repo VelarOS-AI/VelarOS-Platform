@@ -25,7 +25,13 @@ on:
         default: ''
   push:
     tags:
+      # 整列火车
       - 'v*'
+      # 单包发布:<包名或目录名>@<版本>,如 agent-lab@0.1.0
+      - '*@*'
+      # 带 scope 的全名形态(@velaros-ai/agent-lab@0.1.0)。要单列一条:GitHub 的 tag 过滤里
+      # `*` 不跨 `/`,只写 '*@*' 匹配不到带 scope 的 tag,接受它却触发不了就是误导。
+      - '*/*@*'
 
 permissions:
   contents: read

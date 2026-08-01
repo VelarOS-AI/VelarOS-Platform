@@ -14,8 +14,10 @@
   ],
   "velaros": {
     "trainVersion": "0.6.0",
-    "trainNote": "根 version 是火车版本号;各包版本在首次里程碑发布前保留导入时的现值,见 README「版本方案」。",
+    "trainNote": "根 version 是火车版本号,只用来给整列发车的 tag 命名;各包版本独立走 semver,见 README「版本方案」。",
+    "//platform": "平台代:同一代内各包互相兼容,跨代才是整体破坏性升级。每个包在自己的 velaros.platform 里声明同一个值,随包发布,消费者装完也读得到;releaseTopology 的不变量④机械核对一致性。",
     "//domainPackages": "各域的包目录单源。域架构门(check:*-arch)据此把「包集合冻结」收敛到本域,新增包必须同时登记此处与该域的 owners 表。",
+    "platform": "0.6",
     "domainPackages": {
       "kernel": [
         "kernel-client",
@@ -57,19 +59,6 @@
       "evaluation": [
         "agent-lab"
       ]
-    },
-    "domainVersions": {
-      "kernel": "0.3.2",
-      "agent": "0.5.0",
-      "core": "0.3.2",
-      "model": "0.4.6",
-      "capabilities": "0.2.7",
-      "memory": "0.3.5",
-      "ui": "0.2.2",
-      "html-artifacts": "0.1.3",
-      "host": "0.1.0",
-      "surface": "0.1.0",
-      "evaluation": "0.1.0"
     }
   },
   "scripts": {
@@ -106,7 +95,8 @@
     "check:html-artifacts-package": "bun run --cwd packages/html-artifacts check:package-contract && bun run --cwd packages/html-artifacts check:dist",
     "check:workspace-arch": "bun run --cwd packages/workspace check:arch",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",
-    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:workspace-arch && bun run check:agent-lab-package",
+    "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:workspace-arch && bun run check:agent-lab-package && bun run check:platform-generation",
     "//release": "发布链只有一条(scripts/release/)。release:verify 是 CI 预检,读 GITHUB_* 环境变量,本地跑必失败——那是设计,不是坏了。release:dry-run 是本地验明:列发布计划、真打 tarball、走 bun publish --dry-run,不发布任何东西。真发布只由 release-packages.yml 在 tag 上触发,刻意不提供本地入口(发 18 个包不可逆)。",
     "release:verify": "node scripts/release/verify-release-ref.mjs",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",

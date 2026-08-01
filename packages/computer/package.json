@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/computer",
   "version": "0.2.6",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
   "license": "UNLICENSED",
   "author": "VelarOS",

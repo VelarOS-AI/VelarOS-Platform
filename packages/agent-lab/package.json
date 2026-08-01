@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/agent-lab",
   "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
   "license": "MIT",
   "sideEffects": false,

@@ -21,35 +21,40 @@
 
 import { resolve } from 'node:path'
 
-import { collectReleasePackages } from './releaseTopology.mjs'
+import { collectReleasePackages, resolveReleaseSelection } from './releaseTopology.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../..')
-const { rootManifest, ordered } = await collectReleasePackages(repoRoot)
+const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(repoRoot)
 const eventName = process.env.GITHUB_EVENT_NAME
 const ref = process.env.GITHUB_REF
 const refType = process.env.GITHUB_REF_TYPE
 const refName = process.env.GITHUB_REF_NAME
 const sourceSha = process.env.GITHUB_SHA
-const expectedTag = `v${rootManifest.version}`
+const selection = resolveReleaseSelection(rootManifest, ordered, refName)
 
 if (!sourceSha || !/^[a-f0-9]{40}$/u.test(sourceSha)) {
   throw new Error('GITHUB_SHA must identify the exact 40-character source commit')
 }
 
+// ref 与 refName 必须互相印证:两者都来自环境变量,只信其中一个等于把身份判据交给
+// 单一可伪造输入。tag 形态本身由 resolveReleaseSelection 判(整列 v<火车号> 或 <包>@<版本>)。
 if (
   !['push', 'workflow_dispatch'].includes(eventName)
   || refType !== 'tag'
-  || ref !== `refs/tags/${expectedTag}`
-  || refName !== expectedTag
+  || ref !== `refs/tags/${refName}`
+  || selection.kind === 'unknown'
 ) {
   throw new Error(
-    `Package releases require exact tag ${expectedTag}; received ${eventName ?? 'unknown'} ${ref ?? 'unknown'}`,
+    `Package releases require a tag naming what ships (${selection.reason ?? 'ref is not a tag'}); received ${eventName ?? 'unknown'} ${ref ?? 'unknown'}`,
   )
 }
 
 console.info(`✓ release source: ${sourceSha}`)
 console.info(`✓ release ref: ${ref}`)
-console.info(`✓ release contents: ${ordered.length} declared packages`)
-for (const item of ordered) {
+console.info(`✓ platform generation: ${platformGeneration}`)
+console.info(
+  `✓ release contents: ${selection.kind} — ${selection.packages.length} of ${ordered.length} declared packages`,
+)
+for (const item of selection.packages) {
   console.info(`  · ${item.manifest.name}@${item.manifest.version}`)
 }

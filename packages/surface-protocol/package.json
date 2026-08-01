@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/surface-protocol",
   "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Host-neutral wire contracts for provider-owned VelarOS Agent Surfaces.",
   "license": "UNLICENSED",
   "sideEffects": false,

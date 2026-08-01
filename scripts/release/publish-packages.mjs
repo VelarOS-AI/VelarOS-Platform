@@ -3,7 +3,7 @@
 //
 // 从哪读起:发布集合与顺序不在本文件里判——那是 releaseTopology.mjs(唯一事实来源)的活。
 // 本文件只负责三件事,顺序不可换:
-//   ① **身份**:把这批 tarball 绑死到一个精确的源码身份(HEAD SHA + GITHUB_SHA + refs/tags/v<火车号>)
+//   ① **身份**:把这批 tarball 绑死到一个精确的源码身份(HEAD SHA + GITHUB_SHA + 那个 tag 的 ref)
 //      与一棵干净的工作树;
 //   ② **打包并验明**:每个包 pack 出**恰好一个** tarball,记下 size + sha256,并断言构建产物真的进了包;
 //   ③ **发布那一份已验明的 tarball**(而不是让 registry 重新从工作树打包)。
@@ -22,13 +22,17 @@
 // model 独有的第三条(「包版本 == 仓根 version」)是并仓前的锁步假设,火车形态下不成立,
 // 处置理由见 releaseTopology.mjs 文件头。
 //
-// --only 的边界:火车默认整列发车,`--only <名字[,名字…]>` 只发其中几节。**它只做减法,不做豁免**——
-// releaseTopology 的全量校验(声明集 ↔ 磁盘、版本 ↔ bun.lock、拓扑序)照跑,身份四条前置一条不减,
-// 选取发生在校验之后。所以「只发一个包」拿到的仍是一趟验明过的火车,不是绕开火车的小路。
-// 为什么需要它:火车里绝大多数包版本没动,而 --tolerate-republish 会把「registry 上已有该版本」
-// 当成功放过(见 ③ 的注记)——于是一趟全量发车里真正落地的往往只有新包,日志却逐个报 published。
-// 新包单独发车时把范围写明,比让人从 18 行日志里猜哪一行是真的要诚实。
-// 被 --only 排除的包会逐个列进日志(不许静默收窄);名字写错直接红并列出可选值,不做模糊匹配。
+// 这趟发什么,有两个来源,**tag 优先**:
+//   · tag = `<包名或目录名>@<版本>` —— 单包发布,范围由 tag 钉死(见 releaseTopology 的
+//     resolveReleaseSelection);此时传 --only 直接红,开关不许推翻身份。
+//   · tag = `v<火车号>` —— 整列发车,可再用 `--only <名字[,名字…]>` 手动收窄(workflow_dispatch)。
+// --only **只做减法,不做豁免**:releaseTopology 的全量校验(声明集 ↔ 磁盘、版本 ↔ bun.lock、
+// 平台代、拓扑序)照跑,身份四条前置一条不减,选取发生在校验之后。所以「只发一个包」拿到的
+// 仍是一趟验明过的火车,不是绕开火车的小路。
+// 为什么需要收窄:火车里绝大多数包版本没动,而 --tolerate-republish 会把「registry 上已有该
+// 版本」当成功放过(见 ③ 的注记)——于是一趟全量发车里真正落地的往往只有新包,日志却逐个报
+// published。把范围写明,比让人从十几行日志里猜哪一行是真的要诚实。
+// 被排除的包逐个列进日志(不许静默收窄);名字写错直接红并列出可选值,不做模糊匹配。
 //
 // dry-run 的边界:--dry-run 放行「干净工作树 / GITHUB_SHA / tag ref / NODE_AUTH_TOKEN」四条
 // **发布期**前置(七份旧脚本里干净工作树是无条件的,导致本地 dry-run 在有改动时永远跑不起来,
@@ -46,7 +50,11 @@ import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { collectReleasePackages, ReleaseRegistry } from './releaseTopology.mjs'
+import {
+  collectReleasePackages,
+  ReleaseRegistry,
+  resolveReleaseSelection,
+} from './releaseTopology.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dryRun = process.argv.includes('--dry-run')
@@ -102,10 +110,22 @@ const run = (command, args, cwd) => {
   }
 }
 
-// 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、拓扑序),再谈这趟发几节车厢。
-const { rootManifest, ordered } = await collectReleasePackages(root)
-const selected = selectPackages(ordered, readOnlySelectors(process.argv))
-const releaseTag = `v${rootManifest.version}`
+// 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、平台代、拓扑序),再谈这趟发几节车厢。
+const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(root)
+// 范围有两个来源,tag 优先:tag 是这次发布的身份,--only 只是 workflow_dispatch 手动收窄时用。
+// 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
+const tagSelection = resolveReleaseSelection(rootManifest, ordered, process.env.GITHUB_REF_NAME)
+const onlySelectors = readOnlySelectors(process.argv)
+if (tagSelection.kind === 'package' && onlySelectors.length > 0) {
+  throw new Error(
+    `--only cannot narrow a single-package tag (${tagSelection.tag}); the tag already names what ships`,
+  )
+}
+const selected =
+  tagSelection.kind === 'package'
+    ? tagSelection.packages
+    : selectPackages(ordered, onlySelectors)
+const releaseTag = tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : tagSelection.tag
 const expectedRef = `refs/tags/${releaseTag}`
 
 // —— ① 身份 ——
@@ -145,6 +165,7 @@ if (!dryRun && skipBuild) {
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
 console.info(`registry: ${ReleaseRegistry}`)
+console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
 console.info(`publish order (${selected.length} packages, dependencies first):`)
 selected.forEach((item, index) => {
@@ -152,10 +173,11 @@ selected.forEach((item, index) => {
     `  ${String(index + 1).padStart(2, ' ')}. ${item.manifest.name}@${item.manifest.version}  (packages/${item.directoryName}, access=${item.manifest.publishConfig.access})`,
   )
 })
-// 收窄了就得说清收窄掉什么:静默的范围缩减看起来和「全都发了」一模一样。
+// 收窄了就得说清收窄掉什么、以及被谁收窄:静默的范围缩减看起来和「全都发了」一模一样。
+const narrowedBy = tagSelection.kind === 'package' ? `tag ${tagSelection.tag}` : '--only'
 for (const item of ordered) {
   if (selected.includes(item)) continue
-  console.info(`  - skipped by --only: ${item.manifest.name}@${item.manifest.version}`)
+  console.info(`  - skipped by ${narrowedBy}: ${item.manifest.name}@${item.manifest.version}`)
 }
 if (workingTreeStatus && dryRun) {
   console.warn(

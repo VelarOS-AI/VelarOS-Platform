@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/game",
   "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Renderer-neutral game domain contracts, Phaser runtime projection, agent tools, and host composition behind explicit subpaths.",
   "license": "UNLICENSED",
   "author": "VelarOS",

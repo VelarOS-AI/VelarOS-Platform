@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/kernel-client",
   "version": "0.3.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Product-facing client for discovering, connecting to, and calling the shared VelarOS Kernel over its local RPC endpoint.",
   "license": "UNLICENSED",
   "sideEffects": false,

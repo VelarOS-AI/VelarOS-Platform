@@ -11,13 +11,23 @@
 //      并集双向核对——磁盘上多出的可发布包(未登记)红,登记了却不可发布的包(悄悄掉队)也红。
 //   ② manifest 版本必须等于 bun.lock 里该 workspace 的版本(lock 陈旧即红)。
 //   ③ 顺序 = 依赖拓扑,被依赖者先发。
+//   ④ **每个包声明的平台代必须与仓根一致**(velaros.platform)——见下「两根轴」。
+//
+// 两根轴(2026-08-02 定,取代原「首次里程碑统一对齐」计划):
+//   · **包版本**各自独立走 semver。破坏性变更升自己的位(0.x 下是 minor,1.x 下是 major),
+//     消费者按包升级,互不牵连。这也是现实:workspace 已经在 1.2.6,core 还在 0.3.x。
+//   · **平台代 `velaros.platform`** 表达「这批包属于同一代、互相兼容」。跨代才是整体破坏性
+//     升级,应用方看这一个数就知道要不要整批动。它随包发布(写在各包 manifest 里),
+//     所以装到消费者那边也读得到,不是只存在于本仓的约定。
+// 为什么不把「代」塞进包版本号:那样任何一个包的破坏性变更都会强推全部包跳代——代号变成
+// 「任意包破坏性变更」的公倍数,对没变的包是假信号;而且每个包只剩 patch 位一个自由度,
+// 没法表达「加了功能但没 break」。两根轴各管一件事,谁也不替谁说话。
 //
 // 为什么**不**校验「各包版本 == 仓根 version」:并仓前 memory / ui 的 verify-release 与 model 的
 // publish 都带这条锁步断言(源仓里仓根 version 就是那个包的版本)。火车形态下仓根 version 是
-// 火车号(0.6.0)、各包保留导入时现值(0.1.0–1.2.6,登记在 velaros.domainVersions),README
-// 「版本方案」写明统一推进留到首次里程碑。原样搬过来会让任何 tag 都发不出去;强行把 18 个可发布包
-// 对齐到 0.6.0 又会打断 Desktop 已声明的 ^0.5.0 / ^0.3.2 等 range。锁步断言的真实目的是
-// 不变量 ①,故以 ① 承接、锁步本身丢弃。改动这里前先读 README「版本方案」。
+// 火车号,各包版本独立。原样搬过来会让任何 tag 都发不出去;强行把可发布包对齐到 0.6.0
+// 又会打断 Desktop 已声明的 ^0.5.0 / ^1.2.5 等 range。锁步断言的真实目的由 ① 与 ④ 承接,
+// 锁步本身丢弃。改动这里前先读 README「版本方案」。
 
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
@@ -100,6 +110,10 @@ const orderByDependencies = (packages) => {
  */
 export async function collectReleasePackages(root) {
   const rootManifest = await readJson(path.join(root, 'package.json'))
+  const platformGeneration = rootManifest.velaros?.platform
+  if (!platformGeneration) {
+    throw new Error('Root manifest is missing velaros.platform; the release generation must be declared')
+  }
   const declared = declaredPackageDirectories(rootManifest)
   const lockfile = await readJsonc(path.join(root, 'bun.lock'))
   const packagesRoot = path.join(root, 'packages')
@@ -136,6 +150,18 @@ export async function collectReleasePackages(root) {
         `packages/${directoryName} is publishable but not registered in velaros.domainPackages; register it or mark the package private`,
       )
     }
+    // 不变量 ④:代必须写明且与仓根一致。缺失单独报,因为新包漏写是最常见的一种——
+    // 错误文案要直接给出该写什么,而不是丢一句「不一致」让人回来翻仓根。
+    if (!manifest.velaros?.platform) {
+      throw new Error(
+        `${manifest.name} must declare velaros.platform (expected "${platformGeneration}"); it ships with the package so consumers can read which generation they installed`,
+      )
+    }
+    if (manifest.velaros.platform !== platformGeneration) {
+      throw new Error(
+        `${manifest.name} declares platform generation ${manifest.velaros.platform}, but the repo root declares ${platformGeneration}; a release train is one generation`,
+      )
+    }
     packages.push({ directoryName, directory, manifest })
   }
 
@@ -163,5 +189,55 @@ export async function collectReleasePackages(root) {
     }
   }
 
-  return { rootManifest, ordered: orderByDependencies(packages) }
+  return { rootManifest, platformGeneration, ordered: orderByDependencies(packages) }
+}
+
+/**
+ * 把一个 git tag 解析成「这次要发什么」。两种合法形态,别的一律 unknown:
+ *   · `v<仓根 version>`     —— 整列火车,发全部已声明的包;
+ *   · `<包名或目录名>@<版本>` —— 单包发布,且 tag 里的版本必须与该包 manifest 逐字相同。
+ *
+ * 为什么单包 tag 要带版本:tag 是这次发布的**身份**,不是一个开关。写死版本以后,
+ * 「tag 指向的提交里那个包是什么版本」和「tag 自己说发什么版本」对不上就当场红,
+ * 而不是发完才发现发的是上一版。@ 之前允许写全名(@velaros-ai/agent-lab)或目录名(agent-lab)。
+ *
+ * 调用方只信 kind:'train' / 'package';unknown 一律拒发,不做「大概是想发这个吧」的补全。
+ */
+export function resolveReleaseSelection(rootManifest, ordered, refName) {
+  const trainTag = `v${rootManifest.version}`
+  if (refName === trainTag) {
+    return { kind: 'train', tag: trainTag, packages: ordered }
+  }
+  const separator = refName?.lastIndexOf('@') ?? -1
+  // lastIndexOf 而不是 split('@'):全名本身以 @ 开头(@velaros-ai/agent-lab@0.1.0)。
+  if (refName && separator > 0) {
+    const identifier = refName.slice(0, separator)
+    const version = refName.slice(separator + 1)
+    const match = ordered.find(
+      (item) => item.manifest.name === identifier || item.directoryName === identifier,
+    )
+    if (match && match.manifest.version === version) {
+      return { kind: 'package', tag: refName, packages: [match] }
+    }
+    if (match) {
+      return {
+        kind: 'unknown',
+        tag: refName,
+        packages: [],
+        reason: `tag says ${identifier}@${version} but packages/${match.directoryName} declares ${match.manifest.version}`,
+      }
+    }
+    return {
+      kind: 'unknown',
+      tag: refName,
+      packages: [],
+      reason: `${identifier} matches no declared release package`,
+    }
+  }
+  return {
+    kind: 'unknown',
+    tag: refName ?? '',
+    packages: [],
+    reason: `expected ${trainTag} (full train) or <package>@<version> (single package)`,
+  }
 }

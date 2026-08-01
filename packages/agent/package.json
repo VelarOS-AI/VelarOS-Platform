@@ -1,6 +1,9 @@
 {
   "name": "@velaros-ai/agent",
   "version": "0.5.0",
+  "velaros": {
+    "platform": "0.6"
+  },
   "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
   "license": "UNLICENSED",
   "sideEffects": false,
