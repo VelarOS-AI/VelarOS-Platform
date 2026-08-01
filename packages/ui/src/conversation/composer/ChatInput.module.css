@@ -467,10 +467,24 @@
   background: var(--status-emerald-soft);
 }
 
+/**
+ * 摘要按钮：**按可用宽度取宽，窄了才省略**——不再钉死 178px / 7rem / 4.5rem 三层硬上限。
+ *
+ * 判据（真机截图）：输入区宽约 1150px、右侧一大片空白，按钮却在 178px 处就打省略号，
+ * 两格文案分别停在 7rem / 4.5rem——codex 会话渲染成「Codex / GP…」+「跟随 Co…」。
+ * 「跟随 Codex 的配置」这一档的语义（本轮整格不发、由引擎读自己的配置）刚在协议层做对，
+ * 又被这三行藏成一个读不出意思的词头。
+ *
+ * 固定上限当初想表达的是「别把右边的发送键挤掉」，但那件事是 flex 收缩的职责：
+ * `flex: 0 1 auto` + `min-width: 0` 让按钮按内容取宽、空间不够时逐级省略，
+ * 上限由 `.toolbarLeft` 的实际可用宽度（见其规则）给出，而不是一个与容器无关的常数。
+ * 两格文案自身带 `overflow: hidden`（`.velar-text-truncate`），因此 flex 自动最小尺寸即 0，
+ * 收缩时按各自内容长度成比例让位，不需要再各钉一个 rem 上限。
+ */
 .composerModelRunSelectorButton {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 178px;
+  max-width: 100%;
   gap: 5px;
   padding-inline: 8px;
 }
@@ -482,12 +496,9 @@
   transform: none;
 }
 
-.composerModelRunSelectorModelLabel {
-  max-width: 7rem;
-}
-
+.composerModelRunSelectorModelLabel,
 .composerModelRunSelectorRunLabel {
-  max-width: 4.5rem;
+  min-width: 0;
 }
 
 .composerActiveChip {
@@ -738,12 +749,23 @@
   padding-bottom: 6px;
 }
 
+/**
+ * 左组吃掉剩余宽度、右组恒不收缩。
+ *
+ * 这一对是摘要按钮 `max-width: 100%` 的落点：左组此前是 shrink-to-fit，百分比上限没有确定的
+ * 参照宽度，于是只能靠常数 max-width 兜底（真机上把「跟随 Codex 的配置」截成「跟随 Co…」）。
+ * 现在左组有确定的可用宽度，按钮与活动芯片都按它收缩；右组（语音 / 发送）恒 `0 0 auto`，
+ * 无论左边多长都不会被挤掉——那正是原先那三个常数想保住的东西。
+ */
 .toolbarLeft {
   @apply flex items-center gap-2;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .toolbarRight {
   @apply flex items-center gap-2;
+  flex: 0 0 auto;
 }
 
 .toolbarLeft :global(.velar-button-size-icon),

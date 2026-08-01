@@ -196,6 +196,16 @@ function requireDocument(
   })
 }
 
+/**
+ * 宿主文档端口回来的路径必须仍是工程内相对路径。
+ *
+ * `expectedDirectory` 只对 **`list(directory)` 的结果**成立——那是「我问的是这个目录，你不能
+ * 答别的目录」。**读一条清单时不许带它**（判决，真机踩过）：那条路径是工程清单自己声明的、
+ * 已经过 `GameProjectRelativePathSchema` 收窄，宿主只是原样回声。给读路径加目录前缀等于凭空
+ * 规定「场景必须放 `scenes/`、资产清单必须放 `assets/`」，而这条规定既没写进 schema 也没写进
+ * 任何提示词；模型把场景建在 `assets/scenes/main.scene.json` 就会撞上一句
+ * 「宿主返回了工程边界外的清单路径」——既冤枉（路径就在工程内）又无从下手（说的是宿主的错）。
+ */
 function assertProjectDocumentPath(path: string, expectedDirectory?: string): void {
   if (
     !GameProjectRelativePathSchema.safeParse(path).success ||
@@ -593,7 +603,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
           },
         )
       }
-      assertProjectDocumentPath(document.path, 'scenes')
+      assertProjectDocumentPath(document.path)
       if (document.path !== scenePath) {
         throw new GameManifestError(
           'INVALID_MANIFEST',
@@ -623,7 +633,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
         },
       )
     }
-    assertProjectDocumentPath(document.path, 'assets')
+    assertProjectDocumentPath(document.path)
     if (document.path !== assetsPath) {
       throw new GameManifestError(
         'INVALID_MANIFEST',
