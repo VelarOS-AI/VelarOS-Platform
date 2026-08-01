@@ -6,6 +6,12 @@
       "@catalog/*": [
         "./component-library/src/componentLibrary/*"
       ],
+      "@velaros-ai/agent-lab": [
+        "./packages/agent-lab/src/index.ts"
+      ],
+      "@velaros-ai/agent-lab/*": [
+        "./packages/agent-lab/src/*"
+      ],
       "@velaros-ai/agent": [
         "./packages/agent/src/index.ts"
       ],

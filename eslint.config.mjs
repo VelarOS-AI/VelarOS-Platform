@@ -46,6 +46,11 @@ const Domains = [
     config: agentConfig,
     globs: ['packages/agent/**'],
   },
+  {
+    name: 'evaluation',
+    config: agentConfig,
+    globs: ['packages/agent-lab/**'],
+  },
   { name: 'core', config: coreConfig, globs: ['packages/core/**'] },
   {
     name: 'model',

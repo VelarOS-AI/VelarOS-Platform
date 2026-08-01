@@ -39,6 +39,10 @@ const platformCodeStyle = definePlugin({
       runtimeRoots: ['packages/'],
       // React 面：JSX 类规则只扫这里。
       frontendRoots: ['packages/ui/src/', 'packages/html-artifacts/src/'],
+      // Agent Lab 是可独立消费的 host-neutral 基础设施包，刻意不依赖 @velaros-ai/core 的
+      // 全局守卫 / 缺席值 / Log 扩展；portable library 档仍由 TypeScript、ESLint、包架构门和
+      // 自身测试约束，不能套用要求 Core helper 的产品运行时代码风格规则。
+      portableLibraryPrefixes: ['packages/agent-lab/'],
       // 语义扩展 / 守卫 / 缺席值 helper 的实现本体不能套用自身 autofix。
       skipPatterns: [
         '^packages/core/src/typeGuards\\.ts$',

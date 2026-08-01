@@ -32,7 +32,7 @@ tests/<domain>/            各域根级测试树
 docs/<domain>/             各域文档;**总入口 [docs/readme.md](docs/readme.md)**
 ```
 
-`workspaces` = `["packages/*"]`,共 **15 个平台包**(下表)。
+`workspaces` = `["packages/*"]`,共 **16 个平台包**(下表)。
 
 **为什么平铺而不是 `packages/<domain>/<pkg>`**:包内 tsconfig 大量写 `baseUrl: "../.."` +
 `paths: ["./packages/<pkg>/src/index.ts"]`,package.json 构建脚本写 `../../scripts/…`。平铺让这些
@@ -60,6 +60,7 @@ capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: 
 | capabilities | `@velaros-ai/computer`(`/runtime` `/tools`) | 0.2.6 | `packages/computer` |
 | capabilities | `@velaros-ai/system-tools` | 0.2.8 | `packages/system-tools` |
 | capabilities | `@velaros-ai/office-tools` | 0.2.7 | `packages/office-tools` |
+| evaluation | `@velaros-ai/agent-lab` | 0.1.0 | `packages/agent-lab` |
 | capabilities | `@velaros-ai/cli` | 0.2.10 | `packages/cli` |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | `packages/memory` |
 | ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | `packages/ui` |

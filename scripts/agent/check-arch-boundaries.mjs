@@ -543,9 +543,11 @@ function loadBaseline() {
 // VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
 // 「Agent 域的包集合」。域包清单单源 = 仓根 package.json 的 velaros.domainPackages.agent;
 // 两处必须一致,新增 Agent 包要同时登记 KernelClusterPackages 与该清单,漏登即红。
-const DomainPackageDirectories =
+const DomainPackages =
   JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8')).velaros
-    ?.domainPackages?.agent ?? []
+    ?.domainPackages ?? {}
+const DomainPackageDirectories = DomainPackages.agent ?? []
+const RegisteredPlatformPackages = new Set(Object.values(DomainPackages).flat())
 
 function scanAgentPackageSet() {
   const owned = new Set(KernelClusterPackages.map((path) => path.split('/').at(-1)))
@@ -553,8 +555,13 @@ function scanAgentPackageSet() {
   const actual = readdirSync(resolve(RepoRoot, 'packages'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    // 只看本域:已登记的,加上任何未登记却自称 agent-* 的偷渡包。
-    .filter((name) => registered.has(name) || /^agent-/u.test(name))
+    // 只看本域:已登记的,加上任何**未登记进其它平台域**却自称 agent-* 的偷渡包。
+    // agent-lab 属 evaluation 域，由自己的 host-independent 架构门负责，不得被 Agent 域抢归属。
+    .filter(
+      (name) =>
+        registered.has(name) ||
+        (/^agent-/u.test(name) && !RegisteredPlatformPackages.has(name)),
+    )
     .sort()
   const unregistered = [...owned].filter((name) => !registered.has(name))
   const unexpected = [

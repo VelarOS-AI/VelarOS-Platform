@@ -5,6 +5,7 @@
     "": {
       "name": "velaros-platform",
       "dependencies": {
+        "@velaros-ai/agent-lab": "workspace:*",
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/browser": "workspace:*",
         "@velaros-ai/cli": "workspace:*",
@@ -52,6 +53,20 @@
         "tailwindcss": "^4.3.3",
         "typescript": "^5.7.0",
         "vite": "^8.1.5",
+      },
+    },
+    "packages/agent-lab": {
+      "name": "@velaros-ai/agent-lab",
+      "version": "0.1.0",
+      "bin": {
+        "velaros-agent-lab": "./dist/cli.js",
+      },
+      "dependencies": {
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
       },
     },
     "packages/agent": {

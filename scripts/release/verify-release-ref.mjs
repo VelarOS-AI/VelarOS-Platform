@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 发布身份预检:在跑质量门与真发布之前,先把「这次发布是什么」钉死。
 //
-// 挡什么:发布 15 个包到 GitHub Packages 不可逆(同一版本号不能重发成别的内容)。所以在花掉
+// 挡什么:发布 16 个包到 GitHub Packages 不可逆(同一版本号不能重发成别的内容)。所以在花掉
 // build + check 的时间之前,先在这里失败掉三类问题:
 //   ① 发布内容——collectReleasePackages 核对发布集合与 velaros.domainPackages、以及各包
 //      manifest 版本与 bun.lock 是否一致(见 releaseTopology.mjs 的不变量 ①②);

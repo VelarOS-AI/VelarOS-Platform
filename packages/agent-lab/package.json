@@ -1,0 +1,84 @@
+{
+  "name": "@velaros-ai/agent-lab",
+  "version": "0.1.0",
+  "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
+  "license": "MIT",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "velaros-agent-lab": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "import": "./dist/protocol/index.js"
+    },
+    "./runner": {
+      "types": "./dist/runner/index.d.ts",
+      "import": "./dist/runner/index.js"
+    },
+    "./detect": {
+      "types": "./dist/detect/index.d.ts",
+      "import": "./dist/detect/index.js"
+    },
+    "./archive": {
+      "types": "./dist/archive/index.d.ts",
+      "import": "./dist/archive/index.js"
+    },
+    "./report": {
+      "types": "./dist/report/index.d.ts",
+      "import": "./dist/report/index.js"
+    },
+    "./statistics": {
+      "types": "./dist/statistics/index.d.ts",
+      "import": "./dist/statistics/index.js"
+    },
+    "./certification": {
+      "types": "./dist/certification/index.d.ts",
+      "import": "./dist/certification/index.js"
+    },
+    "./drivers": {
+      "types": "./dist/drivers/index.d.ts",
+      "import": "./dist/drivers/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test",
+    "check:arch": "node scripts/check-architecture.mjs",
+    "check:legacy": "bun scripts/check-legacy-equivalence.mjs",
+    "check": "bun run typecheck && bun run test && bun run check:arch",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent-lab"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/agent-lab"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}
