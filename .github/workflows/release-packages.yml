@@ -18,6 +18,11 @@ name: Release packages
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: '只发这几个包(逗号分隔,如 agent-lab);留空 = 整列火车全发'
+        required: false
+        default: ''
   push:
     tags:
       - 'v*'
@@ -46,6 +51,14 @@ jobs:
       # velaros.domainPackages 对齐、各包版本与 bun.lock 一致。
       - run: node scripts/release/verify-release-ref.mjs
       - run: bun run check
-      - run: node scripts/release/publish-packages.mjs
+      # only 走 env 而不是内联表达式:push 事件下 github.event.inputs 是 null,
+      # 内联三元会把 null 当成非空串拼出一个空的 --only 参数,直接红在参数校验上。
+      - run: |
+          if [ -n "$ONLY" ]; then
+            node scripts/release/publish-packages.mjs --only "$ONLY"
+          else
+            node scripts/release/publish-packages.mjs
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ONLY: ${{ github.event.inputs.only }}

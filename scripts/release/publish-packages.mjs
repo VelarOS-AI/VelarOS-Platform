@@ -22,6 +22,14 @@
 // model 独有的第三条(「包版本 == 仓根 version」)是并仓前的锁步假设,火车形态下不成立,
 // 处置理由见 releaseTopology.mjs 文件头。
 //
+// --only 的边界:火车默认整列发车,`--only <名字[,名字…]>` 只发其中几节。**它只做减法,不做豁免**——
+// releaseTopology 的全量校验(声明集 ↔ 磁盘、版本 ↔ bun.lock、拓扑序)照跑,身份四条前置一条不减,
+// 选取发生在校验之后。所以「只发一个包」拿到的仍是一趟验明过的火车,不是绕开火车的小路。
+// 为什么需要它:火车里绝大多数包版本没动,而 --tolerate-republish 会把「registry 上已有该版本」
+// 当成功放过(见 ③ 的注记)——于是一趟全量发车里真正落地的往往只有新包,日志却逐个报 published。
+// 新包单独发车时把范围写明,比让人从 18 行日志里猜哪一行是真的要诚实。
+// 被 --only 排除的包会逐个列进日志(不许静默收窄);名字写错直接红并列出可选值,不做模糊匹配。
+//
 // dry-run 的边界:--dry-run 放行「干净工作树 / GITHUB_SHA / tag ref / NODE_AUTH_TOKEN」四条
 // **发布期**前置(七份旧脚本里干净工作树是无条件的,导致本地 dry-run 在有改动时永远跑不起来,
 // 而 dry-run 的用处恰恰是改完发布链之后先验一遍)。这四条在真发布路径上一条不减。
@@ -44,6 +52,40 @@ const root = path.resolve(import.meta.dirname, '../..')
 const dryRun = process.argv.includes('--dry-run')
 const skipBuild = process.argv.includes('--skip-build')
 
+const readOnlySelectors = (argv) => {
+  const selectors = []
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== '--only') continue
+    const value = argv[index + 1]
+    if (!value || value.startsWith('--')) {
+      throw new Error('--only requires at least one package name, e.g. --only agent-lab')
+    }
+    for (const entry of value.split(',')) {
+      const trimmed = entry.trim()
+      if (trimmed) selectors.push(trimmed)
+    }
+  }
+  return selectors
+}
+
+// 按包名或目录名选取,拒绝模糊匹配:发布不可逆,「你是不是想发这个」的猜测不配出现在这里。
+const selectPackages = (packages, selectors) => {
+  if (selectors.length === 0) return packages
+  const chosen = new Set()
+  for (const selector of selectors) {
+    const match = packages.find(
+      (item) => item.manifest.name === selector || item.directoryName === selector,
+    )
+    if (!match) {
+      const known = packages.map((item) => item.manifest.name).join(', ')
+      throw new Error(`--only ${selector} matches no declared release package. Declared: ${known}`)
+    }
+    chosen.add(match.manifest.name)
+  }
+  // 保持拓扑序:选取只做过滤,不重排——被依赖者仍然先发。
+  return packages.filter((item) => chosen.has(item.manifest.name))
+}
+
 const runForOutput = (command, args, cwd) => {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', env: process.env })
   if (result.status !== 0) {
@@ -60,7 +102,9 @@ const run = (command, args, cwd) => {
   }
 }
 
+// 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、拓扑序),再谈这趟发几节车厢。
 const { rootManifest, ordered } = await collectReleasePackages(root)
+const selected = selectPackages(ordered, readOnlySelectors(process.argv))
 const releaseTag = `v${rootManifest.version}`
 const expectedRef = `refs/tags/${releaseTag}`
 
@@ -101,12 +145,18 @@ if (!dryRun && skipBuild) {
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
 console.info(`registry: ${ReleaseRegistry}`)
-console.info(`publish order (${ordered.length} packages, dependencies first):`)
-ordered.forEach((item, index) => {
+console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
+console.info(`publish order (${selected.length} packages, dependencies first):`)
+selected.forEach((item, index) => {
   console.info(
     `  ${String(index + 1).padStart(2, ' ')}. ${item.manifest.name}@${item.manifest.version}  (packages/${item.directoryName}, access=${item.manifest.publishConfig.access})`,
   )
 })
+// 收窄了就得说清收窄掉什么:静默的范围缩减看起来和「全都发了」一模一样。
+for (const item of ordered) {
+  if (selected.includes(item)) continue
+  console.info(`  - skipped by --only: ${item.manifest.name}@${item.manifest.version}`)
+}
 if (workingTreeStatus && dryRun) {
   console.warn(
     `! dry-run over a dirty working tree (${workingTreeStatus.split('\n').length} entries); a real publish refuses this`,
@@ -123,7 +173,7 @@ if (!skipBuild) {
   run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
 }
 
-for (const item of ordered) {
+for (const item of selected) {
   const packDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-pack-'))
   try {
     run('bun', ['pm', 'pack', '--destination', packDirectory, '--ignore-scripts'], item.directory)
@@ -168,6 +218,9 @@ for (const item of ordered) {
       ReleaseRegistry,
       '--access',
       item.manifest.publishConfig.access,
+      // registry 上已有该版本时不报错。代价是这一步会变成静默 no-op:日志照样往下走,
+      // 而那个版本的字节仍是上一次发的。所以「改了内容却没改版本号」永远不会被这里拦住——
+      // 拦它的是版本号纪律,不是发布器。想确认某次真的落地了,看 registry 上该版本的时间戳。
       '--tolerate-republish',
       '--ignore-scripts',
     ]
@@ -178,4 +231,6 @@ for (const item of ordered) {
   }
 }
 
-console.info(`${dryRun ? '✓ dry-run' : '✓ released'} ${ordered.length} packages at ${releaseTag}`)
+console.info(
+  `${dryRun ? '✓ dry-run' : '✓ released'} ${selected.length} of ${ordered.length} declared packages at ${releaseTag}`,
+)
