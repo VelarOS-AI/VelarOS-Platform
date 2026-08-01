@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { isNotUndefined, isUndefined } from '@velaros-ai/core'
 import {
   type AppliedAdjustment,
   clampedInt,
@@ -68,6 +69,12 @@ export const GameManifestEditOperationSchema = z.discriminatedUnion('action', [
     values: UnknownValuesSchema,
   }),
   z.object({
+    action: z.literal('set_extends'),
+    // 裸 slug 也收：target 已经唯一确定了 scene / prefab，补前缀无歧义（编辑器负责归一并留痕）。
+    // `null` 是真实意图（清除继承），所以是 nullable 而不是 optional——省略它没有安全的默认值。
+    extends: z.union([SceneReferenceSchema, PrefabReferenceSchema, GameSlugSchema]).nullable(),
+  }),
+  z.object({
     action: z.literal('set_asset'),
     assetId: GameSlugSchema,
     values: UnknownValuesSchema,
@@ -102,10 +109,10 @@ export const GameRunSchema = z
     const adjustments: AppliedAdjustment[] = []
     const scene = input.scene?.startsWith('scene:')
       ? input.scene
-      : input.scene === undefined
+      : isUndefined(input.scene)
         ? undefined
         : `scene:${input.scene}`
-    if (input.scene !== undefined && scene !== input.scene) {
+    if (isNotUndefined(input.scene) && scene !== input.scene) {
       adjustments.push({
         field: 'scene',
         action: 'aliased',

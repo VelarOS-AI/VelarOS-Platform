@@ -201,7 +201,7 @@ export class GameManifestResolver {
       )
     }
     if (this.source.project.entryScene) {
-      this.requireScene(gameReferenceId(this.source.project.entryScene))
+      this.assertEntrySceneExists(this.source.project.entryScene)
     }
     for (const scene of this.source.scenes) {
       indexUnique(scene.entities, `scene:${scene.id} entity`)
@@ -474,17 +474,28 @@ export class GameManifestResolver {
     return resolved
   }
 
+  /**
+   * 继承链的两条上界。
+   *
+   * `hint` 里必须点名 `set_extends`：`extends` 是清单里唯一一处**只能由它改写**的拓扑字段，
+   * 而在补上那个动作之前，成环之后闭集里没有任何一条出路（真机第十轮：一次 `ws_edit` 制造的
+   * 环让六个 target 全死，报错正文既没有文件路径也没有可执行动作）。
+   */
   private assertInheritanceStep(reference: string, chain: readonly string[]): void {
+    const cycleHint = '用 game_scene_edit 的 set_extends 把环上任意一条 extends 改成 null'
+      + '（或改指到环外的清单）即可解开；target 填环上那份清单的 id。'
     if (chain.includes(reference)) {
       throw new GameManifestError(
         'INHERITANCE_CYCLE',
         `继承成环：${[...chain, reference].join(' → ')}`,
+        { hint: cycleHint },
       )
     }
     if (chain.length >= MaxInheritanceDepth) {
       throw new GameManifestError(
         'INHERITANCE_DEPTH',
         `继承深度超过 ${MaxInheritanceDepth}：${[...chain, reference].join(' → ')}`,
+        { hint: `继承最多 ${MaxInheritanceDepth} 层；${cycleHint}` },
       )
     }
   }
@@ -497,6 +508,36 @@ export class GameManifestResolver {
   private requirePrefab(id: string): GamePrefabManifest {
     const prefab = this.prefabIndex.get(id)
     return prefab ?? missingReference('prefab', `prefab:${id}`, [...this.prefabIndex.keys()])
+  }
+
+  /**
+   * `entryScene` 指着一个不存在的场景 —— **报错正文必须点名它是哪个字段，并开出走得通的药方**。
+   *
+   * ## 判决（第十一轮 P2）：药方走不通等于没有药方
+   * 上一版直接借用 `requireScene`，模型拿到的整句话是「找不到 scene:a。可用 scene id：当前为空。」
+   * ——既不点名 `entryScene` 也不点名 `game.project.json`，而「可用 scene id：当前为空」读起来
+   * 就是一条死胡同。实测链条：I1 拒绝 `set_project({scenes:[]})` 并开出第三条出路
+   * （「先删文件再改声明」）→ 模型照做删掉文件 → 重发同一条 `set_project` → 撞这一句、零落盘。
+   * 真正的出路 `set_project({scenes:[], entryScene:null})` 全程无人指路。
+   *
+   * `entryScene:null` 在两种形态下都成立，所以可以放心开：`scenes` 为空时它就是「没有入口场景」，
+   * 非空时解析器把它回落到 `scenes[0]`（那是一份仍然存在的场景）。
+   */
+  private assertEntrySceneExists(reference: GameReference<'scene'>): void {
+    const id = gameReferenceId(reference)
+    if (this.sceneIndex.has(id)) return
+    throw new GameManifestError(
+      'INVALID_REFERENCE',
+      `game.project.json 的 entryScene 指向 ${reference}，但工程里没有这个场景。`,
+      {
+        path: 'game.project.json',
+        hint:
+          `${buildValidItemsHint('可用 scene id', [...this.sceneIndex.keys()])}\n`
+          + '用 set_project 在**同一批**里把 entryScene 一起改：指到一个仍然存在的场景'
+          + '（entryScene:"scene:<id>"），或传 entryScene:null——scenes 为空时那就是「没有入口场景」，'
+          + '非空时会回落到 scenes[0]。刚把入口场景从 scenes 里摘掉时，漏改这一格就会撞上这条。',
+      },
+    )
   }
 }
 

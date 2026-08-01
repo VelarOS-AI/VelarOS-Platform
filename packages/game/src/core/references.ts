@@ -49,6 +49,15 @@ export type GameProjectDirectory =
   (typeof GameProjectDirectories)[keyof typeof GameProjectDirectories]
 
 /**
+ * `project.assets` 缺席时的落点 —— **解析器的缺省值与编辑器开出的落点必须是同一个字面量**。
+ *
+ * 这条路径过去在三处各写一遍（解析器的 `defaulted`、编辑器角色冲突提示里的「资产清单默认 …」、
+ * 编辑器修复工程清单自指声明时的回落）。它正是 hardening §2「看着一样就复制、后来各改各的」
+ * 那张墓碑表的形状：解析器一旦改了缺省，另外两处开出的药方就会把模型指到一条工程不认的路径上。
+ */
+export const GameDefaultAssetsManifestPath = `${GameProjectDirectories.assets}/assets.json`
+
+/**
  * 清单路径 → 稳定 id（`scenes/main.scene.json` → `main`）。
  *
  * 两个消费者共用一份：解析器用它给缺 `id` 的场景/prefab 清单补上（真机第一手，见

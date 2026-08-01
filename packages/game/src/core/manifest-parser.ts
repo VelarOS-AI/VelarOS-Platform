@@ -21,7 +21,11 @@ import {
   buildAppliedAdjustments,
 } from '@velaros-ai/core/utils/ForgivingSchema'
 
-import { gameManifestIdFromPath, GameSlugSchema } from './references.js'
+import {
+  GameDefaultAssetsManifestPath,
+  gameManifestIdFromPath,
+  GameSlugSchema,
+} from './references.js'
 import {
   type GameAssetsManifest,
   GameAssetsManifestSchema,
@@ -56,15 +60,26 @@ export class GameManifestError extends Error {
   public readonly code: GameManifestErrorCode
   public readonly path: Nullable<string>
   public readonly hint: Nullable<string>
+  /**
+   * 不含 `hint` 的那一句正文。
+   *
+   * 重新包装一条清单错误（补一句更外层的出路）时必须用它，否则 `message` 会带着旧 `hint`
+   * 再拼一遍新的，模型读到两段半重复的建议。
+   */
+  public readonly detail: string
 
   public constructor(
     code: GameManifestErrorCode,
     message: string,
-    options: { path?: string; hint?: string } = {},
+    // `path` / `hint` 收 `Nullable`：**重新包装一条已有清单错误**（补一句更外层的出路）时，
+    // 源错误的这两格本来就是 `Nullable<string>`，收窄成 `string?` 只会逼每个包装点写一次
+    // 单属性条件展开。缺席与 null 在这里没有语义差别（都走 `toNullable`）。
+    options: { path?: LooseOptional<string>; hint?: LooseOptional<string> } = {},
   ) {
     super(options.hint ? `${message}\n${options.hint}` : message)
     this.name = 'GameManifestError'
     this.code = code
+    this.detail = message
     this.path = toNullable(options.path)
     this.hint = toNullable(options.hint)
   }
@@ -476,7 +491,7 @@ function normalizedPathArray(
   field: string,
   context: NormalizationContext,
 ): unknown[] {
-  return normalizedStringArray(value, field, context).map((item, index) => {
+  const items = normalizedStringArray(value, field, context).map((item, index) => {
     if (!isRecord(item) || !isString(item.path)) return item
     context.adjustments.push({
       field: `${field}[${index}]`,
@@ -484,6 +499,39 @@ function normalizedPathArray(
       detail: `对象形态已归一为路径字符串 ${JSON.stringify(item.path)}。`,
     })
     return item.path
+  })
+  return dedupedPaths(items, field, context)
+}
+
+/**
+ * 同一条路径在一个声明数组里出现两次 = 纯粹的重复，去掉不丢任何信息。
+ *
+ * 判决（第十轮，真机第一手）：`scenes:['scenes/a.scene.json','scenes/a.scene.json']` 过去让
+ * **六个 target 全死**——装载按路径去重只留一份，声明数组却原样带着两项，激活阶段于是把同一份
+ * 场景推进拓扑两次，解析器的 `indexUnique` 抛「scene id 重复：a」。那句话既点不出文件、
+ * 也没有可执行动作，而制造这个状态只需要一次 `ws_edit`。
+ *
+ * 这里去重而不是报错，是「钳制不拒绝」：重复项没有第二种解释，报错只能让模型自己猜要删哪一条。
+ * 与 I1 不冲突——路径仍然被声明着，只是不再声明两遍。
+ */
+function dedupedPaths(
+  items: readonly unknown[],
+  field: string,
+  context: NormalizationContext,
+): unknown[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    if (!isString(item)) return true
+    if (!seen.has(item)) {
+      seen.add(item)
+      return true
+    }
+    context.adjustments.push({
+      field,
+      action: 'ignored',
+      detail: `重复声明的路径 ${JSON.stringify(item)} 已合并为一条。`,
+    })
+    return false
   })
 }
 
@@ -578,7 +626,7 @@ function normalizeProject(value: unknown, context: NormalizationContext): Record
     prefabs: isUndefined(project.prefabs)
       ? defaulted(project.prefabs, [], '$.prefabs', context)
       : normalizedPathArray(project.prefabs, '$.prefabs', context),
-    assets: defaulted(project.assets, 'assets/assets.json', '$.assets', context),
+    assets: defaulted(project.assets, GameDefaultAssetsManifestPath, '$.assets', context),
     layers: isUndefined(project.layers)
       ? defaulted(project.layers, ['background', 'actors', 'ui'], '$.layers', context)
       : normalizedStringArray(project.layers, '$.layers', context),

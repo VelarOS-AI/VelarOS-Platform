@@ -138,8 +138,22 @@ export const gameSceneEditTool = defineGameTool<
       + '（kind、extends: null、每个实体的 components: {}）；什么都没有就建一份空清单。',
     'set_project 的数组是整体替换：重发 scenes / prefabs / assets 时漏掉一条 = 把那份文档摘出工程。'
       + '被摘掉的文件在磁盘上有内容时本次调用会被拒绝并点名它，空清单则放行并在 diffSummary 里'
-      + '留一行 undeclared。只想改别的字段时就别重发这几项。'
-      + '同一条路径也不能同时充当两种角色（既是 prefab 又是资产清单之类），会当场被拒。',
+      + '留一行 undeclared。只想改别的字段时就别重发这几项。',
+    'set_extends 是 scene.extends / prefab.extends 的唯一写路径：target 决定种类，'
+      + '传 scene:<slug> / prefab:<slug>（裸 slug 也收，会按 target 补前缀），传 null 清除继承。'
+      + '继承成环或超过 4 层时报错正文会点名整条链，用它把环上任意一条改成 null 即可解开。',
+    'target=project 在任何工程状态下都可用（工程清单本身读不出来除外，那一档会点名它）：'
+      + '工程在你动手之前就已经坏掉时，编辑照常写入，那处破损随 warnings 原文送达而不是拦住你——'
+      + '否则唯一能修拓扑的 set_project 会需要一个已经健康的工程。'
+      + '读不出来的子清单会被排除在本次编辑之外（声明与文件都保留、绝不覆盖），'
+      + '一条路径被两个角色声明时那条路径这次一个字节都不写。'
+      + '但坏在哪一点上，触碰那一点本身仍然当场失败并点名文件：'
+      + '同一个 id 有两份载体、资产清单或场景这次读不出来——那不是把工程锁死，'
+      + '其余 target 与 set_project 照常可用，报错正文里就有出路。',
+    'changedFiles 是这次真正落盘的权威清单，diffSummary 与它逐条对应：'
+      + '写盘被保护挡下时会出一条 skipped write 行（说明这次对那份文件的改动没有生效，'
+      + '照 warnings 修好冲突后重发即可），落盘却没有语义行的文件会补一条 wrote 行。'
+      + '看到 skipped write 就别当成已经改好了。',
   ],
   examples: [
     {
@@ -165,6 +179,11 @@ export const gameSceneEditTool = defineGameTool<
       ],
       dryRun: true,
     },
+    {
+      target: 'scene:level-1',
+      operations: [{ action: 'set_extends', extends: null }],
+      reason: '解开 scene:level-1 与 scene:base 之间的继承环',
+    },
   ],
   notes: [
     '写入由宿主提供的工程根受限、revision 原子文档端口完成。',
@@ -177,6 +196,12 @@ export const gameSceneEditTool = defineGameTool<
       + '推不出 slug）就摘掉那条悬空声明并在 warnings 里说明怎么接回来（dropped dangling 行，'
       + 'entryScene 指着它时一并撤下）。这些修复只发生在「声明指向的文件本就不存在」这一档，'
       + '不会动任何有内容的文件。',
+    '整体校验只拦本次编辑**新引入**的破损：装载时就已经存在的（继承环、同 id 双载体、'
+      + '悬空引用、角色冲突……）一律随 warnings 报出而不阻断，因为拦住它等于把工程锁死在坏状态里。'
+      + '工程原本健康时任何新破损照旧当场失败、零文件落盘。',
+    'game.project.json 不能出现在自己的 scenes / prefabs / assets 声明里（它是工程拓扑的根）：'
+      + '装载时就有的那一档会被就地摘掉并留一行 dropped self-declaration，'
+      + '本次编辑写进去的当场失败、零文件落盘。',
     '一个稳定 id 只许有一个载体，这条在「编辑器创建或采纳清单」的那一刻强制。'
       + '编辑一份已经被声明的清单不扫工程目录（省一次全盘遍历），因此你事后用 ws_edit 手写的'
       + '第二份同 id 文件在那条路径上不会被发现——它也不会被工程加载。要让它生效就把它变成'
