@@ -110,6 +110,9 @@ function createStore(): MemoryManifestStore {
       layers: ['actors'],
       collisionLayers: [],
       input: { actions: { jump: ['Space'] } },
+      // 显式声明命令 = 走「工程自带 dev server」那条路。缺省已改成宿主内置静态服务
+      // （2026-08-01 判决），而本 fixture 断言的正是命令那条路，所以必须自己声明。
+      dev: { server: { command: 'bun run dev', port: 5173 } },
     },
     'scenes/base.scene.json': {
       id: 'base',

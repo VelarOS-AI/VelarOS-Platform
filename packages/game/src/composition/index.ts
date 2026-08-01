@@ -24,6 +24,9 @@ import {
 import {
   createGameRuntimeDescriptor,
   type GameApprovedProcessHost,
+  GameBuiltinDevServer,
+  type GameBuiltinDevServerHost,
+  type GameBuiltinHostFilePort,
   type GameDevServerStartupOutcome,
   type GameManagedDevProcess,
   GameProjectRuntime,
@@ -39,6 +42,8 @@ export { GameProjectFileName }
 // 宿主舞台在「工程还没跑起来」时要如实说清工程长什么样，而领域解析不许在壳里复制一份。
 export type { GameProjectOverview, GameSceneOverview } from '../core/index.js'
 export { summarizeGameProject } from '../core/index.js'
+// 就绪窄桥的**失败那一格**：宿主的就绪轮询要读它，键名两侧只能有一份。
+export { GameBuiltinHostBootErrorKey } from '../runtime/index.js'
 
 export interface GameCapabilityDescriptor {
   readonly id: 'game'
@@ -53,6 +58,19 @@ export interface CreateGameCapabilityOptions {
   readonly runtime?: GameRuntimePort
 }
 
+/**
+ * 宿主为「工程只出清单」那条缺省路径提供的两样东西。
+ *
+ * 缺席 = 内置服务不可用（`GameBuiltinRuntimeUnavailableError` 明说原因），语义编辑与
+ * 「工程自己声明了 dev.server.command」那条路都不受影响——**内置服务是缺省，不是前提**。
+ */
+export interface GameBuiltinRuntimeDelivery {
+  /** `@velaros-ai/game` 的浏览器产物 `dist/browser/page.js` 全文（含 phaser 与投影层）。 */
+  readonly pageScript: string
+  /** 读工程根内一条已声明路径的原始字节；根内确认与符号链接拒绝归宿主。 */
+  readonly files: GameBuiltinHostFilePort
+}
+
 export interface CreateGameProjectCapabilityOptions {
   readonly projectRoot: string
   readonly project: GameProjectManifest
@@ -60,6 +78,8 @@ export interface CreateGameProjectCapabilityOptions {
   readonly processHost: GameApprovedProcessHost
   readonly pageHost: GameRuntimePageHost
   readonly observer?: GameRuntimeObserver
+  /** 缺席即内置服务不可用；见 {@link GameBuiltinRuntimeDelivery}。 */
+  readonly builtinRuntime?: GameBuiltinRuntimeDelivery
 }
 
 export interface CreateGameProjectCapabilityFromTextOptions extends Omit<
@@ -175,6 +195,26 @@ export function createGameManifestEditor(
   return new GameManifestWorkspaceEditor(documents)
 }
 
+/**
+ * 内置服务的装配。
+ *
+ * **一份工程一台服务**：它与 `GameProjectRuntime` 同生同死，起停全经
+ * `GameDevServerController`，因此不需要在壳里再记一份句柄——上一批「dev server 活过应用退出」
+ * 那个洞正是从「壳自己另拿一条终止路径」长出来的。
+ */
+function toBuiltinDevServerHost(
+  options: CreateGameProjectCapabilityOptions
+): GameBuiltinDevServerHost | undefined {
+  const delivery = options.builtinRuntime
+  if (!delivery) return undefined
+  const server = new GameBuiltinDevServer({
+    documents: options.documents,
+    files: delivery.files,
+    pageScript: delivery.pageScript,
+  })
+  return { start: () => server.start() }
+}
+
 export function createGameProjectCapability(
   options: CreateGameProjectCapabilityOptions
 ): GameCapability {
@@ -183,7 +223,8 @@ export function createGameProjectCapability(
     options.project,
     options.processHost,
     options.pageHost,
-    options.observer
+    options.observer,
+    toBuiltinDevServerHost(options)
   )
   const editor = new GameManifestWorkspaceEditor(options.documents)
   const synchronizedEditor: GameSceneEditorPort = {
@@ -230,6 +271,8 @@ export function createGameProjectCapabilityFromText(
 
 export type {
   GameApprovedProcessHost,
+  GameBuiltinDevServerHost,
+  GameBuiltinHostFilePort,
   GameDevServerStartupOutcome,
   GameManagedDevProcess,
   GameManifestDocument,

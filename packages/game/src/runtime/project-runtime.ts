@@ -12,7 +12,11 @@ import type {
   GameStopResult,
 } from '../core/index.js'
 
-import { type GameApprovedProcessHost, GameDevServerController } from './dev-server.js'
+import {
+  type GameApprovedProcessHost,
+  type GameBuiltinDevServerHost,
+  GameDevServerController,
+} from './dev-server.js'
 
 export interface GameRuntimePageHost {
   readonly open: (input: { readonly url: string; readonly scene: string }) => Promise<void>
@@ -36,11 +40,11 @@ export interface GameRuntimeObserver {
   readonly onInput?: (result: GameInputResult) => void
 }
 
-function notifyObserver(callback: (() => void) | undefined): void {
+function notifyObserver(callback?: () => void): void {
   try {
     callback?.()
   } catch {
-    // Observation is best-effort and must never change a game operation's result.
+    // arch-guard:silent-catch-ok 观测是尽力而为：一次上报失败绝不许改变游戏操作本身的结果。
   }
 }
 
@@ -56,9 +60,10 @@ export class GameProjectRuntime implements GameRuntimePort {
     project: GameProjectManifest,
     processHost: GameApprovedProcessHost,
     private readonly pageHost: GameRuntimePageHost,
-    private readonly observer?: GameRuntimeObserver
+    private readonly observer?: GameRuntimeObserver,
+    builtinHost?: GameBuiltinDevServerHost
   ) {
-    this.devServer = new GameDevServerController(projectRoot, project, processHost)
+    this.devServer = new GameDevServerController(projectRoot, project, processHost, builtinHost)
   }
 
   public isAvailable(): boolean {
@@ -81,7 +86,10 @@ export class GameProjectRuntime implements GameRuntimePort {
     } catch (error) {
       if (this.pageOpen) {
         this.pageOpen = false
-        await this.pageHost.close().catch(() => undefined)
+        await this.pageHost.close().catch(() => {
+          // arch-guard:silent-catch-ok 关页面只是清理：要抛给调用方的是上面那个启动错误，
+          // 清理本身失败不该把它顶掉。
+        })
       }
       throw error
     }
@@ -96,7 +104,9 @@ export class GameProjectRuntime implements GameRuntimePort {
       return result
     } catch (error) {
       this.pageOpen = false
-      await this.pageHost.close().catch(() => undefined)
+      await this.pageHost.close().catch(() => {
+        // arch-guard:silent-catch-ok 同上：这条路径要抛的是 pageHost.open 的失败原因。
+      })
       await this.devServer.stop(false)
       throw error
     }
@@ -108,6 +118,8 @@ export class GameProjectRuntime implements GameRuntimePort {
       try {
         await this.pageHost.close()
       } catch (error) {
+        // arch-guard:silent-catch-ok 不是吞错：这里先记下，等 dev server 也停完再抛（见下方
+        // `if (pageCloseError) throw pageCloseError`）——先抛会让进程留在跑着的状态。
         pageCloseError = error
       } finally {
         this.pageOpen = false

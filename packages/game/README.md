@@ -7,7 +7,7 @@ web 运行时投影、模型可调用的工具、宿主装配入口——**四�
 
 ```
 @velaros-ai/game/core         渲染器无关的工程/场景事实(schema + 解析 + 解析器 + 端口)
-@velaros-ai/game/runtime      web 运行时投影(Phaser 4)+ dev server + 运行态
+@velaros-ai/game/runtime      web 运行时投影(Phaser 4)+ dev server + 内置静态服务 + 运行态
 @velaros-ai/game/tools        六个 game_* 工具的名字、schema 与集合
 @velaros-ai/game/composition  宿主唯一装配入口 + mod 清单 + 回合上下文
 ```
@@ -52,6 +52,14 @@ canonical formatter、`GameManifestResolver`、`GameManifestWorkspaceEditor`,
 **不执行工程提供的就绪正则**;Phaser follow camera 按 `camera.target` 引用目标实体,
 不把「声明了 camera 组件的实体」误当目标。
 
+**`dev.server.command` 缺席时走 `GameBuiltinDevServer`**(2026-08-01 判决):宿主在自己进程里
+起一份绑 loopback、用临时端口的静态服务,把「自带运行时的页面 + 已解析好的清单」送出去,
+于是**工程只出清单也能跑起来**——不需要 `package.json`、不需要装依赖、不需要联网。
+运行时字节由宿主经 `pageScript` 注入(构建产物 `dist/browser/page-source.js`,
+入口源码 `src/runtime/browser-entry.ts`,单独 `bun build --target=browser` 成包);
+文件只回送**上一次 boot 按清单声明过的**资产与玩法脚本,路径逐字查表、不做 join,
+`Host` 头必须是本机。声明了 `command` 的工程照旧走进程那条路——内置服务是缺省,不是唯一。
+
 ### `tools` —— 模型面
 
 稳定六工具(`GameToolNames`,顺序即注册顺序):
@@ -59,7 +67,7 @@ canonical formatter、`GameManifestResolver`、`GameManifestWorkspaceEditor`,
 | 工具 | 干什么 |
 | --- | --- |
 | `game_scene_edit` | 语义编辑场景 / prefab / 工程声明 |
-| `game_run` | 启动 dev server 并打开入口场景 |
+| `game_run` | 启动运行态(缺省 = 宿主内置静态服务;工程声明了 `dev.server.command` 则起它)并打开入口场景 |
 | `game_stop` | 停止运行态(幂等) |
 | `game_screenshot` | 截当前画面(可带区域与 overlay) |
 | `game_query_state` | 查 scene / selection / entities / entity / errors / perf |

@@ -1,6 +1,6 @@
 import { isEmpty, isNotNull, isNull, isTrue, isUndefined } from '@velaros-ai/core'
 
-import { GameDefaultDevCommand, GameDefaultDevPort } from '../core/overview.js'
+import { GameDefaultDevPort } from '../core/overview.js'
 import type {
   GameRunRequest,
   GameRunResult,
@@ -67,6 +67,35 @@ export class GameRuntimePermissionDeniedError extends Error {
 export class DenyAllGameProcessHost implements GameApprovedProcessHost {
   public async startApproved(): Promise<GameManagedDevProcess> {
     throw new GameRuntimePermissionDeniedError()
+  }
+}
+
+/**
+ * 宿主内置静态服务的启动端口 —— **`dev.server.command` 缺席时走的那条路**。
+ *
+ * 判决（2026-08-01）：清单缺省不再是 `bun run dev`。工程只出清单时由宿主起一份自带运行时的
+ * 静态服务（实现见 `builtin-host.ts`），工程根因此**不需要 `package.json`、不需要装依赖、
+ * 不需要联网**。声明了 `dev.server.command` 的工程照旧走自己那条路——内置服务是缺省，不是唯一。
+ *
+ * 抽成端口而不是让控制器直接 new，是为了让「没有内置产物的宿主」（例如只用 game 包做语义
+ * 编辑的集成方）能显式 fail-closed，而不是在起服务时才炸出一句看不懂的话。
+ */
+export interface GameBuiltinDevServerHost {
+  readonly start: () => Promise<GameManagedDevProcess>
+}
+
+export class GameBuiltinRuntimeUnavailableError extends Error {
+  public constructor() {
+    super(
+      'game.project.json 没有声明 dev.server.command，而当前宿主没有提供内置游戏静态服务：要么升级宿主，要么在清单里声明这个工程自己的启动命令。'
+    )
+    this.name = 'GameBuiltinRuntimeUnavailableError'
+  }
+}
+
+export class DenyAllGameBuiltinDevServerHost implements GameBuiltinDevServerHost {
+  public async start(): Promise<GameManagedDevProcess> {
+    throw new GameBuiltinRuntimeUnavailableError()
   }
 }
 
@@ -156,6 +185,7 @@ export class GameDevServerController {
     private readonly projectRoot: string,
     private project: GameProjectManifest,
     private readonly processHost: GameApprovedProcessHost = new DenyAllGameProcessHost(),
+    private readonly builtinHost: GameBuiltinDevServerHost = new DenyAllGameBuiltinDevServerHost(),
   ) {}
 
   public updateProject(project: GameProjectManifest): void {
@@ -179,15 +209,19 @@ export class GameDevServerController {
     if (this.isRunning() && !shouldRestart && this.ready) return this.toRunResult(this.ready, scene, false)
     if (this.process) await this.stop(false)
 
+    // 缺省 = 宿主内置静态服务；声明了命令 = 走工程自己那条路。分派只有这一处。
     const server = this.project.dev.server
-    const requestedPort = server?.port ?? GameDefaultDevPort
-    const process = await this.processHost.startApproved({
-      command: server?.command ?? GameDefaultDevCommand,
-      cwd: this.projectRoot,
-      requestedPort,
-      permission: 'process:exec',
-      approvalReason: `启动游戏工程 ${this.project.name} 的本地 dev server`,
-    })
+    const command = server?.command
+    const requestedPort = command ? (server?.port ?? GameDefaultDevPort) : null
+    const process = command
+      ? await this.processHost.startApproved({
+        command,
+        cwd: this.projectRoot,
+        requestedPort: requestedPort ?? GameDefaultDevPort,
+        permission: 'process:exec',
+        approvalReason: `启动游戏工程 ${this.project.name} 的本地 dev server`,
+      })
+      : await this.builtinHost.start()
     this.process = process
     this.activeScene = scene
 
@@ -201,7 +235,9 @@ export class GameDevServerController {
         throw new GameDevServerStartupError(ready)
       }
       this.ready = ready
-      if (ready.port !== requestedPort) {
+      // 端口一致性只对**清单固定了端口**的那条路成立：内置服务用内核分配的临时端口，
+      // 页面身份就是它自己回的那一个，没有第二个数字可以对不上。
+      if (isNotNull(requestedPort) && ready.port !== requestedPort) {
         throw new GameDevServerPortMismatchError(requestedPort, ready.port)
       }
       this.projectChangedWhileRunning = false

@@ -35,19 +35,27 @@ export interface GameProjectOverview {
   readonly unreadableScenePaths: readonly string[]
   readonly prefabCount: number
   readonly assetsPath: string
-  /** dev server 命令；工程没写就是运行时的同一份缺省值，不是本函数编的。 */
-  readonly devCommand: string
-  readonly devPort: number
+  /**
+   * 工程**声明**的 dev server 命令；**null = 走宿主内置静态服务**。
+   *
+   * 这一格从「string + 缺省 `bun run dev`」改成 Nullable 是 2026-08-01 判决的直接后果：
+   * 缺省不再是一条命令，而是「宿主起一份自带运行时的静态服务」。留着旧缺省会让摘要说一句
+   * 运行时根本不会执行的话——而界面说的与真跑的分叉，正是上一批花了整整一节去修的病。
+   */
+  readonly devCommand: Nullable<string>
+  /** 声明的端口；内置服务用内核分配的临时端口，开跑前不存在这个数字，故为 null。 */
+  readonly devPort: Nullable<number>
 }
 
 /**
- * dev server 的缺省命令与端口 —— **运行时与摘要共用这一份**。
+ * 工程声明了 `dev.server.command` 却没写端口时的缺省端口 —— **运行时与摘要共用这一份**。
  *
  * 住在 core 而不是 runtime，是因为依赖方向只允许 runtime → core：让 `GameDevServerController`
- * 从这里取，摘要也从这里取，界面说的「会跑什么」与真跑的才是同一件事。各写一份的那一版，
- * 改端口缺省时必然漏掉另一处。
+ * 从这里取，摘要也从这里取，界面说的「会跑在哪」与真跑的才是同一件事。
+ *
+ * **没有 `GameDefaultDevCommand` 了**：命令缺席不再回落到一条命令，而是换一条运行路径
+ * （内置静态服务）。留一个「缺省命令」常量在这里，等于给两条路之间又造一个会漂的中间态。
  */
-export const GameDefaultDevCommand = 'bun run dev'
 export const GameDefaultDevPort = 5173
 
 /**
@@ -105,7 +113,10 @@ export function summarizeGameProject(input: {
     unreadableScenePaths,
     prefabCount: project.prefabs.length,
     assetsPath: project.assets,
-    devCommand: project.dev.server?.command ?? GameDefaultDevCommand,
-    devPort: project.dev.server?.port ?? GameDefaultDevPort,
+    // 声明了命令才有「端口」可谈：内置服务那条路两格都是 null，界面据此说「宿主内置服务」。
+    devCommand: toNullable(project.dev.server?.command),
+    devPort: isPresent(project.dev.server?.command)
+      ? (project.dev.server?.port ?? GameDefaultDevPort)
+      : null,
   }
 }
