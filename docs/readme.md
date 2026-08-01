@@ -1,7 +1,7 @@
 # VelarOS-Platform 文档索引
 
 > **本页是本仓 docs 的唯一可信入口**:每行给一句「什么时候该读它」。不在索引里的文档 = 没人找得到。
-> 仓本身是什么、16 个包在哪、门怎么跑,看 [../README.md](../README.md)。
+> 仓本身是什么、18 个包在哪、门怎么跑,看 [../README.md](../README.md)。
 
 > **三条阅读纪律**
 > ① **判决源不在本仓**。架构裁决住 VelarOS-Desktop 仓的 `docs/kernel-contract.md` 与
@@ -26,7 +26,7 @@
 
 | 顺序 | 文档 | 什么时候该读它 |
 | --- | --- | --- |
-| 1 | [../README.md](../README.md) | 第一次进本仓:布局、16 个包与目录、单版本火车、常用命令与各域门、源仓考古 |
+| 1 | [../README.md](../README.md) | 第一次进本仓:布局、18 个包与目录、单版本火车、常用命令与各域门、源仓考古 |
 | 2 | [mod-dev/README.md](./mod-dev/README.md) | 想给 VelarOS 加一个工具 / 一段提示词 / 一个工作区 / 一块设置区——mod 是什么、分节信封、两级注册机、信任级 |
 | 3 | [mod-dev/getting-started.md](./mod-dev/getting-started.md) | **要动手了**:最小 mod → 本地安装 → 启停 → 诊断四态与全部诊断码;含现状与限制 |
 | 4 | Desktop 仓 `docs/kernel-contract.md` | 拿不准「这该进内核还是产品」「这接口能不能动」时——**边界唯一裁决依据**,不在本仓 |
@@ -62,7 +62,7 @@
 | [agent-lab/integration.md](./agent-lab/integration.md) | 要接新执行体、加 Journey、Verifier、Detector 或 CLI Runtime 时 |
 | [agent-lab/legacy-equivalence.md](./agent-lab/legacy-equivalence.md) | 要核对旧 Desktop agent-lab 的 52 份历史归档、19 个 detector 与已判决语义变化时 |
 | [memory/memory-backends.md](./memory/memory-backends.md) | 要加或改记忆后端时:三档后端(`memory-files` 默认 / `memory-vector` 增强 / `memory-tree` 未来)的端口收口落在本仓哪些文件、留了哪些接缝 |
-| [../README.md](../README.md)「Kernel 的形态」 | 想知道「内核是库不是进程」在目录上长什么样:`core/src/kernel/` 五分区 vs `kernel-serve` vs `kernel-client`,以及 `check:kernel-arch` 锁的依赖方向 |
+| [../README.md](../README.md)「Kernel 库与独立 Host 进程」 | 想知道「库优先、进程可选」在目录上长什么样:`core/src/kernel/` 五分区 vs `kernel-serve` / `serve-host` / `kernel-client`,以及 `check:kernel-arch` 锁的依赖方向 |
 | [mod-dev/seams.md](./mod-dev/seams.md) | 要在运行时**拦一下** agent 行为时:15 个 seam kind、哪 4 个已接线、为什么权限不可旁路 |
 | [mod-dev/capabilities.md](./mod-dev/capabilities.md) | 要跨 mod 边界拿能力时:capability token 与权限 broker 的形状,记忆后端当案例 |
 

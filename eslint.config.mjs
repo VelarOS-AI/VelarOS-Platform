@@ -51,6 +51,11 @@ const Domains = [
     config: agentConfig,
     globs: ['packages/agent-lab/**'],
   },
+  {
+    name: 'surface',
+    config: agentConfig,
+    globs: ['packages/surface-protocol/**'],
+  },
   { name: 'core', config: coreConfig, globs: ['packages/core/**'] },
   {
     name: 'model',
@@ -91,6 +96,11 @@ const Domains = [
     name: 'html-artifacts',
     config: htmlArtifactsConfig,
     globs: ['packages/html-artifacts/**'],
+  },
+  {
+    name: 'host',
+    config: kernelConfig,
+    globs: ['packages/serve-host/**'],
   },
 ]
 

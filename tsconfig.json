@@ -90,6 +90,18 @@
       "@velaros-ai/kernel-serve/updater/*": [
         "./packages/kernel-serve/src/updater/*"
       ],
+      "@velaros-ai/serve-host": [
+        "./packages/serve-host/src/index.ts"
+      ],
+      "@velaros-ai/serve-host/*": [
+        "./packages/serve-host/src/*"
+      ],
+      "@velaros-ai/surface-protocol": [
+        "./packages/surface-protocol/src/index.ts"
+      ],
+      "@velaros-ai/surface-protocol/*": [
+        "./packages/surface-protocol/src/*"
+      ],
       "@velaros-ai/memory/knowledge": [
         "./packages/memory/src/knowledge/index.ts"
       ],

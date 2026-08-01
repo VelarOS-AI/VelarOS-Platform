@@ -32,7 +32,7 @@ tests/<domain>/            各域根级测试树
 docs/<domain>/             各域文档;**总入口 [docs/readme.md](docs/readme.md)**
 ```
 
-`workspaces` = `["packages/*"]`,共 **16 个平台包**(下表)。
+`workspaces` = `["packages/*"]`,共 **18 个平台包**(下表)。
 
 **为什么平铺而不是 `packages/<domain>/<pkg>`**:包内 tsconfig 大量写 `baseUrl: "../.."` +
 `paths: ["./packages/<pkg>/src/index.ts"]`,package.json 构建脚本写 `../../scripts/…`。平铺让这些
@@ -55,16 +55,19 @@ capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: 
 | agent | `@velaros-ai/agent` | 0.5.0 | `packages/agent` |
 | core | `@velaros-ai/core` | 0.3.2 | `packages/core` |
 | model | `@velaros-ai/model` | 0.4.6 | `packages/model` |
-| capabilities | `@velaros-ai/workspace` | 1.2.5 | `packages/workspace` |
+| capabilities | `@velaros-ai/workspace` | 1.2.6 | `packages/workspace` |
 | capabilities | `@velaros-ai/browser`(`/core` `/tools` `/composition` `/runtime`) | 0.2.6 | `packages/browser` |
 | capabilities | `@velaros-ai/computer`(`/runtime` `/tools`) | 0.2.6 | `packages/computer` |
-| capabilities | `@velaros-ai/system-tools` | 0.2.8 | `packages/system-tools` |
-| capabilities | `@velaros-ai/office-tools` | 0.2.7 | `packages/office-tools` |
-| evaluation | `@velaros-ai/agent-lab` | 0.1.0 | `packages/agent-lab` |
-| capabilities | `@velaros-ai/cli` | 0.2.10 | `packages/cli` |
+| capabilities | `@velaros-ai/game` | 0.1.0 | `packages/game` |
+| capabilities | `@velaros-ai/system-tools` | 0.2.9 | `packages/system-tools` |
+| capabilities | `@velaros-ai/office-tools` | 0.2.8 | `packages/office-tools` |
+| capabilities | `@velaros-ai/cli` | 0.2.11 | `packages/cli` |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | `packages/memory` |
 | ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | `packages/ui` |
 | html-artifacts | `@velaros-ai/html-artifacts` | 0.1.3 | `packages/html-artifacts` |
+| host | `@velaros-ai/serve-host` | 0.1.0 | `packages/serve-host` |
+| surface | `@velaros-ai/surface-protocol` | 0.1.0 | `packages/surface-protocol` |
+| evaluation | `@velaros-ai/agent-lab` | 0.1.0 | `packages/agent-lab` |
 
 ## 源仓考古指引
 
@@ -131,7 +134,7 @@ capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: 
 
 ```bash
 bun install
-bun run build            # 按依赖拓扑逐包构建(23 包)
+bun run build            # 按依赖拓扑逐包构建(18 包)
 bun run typecheck        # 逐包 typecheck
 bun run test             # 逐包 test
 bun run lint             # 全仓 eslint(域规则集各自生效)
@@ -148,9 +151,10 @@ bun run check:gates      # 只跑各域质量门
 > `postinstall` 会跑 `electron-rebuild -f -w better-sqlite3`:memory 的探针与 knowledge profile
 > 集成测试跑在 Electron 上,原生模块 ABI 必须匹配(memory 域自拆仓时期沿用至今的做法)。
 
-## Kernel 的形态(P2 已落)
+## Kernel 库与独立 Host 进程(P2 已落)
 
-内核**是库不是进程**(宪章 §15.1 原则一 / §15.4「一个身份」):
+Kernel 本体仍是可注入的库；`serve-host` 是可选的独立产品进程。Desktop / Workbench 可以继续
+进程内组合 Kernel，也可以在后续按产品需要切换为 Host 客户端，两种形态不共享数据库或产品 UI。
 
 | 位置 | 是什么 |
 | --- | --- |
@@ -158,6 +162,8 @@ bun run check:gates      # 只跑各域质量门
 | `packages/kernel-serve/src/daemon/` | **serve 部署模式的配件**(`@velaros-ai/kernel-serve/daemon`):daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / 编译期 bundled pack 清单 |
 | `packages/kernel-serve/src/updater/` | 共享 Runtime 的安装、切换、回滚(`@velaros-ai/kernel-serve/updater`) |
 | `packages/kernel-client/` | 瘦客户端与 serve 模式的接入面 |
+| `packages/serve-host/` | 独立 Velar Host 产品组合根:`velaros serve` / 独立数据根 / fail-closed 能力开关 / 轻量控制页 / Extension Bridge |
+| `packages/surface-protocol/` | Provider Agent Surface 的 Host 中立 wire contract；Web / 插件 / 移动端与具体宿主解耦 |
 
 依赖方向由 `check:kernel-arch` 锁死:**core 不得依赖 kernel-daemon / kernel-client / kernel-updater**
 (库不知进程);反向依赖 core 合法。`check:core-semantic-vocabulary` 另外禁止内核认识
@@ -168,10 +174,11 @@ bun run check:gates      # 只跑各域质量门
 1. **领域语义逐出 core 未做完**:`check:core-semantic-vocabulary` 的「待逐出清单」列了余量
    (最大一块是 `packages/core/src/types/index.ts`,1310 行聊天/执行/IPC 载荷);
    数据契约去 `agent/protocol`,运行时行为去 `agent` 主干。清单只减不增。
-2. **serve 模式还没有能力宿主**:P4 已把 `importSibling` 与 `packs/` 整体退役——bundled pack 现在
-   是编译期常量,daemon 自己只编进 sidecar 目录桩,具体能力(workspace / computer / system-tools)
-   由**宿主的构建图**经 `bootKernelDaemon({ modPacks })` 注入(依赖方向 ⑤→④→③→②,宪章 §15.2)。
-   Platform 内暂无 `velaros serve` 宿主包,所以这条注入线眼下只有契约与测试,没有生产消费者。
+2. ~~**serve 模式还没有能力宿主**~~ **独立 Host v1 已接线(2026-08)**:
+   `@velaros-ai/serve-host` 提供 `velaros serve`,拥有独立数据根、Kernel local RPC、轻量控制页、
+   Extension Bridge，以及 Workspace / Computer 的动态 fail-closed 权限策略。Computer sidecar 由用户
+   显式安装到 Host 数据根；网页模型拥有模型与 Agent 循环，Host 不接触模型凭据。Browser、内建
+   Model / Agent 与远端 Web/Mobile 认证网关仍按后续产品里程碑接入。
 3. ~~**发布流水线**~~ **已接线(2026-08)**:七份逐仓 `scripts/<domain>/release/*` 已合成一条
    `scripts/release/`(`releaseTopology.mjs` 发布清单单源 + `verify-release-ref.mjs` 预检 +
    `publish-packages.mjs` 发布器),`release-packages.yml` 在质量门之后接上 publish 步骤。

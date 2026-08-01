@@ -1,0 +1,57 @@
+{
+  "name": "@velaros-ai/serve-host",
+  "version": "0.1.0",
+  "description": "Independent headless Velar Host composition root for Kernel clients and the VelarOS browser extension.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "velaros": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && chmod +x dist/cli.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/serve-host"
+  },
+  "dependencies": {
+    "@velaros-ai/agent": "workspace:*",
+    "@velaros-ai/computer": "workspace:*",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel-client": "workspace:*",
+    "@velaros-ai/kernel-serve": "workspace:*",
+    "@velaros-ai/office-tools": "workspace:*",
+    "@velaros-ai/surface-protocol": "workspace:*",
+    "@velaros-ai/system-tools": "workspace:*",
+    "@velaros-ai/workspace": "workspace:*",
+    "ws": "^8.18.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/serve-host"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { isNonBlankString, isString } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isString, toNullable } from '@velaros-ai/core'
 
 import {
   type ComputerResourceRuntime,
@@ -46,10 +47,12 @@ const require = createRequire(typeof __filename === 'string' ? __filename : impo
 
 /** 各平台对应的 helper 脚本文件名。 */
 function helperScriptName(platform: NodeJS.Platform): Nullable<string> {
-  if (platform === 'darwin') return 'mac_helper.py'
-  if (platform === 'win32') return 'win_helper.py'
-  if (platform === 'linux') return 'linux_helper.py'
-  return null
+  switch (platform) {
+    case 'darwin': return 'mac_helper.py'
+    case 'win32': return 'win_helper.py'
+    case 'linux': return 'linux_helper.py'
+    default: return null
+  }
 }
 
 function readElectronResourcesPath(): Nullable<string> {
@@ -68,7 +71,7 @@ function readEnvironmentResourceRoots(): string[] {
 
 function buildDefaultResourceRoots(resourceRuntime: ComputerResourceRuntime): string[] {
   const environmentRoots = readEnvironmentResourceRoots()
-  if (environmentRoots.length > 0) return environmentRoots
+  if (!isEmpty(environmentRoots)) return environmentRoots
 
   const roots = new Set<string>()
   // 用户按需安装根（userData/resources）优先，安装/停用即时生效。
@@ -112,7 +115,7 @@ class ComputerHelperResolver {
   private readonly resourceRuntime: ComputerResourceRuntime
 
   constructor(options: ComputerHelperResolverOptions = {}) {
-    this.configuredResourceRoots = options.resourceRoots ?? null
+    this.configuredResourceRoots = toNullable(options.resourceRoots)
     this.platform = options.platform ?? process.platform
     this.resourceRuntime = options.resourceRuntime ?? computerResourceRuntime
   }
@@ -187,6 +190,11 @@ export function resolveComputerHelper(
   options: ComputerHelperResolverOptions = {}
 ): Nullable<ComputerHelperLaunchSpec> {
   return new ComputerHelperResolver(options).resolve()
+}
+
+/** Source assets shipped by `@velaros-ai/computer`, used by explicit host installers. */
+export function resolveBundledComputerRuntimeSourceRoot(): string {
+  return resolve(fileURLToPath(new URL('../../runtime', import.meta.url)))
 }
 
 export { ComputerHelperResolver }

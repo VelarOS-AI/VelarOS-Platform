@@ -139,11 +139,13 @@ daemon 不做能力判定——module host、能力注册、权限判定、事�
 | `@velaros-ai/core/kernel` | Kernel 库本体,daemon 切片的唯一内核依赖 |
 | `@velaros-ai/core/kernel/abi` | Mod 开发面(写 mod 的人看这里,不看本包) |
 | `@velaros-ai/kernel-client` | 瘦客户端接入面;与 daemon 共享 serve 模式的连线契约 |
+| `@velaros-ai/serve-host` | 独立 Velar Host 产品组合根;注入能力、权限策略、CLI 与 Extension Bridge |
 
-## 已知欠账
+## 生产消费者
 
-Platform 内还没有 `velaros serve` 宿主包,所以上面那条**能力注入线目前只有契约与测试,
-没有生产消费者**(仓根 README「已知欠账」第 2 条)。
+`@velaros-ai/serve-host` 已经是这条注入线的首个独立进程消费者。它复用本包的 daemon
+与进程内传输,但能力组合、数据根、权限策略和产品协议仍由 Host 自己拥有;Desktop / Workbench
+继续按「库优先」在自己的进程内装栈,没有被迫迁移到 serve 模式。
 
 ---
 

@@ -3,6 +3,7 @@ export {
   ComputerHelperResolver,
   computerHelperResolver,
   type ComputerHelperResolverOptions,
+  resolveBundledComputerRuntimeSourceRoot,
   resolveComputerHelper,
 } from './ComputerHelperResolver'
 export {
@@ -25,6 +26,7 @@ export {
 } from './ComputerSidecarProtocol'
 export {
   ComputerCapability,
+  ComputerKernelModuleVersion,
   type ComputerRuntimeCapabilityService,
   type ComputerRuntimePort,
   createComputerKernelModule,

@@ -1,4 +1,7 @@
-import type { KernelModuleDefinition } from '@velaros-ai/core/kernel/abi'
+import type {
+  KernelModuleDefinition,
+  KernelPermissionBroker,
+} from '@velaros-ai/core/kernel/abi'
 import {
   type KernelHostBridgeRegistry,
   KernelModuleHost,
@@ -11,6 +14,8 @@ import {
   type KernelClientAccessBroker,
   KernelService,
 } from '@velaros-ai/core/kernel/runtime'
+import { isEmpty } from '@velaros-ai/core/utils/array'
+import { toOptional } from '@velaros-ai/core/utils/nullish'
 import type { KernelDaemonPaths } from '@velaros-ai/kernel-client/contracts'
 
 import { KernelLocalDaemon } from './daemon'
@@ -47,6 +52,8 @@ export interface BootKernelDaemonOptions {
   readonly hostBridges?: KernelHostBridgeRegistry
   /** Unix socket path for product HostBridge (overrides env when set). */
   readonly hostBridgeEndpoint?: string
+  /** Host-owned capability permission policy. Secure default remains deny-all. */
+  readonly permissionBroker?: KernelPermissionBroker
   /**
    * Gates capability.session.open for connected Clients.
    * Defaults to allow-any-loaded when modules are supplied; otherwise deny-all.
@@ -75,7 +82,7 @@ export async function bootKernelDaemon(
   const modStore = new KernelModStore(
     options.modStorePaths ?? createDefaultKernelModStorePaths(),
   )
-  if (options.modPacks !== undefined) {
+  if (options.modPacks) {
     modStore.registerAll(options.modPacks)
   }
 
@@ -91,19 +98,22 @@ export async function bootKernelDaemon(
 
   const hostBridgeEndpoint = parseHostBridgeEndpoint(
     options.hostBridgeEndpoint ?? process.env.VELAROS_HOST_BRIDGE_ENDPOINT,
-  ) ?? { kind: 'unix' as const, path: '/tmp/velaros-host-bridge-unconfigured.sock' }
+  )
   const isolationAdapters = [
     ...(options.isolationAdapters ?? []),
     ...(options.hostBridges?.toIsolationAdapters() ?? []),
-    new SidecarIsolationAdapter({
-      endpoint: hostBridgeEndpoint,
-      allowOfflineFallback: true,
-    }),
+    ...(hostBridgeEndpoint
+      ? [new SidecarIsolationAdapter({
+          endpoint: hostBridgeEndpoint,
+          allowOfflineFallback: true,
+        })]
+      : []),
   ]
 
   const host = new KernelModuleHost({
     apiVersion: options.apiVersion ?? 1,
-    ...(isolationAdapters.length > 0 ? { isolationAdapters } : {}),
+    permissionBroker: toOptional(options.permissionBroker),
+    ...(!isEmpty(isolationAdapters) ? { isolationAdapters } : {}),
   })
   if (modules.length > 0) {
     host.registerModules(modules)
@@ -117,9 +127,7 @@ export async function bootKernelDaemon(
   const service = new KernelService({
     host,
     kernelVersion: options.kernelVersion,
-    ...(clientAccessBroker === undefined
-      ? {}
-      : { clientAccessBroker }),
+    clientAccessBroker: toOptional(clientAccessBroker),
     modCatalog: {
       list: () =>
         modStore.list().map((pack) => ({
@@ -161,7 +169,14 @@ export async function bootKernelDaemon(
   try {
     await daemon.start()
   } catch (error) {
-    await service.dispose().catch(() => undefined)
+    try {
+      await service.dispose()
+    } catch (disposeError) {
+      throw new AggregateError(
+        [error, disposeError],
+        'Kernel daemon 启动失败，且回收 Kernel service 时再次失败。',
+      )
+    }
     throw error
   }
 

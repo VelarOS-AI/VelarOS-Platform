@@ -29,6 +29,8 @@
 **注意目录同名陷阱**:包根下的 `runtime/` 是**随包发布的 Python helper 资产目录**
 (`mac_helper.py` / `win_helper.py` / `linux_helper.py` + 各平台 `requirements*.txt`),
 跟 `src/runtime` 那个 TS 切片是两回事。helper 从宿主提供的资源根解析,不写死路径。
+独立 Host 由 `velaros serve computer install` 把这些资产和隔离 venv 安装到 Host 自己的
+数据根；这是用户显式触发的产品安装动作，runtime resolver 本身仍不会联网或自动装依赖。
 
 ## 核心概念
 

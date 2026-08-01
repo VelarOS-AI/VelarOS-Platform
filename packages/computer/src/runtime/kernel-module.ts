@@ -1,4 +1,4 @@
-import { isFiniteNumber, isPlainObject, isString, isUndefined, toOptional } from '@velaros-ai/core'
+import { isFiniteNumber, isPlainObject, isPresent, isString, isUndefined, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   createCapabilityToken,
@@ -21,6 +21,8 @@ import type {
   ComputerScreenSize,
   ComputerTypeResult,
 } from './types'
+
+export const ComputerKernelModuleVersion = '0.2.6'
 
 export interface ComputerRuntimePort {
   isReady(): boolean
@@ -271,7 +273,7 @@ export function createComputerKernelModule(
   return defineKernelModule({
     manifest: {
       id: 'velaros.computer.sidecar',
-      version: '0.2.6',
+      version: ComputerKernelModuleVersion,
       apiVersion: 1,
       provides: [ComputerCapability],
       requires: [],
@@ -280,8 +282,8 @@ export function createComputerKernelModule(
       isolation: 'in-process',
     },
     activate(context) {
-      const ownsRuntime = options.runtime === undefined
-        || options.disposeInjectedRuntime === true
+      const ownsRuntime = !isPresent(options.runtime)
+        || !!options.disposeInjectedRuntime
       const runtime =
         options.runtime ?? new ComputerSidecarManager(options.sidecar)
       const service = createComputerCapabilityService(runtime)
