@@ -40,6 +40,8 @@ function decodeRequestPath(pathname: string): string {
   try {
     return decodeURIComponent(pathname)
   } catch {
+    // arch-guard:silent-catch-ok 不是吞错：畸形 `%` 序列本来就不是合法请求路径，按原样回去
+    // 就会在 `servable` 查表时落到 404 并带上正文说明——那条路径本身就是应答，没有第二个接收者。
     return pathname
   }
 }

@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import { parseGameProjectManifest } from '../dist/core/index.js'
 import {
   DenyAllGameProcessHost,
+  describeUnreadableColor,
+  describeUnrealizedVisual,
   type GameApprovedProcessHost,
   GameDevServerController,
   GameDevServerPortMismatchError,
@@ -13,6 +15,7 @@ import {
   GameProjectRuntime,
   type GameRuntimePageHost,
   GameRuntimePermissionDeniedError,
+  parseVisualColor,
 } from '../dist/runtime/index.js'
 
 const project = parseGameProjectManifest({
@@ -299,5 +302,194 @@ describe('GameProjectRuntime', () => {
     expect(runtime.isRunning()).toBeFalse()
     expect(closeCalls).toBe(1)
     expect(processHost.processes[0]?.stopCalls).toEqual([false])
+  })
+})
+
+/**
+ * 第十二轮：「跑起来了但什么都看不见」的信号必须在**跑**结束那一刻就到手。
+ *
+ * 真机第一手：模型 `game_run` 成功后直接截图、报告三个物体都在，全程没调过 `game_query_state`。
+ * 可见性只挂在查询工具上等于给了一条它不会走的路。
+ */
+describe('game_run first frame visibility', () => {
+  const scenePayload = (renderedEntities: number) => ({
+    select: 'scene' as const,
+    scene: 'main',
+    running: true,
+    url: 'http://127.0.0.1:4173',
+    entityCount: 3,
+    renderedEntities,
+    invisibleEntities: 3 - renderedEntities,
+    fps: 97,
+    elapsedMs: 12,
+  })
+
+  const errorRecord = {
+    signature: 'runtime|blind|',
+    message: '场景 scene:main 的 3 个实体没有一个产生可见画面：这一帧上只有调试叠加层。',
+    source: 'runtime' as const,
+    count: 1,
+    firstAt: 1,
+    lastAt: 1,
+  }
+
+  test('把首帧可见性与页面诊断拼进 game_run 结果', async () => {
+    const pageHost: GameRuntimePageHost = {
+      open: async () => undefined,
+      close: async () => undefined,
+      screenshot: async () => ({
+        path: 'game.png',
+        width: 960,
+        height: 540,
+        capturedAt: 1,
+        overlay: true,
+      }),
+      query: async (request) =>
+        request.select === 'errors'
+          ? { select: 'errors', errors: [errorRecord], total: 1 }
+          : scenePayload(0),
+      input: async () => ({ appliedSteps: 0, droppedSteps: [] }),
+    }
+    const runtime = new GameProjectRuntime(
+      '/tmp/runtime-probe',
+      project,
+      new ProbeProcessHost(),
+      pageHost,
+    )
+
+    const result = await runtime.run({})
+
+    expect(result.firstFrame).toEqual({
+      entityCount: 3,
+      renderedEntities: 0,
+      invisibleEntities: 3,
+    })
+    // 内置服务那条路上 `waitUntilReady` 看不到页面诊断；这里把两半接上。
+    expect(result.runtimeErrors).toHaveLength(1)
+    expect(result.runtimeErrors[0]?.message).toContain('没有一个产生可见画面')
+  })
+
+  test('观测失败绝不把「其实跑起来了」翻成失败', async () => {
+    const pageHost: GameRuntimePageHost = {
+      open: async () => undefined,
+      close: async () => undefined,
+      screenshot: async () => ({
+        path: 'game.png',
+        width: 960,
+        height: 540,
+        capturedAt: 1,
+        overlay: true,
+      }),
+      query: async () => {
+        throw new Error('window.__velarosGame 还没挂上')
+      },
+      input: async () => ({ appliedSteps: 0, droppedSteps: [] }),
+    }
+    const runtime = new GameProjectRuntime(
+      '/tmp/runtime-probe',
+      project,
+      new ProbeProcessHost(),
+      pageHost,
+    )
+
+    const result = await runtime.run({})
+
+    expect(result.status).toBe('running')
+    expect(result.firstFrame).toBeUndefined()
+    expect(runtime.isRunning()).toBeTrue()
+  })
+})
+
+describe('describeUnrealizedVisual', () => {
+  const entity = (id, components, envelope = {}) => ({ id, components, ...envelope })
+
+  test('真机那一档：组件写成 sprite / collider，实体什么都没画 → 点名并给出路', () => {
+    const message = describeUnrealizedVisual(
+      entity('ground', {
+        sprite: { width: 800, height: 40, color: '#6b8e23' },
+        collider: { width: 800 },
+      }),
+      false,
+    )
+    expect(message).toContain('实体 ground 没有产生任何画面')
+    expect(message).toContain('sprite / collider')
+    expect(message).toContain('components.visual')
+  })
+
+  /**
+   * 第十三轮 P1-2：证据面必须覆盖实体**信封**。
+   *
+   * 清单解析器只把名字在组件闭集或别名表里的键搬进 `components`，闭集外的（`renderer` /
+   * 直接写在实体上的 `color`）原地留在信封上。上一版只扫组件表，于是这一档在运行期
+   * 一条诊断都没有——而回合上下文恰恰叫模型去 `select:'errors'` 看原因。
+   */
+  test('闭集外的键留在实体信封上时同样算证据（P1-2）', () => {
+    const message = describeUnrealizedVisual(
+      entity('coin', {}, { renderer: 'circle', color: '#ffd700' }),
+      false,
+    )
+    expect(message).toContain('实体 coin 没有产生任何画面')
+    expect(message).toContain('实体块上的 renderer / color')
+    expect(message).toContain('components.visual')
+  })
+
+  test('故意不画的实体（触发器 / 出生点 / 纯逻辑）不报——清单干净就是没有未兑现的意图', () => {
+    expect(describeUnrealizedVisual(
+      entity('spawn-point', {
+        transform: { position: { x: 10, y: 20 } },
+        tags: ['spawn'],
+        layer: 'actors',
+        order: 0,
+      }),
+      false,
+    )).toBeNull()
+    expect(describeUnrealizedVisual(
+      entity(
+        'trigger',
+        { body: { kind: 'static', layer: 'ground' }, script: { module: 'src/systems/trigger.js' } },
+        // 信封上的已知键（from / parent / notes）不是证据：它们是被支持的写法。
+        { from: 'prefab:trigger', notes: '出生区域，故意不画' },
+      ),
+      false,
+    )).toBeNull()
+  })
+
+  test('声明了 visual 却没投影出来一定报；画出来了一定不报', () => {
+    expect(describeUnrealizedVisual(entity('ghost', { visual: { color: '#fff' } }), false))
+      .toContain('声明了 visual 却没有产生任何画面')
+    expect(describeUnrealizedVisual(entity('hero', { sprite: { color: '#fff' } }), true)).toBeNull()
+  })
+})
+
+/**
+ * 第十三轮 P1-1：颜色不许静默变紫。
+ *
+ * 只有 hex / `0x` / `rgb()` / `rgba()` 这几档是本包自己解析的，所以能在 Node 里钉住；
+ * 具名色与 `hsl()` 走页面自己的 CSS 解析器（没有 DOM 时回 null，由调用点出诊断）。
+ */
+describe('parseVisualColor', () => {
+  test('收下 3/4/6/8 位十六进制、0x 前缀与 rgb()/rgba()，alpha 不再被丢掉', () => {
+    expect(parseVisualColor('#f00')).toEqual({ color: 0xff0000, alpha: 1 })
+    expect(parseVisualColor('6b8e23')).toEqual({ color: 0x6b8e23, alpha: 1 })
+    expect(parseVisualColor('0x6b8e23')).toEqual({ color: 0x6b8e23, alpha: 1 })
+    expect(parseVisualColor('#ffd700')).toEqual({ color: 0xffd700, alpha: 1 })
+    expect(parseVisualColor('#ff000080')?.color).toBe(0xff0000)
+    expect(parseVisualColor('#ff000080')?.alpha).toBeCloseTo(128 / 255, 5)
+    expect(parseVisualColor('rgb(255, 215, 0)')).toEqual({ color: 0xffd700, alpha: 1 })
+    expect(parseVisualColor('rgba(255 0 0 / 50%)')).toEqual({ color: 0xff0000, alpha: 0.5 })
+    expect(parseVisualColor('rgb(100%, 0%, 0%)')).toEqual({ color: 0xff0000, alpha: 1 })
+  })
+
+  test('认不出来回 null（调用点据此出诊断），绝不回一个别的颜色', () => {
+    for (const value of ['reed', '#12345', 'rgb(1,2)', '', '   ', 42, null, undefined]) {
+      expect(parseVisualColor(value)).toBeNull()
+    }
+  })
+
+  test('诊断正文点名「你写的是什么 / 画面上会是什么 / 可以怎么写」', () => {
+    const message = describeUnreadableColor('实体 coin 的 visual.color', 'gooold', '#8b5cf6')
+    expect(message).toContain('"gooold"')
+    expect(message).toContain('#8b5cf6')
+    expect(message).toContain('rgba(…)')
   })
 })

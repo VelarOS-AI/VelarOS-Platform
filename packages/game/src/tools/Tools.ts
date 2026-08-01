@@ -133,9 +133,23 @@ export const gameSceneEditTool = defineGameTool<
       + '成立；target 打错字而这一批以 remove_*/rename_* 开头时，你拿到的是'
       + '「找不到编辑目标 …。可用 scene：…」，照着改一次即可。',
     '空 operations = 「确保这份清单存在并被工程登记」：磁盘上已经有就登记进 game.project.json 并'
-      + '规范化成 canonical 格式——已有内容一条不丢（未知字段与 notes 原样保留、实体顺序不变），'
+      + '规范化成 canonical 格式——已有内容一条不丢（真正未知的字段与 notes 原样保留、实体顺序不变），'
       + '但键序会按 canonical 重排，并把 schema 缺省字段显式写出来'
       + '（kind、extends: null、每个实体的 components: {}）；什么都没有就建一份空清单。',
+    '写错名字/位置但**无歧义**的键会被归一到 canonical 形态，每一次都在 appliedAdjustments 里点名'
+      + '（components.sprite / components.text → visual、components.collider → body、'
+      + '组件写在实体块上 → 搬进 components、工程顶层的 pixelArt / canvasWidth / canvasHeight →'
+      + ' runtime.* 、场景顶层的 gravity / background → meta）。canonical 那一格已经有值时**不归一**：'
+      + '那是两种意图，warnings 会点名两边让你自己合并。',
+    '形状也宽容：components 可以写成 ECS 风数组（每项用 type 或 component 指明组件名）；'
+      + 'entities / assets / animation.clips 可以写成按 id（clips 按 name）分组的对象，'
+      + '键会写进条目的 id/name。两种都在 appliedAdjustments 里点名。',
+    '**解析器读不懂的形状一律当场失败，绝不静默丢掉再写回磁盘**：报错正文会说清「你写的是什么 / '
+      + '这一格要的是什么 / 怎么改」，并且这次**零文件落盘**（磁盘一个字节都没动），改完重发即可。'
+      + '所以 ok:true 就意味着落盘的内容里没有任何一条被悄悄扔掉。',
+    'warnings 里写着「不会生效」的一律要改：那一项确实不会产生任何画面或行为。v0 的每一层'
+      + '（含场景 / prefab / 资产清单的信封）都属于这一档——信封的已知键正是 entities / '
+      + 'components / assets / extends / meta，把内容写在信封的错名键下同样什么都不会画。',
     'set_project 的数组是整体替换：重发 scenes / prefabs / assets 时漏掉一条 = 把那份文档摘出工程。'
       + '被摘掉的文件在磁盘上有内容时本次调用会被拒绝并点名它，空清单则放行并在 diffSummary 里'
       + '留一行 undeclared。只想改别的字段时就别重发这几项。',
@@ -237,11 +251,16 @@ export const gameRunTool = defineGameTool<z.output<typeof GameRunSchema>>({
   ],
   usage: [
     '需要强制重启时传 restart=true；timeoutMs 会钳制到 1000..180000。',
+    '结果里的 firstFrame 是页面就绪那一刻的可见性：renderedEntities 是真的画出来的实体数。'
+      + 'renderedEntities=0 而 entityCount>0 = **跑起来了但画面上只有调试叠加层**，'
+      + '别据此报告成功——runtimeErrors 里会逐实体说明原因（通常是组件名没被认识）。',
   ],
   examples: [{}, { scene: 'scene:level-1', restart: true, timeoutMs: 60_000 }],
   notes: [
     'V0 始终等待可交互状态，不暴露无法形成闭环的 waitForReady=false 分支。',
     '宿主没有注入获批进程端口时默认拒绝。',
+    'firstFrame 与 runtimeErrors 里的页面诊断是 best-effort 观测：读不到时字段缺席，'
+      + '不会把一次成功的启动翻成失败。',
   ],
   schema: GameRunSchema,
   permissions: ['fs:read', 'process:exec', 'browser:control'],
@@ -350,6 +369,8 @@ export const gameQueryStateTool = defineGameTool<
   ],
   usage: [
     '读取单实体时传 select=entity 和 entityId，可用 components 收窄结果。',
+    'select=scene 除了 entityCount 还给 renderedEntities / invisibleEntities（两者之和 = entityCount）。'
+      + '「实体都在、画面却是空的」只有这两个数看得出来——entityCount 与 fps 对它完全无感。',
   ],
   examples: [
     {},

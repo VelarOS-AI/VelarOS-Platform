@@ -4,6 +4,7 @@ import type {
   GameProjectManifest,
   GameRunRequest,
   GameRunResult,
+  GameRuntimeErrorRecord,
   GameRuntimePort,
   GameRuntimeQuery,
   GameRuntimeQueryResult,
@@ -93,15 +94,16 @@ export class GameProjectRuntime implements GameRuntimePort {
       }
       throw error
     }
-    if (pageWasReady && !result.restarted) return result
+    if (pageWasReady && !result.restarted) return this.withFirstFrame(result)
     try {
       await this.pageHost.open({
         url: result.url,
         scene: result.scene,
       })
       this.pageOpen = true
-      notifyObserver(() => this.observer?.onRun?.(result))
-      return result
+      const observed = await this.withFirstFrame(result)
+      notifyObserver(() => this.observer?.onRun?.(observed))
+      return observed
     } catch (error) {
       this.pageOpen = false
       await this.pageHost.close().catch(() => {
@@ -157,8 +159,53 @@ export class GameProjectRuntime implements GameRuntimePort {
     return result
   }
 
+  /**
+   * 就绪的下一刻读一次页面：可见性计数 + 页面已攒下的诊断，拼进 `game_run` 的结果。
+   *
+   * ## 为什么在这里，而不是让模型自己去 `game_query_state`
+   * 「跑」结束那一刻就是模型报告成功的地方（真机第一手：跑完直接截图、报告三个物体都在，
+   * 全程没查过状态）。首帧诊断本来就是 `GameRunResult` 已有的字段——内置服务那条路上它一直
+   * 恒为空，因为诊断攒在**页面**里而 `waitUntilReady` 只看得到进程日志。这里把两半接上。
+   *
+   * ## best-effort 的边界
+   * 观测失败（页面还没挂上窄桥、求值被拒、结果形状不对）一律**原样返回启动结果**：
+   * 观测绝不许改变 `game_run` 本身的成败——那是「监控把被监控者搞挂」的经典自伤。
+   */
+  private async withFirstFrame(result: GameRunResult): Promise<GameRunResult> {
+    try {
+      const scene = await this.pageHost.query({ select: 'scene' })
+      if (scene.select !== 'scene') return result
+      const errors = await this.pageHost.query({ select: 'errors', limit: 20, offset: 0 })
+      const pageErrors = errors.select === 'errors' ? errors.errors : []
+      return {
+        ...result,
+        firstFrame: {
+          entityCount: scene.entityCount,
+          renderedEntities: scene.renderedEntities,
+          invisibleEntities: scene.invisibleEntities,
+        },
+        runtimeErrors: mergeErrorRecords(result.runtimeErrors, pageErrors),
+      }
+    } catch {
+      // arch-guard:silent-catch-ok 观测是尽力而为：读不到首帧就照原样交回启动结果，
+      // 绝不让一次观测失败把「游戏其实跑起来了」翻成失败。
+      return result
+    }
+  }
+
   private requireRunning(operation: string): void {
     if (this.isRunning()) return
     throw new Error(`${operation} 需要运行中的游戏页面；请先调用 game_run。`)
   }
+}
+
+/** 进程日志与页面各自攒的诊断按 `signature` 合并去重（同一条不许在结果里出现两遍）。 */
+function mergeErrorRecords(
+  base: readonly GameRuntimeErrorRecord[],
+  extra: readonly GameRuntimeErrorRecord[],
+): readonly GameRuntimeErrorRecord[] {
+  if (extra.length === 0) return base
+  const merged = new Map(base.map((record) => [record.signature, record]))
+  for (const record of extra) merged.set(record.signature, record)
+  return [...merged.values()]
 }

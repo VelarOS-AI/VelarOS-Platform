@@ -28,7 +28,15 @@ function errorSignature(error: GameRuntimeErrorRecord): string {
 }
 
 function sceneSignature(scene: GameRuntimeSceneSnapshot): string {
-  return `${scene.scene}:${scene.running}:${scene.url ?? ''}:${scene.entityCount}`
+  return [
+    scene.scene,
+    scene.running,
+    scene.url ?? '',
+    scene.entityCount,
+    // 可见性进指纹：实体数不变而「可见 0 → 可见 3」是一次真实的状态跃迁（改完清单重跑），
+    // 不进指纹就会被去重吃掉，回合上下文里永远停在第一次的那句话上。
+    scene.renderedEntities,
+  ].join(':')
 }
 
 /**
@@ -72,7 +80,11 @@ export class GameTurnContextCoordinator {
       scene: result.scene,
       running: true,
       url: result.url,
-      entityCount: 0,
+      // 首帧读得到就用真数：`entityCount: 0` 那种占位值会让「一个实体都没画出来」这条
+      // 事实在回合上下文里彻底隐身，而那正是最需要被看见的一档。
+      entityCount: result.firstFrame?.entityCount ?? 0,
+      renderedEntities: result.firstFrame?.renderedEntities ?? 0,
+      invisibleEntities: result.firstFrame?.invisibleEntities ?? 0,
       fps: null,
       elapsedMs: result.readyMs,
     })
@@ -156,11 +168,16 @@ export class GameTurnContextCoordinator {
     const signature = sceneSignature(scene)
     if (this.lastScenes.get(sessionId) === signature) return
     this.lastScenes.set(sessionId, signature)
+    const blind = scene.entityCount > 0 && scene.renderedEntities === 0
     this.ledgers['game.scene-state'].append(sessionId, {
-      label: `${scene.scene} · ${scene.entityCount} 个实体`,
+      label: `${scene.scene} · ${scene.entityCount} 个实体 · 可见 ${scene.renderedEntities}`,
       summaryText: `游戏场景“${scene.scene}”当前${
         scene.running ? '正在运行' : '已停止'
-      }，包含 ${scene.entityCount} 个实体。`,
+      }，包含 ${scene.entityCount} 个实体，其中 ${scene.renderedEntities} 个产生了可见画面。${
+        blind
+          ? '一个都没画出来——画面上只有调试叠加层；用 game_query_state({select:"errors"}) 看逐实体原因。'
+          : ''
+      }`,
       inspect: { tool: 'game_query_state', argsHint: { select: 'scene' } },
     })
   }
