@@ -44,7 +44,7 @@ import {
   resolveOfficeInputPath,
   resolveOfficeInputPathWithExtensions,
   rm,
-  runOfficeSystemCommand,
+  runLibreOfficeSystemCommand,
   runWithDirectory,
   tmpdir,
   toolRequiresWorkspace,
@@ -142,7 +142,7 @@ const convertWordToPdf = defineOfficeTool<ConvertWordToPdfInput>({
           officePlatformCompatibility.quoteShellArg(tempDir),
           officePlatformCompatibility.quoteShellArg(normalizedInputPath),
         ].join(' ')
-        const commandResult = await runOfficeSystemCommand(
+        const commandResult = await runLibreOfficeSystemCommand(
           ctx,
           command,
           dirname(normalizedInputPath),

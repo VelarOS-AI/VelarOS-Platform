@@ -75,6 +75,7 @@ export {
   resolveOfficeInputPath,
   resolveOfficeInputPathWithExtensions,
   rm,
+  runLibreOfficeSystemCommand,
   runOfficeSystemCommand,
   runWithDirectory,
   sep,

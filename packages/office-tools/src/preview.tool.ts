@@ -26,7 +26,10 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
   summary: '解析 Office 文档并可生成 HTML 预览。',
   suitable: ['需要检查生成后的 Word、PowerPoint 或 Excel 文档结构和摘要。'],
   forbidden: ['不要用它编辑文档内容。'],
-  usage: ['传 inputPath；需要浏览器预览时传 outputPath。'],
+  usage: [
+    '传 inputPath；需要浏览器预览时传 outputPath。',
+    '重复写入同一个 outputPath 时传 overwrite=true。',
+  ],
   examples: [{ inputPath: "report.docx", outputPath: "preview.html" }],
   notes: ['.doc 会先临时转为 .docx 后解析。'],
   schema: previewOfficeDocumentSchema,

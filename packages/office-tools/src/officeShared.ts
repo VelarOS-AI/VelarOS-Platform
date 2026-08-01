@@ -7,7 +7,7 @@
 
 import { copyFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path'
 
 import { z } from 'zod'
@@ -535,6 +535,67 @@ export async function runOfficeSystemCommand(
   )
 }
 
+function escapeFontConfigXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+export function buildMacLibreOfficeFontConfig(input: {
+  homeDir: string
+  cacheDir: string
+}): string {
+  const directories = [
+    '/System/Library/Fonts',
+    '/System/Library/Fonts/Supplemental',
+    '/Library/Fonts',
+    join(input.homeDir, 'Library', 'Fonts'),
+  ]
+  return [
+    '<?xml version="1.0"?>',
+    '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">',
+    '<fontconfig>',
+    ...directories.map((directory) => `  <dir>${escapeFontConfigXml(directory)}</dir>`),
+    `  <cachedir>${escapeFontConfigXml(input.cacheDir)}</cachedir>`,
+    '</fontconfig>',
+    '',
+  ].join('\n')
+}
+
+/**
+ * Runs LibreOffice with a real writable Fontconfig cache on macOS.
+ * Relocatable/headless LibreOffice bundles otherwise resolve their placeholder
+ * cache directory literally and can substitute CJK text with unrelated fonts.
+ */
+export async function runLibreOfficeSystemCommand(
+  ctx: OfficeToolContext,
+  command: string,
+  cwd: string,
+  timeoutMs = 120_000
+): Promise<OfficeSystemCommandResult> {
+  if (process.platform !== 'darwin') return runOfficeSystemCommand(ctx, command, cwd, timeoutMs)
+  const runtimeDir = await mkdtemp(join(tmpdir(), 'velaros-office-fontconfig-'))
+  const cacheDir = join(runtimeDir, 'cache')
+  const configPath = join(runtimeDir, 'fonts.conf')
+  await mkdir(cacheDir, { recursive: true })
+  await writeFile(configPath, buildMacLibreOfficeFontConfig({
+    homeDir: homedir(),
+    cacheDir,
+  }), 'utf8')
+  const configuredCommand = [
+    `FONTCONFIG_FILE=${officePlatformCompatibility.quoteShellArg(configPath)}`,
+    command,
+  ].join(' ')
+  try {
+    return await runOfficeSystemCommand(ctx, configuredCommand, cwd, timeoutMs)
+  } finally {
+    await rm(runtimeDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 临时字体缓存尽力清理 */)
+  }
+}
+
 // 依次查找常见 LibreOffice 命令名和 macOS App 内的 soffice 可执行文件。
 export async function resolveLibreOfficeCommand(
   ctx: OfficeToolContext
@@ -579,7 +640,7 @@ export async function normalizeWordInputToDocx(input: {
     officePlatformCompatibility.quoteShellArg(tempDir),
     officePlatformCompatibility.quoteShellArg(input.inputPath),
   ].join(' ')
-  const commandResult = await runOfficeSystemCommand(
+  const commandResult = await runLibreOfficeSystemCommand(
     input.ctx,
     command,
     dirname(input.inputPath),

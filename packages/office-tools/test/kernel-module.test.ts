@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
+import JSZip from 'jszip'
 
 import type {
   CapabilityToken,
@@ -117,6 +118,50 @@ describe('office tools kernel module', () => {
         new AbortController().signal,
       )).rejects.toThrow('Office capability input is invalid')
       expect(resolverCalls).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('renders standard document subtitle and date into the generated docx', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-office-standard-word-'))
+    let service: OfficeToolsCapabilityService | undefined
+    const module = createOfficeToolsKernelModule({
+      resolveContext: async (_scope, signal) => ({
+        abortSignal: signal,
+        hasWorkspaceRoot: () => true,
+        workspace: {
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutationWorkspace: async () => ({ approved: true, rootPath: root }),
+        },
+        system: {},
+      }) as unknown as OfficeToolContext,
+    })
+
+    try {
+      await module.activate(
+        createCaptureContext((_tokenId, registered) => {
+          service = registered as OfficeToolsCapabilityService
+        }),
+      )
+      await service?.invoke(
+        'create_word_document',
+        undefined,
+        {
+          outputPath: 'weekly.docx',
+          title: '产品与工程周报',
+          profile: 'standard',
+          metadata: { subtitle: 'Host 网页链路实测', date: '2026-08-01' },
+          blocks: [{ kind: 'paragraph', text: '正文' }],
+          overwrite: true,
+        },
+        new AbortController().signal,
+      )
+      const archive = await JSZip.loadAsync(await readFile(join(root, 'weekly.docx')))
+      const documentXml = await archive.file('word/document.xml')?.async('text')
+      expect(documentXml).toContain('Host 网页链路实测')
+      expect(documentXml).toContain('2026-08-01')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -81,6 +81,20 @@ export type ExcelAlignment = {
   textRotation?: number
 }
 
+// 可复用的单元格样式，既可用于单个单元格，也可用于工作表表头。
+export type ExcelCellStyle = {
+  numFmt?: string
+  font?: ExcelFont
+  fill?: ExcelFill
+  border?: ExcelBorders
+  alignment?: ExcelAlignment
+  /** 常用表头样式的扁平简写；复杂样式仍使用 font/fill。 */
+  bold?: boolean
+  italic?: boolean
+  color?: string
+  bgColor?: string
+}
+
 // 单元格输入支持简单值，也支持对象格式来声明公式、富文本、样式、超链接和合并范围。
 export type ExcelCellInput = LooseOptional<
   | string
@@ -111,7 +125,7 @@ export type ExcelColumnDef =
       header: string
       key?: string
       width?: number
-      style?: { numFmt?: string; font?: ExcelFont; fill?: ExcelFill; alignment?: ExcelAlignment }
+      style?: ExcelCellStyle
     }
 
 // 单个工作表输入；冻结行列和标签颜色在创建 worksheet 时使用。
@@ -123,6 +137,8 @@ export type SpreadsheetSheetInput = {
   freezeCols?: number
   tabColor?: string
   showGridLines?: boolean
+  headerStyle?: ExcelCellStyle
+  numberFormats?: Record<string, string>
 }
 
 // 工具入口参数；sheets/content 二选一，content 会被自动解析成单张表。
@@ -169,6 +185,18 @@ export const excelCellObjectSchema = z.object({
   rowSpan: z.number().int().positive().optional(),
 })
 
+export const excelCellStyleSchema = z.object({
+  numFmt: z.string().min(1).max(120).optional(),
+  font: excelFontSchema,
+  fill: z.record(z.string(), z.any()).optional(),
+  border: z.record(z.string(), z.any()).optional(),
+  alignment: z.record(z.string(), z.any()).optional(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  color: z.string().optional(),
+  bgColor: z.string().optional(),
+})
+
 // 简单单元格和对象单元格共用一个 union，方便用户按复杂度逐步输入。
 export const excelCellSchema = z.union([
   z.string(),
@@ -200,6 +228,13 @@ export const spreadsheetSheetArraySchema = z
       freezeCols: z.number().int().min(0).optional(),
       tabColor: z.string().optional(),
       showGridLines: z.boolean().optional(),
+      headerStyle: excelCellStyleSchema.optional(),
+      numberFormats: z
+        .record(
+          z.string().regex(/^[A-Z]+[1-9]\d*(?::[A-Z]+[1-9]\d*)?$/iu),
+          z.string().min(1).max(120),
+        )
+        .optional(),
     })
   )
   .min(1)
@@ -482,7 +517,8 @@ export function normalizeSheetName(name: string, index: number): string {
 
 // ExcelJS 使用 ARGB；用户常传 6 位 RGB，这里自动补上不透明 Alpha。
 export function toArgbColor(hex: string): string {
-  return hex.length === 6 ? `FF${hex.toUpperCase()}` : hex.toUpperCase()
+  const normalized = hex.trim().replace(/^#/u, '')
+  return normalized.length === 6 ? `FF${normalized.toUpperCase()}` : normalized.toUpperCase()
 }
 
 // 把工具层字体配置翻译成 ExcelJS 单元格字体对象。
@@ -544,6 +580,36 @@ export function applyExcelAlignment(target: { alignment?: object }, alignment?: 
   target.alignment = alignment
 }
 
+// 把声明式样式统一转换成 ExcelJS 可以直接接收的对象。
+export function buildExcelCellStyle(style?: ExcelCellStyle): Record<string, unknown> {
+  const cellStyle: Record<string, unknown> = {}
+  if (!style) return cellStyle
+  const flatFont =
+    isPresent(style.bold) || isPresent(style.italic) || isNonBlankString(style.color)
+      ? { bold: style.bold, italic: style.italic, color: style.color }
+      : undefined
+  applyExcelFont(
+    cellStyle,
+    style.font || flatFont
+      ? {
+          ...flatFont,
+          ...style.font,
+        }
+      : undefined,
+  )
+  applyExcelFill(
+    cellStyle,
+    style.fill ??
+      (isNonBlankString(style.bgColor)
+        ? { type: 'pattern', pattern: 'solid', fgColor: style.bgColor }
+        : undefined),
+  )
+  applyExcelBorder(cellStyle, style.border)
+  applyExcelAlignment(cellStyle, style.alignment)
+  if (style.numFmt) cellStyle.numFmt = style.numFmt
+  return cellStyle
+}
+
 // buildExcelCellValue 的中间结果：值、样式和布局信息拆开，便于执行阶段统一应用。
 export type ExcelCellBuildResult = {
   excelValue: CellValue
@@ -563,13 +629,8 @@ export function buildExcelCellValue(cell: ExcelCellInput): ExcelCellBuildResult 
     return { excelValue: cell, cellStyle: {} }
   }
   const obj = cell
-  const cellStyle: Record<string, unknown> = {}
   // 对象单元格先累积样式，再根据值类型决定实际写入内容。
-  applyExcelFont(cellStyle, obj.font)
-  applyExcelFill(cellStyle, obj.fill)
-  applyExcelBorder(cellStyle, obj.border)
-  applyExcelAlignment(cellStyle, obj.alignment)
-  if (obj.numFmt) cellStyle.numFmt = obj.numFmt
+  const cellStyle = buildExcelCellStyle(obj)
 
   let excelValue: CellValue
   if (!!obj.richText && !isEmpty(obj.richText)) {

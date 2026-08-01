@@ -7,7 +7,7 @@
 import ExcelJS from 'exceljs'
 import { type z } from 'zod'
 
-import { isEmpty, isPresent,isString, optionalWhenLazy } from '@velaros-ai/core'
+import { isEmpty, isPresent, isString, optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -21,7 +21,39 @@ import {
   writeOfficeBuffer,
 } from './officeShared'
 import type { CreateSpreadsheetInput } from './spreadsheetTool'
-import { applyAutoWidths, buildExcelCellValue, createSpreadsheetGuidedSchema, createSpreadsheetPresetSchema, createSpreadsheetSchema, normalizeCreateSpreadsheetGuided, normalizeCreateSpreadsheetPreset, normalizeSheetName, normalizeSpreadsheetSheets, toArgbColor } from './spreadsheetTool'
+import { applyAutoWidths, buildExcelCellStyle, buildExcelCellValue, createSpreadsheetGuidedSchema, createSpreadsheetPresetSchema, createSpreadsheetSchema, normalizeCreateSpreadsheetGuided, normalizeCreateSpreadsheetPreset, normalizeSheetName, normalizeSpreadsheetSheets, toArgbColor } from './spreadsheetTool'
+
+const ExcelAddressPattern = /^([A-Z]+)([1-9]\d*)(?::([A-Z]+)([1-9]\d*))?$/iu
+const MaxNumberFormatCells = 100_000
+
+function excelColumnNumber(name: string): number {
+  let value = 0
+  for (const char of name.toUpperCase()) value = value * 26 + char.charCodeAt(0) - 64
+  return value
+}
+
+function applyNumberFormats(
+  sheet: ExcelJS.Worksheet,
+  numberFormats?: Readonly<Record<string, string>>,
+): void {
+  for (const [address, numFmt] of Object.entries(numberFormats ?? {})) {
+    const match = ExcelAddressPattern.exec(address)
+    if (!match) continue
+    const startColumn = excelColumnNumber(match[1]!)
+    const startRow = Number(match[2])
+    const endColumn = excelColumnNumber(match[3] ?? match[1]!)
+    const endRow = Number(match[4] ?? match[2])
+    const left = Math.min(startColumn, endColumn)
+    const right = Math.max(startColumn, endColumn)
+    const top = Math.min(startRow, endRow)
+    const bottom = Math.max(startRow, endRow)
+    if ((right - left + 1) * (bottom - top + 1) > MaxNumberFormatCells)
+      throw new AppError('VALIDATION', `create_spreadsheet: numberFormats 范围过大：${address}`)
+    for (let row = top; row <= bottom; row++)
+      for (let column = left; column <= right; column++)
+        sheet.getRow(row).getCell(column).numFmt = numFmt
+  }
+}
 
 // ─── Tool definition ────────────────────────────────────────────────────────────
 
@@ -194,6 +226,13 @@ const createSpreadsheet = defineOfficeTool<CreateSpreadsheetInput>({
               m.startCol + m.colSpan - 1
             )
         }
+
+        if (sheetInput.headerStyle && sheetInput.columns?.length) {
+          const headerStyle = buildExcelCellStyle(sheetInput.headerStyle)
+          for (let column = 1; column <= sheetInput.columns.length; column++)
+            Object.assign(sheet.getRow(1).getCell(column), headerStyle)
+        }
+        applyNumberFormats(sheet, sheetInput.numberFormats)
 
         // 内容全部写入后再自动列宽，避免漏掉后续行的最长文本。
         applyAutoWidths(sheet)

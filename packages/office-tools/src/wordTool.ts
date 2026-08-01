@@ -5,6 +5,7 @@
  * 依赖：officeShared（共享类型 + 路径辅助）
  */
 import { readFile } from 'node:fs/promises'
+import { platform as nodePlatform } from 'node:os'
 
 import {
   AlignmentType,
@@ -721,6 +722,43 @@ export function buildWordTable(block: Extract<WordBlock, { kind: 'table' }>): Ta
   })
 }
 
+export function buildStandardWordFrontMatter(
+  children: FileChild[],
+  input: Pick<CreateWordDocumentInput, 'title' | 'author' | 'metadata'>
+): void {
+  if (input.title) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        heading: HeadingLevel.TITLE,
+        spacing: { after: input.metadata?.subtitle ? 120 : 320 },
+        children: [new TextRun({ text: input.title, bold: true, size: 36 })],
+      })
+    )
+  }
+  if (input.metadata?.subtitle) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+        children: [new TextRun({ text: input.metadata.subtitle, size: 24, color: '475569' })],
+      })
+    )
+  }
+  const details = [input.metadata?.organization, input.author, input.metadata?.date]
+    .filter(isNonBlankString)
+    .map((value) => value.trim())
+  if (!isEmpty(details)) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 320 },
+        children: [new TextRun({ text: details.join(' · '), size: 20, color: '64748B' })],
+      })
+    )
+  }
+}
+
 /** 将结构化 WordBlock 转成 docx section children。 */
 export function buildWordChildren(
   input: Pick<
@@ -740,16 +778,9 @@ export function buildWordChildren(
   const blocks = isArray(input.blocks) ? input.blocks : []
   if (isAcademicWordProfile(input.profile)) {
     buildAcademicWordFrontMatter(children, input)
-  } else if (input.title) {
-    // title 只在新建完整文档时插入；append fragment 不重复插入标题。
-    children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        heading: HeadingLevel.TITLE,
-        spacing: { after: 320 },
-        children: [new TextRun({ text: input.title, bold: true, size: 36 })],
-      })
-    )
+  } else {
+    // 标题与标准文档元数据只在新建完整文档时传入；append fragment 不重复插入。
+    buildStandardWordFrontMatter(children, input)
   }
   for (const block of blocks) {
     switch (block.kind) {
@@ -854,6 +885,26 @@ export function getWordLanguage(input: Pick<CreateWordDocumentInput, 'language'>
   return input.language ?? 'zh-CN'
 }
 
+export interface WordFontFamilies {
+  readonly body: string
+  readonly heading: string
+}
+
+/**
+ * Chooses fonts that are actually available on the document producer's OS.
+ * The previous SimSun/SimHei defaults are Windows-only and caused headless
+ * LibreOffice on macOS/Linux to emit PDFs with corrupt CJK glyph mappings.
+ */
+export function resolveWordFontFamilies(
+  language: 'zh-CN' | 'en-US',
+  hostPlatform: NodeJS.Platform = nodePlatform(),
+): WordFontFamilies {
+  if (language === 'en-US') return { body: 'Times New Roman', heading: 'Aptos Display' }
+  if (hostPlatform === 'darwin') return { body: 'Arial Unicode MS', heading: 'Arial Unicode MS' }
+  if (hostPlatform === 'win32') return { body: 'Microsoft YaHei', heading: 'Microsoft YaHei' }
+  return { body: 'Noto Sans CJK SC', heading: 'Noto Sans CJK SC' }
+}
+
 export function buildAcademicWordFrontMatter(
   children: FileChild[],
   input: Pick<
@@ -869,6 +920,7 @@ export function buildAcademicWordFrontMatter(
   >
 ): void {
   const language = getWordLanguage(input)
+  const fonts = resolveWordFontFamilies(language)
   const labels =
     language === 'en-US'
       ? {
@@ -914,7 +966,7 @@ export function buildAcademicWordFrontMatter(
             text: input.title,
             bold: true,
             size: language === 'en-US' ? 36 : 40,
-            font: { eastAsia: language === 'en-US' ? 'Times New Roman' : 'SimHei' },
+            font: { ascii: fonts.heading, hAnsi: fonts.heading, eastAsia: fonts.heading },
           }),
         ],
       })
@@ -1036,8 +1088,7 @@ export function buildAcademicMetadataRows(
 }
 
 export function buildAcademicWordStyles(language: 'zh-CN' | 'en-US') {
-  const bodyFont = language === 'en-US' ? 'Times New Roman' : 'SimSun'
-  const headingFont = language === 'en-US' ? 'Aptos Display' : 'SimHei'
+  const { body: bodyFont, heading: headingFont } = resolveWordFontFamilies(language)
 
   return {
     default: {
@@ -1099,6 +1150,55 @@ export function buildAcademicWordStyles(language: 'zh-CN' | 'en-US') {
   }
 }
 
+export function buildStandardWordStyles(language: 'zh-CN' | 'en-US') {
+  const { body: bodyFont, heading: headingFont } = resolveWordFontFamilies(language)
+  return {
+    default: {
+      document: {
+        run: { font: { ascii: bodyFont, hAnsi: bodyFont, eastAsia: bodyFont }, size: 22 },
+        paragraph: {
+          spacing: { after: 140, line: 320, lineRule: LineRuleType.AUTO },
+        },
+      },
+      title: {
+        run: {
+          bold: true,
+          size: 36,
+          font: { ascii: headingFont, hAnsi: headingFont, eastAsia: headingFont },
+        },
+        paragraph: { spacing: { after: 320 }, alignment: AlignmentType.CENTER },
+      },
+      heading1: {
+        run: {
+          bold: true,
+          size: 30,
+          color: '0F172A',
+          font: { ascii: headingFont, hAnsi: headingFont, eastAsia: headingFont },
+        },
+        paragraph: { spacing: { before: 260, after: 140 }, outlineLevel: 0 },
+      },
+      heading2: {
+        run: {
+          bold: true,
+          size: 26,
+          color: '1E293B',
+          font: { ascii: headingFont, hAnsi: headingFont, eastAsia: headingFont },
+        },
+        paragraph: { spacing: { before: 220, after: 120 }, outlineLevel: 1 },
+      },
+      heading3: {
+        run: {
+          bold: true,
+          size: 24,
+          color: '334155',
+          font: { ascii: headingFont, hAnsi: headingFont, eastAsia: headingFont },
+        },
+        paragraph: { spacing: { before: 180, after: 100 }, outlineLevel: 2 },
+      },
+    },
+  }
+}
+
 export function buildAcademicWordFooter(): Footer {
   return new Footer({
     children: [
@@ -1139,7 +1239,9 @@ export function buildWordDocument(
     keywords: input.keywords?.join(', '),
     description: input.abstract,
     features: optionalWhenLazy(shouldIncludeAcademicToc(input), () => ({ updateFields: true })),
-    styles: optionalWhenLazy(isAcademic, () => buildAcademicWordStyles(language)),
+    styles: isAcademic
+      ? buildAcademicWordStyles(language)
+      : buildStandardWordStyles(language),
     sections: [
       {
         properties: optionalWhenLazy(isAcademic, () => ({
