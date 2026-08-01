@@ -1,16 +1,10 @@
 export const GameSchemaChannel = 'v0' as const
 export const GameProjectFileName = 'game.project.json' as const
 
-export const GameProjectDirectories = Object.freeze({
-  assets: 'assets',
-  prefabs: 'prefabs',
-  scenes: 'scenes',
-  source: 'src',
-})
-
 export type GameSchemaChannel = typeof GameSchemaChannel
-export type GameProjectDirectory =
-  (typeof GameProjectDirectories)[keyof typeof GameProjectDirectories]
+
+// GameProjectDirectories / GameProjectDirectory 住 references.ts（编辑器要用它推路径，放这里
+// 就是一条 index → editor → index 的循环），经下面的 `export *` 原样转出，对外位置不变。
 
 export * from './editor.js'
 export * from './formatter.js'

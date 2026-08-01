@@ -31,6 +31,41 @@ export const GameProjectRelativePathSchema = z
     '工程内相对路径不能包含控制字符。',
   )
 
+/**
+ * 工程内的固定目录布局。
+ *
+ * 住在这里（而不是 `core/index.ts`）是为了让**清单编辑器**也能引用它：编辑器要按稳定 id 推出
+ * 新场景 / 新 prefab 的落点路径，而 `index.ts` 反过来 `export *` 编辑器，放在那边就是一条循环。
+ * 对外可见的名字与位置不变（`index.ts` 经 `export *` 原样转出）。
+ */
+export const GameProjectDirectories = Object.freeze({
+  assets: 'assets',
+  prefabs: 'prefabs',
+  scenes: 'scenes',
+  source: 'src',
+})
+
+export type GameProjectDirectory =
+  (typeof GameProjectDirectories)[keyof typeof GameProjectDirectories]
+
+/**
+ * 清单路径 → 稳定 id（`scenes/main.scene.json` → `main`）。
+ *
+ * 两个消费者共用一份：解析器用它给缺 `id` 的场景/prefab 清单补上（真机第一手，见
+ * `withIdFromSourceName`），编辑器用它判断一条**声明了却还不存在**的清单路径能不能自举出
+ * 一份合法的空清单。文件名推不出合法 slug（`My Scene.json`、`01.json`）时回 null，
+ * 由调用方各自决定报什么错——绝不硬编一个非法 id。
+ */
+export function gameManifestIdFromPath(path: string): Nullable<string> {
+  const fileName = path.split('/').at(-1)
+  if (!fileName) return null
+  const stem = fileName
+    .replace(/\.(?:prefab|scene)\.json$/u, '')
+    .replace(/\.json$/u, '')
+  if (!stem) return null
+  return GameSlugSchema.safeParse(stem).success ? stem : null
+}
+
 export type GameReferenceKind = 'asset' | 'entity' | 'prefab' | 'scene'
 export type GameReference<TKind extends GameReferenceKind = GameReferenceKind> =
   `${TKind}:${string}`

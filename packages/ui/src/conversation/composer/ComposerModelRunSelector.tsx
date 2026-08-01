@@ -179,7 +179,10 @@ function ComposerModelRunSelectorImpl({
   const selectedModelLabel = modelSelector
     ? getSelectedModelLabel(visibleProvider, visibleModel)
     : t('chat.selectModel')
-  // 宿主给的摘要优先：没有模型目录时包内回落的「选择模型」是一句做不到的承诺（用户点开是空菜单）。
+  // 宿主给的摘要优先，且**两格一起接管**：没有模型目录时包内回落的「选择模型」是一句做不到的
+  // 承诺（用户点开是空菜单），而两格各自回落时，宿主根本无从表达「这两个轴现在是同一件事」——
+  // 真机上模型格与推理档格双双处于「跟随引擎设置」，包内各画各的，按钮就渲染成
+  // 「Codex / 跟随 Codex 设置」紧跟「跟随 Codex 设置」，同一句话连出现两次。
   const selectedModelDisplayLabel =
     modelRunSummary?.primaryLabel ??
     (modelSelector && visibleProvider
@@ -195,14 +198,16 @@ function ComposerModelRunSelectorImpl({
   const selectedReasoningLabel =
     reasoning?.summaryLabel ??
     reasoning?.options.find((option) => option.value === reasoning.value)?.label
+  // 运行档那一格：宿主给了摘要就整格听它的（**包括「这一格什么都不用说」**——`secondaryLabel`
+  // 缺席时不渲染，而不是回落到 Velar 的「自动」，那是外部执行体根本没有的概念）。
   const selectedRunProfileLabel = runProfile
     ? t(
         visibleRunProfileOptions.find((option) => option.value === visibleRunProfileValue)
           ?.labelKey ?? 'chat.composerRunProfile_auto'
       )
-    : (selectedReasoningLabel ??
-      modelRunSummary?.secondaryLabel ??
-      t('chat.composerRunProfile_auto'))
+    : modelRunSummary
+      ? modelRunSummary.secondaryLabel
+      : (selectedReasoningLabel ?? t('chat.composerRunProfile_auto'))
   const modelMenuCapabilityControls = capabilityControls.filter(
     (control) => control.placement === 'model-menu'
   )
@@ -251,14 +256,20 @@ function ComposerModelRunSelectorImpl({
           className={styles.composerModelRunSelectorButton}
           data-tour-id="chat-model-run-controls"
           data-open={open}
-          title={`${selectedModelDisplayLabel} / ${selectedRunProfileLabel}`}
+          title={
+            selectedRunProfileLabel
+              ? `${selectedModelDisplayLabel} / ${selectedRunProfileLabel}`
+              : selectedModelDisplayLabel
+          }
         >
           <Text tone="strong" truncate className={styles.composerModelRunSelectorModelLabel}>
             {selectedModelDisplayLabel}
           </Text>
-          <Text tone="caption" truncate className={styles.composerModelRunSelectorRunLabel}>
-            {selectedRunProfileLabel}
-          </Text>
+          {!!selectedRunProfileLabel && (
+            <Text tone="caption" truncate className={styles.composerModelRunSelectorRunLabel}>
+              {selectedRunProfileLabel}
+            </Text>
+          )}
           <CaretDownIcon size={12} />
         </Button>
       )}

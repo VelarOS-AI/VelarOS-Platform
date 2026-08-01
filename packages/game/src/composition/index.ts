@@ -24,6 +24,7 @@ import {
 import {
   createGameRuntimeDescriptor,
   type GameApprovedProcessHost,
+  type GameDevServerStartupOutcome,
   type GameManagedDevProcess,
   GameProjectRuntime,
   type GameRuntimeDescriptor,
@@ -226,6 +227,7 @@ export function createGameProjectCapabilityFromText(
 
 export type {
   GameApprovedProcessHost,
+  GameDevServerStartupOutcome,
   GameManagedDevProcess,
   GameManifestDocument,
   GameManifestDocumentChange,

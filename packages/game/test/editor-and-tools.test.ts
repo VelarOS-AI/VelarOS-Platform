@@ -22,6 +22,8 @@ import {
 class MemoryManifestStore implements GameManifestDocumentStore {
   private readonly documents = new Map<string, GameManifestDocument>()
   public readonly batches: GameManifestDocumentChange[][] = []
+  /** 工程扫描次数 —— 「编辑已声明的清单一次盘都不走」这条判决要有锁。 */
+  public manifestScans = 0
 
   public constructor(entries: Record<string, unknown>) {
     for (const [path, value] of Object.entries(entries)) {
@@ -37,9 +39,11 @@ class MemoryManifestStore implements GameManifestDocumentStore {
     return this.documents.get(path) ?? null
   }
 
-  public async list(directory: 'prefabs'): Promise<readonly GameManifestDocument[]> {
-    return [...this.documents.values()].filter((document) =>
-      document.path.startsWith(`${directory}/`),
+  public async listManifests(): Promise<readonly GameManifestDocument[]> {
+    this.manifestScans += 1
+    return [...this.documents.values()].filter(
+      (document) =>
+        document.path.endsWith('.scene.json') || document.path.endsWith('.prefab.json'),
     )
   }
 
@@ -47,6 +51,13 @@ class MemoryManifestStore implements GameManifestDocumentStore {
     changes: readonly GameManifestDocumentChange[],
   ): Promise<void> {
     for (const change of changes) {
+      // `create` 是「以不存在为前提」的更强断言，宿主端口不比对 revision（见
+      // GameManifestDocumentChange 的判决）。测试替身必须照抄这条，否则自举写入会被一个
+      // 真实宿主根本不做的比对判红。
+      if (change.create) {
+        expect(this.documents.has(change.path)).toBeFalse()
+        continue
+      }
       expect(this.documents.get(change.path)?.revision).toBe(
         change.expectedRevision,
       )
@@ -65,6 +76,10 @@ class MemoryManifestStore implements GameManifestDocumentStore {
     const document = this.documents.get(path)
     if (!document) throw new Error(`missing ${path}`)
     return JSON.parse(document.text) as Record<string, unknown>
+  }
+
+  public has(path: string): boolean {
+    return this.documents.has(path)
   }
 
   public setText(path: string, text: string): void {
@@ -200,34 +215,77 @@ describe('GameManifestWorkspaceEditor', () => {
     expect(store.batches).toHaveLength(0)
   })
 
-  test('activates a pre-created prefab only through project.prefabs', async () => {
+  test('adopts a pre-created prefab draft when it is named as the edit target', async () => {
+    // 第六轮判决：文档级 target 也是 upsert。磁盘上已有的草稿在被**指名为编辑目标**时进入拓扑
+    // （「我现在要编它」本身就是显式激活），不再要求先走一趟 set_project；未被指名的草稿仍留在
+    // 拓扑外（下一条用例锁的就是那一面）。
     const store = createStore()
     const editor = new GameManifestWorkspaceEditor(store)
-    await expect(editor.edit({
+    const adopted = await editor.edit({
       target: 'prefab:enemy',
-      operations: [],
-    })).rejects.toThrow('找不到编辑目标 prefab:enemy')
-
-    const declared = await editor.edit({
-      target: 'project',
-      operations: [{
-        action: 'set_project',
-        values: {
-          prefabs: [
-            'prefabs/player.prefab.json',
-            'prefabs/enemy.prefab.json',
-          ],
-        },
-      }],
+      operations: [
+        { action: 'set_component', component: 'body', values: { kind: 'dynamic' } },
+      ],
     })
-    expect(declared.changedFiles).toEqual(['game.project.json'])
-
-    const enemy = await editor.edit({
-      target: 'prefab:enemy',
-      operations: [],
-      dryRun: true,
+    // 被指名的那一份由本批拥有 canonical 形态：同一批里的语义操作必须落盘，
+    // 「采纳时保留草稿原文」那条规则只对 set_project 顺手声明进来的草稿成立。
+    expect(adopted.changedFiles).toEqual([
+      'game.project.json',
+      'prefabs/enemy.prefab.json',
+    ])
+    expect(store.value('game.project.json').prefabs).toEqual([
+      'prefabs/player.prefab.json',
+      'prefabs/enemy.prefab.json',
+    ])
+    expect(store.value('prefabs/enemy.prefab.json')).toEqual({
+      id: 'enemy',
+      kind: 'prefab',
+      extends: null,
+      components: { tags: ['enemy'], body: { kind: 'dynamic' } },
     })
-    expect(enemy.ok).toBeTrue()
+  })
+
+  test('creates the scene document when the target does not exist yet', async () => {
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    const created = await editor.edit({
+      target: 'scene:arena',
+      operations: [
+        { action: 'set_entity', entityId: 'hero' },
+        { action: 'set_scene_meta', values: { title: 'Arena' } },
+      ],
+    })
+
+    expect(created.changedFiles).toEqual([
+      'game.project.json',
+      'scenes/arena.scene.json',
+    ])
+    expect(store.value('scenes/arena.scene.json')).toEqual({
+      id: 'arena',
+      kind: 'scene',
+      extends: null,
+      meta: { title: 'Arena' },
+      entities: [{ id: 'hero', components: {} }],
+    })
+    expect(store.value('game.project.json').scenes).toEqual([
+      'scenes/base.scene.json',
+      'scenes/level-1.scene.json',
+      'scenes/arena.scene.json',
+    ])
+    // 工程已有 entryScene 时不许被新场景顶掉（只补缺席，不否决显式意图）。
+    expect(store.value('game.project.json').entryScene).toBe('scene:base')
+  })
+
+  test('refuses to hijack a manifest whose declared id differs from the target', async () => {
+    const store = createStore()
+    store.setText(
+      'prefabs/enemy.prefab.json',
+      JSON.stringify({ id: 'enemy-slime', kind: 'prefab', components: {} }),
+    )
+    const editor = new GameManifestWorkspaceEditor(store)
+    await expect(
+      editor.edit({ target: 'prefab:enemy', operations: [] }),
+    ).rejects.toThrow('与编辑目标 prefab:enemy 对不上')
   })
 
   test('ignores malformed undeclared prefab drafts until project.prefabs activates them', async () => {
@@ -274,10 +332,20 @@ describe('GameManifestWorkspaceEditor', () => {
       }],
     })
 
-    expect(declared.changedFiles).toEqual(['game.project.json'])
-    expect(store.batches[0]?.map((change) => change.path)).toEqual([
+    // 场景与资产清单一进拓扑就由编辑器拥有 canonical 形态（`serializeWorkspace` 无条件格式化
+    // 它们），所以声明它们的这一批会把两份文件一并写成 canonical。「采纳时保留原文」那条只对
+    // prefab 草稿成立。
+    expect(declared.changedFiles).toEqual([
       'game.project.json',
+      'scenes/bonus.scene.json',
+      'assets/next.json',
     ])
+    expect(store.value('scenes/bonus.scene.json')).toEqual({
+      id: 'bonus',
+      kind: 'scene',
+      extends: null,
+      entities: [],
+    })
 
     const sceneEdit = await editor.edit({
       target: 'scene:bonus',
@@ -310,6 +378,7 @@ describe('GameManifestWorkspaceEditor', () => {
             url: 'http://127.0.0.1:5173',
             port: 5173,
             readyMs: 1,
+            outcome: { kind: 'ready' } as const,
             compileErrors: [],
             runtimeErrors: [],
             startupLogTail: 'ready',
@@ -360,6 +429,561 @@ describe('GameManifestWorkspaceEditor', () => {
       '启动游戏工程 editor-test-refreshed 的本地 dev server',
     )
     await capability.toolApi.runtime.stop()
+  })
+
+  test('bootstraps an empty project root into a runnable manifest set in one call', async () => {
+    // 验收线：空目录 + 一次语义编辑 = 工程清单 + 资产清单 + 入口场景，全部由闭集完成，
+    // 不需要模型手写任何一份 JSON。第六轮之前这条路走不通（闭集里没有能新建场景的动作）。
+    const store = new MemoryManifestStore({})
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({
+      target: 'scene:main',
+      operations: [
+        {
+          action: 'set_entity',
+          entityId: 'hero',
+          components: { transform: { position: { x: 32, y: 64 } } },
+        },
+      ],
+    })
+
+    expect(result.changedFiles.toSorted()).toEqual([
+      'assets/assets.json',
+      'game.project.json',
+      'scenes/main.scene.json',
+    ])
+    expect(store.batches[0]?.every((change) => change.create)).toBeTrue()
+    const project = store.value('game.project.json')
+    expect(project.scenes).toEqual(['scenes/main.scene.json'])
+    expect(project.assets).toBe('assets/assets.json')
+    // 入口场景在这一刻补上：没有它 game_run 只会说「游戏工程没有 entryScene」。
+    expect(project.entryScene).toBe('scene:main')
+    expect(
+      (store.value('scenes/main.scene.json').entities as Array<Record<string, unknown>>)[0]?.id,
+    ).toBe('hero')
+  })
+
+  test('rejects a set_project that undeclares a scene holding content', async () => {
+    // 不变量 I1（第八轮）：守「移除」那一半。模型重发整份 scenes 数组时只把 basename 打错一格，
+    // merge patch 对数组是整体替换，所以重发整份数组是**正常操作方式**。第七轮从「创建」那一侧
+    // 拦（同 id 已住在别处），于是换一种打错方式就漏一格；现在判据在**转移**上：
+    // 装载时声明过、现在不声明了 = 一次移除，有内容就硬失败。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'orphan-guard',
+        entryScene: 'scene:level1',
+        scenes: ['scenes/level1.scene.json'],
+        assets: 'assets/assets.json',
+      },
+      'scenes/level1.scene.json': {
+        id: 'level1',
+        entities: [{ id: 'hero' }, { id: 'ground' }, { id: 'goal' }],
+      },
+      'assets/assets.json': { assets: [] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'project',
+        operations: [{
+          action: 'set_project',
+          values: { scenes: ['scenes/levl1.scene.json'] },
+        }],
+      }),
+    ).rejects.toThrow('把 scenes/level1.scene.json 从 game.project.json 的声明里摘掉了')
+    // 一个字节都不许落盘：那份有内容的场景必须原样留着，诱饵也不许出现。
+    expect(store.batches).toHaveLength(0)
+    expect(
+      (store.value('scenes/level1.scene.json').entities as unknown[]).length,
+    ).toBe(3)
+    expect(store.has('scenes/levl1.scene.json')).toBeFalse()
+  })
+
+  test('rejects a set_project that repoints assets away from a non-empty manifest', async () => {
+    // 同一条不变量的第二格。资产清单**没有稳定 id**，所以第七轮那道从创建侧看的门结构上够不着它
+    // ——这正是「判据必须落在转移上」的证据。
+    const store = new MemoryManifestStore({
+      'game.project.json': { name: 'assets-guard', assets: 'assets/assets.json' },
+      'assets/assets.json': {
+        assets: [
+          { id: 'hero-idle', kind: 'texture', path: 'assets/hero.png' },
+          { id: 'jump', kind: 'audio', path: 'assets/jump.wav' },
+        ],
+      },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'project',
+        operations: [{ action: 'set_project', values: { assets: 'data/assets.json' } }],
+      }),
+    ).rejects.toThrow('把 assets/assets.json 从 game.project.json 的声明里摘掉了')
+    expect(store.batches).toHaveLength(0)
+    expect(store.has('data/assets.json')).toBeFalse()
+  })
+
+  test('rejects a set_project that undeclares a prefab holding components', async () => {
+    // 第三格（孪生站点 activateDeclaredPrefabs）。三格一条判据，因为三者都只是
+    // 「game.project.json 里的一条路径」。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'project',
+        operations: [{ action: 'set_project', values: { prefabs: [] } }],
+      }),
+    ).rejects.toThrow('把 prefabs/player.prefab.json 从 game.project.json 的声明里摘掉了')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('allows undeclaring an empty manifest and says so in the summary', async () => {
+    // I1 只在**确定丢内容**那一档硬失败：空壳退出声明什么都没丢，拦下来只是仪式。
+    // 但零 error 零 warning 地发生是不许的。
+    const store = createStore()
+    // bonus 本来就没被声明，先声明它、再摘掉，才构成一次「移除」。
+    await new GameManifestWorkspaceEditor(store).edit({
+      target: 'project',
+      operations: [{
+        action: 'set_project',
+        values: {
+          scenes: [
+            'scenes/base.scene.json',
+            'scenes/level-1.scene.json',
+            'scenes/bonus.scene.json',
+          ],
+        },
+      }],
+    })
+    const undeclared = await new GameManifestWorkspaceEditor(store).edit({
+      target: 'project',
+      operations: [{
+        action: 'set_project',
+        values: { scenes: ['scenes/base.scene.json', 'scenes/level-1.scene.json'] },
+      }],
+    })
+
+    expect(undeclared.diffSummary).toContain(
+      'undeclared scene: scenes/bonus.scene.json（空清单，文件保留在磁盘上）',
+    )
+    expect(undeclared.warnings.join('\n')).toContain('scenes/bonus.scene.json 已退出 project 声明')
+    // 文件本身留在磁盘上，一个字节都没动。
+    expect(store.value('scenes/bonus.scene.json').id).toBe('bonus')
+  })
+
+  test('materializes the target lazily so a set-then-rename batch works from nothing', async () => {
+    // 第八轮的形二：第七轮「批次里出现 rename_* 就不创建 target」的前置判据被实测证伪——
+    // 同一批打在一份已存在的空场景上两条全成立。现在物化由**操作顺序**决定：
+    // set_entity 先到就把场景建出来，rename_entity 随后自然找得到那条实体。
+    const store = new MemoryManifestStore({})
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({
+      target: 'scene:main',
+      operations: [
+        { action: 'set_entity', entityId: 'hero' },
+        { action: 'rename_entity', entityId: 'hero', newId: 'player' },
+      ],
+    })
+
+    expect(result.changedFiles).toContain('scenes/main.scene.json')
+    expect(
+      (store.value('scenes/main.scene.json').entities as Array<Record<string, unknown>>)[0]?.id,
+    ).toBe('player')
+  })
+
+  test('tells the model the target was freshly created when an entity lookup fails inside it', async () => {
+    // 混合批次打错 target：set_* 先到，所以场景确实被建了出来，随后 remove_entity 落空。
+    // 第七轮担心的正是这句报错会把模型指向「去建实体」；修法不是拦创建（那要靠预测整批），
+    // 而是把我们手里本来就有的事实说出来——这份清单是本次调用刚创建的。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'scene:levl-1',
+        operations: [
+          { action: 'set_entity', entityId: 'hero' },
+          { action: 'remove_entity', entityId: 'player' },
+        ],
+      }),
+    ).rejects.toThrow('是本次调用刚创建的')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('adopts a hand-written manifest that already carries the target id', async () => {
+    // 第八轮的形三（真机第一手）：文档明确保留「模型用 ws_edit 直接写 .scene.json」这条路。
+    // 上一版只扫 prefabs/ 一个目录，于是手写在 levels/ 的那份被跳过、另起一份空 scenes/main，
+    // 磁盘上从此两份 id=main，全程零提示。现在扫描面 = 整个工程，已有载体一律采纳。
+    const store = new MemoryManifestStore({
+      'game.project.json': { name: 'handwritten', assets: 'assets/assets.json' },
+      'assets/assets.json': { assets: [] },
+      'levels/main.scene.json': {
+        id: 'main',
+        entities: [{ id: 'hero' }, { id: 'ground' }],
+      },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({
+      target: 'scene:main',
+      operations: [{ action: 'set_entity', entityId: 'goal' }],
+    })
+
+    expect(result.diffSummary).toContain('declared scene: scene:main → levels/main.scene.json')
+    expect(store.has('scenes/main.scene.json')).toBeFalse()
+    expect(store.value('game.project.json').scenes).toEqual(['levels/main.scene.json'])
+    expect(store.value('game.project.json').entryScene).toBe('scene:main')
+    expect(
+      (store.value('levels/main.scene.json').entities as Array<Record<string, unknown>>).map(
+        (entity) => entity.id,
+      ),
+    ).toEqual(['hero', 'ground', 'goal'])
+  })
+
+  test('refuses to guess when two files on disk carry the same stable id', async () => {
+    // 双射真的在磁盘上被打破时（ws_edit 不过编辑器，拦不住）当面报出来，不挑一份继续跑。
+    const store = new MemoryManifestStore({
+      'game.project.json': { name: 'ambiguous', assets: 'assets/assets.json' },
+      'assets/assets.json': { assets: [] },
+      'levels/main.scene.json': { id: 'main', entities: [] },
+      'scenes/main.scene.json': { id: 'main', entities: [] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({ target: 'scene:main', operations: [] }),
+    ).rejects.toThrow('scene:main 在工程里有 2 份载体')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('refuses to bootstrap a declared path when the id already has a carrier', async () => {
+    // 声明指向 A、载体却在 B：这一档不能靠采纳解决（模型显式指定了落点），所以报错点名 B。
+    const store = new MemoryManifestStore({
+      'game.project.json': { name: 'carrier', assets: 'assets/assets.json' },
+      'assets/assets.json': { assets: [] },
+      'levels/arena.scene.json': { id: 'arena', entities: [{ id: 'hero' }] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'project',
+        operations: [{
+          action: 'set_project',
+          values: { scenes: ['scenes/arena.scene.json'] },
+        }],
+      }),
+    ).rejects.toThrow('scene:arena 已经住在 levels/arena.scene.json')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('empty operations declare and canonicalize an existing draft without losing content', async () => {
+    // 用法文字必须与行为逐字对应。上一版写的是「空 operations 是成功的 no-op：它只保证目标清单
+    // 存在，不会重写已有内容」——但对一份磁盘已有、尚未声明的草稿，空批次会把它规范化重写并
+    // 写进 project.prefabs（changedFiles 两条）。内容确实一条没丢，那句话却是假的，
+    // 而空批次恰恰是模型用来「只确认目标存在」的探路手势。
+    const store = createStore()
+    store.setText(
+      'prefabs/enemy.prefab.json',
+      '{"components":{"tags":["enemy"]},"id":"enemy","kind":"prefab"}',
+    )
+    const editor = new GameManifestWorkspaceEditor(store)
+    const probe = await editor.edit({ target: 'prefab:enemy', operations: [] })
+
+    expect(probe.operationsApplied).toBe(0)
+    expect(probe.changedFiles).toEqual([
+      'game.project.json',
+      'prefabs/enemy.prefab.json',
+    ])
+    expect(probe.diffSummary).toContain(
+      'declared prefab: prefab:enemy → prefabs/enemy.prefab.json',
+    )
+    // 内容一条不丢，只重排键序与缩进。
+    expect(store.value('prefabs/enemy.prefab.json')).toEqual({
+      id: 'enemy',
+      kind: 'prefab',
+      extends: null,
+      components: { tags: ['enemy'] },
+    })
+  })
+
+  test('never walks the project when every touched manifest is already declared', async () => {
+    // 扫描的代价只在「要采纳或创建」时付。编辑一份已声明的清单一次盘都不走。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    await editor.edit({
+      target: 'scene:base',
+      operations: [{ action: 'set_entity', entityId: 'ground' }],
+    })
+
+    expect(store.manifestScans).toBe(0)
+  })
+
+  test('names every bootstrap creation in diffSummary', async () => {
+    // 同一条判决的另一半：`set_project` 声明一条还不存在的场景路径**可以**创建（那是显式意图），
+    // 但创建必须在结果里看得见。第六轮这条路径一行摘要都不写。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    const declared = await editor.edit({
+      target: 'project',
+      operations: [{
+        action: 'set_project',
+        values: {
+          scenes: [
+            'scenes/base.scene.json',
+            'scenes/level-1.scene.json',
+            'scenes/arena.scene.json',
+          ],
+        },
+      }],
+    })
+
+    expect(declared.changedFiles).toContain('scenes/arena.scene.json')
+    expect(declared.diffSummary).toContain(
+      'created scene: scene:arena → scenes/arena.scene.json',
+    )
+  })
+
+  test('keeps the did-you-mean error instead of materializing a mistyped target', async () => {
+    // 第七轮 P2（主线判决）：永远不许拿「你是不是想说 X」的报错去换一次静默创建。
+    // 这一批只有 remove_entity —— 模型显然是在指一个它认为已经存在的场景。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'scene:levl-1',
+        operations: [{ action: 'remove_entity', entityId: 'player' }],
+      }),
+    ).rejects.toThrow('找不到编辑目标 scene:levl-1')
+    expect(store.batches).toHaveLength(0)
+    expect(store.value('game.project.json').scenes).toEqual([
+      'scenes/base.scene.json',
+      'scenes/level-1.scene.json',
+    ])
+  })
+
+  test('refuses to create a prefab target for a remove-only batch', async () => {
+    // prefab 上的 remove_component 在空 prefab 上**静默成功**，所以第六轮的无差别 upsert 会把
+    // 一个打错的 target 落成一份空文件并报成功——比场景那一档更隐蔽。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'prefab:playr',
+        operations: [{ action: 'remove_component', component: 'body' }],
+      }),
+    ).rejects.toThrow('可用 prefab：prefab:player')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('still creates a mistyped-looking target when the batch actually writes into it', async () => {
+    // 反向锁：第六轮的 P0 不许被修回去。带 set_* 的批次照样从零建出场景。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    const created = await editor.edit({
+      target: 'scene:arena',
+      operations: [{ action: 'set_entity', entityId: 'hero' }],
+    })
+
+    expect(created.changedFiles).toContain('scenes/arena.scene.json')
+  })
+
+  test('upserts the entity when set_component names one that does not exist yet', async () => {
+    // 第七轮 P2：set_component 是闭集里唯一没被摊平的一级，而用法文字说所有 set_* 都是 upsert。
+    // 摊平它——落盘结果与 set_entity(components:{...}) 逐字节相同。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({
+      target: 'scene:base',
+      operations: [{
+        action: 'set_component',
+        entityId: 'ground',
+        component: 'transform',
+        values: { position: { x: 0, y: 480 } },
+      }],
+    })
+
+    expect(result.diffSummary).toContain('added entity: entity:ground')
+    const entities = store.value('scenes/base.scene.json').entities as Array<
+      Record<string, unknown>
+    >
+    expect(entities.at(-1)).toEqual({
+      id: 'ground',
+      components: { transform: { position: { x: 0, y: 480 } } },
+    })
+  })
+
+  test('lets set_component override an inherited entity by creating a local patch', async () => {
+    // 顺带修好的第二个真缺陷：requireSceneEntity 只看本地 entities，于是「在子场景里改一个
+    // 继承来的实体」过去也撞墙——而正解恰恰是建一条本地覆盖条目。
+    const store = createStore()
+    const editor = new GameManifestWorkspaceEditor(store)
+    await editor.edit({
+      target: 'scene:base',
+      operations: [{ action: 'set_entity', entityId: 'obstacle' }],
+    })
+    await editor.edit({
+      target: 'scene:level-1',
+      operations: [{
+        action: 'set_component',
+        entityId: 'obstacle',
+        component: 'transform',
+        values: { position: { x: 320, y: 96 } },
+      }],
+    })
+
+    const entities = store.value('scenes/level-1.scene.json').entities as Array<
+      Record<string, unknown>
+    >
+    expect(entities.map((entity) => entity.id)).toEqual(['player', 'obstacle'])
+    expect(entities.at(-1)).toEqual({
+      id: 'obstacle',
+      components: { transform: { position: { x: 320, y: 96 } } },
+    })
+  })
+
+  test('repairs a half-built project whose declared manifests are missing', async () => {
+    // 真机第一手：模型手写了 game.project.json、资产清单还没落盘，旧行为抛
+    // 「找不到游戏清单 assets/assets.json」并让模型继续手写。缺席是半成品，不是损坏。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'half-built',
+        scenes: ['scenes/main.scene.json'],
+        assets: 'assets/assets.json',
+      },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({ target: 'project', operations: [] })
+
+    expect(result.changedFiles.toSorted()).toEqual([
+      'assets/assets.json',
+      'scenes/main.scene.json',
+    ])
+    expect(store.value('assets/assets.json')).toEqual({ assets: [] })
+    expect(store.value('scenes/main.scene.json')).toEqual({
+      id: 'main',
+      kind: 'scene',
+      extends: null,
+      entities: [],
+    })
+  })
+
+  test('follows the carrier when a declared manifest moved, instead of bricking every target', async () => {
+    // 第九轮 P1（真机可达链条）：手写 levels/main → 被采纳登记 → 模型照 usage 又手写一份
+    // scenes/main → 清理时删掉被声明的 levels/main。此后装载站点只会「创建第二个载体 →
+    // 撞 I3 → 抛错」，于是**每一个** target 都抛同一句，连报错正文自己开的 set_project
+    // 药方也抛同一句，会话彻底不可用。装载期必须走完整的 I3：载体在哪，声明就跟到哪。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'moved',
+        scenes: ['levels/main.scene.json'],
+        entryScene: 'scene:main',
+        assets: 'assets/assets.json',
+      },
+      'assets/assets.json': { assets: [] },
+      'scenes/main.scene.json': { id: 'main', entities: [{ id: 'hero' }] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+    const repaired = await editor.edit({ target: 'assets', operations: [] })
+
+    expect(repaired.diffSummary).toContain(
+      'redeclared scene: levels/main.scene.json（已不在磁盘上）→ scenes/main.scene.json',
+    )
+    // 修复必须落盘：基线若在修复之后才取，摘要行会说做了而磁盘上没做，下一次调用再修一遍。
+    expect(repaired.changedFiles).toContain('game.project.json')
+    expect(store.value('game.project.json').scenes).toEqual(['scenes/main.scene.json'])
+    // 修完就是干净的：同一批再跑一次不该产生任何变更。
+    const settled = await editor.edit({ target: 'assets', operations: [] })
+    expect(settled.changedFiles).toEqual([])
+    expect(settled.diffSummary).toEqual([])
+  })
+
+  test('drops a dangling declaration whose id is ambiguous rather than failing every target', async () => {
+    // 同一 id 两份载体、声明却指向已删除的第三条路径：这一档采纳不了（编辑器不挑一份），
+    // 但它同样不许把无关的 target 打死。声明指向的文件根本不存在，摘掉它什么都不丢；
+    // entryScene 指着它就一并撤下，否则刚修好的工程会立刻被一条悬空引用重新判死。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'ambiguous-dangling',
+        scenes: ['levels/main.scene.json'],
+        entryScene: 'scene:main',
+        assets: 'assets/assets.json',
+      },
+      'assets/assets.json': { assets: [] },
+      'scenes/main.scene.json': { id: 'main', entities: [] },
+      'stages/main.scene.json': { id: 'main', entities: [] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+    const dropped = await editor.edit({ target: 'assets', operations: [] })
+
+    expect(dropped.diffSummary).toContain(
+      'dropped dangling scene: levels/main.scene.json（声明已摘除，磁盘上本就没有这份文件）',
+    )
+    expect(dropped.diffSummary).toContain(
+      'cleared entry scene: scene:main（入口场景随悬空声明一并撤下）',
+    )
+    expect(store.value('game.project.json').scenes).toEqual([])
+    expect(store.value('game.project.json').entryScene).toBeNull()
+    // 真去触碰那个 id 时仍然 fail-fast——放宽的只有装载，不是运行。
+    await expect(
+      editor.edit({ target: 'scene:main', operations: [] }),
+    ).rejects.toThrow('scene:main 在工程里有 2 份载体')
+  })
+
+  test('refuses to let one path play two roles in the project topology', async () => {
+    // 第九轮 P3：documents 过去按 [project, ...scenes, ...prefabs, assets] 平铺而不按路径收敛，
+    // 路径重合时产出两条同路径 change，真实宿主把「同批重复路径」当硬错整批拒——模型拿到的是
+    // 一句内部实现口吻、无自救动作的话。判读与提交现在读同一张带角色的表。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'two-roles',
+        prefabs: ['prefabs/player.prefab.json'],
+        assets: 'assets/assets.json',
+      },
+      'assets/assets.json': { assets: [] },
+      'prefabs/player.prefab.json': { id: 'player', components: {} },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+
+    await expect(
+      editor.edit({
+        target: 'project',
+        operations: [{
+          action: 'set_project',
+          values: { assets: 'prefabs/player.prefab.json' },
+        }],
+      }),
+    ).rejects.toThrow('同时扮演 2 个角色：prefab:player、资产清单')
+    expect(store.batches).toHaveLength(0)
+  })
+
+  test('does not discover a second carrier of an already declared id (documented cost of not scanning)', async () => {
+    // **这是文档口径的锁，不是缺陷的锁**（第九轮 P2 裁决：改文档不改代码）。
+    // I3 被强制的时机是「编辑器创建或采纳一份清单」，而编辑一份**已声明**的清单一次盘都不走
+    // （上面的 manifestScans === 0 锁），所以 ws_edit 事后手写的第二份在这条路径上发现不了。
+    // 要让它「当面报出」只能把每次编辑都扫盘的代价加回来——第八轮刚把它压掉。
+    const store = new MemoryManifestStore({
+      'game.project.json': {
+        name: 'shadow',
+        scenes: ['scenes/main.scene.json'],
+        assets: 'assets/assets.json',
+      },
+      'assets/assets.json': { assets: [] },
+      'scenes/main.scene.json': { id: 'main', entities: [] },
+      'levels/main.scene.json': { id: 'main', entities: [{ id: 'handwritten' }] },
+    })
+    const editor = new GameManifestWorkspaceEditor(store)
+    const result = await editor.edit({
+      target: 'scene:main',
+      operations: [{ action: 'set_entity', entityId: 'goal' }],
+    })
+
+    expect(result.changedFiles).toEqual(['scenes/main.scene.json'])
+    expect(store.manifestScans).toBe(0)
+    expect(store.value('game.project.json').scenes).toEqual(['scenes/main.scene.json'])
   })
 })
 

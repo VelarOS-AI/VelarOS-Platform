@@ -1,3 +1,5 @@
+import { isEmpty, isNotNull, isNull, isTrue, isUndefined } from '@velaros-ai/core'
+
 import type {
   GameRunRequest,
   GameRunResult,
@@ -15,10 +17,28 @@ export interface GameDevServerStartRequest {
   readonly approvalReason: string
 }
 
+/**
+ * 等待就绪的**终态**。
+ *
+ * 判决（第六轮，真机第一手）：上一版没有这一格，宿主只能把「等了 60 秒没等到」伪装成一条
+ * `source: 'compile'` 的错误记录塞进 `compileErrors`，于是模型读到的是
+ * 「游戏编译失败：等待游戏 dev server 就绪超时（60000ms）」——一句自相矛盾、且没有任何可执行
+ * 信息的话（真实情况是工程根里连 package.json 都没有，进程 50ms 就退了）。
+ *
+ * 三态各对应一种真实结局，`ready` 之外都必须由 `GameDevServerStartupError` 如实播报：
+ *  - `exited`：进程已经不在了（宿主的存活探针发现的）。这一档**不该等满超时**。
+ *  - `timeout`：进程还活着，但启动日志里始终没出现可访问的 loopback 地址。
+ */
+export type GameDevServerStartupOutcome =
+  | { readonly kind: 'ready' }
+  | { readonly kind: 'exited'; readonly exitCode: Nullable<number> }
+  | { readonly kind: 'timeout'; readonly waitedMs: number }
+
 export interface GameDevServerReadyResult {
   readonly url: string
   readonly port: number
   readonly readyMs: number
+  readonly outcome: GameDevServerStartupOutcome
   readonly compileErrors: readonly GameRuntimeErrorRecord[]
   readonly runtimeErrors: readonly GameRuntimeErrorRecord[]
   readonly startupLogTail: string
@@ -49,14 +69,65 @@ export class DenyAllGameProcessHost implements GameApprovedProcessHost {
   }
 }
 
+const MaxStartupExcerptLines = 12
+const MaxStartupExcerptChars = 1_200
+
+/**
+ * 启动日志尾巴 → 错误正文里那几行。
+ *
+ * 判据：一个失败的 dev server，唯一能让模型下一步做对的信息就在它自己的输出里
+ * （`bun run dev` 在没有 package.json 的目录里那句 `error: Script not found "dev"`）。
+ * 上一版把它只放进 `diagnostics.startupLogTail`，而抛出的 `Error` 只带一句话——
+ * 工具错误通道送到模型面前的就是那一句话，日志从来没到过模型手里。
+ */
+function startupLogExcerpt(startupLogTail: string): string {
+  const lines = startupLogTail
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+  if (isEmpty(lines)) return ''
+  return lines
+    .slice(-MaxStartupExcerptLines)
+    .join('\n')
+    .slice(-MaxStartupExcerptChars)
+}
+
+function describeStartupFailure(diagnostics: GameDevServerReadyResult): string {
+  const first = diagnostics.compileErrors[0]
+  if (first) {
+    const location = first.file
+      ? `${first.file}${first.line ? `:${first.line}` : ''} `
+      : ''
+    return `游戏编译失败：${location}${first.message}`
+  }
+  const outcome = diagnostics.outcome
+  switch (outcome.kind) {
+    case 'exited':
+      return `游戏 dev server 启动后立即退出${
+        isNull(outcome.exitCode) ? '' : `（exit ${outcome.exitCode}）`
+      }，没有进入可交互状态。`
+    case 'timeout':
+      return `等待游戏 dev server 就绪超时（${outcome.waitedMs}ms）：进程仍在运行，但启动日志里始终没有出现可访问的 loopback 地址。`
+    case 'ready':
+      return '游戏 dev server 未能进入可交互状态。'
+    default: {
+      // 编译期穷尽：终态闭集加一种而这里没接线即编译红，不退化成一句泛化的失败。
+      const unknownOutcome: never = outcome
+      return `游戏 dev server 未能进入可交互状态（未知终态 ${JSON.stringify(unknownOutcome)}）。`
+    }
+  }
+}
+
 export class GameDevServerStartupError extends Error {
   public readonly diagnostics: GameDevServerReadyResult
 
   public constructor(diagnostics: GameDevServerReadyResult) {
-    const first = diagnostics.compileErrors[0]
-    super(first
-      ? `游戏编译失败：${first.file ? `${first.file}${first.line ? `:${first.line}` : ''} ` : ''}${first.message}`
-      : '游戏 dev server 未能进入可交互状态。')
+    const excerpt = startupLogExcerpt(diagnostics.startupLogTail)
+    super(
+      excerpt
+        ? `${describeStartupFailure(diagnostics)}\n启动日志末尾：\n${excerpt}`
+        : describeStartupFailure(diagnostics),
+    )
     this.name = 'GameDevServerStartupError'
     this.diagnostics = diagnostics
   }
@@ -75,9 +146,9 @@ export class GameDevServerPortMismatchError extends Error {
 }
 
 export class GameDevServerController {
-  private process: GameManagedDevProcess | null = null
-  private activeScene: string | null = null
-  private ready: GameDevServerReadyResult | null = null
+  private process: Nullable<GameManagedDevProcess> = null
+  private activeScene: Nullable<string> = null
+  private ready: Nullable<GameDevServerReadyResult> = null
   private projectChangedWhileRunning = false
 
   public constructor(
@@ -92,18 +163,17 @@ export class GameDevServerController {
   }
 
   public isRunning(): boolean {
-    return this.process !== null && this.ready !== null
+    return isNotNull(this.process) && isNotNull(this.ready)
   }
 
   public async run(request: GameRunRequest = {}): Promise<GameRunResult> {
     const scene = this.resolveScene(request.scene)
-    const shouldRestart = request.restart === true
-      || this.projectChangedWhileRunning
-      || (
-      this.process !== null
-      && this.activeScene !== null
-      && this.activeScene !== scene
-    )
+    const shouldRestart =
+      isTrue(request.restart) ||
+      this.projectChangedWhileRunning ||
+      (isNotNull(this.process) &&
+        isNotNull(this.activeScene) &&
+        this.activeScene !== scene)
 
     if (this.isRunning() && !shouldRestart && this.ready) return this.toRunResult(this.ready, scene, false)
     if (this.process) await this.stop(false)
@@ -125,8 +195,11 @@ export class GameDevServerController {
         timeoutMs: Math.min(180_000, Math.max(1_000, Math.round(request.timeoutMs ?? 60_000))),
         ...(server?.readyText ? { readyText: server.readyText } : {}),
       })
+      // 先判终态再登记「已就绪」：失败的那一份不该有任何一瞬间被 isRunning() 当成在跑。
+      if (ready.outcome.kind !== 'ready' || !isEmpty(ready.compileErrors)) {
+        throw new GameDevServerStartupError(ready)
+      }
       this.ready = ready
-      if (ready.compileErrors.length > 0) throw new GameDevServerStartupError(ready)
       if (ready.port !== requestedPort) {
         throw new GameDevServerPortMismatchError(requestedPort, ready.port)
       }
@@ -150,11 +223,11 @@ export class GameDevServerController {
     return {
       status: 'stopped',
       wasRunning: true,
-      ...(result.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+      ...(isUndefined(result.exitCode) ? {} : { exitCode: result.exitCode }),
     }
   }
 
-  private resolveScene(requested: string | undefined): string {
+  private resolveScene(requested: LooseOptional<string>): string {
     const reference = requested ?? this.project.entryScene
     if (!reference) {
       throw new Error('游戏工程没有 entryScene；请先在 game.project.json 声明入口场景。')

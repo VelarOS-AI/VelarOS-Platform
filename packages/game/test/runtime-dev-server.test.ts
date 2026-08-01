@@ -7,6 +7,8 @@ import {
   GameDevServerController,
   GameDevServerPortMismatchError,
   type GameDevServerStartRequest,
+  GameDevServerStartupError,
+  type GameDevServerStartupOutcome,
   type GameManagedDevProcess,
   GameProjectRuntime,
   type GameRuntimePageHost,
@@ -38,6 +40,7 @@ class ProbeProcess implements GameManagedDevProcess {
       url: `http://127.0.0.1:${this.readyPort}`,
       port: this.readyPort,
       readyMs: 25,
+      outcome: { kind: 'ready' } as const,
       compileErrors: [],
       runtimeErrors: [],
       startupLogTail: 'ready',
@@ -47,6 +50,44 @@ class ProbeProcess implements GameManagedDevProcess {
   public async stop(force: boolean) {
     this.stopCalls.push(force)
     return { exitCode: 0 }
+  }
+}
+
+/** 起不来的 dev server：终态由宿主如实上报，不再伪装成一条编译错误。 */
+class FailingProbeProcess implements GameManagedDevProcess {
+  public stopCalls: boolean[] = []
+
+  public constructor(
+    private readonly outcome: GameDevServerStartupOutcome,
+    private readonly startupLogTail: string,
+  ) {}
+
+  public async waitUntilReady() {
+    return {
+      url: 'http://127.0.0.1:4173',
+      port: 4173,
+      readyMs: 40,
+      outcome: this.outcome,
+      compileErrors: [],
+      runtimeErrors: [],
+      startupLogTail: this.startupLogTail,
+    }
+  }
+
+  public async stop(force: boolean) {
+    this.stopCalls.push(force)
+    return { exitCode: 0 }
+  }
+}
+
+class FailingProbeProcessHost implements GameApprovedProcessHost {
+  public constructor(
+    private readonly outcome: GameDevServerStartupOutcome,
+    private readonly startupLogTail: string,
+  ) {}
+
+  public async startApproved(): Promise<GameManagedDevProcess> {
+    return new FailingProbeProcess(this.outcome, this.startupLogTail)
   }
 }
 
@@ -144,6 +185,34 @@ describe('GameDevServerController', () => {
       command: 'bun run dev:refreshed',
       approvalReason: '启动游戏工程 runtime-probe-refreshed 的本地 dev server',
     })
+  })
+
+  test('reports an immediate process exit with its own startup log instead of a fake compile error', async () => {
+    const controller = new GameDevServerController(
+      '/tmp/runtime-probe',
+      project,
+      new FailingProbeProcessHost(
+        { kind: 'exited', exitCode: 1 },
+        'error: Script not found "dev"\n',
+      ),
+    )
+
+    await expect(controller.run()).rejects.toThrow(GameDevServerStartupError)
+    await expect(controller.run()).rejects.toThrow('启动后立即退出（exit 1）')
+    // 唯一能让模型下一步做对的信息在进程自己的输出里，必须进错误正文。
+    await expect(controller.run()).rejects.toThrow('Script not found "dev"')
+    expect(controller.isRunning()).toBeFalse()
+  })
+
+  test('does not call a readiness timeout a compile failure', async () => {
+    const controller = new GameDevServerController(
+      '/tmp/runtime-probe',
+      project,
+      new FailingProbeProcessHost({ kind: 'timeout', waitedMs: 60_000 }, 'compiling…'),
+    )
+
+    await expect(controller.run()).rejects.toThrow('就绪超时（60000ms）')
+    await expect(controller.run()).rejects.not.toThrow('游戏编译失败')
   })
 
   test('rejects an auto-selected port and stops the mismatched process', async () => {

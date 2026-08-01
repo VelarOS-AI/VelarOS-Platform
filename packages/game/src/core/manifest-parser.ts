@@ -21,7 +21,7 @@ import {
   buildAppliedAdjustments,
 } from '@velaros-ai/core/utils/ForgivingSchema'
 
-import { GameSlugSchema } from './references.js'
+import { gameManifestIdFromPath, GameSlugSchema } from './references.js'
 import {
   type GameAssetsManifest,
   GameAssetsManifestSchema,
@@ -41,6 +41,17 @@ export type GameManifestErrorCode =
   | 'INVALID_MANIFEST'
   | 'INVALID_REFERENCE'
 
+/**
+ * 清单层的失败。
+ *
+ * ## `hint` 必须进 `message`（第七轮判决，与 `startupLogTail` 同一条教训）
+ * 二十来个抛出点都精心写了 `hint`——「可用 scene：scene:level1」「可用 asset id：…」
+ * 「先把文件移到 …，再改声明」——**它们过去一条都没到过模型手里**：`hint` 是个只写字段，
+ * 全仓唯一的读者是本包自己的单测，而工具错误通道送达的只有 `Error.message` 那一句。
+ * 模型看到的因此是光秃秃的「找不到编辑目标 scene:levl1。」，一步自纠的抓手全被吞掉。
+ *
+ * 结构化字段保留（调用方想分开渲染仍拿得到），但正文一律带上提示。
+ */
 export class GameManifestError extends Error {
   public readonly code: GameManifestErrorCode
   public readonly path: Nullable<string>
@@ -51,7 +62,7 @@ export class GameManifestError extends Error {
     message: string,
     options: { path?: string; hint?: string } = {},
   ) {
-    super(message)
+    super(options.hint ? `${message}\n${options.hint}` : message)
     this.name = 'GameManifestError'
     this.code = code
     this.path = toNullable(options.path)
@@ -430,18 +441,6 @@ function normalizeSceneLike(
   return normalized
 }
 
-function sceneIdFromPath(path: string): Nullable<string> {
-  const fileName = path.split('/').at(-1)
-  if (!fileName) return null
-  const stem = fileName
-    .replace(/\.(?:prefab|scene)\.json$/u, '')
-    .replace(/\.json$/u, '')
-  if (!stem) return null
-  // 文件名不一定是合法 slug（`My Scene.json`、`01.json`）。推不出合法 id 时回 null，
-  // 让校验照常报错——只是这一次错误正文里带得上是哪一份清单。
-  return GameSlugSchema.safeParse(stem).success ? stem : null
-}
-
 /**
  * 场景/prefab 清单缺 `id` 时按文件名补上。
  *
@@ -454,7 +453,7 @@ function sceneIdFromPath(path: string): Nullable<string> {
  * 推断补到清单自己的 `id` 上——「钳制不拒绝」。推不出合法 slug 时不补，报错照旧。
  */
 function withIdFromSourceName(context: NormalizationContext): Record<string, unknown> {
-  const derivedId = sceneIdFromPath(context.sourceName)
+  const derivedId = gameManifestIdFromPath(context.sourceName)
   if (!derivedId) return {}
   context.adjustments.push({
     field: '$.id',
@@ -504,7 +503,7 @@ function normalizedEntryScene(
   const trimmed = value.trim()
   if (!trimmed || trimmed.startsWith('scene:')) return value
 
-  const declaredPathId = scenePaths.includes(trimmed) ? sceneIdFromPath(trimmed) : null
+  const declaredPathId = scenePaths.includes(trimmed) ? gameManifestIdFromPath(trimmed) : null
   const slug = declaredPathId ?? (GameSlugSchema.safeParse(trimmed).success ? trimmed : null)
   if (!slug) return value
 
@@ -535,7 +534,7 @@ function normalizeProject(value: unknown, context: NormalizationContext): Record
   warnUnknownKeys(server, KnownServerKeys, '$.dev.server', context)
   warnUnknownKeys(overlay, KnownOverlayKeys, '$.dev.overlay', context)
   const entryFallback = isString(scenes[0])
-    ? sceneIdFromPath(scenes[0])
+    ? gameManifestIdFromPath(scenes[0])
     : null
 
   return {
