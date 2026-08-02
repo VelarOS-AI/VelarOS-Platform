@@ -7,7 +7,8 @@ import { z } from 'zod'
 import { isEmpty, stringifyPretty } from '@velaros-ai/core'
 
 export const VelarHostCapabilityConfirmationSchema = z.enum([
-  'workspace-write',
+  'project-write',
+  'project-execute',
   'system-observe',
   'system-read',
   'system-write',
@@ -26,29 +27,13 @@ const VelarHostSystemCapabilitySchema = z.strictObject({
   execute: z.boolean(),
 })
 
-const LegacyVelarHostConfigSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  capabilities: z.strictObject({
-    workspace: z.strictObject({
-      read: z.boolean(),
-      write: z.boolean(),
-    }),
-    computer: z.strictObject({
-      observe: z.boolean(),
-      control: z.boolean(),
-    }),
-  }),
-  computer: z.strictObject({
-    resourceRoots: z.array(z.string().min(1).max(4_096)).max(16),
-  }),
-})
-
 export const VelarHostConfigSchema = z.strictObject({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   capabilities: z.strictObject({
-    workspace: z.strictObject({
+    project: z.strictObject({
       read: z.boolean(),
       write: z.boolean(),
+      execute: z.boolean(),
     }),
     system: VelarHostSystemCapabilitySchema,
     computer: z.strictObject({
@@ -64,9 +49,10 @@ export type VelarHostConfig = z.infer<typeof VelarHostConfigSchema>
 
 export const VelarHostConfigUpdateSchema = z.strictObject({
   capabilities: z.strictObject({
-    workspace: z.strictObject({
+    project: z.strictObject({
       read: z.boolean(),
       write: z.boolean(),
+      execute: z.boolean(),
     }),
     system: VelarHostSystemCapabilitySchema,
     computer: z.strictObject({
@@ -77,7 +63,7 @@ export const VelarHostConfigUpdateSchema = z.strictObject({
   computer: z.strictObject({
     resourceRoots: z.array(z.string().min(1).max(4_096)).max(16),
   }),
-  confirmations: z.array(VelarHostCapabilityConfirmationSchema).max(7),
+  confirmations: z.array(VelarHostCapabilityConfirmationSchema).max(8),
 })
 export type VelarHostConfigUpdate = z.infer<typeof VelarHostConfigUpdateSchema>
 
@@ -87,9 +73,9 @@ export interface VelarHostConfigSnapshot {
 }
 
 const DefaultVelarHostConfig: VelarHostConfig = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   capabilities: {
-    workspace: { read: true, write: false },
+    project: { read: true, write: false, execute: false },
     system: { observe: false, read: false, write: false, execute: false },
     computer: { observe: false, control: false },
   },
@@ -112,8 +98,8 @@ function normalizeResourceRoots(roots: readonly string[]): string[] {
 }
 
 function assertSafeCapabilityDependencies(value: VelarHostConfig): void {
-  if (value.capabilities.workspace.write && !value.capabilities.workspace.read) {
-    throw new Error('Workspace write access requires workspace read access')
+  if (value.capabilities.project.write && !value.capabilities.project.read) {
+    throw new Error('Project write access requires project read access')
   }
   if (value.capabilities.computer.control && !value.capabilities.computer.observe) {
     throw new Error('Computer control requires computer observation access')
@@ -128,8 +114,11 @@ function requiredConfirmations(
   next: VelarHostConfig,
 ): VelarHostCapabilityConfirmation[] {
   const confirmations: VelarHostCapabilityConfirmation[] = []
-  if (!current.capabilities.workspace.write && next.capabilities.workspace.write) {
-    confirmations.push('workspace-write')
+  if (!current.capabilities.project.write && next.capabilities.project.write) {
+    confirmations.push('project-write')
+  }
+  if (!current.capabilities.project.execute && next.capabilities.project.execute) {
+    confirmations.push('project-execute')
   }
   if (!current.capabilities.system.observe && next.capabilities.system.observe) {
     confirmations.push('system-observe')
@@ -169,23 +158,9 @@ export class VelarHostConfigStore {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 })
     try {
       const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
-      const current = VelarHostConfigSchema.safeParse(parsed)
-      const legacy = current.success ? null : LegacyVelarHostConfigSchema.safeParse(parsed)
-      const value = current.success
-        ? current.data
-        : legacy?.success
-          ? VelarHostConfigSchema.parse({
-              schemaVersion: 2,
-              capabilities: {
-                ...legacy.data.capabilities,
-                system: { observe: false, read: false, write: false, execute: false },
-              },
-              computer: legacy.data.computer,
-            })
-          : VelarHostConfigSchema.parse(parsed)
+      const value = VelarHostConfigSchema.parse(parsed)
       assertSafeCapabilityDependencies(value)
       const store = new VelarHostConfigStore(path, value)
-      if (legacy?.success) await store.persist(value)
       return store
     } catch (error) {
       if (!isNodeError(error, 'ENOENT')) {
@@ -208,7 +183,7 @@ export class VelarHostConfigStore {
     const parsed = VelarHostConfigUpdateSchema.parse(input)
     const operation = this.mutation.then(async () => {
       const next = VelarHostConfigSchema.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         capabilities: parsed.capabilities,
         computer: {
           resourceRoots: normalizeResourceRoots(parsed.computer.resourceRoots),

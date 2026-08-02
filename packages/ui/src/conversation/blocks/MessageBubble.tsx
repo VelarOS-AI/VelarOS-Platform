@@ -22,9 +22,9 @@ import type {
   ChatMessage,
   ChatProviderId,
   ModelPricingCatalog,
+  ProjectRootEntry,
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
-  WorkspaceRootEntry,
 } from '#contracts'
 import { isPresent } from '#internal/runtime'
 
@@ -43,8 +43,8 @@ interface MessageBubbleProps {
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  activeWorkspaceRoot?: LooseOptional<string>
-  workspaceRoots?: WorkspaceRootEntry[]
+  activeProjectRoot?: LooseOptional<string>
+  projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
   billingModel?: LooseOptional<{
     provider: ChatProviderId
@@ -57,7 +57,7 @@ interface MessageBubbleProps {
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
   onOpenBrowserLink?: (url: string) => void | Promise<void>
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   onReviewFileChanges?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
@@ -96,7 +96,7 @@ function hasWorkerThreadAnchorToolBlock(message: ChatMessage): boolean {
   if (isPresent(cached)) return cached
 
   for (const block of message.blocks) {
-    if (block.type === 'tool-call' && block.toolName === 'dispatch_agent') {
+    if (block.type === 'tool-call' && block.toolName === 'agent:dispatch') {
       WorkerThreadAnchorToolPresenceByMessage.set(message, true)
       return true
     }
@@ -111,7 +111,7 @@ function hasPlanToolBlock(message: ChatMessage): boolean {
   if (isPresent(cached)) return cached
 
   for (const block of message.blocks) {
-    if (block.type === 'tool-call' && block.toolName === 'update_plan') {
+    if (block.type === 'tool-call' && block.toolName === 'plan:update') {
       PlanToolPresenceByMessage.set(message, true)
       return true
     }
@@ -217,8 +217,8 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       hiddenPlanToolCallId={props.hiddenPlanToolCallId}
       hideGoalToolBlocks={props.hideGoalToolBlocks}
       planUpdateIndexByToolCallId={props.planUpdateIndexByToolCallId}
-      activeWorkspaceRoot={props.activeWorkspaceRoot}
-      workspaceRoots={props.workspaceRoots}
+      activeProjectRoot={props.activeProjectRoot}
+      projectRoots={props.projectRoots}
       canShowFileChangeSummary={props.canShowFileChangeSummary}
       billingModel={props.billingModel}
       pricingCatalog={props.pricingCatalog}
@@ -228,7 +228,7 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       renderAfterToolCall={props.renderAfterToolCall}
       onOpenBrowserLink={props.onOpenBrowserLink}
       onOpenFileChange={props.onOpenFileChange}
-      onOpenWorkspacePath={props.onOpenWorkspacePath}
+      onOpenProjectPath={props.onOpenProjectPath}
       onReviewFileChanges={props.onReviewFileChanges}
       activeUserActionCardIds={props.activeUserActionCardIds}
       onResolveUserActionCard={props.onResolveUserActionCard}
@@ -252,8 +252,8 @@ function areMessageBubblePropsEqual(
     prev.showToolDetails === next.showToolDetails &&
     areToolVisibilityPropsEqual(prev, next) &&
     arePlanToolRenderPropsEqual(prev, next) &&
-    prev.activeWorkspaceRoot === next.activeWorkspaceRoot &&
-    prev.workspaceRoots === next.workspaceRoots &&
+    prev.activeProjectRoot === next.activeProjectRoot &&
+    prev.projectRoots === next.projectRoots &&
     prev.canShowFileChangeSummary === next.canShowFileChangeSummary &&
     prev.billingModel?.provider === next.billingModel?.provider &&
     prev.billingModel?.model === next.billingModel?.model &&
@@ -264,7 +264,7 @@ function areMessageBubblePropsEqual(
     areToolSlotRenderPropsEqual(prev, next) &&
     prev.onOpenBrowserLink === next.onOpenBrowserLink &&
     prev.onOpenFileChange === next.onOpenFileChange &&
-    prev.onOpenWorkspacePath === next.onOpenWorkspacePath &&
+    prev.onOpenProjectPath === next.onOpenProjectPath &&
     prev.onReviewFileChanges === next.onReviewFileChanges &&
     prev.onRewindToMessage === next.onRewindToMessage &&
     prev.onTranslateThinkingBlock === next.onTranslateThinkingBlock &&

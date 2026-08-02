@@ -3,7 +3,7 @@
  *
  * 每轮活动尾一小块固定格式的账：epoch 号、预算占用、五态计数、最大持仓 top3、pending 数。
  * 两个用途：给模型**本体感知**（把上下文状态暴露成可寻址块本身就有增益 [A1]），以及给它
- * 调 `distill_context` 的依据（它得先知道自己撑不撑得住，才谈得上主动请求一次 epoch）。
+ * 调 `context:distill` 的依据（它得先知道自己撑不撑得住，才谈得上主动请求一次 epoch）。
  *
  * ## 为什么在尾部而不在系统提示里
  * dashboard 每轮都变。放进稳定前缀 = 每请求前缀字节漂移 = 整条下游缓存全灭（这正是 P7-1
@@ -59,7 +59,7 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
   const top = renderTopHoldings(input)
   if (top) lines.push(top)
   lines.push(
-    'Non-inline records stay retrievable via recall_context; call distill_context when a phase is done to request one compaction epoch.'
+    'Non-inline records stay retrievable via context:recall; call context:distill when a phase is done to request one compaction epoch.'
   )
 
   return lines.join('\n')

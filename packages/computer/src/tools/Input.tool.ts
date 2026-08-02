@@ -8,11 +8,11 @@ import { defineComputerTool } from './Types'
 
 /** Move the cursor to a coordinate without clicking. */
 const computerMove = defineComputerTool<{ x: number; y: number }>({
-  name: 'computer_move',
+  name: 'computer:move',
   role: 'control',
   summary: '移动鼠标到屏幕坐标（不点击）。',
   suitable: ['需要悬停某处但不点击。'],
-  forbidden: ['点击用 computer_click。'],
+  forbidden: ['点击用 computer:click。'],
   usage: ['传屏幕逻辑坐标 x、y。'],
   examples: [{ x: 640, y: 400 }],
   notes: ['启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。'],
@@ -47,7 +47,7 @@ const computerClick = defineComputerTool<{
   button?: 'left' | 'right' | 'middle'
   count?: number
 }>({
-  name: 'computer_click',
+  name: 'computer:click',
   role: 'control',
   summary: '在屏幕坐标点击桌面或原生应用。',
   suitable: ['点击桌面按钮、菜单、输入框等元素。'],
@@ -92,11 +92,11 @@ const computerClick = defineComputerTool<{
 
 /** Type literal text into the focused element. */
 const computerType = defineComputerTool<{ text: string }>({
-  name: 'computer_type',
+  name: 'computer:type',
   role: 'control',
   summary: '在当前焦点处输入文本。',
   suitable: ['向已聚焦的输入框/编辑器输入文字。'],
-  forbidden: ['组合键用 computer_key。'],
+  forbidden: ['组合键用 computer:key。'],
   usage: ['先点击获取焦点，再传 text。'],
   examples: [{ text: 'hello world' }],
   notes: ['启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。'],
@@ -119,11 +119,11 @@ const computerType = defineComputerTool<{ text: string }>({
 
 /** Press a key or key combination (e.g. "cmd+a", "enter"). */
 const computerKey = defineComputerTool<{ keys: string }>({
-  name: 'computer_key',
+  name: 'computer:key',
   role: 'control',
   summary: '按下按键或组合键。',
   suitable: ['发送 Enter、Esc、Tab 或 cmd/ctrl 快捷键。'],
-  forbidden: ['普通文本用 computer_type。'],
+  forbidden: ['普通文本用 computer:type。'],
   usage: ['传按键序列，用 + 连接。'],
   examples: [{ keys: 'enter' }, { keys: 'cmd+a' }],
   notes: ['启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。'],
@@ -150,9 +150,9 @@ const computerKey = defineComputerTool<{ keys: string }>({
 })
 
 const computerInputTools = {
-  computer_move: computerMove,
-  computer_click: computerClick,
-  computer_type: computerType,
-  computer_key: computerKey,
+  'computer:move': computerMove,
+  'computer:click': computerClick,
+  'computer:type': computerType,
+  'computer:key': computerKey,
 }
 export { computerInputTools }

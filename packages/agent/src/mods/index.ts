@@ -19,7 +19,10 @@ export type {
   AgentModSourceKind,
 } from './AgentModLoader'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from './AgentModLoader'
+export type { AgentModSurfaceSnapshot } from './AgentModProjection'
 export {
+  composeAgentModSpaces,
+  createAgentModSurfaceSnapshot,
   projectAgentModExecutionModes,
   projectAgentModPromptSegments,
   projectAgentModSkills,

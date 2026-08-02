@@ -10,6 +10,18 @@
 // 首尾空白），语义层零宽容。
 import { z } from 'zod'
 
+import {
+  isArray,
+  isBlank,
+  isEmpty,
+  isNotNull,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
+import { isCanonicalToolId } from '@velaros-ai/core/tool-contract'
+
 // ─── semver：manifest 兼容轴的最小判定器（单源，Loader 复用） ──────────────────
 
 interface SemverVersion {
@@ -27,7 +39,7 @@ const SemverVersionPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u
 const SemverComparatorPattern = /^(\^|~|>=|<=|>|<|=)?\s*(.+)$/u
 
 /** 解析 `x.y.z`（预发布/构建元数据被忽略）；非法返回 null。 */
-function parseSemverVersion(text: string): SemverVersion | null {
+function parseSemverVersion(text: string): Nullable<SemverVersion> {
   const match = SemverVersionPattern.exec(text.trim())
   if (!match) return null
   return {
@@ -43,9 +55,9 @@ function compareSemver(left: SemverVersion, right: SemverVersion): number {
   return left.patch - right.patch
 }
 
-function parseSemverComparator(text: string): SemverComparator | null {
+function parseSemverComparator(text: string): Nullable<SemverComparator> {
   const trimmed = text.trim()
-  if (trimmed === '' || trimmed === '*' || trimmed === 'x') return { kind: 'any' }
+  if (isEmpty(trimmed) || trimmed === '*' || trimmed === 'x') return { kind: 'any' }
   const match = SemverComparatorPattern.exec(trimmed)
   if (!match) return null
   const version = parseSemverVersion(match[2] ?? '')
@@ -94,11 +106,11 @@ function satisfiesComparator(version: SemverVersion, comparator: SemverComparato
  */
 function isSemverRangeParsable(range: string): boolean {
   const clauses = range.split('||')
-  if (clauses.length === 0) return false
+  if (isEmpty(clauses)) return false
   return clauses.every((clause) => {
-    const comparators = clause.trim().split(/\s+/u).filter((part) => part !== '')
-    if (comparators.length === 0) return false
-    return comparators.every((part) => parseSemverComparator(part) !== null)
+    const comparators = clause.trim().split(/\s+/u).filter((part) => !isEmpty(part))
+    if (isEmpty(comparators)) return false
+    return comparators.every((part) => isNotNull(parseSemverComparator(part)))
   })
 }
 
@@ -107,11 +119,11 @@ function satisfiesSemverRange(version: string, range: string): boolean {
   const parsedVersion = parseSemverVersion(version)
   if (!parsedVersion) return false
   return range.split('||').some((clause) => {
-    const comparators = clause.trim().split(/\s+/u).filter((part) => part !== '')
-    if (comparators.length === 0) return false
+    const comparators = clause.trim().split(/\s+/u).filter((part) => !isEmpty(part))
+    if (isEmpty(comparators)) return false
     return comparators.every((part) => {
       const comparator = parseSemverComparator(part)
-      return comparator !== null && satisfiesComparator(parsedVersion, comparator)
+      return isNotNull(comparator) && satisfiesComparator(parsedVersion, comparator)
     })
   })
 }
@@ -173,7 +185,7 @@ const AgentModSeamKindSchema = z.enum(AgentModSeamKinds)
 /** 标量→单元素数组；其余原样交给下游 schema 报错（不吞毁）。 */
 function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   return z.preprocess(
-    (value) => (typeof value === 'string' ? [value] : value),
+    (value) => (isString(value) ? [value] : value),
     z.array(schema)
   )
 }
@@ -181,14 +193,18 @@ function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
 const TrimmedIdSchema = z
   .string()
   .transform((value) => value.trim())
-  .refine((value) => value.length > 0, { message: '不能为空' })
+  .refine((value) => !isEmpty(value), { message: '不能为空' })
+
+const CanonicalToolIdSchema = TrimmedIdSchema.refine(isCanonicalToolId, {
+  message: '必须使用 namespace:tool canonical id',
+})
 
 const SemverRangeSchema = TrimmedIdSchema.refine(isSemverRangeParsable, {
   message: '不是可解析的 semver range（支持 * / 1.2.3 / ^1.2.3 / ~1.2.3 / >=1.2.3，空白=合取，||=析取）',
 })
 
 const SemverVersionSchema = TrimmedIdSchema.refine(
-  (value) => parseSemverVersion(value) !== null,
+  (value) => isNotNull(parseSemverVersion(value)),
   { message: '不是合法的 x.y.z 版本号' }
 )
 
@@ -196,7 +212,7 @@ const SemverVersionSchema = TrimmedIdSchema.refine(
 
 /** 工具贡献：`name` 是全宿主唯一键（裁决 5 工具名唯一性，冲突拒载）。 */
 const AgentModToolContributionSchema = z.strictObject({
-  name: TrimmedIdSchema,
+  name: CanonicalToolIdSchema,
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
@@ -257,6 +273,8 @@ const AgentModSpaceContributionSchema = z.strictObject({
   identityStrategy: z.enum(['ordinal', 'path', 'origin']),
   surfaceProfileId: TrimmedIdSchema.optional(),
   boundCapabilityIds: tolerantArray(TrimmedIdSchema).optional(),
+  /** 复用另一个空间已经拼装好的职责包；用于 Game 等项目型空间继承 Project 配方。 */
+  inheritsSpaceIds: tolerantArray(TrimmedIdSchema).optional(),
   toolCategoryIds: tolerantArray(TrimmedIdSchema).optional(),
   residentToolNames: tolerantArray(TrimmedIdSchema).optional(),
   /** 本 space 允许的 per-turn 上下文源白名单（mod 进入每回合上下文的唯一通道）。 */
@@ -410,7 +428,7 @@ type AgentModManifest = z.infer<typeof AgentModManifestSchema>
 /** 标量 id → `{ id }`（形态层宽容；语义零宽容）。 */
 function tolerantCapabilityRef<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   return z.preprocess(
-    (value) => (typeof value === 'string' ? { id: value } : value),
+    (value) => (isString(value) ? { id: value } : value),
     schema
   )
 }
@@ -501,7 +519,7 @@ function parseVelarosModEnvelope(
   // 身份复核：这是唯一一处跨节动作。一个 mod 只能有一个身份，两节各报一个 id 是事故形态
   // （安装器按 module.id 落盘，Agent 注册机按 agent.id 记账，之后二者永远对不上）。
   const agentId = readOptionalModId(envelope.agent)
-  if (agentId !== undefined && agentId !== envelope.module.id) return {
+  if (isPresent(agentId) && agentId !== envelope.module.id) return {
       ok: false,
       diagnostics: [
         {
@@ -537,19 +555,18 @@ interface ParseAgentModManifestOptions {
   origin?: string
 }
 
-function readOptionalModId(input: unknown): string | undefined {
-  if (typeof input !== 'object' || input === null) return undefined
+function readOptionalModId(input: unknown) {
+  if (!isPlainObject(input)) return undefined
   const id = Reflect.get(input, 'id')
-  return typeof id === 'string' && id.trim() !== '' ? id.trim() : undefined
+  return isString(id) && !isBlank(id) ? id.trim() : undefined
 }
 
 /** 形态判定：有 `module` 节且没有九轴 manifest 必填字段 = 这是信封不是 agent 节。 */
 function looksLikeVelarosModEnvelope(input: unknown): boolean {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false
+  if (!isPlainObject(input)) return false
   return (
-    typeof Reflect.get(input, 'module') === 'object' &&
-    Reflect.get(input, 'module') !== null &&
-    Reflect.get(input, 'manifestSchemaVersion') === undefined
+    isPlainObject(Reflect.get(input, 'module')) &&
+    isUndefined(Reflect.get(input, 'manifestSchemaVersion'))
   )
 }
 
@@ -559,7 +576,7 @@ function listAgentModDeclaredAxes(
 ): readonly AgentModContributionAxisName[] {
   return AgentModContributionAxisNames.filter((axis) => {
     const entries = Reflect.get(manifest.contributes, axis)
-    return Array.isArray(entries) && entries.length > 0
+    return isArray(entries) && !isEmpty(entries)
   })
 }
 
@@ -570,7 +587,7 @@ function readAgentModContributionKey(
 ): string {
   const key = axis === 'tools' ? 'name' : 'id'
   const value = Reflect.get(entry as object, key)
-  return typeof value === 'string' ? value : ''
+  return isString(value) ? value : ''
 }
 
 /**
@@ -615,7 +632,7 @@ function parseAgentModManifest(
 
   for (const axis of AgentModContributionAxisNames) {
     const entries = Reflect.get(manifest.contributes, axis)
-    if (!Array.isArray(entries)) continue
+    if (!isArray(entries)) continue
     const seen = new Set<string>()
     for (const entry of entries) {
       const key = readAgentModContributionKey(axis, entry)
@@ -644,7 +661,7 @@ function parseAgentModManifest(
     })
   }
 
-  if (diagnostics.length > 0) return { ok: false, diagnostics }
+  if (!isEmpty(diagnostics)) return { ok: false, diagnostics }
   return { ok: true, manifest }
 }
 

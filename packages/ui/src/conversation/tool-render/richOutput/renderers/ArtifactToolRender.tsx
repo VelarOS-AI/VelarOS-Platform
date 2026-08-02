@@ -65,18 +65,18 @@ export const ArtifactToolRender = memo(function ArtifactToolRender({
     )
 
   async function openPath(kind: 'open' | 'reveal'): Promise<void> {
-    const openWorkspacePath = capabilities.openWorkspacePath
-    const revealWorkspacePath = capabilities.revealWorkspacePath
+    const openProjectPath = capabilities.openProjectPath
+    const revealProjectPath = capabilities.revealProjectPath
 
     if (!sessionId || !path) return
 
     try {
       if (kind === 'open') {
-        if (!openWorkspacePath) return
-        Result.unwrap(await openWorkspacePath(sessionId, path))
+        if (!openProjectPath) return
+        Result.unwrap(await openProjectPath(sessionId, path))
       } else {
-        if (!revealWorkspacePath) return
-        Result.unwrap(await revealWorkspacePath(sessionId, path))
+        if (!revealProjectPath) return
+        Result.unwrap(await revealProjectPath(sessionId, path))
       }
     } catch (errorValue) {
       capabilities.showNotice?.({

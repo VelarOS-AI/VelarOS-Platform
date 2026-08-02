@@ -4,7 +4,7 @@
 // ## 组织
 // 五个 op 各有一份精确 schema（find/page/map/read/replace），`toolSpaceSchema` 把它们并成按 `op`
 // 判别的联合——**执行侧只认这份联合**。另有一层"查询门面" `toolSpaceQueryMethodSchema`：
-// tool_map 对模型暴露的是这层宽松形状（所有字段可选 + op 可省），进门后由
+// tooling:map 对模型暴露的是这层宽松形状（所有字段可选 + op 可省），进门后由
 // `parseToolSpaceQueryMethodInput` 归一成联合里的精确形状。
 //
 // ## 两条宽容判据（都是实测失败模式换来的，别顺手收严）
@@ -12,7 +12,7 @@
 //     （典型：read 带 toolOsStates）。strict 会硬报 Unrecognized key 让模型循环重试，strip 静默
 //     丢弃不属于本 op 的键、按有效参数执行，核心意图仍达成。
 //  2. **op 可以省，按字段反推**：省略 op 且带了 query → 按 find 解析，否则按 map。不这样推断的话
-//     `tool_map({query})` 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，模型白花
+//     `tooling:map({query})` 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，模型白花
 //     一轮改 op——这是高频可观测的失败模式。
 //
 // ## 一个必须一起改的地方
@@ -76,7 +76,7 @@ export const toolSpaceFindSchema = toolSpaceBaseSchema.extend({
     .min(1)
     .max(240)
     .refine(isChineseOrEnglishToolSearchQuery, {
-      message: 'tool_find query 只允许使用中文或英文搜索词；数字和工具名常用符号可以作为辅助内容。',
+      message: 'tooling:map query 只允许使用中文或英文搜索词；数字和工具名常用符号可以作为辅助内容。',
     })
     .describe(
       parameterDescription({
@@ -251,7 +251,7 @@ export const toolSpaceReadSchema = toolSpaceBaseSchema.extend({
       parameterDescription({
         description: '要读取正文的技能页 id：skill:<skill_id>，例如 skill:global:coding-style。',
         notes: [
-          'tool_read 只读技能（及未来其他可读资源），不读工具页 schema——需要工具能力用 tool_map 发现、tool_replace 换入。',
+          'tooling:read 只读技能（及未来其他可读资源），不读工具页 schema——需要工具能力用 tooling:map 发现、tooling:replace 换入。',
         ],
       })
     ),
@@ -297,10 +297,10 @@ const toolSpaceQueryMethodObjectSchema = z.object({
     .min(2)
     .max(240)
     .refine((value) => ToolFindQueryHasSearchLanguage.test(value), {
-      message: 'tool_find query 必须包含中文或英文搜索词。',
+      message: 'tooling:map query 必须包含中文或英文搜索词。',
     })
     .refine((value) => ToolFindQueryAllowedCharacters.test(value), {
-      message: 'tool_find query 只允许使用中文或英文搜索词；数字和工具名常用符号可以作为辅助内容。',
+      message: 'tooling:map query 只允许使用中文或英文搜索词；数字和工具名常用符号可以作为辅助内容。',
     })
     .optional()
     .describe(parameterDescription({ description: 'find 模式下要搜索的工具意图、能力名、工具名或任务短语。' })),
@@ -377,7 +377,7 @@ function stripUndefinedFields(input: Record<string, unknown>): Record<string, un
 
 function parseToolSpaceQueryByOp(input: z.output<typeof toolSpaceQueryMethodObjectSchema>) {
   // 省略 op 但带了 query → 模型意图就是按短语搜索，按 find 解析。否则默认 map（按分类展开）。
-  // 不这样推断的话，tool_map({query}) 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，
+  // 不这样推断的话，tooling:map({query}) 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，
   // 模型只能白白多花一轮改 op，是高频可观测的失败模式。
   const op = input.op ?? (isNotUndefined(input.query) ? 'find' : 'map')
   const normalized = stripUndefinedFields({ ...input, op })

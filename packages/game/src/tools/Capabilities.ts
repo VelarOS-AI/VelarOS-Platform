@@ -1,10 +1,10 @@
 import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
 
 export const GameManifestEditCapability = {
-  effectKind: 'workspace-edit',
-  readScopes: ['workspace', 'game-manifest'],
-  writeScopes: ['workspace', 'game-manifest'],
-  filesystem: { read: 'workspace', write: 'workspace' },
+  effectKind: 'project-edit',
+  readScopes: ['project', 'game-manifest'],
+  writeScopes: ['project', 'game-manifest'],
+  filesystem: { read: 'project', write: 'project' },
   concurrency: 'unsafe',
   canReadArbitrarySource: false,
   metadata: { gameAccess: 'manifest-edit' },
@@ -13,9 +13,9 @@ export const GameManifestEditCapability = {
 
 export const GameRunCapability = {
   effectKind: 'process',
-  readScopes: ['workspace', 'game-runtime'],
+  readScopes: ['project', 'game-runtime'],
   writeScopes: ['game-runtime'],
-  filesystem: { read: 'workspace', write: 'none' },
+  filesystem: { read: 'project', write: 'none' },
   process: { execution: 'long-running' },
   concurrency: 'unsafe',
   canReadArbitrarySource: false,
@@ -35,8 +35,8 @@ export const GameObserveCapability = {
 export const GameScreenshotCapability = {
   effectKind: 'browser',
   readScopes: ['game-runtime'],
-  writeScopes: ['workspace'],
-  filesystem: { read: 'none', write: 'workspace' },
+  writeScopes: ['project'],
+  filesystem: { read: 'none', write: 'project' },
   concurrency: 'unsafe',
   canReadArbitrarySource: false,
   metadata: { gameAccess: 'artifact' },

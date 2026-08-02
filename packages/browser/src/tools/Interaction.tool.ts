@@ -26,7 +26,7 @@ const browserPerformTargetAction = defineBrowserTool<{
   value?: BrowserTargetActionOptions['value']
   waitForNavigation?: boolean
 }>({
-  name: 'browser_perform_target_action',
+  name: 'browser:perform_target_action',
   role: 'control',
   summary: '操作当前页面上的目标元素。',
   suitable: [
@@ -167,11 +167,11 @@ const browserNavigatePage = defineBrowserTool<{
   action: BrowserPageNavigationOptions['action']
   url?: string
 }>({
-  name: 'browser_navigate_page',
+  name: 'browser:navigate_page',
   role: 'control',
   summary: '控制当前页面导航。',
   suitable: ['需要后退、前进、刷新或跳转 URL。'],
-  forbidden: ['不要用它进入新站点工作区；新站点用 enter_browser_site。'],
+  forbidden: ['不要用它进入新站点工作区；新站点用 browser:enter_site。'],
   usage: ['传 action；action=goto 时传 url。'],
   examples: [{ action: "goto", url: "https://example.com" }],
   notes: ['导航后会同步当前 browser context。'],
@@ -217,7 +217,7 @@ const browserNavigatePage = defineBrowserTool<{
       forbidden: ['不要用于后退、前进或刷新。'],
       usage: ['传 url。'],
       examples: [{ url: "https://example.com/search" }],
-      notes: ['跨主站点切换优先使用 enter_browser_site。'],
+      notes: ['跨主站点切换优先使用 browser:enter_site。'],
       schema: z.object({
         url: z.string().min(1).max(2048).describe(
           parameterDescription({
@@ -266,7 +266,7 @@ const browserScrollPage = defineBrowserTool<{
   x?: number
   y?: number
 }>({
-  name: 'browser_scroll_page',
+  name: 'browser:scroll_page',
   role: 'control',
   summary: '滚动当前页面。',
   suitable: ['需要查看页面其他区域或触发懒加载内容。'],
@@ -330,7 +330,7 @@ const browserScrollPage = defineBrowserTool<{
 const browserTypeText = defineBrowserTool<{
   text: string
 }>({
-  name: 'browser_type_text',
+  name: 'browser:type_text',
   role: 'control',
   summary: '向当前焦点元素输入文本。',
   suitable: ['需要模拟真实键盘输入。'],
@@ -367,7 +367,7 @@ const browserPressKey = defineBrowserTool<{
   repeat?: number
   waitForNavigation?: boolean
 }>({
-  name: 'browser_press_key',
+  name: 'browser:press_key',
   role: 'control',
   summary: '向当前页面发送键盘按键。',
   suitable: ['需要提交表单、切换焦点或触发键盘快捷键。'],
@@ -439,11 +439,11 @@ const browserMoveMouse = defineBrowserTool<{
   x: number
   y: number
 }>({
-  name: 'browser_move_mouse',
+  name: 'browser:move_mouse',
   role: 'control',
   summary: '移动当前页面的虚拟鼠标。',
   suitable: ['需要悬停触发 UI，或在坐标点击前移动光标。'],
-  forbidden: ['不要用它点击；点击用 browser_click_coordinates。'],
+  forbidden: ['不要用它点击；点击用 browser:click_coordinates。'],
   usage: ['传视口坐标 x 和 y。'],
   examples: [{ x: 120, y: 240 }],
   notes: ['坐标基于当前 viewport。'],
@@ -521,7 +521,7 @@ const browserClickCoordinates = defineBrowserTool<{
   clickCount?: number
   waitForNavigation?: boolean
 }>({
-  name: 'browser_click_coordinates',
+  name: 'browser:click_coordinates',
   role: 'control',
   summary: '按视口坐标点击页面。',
   suitable: ['无法稳定定位元素，只能按截图坐标点击。'],
@@ -592,7 +592,7 @@ const browserWaitForSelector = defineBrowserTool<{
   visible?: boolean
   timeoutMs?: number
 }>({
-  name: 'browser_wait_for_selector',
+  name: 'browser:wait_for_selector',
   role: 'control',
   summary: '等待页面元素出现。',
   suitable: ['点击、跳转、输入或异步加载后等待元素出现、可见、隐藏或移除。'],
@@ -662,7 +662,7 @@ const browserWaitForPage = defineBrowserTool<{
   text?: string
   timeoutMs?: number
 }>({
-  name: 'browser_wait_for_page',
+  name: 'browser:wait_for_page',
   role: 'control',
   summary: '等待当前页面 URL、文本、表达式、加载状态或短暂停顿。',
   suitable: ['点击、输入、滚动后等待动画、轻量 SPA 更新、懒加载、URL 变化、页面正文出现文本、页面表达式成立、readyState 或网络空闲稳定。'],
@@ -760,11 +760,11 @@ const browserSetViewport = defineBrowserTool<{
   width: number
   height: number
 }>({
-  name: 'browser_set_viewport',
+  name: 'browser:set_viewport',
   role: 'control',
   summary: '设置当前页面的 CSS viewport 分辨率。',
   suitable: ['检查响应式设计、复现移动端或桌面端布局，或截图前固定尺寸。'],
-  forbidden: ['不要用它缩放页面内容；缩放用 browser_set_page_zoom。'],
+  forbidden: ['不要用它缩放页面内容；缩放用 browser:set_page_zoom。'],
   usage: ['传 width 和 height。'],
   examples: [{ width: 1440, height: 900 }],
   notes: ['浏览器工作区外框保持不变，页面会在内部按目标分辨率缩放；会影响后续截图和坐标操作。'],
@@ -802,11 +802,11 @@ const browserSetPageZoom = defineBrowserTool<{
   zoomFactor?: number
   step?: number
 }>({
-  name: 'browser_set_page_zoom',
+  name: 'browser:set_page_zoom',
   role: 'control',
   summary: '调整当前页面缩放比例。',
   suitable: ['文字过小、坐标点击困难，或需要缩小查看页面宽度。'],
-  forbidden: ['不要用它改变 viewport 尺寸；视口尺寸用 browser_set_viewport。'],
+  forbidden: ['不要用它改变 viewport 尺寸；视口尺寸用 browser:set_viewport。'],
   usage: ['传 action；action=set 时传 zoomFactor。'],
   examples: [{ action: "reset" }],
   notes: ['缩放影响视觉呈现和坐标映射。'],
@@ -872,7 +872,7 @@ const browserSetPageZoom = defineBrowserTool<{
 
 /** 页面交互类工具出口。 */
 const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
-  name: 'browser_act',
+  name: 'browser:act',
   role: 'control',
   summary: '统一执行当前页面动作。',
   suitable: [
@@ -880,7 +880,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
     '需要替代旧的单一 browser 交互工具时使用。',
   ],
   forbidden: [
-    '不要用它进入或退出 browser site 模式；站点会话仍用 enter_browser_site/leave_browser_site。',
+    '不要用它进入或退出 browser site 模式；站点会话仍用 browser:enter_site/browser:leave_site。',
     '不要用坐标点击替代稳定 selector；能定位元素时优先 action=target。',
   ],
   usage: [
@@ -1145,12 +1145,12 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
         })
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser_act action.')
+        throw new AppError('VALIDATION', 'Unsupported browser:act action.')
     }
   },
 })
 
 const browserInteractionTools = {
-  browser_act: browserAct,
+  'browser:act': browserAct,
 }
 export { browserInteractionTools }

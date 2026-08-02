@@ -1,5 +1,5 @@
+export { GameToolName, GameToolNames } from '../contracts.js'
 export * from './Capabilities.js'
 export * from './Collection.js'
-export * from './Names.js'
 export * from './Schemas.js'
 export * from './Types.js'

@@ -1228,7 +1228,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((threadId: string) => void)"
     },
     {
-      "name": "ChatConversationPane.onOpenWorkspacePath",
+      "name": "ChatConversationPane.onOpenProjectPath",
       "description": "Auto-generated from TypeScript props.",
       "type": "((path: string) => unknown)"
     },
@@ -1666,14 +1666,14 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "ReadonlyMap<string, number>"
     },
     {
-      "name": "ChatTranscript.activeWorkspaceRoot",
+      "name": "ChatTranscript.activeProjectRoot",
       "description": "Auto-generated from TypeScript props.",
       "type": "LooseOptional<string>"
     },
     {
-      "name": "ChatTranscript.workspaceRoots",
+      "name": "ChatTranscript.projectRoots",
       "description": "Auto-generated from TypeScript props.",
-      "type": "WorkspaceRootEntry[]"
+      "type": "ProjectRootEntry[]"
     },
     {
       "name": "ChatTranscript.canShowFileChangeSummary",
@@ -1726,7 +1726,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((entry: FileChangeSummaryListEntry) => void | Promise<void>)"
     },
     {
-      "name": "ChatTranscript.onOpenWorkspacePath",
+      "name": "ChatTranscript.onOpenProjectPath",
       "description": "Auto-generated from TypeScript props.",
       "type": "((path: string) => unknown)"
     },
@@ -1899,13 +1899,13 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     {
       "name": "CommandToolRenderDetails.result",
       "description": "Auto-generated from TypeScript props.",
-      "type": "Nullable<WorkspaceCommandResult>",
+      "type": "Nullable<ProjectCommandResult>",
       "recommended": "Required"
     },
     {
       "name": "CommandToolRenderDetails.backgroundProcess",
       "description": "Auto-generated from TypeScript props.",
-      "type": "Nullable<WorkspaceBackgroundProcessInfo>",
+      "type": "Nullable<ProjectBackgroundProcessInfo>",
       "recommended": "Required"
     },
     {
@@ -4198,14 +4198,14 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "ReadonlyMap<string, number>"
     },
     {
-      "name": "MessageBubble.activeWorkspaceRoot",
+      "name": "MessageBubble.activeProjectRoot",
       "description": "Auto-generated from TypeScript props.",
       "type": "LooseOptional<string>"
     },
     {
-      "name": "MessageBubble.workspaceRoots",
+      "name": "MessageBubble.projectRoots",
       "description": "Auto-generated from TypeScript props.",
-      "type": "WorkspaceRootEntry[]"
+      "type": "ProjectRootEntry[]"
     },
     {
       "name": "MessageBubble.canShowFileChangeSummary",
@@ -4253,7 +4253,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((entry: FileChangeSummaryListEntry) => void | Promise<void>)"
     },
     {
-      "name": "MessageBubble.onOpenWorkspacePath",
+      "name": "MessageBubble.onOpenProjectPath",
       "description": "Auto-generated from TypeScript props.",
       "type": "((path: string) => unknown)"
     },
@@ -4355,7 +4355,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((url: string) => void | Promise<void>)"
     },
     {
-      "name": "MessageContentBlock.onOpenWorkspacePath",
+      "name": "MessageContentBlock.onOpenProjectPath",
       "description": "Auto-generated from TypeScript props.",
       "type": "((path: string) => unknown)"
     },

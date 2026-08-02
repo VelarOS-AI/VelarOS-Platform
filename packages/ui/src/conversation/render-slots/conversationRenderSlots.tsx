@@ -8,8 +8,8 @@ import type {
   ChatGoalLifecycleAction,
   ChatMessage,
   ContentBlock,
+  ProjectAutoApprovalNotice,
   UserActionCard,
-  WorkspaceAutoApprovalNotice,
 } from '#contracts'
 import type { GoalDockViewModel } from '#internal/goalLifecycle'
 
@@ -29,8 +29,8 @@ export type ConversationStickyDockContent =
       onOpenArtifact?: (path: string) => unknown
     }
   | {
-      kind: 'workspace-auto-approval'
-      notice: WorkspaceAutoApprovalNotice
+      kind: 'project-auto-approval'
+      notice: ProjectAutoApprovalNotice
       onDismiss?: () => void
     }
   | {

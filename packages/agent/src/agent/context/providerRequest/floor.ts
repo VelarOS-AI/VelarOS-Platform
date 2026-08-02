@@ -126,9 +126,9 @@ export function assertProviderRequestInvariants(
   if (
     explicitToolSurface &&
     requestFingerprint.contextRefCount > 0 &&
-    !requestFingerprint.availableToolNames.includes('recall_context')
+    !requestFingerprint.availableToolNames.includes('context:recall')
   ) {
-    issues.push('provider-visible context handles require resident recall_context tool')
+    issues.push('provider-visible context handles require resident context:recall tool')
   }
 
   if (isEmpty(issues)) return

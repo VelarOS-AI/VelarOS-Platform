@@ -28,7 +28,7 @@ function commandBlock(overrides: Partial<ToolCallBlockType>): ToolCallBlockType 
   }
 }
 
-/** Command(bash / ws_run_command) 工具卡:running / success / error / timedOut 四态。 */
+/** Command(bash / project:run) 工具卡:running / success / error / timedOut 四态。 */
 export function CommandToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -87,7 +87,7 @@ export function CommandToolCardExample(): ReactElement {
   )
 }
 
-/** Default renderer(未注册工具名,如 ws_read):running / success / error 三态。 */
+/** Default renderer(未注册工具名,如 project:read):running / success / error 三态。 */
 export function DefaultToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -95,7 +95,7 @@ export function DefaultToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'read-run',
-          toolName: 'ws_read',
+          toolName: 'project:read',
           args: { path: 'src/greeter.ts' },
           isRunning: true,
         }}
@@ -104,7 +104,7 @@ export function DefaultToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'read-ok',
-          toolName: 'ws_read',
+          toolName: 'project:read',
           args: { path: 'src/greeter.ts' },
           result: {
             path: 'src/greeter.ts',
@@ -116,7 +116,7 @@ export function DefaultToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'read-err',
-          toolName: 'ws_read',
+          toolName: 'project:read',
           args: { path: 'src/missing.ts' },
           error: 'ENOENT: no such file or directory, open "src/missing.ts"',
         }}
@@ -125,7 +125,7 @@ export function DefaultToolCardExample(): ReactElement {
   )
 }
 
-/** Plan renderer(update_plan / proposal_review):in-progress / completed / failed 三态。 */
+/** Plan renderer(plan:update / proposal:review):in-progress / completed / failed 三态。 */
 export function PlanToolCardExample(): ReactElement {
   const steps = (statuses: readonly string[]): Array<{ step: string; status: string }> =>
     ['盘点渲染管线', '收割真实 fixture', '补图鉴条目', '跑门禁'].map((step, index) => ({
@@ -140,7 +140,7 @@ export function PlanToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'plan-progress',
-          toolName: 'update_plan',
+          toolName: 'plan:update',
           args: {
             explanation: '按顺序推进图鉴建设。',
             plan: steps(['completed', 'in_progress', 'pending', 'pending']),
@@ -152,7 +152,7 @@ export function PlanToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'plan-done',
-          toolName: 'update_plan',
+          toolName: 'plan:update',
           args: {
             explanation: '全部完成。',
             plan: steps(['completed', 'completed', 'completed', 'completed']),
@@ -164,7 +164,7 @@ export function PlanToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'plan-failed',
-          toolName: 'update_plan',
+          toolName: 'plan:update',
           args: {
             explanation: '门禁未过。',
             plan: steps(['completed', 'completed', 'completed', 'failed']),
@@ -175,12 +175,12 @@ export function PlanToolCardExample(): ReactElement {
   )
 }
 
-/** Goal renderer(create_goal / update_goal):active / complete / blocked 三态。 */
+/** Goal renderer(goal:create / goal:update):active / complete / blocked 三态。 */
 export function GoalToolCardExample(): ReactElement {
   const goal = (status: string, objective: string, error?: string): ToolCallBlockType => ({
     type: 'tool-call',
     toolCallId: `goal-${status}`,
-    toolName: 'create_goal',
+    toolName: 'goal:create',
     args: { objective, status },
     error: toOptional(error),
   })
@@ -194,7 +194,7 @@ export function GoalToolCardExample(): ReactElement {
   )
 }
 
-/** FileChange renderer(ws_edit / write 等):success / running / rejected / no-change 四态。 */
+/** FileChange renderer(project:edit / write 等):success / running / rejected / no-change 四态。 */
 export function FileChangeToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -202,7 +202,7 @@ export function FileChangeToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'edit-ok',
-          toolName: 'ws_edit',
+          toolName: 'project:edit',
           args: { path: 'src/greeter.ts' },
           result: {
             transactionId: 'tx-1',
@@ -216,7 +216,7 @@ export function FileChangeToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'edit-run',
-          toolName: 'ws_edit',
+          toolName: 'project:edit',
           args: { path: 'src/greeter.ts' },
           isRunning: true,
         }}
@@ -225,7 +225,7 @@ export function FileChangeToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'edit-reject',
-          toolName: 'ws_edit',
+          toolName: 'project:edit',
           args: { path: 'src/greeter.ts' },
           result: { transactionId: 'tx-2', approved: false, blocked: true, changedFiles: [] },
         }}
@@ -234,7 +234,7 @@ export function FileChangeToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'edit-nochange',
-          toolName: 'ws_edit',
+          toolName: 'project:edit',
           args: { path: 'src/greeter.ts' },
           result: { transactionId: 'tx-3', changed: false, changedFiles: [] },
         }}

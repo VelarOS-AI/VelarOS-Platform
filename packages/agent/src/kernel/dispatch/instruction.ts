@@ -42,9 +42,9 @@ function buildSubAgentDispatchInstruction(
           .filter(Boolean)
           .join('\n')
       : null,
-    // tool_map/tool_replace 换页教义不再写进任务指令:canonical 是系统提示词的
-    // tool-capability-map 段(按 tool_map 实际暴露门控;无条件指令行会在子 agent
-    // 没有 tool_map 时教一个不存在的工具)。
+    // tooling:map/tooling:replace 换页教义不再写进任务指令:canonical 是系统提示词的
+    // tool-capability-map 段(按 tooling:map 实际暴露门控;无条件指令行会在子 agent
+    // 没有 tooling:map 时教一个不存在的工具)。
     input.structuredOutputContract
       ? '最终回复只返回满足 schema 的 JSON，不要添加 Markdown fence 或解释。'
       : '完成后返回简洁摘要：做了什么、关键发现/改动、未完成项与下一步建议。',

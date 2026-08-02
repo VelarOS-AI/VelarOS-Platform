@@ -17,7 +17,7 @@ import { buildSystemToolInstallCompactLine } from './systemToolInstallRenderMode
 
 import styles from '../command/CommandToolRender.module.css'
 
-import type { ToolCallBlock, WorkspaceCommandResult } from '#contracts'
+import type { ProjectCommandResult,ToolCallBlock } from '#contracts'
 import { isFalse,isPresent, isString, toNullable } from '#internal/runtime'
 import { peekLooseBoolean, peekLooseString, readRecord } from '#internal/unknownJsonRecord'
 
@@ -37,10 +37,10 @@ interface InstallToolResult {
   path?: LooseOptional<string>
   message?: LooseOptional<string>
   error?: LooseOptional<string>
-  commandResult?: LooseOptional<WorkspaceCommandResult>
+  commandResult?: LooseOptional<ProjectCommandResult>
 }
 
-function isWorkspaceCommandResult(value: any): value is WorkspaceCommandResult {
+function isProjectCommandResult(value: any): value is ProjectCommandResult {
   const record = readRecord(value)
   return !!record && isString(record.command) && isString(record.stdout) && isString(record.stderr)
 }
@@ -49,7 +49,7 @@ function readInstallResult(value: any): Nullable<InstallToolResult> {
   const record = readRecord(value)
   if (!record) return null
 
-  const commandResult = isWorkspaceCommandResult(record.commandResult) ? record.commandResult : null
+  const commandResult = isProjectCommandResult(record.commandResult) ? record.commandResult : null
 
   return {
     suggested: peekLooseBoolean(record, 'suggested'),

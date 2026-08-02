@@ -17,6 +17,8 @@ interface AgentHistoryToolContext {
   codingSession: unknown
   sessionId?: string
   evidenceLedger?: readonly ChatContextEvidenceRecord[]
+  /** canonical tool id → provider transport name for the current request. */
+  getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>
 }
 
 function sanitizeHistoryForProvider(

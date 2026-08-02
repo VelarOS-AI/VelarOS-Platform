@@ -212,7 +212,7 @@ export class MemoryTurnRecallCoordinator {
         this.ledgers.append(input.sessionId, {
           label: `记忆：${this.truncate(memory.title, 16)}`,
           summaryText,
-          inspect: { tool: 'get_memory', argsHint: { id: memory.id } },
+          inspect: { tool: 'memory:get', argsHint: { id: memory.id } },
         })
       }
     }

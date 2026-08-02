@@ -52,7 +52,7 @@ function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolCo
 ): boolean {
   switch (action.kind) {
     case 'govern-epoch': {
-      // 缺页 = 请求治理器强开一次 epoch。语义与模型调 distill_context / 宿主 compact_session 一致：
+      // 缺页 = 请求治理器强开一次 epoch。语义与模型调 context:distill / 宿主 compact_session 一致：
       // 绕过水位触发线，但反空转、尾保护、达标即停一条不减——压不下去时返回 false 交给下一级。
       const report = ctx.governanceSessions.requestEpoch(ctx.toolContext.sessionId, {
         modelWindowTokens: ctx.roleRuntime.contextWindow,

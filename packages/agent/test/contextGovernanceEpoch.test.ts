@@ -392,7 +392,7 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
     assert.equal(session.ledger.list().length, 2)
   })
 
-  void test('distill_context 只触发一次 epoch，同一条调用不重复触发', () => {
+  void test('context:distill 只触发一次 epoch，同一条调用不重复触发', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 0,
       minEpochSavingPercent: 1,
@@ -401,8 +401,8 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
     const session = new ContextGovernanceSession(config, null, null)
     const history = [
       ...buildPressureHistory(5, 4_000),
-      toolCallMessage('call-distill', 'distill_context', { facts: ['x'] }),
-      toolResultMessage('call-distill', 'distill_context', '{"distilled":true}'),
+      toolCallMessage('call-distill', 'context:distill', { facts: ['x'] }),
+      toolResultMessage('call-distill', 'context:distill', '{"distilled":true}'),
     ]
     session.syncHistory({ messages: history, at: 1_000 })
 

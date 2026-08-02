@@ -15,7 +15,6 @@ import type {
   ToolDiscoveryToolAvailabilityInput,
 } from './discovery-availability'
 import {
-  isReflectEligibleDiscoveryAvailability,
   nextActionForDiscoveryAvailability,
   resolveToolDiscoveryAvailability,
   schemaStateForDiscoveryAvailability,
@@ -223,8 +222,6 @@ class ToolCapabilityRegistry {
         schemaPolicy: schemaPolicyForAvailability(availability),
         nextAction: nextActionForDiscoveryAvailability(availability),
         resident: visible,
-        reflectEligible:
-          isReflectEligibleDiscoveryAvailability(availability) && entry.tool.role !== 'control',
         reasons: reasonsForToolPage({
           categoryAllowed,
           categoryAccessAllowed: categoryAccess.allowed,

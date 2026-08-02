@@ -16,13 +16,13 @@ export default defineComponentLibraryEntry({
     origin: 'packages/ui/src/conversation/tool-render',
     exampleMode: 'fixture',
     usage:
-      'Use shared compact rows and disclosure cards for command, plan (update_plan), file and rich tool output.',
+      'Use shared compact rows and disclosure cards for command, plan (plan:update), file and rich tool output.',
     avoid:
       'Do not create one-off tool result cards when ToolDisclosureCard or CompactToolRow fits.',
     examples: [
       {
         id: 'tool-renderers-fixture',
-        label: 'Fixture: command + update_plan outputs',
+        label: 'Fixture: command + plan:update outputs',
         node: <ToolRendererExample />,
       },
     ],
@@ -30,7 +30,7 @@ export default defineComponentLibraryEntry({
       {
         name: 'ToolCallBlock.block',
         description:
-          'For update_plan ToolCallBlocks, routing dispatches from ToolCallBlock to PlanToolRender (see packages/ui/src/conversation/tool-render/plan).',
+          'For plan:update ToolCallBlocks, routing dispatches from ToolCallBlock to PlanToolRender (see packages/ui/src/conversation/tool-render/plan).',
         type: 'ToolCallBlock',
       },
       {

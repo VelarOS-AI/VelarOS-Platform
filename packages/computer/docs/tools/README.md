@@ -9,12 +9,12 @@
 
 | 工具 | 档位 | 干什么 |
 | --- | --- | --- |
-| `computer_screenshot` | 只读 observe | 抓主显示器截图(逻辑分辨率,坐标 1:1) |
-| `computer_screen_size` | 只读 observe | 读主显示器逻辑几何 |
-| `computer_move` | 高风险 control | 移动光标(不点击) |
-| `computer_click` | 高风险 control | 在坐标点击(左 / 右 / 中键、可连击) |
-| `computer_type` | 高风险 control | 在当前焦点输入字面文本 |
-| `computer_key` | 高风险 control | 按键或组合键(如 `cmd+a`、`enter`) |
+| `computer:screenshot` | 只读 observe | 抓主显示器截图(逻辑分辨率,坐标 1:1) |
+| `computer:screen_size` | 只读 observe | 读主显示器逻辑几何 |
+| `computer:move` | 高风险 control | 移动光标(不点击) |
+| `computer:click` | 高风险 control | 在坐标点击(左 / 右 / 中键、可连击) |
+| `computer:type` | 高风险 control | 在当前焦点输入字面文本 |
+| `computer:key` | 高风险 control | 按键或组合键(如 `cmd+a`、`enter`) |
 
 **四个 control 档工具的每一次实际操作都要过宿主确认流程**;确认端口缺席时**不得默认放行**。
 整个 `computer-control` 工具类别**默认关闭**,像浏览器模式一样需要显式 opt-in。

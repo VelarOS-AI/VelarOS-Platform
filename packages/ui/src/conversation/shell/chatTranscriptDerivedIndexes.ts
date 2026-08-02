@@ -39,7 +39,7 @@ export function buildChatTranscriptDerivedIndexes({
 
   for (const message of messages) {
     for (const block of message.blocks) {
-      if (block.type !== 'tool-call' || block.toolName !== 'update_plan') continue
+      if (block.type !== 'tool-call' || block.toolName !== 'plan:update') continue
 
       planUpdateIndexByToolCallId.set(block.toolCallId, planUpdateIndex)
       planUpdateIndex += 1

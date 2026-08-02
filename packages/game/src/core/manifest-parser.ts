@@ -489,7 +489,7 @@ export const GameKnownComponentKeys: ReadonlySet<string> = KnownComponentKeys
  * {@link relocateEntityComponents} 只搬名字在闭集或别名表里的键 —— 闭集**外**的
  * （`renderer` / `graphic` / `image` / 直接写在实体上的 `color`、`width`）原地留在信封上。
  * 于是「写了视觉意图 + 什么都没画」在运行期彻底无诊断，而回合上下文恰恰叫模型去
- * `game_query_state({select:'errors'})` 看原因 —— 那张表是空的。证据面必须与
+ * `game:query_state({select:'errors'})` 看原因 —— 那张表是空的。证据面必须与
  * 「未兑现的意图可能停在哪」一致，所以两层闭集都要给到投影层。
  */
 export const GameKnownEntityKeys: ReadonlySet<string> = KnownEntityKeys
@@ -518,7 +518,7 @@ function describeShape(value: unknown): string {
  * 第十二轮之前这里是第三条出口：`recordOrEmpty` / `normalizedStringArray` 把读不懂的值
  * 静默摊成 `{}` / `[]`，只留一条 `action:'ignored'` 的 adjustment。而清单编辑器写盘写的是
  * **解析后的值**（`serializeWorkspace` → `formatGameManifest(entry.value)`），于是
- * 「一次带真实 operation 的 `game_scene_edit`」会把这份丢弃**写回磁盘**：ECS 风
+ * 「一次带真实 operation 的 `game:scene_edit`」会把这份丢弃**写回磁盘**：ECS 风
  * `components: [...]` 变成 `{}`（实体不可见、`errors 0`、连空画面信号都不报，因为组件表是空的、
  * 没有闭集外键当证据），按 id 分组的 `entities: {...}` 整份消失（`diffSummary` 只说
  * 「added entity: …」，一个字不提删除）。这直接违反两条铁律：**写盘永远全保真**，以及
@@ -1362,7 +1362,7 @@ function normalizedPathArray(
  * 判决（第十轮，真机第一手）：`scenes:['scenes/a.scene.json','scenes/a.scene.json']` 过去让
  * **六个 target 全死**——装载按路径去重只留一份，声明数组却原样带着两项，激活阶段于是把同一份
  * 场景推进拓扑两次，解析器的 `indexUnique` 抛「scene id 重复：a」。那句话既点不出文件、
- * 也没有可执行动作，而制造这个状态只需要一次 `ws_edit`。
+ * 也没有可执行动作，而制造这个状态只需要一次 `project:edit`。
  *
  * 这里去重而不是报错，是「钳制不拒绝」：重复项没有第二种解释，报错只能让模型自己猜要删哪一条。
  * 与 I1 不冲突——路径仍然被声明着，只是不再声明两遍。
@@ -1391,7 +1391,7 @@ function dedupedPaths(
 /**
  * `entryScene` 的宽容归一：裸 slug 与已声明的场景路径都收敛成 `scene:<slug>` 引用。
  *
- * `game_run` 的 `scene` 参数早就这么归一（GameRunSchema 的 transform，真机日志里
+ * `game:run` 的 `scene` 参数早就这么归一（GameRunSchema 的 transform，真机日志里
  * 「裸 scene slug 已归一为 scene:main」正常工作过）；工程清单这一格却只会拒绝，
  * 于是同一个概念在两个入口有两套严格度。这里补齐，让两边一致。
  */

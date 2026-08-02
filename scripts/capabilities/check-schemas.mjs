@@ -53,6 +53,15 @@ function normalizeSources(collection, label) {
   })
 }
 
+function isObjectInputSchema(schema) {
+  if (schema?.type === 'object') return true
+  for (const alternatives of [schema?.anyOf, schema?.oneOf]) {
+    if (Array.isArray(alternatives) && alternatives.length > 0)
+      return alternatives.every(isObjectInputSchema)
+  }
+  return false
+}
+
 for (const owner of CapabilityOwners) {
   let ownerSchemaCount = 0
   for (const capability of owner.packages) {
@@ -79,7 +88,7 @@ for (const owner of CapabilityOwners) {
           )
         }
         for (const tool of bundle.tools) {
-          if (tool.inputSchema?.type !== 'object') {
+          if (!isObjectInputSchema(tool.inputSchema)) {
             throw new Error(`${exportName}:${tool.name} did not produce an object input schema`)
           }
         }

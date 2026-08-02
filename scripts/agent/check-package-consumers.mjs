@@ -460,8 +460,8 @@ console.info(${JSON.stringify(record.manifest.name)} + ' CLI contract passed')
 
 // Proves the freshly packed agent tarballs and the published @velaros-ai/core declaration surface
 // can coexist with a third-party package that declares its own ambient helper aliases. Core is no
-// longer a workspace package, so it enters the probe as the installed registry artifact that
-// linkExternalDependencies mirrors into the consumer instead of a locally packed tarball.
+// longer part of the locally packed closure, so the probe installs it as the registry artifact
+// that linkExternalDependencies mirrors into the consumer.
 async function createAmbientConflictConsumer(packagesByName, consumersRoot) {
   const consumerRoot = await mkdtemp(path.join(consumersRoot, 'ambient-conflict-'))
   const consumerNodeModules = path.join(consumerRoot, 'node_modules')

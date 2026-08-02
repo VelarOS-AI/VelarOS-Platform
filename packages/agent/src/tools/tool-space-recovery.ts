@@ -17,10 +17,10 @@ function buildToolSpaceRecoveryGuide(input: {
     ? `tool:${input.toolName} / ${capabilityId}`
     : `tool:${input.toolName}`
   const nextActions = [
-    `先用 tool_map(kind:"all") 查看系统工具地图和 guide.dependencyRules；或用 tool_map(op:"find", query:"${input.toolName}") 定位目标工具状态和功能摘要。需要缩小范围时使用 domainIds/toolOsStates。`,
+    `先用 tooling:map(kind:"all") 查看系统工具地图和 guide.dependencyRules；或用 tooling:map(op:"find", query:"${input.toolName}") 定位目标工具状态和功能摘要。需要缩小范围时使用 domainIds/toolOsStates。`,
     `先满足 ${target} 的 activation.dependencies；具体前置条件与用户动作由能力页声明，不要猜测宿主资源或切换方式。`,
-    `如果 ${target} 是 visible，直接调用真实工具；如果是 loadable，先 tool_replace(pageIn:["tool:${input.toolName}"])，下一轮通过真实 schema 调用。`,
-    `如果 ${target} 是 requires_approval，用 tool_replace(pageIn:["${capabilityId ?? `tool:${input.toolName}`}"]) 做一类能力激活；如果是 requires_user_action，严格执行 activation.dependencies 与 nextActions。`,
+    `如果 ${target} 是 visible，直接调用真实工具；如果是 loadable，先 tooling:replace(pageIn:["tool:${input.toolName}"])，下一轮通过真实 schema 调用。`,
+    `如果 ${target} 是 requires_approval，用 tooling:replace(pageIn:["${capabilityId ?? `tool:${input.toolName}`}"]) 做一类能力激活；如果是 requires_user_action，严格执行 activation.dependencies 与 nextActions。`,
   ]
 
   if (input.unavailableReason) {

@@ -153,7 +153,7 @@ class ExecutionInteractionFacade {
       throw new AppError('VALIDATION', '确认卡片已过期，请忽略这组旧卡片。')
     }
 
-    // 卡结果必须进 decision.message:读卡结果决定语义的工具(如 proposal_review 要求
+    // 卡结果必须进 decision.message:读卡结果决定语义的工具(如 proposal:review 要求
     // actionKind==='acknowledge' 才算批准)靠 readActionCardResults(decision.message) 解析。
     // 这里以结构化的 `userActionCardResults` 为**唯一真源**统一序列化;UI 曾把同一份 JSON
     // 借道 rejectionMessage 传输,那条历史约定已经删掉——留着只会让下游把一坨 JSON 当成

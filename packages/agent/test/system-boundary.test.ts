@@ -14,7 +14,7 @@ import {
 } from 'bun:test'
 
 const PackageRoot = resolve(import.meta.dir, '..')
-const ForbiddenDependency = '@velaros-ai/system-tools'
+const ForbiddenDependency = '@velaros-ai/system'
 
 function listTypeScriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -25,7 +25,7 @@ function listTypeScriptFiles(directory: string): string[] {
 }
 
 describe('Agent System boundary', () => {
-  test('agent-runtime has no concrete system-tools dependency', () => {
+  test('agent-runtime has no concrete System package dependency', () => {
     const packageJson = JSON.parse(
       readFileSync(join(PackageRoot, 'package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> }

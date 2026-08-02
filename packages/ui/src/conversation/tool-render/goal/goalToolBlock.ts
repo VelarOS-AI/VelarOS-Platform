@@ -2,7 +2,7 @@ import type { ToolCallBlock } from '#contracts'
 import { toNullable } from '#internal/runtime'
 import { asRecord, readFirstString } from '#internal/unknownJsonRecord'
 
-const GoalStateToolNames = new Set(['create_goal', 'update_goal'])
+const GoalStateToolNames = new Set(['goal:create', 'goal:update'])
 const GoalTerminalStatuses = new Set(['complete', 'blocked'])
 
 function getGoalRecord(block: Pick<ToolCallBlock, 'result'>): Nullable<Record<string, unknown>> {
@@ -38,8 +38,8 @@ export function getGoalToolBlockStatus(
   const status = readFirstString(goalRecord?.status, resultRecord?.status, argsRecord?.status)
 
   if (status) return status
-  if (block.toolName === 'create_goal' && getGoalToolBlockObjective(block)) return 'active'
-  if (block.toolName === 'update_goal' && (argsRecord?.objective || argsRecord?.constraints))
+  if (block.toolName === 'goal:create' && getGoalToolBlockObjective(block)) return 'active'
+  if (block.toolName === 'goal:update' && (argsRecord?.objective || argsRecord?.constraints))
     return 'active'
 
   return null

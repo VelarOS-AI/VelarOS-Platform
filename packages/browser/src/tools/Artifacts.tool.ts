@@ -14,7 +14,7 @@ import { defineBrowserTool } from './Types'
 
 /** 浏览器网站工作区文件与结构化 artifact 的统一原语入口。 */
 const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
-  name: 'browser_files',
+  name: 'browser:files',
   role: 'edit',
   summary: '统一管理当前网站浏览器工作区文件和结构化 artifact。',
   suitable: [
@@ -71,7 +71,7 @@ const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
 
 /** browser 工作区文件/artifact 工具出口。 */
 const browserArtifactTools = {
-  browser_files: browserFiles,
+  'browser:files': browserFiles,
 }
 
 export { browserArtifactTools }

@@ -27,10 +27,10 @@ export default defineComponentLibraryEntry({
     avoid: '不要再为单个工具手搓一次性结果卡;新工具优先落进现有 renderer 族或 DefaultToolRender。',
     examples: [
       { id: 'tool-card-command', label: 'Command(bash)· running/success/error/timedOut · 手编 fixture', node: <CommandToolCardExample /> },
-      { id: 'tool-card-default', label: 'Default(ws_read)· running/success/error · 手编 fixture', node: <DefaultToolCardExample /> },
-      { id: 'tool-card-plan', label: 'Plan(update_plan)· in-progress/completed/failed · 手编 fixture', node: <PlanToolCardExample /> },
-      { id: 'tool-card-goal', label: 'Goal(create_goal)· active/complete/blocked · 手编 fixture', node: <GoalToolCardExample /> },
-      { id: 'tool-card-file-change', label: 'FileChange(ws_edit)· success/running/rejected/no-change · 手编 fixture', node: <FileChangeToolCardExample /> },
+      { id: 'tool-card-default', label: 'Default(project:read)· running/success/error · 手编 fixture', node: <DefaultToolCardExample /> },
+      { id: 'tool-card-plan', label: 'Plan(plan:update)· in-progress/completed/failed · 手编 fixture', node: <PlanToolCardExample /> },
+      { id: 'tool-card-goal', label: 'Goal(goal:create)· active/complete/blocked · 手编 fixture', node: <GoalToolCardExample /> },
+      { id: 'tool-card-file-change', label: 'FileChange(project:edit)· success/running/rejected/no-change · 手编 fixture', node: <FileChangeToolCardExample /> },
       { id: 'tool-card-density', label: 'compact / full 密度两态 · 手编 fixture', node: <ToolCardDensityExample /> },
     ],
     api: [

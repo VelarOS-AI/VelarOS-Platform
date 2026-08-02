@@ -28,7 +28,7 @@ export const ComputerControlCapability = {
   canReadArbitrarySource: true,
   concurrency: 'unsafe',
   metadata: {
-    canMutateWorkspace: false,
+    canMutateProject: false,
   },
   reason: 'desktop input control (mouse/keyboard)',
 } satisfies ComputerToolCapabilitySchema

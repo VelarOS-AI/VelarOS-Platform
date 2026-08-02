@@ -1,4 +1,5 @@
-import { GameToolName } from './Names.js'
+import { GameToolName } from '../contracts.js'
+
 import {
   gameInputTool,
   gameQueryStateTool,

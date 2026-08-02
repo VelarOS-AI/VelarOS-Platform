@@ -1,18 +1,18 @@
 import type { ChatStatusRuntime } from '../status/chatStatus'
 
 import type {
+  ProjectAutoApprovalNotice,
   StreamUsageTelemetryPayload,
   UserActionCard,
-  WorkspaceAutoApprovalNotice,
 } from '#contracts'
 
 /**
  * `ConversationStickyDockItem` — 会话顶栏坞项的**渲染切片投影**（镜像宿主 `StickyDockItem` 联合，
  * 全部经 Conversation UI 自有纯展示基元表达；宿主结构可赋值）。会话壳按 `kind` 分发到 `stickyDockItemContent`
- * slot（user-action-card / workspace-auto-approval）或包内 PlanToolRender（plan-update）。
+ * slot（user-action-card / project-auto-approval）或包内 PlanToolRender（plan-update）。
  */
 export type ConversationStickyDockItem =
-  | { kind: 'workspace-auto-approval'; id: string; createdAt: number; notice: WorkspaceAutoApprovalNotice }
+  | { kind: 'project-auto-approval'; id: string; createdAt: number; notice: ProjectAutoApprovalNotice }
   | { kind: 'plan-update'; id: string; createdAt: number; summary: string }
   | { kind: 'user-action-card'; id: string; createdAt: number; card: UserActionCard }
 

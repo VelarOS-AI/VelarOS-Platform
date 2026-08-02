@@ -436,7 +436,7 @@ export function UserActionCard({
       </div>
     )
 
-  // 固定模版:带文档产物的卡(如 proposal_review)不把正文塞进卡里,改成「点标题开侧边栏预览」
+  // 固定模版:带文档产物的卡(如 proposal:review)不把正文塞进卡里,改成「点标题开侧边栏预览」
   // + 标题右侧一个侧边栏图标示意可点。侧边栏预览走既有 onOpenArtifact(= 打开工作区文档)。
   const openableArtifactPath =
     !!viewModel.card.artifact?.path && !!onOpenArtifact ? viewModel.card.artifact.path : null

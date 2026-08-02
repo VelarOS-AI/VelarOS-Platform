@@ -31,7 +31,7 @@ export type ContextMigrationCause =
   /** 语义去重：同工具同目标的旧快照被新的取代。 */
   | 'superseded'
 
-/** 缺页（fault）事件：`recall_context` 命中非 INLINE 记录。 */
+/** 缺页（fault）事件：`context:recall` 命中非 INLINE 记录。 */
 export interface ContextFaultEvent {
   recordId: string
   residency: ContextResidency

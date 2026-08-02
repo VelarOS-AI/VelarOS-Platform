@@ -497,7 +497,7 @@ export function createBuiltinDetectors(
           { call: ToolCallRecord; count: number }
         >();
         for (const call of collectToolCalls(observation)) {
-          if (call.name !== "tool_map") continue;
+          if (call.name !== "tooling:map") continue;
           if (!isJsonObject(call.input) || call.input.op !== "read") continue;
           const page = canonicalJson(call.input.ids ?? call.input.id ?? "");
           const current = reads.get(page);

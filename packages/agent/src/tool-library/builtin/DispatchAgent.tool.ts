@@ -6,7 +6,7 @@ import type { DispatchAgentInput } from './DispatchAgent'
 import { dispatchAgentSchema } from './DispatchAgent'
 
 const dispatchAgent = defineVelaTool<DispatchAgentInput>({
-  name: 'dispatch_agent',
+  name: 'agent:dispatch',
   role: 'control',
   category: 'general',
   summary: '在当前执行作用域中派发独立 sub-agent。',
@@ -16,15 +16,15 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
   ],
   forbidden: [
     '默认不派：简单/单步任务（读文件、跑命令）自己直接做，更快。',
-    '工具调不出时用 tool_map/tool_replace 换入自用，别拿子 Agent 绕过。',
+    '工具调不出时用 tooling:map/tooling:replace 换入自用，别拿子 Agent 绕过。',
     '不派彼此实时同步的串行任务；子 Agent 不能再派子 Agent。',
     '不要用子 Agent 绕过宿主的能力、权限或作用域边界。',
   ],
   usage: [
-    '同一轮可多次调用 dispatch_agent 实现并行；系统会自动限制并发数。',
+    '同一轮可多次调用 agent:dispatch 实现并行；系统会自动限制并发数。',
     'subagent_type 必须来自运行时公开的 SubAgentTypeProvider；类型决定默认工具与只读策略。',
-    'mode=sync（默认）会阻塞到子 Agent 完成、直接把结果内联返回——主链路需要该结果才能继续时用它，不要再调 wait_background_jobs，也不要因为没立刻拿到就重派。',
-    'mode=async 后台 fire-and-forget，立即返回可等待 job；父 Agent 先继续非重叠工作，之后用 read_background_job_output/wait_background_jobs 主动收束。',
+    'mode=sync（默认）会阻塞到子 Agent 完成、直接把结果内联返回——主链路需要该结果才能继续时用它，不要再调 job:wait，也不要因为没立刻拿到就重派。',
+    'mode=async 后台 fire-and-forget，立即返回可等待 job；父 Agent 先继续非重叠工作，之后用 job:read_output/job:wait 主动收束。',
     'thread_id 续跑已有 worker；interrupt 配合 thread_id 中断运行中 worker。',
     'agent_name 必须是英文代号名，不要带数字，例如 Atlas、Forge、Scout、Beacon。',
     'tool_scope 可用 type_default、inherit 或 custom；custom 时填写 tool_categories。',
@@ -41,7 +41,7 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       description: 'Scan auth module',
       prompt: 'Read src/auth and summarize login flow, key files, and risks.',
     },
-    // 异步后台任务：mode:async，父 Agent 先继续，之后用 wait_background_jobs/read_background_job_output 收束
+    // 异步后台任务：mode:async，父 Agent 先继续，之后用 job:wait/job:read_output 收束
     {
       agent_name: 'Builder',
       subagent_type: 'general',
@@ -106,7 +106,7 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
 })
 
 const dispatchAgentTools = {
-  dispatch_agent: dispatchAgent,
+  'agent:dispatch': dispatchAgent,
 }
 
 export { dispatchAgentTools }

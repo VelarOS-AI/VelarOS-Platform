@@ -9,7 +9,7 @@
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
   "bugs": {
-    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
   "keywords": [
     "browser",
@@ -37,13 +37,13 @@
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
     },
-    "./tools/cli": {
-      "types": "./dist/tools/cli.d.ts",
-      "import": "./dist/tools/cli.js"
-    },
     "./composition": {
       "types": "./dist/composition/index.d.ts",
       "import": "./dist/composition/index.js"
+    },
+    "./composition/mod": {
+      "types": "./dist/composition/mod.d.ts",
+      "import": "./dist/composition/mod.js"
     },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
@@ -60,7 +60,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "generate:schema-bundle": "bun scripts/generate-tools-schema-bundle.mjs",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/tools/cli.js && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-bundle",
     "test": "bun run build && bun run test:built",
     "test:built": "bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser"
@@ -94,7 +94,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/browser"
   },
   "publishConfig": {

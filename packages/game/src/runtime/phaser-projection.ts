@@ -312,7 +312,7 @@ function anchorOrigin(anchor: SpriteAnchor): readonly [number, number] {
  * 上一版只扫组件表，而清单解析器只把名字**在组件闭集或别名表里**的键搬进 `components`——
  * 闭集外的（`renderer` / `graphic` / `image`、或者直接写在实体上的 `color` / `width`）原地
  * 留在信封上。于是最典型的那一档「写了视觉意图 + 什么都没画」在运行期一条诊断都没有，
- * 而回合上下文偏偏叫模型去 `game_query_state({select:'errors'})` 看原因——那张表是空的。
+ * 而回合上下文偏偏叫模型去 `game:query_state({select:'errors'})` 看原因——那张表是空的。
  *
  * @returns 该报的那句话；没有证据（= 作者本来就没打算画）时回 `null`。
  */
@@ -481,7 +481,7 @@ function createProjectionSceneClass(
         onReady(this)
       } catch (error) {
         // arch-guard:silent-catch-ok 不是吞错：reportError 把原文写进 GameRuntimeDiagnostics
-        // （→ game_query_state({select:'errors'}) / overlay / game.runtime-errors），onFailure 再让
+        // （→ game:query_state({select:'errors'}) / overlay / game.runtime-errors），onFailure 再让
         // createPhaserGameRuntime 的 ready Promise 带着它 reject。
         this.reportError(error)
         onFailure(error)
@@ -812,7 +812,7 @@ function createProjectionSceneClass(
      * 「跑起来了但什么都看不见」的机械信号；判据与不误报的论证见 {@link describeUnrealizedVisual}。
      *
      * 计数（`renderedEntities` / `invisibleEntities`）与本诊断是两回事：**计数永远如实给**
-     * （`game_query_state({select:'scene'})` 与 overlay 都读它），故意的纯调试场景在那里显示
+     * （`game:query_state({select:'scene'})` 与 overlay 都读它），故意的纯调试场景在那里显示
      * `visible 0` —— 那是事实陈述，不是告警；本诊断一条都不会出。
      */
     private reportUnrealizedVisuals(): void {
@@ -988,7 +988,7 @@ function createProjectionSceneClass(
       if (this.overlayText) {
         const lastError = diagnostics.list()[0]
         this.overlayText.setText([
-          // `visible` 与 `game_query_state` 的 `renderedEntities` 是同一个数：人在截图上
+          // `visible` 与 `game:query_state` 的 `renderedEntities` 是同一个数：人在截图上
           // 看到 `visible 0/3` 与模型读到的结构化事实必须逐字对应，不许两套算法。
           `scene:${options.scene.id} · entities ${this.records.size} · visible ${this.countRenderedEntities()}`,
           `selection:${this.selectedEntityId ?? 'none'} · errors ${diagnostics.list().length}`,

@@ -55,14 +55,14 @@ import type {
   ChatProviderId,
   ContentBlock,
   ModelPricingCatalog,
+  ProjectRootEntry,
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
-  WorkspaceRootEntry,
 } from '#contracts'
 import { isEmpty } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
-const EmptyWorkspaceRoots: WorkspaceRootEntry[] = []
+const EmptyProjectRoots: ProjectRootEntry[] = []
 const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 
 function createPlanAwareToolActivityExclusionPredicate(
@@ -71,7 +71,7 @@ function createPlanAwareToolActivityExclusionPredicate(
   return (block) => {
     const isExcluded = isToolActivitySummaryExcludedToolCall(block)
 
-    if (block.toolName === 'update_plan')
+    if (block.toolName === 'plan:update')
       return latestMessagePlanToolCallId
         ? block.toolCallId === latestMessagePlanToolCallId
         : isExcluded
@@ -94,8 +94,8 @@ export function AssistantMessageBubble({
   hiddenPlanToolCallId = null,
   hideGoalToolBlocks = false,
   planUpdateIndexByToolCallId,
-  activeWorkspaceRoot = null,
-  workspaceRoots = EmptyWorkspaceRoots,
+  activeProjectRoot = null,
+  projectRoots = EmptyProjectRoots,
   canShowFileChangeSummary = true,
   billingModel = null,
   pricingCatalog = null,
@@ -105,7 +105,7 @@ export function AssistantMessageBubble({
   renderAfterToolCall,
   onOpenBrowserLink,
   onOpenFileChange,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   onReviewFileChanges,
   activeUserActionCardIds,
   onResolveUserActionCard,
@@ -124,8 +124,8 @@ export function AssistantMessageBubble({
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  activeWorkspaceRoot?: LooseOptional<string>
-  workspaceRoots?: WorkspaceRootEntry[]
+  activeProjectRoot?: LooseOptional<string>
+  projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
   billingModel?: LooseOptional<{
     provider: ChatProviderId
@@ -138,7 +138,7 @@ export function AssistantMessageBubble({
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
   onOpenBrowserLink?: (url: string) => void | Promise<void>
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   onReviewFileChanges?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
@@ -197,11 +197,11 @@ export function AssistantMessageBubble({
     hasActionItems,
     openPathInLight,
   } = useMessageActionView({
-    activeWorkspaceRoot,
+    activeProjectRoot,
     message,
-    onOpenWorkspacePath,
+    onOpenProjectPath,
     sessionId,
-    workspaceRoots,
+    projectRoots,
   })
   const {
     messageRenderSegments,
@@ -332,7 +332,7 @@ export function AssistantMessageBubble({
             getBlockIndex={getBlockIndex}
             formatPathForDisplay={formatMessagePathForDisplay}
             onOpenBrowserLink={onOpenBrowserLink}
-            onOpenWorkspacePath={openPathInLight}
+            onOpenProjectPath={openPathInLight}
             activeUserActionCardIds={activeUserActionCardIds}
             onResolveUserActionCard={onResolveUserActionCard}
             onTranslateThinkingBlock={onTranslateThinkingBlock}

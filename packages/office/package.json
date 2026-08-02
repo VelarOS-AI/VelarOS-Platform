@@ -1,0 +1,87 @@
+{
+  "name": "@velaros-ai/office",
+  "version": "1.0.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/office#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "keywords": [
+    "office",
+    "documents",
+    "spreadsheets",
+    "presentations",
+    "agent-tools"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./composition": {
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
+    "test:kernel-module": "bun test test/kernel-module.test.ts",
+    "test": "bun run build && bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/office"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
+    "@velaros-ai/core": "workspace:*",
+    "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "5.4.394",
+    "pptxgenjs": "^4.0.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/office"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

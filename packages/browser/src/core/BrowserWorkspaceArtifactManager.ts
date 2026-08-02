@@ -14,9 +14,9 @@ import type {
   BrowserWorkspaceArtifactKind,
   BrowserWorkspaceArtifactRecord,
   BrowserWorkspaceManifest,
+  ProjectReadFileResult,
   WorkspaceFileEntry,
   WorkspaceListOptions,
-  WorkspaceReadFileResult,
   WorkspaceWriteFileOptions,
   WorkspaceWriteFileResult,
 } from './types'
@@ -50,7 +50,7 @@ interface BrowserWorkspaceArtifactAccess {
     startLine?: number,
     endLine?: number,
     maxChars?: number
-  ) => Promise<WorkspaceReadFileResult>
+  ) => Promise<ProjectReadFileResult>
   writeFile: (
     path: string,
     content: string,

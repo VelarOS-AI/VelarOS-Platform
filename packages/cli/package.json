@@ -9,7 +9,7 @@
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
   "bugs": {
-    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
   "keywords": [
     "cli",
@@ -50,10 +50,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/cli"
   },
   "dependencies": {
-    "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/office-tools": "workspace:*",
-    "@velaros-ai/system-tools": "workspace:*",
-    "@velaros-ai/workspace": "workspace:*"
+    "@velaros-ai/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
@@ -61,7 +58,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/cli"
   },
   "publishConfig": {

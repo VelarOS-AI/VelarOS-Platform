@@ -18,7 +18,7 @@ import {
 } from './ActiveDirectives'
 
 const listActiveDirectives = defineVelaTool<Record<string, never>>({
-  name: 'list_active_directives',
+  name: 'directive:list',
   role: 'inspect',
   category: 'general',
   summary: '列出当前 session 上下文保护区中仍然生效的用户长期指令。',
@@ -51,7 +51,7 @@ const upsertActiveDirective = defineVelaTool<{
   directiveType: ActiveDirectiveType
   sourceMessageId?: string
 }>({
-  name: 'upsert_active_directive',
+  name: 'directive:upsert',
   role: 'control',
   category: 'general',
   summary: '把用户明确要求后续轮次持续遵守的重要指令写入当前 session 上下文保护区。',
@@ -66,7 +66,7 @@ const upsertActiveDirective = defineVelaTool<{
     },
   ],
   notes: [
-    `最多同时保护 ${ActiveDirectiveLimits.maxActive} 条；用户取消后用 archive_active_directive 归档。`,
+    `最多同时保护 ${ActiveDirectiveLimits.maxActive} 条；用户取消后用 directive:archive 归档。`,
   ],
   schema: z.object({
     id: z
@@ -175,15 +175,15 @@ const archiveActiveDirective = defineVelaTool<{
   title?: string
   directiveType?: ActiveDirectiveType
 }>({
-  name: 'archive_active_directive',
+  name: 'directive:archive',
   role: 'control',
   category: 'general',
   summary: '取消当前 session 上下文保护区中一个或多个已固定的长期指令。',
   suitable: ['用户明确说取消限制、不需要禁令、以后可以、刚才那条不要固定。'],
   forbidden: ['不要归档普通 active context；只处理 metadata.directive=true 的条目。'],
-  usage: ['session directive；goal.constraints 用 update_goal。'],
+  usage: ['session directive；goal.constraints 用 goal:update。'],
   examples: [{ title: '禁止自动重建索引' }, { directiveType: 'prohibition' }],
-  notes: ['归档 session directive；goal.constraints 用 update_goal。'],
+  notes: ['归档 session directive；goal.constraints 用 goal:update。'],
   schema: z
     .object({
       ids: z
@@ -253,9 +253,9 @@ const archiveActiveDirective = defineVelaTool<{
 })
 
 const activeDirectiveTools = {
-  list_active_directives: listActiveDirectives,
-  upsert_active_directive: upsertActiveDirective,
-  archive_active_directive: archiveActiveDirective,
+  'directive:list': listActiveDirectives,
+  'directive:upsert': upsertActiveDirective,
+  'directive:archive': archiveActiveDirective,
 }
 
 export { activeDirectiveTools }

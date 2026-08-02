@@ -66,15 +66,15 @@ export interface ToolContractRuntimeSpec<
   exposure?: ToolExposurePolicy
   /**
    * 工具输出是否必须**保持内联**、禁止被 page-out 成 payload 引用（__kernelRef）。
-   * 用于发现/索引/目录类工具（如 tool_map）——它们的输出就是模型当下要读的内容，
-   * 被卸载后模型还得 recall_context 召回，自我抵消。声明在工具上、单一来源、易维护。
+   * 用于发现/索引/目录类工具（如 tooling:map）——它们的输出就是模型当下要读的内容，
+   * 被卸载后模型还得 context:recall 召回，自我抵消。声明在工具上、单一来源、易维护。
    */
   outputInline?: boolean
   /** 运行依赖不存在时不进入工具发现目录。 */
   hideWhenUnavailable?: boolean
   isAvailable?: (ctx: TContext) => boolean
   /**
-   * `isAvailable` 为假时给发现层（`tool_map` 页表）的**具体原因**。
+   * `isAvailable` 为假时给发现层（`tooling:map` 页表）的**具体原因**。
    *
    * 判据：`hideWhenUnavailable: false` 的意思是「留在发现层让模型看见」，而页表原来只有一句
    * 泛化的「工具注册存在，但当前运行态不可用。」——模型据此只会判定「此路不通」，然后去搜别的

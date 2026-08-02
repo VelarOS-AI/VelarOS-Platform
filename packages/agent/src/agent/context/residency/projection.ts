@@ -311,7 +311,7 @@ function buildTombstoneText(record: ContextRecord, residency: ContextResidency):
       reason,
       originalLength: record.bytes.full,
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: { ref, refKind: resolveTombstoneRefKind(record), reason },
       },
       meta: { recordId: record.id, anchors: [...record.anchors] },

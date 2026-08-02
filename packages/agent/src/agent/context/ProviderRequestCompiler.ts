@@ -25,7 +25,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isArray, isEmpty, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import type {
@@ -107,6 +107,8 @@ export interface CompileProviderRequestInput {
    */
   tailBlocks?: readonly ModelMessage[]
   historyRewriteSignals?: readonly ProviderHistoryRewriteSignal[]
+  /** canonical tool id → provider-safe request-local name. Persistent history remains canonical. */
+  toolNameAliases?: Readonly<Record<string, string>>
 }
 
 export type ProviderRequestPressureKind =
@@ -139,16 +141,16 @@ export interface CompiledProviderRequest {
   decision: ProviderRequestCompileDecision
   requestFingerprint: ProviderRequestFingerprint
   /** 本轮跑过的治理 epoch 报告；未触发时为 null。 */
-  governanceEpoch?: Nullable<GovernanceEpochReport>
+  governanceEpoch?: LooseOptional<GovernanceEpochReport>
   /** 会话累计已应用的 epoch 代数（跳过的 epoch 不计代，与 dashboard 上的号同源）。 */
   governanceEpochSeq?: LooseOptional<number>
   /** 治理后的投影占用（token）与驻留态计数，供调试面与 scoreboard 消费。 */
-  governanceOccupancyPercent?: Nullable<number>
+  governanceOccupancyPercent?: LooseOptional<number>
   /**
    * 转交信号（设计 §4）。B1 起送核门失去回收阶梯的二次挽救，**压力的唯一出路是转交**，
    * 所以这条信号必须沿编译结果一路出到壳侧的布防看门，不能只留在治理器内部。
    */
-  governanceHandoff?: Nullable<ContextHandoffSignal>
+  governanceHandoff?: LooseOptional<ContextHandoffSignal>
   historyRewriteFingerprint?: string
 }
 
@@ -222,9 +224,13 @@ export class ProviderRequestCompiler {
     // stage ③ + 活动尾：保留上下文、dashboard、宿主 tailBlocks 一律排在账本投影之后。
     const retained = withProviderVisibleRetainedContext(projection.messages, classified.blocks)
     const tailBlocks = this.buildTailBlocks(input, governance, projection.stats.projectedTokens)
-    const providerMessages = applyHistoryStructureRepair(
+    const canonicalProviderMessages = applyHistoryStructureRepair(
       isEmpty(tailBlocks) ? retained.messages : [...retained.messages, ...tailBlocks],
       { log: false }
+    )
+    const providerMessages = rewriteProviderToolNames(
+      canonicalProviderMessages,
+      input.toolNameAliases ?? {}
     )
     const historyRewriteFingerprint = buildProviderHistoryRewriteFingerprint([
       ...(input.historyRewriteSignals ?? []),
@@ -324,6 +330,34 @@ export class ProviderRequestCompiler {
   }
 }
 
+function rewriteProviderToolNames(
+  messages: readonly ModelMessage[],
+  aliases: Readonly<Record<string, string>>
+): ModelMessage[] {
+  if (isEmpty(Object.keys(aliases))) return [...messages]
+
+  return messages.map((message) => {
+    if ((message.role !== 'assistant' && message.role !== 'tool') || !isArray(message.content))
+      return message
+
+    let changed = false
+    const content = message.content.map((part) => {
+      if (!isPlainObject(part)) return part
+      const record = part as { type?: unknown; toolName?: unknown }
+      if (
+        (record.type !== 'tool-call' && record.type !== 'tool-result') ||
+        !isString(record.toolName)
+      )
+        return part
+      const providerName = aliases[record.toolName]
+      if (!providerName || providerName === record.toolName) return part
+      changed = true
+      return { ...part, toolName: providerName }
+    })
+    return changed ? ({ ...message, content } as ModelMessage) : message
+  })
+}
+
 /**
  * 切出稳定前缀：开头**连续**的 system 消息。
  *
@@ -346,7 +380,7 @@ function resolveBudgetTokens(
 ): number {
   const modelWindow = input.contextWindow ?? input.contextUsageOptions?.contextWindow
   const cap = session.config.cap
-  if (typeof modelWindow !== 'number' || !Number.isFinite(modelWindow) || modelWindow <= 0) return cap
+  if (!isFiniteNumber(modelWindow) || modelWindow <= 0) return cap
 
   return Math.min(Math.floor(modelWindow), cap)
 }

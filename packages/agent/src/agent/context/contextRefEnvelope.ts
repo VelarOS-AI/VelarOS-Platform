@@ -23,7 +23,7 @@ export type ContextRefKind =
   | 'history-budget-truncated'
 
 export interface ContextRefRetrieval {
-  tool: 'recall_context'
+  tool: 'context:recall'
   args: {
     ref: string
     refKind: 'tool-payload' | 'payload-ref' | 'context-handle' | 'evidence'
@@ -142,7 +142,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       excerpt: readString('preview'),
       originalLength: typeof record.chars === 'number' ? (record.chars as number) : undefined,
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: { ref, refKind: payloadRef ? 'payload-ref' : 'tool-payload' },
       },
     })
@@ -159,7 +159,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       originalLength:
         typeof record.originalLength === 'number' ? (record.originalLength as number) : undefined,
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: { ref: toolCallId, refKind: 'tool-payload' },
       },
     })
@@ -174,7 +174,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       ref: blockId,
       excerpt: readString('summary'),
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: { ref: blockId, refKind: 'context-handle' },
       },
     })

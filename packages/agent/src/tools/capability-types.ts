@@ -39,7 +39,6 @@ interface ToolCapabilityPage {
   schemaPolicy: ToolCapabilitySchemaPolicy
   nextAction: ToolDiscoveryNextAction
   resident: boolean
-  reflectEligible: boolean
   reasons: ToolCapabilityReason[]
 }
 

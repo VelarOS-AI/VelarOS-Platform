@@ -16,7 +16,7 @@ import { type BrowserExternalPageLauncher } from './CdpExternalBrowserLauncher'
 import { CdpInteractionEngine } from './CdpInteractionEngine'
 import { type BrowserDiagnosticsLimits, CdpPageDataEngine } from './CdpPageDataEngine'
 import { CdpScreenshotEngine } from './CdpScreenshotEngine'
-import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserDragOptions, BrowserElementQueryOptions, BrowserEmulationOptions, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserFetchResourceOptions, BrowserHandleDialogOptions, BrowserHandleDownloadOptions, BrowserHandlePermissionOptions, BrowserHeapSnapshotOptions, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListPageResourcesOptions, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticsOptions, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageStorageOptions, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPerformanceInsightOptions, BrowserPerformanceTraceStartOptions, BrowserPressKeyOptions, BrowserScreencastStartOptions, BrowserScreencastStopOptions, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTypeTextOptions, BrowserUploadFileOptions, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserWaitForSelectorOptions, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './types.js'
+import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserDragOptions, BrowserElementQueryOptions, BrowserEmulationOptions, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserFetchResourceOptions, BrowserHandleDialogOptions, BrowserHandleDownloadOptions, BrowserHandlePermissionOptions, BrowserHeapSnapshotOptions, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListPageResourcesOptions, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticsOptions, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageStorageOptions, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPerformanceInsightOptions, BrowserPerformanceTraceStartOptions, BrowserPressKeyOptions, BrowserScreencastStartOptions, BrowserScreencastStopOptions, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTypeTextOptions, BrowserUploadFileOptions, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserWaitForSelectorOptions, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './types.js'
 
 const CdpBrowserRuntimeMaxDiagnosticEntries = 300
 
@@ -32,7 +32,7 @@ export interface CdpWorkspaceFileAccess {
     startLine?: number,
     endLine?: number,
     maxChars?: number
-  ): Promise<WorkspaceReadFileResult>
+  ): Promise<ProjectReadFileResult>
   writeFile(
     path: string,
     content: string,

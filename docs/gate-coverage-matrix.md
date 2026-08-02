@@ -27,10 +27,11 @@
 | `game` | 102 | 102 | 同上 |
 | `kernel-client` | 102 | 102 | 同上 |
 | `kernel-serve` | 102 | 102 | 同上 |
-| `capabilities/cli` | 102 | 102 | 同上 |
-| `capabilities/office-tools` | 102 | 102 | 同上 |
-| `capabilities/system-tools` | 102 | 102 | 同上 |
-| `capabilities/workspace` | 102 | 102 | 同上 |
+| `cli` | 102 | 102 | 同上 |
+| `office` | 102 | 102 | 同上 |
+| `system` | 102 | 102 | 同上 |
+| `project` | 102 | 102 | 同上 |
+| `development` | 102 | 102 | 同上 |
 | `ui` | 103 | **104** | 已补 `react-hooks/exhaustive-deps`;齐平 |
 | `memory` | **78** | **102** | 曾缺 28 条,已补齐 |
 | `model` | **78** | **116** | 曾缺 44 条,已补齐(另有源仓自带的 tsPlugin recommended 18 条) |
@@ -68,7 +69,7 @@
 | agent | `check:agent-schemas` | 工具 schema 快照 | — |
 | agent | `check:agent-arch` | 依赖方向 / 包集合冻结 | `baselines/agent/arch-boundaries-baseline.json` |
 | capabilities | `check:capabilities-schemas` | 能力包 schema 快照 | `baselines/capabilities/browser-input-schemas.json` |
-| capabilities | `check:capabilities-arch` | 包集合冻结 + owners 表(**含 browser / computer / game / cli / office-tools / system-tools / workspace 七包**) | — |
+| capabilities | `check:capabilities-arch` | 包集合冻结 + owners 表（browser / computer / game / cli / office / system / project / development 八包） | — |
 | model | `check:model-arch` | 依赖方向 | — |
 | memory | `check:memory-boundaries` | 产品边界棘轮(kernel 对 memory 零 import) | — |
 | memory | `check:memory-knowledge-profile` | knowledge profile 集成 | — |
@@ -80,12 +81,12 @@
 | ui | `check:ui-component-library` | 图鉴生成物新鲜度 / 独立性 | — |
 | 全仓 | `check:code-style` | 语言级写法门(公开包 37 条,见 §3) | `.arch-guard/baseline.json`(1915 条) |
 | html-artifacts | `check:html-artifacts-package` | 包导出契约 + dist 产物(QI 批挂链) | — |
-| workspace | `check:workspace-arch` | 单包形态 + host/capability 边界(QI 批挂链) | — |
+| project | `check:project-arch` | 单包形态 + host/capability 边界 | — |
 | **game** | 只被 `check:capabilities-arch` 的包集合冻结覆盖 | 无自己的 schema / 架构门 | — |
 
 > **缺口 A 已闭合**(QI 批 2026-07-30):`html-artifacts` 的 `check:package-contract` + `check:dist`
-> 与 `capabilities/workspace` 的 `check:arch` 已分别包成 `check:html-artifacts-package` /
-> `check:workspace-arch` 挂进根 `check:gates`。教训留档:**门写了但没挂链等于没有门,还多骗一层
+> 与 `project` 的 `check:arch` 已分别包成 `check:html-artifacts-package` /
+> `check:project-arch` 挂进根 `check:gates`。教训留档:**门写了但没挂链等于没有门,还多骗一层
 > 安全感**——新写检查脚本时同一批就要挂链。
 
 ---

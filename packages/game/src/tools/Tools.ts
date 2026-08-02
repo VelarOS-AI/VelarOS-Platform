@@ -6,6 +6,7 @@ import {
   buildAppliedAdjustments,
 } from '@velaros-ai/core/utils/ForgivingSchema'
 
+import { GameToolName } from '../contracts.js'
 import type { GameInputStep, GameRuntimeQuery } from '../core/index.js'
 
 import {
@@ -15,7 +16,6 @@ import {
   GameRunCapability,
   GameScreenshotCapability,
 } from './Capabilities.js'
-import { GameToolName } from './Names.js'
 import {
   GameInputSchema,
   GameQueryStateSchema,
@@ -39,8 +39,8 @@ class GameToolStateError extends Error {
  *
  * 判据（别再往里合取运行态，这是 2026-08 第二次事故的判决）：宿主的 `ctx.game` 是**每一轮
  * 只装配一次**的快照（`AgentRunner` 在轮开头调一次 `buildToolContext`）。把「工程已存在」或
- * 「运行时已就绪」合进 `isAvailable`，后果是同一轮里模型刚用 `game_scene_edit` 把工程建出来，
- * `game_run` 仍然整轮不在工具清单里，换页也过同一道门，于是「建完工程仍然跑不起来」。
+ * 「运行时已就绪」合进 `isAvailable`，后果是同一轮里模型刚用 `game:scene_edit` 把工程建出来，
+ * `game:run` 仍然整轮不在工具清单里，换页也过同一道门，于是「建完工程仍然跑不起来」。
  * 更糟的是可用性在轮内翻转还会与轮规划快照的失效判据（注册指纹，不含运行态）打架。
  *
  * 所以前置条件一律在**执行期**给可执行错误（见 `requireProject` / `requireRunning`），
@@ -57,7 +57,7 @@ function isGameSessionAvailable(context: GameToolContext): boolean {
  * 不可用时给发现层的原因 —— 这一档只剩「需要**用户**动手」，所以必须点名让用户做什么。
  *
  * 页表原来只有一句泛化的「工具注册存在，但当前运行态不可用。」，模型读到就判「此路不通」，
- * 于是去搜别的工具或退回 show_widget 手搓（实测 8 次 tool_map、59 秒）。
+ * 于是去搜别的工具或退回 ui:show_widget 手搓（实测 8 次 tooling:map、59 秒）。
  */
 function gameSessionUnavailableReason(): string {
   return '游戏能力未接入本会话：需要为该会话选一个工程根目录，并确认游戏 mod 已启用。这一步要用户在界面上完成，模型无法自行解除。'
@@ -67,8 +67,8 @@ function gameSessionUnavailableReason(): string {
  * 六个 game 工具一律**不隐身**（2026-08 真机事故的判决，别再改回 true）。
  *
  * 事故形态：全部 `hideWhenUnavailable: true` + 可用性合取 `isProjectAvailable()`，空工程根上
- * 于是整族从发现层消失——模型在 game 空间连搜 8 次 `tool_map`（game / 3d / scene / cube /
- * engine）零命中、耗时 59 秒，最后退回 `show_widget` 手搓 Three.js。
+ * 于是整族从发现层消失——模型在 game 空间连搜 8 次 `tooling:map`（game / 3d / scene / cube /
+ * engine）零命中、耗时 59 秒，最后退回 `ui:show_widget` 手搓 Three.js。
  *
  * 判据：`hideWhenUnavailable` 的正当用途是「需要**用户**动手才能获得的能力」（computer-control
  * 要先装插件并授系统权限），隐身是为了不让模型对着自己解决不了的门空转。这里要动手的是模型
@@ -87,18 +87,18 @@ const GameToolHiddenWhenUnavailable = false
  * 工程前置：缺工程清单时给**可执行**错误，而不是让工具从发现层消失。
  *
  * 错误正文必须包含自救动作（用哪个工具、传什么参数）：模型读到「不可用」只会去搜别的工具或
- * 退回手搓，读到「先用 game_scene_edit(target='project') 建工程」才会自举。
+ * 退回手搓，读到「先用 game:scene_edit(target='project') 建工程」才会自举。
  */
 function requireProject(context: GameToolContext): void {
   if (context.game.isProjectAvailable()) return
   throw new GameToolStateError(
-    '工程根还没有 game.project.json：先调用 game_scene_edit(target="scene:<id>", operations=[…]) —— 它会一并建出工程清单、资产清单与这个入口场景，再重试本工具。'
+    '工程根还没有 game.project.json：先调用 game:scene_edit(target="scene:<id>", operations=[…]) —— 它会一并建出工程清单、资产清单与这个入口场景，再重试本工具。'
   )
 }
 
 function requireRunning(context: GameToolContext): void {
   if (context.game.runtime.isRunning()) return
-  throw new GameToolStateError('游戏尚未运行；请先调用 game_run，成功后再执行此操作。')
+  throw new GameToolStateError('游戏尚未运行；请先调用 game:run，成功后再执行此操作。')
 }
 
 export const gameSceneEditTool = defineGameTool<
@@ -124,7 +124,7 @@ export const gameSceneEditTool = defineGameTool<
       + '声明）就采纳它并登记进 game.project.json；一个都没有才新建 scenes/<id>.scene.json'
       + '（prefab 落在 prefabs/<id>.prefab.json），工程还没有入口场景时一并设为 entryScene。',
     '空目录起步只要一次调用：target="scene:<id>" 会连 game.project.json 与资产清单一起建出来，'
-      + '之后 game_run 即可用。不需要先手写任何 JSON。',
+      + '之后 game:run 即可用。不需要先手写任何 JSON。',
     'set_* 每一级都是 upsert + merge patch：target、实体、组件、资产都是不存在就创建'
       + '（set_component 带一个还不存在的 entityId 会先把该实体建出来）；'
       + '显式 null 清除字段，数组整体替换。',
@@ -217,7 +217,7 @@ export const gameSceneEditTool = defineGameTool<
       + '装载时就有的那一档会被就地摘掉并留一行 dropped self-declaration，'
       + '本次编辑写进去的当场失败、零文件落盘。',
     '一个稳定 id 只许有一个载体，这条在「编辑器创建或采纳清单」的那一刻强制。'
-      + '编辑一份已经被声明的清单不扫工程目录（省一次全盘遍历），因此你事后用 ws_edit 手写的'
+      + '编辑一份已经被声明的清单不扫工程目录（省一次全盘遍历），因此你事后用 project:edit 手写的'
       + '第二份同 id 文件在那条路径上不会被发现——它也不会被工程加载。要让它生效就把它变成'
       + '唯一载体（删掉或改名另一份），或直接改用它的 id。',
   ],
@@ -323,7 +323,7 @@ export const gameScreenshotTool = defineGameTool<
     '需要观察真实画面、碰撞调试层或修改前后视觉差异时。',
   ],
   forbidden: [
-    '不要在游戏未运行时调用；先 game_run。',
+    '不要在游戏未运行时调用；先 game:run。',
     '不要传文件路径；产物位置由宿主生成，避免路径注入。',
   ],
   protocol: [
@@ -378,7 +378,7 @@ export const gameQueryStateTool = defineGameTool<
     { select: 'errors', limit: 20, offset: 0 },
   ],
   notes: [
-    'V0 不增加独立 game_assert；查询保持单一真值，断言由调用方基于结构化结果完成。',
+    'V0 不增加独立 game:assert；查询保持单一真值，断言由调用方基于结构化结果完成。',
   ],
   schema: GameQueryStateSchema,
   permissions: ['browser:control'],
@@ -482,7 +482,7 @@ export const gameInputTool = defineGameTool<z.output<typeof GameInputSchema>>({
     ) * repetitions
     if (requestedWaitMs > 10_000) {
       throw new GameToolStateError(
-        `game_input 的显式等待总时长为 ${requestedWaitMs}ms，超过单次 10000ms 上限；请拆批并在批次间 query。`,
+        `game:input 的显式等待总时长为 ${requestedWaitMs}ms，超过单次 10000ms 上限；请拆批并在批次间 query。`,
       )
     }
 

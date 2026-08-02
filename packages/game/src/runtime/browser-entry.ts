@@ -133,7 +133,7 @@ async function boot(): Promise<void> {
   })
   // 装载期攒下的问题在**运行时就绪之后**才报，而且刻意走 window 的 error 事件：
   // `GameRuntimeDiagnostics.installWindowCapture()` 监听的就是它，于是这些问题与运行期错误
-  // 进同一张表，`game_query_state({select:'errors'})`、调试抽屉、`game.runtime-errors`
+  // 进同一张表，`game:query_state({select:'errors'})`、调试抽屉、`game.runtime-errors`
   // 三处都看得见。早于 createPhaserGameRuntime 报会丢（那时采集还没装）；不报就等于
   // 我们知道却不说。
   for (const message of pending) window.dispatchEvent(new ErrorEvent('error', { message }))

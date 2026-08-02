@@ -15,18 +15,18 @@ import {
 } from './BackgroundJobs'
 
 const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
-  name: 'read_background_job_output',
+  name: 'job:read_output',
   role: 'control',
   category: 'general',
   summary: '读取当前会话内核后台 job 的新增或完整输出。',
   suitable: [
-    'dispatch_agent 已启动可等待子 Agent job，后续需要查看其结果或错误输出。',
+    'agent:dispatch 已启动可等待子 Agent job，后续需要查看其结果或错误输出。',
     '后台 job 通知提示任务完成、失败或可能停滞，需要检查输出后再继续。',
     '需要非阻塞地轮询后台任务输出，而不是 sleep 或重复派发同一任务。',
   ],
   forbidden: [
-    '不要用它读取系统 shell 命令历史；系统后台命令仍使用 list_background_tasks。',
-    '不要在没有 job_id 时猜测；先从 dispatch_agent 返回或后台通知中取得 job id。',
+    '不要用它读取系统 shell 命令历史；系统后台命令仍使用 system:list-tasks。',
+    '不要在没有 job_id 时猜测；先从 agent:dispatch 返回或后台通知中取得 job id。',
   ],
   usage: [
     '默认 mode=incremental，只返回新增输出并推进游标；需要完整缓存时用 mode=snapshot。',
@@ -65,18 +65,18 @@ const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
 })
 
 const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
-  name: 'wait_background_jobs',
+  name: 'job:wait',
   role: 'control',
   category: 'general',
   summary: '等待当前会话内核后台 job 完成并返回结果。',
   suitable: [
-    'dispatch_agent 已启动一个或多个可等待子 Agent job，需要在继续决策前收束它们的结果。',
+    'agent:dispatch 已启动一个或多个可等待子 Agent job，需要在继续决策前收束它们的结果。',
     '后台 job 仍在运行，但下一步依赖其最终输出，应该等待而不是手动轮询。',
     '需要一次性等待当前会话内所有已运行后台 job，可省略 job_ids。',
   ],
   forbidden: [
-    '不要用它等待普通系统命令；系统后台命令用 list_background_tasks 或系统任务工具。',
-    '不要把 thread_id 当 job_id；job_id 来自 dispatch_agent 返回或后台通知。',
+    '不要用它等待普通系统命令；系统后台命令用 system:list-tasks 或系统任务工具。',
+    '不要把 thread_id 当 job_id；job_id 来自 agent:dispatch 返回或后台通知。',
   ],
   usage: [
     '提供 job_ids 时只等待当前会话拥有且匹配的 job；跨会话或不存在的 id 会被忽略。',
@@ -93,7 +93,7 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
   ],
   notes: [
     '该工具只访问当前会话拥有的内核后台 job；不读取其他会话任务。',
-    '它和 read_background_job_output 使用同一个输出源，artifact-backed 输出可完整读取。',
+    '它和 job:read_output 使用同一个输出源，artifact-backed 输出可完整读取。',
   ],
   schema: waitBackgroundJobsSchema,
   permissions: [],
@@ -113,18 +113,18 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
 })
 
 const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
-  name: 'cancel_background_job',
+  name: 'job:cancel',
   role: 'control',
   category: 'general',
   summary: '取消当前会话内核后台 job。',
   suitable: [
-    'dispatch_agent 启动的后台子 Agent 已不需要继续运行。',
+    'agent:dispatch 启动的后台子 Agent 已不需要继续运行。',
     '后台 job 可能卡住或处理了错误方向，需要按 job id 中断。',
     '后台通知提示 job 仍在运行，而用户或主任务已经切换目标。',
   ],
   forbidden: [
     '不要用它取消系统后台命令；系统后台命令使用对应系统任务工具。',
-    '不要猜测 job_id；先从 dispatch_agent 返回或后台通知中取得 job id。',
+    '不要猜测 job_id；先从 agent:dispatch 返回或后台通知中取得 job id。',
   ],
   usage: [
     '只取消当前会话拥有的 job；跨会话或不存在的 job 会返回 not found。',
@@ -137,7 +137,7 @@ const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
     },
   ],
   notes: [
-    '取消后可用 read_background_job_output 或 wait_background_jobs 查看最终可读输出。',
+    '取消后可用 job:read_output 或 job:wait 查看最终可读输出。',
   ],
   schema: cancelBackgroundJobSchema,
   permissions: [],
@@ -155,9 +155,9 @@ const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
 })
 
 const backgroundJobTools = {
-  cancel_background_job: cancelBackgroundJob,
-  read_background_job_output: readBackgroundJobOutput,
-  wait_background_jobs: waitBackgroundJobs,
+  'job:cancel': cancelBackgroundJob,
+  'job:read_output': readBackgroundJobOutput,
+  'job:wait': waitBackgroundJobs,
 }
 
 export { backgroundJobTools }

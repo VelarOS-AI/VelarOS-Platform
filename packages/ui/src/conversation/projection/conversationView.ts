@@ -9,7 +9,7 @@ import type {
   ChatMessage,
   ChatProviderId,
   ModelPricingCatalog,
-  WorkspaceRootEntry,
+  ProjectRootEntry,
 } from '#contracts'
 
 /**
@@ -27,10 +27,10 @@ export interface ConversationView {
   activeMemberSessionId: string
   /**
    * 工作区文件级能力位（文件变更汇总 / 回退选文件）——由宿主边界从 space 描述符
-   * (`getWorkspaceSpaceDescriptor(space).supportsWorkspaceFiles`) 投影而来。host 无关的会话壳按
+   * (`getWorkspaceSpaceDescriptor(space).supportsProjectFiles`) 投影而来。host 无关的会话壳按
    * 此能力位分派，不透传原始 `WorkspaceSpaceKind` 枚举（避免包内散写枚举硬分派）。
    */
-  supportsWorkspaceFiles: boolean
+  supportsProjectFiles: boolean
   messages: ChatMessage[]
   queuedMessages?: ChatMessage[]
   messageRunMarkers: ConversationMessageRunMarker[]
@@ -42,9 +42,9 @@ export interface ConversationView {
   hasStreamingThinkingBlock: boolean
   liveTraceSummary?: string
   runningLabel: string
-  activeWorkspaceRoot?: LooseOptional<string>
+  activeProjectRoot?: LooseOptional<string>
   workspaceSourceRoot?: LooseOptional<string>
-  workspaceRoots?: WorkspaceRootEntry[]
+  projectRoots?: ProjectRootEntry[]
   billingModel?: LooseOptional<{
     provider: ChatProviderId
     model: string

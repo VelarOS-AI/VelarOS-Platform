@@ -39,7 +39,7 @@ function buildModelImageSrc(image: Pick<ToolModelImage, 'data' | 'mediaType'>): 
 }
 
 function isBrowserScreenshotBackedBlock(block: ToolCallBlockType): boolean {
-  if (block.toolName === 'browser_capture_screenshot') return true
+  if (block.toolName === 'browser:capture_screenshot') return true
   if (!isRecord(block.result)) return false
 
   return isRecord(block.result.automaticScreenshot)

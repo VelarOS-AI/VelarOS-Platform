@@ -23,7 +23,7 @@ const browserGenerateRecipeSkeleton = defineBrowserTool<{
   overwrite?: boolean
   template?: 'login' | 'search' | 'pagination' | 'form_submit'
 }>({
-  name: 'browser_generate_recipe_skeleton',
+  name: 'browser:generate_recipe_skeleton',
   role: 'edit',
   summary: '基于当前页面生成最小 recipe skeleton。',
   suitable: ['需要从当前页面沉淀候选自动化步骤，再逐步补全成可执行 recipe。'],
@@ -120,7 +120,7 @@ const browserGenerateRecipeSkeletonFromSnapshot = defineBrowserTool<{
   overwrite?: boolean
   template?: 'login' | 'search' | 'pagination' | 'form_submit'
 }>({
-  name: 'browser_generate_recipe_skeleton_from_snapshot',
+  name: 'browser:generate_recipe_skeleton_from_snapshot',
   role: 'edit',
   summary: '从已保存页面快照生成 recipe skeleton。',
   suitable: ['需要复用 pages/ 下的自动快照或历史页面结构。'],
@@ -176,7 +176,7 @@ const browserReadRecipeSkeleton = defineBrowserTool<{
   inputs?: Record<string, string>
   maxSteps?: number
 }>({
-  name: 'browser_read_recipe_skeleton',
+  name: 'browser:read_recipe_skeleton',
   role: 'inspect',
   summary: '读取并预览当前网站的 recipe skeleton。',
   suitable: ['需要查看 recipe 输入、可执行步骤和缺失字段。'],
@@ -230,7 +230,7 @@ const browserRunRecipeSkeleton = defineBrowserTool<{
   saveSnapshots?: boolean
   runName?: string
 }>({
-  name: 'browser_run_recipe_skeleton',
+  name: 'browser:run_recipe_skeleton',
   role: 'edit',
   summary: '执行当前网站的 recipe skeleton。',
   suitable: ['需要按 recipe 顺序执行点击、输入或带 target 的链接跟随步骤。'],
@@ -323,11 +323,11 @@ const browserRunRecipeSkeleton = defineBrowserTool<{
 const browserReadRecipeRun = defineBrowserTool<{
   path: string
 }>({
-  name: 'browser_read_recipe_run',
+  name: 'browser:read_recipe_run',
   role: 'inspect',
   summary: '读取当前网站的 recipe 运行记录。',
   suitable: ['需要查看 step 结果、before/after snapshot、缺失输入或 run 元数据。'],
-  forbidden: ['不要用它读取 recipe skeleton；recipe 用 browser_read_recipe_skeleton。'],
+  forbidden: ['不要用它读取 recipe skeleton；recipe 用 browser:read_recipe_skeleton。'],
   usage: ['传 runs/ 下的 path。'],
   examples: [{ path: "runs/search-001.json" }],
   notes: ['只读当前网站工作区 runs/ 下的记录。'],
@@ -359,7 +359,7 @@ const browserRerunRecipeFromRun = defineBrowserTool<{
   saveSnapshots?: boolean
   runName?: string
 }>({
-  name: 'browser_rerun_recipe_from_run',
+  name: 'browser:rerun_recipe_from_run',
   role: 'edit',
   summary: '根据历史 run record 重跑对应 recipe。',
   suitable: ['需要复现或修正上一轮 recipe 执行。'],
@@ -437,7 +437,7 @@ const browserRerunRecipeFromRun = defineBrowserTool<{
 
 /** recipe 自动化工具出口。 */
 const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
-  name: 'browser_recipe',
+  name: 'browser:recipe',
   role: 'edit',
   summary: '统一管理当前网站的 browser recipe skeleton 和运行记录。',
   suitable: [
@@ -445,7 +445,7 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
     '需要读取 recipe skeleton 或历史 run record。',
   ],
   forbidden: [
-    '不要用它读取普通 browser 工作区文件；文件和 artifact 读写使用 browser_files。',
+    '不要用它读取普通 browser 工作区文件；文件和 artifact 读写使用 browser:files。',
     '不要首次运行新 recipe 时直接跳过 dryRun 预检。',
   ],
   protocol: ['真实执行前先 action=run_skeleton dryRun=true 预检；确认目标命中后再执行。'],
@@ -546,12 +546,12 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
         )
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser_recipe action.')
+        throw new AppError('VALIDATION', 'Unsupported browser:recipe action.')
     }
   },
 })
 
 const browserRecipeTools = {
-  browser_recipe: browserRecipe,
+  'browser:recipe': browserRecipe,
 }
 export { browserRecipeTools }

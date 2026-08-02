@@ -104,7 +104,7 @@ function getToolResultIcon(kind: ToolResultSummaryKind): ReactElement {
       return <FileTextIcon size={s} />
     case 'install':
       return <PlugIcon size={s} />
-    case 'system-tools':
+    case 'system':
       return <CpuIcon size={s} />
     case 'tool-catalog':
       return <ListBulletsIcon size={s} />
@@ -122,7 +122,7 @@ function getToolResultIcon(kind: ToolResultSummaryKind): ReactElement {
       return <GaugeIcon size={s} />
     case 'project-discovery-rescan':
       return <ArrowsClockwiseIcon size={s} />
-    case 'workspace-roots':
+    case 'project-roots':
       return <FoldersIcon size={s} />
     case 'project-catalog':
       return <BinocularsIcon size={s} />

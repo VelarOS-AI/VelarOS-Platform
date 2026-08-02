@@ -10,7 +10,7 @@ function RichCard({ block }: { block: ToolCallBlockType }): ReactElement {
   return <ToolCallBlock block={block} compact={false} sessionId={SESSION_ID} />
 }
 
-/** ArtifactToolRender(produce_artifact):success(收割自真实归档)/ running / error。 */
+/** ArtifactToolRender(artifact:produce):success(收割自真实归档)/ running / error。 */
 export function ArtifactToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -18,7 +18,7 @@ export function ArtifactToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'artifact-ok',
-          toolName: 'produce_artifact',
+          toolName: 'artifact:produce',
           args: { type: 'html', filename: 'landing-page.html', title: '产品落地页示例' },
           result: {
             created: true,
@@ -34,7 +34,7 @@ export function ArtifactToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'artifact-run',
-          toolName: 'produce_artifact',
+          toolName: 'artifact:produce',
           args: { type: 'markdown', filename: 'report.md', title: '周报' },
           isRunning: true,
         }}
@@ -43,7 +43,7 @@ export function ArtifactToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'artifact-err',
-          toolName: 'produce_artifact',
+          toolName: 'artifact:produce',
           args: { type: 'html', filename: 'x.html' },
           error: '写入失败:目标目录不可写',
         }}
@@ -52,62 +52,7 @@ export function ArtifactToolCardExample(): ReactElement {
   )
 }
 
-/** GitCommitsToolRender(get_git_commits):success(有提交)/ empty / running。 */
-export function GitCommitsToolCardExample(): ReactElement {
-  return (
-    <Stack gap="sm">
-      <RichCard
-        block={{
-          type: 'tool-call',
-          toolCallId: 'git-ok',
-          toolName: 'get_git_commits',
-          args: { limit: 3 },
-          result: {
-            count: 2,
-            commits: [
-              {
-                hash: 'a1b2c3d4e5f6',
-                shortHash: 'a1b2c3d',
-                authorName: 'Zoe',
-                authorEmail: 'zoe@example.com',
-                date: '2026-07-20T09:12:00+08:00',
-                subject: 'feat(chat): persist provider artifacts',
-                refs: 'HEAD -> main',
-              },
-              {
-                hash: 'f6e5d4c3b2a1',
-                shortHash: 'f6e5d4c',
-                authorName: 'Ravi',
-                date: '2026-07-19T18:40:00+08:00',
-                subject: 'refactor(workbench): establish product boundary',
-              },
-            ],
-          },
-        }}
-      />
-      <RichCard
-        block={{
-          type: 'tool-call',
-          toolCallId: 'git-empty',
-          toolName: 'get_git_commits',
-          args: { limit: 3 },
-          result: { count: 0, commits: [] },
-        }}
-      />
-      <RichCard
-        block={{
-          type: 'tool-call',
-          toolCallId: 'git-run',
-          toolName: 'get_git_commits',
-          args: { limit: 3 },
-          isRunning: true,
-        }}
-      />
-    </Stack>
-  )
-}
-
-/** MemoryRecallToolRender(search_memories):success(命中)/ empty / running。 */
+/** MemoryRecallToolRender(memory:search):success(命中)/ empty / running。 */
 export function MemoryRecallToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -115,7 +60,7 @@ export function MemoryRecallToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'memory-ok',
-          toolName: 'search_memories',
+          toolName: 'memory:search',
           args: { query: '浏览器工具修复', mode: 'default' },
           result: {
             mode: 'default',
@@ -144,7 +89,7 @@ export function MemoryRecallToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'memory-empty',
-          toolName: 'search_memories',
+          toolName: 'memory:search',
           args: { query: '不存在的主题', mode: 'default' },
           result: { mode: 'default', count: 0, memories: [] },
         }}
@@ -153,7 +98,7 @@ export function MemoryRecallToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'memory-run',
-          toolName: 'search_memories',
+          toolName: 'memory:search',
           args: { query: '浏览器工具修复' },
           isRunning: true,
         }}
@@ -162,7 +107,7 @@ export function MemoryRecallToolCardExample(): ReactElement {
   )
 }
 
-/** SearchResultToolRender(web_search):success(带 answer)/ empty。 */
+/** SearchResultToolRender(web:search):success(带 answer)/ empty。 */
 export function SearchResultToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -170,7 +115,7 @@ export function SearchResultToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'search-ok',
-          toolName: 'web_search',
+          toolName: 'web:search',
           args: { query: 'react server components' },
           result: {
             answer: 'React Server Components 让组件在服务端渲染并流式传给客户端,减小 bundle。',
@@ -196,7 +141,7 @@ export function SearchResultToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'search-empty',
-          toolName: 'web_search',
+          toolName: 'web:search',
           args: { query: 'zxqwv nonexistent term' },
           result: { count: 0, results: [] },
         }}
@@ -205,7 +150,7 @@ export function SearchResultToolCardExample(): ReactElement {
   )
 }
 
-/** WebReadToolRender(web_read):success(正文)/ tool-error(result.error)/ running。 */
+/** WebReadToolRender(web:read):success(正文)/ tool-error(result.error)/ running。 */
 export function WebReadToolCardExample(): ReactElement {
   return (
     <Stack gap="sm">
@@ -213,7 +158,7 @@ export function WebReadToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'webread-ok',
-          toolName: 'web_read',
+          toolName: 'web:read',
           args: { source_id: 'src-1' },
           result: {
             source_id: 'src-1',
@@ -229,7 +174,7 @@ export function WebReadToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'webread-err',
-          toolName: 'web_read',
+          toolName: 'web:read',
           args: { source_id: 'src-9' },
           result: {
             source_id: 'src-9',
@@ -243,7 +188,7 @@ export function WebReadToolCardExample(): ReactElement {
         block={{
           type: 'tool-call',
           toolCallId: 'webread-run',
-          toolName: 'web_read',
+          toolName: 'web:read',
           args: { source_id: 'src-1' },
           isRunning: true,
         }}

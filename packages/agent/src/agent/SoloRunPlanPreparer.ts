@@ -165,32 +165,32 @@ interface SoloTurnPlanningSnapshot {
   toolSchemaChars?: Readonly<Record<string, number>>
 }
 
-const PlanModeRequiredToolNames = ['update_plan', 'show_user_action_cards'] as const
+const PlanModeRequiredToolNames = ['plan:update', 'interaction:show_action_cards'] as const
 const ProposalModeRequiredToolNames = [
-  'get_proposal',
-  'proposal_review',
+  'proposal:get',
+  'proposal:review',
   'ask_user',
-  'dispatch_agent',
-  'run_agent_workflow',
-  'produce_artifact',
+  'agent:dispatch',
+  'agent:run_workflow',
+  'artifact:produce',
 ] as const
-const ProposalLifecycleToolNameSet = new Set<string>(['get_proposal', 'proposal_review'])
+const ProposalLifecycleToolNameSet = new Set<string>(['proposal:get', 'proposal:review'])
 const ProposalModeAllowedNonInspectToolNames = new Set<string>([
   ...ProposalModeRequiredToolNames,
-  'read_background_job_output',
-  'wait_background_jobs',
-  'cancel_background_job',
-  'tool_replace',
-  // tool_read 是只读的技能/工具页读取入口：不带进来会把 runtime.available-skill-pages
-  // 索引段一起干掉（段的 when 依赖 tool_read 在场），提案轮次对技能完全失明。
-  'tool_read',
+  'job:read_output',
+  'job:wait',
+  'job:cancel',
+  'tooling:replace',
+  // tooling:read 是只读的技能/工具页读取入口：不带进来会把 runtime.available-skill-pages
+  // 索引段一起干掉（段的 when 依赖 tooling:read 在场），提案轮次对技能完全失明。
+  'tooling:read',
 ])
-const GoalModeRequiredToolNames = ['get_goal', 'create_goal', 'update_goal'] as const
+const GoalModeRequiredToolNames = ['goal:get', 'goal:create', 'goal:update'] as const
 const BootstrapSharedToolNames = [
-  'tool_map',
-  'update_plan',
+  'tooling:map',
+  'plan:update',
   'ask_user',
-  'show_user_action_cards',
+  'interaction:show_action_cards',
 ] as const
 function filterToolsForContextPhase(input: {
   tools: readonly string[]
@@ -210,11 +210,11 @@ function filterToolsForContextPhase(input: {
  * 上下文自理。声明集之外全部收掉——显式选中即用户对工具面的明确授权边界。
  */
 const SkillGateAlwaysKeptToolNames = new Set<string>([
-  'tool_read',
+  'tooling:read',
   'ask_user',
-  'show_user_action_cards',
-  'recall_context',
-  'distill_context',
+  'interaction:show_action_cards',
+  'context:recall',
+  'context:distill',
 ])
 function excludeProposalLifecycleToolsWhenDisabled<T extends readonly string[] | undefined>(
   tools: T,

@@ -32,16 +32,15 @@ tests/<domain>/            各域根级测试树
 docs/<domain>/             各域文档;**总入口 [docs/readme.md](docs/readme.md)**
 ```
 
-`workspaces` = `["packages/*"]`,共 **18 个平台包**(下表)。
+`workspaces` = `["packages/*"]`,共 **19 个平台包**(下表)。
 
 **为什么平铺而不是 `packages/<domain>/<pkg>`**:包内 tsconfig 大量写 `baseUrl: "../.."` +
 `paths: ["./packages/<pkg>/src/index.ts"]`,package.json 构建脚本写 `../../scripts/…`。平铺让这些
 相对路径逐字成立,导入零改写;分域再嵌一层则要改写每个包的 tsconfig 与构建脚本。
-**域不是目录,是 `velaros.domainPackages` 里的一行声明**——`cli` / `office-tools` /
-`system-tools` / `workspace` 四个包 2026-07-30(QI 批)已从 `packages/capabilities/` 提到顶层,
-和其余能力包(browser / computer / game)平级;两级扫描的特例随之消失。
-capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: "../../.."`)。域归属不靠目录,
-由仓根 `package.json` 的 `velaros.domainPackages` 声明,各域架构门据此把「包集合冻结」收敛到本域。
+**域不是目录,是 `velaros.domainPackages` 里的一行声明**。能力包全部平铺在 `packages/`：
+Project、System、Browser 等聚合包通过子路径表达职责切片，Development 等单一职责包再由
+Mod Loader 拼入具体空间。域归属不靠目录，由仓根 `package.json` 的
+`velaros.domainPackages` 声明，各域架构门据此冻结包集合。
 
 ## 包目录索引
 
@@ -55,12 +54,13 @@ capabilities 是唯一嵌了一层的域(其包内 tsconfig 相应写 `baseUrl: 
 | agent | `@velaros-ai/agent` | 0.5.0 | `packages/agent` |
 | core | `@velaros-ai/core` | 0.3.2 | `packages/core` |
 | model | `@velaros-ai/model` | 0.4.6 | `packages/model` |
-| capabilities | `@velaros-ai/workspace` | 1.2.6 | `packages/workspace` |
+| capabilities | `@velaros-ai/project` | 2.0.0 | `packages/project` |
 | capabilities | `@velaros-ai/browser`(`/core` `/tools` `/composition` `/runtime`) | 0.2.6 | `packages/browser` |
 | capabilities | `@velaros-ai/computer`(`/runtime` `/tools`) | 0.2.6 | `packages/computer` |
 | capabilities | `@velaros-ai/game` | 0.1.0 | `packages/game` |
-| capabilities | `@velaros-ai/system-tools` | 0.2.9 | `packages/system-tools` |
-| capabilities | `@velaros-ai/office-tools` | 0.2.8 | `packages/office-tools` |
+| capabilities | `@velaros-ai/system` | 1.0.0 | `packages/system` |
+| capabilities | `@velaros-ai/office` | 1.0.0 | `packages/office` |
+| capabilities | `@velaros-ai/development` | 1.0.0 | `packages/development` |
 | capabilities | `@velaros-ai/cli` | 0.2.11 | `packages/cli` |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | `packages/memory` |
 | ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | `packages/ui` |
@@ -236,4 +236,4 @@ Kernel 本体仍是可注入的库；`serve-host` 是可选的独立产品进程
    的扫描根收窄,`packages/capabilities/**` 等根本没进面)。详见
    [docs/gate-coverage-matrix.md](docs/gate-coverage-matrix.md) §3。
 8. ~~**两个包的检查脚本写了但没挂链**~~ → **已闭合(QI 批)**:`check:html-artifacts-package`
-   与 `check:workspace-arch` 已挂进根 `check:gates`。
+   与 `check:project-arch` 已挂进根 `check:gates`。

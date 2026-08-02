@@ -16,11 +16,11 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
 
   public request(request: KernelPermissionRequest): Promise<KernelPermissionDecision> {
     const capabilities = this.config.snapshot().value.capabilities
-    const granted = request.moduleId === 'velaros.workspace.default'
-      ? this.workspacePermissionGranted(request.permission, capabilities.workspace)
-      : request.moduleId === 'velaros.office.tools'
-        ? this.officePermissionGranted(request.permission, capabilities.workspace)
-        : request.moduleId === 'velaros.system.tools'
+    const granted = request.moduleId === 'velaros.project'
+      ? this.projectPermissionGranted(request.permission, capabilities.project)
+      : request.moduleId === 'velaros.office'
+        ? this.officePermissionGranted(request.permission, capabilities.project)
+        : request.moduleId === 'velaros.system'
           ? this.systemPermissionGranted(request.permission, capabilities.system)
       : request.moduleId === 'velaros.computer.sidecar'
         ? this.computerPermissionGranted(request.permission, capabilities.computer)
@@ -35,12 +35,13 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
     })
   }
 
-  private workspacePermissionGranted(
+  private projectPermissionGranted(
     permission: string,
-    policy: { read: boolean; write: boolean },
+    policy: { read: boolean; write: boolean; execute: boolean },
   ): boolean {
     if (permission === 'fs:read') return policy.read
-    if (permission === 'fs:write' || permission === 'process:exec') return policy.write
+    if (permission === 'fs:write') return policy.write
+    if (permission === 'process:exec') return policy.execute
     return false
   }
 

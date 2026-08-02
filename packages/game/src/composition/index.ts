@@ -1,3 +1,4 @@
+import { GameToolNames } from '../contracts.js'
 import {
   type GameInputResult,
   type GameInputStep,
@@ -6,7 +7,7 @@ import {
   type GameManifestDocumentStore,
   type GameManifestEditRequest,
   type GameManifestEditResult,
-  GameManifestWorkspaceEditor,
+  GameManifestProjectEditor,
   GameProjectFileName,
   type GameProjectManifest,
   type GameRunRequest,
@@ -34,10 +35,8 @@ import {
   type GameRuntimeObserver,
   type GameRuntimePageHost,
 } from '../runtime/index.js'
-import { type GameToolContext, GameToolNames, gameTools, type ToolGameApi } from '../tools/index.js'
+import { type GameToolContext, gameTools, type ToolGameApi } from '../tools/index.js'
 
-export * from './mod.js'
-export * from './turn-context.js'
 export { GameProjectFileName }
 // 宿主舞台在「工程还没跑起来」时要如实说清工程长什么样，而领域解析不许在壳里复制一份。
 export type { GameProjectOverview, GameSceneOverview } from '../core/index.js'
@@ -111,7 +110,7 @@ class UnavailableGameSceneEditor implements GameSceneEditorPort {
   }
 
   public async edit(_request: GameManifestEditRequest): Promise<GameManifestEditResult> {
-    throw new GameCapabilityUnavailableError('game_scene_edit')
+    throw new GameCapabilityUnavailableError('game:scene_edit')
   }
 }
 
@@ -125,7 +124,7 @@ class UnavailableGameRuntime implements GameRuntimePort {
   }
 
   public async run(_request: GameRunRequest): Promise<GameRunResult> {
-    throw new GameCapabilityUnavailableError('game_run')
+    throw new GameCapabilityUnavailableError('game:run')
   }
 
   public async stop(_force?: boolean): Promise<GameStopResult> {
@@ -133,11 +132,11 @@ class UnavailableGameRuntime implements GameRuntimePort {
   }
 
   public async screenshot(_request: GameScreenshotRequest): Promise<GameScreenshotResult> {
-    throw new GameCapabilityUnavailableError('game_screenshot')
+    throw new GameCapabilityUnavailableError('game:screenshot')
   }
 
   public async query(_request: GameRuntimeQuery): Promise<GameRuntimeQueryResult> {
-    throw new GameCapabilityUnavailableError('game_query_state')
+    throw new GameCapabilityUnavailableError('game:query_state')
   }
 
   public async input(
@@ -148,7 +147,7 @@ class UnavailableGameRuntime implements GameRuntimePort {
       readonly captureAfter?: boolean
     }
   ): Promise<GameInputResult> {
-    throw new GameCapabilityUnavailableError('game_input')
+    throw new GameCapabilityUnavailableError('game:input')
   }
 }
 
@@ -192,7 +191,7 @@ export function createGameCapability(options: CreateGameCapabilityOptions = {}):
 export function createGameManifestEditor(
   documents: GameManifestDocumentStore
 ): GameSceneEditorPort {
-  return new GameManifestWorkspaceEditor(documents)
+  return new GameManifestProjectEditor(documents)
 }
 
 /**
@@ -226,7 +225,7 @@ export function createGameProjectCapability(
     options.observer,
     toBuiltinDevServerHost(options)
   )
-  const editor = new GameManifestWorkspaceEditor(options.documents)
+  const editor = new GameManifestProjectEditor(options.documents)
   const synchronizedEditor: GameSceneEditorPort = {
     isAvailable: () => editor.isAvailable(),
     edit: async (request) => {

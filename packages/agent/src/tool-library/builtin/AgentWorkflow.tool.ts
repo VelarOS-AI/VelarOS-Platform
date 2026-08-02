@@ -5,11 +5,11 @@ import { defineVelaTool, type VelaTool } from '../defineVelaTool'
 import { agentWorkflowSchema, type RunAgentWorkflowInput } from './AgentWorkflow'
 
 interface AgentWorkflowToolCollection {
-  readonly run_agent_workflow: VelaTool<RunAgentWorkflowInput>
+  readonly 'agent:run_workflow': VelaTool<RunAgentWorkflowInput>
 }
 
 const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
-  name: 'run_agent_workflow',
+  name: 'agent:run_workflow',
   role: 'control',
   category: 'general',
   summary: '用声明式、有界控制流编排多个一级子 Agent，并在代码侧收敛结构化结果。',
@@ -85,7 +85,7 @@ const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
 })
 
 const agentWorkflowTools: AgentWorkflowToolCollection = {
-  run_agent_workflow: runAgentWorkflow,
+  'agent:run_workflow': runAgentWorkflow,
 }
 
 export { agentWorkflowTools }

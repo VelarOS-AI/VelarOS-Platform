@@ -2,7 +2,7 @@ import { createContext, type ReactElement, type ReactNode, useContext } from 're
 
 import type { MessageActionView } from '../projection'
 
-import type { ChatMessage, WorkspaceRootEntry } from '#contracts'
+import type { ChatMessage, ProjectRootEntry } from '#contracts'
 
 /**
  * blocks 层的 **hook 注入端口**——把宿主专属、按消息派生的 viewmodel（触达 rendererIpc）以 hook 形式
@@ -17,11 +17,11 @@ import type { ChatMessage, WorkspaceRootEntry } from '#contracts'
  * 不直依宿主配置上下文。
  */
 export interface ConversationMessageActionOptions {
-  activeWorkspaceRoot: Nullable<string>
+  activeProjectRoot: Nullable<string>
   message: ChatMessage
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   sessionId: string
-  workspaceRoots: WorkspaceRootEntry[]
+  projectRoots: ProjectRootEntry[]
 }
 
 export interface ConversationBlockHooks {

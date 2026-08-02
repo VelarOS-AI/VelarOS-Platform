@@ -4,7 +4,7 @@
  * 新记录进账本的一瞬间定初始驻留，之后轮与轮之间投影严格只追加 —— 这是 P1/P4 的地基：
  * 准入不改写任何既有记录，所以准入永远不会毁缓存。三条规则：
  *  ① 工具结果超 `admission.inlineMaxChars` → 直接 EXCERPT（头尾摘录 + 召回句柄，语义与今天的
- *     `tool-output-store` 句柄化逐字一致，`recall_context` 继续认）；
+ *     `tool-output-store` 句柄化逐字一致，`context:recall` 继续认）；
  *  ② 同工具同目标的旧快照类记录 → 标 **pending-EVICT**（只标记，真正逐出归 B1 的 epoch。
  *     依据：相似而过时的内容比无关内容更毒）；
  *  ③ 锚点规则抽取立刻做，落记录元数据（后续骨架与锚点验证共用同一份）。
@@ -182,7 +182,7 @@ export function buildExcerptEnvelope(record: ContextRecord): Nullable<ContextRef
     originalLength: record.bytes.full,
     reason: excerpt.reason,
     retrieval: {
-      tool: 'recall_context',
+      tool: 'context:recall',
       args: { ref: excerpt.ref, refKind: excerpt.refKind, reason: excerpt.reason },
     },
     meta: { recordId: record.id },
@@ -263,7 +263,7 @@ function buildUserTextSafetyValveText(
   return [
     excerpt,
     '',
-    `[user text truncated before provider replay; originalLength=${originalLength}; use recall_context(ref:"${ref}", refKind:"${refKind}") for the full text.]`,
+    `[user text truncated before provider replay; originalLength=${originalLength}; use context:recall(ref:"${ref}", refKind:"${refKind}") for the full text.]`,
   ].join('\n')
 }
 

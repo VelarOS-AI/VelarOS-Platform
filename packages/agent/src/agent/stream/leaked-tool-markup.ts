@@ -2,7 +2,7 @@
  * 泄漏工具调用标记过滤器。
  *
  * 某些模型会把工具调用以含全宽竖线 `｜` 的原生 DSML 文本格式吐出来：
- * `<｜DSML｜tool_calls>...<｜DSML｜invoke name="ws_edit">...`。正常情况下供应商会把它
+ * `<｜DSML｜tool_calls>...<｜DSML｜invoke name="project:edit">...`。正常情况下供应商会把它
  * 翻译成结构化 tool-call，但**大 payload（整文件塞进一个参数）时会在传输中断裂**，
  * 未翻译的原始标记就当普通文本泄漏到 UI/历史里，把整屏都堆满乱码。
  *

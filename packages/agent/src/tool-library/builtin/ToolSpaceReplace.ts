@@ -146,7 +146,7 @@ function buildReplaceNextTurnHint(input: {
 
   if (!isEmpty(input.skippedPageDetails)) return '没有新的工具页被换入；请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。'
 
-  return '没有新的工具页被换入；请回到 tool_map(op:"find") 或 tool_map(op:"page") 重新确认目标页，再用 tool_replace 换入。'
+  return '没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。'
 }
 
 export async function replaceToolSpacePages(
@@ -363,7 +363,7 @@ export async function replaceToolSpacePages(
     }),
     message:
       alreadyResidentTools.length === preparedTools.length && !isEmpty(alreadyResidentTools)
-        ? `换入目标已全部驻留(${alreadyResidentTools.join('、')}),本轮即可直接调用,无需再 tool_replace。`
+        ? `换入目标已全部驻留(${alreadyResidentTools.join('、')}),本轮即可直接调用,无需再 tooling:replace。`
         : 'ContextOS 工具页替换已处理。',
   }
 }

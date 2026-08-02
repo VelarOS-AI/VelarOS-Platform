@@ -255,7 +255,7 @@ function sameStringSet(left: readonly string[], right: readonly string[]): boole
 /**
  * 按需子智能体派发器。
  *
- * 主智能体通过 dispatch_agent 工具触发；负责并发上界（按执行隔离）、类型路由、
+ * 主智能体通过 agent:dispatch 工具触发；负责并发上界（按执行隔离）、类型路由、
  * 模型路由健康度反馈、写租约、工作线程事件投影，以及失败/中断的回灌处理。
  */
 class SubAgentDispatcher {
@@ -542,7 +542,7 @@ class SubAgentDispatcher {
     const priorFindingsBriefing = this.progressLedger.buildPriorFindingsBriefing(executionKey)
 
     // sync 与 async 都创建后台 job 供侧边栏看进度流；区别只在父 Agent 是否阻塞等结果：
-    // - async：fire-and-forget，立即返回可等待 job（父继续，稍后 wait_background_jobs 收束）。
+    // - async：fire-and-forget，立即返回可等待 job（父继续，稍后 job:wait 收束）。
     // - sync：阻塞直到子 Agent 完成，把最终结果内联返回给父 Agent（无需再轮询 job），
     //   同时 runWorker 仍把进度写进该 job，UI 照样能看到实时轨迹。
     const backgroundJobId =
@@ -834,7 +834,7 @@ class SubAgentDispatcher {
     executionKey: string,
     threadId: string
   ): string {
-    const aborted = this.abortWorker(executionKey, threadId, 'Sub-agent interrupted via dispatch_agent')
+    const aborted = this.abortWorker(executionKey, threadId, 'Sub-agent interrupted via agent:dispatch')
     const session = this.sessionStore.getSession(threadId)
     const summary = aborted
       ? '已发送中断信号给正在运行的子智能体。'

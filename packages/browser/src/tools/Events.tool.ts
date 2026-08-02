@@ -10,12 +10,12 @@ import { waitForPendingEvent } from './PendingEvents'
 import { defineBrowserTool } from './Types'
 
 const browserListPendingEvents = defineBrowserTool<Record<string, never>>({
-  name: 'browser_list_pending_events',
+  name: 'browser:list_pending_events',
   role: 'inspect',
   summary: '列出当前页面待处理的阻塞事件。',
   suitable: [
     '需要确认是否有未处理的 JS 弹窗、下载或权限请求。',
-    'browser_get_page_diagnostics 显示 pending 事件后进一步定位 eventId。',
+    'browser:get_page_diagnostics 显示 pending 事件后进一步定位 eventId。',
   ],
   forbidden: ['不要用它代替具体的 handle 工具。'],
   usage: ['无需参数；返回 pending 数组。'],
@@ -37,14 +37,14 @@ const browserWaitForPendingEvent = defineBrowserTool<{
   kind?: BrowserPendingEventKind
   timeoutMs?: number
 }>({
-  name: 'browser_wait_for_pending_event',
+  name: 'browser:wait_for_pending_event',
   role: 'inspect',
   summary: '等待当前页面出现待处理的浏览器阻塞事件。',
   suitable: [
     '点击下载、触发权限请求或弹窗后，需要等待 pending 事件出现。',
-    '下载动作后等待 download 事件，再调用 browser_handle_download 接受或取消。',
+    '下载动作后等待 download 事件，再调用 browser:handle_download 接受或取消。',
   ],
-  forbidden: ['不要用它处理事件；处理仍使用 browser_handle_dialog/browser_handle_download/browser_handle_permission。'],
+  forbidden: ['不要用它处理事件；处理仍使用 browser:handle_dialog/browser:handle_download/browser:handle_permission。'],
   usage: ['默认 kind=download；可传 kind=dialog/download/permission 和 timeoutMs。'],
   examples: [{ kind: 'download', timeoutMs: 1000 }],
   notes: ['返回 event 后，再用对应 handle 工具处理 eventId。'],
@@ -84,7 +84,7 @@ const browserHandleDialog = defineBrowserTool<{
   accept: boolean
   promptText?: string
 }>({
-  name: 'browser_handle_dialog',
+  name: 'browser:handle_dialog',
   role: 'control',
   summary: '处理待处理的 JS 弹窗（alert/confirm/prompt）。',
   suitable: ['页面出现 alert、confirm 或 prompt 弹窗阻塞自动化。'],
@@ -98,7 +98,7 @@ const browserHandleDialog = defineBrowserTool<{
     // 给 prompt 弹窗填值并确认
     { accept: true, promptText: 'VelarOS' },
   ],
-  notes: ['可先调用 browser_list_pending_events 获取 eventId。'],
+  notes: ['可先调用 browser:list_pending_events 获取 eventId。'],
   schema: z.object({
     eventId: z.string().optional().describe(
       parameterDescription({
@@ -133,7 +133,7 @@ const browserHandleDownload = defineBrowserTool<{
   action: 'accept' | 'cancel'
   savePath?: string
 }>({
-  name: 'browser_handle_download',
+  name: 'browser:handle_download',
   role: 'control',
   summary: '接受或取消待处理的页面下载。',
   suitable: ['页面触发文件下载并阻塞后续操作时。'],
@@ -184,14 +184,14 @@ const browserHandlePermission = defineBrowserTool<{
   eventId?: string
   grant: boolean
 }>({
-  name: 'browser_handle_permission',
+  name: 'browser:handle_permission',
   role: 'control',
   summary: '允许或拒绝待处理的浏览器权限请求。',
   suitable: ['页面请求 geolocation、notifications、clipboard 等权限时。'],
   forbidden: ['不要对非 pending 权限随意调用。'],
   usage: ['grant=true 允许；grant=false 拒绝。'],
   examples: [{ grant: true }],
-  notes: ['可先调用 browser_list_pending_events 查看 permission 详情。'],
+  notes: ['可先调用 browser:list_pending_events 查看 permission 详情。'],
   schema: z.object({
     eventId: z.string().optional().describe(
       parameterDescription({
@@ -216,10 +216,10 @@ const browserHandlePermission = defineBrowserTool<{
 })
 
 const browserEventTools = {
-  browser_list_pending_events: browserListPendingEvents,
-  browser_wait_for_pending_event: browserWaitForPendingEvent,
-  browser_handle_dialog: browserHandleDialog,
-  browser_handle_download: browserHandleDownload,
-  browser_handle_permission: browserHandlePermission,
+  'browser:list_pending_events': browserListPendingEvents,
+  'browser:wait_for_pending_event': browserWaitForPendingEvent,
+  'browser:handle_dialog': browserHandleDialog,
+  'browser:handle_download': browserHandleDownload,
+  'browser:handle_permission': browserHandlePermission,
 }
 export { browserEventTools }

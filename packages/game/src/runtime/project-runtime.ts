@@ -134,12 +134,12 @@ export class GameProjectRuntime implements GameRuntimePort {
   }
 
   public async screenshot(request: GameScreenshotRequest): Promise<GameScreenshotResult> {
-    this.requireRunning('game_screenshot')
+    this.requireRunning('game:screenshot')
     return this.pageHost.screenshot(request)
   }
 
   public async query(request: GameRuntimeQuery): Promise<GameRuntimeQueryResult> {
-    this.requireRunning('game_query_state')
+    this.requireRunning('game:query_state')
     const result = await this.pageHost.query(request)
     notifyObserver(() => this.observer?.onQuery?.(request, result))
     return result
@@ -153,23 +153,23 @@ export class GameProjectRuntime implements GameRuntimePort {
       readonly captureAfter?: boolean
     }
   ): Promise<GameInputResult> {
-    this.requireRunning('game_input')
+    this.requireRunning('game:input')
     const result = await this.pageHost.input(steps, options)
     notifyObserver(() => this.observer?.onInput?.(result))
     return result
   }
 
   /**
-   * 就绪的下一刻读一次页面：可见性计数 + 页面已攒下的诊断，拼进 `game_run` 的结果。
+   * 就绪的下一刻读一次页面：可见性计数 + 页面已攒下的诊断，拼进 `game:run` 的结果。
    *
-   * ## 为什么在这里，而不是让模型自己去 `game_query_state`
+   * ## 为什么在这里，而不是让模型自己去 `game:query_state`
    * 「跑」结束那一刻就是模型报告成功的地方（真机第一手：跑完直接截图、报告三个物体都在，
    * 全程没查过状态）。首帧诊断本来就是 `GameRunResult` 已有的字段——内置服务那条路上它一直
    * 恒为空，因为诊断攒在**页面**里而 `waitUntilReady` 只看得到进程日志。这里把两半接上。
    *
    * ## best-effort 的边界
    * 观测失败（页面还没挂上窄桥、求值被拒、结果形状不对）一律**原样返回启动结果**：
-   * 观测绝不许改变 `game_run` 本身的成败——那是「监控把被监控者搞挂」的经典自伤。
+   * 观测绝不许改变 `game:run` 本身的成败——那是「监控把被监控者搞挂」的经典自伤。
    */
   private async withFirstFrame(result: GameRunResult): Promise<GameRunResult> {
     try {
@@ -195,7 +195,7 @@ export class GameProjectRuntime implements GameRuntimePort {
 
   private requireRunning(operation: string): void {
     if (this.isRunning()) return
-    throw new Error(`${operation} 需要运行中的游戏页面；请先调用 game_run。`)
+    throw new Error(`${operation} 需要运行中的游戏页面；请先调用 game:run。`)
   }
 }
 

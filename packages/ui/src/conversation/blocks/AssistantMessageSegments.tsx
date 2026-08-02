@@ -149,7 +149,7 @@ function AssistantMessageSegmentsInner({
   getBlockIndex,
   formatPathForDisplay,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   activeUserActionCardIds,
   onResolveUserActionCard,
   onTranslateThinkingBlock,
@@ -171,7 +171,7 @@ function AssistantMessageSegmentsInner({
   getBlockIndex?: (block: ContentBlock) => number | undefined
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
   onTranslateThinkingBlock?: (request: {
@@ -335,7 +335,7 @@ function AssistantMessageSegmentsInner({
         blockIndex={getBlockIndex?.(segment.block)}
         formatPathForDisplay={formatPathForDisplay}
         onOpenBrowserLink={onOpenBrowserLink}
-        onOpenWorkspacePath={onOpenWorkspacePath}
+        onOpenProjectPath={onOpenProjectPath}
         activeUserActionCardIds={activeUserActionCardIds}
         onResolveUserActionCard={onResolveUserActionCard}
         consumedScheduledTaskProposalIds={consumedScheduledTaskProposalIds}

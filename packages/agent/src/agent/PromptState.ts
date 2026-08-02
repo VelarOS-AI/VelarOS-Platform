@@ -197,7 +197,7 @@ class PromptStateBuilder {
         toolCategoryOverviews.all,
         enabledToolNames
       ),
-      canUpdatePlan: enabledToolNames.has('update_plan'),
+      canUpdatePlan: enabledToolNames.has('plan:update'),
       userRequestedPlan: isExecutionModeSelected('plan', enabledPromptFeatures),
       proposalMode,
       goalMode: isTrue(goalMode),

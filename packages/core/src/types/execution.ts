@@ -115,7 +115,7 @@ export interface ExecutionTaskPlanStep {
   updatedAt: Nullable<number>
   /**
    * 步骤来源：'scaffold' 是路由按 workflow 角色注入的默认占位步骤（如 operator-execute），
-   * 'manual' 是模型经 update_plan 亲自编写的计划步骤。缺省视作 scaffold（兼容旧数据）。
+   * 'manual' 是模型经 plan:update 亲自编写的计划步骤。缺省视作 scaffold（兼容旧数据）。
    * 一旦存在 manual 步骤，角色 turn 的 scaffold 合并就不得再覆盖模型计划（见 mergeExecutionPlan）。
    */
   origin?: 'scaffold' | 'manual'

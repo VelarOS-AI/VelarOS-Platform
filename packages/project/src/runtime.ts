@@ -1,0 +1,5 @@
+export { DEFAULT_CORE_POLICY, PROJECT_PACKAGE_VERSION } from './core/defaults.js'
+export type { CreateProjectKernelOptions, ProjectKernel } from './core/project-kernel.js'
+export { createProjectKernel } from './core/project-kernel.js'
+export { ProjectError, toErrorObject } from './errors.js'
+export { createSecretRedactionProvider } from './providers/index.js'

@@ -1,0 +1,102 @@
+{
+  "name": "@velaros-ai/project",
+  "version": "2.0.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
+  "type": "module",
+  "license": "MIT",
+  "author": "VelarOS",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./files": {
+      "types": "./dist/files.d.ts",
+      "import": "./dist/files.js"
+    },
+    "./changes": {
+      "types": "./dist/changes.d.ts",
+      "import": "./dist/changes.js"
+    },
+    "./execution": {
+      "types": "./dist/execution.d.ts",
+      "import": "./dist/execution.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js"
+    },
+    "./composition": {
+      "types": "./dist/composition/index.d.ts",
+      "import": "./dist/composition/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./kernel": {
+      "types": "./dist/kernel-module.d.ts",
+      "import": "./dist/kernel-module.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node scripts/build/clean-package.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist && node scripts/build/copy-velaros-globals-to-dist.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "bun run build && bun test test/project.test.ts test/kernel-module.test.ts test/approval-context.test.ts test/ripgrep.test.mjs test/typescript-plugin.test.mjs test/visibility-policy.test.mjs test/agent/package-boundary.test.ts",
+    "check:arch": "node scripts/check-architecture.mjs",
+    "check": "bun run typecheck && bun run lint && bun run check:arch && bun run test",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "diff": "^8.0.4",
+    "execa": "^9.6.1",
+    "iconv-lite": "^0.7.2",
+    "picomatch": "^4.0.3",
+    "typescript": "^5.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.19.17",
+    "@types/picomatch": "^3.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/project"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

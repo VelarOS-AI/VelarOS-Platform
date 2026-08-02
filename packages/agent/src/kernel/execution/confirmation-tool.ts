@@ -32,7 +32,7 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
     examples: ['请求确认即将运行可能写文件的命令。'],
     notes: [
       '用户批准后继续，拒绝时终止本次 execution。',
-      '表单/多卡改用 show_user_action_cards。',
+      '表单/多卡改用 interaction:show_action_cards。',
     ],
   }),
   schema: z.object({
@@ -54,7 +54,7 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
 }
 
 const confirmationTools = {
-  request_confirmation: requestConfirmationTool,
+  'interaction:confirm': requestConfirmationTool,
 }
 
 export { confirmationTools }

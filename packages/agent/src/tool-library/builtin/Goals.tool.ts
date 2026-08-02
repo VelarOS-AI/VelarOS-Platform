@@ -95,7 +95,7 @@ const goalConstraintSchema = z.object({
 })
 
 const getGoal = defineVelaTool<Record<string, never>>({
-  name: 'get_goal',
+  name: 'goal:get',
   role: 'inspect',
   category: 'general',
   summary: '读取当前 session 的目标模式目标状态。',
@@ -128,7 +128,7 @@ const createGoal = defineVelaTool<{
   steps?: GoalStep[]
   constraints?: GoalConstraint[]
 }>({
-  name: 'create_goal',
+  name: 'goal:create',
   role: 'control',
   category: 'general',
   summary: '为需要长时间持续工作的任务创建当前 session 活动目标。',
@@ -138,12 +138,12 @@ const createGoal = defineVelaTool<{
   ],
   forbidden: [
     '不要为短小、可立即完成的任务创建目标；用户明确要求不用目标模式时不得自主启用。',
-    '不要在已有活动目标时重复创建；改完成/阻塞状态请用 update_goal。',
+    '不要在已有活动目标时重复创建；改完成/阻塞状态请用 goal:update。',
   ],
   usage: [
     '预计任务会长时间运行、跨多轮推进或等待后台工作时，可主动创建目标；普通任务不要创建。',
     'objective 写清本次要达成的结果；token_budget 只有用户明确给预算时才传。',
-    '目标生命周期步骤写入 steps；如果用户同时要求可见 plan/计划，另行调用 update_plan 维护 execution plan；需要持续遵守的用户约束写入 constraints。',
+    '目标生命周期步骤写入 steps；如果用户同时要求可见 plan/计划，另行调用 plan:update 维护 execution plan；需要持续遵守的用户约束写入 constraints。',
   ],
   examples: [
     {
@@ -175,7 +175,7 @@ const createGoal = defineVelaTool<{
       .optional()
       .describe(
         parameterDescription({
-          description: '目标拆解出的完整生命周期步骤列表；不替代 update_plan 的可见 execution plan。',
+          description: '目标拆解出的完整生命周期步骤列表；不替代 plan:update 的可见 execution plan。',
         })
       ),
     constraints: z
@@ -199,7 +199,7 @@ const createGoal = defineVelaTool<{
     })
     const current = findCurrentGoalArtifact(artifacts)
     if (current && toGoalSnapshot(current).status === 'active') {
-      throw new AppError('VALIDATION', 'Active goal already exists. Use get_goal or update_goal.')
+      throw new AppError('VALIDATION', 'Active goal already exists. Use goal:get or goal:update.')
     }
 
     const artifact = await ctx.activeContext.upsertActiveContextArtifact(
@@ -227,7 +227,7 @@ const updateGoal = defineVelaTool<{
   complete_step?: string | number
   constraints?: GoalConstraint[]
 }>({
-  name: 'update_goal',
+  name: 'goal:update',
   role: 'control',
   category: 'general',
   summary: '更新当前 session 的统一目标状态，或把目标标记为完成/受阻。',
@@ -278,7 +278,7 @@ const updateGoal = defineVelaTool<{
         .optional()
         .describe(
           parameterDescription({
-            description: '目标拆解出的完整生命周期步骤列表；不替代 update_plan 的可见 execution plan。',
+            description: '目标拆解出的完整生命周期步骤列表；不替代 plan:update 的可见 execution plan。',
           })
         ),
       complete_step: z
@@ -314,7 +314,7 @@ const updateGoal = defineVelaTool<{
     })
     const artifact = findCurrentGoalArtifact(artifacts)
     if (!artifact || toGoalSnapshot(artifact).status !== 'active') {
-      throw new AppError('VALIDATION', 'No active goal exists. Use create_goal first.')
+      throw new AppError('VALIDATION', 'No active goal exists. Use goal:create first.')
     }
 
     const hasStatus = !!input.status
@@ -386,7 +386,7 @@ const updateGoal = defineVelaTool<{
       allStepsResolved: toNullable(stepCompletion?.allStepsResolved),
       nextAction: stepCompletion
         ? stepCompletion.allStepsResolved
-          ? 'All goal steps are resolved. If the objective is truly complete, call update_goal({status:"complete"}).'
+          ? 'All goal steps are resolved. If the objective is truly complete, call goal:update({status:"complete"}).'
           : 'Continue with the active goal step.'
         : null,
       finalTokenUsage: null,
@@ -395,9 +395,9 @@ const updateGoal = defineVelaTool<{
 })
 
 const goalTools = {
-  get_goal: getGoal,
-  create_goal: createGoal,
-  update_goal: updateGoal,
+  'goal:get': getGoal,
+  'goal:create': createGoal,
+  'goal:update': updateGoal,
 }
 
 export { goalTools }

@@ -22,7 +22,7 @@ const browserPerformance = defineBrowserTool<{
   insightName?: string
   path?: string
 }>({
-  name: 'browser_performance',
+  name: 'browser:performance',
   role: 'control',
   summary: '页面性能与内存分析：trace 出 CWV 指标与瓶颈 insight，堆快照排查内存泄漏。',
   suitable: [
@@ -146,7 +146,7 @@ const browserPerformance = defineBrowserTool<{
     // schema 已保证:action 缺失只在带 insight 字段时被推断补全,否则 superRefine 拦下;
     // 这里的空值分支只是类型收窄兜底。
     const action = args.action
-    if (!action) throw new AppError('VALIDATION', 'Unsupported browser_performance action.')
+    if (!action) throw new AppError('VALIDATION', 'Unsupported browser:performance action.')
 
     switch (action) {
       case 'start_trace':
@@ -165,12 +165,12 @@ const browserPerformance = defineBrowserTool<{
         return ctx.browser.captureHeapSnapshot({ path: args.path })
       default:
         action satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser_performance action.')
+        throw new AppError('VALIDATION', 'Unsupported browser:performance action.')
     }
   },
 })
 
 const browserPerformanceTools = {
-  browser_performance: browserPerformance,
+  'browser:performance': browserPerformance,
 }
 export { browserPerformanceTools }

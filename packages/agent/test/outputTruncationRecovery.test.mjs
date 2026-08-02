@@ -122,16 +122,16 @@ test('final tool input reparses complete JSON strings but rejects truncated stri
 test('capability aliases are absent by default and resolve only when injected', async () => {
   const { ToolExecutionPolicy } = await import(packagePath.href)
   const policy = new ToolExecutionPolicy({
-    get: (toolName) => (toolName === 'produce_artifact' ? {} : null),
+    get: (toolName) => (toolName === 'artifact:produce' ? {} : null),
   })
 
-  assert.equal(policy.resolveCanonicalToolName('produce_artifact'), 'produce_artifact')
+  assert.equal(policy.resolveCanonicalToolName('artifact:produce'), 'artifact:produce')
   assert.equal(policy.resolveCanonicalToolName('export_workspace_file'), 'export_workspace_file')
   assert.equal(
     policy.resolveCanonicalToolName('EXPORT_WORKSPACE_FILE', {
-      toolAliases: { export_workspace_file: 'produce_artifact' },
+      toolAliases: { export_workspace_file: 'artifact:produce' },
     }),
-    'produce_artifact'
+    'artifact:produce'
   )
 })
 
@@ -145,7 +145,7 @@ test('stream consumer never executes a truncated final tool call', async () => {
       yield {
         type: 'tool-call',
         toolCallId: 'tool-1',
-        toolName: 'produce_artifact',
+        toolName: 'artifact:produce',
         input: '{"type":"html","content":"cut',
       }
       yield {

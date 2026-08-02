@@ -10,10 +10,10 @@ import styles from './CommandToolRender.module.css'
 
 import type {
   AppLocale,
+  ProjectBackgroundProcessInfo,
+  ProjectCommandResult,
+  ProjectVerificationSummary,
   ToolCallBlock,
-  WorkspaceBackgroundProcessInfo,
-  WorkspaceCommandResult,
-  WorkspaceVerificationSummary,
 } from '#contracts'
 import { isEmpty,isPlainObject, isString, isTrue, numberOrNull, optionalWhen, toOptional } from '#internal/runtime'
 
@@ -38,7 +38,7 @@ export function normalizeArgs(value: any): CommandToolArgs {
 
 export function getStatusLabel(
   block: ToolCallBlock,
-  result: Nullable<WorkspaceCommandResult>,
+  result: Nullable<ProjectCommandResult>,
   locale: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): string {
@@ -55,7 +55,7 @@ export function getStatusLabel(
 
 export function getStatusTone(
   block: ToolCallBlock,
-  result: Nullable<WorkspaceCommandResult>
+  result: Nullable<ProjectCommandResult>
 ): 'running' | 'success' | 'error' | 'warning' {
   if (block.isRunning) return 'running'
 
@@ -68,7 +68,7 @@ export function getStatusTone(
 
 export function getStatusIcon(
   block: ToolCallBlock,
-  result: Nullable<WorkspaceCommandResult>
+  result: Nullable<ProjectCommandResult>
 ): ReactElement {
   if (block.isRunning) return <span className={styles.runningStatusDot} aria-hidden="true" />
 
@@ -82,8 +82,8 @@ export function getStatusIcon(
 export function inferCommandPurpose(
   command: string,
   locale: AppLocale,
-  verification?: LooseOptional<WorkspaceVerificationSummary>,
-  backgroundProcess?: LooseOptional<WorkspaceBackgroundProcessInfo>,
+  verification?: LooseOptional<ProjectVerificationSummary>,
+  backgroundProcess?: LooseOptional<ProjectBackgroundProcessInfo>,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): string {
   if (backgroundProcess?.reason) return backgroundProcess.reason
@@ -160,7 +160,7 @@ export function inferCommandPurpose(
 }
 
 export function summarizeOutput(
-  result: Nullable<WorkspaceCommandResult>,
+  result: Nullable<ProjectCommandResult>,
   locale: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {

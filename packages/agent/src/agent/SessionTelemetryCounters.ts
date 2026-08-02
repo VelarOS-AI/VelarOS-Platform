@@ -11,7 +11,7 @@ class SessionTelemetryCounters {
   private invisibleToolCalls = 0
   private confirmCards = 0
 
-  /** tool_replace 工具调用次数（= 本会话能力启用次数）。 */
+  /** tooling:replace 工具调用次数（= 本会话能力启用次数）。 */
   public recordToolReplaceCall(): void {
     this.toolReplaceCalls += 1
   }

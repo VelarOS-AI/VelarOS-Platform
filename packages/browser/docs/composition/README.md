@@ -15,7 +15,8 @@ peer 依赖 `react` 19.x。
 
 ## 公共入口
 
-只有根入口 `@velaros-ai/browser/composition`。
+React 合成协议只从 `@velaros-ai/browser/composition` 导出。宿主侧 Mod Loader 定义使用
+`@velaros-ai/browser/composition/mod`；该入口会绑定完整浏览器工具集合，禁止 renderer 导入。
 
 ## 核心概念
 

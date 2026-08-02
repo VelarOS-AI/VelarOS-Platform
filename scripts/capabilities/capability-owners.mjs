@@ -1,8 +1,8 @@
 export const RepositoryUrl =
-  'git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git'
+  'git+https://github.com/VelarOS-AI/VelarOS-Platform.git'
 
 // P7a 合并后的能力包清单。字段语义:
-//   directory      相对 packages/ 的目录(平铺一层,如 workspace)
+//   directory      相对 packages/ 的目录(平铺一层,如 project)
 //   entrySubpaths  package.json exports 里必须带 types+import 的入口键;单入口包写 ['.'],
 //                  合包写各切片子路径(合包**没有**根导出:切片运行面互斥,禁止混进同一个口)
 //   sourceRoots    各切片的 src 子目录(相对 src/);单切片包写 ['']
@@ -10,15 +10,24 @@ export const RepositoryUrl =
 //   schemaEntry    check-schemas 拿 tool schema 的 dist 入口(默认 dist/index.js)
 export const CapabilityOwners = [
   {
-    owner: 'workspace',
+    owner: 'project',
     packages: [
       {
-        directory: 'workspace',
-        name: '@velaros-ai/workspace',
-        entrySubpaths: ['.'],
+        directory: 'project',
+        name: '@velaros-ai/project',
+        entrySubpaths: ['.', './files', './changes', './execution', './agent', './composition', './contracts', './kernel'],
         sourceRoots: [''],
         electronRoots: [],
-        schemaExports: ['WorkspaceAgentToolSpecs'],
+        schemaExports: ['projectTools'],
+        schemaEntry: 'dist/agent/index.js',
+      },
+      {
+        directory: 'development',
+        name: '@velaros-ai/development',
+        entrySubpaths: ['.', './composition'],
+        sourceRoots: [''],
+        electronRoots: [],
+        schemaExports: ['developmentTools'],
       },
     ],
   },
@@ -66,12 +75,12 @@ export const CapabilityOwners = [
     owner: 'system',
     packages: [
       {
-        directory: 'system-tools',
-        name: '@velaros-ai/system-tools',
-        entrySubpaths: ['.'],
+        directory: 'system',
+        name: '@velaros-ai/system',
+        entrySubpaths: ['.', './files', './execution', './processes', './desktop', './composition', './platform-compatibility', './contracts'],
         sourceRoots: [''],
         electronRoots: [],
-        schemaExports: ['systemTools', 'systemProjectTools'],
+        schemaExports: ['systemTools'],
       },
     ],
   },
@@ -79,8 +88,8 @@ export const CapabilityOwners = [
     owner: 'office',
     packages: [
       {
-        directory: 'office-tools',
-        name: '@velaros-ai/office-tools',
+        directory: 'office',
+        name: '@velaros-ai/office',
         entrySubpaths: ['.'],
         sourceRoots: [''],
         electronRoots: [],

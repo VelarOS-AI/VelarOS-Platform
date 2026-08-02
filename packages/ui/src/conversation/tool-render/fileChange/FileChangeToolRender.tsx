@@ -79,7 +79,7 @@ function getTransactionId(
   return readFirstString(result?.transactionId, args?.transactionId)
 }
 
-function isWorkspaceApplyPreflight(result: Nullable<Record<string, unknown>>): boolean {
+function isProjectApplyPreflight(result: Nullable<Record<string, unknown>>): boolean {
   return (
     isTrue(result?.blocked) ||
     (isString(result?.status) &&
@@ -87,11 +87,11 @@ function isWorkspaceApplyPreflight(result: Nullable<Record<string, unknown>>): b
   )
 }
 
-function isWorkspaceApplyRejected(result: Nullable<Record<string, unknown>>): boolean {
+function isProjectApplyRejected(result: Nullable<Record<string, unknown>>): boolean {
   return isTrue(result?.skipped) || isFalse(result?.approved)
 }
 
-function getWorkspaceApplyStatusText(
+function getProjectApplyStatusText(
   block: ToolCallBlock,
   result: Nullable<Record<string, unknown>>,
   locale: string
@@ -99,8 +99,8 @@ function getWorkspaceApplyStatusText(
   const zh = isZhLocale(locale)
   if (block.error) return zh ? '应用失败' : 'Failed'
   if (block.isRunning) return zh ? '正在应用' : 'Applying'
-  if (isWorkspaceApplyRejected(result)) return zh ? '已拒绝' : 'Rejected'
-  if (isWorkspaceApplyPreflight(result)) return zh ? '待确认' : 'Pending confirmation'
+  if (isProjectApplyRejected(result)) return zh ? '已拒绝' : 'Rejected'
+  if (isProjectApplyPreflight(result)) return zh ? '待确认' : 'Pending confirmation'
   switch (result?.status) {
     case 'needs_model_review': {
       return zh ? '待模型审核' : 'Needs review'
@@ -116,7 +116,7 @@ function getWorkspaceApplyStatusText(
   return zh ? '已写入' : 'Applied'
 }
 
-function getWorkspaceApplyTone(
+function getProjectApplyTone(
   block: ToolCallBlock,
   result: Nullable<Record<string, unknown>>
 ): CompactToolTone {
@@ -129,12 +129,12 @@ function getWorkspaceApplyTone(
       return 'neutral'
     }
   }
-  if (isWorkspaceApplyRejected(result) || isFalse(result?.changed)) return 'neutral'
-  if (block.isRunning || isWorkspaceApplyPreflight(result)) return 'running'
+  if (isProjectApplyRejected(result) || isFalse(result?.changed)) return 'neutral'
+  if (block.isRunning || isProjectApplyPreflight(result)) return 'running'
   return 'success'
 }
 
-export function collectWorkspaceApplyPaths(
+export function collectProjectApplyPaths(
   result: Nullable<Record<string, unknown>>,
   args: Nullable<Record<string, unknown>>
 ): string[] {
@@ -168,7 +168,7 @@ function buildTargetLabel(
   }
 }
 
-const WorkspaceApplyEditRow = memo(
+const ProjectApplyEditRow = memo(
   ({ block, formatPathForDisplay }: FileChangeToolRenderProps): React.ReactElement => {
     const { locale, t } = useConversationI18n()
     const translatorRuntime = useConversationTranslatorRuntime()
@@ -176,15 +176,15 @@ const WorkspaceApplyEditRow = memo(
     const args = asRecord(block.args)
     const displayName = getToolDisplayName(block.toolName, locale, translatorRuntime)
     const transactionId = getTransactionId(result, args)
-    const changedFiles = collectWorkspaceApplyPaths(result, args)
+    const changedFiles = collectProjectApplyPaths(result, args)
     const fallbackTarget = transactionId ? `tx: ${transactionId}` : t('chat.fileChangeUnknownFile')
     const target = buildTargetLabel(changedFiles, fallbackTarget, formatPathForDisplay)
-    const statusText = getWorkspaceApplyStatusText(block, result, locale)
+    const statusText = getProjectApplyStatusText(block, result, locale)
     const statusLabel = getToolStatusLabel(block, locale, translatorRuntime)
     const errorMessage = block.error
       ? getErrorMessage(block.error, t('chat.fileChangeErrorFallback'))
       : null
-    const tone = getWorkspaceApplyTone(block, result)
+    const tone = getProjectApplyTone(block, result)
 
     return (
       <CompactToolRow
@@ -193,7 +193,7 @@ const WorkspaceApplyEditRow = memo(
           block.isRunning ? (
             <SpinnerGapIcon size={12} className={styles.spinIcon} />
           ) : (
-            // 每个编辑族工具用各自语义图标：ws_edit=铅笔 / apply=保存 / rollback=回退 / batch=堆叠。
+            // 每个编辑族工具使用各自的语义图标：edit=铅笔，rollback=回退。
             toolLeadingPhosphorIconForTool(block.toolName, 12)
           )
         }
@@ -212,14 +212,14 @@ const WorkspaceApplyEditRow = memo(
   }
 )
 
-WorkspaceApplyEditRow.displayName = 'WorkspaceApplyEditRow'
+ProjectApplyEditRow.displayName = 'ProjectApplyEditRow'
 
 const FileChangeToolRender = memo(
   (props: FileChangeToolRenderProps): React.ReactElement => (
-    // 所有写盘的文件编辑工具（ws_edit / ws_rollback / move_file 等）都渲染成
+    // 所有写盘的 Project 编辑工具都渲染成
     // 紧凑的「工具调用」行：工具名 + 变更文件 + 状态。不再逐工具单独渲染差异卡——每条改动的 +/-
     // 差异统一由消息末尾那张汇总卡展示（见 MessageFileChangeSummary），避免中途一堆 +0-0 小卡。
-    <WorkspaceApplyEditRow {...props} />
+    <ProjectApplyEditRow {...props} />
   )
 )
 

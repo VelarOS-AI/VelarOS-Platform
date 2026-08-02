@@ -43,7 +43,7 @@ import { measureLedgerProjection } from './projection'
 import { ContextResidencyLedger } from './ResidencyLedger'
 
 /** 模型声明阶段边界的工具名（语义升格为"请求开一次 epoch"，见设计 §5.2）。 */
-export const ContextEpochRequestToolName = 'distill_context'
+export const ContextEpochRequestToolName = 'context:distill'
 
 /** 每会话保留的 epoch 报告条数（转交信号只看最近若干次，无限留等于内存泄漏）。 */
 const MaxRetainedEpochReports = 32
@@ -184,7 +184,7 @@ export class ContextGovernanceSession {
   /**
    * 手动开一次 epoch（宿主的 `compact_session` 落点）。
    *
-   * 语义与模型调 `distill_context` 完全一致——**请求开一次 epoch**，绕过水位触发线，但反空转、
+   * 语义与模型调 `context:distill` 完全一致——**请求开一次 epoch**，绕过水位触发线，但反空转、
    * 尾保护、达标即停等器械纪律一条不减。手动不等于强拆：压不下去的出路仍是转交，不是压尾。
    */
   public requestEpoch(input: {
@@ -289,7 +289,7 @@ export class ContextGovernanceSession {
   }
 
   /**
-   * 缺页记账：`recall_context` 命中账本记录时调用。
+   * 缺页记账：`context:recall` 命中账本记录时调用。
    *
    * `ref` 可以是记录 id、payloadRef 或 toolCallId —— 折叠信封给模型的指引就是这三种之一，
    * 这里全认，命中不了直接返回 false（其它折叠机制的引用不该记进本账本的 fault 率）。
@@ -328,7 +328,7 @@ export class ContextGovernanceSession {
   }
 
   /**
-   * 模型是否在**最新一轮**调用了 `distill_context`（= 请求开一次 epoch）。
+   * 模型是否在**最新一轮**调用了 `context:distill`（= 请求开一次 epoch）。
    *
    * 信号从账本结构里读，不从工具 handler 推 —— handler 侧信号需要一条穿过 ToolContext 的
    * 新端口，而这个事实本来就在历史里逐字可查；从账本读还天然可离线重放（B4 的前提）。
@@ -482,7 +482,7 @@ export class ContextGovernanceSessionRegistry {
     return toNullable(this.sessions.get(key))
   }
 
-  /** fault 记账入口：`recall_context` 每次取回后调用；未命中账本返回 false。 */
+  /** fault 记账入口：`context:recall` 每次取回后调用；未命中账本返回 false。 */
   public recordFault(sessionId: LooseOptional<string>, ref: string, at: number = Date.now()): boolean {
     return this.peek(sessionId)?.recordFault(ref, at) ?? false
   }

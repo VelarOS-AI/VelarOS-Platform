@@ -14,7 +14,7 @@ export function getLatestPlanToolCallId(blocks: readonly ContentBlock[]): Nullab
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
     const block = blocks[index]
 
-    if (block?.type === 'tool-call' && block.toolName === 'update_plan') return block.toolCallId
+    if (block?.type === 'tool-call' && block.toolName === 'plan:update') return block.toolCallId
   }
 
   return null

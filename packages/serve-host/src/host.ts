@@ -16,18 +16,20 @@ import {
   createDefaultKernelModStorePaths,
   InProcessKernelTransport,
 } from '@velaros-ai/kernel-serve/daemon'
-import { createOfficeToolsKernelModule } from '@velaros-ai/office-tools'
+import { createOfficeKernelModule } from '@velaros-ai/office/composition'
+import { installProjectApprovalProvider } from '@velaros-ai/project/composition'
+import { createProjectKernelModule } from '@velaros-ai/project/kernel'
+import {
+  createProjectKernel,
+} from '@velaros-ai/project/runtime'
 import {
   createLocalSystemKernel,
-  createSystemToolsKernelModule,
-} from '@velaros-ai/system-tools'
-import {
-  createVelarosWorkspaceBridge,
-  createWorkspaceKernelModule,
-} from '@velaros-ai/workspace'
+  createSystemKernelModule,
+} from '@velaros-ai/system'
 
 import {
   createVelarHostOfficeToolContext,
+  createVelarHostProjectToolContext,
   createVelarHostSystemToolContext,
 } from './capability-contexts'
 import {
@@ -54,7 +56,7 @@ const HostLog = Log.tag('VelarHost')
 
 export interface StartVelarHostOptions {
   readonly dataRoot?: string
-  readonly workspaceRoot?: string
+  readonly projectRoot?: string
   readonly portStart?: number
   readonly portEnd?: number
   readonly controlPortStart?: number
@@ -73,7 +75,7 @@ export interface VelarHostPublicStatus {
   readonly pid: number
   readonly startedAt: number
   readonly dataRoot: string
-  readonly workspaceRoot: string
+  readonly projectRoot: string
   readonly kernel: {
     readonly protocolVersion: number
     readonly kernelVersion: string
@@ -102,7 +104,7 @@ export async function startVelarHost(
   const now = options.now ?? Date.now
   const startedAt = now()
   const paths = createVelarHostPaths(options.dataRoot)
-  const workspaceRoot = resolve(options.workspaceRoot?.trim() || process.cwd())
+  const projectRoot = resolve(options.projectRoot?.trim() || process.cwd())
   await mkdir(paths.dataRoot, { recursive: true, mode: 0o700 })
   await mkdir(paths.runtimeRoot, { recursive: true, mode: 0o700 })
 
@@ -118,8 +120,9 @@ export async function startVelarHost(
       })
     },
   })
-  const workspace = await createVelarosWorkspaceBridge({ root: workspaceRoot })
-  const system = createLocalSystemKernel({ cwd: workspaceRoot })
+  const project = await createProjectKernel({ root: projectRoot })
+  installProjectApprovalProvider(project)
+  const system = createLocalSystemKernel({ cwd: projectRoot })
   let booted: BootedKernelDaemon | undefined
   let kernelClient: KernelClient | undefined
   let toolGateway: VelarHostToolGateway | undefined
@@ -132,17 +135,22 @@ export async function startVelarHost(
       paths: paths.kernel,
       modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot),
       modules: [
-        createWorkspaceKernelModule({
-          bridge: workspace,
-          disposeResolvedBridges: true,
+        createProjectKernelModule({
+          resolveContext: (_scope, signal) => createVelarHostProjectToolContext({
+            projectRoot,
+            kernel: project,
+            system,
+            config,
+            signal,
+          }),
         }),
-        createSystemToolsKernelModule({
+        createSystemKernelModule({
           resolveContext: (_scope, signal) =>
             createVelarHostSystemToolContext(system, signal),
         }),
-        createOfficeToolsKernelModule({
+        createOfficeKernelModule({
           resolveContext: (_scope, signal) => createVelarHostOfficeToolContext({
-            workspaceRoot,
+            projectRoot,
             system,
             config,
             signal,
@@ -158,10 +166,9 @@ export async function startVelarHost(
     kernelClient = new KernelClient(new InProcessKernelTransport(booted.service))
     toolGateway = new VelarHostToolGateway(
       kernelClient,
-      workspace,
       config,
       () => createVelarHostOfficeToolContext({
-        workspaceRoot,
+        projectRoot,
         system,
         config,
         signal: new AbortController().signal,
@@ -170,7 +177,7 @@ export async function startVelarHost(
     await toolGateway.start()
     extensionBridge = new VelarHostExtensionBridge({
       credentialPath: paths.credentialPath,
-      workspaceRoot,
+      projectRoot,
       toolGateway,
       hostVersion: VelarHostVersion,
       portStart: toOptional(options.portStart),
@@ -202,7 +209,7 @@ export async function startVelarHost(
       pid: process.pid,
       startedAt,
       dataRoot: paths.dataRoot,
-      workspaceRoot,
+      projectRoot,
       kernel: {
         protocolVersion: descriptor.protocolVersion,
         kernelVersion: descriptor.kernelVersion,
@@ -255,7 +262,6 @@ export async function startVelarHost(
     await settleCleanup('启动失败后的工具网关', () => toolGateway?.dispose())
     await settleCleanup('启动失败后的 Kernel 客户端', () => kernelClient?.dispose())
     await settleCleanup('启动失败后的 Kernel daemon', () => booted?.stop())
-    await settleCleanup('启动失败后的 Workspace', () => workspace.asModule().dispose?.())
     throw error
   }
 }

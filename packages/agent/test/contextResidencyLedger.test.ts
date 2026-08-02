@@ -120,7 +120,7 @@ void describe('context residency ledger · admission (§4A)', () => {
     })
     const envelope = JSON.parse(readToolResultValue(projected.messages[0]!)) as Record<string, unknown>
     assert.equal(envelope.__contextRef, 'tool-output')
-    assert.deepEqual((envelope.retrieval as Record<string, unknown>).tool, 'recall_context')
+    assert.deepEqual((envelope.retrieval as Record<string, unknown>).tool, 'context:recall')
   })
 
   void test('small tool results stay INLINE', () => {
@@ -346,7 +346,7 @@ void describe('context residency ledger · projection layout', () => {
     })
     const content = String(projected.messages[0]?.content)
     assert.ok(content.includes('expired'))
-    assert.ok(!content.includes('recall_context'))
+    assert.ok(!content.includes('context:recall'))
   })
 })
 

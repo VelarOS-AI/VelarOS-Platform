@@ -1,4 +1,4 @@
-// 域：工具页目录的**门面**。tool_map / tool_read / tool_replace 三个控制工具的业务实现散在
+// 域：工具页目录的**门面**。tooling:map / tooling:read / tooling:replace 三个控制工具的业务实现散在
 // 本目录的四个 ToolSpace* 模块里，本文件只做一件事：把五个 op 收成一张派发表，并把
 // `Categories.tool.ts` 需要的 schema 原样透出。没有业务逻辑，改业务不该改到这里。
 //

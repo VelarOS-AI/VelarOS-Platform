@@ -60,11 +60,6 @@ import {
 } from '../kernel'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
 
-import {
-  isControlToolName,
-  ReflectToolCallToolName,
-} from './ControlToolInput'
-import { ControlToolRunner } from './ControlToolRunner'
 import type {
   ToolExecutionPolicy,
   ToolExecutionPolicyContext,
@@ -116,7 +111,7 @@ export interface PendingTool {
    * 在 {@link ToolExecutor.runOne} 开工时开启，在 {@link ToolExecutor.finalizeResult}（唯一终结点）
    * 收敛后置空——单开单闭、纯旁路，span 失败不冒泡进执行主路。
    */
-  spanHandle?: Nullable<ToolSpanHandle>
+  spanHandle?: LooseOptional<ToolSpanHandle>
 }
 
 export interface ToolResult {
@@ -157,7 +152,6 @@ export class ToolExecutor {
   private terminalError: LooseOptional<AppError> = null
   private readonly executionPolicy: ToolExecutionPolicy
   private readonly resultMiddlewares: ReadonlyArray<ToolResultMiddleware<any>>
-  private readonly controlToolRunner: ControlToolRunner
   private readonly materializer: KernelToolResultMaterializer
   private readonly loopGuard = new KernelToolLoopGuard()
   private failureBatchResultCursor = 0
@@ -194,16 +188,6 @@ export class ToolExecutor {
     this.toolSpanOpener = toNullable(options.toolSpanOpener)
     this.seams = toNullable(options.seams)
     this.resultMiddlewares = resolveToolResultMiddlewares(this.ctx.capabilityPorts)
-    this.controlToolRunner = new ControlToolRunner({
-      ctx: this.ctx,
-      events: this.events,
-      executionPolicy: this.executionPolicy,
-      executePreparedTool: this.executePreparedTool.bind(this),
-      finalizeResult: this.finalizeResult.bind(this),
-      buildExecutionAppError: this.buildExecutionAppError.bind(this),
-      applyExecutionFailureSideEffects: this.applyExecutionFailureSideEffects.bind(this),
-      readTerminalError: () => this.terminalError,
-    })
     this.providerTurnReducer = toNullable(options.providerTurnReducer)
     this.onProviderTurnSnapshot = toNullable(options.onProviderTurnSnapshot)
     this.materializer = new KernelToolResultMaterializer({
@@ -230,13 +214,14 @@ export class ToolExecutor {
   public enqueue(
     toolCallId: string,
     toolName: string,
-    args: Record<string, unknown> | undefined,
+    args: LooseOptional<Record<string, unknown>>,
     isConcurrencySafe: boolean
   ): void {
     // TODO[主链路-47]: tool-call 从模型流进入这里；并发安全工具可并行，有副作用工具会排队串行。
     const canonicalToolName = this.executionPolicy.resolveCanonicalToolName(
       toolName,
-      this.ctx.capabilityPorts
+      this.ctx.capabilityPorts,
+      this.ctx
     )
     const providerArgs = this.readProviderToolArgs(canonicalToolName, args)
     const pendingArgs = providerArgs.ok ? providerArgs.args : {}
@@ -268,35 +253,33 @@ export class ToolExecutor {
       })
       return
     }
-    if (!isControlToolName(canonicalToolName)) {
-      const unavailableDecision = this.executionPolicy.prepareUnavailableExecution({
+    const unavailableDecision = this.executionPolicy.prepareUnavailableExecution({
+      toolCallId,
+      toolName: canonicalToolName,
+      args: pendingArgs,
+      baseContext: this.ctx,
+      abortSignal: this.ctx.abortSignal,
+      emitProgress: (chunk) => this.emitToolProgress(toolCallId, chunk),
+      updateMetadata: (payload) => this.emitToolMetadata(toolCallId, payload),
+    })
+    if (unavailableDecision) {
+      const executionToolName = unavailableDecision.toolName ?? canonicalToolName
+      pending.status = 'executing'
+      pending.promise = this.finalizeResult(pending, {
         toolCallId,
-        toolName: canonicalToolName,
+        toolName: executionToolName,
         args: pendingArgs,
-        baseContext: this.ctx,
-        abortSignal: this.ctx.abortSignal,
-        emitProgress: (chunk) => this.emitToolProgress(toolCallId, chunk),
-        updateMetadata: (payload) => this.emitToolMetadata(toolCallId, payload),
+        error: unavailableDecision.error,
+        result: this.executionPolicy.buildBlockedFailureResult(
+          executionToolName,
+          unavailableDecision.error,
+          this.ctx
+        ),
+      }).finally(() => {
+        pending.status = 'done'
+        this.drainQueue()
       })
-      if (unavailableDecision) {
-        const executionToolName = unavailableDecision.toolName ?? canonicalToolName
-        pending.status = 'executing'
-        pending.promise = this.finalizeResult(pending, {
-          toolCallId,
-          toolName: executionToolName,
-          args: pendingArgs,
-          error: unavailableDecision.error,
-          result: this.executionPolicy.buildBlockedFailureResult(
-            executionToolName,
-            unavailableDecision.error,
-            this.ctx
-          ),
-        }).finally(() => {
-          pending.status = 'done'
-          this.drainQueue()
-        })
-        return
-      }
+      return
     }
     this.drainQueue()
   }
@@ -432,12 +415,13 @@ export class ToolExecutor {
 
     // 观测接缝：本工具真正进入执行时开一条 tool span（收敛在唯一终结点 finalizeResult）。
     // 端口缺省 → null → 全链 no-op；toolCategoryId 从执行策略注册表查（#37 阶段 C 片 1，未知用 null）。
-    tool.spanHandle =
+    tool.spanHandle = toNullable(
       this.toolSpanOpener?.beginToolSpan({
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
         toolCategoryId: toNullable(this.executionPolicy.getToolCategoryId(tool.toolName)),
-      }) ?? null
+      })
+    )
 
     // 每个工具独立的 AbortController（可被 sibling cancel）
     const toolAbort = new AbortController()
@@ -450,11 +434,8 @@ export class ToolExecutor {
     let terminalError: LooseOptional<AppError> = null
     let activeExecutionContext: LooseOptional<ActiveToolExecutionContext> = null
     try {
-      if (isControlToolName(tool.toolName)) {
-        result = await this.runControlToolCall(tool, toolAbort)
-      } else {
-        // TODO[主链路-49]: 真正执行工具前先做权限、参数和可执行性检查，失败结果也会作为 tool result 返回模型。
-        const decision = this.executionPolicy.prepareExecution({
+      // TODO[主链路-49]: 真正执行工具前先做权限、参数和可执行性检查，失败结果也会作为 tool result 返回模型。
+      const decision = this.executionPolicy.prepareExecution({
           toolCallId: tool.toolCallId,
           toolName: tool.toolName,
           args: tool.args,
@@ -462,8 +443,8 @@ export class ToolExecutor {
           abortSignal: toolAbort.signal,
           emitProgress: (chunk) => this.emitToolProgress(tool.toolCallId, chunk),
           updateMetadata: (payload) => this.emitToolMetadata(tool.toolCallId, payload),
-        })
-        if (!decision.allowed) {
+      })
+      if (!decision.allowed) {
           const executionToolName = decision.toolName ?? tool.toolName
           log.warn('tool execute end', {
             name: executionToolName,
@@ -481,21 +462,21 @@ export class ToolExecutor {
               this.ctx
             ),
           })
-        }
+      }
 
-        const executionToolName = decision.prepared.toolName
-        const writeLike = isKernelWriteLikeTool({
+      const executionToolName = decision.prepared.toolName
+      const writeLike = isKernelWriteLikeTool({
           toolName: executionToolName,
           args: tool.args,
           permissions: decision.prepared.tool.permissions,
           capabilities: decision.prepared.tool.capabilities,
-        })
-        const loopGuardMessage = this.loopGuard.checkRepeatedWriteLikeSuccess({
+      })
+      const loopGuardMessage = this.loopGuard.checkRepeatedWriteLikeSuccess({
           toolName: executionToolName,
           args: tool.args,
           writeLike,
-        })
-        if (loopGuardMessage) {
+      })
+      if (loopGuardMessage) {
           log.warn('tool execute end', {
             name: executionToolName,
             id: tool.toolCallId,
@@ -513,29 +494,28 @@ export class ToolExecutor {
               executionToolName
             ),
           })
-        }
+      }
 
-        // TODO[主链路-50]: 工具函数在这里被调用；输出会通过 emitToolDone 推给 UI，并在外层追加进下一轮模型 history。
-        activeExecutionContext = {
+      // TODO[主链路-50]: 工具函数在这里被调用；输出会通过 emitToolDone 推给 UI，并在外层追加进下一轮模型 history。
+      activeExecutionContext = {
           toolName: executionToolName,
           args: tool.args,
           isConcurrencySafe: tool.isConcurrencySafe,
           toolContext: decision.prepared.toolContext,
-        }
-        result = await this.executePreparedToolWithAbortSettlement(
+      }
+      result = await this.executePreparedToolWithAbortSettlement(
           tool,
           decision.prepared,
           tool.args,
           executionToolName,
           toolAbort.signal
-        )
-        if (!result.error) {
-          this.loopGuard.recordSuccess({
+      )
+      if (!result.error) {
+        this.loopGuard.recordSuccess({
             toolName: executionToolName,
             args: tool.args,
             writeLike,
-          })
-        }
+        })
       }
       const status = result.error ? 'error' : 'completed'
       const logEnd = result.error ? log.warn.bind(log) : log.info.bind(log)
@@ -586,13 +566,6 @@ export class ToolExecutor {
     }
 
     return finalized
-  }
-
-  private async runControlToolCall(
-    wrapperTool: PendingTool,
-    toolAbort: AbortController
-  ): Promise<ToolResult> {
-    return this.controlToolRunner.run(wrapperTool, toolAbort)
   }
 
   private emitToolProgress(toolCallId: string, chunk: string): void {
@@ -654,7 +627,7 @@ export class ToolExecutor {
   private async executePreparedTool(
     tool: PendingTool,
     prepared: ToolExecutionPrepared,
-    args: Record<string, unknown> | undefined,
+    args: LooseOptional<Record<string, unknown>>,
     toolName: string
   ): Promise<ToolResult> {
     const output = await this.executionPolicy.executePrepared(prepared, args, toolName)
@@ -688,7 +661,7 @@ export class ToolExecutor {
   private async executePreparedToolWithAbortSettlement(
     tool: PendingTool,
     prepared: ToolExecutionPrepared,
-    args: Record<string, unknown> | undefined,
+    args: LooseOptional<Record<string, unknown>>,
     toolName: string,
     abortSignal: AbortSignal
   ): Promise<ToolResult> {
@@ -787,7 +760,7 @@ export class ToolExecutor {
         sessionId: this.readSessionId(),
       })
       if ('result' in outcome) result.result = outcome.result
-      if (typeof outcome.error === 'string') result.error = outcome.error
+      if (isString(outcome.error)) result.error = outcome.error
     }
 
     // 提取 capability notice（嵌在结果里）、
@@ -801,8 +774,8 @@ export class ToolExecutor {
       error: result.error,
       effects: result.effects,
       notices: result.notices,
-      // 发现/索引类工具（如 tool_map）声明 outputInline：输出禁止 page-out，
-      // 否则模型拿到的是 __kernelRef 桩、还得 recall_context 召回，自我抵消。
+      // 发现/索引类工具（如 tooling:map）声明 outputInline：输出禁止 page-out，
+      // 否则模型拿到的是 __kernelRef 桩、还得 context:recall 召回，自我抵消。
       keepOutputInline: this.executionPolicy.isToolOutputInline(result.toolName),
     })
 
@@ -1055,7 +1028,6 @@ export class ToolExecutor {
   }
 }
 
-export { ReflectToolCallToolName }
 export function emitToolProgressEvent(
   events: ToolExecutorEvents,
   toolCallId: string,

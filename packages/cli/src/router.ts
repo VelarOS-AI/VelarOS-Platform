@@ -1,12 +1,10 @@
+import { isFalse } from '@velaros-ai/core'
 import {
   formatVelarosCliError,
   formatVelarosCliSuccess,
   VelarosCliError,
   type VelarosCliRunOptions,
 } from '@velaros-ai/core/cli'
-import { runOfficeToolsCli } from '@velaros-ai/office-tools/cli'
-import { runSystemToolsCli } from '@velaros-ai/system-tools/cli'
-import { runWorkspaceCli } from '@velaros-ai/workspace/cli'
 
 import { runAgentCli } from './agent.js'
 
@@ -41,9 +39,6 @@ export interface CreateVelarosCliRouterOptions {
 }
 
 const BuiltinNamespaceRunners: Readonly<Record<string, VelarosCliNamespaceRunner>> = {
-  workspace: runWorkspaceCli,
-  system: runSystemToolsCli,
-  office: runOfficeToolsCli,
   agent: runAgentCli,
 }
 
@@ -59,11 +54,6 @@ const BuiltinNamespaceRunners: Readonly<Record<string, VelarosCliNamespaceRunner
  *   默认集，不是准入白名单（`includeBuiltinNamespaces: false` 可整组关掉）。
  * - **router 只消费 `text` 与 `exitCode`**：stdout/stderr 与进程退出码由宿主（`cli.ts main()`）按
  *   这两个字段决定。`envelope` 是命名空间自持的结构化载荷，router 原样透出。
- * - **envelope 形状分叉（已知，刻意不在此处抹平）**：workspace 自持 `workspaceRoot` 轴的信封
- *   （错误 kind = `velaros.workspaceCli.error`），其余命名空间走 core 的 `namespace`/`command`/`cwd`
- *   轴。两者在 `text`/`exitCode` 上一致，所以透传安全。**不在 router 里重建 envelope**：`text` 已由
- *   各命名空间自己序列化完毕，只改 `envelope` 会让同一个结果的两个字段自相矛盾；要统一就得连
- *   `text` 一起改，那会改掉 `velaros workspace … --json` 的 stdout，属跨包契约决策。
  * - **失败方向**：未知命名空间 → `UNKNOWN_NAMESPACE`（exitCode 2）；命名空间抛出的任何异常都在
  *   `run()` 内收成错误信封。router 自身永不向宿主抛——宿主拿到的永远是可打印结果。
  */
@@ -75,7 +65,7 @@ export class VelarosCliRouter {
 
   constructor(options: CreateVelarosCliRouterOptions = {}) {
     this.namespaceRunners = Object.freeze({
-      ...(options.includeBuiltinNamespaces === false ? {} : BuiltinNamespaceRunners),
+      ...(isFalse(options.includeBuiltinNamespaces) ? {} : BuiltinNamespaceRunners),
       ...options.namespaces,
     })
     this.namespaces = Object.freeze(Object.keys(this.namespaceRunners).sort())
@@ -136,7 +126,7 @@ Commands:
   help
 ${namespaces.map((namespace) => `  ${namespace} ...`).join('\n')}
 
-Products can add Browser, Memory, Computer, or other namespaces through createVelarosCliRouter().
+Products can add non-tool operational namespaces through createVelarosCliRouter().
 `
 }
 

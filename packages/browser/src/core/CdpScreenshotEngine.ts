@@ -126,7 +126,7 @@ export class CdpScreenshotEngine {
     // 诚实缺席:GIF 合成需要把 CDP 的 PNG 帧解码成 RGBA 的栅格解码器,headless CDP 侧不硬造。
     throw new AppError(
       'EXECUTION_FAILED',
-      'headless CDP 模式下的录屏 GIF 合成需要 nativeImage 级栅格解码器（诚实缺席）。请在 Electron 宿主内录屏，或改用 browser_capture_screenshot。'
+      'headless CDP 模式下的录屏 GIF 合成需要 nativeImage 级栅格解码器（诚实缺席）。请在 Electron 宿主内录屏，或改用 browser:capture_screenshot。'
     )
   }
 

@@ -103,7 +103,7 @@ interface DeviceRuntime {
 
 export interface VelarHostExtensionBridgeOptions {
   readonly credentialPath: string
-  readonly workspaceRoot: string
+  readonly projectRoot: string
   readonly toolGateway: VelarHostToolGateway
   readonly hostVersion?: string
   readonly portStart?: number
@@ -180,7 +180,7 @@ export class VelarHostExtensionBridge {
   public constructor(private readonly options: VelarHostExtensionBridgeOptions) {
     this.now = options.now ?? Date.now
     const projectWorkspaceBindingId = createHash('sha256')
-      .update(options.workspaceRoot)
+      .update(options.projectRoot)
       .digest('base64url')
       .slice(0, 32)
     const systemWorkspaceBindingId = createHash('sha256')
@@ -197,8 +197,8 @@ export class VelarHostExtensionBridge {
       {
         id: projectWorkspaceBindingId,
         space: 'project' as const,
-        label: basename(options.workspaceRoot) || 'Project',
-        description: options.workspaceRoot,
+        label: basename(options.projectRoot) || 'Project',
+        description: options.projectRoot,
       },
     ]
     this.workspaceSpacesById = new Map(

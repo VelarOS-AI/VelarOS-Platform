@@ -21,9 +21,9 @@ import type {
   ChatMessage,
   ChatProviderId,
   ModelPricingCatalog,
+  ProjectRootEntry,
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
-  WorkspaceRootEntry,
 } from '#contracts'
 import { toNullable } from '#internal/runtime'
 
@@ -72,8 +72,8 @@ export interface ChatTranscriptProps {
   hiddenPlanToolCallId?: LooseOptional<string>
   hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
-  activeWorkspaceRoot?: LooseOptional<string>
-  workspaceRoots?: WorkspaceRootEntry[]
+  activeProjectRoot?: LooseOptional<string>
+  projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
   billingModel?: LooseOptional<{
     provider: ChatProviderId
@@ -87,7 +87,7 @@ export interface ChatTranscriptProps {
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
   onOpenBrowserLink?: (url: string) => void | Promise<void>
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   onReviewFileChanges?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
@@ -119,8 +119,8 @@ function ChatTranscriptInner({
   hiddenPlanToolCallId = null,
   hideGoalToolBlocks = false,
   planUpdateIndexByToolCallId,
-  activeWorkspaceRoot,
-  workspaceRoots,
+  activeProjectRoot,
+  projectRoots,
   canShowFileChangeSummary = true,
   billingModel,
   getRuntimeCostContexts,
@@ -131,7 +131,7 @@ function ChatTranscriptInner({
   renderAfterToolCall,
   onOpenBrowserLink,
   onOpenFileChange,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   onReviewFileChanges,
   activeUserActionCardIds,
   onResolveUserActionCard,
@@ -170,8 +170,8 @@ function ChatTranscriptInner({
               hiddenPlanToolCallId={hiddenPlanToolCallId}
               hideGoalToolBlocks={hideGoalToolBlocks}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              activeWorkspaceRoot={activeWorkspaceRoot}
-              workspaceRoots={workspaceRoots}
+              activeProjectRoot={activeProjectRoot}
+              projectRoots={projectRoots}
               canShowFileChangeSummary={canShowFileChangeSummary}
               billingModel={billingModel}
               pricingCatalog={pricingCatalog}
@@ -181,7 +181,7 @@ function ChatTranscriptInner({
               renderAfterToolCall={renderAfterToolCall}
               onOpenBrowserLink={onOpenBrowserLink}
               onOpenFileChange={onOpenFileChange}
-              onOpenWorkspacePath={onOpenWorkspacePath}
+              onOpenProjectPath={onOpenProjectPath}
               onReviewFileChanges={onReviewFileChanges}
               activeUserActionCardIds={activeUserActionCardIds}
               onResolveUserActionCard={onResolveUserActionCard}

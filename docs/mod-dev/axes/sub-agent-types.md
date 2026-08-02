@@ -1,6 +1,6 @@
 # 轴：`subAgentTypes`
 
-贡献一个子 agent 类型（`dispatch_agent` 可派发的角色）。**主键 = `id`；绑定可选。**
+贡献一个子 agent 类型（`agent:dispatch` 可派发的角色）。**主键 = `id`；绑定可选。**
 
 > **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `subAgentTypes`）。
 > 收敛时机：蓝图 §8.4 定为 **M2c**，与 skills 同批（同一 registry 归一工位）。

@@ -6,7 +6,7 @@ import { readStringScalar } from '#internal/unknownJsonRecord'
  * 浏览器截图存在性谓词（AssistantMessageBubble 用它决定是否挂载 `browserScreenshotGroup` slot）。
  *
  * 与宿主 `BrowserScreenshotGroup.readBrowserScreenshot` 的可见性判定逐字节镜像（自动截图跳过未变更、
- * 手动 `browser_capture_screenshot` 保留、`ok !== false` 且有 `path`），只判存在不建对象——slot 挂载门
+ * 手动 `browser:capture_screenshot` 保留、`ok !== false` 且有 `path`），只判存在不建对象——slot 挂载门
  * 是纯谓词，完整截图对象仍在宿主 slot 实现内构建。
  */
 function artifactHasVisibleScreenshot(artifact: unknown, skipUnchanged: boolean): boolean {
@@ -26,7 +26,7 @@ function blockHasVisibleBrowserScreenshot(block: ToolCallBlockType): boolean {
   if (isRecord(block.result.automaticScreenshot))
     return artifactHasVisibleScreenshot(block.result.automaticScreenshot, true)
 
-  if (block.toolName !== 'browser_capture_screenshot') return false
+  if (block.toolName !== 'browser:capture_screenshot') return false
 
   return artifactHasVisibleScreenshot(block.result, false)
 }

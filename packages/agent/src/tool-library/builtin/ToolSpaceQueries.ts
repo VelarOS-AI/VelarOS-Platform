@@ -254,7 +254,7 @@ export function searchToolDiscoveryCards(
     statusSummary,
     hasMore,
     nextCursor,
-    message: '这是工具页索引；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用。',
+    message: '这是工具页索引；需要执行 loadable 工具时用 tooling:replace 换入，下一轮通过真实 schema 调用。',
   }
 }
 
@@ -321,7 +321,7 @@ export function pageToolDiscoveryCards(
     },
     pages: page.map((card) => summarizeToolSpacePageRef(card)),
     statusSummary: buildToolSpaceStatusSummary(cards),
-    message: '这是工具页索引；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用。',
+    message: '这是工具页索引；需要执行 loadable 工具时用 tooling:replace 换入，下一轮通过真实 schema 调用。',
   }
 }
 
@@ -348,14 +348,14 @@ function toolMapParameterAdjustments(
       effective: effectiveMaxToolsPerCategory,
       reason: 'category_row_budget',
       message:
-        'maxToolsPerCategory was capped by the map row budget; use categoryIds or tool_map(op:"page") to inspect a category in full.',
+        'maxToolsPerCategory was capped by the map row budget; use categoryIds or tooling:map(op:"page") to inspect a category in full.',
     },
   ]
 }
 
 function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryCard[]) {
   const visibleToolNames = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
-  const showUserActionTool = cards.find((card) => card.id === 'tool:show_user_action_cards')
+  const showUserActionTool = cards.find((card) => card.id === 'tool:interaction:show_action_cards')
   const kernelTools = cards
     .filter((card) => card.kind === 'tool' && visibleToolNames.has(card.name))
     .map((card) => ({ name: card.name, visible: true }))
@@ -372,7 +372,7 @@ function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryC
       {
         toolOsState: 'loadable',
         availability: 'loadable',
-        meaning: '已授权或可通过 tool_replace 申请/换入；不需要把它当作权限分类。',
+        meaning: '已授权或可通过 tooling:replace 申请/换入；不需要把它当作权限分类。',
         nextStep: 'follow page.activation.method',
       },
       {
@@ -400,7 +400,7 @@ function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryC
           pageId: 'capability:<category>',
           availability: 'requires_approval',
           pageIn: ['capability:<category>'],
-          nextTool: 'tool_replace',
+          nextTool: 'tooling:replace',
         },
       },
       {
@@ -411,13 +411,13 @@ function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryC
         prerequisite: {
           id: 'plugin_user_action',
           kind: 'plugin',
-          pageId: showUserActionTool?.id ?? 'tool:show_user_action_cards',
+          pageId: showUserActionTool?.id ?? 'tool:interaction:show_action_cards',
           availability: showUserActionTool?.availability ?? 'unavailable',
           pageIn:
             showUserActionTool && showUserActionTool.availability !== 'visible'
-              ? ['tool:show_user_action_cards']
+              ? ['tool:interaction:show_action_cards']
               : [],
-          nextTool: 'show_user_action_cards',
+          nextTool: 'interaction:show_action_cards',
         },
       },
     ],
@@ -491,7 +491,7 @@ export function mapToolDiscoveryCards(
             method: 'inspect_reasons' as const,
             pageIn: [],
             capabilityId: activationCapabilityIdForCategory(categoryId),
-            nextTool: 'tool_map',
+            nextTool: 'tooling:map',
             dependencies: [],
           },
       toolNames,
@@ -506,7 +506,7 @@ export function mapToolDiscoveryCards(
       toolPage:
         visibleTools.length < tools.length
           ? {
-              tool: 'tool_page' as const,
+              tool: 'tooling:map' as const,
               categoryIds: [categoryId],
               kind: 'tool' as const,
             }
@@ -548,6 +548,6 @@ export function mapToolDiscoveryCards(
     guide: buildToolSpaceMapGuide(ctx, allCards),
     categories,
     message:
-      '这是分页工具页索引；每个分类附带完整 toolNames，详细状态页仍按 maxToolsPerCategory 展开；需要执行 loadable 工具时用 tool_replace 换入，下一轮通过真实 schema 调用；需要更多分类时用 page.nextCursor 继续。',
+      '这是分页工具页索引；每个分类附带完整 toolNames，详细状态页仍按 maxToolsPerCategory 展开；需要执行 loadable 工具时用 tooling:replace 换入，下一轮通过真实 schema 调用；需要更多分类时用 page.nextCursor 继续。',
   }
 }

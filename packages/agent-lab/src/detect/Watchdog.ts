@@ -28,7 +28,7 @@ function signalCounts(
     const input = JSON.stringify(call.input);
     const retryKey = `${call.name}\u0000${input}`;
     repeatCounts.set(retryKey, (repeatCounts.get(retryKey) ?? 0) + 1);
-    if (call.name === "tool_map") {
+    if (call.name === "tooling:map") {
       toolMapCounts.set(input, (toolMapCounts.get(input) ?? 0) + 1);
     }
   }

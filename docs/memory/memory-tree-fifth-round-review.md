@@ -130,7 +130,7 @@ Snapshot N+1
 - **已退役的开发期原型**：旧 `ChatStorageMigrationCoordinator` 的 marker/staging 思路只作历史参考，不再是当前可复用实现。
 - **只能作为 seed**：Electron `safeStorage`。它适合保护少量 root/wrapping secret，不应直接等同于完整 content-key service。
 - **必须新增**：MemoryErasureService、normalized erasure target repository、MemoryDisclosureGateway/privacy barrier、ContentKeyService、独立 index generation、materialized base/compaction repository。
-- **仍然应该删除**：旧 memory graph/timeline、renderer 自动沉淀、`save_memory` 直写、旧 MemoryRecord/FTS/vector schema。第五轮没有推翻此前删除结论。
+- **仍然应该删除**：旧 memory graph/timeline、renderer 自动沉淀、`memory:save` 直写、旧 MemoryRecord/FTS/vector schema。第五轮没有推翻此前删除结论。
 
 ## H. 是否需要重新裁决产品问题
 

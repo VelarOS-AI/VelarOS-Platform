@@ -9,7 +9,7 @@
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
   "bugs": {
-    "url": "https://github.com/VelarOS-AI/VelarOS-Capabilities/issues"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
   "keywords": [
     "game-engine",
@@ -23,6 +23,10 @@
   },
   "type": "module",
   "exports": {
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
     "./core": {
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
@@ -38,6 +42,14 @@
     "./composition": {
       "types": "./dist/composition/index.d.ts",
       "import": "./dist/composition/index.js"
+    },
+    "./composition/mod": {
+      "types": "./dist/composition/mod.d.ts",
+      "import": "./dist/composition/mod.js"
+    },
+    "./composition/turn-context": {
+      "types": "./dist/composition/turn-context.d.ts",
+      "import": "./dist/composition/turn-context.js"
     },
     "./browser/page-source": {
       "types": "./dist/browser/page-source.d.ts",
@@ -68,7 +80,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Capabilities.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/game"
   },
   "publishConfig": {

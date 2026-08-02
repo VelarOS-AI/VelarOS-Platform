@@ -116,8 +116,8 @@ export interface GameRunRequest {
 /**
  * 页面就绪后立刻读到的那一帧事实。
  *
- * 放在 `game_run` 的结果里，是因为**「跑」结束那一刻就是模型最可能停下来报告成功的地方**：
- * 真机上它跑完直接截图、报告「绿色地面、蓝色玩家、金色金币都在」，从没调过 `game_query_state`。
+ * 放在 `game:run` 的结果里，是因为**「跑」结束那一刻就是模型最可能停下来报告成功的地方**：
+ * 真机上它跑完直接截图、报告「绿色地面、蓝色玩家、金色金币都在」，从没调过 `game:query_state`。
  * 可见性只挂在查询工具上等于给了一条它不会走的路。
  */
 export interface GameRunFirstFrame {
@@ -136,7 +136,7 @@ export interface GameRunResult {
   readonly runtimeErrors: readonly GameRuntimeErrorRecord[]
   readonly startupLogTail: string
   readonly restarted: boolean
-  /** 页面读得到时才有；观测失败绝不改变 `game_run` 本身的成败（best-effort）。 */
+  /** 页面读得到时才有；观测失败绝不改变 `game:run` 本身的成败（best-effort）。 */
   readonly firstFrame?: GameRunFirstFrame
   readonly appliedAdjustments?: readonly AppliedAdjustment[]
 }

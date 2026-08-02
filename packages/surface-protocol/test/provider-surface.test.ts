@@ -28,7 +28,7 @@ describe('provider surface protocol', () => {
       contractId: 'contract-1',
       catalogRevision: 'workspace-readonly-v1',
       toolCallId: 'call-1',
-      toolName: 'ws_read',
+      toolName: 'project:read',
       input: { path: 'README.md' },
       bypassPermissionBroker: true,
     })
@@ -72,7 +72,7 @@ describe('provider surface protocol', () => {
       contractId: 'contract-1',
       catalogRevision: 'catalog-1',
       toolCallId: 'call-1',
-      toolName: 'computer_screenshot',
+      toolName: 'computer:screenshot',
       status: 'success',
       output: { width: 1280, height: 720 },
       artifacts: [{

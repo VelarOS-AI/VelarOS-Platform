@@ -37,9 +37,10 @@
         "cli",
         "computer",
         "game",
-        "office-tools",
-        "system-tools",
-        "workspace"
+        "office",
+        "system",
+        "project",
+        "development"
       ],
       "memory": [
         "memory"
@@ -93,10 +94,10 @@
     "check:code-style:fix": "arch-guard run --fix",
     "check:code-style:baseline": "arch-guard baseline update",
     "check:html-artifacts-package": "bun run --cwd packages/html-artifacts check:package-contract && bun run --cwd packages/html-artifacts check:dist",
-    "check:workspace-arch": "bun run --cwd packages/workspace check:arch",
+    "check:project-arch": "bun run --cwd packages/project check:arch",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
-    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:workspace-arch && bun run check:agent-lab-package && bun run check:platform-generation",
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:project-arch && bun run check:agent-lab-package && bun run check:platform-generation",
     "//release": "发布链只有一条(scripts/release/)。release:verify 是 CI 预检,读 GITHUB_* 环境变量,本地跑必失败——那是设计,不是坏了。release:dry-run 是本地验明:列发布计划、真打 tarball、走 bun publish --dry-run,不发布任何东西。真发布只由 release-packages.yml 在 tag 上触发,刻意不提供本地入口(发 18 个包不可逆)。",
     "release:verify": "node scripts/release/verify-release-ref.mjs",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
@@ -147,12 +148,12 @@
     "@velaros-ai/kernel-serve": "workspace:*",
     "@velaros-ai/memory": "workspace:*",
     "@velaros-ai/model": "workspace:*",
-    "@velaros-ai/office-tools": "workspace:*",
+    "@velaros-ai/office": "workspace:*",
     "@velaros-ai/serve-host": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
-    "@velaros-ai/system-tools": "workspace:*",
+    "@velaros-ai/system": "workspace:*",
     "@velaros-ai/ui": "workspace:*",
-    "@velaros-ai/workspace": "workspace:*",
+    "@velaros-ai/project": "workspace:*",
     "better-sqlite3": "^12.9.0"
   },
   "repository": {

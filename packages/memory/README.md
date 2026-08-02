@@ -25,10 +25,8 @@
 | `@velaros-ai/memory/backend` | 实现无关的后端动词端口 `MemoryStoreBackend` + 派生索引契约 + 叠加编排 |
 | `@velaros-ai/memory/files` | bundled 默认权威档 `memory-files`(宿主注入路径与文件 IO) |
 | `@velaros-ai/memory/vector` | **市场可选**派生索引 `memory-vector`(宿主注入嵌入端口与索引存储) |
-| `@velaros-ai/memory/cli` | 命令行入口 |
 | `@velaros-ai/memory/knowledge` | 工作区资料与代码知识域(摄取 / 检索 / 诊断 / 工具) |
 | `@velaros-ai/memory/knowledge/contracts` | 浏览器安全的纯类型 Knowledge DTO |
-| `@velaros-ai/memory/knowledge/cli` | knowledge 命令行入口 |
 | `@velaros-ai/memory/adapter-kernel` | **唯一合法的** kernel ↔ memory 双向胶水 |
 
 `/contracts` 与 `/knowledge/contracts` 的**运行时 JavaScript 为空**——不会加载 SQLite、

@@ -55,7 +55,7 @@ interface RunSoloExecutionParams {
  *   → AgentRunner.streamSoloWorker（@velaros-ai/agent loop）
  * ```
  *
- * 复杂任务通过主 Agent 的 `dispatch_agent` 工具按需派发子 Agent。
+ * 复杂任务通过主 Agent 的 `agent:dispatch` 工具按需派发子 Agent。
  */
 class SoloExecutionService {
   constructor(

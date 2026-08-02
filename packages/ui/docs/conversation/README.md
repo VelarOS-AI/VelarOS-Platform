@@ -118,7 +118,7 @@ export function ToolMessage({ block }: { block: ToolCall }) {
 ## 能力位下沉,不散写枚举
 
 会话壳**不接收**原始的 `WorkspaceSpaceKind` 枚举。宿主在边界处从 space 描述符投影出
-**能力位**(如 `supportsWorkspaceFiles` —— 决定文件变更汇总与回退选文件是否可用),
+**能力位**(如 `supportsProjectFiles` —— 决定文件变更汇总与回退选文件是否可用),
 包内按能力位分派。这样加一个新空间不需要改包里的任何 `switch`(no-enum-dispatch 门执法)。
 
 ## 生命周期与并发

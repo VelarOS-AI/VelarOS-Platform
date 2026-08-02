@@ -710,11 +710,11 @@ class ChatContextRetrievalService {
 
     if (input.kind === 'terminal-output') {
       hints.push(
-        'terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 recall_context kind=conversation/all 或按 ref 精确取回。'
+        'terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 context:recall kind=conversation/all 或按 ref 精确取回。'
       )
     } else {
       hints.push(
-        'conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 recall_context kind=terminal/all。'
+        'conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 context:recall kind=terminal/all。'
       )
     }
 

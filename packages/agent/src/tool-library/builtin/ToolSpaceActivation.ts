@@ -146,9 +146,9 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
       summary: '目标工具所属能力尚未启用；先申请能力页，优先按 capability 一类激活。',
       pageId: capabilityId ?? card.id,
       pageIn: [capabilityId ?? card.id],
-      nextTool: 'tool_replace',
+      nextTool: 'tooling:replace',
       reasonKeys: ['approval.required'],
-      activationHint: `先 tool_replace(pageIn:["${capabilityId ?? card.id}"])；授权通过后，目标工具会按动态工具空间预算换入/暴露。`,
+      activationHint: `先 tooling:replace(pageIn:["${capabilityId ?? card.id}"])；授权通过后，目标工具会按动态工具空间预算换入/暴露。`,
     })
   }
 
@@ -159,12 +159,12 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
       state: 'requires_user_action',
       required: true,
       summary: '目标能力依赖外部连接器或用户侧动作，必须向用户展示动作卡。',
-      pageId: 'tool:show_user_action_cards',
-      pageIn: ['tool:show_user_action_cards'],
-      nextTool: 'show_user_action_cards',
+      pageId: 'tool:interaction:show_action_cards',
+      pageIn: ['tool:interaction:show_action_cards'],
+      nextTool: 'interaction:show_action_cards',
       reasonKeys: ['plugin.user_action_required'],
       activationHint:
-        '先定位阻塞页；再换入 show_user_action_cards，构造 blocking=true 的插件卡（enable_prompt_features 标"批准" + 一个 reject 标"拒绝"）等待用户完成。',
+        '先定位阻塞页；再换入 interaction:show_action_cards，构造 blocking=true 的插件卡（enable_prompt_features 标"批准" + 一个 reject 标"拒绝"）等待用户完成。',
     })
   }
 
@@ -180,9 +180,9 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
       summary: '工具或能力在当前运行态不可用。',
       pageId: null,
       pageIn: [],
-      nextTool: 'tool_map',
+      nextTool: 'tooling:map',
       reasonKeys: card.reasons.filter((reason) => reason.layer === 'runtime').map(reasonKey),
-      activationHint: '回到 tool_map 或 tool_map(op:"find") 查看替代工具或等待运行态恢复。',
+      activationHint: '回到 tooling:map 或 tooling:map(op:"find") 查看替代工具或等待运行态恢复。',
     })
   }
 
@@ -195,9 +195,9 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
       summary: '工具已授权但不在本轮可见工具空间；需要先 page-in，让真实 schema 在下一轮暴露。',
       pageId: card.id,
       pageIn: [card.id],
-      nextTool: 'tool_replace',
+      nextTool: 'tooling:replace',
       reasonKeys: ['resident.loadable'],
-      activationHint: 'tool_replace(pageIn:[tool]) 后下一轮调用真实工具。',
+      activationHint: 'tooling:replace(pageIn:[tool]) 后下一轮调用真实工具。',
     })
   }
 
@@ -238,20 +238,20 @@ function buildActivationFlow(input: {
   } else if (input.method === 'page_in_only') {
     if (input.card.kind === 'capability') {
       flow.push(
-        `tool_replace(pageIn:["${input.card.id}"]) 启用该能力；下一轮重新查看具体工具页状态，再按目标工具 activation 调用。`
+        `tooling:replace(pageIn:["${input.card.id}"]) 启用该能力；下一轮重新查看具体工具页状态，再按目标工具 activation 调用。`
       )
     } else {
-      flow.push(`tool_replace(pageIn:["${input.card.id}"])，下一轮直接调用 ${input.card.name}。`)
+      flow.push(`tooling:replace(pageIn:["${input.card.id}"])，下一轮直接调用 ${input.card.name}。`)
     }
   } else if (input.method === 'request_approval') {
     const target = input.pageIn[0] ?? input.card.id
     flow.push(
-      `tool_replace(pageIn:["${target}"]) 请求启用能力；通过后重新读取工具状态或下一轮调用。`
+      `tooling:replace(pageIn:["${target}"]) 请求启用能力；通过后重新读取工具状态或下一轮调用。`
     )
   } else if (input.method === 'request_user_action') {
     if (!isEmpty(input.pageIn)) {
       flow.push(
-        `先 tool_replace(pageIn:${JSON.stringify(input.pageIn)}) 换入前置入口，再调用 ${input.nextTool ?? '对应工具'} 完成用户动作。`
+        `先 tooling:replace(pageIn:${JSON.stringify(input.pageIn)}) 换入前置入口，再调用 ${input.nextTool ?? '对应工具'} 完成用户动作。`
       )
     } else {
       flow.push('查看 reasons，按能力提供方声明的阻塞项请求用户动作。')
@@ -297,10 +297,10 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
         return withActivationDependencies(card, {
           method: 'page_in_only',
           summary:
-            '插件可静默启用；用 tool_replace page-in 插件页，下一轮再调用目标能力的真实工具。',
+            '插件可静默启用；用 tooling:replace page-in 插件页，下一轮再调用目标能力的真实工具。',
           pageIn: [card.id],
           capabilityId: activationCapabilityIdForCard(card),
-          nextTool: 'tool_replace',
+          nextTool: 'tooling:replace',
           notes: [
             '插件页本身不是可执行工具；启用后重新查看目标工具页，或直接调用下一轮暴露的入口工具。',
           ],
@@ -309,10 +309,10 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
         return withActivationDependencies(card, {
           method: 'page_in_only',
           summary:
-            '该能力已预授权但尚未启用；用 tool_replace page-in 启用能力，下一轮再按具体工具页状态调用目标工具。',
+            '该能力已预授权但尚未启用；用 tooling:replace page-in 启用能力，下一轮再按具体工具页状态调用目标工具。',
           pageIn: [card.id],
           capabilityId: activationCapabilityIdForCard(card),
-          nextTool: 'tool_replace',
+          nextTool: 'tooling:replace',
           notes: [
             '能力页本身不是可执行工具；启用后重新查看目标工具页，按目标工具的 toolOsState、activation 和真实 schema 执行。',
           ],
@@ -321,10 +321,10 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
         return withActivationDependencies(card, {
           method: 'page_in_only',
           summary:
-            '已授权但未驻留；先用 tool_replace page-in，下一轮通过真实工具 schema 调用。',
+            '已授权但未驻留；先用 tooling:replace page-in，下一轮通过真实工具 schema 调用。',
           pageIn: [card.id],
           capabilityId: activationCapabilityIdForCard(card),
-          nextTool: 'tool_replace',
+          nextTool: 'tooling:replace',
           notes: [
             '主模型不通过反射代理或单工具详情读取来构造参数。',
             '需要执行该工具时，用 replace page-in，让真实 schema 在下一轮暴露。',
@@ -337,10 +337,10 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
     const capabilityId = activationCapabilityIdForCard(card)
     return withActivationDependencies(card, {
       method: 'request_approval',
-      summary: '能力尚未启用；先用 tool_replace 请求启用能力或目标工具页。',
+      summary: '能力尚未启用；先用 tooling:replace 请求启用能力或目标工具页。',
       pageIn: [capabilityId ?? card.id],
       capabilityId,
-      nextTool: 'tool_replace',
+      nextTool: 'tooling:replace',
       notes: ['replace 通过后，下一轮再调用真实工具；未通过则按 requiresApprovalDetails 处理。'],
     })
   }
@@ -352,14 +352,14 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
     return withActivationDependencies(card, {
       method: 'request_user_action',
       summary: pluginUserAction
-          ? '外部连接器或用户侧动作尚未完成；先用 show_user_action_cards 请求用户动作。'
+          ? '外部连接器或用户侧动作尚未完成；先用 interaction:show_action_cards 请求用户动作。'
           : '需要先完成能力提供方声明的用户动作；查看 reasons 和 dependencies。',
       pageIn: pluginUserAction
-          ? ['tool:show_user_action_cards']
+          ? ['tool:interaction:show_action_cards']
           : [],
       capabilityId: activationCapabilityIdForCard(card),
       nextTool: pluginUserAction
-          ? 'show_user_action_cards'
+          ? 'interaction:show_action_cards'
           : null,
       notes: ['完成用户动作后重新查看工具页状态，不要重复调用当前不可用工具。'],
     })
@@ -370,8 +370,8 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
     summary: '当前不可用；先查看 reasons，改查工具空间状态清单或选择替代工具。',
     pageIn: [],
     capabilityId: activationCapabilityIdForCard(card),
-    nextTool: 'tool_map',
-    notes: ['用 tool_map 或 tool_map(op:"find"/"page") 查看系统所有工具状态、功能摘要和替代路径。'],
+    nextTool: 'tooling:map',
+    notes: ['用 tooling:map 或 tooling:map(op:"find"/"page") 查看系统所有工具状态、功能摘要和替代路径。'],
   })
 }
 

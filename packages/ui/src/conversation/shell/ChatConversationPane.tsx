@@ -52,10 +52,10 @@ import styles from './ChatConversationPane.module.css'
 import type {
   ActiveContextArtifact,
   ChatMessage,
+  ProjectRootEntry,
   ToolCallBlock as ToolCallBlockType,
   UserActionCard as UserActionCardType,
   UserActionCardResult,
-  WorkspaceRootEntry,
 } from '#contracts'
 import { buildGoalDockViewModel } from '#internal/goalLifecycle'
 import { isEmpty, isPresent, last, Log, optionalWhenLazy, toNullable, toOptional } from '#internal/runtime'
@@ -65,7 +65,7 @@ const log = Log.tag('chat-conversation-pane')
 const EmptyQueuedMessages: ChatMessage[] = []
 const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 const EmptyWorkerThreads: ConversationWorkerThread[] = []
-const EmptyWorkspaceRoots: WorkspaceRootEntry[] = []
+const EmptyProjectRoots: ProjectRootEntry[] = []
 const RuntimeInlineNoticeMessage = {
   id: 'runtime-inline-notice',
   role: 'assistant',
@@ -94,7 +94,7 @@ export interface ChatConversationPaneProps {
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
   selectedWorkerThreadId?: LooseOptional<string>
   onOpenWorkerThread?: (threadId: string) => void
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   onReviewFileChanges?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
   onResolveConfirmation?: (
     approved: boolean,
@@ -126,7 +126,7 @@ function getLatestPlanToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlock
     for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
       const block = message.blocks[blockIndex]
 
-      if (block.type === 'tool-call' && block.toolName === 'update_plan') return block
+      if (block.type === 'tool-call' && block.toolName === 'plan:update') return block
     }
   }
 
@@ -166,7 +166,7 @@ export function ChatConversationPane({
   onOpenFileChange,
   selectedWorkerThreadId = null,
   onOpenWorkerThread,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   onReviewFileChanges,
   onResolveConfirmation,
   onSubmitInput,
@@ -197,9 +197,9 @@ export function ChatConversationPane({
     hasStreamingThinkingBlock,
     liveTraceSummary,
     runningLabel,
-    supportsWorkspaceFiles,
-    activeWorkspaceRoot,
-    workspaceRoots = EmptyWorkspaceRoots,
+    supportsProjectFiles,
+    activeProjectRoot,
+    projectRoots = EmptyProjectRoots,
     billingModel = null,
     pricingCatalog = null,
     hasOlderMessages = false,
@@ -470,18 +470,18 @@ export function ChatConversationPane({
             card: item.card,
             sessionId,
             onDismiss,
-            onOpenArtifact: onOpenWorkspacePath,
+            onOpenArtifact: onOpenProjectPath,
           }),
         })
         continue
       }
 
-      if (item.kind === 'workspace-auto-approval') {
+      if (item.kind === 'project-auto-approval') {
         dockItems.push({
           id: item.id,
           createdAt: item.createdAt,
           content: slots.stickyDockItemContent({
-            kind: 'workspace-auto-approval',
+            kind: 'project-auto-approval',
             notice: item.notice,
             onDismiss,
           }),
@@ -497,7 +497,7 @@ export function ChatConversationPane({
           kind: 'preflight-action',
           card: preflightUserActionCard,
           sessionId,
-          onOpenArtifact: onOpenWorkspacePath,
+          onOpenArtifact: onOpenProjectPath,
           onResolve: (resolution) =>
             onResolvePreflightUserActionCard?.({
               cardId: preflightUserActionCard.id,
@@ -543,7 +543,7 @@ export function ChatConversationPane({
     handleContinueGoal,
     handleGoalLifecycleAction,
     onDismissStickyDockItem,
-    onOpenWorkspacePath,
+    onOpenProjectPath,
     onResolvePreflightUserActionCard,
     preflightDockItemId,
     preflightUserActionCard,
@@ -663,9 +663,9 @@ export function ChatConversationPane({
               hideGoalToolBlocks={hideGoalToolBlocks}
               hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              activeWorkspaceRoot={activeWorkspaceRoot}
-              workspaceRoots={workspaceRoots}
-              canShowFileChangeSummary={supportsWorkspaceFiles}
+              activeProjectRoot={activeProjectRoot}
+              projectRoots={projectRoots}
+              canShowFileChangeSummary={supportsProjectFiles}
               billingModel={billingModel}
               getRuntimeCostContexts={getTranscriptRuntimeCostContexts}
               getGoalCompletionSummary={getTranscriptGoalCompletionSummary}
@@ -673,14 +673,14 @@ export function ChatConversationPane({
               renderAfterToolCall={renderWorkerThreadsAfterToolCall}
               onOpenBrowserLink={onOpenBrowserLink}
               onOpenFileChange={onOpenFileChange}
-              onOpenWorkspacePath={onOpenWorkspacePath}
+              onOpenProjectPath={onOpenProjectPath}
               onReviewFileChanges={onReviewFileChanges}
               activeUserActionCardIds={transcriptActiveUserActionCardIds}
               onResolveUserActionCard={resolveUserActionCard}
               onRewindToMessage={onRewindToMessage}
               onTranslateThinkingBlock={onTranslateThinkingBlock}
               canRewindToMessage={canRewindToMessage}
-              canChooseRewindFiles={supportsWorkspaceFiles}
+              canChooseRewindFiles={supportsProjectFiles}
             />
             {!!streamSlot && <div className={styles.streamSlot}>{streamSlot}</div>}
             {!inlineNoticeMessageId && inlineNotice && (
@@ -694,15 +694,15 @@ export function ChatConversationPane({
                 hideGoalToolBlocks={hideGoalToolBlocks}
                 hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
                 planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-                activeWorkspaceRoot={activeWorkspaceRoot}
-                workspaceRoots={workspaceRoots}
-                canShowFileChangeSummary={supportsWorkspaceFiles}
+                activeProjectRoot={activeProjectRoot}
+                projectRoots={projectRoots}
+                canShowFileChangeSummary={supportsProjectFiles}
                 billingModel={billingModel}
                 pricingCatalog={pricingCatalog}
                 runtimeCostContexts={EmptyRuntimeCostContexts}
                 onOpenBrowserLink={onOpenBrowserLink}
                 onOpenFileChange={onOpenFileChange}
-                onOpenWorkspacePath={onOpenWorkspacePath}
+                onOpenProjectPath={onOpenProjectPath}
                 onReviewFileChanges={onReviewFileChanges}
                 activeUserActionCardIds={transcriptActiveUserActionCardIds}
                 onResolveUserActionCard={resolveUserActionCard}

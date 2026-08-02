@@ -91,7 +91,7 @@ export function toolLeadingPhosphorIcon(
       return <FileTextIcon size={s} weight="regular" className={cn} />
     case 'install':
       return <PlugsIcon size={s} weight="regular" className={cn} />
-    case 'system-tools':
+    case 'system':
       return <WrenchIcon size={s} weight="regular" className={cn} />
     case 'tool-catalog':
       return <ListBulletsIcon size={s} weight="regular" className={cn} />
@@ -121,7 +121,7 @@ export function toolLeadingPhosphorIcon(
       return <GaugeIcon size={s} weight="regular" className={cn} />
     case 'project-discovery-rescan':
       return <ArrowsClockwiseIcon size={s} weight="regular" className={cn} />
-    case 'workspace-roots':
+    case 'project-roots':
       return <FoldersIcon size={s} weight="regular" className={cn} />
     case 'project-catalog':
       return <BinocularsIcon size={s} weight="regular" className={cn} />

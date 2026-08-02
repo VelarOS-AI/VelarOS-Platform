@@ -49,14 +49,14 @@ describe('goal blocked lifecycle', () => {
   test('allows the model to mark a fresh active goal blocked without a multi-turn audit', async () => {
     const harness = createGoalToolContext()
 
-    const created = await goalTools.create_goal.execute(
+    const created = await goalTools['goal:create'].execute(
       { objective: '等待必要的外部授权后继续发布' },
       harness.context
     )
     expect(created.status).toBe('active')
     expect(created.goal.blockedAuditTurns).toBe(1)
 
-    const blocked = await goalTools.update_goal.execute(
+    const blocked = await goalTools['goal:update'].execute(
       { status: 'blocked' },
       harness.context
     )
@@ -75,7 +75,7 @@ describe('goal blocked lifecycle', () => {
     } as never).find((candidate) => candidate.id === 'runtime.goal-mode')
     const prompt = segment?.render({})
 
-    expect(prompt).toContain('可以自行调用 update_goal({status:"blocked"})')
+    expect(prompt).toContain('可以自行调用 goal:update({status:"blocked"})')
     expect(prompt).toContain('不需要等待多轮审计')
   })
 })

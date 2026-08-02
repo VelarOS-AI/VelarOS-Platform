@@ -230,7 +230,7 @@ function formatObservedActionCandidate(
       arguments: draft.arguments,
       preview: buildObservedActionPreview(draft, id),
       replay: {
-        tool: 'browser_upload_file',
+        tool: 'browser:upload_file',
         input: uploadInput,
       },
       target: draft.target,
@@ -254,7 +254,7 @@ function formatObservedActionCandidate(
     arguments: draft.arguments,
     preview: buildObservedActionPreview(draft, id),
     replay: {
-      tool: 'browser_act',
+      tool: 'browser:act',
       input: actionInput,
     },
     target: draft.target,
@@ -276,8 +276,8 @@ function buildObservedActionPreview(
 ): BrowserObservedActionPreview {
   const target = describeObservedActionTarget(draft.target, fallbackTarget)
   const command = draft.method === 'upload'
-    ? `browser_upload_file ${target} <filePath>`
-    : `browser_act target ${draft.method} ${target}`
+    ? `browser:upload_file ${target} <filePath>`
+    : `browser:act target ${draft.method} ${target}`
   return {
     label: draft.description,
     target,

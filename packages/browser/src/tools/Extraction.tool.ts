@@ -21,11 +21,11 @@ const browserExtractTable = defineBrowserTool<{
   save?: boolean
   name?: string
 }>({
-  name: 'browser_extract_table',
+  name: 'browser:extract_table',
   role: 'inspect',
   summary: '从当前页面提取表格数据。',
   suitable: ['需要把页面表格转成 headers 和 rows 的结构化结果。'],
-  forbidden: ['不要用它解析非表格列表；列表用 browser_extract_list。'],
+  forbidden: ['不要用它解析非表格列表；列表用 browser:extract_list。'],
   usage: ['可传 selector 或 tableIndex；需要保存时传 save=true。'],
   examples: [{ maxRows: 200, save: true }],
   notes: ['提取脚本在当前网页上下文中运行。'],
@@ -103,11 +103,11 @@ const browserExtractList = defineBrowserTool<{
   save?: boolean
   name?: string
 }>({
-  name: 'browser_extract_list',
+  name: 'browser:extract_list',
   role: 'inspect',
   summary: '从当前页面提取列表条目。',
   suitable: ['需要提取新闻、电商、搜索结果等列表的标题、链接和描述。'],
-  forbidden: ['不要用它提取表格；表格用 browser_extract_table。'],
+  forbidden: ['不要用它提取表格；表格用 browser:extract_table。'],
   usage: ['可传 selector 限定列表容器；需要保存时传 save=true。'],
   examples: [{ selector: ".result", maxItems: 50 }],
   notes: ['省略 selector 时会自动检测常见列表结构。'],
@@ -180,7 +180,7 @@ const browserPaginateExtract = defineBrowserTool<{
   save?: boolean
   name?: string
 }>({
-  name: 'browser_paginate_extract',
+  name: 'browser:paginate_extract',
   role: 'inspect',
   summary: '翻页提取列表数据并合并结果。',
   suitable: ['需要跨多页收集搜索结果、商品列表或文章列表。'],
@@ -309,7 +309,7 @@ const browserExtractPageContent = defineBrowserTool<{
   save?: boolean
   name?: string
 }>({
-  name: 'browser_extract_page_content',
+  name: 'browser:extract_page_content',
   role: 'inspect',
   summary: '提取当前页面可见正文并保存为 plain/markdown/html。',
   suitable: [
@@ -317,7 +317,7 @@ const browserExtractPageContent = defineBrowserTool<{
     '用户要求保存页面文字内容而非截图。',
   ],
   forbidden: [
-    '不要用于表格结构化数据；表格用 browser_extract_table。',
+    '不要用于表格结构化数据；表格用 browser:extract_table。',
     '跨域 iframe、canvas 渲染内容无法提取。',
   ],
   usage: [
@@ -326,7 +326,7 @@ const browserExtractPageContent = defineBrowserTool<{
     'format 选 plain/markdown/html；save=true 写入 extracts/。',
   ],
   examples: [{ format: 'markdown', save: true }],
-  notes: ['懒加载内容需先 browser_act action=scroll 滚到可见区域。'],
+  notes: ['懒加载内容需先 browser:act action=scroll 滚到可见区域。'],
   schema: z.object({
     format: z.enum(['plain', 'markdown', 'html']).optional().describe(
       parameterDescription({
@@ -416,7 +416,7 @@ const browserExtractPageContent = defineBrowserTool<{
 
 /** 页面结构化抽取工具出口。 */
 const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
-  name: 'browser_extract',
+  name: 'browser:extract',
   role: 'inspect',
   summary: '统一提取当前页面的表格、列表、分页列表或正文。',
   suitable: [
@@ -424,8 +424,8 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
     '需要提取正文为 plain/markdown/html，或跨分页收集列表项。',
   ],
   forbidden: [
-    '不要用于截图、PDF、媒体或资源清单导出；这些仍用 browser_export_page。',
-    '不要用它操作页面表单或按钮；页面动作使用 browser_act。',
+    '不要用于截图、PDF、媒体或资源清单导出；这些仍用 browser:export_page。',
+    '不要用它操作页面表单或按钮；页面动作使用 browser:act。',
   ],
   protocol: ['分页提取会点击下一页，先确认当前页面处于列表第一页。'],
   usage: ['传 action 选择 table、list、paginate 或 content，再传该动作需要的字段。'],
@@ -496,12 +496,12 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
         )
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser_extract action.')
+        throw new AppError('VALIDATION', 'Unsupported browser:extract action.')
     }
   },
 })
 
 const browserExtractionTools = {
-  browser_extract: browserExtract,
+  'browser:extract': browserExtract,
 }
 export { browserExtractionTools }

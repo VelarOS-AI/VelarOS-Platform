@@ -798,7 +798,7 @@ class SoloStreamLoop<
           runAutomaticVerification,
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
-          // 显式 goalMode 与模型通过 create_goal 自主建立的目标都进入同一收尾门。
+          // 显式 goalMode 与模型通过 goal:create 自主建立的目标都进入同一收尾门。
           // 非 goal 普通任务没有目标时把 missing 视为无需门控，避免被强迫创建目标。
           goalMode: true,
           inspectGoalState: async () => {

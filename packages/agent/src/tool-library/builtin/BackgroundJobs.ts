@@ -9,7 +9,7 @@ import type { ToolBackgroundJobOutputSnapshot } from '../KernelToolContext'
 const readBackgroundJobOutputSchema = z.object({
   job_id: z.string().trim().min(1).max(180).describe(
     parameterDescription({
-      description: '后台 job id。dispatch_agent 返回的 thread_id 不是 job_id；使用工具结果或后续通知中的 job id。',
+      description: '后台 job id。agent:dispatch 返回的 thread_id 不是 job_id；使用工具结果或后续通知中的 job id。',
     })
   ),
   mode: z

@@ -362,7 +362,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   /**
    * 归档一条记忆：撤索引行 + 标 `status: archived`。
    *
-   * **文件不删**。这是 §九 9.4「权威内容永不静默硬删」的落点，也和 `archive_memory` 工具
+   * **文件不删**。这是 §九 9.4「权威内容永不静默硬删」的落点，也和 `memory:archive` 工具
    * 「自然遗忘不是物理删除」的产品语义对齐——归档后仍可被 `includeDormant` 深层召回捞回。
    */
   public erase(id: string): MemoryForgetResult {

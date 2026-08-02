@@ -20,7 +20,7 @@ function getCurrentPlanDetailStep(steps: PlanToolStepPreview[]): Nullable<PlanTo
   )
 }
 
-function isWorkspaceTargetDetail(detail: Nullable<string>): boolean {
+function isProjectTargetDetail(detail: Nullable<string>): boolean {
   const normalized = detail ? normalizeInline(detail).toLowerCase() : ''
 
   if (!normalized) return false
@@ -32,7 +32,7 @@ function isWorkspaceTargetDetail(detail: Nullable<string>): boolean {
 }
 
 function getVisiblePlanObjective(step: PlanToolStepPreview): Nullable<string> {
-  if (!step.objective || isWorkspaceTargetDetail(step.objective)) return null
+  if (!step.objective || isProjectTargetDetail(step.objective)) return null
 
   return normalizeInline(step.objective) === normalizeInline(step.title) ? null : step.objective
 }
@@ -41,7 +41,7 @@ function getPlanMergedDetail(block: ToolCallBlockType): Nullable<string> {
   const steps = getPlanToolBlockSteps(block)
   const currentStep = getCurrentPlanDetailStep(steps)
   const explanation = getPlanToolBlockExplanation(block)
-  const visibleExplanation = isWorkspaceTargetDetail(explanation) ? null : explanation
+  const visibleExplanation = isProjectTargetDetail(explanation) ? null : explanation
 
   if (!currentStep) return visibleExplanation
 
@@ -66,7 +66,7 @@ export function getMergedToolDetails(
   const details: string[] = []
 
   for (const block of blocks) {
-    if (block.toolName === 'update_plan') {
+    if (block.toolName === 'plan:update') {
       const detail = getPlanMergedDetail(block)
       if (detail && !seen.has(detail)) {
         seen.add(detail)

@@ -57,36 +57,32 @@ const forbiddenPublishedPathFragments = [
 ]
 const portableContractsFixtures = new Map([
   [
-    '@velaros-ai/workspace',
+    '@velaros-ai/project',
     {
-      bundleName: 'workspace-contracts',
+      bundleName: 'project-contracts',
       source: `import {
-  isProjectWorkspaceRootSource,
-  WorkspaceDiscoveryToolNames,
-  WorkspaceKernelToolNames,
-  WorkspaceMutationToolNames,
-  WorkspaceRootSource,
-  type WorkspaceBackgroundProcessInfo,
-  type WorkspaceCommandResult,
-  type WorkspaceGitBranch,
-  type WorkspaceReadFileResult,
-  type WorkspaceRootEntry,
-} from '@velaros-ai/workspace/contracts'
+  isProjectRootSource,
+  ProjectRootSource,
+  ProjectToolNames,
+  type ProjectBackgroundProcessInfo,
+  type ProjectCommandResult,
+  type ProjectGitBranch,
+  type ProjectReadFileResult,
+  type ProjectRootEntry,
+} from '@velaros-ai/project/contracts'
 
-export interface WorkspaceContractsTypeFixture {
-  root: WorkspaceRootEntry
-  branch: WorkspaceGitBranch
-  backgroundProcess: WorkspaceBackgroundProcessInfo
-  commandResult: WorkspaceCommandResult
-  readResult: WorkspaceReadFileResult
+export interface ProjectContractsTypeFixture {
+  root: ProjectRootEntry
+  branch: ProjectGitBranch
+  backgroundProcess: ProjectBackgroundProcessInfo
+  commandResult: ProjectCommandResult
+  readResult: ProjectReadFileResult
 }
 
-Object.assign(globalThis, { __velarosWorkspaceContractsBrowserGate: {
-  WorkspaceDiscoveryToolNames,
-  WorkspaceKernelToolNames,
-  WorkspaceMutationToolNames,
-  WorkspaceRootSource,
-  isProjectWorkspaceRootSource,
+Object.assign(globalThis, { __velarosProjectContractsBrowserGate: {
+  ProjectRootSource,
+  ProjectToolNames,
+  isProjectRootSource,
 } })
 `,
     },
@@ -131,17 +127,17 @@ Object.assign(globalThis, { __velarosBrowserContractsBrowserGate: {
     },
   ],
   [
-    '@velaros-ai/system-tools',
+    '@velaros-ai/system',
     {
-      bundleName: 'system-tools-contracts',
-      source: `import * as SystemContracts from '@velaros-ai/system-tools/contracts'
+      bundleName: 'system-contracts',
+      source: `import * as SystemContracts from '@velaros-ai/system/contracts'
 import type {
   SystemBackgroundTaskRecord,
   SystemDefaultEditorId,
   SystemEnvironmentInspection,
   SystemOverview,
   SystemRuntimePlatform,
-} from '@velaros-ai/system-tools/contracts'
+} from '@velaros-ai/system/contracts'
 
 export interface SystemContractsTypeFixture {
   backgroundTask: SystemBackgroundTaskRecord
@@ -158,34 +154,19 @@ Object.assign(globalThis, { __velarosSystemContractsBrowserGate: SystemContracts
 ])
 const consumerTypeFixtures = new Map([
   [
-    '@velaros-ai/office-tools',
+    '@velaros-ai/office',
     `import type {
   OfficeEnvironmentInspection,
-  OfficeRuntimePlatform,
   OfficeSystemApi,
-} from '@velaros-ai/office-tools'
-
-type ForwardCompatibleHostPlatform =
-  | 'darwin'
-  | 'linux'
-  | (string & {})
-
-type ForwardCompatibleHostInspection =
-  Omit<OfficeEnvironmentInspection, 'os'> & {
-    os: Omit<OfficeEnvironmentInspection['os'], 'platform'> & {
-      platform: ForwardCompatibleHostPlatform
-    }
-  }
+} from '@velaros-ai/office/contracts'
 
 declare const inspectFromHost: (
   commands?: string[]
-) => Promise<ForwardCompatibleHostInspection>
+) => Promise<OfficeEnvironmentInspection>
 
 const inspectForOffice: OfficeSystemApi['inspectEnvironment'] = inspectFromHost
-const futurePlatform: OfficeRuntimePlatform = 'visionos'
 
 void inspectForOffice
-void futurePlatform
 `,
   ],
 ])
@@ -249,7 +230,7 @@ function assertManifestQuality(manifest, directoryName) {
     typeof manifest.description === 'string' && manifest.description.trim().length >= 20,
     `${label}: description must explain the public package`,
   )
-  const isOpenSourceWorkspace = manifest.name === '@velaros-ai/workspace'
+  const isOpenSourceWorkspace = manifest.name === '@velaros-ai/project'
   const expectedLicense = isOpenSourceWorkspace ? 'MIT' : 'UNLICENSED'
   assert(manifest.license === expectedLicense, `${label}: license must be ${expectedLicense}`)
   assert(manifest.type === 'module', `${label}: only ESM packages are supported`)

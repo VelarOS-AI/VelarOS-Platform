@@ -34,16 +34,6 @@ export interface MemoryItem {
   snippet?: string
 }
 
-export interface GitCommitItem {
-  hash: string
-  shortHash: string
-  authorName: string
-  authorEmail?: string
-  date: string
-  subject: string
-  refs?: string
-}
-
 export function readArray(value: unknown): unknown[] {
   return isArray(value) ? value : []
 }
@@ -147,31 +137,12 @@ export function readMemoryItems(result: Nullable<Record<string, unknown>>): Memo
     })
 }
 
-export function readGitCommits(result: Nullable<Record<string, unknown>>): GitCommitItem[] {
-  return readArray(result?.commits)
-    .map(readRecord)
-    .filter((item): item is Record<string, unknown> => !!item)
-    .map((item) => {
-      const authorEmail = readString(item.authorEmail)
-      const refs = readString(item.refs)
-      return stripUndefinedFields({
-        hash: readString(item.hash) ?? '',
-        shortHash: readString(item.shortHash) ?? readString(item.hash)?.slice(0, 7) ?? '',
-        authorName: readString(item.authorName) ?? '',
-        authorEmail: toOptional(authorEmail),
-        date: readString(item.date) ?? '',
-        subject: readString(item.subject) ?? '',
-        refs: toOptional(refs),
-      })
-    })
-}
-
 export function getMemoryTitle(
   toolName: string,
   t: (key: ConversationMessageKey) => string,
-  mode?: Nullable<string>
+  mode?: LooseOptional<string>
 ): string {
-  if (toolName === 'search_memories') {
+  if (toolName === 'memory:search') {
     switch (mode) {
       case 'browse':
         return t('chat.richMemoryBrowseTitle')

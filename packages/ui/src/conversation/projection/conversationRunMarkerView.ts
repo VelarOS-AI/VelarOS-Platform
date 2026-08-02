@@ -1,7 +1,7 @@
 import type {
+  ProjectCheckpointDiffFailure,
+  ProjectCheckpointFileDiff,
   StreamTurnContextPayload,
-  WorkspaceCheckpointDiffFailure,
-  WorkspaceCheckpointFileDiff,
 } from '#contracts'
 
 /**
@@ -36,8 +36,8 @@ export interface ConversationMessageRunMarker extends ConversationRunMarkerView 
   goalMode?: boolean
   workspaceCheckpointDiff?: {
     capturedAt: number
-    changes: WorkspaceCheckpointFileDiff[]
-    failedRoots: WorkspaceCheckpointDiffFailure[]
+    changes: ProjectCheckpointFileDiff[]
+    failedRoots: ProjectCheckpointDiffFailure[]
     error: Nullable<string>
   }
   timestamp: number

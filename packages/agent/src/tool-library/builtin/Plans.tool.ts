@@ -29,7 +29,7 @@ function describePlanStepRefsForModel(
 
 /** 更新当前 execution 的可见计划。 */
 const updatePlan = defineVelaTool<UpdatePlanInput>({
-  name: 'update_plan',
+  name: 'plan:update',
   role: 'control',
   category: 'general',
   summary: '更新当前 execution 的可见执行计划。',
@@ -192,7 +192,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
       title: input.explanation?.trim() || '当前执行计划',
       content: formatActivePlanContent(toNullable(input.explanation), plan),
       metadata: {
-        source: 'update_plan',
+        source: 'plan:update',
         executionId: interaction.executionId,
         planStepCount: plan.length,
       },
@@ -217,7 +217,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
 
 /** 读取当前 execution 的计划和执行建议。 */
 const getPlan = defineVelaTool<Record<string, never>>({
-  name: 'get_plan',
+  name: 'plan:get',
   role: 'inspect',
   category: 'general',
   summary: '读取当前 execution 的可见执行计划。',
@@ -245,8 +245,8 @@ const getPlan = defineVelaTool<Record<string, never>>({
   },
 })
 const plansTools = {
-  update_plan: updatePlan,
-  get_plan: getPlan,
+  'plan:update': updatePlan,
+  'plan:get': getPlan,
 }
 
 export { plansTools }

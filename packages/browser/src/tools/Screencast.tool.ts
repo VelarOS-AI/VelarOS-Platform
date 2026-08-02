@@ -13,11 +13,11 @@ const browserScreencast = defineBrowserTool<{
   everyNthFrame?: number
   name?: string
 }>({
-  name: 'browser_screencast',
+  name: 'browser:screencast',
   role: 'control',
   summary: '录制页面操作过程并合成 GIF（回放/取证/演示）。',
   suitable: ['用户要求录下操作过程，或需要给关键流程留可回放的操作证据。'],
-  forbidden: ['静态页面截图用 browser_capture_screenshot；录屏只为过程。'],
+  forbidden: ['静态页面截图用 browser:capture_screenshot；录屏只为过程。'],
   usage: [
     'action=start 开始录制 → 执行页面操作 → action=stop 合成 GIF 并返回路径。',
     '页面无变化不产生新帧；达到帧数上限会自动截断。',
@@ -66,6 +66,6 @@ const browserScreencast = defineBrowserTool<{
 })
 
 const browserScreencastTools = {
-  browser_screencast: browserScreencast,
+  'browser:screencast': browserScreencast,
 }
 export { browserScreencastTools }

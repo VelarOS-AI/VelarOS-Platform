@@ -10,9 +10,9 @@ export interface BuildToolPayloadRefsForProviderMessagesInput {
   messages: ModelMessage[]
   store: ContextPayloadStore
   /**
-   * 声明 outputInline 的工具（如 tool_map / tool_read）：其结果禁止被 page-out 成 payload
+   * 声明 outputInline 的工具（如 tooling:map / tooling:read）：其结果禁止被 page-out 成 payload
    * 引用。这里直接不为它们生成 ref，下游 dedupe/reclaim 因 `!payloadRef` 自然跳过，工具输出
-   * 始终原样内联给模型，避免「模型看到 __contextRef 又得 recall_context 召回」的多余轮次。
+   * 始终原样内联给模型，避免「模型看到 __contextRef 又得 context:recall 召回」的多余轮次。
    */
   isOutputInlineToolName?: (toolName: string) => boolean
 }

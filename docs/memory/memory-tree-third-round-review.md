@@ -118,7 +118,7 @@
 - **直接复用**：SQLite 事务封装、FTS 与主表同事务更新、LanceDB failure fallback、query 先用 SQLite 候选 ID 过滤向量的形态。
 - **重构后复用**：现有 vector index 状态与失败日志模式；升级为 generation + tombstone deny-set + purge job。
 - **迁移期间保留**：当前 Memory/Knowledge 共用的 embedding 与路径 provider；Knowledge 域保持不动。
-- **应当删除**：`save_memory` 直写、renderer 自动沉淀、前端临时相似度关系、每文件夹记忆入口。
+- **应当删除**：`memory:save` 直写、renderer 自动沉淀、前端临时相似度关系、每文件夹记忆入口。
 - **需要进一步取证**：应用管理的数据库备份、诊断导出、崩溃报告和日志落盘位置是否会复制记忆正文。
 
 ## H. 建议的工程 RFC 目录

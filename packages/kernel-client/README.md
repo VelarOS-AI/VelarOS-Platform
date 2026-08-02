@@ -66,15 +66,15 @@ import { KernelProtocolVersion } from '@velaros-ai/kernel-client'
 
 const session = await client.openCapabilitySession({
   requires: [
-    { capabilityId: 'velaros.workspace', operations: null, scope: null },
+    { capabilityId: 'velaros.project', operations: null, scope: null },
   ],
 })
 
 const response = await session.call({
   protocolVersion: KernelProtocolVersion,
   callId: crypto.randomUUID(),
-  capabilityId: 'velaros.workspace',
-  operation: 'listRoots',
+  capabilityId: 'velaros.project',
+  operation: 'project:list',
   scope: null,
   input: {},
 }, abortSignal)

@@ -78,7 +78,7 @@ function collectEditPaths(block: ToolCallBlock, target: Set<string>): boolean {
 
   const sizeBefore = target.size
 
-  // 工作区内核的 ws_edit / ws_rollback 返回 { changedFiles, newRevisions }（已真正写盘）；
+  // Project 内核的 edit / rollback 返回 { changedFiles, newRevisions }（已真正写盘）；
   // 只有带 newRevisions 的结果才计入「已编辑」统计。
   if (isArray(result?.changedFiles) && isPresent(asRecord(result?.newRevisions))) {
     result.changedFiles.forEach((item) => {
@@ -115,7 +115,7 @@ function collectExploredPaths(block: ToolCallBlock, target: Set<string>): void {
   const args = asRecord(block.args)
   const result = asRecord(block.result)
 
-  if (block.toolName === 'ws_read') {
+  if (block.toolName === 'project:read') {
     const batch = readRecordsArray(result, 'files')
     if (batch.length) {
       batch.forEach((file) => {
@@ -280,7 +280,7 @@ export function getToolActivityGroupSummary(
   }
 
   blocks.forEach((block) => {
-    if (block.toolName === 'update_plan') {
+    if (block.toolName === 'plan:update') {
       counts.planUpdateCount += 1
       return
     }

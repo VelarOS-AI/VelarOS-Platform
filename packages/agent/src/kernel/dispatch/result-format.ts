@@ -86,11 +86,11 @@ function formatSubAgentStartedMessage(
   if (backgroundJobId) {
     lines.push(`后台 job id: ${backgroundJobId}`)
     lines.push(
-      `需要查看后台输出时，调用 read_background_job_output(job_id="${backgroundJobId}")——它会返回子 Agent 运行中的实时进展轨迹（工具调用/失败）；需要收束结果时，调用 wait_background_jobs(job_ids=["${backgroundJobId}"])。`
+      `需要查看后台输出时，调用 job:read_output(job_id="${backgroundJobId}")——它会返回子 Agent 运行中的实时进展轨迹（工具调用/失败）；需要收束结果时，调用 job:wait(job_ids=["${backgroundJobId}"])。`
     )
   }
   lines.push(
-    '不要 sleep、轮询状态或重复它正在处理的同一文件/主题；继续非重叠任务，或在下一步依赖结果时调用 wait_background_jobs。'
+    '不要 sleep、轮询状态或重复它正在处理的同一文件/主题；继续非重叠任务，或在下一步依赖结果时调用 job:wait。'
   )
   return lines.join('\n')
 }

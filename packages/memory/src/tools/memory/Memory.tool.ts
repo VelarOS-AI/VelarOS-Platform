@@ -93,7 +93,7 @@ function compactRecall(item: MemoryRecallItem): Record<string, unknown> {
 }
 
 const saveMemory = defineMemoryTool<SaveMemoryInput>({
-  name: 'save_memory',
+  name: 'memory:save',
   role: 'memory',
   category: 'memory',
   summary: '把一条可追溯证据交给记忆树，而不是直接改写长期结论。',
@@ -202,7 +202,7 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
 })
 
 const searchMemories = defineMemoryTool<SearchMemoriesInput>({
-  name: 'search_memories',
+  name: 'memory:search',
   role: 'memory',
   category: 'memory',
   summary: '沿当前记忆树路径召回带来源的 Claim。',
@@ -213,7 +213,7 @@ const searchMemories = defineMemoryTool<SearchMemoriesInput>({
     '普通召回只返回 active 记忆；deep=true 才包含 dormant 记忆。',
   ],
   usage: ['search 模式传 query；browse/profile 可以省略 query。'],
-  notes: ['结果绑定当前树版本；需要核对来源时继续调用 get_memory。'],
+  notes: ['结果绑定当前树版本；需要核对来源时继续调用 memory:get。'],
   examples: [
     { query: '记忆系统重构', limit: 8 },
     { mode: 'profile', limit: 12 },
@@ -272,13 +272,13 @@ const searchMemories = defineMemoryTool<SearchMemoriesInput>({
 })
 
 const getMemory = defineMemoryTool<GetMemoryInput>({
-  name: 'get_memory',
+  name: 'memory:get',
   role: 'memory',
   category: 'memory',
   summary: '按 Claim id 读取记忆结论、树路径和 Evidence 来源。',
-  suitable: ['search_memories 返回候选后，需要检查完整值和 provenance。'],
+  suitable: ['memory:search 返回候选后，需要检查完整值和 provenance。'],
   forbidden: ['不要用它搜索未知记忆。'],
-  usage: ['传 search_memories 返回的 id。'],
+  usage: ['传 memory:search 返回的 id。'],
   notes: ['id 是 Claim id。'],
   examples: [{ id: 'claim_abcd' }],
   schema: z.object({ id: z.string().min(1) }),
@@ -294,7 +294,7 @@ const getMemory = defineMemoryTool<GetMemoryInput>({
 })
 
 const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
-  name: 'archive_memory',
+  name: 'memory:archive',
   role: 'memory',
   category: 'memory',
   summary: '让一条 Claim 沉睡并退出普通召回，保留 Evidence 供深层回忆。',
@@ -324,10 +324,10 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
 })
 
 const memoryTools = {
-  save_memory: saveMemory,
-  search_memories: searchMemories,
-  get_memory: getMemory,
-  archive_memory: forgetMemory,
+  'memory:save': saveMemory,
+  'memory:search': searchMemories,
+  'memory:get': getMemory,
+  'memory:archive': forgetMemory,
 }
 
 export { memoryTools }

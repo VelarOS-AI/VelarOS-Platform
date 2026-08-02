@@ -67,7 +67,7 @@ function buildSkillReadPage(
     fullDetails: optionalWhenLazy(detail === 'full', () => ({
       readGuidance: [
         '这是当前角色和 selectedSkillIds 下可见的技能正文；按需读取后只应用与当前任务相关的步骤。',
-        '技能正文不会改变工具可见性；需要新工具仍按 tool_map / tool_replace 的工具空间流程处理。',
+        '技能正文不会改变工具可见性；需要新工具仍按 tooling:map / tooling:replace 的工具空间流程处理。',
       ],
     })),
   }
@@ -121,6 +121,6 @@ export async function readRequestedSkillPages(
       ? `用户拒绝读取技能：${deniedSkillIds.join('、')}。不要再次尝试读取这些技能，按用户意图继续当前任务。`
       : isEmpty(missingIds)
         ? '已读取技能正文。'
-        : `部分技能 id 不存在：${missingIds.join('、')}。技能列表见任务提示词里的「可按需读取的技能」索引；tool_read 只读 skill:<id>，工具能力请用 tool_map 发现、tool_replace 换入。`,
+        : `部分技能 id 不存在：${missingIds.join('、')}。技能列表见任务提示词里的「可按需读取的技能」索引；tooling:read 只读 skill:<id>，工具能力请用 tooling:map 发现、tooling:replace 换入。`,
   }
 }

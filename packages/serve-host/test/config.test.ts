@@ -19,36 +19,12 @@ describe('Velar Host config authority', () => {
     const store = await VelarHostConfigStore.open(path)
 
     expect(store.snapshot().value.capabilities).toEqual({
-      workspace: { read: true, write: false },
+      project: { read: true, write: false, execute: false },
       system: { observe: false, read: false, write: false, execute: false },
       computer: { observe: false, control: false },
     })
     expect((await stat(path)).mode & 0o777).toBe(0o600)
-    expect(JSON.parse(await readFile(path, 'utf8')).schemaVersion).toBe(2)
-  })
-
-  test('migrates existing v1 config without broadening authority', async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-host-config-'))
-    const path = join(temporaryRoot, 'host-config.json')
-    await Bun.write(path, JSON.stringify({
-      schemaVersion: 1,
-      capabilities: {
-        workspace: { read: true, write: true },
-        computer: { observe: true, control: false },
-      },
-      computer: { resourceRoots: [] },
-    }))
-
-    const store = await VelarHostConfigStore.open(path)
-    expect(store.snapshot().value).toMatchObject({
-      schemaVersion: 2,
-      capabilities: {
-        workspace: { read: true, write: true },
-        system: { observe: false, read: false, write: false, execute: false },
-        computer: { observe: true, control: false },
-      },
-    })
-    expect(JSON.parse(await readFile(path, 'utf8')).schemaVersion).toBe(2)
+    expect(JSON.parse(await readFile(path, 'utf8')).schemaVersion).toBe(3)
   })
 
   test('requires explicit confirmation before broadening dangerous capabilities', async () => {
@@ -56,7 +32,7 @@ describe('Velar Host config authority', () => {
     const store = await VelarHostConfigStore.open(join(temporaryRoot, 'host-config.json'))
     const value = {
       capabilities: {
-        workspace: { read: true, write: false },
+        project: { read: true, write: false, execute: false },
         system: { observe: false, read: false, write: false, execute: false },
         computer: { observe: true, control: true },
       },
@@ -79,12 +55,12 @@ describe('Velar Host config authority', () => {
 
     await expect(store.update({
       capabilities: {
-        workspace: { read: false, write: true },
+        project: { read: false, write: true, execute: false },
         system: { observe: false, read: false, write: false, execute: false },
         computer: { observe: false, control: false },
       },
       computer: { resourceRoots: [] },
-      confirmations: ['workspace-write'],
-    })).rejects.toThrow('requires workspace read')
+      confirmations: ['project-write'],
+    })).rejects.toThrow('requires project read')
   })
 })

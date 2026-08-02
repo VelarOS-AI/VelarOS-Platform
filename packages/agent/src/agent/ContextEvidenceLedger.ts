@@ -249,7 +249,7 @@ class ContextEvidenceLedger {
 
     for (const record of evidenceLedger) {
       const headerParts = [
-        // id 必须渲染:recall_context(ref=evidence id) 要求模型引用它,不给看等于让模型猜句柄(铁律1)。
+        // id 必须渲染:context:recall(ref=evidence id) 要求模型引用它,不给看等于让模型猜句柄(铁律1)。
         `id=${record.id}`,
         record.kind,
         record.importance,

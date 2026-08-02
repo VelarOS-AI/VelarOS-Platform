@@ -163,7 +163,7 @@ export interface ToolDescriptor {
   capabilities?: ToolCapabilitySchema
   /** 内置工具默认走 ToolMetadataCatalog；provider 可用此字段覆盖或补充暴露策略。 */
   exposure?: ToolExposurePolicy
-  /** 输出必须保持内联、禁止 page-out 成 payload 引用（发现/索引类工具，如 tool_map）。 */
+  /** 输出必须保持内联、禁止 page-out 成 payload 引用（发现/索引类工具，如 tooling:map）。 */
   outputInline?: boolean
   categoryId: ToolCategoryId
   systemEnabled: boolean

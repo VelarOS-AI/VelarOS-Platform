@@ -47,7 +47,7 @@ const ModelToolResultLimits: ToolResultCompactionLimits = {
 }
 
 /**
- * 持久化/召回用全保真档位：serializedResult 是 recall_context 的唯一数据源,写入时裁剪
+ * 持久化/召回用全保真档位：serializedResult 是 context:recall 的唯一数据源,写入时裁剪
  * 等于永久销毁数据（第 51 条之后任何路径都取不回,真机已复现）。此档只做防爆兜底,
  * 模型视图的预算收敛交给 serializeToolResultForModel / sanitize 的回放重裁。
  */
@@ -126,7 +126,7 @@ function applyToolSpaceResultLimits(
   if (!isToolSpaceProtocolResult(result)) return limits
 
   // ContextOS 工具空间结果是“页表元数据”，不是普通业务输出。schema / activation /
-  // dependencyRules 等深层结构会直接决定下一步 tool_reflect 或 page-in 参数，不能被
+  // dependencyRules 等深层结构会直接决定下一步工具换入参数，不能被
   // 通用浅层保护替换成 "[Depth limit reached]"。
   return {
     ...limits,
@@ -167,7 +167,7 @@ function buildDepthLimitMarker(value: unknown, jsonPath: string): Record<string,
     omittedType: describeTruncatedValueType(value),
     // 统一召回 affordance 形(与折叠桩信封 retrieval 同构);<toolCallId> 由模型代入本次调用 id。
     retrieval: {
-      tool: 'recall_context',
+      tool: 'context:recall',
       args: {
         ref: '<toolCallId>',
         refKind: 'tool-payload',
@@ -402,7 +402,7 @@ function buildTruncatedToolResult(
         serialized.length > previewLength ? `${serialized.slice(0, previewLength)}…` : serialized,
       // 此层不知 toolCallId:<toolCallId> 由模型代入本次工具调用 id(与深度截断标记同约定)。
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: { ref: '<toolCallId>', refKind: 'tool-payload' },
       },
     }
@@ -617,7 +617,7 @@ export interface SerializationHints {
    */
   maxOutputChars?: number
   /**
-   * read_file / ws_read 的 maxChars 或 maxBytes；指定后内容预算随之扩展。
+   * read_file / project:read 的 maxChars 或 maxBytes；指定后内容预算随之扩展。
    */
   maxChars?: number
 }
@@ -669,7 +669,7 @@ function buildModelLimitsWithHints(
 }
 
 export function serializeToolResultForModel(result: unknown, hints?: SerializationHints): string {
-  // 先修正 read_file / ws_read / read_files 等结果的元数据，再进行通用压缩序列化。
+  // 先修正 read_file / project:read / read_files 等结果的元数据，再进行通用压缩序列化。
   const limits = buildModelLimitsWithHints(hints, result)
   const contentBudget = calcReadFileContentBudget(limits.maxSerializedLength)
   const preprocessed = fixReadFilesMetadata(
@@ -680,7 +680,7 @@ export function serializeToolResultForModel(result: unknown, hints?: Serializati
 }
 
 /**
- * 全保真序列化：供 serializedResult 持久化（recall_context 的数据源）。
+ * 全保真序列化：供 serializedResult 持久化（context:recall 的数据源）。
  * 与模型档的区别:不为省上下文预裁——数据完整性优先,预算收敛在读取侧做。
  */
 export function serializeToolResultForRecall(result: unknown): string {

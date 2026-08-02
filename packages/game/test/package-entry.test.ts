@@ -3,20 +3,23 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'bun:test'
 
 import {
-  createGameBundledModDefinition,
   createGameCapability,
   createGameCapabilityDescriptor,
-  GameModId,
-  GameTurnContextCoordinator,
-  GameTurnContextSourceIds,
 } from '../dist/composition/index.js'
+import { createGameBundledModDefinition } from '../dist/composition/mod.js'
+import { GameTurnContextCoordinator } from '../dist/composition/turn-context.js'
+import {
+  GameModId,
+  GameToolName,
+  GameToolNames,
+  GameTurnContextSourceIds,
+} from '../dist/contracts.js'
 import {
   GameProjectDirectories,
   GameProjectFileName,
   GameSchemaChannel,
 } from '../dist/core/index.js'
 import { createGameRuntimeDescriptor } from '../dist/runtime/index.js'
-import { GameToolNames } from '../dist/tools/index.js'
 
 describe('@velaros-ai/game partition entries', () => {
   test('publish one renderer-neutral project identity', () => {
@@ -31,12 +34,12 @@ describe('@velaros-ai/game partition entries', () => {
       renderer: 'web',
     })
     expect(GameToolNames).toEqual([
-      'game_scene_edit',
-      'game_run',
-      'game_stop',
-      'game_screenshot',
-      'game_query_state',
-      'game_input',
+      'game:scene_edit',
+      'game:run',
+      'game:stop',
+      'game:screenshot',
+      'game:query_state',
+      'game:input',
     ])
   })
 
@@ -57,7 +60,7 @@ describe('@velaros-ai/game partition entries', () => {
     const context = capability.createToolContext(new AbortController().signal)
 
     expect(capability.toolApi.isProjectAvailable()).toBe(false)
-    expect(capability.tools.game_run.isAvailable?.(context)).toBe(false)
+    expect(capability.tools[GameToolName.run].isAvailable?.(context)).toBe(false)
     await expect(capability.toolApi.runtime.run({})).rejects.toThrow('宿主没有为当前会话注入')
     expect(await capability.toolApi.runtime.stop()).toEqual({
       status: 'stopped',
@@ -116,7 +119,7 @@ describe('@velaros-ai/game partition entries', () => {
     })
     expect(snapshot.deltas).toHaveLength(1)
     expect(snapshot.deltas[0]?.inspect).toEqual({
-      tool: 'game_query_state',
+      tool: 'game:query_state',
       argsHint: { select: 'entity', entityId: 'player' },
     })
 

@@ -383,12 +383,12 @@ function MarkdownPreWithExpandableCode({
 function useBaseMarkdownComponents({
   isStreaming = false,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   externalOpenLabel = 'Open in external browser',
 }: {
   isStreaming?: boolean
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   externalOpenLabel?: string
 }): StreamdownComponents {
   return useMemo(() => {
@@ -411,7 +411,7 @@ function useBaseMarkdownComponents({
         </code>
       )
 
-      if (!filePath || !onOpenWorkspacePath) return renderInlineCode(children)
+      if (!filePath || !onOpenProjectPath) return renderInlineCode(children)
 
       return renderInlineCode(
         <Link
@@ -423,7 +423,7 @@ function useBaseMarkdownComponents({
             if (!isPrimaryPointerClick(event)) return
 
             event.preventDefault()
-            void onOpenWorkspacePath(filePath)
+            void onOpenProjectPath(filePath)
           }}
         >
           {children}
@@ -431,7 +431,7 @@ function useBaseMarkdownComponents({
       )
     }) as StreamdownComponents['inlineCode']
 
-    if (onOpenBrowserLink || onOpenWorkspacePath) {
+    if (onOpenBrowserLink || onOpenProjectPath) {
       baseMarkdownComponents.a = (({
         href,
         onClick,
@@ -444,7 +444,7 @@ function useBaseMarkdownComponents({
         const shouldOpenInBrowser = linkTarget.kind === 'web' && !!onOpenBrowserLink
         const shouldOpenExternally = linkTarget.kind === 'external-protocol'
 
-        if (linkTarget.kind === 'workspace-file' && onOpenWorkspacePath)
+        if (linkTarget.kind === 'project-file' && onOpenProjectPath)
           return (
             <Link
               href={href}
@@ -457,7 +457,7 @@ function useBaseMarkdownComponents({
                 if (event.defaultPrevented || !isPrimaryPointerClick(event)) return
 
                 event.preventDefault()
-                void onOpenWorkspacePath(linkTarget.path)
+                void onOpenProjectPath(linkTarget.path)
               }}
             />
           )
@@ -511,19 +511,19 @@ function useBaseMarkdownComponents({
     }
 
     return baseMarkdownComponents
-  }, [externalOpenLabel, isStreaming, onOpenBrowserLink, onOpenWorkspacePath])
+  }, [externalOpenLabel, isStreaming, onOpenBrowserLink, onOpenProjectPath])
 }
 
 export function useMessageMarkdownComponents(
   onOpenBrowserLink?: (url: string) => void | Promise<void>,
-  onOpenWorkspacePath?: (path: string) => unknown,
+  onOpenProjectPath?: (path: string) => unknown,
   externalOpenLabel = 'Open in external browser',
   options?: { isStreaming?: boolean; tailNode?: LooseOptional<ReactElement> }
 ): StreamdownComponents {
   const baseMarkdownComponents = useBaseMarkdownComponents({
     isStreaming: !!options?.isStreaming,
     onOpenBrowserLink,
-    onOpenWorkspacePath,
+    onOpenProjectPath,
     externalOpenLabel,
   })
   const tailNode = options?.tailNode

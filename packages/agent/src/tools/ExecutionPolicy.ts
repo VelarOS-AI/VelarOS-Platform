@@ -17,7 +17,7 @@
 //    否则模型只会原样重试。
 //  - **自动批准必须留痕**（`CapabilityAutoApprovalNotice`）：无痕迹的自动批准等于没有审批。
 //  - **本门不认识 mod**：mod 贡献在装载期已被宿主收窄，到这里与内置工具同权。
-import { isPlainObject, optionalWhenLazy,toNullable } from '@velaros-ai/core'
+import { isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -171,6 +171,7 @@ interface ToolExecutionPolicyContext {
     toolName: string
   ) => LooseOptional<ToolVisibleSurfaceProfileId>
   getCurrentVisibleToolNames?: () => string[]
+  resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => LooseOptional<string>
   getCurrentVisibleToolRegistrationSignature?: (toolName: string) => LooseOptional<string>
   execution: LooseOptional<ToolExecutionPolicyExecution>
   emitProgress?: (chunk: string) => void
@@ -264,9 +265,13 @@ class ToolExecutionPolicy {
    */
   public resolveCanonicalToolName(
     toolName: string,
-    capabilityPorts?: AgentRuntimeCapabilityPorts
+    capabilityPorts?: AgentRuntimeCapabilityPorts,
+    context?: Pick<ToolExecutionPolicyContext, 'resolveCurrentVisibleCanonicalToolName'>
   ): string {
     if (this.toolRegistry.get(toolName)) return toolName
+
+    const transportedName = context?.resolveCurrentVisibleCanonicalToolName?.(toolName)
+    if (transportedName && this.toolRegistry.get(transportedName)) return transportedName
 
     const lowerName = toolName.toLowerCase()
     if (lowerName !== toolName && this.toolRegistry.get(lowerName)) return lowerName
@@ -505,7 +510,7 @@ class ToolExecutionPolicy {
   /** 执行已经准备好的工具定义。 */
   public async executePrepared(
     prepared: ToolExecutionPrepared,
-    args: Record<string, unknown> | undefined,
+    args: LooseOptional<Record<string, unknown>>,
     toolName: string
   ): Promise<unknown> {
     // 在执行前用工具自身的 zod schema 校验参数完整性。
@@ -515,7 +520,7 @@ class ToolExecutionPolicy {
     const parseResult = this.validateAndNormalizeToolInput({
       tool: prepared.tool,
       selectedSurface: prepared.selectedSurface,
-      args,
+      args: toOptional(args),
       toolContext: prepared.toolContext,
     })
     if (!parseResult.success) {
@@ -719,7 +724,7 @@ class ToolExecutionPolicy {
   /**
    * 获取工具角色（如 `control`）。
    * 供 ToolExecutor 判定嵌套/包装调用（timed/chain/reflect）是否触达控制类工具——
-   * 控制/编排类工具（dispatch_agent、update_plan、show_user_action_cards 等）不应被嵌套调用。
+   * 控制/编排类工具（agent:dispatch、plan:update、interaction:show_action_cards 等）不应被嵌套调用。
    */
   public getToolRole(toolName: string): LooseOptional<ToolRole> {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)

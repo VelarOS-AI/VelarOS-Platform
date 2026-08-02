@@ -15,7 +15,6 @@
 
 - `@velaros-ai/memory/knowledge` —— 运行时、领域、embedding、存储与注入端口
 - `@velaros-ai/memory/knowledge/contracts` —— **浏览器安全的纯类型** Knowledge DTO
-- `@velaros-ai/memory/knowledge/cli` —— 命令行入口
 
 `/contracts` 的运行时 JavaScript 为空:不会加载 SQLite、LanceDB、Apache Arrow、
 embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端测试从这里取类型。

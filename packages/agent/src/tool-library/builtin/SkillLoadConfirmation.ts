@@ -2,7 +2,7 @@ import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 const SkillPagePrefix = 'skill:'
 
-/** 解析 tool_read 的技能页 id（skill:<id>）；非技能页返回 null。 */
+/** 解析 tooling:read 的技能页 id（skill:<id>）；非技能页返回 null。 */
 function readSkillPageId(id: string): Nullable<string> {
   const trimmed = id.trim()
   if (!trimmed.toLowerCase().startsWith(SkillPagePrefix)) return null

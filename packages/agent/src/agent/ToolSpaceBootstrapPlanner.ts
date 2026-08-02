@@ -13,7 +13,7 @@ import {
   normalizeIntentText,
 } from './IntentSignals'
 
-const KernelDiscoveryTools = new Set(['tool_map'])
+const KernelDiscoveryTools = new Set(['tooling:map'])
 const MaxForcedDiscoveryPerFingerprint = 2
 
 type ToolSpaceBootstrapDecisionKind = 'none' | 'preload' | 'discover'
@@ -31,7 +31,7 @@ interface ToolSpaceBootstrapDecision {
 
 interface ToolSpaceForcedToolChoice {
   type: 'tool'
-  toolName: 'tool_map'
+  toolName: 'tooling:map'
 }
 
 interface ToolSpaceBootstrapPlannerInput {
@@ -66,8 +66,8 @@ function detectIntentDomains(
   return detectAgentIntentSignals(text, capabilityPorts).domains
 }
 
-function resolveDiscoveryTool(_domains: readonly IntentDomainMatch[]): 'tool_map' {
-  return 'tool_map'
+function resolveDiscoveryTool(_domains: readonly IntentDomainMatch[]): 'tooling:map' {
+  return 'tooling:map'
 }
 
 function buildFingerprint(input: {
@@ -134,7 +134,7 @@ function markToolSpaceBootstrapDiscoverySatisfied(
 }
 
 function buildDiscoveryReminder(input: {
-  toolName: 'tool_map'
+  toolName: 'tooling:map'
   intentText: string
   pageInCategories: readonly ToolCategoryId[]
   complex: boolean
@@ -187,8 +187,8 @@ function planToolSpaceBootstrap(input: ToolSpaceBootstrapPlannerInput): ToolSpac
     }
 
   // 已确认的发现策略：只有意图模糊（capability-uncertainty 命中的 unknown 域）或跨 ≥2 能力域的
-  // 复杂任务才强制全局 tool_map 发现；能直接定位到具体类别（如 category-*）的单域意图改走静默
-  // 预载（下方 pageInCategories → 'preload'），不再每次干活前都逼模型先调一次 tool_map。
+  // 复杂任务才强制全局 tooling:map 发现；能直接定位到具体类别（如 category-*）的单域意图改走静默
+  // 预载（下方 pageInCategories → 'preload'），不再每次干活前都逼模型先调一次 tooling:map。
   const complex = domains.length >= 2 || domains.some((domain) => domain.id === 'unknown')
   const hasDiscoveryNeed = complex
   const requestedDiscoveryTool = hasDiscoveryNeed ? resolveDiscoveryTool(domains) : null

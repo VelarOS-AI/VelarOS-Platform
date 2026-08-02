@@ -76,12 +76,22 @@ describe('manifest 解析', () => {
   test('同轴主键重复给可读诊断', () => {
     const result = parseAgentModManifest(
       baseManifest({
-        contributes: { tools: [{ name: 'probe_tool' }, { name: 'probe_tool' }] },
+        contributes: { tools: [{ name: 'probe:tool' }, { name: 'probe:tool' }] },
       })
     )
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.diagnostics[0]?.code).toBe('mod.duplicate-contribution')
+  })
+
+  test('工具贡献必须在装载前使用 namespace:tool canonical id', () => {
+    const result = parseAgentModManifest(
+      baseManifest({ contributes: { tools: [{ name: 'probe_tool' }] } })
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.diagnostics[0]?.code).toBe('mod.manifest-invalid')
+    expect(result.diagnostics[0]?.message).toContain('namespace:tool')
   })
 
   test('requiredAxes 必须是自己实际贡献的轴', () => {
@@ -97,7 +107,7 @@ describe('manifest 解析', () => {
     const result = parseAgentModManifest(
       baseManifest({
         contributes: {
-          tools: [{ name: 'probe_tool' }],
+          tools: [{ name: 'probe:tool' }],
           skills: [],
         },
       })

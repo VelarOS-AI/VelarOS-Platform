@@ -97,15 +97,15 @@ describe("built-in detectors", () => {
     expect(
       detect(
         "tool-retry-loop",
-        withCalls([call("a", "ws_read", {}), call("b", "ws_read", {})]),
+        withCalls([call("a", "project:read", {}), call("b", "project:read", {})]),
       ),
     ).toEqual([]);
     expect(
       detect(
         "toolmap-read-loop",
         withCalls([
-          call("a", "tool_map", { op: "find", query: "write" }),
-          call("b", "tool_map", { op: "find", query: "write" }),
+          call("a", "tooling:map", { op: "find", query: "write" }),
+          call("b", "tooling:map", { op: "find", query: "write" }),
         ]),
       ),
     ).toEqual([]);
@@ -113,23 +113,23 @@ describe("built-in detectors", () => {
       detect(
         "toolmap-read-loop",
         withCalls([
-          call("a", "tool_map", { op: "read", ids: ["tool:write"] }),
-          call("b", "tool_map", { op: "read", ids: ["tool:write"] }),
+          call("a", "tooling:map", { op: "read", ids: ["tool:write"] }),
+          call("b", "tooling:map", { op: "read", ids: ["tool:write"] }),
         ]),
       ).map((finding) => finding.detectorId),
     ).toEqual(["toolmap-read-loop"]);
     expect(
       detect(
         "turn-tool-density",
-        withCalls([call("a", "ws_read", { path: "a" })]),
+        withCalls([call("a", "project:read", { path: "a" })]),
       ),
     ).toEqual([]);
     expect(
       detect(
         "turn-tool-density",
         withCalls([
-          call("a", "ws_read", { path: "a" }),
-          call("b", "ws_read", { path: "b" }),
+          call("a", "project:read", { path: "a" }),
+          call("b", "project:read", { path: "b" }),
         ]),
       ).map((finding) => finding.detectorId),
     ).toEqual(["turn-tool-density"]);

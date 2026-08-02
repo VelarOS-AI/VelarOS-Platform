@@ -308,10 +308,10 @@ describe('GameProjectRuntime', () => {
 /**
  * 第十二轮：「跑起来了但什么都看不见」的信号必须在**跑**结束那一刻就到手。
  *
- * 真机第一手：模型 `game_run` 成功后直接截图、报告三个物体都在，全程没调过 `game_query_state`。
+ * 真机第一手：模型 `game:run` 成功后直接截图、报告三个物体都在，全程没调过 `game:query_state`。
  * 可见性只挂在查询工具上等于给了一条它不会走的路。
  */
-describe('game_run first frame visibility', () => {
+describe('game:run first frame visibility', () => {
   const scenePayload = (renderedEntities: number) => ({
     select: 'scene' as const,
     scene: 'main',
@@ -333,7 +333,7 @@ describe('game_run first frame visibility', () => {
     lastAt: 1,
   }
 
-  test('把首帧可见性与页面诊断拼进 game_run 结果', async () => {
+  test('把首帧可见性与页面诊断拼进 game:run 结果', async () => {
     const pageHost: GameRuntimePageHost = {
       open: async () => undefined,
       close: async () => undefined,

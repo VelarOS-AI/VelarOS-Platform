@@ -132,6 +132,12 @@ export interface KernelToolContext {
   getEnabledToolCategories: () => ToolCategoryId[]
   getCurrentVisibleToolNames: () => string[]
   setCurrentVisibleToolNames: (toolNames: string[]) => void
+  /** provider 传输名 → canonical tool id；只对本轮已曝光工具有效。 */
+  resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => Nullable<string>
+  /** canonical tool id → provider 传输名；编译历史回放时使用。 */
+  getCurrentVisibleProviderToolName?: (canonicalToolName: string) => Nullable<string>
+  getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>
+  setCurrentVisibleToolTransportNames?: (canonicalToProvider: Record<string, string>) => void
   getCurrentVisibleToolRegistrationSignature?: (toolName: string) => Nullable<string>
   setCurrentVisibleToolRegistrationSignatures?: (signatures: Record<string, string>) => void
   getCurrentVisibleToolSurfaceProfile: (

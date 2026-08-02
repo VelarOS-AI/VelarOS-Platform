@@ -27,9 +27,6 @@ export const ArtifactRenderToolNames = getToolNamesByRenderKind('artifact').filt
 export const MemoryRecallRenderToolNames = getToolNamesByRenderKind('memory').filter(
   hasDedicatedToolRender
 )
-export const GitCommitsRenderToolNames = getToolNamesByRenderKind('git').filter(
-  hasDedicatedToolRender
-)
 export const SystemToolInstallToolNames = getToolNamesByRenderKind('install').filter(
   hasDedicatedToolRender
 )

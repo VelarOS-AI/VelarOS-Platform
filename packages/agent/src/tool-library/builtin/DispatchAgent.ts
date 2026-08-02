@@ -97,7 +97,7 @@ const dispatchAgentSchema = z.object({
     .describe(
       parameterDescription({
         description:
-          'sync（默认）阻塞直到子 Agent 完成、直接内联返回结果，主链路需要该结果继续时用；async 后台 fire-and-forget，立即返回可等待 job，父 Agent 继续非重叠工作，之后用 wait_background_jobs 收束。',
+          'sync（默认）阻塞直到子 Agent 完成、直接内联返回结果，主链路需要该结果继续时用；async 后台 fire-and-forget，立即返回可等待 job，父 Agent 继续非重叠工作，之后用 job:wait 收束。',
       })
     ),
   readonly: z

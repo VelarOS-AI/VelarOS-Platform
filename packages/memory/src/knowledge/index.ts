@@ -31,9 +31,9 @@ export type {
   KnowledgeEmbeddingRuntime,
   KnowledgeHttpClient,
   KnowledgeIndexingPolicy,
+  KnowledgeProjectApi,
   KnowledgeRuntimeProviders,
   KnowledgeStoragePathProvider,
-  KnowledgeSystemApi,
   KnowledgeTool,
   KnowledgeToolContext,
 } from './Types'

@@ -117,7 +117,7 @@ Electron API、渲染层组件、应用资源、具体工具注册、能力结�
 | --- | --- |
 | `@velaros-ai/kernel-client` / `@velaros-ai/kernel-serve` | serve 部署模式的两侧,**它们依赖 core,core 不依赖它们**(`check:kernel-arch`) |
 | `@velaros-ai/agent` | 最大消费方;core 待逐出的产品语义正是往它那里搬 |
-| 各能力包(browser / workspace / office-tools / …) | 用 `tool-contract` 定义工具、用 `kernel/abi` 做成 kernel module |
+| 各能力包(browser / workspace / office / …) | 用 `tool-contract` 定义工具、用 `kernel/abi` 做成 kernel module |
 
 ## 门
 

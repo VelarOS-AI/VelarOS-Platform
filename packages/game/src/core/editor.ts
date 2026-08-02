@@ -166,7 +166,7 @@ interface ParsedDocument<T> {
  *    `updated project`；自举行 `created scene: …` 后来那份清单又被同批摘出声明，一个字节没落）；
  *  - 磁盘上做了、报告里没有（中途采纳的资产清单被 canonical 重写，摘要一个字不提）。
  *
- * 带上 `paths` 之后，{@link GameManifestWorkspaceEditor.reconcileSummary} 能拿变更清单当权威
+ * 带上 `paths` 之后，{@link GameManifestProjectEditor.reconcileSummary} 能拿变更清单当权威
  * 逐条对账：没落盘的「创建」行被撤掉，没被任何行认领的落盘路径自动补一行。
  */
 interface GameEditSummary {
@@ -228,7 +228,7 @@ interface LoadedWorkspace extends GameBootstrapLedger {
    *
    * 判决（第九轮）：这份基线过去是在 `loadWorkspace` **返回之后**才由
    * {@link serializeWorkspace} 现算的，于是装载期就地修好的声明（见
-   * {@link GameManifestWorkspaceEditor.loadDeclaredManifest}）与它自己相等，
+   * {@link GameManifestProjectEditor.loadDeclaredManifest}）与它自己相等，
    * `changedFiles` 空、修复永不落盘、下一次调用再修一遍——摘要行说做了、磁盘上没做。
    * 基线必须在**修复之前**取，所以由装载逐份记账，而不是事后整体现算。
    */
@@ -237,13 +237,13 @@ interface LoadedWorkspace extends GameBootstrapLedger {
    * 装载完成那一刻的**整体诊断**——不变量 I4 的唯一状态位。
    *
    * 非 null = 这个工程在本次编辑动手之前就已经不自洽。见
-   * {@link GameManifestWorkspaceEditor.acceptDiagnosis}。
+   * {@link GameManifestProjectEditor.acceptDiagnosis}。
    */
   diagnosisAtLoad: Nullable<GameManifestError>
   /**
    * **已声明但这次读不出来**的文档：路径 → 那条解析错误。
    *
-   * 判决（第十轮）：装载一份坏掉的子清单过去直接抛，于是 `ws_edit` 写坏 `scenes/a.scene.json`
+   * 判决（第十轮）：装载一份坏掉的子清单过去直接抛，于是 `project:edit` 写坏 `scenes/a.scene.json`
    * 之后连 `target='project'` 都动不了。它们现在只是**退出本次工作集**：声明保留（I1 因此仍
    * 拦得住「顺手把它摘掉」）、文件保留、永不被写盘（见 `edit` 的变更计算），并每次都在
    * warnings 里点名。真的去触碰它们时仍然当场抛同一条解析错误——不许静默吞。
@@ -301,7 +301,7 @@ function gamePrefabBootstrapText(id: string): string {
  *
  * 这不是一条被强制的 id↔路径映射：`project.scenes` 接受任意工程内相对路径，
  * `levels/main.scene.json` 声明 `id: main` 是合法状态。真正被强制的只有「一个 (kind,id) 至多
- * 一个载体」（见 {@link GameManifestWorkspaceEditor.assertBootstrapIdIsFree}），
+ * 一个载体」（见 {@link GameManifestProjectEditor.assertBootstrapIdIsFree}），
  * 而已有载体时走的是采纳，根本用不到这个默认值。
  */
 function gameSceneManifestPath(id: string): string {
@@ -395,7 +395,7 @@ function assertProjectDocumentPath(path: string): void {
  * 往 diffSummary 里写一行。
  *
  * `paths` 不是装饰：它是这一行与真实写盘之间**唯一**的机械纽带
- * （见 {@link GameEditSummary} 与 {@link GameManifestWorkspaceEditor.reconcileSummary}）。
+ * （见 {@link GameEditSummary} 与 {@link GameManifestProjectEditor.reconcileSummary}）。
  * 新增写行的站点必须给出它说的是哪几份文件；确实与文件无关的行传空数组。
  */
 function pushSummary(
@@ -771,7 +771,7 @@ function assertOneRolePerPath(workspace: LoadedWorkspace): void {
  * `game.project.json` 在自己的声明里出现了几次、都出现在哪几项 —— **拓扑的根不能是拓扑的一员**。
  *
  * ## 判决（第十一轮 P0）：写盘保护不适用于工程清单本身
- * 一次 `ws_edit` 把 `scenes` 写成 `[…, 'game.project.json']`（`prefabs` / `assets` 同形），
+ * 一次 `project:edit` 把 `scenes` 写成 `[…, 'game.project.json']`（`prefabs` / `assets` 同形），
  * 工程清单于是拿到第二个角色、或干脆因为「按场景解析不出来」进 `unreadable`。此后写盘保护
  * 对**工程清单自己**返回不可写：`target='project'` + `set_project` 回 `ok:true`、
  * `diffSummary` 写着 `updated project`，而 `changedFiles` 是空的、磁盘一个字节没动——
@@ -781,7 +781,7 @@ function assertOneRolePerPath(workspace: LoadedWorkspace): void {
  * 保护本身是对的（读不出来的路径永不写、一路径两角色一个字节都不动），错的是**它罩住了
  * 拓扑的唯一来源**：工程清单被保护掉 = 整个工具族失效，而这正是 I4 要禁止的那件事。
  * 正解不是给保护开一个例外，而是让这个状态**结构上不存在**：自指声明在装载期就地摘除
- * （见 {@link GameManifestWorkspaceEditor.repairProjectSelfDeclaration}），本次编辑新写进来的
+ * （见 {@link GameManifestProjectEditor.repairProjectSelfDeclaration}），本次编辑新写进来的
  * 当场抛（同 `throwIfDeclaredByThisEdit` 的归因判据）。工程清单于是永远只有「工程清单」
  * 一个角色，也永远不会被当成子清单去解析。
  */
@@ -882,11 +882,11 @@ interface GameWorkspaceDiagnosis {
  *
  * ## 判决（第十轮）：不变量 I4 的机器
  * 整体校验是一条**后置条件**，而后置条件对「它在编辑之前就已经为假」这件事是无能为力的：
- * 它只会把「工程某处坏了」放大成「所有编辑都做不了」。真机第十轮实测：一次 `ws_edit` 造出的
+ * 它只会把「工程某处坏了」放大成「所有编辑都做不了」。真机第十轮实测：一次 `project:edit` 造出的
  * 继承环 / 同 id 双载体 / 坏 JSON 子清单 / 路径角色冲突 / prefab 环 / 继承超深 / 悬空引用，
  * **每一种都让六个 target 全死**——包括 `set_project`，也就是唯一能修工程拓扑的那条路。
  *
- * 所以这里只**求值**不判决：谁致命由 {@link GameManifestWorkspaceEditor.acceptDiagnosis} 按
+ * 所以这里只**求值**不判决：谁致命由 {@link GameManifestProjectEditor.acceptDiagnosis} 按
  * 「这条诊断是不是本次编辑引入的」来定。非 `GameManifestError`（真正的实现 bug）原样抛出——
  * 降级的是清单层的判据，不是我们自己的崩溃。
  *
@@ -913,12 +913,12 @@ type GameManifestTargetEntry =
   | ParsedDocument<GameSceneManifest>
 
 /**
- * 已经在拓扑里的目标；不在就回 null（由 {@link GameManifestWorkspaceEditor.resolveTarget}
+ * 已经在拓扑里的目标；不在就回 null（由 {@link GameManifestProjectEditor.resolveTarget}
  * 决定采纳 / 创建 / 报错）。
  *
  * ## 判决（第十一轮 P2）：拓扑里有两份载体时**不许挑一份继续跑**
  * 上一版用 `find` 取第一条，于是 `scenes:['scenes/a.scene.json','levels/a.scene.json']`
- * （两份都自称 `id:a`）下 `game_scene_edit(target='scene:a', [set_entity z])` 回 `ok:true`，
+ * （两份都自称 `id:a`）下 `game:scene_edit(target='scene:a', [set_entity z])` 回 `ok:true`，
  * 实体只落进数组里**靠前**的那一份，摘要一个字不提写的是哪一份；把声明顺序对调，同一条调用
  * 改写另一份。它与失败语义表那一行「触碰一个有两份载体的稳定 id → 失败，列出全部载体路径；
  * 编辑器不挑一份继续跑」直接矛盾。第十轮之前这一格由解析器 `indexUnique` 在装载期抛死，
@@ -927,7 +927,7 @@ type GameManifestTargetEntry =
  *
  * 这不违反 I4：I4 禁止的是既存破损打死**无关**的编辑（`target='project'` 与其余 target 照常
  * 可用，那也是修好它的唯一通道）；这里被拒的正是**坏在那一点上的那个 target**，报错点名两条
- * 载体路径并给出出路——与 {@link GameManifestWorkspaceEditor.requireReadableAssets}
+ * 载体路径并给出出路——与 {@link GameManifestProjectEditor.requireReadableAssets}
  * （触碰读不出来的资产清单当场抛）同一条判据，也是第十轮自己立的规矩。
  */
 function loadedManifestEntry(
@@ -1002,13 +1002,13 @@ type GameManifestParseOutcome<T> =
  * 解析一份**已声明**的子清单：读得出就返回，读不出就出一条 warning 并把错误交回调用方。
  *
  * 判决（第十轮）：装载与声明激活都是每一次编辑的公共前置，在那里抛错就是把「一份文件坏了」
- * 放大成「整个工具族不可用」——`ws_edit` 写坏 `scenes/a.scene.json`、或者把一份场景误声明成
+ * 放大成「整个工具族不可用」——`project:edit` 写坏 `scenes/a.scene.json`、或者把一份场景误声明成
  * prefab，之后连 `target='project'` 都动不了（code-standard §2.8：装载路径上的失败要降级并记账）。
  *
  * 降级不是遗忘：路径与那条解析错误每次都在 warnings 里点名；它不进工作集，所以
  * {@link serializeWorkspace} 里根本没有它的文本，**结构上写不到它头上**；而真的以它为 target 时
  * 照旧当场抛同一条错（scene / prefab 走采纳时重解，assets 见
- * {@link GameManifestWorkspaceEditor.requireReadableAssets}）。
+ * {@link GameManifestProjectEditor.requireReadableAssets}）。
  *
  * 工程清单本身**不走这条路**，见 {@link parseProjectManifestOrFail}。
  */
@@ -1111,7 +1111,7 @@ function rememberCanonicalBaseline(
  * 而拿自举基线顶上等于抹掉用户已经写下的配置（那比报错糟得多）。
  *
  * 这不是「产品自己造得出、自己修不了」的状态：编辑器写盘前一定先解析过自己要写的文本，
- * 所以它**造不出**一份读不回来的工程清单；能造出这个状态的只有 `ws_edit`，而它也能改回去。
+ * 所以它**造不出**一份读不回来的工程清单；能造出这个状态的只有 `project:edit`，而它也能改回去。
  * 正文点名文件与逐条问题，出路只有一步。
  */
 function parseProjectManifestOrFail(
@@ -1123,7 +1123,7 @@ function parseProjectManifestOrFail(
     if (!(error instanceof GameManifestError)) throw error
     const boundary = 'game.project.json 是工程拓扑的唯一来源，也是唯一一份编辑器无法降级处理的清单'
       + '（其余清单读不出来只会被排除在本次编辑之外，不影响 target=project）。'
-      + '用工作区编辑工具按上面的逐条问题把它改回合法，game_scene_edit 随即恢复；'
+      + '用工作区编辑工具按上面的逐条问题把它改回合法，game:scene_edit 随即恢复；'
       + '编辑器不会拿一份空白工程覆盖它。'
     throw new GameManifestError(error.code, error.detail, {
       path: document.path,
@@ -1132,7 +1132,7 @@ function parseProjectManifestOrFail(
   }
 }
 
-export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
+export class GameManifestProjectEditor implements GameSceneEditorPort {
   public constructor(private readonly store: GameManifestDocumentStore) {}
 
   public isAvailable(): boolean {
@@ -1254,7 +1254,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
       // 「已经写入」这句话在「该写的都被写盘保护挡下了」那一档是假的（changedFiles 会是空的）：
       // 落盘情况只有一个权威陈述，就是 changedFiles，这里指过去而不是替它下结论（原则甲）。
       '本次编辑照常完成（具体落了哪些盘见 changedFiles）；但这个工程在编辑开始之前就已经不自洽了'
-        + `（所以没有拦它），修好之前 game_run / game_query_state 读到的仍是坏的工程：${error.message}`,
+        + `（所以没有拦它），修好之前 game:run / game:query_state 读到的仍是坏的工程：${error.message}`,
     )
   }
 
@@ -1372,7 +1372,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
       }
       // 入口场景只在「工程还没有入口 + 这是第一条场景」时补：解析器的 `scenes[0]` 缺省规则本来
       // 就是这么定的，而它只在**清单里没写 entryScene 这个键**时生效——自举出来的工程写盘后
-      // 那一格是显式 `null`，缺省规则从此不再触发，于是 game_run 只会说「没有 entryScene」。
+      // 那一格是显式 `null`，缺省规则从此不再触发，于是 game:run 只会说「没有 entryScene」。
       if (!workspace.project.value.entryScene && workspace.project.value.scenes.length === 1) {
         workspace.project.value.entryScene = `scene:${id}`
         pushSummary(
@@ -1451,7 +1451,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    * 工程里有没有文件已经携带这个稳定 id。
    *
    * 两份同 id 时**不猜**：报出全部候选，让模型删掉一份或改一个 id。「一个 id 一个载体」唯一
-   * 可能在磁盘上被打破的入口是 `ws_edit`（它不过编辑器，拦不住），既然打破了就必须当面说，
+   * 可能在磁盘上被打破的入口是 `project:edit`（它不过编辑器，拦不住），既然打破了就必须当面说，
    * 不许挑一份继续跑。
    */
   private async findManifestCarryingId(
@@ -1530,7 +1530,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    *
    * ## 判决（第八轮）：「一个 id 一个载体」不是假设，是自举的前置条件
    * 自举的正当性完全建立在「一个稳定 id 在工程里只有一个载体」上，而第七轮只查
-   * **已声明并装载**的那批。于是文档明确保留的那条路——模型先用 `ws_edit` 手写
+   * **已声明并装载**的那批。于是文档明确保留的那条路——模型先用 `project:edit` 手写
    * `levels/main.scene.json`（id=main）——照样在 `scenes/main.scene.json` 另起一份空清单，
    * 手写那份连同两个实体被跳过，全程零提示，磁盘上从此有两份 id=main。
    *
@@ -1544,7 +1544,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    *
    * **不许再写「下一次触碰该 id 时会被当面报出」**（第九轮实测证伪、第十轮把这处代码注释也改实）：
    * 编辑一份**已经被声明**的清单短路在 `loadedManifestEntry`，一次盘都不走（`manifestScans === 0`
-   * 有回归锁），所以 `ws_edit` 事后手写出的第二份在那条路径上**发现不了**——它也不会被工程加载，
+   * 有回归锁），所以 `project:edit` 事后手写出的第二份在那条路径上**发现不了**——它也不会被工程加载，
    * 只是一份无人读的死文件。它会在下一次**需要采纳或创建**该 id 时（声明被摘掉后重新触碰、
    * 换一个落点）被 {@link findManifestCarryingId} 报出；如果它被声明进了工程，
    * 收尾的 {@link assertOneCarrierPerId} 也会在诊断里点名两份载体。
@@ -1746,7 +1746,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    * 上一版是两个近似孪生的循环，共用**一个**跨种类的 `loadedPaths` 去重集：同一条路径被
    * scenes 抢先认领之后，prefabs 循环直接 `continue`，第二个角色对 `diagnosisAtLoad` **隐身**；
    * 而 `activateDeclaredPrefabs` 没有同一条去重，于是那个角色在收尾时**凭空出现**，
-   * {@link GameManifestWorkspaceEditor.acceptDiagnosis} 按 `diagnosisAtLoad === null` 判成
+   * {@link GameManifestProjectEditor.acceptDiagnosis} 按 `diagnosisAtLoad === null` 判成
    * 「本次编辑引入」并抛——实测 `scenes:[…,'shared/thing.json']` +
    * `prefabs:[…,'shared/thing.json']` 让六个 target 全死。
    *
@@ -2035,7 +2035,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    * （「先用工作区工具创建并校验，再把它加入 project.scenes」）与现在的行为完全相反——
    * 正是第六轮拆掉的那堵墙。死代码 + 误导，一起清掉。
    *
-   * 现在收尾只剩一条 {@link GameManifestWorkspaceEditor.acceptDiagnosis}，它把
+   * 现在收尾只剩一条 {@link GameManifestProjectEditor.acceptDiagnosis}，它把
    * {@link assertOneRolePerPath} / {@link assertOneCarrierPerId} / 解析器全量校验
    * 一起当成**可归因的诊断**处理。
    */
@@ -2537,11 +2537,11 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
   /**
    * `extends` 的唯一写路径 —— **闭集必须写得了它自己读得懂的每一处拓扑**。
    *
-   * ## 判决（第十轮）：补一个动作，而不是在报错里指路 ws_edit
+   * ## 判决（第十轮）：补一个动作，而不是在报错里指路 project:edit
    * 闭集九个动作能写实体、组件、资产、工程拓扑，唯独 `scene.extends` / `prefab.extends`
    * 一个都写不了——而清单**读**它、解析器**按它**建继承链、`rename_entity` 还**沿着它**改引用。
-   * 净效果是产品自己造得出、自己修不了：一次 `ws_edit` 写出的继承环，用语义 API 解不开。
-   * 「在报错里指路 ws_edit」被否决：那等于承认语义 API 有一格永久缺口，而这一格恰恰是
+   * 净效果是产品自己造得出、自己修不了：一次 `project:edit` 写出的继承环，用语义 API 解不开。
+   * 「在报错里指路 project:edit」被否决：那等于承认语义 API 有一格永久缺口，而这一格恰恰是
    * 唯一能把工程锁死的那格（第六轮否决 `create_scene` 的理由在这里不成立——那条是
    * 「`set_` 本来就读作 upsert，不该逼模型记仪式」，而这里根本没有任何动作可用）。
    *
@@ -2549,7 +2549,7 @@ export class GameManifestWorkspaceEditor implements GameSceneEditorPort {
    * 唯一确定，所以裸 slug 无歧义，按 target 的种类补前缀（钳制不拒绝）。
    *
    * **这里不查环、不查目标存不存在**：那两件事是「编辑后工程自不自洽」，归 I4 的
-   * {@link GameManifestWorkspaceEditor.acceptDiagnosis} 统一归因——工程原本健康就当场抛
+   * {@link GameManifestProjectEditor.acceptDiagnosis} 统一归因——工程原本健康就当场抛
    * （零文件落盘），原本就坏就随 warnings 报出来。在这里再补一条前置谓词，就又是五~八轮
    * 那条「每加一种打错方式补一条守卫」的老路。
    */

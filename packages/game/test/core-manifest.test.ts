@@ -715,7 +715,7 @@ describe('game manifest forgiving normalization (round 12)', () => {
  * 第十三轮（对抗终验第一手）：**解析器读不懂的形状，可以不理解，但不许把它变没。**
  *
  * 病灶链：`recordOrEmpty` / `normalizedStringArray` 把读不懂的值静默摊成 `{}` / `[]`，
- * 而清单编辑器写盘写的是解析后的值——一次带真实 operation 的 `game_scene_edit` 会把这份丢弃
+ * 而清单编辑器写盘写的是解析后的值——一次带真实 operation 的 `game:scene_edit` 会把这份丢弃
  * **写回磁盘**。ECS 风 `components: [...]` 变成 `{}`（实体不可见、`errors 0`、连空画面信号都不报，
  * 因为组件表是空的、没有闭集外键当证据）；按 id 分组的 `entities: {...}` 整份消失，
  * `diffSummary` 一个字不提删除。

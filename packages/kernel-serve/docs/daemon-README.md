@@ -42,11 +42,11 @@
 | 坏了会怎样 | **构建期红** | 该 pack 缺席 + 可读失败原因,Kernel 照常起 |
 
 **本包自己只编进 sidecar 目录桩**(agent / model / browser:目录在 Kernel,实现在宿主那侧)。
-具体能力(workspace / computer-runtime / system-tools …)的 bundled pack 归**宿主**的构建图——
+具体能力(Project / Computer / System …)的 bundled pack 归**宿主**的构建图——
 依赖方向单向 ⑤→④→③→②,内核不认识能力包。宿主这样注入:
 
 ```ts
-import { createWorkspaceKernelModule } from '@velaros-ai/workspace'
+import { createProjectKernelModule } from '@velaros-ai/project'
 import { bootKernelDaemon, createBundledModPack, toBundledPackRecords } from '@velaros-ai/kernel-serve/daemon'
 
 await bootKernelDaemon({
@@ -54,7 +54,7 @@ await bootKernelDaemon({
   modPacks: toBundledPackRecords([
     createBundledModPack({
       id: 'system.workspace',
-      module: createWorkspaceKernelModule({ workspace: { root } }),
+      module: createProjectKernelModule({ workspace: { root } }),
     }),
   ]),
 })

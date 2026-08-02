@@ -109,7 +109,7 @@ function createBuiltInPromptSegments(
         [
           'HTML 实时预览能力已开启。',
           '需要创建或更新轻量的流式 HTML/SVG 页面、卡片、落地页、静态内容或轻交互预览时，先读取 skill:html-artifact-output；普通说明继续使用 Markdown，不要用代码块触发预览。',
-          'HTML 实时预览必须直接输出 <artifact>/<patch> 流式协议；不要调用 produce_artifact，后者只负责导出可下载资源，不能生成当前会话里的实时预览。',
+          'HTML 实时预览必须直接输出 <artifact>/<patch> 流式协议；不要调用 artifact:produce，后者只负责导出可下载资源，不能生成当前会话里的实时预览。',
         ].join('\n'),
     },
     {

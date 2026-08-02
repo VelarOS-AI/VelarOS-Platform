@@ -68,12 +68,6 @@ export interface MemoryApi {
   ) => Promise<MemorySourceEligibilityResult> | MemorySourceEligibilityResult
 }
 
-export interface MemorySystemApi {
-  getOverview: () =>
-    | Promise<{ activeWorkspaceRoot?: Nullable<string> }>
-    | { activeWorkspaceRoot?: Nullable<string> }
-}
-
 /** Host-owned conversation lineage normalized at the Memory tool boundary. */
 export interface MemorySessionLineageContext {
   sessionId: string
@@ -88,7 +82,6 @@ export interface MemoryToolContext {
   memoryScope?: LooseOptional<MemoryScopeId>
   sessionLineage?: LooseOptional<MemorySessionLineageContext>
   memory: MemoryApi
-  system: MemorySystemApi
 }
 
 export type ToolContext = MemoryToolContext

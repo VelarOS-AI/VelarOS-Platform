@@ -334,9 +334,9 @@ describe('agent mod validate/resolve 拒载语义', () => {
       origin: `/packs/${id}`,
       manifest: createManifest({
         id,
-        contributes: { tools: [{ name: 'probe_tool' }] },
+        contributes: { tools: [{ name: 'probe:tool' }] },
       }),
-      bindings: { tools: { probe_tool: { name: 'probe_tool' } as never } },
+      bindings: { tools: { 'probe:tool': { name: 'probe:tool' } as never } },
     })
     const loader = new AgentModLoader({ host: createHost() })
     const report = loader.load([withTool('probe.first'), withTool('probe.second')])
@@ -351,7 +351,7 @@ describe('agent mod validate/resolve 拒载语义', () => {
       {
         source: 'pack',
         origin: '/packs/no-binding',
-        manifest: createManifest({ contributes: { tools: [{ name: 'probe_tool' }] } }),
+        manifest: createManifest({ contributes: { tools: [{ name: 'probe:tool' }] } }),
       },
     ])
 

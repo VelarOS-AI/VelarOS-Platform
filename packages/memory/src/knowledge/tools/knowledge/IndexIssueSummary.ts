@@ -31,7 +31,7 @@ function classifyKnowledgeIndexError(
     kind: 'index-error',
     actionable: false,
     guidance:
-      'Knowledge index has stored errors for these documents; inspect get_knowledge_diagnostics or resync the workspace if the results look stale.',
+      'Knowledge index has stored errors for these documents; inspect knowledge:diagnostics or resync the workspace if the results look stale.',
   }
 }
 

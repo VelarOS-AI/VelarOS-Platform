@@ -64,7 +64,7 @@ type MessageContentBlockRenderContext = {
   blockIndex?: number
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
   consumedScheduledTaskProposalIds?: ReadonlySet<string>
@@ -95,7 +95,7 @@ interface MessageContentBlockProps {
   blockIndex?: number
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
   activeUserActionCardIds?: readonly string[]
   onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
   consumedScheduledTaskProposalIds?: ReadonlySet<string>
@@ -181,10 +181,10 @@ const STRUCTURED_BLOCK_RENDERERS = {
       disabled: card.blocking && !isActiveBlockingCard,
       activeUserActionCardIds: ctx.activeUserActionCardIds,
       onActionComplete,
-      onOpenArtifact: ctx.onOpenWorkspacePath,
+      onOpenArtifact: ctx.onOpenProjectPath,
     })
   },
-  'workspace-auto-approval': () => null,
+  'project-auto-approval': () => null,
   'assistant-generated-file': () => null,
   'assistant-source': () => null,
   'scheduled-task-proposal': (block, ctx) => {
@@ -251,13 +251,13 @@ function DeferredMessageMarkdownBlock({
   tailMarker,
   formatPathForDisplay,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
 }: {
   block: TextBlock
   tailMarker?: LooseOptional<ConversationMessageRunMarker>
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
 }): ReactElement {
   const richRendererReady = useAfterFirstPaint()
   const fallback = <PlainTextBlockFallback block={block} />
@@ -271,7 +271,7 @@ function DeferredMessageMarkdownBlock({
         tailMarker={tailMarker}
         formatPathForDisplay={formatPathForDisplay}
         onOpenBrowserLink={onOpenBrowserLink}
-        onOpenWorkspacePath={onOpenWorkspacePath}
+        onOpenProjectPath={onOpenProjectPath}
       />
     </Suspense>
   )
@@ -322,7 +322,7 @@ function MessageContentBlockInner({
   blockIndex,
   formatPathForDisplay,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
   activeUserActionCardIds,
   onResolveUserActionCard,
   consumedScheduledTaskProposalIds,
@@ -364,7 +364,7 @@ function MessageContentBlockInner({
       blockIndex,
       formatPathForDisplay,
       onOpenBrowserLink,
-      onOpenWorkspacePath,
+      onOpenProjectPath,
       activeUserActionCardIds,
       onResolveUserActionCard,
       consumedScheduledTaskProposalIds,
@@ -389,7 +389,7 @@ function MessageContentBlockInner({
             tailMarker={!isStreaming && runMarker ? runMarker : null}
             formatPathForDisplay={formatPathForDisplay}
             onOpenBrowserLink={onOpenBrowserLink}
-            onOpenWorkspacePath={onOpenWorkspacePath}
+            onOpenProjectPath={onOpenProjectPath}
           />
         </Suspense>
       ),
@@ -407,7 +407,7 @@ function MessageContentBlockInner({
         tailMarker={runMarker}
         formatPathForDisplay={formatPathForDisplay}
         onOpenBrowserLink={onOpenBrowserLink}
-        onOpenWorkspacePath={onOpenWorkspacePath}
+        onOpenProjectPath={onOpenProjectPath}
       />
     ),
   })
@@ -422,7 +422,7 @@ function areTextBlockPropsEqual(
   return (
     prev.formatPathForDisplay === next.formatPathForDisplay &&
     prev.onOpenBrowserLink === next.onOpenBrowserLink &&
-    prev.onOpenWorkspacePath === next.onOpenWorkspacePath &&
+    prev.onOpenProjectPath === next.onOpenProjectPath &&
     (!prev.isStreaming || prev.animateStreamingText === next.animateStreamingText) &&
     (prev.isStreaming || areRunMarkersEqual(prev.runMarker, next.runMarker))
   )
@@ -498,7 +498,7 @@ function areMessageContentBlockPropsEqual(
       return areUserActionCardBlockPropsEqual(prev, next)
     case 'system-tool-install-suggestion':
     case 'capability-auto-approval':
-    case 'workspace-auto-approval':
+    case 'project-auto-approval':
       return true
     case 'scheduled-task-proposal':
       return areScheduledTaskProposalBlockPropsEqual(prev, next)

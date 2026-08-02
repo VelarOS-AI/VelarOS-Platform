@@ -209,7 +209,7 @@ export class ContextResidencyLedger {
   }
 
   /**
-   * 缺页（fault）记账：`recall_context` 命中非 INLINE 记录时调用。
+   * 缺页（fault）记账：`context:recall` 命中非 INLINE 记录时调用。
    * fault 率是策略好坏的核心信号，也替代 v1 断链的 outcome 回学。
    */
   public recordFault(recordId: string, at: number): number {

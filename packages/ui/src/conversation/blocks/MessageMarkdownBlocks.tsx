@@ -335,13 +335,13 @@ function MessageMarkdownBlockInner({
   block,
   tailMarker,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
 }: {
   block: TextBlock
   tailMarker?: LooseOptional<ConversationMessageRunMarker>
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
 }): Nullable<ReactElement> {
   const { t } = useConversationI18n()
   const markdownContentRef = useRef<HTMLDivElement>(null)
@@ -352,7 +352,7 @@ function MessageMarkdownBlockInner({
   )
   const components = useMessageMarkdownComponents(
     onOpenBrowserLink,
-    onOpenWorkspacePath,
+    onOpenProjectPath,
     t('browser.openExternal'),
     { isStreaming: false, tailNode: tailMarkerNode }
   )
@@ -393,7 +393,7 @@ function StreamingTextBlockInner({
   isMessageStreaming,
   tailMarker,
   onOpenBrowserLink,
-  onOpenWorkspacePath,
+  onOpenProjectPath,
 }: {
   block: TextBlock
   animateText: boolean
@@ -401,7 +401,7 @@ function StreamingTextBlockInner({
   tailMarker?: LooseOptional<ConversationMessageRunMarker>
   formatPathForDisplay?: (path: string) => string
   onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenWorkspacePath?: (path: string) => unknown
+  onOpenProjectPath?: (path: string) => unknown
 }): Nullable<ReactElement> {
   const { t } = useConversationI18n()
   const markdownContentRef = useRef<HTMLDivElement>(null)
@@ -414,7 +414,7 @@ function StreamingTextBlockInner({
   )
   const components = useMessageMarkdownComponents(
     onOpenBrowserLink,
-    onOpenWorkspacePath,
+    onOpenProjectPath,
     t('browser.openExternal'),
     { isStreaming: animateText, tailNode: tailMarkerNode }
   )

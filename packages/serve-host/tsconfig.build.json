@@ -18,10 +18,10 @@
       "@velaros-ai/kernel-client": ["./packages/kernel-client/dist/index.d.ts"],
       "@velaros-ai/kernel-client/*": ["./packages/kernel-client/dist/*"],
       "@velaros-ai/kernel-serve/daemon": ["./packages/kernel-serve/dist/daemon/index.d.ts"],
-      "@velaros-ai/office-tools": ["./packages/office-tools/dist/index.d.ts"],
+      "@velaros-ai/office": ["./packages/office/dist/index.d.ts"],
       "@velaros-ai/surface-protocol": ["./packages/surface-protocol/dist/index.d.ts"],
-      "@velaros-ai/system-tools": ["./packages/system-tools/dist/index.d.ts"],
-      "@velaros-ai/workspace": ["./packages/workspace/dist/index.d.ts"]
+      "@velaros-ai/system": ["./packages/system/dist/index.d.ts"],
+      "@velaros-ai/project": ["./packages/project/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"]

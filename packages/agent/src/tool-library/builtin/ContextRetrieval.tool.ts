@@ -7,7 +7,7 @@ import type { RecallContextInput } from './ContextRetrieval'
 import { inferRecallRefKind, recallContextSchema } from './ContextRetrieval'
 
 const recallContext = defineVelaTool<RecallContextInput>({
-  name: 'recall_context',
+  name: 'context:recall',
   role: 'inspect',
   category: 'general',
   summary: '统一找回本会话之前见过的上下文。',
@@ -133,7 +133,7 @@ const recallContext = defineVelaTool<RecallContextInput>({
 })
 
 const contextRetrievalTools = {
-  recall_context: recallContext,
+  'context:recall': recallContext,
 }
 
 export { contextRetrievalTools }

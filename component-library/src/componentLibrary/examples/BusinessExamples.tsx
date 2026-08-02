@@ -115,7 +115,7 @@ function SessionStickyDockExample() {
   const planToolBlock: ToolCallBlockType = {
     type: 'tool-call',
     toolCallId: 'library-plan-update',
-    toolName: 'update_plan',
+    toolName: 'plan:update',
     args: {
       explanation: '把会话级提醒固定在对话顶部，展开时不遮挡卡片操作。',
       plan: [
@@ -134,7 +134,7 @@ function SessionStickyDockExample() {
       ],
     },
     result: {
-      explanation: '计划卡片复用原 update_plan 渲染器。',
+      explanation: '计划卡片复用原 plan:update 渲染器。',
       plan: [
         {
           step: '完成业务组件拆分',
@@ -263,16 +263,16 @@ import type { ComponentProps } from 'react'
 const planToolBlock: ComponentProps<typeof ToolCallBlock>['block'] = {
   type: 'tool-call',
   toolCallId: 'plan-update',
-  toolName: 'update_plan',
+  toolName: 'plan:update',
   args: {
-    explanation: '计划卡片复用原 update_plan 渲染器。',
+    explanation: '计划卡片复用原 plan:update 渲染器。',
     plan: [
       { step: '完成业务组件拆分', status: 'completed' },
       { step: '补组件库 fixture', status: 'in_progress' },
     ],
   },
   result: {
-    explanation: '计划卡片复用原 update_plan 渲染器。',
+    explanation: '计划卡片复用原 plan:update 渲染器。',
     plan: [
       { step: '完成业务组件拆分', status: 'completed' },
       { step: '补组件库 fixture', status: 'in_progress' },

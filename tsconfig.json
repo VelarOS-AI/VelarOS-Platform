@@ -117,17 +117,17 @@
       "@velaros-ai/memory/*": [
         "./packages/memory/src/*"
       ],
-      "@velaros-ai/office-tools": [
-        "./packages/office-tools/src/index.ts"
+      "@velaros-ai/office": [
+        "./packages/office/src/index.ts"
       ],
-      "@velaros-ai/office-tools/*": [
-        "./packages/office-tools/src/*"
+      "@velaros-ai/office/*": [
+        "./packages/office/src/*"
       ],
-      "@velaros-ai/system-tools": [
-        "./packages/system-tools/src/index.ts"
+      "@velaros-ai/system": [
+        "./packages/system/src/index.ts"
       ],
-      "@velaros-ai/system-tools/*": [
-        "./packages/system-tools/src/*"
+      "@velaros-ai/system/*": [
+        "./packages/system/src/*"
       ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"
@@ -135,11 +135,11 @@
       "@velaros-ai/ui/*": [
         "./packages/ui/src/*"
       ],
-      "@velaros-ai/workspace": [
-        "./packages/workspace/src/index.ts"
+      "@velaros-ai/project": [
+        "./packages/project/src/index.ts"
       ],
-      "@velaros-ai/workspace/*": [
-        "./packages/workspace/src/*"
+      "@velaros-ai/project/*": [
+        "./packages/project/src/*"
       ]
     }
   },

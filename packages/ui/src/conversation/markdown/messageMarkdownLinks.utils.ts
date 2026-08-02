@@ -2,7 +2,7 @@ import { isBlank } from '#internal/runtime'
 export type MessageMarkdownHrefTarget =
   | { kind: 'web'; url: string }
   | { kind: 'external-protocol'; url: string }
-  | { kind: 'workspace-file'; path: string }
+  | { kind: 'project-file'; path: string }
   | { kind: 'passthrough'; href: string }
 
 const WebLinkPattern = /^https?:\/\//i
@@ -128,7 +128,7 @@ export function resolveMessageMarkdownHrefTarget(href: string): MessageMarkdownH
   if (ExternalNonWebLinkPattern.test(link)) return { kind: 'external-protocol', url: link }
 
   const filePath = normalizeMessageMarkdownFileReference(link)
-  if (filePath) return { kind: 'workspace-file', path: filePath }
+  if (filePath) return { kind: 'project-file', path: filePath }
 
   return { kind: 'passthrough', href }
 }

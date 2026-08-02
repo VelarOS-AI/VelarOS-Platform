@@ -8,7 +8,7 @@
 
 ```ts
 z.strictObject({
-  name: TrimmedIdSchema,                              // 主键，全宿主唯一
+  name: CanonicalToolIdSchema,                        // namespace:tool，全宿主唯一
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
@@ -27,16 +27,16 @@ z.strictObject({
 
 ## 命名规则（裁决 5）
 
-工具名的合法字符集由 provider API 决定，不是我们的偏好：
-Anthropic 工具名 schema 是 `^[a-zA-Z0-9_-]{1,64}$`，
-且 `BrowserToolResultEnhancer.ts` 用 `/[^a-z0-9_-]+/gi` 净化工具名（冒号、点号一并被剥）。
+VelarOS 内部、Manifest、权限策略与持久历史只认 canonical id：
+`namespace:tool`。命名空间允许小写字母、数字、点和短横线；具体工具名允许小写字母、
+数字和下划线。Mod Loader 在注册任何绑定前完成校验，非法名字直接拒载。
 
 因此：
 
-- **冒号 `:` 与点号 `.` 前缀都非法**——它们发不到模型面；
-- 命名空间只能用**下划线**：外部 mod 的工具名须带 `modId_` 形态的合法前缀
-  （例：mod id `acme.notes` → 工具名 `acme_notes_search`）；
-- **官方保留裸名**（`read` / `bash` / `ws_edit` …）；
+- 外部 mod 使用自己的稳定命名空间，例如 `acme.notes:search`；
+- 不允许裸名，也不允许把 provider 的下划线传输名写回 Manifest；
+- provider 不支持冒号时，请求编译器临时映射为 `namespace__tool`。映射只存在于该次请求，
+  返回的工具调用立即还原成 canonical id；
 - 注册期做全局唯一性校验，冲突 → `mod.tool-name-conflict`，**拒载不覆盖**。
 
 ## 运行态绑定
@@ -50,13 +50,13 @@ import { defineVelaTool } from '@velaros-ai/agent'
 const acmeNotesSearch = defineVelaTool({ /* … */ })
 
 const bindings: AgentModBindings = {
-  tools: { acme_notes_search: acmeNotesSearch },
+  tools: { 'acme.notes:search': acmeNotesSearch },
 }
 ```
 
 缺绑定 → `mod.binding-missing`：
 
-> `tools 条目「acme_notes_search」缺运行态绑定；该轴必须提供实现，拒载而不静默降级成空贡献。`
+> `tools 条目「acme.notes:search」缺运行态绑定；该轴必须提供实现，拒载而不静默降级成空贡献。`
 
 `VelaTool` 是 `ToolContractRuntimeSpec<TInput, TCtx, any, ToolPermission>` 的别名，
 默认上下文是 host 无关的核心面 `KernelToolContext`
@@ -92,6 +92,5 @@ manifest 条目由工具实体**派生**（`toToolContribution` 读 `category` /
 
 工具的**常驻 surface** 计入既有上下文治理预算，不是另一套静态配额。
 mod 可以在 manifest 顶层声明 `budget.residentPromptTokens` 作为提示；
-超预算时由既有治理降级为按需通道（`tool_map` / skill），
+超预算时由既有治理降级为按需通道（`tooling:map` / skill），
 **不新造一套静态配额双脑**（裁决 5）。
-</content>

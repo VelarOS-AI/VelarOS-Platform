@@ -34,7 +34,7 @@ export const planStatusSchema = z.enum([
 
 export const planLifecycleSchema = z.enum(['active', 'completed', 'archived'])
 
-/** update_plan 工具入参。 */
+/** plan:update 工具入参。 */
 export type UpdatePlanInput = {
   /** 本次计划变更的简短说明。 */
   explanation?: LooseOptional<string>

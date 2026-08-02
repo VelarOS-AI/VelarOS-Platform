@@ -13,7 +13,7 @@ import type { ExecutionModeDescriptor, ExecutionModeId } from './ExecutionModeDe
  *
  * 无对应提示词特性——经 `AgentExecutionConfig.goalMode` 布尔 / 活跃目标推断驱动（见 PromptState 的
  * `goalMode: isTrue(goalMode) || hasActiveGoal`）。不施加工具执行边界；工具面另有
- * `GoalModeRequiredToolNames`（get_goal/create_goal/update_goal）保护集，属 SoloRunPlanPreparer
+ * `GoalModeRequiredToolNames`（goal:get/goal:create/goal:update）保护集，属 SoloRunPlanPreparer
  * 曝光深水域，不并入执行门白名单。
  */
 const goalModeDescriptor: ExecutionModeDescriptor = {
@@ -45,11 +45,11 @@ const planModeDescriptor: ExecutionModeDescriptor = {
  *
  * 由 `proposal` 提示词特性激活；施加宿主级只读执行边界——非 inspect 工具默认拒绝执行，
  * 仅放行下列白名单（`ToolExecutionPolicy` 执行门单源）。会话级粘滞；完成语义为
- * 「批准后下轮自动退出」（`proposal_review` 批准返回 disabledPromptFeatures=['proposal']，
+ * 「批准后下轮自动退出」（`proposal:review` 批准返回 disabledPromptFeatures=['proposal']，
  * 由消费方一次性关停模式）。
  *
  * 注：本白名单是**执行门**白名单，与 `SoloRunPlanPreparer` 的**工具面曝光**白名单是两条独立
- * 校准的抗体（前者含 tool_map、后者含 get_proposal，成员刻意不同），不可合并——曝光集合仍留
+ * 校准的抗体（前者含 tooling:map、后者含 proposal:get，成员刻意不同），不可合并——曝光集合仍留
  * SoloRunPlanPreparer 深水域。
  */
 const proposalModeDescriptor: ExecutionModeDescriptor = {
@@ -60,18 +60,18 @@ const proposalModeDescriptor: ExecutionModeDescriptor = {
     readOnlyExecutionBoundary: true,
     executionGateAllowedNonInspectTools: [
       'ask_user',
-      'proposal_review',
-      'produce_artifact',
-      'dispatch_agent',
-      'run_agent_workflow',
-      'read_background_job_output',
-      'wait_background_jobs',
-      'cancel_background_job',
-      // 工具空间三件套都是只读/编排操作:tool_map 看目录、tool_read 读 schema、tool_replace 换页。
+      'proposal:review',
+      'artifact:produce',
+      'agent:dispatch',
+      'agent:run_workflow',
+      'job:read_output',
+      'job:wait',
+      'job:cancel',
+      // 工具空间三件套都是只读/编排操作:tooling:map 看目录、tooling:read 读 schema、tooling:replace 换页。
       // 拦掉 map/read 会把方案模式的调研发现链路整个掐断(模型连有什么工具都查不了)。
-      'tool_map',
-      'tool_read',
-      'tool_replace',
+      'tooling:map',
+      'tooling:read',
+      'tooling:replace',
     ],
   },
   stickiness: { sessionSticky: true },

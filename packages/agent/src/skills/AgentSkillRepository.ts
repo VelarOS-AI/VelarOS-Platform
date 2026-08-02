@@ -15,7 +15,7 @@ import type { AgentSkillDefinition, AgentSkillProvider } from './AgentSkillProvi
  *
  * 技能合并规则：
  *  - 多个供应方注册同一技能时，后注册者覆盖先注册者，重载顺序按供应方数组。
- *  - 可见性（Claude Code 同款）：descriptor 对角色始终可见、全文可随时 tool_read 按需读取；
+ *  - 可见性（Claude Code 同款）：descriptor 对角色始终可见、全文可随时 tooling:read 按需读取；
  *    但普通 skill 命中后只注入 skill:<id> 链接，正文不直接进入系统提示。
  *  - 输出按优先级升序加标识字母序排序，保证提示结构稳定，利于缓存。
  *
@@ -27,12 +27,12 @@ import type { AgentSkillDefinition, AgentSkillProvider } from './AgentSkillProvi
  * 其上有一条**显式选中的逃生口**（`getDefinitionForRoleIgnoringSpace`）：用户亲手选的技能跳过
  * 作用域过滤（作用域收敛的是"泛化索引"，不是权限；enabled 与资源根精筛仍然生效）。
  * 这条逃生口在**注入侧**（`getSkillMarkdownForRole`）与**读取侧**（`readSkillForRole`）各接了一次，
- * 两处必须同形——只补注入侧会让提示词里写着"必须先读 skill:x"而 tool_read 回 404，
+ * 两处必须同形——只补注入侧会让提示词里写着"必须先读 skill:x"而 tooling:read 回 404，
  * 选中意图断在半路且没有任何报错；只补读取侧则是选了却不提示，用户完全无感。
  *
  * ## 注入方式由 skillKind 决定，不是由来源决定
  * `role` 类技能注入全文常驻（只应由受信任的内置角色供应方产出），`capability` 类一律只注入
- * `skill:<id>` 指针、正文按需 tool_read。把某个来源整体升格成全文注入等于把它的 token 成本
+ * `skill:<id>` 指针、正文按需 tooling:read。把某个来源整体升格成全文注入等于把它的 token 成本
  * 变成每轮固定开销。
  */
 class AgentSkillRepository {
@@ -61,7 +61,7 @@ class AgentSkillRepository {
     this.lastProviderVersions = this.snapshotProviderVersions()
   }
 
-  /** 角色可见的技能 descriptor（不含全文）；不按选中过滤，模型据此按需 tool_read。 */
+  /** 角色可见的技能 descriptor（不含全文）；不按选中过滤，模型据此按需 tooling:read。 */
   public listSkillsForRole(
     roleId: AgentRoleId,
     selectedSkillIds: string[] = [],
@@ -127,7 +127,7 @@ class AgentSkillRepository {
       .join('\n\n')
   }
 
-  /** 按需读取单个技能全文（tool_read skill:<id>）；角色可见即可读，不要求选中。 */
+  /** 按需读取单个技能全文（tooling:read skill:<id>）；角色可见即可读，不要求选中。 */
   public readSkillForRole(
     roleId: AgentRoleId,
     skillId: string,
@@ -299,7 +299,7 @@ class AgentSkillRepository {
 
   private shouldInjectFullMarkdown(skill: AgentSkillDefinition): boolean {
     // 只有角色身份技能（skillKind='role'，仅内置角色供应方产出）注入全文常驻；
-    // 能力技能一律走 skill:<id> 指针，正文按需 tool_read。
+    // 能力技能一律走 skill:<id> 指针，正文按需 tooling:read。
     return skill.skillKind === 'role'
   }
 
@@ -323,19 +323,19 @@ class AgentSkillRepository {
       // 用户显式选中 ≠ 泛化命中：选中即指令，回答前必须先读并遵循——措辞太软会被模型自主裁量跳过。
       lines.push(
         '',
-        '用户为本次请求**显式选择**了以下 Skill。开始实质回答前必须先用 tool_read 读取其正文并严格遵循（读取已免确认）：',
+        '用户为本次请求**显式选择**了以下 Skill。开始实质回答前必须先用 tooling:read 读取其正文并严格遵循（读取已免确认）：',
         ...selectedSkills.map(formatLine)
       )
     }
     if (!isEmpty(matchedSkills)) {
       lines.push(
         '',
-        '以下 Skill 与当前请求匹配，正文不直接注入；需要时调用 tool_read 读取：',
+        '以下 Skill 与当前请求匹配，正文不直接注入；需要时调用 tooling:read 读取：',
         ...matchedSkills.map(formatLine)
       )
     }
 
-    lines.push('', '读取格式：tool_read({ ids: ["skill:<id>"], detail: "full" })')
+    lines.push('', '读取格式：tooling:read({ ids: ["skill:<id>"], detail: "full" })')
     return lines.join('\n')
   }
 

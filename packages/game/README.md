@@ -1,15 +1,18 @@
 # @velaros-ai/game
 
 **VelarOS 游戏能力域的单发布包**(capabilities 域,住 `packages/game`,域归属由仓根
-`velaros.domainPackages` 声明)。它把「AI 写游戏」这件事拆成四层:声明式工程事实、
-web 运行时投影、模型可调用的工具、宿主装配入口——**四层各占一个 subpath,刻意不给根导出**,
+`velaros.domainPackages` 声明)。它把「AI 写游戏」这件事拆成声明式工程事实、
+web 运行时投影、模型可调用的工具、浏览器安全契约与宿主装配入口——**各层占独立 subpath,刻意不给根导出**,
 因为它们的运行面互斥(浏览器侧只要 `core`,Node 宿主才要 `composition`)。
 
 ```
 @velaros-ai/game/core         渲染器无关的工程/场景事实(schema + 解析 + 解析器 + 端口)
 @velaros-ai/game/runtime      web 运行时投影(Phaser 4)+ dev server + 内置静态服务 + 运行态
-@velaros-ai/game/tools        六个 game_* 工具的名字、schema 与集合
-@velaros-ai/game/composition  宿主唯一装配入口 + mod 清单 + 回合上下文
+@velaros-ai/game/tools        六个 game:* 工具的名字、schema 与集合
+@velaros-ai/game/contracts    renderer-safe 的工具、空间、Mod 与上下文源身份
+@velaros-ai/game/composition  宿主能力装配入口
+@velaros-ai/game/composition/mod           Mod Loader 定义
+@velaros-ai/game/composition/turn-context  宿主回合上下文协调器
 ```
 
 ## 它解决什么问题
@@ -28,7 +31,7 @@ web 运行时投影、模型可调用的工具、宿主装配入口——**四�
 `GameProjectDirectories` = `assets` / `prefabs` / `scenes` / `src`)、四份 zod schema
 (project / scene / prefab / assets)、宽容文本解析(`parseGameProjectManifestText`,
 基于 `@velaros-ai/core` 的 ForgivingSchema,归一化后回显 `AppliedAdjustment`)、
-canonical formatter、`GameManifestResolver`、`GameManifestWorkspaceEditor`,
+canonical formatter、`GameManifestResolver`、`GameManifestProjectEditor`,
 以及渲染器无关的运行时端口 `GameRuntimePort` / `GameSceneEditorPort`。
 
 两条容易被忽略的设计:
@@ -66,22 +69,23 @@ canonical formatter、`GameManifestResolver`、`GameManifestWorkspaceEditor`,
 
 | 工具 | 干什么 |
 | --- | --- |
-| `game_scene_edit` | 语义编辑场景 / prefab / 工程声明 |
-| `game_run` | 启动运行态(缺省 = 宿主内置静态服务;工程声明了 `dev.server.command` 则起它)并打开入口场景 |
-| `game_stop` | 停止运行态(幂等) |
-| `game_screenshot` | 截当前画面(可带区域与 overlay) |
-| `game_query_state` | 查 scene / selection / entities / entity / errors / perf |
-| `game_input` | 注入 press / key_down / key_up / tap / move / wait 序列 |
+| `game:scene_edit` | 语义编辑场景 / prefab / 工程声明 |
+| `game:run` | 启动运行态(缺省 = 宿主内置静态服务;工程声明了 `dev.server.command` 则起它)并打开入口场景 |
+| `game:stop` | 停止运行态(幂等) |
+| `game:screenshot` | 截当前画面(可带区域与 overlay) |
+| `game:query_state` | 查 scene / selection / entities / entity / errors / perf |
+| `game:input` | 注入 press / key_down / key_up / tap / move / wait 序列 |
 
-**V0 刻意不提供 `game_assert`**:断言语义会和 `game_query_state` 的查询语义重复一份,
+**V0 刻意不提供 `game:assert`**:断言语义会和 `game:query_state` 的查询语义重复一份,
 调用方直接基于结构化结果判断。
 
 ### `composition` —— 宿主装配
 
 `createGameCapability()`(**默认全不可用、fail closed**)、
 `createGameProjectCapability()` / `createGameProjectCapabilityFromText()`、
-`createGameManifestEditor()`,以及 mod 面:`GameModId` = `velaros.game`、
-`GameWorkspaceSpaceId` = `game`、`GameTurnContextCoordinator`
+`createGameManifestEditor()`。稳定身份从 `@velaros-ai/game/contracts` 读取；Mod 定义与回合上下文分别从
+`@velaros-ai/game/composition/mod`、`@velaros-ai/game/composition/turn-context` 读取。
+`GameModId` = `velaros.game`、`GameSpaceId` = `game`，`GameTurnContextCoordinator`
 (三个回合上下文源:`game.runtime-errors` / `game.selection` / `game.scene-state`)。
 
 包根的 `velaros.mod.json` 是这个 mod 的分节信封(module 节 + agent 节),
@@ -116,7 +120,7 @@ const toolContext = capability.createToolContext(abortSignal)
 ```
 
 语义编辑若改到 `game.project.json`,composition 会在同一能力实例内刷新运行时工程快照;
-**正在跑的实例会在下一次 `game_run` 强制重启**,不复用旧命令、端口或入口场景。
+**正在跑的实例会在下一次 `game:run` 强制重启**,不复用旧命令、端口或入口场景。
 
 ## 边界:本包不负责什么
 

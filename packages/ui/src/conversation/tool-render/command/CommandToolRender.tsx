@@ -27,7 +27,7 @@ import { CommandToolRenderDetails } from './CommandToolRenderDetails'
 
 import styles from './CommandToolRender.module.css'
 
-import type { ToolCallBlock, WorkspaceCommandResult } from '#contracts'
+import type { ProjectCommandResult,ToolCallBlock } from '#contracts'
 import { AppError } from '#internal/result'
 import { Result } from '#internal/result'
 import { isBoolean, isNonBlankString, isNumber, isPresent, isString, optionalWhen,toNullable } from '#internal/runtime'
@@ -35,7 +35,7 @@ import { isRecord } from '#internal/unknownJsonRecord'
 
 const cx = StyleUtils.bindCx(styles)
 
-function isWorkspaceCommandResult(value: unknown): value is WorkspaceCommandResult {
+function isProjectCommandResult(value: unknown): value is ProjectCommandResult {
   if (!isRecord(value)) return false
 
   return (
@@ -71,7 +71,7 @@ const CommandToolRender = memo(
     const [isTerminatingBackgroundTask, setIsTerminatingBackgroundTask] = useState(false)
     const [backgroundTaskTerminated, setBackgroundTaskTerminated] = useState(false)
     const args = normalizeArgs(block.args)
-    const result: Nullable<WorkspaceCommandResult> = isWorkspaceCommandResult(block.result)
+    const result: Nullable<ProjectCommandResult> = isProjectCommandResult(block.result)
       ? block.result
       : null
     const command = result?.command ?? args.command ?? ''

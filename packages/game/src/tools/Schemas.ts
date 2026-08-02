@@ -93,7 +93,7 @@ export const GameSceneEditSchema = z.object({
   target: GameManifestEditTargetSchema,
   operations: z.array(GameManifestEditOperationSchema).max(
     200,
-    '单次 game_scene_edit 最多接受 200 个语义操作；请按目标拆批。',
+    '单次 game:scene_edit 最多接受 200 个语义操作；请按目标拆批。',
   ),
   reason: z.string().trim().min(1).optional(),
   dryRun: z.boolean().optional(),
@@ -223,7 +223,7 @@ export const GameInputSchema = z.object({
   // Tools.ts validates each item independently and reports its original index.
   steps: z.array(z.unknown()).max(
     200,
-    '单次 game_input 最多接受 200 个步骤；请拆分观察闭环。',
+    '单次 game:input 最多接受 200 个步骤；请拆分观察闭环。',
   ),
   repeat: clampedInt(1, 20).optional(),
   settleFrames: clampedInt(0, 120).optional(),

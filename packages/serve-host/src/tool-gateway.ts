@@ -15,16 +15,22 @@ import {
   isString,
   toOptional,
 } from '@velaros-ai/core'
+import { schemaToInputSchema } from '@velaros-ai/core/tool-contract'
 import {
   type CapabilitySession,
   type KernelClient,
   KernelProtocolVersion,
 } from '@velaros-ai/kernel-client'
+import { OfficeCapability } from '@velaros-ai/office/composition'
+import type { OfficeToolContext } from '@velaros-ai/office/contracts'
+import { officeTools } from '@velaros-ai/office/tools'
+import { projectTools } from '@velaros-ai/project/agent'
 import {
-  type OfficeToolContext,
-  officeTools,
-  OfficeToolsCapability,
-} from '@velaros-ai/office-tools'
+  ProjectToolNames,
+} from '@velaros-ai/project/contracts'
+import {
+  ProjectCapability,
+} from '@velaros-ai/project/kernel'
 import {
   type ProviderSurfaceArtifact,
   ProviderSurfaceProtocolVersion,
@@ -36,68 +42,60 @@ import {
   type ProviderSurfaceWorkspaceSpace,
 } from '@velaros-ai/surface-protocol'
 import {
+  SystemCapability,
+  SystemToolNames,
   systemTools,
-  SystemToolsCapability,
-} from '@velaros-ai/system-tools'
-import {
-  schemaToInputSchema,
-  type VelarosWorkspaceBridge,
-  WorkspaceCapability,
-  WorkspaceKernelToolNames,
-} from '@velaros-ai/workspace'
+} from '@velaros-ai/system'
 
 import type { VelarHostConfigStore } from './config'
 
-const WorkspaceReadOperations = Object.freeze([
-  WorkspaceKernelToolNames.status,
-  WorkspaceKernelToolNames.read,
-  WorkspaceKernelToolNames.stat,
-  WorkspaceKernelToolNames.listFiles,
-  WorkspaceKernelToolNames.search,
-  WorkspaceKernelToolNames.symbols,
-  WorkspaceKernelToolNames.resolveTarget,
-  WorkspaceKernelToolNames.buildEvidence,
-  WorkspaceKernelToolNames.diff,
+const ProjectReadOperations = Object.freeze([
+  ProjectToolNames.read,
+  ProjectToolNames.list,
+  ProjectToolNames.search,
 ])
 
-const WorkspaceWriteOperations = Object.freeze([
-  WorkspaceKernelToolNames.prepareEdit,
-  WorkspaceKernelToolNames.amendEdit,
-  WorkspaceKernelToolNames.commitEdit,
-  WorkspaceKernelToolNames.applyEdit,
-  WorkspaceKernelToolNames.validate,
-  WorkspaceKernelToolNames.rollback,
-  WorkspaceKernelToolNames.runBatch,
+const ProjectWriteOperations = Object.freeze([
+  ProjectToolNames.edit,
+  ProjectToolNames.rollback,
 ])
+const ProjectExecuteOperations = Object.freeze([ProjectToolNames.run])
 
-const SystemObserveOperations = new Set([
-  'get_system_overview',
-  'ps',
-  'refresh_shell_environment',
-  'list_background_tasks',
+const SystemObserveOperations = new Set<string>([
+  SystemToolNames.processes,
+  SystemToolNames.listTasks,
 ])
-const SystemReadOperations = new Set(['read', 'list', 'grep'])
-const SystemWriteOperations = new Set(['write', 'edit'])
-const SystemExecuteOperations = new Set(['bash', 'open', 'terminate_background_task'])
+const SystemReadOperations = new Set<string>([
+  SystemToolNames.read,
+  SystemToolNames.list,
+  SystemToolNames.search,
+])
+const SystemWriteOperations = new Set<string>([SystemToolNames.write, SystemToolNames.edit])
+const SystemExecuteOperations = new Set<string>([
+  SystemToolNames.run,
+  SystemToolNames.open,
+  SystemToolNames.refreshEnvironment,
+  SystemToolNames.terminateTask,
+])
 
 const ComputerOperationByToolName = Object.freeze({
-  computer_screenshot: 'screenshot',
-  computer_screen_size: 'screen_size',
-  computer_move: 'mouse_move',
-  computer_click: 'left_click',
-  computer_type: 'type_text',
-  computer_key: 'key',
+  'computer:screenshot': 'screenshot',
+  'computer:screen_size': 'screen_size',
+  'computer:move': 'mouse_move',
+  'computer:click': 'left_click',
+  'computer:type': 'type_text',
+  'computer:key': 'key',
 })
 
 const ComputerObserveToolNames = new Set([
-  'computer_screenshot',
-  'computer_screen_size',
+  'computer:screenshot',
+  'computer:screen_size',
 ])
 const ComputerControlToolNames = new Set([
-  'computer_move',
-  'computer_click',
-  'computer_type',
-  'computer_key',
+  'computer:move',
+  'computer:click',
+  'computer:type',
+  'computer:key',
 ])
 
 interface ToolRoute {
@@ -156,28 +154,22 @@ export class VelarHostToolGateway {
 
   public constructor(
     private readonly kernel: KernelClient,
-    workspace: VelarosWorkspaceBridge,
     private readonly config: VelarHostConfigStore,
     officeToolContextFactory?: VelarHostOfficeToolContextFactory,
   ) {
-    const supportedWorkspaceOperations = new Set<string>([
-      ...WorkspaceReadOperations,
-      ...WorkspaceWriteOperations,
-    ])
-    const workspaceRoutes: ToolRoute[] = workspace.tools
-      .filter((tool) => supportedWorkspaceOperations.has(tool.name))
-      .map((tool) => ({
+    const projectRoutes: ToolRoute[] = Object.entries(projectTools)
+      .map(([name, tool]) => ({
         descriptor: {
-          name: tool.name,
+          name,
           description: compactDescription(tool.description),
           inputSchema: schemaToInputSchema(tool.schema),
-          category: 'workspace',
-          readOnly: WorkspaceReadOperations.includes(
-            tool.name as (typeof WorkspaceReadOperations)[number],
+          category: 'project',
+          readOnly: ProjectReadOperations.includes(
+            name as (typeof ProjectReadOperations)[number],
           ),
         },
-        capabilityId: WorkspaceCapability.id,
-        operation: tool.name,
+        capabilityId: ProjectCapability.id,
+        operation: name,
       }))
     const computerRoutes: ToolRoute[] = Object.entries(computerTools)
       .flatMap(([fallbackName, tool]) => {
@@ -207,7 +199,7 @@ export class VelarHostToolGateway {
             category: 'system-control',
             readOnly: SystemObserveOperations.has(name) || SystemReadOperations.has(name),
           },
-          capabilityId: SystemToolsCapability.id,
+          capabilityId: SystemCapability.id,
           operation: name,
         }
       })
@@ -223,7 +215,7 @@ export class VelarHostToolGateway {
             category: 'office',
             readOnly: !tool.permissions.includes('fs:write'),
           },
-          capabilityId: OfficeToolsCapability.id,
+          capabilityId: OfficeCapability.id,
           operation: name,
           isAvailable: !isAvailable || !officeToolContextFactory
             ? undefined
@@ -231,7 +223,7 @@ export class VelarHostToolGateway {
         }
       })
     this.routesByName = new Map(
-      [...workspaceRoutes, ...systemRoutes, ...officeRoutes, ...computerRoutes]
+      [...projectRoutes, ...systemRoutes, ...officeRoutes, ...computerRoutes]
         .map((route) => [route.descriptor.name, route]),
     )
   }
@@ -241,8 +233,12 @@ export class VelarHostToolGateway {
     this.session = await this.kernel.openCapabilitySession({
       requires: [
         {
-          capabilityId: WorkspaceCapability.id,
-          operations: [...WorkspaceReadOperations, ...WorkspaceWriteOperations],
+          capabilityId: ProjectCapability.id,
+          operations: [
+            ...ProjectReadOperations,
+            ...ProjectWriteOperations,
+            ...ProjectExecuteOperations,
+          ],
           scope: null,
         },
         {
@@ -251,12 +247,12 @@ export class VelarHostToolGateway {
           scope: null,
         },
         {
-          capabilityId: SystemToolsCapability.id,
+          capabilityId: SystemCapability.id,
           operations: Object.values(systemTools).map((tool) => tool.name).filter(isString),
           scope: null,
         },
         {
-          capabilityId: OfficeToolsCapability.id,
+          capabilityId: OfficeCapability.id,
           operations: Object.values(officeTools).map((tool) => tool.name).filter(isString),
           scope: null,
         },
@@ -334,22 +330,25 @@ export class VelarHostToolGateway {
         if (route.isAvailable && !route.isAvailable()) return false
         if (
           workspaceSpace === 'project'
-          && route.capabilityId !== WorkspaceCapability.id
-          && route.capabilityId !== OfficeToolsCapability.id
+          && route.capabilityId !== ProjectCapability.id
+          && route.capabilityId !== OfficeCapability.id
         ) return false
         if (
           workspaceSpace === 'system'
           && route.capabilityId !== ComputerCapability.id
-          && route.capabilityId !== SystemToolsCapability.id
+          && route.capabilityId !== SystemCapability.id
         ) return false
         if (workspaceSpace === 'browser') return false
-        if (WorkspaceReadOperations.includes(
-          route.operation as (typeof WorkspaceReadOperations)[number],
-        )) return capabilities.workspace.read
-        if (WorkspaceWriteOperations.includes(
-          route.operation as (typeof WorkspaceWriteOperations)[number],
-        )) return capabilities.workspace.write
-        if (route.capabilityId === OfficeToolsCapability.id) return capabilities.workspace.write
+        if (ProjectReadOperations.includes(
+          route.operation as (typeof ProjectReadOperations)[number],
+        )) return capabilities.project.read
+        if (ProjectWriteOperations.includes(
+          route.operation as (typeof ProjectWriteOperations)[number],
+        )) return capabilities.project.write
+        if (ProjectExecuteOperations.includes(
+          route.operation as (typeof ProjectExecuteOperations)[number],
+        )) return capabilities.project.execute
+        if (route.capabilityId === OfficeCapability.id) return capabilities.project.write
         if (SystemObserveOperations.has(route.operation)) return capabilities.system.observe
         if (SystemReadOperations.has(route.operation)) return capabilities.system.read
         if (SystemWriteOperations.has(route.operation)) return capabilities.system.write
@@ -365,7 +364,7 @@ export class VelarHostToolGateway {
     toolName: string,
     value: unknown,
   ): { output: unknown; artifacts?: ProviderSurfaceArtifact[] } {
-    if (toolName !== 'computer_screenshot') return { output: value }
+    if (toolName !== 'computer:screenshot') return { output: value }
     const output = asRecord(value)
     if (isNull(output) || !isString(output.base64) || isEmpty(output.base64)) return { output: value }
     const { base64, ...metadata } = output

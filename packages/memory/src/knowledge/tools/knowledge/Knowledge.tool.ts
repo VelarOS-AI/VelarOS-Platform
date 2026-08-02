@@ -12,7 +12,7 @@ import { resolveWorkspaceRoot } from './workspace'
 
 /** 查看 knowledge 索引健康状态。 */
 const getKnowledgeDiagnostics = defineKnowledgeTool<Record<string, never>>({
-  name: 'get_knowledge_diagnostics',
+  name: 'knowledge:diagnostics',
   role: 'memory',
   category: 'knowledge',
   summary: '查看 knowledge 索引诊断信息。',
@@ -40,13 +40,13 @@ const syncKnowledgeWorkspace = defineKnowledgeTool<{
   workspaceRoot?: string
   force?: boolean
 }>({
-  name: 'sync_knowledge_workspace',
+  name: 'knowledge:sync',
   role: 'memory',
   category: 'knowledge',
   summary: '同步工作区 knowledge 文档索引。',
   suitable: ['需要让当前工作区文档、配置或代码知识进入可检索索引。'],
   forbidden: ['不要把它当作全文搜索工具。'],
-  protocol: ['先确认 workspaceRoot；同步完成后再 search_knowledge 检索。'],
+  protocol: ['先确认 workspaceRoot；同步完成后再 knowledge:search 检索。'],
   usage: ['可传 workspaceRoot；需要跳过短时 TTL 时传 force=true。'],
   examples: [{ workspaceRoot: "/repo", force: true }],
   notes: ['会增量扫描并清理已删除或不可见的旧知识记录。'],
@@ -92,7 +92,7 @@ const searchKnowledge = defineKnowledgeTool<{
   documentIds?: string[]
   limit?: number
 }>({
-  name: 'search_knowledge',
+  name: 'knowledge:search',
   role: 'memory',
   category: 'knowledge',
   summary: '搜索工作区 knowledge。',
@@ -206,8 +206,8 @@ const searchKnowledge = defineKnowledgeTool<{
 
 /** knowledge 类别公开工具集合。 */
 const knowledgeTools = {
-  get_knowledge_diagnostics: getKnowledgeDiagnostics,
-  sync_knowledge_workspace: syncKnowledgeWorkspace,
-  search_knowledge: searchKnowledge,
+  'knowledge:diagnostics': getKnowledgeDiagnostics,
+  'knowledge:sync': syncKnowledgeWorkspace,
+  'knowledge:search': searchKnowledge,
 }
 export { knowledgeTools }

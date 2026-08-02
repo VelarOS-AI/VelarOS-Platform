@@ -250,7 +250,7 @@ export function getVisibleMessageBlocks(
 
   const visibleBlocks: ContentBlock[] = []
   message.blocks.forEach((block) => {
-    if (block.type === 'workspace-auto-approval') return
+    if (block.type === 'project-auto-approval') return
     if (isFalse(options.showThinkingProcess) && block.type === 'thinking') return
     if (hasPendingBlockingUserActionCard && block.type === 'text') return
     if (block.type !== 'tool-call') {
@@ -259,7 +259,7 @@ export function getVisibleMessageBlocks(
     }
 
     if (
-      block.toolName === 'update_plan' &&
+      block.toolName === 'plan:update' &&
       (options.hidePlanToolBlocks || block.toolCallId === options.hiddenPlanToolCallId)
     )
       return
@@ -289,7 +289,7 @@ export function hasVisibleSegmentContent(segment: ToolRenderSegment): boolean {
     case 'user-action-card':
     case 'scheduled-task-proposal':
       return true
-    case 'workspace-auto-approval':
+    case 'project-auto-approval':
       return false
     case 'text':
       return !isBlank(segment.block.text)

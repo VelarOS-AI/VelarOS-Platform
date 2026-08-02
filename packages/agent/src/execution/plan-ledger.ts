@@ -54,7 +54,7 @@ class ExecPlanLedger {
 
     if (isEmpty(nextPlan)) return currentPlan
 
-    // 模型已经用 update_plan 亲手写了计划:scaffold 默认计划只是角色占位,不得再把它覆盖回去。
+    // 模型已经用 plan:update 亲手写了计划:scaffold 默认计划只是角色占位,不得再把它覆盖回去。
     // (历史 bug:每个 turn 的 updateRole 都会用单步 operator-execute 冲掉模型的多步计划,
     //  导致 complete_step 永远匹配不到步骤、计划模式陷入死循环。)
     if (currentPlan.some((step) => step.origin === 'manual')) return this.routingCoordinator.refreshExecutionPlan(currentPlan)
@@ -108,7 +108,7 @@ class ExecPlanLedger {
         status: this.toExecutionPlanStepStatus(item.status),
         taskId: null,
         updatedAt: defaults.now,
-        // 模型经 update_plan 亲手写的步骤:标记 manual,让 mergeExecutionPlan 不被 scaffold 覆盖。
+        // 模型经 plan:update 亲手写的步骤:标记 manual,让 mergeExecutionPlan 不被 scaffold 覆盖。
         origin: 'manual' as const,
       }
     })

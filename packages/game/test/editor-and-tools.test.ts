@@ -9,12 +9,13 @@ import {
   type GameManifestDocument,
   type GameManifestDocumentChange,
   type GameManifestDocumentStore,
-  GameManifestWorkspaceEditor,
+  GameManifestProjectEditor,
   parseGameProjectManifest,
 } from '../dist/core/index.js'
 import type { GameDevServerStartRequest } from '../dist/runtime/index.js'
 import {
   type GameToolContext,
+  GameToolName,
   GameToolNames,
   gameTools,
 } from '../dist/tools/index.js'
@@ -158,10 +159,10 @@ function createStore(): MemoryManifestStore {
   })
 }
 
-describe('GameManifestWorkspaceEditor', () => {
+describe('GameManifestProjectEditor', () => {
   test('renames an entity and all inherited-scene references in one atomic batch', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:base',
       operations: [
@@ -194,7 +195,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('uses a tombstone when removing an inherited entity', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await editor.edit({
       target: 'scene:level-1',
       operations: [{ action: 'remove_entity', entityId: 'player' }],
@@ -206,7 +207,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('treats empty operations as a no-op and dry-run never writes', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const noOp = await editor.edit({
       target: 'scene:base',
       operations: [],
@@ -234,7 +235,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // （「我现在要编它」本身就是显式激活），不再要求先走一趟 set_project；未被指名的草稿仍留在
     // 拓扑外（下一条用例锁的就是那一面）。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const adopted = await editor.edit({
       target: 'prefab:enemy',
       operations: [
@@ -261,7 +262,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('creates the scene document when the target does not exist yet', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const created = await editor.edit({
       target: 'scene:arena',
       operations: [
@@ -296,7 +297,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'prefabs/enemy.prefab.json',
       JSON.stringify({ id: 'enemy-slime', kind: 'prefab', components: {} }),
     )
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await expect(
       editor.edit({ target: 'prefab:enemy', operations: [] }),
     ).rejects.toThrow('与编辑目标 prefab:enemy 对不上')
@@ -305,7 +306,7 @@ describe('GameManifestWorkspaceEditor', () => {
   test('ignores malformed undeclared prefab drafts until project.prefabs activates them', async () => {
     const store = createStore()
     store.setText('prefabs/enemy.prefab.json', '{"id":')
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     const unrelated = await editor.edit({
       target: 'scene:base',
@@ -330,7 +331,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('activates pre-created scene and asset manifests through set_project', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const declared = await editor.edit({
       target: 'project',
       operations: [{
@@ -449,7 +450,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 验收线：空目录 + 一次语义编辑 = 工程清单 + 资产清单 + 入口场景，全部由闭集完成，
     // 不需要模型手写任何一份 JSON。第六轮之前这条路走不通（闭集里没有能新建场景的动作）。
     const store = new MemoryManifestStore({})
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:main',
       operations: [
@@ -470,7 +471,7 @@ describe('GameManifestWorkspaceEditor', () => {
     const project = store.value('game.project.json')
     expect(project.scenes).toEqual(['scenes/main.scene.json'])
     expect(project.assets).toBe('assets/assets.json')
-    // 入口场景在这一刻补上：没有它 game_run 只会说「游戏工程没有 entryScene」。
+    // 入口场景在这一刻补上：没有它 game:run 只会说「游戏工程没有 entryScene」。
     expect(project.entryScene).toBe('scene:main')
     expect(
       (store.value('scenes/main.scene.json').entities as Array<Record<string, unknown>>)[0]?.id,
@@ -495,7 +496,7 @@ describe('GameManifestWorkspaceEditor', () => {
       },
       'assets/assets.json': { assets: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -526,7 +527,7 @@ describe('GameManifestWorkspaceEditor', () => {
         ],
       },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -542,7 +543,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 第三格（孪生站点 activateDeclaredPrefabs）。三格一条判据，因为三者都只是
     // 「game.project.json 里的一条路径」。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -558,7 +559,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 但零 error 零 warning 地发生是不许的。
     const store = createStore()
     // bonus 本来就没被声明，先声明它、再摘掉，才构成一次「移除」。
-    await new GameManifestWorkspaceEditor(store).edit({
+    await new GameManifestProjectEditor(store).edit({
       target: 'project',
       operations: [{
         action: 'set_project',
@@ -571,7 +572,7 @@ describe('GameManifestWorkspaceEditor', () => {
         },
       }],
     })
-    const undeclared = await new GameManifestWorkspaceEditor(store).edit({
+    const undeclared = await new GameManifestProjectEditor(store).edit({
       target: 'project',
       operations: [{
         action: 'set_project',
@@ -592,7 +593,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 同一批打在一份已存在的空场景上两条全成立。现在物化由**操作顺序**决定：
     // set_entity 先到就把场景建出来，rename_entity 随后自然找得到那条实体。
     const store = new MemoryManifestStore({})
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:main',
       operations: [
@@ -612,7 +613,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 第七轮担心的正是这句报错会把模型指向「去建实体」；修法不是拦创建（那要靠预测整批），
     // 而是把我们手里本来就有的事实说出来——这份清单是本次调用刚创建的。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -627,7 +628,7 @@ describe('GameManifestWorkspaceEditor', () => {
   })
 
   test('adopts a hand-written manifest that already carries the target id', async () => {
-    // 第八轮的形三（真机第一手）：文档明确保留「模型用 ws_edit 直接写 .scene.json」这条路。
+    // 第八轮的形三（真机第一手）：文档明确保留「模型用 project:edit 直接写 .scene.json」这条路。
     // 上一版只扫 prefabs/ 一个目录，于是手写在 levels/ 的那份被跳过、另起一份空 scenes/main，
     // 磁盘上从此两份 id=main，全程零提示。现在扫描面 = 整个工程，已有载体一律采纳。
     const store = new MemoryManifestStore({
@@ -638,7 +639,7 @@ describe('GameManifestWorkspaceEditor', () => {
         entities: [{ id: 'hero' }, { id: 'ground' }],
       },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:main',
       operations: [{ action: 'set_entity', entityId: 'goal' }],
@@ -656,14 +657,14 @@ describe('GameManifestWorkspaceEditor', () => {
   })
 
   test('refuses to guess when two files on disk carry the same stable id', async () => {
-    // 双射真的在磁盘上被打破时（ws_edit 不过编辑器，拦不住）当面报出来，不挑一份继续跑。
+    // 双射真的在磁盘上被打破时（project:edit 不过编辑器，拦不住）当面报出来，不挑一份继续跑。
     const store = new MemoryManifestStore({
       'game.project.json': { name: 'ambiguous', assets: 'assets/assets.json' },
       'assets/assets.json': { assets: [] },
       'levels/main.scene.json': { id: 'main', entities: [] },
       'scenes/main.scene.json': { id: 'main', entities: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({ target: 'scene:main', operations: [] }),
@@ -678,7 +679,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'assets/assets.json': { assets: [] },
       'levels/arena.scene.json': { id: 'arena', entities: [{ id: 'hero' }] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -702,7 +703,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'prefabs/enemy.prefab.json',
       '{"components":{"tags":["enemy"]},"id":"enemy","kind":"prefab"}',
     )
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const probe = await editor.edit({ target: 'prefab:enemy', operations: [] })
 
     expect(probe.operationsApplied).toBe(0)
@@ -725,7 +726,7 @@ describe('GameManifestWorkspaceEditor', () => {
   test('never walks the project when every touched manifest is already declared', async () => {
     // 扫描的代价只在「要采纳或创建」时付。编辑一份已声明的清单一次盘都不走。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await editor.edit({
       target: 'scene:base',
       operations: [{ action: 'set_entity', entityId: 'ground' }],
@@ -738,7 +739,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 同一条判决的另一半：`set_project` 声明一条还不存在的场景路径**可以**创建（那是显式意图），
     // 但创建必须在结果里看得见。第六轮这条路径一行摘要都不写。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const declared = await editor.edit({
       target: 'project',
       operations: [{
@@ -763,7 +764,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 第七轮 P2（主线判决）：永远不许拿「你是不是想说 X」的报错去换一次静默创建。
     // 这一批只有 remove_entity —— 模型显然是在指一个它认为已经存在的场景。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -782,7 +783,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // prefab 上的 remove_component 在空 prefab 上**静默成功**，所以第六轮的无差别 upsert 会把
     // 一个打错的 target 落成一份空文件并报成功——比场景那一档更隐蔽。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -796,7 +797,7 @@ describe('GameManifestWorkspaceEditor', () => {
   test('still creates a mistyped-looking target when the batch actually writes into it', async () => {
     // 反向锁：第六轮的 P0 不许被修回去。带 set_* 的批次照样从零建出场景。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const created = await editor.edit({
       target: 'scene:arena',
       operations: [{ action: 'set_entity', entityId: 'hero' }],
@@ -809,7 +810,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 第七轮 P2：set_component 是闭集里唯一没被摊平的一级，而用法文字说所有 set_* 都是 upsert。
     // 摊平它——落盘结果与 set_entity(components:{...}) 逐字节相同。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:base',
       operations: [{
@@ -834,7 +835,7 @@ describe('GameManifestWorkspaceEditor', () => {
     // 顺带修好的第二个真缺陷：requireSceneEntity 只看本地 entities，于是「在子场景里改一个
     // 继承来的实体」过去也撞墙——而正解恰恰是建一条本地覆盖条目。
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await editor.edit({
       target: 'scene:base',
       operations: [{ action: 'set_entity', entityId: 'obstacle' }],
@@ -869,7 +870,7 @@ describe('GameManifestWorkspaceEditor', () => {
         assets: 'assets/assets.json',
       },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({ target: 'project', operations: [] })
 
     expect(result.changedFiles.toSorted()).toEqual([
@@ -900,7 +901,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'assets/assets.json': { assets: [] },
       'scenes/main.scene.json': { id: 'main', entities: [{ id: 'hero' }] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const repaired = await editor.edit({ target: 'assets', operations: [] })
 
     expect(repaired.diffSummary).toContain(
@@ -930,7 +931,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/main.scene.json': { id: 'main', entities: [] },
       'stages/main.scene.json': { id: 'main', entities: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const dropped = await editor.edit({ target: 'assets', operations: [] })
 
     expect(dropped.diffSummary).toContain(
@@ -960,7 +961,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'assets/assets.json': { assets: [] },
       'prefabs/player.prefab.json': { id: 'player', components: {} },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     await expect(
       editor.edit({
@@ -977,7 +978,7 @@ describe('GameManifestWorkspaceEditor', () => {
   test('does not discover a second carrier of an already declared id (documented cost of not scanning)', async () => {
     // **这是文档口径的锁，不是缺陷的锁**（第九轮 P2 裁决：改文档不改代码）。
     // I3 被强制的时机是「编辑器创建或采纳一份清单」，而编辑一份**已声明**的清单一次盘都不走
-    // （上面的 manifestScans === 0 锁），所以 ws_edit 事后手写的第二份在这条路径上发现不了。
+    // （上面的 manifestScans === 0 锁），所以 project:edit 事后手写的第二份在这条路径上发现不了。
     // 要让它「当面报出」只能把每次编辑都扫盘的代价加回来——第八轮刚把它压掉。
     const store = new MemoryManifestStore({
       'game.project.json': {
@@ -989,7 +990,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/main.scene.json': { id: 'main', entities: [] },
       'levels/main.scene.json': { id: 'main', entities: [{ id: 'handwritten' }] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'scene:main',
       operations: [{ action: 'set_entity', entityId: 'goal' }],
@@ -1006,7 +1007,7 @@ describe('GameManifestWorkspaceEditor', () => {
   // 每一种坏工程都只问同一个问题——`target='project'` 还能不能用。
   // ===================================================================================
 
-  /** 一组「一次 ws_edit 就能造出来」的坏工程。新想到的坏法请加进这张表，不要新开测试。 */
+  /** 一组「一次 project:edit 就能造出来」的坏工程。新想到的坏法请加进这张表，不要新开测试。 */
   const damagedProjects: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
     ['两节点继承环', {
       'game.project.json': {
@@ -1157,7 +1158,7 @@ describe('GameManifestWorkspaceEditor', () => {
         },
       ] as const) {
         const store = new MemoryManifestStore(entries)
-        const result = await new GameManifestWorkspaceEditor(store).edit(request)
+        const result = await new GameManifestProjectEditor(store).edit(request)
         expect(result.ok).toBeTrue()
         // **第十一轮补的这一半才是这条电池的重点**：上一版只断 `ok`，于是「ok:true、
         // diffSummary 说 updated project、changedFiles 空、磁盘零变化」这种撒谎形态整格躺在
@@ -1182,7 +1183,7 @@ describe('GameManifestWorkspaceEditor', () => {
       for (const target of ['project', 'assets', 'scene:a', 'prefab:p'] as const) {
         const store = new MemoryManifestStore(entries)
         const before = store.snapshot()
-        const result = await new GameManifestWorkspaceEditor(store)
+        const result = await new GameManifestProjectEditor(store)
           .edit({ target, operations: [] })
           .catch(() => null)
         const after = store.snapshot()
@@ -1221,7 +1222,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/b.scene.json': { id: 'b', extends: 'scene:a', entities: [{ id: 'hb' }] },
       'assets/assets.json': { assets: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const reported = await editor.edit({ target: 'project', operations: [] })
     const damage = reported.warnings.find((warning) => warning.includes('继承成环'))
     expect(damage).toContain('scene:a → scene:b → scene:a')
@@ -1241,7 +1242,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('I4: a cycle introduced by this edit still fails fast with zero writes', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await expect(editor.edit({
       target: 'scene:base',
       operations: [{ action: 'set_extends', extends: 'scene:level-1' }],
@@ -1251,7 +1252,7 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('set_extends normalizes a bare slug and refuses a cross-kind reference', async () => {
     const store = createStore()
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const result = await editor.edit({
       target: 'prefab:enemy',
       operations: [{ action: 'set_extends', extends: 'player' }],
@@ -1281,7 +1282,7 @@ describe('GameManifestWorkspaceEditor', () => {
       ],
     }
     store.setText('game.project.json', JSON.stringify(declared))
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
 
     const reported = await editor.edit({ target: 'project', operations: [] })
     expect(reported.warnings.some((warning) => warning.includes('scenes/bonus.scene.json')
@@ -1315,7 +1316,7 @@ describe('GameManifestWorkspaceEditor', () => {
       },
       'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const reported = await editor.edit({ target: 'project', operations: [] })
     expect(reported.changedFiles).not.toContain('scenes/a.scene.json')
     expect(reported.diffSummary.some((line) => line.startsWith('skipped write'))).toBeTrue()
@@ -1340,7 +1341,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }] },
       'assets/assets.json': { assets: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await editor.edit({
       target: 'project',
       operations: [{ action: 'set_project', values: { name: 'renamed' } }],
@@ -1364,7 +1365,7 @@ describe('GameManifestWorkspaceEditor', () => {
         'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }], notes: 'keep' },
         'assets/assets.json': { assets: [] },
       })
-      const editor = new GameManifestWorkspaceEditor(store)
+      const editor = new GameManifestProjectEditor(store)
       const renamed = await editor.edit({
         target: 'project',
         operations: [{ action: 'set_project', values: { name: 'renamed' } }],
@@ -1389,7 +1390,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }] },
       'assets/assets.json': { assets: [] },
     })
-    await expect(new GameManifestWorkspaceEditor(store).edit({
+    await expect(new GameManifestProjectEditor(store).edit({
       target: 'project',
       operations: [{
         action: 'set_project',
@@ -1416,7 +1417,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'shared/thing.json': { note: 'hand written' },
       'assets/assets.json': { assets: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const reported = await editor.edit({ target: 'project', operations: [] })
     expect(reported.ok).toBeTrue()
     // 装载时就成立的冲突 → 随 warning 报出，那条路径一个字节都不动，且**说出来**。
@@ -1446,13 +1447,13 @@ describe('GameManifestWorkspaceEditor', () => {
         'levels/a.scene.json': { id: 'a', entities: [{ id: 'y' }] },
         'assets/assets.json': { assets: [] },
       })
-      await expect(new GameManifestWorkspaceEditor(store).edit({
+      await expect(new GameManifestProjectEditor(store).edit({
         target: 'scene:a',
         operations: [{ action: 'set_entity', entityId: 'z' }],
       })).rejects.toThrow('scene:a 在工程里有 2 份载体')
       expect(store.batches).toHaveLength(0)
       // 无关 target 照常可用——被拒的只是坏在那一点上的那个 target（I4 没有被推倒）。
-      const unrelated = await new GameManifestWorkspaceEditor(store).edit({
+      const unrelated = await new GameManifestProjectEditor(store).edit({
         target: 'project',
         operations: [{ action: 'set_project', values: { name: 'renamed' } }],
       })
@@ -1472,7 +1473,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }] },
       'assets/assets.json': { assets: [] },
     })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     const refused = await editor
       .edit({ target: 'project', operations: [{ action: 'set_project', values: { scenes: [] } }] })
       .catch((error: Error) => error)
@@ -1506,7 +1507,7 @@ describe('GameManifestWorkspaceEditor', () => {
       'scenes/a.scene.json': { id: 'a', entities: [{ id: 'x' }] },
       'assets/assets.json': { assets: [{ id: 'tex', kind: 'texture', path: 'x.png' }], notes: 'keep me' },
     })
-    const adopted = await new GameManifestWorkspaceEditor(store).edit({
+    const adopted = await new GameManifestProjectEditor(store).edit({
       target: 'project',
       operations: [{ action: 'set_project', values: { assets: 'assets/assets.json' } }],
     })
@@ -1518,11 +1519,11 @@ describe('GameManifestWorkspaceEditor', () => {
 
   test('game.project.json is the only manifest whose failure is fatal, and it says so', async () => {
     const store = new MemoryManifestStore({ 'game.project.json': '{ "name": "x", ' })
-    const editor = new GameManifestWorkspaceEditor(store)
+    const editor = new GameManifestProjectEditor(store)
     await expect(editor.edit({ target: 'project', operations: [] })).rejects.toThrow(
       '唯一一份编辑器无法降级处理的清单',
     )
-    // 一次 ws_edit 就修好了，出路只有一步。
+    // 一次 project:edit 就修好了，出路只有一步。
     store.setText('game.project.json', JSON.stringify({ name: 'x' }))
     const healed = await editor.edit({ target: 'project', operations: [] })
     expect(healed.ok).toBeTrue()
@@ -1532,30 +1533,30 @@ describe('GameManifestWorkspaceEditor', () => {
 describe('game tool contracts', () => {
   test('publish exactly the six stable names with explicit permissions', () => {
     expect(Object.keys(gameTools)).toEqual([...GameToolNames])
-    expect(gameTools.game_scene_edit.permissions).toEqual([
+    expect(gameTools[GameToolName.sceneEdit].permissions).toEqual([
       'fs:read',
       'fs:write',
     ])
-    expect(gameTools.game_run.permissions).toContain('process:exec')
-    expect(gameTools.game_input.permissions).toContain('input:control')
+    expect(gameTools[GameToolName.run].permissions).toContain('process:exec')
+    expect(gameTools[GameToolName.input].permissions).toContain('input:control')
   })
 
-  test('hide behind project availability and point runtime tools to game_run', async () => {
+  test('hide behind project availability and point runtime tools to game:run', async () => {
     const context = createToolContext(false)
-    expect(gameTools.game_run.isAvailable?.(context)).toBe(false)
+    expect(gameTools[GameToolName.run].isAvailable?.(context)).toBe(false)
 
     const available = createToolContext(true)
     await expect(
-      gameTools.game_query_state.execute(
-        gameTools.game_query_state.schema.parse({}),
+      gameTools[GameToolName.queryState].execute(
+        gameTools[GameToolName.queryState].schema.parse({}),
         available,
       ),
-    ).rejects.toThrow('先调用 game_run')
+    ).rejects.toThrow('先调用 game:run')
   })
 
   test('drops one malformed input step without failing the valid step', async () => {
     const context = createToolContext(true, true)
-    const input = gameTools.game_input.schema.parse({
+    const input = gameTools[GameToolName.input].schema.parse({
       steps: [
         null,
         { key: 'Space' },
@@ -1563,7 +1564,7 @@ describe('game tool contracts', () => {
         { action: 'press', logicalAction: 'jump' },
       ],
     })
-    const result = await gameTools.game_input.execute(input, context) as {
+    const result = await gameTools[GameToolName.input].execute(input, context) as {
       appliedSteps: number
       droppedSteps: Array<{ index: number }>
     }
@@ -1578,22 +1579,22 @@ describe('game tool contracts', () => {
 
   test('rejects an input batch whose waits exceed the page-call budget', async () => {
     const context = createToolContext(true, true)
-    const input = gameTools.game_input.schema.parse({
+    const input = gameTools[GameToolName.input].schema.parse({
       steps: [{ action: 'wait', ms: 6_000 }],
       repeat: 2,
     })
 
     await expect(
-      gameTools.game_input.execute(input, context),
+      gameTools[GameToolName.input].execute(input, context),
     ).rejects.toThrow('超过单次 10000ms 上限')
   })
 
   test('infers entity queries and normalizes forgiving run/screenshot fields', async () => {
-    const entityQuery = gameTools.game_query_state.schema.parse({
+    const entityQuery = gameTools[GameToolName.queryState].schema.parse({
       entityId: 'player',
     })
-    const runInput = gameTools.game_run.schema.parse({ scene: 'level-1' })
-    const screenshot = gameTools.game_screenshot.schema.parse({
+    const runInput = gameTools[GameToolName.run].schema.parse({ scene: 'level-1' })
+    const screenshot = gameTools[GameToolName.screenshot].schema.parse({
       label: ' First Playable Screenshot! ',
     })
 
@@ -1604,7 +1605,7 @@ describe('game tool contracts', () => {
     expect(runInput.scene).toBe('scene:level-1')
     expect(screenshot.label).toBe('first-playable-screenshot')
 
-    const result = await gameTools.game_run.execute(
+    const result = await gameTools[GameToolName.run].execute(
       runInput,
       createToolContext(true),
     ) as {

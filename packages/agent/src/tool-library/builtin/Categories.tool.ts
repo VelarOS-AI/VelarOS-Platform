@@ -12,11 +12,11 @@ import {
 } from './Categories'
 
 const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>({
-  name: 'tool_map',
+  name: 'tooling:map',
   role: 'control',
   category: 'general',
   // 工具地图就是模型当下要读的内容：禁止 page-out 成 payload 引用，否则模型还得
-  // recall_context 召回，白白多花轮次（见 debug：tool_map→卸载→recall）。
+  // context:recall 召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
   outputInline: true,
   summary:
     'ContextOS 统一查询入口：按分类展开工具地图，也可用 op=find/page/read 查询工具页状态。',
@@ -28,10 +28,10 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   ],
   forbidden: ['不要用它执行目标工具；它只返回工具地图和激活路径。'],
   protocol: [
-    '默认或 op="map"：按分类分页；page.nextCursor 非空时继续调用 tool_map(cursor: nextCursor)。',
+    '默认或 op="map"：按分类分页；page.nextCursor 非空时继续调用 tooling:map(cursor: nextCursor)。',
     'op="find"：按 query 搜索工具页；op="page"：平铺分页；op="read"：读取指定技能正文（skill:<id>）。',
     'map 下每个 category 返回完整 toolNames；详细状态页仍按 maxToolsPerCategory 展开。',
-    '每个 category 头部包含 capability 页，可用 tool_replace 一类激活。',
+    '每个 category 头部包含 capability 页，可用 tooling:replace 一类激活。',
     '每个 tool 页包含 toolOsState 与 activation：resident 可直接调用，loadable 按 activation.method 换入，needs_setup 先处理 dependencies。',
   ],
   usage: [
@@ -44,7 +44,7 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
     { kind: 'tool', toolOsStates: ['loadable'] },
   ],
   notes: [
-    '这是首选查询入口：先看结构化状态清单、依赖关系和一类激活路径，再决定是否 tool_replace。',
+    '这是首选查询入口：先看结构化状态清单、依赖关系和一类激活路径，再决定是否 tooling:replace。',
     '只列出当前产品作用域允许的工具；具体作用域隔离与恢复动作由注入的 CapabilityScopePolicy 声明。',
   ],
   schema: toolSpaceQueryMethodSchema,
@@ -57,17 +57,17 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
 })
 
 const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>({
-  name: 'tool_read',
+  name: 'tooling:read',
   role: 'control',
   category: 'general',
-  // 同 tool_map：技能正文是模型当下要读的内容，禁止 page-out。
+  // 同 tooling:map：技能正文是模型当下要读的内容，禁止 page-out。
   outputInline: true,
   summary: '读取当前角色可见的技能正文（skill:<id>）；技能索引见任务提示词。',
   suitable: [
     '任务确实需要某个技能的规范/步骤时，按 id 读取其正文再据以执行。',
   ],
   forbidden: [
-    '不读工具能力：需要某个工具时用 tool_map 发现、tool_replace 换入，让真实工具 schema 在下一轮暴露；不要用 tool_read 读工具页。',
+    '不读工具能力：需要某个工具时用 tooling:map 发现、tooling:replace 换入，让真实工具 schema 在下一轮暴露；不要用 tooling:read 读工具页。',
     '不要猜技能正文或不存在的 id；读取前只把索引当目录。',
   ],
   protocol: ['detail="full" 时技能页额外返回按需读取说明；默认 brief 即技能正文。'],
@@ -85,7 +85,7 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
 })
 
 const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSchema>>({
-  name: 'tool_replace',
+  name: 'tooling:replace',
   role: 'control',
   category: 'general',
   summary: '换入/换出工具页，或按 capability 一类激活能力；影响后续 AI SDK tools 暴露。',
@@ -119,9 +119,9 @@ const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSch
 })
 
 const categoriesTools = {
-  tool_map: toolSpaceMap,
-  tool_read: toolSpaceRead,
-  tool_replace: toolSpaceReplace,
+  'tooling:map': toolSpaceMap,
+  'tooling:read': toolSpaceRead,
+  'tooling:replace': toolSpaceReplace,
 }
 
 export { categoriesTools }

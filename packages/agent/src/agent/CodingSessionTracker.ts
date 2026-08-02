@@ -114,7 +114,7 @@ class CodingSessionTracker {
   private editVersion = 0
   /** 已检查（read/list/diff 等）至的编辑版本；用于判断是否需要 inspection reminder。 */
   private lastInspectionVersion = 0
-  /** 已验证（ws_run_command / run_verification_plan）至的编辑版本。 */
+  /** 已验证（project:run / run_verification_plan）至的编辑版本。 */
   private lastVerificationVersion = 0
   /** 已发过 post-edit reminder 的编辑版本；同版本只发一次。 */
   private reminderIssuedForVersion = 0
@@ -391,7 +391,7 @@ class CodingSessionTracker {
   }
 
   /**
-   * 合并路径→revision（apply_edit.newRevisions 与 ws_read 快照），
+   * 合并路径→revision（apply_edit.newRevisions 与 project:read 快照），
    * 供模型历史清洗阶段丢弃过期读结果。
    */
   private mergeResourceRevisionHints(toolName: string, result: unknown): void {
@@ -593,7 +593,7 @@ class CodingSessionTracker {
     args: Record<string, unknown>,
     result: unknown
   ): void {
-    if (toolName === 'tool_replace') {
+    if (toolName === 'tooling:replace') {
       this.telemetryCounters.recordToolReplaceCall()
     }
     this.toolCallDeduper.recordIdempotentToolCall(toolName, args)
@@ -1022,7 +1022,7 @@ class CodingSessionTracker {
   /**
    * 计算本轮“新发生缺页”的 page-in 工具并标记已上报。
    *
-   * 背景：模型 tool_replace page-in 的工具进入 budgetOverrideToolNames 获得驻留优先级，
+   * 背景：模型 tooling:replace page-in 的工具进入 budgetOverrideToolNames 获得驻留优先级，
    * 但动态工具空间是硬预算——当驻留集合本身超出 maxToolSchemaChars 时，部分 page-in 工具仍会被换出。
    * 若对模型静默，模型会困惑“为什么换入的工具下一轮不见了”。这里把换出的 page-in 工具回报给上层，
    * 由 agent loop 注入一条 system 提醒。
@@ -1362,7 +1362,7 @@ class CodingSessionTracker {
     toolName: string,
     args: Record<string, unknown>
   ): void {
-    if (toolName !== 'bash' && toolName !== 'ws_run_command') return
+    if (toolName !== 'bash' && toolName !== 'project:run') return
     const command = args.command
     if (!isString(command) || !command.trim()) return
 

@@ -15,7 +15,6 @@ export type {
   MemoryApi,
   MemoryDatabaseProvider,
   MemorySessionLineageContext,
-  MemorySystemApi,
   MemoryToolContext,
   MemoryTreeRuntimeProviders,
   ToolContext,

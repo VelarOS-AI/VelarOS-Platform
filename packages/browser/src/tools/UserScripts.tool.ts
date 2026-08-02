@@ -50,7 +50,7 @@ const browserUserScriptsSchema = z.discriminatedUnion('action', [
 ])
 
 const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSchema>>({
-  name: 'browser_user_scripts',
+  name: 'browser:user_scripts',
   role: 'edit',
   summary: '按 VelarOS 自有契约管理可跨站匹配并自动注入的浏览器脚本。',
   suitable: [
@@ -121,5 +121,5 @@ const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSc
 })
 
 export const browserUserScriptTools = {
-  browser_user_scripts: browserUserScripts,
+  'browser:user_scripts': browserUserScripts,
 }

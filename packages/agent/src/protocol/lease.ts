@@ -18,10 +18,10 @@ export const LeaseRenewalWindowMs = 10 * 60 * 1000
 export const LeaseRenewalTurnLimit = 6
 
 /** 目录自恢复发现工具名：拉取当前完整工具清单（宪章 §3）。 */
-export const ToolCatalogDiscoveryToolName = 'velaros_tool_catalog'
+export const ToolCatalogDiscoveryToolName = 'tooling:catalog'
 
 /** schema 自恢复发现工具名：按需拉取某工具的精确输入 schema（宪章 §3）。 */
-export const ToolSchemaDiscoveryToolName = 'velaros_tool_schema'
+export const ToolSchemaDiscoveryToolName = 'tooling:schema'
 
 /**
  * 单个工具目录条目。

@@ -6,7 +6,7 @@
  * `kernel/context-epoch.ts` 是请求陈旧守卫，与本模块无关。
  *
  * ## 一次 epoch 的固定顺序
- *  1. **触发判定**：投影占用 > `epochTriggerPercent × G`，或模型调用 `distill_context` 声明阶段完成。
+ *  1. **触发判定**：投影占用 > `epochTriggerPercent × G`，或模型调用 `context:distill` 声明阶段完成。
  *  2. **反空转**：先估这次能省多少，低于 `minEpochSavingPercent` 就整个跳过并记事件 ——
  *     宁可带着高占用多跑一轮，也不为 3% 的收益炸掉整条 KV 缓存。
  *  3. **I2 产物落地**：把上一个 epoch 之后异步跑完的蒸馏产物应用进账本（B2 起）。放在最前是因为
@@ -116,7 +116,7 @@ export interface RunGovernanceEpochInput {
   epoch: number
   /** 时刻（迁移事件的 `at`）。epoch 自身不取时钟。 */
   at: number
-  /** 模型是否调用了 `distill_context` 声明阶段边界。 */
+  /** 模型是否调用了 `context:distill` 声明阶段边界。 */
   modelRequested?: LooseOptional<boolean>
   /** 耗时（毫秒）。调用方测量，本函数不取时钟。 */
   durationMs?: LooseOptional<number>
@@ -203,7 +203,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   // ② I0 逐出：机械、免费、可召回。
   const skeletonMembers: ContextRecord[] = []
   for (const candidate of candidates) {
-    // 达标即停 —— 但**模型请求的 epoch 例外**：模型调 `distill_context` 就是在说"这批结果我已经
+    // 达标即停 —— 但**模型请求的 epoch 例外**：模型调 `context:distill` 就是在说"这批结果我已经
     // 消化完了"，那些被取代/陈旧的快照该当场折掉，不该因为"现在还没胀到目标线"而留着。
     // 例外只覆盖免费且可召回的前两档（superseded / stale）；低锚密度那档仍只在真有压力时才动。
     const belowTarget = measureProjectedTokens(ledger, config, budgetTokens) <= targetTokens

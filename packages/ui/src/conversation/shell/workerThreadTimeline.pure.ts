@@ -77,7 +77,7 @@ function createPendingWorkerThreadFromDispatchToolCall(
   message: ChatMessage,
   block: ToolCallBlock
 ): Nullable<ConversationWorkerThread> {
-  if (block.toolName !== 'dispatch_agent' || !block.isRunning) return null
+  if (block.toolName !== 'agent:dispatch' || !block.isRunning) return null
 
   const args = isRecord(block.args) ? block.args : {}
   const prompt = readDispatchArg(args, 'prompt')
@@ -290,7 +290,7 @@ function createWorkerThreadTranscriptAnchorIndex(
     })
 
     message.blocks.forEach((block) => {
-      if (block.type !== 'tool-call' || block.toolName !== 'dispatch_agent') return
+      if (block.type !== 'tool-call' || block.toolName !== 'agent:dispatch') return
 
       const timestamp = readFiniteTimestamp(block.startedAt) ?? message.timestamp
       dispatchAnchors.push({

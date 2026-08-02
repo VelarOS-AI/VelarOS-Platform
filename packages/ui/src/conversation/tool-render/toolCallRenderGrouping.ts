@@ -2,9 +2,9 @@ import type { ContentBlock, ToolCallBlock as ToolCallBlockType } from '#contract
 import { isEmpty,isPresent } from '#internal/runtime'
 
 export const TOOL_GROUP_COLLAPSE_MIN = 4
-export const TOOL_ACTIVITY_SUMMARY_EXCLUDED_TOOL_NAMES = ['show_widget', 'update_plan'] as const
+export const TOOL_ACTIVITY_SUMMARY_EXCLUDED_TOOL_NAMES = ['ui:show_widget', 'plan:update'] as const
 export const TOOL_ACTIVITY_SUMMARY_INTERACTION_TOOL_NAMES = [
-  'show_user_action_cards',
+  'interaction:show_action_cards',
   'request_confirmation',
 ] as const
 
@@ -146,8 +146,8 @@ export function buildToolRenderSegments(
                 ? `capability-auto-approval:${block.notice.id}`
                 : block.type === 'user-action-card'
                   ? `user-action-card:${block.card.id}`
-                  : block.type === 'workspace-auto-approval'
-                    ? `workspace-auto-approval:${block.notice.id}`
+                  : block.type === 'project-auto-approval'
+                    ? `project-auto-approval:${block.notice.id}`
                     : `text:${index}`,
     })
   })

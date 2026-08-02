@@ -106,12 +106,14 @@ export async function compileProviderSendRequest(
     ...input,
     messages: providerMessages,
     toolPayloadRefsByToolCallId,
+    toolNameAliases:
+      input.toolNameAliases ?? input.toolContext?.getCurrentVisibleToolTransportNames?.(),
   })
 
   return {
     ...compiled,
     sanitizedHistoryMessages,
-    providerMessages,
+    providerMessages: compiled.messages,
     userTextPayloadRefs: userTextPayloadRefs.length,
   }
 }

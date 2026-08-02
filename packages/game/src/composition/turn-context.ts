@@ -5,6 +5,7 @@ import {
   TurnContextSessionLedgers,
 } from '@velaros-ai/core/utils/TurnContextLedger'
 
+import { GameTurnContextSourceIds } from '../contracts.js'
 import type {
   GameInputResult,
   GameRunResult,
@@ -14,8 +15,6 @@ import type {
   GameRuntimeSceneSnapshot,
   GameStopResult,
 } from '../core/index.js'
-
-import { GameTurnContextSourceIds } from './mod.js'
 
 export type GameTurnContextSourceId = (typeof GameTurnContextSourceIds)[number]
 export type GameTurnContextScopeResolver = (
@@ -95,7 +94,7 @@ export class GameTurnContextCoordinator {
     this.ledgers['game.scene-state'].append(sessionId, {
       label: '游戏已停止',
       summaryText: '游戏运行态已停止。',
-      inspect: { tool: 'game_run' },
+      inspect: { tool: 'game:run' },
     })
   }
 
@@ -127,8 +126,8 @@ export class GameTurnContextCoordinator {
         ? `用户选择了游戏实体“${entityId}”。`
         : '用户清除了游戏实体选择。',
       inspect: entityId
-        ? { tool: 'game_query_state', argsHint: { select: 'entity', entityId } }
-        : { tool: 'game_query_state', argsHint: { select: 'selection' } },
+        ? { tool: 'game:query_state', argsHint: { select: 'entity', entityId } }
+        : { tool: 'game:query_state', argsHint: { select: 'selection' } },
     })
   }
 
@@ -151,7 +150,7 @@ export class GameTurnContextCoordinator {
         this.ledgers['game.runtime-errors'].append(sessionId, {
           label: '游戏报错已清零',
           summaryText: '游戏运行态报错列表现已为空。',
-          inspect: { tool: 'game_query_state', argsHint: { select: 'errors' } },
+          inspect: { tool: 'game:query_state', argsHint: { select: 'errors' } },
         })
       }
       return
@@ -160,7 +159,7 @@ export class GameTurnContextCoordinator {
     this.ledgers['game.runtime-errors'].append(sessionId, {
       label: `${errors.length} 条游戏报错`,
       summaryText: `游戏运行态报告了 ${errors.length} 条报错，最新一条：${latest.message}`,
-      inspect: { tool: 'game_query_state', argsHint: { select: 'errors' } },
+      inspect: { tool: 'game:query_state', argsHint: { select: 'errors' } },
     })
   }
 
@@ -175,10 +174,10 @@ export class GameTurnContextCoordinator {
         scene.running ? '正在运行' : '已停止'
       }，包含 ${scene.entityCount} 个实体，其中 ${scene.renderedEntities} 个产生了可见画面。${
         blind
-          ? '一个都没画出来——画面上只有调试叠加层；用 game_query_state({select:"errors"}) 看逐实体原因。'
+          ? '一个都没画出来——画面上只有调试叠加层；用 game:query_state({select:"errors"}) 看逐实体原因。'
           : ''
       }`,
-      inspect: { tool: 'game_query_state', argsHint: { select: 'scene' } },
+      inspect: { tool: 'game:query_state', argsHint: { select: 'scene' } },
     })
   }
 }

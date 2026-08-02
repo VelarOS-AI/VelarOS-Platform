@@ -105,7 +105,7 @@
 | [turn-context-sources.md](./mod-dev/axes/turn-context-sources.md) | 要让 mod 的信息进入**每回合上下文**时——这是唯一通道 |
 | [hooks.md](./mod-dev/axes/hooks.md) | 要把 handler 挂到某个 seam 上时(机制看 seams.md,本页只讲 manifest 侧) |
 | [execution-modes.md](./mod-dev/axes/execution-modes.md) | 要加目标模式 / 计划模式那一类执行模式时 |
-| [sub-agent-types.md](./mod-dev/axes/sub-agent-types.md) | 要加一个 `dispatch_agent` 可派发的子 agent 角色时 |
+| [sub-agent-types.md](./mod-dev/axes/sub-agent-types.md) | 要加一个 `agent:dispatch` 可派发的子 agent 角色时 |
 | [skills.md](./mod-dev/axes/skills.md) | 要贡献 `*.md` 技能时(注意:今天 Desktop 的技能仍走文件式供应方,本轴未接线) |
 
 **两族 ui 轴**(住 `ui` 节,由产品壳解析):

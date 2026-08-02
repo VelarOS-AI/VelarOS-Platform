@@ -90,8 +90,8 @@ const computer: ToolComputerApi = {
   typeText: (text) => manager.typeText(text),
   key: (keys) => manager.key(keys),
 }
-// computerTools:computer_screenshot / computer_screen_size /
-//                computer_move / computer_click / computer_type / computer_key
+// computerTools:computer:screenshot / computer:screen_size /
+//                computer:move / computer:click / computer:type / computer:key
 ```
 
 ## 边界:本包不负责什么
@@ -110,7 +110,7 @@ const computer: ToolComputerApi = {
   注册进 agent 运行时。
 - `src/runtime/kernel-module.ts` 提供可选的 Kernel 模块适配器(`createComputerKernelModule`),
   默认**不接管**调用方注入的 runtime 生命周期。
-- 姐妹能力包:`@velaros-ai/browser`(浏览器自动化)、`@velaros-ai/workspace`(本地代码工作区)。
+- 姐妹能力包:`@velaros-ai/browser`(浏览器自动化)、`@velaros-ai/project`(本地代码工作区)。
 
 ## 兼容策略
 

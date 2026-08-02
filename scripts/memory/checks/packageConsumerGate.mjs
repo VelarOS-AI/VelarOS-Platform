@@ -517,8 +517,6 @@ async function writeConsumerProject(consumerDirectory) {
 const memory = await import('@velaros-ai/memory')
 const knowledge = await import('@velaros-ai/memory/knowledge')
 const adapter = await import('@velaros-ai/memory/adapter-kernel')
-const memoryCli = await import('@velaros-ai/memory/cli')
-const knowledgeCli = await import('@velaros-ai/memory/knowledge/cli')
 
 assert.equal(typeof memory.DefaultMemoryRuntime, 'function')
 assert.equal(typeof memory.MemoryRuntime, 'function')
@@ -527,8 +525,6 @@ assert.equal(typeof knowledge.KnowledgeRuntime, 'function')
 assert.equal(typeof knowledge.VectorFailureMonitor, 'function')
 assert.equal(typeof adapter.MemoryAdapterRuntime, 'function')
 assert.equal(typeof adapter.mountMemoryAdapter, 'function')
-assert.equal(typeof memoryCli.runMemoryCli, 'function')
-assert.equal(typeof knowledgeCli.runKnowledgeCli, 'function')
 `
   )
 }

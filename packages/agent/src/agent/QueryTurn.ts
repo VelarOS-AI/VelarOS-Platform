@@ -336,10 +336,10 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     })
 
     try {
-      // 注意力路由内置常开，历史里随时可能出现 recall 句柄，recall_context 必须恒定可用。
+      // 注意力路由内置常开，历史里随时可能出现 recall 句柄，context:recall 必须恒定可用。
       const providerToolNamePlan = this.turnRequestHelper.resolveProviderToolNamePlan(
         args.history,
-        args.allowedTools ? [...args.allowedTools, 'recall_context'] : args.allowedTools
+        args.allowedTools ? [...args.allowedTools, 'context:recall'] : args.allowedTools
       )
       const providerToolNames = providerToolNamePlan.providerToolNames ?? []
       const aiTools = toolRegistry.toAiTools(args.toolContext, providerToolNames, {

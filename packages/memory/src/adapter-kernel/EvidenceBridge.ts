@@ -37,7 +37,7 @@ interface ComputerUseObservationInput {
 }
 
 interface WorkspaceToolObservationInput extends ComputerUseObservationInput {
-  categoryId: 'workspace-inspect' | 'workspace-edit' | 'workspace-execute' | 'code-intelligence'
+  categoryId: 'project-files' | 'project-changes' | 'project-execution' | 'development-code'
   taskTitle: string
 }
 
@@ -297,17 +297,17 @@ export class MemoryEvidenceBridge {
     args: Record<string, unknown>
   ): Nullable<string> {
     switch (toolName) {
-      case 'computer_screenshot':
+      case 'computer:screenshot':
         return '为当前任务观察了主屏幕；原始截图未进入长期记忆。'
-      case 'computer_screen_size':
+      case 'computer:screen_size':
         return '为当前任务读取了主屏幕几何信息。'
-      case 'computer_move':
+      case 'computer:move':
         return `为当前任务移动了鼠标到 (${this.numberOrUnknown(args.x)}, ${this.numberOrUnknown(args.y)})。`
-      case 'computer_click':
+      case 'computer:click':
         return `为当前任务在 (${this.numberOrUnknown(args.x)}, ${this.numberOrUnknown(args.y)}) 执行了 ${isString(args.button) ? args.button : 'left'} 点击。`
-      case 'computer_type':
+      case 'computer:type':
         return `为当前任务向桌面焦点输入了文本；仅保留长度 ${isString(args.text) ? args.text.length : 0}，原文未进入长期记忆。`
-      case 'computer_key':
+      case 'computer:key':
         return `为当前任务发送了按键 ${isString(args.keys) ? args.keys.slice(0, 100) : 'unknown'}。`
       default:
         return null
@@ -318,14 +318,14 @@ export class MemoryEvidenceBridge {
     const target = this.readWorkspaceTarget(input.args)
     const targetText = target ? `，目标 ${target}` : ''
     switch (input.categoryId) {
-      case 'workspace-edit':
-        return `通过 ${input.toolName} 完成了一次工作区修改${targetText}；文件正文未复制进长期记忆。`
-      case 'workspace-execute':
-        return `通过 ${input.toolName} 完成了一次工作区执行${targetText}；命令和输出原文未复制进长期记忆。`
-      case 'code-intelligence':
+      case 'project-changes':
+        return `通过 ${input.toolName} 完成了一次项目修改${targetText}；文件正文未复制进长期记忆。`
+      case 'project-execution':
+        return `通过 ${input.toolName} 完成了一次项目执行${targetText}；命令和输出原文未复制进长期记忆。`
+      case 'development-code':
         return `通过 ${input.toolName} 检查了代码结构${targetText}；查询结果原文未复制进长期记忆。`
-      case 'workspace-inspect':
-        return `通过 ${input.toolName} 检查了工作区${targetText}；读取内容未复制进长期记忆。`
+      case 'project-files':
+        return `通过 ${input.toolName} 检查了项目文件${targetText}；读取内容未复制进长期记忆。`
     }
   }
 

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isObject, isPresent, isString, optionalWhen, stringifyPretty,toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord, WorkspaceReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './types.js'
+import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord, ProjectReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './types.js'
 
 const BrowserUserScriptIndexPath = 'scripts/index.json'
 const BrowserUserScriptStoreVersion = 1 as const
@@ -16,7 +16,7 @@ interface BrowserUserScriptAccess {
     startLine?: number,
     endLine?: number,
     maxChars?: number
-  ) => Promise<WorkspaceReadFileResult>
+  ) => Promise<ProjectReadFileResult>
   writeFile: (
     path: string,
     content: string,

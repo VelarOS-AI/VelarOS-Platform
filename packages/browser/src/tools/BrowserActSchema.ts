@@ -344,7 +344,7 @@ const browserActWaitForFunctionSchema = z
       parameterDescription({
         description: '要重复执行直到返回 truthy 的页面 JavaScript 表达式。',
         usage: ['例如 expression=document.readyState === "complete"。'],
-        notes: ['表达式在页面上下文执行；需要任意脚本取值时用 browser_evaluate_script。'],
+        notes: ['表达式在页面上下文执行；需要任意脚本取值时用 browser:evaluate_script。'],
       })
     ),
     timeoutMs: z.number().int().positive().max(60000).optional().describe(

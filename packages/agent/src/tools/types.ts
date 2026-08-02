@@ -39,7 +39,7 @@ interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContex
   permissions: ToolPermission[]
   capabilities?: ToolCapabilitySchema
   exposure?: ToolExposurePolicy
-  /** 输出禁止 page-out、始终内联（发现/索引类工具，如 tool_map）。 */
+  /** 输出禁止 page-out、始终内联（发现/索引类工具，如 tooling:map）。 */
   outputInline?: boolean
   /** 运行依赖不存在时从工具发现层彻底移除，而不是展示为不可用。 */
   hideWhenUnavailable?: boolean

@@ -15,7 +15,7 @@ Electron 内嵌 WebContents,和外部 Chrome 的 CDP 连接。本包的答案是
 
 ## 对外分区
 
-**本包刻意没有根导出。** 四个切片的运行面互斥(host 无关 / React / Electron),
+**本包刻意没有根导出。** 各切片的运行面互斥(host 无关 / React / Electron),
 合成一个根入口会让 renderer 侧 bundle 顺着根 index 把 Electron 代码一起拽进去
 ——**这正是必须靠子路径切分守住的墙**。
 
@@ -23,9 +23,9 @@ Electron 内嵌 WebContents,和外部 Chrome 的 CDP 连接。本包的答案是
 | --- | --- | --- |
 | `@velaros-ai/browser/core` | `src/core` | host 无关的 CDP 自动化运行时、驱动、策略、脚本构建器 |
 | `@velaros-ai/browser/core/contracts` | `src/core/contracts.ts` | 浏览器安全 DTO + 确定性策略(无 Node 内置模块) |
-| `@velaros-ai/browser/tools` | `src/tools` | 宿主注入式的 agent 工具集合(六十余个,多数以 `browser_` 打头) |
-| `@velaros-ai/browser/tools/cli` | `src/tools/cli.ts` | 工具 CLI 入口 |
-| `@velaros-ai/browser/composition` | `src/composition` | React 合成边界(peer `react`) |
+| `@velaros-ai/browser/tools` | `src/tools` | 宿主注入式的 40 个 `browser:*` canonical agent 工具 |
+| `@velaros-ai/browser/composition` | `src/composition/BrowserCompositionProvider.tsx` | renderer-safe React 合成边界(peer `react`) |
+| `@velaros-ai/browser/composition/mod` | `src/composition/mod.ts` | 宿主侧 Mod Loader 定义；会绑定完整工具集合，renderer 不得导入 |
 | `@velaros-ai/browser/runtime` | `src/runtime` | Electron 会话 / 自动化运行时(peer `electron`) |
 
 `react` 与 `electron` 都是**可选 peer**:只用 `./core` / `./tools` 的宿主两个都不用装。
@@ -89,12 +89,11 @@ Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
 - 与 `@velaros-ai/agent` 是**被注入关系**:本包不 import 它,宿主在装配根把 `browserTools`
   注册进 agent 运行时。
 - `src/runtime/kernel-module.ts` 提供可选的 Kernel 模块适配器。
-- `vendor/devtools-performance-engine` 是随包发布的性能分析引擎产物,由 `browser_performance` 消费。
-- 姐妹能力包:`@velaros-ai/computer`(OS 级桌面控制)、`@velaros-ai/workspace`(本地代码工作区)。
+- `vendor/devtools-performance-engine` 是随包发布的性能分析引擎产物,由 `browser:performance` 消费。
+- 姐妹能力包:`@velaros-ai/computer`(OS 级桌面控制)、`@velaros-ai/project`(本地代码工作区)。
 
 ## 兼容策略
 
-切片子路径即兼容面:并仓前的 `@velaros-ai/browser-{core,tools,composition,runtime}` 根导出
-分别等价于今天的 `@velaros-ai/browser/{core,tools,composition,runtime}`。
-现有工具名、输入 schema 与 `ToolBrowserApi` 必选成员保持兼容;新增宿主专属能力优先设计成可选方法。
-版本随平台单版本火车推进。
+切片子路径就是依赖边界。工具身份统一使用 `namespace:tool` canonical id；Provider 若不接受冒号，
+只在传输边界转换成可逆别名，注册表、权限、历史和 Mod 声明始终保存 canonical id。
+新增宿主专属能力优先设计成可选方法，版本随平台单版本火车推进。

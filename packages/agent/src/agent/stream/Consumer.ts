@@ -134,6 +134,7 @@ interface ConsumeAssistantStreamArgs {
   providerTurnReducer?: ProviderTurnEventReducer
   toolContext?: {
     locale?: AppLocale
+    resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => LooseOptional<string>
   }
   /**
    * 空流恢复错误的来源标签（装配面差异）：主 Agent 流 = 'stream'，子 Agent 装配 = 'query'。
@@ -450,7 +451,12 @@ class StreamConsumer {
             markVisibleOutput: () => {
               turnState.hasVisibleOutput = true
             },
-            resolveToolName: (toolName) => this.executionPolicy.resolveCanonicalToolName(toolName),
+            resolveToolName: (toolName) =>
+              this.executionPolicy.resolveCanonicalToolName(
+                toolName,
+                undefined,
+                args.toolContext
+              ),
           })
         ) {
           continue
@@ -462,7 +468,11 @@ class StreamConsumer {
 
         flushPendingRawTextFallback()
 
-        const toolName = this.executionPolicy.resolveCanonicalToolName(part.toolName)
+        const toolName = this.executionPolicy.resolveCanonicalToolName(
+          part.toolName,
+          undefined,
+          args.toolContext
+        )
         diagnostics.toolCallCount += 1
         const toolCallId = allocateToolCallId(part.toolCallId)
         const streamedInput = takeProviderToolInputDraftForFinalCall(pendingToolInputDrafts, {
@@ -537,7 +547,7 @@ class StreamConsumer {
           turn: turnState.turn,
           model: args.model,
           rejectedToolCalls,
-          finishReason: finishDiagnostic?.details.normalizedFinishReason ?? null,
+          finishReason: toNullable(finishDiagnostic?.details.normalizedFinishReason),
         }
       )
     }

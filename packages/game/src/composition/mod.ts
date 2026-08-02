@@ -1,20 +1,18 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
 
-import { GameToolNames, gameTools } from '../tools/index.js'
-
-export const GameModId = 'velaros.game' as const
-export const GameWorkspaceSpaceId = 'game' as const
-export const GameTurnContextSourceIds = Object.freeze([
-  'game.runtime-errors',
-  'game.selection',
-  'game.scene-state',
-] as const)
+import {
+  GameModId,
+  GameSpaceId,
+  GameToolNames,
+  GameTurnContextSourceIds,
+} from '../contracts.js'
+import { gameTools } from '../tools/index.js'
 
 export interface GameBundledModDefinition {
   readonly id: typeof GameModId
   readonly specifier: string
   readonly defaultEnabled: false
-  readonly manifest: unknown
+  readonly manifest: typeof GameAgentModManifest
   readonly bindings: {
     readonly tools: typeof gameTools
     readonly toolCategories: Readonly<Record<'game', ToolCategoryDefinition>>
@@ -50,11 +48,11 @@ const GameAgentModManifest = Object.freeze({
     tools: GameToolNames.map((name) => ({
       name,
       categoryId: 'game',
-      residentInSpaces: [GameWorkspaceSpaceId],
+      residentInSpaces: [GameSpaceId],
     })),
     spaces: [
       {
-        id: GameWorkspaceSpaceId,
+        id: GameSpaceId,
         descriptor: {
           label: 'Game',
           hint: '编辑、运行并观察当前游戏工程',
@@ -66,6 +64,7 @@ const GameAgentModManifest = Object.freeze({
         identityStrategy: 'path',
         surfaceProfileId: 'game',
         boundCapabilityIds: ['velaros.game'],
+        inheritsSpaceIds: ['project'],
         toolCategoryIds: ['game'],
         residentToolNames: [...GameToolNames],
         turnContextSourceIds: [...GameTurnContextSourceIds],
@@ -79,7 +78,7 @@ const GameAgentModManifest = Object.freeze({
           : id === 'game.selection'
             ? '游戏实体选择'
             : '游戏场景状态',
-      spaces: [GameWorkspaceSpaceId],
+      spaces: [GameSpaceId],
       rendererVisible: true,
       priority: 60 + index,
     })),

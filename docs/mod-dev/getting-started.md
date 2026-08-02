@@ -20,7 +20,7 @@
     "apiVersion": 1,
     "provides": [{ "id": "velaros.agent", "version": "1.0.0" }],
     "requires": [],
-    "permissions": ["workspace:read"],
+    "permissions": ["project:read"],
     "isolation": "in-process",
     "entry": "./index.js"
   },

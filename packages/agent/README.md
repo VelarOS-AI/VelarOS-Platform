@@ -14,7 +14,7 @@
 
 这条「机制与领域分离」是本包最重要的设计判决:运行时里**不许出现产品或能力的名字**。
 想让 agent 会一件新事,做法是写一个能力包 + 在装配根注入,而不是在这里加
-`if (toolName === 'browser_act')`。
+`if (toolName === 'browser:act')`。
 
 ## 对外分区
 
@@ -40,7 +40,7 @@ Agent 消息帧的进程(RPC 前脸、日志分析、外部桥接)不该被迫�
 `ContextEvidenceLedger` 记住哪些工具结果构成证据。**上下文压不下去不是靠一刀截断**,而是这条阶梯。
 
 **工具**。`ToolRegistry` 持有目录快照,`ToolExecutor` 是**唯一执行路径**(权限、schema 校验、
-结果归一都在这一条路上)。`src/tool-library/` 是 host 无关的通用工具集合——`dispatch_agent`、
+结果归一都在这一条路上)。`src/tool-library/` 是 host 无关的通用工具集合——`agent:dispatch`、
 上下文召回与蒸馏、目标 / 计划、后台任务、工作流等**机制类**工具住这里;浏览器点击、文件编辑那种
 **领域类**工具住各自能力包。
 
@@ -132,7 +132,7 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
         ↓
 @velaros-ai/agent           ← 本包:执行机制
         ↑ 经 AgentRuntimeCapabilityPorts 注入
-@velaros-ai/{browser,workspace,computer,memory,office-tools,system-tools,cli,game}
+@velaros-ai/{browser,project,development,computer,memory,office,system,cli,game}
                               领域能力包:提供工具与领域解释,自己不认识 agent 循环
 ```
 

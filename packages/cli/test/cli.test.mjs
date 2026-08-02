@@ -1,6 +1,6 @@
 /**
  * @test-meta
- * title: VelarOS Kernel 命令行工具
+ * title: VelarOS operational command line
  * summary: 发布契约：构建后验证命令行分发产物与帮助信息。
  * area: packages
  */
@@ -13,37 +13,6 @@ import { join } from 'node:path'
 import { test } from 'bun:test'
 
 const cliPath = new URL('../dist/cli.js', import.meta.url)
-
-test('velaros cli routes workspace commands', async () => {
-  const { runVelarosCli } = await import(cliPath.href)
-
-  const result = await runVelarosCli(['workspace', 'help'])
-
-  assert.equal(result.exitCode, 0)
-  assert.match(result.text, /Velaros Workspace CLI/)
-})
-
-test('velaros cli routes system tools commands', async () => {
-  const { runVelarosCli } = await import(cliPath.href)
-
-  const result = await runVelarosCli(['system', 'tools', 'list'])
-
-  assert.equal(result.exitCode, 0)
-  const parsed = JSON.parse(result.text)
-  assert.equal(parsed.kind, 'velaros.cli.system.tools.list')
-  assert.ok(parsed.result.tools.some((tool) => tool.name === 'get_system_overview'))
-})
-
-test('velaros cli routes office tools commands', async () => {
-  const { runVelarosCli } = await import(cliPath.href)
-
-  const result = await runVelarosCli(['office', 'tools', 'list'])
-
-  assert.equal(result.exitCode, 0)
-  const parsed = JSON.parse(result.text)
-  assert.equal(parsed.kind, 'velaros.cli.office.tools.list')
-  assert.ok(parsed.result.tools.some((tool) => tool.name === 'preview_office_document'))
-})
 
 test('velaros cli composes product-owned namespaces through registration', async () => {
   const { createVelarosCliRouter } = await import(cliPath.href)
@@ -76,9 +45,6 @@ test('velaros cli composes product-owned namespaces through registration', async
   assert.deepEqual(JSON.parse(help.text).result.namespaces, [
     'agent',
     'browser',
-    'office',
-    'system',
-    'workspace',
   ])
 })
 

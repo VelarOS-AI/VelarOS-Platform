@@ -478,11 +478,11 @@ export class GameManifestResolver {
    * 继承链的两条上界。
    *
    * `hint` 里必须点名 `set_extends`：`extends` 是清单里唯一一处**只能由它改写**的拓扑字段，
-   * 而在补上那个动作之前，成环之后闭集里没有任何一条出路（真机第十轮：一次 `ws_edit` 制造的
+   * 而在补上那个动作之前，成环之后闭集里没有任何一条出路（真机第十轮：一次 `project:edit` 制造的
    * 环让六个 target 全死，报错正文既没有文件路径也没有可执行动作）。
    */
   private assertInheritanceStep(reference: string, chain: readonly string[]): void {
-    const cycleHint = '用 game_scene_edit 的 set_extends 把环上任意一条 extends 改成 null'
+    const cycleHint = '用 game:scene_edit 的 set_extends 把环上任意一条 extends 改成 null'
       + '（或改指到环外的清单）即可解开；target 填环上那份清单的 id。'
     if (chain.includes(reference)) {
       throw new GameManifestError(

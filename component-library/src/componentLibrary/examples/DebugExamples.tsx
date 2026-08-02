@@ -29,7 +29,7 @@ const toolBlock: ToolCallBlockType = {
 const planToolBlock: ToolCallBlockType = {
   type: 'tool-call',
   toolCallId: 'component-library-plan',
-  toolName: 'update_plan',
+  toolName: 'plan:update',
   args: {
     explanation: '把计划工具输出收进组件库，后续对话栏直接复用原渲染器。',
     plan: [
@@ -48,7 +48,7 @@ const planToolBlock: ToolCallBlockType = {
     ],
   },
   result: {
-    explanation: '计划卡片复用 update_plan 工具渲染器。',
+    explanation: '计划卡片复用 plan:update 工具渲染器。',
     plan: [
       {
         step: '复用 PlanToolRender',

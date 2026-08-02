@@ -114,14 +114,7 @@ function toolOsStateForDiscoveryAvailability(
   }
 }
 
-function isReflectEligibleDiscoveryAvailability(
-  availability: ToolDiscoveryAvailability
-): boolean {
-  return availability === 'visible' || availability === 'loadable'
-}
-
 export {
-  isReflectEligibleDiscoveryAvailability,
   nextActionForDiscoveryAvailability,
   resolveCapabilityDiscoveryAvailability,
   resolveToolDiscoveryAvailability,

@@ -7,6 +7,7 @@ import {
   renderToolExampleInputs,
   type ToolContractExampleRegistry,
 } from './examples'
+import { assertCanonicalToolId } from './identity'
 import type {
   DefineToolContractInput,
   DefineToolRuntimeSpecInput,
@@ -89,6 +90,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
   input: DefineToolContractInput<TInput, TContext>,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): ToolContractSpec<TInput, TContext> {
+  assertCanonicalToolId(input.name)
   const descriptionSpec = pickToolDescriptionSpec(input)
   validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
   return {
@@ -164,6 +166,7 @@ function defineToolRuntimeSpec<
   input: DefineToolRuntimeSpecInput<TInput, TContext, TResult, TPermission>,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission> {
+  assertCanonicalToolId(input.name)
   const descriptionSpec = pickToolDescriptionSpec(input)
   validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
 

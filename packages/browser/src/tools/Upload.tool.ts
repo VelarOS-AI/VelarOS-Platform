@@ -11,7 +11,7 @@ const browserUploadFile = defineBrowserTool<{
   target: BrowserTargetHintInput
   filePath: string
 }>({
-  name: 'browser_upload_file',
+  name: 'browser:upload_file',
   role: 'control',
   summary: '向 file input 上传本地文件。',
   suitable: [
@@ -58,6 +58,6 @@ const browserUploadFile = defineBrowserTool<{
 })
 
 const browserUploadTools = {
-  browser_upload_file: browserUploadFile,
+  'browser:upload_file': browserUploadFile,
 }
 export { browserUploadTools }

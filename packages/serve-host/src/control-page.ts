@@ -23,8 +23,8 @@ export const VelarHostControlHtml: string = `<!doctype html>
         <div><strong id="extension-value">—</strong><small id="extension-provider">—</small></div>
       </div>
       <div class="summary-row">
-        <span>工作区</span>
-        <div><strong id="workspace-value">—</strong><small id="workspace-path">—</small></div>
+        <span>项目</span>
+        <div><strong id="project-value">—</strong><small id="project-path">—</small></div>
       </div>
     </section>
 
@@ -58,10 +58,11 @@ export const VelarHostControlHtml: string = `<!doctype html>
       </div>
       <div class="permission-groups">
         <details class="permission-group">
-          <summary><span><strong>项目文件</strong><small>读取与修改当前工作区</small></span><span class="disclosure-arrow">›</span></summary>
+          <summary><span><strong>项目空间</strong><small>读取、修改和运行当前项目</small></span><span class="disclosure-arrow">›</span></summary>
           <div class="toggles">
-            <label><span><strong>读取</strong><small>搜索、状态和 diff</small></span><input id="workspace-read" type="checkbox"></label>
-            <label><span><strong>修改</strong><small>编辑、校验与回滚</small></span><input id="workspace-write" type="checkbox"></label>
+            <label><span><strong>读取</strong><small>读取、列出和搜索文件</small></span><input id="project-read" type="checkbox"></label>
+            <label><span><strong>修改</strong><small>原子编辑与回滚</small></span><input id="project-write" type="checkbox"></label>
+            <label><span><strong>运行</strong><small>在项目边界内执行命令</small></span><input id="project-execute" type="checkbox"></label>
           </div>
         </details>
         <details class="permission-group">
@@ -345,9 +346,9 @@ export const VelarHostControlJs: string = `
     byId('module-value').textContent = host.kernel.moduleIds.length + ' 个能力模块'
     byId('extension-value').textContent = extension.connected ? '已连接' : extension.deviceId ? '已配对，等待页面' : '等待配对'
     byId('extension-provider').textContent = extension.provider ? 'Provider · ' + extension.provider : 'ChatGPT / 网页模型'
-    byId('workspace-value').textContent = basename(host.workspaceRoot)
-    byId('workspace-path').textContent = host.workspaceRoot
-    byId('workspace-path').title = host.workspaceRoot
+    byId('project-value').textContent = basename(host.projectRoot)
+    byId('project-path').textContent = host.projectRoot
+    byId('project-path').title = host.projectRoot
     byId('revision-value').textContent = payload.config.revision
     byId('data-root-value').textContent = host.dataRoot
     byId('data-root-value').title = host.dataRoot
@@ -371,8 +372,9 @@ export const VelarHostControlJs: string = `
         ? '有效期至 ' + new Date(extension.pairingExpiresAt).toLocaleTimeString()
         : extension.deviceId ? '设备已保存，等待网页连接。' : '生成配对码后在插件中输入。'
     if (!dirty) {
-      byId('workspace-read').checked = currentConfig.capabilities.workspace.read
-      byId('workspace-write').checked = currentConfig.capabilities.workspace.write
+      byId('project-read').checked = currentConfig.capabilities.project.read
+      byId('project-write').checked = currentConfig.capabilities.project.write
+      byId('project-execute').checked = currentConfig.capabilities.project.execute
       byId('system-observe').checked = currentConfig.capabilities.system.observe
       byId('system-read').checked = currentConfig.capabilities.system.read
       byId('system-write').checked = currentConfig.capabilities.system.write
@@ -420,14 +422,15 @@ export const VelarHostControlJs: string = `
     }
   }
 
-  byId('workspace-write').addEventListener('change', () => {
-    if (byId('workspace-write').checked) byId('workspace-read').checked = true
+  byId('project-write').addEventListener('change', () => {
+    if (byId('project-write').checked) byId('project-read').checked = true
     markDirty()
   })
-  byId('workspace-read').addEventListener('change', () => {
-    if (!byId('workspace-read').checked) byId('workspace-write').checked = false
+  byId('project-read').addEventListener('change', () => {
+    if (!byId('project-read').checked) byId('project-write').checked = false
     markDirty()
   })
+  byId('project-execute').addEventListener('change', markDirty)
   byId('system-write').addEventListener('change', () => {
     if (byId('system-write').checked) byId('system-read').checked = true
     markDirty()
@@ -454,7 +457,11 @@ export const VelarHostControlJs: string = `
     try {
       const next = {
         capabilities: {
-          workspace: { read: byId('workspace-read').checked, write: byId('workspace-write').checked },
+          project: {
+            read: byId('project-read').checked,
+            write: byId('project-write').checked,
+            execute: byId('project-execute').checked,
+          },
           system: {
             observe: byId('system-observe').checked,
             read: byId('system-read').checked,
@@ -471,7 +478,8 @@ export const VelarHostControlJs: string = `
         },
       }
       const confirmations = []
-      if (!currentConfig.capabilities.workspace.write && next.capabilities.workspace.write && confirm('允许网页 Agent 修改当前工作区？')) confirmations.push('workspace-write')
+      if (!currentConfig.capabilities.project.write && next.capabilities.project.write && confirm('允许网页 Agent 修改当前项目？')) confirmations.push('project-write')
+      if (!currentConfig.capabilities.project.execute && next.capabilities.project.execute && confirm('允许网页 Agent 在当前项目内运行命令？')) confirmations.push('project-execute')
       if (!currentConfig.capabilities.system.observe && next.capabilities.system.observe && confirm('允许网页 Agent 查看本机系统状态？')) confirmations.push('system-observe')
       if (!currentConfig.capabilities.system.read && next.capabilities.system.read && confirm('允许网页 Agent 读取工作区外的本机文件？')) confirmations.push('system-read')
       if (!currentConfig.capabilities.system.write && next.capabilities.system.write && confirm('允许网页 Agent 修改工作区外的本机文件？')) confirmations.push('system-write')

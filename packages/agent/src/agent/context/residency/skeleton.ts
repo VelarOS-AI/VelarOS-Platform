@@ -190,7 +190,7 @@ export function renderContextRecallLine(members: readonly ContextRecord[]): Null
   }
   if (isEmpty(refs)) return null
 
-  return `- 召回：${refs.join(' | ')}（recall_context）`
+  return `- 召回：${refs.join(' | ')}（context:recall）`
 }
 
 function collectSkeletonFields(

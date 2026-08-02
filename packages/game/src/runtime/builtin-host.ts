@@ -112,7 +112,7 @@ function extensionOf(path: string): string {
 }
 
 /**
- * 页面骨架 —— **eject 接缝之一**：将来 `game_eject` 把这段原样落成工程里的 `index.html`。
+ * 页面骨架 —— **eject 接缝之一**：将来 `game:eject` 把这段原样落成工程里的 `index.html`。
  *
  * 刻意极简：一个容器 + 一条 module script。CSP 只放行同源，`object-src` / `base-uri` 关死；
  * 图片与音频额外放行 `data:` / `blob:`（Phaser 的纹理生成与音频解码要用）。
@@ -180,7 +180,7 @@ function escapeHtml(input: string): string {
  *
  * ## 生命周期
  * 挂 {@link GameDevServerController}：它拿到的是一份 {@link GameManagedDevProcess}，
- * 与「工程自带 dev server」那条路**同一个接口、同一套起停**（`game_stop`、会话删除、窗口关闭、
+ * 与「工程自带 dev server」那条路**同一个接口、同一套起停**（`game:stop`、会话删除、窗口关闭、
  * mod 停用、能力重建全都已经走 `runtime.stop()`）。
  *
  * **不会活过应用退出**，而且是结构上不会：它是本进程里的一个 `Server`，`unref()` 之后连事件
@@ -378,7 +378,7 @@ export class GameBuiltinDevServer {
     response.writeHead(status, {
       'content-type': mediaType,
       'content-length': String(body.byteLength),
-      // 清单随时会被 game_scene_edit 改；缓存住等于让「改完刷新」变成偶尔生效。
+      // 清单随时会被 game:scene_edit 改；缓存住等于让「改完刷新」变成偶尔生效。
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
     })
@@ -407,7 +407,7 @@ export class GameBuiltinDevServer {
    * 每次 boot 都重新读盘 —— **这就是留给热更的接缝**。
    *
    * 本批不做 HMR（不在验收线上），但形态上没有把路堵死：页面重载就是一次新的 boot，
-   * 于是 `game_scene_edit` 改完清单、舞台按「重新加载页面」，画面就是新的。将来要真热更，
+   * 于是 `game:scene_edit` 改完清单、舞台按「重新加载页面」，画面就是新的。将来要真热更，
    * 只需在本服务上加一条 SSE 通道播「清单变了」，页面收到后重取 boot.json——
    * 负载形状与解析责任都不用动。
    */

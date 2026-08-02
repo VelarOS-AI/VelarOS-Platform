@@ -166,7 +166,7 @@ function buildExecutionPlanRequiredReminder(state: SoloExecutionPlanFinishingSta
     '[系统] 执行计划收尾检查未通过。',
     `当前计划共有 ${state.total} 步，仍有 ${state.unresolved.length} 步未收束：`,
     unresolved,
-    '必须继续推进这些步骤；如果某步已经完成、跳过或废弃，请先调用 update_plan 更新完整计划状态，再尝试收尾。',
+    '必须继续推进这些步骤；如果某步已经完成、跳过或废弃，请先调用 plan:update 更新完整计划状态，再尝试收尾。',
   ].join('\n')
 }
 
@@ -180,10 +180,10 @@ function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string 
     '[系统] 目标模式收尾检查未通过。',
     statusLine,
     '必须继续推进，不能直接结束本次回复：',
-    '- 如果还没有目标，先调用 create_goal 创建本次目标。',
+    '- 如果还没有目标，先调用 goal:create 创建本次目标。',
     '- 如果目标尚未完成，继续读取、修改、执行或验证。',
-    '- 如果目标已经真正完成，调用 update_goal({status:"complete"}) 后再收尾。',
-    '- 如果确认存在无法继续推进的真实阻碍，可以自行调用 update_goal({status:"blocked"}) 后再收尾；不需要等待多轮审计。',
+    '- 如果目标已经真正完成，调用 goal:update({status:"complete"}) 后再收尾。',
+    '- 如果确认存在无法继续推进的真实阻碍，可以自行调用 goal:update({status:"blocked"}) 后再收尾；不需要等待多轮审计。',
   ].join('\n')
 }
 

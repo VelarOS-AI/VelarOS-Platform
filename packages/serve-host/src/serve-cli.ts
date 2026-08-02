@@ -33,7 +33,7 @@ export interface ServeCliRunOptions {
 interface ParsedServeArgs {
   command: 'start' | 'status' | 'control' | 'computer-install' | 'help'
   dataRoot?: string
-  workspaceRoot?: string
+  projectRoot?: string
   pythonCommand?: string
   json: boolean
 }
@@ -55,7 +55,7 @@ function parseServeArgs(argv: string[]): ParsedServeArgs {
   }
   if (!isPresent(command)) throw new Error(`Unknown serve command: ${commandValue}`)
   let dataRoot: string | undefined
-  let workspaceRoot: string | undefined
+  let projectRoot: string | undefined
   let pythonCommand: string | undefined
   let json = false
   for (let index = startIndex; index < argv.length; index += 1) {
@@ -64,33 +64,33 @@ function parseServeArgs(argv: string[]): ParsedServeArgs {
       json = true
       continue
     }
-    if (argument === '--data-root' || argument === '--workspace-root' || argument === '--python') {
+    if (argument === '--data-root' || argument === '--project-root' || argument === '--python') {
       const value = argv[++index]
       if (!isPresent(value) || isBlank(value)) {
         throw new Error(`${argument} requires a path`)
       }
       if (argument === '--data-root') dataRoot = value
-      else if (argument === '--workspace-root') workspaceRoot = value
+      else if (argument === '--project-root') projectRoot = value
       else pythonCommand = value
       continue
     }
     if (argument === '--help' || argument === '-h') return { command: 'help', json }
     throw new Error(`Unknown serve option: ${argument}`)
   }
-  if (isPresent(workspaceRoot) && command !== 'start') {
-    throw new Error('--workspace-root is only valid for velaros serve start')
+  if (isPresent(projectRoot) && command !== 'start') {
+    throw new Error('--project-root is only valid for velaros serve start')
   }
   if (isPresent(pythonCommand) && command !== 'computer-install') {
     throw new Error('--python is only valid for velaros serve computer install')
   }
-  return { command, dataRoot, workspaceRoot, pythonCommand, json }
+  return { command, dataRoot, projectRoot, pythonCommand, json }
 }
 
 function serveHelp(): string {
   return `Velar Host
 
 Commands:
-  velaros serve [start] [--workspace-root PATH] [--data-root PATH]
+  velaros serve [start] [--project-root PATH] [--data-root PATH]
   velaros serve status [--data-root PATH] [--json]
   velaros serve control [--data-root PATH]
   velaros serve computer install [--data-root PATH] [--python COMMAND] [--json]
@@ -156,7 +156,7 @@ export async function runServeCli(
     }
     const runtime = await startVelarHost({
       dataRoot: parsed.dataRoot,
-      workspaceRoot: parsed.workspaceRoot ?? options.cwd,
+      projectRoot: parsed.projectRoot ?? options.cwd,
     })
     runningHosts.add(runtime)
     const removeHandlers = installVelarHostShutdownHandlers(runtime)
@@ -172,7 +172,7 @@ export async function runServeCli(
         ? `${JSON.stringify(result)}\n`
         : [
             `Velar Host ${result.version} started (pid ${result.pid}).`,
-            `Workspace: ${result.workspaceRoot}`,
+            `Project: ${result.projectRoot}`,
             `Extension bridge: ${result.extension.endpoint}`,
             `Pairing code: ${result.extension.pairingCode ?? 'resume existing device'}`,
             `Control: ${runtime.controlUrl}`,

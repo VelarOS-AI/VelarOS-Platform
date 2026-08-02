@@ -33,32 +33,32 @@
       ],
       "tools": [
         {
-          "name": "game_scene_edit",
+          "name": "game:scene_edit",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         },
         {
-          "name": "game_run",
+          "name": "game:run",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         },
         {
-          "name": "game_stop",
+          "name": "game:stop",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         },
         {
-          "name": "game_screenshot",
+          "name": "game:screenshot",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         },
         {
-          "name": "game_query_state",
+          "name": "game:query_state",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         },
         {
-          "name": "game_input",
+          "name": "game:input",
           "categoryId": "game",
           "residentInSpaces": ["game"]
         }
@@ -77,14 +77,15 @@
           "identityStrategy": "path",
           "surfaceProfileId": "game",
           "boundCapabilityIds": ["velaros.game"],
+          "inheritsSpaceIds": ["project"],
           "toolCategoryIds": ["game"],
           "residentToolNames": [
-            "game_scene_edit",
-            "game_run",
-            "game_stop",
-            "game_screenshot",
-            "game_query_state",
-            "game_input"
+            "game:scene_edit",
+            "game:run",
+            "game:stop",
+            "game:screenshot",
+            "game:query_state",
+            "game:input"
           ],
           "turnContextSourceIds": ["game.runtime-errors", "game.selection", "game.scene-state"]
         }

@@ -13,7 +13,7 @@ import { defineBrowserTool } from './Types'
 
 /** 进入或切换当前 session 的 browser site 工作区。 */
 const enterBrowserSite = defineBrowserTool<{ url: string }>({
-  name: 'enter_browser_site',
+  name: 'browser:enter_site',
   role: 'control',
   summary: '打开网站并进入浏览器会话。',
   suitable: [
@@ -63,7 +63,7 @@ const enterBrowserSite = defineBrowserTool<{ url: string }>({
 
 /** 退出当前 browser site 模式。 */
 const leaveBrowserSite = defineBrowserTool<Record<string, never>>({
-  name: 'leave_browser_site',
+  name: 'browser:leave_site',
   role: 'control',
   summary: '退出当前浏览器网站会话。',
   suitable: ['不再需要当前网站的浏览器能力。'],
@@ -90,11 +90,11 @@ const leaveBrowserSite = defineBrowserTool<Record<string, never>>({
 
 /** 显示并连接当前受控浏览器页面。 */
 const browserShowPage = defineBrowserTool<Record<string, never>>({
-  name: 'browser_show_page',
+  name: 'browser:show_page',
   role: 'control',
   summary: '显示并连接当前受控浏览器页面。',
   suitable: ['需要让当前已绑定网页在内嵌浏览器中可见。'],
-  forbidden: ['不要用它切换网站；切换网站用 enter_browser_site。'],
+  forbidden: ['不要用它切换网站；切换网站用 browser:enter_site。'],
   usage: ['调用前必须已有 active browser site。'],
   examples: [{}],
   notes: ['只连接当前受控页面，不提供任意脚本执行。'],
@@ -114,14 +114,14 @@ const browserShowPage = defineBrowserTool<Record<string, never>>({
 
 /** 隐藏当前受控浏览器页面。 */
 const browserHidePage = defineBrowserTool<Record<string, never>>({
-  name: 'browser_hide_page',
+  name: 'browser:hide_page',
   role: 'control',
   summary: '隐藏当前受控浏览器页面。',
   suitable: ['需要收起可视页面但保留站点会话。'],
-  forbidden: ['不要用它退出 browser mode；退出用 leave_browser_site。'],
+  forbidden: ['不要用它退出 browser mode；退出用 browser:leave_site。'],
   usage: ['调用前必须已有 active browser site。'],
   examples: [{}],
-  notes: ['隐藏后可用 browser_show_page 重新显示。'],
+  notes: ['隐藏后可用 browser:show_page 重新显示。'],
   schema: z.object({}),
   permissions: [],
   capabilities: BrowserControlCapability,
@@ -138,7 +138,7 @@ const browserHidePage = defineBrowserTool<Record<string, never>>({
 
 /** 读取当前 browser mode 状态和绑定站点信息。 */
 const getBrowserSiteContext = defineBrowserTool<Record<string, never>>({
-  name: 'get_browser_site_context',
+  name: 'browser:site_context',
   role: 'inspect',
   summary: '查看当前浏览器会话状态。',
   suitable: ['需要判断 browser mode 是否激活或查看绑定站点信息。'],
@@ -159,7 +159,7 @@ const getBrowserSiteContext = defineBrowserTool<Record<string, never>>({
 
 /** 枚举当前受控浏览器页面 target。 */
 const browserListPageTargets = defineBrowserTool<Record<string, never>>({
-  name: 'browser_list_page_targets',
+  name: 'browser:list_page_targets',
   role: 'inspect',
   summary: '列出当前受控浏览器页面 target。',
   suitable: [
@@ -187,22 +187,22 @@ const browserListPageTargets = defineBrowserTool<Record<string, never>>({
 
 /** 切换当前受控的外部 CDP 页面 target。 */
 const browserSwitchPageTarget = defineBrowserTool<{ targetId: string }>({
-  name: 'browser_switch_page_target',
+  name: 'browser:switch_page_target',
   role: 'control',
   summary: '切换当前受控的外部 CDP page target。',
   suitable: [
       '外部浏览器已有多个 page target，需要把后续 browser 工具绑定到另一个标签页。',
-      'browser_list_page_targets 返回了目标 targetId，且用户或任务需要操作该页面。',
+      'browser:list_page_targets 返回了目标 targetId，且用户或任务需要操作该页面。',
     ],
   forbidden: [
-      '不要用它切换网站工作区；主站点切换仍使用 enter_browser_site。',
+      '不要用它切换网站工作区；主站点切换仍使用 browser:enter_site。',
       '不要在内嵌 WebView 路径使用；WebView 当前只有单个 synthetic target。',
     ],
   protocol: [
-      '先调用 browser_list_page_targets 获取 targetId。',
-      '切换后继续用 browser_inspect_page 或 browser_get_page_state 确认当前受控页面。',
+      '先调用 browser:list_page_targets 获取 targetId。',
+      '切换后继续用 browser:inspect_page 或 browser:get_page_state 确认当前受控页面。',
     ],
-  usage: ['传 browser_list_page_targets 返回的 targetId。'],
+  usage: ['传 browser:list_page_targets 返回的 targetId。'],
   examples: [{ targetId: 'page-2' }],
   notes: ['只切换当前受控 page driver，不关闭外部浏览器窗口。'],
   schema: z.object({
@@ -212,7 +212,7 @@ const browserSwitchPageTarget = defineBrowserTool<{ targetId: string }>({
       .describe(
         parameterDescription({
           description: '要切换到的 CDP page target id。',
-          usage: ['来自 browser_list_page_targets 返回的 targets[].id。'],
+          usage: ['来自 browser:list_page_targets 返回的 targets[].id。'],
         })
       ),
   }),
@@ -230,7 +230,7 @@ const browserSwitchPageTarget = defineBrowserTool<{ targetId: string }>({
 
 /** 读取或创建当前站点工作区 manifest。 */
 const getBrowserWorkspaceManifest = defineBrowserTool<Record<string, never>>({
-  name: 'get_browser_workspace_manifest',
+  name: 'browser:space_manifest',
   role: 'inspect',
   summary: '读取当前站点浏览器工作区清单。',
   suitable: ['需要确认站点工作区路径和标准 artifact 目录。'],
@@ -252,13 +252,13 @@ const getBrowserWorkspaceManifest = defineBrowserTool<Record<string, never>>({
 
 /** session 类 browser 工具出口。 */
 const browserSessionTools = {
-  enter_browser_site: enterBrowserSite,
-  leave_browser_site: leaveBrowserSite,
-  browser_show_page: browserShowPage,
-  browser_hide_page: browserHidePage,
-  get_browser_site_context: getBrowserSiteContext,
-  browser_list_page_targets: browserListPageTargets,
-  browser_switch_page_target: browserSwitchPageTarget,
-  get_browser_workspace_manifest: getBrowserWorkspaceManifest,
+  'browser:enter_site': enterBrowserSite,
+  'browser:leave_site': leaveBrowserSite,
+  'browser:show_page': browserShowPage,
+  'browser:hide_page': browserHidePage,
+  'browser:site_context': getBrowserSiteContext,
+  'browser:list_page_targets': browserListPageTargets,
+  'browser:switch_page_target': browserSwitchPageTarget,
+  'browser:space_manifest': getBrowserWorkspaceManifest,
 }
 export { browserSessionTools }

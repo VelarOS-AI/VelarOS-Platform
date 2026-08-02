@@ -51,7 +51,7 @@ const executionSpanBaseFields = {
    */
   runId: z.string().nullable(),
   sessionId: z.string(),
-  /** 人读名（工具名 / 'provider-request' / 'recall_context' 等）。 */
+  /** 人读名（工具名 / 'provider-request' / 'context:recall' 等）。 */
   name: z.string(),
   startedAt: z.number().int(),
   /** 收敛时刻；只追加已完成 span，故落盘记录恒有值。 */

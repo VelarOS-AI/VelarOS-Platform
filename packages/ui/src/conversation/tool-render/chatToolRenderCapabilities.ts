@@ -40,8 +40,8 @@ export interface ChatToolRenderCapabilities {
     changeId: string,
     path?: string
   ) => Promise<Result<SystemFileChangePreviewResult>>
-  openWorkspacePath?: (sessionId: string, path: string) => Promise<Result<unknown>>
-  revealWorkspacePath?: (sessionId: string, path: string) => Promise<Result<unknown>>
+  openProjectPath?: (sessionId: string, path: string) => Promise<Result<unknown>>
+  revealProjectPath?: (sessionId: string, path: string) => Promise<Result<unknown>>
   restoreFileChange?: (
     sessionId: string,
     changeId: string,

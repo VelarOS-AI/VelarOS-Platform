@@ -36,10 +36,10 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel-client": "workspace:*",
     "@velaros-ai/kernel-serve": "workspace:*",
-    "@velaros-ai/office-tools": "workspace:*",
+    "@velaros-ai/office": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
-    "@velaros-ai/system-tools": "workspace:*",
-    "@velaros-ai/workspace": "workspace:*",
+    "@velaros-ai/system": "workspace:*",
+    "@velaros-ai/project": "workspace:*",
     "ws": "^8.18.3",
     "zod": "^4.3.6"
   },

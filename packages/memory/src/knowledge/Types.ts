@@ -231,17 +231,16 @@ export interface KnowledgeApi {
   ) => Promise<KnowledgeSearchResult[]>
 }
 
-export interface KnowledgeSystemApi {
-  getOverview: () =>
-    | Promise<{ activeWorkspaceRoot?: Nullable<string> }>
-    | { activeWorkspaceRoot?: Nullable<string> }
+export interface KnowledgeProjectApi {
+  getRootPath: () => string
 }
 
 export interface KnowledgeToolContext {
   abortSignal: AbortSignal
   sessionId: string
   knowledge: KnowledgeApi
-  system: KnowledgeSystemApi
+  hasProjectRoot: () => boolean
+  project: KnowledgeProjectApi
 }
 
 export type KnowledgeTool<

@@ -2,7 +2,7 @@
 //
 // ## 解决什么问题
 // 一次目录列举/长命令输出可能是几十 KB。原样塞进历史，后续每一轮都要重付这笔 token，且很快把窗口
-// 撑爆。这里在**结果落进历史之前**把超阈值的输出换成 `ContextRefEnvelope`（含头尾摘要 + `recall_context`
+// 撑爆。这里在**结果落进历史之前**把超阈值的输出换成 `ContextRefEnvelope`（含头尾摘要 + `context:recall`
 // 的召回参数），全文另存。模型需要时自己召回。
 //
 // ## 关键不变量（改这些会破什么）
@@ -196,7 +196,7 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
         excerptTruncated: serialized.length > preview.length,
         originalLength: serialized.length,
         retrieval: {
-          tool: 'recall_context',
+          tool: 'context:recall',
           args: { ref: input.toolCallId, refKind: 'tool-payload', reason: 'need full tool output' },
         },
         meta: { outputId },
@@ -267,7 +267,7 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       excerptTruncated: stored.chars > preview.length,
       originalLength: stored.chars,
       retrieval: {
-        tool: 'recall_context',
+        tool: 'context:recall',
         args: {
           ref: payloadRef,
           refKind: 'payload-ref',

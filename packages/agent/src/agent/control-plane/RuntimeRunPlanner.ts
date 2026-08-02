@@ -255,7 +255,7 @@ class PromptRunPlanner {
           : action === 'read-page'
             ? '先读取对应工具页确认依赖和 schema。'
             : needsToolSpaceAdjustment
-              ? '先用 tool_replace page-out 暂时不需要的工具腾出工具空间，再重新 page-in 或发现目标能力。'
+              ? '先用 tooling:replace page-out 暂时不需要的工具腾出工具空间，再重新 page-in 或发现目标能力。'
               : '先重新发现或调整工具空间后再继续。'
 
     return `[系统] Capability page fault：${faultText}。恢复策略：${action}。${actionText}`

@@ -90,7 +90,7 @@ function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGo
 }
 
 /**
- * 主 Agent 目标（create_goal 建立的 requirement 制品）生命周期。
+ * 主 Agent 目标（goal:create 建立的 requirement 制品）生命周期。
  *
  * 单次取数复用：收尾门在同一轮里先 `inspect()` 再（未终结时）`recordCompletionAttempt()`，
  * 两步之间无任何写入，故 inspect 解析出的目标 artifact 被缓存供 record 直接复用，

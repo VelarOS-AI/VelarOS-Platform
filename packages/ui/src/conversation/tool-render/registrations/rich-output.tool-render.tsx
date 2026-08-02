@@ -3,7 +3,6 @@ import { lazy } from 'react'
 import type { ToolRenderRegistration } from '../ToolRenderRegistry'
 import {
   ArtifactRenderToolNames,
-  GitCommitsRenderToolNames,
   MemoryRecallRenderToolNames,
   SearchResultRenderToolNames,
   WebReadRenderToolNames,
@@ -16,11 +15,6 @@ import {
 const LazyArtifactToolRender = lazy(async () =>
   import('../richOutput/renderers/ArtifactToolRender').then((module) => ({
     default: module.ArtifactToolRender,
-  }))
-)
-const LazyGitCommitsToolRender = lazy(async () =>
-  import('../richOutput/renderers/GitCommitsToolRender').then((module) => ({
-    default: module.GitCommitsToolRender,
   }))
 )
 const LazyMemoryRecallToolRender = lazy(async () =>
@@ -55,10 +49,6 @@ const registrations: ToolRenderRegistration[] = [
   {
     toolNames: MemoryRecallRenderToolNames,
     component: LazyMemoryRecallToolRender,
-  },
-  {
-    toolNames: GitCommitsRenderToolNames,
-    component: LazyGitCommitsToolRender,
   },
 ]
 

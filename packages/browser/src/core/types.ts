@@ -677,12 +677,12 @@ export interface BrowserObservedActionPreview {
 }
 
 export interface BrowserObservedTargetActionReplay {
-  tool: 'browser_act'
+  tool: 'browser:act'
   input: BrowserObservedActionInput
 }
 
 export interface BrowserObservedUploadReplay {
-  tool: 'browser_upload_file'
+  tool: 'browser:upload_file'
   input: BrowserObservedUploadInput
 }
 
@@ -1645,7 +1645,7 @@ export interface WorkspaceListOptions {
   limit?: number
 }
 
-export interface WorkspaceReadFileResult {
+export interface ProjectReadFileResult {
   path: string
   content: string
   totalLines: number

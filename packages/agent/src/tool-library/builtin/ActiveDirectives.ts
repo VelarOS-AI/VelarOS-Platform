@@ -151,7 +151,7 @@ function buildNoArchiveDiagnostic(
       possibleGoalConstraintIds: goalConstraintReferences.map((reference) => reference.constraintId),
       goalConstraintReferences,
       message:
-        '这些 id 匹配当前 goal.constraints，而不是 session-level active directive；archive_active_directive 只归档 metadata.directive=true 的 session directive。请用 update_goal 修改或移除目标 constraints。',
+        '这些 id 匹配当前 goal.constraints，而不是 session-level active directive；directive:archive 只归档 metadata.directive=true 的 session directive。请用 goal:update 修改或移除目标 constraints。',
     }
 
   return {
@@ -160,7 +160,7 @@ function buildNoArchiveDiagnostic(
     possibleGoalConstraintIds: [],
     goalConstraintReferences: [],
     message:
-      '没有匹配到 active session directive；archive_active_directive 只处理 metadata.directive=true 的 session requirement。若要修改目标约束，请使用 update_goal。',
+      '没有匹配到 active session directive；directive:archive 只处理 metadata.directive=true 的 session requirement。若要修改目标约束，请使用 goal:update。',
   }
 }
 

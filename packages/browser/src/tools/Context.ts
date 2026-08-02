@@ -12,7 +12,7 @@ type BrowserToolContext = Parameters<VelaTool<Record<string, never>>['execute']>
  * 只在实时快照确认存在 pending 事件时暴露对应处理工具。
  *
  * 处理器不是普通浏览器动作：常驻会诱导模型在每次页面操作前先探测权限、弹窗或下载。
- * 快照缺失时保持隐藏，调用方仍可用 browser_wait_for_pending_event 等待预期事件出现。
+ * 快照缺失时保持隐藏，调用方仍可用 browser:wait_for_pending_event 等待预期事件出现。
  */
 export function hasPendingBrowserEvent(
   ctx: BrowserToolContext,
@@ -33,7 +33,7 @@ export function requireActiveBrowserSite(ctx: BrowserToolContext): void {
   if (!ctx.browser.isActive()) {
     throw new AppError(
       'VALIDATION',
-      '当前还没有激活浏览器网站工作区，请先调用 enter_browser_site。'
+      '当前还没有激活浏览器网站工作区，请先调用 browser:enter_site。'
     )
   }
 }

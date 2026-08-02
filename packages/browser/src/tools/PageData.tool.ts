@@ -13,7 +13,7 @@ import { defineBrowserTool } from './Types'
 
 /** 读取当前页面 storage；外部 CDP 模式可读取浏览器 cookie jar 元数据。 */
 const browserReadPageStorage = defineBrowserTool<BrowserReadPageStorageInput>({
-  name: 'browser_read_page_storage',
+  name: 'browser:read_page_storage',
   role: 'inspect',
   summary: '读取当前页面的浏览器存储。',
   suitable: ['需要检查页面 localStorage、sessionStorage 或当前页 cookie。'],
@@ -85,7 +85,7 @@ const browserReadPageStorage = defineBrowserTool<BrowserReadPageStorageInput>({
 
 /** 在当前页面沙盒中执行受控 JavaScript。 */
 const browserEvaluateScript = defineBrowserTool<BrowserEvaluateScriptInput>({
-  name: 'browser_evaluate_script',
+  name: 'browser:evaluate_script',
   role: 'control',
   summary: '在当前浏览器页面上下文执行 JavaScript。',
   suitable: ['需要完成其他 browser 工具未覆盖的页面检查或调试。'],
@@ -150,7 +150,7 @@ const browserEvaluateScript = defineBrowserTool<BrowserEvaluateScriptInput>({
 
 /** 页面数据类工具出口。 */
 const browserPageDataTools = {
-  browser_read_page_storage: browserReadPageStorage,
-  browser_evaluate_script: browserEvaluateScript,
+  'browser:read_page_storage': browserReadPageStorage,
+  'browser:evaluate_script': browserEvaluateScript,
 }
 export { browserPageDataTools }

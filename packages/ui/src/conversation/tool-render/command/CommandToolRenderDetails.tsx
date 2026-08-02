@@ -16,9 +16,9 @@ import styles from './CommandToolRender.module.css'
 
 import {
   type AppLocale,
+  type ProjectBackgroundProcessInfo,
+  type ProjectCommandResult,
   type ToolCallBlock,
-  type WorkspaceBackgroundProcessInfo,
-  type WorkspaceCommandResult,
 } from '#contracts'
 import { isBlank,isString } from '#internal/runtime'
 
@@ -27,8 +27,8 @@ const cx = StyleUtils.bindCx(styles)
 interface CommandToolRenderDetailsProps {
   block: ToolCallBlock
   cwd: Nullable<string>
-  result: Nullable<WorkspaceCommandResult>
-  backgroundProcess: Nullable<WorkspaceBackgroundProcessInfo>
+  result: Nullable<ProjectCommandResult>
+  backgroundProcess: Nullable<ProjectBackgroundProcessInfo>
   stdout: string
   stderr: string
   locale: AppLocale
@@ -39,7 +39,7 @@ interface CommandToolRenderDetailsProps {
 
 function resolveDisplayCommand(
   block: ToolCallBlock,
-  result: Nullable<WorkspaceCommandResult>
+  result: Nullable<ProjectCommandResult>
 ): string {
   const resultCommand = result?.command
   if (isString(resultCommand) && !isBlank(resultCommand)) return resultCommand

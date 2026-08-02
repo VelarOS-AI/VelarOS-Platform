@@ -62,7 +62,7 @@ class CapabilityRunPlanner {
     const bootstrap = planToolSpaceBootstrap({
       messages: input.messages,
       currentVisibleToolNames: [
-        ...new Set([...input.currentVisibleToolNames, 'tool_map']),
+        ...new Set([...input.currentVisibleToolNames, 'tooling:map']),
       ],
       enabledToolCategories: input.enabledToolCategoryIds,
       allowedToolCategories: input.allowedToolCategoryIds,

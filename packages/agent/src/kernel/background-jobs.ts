@@ -4,7 +4,7 @@
 // ## ① 生命周期状态机
 // `running → completed | failed | cancelled`，**终态不可再迁移**（`requireRunning` 撞终态抛
 // `CONFLICT` 并把 `jobStatus` 放进 context 供调用方结构化判定）。终态任务不立即删除：它们还要被
-// `wait_background_jobs` / `read_background_job_output` 读到。回收由**两条独立闸**共同负责——
+// `job:wait` / `job:read_output` 读到。回收由**两条独立闸**共同负责——
 // TTL（`terminalJobTtlMs`，**负值刻意合法 = 永不按时间清理**）与条数上限（`terminalJobLimit`）。
 // 只有 TTL 会让"一次跑很多短任务"撑爆内存；只有条数上限会让"一个终态任务留一整天"。两条都要。
 //
@@ -290,7 +290,7 @@ class KernelBackgroundJobManager {
         occurredAt: now,
         label: `${job.label} 疑似停滞`,
         summaryText: `后台任务「${job.label}」疑似停滞：已 ${formatDuration(this.stalledAfterMs)} 无可见输出。`,
-        inspect: { tool: 'read_background_job_output', argsHint: { job_id: job.id } },
+        inspect: { tool: 'job:read_output', argsHint: { job_id: job.id } },
       })
       queued += 1
     }
@@ -453,7 +453,7 @@ class KernelBackgroundJobManager {
       summaryText: `后台任务「${job.label}」已${outcome}${
         detail ? `：${detail.length > 120 ? `${detail.slice(0, 120)}…` : detail}` : '。'
       }`,
-      inspect: { tool: 'read_background_job_output', argsHint: { job_id: job.id } },
+      inspect: { tool: 'job:read_output', argsHint: { job_id: job.id } },
     })
     this.cancelHandlerByJob.delete(job.id)
     this.notifyWaiters()

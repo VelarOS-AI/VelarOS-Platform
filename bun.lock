@@ -17,12 +17,12 @@
         "@velaros-ai/kernel-serve": "workspace:*",
         "@velaros-ai/memory": "workspace:*",
         "@velaros-ai/model": "workspace:*",
-        "@velaros-ai/office-tools": "workspace:*",
+        "@velaros-ai/office": "workspace:*",
+        "@velaros-ai/project": "workspace:*",
         "@velaros-ai/serve-host": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
-        "@velaros-ai/system-tools": "workspace:*",
+        "@velaros-ai/system": "workspace:*",
         "@velaros-ai/ui": "workspace:*",
-        "@velaros-ai/workspace": "workspace:*",
         "better-sqlite3": "^12.9.0",
       },
       "devDependencies": {
@@ -120,9 +120,6 @@
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/office-tools": "workspace:*",
-        "@velaros-ai/system-tools": "workspace:*",
-        "@velaros-ai/workspace": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -146,6 +143,20 @@
       "version": "0.3.3",
       "dependencies": {
         "gpt-tokenizer": "^3.0.1",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
+      },
+    },
+    "packages/development": {
+      "name": "@velaros-ai/development",
+      "version": "1.0.0",
+      "dependencies": {
+        "@codemirror/lang-python": "^6.2.1",
+        "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/project": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -239,9 +250,9 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/office-tools": {
-      "name": "@velaros-ai/office-tools",
-      "version": "0.2.8",
+    "packages/office": {
+      "name": "@velaros-ai/office",
+      "version": "1.0.0",
       "bin": {
         "velaros-office": "./dist/cli.js",
       },
@@ -262,6 +273,33 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/project": {
+      "name": "@velaros-ai/project",
+      "version": "2.0.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "diff": "^8.0.4",
+        "execa": "^9.6.1",
+        "iconv-lite": "^0.7.2",
+        "picomatch": "^4.0.3",
+        "typescript": "^5.0.0",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@eslint/js": "^9.39.4",
+        "@types/node": "^22.19.17",
+        "@types/picomatch": "^3.0.1",
+        "@typescript-eslint/eslint-plugin": "^8.59.3",
+        "@typescript-eslint/parser": "^8.59.3",
+        "eslint": "^9.39.4",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-eslint-comments": "^3.2.0",
+        "eslint-plugin-simple-import-sort": "^13.0.0",
+        "eslint-plugin-unicorn": "^64.0.0",
+        "eslint-plugin-unused-imports": "^4.4.1",
+        "globals": "^17.6.0",
+      },
+    },
     "packages/serve-host": {
       "name": "@velaros-ai/serve-host",
       "version": "0.1.0",
@@ -274,10 +312,10 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel-client": "workspace:*",
         "@velaros-ai/kernel-serve": "workspace:*",
-        "@velaros-ai/office-tools": "workspace:*",
+        "@velaros-ai/office": "workspace:*",
+        "@velaros-ai/project": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
-        "@velaros-ai/system-tools": "workspace:*",
-        "@velaros-ai/workspace": "workspace:*",
+        "@velaros-ai/system": "workspace:*",
         "ws": "^8.18.3",
         "zod": "^4.3.6",
       },
@@ -298,9 +336,9 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/system-tools": {
-      "name": "@velaros-ai/system-tools",
-      "version": "0.2.9",
+    "packages/system": {
+      "name": "@velaros-ai/system",
+      "version": "1.0.0",
       "bin": {
         "velaros-system": "./dist/cli.js",
       },
@@ -344,36 +382,6 @@
       "peerDependencies": {
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-      },
-    },
-    "packages/workspace": {
-      "name": "@velaros-ai/workspace",
-      "version": "1.2.6",
-      "bin": {
-        "velaros-workspace": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "diff": "^8.0.4",
-        "execa": "^9.6.1",
-        "iconv-lite": "^0.7.2",
-        "picomatch": "^4.0.3",
-        "typescript": "^5.0.0",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@eslint/js": "^9.39.4",
-        "@types/node": "^22.19.17",
-        "@types/picomatch": "^3.0.1",
-        "@typescript-eslint/eslint-plugin": "^8.59.3",
-        "@typescript-eslint/parser": "^8.59.3",
-        "eslint": "^9.39.4",
-        "eslint-config-prettier": "^10.1.8",
-        "eslint-plugin-eslint-comments": "^3.2.0",
-        "eslint-plugin-simple-import-sort": "^13.0.0",
-        "eslint-plugin-unicorn": "^64.0.0",
-        "eslint-plugin-unused-imports": "^4.4.1",
-        "globals": "^17.6.0",
       },
     },
   },
@@ -429,6 +437,16 @@
     "@braintree/sanitize-url": ["@braintree/sanitize-url@7.1.2", "", {}, "sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA=="],
 
     "@chevrotain/types": ["@chevrotain/types@11.1.2", "", {}, "sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw=="],
+
+    "@codemirror/autocomplete": ["@codemirror/autocomplete@6.20.3", "", { "dependencies": { "@codemirror/language": "^6.0.0", "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.17.0", "@lezer/common": "^1.0.0" } }, "sha512-tlosUqb+3BbxCxZdu4tKeRghPFC+QM7q4X5YhKV2eCmPG+1r2F3f4AaSz5sCrFqUtX4Jh20VFTKecl16MgiV9g=="],
+
+    "@codemirror/lang-python": ["@codemirror/lang-python@6.2.1", "", { "dependencies": { "@codemirror/autocomplete": "^6.3.2", "@codemirror/language": "^6.8.0", "@codemirror/state": "^6.0.0", "@lezer/common": "^1.2.1", "@lezer/python": "^1.1.4" } }, "sha512-IRjC8RUBhn9mGR9ywecNhB51yePWCGgvHfY1lWN/Mrp3cKuHr0isDKia+9HnvhiWNnMpbGhWrkhuWOc09exRyw=="],
+
+    "@codemirror/language": ["@codemirror/language@6.12.4", "", { "dependencies": { "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.23.0", "@lezer/common": "^1.5.0", "@lezer/highlight": "^1.0.0", "@lezer/lr": "^1.0.0", "style-mod": "^4.0.0" } }, "sha512-1q4PaT+o6PbgpkJt4Q8Fv5XJxTy4FUZ4MWETtyiDw3J0Pyr9E2vqcKL+k9wcvjNTIsauxvE7OfmWj3FRPHQ76A=="],
+
+    "@codemirror/state": ["@codemirror/state@6.7.1", "", { "dependencies": { "@marijn/find-cluster-break": "^1.0.0" } }, "sha512-9QzNDgE4EYDnAHfrTlR2lwiPciiOymLtwKK+8yHQzCc7GXhAP9xdEbEJFy2IWB1j9UGUl9BsgMmTo/ImA02T7A=="],
+
+    "@codemirror/view": ["@codemirror/view@6.43.7", "", { "dependencies": { "@codemirror/state": "^6.7.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-FZsExxkoxnAN+d9TgqXLg5g4A1oQwzX9WlkOT5i2PKkcW7xx3Bmu0vs90g6fo9Mpdsb/l96dnAraQ8932aO4/g=="],
 
     "@date-fns/tz": ["@date-fns/tz@1.5.0", "", {}, "sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg=="],
 
@@ -570,7 +588,17 @@
 
     "@lancedb/lancedb-win32-x64-msvc": ["@lancedb/lancedb-win32-x64-msvc@0.27.2", "", { "os": "win32", "cpu": "x64" }, "sha512-XlwiI6CK2Gkqq+FFVAStHojao/XjIJpDPTm7Tb9SpLL64IlwGw3yaT2hnWKTm90W4KlSrpfSldPly+s+y4U7JQ=="],
 
+    "@lezer/common": ["@lezer/common@1.5.2", "", {}, "sha512-sxQE460fPZyU3sdc8lafxiPwJHBzZRy/udNFynGQky1SePYBdhkBl1kOagA9uT3pxR8K09bOrmTUqA9wb/PjSQ=="],
+
+    "@lezer/highlight": ["@lezer/highlight@1.2.3", "", { "dependencies": { "@lezer/common": "^1.3.0" } }, "sha512-qXdH7UqTvGfdVBINrgKhDsVTJTxactNNxLk7+UMwZhU13lMHaOBlJe9Vqp907ya56Y3+ed2tlqzys7jDkTmW0g=="],
+
+    "@lezer/lr": ["@lezer/lr@1.4.10", "", { "dependencies": { "@lezer/common": "^1.0.0" } }, "sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A=="],
+
+    "@lezer/python": ["@lezer/python@1.1.19", "", { "dependencies": { "@lezer/common": "^1.2.0", "@lezer/highlight": "^1.0.0", "@lezer/lr": "^1.0.0" } }, "sha512-MhQIURHRytsNzP/YXnqpYKW6la6voAH3kyplTOOiCdjyFY6cWWGFVmYVdHIPrElqSDf4iCDktQCockB9FxuhzQ=="],
+
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
+
+    "@marijn/find-cluster-break": ["@marijn/find-cluster-break@1.0.3", "", {}, "sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA=="],
 
     "@mermaid-js/parser": ["@mermaid-js/parser@1.2.0", "", { "dependencies": { "@chevrotain/types": "~11.1.2" } }, "sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA=="],
 
@@ -968,6 +996,8 @@
 
     "@velaros-ai/core": ["@velaros-ai/core@workspace:packages/core"],
 
+    "@velaros-ai/development": ["@velaros-ai/development@workspace:packages/development"],
+
     "@velaros-ai/game": ["@velaros-ai/game@workspace:packages/game"],
 
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@workspace:packages/html-artifacts"],
@@ -980,17 +1010,17 @@
 
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 
-    "@velaros-ai/office-tools": ["@velaros-ai/office-tools@workspace:packages/office-tools"],
+    "@velaros-ai/office": ["@velaros-ai/office@workspace:packages/office"],
+
+    "@velaros-ai/project": ["@velaros-ai/project@workspace:packages/project"],
 
     "@velaros-ai/serve-host": ["@velaros-ai/serve-host@workspace:packages/serve-host"],
 
     "@velaros-ai/surface-protocol": ["@velaros-ai/surface-protocol@workspace:packages/surface-protocol"],
 
-    "@velaros-ai/system-tools": ["@velaros-ai/system-tools@workspace:packages/system-tools"],
+    "@velaros-ai/system": ["@velaros-ai/system@workspace:packages/system"],
 
     "@velaros-ai/ui": ["@velaros-ai/ui@workspace:packages/ui"],
-
-    "@velaros-ai/workspace": ["@velaros-ai/workspace@workspace:packages/workspace"],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 
@@ -1143,6 +1173,8 @@
     "crc-32": ["crc-32@1.2.2", "", { "bin": { "crc32": "bin/crc32.njs" } }, "sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ=="],
 
     "crc32-stream": ["crc32-stream@4.0.3", "", { "dependencies": { "crc-32": "^1.2.0", "readable-stream": "^3.4.0" } }, "sha512-NT7w2JVU7DFroFdYkeq8cywxrgjPHWkdX1wjpRQXPX5Asews3tA+Ght6lddQO5Mkumffp3X7GEqku3epj2toIw=="],
+
+    "crelt": ["crelt@1.0.7", "", {}, "sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA=="],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
@@ -2042,6 +2074,8 @@
 
     "strip-json-comments": ["strip-json-comments@3.1.1", "", {}, "sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig=="],
 
+    "style-mod": ["style-mod@4.1.3", "", {}, "sha512-i/n8VsZydrugj3Iuzll8+x/00GH2vnYsk1eomD8QiRrSAeW6ItbCQDtfXCeJHd0iwiNagqjQkvpvREEPtW3IoQ=="],
+
     "style-to-js": ["style-to-js@1.1.21", "", { "dependencies": { "style-to-object": "1.0.14" } }, "sha512-RjQetxJrrUJLQPHbLku6U/ocGtzyjbJMP9lCNK7Ag0CNh690nSH8woqWH9u16nMjYBAok+i7JO1NP2pOy8IsPQ=="],
 
     "style-to-object": ["style-to-object@1.0.14", "", { "dependencies": { "inline-style-parser": "0.2.7" } }, "sha512-LIN7rULI0jBscWQYaSswptyderlarFkjQ+t79nzty8tcIAceVomEVlLzH5VP4Cmsv6MtKhs7qaAiwlcp+Mgaxw=="],
@@ -2145,6 +2179,8 @@
     "vfile-message": ["vfile-message@4.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "unist-util-stringify-position": "^4.0.0" } }, "sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw=="],
 
     "vite": ["vite@8.1.5", "", { "dependencies": { "lightningcss": "^1.32.0", "picomatch": "^4.0.5", "postcss": "^8.5.17", "rolldown": "~1.1.5", "tinyglobby": "^0.2.17" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.3.0", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-7ULLwsCdYx/nRyrpiEwvqb5TFHrMVZyBt+rg/OAXT7rgj/z+DtTDyKFeLAdDkubDVDKD8jOsndmy7m55XcfUsw=="],
+
+    "w3c-keyname": ["w3c-keyname@2.2.8", "", {}, "sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ=="],
 
     "web-namespaces": ["web-namespaces@2.0.1", "", {}, "sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ=="],
 

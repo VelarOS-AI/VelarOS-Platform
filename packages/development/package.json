@@ -1,0 +1,51 @@
+{
+  "name": "@velaros-ai/development",
+  "version": "1.0.0",
+  "velaros": { "platform": "0.6" },
+  "description": "Development-space code understanding contracts, tools, and Project-space composition.",
+  "license": "UNLICENSED",
+  "author": "VelarOS",
+  "type": "module",
+  "sideEffects": false,
+  "engines": { "node": ">=20.0.0" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./composition": {
+      "types": "./dist/composition/index.d.ts",
+      "import": "./dist/composition/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
+    "test": "bun run build && bun test test/development.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/development"
+  },
+  "dependencies": {
+    "@codemirror/lang-python": "^6.2.1",
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/project": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/development"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

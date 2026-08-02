@@ -67,14 +67,18 @@ export type ToolCategoryId =
   | 'memory'
   | 'knowledge'
   | 'office'
-  | 'system-control'
+  | 'system'
+  | 'system-files'
+  | 'system-execution'
+  | 'system-processes'
+  | 'system-desktop'
   | 'computer-control'
   | 'scheduling'
-  | 'workspace'
-  | 'workspace-inspect'
-  | 'workspace-edit'
-  | 'workspace-execute'
-  | 'code-intelligence'
+  | 'project'
+  | 'project-files'
+  | 'project-changes'
+  | 'project-execution'
+  | 'development-code'
 
 export type ToolPermission =
   | 'fs:read'
@@ -83,7 +87,7 @@ export type ToolPermission =
   | 'process:exec:unsafe'
   | 'system:open'
   | 'system:app'
-  | 'workspace:root'
+  | 'project:root'
   | 'screen:capture'
   | 'window:track'
   | 'input:control'
@@ -111,7 +115,7 @@ export type ToolRenderKind =
   | 'widget'
   | 'read-local'
   | 'install'
-  | 'system-tools'
+  | 'system'
   | 'tool-catalog'
   | 'tool-map'
   | 'tool-read'
@@ -126,7 +130,7 @@ export type ToolRenderKind =
   | 'active-project-infer'
   | 'dev-environment-summary'
   | 'project-discovery-rescan'
-  | 'workspace-roots'
+  | 'project-roots'
   | 'project-catalog'
   | 'project-metadata'
   | 'generic'
@@ -263,7 +267,7 @@ export interface CapabilityAutoApprovalNoticeBlock {
   }
 }
 
-export interface WorkspaceAutoApprovalNotice {
+export interface ProjectAutoApprovalNotice {
   id: string
   path: string
   reason: string
@@ -272,9 +276,9 @@ export interface WorkspaceAutoApprovalNotice {
   approvedAt: number
 }
 
-export interface WorkspaceAutoApprovalNoticeBlock {
-  type: 'workspace-auto-approval'
-  notice: WorkspaceAutoApprovalNotice
+export interface ProjectAutoApprovalNoticeBlock {
+  type: 'project-auto-approval'
+  notice: ProjectAutoApprovalNotice
 }
 
 export type UserActionCardTone = 'info' | 'warning' | 'success' | 'danger'
@@ -405,7 +409,7 @@ export interface SystemToolInstallSuggestionBlock {
     installAvailable: boolean
     detectedAt: number
     triggeredBy: {
-      scope: 'workspace' | 'system'
+      scope: 'project' | 'system'
       command: string
     }
     alternatives?: Array<{
@@ -449,7 +453,7 @@ export type ContentBlock =
   | AssistantGeneratedFileBlock
   | AssistantSourceBlock
   | CapabilityAutoApprovalNoticeBlock
-  | WorkspaceAutoApprovalNoticeBlock
+  | ProjectAutoApprovalNoticeBlock
   | UserActionCardBlock
   | SystemToolInstallSuggestionBlock
   | ScheduledTaskProposalBlock
@@ -786,7 +790,7 @@ export type ChatStreamEvent =
   | { type: 'end' }
   | { type: 'error'; payload: { code?: string; message?: string } }
 
-export interface WorkspaceRootEntry {
+export interface ProjectRootEntry {
   path: string
   active: boolean
   exists: boolean
@@ -794,7 +798,7 @@ export interface WorkspaceRootEntry {
   source: 'project'
 }
 
-export interface WorkspaceBackgroundProcessInfo {
+export interface ProjectBackgroundProcessInfo {
   taskId: Nullable<string>
   sessionId: Nullable<string>
   pid: Nullable<number>
@@ -808,13 +812,13 @@ export interface WorkspaceBackgroundProcessInfo {
   autoStarted: boolean
 }
 
-export interface WorkspaceVerificationSummary {
+export interface ProjectVerificationSummary {
   kind: 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
   status: 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
   issues: string[]
 }
 
-export interface WorkspaceCommandResult {
+export interface ProjectCommandResult {
   command: string
   cwd: string
   exitCode: Nullable<number>
@@ -827,8 +831,8 @@ export interface WorkspaceCommandResult {
   aborted: boolean
   truncated: boolean
   success: boolean
-  backgroundProcess?: LooseOptional<WorkspaceBackgroundProcessInfo>
-  verification: WorkspaceVerificationSummary
+  backgroundProcess?: LooseOptional<ProjectBackgroundProcessInfo>
+  verification: ProjectVerificationSummary
   systemToolSuggestion?: LooseOptional<SystemToolInstallSuggestionBlock['suggestion']>
 }
 
@@ -855,7 +859,7 @@ export interface SystemBackgroundTaskTerminateResult {
   message: string
 }
 
-export interface WorkspaceCheckpointFileDiff {
+export interface ProjectCheckpointFileDiff {
   root: string
   path: string
   patch: string
@@ -865,7 +869,7 @@ export interface WorkspaceCheckpointFileDiff {
   binary: boolean
 }
 
-export interface WorkspaceCheckpointDiffFailure {
+export interface ProjectCheckpointDiffFailure {
   root: string
   fromCommitId: string
   toCommitId: string

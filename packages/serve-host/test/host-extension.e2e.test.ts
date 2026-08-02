@@ -236,7 +236,7 @@ describe('Velar Host extension journey without Desktop', () => {
     await Bun.write(join(workspaceRoot, 'proof.txt'), 'VELAR_HOST_EXTENSION_E2E_OK\n')
 
     runtime = await startVelarHost({
-      workspaceRoot,
+      projectRoot: workspaceRoot,
       dataRoot,
       portStart: 0,
       portEnd: 0,
@@ -244,9 +244,9 @@ describe('Velar Host extension journey without Desktop', () => {
     })
     expect(runtime.status.kernel.moduleIds).toEqual([
       'velaros.computer.sidecar',
-      'velaros.office.tools',
-      'velaros.system.tools',
-      'velaros.workspace.default',
+      'velaros.office',
+      'velaros.project',
+      'velaros.system',
     ])
     expect(runtime.status.extension.pairingCode).toBe('123456')
 
@@ -319,10 +319,10 @@ describe('Velar Host extension journey without Desktop', () => {
     }
     expect(binding.surfaceOwner).toBe('provider')
     expect(binding.workspaceSpace).toBe('project')
-    expect(toolCatalog.tools.some((tool) => tool.name === 'ws_read')).toBe(true)
-    expect(toolCatalog.tools.some((tool) => tool.name === 'computer_screenshot')).toBe(false)
+    expect(toolCatalog.tools.some((tool) => tool.name === 'project:read')).toBe(true)
+    expect(toolCatalog.tools.some((tool) => tool.name === 'computer:screenshot')).toBe(false)
     expect(toolCatalog.tools.every((tool) => tool.readOnly === true)).toBe(true)
-    expect(toolCatalog.tools.some((tool) => tool.name === 'ws_commit_edit')).toBe(false)
+    expect(toolCatalog.tools.some((tool) => tool.name === 'project:edit')).toBe(false)
     expect(runtime.status.extension.surfaceCount).toBe(1)
     expect(runtime.status.extension.activity?.eventType).toBe('provider_surface_prepare')
     send(socket, { type: 'ack', sequence: contractEnvelope.sequence })
@@ -332,7 +332,7 @@ describe('Velar Host extension journey without Desktop', () => {
       contractId: binding.toolContract.id,
       catalogRevision: binding.toolContract.catalogRevision,
       toolCallId: 'tool-read-1',
-      toolName: 'ws_read',
+      toolName: 'project:read',
       input: { path: 'proof.txt', maxChars: 200 },
     }
     send(socket, {
@@ -361,7 +361,7 @@ describe('Velar Host extension journey without Desktop', () => {
     expect(result.output.files[0].content).toBe('VELAR_HOST_EXTENSION_E2E_OK\n')
     expect(runtime.status.extension.activity).toMatchObject({
       eventType: 'provider_surface_tool_result',
-      toolName: 'ws_read',
+      toolName: 'project:read',
       status: 'success',
     })
     send(socket, { type: 'ack', sequence: resultEnvelope.sequence })
@@ -376,8 +376,10 @@ describe('Velar Host extension journey without Desktop', () => {
         call: {
           ...readCall,
           toolCallId: 'tool-write-1',
-          toolName: 'ws_commit_edit',
-          input: { path: 'proof.txt', content: 'MUTATED\n' },
+          toolName: 'project:edit',
+          input: {
+            operations: [{ type: 'replace_text', path: 'proof.txt', search: 'E2E', replacement: 'MUTATED' }],
+          },
         },
       },
     })
@@ -424,7 +426,7 @@ describe('Velar Host extension journey without Desktop', () => {
     await Bun.write(join(workspaceRoot, 'anchor.txt'), 'COMPACTION_ANCHOR_OK\n')
 
     runtime = await startVelarHost({
-      workspaceRoot,
+      projectRoot: workspaceRoot,
       dataRoot,
       portStart: 0,
       portEnd: 0,
@@ -494,9 +496,9 @@ describe('Velar Host extension journey without Desktop', () => {
       expect(contractPayload.binding.workspaceSpace).toBe('project')
       expect(contractPayload.binding.providerParentMessageId)
         .toBe(turn < 12 ? `parent-${turn}` : `compacted-parent-${turn}`)
-      expect(contractPayload.toolCatalog.tools.some((tool) => tool.name === 'ws_status'))
+      expect(contractPayload.toolCatalog.tools.some((tool) => tool.name === 'project:list'))
         .toBe(true)
-      expect(contractPayload.toolCatalog.tools.some((tool) => tool.name === 'computer_screenshot'))
+      expect(contractPayload.toolCatalog.tools.some((tool) => tool.name === 'computer:screenshot'))
         .toBe(false)
       send(socket, { type: 'ack', sequence: contractEnvelope.sequence })
 
@@ -512,8 +514,8 @@ describe('Velar Host extension journey without Desktop', () => {
             contractId: contractPayload.binding.toolContract.id,
             catalogRevision: contractPayload.binding.toolContract.catalogRevision,
             toolCallId: `context-status-${turn}`,
-            toolName: 'ws_status',
-            input: {},
+            toolName: 'project:list',
+            input: { path: '.', limit: 10 },
           },
         },
       })
@@ -525,16 +527,16 @@ describe('Velar Host extension journey without Desktop', () => {
       await inbox.next('event_ack')
       const resultEnvelope = resultCommand.command as Record<string, unknown>
       const result = (resultEnvelope.payload as {
-        result: { status: string; output: { root: string } }
+        result: { status: string; output: { rootPath: string } }
       }).result
       expect(result.status).toBe('success')
-      expect(result.output.root).toBe(workspaceRoot)
+      expect(result.output.rootPath).toBe(workspaceRoot)
       send(socket, { type: 'ack', sequence: resultEnvelope.sequence })
     }
 
     expect(runtime.status.extension.activity).toMatchObject({
       eventType: 'provider_surface_tool_result',
-      toolName: 'ws_status',
+      toolName: 'project:list',
       status: 'success',
     })
     socket.terminate()
@@ -548,7 +550,7 @@ describe('Velar Host extension journey without Desktop', () => {
     await Bun.write(join(workspaceRoot, 'proof.txt'), 'CONTROL_PLANE_OK\n')
 
     runtime = await startVelarHost({
-      workspaceRoot,
+      projectRoot: workspaceRoot,
       dataRoot,
       portStart: 0,
       portEnd: 0,
@@ -579,7 +581,7 @@ describe('Velar Host extension journey without Desktop', () => {
 
     const unsafeUpdate = {
       capabilities: {
-        workspace: { read: true, write: true },
+        project: { read: true, write: true, execute: true },
         system: { observe: true, read: true, write: true, execute: true },
         computer: { observe: true, control: true },
       },
@@ -597,7 +599,8 @@ describe('Velar Host extension journey without Desktop', () => {
       body: JSON.stringify({
         ...unsafeUpdate,
         confirmations: [
-          'workspace-write',
+          'project-write',
+          'project-execute',
           'system-observe',
           'system-read',
           'system-write',
@@ -670,14 +673,14 @@ describe('Velar Host extension journey without Desktop', () => {
       tools: Array<{ name: string }>
     }
     expect(binding.workspaceSpace).toBe('system')
-    expect(catalog.tools.some((tool) => tool.name === 'computer_screenshot')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'computer_click')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'get_system_overview')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'read')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'write')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'bash')).toBe(true)
-    expect(catalog.tools.some((tool) => tool.name === 'ws_read')).toBe(false)
-    expect(catalog.tools.some((tool) => tool.name === 'ws_commit_edit')).toBe(false)
+    expect(catalog.tools.some((tool) => tool.name === 'computer:screenshot')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'computer:click')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'system:processes')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'system:read')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'system:write')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'system:run')).toBe(true)
+    expect(catalog.tools.some((tool) => tool.name === 'project:read')).toBe(false)
+    expect(catalog.tools.some((tool) => tool.name === 'project:edit')).toBe(false)
     send(socket, { type: 'ack', sequence: contractEnvelope.sequence })
 
     const overviewResult = await callProviderTool({
@@ -688,8 +691,8 @@ describe('Velar Host extension journey without Desktop', () => {
       contractId: binding.toolContract.id,
       catalogRevision: binding.toolContract.catalogRevision,
       toolCallId: 'system-overview-1',
-      toolName: 'get_system_overview',
-      toolInput: {},
+      toolName: 'system:processes',
+      toolInput: { limit: 10 },
     })
     expect(overviewResult.status).toBe('success')
 
@@ -702,7 +705,7 @@ describe('Velar Host extension journey without Desktop', () => {
       contractId: binding.toolContract.id,
       catalogRevision: binding.toolContract.catalogRevision,
       toolCallId: 'system-write-1',
-      toolName: 'write',
+      toolName: 'system:write',
       toolInput: { path: outsideNote, content: 'SYSTEM_TOOL_OK\n' },
     })
     expect(systemWriteResult.status).toBe('success')
@@ -714,7 +717,7 @@ describe('Velar Host extension journey without Desktop', () => {
       contractId: binding.toolContract.id,
       catalogRevision: binding.toolContract.catalogRevision,
       toolCallId: 'system-read-1',
-      toolName: 'read',
+      toolName: 'system:read',
       toolInput: { path: outsideNote, endLine: 10 },
     })
     expect(systemReadResult).toMatchObject({
@@ -729,7 +732,7 @@ describe('Velar Host extension journey without Desktop', () => {
       contractId: binding.toolContract.id,
       catalogRevision: binding.toolContract.catalogRevision,
       toolCallId: 'system-command-1',
-      toolName: 'bash',
+      toolName: 'system:run',
       toolInput: { command: 'node --version', cwd: temporaryRoot },
     })
     expect(systemCommandResult).toMatchObject({
@@ -749,7 +752,7 @@ describe('Velar Host extension journey without Desktop', () => {
           contractId: binding.toolContract.id,
           catalogRevision: binding.toolContract.catalogRevision,
           toolCallId: 'computer-shot-1',
-          toolName: 'computer_screenshot',
+          toolName: 'computer:screenshot',
           input: {},
         },
       },
@@ -791,7 +794,7 @@ describe('Velar Host extension journey without Desktop', () => {
           contractId: binding.toolContract.id,
           catalogRevision: binding.toolContract.catalogRevision,
           toolCallId: 'computer-click-1',
-          toolName: 'computer_click',
+          toolName: 'computer:click',
           input: { x: 40, y: 50 },
         },
       },
@@ -829,9 +832,9 @@ describe('Velar Host extension journey without Desktop', () => {
       toolCatalog: { tools: Array<{ name: string }> }
     }
     expect(officeContractPayload.toolCatalog.tools.some((tool) =>
-      tool.name === 'create_word_document')).toBe(true)
+      tool.name === 'office:create_word_document')).toBe(true)
     expect(officeContractPayload.toolCatalog.tools.some((tool) =>
-      tool.name === 'convert_document_to_markdown')).toBe(false)
+      tool.name === 'office:convert_document_to_markdown')).toBe(false)
     send(socket, { type: 'ack', sequence: officeContractEnvelope.sequence })
 
     send(socket, {
@@ -846,7 +849,7 @@ describe('Velar Host extension journey without Desktop', () => {
           contractId: officeContractPayload.binding.toolContract.id,
           catalogRevision: officeContractPayload.binding.toolContract.catalogRevision,
           toolCallId: 'office-word-1',
-          toolName: 'create_word_document',
+          toolName: 'office:create_word_document',
           input: {
             outputPath: 'reports/host-e2e.docx',
             title: 'Host E2E',

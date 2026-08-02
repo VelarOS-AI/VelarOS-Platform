@@ -52,11 +52,11 @@ import { defineBrowserTool } from './Types'
 
 /** 读取当前页面轻量状态，不做完整 DOM 抽取。 */
 const browserGetPageState = defineBrowserTool<Record<string, never>>({
-  name: 'browser_get_page_state',
+  name: 'browser:get_page_state',
   role: 'inspect',
   summary: '轻量查询当前浏览器页面状态。',
   suitable: ['需要在操作前快速确认 URL、标题、加载状态或最近导航错误。'],
-  forbidden: ['不要用它读取页面正文或元素列表；需要内容时用 browser_inspect_page。'],
+  forbidden: ['不要用它读取页面正文或元素列表；需要内容时用 browser:inspect_page。'],
   usage: ['无需参数。'],
   examples: [{}],
   notes: ['比完整页面检查更轻。'],
@@ -80,7 +80,7 @@ const browserInspectPage = defineBrowserTool<{
   maxHtmlChars?: number
   maxElements?: number
 }>({
-  name: 'browser_inspect_page',
+  name: 'browser:inspect_page',
   role: 'inspect',
   summary: '检查当前浏览器页面的可读内容。',
   suitable: ['需要理解真实网页状态、正文、标题结构、链接摘要和主要交互元素。'],
@@ -164,14 +164,14 @@ const browserObserveActions = defineBrowserTool<{
   limit?: number
   ignoreSelectors?: string[]
 }>({
-  name: 'browser_observe_actions',
+  name: 'browser:observe_actions',
   role: 'inspect',
   summary: '观察当前页面可执行动作候选。',
   suitable: [
     '需要先找出页面上可能要点击或填写的元素，再选择一个动作执行。',
-    '需要生成可缓存、可预览、可传给 browser_act 的动作候选。',
+    '需要生成可缓存、可预览、可传给 browser:act 的动作候选。',
   ],
-  forbidden: ['不要用它执行动作；执行候选动作时用 browser_act。'],
+  forbidden: ['不要用它执行动作；执行候选动作时用 browser:act。'],
   protocol: ['先 observe 候选，展示 preview；执行时调用候选的 replay.tool，并把 replay.input 作为入参。'],
   usage: ['可传 instruction 做轻量过滤和排序；limit 控制返回数量；ignoreSelectors 可排除导航、弹窗、广告等噪音区域。'],
   examples: [{ instruction: 'email', limit: 5 }, { instruction: 'checkout', ignoreSelectors: ['nav', '.cookie-banner'] }],
@@ -180,7 +180,7 @@ const browserObserveActions = defineBrowserTool<{
     'ignoreSelectors 会在生成候选前过滤对应子树，适合排除 cookie banner、固定导航和广告容器。',
     '每个候选包含 actionId、preview 和 replay；target 类动作额外保留兼容旧调用方的 actionInput。',
     '原生 select 会作为需要 value 的 select 候选返回；value 可按 option value 或可见文本匹配。',
-    'file input 会作为 upload 候选返回；执行时用 browser_upload_file 并补 filePath。',
+    'file input 会作为 upload 候选返回；执行时用 browser:upload_file 并补 filePath。',
     '自定义 dropdown 触发器会带 twoStep=true；先执行 click，再重新 observe 选项。',
   ],
   schema: z.object({
@@ -235,7 +235,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
   annotateElements?: boolean | { enabled?: boolean; maxElements?: number }
   compareWithPrevious?: boolean
 }>({
-  name: 'browser_capture_screenshot',
+  name: 'browser:capture_screenshot',
   role: 'inspect',
   summary: '截取当前浏览器页面并保存到网站工作区。',
   suitable: ['需要做视觉检查、调试、坐标定位或归档页面状态。'],
@@ -245,12 +245,12 @@ const browserCaptureScreenshot = defineBrowserTool<{
   examples: [
     // 只截当前视口（默认）
     {},
-    // 整页 + 元素编号标注（返回 @e1 这类可直接给 browser_act 的 ref）
+    // 整页 + 元素编号标注（返回 @e1 这类可直接给 browser:act 的 ref）
     { fullPage: true, annotateElements: true },
   ],
   notes: [
     '图片保存到当前网站浏览器工作区。',
-    'annotateElements=true 时 metadata.elementLegend 会返回编号元素的可读 legend；条目的 target.ref 形如 @e1，可在页面变化前直接交给 browser_act。',
+    'annotateElements=true 时 metadata.elementLegend 会返回编号元素的可读 legend；条目的 target.ref 形如 @e1，可在页面变化前直接交给 browser:act。',
   ],
   schema: z.object({
     path: z
@@ -377,7 +377,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
 
 /** 按 CSS selector 查询元素并返回可复用 target hint。 */
 const browserQueryElements = defineBrowserTool<BrowserQueryElementsInput>({
-  name: 'browser_query_elements',
+  name: 'browser:query_elements',
   role: 'inspect',
   summary: '用 CSS selector 查询当前页面元素。',
   suitable: ['需要读取列表、表格、组件文本、属性或可复用 target。'],
@@ -434,7 +434,7 @@ const browserQueryElements = defineBrowserTool<BrowserQueryElementsInput>({
 
 /** 读取页面诊断事件，如 console、加载错误和渲染异常。 */
 const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInput>({
-  name: 'browser_get_page_diagnostics',
+  name: 'browser:get_page_diagnostics',
   role: 'inspect',
   summary: '读取当前浏览器页面的诊断事件。',
   suitable: ['需要调试网页功能、前端报错、加载失败或自动化失败。'],
@@ -488,14 +488,14 @@ const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInp
 
 /** 列出当前页面捕获到的网络诊断事件。 */
 const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput>({
-  name: 'browser_list_network_events',
+  name: 'browser:list_network_events',
   role: 'inspect',
   summary: '列出当前页面捕获的网络诊断事件。',
   suitable: ['需要快速定位失败请求、HTTP 错误、被拦截资源或网络异常。'],
   forbidden: ['不要把它当作完整 HAR 或响应体读取工具；这里只返回 diagnostics 中已捕获的网络事件。'],
   usage: ['传 limit；可用 status、resourceType 或 failedOnly 缩小范围。'],
   examples: [{ limit: 100, failedOnly: true }, { limit: 80, status: 404 }],
-  notes: ['复用 browser_get_page_diagnostics 的网络事件缓存，并重算过滤后的 summary。'],
+  notes: ['复用 browser:get_page_diagnostics 的网络事件缓存，并重算过滤后的 summary。'],
   schema: browserListNetworkEventsSchema,
   surfaces: {
     preset: {
@@ -550,18 +550,18 @@ const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput
 
 /** 按网络诊断事件 requestId 读取外部 CDP 浏览器捕获的响应体。 */
 const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkResponseBodyInput>({
-  name: 'browser_get_network_response_body',
+  name: 'browser:get_network_response_body',
   role: 'inspect',
   summary: '读取当前页面某个已捕获网络请求的响应体。',
   suitable: [
-    'browser_list_network_events 返回了 requestId，需要查看对应 API 响应体。',
+    'browser:list_network_events 返回了 requestId，需要查看对应 API 响应体。',
     '需要调试当前页面 XHR/fetch 的 JSON、文本或 base64 响应。',
   ],
   forbidden: [
-    '不要用它下载任意 URL；下载资源用 browser_fetch_resource。',
-    '不要在没有当前页面 requestId 时调用；先用 browser_list_network_events 找 requestId。',
+    '不要用它下载任意 URL；下载资源用 browser:fetch_resource。',
+    '不要在没有当前页面 requestId 时调用；先用 browser:list_network_events 找 requestId。',
   ],
-  protocol: ['先调用 browser_list_network_events 获取 requestId，再用该 requestId 读取响应体。'],
+  protocol: ['先调用 browser:list_network_events 获取 requestId，再用该 requestId 读取响应体。'],
   usage: ['传 requestId；大响应按需设置 maxChars。'],
   examples: [{ requestId: '12345.67', maxChars: 20000 }],
   notes: [
@@ -573,7 +573,7 @@ const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkRespons
     guided: {
       role: 'inspect',
       summary: '按 requestId 读取网络响应体。',
-      suitable: ['已经从 browser_list_network_events 拿到 requestId。'],
+      suitable: ['已经从 browser:list_network_events 拿到 requestId。'],
       forbidden: ['不要传 URL；这里只接受 requestId。'],
       usage: ['传 requestId；maxChars 可省略。'],
       examples: [{ requestId: '12345.67' }],
@@ -597,19 +597,19 @@ const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkRespons
 
 /** 按网络诊断事件 requestId 读取请求/响应详情。 */
 const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput>({
-  name: 'browser_get_network_request',
+  name: 'browser:get_network_request',
   role: 'inspect',
   summary: '读取当前页面某个已捕获网络请求的完整详情。',
   suitable: [
-    'browser_list_network_events 返回了 requestId，需要查看请求 headers、postData、响应 headers、timing 或 body size。',
+    'browser:list_network_events 返回了 requestId，需要查看请求 headers、postData、响应 headers、timing 或 body size。',
     '需要调试当前页面 XHR/fetch、资源加载、缓存命中或失败原因。',
   ],
   forbidden: [
     '不要把它当作 HAR 导出；这里只返回单个 requestId 的详情。',
-    '不要传 URL；必须先通过 browser_list_network_events 获取 requestId。',
+    '不要传 URL；必须先通过 browser:list_network_events 获取 requestId。',
   ],
   protocol: [
-    '先调用 browser_list_network_events 定位请求；需要 body 时设置 includeResponseBody=true 或改用 browser_get_network_response_body。',
+    '先调用 browser:list_network_events 定位请求；需要 body 时设置 includeResponseBody=true 或改用 browser:get_network_response_body。',
   ],
   usage: ['传 requestId；需要响应体时传 includeResponseBody=true 和可选 maxBodyChars。'],
   examples: [{ requestId: '12345.67' }, { requestId: '12345.67', includeResponseBody: true }],
@@ -622,7 +622,7 @@ const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput
     guided: {
       role: 'inspect',
       summary: '按 requestId 读取网络请求详情。',
-      suitable: ['已经从 browser_list_network_events 拿到 requestId。'],
+      suitable: ['已经从 browser:list_network_events 拿到 requestId。'],
       forbidden: ['不要传 URL；这里只接受 requestId。'],
       usage: ['传 requestId；includeResponseBody 和 maxBodyChars 可省略。'],
       examples: [{ requestId: '12345.67', includeResponseBody: true }],
@@ -646,14 +646,14 @@ const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput
 
 /** 列出当前页面捕获到的 console 诊断事件。 */
 const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput>({
-  name: 'browser_list_console_events',
+  name: 'browser:list_console_events',
   role: 'inspect',
   summary: '列出当前页面捕获的 console 诊断事件。',
   suitable: ['需要快速定位 console error、warning 或前端运行时报错。'],
   forbidden: ['不要把它当作页面正文读取工具；这里只有 diagnostics 中已捕获的 console 事件。'],
   usage: ['传 limit；可用 level 或 errorsOnly 缩小范围。'],
   examples: [{ limit: 100, errorsOnly: true }, { limit: 80, level: 'warning' }],
-  notes: ['复用 browser_get_page_diagnostics 的 console 事件缓存，并重算过滤后的 summary。'],
+  notes: ['复用 browser:get_page_diagnostics 的 console 事件缓存，并重算过滤后的 summary。'],
   schema: browserListConsoleEventsSchema,
   surfaces: {
     preset: {
@@ -707,14 +707,14 @@ const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput
 
 /** 列出当前页面捕获到的未处理异常诊断事件。 */
 const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
-  name: 'browser_list_page_errors',
+  name: 'browser:list_page_errors',
   role: 'inspect',
   summary: '列出当前页面捕获的未处理异常。',
   suitable: ['需要快速定位页面运行时异常、未捕获 JS 错误或自动化后页面报错。'],
-  forbidden: ['不要把它当作 console 输出列表；console 输出用 browser_list_console_events。'],
+  forbidden: ['不要把它当作 console 输出列表；console 输出用 browser:list_console_events。'],
   usage: ['传 limit；读取后需要清空缓存时传 clear=true。'],
   examples: [{ limit: 50, clear: true }],
-  notes: ['复用 browser_get_page_diagnostics 的 page-error 事件缓存，并重算过滤后的 summary。'],
+  notes: ['复用 browser:get_page_diagnostics 的 page-error 事件缓存，并重算过滤后的 summary。'],
   schema: browserListPageErrorsSchema,
   surfaces: {
     preset: {
@@ -768,11 +768,11 @@ const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
 const browserGetElementBounds = defineBrowserTool<{
   selector: string
 }>({
-  name: 'browser_get_element_bounds',
+  name: 'browser:get_element_bounds',
   role: 'inspect',
   summary: '查询元素的精确视口坐标。',
   suitable: ['需要在坐标点击前定位元素的边界和中心点。'],
-  forbidden: ['不要用它执行点击；点击用 browser_act action=click_coordinates 或 action=target。'],
+  forbidden: ['不要用它执行点击；点击用 browser:act action=click_coordinates 或 action=target。'],
   usage: ['传 CSS selector。'],
   examples: [{ selector: "button[type=submit]" }],
   notes: ['未匹配时返回 found=false。'],
@@ -822,12 +822,12 @@ const browserCaptureRegion = defineBrowserTool<{
   height?: number
   path?: string
 }>({
-  name: 'browser_capture_region',
+  name: 'browser:capture_region',
   role: 'inspect',
   summary: '截取页面指定区域的 PNG 截图。',
   suitable: [
     '需要保存某个 DOM 区块、卡片或图表的所见即所得截图。',
-    'browser_capture_screenshot 全页/视口过大时使用。',
+    'browser:capture_screenshot 全页/视口过大时使用。',
   ],
   forbidden: ['跨域 iframe 内区域无法截取。'],
   usage: ['传 selector；或传 x/y/width/height（page CSS 坐标）。'],
@@ -876,7 +876,7 @@ const browserCaptureRegion = defineBrowserTool<{
     requireActiveBrowserSite(ctx)
 
     if (!selector?.trim() && !(Number.isFinite(x) && Number.isFinite(y) && width && height)) {
-      throw new AppError('VALIDATION', 'browser_capture_region 需要 selector 或完整的 x/y/width/height。')
+      throw new AppError('VALIDATION', 'browser:capture_region 需要 selector 或完整的 x/y/width/height。')
     }
 
     return ctx.browser.captureScreenshot(
@@ -891,18 +891,18 @@ const browserCaptureRegion = defineBrowserTool<{
 
 /** 页面检查类工具出口。 */
 const browserInspectionTools = {
-  browser_get_page_state: browserGetPageState,
-  browser_inspect_page: browserInspectPage,
-  browser_observe_actions: browserObserveActions,
-  browser_capture_screenshot: browserCaptureScreenshot,
-  browser_capture_region: browserCaptureRegion,
-  browser_query_elements: browserQueryElements,
-  browser_get_page_diagnostics: browserGetPageDiagnostics,
-  browser_list_console_events: browserListConsoleEvents,
-  browser_list_network_events: browserListNetworkEvents,
-  browser_get_network_request: browserGetNetworkRequest,
-  browser_get_network_response_body: browserGetNetworkResponseBody,
-  browser_list_page_errors: browserListPageErrors,
-  browser_get_element_bounds: browserGetElementBounds,
+  'browser:get_page_state': browserGetPageState,
+  'browser:inspect_page': browserInspectPage,
+  'browser:observe_actions': browserObserveActions,
+  'browser:capture_screenshot': browserCaptureScreenshot,
+  'browser:capture_region': browserCaptureRegion,
+  'browser:query_elements': browserQueryElements,
+  'browser:get_page_diagnostics': browserGetPageDiagnostics,
+  'browser:list_console_events': browserListConsoleEvents,
+  'browser:list_network_events': browserListNetworkEvents,
+  'browser:get_network_request': browserGetNetworkRequest,
+  'browser:get_network_response_body': browserGetNetworkResponseBody,
+  'browser:list_page_errors': browserListPageErrors,
+  'browser:get_element_bounds': browserGetElementBounds,
 }
 export { browserInspectionTools }

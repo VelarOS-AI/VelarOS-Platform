@@ -34,7 +34,7 @@ const browserExportPage = defineBrowserTool<{
   tableIndex?: number
   maxRows?: number
 }>({
-  name: 'browser_export_page',
+  name: 'browser:export_page',
   role: 'control',
   summary: '统一导出当前页面可见内容（文本/截图/区域/PDF/媒体/表格/快照）。',
   suitable: [
@@ -60,7 +60,7 @@ const browserExportPage = defineBrowserTool<{
     { kind: 'region', selector: '#invoice' },
     // 打印为 PDF
     { kind: 'pdf' },
-    // 列出可下载媒体 URL（再用 browser_fetch_resource 下载）
+    // 列出可下载媒体 URL（再用 browser:fetch_resource 下载）
     { kind: 'media' },
     // 提取第 0 张表格为 JSON
     { kind: 'table', tableIndex: 0, maxRows: 200 },
@@ -69,7 +69,7 @@ const browserExportPage = defineBrowserTool<{
   ],
   notes: [
     '产物默认写入 extracts/、artifacts/screenshots/、artifacts/exports/ 或 pages/。',
-    'fetchable 媒体 URL 再用 browser_fetch_resource 下载。',
+    'fetchable 媒体 URL 再用 browser:fetch_resource 下载。',
   ],
   schema: z.object({
     kind: exportKindSchema.describe(
@@ -252,6 +252,6 @@ const browserExportPage = defineBrowserTool<{
 })
 
 const browserExportTools = {
-  browser_export_page: browserExportPage,
+  'browser:export_page': browserExportPage,
 }
 export { browserExportTools }

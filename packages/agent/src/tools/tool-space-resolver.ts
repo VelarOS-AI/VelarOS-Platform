@@ -46,7 +46,6 @@ import {
 } from './access-policy'
 import type { ToolCapabilityPage } from './capability-types'
 import {
-  isReflectEligibleDiscoveryAvailability,
   nextActionForDiscoveryAvailability,
   resolveCapabilityDiscoveryAvailability,
   resolveToolDiscoveryAvailability,
@@ -58,8 +57,6 @@ import {
 } from './discovery-availability'
 
 const ToolSpacePageKindValues = ['tool', 'capability', 'plugin'] as const
-const ReflectionBlockedControlToolNames = new Set(['tool_reflect'])
-
 function normalizePromptFeatures(features: readonly ChatPromptFeatureId[]): ChatPromptFeatureId[] {
   return [...new Set(features.filter((feature) => feature.trim()))]
 }
@@ -93,7 +90,6 @@ interface ToolSpacePage {
   schemaPolicy: ToolSpaceSchemaPolicy
   nextAction: ToolDiscoveryNextAction
   resident: boolean
-  reflectEligible: boolean
   access: ToolAccessDecision
   reasons: ToolSpaceReason[]
   description?: string
@@ -221,10 +217,6 @@ function schemaPolicyForPage(kind: ToolSpacePageKind, availability: ToolDiscover
   return kind === 'tool' ? schemaPolicyForToolAvailability(availability) : 'none'
 }
 
-function isReflectionBlockedTool(tool: ToolDescriptor): boolean {
-  return tool.role === 'control' || ReflectionBlockedControlToolNames.has(tool.name)
-}
-
 function requiresToolCategoryApproval(
   ctx: ToolSpaceResolverContext,
   categoryId: ToolCategoryId
@@ -272,7 +264,6 @@ function reasonsForTool(input: {
   categoryEnabled: boolean
   requiresApproval: boolean
   pluginBacked: boolean
-  reflectionBlocked: boolean
   availability: ToolDiscoveryAvailability
 }): ToolSpaceReason[] {
   const reasons: ToolSpaceReason[] = []
@@ -300,25 +291,13 @@ function reasonsForTool(input: {
     reasons.push(reason('resident', 'loadable', '该工具已授权但未驻留，可换入动态工具空间。'))
     if (!input.categoryEnabled && !input.requiresApproval) {
       reasons.push(
-        reason('approval', 'preauthorized', '当前运行态允许 tool_replace 直接启用该工具类别。')
+        reason('approval', 'preauthorized', '当前运行态允许 tooling:replace 直接启用该工具类别。')
       )
     }
   } else if (input.availability === 'requires_approval') {
     reasons.push(reason('approval', 'required', '该工具类别需要先申请启用。'))
   } else if (input.pluginBacked) {
     reasons.push(reason('plugin', 'user_action_required', '该工具类别依赖外部连接器或用户动作。'))
-  }
-  if (
-    input.reflectionBlocked &&
-    (input.availability === 'visible' || input.availability === 'loadable')
-  ) {
-    reasons.push(
-      reason(
-        'runtime',
-        'control_tool',
-        '该工具是 control-role 编排/控制工具；可见时直接调用，未驻留时必须先 page-in，不能通过代理或链式嵌套调用。'
-      )
-    )
   }
   return reasons
 }
@@ -353,7 +332,7 @@ function reasonsForCapability(input: {
     reasons.push(reason('capability', 'enabled', '该能力已经启用。'))
   } else if (input.availability === 'loadable' && !input.requiresApproval) {
     reasons.push(
-      reason('approval', 'preauthorized', '当前运行态允许 tool_replace 直接启用该能力。')
+      reason('approval', 'preauthorized', '当前运行态允许 tooling:replace 直接启用该能力。')
     )
   } else if (input.availability === 'requires_approval') {
     reasons.push(reason('approval', 'required', '该能力需要先申请启用。'))
@@ -379,7 +358,6 @@ function createToolPage(input: {
   const visible = input.visibleToolNames.has(input.tool.name)
   const systemEnabled = input.tool.systemEnabled ?? true
   const pluginBacked = isPluginBackedToolCategory(input.categoryId)
-  const reflectionBlocked = isReflectionBlockedTool(input.tool)
   const availability = resolveToolDiscoveryAvailability({
     toolName: input.tool.name,
     categoryId: input.categoryId,
@@ -406,7 +384,6 @@ function createToolPage(input: {
     categoryEnabled: input.categoryEnabled,
     requiresApproval: input.requiresApproval,
     pluginBacked,
-    reflectionBlocked,
     availability,
   })
   const id = `tool:${input.tool.name}`
@@ -435,7 +412,6 @@ function createToolPage(input: {
     schemaPolicy: schemaPolicyForPage('tool', availability),
     nextAction,
     resident: visible,
-    reflectEligible: isReflectEligibleDiscoveryAvailability(availability) && !reflectionBlocked,
     access: buildToolAccessDecision({
       targetId: id,
       kind: 'tool',
@@ -525,7 +501,6 @@ function createCapabilityPage(input: {
     schemaPolicy: 'none',
     nextAction,
     resident: input.enabled,
-    reflectEligible: false,
     access: buildToolAccessDecision({
       targetId: id,
       kind: 'capability',
@@ -640,7 +615,6 @@ function buildToolSpacePagesFromCapabilities(pages: ToolCapabilityPage[]): ToolS
         schemaPolicy: schemaPolicyFromCapabilityPage(page),
         nextAction: page.nextAction,
         resident: page.resident,
-        reflectEligible: page.reflectEligible && !isReflectionBlockedTool(descriptor),
         access: buildToolAccessDecision({
           targetId: page.id,
           kind: 'tool',
@@ -757,18 +731,14 @@ function buildToolSpaceCategoryFilter(
 
 const ToolSpacePageMatchReasonByAvailability: Record<ToolDiscoveryAvailability, string> = {
   visible: '工具页已驻留，可直接调用完整 schema。',
-  loadable: '工具页可按需换入；调用前用 tool_replace page-in。',
-  requires_approval: '能力尚未启用；需要先通过 tool_replace 请求授权。',
+  loadable: '工具页可按需换入；调用前用 tooling:replace page-in。',
+  requires_approval: '能力尚未启用；需要先通过 tooling:replace 请求授权。',
   requires_user_action: '能力依赖外部连接器、资源绑定或其他用户动作。',
   unavailable: '当前运行环境、权限、系统设置或角色边界不可用。',
 }
 
 function matchReasonForToolSpacePage(card: ToolSpacePage): string {
   return ToolSpacePageMatchReasonByAvailability[card.availability]
-}
-
-function isReflectEligibleToolSpacePage(card: ToolSpacePage): boolean {
-  return card.kind === 'tool' && card.reflectEligible
 }
 
 export {
@@ -778,7 +748,6 @@ export {
   buildToolSpacePagesFromCapabilities,
   isPluginBackedToolCategory,
   isPromptFeatureEffectivelyEnabled,
-  isReflectEligibleToolSpacePage,
   matchReasonForToolSpacePage,
   PluginBackedToolCategoryIds,
   PluginFeatureDescriptions,

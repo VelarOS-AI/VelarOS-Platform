@@ -4,7 +4,7 @@ export type BrowserCapabilityAccess = 'observe' | 'control' | 'artifact'
 
 export type BrowserCapabilityMetadata = Readonly<{
   browserAccess: BrowserCapabilityAccess
-  canMutateWorkspace?: boolean
+  canMutateProject?: boolean
 }> & Readonly<Record<string, unknown>>
 
 export type BrowserToolCapabilitySchema = Omit<ToolCapabilitySchema, 'metadata'> & {
@@ -30,7 +30,7 @@ export const BrowserControlCapability = {
   concurrency: 'unsafe',
   metadata: {
     browserAccess: 'control',
-    canMutateWorkspace: false,
+    canMutateProject: false,
   },
   reason: 'browser page control',
 } satisfies BrowserToolCapabilitySchema
@@ -56,7 +56,7 @@ export const BrowserArtifactWriteCapability = {
   concurrency: 'unsafe',
   metadata: {
     browserAccess: 'artifact',
-    canMutateWorkspace: false,
+    canMutateProject: false,
   },
   reason: 'browser workspace artifact write',
 } satisfies BrowserToolCapabilitySchema
@@ -70,7 +70,7 @@ export const BrowserSessionCapability = {
   concurrency: 'unsafe',
   metadata: {
     browserAccess: 'control',
-    canMutateWorkspace: false,
+    canMutateProject: false,
   },
   reason: 'browser session management',
 } satisfies BrowserToolCapabilitySchema

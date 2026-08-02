@@ -36,7 +36,6 @@ export type {
   ToolDiscoveryToolAvailabilityInput,
 } from './discovery-availability'
 export {
-  isReflectEligibleDiscoveryAvailability,
   nextActionForDiscoveryAvailability,
   resolveCapabilityDiscoveryAvailability,
   resolveToolDiscoveryAvailability,
@@ -57,7 +56,7 @@ export type {
 } from './ExecutionPolicy'
 export { ToolExecutionPolicy } from './ExecutionPolicy'
 export type { PendingTool, ToolExecutorEvents, ToolResult } from './Executor'
-export { ReflectToolCallToolName, ToolExecutor } from './Executor'
+export { ToolExecutor } from './Executor'
 export { liftGenericModelImage } from './modelImageLift'
 export {
   defaultRuntimePromptFeaturePolicy,
@@ -80,7 +79,6 @@ export {
   buildToolSpacePagesFromCapabilities,
   isPluginBackedToolCategory,
   isPromptFeatureEffectivelyEnabled,
-  isReflectEligibleToolSpacePage,
   matchReasonForToolSpacePage,
   PluginBackedToolCategoryIds,
   PluginFeatureDescriptions,
@@ -92,6 +90,14 @@ export {
   toolArgsSchemaValidator,
   validateToolArgsWithNormalization,
 } from './ToolArgsSchemaValidator'
+export type { ToolTransportNamePlan } from './ToolIdentity'
+export {
+  assertCanonicalToolId,
+  CanonicalToolIdPattern,
+  createToolTransportNamePlan,
+  isCanonicalToolId,
+  ProviderToolNamePattern,
+} from './ToolIdentity'
 export type {
   RegisteredTool,
   RegistryTool,

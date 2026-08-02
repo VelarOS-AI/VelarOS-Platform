@@ -185,7 +185,7 @@ function formatToolSpaceTargets(
 }
 
 function getToolReadSkillNames(toolName: string, args: Nullable<Record<string, any>>): string[] {
-  if (toolName !== 'tool_read') return []
+  if (toolName !== 'tooling:read') return []
 
   return readStringArray(args, 'ids')
     .map((id) => id.trim().replace(/^skill:/iu, '').trim())

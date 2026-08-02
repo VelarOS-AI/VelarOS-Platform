@@ -11,7 +11,7 @@ const browserFetchResource = defineBrowserTool<{
   savePath: string
   referer?: string
 }>({
-  name: 'browser_fetch_resource',
+  name: 'browser:fetch_resource',
   role: 'control',
   summary: '用当前浏览器会话下载远程图片或视频到工作区。',
   suitable: [
@@ -23,7 +23,7 @@ const browserFetchResource = defineBrowserTool<{
     'savePath 必须位于当前 browser workspace 内。',
   ],
   usage: [
-    '先用 browser_list_media_sources 或 browser_evaluate_script preset=media_sources 找 URL。',
+    '先用 browser:list_media_sources 或 browser:evaluate_script preset=media_sources 找 URL。',
     '传 url 和 savePath（建议 downloads/ 下）；需要时传 referer。',
   ],
   examples: [
@@ -67,17 +67,17 @@ const browserListMediaSources = defineBrowserTool<{
   includeDataUrls?: boolean
   includeBlobUrls?: boolean
 }>({
-  name: 'browser_list_media_sources',
+  name: 'browser:list_media_sources',
   role: 'inspect',
   summary: '列出当前页面上的图片、视频和音频 URL。',
   suitable: [
     '需要批量发现页面媒体资源再逐个下载。',
-    'browser_inspect_page 未直接给出媒体 URL 时。',
+    'browser:inspect_page 未直接给出媒体 URL 时。',
   ],
   forbidden: ['不要指望枚举到跨域 iframe 内或 DRM 保护的媒体。'],
   usage: ['无需参数；按需调整 limit 或包含 data/blob URL。'],
   examples: [{ limit: 40 }],
-  notes: ['fetchable=true 的 URL 可直接传给 browser_fetch_resource。'],
+  notes: ['fetchable=true 的 URL 可直接传给 browser:fetch_resource。'],
   schema: z.object({
     limit: z.number().transform((value) => Math.min(200, Math.max(1, Math.round(value)))).optional().describe(
       parameterDescription({
@@ -113,7 +113,7 @@ const browserListPageResources = defineBrowserTool<{
   limit?: number
   includeIframes?: boolean
 }>({
-  name: 'browser_list_page_resources',
+  name: 'browser:list_page_resources',
   role: 'inspect',
   summary: '枚举页面链接、iframe 与媒体资源概览。',
   suitable: [
@@ -123,7 +123,7 @@ const browserListPageResources = defineBrowserTool<{
   forbidden: ['跨域 iframe 内部链接无法枚举。'],
   usage: ['无需参数；按需调整 limit 或 includeIframes。'],
   examples: [{ limit: 80, includeIframes: true }],
-  notes: ['媒体详情用 browser_list_media_sources；fetchable URL 用 browser_fetch_resource。'],
+  notes: ['媒体详情用 browser:list_media_sources；fetchable URL 用 browser:fetch_resource。'],
   schema: z.object({
     limit: z.number().transform((value) => Math.min(500, Math.max(1, Math.round(value)))).optional().describe(
       parameterDescription({
@@ -150,8 +150,8 @@ const browserListPageResources = defineBrowserTool<{
 })
 
 const browserFetchTools = {
-  browser_fetch_resource: browserFetchResource,
-  browser_list_media_sources: browserListMediaSources,
-  browser_list_page_resources: browserListPageResources,
+  'browser:fetch_resource': browserFetchResource,
+  'browser:list_media_sources': browserListMediaSources,
+  'browser:list_page_resources': browserListPageResources,
 }
 export { browserFetchTools }

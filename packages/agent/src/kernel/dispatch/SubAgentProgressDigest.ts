@@ -16,7 +16,7 @@ function pickArgsHint(args: Record<string, unknown>): Nullable<string> {
  * 子 Agent 运行中进展摘要记录器。
  *
  * 从 worker 事件流提取工具调用轨迹，写入子 Agent 对应的后台 job 输出——
- * 父 Agent 用现有 read_background_job_output 即可随时窥视运行中子 Agent 的进展，
+ * 父 Agent 用现有 job:read_output 即可随时窥视运行中子 Agent 的进展，
  * 不需要新工具、不打断子 Agent。sink 绑定前的行先缓冲，绑定时一次性冲刷。
  */
 class SubAgentProgressDigestRecorder {

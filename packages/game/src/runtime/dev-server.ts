@@ -59,7 +59,7 @@ export interface GameApprovedProcessHost {
 
 export class GameRuntimePermissionDeniedError extends Error {
   public constructor() {
-    super('game_run 需要 process:exec 权限；宿主未提供获批执行端口，默认拒绝。')
+    super('game:run 需要 process:exec 权限；宿主未提供获批执行端口，默认拒绝。')
     this.name = 'GameRuntimePermissionDeniedError'
   }
 }
