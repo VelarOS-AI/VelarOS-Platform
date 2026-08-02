@@ -31,8 +31,8 @@ export {
   type SystemCapabilityService,
   type SystemToolContextResolver,
 } from './kernel-module'
-export type { SystemToolName } from './system-tool-names'
-export { SystemToolNames } from './system-tool-names'
+export type { SystemToolCategoryId, SystemToolName } from './system-tool-names'
+export { SystemToolCategoryByName, SystemToolNames } from './system-tool-names'
 export * from './SystemCommandExecutionPolicy'
 export type * from './SystemContracts'
 export * from './SystemPlatformCompatibility'

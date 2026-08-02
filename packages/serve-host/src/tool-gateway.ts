@@ -10,12 +10,12 @@ import {
   isBlank,
   isEmpty,
   isNull,
-  isPlainObject,
   isPresent,
   isString,
   toOptional,
 } from '@velaros-ai/core'
 import { schemaToInputSchema } from '@velaros-ai/core/tool-contract'
+import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 import {
   type CapabilitySession,
   type KernelClient,
@@ -43,6 +43,7 @@ import {
 } from '@velaros-ai/surface-protocol'
 import {
   SystemCapability,
+  SystemToolCategoryByName,
   SystemToolNames,
   systemTools,
 } from '@velaros-ai/system'
@@ -136,10 +137,6 @@ function discoveryTools(): readonly ProviderSurfaceToolDescriptor[] {
   ]
 }
 
-function asRecord(value: unknown): Nullable<Record<string, unknown>> {
-  return isPlainObject(value) ? value : null
-}
-
 /**
  * Provider Surface projection over real Kernel capability sessions.
  *
@@ -196,7 +193,9 @@ export class VelarHostToolGateway {
             name,
             description: compactDescription(tool.description),
             inputSchema: schemaToInputSchema(tool.schema),
-            category: 'system-control',
+            category: SystemToolCategoryByName[
+              name as keyof typeof SystemToolCategoryByName
+            ],
             readOnly: SystemObserveOperations.has(name) || SystemReadOperations.has(name),
           },
           capabilityId: SystemCapability.id,

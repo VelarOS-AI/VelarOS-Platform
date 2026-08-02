@@ -544,6 +544,26 @@ void describe('编译器切换 · 行为对齐', () => {
     assert.equal(compiled.historyRewriteFingerprint, undefined)
   })
 
+  void test('provider 边界改写系统与 assistant 工具引用，但保留用户原文', () => {
+    const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    const compiled = new ProviderRequestCompiler(registry).compileWithReclaim({
+      model: 'gpt-test',
+      systemPrompt: '需要时调用 project:read。',
+      sessionId: 'tool-alias-text-1',
+      messages: [
+        userMessage('请解释 project:read 是什么。'),
+        assistantMessage('我会先调用 project:read。'),
+        userMessage('继续。'),
+      ],
+      contextWindow: 200_000,
+      toolNameAliases: { 'project:read': 'project__read' },
+    })
+
+    assert.equal(compiled.system, '需要时调用 project__read。')
+    assert.equal(String(compiled.messages[0]?.content), '请解释 project:read 是什么。')
+    assert.equal(String(compiled.messages[1]?.content), '我会先调用 project__read。')
+  })
+
   void test('同一会话连续两轮编译：第二轮只增量摄入，输出仍逐字等价', () => {
     const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
     const compiler = new ProviderRequestCompiler(registry)

@@ -9,6 +9,7 @@ import {
   createSystemKernelModule,
   SystemCapability,
   type SystemCapabilityService,
+  SystemToolCategoryByName,
   type SystemToolContext,
 } from '../src'
 
@@ -27,6 +28,22 @@ function captureService(
 }
 
 describe('System Kernel module', () => {
+  test('keeps every tool in one concrete responsibility category', () => {
+    expect(SystemToolCategoryByName).toEqual({
+      'system:read': 'system-files',
+      'system:write': 'system-files',
+      'system:edit': 'system-files',
+      'system:list': 'system-files',
+      'system:search': 'system-files',
+      'system:run': 'system-execution',
+      'system:refresh-environment': 'system-execution',
+      'system:processes': 'system-processes',
+      'system:list-tasks': 'system-processes',
+      'system:terminate-task': 'system-processes',
+      'system:open': 'system-desktop',
+    })
+  })
+
   test('registers the precise canonical tool collection', async () => {
     let service: SystemCapabilityService | undefined
     const module = createSystemKernelModule()

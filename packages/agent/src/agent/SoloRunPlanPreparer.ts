@@ -169,7 +169,7 @@ const PlanModeRequiredToolNames = ['plan:update', 'interaction:show_action_cards
 const ProposalModeRequiredToolNames = [
   'proposal:get',
   'proposal:review',
-  'ask_user',
+  'interaction:ask_user',
   'agent:dispatch',
   'agent:run_workflow',
   'artifact:produce',
@@ -189,7 +189,7 @@ const GoalModeRequiredToolNames = ['goal:get', 'goal:create', 'goal:update'] as 
 const BootstrapSharedToolNames = [
   'tooling:map',
   'plan:update',
-  'ask_user',
+  'interaction:ask_user',
   'interaction:show_action_cards',
 ] as const
 function filterToolsForContextPhase(input: {
@@ -211,7 +211,7 @@ function filterToolsForContextPhase(input: {
  */
 const SkillGateAlwaysKeptToolNames = new Set<string>([
   'tooling:read',
-  'ask_user',
+  'interaction:ask_user',
   'interaction:show_action_cards',
   'context:recall',
   'context:distill',

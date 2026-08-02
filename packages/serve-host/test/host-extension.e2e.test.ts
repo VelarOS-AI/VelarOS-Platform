@@ -670,7 +670,7 @@ describe('Velar Host extension journey without Desktop', () => {
       toolContract: { id: string; catalogRevision: string }
     }
     const catalog = contractPayload.toolCatalog as {
-      tools: Array<{ name: string }>
+      tools: Array<{ name: string; category?: string }>
     }
     expect(binding.workspaceSpace).toBe('system')
     expect(catalog.tools.some((tool) => tool.name === 'computer:screenshot')).toBe(true)
@@ -679,6 +679,15 @@ describe('Velar Host extension journey without Desktop', () => {
     expect(catalog.tools.some((tool) => tool.name === 'system:read')).toBe(true)
     expect(catalog.tools.some((tool) => tool.name === 'system:write')).toBe(true)
     expect(catalog.tools.some((tool) => tool.name === 'system:run')).toBe(true)
+    expect(catalog.tools.find((tool) => tool.name === 'system:read')?.category).toBe(
+      'system-files',
+    )
+    expect(catalog.tools.find((tool) => tool.name === 'system:run')?.category).toBe(
+      'system-execution',
+    )
+    expect(catalog.tools.find((tool) => tool.name === 'system:processes')?.category).toBe(
+      'system-processes',
+    )
     expect(catalog.tools.some((tool) => tool.name === 'project:read')).toBe(false)
     expect(catalog.tools.some((tool) => tool.name === 'project:edit')).toBe(false)
     send(socket, { type: 'ack', sequence: contractEnvelope.sequence })

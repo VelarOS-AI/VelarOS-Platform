@@ -5,7 +5,7 @@ import type { CorePolicy } from "../types/policy.js";
 // resolveJsonModule + 打包器配合，代价大于一条门；而这条门刚抓到过一次真实漂移，说明它够用。
 export const PROJECT_PACKAGE_VERSION = "2.0.0";
 
-/** 保守默认值：有界读取、revision 防护、事务范围限制，并且不隐式要求审批。 */
+/** 保守默认值：有界读取、revision 防护、事务范围限制，高风险写入必须显式审批。 */
 export const DEFAULT_CORE_POLICY: CorePolicy = {
   allowFullFileRewrite: false,
   requireBaseRevision: true,
@@ -26,9 +26,6 @@ export const DEFAULT_CORE_POLICY: CorePolicy = {
   protectedFiles: [],
   generatedFiles: ["**/*.generated.*", "**/*.gen.*", "**/generated/**"],
   approval: {
-    requireForDeleteFile: false,
-    requireForRenameFile: false,
-    requireForHighRiskPatch: false,
-    requireForProtectedFile: false,
+    requireForHighRiskPatch: true,
   },
 };

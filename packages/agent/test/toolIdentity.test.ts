@@ -4,6 +4,7 @@ import {
   assertCanonicalToolId,
   createToolTransportNamePlan,
   isCanonicalToolId,
+  rewriteCanonicalToolReferences,
 } from '../src/tools/ToolIdentity'
 
 describe('canonical tool identity', () => {
@@ -30,5 +31,19 @@ describe('canonical tool identity', () => {
     expect(plan.providerToCanonical.project__read).toBe('project:read')
     expect(plan.providerToCanonical.mcp_github__create_issue).toBe('mcp.github:create_issue')
     expect(() => createToolTransportNamePlan(['legacy_safe_name'])).toThrow('namespace:tool')
+  })
+
+  it('rewrites only complete canonical references in model-visible text', () => {
+    const aliases = {
+      'project:read': 'project__read',
+      'interaction:ask_user': 'interaction__ask_user',
+    }
+
+    expect(
+      rewriteCanonicalToolReferences(
+        '先用 project:read，再调用 interaction:ask_user；不要改 project:read_more。',
+        aliases
+      )
+    ).toBe('先用 project__read，再调用 interaction__ask_user；不要改 project:read_more。')
   })
 })

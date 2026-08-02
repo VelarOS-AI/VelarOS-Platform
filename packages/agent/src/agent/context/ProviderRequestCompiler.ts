@@ -34,6 +34,7 @@ import type {
 } from '@velaros-ai/core/utils/contextUsage'
 
 import type { ProviderRequestFingerprint } from '../../kernel/provider-events'
+import { rewriteCanonicalToolReferences } from '../../tools/ToolIdentity'
 import { assertValidModelHistory } from '../history/validate'
 
 import {
@@ -228,9 +229,10 @@ export class ProviderRequestCompiler {
       isEmpty(tailBlocks) ? retained.messages : [...retained.messages, ...tailBlocks],
       { log: false }
     )
+    const toolNameAliases = input.toolNameAliases ?? {}
     const providerMessages = rewriteProviderToolNames(
       canonicalProviderMessages,
-      input.toolNameAliases ?? {}
+      toolNameAliases
     )
     const historyRewriteFingerprint = buildProviderHistoryRewriteFingerprint([
       ...(input.historyRewriteSignals ?? []),
@@ -255,7 +257,7 @@ export class ProviderRequestCompiler {
     })
 
     return {
-      system: input.systemPrompt,
+      system: rewriteCanonicalToolReferences(input.systemPrompt, toolNameAliases),
       messages: providerMessages,
       ledger: budget.ledger,
       estimate: budget.estimate,
@@ -337,22 +339,37 @@ function rewriteProviderToolNames(
   if (isEmpty(Object.keys(aliases))) return [...messages]
 
   return messages.map((message) => {
-    if ((message.role !== 'assistant' && message.role !== 'tool') || !isArray(message.content))
-      return message
+    if (message.role === 'user') return message
+
+    if (isString(message.content)) {
+      const content = rewriteCanonicalToolReferences(message.content, aliases)
+      return content === message.content ? message : ({ ...message, content } as ModelMessage)
+    }
+    if (!isArray(message.content)) return message
 
     let changed = false
     const content = message.content.map((part) => {
       if (!isPlainObject(part)) return part
-      const record = part as { type?: unknown; toolName?: unknown }
+      const record = part as { type?: unknown; toolName?: unknown; text?: unknown }
+      let next: Record<string, unknown> = part
       if (
-        (record.type !== 'tool-call' && record.type !== 'tool-result') ||
-        !isString(record.toolName)
-      )
-        return part
-      const providerName = aliases[record.toolName]
-      if (!providerName || providerName === record.toolName) return part
-      changed = true
-      return { ...part, toolName: providerName }
+        (record.type === 'tool-call' || record.type === 'tool-result') &&
+        isString(record.toolName)
+      ) {
+        const providerName = aliases[record.toolName]
+        if (providerName && providerName !== record.toolName) {
+          next = { ...next, toolName: providerName }
+          changed = true
+        }
+      }
+      if (record.type === 'text' && isString(record.text)) {
+        const text = rewriteCanonicalToolReferences(record.text, aliases)
+        if (text !== record.text) {
+          next = { ...next, text }
+          changed = true
+        }
+      }
+      return next as typeof part
     })
     return changed ? ({ ...message, content } as ModelMessage) : message
   })

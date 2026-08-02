@@ -51,6 +51,47 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     to: ProjectPathSchema,
   }),
   z.strictObject({
+    type: z.literal('replace_symbol'),
+    path: ProjectPathSchema,
+    symbol: z.strictObject({
+      kind: z.string().min(1).optional(),
+      name: z.string().min(1),
+      container: z.string().min(1).optional(),
+    }),
+    replacement: z.string(),
+    mode: z.enum(['whole', 'body']).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('insert_around_symbol'),
+    path: ProjectPathSchema,
+    symbol: z.strictObject({
+      kind: z.string().min(1).optional(),
+      name: z.string().min(1),
+      container: z.string().min(1).optional(),
+    }),
+    position: z.enum(['before', 'after']),
+    text: z.string().min(1),
+  }),
+  z.strictObject({
+    type: z.literal('add_import'),
+    path: ProjectPathSchema,
+    importStatement: z.string().min(1).optional(),
+    module: z.string().min(1).optional(),
+    named: z.array(z.string().min(1)).min(1).optional(),
+    defaultImport: z.string().min(1).optional(),
+    namespaceImport: z.string().min(1).optional(),
+    sideEffectOnly: z.boolean().optional(),
+    dedupe: z.boolean().optional(),
+  }),
+  z.strictObject({
+    type: z.literal('remove_import'),
+    path: ProjectPathSchema,
+    importStatement: z.string().min(1).optional(),
+    moduleSpecifier: z.string().min(1).optional(),
+    module: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+  }),
+  z.strictObject({
     type: z.literal('json_patch'),
     path: ProjectPathSchema,
     patches: z.array(z.strictObject({

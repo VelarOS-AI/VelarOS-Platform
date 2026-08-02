@@ -1,5 +1,5 @@
-import type { ProjectToolContext } from '@velaros-ai/project/agent'
 import { isEmpty } from '@velaros-ai/core'
+import type { ProjectToolContext } from '@velaros-ai/project/agent'
 
 import { jsTsLanguageService } from './JsTsNavigation'
 import {

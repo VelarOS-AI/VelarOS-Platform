@@ -210,7 +210,7 @@ class ExecutionInteractions {
       } else if (resolver.rejectTerminatesExecution) {
         // 普通确认拒绝会让 awaitConfirmation 抛 EXECUTION_DENIED。
         //
-        // **理由必须随错误一起走**：终止型确认（权限闸 / 危险命令闸 / request_confirmation）
+        // **理由必须随错误一起走**：终止型确认（权限闸 / 危险命令闸 / interaction:confirm）
         // 没有卡结果这条结构化通路，`message` 是用户那句话到达模型的**唯一**载体——
         // 工具面把 EXECUTION_DENIED 映成 `tool_denied` 时读的正是 `error.message`。
         // 丢掉它，"别在生产库上跑，改成 dry-run" 这种正是模型该收到的下一步指令就永远

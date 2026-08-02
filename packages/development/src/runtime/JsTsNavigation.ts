@@ -1,15 +1,10 @@
 import nodePath from 'node:path'
 
+import * as ts from 'typescript'
+
 import { isFalse, isNumber, isPresent, isTrue, numberOrNull, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { optionalWhenLazy } from '@velaros-ai/core/utils/optionalWhen'
-import * as ts from 'typescript'
-
-import {
-  acquireTypeScriptLanguageService,
-  safeReadFile as safeReadTypeScriptProjectFile,
-  TypeScriptExtensions,
-} from './TypeScriptProjectHost'
 
 import type {
   FindImportersInput,
@@ -44,6 +39,11 @@ import {
   scanReferences,
   type SourceFileSelection as FileSelection,
 } from './LanguageService'
+import {
+  acquireTypeScriptLanguageService,
+  safeReadFile as safeReadTypeScriptProjectFile,
+  TypeScriptExtensions,
+} from './TypeScriptProjectHost'
 
 const DefaultJsTsExtensions = ['ts', 'tsx', 'js', 'jsx', 'mts', 'cts', 'mjs', 'cjs'] as const
 

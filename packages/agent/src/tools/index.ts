@@ -97,6 +97,7 @@ export {
   createToolTransportNamePlan,
   isCanonicalToolId,
   ProviderToolNamePattern,
+  rewriteCanonicalToolReferences,
 } from './ToolIdentity'
 export type {
   RegisteredTool,

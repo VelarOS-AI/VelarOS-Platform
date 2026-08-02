@@ -12,8 +12,11 @@ import { useImagePreviewDialogMessages } from '../react-hooks/useImagePreviewDia
 import styles from './MessageBubble.module.css'
 
 import type { ContentBlock, ToolCallBlock as ToolCallBlockType } from '#contracts'
-import { isBlank, isEmpty,isFiniteNumber, isPresent, isRecord } from '#internal/runtime'
-import { readStringScalar } from '#internal/unknownJsonRecord'
+import { isBlank, isEmpty, isPresent, isRecord } from '#internal/runtime'
+import {
+  readNumberScalar as readNumber,
+  readStringScalar as readString,
+} from '#internal/unknownJsonRecord'
 
 const cx = StyleUtils.bindCx(styles)
 
@@ -24,14 +27,6 @@ interface ToolModelImage {
   mediaType: 'image/png' | 'image/jpeg'
   title: string
   description: string
-}
-
-function readString(value: unknown): Nullable<string> {
-  return readStringScalar(value)
-}
-
-function readNumber(value: unknown): Nullable<number> {
-  return isFiniteNumber(value) ? value : null
 }
 
 function buildModelImageSrc(image: Pick<ToolModelImage, 'data' | 'mediaType'>): string {

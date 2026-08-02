@@ -5,7 +5,7 @@ export const TOOL_GROUP_COLLAPSE_MIN = 4
 export const TOOL_ACTIVITY_SUMMARY_EXCLUDED_TOOL_NAMES = ['ui:show_widget', 'plan:update'] as const
 export const TOOL_ACTIVITY_SUMMARY_INTERACTION_TOOL_NAMES = [
   'interaction:show_action_cards',
-  'request_confirmation',
+  'interaction:confirm',
 ] as const
 
 export const ToolActivitySummaryExcludedToolNameSet = new Set<string>(

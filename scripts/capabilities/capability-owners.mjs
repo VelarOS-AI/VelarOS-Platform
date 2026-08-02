@@ -24,7 +24,7 @@ export const CapabilityOwners = [
       {
         directory: 'development',
         name: '@velaros-ai/development',
-        entrySubpaths: ['.', './composition'],
+        entrySubpaths: ['.', './runtime', './composition'],
         sourceRoots: [''],
         electronRoots: [],
         schemaExports: ['developmentTools'],

@@ -59,7 +59,7 @@ const proposalModeDescriptor: ExecutionModeDescriptor = {
   toolProjection: {
     readOnlyExecutionBoundary: true,
     executionGateAllowedNonInspectTools: [
-      'ask_user',
+      'interaction:ask_user',
       'proposal:review',
       'artifact:produce',
       'agent:dispatch',

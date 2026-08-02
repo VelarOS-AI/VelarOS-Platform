@@ -40,7 +40,7 @@ const TerminalFinishReasons = new Set([
   "aborted",
   "abort",
 ]);
-const InteractiveToolNames = new Set(["ask_user"]);
+const InteractiveToolNames = new Set(["interaction:ask_user"]);
 const PlaceholderLeakPattern = /连接中断。请检查网络|请检查网络或稍后再试/;
 const ProtocolLeakPattern = /<\/artifact>/;
 const ToolFailurePattern =

@@ -415,63 +415,6 @@ export interface ProjectInfo {
   hasTypeCheck: boolean
 }
 
-export type ProjectVerificationGoal = 'quick' | 'standard' | 'thorough'
-
-export interface ProjectVerificationSuggestion {
-  command: string
-  label?: string
-  priority: number
-}
-
-export interface ProjectSuggestVerificationOptions {
-  changedPaths?: string[]
-  goal?: ProjectVerificationGoal
-}
-
-export interface ProjectVerificationPlan {
-  goal: ProjectVerificationGoal
-  suggestions: ProjectVerificationSuggestion[]
-  notes?: string[]
-}
-
-export interface ProjectImpactImporter {
-  targetPath: string
-  importerPath: string
-  depth: number
-}
-
-export interface ProjectAnalyzeImpactOptions {
-  changedPaths?: string[]
-  maxDepth?: number
-}
-
-export interface ProjectImpactAnalysis {
-  changedPaths: string[]
-  affectedPaths: string[]
-  importers: ProjectImpactImporter[]
-  relatedTestPaths: string[]
-  maxDepth: number
-}
-
-export interface ProjectRunVerificationOptions {
-  changedPaths?: string[]
-  goal?: ProjectVerificationGoal
-  maxCommands?: number
-  stopOnFailure?: boolean
-}
-
-export interface ProjectVerificationRunStep {
-  suggestion: ProjectVerificationSuggestion
-  result: ProjectCommandResult
-}
-
-export interface ProjectVerificationRunResult {
-  plan: ProjectVerificationPlan
-  steps: ProjectVerificationRunStep[]
-  overallStatus: ProjectVerificationStatus
-  stoppedEarly: boolean
-}
-
 export interface ProjectGitFileStatusEntry {
   path: string
   originalPath?: string

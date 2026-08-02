@@ -29,10 +29,7 @@ export interface CorePolicy {
   protectedFiles: string[];
   generatedFiles: string[];
   approval: {
-    requireForDeleteFile: boolean;
-    requireForRenameFile: boolean;
     requireForHighRiskPatch: boolean;
-    requireForProtectedFile: boolean;
   };
 }
 

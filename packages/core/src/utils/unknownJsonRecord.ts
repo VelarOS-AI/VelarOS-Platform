@@ -24,6 +24,14 @@ export function readString(
   return readStringScalar(record?.[key])
 }
 
+/** 读取原样字符串（保留空串与首尾空白）；非字符串返回 `null`。 */
+export function readRawString(
+  record: LooseOptional<Record<string, unknown>>,
+  key: string
+): Nullable<string> {
+  return readRawStringScalar(record?.[key])
+}
+
 /**
  * 依据裁剪后的内容判断是否非空字符串；保留返回值两侧的原始空白。
  */
@@ -42,6 +50,11 @@ export function readStringScalar(value: unknown): Nullable<string> {
   if (!isString(value)) return null
   const trimmed = value.trim()
   return isBlank(trimmed) ? null : trimmed
+}
+
+/** 读取原样字符串叶子（保留空串与首尾空白）；非字符串返回 `null`。 */
+export function readRawStringScalar(value: unknown): Nullable<string> {
+  return isString(value) ? value : null
 }
 
 /** 在多个 JSON 字符串叶子中读取第一个裁剪后的非空字符串。 */

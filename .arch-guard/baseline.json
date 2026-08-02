@@ -9503,13 +9503,6 @@
     {
       "checkId": "code-style/prefer-table-branching",
       "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "12aa7de9c8961450",
-      "message": "packages/game/src/runtime/phaser-projection.ts:736: \"visual.shape\" maps 2 outcomes through repeated if branches ('circle', 'ellipse'). Use switch for repeated explicit outcomes.",
-      "file": "packages/game/src/runtime/phaser-projection.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
       "fingerprint": "281f34e4bfc0d96a",
       "message": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts:89: \"button\" maps 3 outcomes through repeated if branches ('right', 'middle'). Use switch for repeated explicit outcomes.",
       "file": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts"
@@ -9520,13 +9513,6 @@
       "fingerprint": "2e55e5dbb2fbf624",
       "message": "packages/agent/src/kernel/execution/ExecutionService.ts:450: \"result.status\" maps 3 outcomes through repeated if branches ('accepted', 'closed'). Use switch for repeated explicit outcomes.",
       "file": "packages/agent/src/kernel/execution/ExecutionService.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "32e9bf192ceeaada",
-      "message": "packages/serve-host/src/permission-policy.ts:42: \"permission\" maps 4 outcomes through repeated if branches ('fs:read', 'fs:write', 'process:exec'). Use switch for repeated explicit outcomes.",
-      "file": "packages/serve-host/src/permission-policy.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -9580,23 +9566,9 @@
     {
       "checkId": "code-style/prefer-table-branching",
       "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "867b595319631e42",
-      "message": "packages/game/src/runtime/phaser-projection.ts:523: \"request.select\" maps 2 outcomes through repeated if branches ('selection', 'entity'). Use switch for repeated explicit outcomes.",
-      "file": "packages/game/src/runtime/phaser-projection.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
       "fingerprint": "88db71c683a7b425",
       "message": "packages/memory/src/backend/Contract.ts:165: \"verb\" maps 4 outcomes through repeated if branches ('erase', 'dream', 'govern'). Use switch for repeated explicit outcomes.",
       "file": "packages/memory/src/backend/Contract.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "89c16a2a7d91a40d",
-      "message": "packages/game/src/core/editor.ts:937: \"target\" maps 2 outcomes through repeated if branches ('project', 'assets'). Use switch for repeated explicit outcomes.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -9611,13 +9583,6 @@
       "fingerprint": "a0d69c95012eab60",
       "message": "packages/office/src/wordTool.ts:903: \"hostPlatform\" maps 3 outcomes through repeated if branches ('darwin', 'win32'). Use switch for repeated explicit outcomes.",
       "file": "packages/office/src/wordTool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "a9bc016af6de9235",
-      "message": "packages/game/src/core/editor.ts:1336: \"target\" maps 2 outcomes through repeated if branches ('project', 'assets'). Use switch for repeated explicit outcomes.",
-      "file": "packages/game/src/core/editor.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -9639,13 +9604,6 @@
       "fingerprint": "cecbf330249b0f8e",
       "message": "packages/model/src/ThinkingDepthModelOptions.ts:143: \"level\" maps 3 outcomes through repeated if branches ('off', 'ultra'). Use switch for repeated explicit outcomes.",
       "file": "packages/model/src/ThinkingDepthModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "de39a762b094b9d6",
-      "message": "packages/serve-host/src/permission-policy.ts:70: \"permission\" maps 2 outcomes through repeated if branches ('fs:read', 'fs:write'). Use switch for repeated explicit outcomes.",
-      "file": "packages/serve-host/src/permission-policy.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",

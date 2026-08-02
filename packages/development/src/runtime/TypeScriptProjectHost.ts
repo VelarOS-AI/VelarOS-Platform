@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto'
 import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
-import { isEmpty, isPlainObject, isPresent } from '@velaros-ai/core'
 import * as ts from 'typescript'
+
+import { isEmpty, isPlainObject, isPresent } from '@velaros-ai/core'
 
 /**
  * TypeScript 项目宿主 —— `development:query-code` 背后的 `ts.LanguageService` 池。

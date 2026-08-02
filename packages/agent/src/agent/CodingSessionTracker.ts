@@ -1362,7 +1362,7 @@ class CodingSessionTracker {
     toolName: string,
     args: Record<string, unknown>
   ): void {
-    if (toolName !== 'bash' && toolName !== 'project:run') return
+    if (toolName !== 'system:run' && toolName !== 'project:run') return
     const command = args.command
     if (!isString(command) || !command.trim()) return
 

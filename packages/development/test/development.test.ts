@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   createDevelopmentToolApi,
-  DevelopmentToolNames,
   developmentTools,
   isDevelopmentLanguageQuery,
 } from '../src'
 import { createDevelopmentBundledModDefinition } from '../src/composition'
+import { DevelopmentToolNames } from '../src/contracts'
 
 describe('@velaros-ai/development', () => {
   test('exposes one canonical structured tool', () => {

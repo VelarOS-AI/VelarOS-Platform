@@ -51,9 +51,10 @@ function stableExternalNameHash(value: string): string {
 }
 
 function canonicalizeMcpNameSegment(segment: string, fallback: string, separator: '-' | '_'): string {
+  const disallowedCharacters = separator === '-' ? /[^a-z0-9-]+/gu : /[^a-z0-9_]+/gu
   const normalized = segment
     .toLowerCase()
-    .replace(/[^a-z0-9_-]+/gu, separator)
+    .replace(disallowedCharacters, separator)
     .replace(new RegExp(`${separator}+`, 'gu'), separator)
     .replace(/^[-_]+|[-_]+$/gu, '')
   const leadingSafe = /^[a-z]/u.test(normalized) ? normalized : `${fallback}${separator}${normalized || 'unnamed'}`

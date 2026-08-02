@@ -2,11 +2,12 @@ import type { ProjectToolContext } from '@velaros-ai/project/agent'
 
 import type { DevelopmentToolApi } from '../Development.tool'
 import {
-  isDevelopmentLanguageQuery,
   type DevelopmentIndexQuery,
   type DevelopmentLanguageQuery,
   type DevelopmentQuery,
+  isDevelopmentLanguageQuery,
 } from '../query-schema'
+
 import { executeDevelopmentOperation } from './DevelopmentResult'
 import { developmentLanguageOperations } from './LanguageOperations'
 

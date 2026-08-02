@@ -1,5 +1,6 @@
-import { isEmpty, isFalse,isPresent } from '@velaros-ai/core'
+import { isEmpty, isFalse, isPresent, toOptional } from '@velaros-ai/core'
 
+import { findJsTsSymbols } from "../adapters/jsts-adapter.js";
 import { ProjectError } from "../errors.js";
 import type { PreparedPatch } from "../types/edit.js";
 import type { PatchStrategy, PatchStrategyInput } from "../types/patch.js";
@@ -7,14 +8,14 @@ import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { countChangedLines } from "../utils/text.js";
 
-function makePatch(path: string, baseRevision: string | undefined, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
+function makePatch(path: string, baseRevision: LooseOptional<string>, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
   const changedLines = countChangedLines(diff);
   return {
     patchId: id("patch"),
     strategyId: "jsts.patch",
     path,
-    baseRevision,
+    baseRevision: toOptional(baseRevision),
     oldContent,
     newContent,
     diff,
@@ -50,6 +51,38 @@ function importInsertOffset(content: string): number {
 function normalizeImport(statement: string): string {
   const trimmed = statement.trim();
   return trimmed.endsWith(";") ? trimmed : `${trimmed};`;
+}
+
+function resolveSymbolRange(
+  content: string,
+  input: PatchStrategyInput,
+  operation: {
+    type: string;
+    symbol?: { kind?: string; name: string; container?: string };
+  },
+): { start: number; end: number } {
+  const targetRange = input.target?.range;
+  if (isPresent(targetRange?.startOffset) && isPresent(targetRange.endOffset)) return { start: targetRange.startOffset, end: targetRange.endOffset };
+
+  const symbol = operation.symbol;
+  if (!symbol) {
+    throw new ProjectError("TARGET_NOT_FOUND", `${operation.type} 需要 targetId 或 operation.symbol`);
+  }
+  const matches = findJsTsSymbols(content).filter((candidate) => {
+    if (candidate.name !== symbol.name) return false;
+    if (symbol.kind && symbol.kind !== "any" && candidate.kind !== symbol.kind) return false;
+    return !symbol.container || candidate.container === symbol.container;
+  });
+  if (matches.length !== 1) {
+    throw new ProjectError(
+      isEmpty(matches) ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
+      `${operation.type} 预期 1 个 symbol，实际找到 ${matches.length} 个`,
+    );
+  }
+  return {
+    start: matches[0].range.startOffset ?? 0,
+    end: matches[0].range.endOffset ?? 0,
+  };
 }
 
 export function jsTsPatchStrategy(): PatchStrategy {
@@ -129,11 +162,7 @@ export function jsTsPatchStrategy(): PatchStrategy {
         return [makePatch(snap.path, snap.revision, content, newContent, { op: "remove_import", startOffset: start, endOffset: end })];
       }
 
-      if (!input.target?.range || !isPresent(input.target.range.startOffset) || !isPresent(input.target.range.endOffset)) {
-        throw new ProjectError("TARGET_NOT_FOUND", `${op.type} 需要已解析的 symbol target`);
-      }
-      const start = input.target.range.startOffset;
-      const end = input.target.range.endOffset;
+      const { start, end } = resolveSymbolRange(content, input, op);
 
       if (op.type === "replace_symbol") {
         let replaceStart = start;
@@ -142,7 +171,7 @@ export function jsTsPatchStrategy(): PatchStrategy {
           // 优先用已解析目标携带的 AST body 区间（含花括号）。核心 jsts 策略不引入 TS 编译器，
           // 无元数据时退回朴素花括号匹配；但若无法可靠定位 body，必须显式报错——
           // 绝不静默把「只改 body」退化成替换整个声明（旧兜底会悄悄改坏代码）。
-          const metaBody = input.target.metadata?.bodyRange as { startOffset?: number; endOffset?: number } | undefined;
+          const metaBody = input.target?.metadata?.bodyRange as { startOffset?: number; endOffset?: number } | undefined;
           if (isPresent(metaBody?.startOffset) && isPresent(metaBody?.endOffset) && metaBody.endOffset >= metaBody.startOffset + 2) {
             replaceStart = metaBody.startOffset + 1;
             replaceEnd = metaBody.endOffset - 1;
@@ -157,20 +186,20 @@ export function jsTsPatchStrategy(): PatchStrategy {
           }
         }
         const newContent = content.slice(0, replaceStart) + op.replacement + content.slice(replaceEnd);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "replace_symbol", mode: op.mode ?? "whole", targetId: input.target.targetId, startOffset: replaceStart, endOffset: replaceEnd })];
+        return [makePatch(snap.path, snap.revision, content, newContent, { op: "replace_symbol", mode: op.mode ?? "whole", targetId: input.intent.targetId, startOffset: replaceStart, endOffset: replaceEnd })];
       }
       if (op.type === "insert_before_symbol") {
         const newContent = content.slice(0, start) + op.text + content.slice(start);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_before_symbol", targetId: input.target.targetId, startOffset: start, endOffset: start })];
+        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_before_symbol", targetId: input.intent.targetId, startOffset: start, endOffset: start })];
       }
       if (op.type === "insert_after_symbol") {
         const newContent = content.slice(0, end) + op.text + content.slice(end);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_after_symbol", targetId: input.target.targetId, startOffset: end, endOffset: end })];
+        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_after_symbol", targetId: input.intent.targetId, startOffset: end, endOffset: end })];
       }
       if (op.type === "insert_around_symbol") {
         const at = op.position === "before" ? start : end;
         const newContent = content.slice(0, at) + op.text + content.slice(at);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_around_symbol", targetId: input.target.targetId, startOffset: at, endOffset: at })];
+        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_around_symbol", targetId: input.intent.targetId, startOffset: at, endOffset: at })];
       }
       throw new ProjectError("NOT_SUPPORTED", `不支持的 JS/TS 操作：${op.type}`);
     },

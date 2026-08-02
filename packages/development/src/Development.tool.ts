@@ -2,9 +2,8 @@ import { defineToolRuntimeSpec, type ToolContractRuntimeSpec } from '@velaros-ai
 import type { ToolPermission } from '@velaros-ai/core/types'
 import type { ProjectToolContext } from '@velaros-ai/project/agent'
 
-import { DevelopmentQuerySchema, type DevelopmentQuery } from './query-schema'
-
-const DevelopmentToolNames = Object.freeze({ queryCode: 'development:query-code' } as const)
+import { DevelopmentToolNames } from './contracts'
+import { type DevelopmentQuery,DevelopmentQuerySchema } from './query-schema'
 
 interface DevelopmentToolApi {
   isCodeQueryAvailable: () => boolean

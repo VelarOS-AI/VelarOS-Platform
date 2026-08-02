@@ -1,5 +1,5 @@
 import { isFunction } from '@velaros-ai/core'
-import { runInProjectDirectory, type ProjectToolContext } from '@velaros-ai/project/agent'
+import { type ProjectToolContext,runInProjectDirectory } from '@velaros-ai/project/agent'
 
 import {
   analyzeImpactWithService,

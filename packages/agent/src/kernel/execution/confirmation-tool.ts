@@ -8,7 +8,7 @@ import {
 } from '@velaros-ai/core/utils/ToolDescription'
 
 /**
- * request_confirmation 的最小执行上下文：只需审批通道与取消信号。
+ * interaction:confirm 的最小执行上下文：只需审批通道与取消信号。
  *
  * 声明成 host ToolContext 的**超集**（字段更少），故本工具可赋给宿主更宽的 VelaTool 契约
  * （TContext 逆变），无需把宿主 ToolContext 拖进内核。

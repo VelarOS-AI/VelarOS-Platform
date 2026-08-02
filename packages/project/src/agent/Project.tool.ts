@@ -198,7 +198,7 @@ const projectEdit = defineProjectTool<{
   role: 'edit',
   summary: '以一个可回滚事务原子地修改项目内一个或多个文件。',
   schema: z.object({
-    operations: ProjectEditOperationsSchema.min(1).max(100),
+    operations: ProjectEditOperationsSchema.min(1).max(20),
     cwd: z.string().optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
@@ -226,6 +226,9 @@ const projectEdit = defineProjectTool<{
             transactionId: transaction.transactionId,
             changedFiles: applied.changedFiles,
             revisions: applied.newRevisions,
+            diff: transaction.diff,
+            changedLines: transaction.changedLines,
+            risk: transaction.risk,
           }
         } catch (error) {
           kernel.discardTransaction(transaction.transactionId)

@@ -6,6 +6,7 @@ import {
 } from '@velaros-ai/core/tool-contract'
 import type { ToolPermission } from '@velaros-ai/core/types'
 
+import { SystemToolCategoryByName, type SystemToolName } from './system-tool-names'
 import type {
   SystemBackgroundTaskQueryOptions,
   SystemBackgroundTaskRecord,
@@ -92,10 +93,13 @@ export type VelaTool<TInput extends Record<string, unknown> = Record<string, unk
 type DefineSystemToolInput<TInput extends Record<string, unknown>> = Omit<
   DefineToolRuntimeSpecInput<TInput, SystemToolContext, unknown, ToolPermission>,
   'category'
->
+> & { name: SystemToolName }
 
 export function defineSystemTool<TInput extends Record<string, unknown>>(
   input: DefineSystemToolInput<TInput>
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec({ ...input, category: 'system-control' })
+  return defineToolRuntimeSpec({
+    ...input,
+    category: SystemToolCategoryByName[input.name],
+  })
 }

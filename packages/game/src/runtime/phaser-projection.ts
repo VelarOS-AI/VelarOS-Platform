@@ -504,59 +504,62 @@ function createProjectionSceneClass(
     }
 
     public query(request: GameRuntimeQuery = { select: 'scene' }): GameRuntimeQueryResult {
-      if (isUndefined(request.select) || request.select === 'scene') {
-        const renderedEntities = this.countRenderedEntities()
-        return {
-          select: 'scene',
-          scene: options.scene.id,
-          running: true,
-          url: window.location.href,
-          entityCount: this.records.size,
-          renderedEntities,
-          invisibleEntities: this.records.size - renderedEntities,
-          fps: Number.isFinite(this.game.loop.actualFps)
-            ? Math.round(this.game.loop.actualFps)
-            : null,
-          elapsedMs: Date.now() - this.startedAt,
+      switch (request.select) {
+        case undefined:
+        case 'scene': {
+          const renderedEntities = this.countRenderedEntities()
+          return {
+            select: 'scene',
+            scene: options.scene.id,
+            running: true,
+            url: window.location.href,
+            entityCount: this.records.size,
+            renderedEntities,
+            invisibleEntities: this.records.size - renderedEntities,
+            fps: Number.isFinite(this.game.loop.actualFps)
+              ? Math.round(this.game.loop.actualFps)
+              : null,
+            elapsedMs: Date.now() - this.startedAt,
+          }
         }
-      }
-      if (request.select === 'selection')
-        return {
-          select: 'selection',
-          entity: isNull(this.selectedEntityId)
-            ? null
-            : this.entitySnapshot(this.selectedEntityId),
+        case 'selection':
+          return {
+            select: 'selection',
+            entity: isNull(this.selectedEntityId)
+              ? null
+              : this.entitySnapshot(this.selectedEntityId),
+          }
+        case 'entity':
+          return {
+            select: 'entity',
+            entity: this.entitySnapshot(request.entityId, request.components),
+          }
+        case 'entities': {
+          const offset = Math.max(0, Math.round(request.offset ?? 0))
+          const limit = normalizePageSize(request.limit, 50)
+          const entities = [...this.records.keys()]
+            .slice(offset, offset + limit)
+            .map((id) => this.entitySnapshot(id))
+          const nextOffset = offset + entities.length
+          return {
+            select: 'entities',
+            entities,
+            total: this.records.size,
+            ...(nextOffset < this.records.size ? { nextOffset } : {}),
+          }
         }
-      if (request.select === 'entity')
-        return {
-          select: 'entity',
-          entity: this.entitySnapshot(request.entityId, request.components),
-        }
-      if (request.select === 'entities') {
-        const offset = Math.max(0, Math.round(request.offset ?? 0))
-        const limit = normalizePageSize(request.limit, 50)
-        const entities = [...this.records.keys()]
-          .slice(offset, offset + limit)
-          .map((id) => this.entitySnapshot(id))
-        const nextOffset = offset + entities.length
-        return {
-          select: 'entities',
-          entities,
-          total: this.records.size,
-          ...(nextOffset < this.records.size ? { nextOffset } : {}),
-        }
-      }
-      if (request.select === 'errors') {
-        const errors = diagnostics.list()
-        const offset = Math.max(0, Math.round(request.offset ?? 0))
-        const limit = normalizePageSize(request.limit, 50)
-        const page = errors.slice(offset, offset + limit)
-        const nextOffset = offset + page.length
-        return {
-          select: 'errors',
-          errors: page,
-          total: errors.length,
-          ...(nextOffset < errors.length ? { nextOffset } : {}),
+        case 'errors': {
+          const errors = diagnostics.list()
+          const offset = Math.max(0, Math.round(request.offset ?? 0))
+          const limit = normalizePageSize(request.limit, 50)
+          const page = errors.slice(offset, offset + limit)
+          const nextOffset = offset + page.length
+          return {
+            select: 'errors',
+            errors: page,
+            total: errors.length,
+            ...(nextOffset < errors.length ? { nextOffset } : {}),
+          }
         }
       }
 
@@ -733,32 +736,34 @@ function createProjectionSceneClass(
       // alpha 是解析出来的第二格：8 位十六进制与 `rgba(…)` 过去连同颜色一起被丢掉，
       // 而 Phaser 的每个形状工厂最后一个参数正好就是它。
       const { color, alpha } = this.shapeColor(entityId, visual.color)
-      if (visual.shape === 'circle')
-        return this.add.circle(x, y, visual.radius ?? 16, color, alpha) as RuntimeGameObject
-      if (visual.shape === 'ellipse')
-        return this.add.ellipse(
-          x,
-          y,
-          visual.width ?? 32,
-          visual.height ?? 24,
-          color,
-          alpha
-        ) as RuntimeGameObject
-      if (visual.shape === 'triangle') {
-        const width = visual.width ?? 32
-        const height = visual.height ?? 32
-        return this.add.triangle(
-          x,
-          y,
-          width / 2,
-          0,
-          0,
-          height,
-          width,
-          height,
-          color,
-          alpha
-        ) as RuntimeGameObject
+      switch (visual.shape) {
+        case 'circle':
+          return this.add.circle(x, y, visual.radius ?? 16, color, alpha) as RuntimeGameObject
+        case 'ellipse':
+          return this.add.ellipse(
+            x,
+            y,
+            visual.width ?? 32,
+            visual.height ?? 24,
+            color,
+            alpha
+          ) as RuntimeGameObject
+        case 'triangle': {
+          const width = visual.width ?? 32
+          const height = visual.height ?? 32
+          return this.add.triangle(
+            x,
+            y,
+            width / 2,
+            0,
+            0,
+            height,
+            width,
+            height,
+            color,
+            alpha
+          ) as RuntimeGameObject
+        }
       }
       return this.add.rectangle(
         x,

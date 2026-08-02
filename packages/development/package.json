@@ -12,6 +12,10 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "import": "./dist/runtime/index.js"
@@ -24,9 +28,11 @@
   "files": ["dist", "README.md"],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --quiet",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
     "test": "bun run build && bun test test/development.test.ts",
+    "check": "bun run typecheck && bun run lint && bun run test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/development"
   },
   "dependencies": {

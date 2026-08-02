@@ -62,9 +62,10 @@
     "build": "bun run clean && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist && node scripts/build/copy-velaros-globals-to-dist.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test": "bun run build && bun test test/project.test.ts test/kernel-module.test.ts test/approval-context.test.ts test/ripgrep.test.mjs test/typescript-plugin.test.mjs test/visibility-policy.test.mjs test/agent/package-boundary.test.ts",
+    "test": "bun run build && bun test test/project.test.ts test/agent-tool-contract.test.ts test/kernel-module.test.ts test/approval-context.test.ts test/ripgrep.test.mjs test/typescript-plugin.test.mjs test/visibility-policy.test.mjs test/agent/package-boundary.test.ts",
+    "check:agent-contract": "bun test test/agent-tool-contract.test.ts",
     "check:arch": "node scripts/check-architecture.mjs",
-    "check": "bun run typecheck && bun run lint && bun run check:arch && bun run test",
+    "check": "bun run typecheck && bun run lint && bun run check:arch && bun run check:agent-contract && bun run test",
     "prepack": "bun run build"
   },
   "dependencies": {

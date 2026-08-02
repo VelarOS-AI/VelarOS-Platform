@@ -95,6 +95,8 @@ export interface RenameFileOperation {
 
 export interface ReplaceSymbolOperation {
   type: "replace_symbol";
+  /** 没有 targetId 时由 Agent 直接提供的项目相对路径。 */
+  path?: string;
   /** adapter 解析的符号选择器；路径通常来自 targetId 或 operation.path。 */
   symbol?: {
     kind?: string;
@@ -107,6 +109,8 @@ export interface ReplaceSymbolOperation {
 
 export interface InsertAroundSymbolOperation {
   type: "insert_around_symbol";
+  /** 没有 targetId 时由 Agent 直接提供的项目相对路径。 */
+  path?: string;
   symbol?: {
     kind?: string;
     name: string;

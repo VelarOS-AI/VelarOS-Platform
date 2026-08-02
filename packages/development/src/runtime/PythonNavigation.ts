@@ -1,6 +1,7 @@
 import nodePath from 'node:path'
 
 import { pythonLanguage } from '@codemirror/lang-python'
+
 import { isEmpty, isFalse, isPresent, toNullable } from '@velaros-ai/core'
 
 import type {

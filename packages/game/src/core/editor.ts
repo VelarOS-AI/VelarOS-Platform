@@ -934,8 +934,12 @@ function loadedManifestEntry(
   workspace: LoadedWorkspace,
   target: GameManifestEditTarget,
 ): Nullable<GameManifestTargetEntry> {
-  if (target === 'project') return workspace.project
-  if (target === 'assets') return workspace.assets
+  switch (target) {
+    case 'project':
+      return workspace.project
+    case 'assets':
+      return workspace.assets
+  }
   const id = gameReferenceId(target)
   const kind = target.startsWith('scene:') ? 'scene' : 'prefab'
   const carriers: readonly GameManifestTargetEntry[] = (
@@ -1333,8 +1337,12 @@ export class GameManifestProjectEditor implements GameSceneEditorPort {
     // `target='project'` 的**窄路径**（不变量 I4 的第三个执行点）：第一行返回，不走扫描、
     // 不走自举、不碰任何别的文档。工程清单在 loadWorkspace 里一定已经就位（缺席即自举，
     // 读不出来则整次编辑已经在那里以点名的方式失败了），所以这一行结构上抛不出来。
-    if (target === 'project') return workspace.project
-    if (target === 'assets') return this.requireReadableAssets(workspace)
+    switch (target) {
+      case 'project':
+        return workspace.project
+      case 'assets':
+        return this.requireReadableAssets(workspace)
+    }
     const loaded = loadedManifestEntry(workspace, target)
     if (loaded) return loaded
     const kind = target.startsWith('scene:') ? 'scene' : 'prefab'

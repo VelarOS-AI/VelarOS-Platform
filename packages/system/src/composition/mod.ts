@@ -1,13 +1,7 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
 
-import {
-  systemDesktopTools,
-  systemExecutionTools,
-  systemFileTools,
-  systemProcessTools,
-  systemTools,
-} from '../Collection'
-import { SystemToolNames } from '../system-tool-names'
+import { systemTools } from '../Collection'
+import { SystemToolCategoryByName, SystemToolNames } from '../system-tool-names'
 
 const SystemModId = 'velaros.system' as const
 const SystemSpaceId = 'system' as const
@@ -39,19 +33,6 @@ const SystemToolCategories = Object.freeze({
   }),
 })
 
-const SystemCategoryTools = Object.freeze({
-  'system-files': systemFileTools,
-  'system-execution': systemExecutionTools,
-  'system-processes': systemProcessTools,
-  'system-desktop': systemDesktopTools,
-})
-
-function systemCategoryForTool(name: string): keyof typeof SystemCategoryTools {
-  for (const [categoryId, tools] of Object.entries(SystemCategoryTools))
-    if (Object.hasOwn(tools, name)) return categoryId as keyof typeof SystemCategoryTools
-  throw new Error(`System tool「${name}」没有职责类别。`)
-}
-
 const SystemAgentModManifest = Object.freeze({
   id: SystemModId,
   version: '1.0.0',
@@ -71,7 +52,7 @@ const SystemAgentModManifest = Object.freeze({
     })),
     tools: Object.values(SystemToolNames).map((name) => ({
       name,
-      categoryId: systemCategoryForTool(name),
+      categoryId: SystemToolCategoryByName[name],
       residentInSpaces: [SystemSpaceId],
     })),
     spaces: [{

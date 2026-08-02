@@ -82,9 +82,9 @@ VelarOS 是 BYOK 产品，新用户可能长期没有配置任何 provider。原
 
 复用表新增 15 行真实代码 owner（详见架构文档），关键判断：
 
-- **保持不动**：knowledge 兄弟域、`shared/` 混合检索基建、`Embeddings` 注入式基础设施、`context:recall` / `context:distill` 句柄体系（会话内工作记忆，与长期树分层，交点只在证据采集）。
+- **保持不动**：knowledge 兄弟域、`shared/` 混合检索基建、`Embeddings` 注入式基础设施、`recall_context` / `distill_context` 句柄体系（会话内工作记忆，与长期树分层，交点只在证据采集）。
 - **复用形态**：`TurnRecallCoordinator` 第八源注入模式、`DeterministicCurator` 脱敏正则作为隐私入口种子；旧 chat generation 协调器已在测试版基线整理中退役。
-- **删除**：renderer 侧自动沉淀（采集职责移到 main 侧证据桥，顺带修复“浏览器 / 系统空间会话从不自动沉淀”的现状不平等）、`memory:save` 绕过 curation 的直写路径（被禁的平行写入管线，现状真实存在）、编码记忆辅助器（其唯一写入口的生产者已消失，半死链路）、每文件夹记忆入口、关系 / 时间双视图与前端相似度连线。
+- **删除**：renderer 侧自动沉淀（采集职责移到 main 侧证据桥，顺带修复“浏览器 / 系统空间会话从不自动沉淀”的现状不平等）、`save_memory` 绕过 curation 的直写路径（被禁的平行写入管线，现状真实存在）、编码记忆辅助器（其唯一写入口的生产者已消失，半死链路）、每文件夹记忆入口、关系 / 时间双视图与前端相似度连线。
 - **新造**：揭晓 gate——现有 entitlement 全是服务端计划位，树成熟度是本地信号，`revealed` 由本地 policy 组合计算，成熟度不上报云端。
 
 ### 14. 周边文档同步
@@ -100,13 +100,13 @@ VelarOS 是 BYOK 产品，新用户可能长期没有配置任何 provider。原
 - **P0**：擦除改写历史与 `tree_hash` 锚点校验互斥 → 当时以哈希指纹分层解决（该方案后被第三轮评审否决，第四轮已取代，见文末）。
 - **P1**：擦除闭包漏掉派生文本（身份陈述 / 主线描述 / 压缩摘要 / 节点标题）与 run ledger → 扩入单事务（见修订 2）；R-022“零网络”与远程 embedding 矛盾 → 改为“不同步等待网络 + 确定性降级”，并把“异步模型选择”明确为允许的第二层（否则现有 TurnRecallCoordinator 复用形态违宪）；R-040“提炼”一词混指两种职责 → 拆分为“最小 Evidence 片段确定性产出”与“模型候选提取”；R-017 告知屏与 R-027“Onboarding 后置”时序冲突 → 告知屏独立轻量实现、随第一阶段交付；“所有树版本可从证据层重建”是与 diff 权威矛盾的旧措辞 → 收窄为“当前树可重建，历史唯一来源是 diff 链”；三强度契约与 episode / relation 表结构不咬合 → 契约收窄 + episodes 表补列；Claim 的 erased 墓碑无字段承载 → lifecycle_state 枚举定案并含 erased。
 - **P2**（拣要）：TreeSnapshot 逻辑定义与存储定义分层标注；信任等级落为 `memory_evidence.trust_level` 列并按“内容作者而非采集通道”确定性判定；认识状态梯子统一为 `user_confirmed > observed > derived > inferred`（`disputed` 并列）；隐藏树用户的治理动线补齐（记忆 Tab 内标题级检索列表，不呈现树形与身份）；FTS 补派生地位条款；用户显式补建 / 维护并入 Dream 租约，模型切换不进入调度；diff ops 补 `split`；树投影数据层从 Phase 4 前移到 Phase 3（否则最小切片声明不可执行）；“快速记忆清洗模型”改名“快速候选整理模型”；Product API 补 `eraseMemory`；决策表旧行与冻结行状态同步。
-- 代码事实核查：修订记录与架构文档引用的 8 项现状（TurnRecallCoordinator、Selector、memory:save 直写、useChatMemoryBridge、编码记忆辅助器断供、迁移协调器、entitlement 形态、前端相似度连线）全部属实，无一失实。
+- 代码事实核查：修订记录与架构文档引用的 8 项现状（TurnRecallCoordinator、Selector、save_memory 直写、useChatMemoryBridge、编码记忆辅助器断供、迁移协调器、entitlement 形态、前端相似度连线）全部属实，无一失实。
 
 ## 侦察确认的关键现状（供下一轮评审直接引用）
 
 1. 记忆树目前是纯文档态：全仓源码零命中 memory-tree / MemoryDream / IdentityEpoch。现有代码世界是 `MemoryRecord` + `fact/preference/feedback/reference/procedure` kind + metadata 内嵌 scope。
 2. 代码里实际存在四套独立“记忆”机制：长期记忆（SQLite + LanceDB）、编码记忆辅助器（读长期记忆拼 prompt 段）、句柄召回体系（聊天存档）、回合自动注入（TurnRecallCoordinator）。架构文档新增“相邻记忆机制边界”章逐一定去向。
-3. “多套写入管线”反模式已被证实存在：`memory:save` 直写不走 curation，IPC 与自动沉淀走 curation，各自维护合并规则。
+3. “多套写入管线”反模式已被证实存在：`save_memory` 直写不走 curation，IPC 与自动沉淀走 curation，各自维护合并规则。
 4. Memory 页图谱的“关系”是前端即时算的向量相似度（且 cap 前 20 条记忆），正是新架构明令删除的“前端临时关系真相”。
 5. 自动沉淀由 renderer 发起且要求 `workspaceRoot` 非空——浏览器与系统空间会话在现状下从不自动沉淀。
 6. 当前只保留 `MigrationManager` 承担正式版本的表内演进；跨库 generation 变更需在出现真实发布需求时重新设计。

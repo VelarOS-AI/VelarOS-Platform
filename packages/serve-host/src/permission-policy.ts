@@ -39,10 +39,16 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
     permission: string,
     policy: { read: boolean; write: boolean; execute: boolean },
   ): boolean {
-    if (permission === 'fs:read') return policy.read
-    if (permission === 'fs:write') return policy.write
-    if (permission === 'process:exec') return policy.execute
-    return false
+    switch (permission) {
+      case 'fs:read':
+        return policy.read
+      case 'fs:write':
+        return policy.write
+      case 'process:exec':
+        return policy.execute
+      default:
+        return false
+    }
   }
 
   private computerPermissionGranted(
@@ -58,18 +64,31 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
     permission: string,
     policy: { read: boolean; write: boolean },
   ): boolean {
-    if (permission === 'fs:read') return policy.read
-    if (permission === 'fs:write' || permission === 'process:exec') return policy.write
-    return false
+    switch (permission) {
+      case 'fs:read':
+        return policy.read
+      case 'fs:write':
+      case 'process:exec':
+        return policy.write
+      default:
+        return false
+    }
   }
 
   private systemPermissionGranted(
     permission: string,
     policy: { observe: boolean; read: boolean; write: boolean; execute: boolean },
   ): boolean {
-    if (permission === 'fs:read') return policy.read
-    if (permission === 'fs:write') return policy.write
-    if (permission === 'process:exec' || permission === 'system:open') return policy.execute
-    return false
+    switch (permission) {
+      case 'fs:read':
+        return policy.read
+      case 'fs:write':
+        return policy.write
+      case 'process:exec':
+      case 'system:open':
+        return policy.execute
+      default:
+        return false
+    }
   }
 }

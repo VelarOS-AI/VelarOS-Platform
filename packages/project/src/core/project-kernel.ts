@@ -37,7 +37,7 @@
 // 淘汰最旧项；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
 import * as path from "node:path";
 
-import { isArray,isEmpty, isFalse, isNotNull, isNull, isObject, isPresent, isString, isUndefined, optionalWhen, toOptional } from "@velaros-ai/core";
+import { isArray,isEmpty, isFalse, isNotNull, isNull, isObject, isPresent, isString, isTrue, isUndefined, optionalWhen, toOptional } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 
 import { type AuditEvent, AuditJournal } from "../audit/journal.js";
@@ -55,7 +55,7 @@ import { ValidatorRegistry } from "../registry/validator-registry.js";
 import { searchWithRipgrep } from "../search/ripgrep.js";
 import type { FileAdapterFactory, ProjectSymbol } from "../types/adapter.js";
 import type { BatchInput, BatchMetrics, BatchResult } from "../types/batch.js";
-import type { Diagnostic, DiffResult, ProjectStatus,Range } from "../types/common.js";
+import type { Diagnostic, DiffResult, ProjectStatus,Range, RiskLevel } from "../types/common.js";
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from "../types/context.js";
 import type { AmendEditInput, ApplyEditInput, ApplyResult, EditIntent, EditOperation, PreparedPatch,PreparedTransaction, PrepareEditInput, RollbackInput, RollbackResult } from "../types/edit.js";
 import type { FixInput, FixResult, ProjectFixer } from "../types/fix.js";
@@ -332,16 +332,24 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       this.policy.approval.requireForHighRiskPatch &&
       !options?.skipHighRiskUserApproval;
     if (providerDecision?.requireApproval || needsHighRiskApproval) {
-      const approved = await this.providers.approval?.approve({ action, paths, risk, reason: providerDecision?.reason ?? `${action} 需要审批`, data });
+      if (!this.providers.approval) {
+        throw new ProjectError(
+          "PERMISSION_DENIED",
+          `${action} 需要审批，但宿主没有提供审批通道`,
+          { action, paths, risk },
+          "请在有用户审批上下文的宿主中重试，或缩小为非破坏性操作。",
+        );
+      }
+      const approved = await this.providers.approval.approve({ action, paths, risk, reason: providerDecision?.reason ?? `${action} 需要审批`, data });
       if (isFalse(approved)) throw new ProjectError("PERMISSION_DENIED", `${action} 的审批被拒绝`);
     }
   }
 
   private async authorizePaths(
-    paths: readonly string[] | undefined,
+    paths: LooseOptional<readonly string[]>,
     action: "read" | "write" | "search" | "observe",
     deniedActionLabel: string,
-  ): Promise<string[] | undefined> {
+  ): Promise<LooseOptional<string[]>> {
     if (!paths) return undefined;
     const authorized: string[] = [];
     for (const pathValue of paths) {
@@ -1120,7 +1128,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const changedFiles = [...new Set(preparedPatches.map((p) => p.path))];
     const diff = combineDiffs(preparedPatches.map((p) => p.diff));
     const changedLines = preparedPatches.reduce((sum, p) => sum + p.changedLines, 0);
-    const risk = "low" as const;
+    const risk = this.resolveTransactionRisk(preparedPatches, changedFiles, changedLines);
 
     this.assertScopeWithinPolicy(changedFiles, changedLines);
 
@@ -1149,7 +1157,26 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     tx.changedFiles = [...new Set(tx.patches.map((p) => p.path))];
     tx.diff = combineDiffs(tx.patches.map((p) => p.diff));
     tx.changedLines = tx.patches.reduce((sum, p) => sum + p.changedLines, 0);
-    tx.risk = "low";
+    tx.risk = this.resolveTransactionRisk(tx.patches, tx.changedFiles, tx.changedLines);
+  }
+
+  private resolveTransactionRisk(
+    patches: readonly PreparedPatch[],
+    changedFiles: readonly string[],
+    changedLines: number,
+  ): RiskLevel {
+    const destructive = patches.some((patchValue) => {
+      const op = patchValue.metadata?.op;
+      return op === "delete_file"
+        || op === "rename_file_delete"
+        || (op === "create_file" && isTrue(patchValue.metadata?.overwrite));
+    });
+    if (destructive) return "high";
+
+    const createsFile = patches.some((patchValue) => patchValue.metadata?.op === "create_file");
+    const broadChange = changedFiles.length > this.policy.maxChangedFilesPerTransaction / 2
+      || changedLines > this.policy.maxChangedLinesPerTransaction / 2;
+    return createsFile || broadChange ? "medium" : "low";
   }
 
   /**
@@ -1159,10 +1186,20 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
    */
   private assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void {
     if (changedFiles.length > this.policy.maxChangedFilesPerTransaction) {
-      throw new ProjectError("SCOPE_VIOLATION", `变更文件过多：${changedFiles.length}`);
+      throw new ProjectError(
+        "SCOPE_VIOLATION",
+        `变更文件过多：${changedFiles.length}`,
+        { actual: changedFiles.length, maximum: this.policy.maxChangedFilesPerTransaction },
+        `请按独立意图拆成每批最多 ${this.policy.maxChangedFilesPerTransaction} 个文件的多个原子事务。`,
+      );
     }
     if (changedLines > this.policy.maxChangedLinesPerTransaction) {
-      throw new ProjectError("SCOPE_VIOLATION", `变更行数过多：${changedLines}`);
+      throw new ProjectError(
+        "SCOPE_VIOLATION",
+        `变更行数过多：${changedLines}`,
+        { actual: changedLines, maximum: this.policy.maxChangedLinesPerTransaction },
+        `请按独立意图拆成每批最多 ${this.policy.maxChangedLinesPerTransaction} 行的多个原子事务。`,
+      );
     }
     for (const file of changedFiles) {
       if (matchesAny(file, this.policy.protectedFiles)) throw new ProjectError("PROTECTED_FILE", `受保护文件被修改：${file}`);
@@ -1351,8 +1388,17 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     if (!isRestoringRolledBackTransaction && (tx.appliedAt || tx.status === "applied")) {
       throw new ProjectError("INVALID_INPUT", `事务已经应用：${input.transactionId}`);
     }
+    const validation = await this.validate({ transactionId: tx.transactionId });
+    if (!validation.ok) {
+      throw new ProjectError(
+        "VALIDATION_FAILED",
+        `事务校验失败，未写入磁盘：${tx.transactionId}`,
+        { diagnostics: validation.diagnostics, checks: validation.checks },
+        "请根据 diagnostics 修正编辑操作，然后重新准备事务。",
+      );
+    }
     const authorizedChangedFiles = await this.authorizePaths(tx.changedFiles, "write", "写入");
-    await this.decide("apply_edit", authorizedChangedFiles, input, tx.risk);
+    await this.decide("apply_edit", toOptional(authorizedChangedFiles), input, tx.risk);
     const lock = await this.locks.lock(tx.changedFiles, tx.transactionId);
     try {
       const oldRevisions: Record<string, string> = {};

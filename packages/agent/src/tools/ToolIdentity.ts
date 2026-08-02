@@ -81,11 +81,43 @@ function createToolTransportNamePlan(canonicalIds: readonly string[]): ToolTrans
   })
 }
 
+const ToolIdentityTokenCharacters = 'a-zA-Z0-9._:-'
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 把模型可见文本里的 canonical 工具引用编译成当前请求的 provider 别名。
+ *
+ * 只替换完整 identity token，避免 `project:read` 误伤 `project:read_more`；映射只活在
+ * provider 请求边界，不得写回提示词定义、注册表或持久历史。
+ */
+function rewriteCanonicalToolReferences(
+  text: string,
+  aliases: Readonly<Record<string, string>>
+): string {
+  let rewritten = text
+  const entries = Object.entries(aliases)
+    .filter(([canonicalId, providerName]) => canonicalId !== providerName)
+    .sort(([left], [right]) => right.length - left.length || left.localeCompare(right))
+
+  for (const [canonicalId, providerName] of entries) {
+    const pattern = new RegExp(
+      `(^|[^${ToolIdentityTokenCharacters}])${escapeRegularExpression(canonicalId)}(?=$|[^${ToolIdentityTokenCharacters}])`,
+      'gu'
+    )
+    rewritten = rewritten.replace(pattern, (_match, prefix: string) => `${prefix}${providerName}`)
+  }
+  return rewritten
+}
+
 export {
   assertCanonicalToolId,
   CanonicalToolIdPattern,
   createToolTransportNamePlan,
   isCanonicalToolId,
   ProviderToolNamePattern,
+  rewriteCanonicalToolReferences,
 }
 export type { ToolTransportNamePlan }

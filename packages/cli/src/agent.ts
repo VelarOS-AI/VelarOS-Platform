@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
-import { isString, optionalWhen } from '@velaros-ai/core'
+import { optionalWhen } from '@velaros-ai/core'
 import {
   formatVelarosCliError,
   formatVelarosCliSuccess,
@@ -9,7 +9,10 @@ import {
   type VelarosCliRunOptions,
   type VelarosCliRunResult,
 } from '@velaros-ai/core/cli'
-import { asRecord as readJsonRecordValue } from '@velaros-ai/core/utils/unknownJsonRecord'
+import {
+  asRecord as readJsonRecordValue,
+  readRawString as readString,
+} from '@velaros-ai/core/utils/unknownJsonRecord'
 
 const TaskArtifactRoot = '.velaros/agent-runs'
 const AgentCommandNames = ['help', 'manifest', 'status'] as const
@@ -234,9 +237,4 @@ function readJsonRecord(path: string): Record<string, unknown> {
 
 function optionalRecord(value: unknown): Record<string, unknown> {
   return readJsonRecordValue(value) ?? {}
-}
-
-function readString(record: Record<string, unknown>, key: string): Nullable<string> {
-  const value = record[key]
-  return isString(value) ? value : null
 }
