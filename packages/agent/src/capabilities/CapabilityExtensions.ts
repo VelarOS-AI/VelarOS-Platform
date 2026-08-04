@@ -5,7 +5,7 @@ import type {
   StreamToolResultEffects,
   ToolCategoryDefinition,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { PromptSegmentDefinition } from '../prompts/registry'

@@ -1,4 +1,4 @@
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
+import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
 
 interface RuntimePromptFeaturePolicy {
   normalize(features: readonly ChatPromptFeatureId[]): ChatPromptFeatureId[]

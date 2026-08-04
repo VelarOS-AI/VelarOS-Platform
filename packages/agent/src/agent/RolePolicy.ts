@@ -1,5 +1,5 @@
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { logRuntime } from '@velaros-ai/core/logger'
-import type { ToolCategoryId } from '@velaros-ai/core/types'
 
 import { compareStableStrings } from './context/residency/determinism'
 import type { AgentRoleDefinition } from './RoleTypes'

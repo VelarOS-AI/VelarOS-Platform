@@ -1,5 +1,5 @@
 {
-  "__sharedDefs": "72aac18e71d0250c31c73ddc7a67e7ea57c3732b81e3f2b45642dcbc3bfd7619",
+  "__sharedDefs": "86cd087923d4279f9c259ecb631e8cc073003ed4af9e8fbfe7702746f29f157e",
   "browser:enter_site": "791e9cedcfef33087dde5c4e7f580aad938fa412f90853d81f0375a601467d64",
   "browser:leave_site": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:show_page": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
@@ -32,12 +32,13 @@
   "browser:list_media_sources": "4492be957603e9523800bfdd8d9bc8b1e636001844bee0f26e1e7ec3005fb577",
   "browser:list_page_resources": "e58d5f60dde8f43291d6246f0c6a003b50b35aeca615155ca6b57f428f789e64",
   "browser:read_page_storage": "e1193f50f46c09754dda110e1a4a32e63499bb2f64218d2b9054140d078eb178",
+  "browser:read_page_data": "00612f752164748b39f51d260e4bbe64f17ed056a1b137aa34951b7489542bce",
   "browser:evaluate_script": "738febfacdf0dae9069a6b81285831b73e35f2df2cefebf063e642bad411bf90",
-  "browser:extract": "fc2a7ab01765139c7bd91b89397d9ee3366def2065250139123744a486ea9075",
+  "browser:extract": "1d56b46d814351b5344c529374b24725ad8f6217d422442d105257a28a40424d",
   "browser:export_page": "d3cbffe0626d39cc88c1ba7c797a02487a10c62e4fd1ae853ee41340b66d17ea",
-  "browser:performance": "cd0f2542ddce4919866ed356c18d2ded6cbc51ecf198e93ced415891482a1d3d",
+  "browser:performance": "27046124c656191e023471b5e261b9b497413a92123140eb722a35b885f217c7",
   "browser:screencast": "af27e98dedb142a08258279e23a4b63f1ad4710ed7a51d3bc8601954f8bc47d1",
-  "browser:files": "fc081c6858de939a9a95f3f00e7210078b1e4c16e03a0d37427ca001393e78a0",
-  "browser:recipe": "833a5ae49158cf0d795b07a11d3168c4af34b1dd694c1bd59561da69fff30937",
-  "browser:user_scripts": "dfe4d159af89aa13387dab2db770e6ef6b35d6bf067dbcdd13f1046f9804219c"
+  "browser:files": "0505c5181c900f0ea8ba56de11576882f4572fb25f839aef65dd7bda5381c43b",
+  "browser:recipe": "5b7d641eb88bd3e001ea1869fc452c693c9a0abb7a1307c1351afb57dc942287",
+  "browser:user_scripts": "2ae5ba3718b95154f9c72425fe1bd434648562617cd102b431cdd26242489e0f"
 }

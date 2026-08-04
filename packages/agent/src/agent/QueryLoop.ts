@@ -2,17 +2,26 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import { isBlank,isEmpty, isPresent, isTrue, toNullable, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { resolveContextWindowBudget } from '@velaros-ai/agent'
 import type {
+  AgentModelInputModality,
   SubAgentStructuredOutputContract,
   SubAgentUsage,
   ThinkingDepth,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
-import { resolveContextWindowBudget } from '@velaros-ai/core/utils/contextBudget'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import {
+  isBlank,
+  isEmpty,
+  isNull,
+  isPresent,
+  isTrue,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import { resolveCapabilityDelegationPolicy } from '../capabilities'
 import { type AutoVerificationToolContext, tickLoopReminders } from '../coding'
@@ -92,6 +101,7 @@ interface QueryLoopSubAgentRuntimeOverride {
   provider: AgentModelProvider
   providerId: string
   model: string
+  supportedInputModalities?: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
   thinkingDepth?: LooseOptional<ThinkingDepth>
 }
@@ -153,6 +163,7 @@ interface QueryLoopRoleRuntime {
   model: string
   providerModel?: string
   contextWindow?: number
+  supportedInputModalities: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
   resolutionSource: string
   resolutionTrace: readonly unknown[]
@@ -317,7 +328,10 @@ class QueryLoop<
           provider: args.opts.runtimeOverride.provider,
           providerId: args.opts.runtimeOverride.providerId,
           model: args.opts.runtimeOverride.model,
+          providerModel: args.opts.runtimeOverride.model,
           contextWindow: undefined,
+          supportedInputModalities:
+            args.opts.runtimeOverride.supportedInputModalities ?? ['text'],
           modelRequestOptions: args.opts.runtimeOverride.modelRequestOptions,
           resolutionSource: 'injected',
           resolutionTrace: [],
@@ -364,6 +378,7 @@ class QueryLoop<
       blockedToolNames: delegationPolicy.blockedToolNames,
       blockedCategoryIds: delegationPolicy.blockedCategoryIds,
     })
+    childCtx.setSupportedModelInputModalities(roleRuntime.supportedInputModalities)
     // 子 Agent 同样下发输入侧可用窗口，让其编辑工具按自身模型窗口做编辑预算（缺省回退保守默认）。
     childCtx.codingSession.setUsableContextWindowTokens?.(
       resolveContextWindowBudget({
@@ -393,7 +408,7 @@ class QueryLoop<
     const subAgentMaxTurns = this.executionLimits.subAgentMaxTurns
     const windDownGuard = new LoopWindDownGuard({
       hardCapTurns: subAgentMaxTurns ?? Number.POSITIVE_INFINITY,
-      disabled: turnCapDisabled || subAgentMaxTurns === null,
+      disabled: turnCapDisabled || isNull(subAgentMaxTurns),
       deadlineAt: toNullable(args.opts.softDeadlineAt),
     })
 
@@ -403,9 +418,9 @@ class QueryLoop<
     let usageOutputTokens: Nullable<number> = null
     let usageCostUsd: Nullable<number> = null
     const reportUsage = (): void => {
-      if (usageInputTokens === null && usageOutputTokens === null && usageCostUsd === null) return
+      if (isNull(usageInputTokens) && isNull(usageOutputTokens) && isNull(usageCostUsd)) return
       const totalTokens =
-        usageInputTokens === null && usageOutputTokens === null
+        isNull(usageInputTokens) && isNull(usageOutputTokens)
           ? null
           : (usageInputTokens ?? 0) + (usageOutputTokens ?? 0)
       args.opts.onUsage?.({
@@ -419,14 +434,16 @@ class QueryLoop<
     // 观测（#37 阶段 C 片 2）：本次子 Agent 委派 = 一个独立顶层 run span，落父会话同一 span 账本、靠
     // sessionId 关联；带子 Agent 身份（identity/角色）与派发来源（父角色）标注，令同会话多 run 树可辨识。
     // 缺省端口时为 null（全链 no-op）。各终止分支就近收敛（scope.end 失败隔离、幂等首闭为准）。
-    const runScope =
+    const runScope = toNullable(
       this.spanScopeFactory?.beginRun({
         runId: randomUUID(),
         sessionId: args.parentCtx.sessionId?.trim() || 'unknown-session',
+        // Child runs currently inherit the parent session but not the renderer message envelope.
         rootInputId: null,
         agentName: delegation.identity?.trim() || roleResolution.id,
         dispatchSource: args.parentCtx.role.id,
-      }) ?? null
+      })
+    )
 
     const isAborted = (): boolean =>
       args.parentCtx.abortSignal.aborted || !!args.opts.workerAbortSignal?.aborted
@@ -434,7 +451,13 @@ class QueryLoop<
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<string>> => {
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnToolContext = captureAgentTurnCapabilityContext(childCtx)
-      const allowedToolsForTurn = turnToolContext.getCurrentVisibleToolNames()
+      const supportedInputModalities = new Set(roleRuntime.supportedInputModalities)
+      const allowedToolsForTurn = turnToolContext.getCurrentVisibleToolNames().filter(
+        (toolName) =>
+          (turnToolRegistry.getDescriptor(toolName)?.requiredModelInputModalities ?? []).every(
+            (modality) => supportedInputModalities.has(modality)
+          )
+      )
       const toolSchemaChars = this.prepareToolSchemaChars(
         turnToolRegistry,
         turnToolContext,
@@ -476,6 +499,7 @@ class QueryLoop<
         turn,
         roleId: roleResolution.id,
         model: roleRuntime.model,
+        providerModel: roleRuntime.providerModel,
         provider: roleRuntime.providerId,
       })
 
@@ -498,6 +522,7 @@ class QueryLoop<
                 history,
                 reasoningLanguage: args.systemConfig.reasoningLanguage,
                 contextWindow: roleRuntime.contextWindow,
+                supportedInputModalities: roleRuntime.supportedInputModalities,
                 contextUsageOptions,
                 toolSchemaChars,
                 toolContext: turnToolContext,

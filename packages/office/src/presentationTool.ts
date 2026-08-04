@@ -7,10 +7,10 @@
 
 import { z } from 'zod'
 
-import { isArray, isEmpty, isNonBlankString, isPresent, isString, optionalWhen } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isArray, isEmpty, isNonBlankString, isPresent, isString, optionalWhen } from '@velaros-ai/core'
 
 import {
   outputPathSchema,

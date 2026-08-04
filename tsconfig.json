@@ -72,23 +72,11 @@
       "@velaros-ai/core/*": [
         "./packages/core/src/*"
       ],
-      "@velaros-ai/kernel-client": [
-        "./packages/kernel-client/src/index.ts"
+      "@velaros-ai/kernel": [
+        "./packages/kernel/src/index.ts"
       ],
-      "@velaros-ai/kernel-client/contracts": [
-        "./packages/kernel-client/src/contracts/index.ts"
-      ],
-      "@velaros-ai/kernel-serve/daemon": [
-        "./packages/kernel-serve/src/daemon/index.ts"
-      ],
-      "@velaros-ai/kernel-serve/daemon/*": [
-        "./packages/kernel-serve/src/daemon/*"
-      ],
-      "@velaros-ai/kernel-serve/updater": [
-        "./packages/kernel-serve/src/updater/index.ts"
-      ],
-      "@velaros-ai/kernel-serve/updater/*": [
-        "./packages/kernel-serve/src/updater/*"
+      "@velaros-ai/kernel/*": [
+        "./packages/kernel/src/*"
       ],
       "@velaros-ai/serve-host": [
         "./packages/serve-host/src/index.ts"

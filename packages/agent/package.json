@@ -18,13 +18,29 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
+    },
     "./chat-stream": {
       "types": "./dist/chat/stream/index.d.ts",
       "import": "./dist/chat/stream/index.js"
     },
+    "./chat": {
+      "types": "./dist/chat/index.d.ts",
+      "import": "./dist/chat/index.js"
+    },
+    "./run-context": {
+      "types": "./dist/agent/run-context/index.d.ts",
+      "import": "./dist/agent/run-context/index.js"
+    },
     "./protocol": {
       "types": "./dist/protocol/index.d.ts",
       "import": "./dist/protocol/index.js"
+    },
+    "./protocol/agent-capability": {
+      "types": "./dist/protocol/agent-capability.d.ts",
+      "import": "./dist/protocol/agent-capability.js"
     },
     "./protocol/execution": {
       "types": "./dist/protocol/execution.d.ts",
@@ -53,6 +69,10 @@
     "./protocol/session": {
       "types": "./dist/protocol/session.d.ts",
       "import": "./dist/protocol/session.js"
+    },
+    "./tool-contract": {
+      "types": "./dist/tool-contract/index.d.ts",
+      "import": "./dist/tool-contract/index.js"
     }
   },
   "files": [
@@ -63,13 +83,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/agent/build/fix-esm-extensions.mjs dist && node ../../scripts/agent/build/copy-velaros-globals-to-dist.mjs",
-    "test": "bun run build && bun test test",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/agent/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "check:browser": "node ../../scripts/agent/check-browser-surface.mjs",
+    "test": "bun run build && bun run check:browser && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel": "workspace:*",
+    "gpt-tokenizer": "^3.0.1",
     "ai": "^6.0.168",
     "execa": "^9.6.1",
     "typescript": "^5.7.0",

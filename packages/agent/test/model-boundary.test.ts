@@ -32,7 +32,7 @@ function listTypeScriptFiles(directory: string): string[] {
 }
 
 describe('Agent Model boundary', () => {
-  test('agent-runtime has no concrete model-runtime dependency', () => {
+  test('Agent has no concrete Model package dependency', () => {
     const packageJson = JSON.parse(
       readFileSync(join(PackageRoot, 'package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> }
@@ -95,13 +95,38 @@ describe('Agent Model boundary', () => {
     })
   })
 
-  test('compatibility bridge fails fast when Model capability was not injected', () => {
-    const runtime = new ModelRuntime()
-    expect(() =>
-      runtime.createAgentProvider({
-        apiKey: '',
-        baseURL: '',
-      })
-    ).toThrow('Agent Model capability 未注入')
+  test('unwraps Agent-owned config exactly once at the injected Model capability boundary', async () => {
+    const observed: unknown[] = []
+    const runtime = new ModelRuntime({
+      createAgentProvider: (selection) => {
+        observed.push(['provider', selection])
+        return (() => undefined) as never
+      },
+      resolveRoleRuntime: (selection, runtimeContext) => {
+        observed.push(['role', selection, runtimeContext])
+        return Promise.resolve({}) as never
+      },
+    })
+
+    runtime.createAgentProvider({
+      modelSelection: { provider: 'test', model: 'primary' },
+      hostOnlyField: 'must-not-leak',
+    })
+    await runtime.resolveRoleRuntime(
+      { modelSelection: { provider: 'test', model: 'role' } },
+      {
+        modelRuntimeContext: { providerRuntimeConfigs: [], openRouter: {} },
+        hostOnlyField: 'must-not-leak',
+      }
+    )
+
+    expect(observed).toEqual([
+      ['provider', { provider: 'test', model: 'primary' }],
+      [
+        'role',
+        { provider: 'test', model: 'role' },
+        { providerRuntimeConfigs: [], openRouter: {} },
+      ],
+    ])
   })
 })

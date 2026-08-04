@@ -8,9 +8,10 @@ import {
   defineKernelModule,
   type KernelCallableCapabilityOperation,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
   type ScopeRef,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import { projectTools } from './agent/Project.tool.js'
 import type { ProjectToolContext, VelaTool } from './agent/Types.js'
@@ -89,7 +90,7 @@ export function createProjectKernelModule(
     manifest: {
       id: 'velaros.project',
       version: '2.0.0',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [ProjectCapability],
       requires: [],
       optionalRequires: [],

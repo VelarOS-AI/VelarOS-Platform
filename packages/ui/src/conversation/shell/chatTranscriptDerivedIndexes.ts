@@ -1,6 +1,8 @@
 import type { ConversationMessageRunMarker } from '../projection'
 
 import type { ChatMessage } from '#contracts'
+import { isConversationTurnInputMessage } from '#contracts'
+import { toNullable } from '#internal/runtime'
 
 export interface ChatTranscriptDerivedIndexesInput {
   messages: readonly ChatMessage[]
@@ -15,7 +17,6 @@ export interface ChatTranscriptDerivedIndexes {
   latestCompletedAssistantMessageId: Nullable<string>
   planUpdateIndexByToolCallId: Map<string, number>
   assistantQuestionMap: Map<string, ChatMessage>
-  guidedInputMessageIds: Set<string>
   activeAwaitingInputMessageId: Nullable<string>
 }
 
@@ -27,14 +28,12 @@ export function buildChatTranscriptDerivedIndexes({
 }: ChatTranscriptDerivedIndexesInput): ChatTranscriptDerivedIndexes {
   const planUpdateIndexByToolCallId = new Map<string, number>()
   const assistantQuestionMap = new Map<string, ChatMessage>()
-  const guidedInputMessageIds = new Set<string>()
   const expectedQuestion = awaitingInputQuestion?.trim() || null
 
   let latestAssistantMessage: Nullable<ChatMessage> = null
   let latestCompletedAssistantMessage: Nullable<ChatMessage> = null
   let activeAwaitingInputMessageId: Nullable<string> = null
   let latestUserMessage: Nullable<ChatMessage> = null
-  let previousMessage: Nullable<ChatMessage> = null
   let planUpdateIndex = 0
 
   for (const message of messages) {
@@ -45,19 +44,12 @@ export function buildChatTranscriptDerivedIndexes({
       planUpdateIndex += 1
     }
 
-    if (message.role === 'user') {
-      if (previousMessage?.role === 'assistant') {
-        const previousMarker = messageRunMarkerMap.get(previousMessage.id)
-
-        if (previousMarker?.status === 'awaiting-input') {
-          guidedInputMessageIds.add(message.id)
-        }
-      }
-
+    if (isConversationTurnInputMessage(message)) {
       latestUserMessage = message
-      previousMessage = message
       continue
     }
+
+    if (message.role === 'user') continue
 
     latestAssistantMessage = message
 
@@ -79,16 +71,14 @@ export function buildChatTranscriptDerivedIndexes({
       }
     }
 
-    previousMessage = message
   }
 
   return {
     latestAssistantMessage,
     latestCompletedAssistantMessage,
-    latestCompletedAssistantMessageId: latestCompletedAssistantMessage?.id ?? null,
+    latestCompletedAssistantMessageId: toNullable(latestCompletedAssistantMessage?.id),
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
-    guidedInputMessageIds,
     activeAwaitingInputMessageId,
   }
 }

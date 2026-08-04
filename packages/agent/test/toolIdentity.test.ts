@@ -2,8 +2,11 @@ import { describe, expect, it } from 'bun:test'
 
 import {
   assertCanonicalToolId,
-  createToolTransportNamePlan,
   isCanonicalToolId,
+} from '../src/tool-contract/identity'
+import {
+  createToolTransportNamePlan,
+  createToolTransportProjection,
   rewriteCanonicalToolReferences,
 } from '../src/tools/ToolIdentity'
 
@@ -31,6 +34,26 @@ describe('canonical tool identity', () => {
     expect(plan.providerToCanonical.project__read).toBe('project:read')
     expect(plan.providerToCanonical.mcp_github__create_issue).toBe('mcp.github:create_issue')
     expect(() => createToolTransportNamePlan(['legacy_safe_name'])).toThrow('namespace:tool')
+  })
+
+  it('projects request-visible aliases from the complete registered identity set', () => {
+    const registered = ['mcp.github:read', 'mcp..github:read', 'project:read']
+    const first = createToolTransportProjection(registered, ['mcp..github:read'])
+    const expanded = createToolTransportProjection(registered, [
+      'project:read',
+      'mcp..github:read',
+    ])
+    const providerName = first.visibleCanonicalToProvider['mcp..github:read']
+
+    expect(providerName).toBeTruthy()
+    expect(first.plan.providerToCanonical[providerName!]).toBe('mcp..github:read')
+    expect(first.visibleCanonicalToProvider).toEqual({
+      'mcp..github:read': providerName,
+    })
+    expect(expanded.visibleCanonicalToProvider['mcp..github:read']).toBe(providerName)
+    expect(() =>
+      createToolTransportProjection(registered, ['browser:inspect_page'])
+    ).toThrow('absent from the registered transport plan')
   })
 
   it('rewrites only complete canonical references in model-visible text', () => {

@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNumber, optionalWhen,toNullable, truncate } from '@velaros-ai/core'
-import type { ToolCategoryId } from '@velaros-ai/core/types'
 
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
 

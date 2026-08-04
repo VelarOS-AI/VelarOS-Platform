@@ -1,4 +1,5 @@
 import { isNumber, isObject,isString, stringifyPretty, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
@@ -260,7 +261,9 @@ class BrowserWorkspaceArtifactManager {
         parsed.directories && isObject(parsed.directories)
       ) return parsed as BrowserWorkspaceManifest
     } catch (error) {
-      log.debug('读取浏览器工作区清单失败', { error })
+      if (AppError.from(error).code !== 'NOT_FOUND') {
+        log.debug('浏览器工作区清单损坏，准备重新生成', { error })
+      }
       // Ignore invalid or missing manifest and let ensureManifest regenerate it.
     }
 
@@ -312,7 +315,7 @@ function getBrowserSiteOrigin(url: string): Nullable<string> {
 }
 
 /** 将任意标题/路径片段转成安全文件名。 */
-function slugifyArtifactName(value: string | undefined, fallbackPrefix: string): string {
+function slugifyArtifactName(value: LooseOptional<string>, fallbackPrefix: string): string {
   const normalized =
     value
       ?.trim()

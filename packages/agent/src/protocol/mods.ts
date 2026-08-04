@@ -10,6 +10,7 @@
 // 首尾空白），语义层零宽容。
 import { z } from 'zod'
 
+import { isCanonicalToolId } from '@velaros-ai/agent/tool-contract'
 import {
   isArray,
   isBlank,
@@ -20,7 +21,6 @@ import {
   isString,
   isUndefined,
 } from '@velaros-ai/core'
-import { isCanonicalToolId } from '@velaros-ai/core/tool-contract'
 
 // ─── semver：manifest 兼容轴的最小判定器（单源，Loader 复用） ──────────────────
 
@@ -155,7 +155,7 @@ const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 /**
  * 拦截 seam 闭集（裁决 9 机制②）。
  *
- * mod 只能挂接，不能发明新钩子。首批**真接线**的钩子见 agent-runtime 的 `mods/AgentModSeams.ts`
+ * mod 只能挂接，不能发明新钩子。首批**真接线**的钩子由 Agent 的 mod seam 实现。
  * 与 docs/agent-mod-trunk.md 的残余清单；未接线者只有注册面与类型，dispatch 恒无调用点。
  */
 const AgentModSeamKinds = [
@@ -216,6 +216,8 @@ const AgentModToolContributionSchema = z.strictObject({
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
+  /** 声明本工具在哪些 space 可用；只绑定类别，不把完整 schema 钉死在常驻集。 */
+  availableInSpaces: tolerantArray(TrimmedIdSchema).optional(),
   /** 声明本工具在哪些 space 常驻（数据条目，由宿主常驻集算法消费）。 */
   residentInSpaces: tolerantArray(TrimmedIdSchema).optional(),
 })
@@ -447,12 +449,12 @@ const VelarosModCapabilityRequirementSchema = z.strictObject({
 
 /**
  * `module` 节 —— **Kernel 拥有**，形状对齐 `KernelModuleManifest`（单一事实来源在
- * `@velaros-ai/core/kernel/abi`；本文件只是它的磁盘 JSON 投影，不是第二个定义）。
+ * `@velaros-ai/kernel/contracts/abi`；本文件只是它的磁盘 JSON 投影，不是第二个定义）。
  *
  * `entry` / `exportName` 是 Kernel 侧的**装载寻址**：pack 目录里哪一个文件导出这个模块。
  * 它们只对 installed pack 有意义（bundled pack 走构建图，没有寻址问题）。
  *
- * 本 schema 住在 agent-protocol 而不是 core，是因为**依赖方向**：契约层（①）不得反向依赖
+ * 本 schema 住在 Agent protocol 子路径而不是 Core，是因为**依赖方向**：契约层（①）不得反向依赖
  * Kernel 库（②）。Kernel 侧读同一节时用它自己的窄读取器——两个 owner 各读各节，正是 §8.3
  * 要的形状。
  */

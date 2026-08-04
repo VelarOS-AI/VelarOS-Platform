@@ -1,4 +1,4 @@
-import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/ToolDescription'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 
 import { systemPrimitiveTools } from './Primitive.tool'
 import { systemRuntimeTools } from './Runtime.tool'

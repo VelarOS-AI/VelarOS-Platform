@@ -1,9 +1,9 @@
 import type { ModelMessage } from 'ai'
 
+import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isEmpty, isTrue, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import {

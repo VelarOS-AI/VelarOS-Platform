@@ -75,8 +75,8 @@ SQLite FTS + 树路径。包清单里的 `@lancedb/lancedb` 只服务 `src/knowl
 | 件 | 落点 | 判据 |
 | --- | --- | --- |
 | 窄动词契约 `MemoryStoreBackend` | `packages/memory/src/backend/Contract.ts`（**主干**） | 它是记忆产品自己的实现无关端口，零 Kernel ABI、零 fs、零 SQL。放主干才能被 files / tree 两个主干实现同时消费 |
-| capability token 族 + kernel 模块工厂 | `packages/memory/src/adapter-kernel/MemoryStoreCapability.ts`（**适配器**） | token 是 **mod 轴机制**（`@velaros-ai/core/kernel/abi`）。方向铁律 `adapter-kernel → 主干` 单向，主干不得反向依赖适配器，故 token 只能在适配器侧 |
-| 为什么不放 core | —— | `packages/core/src/kernel/**` 有语义词汇硬墙（`check:core-semantic-vocabulary`，**无 baseline 逃生**）：出现 `memory` 一词即红 |
+| capability token 族 + kernel 模块工厂 | `packages/memory/src/adapter-kernel/MemoryStoreCapability.ts`（**适配器**） | token 是 **mod 轴机制**（`@velaros-ai/kernel/contracts/abi`）。方向铁律 `adapter-kernel → 主干` 单向，主干不得反向依赖适配器，故 token 只能在适配器侧 |
+| 为什么不放 Kernel | —— | `packages/kernel/src/**` 有具体能力语义硬墙：出现 `memory` 一词即红 |
 | 为什么一档一 token 而非共享 token | `velaros.memory.store.<backendId>` | `KernelServiceStore` 对同一 capability id 只允许一个 active 服务（`DUPLICATE_SERVICE`）。三档要**叠加**（§九 9.2）就必须各占一个 id；共享 id 会把叠加降级成三选一 |
 | 为什么是普通服务对象而非 callable capability | `MemoryStoreCapabilityService = { backend }` | 后端解析是记忆产品**进程内**的实现选择，消费者只有适配器自己。对外那张需要审计与权限门的面仍是 `velaros.memory`（`adapter-kernel/kernel-module.ts`），一条没减 |
 

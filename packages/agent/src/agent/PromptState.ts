@@ -1,7 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } from '@velaros-ai/core'
-import { isRunProfileId } from '@velaros-ai/core/constants/typedFieldAsserts'
 import type {
   AgentContextPhase,
   AgentDeveloperContext,
@@ -20,7 +18,9 @@ import type {
   ToolDescriptor,
   ToolSurfaceProfileId,
   WorkflowType,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isRunProfileId } from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,

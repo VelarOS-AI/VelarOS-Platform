@@ -1,19 +1,21 @@
+import { isEmpty, isPlainObject } from '@velaros-ai/core'
 import {
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
   type KernelModuleHealth,
   type ScopeRef,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 /**
  * Product-owned Agent runtime injected at composition time.
  *
  * The Kernel adapter deliberately treats execution input and output as opaque.
  * Agent session, prompt, tool, and capability semantics remain owned by
- * agent-runtime and its host composition rather than becoming Kernel contracts.
+ * Agent 运行时及其宿主装配，而不是 Kernel 契约。
  *
  * Two-tier registration boundary: this adapter is tier one and never parses a
  * domain manifest. Hosts pass the Kernel pack listing to the tier-two Agent
@@ -24,7 +26,7 @@ import {
 export interface AgentCapabilityRuntime {
   start?(signal: AbortSignal): void | Promise<void>
   execute(
-    scope: ScopeRef | undefined,
+    scope: LooseOptional<ScopeRef>,
     input: unknown,
     context: AgentCapabilityExecutionContext,
   ): unknown | Promise<unknown>
@@ -48,7 +50,7 @@ export interface AgentCapabilityService
   extends KernelCallableCapabilityService {
   isReady(): boolean
   execute(
-    scope: ScopeRef | undefined,
+    scope: LooseOptional<ScopeRef>,
     input: unknown,
     signal: AbortSignal,
   ): Promise<unknown>
@@ -64,15 +66,14 @@ export interface CreateAgentKernelModuleOptions {
 export const AgentCapability =
   createCapabilityToken<AgentCapabilityService>('velaros.agent')
 
-const agentExecutionPermission = 'agent:execute'
+/** Stable module identity used by host permission policies. */
+export const AgentKernelModuleId = 'velaros.agent.runtime'
+
+/** Permission required to execute an Agent through the Kernel capability. */
+export const AgentExecutionPermission = 'agent:execute'
 
 function parseEmptyInput(input: unknown): void {
-  if (
-    typeof input !== 'object'
-    || input === null
-    || Array.isArray(input)
-    || Object.keys(input).length !== 0
-  ) {
+  if (!isPlainObject(input) || !isEmpty(Object.keys(input))) {
     throw new Error('Agent health input is invalid')
   }
 }
@@ -89,13 +90,13 @@ export function createAgentKernelModule(
 ): KernelModuleDefinition {
   return defineKernelModule({
     manifest: {
-      id: 'velaros.agent.runtime',
+      id: AgentKernelModuleId,
       version: '0.3.2',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [AgentCapability],
       requires: [],
       optionalRequires: [],
-      permissions: [agentExecutionPermission],
+      permissions: [AgentExecutionPermission],
       isolation: 'in-process',
     },
     activate(context) {
@@ -107,7 +108,7 @@ export function createAgentKernelModule(
       }
 
       const execute = async (
-        scope: ScopeRef | undefined,
+        scope: LooseOptional<ScopeRef>,
         input: unknown,
         signal: AbortSignal,
       ): Promise<unknown> => {
@@ -137,7 +138,7 @@ export function createAgentKernelModule(
         },
         execute: {
           metadata: {
-            permissions: [agentExecutionPermission],
+            permissions: [AgentExecutionPermission],
             reason: 'Execute an Agent request through the injected runtime.',
           },
           invoke: execute,

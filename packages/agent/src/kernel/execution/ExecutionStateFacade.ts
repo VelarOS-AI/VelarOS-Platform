@@ -1,5 +1,5 @@
-import type { ExecutionRecord, StreamStatePayload } from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
+import type { ExecutionRecord, StreamStatePayload } from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 
 import type { ExecutionInteractions, ExecutionRecords } from '../../execution'
 

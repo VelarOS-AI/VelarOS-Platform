@@ -24,7 +24,7 @@ test('accepts manifest-aligned workspaces and exact private resolutions', () => 
     new LockfileConsistencyValidator({
       repositoryRoot,
     }).listExternalVelarosDependencyNames(),
-    ['@velaros-ai/core', '@velaros-ai/kernel-sdk'],
+    ['@velaros-ai/core', '@velaros-ai/kernel'],
   )
   assert.deepEqual(
     new LockfileConsistencyValidator({
@@ -34,7 +34,7 @@ test('accepts manifest-aligned workspaces and exact private resolutions', () => 
       {
         directory: '',
         manifestPath: 'package.json',
-        packageNames: ['@velaros-ai/core', '@velaros-ai/kernel-sdk'],
+        packageNames: ['@velaros-ai/core', '@velaros-ai/kernel'],
       },
       {
         directory: 'packages/example',
@@ -63,18 +63,18 @@ test('rejects a stale private registry resolution', () => {
 
   assert.throws(
     () => new LockfileConsistencyValidator({ repositoryRoot }).validate(),
-    /解析 @velaros-ai\/core@0\.2\.1，不满足 package\.json 的 \^0\.3\.2/,
+    /解析 @velaros-ai\/core@0\.2\.1，不满足 package\.json 的 \^0\.4\.0/,
   )
 })
 
 test('checks the resolved version against every manifest range', () => {
   const repositoryRoot = createFixture({
-    packageCoreRange: '^0.4.0',
+    packageCoreRange: '^0.5.0',
   })
 
   assert.throws(
     () => new LockfileConsistencyValidator({ repositoryRoot }).validate(),
-    /不满足 packages\/example\/package\.json 的 \^0\.4\.0/,
+    /不满足 packages\/example\/package\.json 的 \^0\.5\.0/,
   )
 })
 
@@ -97,7 +97,7 @@ test('runs each manifest update from its own directory', () => {
       {
         cwd: repositoryRoot,
         manifestPath: 'package.json',
-        packageNames: ['@velaros-ai/core', '@velaros-ai/kernel-sdk'],
+        packageNames: ['@velaros-ai/core', '@velaros-ai/kernel'],
       },
       {
         cwd: join(repositoryRoot, 'packages/example'),
@@ -125,9 +125,9 @@ test('restores exact manifest bytes and fails if Bun mutates any manifest', () =
 })
 
 function createFixture({
-  coreVersion = '0.3.2',
+  coreVersion = '0.4.0',
   lockWorkspaceVersion = '1.2.3',
-  packageCoreRange = '^0.3.2',
+  packageCoreRange = '^0.4.0',
 } = {}) {
   const repositoryRoot = mkdtempSync(join(tmpdir(), 'velaros-lock-check-'))
   mkdirSync(join(repositoryRoot, 'packages/example'), { recursive: true })
@@ -138,8 +138,8 @@ function createFixture({
       '@velaros-ai/example': 'workspace:*',
     },
     devDependencies: {
-      '@velaros-ai/core': '^0.3.2',
-      '@velaros-ai/kernel-sdk': '^0.2.2',
+      '@velaros-ai/core': '^0.4.0',
+      '@velaros-ai/kernel': '^0.1.0',
     },
     workspaces: ['packages/*'],
   })
@@ -159,8 +159,8 @@ function createFixture({
         "@velaros-ai/example": "workspace:*",
       },
       "devDependencies": {
-        "@velaros-ai/core": "^0.3.2",
-        "@velaros-ai/kernel-sdk": "^0.2.2",
+        "@velaros-ai/core": "^0.4.0",
+        "@velaros-ai/kernel": "^0.1.0",
       },
     },
     "packages/example": {
@@ -172,7 +172,7 @@ function createFixture({
   },
   "packages": {
     "@velaros-ai/core": ["@velaros-ai/core@${coreVersion}", "https://npm.pkg.github.com/download/@velaros-ai/core/${coreVersion}/fixture"],
-    "@velaros-ai/kernel-sdk": ["@velaros-ai/kernel-sdk@0.2.2", "https://npm.pkg.github.com/download/@velaros-ai/kernel-sdk/0.2.2/fixture"],
+    "@velaros-ai/kernel": ["@velaros-ai/kernel@0.1.0", "https://npm.pkg.github.com/download/@velaros-ai/kernel/0.1.0/fixture"],
   },
 }
 `,

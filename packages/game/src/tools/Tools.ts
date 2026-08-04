@@ -1,10 +1,10 @@
 import { type z } from 'zod'
 
-import { isEmpty } from '@velaros-ai/core'
 import {
   type AppliedAdjustment,
   buildAppliedAdjustments,
-} from '@velaros-ai/core/utils/ForgivingSchema'
+} from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
 
 import { GameToolName } from '../contracts.js'
 import type { GameInputStep, GameRuntimeQuery } from '../core/index.js'

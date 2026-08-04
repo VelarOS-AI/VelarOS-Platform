@@ -431,37 +431,17 @@ console.info(${JSON.stringify(record.manifest.name)} + \` runtime imports passed
     { stdio: 'inherit' },
   )
 
-  if (record.packedManifest.exports?.['./cli']) {
-    await writeFile(
-      path.join(consumerRoot, 'cli.mjs'),
-      `import { runToolCollectionCli } from ${JSON.stringify(`${record.manifest.name}/cli`)}
-
-const result = await runToolCollectionCli(['help'], {
-  namespace: 'package-consumer',
-  binName: 'package-consumer',
-  tools: {},
-  createContext: () => ({}),
-})
-if (result.exitCode !== 0 || !result.text.includes('Commands:')) {
-  throw new Error('CLI help contract failed')
-}
-console.info(${JSON.stringify(record.manifest.name)} + ' CLI contract passed')
-`,
-    )
-    run(process.execPath, ['cli.mjs'], consumerRoot, { stdio: 'inherit' })
-  }
-
   console.info(
     `${record.manifest.name} isolated consumer passed (internal closure: ${closure.join(', ')})`,
   )
 }
 
-async function createAmbientConflictConsumer(packagesByName, consumersRoot) {
+async function createKernelAmbientConflictConsumer(packagesByName, consumersRoot) {
   const consumerRoot = await mkdtemp(path.join(consumersRoot, 'ambient-conflict-'))
   const consumerNodeModules = path.join(consumerRoot, 'node_modules')
-  const clientName = '@velaros-ai/kernel-client'
-  const sdkName = '@velaros-ai/kernel-sdk'
-  const closure = internalDependencyClosure(clientName, packagesByName)
+  const clientName = '@velaros-ai/kernel/client'
+  const abiName = '@velaros-ai/kernel/contracts/abi'
+  const closure = internalDependencyClosure('@velaros-ai/kernel', packagesByName)
   await mkdir(path.join(consumerNodeModules, '@velaros-ai'), { recursive: true })
   await linkExternalDependencies(consumerNodeModules, closure, packagesByName)
   for (const dependencyName of closure) {
@@ -528,7 +508,7 @@ export declare const uiConflictProbe: true
   await writeFile(
     path.join(consumerRoot, 'consumer.ts'),
     `import { KernelClient, KernelProtocolVersion } from '${clientName}'
-import { createCapabilityToken } from '${sdkName}'
+import { createCapabilityToken } from '${abiName}'
 import {
   uiConflictProbe,
   type UiConflictProbe,
@@ -543,7 +523,7 @@ void [KernelClient, KernelProtocolVersion, token, probe, uiConflictProbe]
     path.join(consumerRoot, 'runtime.mjs'),
     `await Promise.all([
   import('${clientName}'),
-  import('${sdkName}'),
+  import('${abiName}'),
   import('@velaros-ai/ui-conflict-probe'),
 ])
 `,
@@ -570,13 +550,12 @@ void [KernelClient, KernelProtocolVersion, token, probe, uiConflictProbe]
     { stdio: 'inherit' },
   )
   run(process.execPath, ['runtime.mjs'], consumerRoot, { stdio: 'inherit' })
-  console.info('kernel-client + kernel-sdk + ambient UI tarball conflict probe passed')
+  console.info('kernel subpaths + ambient UI tarball conflict probe passed')
 }
 
-const packageDirectories = (await readdir(packagesRoot, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort()
+// Kernel 的隔离消费门只验证自身与唯一的内部依赖 Core。其他领域包有各自的消费门，
+// 不应让 Kernel 检查承担整个工作区的发布元数据治理。
+const packageDirectories = ['core', 'kernel']
 
 const workspace = await mkdtemp(path.join(tmpdir(), 'velaros-kernel-consumers-'))
 const packedDirectory = path.join(workspace, 'packed')
@@ -655,7 +634,7 @@ try {
   for (const record of packagesByName.values()) {
     await createPackageConsumer(record, packagesByName, consumersRoot)
   }
-  await createAmbientConflictConsumer(packagesByName, consumersRoot)
+  await createKernelAmbientConflictConsumer(packagesByName, consumersRoot)
 
   console.info(`isolated consumer package checks passed: ${packagesByName.size} packages`)
 } finally {

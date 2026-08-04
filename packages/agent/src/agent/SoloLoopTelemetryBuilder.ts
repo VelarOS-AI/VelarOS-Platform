@@ -1,4 +1,3 @@
-import { isNumber, toNullable } from '@velaros-ai/core'
 import type {
   RunProfileId,
   StreamTurnContextPayload,
@@ -6,7 +5,8 @@ import type {
   ToolLayerTelemetryMetrics,
   ToolSchemaTelemetryPayload,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isNumber, toNullable } from '@velaros-ai/core'
 
 interface SoloToolSchemaTelemetryContext {
   codingSession: {
@@ -32,6 +32,8 @@ interface BuildSoloRunProfileTelemetryInput {
   profile: RunProfileId
   reason: string
   contextWindow: Nullable<number>
+  physicalContextWindow: Nullable<number>
+  maxInputWorkingSetTokens: Nullable<number>
   maxToolCount: Nullable<number>
   maxSystemPromptChars: Nullable<number>
   baseAllowedToolCount: number

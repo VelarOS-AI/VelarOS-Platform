@@ -117,7 +117,11 @@ describe('SystemPlatformCompatibility', () => {
     expect(windows.getProcessListCommandSpec()?.file).toBe('powershell.exe')
     expect(windows.getOpenPortInspectionCommandSpec()?.file).toBe('powershell.exe')
 
-    expect(linux.getProcessKillPid(42)).toBe(-42)
+  expect(linux.getProcessKillPid(42)).toBe(-42)
+  expect(linux.isProcessMissingError({ code: 'ESRCH' })).toBe(true)
+  expect(linux.isProcessMissingError({ errno: 3 })).toBe(true)
+  expect(linux.isProcessMissingError({ errno: -3 })).toBe(true)
+  expect(linux.isProcessMissingError({ code: 'EPERM' })).toBe(false)
     expect(linux.getFallbackTerminateCommand('bun   run dev')).toBe("pkill -f 'bun run dev'")
     expect(linux.getCpuUsageCommandSpec()).toEqual({
       file: 'cat',

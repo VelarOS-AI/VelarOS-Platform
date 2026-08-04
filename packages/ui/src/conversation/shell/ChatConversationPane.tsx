@@ -57,6 +57,7 @@ import type {
   UserActionCard as UserActionCardType,
   UserActionCardResult,
 } from '#contracts'
+import { isConversationTurnInputMessage } from '#contracts'
 import { buildGoalDockViewModel } from '#internal/goalLifecycle'
 import { isEmpty, isPresent, last, Log, optionalWhenLazy, toNullable, toOptional } from '#internal/runtime'
 
@@ -118,7 +119,7 @@ function getLatestPlanToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlock
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex]
 
-    if (message.role === 'user') return null
+    if (isConversationTurnInputMessage(message)) return null
     if (message.role !== 'assistant') {
       continue
     }
@@ -137,7 +138,7 @@ function getLatestGoalToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlock
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex]
 
-    if (message.role === 'user') return null
+    if (isConversationTurnInputMessage(message)) return null
     if (message.role !== 'assistant') {
       continue
     }
@@ -373,7 +374,6 @@ export function ChatConversationPane({
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
-    guidedInputMessageIds,
     visibleMessages,
   } = useChatConversationTranscriptModel({
     messages,
@@ -555,10 +555,6 @@ export function ChatConversationPane({
     (message: ChatMessage) => toNullable(assistantQuestionMap.get(message.id)),
     [assistantQuestionMap]
   )
-  const getTranscriptIsGuidedInput = useCallback(
-    (message: ChatMessage) => guidedInputMessageIds.has(message.id),
-    [guidedInputMessageIds]
-  )
   const getTranscriptIsStreaming = useCallback(
     (message: ChatMessage) => isTranscriptRunActive && message.id === activeAssistantMessageId,
     [activeAssistantMessageId, isTranscriptRunActive]
@@ -654,7 +650,6 @@ export function ChatConversationPane({
               className={styles.messageSequence}
               pricingCatalog={pricingCatalog}
               getQuestionMessage={getTranscriptQuestionMessage}
-              getIsGuidedInput={getTranscriptIsGuidedInput}
               getIsStreaming={getTranscriptIsStreaming}
               getRunMarker={getTranscriptRunMarker}
               getInlineNotice={getTranscriptInlineNotice}

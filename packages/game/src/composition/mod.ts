@@ -1,4 +1,4 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import {
   GameModId,
@@ -48,7 +48,7 @@ const GameAgentModManifest = Object.freeze({
     tools: GameToolNames.map((name) => ({
       name,
       categoryId: 'game',
-      residentInSpaces: [GameSpaceId],
+      availableInSpaces: [GameSpaceId],
     })),
     spaces: [
       {
@@ -66,7 +66,6 @@ const GameAgentModManifest = Object.freeze({
         boundCapabilityIds: ['velaros.game'],
         inheritsSpaceIds: ['project'],
         toolCategoryIds: ['game'],
-        residentToolNames: [...GameToolNames],
         turnContextSourceIds: [...GameTurnContextSourceIds],
       },
     ],

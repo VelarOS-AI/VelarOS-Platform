@@ -71,16 +71,18 @@ function findingKey(finding: Finding): string {
 export function createWatchdogBaseline(
   observation: Observation,
   findings: readonly Finding[],
+  activeDetectorIds: ReadonlySet<string>,
   thresholds: LoopThresholds = DefaultLoopThresholds,
 ): WatchdogBaseline {
   return {
     counts: Object.fromEntries(
-      signalCounts(observation, thresholds).map((signal) => [
-        signal.key,
-        signal.count,
-      ]),
+      signalCounts(observation, thresholds)
+        .filter((signal) => activeDetectorIds.has(signal.detectorId))
+        .map((signal) => [signal.key, signal.count]),
     ),
-    findingKeys: findings.map(findingKey),
+    findingKeys: findings
+      .filter((finding) => activeDetectorIds.has(finding.detectorId))
+      .map(findingKey),
   };
 }
 
@@ -88,16 +90,21 @@ export function selectAbortCandidate(
   observation: Observation,
   findings: readonly Finding[],
   baseline: WatchdogBaseline,
+  activeDetectorIds: ReadonlySet<string>,
   thresholds: LoopThresholds = DefaultLoopThresholds,
 ): WatchdogSignal | null {
-  for (const signal of signalCounts(observation, thresholds)) {
+  for (const signal of signalCounts(observation, thresholds).filter((item) =>
+    activeDetectorIds.has(item.detectorId),
+  )) {
     const delta = signal.count - (baseline.counts[signal.key] ?? 0);
     if (delta >= signal.abortAt) return { ...signal, count: delta };
   }
   const baselineFindings = new Set(baseline.findingKeys);
   const fatal = findings.find(
     (item) =>
-      item.severity === "fail" && !baselineFindings.has(findingKey(item)),
+      activeDetectorIds.has(item.detectorId) &&
+      item.severity === "fail" &&
+      !baselineFindings.has(findingKey(item)),
   );
   return fatal
     ? {

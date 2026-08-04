@@ -1,7 +1,7 @@
 import type {
   ThinkingDepth,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { CapabilityValidationStatus } from '../capabilities'
 export interface CapabilityValidationFailure {

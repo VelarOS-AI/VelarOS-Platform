@@ -13,12 +13,6 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const SourceFilePattern = /\.[cm]?[jt]sx?$/u
-const DependencySections = [
-  'dependencies',
-  'optionalDependencies',
-  'peerDependencies',
-  'devDependencies',
-]
 const HostSpecifierPrefixes = [
   'electron',
   '@electron/',
@@ -29,11 +23,7 @@ const HostSpecifierPrefixes = [
   '@main/',
 ]
 const KernelConcreteDomainSpecifiers = [
-  '@velaros-ai/core/types',
-  '@velaros-ai/core/constants/chat',
-  '@velaros-ai/core/constants/storage',
-  '@velaros-ai/core/constants/workspaceSpaces',
-  '@velaros-ai/core/constants/workspaceVisibility',
+  '@velaros-ai/agent/protocol',
   '@velaros-ai/core/memory',
   '@velaros-ai/core/utils/EmbeddingModelSelection',
   '@velaros-ai/core/utils/PathContainmentHelper',

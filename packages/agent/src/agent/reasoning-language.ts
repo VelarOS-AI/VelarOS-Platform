@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 
+import type { ReasoningLanguagePreference } from '@velaros-ai/agent/protocol'
 import { isArray, isObject,isString } from '@velaros-ai/core'
-import type { ReasoningLanguagePreference } from '@velaros-ai/core/types'
 
 const ReasoningLanguageBlockPattern = /^\s*<reasoning-language>[\s\S]*?<\/reasoning-language>\s*/i
 type UserModelMessage = Extract<ModelMessage, { role: 'user' }>

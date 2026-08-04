@@ -478,7 +478,7 @@
     "dev": "bun run --cwd ../.. dev",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/ui/build/copy-velaros-globals-to-dist.mjs",
+    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs --utility-module @velaros-ai/ui/utility-types",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/ui"
   },
   "repository": {

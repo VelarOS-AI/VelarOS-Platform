@@ -1,4 +1,4 @@
-import { buildValidItemsHint } from '@velaros-ai/core/utils/ForgivingSchema'
+import { buildValidItemsHint } from '@velaros-ai/agent/tool-contract'
 
 import { GameManifestError } from './manifest-parser.js'
 import {

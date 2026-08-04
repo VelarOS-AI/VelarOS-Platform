@@ -1,5 +1,5 @@
+import type { ChatContextEvidenceRecord } from '@velaros-ai/agent/protocol'
 import { isArray,isFunction } from '@velaros-ai/core'
-import type { ChatContextEvidenceRecord } from '@velaros-ai/core/types'
 
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'

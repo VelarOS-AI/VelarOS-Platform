@@ -123,10 +123,12 @@ export function assertProviderRequestInvariants(
 
   const explicitToolSurface =
     Boolean(input.availableToolNames) || !isEmpty(Object.keys(input.toolSchemaChars ?? {}))
+  const recallProviderToolName =
+    input.toolNameAliases?.['context:recall']?.trim() || 'context:recall'
   if (
     explicitToolSurface &&
     requestFingerprint.contextRefCount > 0 &&
-    !requestFingerprint.availableToolNames.includes('context:recall')
+    !requestFingerprint.availableToolNames.includes(recallProviderToolName)
   ) {
     issues.push('provider-visible context handles require resident context:recall tool')
   }

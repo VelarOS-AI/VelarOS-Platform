@@ -57,15 +57,24 @@ export {
   AgentStreamDiagnosticRecorder,
   AgentStreamDiagnosticRecorder as StreamDiagnosticRecorder,
 } from './recorder'
-export type { ProviderFinalToolInputResolution, ProviderToolInputDraft } from './tool-input'
+export type {
+  ProviderExecutableToolInputResolution,
+  ProviderFinalToolInputResolution,
+  ProviderJsonTextDiagnostic,
+  ProviderToolInputDraft,
+  RejectedProviderToolInputDiagnostic,
+} from './tool-input'
 export {
   applyProviderToolInputStreamPart,
   buildToolInputReadyMetadata,
+  diagnoseProviderJsonText,
+  diagnoseRejectedProviderToolInput,
   parseEndedProviderToolInputDraft,
   parseRecoverableProviderToolInputDraft,
+  resolveProviderExecutableToolInput,
+  resolveProviderFinalToolCallIdentity,
   resolveProviderFinalToolInput,
   summarizeProviderToolInputDraft,
-  takeProviderToolInputDraftForFinalCall,
 } from './tool-input'
 export type {
   StreamDiagnostics,

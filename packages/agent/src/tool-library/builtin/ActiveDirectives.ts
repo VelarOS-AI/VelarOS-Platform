@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
+import type { ActiveContextArtifact } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty,isObject, isString, isTrue } from '@velaros-ai/core'
-import type { ActiveContextArtifact } from '@velaros-ai/core/types'
 
 const directiveTypeSchema = z.enum([
   'prohibition',

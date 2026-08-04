@@ -1,15 +1,15 @@
 import type { ModelMessage } from 'ai'
 
-import { isBlank, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { Logger } from '@velaros-ai/core/logger'
 import type {
   AgentEvent,
   ExecutionRecord,
   StreamStatePayload,
   ToolExecutionApi,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isBlank, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { Logger } from '@velaros-ai/core/logger'
 
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
 import type { ExecutionRecords, ExecutionStore, SourceSessionGuard } from '../../execution'

@@ -110,6 +110,7 @@ export class ModelProviderCollection {
         models: script.manifest.models.map((model) => ({
           id: model.id,
           contextWindow: model.contextWindow,
+          inputModalities: model.inputModalities,
         })),
       }
 

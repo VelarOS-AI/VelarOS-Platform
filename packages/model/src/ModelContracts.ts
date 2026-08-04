@@ -30,6 +30,7 @@ export type ChatProviderId = BuiltInChatProviderId | InjectedChatProviderId
 
 export type ThinkingDepth = 'fast' | 'balanced' | 'deep'
 export type ReasoningLevel = 'off' | 'low' | 'medium' | 'high' | 'ultra'
+export type ModelInputModality = 'text' | 'image' | 'audio'
 
 export interface AgentProviderAdapterConfig {
   kind: 'js'
@@ -42,6 +43,8 @@ export interface ProviderModelCatalogEntry {
   id: string
   label: string
   contextWindow?: number
+  /** Inputs the concrete model transport explicitly accepts. Unknown is fail-closed to text. */
+  inputModalities?: readonly ModelInputModality[]
   available?: boolean
   minPlan?: string
 }

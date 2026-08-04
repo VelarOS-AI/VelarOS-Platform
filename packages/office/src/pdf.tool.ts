@@ -37,6 +37,7 @@ import {
   mkdtemp,
   normalizeWordInputToDocx,
   OfficeDocumentProcessCapability,
+  OfficeDocumentReadCapability,
   OfficeDocumentWriteCapability,
   type OfficeToolContext,
   prepareOfficeOutputPath,
@@ -51,8 +52,8 @@ import {
   writeFile,
   writeOfficeBuffer,
 } from './officeShared'
-import type { ConvertPdfToWordInput, ConvertWordToPdfInput, CreateLatexPdfInput, EditPdfDocumentInput } from './pdfTools'
-import { applyPdfMetadata, applyPdfTextStamp, buildLatexCompileCommands, convertPdfToWordSchema, convertWordToPdfSchema, createLatexPdfSchema, editPdfDocumentSchema, extractPdfTextPages, getDefaultLatexSourcePath, resolveLatexCompiler, resolvePdfPageNumbers, runLatexCompileCommands } from './pdfTools'
+import type { ConvertPdfToWordInput, ConvertWordToPdfInput, CreateLatexPdfInput, EditPdfDocumentInput, ExtractPdfTextInput } from './pdfTools'
+import { applyPdfMetadata, applyPdfTextStamp, buildLatexCompileCommands, convertPdfToWordSchema, convertWordToPdfSchema, createLatexPdfSchema, editPdfDocumentSchema, extractPdfTextPages, extractPdfTextSchema, getDefaultLatexSourcePath, resolveLatexCompiler, resolvePdfPageNumbers, runLatexCompileCommands } from './pdfTools'
 import { buildWordChildren } from './wordTool'
 
 // ─── Tool: convertWordToPdf ────────────────────────────────────────────────────
@@ -213,7 +214,7 @@ const convertPdfToWord = defineOfficeTool<ConvertPdfToWordInput>({
       const inputPath = await resolveOfficeInputPath(ctx, input.inputPath, '.pdf')
       const output = await prepareOfficeOutputPath(ctx, input.outputPath, '.docx', input.overwrite)
       // 先把 PDF 中可提取文本按页读出，再映射成 Word 段落块。
-      const pages = await extractPdfTextPages(inputPath, input.maxPages)
+      const { pages } = await extractPdfTextPages(inputPath, { maxPages: input.maxPages })
       const blocks = pages.flatMap((page) => [
         { kind: 'heading' as const, text: `Page ${page.page}`, level: 2 as const },
         {
@@ -235,6 +236,44 @@ const convertPdfToWord = defineOfficeTool<ConvertPdfToWordInput>({
       })
       const buffer = await Packer.toBuffer(document)
       return writeOfficeBuffer(output, buffer, 'docx')
+    })
+  },
+})
+
+// ─── Tool: extractPdfText ─────────────────────────────────────────────────────
+
+const extractPdfText = defineOfficeTool<ExtractPdfTextInput>({
+  name: 'office:extract_pdf_text',
+  role: 'inspect',
+  summary: '按页提取文本型 PDF 中的可选择文本。',
+  suitable: ['读取 PDF 的指定页、核对正文，或为后续总结提取有界文本。'],
+  forbidden: ['不要用于扫描件或图片型 PDF 的 OCR，也不要用于编辑或转换 PDF。'],
+  protocol: [
+    '页码使用从 1 开始的编号；指定页使用 pages，读取前若干页使用 maxPages。',
+    '省略 pages 和 maxPages 时只读取前 20 页；hasMore=true 表示仍有未读取页面。',
+  ],
+  usage: ['传 inputPath；需要单页或离散页面时传 pages，例如 pages=[2,5]。'],
+  examples: [{ inputPath: 'paper.pdf', pages: [2] }],
+  notes: ['返回总页数和逐页文本；重复页码只提取一次并保持首次出现顺序。'],
+  schema: extractPdfTextSchema,
+  permissions: ['fs:read'],
+  capabilities: OfficeDocumentReadCapability,
+  isAvailable: toolRequiresProject,
+  isConcurrencySafe: () => true,
+  execute: async (input: ExtractPdfTextInput, ctx: OfficeToolContext) => {
+    ctx.abortSignal.throwIfAborted()
+    return runWithDirectory(ctx, input.cwd, async () => {
+      const inputPath = await resolveOfficeInputPath(ctx, input.inputPath, '.pdf')
+      const extracted = await extractPdfTextPages(inputPath, {
+        pages: input.pages,
+        maxPages: input.pages ? undefined : (input.maxPages ?? 20),
+      })
+      return {
+        inputPath,
+        pageCount: extracted.pageCount,
+        pages: extracted.pages,
+        hasMore: extracted.pages.length < extracted.pageCount,
+      }
     })
   },
 })
@@ -429,6 +468,7 @@ const editPdfDocument = defineOfficeTool<EditPdfDocumentInput>({
   },
 })
 const pdfTools = {
+  'office:extract_pdf_text': extractPdfText,
   'office:convert_pdf_to_word': convertPdfToWord,
   'office:convert_word_to_pdf': convertWordToPdf,
   'office:create_latex_pdf': createLatexPdf,

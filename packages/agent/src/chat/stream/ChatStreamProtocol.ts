@@ -1,4 +1,3 @@
-import type { SerializedError } from '@velaros-ai/core/error'
 import type {
   AgentEvent,
   ChatStreamEvent,
@@ -9,7 +8,7 @@ import type {
   StreamToolMetadataPayload,
   StreamToolProgressPayload,
   StreamToolResultPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 import {
   ALL_STREAM_RUNTIME_STATE_KINDS,
   STREAM_FAILURE_RUNTIME_STATE_KINDS,
@@ -19,7 +18,8 @@ import {
   type StreamStateKind,
   TERMINAL_STREAM_RUNTIME_STATE_KINDS,
   type TerminalStreamRuntimeStateKind,
-} from '@velaros-ai/core/types/chatRuntime'
+} from '@velaros-ai/agent/protocol'
+import type { SerializedError } from '@velaros-ai/core/error'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
 
 import type {

@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 
 import type { NativeExecutionState } from "../src/drivers/index.js";
-import { createPollingDriver } from "../src/drivers/index.js";
+import type { VelarHooksClient } from "../src/drivers/index.js";
+import {
+  createPollingDriver,
+  createVelarHooksDriver,
+} from "../src/drivers/index.js";
 import { EmptyBudgetUsage, UnlimitedBudget } from "../src/protocol/index.js";
 
 import { FullCapabilities, journey, observation, trial } from "./fixtures.js";
@@ -139,4 +143,73 @@ test("polling driver classifies native executor unavailability as attrition", as
     cause: "agent-unavailable",
     detail: "authentication_failed",
   });
+});
+
+test("velar hooks driver preserves structured error-text tool result truth", async () => {
+  const client = {
+    command: async (input: { readonly kind?: string }) => {
+      if (input.kind === "get_runtime_status")
+        return { ok: true, data: { running: false, status: "completed" } };
+      if (input.kind === "get_transcript")
+        return { ok: true, data: { messages: [] } };
+      if (input.kind === "get_debug")
+        return {
+          ok: true,
+          data: {
+            turns: [
+              {
+                id: "turn-1",
+                messages: [
+                  {
+                    content: [
+                      {
+                        type: "tool-call",
+                        toolCallId: "call-1",
+                        toolName: "system:write",
+                        input: { path: "/tmp/existing" },
+                      },
+                    ],
+                  },
+                  {
+                    content: [
+                      {
+                        type: "tool-result",
+                        toolCallId: "call-1",
+                        output: {
+                          type: "error-text",
+                          value: "destination already exists",
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks",
+    identity: {
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    },
+    client,
+  });
+  const session = await driver.openSession({
+    trial: trial(),
+    journey: journey(),
+    workspaceRoot: null,
+  });
+  const result = await driver.collect(session, "archive");
+  expect(result.turns[0]?.toolCalls[0]?.isError).toBe(true);
 });

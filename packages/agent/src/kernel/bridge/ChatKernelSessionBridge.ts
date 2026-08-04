@@ -28,8 +28,6 @@
 
 import type { ModelMessage } from 'ai'
 
-import { isArray, isBlank, isEmpty,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   ChatSendRequest,
   ExecutionPendingInteractionKind,
@@ -38,7 +36,9 @@ import type {
   ExecutionProvideInputRequest,
   ExecutionResolveConfirmationRequest,
   UserActionCardResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isBlank, isEmpty,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   KernelBackgroundJobManager,

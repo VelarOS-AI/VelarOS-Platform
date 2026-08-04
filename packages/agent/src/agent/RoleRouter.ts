@@ -1,5 +1,5 @@
+import type { AgentRoleId } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
-import type { AgentRoleId } from '@velaros-ai/core/types'
 
 import type { AgentRoleDefinition, ResolveAgentRoleOptions, WorkflowType } from './RoleTypes'
 

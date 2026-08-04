@@ -1,16 +1,17 @@
-import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@velaros-ai/core'
 import type {
   RunProfileId,
   ToolDescriptor,
   ToolExposurePolicy,
   ToolExposureProfilePolicy,
   ToolExposureTier,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@velaros-ai/core'
 
 import { compareStableStrings } from './context/residency/determinism'
 import {
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
+  resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 } from './RuntimeProfiles'
 
@@ -187,8 +188,6 @@ function resolveEffectiveMaxToolSchemaChars(input: {
   profileMaxToolSchemaChars: Nullable<number>
   dynamicMaxToolSchemaChars?: LooseOptional<number>
 }): Nullable<number> {
-  if (input.profile === 'expanded') return null
-
   if (isNumber(input.profileMaxToolSchemaChars) && isNumber(input.dynamicMaxToolSchemaChars)) return Math.min(input.profileMaxToolSchemaChars, input.dynamicMaxToolSchemaChars)
 
   if (isNumber(input.profileMaxToolSchemaChars)) return input.profileMaxToolSchemaChars
@@ -237,9 +236,11 @@ function applyRunProfileToolExposure(
   const candidateTools = [...allowedTools]
   const residentTools = candidateTools.filter(
     (toolName) =>
+      protectedToolSet.has(toolName) ||
       resolveToolExposure(toolName, profile, toolDescriptorByName.get(toolName)).alwaysResident
   )
-  const pageableTools = candidateTools.filter((toolName) => !residentTools.includes(toolName))
+  const residentToolSet = new Set(residentTools)
+  const pageableTools = candidateTools.filter((toolName) => !residentToolSet.has(toolName))
   const orderedResidentTools =
     residentTools.length > 1
       ? sortToolsByBudgetPriority(
@@ -270,6 +271,12 @@ function applyRunProfileToolExposure(
         maxToolSchemaChars! - sumToolSchemaChars(orderedResidentTools, options.toolSchemaChars!)
       )
     : null
+  const exposedToolLimit = schemaBudgetActive
+    ? getSoftToolCountLimit(maxToolCount)
+    : maxToolCount
+  const pageableToolLimit = isNumber(exposedToolLimit)
+    ? Math.max(0, exposedToolLimit - orderedResidentTools.length)
+    : null
   const exposedPageableTools = schemaBudgetActive
     ? applyToolCountBudget(
         applyToolSchemaCharBudget(orderedTools, {
@@ -277,10 +284,10 @@ function applyRunProfileToolExposure(
           toolSchemaChars: options.toolSchemaChars!,
           allowOversizeFirst: isEmpty(orderedResidentTools),
         }),
-        maxToolCount,
-        { soft: true }
+        pageableToolLimit,
+        { soft: false }
       )
-    : applyToolCountBudget(orderedTools, maxToolCount, { soft: false })
+    : applyToolCountBudget(orderedTools, pageableToolLimit, { soft: false })
   const exposedTools = [...new Set([...orderedResidentTools, ...exposedPageableTools])]
   const exposedSet = new Set(exposedTools)
 
@@ -324,5 +331,6 @@ export {
   applyRunProfileToolExposure,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
+  resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 }

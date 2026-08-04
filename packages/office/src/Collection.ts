@@ -1,4 +1,4 @@
-import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/ToolDescription'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 
 import { markitdownTools } from './markitdown.tool'
 import { pdfTools } from './pdf.tool'

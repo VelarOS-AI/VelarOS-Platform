@@ -362,7 +362,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         this.killProcessTree(task.pid, signal)
         terminated = true
       } catch (error) {
-        if (this.isProcessMissingError(error)) {
+        if (this.platformTools.isProcessMissingError(error)) {
           message = '后台进程已经退出。'
         } else {
           throw new AppError('PLATFORM', '终止后台进程失败。', error, {
@@ -914,7 +914,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     try {
       this.killProcessTree(pid, signal)
     } catch (error) {
-      if (this.isProcessMissingError(error)) return
+      if (this.platformTools.isProcessMissingError(error)) return
 
       log.warn('failed to reap command process tree', {
         pid,
@@ -1080,7 +1080,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       process.kill(pid, 0)
       return true
     } catch (error) {
-      if (this.isProcessMissingError(error)) return false
+      if (this.platformTools.isProcessMissingError(error)) return false
       if (this.isProcessPermissionError(error)) return true
       log.debug('检查进程状态失败，按已退出处理', {
         pid,
@@ -1092,12 +1092,6 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
   private resolveBackgroundTaskStatus(task: SystemBackgroundTaskRecord): SystemBackgroundTaskStatus {
     return this.isProcessAlive(task.pid) ? 'running' : 'exited'
-  }
-
-  /** ESRCH = "进程不存在"。数值 errno 3 是同一个含义的另一种呈现（部分平台只给 errno 不给 code）。 */
-  private isProcessMissingError(error: unknown): boolean {
-    if (!isPlainObject(error)) return false
-    return error.code === 'ESRCH' || error.errno === 3
   }
 
   private isProcessPermissionError(error: unknown): boolean {

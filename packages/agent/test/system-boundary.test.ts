@@ -25,7 +25,7 @@ function listTypeScriptFiles(directory: string): string[] {
 }
 
 describe('Agent System boundary', () => {
-  test('agent-runtime has no concrete System package dependency', () => {
+  test('Agent has no concrete System package dependency', () => {
     const packageJson = JSON.parse(
       readFileSync(join(PackageRoot, 'package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> }

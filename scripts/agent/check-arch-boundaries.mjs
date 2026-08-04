@@ -121,6 +121,49 @@ function stripCodeComments(source) {
   return result
 }
 
+// Contract markers describe syntax, not formatter layout. Remove whitespace only while
+// outside string/template literals so prettier/biome line wrapping cannot disable a gate,
+// while literal values (including spaces) remain exact.
+function canonicalizeCodeLayout(source) {
+  let result = ''
+  let state = 'code' // code | single | double | template
+  for (let index = 0; index < source.length; index += 1) {
+    const ch = source[index]
+    if (state === 'code') {
+      if (/\s/u.test(ch)) continue
+      if (ch === ',') {
+        let lookahead = index + 1
+        while (/\s/u.test(source[lookahead] ?? '')) lookahead += 1
+        if (/[)\]}]/u.test(source[lookahead] ?? '')) continue
+      }
+      if (ch === "'") state = 'single'
+      else if (ch === '"') state = 'double'
+      else if (ch === '`') state = 'template'
+      result += ch
+      continue
+    }
+
+    result += ch
+    if (ch === '\\') {
+      result += source[index + 1] ?? ''
+      index += 1
+      continue
+    }
+    if (
+      (state === 'single' && ch === "'") ||
+      (state === 'double' && ch === '"') ||
+      (state === 'template' && ch === '`')
+    ) {
+      state = 'code'
+    }
+  }
+  return result
+}
+
+function canonicalContractSource(source) {
+  return canonicalizeCodeLayout(stripCodeComments(source))
+}
+
 // —— 防线① kernel 簇 import 方向边界 ——
 function scanKernelClusterBoundary() {
   const violations = []
@@ -247,12 +290,17 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
 
   for (const contract of contracts) {
     const source = readFileSync(resolve(RepoRoot, contract.file), 'utf8')
-    const missing = contract.requiredMarkers.filter((marker) => !source.includes(marker))
+    const canonicalSource = canonicalContractSource(source)
+    const canonicalRequiredMarkers = contract.requiredMarkers.map(canonicalizeCodeLayout)
+    const canonicalOrderedMarkers = contract.orderedMarkers.map(canonicalizeCodeLayout)
+    const missing = contract.requiredMarkers.filter(
+      (_marker, index) => !canonicalSource.includes(canonicalRequiredMarkers[index]),
+    )
     const ordered =
-      contract.orderedMarkers.length < 2 ||
-      contract.orderedMarkers.every((marker, index) => {
-        if (index === 0) return source.indexOf(marker) >= 0
-        return source.indexOf(marker) > source.indexOf(contract.orderedMarkers[index - 1])
+      canonicalOrderedMarkers.length < 2 ||
+      canonicalOrderedMarkers.every((marker, index) => {
+        if (index === 0) return canonicalSource.indexOf(marker) >= 0
+        return canonicalSource.indexOf(marker) > canonicalSource.indexOf(canonicalOrderedMarkers[index - 1])
       })
     if (missing.length === 0 && ordered) continue
 
@@ -356,8 +404,8 @@ function scanConcreteSemanticInjectionBoundary() {
     lines.forEach((line, index) => {
       if (!concreteRuntimeLiteralPattern.test(line)) return
       violations.push({
-        rule: 'agent-runtime-concrete-semantic-literal',
-        fingerprint: `agent-runtime-concrete-semantic-literal::${relativeFile}:${index + 1}`,
+        rule: 'agent-concrete-semantic-literal',
+        fingerprint: `agent-concrete-semantic-literal::${relativeFile}:${index + 1}`,
         message: `${relativeFile}:${index + 1}: Agent Runtime 不得硬编码具体能力 id、工具名或隔离原因。`,
       })
     })
@@ -372,8 +420,8 @@ function scanConcreteSemanticInjectionBoundary() {
     if (!match) continue
     const line = source.slice(0, match.index).split('\n').length
     violations.push({
-      rule: 'agent-runtime-concrete-semantic-vocabulary',
-      fingerprint: `agent-runtime-concrete-semantic-vocabulary::${relativeFile}:${line}`,
+      rule: 'agent-concrete-semantic-vocabulary',
+      fingerprint: `agent-concrete-semantic-vocabulary::${relativeFile}:${line}`,
       message: `${relativeFile}:${line}: Agent Runtime 的代码、文案和注释都不得解释具体产品能力；请使用 capability/resource/scope 中立术语。`,
     })
   }
@@ -434,7 +482,10 @@ function scanConcreteSemanticInjectionBoundary() {
   ]
   for (const contract of requiredInjectionMarkers) {
     const source = readFileSync(resolve(RepoRoot, contract.file), 'utf8')
-    const missing = contract.markers.filter((marker) => !source.includes(marker))
+    const canonicalSource = canonicalContractSource(source)
+    const missing = contract.markers.filter(
+      (marker) => !canonicalSource.includes(canonicalizeCodeLayout(marker)),
+    )
     if (missing.length === 0) continue
     violations.push({
       rule: 'capability-injection-wiring',
@@ -526,7 +577,12 @@ function scanReleaseIdentityBoundary() {
       continue
     }
     const source = readFileSync(contractPath, 'utf8')
-    const missing = contract.markers.filter((marker) => !source.includes(marker))
+    const isCodeContract = /\.(?:[cm]?[jt]sx?)$/u.test(contract.file)
+    const canonicalSource = isCodeContract ? canonicalContractSource(source) : source
+    const missing = contract.markers.filter((marker) => {
+      const canonicalMarker = isCodeContract ? canonicalizeCodeLayout(marker) : marker
+      return !canonicalSource.includes(canonicalMarker)
+    })
     if (missing.length === 0) continue
     violations.push({
       rule: 'release-artifact-identity',

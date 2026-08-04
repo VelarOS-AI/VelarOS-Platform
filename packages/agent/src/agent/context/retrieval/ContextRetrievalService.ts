@@ -1,4 +1,7 @@
-import { isEmpty, isFiniteNumber,isNotNull, isPositiveNumber, numberOrNull, toNullable } from '@velaros-ai/core'
+import {
+  normalizeSessionLineageId,
+  normalizeSessionLineageIdList,
+} from '@velaros-ai/agent'
 import type {
   ChatContextReadEvidenceRequest,
   ChatContextReadEvidenceResult,
@@ -14,11 +17,8 @@ import type {
   ChatContextSearchTerminalOutputRequest,
   ChatContextSearchTerminalOutputResult,
   SessionLineageContext,
-} from '@velaros-ai/core/types'
-import {
-  normalizeSessionLineageId,
-  normalizeSessionLineageIdList,
-} from '@velaros-ai/core/utils/sessionLineage'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty, isFiniteNumber,isNotNull, isPositiveNumber, numberOrNull, toNullable } from '@velaros-ai/core'
 
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { compareStableStrings } from '../residency/determinism'

@@ -3,8 +3,8 @@
 // 装配链只读快照投影，不直接遍历注册表（保证「每回合固定 generation」的消费纪律）。
 // 投影是纯函数：同一快照恒得同一结果，且**保持载荷对象同一性**——装载不复制、不包装、
 // 不改写运行态载荷，这是「官方内置经同一 Loader 装载后行为零变化」的结构性保证。
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isNotNull } from '@velaros-ai/core'
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'
@@ -126,10 +126,11 @@ function projectAgentModSpaces(snapshot: AgentModRegistrySnapshot): AgentModSpac
 }
 
 /**
- * 把职责包声明的 `residentInSpaces` 汇入空间配方。
+ * 把职责包声明的可用性与常驻性汇入空间配方。
  *
- * 空间只拥有身份和基础策略；文件、执行、开发等职责包通过各自工具声明加入空间，因而
- * 不需要再复制一份 Desktop 专用工具清单。引用不存在的空间属于无效装配，直接报错。
+ * `availableInSpaces` 只把工具所属类别绑定到空间；`residentInSpaces` 才把具体工具 schema
+ * 钉进常驻集。两者不能混用，否则“这个空间能用”会退化成“每轮必须发送完整 schema”。
+ * 引用不存在的空间属于无效装配，直接报错。
  */
 function composeAgentModSpaces(snapshot: AgentModRegistrySnapshot): AgentModSpaceContribution[] {
   const recipes = new Map(
@@ -140,14 +141,27 @@ function composeAgentModSpaces(snapshot: AgentModRegistrySnapshot): AgentModSpac
     }])
   )
 
+  const resolveRecipe = (
+    record: AgentModRegistrySnapshot['tools'][number],
+    spaceId: string
+  ) => {
+    const recipe = recipes.get(spaceId)
+    if (!recipe) {
+      throw new Error(
+        `Agent mod「${record.modId}」的工具「${record.key}」引用了不存在的空间「${spaceId}」。`
+      )
+    }
+    return recipe
+  }
+
   for (const record of snapshot.tools) {
+    for (const spaceId of record.declaration.availableInSpaces ?? []) {
+      const recipe = resolveRecipe(record, spaceId)
+      if (record.declaration.categoryId)
+        recipe.toolCategoryIds.add(record.declaration.categoryId)
+    }
     for (const spaceId of record.declaration.residentInSpaces ?? []) {
-      const recipe = recipes.get(spaceId)
-      if (!recipe) {
-        throw new Error(
-          `Agent mod「${record.modId}」的工具「${record.key}」引用了不存在的空间「${spaceId}」。`
-        )
-      }
+      const recipe = resolveRecipe(record, spaceId)
       recipe.residentToolNames.add(record.key)
       if (record.declaration.categoryId)
         recipe.toolCategoryIds.add(record.declaration.categoryId)

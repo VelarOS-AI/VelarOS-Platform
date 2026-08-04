@@ -1,16 +1,26 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isFunction, isObject, isPresent,isString, toNullable, truncate } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentDelegationContract,
+  AgentModelInputModality,
   AgentRoleExpectedOutputKind,
   AgentRoleId,
   ToolAvailabilityScope,
   ToolCategoryId,
   ToolCategoryOverview,
   ToolDescriptor,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import {
+  isArray,
+  isEmpty,
+  isFunction,
+  isObject,
+  isPresent,
+  isString,
+  toNullable,
+  truncate,
+} from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
 
@@ -72,6 +82,9 @@ interface SubAgentContextBase {
   getEnabledToolCategories(): ToolCategoryId[]
   getCurrentVisibleToolNames(): string[]
   setCurrentVisibleToolNames(toolNames: string[]): void
+  getSupportedModelInputModalities(): readonly AgentModelInputModality[]
+  setSupportedModelInputModalities(modalities: readonly AgentModelInputModality[]): void
+  system?: unknown
   getCurrentVisibleToolSurfaceProfile?(toolName: string): unknown
   setCurrentVisibleToolSurfaceProfiles?(profiles: Record<string, unknown>): void
   codingSession: {
@@ -127,20 +140,18 @@ type BackgroundCommandSystemBoundary = {
 
 function createSubAgentSystemBoundary<TContext extends SubAgentContextBase>(
   parentCtx: TContext
-): Partial<TContext> {
-  const system = (parentCtx as { system?: unknown }).system
-  if (!system || !isObject(system)) return {}
+): TContext['system'] {
+  const system = parentCtx.system
+  if (!system || !isObject(system)) return system
 
   const backgroundBoundary = system as Partial<BackgroundCommandSystemBoundary>
-  if (!isFunction(backgroundBoundary.canStartBackgroundCommands)) return {}
+  if (!isFunction(backgroundBoundary.canStartBackgroundCommands)) return system
 
   const boundedSystem = Object.create(Object.getPrototypeOf(system)) as Record<string, unknown>
   Object.assign(boundedSystem, system)
   boundedSystem.canStartBackgroundCommands = () => false
 
-  return {
-    system: boundedSystem,
-  } as unknown as Partial<TContext>
+  return boundedSystem
 }
 
 /** 无显式合约时，从 query 参数构造最小委派合约。 */
@@ -261,6 +272,7 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
       .getAllowedSubAgentTools([...args.roleResolution.allowedTools])
       .filter((toolName) => !blockedToolNames.has(toolName))
   )
+  let supportedModelInputModalities = [...args.parentCtx.getSupportedModelInputModalities()]
   const expandAllowedToolsForCategories = (categories: readonly ToolCategoryId[]): void => {
     const enabledCategories = categories.filter(
       (categoryId) => !blockedCategoryIds.has(categoryId)
@@ -344,7 +356,7 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
 
   return {
     ...args.parentCtx,
-    ...createSubAgentSystemBoundary(args.parentCtx),
+    system: createSubAgentSystemBoundary(args.parentCtx),
     log: args.log,
     role: {
       id: args.roleResolution.id,
@@ -380,6 +392,10 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
     },
     getEnabledToolCategories: () => [...allowedCategorySet],
     getCurrentVisibleToolNames: () => [...allowedToolSet],
+    getSupportedModelInputModalities: () => [...supportedModelInputModalities],
+    setSupportedModelInputModalities: (modalities) => {
+      supportedModelInputModalities = [...new Set(modalities)]
+    },
     listCapabilityPages: undefined,
     setCurrentVisibleToolNames: () => {
       // 子 Agent 的工具边界由 delegation scope 固定，不能在子上下文内扩大。

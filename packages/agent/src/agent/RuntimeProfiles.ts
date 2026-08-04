@@ -1,15 +1,15 @@
-import { isNotUndefined, isNumber } from '@velaros-ai/core'
-import {
-  assertRunProfileId,
-  parseOptionalRunProfileSelectionId,
-} from '@velaros-ai/core/constants/typedFieldAsserts'
 import type {
   RunProfileDefinition,
   RunProfileId,
   RunProfileRuntimePolicy,
   RunProfileSelectionId,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import {
+  assertRunProfileId,
+  parseOptionalRunProfileSelectionId,
+} from '@velaros-ai/agent/protocol'
+import { isNotUndefined, isNumber } from '@velaros-ai/core'
 
 const AutoRunProfileSelectionId: RunProfileSelectionId = 'auto'
 const DefaultRunProfileSelectionId: RunProfileSelectionId = AutoRunProfileSelectionId
@@ -24,9 +24,10 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     label: 'Compact',
     description: 'Bounded runtime profile for smaller context windows.',
     budget: {
-      maxToolCount: 64,
+      maxToolCount: 32,
       maxSystemPromptChars: 80_000,
-      maxToolSchemaChars: 220_000,
+      maxInputWorkingSetTokens: 48_000,
+      maxToolSchemaChars: 48_000,
     },
     defaults: {
       thinkingDepth: 'fast',
@@ -40,9 +41,10 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     label: 'Balanced',
     description: 'Default runtime profile for medium and large context windows.',
     budget: {
-      maxToolCount: 160,
+      maxToolCount: 64,
       maxSystemPromptChars: 220_000,
-      maxToolSchemaChars: 360_000,
+      maxInputWorkingSetTokens: 96_000,
+      maxToolSchemaChars: 96_000,
     },
     defaults: {
       thinkingDepth: 'balanced',
@@ -54,11 +56,12 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   expanded: {
     id: 'expanded',
     label: 'Expanded',
-    description: 'Unbounded runtime profile for very large context windows.',
+    description: 'Broad but cognitively bounded runtime profile for very large context windows.',
     budget: {
-      maxToolCount: null,
+      maxToolCount: 128,
       maxSystemPromptChars: null,
-      maxToolSchemaChars: null,
+      maxInputWorkingSetTokens: 192_000,
+      maxToolSchemaChars: 192_000,
     },
     defaults: {
       thinkingDepth: 'deep',
@@ -67,6 +70,21 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     },
     automaticToolCategories: [],
   },
+}
+
+/**
+ * 物理模型窗口定义“最多能装多少”，run profile 定义“本次运行允许长期携带多少”。
+ * 两者取较小值，使 compact/balanced/expanded 的成本语义不随 1M 等大窗口模型失效。
+ */
+function resolveRunProfileWorkingSetContextWindow(input: {
+  physicalContextWindow: number
+  profile: RunProfileId
+}): number {
+  const physicalContextWindow = Math.max(1, Math.floor(input.physicalContextWindow))
+  const limit = RunProfileDefinitions[input.profile].budget.maxInputWorkingSetTokens
+  return isNumber(limit)
+    ? Math.min(physicalContextWindow, Math.max(1, Math.floor(limit)))
+    : physicalContextWindow
 }
 
 function resolveRunProfilePolicyForRuntime(input: {
@@ -142,5 +160,6 @@ export {
   getToolSurfaceFallbackChain,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
+  resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 }

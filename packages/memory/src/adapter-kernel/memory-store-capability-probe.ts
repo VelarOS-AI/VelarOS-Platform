@@ -13,14 +13,15 @@
 
 import assert from 'node:assert/strict'
 
-import { KernelModuleHost } from '@velaros-ai/core/kernel/host'
+import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
 import { createMemoryFilesBackend, MemoryFilesBackendId } from '../files'
 import { createInMemoryMemoryFilesIo } from '../files/Io'
 import { createMemoryVectorBackend, MemoryVectorBackendId } from '../vector'
 import {
   createMemoryTreeStoreBackend,
-  type MemoryDomain,
+  MemoryDomain,
   type MemoryStoreBackend,
   MemoryTreeBackendId,
 } from '..'
@@ -67,7 +68,7 @@ function createFakeDomain(): { domain: MemoryDomain; calls: DomainCallLog } {
     forgetClaim: 0,
     setSessionEvidenceEligibility: 0,
   }
-  const domain = {
+  const domain = Object.assign(Object.create(MemoryDomain.prototype), {
     captureEvidence: () => {
       calls.captureEvidence += 1
       return { evidence: { id: 'ev-1' }, inserted: true }
@@ -110,7 +111,7 @@ function createFakeDomain(): { domain: MemoryDomain; calls: DomainCallLog } {
     },
     warmup: () => ({ state: 'skipped' }),
     recoverOrphanDreamRuns: () => 0,
-  } as unknown as MemoryDomain
+  }) as MemoryDomain
   return { domain, calls }
 }
 
@@ -160,18 +161,13 @@ function probeTokenShape(): void {
       !== createMemoryStoreCapabilityToken('tree').id,
     '一档一 token：共享 id 会把叠加语义降级成三选一',
   )
-  let rejected = false
-  try {
-    memoryStoreCapabilityId('   ')
-  } catch {
-    rejected = true
-  }
-  check(rejected, '空后端 id 必须被拒')
+  assert.throws(() => memoryStoreCapabilityId('   '), '空后端 id 必须被拒')
+  assertionCount += 1
 }
 
 // ── ①②③ 并存注册 / 优先序解析 / 没装就没有 ────────────────────────────────
 async function probeRegistryResolution(): Promise<void> {
-  const empty = new KernelModuleHost({ apiVersion: 1 })
+  const empty = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
   await empty.start()
   equal(
     resolveMemoryStoreBackend({ registry: empty, preference: ['files', 'tree'] }),
@@ -188,7 +184,7 @@ async function probeRegistryResolution(): Promise<void> {
   const treeBackend = createMemoryTreeStoreBackend(domain)
   const filesBackend = createFilesBackend()
 
-  const host = new KernelModuleHost({ apiVersion: 1 })
+  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
   host.registerModule(createMemoryStoreKernelModule({ backend: treeBackend }))
   host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
   await host.start()
@@ -265,7 +261,7 @@ async function probeDefaultFallback(): Promise<void> {
 async function probeFilesRouting(): Promise<void> {
   const { domain, calls } = createFakeDomain()
   const filesBackend = createFilesBackend()
-  const host = new KernelModuleHost({ apiVersion: 1 })
+  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
   host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
   await host.start()
 
@@ -303,7 +299,7 @@ async function probeDerivedIndexRoleGate(): Promise<void> {
     },
   })
 
-  const host = new KernelModuleHost({ apiVersion: 1 })
+  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
   host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
   host.registerModule(createMemoryStoreKernelModule({ backend: vectorBackend }))
   await host.start()
@@ -341,4 +337,4 @@ assert.equal(
   ExpectedAssertionCount,
   `断言数应为 ${ExpectedAssertionCount}，实际 ${assertionCount}（改动断言时同步更新常量）`,
 )
-console.info(`[memory-store-capability] 探针通过：${assertionCount} 条断言。`)
+process.stdout.write(`[memory-store-capability] 探针通过：${assertionCount} 条断言。\n`)

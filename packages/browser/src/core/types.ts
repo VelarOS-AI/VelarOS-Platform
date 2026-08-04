@@ -740,6 +740,13 @@ export interface BrowserTargetActionResult {
   blockedBy?: LooseOptional<string>
   selectedValues?: LooseOptional<string[]>
   availableOptions?: LooseOptional<Array<{ value: string; text: string; selected: boolean }>>
+  controlState?: LooseOptional<{
+    kind: 'text' | 'checkable' | 'select' | 'contenteditable'
+    value?: LooseOptional<string>
+    valueLength?: LooseOptional<number>
+    checked?: LooseOptional<boolean>
+    selectedValues?: LooseOptional<string[]>
+  }>
   capturedAt: number
 }
 
@@ -1408,7 +1415,7 @@ export interface BrowserPerformanceTraceStartOptions {
   /** true（默认）：先跳 about:blank 再回跳原 URL，录制完整加载过程；false：从当前页面状态原地开录。 */
   reload?: boolean
   /** 录制这么久后自动停止并返回分析；null/0 表示保持录制直到显式 stop_trace。默认 5000ms。 */
-  autoStopMs?: Nullable<number>
+  autoStopMs?: LooseOptional<number>
 }
 
 export interface BrowserPerformanceTraceStopResult {

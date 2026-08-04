@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
-import { isNotUndefined, isUndefined } from '@velaros-ai/core'
 import {
   type AppliedAdjustment,
   clampedInt,
   inferActionFromFields,
-} from '@velaros-ai/core/utils/ForgivingSchema'
+} from '@velaros-ai/agent/tool-contract'
+import { isNotUndefined, isUndefined } from '@velaros-ai/core'
 
 import {
   createGameReferenceSchema,

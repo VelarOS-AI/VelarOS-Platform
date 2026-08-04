@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
 import {
+  AppError,
   isBlank,
   isNotNull,
   isPlainObject,
@@ -21,9 +22,15 @@ import {
 const runningHosts = new Set<VelarHostRuntime>()
 
 export interface ServeCliRunResult {
+  readonly command: string
   readonly text: string
   readonly exitCode: number
   readonly envelope?: unknown
+  readonly error?: {
+    readonly code: string
+    readonly message: string
+    readonly details: Record<string, unknown>
+  }
 }
 
 export interface ServeCliRunOptions {
@@ -36,6 +43,18 @@ interface ParsedServeArgs {
   projectRoot?: string
   pythonCommand?: string
   json: boolean
+}
+
+class ServeCliError extends Error {
+  public constructor(
+    public readonly code: string,
+    message: string,
+    public readonly exitCode: number,
+    public readonly details: Record<string, unknown> = {}
+  ) {
+    super(message)
+    this.name = 'ServeCliError'
+  }
 }
 
 function parseServeArgs(argv: string[]): ParsedServeArgs {
@@ -53,7 +72,14 @@ function parseServeArgs(argv: string[]): ParsedServeArgs {
     command = 'help'
     startIndex = 1
   }
-  if (!isPresent(command)) throw new Error(`Unknown serve command: ${commandValue}`)
+  if (!isPresent(command)) {
+    throw new ServeCliError(
+      'UNKNOWN_COMMAND',
+      `Unknown serve command: ${commandValue}`,
+      2,
+      { command: commandValue }
+    )
+  }
   let dataRoot: string | undefined
   let projectRoot: string | undefined
   let pythonCommand: string | undefined
@@ -64,24 +90,43 @@ function parseServeArgs(argv: string[]): ParsedServeArgs {
       json = true
       continue
     }
-    if (argument === '--data-root' || argument === '--project-root' || argument === '--python') {
+    if (
+      argument === '--data-root'
+      || argument === '--project-root'
+      || argument === '--workspace-root'
+      || argument === '--python'
+    ) {
       const value = argv[++index]
       if (!isPresent(value) || isBlank(value)) {
-        throw new Error(`${argument} requires a path`)
+        throw new ServeCliError('ARGUMENT_ERROR', `${argument} requires a path`, 2, {
+          flag: argument,
+        })
       }
       if (argument === '--data-root') dataRoot = value
-      else if (argument === '--project-root') projectRoot = value
+      else if (argument === '--project-root' || argument === '--workspace-root') projectRoot = value
       else pythonCommand = value
       continue
     }
     if (argument === '--help' || argument === '-h') return { command: 'help', json }
-    throw new Error(`Unknown serve option: ${argument}`)
+    throw new ServeCliError('ARGUMENT_ERROR', `Unknown serve option: ${argument}`, 2, {
+      flag: argument,
+    })
   }
   if (isPresent(projectRoot) && command !== 'start') {
-    throw new Error('--project-root is only valid for velaros serve start')
+    throw new ServeCliError(
+      'ARGUMENT_ERROR',
+      '--project-root is only valid for velaros serve start',
+      2,
+      { flag: '--project-root', command }
+    )
   }
   if (isPresent(pythonCommand) && command !== 'computer-install') {
-    throw new Error('--python is only valid for velaros serve computer install')
+    throw new ServeCliError(
+      'ARGUMENT_ERROR',
+      '--python is only valid for velaros serve computer install',
+      2,
+      { flag: '--python', command }
+    )
   }
   return { command, dataRoot, projectRoot, pythonCommand, json }
 }
@@ -103,9 +148,18 @@ export async function runServeCli(
   argv: string[],
   options: ServeCliRunOptions = {},
 ): Promise<ServeCliRunResult> {
+  let command = 'unknown'
   try {
     const parsed = parseServeArgs(argv)
-    if (parsed.command === 'help') return { text: serveHelp(), exitCode: 0 }
+    command = parsed.command === 'computer-install' ? 'computer.install' : parsed.command
+    if (parsed.command === 'help') return {
+      command,
+      text: serveHelp(),
+      exitCode: 0,
+      envelope: {
+        commands: ['start', 'status', 'control', 'computer install'],
+      },
+    }
     if (parsed.command === 'status') {
       const status = await readHostStatus(parsed.dataRoot)
       const result = {
@@ -113,6 +167,7 @@ export async function runServeCli(
         status,
       }
       return {
+        command,
         text: parsed.json
           ? `${JSON.stringify(result)}\n`
           : !isNotNull(status)
@@ -124,7 +179,15 @@ export async function runServeCli(
     }
     if (parsed.command === 'control') {
       const status = await readHostStatus(parsed.dataRoot)
-      if (!isNotNull(status) || !isProcessAlive(status.pid)) return { text: 'Velar Host is not running.\n', exitCode: 1 }
+      if (!isNotNull(status) || !isProcessAlive(status.pid)) {
+        const result = { running: false, controlUrl: null }
+        return {
+          command,
+          text: parsed.json ? `${JSON.stringify(result)}\n` : 'Velar Host is not running.\n',
+          exitCode: 1,
+          envelope: result,
+        }
+      }
       const token = (await readFile(createVelarHostPaths(parsed.dataRoot).controlTokenPath, 'utf8'))
         .trim()
       if (!/^[A-Za-z0-9_-]{40,128}$/u.test(token)) {
@@ -132,10 +195,12 @@ export async function runServeCli(
       }
       const controlUrl = `${status.control.endpoint}/#token=${encodeURIComponent(token)}`
       return {
+        command,
         text: parsed.json
           ? `${JSON.stringify({ controlUrl })}\n`
           : `${controlUrl}\n`,
         exitCode: 0,
+        envelope: { running: true, controlUrl },
       }
     }
     if (parsed.command === 'computer-install') {
@@ -145,6 +210,7 @@ export async function runServeCli(
         pythonCommand: toOptional(parsed.pythonCommand),
       })
       return {
+        command,
         text: parsed.json
           ? `${JSON.stringify(installation)}\n`
           : installation.installed
@@ -168,6 +234,7 @@ export async function runServeCli(
     }
     const result = runtime.status
     return {
+      command,
       text: parsed.json
         ? `${JSON.stringify(result)}\n`
         : [
@@ -183,9 +250,22 @@ export async function runServeCli(
       envelope: result,
     }
   } catch (error) {
+    const normalized = error instanceof ServeCliError
+      ? error
+      : new ServeCliError(
+          'EXECUTION_ERROR',
+          AppError.getMessage(error),
+          1
+        )
     return {
-      text: `${error instanceof Error ? error.message : String(error)}\n`,
-      exitCode: 1,
+      command,
+      text: `${normalized.message}\n`,
+      exitCode: normalized.exitCode,
+      error: {
+        code: normalized.code,
+        message: normalized.message,
+        details: normalized.details,
+      },
     }
   }
 }

@@ -12,7 +12,7 @@ import {
   ContextUsageCompactionPercent,
   type ContextUsageEstimate,
   estimateContextUsage,
-} from '@velaros-ai/core/utils/contextUsage'
+} from '@velaros-ai/agent'
 
 import {
   type ContextLedgerEntry,

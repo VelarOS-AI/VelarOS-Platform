@@ -1,4 +1,4 @@
-import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 
 export type ComputerToolCapabilitySchema = ToolCapabilitySchema & {
   metadata: Readonly<Record<string, unknown>>

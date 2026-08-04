@@ -26,8 +26,8 @@
 
 import { type z } from 'zod'
 
+import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '@velaros-ai/agent/protocol'
 import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
-import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '@velaros-ai/core/types'
 
 import { compareStableStrings } from '../../agent/context/residency/determinism'
 import {
@@ -155,6 +155,41 @@ function summarizeToolSpacePageRef(
   }
 }
 
+/**
+ * find 是高频路由结果，只返回“选哪张页、下一步怎么做”所需字段。
+ * 完整 access gates / reasons / dependency graph 留在 page/map 结果，避免一次意图检索把同一依赖
+ * 以多种展开形状重复塞进后续每轮历史。
+ */
+function summarizeToolSpaceFindRef(
+  card: ToolDiscoveryCard,
+  score: number,
+  matchedFields: ToolSearchResultEntry['matchedFields']
+): ToolSearchResultEntry {
+  const activation = buildToolActivationRef(card)
+  return {
+    id: card.id,
+    kind: card.kind,
+    name: card.name,
+    categoryId: card.categoryId,
+    summary: card.summary,
+    score,
+    availability: card.availability,
+    toolOsState: card.toolOsState,
+    risk: card.risk,
+    schemaState: card.schemaState,
+    schemaPolicy: card.schemaPolicy,
+    nextAction: card.nextAction,
+    resident: card.resident,
+    activation: {
+      method: activation.method,
+      pageIn: activation.pageIn,
+      capabilityId: activation.capabilityId,
+      nextTool: activation.nextTool,
+    },
+    matchedFields,
+  }
+}
+
 function buildToolSpaceStatusSummary(cards: readonly ToolDiscoveryCard[]) {
   const byKind = Object.fromEntries(
     ToolDiscoveryKindValues.map((kind) => [kind, cards.filter((card) => card.kind === kind).length])
@@ -243,13 +278,12 @@ export function searchToolDiscoveryCards(
       hasMore,
       nextCursor,
     },
-    pages: page.map(
-      ({ card, score }) =>
-        ({
-          ...summarizeToolSpacePageRef(card),
-          score,
-          matchSignals: buildMatchSignals(card, terms, scoreContext),
-        }) satisfies ToolSearchResultEntry
+    pages: page.map(({ card, score }) =>
+      summarizeToolSpaceFindRef(
+        card,
+        score,
+        [...new Set(buildMatchSignals(card, terms, scoreContext).map((signal) => signal.field))]
+      )
     ),
     statusSummary,
     hasMore,
@@ -258,7 +292,7 @@ export function searchToolDiscoveryCards(
   }
 }
 
-function parseToolSpaceCursor(cursor: Nullable<string> | undefined): number {
+function parseToolSpaceCursor(cursor: LooseOptional<string>): number {
   if (!cursor) return 0
 
   const value = Number(cursor)

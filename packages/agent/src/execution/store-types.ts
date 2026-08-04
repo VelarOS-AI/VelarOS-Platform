@@ -2,7 +2,7 @@ import type {
   ExecutionEventRecord,
   ExecutionRecord,
   ExecutionTaskRecord,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 type AppendExecutionEventInput = Omit<
   ExecutionEventRecord,

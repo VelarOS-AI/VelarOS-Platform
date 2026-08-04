@@ -431,26 +431,6 @@ console.info(${JSON.stringify(record.manifest.name)} + \` runtime imports passed
     { stdio: 'inherit' },
   )
 
-  if (record.packedManifest.exports?.['./cli']) {
-    await writeFile(
-      path.join(consumerRoot, 'cli.mjs'),
-      `import { runToolCollectionCli } from ${JSON.stringify(`${record.manifest.name}/cli`)}
-
-const result = await runToolCollectionCli(['help'], {
-  namespace: 'package-consumer',
-  binName: 'package-consumer',
-  tools: {},
-  createContext: () => ({}),
-})
-if (result.exitCode !== 0 || !result.text.includes('Commands:')) {
-  throw new Error('CLI help contract failed')
-}
-console.info(${JSON.stringify(record.manifest.name)} + ' CLI contract passed')
-`,
-    )
-    run(process.execPath, ['cli.mjs'], consumerRoot, { stdio: 'inherit' })
-  }
-
   console.info(
     `${record.manifest.name} isolated consumer passed (internal closure: ${closure.join(', ')})`,
   )

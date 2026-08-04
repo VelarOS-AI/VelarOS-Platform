@@ -1,4 +1,5 @@
 import type {
+  AgentModelInputModality,
   AgentRoleId,
   CapabilityScopeId,
   ChatPromptFeatureId,
@@ -9,7 +10,7 @@ import type {
   ToolProviderKind,
   ToolRole,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
 
@@ -17,6 +18,13 @@ interface ToolRegistryCodingSession {
   isToolCategoryAllowed: (categoryId: ToolCategoryId) => boolean
   hasToolCategoryAccess(categoryId: ToolCategoryId): boolean
   hasActiveToolCategoryAccess: (categoryId: ToolCategoryId) => boolean
+  /**
+   * 具体工具是否由 tooling:replace 显式换入。
+   *
+   * Prompt feature 是产品入口选择，不是第二套工具权限。显式工具租约只对这一项
+   * schema 生效，仍需通过类别、作用域、系统开关和工具自身运行态闸门。
+   */
+  hasToolNameAccess?: (toolName: string) => boolean
   hasPromptFeatureAccess: (feature: ChatPromptFeatureId) => boolean
   getToolSurfaceProfile: () => ToolSurfaceProfileId
   /** 会话声明/切换后的当前能力作用域；可选——外部端口缺失时回退运行态推断。 */
@@ -31,6 +39,8 @@ interface ToolRegistryContext {
   codingSession: ToolRegistryCodingSession
   capabilityPorts?: AgentRuntimeCapabilityPorts
   isToolSystemEnabled(toolName: string): boolean
+  /** 本轮实际模型声明支持的输入类型；缺席时注册表按 text-only fail closed。 */
+  getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
 }
 
 interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContext> {
@@ -38,6 +48,7 @@ interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContex
   role?: ToolRole
   permissions: ToolPermission[]
   capabilities?: ToolCapabilitySchema
+  requiredModelInputModalities?: readonly AgentModelInputModality[]
   exposure?: ToolExposurePolicy
   /** 输出禁止 page-out、始终内联（发现/索引类工具，如 tooling:map）。 */
   outputInline?: boolean

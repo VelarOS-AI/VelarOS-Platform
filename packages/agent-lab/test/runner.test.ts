@@ -185,4 +185,45 @@ describe("continuous journey runner", () => {
     expect(result.legs[0]?.passed).toBeNull();
     expect(result.drops[0]?.cause).toBe("harness-failure");
   });
+
+  test("refreshes executor identity after the native session settles", async () => {
+    const driver = successfulDriver([], []);
+    let identityReads = 0;
+    driver.identity = async () => ({
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: identityReads++ === 0 ? null : "airjelly",
+      model: identityReads === 1 ? null : "deepseek/deepseek-v4-pro",
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    });
+    const verifiers = new VerifierRegistry();
+    verifiers.register("complete", () => ({
+      kind: "pass",
+      credit: 1,
+      evidence: {},
+    }));
+
+    const result = await runJourney({
+      jobId: "job",
+      suiteId: "suite",
+      trial: trial(),
+      journey: journey(),
+      driver,
+      detectors: new DetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    });
+
+    expect(identityReads).toBe(2);
+    expect(result.manifest.executor).toMatchObject({
+      provider: "airjelly",
+      model: "deepseek/deepseek-v4-pro",
+    });
+  });
 });

@@ -5,7 +5,7 @@ import type {
   KernelModuleActivateContext,
   KernelModuleHealth,
   ScopeRef,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   AgentCapability,

@@ -534,7 +534,7 @@ export class VelarHostExtensionBridge {
       device: {
         id: randomUUID(),
         provider,
-        appVersion: this.options.hostVersion ?? '0.1.0',
+        appVersion: this.options.hostVersion ?? '0.2.0',
         appEdition: 'host',
         capabilities: z.json().parse(message.capabilities),
         tabUrl: tabUrl.toString(),

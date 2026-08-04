@@ -308,55 +308,36 @@ export default [
       'no-var': 'off',
     },
   },
-  // 包边界:kernel-client 是产品入口,不得反向依赖 Kernel 内部 Host/Runtime/RPC/Daemon。
+  // 子路径边界:client 只依赖 contracts,不得反向依赖 runtime 或 serve。
   {
-    files: ['packages/kernel-client/**/*.{ts,tsx}'],
+    files: ['src/client/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['**/src/host/*', '**/src/runtime/*', '**/src/rpc/*', '**/src/daemon/*', '**/src/launcher/*'],
+              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../runtime/*', '../serve/*'],
               message:
-                'kernel-client 只能依赖协议契约;Host/Runtime/RPC/Daemon 是 Kernel 内部实现。',
+                'Kernel client 只能依赖 contracts;runtime 与 serve 是更外层实现。',
             },
           ],
         },
       ],
     },
   },
-  // kernel-sdk 是 Mod 开发入口:不得依赖 Client,也不得依赖任何 Runtime 实现。
+  // contracts 是最内层稳定契约,不得依赖任何实现与部署切片。
   {
-    files: ['packages/kernel-sdk/**/*.{ts,tsx}'],
+    files: ['src/contracts/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel-client', '@velaros-ai/kernel-client/*', '@velaros-ai/kernel-serve/updater', '**/src/host/*', '**/src/runtime/*'],
+              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../runtime/*', '../client/*', '../serve/*'],
               message:
-                'kernel-sdk 只定义 Mod 契约;不得依赖 Client、Updater 或 Kernel 内部实现。',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  // Kernel 内部实现只能经 src/protocol 桶文件消费 wire 契约,保持协议单一事实来源。
-  {
-    files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/protocol/**'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: '@velaros-ai/kernel-client/protocol',
-              message:
-                'Kernel 内部请从 `src/protocol` 桶文件引入 wire 契约,不要直接写包路径。',
+                'Kernel contracts 不得依赖 runtime、client 或 serve。',
             },
           ],
         },

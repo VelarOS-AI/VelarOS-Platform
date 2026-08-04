@@ -2,7 +2,7 @@
 
 Development 是可组合的代码理解能力包，不拥有项目文件编辑或命令执行。
 
-模型只看到一个结构化工具：`development:query-code`。它通过 action 覆盖符号、关系、依赖、诊断、影响面和索引操作，并由宿主注入实际代码服务。该职责包通过 Mod Loader 的 `residentInSpaces: ['project']` 加入 Project 空间。
+模型只看到一个结构化工具：`development:query-code`。它通过 action 覆盖符号、关系、依赖、诊断、影响面和索引操作，并由宿主注入实际代码服务。该职责包通过 Mod Loader 的 `availableInSpaces: ['project']` 加入 Project 空间；是否常驻由运行时工具预算决定。
 
 `@velaros-ai/development/runtime` 拥有 JavaScript、TypeScript 与 Python 的即时语言分析、
 TypeScript Language Service 缓存和统一 action 路由。宿主只通过 `DevelopmentCodeIndexApi`

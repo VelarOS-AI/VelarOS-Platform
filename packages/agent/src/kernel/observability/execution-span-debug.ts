@@ -10,7 +10,7 @@
 // 与转录相关的 legacy 字段（rawRequest/rawResponse/systemPromptChars 等）不出现，出现的都是 span
 // 能确证的执行事实：token/cost/finishReason/指纹/工具分类与错误码/延迟。调用方据此把它与 legacy 转录
 // 段并列（片 1 加数据源标注双源核对），完整替换随 D3 prompt 审计侧信道落地（片 2+）。
-import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNull, isTrue, toNullable } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../../agent/context/residency/determinism'
 import type {
@@ -29,6 +29,7 @@ export interface ExecutionSpanDebugTool {
   toolCallId: string
   toolName: string
   toolCategoryId: Nullable<string>
+  toolEffectKind: Nullable<string>
   status: ExecutionSpanStatus
   errorCode: Nullable<string>
   latencyMs: Nullable<number>
@@ -160,7 +161,7 @@ export function projectExecutionSpanDebug(
   const capabilityObservations = spans
     .filter(
       (span): span is CapabilitySpan =>
-        span.category === 'capability' && span.parentSpanId === null
+        span.category === 'capability' && isNull(span.parentSpanId)
     )
     .sort(compareSpansChronologically)
     .map((span) => ({
@@ -248,6 +249,7 @@ function projectTurn(
     toolCallId: span.toolCallId,
     toolName: span.toolName,
     toolCategoryId: span.toolCategoryId,
+    toolEffectKind: toNullable(span.toolEffectKind),
     status: span.status,
     errorCode: span.errorCode,
     latencyMs: span.metrics.latencyMs,

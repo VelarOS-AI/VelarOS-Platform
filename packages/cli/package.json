@@ -1,13 +1,13 @@
 {
   "name": "@velaros-ai/cli",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Extensible command-line router for composing capability package namespaces.",
+  "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
   "license": "UNLICENSED",
   "author": "VelarOS",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
@@ -20,7 +20,7 @@
   ],
   "type": "module",
   "bin": {
-    "velaros": "./dist/cli.js"
+    "velaros": "./dist/bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,12 +45,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/cli.js && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/bin.js && node ../../scripts/build/normalize-package-declarations.mjs",
     "test": "bun run build && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/cli"
   },
   "dependencies": {
-    "@velaros-ai/core": "workspace:*"
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/serve-host": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

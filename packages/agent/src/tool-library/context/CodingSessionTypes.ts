@@ -5,7 +5,7 @@ import type {
   RunProfileSelectionId,
   ToolCategoryId,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { ToolAllocatorRequest } from '../../agent/control-plane'
 import type {

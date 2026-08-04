@@ -17,6 +17,17 @@
  * 回到这里 `getItem` 取全文；本后端的 capture 是双写里先落地的那一写。
  */
 
+import {
+  isArray,
+  isEmpty,
+  isFalse,
+  isFunction,
+  isNotNull,
+  isNull,
+  isString,
+  isTrue,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -193,7 +204,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const absolutePath = this.io.join(root.directory, relativePath)
 
     const previousRaw = this.io.readTextFile(absolutePath)
-    const previous = previousRaw === null
+    const previous = isNull(previousRaw)
       ? undefined
       : parseMemoryFileDocument(previousRaw, title)
 
@@ -226,7 +237,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       body: input.content.trim(),
     })
 
-    const inserted = previousRaw === null || previousRaw !== document
+    const inserted = isNull(previousRaw) || previousRaw !== document
     if (inserted) {
       this.io.ensureDirectory(this.io.join(root.directory, this.entriesDirectoryName))
       this.io.writeTextFile(absolutePath, document)
@@ -267,7 +278,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   public recall(query: string, options: MemoryRecallOptions = {}): MemoryRecallItem[] {
     const roots = this.resolveReadRoots(options)
-    if (roots.length === 0) return []
+    if (isEmpty(roots)) return []
 
     const limit = Math.max(1, Math.min(options.limit ?? 10, 100))
     const tokens = tokenize(query ?? '')
@@ -276,8 +287,8 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
     for (const root of roots) {
       // 归档条目已经从索引里撤走，深层召回才把目录里的残余条目一并纳入候选。
-      for (const entry of this.listCandidateEntries(root, options.includeDormant === true)) {
-        const score = tokens.length === 0
+      for (const entry of this.listCandidateEntries(root, isTrue(options.includeDormant))) {
+        const score = isEmpty(tokens)
           ? 1
           : scoreIndexEntry(entry, tokens)
         order += 1
@@ -289,6 +300,9 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       right.score - left.score || right.order - left.order)
 
     const categories = options.categories?.length ? new Set(options.categories) : undefined
+    const excludedSourceTypes = options.excludeSourceTypes?.length
+      ? new Set(options.excludeSourceTypes)
+      : undefined
     const items: MemoryRecallItem[] = []
     // 按需全文：只对索引命中的头部候选读文件，类别过滤在读到的文档上完成。
     for (const candidate of candidates.slice(0, MaxFullTextReadsPerRecall)) {
@@ -297,12 +311,19 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       if (!loaded) continue
       if (loaded.document.attributes.status === ArchivedStatus && !options.includeDormant) continue
       if (categories && !categories.has(loaded.document.type as MemoryEvidenceCategory)) continue
+      if (options.excludeConversationObservations && loaded.document.type === 'conversation') continue
+      if (
+        excludedSourceTypes
+        && excludedSourceTypes.has(
+          loaded.document.attributes.sourceType as MemoryEvidenceInput['sourceType']
+        )
+      ) continue
       items.push(
         this.toRecallItem(
           candidate.root,
           candidate.entry,
           loaded.document,
-          tokens.length === 0 ? 'recent' : 'text',
+          isEmpty(tokens) ? 'recent' : 'text',
         ),
       )
     }
@@ -373,7 +394,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
     const absolutePath = this.io.join(root.directory, parsed.path)
     const raw = this.io.readTextFile(absolutePath)
-    if (raw !== null) {
+    if (isNotNull(raw)) {
       const document = parseMemoryFileDocument(raw, parsed.path)
       this.io.writeTextFile(
         absolutePath,
@@ -396,12 +417,12 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   private listRoots(): readonly MemoryFilesScopeRoot[] {
     const { roots } = this.options
-    return typeof roots === 'function' ? roots() : roots
+    return isFunction(roots) ? roots() : roots
   }
 
   private resolveWriteRoot(input: MemoryEvidenceInput): MemoryFilesScopeRoot {
-    const roots = this.listRoots().filter((root) => root.readOnly !== true)
-    if (roots.length === 0) {
+    const roots = this.listRoots().filter((root) => !isTrue(root.readOnly))
+    if (isEmpty(roots)) {
       throw new AppError(
         'INVARIANT',
         'memory-files 后端没有可写的作用域根；宿主必须注入至少一个目录。',
@@ -433,7 +454,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const workspaceRoot = options.workspaceRoot?.trim()
     if (!scopeId && !workspaceRoot) return roots
 
-    const includeGlobal = options.includeGlobal !== false
+    const includeGlobal = !isFalse(options.includeGlobal)
     return roots.filter((root) => {
       if (scopeId && root.scopeId === scopeId) return true
       if (
@@ -451,7 +472,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   private readIndex(root: MemoryFilesScopeRoot): MemoryIndexEntry[] {
     const raw = this.io.readTextFile(this.io.join(root.directory, this.indexFileName))
     const entries = parseMemoryIndex(raw)
-    if (entries.length > 0 || raw !== null) return entries
+    if (!isEmpty(entries) || isNotNull(raw)) return entries
     // 索引缺席但目录里有条目文件（用户手动拷进来 / 索引被误删）：按目录重建，绝不当作空记忆。
     return this.scanEntriesDirectory(root)
   }
@@ -519,7 +540,10 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const taken = new Set(entries.map((entry) => entry.path))
     for (let suffix = 0; suffix < 1000; suffix += 1) {
       const path = `${this.entriesDirectoryName}/${suffix === 0 ? base : `${base}-${suffix + 1}`}.md`
-      if (!taken.has(path) && this.io.readTextFile(this.io.join(root.directory, path)) === null) return path
+      if (
+        !taken.has(path)
+        && isNull(this.io.readTextFile(this.io.join(root.directory, path)))
+      ) return path
     }
     return `${this.entriesDirectoryName}/${base}-${hash(title)}.md`
   }
@@ -529,7 +553,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     relativePath: string,
   ): Nullable<MemoryFileDocument> {
     const raw = this.io.readTextFile(this.io.join(root.directory, relativePath))
-    if (raw === null) return null
+    if (isNull(raw)) return null
     return parseMemoryFileDocument(raw, relativePath.replace(/^.*\//u, '').replace(/\.md$/u, ''))
   }
 
@@ -568,6 +592,9 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       snapshotVersion: 0,
       retrievalReason,
       evidenceIds: [id],
+      sourceTypes: document.attributes.sourceType
+        ? [document.attributes.sourceType as MemoryEvidenceInput['sourceType']]
+        : [],
       // 文件后端没有树投影：路径为空是诚实回答，不是缺陷。
       path: [],
     }
@@ -637,15 +664,15 @@ function readMetadataString(
   key: string,
 ): string {
   const value = metadata?.[key]
-  return typeof value === 'string' ? value.trim() : ''
+  return trimmedStringOrEmpty(value)
 }
 
 function optionalTags(
   metadata: LooseOptional<Record<string, unknown>>,
 ): Record<string, string> {
   const tags = metadata?.tags
-  if (!Array.isArray(tags) || tags.length === 0) return {}
-  const joined = tags.filter((tag) => typeof tag === 'string').join(', ')
+  if (!isArray(tags) || isEmpty(tags)) return {}
+  const joined = tags.filter(isString).join(', ')
   return joined ? { tags: joined } : {}
 }
 

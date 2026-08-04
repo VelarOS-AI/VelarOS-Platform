@@ -1,12 +1,7 @@
-import { isArray, isEmpty, isObject } from '@velaros-ai/core'
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
+import { isArray, isEmpty, isPlainObject, toNullable } from '@velaros-ai/core'
 import { normalizeUnknownStringArray as readStringArray } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
-import {
-  defaultRuntimePromptFeaturePolicy,
-  type RuntimePromptFeaturePolicy,
-} from '../tools/prompt-feature-policy'
 
 const IDEMPOTENT_TOOL_CALLS = new Set([
   'tooling:map',
@@ -15,20 +10,13 @@ const IDEMPOTENT_TOOL_CALLS = new Set([
   'plan:update',
 ])
 
-interface CodingToolCallDeduperOptions {
-  getEnabledToolCategories: () => ReadonlySet<ToolCategoryId>
-  getEnabledPromptFeatures: () => ReadonlySet<ChatPromptFeatureId>
-  getSessionApprovedToolCategories: () => ReadonlySet<ToolCategoryId>
-  promptFeaturePolicy?: RuntimePromptFeaturePolicy
-}
-
 function normalizeToolCallFingerprintValue(value: unknown): unknown {
   if (isArray(value)) return value.map(normalizeToolCallFingerprintValue)
 
-  if (!value || !isObject(value)) return value
+  if (!isPlainObject(value)) return value
 
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
+    Object.entries(value)
       .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([key, nestedValue]) => [key, normalizeToolCallFingerprintValue(nestedValue)])
   )
@@ -57,9 +45,9 @@ function buildToolFingerprint(
   // 保证"只换说明的刷屏重复"仍会被拦。
   if (toolName === 'plan:update') return JSON.stringify(
       normalizeToolCallFingerprintValue({
-        plan: args.plan ?? null,
-        complete_step: args.complete_step ?? null,
-        lifecycle: args.lifecycle ?? null,
+        plan: toNullable(args.plan),
+        complete_step: toNullable(args.complete_step),
+        lifecycle: toNullable(args.lifecycle),
       })
     )
   return JSON.stringify(normalizeToolCallFingerprintValue(args))
@@ -71,19 +59,15 @@ function buildToolFingerprint(
  * 背景：模型有时会连续多次发出完全相同的 tooling:replace/read/map / plan:update，
  * 既浪费 token 又会让用户看到大段重复输出。这里基于规范化后的入参指纹来：
  *  - 命中相同 fingerprint：返回提示文案，由调用方写入工具结果替代真正的执行；
- *  - tooling:replace 还会判断本次申请的能力是否其实已经开启（包含 office 的会话级授权），
- *    若已开启则返回 “redundant feature” 文案，引导模型直接调用具体工具。
+ * 这里刻意只判断“完全相同的调用是否刚执行过”，不根据能力授权状态推断工具页是否驻留。
+ * 能力已授权与具体工具 schema 已进入本轮 tools 是两个独立状态；后者只能由
+ * ToolSpaceReplace 按当前驻留信息处理。
  *
  * fingerprint 规范化通过 `normalizeToolCallFingerprintValue` 对对象 key 排序，
  * 保证模型用不同 key 顺序生成的参数仍可命中同一指纹。
  */
 class CodingToolCallDeduper {
   private readonly lastIdempotentToolCallFingerprints = new Map<string, string>()
-  private readonly promptFeaturePolicy: RuntimePromptFeaturePolicy
-
-  constructor(private readonly options: CodingToolCallDeduperOptions) {
-    this.promptFeaturePolicy = options.promptFeaturePolicy ?? defaultRuntimePromptFeaturePolicy
-  }
 
   public recordIdempotentToolCall(toolName: string, args: Record<string, unknown>): void {
     const fingerprint = buildToolFingerprint(toolName, args)
@@ -115,58 +99,6 @@ class CodingToolCallDeduper {
     }
   }
 
-  public getRedundantPromptFeatureMessage(
-    toolName: string,
-    args: Record<string, unknown>
-  ): LooseOptional<string> {
-    if (toolName !== 'tooling:replace') return null
-
-    const requestedPromptFeatures = this.promptFeaturePolicy.normalize(
-      readStringArray(args.pageIn)
-        .filter((id) => id.startsWith('plugin:'))
-        .map((id) => id.slice('plugin:'.length)) as ChatPromptFeatureId[]
-    )
-    const requestedCategories = [
-      ...new Set([
-        ...(readStringArray(args.pageIn)
-          .filter((id) => id.startsWith('capability:'))
-          .map((id) => id.slice('capability:'.length)) as ToolCategoryId[]),
-        ...this.promptFeaturePolicy.getCategoriesForFeatures(requestedPromptFeatures),
-      ]),
-    ]
-    const requestedCategoryPromptFeatures = requestedPromptFeatures.length
-      ? []
-      : this.promptFeaturePolicy.getFeaturesForCategories(requestedCategories)
-    const requestedFeatures = this.promptFeaturePolicy.normalize([
-      ...requestedPromptFeatures,
-      ...requestedCategoryPromptFeatures,
-    ])
-
-    if (isEmpty(requestedCategories) && isEmpty(requestedFeatures)) return null
-
-    const enabledToolCategories = this.options.getEnabledToolCategories()
-    const enabledPromptFeatures = this.options.getEnabledPromptFeatures()
-    const sessionApprovedToolCategories = this.options.getSessionApprovedToolCategories()
-    const hasMissingCategory = requestedCategories.some(
-      (categoryId) => !enabledToolCategories.has(categoryId)
-    )
-    const hasMissingFeature = requestedFeatures.some(
-      (feature) => !enabledPromptFeatures.has(feature)
-    )
-
-    if (hasMissingCategory || hasMissingFeature) return null
-
-    const requestsOfficeApproval =
-      requestedCategories.includes('office') ||
-      requestedFeatures.some((feature) => this.promptFeaturePolicy.isOfficeFeature(feature))
-    if (requestsOfficeApproval && !sessionApprovedToolCategories.has('office')) return null
-
-    return [
-      '请求的工具分类或用户已手动开启的插件已经可用，无需重复加载。',
-      '请直接调用已开放的具体工具继续执行；例如 Office Word 任务应调用 office:create_word_document。',
-    ].join('\n')
-  }
 }
 
 export { buildToolFingerprint,CodingToolCallDeduper }
-export type { CodingToolCallDeduperOptions }

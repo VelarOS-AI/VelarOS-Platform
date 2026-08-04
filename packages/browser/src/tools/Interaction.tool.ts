@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isNumber, isPresent, isString, numberOrNull, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { optionalWhenLazy } from '@velaros-ai/core/utils/optionalWhen'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserMoveMouseResult, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserTargetActionOptions, BrowserTypeTextResult, BrowserViewportResult, BrowserWaitForSelectorResult } from '../core'
 
@@ -874,9 +874,9 @@ const browserSetPageZoom = defineBrowserTool<{
 const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
   name: 'browser:act',
   role: 'control',
-  summary: '统一执行当前页面动作。',
+  summary: '在已进入的浏览器会话中跳转 URL、点击、填写、滚动或等待页面。',
   suitable: [
-    '需要点击、填写、选择、清空、选中文本、导航、滚动、键鼠、等待、视口、缩放、网络或环境模拟控制当前 browser 页面。',
+    '需要直接访问 URL，或点击、填写、选择、清空、选中文本、前进、后退、刷新、滚动、键鼠、等待、视口、缩放、网络或环境模拟控制当前 browser 页面。',
     '需要替代旧的单一 browser 交互工具时使用。',
   ],
   forbidden: [

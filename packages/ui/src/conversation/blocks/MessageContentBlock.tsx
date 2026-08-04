@@ -7,113 +7,118 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-} from 'react'
+} from "react";
 
-import { prepareStreamdownMarkdownText } from '../markdown/streamdownMarkdownSource.utils'
-import type { UserActionResolution } from '../projection'
-import { useTimerScope } from '../react-hooks/useTimerScope'
-import { type ConversationRenderSlots,useConversationRenderSlots } from '../render-slots'
-import { ReplaceableRenderSlot } from '../render-slots/ReplaceableRenderSlot'
-import { shouldRenderToolBlockCompact } from '../tool-render/messageBubbleToolModel'
+import { prepareStreamdownMarkdownText } from "../markdown/streamdownMarkdownSource.utils";
+import type { UserActionResolution } from "../projection";
+import { useTimerScope } from "../react-hooks/useTimerScope";
+import {
+  type ConversationRenderSlots,
+  useConversationRenderSlots,
+} from "../render-slots";
+import { ReplaceableRenderSlot } from "../render-slots/ReplaceableRenderSlot";
+import { LazyToolCallBlock } from "../tool-render/LazyToolCallBlock";
+import { shouldRenderToolBlockCompact } from "../tool-render/messageBubbleToolModel";
 
-import { shouldUseLiveTextRenderer } from './liveTextRendererMode'
-import { areRunMarkersEqual, type ConversationMessageRunMarker } from './messageBubbleRenderModel'
+import { shouldUseLiveTextRenderer } from "./liveTextRendererMode";
+import {
+  areRunMarkersEqual,
+  type ConversationMessageRunMarker,
+} from "./messageBubbleRenderModel";
 
-import styles from './MessageBubble.module.css'
+import styles from "./MessageBubble.module.css";
 
-import type { ContentBlock, TextBlock, UserActionCardResult } from '#contracts'
-import { isBlank, optionalWhenLazy, toNullable } from '#internal/runtime'
+import type { ContentBlock, TextBlock, UserActionCardResult } from "#contracts";
+import { isBlank, optionalWhenLazy, toNullable } from "#internal/runtime";
 
 const LazyMessageMarkdownBlock = lazy(async () =>
-  import('./MessageMarkdownBlocks').then((module) => ({
+  import("./MessageMarkdownBlocks").then((module) => ({
     default: module.MessageMarkdownBlock,
-  }))
-)
+  })),
+);
 
 const LazyStreamingTextBlock = lazy(async () =>
-  import('./MessageMarkdownBlocks').then((module) => ({
+  import("./MessageMarkdownBlocks").then((module) => ({
     default: module.StreamingTextBlock,
-  }))
-)
+  })),
+);
 
 const LazyThinkingBlock = lazy(async () =>
-  import('./MessageMarkdownBlocks').then((module) => ({
+  import("./MessageMarkdownBlocks").then((module) => ({
     default: module.ThinkingBlock,
-  }))
-)
-
-const LazyToolCallBlock = lazy(async () =>
-  import('../tool-render/ToolCallBlock').then((module) => ({
-    default: module.ToolCallBlock,
-  }))
-)
+  })),
+);
 
 const LazyHtmlArtifactBlock = lazy(async () =>
-  import('../artifacts/HtmlArtifactBlock').then((module) => ({
+  import("../artifacts/HtmlArtifactBlock").then((module) => ({
     default: module.HtmlArtifactBlock,
-  }))
-)
+  })),
+);
 
 type MessageContentBlockRenderContext = {
-  isStreaming: boolean
-  autoCollapseThinking: boolean
-  sessionId: string
-  messageId: string
-  runMarker: LooseOptional<ConversationMessageRunMarker>
-  planUpdateIndex?: number
-  blockIndex?: number
-  formatPathForDisplay?: (path: string) => string
-  onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenProjectPath?: (path: string) => unknown
-  activeUserActionCardIds?: readonly string[]
-  onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
-  consumedScheduledTaskProposalIds?: ReadonlySet<string>
-  onScheduledTaskProposalConsumed?: (proposalId: string) => void
+  isStreaming: boolean;
+  autoCollapseThinking: boolean;
+  sessionId: string;
+  messageId: string;
+  runMarker: LooseOptional<ConversationMessageRunMarker>;
+  planUpdateIndex?: number;
+  blockIndex?: number;
+  formatPathForDisplay?: (path: string) => string;
+  onOpenBrowserLink?: (url: string) => void | Promise<void>;
+  onOpenProjectPath?: (path: string) => unknown;
+  activeUserActionCardIds?: readonly string[];
+  onResolveUserActionCard?: (
+    request: UserActionCardResult,
+  ) => void | Promise<void>;
+  consumedScheduledTaskProposalIds?: ReadonlySet<string>;
+  onScheduledTaskProposalConsumed?: (proposalId: string) => void;
   onTranslateThinkingBlock?: (request: {
-    messageId: string
-    blockIndex: number
-    text: string
-  }) => Promise<void>
+    messageId: string;
+    blockIndex: number;
+    text: string;
+  }) => Promise<void>;
   /** 宿主专属黑名单卡件 / viewmodel 容器的注入 render-slot（§12.9 封闭具名集合）。 */
-  slots: ConversationRenderSlots
-}
+  slots: ConversationRenderSlots;
+};
 
 type StructuredBlockRenderer = (
   block: ContentBlock,
-  ctx: MessageContentBlockRenderContext
-) => Nullable<ReactElement>
+  ctx: MessageContentBlockRenderContext,
+) => Nullable<ReactElement>;
 
 interface MessageContentBlockProps {
-  block: ContentBlock
-  isStreaming: boolean
-  autoCollapseThinking?: boolean
-  animateStreamingText: boolean
-  sessionId: string
-  messageId: string
-  runMarker?: LooseOptional<ConversationMessageRunMarker>
-  planUpdateIndex?: number
-  blockIndex?: number
-  formatPathForDisplay?: (path: string) => string
-  onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenProjectPath?: (path: string) => unknown
-  activeUserActionCardIds?: readonly string[]
-  onResolveUserActionCard?: (request: UserActionCardResult) => void | Promise<void>
-  consumedScheduledTaskProposalIds?: ReadonlySet<string>
-  onScheduledTaskProposalConsumed?: (proposalId: string) => void
+  block: ContentBlock;
+  isStreaming: boolean;
+  autoCollapseThinking?: boolean;
+  animateStreamingText: boolean;
+  sessionId: string;
+  messageId: string;
+  runMarker?: LooseOptional<ConversationMessageRunMarker>;
+  planUpdateIndex?: number;
+  blockIndex?: number;
+  formatPathForDisplay?: (path: string) => string;
+  onOpenBrowserLink?: (url: string) => void | Promise<void>;
+  onOpenProjectPath?: (path: string) => unknown;
+  activeUserActionCardIds?: readonly string[];
+  onResolveUserActionCard?: (
+    request: UserActionCardResult,
+  ) => void | Promise<void>;
+  consumedScheduledTaskProposalIds?: ReadonlySet<string>;
+  onScheduledTaskProposalConsumed?: (proposalId: string) => void;
   onTranslateThinkingBlock?: (request: {
-    messageId: string
-    blockIndex: number
-    text: string
-  }) => Promise<void>
+    messageId: string;
+    blockIndex: number;
+    text: string;
+  }) => Promise<void>;
 }
 
 const STRUCTURED_BLOCK_RENDERERS = {
-  'tool-call': (block, ctx) => (
+  "tool-call": (block, ctx) => (
     <Suspense fallback={null}>
       <LazyToolCallBlock
-        block={block as Extract<ContentBlock, { type: 'tool-call' }>}
+        block={block as Extract<ContentBlock, { type: "tool-call" }>}
         compact={shouldRenderToolBlockCompact(
-          (block as Extract<ContentBlock, { type: 'tool-call' }>).toolName
+          (block as Extract<ContentBlock, { type: "tool-call" }>).toolName,
         )}
         sessionId={ctx.sessionId}
         planUpdateIndex={ctx.planUpdateIndex}
@@ -124,7 +129,7 @@ const STRUCTURED_BLOCK_RENDERERS = {
   thinking: (block, ctx) => (
     <Suspense fallback={null}>
       <LazyThinkingBlock
-        block={block as Extract<ContentBlock, { type: 'thinking' }>}
+        block={block as Extract<ContentBlock, { type: "thinking" }>}
         isStreaming={ctx.isStreaming}
         autoCollapse={ctx.autoCollapseThinking}
         messageId={ctx.messageId}
@@ -133,26 +138,38 @@ const STRUCTURED_BLOCK_RENDERERS = {
       />
     </Suspense>
   ),
-  'html-artifact': (block) => (
+  "html-artifact": (block) => (
     <Suspense fallback={null}>
-      <LazyHtmlArtifactBlock block={block as Extract<ContentBlock, { type: 'html-artifact' }>} />
+      <LazyHtmlArtifactBlock
+        block={block as Extract<ContentBlock, { type: "html-artifact" }>}
+      />
     </Suspense>
   ),
-  'system-tool-install-suggestion': (block, ctx) =>
+  "system-tool-install-suggestion": (block, ctx) =>
     ctx.slots.systemToolInstall({
-      block: block as Extract<ContentBlock, { type: 'system-tool-install-suggestion' }>,
+      block: block as Extract<
+        ContentBlock,
+        { type: "system-tool-install-suggestion" }
+      >,
     }),
-  'capability-auto-approval': (block, ctx) =>
+  "capability-auto-approval": (block, ctx) =>
     ctx.slots.capabilityAutoApprovalNotice({
-      block: block as Extract<ContentBlock, { type: 'capability-auto-approval' }>,
+      block: block as Extract<
+        ContentBlock,
+        { type: "capability-auto-approval" }
+      >,
     }),
-  'user-action-card': (block, ctx) => {
-    const userActionBlock = block as Extract<ContentBlock, { type: 'user-action-card' }>
-    const card = userActionBlock.card
-    const isActiveBlockingCard = card.blocking && !!ctx.activeUserActionCardIds?.includes(card.id)
+  "user-action-card": (block, ctx) => {
+    const userActionBlock = block as Extract<
+      ContentBlock,
+      { type: "user-action-card" }
+    >;
+    const card = userActionBlock.card;
+    const isActiveBlockingCard =
+      card.blocking && !!ctx.activeUserActionCardIds?.includes(card.id);
     // 提问卡（wizard）作答后不消失、只禁用：跳过"已消费即隐藏"的全局规则，保持挂载并展示用户所选。
     // 非 wizard 的可见性（已消费/超时）谓词在宿主 userActionCard slot 实现内应用（不可见回 null）。
-    const isWizardCard = card.form?.presentation === 'wizard'
+    const isWizardCard = card.form?.presentation === "wizard";
 
     const onActionComplete = optionalWhenLazy(
       isActiveBlockingCard,
@@ -164,8 +181,8 @@ const STRUCTURED_BLOCK_RENDERERS = {
           message: resolution.message,
           values: resolution.values,
           timedOut: resolution.timedOut,
-        })
-    )
+        }),
+    );
 
     if (isWizardCard)
       return ctx.slots.askUser({
@@ -173,7 +190,7 @@ const STRUCTURED_BLOCK_RENDERERS = {
         sessionId: ctx.sessionId,
         disabled: card.blocking && !isActiveBlockingCard,
         onActionComplete,
-      })
+      });
 
     return ctx.slots.userActionCard({
       block: userActionBlock,
@@ -182,68 +199,82 @@ const STRUCTURED_BLOCK_RENDERERS = {
       activeUserActionCardIds: ctx.activeUserActionCardIds,
       onActionComplete,
       onOpenArtifact: ctx.onOpenProjectPath,
-    })
+    });
   },
-  'project-auto-approval': () => null,
-  'assistant-generated-file': () => null,
-  'assistant-source': () => null,
-  'scheduled-task-proposal': (block, ctx) => {
-    const proposalBlock = block as Extract<ContentBlock, { type: 'scheduled-task-proposal' }>
+  "project-auto-approval": () => null,
+  "assistant-generated-file": () => null,
+  "assistant-source": () => null,
+  "scheduled-task-proposal": (block, ctx) => {
+    const proposalBlock = block as Extract<
+      ContentBlock,
+      { type: "scheduled-task-proposal" }
+    >;
 
     return ctx.slots.scheduledTaskProposal({
       block: proposalBlock,
-      consumed: !!ctx.consumedScheduledTaskProposalIds?.has(proposalBlock.proposal.id),
+      consumed: !!ctx.consumedScheduledTaskProposalIds?.has(
+        proposalBlock.proposal.id,
+      ),
       onConsumed: ctx.onScheduledTaskProposalConsumed,
-    })
+    });
   },
-  'flagged-task': (block, ctx) =>
+  "flagged-task": (block, ctx) =>
     ctx.slots.flaggedTaskSuggestion({
-      block: block as Extract<ContentBlock, { type: 'flagged-task' }>,
+      block: block as Extract<ContentBlock, { type: "flagged-task" }>,
       sessionId: ctx.sessionId,
     }),
-} satisfies Record<Exclude<ContentBlock['type'], 'text'>, StructuredBlockRenderer>
+} satisfies Record<
+  Exclude<ContentBlock["type"], "text">,
+  StructuredBlockRenderer
+>;
 
-function getStructuredBlockRenderer(blockType: string): Nullable<StructuredBlockRenderer> {
+function getStructuredBlockRenderer(
+  blockType: string,
+): Nullable<StructuredBlockRenderer> {
   return toNullable(
-    (STRUCTURED_BLOCK_RENDERERS as Partial<Record<string, StructuredBlockRenderer>>)[blockType]
-  )
+    (
+      STRUCTURED_BLOCK_RENDERERS as Partial<
+        Record<string, StructuredBlockRenderer>
+      >
+    )[blockType],
+  );
 }
 
 function PlainTextBlockFallback({ block }: { block: TextBlock }): ReactElement {
   const className =
-    block.tone === 'error'
+    block.tone === "error"
       ? `${styles.markdownContent} ${styles.markdownError}`
-      : styles.markdownContent
+      : styles.markdownContent;
 
   return (
     <div className={className}>
       <p className={styles.textContent}>{block.text}</p>
     </div>
-  )
+  );
 }
 
 function useAfterFirstPaint(): boolean {
-  const [ready, setReady] = useState(false)
-  const timers = useTimerScope('MessageContentBlock.afterFirstPaint')
+  const [ready, setReady] = useState(false);
+  const timers = useTimerScope("MessageContentBlock.afterFirstPaint");
 
   useEffect(() => {
-    let secondFrame: Nullable<ReturnType<typeof timers.nextFrame>> = null
+    let secondFrame: Nullable<ReturnType<typeof timers.nextFrame>> = null;
     const firstFrame = timers.nextFrame(
       () => {
         secondFrame = timers.nextFrame(() => setReady(true), {
-          label: 'chat.richMarkdown.ready',
-        })
+          label: "chat.richMarkdown.ready",
+        });
       },
-      { label: 'chat.richMarkdown.afterPaint' }
-    )
+      { label: "chat.richMarkdown.afterPaint" },
+    );
 
     return () => {
-      firstFrame.cancel()
-      secondFrame?.cancel()
-    }
-  }, [timers])
+      firstFrame.cancel();
+      secondFrame?.cancel();
+    };
+  }, [timers]);
 
-  return ready
+  return ready;
 }
 
 function DeferredMessageMarkdownBlock({
@@ -253,16 +284,16 @@ function DeferredMessageMarkdownBlock({
   onOpenBrowserLink,
   onOpenProjectPath,
 }: {
-  block: TextBlock
-  tailMarker?: LooseOptional<ConversationMessageRunMarker>
-  formatPathForDisplay?: (path: string) => string
-  onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenProjectPath?: (path: string) => unknown
+  block: TextBlock;
+  tailMarker?: LooseOptional<ConversationMessageRunMarker>;
+  formatPathForDisplay?: (path: string) => string;
+  onOpenBrowserLink?: (url: string) => void | Promise<void>;
+  onOpenProjectPath?: (path: string) => unknown;
 }): ReactElement {
-  const richRendererReady = useAfterFirstPaint()
-  const fallback = <PlainTextBlockFallback block={block} />
+  const richRendererReady = useAfterFirstPaint();
+  const fallback = <PlainTextBlockFallback block={block} />;
 
-  if (!richRendererReady) return fallback
+  if (!richRendererReady) return fallback;
 
   return (
     <Suspense fallback={fallback}>
@@ -274,7 +305,7 @@ function DeferredMessageMarkdownBlock({
         onOpenProjectPath={onOpenProjectPath}
       />
     </Suspense>
-  )
+  );
 }
 
 /**
@@ -293,12 +324,12 @@ function renderReplaceableMarkdown({
   isStreaming,
   official,
 }: {
-  slot: ConversationRenderSlots['messageMarkdown']
-  block: TextBlock
-  isStreaming: boolean
-  official: ReactElement
+  slot: ConversationRenderSlots["messageMarkdown"];
+  block: TextBlock;
+  isStreaming: boolean;
+  official: ReactElement;
 }): ReactElement {
-  if (!slot) return official
+  if (!slot) return official;
 
   return (
     <ReplaceableRenderSlot
@@ -307,7 +338,7 @@ function renderReplaceableMarkdown({
       props={{ text: prepareStreamdownMarkdownText(block.text), isStreaming }}
       fallback={official}
     />
-  )
+  );
 }
 
 function MessageContentBlockInner({
@@ -329,17 +360,17 @@ function MessageContentBlockInner({
   onScheduledTaskProposalConsumed,
   onTranslateThinkingBlock,
 }: MessageContentBlockProps): Nullable<ReactElement> {
-  const hasRenderedLiveTextRef = useRef(false)
-  const slots = useConversationRenderSlots()
+  const hasRenderedLiveTextRef = useRef(false);
+  const slots = useConversationRenderSlots();
 
   const useLiveTextRenderer =
-    block.type === 'text' &&
+    block.type === "text" &&
     !isBlank(block.text) &&
     shouldUseLiveTextRenderer({
       isStreaming,
       animateStreamingText,
       hasRenderedLiveText: hasRenderedLiveTextRef.current,
-    })
+    });
 
   // 「本块已走过 live 渲染器」是**跨渲染的持久事实**，必须等 commit 之后才落笔：
   // 写在渲染体里会被 StrictMode 的双渲染、以及并发模式下被丢弃的渲染污染——那些渲染的
@@ -347,12 +378,12 @@ function MessageContentBlockInner({
   // 首次决定走 live 的那一帧本来就是靠 isStreaming 判出来的，flag 只影响其后的帧。
   // 判定必须整体前置到所有早返之前，否则就是条件调用 hook（rules-of-hooks）。
   useLayoutEffect(() => {
-    if (useLiveTextRenderer) hasRenderedLiveTextRef.current = true
-  }, [useLiveTextRenderer])
+    if (useLiveTextRenderer) hasRenderedLiveTextRef.current = true;
+  }, [useLiveTextRenderer]);
 
-  if (block.type !== 'text') {
-    const renderer = getStructuredBlockRenderer(block.type)
-    if (!renderer) return null
+  if (block.type !== "text") {
+    const renderer = getStructuredBlockRenderer(block.type);
+    if (!renderer) return null;
 
     return renderer(block, {
       isStreaming,
@@ -371,12 +402,13 @@ function MessageContentBlockInner({
       onScheduledTaskProposalConsumed,
       onTranslateThinkingBlock,
       slots,
-    })
+    });
   }
 
-  if (isBlank(block.text)) return null
+  if (isBlank(block.text)) return null;
 
-  if (useLiveTextRenderer) return renderReplaceableMarkdown({
+  if (useLiveTextRenderer)
+    return renderReplaceableMarkdown({
       slot: slots.messageMarkdown,
       block,
       isStreaming,
@@ -393,7 +425,7 @@ function MessageContentBlockInner({
           />
         </Suspense>
       ),
-    })
+    });
 
   // 走到这里必然 `isStreaming === false`（`shouldUseLiveTextRenderer` 对 streaming 恒真），
   // 因此替换件在这条路上拿到的 `isStreaming` 只可能是 false。
@@ -410,27 +442,28 @@ function MessageContentBlockInner({
         onOpenProjectPath={onOpenProjectPath}
       />
     ),
-  })
+  });
 }
 
 function areTextBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
-  if (prev.isStreaming !== next.isStreaming) return false
+  if (prev.isStreaming !== next.isStreaming) return false;
 
   return (
     prev.formatPathForDisplay === next.formatPathForDisplay &&
     prev.onOpenBrowserLink === next.onOpenBrowserLink &&
     prev.onOpenProjectPath === next.onOpenProjectPath &&
-    (!prev.isStreaming || prev.animateStreamingText === next.animateStreamingText) &&
+    (!prev.isStreaming ||
+      prev.animateStreamingText === next.animateStreamingText) &&
     (prev.isStreaming || areRunMarkersEqual(prev.runMarker, next.runMarker))
-  )
+  );
 }
 
 function areThinkingBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
   return (
     prev.isStreaming === next.isStreaming &&
@@ -438,79 +471,89 @@ function areThinkingBlockPropsEqual(
     prev.messageId === next.messageId &&
     prev.blockIndex === next.blockIndex &&
     prev.onTranslateThinkingBlock === next.onTranslateThinkingBlock
-  )
+  );
 }
 
 function areToolCallBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
   return (
     prev.sessionId === next.sessionId &&
     prev.planUpdateIndex === next.planUpdateIndex &&
     prev.formatPathForDisplay === next.formatPathForDisplay
-  )
+  );
 }
 
 function areUserActionCardBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
   return (
     prev.sessionId === next.sessionId &&
     prev.activeUserActionCardIds === next.activeUserActionCardIds &&
     prev.onResolveUserActionCard === next.onResolveUserActionCard
-  )
+  );
 }
 
-function isScheduledTaskProposalConsumed(props: Readonly<MessageContentBlockProps>): boolean {
-  const block = props.block as Extract<ContentBlock, { type: 'scheduled-task-proposal' }>
+function isScheduledTaskProposalConsumed(
+  props: Readonly<MessageContentBlockProps>,
+): boolean {
+  const block = props.block as Extract<
+    ContentBlock,
+    { type: "scheduled-task-proposal" }
+  >;
 
-  return !!props.consumedScheduledTaskProposalIds?.has(block.proposal.id)
+  return !!props.consumedScheduledTaskProposalIds?.has(block.proposal.id);
 }
 
 function areScheduledTaskProposalBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
   return (
-    isScheduledTaskProposalConsumed(prev) === isScheduledTaskProposalConsumed(next) &&
-    prev.onScheduledTaskProposalConsumed === next.onScheduledTaskProposalConsumed
-  )
+    isScheduledTaskProposalConsumed(prev) ===
+      isScheduledTaskProposalConsumed(next) &&
+    prev.onScheduledTaskProposalConsumed ===
+      next.onScheduledTaskProposalConsumed
+  );
 }
 
 function areMessageContentBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>
+  next: Readonly<MessageContentBlockProps>,
 ): boolean {
-  if (prev.block !== next.block) return false
+  if (prev.block !== next.block) return false;
 
   switch (prev.block.type) {
-    case 'text':
-      return areTextBlockPropsEqual(prev, next)
-    case 'thinking':
-      return areThinkingBlockPropsEqual(prev, next)
-    case 'tool-call':
-      return areToolCallBlockPropsEqual(prev, next)
-    case 'html-artifact':
-      return true
-    case 'user-action-card':
-      return areUserActionCardBlockPropsEqual(prev, next)
-    case 'system-tool-install-suggestion':
-    case 'capability-auto-approval':
-    case 'project-auto-approval':
-      return true
-    case 'scheduled-task-proposal':
-      return areScheduledTaskProposalBlockPropsEqual(prev, next)
+    case "text":
+      return areTextBlockPropsEqual(prev, next);
+    case "thinking":
+      return areThinkingBlockPropsEqual(prev, next);
+    case "tool-call":
+      return areToolCallBlockPropsEqual(prev, next);
+    case "html-artifact":
+      return true;
+    case "user-action-card":
+      return areUserActionCardBlockPropsEqual(prev, next);
+    case "system-tool-install-suggestion":
+    case "capability-auto-approval":
+    case "project-auto-approval":
+      return true;
+    case "scheduled-task-proposal":
+      return areScheduledTaskProposalBlockPropsEqual(prev, next);
     // 卡片状态由 flaggedTaskStore 订阅驱动，block 与 sessionId 相同即等价。
-    case 'flagged-task':
-      return prev.sessionId === next.sessionId
-    case 'assistant-generated-file':
-    case 'assistant-source':
-      return true
+    case "flagged-task":
+      return prev.sessionId === next.sessionId;
+    case "assistant-generated-file":
+    case "assistant-source":
+      return true;
   }
 }
 
-export const MessageContentBlock = memo(MessageContentBlockInner, areMessageContentBlockPropsEqual)
+export const MessageContentBlock = memo(
+  MessageContentBlockInner,
+  areMessageContentBlockPropsEqual,
+);
 
-MessageContentBlock.displayName = 'MessageContentBlock'
+MessageContentBlock.displayName = "MessageContentBlock";

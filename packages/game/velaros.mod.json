@@ -35,32 +35,32 @@
         {
           "name": "game:scene_edit",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         },
         {
           "name": "game:run",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         },
         {
           "name": "game:stop",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         },
         {
           "name": "game:screenshot",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         },
         {
           "name": "game:query_state",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         },
         {
           "name": "game:input",
           "categoryId": "game",
-          "residentInSpaces": ["game"]
+          "availableInSpaces": ["game"]
         }
       ],
       "spaces": [
@@ -79,14 +79,6 @@
           "boundCapabilityIds": ["velaros.game"],
           "inheritsSpaceIds": ["project"],
           "toolCategoryIds": ["game"],
-          "residentToolNames": [
-            "game:scene_edit",
-            "game:run",
-            "game:stop",
-            "game:screenshot",
-            "game:query_state",
-            "game:input"
-          ],
           "turnContextSourceIds": ["game.runtime-errors", "game.selection", "game.scene-state"]
         }
       ],

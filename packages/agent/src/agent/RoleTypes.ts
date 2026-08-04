@@ -8,7 +8,7 @@ import type {
   ChatPromptFeatureId,
   ToolCategoryId,
   WorkflowType,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 /** 角色合约：来自共享配置的 profile，加上后端运行所需 workflow 信息。 */
 interface AgentRoleContract extends AgentRoleProfileConfig {

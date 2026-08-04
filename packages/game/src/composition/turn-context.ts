@@ -1,9 +1,9 @@
-import { isFunction, toNullable } from '@velaros-ai/core'
-import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
+import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/agent/protocol'
 import {
   type TurnContextAppendHub,
   TurnContextSessionLedgers,
-} from '@velaros-ai/core/utils/TurnContextLedger'
+} from '@velaros-ai/agent/run-context'
+import { isFunction, toNullable } from '@velaros-ai/core'
 
 import { GameTurnContextSourceIds } from '../contracts.js'
 import type {

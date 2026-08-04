@@ -4,7 +4,7 @@ import type {
   CapabilityScopeId,
   ChatPromptFeatureId,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 interface AgentSurfaceToolPolicy {
   baseCategories: readonly ToolCategoryId[]

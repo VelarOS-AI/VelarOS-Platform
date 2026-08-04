@@ -1,5 +1,3 @@
-import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   ExecutionPendingInteractionKind,
   ExecutionPendingInteractionSnapshot,
@@ -7,7 +5,9 @@ import type {
   ExecutionRecord,
   ExecutionResolveConfirmationRequest,
   ToolConfirmationDecisionOptions,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   ExecutionInteractions,

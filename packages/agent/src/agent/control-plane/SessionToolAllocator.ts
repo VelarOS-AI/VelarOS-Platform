@@ -1,5 +1,5 @@
+import type { ToolCategoryId, ToolDescriptor } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
-import type { ToolCategoryId, ToolDescriptor } from '@velaros-ai/core/types'
 
 import {
   type AgentRuntimeCapabilityPorts,
@@ -16,7 +16,7 @@ interface ToolAllocatorRequest {
 }
 
 interface ToolAllocatorCategory<TTool extends { name: string } = ToolDescriptor> {
-  category: { id: ToolCategoryId } & Record<string, unknown>
+  category: { id: ToolCategoryId }
   tools: readonly TTool[]
 }
 

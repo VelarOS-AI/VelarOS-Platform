@@ -2,8 +2,8 @@
 //
 // 包含守护资产：`formatSubAgentTaskResultForParent` 的【子agent「Name」的返回】前缀——并行多个
 // 子 Agent 时让父可靠区分各自结果、避免把 A 的结论错标成 B（实测防护，语义一字不动）。
+import type { SubAgentTaskResult } from '@velaros-ai/agent/protocol'
 import { truncate } from '@velaros-ai/core'
-import type { SubAgentTaskResult } from '@velaros-ai/core/types'
 
 import { formatSubAgentToolResult } from '../../sub-agent'
 

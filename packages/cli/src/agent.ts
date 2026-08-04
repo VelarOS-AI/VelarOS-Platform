@@ -3,16 +3,16 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { optionalWhen } from '@velaros-ai/core'
 import {
-  formatVelarosCliError,
-  formatVelarosCliSuccess,
-  VelarosCliError,
-  type VelarosCliRunOptions,
-  type VelarosCliRunResult,
-} from '@velaros-ai/core/cli'
-import {
   asRecord as readJsonRecordValue,
   readRawString as readString,
 } from '@velaros-ai/core/utils/unknownJsonRecord'
+
+import { formatVelarosCliError, formatVelarosCliSuccess } from './output.js'
+import {
+  VelarosCliError,
+  type VelarosCliRunOptions,
+  type VelarosCliRunResult,
+} from './types.js'
 
 const TaskArtifactRoot = '.velaros/agent-runs'
 const AgentCommandNames = ['help', 'manifest', 'status'] as const

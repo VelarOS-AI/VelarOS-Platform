@@ -12,17 +12,17 @@ import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node
 
 import { z } from 'zod'
 
-import { isPlainObject } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import type {
+  ToolCapabilitySchema,
+} from '@velaros-ai/agent/protocol'
 import {
   defineToolRuntimeSpec,
   type DefineToolRuntimeSpecInput,
   type ToolContractRuntimeSpec,
-} from '@velaros-ai/core/tool-contract'
-import type {
-  ToolCapabilitySchema,
-} from '@velaros-ai/core/types'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
+import { isPlainObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   OfficeEnvironmentCommandAvailability,
@@ -116,6 +116,23 @@ export function defineOfficeTool<TInput extends Record<string, unknown>>(
 export type OfficeToolCapabilitySchema = ToolCapabilitySchema & {
   metadata: Readonly<Record<string, unknown>>
 }
+
+export const OfficeDocumentReadCapability = {
+  effectKind: 'read',
+  readScopes: ['project', 'system'],
+  filesystem: { read: 'project', write: 'none' },
+  canReadArbitrarySource: false,
+  metadata: {
+    project: {
+      requiresActiveProject: true,
+      requiresProjectSwitchForExternalCwd: true,
+      arbitraryRead: true,
+    },
+    canMutateProject: false,
+  },
+  concurrency: 'safe',
+  reason: 'office document inspection',
+} satisfies OfficeToolCapabilitySchema
 
 export const OfficeDocumentWriteCapability = {
   effectKind: 'write',

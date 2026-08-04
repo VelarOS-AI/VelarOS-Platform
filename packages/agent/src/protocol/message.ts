@@ -18,16 +18,16 @@ export const TextPartSchema = z.strictObject({
  */
 export const ToolCallPartSchema = z.strictObject({
   type: z.literal('tool-call'),
-  toolCallId: z.string(),
-  toolName: z.string(),
+  toolCallId: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
   input: z.record(z.string(), z.unknown()),
 })
 
 /** 工具结果片段；`toolCallId` 必须与对应的调用片段一致。 */
 export const ToolResultPartSchema = z.strictObject({
   type: z.literal('tool-result'),
-  toolCallId: z.string(),
-  toolName: z.string(),
+  toolCallId: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
   output: z.unknown(),
 })
 

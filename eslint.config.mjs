@@ -33,13 +33,10 @@ const Domains = [
   {
     name: 'kernel',
     config: kernelConfig,
-    globs: [
-      'packages/kernel-client/**',
-      'packages/kernel-serve/**',
-    ],
-    // Kernel 仓根 src/ 与 test/ 的裸路径规则,P2 库化后落在 serve 域包下(内核本体已并入 core 域)。
+    globs: ['packages/kernel/**'],
+    // Kernel 原始规则里的 src/ 与 test/ 裸路径统一落到唯一 Kernel 包。
     remap: (pattern) =>
-      /^(?:src|test)\//.test(pattern) ? `packages/kernel-serve/${pattern}` : pattern,
+      /^(?:src|test)\//.test(pattern) ? `packages/kernel/${pattern}` : pattern,
   },
   {
     name: 'agent',

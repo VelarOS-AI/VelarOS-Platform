@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
-import { isEmpty,isPresent, isString } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isEmpty,isPresent, isString } from '@velaros-ai/core'
 
 import type { BrowserPageNavigationOptions, BrowserTargetActionKind, BrowserTargetActionValue } from '../core'
 

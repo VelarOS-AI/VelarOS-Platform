@@ -1,11 +1,11 @@
 import type { ModelMessage } from 'ai'
 
-import { isEmpty, isString, toNullable } from '@velaros-ai/core'
 import type {
   ChatCompactContextCapabilityTruth,
   ChatContextEvidenceRecord,
   StreamToolResultEffects,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty, isString, toNullable } from '@velaros-ai/core'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import {

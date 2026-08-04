@@ -15,6 +15,8 @@
  * 写第二套逻辑，让它退化成「派生层零贡献」正是缺席时的既定行为。
  */
 
+import { isEmpty, isFunction } from '@velaros-ai/core'
+
 import type {
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
@@ -102,6 +104,7 @@ export function createLayeredMemoryStoreBackend(
   ): Promise<T | undefined> => {
     try {
       return await run()
+    // @arch-guard:suspend code-style/require-error-logging 理由：派生索引失败经 onDerivedFailure 结构化诊断端口上报，且权威路径契约要求不抛出。
     } catch (error) {
       report({ backendId, stage, error })
       return undefined
@@ -109,14 +112,14 @@ export function createLayeredMemoryStoreBackend(
   }
 
   const indexEvidence = async (result: MemoryCaptureBatchResult): Promise<void> => {
-    if (derived.length === 0 || result.evidence.length === 0) return
+    if (isEmpty(derived) || isEmpty(result.evidence)) return
     for (const index of derived) {
       await bestEffort(index.descriptor.id, 'index', () => index.indexEvidence(result.evidence))
     }
   }
 
   const removePointers = async (ids: readonly string[]): Promise<void> => {
-    if (ids.length === 0) return
+    if (isEmpty(ids)) return
     for (const index of derived) {
       await bestEffort(index.descriptor.id, 'prune', () => index.removePointers(ids))
     }
@@ -144,6 +147,9 @@ export function createLayeredMemoryStoreBackend(
           orphanIds.push(pointer.id)
           continue
         }
+        if (
+          recallOptionsExcludeItem(full, options_)
+        ) continue
         // 检索理由如实标成 deep(语义层),但内容逐字来自权威层。
         items.push({ ...full, retrievalReason: 'deep' })
       }
@@ -249,14 +255,14 @@ export function createLayeredMemoryStoreBackend(
   if (supportsMemoryBackendVerb(authority, 'dream')) {
     backend.dream = (dreamOptions) => authority.dream!(dreamOptions)
   }
-  if (typeof authority.governSourceEligibility === 'function') {
+  if (isFunction(authority.governSourceEligibility)) {
     backend.governSourceEligibility = (
       sourceId: string,
       state: MemoryEvidenceEligibilityState,
     ): MemorySourceEligibilityResult | Promise<MemorySourceEligibilityResult> =>
       authority.governSourceEligibility!(sourceId, state)
   }
-  if (typeof authority.governEvidenceEligibility === 'function') {
+  if (isFunction(authority.governEvidenceEligibility)) {
     backend.governEvidenceEligibility = (
       evidenceId: string,
       state: MemoryEvidenceEligibilityState,
@@ -265,6 +271,20 @@ export function createLayeredMemoryStoreBackend(
   }
 
   return backend
+}
+
+function recallOptionsExcludeItem(
+  item: MemoryRecallItem,
+  options: MemoryRecallOptions,
+): boolean {
+  if (options.excludeConversationObservations && item.predicate === 'conversation_observation')
+    return true
+  const excluded = options.excludeSourceTypes
+  return Boolean(
+    excluded?.length
+    && item.sourceTypes?.length
+    && item.sourceTypes.every((sourceType) => excluded.includes(sourceType))
+  )
 }
 
 /**

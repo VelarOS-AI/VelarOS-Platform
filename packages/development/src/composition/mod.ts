@@ -1,4 +1,4 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import { DevelopmentToolNames, developmentTools } from '../Development.tool'
 
@@ -31,7 +31,7 @@ const DevelopmentAgentModManifest = Object.freeze({
     tools: [{
       name: DevelopmentToolNames.queryCode,
       categoryId: DevelopmentToolCategory.id,
-      residentInSpaces: ['project'],
+      availableInSpaces: ['project'],
     }],
   },
 })

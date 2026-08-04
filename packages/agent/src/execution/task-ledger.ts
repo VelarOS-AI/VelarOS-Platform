@@ -1,11 +1,11 @@
-import { toNullable } from '@velaros-ai/core'
 import type {
   ExecutionEventSeverity,
   ExecutionRecord,
   ExecutionTaskPlanStep,
   ExecutionTaskPlanStepStatus,
   ExecutionTaskRecord,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { toNullable } from '@velaros-ai/core'
 
 import { type ExecRouting } from './routing'
 import type { ExecutionTaskLedgerStore } from './store-types'

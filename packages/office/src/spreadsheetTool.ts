@@ -7,11 +7,11 @@
 import type { CellValue, Workbook } from 'exceljs'
 import { z } from 'zod'
 
-import { isArray, isBoolean, isEmpty, isNonBlankString, isNumber, isPlainObject, isPresent, isString, optionalWhenLazy, toNullable,trimmedStringOrEmpty } from '@velaros-ai/core'
-import { logRuntime } from '@velaros-ai/core/logger'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isArray, isBoolean, isEmpty, isNonBlankString, isNumber, isPlainObject, isPresent, isString, optionalWhenLazy, toNullable,trimmedStringOrEmpty } from '@velaros-ai/core'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   isMarkdownTableSeparator,

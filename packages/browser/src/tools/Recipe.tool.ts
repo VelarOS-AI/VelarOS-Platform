@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { AppError } from '@velaros-ai/core/error'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import { browserRecipeSchema, parseBrowserRecipeInput } from './BrowserRecipeSchema'
 import {

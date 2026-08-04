@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
+import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { assertCanonicalToolId, buildToolContractDescription } from '@velaros-ai/core/tool-contract'
 
 import {
   analyzeCommandExecution,
@@ -13,25 +14,26 @@ import {
 import { ProjectEditOperationsSchema } from '../edit-schema.js'
 import { ProjectToolNames } from '../project-tool-names.js'
 
-import { executeAgentProjectRead } from './ProjectKernelPort.js'
+import { executeAgentProjectRead, executeAgentProjectSearch } from './ProjectKernelPort.js'
 import type { ProjectToolContext,VelaTool } from './Types.js'
 
 type ProjectToolCollection = Readonly<Record<string, VelaTool<any>>>
 
 function defineProjectTool<TInput extends Record<string, any>>(input: {
   name: string
-  category: string
+  category: ToolCategoryId
   role: 'inspect' | 'edit' | 'execute'
   summary: string
   suitable?: readonly [string, ...string[]]
   forbidden?: readonly [string, ...string[]]
   protocol?: readonly [string, ...string[]]
   usage?: readonly [string, ...string[]]
-  examples?: readonly [Record<string, unknown>, ...Array<Record<string, unknown>>]
+  examples: readonly [Record<string, unknown>, ...Array<Record<string, unknown>>]
   notes?: readonly [string, ...string[]]
   schema: VelaTool<TInput>['schema']
   permissions: VelaTool<TInput>['permissions']
   capabilities?: VelaTool<TInput>['capabilities']
+  exposure?: VelaTool<TInput>['exposure']
   hideWhenUnavailable?: VelaTool<TInput>['hideWhenUnavailable']
   isAvailable?: VelaTool<TInput>['isAvailable']
   isConcurrencySafe?: VelaTool<TInput>['isConcurrencySafe']
@@ -50,20 +52,19 @@ function defineProjectTool<TInput extends Record<string, any>>(input: {
     notes,
     ...tool
   } = input
-  assertCanonicalToolId(name)
-  return Object.freeze({
+  return Object.freeze(defineToolRuntimeSpec({
+    name,
+    category,
+    role,
+    summary,
+    suitable: suitable ?? ['需要完成该工具职责所描述的项目操作。'],
+    forbidden: forbidden ?? ['目标不属于当前项目边界。'],
+    protocol: protocol ?? ['只使用当前项目上下文解析路径和执行操作。'],
+    usage: usage ?? ['参数必须来自当前请求或前序工具结果。'],
+    examples,
+    notes: notes ?? ['返回值是当前操作的权威结果。'],
     ...tool,
-    description: buildToolContractDescription(name, category, {
-      role,
-      summary,
-      suitable: suitable ?? ['需要完成该工具职责所描述的项目操作。'],
-      forbidden: forbidden ?? ['目标不属于当前项目边界。'],
-      protocol: protocol ?? ['只使用当前项目上下文解析路径和执行操作。'],
-      usage: usage ?? ['参数必须来自当前请求或前序工具结果。'],
-      examples: examples ?? [{}],
-      notes: notes ?? ['返回值是当前操作的权威结果。'],
-    }),
-  })
+  }))
 }
 
 function runInProjectDirectory<T>(
@@ -91,6 +92,7 @@ const projectRead = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '读取项目根目录内的一个或多个文本文件，并返回修订版本与分页信息。',
+  examples: [{ path: ['src/contentHash.ts', 'src/cacheKey.ts'] }],
   schema: z.object({
     path: z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(20)]),
     range: ProjectRangeSchema,
@@ -98,6 +100,7 @@ const projectRead = defineProjectTool<{
     baseRevisions: z.record(z.string(), z.string()).optional(),
   }),
   permissions: ['fs:read'],
+  exposure: { tier: 'common', rank: 10 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
@@ -120,6 +123,7 @@ const projectList = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '在项目根目录内列出或按 glob 发现文件和目录。',
+  examples: [{ path: '.', maxDepth: 2 }],
   schema: z.object({
     path: z.string().optional(),
     include: z.array(z.string().min(1)).max(20).optional(),
@@ -129,6 +133,7 @@ const projectList = defineProjectTool<{
     limit: z.number().int().positive().max(2_000).optional().default(200),
   }),
   permissions: ['fs:read'],
+  exposure: { tier: 'common', rank: 20 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
@@ -163,6 +168,7 @@ const projectSearch = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '在项目文件正文中执行有界文本或正则搜索。',
+  examples: [{ query: 'contentHash', path: 'src' }],
   schema: z.object({
     query: z.string().min(1),
     path: z.string().optional(),
@@ -170,23 +176,147 @@ const projectSearch = defineProjectTool<{
     exclude: z.array(z.string().min(1)).max(20).optional(),
     regex: z.boolean().optional().default(false),
     caseSensitive: z.boolean().optional().default(false),
-    limit: z.number().int().positive().max(500).optional().default(50),
+    limit: z.number().int().positive().max(100).optional().default(30),
   }),
   permissions: ['fs:read'],
+  exposure: { tier: 'common', rank: 30 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
     const kernel = await context.project.kernel()
-    return kernel.search({
-      query: input.query,
-      root: input.path,
-      include: input.include,
-      exclude: input.exclude,
-      regex: input.regex,
-      caseSensitive: input.caseSensitive,
-      maxResults: input.limit ?? 50,
-    })
+    return executeAgentProjectSearch(kernel, input)
   },
+})
+
+const ProjectWriteModeSchema = z.enum(['create', 'overwrite', 'append', 'prepend'])
+
+type ProjectWriteInput = {
+  path: string
+  content: string
+  mode: z.infer<typeof ProjectWriteModeSchema>
+  cwd?: string
+  skipIfAlreadyPresent?: boolean
+}
+
+function projectWriteOperation(input: ProjectWriteInput): z.input<typeof ProjectEditOperationsSchema>[number] {
+  switch (input.mode) {
+    case 'create':
+      return {
+        operation: {
+          type: 'create_file',
+          path: input.path,
+          content: input.content,
+        },
+      }
+    case 'overwrite':
+      return {
+        operation: {
+          type: 'create_file',
+          path: input.path,
+          content: input.content,
+          overwrite: true,
+        },
+      }
+    case 'append':
+      return {
+        operation: {
+          type: 'append_text',
+          path: input.path,
+          text: input.content,
+          skipIfAlreadyPresent: input.skipIfAlreadyPresent,
+        },
+      }
+    case 'prepend':
+      return {
+        operation: {
+          type: 'prepend_text',
+          path: input.path,
+          text: input.content,
+          skipIfAlreadyPresent: input.skipIfAlreadyPresent,
+        },
+      }
+  }
+}
+
+async function applyProjectEditTransaction(
+  input: {
+    operations: z.input<typeof ProjectEditOperationsSchema>
+    cwd?: string
+    operationLabel: string
+    targetPath?: string
+  },
+  context: ProjectToolContext
+) {
+  context.abortSignal.throwIfAborted()
+  const authorization = await context.project.prepareMutation({
+    cwd: input.cwd,
+    operation: input.operationLabel,
+    targetPath: input.targetPath,
+  })
+  if (!authorization.approved) return {
+      approved: false,
+      changed: false,
+      message: authorization.rejectionMessage ?? authorization.message,
+    }
+
+  return context.project.runInDirectory(authorization.rootPath, async () =>
+    context.project.runWithApproval(async () => {
+      const kernel = await context.project.kernel()
+      const transaction = await kernel.prepareEdit({ operations: input.operations })
+      try {
+        const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
+        return {
+          changed: !isEmpty(applied.changedFiles),
+          transactionId: transaction.transactionId,
+          changedFiles: applied.changedFiles,
+          revisions: applied.newRevisions,
+          diff: transaction.diff,
+          changedLines: transaction.changedLines,
+          risk: transaction.risk,
+        }
+      } catch (error) {
+        kernel.discardTransaction(transaction.transactionId)
+        throw error
+      }
+    })
+  )
+}
+
+/**
+ * 长文本落盘走浅层合同：模型不需要先选择十三分支联合，再把正文嵌进事务意图包装层。
+ * 执行仍复用 Project Kernel 的同一套授权、prepare/apply/rollback 事务边界。
+ */
+const projectWrite = defineProjectTool<ProjectWriteInput>({
+  name: ProjectToolNames.write,
+  category: 'project-changes',
+  role: 'edit',
+  summary: '把一段完整文本创建、覆盖、追加或前置写入一个项目文件。',
+  suitable: ['创建报告、配置、源码或其他以完整文本为主体的单文件内容。'],
+  forbidden: ['不要用于精确替换、符号编辑、导入编辑、JSON Patch 或多文件原子事务；这些使用 project:edit。'],
+  protocol: ['写入仍由 Project Kernel 以可回滚事务执行；path 必须位于当前项目边界内。'],
+  usage: ['传 path、content 和明确的 mode；append/prepend 可用 skipIfAlreadyPresent 保证幂等。'],
+  examples: [{ path: 'reports/review.md', content: '# Review\n\nPassed.', mode: 'create' }],
+  notes: ['mode=create 拒绝覆盖既有文件；mode=overwrite 才允许整文件替换。'],
+  schema: z.strictObject({
+    path: z.string().min(1),
+    content: z.string(),
+    mode: ProjectWriteModeSchema,
+    cwd: z.string().min(1).optional(),
+    skipIfAlreadyPresent: z.boolean().optional(),
+  }),
+  permissions: ['fs:read', 'fs:write'],
+  exposure: { tier: 'common', rank: 40 },
+  isConcurrencySafe: () => false,
+  execute: (input, context) =>
+    applyProjectEditTransaction(
+      {
+        operations: [projectWriteOperation(input)],
+        cwd: input.cwd,
+        operationLabel: `${input.mode} 项目文件`,
+        targetPath: input.path,
+      },
+      context
+    ),
 })
 
 const projectEdit = defineProjectTool<{
@@ -196,47 +326,36 @@ const projectEdit = defineProjectTool<{
   name: ProjectToolNames.edit,
   category: 'project-changes',
   role: 'edit',
-  summary: '以一个可回滚事务原子地修改项目内一个或多个文件。',
+  summary: '以一个可回滚事务执行精确文本、符号、导入、JSON 或多文件结构化修改。',
+  suitable: ['需要精确替换、锚点插入、符号/导入/JSON 修改，或多个操作必须原子提交。'],
+  forbidden: ['不要用它承载单文件报告或整段长文本；创建、覆盖、追加或前置完整内容使用 project:write。'],
+  usage: ['每个 operations 项包含 operation；先读取目标修订，再提交最小结构化修改。'],
+  examples: [{
+    operations: [{
+      operation: {
+        type: 'replace_text',
+        path: 'src/index.ts',
+        oldText: 'const ready = false',
+        newText: 'const ready = true',
+      },
+    }],
+  }],
   schema: z.object({
     operations: ProjectEditOperationsSchema.min(1).max(20),
     cwd: z.string().optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
+  exposure: { tier: 'situational', rank: 10 },
   isConcurrencySafe: () => false,
-  execute: async (input, context) => {
-    context.abortSignal.throwIfAborted()
-    const authorization = await context.project.prepareMutation({
-      cwd: input.cwd,
-      operation: '修改项目文件',
-    })
-    if (!authorization.approved) return {
-      approved: false,
-      changed: false,
-      message: authorization.rejectionMessage ?? authorization.message,
-    }
-
-    return context.project.runInDirectory(authorization.rootPath, async () =>
-      context.project.runWithApproval(async () => {
-        const kernel = await context.project.kernel()
-        const transaction = await kernel.prepareEdit({ operations: input.operations })
-        try {
-          const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
-          return {
-            changed: !isEmpty(applied.changedFiles),
-            transactionId: transaction.transactionId,
-            changedFiles: applied.changedFiles,
-            revisions: applied.newRevisions,
-            diff: transaction.diff,
-            changedLines: transaction.changedLines,
-            risk: transaction.risk,
-          }
-        } catch (error) {
-          kernel.discardTransaction(transaction.transactionId)
-          throw error
-        }
-      })
-    )
-  },
+  execute: (input, context) =>
+    applyProjectEditTransaction(
+      {
+        operations: input.operations,
+        cwd: input.cwd,
+        operationLabel: '结构化修改项目文件',
+      },
+      context
+    ),
 })
 
 const projectRollback = defineProjectTool<{ transactionId: string }>({
@@ -244,8 +363,10 @@ const projectRollback = defineProjectTool<{ transactionId: string }>({
   category: 'project-changes',
   role: 'edit',
   summary: '撤销由 project:edit 创建并已应用的项目事务。',
+  examples: [{ transactionId: 'transaction-id-from-project-edit' }],
   schema: z.object({ transactionId: z.string().min(1) }),
   permissions: ['fs:read', 'fs:write'],
+  exposure: { tier: 'situational', rank: 20 },
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
@@ -328,6 +449,7 @@ const projectRun = defineProjectTool<{
   category: 'project-execution',
   role: 'execute',
   summary: '在项目边界内运行可取消、可审计且支持后台任务的命令。',
+  examples: [{ command: 'bun test' }],
   schema: z.object({
     command: z.string().min(1),
     cwd: z.string().optional(),
@@ -337,6 +459,7 @@ const projectRun = defineProjectTool<{
     parallel: z.boolean().optional(),
   }),
   permissions: ['process:exec'],
+  exposure: { tier: 'common', rank: 50 },
   isConcurrencySafe: (input) => isParallelCommandExecutionSafe(input),
   execute: runProjectCommand,
 })
@@ -347,6 +470,7 @@ const projectFileTools: ProjectToolCollection = Object.freeze({
   [ProjectToolNames.search]: projectSearch,
 })
 const projectChangeTools: ProjectToolCollection = Object.freeze({
+  [ProjectToolNames.write]: projectWrite,
   [ProjectToolNames.edit]: projectEdit,
   [ProjectToolNames.rollback]: projectRollback,
 })

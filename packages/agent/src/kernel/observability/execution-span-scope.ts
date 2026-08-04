@@ -7,7 +7,7 @@
 //   - **调用方零 spanId 记账**：run→turn→{model,tool,capability,policy} 的父子指针由 scope 内部管理，
 //     生产侧（SoloLoop / ToolExecutor）只声明「开一个什么 span」，拿回一个非抛出 handle 供收敛。
 //   - **只落已完成 span**：进行中 span 驻 recorder 内存，收敛才 emit + 校验 + 落账本（读侧无半态）。
-import { toOptional } from '@velaros-ai/core'
+import { toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -65,6 +65,7 @@ export interface ToolSpanOpener {
     toolCallId: string
     toolName: string
     toolCategoryId: Nullable<string>
+    toolEffectKind: Nullable<string>
   }): Nullable<ToolSpanHandle>
 }
 
@@ -189,10 +190,10 @@ export class LedgerExecutionSpanScopeFactory
 
   constructor(deps: LedgerExecutionSpanScopeFactoryDeps) {
     this.resolveLedgerPath = deps.resolveLedgerPath
-    this.resolvePromptAuditPath = deps.resolvePromptAuditPath ?? null
+    this.resolvePromptAuditPath = toNullable(deps.resolvePromptAuditPath)
     this.warn = deps.warn ?? ((message, detail) => log.debug(message, detail))
     this.now = deps.now ?? (() => Date.now())
-    this.nextSpanId = deps.nextSpanId ?? null
+    this.nextSpanId = toNullable(deps.nextSpanId)
   }
 
   public beginRun(input: {
@@ -446,6 +447,7 @@ class LedgerTurnSpanScope implements TurnSpanScope {
     toolCallId: string
     toolName: string
     toolCategoryId: Nullable<string>
+    toolEffectKind: Nullable<string>
   }): Nullable<ToolSpanHandle> {
     if (!this.turnSpan) return null
     const parentSpanId = this.turnSpan.spanId
@@ -460,6 +462,7 @@ class LedgerTurnSpanScope implements TurnSpanScope {
           toolCallId: input.toolCallId,
           toolName: input.toolName,
           toolCategoryId: input.toolCategoryId,
+          toolEffectKind: input.toolEffectKind,
           errorCode: null,
         }),
       'begin tool span'

@@ -11,7 +11,7 @@
 
 ### Kernel 侧
 
-`packages/kernel-serve/src/daemon/daemon/bundled-packs.ts`：
+`packages/kernel/src/serve/daemon/bundled-packs.ts`：
 
 ```ts
 export interface KernelBundledPack {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isNumber, isPresent, isString } from '@velaros-ai/core'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import type { BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue } from '../core'
 

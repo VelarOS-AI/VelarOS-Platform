@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import type { ChatContextEvidenceRecord } from '@velaros-ai/core/types'
+import type { ChatContextEvidenceRecord } from '@velaros-ai/agent/protocol'
 
 import { mapInternalFollowUpsForProvider } from './internalMessages'
 import { repairHistoryStructureForProvider } from './repair'

@@ -1,12 +1,13 @@
 import { isFalse } from '@velaros-ai/core'
-import {
-  formatVelarosCliError,
-  formatVelarosCliSuccess,
-  VelarosCliError,
-  type VelarosCliRunOptions,
-} from '@velaros-ai/core/cli'
 
 import { runAgentCli } from './agent.js'
+import { formatVelarosCliError, formatVelarosCliSuccess } from './output.js'
+import { runServeNamespace } from './serve.js'
+import {
+  VelarosCliError,
+  type VelarosCliNamespaceRunResult,
+  type VelarosCliRunOptions,
+} from './types.js'
 
 /**
  * 命名空间运行结果。
@@ -16,12 +17,6 @@ import { runAgentCli } from './agent.js'
  * 等于把分叉从类型面藏进运行期。第三方命名空间甚至可以完全不给 envelope（`test/cli.test.mjs`
  * 注册的 `browser`/`custom` 就没有）。
  */
-export interface VelarosCliNamespaceRunResult {
-  text: string
-  exitCode: number
-  envelope?: unknown
-}
-
 export type VelarosCliNamespaceRunner = (
   argv: string[],
   options: VelarosCliRunOptions,
@@ -40,6 +35,7 @@ export interface CreateVelarosCliRouterOptions {
 
 const BuiltinNamespaceRunners: Readonly<Record<string, VelarosCliNamespaceRunner>> = {
   agent: runAgentCli,
+  serve: runServeNamespace,
 }
 
 /**

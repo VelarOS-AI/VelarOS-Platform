@@ -1,4 +1,3 @@
-import { isEmpty } from '@velaros-ai/core'
 import type {
   AgentContextPhase,
   AgentDeveloperContext,
@@ -13,7 +12,8 @@ import type {
   ToolOsState,
   ToolSurfaceProfileId,
   WorkflowType,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 import type {
   PromptSegmentDefinition,

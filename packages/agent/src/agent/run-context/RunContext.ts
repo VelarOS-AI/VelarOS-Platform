@@ -6,7 +6,7 @@ import type {
   PromptSegmentTrace,
   RunProfileId,
   SkippedPromptSegmentTrace,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import {
   createSelectedSkillPromptSegment,

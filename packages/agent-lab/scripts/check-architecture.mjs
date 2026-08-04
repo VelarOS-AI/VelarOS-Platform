@@ -9,6 +9,7 @@ const PureRoots = [
   "report",
   "statistics",
   "certification",
+  "workload",
 ];
 const ExpectedExports = [
   ".",
@@ -20,6 +21,7 @@ const ExpectedExports = [
   "./report",
   "./runner",
   "./statistics",
+  "./workload",
 ];
 
 async function files(root) {
@@ -99,6 +101,7 @@ const requiredFiles = [
   "src/cli.ts",
   "src/index.ts",
   "test/protocol.test.ts",
+  "test/real-workload.test.ts",
   "test/runner.test.ts",
   "test/archive-report.test.ts",
   "test/cli.test.ts",

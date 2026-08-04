@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
 
-import { isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { writeFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
@@ -243,36 +243,4 @@ function encodeUtf16Be(content: string): Buffer {
 
 function toCrlf(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')
-}
-
-/** 按字符上限裁剪行列表，优先保整行。 */
-export function truncateToChars(
-  lines: string[],
-  maxChars: number
-): { content: string; lineCount: number; firstLineTruncated: boolean } {
-  const outputLines: string[] = []
-  let usedChars = 0
-
-  for (const line of lines) {
-    const separatorChars = !isEmpty(outputLines) ? 1 : 0
-    const nextChars = usedChars + separatorChars + line.length
-
-    if (nextChars > maxChars) {
-      if (isEmpty(outputLines)) return { content: line.slice(0, maxChars), lineCount: 1, firstLineTruncated: true }
-      return {
-        content: outputLines.join('\n'),
-        lineCount: outputLines.length,
-        firstLineTruncated: false,
-      }
-    }
-
-    outputLines.push(line)
-    usedChars = nextChars
-  }
-
-  return {
-    content: outputLines.join('\n'),
-    lineCount: outputLines.length,
-    firstLineTruncated: false,
-  }
 }

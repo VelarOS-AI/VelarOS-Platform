@@ -1,4 +1,4 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import { systemTools } from '../Collection'
 import { SystemToolCategoryByName, SystemToolNames } from '../system-tool-names'
@@ -53,7 +53,7 @@ const SystemAgentModManifest = Object.freeze({
     tools: Object.values(SystemToolNames).map((name) => ({
       name,
       categoryId: SystemToolCategoryByName[name],
-      residentInSpaces: [SystemSpaceId],
+      availableInSpaces: [SystemSpaceId],
     })),
     spaces: [{
       id: SystemSpaceId,
@@ -68,6 +68,7 @@ const SystemAgentModManifest = Object.freeze({
       identityStrategy: 'ordinal',
       surfaceProfileId: 'chat',
       boundCapabilityIds: [SystemModId],
+      toolCategoryIds: Object.keys(SystemToolCategories),
     }],
   },
 })

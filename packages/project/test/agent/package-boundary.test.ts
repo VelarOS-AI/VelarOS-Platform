@@ -25,14 +25,11 @@ function listTypeScriptFiles(directory: string): string[] {
 }
 
 describe('Project Agent boundary', () => {
-  test('owns its Agent contracts without depending on Agent Runtime', () => {
-    for (const section of [
-      'dependencies',
-      'devDependencies',
-      'peerDependencies',
-      'optionalDependencies',
-    ]) {
-      expect(PackageManifest[section]?.['@velaros-ai/agent']).toBeUndefined()
+  test('depends on the grouped Agent package through explicit subpaths', () => {
+    expect(PackageManifest.dependencies?.['@velaros-ai/agent']).toBe('workspace:*')
+    for (const path of listTypeScriptFiles(SourceRoot)) {
+      const source = readFileSync(path, 'utf8')
+      expect(source).not.toMatch(/from ['"]@velaros-ai\/agent['"]/)
     }
   })
 
@@ -46,7 +43,7 @@ describe('Project Agent boundary', () => {
     expect(violations).toEqual([])
   })
 
-  test('tool context exposes only the ports used by the six-tool surface', () => {
+  test('tool context exposes only the ports used by the seven-tool surface', () => {
     const source = readFileSync(resolve(SourceRoot, 'Types.ts'), 'utf8')
     for (const field of [
       'getRootPath',

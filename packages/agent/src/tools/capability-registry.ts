@@ -1,5 +1,5 @@
+import type { ToolDescriptor } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
-import type { ToolDescriptor } from '@velaros-ai/core/types'
 
 import { decideToolCategoryAccess, type ToolCategoryUnavailableReason } from './access-policy'
 import type {
@@ -19,6 +19,7 @@ import {
   resolveToolDiscoveryAvailability,
   schemaStateForDiscoveryAvailability,
 } from './discovery-availability'
+import { isToolCompatibleWithModelInputs } from './model-input-policy'
 import {
   defaultRuntimePromptFeaturePolicy,
   type RuntimePromptFeaturePolicy,
@@ -66,6 +67,7 @@ function descriptorForRegisteredTool<TTool extends RegistryTool<any>>(
     role: entry.tool.role,
     permissions: entry.tool.permissions,
     capabilities: entry.tool.capabilities,
+    requiredModelInputModalities: entry.tool.requiredModelInputModalities,
     exposure: entry.tool.exposure,
     categoryId: entry.categoryId,
     systemEnabled,
@@ -173,6 +175,12 @@ class ToolCapabilityRegistry {
 
     for (const [name, entry] of registry) {
       if (options.allowList && !options.allowList.includes(name)) {
+        continue
+      }
+
+      // 能力页是 tooling:map 的数据源；不能只过滤最终 tools，否则模型仍会发现并换入
+      // 自己无法消费结果的工具。
+      if (!isToolCompatibleWithModelInputs(entry.tool, ctx)) {
         continue
       }
 

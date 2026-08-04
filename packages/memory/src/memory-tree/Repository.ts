@@ -1236,6 +1236,7 @@ export class MemoryTreeRepository {
     const effectiveScope = scopeId || (workspaceRoot ? buildProjectMemoryScope(workspaceRoot) : '')
     const normalizedQuery = query.trim()
     const includeGlobal = options.includeGlobal ?? true
+    const excludedSourceTypes = options.excludeSourceTypes ?? []
     const scopeClause = includeGlobal
       ? `AND (? = '' OR concept.scope_id = ? OR concept.scope_type = 'global')`
       : `AND (? = '' OR concept.scope_id = ?)`
@@ -1264,11 +1265,24 @@ export class MemoryTreeRepository {
             trusted_e.source_type = 'chat_message'
             AND trusted_e.trust_level = 'agent_derived'
           )
-      ))`
+      ))
+      AND (? = 0 OR c.predicate <> 'conversation_observation')
+      ${isEmpty(excludedSourceTypes)
+        ? ''
+        : `AND EXISTS (
+          SELECT 1
+          FROM memory_claim_evidence source_ce
+          JOIN memory_evidence source_e ON source_e.id = source_ce.evidence_id
+          WHERE source_ce.claim_id = c.id
+            AND source_e.eligibility_state = 'active'
+            AND source_e.source_type NOT IN (${excludedSourceTypes.map(() => '?').join(', ')})
+        )`}`
     const provenanceParameters = [
       excludeSessionId,
       excludeSessionId,
       options.excludeAgentConversationEchoes ? 1 : 0,
+      options.excludeConversationObservations ? 1 : 0,
+      ...excludedSourceTypes,
     ] as const
 
     if (isBlank(normalizedQuery)) return this.db
@@ -1403,6 +1417,7 @@ export class MemoryTreeRepository {
       snapshotVersion,
       retrievalReason: reason,
       evidenceIds: this.listClaimEvidenceIds(row.id),
+      sourceTypes: this.listClaimEvidenceSourceTypes(row.id),
       path: treeIndex ? this.treePathFromIndex(treeIndex, 'claim', row.id) : [],
     }))
   }
@@ -1512,6 +1527,20 @@ export class MemoryTreeRepository {
         .prepare(`SELECT evidence_id FROM memory_claim_evidence WHERE claim_id = ? ORDER BY created_at ASC`)
         .all(claimId) as Array<{ evidence_id: string }>
     ).map((row) => row.evidence_id)
+  }
+
+  private listClaimEvidenceSourceTypes(claimId: string): Array<MemoryEvidenceRecord['sourceType']> {
+    return (
+      this.db
+        .prepare(
+          `SELECT DISTINCT e.source_type
+           FROM memory_claim_evidence ce
+           JOIN memory_evidence e ON e.id = ce.evidence_id
+           WHERE ce.claim_id = ? AND e.eligibility_state = 'active'
+           ORDER BY e.source_type ASC`
+        )
+        .all(claimId) as Array<{ source_type: MemoryEvidenceRecord['sourceType'] }>
+    ).map((row) => row.source_type)
   }
 
   private listClaimIdsForEvidence(evidenceId: string): string[] {

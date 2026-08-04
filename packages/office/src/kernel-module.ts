@@ -8,9 +8,10 @@ import {
   defineKernelModule,
   type KernelCallableCapabilityOperation,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
   type ScopeRef,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import { officeTools } from './Collection'
 import type { OfficeToolContext, VelaTool } from './officeShared'
@@ -126,7 +127,7 @@ export function createOfficeKernelModule(
     manifest: {
       id: 'velaros.office',
       version: '0.2.7',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [OfficeCapability],
       requires: [],
       optionalRequires: [],

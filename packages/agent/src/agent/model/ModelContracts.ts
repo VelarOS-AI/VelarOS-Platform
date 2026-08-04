@@ -1,5 +1,10 @@
 import type { LanguageModel } from 'ai'
 
+import type {
+  AgentModelInputModality,
+  RunProfileRuntimePolicy,
+} from '@velaros-ai/agent/protocol'
+
 export interface AgentModelRequestPolicy {
   temperature?: number
   topP?: number
@@ -25,12 +30,16 @@ export interface ResolvedAgentModelRuntime {
   model: string
   providerModel: string
   contextWindow?: number
+  supportedInputModalities: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
-  runProfilePolicy?: unknown
+  /** Optional Agent-owned runtime policy supplied by richer injected model capabilities. */
+  runProfilePolicy?: RunProfileRuntimePolicy
   resolutionSource: string
   resolutionTrace: readonly unknown[]
   fallbackReason?: string
 }
+
+export type { AgentModelInputModality }
 
 /** Agent supplies opaque selection/context; Model owns catalog, auth and fallback. */
 export interface AgentModelResolverPort {

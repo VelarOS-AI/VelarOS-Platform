@@ -564,6 +564,40 @@ void describe('编译器切换 · 行为对齐', () => {
     assert.equal(String(compiled.messages[1]?.content), '我会先调用 project__read。')
   })
 
+  void test('provider-safe recall 别名满足上下文句柄驻留不变量', () => {
+    const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    const compiled = new ProviderRequestCompiler(registry).compileWithReclaim({
+      model: 'gpt-test',
+      systemPrompt: 'system',
+      sessionId: 'recall-alias-1',
+      messages: [userMessage('{"__contextRef":"message:1"}')],
+      contextWindow: 200_000,
+      availableToolNames: ['context__recall'],
+      toolSchemaChars: { context__recall: 123 },
+      toolNameAliases: { 'context:recall': 'context__recall' },
+    })
+
+    assert.equal(compiled.requestFingerprint.contextRefCount, 1)
+    assert.deepEqual(compiled.requestFingerprint.availableToolNames, ['context__recall'])
+  })
+
+  void test('上下文句柄在 canonical 与 provider recall 都缺席时继续 fail-closed', () => {
+    const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    assert.throws(
+      () =>
+        new ProviderRequestCompiler(registry).compileWithReclaim({
+          model: 'gpt-test',
+          systemPrompt: 'system',
+          sessionId: 'recall-alias-missing-1',
+          messages: [userMessage('{"__contextRef":"message:1"}')],
+          contextWindow: 200_000,
+          availableToolNames: ['tooling__map'],
+          toolNameAliases: { 'context:recall': 'context__recall' },
+        }),
+      /provider-visible context handles require resident context:recall tool/
+    )
+  })
+
   void test('同一会话连续两轮编译：第二轮只增量摄入，输出仍逐字等价', () => {
     const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
     const compiler = new ProviderRequestCompiler(registry)

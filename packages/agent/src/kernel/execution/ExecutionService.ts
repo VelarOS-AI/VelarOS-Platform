@@ -14,8 +14,6 @@
 //    否则 mod 记的账与实际执行数对不上。
 import type { ModelMessage } from 'ai'
 
-import { isBlank,isEmpty, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   ExecutionProvideInputRequest,
   ExecutionRecord,
@@ -26,7 +24,9 @@ import type {
   StreamTurnContextPayload,
   ToolConfirmationDecisionOptions,
   ToolExecutionPlanUpdate,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isBlank,isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   ExecutionGuidanceQueue,
@@ -366,6 +366,11 @@ class ExecutionService {
     authorization?.assertCurrent()
     const enqueued = this.guidanceQueue.enqueue(executionId, request.message)
     this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
+
+    this.log.info('main-agent guidance enqueued', {
+      executionId,
+      sourceSessionId: request.sessionId,
+    })
 
     this.emitExecutionDebug(executionId)
   }

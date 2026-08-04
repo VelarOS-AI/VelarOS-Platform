@@ -27,6 +27,11 @@ import type {
   ChatMessage,
   SerializedImageAttachment,
 } from '#contracts'
+import {
+  isConversationTurnInputMessage,
+  isRunGuidanceMessage,
+  resolveChatMessageConversationKind,
+} from '#contracts'
 import { isBlank, isEmpty, isPresent, optionalWhenLazy } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
@@ -55,13 +60,11 @@ function formatBrowserElementChipTitle(
 
 function UserMessageBubbleInner({
   message,
-  isGuidedInput = false,
   onRewindToMessage,
   canRewindToMessage = true,
   canChooseRewindFiles = false,
 }: {
   message: ChatMessage
-  isGuidedInput?: boolean
   onRewindToMessage?: (messageId: string, options?: { restoreFiles?: boolean }) => Promise<void>
   canRewindToMessage?: boolean
   canChooseRewindFiles?: boolean
@@ -84,9 +87,11 @@ function UserMessageBubbleInner({
       setPreviewOpenIndex(previewItems.length ? previewItems.length - 1 : null)
     }
   }, [previewItems.length, previewOpenIndex])
-  const canShowRewindAction = !!onRewindToMessage && canRewindToMessage
+  const isRunGuidance = isRunGuidanceMessage(message)
+  const canShowRewindAction =
+    isConversationTurnInputMessage(message) && !!onRewindToMessage && canRewindToMessage
   const hasUserActions = canShowRewindAction || !isBlank(copyText)
-  const guidanceStatus = message.guidanceStatus ?? (isGuidedInput ? 'sent' : null)
+  const guidanceStatus = message.guidanceStatus ?? (isRunGuidance ? 'sent' : null)
   const guidanceLabel =
     guidanceStatus === 'awaiting-decision'
       ? t('chat.awaitingUserDecision')
@@ -108,7 +113,7 @@ function UserMessageBubbleInner({
       className={cx('root', 'user')}
       data-message-id={message.id}
       data-message-role={message.role}
-      data-guided-input={isGuidedInput}
+      data-conversation-kind={resolveChatMessageConversationKind(message)}
     >
       <div className={styles.userRow}>
         {(hasUserActions || guidanceLabel) && (
@@ -131,7 +136,7 @@ function UserMessageBubbleInner({
                 {!isBlank(copyText) && (
                   <MessageCopyButton
                     text={copyText}
-                    label={t('chat.copyPrompt')}
+                    label={t(isRunGuidance ? 'chat.copyGuidance' : 'chat.copyPrompt')}
                     copiedLabel={t('chat.codeBlockCopied')}
                   />
                 )}

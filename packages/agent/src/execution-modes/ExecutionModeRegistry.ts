@@ -3,8 +3,8 @@
 // 行为逐字节不变——预制 descriptor 只是把此前散在提示词构建 / 工具门控 / 会话粘性三处的
 // 硬编码事实（提示词特性 id、方案模式执行门白名单、快照标志名、粘性/完成语义）**重表达为
 // 声明**，消费点改经本注册表解析单源。新模式 = 纯声明零改码（构造一份 descriptor 即可）。
+import type { ChatPromptFeatureId } from '@velaros-ai/agent/protocol'
 import { isNotNull, toNullable } from '@velaros-ai/core'
-import type { ChatPromptFeatureId } from '@velaros-ai/core/types'
 
 import type { ExecutionModeDescriptor, ExecutionModeId } from './ExecutionModeDescriptor'
 

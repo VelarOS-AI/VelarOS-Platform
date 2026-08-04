@@ -33,7 +33,7 @@ import { createBuiltinAgentModPackage } from './BuiltinAgentMod'
 /**
  * Kernel pack 描述符的结构化契约。
  *
- * 与 kernel-client 的 `KernelModPackDescriptor` 同形：`specifier` 指向 pack 包目录，
+ * 与 Kernel client 的 `KernelModPackDescriptor` 同形：`specifier` 指向 pack 包目录，
  * `provides` 列出该 pack 贡献的能力 id。
  */
 interface AgentModPackDescriptorLike {

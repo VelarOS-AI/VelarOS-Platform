@@ -131,6 +131,13 @@ export interface MemoryRecallOptions {
   excludeSessionId?: string
   /** 自动回合召回使用：Evidence 保留，但不把纯 assistant 会话复述再次喂回模型。 */
   excludeAgentConversationEchoes?: boolean
+  /** 自动回合召回使用：原始会话观察不注入，已整理成偏好、事实或流程的长期 Claim 不受影响。 */
+  excludeConversationObservations?: boolean
+  /**
+   * 排除仅由这些来源支持的 Claim。混合来源 Claim 只要仍有一个未排除的有效 Evidence 就保留。
+   * 典型用途是让自动回合召回跳过运行轨迹，同时保留手动查询与审计能力。
+   */
+  excludeSourceTypes?: MemoryEvidenceSourceType[]
   categories?: MemoryEvidenceCategory[]
   includeDormant?: boolean
   deep?: boolean
@@ -154,6 +161,8 @@ export interface MemoryRecallItem {
   snapshotVersion: number
   retrievalReason: 'text' | 'scope' | 'mainline' | 'recent' | 'deep'
   evidenceIds: string[]
+  /** 当前有效 Evidence 的来源类型；旧索引或外部后端无法提供来源时允许缺席。 */
+  sourceTypes?: MemoryEvidenceSourceType[]
   path: MemoryTreePathNode[]
 }
 

@@ -11,9 +11,9 @@
 //  - **中止只在轮首生效**：轮内中止会留下半成品工具结果 → 历史结构出现孤儿片段 →
 //    下一轮 provider 校验拒收整条会话（曾导致会话永久锁死，见 history-orphan 自愈判决）。
 //  - **surface 不得持有回合状态**：状态归引擎，壳只做 IO 与投影；壳存状态 = 两份真相。
+import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
 import type { ScopedLog } from '@velaros-ai/core/logger'
-import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '@velaros-ai/core/types'
 
 import type { ModelSpanHandle, RunSpanScope, TurnSpanScope } from '../kernel'
 
@@ -123,16 +123,24 @@ interface LoopTurnSpans {
  */
 function beginLoopTurnSpans(
   runScope: Nullable<RunSpanScope>,
-  input: { turn: number; roleId: string; model: string; provider: string }
+  input: {
+    turn: number
+    roleId: string
+    model: string
+    provider: string
+    providerModel?: LooseOptional<string>
+  }
 ): LoopTurnSpans {
-  const turnScope: Nullable<TurnSpanScope> =
-    runScope?.beginTurn({ turn: input.turn, roleId: input.roleId, model: input.model }) ?? null
-  const modelSpan: Nullable<ModelSpanHandle> =
+  const turnScope = toNullable(
+    runScope?.beginTurn({ turn: input.turn, roleId: input.roleId, model: input.model }),
+  )
+  const modelSpan = toNullable(
     turnScope?.beginModelSpan({
       provider: input.provider,
-      model: input.model,
+      model: input.providerModel?.trim() || input.model,
       requestFingerprint: null,
-    }) ?? null
+    }),
+  )
   return { turnScope, modelSpan }
 }
 

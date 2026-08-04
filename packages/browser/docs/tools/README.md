@@ -19,19 +19,19 @@
 
 六十余个工具,分这些族:
 
-| 族 | 代表工具 |
-| --- | --- |
-| 会话与站点 | `browser:enter_site` / `browser:leave_site` / `browser:site_context` / `browser:show_page` / `browser:switch_page_target` |
-| 检查 | `browser:inspect_page` / `browser:query_elements` / `browser:observe_actions` / `browser:get_element_bounds` |
-| 交互 | `browser:act` / `browser:click_coordinates` / `browser:type_text` / `browser:press_key` / `browser:scroll_page` |
-| 等待 | `browser:wait_for_page` / `browser:wait_for_selector` / `browser:wait_for_pending_event` |
-| 页面数据与抽取 | `browser:extract` / `browser:extract_table` / `browser:extract_list` / `browser:paginate_extract` / `browser:read_page_storage` |
-| 网络与诊断 | `browser:list_network_events` / `browser:get_network_response_body` / `browser:list_console_events` / `browser:list_page_errors` |
-| 挂起事件 | `browser:handle_dialog` / `browser:handle_download` / `browser:handle_permission` / `browser:list_pending_events` |
-| 截图 / 录屏 / 导出 | `browser:capture_screenshot` / `browser:capture_region` / `browser:screencast` / `browser:export_page` |
-| 上传与取资源 | `browser:upload_file` / `browser:fetch_resource` |
-| 性能 | `browser:performance` |
-| recipe 与用户脚本 | `browser:recipe` / `browser:generate_recipe_skeleton` / `browser:rerun_recipe_from_run` / `browser:user_scripts` |
+| 族                 | 代表工具                                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 会话与站点         | `browser:enter_site` / `browser:leave_site` / `browser:site_context` / `browser:show_page` / `browser:switch_page_target`               |
+| 检查               | `browser:inspect_page` / `browser:read_page_data` / `browser:query_elements` / `browser:observe_actions` / `browser:get_element_bounds` |
+| 交互               | `browser:act` / `browser:click_coordinates` / `browser:type_text` / `browser:press_key` / `browser:scroll_page`                         |
+| 等待               | `browser:wait_for_page` / `browser:wait_for_selector` / `browser:wait_for_pending_event`                                                |
+| 页面数据与抽取     | `browser:extract` / `browser:extract_table` / `browser:extract_list` / `browser:paginate_extract` / `browser:read_page_storage`         |
+| 网络与诊断         | `browser:list_network_events` / `browser:get_network_response_body` / `browser:list_console_events` / `browser:list_page_errors`        |
+| 挂起事件           | `browser:handle_dialog` / `browser:handle_download` / `browser:handle_permission` / `browser:list_pending_events`                       |
+| 截图 / 录屏 / 导出 | `browser:capture_screenshot` / `browser:capture_region` / `browser:screencast` / `browser:export_page`                                  |
+| 上传与取资源       | `browser:upload_file` / `browser:fetch_resource`                                                                                        |
+| 性能               | `browser:performance`                                                                                                                   |
+| recipe 与用户脚本  | `browser:recipe` / `browser:generate_recipe_skeleton` / `browser:rerun_recipe_from_run` / `browser:user_scripts`                        |
 
 ## 主要导出
 
@@ -51,19 +51,23 @@ import {
   browserTools,
   type BrowserToolContext,
   type ToolBrowserApi,
-} from '@velaros-ai/browser/tools'
+} from "@velaros-ai/browser/tools";
 
-const browser: ToolBrowserApi = createPlaywrightBrowserAdapter(page)
+const browser: ToolBrowserApi = createPlaywrightBrowserAdapter(page);
 
 for (const tool of Object.values(browserTools)) {
   thirdPartyAgent.registerTool({
     name: tool.name,
     schema: tool.schema,
     execute: (input, signal) => {
-      const context: BrowserToolContext = { browser, abortSignal: signal, execution: null }
-      return tool.execute(input, context)
+      const context: BrowserToolContext = {
+        browser,
+        abortSignal: signal,
+        execution: null,
+      };
+      return tool.execute(input, context);
     },
-  })
+  });
 }
 ```
 

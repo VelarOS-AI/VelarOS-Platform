@@ -1,8 +1,6 @@
 import type { LanguageModel, ModelMessage, ToolSet } from 'ai'
 
-import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import type { EstimateContextUsageOptions } from '@velaros-ai/agent'
 import type {
   AgentEvent,
   AppLocale,
@@ -15,9 +13,11 @@ import type {
   StreamToolMetadataPayload,
   StreamToolProgressPayload,
   StreamToolResultPayload,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
-import type { EstimateContextUsageOptions } from '@velaros-ai/core/utils/contextUsage'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   buildKernelContextEpoch,
@@ -40,6 +40,7 @@ import {
 import { ToolExecutor, type ToolExecutorEvents } from '../tools'
 
 import { compareStableStrings } from './context/residency/determinism'
+import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import {
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
@@ -51,7 +52,7 @@ import {
   type AgentTurnHistoryHelper,
   createInternalFollowUpMessage,
 } from './history'
-import type { AgentModelRequestOptions } from './model'
+import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
 import {
   type AgentModelRequestPort,
   type AgentModelStreamInput,
@@ -131,6 +132,8 @@ export interface ExecuteQueryTurnArgs<
   history: ModelMessage[]
   reasoningLanguage?: ReasoningLanguagePreference
   contextWindow?: LooseOptional<number>
+  /** Concrete inputs accepted by the selected model. Missing is text-only. */
+  supportedInputModalities?: readonly AgentModelInputModality[]
   contextUsageOptions?: EstimateContextUsageOptions
   toolSchemaChars?: Readonly<Record<string, number>>
   toolContext: TToolContext
@@ -346,6 +349,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         toolSchemaChars: args.toolSchemaChars,
         historyToolNames: providerToolNamePlan.historyToolNames,
       })
+      const toolTransportPlan =
+        this.turnRequestHelper.captureToolTransportPlan(args.toolContext)
       // P7 确定性序列化：工具清单顺序直接进 prompt 字节，禁 locale 相关比较。
       const providerAvailableToolNames = Object.keys(aiTools).sort(compareStableStrings)
       const contextWorkingSetInputs = await this.turnRequestHelper.resolveContextWorkingSetInputs(
@@ -354,13 +359,17 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       const toolSchemaChars = this.turnRequestHelper.resolveToolSchemaChars(
         toolRegistry,
         args.toolContext,
-        providerAvailableToolNames,
+        providerToolNamePlan.providerToolNames,
         aiTools,
+        toolTransportPlan,
         args.toolSchemaChars
       )
-      const toolSchemaHashes = toolRegistry.estimateToolSchemaHashesByName?.(
+      const toolSchemaHashes = this.turnRequestHelper.resolveToolSchemaHashes(
+        toolRegistry,
         args.toolContext,
-        providerAvailableToolNames
+        providerToolNamePlan.providerToolNames,
+        aiTools,
+        toolTransportPlan
       )
       const compiledRequest = await compileProviderSendRequest(
         {
@@ -375,6 +384,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           systemPrompt: args.systemPrompt,
           toolSchemaChars,
           availableToolNames: providerAvailableToolNames,
+          toolNameAliases: toolTransportPlan.canonicalToProvider,
           activeTask: contextWorkingSetInputs.activeTask,
           pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
           contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,
@@ -391,6 +401,11 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       this.turnRequestHelper.emitContextUsageEstimate(compiledRequest, {
         events: args.events,
         turn: args.turn,
+        model: args.model,
+      })
+      assertModelInputCompatibility({
+        messages: compiledRequest.messages,
+        supportedInputModalities: args.supportedInputModalities,
         model: args.model,
       })
       this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
@@ -506,6 +521,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
             usableContextWindow: compiledRequest.estimate.usableContextWindow,
           },
           requestFingerprint: compiledRequest.requestFingerprint,
+          providerToCanonicalToolNames: toolTransportPlan.providerToCanonical,
           contextEpochClaim,
           contextEpochGuard: args.contextEpochGuard,
           providerTurnReducer,

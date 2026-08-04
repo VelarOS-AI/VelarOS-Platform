@@ -1,14 +1,15 @@
-import { isEmpty } from '@velaros-ai/core'
 import type {
   CapabilityScopeId,
   RunProfileId,
   ToolCategoryId,
   ToolDescriptor,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
   expandCapabilityCategoryIds,
+  resolveCapabilityScopePolicy,
   resolveCapabilityScopeResidency,
 } from '../../capabilities'
 import { resolveSoloLoopTools } from '../LoopRuntime'
@@ -121,13 +122,28 @@ class CapabilityRunPlanner {
             ...scopeProtectedToolNames,
           ]),
         ]
-    const exposure = applyRunProfileToolExposure(baseAllowedToolNames, input.runProfile, {
+    // 宿主一旦声明 residency，resident/protected 就是正式工作集，而不是“预算够时仍把
+    // 其余全部工具顺便塞进请求”的排序提示。否则 tooling:map 把工具标成 loadable，
+    // 下一轮却会因 operational 阶段直接暴露全表，tooling:replace 形同虚设并持续烧 schema token。
+    const scopedResidencyEnabled = !!resolveCapabilityScopePolicy(input.capabilityPorts)?.getResidency
+    const demandedToolNameSet = new Set([
+      ...effectiveProtectedToolNames,
+      ...(input.configuredTools ?? []),
+    ])
+    const exposureCandidates = scopedResidencyEnabled
+      ? baseAllowedToolNames.filter((toolName) => demandedToolNameSet.has(toolName))
+      : baseAllowedToolNames
+    const exposure = applyRunProfileToolExposure(exposureCandidates, input.runProfile, {
       protectedTools: effectiveProtectedToolNames,
       toolDescriptors: enabledToolDescriptors,
       toolSchemaChars: input.toolSchemaChars,
       maxToolSchemaCharsOverride: input.toolSchemaCharBudget,
       toolUsageScores: input.toolUsageScores,
     })
+    const exposedToolNameSet = new Set(exposure.allowedTools)
+    const droppedToolNames = baseAllowedToolNames.filter(
+      (toolName) => !exposedToolNameSet.has(toolName)
+    )
     const forcedToolChoice =
       bootstrap.forcedToolChoice && exposure.allowedTools.includes(bootstrap.forcedToolChoice.toolName)
         ? bootstrap.forcedToolChoice
@@ -137,7 +153,7 @@ class CapabilityRunPlanner {
       resolvedForcedToolChoice: forcedToolChoice,
       enabledToolDescriptors,
       baseAllowedToolNames,
-      droppedToolNames: exposure.droppedTools,
+      droppedToolNames,
       budgetOverrideToolNames: input.budgetOverrideToolNames,
       collectNewlyEvictedPagedInTools: input.collectNewlyEvictedPagedInTools,
     })
@@ -147,7 +163,7 @@ class CapabilityRunPlanner {
       protectedToolNames: effectiveProtectedToolNames,
       baseAllowedToolNames,
       residentToolNames: exposure.allowedTools,
-      droppedToolNames: exposure.droppedTools,
+      droppedToolNames,
       pageFaults,
       bootstrapState: forcedToolChoice ? bootstrap.nextState : input.bootstrapState ?? {},
     }

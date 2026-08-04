@@ -1,8 +1,5 @@
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 
-import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 import type {
   ExecutionEventRecord,
   ExecutionPlanView,
@@ -12,7 +9,10 @@ import type {
   ExecutionTaskRecord,
   StreamExecutionGraphPayload,
   StreamStatePayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 

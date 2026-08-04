@@ -14,6 +14,7 @@ import {
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
+  ModelInputModality,
   ModelRequestOptions,
   ModelRuntimeContext,
   ModelSelection,
@@ -35,6 +36,8 @@ interface ResolvedAgentModelRuntime {
   model: string
   providerModel: string
   contextWindow?: number
+  /** Explicit concrete-model input contract; missing provider metadata is text-only. */
+  supportedInputModalities: readonly ModelInputModality[]
   modelRequestOptions?: ModelRequestOptions
   resolutionSource: 'provider-collection'
   resolutionTrace: Array<{
@@ -194,6 +197,9 @@ class AgentModelResolver {
       ?? providerScriptMetadata?.model
       ?? resolvedModel.model
     const externalModel = providerScriptMetadata?.model ?? resolvedModel.model
+    const catalogInputModalities = this.providers
+      .requireCatalog(input.providerId)
+      .models.find((candidate) => candidate.id === resolvedModel.model)?.inputModalities
     const catalogContextWindow = resolveProviderScriptContextWindow({
       providerId: input.providerId,
       runtimeModel,
@@ -243,6 +249,8 @@ class AgentModelResolver {
       model: externalModel,
       providerModel: runtimeModel,
       contextWindow,
+      supportedInputModalities:
+        providerScriptMetadata?.inputModalities ?? catalogInputModalities ?? ['text'],
       modelRequestOptions,
       resolutionSource: 'provider-collection',
       resolutionTrace: runtimeTrace,
@@ -263,10 +271,10 @@ class AgentModelResolver {
   }
 
   private mergeModelRequestOptions(
-    requestOptions: ModelRequestOptions | undefined,
+    requestOptions: LooseOptional<ModelRequestOptions>,
     providerOptions: Nullable<Record<string, unknown>>
-  ): ModelRequestOptions | undefined {
-    if (!providerOptions) return requestOptions
+  ) {
+    if (!providerOptions) return toOptional(requestOptions)
 
     return {
       ...(requestOptions ?? {}),
@@ -279,10 +287,10 @@ class AgentModelResolver {
   }
 
   private mergeModelRequestOptionLayers(
-    primary: ModelRequestOptions | undefined,
+    primary: LooseOptional<ModelRequestOptions>,
     secondary: LooseOptional<ModelRequestOptions>
-  ): ModelRequestOptions | undefined {
-    if (!secondary) return primary
+  ) {
+    if (!secondary) return toOptional(primary)
     if (!primary) return secondary
 
     return {

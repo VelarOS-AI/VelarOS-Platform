@@ -39,9 +39,6 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import { isBoolean, isEmpty, isFunction, Log, optionalWhen, toNullable,toOptional, truncate } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/core/tool-contract'
 import type {
   AgentEvent,
   ExecutionTaskStatus,
@@ -51,7 +48,10 @@ import type {
   ThinkingDepth,
   ToolCategoryId,
   UserActionCard,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { isBoolean, isEmpty, isFunction, Log, optionalWhen, toNullable,toOptional, truncate } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   type AgentExecutionLimitOverrides,

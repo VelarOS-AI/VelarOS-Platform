@@ -8,14 +8,14 @@ import {
   resolveComputerHelper,
 } from '@velaros-ai/computer/runtime'
 import { isPresent, Log, stringifyPretty, toOptional } from '@velaros-ai/core'
-import { KernelClient } from '@velaros-ai/kernel-client'
-import type { KernelRpcEndpoint } from '@velaros-ai/kernel-client/contracts'
+import { KernelClient } from '@velaros-ai/kernel/client'
+import type { KernelRpcEndpoint } from '@velaros-ai/kernel/client/contracts'
 import {
   type BootedKernelDaemon,
   bootKernelDaemon,
   createDefaultKernelModStorePaths,
   InProcessKernelTransport,
-} from '@velaros-ai/kernel-serve/daemon'
+} from '@velaros-ai/kernel/serve'
 import { createOfficeKernelModule } from '@velaros-ai/office/composition'
 import { installProjectApprovalProvider } from '@velaros-ai/project/composition'
 import { createProjectKernelModule } from '@velaros-ai/project/kernel'
@@ -50,7 +50,7 @@ import {
 import { VelarHostPermissionBroker } from './permission-policy'
 import { VelarHostToolGateway } from './tool-gateway'
 
-export const VelarHostVersion = '0.1.0'
+export const VelarHostVersion = '0.2.0'
 export const VelarHostKernelVersion = '0.3.2'
 const HostLog = Log.tag('VelarHost')
 

@@ -331,6 +331,7 @@ function toPointerItem(record: MemoryVectorIndexRecord, score: number): MemoryRe
     snapshotVersion: 0,
     retrievalReason: 'deep',
     evidenceIds: [record.id],
+    sourceTypes: [],
     path: [],
   }
 }

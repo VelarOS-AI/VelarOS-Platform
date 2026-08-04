@@ -1,12 +1,13 @@
-import { isPlainObject, isString } from '@velaros-ai/core'
+import { isBlank, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import { type ElectronBrowserRuntime } from './ElectronBrowserRuntime'
 
@@ -48,7 +49,7 @@ function parseSessionInput(input: unknown): string {
   if (
     Object.keys(input).length !== 1
     || !isString(sessionId)
-    || sessionId.trim().length === 0
+    || isBlank(sessionId)
     || sessionId !== sessionId.trim()
     || sessionId.length > 512
   ) {
@@ -58,7 +59,7 @@ function parseSessionInput(input: unknown): string {
 }
 
 function parseEmptyInput(input: unknown): void {
-  if (!isPlainObject(input) || Object.keys(input).length !== 0) {
+  if (!isPlainObject(input) || !isEmpty(Object.keys(input))) {
     throw invalidCapabilityInput()
   }
 }
@@ -77,7 +78,7 @@ export function createBrowserKernelModule(
     manifest: {
       id: 'velaros.browser.electron',
       version: '0.2.4',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [BrowserRuntimeCapability],
       requires: [],
       optionalRequires: [],

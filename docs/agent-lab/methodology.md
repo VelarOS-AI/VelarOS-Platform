@@ -1,51 +1,44 @@
 # Agent Lab 测量方法与 2026 调研判决
 
-## 调研结论
+## 公开评测带来的原则
 
-本方案在 2026-08 重新核对了业界当前形态，没有把旧 Desktop 实现或上一版 blueprint 当设计稿：
+- [Terminal-Bench 2](https://github.com/harbor-framework/terminal-bench-2) 与 Harbor 把任务环境、agent adapter、
+  verifier 和结果制品分开：VelarOS 因此把生产事实、宿主验收和纯审计分层。
+- [WebArena-Verified](https://github.com/ServiceNow/webarena-verified) 强调可复现状态与确定性验证：结果优先由
+  文件、命令、JSON、browser state 或用户确认判定，不用关键词和 LLM judge 冒充真值。
+- [OSWorld V2](https://github.com/xlang-ai/OSWorld-V2) 与 [tau-bench](https://github.com/sierra-research/tau2-bench)
+  说明真实计算机/状态化多轮任务的重要性：任务样本来自实际产品流量，而不是工具清单排列组合。
+- [BrowseComp](https://openai.com/index/browsecomp/) 提供高难度检索任务的设计参考，但公开题只作一次性外部
+  对照，不直接复制成 VelarOS 默认题库。
+- OpenAI 对 [SWE-bench Verified 污染](https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/)
+  的说明表明固定公开题会随时间失真；真实任务和私有案例能降低污染与针对性优化。
+- [可信第三方评测基础](https://openai.com/index/trustworthy-third-party-evaluations-foundations/) 强调披露
+  system、harness、预算和有效性检查；这些信息在显式研究矩阵中继续进入归档和可比性门。
 
-- Harness-Bench 说明 harness 配置本身会显著影响结果，比较前必须共享任务环境、预算与评测协议，同时保留
-  原生 harness 行为；本包把这四项做成 manifest 与 comparability 机械条件。
-  见 [Harness-Bench](https://arxiv.org/abs/2605.27922)。
-- Terminal-Bench 2 / Harbor 把真实任务、唯一环境、测试验证器、agent adapter 和结果制品分离；Harbor 的
-  verifier sidecar 也证明验证证据应与 agent 环境分开。
-  见 [Terminal-Bench 2](https://arxiv.org/abs/2601.11868)、
-  [Harbor agents](https://www.harborframework.com/docs/agents)、
-  [Harbor artifacts](https://www.harborframework.com/docs/run-jobs/results-and-artifacts)。
-- Inspect 用 epochs 与 reducer 显式表达重复试验；本包保留 replicate 身份，并把单次成败与可靠性估计分开。
-  见 [Inspect metrics](https://inspect.aisi.org.uk/metrics.html)。
-- OpenAI 的第三方评测建议披露 system、harness、预算与有效性检查；这些字段进入 v3 manifest 和认证前置门。
-  见 [可信第三方评测基础](https://openai.com/index/trustworthy-third-party-evaluations-foundations/)。
-- BenchJack 展示验证器和 benchmark 完整性缺陷能让系统“不解题也高分”；因此完整性失败会直接让认证拒绝，
-  verifier isolation 不足则给未知而非通过。见 [BenchJack](https://arxiv.org/abs/2605.12673)。
-- METR 的长任务研究使用层级 bootstrap 处理任务簇与随机性；本包按 Journey 簇做确定性配对 bootstrap，避免
-  把同一长旅程的 leg 当独立样本。见 [METR 长任务方法](https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/)。
+## 现行判决
 
-## 与业界主流不同的判决
+产品改动不再默认运行 `quick/friction/full` 等固定 suite。它们覆盖的是设计者想象的工具面，成本持续，
+却不能代表用户真实任务分布。日常方法是：
 
-VelarOS 的真实产品单位是长会话连续旅程，所以不采用“一案例一新会话”作为默认原语。抽象上没有分叉：独立
-案例是单 leg Journey；连续旅程是多 leg Journey。统计聚类按 Journey，而不是把 leg 数量错误当成样本量。
+1. 从一个已经完成且未重复审计的真实任务采集记录。
+2. 用任务自身的验收条件判断 `outcome`，用 spans 判断 `health`。
+3. 发现工具/系统问题时先修 owner seam，再选择一个不同的新任务验证。
+4. 只有高价值问题补齐 acceptance 与 workspace snapshot，固化成 `RealTaskCase`。
+5. 复跑默认一次。只有研究问题确实需要方差时才声明 replicates 与比较矩阵。
 
-旧 blueprint 的“先只做 P0 harness，再把统计与认证留空”没有采用。原因是第三方生态认证若没有可比性门、
-attrition、重复试验和不确定性表达，归档格式会先被错误总分固化。当前版本先交付保守的统计与认证基础：证据
-不足就 `inconclusive`，不承诺排行榜。
+## 解释规则
 
-## 回归门
+- `verified-pass`：明确验收通过，过程健康。
+- `verified-pass-with-issues`：验收通过，但过程出现可行动问题。
+- `verified-fail`：验收或用户确认明确失败。
+- `needs-review`：执行已坏但缺少足够结果验收。
+- `unknown`：证据不足；不是 0 分，也不是失败。
 
-回归比较优先使用相同 Journey 版本、fixture digest、consumer commit、预算和 replicate seed 的配对结果。
-环境漂移进入 drops，不能算 agent 失败；任务摘要或判据摘要不同则判不可比。正式回归阈值至少包含最小实际
-效应，避免“统计可见但产品无意义”的变化触发门。
+工具错误至少区分预期不可用、并行冗余和反馈后的顺序重试。只有后一类说明执行没有根据反馈换路；
+并行 fan-out 是不同的效率/规划问题。成本、token 和调用数只来自供应商或执行账本真实字段，不估算。
 
-## 跨执行体
+## 何时仍使用 Journey/统计
 
-内部 agent、Codex、Claude Code 各自保留原生提示、工具和协调器。共享的是任务环境、预算上限、验证器和
-归档协议。报告以失败分类分布、attrition、观测缺口和完成度区间为主；总分只是派生量，不能代替根因矩阵。
-
-Token 口径若供应商不能等价提供，coverage 必须是 partial/none，比较时展示未知。墙钟上限相同不代表工作量
-相同，因此能提供 working time 的 Driver 应同时记账。
-
-## 上下文治理实验
-
-每个 context residency event 保留 epoch、触发原因、压缩前后 token、下一请求 cache-read 变化与 distill 成本。
-分析时至少按 Journey turn/epoch 分层，报告压缩收益随轮次的变化、完成度变化和召回是否补回信息。事件只能由
-现有 residency ledger 投影；Agent Lab 不写回、不补字段、不另算第二账本。
+Journey 是 `RealTaskCase` 的执行容器，也可用于明确批准的上下文治理或跨执行体研究。跨执行体比较仍要求
+共享任务快照、验收、预算与 consumer commit；环境 attrition 单列，未知 coverage 不补零。少于两个独立
+任务簇时不宣称显著性。

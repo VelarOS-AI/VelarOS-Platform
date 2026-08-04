@@ -34,6 +34,7 @@ function buildRuntimeToolCapabilityMap(snapshot: RuntimePromptSnapshot): string 
   const lines = [
     '工具字段、枚举、前置条件和返回含义以本轮真实 schema/description 为准，不要猜工具名。',
     '复杂能力先 discover/search/list，再 bounded inspect/read，最后 execute/verify；简单无状态工具可直接调用。',
+    '任务引用文件、页面或其他外部输入且输出依赖其内容时，必须先用对应能力读取当前真值，再生成、转换或总结；对话召回不能替代文件或页面读取。',
     '返回 truncated、has_more、next_cursor 或低置信时继续补查，并保留可追溯证据。',
   ]
   if (hasRuntimeTool(snapshot, 'tooling:map')) {

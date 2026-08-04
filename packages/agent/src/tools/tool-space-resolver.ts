@@ -16,7 +16,6 @@
 //  - **常驻集不为空**：核心工具必须常驻，否则进入空间的第一轮只能靠工具发现，表现为
 //    「转好几轮才开始干活」。
 //  - **隔离按类别不按名字**：类别是唯一隔离单位；逐名例外会随工具增加而腐坏。
-import { isEmpty, isFunction, isPresent, isString, truncate } from '@velaros-ai/core'
 import type {
   AgentRoleId,
   CapabilityScopeId,
@@ -26,11 +25,12 @@ import type {
   ToolCategoryOverview,
   ToolDescriptor,
   ToolOsState,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 import {
   parseStructuredToolDescription,
   type StructuredToolDescriptionParts,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isEmpty, isFunction, isPresent, isString, truncate } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
@@ -194,6 +194,25 @@ function searchHintsForTool(input: {
 function riskForTool(tool: ToolDescriptor): ToolSpacePageRisk {
   const permissions = tool.permissions ?? []
   if (permissions.some((permission) => permission.endsWith(':unsafe'))) return 'destructive'
+
+  // capabilities.effectKind 是工具 owner 声明的正式副作用契约；permissions 只是宿主授权键。
+  // 只看 permissions 会把无需宿主权限、但真实有副作用的工具错标成 risk:none。
+  // 本层只解释通用副作用词汇；具体产品域 effect 仍由能力 owner 保持不透明。
+  switch (tool.capabilities?.effectKind.trim().toLowerCase()) {
+    case 'destructive':
+      return 'destructive'
+    case 'execute':
+      return 'execute'
+    case 'write':
+      return 'write'
+    case 'external':
+      return 'external'
+    case 'read':
+      return 'read'
+    default:
+      break
+  }
+
   if (permissions.some((permission) => permission.includes(':exec'))) return 'execute'
   if (permissions.some((permission) => permission.endsWith(':write'))) return 'write'
   if (
@@ -527,9 +546,7 @@ function isPromptFeatureEffectivelyEnabled(
   enabledFeatures: ReadonlySet<ChatPromptFeatureId>,
   feature: ChatPromptFeatureId
 ): boolean {
-  if (enabledFeatures.has(feature)) return true
-
-  return false
+  return enabledFeatures.has(feature)
 }
 
 function buildPluginEntries(

@@ -1,4 +1,3 @@
-import type { ScopedLog } from '@velaros-ai/core/logger'
 import type {
   AgentDeveloperContext,
   AgentSurfaceId,
@@ -10,7 +9,8 @@ import type {
   SessionLineageContext,
   ToolCategoryId,
   ToolExecutionApi,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type {
   AgentRuntimeCapabilityPorts,

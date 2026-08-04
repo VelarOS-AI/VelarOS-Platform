@@ -3,7 +3,7 @@ import type {
   ExecutionTaskPlanStep,
   ExecutionTaskRecord,
   ToolExecutionPlanUpdate,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { ExecutionRecords, ExecutionRoutingCoordinator } from '../../execution'
 

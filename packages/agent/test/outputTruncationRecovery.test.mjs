@@ -119,6 +119,69 @@ test('final tool input reparses complete JSON strings but rejects truncated stri
   })
 })
 
+test('invalid final tool input may recover only from a completed valid stream draft', async () => {
+  const { resolveProviderExecutableToolInput } = await import(packagePath.href)
+  const completedDraft = {
+    id: 'tool-1',
+    toolName: 'project:edit',
+    inputText: '{"path":"report.md","content":"complete"}',
+    inputEnded: true,
+  }
+
+  assert.deepEqual(
+    resolveProviderExecutableToolInput('{"path":"report.md","content":"cut', completedDraft),
+    {
+      ok: true,
+      input: { path: 'report.md', content: 'complete' },
+      source: 'ended-stream-draft',
+    }
+  )
+  assert.deepEqual(
+    resolveProviderExecutableToolInput('{"path":"report.md","content":"cut', {
+      ...completedDraft,
+      inputEnded: false,
+    }),
+    {
+      ok: false,
+      reason: 'final_tool_input_json_parse_failed',
+      receivedType: 'string',
+      inputChars: 34,
+    }
+  )
+  assert.deepEqual(
+    resolveProviderExecutableToolInput('{"path":"report.md","content":"cut', {
+      ...completedDraft,
+      inputText: '{"path":"report.md","content":"also cut',
+    }),
+    {
+      ok: false,
+      reason: 'final_tool_input_json_parse_failed',
+      receivedType: 'string',
+      inputChars: 34,
+    }
+  )
+})
+
+test('invalid tool input diagnostics expose structure without exposing content', async () => {
+  const { diagnoseRejectedProviderToolInput } = await import(packagePath.href)
+  const finalInput = '{"path":"private-report.md","content":"line one\nline two'
+  const diagnostic = diagnoseRejectedProviderToolInput(finalInput, {
+    id: 'tool-1',
+    toolName: 'project:write',
+    inputText: finalInput,
+    inputEnded: true,
+  })
+
+  assert.equal(diagnostic.final.startsWithObject, true)
+  assert.equal(diagnostic.final.endsWithObject, false)
+  assert.equal(diagnostic.final.terminatedInString, true)
+  assert.equal(diagnostic.final.rawControlCharactersInString, 1)
+  assert.equal(diagnostic.final.parseStatus, 'invalid-json')
+  assert.equal(diagnostic.streamDraft.inputEnded, true)
+  assert.equal(diagnostic.streamDraft.identicalToFinal, true)
+  assert.doesNotMatch(JSON.stringify(diagnostic), /private-report|line one/u)
+})
+
 test('capability aliases are absent by default and resolve only when injected', async () => {
   const { ToolExecutionPolicy } = await import(packagePath.href)
   const policy = new ToolExecutionPolicy({

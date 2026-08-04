@@ -12,8 +12,8 @@ type EngineAssignedField = 'id' | 'parentId' | 'createdAt'
  * 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `type` 的收窄能力。
  *
  * 与 `observability/ExecutionSpanRecorder.ts` 的同名类型是**刻意的两份**：为两行纯类型别名新建
- * 共享模块（或塞进全局 `types/velaros-globals.d.ts`）的成本高于收益——前者多一层 import 边，
- * 后者与该文件"全局面只减不增、运行时符号已迁出"的既定方向相反。改一处时记得另一处同形。
+ * 两行局部工具类型不值得额外建立公共模块；保持在所属实现附近，更容易看清使用边界。
+ * 改动这一形状时，应同步检查 observability 中的同名局部类型。
  */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 

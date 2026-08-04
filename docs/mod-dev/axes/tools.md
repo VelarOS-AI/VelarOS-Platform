@@ -12,6 +12,8 @@ z.strictObject({
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
+  /** 只绑定可用类别，不强制常驻 schema。 */
+  availableInSpaces: tolerantArray(TrimmedIdSchema).optional(),
   /** 声明本工具在哪些 space 常驻（数据条目，由宿主常驻集算法消费）。 */
   residentInSpaces: tolerantArray(TrimmedIdSchema).optional(),
 })
@@ -23,6 +25,7 @@ z.strictObject({
 | `categoryId` | 归入哪个工具类别；类别本身可由 [`toolCategories`](./tool-categories.md) 轴贡献 |
 | `summary` | 简述（宿主诊断面 / 工具目录展示用） |
 | `readOnly` | 只读工具标记 |
+| `availableInSpaces` | 声明本工具在哪些 space 可用；只绑定类别，可按预算换入，不强制每轮发送 schema |
 | `residentInSpaces` | 声明本工具在哪些 space 常驻。**纯数据条目**——由宿主的常驻集算法消费，主干不解释 space 语义 |
 
 ## 命名规则（裁决 5）

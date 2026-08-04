@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   createModelKernelModule,

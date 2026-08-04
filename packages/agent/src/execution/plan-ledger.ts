@@ -1,4 +1,3 @@
-import { isEmpty } from '@velaros-ai/core'
 import type {
   AgentRoleId,
   ExecutionTaskPlanStep,
@@ -6,7 +5,8 @@ import type {
   ExecutionTaskRecord,
   ToolExecutionPlanItemStatus,
   ToolExecutionPlanUpdate,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 import {
   type ExecutionIdFactory,

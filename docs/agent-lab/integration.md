@@ -1,65 +1,46 @@
-# Agent Lab 接入手册
+# Agent Lab 宿主接入手册
+
+## 接入真实任务
+
+宿主在普通产品执行完成后保留可关联事实，不在热路径调用评测器：
+
+1. 每轮生成稳定 `runId`，并把触发它的 `rootInputId` 写入 run span。
+2. 记录 `run/turn/model/tool/capability/policy` 的收敛 span；外部引擎至少记录 run/turn/tool。
+3. 采集器按 session/run 读取 span、会话标题/工作区/消息和产物，只归一化已有事实。
+4. 验收器从真实工作区或产品状态读证据；命令直启 argv，路径不能逃逸工作区。
+5. 用户接受/拒绝作为独立 sidecar evidence，重新审计时合并。
+6. 默认记录不包含 prompt/answer；只有本地显式排障才包含，HTML 报告始终不包含。
+
+`auditRealTask(record)` 不做 I/O、不调用模型。宿主用 `writeRealTaskBundle` 原子写
+`record.json`、`assessment.json` 和 `report.html`。
+
+## 固化问题
+
+调用 `promoteRealTaskCase` 前必须人工提供：
+
+- 审阅后的 prompt；
+- `git commit` 或 archive 等可重建 workspace reference 与 source path；
+- 至少一条确定性 acceptance contract；
+- `redacted` 或 `shareable` 隐私结论与说明。
+
+工作区当前脏状态不能用 `HEAD` 冒充快照。宿主应拒绝猜测 reference；不能重建的任务可以保留审计记录，
+但不应伪装成可复现案例。
+
+## 显式复跑
+
+把一个 `RealTaskCase` 投影成单 leg Journey：setup 在隔离根恢复 snapshot，prompt 原样执行，criterion 读取
+case acceptance。默认一个 executor、一个 replicate、concurrency=1。复跑仍使用原生 Driver 的权限、审批、
+中止与 settle 行为；执行体不可用是 attrition，不是 0 分。
+
+Driver 基建可保留一个最小 probe 验证真实 app 发送、写入、存储和 verifier 链，但 probe 只诊断 harness，
+不能被称为产品能力回归。
+
+## 新验收类型
+
+先扩 `RealTaskAssertionKindSchema`，再由宿主实现读取面。读取面不存在时返回 `unknown`；不能退化成“回答包含
+关键词”或“调用过某工具”。产物 evidence 只保存相对路径、大小、哈希和 provenance，大正文留在原 owner。
 
 ## 新执行体
 
-优先实现 `PollingDriverAdapter`，由 `createPollingDriver` 统一施加稳定 idle、预算、确认策略和看门狗；只有原生
-执行模型不适合轮询时才直接实现 `LabDriver`。
-
-接入清单：
-
-1. `identity()` 报告 adapter/CLI/model/revision/reasoning/config；拿不到就 `null`。
-2. `capabilities()` 逐观测面声明 full/partial/none，并声明 settle signal、abort、approval、verifier isolation。
-3. `openSession()` 创建 trial 级原生会话；`send()` 只追加当前 leg，不能重开会话。
-4. `readState()` 使用该执行体权威状态。内部 agent 可读 agent events，外部 engine 应读 coordinator/process。
-5. `revision` 必须在新完成输出出现时变化，用来挡住“尚未起跑时 running=false”的竞态。
-6. `collect()` 投影 transcript、turn、usage、runtime、artifacts 与原 residency ledger；工具调用按稳定 id。
-7. 真机测 approval、abort、待输入、app 重启、空闲间隙和归档落盘延迟。
-
-Velar Hooks 适配器已完成 HTTP 重试、Bearer endpoint 发现、runtime/transcript/debug 投影和确认/中止。产品侧把
-execution binding 放到 `resolveSpace` / `commandExtras`，用 `sendParameters` 只挑出合法 hook 字段；不要把
-中止、双发、故障注入等产品控制参数泄漏到 hook 命令，也不要在任务文件写死 Codex / Claude 私有协议。
-
-## 新任务
-
-任务必须是可审阅的版本化纯数据：fixture 能恢复、hygiene 明确、每个 leg 有产品含义、预算有依据、判据尽量读
-磁盘真相。修改 prompt、fixture、leg 顺序、预算或 criterion 都要提升版本。任务注册门应锁 id/version/digest，
-防止“同版本偷偷变题”。
-
-连续旅程的 leg 不应拆成散装测试。若某一步失败后继续执行没有意义，标 `blocking: true`；否则允许后续步骤继续，
-用来观察 agent 是否能恢复或解释残余状态。
-
-## 新判据
-
-Verifier 的输入是 trial、journey、leg、criterion、session、observation 和 workspace root。建议：
-
-- 优先从隔离进程或 sidecar 读取产物，不信任 agent 自报“已完成”。
-- 返回结构化 evidence；大制品只存摘要、路径、大小和哈希。
-- 明确失败返回 `fail` + FailureClass；部分完成可用 `partial`。
-- 验证器缺失、环境不可用或证据采集失败返回 `void`，不能伪装成 `fail` 或 0。
-- 抛异常会被 runner 记录为 `verifier-failure`，只用于真正的 verifier bug。
-
-## 新探测器
-
-Detector 是同步纯函数，输入相同必须字节级等价。定义必须注明稳定 id、版本、观测面、运行相位、默认严重度与
-是否允许运行期掐断。先写 synthetic hit/miss、累积快照去重和 archive/live 等价测试，再登记为 gating detector。
-
-## Runtime 与 CLI
-
-Runtime 模块导出工厂：
-
-```ts
-export async function createAgentLabRuntime() {
-  return {
-    detectors,
-    verifiers,
-    workspaceRoot,
-    sourceCommit,
-    consumerCommit,
-    getJourney: (trial) => journeys.get(`${trial.journeyId}@${trial.journeyVersion}`),
-    resolveDriver: (trial) => drivers.get(trial.executorId),
-  }
-}
-```
-
-先运行 `validate`，再用一条单 Journey 单 replicate job 做 smoke；确认归档 identity、unknown、工具去重和报告后，
-才扩成多执行体矩阵。能力比较至少两个 Journey 簇；单簇结果只能诊断，不能宣称显著差异。
+外部执行体保留原生提示、工具、审批和恢复语义。宿主将其流事件桥到共享 execution span factory；模型、token
+或 cost 没有可靠字段时留空并记录 gap。观测失败是旁路故障，不能影响任务主链。

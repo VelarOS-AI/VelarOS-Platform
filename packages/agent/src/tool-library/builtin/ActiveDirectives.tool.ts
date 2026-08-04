@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import { defineVelaTool } from '../defineVelaTool'
 

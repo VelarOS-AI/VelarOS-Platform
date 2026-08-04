@@ -4,7 +4,7 @@ import type {
   AgentSkillSourceKind,
   CapabilityScopeId,
   ChatPromptFeatureId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 /**
  * 技能类型——行为知识三层模型里 Tier2 的两个子类，决定注入方式：

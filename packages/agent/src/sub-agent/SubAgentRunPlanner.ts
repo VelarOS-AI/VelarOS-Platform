@@ -1,4 +1,4 @@
-import type { SubAgentTaskRequest, SubAgentTypeId } from '@velaros-ai/core/types'
+import type { SubAgentTaskRequest, SubAgentTypeId } from '@velaros-ai/agent/protocol'
 
 interface SubAgentRunPreCheckResult {
   allow: boolean

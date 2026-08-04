@@ -1,4 +1,4 @@
-import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/ToolDescription'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 
 import { computerInputTools } from './Input.tool'
 import { computerScreenTools } from './Screen.tool'

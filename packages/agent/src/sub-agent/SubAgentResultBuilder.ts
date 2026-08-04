@@ -6,7 +6,7 @@ import type {
   SubAgentUsage,
   SubAgentWindDownReason,
   TeamModelSelectionTrace,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { CodingSessionSnapshot } from '../reminders/types'
 

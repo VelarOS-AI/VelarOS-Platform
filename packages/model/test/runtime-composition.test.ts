@@ -54,7 +54,7 @@ describe('model runtime composition', () => {
 
     first.providerScriptRegistry.registerSource({
       source: IsolatedProviderSource,
-      scriptPath: '/tmp/velaros-model-runtime-isolated-provider.cjs',
+      scriptPath: '/tmp/velaros-model-isolated-provider.cjs',
     })
 
     expect(first.providerScriptRegistry.supportsProvider(IsolatedProviderId)).toBe(true)

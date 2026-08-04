@@ -1,5 +1,5 @@
 export const KnowledgeReadCapability = {
-  effectKind: 'memory',
+  effectKind: 'read',
   readScopes: ['memory', 'workspace'],
   memoryAccess: 'read',
   concurrency: 'safe',
@@ -7,7 +7,7 @@ export const KnowledgeReadCapability = {
 } as const
 
 export const KnowledgeWriteCapability = {
-  effectKind: 'memory',
+  effectKind: 'write',
   readScopes: ['memory', 'workspace'],
   writeScopes: ['memory'],
   memoryAccess: 'write',

@@ -13,8 +13,7 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/game": "workspace:*",
         "@velaros-ai/html-artifacts": "workspace:*",
-        "@velaros-ai/kernel-client": "workspace:*",
-        "@velaros-ai/kernel-serve": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/memory": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/office": "workspace:*",
@@ -63,8 +62,10 @@
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "ai": "^6.0.168",
         "execa": "^9.6.1",
+        "gpt-tokenizer": "^3.0.1",
         "typescript": "^5.7.0",
         "zod": "^4.3.6",
       },
@@ -92,6 +93,7 @@
       "version": "0.2.6",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "gifenc": "^1.0.3",
         "zod": "^4.3.6",
       },
@@ -114,12 +116,13 @@
     },
     "packages/cli": {
       "name": "@velaros-ai/cli",
-      "version": "0.2.11",
+      "version": "0.2.12",
       "bin": {
-        "velaros": "./dist/cli.js",
+        "velaros": "./dist/bin.js",
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/serve-host": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -131,6 +134,7 @@
       "version": "0.2.6",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -140,11 +144,7 @@
     },
     "packages/core": {
       "name": "@velaros-ai/core",
-      "version": "0.3.3",
-      "dependencies": {
-        "gpt-tokenizer": "^3.0.1",
-        "zod": "^4.3.6",
-      },
+      "version": "0.4.0",
       "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
@@ -185,9 +185,12 @@
         "vite": "^7.3.2",
       },
     },
-    "packages/kernel-client": {
-      "name": "@velaros-ai/kernel-client",
-      "version": "0.3.0",
+    "packages/kernel": {
+      "name": "@velaros-ai/kernel",
+      "version": "0.1.0",
+      "bin": {
+        "velaros-kernel-daemon": "./dist/serve/main.js",
+      },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "zod": "^4.3.6",
@@ -198,32 +201,13 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/kernel-serve": {
-      "name": "@velaros-ai/kernel-serve",
-      "version": "0.3.2",
-      "bin": {
-        "velaros-kernel-daemon": "./dist/daemon/main.js",
-      },
-      "dependencies": {
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/kernel-client": "workspace:*",
-        "zod": "^4.3.6",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-    },
     "packages/memory": {
       "name": "@velaros-ai/memory",
       "version": "0.3.6",
-      "bin": {
-        "velaros-memory": "./dist/cli.js",
-        "velaros-knowledge": "./dist/knowledge/cli.js",
-      },
       "dependencies": {
         "@lancedb/lancedb": "^0.27.2",
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "apache-arrow": "^18.1.0",
         "better-sqlite3": "^12.9.0",
         "zod": "^4.3.6",
@@ -243,6 +227,7 @@
         "@ai-sdk/openai": "^3.0.53",
         "@ai-sdk/provider": "3.0.8",
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "ai": "^6.0.168",
       },
       "devDependencies": {
@@ -253,12 +238,10 @@
     "packages/office": {
       "name": "@velaros-ai/office",
       "version": "1.0.0",
-      "bin": {
-        "velaros-office": "./dist/cli.js",
-      },
       "dependencies": {
         "@napi-rs/canvas": "^1.0.0",
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "docx": "^9.6.1",
         "exceljs": "^4.4.0",
         "jszip": "^3.10.1",
@@ -278,6 +261,7 @@
       "version": "2.0.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "diff": "^8.0.4",
         "execa": "^9.6.1",
         "iconv-lite": "^0.7.2",
@@ -302,16 +286,12 @@
     },
     "packages/serve-host": {
       "name": "@velaros-ai/serve-host",
-      "version": "0.1.0",
-      "bin": {
-        "velaros": "./dist/cli.js",
-      },
+      "version": "0.2.0",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/computer": "workspace:*",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/kernel-client": "workspace:*",
-        "@velaros-ai/kernel-serve": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/office": "workspace:*",
         "@velaros-ai/project": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
@@ -339,11 +319,9 @@
     "packages/system": {
       "name": "@velaros-ai/system",
       "version": "1.0.0",
-      "bin": {
-        "velaros-system": "./dist/cli.js",
-      },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/kernel": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -1002,9 +980,7 @@
 
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@workspace:packages/html-artifacts"],
 
-    "@velaros-ai/kernel-client": ["@velaros-ai/kernel-client@workspace:packages/kernel-client"],
-
-    "@velaros-ai/kernel-serve": ["@velaros-ai/kernel-serve@workspace:packages/kernel-serve"],
+    "@velaros-ai/kernel": ["@velaros-ai/kernel@workspace:packages/kernel"],
 
     "@velaros-ai/memory": ["@velaros-ai/memory@workspace:packages/memory"],
 

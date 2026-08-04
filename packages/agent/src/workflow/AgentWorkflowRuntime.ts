@@ -31,16 +31,6 @@
 // 注意占位也会进 `outputs`：下游 filter / dedupe / majority_vote 读到的数组里含 skipped 条目，
 // 需要时按 `status` 自行滤除。
 
-import {
-  isArray,
-  isFalse,
-  isNotUndefined,
-  isNumber,
-  isPresent,
-  isRecord,
-  isUndefined,
-} from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentWorkflowAgentCall,
   AgentWorkflowAgentResult,
@@ -54,7 +44,17 @@ import type {
   AgentWorkflowStepResult,
   AgentWorkflowValuePath,
   AgentWorkflowValueRef,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import {
+  isArray,
+  isFalse,
+  isNotUndefined,
+  isNumber,
+  isPresent,
+  isRecord,
+  isUndefined,
+} from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 

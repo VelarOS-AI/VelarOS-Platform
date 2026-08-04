@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import { createAgentRuntimeInputInterruptScope } from '../src/agent/RuntimeInputPort'
 import { consumeSoloRuntimeGuidance } from '../src/agent/SoloRuntimeGuidance'
 import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
 
@@ -120,5 +121,33 @@ void describe('runtime input settlement', () => {
       }
     )
     assert.deepEqual(queue.port(executionId).takeOrSeal(), { status: 'sealed' })
+  })
+
+  void test('newly accepted guidance interrupts an active provider-turn scope', () => {
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'execution:interrupt-active-turn'
+    const interrupt = createAgentRuntimeInputInterruptScope(queue.port(executionId))
+
+    assert.equal(interrupt.signal.aborted, false)
+    assert.deepEqual(queue.enqueue(executionId, userMessage('stop searching')), {
+      status: 'accepted',
+    })
+    assert.equal(interrupt.signal.aborted, true)
+    assert.equal(queue.consume(executionId)?.role, 'user')
+
+    interrupt.dispose()
+  })
+
+  void test('pending guidance closes the drain-to-request race immediately', () => {
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'execution:interrupt-before-subscribe'
+
+    assert.deepEqual(queue.enqueue(executionId, userMessage('use existing evidence')), {
+      status: 'accepted',
+    })
+
+    const interrupt = createAgentRuntimeInputInterruptScope(queue.port(executionId))
+    assert.equal(interrupt.signal.aborted, true)
+    interrupt.dispose()
   })
 })

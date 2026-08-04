@@ -14,6 +14,7 @@ export {
 } from './AgentSurfaceProfile'
 export type { AgentWorkflowRunRequest } from './AgentWorkflowCoordinator'
 export { AgentWorkflowCoordinator } from './AgentWorkflowCoordinator'
+export * from './GoalLifecycleProjection'
 export * from './host-ports'
 export type { AgentProvider, ResolvedAgentRuntime } from './ModelRuntime'
 export {

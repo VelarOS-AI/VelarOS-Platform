@@ -10,7 +10,7 @@
 所有顶层应用（Desktop / Workbench / Extension / CLI）都需要 agent，因此**领域轴的注册机住 agent 域**。
 
 ```
-第一级  Kernel Module Host（packages/core/src/kernel/host/）
+第一级  Kernel Module Host（packages/kernel/src/runtime/host/）
         只解析窄 KernelModuleDescriptor { id, version, apiVersion, provides, requires, permissions, isolation }
         管 pack 的安装/启停/发现，永不解析领域贡献轴
 
@@ -176,7 +176,7 @@ const segments = projectAgentModPromptSegments(snapshot)
 
 ### pack 布局与筛选规则
 
-- 宿主从 kernel-client 的 `mods/list` 拿到 `KernelModPackDescriptor { id, kind, version, enabled, provides, specifier }`。
+- 宿主从 `@velaros-ai/kernel/client` 的 `mods/list` 拿到 `KernelModPackDescriptor { id, kind, version, enabled, provides, specifier }`。
 - **筛选**：`enabled === true` 且 `provides` 含 `AgentModPackProvidesId`（= `'velaros.agent'`，与 `AgentCapability` 令牌同值）
   的 pack 才归 Agent 轴；其余留诊断跳过（`mod.pack-disabled` / `mod.pack-not-agent-axis`），不静默丢。
 - **布局**：`specifier` 指向 pack 包目录，其中必须有 `VelarosModManifestFileName`（= `velaros.mod.json`，

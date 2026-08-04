@@ -4,7 +4,7 @@ import type {
   ChatContextRetrievalIndexSourceFingerprint,
   ChatMessage,
   SerializedMessage,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 /** 索引 snapshot schema 版本；与 {@link ContextRetrievalIndexBuilder} 产出一致。 */
 const ChatContextRetrievalIndexVersion = 1

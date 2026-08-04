@@ -8,10 +8,38 @@ import {
   readErrnoCode,
   readSystemTextFile,
   resolveSystemPathInput,
-  truncateToChars,
 } from './Filesystem.js'
 
 const ReadLineWindowChunkBytes = 64 * 1024
+
+/**
+ * 把文本投影成用户可寻址的内容行。文件末尾的换行符只是最后一行的终止符，不能再制造一个
+ * 空的“幽灵行”；中间连续换行产生的空行仍然保留。空文件维持一条空行，以兼容从第 1 行读取。
+ */
+interface AddressableTextLine {
+  readonly content: string
+  readonly terminator: string
+}
+
+function splitAddressableTextLines(content: string): AddressableTextLine[] {
+  if (!content) return [{ content: '', terminator: '' }]
+  const segments = content.match(/[^\r\n]*(?:\r\n|\n|\r|$)/gu) ?? []
+  return segments
+    .filter((segment) => segment.length > 0)
+    .map((segment) => {
+      const terminator = segment.endsWith('\r\n')
+        ? '\r\n'
+        : segment.endsWith('\n')
+          ? '\n'
+          : segment.endsWith('\r')
+            ? '\r'
+            : ''
+      return {
+        content: terminator ? segment.slice(0, -terminator.length) : segment,
+        terminator,
+      }
+    })
+}
 
 export interface AtomicReadInput {
   path: string
@@ -61,7 +89,7 @@ export async function executeAtomicRead(input: AtomicReadInput): Promise<AtomicR
   const textFile = await readSystemTextFile(resolvedPath)
 
   const fullContent = textFile.content
-  const lines = fullContent.split(/\r?\n/)
+  const lines = splitAddressableTextLines(fullContent)
   const totalLines = lines.length
   const safeEndLine = input.endLine ? Math.min(totalLines, input.endLine) : totalLines
 
@@ -88,7 +116,7 @@ interface AtomicReadResultBuildInput {
   path: string
   startLine: number
   requestedEndLine: number
-  lines: string[]
+  lines: AddressableTextLine[]
   hasMoreAfterWindow: boolean
   totalLines?: number
   maxChars?: number
@@ -105,10 +133,12 @@ function buildAtomicReadResult(input: AtomicReadResultBuildInput): AtomicReadRes
     }
   }
 
-  const selectedContent = input.lines.join('\n')
+  const selectedContent = input.lines
+    .map((line) => `${line.content}${line.terminator}`)
+    .join('')
   const totalChars = selectedContent.length
   const effectiveMaxChars = input.maxChars ?? totalChars
-  const truncation = truncateToChars(input.lines, effectiveMaxChars)
+  const truncation = truncateAddressableLines(input.lines, effectiveMaxChars)
   const windowTruncated = totalChars > effectiveMaxChars
   const content = windowTruncated ? truncation.content : selectedContent
   const returnedLineCount = windowTruncated ? truncation.lineCount : input.lines.length
@@ -141,7 +171,7 @@ function buildAtomicReadResult(input: AtomicReadResultBuildInput): AtomicReadRes
 }
 
 interface SystemTextLineWindow {
-  lines: string[]
+  lines: AddressableTextLine[]
   hasMore: boolean
   totalLines?: number
 }
@@ -195,9 +225,11 @@ function collectLineWindow(
   endLine: number,
   includeTrailingPartial: boolean
 ): SystemTextLineWindow {
-  const parts = content.split(/\r?\n/)
-  const lines = includeTrailingPartial || content.endsWith('\n') ? parts : parts.slice(0, -1)
-  const selectedLines: string[] = []
+  const parsedLines = splitAddressableTextLines(content)
+  const lines = includeTrailingPartial
+    ? parsedLines
+    : parsedLines.filter((line) => !isEmpty(line.terminator))
+  const selectedLines: AddressableTextLine[] = []
   let lineNumber = 1
 
   for (const line of lines) {
@@ -224,6 +256,30 @@ function collectLineWindow(
     hasMore: false,
     totalLines: includeTrailingPartial ? lines.length : undefined,
   }
+}
+
+function truncateAddressableLines(
+  lines: readonly AddressableTextLine[],
+  maxChars: number
+): { content: string; lineCount: number; firstLineTruncated: boolean } {
+  let content = ''
+  let lineCount = 0
+
+  for (const line of lines) {
+    const segment = `${line.content}${line.terminator}`
+    if (content.length + segment.length > maxChars) {
+      if (lineCount === 0) return {
+          content: segment.slice(0, maxChars),
+          lineCount: 1,
+          firstLineTruncated: true,
+        }
+      return { content, lineCount, firstLineTruncated: false }
+    }
+    content += segment
+    lineCount += 1
+  }
+
+  return { content, lineCount, firstLineTruncated: false }
 }
 
 async function openSystemTextFileForRead(resolvedPath: string) {

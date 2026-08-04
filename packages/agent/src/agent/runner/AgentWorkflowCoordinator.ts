@@ -5,7 +5,7 @@ import type {
   AgentWorkflowDefinition,
   AgentWorkflowRunResult,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import { parseSubAgentToolResult } from '../../sub-agent'

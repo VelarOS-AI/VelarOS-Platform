@@ -1,0 +1,88 @@
+{
+  "name": "@velaros-ai/kernel",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
+    },
+    "./contracts/abi": {
+      "types": "./dist/contracts/abi/index.d.ts",
+      "import": "./dist/contracts/abi/index.js"
+    },
+    "./contracts/protocol": {
+      "types": "./dist/contracts/protocol/index.d.ts",
+      "import": "./dist/contracts/protocol/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./client/contracts": {
+      "types": "./dist/client/contracts/index.d.ts",
+      "import": "./dist/client/contracts/index.js"
+    },
+    "./serve": {
+      "types": "./dist/serve/index.d.ts",
+      "import": "./dist/serve/index.js"
+    },
+    "./serve/updater": {
+      "types": "./dist/serve/updater/index.d.ts",
+      "import": "./dist/serve/updater/index.js"
+    }
+  },
+  "bin": {
+    "velaros-kernel-daemon": "./dist/serve/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs && bun run generate:schema-snapshot",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/kernel",
+    "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/kernel"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

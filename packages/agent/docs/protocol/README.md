@@ -52,7 +52,7 @@ if (!parsed.success) return toProtocolError(parsed.error)
 ## 边界
 
 - **不定义** Kernel 模块生命周期、权限、状态、能力路由、产品装配——那些住内核基座
-  `@velaros-ai/core/kernel/abi`(模块 ABI)与 `@velaros-ai/core/kernel/protocol`(wire 调用信封)。
+  `@velaros-ai/kernel/contracts/abi`(模块 ABI)与 `@velaros-ai/kernel/contracts/protocol`(wire 调用信封)。
 - 无全局注册表,不读环境变量。模型、工具执行器、存储、权限、传输都由上层注入,
   本切片只在它们的传输边界做验证。
 - 能力自己的 payload 形状留在对应能力包,不塞进本切片的严格对象。

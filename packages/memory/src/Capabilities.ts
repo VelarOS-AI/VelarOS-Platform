@@ -1,5 +1,5 @@
 export const MemoryReadCapability = {
-  effectKind: 'memory',
+  effectKind: 'read',
   readScopes: ['memory'],
   memoryAccess: 'read',
   concurrency: 'safe',
@@ -7,7 +7,7 @@ export const MemoryReadCapability = {
 } as const
 
 export const MemoryWriteCapability = {
-  effectKind: 'memory',
+  effectKind: 'write',
   readScopes: ['memory'],
   writeScopes: ['memory'],
   memoryAccess: 'write',

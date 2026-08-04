@@ -4,7 +4,7 @@
 // 运行上下文装配本体 host 无关，只认端口不认实现：流经的工具上下文、代码会话读取子面、
 // 工具上下文等能力都由宿主注入。具体产品域通过 capability ports 贡献上下文，
 // runtime 不持有任何具体产品能力的专用辅助器。
-import type { ToolCategoryId } from '@velaros-ai/core/types'
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 
 import type {
   PromptStateCodingSession,

@@ -1,10 +1,10 @@
+import type { ToolPermission } from '@velaros-ai/agent/protocol'
 import {
   type ApprovalPort,
   defineToolRuntimeSpec,
   type DefineToolRuntimeSpecInput,
   type ToolContractRuntimeSpec,
-} from '@velaros-ai/core/tool-contract'
-import type { ToolPermission } from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/tool-contract'
 
 import { SystemToolCategoryByName, type SystemToolName } from './system-tool-names'
 import type {

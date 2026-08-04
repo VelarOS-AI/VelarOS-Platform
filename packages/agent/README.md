@@ -2,7 +2,7 @@
 
 > **位置**:VelarOS-Platform 单版本火车 · `agent` 域唯一包 · 目录 `packages/agent`。
 > 它是**宿主无关的 Agent 执行运行时**,被 Desktop 一类宿主装配消费;它自己不是应用,也不是内核
-> ——内核库本体在 `@velaros-ai/core/kernel`。
+> ——内核库本体在 `@velaros-ai/kernel`。
 
 ## 这个包解决什么问题
 
@@ -21,13 +21,17 @@
 | 子路径 | 一句话职责 |
 | --- | --- |
 | `@velaros-ai/agent` | 运行时主干:循环、上下文、提示词、工具注册与执行、执行账本、子 agent 派发、技能、mod 装载 |
+| `@velaros-ai/agent/node` | **仅 Node Host**：工具目录 revision、租约校验、schema 自恢复与单调用执行门面；Node 内建模块不会进入 browser-safe 子路径 |
+| `@velaros-ai/agent/chat` | **browser-safe** 聊天客户端公共面:会话投影、搜索、上下文用量与回合环境格式化 |
 | `@velaros-ai/agent/chat-stream` | 聊天流协议与消费者(`ChatStreamProtocol` / `ChatStreamConsumer` / 会话流日志) |
+| `@velaros-ai/agent/run-context` | 回合上下文账本与追加通道，供能力适配器接入，不暴露 Agent 根运行时 |
+| `@velaros-ai/agent/tool-contract` | 工具定义、审批端口、描述构造与 schema 辅助，只承载 Agent 工具契约 |
 | `@velaros-ai/agent/protocol` | **版本化 wire 契约**(zod schema + 推导类型),跨进程 / 跨版本传输用 |
-| `@velaros-ai/agent/protocol/{execution,message,session,lease,mods,observability,external-agent-bridge}` | 按契约族细分的按需入口 |
+| `@velaros-ai/agent/protocol/{agent-capability,execution,message,session,lease,mods,observability,external-agent-bridge}` | 按契约族细分的按需入口 |
 
-**为什么 protocol 单独切出来**:它只描述数据形状,零运行时逻辑,只依赖 `zod`。一个只想解析
+**为什么 protocol 单独切出来**:它只描述数据形状与 browser-safe 边界校验,不含 Node 或执行编排。一个只想解析
 Agent 消息帧的进程(RPC 前脸、日志分析、外部桥接)不该被迫吃进整个执行运行时。
-`protocol` 里**没有任何 class**,一律「schema + `z.infer` 类型」,严格对象、拒未知字段。
+协议对象以严格 schema/解析器拒绝未知字段；需要 `node:crypto` 或 ToolExecutor 的实现单独留在 `/node`。
 
 ## 核心概念
 

@@ -1,8 +1,8 @@
 import type { ModelMessage } from 'ai'
 
+import type { StreamTurnEndPayload } from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import type { ScopedLog } from '@velaros-ai/core/logger'
-import type { StreamTurnEndPayload } from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
 
 import { createInternalFollowUpMessage } from './history'
 import {

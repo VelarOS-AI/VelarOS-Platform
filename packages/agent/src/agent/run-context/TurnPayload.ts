@@ -1,11 +1,11 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isObject,isPresent, isString, toNullable } from '@velaros-ai/core'
 import type {
   PromptSegmentTrace,
   SkippedPromptSegmentTrace,
   StreamTurnContextPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isObject,isPresent, isString, toNullable } from '@velaros-ai/core'
 
 import { isToolCategoryAvailable } from '../../tools'
 import { isInternalFollowUpMessage } from '../history'

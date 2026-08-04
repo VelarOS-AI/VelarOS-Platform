@@ -1,8 +1,8 @@
 import type { ModelMessage } from 'ai'
 
+import { stripTurnContextBlocks } from '@velaros-ai/agent'
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isArray, isObject, isString } from '@velaros-ai/core'
-import type { ToolCategoryId } from '@velaros-ai/core/types'
-import { stripTurnContextBlocks } from '@velaros-ai/core/utils/TurnContextFormat'
 
 import {
   type AgentRuntimeCapabilityPorts,

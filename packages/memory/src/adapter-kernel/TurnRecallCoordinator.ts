@@ -1,6 +1,7 @@
-import { isEmpty,Log } from '@velaros-ai/core'
+import { TurnContextSessionLedgers } from '@velaros-ai/agent/run-context'
+import { isEmpty, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { MemoryRecallItem, MemoryStoreBackend } from '..'
 
@@ -22,6 +23,12 @@ const RecallLedgerMaxEntries = 16
 const InjectedSessionsMax = 128
 /** 引擎发送前可等待召回的硬预算；超时后本轮跳过，不阻塞发送、不重试。 */
 const AwaitableRecallTimeoutMs = 2_000
+/** 运行轨迹可供审计/手动召回，但不应作为下一项任务的自动语义上下文。 */
+const AutomaticRecallExcludedSourceTypes = [
+  'workspace_event',
+  'execution_event',
+  'computer_use',
+] as const
 
 export interface MemoryTurnRecallDeps {
   /**
@@ -123,7 +130,7 @@ export class MemoryTurnRecallCoordinator {
 
     this.inFlightSessions.add(input.sessionId)
     let expired = false
-    let timer: Nullable<ReturnType<typeof setTimeout>> = null
+    const timers = new TimerScope({ name: 'MemoryTurnRecallCoordinator.awaitableRecall' })
     const recallTask = this.recall(input, query, false, () => expired)
       .then((summaries) => ({ summaries }))
       .catch((error) => {
@@ -137,17 +144,19 @@ export class MemoryTurnRecallCoordinator {
         this.inFlightSessions.delete(input.sessionId)
       })
 
-    const result = await Promise.race([
-      recallTask,
-      new Promise<MemoryTurnRecallResult>((resolve) => {
-        timer = setTimeout(() => {
-          expired = true
-          resolve({ summaries: [] })
-        }, Math.min(timeoutMs, AwaitableRecallTimeoutMs))
-      }),
-    ])
-    if (timer) clearTimeout(timer)
-    return result
+    try {
+      return await Promise.race([
+        recallTask,
+        new Promise<MemoryTurnRecallResult>((resolve) => {
+          timers.after(Math.min(timeoutMs, AwaitableRecallTimeoutMs), () => {
+            expired = true
+            resolve({ summaries: [] })
+          })
+        }),
+      ])
+    } finally {
+      timers.dispose()
+    }
   }
 
   /** 环境回合上下文 source adapter：纯内存读账本，无 IO。 */
@@ -185,6 +194,8 @@ export class MemoryTurnRecallCoordinator {
       scopeId: scope.scopeId,
       excludeSessionId: input.sessionId,
       excludeAgentConversationEchoes: true,
+      excludeConversationObservations: true,
+      excludeSourceTypes: [...AutomaticRecallExcludedSourceTypes],
     })
     if (isEmpty(candidates) && (this.deps.isAutomaticDeepRecallEnabled?.() ?? true)) {
       candidates = await this.deps.recall(query, {
@@ -193,6 +204,8 @@ export class MemoryTurnRecallCoordinator {
         scopeId: scope.scopeId,
         excludeSessionId: input.sessionId,
         excludeAgentConversationEchoes: true,
+        excludeConversationObservations: true,
+        excludeSourceTypes: [...AutomaticRecallExcludedSourceTypes],
         includeDormant: true,
         deep: true,
       })
@@ -200,7 +213,14 @@ export class MemoryTurnRecallCoordinator {
     if (isExpired()) return []
 
     const injectedIds = this.injectedIdsFor(input.sessionId)
-    const freshCandidates = candidates.filter((candidate) => !injectedIds.has(candidate.id))
+    const excludedSourceTypes = new Set<string>(AutomaticRecallExcludedSourceTypes)
+    const freshCandidates = candidates.filter((candidate) =>
+      !injectedIds.has(candidate.id)
+      && candidate.predicate !== 'conversation_observation'
+      && (
+        !candidate.sourceTypes?.length
+        || candidate.sourceTypes.some((sourceType) => !excludedSourceTypes.has(sourceType))
+      ))
     if (isEmpty(freshCandidates)) return []
 
     const summaries: string[] = []

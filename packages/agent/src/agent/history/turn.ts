@@ -1,11 +1,11 @@
 import type { ModelMessage } from 'ai'
 
-import { isEmpty,isFalse, toNullable } from '@velaros-ai/core'
 import {
   compactToolInputForModel,
   extractSerializationHintsFromToolInput,
   serializeToolResultForModel,
-} from '@velaros-ai/core/utils/toolResultSerialization'
+} from '@velaros-ai/agent'
+import { isEmpty,isFalse, toNullable } from '@velaros-ai/core'
 
 interface AgentTurnToolResult {
   toolCallId: string
@@ -25,14 +25,15 @@ interface AgentTurnToolExecutor {
   getTerminalError(): unknown
 }
 
-export interface AssistantContentPart {
-  type: 'text' | 'reasoning' | 'tool-call'
-  text?: string
-  toolCallId?: string
-  toolName?: string
-  input?: Record<string, unknown>
-  replayable?: boolean
-}
+export type AssistantContentPart =
+  | { type: 'text'; text: string; replayable?: boolean }
+  | { type: 'reasoning'; text: string }
+  | {
+      type: 'tool-call'
+      toolCallId: string
+      toolName: string
+      input: Record<string, unknown>
+    }
 
 type AssistantModelContentPart =
   | { type: 'text'; text: string }
@@ -137,7 +138,7 @@ class TurnHistory {
     assistantContent.forEach((part) => {
       if (part.type === 'text') {
         if (isFalse(part.replayable)) return
-        modelContent.push({ type: 'text', text: part.text! })
+        modelContent.push({ type: 'text', text: part.text })
         return
       }
 
@@ -145,9 +146,9 @@ class TurnHistory {
 
       modelContent.push({
         type: 'tool-call',
-        toolCallId: part.toolCallId!,
-        toolName: part.toolName!,
-        input: compactToolInputForModel(part.input!),
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        input: compactToolInputForModel(part.input),
       })
     })
 
@@ -165,18 +166,18 @@ class TurnHistory {
     return assistantContent.map((part) => {
       switch (part.type) {
         case 'text': {
-          return { type: 'text', text: part.text ?? '' }
+          return { type: 'text', text: part.text }
         }
         case 'reasoning': {
-          return { type: 'reasoning', text: part.text ?? '' }
+          return { type: 'reasoning', text: part.text }
         }
         default: {
           return {
-        type: 'tool-call',
-        toolCallId: part.toolCallId ?? '',
-        toolName: part.toolName ?? '',
-        input: part.input ?? {},
-      }
+            type: 'tool-call',
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            input: part.input,
+          }
         }
       }
     })

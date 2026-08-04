@@ -94,6 +94,12 @@ describe('Velar Host Computer runtime installer', () => {
       '--json',
     ])
     expect(cli.exitCode).toBe(0)
+    expect(cli.command).toBe('computer.install')
+    expect(cli.envelope).toMatchObject({ installed: false })
     expect(JSON.parse(cli.text).installed).toBe(false)
+
+    const invalid = await runServeCli(['status', '--unknown-option'])
+    expect(invalid.exitCode).toBe(2)
+    expect(invalid.error?.code).toBe('ARGUMENT_ERROR')
   })
 })

@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs'
 import type {
   CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   createOfficeKernelModule,

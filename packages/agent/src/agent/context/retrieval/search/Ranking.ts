@@ -1,6 +1,6 @@
+import { extractSessionSearchTerms } from '@velaros-ai/agent'
+import type { ChatContextRetrievalScoreStats } from '@velaros-ai/agent/protocol'
 import { isEmpty, isPresent } from '@velaros-ai/core'
-import type { ChatContextRetrievalScoreStats } from '@velaros-ai/core/types'
-import { extractSessionSearchTerms } from '@velaros-ai/core/utils/sessionSearchText'
 
 import { chatSearchText } from './Text'
 
@@ -138,7 +138,7 @@ class ChatSearchRanking {
 
   /**
    * 从用户 query 提取归一化检索词项（小写、去标点、拆词/ CJK 等）。
-   * 实现委托 `@velaros-ai/core/utils/sessionSearchText.extractSessionSearchTerms`。
+   * 实现委托 `@velaros-ai/agent.extractSessionSearchTerms`。
    */
   public normalizeSearchTerms(query: string): string[] {
     return extractSessionSearchTerms(query)

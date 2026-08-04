@@ -25,13 +25,13 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 import type {
   ContextUsageEstimate,
   EstimateContextUsageOptions,
-} from '@velaros-ai/core/utils/contextUsage'
+} from '@velaros-ai/agent'
+import { isArray, isEmpty, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProviderRequestFingerprint } from '../../kernel/provider-events'
 import { rewriteCanonicalToolReferences } from '../../tools/ToolIdentity'

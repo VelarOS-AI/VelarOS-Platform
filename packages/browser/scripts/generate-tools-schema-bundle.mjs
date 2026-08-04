@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
+import { createToolSchemaBundle } from '@velaros-ai/agent/tool-contract'
 
 import { browserTools } from '../src/tools/Collection'
 

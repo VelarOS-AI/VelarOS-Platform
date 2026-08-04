@@ -2,7 +2,8 @@
  * 聊天转录窗口：按对话节切片渲染，并提供导航引用。
  *
  * 取代旧的整列表虚拟化：只把可见消息中的一个「窗口」切片交给转录区全量渲染，
- * 窗口边界对齐用户消息。右侧滚动导航通过导航引用驱动窗口：
+ * 窗口边界只对齐真正开启新轮次的 turn-input；run-guidance 等 user-role 内部消息留在当前轮。
+ * 右侧滚动导航通过导航引用驱动窗口：
  *   - 上一节/下一节：窗口内走页面节点滚动；到达窗口边界时按对话节滑动窗口
  *   - 回顶：滑到已加载顶部；已在顶部且磁盘还有更旧消息时触发加载更旧消息
  *   - 到底：回到末尾窗口并重新跟随（流式贴底由 useScrollToBottom 负责）
@@ -20,6 +21,7 @@ import {
 import type { ChatTranscriptNavigationHandle } from './ChatTranscript'
 
 import type { ChatMessage } from '#contracts'
+import { isConversationTurnInputMessage } from '#contracts'
 import { isEmpty, isNumber } from '#internal/runtime'
 
 /** 单窗口渲染的消息条数预算（按对话节边界向上取整，单个超大对话节仍整段渲染）。 */
@@ -69,11 +71,11 @@ export interface ChatTranscriptWindowAnchorState {
 
 const InitialWindowState: TranscriptWindowState = { followEnd: true, anchorIndex: 0, nonce: 0 }
 
-/** user 消息所在下标即 section 起点；首条非 user 时补 0，使开头那段也算一个 section。 */
-function computeSectionStarts(messages: ChatMessage[]): number[] {
+/** turn-input 所在下标即 section 起点；开头不是 turn-input 时补 0。 */
+export function computeChatTranscriptSectionStarts(messages: ChatMessage[]): number[] {
   const starts: number[] = []
   messages.forEach((message, index) => {
-    if (message.role === 'user') starts.push(index)
+    if (isConversationTurnInputMessage(message)) starts.push(index)
   })
   if (isEmpty(starts) || starts[0] !== 0) starts.unshift(0)
 
@@ -164,7 +166,7 @@ export function resolveChatTranscriptWindowMessages({
   state: ChatTranscriptWindowAnchorState
   pinnedMessageId?: LooseOptional<string>
 }): ChatMessage[] {
-  const sectionStarts = computeSectionStarts(messages)
+  const sectionStarts = computeChatTranscriptSectionStarts(messages)
   const baseRange = deriveWindowRange(messages.length, sectionStarts, {
     followEnd: state.followEnd,
     anchorIndex: state.anchorIndex,
@@ -211,7 +213,7 @@ export function useChatTranscriptWindow({
   // member=session：会话即工作区，transcript 窗口 scope key 就是 sessionId。
   const transcriptWindowScopeKey = sessionId
 
-  const sectionStarts = useMemo(() => computeSectionStarts(messages), [messages])
+  const sectionStarts = useMemo(() => computeChatTranscriptSectionStarts(messages), [messages])
   const range = useMemo(
     () => {
       const baseRange = deriveWindowRange(messages.length, sectionStarts, state)

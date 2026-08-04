@@ -304,6 +304,33 @@ class BrowserTargetActionScriptBuilder {
         if (isNativeCheckable(control)) return control.checked
         return normalize(control.getAttribute('aria-checked')).toLowerCase() === 'true'
       }
+      const readControlState = (node) => {
+        if (isHtmlSelectElement(node)) {
+          return {
+            kind: 'select',
+            value: String(node.value ?? ''),
+            selectedValues: Array.from(node.selectedOptions).map((option) => String(option.value ?? '')),
+          }
+        }
+        if (isNativeCheckable(node)) {
+          return { kind: 'checkable', checked: node.checked }
+        }
+        if (isTextInputElement(node) || isHtmlTextAreaElement(node)) {
+          const value = String(node.value ?? '')
+          if (isHtmlInputElement(node) && node.type.toLowerCase() === 'password') {
+            return { kind: 'text', value: null, valueLength: value.length }
+          }
+          return { kind: 'text', value, valueLength: value.length }
+        }
+        if (isHtmlElement(node) && node.isContentEditable) {
+          const value = String(node.textContent ?? '')
+          return { kind: 'contenteditable', value, valueLength: value.length }
+        }
+        const checkable = resolveCheckableControl(node)
+        return checkable
+          ? { kind: 'checkable', checked: readCheckableState(checkable) }
+          : null
+      }
       const dispatchCheckableChange = (control) => {
         control.dispatchEvent(new Event('input', { bubbles: true }))
         control.dispatchEvent(new Event('change', { bubbles: true }))
@@ -659,6 +686,7 @@ class BrowserTargetActionScriptBuilder {
         clickPoint: null,
         clickMethod: payload.action === 'click' ? 'dom' : null,
         selectedValues,
+        controlState: readControlState(element),
         failureReason: null,
         blockedBy: null,
         capturedAt: Date.now(),

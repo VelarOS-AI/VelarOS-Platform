@@ -1,20 +1,23 @@
-import { isTrue, toNullable } from '@velaros-ai/core'
 import type {
   ActiveContextArtifact,
   ActiveContextArtifactKind,
   ActiveContextArtifactStatus,
   ActiveContextUpsertInput,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+
+import {
+  assertGoalCanComplete,
+  buildGoalStateUpsertInput,
+  buildGoalTerminalUpsertInput,
+  buildGoalUpsertInput,
+  findCurrentGoalArtifact,
+  type GoalStatus,
+  toGoalSnapshot,
+} from '../tool-library/builtin/Goals'
 
 import type { SoloGoalFinishingState } from './SoloFinishingGate'
 
-type SoloGoalLifecycleStatus =
-  | 'active'
-  | 'paused'
-  | 'complete'
-  | 'blocked'
-  | 'cancelled'
-  | 'removed'
+type SoloGoalLifecycleStatus = GoalStatus
 
 /** goal 生命周期所需的最小 activeContext 端口（读全量 requirement + upsert 单条目标）。 */
 interface SoloGoalLifecycleActiveContext {
@@ -25,44 +28,12 @@ interface SoloGoalLifecycleActiveContext {
   upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>
 }
 
-function isSoloGoalArtifact(artifact: ActiveContextArtifact): boolean {
-  return artifact.kind === 'requirement' && isTrue(artifact.metadata?.goal)
-}
-
 function readSoloGoalStatus(artifact: ActiveContextArtifact): SoloGoalLifecycleStatus {
-  const status = artifact.metadata?.goalStatus
-  if (
-    status === 'complete' ||
-    status === 'blocked' ||
-    status === 'active' ||
-    status === 'paused' ||
-    status === 'cancelled' ||
-    status === 'removed'
-  )
-    return status
-  if (artifact.status === 'archived') return 'removed'
-  return artifact.status === 'completed' ? 'complete' : 'active'
+  return toGoalSnapshot(artifact).status
 }
 
 function readSoloGoalBlockedAuditTurns(artifact: ActiveContextArtifact): number {
-  const turns = artifact.metadata?.blockedAuditTurns
-  return Number.isFinite(turns) ? Math.max(0, Math.floor(Number(turns))) : 1
-}
-
-function findSoloCurrentGoalArtifact(
-  artifacts: readonly ActiveContextArtifact[]
-): Nullable<ActiveContextArtifact> {
-  const goals = artifacts
-    .filter(isSoloGoalArtifact)
-    .filter((artifact) => artifact.status !== 'archived')
-    .sort((left, right) => right.updatedAt - left.updatedAt)
-
-  return toNullable(
-    goals.find((artifact) => {
-      const status = readSoloGoalStatus(artifact)
-      return status === 'active' || status === 'paused'
-    }) ?? goals[0]
-  )
+  return toGoalSnapshot(artifact).blockedAuditTurns
 }
 
 function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGoalFinishingState {
@@ -107,7 +78,59 @@ class SoloGoalLifecycle {
       status: 'all',
       kinds: ['requirement'],
     })
-    return findSoloCurrentGoalArtifact(artifacts)
+    return findCurrentGoalArtifact(artifacts)
+  }
+
+  /**
+   * 显式目标模式由运行控制面在首轮模型请求前建目标。
+   *
+   * 活动目标代表同一 session 中仍在推进的工作，保留它；已暂停或进入终态的旧目标不应
+   * 吞掉新的显式用户目标，因此用统一 goal id 开启一轮新的生命周期。
+   */
+  public async ensureExplicitGoal(objective: string): Promise<SoloGoalFinishingState> {
+    const normalizedObjective = objective.trim()
+    const current = await this.fetchCurrentGoal()
+    if (current && readSoloGoalStatus(current) === 'active') {
+      this.cachedGoal = current
+      return toSoloGoalFinishingState(current)
+    }
+
+    if (!normalizedObjective) return toSoloGoalFinishingState(current)
+
+    const created = await this.activeContext.upsertActiveContextArtifact(
+      buildGoalUpsertInput({ objective: normalizedObjective, now: Date.now() })
+    )
+    this.cachedGoal = null
+    return toSoloGoalFinishingState(created)
+  }
+
+  /**
+   * 模型正常收尾且其它验证门均已通过时，由控制面收束显式目标。
+   * pending/in_progress 步骤随成功收尾一并完成；failed 步骤仍阻止自动终结，留给模型真实处理。
+   */
+  public async recordSuccessfulCompletion(): Promise<boolean> {
+    const goal = await this.fetchCurrentGoal()
+    if (!goal || readSoloGoalStatus(goal) !== 'active') return false
+
+    const snapshot = toGoalSnapshot(goal)
+    const steps = snapshot.steps.map((step) =>
+      step.status === 'pending' || step.status === 'in_progress'
+        ? { ...step, status: 'completed' as const }
+        : step
+    )
+    if (steps.some((step) => step.status === 'failed')) return false
+
+    const stateArtifact = steps.some((step, index) => step.status !== snapshot.steps[index]?.status)
+      ? await this.activeContext.upsertActiveContextArtifact(
+          buildGoalStateUpsertInput({ artifact: goal, steps })
+        )
+      : goal
+    assertGoalCanComplete(toGoalSnapshot(stateArtifact))
+    await this.activeContext.upsertActiveContextArtifact(
+      buildGoalTerminalUpsertInput({ artifact: stateArtifact, status: 'complete', now: Date.now() })
+    )
+    this.cachedGoal = null
+    return true
   }
 
   /** 收尾门读取目标状态；缓存本次解析出的目标 artifact 供同轮 record 复用。 */

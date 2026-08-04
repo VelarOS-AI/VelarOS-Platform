@@ -1,4 +1,4 @@
-import type { ChatMessage, TextBlock, ToolCallBlock } from '@velaros-ai/core/types'
+import type { ChatMessage, TextBlock, ToolCallBlock } from '@velaros-ai/agent/protocol'
 
 import { chatSearchText } from './Text'
 

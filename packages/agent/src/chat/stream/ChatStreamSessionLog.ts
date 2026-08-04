@@ -3,7 +3,7 @@ import type {
   ChatStreamEvent,
   ChatStreamEventEnvelope,
   ChatStreamSnapshot,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
 import type { ChatStreamLogEntry } from './types'

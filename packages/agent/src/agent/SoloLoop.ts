@@ -16,26 +16,27 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import { isTrue,toNullable, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime, type ScopedLog } from '@velaros-ai/core/logger'
 import type {
   ActiveContextArtifact,
   ActiveContextArtifactKind,
   ActiveContextArtifactStatus,
   ActiveContextUpsertInput,
   AgentContextPhase,
+  AgentModelInputModality,
   PromptSegmentTrace,
   RunProfileId,
   RunProfileRuntimePolicy,
   SkippedPromptSegmentTrace,
   StreamTurnContextPayload,
   ToolCategoryId,
-  ToolDescriptor,
+  ToolCategoryOverview,
   ToolLayerTelemetryMetrics,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isNull, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime, type ScopedLog } from '@velaros-ai/core/logger'
 
 import {
   type AutoVerificationEvents,
@@ -70,6 +71,7 @@ import {
 } from './ExecutionLimits'
 import type { AgentTurnToolExecutor } from './history'
 import { createInternalFollowUpMessage } from './history'
+import { extractLatestUserTextFromMessages } from './IntentSignals'
 import {
   AgentLoopContextUsageManager,
   type AgentLoopToolRegistry,
@@ -90,6 +92,7 @@ import type {
   AgentSystemRuntimeConfig,
 } from './RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
+import { createAgentRuntimeInputInterruptScope } from './RuntimeInputPort'
 import { applySoloContextDegradeAction } from './SoloContextDegradeActionExecutor'
 import {
   createSoloFinishingGateBlockTracker,
@@ -128,6 +131,7 @@ interface SoloLoopRoleRuntime {
   model: string
   providerModel?: string
   contextWindow?: number
+  supportedInputModalities: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
   runProfilePolicy?: RunProfileRuntimePolicy
   resolutionSource: string
@@ -165,10 +169,12 @@ type SoloLoopToolContext = StreamTurnToolContext &
     }
     getCurrentVisibleToolNames: () => string[]
     setCurrentVisibleToolNames: (toolNames: string[]) => void
-    listToolCategories(scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'): Array<{
-      category: { id: ToolCategoryId }
-      tools: ToolDescriptor[]
-    }>
+    setSupportedModelInputModalities: (
+      modalities: readonly AgentModelInputModality[]
+    ) => void
+    listToolCategories(
+      scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
+    ): ToolCategoryOverview[]
   }
 
 interface SoloLoopRuntime<TEvents extends SoloLoopEvents> {
@@ -251,7 +257,7 @@ type SoloLoopToolRegistry<TContext extends SoloLoopToolContext> = AgentLoopToolR
       toolContext: TContext,
       allowList?: string[],
       scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
-    ): Array<{ category: { id: ToolCategoryId }; tools: ToolDescriptor[] }>
+    ): ToolCategoryOverview[]
     getDescriptor(toolName: string): LooseOptional<{ categoryId?: LooseOptional<ToolCategoryId> }>
     estimateToolsSerializedCharsForProfile?: (
       toolContext: TContext,
@@ -323,21 +329,52 @@ type SoloModeStreamLoopResult = { status: 'completed' } | { status: 'aborted' | 
  * 6. 若没有工具调用，运行自动验证 gate，通过后结束。
  */
 
-/**
- * 超大工具调用输出被上游 serving 层截断（模型把整文件塞进一次工具调用参数，长流式生成中途断裂
- * → MODEL_STREAM_INTERRUPTED）时，反应式自纠的最多重试次数。超过则降级为普通错误，避免死循环。
- */
-const SoloOversizedToolCallRecoveryMaxAttempts = 2
+type SoloInterruptedToolCallRecoveryKind =
+  | 'output-truncation'
+  | 'invalid-input'
+  | 'invalid-identity'
 
-/** 构造注入给下一轮的能力中立纠正提示。 */
-function buildOversizedToolCallRecoveryGuidance(_allowedTools: readonly string[]): string {
+const SoloInterruptedToolCallRecoveryLimits = {
+  'output-truncation': 2,
+  // 参数协议错误重试一次足以给模型自纠；继续盲试只会空烧上下文和额度。
+  'invalid-input': 1,
+  'invalid-identity': 1,
+} as const
+
+function resolveInterruptedToolCallRecoveryKind(
+  error: AppError
+): SoloInterruptedToolCallRecoveryKind {
+  const reason = error.context?.reason
+  if (reason === 'final_tool_name_missing' || reason === 'tool_input_start_name_missing') return 'invalid-identity'
+  const finishReason = error.context?.finishReason
+  return finishReason === 'length' || finishReason === 'repetition_truncation'
+    ? 'output-truncation'
+    : 'invalid-input'
+}
+
+/** 构造注入给下一轮的能力中立纠正提示，不把所有参数协议错误误报为超长截断。 */
+function buildInterruptedToolCallRecoveryGuidance(
+  kind: SoloInterruptedToolCallRecoveryKind
+): string {
+  if (kind === 'invalid-identity') return [
+    '上一次工具调用缺少工具名称，已在执行前拒绝，没有产生副作用。',
+    '如果该操作仍然必要，请从当前工具目录中选择一个明确工具，并重新发送一次完整调用。',
+    '不要猜测或省略工具名，也不要重复分析；现在直接完成这个未执行的操作。',
+  ].join('\n')
+
+  if (kind === 'invalid-input') return [
+    '上一次工具调用的参数不是完整、合法的 JSON object，已在执行前拒绝，没有产生副作用。',
+    '如果该操作仍然必要，只重发一个完整工具调用；严格遵循当前 schema，确保字符串、换行和引号正确转义。',
+    '参数含长文本时，改用当前能力公开的小块写入或分段追加方式；具体操作名与参数以工具目录为准。',
+    '不要重复分析，现在直接完成这个未执行的操作。',
+  ].join('\n')
+
   return [
-    '上一次工具调用因为一次性输出内容过大，在传输中途被截断、没能执行（这是上游模型服务对超长单次输出的限制，不是你的错）。',
+    '上一次工具调用因为一次性输出内容过大，在传输中途被截断、没能执行。',
     '请把这次操作拆成更小的多次工具调用，每次只处理一部分，不要再一口气输出超大内容。',
     '优先使用当前能力公开的局部更新或分段追加操作；具体操作名与参数必须以工具目录为准。',
     '现在就用更小的分批方式重做这次操作。',
-  ]
-    .join('\n')
+  ].join('\n')
 }
 
 class SoloStreamLoop<
@@ -439,24 +476,30 @@ class SoloStreamLoop<
     const primaryMaxTurns = this.executionLimits.primaryMaxTurns
     const windDownGuard = new LoopWindDownGuard({
       hardCapTurns: primaryMaxTurns ?? Number.POSITIVE_INFINITY,
-      disabled: primaryMaxTurns === null,
+      disabled: isNull(primaryMaxTurns),
     })
-    // 超大工具调用被上游截断的反应式自纠计数；一旦有工具调用成功即清零（按"卡住的这一段"计，不累计全程）。
-    let oversizedToolCallRecoveryAttempts = 0
+    // 工具参数流中断/非法的反应式自纠计数；一旦有工具调用成功即清零。
+    let interruptedToolCallRecoveryAttempts = 0
     const finishingGateBlockTracker = createSoloFinishingGateBlockTracker()
     // 目标生命周期：整个 solo 执行共享一个实例，收尾门同轮 inspect→record 复用单次取数。
     const goalLifecycle = new SoloGoalLifecycle(args.toolContext.activeContext)
+    if (isTrue(args.config.goalMode)) {
+      await goalLifecycle.ensureExplicitGoal(
+        extractLatestUserTextFromMessages(args.history) ?? '完成当前用户目标'
+      )
+    }
     // 观测：一次完整 solo 执行 = 一个 run span 根；缺省端口时为 null（全链 no-op）。
     // 每个 finish 分支就近收敛（scope.end 失败隔离且幂等首闭为准，多次调用后续吞掉）。
-    const runScope =
+    const runScope = toNullable(
       this.spanScopeFactory?.beginRun({
         runId: randomUUID(),
         sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
-        rootInputId: null,
+        rootInputId: toNullable(args.config.rootInputId),
         // 主 Agent = 根 run，无子 Agent 身份/派发来源标注（缺席用 null）。
         agentName: null,
         dispatchSource: null,
-      }) ?? null
+      })
+    )
 
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<SoloModeStreamLoopResult>> => {
       // TODO[主链路-26]: 一轮模型调用从这里开始；每次循环最多发起一次 LLM 请求，tool result 可能把流程带回下一轮。
@@ -479,6 +522,9 @@ class SoloStreamLoop<
           args.config.promptFeatures
         ),
       }
+      // 工具发现与最终 tools 必须共用本轮已解析模型的输入能力，不能让目录继续展示
+      // 模型无法消费结果的截图/音频工具。
+      args.toolContext.setSupportedModelInputModalities(roleRuntime.supportedInputModalities)
       args.events.emitRuntime(ChatRuntimeEvents.phase('preparing-tools'))
       const contextPhaseDecision = resolveAgentContextPhase({
         turn,
@@ -507,6 +553,7 @@ class SoloStreamLoop<
           model: roleRuntime.model,
           providerModel: roleRuntime.providerModel,
           contextWindow: roleRuntime.contextWindow,
+          supportedInputModalities: roleRuntime.supportedInputModalities,
           modelRequestOptions: roleRuntime.modelRequestOptions,
           runProfilePolicy: roleRuntime.runProfilePolicy,
         },
@@ -536,7 +583,8 @@ class SoloStreamLoop<
       // 工具列表在缺页降级（narrow-tools 档）时可能被收窄，故用 let。
       let allowedTools = preparedRunPlan.allowedTools
       const activeThinkingDepth = runProfileDefinition.defaults.thinkingDepth
-      const activeContextWindow = roleRuntime.contextWindow ?? resolvedRunProfile.contextWindow
+      // run plan 已把物理模型窗口与 profile 工作集上限取最小值；后续估算、编译和降级必须共用它。
+      const activeContextWindow = runPlan.context.contextWindow
 
       // TODO[主链路-27]: 调模型前先构建本轮 system prompt、上下文片段和 step budget，这是本轮请求的主要提示词来源。
       const promptStartedAt = Date.now()
@@ -639,6 +687,8 @@ class SoloStreamLoop<
           profile: runProfile,
           reason: resolvedRunProfile.reason,
           contextWindow: toNullable(activeContextWindow),
+          physicalContextWindow: toNullable(roleRuntime.contextWindow ?? resolvedRunProfile.contextWindow),
+          maxInputWorkingSetTokens: runProfileDefinition.budget.maxInputWorkingSetTokens,
           maxToolCount: toolExposure.maxToolCount,
           maxSystemPromptChars: runProfileDefinition.budget.maxSystemPromptChars,
           baseAllowedToolCount: baseAllowedTools.length,
@@ -669,6 +719,7 @@ class SoloStreamLoop<
         turn,
         roleId: args.resolution.id,
         model: roleRuntime.model,
+        providerModel: roleRuntime.providerModel,
         provider: roleRuntime.providerId,
       })
 
@@ -680,60 +731,68 @@ class SoloStreamLoop<
       try {
         // TODO[主链路-30]: 进入单轮流式调用；executeStreamTurn 内部会通过统一请求层发起请求。
         // 缺页兜底（护栏 2，机制单源在 AgentLoop）不计入对外步数。
-        const turnResult = await executeLoopTurnWithContextOverflowRecovery({
-          turn,
-          abortSignal: args.abortController.signal,
-          executeTurn: () =>
-            this.turnHelper.executeStreamTurn({
-              provider: roleRuntime.provider,
-              model: roleRuntime.model,
-              modelRequestOptions: roleRuntime.modelRequestOptions,
-              systemPrompt,
-              stableCutoff,
-              history: args.history,
-              reasoningLanguage: args.systemConfig.reasoningLanguage,
-              contextWindow: roleRuntime.contextWindow,
-              contextUsageOptions,
-              toolContext: args.toolContext,
-              toolRegistry: turnToolRegistry,
-              allowTools: allowedTools,
-              toolSchemaChars,
-              toolChoice: toOptional(bootstrapToolChoice),
-              executor,
-              events: args.events,
-              abortSignal: args.abortController.signal,
-              idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
-              turn,
-            }),
-          resolveAction: (attempt) =>
-            recoveryRunPlanner.resolveContextOverflowAction(runPlan.recovery, attempt),
-          applyAction: async (action) =>
-            applySoloContextDegradeAction(action, {
-              governanceSessions: this.governanceSessions,
-              toolRegistry: turnToolRegistry,
-              log: this.log,
-              roleRuntime,
-              turn,
-              baseAllowedTools,
-              protectedTools,
-              enabledToolDescriptors,
-              zoneAllocation,
-              toolContext: args.toolContext,
-              currentAllowedTools: allowedTools,
-              onToolsNarrowed: (next) => {
-                allowedTools = next
-              },
-            }),
-          // 上下文超限发生在请求建立阶段、工具尚未执行，重置 executor 以确保干净重放。
-          onBeforeRetry: () => {
-            executor = new ToolExecutor(args.toolContext, args.events, turnExecutionPolicy, {
-              toolSpanOpener: toOptional(spans.turnScope),
-              seams: this.seams,
-            })
-          },
-          surrenderLogMessage: 'solo loop exhausted context degrade ladder; surrendering',
-          log: this.log,
-        })
+        const runtimeInputInterrupt = createAgentRuntimeInputInterruptScope(args.runtimeInput)
+        let turnResult: StreamTurnResult
+        try {
+          turnResult = await executeLoopTurnWithContextOverflowRecovery({
+            turn,
+            abortSignal: args.abortController.signal,
+            executeTurn: () =>
+              this.turnHelper.executeStreamTurn({
+                provider: roleRuntime.provider,
+                model: roleRuntime.model,
+                modelRequestOptions: roleRuntime.modelRequestOptions,
+                systemPrompt,
+                stableCutoff,
+                history: args.history,
+                reasoningLanguage: args.systemConfig.reasoningLanguage,
+                contextWindow: roleRuntime.contextWindow,
+                supportedInputModalities: roleRuntime.supportedInputModalities,
+                contextUsageOptions,
+                toolContext: args.toolContext,
+                toolRegistry: turnToolRegistry,
+                allowTools: allowedTools,
+                toolSchemaChars,
+                toolChoice: toOptional(bootstrapToolChoice),
+                executor,
+                events: args.events,
+                abortSignal: args.abortController.signal,
+                runtimeInputInterruptSignal: runtimeInputInterrupt.signal,
+                idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
+                turn,
+              }),
+            resolveAction: (attempt) =>
+              recoveryRunPlanner.resolveContextOverflowAction(runPlan.recovery, attempt),
+            applyAction: async (action) =>
+              applySoloContextDegradeAction(action, {
+                governanceSessions: this.governanceSessions,
+                toolRegistry: turnToolRegistry,
+                log: this.log,
+                roleRuntime,
+                turn,
+                baseAllowedTools,
+                protectedTools,
+                enabledToolDescriptors,
+                zoneAllocation,
+                toolContext: args.toolContext,
+                currentAllowedTools: allowedTools,
+                onToolsNarrowed: (next) => {
+                  allowedTools = next
+                },
+              }),
+            // 上下文超限发生在请求建立阶段、工具尚未执行，重置 executor 以确保干净重放。
+            onBeforeRetry: () => {
+              executor = new ToolExecutor(args.toolContext, args.events, turnExecutionPolicy, {
+                toolSpanOpener: toOptional(spans.turnScope),
+                seams: this.seams,
+              })
+            },
+            surrenderLogMessage: 'solo loop exhausted context degrade ladder; surrendering',
+            log: this.log,
+          })
+        } finally {
+          runtimeInputInterrupt.dispose()
+        }
         // 观测：provider 回合收敛 —— usage 挂在本确定 turn 的 model span（D5，消 C2 的 turn:null）。
         // 富化字段（outputTokens/costUsd/finishReason/requestFingerprint）由 StreamTurnResult 从供应方
         // 回合的 stream diagnostics + 请求指纹回传（#37 阶段 C 片 1，与 inputTokens 同源同通道）。
@@ -748,9 +807,14 @@ class SoloStreamLoop<
           predictedInputTokens,
           toNullable(turnResult.inputTokens)
         )
+        if (turnResult.interruptedByRuntimeInput) {
+          this.log.info('provider turn yielded to runtime guidance before tool dispatch', { turn })
+          args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))
+          return loopContinue()
+        }
         if (turnResult.hasToolUse) {
           resetSoloFinishingGateBlockTracker(finishingGateBlockTracker)
-          oversizedToolCallRecoveryAttempts = 0
+          interruptedToolCallRecoveryAttempts = 0
           const toolUseContinuation = await runSoloToolUseContinuation({
             turn,
             history: args.history,
@@ -806,6 +870,9 @@ class SoloStreamLoop<
             if (isTrue(args.config.goalMode) || state.exists) return state
             return { ...state, terminal: true }
           },
+          completeGoalOnSuccessfulFinish: isTrue(args.config.goalMode)
+            ? () => goalLifecycle.recordSuccessfulCompletion().then(() => undefined)
+            : undefined,
           recordGoalCompletionAttempt: () => goalLifecycle.recordCompletionAttempt(),
           finishingGateBlockTracker,
           log: this.log,
@@ -837,25 +904,28 @@ class SoloStreamLoop<
       } catch (error) {
         // 观测：本轮 provider 回合出错收敛（幂等——try 内已 ok 收敛则此处吞掉）。
         endLoopTurnSpansError(spans)
-        // 反应式自纠：超大工具调用输出被上游 serving 层截断（MODEL_STREAM_INTERRUPTED）时，
-        // 不把整条消息判死——注入一条纠正提示引导模型改用定点/分批编辑，continue 重试本轮。
-        // 有限次兜底避免上游持续抽风时死循环；仍在中止信号下则不重试。
+        // 反应式自纠：安全拒绝未完整参数后，按真实原因给一次有界纠正机会。
+        // 截断可允许两次分批收敛，普通非法 JSON 只允许一次，避免重复空烧额度。
+        const appError = AppError.from(error)
+        const recoveryKind = resolveInterruptedToolCallRecoveryKind(appError)
         if (
-          AppError.from(error).code === 'MODEL_STREAM_INTERRUPTED' &&
+          appError.code === 'MODEL_STREAM_INTERRUPTED' &&
           !args.abortController.signal.aborted &&
-          oversizedToolCallRecoveryAttempts < SoloOversizedToolCallRecoveryMaxAttempts
+          interruptedToolCallRecoveryAttempts <
+            SoloInterruptedToolCallRecoveryLimits[recoveryKind]
         ) {
-          oversizedToolCallRecoveryAttempts += 1
+          interruptedToolCallRecoveryAttempts += 1
           args.history.push(
             createInternalFollowUpMessage(
-              buildOversizedToolCallRecoveryGuidance(args.resolution.allowedTools)
+              buildInterruptedToolCallRecoveryGuidance(recoveryKind)
             )
           )
           this.log.warn(
-            'oversized tool-call output truncated upstream; injecting recovery guidance and retrying',
+            'tool-call input rejected before execution; injecting bounded recovery guidance',
             {
               turn,
-              attempt: oversizedToolCallRecoveryAttempts,
+              recoveryKind,
+              attempt: interruptedToolCallRecoveryAttempts,
             }
           )
           args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))

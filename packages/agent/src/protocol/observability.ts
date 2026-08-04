@@ -103,9 +103,11 @@ export type ModelSpan = z.infer<typeof ModelSpanSchema>
 export const ToolSpanSchema = z.strictObject({
   ...executionSpanBaseFields,
   category: z.literal('tool'),
-  toolCallId: z.string(),
-  toolName: z.string(),
+  toolCallId: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
   toolCategoryId: z.string().nullable(),
+  /** 工具 owner 声明的正式副作用类型；外部/未知工具用 null。 */
+  toolEffectKind: z.string().nullable().optional(),
   /** 失败时的结构化错误码（成功用 null）。 */
   errorCode: z.string().nullable(),
 })

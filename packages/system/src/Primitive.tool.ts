@@ -1,8 +1,7 @@
 import { z } from 'zod'
 
-import { AppError } from '@velaros-ai/core/error'
-import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import {
   applyDefaultRecursiveMaxDepth,
   optionalReadEndLine,
@@ -11,7 +10,8 @@ import {
   refineBoundedReadInput,
   requiredNonNegativeMaxDepth,
   requiredResultLimit,
-} from '@velaros-ai/core/utils/ToolInputBounds'
+} from '@velaros-ai/agent/tool-contract'
+import { AppError } from '@velaros-ai/core/error'
 
 import { executeAtomicEdit } from './atomic/Edit.js'
 import { executeAtomicGrep } from './atomic/Grep.js'
@@ -31,7 +31,7 @@ type SystemToolCapabilitySchema = ToolCapabilitySchema & {
 }
 
 const SystemOpenCapability = {
-  effectKind: 'browser',
+  effectKind: 'external',
   readScopes: ['system'],
   concurrency: 'unsafe',
   metadata: {
@@ -154,7 +154,10 @@ const edit = defineSystemTool<{
   ],
   usage: ['传 path、oldText、newText；可传 expectedReplacements 和 maxFileBytes。'],
   examples: [{ path: '~/.config/tool/config.json', oldText: 'oldField', newText: 'newField' }],
-  notes: ['活动项目根内的代码文件应使用 project:edit。'],
+  notes: [
+    '原子替换会保留已有文件的权限位和文本编码；成功结果可作为这两项后置条件的依据。',
+    '活动项目根内的代码文件应使用 project:edit。',
+  ],
   schema: z.object({
     path: z.string().min(1).describe(parameterDescription({ description: '要编辑的文本文件路径。' })),
     oldText: z.string().min(1).max(50_000).describe(parameterDescription({ description: '要精确匹配的原文本。' })),
@@ -287,7 +290,10 @@ const bash = defineSystemTool<{
   name: SystemToolNames.run,
   role: 'execute',
   summary: '在宿主系统默认 shell 中执行命令（Windows 为 cmd.exe，macOS/Linux 为 POSIX shell）。',
-  suitable: ['执行系统诊断、跨目录探测、工具安装后检查或本地脚本。'],
+  suitable: [
+    '执行系统诊断、跨目录探测、工具安装后检查或本地脚本。',
+    '处理没有专用 primitive 的系统文件操作，例如复制、移动、删除、归档、解压、权限检查或修改。',
+  ],
   forbidden: ['不要执行危险写命令、长期服务或重复命令，除非已有用户意图或确认。'],
   protocol: [
     '属于当前项目的命令必须使用 project:run。',
@@ -297,7 +303,10 @@ const bash = defineSystemTool<{
     '长期服务传 background=true；危险命令会走确认流程。',
     '输出可能很长时设置 maxOutputChars，并用返回的 logPath 续读完整日志。',
   ],
-  usage: ['传 command；需要特定目录时传 cwd。'],
+  usage: [
+    '传 command；需要特定目录时传 cwd。',
+    '系统路径上的复制、移动、删除、归档、解压、chmod 或 stat 使用本工具；先用 system:list/read 缩小目标范围。',
+  ],
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
   notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令；项目内使用 project:run。'],
   schema: z.object({

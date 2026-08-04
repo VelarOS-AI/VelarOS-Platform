@@ -5,8 +5,9 @@ import {
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 import type { ChatProviderId } from './ModelContracts'
@@ -108,7 +109,7 @@ export function createModelKernelModule(
     manifest: {
       id: 'velaros.model.registry',
       version: '0.3.0',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [ModelCapability],
       requires: [],
       optionalRequires: [],

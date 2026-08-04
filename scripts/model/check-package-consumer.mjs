@@ -39,8 +39,8 @@ const PackageSpecifications = [
     name: '@velaros-ai/model',
     directory: resolve(RepositoryRoot, 'packages/model'),
     expectedDependencies: {
-      '@velaros-ai/core': '^0.3.2',
-      '@velaros-ai/kernel-sdk': '^0.2.2',
+      '@velaros-ai/core': '^0.4.0',
+      '@velaros-ai/kernel': '^0.1.0',
     },
   },
 ]
@@ -48,11 +48,11 @@ const PackageSpecifications = [
 const SupportPackageSpecifications = [
   {
     name: '@velaros-ai/core',
-    expectedVersion: '0.3.2',
+    expectedVersion: '0.4.0',
   },
   {
-    name: '@velaros-ai/kernel-sdk',
-    expectedVersion: '0.2.2',
+    name: '@velaros-ai/kernel',
+    expectedVersion: '0.1.0',
   },
   {
     name: '@velaros-ai/ui',
@@ -507,7 +507,7 @@ async function writeConsumerProject(consumerDirectory) {
       consumerDirectory,
       'node_modules/@velaros-ai/model/examples/minimal.ts'
     ),
-    join(consumerDirectory, 'examples/model-runtime.ts')
+    join(consumerDirectory, 'examples/model.ts')
   )
   await writeFile(
     join(consumerDirectory, 'runtime-import.mjs'),
@@ -580,7 +580,7 @@ export default {
     lib: {
       entry: 'browser-entry.ts',
       formats: ['es'],
-      fileName: 'model-runtime',
+      fileName: 'model',
     },
     outDir: 'browser-dist',
   },

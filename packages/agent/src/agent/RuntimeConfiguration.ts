@@ -13,7 +13,7 @@ import type {
   ToolExecutionApi,
   ToolPermission,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { ContextGovernanceConfigInput } from './context/residency/governanceConfig'
 
@@ -59,6 +59,8 @@ export interface AgentExecutionConfig {
   modelSelection?: unknown
   locale?: AppLocale
   sessionId?: string
+  /** Triggering user message identity for execution observation and real-task evaluation. */
+  rootInputId?: LooseOptional<string>
   tools?: string[]
   thinkingDepth?: ThinkingDepth
   reasoningLevel?: ReasoningLevel

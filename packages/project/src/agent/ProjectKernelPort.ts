@@ -1,4 +1,4 @@
-import { isNull, isString, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNull, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
 
 /**
  * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
@@ -73,6 +73,7 @@ export interface AgentProjectFixResult {
 }
 
 export interface AgentProjectFileSnapshot {
+  path: string
   exists: boolean
   isDirectory: boolean
   isBinary: boolean
@@ -97,11 +98,29 @@ export interface AgentProjectReadResult {
   hasMore?: boolean
 }
 
+export interface AgentProjectReadIssue {
+  path: string
+  reason: 'directory' | 'not_found' | 'binary'
+  message: string
+}
+
 export interface AgentProjectSearchResult {
   query: string
-  hits: Array<{ path: string }>
+  hits: AgentProjectSearchHit[]
   truncated?: boolean
   toolRequirements?: AgentProjectCommandToolRequirement[]
+  nextAction?: string
+}
+
+export interface AgentProjectSearchHit {
+  path: string
+  range?: {
+    startLine: number
+    startColumn?: number
+    endLine: number
+    endColumn?: number
+  }
+  snippet?: string
 }
 
 export interface AgentProjectDiffResult {
@@ -162,6 +181,36 @@ export interface AgentProjectReadRequest {
 }
 
 const DefaultAgentReadMaxChars = 500_000
+const DefaultAgentSearchLimit = 30
+const MaxAgentSearchLimit = 100
+const MaxAgentSearchResultChars = 24_000
+
+/**
+ * Project Kernel 的 FileSnapshot 还包含正文、绝对路径、内容哈希和适配器元数据。
+ * Agent 边界必须显式投影，避免结构类型允许的额外字段在运行时穿透，并防止正文
+ * 同时出现在 snapshot.content 与顶层 content 中占用两份模型上下文。
+ */
+function projectAgentReadResult(
+  filePath: string,
+  result: AgentProjectReadResult
+): AgentProjectReadResult {
+  return {
+    snapshot: {
+      path: result.snapshot.path || filePath,
+      exists: result.snapshot.exists,
+      isDirectory: result.snapshot.isDirectory,
+      isBinary: result.snapshot.isBinary,
+      revision: toOptional(result.snapshot.revision),
+    },
+    ...(isUndefined(result.content) ? {} : { content: result.content }),
+    ...(isUndefined(result.range) ? {} : { range: result.range }),
+    ...(isUndefined(result.totalLines) ? {} : { totalLines: result.totalLines }),
+    ...(isUndefined(result.truncated) ? {} : { truncated: result.truncated }),
+    ...(isUndefined(result.nextStartLine) ? {} : { nextStartLine: result.nextStartLine }),
+    ...(isUndefined(result.remainingLines) ? {} : { remainingLines: result.remainingLines }),
+    ...(isUndefined(result.hasMore) ? {} : { hasMore: result.hasMore }),
+  }
+}
 
 /** Project-owned Agent adapter for multi-file aggregation over the injected read port. */
 export async function executeAgentProjectRead(
@@ -172,6 +221,8 @@ export async function executeAgentProjectRead(
   rootPath: string
   count: number
   files: AgentProjectReadResult[]
+  issues?: AgentProjectReadIssue[]
+  nextAction?: string
   appliedDefaultBound?: { maxChars: number }
 }> {
   const {
@@ -193,22 +244,132 @@ export async function executeAgentProjectRead(
       ? { ...rest, maxChars: DefaultAgentReadMaxChars }
       : rest
   const files = await Promise.all(
-    paths.map((filePath) =>
-      project.read({
+    paths.map(async (filePath) =>
+      projectAgentReadResult(filePath, await project.read({
         ...readInput,
         path: filePath,
         baseRevision: baseRevisions?.[filePath],
-      })
+      }))
     )
   )
+  const issues = files.flatMap<AgentProjectReadIssue>((file) => {
+    if (!file.snapshot.exists)
+      return [{
+        path: file.snapshot.path,
+        reason: 'not_found',
+        message: '路径不存在，未读取任何内容。',
+      }]
+    if (file.snapshot.isDirectory)
+      return [{
+        path: file.snapshot.path,
+        reason: 'directory',
+        message: '该路径是目录；project:read 不会枚举目录内容。',
+      }]
+    if (file.snapshot.isBinary)
+      return [{
+        path: file.snapshot.path,
+        reason: 'binary',
+        message: '该路径是二进制文件；project:read 只读取文本。',
+      }]
+    return []
+  })
+  const needsPathDiscovery = issues.some(
+    (issue) => issue.reason === 'directory' || issue.reason === 'not_found'
+  )
+  const needsBinaryCapability = issues.some((issue) => issue.reason === 'binary')
   const rootPath = options.rootPath ?? (await project.status()).root
   return {
     rootPath,
     count: files.length,
     files,
+    ...(isEmpty(issues) ? {} : { issues }),
+    ...(needsPathDiscovery
+      ? {
+          nextAction: '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。',
+        }
+      : needsBinaryCapability
+        ? { nextAction: '请改用能处理该二进制格式的专用能力，不要继续调用 project:read。' }
+        : {}),
     ...(appliedDefaultBound
       ? { appliedDefaultBound: { maxChars: DefaultAgentReadMaxChars } }
       : {}),
+  }
+}
+
+export interface AgentProjectSearchRequest {
+  query: string
+  path?: string
+  include?: string[]
+  exclude?: string[]
+  regex?: boolean
+  caseSensitive?: boolean
+  limit?: number
+}
+
+function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHit {
+  return {
+    path: hit.path,
+    ...(isUndefined(hit.range) ? {} : {
+      range: {
+        startLine: hit.range.startLine,
+        ...(isUndefined(hit.range.startColumn) ? {} : { startColumn: hit.range.startColumn }),
+        endLine: hit.range.endLine,
+        ...(isUndefined(hit.range.endColumn) ? {} : { endColumn: hit.range.endColumn }),
+      },
+    }),
+    ...(isUndefined(hit.snippet) ? {} : { snippet: hit.snippet }),
+  }
+}
+
+/**
+ * Project Kernel 搜索结果含 revision/score/backend/adapter/trust 等诊断元数据。
+ * Agent 搜索边界只投影定位所需的 path/range/snippet，并同时受条数和序列化字符双重约束；
+ * 命中很多时让模型缩小 query/path，而不是把整批内部结果塞进后续每一轮上下文。
+ */
+export async function executeAgentProjectSearch(
+  project: AgentProjectKernelPort,
+  input: AgentProjectSearchRequest
+): Promise<AgentProjectSearchResult> {
+  const requestedLimit = input.limit ?? DefaultAgentSearchLimit
+  const effectiveLimit = Math.min(MaxAgentSearchLimit, Math.max(1, requestedLimit))
+  const result = await project.search({
+    query: input.query,
+    root: input.path,
+    include: input.include,
+    exclude: input.exclude,
+    regex: input.regex,
+    caseSensitive: input.caseSensitive,
+    maxResults: effectiveLimit,
+  })
+  const hits: AgentProjectSearchHit[] = []
+  let serializedChars = 2
+  let responseTruncated = isTrue(result.truncated) || result.hits.length > effectiveLimit
+
+  for (const richHit of result.hits.slice(0, effectiveLimit)) {
+    const hit = projectAgentSearchHit(richHit)
+    const hitChars = JSON.stringify(hit).length + (!isEmpty(hits) ? 1 : 0)
+    if (serializedChars + hitChars > MaxAgentSearchResultChars) {
+      responseTruncated = true
+      break
+    }
+    hits.push(hit)
+    serializedChars += hitChars
+  }
+
+  return {
+    query: result.query,
+    hits,
+    ...(responseTruncated ? {
+      truncated: true,
+      nextAction: '结果已达到 Agent 搜索输出上限；请收窄 query、path 或 include 后继续，不要改搜父目录。',
+    } : {}),
+    ...(isUndefined(result.toolRequirements) ? {} : {
+      toolRequirements: result.toolRequirements.map((requirement) => ({
+        kind: requirement.kind,
+        command: requirement.command,
+        ...(isUndefined(requirement.reason) ? {} : { reason: requirement.reason }),
+      })),
+    }),
   }
 }
 

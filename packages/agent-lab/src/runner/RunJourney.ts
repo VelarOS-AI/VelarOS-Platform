@@ -393,6 +393,9 @@ export async function runJourney(
               readonly reason: string;
             } | null;
           } = { current: null };
+          const activeWatchdogDetectorIds = new Set(
+            journey.gatingDetectorIds,
+          );
 
           await options.driver.send(session, leg);
           let settleOutcome = await options.driver.waitSettled(session, {
@@ -425,6 +428,7 @@ export async function runJourney(
                 watchdogBaseline = createWatchdogBaseline(
                   observation,
                   sampleFindings,
+                  activeWatchdogDetectorIds,
                 );
                 return { kind: "continue" };
               }
@@ -432,6 +436,7 @@ export async function runJourney(
                 observation,
                 sampleFindings,
                 watchdogBaseline,
+                activeWatchdogDetectorIds,
               );
               if (!candidate) return { kind: "continue" };
               watchdogAbort.current = {
@@ -578,6 +583,17 @@ export async function runJourney(
     }
   }
 
+  const finalExecutor = await options.driver.identity().catch((error: unknown) => {
+    findings.push({
+      detectorId: "executor-identity-refresh-failed",
+      severity: "warn",
+      failureClass: "infrastructure",
+      summary: error instanceof Error ? error.message : String(error),
+      references: [],
+      evidence: {},
+    });
+    return executor;
+  });
   const finishedAt = now();
   return {
     manifest: {
@@ -592,7 +608,7 @@ export async function runJourney(
         detectorDigest,
         policyDigest,
       ),
-      executor,
+      executor: finalExecutor,
       capabilities,
       startedAt,
       finishedAt,

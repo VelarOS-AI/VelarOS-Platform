@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import {
   applyDefaultRecursiveMaxDepth,
   optionalReadEndLine,
@@ -8,7 +8,7 @@ import {
   optionalReadStartLine,
   refineBoundedReadInput,
   requiredResultLimit,
-} from '@velaros-ai/core/utils/ToolInputBounds'
+} from '@velaros-ai/agent/tool-contract'
 
 const browserFilesActionSchema = z.enum([
   'list_files',

@@ -2,6 +2,7 @@ import type { ModelAdapterConfig } from './ModelAdapter'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
+  ModelInputModality,
   ModelRequestOptions,
   ProviderModelCatalogEntry,
   ProviderScriptManifest,
@@ -12,6 +13,8 @@ export interface ProviderScriptRuntimeMetadata {
   model?: LooseOptional<string>
   providerModel?: LooseOptional<string>
   contextWindow?: LooseOptional<number>
+  /** Authoritative concrete-model input contract. Missing means text-only, never "guess vision". */
+  inputModalities?: LooseOptional<readonly ModelInputModality[]>
   fallbackReason?: LooseOptional<string>
   config?: unknown
   modelRequestOptions?: LooseOptional<ModelRequestOptions>

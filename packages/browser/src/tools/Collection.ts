@@ -1,4 +1,4 @@
-import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/ToolDescription'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 
 import { browserArtifactTools } from './Artifacts.tool'
 import { browserEventTools } from './Events.tool'

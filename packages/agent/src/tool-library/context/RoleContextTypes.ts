@@ -1,4 +1,4 @@
-import type { AgentRoleId } from '@velaros-ai/core/types'
+import type { AgentRoleId } from '@velaros-ai/agent/protocol'
 
 /** 当前 Agent 角色状态，工具可据此了解身份和可委派方向。 */
 export interface ToolRoleApi {

@@ -1,4 +1,4 @@
-import { isEmpty, toNullable } from '@velaros-ai/core'
+import { isEmpty, isPlainObject, toNullable } from '@velaros-ai/core'
 
 export type RuntimePlatform = NodeJS.Platform
 
@@ -207,6 +207,18 @@ export class SystemPlatformCompatibility {
     return this.isWindows() ? pid : -pid
   }
 
+  /**
+   * Whether a process operation failed because its target no longer exists.
+   *
+   * Node normally exposes POSIX ESRCH as `code`, while a few hosts and mocks
+   * only retain the positive errno value. Keep that compatibility rule in the
+   * System owner so command runners do not each reinterpret process races.
+   */
+  public isProcessMissingError(error: unknown): boolean {
+    if (!isPlainObject(error)) return false
+    return error.code === 'ESRCH' || error.errno === 3 || error.errno === -3
+  }
+
   public getDirectorySymlinkType(): DirectorySymlinkType {
     return this.isWindows() ? 'junction' : 'dir'
   }
@@ -258,7 +270,7 @@ export class SystemPlatformCompatibility {
   public getOpenPathWithEditorCommandSpec(
     path: string,
     editor: EditorCommandDefinition
-  ): CommandSpec | null {
+  ): Nullable<CommandSpec> {
     if (this.isMacOS() && editor.darwinApplication)
       return {
         file: 'open',
@@ -313,11 +325,11 @@ export class SystemPlatformCompatibility {
     ]
   }
 
-  public getDarwinApplicationMetadataSearchSpec(bundleName: string): CommandSpec | null {
+  public getDarwinApplicationMetadataSearchSpec(bundleName: string): Nullable<CommandSpec> {
     return this.isMacOS() ? { file: '/usr/bin/mdfind', args: ['-name', bundleName] } : null
   }
 
-  public getBackgroundShellLaunchCommand(options: BackgroundShellLaunchOptions): string | null {
+  public getBackgroundShellLaunchCommand(options: BackgroundShellLaunchOptions): Nullable<string> {
     if (this.isWindows()) return options.command
     const quotedShell = this.quotePosixSingle(options.shellPath)
     const quotedLogPath = this.quotePosixSingle(options.logPath)
@@ -325,12 +337,12 @@ export class SystemPlatformCompatibility {
     return `nohup ${quotedShell} -lc ${quotedCommand} >> ${quotedLogPath} 2>&1 & printf "${options.pidMarker}%s\\n" "$!"`
   }
 
-  public getTerminateCommand(pid: number, force = false): string | null {
+  public getTerminateCommand(pid: number, force = false): Nullable<string> {
     if (this.isWindows()) return `taskkill /PID ${pid} /T${force ? ' /F' : ''}`
     return force ? `kill -KILL ${pid}` : `kill -TERM ${pid}`
   }
 
-  public getProcessTreeKillCommandSpec(pid: number, signal: NodeJS.Signals): CommandSpec | null {
+  public getProcessTreeKillCommandSpec(pid: number, signal: NodeJS.Signals): Nullable<CommandSpec> {
     if (!this.isWindows() || !Number.isInteger(pid) || pid <= 0) return null
     return {
       file: 'taskkill',
@@ -338,13 +350,13 @@ export class SystemPlatformCompatibility {
     }
   }
 
-  public getFallbackTerminateCommand(command: string): string | null {
+  public getFallbackTerminateCommand(command: string): Nullable<string> {
     if (this.isWindows()) return null
     const normalized = command.replace(/\s+/g, ' ').trim().slice(0, 120)
     return normalized ? `pkill -f ${this.quotePosixSingle(normalized)}` : null
   }
 
-  public getOpenPortInspectionCommandSpec(): CommandSpec | null {
+  public getOpenPortInspectionCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
         'Get-NetTCPConnection -State Listen | ForEach-Object { $processName = \'\'; try { $process = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; if ($process) { $processName = $process.ProcessName } } catch {}; Write-Output ("{0}`t{1}`t{2}`t{3}`t{4}" -f $_.OwningProcess, $processName, $_.LocalAddress, $_.LocalPort, $_.State) }'
@@ -352,7 +364,7 @@ export class SystemPlatformCompatibility {
     return { file: 'lsof', args: ['-nP', '-iTCP', '-sTCP:LISTEN', '-FpcnT'] }
   }
 
-  public getProcessListCommandSpec(): CommandSpec | null {
+  public getProcessListCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
         "$cpuByPid = @{}; Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object { if ($_.IDProcess -gt 0) { $cpuByPid[[int]$_.IDProcess] = [double]$_.PercentProcessorTime } }; Get-CimInstance Win32_Process | ForEach-Object { $owner = $_.GetOwner(); $user = if ($owner -and $owner.User) { if ($owner.Domain) { \"$($owner.Domain)\\$($owner.User)\" } else { $owner.User } } else { '' }; $start = if ($_.CreationDate) { [System.Management.ManagementDateTimeConverter]::ToDateTime($_.CreationDate).ToString('o') } else { '' }; $command = if ($_.CommandLine) { ($_.CommandLine -replace \"[`r`n]+\", ' ').Trim() } else { $_.Name }; $state = if ($_.ExecutionState) { [string]$_.ExecutionState } else { 'Running' }; $cpu = if ($cpuByPid.ContainsKey([int]$_.ProcessId)) { $cpuByPid[[int]$_.ProcessId] } else { 0 }; $workingSetKb = [int64](($_.WorkingSetSize) / 1024); Write-Output (\"{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}\" -f $_.ProcessId, $_.ParentProcessId, $user, $start, $state, $cpu, $workingSetKb, $_.Name, $command) }"
@@ -363,7 +375,7 @@ export class SystemPlatformCompatibility {
     }
   }
 
-  public getProcessStartTimeCommandSpec(pid: number): CommandSpec | null {
+  public getProcessStartTimeCommandSpec(pid: number): Nullable<CommandSpec> {
     if (!Number.isInteger(pid) || pid <= 0) return null
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
@@ -372,7 +384,7 @@ export class SystemPlatformCompatibility {
     return { file: 'ps', args: ['-p', String(pid), '-o', 'lstart='] }
   }
 
-  public getCpuUsageCommandSpec(): CommandSpec | null {
+  public getCpuUsageCommandSpec(): Nullable<CommandSpec> {
     if (this.isMacOS()) return { file: 'top', args: ['-l', '1', '-n', '0'] }
     if (this.platform === 'linux') return { file: 'cat', args: ['/proc/stat'] }
     return this.isWindows()
@@ -382,11 +394,11 @@ export class SystemPlatformCompatibility {
       : null
   }
 
-  public getDarwinCpuUsageCommandSpec(): CommandSpec | null {
+  public getDarwinCpuUsageCommandSpec(): Nullable<CommandSpec> {
     return this.isMacOS() ? this.getCpuUsageCommandSpec() : null
   }
 
-  public getSwapStatsCommandSpec(): CommandSpec | null {
+  public getSwapStatsCommandSpec(): Nullable<CommandSpec> {
     if (this.isMacOS()) return { file: 'sysctl', args: ['vm.swapusage'] }
     if (this.platform === 'linux') return { file: 'cat', args: ['/proc/meminfo'] }
     return this.isWindows()
@@ -396,7 +408,7 @@ export class SystemPlatformCompatibility {
       : null
   }
 
-  public getDiskStatsCommandSpec(): CommandSpec | null {
+  public getDiskStatsCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
         '$drive = $env:SystemDrive; if (-not $drive) { $drive = \'C:\' }; $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID=\'$drive\'"; if ($disk) { Write-Output ("{0}`t{1}" -f ([int64]($disk.Size - $disk.FreeSpace)), [int64]$disk.Size) }'

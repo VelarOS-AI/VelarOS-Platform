@@ -7,16 +7,14 @@
 > ① **判决源不在本仓**。架构裁决住 VelarOS-Desktop 仓的 `docs/kernel-contract.md` 与
 >    `docs/mod-architecture-blueprint.md`;本仓 docs 绝大多数是**参考手册与落地地图**,
 >    与判决源冲突时改本仓、不改判决源。唯一例外见 §二末尾的 `memory-tree-spec-freeze.md`。
-> ② **活文档必须与代码同步修实;历史档不修实**——§六登记的文档记的是当时的事实,改掉等于伪造历史。
+> ② **文档必须与代码同步修实**；失效方案直接删除，不在活文档中保留兼容说明。
 > ③ **「契约已定」≠「能用了」**。mod-dev 套件对未实装的部分一律标注「契约已定,实装批次 X」,
 >    axes 各页另有「Desktop 接线状态」一行,读之前先看那行。
 
 > **2026-07-30 全仓实况**(读任何路径前先记住这三条)
-> 1. **平台侧七仓已并入本仓**(Kernel / Agent / Core / Capabilities / Model / Memory / UI)。
->    `../VelarOS-Kernel` 一类 sibling 路径**已不在磁盘上**,取证路径见 README「源仓考古指引」。
-> 2. **并仓时合包改名**:`agent-runtime`→`agent`、`browser-*`→`browser/*`、`model-runtime`→`model`、
->    `knowledge`→`memory/knowledge`、`conversation-ui`→`ui/conversation`。全表在 Desktop 仓
->    `docs/ecosystem-repo-topology.md` §2。
+> 1. **平台能力统一位于本仓**(Kernel / Agent / Core / Capabilities / Model / Memory / UI)。
+> 2. **同域能力通过子路径归拢**：`kernel/*`、`agent/*`、`browser/*`、`memory/*`、`ui/*`。
+>    全表在 Desktop 仓 `docs/ecosystem-repo-topology.md` §2。
 > 3. **`docs/<域>/` 只剩三个目录**:`agent/` `memory/` `mod-dev/`。其余域没有本仓侧文档
 >    (并仓遗留的源仓根 manifest 副本已于 2026-07-30 删除)。
 
@@ -26,7 +24,7 @@
 
 | 顺序 | 文档 | 什么时候该读它 |
 | --- | --- | --- |
-| 1 | [../README.md](../README.md) | 第一次进本仓:布局、18 个包与目录、单版本火车、常用命令与各域门、源仓考古 |
+| 1 | [../README.md](../README.md) | 第一次进本仓:布局、18 个包与目录、单版本火车、常用命令与各域门 |
 | 2 | [mod-dev/README.md](./mod-dev/README.md) | 想给 VelarOS 加一个工具 / 一段提示词 / 一个工作区 / 一块设置区——mod 是什么、分节信封、两级注册机、信任级 |
 | 3 | [mod-dev/getting-started.md](./mod-dev/getting-started.md) | **要动手了**:最小 mod → 本地安装 → 启停 → 诊断四态与全部诊断码;含现状与限制 |
 | 4 | Desktop 仓 `docs/kernel-contract.md` | 拿不准「这该进内核还是产品」「这接口能不能动」时——**边界唯一裁决依据**,不在本仓 |
@@ -62,7 +60,7 @@
 | [agent-lab/integration.md](./agent-lab/integration.md) | 要接新执行体、加 Journey、Verifier、Detector 或 CLI Runtime 时 |
 | [agent-lab/legacy-equivalence.md](./agent-lab/legacy-equivalence.md) | 要核对旧 Desktop agent-lab 的 52 份历史归档、19 个 detector 与已判决语义变化时 |
 | [memory/memory-backends.md](./memory/memory-backends.md) | 要加或改记忆后端时:三档后端(`memory-files` 默认 / `memory-vector` 增强 / `memory-tree` 未来)的端口收口落在本仓哪些文件、留了哪些接缝 |
-| [../README.md](../README.md)「Kernel 库与独立 Host 进程」 | 想知道「库优先、进程可选」在目录上长什么样:`core/src/kernel/` 五分区 vs `kernel-serve` / `serve-host` / `kernel-client`,以及 `check:kernel-arch` 锁的依赖方向 |
+| [../README.md](../README.md)「Kernel 库与独立 Host 进程」 | 想知道「库优先、进程可选」在目录上长什么样：`kernel/{contracts,runtime,client,serve}` 子路径、`serve-host` 产品组合与 `check:kernel-arch` 的依赖方向 |
 | [mod-dev/seams.md](./mod-dev/seams.md) | 要在运行时**拦一下** agent 行为时:15 个 seam kind、哪 4 个已接线、为什么权限不可旁路 |
 | [mod-dev/capabilities.md](./mod-dev/capabilities.md) | 要跨 mod 边界拿能力时:capability token 与权限 broker 的形状,记忆后端当案例 |
 
@@ -136,7 +134,6 @@
 | [memory/memory-tree-fifth-round-review.md](./memory/memory-tree-fifth-round-review.md) | 记忆树第五轮独立评审报告(2026-07-13,结论 NEEDS REVISION),范围是 Erasure Saga / 内容加密外置 / Dream 并发 / 物化基点 |
 | [memory/memory-tree-revision-notes.md](./memory/memory-tree-revision-notes.md) | 第二 / 四 / 六轮修订的索引:每项修订的动因、证据与影响面。**注意文首那条撤销声明**——「首次启动记忆告知门」整条已撤销,文内相关历史条目全部作废 |
 | [memory/0.3-migration.md](./memory/0.3-migration.md) | memory `0.3.0` 迁移说明(产品域 DTO 从 Kernel Core 撤出,无兼容别名)。当年的升级指南,不是现行架构 |
-| [agent/migrations/0.3-capability-injection.md](./agent/migrations/0.3-capability-injection.md) | Kernel `0.3` capability-injection 迁移说明(产品显式装配模型与能力包并注入运行时端口)。同上 |
 
 ---
 

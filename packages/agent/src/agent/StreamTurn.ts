@@ -1,16 +1,16 @@
 import type { LanguageModel, ModelMessage, TextStreamPart, ToolChoice, ToolSet } from 'ai'
 
-import { isEmpty, isObject, isPositiveNumber, isString,toNullable, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import type { EstimateContextUsageOptions } from '@velaros-ai/agent'
 import type {
   AppLocale,
   ChatRuntimeEvent,
   ReasoningLanguagePreference,
   StreamAssistantRawPayload,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
-import type { EstimateContextUsageOptions } from '@velaros-ai/core/utils/contextUsage'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   buildKernelContextEpoch,
@@ -26,6 +26,7 @@ import {
 import type { ToolExecutionPolicyRegistry } from '../tools'
 
 import { compareStableStrings } from './context/residency/determinism'
+import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import {
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
@@ -38,7 +39,7 @@ import {
   type AssistantContentPart,
   createInternalFollowUpMessage,
 } from './history'
-import type { AgentModelRequestOptions } from './model'
+import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
 import {
   type AgentModelRequestPort,
   type AgentModelStreamInput,
@@ -80,20 +81,28 @@ interface LinkedAbortScope {
   dispose(): void
 }
 
-function createLinkedAbortScope(parentSignal: AbortSignal): LinkedAbortScope {
+function createLinkedAbortScope(...parentSignals: AbortSignal[]): LinkedAbortScope {
   const controller = new AbortController()
   const abort = (reason?: unknown): void => {
     if (!controller.signal.aborted) controller.abort(reason)
   }
-  const forwardParentAbort = (): void => abort(parentSignal.reason)
+  const disposers: Array<() => void> = []
 
-  if (parentSignal.aborted) forwardParentAbort()
-  else parentSignal.addEventListener('abort', forwardParentAbort, { once: true })
+  for (const parentSignal of parentSignals) {
+    const forwardParentAbort = (): void => abort(parentSignal.reason)
+    if (parentSignal.aborted) forwardParentAbort()
+    else {
+      parentSignal.addEventListener('abort', forwardParentAbort, { once: true })
+      disposers.push(() => parentSignal.removeEventListener('abort', forwardParentAbort))
+    }
+  }
 
   return {
     signal: controller.signal,
     abort,
-    dispose: () => parentSignal.removeEventListener('abort', forwardParentAbort),
+    dispose: () => {
+      for (const dispose of disposers) dispose()
+    },
   }
 }
 
@@ -203,6 +212,8 @@ export interface ExecuteStreamTurnArgs<
   reasoningLanguage?: ReasoningLanguagePreference
   /** 当前模型上下文窗口；用于最终 provider payload send gate。 */
   contextWindow?: LooseOptional<number>
+  /** Concrete inputs accepted by the selected model. Missing is text-only. */
+  supportedInputModalities?: readonly AgentModelInputModality[]
   /** loop 侧已经带上输出预留、安全余量和校准系数的估算配置。 */
   contextUsageOptions?: EstimateContextUsageOptions
   /** 工具执行上下文。 */
@@ -221,6 +232,8 @@ export interface ExecuteStreamTurnArgs<
   events: StreamTurnEvents
   /** 取消信号。 */
   abortSignal: AbortSignal
+  /** 新运行时输入到达时只抢占当前 provider 回合，不取消整个 execution。 */
+  runtimeInputInterruptSignal?: AbortSignal
   /** 模型流连续无任何活动时的超时；缺省使用统一运行时策略。 */
   idleStallTimeoutMs?: LooseOptional<number>
   /** 当前轮次。 */
@@ -233,6 +246,8 @@ export interface ExecuteStreamTurnArgs<
 export interface StreamTurnResult {
   /** 本轮 assistant 是否产生过 tool call。 */
   hasToolUse: boolean
+  /** 当前 provider 回合在派发任何工具副作用前为新运行时输入让路。 */
+  interruptedByRuntimeInput?: boolean
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>
   /**
@@ -295,6 +310,10 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     let providerTurnReducer: LooseOptional<ProviderTurnEventReducer> = null
     let streamContinuationRecoveries = 0
     let reasoningOnlyVisibleAnswerRecoveries = 0
+    const turnAbortScope = createLinkedAbortScope(
+      args.abortSignal,
+      ...(args.runtimeInputInterruptSignal ? [args.runtimeInputInterruptSignal] : [])
+    )
     this.log.info('model stream turn start', {
       turn: args.turn,
       model: args.model,
@@ -308,7 +327,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         try {
           assistantContent = await this.connectionRetryHelper.runWithConnectionRetry(
             async () => {
-              const requestAbortScope = createLinkedAbortScope(args.abortSignal)
+              const requestAbortScope = createLinkedAbortScope(turnAbortScope.signal)
               // 每次尝试整体新建 turnState（S7），彻底消除失败尝试的 usage 残留。
               turnState = this.createTurnState(args.turn)
               try {
@@ -338,6 +357,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     historyToolNames: providerToolNamePlan.historyToolNames,
                   }
                 )
+                const toolTransportPlan =
+                  this.turnRequestHelper.captureToolTransportPlan(args.toolContext)
                 // P7 确定性序列化：工具清单顺序直接进 prompt 字节，禁 locale 相关比较。
                 const providerAvailableToolNames = Object.keys(aiTools).sort(compareStableStrings)
                 const contextWorkingSetInputs = await this.turnRequestHelper.resolveContextWorkingSetInputs(
@@ -346,15 +367,23 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 const toolSchemaChars = this.turnRequestHelper.resolveToolSchemaChars(
                   toolRegistry,
                   args.toolContext,
-                  providerAvailableToolNames,
+                  providerToolNamePlan.providerToolNames,
                   aiTools,
+                  toolTransportPlan,
                   args.toolSchemaChars
                 )
-                const toolSchemaHashes = toolRegistry.estimateToolSchemaHashesByName?.(
+                const toolSchemaHashes = this.turnRequestHelper.resolveToolSchemaHashes(
+                  toolRegistry,
                   args.toolContext,
-                  providerAvailableToolNames
+                  providerToolNamePlan.providerToolNames,
+                  aiTools,
+                  toolTransportPlan
                 )
-                const toolChoiceName = this.resolveToolChoiceName(args.toolChoice)
+                const providerToolChoice = this.turnRequestHelper.resolveProviderToolChoice(
+                  toolTransportPlan,
+                  args.toolChoice
+                )
+                const toolChoiceName = this.resolveToolChoiceName(providerToolChoice)
                 const compiledRequest = await compileProviderSendRequest(
                   {
                     sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
@@ -371,6 +400,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     toolSchemaChars,
                     availableToolNames: providerAvailableToolNames,
                     toolChoiceName,
+                    toolNameAliases: toolTransportPlan.canonicalToProvider,
                     activeTask: contextWorkingSetInputs.activeTask,
                     pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
                     contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,
@@ -380,7 +410,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                         args.toolContext,
                         providerMessages,
                         (toolName) =>
-                          toolRegistry.getDescriptor(toolName)?.outputInline === true
+                          isTrue(toolRegistry.getDescriptor(toolName)?.outputInline)
                       ),
                   },
                   this.requestCompiler
@@ -388,6 +418,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 this.turnRequestHelper.emitContextUsageEstimate(compiledRequest, {
                   events: args.events,
                   turn: args.turn,
+                  model: args.model,
+                })
+                assertModelInputCompatibility({
+                  messages: compiledRequest.messages,
+                  supportedInputModalities: args.supportedInputModalities,
                   model: args.model,
                 })
                 this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
@@ -458,7 +493,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                       system: compiledRequest.system,
                       messages: compiledRequest.messages,
                       tools: aiTools,
-                      toolChoice: args.toolChoice,
+                      toolChoice: providerToolChoice,
                       providerOptions: mergeSessionPromptCacheProviderOptions(
                         args.modelRequestOptions,
                         args.toolContext.sessionId
@@ -487,6 +522,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     usableContextWindow: compiledRequest.estimate.usableContextWindow,
                   },
                   requestFingerprint: compiledRequest.requestFingerprint,
+                  providerToCanonicalToolNames: toolTransportPlan.providerToCanonical,
                   contextEpochClaim,
                   contextEpochGuard: args.contextEpochGuard,
                   providerTurnReducer,
@@ -504,7 +540,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
             {
               phase: 'stream',
               turn: args.turn,
-              abortSignal: args.abortSignal,
+              abortSignal: turnAbortScope.signal,
               hasVisibleOutput: () => turnState.hasVisibleOutput,
               hasToolUse: () => turnState.hasToolUse,
               onRetry: (error, attempt) => {
@@ -522,6 +558,10 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
           break
         } catch (error) {
           const appError = AppError.from(error)
+          if (this.wasInterruptedByRuntimeInput(args, turnState)) {
+            assistantContent = interrupted.partial?.assistantContent ?? assistantContent
+            break
+          }
           if (
             this.shouldRecoverReasoningOnlyEmptyResponse(
               error,
@@ -606,7 +646,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 
       this.log.info('model stream turn end', {
         turn: args.turn,
-        status: args.abortSignal.aborted ? 'aborted' : 'completed',
+        status: args.abortSignal.aborted
+          ? 'aborted'
+          : this.wasInterruptedByRuntimeInput(args, turnState)
+            ? 'steered'
+            : 'completed',
         durationMs: Date.now() - startedAt,
       })
       didLogTurnEnd = true
@@ -616,9 +660,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         return { hasToolUse: false }
       }
 
+      const interruptedByRuntimeInput = this.wasInterruptedByRuntimeInput(args, turnState)
+
       // TODO[主链路-43]: stream 结束后把 assistant 文本/tool-call 写回 history；如果有工具，外层 loop 会继续追加 tool result。
       this.turnHistoryHelper.appendAssistantMessage(args.history, assistantContent)
-      if (!turnState.hasToolUse) {
+      if (interruptedByRuntimeInput || !turnState.hasToolUse) {
         this.emitProviderTurnSnapshot(args, providerTurnReducer)
       }
       args.events.emitAssistantRaw({
@@ -627,7 +673,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         content: this.turnHistoryHelper.toAssistantRawContent(assistantContent),
       })
       return {
-        hasToolUse: turnState.hasToolUse,
+        hasToolUse: interruptedByRuntimeInput ? false : turnState.hasToolUse,
+        interruptedByRuntimeInput,
         inputTokens: toNullable(turnState.inputTokens),
         outputTokens: toNullable(turnState.outputTokens),
         costUsd: toNullable(turnState.costUsd),
@@ -650,7 +697,20 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
       }
       this.emitProviderTurnSnapshot(args, providerTurnReducer, { requirePendingTools: true })
       throw error
+    } finally {
+      turnAbortScope.dispose()
     }
+  }
+
+  private wasInterruptedByRuntimeInput(
+    args: ExecuteStreamTurnArgs<TToolContext>,
+    turnState: StreamConsumerTurnState
+  ): boolean {
+    return !!(
+      !args.abortSignal.aborted &&
+      args.runtimeInputInterruptSignal?.aborted &&
+      !turnState.hasDispatchedToolUse
+    )
   }
 
   /** 对外暴露给 TurnRunner 的 stream 消费入口。 */

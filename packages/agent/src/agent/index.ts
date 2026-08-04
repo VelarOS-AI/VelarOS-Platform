@@ -12,6 +12,7 @@ export {
   executeLoopTurnWithContextOverflowRecovery,
   runAgentLoop,
 } from './AgentLoop'
+export * from './AppRuntimeFacts'
 export type {
   CodingSessionToolCategoryToolNames,
   CodingSessionToolContext,

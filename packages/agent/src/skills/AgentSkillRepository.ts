@@ -1,10 +1,10 @@
-import { isEmpty,isFalse, isPresent, toNullable } from '@velaros-ai/core'
 import type {
   AgentRoleId,
   AgentSkillDescriptor,
   CapabilityScopeId,
   ChatPromptFeatureId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty,isFalse, isPresent, toNullable } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 

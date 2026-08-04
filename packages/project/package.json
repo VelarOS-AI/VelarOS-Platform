@@ -59,7 +59,7 @@
   ],
   "scripts": {
     "clean": "node scripts/build/clean-package.mjs",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist && node scripts/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node scripts/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "bun run build && bun test test/project.test.ts test/agent-tool-contract.test.ts test/kernel-module.test.ts test/approval-context.test.ts test/ripgrep.test.mjs test/typescript-plugin.test.mjs test/visibility-policy.test.mjs test/agent/package-boundary.test.ts",
@@ -69,7 +69,9 @@
     "prepack": "bun run build"
   },
   "dependencies": {
+    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel": "workspace:*",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
     "iconv-lite": "^0.7.2",

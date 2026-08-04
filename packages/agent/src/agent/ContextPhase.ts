@@ -1,12 +1,12 @@
 import type { ModelMessage } from 'ai'
 
-import { isTrue } from '@velaros-ai/core'
 import type {
   AgentContextPhase,
   AgentContextPhaseReason,
   AgentSurfaceId,
   ChatPromptFeatureId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isTrue } from '@velaros-ai/core'
 
 interface AgentContextPhaseDecision {
   phase: AgentContextPhase

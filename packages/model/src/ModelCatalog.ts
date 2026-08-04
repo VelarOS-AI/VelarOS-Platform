@@ -1,6 +1,6 @@
-import { first, isBlank, isEmpty, isNumber } from '@velaros-ai/core'
+import { first, isBlank, isEmpty, isNumber, toNullable } from '@velaros-ai/core'
 
-import type { ChatProviderId } from './ModelContracts'
+import type { ChatProviderId, ModelInputModality } from './ModelContracts'
 import {
   DirectOpenAICompatibleProviderIds,
   OpenRouterCompatibleProviderIds,
@@ -55,6 +55,7 @@ export interface ModelCapabilityProfile {
 export interface ProviderModelDefinition {
   id: string
   contextWindow?: number
+  inputModalities?: readonly ModelInputModality[]
   openAiOnly?: boolean
 }
 
@@ -986,7 +987,7 @@ export interface ProviderModelResolution {
 export function getSharedProviderCatalog(
   providerId: ChatProviderId
 ): Nullable<SharedProviderCatalog> {
-  return SharedProviderCatalogMap.get(providerId) ?? null
+  return toNullable(SharedProviderCatalogMap.get(providerId))
 }
 
 export function getSharedProviderModels(providerId: ChatProviderId): string[] {

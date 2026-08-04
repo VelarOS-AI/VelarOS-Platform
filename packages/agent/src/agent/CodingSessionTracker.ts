@@ -1,10 +1,3 @@
-import { isArray, isEmpty, isFiniteNumber, isNumber, isObject, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
-import {
-  assertRunProfileSelectionId,
-  assertToolSurfaceProfileId,
-  resolveRunProfileSelectionId,
-  resolveToolSurfaceProfileId,
-} from '@velaros-ai/core/constants/typedFieldAsserts'
 import type {
   CapabilityAutoApprovalNotice,
   CapabilityScopeId,
@@ -15,7 +8,14 @@ import type {
   ToolLayerTelemetryMetrics,
   ToolSurfaceProfileId,
   TurnPlanningTelemetryPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import {
+  assertRunProfileSelectionId,
+  assertToolSurfaceProfileId,
+  resolveRunProfileSelectionId,
+  resolveToolSurfaceProfileId,
+} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
 
 const DefaultEnabledPromptFeatures: readonly ChatPromptFeatureId[] = []
 import type {
@@ -305,12 +305,7 @@ class CodingSessionTracker {
         approvedAt,
       }
     }
-    this.toolCallDeduper = new CodingToolCallDeduper({
-      getEnabledToolCategories: () => this.enabledToolCategories,
-      getEnabledPromptFeatures: () => this.enabledPromptFeatures,
-      getSessionApprovedToolCategories: () => this.sessionApprovedToolCategories,
-      promptFeaturePolicy: this.promptFeaturePolicy,
-    })
+    this.toolCallDeduper = new CodingToolCallDeduper()
   }
 
   /**
@@ -367,21 +362,19 @@ class CodingSessionTracker {
 
   /** 从工具结果中提取 fileChanges 描述符并追加到 recentFileChanges。 */
   private collectFileChanges(toolName: string, result: unknown): void {
-    if (!result || !isObject(result)) return
-    const record = result as Record<string, unknown>
-    const raw = record['fileChanges']
+    if (!isPlainObject(result)) return
+    const raw = result['fileChanges']
     if (!isArray(raw)) return
     for (const item of raw) {
-      if (!item || !isObject(item)) continue
-      const change = item as Record<string, unknown>
-      if (!isString(change['changeId']) || !isString(change['path'])) continue
+      if (!isPlainObject(item)) continue
+      if (!isString(item['changeId']) || !isString(item['path'])) continue
       this.recentFileChanges.push({
         toolName,
-        path: change['path'],
-        created: isTrue(change['created']),
-        added: isNumber(change['added']) ? change['added'] : 0,
-        removed: isNumber(change['removed']) ? change['removed'] : 0,
-        changeId: change['changeId'],
+        path: item['path'],
+        created: isTrue(item['created']),
+        added: isNumber(item['added']) ? item['added'] : 0,
+        removed: isNumber(item['removed']) ? item['removed'] : 0,
+        changeId: item['changeId'],
       })
     }
     // 只保留最近 60 条，避免长会话无限膨胀
@@ -395,10 +388,9 @@ class CodingSessionTracker {
    * 供模型历史清洗阶段丢弃过期读结果。
    */
   private mergeResourceRevisionHints(toolName: string, result: unknown): void {
-    if (!result || !isObject(result)) return
-    const record = result as Record<string, unknown>
+    if (!isPlainObject(result)) return
 
-    const nr = record['newRevisions']
+    const nr = result['newRevisions']
     if (isPlainObject(nr)) {
       for (const [path, rev] of Object.entries(nr)) {
         if (!isString(path) || !isString(rev)) continue
@@ -412,25 +404,23 @@ class CodingSessionTracker {
       }
     }
 
-    const snapSingle = record['snapshot']
-    if (snapSingle && isObject(snapSingle)) {
-      const s = snapSingle as Record<string, unknown>
-      if (isString(s.path) && isString(s.revision)) {
-        this.resourceRevisionById.set(s.path, s.revision)
-        this.externallyTouchedPaths.delete(s.path)
+    const snapSingle = result['snapshot']
+    if (isPlainObject(snapSingle)) {
+      if (isString(snapSingle.path) && isString(snapSingle.revision)) {
+        this.resourceRevisionById.set(snapSingle.path, snapSingle.revision)
+        this.externallyTouchedPaths.delete(snapSingle.path)
       }
     }
 
-    const files = record['files']
+    const files = result['files']
     if (isArray(files)) {
       for (const item of files) {
-        if (!item || !isObject(item)) continue
-        const snap = (item as Record<string, unknown>).snapshot
-        if (!snap || !isObject(snap)) continue
-        const s = snap as Record<string, unknown>
-        if (isString(s.path) && isString(s.revision)) {
-          this.resourceRevisionById.set(s.path, s.revision)
-          this.externallyTouchedPaths.delete(s.path)
+        if (!isPlainObject(item)) continue
+        const snap = item.snapshot
+        if (!isPlainObject(snap)) continue
+        if (isString(snap.path) && isString(snap.revision)) {
+          this.resourceRevisionById.set(snap.path, snap.revision)
+          this.externallyTouchedPaths.delete(snap.path)
         }
       }
     }
@@ -608,12 +598,6 @@ class CodingSessionTracker {
     toolName: string,
     args: Record<string, unknown>
   ): Nullable<string> {
-    const redundantPromptFeatureMessage = this.toolCallDeduper.getRedundantPromptFeatureMessage(
-      toolName,
-      args
-    )
-    if (redundantPromptFeatureMessage) return this.recordDedupeHit(redundantPromptFeatureMessage)
-
     const repeatedIdempotentMessage = this.toolCallDeduper.getRepeatedIdempotentToolCallMessage(
       toolName,
       args
@@ -782,7 +766,10 @@ class CodingSessionTracker {
       if (!this.isToolCategoryAllowed(categoryId)) return
       this.enabledToolCategories.add(categoryId)
       this.activeToolCategories.add(categoryId)
-      if (dynamicLease && !this.residentToolCategories.has(categoryId)) {
+      // resident 表示类别不能被关停，不表示该类别的全部 schema 永远绕过工具预算驻留。
+      // 显式 page-in 仍要创建临时预算覆盖，否则模型刚换入一个默认 resident 类别，下一轮
+      // 仍可能看不到任何具体工具。
+      if (dynamicLease) {
         this.budgetOverrideToolCategories.add(categoryId)
         this.budgetOverrideToolCategoryTouchedAtTurn.set(
           categoryId,
@@ -835,6 +822,11 @@ class CodingSessionTracker {
     return this.getBudgetOverrideToolNames()
   }
 
+  /** 精确工具页租约；供注册表区分显式 page-in 与整类默认暴露。 */
+  public hasToolNameAccess(toolName: string): boolean {
+    return this.budgetOverrideToolNames.has(toolName.trim())
+  }
+
   public disableToolNames(toolNames: string[], _reason?: string): string[] {
     toolNames.forEach((toolName) => {
       const normalized = toolName.trim()
@@ -876,16 +868,9 @@ class CodingSessionTracker {
   public pruneExpiredToolCategoryLeases(turn: number): ToolCategoryId[] {
     const normalizedTurn = isFiniteNumber(turn) ? Math.max(0, Math.floor(turn)) : 0
     this.currentToolLeaseTurn = normalizedTurn
-    const protectedIds = this.residentToolCategories
     const expired: ToolCategoryId[] = []
 
     for (const categoryId of [...this.budgetOverrideToolCategories]) {
-      if (protectedIds.has(categoryId)) {
-        this.budgetOverrideToolCategories.delete(categoryId)
-        this.budgetOverrideToolCategoryTouchedAtTurn.delete(categoryId)
-        continue
-      }
-
       const touchedTurn = this.budgetOverrideToolCategoryTouchedAtTurn.get(categoryId)
       if (!isFiniteNumber(touchedTurn)) {
         this.budgetOverrideToolCategoryTouchedAtTurn.set(categoryId, normalizedTurn)
@@ -894,8 +879,10 @@ class CodingSessionTracker {
 
       if (normalizedTurn - touchedTurn < this.toolNameLeaseTurns) continue
 
-      this.enabledToolCategories.delete(categoryId)
-      this.activeToolCategories.delete(categoryId)
+      if (!this.residentToolCategories.has(categoryId)) {
+        this.enabledToolCategories.delete(categoryId)
+        this.activeToolCategories.delete(categoryId)
+      }
       this.budgetOverrideToolCategories.delete(categoryId)
       this.budgetOverrideToolCategoryTouchedAtTurn.delete(categoryId)
       this.toolCategoryToolNames[categoryId]?.forEach((toolName) => {

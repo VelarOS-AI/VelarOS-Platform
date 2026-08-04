@@ -1,10 +1,10 @@
 import { isAbsolute, resolve } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
 import {
   type ApprovalPort,
   defaultDenyApprovalPort,
-} from '@velaros-ai/core/tool-contract'
+} from '@velaros-ai/agent/tool-contract'
+import { AppError } from '@velaros-ai/core/error'
 import type { OfficeToolContext } from '@velaros-ai/office/contracts'
 import type { ProjectToolContext } from '@velaros-ai/project/agent'
 import { withProjectApproval } from '@velaros-ai/project/composition'

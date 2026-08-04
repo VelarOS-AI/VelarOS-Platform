@@ -1,5 +1,5 @@
 {
-  "package": "@velaros-ai/kernel-client",
+  "package": "@velaros-ai/kernel",
   "protocolVersion": 2,
   "schemas": {
     "CapabilityCallError": {

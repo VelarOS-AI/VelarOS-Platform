@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
 import { ComputerControlCapability } from './Capabilities'
 import { requireComputerAvailable } from './Context'

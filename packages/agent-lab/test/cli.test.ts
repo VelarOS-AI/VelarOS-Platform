@@ -14,7 +14,10 @@ describe("public CLI", () => {
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("VelarOS Agent Lab");
-      expect(result.stdout).toContain("validate <journey|job|run>");
+      expect(result.stdout).toContain(
+        "validate <journey|job|run|real-task|case>",
+      );
+      expect(result.stdout).toContain("audit-record <record.json>");
       expect(result.stdout).toContain("certify <file-or-dir...>");
     }
   });

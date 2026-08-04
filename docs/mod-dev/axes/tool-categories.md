@@ -21,7 +21,7 @@ z.strictObject({
 
 ## 运行态绑定（可选）
 
-绑定值类型是 `ToolCategoryDefinition`（`@velaros-ai/core/types`）：
+绑定值类型是 `ToolCategoryDefinition`（`@velaros-ai/agent/protocol`）：
 
 ```ts
 interface ToolCategoryDefinition {

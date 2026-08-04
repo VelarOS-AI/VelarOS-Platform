@@ -1,4 +1,4 @@
-import type { AppliedAdjustment } from '@velaros-ai/core/utils/ForgivingSchema'
+import type { AppliedAdjustment } from '@velaros-ai/agent/tool-contract'
 
 export interface GameRuntimeErrorRecord {
   readonly signature: string

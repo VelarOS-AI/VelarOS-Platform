@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
+import { isCanonicalToolId } from '../src/tool-contract/identity'
 import { buildMcpToolName } from '../src/tool-library/mcp/mcpToolTranslation'
-import { isCanonicalToolId } from '../src/tools/ToolIdentity'
 
 describe('MCP tool identity', () => {
   it('normalizes underscores out of the canonical namespace segment', () => {

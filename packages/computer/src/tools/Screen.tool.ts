@@ -20,6 +20,7 @@ const computerScreenshot = defineComputerTool<Record<string, never>>({
   schema: z.object({}),
   permissions: ['screen:capture'],
   capabilities: ComputerObserveCapability,
+  requiredModelInputModalities: ['image'],
   isConcurrencySafe: () => true,
   execute: async (_args, ctx) => {
     ctx.abortSignal.throwIfAborted()

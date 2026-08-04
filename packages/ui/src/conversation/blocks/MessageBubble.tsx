@@ -33,7 +33,6 @@ interface MessageBubbleProps {
   message: ChatMessage
   sessionId: string
   questionMessage?: LooseOptional<ChatMessage>
-  isGuidedInput?: boolean
   isStreaming?: boolean
   runMarker?: LooseOptional<ConversationMessageRunMarker>
   inlineNotice?: LooseOptional<ChatInlineNoticeMeta>
@@ -197,7 +196,6 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
   return props.message.role === 'user' ? (
     <UserMessageBubble
       message={props.message}
-      isGuidedInput={props.isGuidedInput}
       onRewindToMessage={props.onRewindToMessage}
       canRewindToMessage={props.canRewindToMessage}
       canChooseRewindFiles={props.canChooseRewindFiles}
@@ -246,7 +244,6 @@ function areMessageBubblePropsEqual(
     prev.browserScreenshotDisplayMode === next.browserScreenshotDisplayMode &&
     prev.sessionId === next.sessionId &&
     prev.questionMessage === next.questionMessage &&
-    prev.isGuidedInput === next.isGuidedInput &&
     prev.isStreaming === next.isStreaming &&
     prev.inlineNoticeRuntimeSource === next.inlineNoticeRuntimeSource &&
     prev.showToolDetails === next.showToolDetails &&

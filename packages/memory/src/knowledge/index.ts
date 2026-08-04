@@ -1,4 +1,4 @@
-import { structureToolDescriptionsForCategory } from '@velaros-ai/core/utils/ToolDescription'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 
 import { knowledgeTools as rawKnowledgeTools } from './tools/knowledge'
 

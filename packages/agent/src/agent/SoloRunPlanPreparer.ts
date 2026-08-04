@@ -1,9 +1,8 @@
 import type { ModelMessage } from 'ai'
 
-import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
-import type { ScopedLog } from '@velaros-ai/core/logger'
 import type {
   AgentContextPhase,
+  AgentModelInputModality,
   AgentSurfaceId,
   CapabilityScopeId,
   ChatPromptFeatureId,
@@ -12,10 +11,13 @@ import type {
   RunProfileSelectionId,
   ThinkingDepth,
   ToolCategoryId,
+  ToolCategoryOverview,
   ToolDescriptor,
   ToolSurfaceProfileId,
   TurnPlanningTelemetryPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
+import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import {
   type AgentRuntimeCapabilityPorts,
@@ -36,11 +38,16 @@ import { extractLatestUserTextFromMessages, isLowSignalIntentText } from './Inte
 import { resolveSoloLoopTools } from './LoopRuntime'
 import type { AgentModelRequestOptions } from './model'
 import type { PromptStatePreparedToolCategories } from './PromptState'
-import { resolveRunProfilePolicyForRuntime, RunProfileDefinitions } from './RunProfile'
+import {
+  resolveRunProfilePolicyForRuntime,
+  resolveRunProfileWorkingSetContextWindow,
+  RunProfileDefinitions,
+} from './RunProfile'
 import type { ToolSpaceBootstrapState } from './ToolSpaceBootstrapPlanner'
 
-interface SoloRunPlanToolCategory<TTool extends { name: string } = ToolDescriptor> {
-  category: { id: ToolCategoryId }
+interface SoloRunPlanToolCategory<TTool extends ToolDescriptor = ToolDescriptor> {
+  category: ToolCategoryOverview['category']
+  enabled: boolean
   tools: TTool[]
 }
 
@@ -95,6 +102,7 @@ interface SoloRunPlanRoleRuntime {
   model: string
   providerModel?: string
   contextWindow?: number
+  supportedInputModalities: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
   runProfilePolicy?: RunProfileRuntimePolicy
 }
@@ -216,12 +224,12 @@ const SkillGateAlwaysKeptToolNames = new Set<string>([
   'context:recall',
   'context:distill',
 ])
-function excludeProposalLifecycleToolsWhenDisabled<T extends readonly string[] | undefined>(
-  tools: T,
+function filterProposalLifecycleToolsWhenDisabled(
+  tools: readonly string[],
   promptFeatures?: readonly ChatPromptFeatureId[]
-): T {
-  if (!tools || isExecutionModeSelected('proposal', promptFeatures ?? [])) return tools
-  return tools.filter((tool) => !ProposalLifecycleToolNameSet.has(tool)) as unknown as T
+): string[] {
+  if (isExecutionModeSelected('proposal', promptFeatures ?? [])) return [...tools]
+  return tools.filter((tool) => !ProposalLifecycleToolNameSet.has(tool))
 }
 
 function mergeToolCategoryCatalog(
@@ -235,6 +243,7 @@ function mergeToolCategoryCatalog(
     if (!existing) {
       merged.set(entry.category.id, {
         category: entry.category,
+        enabled: entry.enabled,
         tools: [],
       })
       seenToolsByCategory.set(entry.category.id, new Set())
@@ -289,9 +298,21 @@ function collectToolNamesFromCategories(
 function resolvePromptFeatureProtectedToolNames(input: {
   promptFeatures?: readonly ChatPromptFeatureId[]
   goalMode?: boolean
+  contextPhase: AgentContextPhase
   budgetOverrideToolNames: readonly string[]
+  selectedSkillToolNames?: LooseOptional<readonly string[]>
 }): string[] {
   const toolNames = new Set(input.budgetOverrideToolNames)
+
+  for (const toolName of input.selectedSkillToolNames ?? []) {
+    toolNames.add(toolName)
+  }
+
+  if (input.contextPhase !== 'operational') {
+    for (const toolName of BootstrapSharedToolNames) {
+      toolNames.add(toolName)
+    }
+  }
 
   if (isExecutionModeSelected('plan', input.promptFeatures ?? [])) {
     for (const toolName of PlanModeRequiredToolNames) {
@@ -336,6 +357,20 @@ function collectEnabledRuntimeCategoryArtifacts(
   return { enabledToolDescriptors, enabledToolCategories }
 }
 
+/** Removes tools whose result cannot be consumed by the selected concrete model. */
+function filterToolCategoriesForModelInputs(
+  categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>,
+  supportedInputModalities: readonly AgentModelInputModality[]
+): Array<SoloRunPlanToolCategory<ToolDescriptor>> {
+  const supported = new Set(supportedInputModalities)
+  return categories.flatMap((entry) => {
+    const tools = entry.tools.filter((tool) =>
+      (tool.requiredModelInputModalities ?? []).every((modality) => supported.has(modality))
+    )
+    return !isEmpty(tools) ? [{ ...entry, tools }] : []
+  })
+}
+
 function toolCategorySummary(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>
 ): Array<{ id: ToolCategoryId; toolCount: number }> {
@@ -377,6 +412,7 @@ function buildTurnPlanningSnapshotSignature(input: {
   providerId: string
   model: string
   contextWindow: number
+  supportedInputModalities: readonly AgentModelInputModality[]
   requestedRunProfile: RunProfileSelectionId
   runProfile: RunProfileId
   roleAllowedTools: readonly string[]
@@ -390,10 +426,11 @@ function buildTurnPlanningSnapshotSignature(input: {
   contextPhase: AgentContextPhase
 }): string {
   return JSON.stringify({
-    capabilityRevision: input.capabilityRevision ?? null,
+    capabilityRevision: toNullable(input.capabilityRevision),
     providerId: input.providerId,
     model: input.model,
     contextWindow: input.contextWindow,
+    supportedInputModalities: sortedStrings(input.supportedInputModalities),
     requestedRunProfile: input.requestedRunProfile,
     runProfile: input.runProfile,
     configuredTools: sortedStrings(input.configuredTools ?? []),
@@ -421,7 +458,11 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     })
   const runProfile = resolvedRunProfile.profile
   const runProfileDefinition = RunProfileDefinitions[runProfile]
-  const effectiveContextWindow = input.roleRuntime.contextWindow ?? resolvedRunProfile.contextWindow
+  const physicalContextWindow = input.roleRuntime.contextWindow ?? resolvedRunProfile.contextWindow
+  const effectiveContextWindow = resolveRunProfileWorkingSetContextWindow({
+    physicalContextWindow,
+    profile: runProfile,
+  })
   const planningStartedAt = Date.now()
   const expiredToolNameLeases =
     input.toolContext.codingSession.pruneExpiredToolNameLeases?.(input.turn) ?? []
@@ -455,13 +496,14 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
   const budgetOverrideToolNames = resolvePromptFeatureProtectedToolNames({
     promptFeatures: input.promptFeatures,
     goalMode: input.goalMode,
+    contextPhase: input.contextPhase,
     budgetOverrideToolNames: input.toolContext.codingSession.getBudgetOverrideToolNames(),
+    selectedSkillToolNames: input.skillAllowedToolNames,
   })
-  const effectiveConfiguredTools = excludeProposalLifecycleToolsWhenDisabled(
-    input.configuredTools,
-    input.promptFeatures
-  )
-  const effectiveRoleAllowedTools = excludeProposalLifecycleToolsWhenDisabled(
+  const effectiveConfiguredTools = input.configuredTools
+    ? filterProposalLifecycleToolsWhenDisabled(input.configuredTools, input.promptFeatures)
+    : undefined
+  const effectiveRoleAllowedTools = filterProposalLifecycleToolsWhenDisabled(
     input.roleAllowedTools,
     input.promptFeatures
   )
@@ -470,6 +512,7 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     providerId: input.roleRuntime.providerId,
     model: input.roleRuntime.model,
     contextWindow: effectiveContextWindow,
+    supportedInputModalities: input.roleRuntime.supportedInputModalities,
     requestedRunProfile,
     runProfile,
     configuredTools: effectiveConfiguredTools,
@@ -506,16 +549,18 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     toolSchemaCandidateTools = cachedPlanningSnapshot.toolSchemaCandidateTools
     toolSchemaChars = cachedPlanningSnapshot.toolSchemaChars
   } else {
-    runtimeToolCategories =
+    runtimeToolCategories = filterToolCategoriesForModelInputs(
       input.toolRegistry.listCategories?.(input.toolContext, undefined, 'all') ??
-      input.toolContext.listToolCategories('all')
+        input.toolContext.listToolCategories('all'),
+      input.roleRuntime.supportedInputModalities
+    )
     categoryListCalls += 1
     if (shouldRunToolAllocator) {
-      allocatorCatalogToolCategories = mergeToolCategoryCatalog([
+      allocatorCatalogToolCategories = filterToolCategoriesForModelInputs(mergeToolCategoryCatalog([
         ...runtimeToolCategories,
         ...(input.toolRegistry.listCategories?.(input.toolContext, undefined, 'catalog') ??
           input.toolContext.listToolCategories('catalog')),
-      ])
+      ]), input.roleRuntime.supportedInputModalities)
       categoryListCalls += 1
     } else {
       allocatorCatalogToolCategories = runtimeToolCategories
@@ -558,9 +603,11 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
       roleAllowedTools: effectiveRoleAllowedTools,
       enabledToolNames: collectToolNamesFromCategories(runtimeToolCategories),
     })
-    visibleEnabledToolCategories =
+    visibleEnabledToolCategories = filterToolCategoriesForModelInputs(
       input.toolRegistry.listCategories?.(input.toolContext, undefined, 'enabled') ??
-      input.toolContext.listToolCategories('enabled')
+        input.toolContext.listToolCategories('enabled'),
+      input.roleRuntime.supportedInputModalities
+    )
     categoryListCalls += 1
     toolSchemaChars = input.toolRegistry.estimateToolSerializedCharsByName?.(
       input.toolContext,
@@ -716,9 +763,8 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     maxToolCount: runProfileDefinition.budget.maxToolCount,
   }
   const promptToolCategories = {
-    enabled:
-      enabledRuntimeCategoryArtifacts.enabledToolCategories as unknown as PromptStatePreparedToolCategories['enabled'],
-    all: runtimeToolCategories as unknown as PromptStatePreparedToolCategories['all'],
+    enabled: enabledRuntimeCategoryArtifacts.enabledToolCategories,
+    all: runtimeToolCategories,
   } satisfies PromptStatePreparedToolCategories
   input.toolContext.codingSession.recordTurnPlanningTelemetry?.({
     turn: input.turn,
@@ -759,7 +805,11 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
   }
 }
 
-export { filterToolsForContextPhase, prepareSoloRunPlanForTurn }
+export {
+  filterToolCategoriesForModelInputs,
+  filterToolsForContextPhase,
+  prepareSoloRunPlanForTurn,
+}
 export type {
   PrepareSoloRunPlanForTurnInput,
   PrepareSoloRunPlanForTurnResult,

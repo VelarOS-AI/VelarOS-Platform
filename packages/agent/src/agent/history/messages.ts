@@ -1,6 +1,6 @@
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
-import { isArray, isBoolean,isNumber, isObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isBoolean,isNonBlankString,isNumber, isObject, isPresent, isString } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 const log = logRuntime.tag('AgentHistoryMessages')
@@ -59,8 +59,8 @@ class HistoryMessages {
     }
     return (
       record.type === 'tool-call' &&
-      isString(record.toolCallId) &&
-      isString(record.toolName) &&
+      isNonBlankString(record.toolCallId) &&
+      isNonBlankString(record.toolName) &&
       isPresent(record.input)
     )
   }
@@ -75,8 +75,8 @@ class HistoryMessages {
     }
     return (
       record.type === 'tool-result' &&
-      isString(record.toolCallId) &&
-      isString(record.toolName) &&
+      isNonBlankString(record.toolCallId) &&
+      isNonBlankString(record.toolName) &&
       isPresent(record.output)
     )
   }

@@ -20,7 +20,7 @@ const ForbiddenHostImport =
 const ForbiddenCapabilityImport =
   /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:browser|memory|computer|system|development|game|office)(?:\/[^'"]*)?['"]/
 const ForbiddenKernelSemanticImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent-runtime(?:\/[^'"]*)?|@velaros-ai\/core\/(?:constants\/(?:project[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
+  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:project[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g
 const ConcreteCoreTypeName =
@@ -56,15 +56,8 @@ if (
 ) {
   fail('@velaros-ai/project/agent must expose the integrated Agent adapter')
 }
-for (const section of [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-]) {
-  if (manifest[section]?.['@velaros-ai/agent']) {
-    fail(`@velaros-ai/agent must not appear in ${section}`)
-  }
+if (manifest.dependencies?.['@velaros-ai/agent'] !== 'workspace:*') {
+  fail('@velaros-ai/project must depend on the grouped @velaros-ai/agent package')
 }
 if (
   manifest.publishConfig?.access !== 'restricted'

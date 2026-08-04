@@ -8,9 +8,10 @@ import {
   defineKernelModule,
   type KernelCallableCapabilityOperation,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
   type ScopeRef,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   systemTools,
@@ -109,7 +110,7 @@ export function createSystemKernelModule(
     manifest: {
       id: 'velaros.system',
       version: '1.0.0',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [SystemCapability],
       requires: [],
       optionalRequires: [],

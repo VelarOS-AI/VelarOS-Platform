@@ -3,8 +3,8 @@
 // 一个执行模式 = 一份 ExecutionModeDescriptor 声明式捆绑：提示词段投影 + 工具面投影 +
 // 会话粘性规则 + 完成语义。三个官方模式（目标 / 计划 / 方案）重表达为首批预制 descriptor，
 // 经注册表装配；新模式 = 纯声明零改码。descriptor 只承载 host 无关的模式契约，
-// 只依赖 `@velaros-ai/core/types` 的提示词特性 id。
-import type { ChatPromptFeatureId } from '@velaros-ai/core/types'
+// 只依赖 `@velaros-ai/agent/protocol` 的提示词特性 id。
+import type { ChatPromptFeatureId } from '@velaros-ai/agent/protocol'
 
 /** 三个官方执行模式的稳定 id。新增预制模式在此并集追加。 */
 export type ExecutionModeId = 'goal' | 'plan' | 'proposal'

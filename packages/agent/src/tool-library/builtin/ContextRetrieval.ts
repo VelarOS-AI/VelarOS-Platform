@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
 
 const MAX_CHARS_MIN = 1_000
 const MAX_CHARS_MAX = 30_000

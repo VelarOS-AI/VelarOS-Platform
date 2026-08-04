@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
+import type { SkillMarketCatalog, SkillMarketEntry } from '@velaros-ai/agent/protocol'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import type { SkillMarketCatalog, SkillMarketEntry } from '@velaros-ai/core/types'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { SkillFileStore } from './SkillFileStore'

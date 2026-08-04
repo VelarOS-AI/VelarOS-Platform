@@ -1,5 +1,5 @@
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
-import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 

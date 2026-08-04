@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises'
 
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
 import { markItDownBinaryResolver, type MarkItDownLaunchSpec } from './markitdownResolver'
 import { officePlatformCompatibility } from './OfficePlatformCompatibility'

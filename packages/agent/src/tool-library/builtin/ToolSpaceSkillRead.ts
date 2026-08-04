@@ -20,8 +20,8 @@
 
 import { type z } from 'zod'
 
+import type { AgentSkillDescriptor } from '@velaros-ai/agent/protocol'
 import { isEmpty, optionalWhenLazy } from '@velaros-ai/core'
-import type { AgentSkillDescriptor } from '@velaros-ai/core/types'
 
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 

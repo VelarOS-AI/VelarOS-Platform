@@ -9,10 +9,14 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { test } from 'bun:test'
 
 const cliPath = new URL('../dist/cli.js', import.meta.url)
+const installedBinPath = fileURLToPath(
+  new URL('../../../node_modules/.bin/velaros', import.meta.url),
+)
 
 test('velaros cli composes product-owned namespaces through registration', async () => {
   const { createVelarosCliRouter } = await import(cliPath.href)
@@ -45,6 +49,7 @@ test('velaros cli composes product-owned namespaces through registration', async
   assert.deepEqual(JSON.parse(help.text).result.namespaces, [
     'agent',
     'browser',
+    'serve',
   ])
 })
 
@@ -92,6 +97,25 @@ test('velaros cli exposes agent as a formal namespace', async () => {
   assert.equal(parsed.kind, 'velaros.cli.agent.manifest')
   assert.equal(parsed.result.namespace, 'agent')
   assert.deepEqual(parsed.result.commands, ['help', 'manifest', 'status'])
+})
+
+test('velaros cli exposes serve through the Host-owned namespace runner', async () => {
+  const { runVelarosCli } = await import(cliPath.href)
+
+  const help = await runVelarosCli(['serve', '--help', '--json'])
+  assert.equal(help.exitCode, 0)
+  const parsed = JSON.parse(help.text)
+  assert.equal(parsed.kind, 'velaros.cli.serve.help')
+  assert.deepEqual(parsed.result.commands, [
+    'start',
+    'status',
+    'control',
+    'computer install',
+  ])
+
+  const invalid = await runVelarosCli(['serve', 'status', '--not-a-real-option', '--json'])
+  assert.equal(invalid.exitCode, 2)
+  assert.equal(JSON.parse(invalid.text).error.code, 'ARGUMENT_ERROR')
 })
 
 test('velaros agent status reads task artifacts without a script bridge', async () => {
@@ -176,5 +200,15 @@ test('velaros cli module import is side-effect-free', () => {
 
   assert.equal(result.status, 0)
   assert.equal(result.stdout, '')
+  assert.equal(result.stderr, '')
+})
+
+test('installed velaros bin executes through its package-manager symlink', () => {
+  const result = spawnSync(installedBinPath, ['help'], { encoding: 'utf8' })
+
+  assert.equal(result.status, 0)
+  assert.match(result.stdout, /VelarOS CLI/)
+  assert.match(result.stdout, /agent \.\.\./)
+  assert.match(result.stdout, /serve \.\.\./)
   assert.equal(result.stderr, '')
 })

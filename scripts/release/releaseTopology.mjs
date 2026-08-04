@@ -12,6 +12,7 @@
 //   ② manifest 版本必须等于 bun.lock 里该 workspace 的版本(lock 陈旧即红)。
 //   ③ 顺序 = 依赖拓扑,被依赖者先发。
 //   ④ **每个包声明的平台代必须与仓根一致**(velaros.platform)——见下「两根轴」。
+//   ⑤ 可发布包的命令名必须唯一，且品牌入口 `velaros` 只能由 `@velaros-ai/cli` 拥有。
 //
 // 两根轴(2026-08-02 定,取代原「首次里程碑统一对齐」计划):
 //   · **包版本**各自独立走 semver。破坏性变更升自己的位(0.x 下是 minor,1.x 下是 major),
@@ -42,6 +43,11 @@ export const ReleaseRegistry = 'https://npm.pkg.github.com'
 const AllowedAccess = new Set(['restricted', 'public'])
 
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
+
+const manifestBinCommands = (manifest) => {
+  if (typeof manifest.bin === 'string') return [manifest.name.split('/').at(-1)]
+  return Object.keys(manifest.bin ?? {})
+}
 
 // bun.lock 是 JSONC(带注释、尾逗号),沿用七份旧脚本一致的做法:借 TypeScript 的 tsconfig
 // 解析器读,不为一处解析再引一个 JSONC 依赖。
@@ -171,6 +177,26 @@ export async function collectReleasePackages(root) {
     if (privateDirectories.has(directoryName)) continue
     throw new Error(
       `velaros.domainPackages registers packages/${directoryName}, but it is not a publishable package on disk`,
+    )
+  }
+
+  const commandOwners = new Map()
+  for (const item of packages) {
+    for (const command of manifestBinCommands(item.manifest)) {
+      const owners = commandOwners.get(command) ?? []
+      owners.push(item.manifest.name)
+      commandOwners.set(command, owners)
+    }
+  }
+  for (const [command, owners] of commandOwners) {
+    if (owners.length > 1) {
+      throw new Error(`Published CLI command ${command} has multiple owners: ${owners.join(', ')}`)
+    }
+  }
+  const velarosOwners = commandOwners.get('velaros') ?? []
+  if (velarosOwners.length !== 1 || velarosOwners[0] !== '@velaros-ai/cli') {
+    throw new Error(
+      `The velaros command must be owned only by @velaros-ai/cli; got ${velarosOwners.join(', ') || 'no owner'}`,
     )
   }
 

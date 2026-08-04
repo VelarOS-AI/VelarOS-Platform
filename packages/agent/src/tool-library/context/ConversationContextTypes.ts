@@ -8,7 +8,7 @@ import type {
   ChatContextSearchConversationHistoryResult,
   ChatContextSearchTerminalOutputRequest,
   ChatContextSearchTerminalOutputResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 /** 工具按需读取已压缩会话上下文的最小 API。 */
 export interface ToolConversationContextApi {

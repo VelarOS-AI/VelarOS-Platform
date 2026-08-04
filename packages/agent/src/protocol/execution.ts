@@ -2,7 +2,7 @@
 import { z } from 'zod'
 
 import {
-  ToolDescriptorSchema,
+  ToolCatalogEntrySchema,
   VelarToolCallEnvelopeSchema,
   VelarToolResultEnvelopeSchema,
 } from './lease'
@@ -40,7 +40,7 @@ export type DescribeToolSchemaRequest = z.infer<typeof DescribeToolSchemaRequest
 
 /** `describeToolSchema` 响应：单个工具的精确描述符 + 目录修订号（供 schema 自恢复）。 */
 export const DescribeToolSchemaResponseSchema = z.strictObject({
-  tool: ToolDescriptorSchema,
+  tool: ToolCatalogEntrySchema,
   catalogRevision: z.string(),
 })
 export type DescribeToolSchemaResponse = z.infer<typeof DescribeToolSchemaResponseSchema>
@@ -70,7 +70,7 @@ export type RunTurnOptions = z.infer<typeof RunTurnOptionsSchema>
  */
 export const RunTurnRequestSchema = z.strictObject({
   messages: z.array(ModelMessageSchema),
-  tools: z.array(ToolDescriptorSchema),
+  tools: z.array(ToolCatalogEntrySchema),
   options: RunTurnOptionsSchema.optional(),
 })
 export type RunTurnRequest = z.infer<typeof RunTurnRequestSchema>

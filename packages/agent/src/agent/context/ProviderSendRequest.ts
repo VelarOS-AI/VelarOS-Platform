@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 
+import type { ReasoningLanguagePreference } from '@velaros-ai/agent/protocol'
 import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
-import type { ReasoningLanguagePreference } from '@velaros-ai/core/types'
 
 import {
   type AgentHistoryToolContext,

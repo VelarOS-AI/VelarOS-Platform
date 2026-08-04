@@ -4,6 +4,7 @@ import {
   ToolCatalogDiscoveryToolName,
   ToolSchemaDiscoveryToolName,
 } from '@velaros-ai/agent/protocol'
+import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 import { ComputerCapability } from '@velaros-ai/computer/runtime'
 import { computerTools } from '@velaros-ai/computer/tools'
 import {
@@ -14,13 +15,12 @@ import {
   isString,
   toOptional,
 } from '@velaros-ai/core'
-import { schemaToInputSchema } from '@velaros-ai/core/tool-contract'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 import {
   type CapabilitySession,
   type KernelClient,
   KernelProtocolVersion,
-} from '@velaros-ai/kernel-client'
+} from '@velaros-ai/kernel/client'
 import { OfficeCapability } from '@velaros-ai/office/composition'
 import type { OfficeToolContext } from '@velaros-ai/office/contracts'
 import { officeTools } from '@velaros-ai/office/tools'

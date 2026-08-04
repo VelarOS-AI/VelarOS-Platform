@@ -3,7 +3,7 @@
 轴是**贡献**（我给平台加东西）；capability 是**服务**（我提供 / 我要用一个能力实现）。
 两者正交：一个 mod 可以只贡献轴、只提供 capability，或两者都有。
 
-契约面：`@velaros-ai/core/kernel/abi`（`packages/core/src/kernel/abi/`）。
+契约面：`@velaros-ai/kernel/contracts/abi`（`packages/kernel/src/contracts/abi/`）。
 
 ---
 
@@ -64,7 +64,7 @@ manifest 的 `module` 节 schema（`VelarosModModuleSectionSchema`）与它一�
 另加两个**装载寻址**字段 `entry` / `exportName`——它们只对 installed pack 有意义，
 bundled pack 走构建图，没有寻址问题。
 
-> **单一事实来源在 `@velaros-ai/core/kernel/abi`**；
+> **单一事实来源在 `@velaros-ai/kernel/contracts/abi`**；
 > `packages/agent/src/protocol/mods.ts` 里那份是它的**磁盘 JSON 投影，不是第二个定义**。
 > schema 住 `@velaros-ai/agent/protocol` 而不是 core，是因为**依赖方向**：契约层不得反向依赖 Kernel 库。
 > Kernel 侧读同一节时用它自己的窄读取器——各读各节，正是分节信封要的形状。
@@ -176,7 +176,7 @@ export function createMemoryStoreKernelModule(
 **为什么 token 住 adapter-kernel 而不是主干**：
 token 是 mod 轴机制；主干只该持有与实现无关的窄动词契约。
 方向铁律 `adapter-kernel → 主干` 单向也强制了这个落点。
-它也不能住 core：`packages/core/src/kernel/**` 有语义词汇硬墙，出现 `memory` 一词即红。
+它也不能住 Kernel：`packages/kernel/src/**` 有具体能力语义硬墙，出现 `memory` 一词即红。
 
 ### 5.3 窄端口
 

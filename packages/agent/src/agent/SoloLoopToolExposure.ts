@@ -1,4 +1,4 @@
-import type { ToolCategoryId } from '@velaros-ai/core/types'
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 
 import { capabilityRunPlanner } from './control-plane'
 

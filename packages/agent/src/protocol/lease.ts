@@ -28,14 +28,14 @@ export const ToolSchemaDiscoveryToolName = 'tooling:schema'
  *
  * `inputSchema` 是 per-host 投影后的窄化 schema（宪章 §6 per-host 目录投影）。
  */
-export const ToolDescriptorSchema = z.strictObject({
+export const ToolCatalogEntrySchema = z.strictObject({
   name: z.string(),
   description: z.string(),
   inputSchema: z.record(z.string(), z.unknown()),
   category: z.string().optional(),
   readOnly: z.boolean().optional(),
 })
-export type ToolDescriptor = z.infer<typeof ToolDescriptorSchema>
+export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntrySchema>
 
 /**
  * 工具目录快照：`catalogRevision` 绑定精确的可见工具集。
@@ -45,7 +45,7 @@ export type ToolDescriptor = z.infer<typeof ToolDescriptorSchema>
 export const ToolCatalogSnapshotSchema = z.strictObject({
   protocolVersion: z.literal(AgentProtocolVersion),
   catalogRevision: z.string(),
-  tools: z.array(ToolDescriptorSchema),
+  tools: z.array(ToolCatalogEntrySchema),
 })
 export type ToolCatalogSnapshot = z.infer<typeof ToolCatalogSnapshotSchema>
 
@@ -80,8 +80,8 @@ export const VelarToolCallEnvelopeSchema = z.strictObject({
   protocolVersion: z.literal(AgentProtocolVersion),
   contractId: z.string(),
   catalogRevision: z.string(),
-  toolCallId: z.string(),
-  toolName: z.string(),
+  toolCallId: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
   input: z.record(z.string(), z.unknown()),
 })
 export type VelarToolCallEnvelope = z.infer<typeof VelarToolCallEnvelopeSchema>
@@ -100,8 +100,8 @@ export const VelarToolResultEnvelopeSchema = z.strictObject({
   protocolVersion: z.literal(AgentProtocolVersion),
   contractId: z.string(),
   catalogRevision: z.string(),
-  toolCallId: z.string(),
-  toolName: z.string(),
+  toolCallId: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
   status: VelarToolResultStatusSchema,
   output: z.unknown().optional(),
   error: z.string().optional(),

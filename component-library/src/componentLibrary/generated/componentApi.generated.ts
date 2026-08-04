@@ -1616,11 +1616,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((message: ChatMessage) => Nullable<ChatMessage>)"
     },
     {
-      "name": "ChatTranscript.getIsGuidedInput",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "((message: ChatMessage) => boolean)"
-    },
-    {
       "name": "ChatTranscript.getIsStreaming",
       "description": "Auto-generated from TypeScript props.",
       "type": "((message: ChatMessage) => boolean)"
@@ -4146,11 +4141,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "MessageBubble.questionMessage",
       "description": "Auto-generated from TypeScript props.",
       "type": "LooseOptional<ChatMessage>"
-    },
-    {
-      "name": "MessageBubble.isGuidedInput",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
     },
     {
       "name": "MessageBubble.isStreaming",

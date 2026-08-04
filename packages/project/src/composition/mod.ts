@@ -1,4 +1,4 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import {
   projectChangeTools,
@@ -64,7 +64,7 @@ const ProjectAgentModManifest = Object.freeze({
     tools: Object.values(ProjectToolNames).map((name) => ({
       name,
       categoryId: projectCategoryForTool(name),
-      residentInSpaces: [ProjectSpaceId],
+      availableInSpaces: [ProjectSpaceId],
     })),
     spaces: [{
       id: ProjectSpaceId,
@@ -79,6 +79,7 @@ const ProjectAgentModManifest = Object.freeze({
       identityStrategy: 'path',
       surfaceProfileId: 'chat',
       boundCapabilityIds: [ProjectModId],
+      toolCategoryIds: Object.keys(ProjectToolCategories),
     }],
   },
 })

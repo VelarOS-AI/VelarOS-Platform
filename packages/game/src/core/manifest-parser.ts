@@ -1,6 +1,10 @@
 import { type z } from 'zod'
 
 import {
+  type AppliedAdjustment,
+  buildAppliedAdjustments,
+} from '@velaros-ai/agent/tool-contract'
+import {
   isArray,
   isBlank,
   isBoolean,
@@ -18,10 +22,6 @@ import {
   isUndefined,
   toNullable,
 } from '@velaros-ai/core'
-import {
-  type AppliedAdjustment,
-  buildAppliedAdjustments,
-} from '@velaros-ai/core/utils/ForgivingSchema'
 
 import {
   GameDefaultAssetsManifestPath,

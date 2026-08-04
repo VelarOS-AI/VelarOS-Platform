@@ -34,11 +34,11 @@ import {
 import JSZip from 'jszip'
 import { z } from 'zod'
 
-import { isArray, isEmpty, isNonBlankString, isPresent, isString, optionalWhen,optionalWhenLazy, trimmedStringOrEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isArray, isEmpty, isNonBlankString, isPresent, isString, optionalWhen,optionalWhenLazy, trimmedStringOrEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   dirname,

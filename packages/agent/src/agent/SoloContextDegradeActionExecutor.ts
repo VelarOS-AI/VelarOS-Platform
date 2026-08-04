@@ -1,5 +1,5 @@
+import type { ToolDescriptor } from '@velaros-ai/agent/protocol'
 import type { ScopedLog } from '@velaros-ai/core/logger'
-import type { ToolDescriptor } from '@velaros-ai/core/types'
 
 import {
   type ContextGovernanceSessionRegistry,

@@ -82,7 +82,7 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 一件东西若其类型或行为里出现「聊天 / 回合 / 工具结果 / 压缩 / 工作区 / 记忆」这类**域名词**，
 它就不属于 Kernel；只认识「模块 / 能力 / 权限 / 事件 / 状态 / 引用 / 错误」的才留。
 
-机械形态：`packages/core/src/kernel/**` 有硬墙——出现 `memory` 这类词即判红。
+机械形态：`packages/kernel/src/**` 有硬墙——出现 `memory` 这类具体能力词即判红。
 这就是为什么记忆后端的 capability token 住 `packages/memory/src/adapter-kernel/`
 而不是 core。
 
@@ -162,7 +162,7 @@ locale: z.record(TrimmedIdSchema, z.record(TrimmedIdSchema, z.string())).optiona
 | 1 | 蓝图 §3.3 的 `SpaceContribution` | 真名 `AgentModSpaceContribution`（`packages/agent/src/protocol/mods.ts`）。另有 Desktop 的**同名不同形** `SpaceDescriptor`（7 字段，`DesktopCapabilityScopeDescriptors.ts`） | 保留（命名偏离，蓝图措辞按实形读） |
 | 2 | 蓝图 §3.3 / §3.2 说 gate2 是 `source.spaces` | 真实字段是 `TurnContextDeltaSource.scopes`（`packages/core/src/types/turnContext.ts`） | 保留（`scopes` 是终局名，空间枚举已泛化成 `CapabilityScopeId`） |
 | 3 | 蓝图 §3.2 的 `contributes.promptFeatures` | 落地名 `promptSegments`（已在 `docs/agent/agent-mod-trunk.md` 登记偏离） | 保留（偏离已登记） |
-| 4 | Desktop `docs/spaces-composable-dispatch.md` 指向 `../VelarOS-Kernel/packages/core/src/spaces/spaceDescriptors.ts` 并称「九字段」 | 该仓 / 该文件**不存在**；活的是 `DesktopCapabilityScopeRegistry`，7 字段 | 已修（改指 Desktop 真家 + 七字段；同文件另一条 `agent-runtime/prompts/segments/workspace.ts` 留守项也已标注消解） |
+| 4 | Desktop `docs/spaces-composable-dispatch.md` 曾指向不存在的空间描述文件并称「九字段」 | 活的是 `DesktopCapabilityScopeRegistry`，7 字段 | 已修（改指 Desktop 真家 + 七字段） |
 | 5 | `docs/mcp-integration-config.md` 说 `McpServerConfig` 住 `packages/core/src/types/system.ts` | 实住 Desktop 仓 `packages/ipc/src/desktopConfigContracts.ts` | 已修 |
 | 6 | `ToolRenderRegistry.ts` 文档注释示范 `defineToolRenderRegistration({...})` | 该函数**不存在**；真实用法是 `const registration: ToolRenderRegistration = {...}; export default registration` | 已修 |
 | 7 | 蓝图与本文均提 `VELAROS_PLUGIN_ARTIFACT_BASE` | Desktop / Platform 运行时代码**都不读它**；只在一条构建脚本注释里被提到，指 Cloud 侧变量。Desktop 的产物 base 是装配期注入的函数 `cloudAccountService.getPluginArtifactBaseUrl()` | 已修（Desktop 构建脚本注释点名真实装配面；`docs/mod-dev/integration.md` 本就写对） |

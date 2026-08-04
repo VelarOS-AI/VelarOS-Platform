@@ -6,7 +6,7 @@ import type {
   ExecutionTaskRecommendedAction,
   ExecutionTaskRecord,
   StreamTurnContextPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import { ExecPlanState } from './plan-state'
 import type { ResolvedTaskRoute } from './routing-types'

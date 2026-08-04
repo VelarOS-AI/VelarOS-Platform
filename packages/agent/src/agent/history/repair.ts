@@ -211,13 +211,21 @@ function repairHistoryStructure(history: ModelMessage[]): HistorySanitizationRes
  * tool-call 组，避免一次损坏永久锁死会话（每次 send 都被 assertValidModelHistory 拦下）。
  */
 function repairHistoryStructureForProvider(history: ModelMessage[]): HistorySanitizationResult {
+  let identityChangedMessages = 0
+  const identitySanitized = history.map((message) => {
+    const result = sanitizeModelMessage(message, { skipToolResultBudget: true })
+    if (result.changed) identityChangedMessages += 1
+    return result.message
+  })
   // 先剥掉与合法结果混在同一条 tool 消息里的孤儿 tool-result 片段（逐条扫描只能丢整条），
   // 再走结构修复处理「整条无前驱的 tool 消息」和「缺结果的 tool-call 组」（回填/移除）。
-  const stripped = stripOrphanToolResultParts(history)
-  const base = stripped.changedMessages > 0 ? stripped.history : history
+  const stripped = stripOrphanToolResultParts(identitySanitized)
+  const base = stripped.changedMessages > 0 ? stripped.history : identitySanitized
   const sanitized = repairHistoryStructure(base)
-  if (stripped.changedMessages === 0) return sanitized
-  return { ...sanitized, changedMessages: sanitized.changedMessages + stripped.changedMessages }
+  const changedMessages =
+    identityChangedMessages + stripped.changedMessages + sanitized.changedMessages
+  if (changedMessages === sanitized.changedMessages) return sanitized
+  return { ...sanitized, changedMessages }
 }
 
 export { InterruptedToolResultValue, repairHistoryStructureForProvider }

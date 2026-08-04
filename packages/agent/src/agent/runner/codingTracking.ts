@@ -1,6 +1,6 @@
 // 域：主 Agent 的**编码追踪 / 会话键**派生（跨轮授权注册表键 + 子 Agent 执行键）。
 // 逻辑与原 AgentRunner 内联实现逐字节一致，仅按域拆出为纯函数。
-import { normalizeSessionLineageId } from '@velaros-ai/core/utils/sessionLineage'
+import { normalizeSessionLineageId } from '@velaros-ai/agent'
 
 import type { AgentExecutionConfig } from '../RuntimeConfiguration'
 

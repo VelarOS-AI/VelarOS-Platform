@@ -9,7 +9,22 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 
-import { isArray, isBlank, isBoolean, isEmpty,isFunction, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable, toOptional, trimmedStringOrEmpty } from '@velaros-ai/core'
+import {
+  isArray,
+  isBlank,
+  isBoolean,
+  isEmpty,
+  isFalse,
+  isFunction,
+  isNonBlankString,
+  isPlainObject,
+  isPresent,
+  isString,
+  optionalWhen,
+  toNullable,
+  toOptional,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -149,7 +164,7 @@ export interface LoadedProviderScript {
   helpers: ProviderScriptHelpers
 }
 
-const ProviderScriptLog = logRuntime.tag('ProviderScriptRegistry')
+const log = logRuntime.tag('ProviderScriptRegistry')
 const ProviderScriptRequire = createRequire(
   typeof __filename === 'string' ? __filename : import.meta.url
 )
@@ -414,14 +429,14 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
 
   private readEnabledScriptEntries(config: ProviderScriptDevConfig): string[] {
     const providerScripts = isPlainObject(config.providerScripts) ? config.providerScripts : null
-    if (providerScripts?.enabled === false) return []
+    if (isFalse(providerScripts?.enabled)) return []
 
     const scripts = providerScripts?.scripts ?? config.scripts ?? []
     if (!isArray(scripts)) return []
 
     return scripts.flatMap((entry): string[] => {
       if (isString(entry)) return isBlank(entry.trim()) ? [] : [entry.trim()]
-      if (!isPlainObject(entry) || entry.enabled === false) return []
+      if (!isPlainObject(entry) || isFalse(entry.enabled)) return []
 
       const scriptPath = entry.path?.trim() ?? ''
       return isBlank(scriptPath) ? [] : [scriptPath]
@@ -474,7 +489,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
       definition,
       helpers,
     })
-    ProviderScriptLog.info('provider script loaded', {
+    log.info('provider script loaded', {
       providerId,
       scriptPath: input.scriptPath,
     })
@@ -551,7 +566,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
       return
     }
 
-    ProviderScriptLog.warn('provider script requested openExternal before host bridge was set', {
+    log.warn('provider script requested openExternal before host bridge was set', {
       url,
     })
   }
@@ -561,7 +576,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
       const path = this.hostBridge.getUserDataPath?.()
       if (isNonBlankString(path)) return path
     } catch (error) {
-      ProviderScriptLog.debug('provider script host userData path unavailable', { error })
+      log.warn('provider script host userData path unavailable', { error })
     }
 
     return join(this.homeDir, '.velaros')
@@ -571,7 +586,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
     try {
       return this.hostBridge.getAppVersion?.() || '0.0.0'
     } catch (error) {
-      ProviderScriptLog.debug('provider script host app version unavailable', { error })
+      log.warn('provider script host app version unavailable', { error })
       return '0.0.0'
     }
   }
@@ -645,6 +660,7 @@ function normalizeProviderScriptModels(value: unknown): ProviderModelCatalogEntr
 
     const label = String(item.label ?? id).trim() || id
     const contextWindow = toPositiveInteger(item.contextWindow)
+    const inputModalities = normalizeModelInputModalities(item.inputModalities)
     const available = optionalWhen(isBoolean, item.available)
     const minPlan = optionalWhen(isString, item.minPlan)
     return [
@@ -652,6 +668,7 @@ function normalizeProviderScriptModels(value: unknown): ProviderModelCatalogEntr
         id,
         label,
         contextWindow: toOptional(contextWindow),
+        inputModalities,
         available,
         minPlan,
       },
@@ -667,12 +684,25 @@ function normalizeRuntimeMetadata(value: unknown): Nullable<ProviderScriptRuntim
     model: optionalWhen(isString, value.model),
     providerModel: optionalWhen(isString, value.providerModel),
     contextWindow: toOptional(contextWindow),
+    inputModalities: normalizeModelInputModalities(value.inputModalities),
     fallbackReason: optionalWhen(isString, value.fallbackReason),
     config: value.config,
     modelRequestOptions: isPlainObject(value.modelRequestOptions)
       ? (value.modelRequestOptions as ModelRequestOptions)
       : undefined,
   }
+}
+
+function normalizeModelInputModalities(
+  value: unknown
+): Array<'text' | 'image' | 'audio'> | undefined {
+  if (!isArray(value)) return undefined
+
+  const modalities = [...new Set(value.filter(
+    (entry): entry is 'text' | 'image' | 'audio' =>
+      entry === 'text' || entry === 'image' || entry === 'audio'
+  ))]
+  return !isEmpty(modalities) ? modalities : undefined
 }
 
 const ProviderScriptDefinitionOptionalMembers = [
@@ -736,9 +766,9 @@ function normalizeProviderScriptManifest(value: unknown): ProviderScriptManifest
     description,
     defaultBaseURL: trimmedStringOrEmpty(value.defaultBaseURL),
     defaultApiKey: trimmedStringOrEmpty(value.defaultApiKey),
-    apiKeyOptional: optionalWhen(isBoolean, value.apiKeyOptional) ?? true,
-    baseURLConfigurable: optionalWhen(isBoolean, value.baseURLConfigurable) ?? false,
-    enabledByDefault: optionalWhen(isBoolean, value.enabledByDefault) ?? true,
+    apiKeyOptional: optionalWhen(isBoolean, value.apiKeyOptional, true),
+    baseURLConfigurable: optionalWhen(isBoolean, value.baseURLConfigurable, false),
+    enabledByDefault: optionalWhen(isBoolean, value.enabledByDefault, true),
     defaultModel,
     models,
     embeddingModel: optionalTrimmedString(value.embeddingModel),

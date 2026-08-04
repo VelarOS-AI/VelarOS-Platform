@@ -70,6 +70,7 @@ function createProbeToolContext(abortController: AbortController) {
     isToolCategoryAllowed: () => true,
   }
   let visibleToolNames: string[] = [ProbeToolName]
+  let supportedModelInputModalities: string[] = ['text']
   return {
     sessionId: ProbeSessionId,
     abortSignal: abortController.signal,
@@ -85,6 +86,10 @@ function createProbeToolContext(abortController: AbortController) {
     getCurrentVisibleToolNames: () => visibleToolNames,
     setCurrentVisibleToolNames: (names: string[]) => {
       visibleToolNames = names
+    },
+    getSupportedModelInputModalities: () => supportedModelInputModalities,
+    setSupportedModelInputModalities: (modalities: string[]) => {
+      supportedModelInputModalities = [...modalities]
     },
     listToolCategories: () => [],
   }
@@ -124,6 +129,7 @@ async function runProbeLoop(seams: Nullable<AgentModSeamDispatcher>): Promise<Pr
       providerId: 'probe-provider',
       model: 'probe-model',
       contextWindow: 128_000,
+      supportedInputModalities: ['text'],
       resolutionSource: 'probe',
       resolutionTrace: [],
     }),

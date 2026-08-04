@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add `RealTaskRecord`, deterministic outcome/health auditing, privacy-safe reports, and atomic real-task bundles.
+- Add reviewed `RealTaskCase` promotion contracts for explicit single-case replay.
+- Distinguish sequential feedback retries from redundant parallel failure fan-out.
+- Extend the CLI with `validate real-task|case` and `audit-record`.
+
 ## 0.1.0
 
 - Establish the public continuous-journey protocol, runner, driver contract, detector catalog,

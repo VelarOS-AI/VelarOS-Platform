@@ -14,12 +14,12 @@ import { readFile } from 'node:fs/promises'
 import { type PDFDocument, type PDFPage, type RGB, rgb } from 'pdf-lib'
 import { z } from 'zod'
 
-import { isEmpty,isFunction, isPlainObject } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isEmpty,isFunction, isPlainObject, isUndefined } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {
   OfficeEnvironmentCommandAvailability,
@@ -213,6 +213,24 @@ export type ConvertPdfToWordInput = {
   overwrite?: boolean
 }
 
+// PDF 文本读取输入：页码使用用户可见的 1-based 编号；未指定时只读有界的前若干页。
+export type ExtractPdfTextInput = {
+  cwd?: string
+  inputPath: string
+  pages?: number[]
+  maxPages?: number
+}
+
+export type ExtractedPdfTextPage = {
+  page: number
+  text: string
+}
+
+export type ExtractedPdfText = {
+  pageCount: number
+  pages: ExtractedPdfTextPage[]
+}
+
 // Word 转 PDF 的输入：依赖本机 LibreOffice/soffice。
 export type ConvertWordToPdfInput = {
   cwd?: string
@@ -292,6 +310,45 @@ export const convertPdfToWordSchema = z.object({
   maxPages: z.number().int().min(1).max(500).optional(),
   overwrite: z.boolean().optional(),
 })
+
+// PDF 文本读取必须显式选择页码或接受有界前缀；两种选择方式不能同时出现。
+export const extractPdfTextSchema = z
+  .object({
+    cwd: z.string().optional(),
+    inputPath: inputPdfPathSchema,
+    pages: z
+      .array(z.number().int().positive())
+      .min(1)
+      .max(100)
+      .optional()
+      .describe(
+        parameterDescription({
+          description: '要提取的 PDF 页码，使用从 1 开始的编号。',
+          notes: ['按传入顺序返回；重复页码只提取一次。'],
+        })
+      ),
+    maxPages: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe(
+        parameterDescription({
+          description: '从第一页开始最多提取的页数。',
+          notes: ['省略 pages 和 maxPages 时默认读取前 20 页。'],
+        })
+      ),
+  })
+  .superRefine((input, context) => {
+    if (input.pages && input.maxPages) {
+      context.addIssue({
+        code: 'custom',
+        message: 'pages 和 maxPages 不能同时传入。',
+        path: ['pages'],
+      })
+    }
+  })
 
 // Word 输入路径允许 .docx/.doc，后续会按扩展名补全查找。
 export const inputWordPathSchema = z
@@ -453,8 +510,8 @@ export function getPdfjsStandardFontDataUrl(): string | undefined {
 // 使用 pdfjs 逐页提取文本；这里保留页码，后续转 Word 时生成每页标题。
 export async function extractPdfTextPages(
   path: string,
-  maxPages?: number
-): Promise<Array<{ page: number; text: string }>> {
+  options: { pages?: readonly number[]; maxPages?: number } = {}
+): Promise<ExtractedPdfText> {
   const pdfjs = await loadPdfjs()
   const bytes = new Uint8Array(await readFile(path))
   const loadingTask = pdfjs.getDocument({
@@ -464,10 +521,25 @@ export async function extractPdfTextPages(
     standardFontDataUrl: getPdfjsStandardFontDataUrl(),
   })
   const document = await loadingTask.promise
-  const pageLimit = Math.min(document.numPages, maxPages ?? document.numPages)
-  const pages: Array<{ page: number; text: string }> = []
+  const requestedPages = options.pages
+    ? [...new Set(options.pages)]
+    : Array.from(
+        { length: Math.min(document.numPages, options.maxPages ?? document.numPages) },
+        (_, index) => index + 1
+      )
+  const invalidPage = requestedPages.find(
+    (pageNumber) => pageNumber < 1 || pageNumber > document.numPages
+  )
+  if (!isUndefined(invalidPage)) {
+    await document.destroy()
+    throw new AppError(
+      'VALIDATION',
+      `PDF 页码 ${invalidPage} 超出有效范围 1-${document.numPages}。`
+    )
+  }
+  const pages: ExtractedPdfTextPage[] = []
   try {
-    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+    for (const pageNumber of requestedPages) {
       const page = await document.getPage(pageNumber)
       const content = await page.getTextContent()
       // pdfjs 返回的是文本片段数组，这里压成单行文本，避免 Word 里出现大量碎片空白。
@@ -481,7 +553,7 @@ export async function extractPdfTextPages(
   } finally {
     await document.destroy()
   }
-  return pages
+  return { pageCount: document.numPages, pages }
 }
 
 // 将用户传入的标题、作者、主题和关键词写入输出 PDF。

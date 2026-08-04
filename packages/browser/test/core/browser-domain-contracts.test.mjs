@@ -5,6 +5,7 @@ import { test } from 'bun:test'
 import {
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,
+  BrowserTargetActionScriptBuilder,
   buildBrowserLoginDetectionScript,
   buildBrowserScreenshotOptions,
   checkBrowserActionPolicy,
@@ -39,6 +40,18 @@ void test('browser screenshot policy owns stable model-facing defaults', () => {
   assert.deepEqual(options.includeModelImage, BrowserScreenshotDefaultModelImage)
   assert.equal(options.fullPage, true)
   assert.equal(options.compareWithPrevious, true)
+})
+
+void test('browser fill actions return the resulting control value as direct evidence', () => {
+  const script = new BrowserTargetActionScriptBuilder().buildTargetActionScript({
+    action: 'fill',
+    target: { css: 'input[name="answer"]' },
+    value: '2000',
+  })
+
+  assert.match(script, /controlState: readControlState\(element\)/u)
+  assert.match(script, /return \{ kind: 'text', value, valueLength: value\.length \}/u)
+  assert.match(script, /node\.type\.toLowerCase\(\) === 'password'/u)
 })
 
 void test('browser action policy owns deny, confirm, allow and alias precedence', () => {

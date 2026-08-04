@@ -44,7 +44,7 @@ interface ChatTranscriptNavigationState {
 
 /**
  * 渲染窗口的导航契约：由 useChatTranscriptWindow 实现，ChatScrollNavigator 消费。
- * section = user 消息；窗口内走 DOM 滚动，跨边界时滑动窗口。
+ * section = turn-input；运行内 guidance/reply 不创建新 section。
  */
 export interface ChatTranscriptNavigationHandle {
   getSectionMetrics: () => SectionMetric[]
@@ -62,7 +62,6 @@ export interface ChatTranscriptProps {
   itemClassName?: string
   pricingCatalog?: LooseOptional<ModelPricingCatalog>
   getQuestionMessage?: (message: ChatMessage) => Nullable<ChatMessage>
-  getIsGuidedInput?: (message: ChatMessage) => boolean
   getIsStreaming?: (message: ChatMessage) => boolean
   getRunMarker?: (message: ChatMessage) => Nullable<ConversationMessageRunMarker>
   getInlineNotice?: (message: ChatMessage) => Nullable<ChatInlineNoticeMeta>
@@ -109,7 +108,6 @@ function ChatTranscriptInner({
   itemClassName,
   pricingCatalog = null,
   getQuestionMessage,
-  getIsGuidedInput,
   getIsStreaming,
   getRunMarker,
   getInlineNotice,
@@ -160,7 +158,6 @@ function ChatTranscriptInner({
               browserScreenshotDisplayMode={browserScreenshotDisplayMode}
               sessionId={sessionId}
               questionMessage={toNullable(getQuestionMessage?.(message))}
-              isGuidedInput={!!getIsGuidedInput?.(message)}
               isStreaming={!!getIsStreaming?.(message)}
               runMarker={toNullable(getRunMarker?.(message))}
               inlineNotice={inlineNotice}

@@ -23,8 +23,8 @@
 //    不做能力自有资源的推断——「缺什么前置」属于能力描述符的表达力，在这里补一张本地表会与
 //    注入侧打架且必然过时。
 
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
-import type { ToolCategoryId } from '@velaros-ai/core/types'
 
 import {
   buildToolSpacePages,

@@ -1,5 +1,5 @@
+import type { AgentEvent } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNonBlankString, truncate } from '@velaros-ai/core'
-import type { AgentEvent } from '@velaros-ai/core/types'
 
 /** 单个子 Agent 的进展摘要行数上限；超过后停记并留一条说明，防止撑爆 job 输出。 */
 const MaxDigestLines = 200

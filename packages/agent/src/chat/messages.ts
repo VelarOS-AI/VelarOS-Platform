@@ -1,9 +1,10 @@
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
+import type { SerializedMessage } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNonBlankString,isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { SerializedMessage } from '@velaros-ai/core/types'
-import { compactToolInputForModel } from '@velaros-ai/core/utils/toolResultSerialization'
+
+import { compactToolInputForModel } from '../tools/toolResultSerialization'
 
 type AssistantModelContentPart = { type: 'text'; text: string } | ToolCallPart
 type UserModelContentPart =

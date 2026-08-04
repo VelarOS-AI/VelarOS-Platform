@@ -25,6 +25,8 @@
 // 取消一个会话要连带取消它派生出的整棵任务树（子 Agent 会以父任务 id 或父会话 id 再起任务），
 // 故走 `collectLineageClosure` 的不动点闭包而不是一趟 filter。判据见该方法。
 //
+import { type TurnContextAppendHub, TurnContextSessionLedgers } from '@velaros-ai/agent'
+import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/agent/protocol'
 import {
   isEmpty,
   isFiniteNumber,
@@ -35,9 +37,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/core/types'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { type TurnContextAppendHub, TurnContextSessionLedgers } from '@velaros-ai/core/utils/TurnContextLedger'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 

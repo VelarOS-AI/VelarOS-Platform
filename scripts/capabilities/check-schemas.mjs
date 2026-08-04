@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { createToolSchemaBundle } from '@velaros-ai/core/tool-contract'
+import { createToolSchemaBundle } from '@velaros-ai/agent/tool-contract'
 
 import { CapabilityOwners, capabilitySchemaEntry } from './capability-owners.mjs'
 

@@ -6,6 +6,7 @@ import type { ToolSpaceRecoveryGuide } from './tool-space-recovery'
 
 interface ErrorCauseRecord {
   reason?: unknown
+  suggestedNextAction?: unknown
   cause?: unknown
 }
 
@@ -42,6 +43,18 @@ function extractNestedErrorReason(error: unknown): LooseOptional<string> {
     seen.add(current)
     const record = current as ErrorCauseRecord
     if (isNonBlankString(record.reason)) return record.reason.trim()
+    current = record.cause
+  }
+  return null
+}
+
+function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string> {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && isObject(current) && !seen.has(current)) {
+    seen.add(current)
+    const record = current as ErrorCauseRecord
+    if (isNonBlankString(record.suggestedNextAction)) return record.suggestedNextAction.trim()
     current = record.cause
   }
   return null
@@ -96,6 +109,9 @@ function readEmbeddedToolFailure(value: unknown): Nullable<ToolFailureResult> {
   const toolSpaceRecovery = optionalWhen(isObject, record.toolSpaceRecovery) as
     | ToolSpaceRecoveryGuide
     | undefined
+  const runtimeToolIssue = optionalWhen(isObject, record.runtimeToolIssue) as
+    | RuntimeToolIssue
+    | undefined
   if (code) {
     result.code = code
   }
@@ -107,6 +123,9 @@ function readEmbeddedToolFailure(value: unknown): Nullable<ToolFailureResult> {
   }
   if (toolSpaceRecovery) {
     result.toolSpaceRecovery = toolSpaceRecovery
+  }
+  if (runtimeToolIssue) {
+    result.runtimeToolIssue = runtimeToolIssue
   }
   return result
 }
@@ -145,25 +164,32 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)
 
   const nestedReason = extractNestedErrorReason(error)
+  const nestedSuggestedNextAction = extractNestedSuggestedNextAction(error)
+  // 独立领域包可能用 reason 承载稳定机器码。AppError.from 会保留 cause，但不会把领域 reason
+  // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
+  const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code
   const details: Record<string, unknown> = {}
   if (nestedReason) {
     details.reason = nestedReason
   }
-  if (error.code) {
-    details.code = error.code
+  if (effectiveCode) {
+    details.code = effectiveCode
   }
 
   return buildToolFailureResult(
-    error.code === 'EXECUTION_ABORTED'
+    effectiveCode === 'EXECUTION_ABORTED'
       ? 'tool_cancelled'
-      : error.code === 'EXECUTION_DENIED'
+      : effectiveCode === 'UNAVAILABLE'
+        ? 'tool_unavailable'
+      : effectiveCode === 'EXECUTION_DENIED' || effectiveCode === 'PERMISSION_DENIED'
         ? 'tool_denied'
         : 'tool_execution_failed',
     error.message,
     toolName,
     {
-      code: error.code,
+      code: effectiveCode,
       details: optionalWhen(!isEmpty(Object.keys(details)), details),
+      nextActions: nestedSuggestedNextAction ? [nestedSuggestedNextAction] : undefined,
     }
   )
 }

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
+import type { AgentOutputJsonSchema } from '@velaros-ai/agent/protocol'
 import { isEmpty, isRecord } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { AgentOutputJsonSchema } from '@velaros-ai/core/types'
 
 const MaxStructuredOutputSchemaBytes = 16 * 1024
 const MaxStructuredOutputBytes = 64 * 1024

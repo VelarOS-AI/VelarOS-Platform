@@ -1,11 +1,11 @@
-import { isEmpty } from '@velaros-ai/core'
 import type {
   ToolAvailabilityScope,
   ToolCategoryDefinition,
   ToolCategoryId,
   ToolCategoryOverview,
   ToolDescriptor,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import {
@@ -14,6 +14,7 @@ import {
 } from '../capabilities'
 
 import { isToolCategoryAvailable } from './access-policy'
+import { isToolCompatibleWithModelInputs } from './model-input-policy'
 import {
   defaultRuntimePromptFeaturePolicy,
   type RuntimePromptFeaturePolicy,
@@ -106,6 +107,11 @@ class ToolRegistry {
         continue
       }
 
+      // 工具输出会成为下一轮模型输入；实际模型无法消费时不得进入发现或执行表面。
+      if (!isToolCompatibleWithModelInputs(entry.tool, ctx)) {
+        continue
+      }
+
       // 工具可基于宿主上下文做更细的可见性判断。
       if (entry.tool.isAvailable && !entry.tool.isAvailable(ctx)) {
         continue
@@ -147,6 +153,11 @@ class ToolRegistry {
     if (!requiredPromptFeature) return true
 
     if (ctx.codingSession.hasPromptFeatureAccess(requiredPromptFeature)) return true
+
+    // tooling:replace 对具体工具的 page-in 是一个精确、短期的工具选择。它只绕过产品入口的
+    // prompt-feature 筛选，不绕过类别/作用域/系统开关/isAvailable 等真正执行边界。
+    // 否则 Word 这类按需工具会陷入「发现层说可换入，换入后仍因未点 UI feature 而消失」的死路。
+    if (ctx.codingSession.hasToolNameAccess?.(toolName)) return true
 
     return (
       this.promptFeaturePolicy.isOfficeFeature(requiredPromptFeature) &&
@@ -209,6 +220,7 @@ class ToolRegistry {
       role: entry.tool.role,
       permissions: entry.tool.permissions,
       capabilities: entry.tool.capabilities,
+      requiredModelInputModalities: entry.tool.requiredModelInputModalities,
       exposure: entry.tool.exposure,
       categoryId: entry.categoryId,
       systemEnabled: true,
@@ -243,6 +255,7 @@ class ToolRegistry {
         role: entry.tool.role,
         permissions: entry.tool.permissions,
         capabilities: entry.tool.capabilities,
+        requiredModelInputModalities: entry.tool.requiredModelInputModalities,
         exposure: entry.tool.exposure,
         categoryId: entry.categoryId,
         systemEnabled: !disabledTools.has(name),
@@ -263,6 +276,7 @@ class ToolRegistry {
           role: entry.tool.role,
           permissions: entry.tool.permissions,
           capabilities: entry.tool.capabilities,
+          requiredModelInputModalities: entry.tool.requiredModelInputModalities,
           exposure: entry.tool.exposure,
           categoryId: entry.categoryId,
           systemEnabled: false,

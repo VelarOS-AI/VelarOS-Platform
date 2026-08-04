@@ -1,6 +1,6 @@
 // 域：主 Agent 执行的**目标生命周期**（宿主限制下的墙钟判定 + 自主目标探测）。
+import { findCurrentGoalArtifact, getGoalLifecycleStatus } from '@velaros-ai/agent'
 import { isTrue } from '@velaros-ai/core'
-import { findCurrentGoalArtifact, getGoalLifecycleStatus } from '@velaros-ai/core/utils/goalLifecycle'
 
 import type { AgentExecutionLimits } from '../ExecutionLimits'
 import type { AgentExecutionConfig } from '../RuntimeConfiguration'

@@ -18,19 +18,24 @@ import {
   toolRequiresProject,
 } from './officeShared'
 import type { PreviewOfficeDocumentInput } from './previewTool'
-import { buildOfficePreviewHtml, normalizePreviewInput, parseOfficePreview, previewOfficeDocumentSchema, writePreviewHtml } from './previewTool'
+import { buildOfficePreviewHtml, normalizePreviewInput, parseOfficePreview, previewOfficeDocumentSchema, writeOfficePreview } from './previewTool'
+
+const PreviewContentMaxChars = 16_000
 
 const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
   name: 'office:preview_document',
   role: 'render',
-  summary: '解析 Office 文档并可生成 HTML 预览。',
+  summary: '解析 Office 文档并可生成 HTML 或 PNG 预览。',
   suitable: ['需要检查生成后的 Word、PowerPoint 或 Excel 文档结构和摘要。'],
   forbidden: ['不要用它编辑文档内容。'],
   usage: [
-    '传 inputPath；需要浏览器预览时传 outputPath。',
+    '传 inputPath；需要预览文件时传 .html 或 .png outputPath。',
     '重复写入同一个 outputPath 时传 overwrite=true。',
   ],
-  examples: [{ inputPath: "report.docx", outputPath: "preview.html" }],
+  examples: [
+    { inputPath: 'report.docx', outputPath: 'preview.html' },
+    { inputPath: 'metrics.xlsx', outputPath: 'preview.png' },
+  ],
   notes: ['.doc 会先临时转为 .docx 后解析。'],
   schema: previewOfficeDocumentSchema,
   permissions: ['fs:read', 'fs:write', 'process:exec'],
@@ -43,7 +48,7 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
     if (input.outputPath) {
       const authorization = await ctx.office.project.prepareMutation({
         cwd: input.cwd,
-        operation: '生成 Office HTML 预览',
+        operation: '生成 Office 预览',
         targetPath: input.outputPath,
       })
       if (!authorization.approved) return buildProjectMutationSkippedResult(authorization)
@@ -72,7 +77,7 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
           autoRefresh: input.autoRefresh ?? true,
         })
         const output = input.outputPath
-          ? await writePreviewHtml(ctx, input.outputPath, html, input.overwrite)
+          ? await writeOfficePreview(ctx, input.outputPath, html, parsed, input.overwrite)
           : null
 
         return {
@@ -95,8 +100,10 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
             slides: parsed.slides,
             sheets: parsed.sheets,
             messages: parsed.messages,
+            contentHtml: parsed.htmlBody.slice(0, PreviewContentMaxChars),
+            contentTruncated: parsed.htmlBody.length > PreviewContentMaxChars,
           },
-          htmlPreview: output,
+          previewArtifact: output,
         }
       } finally {
         if (normalized.wordInput) await cleanupNormalizedWordInput(normalized.wordInput)

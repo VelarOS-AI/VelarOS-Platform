@@ -4,7 +4,7 @@ import {
   defineToolRuntimeSpec,
   type DefineToolRuntimeSpecInput,
   type ToolContractRuntimeSpec,
-} from '@velaros-ai/core/tool-contract'
+} from '@velaros-ai/agent/tool-contract'
 
 import type {
   KnowledgeDiagnostics,

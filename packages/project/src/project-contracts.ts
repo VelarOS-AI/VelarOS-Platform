@@ -193,16 +193,6 @@ export interface ProjectWriteFileOptions {
   overwrite?: boolean
 }
 
-/** @deprecated 变更协调器已移除，工作区内核会在内部处理锁。 */
-export interface ProjectMutationCoordinationInfo {
-  queued: boolean
-  waitedMs: number
-  paths: string[]
-  sessionId: string
-  waitedForSessions: string[]
-  message?: string
-}
-
 export interface ProjectFileChangeDescriptor {
   changeId: string
   path: string

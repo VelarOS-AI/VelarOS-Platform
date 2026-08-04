@@ -5,8 +5,9 @@ import {
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   ComputerSidecarManager,
@@ -274,7 +275,7 @@ export function createComputerKernelModule(
     manifest: {
       id: 'velaros.computer.sidecar',
       version: ComputerKernelModuleVersion,
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [ComputerCapability],
       requires: [],
       optionalRequires: [],

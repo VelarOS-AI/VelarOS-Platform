@@ -1,8 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isBlank, isEmpty,isObject, isPresent, isString, toNullable, truncate } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 import type {
   ExecutionRecord,
   ExecutionTaskPlanStep,
@@ -10,7 +7,10 @@ import type {
   StreamTurnContextPayload,
   ToolExecutionPlanUpdate,
   UserActionCard,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isBlank, isEmpty,isObject, isPresent, isString, toNullable, truncate } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   type ExecutionIdFactory,

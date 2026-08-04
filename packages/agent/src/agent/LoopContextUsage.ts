@@ -15,17 +15,17 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isNumber } from '@velaros-ai/core'
-import type { ToolCategoryId } from '@velaros-ai/core/types'
 import {
   DefaultContextSafetyMarginPercent,
   resolveReservedOutputTokens,
-} from '@velaros-ai/core/utils/contextBudget'
+} from '@velaros-ai/agent'
 import {
   type ContextUsageEstimate,
   estimateContextUsage,
   type EstimateContextUsageOptions,
-} from '@velaros-ai/core/utils/contextUsage'
+} from '@velaros-ai/agent'
+import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
+import { isNumber } from '@velaros-ai/core'
 
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
 

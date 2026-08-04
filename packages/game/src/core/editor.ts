@@ -1,3 +1,4 @@
+import type { AppliedAdjustment } from '@velaros-ai/agent/tool-contract'
 import {
   isArray,
   isEmpty,
@@ -6,7 +7,6 @@ import {
   isString,
   toNullable,
 } from '@velaros-ai/core'
-import type { AppliedAdjustment } from '@velaros-ai/core/utils/ForgivingSchema'
 
 import { formatGameManifest } from './formatter.js'
 import {

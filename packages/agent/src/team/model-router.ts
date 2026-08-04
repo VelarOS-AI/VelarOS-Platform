@@ -1,4 +1,5 @@
-import type { ThinkingDepth } from '@velaros-ai/core/types'
+import type { AgentModelInputModality, ThinkingDepth } from '@velaros-ai/agent/protocol'
+import { toNullable } from '@velaros-ai/core'
 
 import type {
   AgentModelProvider,
@@ -9,6 +10,7 @@ export interface SubAgentRuntimeOverride {
   provider: AgentModelProvider
   providerId: string
   model: string
+  supportedInputModalities?: readonly AgentModelInputModality[]
   modelRequestOptions?: AgentModelRequestOptions
   thinkingDepth?: ThinkingDepth
 }
@@ -60,7 +62,7 @@ class TeamModelRouter {
     route: TeamModelRouteResult,
     reason: string
   ): LooseOptional<TeamModelRouteResult> {
-    return this.routing.createRelaxedRoute?.(route, reason) ?? null
+    return toNullable(this.routing.createRelaxedRoute?.(route, reason))
   }
 }
 

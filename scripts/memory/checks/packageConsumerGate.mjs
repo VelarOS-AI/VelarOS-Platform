@@ -36,7 +36,7 @@ const PackageSpecifications = [
     directory: resolve(RepositoryRoot, 'packages/memory'),
     example: 'memory.ts',
     expectedDependencies: {
-      '@velaros-ai/core': '^0.3.2',
+      '@velaros-ai/core': '^0.4.0',
     },
   },
   {
@@ -44,16 +44,16 @@ const PackageSpecifications = [
     directory: resolve(RepositoryRoot, 'packages/memory'),
     example: 'knowledge.ts',
     expectedDependencies: {
-      '@velaros-ai/core': '^0.3.2',
+      '@velaros-ai/core': '^0.4.0',
     },
   },
   {
     name: '@velaros-ai/memory/adapter-kernel',
     directory: resolve(RepositoryRoot, 'packages/memory'),
-    example: 'memory-adapter-kernel.ts',
+    example: 'adapter-kernel.ts',
     expectedDependencies: {
-      '@velaros-ai/core': '^0.3.2',
-      '@velaros-ai/kernel-sdk': '^0.2.2',
+      '@velaros-ai/core': '^0.4.0',
+      '@velaros-ai/kernel': '^0.1.0',
     },
   },
 ]
@@ -61,11 +61,11 @@ const PackageSpecifications = [
 const SupportPackageSpecifications = [
   {
     name: '@velaros-ai/core',
-    expectedVersion: '0.3.2',
+    expectedVersion: '0.4.0',
   },
   {
-    name: '@velaros-ai/kernel-sdk',
-    expectedVersion: '0.2.2',
+    name: '@velaros-ai/kernel',
+    expectedVersion: '0.1.0',
   },
   {
     name: '@velaros-ai/ui',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { MemoryRecallItem } from '../../src'
+import type { MemoryRecallItem, MemoryRecallOptions } from '../../src'
 import { MemoryTurnRecallCoordinator } from '../../src/adapter-kernel/TurnRecallCoordinator'
 
 const RecallItem: MemoryRecallItem = {
@@ -21,6 +21,7 @@ const RecallItem: MemoryRecallItem = {
   snapshotVersion: 1,
   retrievalReason: 'scope',
   evidenceIds: ['evidence-1'],
+  sourceTypes: ['user_correction'],
   path: [],
 }
 
@@ -39,7 +40,15 @@ function createCoordinator(
 
 describe('MemoryTurnRecallCoordinator awaitable engine recall', () => {
   test('returns summaries without writing the Solo turn-context ledger', async () => {
-    const coordinator = createCoordinator(async () => [RecallItem])
+    let recallOptions: MemoryRecallOptions | undefined
+    const coordinator = new MemoryTurnRecallCoordinator({
+      recall: async (_query, options) => {
+        recallOptions = options
+        return [RecallItem]
+      },
+      resolveScope: () => ({ scopeType: 'workspace', scopeId: 'workspace-1' as never }),
+      turnContextScopes: ['engine'],
+    })
     const result = await coordinator.recallUserMessage({
       sessionId: 'engine-session',
       query: 'remember engine contract',
@@ -48,6 +57,11 @@ describe('MemoryTurnRecallCoordinator awaitable engine recall', () => {
 
     expect(result.summaries).toHaveLength(1)
     expect(result.summaries[0]).toContain('Keep the engine route fail closed.')
+    expect(recallOptions).toMatchObject({
+      excludeAgentConversationEchoes: true,
+      excludeConversationObservations: true,
+      excludeSourceTypes: ['workspace_event', 'execution_event', 'computer_use'],
+    })
     expect(
       coordinator.createTurnContextSource().peekCached({
         sessionId: 'engine-session',
@@ -91,5 +105,45 @@ describe('MemoryTurnRecallCoordinator awaitable engine recall', () => {
         query: 'remember engine contract',
       })
     ).resolves.toEqual({ summaries: [] })
+  })
+
+  test('does not inject operational-only observations even if a backend ignores source filters', async () => {
+    const coordinator = createCoordinator(async () => [{
+      ...RecallItem,
+      id: 'operational-memory',
+      sourceTypes: ['workspace_event', 'execution_event'],
+    }])
+
+    await expect(
+      coordinator.recallUserMessage({
+        sessionId: 'operational-session',
+        query: 'review project tool behavior',
+      })
+    ).resolves.toEqual({ summaries: [] })
+  })
+
+  test('does not inject raw conversation observations but keeps curated chat-backed claims eligible', async () => {
+    const coordinator = createCoordinator(async () => [
+      {
+        ...RecallItem,
+        id: 'conversation-observation',
+        predicate: 'conversation_observation',
+        sourceTypes: ['chat_message'],
+      },
+      {
+        ...RecallItem,
+        id: 'curated-preference',
+        predicate: 'preference',
+        sourceTypes: ['chat_message'],
+      },
+    ])
+
+    const result = await coordinator.recallUserMessage({
+      sessionId: 'conversation-session',
+      query: 'remember my preferred workflow',
+    })
+
+    expect(result.summaries).toHaveLength(1)
+    expect(result.summaries[0]).toContain('Keep the engine route fail closed.')
   })
 })

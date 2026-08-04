@@ -7,7 +7,7 @@ import type {
   RunProfileSelectionId,
   ToolCategoryId,
   ToolDescriptor,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type { ContextWorkingSetBudgetAllocation, ProviderRequestPressureKind } from '../context'
 import type { ContextDegradeAction } from '../ContextDegradeLadder'

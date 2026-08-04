@@ -33,15 +33,15 @@ const installedPackageResolver = new InstalledPackageResolver({
 })
 const kernelPackageSources = new Map(
   await Promise.all(
-    ['@velaros-ai/core', '@velaros-ai/kernel-sdk'].map(async (packageName) => [
+    ['@velaros-ai/core', '@velaros-ai/kernel'].map(async (packageName) => [
       packageName,
       await installedPackageResolver.resolve(packageName),
     ]),
   ),
 )
 const expectedKernelVersions = new Map([
-  ['@velaros-ai/core', '0.3.2'],
-  ['@velaros-ai/kernel-sdk', '0.2.2'],
+  ['@velaros-ai/core', '0.4.0'],
+  ['@velaros-ai/kernel', '0.1.0'],
 ])
 const repositoryHelperTypeNames = new Set([
   'JsonStringifyReplacer',
@@ -386,10 +386,10 @@ function assertPublishedDependencyPolicy(manifest) {
       `${manifest.name}: published dependency ${name} contains local selector ${version}`,
     )
     if (name === '@velaros-ai/core') {
-      assert(version === '^0.3.2', `${manifest.name}: Core floor must be ^0.3.2`)
+      assert(version === '^0.4.0', `${manifest.name}: Core floor must be ^0.4.0`)
     }
-    if (name === '@velaros-ai/kernel-sdk') {
-      assert(version === '^0.2.2', `${manifest.name}: Kernel SDK floor must be ^0.2.2`)
+    if (name === '@velaros-ai/kernel') {
+      assert(version === '^0.1.0', `${manifest.name}: Kernel floor must be ^0.1.0`)
     }
   }
 }
@@ -766,7 +766,7 @@ void [AppError, BrowserSessionManager, probe, uiConflictProbe]
     path.join(consumerRoot, 'runtime.mjs'),
     `await Promise.all([
   import('@velaros-ai/core'),
-  import('@velaros-ai/kernel-sdk'),
+  import('@velaros-ai/kernel/contracts/abi'),
   import('@velaros-ai/browser/core'),
   import('${targetName}'),
   import('@velaros-ai/ui-conflict-probe'),

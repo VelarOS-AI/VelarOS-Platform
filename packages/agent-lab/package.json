@@ -52,6 +52,10 @@
     "./drivers": {
       "types": "./dist/drivers/index.d.ts",
       "import": "./dist/drivers/index.js"
+    },
+    "./workload": {
+      "types": "./dist/workload/index.d.ts",
+      "import": "./dist/workload/index.js"
     }
   },
   "files": [

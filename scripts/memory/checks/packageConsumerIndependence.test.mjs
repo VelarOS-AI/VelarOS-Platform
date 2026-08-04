@@ -6,12 +6,10 @@ import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
 const RepositoryRoot = resolve(import.meta.dirname, '../../..')
-const GateRelativePath = 'scripts/checks/packageConsumerGate.mjs'
+const GateRelativePath = 'scripts/memory/checks/packageConsumerGate.mjs'
 const NoSiblingSourceFiles = [
   GateRelativePath,
   'tsconfig.eslint.json',
-  'packages/memory/tsconfig.json',
-  'packages/memory/tsconfig.json',
   'packages/memory/tsconfig.json',
 ]
 const MaintainedConsumerRelativePath =
@@ -24,24 +22,20 @@ test('consumer and TypeScript boundaries contain no sibling repository sources',
   }
 })
 
-test('maintained package test resolves explicit workspace build entries', async () => {
+test('maintained package test resolves explicit grouped-package build entries', async () => {
   const source = await readFile(
     resolve(RepositoryRoot, MaintainedConsumerRelativePath),
     'utf8'
   )
-  assert.doesNotMatch(
-    source,
-    /from ['"]@velaros-ai\/(?:knowledge|memory|memory-adapter-kernel)['"]/u
-  )
-  for (const packageDirectory of [
-    'knowledge',
-    'memory',
-    'memory-adapter-kernel',
+  for (const packageEntry of [
+    'packages/memory/dist/index.js',
+    'packages/memory/dist/knowledge/index.js',
+    'packages/memory/dist/adapter-kernel/index.js',
   ]) {
     assert.match(
       source,
       new RegExp(
-        `packages/${packageDirectory}/dist/index\\.js`,
+        packageEntry.replaceAll('.', '\\.'),
         'u'
       )
     )
@@ -68,7 +62,7 @@ test('consumer gate runs from a copied repository without sibling repositories',
       copyDirectoryWithoutDependencies('packages', copiedRepository),
       copyDirectoryWithoutDependencies('tests/memory/consumer', copiedRepository),
     ])
-    await copyScript('scripts/checks/lockfileConsistency.mjs', copiedRepository)
+    await copyScript('scripts/memory/checks/lockfileConsistency.mjs', copiedRepository)
     await copyScript(GateRelativePath, copiedRepository)
 
     assert.deepEqual(await readdir(isolatedParent), ['repository'])

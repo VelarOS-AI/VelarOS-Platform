@@ -1,5 +1,5 @@
+import type { ExecutionStatus } from '@velaros-ai/agent/protocol'
 import { AppError } from '@velaros-ai/core/error'
-import type { ExecutionStatus } from '@velaros-ai/core/types'
 
 /**
  * 合法状态迁移表。

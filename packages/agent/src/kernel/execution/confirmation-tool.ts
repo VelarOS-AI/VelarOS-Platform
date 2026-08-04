@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
-import type { ApprovalPort, ToolContractRuntimeSpec } from '@velaros-ai/core/tool-contract'
-import type { ToolPermission } from '@velaros-ai/core/types'
+import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ApprovalPort, ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import {
+  createManualApprovalOptions,
   renderParameterDescription as parameterDescription,
   renderToolDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
 
 /**
  * interaction:confirm 的最小执行上下文：只需审批通道与取消信号。
@@ -24,6 +25,9 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
   { approved: boolean },
   ToolPermission
 > = {
+  name: 'interaction:confirm',
+  category: 'interaction',
+  role: 'execute',
   description: renderToolDescription({
     description: '向用户请求一次明确确认。',
     suitable: ['执行高风险、长期运行或需要人工授权的动作前。'],
@@ -46,9 +50,11 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
   permissions: [],
   isConcurrencySafe: () => false,
   execute: async ({ message }, ctx) => {
-    await ctx.approval.awaitConfirmation(message, ctx.abortSignal, {
-      requireManualApproval: true,
-    })
+    await ctx.approval.awaitConfirmation(
+      message,
+      ctx.abortSignal,
+      createManualApprovalOptions()
+    )
     return { approved: true }
   },
 }

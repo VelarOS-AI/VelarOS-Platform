@@ -77,6 +77,16 @@ function nullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function toolResultIsError(part: RecordValue, output: unknown): boolean | null {
+  const explicit =
+    nullableBoolean(part.isError) ??
+    (isRecord(output) ? nullableBoolean(output.isError) : null);
+  if (explicit !== null) return explicit;
+  if (!isRecord(output)) return null;
+  const type = nullableString(output.type);
+  return type === "error-text" || type === "error" ? true : null;
+}
+
 function json(value: unknown): JsonValue {
   if (value === null || typeof value === "boolean" || typeof value === "string")
     return value;
@@ -192,9 +202,7 @@ function debugTurns(input: unknown): readonly TurnRecord[] {
         const output = partValue.output ?? partValue.result ?? null;
         results.set(callId, {
           result: json(output),
-          isError:
-            nullableBoolean(partValue.isError) ??
-            (isRecord(output) ? nullableBoolean(output.isError) : null),
+          isError: toolResultIsError(partValue, output),
         });
       }
     }

@@ -7,3 +7,6 @@ export {
   type VelarosCliNamespaceRunResult,
   VelarosCliRouter,
 } from './cli.js'
+export * from './connector.js'
+export * from './output.js'
+export * from './types.js'

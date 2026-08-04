@@ -545,9 +545,17 @@ export interface TurnContextDelta {
   inspect?: { tool: string; argsHint?: Record<string, unknown> }
 }
 
+export type ChatMessageConversationKind =
+  | 'turn-input'
+  | 'run-guidance'
+  | 'interaction-reply'
+  | 'assistant-output'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
+  /** 会话产品语义；与发给模型的 role 正交。 */
+  conversationKind?: ChatMessageConversationKind
   runId?: string
   turnId?: string
   blocks: ContentBlock[]
@@ -585,6 +593,37 @@ export interface ChatMessage {
   serializedStoredInWorkspace?: boolean
   guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent'
   timestamp: number
+}
+
+type ChatMessageConversationSemanticInput = Pick<
+  ChatMessage,
+  'role' | 'conversationKind' | 'guidanceStatus'
+>
+
+export function resolveChatMessageConversationKind(
+  message: ChatMessageConversationSemanticInput
+): ChatMessageConversationKind {
+  if (message.role !== 'user') return 'assistant-output'
+  if (
+    message.conversationKind === 'turn-input' ||
+    message.conversationKind === 'run-guidance' ||
+    message.conversationKind === 'interaction-reply'
+  )
+    return message.conversationKind
+
+  return message.guidanceStatus ? 'run-guidance' : 'turn-input'
+}
+
+export function isConversationTurnInputMessage(
+  message: ChatMessageConversationSemanticInput
+): boolean {
+  return resolveChatMessageConversationKind(message) === 'turn-input'
+}
+
+export function isRunGuidanceMessage(
+  message: ChatMessageConversationSemanticInput
+): boolean {
+  return resolveChatMessageConversationKind(message) === 'run-guidance'
 }
 
 export interface ChatSuggestionItem {

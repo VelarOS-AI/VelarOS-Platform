@@ -1,14 +1,28 @@
 import {
+  isArray,
+  isBlank,
+  isBoolean,
+  isEmpty,
+  isNotUndefined,
+  isNumber,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
+import {
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityService,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import type {
   MemoryDomain,
   MemoryEvidenceCategory,
+  MemoryEvidenceSourceType,
   MemoryRecallOptions,
 } from '..'
 
@@ -40,11 +54,21 @@ const memoryEvidenceCategories = new Set<MemoryEvidenceCategory>([
   'artifact',
 ])
 
+const memoryEvidenceSourceTypes = new Set<MemoryEvidenceSourceType>([
+  'chat_message',
+  'agent_tool',
+  'execution_event',
+  'workspace_event',
+  'computer_use',
+  'user_correction',
+  'import',
+])
+
 function parseRecord(input: unknown): Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  if (!isPlainObject(input)) {
     throw new Error('Memory capability input is invalid')
   }
-  return input as Record<string, unknown>
+  return input
 }
 
 function assertExactKeys(
@@ -61,8 +85,8 @@ function parseIdentifierInput(input: unknown, key: string): string {
   assertExactKeys(record, [key])
   const value = record[key]
   if (
-    typeof value !== 'string'
-    || value.trim().length === 0
+    !isString(value)
+    || isBlank(value.trim())
     || value !== value.trim()
     || value.length > 512
   ) {
@@ -73,7 +97,7 @@ function parseIdentifierInput(input: unknown, key: string): string {
 
 function parseRecallInput(
   input: unknown,
-  scopeId: string | undefined,
+  scopeId?: string,
 ): {
   query: string
   options: MemoryRecallOptions
@@ -81,23 +105,19 @@ function parseRecallInput(
   const record = parseRecord(input)
   assertExactKeys(record, ['query', 'options'])
   if (
-    typeof record.query !== 'string'
-    || record.query.trim().length === 0
+    !isString(record.query)
+    || isBlank(record.query.trim())
     || record.query.length > 16_384
   ) {
     throw new Error('Memory capability input is invalid')
   }
   if (
-    record.options !== undefined
-    && (
-      typeof record.options !== 'object'
-      || record.options === null
-      || Array.isArray(record.options)
-    )
+    isNotUndefined(record.options)
+    && !isPlainObject(record.options)
   ) {
     throw new Error('Memory capability input is invalid')
   }
-  const rawOptions = (record.options ?? {}) as Record<string, unknown>
+  const rawOptions = isPlainObject(record.options) ? record.options : {}
   assertExactKeys(rawOptions, [
     'limit',
     'workspaceRoot',
@@ -105,14 +125,16 @@ function parseRecallInput(
     'includeGlobal',
     'excludeSessionId',
     'excludeAgentConversationEchoes',
+    'excludeConversationObservations',
+    'excludeSourceTypes',
     'categories',
     'includeDormant',
     'deep',
   ])
   if (
-    rawOptions.limit !== undefined
+    isNotUndefined(rawOptions.limit)
     && (
-      typeof rawOptions.limit !== 'number'
+      !isNumber(rawOptions.limit)
       || !Number.isInteger(rawOptions.limit)
       || rawOptions.limit < 1
       || rawOptions.limit > 100
@@ -123,10 +145,10 @@ function parseRecallInput(
   for (const key of ['workspaceRoot', 'scopeId', 'excludeSessionId']) {
     const value = rawOptions[key]
     if (
-      value !== undefined
+      isNotUndefined(value)
       && (
-        typeof value !== 'string'
-        || value.length === 0
+        !isString(value)
+        || isEmpty(value)
         || value.length > 4096
       )
     ) {
@@ -136,23 +158,38 @@ function parseRecallInput(
   for (const key of [
     'includeGlobal',
     'excludeAgentConversationEchoes',
+    'excludeConversationObservations',
     'includeDormant',
     'deep',
   ]) {
     const value = rawOptions[key]
-    if (value !== undefined && typeof value !== 'boolean') {
+    if (isNotUndefined(value) && !isBoolean(value)) {
       throw new Error('Memory capability input is invalid')
     }
   }
   if (
-    rawOptions.categories !== undefined
+    isNotUndefined(rawOptions.excludeSourceTypes)
     && (
-      !Array.isArray(rawOptions.categories)
+      !isArray(rawOptions.excludeSourceTypes)
+      || rawOptions.excludeSourceTypes.length > 16
+      || rawOptions.excludeSourceTypes.some(
+        (sourceType) =>
+          !isString(sourceType)
+          || !memoryEvidenceSourceTypes.has(sourceType as MemoryEvidenceSourceType)
+      )
+    )
+  ) {
+    throw new Error('Memory capability input is invalid')
+  }
+  if (
+    isNotUndefined(rawOptions.categories)
+    && (
+      !isArray(rawOptions.categories)
       || rawOptions.categories.length > 32
       || rawOptions.categories.some(
         (category) =>
-          typeof category !== 'string'
-          || category.length === 0
+          !isString(category)
+          || isEmpty(category)
           || category.length > 64
           || !memoryEvidenceCategories.has(
             category as MemoryEvidenceCategory,
@@ -165,11 +202,11 @@ function parseRecallInput(
     throw new Error('Memory capability input is invalid')
   }
   if (
-    scopeId !== undefined
+    isNotUndefined(scopeId)
     && (
-      rawOptions.workspaceRoot !== undefined
+      isNotUndefined(rawOptions.workspaceRoot)
       || (
-        rawOptions.scopeId !== undefined
+        isNotUndefined(rawOptions.scopeId)
         && rawOptions.scopeId !== scopeId
       )
     )
@@ -180,7 +217,7 @@ function parseRecallInput(
     query: record.query.trim(),
     options: {
       ...rawOptions,
-      ...(scopeId === undefined ? {} : { scopeId }),
+      ...(isUndefined(scopeId) ? {} : { scopeId }),
     } as MemoryRecallOptions,
   }
 }
@@ -202,7 +239,7 @@ export function createMemoryKernelModule(
     manifest: {
       id: 'velaros.memory.default',
       version: '0.3.0',
-      apiVersion: 1,
+      apiVersion: KernelModuleApiVersion,
       provides: [MemoryCapability],
       requires: [],
       optionalRequires: [],
@@ -234,8 +271,8 @@ export function createMemoryKernelModule(
               parseIdentifierInput(input, 'claimId'),
             )
             if (
-              scope !== undefined
-              && claim !== null
+              isPresent(scope)
+              && isPresent(claim)
               && claim.scopeType !== 'global'
               && claim.scopeId !== scope.id
             ) return null

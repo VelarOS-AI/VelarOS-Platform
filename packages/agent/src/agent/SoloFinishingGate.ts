@@ -1,13 +1,13 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray,isEmpty, isFunction, isPlainObject } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { ScopedLog } from '@velaros-ai/core/logger'
 import type {
   ExecutionTaskPlanStep,
   StreamTurnEndPayload,
-} from '@velaros-ai/core/types'
-import { ChatRuntimeEvents } from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isArray,isEmpty, isFunction, isPlainObject } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type { AutoVerificationGateResult } from '../coding'
 import { evaluateKernelFinalReadiness } from '../kernel'
@@ -43,6 +43,7 @@ interface RunSoloFinishingGateInput<
   consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
   goalMode?: boolean
   inspectGoalState?: () => Promise<SoloGoalFinishingState>
+  completeGoalOnSuccessfulFinish?: () => Promise<void>
   recordGoalCompletionAttempt?: (state: SoloGoalFinishingState) => Promise<void>
   finishingGateBlockTracker?: SoloFinishingGateBlockTracker
   log: Pick<ScopedLog, 'debug' | 'info' | 'warn'>
@@ -267,6 +268,7 @@ async function runSoloFinishingGate<
   }
 
   if (input.goalMode && input.inspectGoalState) {
+    await input.completeGoalOnSuccessfulFinish?.()
     const goalState = await input.inspectGoalState()
     if (!goalState.terminal) {
       await input.recordGoalCompletionAttempt?.(goalState)

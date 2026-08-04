@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import type { BrowserElementQueryResult, BrowserObserveActionsResult, BrowserPageDiagnostics } from '../core'
 import { buildBrowserScreenshotOptions } from '../core'

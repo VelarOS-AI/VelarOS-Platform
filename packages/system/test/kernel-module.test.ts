@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import {
   createSystemKernelModule,
@@ -67,6 +67,8 @@ describe('System Kernel module', () => {
       'system:open',
     ])
     expect(service?.getOperationMetadata('system:list-tasks')).toBeUndefined()
+    expect(service?.tools['system:edit']?.description).toContain('保留已有文件的权限位')
+    expect(service?.tools['system:run']?.description).toContain('复制、移动、删除、归档、解压')
     expect(module.manifest.permissions).not.toContain('*')
   })
 

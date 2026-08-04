@@ -1,6 +1,4 @@
 
-import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   ChatContextEvidenceRecord,
   ChatContextRetrievedPayload,
@@ -8,7 +6,9 @@ import type {
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
   SerializedMessage,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'

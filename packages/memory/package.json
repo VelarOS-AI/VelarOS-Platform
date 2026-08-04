@@ -64,7 +64,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/memory/build/fix-esm-extensions.mjs dist && node ../../scripts/memory/build/copy-velaros-globals-to-dist.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/memory/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "test": "bun run build && node --test ../../tests/memory/maintained/packages/memory/*.mjs && bun test test",
     "probe:authority-v2": "node ../../scripts/memory/checks/memoryAuthorityV2Probe.mjs",
     "probe:ingest-dream-v2": "node ../../scripts/memory/checks/memoryIngestDreamV2Probe.mjs",
@@ -81,7 +81,9 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.27.2",
+    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel": "workspace:*",
     "apache-arrow": "^18.1.0",
     "better-sqlite3": "^12.9.0",
     "zod": "^4.3.6"

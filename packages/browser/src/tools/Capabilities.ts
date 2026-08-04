@@ -1,4 +1,4 @@
-import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 
 export type BrowserCapabilityAccess = 'observe' | 'control' | 'artifact'
 
@@ -12,7 +12,7 @@ export type BrowserToolCapabilitySchema = Omit<ToolCapabilitySchema, 'metadata'>
 }
 
 export const BrowserObserveCapability = {
-  effectKind: 'browser',
+  effectKind: 'read',
   readScopes: ['browser'],
   canReadArbitrarySource: true,
   concurrency: 'safe',
@@ -23,7 +23,7 @@ export const BrowserObserveCapability = {
 } satisfies BrowserToolCapabilitySchema
 
 export const BrowserControlCapability = {
-  effectKind: 'browser',
+  effectKind: 'external',
   readScopes: ['browser'],
   writeScopes: ['browser'],
   canReadArbitrarySource: true,
@@ -36,7 +36,7 @@ export const BrowserControlCapability = {
 } satisfies BrowserToolCapabilitySchema
 
 export const BrowserArtifactReadCapability = {
-  effectKind: 'browser',
+  effectKind: 'read',
   readScopes: ['browser'],
   filesystem: { read: 'browser', write: 'none' },
   canReadArbitrarySource: false,
@@ -48,7 +48,7 @@ export const BrowserArtifactReadCapability = {
 } satisfies BrowserToolCapabilitySchema
 
 export const BrowserArtifactWriteCapability = {
-  effectKind: 'browser',
+  effectKind: 'write',
   readScopes: ['browser'],
   writeScopes: ['browser'],
   filesystem: { read: 'browser', write: 'browser' },
@@ -62,7 +62,7 @@ export const BrowserArtifactWriteCapability = {
 } satisfies BrowserToolCapabilitySchema
 
 export const BrowserSessionCapability = {
-  effectKind: 'browser',
+  effectKind: 'external',
   readScopes: ['browser', 'system'],
   writeScopes: ['browser'],
   filesystem: { read: 'browser', write: 'browser' },

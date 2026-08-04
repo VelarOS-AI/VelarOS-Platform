@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/core",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "VelarOS 内核基础层:Kernel 库本体(module ABI / module host / capability registry / 权限 broker / 事件流 / namespaced state / wire 协议)+ 跨域共享契约、错误、日志与运行时工具。",
+  "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
   "license": "UNLICENSED",
   "sideEffects": false,
   "engines": {
@@ -22,41 +22,9 @@
       "types": "./dist/assert.d.ts",
       "import": "./dist/assert.js"
     },
-    "./cli": {
-      "types": "./dist/cli/index.d.ts",
-      "import": "./dist/cli/index.js"
-    },
-    "./constants/*": {
-      "types": "./dist/constants/*.d.ts",
-      "import": "./dist/constants/*.js"
-    },
     "./error": {
       "types": "./dist/error.d.ts",
       "import": "./dist/error.js"
-    },
-    "./kernel": {
-      "types": "./dist/kernel/index.d.ts",
-      "import": "./dist/kernel/index.js"
-    },
-    "./kernel/abi": {
-      "types": "./dist/kernel/abi/index.d.ts",
-      "import": "./dist/kernel/abi/index.js"
-    },
-    "./kernel/contracts": {
-      "types": "./dist/kernel/contracts/index.d.ts",
-      "import": "./dist/kernel/contracts/index.js"
-    },
-    "./kernel/host": {
-      "types": "./dist/kernel/host/index.d.ts",
-      "import": "./dist/kernel/host/index.js"
-    },
-    "./kernel/protocol": {
-      "types": "./dist/kernel/protocol/index.d.ts",
-      "import": "./dist/kernel/protocol/index.js"
-    },
-    "./kernel/runtime": {
-      "types": "./dist/kernel/runtime/index.d.ts",
-      "import": "./dist/kernel/runtime/index.js"
     },
     "./logger": {
       "types": "./dist/logger/index.d.ts",
@@ -65,18 +33,6 @@
     "./result": {
       "types": "./dist/result.d.ts",
       "import": "./dist/result.js"
-    },
-    "./tool-contract": {
-      "types": "./dist/tool-contract/index.d.ts",
-      "import": "./dist/tool-contract/index.js"
-    },
-    "./types": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/types/index.js"
-    },
-    "./types/*": {
-      "types": "./dist/types/*.d.ts",
-      "import": "./dist/types/*.js"
     },
     "./utils/*": {
       "types": "./dist/utils/*.d.ts",
@@ -90,16 +46,12 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/core/build/copy-velaros-globals-to-dist.mjs && bun run generate:schema-snapshot",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/core/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test",
-    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core",
-    "generate:schema-snapshot": "bun scripts/generate-schema-snapshot.mjs"
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/core"
   },
-  "dependencies": {
-    "gpt-tokenizer": "^3.0.1",
-    "zod": "^4.3.6"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.19.17",
     "typescript": "^5.7.0"

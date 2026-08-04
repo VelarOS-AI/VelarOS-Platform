@@ -17,24 +17,26 @@
 //    否则模型只会原样重试。
 //  - **自动批准必须留痕**（`CapabilityAutoApprovalNotice`）：无痕迹的自动批准等于没有审批。
 //  - **本门不认识 mod**：mod 贡献在装载期已被宿主收窄，到这里与内置工具同权。
-import { isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { ScopedLog } from '@velaros-ai/core/logger'
-import { logRuntime } from '@velaros-ai/core/logger'
 import type {
+  AgentModelInputModality,
   AgentRoleId,
   CapabilityAutoApprovalNotice,
   CapabilityScopeId,
   ChatContextEvidenceRecord,
   RunProfileSelectionId,
   ToolAvailabilityScope,
+  ToolCapabilityEffectKind,
   ToolCapabilitySchema,
   ToolCategoryId,
   ToolConfirmationDecisionOptions,
   ToolPermission,
   ToolRole,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { ScopedLog } from '@velaros-ai/core/logger'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import { getToolSurfaceFallbackChain } from '../agent/RuntimeProfiles'
 import {
@@ -123,7 +125,13 @@ interface ToolExecutionPolicyRegistry {
   ): Array<{ name: string }>
   getDescriptor(
     toolName: string
-  ): LooseOptional<{ categoryId?: ToolCategoryId; role?: ToolRole; outputInline?: boolean }>
+  ): LooseOptional<{
+    categoryId?: ToolCategoryId
+    capabilities?: ToolCapabilitySchema
+    role?: ToolRole
+    outputInline?: boolean
+    requiredModelInputModalities?: readonly AgentModelInputModality[]
+  }>
 }
 
 interface ToolExecutionPolicyCodingSession {
@@ -671,6 +679,7 @@ class ToolExecutionPolicy {
 
     return buildToolFailureResult('tool_blocked', reason, canonicalToolName, {
       details: optionalWhenLazy(categoryId, () => ({ categoryId })),
+      recovery: buildToolSpaceRecoveryGuide({ toolName: canonicalToolName, categoryId }),
     })
   }
 
@@ -683,6 +692,12 @@ class ToolExecutionPolicy {
   public getToolCategoryId(toolName: string): LooseOptional<ToolCategoryId> {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)
     return this.toolRegistry.getDescriptor(canonicalToolName)?.categoryId
+  }
+
+  /** 获取工具 owner 声明的正式副作用类型，供执行观测与评测判定使用。 */
+  public getToolEffectKind(toolName: string): LooseOptional<ToolCapabilityEffectKind> {
+    const canonicalToolName = this.resolveCanonicalToolName(toolName)
+    return this.toolRegistry.getDescriptor(canonicalToolName)?.capabilities?.effectKind
   }
 
   /** 工具是否声明 outputInline（输出禁止 page-out、始终内联）。 */

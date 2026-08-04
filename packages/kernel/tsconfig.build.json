@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "paths": {
+      "@velaros-ai/core": ["../core/dist/index.d.ts"],
+      "@velaros-ai/core/*": ["../core/dist/*"],
+      "@velaros-ai/kernel": ["./src/index.ts"],
+      "@velaros-ai/kernel/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

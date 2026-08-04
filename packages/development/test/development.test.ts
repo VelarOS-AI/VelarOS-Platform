@@ -16,7 +16,8 @@ describe('@velaros-ai/development', () => {
 
   test('composes into project space', () => {
     const definition = createDevelopmentBundledModDefinition()
-    expect(definition.manifest.contributes.tools[0]?.residentInSpaces).toEqual(['project'])
+    expect(definition.manifest.contributes.tools[0]?.availableInSpaces).toEqual(['project'])
+    expect(definition.manifest.contributes.tools[0]?.residentInSpaces).toBeUndefined()
   })
 
   test('routes index and language actions through the package runtime', async () => {

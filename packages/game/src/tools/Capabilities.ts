@@ -1,7 +1,7 @@
-import type { ToolCapabilitySchema } from '@velaros-ai/core/types'
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 
 export const GameManifestEditCapability = {
-  effectKind: 'project-edit',
+  effectKind: 'write',
   readScopes: ['project', 'game-manifest'],
   writeScopes: ['project', 'game-manifest'],
   filesystem: { read: 'project', write: 'project' },
@@ -12,7 +12,7 @@ export const GameManifestEditCapability = {
 } satisfies ToolCapabilitySchema
 
 export const GameRunCapability = {
-  effectKind: 'process',
+  effectKind: 'execute',
   readScopes: ['project', 'game-runtime'],
   writeScopes: ['game-runtime'],
   filesystem: { read: 'project', write: 'none' },
@@ -24,7 +24,7 @@ export const GameRunCapability = {
 } satisfies ToolCapabilitySchema
 
 export const GameObserveCapability = {
-  effectKind: 'browser',
+  effectKind: 'read',
   readScopes: ['game-runtime'],
   concurrency: 'safe',
   canReadArbitrarySource: false,
@@ -33,7 +33,7 @@ export const GameObserveCapability = {
 } satisfies ToolCapabilitySchema
 
 export const GameScreenshotCapability = {
-  effectKind: 'browser',
+  effectKind: 'write',
   readScopes: ['game-runtime'],
   writeScopes: ['project'],
   filesystem: { read: 'none', write: 'project' },
@@ -44,7 +44,7 @@ export const GameScreenshotCapability = {
 } satisfies ToolCapabilitySchema
 
 export const GameInputCapability = {
-  effectKind: 'browser',
+  effectKind: 'external',
   readScopes: ['game-runtime'],
   writeScopes: ['game-runtime'],
   concurrency: 'unsafe',

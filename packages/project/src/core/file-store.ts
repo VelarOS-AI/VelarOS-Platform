@@ -23,7 +23,14 @@ import type { BigIntStats } from "node:fs";
 import { mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
-import { isEmpty, isNull,isPresent, isUndefined, optionalWhen } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNull,
+  isPresent,
+  isUndefined,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 
 import { ProjectError } from "../errors.js";
 import type { FileListEntry, FileStatInput, FileStatResult,ObserveInput, ReadInput, ReadResult } from "../types/io.js";
@@ -91,7 +98,12 @@ async function realPathPreservingMissing(absPath: string): Promise<string> {
 async function assertConfinedToRoot(realRoot: string, abs: string, inputPath: string): Promise<void> {
   const realTarget = await realPathPreservingMissing(abs);
   if (isInsideRoot(realRoot, realTarget)) return;
-  throw new ProjectError("PERMISSION_DENIED", `路径解析后越出工作区根目录：${inputPath}`);
+  throw new ProjectError(
+    "PERMISSION_DENIED",
+    `路径解析后越出工作区根目录：${inputPath}`,
+    { inputPath },
+    "该路径或其祖先通过符号链接指向当前工作区外部。请切换到目标包的真实工作区，或只检查当前工作区源码；不要改搜该路径的父目录。",
+  );
 }
 
 /** 按 UTF-8 字节数和字符数截断，优先保留完整行，方便 agent 阅读上下文。 */
@@ -345,7 +357,7 @@ async function detectBinaryByPrefix(absPath: string): Promise<boolean> {
   }
 }
 
-function normalizeFilterList(values: readonly string[] | undefined): string[] {
+function normalizeFilterList(values: LooseOptional<readonly string[]>): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
 
@@ -360,12 +372,12 @@ export class FileStore {
   constructor(
     root: string,
     policy: CorePolicy,
-    fileFilter: FileFilterProvider | undefined,
+    fileFilter: LooseOptional<FileFilterProvider>,
     command: CommandProvider
   ) {
     this.root = path.resolve(root);
     this.policy = policy;
-    this.fileFilter = fileFilter;
+    this.fileFilter = toOptional(fileFilter);
     this.command = command;
   }
 

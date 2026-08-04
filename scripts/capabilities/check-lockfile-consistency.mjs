@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesRoot = path.join(repositoryRoot, 'packages')
 const expectedRegistryVersions = new Map([
-  ['@velaros-ai/core', '0.3.2'],
-  ['@velaros-ai/kernel-sdk', '0.2.2'],
+  ['@velaros-ai/core', '0.4.0'],
+  ['@velaros-ai/kernel', '0.1.0'],
 ])
 
 function assert(condition, message) {

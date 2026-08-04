@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
 const browserExtractActionSchema = z.enum(['table', 'list', 'paginate', 'content'])
 

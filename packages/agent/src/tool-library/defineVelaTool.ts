@@ -2,13 +2,13 @@
 // 与 Desktop 的 defineVelaTool（默认完整 ToolContext）同形，只是默认上下文收窄到 host 无关核心面；
 // 装配进宿主完整 ToolContext 时靠 TContext 逆变无摩擦兼容（宿主更宽，赋给更窄的核心面契约）。
 
+import type { ToolPermission } from '@velaros-ai/agent/protocol'
 import {
   defineToolRuntimeSpec,
   type DefineToolRuntimeSpecInput,
   type ToolContractRuntimeSpec,
   type ToolContractSurface,
-} from '@velaros-ai/core/tool-contract'
-import type { ToolPermission } from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/tool-contract'
 
 import type { KernelToolContext } from './KernelToolContext'
 

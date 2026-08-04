@@ -19,15 +19,19 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   // context:recall 召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
   outputInline: true,
   summary:
-    'ContextOS 统一查询入口：按分类展开工具地图，也可用 op=find/page/read 查询工具页状态。',
+    'ContextOS 工具发现入口：有具体任务时用 op=find+query 精确找工具；只有全局审计才按分类展开地图。',
   suitable: [
-    '需要查看系统所有工具/能力的状态清单和完整工具名索引。',
     '需要按任务短语搜索工具页，或分页读取工具页状态。',
+    '需要查看系统所有工具/能力的状态清单和完整工具名索引。',
     '需要知道某一类能力如何激活，而不是逐个猜工具。',
     '工具找不到或被拦截后，需要先建立全局工具地图。',
   ],
-  forbidden: ['不要用它执行目标工具；它只返回工具地图和激活路径。'],
+  forbidden: [
+    '不要用它执行目标工具；它只返回工具地图和激活路径。',
+    '任务已经明确要读文件、生成文档、创建表格等具体动作时，不要先拉取全局或整类地图；直接 op="find" 搜任务短语。',
+  ],
   protocol: [
+    '具体任务优先 op="find"：query 用用户目标短语，一次返回可换入的具体工具页。',
     '默认或 op="map"：按分类分页；page.nextCursor 非空时继续调用 tooling:map(cursor: nextCursor)。',
     'op="find"：按 query 搜索工具页；op="page"：平铺分页；op="read"：读取指定技能正文（skill:<id>）。',
     'map 下每个 category 返回完整 toolNames；详细状态页仍按 maxToolsPerCategory 展开。',
@@ -35,16 +39,16 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
     '每个 tool 页包含 toolOsState 与 activation：resident 可直接调用，loadable 按 activation.method 换入，needs_setup 先处理 dependencies。',
   ],
   usage: [
-    '查全局或分类时省略 op；按意图搜索时传 op="find" 和 query；用 categoryIds/toolOsStates 缩小范围；判断下一步优先读 toolOsState。',
+    '按意图搜索时传 op="find" 和 query；只有查全局或分类清单时才省略 op。用 categoryIds/toolOsStates 缩小范围；判断下一步优先读 toolOsState。',
     'domainIds 的合法取值来自本工具返回的 categories[].toolOs.domain；没先看过就不要凭猜传域名。',
   ],
   examples: [
-    { kind: 'all', toolOsStates: ['loadable'] },
     { op: 'find', query: 'read document' },
+    { kind: 'all', toolOsStates: ['loadable'] },
     { kind: 'tool', toolOsStates: ['loadable'] },
   ],
   notes: [
-    '这是首选查询入口：先看结构化状态清单、依赖关系和一类激活路径，再决定是否 tooling:replace。',
+    '这是首选查询入口：具体任务先精确 find；全局诊断再看结构化状态清单、依赖关系和一类激活路径。',
     '只列出当前产品作用域允许的工具；具体作用域隔离与恢复动作由注入的 CapabilityScopePolicy 声明。',
   ],
   schema: toolSpaceQueryMethodSchema,

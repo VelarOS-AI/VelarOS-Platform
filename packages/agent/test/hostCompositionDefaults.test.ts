@@ -63,7 +63,7 @@ describe('host-owned skill market endpoint', () => {
   })
 
   test('uses only the endpoint injected by the host', async () => {
-    const skillsDirectory = mkdtempSync(join(tmpdir(), 'agent-runtime-market-test-'))
+    const skillsDirectory = mkdtempSync(join(tmpdir(), 'agent-market-test-'))
     const requestedUrls: string[] = []
     const client = new SkillMarketClient({
       store: new SkillFileStore({ skillsDir: () => skillsDirectory }),

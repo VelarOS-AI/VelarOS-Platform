@@ -1,3 +1,13 @@
+export {
+  optionalReadEndLine,
+  optionalReadMaxChars,
+  optionalReadStartLine,
+  refineBoundedReadInput,
+  requiredNonNegativeMaxDepth,
+  requiredPositiveMaxDepth,
+  requiredResultLimit,
+  ToolInputBoundMessages,
+} from '../tool-contract/ToolInputBounds'
 export type {
   BuildToolAccessDecisionInput,
   ToolAccessDecision,
@@ -57,6 +67,14 @@ export type {
 export { ToolExecutionPolicy } from './ExecutionPolicy'
 export type { PendingTool, ToolExecutorEvents, ToolResult } from './Executor'
 export { ToolExecutor } from './Executor'
+export type {
+  ToolModelInputContext,
+  ToolModelInputRequirements,
+} from './model-input-policy'
+export {
+  DefaultModelInputModalities,
+  isToolCompatibleWithModelInputs,
+} from './model-input-policy'
 export { liftGenericModelImage } from './modelImageLift'
 export {
   defaultRuntimePromptFeaturePolicy,
@@ -90,28 +108,17 @@ export {
   toolArgsSchemaValidator,
   validateToolArgsWithNormalization,
 } from './ToolArgsSchemaValidator'
-export type { ToolTransportNamePlan } from './ToolIdentity'
+export type { ToolTransportNamePlan, ToolTransportProjection } from './ToolIdentity'
 export {
-  assertCanonicalToolId,
-  CanonicalToolIdPattern,
   createToolTransportNamePlan,
-  isCanonicalToolId,
+  createToolTransportProjection,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
 } from './ToolIdentity'
+export * from './toolResultSerialization'
 export type {
   RegisteredTool,
   RegistryTool,
   ToolRegistryCodingSession,
   ToolRegistryContext,
 } from './types'
-export {
-  optionalReadEndLine,
-  optionalReadMaxChars,
-  optionalReadStartLine,
-  refineBoundedReadInput,
-  requiredNonNegativeMaxDepth,
-  requiredPositiveMaxDepth,
-  requiredResultLimit,
-  ToolInputBoundMessages,
-} from '@velaros-ai/core/utils/ToolInputBounds'

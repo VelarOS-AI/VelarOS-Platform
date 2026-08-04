@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
 // 用途:Kernel 架构边界哨兵。基线=零违规。
 //
-// P2 库化后的拓扑:内核本体住 core,进程形态住 kernel 域三包。
-//   packages/core/src/kernel  Kernel 库本体(abi / protocol / contracts / host / runtime)——是库不是进程
-//   packages/kernel-client         瘦客户端与 serve 模式的接入入口
-//   packages/kernel-serve/src/daemon   serve 部署模式的配件(daemon / 本机 RPC 前脸 / 进程内传输)
-//   packages/kernel-serve/src/updater  共享 Runtime 的安装/切换/回滚
+// Kernel 域只占一个包,用子路径表达职责,不再用多个平铺包表达内部切片:
+//   packages/kernel/src/contracts  ABI、wire protocol、service contracts
+//   packages/kernel/src/runtime    进程内 Kernel runtime
+//   packages/kernel/src/client     serve 模式的瘦客户端
+//   packages/kernel/src/serve      可选 daemon / RPC / updater 部署组合
 //
-// 七道防线:
-//  ① 包集合冻结:Kernel 域只能是 kernel-client 与 kernel-serve 两个包(内核本体归 core 域)。
-//  ② host 无关:四处源码根都禁 import electron / @electron/* / Desktop 传输 / renderer·main 别名。
-//  ③ 依赖方向:**core 不得依赖 kernel-daemon / kernel-client**(库不知进程,P2 新增反向约束);
-//     client 不得依赖 daemon 内部实现与 updater;updater 不得依赖 client/内核本体/daemon;
-//     Mod 与产品都不得触达 daemon 内部实现。
-//  ④ 协议单一事实来源:wire schema 只能有一处实现(packages/core/src/kernel/protocol)。
+// 八道防线:
+//  ① 包集合冻结:Kernel 域只能有 packages/kernel 一个包。
+//  ② host 无关:整个 Kernel 禁 import Electron / Desktop renderer/main 路径。
+//  ③ 依赖方向:core → kernel 禁止;contracts → runtime/client/serve 禁止;
+//     runtime → client/serve 禁止;client → runtime/serve 禁止;updater 不得触达其它切片。
+//  ④ 协议单一事实来源:wire schema 只能定义在 packages/kernel/src/contracts/protocol。
 //  ⑤ 审批端口教义(宪章 §4 ApprovalPort 默认 deny):审批动词必须经 ctx.approval.*。
 //  ⑥ Kernel 不得依赖任何具体能力实现(browser / workspace / memory / model 等由产品装配根注入)。
 //  ⑦ 发布必须绑定精确 source/ref/tag 和同一已验明 tarball。
+//  ⑧ 单内核运行语义:new Kernel / serve 共用一条 capability invoker;module ABI 版本只认常量。
 //
 // 有意的基线变化:VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成基线,
 // 并在提交信息里说明差异。
@@ -31,21 +31,18 @@ const UpdateBaseline = process.env.VELAROS_ARCH_BASELINE_UPDATE === '1'
 
 const SourceExtensions = new Set(['.ts', '.tsx'])
 
-/** Kernel 域的两个包(目录名即包名后缀)。内核本体已并入 core 域,不在此列。 */
-const PublicPackages = ['kernel-client', 'kernel-serve']
+/** Kernel 域唯一包。职责通过公开 subpath 切片表达。 */
+const PublicPackages = ['kernel']
 
-/** kernel-serve 的 updater 切片:相对 import 触达 daemon 切片即违规(合包后的方向看守)。 */
+/** updater 子路径相对 import 触达 daemon 切片即违规。 */
 const UpdaterReachesDaemonPattern =
   /(?:from\s+|import\s*\(|require\()\s*['"]\.{1,2}(?:\/\.\.)*\/daemon(?:\/[^'"]*)?['"]/
 
-/** 内核本体的源码根(core 域,但受同一套 Kernel 边界约束)。 */
-const KernelLibraryRoot = 'packages/core/src/kernel'
+/** Kernel 唯一源码根。 */
+const KernelLibraryRoot = 'packages/kernel/src'
 
 /** 需要 host 无关的全部源码根。 */
-const HostNeutralRoots = [
-  KernelLibraryRoot,
-  ...PublicPackages.map((name) => `packages/${name}/src`),
-]
+const HostNeutralRoots = [KernelLibraryRoot]
 
 const ForbiddenHostImportPattern =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*|@velaros\/ipc(?:\/[^'"]*)?|@(?:components|features|hooks|pages|styles|shared)\/[^'"]*|@\/[^'"]*|@preload|@main\/[^'"]*)['"]/
@@ -163,8 +160,8 @@ function scanPackageSet() {
   const actual = readdirSync(resolve(RepoRoot, 'packages'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    // 只看本域:已登记的,加上任何未登记却自称 kernel-* 的偷渡包。
-    .filter((name) => registered.has(name) || /^kernel-/u.test(name))
+    // 只看本域:已登记的,加上任何未登记却自称 kernel / kernel-* 的偷渡包。
+    .filter((name) => registered.has(name) || /^kernel(?:-|$)/u.test(name))
     .sort()
   const unregistered = [...owned].filter((name) => !registered.has(name))
   const unexpected = [
@@ -177,14 +174,14 @@ function scanPackageSet() {
     violations.push({
       rule: 'kernel-package-set',
       fingerprint: `kernel-package-set::unexpected::${unexpected.join(',')}`,
-      message: `Kernel 域只应包含 ${[...owned].join(' / ')},发现额外包:${unexpected.join(', ')}。内核本体请放 packages/core/src/kernel。`,
+      message: `Kernel 域只应包含 packages/kernel,发现额外包:${unexpected.join(', ')}。内部职责请收进 @velaros-ai/kernel 子路径。`,
     })
   }
   if (missing.length > 0) {
     violations.push({
       rule: 'kernel-package-set',
       fingerprint: `kernel-package-set::missing::${missing.join(',')}`,
-      message: `Kernel 域三包缺失:${missing.join(', ')}。`,
+      message: `Kernel 域唯一包缺失:${missing.join(', ')}。`,
     })
   }
   return violations
@@ -217,65 +214,92 @@ function importsPackage(line, names) {
 function scanDependencyDirection() {
   const violations = []
 
-  // P2 反向约束:内核本体是**库**,对进程形态一无所知——core 不得依赖 daemon 与 client。
+  // Core 是无领域语义的共享 primitives,Kernel 只能单向依赖 Core。
   violations.push(
     ...scanLines(
       ['packages/core/src'],
-      (line) =>
-        importsPackage(line, [
-          '@velaros-ai/kernel-serve',
-          '@velaros-ai/kernel-client',
-        ]),
+      (line) => importsPackage(line, ['@velaros-ai/kernel']),
       (file, line) => ({
-        rule: 'core-kernel-process-independence',
-        fingerprint: `core-kernel-process-independence::${file}:${line}`,
-        message: `${file}:${line}: 内核本体(core)是库不是进程,不得依赖 kernel-serve / kernel-client(宪章 §15.1 原则一)。`,
+        rule: 'core-kernel-independence',
+        fingerprint: `core-kernel-independence::${file}:${line}`,
+        message: `${file}:${line}: Core 是共享 primitives,不得依赖 Kernel。`,
       }),
     ),
   )
 
-  // kernel-client 只能持协议契约与内核契约,不得触达 daemon 内部实现。
+  // contracts 是最内层稳定面,不得认识实现或部署切片。
   violations.push(
     ...scanLines(
-      ['packages/kernel-client/src'],
+      ['packages/kernel/src/contracts'],
       (line) =>
         InternalImplementationPattern.test(line)
-        || importsPackage(line, ['@velaros-ai/kernel-serve']),
+        || importsPackage(line, [
+          '@velaros-ai/kernel/runtime',
+          '@velaros-ai/kernel/client',
+          '@velaros-ai/kernel/serve',
+        ])
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|client|serve)(?:\/[^'"]*)?['"]/.test(line),
+      (file, line) => ({
+        rule: 'contracts-dependency-direction',
+        fingerprint: `contracts-dependency-direction::${file}:${line}`,
+        message: `${file}:${line}: Kernel contracts 不得依赖 runtime、client 或 serve。`,
+      }),
+    ),
+  )
+
+  // runtime 是库形态实现,不得反向依赖接入与部署组合。
+  violations.push(
+    ...scanLines(
+      ['packages/kernel/src/runtime'],
+      (line) =>
+        importsPackage(line, ['@velaros-ai/kernel/client', '@velaros-ai/kernel/serve'])
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve)(?:\/[^'"]*)?['"]/.test(line),
+      (file, line) => ({
+        rule: 'runtime-dependency-direction',
+        fingerprint: `runtime-dependency-direction::${file}:${line}`,
+        message: `${file}:${line}: Kernel runtime 不得依赖 client 或 serve。`,
+      }),
+    ),
+  )
+
+  // client 只依赖 contracts;不能绕回 runtime 或 serve 实现。
+  violations.push(
+    ...scanLines(
+      ['packages/kernel/src/client'],
+      (line) =>
+        importsPackage(line, ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/serve'])
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|serve)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'client-dependency-direction',
         fingerprint: `client-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: kernel-client 不得依赖 kernel-serve(RPC/Daemon/Launcher 内部实现与 Updater)。`,
+        message: `${file}:${line}: Kernel client 只能依赖 contracts,不得依赖 runtime 或 serve。`,
       }),
     ),
   )
 
-  // kernel-updater 只管字节与版本指针,不参与能力调用。
+  // updater 只负责字节、签名与版本指针,不得触达 daemon/client/runtime。
   violations.push(
     ...scanLines(
-      ['packages/kernel-serve/src/updater'],
+      ['packages/kernel/src/serve/updater'],
       (line) =>
-        InternalImplementationPattern.test(line)
-        || UpdaterReachesDaemonPattern.test(line)
+        UpdaterReachesDaemonPattern.test(line)
         || importsPackage(line, [
-          '@velaros-ai/kernel-client',
-          '@velaros-ai/kernel-serve',
-          '@velaros-ai/core',
-        ]),
+          '@velaros-ai/kernel/runtime',
+          '@velaros-ai/kernel/client',
+          '@velaros-ai/kernel/contracts',
+          '@velaros-ai/kernel/serve',
+        ])
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|contracts|runtime|daemon|rpc|internal)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'updater-dependency-direction',
         fingerprint: `updater-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: kernel-serve 的 updater 切片只负责安装/切换/回滚,不得依赖 Client、daemon 切片或内核本体。`,
+        message: `${file}:${line}: Kernel updater 不得依赖 contracts、runtime、client 或其它 serve 切片。`,
       }),
     ),
   )
 
-  // package.json 层面的同一约束(声明即违规,不必等到 import)。
-  // 注:updater 合包后没有独立清单,它的「不得依赖 Client/Daemon/core」全部由上面的**源码层**
-  // 规则(含相对 import 触达 daemon 切片)看守;清单层只剩 client 与 core 两条。
-  const manifestBans = {
-    'kernel-client': ['@velaros-ai/kernel-serve'],
-    core: ['@velaros-ai/kernel-client', '@velaros-ai/kernel-serve'],
-  }
+  // package.json 层面的 Core 反向依赖同样是违规。
+  const manifestBans = { core: ['@velaros-ai/kernel'] }
   for (const [packageName, banned] of Object.entries(manifestBans)) {
     const manifestPath = resolve(RepoRoot, 'packages', packageName, 'package.json')
     if (!existsSync(manifestPath)) continue
@@ -299,29 +323,31 @@ function scanDependencyDirection() {
 function scanProtocolSingleSource() {
   const violations = []
 
-  const protocolHome = resolve(RepoRoot, KernelLibraryRoot, 'protocol')
+  const protocolHome = resolve(RepoRoot, KernelLibraryRoot, 'contracts', 'protocol')
   if (!existsSync(protocolHome)) {
     violations.push({
       rule: 'protocol-single-source',
       fingerprint: 'protocol-single-source::missing-home',
-      message: `wire 协议实现目录 ${KernelLibraryRoot}/protocol 不存在;协议必须有唯一实现处。`,
+      message: `wire 协议实现目录 ${KernelLibraryRoot}/contracts/protocol 不存在;协议必须有唯一实现处。`,
     })
     return violations
   }
 
   // 协议 zod schema 只能定义在唯一实现处;别处重新定义 wire schema 即为复制协议。
   const wireSchemaDefinition = /export\s+const\s+\w*(?:Handshake|CapabilityCall|ModuleDescriptor|ScopeRef|ResourceRef|CapabilityToken)\w*Schema\s*=/
-  violations.push(
-    ...scanLines(
-      PublicPackages.map((name) => `packages/${name}/src`),
-      (line) => wireSchemaDefinition.test(line),
-      (file, line) => ({
+  for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
+    if (file.startsWith(`${protocolHome}/`)) continue
+    const relativeFile = normalizeSeparators(relative(RepoRoot, file))
+    const lines = stripCodeComments(readFileSync(file, 'utf8')).split('\n')
+    lines.forEach((line, index) => {
+      if (!wireSchemaDefinition.test(line)) return
+      violations.push({
         rule: 'protocol-single-source',
-        fingerprint: `protocol-single-source::duplicate::${file}:${line}`,
-        message: `${file}:${line}: wire schema 只能定义在 ${KernelLibraryRoot}/protocol;此处是第二份协议定义。`,
-      }),
-    ),
-  )
+        fingerprint: `protocol-single-source::duplicate::${relativeFile}:${index + 1}`,
+        message: `${relativeFile}:${index + 1}: wire schema 只能定义在 ${KernelLibraryRoot}/contracts/protocol。`,
+      })
+    })
+  }
 
   return violations
 }
@@ -446,6 +472,69 @@ function scanReleaseIdentityBoundary() {
   return violations
 }
 
+// —— 防线⑧ 进程内 / serve 共用一条运行语义 ——
+function scanRuntimeSinglePath() {
+  const violations = []
+  const packageSourceRoots = readdirSync(resolve(RepoRoot, 'packages'), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}/src`)
+  const allowedHostConstructors = new Set([
+    'packages/kernel/src/runtime/Kernel.ts',
+    'packages/kernel/src/serve/daemon/boot.ts',
+  ])
+
+  for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
+    const relativeFile = normalizeSeparators(relative(RepoRoot, file))
+    const source = stripCodeComments(readFileSync(file, 'utf8'))
+    if (
+      /new\s+KernelModuleHost\s*\(/u.test(source)
+      && !allowedHostConstructors.has(relativeFile)
+    ) {
+      violations.push({
+        rule: 'kernel-runtime-single-path',
+        fingerprint: `kernel-runtime-single-path::host-constructor::${relativeFile}`,
+        message: `${relativeFile}: KernelModuleHost 只能由公共 Kernel 或 serve 组合根构造。`,
+      })
+    }
+  }
+
+  const sharedInvocationContracts = [
+    {
+      file: 'packages/kernel/src/runtime/Kernel.ts',
+      marker: 'new KernelCapabilityInvoker(this.host)',
+    },
+    {
+      file: 'packages/kernel/src/runtime/service/KernelService.ts',
+      marker: 'new KernelCapabilityInvoker(options.host)',
+    },
+  ]
+  for (const contract of sharedInvocationContracts) {
+    const source = readFileSync(resolve(RepoRoot, contract.file), 'utf8')
+    if (source.includes(contract.marker)) continue
+    violations.push({
+      rule: 'kernel-runtime-single-path',
+      fingerprint: `kernel-runtime-single-path::missing-invoker::${contract.file}`,
+      message: `${contract.file}: 进程内与 serve 调用面必须复用 KernelCapabilityInvoker。`,
+    })
+  }
+
+  violations.push(
+    ...scanLines(
+      packageSourceRoots,
+      (line) => /\bapiVersion\s*:\s*1\b/u.test(line),
+      (file, line) => ({
+        rule: 'kernel-module-api-version-single-source',
+        fingerprint: `kernel-module-api-version-single-source::${file}:${line}`,
+        message: `${file}:${line}: module apiVersion 必须引用 KernelModuleApiVersion,禁止复制数字版本。`,
+      }),
+    ),
+  )
+
+  return violations
+}
+
 function loadBaseline() {
   if (!existsSync(BaselinePath)) return new Set()
   const parsed = JSON.parse(readFileSync(BaselinePath, 'utf8'))
@@ -461,6 +550,7 @@ function main() {
     ...scanApprovalPort(),
     ...scanConcreteCapabilityDirection(),
     ...scanReleaseIdentityBoundary(),
+    ...scanRuntimeSinglePath(),
   ]
   const currentFingerprints = violations.map((v) => v.fingerprint).sort()
 
@@ -471,7 +561,7 @@ function main() {
         {
           version: 2,
           purpose:
-            'Kernel 三包边界(package set + host neutrality + dependency direction + protocol single source + approval port + concrete capability injection + release identity);基线必须保持零。',
+            'Kernel 单包子路径边界(package set + host neutrality + dependency direction + protocol single source + approval port + concrete capability injection + release identity + runtime single path);基线必须保持零。',
           generatedAt: new Date().toISOString(),
           fingerprints: currentFingerprints,
         },
@@ -488,7 +578,7 @@ function main() {
   if (fresh.length === 0) {
     const exempt = currentFingerprints.length
     console.log(
-      `[arch-boundaries] 通过。包集合 + host 无关 + 依赖方向 + 协议单一事实来源 + 审批端口 + 能力注入 + 发布身份:0 条新违规${
+      `[arch-boundaries] 通过。包集合 + host 无关 + 依赖方向 + 协议单一事实来源 + 审批端口 + 能力注入 + 发布身份 + 单内核运行语义:0 条新违规${
         exempt > 0 ? `(${exempt} 条存量入基线冻结)` : '(现状零违规)'
       }。`,
     )

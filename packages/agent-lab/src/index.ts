@@ -6,3 +6,4 @@ export * from "./protocol/index.js";
 export * from "./report/index.js";
 export * from "./runner/index.js";
 export * from "./statistics/index.js";
+export * from "./workload/index.js";

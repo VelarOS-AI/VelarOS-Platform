@@ -1,6 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import { toNullable,toOptional } from '@velaros-ai/core'
 import type {
   SubAgentSessionRecord,
   SubAgentSessionStatus,
@@ -10,7 +9,8 @@ import type {
   SubAgentTypeId,
   TeamModelRouteCategory,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { toNullable,toOptional } from '@velaros-ai/core'
 
 interface CreateSubAgentSessionInput {
   threadId: string

@@ -15,7 +15,6 @@ export {
 } from './AutoVerification'
 export { CodingSessionEditResultHelper } from './edit-results'
 export { hasVerificationRelevantModifiedPaths, isVerificationRelevantPath } from './paths'
-export type { CodingToolCallDeduperOptions } from './tool-dedupe'
 export { buildToolFingerprint, CodingToolCallDeduper } from './tool-dedupe'
 export type {
   CapabilityValidationCollectionResult,

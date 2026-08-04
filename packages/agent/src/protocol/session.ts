@@ -233,7 +233,7 @@ export type RuntimeStatusResponse = z.infer<typeof RuntimeStatusResponseSchema>
 /**
  * 会话事件占位负载联合（判别字段 `kind`）。
  *
- * v0 **只锁信封外形，不复制 agent-runtime 内部事件类型**（宪章 §5）——后续会话簇搬迁时
+ * v0 **只锁信封外形，不复制 Agent 内部事件类型**（宪章 §5）——后续会话簇调整时
  * 以真实 `AgentSessionEvent` 替换本占位，判别字段保持稳定。两个占位变体分别代表
  * "内核已知的生命周期事件"与"壳层透传的自定义事件"，标注为 v0 placeholder。
  */

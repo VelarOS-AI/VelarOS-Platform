@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
-import { requiredResultLimit } from '@velaros-ai/core/utils/ToolInputBounds'
+} from '@velaros-ai/agent/tool-contract'
+import { requiredResultLimit } from '@velaros-ai/agent/tool-contract'
 
 
 export const browserQueryElementsSchema = z.object({

@@ -1,5 +1,5 @@
+import type { RunProfileId } from '@velaros-ai/agent/protocol'
 import { isEmpty,isFiniteNumber } from '@velaros-ai/core'
-import type { RunProfileId } from '@velaros-ai/core/types'
 
 import {
   ContextWorkingSetBudgetGovernor,

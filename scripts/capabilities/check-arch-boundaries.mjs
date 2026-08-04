@@ -23,8 +23,8 @@ const GameRendererImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:phaser(?:\/[^'"]*)?|@babylonjs\/[^'"]*)['"]/;
 const RelativeModuleImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](\.\.?\/[^'"]+)['"]/g;
-const ConcreteKernelPathImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent(?:\/[^'"]*)?|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/;
+const ConcreteAgentRuntimeImport =
+  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/;
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g;
 const ConcreteCoreTypeName =
@@ -348,11 +348,6 @@ for (const expected of CapabilityPackages) {
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {
     for (const [name, version] of Object.entries(dependencies)) {
-      if (name === "@velaros-ai/agent") {
-        fail(
-          `${expected.name}: capability packages must not depend on Agent runtime`,
-        );
-      }
       const internal = KnownByName.get(name);
       if (internal) {
         if (version !== "workspace:*") {
@@ -370,8 +365,8 @@ for (const expected of CapabilityPackages) {
         }
         continue;
       }
-      // 单版本火车:core / kernel-sdk 等平台包已与能力包同仓,写死注册表范围的旧规则(^0.3.2 /
-      // ^0.2.2)前提消失——同仓依赖一律 workspace:*,发布时由包管理器代换成具体版本。
+      // 单版本火车:Core / Kernel 等平台包已与能力包同仓；同仓依赖一律 workspace:*,
+      // 发布时由包管理器代换成具体版本。
       if (WorkspacePackageNames.has(name)) {
         if (version !== "workspace:*") {
           fail(
@@ -397,9 +392,9 @@ for (const expected of CapabilityPackages) {
     if (ForbiddenHostImport.test(source)) {
       fail(`${expected.name}: host import in ${relative(packageRoot, path)}`);
     }
-    if (ConcreteKernelPathImport.test(source)) {
+    if (ConcreteAgentRuntimeImport.test(source)) {
       fail(
-        `${expected.name}: concrete Kernel semantic import in ${relative(packageRoot, path)}`,
+        `${expected.name}: capability code must use an explicit Agent contract or runtime subpath in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {

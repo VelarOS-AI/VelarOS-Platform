@@ -134,4 +134,76 @@ describe('history structure repair', () => {
     assert.equal(repaired.changedMessages, 0)
     expectProviderValid(repaired.history)
   })
+
+  test('空工具名调用及其结果按组移除，不会锁死后续对话', () => {
+    const broken = [
+      userMessage('读取笔记'),
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-empty-name',
+            toolName: '',
+            input: { path: 'notes.txt' },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-empty-name',
+            toolName: '',
+            output: { type: 'error-text', value: 'tool not found' },
+          },
+        ],
+      },
+    ] as ModelMessage[]
+    assert.equal(validateModelHistory(broken).valid, false)
+
+    const repaired = repairHistoryStructureForProvider(broken)
+
+    assert.ok(repaired.removedMessages > 0)
+    assert.equal(repaired.history.length, 1)
+    expectProviderValid(repaired.history)
+  })
+
+  test('混合正文中的残缺工具块被移除，正文仍可回放', () => {
+    const broken = [
+      userMessage('继续'),
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '我先检查文件。' },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-partial',
+            toolName: '   ',
+            input: {},
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-partial',
+            toolName: '   ',
+            output: { type: 'error-text', value: 'invalid identity' },
+          },
+        ],
+      },
+    ] as ModelMessage[]
+
+    const repaired = repairHistoryStructureForProvider(broken)
+
+    assert.deepEqual(repaired.history, [
+      userMessage('继续'),
+      { role: 'assistant', content: [{ type: 'text', text: '我先检查文件。' }] },
+    ])
+    expectProviderValid(repaired.history)
+  })
 })

@@ -112,7 +112,7 @@ export function isParallelCommandExecutionSafe(input: {
 }
 
 export function shouldReapForegroundProcessGroupAfterExit(command: string): boolean {
-  return /(^|[^&])&\s*(?:$|[;&|])/.test(command)
+  return /(^|[^&])&(?!&)\s*(?:$|[;|\r\n])/.test(command)
     && !/\b(?:nohup|setsid|disown)\b/i.test(command)
 }
 

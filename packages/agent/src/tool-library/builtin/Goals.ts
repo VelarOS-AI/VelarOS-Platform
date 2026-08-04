@@ -1,9 +1,9 @@
-import { isArray, isEmpty,isFiniteNumber, isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   ActiveContextArtifact,
   ActiveContextUpsertInput,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty,isFiniteNumber, isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { ActiveDirectiveType } from './ActiveDirectives'
 import type { UserPlanStatus } from './Plans'

@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import type { ExecutionRecord } from '@velaros-ai/core/types'
+import type { ExecutionRecord } from '@velaros-ai/agent/protocol'
 
 import type { AgentExecutionConfig } from '../../agent/RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
@@ -61,7 +61,7 @@ class SoloExecutionService {
   constructor(
     /** 执行生命周期托管：create record、session 互斥、complete/fail/abort。 */
     private readonly executionService: ExecutionService,
-    /** 主进程 AgentRunner；实际 multi-turn 在 agent-runtime SoloStreamLoop。 */
+    /** 主进程 AgentRunner；实际 multi-turn 在 Agent 的 SoloStreamLoop。 */
     private readonly agentRunner: SoloExecutionAgentRunner
   ) {}
 

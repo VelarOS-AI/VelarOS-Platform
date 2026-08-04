@@ -23,7 +23,7 @@
 // ContextBuilder 会派生变体（子 Agent / 不同 surface）；共享同一注册表会让一次 `suppress` 泄漏到别的
 // 变体上。clone 复制定义与压制态、共享 provider 引用（provider 是无状态加载器）。
 //
-import type { PromptSegmentOverride } from '@velaros-ai/core/types'
+import type { PromptSegmentOverride } from '@velaros-ai/agent/protocol'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { AgentChatRuntimeConfig } from '../agent/RuntimeConfiguration'

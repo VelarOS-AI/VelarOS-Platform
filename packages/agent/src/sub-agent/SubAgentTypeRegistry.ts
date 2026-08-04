@@ -1,4 +1,3 @@
-import { AppError } from '@velaros-ai/core/error'
 import type {
   AgentRoleId,
   CustomSubAgentDefinition,
@@ -7,7 +6,8 @@ import type {
   TeamModelRouteCategory,
   TeamWorkerType,
   ToolCategoryId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { AppError } from '@velaros-ai/core/error'
 
 /** Product-owned declaration of one delegatable agent shape. */
 interface SubAgentTypeDescriptor {

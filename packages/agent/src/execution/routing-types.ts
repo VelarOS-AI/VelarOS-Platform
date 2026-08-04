@@ -4,7 +4,7 @@ import type {
   AgentTurnRouteIdentity,
   ExecutionTaskPlanStep,
   WorkflowType,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 interface ResolvedTaskRoute {
   workflowType: Nullable<WorkflowType>

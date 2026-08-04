@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import type { KernelDaemonPaths } from '@velaros-ai/kernel-client/contracts'
+import type { KernelDaemonPaths } from '@velaros-ai/kernel/client/contracts'
 
 export interface VelarHostPaths {
   readonly dataRoot: string

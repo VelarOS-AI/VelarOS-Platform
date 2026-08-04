@@ -6,7 +6,9 @@ import { pathToFileURL } from "node:url";
 
 import {
   discoverRunArchives,
+  readRealTaskRecord,
   readRunArchiveView,
+  writeRealTaskBundle,
   writeRunArchive,
 } from "./archive/index.js";
 import {
@@ -28,6 +30,11 @@ import {
 import type { AgentLabRuntime, CreateAgentLabRuntime } from "./runner/index.js";
 import { runJob, runJourney } from "./runner/index.js";
 import { compareExecutors } from "./statistics/index.js";
+import {
+  auditRealTask,
+  parseRealTaskCase,
+  parseRealTaskRecord,
+} from "./workload/index.js";
 
 interface ParsedArguments {
   readonly command: string | null;
@@ -98,14 +105,32 @@ async function validate(arguments_: ParsedArguments): Promise<void> {
   const [kind, path] = arguments_.positionals;
   if (!kind || !path)
     throw new Error(
-      "Usage: velaros-agent-lab validate <journey|job|run> <file>",
+      "Usage: velaros-agent-lab validate <journey|job|run|real-task|case> <file>",
     );
   const value = await jsonFile(path);
   if (kind === "journey") parseJourneySpec(value);
   else if (kind === "job") parseJobSpec(value);
   else if (kind === "run") parseRunArchive(value);
+  else if (kind === "real-task") parseRealTaskRecord(value);
+  else if (kind === "case") parseRealTaskCase(value);
   else throw new Error(`Unknown validation kind: ${kind}`);
   process.stdout.write(`valid ${kind}: ${resolve(path)}\n`);
+}
+
+async function auditRecord(arguments_: ParsedArguments): Promise<void> {
+  const [path] = arguments_.positionals;
+  if (!path) throw new Error("Usage: velaros-agent-lab audit-record <record.json> --output DIR");
+  const record = await readRealTaskRecord(path);
+  const assessment = auditRealTask(record);
+  const written = await writeRealTaskBundle(
+    requiredFlag(arguments_, "output"),
+    record,
+    assessment,
+  );
+  process.stdout.write(
+    `${JSON.stringify({ verdict: assessment.verdict, findings: assessment.findings.length, ...written }, null, 2)}\n`,
+  );
+  if (assessment.verdict === "verified-fail") process.exitCode = 1;
 }
 
 async function report(arguments_: ParsedArguments): Promise<void> {
@@ -215,7 +240,7 @@ async function certify(arguments_: ParsedArguments): Promise<void> {
 
 function help(): void {
   process.stdout.write(
-    `VelarOS Agent Lab\n\nCommands:\n  validate <journey|job|run> <file>\n  run --job <job.json> --runtime <runtime.mjs>\n  report <file-or-dir...> --output <report.html>\n  compare <file-or-dir...> --a <executor> --b <executor> [--minimum-effect N]\n  certify <file-or-dir...> --policy <policy.json> --subject <subject.json> --executor <id>\n`,
+    `VelarOS Agent Lab\n\nCommands:\n  validate <journey|job|run|real-task|case> <file>\n  audit-record <record.json> --output <directory>\n  run --job <job.json> --runtime <runtime.mjs>\n  report <file-or-dir...> --output <report.html>\n  compare <file-or-dir...> --a <executor> --b <executor> [--minimum-effect N]\n  certify <file-or-dir...> --policy <policy.json> --subject <subject.json> --executor <id>\n`,
   );
 }
 
@@ -230,6 +255,7 @@ async function main(): Promise<void> {
   )
     return help();
   if (arguments_.command === "validate") return validate(arguments_);
+  if (arguments_.command === "audit-record") return auditRecord(arguments_);
   if (arguments_.command === "run") return run(arguments_);
   if (arguments_.command === "report") return report(arguments_);
   if (arguments_.command === "compare") return compare(arguments_);

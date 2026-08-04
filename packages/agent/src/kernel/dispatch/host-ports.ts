@@ -10,7 +10,7 @@ import type {
   ThinkingDepth,
   ToolCategoryId,
   ToolExecutionApi,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 import type {
   AgentChatRuntimeConfig,

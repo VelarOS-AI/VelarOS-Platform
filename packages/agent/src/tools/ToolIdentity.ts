@@ -5,17 +5,18 @@
  * 传输名是一次请求的编译产物，不得写回注册表、权限策略或持久历史。
  */
 
-import {
-  assertCanonicalToolId,
-  CanonicalToolIdPattern,
-  isCanonicalToolId,
-} from '@velaros-ai/core/tool-contract'
+import { assertCanonicalToolId } from '@velaros-ai/agent/tool-contract'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
 
 interface ToolTransportNamePlan {
   readonly canonicalToProvider: Readonly<Record<string, string>>
   readonly providerToCanonical: Readonly<Record<string, string>>
+}
+
+interface ToolTransportProjection {
+  readonly plan: ToolTransportNamePlan
+  readonly visibleCanonicalToProvider: Readonly<Record<string, string>>
 }
 
 function stableToolNameHash(value: string): string {
@@ -81,6 +82,33 @@ function createToolTransportNamePlan(canonicalIds: readonly string[]): ToolTrans
   })
 }
 
+/**
+ * 从完整注册目录编译稳定传输身份，再投影出本次请求实际可见的工具。
+ *
+ * 不能只从可见工具编译：两个 canonical id 净化后发生碰撞时，工具驻留状态的变化会让
+ * 同一工具在不同请求里改名，进而破坏历史解码、工具续租和未驻留调用的 fail-closed 判定。
+ */
+function createToolTransportProjection(
+  registeredCanonicalIds: readonly string[],
+  visibleCanonicalIds: readonly string[]
+): ToolTransportProjection {
+  const plan = createToolTransportNamePlan(registeredCanonicalIds)
+  const visibleCanonicalToProvider: Record<string, string> = {}
+  for (const canonicalId of visibleCanonicalIds) {
+    const providerName = plan.canonicalToProvider[canonicalId]
+    if (!providerName)
+      throw new Error(
+        `visible tool is absent from the registered transport plan: ${canonicalId}`
+      )
+    visibleCanonicalToProvider[canonicalId] = providerName
+  }
+
+  return Object.freeze({
+    plan,
+    visibleCanonicalToProvider: Object.freeze(visibleCanonicalToProvider),
+  })
+}
+
 const ToolIdentityTokenCharacters = 'a-zA-Z0-9._:-'
 
 function escapeRegularExpression(value: string): string {
@@ -113,11 +141,9 @@ function rewriteCanonicalToolReferences(
 }
 
 export {
-  assertCanonicalToolId,
-  CanonicalToolIdPattern,
   createToolTransportNamePlan,
-  isCanonicalToolId,
+  createToolTransportProjection,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
 }
-export type { ToolTransportNamePlan }
+export type { ToolTransportNamePlan, ToolTransportProjection }

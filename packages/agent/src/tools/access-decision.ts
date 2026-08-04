@@ -1,5 +1,5 @@
+import type { ToolCategoryId, ToolOsState } from '@velaros-ai/agent/protocol'
 import { isFalse } from '@velaros-ai/core'
-import type { ToolCategoryId, ToolOsState } from '@velaros-ai/core/types'
 
 import type { ToolCategoryUnavailableReason } from './access-policy'
 import {

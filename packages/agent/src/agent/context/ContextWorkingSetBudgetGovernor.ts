@@ -1,5 +1,5 @@
+import { resolveContextWindowBudget } from '@velaros-ai/agent'
 import { isFiniteNumber } from '@velaros-ai/core'
-import { resolveContextWindowBudget } from '@velaros-ai/core/utils/contextBudget'
 
 import type { ContextLedgerEntry } from './ContextLedger'
 import {

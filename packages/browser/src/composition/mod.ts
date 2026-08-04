@@ -1,4 +1,4 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import { browserTools } from '../tools/Collection'
 
@@ -32,7 +32,7 @@ const BrowserAgentModManifest = Object.freeze({
     tools: Object.keys(browserTools).map((name) => ({
       name,
       categoryId: 'browser',
-      residentInSpaces: [BrowserSpaceId],
+      availableInSpaces: [BrowserSpaceId],
     })),
     spaces: [{
       id: BrowserSpaceId,
@@ -47,6 +47,7 @@ const BrowserAgentModManifest = Object.freeze({
       identityStrategy: 'origin',
       surfaceProfileId: 'browser-control',
       boundCapabilityIds: [BrowserModId],
+      toolCategoryIds: ['browser'],
     }],
   },
 })

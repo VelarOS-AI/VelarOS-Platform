@@ -12,9 +12,9 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
+import type { ToolApprovalRiskLevel, ToolCategoryId, ToolRole } from '@velaros-ai/agent/protocol'
+import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 import { isBoolean } from '@velaros-ai/core'
-import { schemaToInputSchema } from '@velaros-ai/core/tool-contract'
-import type { ToolApprovalRiskLevel, ToolCategoryId, ToolRole } from '@velaros-ai/core/types'
 
 import type { VelaTool } from '../defineVelaTool'
 import type { KernelToolContext } from '../KernelToolContext'
@@ -129,6 +129,7 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
 
   const tool: VelaTool = {
     name: canonicalName,
+    category: categoryId,
     role: resolveToolRole(descriptor),
     description: buildToolDescription(serverName, descriptor),
     schema: convertMcpInputSchema(descriptor.inputSchema),

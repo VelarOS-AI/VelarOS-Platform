@@ -2,7 +2,7 @@ import type {
   KernelPermissionBroker,
   KernelPermissionDecision,
   KernelPermissionRequest,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import type { VelarHostConfigStore } from './config'
 

@@ -28,8 +28,8 @@
 
 import { type z } from 'zod'
 
+import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty, isPresent } from '@velaros-ai/core'
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/core/types'
 
 import { expandCapabilityCategoryIds } from '../../capabilities'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
@@ -140,7 +140,9 @@ function buildReplaceNextTurnHint(input: {
   requiresUserActionDetails: readonly ToolSpaceReplacePageDetail[]
   skippedPageDetails: readonly ToolSpaceReplacePageDetail[]
 }): string {
-  if (!isEmpty(input.preparedTools) || !isEmpty(input.enabledCapabilities)) return '工具页替换已记录；下一轮 AI SDK tools 会按动态工具空间预算暴露实际可调用工具 schema。preparedToolExamples 给出了每个换入工具的正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
+  if (!isEmpty(input.preparedTools)) return '具体工具页已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
+
+  if (!isEmpty(input.enabledCapabilities)) return '能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。'
 
   if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails)) return '没有新的工具页被换入；请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
 
@@ -163,6 +165,7 @@ export async function replaceToolSpacePages(
   const preparedTools: string[] = []
   const pageOutTools: string[] = []
   const enabledCapabilities: ToolCategoryId[] = []
+  const refreshedCapabilityResidency: ToolCategoryId[] = []
   const disabledCapabilities: ToolCategoryId[] = []
   const requiresApproval: string[] = []
   const requiresUserAction: string[] = []
@@ -179,8 +182,16 @@ export async function replaceToolSpacePages(
     if (!card) {
       continue
     }
-    // 已驻留/已启用的页 page-in 是 no-op：工具已可见、能力已启用，或插件已开启。
-    // 注意：插件已启用时其 availability 也是 'visible'，必须先于下面的 plugin 分支判断，
+    // capability 页表达一整个类别的换入意图。即使类别已经授权，它的具体工具 schema 仍可能
+    // 尚未驻留；再次 page-in 必须刷新类别租约，不能把“已授权”误当成“已驻留”。
+    if (card.kind === 'capability' && card.availability === 'visible') {
+      const categories = expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
+      ctx.codingSession.enableToolCategories(categories, input.reason)
+      refreshedCapabilityResidency.push(...categories)
+      continue
+    }
+    // 已驻留的具体工具和已启用的插件 page-in 才是真正的 no-op。
+    // 注意：插件已启用时 availability 同样是 visible，必须先于下面的 plugin 分支判断，
     // 否则会把“已开启的插件”错误回报成 requiresUserAction。
     if (card.availability === 'visible') {
       continue
@@ -326,7 +337,9 @@ export async function replaceToolSpacePages(
     // 换入即给正确示例：照其字段名与结构调用，避免首调凭摘要猜参数被 schema 打回。
     preparedToolExamples: buildPreparedToolExamples([...preparedToolSet], cardsById),
     pageOutTools: [...new Set(pageOutTools)],
-    enabledCapabilities: [...new Set(enabledCapabilities)],
+    enabledCapabilities: [
+      ...new Set([...enabledCapabilities, ...refreshedCapabilityResidency]),
+    ],
     disabledCapabilities: [...new Set(disabledCapabilities)],
     enabledPromptFeatures: finalPromptFeaturesToEnable,
     requiresApproval: [...new Set(requiresApproval)],
@@ -356,7 +369,9 @@ export async function replaceToolSpacePages(
     activeThisTurn: false,
     nextTurnHint: buildReplaceNextTurnHint({
       preparedTools: [...preparedToolSet],
-      enabledCapabilities: [...new Set(enabledCapabilities)],
+      enabledCapabilities: [
+        ...new Set([...enabledCapabilities, ...refreshedCapabilityResidency]),
+      ],
       requiresApprovalDetails,
       requiresUserActionDetails,
       skippedPageDetails,

@@ -2,17 +2,189 @@
 // 用途：从 packages/*/package.json 的 @velaros-ai/* 依赖派生真实依赖图，拓扑排序后依序构建各包（支持 --for 依赖闭包与全量两种模式）。
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT_DIR = resolve(SCRIPT_DIR, '../..')
 const PACKAGES_DIR = resolve(ROOT_DIR, 'packages')
 const VELAROS_SCOPE = '@velaros-ai/'
+const BUILD_STATE_DIR = resolve(ROOT_DIR, '.velaros-workspace')
+const BUILD_CACHE_PATH = resolve(BUILD_STATE_DIR, 'package-build-cache-v1.json')
+const BUILD_LOCK_PATH = resolve(BUILD_STATE_DIR, 'package-build.lock')
+const BUILD_CACHE_SCHEMA_VERSION = 1
+const IgnoredInputDirectoryNames = new Set([
+  '.cache',
+  '.turbo',
+  '.vite',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+])
+const RootBuildInputPaths = [
+  'bun.lock',
+  'bunfig.toml',
+  'package.json',
+  'tsconfig.json',
+]
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'))
+}
+
+function updateHashWithFile(hash, absolutePath, displayPath) {
+  hash.update(`file\0${displayPath}\0`)
+  hash.update(readFileSync(absolutePath))
+  hash.update('\0')
+}
+
+function updateHashWithTree(hash, root, displayRoot = relative(ROOT_DIR, root)) {
+  if (!existsSync(root)) {
+    hash.update(`missing\0${displayRoot}\0`)
+    return
+  }
+
+  const visit = (directory) => {
+    const entries = readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      if (entry.isDirectory() && IgnoredInputDirectoryNames.has(entry.name)) continue
+      const absolutePath = resolve(directory, entry.name)
+      const displayPath = relative(ROOT_DIR, absolutePath)
+      if (entry.isDirectory()) {
+        visit(absolutePath)
+      } else if (entry.isSymbolicLink()) {
+        hash.update(`link\0${displayPath}\0${readlinkSync(absolutePath)}\0`)
+      } else if (entry.isFile()) {
+        updateHashWithFile(hash, absolutePath, displayPath)
+      }
+    }
+  }
+
+  visit(root)
+}
+
+function collectReferencedBuildScripts(node) {
+  const referenced = new Set()
+  const visitedScripts = new Set()
+  const manifest = readJson(resolve(node.dir, 'package.json'))
+
+  const visitScript = (scriptName) => {
+    if (visitedScripts.has(scriptName)) return
+    visitedScripts.add(scriptName)
+    const command = manifest.scripts?.[scriptName]
+    if (!command) return
+
+    for (const match of command.matchAll(/(?:^|\s)([^\s"']+\.mjs)(?=\s|$)/gu)) {
+      const absolutePath = resolve(node.dir, match[1])
+      if (existsSync(absolutePath)) referenced.add(absolutePath)
+    }
+    for (const match of command.matchAll(/bun run ([a-zA-Z0-9:_-]+)/gu)) {
+      visitScript(match[1])
+    }
+  }
+
+  visitScript('build')
+  return [...referenced].sort()
+}
+
+function computePackageInputFingerprint(node, dependencyFingerprints) {
+  const hash = createHash('sha256')
+  hash.update(`velaros-package-build-input-v${BUILD_CACHE_SCHEMA_VERSION}\0`)
+  hash.update(`${process.platform}\0${process.arch}\0${process.version}\0`)
+  updateHashWithTree(hash, node.dir, `packages/${node.dirName}`)
+
+  for (const relativePath of RootBuildInputPaths) {
+    const absolutePath = resolve(ROOT_DIR, relativePath)
+    if (existsSync(absolutePath)) updateHashWithFile(hash, absolutePath, relativePath)
+  }
+  for (const scriptPath of collectReferencedBuildScripts(node)) {
+    updateHashWithFile(hash, scriptPath, relative(ROOT_DIR, scriptPath))
+  }
+  for (const [name, fingerprint] of [...dependencyFingerprints.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))) {
+    hash.update(`dependency\0${name}\0${fingerprint}\0`)
+  }
+  return hash.digest('hex')
+}
+
+function computeBuildOutputFingerprint(node) {
+  const distDirectory = resolve(node.dir, 'dist')
+  if (!existsSync(distDirectory) || !statSync(distDirectory).isDirectory()) return null
+  const hash = createHash('sha256')
+  hash.update(`velaros-package-build-output-v${BUILD_CACHE_SCHEMA_VERSION}\0`)
+  updateHashWithTree(hash, distDirectory, `packages/${node.dirName}/dist`)
+  return hash.digest('hex')
+}
+
+function readBuildCache() {
+  if (!existsSync(BUILD_CACHE_PATH)) return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+  try {
+    const parsed = readJson(BUILD_CACHE_PATH)
+    if (parsed.schemaVersion !== BUILD_CACHE_SCHEMA_VERSION || typeof parsed.packages !== 'object')
+      return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+    return parsed
+  } catch {
+    return { schemaVersion: BUILD_CACHE_SCHEMA_VERSION, packages: {} }
+  }
+}
+
+function writeBuildCache(cache) {
+  mkdirSync(BUILD_STATE_DIR, { recursive: true })
+  const temporaryPath = `${BUILD_CACHE_PATH}.${process.pid}.tmp`
+  writeFileSync(temporaryPath, `${JSON.stringify(cache, null, 2)}\n`, 'utf8')
+  renameSync(temporaryPath, BUILD_CACHE_PATH)
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function acquireBuildLock() {
+  mkdirSync(BUILD_STATE_DIR, { recursive: true })
+  if (existsSync(BUILD_LOCK_PATH)) {
+    let ownerPid = 0
+    try {
+      ownerPid = Number.parseInt(readFileSync(BUILD_LOCK_PATH, 'utf8'), 10)
+    } catch {
+      ownerPid = 0
+    }
+    if (isProcessAlive(ownerPid))
+      throw new Error(`已有包拓扑构建正在运行（pid ${ownerPid}），拒绝并发清理 dist。`)
+    rmSync(BUILD_LOCK_PATH, { force: true })
+  }
+
+  let fileDescriptor
+  try {
+    fileDescriptor = openSync(BUILD_LOCK_PATH, 'wx')
+    writeFileSync(fileDescriptor, `${process.pid}\n`, 'utf8')
+  } catch (error) {
+    if (fileDescriptor !== undefined) closeSync(fileDescriptor)
+    throw new Error(`无法取得包构建锁：${error.message}`)
+  }
+  closeSync(fileDescriptor)
+  return () => rmSync(BUILD_LOCK_PATH, { force: true })
 }
 
 function collectVelarosDeps(manifest) {
@@ -143,6 +315,7 @@ function printHelp() {
 
 用法：
   node scripts/build/buildPackageTopology.mjs                 # 全量：拓扑序构建所有包
+  node scripts/build/buildPackageTopology.mjs --incremental   # 全量：未变化且产物完整的包跳过
   node scripts/build/buildPackageTopology.mjs --for <pkg>     # 只建某包的依赖闭包 + 自身
   node scripts/build/buildPackageTopology.mjs --list          # 打印拓扑序，不构建
 
@@ -153,6 +326,7 @@ function printHelp() {
 function parseArgs(argv) {
   const targets = []
   let list = false
+  let incremental = false
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -160,6 +334,10 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') return { help: true }
     if (arg === '--list') {
       list = true
+      continue
+    }
+    if (arg === '--incremental') {
+      incremental = true
       continue
     }
     if (arg === '--for') {
@@ -176,7 +354,7 @@ function parseArgs(argv) {
     throw new Error(`未知参数：${arg}`)
   }
 
-  return { list, targets }
+  return { incremental, list, targets }
 }
 
 function main() {
@@ -203,8 +381,56 @@ function main() {
 
   if (options.list) return
 
-  for (const node of order) buildPackage(node)
-  console.log(`完成：构建 ${order.filter((node) => node.hasBuild).length} 个包。`)
+  const releaseLock = acquireBuildLock()
+  const cache = readBuildCache()
+  const resolvedFingerprints = new Map()
+  let builtCount = 0
+  let skippedCount = 0
+  try {
+    for (const node of order) {
+      if (!node.hasBuild) {
+        buildPackage(node)
+        continue
+      }
+      const dependencyFingerprints = new Map(
+        node.deps.flatMap((dependencyName) => {
+          const fingerprint = resolvedFingerprints.get(dependencyName)
+          return fingerprint ? [[dependencyName, fingerprint]] : []
+        })
+      )
+      const inputFingerprint = computePackageInputFingerprint(node, dependencyFingerprints)
+      const cached = cache.packages[node.name]
+      const outputFingerprint = options.incremental
+        ? computeBuildOutputFingerprint(node)
+        : null
+      if (
+        options.incremental
+        && cached?.inputFingerprint === inputFingerprint
+        && cached.outputFingerprint
+        && outputFingerprint === cached.outputFingerprint
+      ) {
+        console.log(`· 跳过 ${node.name}（输入与 dist 均未变化）`)
+        resolvedFingerprints.set(node.name, inputFingerprint)
+        skippedCount += 1
+        continue
+      }
+
+      buildPackage(node)
+      const builtOutputFingerprint = computeBuildOutputFingerprint(node)
+      if (!builtOutputFingerprint)
+        throw new Error(`构建 ${node.name} 后缺少 dist 产物，拒绝写入增量缓存。`)
+      cache.packages[node.name] = {
+        inputFingerprint,
+        outputFingerprint: builtOutputFingerprint,
+      }
+      writeBuildCache(cache)
+      resolvedFingerprints.set(node.name, inputFingerprint)
+      builtCount += 1
+    }
+  } finally {
+    releaseLock()
+  }
+  console.log(`完成：构建 ${builtCount} 个包，跳过 ${skippedCount} 个未变化包。`)
 }
 
 try {

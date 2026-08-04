@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/serve-host",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -10,13 +10,14 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "bin": {
-    "velaros": "./dist/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/serve-cli.d.ts",
+      "import": "./dist/serve-cli.js"
     }
   },
   "files": [
@@ -25,7 +26,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/capabilities/build/copy-velaros-globals-to-dist.mjs && chmod +x dist/cli.js",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/serve-host"
@@ -34,8 +35,7 @@
     "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/computer": "workspace:*",
     "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/kernel-client": "workspace:*",
-    "@velaros-ai/kernel-serve": "workspace:*",
+    "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/office": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/system": "workspace:*",

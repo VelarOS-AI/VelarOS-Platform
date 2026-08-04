@@ -119,7 +119,6 @@ export interface UseChatConversationTranscriptModelReturn {
   planUpdateIndexByToolCallId: Map<string, number>
   assistantQuestionMap: Map<string, ChatMessage>
   goalCompletionSummaryByMessageId: Map<string, GoalCompletionActivitySummary>
-  guidedInputMessageIds: Set<string>
   activeAwaitingInputMessageId: Nullable<string>
   visibleMessages: ChatMessage[]
 }
@@ -150,7 +149,6 @@ export function useChatConversationTranscriptModel({
     latestCompletedAssistantMessageId,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
-    guidedInputMessageIds,
     activeAwaitingInputMessageId,
   } = useMemo(
     () =>
@@ -261,7 +259,6 @@ export function useChatConversationTranscriptModel({
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
-    guidedInputMessageIds,
     activeAwaitingInputMessageId,
     visibleMessages,
   }

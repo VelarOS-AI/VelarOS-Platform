@@ -3,11 +3,13 @@ import { describe, expect, test } from 'bun:test'
 import {
   type AgentModHostProfile,
   AgentModLoader,
+  AgentModRegistry,
   AgentModSeamDispatcher,
   AgentModStaleSnapshotError,
   assembleAgentMods,
   BuiltinAgentModId,
   collectBuiltinAgentModTools,
+  composeAgentModSpaces,
   createBuiltinAgentModPackage,
   createBuiltInPromptSegments,
   listExecutionModes,
@@ -59,6 +61,49 @@ function createManifest(overrides: Partial<AgentModManifest> = {}): AgentModMani
 }
 
 describe('agent mod loader', () => {
+  test('space availability does not implicitly pin every tool schema as resident', () => {
+    const registry = new AgentModRegistry()
+    registry.beginRegistration()
+    registry.register('spaces', {
+      axis: 'spaces',
+      modId: 'probe.mod',
+      key: 'project',
+      declaration: {
+        id: 'project',
+        descriptor: { label: 'Project' },
+        identityStrategy: 'path',
+      },
+      payload: null,
+    })
+    registry.register('tools', {
+      axis: 'tools',
+      modId: 'probe.mod',
+      key: 'probe:available',
+      declaration: {
+        name: 'probe:available',
+        categoryId: 'probe-files',
+        availableInSpaces: ['project'],
+      },
+      payload: null,
+    })
+    registry.register('tools', {
+      axis: 'tools',
+      modId: 'probe.mod',
+      key: 'probe:resident',
+      declaration: {
+        name: 'probe:resident',
+        categoryId: 'probe-control',
+        residentInSpaces: ['project'],
+      },
+      payload: null,
+    })
+    registry.endRegistration()
+
+    const [space] = composeAgentModSpaces(registry.snapshot())
+    expect(space?.toolCategoryIds).toEqual(['probe-files', 'probe-control'])
+    expect(space?.residentToolNames).toEqual(['probe:resident'])
+  })
+
   test('装载随包内置 mod 后，工具与提示词段逐项等价于直接枚举（自食狗粮零变化）', () => {
     const loader = new AgentModLoader({ host: createHost() })
     const builtin = createBuiltinAgentModPackage()

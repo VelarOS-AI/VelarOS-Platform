@@ -32,6 +32,53 @@ import type {
 
 const INTERNAL_CONSOLE_TRANSPORT_ID = '__console__'
 
+type ConsoleMethod = 'log' | 'info' | 'warn' | 'error'
+
+interface GuardedConsoleStream {
+  destroyed?: boolean
+  writableEnded?: boolean
+  on?: (event: 'error', listener: (error: unknown) => void) => unknown
+}
+
+interface ConsoleStreamState {
+  faulted: boolean
+}
+
+const consoleStreamStates = new WeakMap<object, ConsoleStreamState>()
+
+function resolveConsoleStream(method: ConsoleMethod): GuardedConsoleStream | null {
+  const runtimeProcess = (
+    globalThis as typeof globalThis & {
+      process?: { stdout?: GuardedConsoleStream; stderr?: GuardedConsoleStream }
+    }
+  ).process
+  return method === 'warn' || method === 'error'
+    ? runtimeProcess?.stderr ?? null
+    : runtimeProcess?.stdout ?? null
+}
+
+function prepareConsoleStream(method: ConsoleMethod): boolean {
+  const stream = resolveConsoleStream(method)
+  if (!stream || typeof stream !== 'object') return true
+  let state = consoleStreamStates.get(stream)
+  if (!state) {
+    state = { faulted: false }
+    consoleStreamStates.set(stream, state)
+    stream.on?.('error', () => {
+      state!.faulted = true
+    })
+  }
+  return !state.faulted && stream.destroyed !== true && stream.writableEnded !== true
+}
+
+function markConsoleStreamFaulted(method: ConsoleMethod): void {
+  const stream = resolveConsoleStream(method)
+  if (!stream || typeof stream !== 'object') return
+  const state = consoleStreamStates.get(stream) ?? { faulted: false }
+  state.faulted = true
+  consoleStreamStates.set(stream, state)
+}
+
 type RuntimeState = {
   appName?: string
   serviceName?: string
@@ -262,14 +309,17 @@ export class LogRuntime implements GlobalLog {
     if (!this.state.consoleEnabled || record.kind !== 'message') return
 
     const method = LEVEL_TO_CONSOLE_METHOD[record.level]
+    if (!prepareConsoleStream(method)) return
     const tag = formatConsoleTag(record.level, record.timestamp, record.scope)
     const payload = buildConsolePayload(record)
 
     try {
       console[method](tag, ...payload)
     } catch {
+      markConsoleStreamFaulted(method)
       // stdout/stderr 写入失败（EIO/EPIPE，如父进程关闭了管道、终端断开、dev 启动进程退出）
-      // 时静默丢弃这条日志：一次控制台写入失败绝不能冒泡成 uncaughtException 把主进程拖崩。
+      // 时静默丢弃这条日志。异步 error 由 prepareConsoleStream 注册的流级监听隔离；同步异常
+      // 在这里隔离。一次控制台写入失败绝不能冒泡成 uncaughtException 把主进程拖崩。
     }
   }
 
@@ -280,9 +330,11 @@ export class LogRuntime implements GlobalLog {
     this.pendingTasks.add(pending)
     pending
       .catch((error) => {
+        if (!prepareConsoleStream('error')) return
         try {
           console.error('[ERR] [LogRuntime] transport failed', { transportId, error })
         } catch {
+          markConsoleStreamFaulted('error')
           // 同 writeToConsole：控制台写入失败（EIO/EPIPE）不再向上抛。
         }
       })

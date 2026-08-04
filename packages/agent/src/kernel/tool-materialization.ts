@@ -1,4 +1,4 @@
-import type { AgentEvent, StreamToolResultEffects } from '@velaros-ai/core/types'
+import type { AgentEvent, StreamToolResultEffects } from '@velaros-ai/agent/protocol'
 
 import type { KernelStoredToolOutput, KernelToolOutputStore } from './tool-output-store'
 

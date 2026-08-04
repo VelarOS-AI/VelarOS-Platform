@@ -1,3 +1,4 @@
+export * from './AgentCapabilityEventPublisher'
 export * from './background-jobs'
 export * from './bridge'
 export * from './context-epoch'

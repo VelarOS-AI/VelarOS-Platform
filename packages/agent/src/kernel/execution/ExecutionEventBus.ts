@@ -1,4 +1,3 @@
-import { toNullable } from '@velaros-ai/core'
 import type {
   AgentEvent,
   ChatRuntimeEvent,
@@ -14,7 +13,8 @@ import type {
   StreamToolResultPayload,
   StreamTurnContextPayload,
   StreamWorkerThreadPayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { toNullable } from '@velaros-ai/core'
 
 interface ExecutionEventBusHandlers {
   /** Agent 文本、工具、runtime、turn context 等流式事件。 */

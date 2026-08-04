@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { isEmpty } from '@velaros-ai/core'
-import type { SubAgentTypeId } from '@velaros-ai/core/types'
+import type { SubAgentTypeId } from '@velaros-ai/agent/protocol'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
 
 /**
  * 子 Agent 授权用的分类 id：本层只校形状。可委派性由注入的 capability delegation policy 在执行期判

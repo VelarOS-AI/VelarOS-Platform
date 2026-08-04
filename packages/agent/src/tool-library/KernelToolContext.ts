@@ -1,10 +1,9 @@
 import type { ModelMessage } from 'ai'
 
-import type { Logger } from '@velaros-ai/core/logger'
-import type { ApprovalPort, InteractionPort } from '@velaros-ai/core/tool-contract'
 import type {
   AgentDelegationContract,
   AgentDeveloperContext,
+  AgentModelInputModality,
   AgentRoleId,
   AgentSkillDescriptor,
   AgentSurfaceId,
@@ -22,7 +21,9 @@ import type {
   ToolExecutionApi,
   ToolPermission,
   ToolSurfaceProfileId,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import type { ApprovalPort, InteractionPort } from '@velaros-ai/agent/tool-contract'
+import type { Logger } from '@velaros-ai/core/logger'
 
 import type { ContextPayloadStore } from '../agent/context/ContextPayloadStore'
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
@@ -132,8 +133,17 @@ export interface KernelToolContext {
   getEnabledToolCategories: () => ToolCategoryId[]
   getCurrentVisibleToolNames: () => string[]
   setCurrentVisibleToolNames: (toolNames: string[]) => void
+  /** 本轮实际模型可消费的输入类型；由 loop 在模型解析后、工具发现前刷新。 */
+  getSupportedModelInputModalities: () => readonly AgentModelInputModality[]
+  setSupportedModelInputModalities: (
+    modalities: readonly AgentModelInputModality[]
+  ) => void
   /** provider 传输名 → canonical tool id；只对本轮已曝光工具有效。 */
   resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => Nullable<string>
+  /**
+   * provider 传输名 → 已注册 canonical id；用于把未驻留调用归入正确工具页，绝不授予执行权。
+   */
+  resolveKnownCanonicalToolName?: (providerToolName: string) => Nullable<string>
   /** canonical tool id → provider 传输名；编译历史回放时使用。 */
   getCurrentVisibleProviderToolName?: (canonicalToolName: string) => Nullable<string>
   getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>

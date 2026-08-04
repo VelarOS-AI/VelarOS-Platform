@@ -7,7 +7,7 @@
 //     （`isStale` / `assertFresh`），不做「静默用旧值」。
 //
 // 明确不做：全局 registry 即时修改、加载顺序覆盖、giant context 注入。
-import type { ToolCategoryDefinition } from '@velaros-ai/core/types'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'

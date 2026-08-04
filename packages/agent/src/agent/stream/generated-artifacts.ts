@@ -1,10 +1,10 @@
 import type { TextStreamPart, ToolSet } from 'ai'
 
-import { Log } from '@velaros-ai/core'
 import type {
   StreamAssistantGeneratedFilePayload,
   StreamAssistantSourcePayload,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+import { Log } from '@velaros-ai/core'
 
 const MaxGeneratedFileBytes = 20 * 1024 * 1024
 const generatedArtifactsLog = Log.tag('GeneratedArtifacts')

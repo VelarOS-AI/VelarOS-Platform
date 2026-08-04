@@ -6,12 +6,15 @@
 
 ## 使用
 
+正式命令入口由 `@velaros-ai/cli` 统一提供；本包只导出 `@velaros-ai/serve-host/cli` 的
+`runServeCli()` 命名空间实现，不再发布第二个同名 `velaros` 可执行文件。
+
 ```sh
 # 可选：显式安装 Host 自己的隔离 Computer Python 运行时
 velaros serve computer install
 
 # 启动无界面 Host；命令会打印控制页地址和短期插件配对码
-velaros serve --workspace-root /path/to/project
+velaros serve --project-root /path/to/project
 
 velaros serve status
 velaros serve control
@@ -35,5 +38,5 @@ Kernel 工具与策略，不保存模型凭据。
 ## 产品边界
 
 Host 是“进程可选”，不是把 Kernel 从库改成服务。Desktop / Workbench 继续进程内组合 Kernel 是
-当前正确形态；未来 Web、移动端或原生产品可以在自己的认证网关后消费 `kernel-client` 与
+当前正确形态；未来 Web、移动端或原生产品可以在自己的认证网关后消费 `@velaros-ai/kernel/client` 与
 `surface-protocol`，不共享 Host 数据库，也不把产品 UI 塞进本包。

@@ -1,5 +1,5 @@
-import { defineToolRuntimeSpec, type ToolContractRuntimeSpec } from '@velaros-ai/core/tool-contract'
-import type { ToolPermission } from '@velaros-ai/core/types'
+import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import { defineToolRuntimeSpec, type ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import type { ProjectToolContext } from '@velaros-ai/project/agent'
 
 import { DevelopmentToolNames } from './contracts'

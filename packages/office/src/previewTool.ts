@@ -5,16 +5,18 @@
  */
 import { readFile } from 'node:fs/promises'
 
+import type { SKRSContext2D } from '@napi-rs/canvas'
 import ExcelJS, { type CellValue } from 'exceljs'
 import JSZip from 'jszip'
 import { z } from 'zod'
 
-import { isArray,isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
-} from '@velaros-ai/core/utils/ToolDescription'
+} from '@velaros-ai/agent/tool-contract'
+import { isArray,isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 
 import {
+  AppError,
   buildMissingSystemToolResult,
   createBrowserOnlineAlternative,
   createCommandFailureResult,
@@ -40,6 +42,16 @@ export type PreviewOfficeDocumentInput = {
   overwrite?: boolean
   maxItems?: number
   autoRefresh?: boolean
+}
+
+export type OfficePreviewArtifact = {
+  path: string
+  bytes: number
+  created: boolean
+  changed: true
+  kind: 'html' | 'png'
+  width?: number
+  height?: number
 }
 
 export type MammothMessage = {
@@ -99,8 +111,8 @@ export const previewOfficeDocumentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '可选 HTML 预览输出路径。',
-        notes: ['无扩展名时自动补齐 .html。'],
+        description: '可选预览输出路径，支持 .html 或 .png。',
+        notes: ['无扩展名时自动补齐 .html；需要静态预览图时显式使用 .png。'],
       })
     ),
   overwrite: z.boolean().optional(),
@@ -327,21 +339,146 @@ export async function parseXlsxPreview(inputPath: string, maxItems: number): Pro
   }
 }
 
-export async function writePreviewHtml(
+export async function writeOfficePreview(
   ctx: OfficeToolContext,
   outputPath: string,
   html: string,
+  parsed: ParsedOfficePreview,
   overwrite?: boolean
-): Promise<{ path: string; bytes: number; created: boolean; changed: true; kind: 'html' }> {
-  const prepared = await prepareOfficeOutputPath(ctx, outputPath, '.html', overwrite)
-  await writeFile(prepared.path, html, 'utf8')
+): Promise<OfficePreviewArtifact> {
+  const requestedExtension = extname(outputPath).toLowerCase()
+  const extension = requestedExtension || '.html'
+  if (extension !== '.html' && extension !== '.png') {
+    throw new AppError('VALIDATION', 'Office 预览输出文件扩展名必须是 .html 或 .png。')
+  }
+  const prepared = await prepareOfficeOutputPath(ctx, outputPath, extension, overwrite)
+  const image = extension === '.png' ? await renderOfficePreviewPng(parsed) : null
+  if (image) await writeFile(prepared.path, image.buffer)
+  else await writeFile(prepared.path, html, 'utf8')
   const stats = await getFileStats(prepared.path)
   return {
     path: prepared.path,
-    bytes: stats ? Number(stats.size) : Buffer.byteLength(html),
+    bytes: stats ? Number(stats.size) : (image?.buffer.byteLength ?? Buffer.byteLength(html)),
     created: prepared.created,
     changed: true,
-    kind: 'html',
+    kind: extension === '.png' ? 'png' : 'html',
+    ...(image ? { width: image.width, height: image.height } : {}),
+  }
+}
+
+const PreviewImageWidth = 1200
+const PreviewImagePadding = 56
+const PreviewImageRowHeight = 54
+
+export async function renderOfficePreviewPng(
+  parsed: ParsedOfficePreview
+): Promise<{ buffer: Buffer; width: number; height: number }> {
+  const { createCanvas } = await import('@napi-rs/canvas')
+  const rows = previewImageRows(parsed)
+  const height = Math.max(420, Math.min(1800, 238 + rows.length * PreviewImageRowHeight))
+  const canvas = createCanvas(PreviewImageWidth, height)
+  const context = canvas.getContext('2d')
+
+  context.fillStyle = '#eef2f6'
+  context.fillRect(0, 0, PreviewImageWidth, height)
+  context.fillStyle = '#ffffff'
+  context.fillRect(
+    PreviewImagePadding,
+    PreviewImagePadding,
+    PreviewImageWidth - PreviewImagePadding * 2,
+    height - PreviewImagePadding * 2
+  )
+  context.fillStyle = '#286f6c'
+  context.font = '700 18px "PingFang SC", "Microsoft YaHei", sans-serif'
+  context.fillText(`${parsed.kind.toUpperCase()} PREVIEW`, 88, 104)
+  context.fillStyle = '#172033'
+  context.font = '700 34px "PingFang SC", "Microsoft YaHei", sans-serif'
+  context.fillText(truncateText(parsed.title, 48), 88, 154, PreviewImageWidth - 176)
+
+  if (parsed.kind === 'xlsx') renderSpreadsheetPreviewRows(context, rows, 88, 194)
+  else renderDocumentPreviewRows(context, rows, 88, 204)
+
+  return {
+    buffer: canvas.toBuffer('image/png'),
+    width: PreviewImageWidth,
+    height,
+  }
+}
+
+function previewImageRows(parsed: ParsedOfficePreview): string[][] {
+  if (parsed.kind === 'xlsx') {
+    const sheet = parsed.sheets?.[0]
+    return sheet?.rows.slice(0, 18) ?? []
+  }
+  if (parsed.kind === 'pptx') return (parsed.slides ?? []).slice(0, 16).map((slide) => [
+      `Slide ${slide.index}`,
+      slide.title,
+      slide.bullets.join(' · '),
+    ])
+  const outline = (parsed.outline ?? []).slice(0, 18).map((item) => [
+    `H${item.level ?? 1}`,
+    item.title,
+  ])
+  return !isEmpty(outline) ? outline : [[truncateText(htmlToText(parsed.htmlBody).trim(), 240)]]
+}
+
+function renderSpreadsheetPreviewRows(
+  context: SKRSContext2D,
+  rows: readonly string[][],
+  x: number,
+  y: number
+): void {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length))
+  const width = PreviewImageWidth - x * 2
+  const columnWidth = width / columnCount
+  const visibleRows = rows.slice(0, 18)
+
+  for (const [rowIndex, row] of visibleRows.entries()) {
+    const rowY = y + rowIndex * PreviewImageRowHeight
+    context.fillStyle = rowIndex === 0 ? '#e7f2f1' : rowIndex % 2 === 0 ? '#f8fafc' : '#ffffff'
+    context.fillRect(x, rowY, width, PreviewImageRowHeight)
+    context.strokeStyle = '#d8dee8'
+    context.strokeRect(x, rowY, width, PreviewImageRowHeight)
+    context.font = `${rowIndex === 0 ? '700' : '400'} 18px "PingFang SC", "Microsoft YaHei", sans-serif`
+    context.fillStyle = '#172033'
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const cellX = x + columnIndex * columnWidth
+      if (columnIndex > 0) {
+        context.beginPath()
+        context.moveTo(cellX, rowY)
+        context.lineTo(cellX, rowY + PreviewImageRowHeight)
+        context.stroke()
+      }
+      context.fillText(
+        truncateText(row[columnIndex] ?? '', 42),
+        cellX + 14,
+        rowY + 34,
+        columnWidth - 28
+      )
+    }
+  }
+}
+
+function renderDocumentPreviewRows(
+  context: SKRSContext2D,
+  rows: readonly string[][],
+  x: number,
+  y: number
+): void {
+  context.font = '400 19px "PingFang SC", "Microsoft YaHei", sans-serif'
+  for (const [index, row] of rows.slice(0, 18).entries()) {
+    const rowY = y + index * PreviewImageRowHeight
+    context.fillStyle = index % 2 === 0 ? '#f8fafc' : '#ffffff'
+    context.fillRect(x, rowY, PreviewImageWidth - x * 2, PreviewImageRowHeight - 6)
+    context.fillStyle = '#667085'
+    context.fillText(truncateText(row[0] ?? '', 18), x + 14, rowY + 31, 160)
+    context.fillStyle = '#172033'
+    context.fillText(
+      truncateText(row.slice(1).join(' — ') || row[0] || '', 100),
+      x + 174,
+      rowY + 31,
+      PreviewImageWidth - x * 2 - 190
+    )
   }
 }
 

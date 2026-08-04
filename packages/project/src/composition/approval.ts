@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
-import type { ApprovalPort } from '@velaros-ai/core/tool-contract'
 
 import type { ApprovalProvider } from '../types/policy.js'
 

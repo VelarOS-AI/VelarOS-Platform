@@ -12,13 +12,13 @@
  */
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
-import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
 import {
   compactToolInputForModel,
   deserializeSerializedToolResult,
   ModelToolResultMaxSerializedLength,
   serializeToolResultForModel,
-} from '@velaros-ai/core/utils/toolResultSerialization'
+} from '@velaros-ai/agent'
+import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 /**
@@ -159,8 +159,8 @@ function isToolCallLikePart(part: unknown): boolean {
   return (
     isRecord(part) &&
     (part.type === 'tool-call' || part.type === 'toolCall') &&
-    (isString(part.toolCallId) || isString(part.id)) &&
-    (isString(part.toolName) || isString(part.name))
+    (isNonBlankString(part.toolCallId) || isNonBlankString(part.id)) &&
+    (isNonBlankString(part.toolName) || isNonBlankString(part.name))
   )
 }
 
@@ -168,8 +168,8 @@ function isToolCallPart(part: unknown): part is ToolCallPart {
   return (
     isRecord(part) &&
     part.type === 'tool-call' &&
-    isString(part.toolCallId) &&
-    isString(part.toolName)
+    isNonBlankString(part.toolCallId) &&
+    isNonBlankString(part.toolName)
   )
 }
 
@@ -177,8 +177,8 @@ function isToolResultPart(part: unknown): part is ToolResultPart {
   return (
     isRecord(part) &&
     part.type === 'tool-result' &&
-    isString(part.toolCallId) &&
-    isString(part.toolName) &&
+    isNonBlankString(part.toolCallId) &&
+    isNonBlankString(part.toolName) &&
     isRecord(part.output)
   )
 }
@@ -1056,21 +1056,30 @@ function sanitizeModelContentArray(
   changed: boolean
 } {
   let changed = false
-  const sanitized = content.map((part) => {
+  const sanitized = content.flatMap((part) => {
+    if (
+      isRecord(part) &&
+      (part.type === 'tool-call' || part.type === 'tool-result') &&
+      (!isNonBlankString(part.toolCallId) || !isNonBlankString(part.toolName))
+    ) {
+      changed = true
+      return []
+    }
+
     if (isToolCallPart(part)) {
       const result = sanitizeToolCallPart(part)
       changed = changed || result.changed
-      return result.part
+      return [result.part]
     }
 
     if (isToolResultPart(part)) {
-      if (options.skipToolResultBudget) return part
+      if (options.skipToolResultBudget) return [part]
       const result = sanitizeToolResultPart(part)
       changed = changed || result.changed
-      return result.part
+      return [result.part]
     }
 
-    return part
+    return [part]
   })
 
   const deduped = dedupeRepeatedModelContentParts(sanitized)

@@ -22,8 +22,8 @@
 
 import { z } from 'zod'
 
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isEmpty,isNotUndefined } from '@velaros-ai/core'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/core/utils/ToolDescription'
 
 import {
   ToolDiscoveryAvailabilityValues,

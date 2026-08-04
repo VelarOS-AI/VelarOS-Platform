@@ -54,11 +54,12 @@ const dependencySections = [
   'peerDependencies',
   'optionalDependencies',
 ]
-// 单版本火车:core 已与 model-runtime 同仓,同仓依赖一律 workspace:*
-// (发布时由包管理器代换成具体版本),旧的注册表范围锁(^0.3.2 / ^0.2.2)前提消失。
-// P2 起 module ABI 并入内核基础层 core(@velaros-ai/core/kernel/abi),kernel-sdk 已解散。
+// 单版本火车:Core、Kernel 与 Model 同仓,同仓依赖一律 workspace:*
+// (发布时由包管理器代换成具体版本)。Module ABI 的唯一入口是
+// @velaros-ai/kernel/contracts/abi。
 const allowedVelarosDependencies = new Map([
   ['@velaros-ai/core', 'workspace:*'],
+  ['@velaros-ai/kernel', 'workspace:*'],
 ])
 
 for (const section of dependencySections) {
@@ -97,7 +98,7 @@ for (const file of sourceFiles) {
       specifier === '@velaros-ai/core' ||
       specifier === '@velaros-ai/core/error' ||
       specifier === '@velaros-ai/core/logger' ||
-      specifier === '@velaros-ai/core/kernel/abi'
+      specifier === '@velaros-ai/kernel/contracts/abi'
     if (!allowed) {
       failures.push(
         `${path.relative(root, file)} imports forbidden VelarOS implementation ${specifier}`,

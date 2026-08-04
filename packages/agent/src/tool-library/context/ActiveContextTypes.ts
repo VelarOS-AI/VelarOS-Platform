@@ -5,7 +5,7 @@ import type {
   ActiveContextGovernanceReport,
   ActiveContextListOptions,
   ActiveContextUpsertInput,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
 
 /** 工具访问活跃上下文的 API。 */
 export interface ToolActiveContextApi {

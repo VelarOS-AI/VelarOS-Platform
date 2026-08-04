@@ -32,15 +32,11 @@ tests/<domain>/            各域根级测试树
 docs/<domain>/             各域文档;**总入口 [docs/readme.md](docs/readme.md)**
 ```
 
-`workspaces` = `["packages/*"]`,共 **19 个平台包**(下表)。
+`workspaces` = `["packages/*"]`,共 **18 个平台包**(下表)。
 
-**为什么平铺而不是 `packages/<domain>/<pkg>`**:包内 tsconfig 大量写 `baseUrl: "../.."` +
-`paths: ["./packages/<pkg>/src/index.ts"]`,package.json 构建脚本写 `../../scripts/…`。平铺让这些
-相对路径逐字成立,导入零改写;分域再嵌一层则要改写每个包的 tsconfig 与构建脚本。
-**域不是目录,是 `velaros.domainPackages` 里的一行声明**。能力包全部平铺在 `packages/`：
-Project、System、Browser 等聚合包通过子路径表达职责切片，Development 等单一职责包再由
-Mod Loader 拼入具体空间。域归属不靠目录，由仓根 `package.json` 的
-`velaros.domainPackages` 声明，各域架构门据此冻结包集合。
+`packages/` 只平铺**领域包**，不把同一领域的内部切片拆成多个 npm 包。Kernel、Browser、
+Computer、Memory、UI 等都通过一个包下的 subpath 表达职责；域归属由仓根
+`velaros.domainPackages` 声明，架构门据此冻结包集合与切片依赖方向。
 
 ## 包目录索引
 
@@ -49,10 +45,9 @@ Mod Loader 拼入具体空间。域归属不靠目录，由仓根 `package.json`
 
 | 域 | 包 | 版本 | 目录 |
 | --- | --- | --- | --- |
-| kernel | `@velaros-ai/kernel-client` | 0.3.0 | `packages/kernel-client` |
-| kernel | `@velaros-ai/kernel-serve`(`/daemon` `/updater`) | 0.3.2 | `packages/kernel-serve` |
+| kernel | `@velaros-ai/kernel`(`/contracts` `/runtime` `/client` `/serve`) | 0.1.0 | `packages/kernel` |
 | agent | `@velaros-ai/agent` | 0.5.0 | `packages/agent` |
-| core | `@velaros-ai/core` | 0.3.2 | `packages/core` |
+| core | `@velaros-ai/core` | 0.4.0 | `packages/core` |
 | model | `@velaros-ai/model` | 0.4.6 | `packages/model` |
 | capabilities | `@velaros-ai/project` | 2.0.0 | `packages/project` |
 | capabilities | `@velaros-ai/browser`(`/core` `/tools` `/composition` `/runtime`) | 0.2.6 | `packages/browser` |
@@ -61,39 +56,13 @@ Mod Loader 拼入具体空间。域归属不靠目录，由仓根 `package.json`
 | capabilities | `@velaros-ai/system` | 1.0.0 | `packages/system` |
 | capabilities | `@velaros-ai/office` | 1.0.0 | `packages/office` |
 | capabilities | `@velaros-ai/development` | 1.0.0 | `packages/development` |
-| capabilities | `@velaros-ai/cli` | 0.2.11 | `packages/cli` |
+| capabilities | `@velaros-ai/cli` | 0.2.12 | `packages/cli` |
 | memory | `@velaros-ai/memory`(`/knowledge` `/adapter-kernel`) | 0.3.5 | `packages/memory` |
 | ui | `@velaros-ai/ui`(`/conversation`) | 0.2.2 | `packages/ui` |
 | html-artifacts | `@velaros-ai/html-artifacts` | 0.1.3 | `packages/html-artifacts` |
-| host | `@velaros-ai/serve-host` | 0.1.0 | `packages/serve-host` |
+| host | `@velaros-ai/serve-host` | 0.2.0 | `packages/serve-host` |
 | surface | `@velaros-ai/surface-protocol` | 0.1.0 | `packages/surface-protocol` |
 | evaluation | `@velaros-ai/agent-lab` | 0.1.0 | `packages/agent-lab` |
-
-## 源仓考古指引
-
-下表的源仓**已全部退役,且不在磁盘上**——别再去 `../VelarOS-Kernel` 这类兄弟目录找它们。
-拆仓前的历史有两条取证路径:
-
-1. **本仓的导入 commit**:每个源仓一个,`git show <导入 commit>` 即是那一刻源仓的完整快照。
-   导入方式是 `git archive HEAD` 只读导出,所以导入 commit 里没有源仓的逐条历史,只有终态。
-2. **源仓完整 git 历史**:归档在仓外 `../_retired-repo-bundles/VelarOS-<域>-20260729.bundle`。
-   要逐条历史就 `git clone <bundle> /tmp/<域>` 再 `git log`,下表的「源仓 HEAD」就是 bundle 的 tip。
-
-| 域 | 已退役源仓 | 本仓导入 commit | 源仓 HEAD | 该 HEAD 描述 |
-| --- | --- | --- | --- | --- |
-| core | VelarOS-Core | `61bb9ef` | `62cd3ec5e204e00fc9bb5e4bc79b9498a6f20a68` | chore: lock workspace dependencies for standalone core build |
-| kernel | VelarOS-Kernel | `039d320` | `aa9fdfca155134117cf77da841871fe76d957d09` | fix(daemon): pack 加载改逐 pack 隔离 |
-| agent | VelarOS-Agent | `2b3f525` | `25a454baf3d73f18ea9580db5167dcf8793dca19` | chore(release): agent-runtime 0.5.0 / agent-protocol 0.4.0(P7a 已合并为 `@velaros-ai/agent`) |
-| model | VelarOS-Model | `e4cf561` | `3ef17b0ed35c24256146251b75f1f2e220f9d9f1` | Merge PR #14 codex/model-composition-cloud-contract-0.4.6 |
-| capabilities | VelarOS-Capabilities | `5e2731d` | `ff464693026688a1d2b522ca23e3a75443c6e456` | Merge PR #19 codex/office-platform-contract-0.2.7 |
-| memory | VelarOS-Memory | `6d1d15f` | `a7aa33441d4a952f5f7c6150c145c9dbc6c83dad` | Merge PR #15 codex/memory-knowledge-contracts |
-| ui | VelarOS-UI | `3ebd44b` | `298c1247b1c3c53fc0014f1fea6cfcec1254cf66` | Merge PR #16 codex/ui-release-check-auth |
-| html-artifacts | VelarOS-HTML-Artifacts | `e61dcad` | `7804a39640e83ffddb5a27e9c7fcef6661cd3ba0` | Merge branch 'codex/own-shell-wheel-test' |
-
-**各源仓导入时的根 manifest 曾以 `docs/<域>/source-root-*.json` 副本形式留在 docs 面,已删**
-(2026-07-30 QD 清理):根共享基座 `package.json` / `tsconfig.json` / `tsconfig.eslint.json` /
-`types/velaros-globals.d.ts` 就是它们的并集,已经是活的单源;副本只是并仓过程工件,而证据在上面
-两条路径里都齐。要看原件:`git show <导入 commit>:docs/<域>/source-root-package.json`。
 
 ## 文档
 
@@ -155,6 +124,7 @@ Mod Loader 拼入具体空间。域归属不靠目录，由仓根 `package.json`
 ```bash
 bun install
 bun run build            # 按依赖拓扑逐包构建(18 包)
+bun run build:incremental # 一键拓扑构建；输入和 dist 指纹均未变化的包自动跳过
 bun run typecheck        # 逐包 typecheck
 bun run test             # 逐包 test
 bun run lint             # 全仓 eslint(域规则集各自生效)
@@ -171,44 +141,42 @@ bun run check:gates      # 只跑各域质量门
 > `postinstall` 会跑 `electron-rebuild -f -w better-sqlite3`:memory 的探针与 knowledge profile
 > 集成测试跑在 Electron 上,原生模块 ABI 必须匹配(memory 域自拆仓时期沿用至今的做法)。
 
-## Kernel 库与独立 Host 进程(P2 已落)
+## Kernel 库与独立 Host 进程
 
 Kernel 本体仍是可注入的库；`serve-host` 是可选的独立产品进程。Desktop / Workbench 可以继续
 进程内组合 Kernel，也可以在后续按产品需要切换为 Host 客户端，两种形态不共享数据库或产品 UI。
 
 | 位置 | 是什么 |
 | --- | --- |
-| `packages/core/src/kernel/` | **Kernel 库本体**:`abi`(Mod 开发面)/ `protocol`(wire 调用信封,唯一事实来源)/ `contracts`(服务面契约)/ `host`(module host + capability registry + 权限 broker + 事件流 + 状态)/ `runtime`(KernelService) |
-| `packages/kernel-serve/src/daemon/` | **serve 部署模式的配件**(`@velaros-ai/kernel-serve/daemon`):daemon 生命周期 / 本机 RPC 前脸 / ModStore / 进程内传输 / 编译期 bundled pack 清单 |
-| `packages/kernel-serve/src/updater/` | 共享 Runtime 的安装、切换、回滚(`@velaros-ai/kernel-serve/updater`) |
-| `packages/kernel-client/` | 瘦客户端与 serve 模式的接入面 |
+| `packages/kernel/src/contracts/` | ABI、wire protocol 与服务契约 |
+| `packages/kernel/src/runtime/` | 进程内 module host、权限、事件、状态与 `KernelService` |
+| `packages/kernel/src/client/` | 瘦客户端与 serve 模式接入面 |
+| `packages/kernel/src/serve/` | 可选 daemon / RPC / updater 部署组合 |
 | `packages/serve-host/` | 独立 Velar Host 产品组合根:`velaros serve` / 独立数据根 / fail-closed 能力开关 / 轻量控制页 / Extension Bridge |
 | `packages/surface-protocol/` | Provider Agent Surface 的 Host 中立 wire contract；Web / 插件 / 移动端与具体宿主解耦 |
 
-依赖方向由 `check:kernel-arch` 锁死:**core 不得依赖 kernel-daemon / kernel-client / kernel-updater**
-(库不知进程);反向依赖 core 合法。`check:core-semantic-vocabulary` 另外禁止内核认识
-聊天 / 浏览器 / 工作区 / 记忆 / 办公 / 桌面控制这类具体域词。
+依赖方向由 `check:kernel-arch` 锁死：Core 不得依赖 Kernel；Kernel 内部按
+`contracts → runtime → client/serve` 分层，`runtime` 不认识进程部署，`client` 不触达
+`runtime/serve`，`updater` 不触达其它切片。`check:core-semantic-vocabulary` 保证 Core
+只保留无领域语义的共享 primitives。
 
 ## 已知欠账(P2 及以后)
 
-1. **领域语义逐出 core 未做完**:`check:core-semantic-vocabulary` 的「待逐出清单」列了余量
-   (最大一块是 `packages/core/src/types/index.ts`,1310 行聊天/执行/IPC 载荷);
-   数据契约去 `agent/protocol`,运行时行为去 `agent` 主干。清单只减不增。
-2. ~~**serve 模式还没有能力宿主**~~ **独立 Host v1 已接线(2026-08)**:
+1. ~~**serve 模式还没有能力宿主**~~ **独立 Host v1 已接线(2026-08)**:
    `@velaros-ai/serve-host` 提供 `velaros serve`,拥有独立数据根、Kernel local RPC、轻量控制页、
    Extension Bridge，以及 Workspace / Computer 的动态 fail-closed 权限策略。Computer sidecar 由用户
    显式安装到 Host 数据根；网页模型拥有模型与 Agent 循环，Host 不接触模型凭据。Browser、内建
    Model / Agent 与远端 Web/Mobile 认证网关仍按后续产品里程碑接入。
-3. ~~**发布流水线**~~ **已接线(2026-08)**:七份逐仓 `scripts/<domain>/release/*` 已合成一条
+2. ~~**发布流水线**~~ **已接线(2026-08)**:七份逐仓 `scripts/<domain>/release/*` 已合成一条
    `scripts/release/`(`releaseTopology.mjs` 发布清单单源 + `verify-release-ref.mjs` 预检 +
    `publish-packages.mjs` 发布器),`release-packages.yml` 在质量门之后接上 publish 步骤。
    **仍未做**的是版本推进本身:各包版本保留导入时现值,统一对齐火车号留到首次里程碑
    (见上「版本方案」);发布器因此**不**校验「包版本 == 仓根 version」,理由写在
    `scripts/release/releaseTopology.mjs` 文件头。本地验明用 `bun run release:dry-run`。
-4. **消费者独立性门未接线**:各域的 `check:consumer` / `check:packages` / `check:lock`
+3. **消费者独立性门未接线**:各域的 `check:consumer` / `check:packages` / `check:lock`
    (打 tarball 后装到临时工程验证可独立消费)需要 npm registry 与逐包 pack,本批未挂进 `check`;
    脚本已随包迁入 `scripts/<domain>/`,路径已修好,接线时可直接用。
-5. **`check:memory-anchors` 门没接线(文档已声称接线)**:`docs/memory/memory-tree-spec-freeze.md`
+4. **`check:memory-anchors` 门没接线(文档已声称接线)**:`docs/memory/memory-tree-spec-freeze.md`
    多处以**现在时**写「由 `bun run check` 链的 `check:memory-anchors`
    (`scripts/checks/memoryTreeDiffProbe.mjs`)机械复跑,46/46 逐字节一致」。实况:探针本体
    `packages/memory/src/memory-tree/v2/treediff-v2-probe.ts` **在**,但 `check:memory-anchors`
@@ -217,8 +185,8 @@ Kernel 本体仍是可注入的库；`serve-host` 是可选的独立产品进程
    → **落点**:照 `probe:storage-v2` 的形状加 `packages/memory` 的 `probe:treediff-v2`
    (`bun --conditions=source src/memory-tree/v2/treediff-v2-probe.ts`),再挂进根 `probe:memory` 链;
    接线后把 spec-freeze 的门名与本条一起改实。**在接线之前,该冻结面的 D1 类 canonical/排序漂移无门可拦。**
-6. **`agent/protocol` 的 span 契约没有快照锁**:`check:kernel-schemas` 给
-   `packages/core/src/kernel/protocol` 做了 wire 形状保形(基线
+5. **`agent/protocol` 的 span 契约没有快照锁**:`check:kernel-schemas` 给
+   `packages/kernel/src/contracts/protocol` 做了 wire 形状保形(基线
    `baselines/kernel/kernel-wire-schema-snapshot.json`),但 `packages/agent/src/protocol/observability.ts`
    的 `ExecutionSpanSchema`(判别联合,六类 `run`/`turn`/`model`/`tool`/`capability`/`policy`)、
    `RunSpanSchema`、`ExecutionSpanMetricsSchema` 只有 zod 定义,**没有基线**——

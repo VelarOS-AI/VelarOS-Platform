@@ -5,10 +5,10 @@
  * 发现，走既有 mod 轴与 capability registry。为记忆开一根 `memoryBackends` 轴，下一个能力域
  * 就会照抄，五套并行扩展系统按域重新长回来。
  *
- * **为什么 token 住这里而不是主干**：token 是 mod 轴机制（`@velaros-ai/core/kernel/abi`），
+ * **为什么 token 住这里而不是主干**：token 是 mod 轴机制（`@velaros-ai/kernel/contracts/abi`），
  * 主干只该持有与实现无关的窄动词契约（`../backend/Contract`）。方向铁律 adapter-kernel → 主干
- * 单向也强制了这个落点——主干不得反向依赖适配器。同理它也不能住 core：
- * `packages/core/src/kernel/**` 有语义词汇硬墙，出现 `memory` 一词即红。
+ * 单向也强制了这个落点——主干不得反向依赖适配器。Kernel 本体有具体能力语义硬墙，
+ * `memory` 属于能力实现，不能进入 Kernel。
  *
  * **为什么一个后端一个 token 而不是一个共享 token**：`KernelServiceStore` 对同一 capability id
  * 只允许一个 active 服务（重复注册即 `DUPLICATE_SERVICE`）。三档要能**叠加**（§九 9.2 权威层
@@ -19,12 +19,14 @@
  * （见 `./kernel-module`），一条没减。
  */
 
+import { isEmpty } from '@velaros-ai/core'
 import {
   type CapabilityToken,
   createCapabilityToken,
   defineKernelModule,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
-} from '@velaros-ai/core/kernel/abi'
+} from '@velaros-ai/kernel/contracts/abi'
 
 import type { MemoryBackendDescriptor, MemoryStoreBackend } from '..'
 
@@ -40,7 +42,7 @@ export interface MemoryStoreCapabilityService {
 
 export function memoryStoreCapabilityId(backendId: string): string {
   const normalized = backendId.trim()
-  if (normalized.length === 0) {
+  if (isEmpty(normalized)) {
     throw new Error('Memory store backend id must not be empty')
   }
   return `${MemoryStoreCapabilityNamespace}.${normalized}`
@@ -86,7 +88,7 @@ export function createMemoryStoreKernelModule(
     manifest: {
       id: options.moduleId ?? token.id,
       version: options.moduleVersion ?? DefaultMemoryStoreCapabilityVersion,
-      apiVersion: options.apiVersion ?? 1,
+      apiVersion: options.apiVersion ?? KernelModuleApiVersion,
       provides: [token],
       requires: [],
       optionalRequires: [],
