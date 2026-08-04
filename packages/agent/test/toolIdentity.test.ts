@@ -5,9 +5,11 @@ import {
   isCanonicalToolId,
 } from '../src/tool-contract/identity'
 import {
+  createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
   rewriteCanonicalToolReferences,
+  rewriteProviderToolReferences,
 } from '../src/tools/ToolIdentity'
 
 describe('canonical tool identity', () => {
@@ -68,5 +70,24 @@ describe('canonical tool identity', () => {
         aliases
       )
     ).toBe('先用 project__read，再调用 interaction__ask_user；不要改 project:read_more。')
+  })
+
+  it('restores provider aliases in complete and chunked assistant text', () => {
+    const aliases = {
+      project__read: 'project:read',
+      interaction__ask_user: 'interaction:ask_user',
+    }
+    expect(
+      rewriteProviderToolReferences(
+        '已用 project__read. 未调用 project__read_more。',
+        aliases
+      )
+    ).toBe('已用 project:read. 未调用 project__read_more。')
+
+    const stream = createProviderToolReferenceCanonicalizer(aliases)
+    expect(stream.push('已用 project__')).toBe('已用 ')
+    expect(stream.push('read，接着 interaction__ask')).toBe('project:read，接着 ')
+    expect(stream.push('_user')).toBe('')
+    expect(stream.flush()).toBe('interaction:ask_user')
   })
 })

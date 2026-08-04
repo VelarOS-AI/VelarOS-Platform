@@ -25,7 +25,7 @@
  *  - **治理类记录不进候选**：P6 的护栏（权限判决 / 用户纠正 / 安全规则）连 EXCERPT 都不降。
  *  - **摘要不折摘要**：I1/I2 产物是压缩的终点，再折一次就是有损叠有损。
  */
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isPresent, isString } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { anchorDensityPerKiloChar } from './anchors'
@@ -118,6 +118,8 @@ export interface RunGovernanceEpochInput {
   at: number
   /** 模型是否调用了 `context:distill` 声明阶段边界。 */
   modelRequested?: LooseOptional<boolean>
+  /** 消息字符/token 的本轮实测密度；缺省保持历史上的 4 字符/token。 */
+  charsPerToken?: LooseOptional<number>
   /** 耗时（毫秒）。调用方测量，本函数不取时钟。 */
   durationMs?: LooseOptional<number>
   /** 上一个 epoch 之后异步跑完、等本次边界落地的蒸馏产物（B2 起）。 */
@@ -145,10 +147,15 @@ interface EpochCandidate {
 export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEpochReport {
   const { ledger, config } = input
   const budgetTokens = Math.max(1, Math.floor(input.budgetTokens))
-  const before = measureProjectedTokens(ledger, config, budgetTokens)
+  const before = measureProjectedTokens(
+    ledger,
+    config,
+    budgetTokens,
+    input.charsPerToken
+  )
   const triggerTokens = (config.epochTriggerPercent / 100) * budgetTokens
   const targetTokens = (config.epochTargetPercent / 100) * budgetTokens
-  const modelRequested = input.modelRequested === true
+  const modelRequested = !!input.modelRequested
   const emptyInstruments = { evict: 0, skeleton: 0, distill: 0 }
 
   // 未触发时**产物不落地**：它们已经付过钱，可以再等一个边界；为了一份不着急的摘要炸掉整条
@@ -165,9 +172,19 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   byInstrument.distill += distillOutcome.appliedByInstrument.distill
   byInstrument.skeleton += distillOutcome.appliedByInstrument.skeleton
 
-  const candidates = collectCandidates(ledger, config, budgetTokens)
+  const candidates = collectCandidates(
+    ledger,
+    config,
+    budgetTokens,
+    input.charsPerToken
+  )
   if (isEmpty(candidates)) {
-    const after = measureProjectedTokens(ledger, config, budgetTokens)
+    const after = measureProjectedTokens(
+      ledger,
+      config,
+      budgetTokens,
+      input.charsPerToken
+    )
     return buildReport(
       input,
       budgetTokens,
@@ -183,11 +200,17 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   // 反空转（[P1] clear_at_least 同款）：先按候选的可回收量估一次上界，不够就整个跳过。
   // 已落地的产物不参与这道闸——钱已经花了，收益该算进本次报告，不该被"预计还能省多少"否掉。
   const reclaimableTokens = estimateResidencyTokens(
-    candidates.reduce((total, candidate) => total + candidate.reclaimableChars, 0)
+    candidates.reduce((total, candidate) => total + candidate.reclaimableChars, 0),
+    input.charsPerToken ?? 4
   )
   const minSavingTokens = (config.minEpochSavingPercent / 100) * before
   if (reclaimableTokens < minSavingTokens) {
-    const after = measureProjectedTokens(ledger, config, budgetTokens)
+    const after = measureProjectedTokens(
+      ledger,
+      config,
+      budgetTokens,
+      input.charsPerToken
+    )
     return buildReport(
       input,
       budgetTokens,
@@ -206,7 +229,13 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
     // 达标即停 —— 但**模型请求的 epoch 例外**：模型调 `context:distill` 就是在说"这批结果我已经
     // 消化完了"，那些被取代/陈旧的快照该当场折掉，不该因为"现在还没胀到目标线"而留着。
     // 例外只覆盖免费且可召回的前两档（superseded / stale）；低锚密度那档仍只在真有压力时才动。
-    const belowTarget = measureProjectedTokens(ledger, config, budgetTokens) <= targetTokens
+    const belowTarget =
+      measureProjectedTokens(
+        ledger,
+        config,
+        budgetTokens,
+        input.charsPerToken
+      ) <= targetTokens
     if (belowTarget && !(modelRequested && candidate.tier !== 'low-density')) break
 
     const target = resolveEvictionTarget(candidate.record)
@@ -231,7 +260,12 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
     }
   }
 
-  const after = measureProjectedTokens(ledger, config, budgetTokens)
+  const after = measureProjectedTokens(
+    ledger,
+    config,
+    budgetTokens,
+    input.charsPerToken
+  )
   return buildReport(input, budgetTokens, before, after, trigger, null, byInstrument, distillOutcome)
 }
 
@@ -267,7 +301,11 @@ function applyPendingDistills(
   const measurement = measureLedgerProjection({
     records: ledger.list(),
     residency: ledger.residencyVector(),
-    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens },
+    budget: {
+      tailProtectTurns: config.tailProtectTurns,
+      budgetTokens,
+      charsPerToken: input.charsPerToken,
+    },
   })
 
   for (const product of products) {
@@ -278,7 +316,7 @@ function applyPendingDistills(
 
     const members = product.memberIds
       .map((memberId) => ledger.get(memberId))
-      .filter((record): record is ContextRecord => record !== null)
+      .filter((record): record is ContextRecord => isNotNull(record))
       .filter((record) => !measurement.tailProtectedRecordIds.has(record.id))
       .filter((record) => {
         const residency = ledger.residencyOf(record.id)
@@ -314,8 +352,9 @@ function applyPendingDistills(
 /**
  * 追加摘要记录（I1 与 I2 共用）。
  *
- * `pinned: true` 不是特权而是常识：摘要是压缩的终点，再折一次就是有损叠有损；
- * `turn` 取最新轮，让它落在活动尾——刚生成的摘要正是模型下一轮最需要读到的东西。
+ * `pinned: true` 不是特权而是常识：摘要是压缩的终点，再折一次就是有损叠有损。
+ * `turn` 归属它所代表的最早成员轮次：摘要是旧历史的替身，必须排在受保护的当前任务之前；
+ * 若错误挂到最新轮，它会落在活动尾并可能让 provider 历史以 assistant 收尾。
  */
 function appendSummaryRecord(
   ledger: ContextResidencyLedger,
@@ -325,11 +364,21 @@ function appendSummaryRecord(
     kind: 'summary',
     message: { role: 'assistant', content: input.text },
     createdAt: input.at,
-    turn: resolveLatestTurn(ledger),
+    turn: resolveSummaryTurn(ledger, input.memberIds),
     pinned: true,
     refetchable: false,
     memberIds: [...input.memberIds],
   })
+}
+
+function resolveSummaryTurn(
+  ledger: ContextResidencyLedger,
+  memberIds: readonly string[]
+): number {
+  const turns = memberIds
+    .map((memberId) => ledger.get(memberId)?.turn)
+    .filter((turn): turn is number => isPresent(turn))
+  return isEmpty(turns) ? resolveLatestTurn(ledger) : Math.min(...turns)
 }
 
 /**
@@ -344,11 +393,17 @@ export function shouldOpenGovernanceEpoch(input: {
   config: ContextGovernanceConfig
   budgetTokens: number
   modelRequested?: LooseOptional<boolean>
+  charsPerToken?: LooseOptional<number>
 }): boolean {
-  if (input.modelRequested === true) return true
+  if (input.modelRequested) return true
 
   const budgetTokens = Math.max(1, Math.floor(input.budgetTokens))
-  const projected = measureProjectedTokens(input.ledger, input.config, budgetTokens)
+  const projected = measureProjectedTokens(
+    input.ledger,
+    input.config,
+    budgetTokens,
+    input.charsPerToken
+  )
   return projected > (input.config.epochTriggerPercent / 100) * budgetTokens
 }
 
@@ -356,12 +411,13 @@ export function shouldOpenGovernanceEpoch(input: {
 export function measureProjectedTokens(
   ledger: ContextResidencyLedger,
   config: ContextGovernanceConfig,
-  budgetTokens: number
+  budgetTokens: number,
+  charsPerToken?: LooseOptional<number>
 ): number {
   return measureLedgerProjection({
     records: ledger.list(),
     residency: ledger.residencyVector(),
-    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens },
+    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens, charsPerToken },
   }).projectedTokens
 }
 
@@ -375,14 +431,15 @@ export function measureProjectedTokens(
 function collectCandidates(
   ledger: ContextResidencyLedger,
   config: ContextGovernanceConfig,
-  budgetTokens: number
+  budgetTokens: number,
+  charsPerToken?: LooseOptional<number>
 ): EpochCandidate[] {
   const records = ledger.list()
   const residencyVector = ledger.residencyVector()
   const measurement = measureLedgerProjection({
     records,
     residency: residencyVector,
-    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens },
+    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens, charsPerToken },
   })
   const pendingEvictIds = new Set(ledger.pendingEvictions())
   const latestTurn = resolveLatestTurnOf(records)
@@ -445,7 +502,7 @@ function isDegradable(record: ContextRecord): boolean {
   if (!record.message) return false
 
   const content = record.message.content
-  return !(typeof content === 'string' && isContextSummaryText(content))
+  return !(isString(content) && isContextSummaryText(content))
 }
 
 /**

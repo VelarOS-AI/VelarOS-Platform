@@ -213,3 +213,242 @@ test("velar hooks driver preserves structured error-text tool result truth", asy
   const result = await driver.collect(session, "archive");
   expect(result.turns[0]?.toolCalls[0]?.isError).toBe(true);
 });
+
+test("velar hooks driver waits for coordinator pending work between model turns", async () => {
+  const statuses = [
+    { running: false },
+    { running: true },
+    { running: false, pendingPrompt: true },
+    { running: false, pendingPrompt: true },
+    { running: false, queuedInputs: 1 },
+    { running: false, queuedInputs: 0 },
+    { running: false, queuedInputs: 0 },
+  ];
+  let statusReads = 0;
+  const client = {
+    command: async (input: { readonly kind?: string }) => {
+      if (input.kind === "get_runtime_status")
+        return {
+          ok: true,
+          data: statuses[Math.min(statusReads++, statuses.length - 1)],
+        };
+      if (input.kind === "get_transcript")
+        return { ok: true, data: { messages: [] } };
+      if (input.kind === "get_debug") return { ok: true, data: { turns: [] } };
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks-coordinator-idle",
+    identity: {
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    },
+    client,
+    polling: { pollMs: 1, settlePolls: 2 },
+  });
+  const session = await driver.openSession({
+    trial: trial(),
+    journey: journey(),
+    workspaceRoot: null,
+  });
+  await driver.send(session, journey().legs[0]);
+  const outcome = await driver.waitSettled(session, {
+    budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
+    signal: new AbortController().signal,
+    onSample: async () => ({ kind: "continue" }),
+  });
+
+  expect(outcome.kind).toBe("settled");
+  expect(statusReads).toBe(statuses.length);
+});
+
+test("velar hooks driver settles when a short execution ends between polls", async () => {
+  const statuses = [
+    { running: false, executionEventCount: 0 },
+    { running: false, executionEventCount: 2 },
+  ];
+  let statusReads = 0;
+  const client = {
+    command: async (input: { readonly kind?: string }) => {
+      if (input.kind === "get_runtime_status")
+        return {
+          ok: true,
+          data: statuses[Math.min(statusReads++, statuses.length - 1)],
+        };
+      if (input.kind === "get_transcript")
+        return { ok: true, data: { messages: [] } };
+      if (input.kind === "get_debug") return { ok: true, data: { turns: [] } };
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks-short-execution",
+    identity: {
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    },
+    client,
+    polling: { pollMs: 1, settlePolls: 1 },
+  });
+  const session = await driver.openSession({
+    trial: trial(),
+    journey: journey(),
+    workspaceRoot: null,
+  });
+  await driver.send(session, journey().legs[0]);
+  const outcome = await driver.waitSettled(session, {
+    budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
+    signal: new AbortController().signal,
+    onSample: async () => ({ kind: "continue" }),
+  });
+
+  expect(outcome.kind).toBe("settled");
+  expect(statusReads).toBe(3);
+});
+
+test("velar hooks driver keeps the full trace for a durable task session", async () => {
+  const client = {
+    command: async (input: { readonly kind?: string }) => {
+      if (input.kind === "get_runtime_status")
+        return { ok: true, data: { running: false, executionEventCount: 1 } };
+      if (input.kind === "get_transcript")
+        return { ok: true, data: { messages: [] } };
+      if (input.kind === "get_debug")
+        return {
+          ok: true,
+          data: {
+            turns: [
+              {
+                id: "prior-turn",
+                messages: [
+                  {
+                    content: [
+                      {
+                        type: "tool-call",
+                        toolCallId: "prior-call",
+                        toolName: "system:read",
+                        input: { path: "/fixture/input.json" },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks-durable-session",
+    identity: {
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    },
+    client,
+    observationScope: "session",
+  });
+  const session = await driver.openSession({
+    trial: trial(),
+    journey: journey(),
+    workspaceRoot: null,
+  });
+  await driver.send(session, journey().legs[0]);
+  const result = await driver.collect(session, "archive");
+
+  expect(result.turns[0]?.toolCalls[0]?.name).toBe("system:read");
+});
+
+test("velar hooks driver restores a durable per-leg observation boundary", async () => {
+  let includeCurrentTurn = false;
+  const turn = (id: string, callId: string, name: string) => ({
+    id,
+    messages: [
+      {
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: callId,
+            toolName: name,
+            input: {},
+          },
+        ],
+      },
+    ],
+  });
+  const client = {
+    command: async (input: { readonly kind?: string }) => {
+      if (input.kind === "get_runtime_status")
+        return { ok: true, data: { running: false, executionEventCount: 2 } };
+      if (input.kind === "get_transcript")
+        return { ok: true, data: { messages: [] } };
+      if (input.kind === "get_debug")
+        return {
+          ok: true,
+          data: {
+            turns: [
+              turn("prior-turn", "prior-call", "system:read"),
+              ...(includeCurrentTurn
+                ? [turn("current-turn", "current-call", "system:write")]
+                : []),
+            ],
+          },
+        };
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks-restored-boundary",
+    identity: {
+      executorId: "executor-a",
+      adapterVersion: "1",
+      cliVersion: null,
+      provider: null,
+      model: null,
+      modelRevision: null,
+      contextWindow: null,
+      reasoningProfile: null,
+      configuration: {},
+    },
+    client,
+    observationScope: "leg",
+  });
+  const session = await driver.openSession({
+    trial: trial(),
+    journey: journey(),
+    workspaceRoot: null,
+  });
+  const baseline = await driver.captureObservationBaseline(session);
+  await driver.closeSession(session);
+  driver.restoreObservationBaseline(session, baseline);
+  includeCurrentTurn = true;
+
+  const result = await driver.collect(session, "archive");
+
+  expect(baseline.toolCallIds).toEqual(["prior-call"]);
+  expect(
+    result.turns.flatMap((item) => item.toolCalls.map((call) => call.name)),
+  ).toEqual(["system:write"]);
+});

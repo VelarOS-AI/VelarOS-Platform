@@ -2,22 +2,40 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
-import type { ActiveContextArtifact } from '@velaros-ai/agent/protocol'
-import { isArray, isEmpty,isObject, isString, isTrue } from '@velaros-ai/core'
+import type {
+  ActiveContextArchiveFilter,
+  ActiveContextArtifact,
+  ActiveContextArtifactKind,
+  ActiveContextArtifactStatus,
+  ActiveContextListOptions,
+  ActiveContextUpsertInput,
+  ActiveDirectiveArchiveInput,
+  ActiveDirectiveType,
+  ActiveDirectiveUpsertInput,
+} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isPlainObject, isString, isTrue } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
-const directiveTypeSchema = z.enum([
-  'prohibition',
-  'preference',
-  'process',
-  'requirement',
-  'other',
-])
-
-type ActiveDirectiveType = z.infer<typeof directiveTypeSchema>
+const directiveTypeSchema = z.enum(['prohibition', 'preference', 'process', 'requirement', 'other'])
 
 const ActiveDirectiveLimits = {
   maxActive: 8,
 } as const
+
+interface ActiveDirectiveContext {
+  listActiveContextArtifacts(options?: ActiveContextListOptions): Promise<ActiveContextArtifact[]>
+  upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>
+  archiveActiveContextArtifacts(
+    filter: ActiveContextArchiveFilter
+  ): Promise<ActiveContextArtifact[]>
+}
+
+interface ActiveDirectiveArchiveResult {
+  archivedIds: string[]
+  archivedCount: number
+  directives: ActiveContextArtifact[]
+  diagnostic?: ReturnType<typeof buildNoArchiveDiagnostic>
+}
 
 interface ActiveDirectiveMetadata {
   directive?: unknown
@@ -31,7 +49,7 @@ interface GoalConstraintReference {
 }
 
 function getDirectiveMetadata(artifact: ActiveContextArtifact): ActiveDirectiveMetadata {
-  return isObject(artifact.metadata) ? (artifact.metadata as ActiveDirectiveMetadata) : {}
+  return isPlainObject(artifact.metadata) ? artifact.metadata : {}
 }
 
 function isActiveDirectiveArtifact(artifact: ActiveContextArtifact): boolean {
@@ -93,15 +111,10 @@ function resolveDirectiveArtifactId(
     if (existingByTitle) return existingByTitle.id
   }
 
-  return createDirectiveArtifactId(
-    requestedId ? `id:${requestedId}` : `title:${input.title}`
-  )
+  return createDirectiveArtifactId(requestedId ? `id:${requestedId}` : `title:${input.title}`)
 }
 
-function matchesDirectiveTitle(
-  artifact: ActiveContextArtifact,
-  title: Nullable<string>
-): boolean {
+function matchesDirectiveTitle(artifact: ActiveContextArtifact, title: Nullable<string>): boolean {
   if (!title) return true
 
   return artifact.title.toLowerCase().includes(title.toLowerCase())
@@ -112,43 +125,44 @@ function readGoalConstraintReferences(
   idSet: ReadonlySet<string>
 ): GoalConstraintReference[] {
   const metadata = artifact.metadata
-  if (!isObject(metadata)) return []
+  if (!isPlainObject(metadata)) return []
 
-  const metadataRecord = metadata as Record<string, unknown>
-  const constraints = metadataRecord.constraints
-  if (!isTrue(metadataRecord.goal) || !isArray(constraints)) return []
+  const constraints = metadata.constraints
+  if (!isTrue(metadata.goal) || !isArray(constraints)) return []
 
   return constraints.flatMap((constraint): GoalConstraintReference[] => {
-    if (!isObject(constraint)) return []
+    if (!isPlainObject(constraint)) return []
 
-    const constraintRecord = constraint as Record<string, unknown>
-    const constraintId = constraintRecord.id
+    const constraintId = constraint.id
     if (!isString(constraintId)) return []
     if (!idSet.has(constraintId)) return []
 
-    const title = constraintRecord.title
-    return [{
-      goalId: artifact.id,
-      constraintId,
-      title: isString(title) ? title : null,
-    }]
+    const title = constraint.title
+    return [
+      {
+        goalId: artifact.id,
+        constraintId,
+        title: isString(title) ? title : null,
+      },
+    ]
   })
 }
 
-function buildNoArchiveDiagnostic(
-  input: { ids?: string[] },
-  artifacts: ActiveContextArtifact[]
-) {
+function buildNoArchiveDiagnostic(input: { ids?: string[] }, artifacts: ActiveContextArtifact[]) {
   const requestedIds = input.ids ?? []
   const idSet = new Set(requestedIds)
-  const goalConstraintReferences = idSet.size > 0
-    ? artifacts.flatMap((artifact) => readGoalConstraintReferences(artifact, idSet))
-    : []
+  const goalConstraintReferences =
+    idSet.size > 0
+      ? artifacts.flatMap((artifact) => readGoalConstraintReferences(artifact, idSet))
+      : []
 
-  if (!isEmpty(goalConstraintReferences)) return {
+  if (!isEmpty(goalConstraintReferences))
+    return {
       reason: 'goal_constraint' as const,
       unmatchedIds: requestedIds,
-      possibleGoalConstraintIds: goalConstraintReferences.map((reference) => reference.constraintId),
+      possibleGoalConstraintIds: goalConstraintReferences.map(
+        (reference) => reference.constraintId
+      ),
       goalConstraintReferences,
       message:
         '这些 id 匹配当前 goal.constraints，而不是 session-level active directive；directive:archive 只归档 metadata.directive=true 的 session directive。请用 goal:update 修改或移除目标 constraints。',
@@ -164,14 +178,108 @@ function buildNoArchiveDiagnostic(
   }
 }
 
+async function listActiveDirectives(
+  context: ActiveDirectiveContext,
+  status: ActiveContextArtifactStatus | 'all' = 'active'
+): Promise<ActiveContextArtifact[]> {
+  const artifacts = await context.listActiveContextArtifacts({
+    status,
+    kinds: ['requirement'] satisfies ActiveContextArtifactKind[],
+  })
+  return artifacts.filter(isActiveDirectiveArtifact)
+}
+
+async function upsertActiveDirective(
+  context: ActiveDirectiveContext,
+  input: ActiveDirectiveUpsertInput
+): Promise<ActiveContextArtifact> {
+  const artifacts = await context.listActiveContextArtifacts({
+    status: 'all',
+  })
+  const id = resolveDirectiveArtifactId(input, artifacts)
+  const existing = artifacts.find((artifact) => artifact.id === id)
+  if (existing && !isActiveDirectiveArtifact(existing)) {
+    throw new AppError(
+      'VALIDATION',
+      `Active directive id conflicts with non-directive active context: ${id}`
+    )
+  }
+
+  const activeDirectives = artifacts.filter(
+    (artifact) => artifact.status === 'active' && isActiveDirectiveArtifact(artifact)
+  )
+  if (existing?.status !== 'active' && activeDirectives.length >= ActiveDirectiveLimits.maxActive) {
+    throw new AppError(
+      'VALIDATION',
+      `Context protection area already contains ${ActiveDirectiveLimits.maxActive} active directives. Archive or merge one before adding another.`
+    )
+  }
+
+  return context.upsertActiveContextArtifact({
+    id,
+    kind: 'requirement',
+    scope: 'session',
+    status: 'active',
+    title: input.title,
+    content: input.content,
+    sourceMessageId: input.sourceMessageId,
+    metadata: {
+      directive: true,
+      directiveType: input.directiveType,
+    },
+  })
+}
+
+async function archiveActiveDirectives(
+  context: ActiveDirectiveContext,
+  input: ActiveDirectiveArchiveInput
+): Promise<ActiveDirectiveArchiveResult> {
+  const idSet = new Set(input.ids ?? [])
+  const title = input.title?.trim() || null
+  const artifacts = await context.listActiveContextArtifacts({
+    status: 'active',
+    kinds: ['requirement'],
+  })
+  const matchingIds = artifacts
+    .filter(isActiveDirectiveArtifact)
+    .filter((artifact) => !idSet.size || idSet.has(artifact.id))
+    .filter((artifact) => matchesDirectiveTitle(artifact, title))
+    .filter(
+      (artifact) => !input.directiveType || getDirectiveType(artifact) === input.directiveType
+    )
+    .map((artifact) => artifact.id)
+
+  if (isEmpty(matchingIds))
+    return {
+      archivedIds: [],
+      archivedCount: 0,
+      directives: [],
+      diagnostic: buildNoArchiveDiagnostic(input, artifacts),
+    }
+
+  const directives = await context.archiveActiveContextArtifacts({
+    ids: matchingIds,
+  })
+  return {
+    archivedIds: matchingIds,
+    archivedCount: matchingIds.length,
+    directives,
+  }
+}
+
 export {
+  type ActiveDirectiveArchiveResult,
+  type ActiveDirectiveContext,
   ActiveDirectiveLimits,
   type ActiveDirectiveType,
+  archiveActiveDirectives,
   buildNoArchiveDiagnostic,
   createDirectiveArtifactId,
   directiveTypeSchema,
   getDirectiveType,
   isActiveDirectiveArtifact,
+  listActiveDirectives,
   matchesDirectiveTitle,
   resolveDirectiveArtifactId,
+  upsertActiveDirective,
 }

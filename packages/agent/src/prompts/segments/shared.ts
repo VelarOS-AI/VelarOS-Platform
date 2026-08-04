@@ -160,30 +160,3 @@ export function createSelectedSkillPromptSegment(text: string): PromptSegmentDef
     text,
   })
 }
-
-function buildThinkingDepthPrompt(depth?: LooseOptional<ThinkingDepth>): string {
-  switch (depth) {
-    case 'fast':
-      return '当前运行策略：低。只补足完成请求必需的上下文，优先最直接可交付路径。'
-    case 'deep':
-      return '当前运行策略：高。在落定方案前检查上下游约束、隐藏依赖和高风险副作用。'
-    default:
-      return '当前运行策略：中。在速度、正确性和改动范围之间做稳妥折中。'
-  }
-}
-
-export function createThinkingDepthPromptSegment(
-  depth?: LooseOptional<ThinkingDepth>
-): PromptSegmentDefinition {
-  return createTextPromptSegment({
-    id: 'runtime.run-strategy',
-    label: 'Run Strategy',
-    stability: 'dynamic',
-    source: 'runtime',
-    priority: PromptSegmentPriority.runtimeAdvice - 30,
-    text: [
-      buildThinkingDepthPrompt(depth),
-      '该约束只控制执行方式；不要暴露隐藏思考过程。',
-    ].join('\n'),
-  })
-}

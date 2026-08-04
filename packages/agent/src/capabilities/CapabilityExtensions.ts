@@ -144,11 +144,18 @@ export interface CapabilityIntentSignal {
   minimumActionIds?: readonly string[]
 }
 
+export interface CapabilityIntentClassifierContext {
+  scopeId?: CapabilityScopeId
+}
+
 /** Product/capability-owned intent classification; Agent merges only generic signals. */
 export interface CapabilityIntentClassifier {
   id: string
   priority?: number
-  classify(text: string): readonly CapabilityIntentSignal[]
+  classify(
+    text: string,
+    context?: CapabilityIntentClassifierContext
+  ): readonly CapabilityIntentSignal[]
 }
 
 export interface ToolAllocationDelegation {
@@ -257,7 +264,7 @@ export function resolveCapabilityDelegationPolicy(
 }
 
 export function resolveCapabilityScopePolicy(
-  ports?: AgentRuntimeCapabilityPorts
+  ports?: LooseOptional<AgentRuntimeCapabilityPorts>
 ): CapabilityScopePolicy | undefined {
   if (ports?.scopePolicy) return ports.scopePolicy
   const policies = ports?.extensions
@@ -270,7 +277,7 @@ export function resolveCapabilityScopePolicy(
 }
 
 export function resolveCapabilityScopeId(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   facts: CapabilityScopeRuntimeFacts
 ): CapabilityScopeId {
   return (
@@ -281,7 +288,7 @@ export function resolveCapabilityScopeId(
 }
 
 export function decideCapabilityScopeCategory(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   categoryId: ToolCategoryId,
   facts: CapabilityScopeRuntimeFacts
 ): CapabilityScopeCategoryDecision {
@@ -293,7 +300,7 @@ export function decideCapabilityScopeCategory(
 }
 
 export function expandCapabilityCategoryIds(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   categoryIds: readonly ToolCategoryId[]
 ): ToolCategoryId[] {
   const expanded = resolveCapabilityScopePolicy(ports)?.expandCategoryIds?.(categoryIds)
@@ -301,7 +308,7 @@ export function expandCapabilityCategoryIds(
 }
 
 export function resolveCapabilityScopeResidency(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   facts: CapabilityScopeRuntimeFacts
 ): CapabilityScopeResidency {
   return resolveCapabilityScopePolicy(ports)?.getResidency?.(facts) ?? {}
@@ -366,7 +373,7 @@ export function resolveCapabilityValidationInterpreters(
 }
 
 export function resolveCapabilityPromptSegments(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   snapshot: unknown
 ): PromptSegmentDefinition[] {
   const contributors = [
@@ -377,7 +384,7 @@ export function resolveCapabilityPromptSegments(
 }
 
 export function resolveCapabilityContextCollectors(
-  ports?: AgentRuntimeCapabilityPorts
+  ports?: LooseOptional<AgentRuntimeCapabilityPorts>
 ): CapabilityContextCollector[] {
   return [
     ...(ports?.extensions?.flatMap((extension) => extension.contextCollectors ?? []) ?? []),
@@ -404,7 +411,7 @@ export function resolveCapabilityIntentClassifiers(
 }
 
 export async function collectCapabilityContext(
-  ports: AgentRuntimeCapabilityPorts | undefined,
+  ports: LooseOptional<AgentRuntimeCapabilityPorts>,
   messages: readonly unknown[],
   context?: Readonly<Record<string, unknown>>
 ): Promise<Readonly<Record<string, unknown>>> {

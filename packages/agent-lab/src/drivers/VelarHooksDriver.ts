@@ -55,6 +55,14 @@ export interface VelarHooksDriverOptions {
     transcript: readonly TranscriptBlock[],
   ) => string | null;
   readonly prepare?: PollingDriverAdapter["prepare"];
+  /** A durable task session keeps its full trace; one-shot sessions isolate each leg. */
+  readonly observationScope?: "leg" | "session";
+}
+
+/** Durable boundary used to observe one new leg inside a long-lived native conversation. */
+export interface VelarHooksObservationBaseline {
+  readonly blockIds: readonly string[];
+  readonly toolCallIds: readonly string[];
 }
 
 function isRecord(value: unknown): value is RecordValue {
@@ -308,6 +316,16 @@ function assistantRevision(transcript: unknown): string | null {
   return null;
 }
 
+function executionRevision(
+  status: RecordValue,
+  transcript: unknown,
+): string | null {
+  const assistant = assistantRevision(transcript);
+  const executionEventCount = nullableNumber(status.executionEventCount);
+  if (assistant === null && executionEventCount === null) return null;
+  return `${executionEventCount ?? "unknown"}:${assistant ?? "no-assistant"}`;
+}
+
 function budgetUsage(
   debug: unknown,
   wallClockMs: number | null = null,
@@ -347,6 +365,7 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
       readonly toolCallIds: ReadonlySet<string>;
     }
   >();
+  const preparedLegBaselines = new Set<string>();
   const capabilities: DriverCapabilities = {
     observes: coverage({
       transcript: "full",
@@ -395,7 +414,37 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
     return value;
   }
 
-  return createPollingDriver(
+  function restoreObservationBaseline(
+    session: SessionHandle,
+    baseline: VelarHooksObservationBaseline,
+  ): void {
+    legBaselines.set(session.id, {
+      blockIds: new Set(baseline.blockIds),
+      toolCallIds: new Set(baseline.toolCallIds),
+    });
+  }
+
+  async function captureObservationBaseline(
+    session: SessionHandle,
+  ): Promise<VelarHooksObservationBaseline> {
+    const before = await snapshot(session);
+    const includeSessionHistory = options.observationScope === "session";
+    const baseline = {
+      blockIds: includeSessionHistory
+        ? []
+        : transcriptBlocks(before.transcript).map((block) => block.id),
+      toolCallIds: includeSessionHistory
+        ? []
+        : debugTurns(before.debug).flatMap((turn) =>
+            turn.toolCalls.map((call) => call.id),
+          ),
+    } satisfies VelarHooksObservationBaseline;
+    restoreObservationBaseline(session, baseline);
+    preparedLegBaselines.add(session.id);
+    return baseline;
+  }
+
+  const driver = createPollingDriver(
     {
       id: options.id,
       capabilities: async () => capabilities,
@@ -422,17 +471,10 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
       },
       prepare: options.prepare ?? (async () => undefined),
       send: async (session, leg) => {
-        const before = latest.get(session.id);
-        legBaselines.set(session.id, {
-          blockIds: new Set(
-            transcriptBlocks(before?.transcript).map((block) => block.id),
-          ),
-          toolCallIds: new Set(
-            debugTurns(before?.debug).flatMap((turn) =>
-              turn.toolCalls.map((call) => call.id),
-            ),
-          ),
-        });
+        if (!preparedLegBaselines.delete(session.id)) {
+          await captureObservationBaseline(session);
+          preparedLegBaselines.delete(session.id);
+        }
         const response = await client.command({
           ...commandExtras,
           ...(options.sendParameters?.(session, leg) ?? leg.driverParameters),
@@ -451,10 +493,10 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
         const unavailableDetail =
           options.classifyUnavailable?.(transcript) ?? null;
         return {
-          running: status.running === true,
+          running: coordinatorRunning(status),
           awaitingConfirmation: status.hasPendingConfirmation === true,
           awaitingInput: status.hasPendingInput === true,
-          revision: assistantRevision(value.transcript),
+          revision: executionRevision(status, value.transcript),
           usage: budgetUsage(
             value.debug,
             Date.now() - (openedAt.get(session.id) ?? Date.now()),
@@ -497,7 +539,7 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
           transcript,
           turns,
           runtime: {
-            running: nullableBoolean(status.running),
+            running: coordinatorRunning(status),
             awaitingConfirmation: nullableBoolean(
               status.hasPendingConfirmation,
             ),
@@ -545,8 +587,21 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
         openedAt.delete(session.id);
         latest.delete(session.id);
         legBaselines.delete(session.id);
+        preparedLegBaselines.delete(session.id);
       },
     },
     options.polling,
+  );
+  return Object.assign(driver, {
+    captureObservationBaseline,
+    restoreObservationBaseline,
+  });
+}
+
+function coordinatorRunning(status: RecordValue): boolean {
+  return (
+    status.running === true ||
+    status.pendingPrompt === true ||
+    (nullableNumber(status.queuedInputs) ?? 0) > 0
   );
 }

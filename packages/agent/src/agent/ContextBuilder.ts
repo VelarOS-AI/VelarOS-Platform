@@ -13,7 +13,7 @@
 //  - **裁剪必须出 trace**（`SkippedPromptSegmentTrace`）：静默裁剪的后果是行为莫名变化且
 //    无从复现——这是历史上最难查的一类问题。
 //  - **组装是纯函数**：同一输入恒得同一提示词（金标轨迹逐字节比对依赖它）。
-import { isEmpty,isPresent } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
 import {
@@ -111,90 +111,23 @@ function wrapCdata(text: string): string {
   return `<![CDATA[\n${text.replaceAll(']]>', ']]]]><![CDATA[>')}\n]]>`
 }
 
-function getPromptPriorityTier(priority: number): 'P0' | 'P1' | 'P2' | 'P3' {
-  if (priority < 100) return 'P0'
-  if (priority < 1_000) return 'P1'
-  if (priority < 3_000) return 'P2'
-  return 'P3'
+function formatPromptSection(part: PromptContribution): string {
+  const name = part.label?.trim() || part.id
+  return [
+    `  <section name="${escapeXmlAttribute(name)}">`,
+    wrapCdata(part.text),
+    '  </section>',
+  ].join('\n')
 }
 
-type StructuredPromptPart = PromptContribution & {
-  mergedIds?: string[]
-  priorityEnd?: number
-}
-
-function canMergeStructuredPromptPart(part: PromptContribution): boolean {
-  if (part.source === 'user' || part.source === 'inline') return false
-
-  return part.priority >= 1_000
-}
-
-function mergeStructuredPromptParts(parts: PromptContribution[]): StructuredPromptPart[] {
-  const merged: StructuredPromptPart[] = []
-
-  for (const part of parts) {
-    const tier = getPromptPriorityTier(part.priority)
-    const previous = merged.at(-1)
-    const previousIds = previous?.mergedIds ?? (previous ? [previous.id] : [])
-    const previousTextLength = previous?.text.length ?? 0
-    const canMergeWithPrevious =
-      previous &&
-      canMergeStructuredPromptPart(previous) &&
-      canMergeStructuredPromptPart(part) &&
-      previous.stability === part.stability &&
-      previous.source === part.source &&
-      getPromptPriorityTier(previous.priority) === tier &&
-      previousTextLength + part.text.length <= 12_000
-
-    if (!canMergeWithPrevious) {
-      merged.push({ ...part })
-      continue
-    }
-
-    previous.id =
-      previousIds.length === 1
-        ? `${previousIds[0]}+${part.id}`
-        : `${previousIds[0]}+...+${part.id}`
-    previous.label = previous.label ?? part.label
-    previous.priorityEnd = Math.max(previous.priorityEnd ?? previous.priority, part.priority)
-    previous.mergedIds = [...previousIds, part.id]
-    previous.text = [previous.text, part.text].join('\n\n')
-  }
-
-  return merged
-}
-
-function formatPromptSegment(part: StructuredPromptPart): string {
-  const priorityRange = part.priorityEnd
-    ? `${part.priority}-${part.priorityEnd}`
-    : String(part.priority)
-  const attributes = [
-    ['id', part.id],
-    ['src', part.source],
-    ['st', part.stability],
-    ['p', priorityRange],
-    ['tier', getPromptPriorityTier(part.priority)],
-    part.retention === 'protected' ? ['ret', 'protected'] : null,
-    part.mergedIds ? ['n', String(part.mergedIds.length)] : null,
-  ]
-    .filter(isPresent)
-    .map(([key, value]) => `${key}="${escapeXmlAttribute(value)}"`)
-    .join(' ')
-
-  return [`  <seg ${attributes}>`, wrapCdata(part.text), '  </seg>'].join('\n')
-}
-
-function formatPromptLayer(args: {
-  name: 'stable' | 'dynamic'
-  cacheable: boolean
+function formatPromptBlock(args: {
+  name: 'instructions' | 'current_context'
   parts: PromptContribution[]
 }): string {
-  const parts = mergeStructuredPromptParts(args.parts)
-
   return [
-    `<layer name="${args.name}" cache="${args.cacheable ? 1 : 0}">`,
-    ...parts.map((part) => formatPromptSegment(part)),
-    '</layer>',
+    `<${args.name}>`,
+    ...args.parts.map((part) => formatPromptSection(part)),
+    `</${args.name}>`,
   ].join('\n')
 }
 
@@ -202,33 +135,23 @@ function buildStructuredSystemPrompt(args: {
   stableParts: PromptContribution[]
   dynamicParts: PromptContribution[]
 }): { systemPrompt: string; stableCutoff: number } {
-  const header = [
-    '<sp v="2">',
-    '<rules>sp=system prompt. layer groups stable/cacheable and dynamic/current-turn text. seg=prompt block. src=source; st=stability; p=priority, lower wins; tier=P0..P3; ret=protected means never trim; n=merged segment count. P0 wins conflicts.</rules>',
-  ].join('\n')
-  const stablePrefix = [
-    header,
-    formatPromptLayer({
-      name: 'stable',
-      cacheable: true,
-      parts: args.stableParts,
-    }),
-  ].join('\n')
+  // Prompt governance metadata belongs to `BuiltContext.segments`, not to the model. The model
+  // receives only descriptive sections; stable and current blocks are independently valid XML so
+  // provider delivery can move the current block behind history without splitting an XML document.
+  const stablePrefix = formatPromptBlock({
+    name: 'instructions',
+    parts: args.stableParts,
+  })
 
-  if (isEmpty(args.dynamicParts)) {
-    const systemPrompt = `${stablePrefix}\n</sp>`
-    return { systemPrompt, stableCutoff: systemPrompt.length }
-  }
+  if (isEmpty(args.dynamicParts)) return { systemPrompt: stablePrefix, stableCutoff: stablePrefix.length }
 
   return {
     systemPrompt: [
       stablePrefix,
-      formatPromptLayer({
-        name: 'dynamic',
-        cacheable: false,
+      formatPromptBlock({
+        name: 'current_context',
         parts: args.dynamicParts,
       }),
-      '</sp>',
     ].join('\n'),
     stableCutoff: stablePrefix.length,
   }
@@ -482,7 +405,7 @@ class ContextBuilder {
     const extras: PromptContribution[] = []
     for (const item of appended) {
       const text = item.text.trim()
-      if (text === '' || known.has(item.id)) continue
+      if (isEmpty(text) || known.has(item.id)) continue
       known.add(item.id)
       extras.push({
         id: item.id,
@@ -494,7 +417,7 @@ class ContextBuilder {
         text,
       })
     }
-    if (extras.length === 0) return composition.dynamicParts
+    if (isEmpty(extras)) return composition.dynamicParts
 
     return [...composition.dynamicParts, ...extras].sort(
       (left, right) => left.priority - right.priority

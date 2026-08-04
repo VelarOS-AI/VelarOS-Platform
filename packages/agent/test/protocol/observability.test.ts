@@ -45,4 +45,32 @@ describe('execution observability protocol', () => {
       }).success
     ).toBe(false)
   })
+
+  test('accepts historical model spans and structured failure evidence', () => {
+    const baseModelSpan = {
+      spanId: 'model-1',
+      parentSpanId: 'turn-1',
+      runId: 'run-1',
+      sessionId: 'session-1',
+      name: 'provider-request',
+      startedAt: 1,
+      endedAt: 2,
+      status: 'ok' as const,
+      metrics: emptyExecutionSpanMetrics(),
+      category: 'model' as const,
+      provider: 'airjelly',
+      model: 'deepseek/deepseek-v4-pro',
+      requestFingerprint: null,
+      finishReason: null,
+    }
+    expect(ExecutionSpanSchema.safeParse(baseModelSpan).success).toBe(true)
+    expect(
+      ExecutionSpanSchema.safeParse({
+        ...baseModelSpan,
+        status: 'error',
+        errorCode: 'QUOTA_EXCEEDED',
+        errorMessage: '模型服务额度已用尽，请补充额度或切换服务商后重试。',
+      }).success
+    ).toBe(true)
+  })
 })

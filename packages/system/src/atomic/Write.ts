@@ -1,7 +1,7 @@
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isFalse } from '@velaros-ai/core'
+import { isFalse, isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../Types.js'
@@ -12,11 +12,19 @@ import {
   resolveSystemPathInput,
   writeSystemFileAtomically,
 } from './Filesystem.js'
+import { executeAtomicRead } from './Read.js'
 import { confirmSensitiveSystemMutation } from './SystemMutationBoundary.js'
+
+export interface AtomicWriteSource {
+  path: string
+  startLine: number
+  endLine: number
+}
 
 export interface AtomicWriteInput {
   path: string
-  content: string
+  content?: string
+  source?: AtomicWriteSource
   overwrite?: boolean
   maxBytes?: number
 }
@@ -26,6 +34,23 @@ export interface AtomicWriteResult {
   bytes: number
   created: boolean
   changed: boolean
+  copiedFrom?: AtomicWriteSource
+}
+
+async function resolveAtomicWriteContent(input: AtomicWriteInput): Promise<{
+  content: string
+  copiedFrom?: AtomicWriteSource
+}> {
+  const hasContent = isPresent(input.content)
+  const hasSource = isPresent(input.source)
+  if (hasContent === hasSource) {
+    throw new AppError('VALIDATION', 'Exactly one of content or source must be provided.')
+  }
+  if (hasContent) return { content: input.content! }
+
+  const source = input.source!
+  const result = await executeAtomicRead(source)
+  return { content: result.content, copiedFrom: source }
 }
 
 export async function executeAtomicWrite(
@@ -35,8 +60,10 @@ export async function executeAtomicWrite(
   const resolvedPath = resolveSystemPathInput(input.path)
   await confirmSensitiveSystemMutation(ctx, resolvedPath, 'write')
   const maxBytes = input.maxBytes ?? 1_000_000
+  const resolvedContent = await resolveAtomicWriteContent(input)
+  const content = resolvedContent.content
 
-  if (input.content.includes('\0')) {
+  if (content.includes('\0')) {
     throw new AppError('VALIDATION', 'Content appears to contain binary data and cannot be written as text.')
   }
 
@@ -60,7 +87,7 @@ export async function executeAtomicWrite(
     ? await readSystemTextFile(resolvedPath).catch(() => null)
     : null
   const outputBuffer = encodeSystemTextContent(
-    input.content,
+    content,
     existingTextFile?.encoding ?? 'utf8'
   )
   const contentBytes = outputBuffer.byteLength
@@ -78,6 +105,9 @@ export async function executeAtomicWrite(
     path: resolvedPath,
     bytes: contentBytes,
     created,
-    changed: created || existingTextFile?.content !== input.content,
+    changed: created || existingTextFile?.content !== content,
+    copiedFrom: toOptional(resolvedContent.copiedFrom),
   }
 }
+
+export { resolveAtomicWriteContent }

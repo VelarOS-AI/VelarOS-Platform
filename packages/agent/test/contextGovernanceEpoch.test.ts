@@ -616,6 +616,32 @@ void describe('编译器切换 · 行为对齐', () => {
     assert.equal(registry.peek('align-2')!.ledger.list().length, next.length)
   })
 
+  void test('治理水位使用 tokenizer 与 MMU 校准后的消息密度', () => {
+    const registry = new ContextGovernanceSessionRegistry({
+      config: {
+        cap: 10_000,
+        tailProtectTurns: 1,
+        epochTriggerPercent: 70,
+        epochTargetPercent: 40,
+        minEpochSavingPercent: 1,
+        dashboard: false,
+      },
+    })
+    const compiled = new ProviderRequestCompiler(registry).compileWithReclaim({
+      model: 'gpt-test',
+      systemPrompt: 'system',
+      sessionId: 'calibrated-density-1',
+      messages: buildPressureHistory(6, 3_000),
+      contextWindow: 1_000_000,
+      calibrationFactor: 3,
+    })
+
+    assert.equal(compiled.governanceEpoch?.trigger, 'watermark')
+    assert.equal(compiled.governanceEpoch?.applied, true)
+    assert.ok((compiled.governanceEpoch?.beforeTokens ?? 0) > 7_000)
+    assert.ok((compiled.governanceOccupancyPercent ?? 100) <= 40)
+  })
+
   void test('dashboard 开启时只在尾部追加一块，历史段不动', () => {
     const registry = new ContextGovernanceSessionRegistry()
     const compiled = new ProviderRequestCompiler(registry).compileWithReclaim({

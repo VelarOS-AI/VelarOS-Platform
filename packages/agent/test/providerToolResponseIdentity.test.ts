@@ -38,8 +38,15 @@ function providerToolParts(
 
 async function consumeProviderParts(
   parts: Array<TextStreamPart<ToolSet>>,
-): Promise<{ assistantContent: Awaited<ReturnType<StreamConsumer["consumeAssistantStream"]>>; enqueued: string[] }> {
+): Promise<{
+  assistantContent: Awaited<ReturnType<StreamConsumer["consumeAssistantStream"]>>;
+  emittedReasoning: string;
+  emittedText: string;
+  enqueued: string[];
+}> {
   const enqueued: string[] = [];
+  let emittedReasoning = "";
+  let emittedText = "";
   const consumer = new StreamConsumer({
     get: () => ({}),
     getDescriptor: () => null,
@@ -60,8 +67,12 @@ async function consumeProviderParts(
         },
       },
       events: {
-        emitReasoningDelta: () => undefined,
-        emitTextDelta: () => undefined,
+        emitReasoningDelta: ({ text }) => {
+          emittedReasoning += text;
+        },
+        emitTextDelta: (text) => {
+          emittedText += text;
+        },
         emitGeneratedFile: () => undefined,
         emitSource: () => undefined,
         emitToolStart: () => undefined,
@@ -72,7 +83,7 @@ async function consumeProviderParts(
     },
   );
 
-  return { assistantContent, enqueued };
+  return { assistantContent, emittedReasoning, emittedText, enqueued };
 }
 
 async function consumeToolName(
@@ -152,6 +163,96 @@ void describe("provider response tool identity", () => {
       assistantToolName: "project:read",
       enqueuedToolName: "project:read",
       requestAdvertised: true,
+    });
+  });
+
+  void test("canonicalizes provider aliases in streamed visible text and persisted history", async () => {
+    const result = await consumeProviderParts([
+      {
+        type: "text-delta",
+        id: "text-1",
+        text: "已使用 project__",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "text-delta",
+        id: "text-1",
+        text: "read 完成。",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "finish",
+        finishReason: "stop",
+        totalUsage: {},
+      } as TextStreamPart<ToolSet>,
+    ]);
+
+    expect(result.emittedText).toBe("已使用 project:read 完成。");
+    expect(result.assistantContent).toContainEqual({
+      type: "text",
+      text: "已使用 project:read 完成。",
+    });
+  });
+
+  void test("canonicalizes provider aliases in streamed reasoning and persisted history", async () => {
+    const result = await consumeProviderParts([
+      {
+        type: "reasoning-delta",
+        id: "reasoning-1",
+        text: "I should call project__",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "reasoning-delta",
+        id: "reasoning-1",
+        text: "read next.",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "text-delta",
+        id: "text-1",
+        text: "Done.",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "finish",
+        finishReason: "stop",
+        totalUsage: {},
+      } as TextStreamPart<ToolSet>,
+    ]);
+
+    expect(result.emittedReasoning).toBe("I should call project:read next.");
+    expect(result.assistantContent).toContainEqual({
+      type: "reasoning",
+      text: "I should call ",
+    });
+    expect(
+      result.assistantContent
+        .filter((part) => part.type === "reasoning")
+        .map((part) => part.text)
+        .join(""),
+    ).toBe("I should call project:read next.");
+  });
+
+  void test("canonicalizes provider aliases recovered from raw reasoning", async () => {
+    const result = await consumeProviderParts([
+      {
+        type: "raw",
+        rawValue: {
+          choices: [{ delta: { reasoning_content: "Use project__read." } }],
+        },
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "text-delta",
+        id: "text-1",
+        text: "Done.",
+      } as TextStreamPart<ToolSet>,
+      {
+        type: "finish",
+        finishReason: "stop",
+        totalUsage: {},
+      } as TextStreamPart<ToolSet>,
+    ]);
+
+    expect(result.emittedReasoning).toBe("Use project:read.");
+    expect(result.assistantContent).toContainEqual({
+      type: "reasoning",
+      text: "Use project:read.",
     });
   });
 

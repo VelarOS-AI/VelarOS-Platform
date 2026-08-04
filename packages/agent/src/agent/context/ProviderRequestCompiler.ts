@@ -25,9 +25,10 @@
  */
 import type { ModelMessage } from 'ai'
 
-import type {
-  ContextUsageEstimate,
-  EstimateContextUsageOptions,
+import {
+  type ContextUsageEstimate,
+  estimateContextUsage,
+  type EstimateContextUsageOptions,
 } from '@velaros-ai/agent'
 import { isArray, isEmpty, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -52,6 +53,7 @@ import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
 } from './providerRequest/stages/retainedContextStage'
+import { estimateMessageChars } from './residency/messageFacts'
 import type { ContextLedgerEntry } from './ContextLedger'
 import {
   type ContextActiveTaskInput,
@@ -207,6 +209,7 @@ export class ProviderRequestCompiler {
       budget: {
         tailProtectTurns: governance.session.config.tailProtectTurns,
         budgetTokens: governance.budgetTokens,
+        charsPerToken: governance.charsPerToken,
       },
       stablePrefix,
     })
@@ -285,6 +288,7 @@ export class ProviderRequestCompiler {
     session: ContextGovernanceSession
     report: Nullable<GovernanceEpochReport>
     budgetTokens: number
+    charsPerToken: number
   } {
     const session =
       this.governanceSessions.resolve(input.sessionId?.trim() || EphemeralGovernanceSessionId)
@@ -302,17 +306,23 @@ export class ProviderRequestCompiler {
       })
     }
 
+    const charsPerToken = resolveHistoryCharsPerToken(input, messages)
     const report = session.governTurn({
       at,
       modelWindowTokens: input.contextWindow ?? input.contextUsageOptions?.contextWindow,
+      charsPerToken,
     })
     const budgetTokens = resolveBudgetTokens(session, input)
-    return { session, report, budgetTokens }
+    return { session, report, budgetTokens, charsPerToken }
   }
 
   private buildTailBlocks(
     input: CompileProviderRequestInput,
-    governance: { session: ContextGovernanceSession; budgetTokens: number },
+    governance: {
+      session: ContextGovernanceSession
+      budgetTokens: number
+      charsPerToken: number
+    },
     projectedTokens: number
   ): ModelMessage[] {
     const blocks = [...(input.tailBlocks ?? [])]
@@ -330,6 +340,33 @@ export class ProviderRequestCompiler {
     if (dashboard) blocks.push(dashboard)
     return blocks
   }
+}
+
+/**
+ * 驻留账本以消息正文字符记账，但字符/token 密度会随语言、结构化工具载荷和模型 tokenizer
+ * 大幅变化。固定按 4 字符/token 会把中文与 JSON 密集的长会话低估数倍，导致治理 epoch 在
+ * 模型已经被旧轨迹淹没后仍不触发。这里复用出核预算的同一 tokenizer 与 MMU 校准系数，
+ * 把本轮历史折算成账本投影可复用的密度；治理状态机仍保持纯函数，只多接收一个显式量纲。
+ */
+function resolveHistoryCharsPerToken(
+  input: CompileProviderRequestInput,
+  messages: readonly ModelMessage[]
+): number {
+  const messageChars = messages.reduce(
+    (total, message) => total + estimateMessageChars(message),
+    0
+  )
+  if (messageChars <= 0) return 4
+
+  const estimateOptions = input.contextUsageOptions ?? {}
+  const estimate = estimateContextUsage(input.model, '', [...messages], {
+    contextWindow: input.contextWindow ?? estimateOptions.contextWindow,
+    calibrationFactor: input.calibrationFactor ?? estimateOptions.calibrationFactor,
+  })
+  if (estimate.estimatedTokens <= 0) return 4
+
+  // 极端 tokenizer/异常样本也不得把治理器推到无穷敏感或完全失明。
+  return Math.min(8, Math.max(0.25, messageChars / estimate.estimatedTokens))
 }
 
 function rewriteProviderToolNames(

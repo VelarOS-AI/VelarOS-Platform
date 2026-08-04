@@ -91,6 +91,22 @@ export interface SystemVerificationSummary {
   issues: string[]
 }
 
+export interface SystemCommandOutputWindow {
+  /** 返回窗口保留完整输出的末尾，而不是开头。 */
+  retained: 'tail'
+  /** false 表示整体输出更长；不影响已返回末尾窗口的真实性。 */
+  complete: boolean
+  /** 进程结束后窗口的末端与完整输出末端一致。 */
+  endPreserved: true
+}
+
+export interface SystemCommandOutputContinuation {
+  /** 完整输出由会话内部终端日志管理，不是普通工作区文件。 */
+  kind: 'session-terminal-log'
+  /** 交给会话终端输出召回能力的稳定查询词。 */
+  query: string
+}
+
 export interface SystemCommandResult {
   command: string
   cwd: string
@@ -103,6 +119,8 @@ export interface SystemCommandResult {
   timedOut: boolean
   aborted: boolean
   truncated: boolean
+  outputWindow?: SystemCommandOutputWindow
+  outputContinuation?: SystemCommandOutputContinuation
   success: boolean
   backgroundProcess?: SystemBackgroundProcessInfo
   verification: SystemVerificationSummary

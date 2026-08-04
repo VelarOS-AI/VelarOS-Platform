@@ -26,6 +26,7 @@ export interface AgentIntentPlan {
   requiresToolDiscovery: boolean
   requiresMutation: boolean
   requiresValidation: boolean
+  evidenceCategoryIds: ToolCategoryId[]
   minimumActionIds: string[]
 }
 
@@ -100,6 +101,7 @@ export interface RecoveryRunPlan {
 
 export interface ValidationRunPlan {
   evidenceRequired: boolean
+  evidenceCategoryIds: ToolCategoryId[]
   minimumActionIds: string[]
   finishingGate: 'none' | 'remind' | 'validate'
 }

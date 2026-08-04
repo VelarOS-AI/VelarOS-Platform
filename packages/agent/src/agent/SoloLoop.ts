@@ -54,6 +54,7 @@ import {
   type ToolExecutorEvents,
 } from '../tools'
 
+import { AgentRunEvidenceTracker } from './control-plane/AgentRunEvidenceTracker'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -69,7 +70,7 @@ import {
   type AgentExecutionLimits,
   resolveAgentExecutionLimits,
 } from './ExecutionLimits'
-import type { AgentTurnToolExecutor } from './history'
+import type { AgentTurnToolExecutor, AgentTurnToolResult } from './history'
 import { createInternalFollowUpMessage } from './history'
 import { extractLatestUserTextFromMessages } from './IntentSignals'
 import {
@@ -202,7 +203,7 @@ interface SoloLoopTurnRunner<TContext extends SoloLoopToolContext, TEvents exten
   appendToolResultsToHistory(
     history: ModelMessage[],
     executor: AgentTurnToolExecutor
-  ): Promise<void>
+  ): Promise<AgentTurnToolResult[]>
 }
 
 interface SoloLoopRunContext<TContext extends SoloLoopToolContext> {
@@ -481,6 +482,7 @@ class SoloStreamLoop<
     // 工具参数流中断/非法的反应式自纠计数；一旦有工具调用成功即清零。
     let interruptedToolCallRecoveryAttempts = 0
     const finishingGateBlockTracker = createSoloFinishingGateBlockTracker()
+    const runEvidenceTracker = new AgentRunEvidenceTracker()
     // 目标生命周期：整个 solo 执行共享一个实例，收尾门同轮 inspect→record 复用单次取数。
     const goalLifecycle = new SoloGoalLifecycle(args.toolContext.activeContext)
     if (isTrue(args.config.goalMode)) {
@@ -580,6 +582,7 @@ class SoloStreamLoop<
         toolSchemaChars,
         promptToolCategories,
       } = preparedRunPlan
+      runEvidenceTracker.require(runPlan.validation)
       // 工具列表在缺页降级（narrow-tools 档）时可能被收窄，故用 let。
       let allowedTools = preparedRunPlan.allowedTools
       const activeThinkingDepth = runProfileDefinition.defaults.thinkingDepth
@@ -832,6 +835,18 @@ class SoloStreamLoop<
             events: args.events,
             log: this.log,
           })
+          const categoryByToolName = new Map(
+            args.toolContext
+              .listTools('all')
+              .map((tool) => [tool.name, tool.categoryId] as const)
+          )
+          runEvidenceTracker.record(
+            toolUseContinuation.toolResults.map((result) => ({
+              toolName: result.toolName,
+              categoryId: toOptional(categoryByToolName.get(result.toolName)),
+              succeeded: !result.error,
+            }))
+          )
           if (toolUseContinuation.status === 'completed') {
             runScope?.end({ status: 'ok' })
             return loopFinish({ status: 'completed' })
@@ -860,6 +875,7 @@ class SoloStreamLoop<
           emitAbort: () => this.runtimeHelper.emitAbort(args.events),
           tickLoopReminders,
           runAutomaticVerification,
+          evaluateRunEvidence: () => runEvidenceTracker.evaluate(),
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
           // 显式 goalMode 与模型通过 goal:create 自主建立的目标都进入同一收尾门。
@@ -902,11 +918,11 @@ class SoloStreamLoop<
         })
         return loopFinish({ status: finishingGate.status })
       } catch (error) {
+        const appError = AppError.from(error)
         // 观测：本轮 provider 回合出错收敛（幂等——try 内已 ok 收敛则此处吞掉）。
-        endLoopTurnSpansError(spans)
+        endLoopTurnSpansError(spans, appError)
         // 反应式自纠：安全拒绝未完整参数后，按真实原因给一次有界纠正机会。
         // 截断可允许两次分批收敛，普通非法 JSON 只允许一次，避免重复空烧额度。
-        const appError = AppError.from(error)
         const recoveryKind = resolveInterruptedToolCallRecoveryKind(appError)
         if (
           appError.code === 'MODEL_STREAM_INTERRUPTED' &&

@@ -8,32 +8,32 @@ import {
   isString,
   isUndefined,
   numberOrNull,
-} from '@velaros-ai/core'
-import { Log } from '@velaros-ai/core/logger'
-import { isEmpty } from '@velaros-ai/core/utils/array'
-import { mapDefined } from '@velaros-ai/core/utils/mapDefined'
-import { toOptional } from '@velaros-ai/core/utils/nullish'
-import { optionalWhenLazy } from '@velaros-ai/core/utils/optionalWhen'
-import { readFirstString } from '@velaros-ai/core/utils/unknownJsonRecord'
+} from "@velaros-ai/core";
+import { Log } from "@velaros-ai/core/logger";
+import { isEmpty } from "@velaros-ai/core/utils/array";
+import { mapDefined } from "@velaros-ai/core/utils/mapDefined";
+import { toOptional } from "@velaros-ai/core/utils/nullish";
+import { optionalWhenLazy } from "@velaros-ai/core/utils/optionalWhen";
+import { readFirstString } from "@velaros-ai/core/utils/unknownJsonRecord";
 
 interface ToolResultCompactionLimits {
-  maxSerializedLength: number
-  maxStringLength: number
-  maxDepth: number
-  maxArrayItems: number
-  preserveLargeContent: boolean
+  maxSerializedLength: number;
+  maxStringLength: number;
+  maxDepth: number;
+  maxArrayItems: number;
+  preserveLargeContent: boolean;
 }
 
 interface ToolInputCompactionLimits {
-  maxSerializedLength: number
-  maxStringLength: number
-  maxArrayItems: number
+  maxSerializedLength: number;
+  maxStringLength: number;
+  maxArrayItems: number;
 }
 
 // 2026-07 真机取证（Downloads 整理会话 9 轮空转）后校准：8_000/50 会把一次 137 条目录列表
 // 裁成 50 条,模型被迫 grep 分批+三连 recall 补查,一个 ls 级任务烧 9 轮。上限对齐业界
 // agent CLI 的单发预算（~30K 字符）;历史膨胀由注意力路由/微压缩按压力回收,不在写入时预裁。
-export const ModelToolResultMaxSerializedLength = 32_000
+export const ModelToolResultMaxSerializedLength = 32_000;
 
 const ModelToolResultLimits: ToolResultCompactionLimits = {
   maxSerializedLength: ModelToolResultMaxSerializedLength,
@@ -43,7 +43,7 @@ const ModelToolResultLimits: ToolResultCompactionLimits = {
   // 曾为 12/50:与工具自身 truncated:false 矛盾、静默否决模型显式 limit（铁律⑦）,已放宽。
   maxArrayItems: 400,
   preserveLargeContent: false,
-}
+};
 
 /**
  * 持久化/召回用全保真档位：serializedResult 是 context:recall 的唯一数据源,写入时裁剪
@@ -56,16 +56,16 @@ const RecallToolResultLimits: ToolResultCompactionLimits = {
   maxDepth: 12,
   maxArrayItems: 5_000,
   preserveLargeContent: true,
-}
+};
 
-const ToolSpaceResultOps = new Set(['find', 'page', 'map', 'read', 'replace'])
+const ToolSpaceResultOps = new Set(["find", "page", "map", "read", "replace"]);
 
 const ToolSpaceModelResultLimits = {
   maxSerializedLength: 48_000,
   maxStringLength: 2_000,
   maxDepth: 18,
   maxArrayItems: 80,
-} as const
+} as const;
 
 const DisplayToolResultLimits: ToolResultCompactionLimits = {
   maxSerializedLength: 60_000,
@@ -73,56 +73,58 @@ const DisplayToolResultLimits: ToolResultCompactionLimits = {
   maxDepth: 8,
   maxArrayItems: 20,
   preserveLargeContent: true,
-}
+};
 
 const ModelToolInputLimits: ToolInputCompactionLimits = {
   maxSerializedLength: 12_000,
   maxStringLength: 900,
-  maxArrayItems: 12,
-}
+  // 结构化文档工具经常包含超过 12 个短块；若在 provider 历史中截断数组，模型会误判执行失败，
+  // 进而重复追加页面。
+  maxArrayItems: 100,
+};
 
-const LargeToolInputFieldThreshold = 240
-const WidgetCodeModelReplayMaxLength = 8_000
+const LargeToolInputFieldThreshold = 240;
+const WidgetCodeModelReplayMaxLength = 8_000;
 
 const LargeToolInputKeys = new Set([
-  'content',
-  'data',
-  'image',
-  'base64',
-  'latexSource',
-  'widget_code',
-  'html',
-  'svg',
-  'source',
-  'newContent',
-  'replacement',
-  'replace',
-])
+  "content",
+  "data",
+  "image",
+  "base64",
+  "latexSource",
+  "widget_code",
+  "html",
+  "svg",
+  "source",
+  "newContent",
+  "replacement",
+  "replace",
+]);
 
-const ToolInputKeysWithoutPreview = new Set(['widget_code'])
+const ToolInputKeysWithoutPreview = new Set(["widget_code"]);
 
 function isToolSpaceProtocolResult(result: unknown): boolean {
-  if (!isPlainObject(result)) return false
+  if (!isPlainObject(result)) return false;
 
-  const op = result['op']
-  if (!isString(op) || !ToolSpaceResultOps.has(op)) return false
+  const op = result["op"];
+  if (!isString(op) || !ToolSpaceResultOps.has(op)) return false;
 
   return (
-    isPresent(result['pages']) ||
-    isPresent(result['categories']) ||
-    isPresent(result['guide']) ||
-    isPresent(result['requiresApprovalDetails']) ||
-    isPresent(result['requiresUserActionDetails']) ||
-    isPresent(result['skippedPageDetails']) ||
-    isPresent(result['preparedTools'])
-  )
+    isPresent(result["pages"]) ||
+    isPresent(result["categories"]) ||
+    isPresent(result["guide"]) ||
+    isPresent(result["requiresApprovalDetails"]) ||
+    isPresent(result["requiresUserActionDetails"]) ||
+    isPresent(result["skippedPageDetails"]) ||
+    isPresent(result["preparedTools"])
+  );
 }
 
 function applyToolSpaceResultLimits(
   result: unknown,
-  limits: ToolResultCompactionLimits
+  limits: ToolResultCompactionLimits,
 ): ToolResultCompactionLimits {
-  if (!isToolSpaceProtocolResult(result)) return limits
+  if (!isToolSpaceProtocolResult(result)) return limits;
 
   // ContextOS 工具空间结果是“页表元数据”，不是普通业务输出。schema / activation /
   // dependencyRules 等深层结构会直接决定下一步工具换入参数，不能被
@@ -131,117 +133,132 @@ function applyToolSpaceResultLimits(
     ...limits,
     maxSerializedLength: Math.max(
       limits.maxSerializedLength,
-      ToolSpaceModelResultLimits.maxSerializedLength
+      ToolSpaceModelResultLimits.maxSerializedLength,
     ),
-    maxStringLength: Math.max(limits.maxStringLength, ToolSpaceModelResultLimits.maxStringLength),
+    maxStringLength: Math.max(
+      limits.maxStringLength,
+      ToolSpaceModelResultLimits.maxStringLength,
+    ),
     maxDepth: Math.max(limits.maxDepth, ToolSpaceModelResultLimits.maxDepth),
-    maxArrayItems: Math.max(limits.maxArrayItems, ToolSpaceModelResultLimits.maxArrayItems),
+    maxArrayItems: Math.max(
+      limits.maxArrayItems,
+      ToolSpaceModelResultLimits.maxArrayItems,
+    ),
     preserveLargeContent: true,
-  }
+  };
 }
 
 function appendJsonPathKey(parent: string, key: string): string {
-  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) return `${parent}.${key}`
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) return `${parent}.${key}`;
 
-  return `${parent}[${JSON.stringify(key)}]`
+  return `${parent}[${JSON.stringify(key)}]`;
 }
 
 function appendJsonPathIndex(parent: string, index: number): string {
-  return `${parent}[${index}]`
+  return `${parent}[${index}]`;
 }
 
 function describeTruncatedValueType(value: unknown): string {
-  if (isArray(value)) return 'array'
-  if (isNull(value)) return 'null'
-  if (isObject(value)) return 'object'
+  if (isArray(value)) return "array";
+  if (isNull(value)) return "null";
+  if (isObject(value)) return "object";
 
-  return typeof value
+  return typeof value;
 }
 
-function buildDepthLimitMarker(value: unknown, jsonPath: string): Record<string, unknown> {
+function buildDepthLimitMarker(
+  value: unknown,
+  jsonPath: string,
+): Record<string, unknown> {
   const marker: Record<string, unknown> = {
     __truncated: true,
-    reason: 'depth-limit',
+    reason: "depth-limit",
     jsonPath,
     omittedType: describeTruncatedValueType(value),
     // 统一召回 affordance 形(与折叠桩信封 retrieval 同构);<toolCallId> 由模型代入本次调用 id。
     retrieval: {
-      tool: 'context:recall',
+      tool: "context:recall",
       args: {
-        ref: '<toolCallId>',
-        refKind: 'tool-payload',
+        ref: "<toolCallId>",
+        refKind: "tool-payload",
         jsonPath,
         reason: `Read the full tool result payload and inspect ${jsonPath}.`,
       },
     },
-  }
+  };
 
   if (isArray(value)) {
-    marker.omittedLength = value.length
-    return marker
+    marker.omittedLength = value.length;
+    return marker;
   }
 
   if (isPlainObject(value)) {
-    const keys = Object.keys(value)
-    marker.omittedKeys = keys.slice(0, 12)
-    if (keys.length > 12) marker.omittedKeyCount = keys.length
+    const keys = Object.keys(value);
+    marker.omittedKeys = keys.slice(0, 12);
+    if (keys.length > 12) marker.omittedKeyCount = keys.length;
   }
 
-  return marker
+  return marker;
 }
 
 function cloneToolResult(
   value: unknown,
   depth: number,
   limits: ToolResultCompactionLimits,
-  jsonPath = '$'
+  jsonPath = "$",
 ): unknown {
   if (depth > limits.maxDepth) {
-    if (isPresent(value) && isObject(value)) return buildDepthLimitMarker(value, jsonPath)
+    if (isPresent(value) && isObject(value))
+      return buildDepthLimitMarker(value, jsonPath);
 
-    return value
+    return value;
   }
 
-  if (!isPresent(value) || !isObject(value)) return value
+  if (!isPresent(value) || !isObject(value)) return value;
 
   if (isArray(value)) {
     const items = value
       .slice(0, limits.maxArrayItems)
       .map((item, index) =>
-        cloneToolResult(item, depth + 1, limits, appendJsonPathIndex(jsonPath, index))
-      )
+        cloneToolResult(
+          item,
+          depth + 1,
+          limits,
+          appendJsonPathIndex(jsonPath, index),
+        ),
+      );
 
     if (value.length > limits.maxArrayItems) {
       items.push({
         __truncatedItems: value.length - limits.maxArrayItems,
         jsonPath,
         nextOffset: limits.maxArrayItems,
-      })
+      });
     }
 
-    return items
+    return items;
   }
 
-  if (!isPlainObject(value)) return value
+  if (!isPlainObject(value)) return value;
 
-  const record: Record<string, unknown> = {}
+  const record: Record<string, unknown> = {};
   for (const [key, nestedValue] of Object.entries(value)) {
     if (
-      key === 'systemToolSuggestion' ||
-      key === 'capabilityAutoApprovalNotice' ||
-      key === 'userActionCards'
+      key === "systemToolSuggestion" ||
+      key === "capabilityAutoApprovalNotice" ||
+      key === "userActionCards"
     ) {
-      continue
+      continue;
     }
 
     record[key] = cloneToolResult(
       nestedValue,
       depth + 1,
       limits,
-      appendJsonPathKey(jsonPath, key)
-    )
+      appendJsonPathKey(jsonPath, key),
+    );
   }
-  return record
+  return record;
 }
 
 /**
@@ -249,19 +266,19 @@ function cloneToolResult(
  * 展示侧保留这些字段的细节，模型侧仍会按预算压缩，避免工具结果撑爆上下文。
  */
 const LargeContentKeys = new Set([
-  'content',
-  'diff',
-  'stdout',
-  'stderr',
-  'excerpt',
-  'preview',
-  'matchedContent',
-  'replacement',
-  'widget_code',
-  'patch',
-  'newContent',
-  'body',
-])
+  "content",
+  "diff",
+  "stdout",
+  "stderr",
+  "excerpt",
+  "preview",
+  "matchedContent",
+  "replacement",
+  "widget_code",
+  "patch",
+  "newContent",
+  "body",
+]);
 
 function trimToolResultStrings(
   value: unknown,
@@ -269,32 +286,36 @@ function trimToolResultStrings(
   limits: ToolResultCompactionLimits,
   maxStringLength: number,
   parentKey?: string,
-  preserveLargeContent = true
+  preserveLargeContent = true,
 ): unknown {
-  if (depth > limits.maxDepth) return value
+  if (depth > limits.maxDepth) return value;
 
   if (isString(value)) {
     // 大内容字段豁免 maxStringLength，不在此处截断
-    if (preserveLargeContent && parentKey && LargeContentKeys.has(parentKey)) return value
-    return value.length > maxStringLength ? `${value.slice(0, maxStringLength)}…` : value
+    if (preserveLargeContent && parentKey && LargeContentKeys.has(parentKey))
+      return value;
+    return value.length > maxStringLength
+      ? `${value.slice(0, maxStringLength)}…`
+      : value;
   }
 
-  if (!isPresent(value) || !isObject(value)) return value
+  if (!isPresent(value) || !isObject(value)) return value;
 
-  if (isArray(value)) return value.map((item) =>
+  if (isArray(value))
+    return value.map((item) =>
       trimToolResultStrings(
         item,
         depth + 1,
         limits,
         maxStringLength,
         undefined,
-        preserveLargeContent
-      )
-    )
+        preserveLargeContent,
+      ),
+    );
 
-  if (!isPlainObject(value)) return value
+  if (!isPlainObject(value)) return value;
 
-  const record: Record<string, unknown> = {}
+  const record: Record<string, unknown> = {};
   for (const [key, nestedValue] of Object.entries(value)) {
     record[key] = trimToolResultStrings(
       nestedValue,
@@ -302,253 +323,296 @@ function trimToolResultStrings(
       limits,
       maxStringLength,
       key,
-      preserveLargeContent
-    )
+      preserveLargeContent,
+    );
   }
-  return record
+  return record;
 }
 
 function describeSerializationValue(value: unknown): Record<string, unknown> {
-  const valueType = isNull(value) ? 'null' : typeof value
-  const constructorName = isObject(value) ? value.constructor?.name : undefined
+  const valueType = isNull(value) ? "null" : typeof value;
+  const constructorName = isObject(value) ? value.constructor?.name : undefined;
   return {
     valueType,
     constructorName: toOptional(constructorName),
-  }
+  };
 }
 
 function serializationErrorMessage(error: unknown): string {
-  const message = readFirstString(error instanceof Error ? error.message : null, error)
-  if (message) return message
-  if (isNull(error)) return 'A null value was caught while serializing the tool result.'
-  if (isUndefined(error)) return 'An undefined value was caught while serializing the tool result.'
-  return String(error)
+  const message = readFirstString(
+    error instanceof Error ? error.message : null,
+    error,
+  );
+  if (message) return message;
+  if (isNull(error))
+    return "A null value was caught while serializing the tool result.";
+  if (isUndefined(error))
+    return "An undefined value was caught while serializing the tool result.";
+  return String(error);
 }
 
 function stringifySerializationError(payload: Record<string, unknown>): string {
   try {
-    const serialized = JSON.stringify(payload)
-    if (isString(serialized) && !isEmpty(serialized)) return serialized
+    const serialized = JSON.stringify(payload);
+    if (isString(serialized) && !isEmpty(serialized)) return serialized;
   } catch {
     // arch-guard:silent-catch-ok The fallback below is static JSON.
   }
-  return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"Tool result serialization failed and the structured fallback could not be serialized."}'
+  return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"Tool result serialization failed and the structured fallback could not be serialized."}';
 }
 
 function buildSerializationErrorResult(
   reason: string,
   message: string,
   value: unknown,
-  error?: unknown
+  error?: unknown,
 ): Record<string, unknown> {
   return {
     serializationError: true,
     reason,
     message,
     ...describeSerializationValue(value),
-    errorName: optionalWhenLazy(error instanceof Error && error.name, () => (error as Error).name),
-  }
+    errorName: optionalWhenLazy(
+      error instanceof Error && error.name,
+      () => (error as Error).name,
+    ),
+  };
 }
 
 function stringifyToolResult(value: unknown): string {
   try {
-    const serialized = JSON.stringify(value)
-    if (isString(serialized) && serialized !== 'null') return serialized
+    const serialized = JSON.stringify(value);
+    if (isString(serialized) && serialized !== "null") return serialized;
 
     const reason = isString(serialized)
-      ? 'tool_result_returned_null'
-      : 'json_stringify_returned_undefined'
+      ? "tool_result_returned_null"
+      : "json_stringify_returned_undefined";
     const message = isString(serialized)
-      ? 'Tool returned top-level null; model-visible fallback inserted so the result is not silently lost.'
-      : 'Tool result could not be serialized to JSON; model-visible fallback inserted.'
-    return stringifySerializationError(buildSerializationErrorResult(reason, message, value))
+      ? "Tool returned top-level null; model-visible fallback inserted so the result is not silently lost."
+      : "Tool result could not be serialized to JSON; model-visible fallback inserted.";
+    return stringifySerializationError(
+      buildSerializationErrorResult(reason, message, value),
+    );
   } catch (error) {
     return stringifySerializationError(
       buildSerializationErrorResult(
-        'json_stringify_threw',
+        "json_stringify_threw",
         serializationErrorMessage(error),
         value,
-        error
-      )
-    )
+        error,
+      ),
+    );
   }
 }
 
 function looksLikeBinaryPayload(value: string): boolean {
-  if (value.startsWith('data:')) return true
+  if (value.startsWith("data:")) return true;
 
-  return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value)
+  return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
 function summarizeToolInputString(value: string, key?: string): string {
-  const field = key ? `"${key}"` : 'string'
-  if (key && ToolInputKeysWithoutPreview.has(key)) return `[omitted ${value.length} chars from ${field}]`
+  const field = key ? `"${key}"` : "string";
+  if (key && ToolInputKeysWithoutPreview.has(key)) return `[history preview omitted ${value.length} chars from ${field}; tool received the full value]`;
 
-  const preview = value.slice(0, 160).replaceAll(/\s+/g, ' ').trim()
+  const preview = value.slice(0, 160).replaceAll(/\s+/g, " ").trim();
 
   return preview
-    ? `[omitted ${value.length} chars from ${field}; preview: ${preview}…]`
-    : `[omitted ${value.length} chars from ${field}]`
+    ? `[history preview omitted ${value.length} chars from ${field}; tool received the full value; preview: ${preview}…]`
+    : `[history preview omitted ${value.length} chars from ${field}; tool received the full value]`;
 }
 
 function buildTruncatedToolResult(
   serialized: string,
-  maxSerializedLength: number
+  maxSerializedLength: number,
 ): { compacted: unknown; serialized: string } {
-  let previewLength = Math.max(0, maxSerializedLength - 160)
+  let previewLength = Math.max(0, maxSerializedLength - 160);
 
   while (previewLength >= 0) {
     const compacted = {
       __truncated: true,
       originalLength: serialized.length,
       preview:
-        serialized.length > previewLength ? `${serialized.slice(0, previewLength)}…` : serialized,
+        serialized.length > previewLength
+          ? `${serialized.slice(0, previewLength)}…`
+          : serialized,
       // 此层不知 toolCallId:<toolCallId> 由模型代入本次工具调用 id(与深度截断标记同约定)。
       retrieval: {
-        tool: 'context:recall',
-        args: { ref: '<toolCallId>', refKind: 'tool-payload' },
+        tool: "context:recall",
+        args: { ref: "<toolCallId>", refKind: "tool-payload" },
       },
-    }
-    const nextSerialized = stringifyToolResult(compacted)
-    if (nextSerialized.length <= maxSerializedLength) return { compacted, serialized: nextSerialized }
+    };
+    const nextSerialized = stringifyToolResult(compacted);
+    if (nextSerialized.length <= maxSerializedLength)
+      return { compacted, serialized: nextSerialized };
 
     if (previewLength === 0) {
-      break
+      break;
     }
 
-    const overflow = nextSerialized.length - maxSerializedLength
-    previewLength = Math.max(0, previewLength - Math.max(overflow, 128))
+    const overflow = nextSerialized.length - maxSerializedLength;
+    previewLength = Math.max(0, previewLength - Math.max(overflow, 128));
   }
 
   const compacted = {
     __truncated: true,
     originalLength: serialized.length,
-  }
-  const nextSerialized = stringifyToolResult(compacted)
+  };
+  const nextSerialized = stringifyToolResult(compacted);
 
-  if (nextSerialized.length <= maxSerializedLength) return { compacted, serialized: nextSerialized }
+  if (nextSerialized.length <= maxSerializedLength)
+    return { compacted, serialized: nextSerialized };
 
   return {
     compacted: { __truncated: true },
     serialized: '{"__truncated":true}',
-  }
+  };
 }
 
 function compactToolInputValue(
   value: unknown,
   parentKey?: string,
-  seen: WeakSet<object> = new WeakSet()
+  seen: WeakSet<object> = new WeakSet(),
 ): unknown {
   if (isString(value)) {
-    if (parentKey === 'widget_code' && value.length <= WidgetCodeModelReplayMaxLength) return value
+    if (
+      parentKey === "widget_code" &&
+      value.length <= WidgetCodeModelReplayMaxLength
+    )
+      return value;
 
     const isLikelyLargeToolField =
       !!parentKey &&
       LargeToolInputKeys.has(parentKey) &&
-      value.length > LargeToolInputFieldThreshold
+      value.length > LargeToolInputFieldThreshold;
 
     if (
       value.length > ModelToolInputLimits.maxStringLength ||
       isLikelyLargeToolField ||
       looksLikeBinaryPayload(value)
-    ) return summarizeToolInputString(value, parentKey)
+    )
+      return summarizeToolInputString(value, parentKey);
 
-    return value
+    return value;
   }
 
-  if (!isPresent(value) || !isObject(value)) return value
+  if (!isPresent(value) || !isObject(value)) return value;
 
-  if (value instanceof ArrayBuffer) return `[omitted binary ArrayBuffer: ${value.byteLength} bytes]`
+  if (value instanceof ArrayBuffer)
+    return `[omitted binary ArrayBuffer: ${value.byteLength} bytes]`;
 
-  if (ArrayBuffer.isView(value)) return `[omitted binary ${value.constructor.name}: ${value.byteLength} bytes]`
+  if (ArrayBuffer.isView(value))
+    return `[omitted binary ${value.constructor.name}: ${value.byteLength} bytes]`;
 
-  if (seen.has(value)) return '[Circular reference omitted]'
-  seen.add(value)
+  if (seen.has(value)) return "[Circular reference omitted]";
+  seen.add(value);
 
   if (isArray(value)) {
     const items = value
       .slice(0, ModelToolInputLimits.maxArrayItems)
-      .map((item) => compactToolInputValue(item, undefined, seen))
+      .map((item) => compactToolInputValue(item, undefined, seen));
 
     if (value.length > ModelToolInputLimits.maxArrayItems) {
       items.push({
-        __truncatedItems: value.length - ModelToolInputLimits.maxArrayItems,
-      })
+        __historyPreviewOmittedItems:
+          value.length - ModelToolInputLimits.maxArrayItems,
+        __toolReceivedFullInput: true,
+        note: "History preview only; do not repeat the tool call because of this marker.",
+      });
     }
 
-    seen.delete(value)
-    return items
+    seen.delete(value);
+    return items;
   }
 
   if (!isPlainObject(value)) {
-    const constructorName = value.constructor?.name ?? 'unknown'
-    seen.delete(value)
-    return `[omitted unsupported object: ${constructorName}]`
+    const constructorName = value.constructor?.name ?? "unknown";
+    seen.delete(value);
+    return `[omitted unsupported object: ${constructorName}]`;
   }
 
-  const record: Record<string, unknown> = {}
+  const record: Record<string, unknown> = {};
   for (const [key, nestedValue] of Object.entries(value)) {
-    record[key] = compactToolInputValue(nestedValue, key, seen)
+    record[key] = compactToolInputValue(nestedValue, key, seen);
   }
-  seen.delete(value)
-  return record
+  seen.delete(value);
+  return record;
 }
 
 function compactToolResult(
   result: unknown,
-  limits: ToolResultCompactionLimits
+  limits: ToolResultCompactionLimits,
 ): { compacted: unknown; serialized: string } {
   try {
-    const cloned = cloneToolResult(result, 0, limits)
+    const cloned = cloneToolResult(result, 0, limits);
     let compacted = trimToolResultStrings(
       cloned,
       0,
       limits,
       limits.maxStringLength,
       undefined,
-      limits.preserveLargeContent
-    )
-    let serialized = stringifyToolResult(compacted)
+      limits.preserveLargeContent,
+    );
+    let serialized = stringifyToolResult(compacted);
 
-    if (serialized.length <= limits.maxSerializedLength) return { compacted, serialized }
+    if (serialized.length <= limits.maxSerializedLength)
+      return { compacted, serialized };
 
-    let nextMaxStringLength = Math.max(limits.maxStringLength, limits.maxSerializedLength)
-    while (serialized.length > limits.maxSerializedLength && nextMaxStringLength > 96) {
-      nextMaxStringLength = Math.max(96, Math.floor(nextMaxStringLength / 2))
-      compacted = trimToolResultStrings(cloned, 0, limits, nextMaxStringLength, undefined, false)
-      serialized = stringifyToolResult(compacted)
+    let nextMaxStringLength = Math.max(
+      limits.maxStringLength,
+      limits.maxSerializedLength,
+    );
+    while (
+      serialized.length > limits.maxSerializedLength &&
+      nextMaxStringLength > 96
+    ) {
+      nextMaxStringLength = Math.max(96, Math.floor(nextMaxStringLength / 2));
+      compacted = trimToolResultStrings(
+        cloned,
+        0,
+        limits,
+        nextMaxStringLength,
+        undefined,
+        false,
+      );
+      serialized = stringifyToolResult(compacted);
     }
 
-    if (serialized.length <= limits.maxSerializedLength) return { compacted, serialized }
+    if (serialized.length <= limits.maxSerializedLength)
+      return { compacted, serialized };
 
-    return buildTruncatedToolResult(serialized, limits.maxSerializedLength)
+    return buildTruncatedToolResult(serialized, limits.maxSerializedLength);
   } catch (error) {
-    Log.tag('toolResultSerialization').debug('压缩工具结果失败，改用错误兜底结果', {
-      error: serializationErrorMessage(error),
-    })
+    Log.tag("toolResultSerialization").debug(
+      "压缩工具结果失败，改用错误兜底结果",
+      {
+        error: serializationErrorMessage(error),
+      },
+    );
     const fallback = stringifySerializationError(
       buildSerializationErrorResult(
-        'tool_result_compaction_failed',
+        "tool_result_compaction_failed",
         serializationErrorMessage(error),
         result,
-        error
-      )
-    )
-    if (fallback.length > limits.maxSerializedLength) return buildTruncatedToolResult(fallback, limits.maxSerializedLength)
+        error,
+      ),
+    );
+    if (fallback.length > limits.maxSerializedLength)
+      return buildTruncatedToolResult(fallback, limits.maxSerializedLength);
 
     return {
       compacted: deserializeSerializedToolResult(fallback),
       serialized: fallback,
-    }
+    };
   }
 }
 
 export function deserializeSerializedToolResult(serialized: string): unknown {
   try {
-    return JSON.parse(serialized)
+    return JSON.parse(serialized);
   } catch {
     // arch-guard:silent-catch-ok Plain strings are valid serialized tool results.
-    return serialized
+    return serialized;
   }
 }
 
@@ -557,7 +621,7 @@ export function deserializeSerializedToolResult(serialized: string): unknown {
  * 根据 maxSerializedLength 动态调整，确保 content 预算与实际序列化上限一致。
  */
 function calcReadFileContentBudget(maxSerializedLength: number): number {
-  return Math.max(maxSerializedLength - 1_500, 1_000)
+  return Math.max(maxSerializedLength - 1_500, 1_000);
 }
 
 /**
@@ -568,27 +632,27 @@ function calcReadFileContentBudget(maxSerializedLength: number): number {
  * 修复：如果 content 超出模型内容预算，按完整行截断并同步更新 truncated / hasMore / returnedChars / nextStartLine。
  */
 function fixReadFileMetadata(result: unknown, contentBudget: number): unknown {
-  if (!isPlainObject(result)) return result
-  const r = result
-  const content = r['content']
-  const totalLines = r['totalLines']
-  if (!isString(content) || !isNumber(totalLines)) return result
-  if (content.length <= contentBudget) return result
+  if (!isPlainObject(result)) return result;
+  const r = result;
+  const content = r["content"];
+  const totalLines = r["totalLines"];
+  if (!isString(content) || !isNumber(totalLines)) return result;
+  if (content.length <= contentBudget) return result;
 
   // 按完整行截断，避免在行中间切断。
-  const lines = content.split('\n')
-  let budget = contentBudget
-  let keptLines = 0
+  const lines = content.split("\n");
+  let budget = contentBudget;
+  let keptLines = 0;
   for (const line of lines) {
-    if (budget - line.length - 1 < 0) break
-    budget -= line.length + 1
-    keptLines++
+    if (budget - line.length - 1 < 0) break;
+    budget -= line.length + 1;
+    keptLines++;
   }
-  keptLines = Math.max(keptLines, 1)
+  keptLines = Math.max(keptLines, 1);
 
-  const truncatedContent = lines.slice(0, keptLines).join('\n')
-  const startLine = isNumber(r['startLine']) ? r['startLine'] : 1
-  const nextStartLine = startLine + keptLines
+  const truncatedContent = lines.slice(0, keptLines).join("\n");
+  const startLine = isNumber(r["startLine"]) ? r["startLine"] : 1;
+  const nextStartLine = startLine + keptLines;
 
   return {
     ...r,
@@ -597,17 +661,20 @@ function fixReadFileMetadata(result: unknown, contentBudget: number): unknown {
     hasMore: true,
     returnedChars: truncatedContent.length,
     nextStartLine,
-  }
+  };
 }
 
 /**
  * 对 read_files 批量结果的 files 数组递归应用 fixReadFileMetadata。
  */
 function fixReadFilesMetadata(result: unknown, contentBudget: number): unknown {
-  if (!isPlainObject(result)) return result
-  const r = result
-  if (!isArray(r['files'])) return result
-  return { ...r, files: r['files'].map((f) => fixReadFileMetadata(f, contentBudget)) }
+  if (!isPlainObject(result)) return result;
+  const r = result;
+  if (!isArray(r["files"])) return result;
+  return {
+    ...r,
+    files: r["files"].map((f) => fixReadFileMetadata(f, contentBudget)),
+  };
 }
 
 /**
@@ -618,27 +685,27 @@ export interface SerializationHints {
   /**
    * bash 的 maxOutputChars 参数；指定后序列化上限动态扩展到该值加 JSON 封装开销。
    */
-  maxOutputChars?: number
+  maxOutputChars?: number;
   /**
    * read_file / project:read 的 maxChars 或 maxBytes；指定后内容预算随之扩展。
    */
-  maxChars?: number
+  maxChars?: number;
 }
 
 export function extractSerializationHintsFromToolInput(
-  toolInput?: unknown
+  toolInput?: unknown,
 ): SerializationHints | undefined {
-  if (!isPlainObject(toolInput)) return undefined
+  if (!isPlainObject(toolInput)) return undefined;
 
-  const input = toolInput
-  const maxOutputChars = toOptional(numberOrNull(input.maxOutputChars))
+  const input = toolInput;
+  const maxOutputChars = toOptional(numberOrNull(input.maxOutputChars));
   const maxChars = isNumber(input.maxChars)
     ? input.maxChars
-    : toOptional(numberOrNull(input.maxBytes))
+    : toOptional(numberOrNull(input.maxBytes));
 
-  if (isPresent(maxOutputChars)) return { maxOutputChars }
+  if (isPresent(maxOutputChars)) return { maxOutputChars };
 
-  return mapDefined(maxChars, (n) => ({ maxChars: n }))
+  return mapDefined(maxChars, (n) => ({ maxChars: n }));
 }
 
 /**
@@ -651,35 +718,38 @@ export function extractSerializationHintsFromToolInput(
  */
 function buildModelLimitsWithHints(
   hints?: SerializationHints,
-  result?: unknown
+  result?: unknown,
 ): ToolResultCompactionLimits {
-  const hintValue = hints?.maxOutputChars ?? hints?.maxChars
+  const hintValue = hints?.maxOutputChars ?? hints?.maxChars;
   if (!hintValue || hintValue <= ModelToolResultMaxSerializedLength) {
     // 无 hints 或 hints 值不大于默认上限时，启用 preserveLargeContent
     // 避免 content/stdout 被 maxStringLength=700 截断（仍受 maxSerializedLength=8000 兜底）
     return applyToolSpaceResultLimits(result, {
       ...ModelToolResultLimits,
       preserveLargeContent: true,
-    })
+    });
   }
   // 有效 hints：按 hintValue + 2000 字节 JSON 封装开销动态扩展
-  const dynamicMax = hintValue + 2_000
+  const dynamicMax = hintValue + 2_000;
   return applyToolSpaceResultLimits(result, {
     ...ModelToolResultLimits,
     maxSerializedLength: dynamicMax,
     preserveLargeContent: true,
-  })
+  });
 }
 
-export function serializeToolResultForModel(result: unknown, hints?: SerializationHints): string {
+export function serializeToolResultForModel(
+  result: unknown,
+  hints?: SerializationHints,
+): string {
   // 先修正 read_file / project:read / read_files 等结果的元数据，再进行通用压缩序列化。
-  const limits = buildModelLimitsWithHints(hints, result)
-  const contentBudget = calcReadFileContentBudget(limits.maxSerializedLength)
+  const limits = buildModelLimitsWithHints(hints, result);
+  const contentBudget = calcReadFileContentBudget(limits.maxSerializedLength);
   const preprocessed = fixReadFilesMetadata(
     fixReadFileMetadata(result, contentBudget),
-    contentBudget
-  )
-  return compactToolResult(preprocessed, limits).serialized
+    contentBudget,
+  );
+  return compactToolResult(preprocessed, limits).serialized;
 }
 
 /**
@@ -687,22 +757,27 @@ export function serializeToolResultForModel(result: unknown, hints?: Serializati
  * 与模型档的区别:不为省上下文预裁——数据完整性优先,预算收敛在读取侧做。
  */
 export function serializeToolResultForRecall(result: unknown): string {
-  return compactToolResult(result, RecallToolResultLimits).serialized
+  return compactToolResult(result, RecallToolResultLimits).serialized;
 }
 
-export function compactToolInputForModel(input: Record<string, unknown>): Record<string, unknown> {
-  const compacted = compactToolInputValue(input)
-  const record = isPlainObject(compacted) ? compacted : { input: compacted }
-  const serialized = stringifyToolResult(record)
+export function compactToolInputForModel(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const compacted = compactToolInputValue(input);
+  const record = isPlainObject(compacted) ? compacted : { input: compacted };
+  const serialized = stringifyToolResult(record);
 
-  if (serialized.length <= ModelToolInputLimits.maxSerializedLength) return record
+  if (serialized.length <= ModelToolInputLimits.maxSerializedLength)
+    return record;
 
   return {
-    __truncated: true,
+    __historyInputPreview: true,
+    __toolReceivedFullInput: true,
+    note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",
     preview: serialized.slice(0, ModelToolInputLimits.maxSerializedLength),
-  }
+  };
 }
 
 export function compactToolResultForDisplay(result: unknown): unknown {
-  return compactToolResult(result, DisplayToolResultLimits).compacted
+  return compactToolResult(result, DisplayToolResultLimits).compacted;
 }

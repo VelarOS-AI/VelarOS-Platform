@@ -266,18 +266,18 @@ function dropRecords(
   legId: string,
   criteria: readonly CriterionResult[],
 ): readonly DropRecord[] {
-  return criteria.flatMap((criterion) =>
-    criterion.outcome.kind === "void"
-      ? [
-          {
-            trialId,
-            legId,
-            cause: criterion.outcome.cause,
-            detail: criterion.outcome.detail,
-          },
-        ]
-      : [],
-  );
+  const unique = new Map<string, DropRecord>();
+  for (const criterion of criteria) {
+    if (criterion.outcome.kind !== "void") continue;
+    const record = {
+      trialId,
+      legId,
+      cause: criterion.outcome.cause,
+      detail: criterion.outcome.detail,
+    } satisfies DropRecord;
+    unique.set(`${record.cause}\0${record.detail}`, record);
+  }
+  return [...unique.values()];
 }
 
 export async function runJourney(

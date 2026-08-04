@@ -19,6 +19,11 @@ interface SoloToolUseContinuationToolChoice {
   toolName: string
 }
 
+interface SoloToolUseContinuationToolResult {
+  toolName: string
+  error?: LooseOptional<string>
+}
+
 interface RunSoloToolUseContinuationInput<
   TExecutor,
   TToolContext,
@@ -30,7 +35,10 @@ interface RunSoloToolUseContinuationInput<
   bootstrapToolChoice: LooseOptional<SoloToolUseContinuationToolChoice>
   getBootstrapState(): ToolSpaceBootstrapState
   setBootstrapState(state: ToolSpaceBootstrapState): void
-  appendToolResultsToHistory(history: ModelMessage[], executor: TExecutor): Promise<void>
+  appendToolResultsToHistory(
+    history: ModelMessage[],
+    executor: TExecutor
+  ): Promise<SoloToolUseContinuationToolResult[]>
   toolContext: TToolContext
   tickLoopReminders(input: {
     mode: 'solo'
@@ -48,8 +56,12 @@ interface RunSoloToolUseContinuationInput<
 }
 
 type SoloToolUseContinuationResult =
-  | { status: 'continue' }
-  | { status: 'completed'; reason: 'wind-down-cap' }
+  | { status: 'continue'; toolResults: SoloToolUseContinuationToolResult[] }
+  | {
+      status: 'completed'
+      reason: 'wind-down-cap'
+      toolResults: SoloToolUseContinuationToolResult[]
+    }
 
 async function runSoloToolUseContinuation<
   TExecutor,
@@ -64,7 +76,7 @@ async function runSoloToolUseContinuation<
     )
   }
 
-  await input.appendToolResultsToHistory(input.history, input.executor)
+  const toolResults = await input.appendToolResultsToHistory(input.history, input.executor)
 
   const afterToolReminders = await input.tickLoopReminders({
     mode: 'solo',
@@ -81,12 +93,12 @@ async function runSoloToolUseContinuation<
       hardCap: input.hardCap,
     })
     input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
-    return { status: 'completed', reason: 'wind-down-cap' }
+    return { status: 'completed', reason: 'wind-down-cap', toolResults }
   }
 
   input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
   input.log.debug('turn end', { turn: input.turn })
-  return { status: 'continue' }
+  return { status: 'continue', toolResults }
 }
 
 export { runSoloToolUseContinuation }

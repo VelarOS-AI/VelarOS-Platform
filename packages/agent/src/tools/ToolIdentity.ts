@@ -6,6 +6,7 @@
  */
 
 import { assertCanonicalToolId } from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
 
@@ -17,6 +18,11 @@ interface ToolTransportNamePlan {
 interface ToolTransportProjection {
   readonly plan: ToolTransportNamePlan
   readonly visibleCanonicalToProvider: Readonly<Record<string, string>>
+}
+
+interface ProviderToolReferenceCanonicalizer {
+  push(text: string): string
+  flush(): string
 }
 
 function stableToolNameHash(value: string): string {
@@ -110,6 +116,7 @@ function createToolTransportProjection(
 }
 
 const ToolIdentityTokenCharacters = 'a-zA-Z0-9._:-'
+const ProviderToolIdentityTokenCharacters = 'a-zA-Z0-9_-'
 
 function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -125,25 +132,77 @@ function rewriteCanonicalToolReferences(
   text: string,
   aliases: Readonly<Record<string, string>>
 ): string {
+  return rewriteToolReferences(text, aliases, ToolIdentityTokenCharacters)
+}
+
+/** 把 provider 可见别名还原为持久历史和用户界面使用的 canonical id。 */
+function rewriteProviderToolReferences(
+  text: string,
+  providerToCanonical: Readonly<Record<string, string>>
+): string {
+  return rewriteToolReferences(text, providerToCanonical, ProviderToolIdentityTokenCharacters)
+}
+
+function rewriteToolReferences(
+  text: string,
+  replacements: Readonly<Record<string, string>>,
+  tokenCharacters: string
+): string {
   let rewritten = text
-  const entries = Object.entries(aliases)
-    .filter(([canonicalId, providerName]) => canonicalId !== providerName)
+  const entries = Object.entries(replacements)
+    .filter(([source, target]) => source !== target)
     .sort(([left], [right]) => right.length - left.length || left.localeCompare(right))
 
-  for (const [canonicalId, providerName] of entries) {
+  for (const [source, target] of entries) {
     const pattern = new RegExp(
-      `(^|[^${ToolIdentityTokenCharacters}])${escapeRegularExpression(canonicalId)}(?=$|[^${ToolIdentityTokenCharacters}])`,
+      `(^|[^${tokenCharacters}])${escapeRegularExpression(source)}(?=$|[^${tokenCharacters}])`,
       'gu'
     )
-    rewritten = rewritten.replace(pattern, (_match, prefix: string) => `${prefix}${providerName}`)
+    rewritten = rewritten.replace(pattern, (_match, prefix: string) => `${prefix}${target}`)
   }
   return rewritten
 }
 
+/**
+ * 流式正文按完整 identity token 还原，避免别名跨 chunk 时漏回用户界面或持久历史。
+ * 只暂存末尾尚未闭合的 token；空映射时完全透传。
+ */
+function createProviderToolReferenceCanonicalizer(
+  providerToCanonical: Readonly<Record<string, string>>
+): ProviderToolReferenceCanonicalizer {
+  const enabled = !isEmpty(Object.keys(providerToCanonical))
+  let pending = ''
+  const flush = (): string => {
+    const output = rewriteProviderToolReferences(pending, providerToCanonical)
+    pending = ''
+    return output
+  }
+  return {
+    push: (text) => {
+      if (!enabled) return text
+      pending += text
+      const incompleteToken = new RegExp(`[${ProviderToolIdentityTokenCharacters}]+$`, 'u').exec(
+        pending
+      )
+      const stableEnd = incompleteToken?.index ?? pending.length
+      const stable = pending.slice(0, stableEnd)
+      pending = pending.slice(stableEnd)
+      return rewriteProviderToolReferences(stable, providerToCanonical)
+    },
+    flush,
+  }
+}
+
 export {
+  createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
+  rewriteProviderToolReferences,
 }
-export type { ToolTransportNamePlan, ToolTransportProjection }
+export type {
+  ProviderToolReferenceCanonicalizer,
+  ToolTransportNamePlan,
+  ToolTransportProjection,
+}

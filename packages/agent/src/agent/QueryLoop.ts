@@ -595,7 +595,7 @@ class QueryLoop<
             continue
           }
           // 护栏 4：本轮 provider 回合失败就近收敛 turn/model span；run span 随即收敛后冒泡。
-          endLoopTurnSpansError(spans)
+          endLoopTurnSpansError(spans, appError)
           runScope?.end({
             status: args.parentCtx.abortSignal.aborted ? 'aborted' : 'error',
           })

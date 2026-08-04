@@ -5,6 +5,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { AgentCapabilityEventPublisher } from '../src/kernel/AgentCapabilityEventPublisher'
 import {
   AgentCapabilityExecutionEventType,
+  createAgentCapabilityExecutionEventEnvelopeV1,
   parseAgentCapabilityExecuteEnvelopeV1,
 } from '../src/protocol/agent-capability'
 
@@ -29,6 +30,28 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
 describe('Agent capability wire', () => {
   test('parses and normalizes the public v1 envelope', () => {
     expect(parseAgentCapabilityExecuteEnvelopeV1(buildEnvelope())).toEqual(buildEnvelope())
+  })
+
+  test('omits absent optional fields from parsed and emitted wire envelopes', () => {
+    const envelope = buildEnvelope() as {
+      execution: {
+        source: Record<string, unknown>
+        scopeMetadata?: Record<string, unknown>
+      }
+    }
+    delete envelope.execution.source.correlationId
+    delete envelope.execution.scopeMetadata
+
+    const parsed = parseAgentCapabilityExecuteEnvelopeV1(envelope)
+    expect(Object.hasOwn(parsed.execution.source, 'correlationId')).toBe(false)
+    expect(Object.hasOwn(parsed.execution, 'scopeMetadata')).toBe(false)
+
+    const event = createAgentCapabilityExecutionEventEnvelopeV1(
+      parsed.execution,
+      'state',
+      { kind: 'done' },
+    )
+    expect(Object.hasOwn(event, 'sessionCorrelationId')).toBe(false)
   })
 
   test('rejects unknown keys at every versioned envelope boundary', () => {

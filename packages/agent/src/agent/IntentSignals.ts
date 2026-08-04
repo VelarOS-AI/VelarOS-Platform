@@ -6,6 +6,7 @@ import { isArray, isObject, isString } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
+  type CapabilityIntentClassifierContext,
   type CapabilityIntentSignal,
   resolveCapabilityIntentClassifiers,
 } from '../capabilities'
@@ -89,10 +90,10 @@ function mergeIntentSignals(signals: readonly CapabilityIntentSignal[]): AgentIn
       minimumActionIds: [],
     }
     current.categories = [...new Set([...current.categories, ...(signal.categoryIds ?? [])])]
-    current.requiresDiscovery ||= signal.requiresDiscovery === true
-    current.requiresEvidence ||= signal.requiresEvidence === true
-    current.requiresMutation ||= signal.requiresMutation === true
-    current.requiresValidation ||= signal.requiresValidation === true
+    current.requiresDiscovery ||= !!signal.requiresDiscovery
+    current.requiresEvidence ||= !!signal.requiresEvidence
+    current.requiresMutation ||= !!signal.requiresMutation
+    current.requiresValidation ||= !!signal.requiresValidation
     current.minimumActionIds = [
       ...new Set([...current.minimumActionIds, ...(signal.minimumActionIds ?? [])]),
     ]
@@ -103,10 +104,11 @@ function mergeIntentSignals(signals: readonly CapabilityIntentSignal[]): AgentIn
 
 function detectAgentIntentSignals(
   text: string,
-  ports?: AgentRuntimeCapabilityPorts
+  ports?: AgentRuntimeCapabilityPorts,
+  context?: CapabilityIntentClassifierContext
 ): AgentIntentSignals {
   const classified = resolveCapabilityIntentClassifiers(ports)
-    .flatMap((classifier) => [...classifier.classify(text)])
+    .flatMap((classifier) => [...classifier.classify(text, context)])
   const domains = mergeIntentSignals(classified)
   const hasCapabilityUncertainty = CapabilityUncertaintyPattern.test(text)
   if (hasCapabilityUncertainty && !domains.some((domain) => domain.id === 'unknown')) {

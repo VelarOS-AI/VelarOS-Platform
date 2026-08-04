@@ -67,7 +67,7 @@ describe('goal blocked lifecycle', () => {
     expect(harness.readArtifact()?.metadata?.goalStatus).toBe('blocked')
   })
 
-  test('teaches the model that it may mark a genuinely blocked goal itself', () => {
+  test('keeps blocked transition details in the goal tool contract instead of duplicating them in the prompt', () => {
     const segment = createTaskRuntimePromptSegments({
       goalMode: true,
       proposalMode: false,
@@ -75,7 +75,9 @@ describe('goal blocked lifecycle', () => {
     } as never).find((candidate) => candidate.id === 'runtime.goal-mode')
     const prompt = segment?.render({})
 
-    expect(prompt).toContain('可以自行调用 goal:update({status:"blocked"})')
-    expect(prompt).toContain('不需要等待多轮审计')
+    expect(prompt).toContain('按 goal 工具契约更新状态')
+    expect(prompt).not.toContain('不需要等待多轮审计')
+    expect(goalTools['goal:update'].description).toContain('可以自行调用')
+    expect(goalTools['goal:update'].description).toContain('不需要等待多轮审计')
   })
 })

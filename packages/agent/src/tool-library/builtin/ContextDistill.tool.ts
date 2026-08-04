@@ -5,8 +5,10 @@ import { toNullable } from '@velaros-ai/core'
 
 import { defineVelaTool } from '../defineVelaTool'
 
-const DistilledFactMaxChars = 400
-const DistilledFactMaxCount = 10
+// 手动蒸馏受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
+// 10 × 400 的契约大致相当，同时允许长阶段为每个已完成工作项保留独立可寻址的事实。
+const DistilledFactMaxChars = 240
+const DistilledFactMaxCount = 20
 const DistillNoteMaxChars = 300
 
 export interface DistillContextInput extends Record<string, unknown> {
@@ -23,6 +25,7 @@ const distillContextSchema = z.object({
       parameterDescription({
         description: '从已读取/搜索/执行结果中蒸馏出的持久事实。',
         notes: [
+          `最多 ${DistilledFactMaxCount} 条，每条不超过 ${DistilledFactMaxChars} 字符；事实较多时先合并重复项。`,
           '每条自包含，代码事实带 file:line 或符号名；决策写清结论和原因。',
           '只记新知识，之前 distill 过的事实不要重复。',
         ],

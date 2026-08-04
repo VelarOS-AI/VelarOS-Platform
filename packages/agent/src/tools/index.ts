@@ -108,12 +108,18 @@ export {
   toolArgsSchemaValidator,
   validateToolArgsWithNormalization,
 } from './ToolArgsSchemaValidator'
-export type { ToolTransportNamePlan, ToolTransportProjection } from './ToolIdentity'
+export type {
+  ProviderToolReferenceCanonicalizer,
+  ToolTransportNamePlan,
+  ToolTransportProjection,
+} from './ToolIdentity'
 export {
+  createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
+  rewriteProviderToolReferences,
 } from './ToolIdentity'
 export * from './toolResultSerialization'
 export type {

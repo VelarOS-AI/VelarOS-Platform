@@ -11,7 +11,6 @@ import type {
 import {
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
-  createThinkingDepthPromptSegment,
   type PromptSegmentDefinition,
 } from '../../prompts'
 import type { RuntimePromptFeaturePolicy } from '../../tools'
@@ -126,10 +125,7 @@ class RunContext {
       runProfile,
       promptBudget,
       identity,
-      roleSegments: [
-        createSkillPromptSegment(roleResolution.id, roleResolution.skillMarkdown),
-        createThinkingDepthPromptSegment(effectiveThinkingDepth),
-      ],
+      roleSegments: [createSkillPromptSegment(roleResolution.id, roleResolution.skillMarkdown)],
     })
   }
 
@@ -184,10 +180,7 @@ class RunContext {
       contextPhase,
       roleSegments:
         contextPhase === 'operational'
-          ? [
-              createSelectedSkillPromptSegment(roleResolution.skillMarkdown),
-              createThinkingDepthPromptSegment(effectiveThinkingDepth),
-            ]
+          ? [createSelectedSkillPromptSegment(roleResolution.skillMarkdown)]
           : [],
     })
   }

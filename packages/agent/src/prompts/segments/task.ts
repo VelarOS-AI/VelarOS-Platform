@@ -30,10 +30,7 @@ export function createTaskRuntimePromptSegments(
       source: 'runtime',
       priority: PromptSegmentPriority.guardrail,
       when: () => snapshot.proposalMode,
-      text: [
-        '当前为方案模式：只调查、分析和形成可审阅方案。',
-        '不要执行产生外部副作用的动作；领域约束以本轮 capability contributor 为准。',
-      ].join('\n'),
+      text: '当前为方案模式：调查和分析后形成可审阅方案；本轮保持只读，领域边界以已注入能力为准。',
     }),
     createTextPromptSegment({
       id: 'runtime.goal-mode',
@@ -42,11 +39,7 @@ export function createTaskRuntimePromptSegments(
       source: 'runtime',
       priority: PromptSegmentPriority.runtimeAdvice + 1,
       when: () => snapshot.goalMode,
-      text: [
-        '当前执行绑定到持久目标；按任务账本持续推进，并在真正达成或受阻时更新目标状态。',
-        '模型确认存在缺少必要授权、用户输入或外部状态等真实阻碍，已经无法继续推进时，可以自行调用 goal:update({status:"blocked"})；不需要等待多轮审计。',
-        '不要仅因为任务困难、耗时、结果不确定或希望获得澄清就标记受阻。',
-      ].join('\n'),
+      text: '当前执行绑定到持久目标：持续推进并维护任务账本；仅在真正达成或无法继续时按 goal 工具契约更新状态。',
     }),
   ]
 }

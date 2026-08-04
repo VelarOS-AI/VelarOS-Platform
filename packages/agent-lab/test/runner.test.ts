@@ -186,6 +186,60 @@ describe("continuous journey runner", () => {
     expect(result.drops[0]?.cause).toBe("harness-failure");
   });
 
+  test("records one shared attrition event instead of one copy per criterion", async () => {
+    const definition = journey();
+    const leg = definition.legs[0]!;
+    const driver = successfulDriver([], []);
+    driver.waitSettled = async () => ({
+      kind: "unavailable",
+      cause: "agent-unavailable",
+      detail: "QUOTA_EXCEEDED: credits exhausted",
+    });
+    const verifiers = new VerifierRegistry();
+    verifiers.register("complete", () => ({ kind: "pass", credit: 1, evidence: {} }));
+    verifiers.register("secondary", () => ({ kind: "pass", credit: 1, evidence: {} }));
+
+    const result = await runJourney({
+      jobId: "job",
+      suiteId: "suite",
+      trial: trial(),
+      journey: {
+        ...definition,
+        legs: [
+          {
+            ...leg,
+            criteria: [
+              ...leg.criteria,
+              {
+                id: "secondary",
+                verifierId: "secondary",
+                parameters: {},
+                weight: 1,
+                gate: true,
+              },
+            ],
+          },
+        ],
+      },
+      driver,
+      detectors: new DetectorRegistry(),
+      verifiers,
+      workspaceRoot: null,
+      sourceCommit: null,
+      consumerCommit: null,
+    });
+
+    expect(result.legs[0]?.criteria).toHaveLength(2);
+    expect(result.drops).toEqual([
+      {
+        trialId: "journey-a:executor-a:1",
+        legId: "leg-1",
+        cause: "agent-unavailable",
+        detail: "QUOTA_EXCEEDED: credits exhausted",
+      },
+    ]);
+  });
+
   test("refreshes executor identity after the native session settles", async () => {
     const driver = successfulDriver([], []);
     let identityReads = 0;

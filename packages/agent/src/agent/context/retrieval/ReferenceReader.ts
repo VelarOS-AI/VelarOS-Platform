@@ -1,16 +1,17 @@
-import { lstat, open } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { lstat, open } from "node:fs/promises";
+import { basename } from "node:path";
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from "@velaros-ai/core";
 
-import { chatSearchText } from './search/Text'
+import { chatSearchRanking } from "./search/Ranking";
+import { chatSearchText } from "./search/Text";
 import {
   type ArtifactManifestSnippet,
   contextRetrievalReferences,
   type LogReadSnippet,
   type ReferencedArtifactPath,
   type ReferencedLogPath,
-} from './References'
+} from "./References";
 
 /**
  * 将 {@link contextRetrievalReferences} 扫描到的磁盘路径**读入内存** `snippet`。
@@ -28,9 +29,9 @@ import {
  */
 class ContextRetrievalReferenceReader {
   /** 单个文本 artifact preview 的最大字符数（读盘时按 ×4 估算字节上限）。 */
-  private readonly artifactPreviewChars = 1_500
+  private readonly artifactPreviewChars = 1_500;
   /** 大日志 head+tail 采样时，head 占 maxBytes 的比例（余下给 tail）。 */
-  private readonly logReadHeadRatio = 0.35
+  private readonly logReadHeadRatio = 0.35;
 
   /**
    * 批量读取日志引用，均分 `totalBudgetChars`。
@@ -43,21 +44,30 @@ class ContextRetrievalReferenceReader {
    */
   public async readReferencedLogs(
     references: ReferencedLogPath[],
-    totalBudgetChars: number
+    totalBudgetChars: number,
   ): Promise<LogReadSnippet[]> {
-    if (isEmpty(references)) return []
+    if (isEmpty(references)) return [];
 
     const perLogBudget = Math.max(
       800,
-      Math.floor(totalBudgetChars / Math.min(references.length, contextRetrievalReferences.maxReferencedLogs))
-    )
-    const snippets: LogReadSnippet[] = []
+      Math.floor(
+        totalBudgetChars /
+          Math.min(
+            references.length,
+            contextRetrievalReferences.maxReferencedLogs,
+          ),
+      ),
+    );
+    const snippets: LogReadSnippet[] = [];
 
-    for (const reference of references.slice(0, contextRetrievalReferences.maxReferencedLogs)) {
-      snippets.push(await this.readReferencedLog(reference, perLogBudget))
+    for (const reference of references.slice(
+      0,
+      contextRetrievalReferences.maxReferencedLogs,
+    )) {
+      snippets.push(await this.readReferencedLog(reference, perLogBudget));
     }
 
-    return snippets
+    return snippets;
   }
 
   /**
@@ -67,15 +77,18 @@ class ContextRetrievalReferenceReader {
    * @returns 最多 maxReferencedArtifacts 条
    */
   public async readReferencedArtifactManifests(
-    references: ReferencedArtifactPath[]
+    references: ReferencedArtifactPath[],
   ): Promise<ArtifactManifestSnippet[]> {
-    const snippets: ArtifactManifestSnippet[] = []
+    const snippets: ArtifactManifestSnippet[] = [];
 
-    for (const reference of references.slice(0, contextRetrievalReferences.maxReferencedArtifacts)) {
-      snippets.push(await this.readReferencedArtifactManifest(reference))
+    for (const reference of references.slice(
+      0,
+      contextRetrievalReferences.maxReferencedArtifacts,
+    )) {
+      snippets.push(await this.readReferencedArtifactManifest(reference));
     }
 
-    return snippets
+    return snippets;
   }
 
   /**
@@ -89,16 +102,18 @@ class ContextRetrievalReferenceReader {
           `#${index + 1}`,
           `path: ${snippet.path}`,
           `source: ${snippet.source}`,
-          `size: ${snippet.size ?? 'unknown'}`,
+          `size: ${snippet.size ?? "unknown"}`,
           `truncated: ${snippet.truncated}`,
           snippet.warning ? `警告: ${snippet.warning}` : null,
         ]
           .filter((item): item is string => Boolean(item))
-          .join('\n')
-        const body = snippet.content ? `content:\n${snippet.content}` : 'content: <unavailable>'
-        return `${header}\n${body}`
+          .join("\n");
+        const body = snippet.content
+          ? `content:\n${snippet.content}`
+          : "content: <unavailable>";
+        return `${header}\n${body}`;
       })
-      .join('\n---\n')
+      .join("\n---\n");
   }
 
   /**
@@ -114,15 +129,17 @@ class ContextRetrievalReferenceReader {
           `source: ${snippet.source}`,
           `type: ${snippet.type}`,
           `filename: ${snippet.filename}`,
-          `size: ${snippet.size ?? 'unknown'}`,
+          `size: ${snippet.size ?? "unknown"}`,
           snippet.warning ? `警告: ${snippet.warning}` : null,
         ]
           .filter((item): item is string => Boolean(item))
-          .join('\n')
-        const preview = snippet.preview ? `preview:\n${snippet.preview}` : 'preview: <not included>'
-        return `${header}\n${preview}`
+          .join("\n");
+        const preview = snippet.preview
+          ? `preview:\n${snippet.preview}`
+          : "preview: <not included>";
+        return `${header}\n${preview}`;
       })
-      .join('\n---\n')
+      .join("\n---\n");
   }
 
   /**
@@ -133,66 +150,76 @@ class ContextRetrievalReferenceReader {
    */
   private async readReferencedLog(
     reference: ReferencedLogPath,
-    maxChars: number
+    maxChars: number,
   ): Promise<LogReadSnippet> {
-    if (!contextRetrievalReferences.isInternalCommandLogPath(reference.path)) return {
+    if (!contextRetrievalReferences.isInternalCommandLogPath(reference.path))
+      return {
         ...reference,
         content: null,
         size: null,
         truncated: false,
-        warning: '已跳过非内部日志路径。',
-      }
+        warning: "已跳过非内部日志路径。",
+      };
 
-    const stats = await lstat(reference.path).catch(() => null)
-    if (!stats) return {
+    const stats = await lstat(reference.path).catch(() => null);
+    if (!stats)
+      return {
         ...reference,
         content: null,
         size: null,
         truncated: false,
-        warning: '引用的日志文件已不存在。',
-      }
+        warning: "引用的日志文件已不存在。",
+      };
 
-    if (!stats.isFile() || stats.isSymbolicLink()) return {
+    if (!stats.isFile() || stats.isSymbolicLink())
+      return {
         ...reference,
         content: null,
         size: stats.size,
         truncated: false,
-        warning: '引用的日志不是普通文件。',
-      }
+        warning: "引用的日志不是普通文件。",
+      };
 
-    const handle = await open(reference.path, 'r').catch(() => null)
-    if (!handle) return {
+    const handle = await open(reference.path, "r").catch(() => null);
+    if (!handle)
+      return {
         ...reference,
         content: null,
         size: stats.size,
         truncated: false,
-        warning: '无法打开引用的日志。',
-      }
+        warning: "无法打开引用的日志。",
+      };
 
     try {
-      const maxBytes = Math.max(maxChars * 4, 1)
-      const truncated = stats.size > maxBytes
+      const maxBytes = Math.max(maxChars * 4, 1);
+      const truncated = stats.size > maxBytes;
       const buffer = truncated
         ? await this.readHeadAndTail(handle, stats.size, maxBytes)
-        : await this.readBytes(handle, stats.size, 0)
+        : await this.readBytes(handle, stats.size, 0);
 
-      if (this.isBinaryBuffer(buffer)) return {
+      if (this.isBinaryBuffer(buffer))
+        return {
           ...reference,
           content: null,
           size: stats.size,
           truncated,
-          warning: '引用的日志疑似二进制文件。',
-        }
+          warning: "引用的日志疑似二进制文件。",
+        };
 
       return {
         ...reference,
-        content: chatSearchText.truncate(buffer.toString('utf-8'), maxChars),
+        content: truncated
+          ? chatSearchRanking.buildHeadTailSnippet(
+              buffer.toString("utf-8"),
+              maxChars,
+            )
+          : chatSearchText.truncate(buffer.toString("utf-8"), maxChars),
         size: stats.size,
         truncated,
         warning: null,
-      }
+      };
     } finally {
-      await handle.close().catch(() => null)
+      await handle.close().catch(() => null);
     }
   }
 
@@ -201,73 +228,79 @@ class ContextRetrievalReferenceReader {
    * 仅 text 扩展名且非二进制时填充 preview。
    */
   private async readReferencedArtifactManifest(
-    reference: ReferencedArtifactPath
+    reference: ReferencedArtifactPath,
   ): Promise<ArtifactManifestSnippet> {
-    const filename = basename(reference.path)
-    const type = contextRetrievalReferences.inferArtifactType(reference.path)
+    const filename = basename(reference.path);
+    const type = contextRetrievalReferences.inferArtifactType(reference.path);
 
-    if (!contextRetrievalReferences.isInternalArtifactPath(reference.path)) return {
+    if (!contextRetrievalReferences.isInternalArtifactPath(reference.path))
+      return {
         ...reference,
         filename,
         type,
         size: null,
         preview: null,
-        warning: '已跳过非内部 artifact 路径。',
-      }
+        warning: "已跳过非内部 artifact 路径。",
+      };
 
-    const stats = await lstat(reference.path).catch(() => null)
-    if (!stats) return {
+    const stats = await lstat(reference.path).catch(() => null);
+    if (!stats)
+      return {
         ...reference,
         filename,
         type,
         size: null,
         preview: null,
-        warning: '引用的 artifact 已不存在。',
-      }
+        warning: "引用的 artifact 已不存在。",
+      };
 
-    if (!stats.isFile() || stats.isSymbolicLink()) return {
+    if (!stats.isFile() || stats.isSymbolicLink())
+      return {
         ...reference,
         filename,
         type,
         size: stats.size,
         preview: null,
-        warning: '引用的 artifact 不是普通文件。',
-      }
+        warning: "引用的 artifact 不是普通文件。",
+      };
 
-    if (!contextRetrievalReferences.isTextArtifactPath(reference.path)) return {
+    if (!contextRetrievalReferences.isTextArtifactPath(reference.path))
+      return {
         ...reference,
         filename,
         type,
         size: stats.size,
         preview: null,
         warning: null,
-      }
+      };
 
-    const handle = await open(reference.path, 'r').catch(() => null)
-    if (!handle) return {
+    const handle = await open(reference.path, "r").catch(() => null);
+    if (!handle)
+      return {
         ...reference,
         filename,
         type,
         size: stats.size,
         preview: null,
-        warning: '无法打开引用的 artifact。',
-      }
+        warning: "无法打开引用的 artifact。",
+      };
 
     try {
       const buffer = await this.readBytes(
         handle,
         Math.min(stats.size, this.artifactPreviewChars * 4),
-        0
-      )
+        0,
+      );
 
-      if (this.isBinaryBuffer(buffer)) return {
+      if (this.isBinaryBuffer(buffer))
+        return {
           ...reference,
           filename,
           type,
           size: stats.size,
           preview: null,
-          warning: '引用的 artifact 疑似二进制文件。',
-        }
+          warning: "引用的 artifact 疑似二进制文件。",
+        };
 
       return {
         ...reference,
@@ -275,13 +308,13 @@ class ContextRetrievalReferenceReader {
         type,
         size: stats.size,
         preview: chatSearchText.truncate(
-          buffer.toString('utf-8'),
-          this.artifactPreviewChars
+          buffer.toString("utf-8"),
+          this.artifactPreviewChars,
         ),
         warning: null,
-      }
+      };
     } finally {
-      await handle.close().catch(() => null)
+      await handle.close().catch(() => null);
     }
   }
 
@@ -292,28 +325,32 @@ class ContextRetrievalReferenceReader {
   private async readHeadAndTail(
     handle: Awaited<ReturnType<typeof open>>,
     fileSize: number,
-    maxBytes: number
+    maxBytes: number,
   ): Promise<Buffer> {
-    const headBytes = Math.max(1, Math.floor(maxBytes * this.logReadHeadRatio))
-    const tailBytes = Math.max(1, maxBytes - headBytes)
-    const head = await this.readBytes(handle, headBytes, 0)
-    const tailStart = Math.max(fileSize - tailBytes, headBytes)
-    const tail = await this.readBytes(handle, Math.max(fileSize - tailStart, 0), tailStart)
+    const headBytes = Math.max(1, Math.floor(maxBytes * this.logReadHeadRatio));
+    const tailBytes = Math.max(1, maxBytes - headBytes);
+    const head = await this.readBytes(handle, headBytes, 0);
+    const tailStart = Math.max(fileSize - tailBytes, headBytes);
+    const tail = await this.readBytes(
+      handle,
+      Math.max(fileSize - tailStart, 0),
+      tailStart,
+    );
     const marker = Buffer.from(
-      `\n... omitted ${Math.max(fileSize - head.length - tail.length, 0)} bytes ...\n`
-    )
-    return Buffer.concat([head, marker, tail])
+      `\n... omitted ${Math.max(fileSize - head.length - tail.length, 0)} bytes ...\n`,
+    );
+    return Buffer.concat([head, marker, tail]);
   }
 
   /**
    * 启发式二进制检测：前 8KB 内出现 NUL 字节则视为二进制。
    */
   private isBinaryBuffer(buffer: Buffer): boolean {
-    const checkLength = Math.min(buffer.length, 8192)
+    const checkLength = Math.min(buffer.length, 8192);
     for (let index = 0; index < checkLength; index += 1) {
-      if (buffer[index] === 0) return true
+      if (buffer[index] === 0) return true;
     }
-    return false
+    return false;
   }
 
   /**
@@ -326,14 +363,14 @@ class ContextRetrievalReferenceReader {
   private async readBytes(
     handle: Awaited<ReturnType<typeof open>>,
     bytesToRead: number,
-    position: number
+    position: number,
   ): Promise<Buffer> {
-    if (bytesToRead <= 0) return Buffer.alloc(0)
+    if (bytesToRead <= 0) return Buffer.alloc(0);
 
-    const buffer = Buffer.alloc(bytesToRead)
-    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, position)
-    return buffer.subarray(0, bytesRead)
+    const buffer = Buffer.alloc(bytesToRead);
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, position);
+    return buffer.subarray(0, bytesRead);
   }
 }
 
-export { ContextRetrievalReferenceReader }
+export { ContextRetrievalReferenceReader };

@@ -238,12 +238,16 @@ class ManagedExecutionRunner {
         completeExecution(execution.id)
       }
     } catch (error) {
-      // AppError code 决定是用户/系统中断还是执行失败。
+      // Agent runtime 事件也能先行写入终态；catch 只在记录尚未终结时拥有流转权，
+      // 否则同一异常会形成 aborted -> failed / completed -> failed 的二次终结。
       const appError = AppError.from(error)
-      if (appError.code === 'EXECUTION_ABORTED') {
-        abortExecution(execution.id, appError.message)
-      } else {
-        failExecution(execution.id, appError.message)
+      const latest = getExecution(execution.id)
+      if (!isTerminalStatus(latest.status)) {
+        if (appError.code === 'EXECUTION_ABORTED') {
+          abortExecution(execution.id, appError.message)
+        } else {
+          failExecution(execution.id, appError.message)
+        }
       }
       throw error
     } finally {

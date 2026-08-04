@@ -1,7 +1,7 @@
 import {
   normalizeSessionLineageId,
   normalizeSessionLineageIdList,
-} from '@velaros-ai/agent'
+} from "@velaros-ai/agent";
 import type {
   ChatContextReadEvidenceRequest,
   ChatContextReadEvidenceResult,
@@ -17,51 +17,58 @@ import type {
   ChatContextSearchTerminalOutputRequest,
   ChatContextSearchTerminalOutputResult,
   SessionLineageContext,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty, isFiniteNumber,isNotNull, isPositiveNumber, numberOrNull, toNullable } from '@velaros-ai/core'
+} from "@velaros-ai/agent/protocol";
+import {
+  isEmpty,
+  isFiniteNumber,
+  isNotNull,
+  isPositiveNumber,
+  numberOrNull,
+  toNullable,
+} from "@velaros-ai/core";
 
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
-import { compareStableStrings } from '../residency/determinism'
+import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
+import { compareStableStrings } from "../residency/determinism";
 
-import { chatSearchRanking } from './search/Ranking'
-import { chatSearchText } from './search/Text'
+import { chatSearchRanking } from "./search/Ranking";
+import { chatSearchText } from "./search/Text";
 import {
   ContextRetrievalBoundedCounter,
   ContextRetrievalBoundedRecentMap,
-} from './BoundedRecentMap'
-import { ContextRetrievalIndexBuilder } from './IndexBuilder'
+} from "./BoundedRecentMap";
+import { ContextRetrievalIndexBuilder } from "./IndexBuilder";
 import {
   type ChatContextRetrievalIndexSnapshot,
   type ChatContextRetrievalIndexStore,
-} from './IndexSnapshot'
-import { ContextRetrievalPayloadReader } from './PayloadReader'
+} from "./IndexSnapshot";
+import { ContextRetrievalPayloadReader } from "./PayloadReader";
 import {
   ContextRetrievalQueryTraceStore,
   type ContextRetrievalQueryTraceStoreOptions,
-} from './QueryTraceStore'
-import { ContextRetrievalReferenceReader } from './ReferenceReader'
+} from "./QueryTraceStore";
+import { ContextRetrievalReferenceReader } from "./ReferenceReader";
 import {
   contextRetrievalReferences,
   type LogReadSnippet,
   type ReferencedLogPath,
-} from './References'
+} from "./References";
 import type {
   RetrievalPayloadStorePort,
   RetrievalStateStorePort,
-} from './sessionStorePorts'
+} from "./sessionStorePorts";
 
-const DefaultRetrievalCountEntryLimit = 4_096
-const DefaultIndexBuildTelemetrySessionLimit = 512
-const DefaultTerminalOutputPayloadCandidateLimit = 64
+const DefaultRetrievalCountEntryLimit = 4_096;
+const DefaultIndexBuildTelemetrySessionLimit = 512;
+const DefaultTerminalOutputPayloadCandidateLimit = 64;
 
 type ChatContextRetrievalIndexToolPayload =
-  ChatContextRetrievalIndexSnapshot['toolPayloads'][number]
+  ChatContextRetrievalIndexSnapshot["toolPayloads"][number];
 
 interface ChatContextRetrievalServiceOptions {
-  maxRetrievalCountEntries?: LooseOptional<number>
-  maxIndexBuildTelemetrySessions?: LooseOptional<number>
-  maxTerminalOutputPayloadCandidates?: LooseOptional<number>
-  queryTrace?: ContextRetrievalQueryTraceStoreOptions
+  maxRetrievalCountEntries?: LooseOptional<number>;
+  maxIndexBuildTelemetrySessions?: LooseOptional<number>;
+  maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
+  queryTrace?: ContextRetrievalQueryTraceStoreOptions;
 }
 
 /**
@@ -69,11 +76,11 @@ interface ChatContextRetrievalServiceOptions {
  */
 interface RetrievalIndexBuildTelemetry {
   /** 本次命中 fresh 磁盘索引还是内存 rebuild。 */
-  lastLoadSource: ChatContextRetrievalIndexLoadSource
+  lastLoadSource: ChatContextRetrievalIndexLoadSource;
   /** rebuild 耗时 ms；loadFresh 命中时为 null。 */
-  lastBuildDurationMs: LooseOptional<number>
+  lastBuildDurationMs: LooseOptional<number>;
   /** 索引 snapshot.builtAt。 */
-  lastBuiltAt: LooseOptional<number>
+  lastBuiltAt: LooseOptional<number>;
 }
 
 /**
@@ -102,25 +109,28 @@ class ChatContextRetrievalService {
    * handle / evidence 重复读取计数。
    * 键：`{sessionId}:{retrievalScopeId}:{handleId}` 或 `…:evidence:{evidenceId}`。
    */
-  private readonly retrievalCounts: ContextRetrievalBoundedCounter
+  private readonly retrievalCounts: ContextRetrievalBoundedCounter;
 
   /** 搜索 query  trace 与重复 search 检测。 */
-  private readonly queryTraceStore: ContextRetrievalQueryTraceStore
+  private readonly queryTraceStore: ContextRetrievalQueryTraceStore;
 
   /** 日志/artifact 读盘。 */
-  private readonly referenceReader = new ContextRetrievalReferenceReader()
+  private readonly referenceReader = new ContextRetrievalReferenceReader();
 
   /** 索引构建（messages + toolPayloads + evidence）。 */
-  private readonly indexBuilder: ContextRetrievalIndexBuilder
+  private readonly indexBuilder: ContextRetrievalIndexBuilder;
 
   /** handle → 正文展开。 */
-  private readonly payloadReader: ContextRetrievalPayloadReader
+  private readonly payloadReader: ContextRetrievalPayloadReader;
 
   /** sessionId → 最近一次索引 load/rebuild 遥测。 */
-  private readonly indexBuildTelemetryBySession: ContextRetrievalBoundedRecentMap<RetrievalIndexBuildTelemetry>
+  private readonly indexBuildTelemetryBySession: ContextRetrievalBoundedRecentMap<RetrievalIndexBuildTelemetry>;
   /** sessionId → 正在进行的 loadFresh/rebuild，避免并发查询重复构建同一索引。 */
-  private readonly pendingIndexLoads = new Map<string, Promise<ChatContextRetrievalIndexSnapshot>>()
-  private readonly terminalOutputPayloadCandidateLimit: number
+  private readonly pendingIndexLoads = new Map<
+    string,
+    Promise<ChatContextRetrievalIndexSnapshot>
+  >();
+  private readonly terminalOutputPayloadCandidateLimit: number;
 
   constructor(
     payloadStore: RetrievalPayloadStorePort,
@@ -132,28 +142,36 @@ class ChatContextRetrievalService {
     private readonly governanceSessions: ContextGovernanceSessionRegistry,
     /** 检索索引存储端口；宿主注入文件系统实现（落盘策略与新鲜度指纹在宿主侧）。 */
     private readonly indexStore: ChatContextRetrievalIndexStore,
-    options: ChatContextRetrievalServiceOptions = {}
+    options: ChatContextRetrievalServiceOptions = {},
   ) {
     this.retrievalCounts = new ContextRetrievalBoundedCounter(
-      this.normalizeLimit(options.maxRetrievalCountEntries, DefaultRetrievalCountEntryLimit)
-    )
-    this.queryTraceStore = new ContextRetrievalQueryTraceStore(options.queryTrace)
+      this.normalizeLimit(
+        options.maxRetrievalCountEntries,
+        DefaultRetrievalCountEntryLimit,
+      ),
+    );
+    this.queryTraceStore = new ContextRetrievalQueryTraceStore(
+      options.queryTrace,
+    );
     this.indexBuildTelemetryBySession = new ContextRetrievalBoundedRecentMap(
       this.normalizeLimit(
         options.maxIndexBuildTelemetrySessions,
-        DefaultIndexBuildTelemetrySessionLimit
-      )
-    )
+        DefaultIndexBuildTelemetrySessionLimit,
+      ),
+    );
     this.terminalOutputPayloadCandidateLimit = this.normalizeLimit(
       options.maxTerminalOutputPayloadCandidates,
-      DefaultTerminalOutputPayloadCandidateLimit
-    )
-    this.indexBuilder = new ContextRetrievalIndexBuilder(payloadStore, stateStore)
+      DefaultTerminalOutputPayloadCandidateLimit,
+    );
+    this.indexBuilder = new ContextRetrievalIndexBuilder(
+      payloadStore,
+      stateStore,
+    );
     this.payloadReader = new ContextRetrievalPayloadReader(
       payloadStore,
       stateStore,
-      this.referenceReader
-    )
+      this.referenceReader,
+    );
   }
 
   /**
@@ -167,26 +185,26 @@ class ChatContextRetrievalService {
    * `retrievalScopeId` 默认 `sessionId`；同一 `scope` 内重复请求同一 `handle` 会告警。
    */
   public async retrieveContextPayload(
-    request: ChatContextRetrievePayloadRequest
+    request: ChatContextRetrievePayloadRequest,
   ): Promise<ChatContextRetrievedPayload> {
-    const sessionId = request.sessionId.trim()
-    const handleId = request.handleId.trim()
-    const jsonPath = request.jsonPath?.trim() || null
+    const sessionId = request.sessionId.trim();
+    const handleId = request.handleId.trim();
+    const jsonPath = request.jsonPath?.trim() || null;
     const retrievalScopeId = this.resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
-      request.sessionLineage
-    )
-    const maxChars = chatSearchText.clampMaxChars(request.maxChars)
-    const offset = Math.max(0, Math.round(request.offset ?? 0))
+      request.sessionLineage,
+    );
+    const maxChars = chatSearchText.clampMaxChars(request.maxChars);
+    const offset = Math.max(0, Math.round(request.offset ?? 0));
     // offset 纳入去重键:分页续读不是重复检索,不该吃 repeated 告警。
-    const countKey = `${sessionId}:${retrievalScopeId}:${handleId}:${jsonPath ?? ''}:${offset}`
-    const retrievalCount = this.retrievalCounts.increment(countKey)
-    const repeated = retrievalCount > 1
+    const countKey = `${sessionId}:${retrievalScopeId}:${handleId}:${jsonPath ?? ""}:${offset}`;
+    const retrievalCount = this.retrievalCounts.increment(countKey);
+    const repeated = retrievalCount > 1;
 
     // member=session：会话即资源作用域，工具 payload handle 不再做跨 context 可见性闸门；
     // 直接展开（句柄无效时 payloadReader 自然返回 found=false）。
-    if (handleId.startsWith('tool:') || handleId.startsWith('ctx-payload:')) {
+    if (handleId.startsWith("tool:") || handleId.startsWith("ctx-payload:")) {
       const payload = await this.payloadReader.retrieveToolPayload({
         sessionId,
         handleId,
@@ -196,12 +214,13 @@ class ChatContextRetrievalService {
         offset,
         repeated,
         retrievalCount,
-      })
-      if (payload.found) this.governanceSessions.recordFault(sessionId, handleId)
-      return payload
+      });
+      if (payload.found)
+        this.governanceSessions.recordFault(sessionId, handleId);
+      return payload;
     }
 
-    if (handleId.startsWith('message:')) {
+    if (handleId.startsWith("message:")) {
       const payload = await this.payloadReader.retrieveMessagePayload({
         sessionId,
         handleId,
@@ -209,51 +228,57 @@ class ChatContextRetrievalService {
         maxChars,
         repeated,
         retrievalCount,
-      })
-      if (payload.found) this.governanceSessions.recordFault(sessionId, handleId)
-      return payload
+      });
+      if (payload.found)
+        this.governanceSessions.recordFault(sessionId, handleId);
+      return payload;
     }
 
     // 铁律1:匹配失败必须列出有效项供自纠,并自动把 ref 当 query 兜底搜一轮——
     // 把"召回失败→模型盲猜重试"的抖动收敛成一次往返。
-    const validHandleSamples = await this.listValidHandleSamples(sessionId)
+    const validHandleSamples = await this.listValidHandleSamples(sessionId);
     const fallbackSearch = await this.searchConversationHistory({
       sessionId,
       query: handleId,
       maxResults: 3,
-    }).catch(() => null)
+    }).catch(() => null);
     return {
       handleId,
       sessionId,
       found: false,
-      kind: 'unknown',
+      kind: "unknown",
       content: null,
       repeated,
       retrievalCount,
       warning: [
-        '未知的动态上下文 handle。',
+        "未知的动态上下文 handle。",
         validHandleSamples.length
-          ? `当前会话有效句柄样本(最多10条):${validHandleSamples.join('、')}`
+          ? `当前会话有效句柄样本(最多10条):${validHandleSamples.join("、")}`
           : null,
         fallbackSearch?.items?.length
-          ? '已自动按该 ref 关键词搜索历史,见 fallbackSearch。'
+          ? "已自动按该 ref 关键词搜索历史,见 fallbackSearch。"
           : null,
       ]
         .filter((item): item is string => Boolean(item))
-        .join(' '),
-      ...(fallbackSearch?.items?.length ? { metadata: { fallbackSearch: fallbackSearch.items } } : {}),
-    }
+        .join(" "),
+      ...(fallbackSearch?.items?.length
+        ? { metadata: { fallbackSearch: fallbackSearch.items } }
+        : {}),
+    };
   }
 
   /** 有效句柄样本(≤10):动态工具 payload handle + evidence id,供召回失败时模型自纠。 */
   private async listValidHandleSamples(sessionId: string): Promise<string[]> {
     try {
-      const index = await this.loadRetrievalIndex(sessionId)
-      const payloadHandles = index.toolPayloads.slice(-6).map((entry) => entry.handleId)
-      const evidenceIds = index.evidence.slice(-4).map((record) => record.id)
-      return [...payloadHandles, ...evidenceIds].slice(0, 10)
+      const index = await this.loadRetrievalIndex(sessionId);
+      const payloadHandles = index.toolPayloads
+        .slice(-6)
+        .map((entry) => entry.handleId);
+      const evidenceIds = index.evidence.slice(-4).map((record) => record.id);
+      return [...payloadHandles, ...evidenceIds].slice(0, 10);
     } catch {
-      return []
+      // arch-guard:silent-catch-ok 纠错提示样本是 best-effort；索引暂不可读时返回空样本，不影响主召回错误。
+      return [];
     }
   }
 
@@ -269,73 +294,80 @@ class ChatContextRetrievalService {
    * 6. queryTraceStore.record → 返回 items + trace
    */
   public async searchConversationHistory(
-    request: ChatContextSearchConversationHistoryRequest
+    request: ChatContextSearchConversationHistoryRequest,
   ): Promise<ChatContextSearchConversationHistoryResult> {
-    const sessionId = request.sessionId.trim()
-    const query = request.query.trim()
+    const sessionId = request.sessionId.trim();
+    const query = request.query.trim();
     const retrievalScopeId = this.resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
-      request.sessionLineage
-    )
-    const maxResults = chatSearchText.clampMaxResults(request.maxResults)
-    const maxChars = chatSearchText.clampMaxChars(request.maxChars)
-    const terms = chatSearchRanking.normalizeSearchTerms(query)
+      request.sessionLineage,
+    );
+    const maxResults = chatSearchText.clampMaxResults(request.maxResults);
+    const maxChars = chatSearchText.clampMaxChars(request.maxChars);
+    const terms = chatSearchRanking.normalizeSearchTerms(query);
     const queryRegistration = this.queryTraceStore.register({
       sessionId,
       retrievalScopeId,
-      kind: 'conversation-history',
+      kind: "conversation-history",
       query,
       terms,
-    })
-    const index = await this.loadRetrievalIndex(sessionId)
-    const totalMessages = index.messages.length
+    });
+    const index = await this.loadRetrievalIndex(sessionId);
+    const totalMessages = index.messages.length;
 
     const matchedItems = index.messages
-      .map((message): LooseOptional<ChatContextSearchConversationHistoryItem> => {
-        const ranking = chatSearchRanking.rankContextText({
-          query,
-          terms,
-          text: message.searchableText,
-          index: message.messageIndex,
-          total: totalMessages,
-        })
-        if (ranking.semanticScore <= 0 && !isEmpty(terms)) return null
+      .map(
+        (message): LooseOptional<ChatContextSearchConversationHistoryItem> => {
+          const ranking = chatSearchRanking.rankContextText({
+            query,
+            terms,
+            text: message.searchableText,
+            index: message.messageIndex,
+            total: totalMessages,
+          });
+          if (ranking.semanticScore <= 0 && !isEmpty(terms)) return null;
 
-        return {
-          handleId: message.handleId,
-          messageId: message.messageId,
-          messageIndex: message.messageIndex,
-          role: message.role,
-          timestamp: message.timestamp,
-          score: ranking.score,
-          matchReasons: ranking.matchReasons,
-          pathHints: ranking.pathHints,
-          symbolHints: ranking.symbolHints,
-          recencyScore: ranking.recencyScore,
-          errorFingerprint: toNullable(ranking.errorFingerprint),
-          summary: chatSearchText.truncate(message.summary, Math.min(240, maxChars)),
-          matchedText: toNullable(
-            chatSearchRanking.buildSearchSnippet(
-              message.text || message.searchableText,
-              terms,
-              Math.min(900, maxChars)
-            )
-          ),
-          toolNames: message.toolNames,
-        }
-      })
-      .filter((item): item is ChatContextSearchConversationHistoryItem => Boolean(item))
+          return {
+            handleId: message.handleId,
+            messageId: message.messageId,
+            messageIndex: message.messageIndex,
+            role: message.role,
+            timestamp: message.timestamp,
+            score: ranking.score,
+            matchReasons: ranking.matchReasons,
+            pathHints: ranking.pathHints,
+            symbolHints: ranking.symbolHints,
+            recencyScore: ranking.recencyScore,
+            errorFingerprint: toNullable(ranking.errorFingerprint),
+            summary: chatSearchText.truncate(
+              message.summary,
+              Math.min(240, maxChars),
+            ),
+            matchedText: toNullable(
+              chatSearchRanking.buildSearchSnippet(
+                message.text || message.searchableText,
+                terms,
+                Math.min(900, maxChars),
+              ),
+            ),
+            toolNames: message.toolNames,
+          };
+        },
+      )
+      .filter((item): item is ChatContextSearchConversationHistoryItem =>
+        Boolean(item),
+      )
       .sort((left, right) => {
-        if (right.score !== left.score) return right.score - left.score
+        if (right.score !== left.score) return right.score - left.score;
 
-        return right.messageIndex - left.messageIndex
-      })
-    const items = matchedItems.slice(0, maxResults)
+        return right.messageIndex - left.messageIndex;
+      });
+    const items = matchedItems.slice(0, maxResults);
     const trace = this.queryTraceStore.record({
       sessionId,
       retrievalScopeId,
-      kind: 'conversation-history',
+      kind: "conversation-history",
       query,
       registration: queryRegistration,
       totalCandidates: totalMessages,
@@ -346,12 +378,12 @@ class ChatContextRetrievalService {
         score: item.score,
         matchReasons: item.matchReasons,
       })),
-    })
+    });
     const retryHints = this.buildEmptySearchRetryHints({
-      kind: 'conversation-history',
+      kind: "conversation-history",
       matchedCount: matchedItems.length,
       totalCandidates: totalMessages,
-    })
+    });
 
     return {
       sessionId,
@@ -361,7 +393,7 @@ class ChatContextRetrievalService {
       trace,
       retryHints: isEmpty(retryHints) ? undefined : retryHints,
       warning: this.combineSearchWarnings(trace.warning, retryHints),
-    }
+    };
   }
 
   /**
@@ -373,27 +405,30 @@ class ChatContextRetrievalService {
    * lifecycle 为 stale / reread-required 时附加过期 warning。
    */
   public async readEvidence(
-    request: ChatContextReadEvidenceRequest
+    request: ChatContextReadEvidenceRequest,
   ): Promise<ChatContextReadEvidenceResult> {
-    const sessionId = request.sessionId.trim()
-    const evidenceId = request.evidenceId.trim()
+    const sessionId = request.sessionId.trim();
+    const evidenceId = request.evidenceId.trim();
     const retrievalScopeId = this.resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
-      request.sessionLineage
-    )
-    const maxChars = chatSearchText.clampMaxChars(request.maxChars)
-    const countKey = `${sessionId}:${retrievalScopeId}:evidence:${evidenceId}`
-    const retrievalCount = this.retrievalCounts.increment(countKey)
-    const repeated = retrievalCount > 1
-    const index = await this.loadRetrievalIndex(sessionId)
-    const evidence = index.evidence.find((record) => record.id === evidenceId)
+      request.sessionLineage,
+    );
+    const maxChars = chatSearchText.clampMaxChars(request.maxChars);
+    const countKey = `${sessionId}:${retrievalScopeId}:evidence:${evidenceId}`;
+    const retrievalCount = this.retrievalCounts.increment(countKey);
+    const repeated = retrievalCount > 1;
+    const index = await this.loadRetrievalIndex(sessionId);
+    const evidence = index.evidence.find((record) => record.id === evidenceId);
 
     if (!evidence) {
       // 铁律1:miss 必须列有效项。证据集通常很小,直接回带 {id, kind, path} 样本供自纠。
       const samples = index.evidence
         .slice(-8)
-        .map((record) => `${record.id}(${record.kind}${record.path ? `:${record.path}` : ''})`)
+        .map(
+          (record) =>
+            `${record.id}(${record.kind}${record.path ? `:${record.path}` : ""})`,
+        );
       return {
         sessionId,
         evidenceId,
@@ -403,27 +438,30 @@ class ChatContextRetrievalService {
         repeated,
         retrievalCount,
         warning: [
-          '未在活跃 Context OS 视图或运行时账本中找到该证据。',
-          samples.length ? `当前有效证据样本:${samples.join('、')}` : null,
+          "未在活跃 Context OS 视图或运行时账本中找到该证据。",
+          !isEmpty(samples) ? `当前有效证据样本:${samples.join("、")}` : null,
         ]
           .filter((item): item is string => Boolean(item))
-          .join(' '),
-      }
+          .join(" "),
+      };
     }
 
-    const stale = evidence.lifecycle === 'stale' || evidence.lifecycle === 'reread-required'
-    const payloadHandleId = this.payloadReader.resolveEvidencePayloadHandle(evidence)
+    const stale =
+      evidence.lifecycle === "stale" ||
+      evidence.lifecycle === "reread-required";
+    const payloadHandleId =
+      this.payloadReader.resolveEvidencePayloadHandle(evidence);
     const repeatedWarning = repeated
-      ? '当前执行范围内已读过该证据；请使用已返回记录或其 payload handle，勿重复读取。'
-      : null
+      ? "当前执行范围内已读过该证据；请使用已返回记录或其 payload handle，勿重复读取。"
+      : null;
     const warning = [
       stale
-        ? '该证据已过期或需要重读；在依赖旧摘录前请通过注入能力重新读取来源。'
+        ? "该证据已过期或需要重读；在依赖旧摘录前请通过注入能力重新读取来源。"
         : null,
       repeatedWarning,
     ]
       .filter((item): item is string => Boolean(item))
-      .join(' ')
+      .join(" ");
 
     return {
       sessionId,
@@ -431,13 +469,15 @@ class ChatContextRetrievalService {
       found: true,
       evidence: {
         ...evidence,
-        excerpt: evidence.excerpt ? chatSearchText.truncate(evidence.excerpt, maxChars) : evidence.excerpt,
+        excerpt: evidence.excerpt
+          ? chatSearchText.truncate(evidence.excerpt, maxChars)
+          : evidence.excerpt,
       },
       payloadHandleId: toNullable(payloadHandleId),
       repeated,
       retrievalCount,
       warning: warning ? warning : null,
-    }
+    };
   }
 
   /**
@@ -445,10 +485,10 @@ class ChatContextRetrievalService {
    * payloadRef 优先于 toolCallId。
    */
   public async readToolPayload(
-    request: ChatContextReadToolPayloadRequest
+    request: ChatContextReadToolPayloadRequest,
   ): Promise<ChatContextRetrievedPayload> {
-    const payloadRef = request.payloadRef?.trim()
-    const toolCallId = request.toolCallId?.trim()
+    const payloadRef = request.payloadRef?.trim();
+    const toolCallId = request.toolCallId?.trim();
 
     return this.retrieveContextPayload({
       sessionId: request.sessionId,
@@ -456,14 +496,16 @@ class ChatContextRetrievalService {
       // 盲加前缀会变 tool:tool:* 永远 miss。
       handleId:
         payloadRef ||
-        (toolCallId?.startsWith('tool:') ? toolCallId : `tool:${toolCallId ?? ''}`),
+        (toolCallId?.startsWith("tool:")
+          ? toolCallId
+          : `tool:${toolCallId ?? ""}`),
       jsonPath: request.jsonPath,
       offset: request.offset,
       retrievalScopeId: request.retrievalScopeId,
       sessionLineage: request.sessionLineage,
-      reason: request.reason ?? '读取指定已保存工具 payload',
+      reason: request.reason ?? "读取指定已保存工具 payload",
       maxChars: request.maxChars,
-    })
+    });
   }
 
   /**
@@ -478,54 +520,55 @@ class ChatContextRetrievalService {
    * 命中项带 logPath、truncated、warning（读盘层问题）。
    */
   public async searchTerminalOutput(
-    request: ChatContextSearchTerminalOutputRequest
+    request: ChatContextSearchTerminalOutputRequest,
   ): Promise<ChatContextSearchTerminalOutputResult> {
-    const sessionId = request.sessionId.trim()
-    const query = request.query.trim()
+    const sessionId = request.sessionId.trim();
+    const query = request.query.trim();
     const retrievalScopeId = this.resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
-      request.sessionLineage
-    )
-    const terms = chatSearchRanking.normalizeSearchTerms(query)
+      request.sessionLineage,
+    );
+    const terms = chatSearchRanking.normalizeSearchTerms(query);
     const queryRegistration = this.queryTraceStore.register({
       sessionId,
       retrievalScopeId,
-      kind: 'terminal-output',
+      kind: "terminal-output",
       query,
       terms,
-    })
-    const maxResults = chatSearchText.clampMaxResults(request.maxResults)
-    const maxChars = chatSearchText.clampMaxChars(request.maxChars)
-    const index = await this.loadRetrievalIndex(sessionId)
-    const items: ChatContextSearchTerminalOutputItem[] = []
-    const logSnippetByPath = new Map<string, LogReadSnippet>()
+    });
+    const maxResults = chatSearchText.clampMaxResults(request.maxResults);
+    const maxChars = chatSearchText.clampMaxChars(request.maxChars);
+    const index = await this.loadRetrievalIndex(sessionId);
+    const items: ChatContextSearchTerminalOutputItem[] = [];
+    const logSnippetByPath = new Map<string, LogReadSnippet>();
     const payloadCandidates = this.selectTerminalOutputPayloadCandidates({
       toolPayloads: index.toolPayloads,
       query,
       terms,
-    })
+    });
 
     for (const toolPayload of payloadCandidates) {
       const snippets = await this.readReferencedLogsOnce({
         references: toolPayload.logReferences,
         cacheByPath: logSnippetByPath,
         totalBudgetChars: maxChars,
-      })
+      });
       for (const snippet of snippets) {
+        const content = snippet.content ?? snippet.path;
         const haystack = [
           toolPayload.searchableText,
           snippet.path,
           snippet.source,
-          snippet.content ?? '',
-        ].join('\n')
+          snippet.content ?? "",
+        ].join("\n");
         const ranking = chatSearchRanking.rankContextText({
           query,
           terms,
           text: haystack,
-        })
+        });
         if (ranking.semanticScore <= 0 && !isEmpty(terms)) {
-          continue
+          continue;
         }
 
         items.push({
@@ -535,26 +578,39 @@ class ChatContextRetrievalService {
           source: snippet.source,
           score: ranking.score,
           matchReasons: ranking.matchReasons,
-          snippet: chatSearchRanking.buildSearchSnippet(snippet.content ?? snippet.path, terms, Math.min(1_500, maxChars)) ?? '',
+          snippet:
+            (snippet.truncated &&
+            !terms.some((term) =>
+              content.toLowerCase().includes(term.toLowerCase()),
+            )
+              ? chatSearchRanking.buildHeadTailSnippet(
+                  content,
+                  Math.min(1_500, maxChars),
+                )
+              : chatSearchRanking.buildSearchSnippet(
+                  content,
+                  terms,
+                  Math.min(1_500, maxChars),
+                )) ?? "",
           truncated: snippet.truncated,
           warning: snippet.warning,
-        })
+        });
       }
     }
     const sortedItems = items.sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score
+      if (right.score !== left.score) return right.score - left.score;
 
-      return compareStableStrings(left.logPath, right.logPath)
-    })
-    const returnedItems = sortedItems.slice(0, maxResults)
+      return compareStableStrings(left.logPath, right.logPath);
+    });
+    const returnedItems = sortedItems.slice(0, maxResults);
     const totalLogReferences = index.toolPayloads.reduce(
       (total, toolPayload) => total + toolPayload.logReferences.length,
-      0
-    )
+      0,
+    );
     const trace = this.queryTraceStore.record({
       sessionId,
       retrievalScopeId,
-      kind: 'terminal-output',
+      kind: "terminal-output",
       query,
       registration: queryRegistration,
       totalCandidates: totalLogReferences,
@@ -565,12 +621,12 @@ class ChatContextRetrievalService {
         score: item.score,
         matchReasons: item.matchReasons,
       })),
-    })
+    });
     const retryHints = this.buildEmptySearchRetryHints({
-      kind: 'terminal-output',
+      kind: "terminal-output",
       matchedCount: sortedItems.length,
       totalCandidates: totalLogReferences,
-    })
+    });
 
     return {
       sessionId,
@@ -579,7 +635,7 @@ class ChatContextRetrievalService {
       trace,
       retryHints: isEmpty(retryHints) ? undefined : retryHints,
       warning: this.combineSearchWarnings(trace.warning, retryHints),
-    }
+    };
   }
 
   /**
@@ -587,27 +643,32 @@ class ChatContextRetrievalService {
    * 若 indexStore 报告 !fresh，会先 loadRetrievalIndex 触发 rebuild 再读 diagnostics。
    */
   public async getRetrievalIndexDiagnostics(
-    sessionId: string
+    sessionId: string,
   ): Promise<Nullable<ChatContextRetrievalIndexDiagnostics>> {
-    const normalizedSessionId = sessionId.trim()
+    const normalizedSessionId = sessionId.trim();
 
-    let diagnostics = await (this.indexStore.getDiagnostics?.(normalizedSessionId))
-    if (!diagnostics) return null
+    let diagnostics =
+      await this.indexStore.getDiagnostics?.(normalizedSessionId);
+    if (!diagnostics) return null;
 
     if (!diagnostics.fresh) {
-      await this.loadRetrievalIndex(normalizedSessionId)
-      diagnostics = (await this.indexStore.getDiagnostics?.(normalizedSessionId)) ?? diagnostics
+      await this.loadRetrievalIndex(normalizedSessionId);
+      diagnostics =
+        (await this.indexStore.getDiagnostics?.(normalizedSessionId)) ??
+        diagnostics;
     }
 
-    const telemetry = this.indexBuildTelemetryBySession.get(normalizedSessionId)
+    const telemetry =
+      this.indexBuildTelemetryBySession.get(normalizedSessionId);
 
     return {
       ...diagnostics,
       lastLoadSource: telemetry?.lastLoadSource ?? diagnostics.lastLoadSource,
-      lastBuildDurationMs: telemetry?.lastBuildDurationMs ?? diagnostics.lastBuildDurationMs,
+      lastBuildDurationMs:
+        telemetry?.lastBuildDurationMs ?? diagnostics.lastBuildDurationMs,
       lastBuiltAt: telemetry?.lastBuiltAt ?? diagnostics.lastBuiltAt,
       recentQueries: this.queryTraceStore.getRecent(normalizedSessionId),
-    }
+    };
   }
 
   /**
@@ -618,186 +679,218 @@ class ChatContextRetrievalService {
    * 3. 写入 indexBuildTelemetryBySession 供 diagnostics
    */
   private async loadRetrievalIndex(
-    sessionId: string
+    sessionId: string,
   ): Promise<ChatContextRetrievalIndexSnapshot> {
-    const normalizedSessionId = sessionId.trim()
-    const pending = this.pendingIndexLoads.get(normalizedSessionId)
-    if (pending) return pending
+    const normalizedSessionId = sessionId.trim();
+    const pending = this.pendingIndexLoads.get(normalizedSessionId);
+    if (pending) return pending;
 
-    const load = this.loadRetrievalIndexUncoalesced(normalizedSessionId).finally(() => {
-      this.pendingIndexLoads.delete(normalizedSessionId)
-    })
-    this.pendingIndexLoads.set(normalizedSessionId, load)
-    return load
+    const load = this.loadRetrievalIndexUncoalesced(
+      normalizedSessionId,
+    ).finally(() => {
+      this.pendingIndexLoads.delete(normalizedSessionId);
+    });
+    this.pendingIndexLoads.set(normalizedSessionId, load);
+    return load;
   }
 
   private async loadRetrievalIndexUncoalesced(
-    normalizedSessionId: string
+    normalizedSessionId: string,
   ): Promise<ChatContextRetrievalIndexSnapshot> {
-    const freshIndex = await this.indexStore.loadFresh(normalizedSessionId).catch(() => null)
+    const freshIndex = await this.indexStore
+      .loadFresh(normalizedSessionId)
+      .catch(() => null);
     if (freshIndex) {
       this.indexBuildTelemetryBySession.set(normalizedSessionId, {
-        lastLoadSource: 'fresh-index',
+        lastLoadSource: "fresh-index",
         lastBuildDurationMs: null,
         lastBuiltAt: freshIndex.builtAt,
-      })
-      return freshIndex
+      });
+      return freshIndex;
     }
 
-    const buildStartedAt = Date.now()
-    const rebuiltIndex = await this.indexBuilder.build(normalizedSessionId)
-    await this.indexStore.save(normalizedSessionId, rebuiltIndex).catch(() => undefined)
+    const buildStartedAt = Date.now();
+    const rebuiltIndex = await this.indexBuilder.build(normalizedSessionId);
+    await this.indexStore
+      .save(normalizedSessionId, rebuiltIndex)
+      .catch(
+        () => undefined /* arch-guard:silent-catch-ok 索引已在内存重建成功；持久化失败只影响下次缓存命中，不应让本次召回失败。 */,
+      );
     this.indexBuildTelemetryBySession.set(normalizedSessionId, {
-      lastLoadSource: 'rebuilt-index',
+      lastLoadSource: "rebuilt-index",
       lastBuildDurationMs: Date.now() - buildStartedAt,
       lastBuiltAt: rebuiltIndex.builtAt,
-    })
-    return rebuiltIndex
+    });
+    return rebuiltIndex;
   }
 
   private selectTerminalOutputPayloadCandidates(input: {
-    toolPayloads: ChatContextRetrievalIndexToolPayload[]
-    query: string
-    terms: string[]
+    toolPayloads: ChatContextRetrievalIndexToolPayload[];
+    query: string;
+    terms: string[];
   }): ChatContextRetrievalIndexToolPayload[] {
-    const withLogs = input.toolPayloads.filter((toolPayload) => !isEmpty(toolPayload.logReferences))
-    if (withLogs.length <= this.terminalOutputPayloadCandidateLimit) return withLogs
+    const withLogs = input.toolPayloads.filter(
+      (toolPayload) => !isEmpty(toolPayload.logReferences),
+    );
+    if (withLogs.length <= this.terminalOutputPayloadCandidateLimit)
+      return withLogs;
 
     const ranked = withLogs.map((toolPayload) => {
       const referenceText = toolPayload.logReferences
         .map((reference) => `${reference.path}\n${reference.source}`)
-        .join('\n')
+        .join("\n");
       const ranking = chatSearchRanking.rankContextText({
         query: input.query,
         terms: input.terms,
         text: `${toolPayload.searchableText}\n${referenceText}`,
-      })
-      return { toolPayload, ranking }
-    })
+      });
+      return { toolPayload, ranking };
+    });
     const matched = ranked.filter(
-      (item) => item.ranking.score > 0 || item.ranking.semanticScore > 0
-    )
-    const candidates = isEmpty(matched) ? ranked : matched
+      (item) => item.ranking.score > 0 || item.ranking.semanticScore > 0,
+    );
+    const candidates = isEmpty(matched) ? ranked : matched;
 
     return candidates
       .sort((left, right) => {
-        if (right.ranking.score !== left.ranking.score) return right.ranking.score - left.ranking.score
-        return compareStableStrings(left.toolPayload.handleId, right.toolPayload.handleId)
+        if (right.ranking.score !== left.ranking.score)
+          return right.ranking.score - left.ranking.score;
+        return compareStableStrings(
+          left.toolPayload.handleId,
+          right.toolPayload.handleId,
+        );
       })
       .slice(0, this.terminalOutputPayloadCandidateLimit)
-      .map((item) => item.toolPayload)
+      .map((item) => item.toolPayload);
   }
 
   private buildEmptySearchRetryHints(input: {
-    kind: 'conversation-history' | 'terminal-output'
-    matchedCount: number
-    totalCandidates: number
+    kind: "conversation-history" | "terminal-output";
+    matchedCount: number;
+    totalCandidates: number;
   }): string[] {
-    if (input.matchedCount > 0) return []
+    if (input.matchedCount > 0) return [];
 
     const hints = [
-      '0 条召回不代表事件没有发生；只表示当前已索引范围和本次 query 没命中。',
-      '请换用更少、更罕见的文件名、符号名、错误指纹或用户原话关键词重新搜索。',
-    ]
+      "0 条召回不代表事件没有发生；只表示当前已索引范围和本次 query 没命中。",
+      "请换用更少、更罕见的文件名、符号名、错误指纹或用户原话关键词重新搜索。",
+    ];
 
     if (input.totalCandidates <= 0) {
       hints.push(
-        input.kind === 'terminal-output'
-          ? '当前会话没有可搜索的内部终端日志引用；需要命令输出时应先确认相关工具结果是否保存了 logPath。'
-          : '当前会话还没有可搜索的历史消息；需要当前状态时请改用对应的注入检查能力。'
-      )
+        input.kind === "terminal-output"
+          ? "当前会话没有可搜索的内部终端日志引用；需要命令输出时应先确认相关工具结果是否保存了 logPath。"
+          : "当前会话还没有可搜索的历史消息；需要当前状态时请改用对应的注入检查能力。",
+      );
     }
 
-    if (input.kind === 'terminal-output') {
+    if (input.kind === "terminal-output") {
       hints.push(
-        'terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 context:recall kind=conversation/all 或按 ref 精确取回。'
-      )
+        "terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 context:recall kind=conversation/all 或按 ref 精确取回。",
+      );
     } else {
       hints.push(
-        'conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 context:recall kind=terminal/all。'
-      )
+        "conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 context:recall kind=terminal/all。",
+      );
     }
 
-    return hints
+    return hints;
   }
 
   private combineSearchWarnings(
     traceWarning: LooseOptional<string>,
-    retryHints: string[]
+    retryHints: string[],
   ): LooseOptional<string> {
     const parts = [traceWarning, ...retryHints].filter((part): part is string =>
-      Boolean(part?.trim())
-    )
+      Boolean(part?.trim()),
+    );
 
-    return isEmpty(parts) ? null : parts.join(' ')
+    return isEmpty(parts) ? null : parts.join(" ");
   }
 
   private async readReferencedLogsOnce(input: {
-    references: ReferencedLogPath[]
-    cacheByPath: Map<string, LogReadSnippet>
-    totalBudgetChars: number
+    references: ReferencedLogPath[];
+    cacheByPath: Map<string, LogReadSnippet>;
+    totalBudgetChars: number;
   }): Promise<LogReadSnippet[]> {
-    const references = input.references.slice(0, contextRetrievalReferences.maxReferencedLogs)
-    const missingReferences = references.filter((reference) => !input.cacheByPath.has(reference.path))
+    const references = input.references.slice(
+      0,
+      contextRetrievalReferences.maxReferencedLogs,
+    );
+    const missingReferences = references.filter(
+      (reference) => !input.cacheByPath.has(reference.path),
+    );
     if (!isEmpty(missingReferences)) {
       const missingSnippets = await this.referenceReader.readReferencedLogs(
         missingReferences,
-        input.totalBudgetChars
-      )
+        input.totalBudgetChars,
+      );
       for (const snippet of missingSnippets) {
-        input.cacheByPath.set(snippet.path, snippet)
+        input.cacheByPath.set(snippet.path, snippet);
       }
     }
 
     return references
       .map((reference): Nullable<LogReadSnippet> => {
-        const snippet = input.cacheByPath.get(reference.path)
-        if (!snippet) return null
+        const snippet = input.cacheByPath.get(reference.path);
+        if (!snippet) return null;
 
         return {
           ...snippet,
           source: reference.source,
-        }
+        };
       })
-      .filter((snippet): snippet is LogReadSnippet => isNotNull(snippet))
+      .filter((snippet): snippet is LogReadSnippet => isNotNull(snippet));
   }
 
   private resolveRetrievalScopeId(
     sessionId: string,
     retrievalScopeId: LooseOptional<string>,
-    lineage: LooseOptional<SessionLineageContext>
+    lineage: LooseOptional<SessionLineageContext>,
   ): string {
-    const baseScope = retrievalScopeId?.trim() || sessionId
-    const lineageScope = this.buildLineageScopeKey(sessionId, lineage)
-    return [baseScope, lineageScope].filter((item): item is string => !!item).join(':')
+    const baseScope = retrievalScopeId?.trim() || sessionId;
+    const lineageScope = this.buildLineageScopeKey(sessionId, lineage);
+    return [baseScope, lineageScope]
+      .filter((item): item is string => !!item)
+      .join(":");
   }
 
   private buildLineageScopeKey(
     sessionId: string,
-    lineage: LooseOptional<SessionLineageContext>
+    lineage: LooseOptional<SessionLineageContext>,
   ): Nullable<string> {
-    const lineageSessionId = lineage?.sessionId?.trim()
-    if (!lineage || !lineageSessionId || lineageSessionId !== sessionId) return null
+    const lineageSessionId = lineage?.sessionId?.trim();
+    if (!lineage || !lineageSessionId || lineageSessionId !== sessionId)
+      return null;
 
-    const branchId = normalizeSessionLineageId(lineage.activeBranchId) || 'branch:unknown'
-    const checkpointId = normalizeSessionLineageId(lineage.activeCheckpointId) || 'head'
-    const cutoffTimestamp = numberOrNull(lineage.cutoffTimestamp)
-    const cutoff = isPositiveNumber(cutoffTimestamp) ? String(cutoffTimestamp) : 'none'
-    const visibleBranchKey = normalizeSessionLineageIdList(lineage.visibleBranchIds).join(',')
+    const branchId =
+      normalizeSessionLineageId(lineage.activeBranchId) || "branch:unknown";
+    const checkpointId =
+      normalizeSessionLineageId(lineage.activeCheckpointId) || "head";
+    const cutoffTimestamp = numberOrNull(lineage.cutoffTimestamp);
+    const cutoff = isPositiveNumber(cutoffTimestamp)
+      ? String(cutoffTimestamp)
+      : "none";
+    const visibleBranchKey = normalizeSessionLineageIdList(
+      lineage.visibleBranchIds,
+    ).join(",");
 
     return [
       `branch=${branchId}`,
       `checkpoint=${checkpointId}`,
       `cutoff=${cutoff}`,
       `visible=${visibleBranchKey}`,
-    ].join('|')
+    ].join("|");
   }
 
-  private normalizeLimit(value: LooseOptional<number>, fallback: number): number {
-    if (!isFiniteNumber(value)) return fallback
+  private normalizeLimit(
+    value: LooseOptional<number>,
+    fallback: number,
+  ): number {
+    if (!isFiniteNumber(value)) return fallback;
 
-    return Math.max(1, Math.floor(value))
+    return Math.max(1, Math.floor(value));
   }
 }
 
-export { ChatContextRetrievalService, type ChatContextRetrievalServiceOptions }
+export { ChatContextRetrievalService, type ChatContextRetrievalServiceOptions };

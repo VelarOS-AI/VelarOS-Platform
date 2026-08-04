@@ -159,6 +159,11 @@ interface LoopTurnPromptAudit {
   skippedPromptSegments: readonly SkippedPromptSegmentTrace[]
 }
 
+interface LoopTurnSpanFailure {
+  code: string
+  message: string
+}
+
 /**
  * 供应方回合成功收敛：usage 四字段挂本确定 turn 的 model span；重内容（系统提示词全文 /
  * promptSegments）落 prompt 审计侧信道，靠 requestFingerprint 关联（缺省无 sidecar 时 no-op；
@@ -173,6 +178,8 @@ function endLoopTurnSpansOk(
   spans.modelSpan?.end({
     status: 'ok',
     finishReason: toNullable(result.finishReason),
+    errorCode: null,
+    errorMessage: null,
     tokensIn: toNullable(result.inputTokens),
     tokensOut: toNullable(result.outputTokens),
     costUsd: toNullable(result.costUsd),
@@ -192,10 +199,15 @@ function endLoopTurnSpansOk(
  * 供应方回合出错收敛（幂等——成功路径已 ok 收敛则后续调用被 scope 吞掉）。
  * 出错路径无 turnResult 富化，指标一律 null（§12.6 缺席值单一）。
  */
-function endLoopTurnSpansError(spans: LoopTurnSpans): void {
+function endLoopTurnSpansError(
+  spans: LoopTurnSpans,
+  failure: LoopTurnSpanFailure
+): void {
   spans.modelSpan?.end({
     status: 'error',
     finishReason: null,
+    errorCode: failure.code,
+    errorMessage: failure.message,
     tokensIn: null,
     tokensOut: null,
     costUsd: null,

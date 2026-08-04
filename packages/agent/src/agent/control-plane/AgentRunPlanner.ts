@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import type { RunProfileSelectionId } from '@velaros-ai/agent/protocol'
+import type { RunProfileSelectionId, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { AgentRuntimeCapabilityPorts } from '../../capabilities'
@@ -34,6 +34,7 @@ import {
 export interface PlanAgentIntentInput {
   messages: ModelMessage[]
   capabilityPorts?: AgentRuntimeCapabilityPorts
+  capabilityScopeId?: string
 }
 
 class AgentIntentPlanner {
@@ -43,7 +44,9 @@ class AgentIntentPlanner {
     )
     if (isLowSignalIntentText(latestUserText)) return this.createLowSignalIntent(latestUserText)
 
-    const signals = detectAgentIntentSignals(latestUserText, input.capabilityPorts)
+    const signals = detectAgentIntentSignals(latestUserText, input.capabilityPorts, {
+      scopeId: input.capabilityScopeId,
+    })
     const domains: AgentIntentDomain[] = signals.domains.map((domain) => domain.id)
     const requiresCapabilityEvidence =
       signals.requiresEvidence || signals.requiresMutation || signals.requiresValidation
@@ -58,6 +61,9 @@ class AgentIntentPlanner {
       requiresToolDiscovery: !isEmpty(domains),
       requiresMutation: signals.requiresMutation,
       requiresValidation: signals.requiresValidation,
+      evidenceCategoryIds: [
+        ...new Set(signals.domains.flatMap((domain) => domain.categories)),
+      ],
       minimumActionIds: signals.minimumActionIds,
     }
   }
@@ -90,6 +96,7 @@ class AgentIntentPlanner {
       requiresToolDiscovery: false,
       requiresMutation: false,
       requiresValidation: false,
+      evidenceCategoryIds: [],
       minimumActionIds: [],
     }
   }
@@ -171,6 +178,7 @@ class AgentRunPlanLedgerComposer {
 export interface BuildValidationRunPlanInput {
   requiresEvidence: boolean
   requiresValidation: boolean
+  evidenceCategoryIds: readonly ToolCategoryId[]
   minimumActionIds: readonly string[]
 }
 
@@ -187,8 +195,13 @@ class AgentRunPlanComposer {
   public buildValidation(input: BuildValidationRunPlanInput): ValidationRunPlan {
     return {
       evidenceRequired: input.requiresEvidence,
+      evidenceCategoryIds: [...new Set(input.evidenceCategoryIds)],
       minimumActionIds: [...new Set(input.minimumActionIds)],
-      finishingGate: input.requiresValidation ? 'validate' : 'none',
+      finishingGate: input.requiresValidation
+        ? 'validate'
+        : input.requiresEvidence
+          ? 'remind'
+          : 'none',
     }
   }
 
@@ -196,6 +209,7 @@ class AgentRunPlanComposer {
     const intent = agentIntentPlanner.plan({
       messages: input.history,
       capabilityPorts: input.capabilityPorts,
+      capabilityScopeId: input.capabilityScopeId,
     })
     const context = contextRunPlanner.plan({
       model: input.roleRuntime.model,

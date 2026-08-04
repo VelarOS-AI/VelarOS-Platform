@@ -24,6 +24,5 @@ export {
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
   createTextPromptSegment,
-  createThinkingDepthPromptSegment,
   PromptSegmentPriority,
 } from './segments'

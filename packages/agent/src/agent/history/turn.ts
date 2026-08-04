@@ -72,7 +72,7 @@ class TurnHistory {
   public async appendToolResultsToHistory(
     history: ModelMessage[],
     executor: AgentTurnToolExecutor
-  ): Promise<void> {
+  ): Promise<AgentTurnToolResult[]> {
     const toolResults = await executor.collectAll()
     const latestModelImageToolCallId = [...toolResults]
       .reverse()
@@ -127,6 +127,7 @@ class TurnHistory {
     if (terminalError) {
       throw terminalError
     }
+    return toolResults
   }
 
   public appendAssistantMessage(

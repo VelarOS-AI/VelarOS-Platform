@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import { executeAtomicRead } from '../src/atomic/Read'
+import { executeAtomicWrite, resolveAtomicWriteContent } from '../src/atomic/Write'
 import { systemTools } from '../src/Collection'
 import { SystemToolNames } from '../src/system-tool-names'
 import { shouldReapForegroundProcessGroupAfterExit } from '../src/SystemCommandExecutionPolicy'
@@ -81,6 +82,35 @@ describe('System capability', () => {
       expect(first.nextStartLine).toBe(3)
       expect(second.content).toBe('line-3')
       expect(`${first.content}${second.content}`).toBe('line-1\r\nline-2\r\nline-3')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('copies a bounded source range without round-tripping text through the model', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-write-source-'))
+    const sourcePath = join(root, 'source.txt')
+    const targetPath = join(root, 'target.txt')
+    try {
+      await writeFile(sourcePath, 'one\r\n  two\r\n\r\nfour  \r\nfive\r\n')
+      const source = { path: sourcePath, startLine: 2, endLine: 4 }
+      const resolved = await resolveAtomicWriteContent({ path: targetPath, source })
+      expect(resolved).toEqual({ content: '  two\r\n\r\nfour  \r\n', copiedFrom: source })
+
+      await executeAtomicWrite(
+        { path: targetPath, source },
+        {
+          abortSignal: new AbortController().signal,
+          approval: {
+            requestApproval: async () => ({ approved: true }),
+          },
+          system: {} as never,
+        }
+      )
+      expect(await readFile(targetPath, 'utf8')).toBe('  two\r\n\r\nfour  \r\n')
+      await expect(
+        resolveAtomicWriteContent({ path: targetPath, content: 'x', source })
+      ).rejects.toThrow('Exactly one of content or source')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

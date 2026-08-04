@@ -7,6 +7,7 @@ export type {
   CapabilityEvidenceExtractor,
   CapabilityEvidenceExtractorContext,
   CapabilityIntentClassifier,
+  CapabilityIntentClassifierContext,
   CapabilityIntentSignal,
   CapabilityPromptContributor,
   CapabilityScopeCategoryDecision,

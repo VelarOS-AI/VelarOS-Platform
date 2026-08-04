@@ -73,6 +73,8 @@ export interface ToolSpanOpener {
 export interface ModelSpanOutcome {
   status: ExecutionSpanStatus
   finishReason: Nullable<string>
+  errorCode: Nullable<string>
+  errorMessage: Nullable<string>
   tokensIn: Nullable<number>
   tokensOut: Nullable<number>
   costUsd: Nullable<number>
@@ -418,6 +420,8 @@ class LedgerTurnSpanScope implements TurnSpanScope {
           model: input.model,
           requestFingerprint: input.requestFingerprint,
           finishReason: null,
+          errorCode: null,
+          errorMessage: null,
         }),
       'begin model span'
     )
@@ -436,6 +440,8 @@ class LedgerTurnSpanScope implements TurnSpanScope {
               patch: {
                 finishReason: outcome.finishReason,
                 requestFingerprint: outcome.requestFingerprint,
+                errorCode: outcome.errorCode,
+                errorMessage: outcome.errorMessage,
               } satisfies Partial<ModelSpan>,
             }),
           'end model span'

@@ -41,6 +41,7 @@ import { ToolExecutor, type ToolExecutorEvents } from '../tools'
 
 import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
+import { normalizeModelRequestError } from './model/ModelRequestError'
 import {
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
@@ -479,9 +480,11 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
             maxRetries: AiSdkMaxRetries,
             includeRawChunks: true,
             onError: ({ error }) => {
-              const appError = AppError.from(error)
+              const appError = normalizeModelRequestError(error)
               this.log.warn('streamText error event', {
                 code: appError.code,
+                message: appError.message,
+                context: appError.context,
               })
             },
           },

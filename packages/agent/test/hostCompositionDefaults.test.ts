@@ -7,7 +7,10 @@ import { describe, expect, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
+  ContextBuilder,
   createBuiltInPromptRegistry,
+  createRuntimePromptSegments,
+  type RuntimePromptSnapshot,
   SkillFileStore,
   SkillMarketClient,
 } from '../src'
@@ -32,6 +35,60 @@ describe('host-owned Agent identity', () => {
     const identity = composition.stableParts.find((part) => part.id === 'core.identity')
 
     expect(identity?.text).toBe('你是 Acme Research Assistant。')
+  })
+
+  test('keeps governance metadata in trace instead of exposing it to the model', () => {
+    const built = new ContextBuilder(createBuiltInPromptRegistry()).build()
+    const stable = built.systemPrompt.slice(0, built.stableCutoff)
+    const current = built.systemPrompt.slice(built.stableCutoff).trimStart()
+
+    expect(stable).toStartWith('<instructions>')
+    expect(stable).toEndWith('</instructions>')
+    expect(current).toStartWith('<current_context>')
+    expect(current).toEndWith('</current_context>')
+    expect(built.systemPrompt).not.toContain('<rules>')
+    expect(built.systemPrompt).not.toContain('<sp ')
+    expect(built.systemPrompt).not.toContain(' src=')
+    expect(built.systemPrompt).not.toContain(' tier=')
+    expect(built.segments.some((segment) => segment.id === 'core.identity')).toBe(true)
+  })
+
+  test('keeps model settings structural and prompt text concise', () => {
+    const snapshot: RuntimePromptSnapshot = {
+      locale: 'zh-CN',
+      roleId: 'chat',
+      roleLabel: 'Chat',
+      workflowType: 'chat',
+      thinkingDepth: 'deep',
+      developerContext: null,
+      agentSurfaceId: 'chat',
+      contextPhase: 'operational',
+      activeCapabilityScope: 'system',
+      toolCategories: [],
+      toolSurfaceProfile: 'full',
+      runProfile: 'expanded',
+      toolCapabilityCategories: [],
+      requestableToolCapabilityCategories: [],
+      canUpdatePlan: false,
+      userRequestedPlan: false,
+      proposalMode: false,
+      goalMode: false,
+      selectedPromptFeatureLabels: [],
+      enabledPromptFeatures: [],
+      autoPromptFeatureLabels: [],
+      availableSkills: [],
+      customSubAgents: [],
+      executionPlanPreview: null,
+      currentExecutionAdvice: null,
+      recentToolFailures: [],
+      hasCompactedContext: false,
+    }
+    const segments = createRuntimePromptSegments(snapshot)
+
+    expect(segments.some((segment) => segment.id === 'runtime.run-profile')).toBe(false)
+    expect(segments.some((segment) => segment.id === 'runtime.run-strategy')).toBe(false)
+    expect(String(segments.find((segment) => segment.id === 'runtime.session')?.render({})))
+      .toContain('回复跟随用户当前使用的语言')
   })
 })
 

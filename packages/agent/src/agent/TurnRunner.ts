@@ -9,6 +9,7 @@ import { sanitizeHistoryForProvider } from './history'
 import {
   AgentTurnHistoryHelper,
   type AgentTurnToolExecutor,
+  type AgentTurnToolResult,
   type AssistantContentPart,
 } from './history'
 import {
@@ -89,9 +90,9 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
   public async appendToolResultsToHistory(
     history: ModelMessage[],
     executor: AgentTurnToolExecutor
-  ): Promise<void> {
+  ): Promise<AgentTurnToolResult[]> {
     // TODO[主链路-39]: 工具调用完成后必须追加 tool result 到 history，下一轮模型才能看到工具输出。
-    await this.turnHistoryHelper.appendToolResultsToHistory(history, executor)
+    return this.turnHistoryHelper.appendToolResultsToHistory(history, executor)
   }
 
   /** 执行一轮子 Agent query 模型调用。 */

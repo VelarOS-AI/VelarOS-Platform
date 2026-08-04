@@ -27,6 +27,7 @@ import type { ToolExecutionPolicyRegistry } from '../tools'
 
 import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
+import { normalizeModelRequestError } from './model/ModelRequestError'
 import {
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
@@ -125,7 +126,7 @@ interface SystemPromptDelivery {
  *
  * **为什么尾块是 user 角色而不是 system**：provider 只接受开头连续的 system 段（Anthropic 对被
  * user/assistant 隔开的第二段 system 直接报错）。尾块与既有 retained-context 注入同形——
- * user 角色 + 显式标签，内容仍是原样的 `<layer name="dynamic">` XML，模型的解析规则不变。
+ * user 角色 + 显式标签，内容仍是原样的 `<current_context>` XML。
  */
 function buildSystemPromptDelivery(
   systemPrompt: string,
@@ -502,9 +503,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                       maxRetries: AiSdkMaxRetries,
                       includeRawChunks: true,
                       onError: ({ error }) => {
-                        const appError = AppError.from(error)
+                        const appError = normalizeModelRequestError(error)
                         this.log.warn('streamText error event', {
                           code: appError.code,
+                          message: appError.message,
+                          context: appError.context,
                         })
                       },
                     },

@@ -33,10 +33,12 @@ import type {
 } from "../../kernel";
 import { recordKernelContextEpochDiagnostic } from "../../kernel";
 import {
+  createProviderToolReferenceCanonicalizer,
   ToolExecutionPolicy,
   type ToolExecutionPolicyRegistry,
 } from "../../tools";
 import type { AssistantContentPart } from "../history";
+import { normalizeModelRequestError } from "../model/ModelRequestError";
 
 import { AgentStreamDiagnosticHelper } from "./diagnostics";
 import {
@@ -243,20 +245,44 @@ class StreamConsumer {
     let hasTextOutput = false;
     // 过滤泄漏的原生工具调用标记（`<｜DSML｜...`），别把它当正文推给 UI/历史。
     const leakedToolMarkupState = createLeakedToolMarkupFilterState();
+    const toolReferenceCanonicalizer =
+      createProviderToolReferenceCanonicalizer(
+        args.providerToCanonicalToolNames ?? {},
+      );
+    const reasoningToolReferenceCanonicalizer =
+      createProviderToolReferenceCanonicalizer(
+        args.providerToCanonicalToolNames ?? {},
+      );
+    let reasoningStreamId = "reasoning";
+    const appendReasoningDelta = (text: string): void => {
+      if (!text) return;
+      assistantContent.push({ type: "reasoning", text });
+      args.providerTurnReducer?.apply({
+        type: "assistant-reasoning-delta",
+        text,
+      });
+      args.events.emitReasoningDelta({ id: reasoningStreamId, text });
+    };
+    const emitReasoningDelta = (id: string, rawText: string): void => {
+      if (!rawText) return;
+      if (id !== reasoningStreamId) {
+        appendReasoningDelta(reasoningToolReferenceCanonicalizer.flush());
+        reasoningStreamId = id;
+      }
+      appendReasoningDelta(reasoningToolReferenceCanonicalizer.push(rawText));
+    };
+    const flushReasoningTail = (): void => {
+      appendReasoningDelta(reasoningToolReferenceCanonicalizer.flush());
+    };
     // 把可见正文里内联的 `<think>...</think>` 抽成 reasoning；没有标签时是纯透传。
     const inlineReasoningTagState = createInlineReasoningTagSplitState();
     const emitInlineReasoningDelta = (text: string): void => {
       if (!text) return;
       // 先把已缓冲的正文提交，保证 assistantContent 里 text/reasoning 顺序与流一致。
       flushCurrentText();
-      assistantContent.push({ type: "reasoning", text });
       // 刻意不置 hasVisibleOutput：与结构化 reasoning-delta 一致，纯思考无可见答复仍触发
       // 「补一个可见答复」的恢复逻辑。
-      args.providerTurnReducer?.apply({
-        type: "assistant-reasoning-delta",
-        text,
-      });
-      args.events.emitReasoningDelta({ id: InlineReasoningTagStreamId, text });
+      emitReasoningDelta(InlineReasoningTagStreamId, text);
     };
     const routeInlineReasoningSegments = (
       segments: InlineReasoningSegment[],
@@ -284,8 +310,17 @@ class StreamConsumer {
         rawText,
       );
       if (!visible) return;
+      const canonical = toolReferenceCanonicalizer.push(visible);
+      if (!canonical) return;
       routeInlineReasoningSegments(
-        splitInlineReasoningTagDelta(inlineReasoningTagState, visible),
+        splitInlineReasoningTagDelta(inlineReasoningTagState, canonical),
+      );
+    };
+    const flushToolReferenceTail = (): void => {
+      const canonical = toolReferenceCanonicalizer.flush();
+      if (!canonical) return;
+      routeInlineReasoningSegments(
+        splitInlineReasoningTagDelta(inlineReasoningTagState, canonical),
       );
     };
     const pendingToolCalls: PendingStreamToolCall[] = [];
@@ -325,6 +360,8 @@ class StreamConsumer {
     const flushPendingToolCalls = (): void => {
       if (isEmpty(pendingToolCalls) || args.abortSignal.aborted) return;
 
+      flushReasoningTail();
+      flushToolReferenceTail();
       flushCurrentText();
 
       for (const toolCall of pendingToolCalls) {
@@ -379,7 +416,9 @@ class StreamConsumer {
       if (didCaptureInterruptedPartial) return;
       didCaptureInterruptedPartial = true;
 
+      flushReasoningTail();
       flushPendingRawTextFallback();
+      flushToolReferenceTail();
       flushCurrentText();
       const hasPendingToolCalls =
         !isEmpty(pendingToolCalls) ||
@@ -453,21 +492,14 @@ class StreamConsumer {
 
         if (part.type === "text-delta") {
           // TODO[主链路-45]: 普通文本增量走 ExecutionEventBus.emitTextDelta，最终由 Desktop stream bridge 发回 renderer。
+          flushReasoningTail();
           hasTextOutput = !!part.text || hasTextOutput;
           emitAssistantTextDelta(part.text);
           continue;
         }
 
         if (part.type === "reasoning-delta") {
-          assistantContent.push({ type: "reasoning", text: part.text });
-          args.providerTurnReducer?.apply({
-            type: "assistant-reasoning-delta",
-            text: part.text,
-          });
-          args.events.emitReasoningDelta({
-            id: part.id,
-            text: part.text,
-          });
+          emitReasoningDelta(part.id, part.text);
           continue;
         }
 
@@ -491,28 +523,21 @@ class StreamConsumer {
             );
           if (reasoningText) {
             diagnostics.rawReasoningChars += reasoningText.length;
-            assistantContent.push({ type: "reasoning", text: reasoningText });
-            args.providerTurnReducer?.apply({
-              type: "assistant-reasoning-delta",
-              text: reasoningText,
-            });
-            args.events.emitReasoningDelta({
-              id: "deepseek-reasoning",
-              text: reasoningText,
-            });
+            emitReasoningDelta("deepseek-reasoning", reasoningText);
           }
           const visibleText =
             this.streamDiagnosticHelper.extractVisibleTextFromRawChunk(
               part.rawValue,
             );
           diagnostics.rawVisibleChars += visibleText.length;
+          if (visibleText) flushReasoningTail();
           pendingRawTextFallback += visibleText;
           continue;
         }
 
         if (part.type === "error") {
           captureInterruptedPartial();
-          throw AppError.from(part.error);
+          throw normalizeModelRequestError(part.error);
         }
 
         if (part.type === "abort") {
@@ -671,14 +696,17 @@ class StreamConsumer {
       );
     }
 
+    flushReasoningTail();
     flushPendingRawTextFallback();
     // 承接的尾巴始终没凑成泄漏标记 → 是正常正文，补发；已抑制则内部丢弃。
     const leakedTail = flushLeakedToolMarkupTail(leakedToolMarkupState);
     if (leakedTail) {
+      const canonical = toolReferenceCanonicalizer.push(leakedTail);
       routeInlineReasoningSegments(
-        splitInlineReasoningTagDelta(inlineReasoningTagState, leakedTail),
+        splitInlineReasoningTagDelta(inlineReasoningTagState, canonical),
       );
     }
+    flushToolReferenceTail();
     // 思考标签承接的尾巴始终没凑成完整标签 → 是真内容，按当前上下文补发。
     routeInlineReasoningSegments(
       flushInlineReasoningTagTail(inlineReasoningTagState),

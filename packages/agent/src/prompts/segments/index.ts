@@ -4,6 +4,5 @@ export {
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
   createTextPromptSegment,
-  createThinkingDepthPromptSegment,
   PromptSegmentPriority,
 } from './runtime'

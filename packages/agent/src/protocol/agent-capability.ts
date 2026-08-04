@@ -4,9 +4,10 @@ import type { ModelMessage } from 'ai'
 import {
   isArray,
   isBlank,
+  isNull,
   isPlainObject,
+  isPresent,
   isString,
-  optionalWhen,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -153,9 +154,9 @@ export function parseAgentCapabilityExecuteEnvelopeV1(
       source: {
         productId: requireBoundedIdentifier(source.productId, 128),
         sessionId: requireBoundedIdentifier(source.sessionId),
-        correlationId: optionalWhen(isString, correlationId),
+        ...(isNull(correlationId) ? {} : { correlationId }),
       },
-      scopeMetadata: optionalWhen(isPlainObject, scopeMetadata),
+      ...(isNull(scopeMetadata) ? {} : { scopeMetadata }),
     },
     messages: envelope.messages as ModelMessage[],
     config,
@@ -167,16 +168,15 @@ export function createAgentCapabilityExecutionEventEnvelopeV1(
   channel: AgentCapabilityExecutionChannel,
   payload: unknown,
 ): AgentCapabilityExecutionEventEnvelopeV1 {
-  return {
+  const envelope = {
     protocolVersion: AgentCapabilityProtocolVersion,
     executionId: execution.id,
     sourceProductId: execution.source.productId,
     sourceSessionId: execution.source.sessionId,
-    sessionCorrelationId: optionalWhen(
-      isString,
-      execution.source.correlationId,
-    ),
     channel,
     payload,
   }
+  if (isPresent(execution.source.correlationId))
+    return { ...envelope, sessionCorrelationId: execution.source.correlationId }
+  return envelope
 }

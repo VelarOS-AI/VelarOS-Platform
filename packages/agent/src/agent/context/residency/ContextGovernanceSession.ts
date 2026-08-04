@@ -18,7 +18,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isEmpty, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isNull, toNullable } from '@velaros-ai/core'
 
 import type { ContextRecordClassifier } from './admission'
 import type { ContextRecord } from './ContextRecord'
@@ -164,8 +164,16 @@ export class ContextGovernanceSession {
   }
 
   /** 当前投影占用（token），与投影共用尾保护规则。 */
-  public projectedTokens(budgetTokens: number): number {
-    return measureProjectedTokens(this.ledgerRef, this.config, budgetTokens)
+  public projectedTokens(
+    budgetTokens: number,
+    charsPerToken?: LooseOptional<number>
+  ): number {
+    return measureProjectedTokens(
+      this.ledgerRef,
+      this.config,
+      budgetTokens,
+      charsPerToken
+    )
   }
 
   /**
@@ -177,6 +185,7 @@ export class ContextGovernanceSession {
   public governTurn(input: {
     at: number
     modelWindowTokens?: LooseOptional<number>
+    charsPerToken?: LooseOptional<number>
   }): Nullable<GovernanceEpochReport> {
     return this.runEpoch(input, this.consumeModelEpochRequest())
   }
@@ -190,12 +199,17 @@ export class ContextGovernanceSession {
   public requestEpoch(input: {
     at: number
     modelWindowTokens?: LooseOptional<number>
+    charsPerToken?: LooseOptional<number>
   }): Nullable<GovernanceEpochReport> {
     return this.runEpoch(input, true)
   }
 
   private runEpoch(
-    input: { at: number; modelWindowTokens?: LooseOptional<number> },
+    input: {
+      at: number
+      modelWindowTokens?: LooseOptional<number>
+      charsPerToken?: LooseOptional<number>
+    },
     modelRequested: boolean
   ): Nullable<GovernanceEpochReport> {
     if (isEmpty(this.ledgerRef.list())) return null
@@ -210,6 +224,7 @@ export class ContextGovernanceSession {
       config: this.config,
       budgetTokens,
       modelRequested,
+      charsPerToken: input.charsPerToken,
     })
     const raw = runGovernanceEpoch({
       ledger: this.ledgerRef,
@@ -218,13 +233,22 @@ export class ContextGovernanceSession {
       epoch,
       at: input.at,
       modelRequested,
+      charsPerToken: input.charsPerToken,
       pendingDistills: willOpen ? this.distillRunner.takePending(this.ledgerGeneration) : [],
       ledgerGeneration: this.ledgerGeneration,
     })
     // 耗时在**跑完之后**测量并回填：epoch 是纯函数（不取时钟），时钟只归调用方。
     const report: GovernanceEpochReport = {
       ...raw,
-      distill: { ...raw.distill, ...this.scheduleDistillation(raw, budgetTokens, epoch) },
+      distill: {
+        ...raw.distill,
+        ...this.scheduleDistillation(
+          raw,
+          budgetTokens,
+          epoch,
+          input.charsPerToken
+        ),
+      },
       durationMs: Math.max(0, Date.now() - startedAt),
     }
     // 只有真正应用了迁移才推进 epoch 号：跳过的 epoch 不是一代，dashboard 上的号必须与
@@ -244,16 +268,21 @@ export class ContextGovernanceSession {
   private scheduleDistillation(
     report: GovernanceEpochReport,
     budgetTokens: number,
-    epoch: number
+    epoch: number,
+    charsPerToken?: LooseOptional<number>
   ): Pick<GovernanceEpochReport['distill'], 'planned' | 'skipReason' | 'gate' | 'totals'> {
     // 未触发的 epoch 不规划：没跑器械就没有"机械没达标"这回事。
-    if (report.trigger === null)
+    if (isNull(report.trigger))
       return { planned: false, skipReason: null, gate: null, totals: this.distillRunner.totals() }
 
     const measurement = measureLedgerProjection({
       records: this.ledgerRef.list(),
       residency: this.ledgerRef.residencyVector(),
-      budget: { tailProtectTurns: this.config.tailProtectTurns, budgetTokens },
+      budget: {
+        tailProtectTurns: this.config.tailProtectTurns,
+        budgetTokens,
+        charsPerToken,
+      },
     })
     const plan = planContextDistillation({
       ledger: this.ledgerRef,
@@ -307,7 +336,7 @@ export class ContextGovernanceSession {
 
   /** 转交信号：连续 N 次低收益 epoch 且 post-epoch 占用仍高。 */
   public handoffSignal(): ContextHandoffSignal {
-    const applied = this.reports.filter((report) => report.trigger !== null).slice(-HandoffLowSavingStreak)
+    const applied = this.reports.filter((report) => isNotNull(report.trigger)).slice(-HandoffLowSavingStreak)
     const recentSavingPercents = [...applied].reverse().map((report) => report.savingPercent)
     const last = applied.at(-1)
     const lastEpochAfterPercent = toNullable(last?.afterPercent)
@@ -316,7 +345,7 @@ export class ContextGovernanceSession {
       applied.every((report) => report.savingPercent < this.config.minEpochSavingPercent)
     const armed =
       lowSavingStreak &&
-      lastEpochAfterPercent !== null &&
+      isNotNull(lastEpochAfterPercent) &&
       lastEpochAfterPercent > HandoffOccupancyPercent
 
     return {
@@ -466,7 +495,7 @@ export class ContextGovernanceSessionRegistry {
     const created = new ContextGovernanceSession(
       this.config,
       this.classifier,
-      this.sinkFactory?.(key) ?? null,
+      toNullable(this.sinkFactory?.(key)),
       { resolveDistiller: () => this.distiller, sessionId: key }
     )
     this.sessions.set(key, created)
@@ -484,12 +513,12 @@ export class ContextGovernanceSessionRegistry {
 
   /** fault 记账入口：`context:recall` 每次取回后调用；未命中账本返回 false。 */
   public recordFault(sessionId: LooseOptional<string>, ref: string, at: number = Date.now()): boolean {
-    return this.peek(sessionId)?.recordFault(ref, at) ?? false
+    return !!this.peek(sessionId)?.recordFault(ref, at)
   }
 
   /** 转交信号（B1b 的 handoff 布防数据源）。 */
   public handoffSignal(sessionId: LooseOptional<string>): Nullable<ContextHandoffSignal> {
-    return this.peek(sessionId)?.handoffSignal() ?? null
+    return toNullable(this.peek(sessionId)?.handoffSignal())
   }
 
   /**
@@ -500,11 +529,11 @@ export class ContextGovernanceSessionRegistry {
     sessionId: LooseOptional<string>,
     input: { at?: LooseOptional<number>; modelWindowTokens?: LooseOptional<number> } = {}
   ): Nullable<GovernanceEpochReport> {
-    return (
+    return toNullable(
       this.peek(sessionId)?.requestEpoch({
         at: input.at ?? Date.now(),
         modelWindowTokens: input.modelWindowTokens,
-      }) ?? null
+      })
     )
   }
 

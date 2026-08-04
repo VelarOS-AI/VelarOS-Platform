@@ -1,23 +1,19 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { defineVelaTool } from '../defineVelaTool'
 
 import {
   ActiveDirectiveLimits,
   type ActiveDirectiveType,
-  buildNoArchiveDiagnostic,
+  archiveActiveDirectives,
   directiveTypeSchema,
-  getDirectiveType,
-  isActiveDirectiveArtifact,
-  matchesDirectiveTitle,
-  resolveDirectiveArtifactId,
+  listActiveDirectives as listActiveDirectiveArtifacts,
+  upsertActiveDirective as upsertActiveDirectiveArtifact,
 } from './ActiveDirectives'
 
-const listActiveDirectives = defineVelaTool<Record<string, never>>({
+const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
   name: 'directive:list',
   role: 'inspect',
   category: 'general',
@@ -31,11 +27,7 @@ const listActiveDirectives = defineVelaTool<Record<string, never>>({
   permissions: [],
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => {
-    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
-      status: 'active',
-      kinds: ['requirement'],
-    })
-    const directives = artifacts.filter(isActiveDirectiveArtifact)
+    const directives = await listActiveDirectiveArtifacts(ctx.activeContext)
 
     return {
       directives,
@@ -44,7 +36,7 @@ const listActiveDirectives = defineVelaTool<Record<string, never>>({
   },
 })
 
-const upsertActiveDirective = defineVelaTool<{
+const upsertActiveDirectiveTool = defineVelaTool<{
   id?: string
   title: string
   content: string
@@ -123,45 +115,7 @@ const upsertActiveDirective = defineVelaTool<{
   permissions: [],
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
-    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
-      status: 'all',
-      kinds: ['requirement'],
-    })
-    const id = resolveDirectiveArtifactId(input, artifacts)
-    const existing = artifacts.find((artifact) => artifact.id === id)
-    if (existing && !isActiveDirectiveArtifact(existing)) {
-      throw new AppError(
-        'VALIDATION',
-        `Active directive id conflicts with non-directive active context: ${id}`
-      )
-    }
-
-    const activeDirectives = artifacts.filter(
-      (artifact) => artifact.status === 'active' && isActiveDirectiveArtifact(artifact)
-    )
-    if (
-      existing?.status !== 'active' &&
-      activeDirectives.length >= ActiveDirectiveLimits.maxActive
-    ) {
-      throw new AppError(
-        'VALIDATION',
-        `Context protection area already contains ${ActiveDirectiveLimits.maxActive} active directives. Archive or merge one before adding another.`
-      )
-    }
-
-    const directive = await ctx.activeContext.upsertActiveContextArtifact({
-      id,
-      kind: 'requirement',
-      scope: 'session',
-      status: 'active',
-      title: input.title,
-      content: input.content,
-      sourceMessageId: input.sourceMessageId,
-      metadata: {
-        directive: true,
-        directiveType: input.directiveType,
-      },
-    })
+    const directive = await upsertActiveDirectiveArtifact(ctx.activeContext, input)
 
     return {
       directive,
@@ -217,44 +171,12 @@ const archiveActiveDirective = defineVelaTool<{
     }),
   permissions: [],
   isConcurrencySafe: () => false,
-  execute: async (input, ctx) => {
-    const idSet = new Set(input.ids ?? [])
-    const title = input.title?.trim() || null
-    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
-      status: 'active',
-      kinds: ['requirement'],
-    })
-    const matchingIds = artifacts
-      .filter(isActiveDirectiveArtifact)
-      .filter((artifact) => !idSet.size || idSet.has(artifact.id))
-      .filter((artifact) => matchesDirectiveTitle(artifact, title))
-      .filter(
-        (artifact) => !input.directiveType || getDirectiveType(artifact) === input.directiveType
-      )
-      .map((artifact) => artifact.id)
-
-    if (isEmpty(matchingIds)) return {
-        archivedIds: [],
-        archivedCount: 0,
-        directives: [],
-        diagnostic: buildNoArchiveDiagnostic(input, artifacts),
-      }
-
-    const directives = await ctx.activeContext.archiveActiveContextArtifacts({
-      ids: matchingIds,
-    })
-
-    return {
-      archivedIds: matchingIds,
-      archivedCount: matchingIds.length,
-      directives,
-    }
-  },
+  execute: (input, ctx) => archiveActiveDirectives(ctx.activeContext, input),
 })
 
 const activeDirectiveTools = {
-  'directive:list': listActiveDirectives,
-  'directive:upsert': upsertActiveDirective,
+  'directive:list': listActiveDirectivesTool,
+  'directive:upsert': upsertActiveDirectiveTool,
   'directive:archive': archiveActiveDirective,
 }
 

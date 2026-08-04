@@ -11,6 +11,7 @@ import {
   requiredNonNegativeMaxDepth,
   requiredResultLimit,
 } from '@velaros-ai/agent/tool-contract'
+import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { executeAtomicEdit } from './atomic/Edit.js'
@@ -24,10 +25,34 @@ import {
   buildBackgroundCommandConfirmationMessage,
   isParallelCommandExecutionSafe,
 } from './SystemCommandExecutionPolicy'
+import type { SystemCommandResult } from './SystemContracts'
 import { defineSystemTool } from './Types.js'
 
 type SystemToolCapabilitySchema = ToolCapabilitySchema & {
   metadata: Readonly<Record<string, unknown>>
+}
+
+function commandLogQuery(logPath: string): string {
+  return (logPath.split(/[\\/]/u).at(-1) ?? logPath).slice(0, 240)
+}
+
+function exposeCommandOutputWindow(result: SystemCommandResult): SystemCommandResult {
+  return {
+    ...result,
+    outputWindow: {
+      retained: 'tail',
+      complete: !result.truncated,
+      endPreserved: true,
+    },
+    ...(result.truncated && result.logPath
+      ? {
+          outputContinuation: {
+            kind: 'session-terminal-log' as const,
+            query: commandLogQuery(result.logPath),
+          },
+        }
+      : {}),
+  }
 }
 
 const SystemOpenCapability = {
@@ -84,20 +109,31 @@ const read = defineSystemTool<{
 
 const write = defineSystemTool<{
   path: string
-  content: string
+  content?: string
+  source?: { path: string; startLine: number; endLine: number }
   overwrite?: boolean
   maxBytes?: number
 }>({
   name: SystemToolNames.write,
   role: 'edit',
-  summary: '写入或创建系统路径上的文本文件（默认覆盖已有文件）。',
-  suitable: ['创建或整体重写小型文本文件、配置片段或命令产物。'],
+  summary: '写入文本或把源文件的有界行区间原样复制到系统路径（默认覆盖已有文件）。',
+  suitable: [
+    '创建或整体重写小型文本文件、配置片段或命令产物。',
+    '原样复制读取结果时用 source，避免内容经过模型转写后丢失空格、空行或换行符。',
+  ],
   forbidden: ['只想改文件的一小段时用 edit 做精确替换，不要用 write 整体重写。'],
   usage: [
-    '传 path 和 content；已存在的文件默认直接覆盖，无需额外参数。',
+    '传 path，并在 content 与 source 中二选一；已存在的文件默认直接覆盖。',
+    'source 必须给出 path、startLine、endLine，只会读取并复制该有界行区间。',
     '只想在文件不存在时创建、绝不覆盖，才传 overwrite=false。',
   ],
-  examples: [{ path: '~/agent-note.txt', content: 'hello\n' }],
+  examples: [
+    { path: '~/agent-note.txt', content: 'hello\n' },
+    {
+      path: '~/tail.txt',
+      source: { path: '~/build.log', startLine: 216, endLine: 220 },
+    },
+  ],
   notes: [
     '只接受文本内容；二进制写入不在本工具范围内。',
     'content 是 JSON 解析后的原始字符串；字面 \\n 按两个字符写入。',
@@ -105,10 +141,15 @@ const write = defineSystemTool<{
   ],
   schema: z.object({
     path: z.string().min(1).describe(parameterDescription({ description: '目标文件路径。' })),
-    content: z.string().max(1_000_000).describe(parameterDescription({
-      description: '要写入的文本内容。',
+    content: z.string().max(1_000_000).optional().describe(parameterDescription({
+      description: '要写入的文本内容；与 source 二选一。',
       notes: ['不会对字面 \\n 做二次反转义；模型工具调用里的 JSON 转义换行会由 provider 正常解析成真实换行。'],
     })),
+    source: z.object({
+      path: z.string().min(1).describe('源文本文件路径。'),
+      startLine: z.number().int().positive().describe('复制起始行，从 1 开始。'),
+      endLine: z.number().int().positive().describe('复制结束行，必须不小于 startLine。'),
+    }).optional().describe('无需模型转写的原样行区间复制来源；与 content 二选一。'),
     overwrite: z.boolean().optional().describe(
       parameterDescription({
         description: '文件已存在时是否覆盖。',
@@ -123,12 +164,29 @@ const write = defineSystemTool<{
       .optional()
       .default(1_000_000)
       .describe(parameterDescription({ description: '允许写入的最大字节数。' })),
+  }).superRefine((input, context) => {
+    if (isPresent(input.content) === isPresent(input.source)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['content'],
+        message: 'Exactly one of content or source must be provided.',
+      })
+    }
+    if (input.source && input.source.startLine > input.source.endLine) {
+      context.addIssue({
+        code: 'custom',
+        path: ['source', 'endLine'],
+        message: 'endLine must be greater than or equal to startLine.',
+      })
+    }
   }),
-  permissions: ['fs:write'],
+  permissions: ['fs:read', 'fs:write'],
   capabilities: {
     effectKind: 'write',
     writeScopes: ['any'],
-    filesystem: { read: 'none', write: 'any' },
+    readScopes: ['any'],
+    filesystem: { read: 'any', write: 'any' },
+    canReadArbitrarySource: true,
     concurrency: 'unsafe',
     reason: 'system text file write primitive',
   },
@@ -301,7 +359,8 @@ const bash = defineSystemTool<{
     'Windows 使用 cmd.exe 语法；命令探测用 where，环境变量用 %NAME%。macOS/Linux 使用 POSIX shell 语法。',
     '系统执行拒绝项目 cwd 时改用 project:run。',
     '长期服务传 background=true；危险命令会走确认流程。',
-    '输出可能很长时设置 maxOutputChars，并用返回的 logPath 续读完整日志。',
+    '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
+    '需要完整日志时按 outputContinuation.query 使用会话终端输出召回；不要把内部 logPath 当普通系统文件直接读取。',
   ],
   usage: [
     '传 command；需要特定目录时传 cwd。',
@@ -362,9 +421,9 @@ const bash = defineSystemTool<{
       ctx.abortSignal
     )
 
-    if (!result.backgroundProcess) return result
+    if (!result.backgroundProcess) return exposeCommandOutputWindow(result)
     return {
-      ...result,
+      ...exposeCommandOutputWindow(result),
       backgroundProcess: {
         ...result.backgroundProcess,
         ports: plan.ports,

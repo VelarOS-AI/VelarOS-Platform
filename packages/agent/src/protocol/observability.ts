@@ -96,6 +96,12 @@ export const ModelSpanSchema = z.strictObject({
   /** Ring0 请求指纹（与 context-replays 对齐，便于跨账本关联）。 */
   requestFingerprint: z.string().nullable(),
   finishReason: z.string().nullable(),
+  /**
+   * 供应方请求失败的安全结构化原因。旧账本没有这两个字段，故协议以 optional 接受历史行；
+   * 新写入恒显式使用 null，避免评测侧从日志或展示文本猜测失败类别。
+   */
+  errorCode: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
 })
 export type ModelSpan = z.infer<typeof ModelSpanSchema>
 

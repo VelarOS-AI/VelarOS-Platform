@@ -12,6 +12,8 @@ import {
   SystemToolCategoryByName,
   type SystemToolContext,
 } from '../src'
+import { createSystemBundledModDefinition } from '../src/composition'
+import type { SystemCommandResult } from '../src/SystemContracts'
 
 function captureService(
   capture: (tokenId: string, service: object) => void,
@@ -72,6 +74,13 @@ describe('System Kernel module', () => {
     expect(module.manifest.permissions).not.toContain('*')
   })
 
+  test('keeps the system execution triangle resident without pinning the whole domain', () => {
+    const tools = createSystemBundledModDefinition().manifest.contributes.tools
+    expect(
+      tools.flatMap((tool) => (tool.residentInSpaces?.includes('system') ? [tool.name] : [])),
+    ).toEqual(['system:read', 'system:write', 'system:run'])
+  })
+
   test('uses strict schemas before resolving a host context', async () => {
     let service: SystemCapabilityService | undefined
     let resolverCalls = 0
@@ -95,5 +104,55 @@ describe('System Kernel module', () => {
       new AbortController().signal,
     )).rejects.toThrow('System capability input is invalid')
     expect(resolverCalls).toBe(0)
+  })
+
+  test('exposes an authoritative tail window and a session-log continuation for truncated output', async () => {
+    let service: SystemCapabilityService | undefined
+    const commandResult: SystemCommandResult = {
+      command: 'printf lots',
+      cwd: '/tmp',
+      exitCode: 0,
+      signal: null,
+      stdout: 'last line\n',
+      stderr: '',
+      logPath: '/tmp/vela-system-command-123.log',
+      durationMs: 10,
+      timedOut: false,
+      aborted: false,
+      truncated: true,
+      success: true,
+      verification: { kind: 'unknown', status: 'unknown', issues: [] },
+    }
+    const module = createSystemKernelModule({
+      resolveContext: (_scope, signal) =>
+        ({
+          abortSignal: signal,
+          system: {
+            runCommand: async () => commandResult,
+            canStartBackgroundCommands: () => true,
+          },
+          approval: { awaitConfirmation: async () => undefined },
+        }) as unknown as SystemToolContext,
+    })
+    await module.activate(captureService((_tokenId, registered) => {
+      service = registered as SystemCapabilityService
+    }))
+
+    const result = (await service?.invoke(
+      'system:run',
+      undefined,
+      { command: 'printf lots', maxOutputChars: 100 },
+      new AbortController().signal,
+    )) as SystemCommandResult
+
+    expect(result.outputWindow).toEqual({
+      retained: 'tail',
+      complete: false,
+      endPreserved: true,
+    })
+    expect(result.outputContinuation).toEqual({
+      kind: 'session-terminal-log',
+      query: 'vela-system-command-123.log',
+    })
   })
 })

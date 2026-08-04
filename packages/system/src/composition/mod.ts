@@ -5,6 +5,11 @@ import { SystemToolCategoryByName, SystemToolNames } from '../system-tool-names'
 
 const SystemModId = 'velaros.system' as const
 const SystemSpaceId = 'system' as const
+const SystemResidentToolNames = new Set<string>([
+  SystemToolNames.read,
+  SystemToolNames.write,
+  SystemToolNames.run,
+])
 
 const SystemToolCategories = Object.freeze({
   'system-files': Object.freeze<ToolCategoryDefinition>({
@@ -54,6 +59,7 @@ const SystemAgentModManifest = Object.freeze({
       name,
       categoryId: SystemToolCategoryByName[name],
       availableInSpaces: [SystemSpaceId],
+      ...(SystemResidentToolNames.has(name) ? { residentInSpaces: [SystemSpaceId] } : {}),
     })),
     spaces: [{
       id: SystemSpaceId,

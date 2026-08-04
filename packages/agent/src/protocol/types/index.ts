@@ -754,6 +754,12 @@ export interface ChatAbortRequest {
 export type ActiveContextArtifactKind = 'plan' | 'decision' | 'requirement'
 export type ActiveContextArtifactScope = string
 export type ActiveContextArtifactStatus = 'active' | 'completed' | 'archived'
+export type ActiveDirectiveType =
+  | 'prohibition'
+  | 'preference'
+  | 'process'
+  | 'requirement'
+  | 'other'
 
 export interface ActiveContextArtifact {
   id: string
@@ -780,6 +786,20 @@ export interface ActiveContextUpsertInput {
   content: string
   sourceMessageId?: LooseOptional<string>
   metadata?: Record<string, unknown>
+}
+
+export interface ActiveDirectiveUpsertInput {
+  id?: string
+  title: string
+  content: string
+  directiveType: ActiveDirectiveType
+  sourceMessageId?: string
+}
+
+export interface ActiveDirectiveArchiveInput {
+  ids?: string[]
+  title?: string
+  directiveType?: ActiveDirectiveType
 }
 
 export interface ActiveContextListOptions {
@@ -852,6 +872,15 @@ export interface ActiveContextGovernanceApplyResult {
 }
 
 export interface ChatActiveContextRequest {
+  sessionId: string
+}
+
+export interface ChatArchiveActiveDirectiveRequest {
+  sessionId: string
+  ids: string[]
+}
+
+export interface ChatActiveDirectivesChangedEvent {
   sessionId: string
 }
 
