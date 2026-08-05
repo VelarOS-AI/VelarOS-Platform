@@ -14,6 +14,16 @@ export {
   resolveBrowserSearchOrNavigationInput,
 } from './BrowserAddressHelper.js'
 export {
+  BrowserAutomationModes,
+  BrowserSearchEngineIds,
+  DefaultBrowserAutomationMode,
+  DefaultBrowserSearchEngine,
+  isBrowserAutomationMode,
+  isBrowserSearchEngineId,
+  resolveBrowserAutomationMode,
+  resolveBrowserSearchEngineId,
+} from './BrowserConfigDefaults.js'
+export {
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,
   BrowserScreenshotDefaultNetworkIdleMs,

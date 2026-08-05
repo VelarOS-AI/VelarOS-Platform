@@ -54,7 +54,7 @@ void test('browser fill actions return the resulting control value as direct evi
   assert.match(script, /node\.type\.toLowerCase\(\) === 'password'/u)
 })
 
-void test('browser action policy owns deny, confirm, allow and alias precedence', () => {
+void test('browser action policy owns deny, allow and alias precedence', () => {
   assert.deepEqual(
     checkBrowserActionPolicy(undefined, { action: 'navigate' }),
     {
@@ -67,7 +67,6 @@ void test('browser action policy owns deny, confirm, allow and alias precedence'
 
   const policy = {
     allow: ['navigate', 'target_action'],
-    confirm: ['click'],
     deny: ['evaluate'],
   }
 
@@ -76,21 +75,21 @@ void test('browser action policy owns deny, confirm, allow and alias precedence'
       action: 'target_action.click',
       aliases: ['target_action', 'click'],
     }).kind,
-    'confirm',
+    'allow',
   )
   assert.equal(checkBrowserActionPolicy(policy, { action: 'evaluate' }).kind, 'deny')
   assert.equal(checkBrowserActionPolicy(policy, { action: 'navigate' }).kind, 'allow')
   assert.equal(checkBrowserActionPolicy(policy, { action: 'download' }).kind, 'deny')
 })
 
-void test('browser action policy supports wildcard matches and explicit default deny', () => {
+void test('browser action policy supports wildcard deny matches and explicit default deny', () => {
   assert.deepEqual(
-    checkBrowserActionPolicy({ confirm: ['*'] }, { action: 'upload' }),
+    checkBrowserActionPolicy({ deny: ['*'] }, { action: 'upload' }),
     {
-      kind: 'confirm',
+      kind: 'deny',
       action: 'upload',
       matchedAction: '*',
-      reason: '浏览器动作需要用户确认：upload',
+      reason: '浏览器动作被策略拒绝：upload',
     },
   )
   assert.equal(checkBrowserActionPolicy({ default: 'deny' }, { action: 'inspect' }).kind, 'deny')

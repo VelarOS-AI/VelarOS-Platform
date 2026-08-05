@@ -5,8 +5,16 @@ import { SystemToolCategoryByName, SystemToolNames } from '../system-tool-names'
 
 const SystemModId = 'velaros.system' as const
 const SystemSpaceId = 'system' as const
+/**
+ * 系统空间的常驻工具：找—读—改—跑这条主回路。
+ *
+ * 进程、后台任务、环境刷新是排障与收尾场景，留在 loadable 由 `tooling:map` 按名换入。
+ */
 const SystemResidentToolNames = new Set<string>([
   SystemToolNames.read,
+  SystemToolNames.list,
+  SystemToolNames.search,
+  SystemToolNames.edit,
   SystemToolNames.write,
   SystemToolNames.run,
 ])
@@ -61,18 +69,11 @@ const SystemAgentModManifest = Object.freeze({
       availableInSpaces: [SystemSpaceId],
       ...(SystemResidentToolNames.has(name) ? { residentInSpaces: [SystemSpaceId] } : {}),
     })),
+    // 只声明**真被消费**的那几格（身份策略 / 绑定能力 / 职责类别）。空间的文案、图标、
+    // 顺序与 surface 分档权威在产品壳的枚举表，manifest 里再写一份没有读者。
     spaces: [{
       id: SystemSpaceId,
-      descriptor: {
-        label: 'System',
-        hint: '操作本机文件、进程与桌面资源',
-        startTitle: '开始系统任务',
-        order: 10,
-        localeKey: 'workspace.space.system',
-      },
-      iconId: 'system',
       identityStrategy: 'ordinal',
-      surfaceProfileId: 'chat',
       boundCapabilityIds: [SystemModId],
       toolCategoryIds: Object.keys(SystemToolCategories),
     }],

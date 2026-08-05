@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
+import {
+  createManualApprovalOptions,
+  renderParameterDescription as parameterDescription,
+} from '@velaros-ai/agent/tool-contract'
 import {
   applyDefaultRecursiveMaxDepth,
   optionalReadEndLine,
@@ -407,10 +410,17 @@ const bash = defineSystemTool<{
           shouldRunInBackground
         ),
         ctx.abortSignal,
-        {
-          approvalRisk: plan.isDangerous ? 'high' : 'low',
-          riskScope: plan.isDangerous ? 'system-command:dangerous' : undefined,
-        }
+        // 破坏性命令**每一条都要用户亲自点头**：riskScope 是按类记忆的，共用
+        // `system-command:dangerous` 意味着批准过 `rm -rf ./node_modules` 就等于预先批准了
+        // 本会话此后所有 `rm -rf` / `sudo` / `dd if=`。不可逆伤害不接受"同类已授权"这种推断，
+        // 因此走 createManualApprovalOptions（requireManualApproval + 不记忆）。
+        // 长驻服务这类"体验型"确认仍是低风险、可按类记忆，语义不变。
+        plan.isDangerous
+          ? createManualApprovalOptions({
+              approvalRisk: 'high',
+              riskScope: 'system-command:dangerous',
+            })
+          : { approvalRisk: 'low' }
       )
     }
 

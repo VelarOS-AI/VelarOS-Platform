@@ -120,54 +120,13 @@ export const gameSceneEditTool = defineGameTool<
     'scene 的组件操作必须带 entityId；prefab 的组件操作不带 entityId。',
   ],
   usage: [
-    'target 也是 upsert，但分两步：工程里已经有文件携带这个稳定 id（不管放在哪个目录、有没有被'
-      + '声明）就采纳它并登记进 game.project.json；一个都没有才新建 scenes/<id>.scene.json'
-      + '（prefab 落在 prefabs/<id>.prefab.json），工程还没有入口场景时一并设为 entryScene。',
     '空目录起步只要一次调用：target="scene:<id>" 会连 game.project.json 与资产清单一起建出来，'
       + '之后 game:run 即可用。不需要先手写任何 JSON。',
-    'set_* 每一级都是 upsert + merge patch：target、实体、组件、资产都是不存在就创建'
-      + '（set_component 带一个还不存在的 entityId 会先把该实体建出来）；'
-      + '显式 null 清除字段，数组整体替换。',
-    'remove_* / rename_* 反过来要求目标已存在，它们不会新建 target。判定按 operations 的先后'
-      + '发生：批内在先的 set_* 已经把 target 建出来时，随后的 rename_entity / remove_entity 照样'
-      + '成立；target 打错字而这一批以 remove_*/rename_* 开头时，你拿到的是'
-      + '「找不到编辑目标 …。可用 scene：…」，照着改一次即可。',
-    '空 operations = 「确保这份清单存在并被工程登记」：磁盘上已经有就登记进 game.project.json 并'
-      + '规范化成 canonical 格式——已有内容一条不丢（真正未知的字段与 notes 原样保留、实体顺序不变），'
-      + '但键序会按 canonical 重排，并把 schema 缺省字段显式写出来'
-      + '（kind、extends: null、每个实体的 components: {}）；什么都没有就建一份空清单。',
-    '写错名字/位置但**无歧义**的键会被归一到 canonical 形态，每一次都在 appliedAdjustments 里点名'
-      + '（components.sprite / components.text → visual、components.collider → body、'
-      + '组件写在实体块上 → 搬进 components、工程顶层的 pixelArt / canvasWidth / canvasHeight →'
-      + ' runtime.* 、场景顶层的 gravity / background → meta）。canonical 那一格已经有值时**不归一**：'
-      + '那是两种意图，warnings 会点名两边让你自己合并。',
-    '形状也宽容：components 可以写成 ECS 风数组（每项用 type 或 component 指明组件名）；'
-      + 'entities / assets / animation.clips 可以写成按 id（clips 按 name）分组的对象，'
-      + '键会写进条目的 id/name。两种都在 appliedAdjustments 里点名。',
-    '**解析器读不懂的形状一律当场失败，绝不静默丢掉再写回磁盘**：报错正文会说清「你写的是什么 / '
-      + '这一格要的是什么 / 怎么改」，并且这次**零文件落盘**（磁盘一个字节都没动），改完重发即可。'
-      + '所以 ok:true 就意味着落盘的内容里没有任何一条被悄悄扔掉。',
-    'warnings 里写着「不会生效」的一律要改：那一项确实不会产生任何画面或行为。v0 的每一层'
-      + '（含场景 / prefab / 资产清单的信封）都属于这一档——信封的已知键正是 entities / '
-      + 'components / assets / extends / meta，把内容写在信封的错名键下同样什么都不会画。',
-    'set_project 的数组是整体替换：重发 scenes / prefabs / assets 时漏掉一条 = 把那份文档摘出工程。'
-      + '被摘掉的文件在磁盘上有内容时本次调用会被拒绝并点名它，空清单则放行并在 diffSummary 里'
-      + '留一行 undeclared。只想改别的字段时就别重发这几项。',
-    'set_extends 是 scene.extends / prefab.extends 的唯一写路径：target 决定种类，'
-      + '传 scene:<slug> / prefab:<slug>（裸 slug 也收，会按 target 补前缀），传 null 清除继承。'
-      + '继承成环或超过 4 层时报错正文会点名整条链，用它把环上任意一条改成 null 即可解开。',
-    'target=project 在任何工程状态下都可用（工程清单本身读不出来除外，那一档会点名它）：'
-      + '工程在你动手之前就已经坏掉时，编辑照常写入，那处破损随 warnings 原文送达而不是拦住你——'
-      + '否则唯一能修拓扑的 set_project 会需要一个已经健康的工程。'
-      + '读不出来的子清单会被排除在本次编辑之外（声明与文件都保留、绝不覆盖），'
-      + '一条路径被两个角色声明时那条路径这次一个字节都不写。'
-      + '但坏在哪一点上，触碰那一点本身仍然当场失败并点名文件：'
-      + '同一个 id 有两份载体、资产清单或场景这次读不出来——那不是把工程锁死，'
-      + '其余 target 与 set_project 照常可用，报错正文里就有出路。',
-    'changedFiles 是这次真正落盘的权威清单，diffSummary 与它逐条对应：'
-      + '写盘被保护挡下时会出一条 skipped write 行（说明这次对那份文件的改动没有生效，'
-      + '照 warnings 修好冲突后重发即可），落盘却没有语义行的文件会补一条 wrote 行。'
-      + '看到 skipped write 就别当成已经改好了。',
+    'set_* 是各级 upsert + merge patch（显式 null 清字段，数组整体替换）；'
+      + 'remove_* / rename_* 要求目标已存在，不会新建 target。',
+    '解析不了的形状当场失败且零文件落盘，报错正文写清怎么改；所以 ok:true = 没有任何一条被悄悄扔掉。',
+    'changedFiles 是本次真正落盘的权威清单；出现 skipped write 行就是没改成，照 warnings 修完重发。',
+    'warnings 里写着「不会生效」的一律要改——那一项确实不会产生任何画面或行为。',
   ],
   examples: [
     {
@@ -193,34 +152,12 @@ export const gameSceneEditTool = defineGameTool<
       ],
       dryRun: true,
     },
-    {
-      target: 'scene:level-1',
-      operations: [{ action: 'set_extends', extends: null }],
-      reason: '解开 scene:level-1 与 scene:base 之间的继承环',
-    },
   ],
   notes: [
-    '写入由宿主提供的工程根受限、revision 原子文档端口完成。',
-    '全部修改在写盘前重新解析并验证引用、继承与碰撞层。',
-    '新建与采纳都出现在 changedFiles 与 diffSummary（created: … / declared: … 行）里；'
-      + '落点路径已被别的清单占用且 id 对不上、同一个稳定 id 在工程里有两份载体、'
-      + '或声明指向 A 而载体在 B 时，一律当场报冲突并点名文件，绝不覆盖也绝不孤立。',
-    '声明指向的文件不在磁盘上时，工程会被就地修好而不是整个编辑不动：'
-      + '该 id 的载体在别处就把声明接过去（redeclared 行），实在接不上（同 id 两份载体 / 文件名'
-      + '推不出 slug）就摘掉那条悬空声明并在 warnings 里说明怎么接回来（dropped dangling 行，'
-      + 'entryScene 指着它时一并撤下）。这些修复只发生在「声明指向的文件本就不存在」这一档，'
-      + '不会动任何有内容的文件。',
-    '整体校验只拦本次编辑**新引入**的破损：装载时就已经存在的（继承环、同 id 双载体、'
-      + '悬空引用、角色冲突……）一律随 warnings 报出而不阻断，因为拦住它等于把工程锁死在坏状态里。'
-      + '工程原本健康时任何新破损照旧当场失败、零文件落盘。',
-    'game.project.json 不能出现在自己的 scenes / prefabs / assets 声明里（它是工程拓扑的根）：'
-      + '装载时就有的那一档会被就地摘掉并留一行 dropped self-declaration，'
-      + '本次编辑写进去的当场失败、零文件落盘。',
-    '一个稳定 id 只许有一个载体，这条在「编辑器创建或采纳清单」的那一刻强制。'
-      + '编辑一份已经被声明的清单不扫工程目录（省一次全盘遍历），因此你事后用 project:edit 手写的'
-      + '第二份同 id 文件在那条路径上不会被发现——它也不会被工程加载。要让它生效就把它变成'
-      + '唯一载体（删掉或改名另一份），或直接改用它的 id。',
+    '写入由宿主提供的工程根受限、revision 原子文档端口完成，写盘前重新解析并验证引用、继承与碰撞层。',
+    '归一（appliedAdjustments）、工程拓扑与破损容忍语义都在技能里，别靠试错摸。',
   ],
+  usageSkillId: 'game-scene-authoring',
   schema: GameSceneEditSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: GameManifestEditCapability,

@@ -449,24 +449,24 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
     '不要首次运行新 recipe 时直接跳过 dryRun 预检。',
   ],
   protocol: ['真实执行前先 action=run_skeleton dryRun=true 预检；确认目标命中后再执行。'],
-  usage: ['传 action 选择 generate/read/run/rerun，再传 path、inputs 或模板参数。'],
+  usage: [
+    '传 action 选择 generate/read/run/rerun，再传 path、inputs 或模板参数。',
+    'rerun_from_run 不沿用历史 inputs，必须重新传。',
+  ],
   examples: [
     // 从当前页面生成 recipe 草稿
     { action: 'generate_skeleton', template: 'search', name: 'site-search' },
-    // 从已存快照生成草稿
-    { action: 'generate_skeleton_from_snapshot', path: 'pages/login.json', template: 'login' },
     // 读取草稿步骤
     { action: 'read_skeleton', path: 'recipes/search.json', maxSteps: 20 },
     // 真跑前先 dryRun 预检
     { action: 'run_skeleton', path: 'recipes/search.json', dryRun: true },
     // 确认命中后真实执行并传输入
     { action: 'run_skeleton', path: 'recipes/search.json', inputs: { q: 'VelarOS' } },
-    // 读取历史 run record
-    { action: 'read_run', path: 'runs/search-001.json' },
     // 基于历史 run 重跑（须重新传 inputs）
     { action: 'rerun_from_run', path: 'runs/search-001.json', inputs: { q: 'VelarOS' } },
   ],
   notes: ['这是 browser recipe 的唯一公开入口；内部仍按 action 复用 skeleton、run 和 rerun 实现。'],
+  usageSkillId: 'browser-automation-recipes',
   schema: browserRecipeSchema,
   permissions: ['network', 'fs:read', 'fs:write'],
   capabilities: BrowserControlCapability,

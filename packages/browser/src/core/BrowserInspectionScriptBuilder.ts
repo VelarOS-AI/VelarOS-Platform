@@ -1,3 +1,5 @@
+import { browserLoginDetectionScriptFragment } from './BrowserLoginDetection'
+
 /** 构造页面结构检查脚本。 */
 class BrowserInspectionScriptBuilder {
   /** 提取页面标题、正文、标题、链接、动作和表单字段。 */
@@ -10,6 +12,7 @@ class BrowserInspectionScriptBuilder {
   }): string {
     const ignoreSelectors = args.ignoreSelectors?.slice(0, 50) ?? []
     return `(() => {
+${browserLoginDetectionScriptFragment}
       const ignoreSelectors = ${JSON.stringify(ignoreSelectors)}
       const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim()
       const escapeCss = (value) => {
@@ -433,6 +436,7 @@ class BrowserInspectionScriptBuilder {
           refCount: nextRefIndex - 1,
           truncated: nextRefIndex - 1 > snapshotLines.length,
         },
+        login: detectLogin(),
         capturedAt,
       }
     })()`

@@ -2,7 +2,7 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserWorkspaceArtifactManager } from '../core'
-import type { BrowserRecipeSkeleton } from '../core'
+import type { BrowserRecipeDryRunSummary, BrowserRecipeSkeleton } from '../core'
 
 import { createArtifactManager, getActiveBrowserContext } from './Context'
 import { isSameBrowserOrigin } from './RecipePaths'
@@ -258,4 +258,46 @@ class BrowserRecipeRunner {
 
 const browserRecipeRunner = new BrowserRecipeRunner()
 
-export { BrowserRecipeRunner,browserRecipeRunner }
+/**
+ * 干跑一份 recipe skeleton 并返回结构化结论。
+ *
+ * 供**宿主 UI 直调**（制品面板的「干跑」按钮走 IPC 落到这里），与模型走的
+ * `browser:recipe action=run_skeleton dryRun=true` 共用同一个执行器：干跑的语义只有一处实现，
+ * 按钮与工具不会各自漂移。刻意不写 run record、不存快照——预检就该零副作用。
+ */
+async function runBrowserRecipeDryRun(
+  input: { path: string },
+  ctx: ToolContext
+): Promise<BrowserRecipeDryRunSummary> {
+  const result = await browserRecipeRunner.runSkeleton(
+    { path: input.path, dryRun: true, saveRun: false, saveSnapshots: false },
+    ctx
+  )
+
+  return {
+    path: result.path,
+    url: result.url,
+    title: toNullable(result.title),
+    executableStepCount: result.executableStepCount,
+    readyStepCount: result.readyStepCount,
+    missingInputCount: result.missingInputCount,
+    skippedStepCount: result.skippedStepCount,
+    requiredInputNames: [...result.requiredInputNames],
+    missingInputs: result.missingInputs.map((missing) => ({
+      stepId: missing.stepId,
+      name: missing.name,
+      label: missing.label,
+      required: missing.required,
+    })),
+    steps: result.stepResults.map((step) => ({
+      id: step.id,
+      kind: step.kind,
+      status: step.status,
+      message: step.message,
+      inputName: toNullable(step.inputName),
+      targetCss: toNullable(step.targetCss),
+    })),
+  }
+}
+
+export { BrowserRecipeRunner, browserRecipeRunner, runBrowserRecipeDryRun }

@@ -112,30 +112,6 @@ const browserShowPage = defineBrowserTool<Record<string, never>>({
   },
 })
 
-/** 隐藏当前受控浏览器页面。 */
-const browserHidePage = defineBrowserTool<Record<string, never>>({
-  name: 'browser:hide_page',
-  role: 'control',
-  summary: '隐藏当前受控浏览器页面。',
-  suitable: ['需要收起可视页面但保留站点会话。'],
-  forbidden: ['不要用它退出 browser mode；退出用 browser:leave_site。'],
-  usage: ['调用前必须已有 active browser site。'],
-  examples: [{}],
-  notes: ['隐藏后可用 browser:show_page 重新显示。'],
-  schema: z.object({}),
-  permissions: [],
-  capabilities: BrowserControlCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => false,
-  execute: async (_input, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    // hidePage 保留 session，后续 showPage 可重新显示。
-    requireActiveBrowserSite(ctx)
-
-    return ctx.browser.hidePage()
-  },
-})
-
 /** 读取当前 browser mode 状态和绑定站点信息。 */
 const getBrowserSiteContext = defineBrowserTool<Record<string, never>>({
   name: 'browser:site_context',
@@ -255,7 +231,6 @@ const browserSessionTools = {
   'browser:enter_site': enterBrowserSite,
   'browser:leave_site': leaveBrowserSite,
   'browser:show_page': browserShowPage,
-  'browser:hide_page': browserHidePage,
   'browser:site_context': getBrowserSiteContext,
   'browser:list_page_targets': browserListPageTargets,
   'browser:switch_page_target': browserSwitchPageTarget,

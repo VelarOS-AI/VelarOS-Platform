@@ -6,7 +6,7 @@ export interface BrowserActionPolicyRequest {
   label?: string
 }
 
-export type BrowserActionPolicyDecisionKind = 'allow' | 'deny' | 'confirm'
+export type BrowserActionPolicyDecisionKind = 'allow' | 'deny'
 
 export interface BrowserActionPolicyDecision {
   kind: BrowserActionPolicyDecisionKind
@@ -60,8 +60,10 @@ function findPolicyMatch(
 /**
  * Resolves the host-agnostic policy decision for a browser action.
  *
- * Browser owns its action vocabulary and match precedence. Product hosts only
- * decide how a `confirm` decision is presented and fulfilled.
+ * Browser owns its action vocabulary and match precedence. The decision closed
+ * set is `allow` / `deny` only — the `confirm` tier was removed (2026-08-06):
+ * no product host ever populated `policy.confirm`, so it was a fully wired
+ * dead configuration tier that never actually triggered.
  */
 export function checkBrowserActionPolicy(
   policy: LooseOptional<BrowserActionPolicyConfig>,
@@ -80,16 +82,6 @@ export function checkBrowserActionPolicy(
       action,
       matchedAction: deniedAction,
       reason: `浏览器动作被策略拒绝：${action}`,
-    }
-
-  const confirm = normalizeActionSet(policy.confirm)
-  const confirmedAction = findPolicyMatch(confirm, requestActions)
-  if (confirmedAction)
-    return {
-      kind: 'confirm',
-      action,
-      matchedAction: confirmedAction,
-      reason: `浏览器动作需要用户确认：${action}`,
     }
 
   const allow = normalizeActionSet(policy.allow)

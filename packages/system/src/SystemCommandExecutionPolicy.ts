@@ -37,6 +37,20 @@ const mutatingGitCommands = new Set([
   'rm', 'stash', 'switch', 'tag',
 ])
 
+/**
+ * 白名单命令里仍然能改盘的参数形态。
+ *
+ * `find` / `sed` 进 `readOnlyCommands` 的理由是「通常只读」，但 `find … -delete`、
+ * `find … -exec rm {} \;`、`sed -i` 都写盘。判成只读的代价是两条：并发放行写操作，
+ * 以及无人值守白名单直接执行——所以这里逐条否决具体参数，不做通用参数解析
+ * （shell 的参数形态足够刁钻，"解析对了大部分"在安全判定里等于错）。
+ */
+const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = {
+  find: [/^-(?:delete|exec|execdir|ok|okdir|fls|fprint|fprint0|fprintf)$/iu],
+  // `-i` / `-i.bak` / `-ni` / `--in-place[=SUFFIX]` 都是就地改写。
+  sed: [/^-[^-]*i/u, /^--in-place(?:=.*)?$/u],
+}
+
 function tokenize(command: string): string[] {
   return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)?.map((token) =>
     token.replace(/^(['"])(.*)\1$/, '$2')
@@ -61,10 +75,13 @@ export function isSystemShellCommandReadOnly(command: string): boolean {
     if (executableIndex < 0) return false
     const executable = tokens[executableIndex]?.split('/').at(-1)?.toLowerCase()
     if (!executable || !readOnlyCommands.has(executable)) return false
+    const args = tokens.slice(executableIndex + 1)
     if (executable === 'git') {
-      const subcommand = tokens.slice(executableIndex + 1).find((token) => !token.startsWith('-'))
+      const subcommand = args.find((token) => !token.startsWith('-'))
       return !!subcommand && !mutatingGitCommands.has(subcommand.toLowerCase())
     }
+    const vetoes = mutatingArgumentsByCommand[executable]
+    if (vetoes && args.some((arg) => vetoes.some((pattern) => pattern.test(arg)))) return false
     return true
   })
 }

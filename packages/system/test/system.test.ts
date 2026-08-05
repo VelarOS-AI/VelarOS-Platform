@@ -8,7 +8,10 @@ import { executeAtomicRead } from '../src/atomic/Read'
 import { executeAtomicWrite, resolveAtomicWriteContent } from '../src/atomic/Write'
 import { systemTools } from '../src/Collection'
 import { SystemToolNames } from '../src/system-tool-names'
-import { shouldReapForegroundProcessGroupAfterExit } from '../src/SystemCommandExecutionPolicy'
+import {
+  isSystemShellCommandReadOnly,
+  shouldReapForegroundProcessGroupAfterExit,
+} from '../src/SystemCommandExecutionPolicy'
 
 describe('System capability', () => {
   test('publishes only canonical system tool ids', () => {
@@ -30,6 +33,50 @@ describe('System capability', () => {
     expect(shouldReapForegroundProcessGroupAfterExit('server &; printf ready')).toBe(true)
     expect(shouldReapForegroundProcessGroupAfterExit('server &\nprintf ready')).toBe(true)
     expect(shouldReapForegroundProcessGroupAfterExit('nohup server &')).toBe(false)
+  })
+
+  test('whitelisted commands still lose read-only status when their arguments write', () => {
+    expect(isSystemShellCommandReadOnly('find . -name "*.ts"')).toBe(true)
+    expect(isSystemShellCommandReadOnly('sed -n 1,20p file.txt')).toBe(true)
+    // 白名单是「无人值守自动放行」与「可并发执行」两道判定的底；这几种写盘形态必须掉出来。
+    expect(isSystemShellCommandReadOnly('find . -name "*.tmp" -delete')).toBe(false)
+    expect(isSystemShellCommandReadOnly('find . -type f -exec rm {} ;')).toBe(false)
+    expect(isSystemShellCommandReadOnly('sed -i s/a/b/ file.txt')).toBe(false)
+    expect(isSystemShellCommandReadOnly('sed --in-place=.bak s/a/b/ file.txt')).toBe(false)
+  })
+
+  test('dangerous shell commands request approval that can never be reused', async () => {
+    const seen: Array<Record<string, unknown> | undefined> = []
+    const context = {
+      abortSignal: new AbortController().signal,
+      approval: {
+        awaitConfirmation: async (
+          _message: string,
+          _signal?: AbortSignal,
+          options?: Record<string, unknown>
+        ) => {
+          seen.push(options)
+        },
+      },
+      system: {
+        canStartBackgroundCommands: () => true,
+        runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0, truncated: false }),
+      },
+    } as never
+
+    await systemTools[SystemToolNames.run].execute({ command: 'rm -rf /tmp/velaros-fixture' }, context)
+    // 破坏性命令：必须是「每次亲自裁决」，绝不能进 riskScope 记忆——否则批准过一条
+    // rm -rf 就等于预授权了本会话此后所有 rm -rf / sudo / dd。
+    expect(seen[0]).toEqual({
+      approvalRisk: 'high',
+      riskScope: 'system-command:dangerous',
+      requireManualApproval: true,
+      rememberRiskScope: false,
+    })
+
+    await systemTools[SystemToolNames.run].execute({ command: 'npm run dev' }, context)
+    // 长驻服务只是体验型确认：低风险、可按类记忆，语义不变。
+    expect(seen[1]).toEqual({ approvalRisk: 'low' })
   })
 
   test('does not count a final line ending as an extra addressable line', async () => {

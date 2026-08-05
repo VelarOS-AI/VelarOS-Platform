@@ -1,20 +1,34 @@
+/**
+ * 浏览器产品配置的两个闭集。
+ *
+ * 运行期清单 / 出厂默认 / 宽容守卫全在 `BrowserConfigDefaults.ts`——加一个引擎只改那一处，
+ * 这里的联合类型跟着它 `satisfies` 咬合。宿主（Desktop 的持久层 schema、Normalizer、IPC 契约）
+ * 一律消费导出的清单与守卫，不再各写一份字面量。
+ */
 export type BrowserSearchEngineId = 'google' | 'bing'
 export type BrowserAutomationMode = 'webview' | 'external'
 
 export interface BrowserActionPolicyConfig {
-  /** 没有命中 allow/deny/confirm 时的默认策略。 */
+  /** 没有命中 allow/deny 时的默认策略。 */
   default?: LooseOptional<'allow' | 'deny'>
   /** 允许的动作类别。非空时未列入动作默认拒绝，除非 default=allow。 */
   allow?: LooseOptional<string[]>
-  /** 拒绝的动作类别；优先级高于 confirm 和 allow。 */
+  /** 拒绝的动作类别；优先级高于 allow。 */
   deny?: LooseOptional<string[]>
-  /** 需要用户确认的动作类别；优先级高于 allow。 */
-  confirm?: LooseOptional<string[]>
 }
 
 export interface BrowserSiteContext {
   url: string
+  /** 站点工作区根：写入唯一落点。宿主决定粒度（Desktop 按站点全局，与登录态、站点记忆同轴）。 */
   workspaceRoot: string
+  /**
+   * 只读的历史工作区根（旧粒度留下的资产），按新→旧排列。
+   *
+   * 存在的唯一理由是**换粒度不丢资产**：写只写 {@link workspaceRoot}，读不到才依次回退。
+   * 刻意不做一次性搬迁脚本——搬迁要在启动路径上遍历用户全部会话目录，失败一半比不搬更糟；
+   * 回退读是幂等的，用户每碰一次旧资产就自然继续可用，新写入自动落到新位置。
+   */
+  legacyWorkspaceRoots?: readonly string[]
 }
 
 /** 每回合浏览器上下文快照里的 pending 阻塞事件计数。 */
@@ -454,6 +468,16 @@ export interface BrowserPageInspection {
   actions: BrowserPageAction[]
   formFields: BrowserPageFormField[]
   snapshot?: BrowserPageSnapshot
+  /**
+   * 登录墙检测（与截图元数据同一份启发式，随检查脚本顺带产出）。
+   *
+   * 刻意内嵌进检查脚本而不是另发一次 `evaluateScript`：inspect 是常驻主回路，多一次页面
+   * 往返既是延迟也会撞上浏览器动作策略里 `evaluate` 这条门——一条只读的观察不该因为
+   * 用户关掉了脚本执行权限就整条失效。
+   */
+  login?: BrowserLoginDetection
+  /** 本次检查是否触发过登录墙门控；缺席 = 没触发（不是「没检测」）。 */
+  loginGate?: BrowserLoginGateRecord
   capturedAt: number
 }
 
@@ -546,6 +570,27 @@ export interface BrowserLoginDetection {
   forms: number
 }
 
+/**
+ * 登录墙**门控**结论（检测的下游）：这一页停下来问过用户了没有、用户怎么答的。
+ *
+ * 与 {@link BrowserLoginDetection} 分开是刻意的：检测只是启发式观察，可以误判；门控是
+ * 一次真实发生过的人机交互，带用户裁决。渲染层据此显示「登录待处理 / 登录后继续」，
+ * 只有本记录能回答那个问题——检测字段回答不了「问过没有」。
+ */
+export interface BrowserLoginGateRecord {
+  /** 是否真的阻塞并向用户征询过；本记录存在即为 true（缺席表示从未触发门控）。 */
+  prompted: boolean
+  /** 用户是否表示已完成登录并继续。 */
+  approved: boolean
+  /** 触发门控的站点身份（与空间 identityStrategy:'origin' 同口径）。 */
+  origin: Nullable<string>
+  confidence: number
+  signals: string[]
+  /** 门控结论说明：批准时取检测理由，拒绝时取用户/宿主给的原因。 */
+  reason: string
+  resolvedAt: number
+}
+
 export interface BrowserScreenshotMetadata {
   viewportWidth: number
   viewportHeight: number
@@ -565,6 +610,46 @@ export interface BrowserScreenshotMetadata {
   stability: Nullable<BrowserPageStabilityResult>
   recentEvents: BrowserPageDiagnosticEntry[]
   login: BrowserLoginDetection
+}
+
+/** 干跑 recipe 时单个步骤的结论（面向人看的精简投影，不带 runtime 原始返回）。 */
+export interface BrowserRecipeDryRunStep {
+  id: string
+  kind: string
+  status: string
+  message: string
+  inputName: Nullable<string>
+  targetCss: Nullable<string>
+}
+
+/**
+ * 「干跑 recipe」的结构化结论。
+ *
+ * 存在的理由是一条判决：**UI 动作不该塞提示词**。制品面板的干跑按钮从前往输入框里写一句
+ * 「请对 X 执行 browser:run_recipe_skeleton，dryRun=true 预检」——工具收门面之后那个名字
+ * 已经不是注册工具了，模型在清单里找不到它，运气好自己改调、运气不好凭空编一个，
+ * 而任何门都拦不住一段字符串。改成 IPC 直调之后，按钮与 recipe 执行器之间是编译期关系。
+ */
+export interface BrowserRecipeDryRunSummary {
+  path: string
+  url: string
+  title: Nullable<string>
+  executableStepCount: number
+  readyStepCount: number
+  missingInputCount: number
+  skippedStepCount: number
+  requiredInputNames: string[]
+  /** 缺失的输入项（step 里声明了、这次没给值的字段）。 */
+  missingInputs: BrowserRecipeDryRunMissingInput[]
+  steps: BrowserRecipeDryRunStep[]
+}
+
+/** 干跑发现的缺失输入；面板据此告诉用户「真跑之前还得填什么」。 */
+export interface BrowserRecipeDryRunMissingInput {
+  stepId: string
+  name: string
+  label: string
+  required: boolean
 }
 
 export interface BrowserScreenshotDiff {
@@ -630,6 +715,8 @@ export interface BrowserScreenshotArtifact {
   metadata?: BrowserScreenshotMetadata
   diff?: BrowserScreenshotDiff
   modelImage?: BrowserScreenshotModelImage
+  /** 本次截图是否触发过登录墙门控；缺席 = 没触发（不是「没检测」）。 */
+  loginGate?: BrowserLoginGateRecord
 }
 
 export type BrowserTargetActionKind =

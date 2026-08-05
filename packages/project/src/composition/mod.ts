@@ -32,6 +32,20 @@ const ProjectToolCategories = Object.freeze({
   }),
 })
 
+/**
+ * 项目空间的常驻工具：读—找—改—跑这条主回路，写码会话每轮都在用。
+ *
+ * `project:rollback` 是事故通道（真出事了再从 `tooling:map` 按名换入），不占每轮 schema。
+ */
+const ProjectResidentToolNames = new Set<string>([
+  ProjectToolNames.read,
+  ProjectToolNames.list,
+  ProjectToolNames.search,
+  ProjectToolNames.edit,
+  ProjectToolNames.write,
+  ProjectToolNames.run,
+])
+
 const ProjectCategoryTools = Object.freeze({
   'project-files': projectFileTools,
   'project-changes': projectChangeTools,
@@ -65,19 +79,14 @@ const ProjectAgentModManifest = Object.freeze({
       name,
       categoryId: projectCategoryForTool(name),
       availableInSpaces: [ProjectSpaceId],
+      ...(ProjectResidentToolNames.has(name) ? { residentInSpaces: [ProjectSpaceId] } : {}),
     })),
+    // 只声明**真被消费**的那几格（身份策略 / 绑定能力 / 职责类别）。空间的文案、图标、
+    // 顺序与 surface 分档权威在产品壳的枚举表，manifest 里再写一份没有读者，只会让人
+    // 改了 manifest 却什么都没变。理由与 browser mod 同一条，别再补回来。
     spaces: [{
       id: ProjectSpaceId,
-      descriptor: {
-        label: 'Project',
-        hint: '阅读、修改并运行当前项目',
-        startTitle: '打开项目',
-        order: 20,
-        localeKey: 'workspace.space.project',
-      },
-      iconId: 'project',
       identityStrategy: 'path',
-      surfaceProfileId: 'chat',
       boundCapabilityIds: [ProjectModId],
       toolCategoryIds: Object.keys(ProjectToolCategories),
     }],

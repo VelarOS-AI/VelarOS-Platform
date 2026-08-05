@@ -46,8 +46,6 @@ export interface ToolBrowserApi {
   leaveSite: () => Promise<void>
   /** 把受控浏览器页面显示出来。 */
   showPage: () => Promise<BrowserPageWindowState>
-  /** 隐藏受控浏览器页面，但保留 session。 */
-  hidePage: () => Promise<BrowserPageWindowState>
   /** 抽取页面结构、可点击元素和基础状态，供模型决定下一步。 */
   inspectPage: (options?: BrowserInspectPageOptions) => Promise<BrowserPageInspection>
   /** 截图并把图片作为工作区产物保存。 */

@@ -21,7 +21,7 @@
       "agent": "*"
     },
     "trust": "bundled-official",
-    "requiredAxes": ["tools", "toolCategories", "spaces", "turnContextSources"],
+    "requiredAxes": ["tools", "toolCategories", "spaces"],
     "contributes": {
       "toolCategories": [
         {
@@ -35,51 +35,47 @@
         {
           "name": "game:scene_edit",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         },
         {
           "name": "game:run",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         },
         {
           "name": "game:stop",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         },
         {
           "name": "game:screenshot",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         },
         {
           "name": "game:query_state",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         },
         {
           "name": "game:input",
           "categoryId": "game",
-          "availableInSpaces": ["game"]
+          "availableInSpaces": ["game"],
+          "residentInSpaces": ["game"]
         }
       ],
       "spaces": [
         {
           "id": "game",
-          "descriptor": {
-            "label": "Game",
-            "hint": "编辑、运行并观察当前游戏工程",
-            "startTitle": "开始构建游戏",
-            "order": 40,
-            "localeKey": "workspace.space.game"
-          },
-          "iconId": "game",
           "identityStrategy": "path",
-          "surfaceProfileId": "game",
           "boundCapabilityIds": ["velaros.game"],
           "inheritsSpaceIds": ["project"],
-          "toolCategoryIds": ["game"],
-          "turnContextSourceIds": ["game.runtime-errors", "game.selection", "game.scene-state"]
+          "toolCategoryIds": ["game"]
         }
       ],
       "turnContextSources": [

@@ -74,11 +74,19 @@ describe('System Kernel module', () => {
     expect(module.manifest.permissions).not.toContain('*')
   })
 
-  test('keeps the system execution triangle resident without pinning the whole domain', () => {
+  test('keeps the system main loop resident without pinning the whole domain', () => {
     const tools = createSystemBundledModDefinition().manifest.contributes.tools
+    // 找—读—改—跑常驻；进程 / 后台任务 / 环境刷新是排障场景，走 tooling:map 按名换入。
     expect(
       tools.flatMap((tool) => (tool.residentInSpaces?.includes('system') ? [tool.name] : [])),
-    ).toEqual(['system:read', 'system:write', 'system:run'])
+    ).toEqual([
+      'system:read',
+      'system:write',
+      'system:edit',
+      'system:list',
+      'system:search',
+      'system:run',
+    ])
   })
 
   test('uses strict schemas before resolving a host context', async () => {

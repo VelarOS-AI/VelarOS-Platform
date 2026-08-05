@@ -69,12 +69,9 @@ const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSc
     '禁用或删除不会回滚当前文档已执行的副作用，需要刷新页面。',
   ],
   usage: [
-    '优先使用精确 host/path match，避免 <all_urls>。',
-    '用 list 查看摘要；只有确需源码时再 read。',
-    'run_now 仍校验当前 URL 是否匹配脚本规则。',
+    '优先使用精确 host/path match，避免 <all_urls>；用 list 查看摘要，只有确需源码时再 read。',
   ],
   examples: [
-    { action: 'list' },
     {
       action: 'create',
       name: 'Hide newsletter popup',
@@ -88,6 +85,7 @@ const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSc
     'external CDP 与 document-start v1 会返回 unsupported，不会伪报注入成功。',
     '脚本按 document + revision 幂等，单脚本失败不会阻断页面或其他脚本。',
   ],
+  usageSkillId: 'browser-automation-recipes',
   schema: browserUserScriptsSchema,
   permissions: ['network', 'fs:read', 'fs:write'],
   capabilities: BrowserArtifactWriteCapability,

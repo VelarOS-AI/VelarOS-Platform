@@ -1,11 +1,11 @@
 import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'
 
+import { DefaultBrowserSearchEngine } from './BrowserConfigDefaults.js'
 import type { BrowserSearchEngineId } from './types.js'
 
 const BrowserExplicitSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i
 const BrowserLocalAddressPattern = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::|\/|$)/i
 const BrowserWhitespacePattern = /\s/
-const DefaultBrowserSearchEngine: BrowserSearchEngineId = 'google'
 const BrowserSearchUrlByEngine: Record<BrowserSearchEngineId, string> = {
   google: 'https://www.google.com/search',
   bing: 'https://www.bing.com/search',
@@ -20,13 +20,6 @@ const BrowserMultiPartPublicSuffixes = new Set([
   'net.cn',
   'org.cn',
 ])
-
-export function resolveBrowserSearchEngineId(
-  value?: LooseOptional<string>,
-  fallback: BrowserSearchEngineId = DefaultBrowserSearchEngine
-): BrowserSearchEngineId {
-  return value === 'google' || value === 'bing' ? value : fallback
-}
 
 export function buildBrowserSearchUrl(
   query: string,

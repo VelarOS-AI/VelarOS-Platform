@@ -1,3 +1,4 @@
+import { isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -81,24 +82,25 @@ export class CdpBrowserRuntime {
   /** engines 依赖的 driver 多态内核面（全部会话都是 external）。 */
   private readonly kernel: BrowserPageDriverKernel = {
     getLivePageDriverSession: (sessionId) => Promise.resolve(this.getPageDriverSession(sessionId)),
-    getExternalPageSession: (sessionId) => this.sessions.get(sessionId) ?? null,
+    getExternalPageSession: (sessionId) => toNullable(this.sessions.get(sessionId)),
     refreshPageDriverSessionState: (sessionId, pageSession, fallbackUrl) =>
       this.refreshDriverSessionState(pageSession.driver, this.sessions.get(sessionId), fallbackUrl),
     refreshExternalPageState: (sessionId, session, fallbackUrl) =>
       this.refreshDriverSessionState(session.driver, session, fallbackUrl),
     updateExternalPageStateFromInspection: (sessionId, session, inspection) => {
       const typed = inspection as { url?: string; title?: string }
-      if (typeof typed.url === 'string' && typed.url) session.url = typed.url
-      if (typeof typed.title === 'string') session.title = typed.title
+      if (isString(typed.url) && typed.url) session.url = typed.url
+      if (isString(typed.title)) session.title = typed.title
     },
     syncExternalPageStateFromScriptResult: (sessionId, session, result, fallbackUrl) => {
-      const typed = result as { url?: string } | null
-      session.url = (typed && typeof typed.url === 'string' && typed.url) || session.url || fallbackUrl
+      const typed = result as Nullable<{ url?: string }>
+      session.url = (typed && isString(typed.url) && typed.url) || session.url || fallbackUrl
     },
     syncSessionSiteContext: (sessionId, url) => {
       const session = this.sessions.get(sessionId)
       if (session) session.url = url
     },
+    // @arch-guard:suspend code-style/forbid-raw-timers 理由：一次性 delay Promise 且 unref 防挂进程；纯内核面无生命周期作用域可挂 TimerScope。
     delay: (ms) => new Promise((resolveDelay) => {
       const timer = setTimeout(resolveDelay, ms)
       timer.unref?.()
@@ -199,7 +201,7 @@ export class CdpBrowserRuntime {
 
     return {
       isActive: (): boolean => this.sessions.has(sessionId),
-      getContext: (): Nullable<BrowserSiteContext> => this.siteContexts.get(sessionId) ?? null,
+      getContext: (): Nullable<BrowserSiteContext> => toNullable(this.siteContexts.get(sessionId)),
       enterSite: (url: string): Promise<BrowserSiteContext> => {
         const next = { url, workspaceRoot: context.workspaceRoot }
         this.siteContexts.set(sessionId, next)
@@ -209,10 +211,8 @@ export class CdpBrowserRuntime {
         this.disposeSession(sessionId)
         return Promise.resolve()
       },
-      // headless CDP 无宿主 UI 窗口:show/hide 诚实降级为「不可见的受控页面」状态。
+      // headless CDP 无宿主 UI 窗口:show 诚实降级为「不可见的受控页面」状态。
       showPage: (): Promise<BrowserPageWindowState> =>
-        Promise.resolve(this.buildWindowState(sessionId, false)),
-      hidePage: (): Promise<BrowserPageWindowState> =>
         Promise.resolve(this.buildWindowState(sessionId, false)),
       inspectPage: (options?: BrowserInspectPageOptions) =>
         run(() => this.pageData.inspectPage(sessionId, context, options)),
@@ -313,11 +313,11 @@ export class CdpBrowserRuntime {
       active: this.sessions.has(sessionId),
       visible,
       driverKind: 'external',
-      url: session?.url ?? null,
-      title: session?.title ?? null,
+      url: toNullable(session?.url),
+      title: toNullable(session?.title),
       canGoBack: false,
       canGoForward: false,
-      viewport: session?.viewport ?? null,
+      viewport: toNullable(session?.viewport),
     }
   }
 
@@ -382,7 +382,7 @@ export class CdpBrowserRuntime {
     session.driver = nextDriver
     const state = await this.refreshDriverSessionState(nextDriver, session, context.url)
     const targets = (await nextDriver.listPageTargets?.()) ?? []
-    const activeTarget = targets.find((entry) => entry.id === options.targetId) ?? targets[0] ?? null
+    const activeTarget = toNullable(targets.find((entry) => entry.id === options.targetId) ?? targets[0])
     return {
       driverKind: 'external',
       activeTargetId: activeTarget ? activeTarget.id : options.targetId,
@@ -419,7 +419,7 @@ export class CdpBrowserRuntime {
       url: state.url || context.url,
       title: state.title,
       loadState: state.url ? 'loaded' : 'unknown',
-      viewport: session.viewport ?? null,
+      viewport: toNullable(session.viewport),
       lastNavigationError: null,
     }
   }

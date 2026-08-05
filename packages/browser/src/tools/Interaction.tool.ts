@@ -886,8 +886,8 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
   usage: [
     '传 action 选择动作类型，再传该动作需要的字段。',
     'action=target 时传 targetAction 和 target；targetAction=fill/select 必须传 value。',
-    'action=drag 时传 source 和 target。',
-    'action=navigate 可只传 url，系统会按 goto 处理。',
+    'action=drag 时传 source 和 target；action=navigate 可只传 url，系统会按 goto 处理。',
+    '页面是异步的：动作之后用 wait_for_selector/wait_for_text/wait 等到位再读结果，别靠重试。',
   ],
   examples: [
     // 点击定位到的元素
@@ -949,21 +949,10 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
       selector: '.results',
       state: 'visible',
     },
-    // 等待页面正文出现指定文本
-    {
-      action: 'wait_for_text',
-      text: 'Loaded profile',
-    },
     // 等待加载状态或短暂停顿
     {
       action: 'wait',
       loadState: 'networkidle',
-    },
-    // 复现移动端布局
-    {
-      action: 'set_viewport',
-      width: 390,
-      height: 844,
     },
     // 设置页面缩放：zoomAction=set 必须带 zoomFactor
     {
@@ -979,6 +968,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
     },
   ],
   notes: ['这是 browser 页面动作的唯一公开入口；内部仍按 action 复用导航、键鼠、等待和视口控制实现。'],
+  usageSkillId: 'browser-automation-recipes',
   schema: browserActSchema,
   permissions: ['network', 'input:control'],
   capabilities: BrowserControlCapability,

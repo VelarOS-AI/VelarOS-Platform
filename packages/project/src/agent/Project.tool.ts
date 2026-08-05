@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { createManualApprovalOptions, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -401,7 +401,12 @@ async function runProjectCommand(
         background
       ),
       context.abortSignal,
-      { approvalRisk: 'high', riskScope: 'project-command:dangerous' }
+      // 与 system:run 同一条判决：破坏性命令按 riskScope 记忆 = 首次批准后整会话静默放行同类，
+      // 用户点头的是 `rm -rf ./dist`，之后跑的可能是 `rm -rf ~`。不可逆伤害每次都要亲自裁决。
+      createManualApprovalOptions({
+        approvalRisk: 'high',
+        riskScope: 'project-command:dangerous',
+      })
     )
     if (!decision.approved) return {
       approved: false,
