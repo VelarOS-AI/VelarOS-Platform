@@ -7,7 +7,7 @@
  *
  * 权威层的三条硬要求正是选文件的理由：**人可读、可手改、可 diff 可版本化**。因此：
  * - 后端从不假设自己是唯一写者：每次读都重新解析磁盘，用户拿编辑器改一行立即生效；
- * - `erase` 是归档（撤索引行 + 标 `status: archived`）而不是物理删除——权威内容是用户资产；
+ * - `archive` 就是归档（撤索引行 + 标 `status: archived`），从不物理删除——权威内容是用户资产；
  * - 不认识的 frontmatter 字段原样保留写回。
  *
  * 作用域双轨（§九 9.5）：全局面住宿主 userData，项目面住仓根 `.velaros/memory/` 随 git 走。
@@ -49,7 +49,11 @@ import type {
   MemoryRecallOptions,
   MemoryScopeType,
 } from '../memory-tree/Types'
-import { GLOBAL_MEMORY_SCOPE, type MemoryScopeId } from '../MemoryScope'
+import {
+  isMemoryVisibleInScope,
+  type MemoryScopeId,
+  resolveMemoryScopeSelector,
+} from '../MemoryScope'
 
 import {
   type MemoryFileDocument,
@@ -108,7 +112,7 @@ const filesDescriptor: MemoryBackendDescriptor = Object.freeze({
   displayName: 'Memory files (markdown authority)',
   // dream / govern 缺席 = partial activation 的「没装就没有」，不是降级：
   // 文件后端没有整理管线，也没有证据可用性状态机。
-  verbs: Object.freeze(['capture', 'recall', 'inspect', 'erase'] as const),
+  verbs: Object.freeze(['capture', 'recall', 'inspect', 'archive'] as const),
 })
 
 const conceptTypeByCategory: Readonly<Record<string, MemoryConceptType>> = {
@@ -386,7 +390,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
    * **文件不删**。这是 §九 9.4「权威内容永不静默硬删」的落点，也和 `memory:archive` 工具
    * 「自然遗忘不是物理删除」的产品语义对齐——归档后仍可被 `includeDormant` 深层召回捞回。
    */
-  public erase(id: string): MemoryForgetResult {
+  public archive(id: string): MemoryForgetResult {
     const parsed = parseEntryId(id)
     if (!parsed) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
     const root = this.listRoots().find((candidate) => candidate.scopeId === parsed.scopeId)
@@ -428,19 +432,15 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         'memory-files 后端没有可写的作用域根；宿主必须注入至少一个目录。',
       )
     }
-    const scopeId = input.scopeId?.trim()
-    const byScopeId = scopeId
-      ? roots.find((root) => root.scopeId === scopeId)
+    // 两轴解析走单源：scopeId 在场即权威，缺席时由 workspaceRoot 物化出 `project:<root>`。
+    // 历史实现在这里做过 `scopeId.endsWith(workspaceRoot)` 的后缀兜底，会把
+    // `project:/backup/a/b` 当成 `/a/b` 的根写进去——落错池子且在本空间再也召回不到。
+    const selector = resolveMemoryScopeSelector(input)
+    const bySelector = selector
+      ? roots.find((root) => root.scopeId === selector)
       : undefined
-    if (byScopeId) return byScopeId
+    if (bySelector) return bySelector
 
-    const workspaceRoot = input.workspaceRoot?.trim()
-    if (workspaceRoot) {
-      const byWorkspace = roots.find(
-        (root) => root.scopeType === 'workspace' && root.scopeId.endsWith(workspaceRoot),
-      )
-      if (byWorkspace) return byWorkspace
-    }
     if (input.scopeType === 'workspace') {
       const anyProject = roots.find((root) => root.scopeType === 'workspace')
       if (anyProject) return anyProject
@@ -449,24 +449,15 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   }
 
   private resolveReadRoots(options: MemoryRecallOptions): readonly MemoryFilesScopeRoot[] {
-    const roots = this.listRoots()
-    const scopeId = options.scopeId?.trim()
-    const workspaceRoot = options.workspaceRoot?.trim()
-    if (!scopeId && !workspaceRoot) return roots
-
-    const includeGlobal = !isFalse(options.includeGlobal)
-    return roots.filter((root) => {
-      if (scopeId && root.scopeId === scopeId) return true
-      if (
-        workspaceRoot
-        && root.scopeType === 'workspace'
-        && root.scopeId.endsWith(workspaceRoot)
-      ) return true
-      return (
-        includeGlobal
-        && (root.scopeType === 'global' || root.scopeId === GLOBAL_MEMORY_SCOPE)
-      )
-    })
+    // 可见性判据单源（`isMemoryVisibleInScope`）：两轴皆空时它对每条根都返回 true，
+    // 因此「不过滤」这一档不必在这里再写一遍。
+    return this.listRoots().filter((root) =>
+      isMemoryVisibleInScope(root, {
+        scopeId: options.scopeId,
+        workspaceRoot: options.workspaceRoot,
+        includeGlobal: isFalse(options.includeGlobal) ? false : undefined,
+      }),
+    )
   }
 
   private readIndex(root: MemoryFilesScopeRoot): MemoryIndexEntry[] {

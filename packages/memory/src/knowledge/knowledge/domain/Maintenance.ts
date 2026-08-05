@@ -34,8 +34,13 @@ export class KnowledgeMaintenance {
     private readonly knowledgeVectors: KnowledgeVectors
   ) {}
 
-  /** 汇总 SQLite 文档统计、文件索引统计、向量库统计和当前索引 runtime。 */
-  public async getDiagnostics(): Promise<KnowledgeDiagnostics> {
+  /**
+   * 汇总 SQLite 文档统计、文件索引统计、向量库统计和当前索引 runtime。
+   *
+   * `workspaceSyncs` 由 `KnowledgeDomain` 从摄取服务合流补齐：那份台账是同步节流的真相源，
+   * 维护服务不该为了一个读数反向依赖摄取服务。
+   */
+  public async getDiagnostics(): Promise<Omit<KnowledgeDiagnostics, 'workspaceSyncs'>> {
     const runtime = this.knowledgeMutationService.getCurrentIndexRuntime()
     const [baseDiagnostics, vectorStore] = await Promise.all([
       Promise.resolve(this.repository.getDiagnosticsBase(runtime)),

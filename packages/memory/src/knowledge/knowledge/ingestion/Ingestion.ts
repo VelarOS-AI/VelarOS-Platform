@@ -56,6 +56,19 @@ export class KnowledgeIngestion {
     private readonly mutationService: KnowledgeMutation
   ) {}
 
+  /**
+   * 各工作区的最近一次同步时刻，供设置页诊断卡如实回答「上次同步是什么时候」。
+   *
+   * 只读进程内 TTL 台账：它就是同步节流的真相源，另开一份落盘时间戳只会多出一个可能对不上的
+   * 第二读数。因此重启后为空 = 本次运行还没同步过，这是诚实回答而不是缺陷。
+   */
+  public listWorkspaceSyncStates(): Array<{ workspaceRoot: string; lastSyncedAt: number }> {
+    return [...this.lastSyncByWorkspace].map(([workspaceRoot, lastSyncedAt]) => ({
+      workspaceRoot,
+      lastSyncedAt,
+    }))
+  }
+
   /** 带 TTL 的工作区文档同步入口。 */
   public async ensureWorkspaceSynced(
     workspaceRoot: string,

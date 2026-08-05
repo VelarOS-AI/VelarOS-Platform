@@ -98,7 +98,7 @@ export class DefaultKnowledgeRuntime implements KnowledgeRuntime {
 /**
  * 兼容的构造器入口。类型位置仍是 0.3.2 的最小契约，值位置创建默认实现。
  */
-// eslint-disable-next-line no-redeclare -- TypeScript 需要保留同名类型契约与构造器值。
+ 
 export const KnowledgeRuntime = DefaultKnowledgeRuntime
 
 export function createKnowledgeRuntime(

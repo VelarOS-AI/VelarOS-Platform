@@ -46,7 +46,7 @@ import {
 /** 派生层出问题时的诊断事件。**永远只是诊断**——没有一条会改变权威层的返回值。 */
 export interface MemoryDerivedIndexFailure {
   readonly backendId: string
-  readonly stage: 'index' | 'recall' | 'prune' | 'erase' | 'rebuild'
+  readonly stage: 'index' | 'recall' | 'prune' | 'archive' | 'rebuild'
   readonly error: unknown
 }
 
@@ -245,9 +245,9 @@ export function createLayeredMemoryStoreBackend(
 
   // 可选动词按权威层的能力**条件挂载**:声明与实现必须一致(`supportsMemoryBackendVerb` 的判据),
   // 挂一个「内部再判一次能力」的空壳会让「没装就没有」退化成「装了但不干活」。
-  if (supportsMemoryBackendVerb(authority, 'erase')) {
-    backend.erase = async (id: string): Promise<MemoryForgetResult> => {
-      const result = await authority.erase!(id)
+  if (supportsMemoryBackendVerb(authority, 'archive')) {
+    backend.archive = async (id: string): Promise<MemoryForgetResult> => {
+      const result = await authority.archive!(id)
       await removePointers([id])
       return result
     }

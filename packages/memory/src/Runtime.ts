@@ -32,7 +32,7 @@ export class DefaultMemoryRuntime implements MemoryRuntime {
  * 兼容的构造器入口：类型位置仍表示已发布的最小契约，值位置可用于创建和
  * `instanceof` 检查。需要声明具体实例类型时使用 {@link DefaultMemoryRuntime}。
  */
-// eslint-disable-next-line no-redeclare -- TypeScript 需要保留同名类型契约与构造器值。
+ 
 export const MemoryRuntime = DefaultMemoryRuntime
 
 export function createMemoryRuntime(

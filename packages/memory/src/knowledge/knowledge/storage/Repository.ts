@@ -583,8 +583,8 @@ class KnowledgeRepo {
   /** 获取 SQLite 侧诊断统计。 */
   public getDiagnosticsBase(
     runtime: KnowledgeIndexRuntime
-  ): Omit<KnowledgeDiagnostics, 'runtime' | 'vectorStore'> {
-    // 向量库统计由 KnowledgeVectors 单独提供，这里只统计关系型表和文件索引。
+  ): Omit<KnowledgeDiagnostics, 'runtime' | 'vectorStore' | 'workspaceSyncs'> {
+    // 向量库统计由 KnowledgeVectors 单独提供，同步台账由摄取服务提供；这里只统计关系型表和文件索引。
     const statusCounts = this.getIndexStatusCounts()
     const trackedBySourceKind = this.getFileIndexSourceKindCounts()
 

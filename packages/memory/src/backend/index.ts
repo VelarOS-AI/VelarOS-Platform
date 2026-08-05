@@ -7,7 +7,11 @@ export type {
   MemoryBackendVerb,
   MemoryStoreBackend,
 } from './Contract'
-export { supportsMemoryBackendVerb } from './Contract'
+export {
+  listMissingAuthorityMemoryVerbs,
+  RequiredAuthorityMemoryVerbs,
+  supportsMemoryBackendVerb,
+} from './Contract'
 export type {
   MemoryAuthorityEnumeration,
   MemoryDerivedIndexBackend,

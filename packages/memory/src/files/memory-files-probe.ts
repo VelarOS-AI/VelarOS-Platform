@@ -288,8 +288,8 @@ async function probeArchive(): Promise<void> {
     evidence({ title: '过时结论', content: '旧项目才适用的偏好。', scopeId: 'global' }),
   ) as { evidence: { id: string } }
 
-  const erased = backend.erase?.(captured.evidence.id) as { claimId: string }
-  equal(erased.claimId, captured.evidence.id, 'erase 回报同一 id')
+  const archived = backend.archive?.(captured.evidence.id) as { claimId: string }
+  equal(archived.claimId, captured.evidence.id, 'archive 回报同一 id')
 
   const files = io.snapshot()
   check(

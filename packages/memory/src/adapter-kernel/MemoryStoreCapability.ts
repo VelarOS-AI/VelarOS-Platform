@@ -29,6 +29,8 @@ import {
 } from '@velaros-ai/kernel/contracts/abi'
 
 import type { MemoryBackendDescriptor, MemoryStoreBackend } from '..'
+// 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
+import { listMissingAuthorityMemoryVerbs } from '../backend/Contract'
 
 /** token 族前缀。完整 id = `${MemoryStoreCapabilityNamespace}.${backendId}`。 */
 export const MemoryStoreCapabilityNamespace = 'velaros.memory.store'
@@ -129,14 +131,20 @@ export interface ResolveMemoryStoreBackendInput {
  * 内容（§九 9.2），被当成权威层用 = 用户以为记忆写进去了、其实什么都没存。这条门让
  * 「只装了 vector 没装 files」退化成「没有权威层 → 缺席」，而不是退化成静默丢数据。
  * 派生索引的正当入口是 {@link resolveMemoryDerivedIndexBackends} + 叠加编排。
+ *
+ * **必备动词门**：缺 `capture / recall / inspect / archive` 任一的后端一律跳过。半个权威层的
+ * 症状（写得进读不出 / 归档按钮按下去没反应）会被当成产品 bug 追很久，而根因只是这个档
+ * 没实现全。跳过让它退化成「这一档没装」，与角色门同一种失败方向。
  */
 export function resolveMemoryStoreBackend(
   input: ResolveMemoryStoreBackendInput,
 ): MemoryStoreBackend | undefined {
   for (const backendId of input.preference) {
     const token = createMemoryStoreCapabilityToken(backendId, input.capabilityVersion)
-    const service = input.registry.getOptionalService(token)
-    if (service?.backend && service.backend.descriptor.role !== 'derived-index') return service.backend
+    const backend = input.registry.getOptionalService(token)?.backend
+    if (!backend || backend.descriptor.role === 'derived-index') continue
+    if (!isEmpty(listMissingAuthorityMemoryVerbs(backend))) continue
+    return backend
   }
   return undefined
 }

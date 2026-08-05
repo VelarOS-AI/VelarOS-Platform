@@ -23,6 +23,15 @@ const RecallLedgerMaxEntries = 16
 const InjectedSessionsMax = 128
 /** 引擎发送前可等待召回的硬预算；超时后本轮跳过，不阻塞发送、不重试。 */
 const AwaitableRecallTimeoutMs = 2_000
+/**
+ * 在途闩的看门狗预算：闩比它还老就当那次召回不会回来了，就地放行。
+ *
+ * 解闩原本完全依赖 promise settle，而召回一路打到 embedding 网关的 HTTP 请求上，
+ * Node fetch 没有默认超时——远端 TCP 挂起（不断也不回）时 `.finally` 永不执行，此后该会话的
+ * 自动记忆召回在进程剩余生命周期内彻底静默失效（审计 U38）。取值比 `AwaitableRecallTimeoutMs`
+ * 宽得多：这道门防的是"永远不回来"，不是"慢"，误伤一次在跑的召回比闩死一个会话更亏。
+ */
+const InFlightLatchWatchdogMs = 30_000
 /** 运行轨迹可供审计/手动召回，但不应作为下一项任务的自动语义上下文。 */
 const AutomaticRecallExcludedSourceTypes = [
   'workspace_event',
@@ -86,7 +95,9 @@ export class MemoryTurnRecallCoordinator {
     notifyRenderer: false,
   })
   private readonly injectedIdsBySession = new Map<string, Set<string>>()
-  private readonly inFlightSessions = new Set<string>()
+  /** 在途召回闩：sessionId → { 认领令牌, 上闩时刻 }（时刻供惰性看门狗判活）。 */
+  private readonly inFlightSessions = new Map<string, { token: number; startedAt: number }>()
+  private inFlightLatchSeq = 0
 
   constructor(private readonly deps: MemoryTurnRecallDeps) {}
 
@@ -97,9 +108,9 @@ export class MemoryTurnRecallCoordinator {
     const query = input.query.trim().slice(0, RecallQueryMaxChars)
     if (query.length < RecallMinQueryChars) return
     // 上一轮召回还在跑（模型选择最长 4s）说明用户在快速连发，跳过本轮避免堆积。
-    if (this.inFlightSessions.has(input.sessionId)) return
+    if (this.isRecallInFlight(input.sessionId)) return
 
-    this.inFlightSessions.add(input.sessionId)
+    const releaseLatch = this.acquireInFlightLatch(input.sessionId)
     void this.recall(input, query, true)
       .catch((error) => {
         log.debug('turn memory recall failed; skipping injection', {
@@ -107,9 +118,40 @@ export class MemoryTurnRecallCoordinator {
           error: AppError.getMessage(error),
         })
       })
-      .finally(() => {
-        this.inFlightSessions.delete(input.sessionId)
-      })
+      .finally(releaseLatch)
+  }
+
+  /**
+   * 在途闩查询，**惰性看门狗**：闩比硬预算还老 = 那次召回不会再回来了，就地放行。
+   *
+   * 惰性而不是挂定时器：判定发生在唯一会被它挡住的那次调用上，不留计时器、不占进程生命周期，
+   * 也不需要任何解闩通知机制。
+   */
+  private isRecallInFlight(sessionId: string): boolean {
+    const latch = this.inFlightSessions.get(sessionId)
+    if (!latch) return false
+    if (Date.now() - latch.startedAt < InFlightLatchWatchdogMs) return true
+
+    log.debug('turn memory recall latch expired by watchdog; recall never settled', { sessionId })
+    this.inFlightSessions.delete(sessionId)
+    return false
+  }
+
+  /**
+   * 上闩并交回解闩函数。
+   *
+   * 解闩按 token 认领：看门狗放行后那次僵死召回若干年后真回来了，它的 `.finally` 不许把**后来**
+   * 那把闩解掉（否则会放进第三次并发召回）。
+   */
+  private acquireInFlightLatch(sessionId: string): () => void {
+    this.inFlightLatchSeq += 1
+    const token = this.inFlightLatchSeq
+    this.inFlightSessions.set(sessionId, { token, startedAt: Date.now() })
+
+    return () => {
+      if (this.inFlightSessions.get(sessionId)?.token === token)
+        this.inFlightSessions.delete(sessionId)
+    }
   }
 
   /**
@@ -125,10 +167,11 @@ export class MemoryTurnRecallCoordinator {
   ): Promise<MemoryTurnRecallResult> {
     if (!(this.deps.isEnabled?.() ?? true)) return { summaries: [] }
     const query = input.query.trim().slice(0, RecallQueryMaxChars)
-    if (query.length < RecallMinQueryChars || this.inFlightSessions.has(input.sessionId))
+    if (query.length < RecallMinQueryChars || this.isRecallInFlight(input.sessionId))
       return { summaries: [] }
 
-    this.inFlightSessions.add(input.sessionId)
+    // 这一路同样只在 settle 时解闩：等待超时只是本轮放弃，闩还挂在那条永不回来的请求上。
+    const releaseLatch = this.acquireInFlightLatch(input.sessionId)
     let expired = false
     const timers = new TimerScope({ name: 'MemoryTurnRecallCoordinator.awaitableRecall' })
     const recallTask = this.recall(input, query, false, () => expired)
@@ -140,9 +183,7 @@ export class MemoryTurnRecallCoordinator {
         })
         return { summaries: [] }
       })
-      .finally(() => {
-        this.inFlightSessions.delete(input.sessionId)
-      })
+      .finally(releaseLatch)
 
     try {
       return await Promise.race([

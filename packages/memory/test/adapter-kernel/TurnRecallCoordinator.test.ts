@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, setSystemTime, test } from 'bun:test'
 
 import type { MemoryRecallItem, MemoryRecallOptions } from '../../src'
 import { MemoryTurnRecallCoordinator } from '../../src/adapter-kernel/TurnRecallCoordinator'
@@ -145,5 +145,31 @@ describe('MemoryTurnRecallCoordinator awaitable engine recall', () => {
 
     expect(result.summaries).toHaveLength(1)
     expect(result.summaries[0]).toContain('Keep the engine route fail closed.')
+  })
+})
+
+describe('MemoryTurnRecallCoordinator in-flight latch watchdog (审计 U38)', () => {
+  test('一次永不 settle 的召回不会永久关闭该会话的自动召回', () => {
+    let recallCalls = 0
+    const coordinator = createCoordinator(() => {
+      recallCalls += 1
+      // embedding 网关 TCP 挂起：既不 resolve 也不 reject，`.finally` 永不执行。
+      return new Promise<MemoryRecallItem[]>(() => undefined)
+    })
+    const input = { sessionId: 'stuck-session', query: 'remember the deploy contract' }
+
+    setSystemTime(new Date('2026-08-05T00:00:00.000Z'))
+    coordinator.notifyUserMessage(input)
+    expect(recallCalls).toBe(1)
+
+    // 闩还新鲜时照旧节流（防连发堆积，这是闩的本职）。
+    coordinator.notifyUserMessage(input)
+    expect(recallCalls).toBe(1)
+
+    // 过了硬预算：那次召回不会回来了，看门狗就地放行，会话恢复自动召回。
+    setSystemTime(new Date('2026-08-05T00:01:00.000Z'))
+    coordinator.notifyUserMessage(input)
+    expect(recallCalls).toBe(2)
+    setSystemTime()
   })
 })

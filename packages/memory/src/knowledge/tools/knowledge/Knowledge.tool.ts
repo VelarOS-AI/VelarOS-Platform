@@ -1,9 +1,14 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
 
 import { KnowledgeReadCapability, KnowledgeWriteCapability } from '../../Capabilities'
-import type { KnowledgeSourceKind } from '../../knowledge/domain/Types'
+import type {
+  KnowledgeSearchResult,
+  KnowledgeSourceKind,
+  KnowledgeWorkspaceSyncResult,
+} from '../../knowledge/domain/Types'
 import { defineKnowledgeTool } from '../../Types'
 
 import { summarizeKnowledgeIndexIssues } from './IndexIssueSummary'
@@ -98,6 +103,11 @@ const searchKnowledge = defineKnowledgeTool<{
   summary: '搜索工作区 knowledge。',
   suitable: ['召回文档或代码知识。'],
   forbidden: ['不要替代读取已知文件。'],
+  protocol: [
+    '零命中且该工作区还没建过索引时会自动补一次增量同步再重搜，'
+      + '结果里的 autoSync 会说明这件事发生过。',
+    'autoSync 存在而 count 仍为 0 = 索引是新建的且确实没有匹配内容，不要再调 knowledge:sync 重试。',
+  ],
   usage: ['传 query；宿主未提供 active workspace root 时必须显式传 workspaceRoot。'],
   examples: [{ query: "auth token refresh", limit: 5 }],
   notes: ['绑定工作区；不跨项目兜底。'],
@@ -185,20 +195,54 @@ const searchKnowledge = defineKnowledgeTool<{
     ctx.abortSignal.throwIfAborted()
     // 搜索同样绑定工作区，避免跨项目召回污染回答。
     const effectiveWorkspaceRoot = await resolveWorkspaceRoot(workspaceRoot, ctx)
-    const results = await ctx.knowledge.searchKnowledge(query, {
-      workspaceRoot: effectiveWorkspaceRoot,
-      sourceKinds,
-      pathHints,
-      symbolHints,
-      documentIds,
-      limit,
-    })
+    const search = (): Promise<KnowledgeSearchResult[]> =>
+      ctx.knowledge.searchKnowledge(query, {
+        workspaceRoot: effectiveWorkspaceRoot,
+        sourceKinds,
+        pathHints,
+        symbolHints,
+        documentIds,
+        limit,
+      })
+
+    let results = await search()
+    /**
+     * **fail-open**（原则 12：可用性类失败要向「还能用」的方向倒）。
+     *
+     * 零命中有两种完全不同的原因：「这个项目里真没有」与「索引压根没建过」。调用方看到的
+     * `count: 0` 长得一模一样，于是要么误判「项目里没有」，要么去猜该不该先调 knowledge:sync
+     * ——一个只有读过实现才知道答案的仪式。这里替它做掉：零命中就补一次增量同步再重搜，
+     * 并在结果里如实说明发生过什么。
+     *
+     * 只在零命中时触发，且 `ensureWorkspaceSynced` 自带 TTL：有索引的工作区不会被反复扫盘。
+     * 同步失败也不改变失败方向——搜索本身已经成功了，把它降级成报错等于让一个可选的加速步骤
+     * 毁掉一次正常召回。
+     */
+    let autoSync: Nullable<KnowledgeWorkspaceSyncResult> = null
+    if (isEmpty(results)) {
+      autoSync = await ctx.knowledge
+        .ensureWorkspaceSynced(effectiveWorkspaceRoot)
+        // @arch-guard:suspend code-style/require-error-logging 理由：自动同步是零命中时的补救步骤，失败经返回值 autoSync=null 如实上报，不得改写搜索本身的成败。
+        .catch(() => null)
+      ctx.abortSignal.throwIfAborted()
+      if (autoSync && autoSync.upserted + autoSync.reindexed > 0) results = await search()
+    }
 
     return {
       query,
       workspaceRoot: effectiveWorkspaceRoot,
       count: results.length,
       indexIssues: summarizeKnowledgeIndexIssues(results),
+      // 只在真的补过索引时出现：常态零命中不该多带一个恒 null 的字段。
+      ...(autoSync
+        ? {
+            autoSync: {
+              scanned: autoSync.scanned,
+              indexed: autoSync.upserted + autoSync.reindexed,
+              note: '本次零命中，已自动为该工作区补建/更新索引后重搜。',
+            },
+          }
+        : {}),
       results,
     }
   },

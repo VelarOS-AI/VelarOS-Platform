@@ -29,7 +29,7 @@ import type {
   MemoryRecallOptions,
   MemoryScopeType,
 } from '../memory-tree/Types'
-import { GLOBAL_MEMORY_SCOPE } from '../MemoryScope'
+import { isMemoryVisibleInScope } from '../MemoryScope'
 
 import { type MemoryEmbedder, MemoryVectorBackendId, type MemoryVectorIndexRecord, type MemoryVectorIndexStore } from './Contract'
 import { createInMemoryVectorIndexStore } from './Store'
@@ -61,7 +61,7 @@ const vectorDescriptor: MemoryBackendDescriptor & { role: 'derived-index' } = Ob
   displayName: 'Memory vector (semantic derived index)',
   // capture 不在列:派生索引不吃原始证据。声明缺席让 supportsMemoryBackendVerb 机械可查,
   // 不是靠读文档才知道 captureBatch 会拒收。
-  verbs: Object.freeze(['recall', 'inspect', 'erase'] as const),
+  verbs: Object.freeze(['recall', 'inspect', 'archive'] as const),
 })
 
 class MemoryVectorBackend implements MemoryDerivedIndexBackend {
@@ -199,8 +199,8 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
     }
   }
 
-  /** `erase` = 剔一个指针。派生层的「遗忘」不涉及内容，因此没有归档语义可言。 */
-  public erase(id: string) {
+  /** `archive` = 剔一个指针。派生层不持内容，「归档」在这里就只是让指针不再参与语义召回。 */
+  public archive(id: string) {
     const removed = this.store.remove([id])
     return { claimId: id, affectedEvidenceIds: removed > 0 ? [id] : [], treeVersion: 0 }
   }
@@ -283,27 +283,18 @@ function stringifyValue(value: unknown): string {
 }
 
 /**
- * 作用域过滤 —— 与权威层同一套语义（scopeId 精确 / workspaceRoot 后缀 / global 兜底）。
+ * 作用域过滤 —— 与权威层**同一个函数**，不是「同一套语义」的口头承诺。
  *
  * 语义召回如果不认作用域，就会把别的项目的记忆捞进来；这是**隔离**问题，不是相关性问题，
- * 所以它在打分之前就发生。
+ * 所以它在打分之前就发生。派生索引横跨历史上索引过的每一个项目，因此这里的判据只要比
+ * 权威层松一点，泄漏面就是全库——曾经的 `scopeId.endsWith(workspaceRoot)` 正是这样一格。
  */
 function matchesScope(record: MemoryVectorIndexRecord, options: MemoryRecallOptions): boolean {
-  const scopeId = options.scopeId?.trim()
-  const workspaceRoot = options.workspaceRoot?.trim()
-  if (!scopeId && !workspaceRoot) return true
-
-  if (scopeId && record.scopeId === scopeId) return true
-  if (
-    workspaceRoot
-    && record.scopeType === 'workspace'
-    && record.scopeId.endsWith(workspaceRoot)
-  ) return true
-
-  return (
-    options.includeGlobal !== false
-    && (record.scopeType === 'global' || record.scopeId === GLOBAL_MEMORY_SCOPE)
-  )
+  return isMemoryVisibleInScope(record, {
+    scopeId: options.scopeId,
+    workspaceRoot: options.workspaceRoot,
+    includeGlobal: options.includeGlobal,
+  })
 }
 
 /**

@@ -117,4 +117,5 @@ Dream scheduler 由实例持有,**不使用进程全局计时器**;同一 domain
 - 自定义 `MemoryHostScopeResolver` → 适配任意租户 / 项目模型;
 - 从消息队列、HTTP 或本地事件源调用 `MemoryEvidenceBridge`;
 - 自定义 `HostIdleSignalPort` → 接服务器负载、移动端电量或前台状态;
-- `createMemoryKernelModule` → 挂到其他兼容 Kernel 宿主。
+- `createMemoryStoreKernelModule` → 把一个记忆后端档注册进其他兼容 Kernel 宿主
+  (`velaros.memory.store.<id>` token 族,与 bundled 默认档同一条注册路径)。

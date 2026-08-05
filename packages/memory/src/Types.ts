@@ -6,6 +6,7 @@ import {
   type ToolContractRuntimeSpec,
 } from '@velaros-ai/agent/tool-contract'
 
+import type { MemoryBackendVerb } from './backend/Contract'
 import type {
   MemoryCaptureResult,
   MemoryDreamRunOptions,
@@ -33,7 +34,21 @@ export interface MemoryTreeRuntimeProviders {
   databaseProvider: MemoryDatabaseProvider
 }
 
+/**
+ * 工具面看得见的后端自述。
+ *
+ * 工具契约必须后端无关（不讲 Evidence→Dream→Claim 管线），但**返回值**可以按能力分档：
+ * 装了整理管线才说「稍后整理」，有版本概念才回版本号。没有这一格，工具只能二选一
+ * ——要么对所有后端说树档的话（默认形态下是假的），要么对所有后端只说最小公倍数。
+ */
+export interface MemoryBackendCapabilities {
+  id: string
+  verbs: readonly MemoryBackendVerb[]
+}
+
 export interface MemoryApi {
+  /** 当前记忆后端是谁、支持哪些动词。工具据此分档措辞与返回字段，不做 `instanceof` 探测。 */
+  describeBackend: () => MemoryBackendCapabilities
   captureEvidence: (
     input: MemoryEvidenceInput
   ) => Promise<MemoryCaptureResult> | MemoryCaptureResult
@@ -41,8 +56,9 @@ export interface MemoryApi {
     query: string,
     options?: MemoryRecallOptions
   ) => Promise<MemoryRecallItem[]> | MemoryRecallItem[]
-  getClaim: (
-    claimId: string
+  /** 按 `recall` 返回的 id 读单条记忆。命名不带 Claim：树档之外没有 Claim 这个概念。 */
+  getMemory: (
+    memoryId: string
   ) => Promise<Nullable<MemoryRecallItem>> | Nullable<MemoryRecallItem>
   getTreeState: () => Promise<MemoryTreeState> | MemoryTreeState
   getTreeStateAtVersion: (
@@ -55,8 +71,9 @@ export interface MemoryApi {
   runDream: (
     options: MemoryDreamRunOptions
   ) => Promise<MemoryDreamRunResult> | MemoryDreamRunResult
-  forgetClaim: (
-    claimId: string
+  /** 归档一条记忆：退出普通召回，内容不删（窄端口 `archive` 动词，后端可缺席）。 */
+  archiveMemory: (
+    memoryId: string
   ) => Promise<MemoryForgetResult> | MemoryForgetResult
   setEvidenceEligibility: (
     evidenceId: string,

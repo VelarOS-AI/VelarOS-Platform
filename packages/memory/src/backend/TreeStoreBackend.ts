@@ -47,7 +47,7 @@ const treeDescriptor: MemoryBackendDescriptor = Object.freeze({
     'capture',
     'recall',
     'inspect',
-    'erase',
+    'archive',
     'dream',
     'govern',
   ] as const),
@@ -101,7 +101,7 @@ class MemoryTreeStoreBackend implements MemoryStoreBackend {
     }
   }
 
-  public erase(id: string): ReturnType<MemoryTreeStoreDomain['forgetClaim']> {
+  public archive(id: string): ReturnType<MemoryTreeStoreDomain['forgetClaim']> {
     return this.domain.forgetClaim(id)
   }
 

@@ -7,13 +7,20 @@
  * 因此本文件：
  * - 只复用记忆产品自持的领域 DTO（Evidence / RecallItem / RecallOptions），不引入 SQLite、
  *   文件系统、向量库或 Kernel ABI 的任何类型；
- * - 把 §8 六动词面按「必备 / 可选」裁剪：capture + recall + inspect 是任何后端的入场券，
- *   erase / dream / govern 由后端按能力声明——缺席即 partial activation 的
- *   「没装就没有」（§15.7 裁决二），不新造降级词汇。
+ * - 动词表收敛为 **4 必备 + 2 能力扩展**（2026-08-05 产品裁决）：权威层后端必须声明
+ *   `capture / recall / inspect / archive`，`dream / govern` 由后端按能力声明——缺席即
+ *   partial activation 的「没装就没有」（§15.7 裁决二），不新造降级词汇。
+ *
+ * **为什么是 `archive` 而不是 §8 原本的 `erase`**：两个实现（files / tree）做的都是归档
+ * ——退出普通召回、内容不删。名字叫 erase 会让设置页上的用户读到「记忆可以删」，而没有任何
+ * 路径能物理删除一条记忆。「可证明擦除」是另一件事，它落地时必须自带工具与 UI 入口，
+ * 在那之前不写进动词表（见 docs 的记忆产品需求清单）。
  *
  * capability token 与 kernel 模块注册**不在这里**：那是 mod 轴机制，住 `./adapter-kernel`
  * （方向铁律：adapter-kernel → 主干单向；主干不得反向依赖适配器）。
  */
+
+import { isFunction } from '@velaros-ai/core'
 
 import type {
   MemoryCaptureBatchResult,
@@ -44,14 +51,33 @@ export type MemoryBackendAwaitable<T> = T | Promise<T>
  */
 export type MemoryBackendRole = 'authority' | 'derived-index'
 
-/** 六动词面在窄端口上的投影。`capture` / `recall` / `inspect` 为必备，其余按能力声明。 */
+/**
+ * 窄端口动词面。
+ *
+ * `capture` / `recall` / `inspect` / `archive` 是**权威层**的入场券（见
+ * {@link RequiredAuthorityMemoryVerbs}）；`dream` / `govern` 是能力扩展，由后端按实现声明。
+ * 派生索引不是权威层，只声明自己真做的那几个（如 `recall` / `inspect` / `archive`）。
+ */
 export type MemoryBackendVerb =
   | 'capture'
   | 'recall'
   | 'inspect'
-  | 'erase'
+  | 'archive'
   | 'dream'
   | 'govern'
+
+/**
+ * 权威层必备动词。
+ *
+ * 少一个就不是一个能当真相层用的记忆后端：不能 capture 等于写不进，不能 recall 等于读不出，
+ * 不能 inspect 等于诊断面永远是空的，不能 archive 等于用户没有任何撤回粒度。
+ */
+export const RequiredAuthorityMemoryVerbs: readonly MemoryBackendVerb[] = Object.freeze([
+  'capture',
+  'recall',
+  'inspect',
+  'archive',
+])
 
 /** 后端自述。宿主诊断面与后端选择器只读它，不做 `instanceof` 之类的实现探测。 */
 export interface MemoryBackendDescriptor {
@@ -133,12 +159,12 @@ export interface MemoryStoreBackend {
   inspect(): MemoryBackendAwaitable<MemoryBackendStats>
 
   /**
-   * erase：让一条记忆退出普通召回。
+   * archive：让一条记忆退出普通召回。
    *
-   * 语义是**沉睡/归档**，不是物理删除——权威内容是用户资产（§九 9.4）。物理擦除走记忆产品
-   * 自己的擦除动词，不从这个窄端口下发。
+   * 语义就是**归档**，不是物理删除——权威内容是用户资产（§九 9.4）。方法在类型上可选，是因为
+   * 派生索引与本接口共用形状；**权威层必须实现它**（见 {@link RequiredAuthorityMemoryVerbs}）。
    */
-  erase?(id: string): MemoryBackendAwaitable<MemoryForgetResult>
+  archive?(id: string): MemoryBackendAwaitable<MemoryForgetResult>
 
   /** dream：后台整理。无整理管线的后端不实现该动词。 */
   dream?(options: MemoryDreamRunOptions): MemoryBackendAwaitable<MemoryDreamRunResult>
@@ -162,11 +188,25 @@ export function supportsMemoryBackendVerb(
   verb: MemoryBackendVerb,
 ): boolean {
   if (!backend.descriptor.verbs.includes(verb)) return false
-  if (verb === 'erase') return typeof backend.erase === 'function'
-  if (verb === 'dream') return typeof backend.dream === 'function'
+  if (verb === 'archive') return isFunction(backend.archive)
+  if (verb === 'dream') return isFunction(backend.dream)
   if (verb === 'govern') return (
-      typeof backend.governSourceEligibility === 'function'
-      || typeof backend.governEvidenceEligibility === 'function'
+      isFunction(backend.governSourceEligibility)
+      || isFunction(backend.governEvidenceEligibility)
     )
   return true
+}
+
+/**
+ * 一个权威层后端缺了哪些必备动词（空数组 = 合格）。
+ *
+ * 解析器用它把「装了一个半成品权威层」变成启动期可见的诊断，而不是等用户按下归档才发现
+ * 这个后端根本没有归档。
+ */
+export function listMissingAuthorityMemoryVerbs(
+  backend: MemoryStoreBackend,
+): readonly MemoryBackendVerb[] {
+  return RequiredAuthorityMemoryVerbs.filter(
+    (verb) => !supportsMemoryBackendVerb(backend, verb),
+  )
 }

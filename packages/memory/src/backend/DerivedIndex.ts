@@ -50,7 +50,7 @@ export function formatMemoryDerivedIndexVersion(version: MemoryDerivedIndexVersi
  * `MemoryStoreBackend` 加一个 `listAll` 会让每个未来后端都被迫实现一个只有索引才用的方法。
  * 因此它是一个独立端口，由权威层**结构上**满足（`memory-files` 提供 `listAll`）或由宿主注入。
  *
- * 与既有惯例一致：`supportsMemoryBackendVerb` 也是靠 `typeof backend.erase === 'function'`
+ * 与既有惯例一致：`supportsMemoryBackendVerb` 也是靠 `typeof backend.archive === 'function'`
  * 判可选动词的，这里用同一种探测方式，不引入 `instanceof`。
  */
 export interface MemoryAuthorityEnumeration {
@@ -107,7 +107,7 @@ export interface MemoryDerivedIndexBackend extends MemoryStoreBackend {
   /** 从权威层全量重建（先清空后灌入，孤儿因此自然消失）。幂等。 */
   rebuild(source: MemoryAuthorityEnumeration): Promise<MemoryDerivedIndexRebuildResult>
 
-  /** 剔除指定指针（权威层已没有的孤儿；`erase` 的批量形式）。返回实际剔除数。 */
+  /** 剔除指定指针（权威层已没有的孤儿；`archive` 的批量形式）。返回实际剔除数。 */
   removePointers(ids: readonly string[]): Promise<number>
 
   /**

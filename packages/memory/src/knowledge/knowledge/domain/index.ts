@@ -37,4 +37,5 @@ export type {
   KnowledgeVectorStoreStats,
   KnowledgeWorkspaceSyncOptions,
   KnowledgeWorkspaceSyncResult,
+  KnowledgeWorkspaceSyncState,
 } from './Types'

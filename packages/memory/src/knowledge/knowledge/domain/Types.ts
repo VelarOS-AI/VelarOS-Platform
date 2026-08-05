@@ -120,7 +120,15 @@ export interface KnowledgeIndexRuntime {
   indexRuntimeKey: string
 }
 
+/** 一个工作区在本次运行里的最近同步时刻（进程内 TTL 台账的投影）。 */
+export interface KnowledgeWorkspaceSyncState {
+  workspaceRoot: string
+  lastSyncedAt: number
+}
+
 export interface KnowledgeDiagnostics {
+  /** 本次运行同步过的工作区；空 = 本次运行还没同步过任何工作区。 */
+  workspaceSyncs: readonly KnowledgeWorkspaceSyncState[]
   totalDocuments: number
   pendingDocuments: number
   readyDocuments: number

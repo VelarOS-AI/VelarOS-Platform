@@ -37,9 +37,12 @@ class KnowledgeDomain {
     this.vectorStore.close()
   }
 
-  /** 汇总知识库 SQLite、文件索引和向量库诊断。 */
+  /** 汇总知识库 SQLite、文件索引、向量库诊断与各工作区的最近同步时刻。 */
   public async getDiagnostics(): Promise<KnowledgeDiagnostics> {
-    return this.knowledgeMaintenanceService.getDiagnostics()
+    const diagnostics = await this.knowledgeMaintenanceService.getDiagnostics()
+    // 「上次同步是什么时候」住在摄取服务里（它才知道 TTL 是按谁计的）；诊断面在这里合流，
+    // 而不是让维护服务反向依赖摄取服务去问一个它不拥有的读数。
+    return { ...diagnostics, workspaceSyncs: this.ingestionService.listWorkspaceSyncStates() }
   }
 
   /** 手动重建一批知识文档索引。 */
@@ -64,7 +67,9 @@ class KnowledgeDomain {
    * 搜索知识库。
    *
    * 搜索必须是纯读取路径，不能触发同步、索引或重建索引。
-   * 索引维护只能由记忆管理里的手动同步/重建入口触发。
+   * 索引维护由手动入口、项目打开生命周期，或 `knowledge:search` 工具在**零命中时**显式补一次
+   * `ensureWorkspaceSynced`（工具层的 fail-open，见 Knowledge.tool.ts）触发——那一层看得见
+   * 「这次搜索什么都没搜到」，本方法看不见，也不该在读路径上替调用方决定写。
    */
   public async searchKnowledge(
     query: string,
