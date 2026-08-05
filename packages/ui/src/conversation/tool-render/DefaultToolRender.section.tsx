@@ -12,7 +12,6 @@ import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
 import { getToolDescription, getToolDetailSummary, getToolResultSummary, getToolStatusLabel, normalizeInline } from './toolCallSummary'
 import { DEFAULT_TOOL_JSON_PREVIEW_MAX_CHARS, formatUnknownPayload, truncateForDisplay } from './toolDisplay'
 import { toolLeadingPhosphorIconForTool } from './toolLeadingPhosphorIcon'
-import { getToolDisplayName, humanizeToolName } from './toolPresentation'
 
 import styles from './ToolCallBlock.module.css'
 
@@ -59,8 +58,7 @@ export const DefaultToolRender = memo(
       translatorRuntime
     )
     const statusLabel = getToolStatusLabel(block, locale, translatorRuntime)
-    const displayName =
-      block.title?.trim() || getToolDisplayName(block.toolName, locale, translatorRuntime)
+    const displayName = block.title?.trim() || block.toolName
     // `args` 契约上是必填对象，但 block 来自流式 reducer 与磁盘归档（§1.8 外部输入边界），
     // 实际可能是 null/标量。这里必须归一而不是裸 `Object.keys(block.args)`——
     // **本组件是整个降级链的终点**：未知工具、坏 payload 最后都落到它。它一抛异常，
@@ -127,7 +125,7 @@ export const DefaultToolRender = memo(
         leadingIcon={toolLeadingPhosphorIconForTool(block.toolName, 12, styles.toolIcon)}
         title={displayName}
         meta={
-          optionalWhenLazy(!(displayName === humanizeToolName(block.toolName)), () => (
+          optionalWhenLazy(displayName !== block.toolName, () => (
             <code className={styles.toolName}>{block.toolName}</code>
           ))
         }

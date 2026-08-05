@@ -24,6 +24,15 @@ export interface ConversationActionPort {
   ) => Promise<ConversationGoalLifecycleResult>
   /** 运行中向执行下发继续引导（宿主构造 SerializedMessage 并投递）。 */
   provideExecutionGuidance: (sessionId: string, guidance: string) => Promise<void>
+  /**
+   * 结算一张会话转交建议卡（宿主自有坞卡）：批准 = 生成简报并在同空间开新会话续跑，
+   * 拒绝 = 冷却后再弹。走本端口而不是 `window` 全局事件——那条旁路谁都能派发。
+   */
+  resolveHandoffSuggestion: (request: {
+    sessionId: string
+    cardId: string
+    approved: boolean
+  }) => void
 }
 
 const ConversationActionPortContext = createContext<Nullable<ConversationActionPort>>(null)

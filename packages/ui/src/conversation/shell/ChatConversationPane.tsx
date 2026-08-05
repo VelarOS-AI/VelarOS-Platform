@@ -460,15 +460,36 @@ export function ChatConversationPane({
       )
 
       if (item.kind === 'user-action-card') {
-        // wizard 分发 / handoff 事件 / onOpenArtifact 全在宿主 stickyDockItemContent slot 实现内处理。
+        // wizard 分发 / onOpenArtifact 在宿主 stickyDockItemContent slot 实现内处理。
         dockItems.push({
           id: item.id,
           createdAt: item.createdAt,
           content: slots.stickyDockItemContent({
             kind: 'user-action-card',
-            itemId: item.id,
             card: item.card,
             sessionId,
+            onDismiss,
+            onOpenArtifact: onOpenProjectPath,
+          }),
+        })
+        continue
+      }
+
+      if (item.kind === 'handoff-suggestion') {
+        dockItems.push({
+          id: item.id,
+          createdAt: item.createdAt,
+          content: slots.stickyDockItemContent({
+            kind: 'handoff-suggestion',
+            card: item.card,
+            sessionId,
+            onResolve: (resolution) =>
+              actionPort.resolveHandoffSuggestion({
+                sessionId,
+                cardId: item.card.id,
+                // 只有"确认转交"这个正向动作算批准；拒绝/跳过/关闭一律进冷却。
+                approved: resolution.approved && resolution.actionKind === 'acknowledge',
+              }),
             onDismiss,
             onOpenArtifact: onOpenProjectPath,
           }),
@@ -535,6 +556,7 @@ export function ChatConversationPane({
 
     return dockItems
   }, [
+    actionPort,
     activeDockPlanBlock,
     activeDockPlanItemId,
     goalDockModel,
@@ -715,6 +737,7 @@ export function ChatConversationPane({
             {shouldRenderAwaitingConfirmationCard && (
               <ChatConfirmationCard
                 message={runtime.awaitingConfirmationMessage}
+                detail={runtime.awaitingConfirmationDetail}
                 onApprove={() => onResolveConfirmation(true)}
                 onReject={(rejectionMessage) => onResolveConfirmation(false, rejectionMessage)}
               />

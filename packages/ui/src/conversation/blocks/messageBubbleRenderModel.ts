@@ -77,10 +77,6 @@ export interface ProcessedActivitySummaryBoundarySignalOptions {
   runMarker?: LooseOptional<Pick<ConversationMessageRunMarker, 'status' | 'turnKind'>>
 }
 
-export interface ProcessedActivityDisclosurePlacementOptions {
-  consumedScheduledTaskProposalIds?: ReadonlySet<string>
-}
-
 export interface ProcessedActivitySummaryPartition {
   processedSegments: MessageRenderSegment[]
   outsideSegments: MessageRenderSegment[]
@@ -299,15 +295,14 @@ export function hasVisibleSegmentContent(segment: ToolRenderSegment): boolean {
 }
 
 export function shouldRenderSegmentOutsideProcessedActivityDisclosure(
-  segment: MessageRenderSegment,
-  options: ProcessedActivityDisclosurePlacementOptions = {}
+  segment: MessageRenderSegment
 ): boolean {
   if (segment.kind !== 'segment') return false
   if (segment.segment.kind !== 'block') return false
 
   const { block } = segment.segment
-  if (block.type === 'scheduled-task-proposal')
-    return !options.consumedScheduledTaskProposalIds?.has(block.proposal.id)
+  // 未创建的提案卡要留在「已处理」折叠外（用户还得填它）；已结算的收进折叠里。
+  if (block.type === 'scheduled-task-proposal') return !block.resolution
 
   // HTML artifact 是用户要看的成品预览,始终展开在「已处理」折叠外,不能被工具活动收起。
   if (block.type === 'html-artifact') return true
@@ -321,8 +316,7 @@ export function shouldRenderSegmentOutsideProcessedActivityDisclosure(
  */
 export function partitionProcessedActivitySummarySegments(
   segments: MessageRenderSegment[],
-  summaryBoundaryIndex: number,
-  options: ProcessedActivityDisclosurePlacementOptions = {}
+  summaryBoundaryIndex: number
 ): ProcessedActivitySummaryPartition {
   const processedSegments: MessageRenderSegment[] = []
   const outsideSegments: MessageRenderSegment[] = []
@@ -333,7 +327,7 @@ export function partitionProcessedActivitySummarySegments(
     const segment = segments[index]
     if (!segment) continue
 
-    if (shouldRenderSegmentOutsideProcessedActivityDisclosure(segment, options)) {
+    if (shouldRenderSegmentOutsideProcessedActivityDisclosure(segment)) {
       outsideSegments.push(segment)
       continue
     }

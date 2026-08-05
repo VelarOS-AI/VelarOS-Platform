@@ -16,15 +16,30 @@ import type { GoalDockViewModel } from '#internal/goalLifecycle'
 /**
  * 顶栏坞项内容的**判别联合注入面**（pass-4 収口）：会话壳产出坞项元数据（id/createdAt/reveal/spotlight），
  * 内容按 `kind` 交宿主 `stickyDockItemContent` slot 渲染。宿主实现在各 kind 内处理专属卡的宿主耦合
- * （wizard 分发 / handoff 事件 / 权限页导航 / i18n）。`plan-update` 由包内 PlanToolRender 直渲，不进本联合。
+ * （wizard 分发 / 权限页导航 / i18n）。`plan-update` 由包内 PlanToolRender 直渲，不进本联合。
+ *
+ * **加一张宿主自有坞卡时只有一条路**：在本联合加一个 kind，带上它自己的回传回调
+ * （`onResolve` / `onAction`）。不要在坞项 id 上编码身份、也不要往 `window` 上挂
+ * `velaros:*-resolve` 全局事件——那条旁路当天能做完，代价是身份可冒充、通道谁都能派发。
  */
 export type ConversationStickyDockContent =
   | {
       kind: 'user-action-card'
-      /** 坞项 id（宿主实现据此判定是否转交建议卡 → 走 handoff 事件通道）。 */
-      itemId: string
       card: UserActionCard
       sessionId: string
+      onDismiss?: () => void
+      onOpenArtifact?: (path: string) => unknown
+    }
+  | {
+      /**
+       * 宿主自有的会话转交建议卡。与 `user-action-card` 分开的理由是**身份与回传**：
+       * 它不是模型产出，批准会去建一个新会话，所以走 typed kind + `onResolve` 正路——
+       * 而不是"坞项 id 前缀嗅探 + window CustomEvent"那条旁路（谁都能冒充、谁都能派发）。
+       */
+      kind: 'handoff-suggestion'
+      card: UserActionCard
+      sessionId: string
+      onResolve: (resolution: UserActionResolution) => void
       onDismiss?: () => void
       onOpenArtifact?: (path: string) => unknown
     }
@@ -103,10 +118,13 @@ export interface ConversationRenderSlots {
   capabilityAutoApprovalNotice: (props: {
     block: Extract<ContentBlock, { type: 'capability-auto-approval' }>
   }) => Nullable<ReactElement>
+  /**
+   * 定时任务提案卡。「已创建」不再由管线传状态——它是 `block.resolution`（随会话存档落盘）
+   * 的读法，宿主件自己读、自己在创建成功后写回去。
+   */
   scheduledTaskProposal: (props: {
     block: Extract<ContentBlock, { type: 'scheduled-task-proposal' }>
-    consumed: boolean
-    onConsumed?: (proposalId: string) => void
+    sessionId: string
   }) => Nullable<ReactElement>
   flaggedTaskSuggestion: (props: {
     block: Extract<ContentBlock, { type: 'flagged-task' }>
@@ -121,7 +139,7 @@ export interface ConversationRenderSlots {
     threads: ConversationWorkerThread[]
     sessionId: string
     variant?: ConversationWorkerThreadVariant
-    selectedThreadId?: Nullable<string>
+    selectedThreadId?: LooseOptional<string>
     onOpenThread?: (threadId: string) => void
   }) => Nullable<ReactElement>
   /**
@@ -159,7 +177,7 @@ export interface ConversationRenderSlots {
    */
   messageFileChangeSummary: (props: {
     message: ChatMessage
-    runMarker?: Nullable<ConversationRunMarkerView>
+    runMarker?: LooseOptional<ConversationRunMarkerView>
     sessionId: string
     formatPathForDisplay?: (path: string) => string
     onOpenEntry?: (entry: FileChangeSummaryListEntry) => void | Promise<void>

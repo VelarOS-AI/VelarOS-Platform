@@ -1,56 +1,61 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 
-import type { ChatInputCommentMentionOption } from '../chatInputTypes'
+import type { ChatInputMentionableOption } from '../chatInputTypes'
 
-import { isEmpty } from '#internal/runtime'
+import { isEmpty, isNotNull, isNull } from '#internal/runtime'
 
-/** 输入值是否处于 `@` 评论调用形态：以 `@` 开头的单行短查询（仅第一个位置生效）。 */
-export function isCommentMentionQuery(value: string): boolean {
+/** 输入值是否处于 `@` 引用调用形态：以 `@` 开头的单行短查询（仅第一个位置生效）。 */
+export function isMentionQuery(value: string): boolean {
   return value.startsWith('@') && !value.includes('\n') && value.length <= 64
 }
 
-/** 按 `@` 后的查询词过滤评论（定位/正文，不区分大小写）。 */
-export function filterCommentMentionOptions(
-  comments: readonly ChatInputCommentMentionOption[],
+/** 按 `@` 后的查询词过滤可引用项（定位/正文，不区分大小写）。 */
+export function filterMentionOptions(
+  options: readonly ChatInputMentionableOption[],
   query: string
-): ChatInputCommentMentionOption[] {
+): ChatInputMentionableOption[] {
   const normalized = query.trim().toLowerCase()
-  if (!normalized) return [...comments]
+  if (!normalized) return [...options]
 
-  return comments.filter((comment) =>
-    `${comment.label}\n${comment.body}`.toLowerCase().includes(normalized)
+  return options.filter((option) =>
+    `${option.label}\n${option.body}`.toLowerCase().includes(normalized)
   )
 }
 
-interface UseComposerCommentMentionMenuInput {
+interface UseComposerMentionMenuInput {
   value: string
   disabled: boolean
-  available: readonly ChatInputCommentMentionOption[]
+  available: readonly ChatInputMentionableOption[]
   selectedIds: readonly string[]
   onToggleSelected: (id: string, selected: boolean) => void
   onDelete: (id: string) => void
   clearInput: () => void
 }
 
-export interface UseComposerCommentMentionMenuReturn {
+export interface UseComposerMentionMenuReturn {
   open: boolean
-  items: ChatInputCommentMentionOption[]
+  items: ChatInputMentionableOption[]
   selectedIdSet: Set<string>
   highlightedIndex: number
   setHighlightedIndex: (index: number) => void
   selectItem: (id: string) => void
   deleteItem: (id: string) => void
-  /** 返回 true 表示按键已被评论菜单消费，调用方不要再走发送等默认行为。 */
+  /** 返回 true 表示按键已被引用菜单消费，调用方不要再走发送等默认行为。 */
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean
 }
 
 /**
- * 聊天输入 `@` 行内评论菜单（与 `/` 技能菜单同款交互）：
- * 输入以 `@` 开头即弹出所有评论列表，随查询过滤；↑↓ 移动、Enter/点击切换选中、Esc 关闭。
- * 选中 = 评论进入 selectedIds（chips 条显示），同时清掉输入框里的 `@query`；列表项可就地删除评论。
+ * 聊天输入 `@` **可引用项**菜单（与 `/` 技能菜单同款交互）。
+ *
+ * 「可引用项」是来源无关的：工作台行内评论、游戏空间选中实体、将来任何 mod 声明"我的 delta 走
+ * mention 面"的东西，都只是它的一种来源。菜单本身不认识任何来源 id——上一版把它叫「评论」，
+ * 于是游戏空间里选中实体按 `@`，弹出的面板顶着"评论"、条目旁的垃圾桶写着"删除评论"。
+ *
+ * 输入以 `@` 开头即弹出列表，随查询过滤；↑↓ 移动、Enter/点击切换选中、Esc 关闭。
+ * 选中 = 进入 selectedIds（chips 条显示），同时清掉输入框里的 `@query`；列表项可就地移除。
  */
-export function useComposerCommentMentionMenu({
+export function useComposerMentionMenu({
   value,
   disabled,
   available,
@@ -58,17 +63,17 @@ export function useComposerCommentMentionMenu({
   onToggleSelected,
   onDelete,
   clearInput,
-}: UseComposerCommentMentionMenuInput): UseComposerCommentMentionMenuReturn {
+}: UseComposerMentionMenuInput): UseComposerMentionMenuReturn {
   const [dismissed, setDismissed] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(0)
 
-  const query = isCommentMentionQuery(value) ? value.slice(1) : null
+  const query = isMentionQuery(value) ? value.slice(1) : null
   const items = useMemo(
-    () => (query === null ? [] : filterCommentMentionOptions(available, query)),
+    () => (isNull(query) ? [] : filterMentionOptions(available, query)),
     [available, query]
   )
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const open = !disabled && !dismissed && query !== null && !isEmpty(items)
+  const open = !disabled && !dismissed && isNotNull(query) && !isEmpty(items)
 
   // 输入变化时复位：重新打开、重置高亮到第一项。
   useEffect(() => {

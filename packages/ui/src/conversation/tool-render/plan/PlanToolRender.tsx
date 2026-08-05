@@ -12,9 +12,8 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosureCard'
 
-import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
+import { useConversationI18n } from '../../i18n'
 import { normalizeInline } from '../toolCallSummary'
-import { getToolDisplayName } from '../toolPresentation'
 
 import {
   arePlanToolStepsCompleted,
@@ -232,12 +231,10 @@ const PlanToolRender = memo(
     sessionId?: string
     planUpdateIndex?: number
   }): React.ReactElement => {
-    const { locale } = useConversationI18n()
-    const translatorRuntime = useConversationTranslatorRuntime()
     const steps = getPlanToolBlockSteps(block)
     const explanation = getPlanToolBlockExplanation(block)
     const tone = getToolTone(block, steps)
-    const displayName = getToolDisplayName(block.toolName, locale, translatorRuntime)
+    const displayName = block.toolName
     const hasError = !!block.error
     const currentStep = hasError ? null : getCurrentPlanStep(steps)
     const inlineDetail = hasError ? null : getPlanInlineDetail(currentStep, explanation)

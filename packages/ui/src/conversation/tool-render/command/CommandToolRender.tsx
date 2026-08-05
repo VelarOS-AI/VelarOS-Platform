@@ -13,7 +13,6 @@ import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18
 import { useChatToolRenderCapabilities } from '../chatToolRenderCapabilitiesContext'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { truncateLocalizedCommandOutput } from '../toolDisplay'
-import { getToolDisplayName } from '../toolPresentation'
 
 import {
   getStatusIcon,
@@ -189,7 +188,7 @@ const CommandToolRender = memo(
         <CompactToolRow
           tone={tone}
           icon={<TerminalWindowIcon size={12} />}
-          label={getToolDisplayName(block.toolName, locale, translatorRuntime)}
+          label={block.toolName}
           detail={compactLine}
           detailTitle={compactLine}
           count={statusLabel}
@@ -212,7 +211,7 @@ const CommandToolRender = memo(
         defaultOpen={false}
         statusIcon={getStatusIcon(block, result)}
         leadingIcon={<TerminalWindowIcon size={12} className={styles.terminalIcon} />}
-        title={getToolDisplayName(block.toolName, locale, translatorRuntime)}
+        title={block.toolName}
         meta={cardMeta}
         subtitle={
           <Stack gap="xs">

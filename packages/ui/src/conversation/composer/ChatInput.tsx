@@ -32,7 +32,7 @@ import { useChatInputInsertDraftBridge } from './hooks/useChatInputInsertDraftBr
 import { useChatInputPromptFeatureActivationBridge } from './hooks/useChatInputPromptFeatureActivationBridge'
 import { useChatInputVoiceRecognition } from './hooks/useChatInputVoiceRecognition'
 import { useComposerAddMenuState } from './hooks/useComposerAddMenuState'
-import { useComposerCommentMentionMenu } from './hooks/useComposerCommentMentionMenu'
+import { useComposerMentionMenu } from './hooks/useComposerMentionMenu'
 import { useComposerPromptFeatures } from './hooks/useComposerPromptFeatures'
 import { useComposerSkillSelection } from './hooks/useComposerSkillSelection'
 import { useComposerSlashSkillMenu } from './hooks/useComposerSlashSkillMenu'
@@ -57,9 +57,9 @@ import {
 } from './chatInputInteractionState.pure'
 import { ChatInputQueuePanel } from './ChatInputQueuePanel'
 import type {
-  ChatInputCommentMentionOption,
-  ChatInputCommentMentions,
   ChatInputManualTestPromptOption,
+  ChatInputMentionableOption,
+  ChatInputMentionables,
   ChatInputPureChatControl,
   ChatInputQueuedDraft,
   ChatInputRunProfileControl,
@@ -73,9 +73,9 @@ import type {
 } from './chatInputTypes'
 import { formatChatInputFileSize, hasDraggedFiles } from './chatInputUtils'
 import type { ChatComposerCapabilityControl } from './ComposerCapabilityControls'
-import { ComposerCommentMentionMenu } from './ComposerCommentMentionMenu'
 import { ComposerDropOverlay } from './ComposerDropOverlay'
 import { ComposerFilePreview } from './ComposerFilePreview'
+import { ComposerMentionMenu } from './ComposerMentionMenu'
 import { ComposerNextStepSuggestionMenu } from './ComposerNextStepSuggestionMenu'
 import { ComposerSlashSkillMenu } from './ComposerSlashSkillMenu'
 import { ComposerToolbarLeading } from './ComposerToolbarLeading'
@@ -140,9 +140,19 @@ export interface ChatInputGoalModeCopy {
   hint: string
 }
 
+/**
+ * 执行模式控制组（目标 / 计划）。
+ *
+ * 与 {@link ChatInputFeaturesControl} 的 `promptFeatures` 正交：那一组回答「哪些能力开着」，
+ * 这一组回答「这一轮按什么执行姿态跑」。2026-08-06 拆轴前 plan 挤在 promptFeatures 数组里，
+ * goal 却已经在这里——同一个概念两种形态，输入区因此得同时读两处才知道当前是什么模式。
+ */
 export interface ChatInputExecutionControl {
   goalMode?: boolean
   onGoalModeChange?: (enabled: boolean) => void
+  /** 计划模式开关（原 `promptFeatures` 里的 `plan`）。 */
+  planMode?: boolean
+  onPlanModeChange?: (enabled: boolean) => void
   /**
    * 开关的显示文案覆盖。
    *
@@ -177,7 +187,7 @@ export interface ChatInputFeaturesControl {
   selectedSkillIds?: string[]
   onOpenSkillDetail?: ChatInputSkillDetailHandler
   onSelectedSkillIdsChange?: (skillIds: string[]) => void
-  commentMentions?: ChatInputCommentMentions
+  mentionables?: ChatInputMentionables
   manualTestPrompts?: ChatInputManualTestPromptOption[]
   quickPrompts?: ChatInputManualTestPromptOption[]
   /** 仅 Workbench 注入：在 + 菜单显示 AI 编辑器控制开关。 */
@@ -236,8 +246,8 @@ const EmptyPromptFeatures: ChatPromptFeatureId[] = []
 const EmptyUnavailablePromptFeatures = new Set<ChatPromptFeatureId>()
 const EmptyAvailableSkills: ChatInputSkillOption[] = []
 const EmptySelectedSkillIds: string[] = []
-const EmptyCommentMentions: ChatInputCommentMentionOption[] = []
-const EmptySelectedCommentIds: string[] = []
+const EmptyMentionables: ChatInputMentionableOption[] = []
+const EmptySelectedMentionIds: string[] = []
 const EmptyManualTestPrompts: ChatInputManualTestPromptOption[] = []
 const EmptyFollowUpSuggestions: ChatSuggestionItem[] = []
 const EmptyVirtualPasteReferences: ChatVirtualPasteReference[] = []
@@ -342,6 +352,8 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   const goalMode = !!executionControl?.goalMode
   const onGoalModeChange = executionControl?.onGoalModeChange
   const goalModeCopy = executionControl?.goalModeCopy
+  const planMode = !!executionControl?.planMode
+  const onPlanModeChange = executionControl?.onPlanModeChange
   // 按「数据 vs 回调」拆成两组取用：features 域字段较多，混取会把状态与动作摊平成一大坨局部变量。
   const {
     browserElementSelections = EmptyBrowserElementSelections,
@@ -354,7 +366,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     promptFeatures = EmptyPromptFeatures,
     availableSkills = EmptyAvailableSkills,
     selectedSkillIds = EmptySelectedSkillIds,
-    commentMentions,
+    mentionables,
     quickPrompts = EmptyManualTestPrompts,
   } = control.features ?? {}
   const {
@@ -380,7 +392,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     selectedId: selectedFollowUpSuggestionId,
     onSelect: onSelectFollowUpSuggestion,
   } = suggestion ?? {}
-  const selectedCommentCount = commentMentions?.selectedIds.length ?? 0
+  const selectedMentionCount = mentionables?.selectedIds.length ?? 0
   const isComposing = useRef(false)
   const dragDepthRef = useRef(0)
   const valueRef = useRef(value)
@@ -485,7 +497,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     filesRef,
     virtualPasteReferences,
     virtualPasteReferencesRef,
-    auxiliaryContentCount: selectedCommentCount,
+    auxiliaryContentCount: selectedMentionCount,
     textareaRef,
     disabled,
     hideSubmit,
@@ -506,7 +518,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     isSubmitting,
     value,
     virtualPasteReferenceCount: virtualPasteReferences.length,
-    auxiliaryContentCount: selectedCommentCount,
+    auxiliaryContentCount: selectedMentionCount,
   })
   const composerDisabled = interactionState.composerDisabled
   const visibleFollowUpSuggestions = useMemo(
@@ -551,7 +563,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   }
 
   function requestFollowUpSuggestionMenuDismiss(): void {
-    if (filesRef.current.length > 0) {
+    if (!isEmpty(filesRef.current)) {
       setDismissFollowUpSuggestionsWhenFilesClear(true)
       return
     }
@@ -664,7 +676,6 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     pluginOptions,
     activePluginOptions,
     updatePromptFeature,
-    updateExclusivePromptFeature,
     updatePromptFeatureGroup,
   } = useComposerPromptFeatures({
     lockedPromptFeatures,
@@ -690,20 +701,20 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     selectedSkillIds,
     updateSelectedSkill,
   })
-  const commentMentionMenu = useComposerCommentMentionMenu({
+  const mentionMenu = useComposerMentionMenu({
     value,
-    disabled: composerDisabled || !commentMentions,
-    available: commentMentions?.available ?? EmptyCommentMentions,
-    selectedIds: commentMentions?.selectedIds ?? EmptySelectedCommentIds,
-    onToggleSelected: (id, selected) => commentMentions?.onToggleSelected(id, selected),
-    onDelete: (id) => commentMentions?.onDelete(id),
+    disabled: composerDisabled || !mentionables,
+    available: mentionables?.available ?? EmptyMentionables,
+    selectedIds: mentionables?.selectedIds ?? EmptySelectedMentionIds,
+    onToggleSelected: (id, selected) => mentionables?.onToggleSelected(id, selected),
+    onDelete: (id) => mentionables?.onDelete(id),
     clearInput: () => applyTextareaValue('', textareaRef.current),
   })
-  const activeCommentOptions = useMemo(() => {
-    if (!commentMentions) return EmptyCommentMentions
-    const selected = new Set(commentMentions.selectedIds)
-    return commentMentions.available.filter((comment) => selected.has(comment.id))
-  }, [commentMentions])
+  const activeMentionOptions = useMemo(() => {
+    if (!mentionables) return EmptyMentionables
+    const selected = new Set(mentionables.selectedIds)
+    return mentionables.available.filter((option) => selected.has(option.id))
+  }, [mentionables])
   const {
     voiceBaseValueRef,
     isVoiceListening,
@@ -741,25 +752,13 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   )
 
   const handleClearPlanMode = useCallback((): void => {
-    updatePromptFeature('plan', false)
-  }, [updatePromptFeature])
+    onPlanModeChange?.(false)
+  }, [onPlanModeChange])
   const handlePlanModeChange = useCallback(
     (enabled: boolean): void => {
-      updateExclusivePromptFeature('plan', ['proposal'], enabled)
+      onPlanModeChange?.(enabled)
     },
-    [updateExclusivePromptFeature]
-  )
-  const handleClearProposalMode = useCallback((): void => {
-    updatePromptFeature('proposal', false)
-  }, [updatePromptFeature])
-  const handleProposalModeChange = useCallback(
-    (enabled: boolean): void => {
-      updateExclusivePromptFeature('proposal', ['plan'], enabled)
-      if (enabled) {
-        onGoalModeChange?.(false)
-      }
-    },
-    [onGoalModeChange, updateExclusivePromptFeature]
+    [onPlanModeChange]
   )
   const handleWorkbenchEditorControlChange = useCallback(
     (enabled: boolean): void => {
@@ -773,15 +772,15 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   const handleGoalModeChange = useCallback(
     (enabled: boolean): void => {
       onGoalModeChange?.(enabled)
-      if (enabled) updatePromptFeature('proposal', false)
     },
-    [onGoalModeChange, updatePromptFeature]
+    [onGoalModeChange]
   )
 
   const canShowComposerMenu =
     !!onFilesChange ||
     !!onPromptFeaturesChange ||
     !!onGoalModeChange ||
+    !!onPlanModeChange ||
     (!!onSelectedSkillIdsChange && !!availableSkills.length) ||
     !!quickPrompts.length
   const showVoiceInput = !hideSubmit
@@ -822,7 +821,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     isSubmitting,
     value,
     virtualPasteReferenceCount: virtualPasteReferences.length,
-    auxiliaryContentCount: selectedCommentCount,
+    auxiliaryContentCount: selectedMentionCount,
   })
 
   function appendVirtualPasteReference(pastedText: string): void {
@@ -1039,12 +1038,9 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     canAttachFiles: !!onFilesChange,
   }
   const composerAddMenuFeatureInput = {
-    canTogglePlanFeature: !!onPromptFeaturesChange,
-    planModeActive: selectedPromptFeatures.has('plan'),
+    canTogglePlanFeature: !!onPlanModeChange,
+    planModeActive: planMode,
     updatePlanMode: handlePlanModeChange,
-    canToggleProposalFeature: !!onPromptFeaturesChange,
-    proposalModeActive: selectedPromptFeatures.has('proposal'),
-    updateProposalMode: handleProposalModeChange,
     // 「AI 操控编辑器」仍在开发中，暂时隐藏。
     canToggleWorkbenchEditorControl: false,
     workbenchEditorControlActive: selectedPromptFeatures.has('workbench-editor'),
@@ -1128,10 +1124,11 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
 
       <ComposerSlashSkillMenu menu={slashSkillMenu} header={t('chat.composerSlashSkillHeader')} />
 
-      <ComposerCommentMentionMenu
-        menu={commentMentionMenu}
-        header={t('chat.composerCommentMentionHeader')}
-        deleteLabel={t('workbench.editorCommentDelete')}
+      <ComposerMentionMenu
+        menu={mentionMenu}
+        // 表头/移除文案走来源注入；缺席才回落通用文案（菜单不替任何来源起名字）。
+        header={mentionables?.header ?? t('chat.composerMentionHeader')}
+        deleteLabel={mentionables?.deleteLabel ?? t('common.remove')}
       />
 
       <ComposerNextStepSuggestionMenu
@@ -1161,12 +1158,10 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
             t={t}
             disabled={composerDisabled}
             capabilityControls={menuCapabilityControls}
-            planModeActive={selectedPromptFeatures.has('plan')}
-            proposalModeActive={selectedPromptFeatures.has('proposal')}
+            planModeActive={planMode}
             goalModeActive={goalMode}
             goalModeLabel={goalModeCopy?.label}
             onClearPlanMode={handleClearPlanMode}
-            onClearProposalMode={handleClearProposalMode}
             onClearGoalMode={handleClearGoalMode}
             browserElementSelections={browserElementSelections}
             onRemoveBrowserElementSelection={onRemoveBrowserElementSelection}
@@ -1175,8 +1170,8 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
             onDismissTurnContextDelta={onDismissTurnContextDelta}
             activePluginOptions={activePluginOptions}
             activeSkillOptions={activeSkillOptions}
-            activeCommentOptions={activeCommentOptions}
-            onRemoveCommentSelection={(id) => commentMentions?.onToggleSelected(id, false)}
+            activeMentionOptions={activeMentionOptions}
+            onRemoveMentionSelection={(id) => mentionables?.onToggleSelected(id, false)}
             onOpenSkillDetail={onOpenSkillDetail}
             lockedPromptFeatures={lockedPromptFeatures}
             updatePromptFeatureGroup={updatePromptFeatureGroup}
@@ -1244,7 +1239,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                 }
               }}
               onKeyDown={(event) => {
-                if (commentMentionMenu.handleKeyDown(event)) return
+                if (mentionMenu.handleKeyDown(event)) return
                 if (slashSkillMenu.handleKeyDown(event)) return
                 if (handleFollowUpSuggestionKeyDown(event)) return
                 if (
@@ -1323,12 +1318,10 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                 t={t}
                 disabled={composerDisabled}
                 capabilityControls={menuCapabilityControls}
-                planModeActive={selectedPromptFeatures.has('plan')}
-                proposalModeActive={selectedPromptFeatures.has('proposal')}
+                planModeActive={planMode}
                 goalModeActive={goalMode}
                 goalModeLabel={goalModeCopy?.label}
                 onClearPlanMode={handleClearPlanMode}
-                onClearProposalMode={handleClearProposalMode}
                 onClearGoalMode={handleClearGoalMode}
                 browserElementSelections={browserElementSelections}
                 onRemoveBrowserElementSelection={onRemoveBrowserElementSelection}
@@ -1337,8 +1330,8 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                 onDismissTurnContextDelta={onDismissTurnContextDelta}
                 activePluginOptions={activePluginOptions}
                 activeSkillOptions={activeSkillOptions}
-                activeCommentOptions={activeCommentOptions}
-                onRemoveCommentSelection={(id) => commentMentions?.onToggleSelected(id, false)}
+                activeMentionOptions={activeMentionOptions}
+                onRemoveMentionSelection={(id) => mentionables?.onToggleSelected(id, false)}
                 onOpenSkillDetail={onOpenSkillDetail}
                 lockedPromptFeatures={lockedPromptFeatures}
                 updatePromptFeatureGroup={updatePromptFeatureGroup}

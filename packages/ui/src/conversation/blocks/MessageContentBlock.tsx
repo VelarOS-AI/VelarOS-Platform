@@ -70,8 +70,6 @@ type MessageContentBlockRenderContext = {
   onResolveUserActionCard?: (
     request: UserActionCardResult,
   ) => void | Promise<void>;
-  consumedScheduledTaskProposalIds?: ReadonlySet<string>;
-  onScheduledTaskProposalConsumed?: (proposalId: string) => void;
   onTranslateThinkingBlock?: (request: {
     messageId: string;
     blockIndex: number;
@@ -103,8 +101,6 @@ interface MessageContentBlockProps {
   onResolveUserActionCard?: (
     request: UserActionCardResult,
   ) => void | Promise<void>;
-  consumedScheduledTaskProposalIds?: ReadonlySet<string>;
-  onScheduledTaskProposalConsumed?: (proposalId: string) => void;
   onTranslateThinkingBlock?: (request: {
     messageId: string;
     blockIndex: number;
@@ -210,12 +206,10 @@ const STRUCTURED_BLOCK_RENDERERS = {
       { type: "scheduled-task-proposal" }
     >;
 
+    // 「已创建」只读 block 自身的结算记录（随会话存档落盘），组件不再持第二份 useState。
     return ctx.slots.scheduledTaskProposal({
       block: proposalBlock,
-      consumed: !!ctx.consumedScheduledTaskProposalIds?.has(
-        proposalBlock.proposal.id,
-      ),
-      onConsumed: ctx.onScheduledTaskProposalConsumed,
+      sessionId: ctx.sessionId,
     });
   },
   "flagged-task": (block, ctx) =>
@@ -356,8 +350,6 @@ function MessageContentBlockInner({
   onOpenProjectPath,
   activeUserActionCardIds,
   onResolveUserActionCard,
-  consumedScheduledTaskProposalIds,
-  onScheduledTaskProposalConsumed,
   onTranslateThinkingBlock,
 }: MessageContentBlockProps): Nullable<ReactElement> {
   const hasRenderedLiveTextRef = useRef(false);
@@ -398,8 +390,6 @@ function MessageContentBlockInner({
       onOpenProjectPath,
       activeUserActionCardIds,
       onResolveUserActionCard,
-      consumedScheduledTaskProposalIds,
-      onScheduledTaskProposalConsumed,
       onTranslateThinkingBlock,
       slots,
     });
@@ -496,29 +486,6 @@ function areUserActionCardBlockPropsEqual(
   );
 }
 
-function isScheduledTaskProposalConsumed(
-  props: Readonly<MessageContentBlockProps>,
-): boolean {
-  const block = props.block as Extract<
-    ContentBlock,
-    { type: "scheduled-task-proposal" }
-  >;
-
-  return !!props.consumedScheduledTaskProposalIds?.has(block.proposal.id);
-}
-
-function areScheduledTaskProposalBlockPropsEqual(
-  prev: Readonly<MessageContentBlockProps>,
-  next: Readonly<MessageContentBlockProps>,
-): boolean {
-  return (
-    isScheduledTaskProposalConsumed(prev) ===
-      isScheduledTaskProposalConsumed(next) &&
-    prev.onScheduledTaskProposalConsumed ===
-      next.onScheduledTaskProposalConsumed
-  );
-}
-
 function areMessageContentBlockPropsEqual(
   prev: Readonly<MessageContentBlockProps>,
   next: Readonly<MessageContentBlockProps>,
@@ -540,8 +507,9 @@ function areMessageContentBlockPropsEqual(
     case "capability-auto-approval":
     case "project-auto-approval":
       return true;
+    // 「已创建」随 block.resolution 走，block 引用相同即等价。
     case "scheduled-task-proposal":
-      return areScheduledTaskProposalBlockPropsEqual(prev, next);
+      return prev.sessionId === next.sessionId;
     // 卡片状态由 flaggedTaskStore 订阅驱动，block 与 sessionId 相同即等价。
     case "flagged-task":
       return prev.sessionId === next.sessionId;

@@ -6,12 +6,11 @@ import { CompactToolRow } from '@velaros-ai/ui/product/layout/CompactToolRow'
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { toolLeadingPhosphorIconForTool } from '../toolLeadingPhosphorIcon'
-import { getToolDisplayName } from '../toolPresentation'
 
 import styles from './FileChangeToolRender.module.css'
 
 import type { ToolCallBlock } from '#contracts'
-import { isArray, isBlank, isEmpty, isFalse, isNonBlankString, isObject, isString, isTrue } from '#internal/runtime'
+import { isArray, isBlank, isEmpty, isFalse, isNonBlankString, isPlainObject, isString, isTrue } from '#internal/runtime'
 import { asRecord, readFirstString, readStringPreserveOuterWhitespace } from '#internal/unknownJsonRecord'
 
 interface FileChangeToolRenderProps {
@@ -24,7 +23,7 @@ interface FileChangeToolRenderProps {
 type CompactToolTone = NonNullable<React.ComponentProps<typeof CompactToolRow>['tone']>
 
 function getErrorMessage(error: unknown, fallback = ''): string {
-  const messageRecord = isObject(error) ? (error as Record<string, unknown>) : null
+  const messageRecord = isPlainObject(error) ? error : null
   return (
     (isString(error) && !isBlank(error.trim()) ? error : null) ??
     readStringPreserveOuterWhitespace(messageRecord, 'message') ??
@@ -52,8 +51,8 @@ function collectPatchPaths(result: Nullable<Record<string, unknown>>): string[] 
   if (!isArray(result?.patches)) return []
 
   return result.patches.flatMap((patch) => {
-    if (!patch || !isObject(patch)) return []
-    const path = (patch as Record<string, unknown>).path
+    if (!patch || !isPlainObject(patch)) return []
+    const path = patch.path
     return isNonBlankString(path) ? [path] : []
   })
 }
@@ -62,8 +61,8 @@ function collectAdvisoryPaths(result: Nullable<Record<string, unknown>>): string
   if (!isArray(result?.advisories)) return []
 
   return result.advisories.flatMap((advisory) => {
-    if (!advisory || !isObject(advisory)) return []
-    return collectStringArray((advisory as Record<string, unknown>).paths)
+    if (!advisory || !isPlainObject(advisory)) return []
+    return collectStringArray(advisory.paths)
   })
 }
 
@@ -174,7 +173,7 @@ const ProjectApplyEditRow = memo(
     const translatorRuntime = useConversationTranslatorRuntime()
     const result = asRecord(block.result)
     const args = asRecord(block.args)
-    const displayName = getToolDisplayName(block.toolName, locale, translatorRuntime)
+    const displayName = block.toolName
     const transactionId = getTransactionId(result, args)
     const changedFiles = collectProjectApplyPaths(result, args)
     const fallbackTarget = transactionId ? `tx: ${transactionId}` : t('chat.fileChangeUnknownFile')

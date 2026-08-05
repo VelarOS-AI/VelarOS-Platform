@@ -11,7 +11,6 @@ export const COMPOSER_PRIMARY_PANEL_SLOT_ORDER = [
   'attachments',
   'capabilities',
   'plan',
-  'proposal',
   'workbench-editor',
   'goal',
   'rendering',
@@ -24,14 +23,13 @@ export type ComposerPrimaryPanelSlotId = (typeof COMPOSER_PRIMARY_PANEL_SLOT_ORD
 /** FunctionBar 活动芯片顺序；仅展示已启用且适合快速关闭的能力。 */
 export const COMPOSER_FUNCTION_BAR_CHIP_ORDER = [
   'plan',
-  'proposal',
   'goal',
   'capabilities',
   'browser-elements',
   'turn-context',
   'plugins',
   'skills',
-  'comments',
+  'mentions',
 ] as const
 
 export type ComposerFunctionBarChipSlotId = (typeof COMPOSER_FUNCTION_BAR_CHIP_ORDER)[number]
@@ -41,10 +39,6 @@ export type ComposerFunctionBarChipPlacement = 'persistent' | 'legacy'
 
 export const COMPOSER_FUNCTION_BAR_CHIP_CONFIG = {
   plan: {
-    chipStyle: 'execution',
-    placement: 'persistent',
-  },
-  proposal: {
     chipStyle: 'execution',
     placement: 'persistent',
   },
@@ -72,7 +66,7 @@ export const COMPOSER_FUNCTION_BAR_CHIP_CONFIG = {
     chipStyle: 'legacy',
     placement: 'legacy',
   },
-  comments: {
+  mentions: {
     chipStyle: 'legacy',
     placement: 'legacy',
   },

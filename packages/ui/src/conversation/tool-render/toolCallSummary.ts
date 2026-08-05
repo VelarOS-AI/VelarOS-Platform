@@ -3,15 +3,11 @@ import {
   conversationTranslatorRuntime,
 } from '../i18n/conversationTranslator'
 
-import {
-  getToolCategoryLabel,
-  getToolDescriptionText,
-  getToolDisplayName,
-} from './toolPresentation'
+import { getToolCategoryLabel, getToolDescriptionText } from './toolPresentation'
 
 import type { AppLocale, ToolCallBlock, ToolCategoryId } from '#contracts'
 import { platformCompatibility } from '#internal/platform'
-import { isBlank, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isPresent } from '#internal/runtime'
+import { isBlank, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isPresent, toNullable } from '#internal/runtime'
 import { asRecord, readNumber, readString, readStringArray } from '#internal/unknownJsonRecord'
 
 type PathDisplayFormatter = (path: string) => string
@@ -21,15 +17,15 @@ type PathDisplayFormatter = (path: string) => string
  * 只有当 cwd 是绝对路径且 path 是相对路径时才 join，其余直接透传。
  */
 function wrapFormatterWithCwd(
-  formatter: PathDisplayFormatter | undefined,
+  formatter: LooseOptional<PathDisplayFormatter>,
   cwd: LooseOptional<string>
-): PathDisplayFormatter | undefined {
+): Nullable<PathDisplayFormatter> {
   if (
     !formatter ||
     !isPresent(cwd) ||
     !cwd.trim() ||
     !platformCompatibility.isAbsolutePathText(cwd.trim())
-  ) return formatter
+  ) return toNullable(formatter)
 
   const normalizedCwd = cwd.trim()
 
@@ -72,11 +68,11 @@ function compactPath(path: string, maxSegments = 2): string {
   return `…/${segments.slice(-maxSegments).join('/')}`
 }
 
-function formatPath(path: string, formatter?: PathDisplayFormatter): string {
+function formatPath(path: string, formatter?: LooseOptional<PathDisplayFormatter>): string {
   return formatter ? formatter(path) : compactPath(path, 3)
 }
 
-function formatCommand(command: string, formatter?: PathDisplayFormatter): string {
+function formatCommand(command: string, formatter?: LooseOptional<PathDisplayFormatter>): string {
   return formatter ? formatter(command) : command
 }
 
@@ -207,7 +203,7 @@ function formatToolReadSkillNames(
 
 function getPrimaryArgPreview(
   args: Nullable<Record<string, any>>,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
@@ -255,7 +251,7 @@ function getPrimaryArgPreview(
 
 export function getToolDetailItems(
   block: Pick<ToolCallBlock, 'toolName' | 'args'>,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): string[] {
@@ -418,12 +414,12 @@ export function getMergedToolGroupStatusLabel(
 export function getToolActivitySummary(
   block: Pick<ToolCallBlock, 'toolName' | 'args' | 'isRunning'>,
   locale: AppLocale,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
   const args = asRecord(block.args)
   const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(args, 'cwd'))
-  const displayName = getToolDisplayName(block.toolName, locale, runtime)
+  const displayName = block.toolName
   const preview =
     formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
     getPrimaryArgPreview(args, cwdFormatter, locale, runtime)
@@ -436,7 +432,7 @@ export function getToolActivitySummary(
 
 export function getToolDetailSummary(
   block: Pick<ToolCallBlock, 'toolName' | 'args'>,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
@@ -459,7 +455,7 @@ export function getToolResultSummary(
 export function getToolDescription(
   block: Pick<ToolCallBlock, 'toolName' | 'args' | 'result' | 'error' | 'isRunning'>,
   locale: AppLocale,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): string | undefined {
   const detail = getToolDetailSummary(block, pathFormatter, locale, runtime)
@@ -484,7 +480,7 @@ export function getToolDescription(
 export function getToolGroupPreview(
   blocks: ToolCallBlock[],
   locale: AppLocale,
-  pathFormatter?: PathDisplayFormatter,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): string | undefined {
   const previews = blocks

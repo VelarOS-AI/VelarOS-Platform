@@ -37,7 +37,6 @@ import {
   getMergedToolGroupStatusLabel,
   getToolDescription,
 } from "../tool-render/toolCallSummary";
-import { getToolDisplayName } from "../tool-render/toolPresentation";
 
 import {
   ToolResultSummaryList,
@@ -369,11 +368,7 @@ function MergedToolCallRowInner({
     formatPathForDisplay,
     translatorRuntime,
   );
-  const displayName = getToolDisplayName(
-    group.toolName,
-    locale,
-    translatorRuntime,
-  );
+  const displayName = group.toolName;
   const commandCopyValue = getMergedCommandCopyValue(group);
   const statusLabel = getMergedToolGroupStatusLabel(
     group.blocks,

@@ -17,6 +17,53 @@
   opacity: 0.68;
 }
 
+/* 自动折叠态：一行标题 + 展开提示。整行可点即展开入口——按钮并没有失效，只是收起来了。 */
+.collapsedFrame {
+  --dismiss-button-size: 20px;
+
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  overflow: visible;
+}
+
+.collapsedRow {
+  @apply flex w-full min-w-0 cursor-pointer items-center gap-2 text-left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--surface-interaction-card);
+  opacity: 0.8;
+  transition: opacity 120ms ease;
+}
+
+.collapsedRow:hover,
+.collapsedRow:focus-visible {
+  opacity: 1;
+}
+
+.collapsedIcon {
+  @apply flex shrink-0 items-center justify-center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.collapsedIcon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.collapsedTitle {
+  @apply min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground;
+  font-size: var(--ui-font-body-sm);
+}
+
+.collapsedHint {
+  @apply shrink-0 text-muted-foreground;
+  font-size: var(--ui-font-body-sm);
+}
+
 .card.card:global(.velar-action-card) {
   padding: 10px 12px;
   border-radius: var(--ui-radius-control);

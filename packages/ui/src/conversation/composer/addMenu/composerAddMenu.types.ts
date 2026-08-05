@@ -37,9 +37,6 @@ export interface ComposerAddMenuFeaturesProps {
   canTogglePlanFeature: boolean
   planModeActive: boolean
   updatePlanMode: (enabled: boolean) => void
-  canToggleProposalFeature: boolean
-  proposalModeActive: boolean
-  updateProposalMode: (enabled: boolean) => void
   canToggleWorkbenchEditorControl?: boolean
   workbenchEditorControlActive?: boolean
   updateWorkbenchEditorControl?: (enabled: boolean) => void

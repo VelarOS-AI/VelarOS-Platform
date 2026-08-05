@@ -31,7 +31,6 @@ export interface PromptFeatureGroupManifest {
 
 export type PromptFeatureLabelKey =
   | 'chat.composerPlanMode'
-  | 'chat.composerProposalMode'
   | 'chat.composerPluginOffice'
   | 'chat.composerPluginDocuments'
   | 'chat.composerPluginSpreadsheets'
@@ -45,9 +44,13 @@ export type PromptFeatureLabelKey =
   | 'chat.composerWorkbenchEditorControl'
   | 'chat.composerPluginWidget'
 
+/**
+ * 能力目录（**只含能力**）。
+ *
+ * 2026-08-06 拆轴：`plan` 从这里移出——它是执行模式不是能力，输入区走
+ * {@link ChatInputExecutionControl}（与 goalMode 同一组），文案键 `chat.composerPlanMode` 仍在用。
+ */
 export const PromptFeatureManifests: readonly PromptFeatureManifest[] = [
-  { id: 'plan', label: 'Plan', labelKey: 'chat.composerPlanMode', iconId: 'widget', toolCategoryIds: [] },
-  { id: 'proposal', label: 'Proposal', labelKey: 'chat.composerProposalMode', iconId: 'widget', toolCategoryIds: [] },
   { id: 'office', label: 'Office', labelKey: 'chat.composerPluginOffice', iconId: 'office', toolCategoryIds: ['office'], pluginFeature: true },
   { id: 'office-document', label: 'Word', labelKey: 'chat.composerPluginDocuments', iconId: 'word', toolCategoryIds: ['office'], parentId: 'office', pluginFeature: true },
   { id: 'office-spreadsheet', label: 'Excel', labelKey: 'chat.composerPluginSpreadsheets', iconId: 'spreadsheet', toolCategoryIds: ['office'], parentId: 'office', pluginFeature: true },
@@ -58,7 +61,7 @@ export const PromptFeatureManifests: readonly PromptFeatureManifest[] = [
   { id: 'computer-use', label: 'Computer Use', labelKey: 'chat.composerPluginComputerUse', iconId: 'computer', toolCategoryIds: ['computer-control'], pluginFeature: true },
   { id: 'html-artifact', label: 'HTML Live Preview', labelKey: 'chat.composerHtmlArtifacts', iconId: 'html', toolCategoryIds: [], pluginFeature: true },
   { id: 'workbench-editor', label: 'Workbench Editor Control', labelKey: 'chat.composerWorkbenchEditorControl', iconId: 'widget', toolCategoryIds: [] },
-  { id: 'widget', label: 'Widget', labelKey: 'chat.composerPluginWidget', iconId: 'widget', toolCategoryIds: ['general'], pluginFeature: true },
+  { id: 'widget', label: 'Widget', labelKey: 'chat.composerPluginWidget', iconId: 'widget', toolCategoryIds: ['interaction'], pluginFeature: true },
 ]
 
 export const PromptFeatureGroupManifests: readonly PromptFeatureGroupManifest[] = [

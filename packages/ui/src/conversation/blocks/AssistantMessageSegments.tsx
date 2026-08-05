@@ -2,11 +2,9 @@ import React, {
   memo,
   type ReactElement,
   type ReactNode,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from 'react'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
@@ -187,9 +185,6 @@ function AssistantMessageSegmentsInner({
   const { locale } = useConversationI18n()
   const translatorRuntime = useConversationTranslatorRuntime()
   const recentlyStreamingMessageIdRef = useRef<Nullable<string>>(null)
-  const [consumedScheduledTaskProposalIds, setConsumedScheduledTaskProposalIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set())
   const shouldRevealStreamingText =
     isStreaming || recentlyStreamingMessageIdRef.current === messageId
 
@@ -209,20 +204,6 @@ function AssistantMessageSegmentsInner({
 
     void preloadToolActivityRenderer()
   }, [isStreaming])
-
-  useEffect(() => {
-    setConsumedScheduledTaskProposalIds(new Set())
-  }, [messageId])
-
-  const onScheduledTaskProposalConsumed = useCallback((proposalId: string): void => {
-    setConsumedScheduledTaskProposalIds((current) => {
-      if (current.has(proposalId)) return current
-
-      const next = new Set(current)
-      next.add(proposalId)
-      return next
-    })
-  }, [])
 
   // 串行传播由状态层保证：ChatStreamPacer 把思考/正文/工具归并成单 FIFO 按到达顺序逐帧吐进
   // session，思考中途的工具调用会截断思考块、后续思考在工具卡下方新开一块（见
@@ -338,8 +319,6 @@ function AssistantMessageSegmentsInner({
         onOpenProjectPath={onOpenProjectPath}
         activeUserActionCardIds={activeUserActionCardIds}
         onResolveUserActionCard={onResolveUserActionCard}
-        consumedScheduledTaskProposalIds={consumedScheduledTaskProposalIds}
-        onScheduledTaskProposalConsumed={onScheduledTaskProposalConsumed}
         onTranslateThinkingBlock={onTranslateThinkingBlock}
       />
     )
@@ -486,8 +465,7 @@ function AssistantMessageSegmentsInner({
       const { processedSegments, outsideSegments, trailingSegments } =
         partitionProcessedActivitySummarySegments(
           visibleMessageRenderSegments,
-          processedActivitySummaryBoundaryIndex,
-          { consumedScheduledTaskProposalIds }
+          processedActivitySummaryBoundaryIndex
         )
       const outsideSegmentKeys = new Set(outsideSegments.map((segment) => segment.key))
       const processedSegmentKeys = new Set(processedSegments.map((segment) => segment.key))

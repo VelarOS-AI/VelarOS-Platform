@@ -29,11 +29,6 @@ interface UseComposerPromptFeaturesResult {
   activePluginOptions: ChatInputPromptFeatureGroupOption[]
   hasOfficeFeatureSelected: boolean
   updatePromptFeature: (feature: ChatPromptFeatureId, enabled: boolean) => void
-  updateExclusivePromptFeature: (
-    feature: ChatPromptFeatureId,
-    excludedFeatures: readonly ChatPromptFeatureId[],
-    enabled: boolean
-  ) => void
   updatePromptFeatureGroup: (option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void
 }
 
@@ -175,47 +170,12 @@ export function useComposerPromptFeatures({
     [lockedPromptFeatures, onPromptFeaturesChange, promptFeatures, unavailablePromptFeatures]
   )
 
-  const updateExclusivePromptFeature = useCallback(
-    (
-      feature: ChatPromptFeatureId,
-      excludedFeatures: readonly ChatPromptFeatureId[],
-      enabled: boolean
-    ): void => {
-      if (!onPromptFeaturesChange) return
-      if (unavailablePromptFeatures.has(feature)) return
-
-      const nextFeatures = buildPromptFeatureSet(
-        promptFeatures,
-        lockedPromptFeatures,
-        unavailablePromptFeatures
-      )
-      if (enabled) {
-        excludedFeatures.forEach((excluded) => {
-          if (!lockedPromptFeatureSet.has(excluded)) nextFeatures.delete(excluded)
-        })
-        nextFeatures.add(feature)
-      } else if (!lockedPromptFeatureSet.has(feature)) {
-        nextFeatures.delete(feature)
-      }
-      lockedPromptFeatureSet.forEach((lockedFeature) => nextFeatures.add(lockedFeature))
-      onPromptFeaturesChange(emitOrderedFeatures(nextFeatures))
-    },
-    [
-      lockedPromptFeatureSet,
-      lockedPromptFeatures,
-      onPromptFeaturesChange,
-      promptFeatures,
-      unavailablePromptFeatures,
-    ]
-  )
-
   return {
     selectedPromptFeatures,
     pluginOptions,
     activePluginOptions,
     hasOfficeFeatureSelected,
     updatePromptFeature,
-    updateExclusivePromptFeature,
     updatePromptFeatureGroup,
   }
 }

@@ -10,7 +10,6 @@ import {
   ChatsCircleIcon,
   FileCodeIcon,
   ListChecksIcon,
-  NotePencilIcon,
   PaperclipIcon,
   PuzzlePieceIcon,
   TargetIcon,
@@ -61,9 +60,6 @@ export function ComposerAddMenuPrimaryPanel({
     canTogglePlanFeature,
     planModeActive,
     updatePlanMode,
-    canToggleProposalFeature,
-    proposalModeActive,
-    updateProposalMode,
     canToggleWorkbenchEditorControl = false,
     workbenchEditorControlActive = false,
     updateWorkbenchEditorControl,
@@ -137,29 +133,6 @@ export function ComposerAddMenuPrimaryPanel({
                 help={t('chat.composerPlanModeHint')}
               />
               <ComposerMenuSwitchIndicator checked={planModeActive} />
-            </Button>
-          )
-        )
-      case 'proposal':
-        return (
-          canToggleProposalFeature && (
-            <Button
-              variant="ghost"
-              size="block"
-              {...menu.getLeafItemProps<HTMLButtonElement>({
-                className: menu.classes.item,
-              })}
-              aria-pressed={proposalModeActive}
-              data-active={proposalModeActive}
-              onClick={() => updateProposalMode(!proposalModeActive)}
-              disabled={disabled}
-            >
-              <NotePencilIcon size={14} />
-              <ComposerMenuItemBody
-                label={t('chat.composerProposalMode')}
-                help={t('chat.composerProposalModeHint')}
-              />
-              <ComposerMenuSwitchIndicator checked={proposalModeActive} />
             </Button>
           )
         )

@@ -4,8 +4,7 @@ import { TargetIcon } from '@phosphor-icons/react'
 import { StyleUtils } from '@velaros-ai/ui'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
-import { getToolDisplayName } from '../toolPresentation'
+import { useConversationI18n } from '../../i18n'
 
 import { getGoalToolBlockObjective, getGoalToolBlockStatus } from './goalToolBlock'
 
@@ -50,8 +49,7 @@ const GoalToolRender = memo(
     planUpdateIndex?: number
   }): React.ReactElement => {
     const { locale } = useConversationI18n()
-    const translatorRuntime = useConversationTranslatorRuntime()
-    const displayName = getToolDisplayName(block.toolName, locale, translatorRuntime)
+    const displayName = block.toolName
     const status = getGoalToolBlockStatus(block)
     const tone = getGoalTone(block, status)
     const statusLabel = getGoalStatusLabel(status, locale)

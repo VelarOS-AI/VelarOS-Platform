@@ -25,9 +25,13 @@ export type ConsumedUserActionCardDisplayMode = 'hide' | 'disable'
 
 /**
  * 已消费卡片：`'hide'` 不渲染；`'disable'` 保留灰显且不可操作。
+ *
+ * 取 `'disable'` 是为了**审批留痕**：确认/拒绝本身不产生任何消息，卡再自己隐掉，事后回看会话
+ * 就只看得到 agent 装了个系统工具、跑了条破坏性命令，看不到当时问了什么、谁批的、填了什么理由。
+ * 结算记录现在随存档落盘（`ConversationCardResolution`），灰显卡展示的就是那份事实。
  * 开发/调试时改此常量即可，勿接入 RendererPreferences。
  */
-export const consumedUserActionCardDisplayMode: ConsumedUserActionCardDisplayMode = 'hide'
+export const consumedUserActionCardDisplayMode: ConsumedUserActionCardDisplayMode = 'disable'
 
 export type UserActionCardVisualIcon = UserActionCardIcon | 'input'
 

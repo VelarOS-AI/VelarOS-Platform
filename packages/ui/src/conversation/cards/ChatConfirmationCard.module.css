@@ -9,14 +9,6 @@
   box-shadow: none;
 }
 
-.installRoot:global(.velar-action-card) {
-  padding: 10px 12px;
-  border-radius: var(--ui-radius-control);
-  border: 0;
-  background: var(--surface-interaction-card);
-  box-shadow: none;
-}
-
 .icon {
   @apply mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center;
   border-radius: 8px;
@@ -39,57 +31,17 @@
   line-height: 18px;
 }
 
-.installIcon:global(.velar-action-card-icon) {
-  align-self: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--status-blue) 10%, var(--card));
-  color: var(--status-blue);
+/* 结构化要点：每条一行，长值（工具名 / 技能 id）就地折行不撑破卡片。 */
+.facts {
+  @apply mt-1 grid list-none gap-0.5 p-0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.installTitleLine {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.installTitleLine span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.installDetailRow {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.installCommand {
-  @apply min-w-0 font-mono;
-  flex: 0 1 auto;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--foreground-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: var(--ui-line-xs);
-}
-
-.installExplanation {
+.fact {
   @apply min-w-0 text-muted-foreground;
-  flex: 1 1 18rem;
   font-size: var(--ui-font-body-sm);
-  line-height: var(--ui-line-default);
+  line-height: var(--ui-line-xs);
+  overflow-wrap: anywhere;
 }
 
 .actions {

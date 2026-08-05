@@ -90,22 +90,33 @@ export interface ChatInputSkillOption {
 
 export type ChatInputSkillDetailHandler = (skill: ChatInputSkillOption) => void | Promise<void>
 
-/** 聊天输入 `@` 菜单里的一条行内评论。 */
-export interface ChatInputCommentMentionOption {
+/** 聊天输入 `@` 菜单里的一条**可引用项**。 */
+export interface ChatInputMentionableOption {
   id: string
-  /** 展示定位，如 `src/foo.ts:12-20`。 */
+  /** 展示定位，如 `src/foo.ts:12-20`，或被选中实体的名字。 */
   label: string
-  /** 评论正文（列表描述 + 发送上下文用）。 */
+  /** 正文（列表描述 + 发送上下文用）。 */
   body: string
 }
 
 /**
- * 行内评论接入 composer 的网关（仅工作台聊天传入）。
- * `@` 菜单列出 `available`，可删除/多选；选中项以 chip 显示，发送后由上层消费。
+ * **可引用项**接入 composer 的网关。
+ *
+ * 来源无关：工作台行内评论、游戏空间选中实体、任何声明「我的 delta 走 mention 面不走 chip 面」
+ * 的 mod，都只是它的一种来源。`@` 菜单列出 `available`，可移除/多选；选中项以 chip 显示，
+ * 发送后由上层消费。
+ *
+ * `header` / `deleteLabel` **由来源注入**：菜单不替任何来源起名字。上一版把这条通道写死叫「评论」，
+ * 而实际唯一的填充者是游戏空间选中实体——于是在游戏里按 `@`，面板顶着「评论」、条目旁的垃圾桶
+ * 写着「删除评论」。
  */
-export interface ChatInputCommentMentions {
-  available: ChatInputCommentMentionOption[]
+export interface ChatInputMentionables {
+  available: ChatInputMentionableOption[]
   selectedIds: string[]
+  /** 菜单表头文案（如「评论」「选中实体」）；缺席时回落通用文案。 */
+  header?: string
+  /** 列表项移除按钮文案；缺席时回落通用文案。 */
+  deleteLabel?: string
   onToggleSelected: (id: string, selected: boolean) => void
   onDelete: (id: string) => void
 }

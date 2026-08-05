@@ -1,38 +1,43 @@
-import { ChatCircleDotsIcon, TrashIcon } from '@phosphor-icons/react'
+import { AtIcon, TrashIcon } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
 
 import { StyleUtils } from '@velaros-ai/ui'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import type { UseComposerCommentMentionMenuReturn } from './hooks/useComposerCommentMentionMenu'
+import type { UseComposerMentionMenuReturn } from './hooks/useComposerMentionMenu'
 
-import styles from './ComposerCommentMentionMenu.module.css'
+import styles from './ComposerMentionMenu.module.css'
 
 const cx = StyleUtils.bindCx(styles)
 
-interface ComposerCommentMentionMenuProps {
-  menu: UseComposerCommentMentionMenuReturn
+interface ComposerMentionMenuProps {
+  menu: UseComposerMentionMenuReturn
   header: string
   deleteLabel: string
 }
 
-/** 聊天输入 `@` 弹出的行内评论列表（内联在 composer 顶部，随查询过滤，可就地删除/切换选中）。 */
-export function ComposerCommentMentionMenu({
+/**
+ * 聊天输入 `@` 弹出的**可引用项**列表（内联在 composer 顶部，随查询过滤，可就地移除/切换选中）。
+ *
+ * 表头与移除按钮文案由调用方注入（`header` / `deleteLabel`）：来源不同说法就不同
+ * （工作台是"评论"，游戏空间是"选中实体"），菜单本身不替任何来源起名字。
+ */
+export function ComposerMentionMenu({
   menu,
   header,
   deleteLabel,
-}: ComposerCommentMentionMenuProps): ReactElement | null {
+}: ComposerMentionMenuProps): Nullable<ReactElement> {
   if (!menu.open) return null
 
   return (
     <div className={styles.panel} role="listbox" aria-label={header}>
       <div className={styles.header}>{header}</div>
       <div className={styles.list}>
-        {menu.items.map((comment, index) => {
-          const isSelected = menu.selectedIdSet.has(comment.id)
+        {menu.items.map((option, index) => {
+          const isSelected = menu.selectedIdSet.has(option.id)
           return (
             <div
-              key={comment.id}
+              key={option.id}
               role="option"
               aria-selected={index === menu.highlightedIndex}
               tabIndex={-1}
@@ -46,15 +51,15 @@ export function ComposerCommentMentionMenu({
                 // 防止 textarea 失焦导致选择前菜单状态变化。
                 event.preventDefault()
               }}
-              onClick={() => menu.selectItem(comment.id)}
+              onClick={() => menu.selectItem(option.id)}
             >
               <span className={styles.itemIcon}>
-                <ChatCircleDotsIcon size={14} weight={isSelected ? 'fill' : 'regular'} />
+                <AtIcon size={14} weight={isSelected ? 'bold' : 'regular'} />
               </span>
               <span className={styles.itemMain}>
-                <Text className={styles.itemLabel}>{comment.label}</Text>
-                {!!comment.body && (
-                  <Text className={styles.itemDescription}>{comment.body}</Text>
+                <Text className={styles.itemLabel}>{option.label}</Text>
+                {!!option.body && (
+                  <Text className={styles.itemDescription}>{option.body}</Text>
                 )}
               </span>
               <button
@@ -68,7 +73,7 @@ export function ComposerCommentMentionMenu({
                 }}
                 onClick={(event) => {
                   event.stopPropagation()
-                  menu.deleteItem(comment.id)
+                  menu.deleteItem(option.id)
                 }}
               >
                 <TrashIcon size={13} />

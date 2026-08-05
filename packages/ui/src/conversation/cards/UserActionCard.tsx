@@ -391,6 +391,35 @@ export function UserActionCard({
 
   if (viewModel.isHidden) return null
 
+  // 自动折叠：纯展示的防堆积收口。按钮并没有失效，只是收起来了——所以整行本身就是展开入口，
+  // 而不是一块"已超时"的墓碑。旧实现在这一刻把卡永久禁用并写盘，那是不可逆的能力剥夺。
+  if (viewModel.autoCollapsed)
+    return (
+      <div className={styles.collapsedFrame}>
+        <button
+          type="button"
+          className={styles.collapsedRow}
+          onClick={viewModel.expandCard}
+          title={t('common.expand')}
+        >
+          <span className={styles.collapsedIcon}>{renderCardIcon(cardVisualIcon)}</span>
+          <span className={styles.collapsedTitle}>{viewModel.card.title}</span>
+          <span className={styles.collapsedHint}>{t('common.expand')}</span>
+        </button>
+        {!!onDismiss && (
+          <button
+            type="button"
+            className={styles.dismissButton}
+            aria-label={t('sessionStickyDock.dismissAria')}
+            title={t('sessionStickyDock.dismissAria')}
+            onClick={onDismiss}
+          >
+            <XIcon size={11} weight="bold" />
+          </button>
+        )}
+      </div>
+    )
+
   if (isFormCard && viewModel.card.form)
     return (
       <div

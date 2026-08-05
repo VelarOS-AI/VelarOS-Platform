@@ -7,7 +7,6 @@ import type { AppLocale, ToolCategoryId, ToolPermission } from '#contracts'
 import { toNullable } from '#internal/runtime'
 
 type ToolMessageSection =
-  | 'toolNames'
   | 'toolDescriptions'
   | 'categoryLabels'
   | 'categoryDescriptions'
@@ -21,18 +20,6 @@ function readToolMessage(
 ): Nullable<string> {
   // 走注入的目录查询：命中返回文案、真正 miss 返回 null（供 humanize 回落）、调试模式返回 key 路径。
   return runtime.lookupMessage(locale, `tools.${section}.${id}`)
-}
-
-export function humanizeToolName(toolName: string): string {
-  return toolName.replaceAll('_', ' ')
-}
-
-export function getToolDisplayName(
-  toolName: string,
-  locale: AppLocale,
-  runtime: ConversationTranslator = conversationTranslatorRuntime
-): string {
-  return readToolMessage(locale, 'toolNames', toolName, runtime) ?? humanizeToolName(toolName)
 }
 
 export function getToolDescriptionText(

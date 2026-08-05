@@ -82,9 +82,9 @@ export {
   type UseComposerAddMenuStateResult,
 } from './hooks/useComposerAddMenuState'
 export {
-  useComposerCommentMentionMenu,
-  type UseComposerCommentMentionMenuReturn,
-} from './hooks/useComposerCommentMentionMenu'
+  useComposerMentionMenu,
+  type UseComposerMentionMenuReturn,
+} from './hooks/useComposerMentionMenu'
 export { useComposerPromptFeatures } from './hooks/useComposerPromptFeatures'
 export { useComposerSkillSelection } from './hooks/useComposerSkillSelection'
 export {

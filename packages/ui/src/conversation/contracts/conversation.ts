@@ -46,7 +46,6 @@ export type MicrophonePermissionStatus =
 
 export type ChatPromptFeatureId =
   | 'plan'
-  | 'proposal'
   | 'office'
   | 'office-document'
   | 'office-spreadsheet'
@@ -60,9 +59,20 @@ export type ChatPromptFeatureId =
   | 'widget'
 
 export type ToolCategoryId =
-  | 'general'
+  | 'agent-control'
+  | 'context'
+  | 'planning'
+  | 'interaction'
+  | 'pet'
   | 'web'
   | 'browser'
+  | 'browser-core'
+  | 'browser-session'
+  | 'browser-observe'
+  | 'browser-network'
+  | 'browser-events'
+  | 'browser-files'
+  | 'browser-advanced'
   | 'game'
   | 'memory'
   | 'knowledge'
@@ -371,6 +381,45 @@ export interface UserActionCardResult {
   timedOut?: boolean
 }
 
+/**
+ * 卡片结算记录：一张卡「是否已作答」的**唯一权威**，随会话存档落盘在对应 block 上。
+ *
+ * 上一版把这件事分散在三处（localStorage 三前缀 / 组件 useState / 主进程 SQLite），
+ * 没一份跟着存档走：换台机器或清一次浏览器存储，历史动作卡全部复活成可点状态，
+ * 定时任务提案卡还能二次创建。渲染层现在只读本记录，不再自持"已消费"状态。
+ */
+export interface ConversationCardResolution {
+  actionKind: UserActionCardAction['kind'] | 'timeout' | 'skip'
+  approved: boolean
+  message?: string
+  values?: Record<string, UserActionFormValue>
+  timedOut?: boolean
+  settledAt: number
+}
+
+/**
+ * 确认请求的结构化信封（镜像 agent 协议 `ConfirmationRequestDetail`）。
+ * 渲染层按 `kind` 分发；缺席或未知 kind 一律回落到确认信封里的散文 `message`。
+ */
+export type ConfirmationRequestDetail =
+  | {
+      kind: 'tool-category-authorization'
+      categoryId: string
+      categoryLabel: string
+      toolName: string
+    }
+  | {
+      kind: 'mcp-tool-call'
+      serverName: string
+      toolName: string
+    }
+  | {
+      kind: 'skill-load'
+      skillId: string
+      label: string
+      description?: LooseOptional<string>
+    }
+
 export interface UserActionCard {
   id: string
   title: string
@@ -394,6 +443,8 @@ export interface UserActionCard {
 export interface UserActionCardBlock {
   type: 'user-action-card'
   card: UserActionCard
+  /** 结算记录（单源）：有值即「已作答」，渲染层只读它。 */
+  resolution?: ConversationCardResolution
 }
 
 export interface SystemToolInstallSuggestionBlock {
@@ -429,6 +480,8 @@ export interface ScheduledTaskProposalBlock {
     prompt: string
     createdAt: number
   }
+  /** 结算记录（单源）：有值即「已创建」，重载后不再复活成可提交状态。 */
+  resolution?: ConversationCardResolution
 }
 
 export interface FlaggedTaskSuggestionBlock {
@@ -763,25 +816,6 @@ export interface StreamWorkerThreadPayload {
   result?: LooseOptional<unknown>
 }
 
-export interface ChatContextEvidenceRecord {
-  id: string
-  toolCallId: string
-  toolName: string
-  kind: 'file-read' | 'file-change' | 'command-output' | 'verification' | 'artifact' | 'generic'
-  importance: 'pinned' | 'high' | 'medium' | 'low'
-  lifecycle: 'active' | 'pinned' | 'consumed' | 'verified' | 'demoted' | 'stale' | 'reread-required'
-  createdAt: number
-  summary: string
-  path?: LooseOptional<string>
-  revision?: LooseOptional<string>
-  contentHash?: LooseOptional<string>
-  excerpt?: LooseOptional<string>
-  fullPayloadRef?: LooseOptional<string>
-  freshness?: LooseOptional<'fresh' | 'stale' | 'unknown'>
-  score?: LooseOptional<number>
-  metadata?: Record<string, unknown>
-}
-
 export interface ChatStreamReasoningEvent {
   type: 'reasoning'
   payload: { id: string; text: string }
@@ -818,7 +852,6 @@ export type ChatStreamEvent =
         result: unknown
         error?: string
         effects?: StreamToolResultEffects
-        evidence?: ChatContextEvidenceRecord[]
         modelImage?: { data: string; mediaType: 'image/png' | 'image/jpeg' }
       }
     }

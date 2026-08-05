@@ -54,13 +54,23 @@ export interface UserActionCardView {
   formErrors: FormErrors
   inputValue: string
   timeoutPaused: boolean
+  /** 真超时时长（调用方显式声明才有）；到点结算并禁用按钮，进度条据此渲染。 */
   effectiveTimeoutMs: Nullable<number>
+  /**
+   * 非阻塞卡是否已自动折叠。
+   *
+   * 纯展示的防堆积：收成一行、留展开入口，**按钮不失效、不落盘**。与 `settled` 正交——
+   * 已结算的卡不折叠（它自己已经灰了），折叠的卡也不算作答。
+   */
+  autoCollapsed: boolean
   activeInputEntry: Nullable<UserActionEntry>
   completedEntry: Nullable<UserActionEntry>
   shouldShowCardActions: boolean
   shouldShowSkipButton: boolean
   setInputValue: (value: string) => void
   setTimeoutPaused: (paused: boolean) => void
+  /** 展开一张自动折叠的卡；展开后本次会话内不再重新折叠。 */
+  expandCard: () => void
   handleFormFieldChange: (fieldId: string, value: FormDraftValue) => void
   submitAction: (entry: UserActionEntry, message?: string) => void
   skipCard: () => void

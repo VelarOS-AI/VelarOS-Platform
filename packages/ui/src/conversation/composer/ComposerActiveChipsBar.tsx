@@ -1,10 +1,9 @@
 import { memo, type ReactElement, type ReactNode, useMemo } from 'react'
 import {
-  ChatCircleDotsIcon,
+  AtIcon,
   CursorClickIcon,
   FileCodeIcon,
   ListChecksIcon,
-  NotePencilIcon,
   PulseIcon,
   TargetIcon,
 } from '@phosphor-icons/react'
@@ -16,7 +15,7 @@ import type { ConversationMessageKey as MessageKey } from '../i18n'
 
 import { groupTurnContextChips } from './utils/turnContextChipGroups.utils'
 import type {
-  ChatInputCommentMentionOption,
+  ChatInputMentionableOption,
   ChatInputPromptFeatureGroupOption,
   ChatInputSkillDetailHandler,
   ChatInputSkillOption,
@@ -96,13 +95,11 @@ export interface ComposerActiveChipsBarProps {
   t: (key: MessageKey) => string
   disabled: boolean
   planModeActive: boolean
-  proposalModeActive: boolean
   goalModeActive: boolean
   /** 目标模式 chip 的文案覆盖（外部执行体自报）；不传时用包内的「目标模式」。 */
   goalModeLabel?: string
   capabilityControls?: readonly ChatComposerCapabilityControl[]
   onClearPlanMode: () => void
-  onClearProposalMode: () => void
   onClearGoalMode: () => void
   browserElementSelections: BrowserElementSelection[]
   onRemoveBrowserElementSelection?: (id: string) => void
@@ -113,8 +110,8 @@ export interface ComposerActiveChipsBarProps {
   onDismissTurnContextDelta?: (id: string) => void
   activePluginOptions: ChatInputPromptFeatureGroupOption[]
   activeSkillOptions: ChatInputSkillOption[]
-  activeCommentOptions?: ChatInputCommentMentionOption[]
-  onRemoveCommentSelection?: (id: string) => void
+  activeMentionOptions?: ChatInputMentionableOption[]
+  onRemoveMentionSelection?: (id: string) => void
   onOpenSkillDetail?: ChatInputSkillDetailHandler
   lockedPromptFeatures?: ChatPromptFeatureId[]
   updatePromptFeatureGroup: (option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void
@@ -127,12 +124,10 @@ function ComposerActiveChipsBarInner({
   t,
   disabled,
   planModeActive,
-  proposalModeActive,
   goalModeActive,
   goalModeLabel,
   capabilityControls = [],
   onClearPlanMode,
-  onClearProposalMode,
   onClearGoalMode,
   browserElementSelections,
   onRemoveBrowserElementSelection,
@@ -141,8 +136,8 @@ function ComposerActiveChipsBarInner({
   onDismissTurnContextDelta,
   activePluginOptions,
   activeSkillOptions,
-  activeCommentOptions,
-  onRemoveCommentSelection,
+  activeMentionOptions,
+  onRemoveMentionSelection,
   onOpenSkillDetail,
   lockedPromptFeatures = EmptyLockedPromptFeatures,
   updatePromptFeatureGroup,
@@ -171,24 +166,6 @@ function ComposerActiveChipsBarInner({
                   disabled={disabled}
                   onRemove={onClearPlanMode}
                   removeAriaLabel={t('chat.composerPlanMode')}
-                />,
-              ]
-            : []),
-        ]
-      case 'proposal':
-        return [
-          ...(proposalModeActive
-            ? [
-                <ComposerActiveChip
-                  key="proposal-mode"
-                  className={resolveComposerFunctionBarChipClassName(slot)}
-                  chipDataPluginId="proposal"
-                  title={t('chat.composerProposalMode')}
-                  label={t('chat.composerProposalMode')}
-                  icon={<NotePencilIcon size={12} weight="bold" />}
-                  disabled={disabled}
-                  onRemove={onClearProposalMode}
-                  removeAriaLabel={t('chat.composerProposalMode')}
                 />,
               ]
             : []),
@@ -326,21 +303,21 @@ function ComposerActiveChipsBarInner({
             removeAriaLabel={skill.label}
           />
         ))
-      case 'comments':
-        return (activeCommentOptions ?? []).map((comment) => (
+      case 'mentions':
+        return (activeMentionOptions ?? []).map((option) => (
           <ComposerActiveChip
-            key={`${slot}-${comment.id}`}
+            key={`${slot}-${option.id}`}
             className={resolveComposerFunctionBarChipClassName(slot)}
-            chipDataPluginId="workbench-comment"
-            title={comment.body ? `${comment.label} · ${comment.body}` : comment.label}
-            label={comment.label}
-            icon={<ChatCircleDotsIcon size={12} weight="fill" />}
+            chipDataPluginId="composer-mention"
+            title={option.body ? `${option.label} · ${option.body}` : option.label}
+            label={option.label}
+            icon={<AtIcon size={12} weight="bold" />}
             disabled={disabled}
             onRemove={optionalWhenLazy(
-              onRemoveCommentSelection,
-              () => () => onRemoveCommentSelection!(comment.id)
+              onRemoveMentionSelection,
+              () => () => onRemoveMentionSelection!(option.id)
             )}
-            removeAriaLabel={comment.label}
+            removeAriaLabel={option.label}
           />
         ))
       default:
