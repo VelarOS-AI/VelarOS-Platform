@@ -14,7 +14,7 @@ import {
 const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>({
   name: 'tooling:map',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   // 工具地图就是模型当下要读的内容：禁止 page-out 成 payload 引用，否则模型还得
   // context:recall 召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
   outputInline: true,
@@ -63,7 +63,7 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
 const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>({
   name: 'tooling:read',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   // 同 tooling:map：技能正文是模型当下要读的内容，禁止 page-out。
   outputInline: true,
   summary: '读取当前角色可见的技能正文（skill:<id>）；技能索引见任务提示词。',
@@ -91,7 +91,7 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
 const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSchema>>({
   name: 'tooling:replace',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   summary: '换入/换出工具页，或按 capability 一类激活能力；影响后续 AI SDK tools 暴露。',
   suitable: [
     '需要一类激活 capability:*。',

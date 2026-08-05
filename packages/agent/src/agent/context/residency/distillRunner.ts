@@ -11,16 +11,17 @@
  *  - **并发 1**：同一会话任何时刻最多一次在飞的蒸馏调用；多出来的请求排队，队列也受
  *    `maxSegmentsPerEpoch` 限制（每 epoch 规划几段）。
  *  - **输入字符上限**：段落在规划期就切好（`maxInputChars`，沿用 v1 的 48K）。
- *  - **超时**：`timeoutMs` 到点即判超时并回落骨架。超时用 `Promise.race` 而不是只发
- *    AbortSignal——端口实现不一定认信号，不能把治理挂在别人的礼貌上。
+ *  - **超时**：`timeoutMs` 到点即判超时并回落骨架。走 `TimerScope.withTimeout`（内部是"发信号 +
+ *    竞速"）而不是只发 AbortSignal——端口实现不一定认信号，不能把治理挂在别人的礼貌上。
  *
  * ## 失败方向
  * 拒收 / 超时 / 端口抛错**一律产出回落骨架产物**，绝不"什么都不给"：段落是在规划期就被判定
  * 非折不可的（机械器械没达标），这时候空手而归等于让压力原样留到下一轮。
  */
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isRecord, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import {
   buildDistillProduct,
@@ -46,7 +47,13 @@ export interface ContextDistillRunnerOptions {
   maxPendingProducts?: LooseOptional<number>
 }
 
+/** `TimerScope.withTimeout` 的超时中止（与端口自己抛的错分开记账：超时不是失败）。 */
+function isTimeoutError(error: unknown): boolean {
+  return isRecord(error) && isString(error.name) && error.name === 'TimeoutError'
+}
+
 export class ContextDistillRunner {
+  private readonly timers = new TimerScope({ name: 'ContextDistillRunner' })
   private readonly queue: ContextDistillRequest[] = []
   private readonly pending: ContextDistillProduct[] = []
   private readonly counters: ContextDistillTotals = createEmptyDistillTotals()
@@ -63,7 +70,7 @@ export class ContextDistillRunner {
 
   /** 是否有在飞或排队的请求（并发 1 的判据）。 */
   public get busy(): boolean {
-    return this.running !== null || !isEmpty(this.queue)
+    return isNotNull(this.running) || !isEmpty(this.queue)
   }
 
   public get pendingCount(): number {
@@ -71,7 +78,7 @@ export class ContextDistillRunner {
   }
 
   public hasDistiller(): boolean {
-    return this.options.resolveDistiller() !== null
+    return isNotNull(this.options.resolveDistiller())
   }
 
   public totals(): ContextDistillTotals {
@@ -140,45 +147,34 @@ export class ContextDistillRunner {
       return
     }
 
-    const controller = new AbortController()
     const timeoutMs = Math.max(1, config.distillation.timeoutMs)
-    let timer: Nullable<ReturnType<typeof setTimeout>> = null
-    const timeout = new Promise<'timeout'>((resolve) => {
-      timer = setTimeout(() => {
-        controller.abort()
-        resolve('timeout')
-      }, timeoutMs)
-    })
-
     try {
-      const outcome = await Promise.race([
+      // `withTimeout` 内部就是"发信号 + 竞速"：端口不一定认 AbortSignal，治理不能挂在别人的礼貌上。
+      const outcome = await this.timers.withTimeout(timeoutMs, (signal) =>
         distiller({
           members: request.members,
           goalHint: request.goalHint,
           targetChars: request.targetChars,
+          maxInputChars: config.distillation.maxInputChars,
           requiredAnchors: request.requiredAnchors,
           mode: config.instruments.distill,
           sessionId: this.options.sessionId,
-          signal: controller.signal,
-        }),
-        timeout,
-      ])
-
-      if (outcome === 'timeout') {
+          signal,
+        })
+      )
+      this.settle(buildDistillProduct({ request, rawText: outcome }))
+    } catch (error) {
+      if (isTimeoutError(error)) {
         log.warn('蒸馏超时，回落 I1 骨架', { epoch: request.epoch, timeoutMs })
         this.settle(buildDistillProduct({ request, rawText: null, failure: 'timeout' }))
         return
       }
 
-      this.settle(buildDistillProduct({ request, rawText: outcome }))
-    } catch (error) {
       log.warn('蒸馏调用失败，回落 I1 骨架', {
         epoch: request.epoch,
         error: AppError.getMessage(error),
       })
       this.settle(buildDistillProduct({ request, rawText: null, failure: 'error' }))
-    } finally {
-      if (timer) clearTimeout(timer)
     }
   }
 

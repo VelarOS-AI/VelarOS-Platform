@@ -1,12 +1,22 @@
 import { isNonBlankString, isTrue } from '@velaros-ai/core'
 
 import {
+  isExecutionModeActive,
+  resolveExecutionModes,
+  stripExecutionModePromptFeatures,
+} from '../execution-modes'
+import {
   assertChatPromptFeatureIds,
   isThinkingDepth,
   parseOptionalReasoningLevel,
   resolveRunProfileSelectionId,
 } from '../protocol/constants/typedFieldAsserts'
-import type { CapabilityScopeId, ChatSendRequest, RunProfileSelectionId } from '../protocol/types'
+import type {
+  CapabilityScopeId,
+  ChatSendRequest,
+  ExecutionModeId,
+  RunProfileSelectionId,
+} from '../protocol/types'
 import type { ReasoningLevel, ThinkingDepth } from '../protocol/types/team'
 
 const DefaultRunProfileSelectionId: RunProfileSelectionId = 'auto'
@@ -17,8 +27,12 @@ interface ResolvedChatSendRequestOptions {
   thinkingDepth?: ThinkingDepth
   /** Composer 思考力度 5 档（off/low/medium/high/ultra）；优先于 thinkingDepth 决定 reasoning 力度。 */
   reasoningLevel?: ReasoningLevel
+  /** 能力轴：**只剩能力**，执行模式的旧形态 id 已在此剥除（见 stripExecutionModePromptFeatures）。 */
   promptFeatures: NonNullable<ChatSendRequest['promptFeatures']>
+  /** 执行模式轴（权威）：新字段 ∪ 旧形态折算，见 resolveExecutionModes。 */
+  executionModes: ExecutionModeId[]
   scope: CapabilityScopeId
+  /** 由模式轴派生，保留给尚未改读新轴的下游（goal 生命周期、收尾门、阶段判定）。 */
   goalMode: boolean
   pureChatMode: boolean
 }
@@ -31,16 +45,20 @@ function resolveRequestScope(request: ChatSendRequest): CapabilityScopeId {
 function resolveChatSendRequestOptions(request: ChatSendRequest): ResolvedChatSendRequestOptions {
   const scope = resolveRequestScope(request)
   // pureChatMode 与 scope 解耦：只取宿主请求的显式字段，不根据具体 scope 类型推断。
-  const rawPromptFeatures = assertChatPromptFeatureIds(
+  const requestedPromptFeatures = assertChatPromptFeatureIds(
     request.promptFeatures,
     'ChatSendRequest.promptFeatures'
   )
-  const proposalMode = rawPromptFeatures.includes('proposal')
-  const requestedPromptFeatures = proposalMode
-    ? rawPromptFeatures.filter((feature) => feature !== 'plan')
-    : rawPromptFeatures
-  // 方案模式依赖提问、产物和评审工具，不能被仅聊天链路吞掉；方案优先关闭 pure/goal。
-  const pureChatMode = isTrue(request.pureChatMode) && !proposalMode
+  const pureChatMode = isTrue(request.pureChatMode)
+  // 拆轴口：先把两种形态折进模式轴，再从能力轴上剥掉模式 id——顺序不可颠倒，
+  // 先剥后折会把「旧宿主只传了 promptFeatures:['plan']」这一路的计划模式直接扔掉。
+  const executionModes = pureChatMode
+    ? []
+    : resolveExecutionModes({
+        executionModes: request.executionModes,
+        promptFeatures: requestedPromptFeatures,
+        goalMode: request.goalMode,
+      })
 
   return {
     runProfile: resolveRunProfileSelectionId(
@@ -51,9 +69,10 @@ function resolveChatSendRequestOptions(request: ChatSendRequest): ResolvedChatSe
     // legacy thinkingDepth 已被 reasoningLevel 取代：宽松解析，非法值忽略而不抛错。
     thinkingDepth: isThinkingDepth(request.thinkingDepth) ? request.thinkingDepth : undefined,
     reasoningLevel: parseOptionalReasoningLevel(request.reasoningLevel),
-    promptFeatures: pureChatMode ? [] : requestedPromptFeatures,
+    promptFeatures: pureChatMode ? [] : stripExecutionModePromptFeatures(requestedPromptFeatures),
+    executionModes,
     scope,
-    goalMode: pureChatMode || proposalMode ? false : isTrue(request.goalMode),
+    goalMode: isExecutionModeActive('goal', executionModes),
     pureChatMode,
   }
 }

@@ -1,7 +1,6 @@
 import type {
   AgentEvent,
   CapabilityScopeId,
-  ChatContextEvidenceRecord,
   StreamToolResultEffects,
   ToolCategoryDefinition,
   ToolCategoryId,
@@ -119,21 +118,6 @@ export interface CapabilityContextCollector {
   ): Promise<unknown> | unknown
 }
 
-export interface CapabilityEvidenceExtractorContext {
-  toolCallId: string
-  toolName: string
-  args?: Readonly<Record<string, unknown>>
-  result: unknown
-  error?: string
-  effects?: StreamToolResultEffects
-}
-
-export interface CapabilityEvidenceExtractor {
-  id: string
-  priority?: number
-  extract(context: CapabilityEvidenceExtractorContext): readonly ChatContextEvidenceRecord[]
-}
-
 export interface CapabilityIntentSignal {
   domainId: string
   categoryIds?: readonly ToolCategoryId[]
@@ -226,7 +210,6 @@ export interface AgentRuntimeCapabilityExtension {
   validationInterpreters?: readonly CapabilityValidationInterpreter[]
   promptContributors?: readonly CapabilityPromptContributor[]
   contextCollectors?: readonly CapabilityContextCollector[]
-  evidenceExtractors?: readonly CapabilityEvidenceExtractor[]
   intentClassifiers?: readonly CapabilityIntentClassifier[]
   allocation?: ToolAllocationMetadata
   scopePolicy?: CapabilityScopePolicy
@@ -245,7 +228,6 @@ export interface AgentRuntimeCapabilityPorts {
   validationInterpreters?: readonly CapabilityValidationInterpreter[]
   promptContributors?: readonly CapabilityPromptContributor[]
   contextCollectors?: readonly CapabilityContextCollector[]
-  evidenceExtractors?: readonly CapabilityEvidenceExtractor[]
   intentClassifiers?: readonly CapabilityIntentClassifier[]
   allocation?: ToolAllocationMetadata
   scopePolicy?: CapabilityScopePolicy
@@ -389,15 +371,6 @@ export function resolveCapabilityContextCollectors(
   return [
     ...(ports?.extensions?.flatMap((extension) => extension.contextCollectors ?? []) ?? []),
     ...(ports?.contextCollectors ?? []),
-  ].sort(byPriority)
-}
-
-export function resolveCapabilityEvidenceExtractors(
-  ports?: AgentRuntimeCapabilityPorts
-): CapabilityEvidenceExtractor[] {
-  return [
-    ...(ports?.extensions?.flatMap((extension) => extension.evidenceExtractors ?? []) ?? []),
-    ...(ports?.evidenceExtractors ?? []),
   ].sort(byPriority)
 }
 

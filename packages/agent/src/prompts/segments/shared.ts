@@ -19,7 +19,7 @@ import type {
   PromptSegmentDefinition,
   PromptSegmentRetention,
   PromptSegmentSource,
-  PromptSegmentStability,
+  PromptSegmentTier,
 } from '../registry'
 
 export interface RuntimePromptToolSummary {
@@ -61,7 +61,6 @@ export interface RuntimePromptSnapshot {
   requestableToolCapabilityCategories: RuntimePromptToolCategorySummary[]
   canUpdatePlan: boolean
   userRequestedPlan: boolean
-  proposalMode: boolean
   goalMode: boolean
   selectedPromptFeatureLabels: string[]
   enabledPromptFeatures: ChatPromptFeatureId[]
@@ -74,16 +73,25 @@ export interface RuntimePromptSnapshot {
   hasCompactedContext: boolean
 }
 
+/**
+ * 段优先级带（按行为知识三层分带；层序由注册表保证，带内数值只决定同层内部顺序与裁剪判据）。
+ *
+ * Tier0（core，0–99）：身份、品牌语气、安全边界。
+ * Tier1（runtime，1_000–8_999）：运行态指导。`capabilityProtocol` 是用户显式开启的能力协议段；
+ *   `runtimeAdvice` 是执行模式/计划一类本轮建议。
+ * Tier2（skill，9_000）：技能索引与命中指针。
+ *
+ * 2026-08-06 删除的死常量（全树零消费者）：`developmentP0` / `role` / `strategy` / `guardrail`，
+ * 以及 `datetime: 500`——真实的 datetime 段自带字面量 9_020，从来没读过这个常量。
+ */
 export const PromptSegmentPriority = {
   identity: 0,
-  developmentP0: 10,
-  role: 100,
-  skill: 120,
-  datetime: 500,
+  brandVoice: 10,
+  safetyBoundary: 20,
   runtime: 1_000,
+  capabilityProtocol: 1_200,
   runtimeAdvice: 1_500,
-  strategy: 3_400,
-  guardrail: 3_600,
+  skill: 9_000,
   user: 10_000,
 } as const
 
@@ -117,10 +125,35 @@ export function hasAnyRuntimeToolAvailable(snapshot: RuntimePromptSnapshot): boo
   )
 }
 
+/**
+ * Tier0 段工厂（唯一入口）。
+ *
+ * **刻意不接受 `when` 谓词、也拿不到 `PromptRenderContext`**：Tier0 的契约是「稳定前缀逐字不变」，
+ * 一旦允许按 facts 判定，前缀就会随会话状态分叉，而分叉的代价（整段历史掉出 provider 前缀缓存）
+ * 是静默且以 token 计的。要按运行态开关的内容一律是 Tier1。
+ */
+export function createCorePromptSegment(args: {
+  id: string
+  label: string
+  source: PromptSegmentSource
+  priority: number
+  text: string
+}): PromptSegmentDefinition {
+  return {
+    id: args.id,
+    label: args.label,
+    tier: 'core',
+    source: args.source,
+    priority: args.priority,
+    render: () => args.text,
+  }
+}
+
 export function createTextPromptSegment(args: {
   id: string
   label: string
-  stability: PromptSegmentStability
+  /** 行为知识层；缺省 Tier1。Tier0 走 {@link createCorePromptSegment}，此处不接受 `core`。 */
+  tier?: Exclude<PromptSegmentTier, 'core'>
   source: PromptSegmentSource
   priority: number
   retention?: PromptSegmentRetention
@@ -130,7 +163,7 @@ export function createTextPromptSegment(args: {
   return {
     id: args.id,
     label: args.label,
-    stability: args.stability,
+    tier: args.tier ?? 'runtime',
     source: args.source,
     priority: args.priority,
     retention: args.retention,
@@ -139,22 +172,31 @@ export function createTextPromptSegment(args: {
   }
 }
 
+/**
+ * Tier2 技能段（角色技能全文档位）。
+ *
+ * `retention: 'protected'` 不是保守起见：技能索引承载的是**用户显式选中**的意图，
+ * 被 run-profile 预算裁掉等于把用户亲手选的技能静默丢弃，而模型对此毫无感知。
+ */
 export function createSkillPromptSegment(id: string, text: string): PromptSegmentDefinition {
   return createTextPromptSegment({
     id: `skill.${id}`,
     label: 'Role Skill',
-    stability: 'stable',
+    tier: 'skill',
+    retention: 'protected',
     source: 'skill',
     priority: PromptSegmentPriority.skill,
     text,
   })
 }
 
+/** Tier2 技能段（主 Agent 本轮命中/选中的技能指针）。 */
 export function createSelectedSkillPromptSegment(text: string): PromptSegmentDefinition {
   return createTextPromptSegment({
     id: 'skill.active',
     label: 'Active Skills',
-    stability: 'stable',
+    tier: 'skill',
+    retention: 'protected',
     source: 'skill',
     priority: PromptSegmentPriority.skill,
     text,

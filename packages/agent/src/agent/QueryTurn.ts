@@ -5,7 +5,6 @@ import type {
   AgentEvent,
   AppLocale,
   ChatRuntimeEvent,
-  ReasoningLanguagePreference,
   StreamAssistantGeneratedFilePayload,
   StreamAssistantSourcePayload,
   StreamReasoningPayload,
@@ -47,6 +46,7 @@ import {
   type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
+  resolveGovernanceSessionKey,
 } from './context'
 import {
   type AgentHistoryToolContext,
@@ -131,7 +131,6 @@ export interface ExecuteQueryTurnArgs<
   modelRequestOptions?: AgentModelRequestOptions
   systemPrompt: string
   history: ModelMessage[]
-  reasoningLanguage?: ReasoningLanguagePreference
   contextWindow?: LooseOptional<number>
   /** Concrete inputs accepted by the selected model. Missing is text-only. */
   supportedInputModalities?: readonly AgentModelInputModality[]
@@ -146,6 +145,14 @@ export interface ExecuteQueryTurnArgs<
   /** 测试/运行时覆盖：模型流多久没有新 chunk 就判定 provider 半开停滞。 */
   idleStallTimeoutMs?: LooseOptional<number>
   contextEpochScope?: LooseOptional<string>
+  /**
+   * 治理账本键（缺省 = 会话 id）。
+   *
+   * 子 agent 的 `toolContext` 是父 ctx 的展开，sessionId 与父会话逐字相同，但它跑的是另一条消息
+   * 序列——共用一本账本会让父子交替编译每次都在第 0 条指纹分叉、整本重建（审计 U12）。派发面
+   * 传一个"每次派发唯一、跨该子 agent 全部轮次稳定"的键进来。
+   */
+  governanceSessionId?: LooseOptional<string>
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
   onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
   /**
@@ -374,13 +381,13 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       )
       const compiledRequest = await compileProviderSendRequest(
         {
-          sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
+          sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
+          governanceSessionId: toOptional(args.governanceSessionId),
           rawHistoryMessages: args.history,
           phase: 'query',
           turn: null,
           payloadStore: args.toolContext.contextPayloadStore,
           toolContext: args.toolContext,
-          reasoningLanguage: args.reasoningLanguage,
           model: args.model,
           systemPrompt: args.systemPrompt,
           toolSchemaChars,
@@ -439,7 +446,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       })
       recordKernelPrefixShapeDiagnostic(providerTurnReducer, prefixShapeRecord)
       const contextEpoch = buildKernelContextEpoch({
-        sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
+        sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
         scope: args.contextEpochScope,
         phase: 'query',
         turn: toNullable(args.turn),
@@ -681,7 +688,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
   private createProviderTurnReducer(
     args: ExecuteQueryTurnArgs<TToolContext>
   ): ProviderTurnEventReducer {
-    const sessionId = args.toolContext.sessionId?.trim() || 'unknown-session'
+    const sessionId = resolveGovernanceSessionKey(args.toolContext.sessionId)
     return new ProviderTurnEventReducer({
       turnId: `${sessionId}:query:${args.turn ?? 'internal'}`,
     })

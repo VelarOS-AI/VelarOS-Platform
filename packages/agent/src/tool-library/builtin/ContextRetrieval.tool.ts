@@ -9,7 +9,7 @@ import { inferRecallRefKind, recallContextSchema } from './ContextRetrieval'
 const recallContext = defineVelaTool<RecallContextInput>({
   name: 'context:recall',
   role: 'inspect',
-  category: 'general',
+  category: 'context',
   summary: '统一找回本会话之前见过的上下文。',
   outputInline: true,
   suitable: [
@@ -88,6 +88,11 @@ const recallContext = defineVelaTool<RecallContextInput>({
             result: await conversation.retrieveContextPayload({
               sessionId: ctx.sessionId,
               handleId: input.ref,
+              // 分页参数必须跟着走:模型手里的 ref 很多时候就是 tool:*(搜索结果的 handleId、
+              // 未命中时的自纠样本都是这个形态),漏传等于每次都回第一页,模型照提示加 offset
+              // 重试拿到逐字相同的内容直到熔断（审计 U9）。
+              jsonPath: input.jsonPath,
+              offset: input.offset,
               reason,
               maxChars,
             }),

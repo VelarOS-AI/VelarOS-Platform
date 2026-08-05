@@ -1,15 +1,22 @@
 // 域：system prompt 的**段注册表与组合器**——决定「哪些段进这一轮的提示词、以什么顺序、算不算稳定」。
 //
 // ## ① 段序即字节序（算法不变量）
-// 组合结果直接决定 system prompt 的字节。排序键是 `(priority, id)`，其中 id 的比较**必须**走
+// 组合结果直接决定 system prompt 的字节。排序键是 `(tierRank, priority, id)`，其中 id 的比较**必须**走
 // `compareStableStrings`（码元序）而不是 locale 相关比较——否则同一份配置在不同机器上生成不同字节的
 // 提示词，前缀缓存跨机器全失效，且表现为「有的机器贵有的机器便宜」，没人会想到是排序。
 // 同 priority 靠 id 兜底而不是靠注册顺序，是为了让「换个装配顺序」不改变输出。
 //
-// ## ② stable / dynamic 是**前缀缓存契约**，不是分类标签
-// `stableParts` 会被放在提示词前半、逐轮字节不变，供 provider 侧前缀缓存命中；`dynamicParts` 放后半。
-// 把一个逐轮变化的段标成 `stable`，代价不是"分类不准"，而是**整段稳定前缀每轮失效**——成本以 token
-// 计、静默发生。判据：这个段的渲染结果在同一会话内会不会随轮次变？会 → dynamic。
+// ## ② 行为知识三层（Tier）是**结构**，stable/dynamic 由它派生
+// 段不再自报 `stability`，只声明自己属于哪一层；`stability` 由 {@link resolvePromptSegmentStability}
+// 机械派生，因此「把一个逐轮变化的段标成 stable」这件事在类型层就不再可表达：
+//  - `core`（Tier0 身份/安全/不可变纪律）→ `stable`，进稳定前缀，**逐字不变**。
+//    Tier0 段只能由 `createCorePromptSegment` 构造——它不接受 `when` 谓词、不读 facts，
+//    渲染结果是构造期就固定的常量，前缀因此结构上不可能逐轮分叉。
+//  - `runtime`（Tier1 运行态段：空间/模式/工具面）→ `dynamic`，进活动尾。
+//  - `skill`（Tier2 技能，工艺知识唯一的家）→ `dynamic`，进活动尾（选中集逐轮可变）。
+// 历史病灶：能力协议段（HTML 实时预览/Widget）与技能索引段曾声明 `stable`，但它们的 `when`
+// 读的是**逐轮重算**的 facts（最新一条 user 消息的正则命中、本轮选中技能集、bootstrap/operational
+// 阶段），于是稳定前缀每隔一轮就分叉一次——前缀缓存连同它后面的整段历史一起失效。
 //
 // ## ③ 跳过一定要留痕（§2.6）
 // 被 suppress / 被配置关停 / 谓词不满足 / 渲染为空，四种情况都进 `skipped` 并带 reason。
@@ -24,11 +31,63 @@
 // 变体上。clone 复制定义与压制态、共享 provider 引用（provider 是无状态加载器）。
 //
 import type { PromptSegmentOverride } from '@velaros-ai/agent/protocol'
+import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { AgentChatRuntimeConfig } from '../agent/RuntimeConfiguration'
-/** Prompt 段稳定性：stable 适合缓存，dynamic 每轮可能变化。 */
+/** Prompt 段稳定性：stable 适合缓存，dynamic 每轮可能变化。由 tier 派生，不再由段自报。 */
 type PromptSegmentStability = 'stable' | 'dynamic'
+/**
+ * 行为知识三层。
+ *
+ * - `core`：Tier0，身份 / 安全 / 不可变纪律。进稳定前缀，逐字不变，极小。
+ * - `runtime`：Tier1，按会话状态装配的运行态指导（空间、执行模式、工具面、能力协议）。
+ * - `skill`：Tier2，工艺知识（怎么做好某类任务）。descriptor 常驻、选中才注入全文。
+ */
+type PromptSegmentTier = 'core' | 'runtime' | 'skill'
+
+/** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
+const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
+  core: 0,
+  runtime: 1,
+  skill: 2,
+}
+
+/** 稳定性由层派生：只有 Tier0 进稳定前缀。 */
+function resolvePromptSegmentStability(tier: PromptSegmentTier): PromptSegmentStability {
+  return tier === 'core' ? 'stable' : 'dynamic'
+}
+
+/**
+ * Tier0 不许带激活谓词——注册面机械拦截，不靠「用 createCorePromptSegment 构造」这条约定。
+ *
+ * `createCorePromptSegment` 不暴露 `when` 只是把这件事做成了**工厂的**不变量：注册面收的是
+ * 裸 `PromptSegmentDefinition`，`{ tier: 'core', when }` 在类型上完全可表达，任何绕过工厂的
+ * 注册（宿主自己拼一份、mod 投影、provider 动态生成）都能把一个逐轮开关的段塞进稳定前缀。
+ * 后果不是「多一段」而是**前缀缓存整体失效**——它后面的全部历史一起作废，且症状只表现为
+ * 「有时候贵」，几乎没人会往提示词分层上想（§② 的历史病灶就是这么来的）。
+ */
+function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefinition): void {
+  if (definition.tier === 'core' && definition.when) {
+    throw new AppError(
+      'VALIDATION',
+      `Tier0 段「${definition.id}」不许带激活谓词：core 段进稳定前缀且必须逐轮字节不变，按 facts 开关的内容请落 tier:'runtime'。`
+    )
+  }
+}
+/**
+ * 存量 `segmentOverrides` 的段 id 别名（旧 id → 现 id）。
+ *
+ * 段 id 是**持久化配置的主键**——用户关掉某段，磁盘上留下的就是这个字符串。所以改段 id 是
+ * 破坏性变更：失配不会报错，只会让那段悄悄回到开启状态，用户以为已经关掉的内容又出现在
+ * 提示词里，且没有任何线索指向「我改过 id」。改一次名就在这里补一行，别指望迁移脚本
+ * （overrides 落在宿主的系统配置里，包这边够不着）。
+ */
+const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {
+  // 2026-08-06 内部实现边界段升 Tier0（见 catalog.ts 的判决注释）。
+  'runtime.internal-implementation-boundary': 'core.internal-implementation-boundary',
+}
+
 /** protected 段属于上下文保护区，不允许被运行配置的 prompt 预算裁剪。 */
 type PromptSegmentRetention = 'normal' | 'protected'
 /** Prompt 段来源，用于调试面板解释每段从哪里来。 */
@@ -40,8 +99,6 @@ interface PromptBudgetOptions {
 }
 
 interface PromptRenderContext {
-  /** 可覆盖身份段。 */
-  identity?: string
   /** 聊天配置，主要读取用户追加 system prompt。 */
   chatConfig?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>
   /** 运行时事实，供 when/render 判断。 */
@@ -55,8 +112,8 @@ interface PromptSegmentDefinition {
   id: string
   /** 人类可读标签。 */
   label?: string
-  /** stable/dynamic 分组。 */
-  stability: PromptSegmentStability
+  /** 行为知识层；stable/dynamic 由它派生，段不得自报稳定性。 */
+  tier: PromptSegmentTier
   /** 段来源。 */
   source: PromptSegmentSource
   /** 排序优先级，越小越靠前。 */
@@ -81,6 +138,7 @@ interface PromptSegmentProvider {
 interface PromptContribution {
   id: string
   label?: string
+  tier: PromptSegmentTier
   stability: PromptSegmentStability
   source: PromptSegmentSource
   priority: number
@@ -129,8 +187,9 @@ class PromptRegistry {
     this.registerMany(definitions)
   }
 
-  /** 注册或覆盖单个 prompt 段。 */
+  /** 注册或覆盖单个 prompt 段（Tier0 带谓词即抛，见 {@link assertCorePromptSegmentHasNoPredicate}）。 */
   public register(definition: PromptSegmentDefinition): this {
+    assertCorePromptSegmentHasNoPredicate(definition)
     this.definitions.set(definition.id, definition)
     return this
   }
@@ -165,7 +224,14 @@ class PromptRegistry {
   public compose(context: PromptRenderContext = {}): PromptCompositionResult {
     const contributions: PromptContribution[] = []
     const skipped: PromptCompositionResult['skipped'] = []
-    const overrides = new Map((context.overrides ?? []).map((item) => [item.id, item]))
+    const overrides = new Map<string, PromptSegmentOverride>()
+    for (const item of context.overrides ?? []) {
+      const alias = PromptSegmentIdAliases[item.id]
+      // 两条并存只可能是跨版本升级的残留：现 id 的显式条目恒优先于旧 id 归一来的那条，
+      // 因此结果与 overrides 的数组顺序无关。
+      if (alias && overrides.has(alias)) continue
+      overrides.set(alias ?? item.id, item)
+    }
 
     for (const definition of this.sortedDefinitions(context)) {
       // suppressions 是运行时临时禁用，优先级高于配置覆盖。
@@ -202,7 +268,8 @@ class PromptRegistry {
       contributions.push({
         id: definition.id,
         label: definition.label,
-        stability: definition.stability,
+        tier: definition.tier,
+        stability: resolvePromptSegmentStability(definition.tier),
         source: definition.source,
         priority: definition.priority,
         retention: definition.retention ?? 'normal',
@@ -234,11 +301,17 @@ class PromptRegistry {
     const definitions = new Map(this.definitions)
     for (const provider of this.providers.values()) {
       for (const definition of provider.load(context)) {
+        // provider 是动态加载器，段在这里才第一次出现——`register` 的拦截够不着它，
+        // 合并点必须重跑同一条断言，否则 Tier0 无谓词只在静态注册面成立。
+        assertCorePromptSegmentHasNoPredicate(definition)
         definitions.set(definition.id, definition)
       }
     }
 
     return [...definitions.values()].sort((left, right) => {
+      // 层序先于 priority：Tier2 恒排在 Tier1 之后，装配顺序不依赖各段自己挑的 priority 数值。
+      const tierDelta = PromptSegmentTierRank[left.tier] - PromptSegmentTierRank[right.tier]
+      if (tierDelta !== 0) return tierDelta
       if (left.priority !== right.priority) return left.priority - right.priority
 
       // P7-2：段序即 prompt 字节序，禁 locale 相关比较。
@@ -254,7 +327,7 @@ class PromptRegistry {
     return {
       id: definition.id,
       label: definition.label,
-      stability: definition.stability,
+      stability: resolvePromptSegmentStability(definition.tier),
       source: definition.source,
       priority: definition.priority,
       reason,
@@ -262,7 +335,7 @@ class PromptRegistry {
   }
 }
 
-export { PromptRegistry }
+export { PromptRegistry, PromptSegmentTierRank, resolvePromptSegmentStability }
 export type {
   PromptBudgetOptions,
   PromptCompositionResult,
@@ -273,4 +346,5 @@ export type {
   PromptSegmentRetention,
   PromptSegmentSource,
   PromptSegmentStability,
+  PromptSegmentTier,
 }

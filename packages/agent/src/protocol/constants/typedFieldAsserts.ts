@@ -6,9 +6,6 @@ import type { RunProfileId, RunProfileSelectionId, ToolSurfaceProfileId } from '
 import type { ChatPromptFeatureId } from '../types/agent'
 import type { ReasoningLevel, ThinkingDepth } from '../types/team'
 
-/** 磁盘 session kind：前端只保留普通聊天会话。 */
-export type StoredChatSessionKind = 'chat'
-
 interface TypedEnumAsserts<T extends string> {
   values: readonly T[]
   is: (value: unknown) => value is T
@@ -66,12 +63,6 @@ function reasoningLevelToThinkingDepth(level?: LooseOptional<ReasoningLevel>): T
   }
 }
 
-const StoredChatSessionKindValues = ['chat'] as const satisfies readonly StoredChatSessionKind[]
-const storedChatSessionKindField = createTypedEnumAsserts(
-  StoredChatSessionKindValues,
-  'sessionKind'
-)
-
 const RunProfileIdValues = ['compact', 'balanced', 'expanded'] as const satisfies readonly RunProfileId[]
 const runProfileIdField = createTypedEnumAsserts(RunProfileIdValues, 'runProfile')
 
@@ -103,13 +94,6 @@ const {
   parseOptional: parseOptionalReasoningLevel,
   resolve: resolveReasoningLevel,
 } = reasoningLevelField
-
-const {
-  is: isStoredChatSessionKind,
-  assert: assertStoredChatSessionKind,
-  parseOptional: parseOptionalStoredChatSessionKind,
-  resolve: resolveStoredChatSessionKind,
-} = storedChatSessionKindField
 
 const {
   is: isRunProfileId,
@@ -157,20 +141,17 @@ export {
   assertReasoningLevel,
   assertRunProfileId,
   assertRunProfileSelectionId,
-  assertStoredChatSessionKind,
   assertThinkingDepth,
   assertToolSurfaceProfileId,
   createTypedEnumAsserts,
   isReasoningLevel,
   isRunProfileId,
   isRunProfileSelectionId,
-  isStoredChatSessionKind,
   isThinkingDepth,
   isToolSurfaceProfileId,
   parseOptionalReasoningLevel,
   parseOptionalRunProfileId,
   parseOptionalRunProfileSelectionId,
-  parseOptionalStoredChatSessionKind,
   parseOptionalThinkingDepth,
   parseOptionalToolSurfaceProfileId,
   reasoningLevelToThinkingDepth,
@@ -178,12 +159,10 @@ export {
   resolveReasoningLevel,
   resolveRunProfileId,
   resolveRunProfileSelectionId,
-  resolveStoredChatSessionKind,
   resolveThinkingDepth,
   resolveToolSurfaceProfileId,
   RunProfileIdValues,
   RunProfileSelectionIdValues,
-  StoredChatSessionKindValues,
   ThinkingDepthValues,
   ToolSurfaceProfileIdValues,
 }

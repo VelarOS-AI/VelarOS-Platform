@@ -8,7 +8,7 @@ import { dispatchAgentSchema } from './DispatchAgent'
 const dispatchAgent = defineVelaTool<DispatchAgentInput>({
   name: 'agent:dispatch',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   summary: '在当前执行作用域中派发独立 sub-agent。',
   suitable: [
     '仅复杂任务：并行探索多目录/方案，或单条子任务本身就需很多步。',
@@ -21,16 +21,13 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
     '不要用子 Agent 绕过宿主的能力、权限或作用域边界。',
   ],
   usage: [
+    'prompt 必须自洽：子 Agent 看不到你的会话历史，目标/已知事实/范围边界/成功标准/输出长度都要写进去。',
     '同一轮可多次调用 agent:dispatch 实现并行；系统会自动限制并发数。',
-    'subagent_type 必须来自运行时公开的 SubAgentTypeProvider；类型决定默认工具与只读策略。',
-    'mode=sync（默认）会阻塞到子 Agent 完成、直接把结果内联返回——主链路需要该结果才能继续时用它，不要再调 job:wait，也不要因为没立刻拿到就重派。',
-    'mode=async 后台 fire-and-forget，立即返回可等待 job；父 Agent 先继续非重叠工作，之后用 job:read_output/job:wait 主动收束。',
-    'thread_id 续跑已有 worker；interrupt 配合 thread_id 中断运行中 worker。',
+    'mode=sync（默认）阻塞到完成并内联返回结果——不要再调 job:wait，也不要因为没立刻拿到就重派；mode=async 立即返回可等待 job，之后用 job:read_output/job:wait 收束。',
+    'subagent_type 来自运行时公开的类型表；tool_scope 用 type_default、inherit 或 custom（custom 时填 tool_categories）。',
+    'thread_id 续跑已有 worker（追问、补做、纠偏都用它）；interrupt 配合 thread_id 中断运行中 worker。',
+    '请人复核时必给 readonly=true；需要机器可读结果时给 output_schema，结果落在 structured_output。',
     'agent_name 必须是英文代号名，不要带数字，例如 Atlas、Forge、Scout、Beacon。',
-    'tool_scope 可用 type_default、inherit 或 custom；custom 时填写 tool_categories。',
-    'effort 覆盖子 Agent 思考力度（fast/balanced/deep），省略即继承会话档；机械子任务压 fast 省钱提速，难题给 deep。',
-    'output_schema 让子 Agent 强制回结构化 JSON（校验不符自动重试），结果在 structured_output 字段——需要机器可读结果时用，免去再解析散文。',
-    'prompt 必须自洽：写清目标、已知事实、范围边界、成功标准和输出长度；不要把理解外包给子 Agent，主 Agent 负责综合与收口。description 用于 UI 展示。',
   ],
   examples: [
     // 同步只读探索（默认 mode:sync，返回后再继续）
@@ -50,30 +47,13 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       description: 'Add tests for utils',
       prompt: 'Write node:test unit tests for every exported function in src/util.js and run them.',
     },
-    // 强制只读子 Agent（禁止修改受保护资源）
-    {
-      agent_name: 'Reviewer',
-      subagent_type: 'explore',
-      tool_scope: 'type_default',
-      readonly: true,
-      description: 'Review recent changes',
-      prompt: 'Review the diff in src/ and list correctness risks; do not modify anything.',
-    },
-    // 续跑已有线程：传 thread_id
-    {
-      agent_name: 'Scout',
-      subagent_type: 'explore',
-      tool_scope: 'type_default',
-      thread_id: 'thr_abc123',
-      description: 'Continue scan',
-      prompt: 'Continue: now also check src/session and report token handling.',
-    },
   ],
   notes: [
     '子 Agent 在独立上下文中运行；回传为 summary 文本 + 结构化 `<subagent-result>` 块（含 thread_id、status、artifacts）。',
-    '跨作用域派发属于具体能力，由能力包注册专用工具并注入端口。',
     '失败或 wind_down 时同样返回结构化结果；主 Agent 可用 thread_id 续跑或自行接手。',
+    '跨作用域派发属于具体能力，由能力包注册专用工具并注入端口。',
   ],
+  usageSkillId: 'sub-agent-orchestration',
   schema: dispatchAgentSchema,
   permissions: [],
   isAvailable: (ctx) => !!ctx.dispatchSubAgent,
@@ -83,24 +63,29 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       throw new AppError('VALIDATION', '子 Agent 派发当前不可用。')
     }
 
+    // snake_case 的模型面参数只有这 7 个需要改名成宿主面 camelCase；其余同名字段整块 spread，
+    // 免得逐字段抄一遍（抄写既冗长又会在 schema 加字段时静默漏传）。
+    const {
+      agent_name: agentName,
+      subagent_type: subagentType,
+      tool_scope: toolScope,
+      tool_categories: toolCategories,
+      thread_id: threadId,
+      route_category: routeCategory,
+      output_schema: outputSchema,
+      ...sameNameFields
+    } = input
+
     return ctx.dispatchSubAgent({
-      agentName: input.agent_name,
-      subagentType: input.subagent_type,
-      toolScope: input.tool_scope,
-      toolCategories: input.tool_categories,
-      prompt: input.prompt,
-      description: input.description,
-      threadId: input.thread_id,
-      mode: input.mode,
-      // 方案模式下评审 Agent 只能读取和找问题，不能借子 Agent 绕过宿主的禁止实施边界。
-      readonly: ctx.proposalMode ? true : input.readonly,
-      model: input.model,
-      effort: input.effort,
-      routeCategory: input.route_category,
-      attachments: input.attachments,
-      interrupt: input.interrupt,
+      ...sameNameFields,
+      agentName,
+      subagentType,
+      toolScope,
+      toolCategories,
+      threadId,
+      routeCategory,
       // output_schema 存在时开放结构化输出契约（校验 + 修复闭环复用 Workflow 既有基建）。
-      structuredOutputContract: input.output_schema ? { schema: input.output_schema } : undefined,
+      structuredOutputContract: outputSchema ? { schema: outputSchema } : undefined,
     })
   },
 })

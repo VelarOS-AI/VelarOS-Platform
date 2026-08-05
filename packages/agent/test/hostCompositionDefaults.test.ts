@@ -71,7 +71,6 @@ describe('host-owned Agent identity', () => {
       requestableToolCapabilityCategories: [],
       canUpdatePlan: false,
       userRequestedPlan: false,
-      proposalMode: false,
       goalMode: false,
       selectedPromptFeatureLabels: [],
       enabledPromptFeatures: [],

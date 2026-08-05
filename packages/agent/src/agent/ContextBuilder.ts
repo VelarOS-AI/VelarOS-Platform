@@ -18,6 +18,7 @@ import { isEmpty } from '@velaros-ai/core'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
 import {
   createBuiltInPromptRegistry,
+  createIdentityPromptSegment,
   type PromptBudgetOptions,
   type PromptCompositionResult,
   type PromptContribution,
@@ -25,21 +26,13 @@ import {
   type PromptRenderContext,
   type PromptSegmentDefinition,
   type PromptSegmentProvider,
+  type PromptSegmentStability,
 } from '../prompts'
 
 import type { AgentChatRuntimeConfig } from './RuntimeConfiguration'
 
 /** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
 const ModTurnContextDefaultPriority = 9_000
-
-export interface ContextSegment {
-  /** 段名（用于 debug） */
-  name: string
-  /** stable: 很少变动，适合 prompt cache；dynamic: 每次可能不同 */
-  stability: 'stable' | 'dynamic'
-  /** 构建段内容 */
-  build: () => Nullable<string>
-}
 
 export interface BuiltContext {
   /** 组装好的完整 system prompt */
@@ -53,7 +46,7 @@ export interface BuiltContext {
   segments: Array<{
     id: string
     label?: string
-    stability: ContextSegment['stability']
+    stability: PromptSegmentStability
     source: string
     priority: number
     retention: 'normal' | 'protected'
@@ -62,7 +55,7 @@ export interface BuiltContext {
   skippedSegments: Array<{
     id: string
     label?: string
-    stability: ContextSegment['stability']
+    stability: PromptSegmentStability
     source: string
     priority: number
     reason: string
@@ -79,17 +72,6 @@ export interface BuiltContext {
 class ContextBuilderParts {
   public createDefaultRegistry(): PromptRegistry {
     return createBuiltInPromptRegistry()
-  }
-
-  public fromContextSegment(segment: ContextSegment): PromptSegmentDefinition {
-    return {
-      id: `inline.${segment.name}`,
-      label: segment.name,
-      stability: segment.stability,
-      source: 'inline',
-      priority: segment.stability === 'stable' ? 1_000 : 5_000,
-      render: () => segment.build(),
-    }
   }
 
   public buildPromptAppend(config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>): Nullable<string> {
@@ -258,10 +240,8 @@ function applyPromptBudget(args: {
  * stable 段放前面，dynamic 段放末尾，让 prompt cache 更容易命中稳定前缀。
  */
 class ContextBuilder {
-  /** prompt 段注册表，负责排序、过滤和 stable/dynamic 分组。 */
+  /** prompt 段注册表，负责排序、过滤和 tier 分组。 */
   private readonly registry: PromptRegistry
-  /** 可覆盖 identity 段，常用于 solo mode 或子 Agent。 */
-  private readonly identity?: string
   /**
    * 可选 mod 拦截 seam 派发器；注入时在段排序后、预算裁剪前派发一次
    * `turn-context:assemble`。追加段与内置段同样计入预算，不得绕过上下文治理。
@@ -271,18 +251,10 @@ class ContextBuilder {
 
   constructor(
     registry: PromptRegistry = contextBuilderHelper.createDefaultRegistry(),
-    identity?: string,
     seams: Nullable<AgentModSeamDispatcher> = null
   ) {
     this.registry = registry
-    this.identity = identity
     this.seams = seams
-  }
-
-  /** 注册自定义段（在 dynamic 段之后追加） */
-  public addSegment(segment: ContextSegment): this {
-    this.registry.register(contextBuilderHelper.fromContextSegment(segment))
-    return this
   }
 
   /** 注册结构化 prompt 段定义。 */
@@ -297,29 +269,20 @@ class ContextBuilder {
     return this
   }
 
-  /** 注入动态环境信息（每次调用前更新）。 */
-  public addDynamicSegment(name: string, content: string): this {
-    return this.addSegment({ name, stability: 'dynamic', build: () => content })
-  }
-
-  public withSegment(
-    name: string,
-    stability: ContextSegment['stability'],
-    content: string
-  ): ContextBuilder {
-    const clone = this.clone()
-    clone.addSegment({ name, stability, build: () => content })
-    return clone
-  }
-
-  /** 返回追加 dynamic 段后的 builder clone。 */
-  public withDynamicSegment(name: string, content: string): ContextBuilder {
-    return this.withSegment(name, 'dynamic', content)
-  }
-
-  /** 覆盖 identity 段（子 Agent 场景使用）。 */
+  /**
+   * 覆盖 identity 段（子 Agent 场景使用）。
+   *
+   * 身份是 builder 作用域的常量，所以做法是在克隆出的注册表里**重新注册 Tier0 身份段**，
+   * 而不是往渲染上下文里塞一个 `identity` 字段——后者等于给 Tier0 开一条"渲染期按上下文变文本"
+   * 的口子，稳定前缀的逐字不变就只剩约定、不再是结构。
+   *
+   * 顺带修：旧实现 `new ContextBuilder(registry.clone(), identity)` **把 seams 丢了**，
+   * 于是子 Agent 的 `turn-context:assemble` 接缝静默失效。
+   */
   public withIdentity(identity: string): ContextBuilder {
-    return new ContextBuilder(this.registry.clone(), identity)
+    const clone = this.clone()
+    clone.registry.register(createIdentityPromptSegment(identity))
+    return clone
   }
 
   /** 禁用某个 prompt segment，通常由系统配置的 segmentOverrides 驱动。 */
@@ -332,13 +295,12 @@ class ContextBuilder {
   /** 组装最终 system prompt，并返回段 trace，供调试面板展示。 */
   public build(
     config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>,
-    context: Omit<PromptRenderContext, 'chatConfig' | 'identity'> = {},
+    context: Omit<PromptRenderContext, 'chatConfig'> = {},
     options: { promptBudget?: LooseOptional<PromptBudgetOptions> } = {}
   ): BuiltContext {
     const composition = this.registry.compose({
       ...context,
       chatConfig: config,
-      identity: this.identity,
     })
     const dynamicParts = this.appendModTurnContext(composition)
     const budgeted = applyPromptBudget({
@@ -410,6 +372,7 @@ class ContextBuilder {
       extras.push({
         id: item.id,
         label: item.label,
+        tier: 'runtime',
         stability: 'dynamic',
         source: 'mod',
         priority: item.priority ?? ModTurnContextDefaultPriority,
@@ -426,7 +389,7 @@ class ContextBuilder {
 
   /** 克隆 registry，保证链式构建不会修改原始 builder。 */
   private clone(): ContextBuilder {
-    return new ContextBuilder(this.registry.clone(), this.identity, this.seams)
+    return new ContextBuilder(this.registry.clone(), this.seams)
   }
 }
 

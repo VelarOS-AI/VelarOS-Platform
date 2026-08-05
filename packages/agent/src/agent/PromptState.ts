@@ -8,6 +8,7 @@ import type {
   AgentSurfaceId,
   CapabilityScopeId,
   ChatPromptFeatureId,
+  ExecutionModeId,
   ExecutionTaskPlanStep,
   ExecutionTaskPlanStepStatus,
   RunProfileId,
@@ -21,12 +22,18 @@ import type {
 } from '@velaros-ai/agent/protocol'
 import { isRunProfileId } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityPromptSegments,
 } from '../capabilities'
-import { isExecutionModeSelected } from '../execution-modes'
+import {
+  isExecutionModeActive,
+  resolveExecutionModes,
+  stripExecutionModePromptFeatures,
+} from '../execution-modes'
 import {
   createRuntimePromptSegments,
   type RuntimePromptSnapshot,
@@ -79,6 +86,8 @@ interface BuildRuntimePromptStateArgs {
   messages: ModelMessage[]
   selectedPromptFeatures?: ChatPromptFeatureId[]
   preparedToolCategories?: PromptStatePreparedToolCategories
+  /** 执行模式轴；缺席时由旧形态（selectedPromptFeatures 里的模式 id / goalMode）折算。 */
+  executionModes?: readonly ExecutionModeId[]
   goalMode?: boolean
   thinkingDepth?: LooseOptional<ThinkingDepth>
   runProfile?: LooseOptional<RunProfileId>
@@ -113,6 +122,7 @@ function readPromptMessageText(message: ModelMessage): string {
     .map((part) => {
       if (isString(part)) return part
       if (!isObject(part)) return ''
+      // @arch-guard:suspend code-style/prefer-is-plain-object-over-guarded-record-cast 理由：part 是 ai-SDK 的判别联合，isPlainObject 会把它收窄到不含 text 的成员，`type === 'text'` 直接被判成无重叠；断言是这条守卫唯一能读到字段的写法。
       const record = part as Record<string, unknown>
       return record.type === 'text' && isString(record.text) ? record.text : ''
     })
@@ -152,15 +162,24 @@ class PromptStateBuilder {
     messages,
     selectedPromptFeatures,
     preparedToolCategories,
+    executionModes,
     goalMode,
     thinkingDepth,
     runProfile,
     contextPhase = 'operational',
   }: BuildRuntimePromptStateArgs): Promise<RuntimeStateContextResult> {
     const promptFeatures = this.promptFeaturePolicy.normalize(selectedPromptFeatures ?? [])
-    const enabledPromptFeatures = [
+    const requestedFeatures = [
       ...new Set([...promptFeatures, ...toolContext.codingSession.getEnabledPromptFeatures()]),
     ]
+    // 拆轴：模式先从两种形态折出来，能力轴随即剥掉模式 id——否则「本轮已选能力：计划模式」
+    // 这类文案会把一个执行姿态展示成插件能力，feature→工具分类映射也会多算一次。
+    const activeExecutionModes = resolveExecutionModes({
+      executionModes,
+      promptFeatures: requestedFeatures,
+      goalMode,
+    })
+    const enabledPromptFeatures = stripExecutionModePromptFeatures(requestedFeatures)
     const selectedPromptFeatureSet = new Set(enabledPromptFeatures)
     const toolCategoryOverviews = this.resolveToolCategoryOverviews(
       toolContext,
@@ -176,7 +195,6 @@ class PromptStateBuilder {
       toolContext.execution.getCurrentPlan()
     )
     const currentExecutionAdvice = toNullable(toolContext.execution.getCurrentExecutionAdvice())
-    const proposalMode = isExecutionModeSelected('proposal', enabledPromptFeatures)
     const runtimeSnapshot: RuntimePromptSnapshot = {
       locale: toolContext.locale,
       roleId: roleResolution.id,
@@ -198,9 +216,8 @@ class PromptStateBuilder {
         enabledToolNames
       ),
       canUpdatePlan: enabledToolNames.has('plan:update'),
-      userRequestedPlan: isExecutionModeSelected('plan', enabledPromptFeatures),
-      proposalMode,
-      goalMode: isTrue(goalMode),
+      userRequestedPlan: isExecutionModeActive('plan', activeExecutionModes),
+      goalMode: isExecutionModeActive('goal', activeExecutionModes),
       selectedPromptFeatureLabels: enabledPromptFeatures.map((feature) =>
         this.promptFeaturePolicy.getLabel(feature)
       ),
@@ -232,6 +249,11 @@ class PromptStateBuilder {
           messages,
           workflowType: roleResolution.workflowType,
         }),
+        // 2026-08-06 补接：`runtime.visual-widget-tools` / `runtime.visual-rendering-routing`
+        // 两段的谓词读这个 fact，而全树**从来没有生产者**——两段自诞生起就没进过任何一次提示词，
+        // Widget 能力开着也拿不到用法指引（工具描述里那句「先读 skill:widget-visual-output」
+        // 只在工具已经换入之后才看得到）。与 html-artifact 对称：能力开启即注入协议段。
+        shouldInjectVisualWidgetPrompt: selectedPromptFeatureSet.has('widget'),
         allowSubAgentDispatch: isTrue(toolContext.canDispatchSubAgents),
         hasExecutionPlan: !!executionPlanPreview,
       },
@@ -246,7 +268,14 @@ class PromptStateBuilder {
   private safeListCustomSubAgents(): RuntimePromptSnapshot['customSubAgents'] {
     try {
       return this.listCustomSubAgents()
-    } catch {
+    } catch (error) {
+      // 自定义子 Agent 清单只是提示词里的一段目录：列不出来时降级成空列表继续构建提示词，
+      // 但不能静默——宿主 provider 抛错时这是唯一的线索。
+      logRuntime
+        .tag('PromptState')
+        .warn('custom sub-agent listing failed, prompt falls back to an empty catalog', {
+          error: AppError.getMessage(error),
+        })
       return []
     }
   }

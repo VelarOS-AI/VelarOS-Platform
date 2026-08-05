@@ -70,7 +70,7 @@ export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Obj
   {
     name: ToolCatalogDiscoveryToolName,
     description: '重新读取当前 VelarOS 工具目录及其目录版本。',
-    category: 'general',
+    category: 'agent-control',
     readOnly: true,
     inputSchema: {
       type: 'object',
@@ -81,7 +81,7 @@ export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Obj
   {
     name: ToolSchemaDiscoveryToolName,
     description: '按工具名读取当前版本的真实参数结构；调用不熟悉的工具前先使用它。',
-    category: 'general',
+    category: 'agent-control',
     readOnly: true,
     inputSchema: {
       type: 'object',

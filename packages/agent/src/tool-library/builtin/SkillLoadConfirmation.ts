@@ -57,6 +57,12 @@ async function confirmAutoLoadedSkillPages(
       {
         approvalRisk: 'low',
         riskScope: `skill-load:${skillId}`,
+        detail: {
+          kind: 'skill-load',
+          skillId,
+          label: skill.descriptor.label,
+          description: skill.descriptor.description,
+        },
       }
     )
     if (!decision.approved) denied.add(id)

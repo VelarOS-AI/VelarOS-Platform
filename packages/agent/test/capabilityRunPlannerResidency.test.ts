@@ -86,11 +86,13 @@ void describe('capability scope residency', () => {
     expect(result.droppedToolNames).toContain('browser:act')
   })
 
-  void test('pages in a requested category and honors explicitly configured tools', () => {
+  void test('paging in a category admits it without making every tool resident', () => {
+    // 类别换入 = 准入。宿主声明了 residency 时，整类别换入只留声明常驻的那些，
+    // 其余仍是 loadable，等模型按名 tooling:replace——否则一次类别授权就把整族灌进每轮 schema。
     const categoryResult = plan({ budgetOverrideToolCategoryIds: [BrowserCategory] })
-    expect(categoryResult.residentToolNames).toHaveLength(3)
-    expect(categoryResult.residentToolNames).toEqual(
-      expect.arrayContaining(['tooling:map', 'browser:act', 'browser:get_page_state'])
+    expect(categoryResult.residentToolNames).toEqual(['tooling:map'])
+    expect(categoryResult.droppedToolNames).toEqual(
+      expect.arrayContaining(['browser:act', 'browser:get_page_state'])
     )
     expect(plan({ configuredTools: ['browser:act'] }).residentToolNames).toEqual([
       'tooling:map',

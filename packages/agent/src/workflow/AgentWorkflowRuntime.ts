@@ -18,11 +18,28 @@
 //
 // ## 三条预算与两种终止
 // `maxAgents`（整次上限）在 `dispatch` 处逐次扣减并抛 `WorkflowBudgetExhaustedError`；
-// `maxConcurrency` 由 `mapWithConcurrency` 的固定 runner 数实现；`maxRounds` 限 repeat 轮次。
-// 三者都先与模块常量取 `min` 再用——**声明值只能调小不能调大**，模型写 `max_agents: 999` 会被
-// 钳到 8 并在结果的 `effective_limits` 里如实回报（静默钳制会让模型以为自己拿到了 999）。
+// `maxConcurrency` 是 `mapWithConcurrency` 的 runner 数；`maxRounds` 限 repeat 轮次。
+// 三者都先取 `min` 再用——**声明值只能调小不能调大**，模型写 `max_agents: 999` 会被钳到实际
+// 可用额度并在结果的 `effective_limits` 里如实回报（静默钳制会让模型以为自己拿到了 999）。
 // 中断（`WorkflowAbortedError`）与预算耗尽是两种不同终止：前者是外部信号，后者是自限，
 // 二者都在 `run` 的 catch 里落成该步骤的终态并**停止后续步骤**，不重试。
+//
+// ## 并发/总量的权威在派发器，不在本文件（2026-08-06 P3 判决）
+// 本解释器**没有自己的并发实现**。`maxConcurrency` 与 `maxAgents` 的上界由注入的
+// `AgentWorkflowDispatchPort.limits` 给出，也就是 `SubAgentDispatcher` 的信号量上限与该执行
+// 剩余的派发总量帽——同一把闸，同一本账。
+//
+// 曾经这里有第二本账：`MaxWorkflowConcurrency = 4` 的固定 runner 数与信号量互不知情，而
+// `effective_limits.max_concurrency` 把这个声明值当"真实上限"回显给模型。父 Agent 先
+// `agent:dispatch` 起 3 个后台子 Agent 再 `run_workflow(max_concurrency: 4)`，结果里白纸黑字
+// 写着 4、实际每次只有 1 个 runner 能拿到槽位，模型据此估算耗时全错且无从发现自己被卡住。
+//
+// **为什么不干脆"无限 runner，全靠信号量排队"**（那是考古给的另一个选项）：会当场破掉下面
+// 那条 skipped 占位约定。一次性把所有 lane 都投出去，就不存在"未启动"的条目，`fail_fast`
+// 什么也停不住、占位分支变成死代码；而且派发器的总量帽 `dispatchCountByExecution` 是在
+// `acquire()` **之前**扣的，等于把用户想放弃的那些 call 的配额也一起烧掉。
+// 因此保留 runner 调度器，只是把 runner 数从"自带常量"改成"读派发器真值"——单源与
+// fail_fast 语义两者都要。
 //
 // ## 一条必须成对维护的约定
 // `parallel` 与 `pipeline` 在 fail_fast 或中断时，都为**未启动**的条目补一条 `status:'skipped'`
@@ -47,22 +64,25 @@ import type {
 } from '@velaros-ai/agent/protocol'
 import {
   isArray,
+  isEmpty,
   isFalse,
   isNotUndefined,
   isNumber,
   isPresent,
   isRecord,
   isUndefined,
+  Log,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
+import type { SubAgentDispatchLimitsSnapshot } from '../kernel/dispatch/concurrency'
 
 const MaxWorkflowAgents = 8
-const MaxWorkflowConcurrency = 4
 const MaxWorkflowRounds = 6
 const MaxWorkflowValueBytes = 32 * 1024
 const Utf8ByteCounter = new TextEncoder()
+const log = Log.tag('AgentWorkflowRuntime')
 
 interface AgentWorkflowDispatchContext {
   stepId: string
@@ -74,6 +94,13 @@ interface AgentWorkflowDispatchContext {
 
 interface AgentWorkflowDispatchPort {
   dispatch: (context: AgentWorkflowDispatchContext) => Promise<AgentWorkflowAgentResult>
+  /**
+   * 本次 run 的真实派发配额（派发器信号量上限 + 该执行剩余的总量帽）。
+   *
+   * 在 `run` 开始时取一次快照即可：并发上限是那把闸的属性、总量帽剩余只会因本 workflow 自己
+   * 的派发而减少，而那部分由 `maxAgents` 同步扣减。**本文件不自己发明这两个数。**
+   */
+  limits: SubAgentDispatchLimitsSnapshot
 }
 
 interface AgentWorkflowRunOptions {
@@ -138,7 +165,7 @@ function comparePredicate(item: unknown, predicate: AgentWorkflowPredicate): boo
     case 'neq':
       return stableJson(actual) !== stableJson(predicate.value)
     case 'in':
-      return Array.isArray(predicate.value) && predicate.value.some(
+      return isArray(predicate.value) && predicate.value.some(
         (candidate) => stableJson(candidate) === stableJson(actual)
       )
     case 'exists':
@@ -182,10 +209,31 @@ async function mapWithConcurrency<T>(
   return results
 }
 
+/**
+ * 声明值 → 生效值的钳制：`min(运行时可用额度, 声明值)`，下界由 `floor` 给。
+ *
+ * 缺省（模型没写）时取"运行时可用额度"而不是某个硬常量——不写等于"给我你能给的"，
+ * 而能给多少由派发器说了算。
+ *
+ * `floor` 两种取法：并发数取 1（0 个 runner 等于什么都不跑，是死锁不是限流）；
+ * agent 总量取 0（**总量帽真的可能已经用光**，此时正确行为是第一次 dispatch 就抛
+ * `WorkflowBudgetExhaustedError`，让 run 状态落成 `budget_exhausted`，而不是硬塞一个名额
+ * 进去、再由派发器回一段"节点失败"的文本把预算耗尽伪装成执行失败）。
+ */
+function clampDeclaredLimit(
+  declared: LooseOptional<number>,
+  runtimeCeiling: number,
+  floor: 0 | 1
+): number {
+  const ceiling = Math.max(floor, Math.floor(runtimeCeiling))
+  if (isUndefined(declared) || !isNumber(declared)) return ceiling
+  return Math.min(ceiling, Math.max(floor, Math.floor(declared)))
+}
+
 class AgentWorkflowRuntime {
   private agentCount = 0
   private maxAgents = MaxWorkflowAgents
-  private maxConcurrency = MaxWorkflowConcurrency
+  private maxConcurrency = 1
   private abortSignal?: AbortSignal
 
   constructor(private readonly port: AgentWorkflowDispatchPort) {}
@@ -195,10 +243,18 @@ class AgentWorkflowRuntime {
     options: AgentWorkflowRunOptions
   ): Promise<AgentWorkflowRunResult> {
     this.agentCount = 0
-    this.maxAgents = Math.min(MaxWorkflowAgents, Math.max(1, definition.max_agents ?? MaxWorkflowAgents))
-    this.maxConcurrency = Math.min(
-      MaxWorkflowConcurrency,
-      Math.max(1, definition.max_concurrency ?? MaxWorkflowConcurrency)
+    // 两条上限都以派发器的运行时真值封顶：`maxAgents` 不许超过该执行剩余的派发总量帽
+    // （超了只会在派发器那边变成一串 `status:'failed'` 的文本，而 workflow 的预算还剩一大截，
+    // 模型看到的是"节点失败"而不是"预算到顶"）；`maxConcurrency` 不许超过信号量上限。
+    this.maxAgents = clampDeclaredLimit(
+      definition.max_agents,
+      Math.min(MaxWorkflowAgents, this.port.limits.remainingDispatchBudget),
+      0
+    )
+    this.maxConcurrency = clampDeclaredLimit(
+      definition.max_concurrency,
+      this.port.limits.maxConcurrentSubAgents,
+      1
     )
     this.abortSignal = options.abortSignal
     this.validateDefinition(definition)
@@ -226,6 +282,7 @@ class AgentWorkflowRuntime {
           agent_count: this.agentCount,
           error: error instanceof Error ? error.message : String(error),
         }
+        log.caught(`workflow step「${step.id}」执行失败（status: ${status}）`, error)
         stepResults.push(result)
         break
       }
@@ -237,6 +294,8 @@ class AgentWorkflowRuntime {
       workflow_run_id: options.runId,
       name: definition.name,
       status,
+      // 回显的是**运行时真值**：`max_concurrency` 就是派发器信号量的上限（钳制后），
+      // `max_agents` 已经把该执行剩余的派发总量帽算进去了。模型据此估算耗时才不会全错。
       effective_limits: {
         max_concurrency: this.maxConcurrency,
         max_agents: this.maxAgents,
@@ -248,7 +307,7 @@ class AgentWorkflowRuntime {
   }
 
   private validateDefinition(definition: AgentWorkflowDefinition): void {
-    if (definition.steps.length === 0) throw new AppError('VALIDATION', 'Workflow 至少需要一个 step。')
+    if (isEmpty(definition.steps)) throw new AppError('VALIDATION', 'Workflow 至少需要一个 step。')
     const ids = new Set<string>()
     for (const step of definition.steps) {
       if (ids.has(step.id)) throw new AppError('VALIDATION', `Workflow step id 重复：${step.id}。`)
@@ -430,6 +489,7 @@ class AgentWorkflowRuntime {
       throw new AppError('VALIDATION', `step "${stepId}" 找不到 source "${source.step_id}"。`)
     }
     const value = valueAtPath(outputs.get(source.step_id), source.path)
+    // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
     if (value === undefined) {
       throw new AppError('VALIDATION', `step "${stepId}" 的 source path 不存在：${source.path?.join('.') || '（根）'}。`)
     }
@@ -462,7 +522,7 @@ class AgentWorkflowRuntime {
     for (const item of items) {
       const vote = valueAtPath(item, step.vote_path)
       if (!isPresent(vote)) continue
-      const groupValue = step.group_path && step.group_path.length > 0
+      const groupValue = !isEmpty(step.group_path ?? [])
         ? valueAtPath(item, step.group_path)
         : '__all__'
       const groupKey = stableJson(groupValue)
@@ -490,7 +550,7 @@ class AgentWorkflowRuntime {
         winner: decided ? top.value : undefined,
       }
     })
-    const decided = decisions.length > 0 && decisions.every((decision) => decision.status === 'decided')
+    const decided = !isEmpty(decisions) && decisions.every((decision) => decision.status === 'decided')
     return { status: decided ? 'decided' : 'inconclusive', groups: decisions }
   }
 
@@ -538,7 +598,6 @@ class AgentWorkflowRuntime {
 export {
   AgentWorkflowRuntime,
   MaxWorkflowAgents,
-  MaxWorkflowConcurrency,
   MaxWorkflowRounds,
   MaxWorkflowValueBytes,
 }

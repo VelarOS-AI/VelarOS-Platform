@@ -83,10 +83,20 @@ class CapabilityRunPlanner {
       enabledToolCategoryIds: nextEnabledCategoryIds,
       budgetOverrideToolCategoryIds: nextBudgetOverrideCategoryIds,
     })
+    const residency = resolveCapabilityScopeResidency(input.capabilityPorts, {
+      scopeId: input.capabilityScopeId,
+    })
+    // 类别换入 = 准入，不是驻留。宿主声明了 residency 时，被换入的类别只把它**声明常驻**的
+    // 那几个工具钉进每轮请求，其余留在 loadable，由模型按名换入。否则一次类别授权就把整个
+    // 类别的工具灌进每轮 schema——类别越大越离谱，按名换入那条通路也就形同虚设。
+    const declaredResidentToolNameSet = residency.residentToolNames
+      ? new Set(residency.residentToolNames)
+      : null
     const toolArtifacts = this.collectCapabilityToolArtifacts({
       enabledToolCategories,
       budgetOverrideToolCategoryIds: nextBudgetOverrideCategoryIds,
       budgetOverrideToolNames: input.budgetOverrideToolNames,
+      categoryResidentToolNames: declaredResidentToolNameSet,
     })
     const protectedToolNames = toolArtifacts.protectedToolNames
     const enabledToolDescriptors = toolArtifacts.enabledToolDescriptors
@@ -94,9 +104,6 @@ class CapabilityRunPlanner {
       configuredTools: input.configuredTools,
       roleAllowedTools: input.roleAllowedTools,
       enabledToolNames: toolArtifacts.enabledToolNames,
-    })
-    const residency = resolveCapabilityScopeResidency(input.capabilityPorts, {
-      scopeId: input.capabilityScopeId,
     })
     const enabledToolNameSet = new Set(toolArtifacts.enabledToolNames)
     const residentToolNames = (residency.residentToolNames ?? []).filter((toolName) =>
@@ -217,6 +224,11 @@ class CapabilityRunPlanner {
     enabledToolCategories: Array<ToolCategory<TTool>>
     budgetOverrideToolCategoryIds: readonly ToolCategoryId[]
     budgetOverrideToolNames: readonly string[]
+    /**
+     * 宿主声明的常驻工具名；给出时，类别换入只保护其中的工具，其余留给按名换入。
+     * 为 null 表示宿主没有 residency 面（无空间概念的宿主），沿用「整类别保护」。
+     */
+    categoryResidentToolNames?: LooseOptional<ReadonlySet<string>>
   }): {
     enabledToolDescriptors: TTool[]
     enabledToolNames: string[]
@@ -232,7 +244,10 @@ class CapabilityRunPlanner {
         enabledToolDescriptors.push(tool)
         enabledToolNames.push(tool.name)
         enabledToolNameSet.add(tool.name)
-        if (budgetOverrideCategorySet.has(entry.category.id)) {
+        if (
+          budgetOverrideCategorySet.has(entry.category.id) &&
+          (input.categoryResidentToolNames?.has(tool.name) ?? true)
+        ) {
           protectedTools.add(tool.name)
         }
       }

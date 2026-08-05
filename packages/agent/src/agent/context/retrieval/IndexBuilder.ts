@@ -1,6 +1,3 @@
-import type { ChatContextEvidenceRecord } from '@velaros-ai/agent/protocol'
-import { isArray,isFunction } from '@velaros-ai/core'
-
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'
 import {
@@ -8,18 +5,14 @@ import {
   ChatContextRetrievalIndexVersion,
 } from './IndexSnapshot'
 import { contextRetrievalReferences } from './References'
-import type {
-  RetrievalPayloadStorePort,
-  RetrievalSessionContextSnapshot,
-  RetrievalStateStorePort,
-} from './sessionStorePorts'
+import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from './sessionStorePorts'
 
 /**
  * 构建单会话**检索索引快照** {@link ChatContextRetrievalIndexSnapshot}。
  *
  * ## 为何需要索引
  * `history` / `terminal` 搜索若每次全量读 `messages` + `payloads` + 扫 `JSON`，延迟高。
- * 索引预计算 `searchableText`、`log`/`artifactReferences`、`evidence` 列表，落盘后可 `loadFresh`。
+ * 索引预计算 `searchableText` 与 `log`/`artifactReferences` 列表，落盘后可 `loadFresh`。
  *
  * ## `Handle` 约定（与 `PayloadReader` 一致）
  * | 类型 | `handleId` 格式 | 解析方式 |
@@ -47,19 +40,17 @@ class ContextRetrievalIndexBuilder {
    * 并行加载：
    * - stateStore.loadSessionMessages
    * - payloadStore.loadSessionPayloads
-   * - loadSessionContextSnapshotForIndex（可选 API）
    *
-   * evidence = contextView.evidenceLedger ∪ runtime evidenceLedger，按 id 去重。
+   * `evidence` 恒为空数组：喂它的那条 `sessionContextSnapshot.evidenceLedger` 端口已随
+   * evidence 流协议链（2026-08-06）整体下线——从采集面到 renderer 账本全程零生产者，
+   * 索引里那份列表在实现史上从未非空过。快照字段本身保留（`context:recall`
+   * `refKind: 'evidence'` 仍读它，行为与下线前逐字相同：恒 `found: false`），
+   * 该 refKind 的去留是独立的模型面裁决，不由本次下线顺手决定。
    */
   public async build(sessionId: string): Promise<ChatContextRetrievalIndexSnapshot> {
-    const [messages, payloads, contextSnapshot] = await Promise.all([
+    const [messages, payloads] = await Promise.all([
       this.stateStore.loadSessionMessages(sessionId),
       this.payloadStore.loadSessionPayloads(sessionId),
-      this.loadSessionContextSnapshotForIndex(sessionId),
-    ])
-    const evidence = this.dedupeEvidence([
-      ...(contextSnapshot.contextView?.evidenceLedger ?? []),
-      ...contextSnapshot.evidenceLedger,
     ])
 
     return {
@@ -119,46 +110,8 @@ class ContextRetrievalIndexBuilder {
             ),
           }
         }),
-      evidence,
+      evidence: [],
     }
-  }
-
-  /**
-   * 加载 Context OS snapshot；StateStore 未实现 loadSessionContextSnapshot 时返回空 ledger。
-   * 使用 duck typing，避免强依赖具体 Store 实现。
-   */
-  private async loadSessionContextSnapshotForIndex(
-    sessionId: string
-  ): Promise<RetrievalSessionContextSnapshot> {
-    const loadSessionContextSnapshot = this.stateStore.loadSessionContextSnapshot
-    if (!isFunction(loadSessionContextSnapshot)) return {
-        contextView: null,
-        evidenceLedger: [],
-      }
-
-    const snapshot = await loadSessionContextSnapshot.call(this.stateStore, sessionId)
-    return {
-      contextView: snapshot.contextView,
-      evidenceLedger: isArray(snapshot.evidenceLedger) ? snapshot.evidenceLedger : [],
-    }
-  }
-
-  /**
-   * 按 evidence.id 去重，保留首次出现顺序，但内容以后出现的记录为准。
-   * contextView 里的 compacted evidence 可能早于 runtime ledger，后者代表更新鲜的运行时事实。
-   */
-  private dedupeEvidence(
-    records: ChatContextEvidenceRecord[]
-  ): ChatContextEvidenceRecord[] {
-    const deduped = new Map<string, ChatContextEvidenceRecord>()
-
-    for (const record of records) {
-      if (!record.id) continue
-
-      deduped.set(record.id, record)
-    }
-
-    return [...deduped.values()]
   }
 }
 

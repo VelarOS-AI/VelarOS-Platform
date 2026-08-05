@@ -3,6 +3,7 @@ import { isEmpty } from "@velaros-ai/core";
 import type { PromptSegmentDefinition } from "../registry";
 
 import {
+  createCorePromptSegment,
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
   createTextPromptSegment,
@@ -66,7 +67,6 @@ function createRuntimePromptSegments(
     createTextPromptSegment({
       id: "runtime.session",
       label: "Session Runtime",
-      stability: "dynamic",
       source: "runtime",
       priority: PromptSegmentPriority.runtime,
       text: `回复跟随用户当前使用的语言；无法判断时使用${fallbackLanguage}。代码、命令、路径和专有名词保留必要原文。`,
@@ -80,7 +80,6 @@ function createRuntimePromptSegments(
       createTextPromptSegment({
         id: "runtime.bootstrap-context",
         label: "Fast Start Context",
-        stability: "dynamic",
         source: "runtime",
         priority: PromptSegmentPriority.runtimeAdvice - 30,
         text: [
@@ -95,7 +94,6 @@ function createRuntimePromptSegments(
     createTextPromptSegment({
       id: "runtime.tool-capability-map",
       label: "Agent Tool Execution Chain",
-      stability: "dynamic",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 31,
       when: () => hasAnyRuntimeToolAvailable(snapshot),
@@ -104,7 +102,6 @@ function createRuntimePromptSegments(
     createTextPromptSegment({
       id: "runtime.sub-agent-dispatch",
       label: "Sub-Agent Dispatch",
-      stability: "dynamic",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 31.5,
       when: () => hasRuntimeTool(snapshot, "agent:dispatch"),
@@ -117,7 +114,6 @@ function createRuntimePromptSegments(
     createTextPromptSegment({
       id: "runtime.selected-capability-hints",
       label: "Selected Capabilities",
-      stability: "dynamic",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 33,
       when: () => !isEmpty(snapshot.selectedPromptFeatureLabels),
@@ -128,6 +124,7 @@ function createRuntimePromptSegments(
 }
 
 export {
+  createCorePromptSegment,
   createRuntimePromptSegments,
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,

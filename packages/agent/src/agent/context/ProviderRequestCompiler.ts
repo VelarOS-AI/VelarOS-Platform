@@ -22,6 +22,13 @@
  * ## 活动尾（P7-1 的落点）
  * `tailBlocks` 是易变内容的唯一合法位置：系统提示词的 dynamic 层、context-dashboard、
  * retained-context 一律排在历史之后。它们放前缀里就是每请求一次全历史缓存失效。
+ *
+ * ## 传输装饰在投影之后（摄入面 ≠ 发送面）
+ * prompt-cache 断点是**回合本地**的改写：每轮挪到最新那条 user 消息上、并从上一条剥掉。
+ * 它若贴在摄入之前，同一条 user 消息"本轮带、下轮不带"，逐条内容指纹的前缀比对就会在每个新
+ * 用户回合分叉 → 整本账本重建（驻留态清零、在飞蒸馏作废、前缀从墓碑形态弹回全文，正是本设计
+ * 要消灭的那件事）。所以账本摄入未装饰的历史，装饰统一贴在投影之后、活动尾之前——provider
+ * 收到的字节与装饰在上游时逐字相同。
  */
 import type { ModelMessage } from 'ai'
 
@@ -30,13 +37,14 @@ import {
   estimateContextUsage,
   type EstimateContextUsageOptions,
 } from '@velaros-ai/agent'
-import { isArray, isEmpty, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProviderRequestFingerprint } from '../../kernel/provider-events'
 import { rewriteCanonicalToolReferences } from '../../tools/ToolIdentity'
 import { assertValidModelHistory } from '../history/validate'
+import { markLatestUserMessagePromptCacheBreakpoint } from '../model'
 
 import {
   assertProviderRequestInvariants,
@@ -47,7 +55,7 @@ import {
   createProviderRequestScratch,
   resolveSharedToolReferenceScan,
 } from './providerRequest/pipeline'
-import { runBudgetStage } from './providerRequest/stages/budgetStage'
+import { resolveToolSchemaReserve, runBudgetStage } from './providerRequest/stages/budgetStage'
 import { applyHistoryStructureRepair } from './providerRequest/stages/historySanitizeStage'
 import {
   buildRetainedContextRewriteSignals,
@@ -71,8 +79,12 @@ import {
   type ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
   type ContextHandoffSignal,
+  type ContextProjectionStats,
+  DefaultResidencyCharsPerToken,
   type GovernanceEpochReport,
+  type GovernanceWindowDerivation,
   projectContextLedger,
+  resolveProjectionBudget,
 } from './residency'
 
 export {
@@ -91,6 +103,21 @@ export interface CompileProviderRequestInput {
   messages: ModelMessage[]
   /** 会话标识；提供后治理账本跨回合存活（缺省则本轮一次性账本，治理退化为纯准入）。 */
   sessionId?: string
+  /**
+   * 治理账本键（缺省 = `sessionId`）。
+   *
+   * 只有一种情况要与 `sessionId` 分开：子 agent 与父会话共用 sessionId（`sessionId` 还要给
+   * PayloadStore 当分区，改不得），但它们是两条完全不同的消息序列，共用一本账本会让父子交替编译
+   * 每次都在第 0 条指纹分叉 → 整本重建（审计 U12）。
+   */
+  governanceSessionId?: LooseOptional<string>
+  /**
+   * 是否贴发送面传输装饰（prompt-cache 断点）。
+   *
+   * 只有**真的要发出去**的编译才开。默认关：`compile()` 因此保持"账本进、投影出"的纯粹形态，
+   * 治理未触发时出口与摄入逐字等价这条断言锁不受装饰干扰。
+   */
+  applySendTransportDecorations?: LooseOptional<boolean>
   availableToolNames?: readonly string[]
   toolChoiceName?: LooseOptional<string>
   toolSchemaChars?: Record<string, number>
@@ -202,22 +229,24 @@ export class ProviderRequestCompiler {
     // 当普通记录摄入，前缀比对每次都会在第 0 条分叉 → 整本账本重建 → 驻留态、faultCount、epoch
     // 号全部清零。它本来就该走投影的 `stablePrefix` 通道（设计 §3 的三段布局）。
     const { stablePrefix, body } = partitionStablePrefix(sanitizedMessages)
-    const governance = this.runGovernance(input, body, at)
+    const governance = this.runGovernance(input, body, stablePrefix, at)
     const projection = projectContextLedger({
       records: governance.session.ledger.list(),
       residency: governance.session.ledger.residencyVector(),
-      budget: {
-        tailProtectTurns: governance.session.config.tailProtectTurns,
-        budgetTokens: governance.budgetTokens,
-        charsPerToken: governance.charsPerToken,
-      },
+      budget: resolveProjectionBudget(
+        governance.session.config,
+        governance.window.windowTokens,
+        governance.ruler.charsPerToken
+      ),
       stablePrefix,
     })
+    // 传输装饰贴在投影**之后**（见文件头）：账本摄入的是未装饰历史，装饰只作用于发出去的这一份。
+    const projectedMessages = applySendTransportDecorations(projection.messages, input)
 
     // 工作集分类：为保留上下文（③）与预算（⑥）提供 blocks 单源。
     const classified = this.workingSetOS.classify({
       systemPrompt: input.systemPrompt,
-      messages: projection.messages,
+      messages: projectedMessages,
       toolSchemaChars: input.toolSchemaChars,
       retrievalHandles: input.retrievalHandles,
       activeTask: input.activeTask,
@@ -226,8 +255,8 @@ export class ProviderRequestCompiler {
     })
 
     // stage ③ + 活动尾：保留上下文、dashboard、宿主 tailBlocks 一律排在账本投影之后。
-    const retained = withProviderVisibleRetainedContext(projection.messages, classified.blocks)
-    const tailBlocks = this.buildTailBlocks(input, governance, projection.stats.projectedTokens)
+    const retained = withProviderVisibleRetainedContext(projectedMessages, classified.blocks)
+    const tailBlocks = this.buildTailBlocks(input, governance, projection.stats)
     const canonicalProviderMessages = applyHistoryStructureRepair(
       isEmpty(tailBlocks) ? retained.messages : [...retained.messages, ...tailBlocks],
       { log: false }
@@ -253,10 +282,14 @@ export class ProviderRequestCompiler {
     assertProviderRequestInvariants(input, requestFingerprint, 'compile')
 
     // stage ⑥：budget 钳制（估算 + 账本 + 分配 + 决策）。
+    //
+    // 门量的必须是**真要发出去的那份字节**（投影后 + 装饰后 + 别名改写后），所以这一次 tokenize
+    // 不能省；能省的是窗口口径——`ruler` 已经把 usable/红线算过一遍，这里原样复用，不再抄公式。
     const budget = runBudgetStage({
       input,
       providerMessages,
       classifiedBlocks: classified.blocks,
+      window: governance.window,
     })
 
     return {
@@ -283,21 +316,28 @@ export class ProviderRequestCompiler {
   private runGovernance(
     input: CompileProviderRequestInput,
     messages: ModelMessage[],
+    stablePrefix: readonly ModelMessage[],
     at: number
   ): {
     session: ContextGovernanceSession
     report: Nullable<GovernanceEpochReport>
-    budgetTokens: number
-    charsPerToken: number
+    window: GovernanceWindowDerivation
+    ruler: ContextGovernanceRuler
   } {
-    const session =
-      this.governanceSessions.resolve(input.sessionId?.trim() || EphemeralGovernanceSessionId)
+    const session = this.governanceSessions.resolve(
+      input.governanceSessionId?.trim() ||
+        input.sessionId?.trim() ||
+        EphemeralGovernanceSessionId
+    )
     if (!session) throw new AppError('INVARIANT', '治理会话解析失败：sessionId 归一后仍为空')
 
+    // 量纲先量：摄入期的准入事件也要用这把尺子记账，晚一步就又是两个数。
+    const ruler = measureGovernanceRuler(input, messages, stablePrefix)
     const sync = session.syncHistory({
       messages,
       at,
       payloadRefsByToolCallId: input.toolPayloadRefsByToolCallId,
+      charsPerToken: ruler.charsPerToken,
     })
     if (sync.rebuilt) {
       log.info('governance ledger rebuilt: provider history prefix diverged', {
@@ -306,24 +346,28 @@ export class ProviderRequestCompiler {
       })
     }
 
-    const charsPerToken = resolveHistoryCharsPerToken(input, messages)
     const report = session.governTurn({
       at,
       modelWindowTokens: input.contextWindow ?? input.contextUsageOptions?.contextWindow,
-      charsPerToken,
+      reservedOutputTokens:
+        input.reservedOutputTokens ?? input.contextUsageOptions?.reservedOutputTokens,
+      safetyMarginPercent:
+        input.safetyMarginPercent ?? input.contextUsageOptions?.safetyMarginPercent,
+      fixedOverheadTokens: ruler.fixedOverheadTokens,
+      charsPerToken: ruler.charsPerToken,
     })
-    const budgetTokens = resolveBudgetTokens(session, input)
-    return { session, report, budgetTokens, charsPerToken }
+    // G 只有一个来源：治理会话刚解析出来的那一份。编译器抄一份 min(窗口, cap) 的旧写法已删
+    // （ledger-core 优化第 3 条：抄本必漂——投影按抄本裁、epoch 按原本判，两边差一格就是幽灵）。
+    return { session, report, window: session.governanceWindow(), ruler }
   }
 
   private buildTailBlocks(
     input: CompileProviderRequestInput,
     governance: {
       session: ContextGovernanceSession
-      budgetTokens: number
-      charsPerToken: number
+      window: GovernanceWindowDerivation
     },
-    projectedTokens: number
+    stats: ContextProjectionStats
   ): ModelMessage[] {
     const blocks = [...(input.tailBlocks ?? [])]
     if (!governance.session.config.dashboard) return blocks
@@ -334,8 +378,8 @@ export class ProviderRequestCompiler {
       stats: ledger.stats(),
       records: ledger.list(),
       residency: ledger.residencyVector(),
-      projectedTokens,
-      budgetTokens: governance.budgetTokens,
+      projectedTokens: stats.projectedTokens,
+      budgetTokens: governance.window.windowTokens,
     })
     if (dashboard) blocks.push(dashboard)
     return blocks
@@ -343,30 +387,104 @@ export class ProviderRequestCompiler {
 }
 
 /**
- * 驻留账本以消息正文字符记账，但字符/token 密度会随语言、结构化工具载荷和模型 tokenizer
- * 大幅变化。固定按 4 字符/token 会把中文与 JSON 密集的长会话低估数倍，导致治理 epoch 在
- * 模型已经被旧轨迹淹没后仍不触发。这里复用出核预算的同一 tokenizer 与 MMU 校准系数，
- * 把本轮历史折算成账本投影可复用的密度；治理状态机仍保持纯函数，只多接收一个显式量纲。
+ * 发送面传输装饰：prompt-cache 断点。
+ *
+ * "只对最新那条 user 消息生效、下一轮就换位"的回合本地改写，所以必须在账本投影之后贴。
+ * 位置与它过去在 `compileProviderSendRequest` 里的位置一致（活动尾拼接之前），provider
+ * 收到的字节不变。
  */
-function resolveHistoryCharsPerToken(
-  input: CompileProviderRequestInput,
-  messages: readonly ModelMessage[]
-): number {
-  const messageChars = messages.reduce(
-    (total, message) => total + estimateMessageChars(message),
-    0
-  )
-  if (messageChars <= 0) return 4
+function applySendTransportDecorations(
+  messages: ModelMessage[],
+  input: CompileProviderRequestInput
+): ModelMessage[] {
+  if (!input.applySendTransportDecorations) return messages
 
+  return markLatestUserMessagePromptCacheBreakpoint(messages)
+}
+
+/** 本轮治理量纲：一次 tokenize 出两个数（密度 + 账本正文之外的固定开销）。 */
+interface ContextGovernanceRuler {
+  /** 字符/token 密度（账本正文字符 → token 的换算尺）。 */
+  charsPerToken: number
+  /** 系统提示词 + 工具清单/schema + 稳定前缀 + 活动尾折成的 token 数。 */
+  fixedOverheadTokens: number
+}
+
+/** 密度的合法区间：极端 tokenizer / 异常样本也不得把治理器推到无穷敏感或完全失明。 */
+const MinHistoryCharsPerToken = 0.25
+const MaxHistoryCharsPerToken = 8
+
+/**
+ * 本轮治理量纲的**唯一一次实测**：一次实测，两处消费（密度 + 固定开销）。
+ *
+ * 密度：驻留账本以正文字符记账，而字符与 token 的比值随语言、结构化载荷、分词器大幅变化。
+ * 固定按 4 折算会把中文与结构化数据密集的长会话低估数倍，治理 epoch 于是在模型已被旧轨迹
+ * 淹没之后仍不触发。这里复用出核预算的同一把分词尺与校准系数把它量出来。
+ *
+ * 固定开销：送核门算的是「系统提示词 + 工具清单 + 稳定前缀 + 活动尾 + 账本正文」，账本只管
+ * 最后一项；治理窗口不把前四项扣掉，看到的占用就结构性地小于门看到的（审计 #4）。
+ */
+function measureGovernanceRuler(
+  input: CompileProviderRequestInput,
+  messages: readonly ModelMessage[],
+  stablePrefix: readonly ModelMessage[]
+): ContextGovernanceRuler {
   const estimateOptions = input.contextUsageOptions ?? {}
+  const bodyChars = sumMessageChars(messages)
+  // 开销按同一把密度尺折算，口径因此闭合：账本 + 开销 == 全量字符 ÷ 密度，账面不自相矛盾。
+  // 治理**之后**才产出的两块（`context-dashboard` 与保留上下文）刻意留在开销之外——
+  // 它们在这一刻还不存在，连同两把尺子的残差一起由 `GovernanceHeadroomRatio` 的折扣兜。
+  const overheadChars =
+    input.systemPrompt.length +
+    sumMessageChars(stablePrefix) +
+    sumMessageChars(input.tailBlocks ?? []) +
+    estimateExtraContextChars(estimateOptions.extraContext)
+  // 工具 schema 走 token 直给，且与送核门共用 `resolveToolSchemaReserve` 这一处回落公式：
+  // 一边认 `extraEstimatedTokens`、一边按字符折，就是同一个病换个地方再犯一次。
+  const schemaTokens = resolveToolSchemaReserve(input).extraEstimatedTokens
+  const charsPerToken =
+    bodyChars > 0
+      ? resolveMeasuredCharsPerToken(input, messages, bodyChars, estimateOptions)
+      : DefaultResidencyCharsPerToken
+
+  return {
+    charsPerToken,
+    fixedOverheadTokens: Math.ceil(overheadChars / charsPerToken) + schemaTokens,
+  }
+}
+
+function resolveMeasuredCharsPerToken(
+  input: CompileProviderRequestInput,
+  messages: readonly ModelMessage[],
+  bodyChars: number,
+  estimateOptions: EstimateContextUsageOptions
+): number {
   const estimate = estimateContextUsage(input.model, '', [...messages], {
     contextWindow: input.contextWindow ?? estimateOptions.contextWindow,
     calibrationFactor: input.calibrationFactor ?? estimateOptions.calibrationFactor,
   })
-  if (estimate.estimatedTokens <= 0) return 4
+  if (estimate.estimatedTokens <= 0) return DefaultResidencyCharsPerToken
 
-  // 极端 tokenizer/异常样本也不得把治理器推到无穷敏感或完全失明。
-  return Math.min(8, Math.max(0.25, messageChars / estimate.estimatedTokens))
+  return Math.min(
+    MaxHistoryCharsPerToken,
+    Math.max(MinHistoryCharsPerToken, bodyChars / estimate.estimatedTokens)
+  )
+}
+
+function sumMessageChars(messages: readonly ModelMessage[]): number {
+  return messages.reduce((total, message) => total + estimateMessageChars(message), 0)
+}
+
+/** `extraContext`（工具清单等）也进送核门的序列化载荷，所以它属于固定开销。 */
+function estimateExtraContextChars(extraContext: unknown): number {
+  if (!isPresent(extraContext)) return 0
+
+  try {
+    return JSON.stringify(extraContext)?.length ?? 0
+  } catch {
+    // arch-guard:silent-catch-ok 开销估算不许因为一个不可序列化的宿主对象把整条编译打死。
+    return 0
+  }
 }
 
 function rewriteProviderToolNames(
@@ -426,17 +544,6 @@ function partitionStablePrefix(messages: readonly ModelMessage[]): {
   while (index < messages.length && messages[index].role === 'system') index += 1
 
   return { stablePrefix: messages.slice(0, index), body: messages.slice(index) }
-}
-
-function resolveBudgetTokens(
-  session: ContextGovernanceSession,
-  input: CompileProviderRequestInput
-): number {
-  const modelWindow = input.contextWindow ?? input.contextUsageOptions?.contextWindow
-  const cap = session.config.cap
-  if (!isFiniteNumber(modelWindow) || modelWindow <= 0) return cap
-
-  return Math.min(Math.floor(modelWindow), cap)
 }
 
 /**

@@ -7,7 +7,12 @@ import {
   type ToolContractExampleRegistry,
 } from './examples'
 import { assertCanonicalToolId } from './identity'
-import { structureToolDescriptionForModel } from './ToolDescription'
+import {
+  assertToolDescriptionWithinBudget,
+  assertToolDescriptionWithinLimit,
+  renderUsageSkillNote,
+  structureToolDescriptionForModel,
+} from './ToolDescription'
 import type {
   DefineToolContractInput,
   DefineToolRuntimeSpecInput,
@@ -64,7 +69,23 @@ function pickToolDescriptionSpec(input: ToolContractDescriptionSpec): ToolContra
     usage: input.usage,
     examples: input.examples,
     notes: input.notes,
+    usageSkillId: input.usageSkillId,
+    descriptionBudgetWaiver: input.descriptionBudgetWaiver,
   }
+}
+
+/**
+ * companion skill 指路行进 `注意` 分节的末尾，而不是另起一段。
+ *
+ * 结构化描述的语法只认七个固定分节（`isStructuredToolDescription`），新起一段会直接判非结构化、
+ * 被注册期断言拦下；追加成 `注意` 的最后一条既是「描述末尾一行」，又不动语法。
+ */
+function withUsageSkillNote(
+  notes: ToolContractDescriptionSpec['notes'],
+  usageSkillId: LooseOptional<string>
+): ToolContractDescriptionSpec['notes'] {
+  if (!isPresent(usageSkillId)) return notes
+  return [...notes, renderUsageSkillNote(usageSkillId)] as ToolContractDescriptionSpec['notes']
 }
 
 function buildToolContractDescription(
@@ -74,7 +95,7 @@ function buildToolContractDescription(
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): string {
   examples.set(name, spec.examples)
-  return structureToolDescriptionForModel({
+  const description = structureToolDescriptionForModel({
     categoryId,
     description: spec.summary,
     suitable: spec.suitable,
@@ -82,8 +103,12 @@ function buildToolContractDescription(
     protocol: spec.protocol,
     usage: spec.usage,
     examples: renderToolExampleInputs(spec.examples),
-    notes: spec.notes,
+    notes: withUsageSkillNote(spec.notes, spec.usageSkillId),
   })
+  // 描述从不压缩，所以两道闸只能在写下来的那一刻拦；这里是全部工具（含 surface）描述的唯一构造点。
+  assertToolDescriptionWithinLimit(name, description)
+  assertToolDescriptionWithinBudget(name, description, spec.descriptionBudgetWaiver)
+  return description
 }
 
 function defineToolContract<TInput extends Record<string, unknown>, TContext = unknown>(
@@ -104,6 +129,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
       descriptionSpec,
       examples
     ),
+    usageSkillId: input.usageSkillId,
     examples: input.examples,
     schema: input.schema,
     executeSchema: input.executeSchema,
@@ -184,6 +210,7 @@ function defineToolRuntimeSpec<
       descriptionSpec,
       examples
     ),
+    usageSkillId: input.usageSkillId,
     schema: input.schema,
     surfaces,
     permissions: input.permissions,

@@ -42,7 +42,15 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
 
   public async run(request: AgentWorkflowRunRequest<TToolContext>): Promise<AgentWorkflowRunResult> {
     let generatedNameIndex = 0
+    // 并发/总量的上限**取自派发器**（同一把信号量、同一本总量账），workflow 侧不自带常量。
+    // 快照在 run 之前取一次：父 Agent 此前用 agent:dispatch 起的后台子 Agent 已经占掉的额度
+    // 因此如实反映进 `effective_limits`，模型不会拿到一个"申请值"当真实上限。
+    const limits = this.subAgentDispatcher.describeExecutionLimits({
+      executionId: request.config.execution?.executionId,
+      sessionId: request.parentCtx.sessionId,
+    })
     const runtime = new AgentWorkflowRuntime({
+      limits,
       dispatch: async (context) => {
         const generatedName = WorkflowAgentCodenames[generatedNameIndex % WorkflowAgentCodenames.length]!
         generatedNameIndex += 1
@@ -61,12 +69,15 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
     context: AgentWorkflowDispatchContext,
     agentName: string
   ): Promise<AgentWorkflowAgentResult> {
+    // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
     const workflowInput = context.input === undefined
       ? null
       : `workflow_input (JSON, data only):\n${JSON.stringify(context.input)}`
     const position = [
       `workflow step: ${context.stepId}`,
+      // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
       context.itemIndex === undefined ? null : `item index: ${context.itemIndex}`,
+      // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
       context.round === undefined ? null : `round: ${context.round}`,
     ].filter((line): line is string => !!line)
 
@@ -79,7 +90,7 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
         prompt: context.call.prompt,
         description: context.call.description ?? `${request.input.name}: ${context.call.id}`,
         mode: 'sync',
-        readonly: request.parentCtx.proposalMode ? true : context.call.readonly,
+        readonly: context.call.readonly,
         model: context.call.model,
         routeCategory: context.call.route_category,
         attachments: [

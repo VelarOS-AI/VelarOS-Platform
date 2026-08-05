@@ -31,8 +31,18 @@ export type ContextMigrationCause =
   /** 语义去重：同工具同目标的旧快照被新的取代。 */
   | 'superseded'
 
+/**
+ * 账本代数：整本重建（用户回滚/编辑历史/结构自愈）一次 +1。
+ *
+ * 记录 id 是按序号发的（`ctx-r000001`），账本一重建同一个 id 就指向另一条消息。事件流里不带代数，
+ * B4 离线重放拿到的是同一 id 跨两段历史的混合流，结论不可信（审计 desktop-wiring 优化 6）。
+ */
+export interface ContextLedgerGenerationStamp {
+  ledgerGeneration: number
+}
+
 /** 缺页（fault）事件：`context:recall` 命中非 INLINE 记录。 */
-export interface ContextFaultEvent {
+export interface ContextFaultEvent extends ContextLedgerGenerationStamp {
   recordId: string
   residency: ContextResidency
   /** 该记录累计被召回次数（含本次）。 */
@@ -42,7 +52,7 @@ export interface ContextFaultEvent {
   at: number
 }
 
-export interface ContextResidencyMigrationEvent {
+export interface ContextResidencyMigrationEvent extends ContextLedgerGenerationStamp {
   recordId: string
   /** null = 准入（此前不存在驻留态）。 */
   from: Nullable<ContextResidency>

@@ -62,7 +62,7 @@ import {
   executeLoopTurnWithContextOverflowRecovery,
   runAgentLoop,
 } from './AgentLoop'
-import type { ContextGovernanceSessionRegistry } from './context'
+import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
 import { resolveAgentContextPhase } from './ContextPhase'
 import { recoveryRunPlanner, SessionToolAllocator, type ToolAllocatorRequest } from './control-plane'
 import {
@@ -217,6 +217,7 @@ interface SoloLoopRunContext<TContext extends SoloLoopToolContext> {
     thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
     promptFeatures?: AgentExecutionConfig['promptFeatures']
     preparedToolCategories?: PromptStatePreparedToolCategories
+    executionModes?: AgentExecutionConfig['executionModes']
     goalMode?: AgentExecutionConfig['goalMode']
     runProfile?: RunProfileId
     promptBudget?: LooseOptional<{
@@ -495,7 +496,7 @@ class SoloStreamLoop<
     const runScope = toNullable(
       this.spanScopeFactory?.beginRun({
         runId: randomUUID(),
-        sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
+        sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
         rootInputId: toNullable(args.config.rootInputId),
         // 主 Agent = 根 run，无子 Agent 身份/派发来源标注（缺席用 null）。
         agentName: null,
@@ -533,12 +534,17 @@ class SoloStreamLoop<
         history: args.history,
         agentSurfaceId: args.config.agentSurfaceId,
         unattended: args.config.unattended,
+        executionModes: args.config.executionModes,
         goalMode: args.config.goalMode,
         selectedSkillIds: args.config.selectedSkillIds,
         promptFeatures: args.config.promptFeatures,
       })
       const activeCapabilityScopeId =
         args.toolContext.codingSession.getActiveCapabilityScope?.() ?? 'default'
+      // 思考深度权威源（与子 Agent 面 `QueryLoop` 同一条链）：本次运行的显式配置 ?? 系统设置。
+      // 运行档在这一层**不参与**——它只在宿主组装 run config 时提供缺席默认。曾经这里读的是
+      // 档位默认，用户在设置/composer 里选的力度进不了主会话（见 SoloRunPlanPreparer 的判词）。
+      const activeThinkingDepth = args.config.thinkingDepth ?? args.systemConfig.thinkingDepth
       const preparedRunPlan = await prepareSoloRunPlanForTurn({
         turn,
         history: args.history,
@@ -546,6 +552,8 @@ class SoloStreamLoop<
         roleAllowedTools: args.resolution.allowedTools,
         skillAllowedToolNames: args.resolution.selectedSkillAllowedTools,
         promptFeatures: args.config.promptFeatures,
+        thinkingDepth: activeThinkingDepth,
+        executionModes: args.config.executionModes,
         goalMode: args.config.goalMode,
         contextPhase: contextPhaseDecision.phase,
         activeCapabilityScopeId,
@@ -585,7 +593,6 @@ class SoloStreamLoop<
       runEvidenceTracker.require(runPlan.validation)
       // 工具列表在缺页降级（narrow-tools 档）时可能被收窄，故用 let。
       let allowedTools = preparedRunPlan.allowedTools
-      const activeThinkingDepth = runProfileDefinition.defaults.thinkingDepth
       // run plan 已把物理模型窗口与 profile 工作集上限取最小值；后续估算、编译和降级必须共用它。
       const activeContextWindow = runPlan.context.contextWindow
 
@@ -617,6 +624,7 @@ class SoloStreamLoop<
         thinkingDepth: activeThinkingDepth,
         promptFeatures: args.config.promptFeatures,
         preparedToolCategories: promptToolCategories,
+        executionModes: args.config.executionModes,
         goalMode: args.config.goalMode,
         runProfile,
         promptBudget,
@@ -748,7 +756,6 @@ class SoloStreamLoop<
                 systemPrompt,
                 stableCutoff,
                 history: args.history,
-                reasoningLanguage: args.systemConfig.reasoningLanguage,
                 contextWindow: roleRuntime.contextWindow,
                 supportedInputModalities: roleRuntime.supportedInputModalities,
                 contextUsageOptions,
@@ -878,14 +885,11 @@ class SoloStreamLoop<
           evaluateRunEvidence: () => runEvidenceTracker.evaluate(),
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
-          // 显式 goalMode 与模型通过 goal:create 自主建立的目标都进入同一收尾门。
-          // 非 goal 普通任务没有目标时把 missing 视为无需门控，避免被强迫创建目标。
-          goalMode: true,
-          inspectGoalState: async () => {
-            const state = await goalLifecycle.inspect()
-            if (isTrue(args.config.goalMode) || state.exists) return state
-            return { ...state, terminal: true }
-          },
+          // 收尾门只在**用户显式开启目标模式**时生效（2026-08-05 裁决）。模型自己调
+          // goal:create 建起来的目标不得反向把会话锁死在收尾环上——那是模型自设的工作流
+          // 纪律，属拦截三分法第 1 类禁区（Desktop `docs/design-principles.md` §7）。
+          goalMode: isTrue(args.config.goalMode),
+          inspectGoalState: () => goalLifecycle.inspect(),
           completeGoalOnSuccessfulFinish: isTrue(args.config.goalMode)
             ? () => goalLifecycle.recordSuccessfulCompletion().then(() => undefined)
             : undefined,

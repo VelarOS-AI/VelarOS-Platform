@@ -177,6 +177,8 @@ export interface ToolDescriptor {
   requiredModelInputModalities?: readonly AgentModelInputModality[]
   /** 内置工具默认走 ToolMetadataCatalog；provider 可用此字段覆盖或补充暴露策略。 */
   exposure?: ToolExposurePolicy
+  /** companion skill id（工具是调用面、技能是用法面）；工具页卡片据此指路。 */
+  usageSkillId?: string
   /** 输出必须保持内联、禁止 page-out 成 payload 引用（发现/索引类工具，如 tooling:map）。 */
   outputInline?: boolean
   categoryId: ToolCategoryId
@@ -354,7 +356,24 @@ export interface UserActionCard {
   createdAt: number
 }
 
+/**
+ * 卡片结算记录：一张卡「是否已作答」的**唯一权威**，随会话存档落盘在对应 block 上。
+ *
+ * 渲染层不得再自持第二份「已消费」状态（localStorage / 组件 useState）：那些都不跟着存档走，
+ * 换台机器或清一次渲染层本地存储就让历史卡整片复活成可点状态，审批也留不下痕。
+ */
+export interface ConversationCardResolution {
+  actionKind: UserActionCardAction['kind'] | 'timeout' | 'skip'
+  approved: boolean
+  message?: string
+  values?: Record<string, UserActionFormValue>
+  timedOut?: boolean
+  settledAt: number
+}
+
 export interface UserActionCardBlock {
   type: 'user-action-card'
   card: UserActionCard
+  /** 结算记录（单源）：有值即「已作答」，渲染层只读它。 */
+  resolution?: ConversationCardResolution
 }

@@ -37,7 +37,6 @@ import { buildApprovalRegistryKey, resolveSubAgentExecutionKey } from './codingT
 import { hasActiveExecutionGoal, resolveExecutionWallClockDeadlineMs } from './goalLifecycle'
 import type {
   RunnerCancelBackgroundJob,
-  RunnerChatStateStore,
   RunnerCodingSessionPolicyBundle,
   RunnerConfigService,
   RunnerExecutionEnvironmentPort,
@@ -86,7 +85,6 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
   private readonly executionEnvironment: RunnerExecutionEnvironmentPort
   private readonly configService: RunnerConfigService
   private readonly toolRegistry: RunnerToolRegistry
-  private readonly chatStateStore: RunnerChatStateStore
   private readonly codingSessionPolicy: RunnerCodingSessionPolicyBundle
   private readonly surfaceProfileProvider: AgentSurfaceProfileProvider
   private readonly executionLimits: AgentExecutionLimits
@@ -108,7 +106,6 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
       domainServices.executionEnvironment ?? passthroughExecutionEnvironment
     this.configService = infrastructure.configService
     this.toolRegistry = infrastructure.toolRegistry
-    this.chatStateStore = infrastructure.chatStateStore
     this.codingSessionPolicy = infrastructure.codingSessionPolicy
     this.surfaceProfileProvider = infrastructure.surfaceProfileProvider
     this.executionLimits = resolveAgentExecutionLimits(infrastructure.executionLimitOverrides)
@@ -224,15 +221,10 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     }
     const executionTimers = new TimerScope({ name: `AgentRunner.execution.${sessionId}` })
     try {
-      const sessionContextSnapshot =
-        await this.chatStateStore.loadSessionContextSnapshot(sessionId)
       const toolContext = this.contextHelper.buildToolContext({
         abortController,
         config: loopConfig,
         codingSession,
-        sessionContext: {
-          evidenceLedger: sessionContextSnapshot.evidenceLedger,
-        },
         roleState: {
           getAllowedToolNames: () => resolution.allowedTools,
           getEnabledToolCategories: () => resolution.enabledToolCategories,

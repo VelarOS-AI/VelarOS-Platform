@@ -41,4 +41,3 @@ export interface PromptSegmentOverride {
 }
 
 export type PermissionConfirmationMode = 'standard-open' | 'never-ask' | 'ask-every-time'
-export type ReasoningLanguagePreference = 'auto' | 'zh' | 'en'

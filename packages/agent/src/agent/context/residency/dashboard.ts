@@ -18,8 +18,8 @@ import type { ModelMessage } from 'ai'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ContextRecord, ContextResidency } from './ContextRecord'
-import { residentChars } from './ContextRecord'
 import { compareStableStrings } from './determinism'
+import { residentChars, resolveEffectiveResidency } from './projection'
 import type { ContextLedgerStats } from './ResidencyLedger'
 
 /** 最大持仓榜的条数。 */
@@ -50,13 +50,14 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
   const occupancy = input.budgetTokens > 0
     ? Math.round((input.projectedTokens / input.budgetTokens) * 1000) / 10
     : 0
-  const byResidency = input.stats.byResidency
+  const holdings = collectHoldings(input)
+  const byResidency = countByEffectiveResidency(holdings)
   const lines = [
     `${DashboardMarker} epoch=${input.epoch} used=${input.projectedTokens}/${input.budgetTokens}tok (${occupancy}%)`,
     `records=${input.stats.recordCount} inline=${byResidency.INLINE} excerpt=${byResidency.EXCERPT} summarized=${byResidency.SUMMARIZED} evicted=${byResidency.EVICTED} expired=${byResidency.EXPIRED} pendingEvict=${input.stats.pendingEvictCount} faults=${input.stats.totalFaults}`,
   ]
 
-  const top = renderTopHoldings(input)
+  const top = renderTopHoldings(holdings)
   if (top) lines.push(top)
   lines.push(
     'Non-inline records stay retrievable via context:recall; call context:distill when a phase is done to request one compaction epoch.'
@@ -70,23 +71,56 @@ export function isContextDashboardText(value: string): boolean {
   return value.trimStart().startsWith(DashboardMarker)
 }
 
-function renderTopHoldings(input: ContextDashboardInput): Nullable<string> {
-  const holdings = input.records
-    .map((record) => {
-      const residency = input.residency.get(record.id) ?? record.admittedResidency
-      return {
-        id: record.id,
-        label: record.toolName ?? record.kind,
-        chars: residentChars(record, residency),
-      }
-    })
+interface DashboardHolding {
+  id: string
+  label: string
+  residency: ContextResidency
+  chars: number
+}
+
+/**
+ * 每条记录的**有效**驻留态与实际占用（与投影同一份 `resolveEffectiveResidency` + `residentChars`）。
+ *
+ * "有效"两个字是硬要求：dashboard 报的必须等于真发出去的字节，模型才谈得上据此判断自己撑不撑
+ * 得住（审计 U21）。共用投影那一份判据就是唯一兑现方式 —— 尾保护已经不改渲染（v3 · R1），
+ * 所以这里也不再需要知道谁在窗口里。
+ */
+function collectHoldings(input: ContextDashboardInput): DashboardHolding[] {
+  return input.records.map((record) => {
+    const declared = input.residency.get(record.id) ?? record.admittedResidency
+    const residency = resolveEffectiveResidency(record, declared)
+    return {
+      id: record.id,
+      label: record.toolName ?? record.kind,
+      residency,
+      chars: residentChars(record, residency),
+    }
+  })
+}
+
+function countByEffectiveResidency(
+  holdings: readonly DashboardHolding[]
+): Record<ContextResidency, number> {
+  const counts: Record<ContextResidency, number> = {
+    INLINE: 0,
+    EXCERPT: 0,
+    SUMMARIZED: 0,
+    EVICTED: 0,
+    EXPIRED: 0,
+  }
+  for (const holding of holdings) counts[holding.residency] += 1
+  return counts
+}
+
+function renderTopHoldings(holdings: readonly DashboardHolding[]): Nullable<string> {
+  const top = [...holdings]
     .filter((holding) => holding.chars > 0)
     .sort((left, right) => right.chars - left.chars || compareStableStrings(left.id, right.id))
     .slice(0, TopHoldingCount)
 
-  if (isEmpty(holdings)) return null
+  if (isEmpty(top)) return null
 
-  return `top: ${holdings
+  return `top: ${top
     .map((holding) => `${holding.id}/${holding.label}=${Math.round(holding.chars / 1000)}k`)
     .join(' ')}`
 }

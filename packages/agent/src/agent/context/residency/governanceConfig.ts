@@ -119,11 +119,43 @@ export interface ContextEvictionConfig {
   staleRefetchableTurnDistance: number
 }
 
+/**
+ * 转交（handoff）布防阈值（B3 起进配置面，B4 扫参对象）。
+ *
+ * 这两个数原先是 `ContextGovernanceSession.ts` 里的模块常量，与 `ContextEvictionConfig` 同一处境：
+ * 设计 §4 明写 35% 那道占用闸"留作扫参对象"，写死在代码里等于每扫一次参就要改代码重编译。
+ * 默认值逐字沿用原常量，行为零变化。
+ */
+export interface ContextHandoffConfig {
+  /** 连续多少次低收益 epoch 才认为"压不下去了"。 */
+  lowSavingStreak: number
+  /** post-epoch 占用高于该百分比（占 G）才布防转交。 */
+  occupancyPercent: number
+}
+
 export interface ContextGovernanceConfig {
-  /** 治理窗口上限：G = min(模型窗口, cap)。 */
+  /**
+   * 治理窗口 **上限**：`G = min(cap, 送核门余量)`（推导见 `governanceWindow.ts`）。
+   *
+   * 语义从 v3 的「min(模型窗口, cap)」收窄成纯上限：分母改由送核门余量定，cap 只负责
+   * 把超大窗口（1M）下的 G 锁回可治理的量级。
+   */
   cap: number
   /** 尾保护轮数：最近若干轮对话恒以全文投影。 */
   tailProtectTurns: number
+  /**
+   * 尾保护条数：最近若干**条记录**。与 {@link tailProtectTurns} 取**交集**（两条都满足才受保护）。
+   *
+   * 存在理由是量纲：轮数量的是"模型正在聊哪件事"，而压力来自"这一轮里已经堆了多少条工具痕迹"。
+   * 一次长自主运行（用户发一条指令、agent 连跑几十轮工具）整本账本只有 1 个对话轮，光按轮算
+   * 会让每条记录都落在窗口内、治理器一条候选都收不到——本子系统在它最该发挥作用的形态下 100%
+   * 空转（审计 V1）。
+   *
+   * 默认 16：普通对话一轮约 4-6 条记录，两轮 8-12 条，条数闸基本不咬合（尾保护仍等于轮窗口）；
+   * 而在长自主运行里它把保护收敛到最近约 8 个工具步——模型手边真正在用的那一截。
+   * 0 = 尾保护关闭（与 `tailProtectTurns: 0` 同义）。
+   */
+  tailProtectMaxRecords: number
   /** epoch 触发水位（占 G 的百分比）。 */
   epochTriggerPercent: number
   /** epoch 目标水位（占 G 的百分比）。 */
@@ -134,20 +166,18 @@ export interface ContextGovernanceConfig {
   instruments: ContextInstrumentConfig
   /** I0 机械逐出的选段阈值。 */
   eviction: ContextEvictionConfig
+  /** 转交布防阈值。 */
+  handoff: ContextHandoffConfig
   /** I2 蒸馏的成本护栏与 adaptive 判据（档位在 `instruments.distill`）。 */
   distillation: ContextDistillConfig
   /** 活动尾的 context-dashboard 块（模型本体感知）。 */
   dashboard: boolean
-  /**
-   * epoch 批处理开关（隐藏开关，RQ2 缓存对照专用）。
-   * false = 退化成逐轮应用降级，用来量化"批处理省下多少缓存重建"。
-   */
-  epochBatching: boolean
 }
 
 export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   cap: 200_000,
   tailProtectTurns: 2,
+  tailProtectMaxRecords: 16,
   epochTriggerPercent: 70,
   epochTargetPercent: 40,
   minEpochSavingPercent: 10,
@@ -157,6 +187,8 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   instruments: { skeleton: true, distill: 'aux' },
   // 逐字沿用 B1 起 `GovernanceEpoch.ts` 里的模块常量值：搬进配置面是为了 B4 能扫，不是改行为。
   eviction: { lowAnchorDensityPerKiloChar: 2, staleRefetchableTurnDistance: 2 },
+  // 同上：逐字沿用 B1 起 `ContextGovernanceSession.ts` 里的 HandoffLowSavingStreak / HandoffOccupancyPercent。
+  handoff: { lowSavingStreak: 2, occupancyPercent: 35 },
   distillation: {
     maxSegmentsPerEpoch: 1,
     maxInputChars: 48_000,
@@ -173,7 +205,6 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
     },
   },
   dashboard: true,
-  epochBatching: true,
 }
 
 const DistillInstruments: ContextDistillInstrument[] = ['off', 'aux', 'main', 'adaptive']
@@ -226,6 +257,7 @@ export function resolveContextGovernanceArmName(
 export interface ContextGovernanceConfigInput {
   cap?: LooseOptional<number>
   tailProtectTurns?: LooseOptional<number>
+  tailProtectMaxRecords?: LooseOptional<number>
   epochTriggerPercent?: LooseOptional<number>
   epochTargetPercent?: LooseOptional<number>
   minEpochSavingPercent?: LooseOptional<number>
@@ -241,6 +273,10 @@ export interface ContextGovernanceConfigInput {
   eviction?: LooseOptional<{
     lowAnchorDensityPerKiloChar?: LooseOptional<number>
     staleRefetchableTurnDistance?: LooseOptional<number>
+  }>
+  handoff?: LooseOptional<{
+    lowSavingStreak?: LooseOptional<number>
+    occupancyPercent?: LooseOptional<number>
   }>
   distillation?: LooseOptional<{
     maxSegmentsPerEpoch?: LooseOptional<number>
@@ -258,7 +294,6 @@ export interface ContextGovernanceConfigInput {
     }>
   }>
   dashboard?: LooseOptional<boolean>
-  epochBatching?: LooseOptional<boolean>
 }
 
 /**
@@ -285,6 +320,13 @@ export function resolveContextGovernanceConfig(
   return {
     cap: clampInteger(input?.cap, defaults.cap, 1_000, 10_000_000),
     tailProtectTurns: clampInteger(input?.tailProtectTurns, defaults.tailProtectTurns, 0, 100),
+    // 上界给到 100 万 = "只按轮算"的表达方式；下界 0 = 尾保护关闭（与 tailProtectTurns: 0 同义）。
+    tailProtectMaxRecords: clampInteger(
+      input?.tailProtectMaxRecords,
+      defaults.tailProtectMaxRecords,
+      0,
+      1_000_000
+    ),
     epochTriggerPercent,
     epochTargetPercent,
     minEpochSavingPercent: clampPercent(
@@ -325,9 +367,24 @@ export function resolveContextGovernanceConfig(
         1_000
       ),
     },
+    handoff: {
+      // streak 至少 1：连续 0 次低收益就布防 = 一开机就劝人换会话。
+      lowSavingStreak: clampInteger(
+        input?.handoff?.lowSavingStreak,
+        defaults.handoff.lowSavingStreak,
+        1,
+        100
+      ),
+      // 占用闸允许配到 0（= 只看收益，不看占用），所以不走 clampPercent 的 ≥1 下界。
+      occupancyPercent: clampNumber(
+        input?.handoff?.occupancyPercent,
+        defaults.handoff.occupancyPercent,
+        0,
+        100
+      ),
+    },
     distillation: resolveDistillationConfig(input?.distillation),
     dashboard: input?.dashboard ?? defaults.dashboard,
-    epochBatching: input?.epochBatching ?? defaults.epochBatching,
   }
 }
 
@@ -336,15 +393,6 @@ export function resolveContextGovernancePreset(
   name: ContextGovernancePresetName
 ): ContextGovernanceConfig {
   return resolveContextGovernanceConfig(ContextGovernancePresets[name])
-}
-
-/** 治理窗口 G = min(模型可用窗口, cap)。窗口未知时退化为 cap。 */
-export function resolveGovernanceWindowTokens(
-  config: ContextGovernanceConfig,
-  modelWindowTokens: LooseOptional<number>
-): number {
-  if (!isFiniteNumber(modelWindowTokens) || modelWindowTokens <= 0) return config.cap
-  return Math.min(Math.floor(modelWindowTokens), config.cap)
 }
 
 /**

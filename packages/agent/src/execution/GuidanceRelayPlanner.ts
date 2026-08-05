@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 import { z } from 'zod'
 
-import { isArray, isBlank, isEmpty, isObject, isString, isTrue,optionalWhenLazy, truncate } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty, isObject, isString, optionalWhenLazy, truncate } from '@velaros-ai/core'
 
 import type { SubAgentGuidanceRelayWorkerSnapshot } from './SubAgentGuidanceRelayRegistry'
 
@@ -19,12 +19,17 @@ const GuidanceRelayMainAgentSchema = z
   })
   .passthrough()
 
+/**
+ * `notifyMainAgent`（遗留布尔，2026-08-06 删）曾与 `mainAgent.mode` 三态并存：提示词只教后者，
+ * 模型永远不会填前者，于是「有 relay 且没填遗留布尔」这条最常见路径恒判「主控不用知道」。
+ * 现在只有 `mainAgent.mode` 一格，而且它只决定**主控收到的是改写还是原文**，不再决定收不收得到
+ * （投递保证在 `ExecutionService.provideGuidanceForSourceSession`）。
+ */
 const GuidanceRelayPlanSchema = z
   .object({
     understanding: z.string().min(1),
     relays: z.array(GuidanceRelayTargetSchema).default([]),
     mainAgent: GuidanceRelayMainAgentSchema.optional(),
-    notifyMainAgent: z.boolean().optional(),
   })
   .passthrough()
 
@@ -81,7 +86,8 @@ function buildGuidanceRelayPrompt(input: BuildGuidanceRelayPromptInput): string 
     '- Only target sub-agents whose current task is clearly related to the guidance.',
     '- Relay-only guidance is internal: do not create a main-agent follow-up just to expose or acknowledge that rewrite.',
     '- If the guidance is only for the main agent, return an empty relays array.',
-    '- Set mainAgent.mode to "none" when no parent/main-agent action is needed.',
+    '- The main agent always receives the user message; mainAgent only decides whether it arrives as your rewrite or verbatim. You can never hide it.',
+    '- Set mainAgent.mode to "none" when no parent/main-agent action is needed; the raw user text is still delivered to the main agent.',
     '- Set mainAgent.mode to "immediate" when the main agent should consider the guidance on its next turn without waiting for sub-agent results.',
     '- Set mainAgent.mode to "deferred" when the guidance is a later task, a follow-up, or requires one or more active sub-agents to finish first.',
     '- For deferred main-agent work, fill dependsOnThreadIds with only active threadId values whose results are needed. Leave it empty for general follow-up work after the current run settles.',
@@ -101,17 +107,46 @@ function parseGuidanceRelayPlan(raw: unknown): GuidanceRelayPlan {
   return GuidanceRelayPlanSchema.parse(raw)
 }
 
+/**
+ * 主控要收到的**改写**文本；`null` = 没有可用的改写，调用方投递用户原文。
+ *
+ * 注意语义：返回 `null` 不代表「主控不用知道」——投递是无条件的（见
+ * `ExecutionService.provideGuidanceForSourceSession`），这里只回答「用改写还是用原文」。
+ */
 function resolveMainAgentGuidanceMessage(plan: GuidanceRelayPlan): Nullable<string> {
   const understanding = plan.understanding.trim()
   if (isBlank(understanding)) return null
 
   if (plan.mainAgent) return resolveExplicitMainAgentGuidanceMessage(plan, understanding)
 
-  if (!isEmpty(plan.relays) && !isTrue(plan.notifyMainAgent)) return null
-
+  // 模型没填 mainAgent 这一格：按「主控也要知道」处理（fail-open）。
   if (isEmpty(plan.relays)) return `[主控补充] ${understanding}`
 
   return `[主控补充] ${understanding}\n\n（已向 ${plan.relays.length} 个子任务 relay 引导，子 Agent 会按主控理解继续执行。）`
+}
+
+/** 主控这一侧本次收到的是规划改写还是用户原文。 */
+interface MainAgentGuidanceDelivery {
+  message: ModelMessage
+  kind: 'planned-rewrite' | 'verbatim'
+}
+
+/**
+ * relay 纯增量的**投递判决**——这是一个无条件投递的函数，没有「不投递」这个返回值。
+ *
+ * 规划只回答「主控收到的是改写还是原文」，回答不了「主控要不要知道」：这句话是用户敲进输入框
+ * 回车发出的，主控不知道它存在 = 用户输入丢失。规划由小辅助模型完成，判错的代价必须是多花一点
+ * token（多一条原文入历史），不是丢消息。
+ */
+function resolveMainAgentGuidanceDelivery(input: {
+  plannedMainAgentMessage: LooseOptional<string>
+  originalMessage: ModelMessage
+}): MainAgentGuidanceDelivery {
+  const planned = input.plannedMainAgentMessage
+  if (isString(planned) && !isBlank(planned))
+    return { message: { role: 'user', content: planned }, kind: 'planned-rewrite' }
+
+  return { message: input.originalMessage, kind: 'verbatim' }
 }
 
 function filterValidGuidanceRelays(
@@ -236,6 +271,7 @@ export {
   GuidanceRelayPlanSchema,
   normalizeGuidanceRelayPlan,
   parseGuidanceRelayPlan,
+  resolveMainAgentGuidanceDelivery,
   resolveMainAgentGuidanceMessage,
 }
-export type { GuidanceRelayPlan }
+export type { GuidanceRelayPlan, MainAgentGuidanceDelivery }

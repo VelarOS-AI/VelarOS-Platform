@@ -1,6 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import type { ReasoningLanguagePreference } from '@velaros-ai/agent/protocol'
 import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
 
 import {
@@ -8,8 +7,6 @@ import {
   sanitizeHistoryForProvider,
   type SanitizeModelHistoryOptions,
 } from '../history'
-import { markLatestUserMessagePromptCacheBreakpoint } from '../model'
-import { applyReasoningLanguagePreferenceToLatestUserMessage } from '../reasoning-language'
 
 import type { ContextPayloadStore } from './ContextPayloadStore'
 import type {
@@ -34,7 +31,6 @@ export interface CompileProviderSendRequestInput
   turn?: LooseOptional<number>
   payloadStore?: LooseOptional<ContextPayloadStore>
   toolContext?: AgentHistoryToolContext
-  reasoningLanguage?: ReasoningLanguagePreference
   sanitizeOptions?: SanitizeModelHistoryOptions
   /** 为 true 时跳过异步 user-text 持久化，主要用于测试。 */
   skipUserTextPersistence?: boolean
@@ -91,20 +87,19 @@ export async function compileProviderSendRequest(
     mergedSanitizeOptions
   )
   const leadingMessages = input.leadingMessages ?? []
-  const providerMessages = markLatestUserMessagePromptCacheBreakpoint(
-    applyReasoningLanguagePreferenceToLatestUserMessage(
-      [...leadingMessages, ...sanitizedHistoryMessages],
-      input.reasoningLanguage ?? 'auto'
-    )
-  )
+  // 交给编译器的是**未装饰**的历史：prompt-cache 断点每轮换位，贴在这里
+  // 会让驻留账本的前缀指纹在每个新用户回合分叉、整本重建（审计 V10/U2/U4）。装饰改由编译器在
+  // 投影之后贴（`applySendTransportDecorations`），provider 收到的字节不变。
+  const undecoratedMessages = [...leadingMessages, ...sanitizedHistoryMessages]
   const toolPayloadRefsResult = input.buildToolPayloadRefs
-    ? await input.buildToolPayloadRefs(providerMessages)
+    ? await input.buildToolPayloadRefs(undecoratedMessages)
     : undefined
   const toolPayloadRefsByToolCallId = toOptional(toolPayloadRefsResult)
 
   const compiled = compiler.compileWithReclaim({
     ...input,
-    messages: providerMessages,
+    messages: undecoratedMessages,
+    applySendTransportDecorations: true,
     toolPayloadRefsByToolCallId,
     toolNameAliases:
       input.toolNameAliases ?? input.toolContext?.getCurrentVisibleToolTransportNames?.(),

@@ -18,6 +18,14 @@ export interface ContextUsageEstimate {
   percent: number
 }
 
+/** 送核门的窗口口径（{@link resolveContextUsageWindow} 的产物）。 */
+export interface ContextUsageWindow {
+  contextWindow: number
+  usableContextWindow: number
+  reservedOutputTokens: number
+  safetyMarginPercent: number
+}
+
 export interface EstimateContextUsageOptions {
   contextWindow?: LooseOptional<number>
   extraContext?: unknown
@@ -364,6 +372,39 @@ function estimateValueTokens(value: unknown, seen: Set<object>): number {
   return estimateEntriesTokens(Object.entries(record), seen)
 }
 
+/**
+ * 送核门窗口口径的**唯一推导**（`estimateContextUsage` 与治理窗口共用）。
+ *
+ * 水位一律按模型真实窗口百分比计；请求体积由注意力路由、压缩与回收阶梯独立约束。
+ * 预算调优为可选项：仅当调用方提供输出预留/安全余量时，才把百分比改对“可用窗口”计量；
+ * 否则退化为旧行为（usable == contextWindow），保证既有调用与测试不变。
+ *
+ * 抽成独立函数不是为了复用美感，而是因为**治理窗口 G 必须与送核门同源**：这段条件退化
+ * （`hasBudgetTuning`）一旦被抄一份，两把尺子就会在"调用方没传预算调优"这类边角上分叉，
+ * 治理器算出来的占用比送核门小一大截，于是它总在撞门之后才醒（审计 #4）。
+ */
+export function resolveContextUsageWindow(
+  options: Pick<
+    EstimateContextUsageOptions,
+    'contextWindow' | 'reservedOutputTokens' | 'safetyMarginPercent'
+  >
+): ContextUsageWindow {
+  const contextWindow = isFiniteNumber(options.contextWindow)
+    ? Math.max(1, Math.floor(options.contextWindow))
+    : 128_000
+  const hasBudgetTuning =
+    isFiniteNumber(options.reservedOutputTokens) || isFiniteNumber(options.safetyMarginPercent)
+  const reservedOutputTokens = hasBudgetTuning
+    ? Math.max(0, Math.floor(options.reservedOutputTokens ?? 0))
+    : 0
+  const safetyMarginPercent = hasBudgetTuning ? clamp(options.safetyMarginPercent ?? 0, 0, 90) : 0
+  const usableContextWindow = hasBudgetTuning
+    ? resolveUsableContextWindow({ contextWindow, reservedOutputTokens, safetyMarginPercent })
+    : contextWindow
+
+  return { contextWindow, usableContextWindow, reservedOutputTokens, safetyMarginPercent }
+}
+
 export function estimateContextUsage(
   model: string,
   systemPrompt: string,
@@ -414,23 +455,8 @@ export function estimateContextUsage(
     estimatedTokens = Math.max(1, Math.ceil(estimatedTokens * calibrationFactor))
   }
 
-  const contextWindow = isFiniteNumber(options.contextWindow)
-      ? Math.max(1, Math.floor(options.contextWindow))
-      : 128_000
-  // 水位一律按模型真实窗口百分比计；请求体积由注意力路由、压缩与回收阶梯独立约束。
-  // 预算调优为可选项：仅当调用方提供输出预留/安全余量时，才把百分比改对“可用窗口”计量；
-  // 否则退化为旧行为（usable == contextWindow），保证既有调用与测试不变。
-  const hasBudgetTuning =
-    isFiniteNumber(options.reservedOutputTokens) || isFiniteNumber(options.safetyMarginPercent)
-  const reservedOutputTokens = hasBudgetTuning
-    ? Math.max(0, Math.floor(options.reservedOutputTokens ?? 0))
-    : 0
-  const safetyMarginPercent = hasBudgetTuning
-    ? clamp((options.safetyMarginPercent ?? 0), 0, 90)
-    : 0
-  const usableContextWindow = hasBudgetTuning
-    ? resolveUsableContextWindow({ contextWindow, reservedOutputTokens, safetyMarginPercent })
-    : contextWindow
+  const window = resolveContextUsageWindow(options)
+  const { contextWindow, usableContextWindow, reservedOutputTokens } = window
   const tokenPercent = Number(((estimatedTokens / usableContextWindow) * 100).toFixed(2))
   const payloadPercent = Number(
     ((estimatedChars / ContextUsagePayloadWindowChars) * 100).toFixed(2)

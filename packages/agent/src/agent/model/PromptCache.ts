@@ -7,6 +7,8 @@ import {
   isString,
 } from '@velaros-ai/core'
 
+import { UnknownGovernanceSessionId } from '../context/residency/sessionKey'
+
 import type { AgentModelRequestOptions } from './ModelContracts'
 
 const SessionPromptCacheKeyHashSeed = 0x811c9dc5
@@ -53,8 +55,10 @@ function markLatestUserMessagePromptCacheBreakpoint(
 function resolveSessionPromptCacheKey(
   sessionId: LooseOptional<string>
 ): LooseOptional<string> {
+  // 无身份会话不发 prompt-cache key：兜底键全局共用，按它缓存等于把不同会话的前缀串到一起。
+  // 判据与 `resolveGovernanceSessionKey` 的兜底值同源，不再各写一份字面量。
   const trimmed = sessionId?.trim()
-  if (!trimmed || trimmed === 'unknown-session') return undefined
+  if (!trimmed || trimmed === UnknownGovernanceSessionId) return undefined
 
   const safePrefix = trimmed
     .replace(/[^A-Za-z0-9_-]+/g, '-')
@@ -100,7 +104,7 @@ function removeStaleUserPromptCacheBoundary(message: ModelMessage): ModelMessage
   if (nextProviderOptions === message.providerOptions) return message
 
   const nextMessage = { ...message } as ModelMessage
-  if (Object.keys(nextProviderOptions).length > 0) {
+  if (!isEmpty(Object.keys(nextProviderOptions))) {
     nextMessage.providerOptions = nextProviderOptions as ModelMessageProviderOptions
   } else {
     delete nextMessage.providerOptions
@@ -162,7 +166,7 @@ function removePromptCacheBoundaryProviderOptions(
   if (isPlainObject(velarosOptions) && PromptCacheBreakpointKey in velarosOptions) {
     changed = true
     const cleaned = omitRecordKey(velarosOptions, PromptCacheBreakpointKey)
-    if (Object.keys(cleaned).length > 0) next[VelarosProviderOptionsKey] = cleaned
+    if (!isEmpty(Object.keys(cleaned))) next[VelarosProviderOptionsKey] = cleaned
     else delete next[VelarosProviderOptionsKey]
   }
 
@@ -170,7 +174,7 @@ function removePromptCacheBoundaryProviderOptions(
   if (isPlainObject(anthropicOptions) && CacheControlField in anthropicOptions) {
     changed = true
     const cleaned = omitRecordKey(anthropicOptions, CacheControlField)
-    if (Object.keys(cleaned).length > 0) next[AnthropicProviderKey] = cleaned
+    if (!isEmpty(Object.keys(cleaned))) next[AnthropicProviderKey] = cleaned
     else delete next[AnthropicProviderKey]
   }
 

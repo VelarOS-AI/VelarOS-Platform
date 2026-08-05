@@ -5,6 +5,7 @@ import {
   type ContextGovernanceSessionRegistry,
   type ContextWorkingSetBudgetAllocation,
   ContextWorkingSetBudgetGovernor,
+  resolveGovernanceSessionKey,
 } from './context'
 import type { ContextDegradeAction } from './ContextDegradeLadder'
 import { applyRunProfileToolExposure } from './RunProfile'
@@ -54,9 +55,15 @@ function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolCo
     case 'govern-epoch': {
       // 缺页 = 请求治理器强开一次 epoch。语义与模型调 context:distill / 宿主 compact_session 一致：
       // 绕过水位触发线，但反空转、尾保护、达标即停一条不减——压不下去时返回 false 交给下一级。
-      const report = ctx.governanceSessions.requestEpoch(ctx.toolContext.sessionId, {
-        modelWindowTokens: ctx.roleRuntime.contextWindow,
-      })
+      // 键必须与编译面注册时用的那一个逐字相同：编译面对空会话 id 回落 `unknown-session`，
+      // 这里原样传空串就查不到账本，这一级对无身份会话恒失效。
+      const report = ctx.governanceSessions.requestEpoch(
+        resolveGovernanceSessionKey(ctx.toolContext.sessionId),
+        {
+          modelWindowTokens: ctx.roleRuntime.contextWindow,
+          source: 'overflow-recovery',
+        }
+      )
       if (report?.applied) {
         ctx.log.warn('solo loop recovered context overflow via governance epoch', {
           turn: ctx.turn,

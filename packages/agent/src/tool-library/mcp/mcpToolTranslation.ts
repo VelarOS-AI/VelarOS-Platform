@@ -22,8 +22,12 @@ import type { KernelToolContext } from '../KernelToolContext'
 import { translateMcpCallResult } from './mcpCallResult'
 import type { McpClientConnection, McpToolDescriptor } from './McpClientConnection'
 
-/** 外部 MCP 工具默认归入的类别（shared/resident，跨三空间可见；不新增封闭轴枚举）。 */
-const DefaultMcpToolCategoryId: ToolCategoryId = 'general'
+/**
+ * 外部 MCP 工具默认归入的类别（shared/resident，跨空间可见；不新增封闭轴枚举）。
+ *
+ * 宿主可用 {@link TranslateMcpToolInput.categoryId} 显式覆盖成自己的分类。
+ */
+const DefaultMcpToolCategoryId: ToolCategoryId = 'agent-control'
 
 /** config 的自动放行策略：true=全部免确认；string[]=仅这些（原始）工具名免确认。 */
 export type McpAutoApprovePolicy = boolean | readonly string[]
@@ -146,6 +150,7 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
             approvalRisk: riskLevel,
             riskScope: `mcp:${serverName}:${originalName}`,
             rememberRiskScope: true,
+            detail: { kind: 'mcp-tool-call', serverName, toolName: originalName },
           }
         )
         if (!decision.approved) return {

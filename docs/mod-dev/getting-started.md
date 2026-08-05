@@ -175,7 +175,10 @@ IPC 通道 `system:install-mod-from-directory`。
 - `activeAxes` → `settings.modsAxesActive`「已生效轴」
 - `absentAxes` → `settings.modsAxesAbsent`「缺席轴」（宿主不支持该轴的落点）
 - `unroutedAxes` → `settings.modsAxesUnrouted`「未接线轴」
-  （**宿主声明支持、Loader 也注册了，但宿主还没把它接进任何运行时消费者**）
+  （**缺席轴里「宿主还没接这条线」的那一档**：轴在闭集里合法、将来会接，今天贡献被裁掉）
+
+两者的差别对作者是行动含义：`absentAxes` 可能是「这个壳形态上就没有这条轴」，
+`unroutedAxes` 是「Desktop 还没接、接了就生效」。设置页两句分列，不混成一句。
 
 `unrouted` 是 Desktop 自己加的一档，诊断码 `desktop.mod.axis-unrouted`；
 轴落点接线失败另有 `desktop.mod.axis-landing-failed`。这两码不在主干契约里。

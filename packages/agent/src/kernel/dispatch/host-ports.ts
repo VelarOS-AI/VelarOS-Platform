@@ -39,7 +39,6 @@ export interface SubAgentQueryOptions {
   contextEpochScope?: string
   context?: string
   softDeadlineAt?: number
-  turnCapDisabled?: boolean
   consumeRelayedGuidance?: () => Nullable<string>
   initialHistory?: ModelMessage[]
   onHistoryUpdate?: (history: ModelMessage[]) => void

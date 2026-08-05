@@ -53,7 +53,7 @@ const distillContextSchema = z.object({
 const distillContext = defineVelaTool<DistillContextInput>({
   name: 'context:distill',
   role: 'control',
-  category: 'general',
+  category: 'context',
   summary: '声明当前阶段已完成：记录蒸馏后的关键事实与进度便签，并请求对已消化的旧上下文做一次压缩。',
   outputInline: true,
   suitable: [

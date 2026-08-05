@@ -93,6 +93,8 @@ interface ToolSpacePage {
   access: ToolAccessDecision
   reasons: ToolSpaceReason[]
   description?: string
+  /** companion skill id：这张页的深度用法住在哪个技能里（`tooling:map` 卡片透出）。 */
+  usageSkillId?: string
 }
 
 interface ToolSpaceResolverCodingSession {
@@ -451,6 +453,7 @@ function createToolPage(input: {
     }),
     reasons,
     description: normalizeDescription(input.tool.description),
+    usageSkillId: input.tool.usageSkillId,
   }
 }
 
@@ -652,6 +655,7 @@ function buildToolSpacePagesFromCapabilities(pages: ToolCapabilityPage[]): ToolS
         }),
         reasons: page.reasons,
         description: descriptor.description,
+        usageSkillId: descriptor.usageSkillId,
       }
     })
 }

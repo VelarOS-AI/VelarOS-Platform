@@ -9,8 +9,8 @@ import {
   DefaultContextGovernanceConfig,
   resolveContextGovernanceConfig,
   resolveContextGovernancePreset,
-  resolveGovernanceWindowTokens,
 } from '../src/agent/context/residency/governanceConfig'
+import { resolveGovernanceWindowTokens } from '../src/agent/context/residency/governanceWindow'
 import { ingestHistoryIntoLedger, planHistoryIngest } from '../src/agent/context/residency/ingest'
 import { InMemoryContextMigrationEventSink } from '../src/agent/context/residency/migrationLog'
 import { projectContextLedger } from '../src/agent/context/residency/projection'
@@ -75,20 +75,23 @@ void describe('context residency ledger · determinism (P7)', () => {
 
 void describe('context residency ledger · anchors', () => {
   void test('extracts paths, commands, identifiers and semantic numbers in a stable order', () => {
-    const anchors = extractContextAnchors(
+    const text =
       'ran bun run check on packages/agent/src/index.ts and it exited with exit code 3; ContextResidencyLedger is fine'
-    )
-    assert.ok(anchors.includes('packages/agent/src/index.ts'))
+    const anchors = extractContextAnchors(text)
+    const texts = anchors.map((anchor) => anchor.text)
+    assert.ok(texts.includes('packages/agent/src/index.ts'))
     // 命令锚逐字沿用 v1 的停止词裁剪：散文停止词（and/or/then…）才断，介词不断。
-    assert.ok(anchors.some((anchor) => anchor.startsWith('bun run check')))
-    assert.ok(anchors.includes('ContextResidencyLedger'))
-    assert.ok(anchors.some((anchor) => anchor.toLowerCase().includes('exit code 3')))
+    assert.ok(texts.some((anchor) => anchor.startsWith('bun run check')))
+    assert.ok(texts.includes('ContextResidencyLedger'))
+    assert.ok(texts.some((anchor) => anchor.toLowerCase().includes('exit code 3')))
+    assert.deepEqual(anchors, extractContextAnchors(text))
+    // 类别在准入期就定下：骨架据此分栏，不再靠一条更弱的正则二次分类（审计 V13）。
     assert.deepEqual(
-      anchors,
-      extractContextAnchors(
-        'ran bun run check on packages/agent/src/index.ts and it exited with exit code 3; ContextResidencyLedger is fine'
-      )
+      anchors.find((anchor) => anchor.text === 'packages/agent/src/index.ts')?.kind,
+      'path'
     )
+    assert.deepEqual(anchors.find((anchor) => anchor.text.startsWith('bun run'))?.kind, 'command')
+    assert.deepEqual(anchors.find((anchor) => anchor.text === 'ContextResidencyLedger')?.kind, 'identifier')
   })
 })
 
@@ -255,7 +258,14 @@ void describe('context residency ledger · projection layout', () => {
     assert.ok(projected.stats.occupancyPercent !== null)
   })
 
-  void test('tail protection overrides a declared downgrade', () => {
+  void test('tail protection does not re-inflate a declared downgrade (v3 · R1)', () => {
+    // 语义改判（v3 · R1）：尾保护 = **治理器不得再降这条记录**（候选集与蒸馏段按 id 排除窗口内
+    // 记录），而不是"把已降级的记录在渲染面还原成全文"。旧语义下窗口是「最近 N 轮 ∩ 最近 M 条」，
+    // 每追加一条就滑一格，滑出去那条的渲染当场从全文变信封 —— 位置固定在前缀中段，既不产 epoch
+    // 报告也不落迁移事件，KV 缓存却每轮失效一次（P4「每 epoch 恰好一次缓存重建」被自己的保护破掉）。
+    //
+    // 这里用手工 migrate 制造"窗口内的已降级记录"——治理器本身产不出这一形态（窗口只出不进）——
+    // 断言投影诚实反映账本：账本说降了就是降了，渲染面不上翻。
     const ledger = new ContextResidencyLedger()
     const record = ledger.append({
       kind: 'assistant',
@@ -270,7 +280,10 @@ void describe('context residency ledger · projection layout', () => {
       residency: ledger.residencyVector(),
       budget: { tailProtectTurns: 2 },
     })
-    assert.equal(projected.messages[0]?.content, 'recent narrative')
+    assert.equal(projected.stats.tailProtectedRecordIds.length, 1)
+    assert.equal(projected.stats.tombstoneCount, 1)
+    assert.notEqual(projected.messages[0]?.content, 'recent narrative')
+    assert.ok(String(projected.messages[0]?.content).includes(record.id))
   })
 
   void test('evicted tool results keep their message shell so tool pairing survives', () => {
@@ -370,7 +383,9 @@ void describe('context residency ledger · ingest', () => {
       [0, 0, 0, 0, 1]
     )
     assert.deepEqual(plan.inputs[2]?.toolArgs, { path: 'src/a.ts' })
-    assert.equal(plan.nextTurn, 2)
+    // nextTurn 不预支：跨批的"见过边界没有"单独带走，否则增量与整批对同一份历史给出两套轮序。
+    assert.equal(plan.nextTurn, 1)
+    assert.equal(plan.turnBoundarySeen, true)
 
     const ledger = new ContextResidencyLedger()
     ingestHistoryIntoLedger(ledger, history)
@@ -451,10 +466,27 @@ void describe('context residency ledger · governance config (§7)', () => {
     )
   })
 
-  void test('governance window is min(model window, cap)', () => {
+  /**
+   * 量纲统一批改判（原断言：G === min(模型窗口, cap)）。
+   *
+   * G 现在从**送核门余量**导出，cap 只剩上限角色：超大窗口下 cap 仍然咬合（1M → 200K），
+   * 常规窗口下咬合的是门余量（128K → 门红线 102_400 的九折 = 92_160）。
+   */
+  void test('governance window is derived from the send gate, capped by cap', () => {
     const config = resolveContextGovernanceConfig()
-    assert.equal(resolveGovernanceWindowTokens(config, 1_000_000), 200_000)
-    assert.equal(resolveGovernanceWindowTokens(config, 128_000), 128_000)
-    assert.equal(resolveGovernanceWindowTokens(config, null), 200_000)
+    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 1_000_000 }), 200_000)
+    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 128_000 }), 92_160)
+    // 窗口缺席 = `estimateContextUsage` 的默认 128K，与门用同一条兜底，不再退化成 cap。
+    assert.equal(resolveGovernanceWindowTokens(config, {}), 92_160)
+    // 输出预留 + 安全余量一进来，两把尺子一起缩：G 必须跟着门的 usable 走。
+    assert.equal(
+      resolveGovernanceWindowTokens(config, {
+        modelWindowTokens: 128_000,
+        reservedOutputTokens: 16_000,
+        safetyMarginPercent: 4,
+      }),
+      // usable = floor(128_000 × 0.96) − 16_000 = 106_880 → 门红线 85_504 → 九折 76_953。
+      76_953
+    )
   })
 })

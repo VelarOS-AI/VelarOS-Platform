@@ -1,6 +1,7 @@
 import { isEmpty, isPresent,isString } from '@velaros-ai/core'
 
 import { compareStableStrings, stableStringify } from '../agent/context/residency/determinism'
+import { UnknownGovernanceSessionId } from '../agent/context/residency/sessionKey'
 
 import type { ProviderTurnEventReducer } from './provider-events'
 
@@ -91,8 +92,10 @@ function normalizeOptionalFingerprint(value: LooseOptional<string>): string | un
 function resolvePrefixShapeTrackerKey(
   input: Omit<KernelPrefixShapeTrackerRecordInput, 'current'>
 ): LooseOptional<string> {
+  // 无身份会话不进前缀形状账本：兜底键是所有无身份会话共用的那一个，按它索引会把不同会话的
+  // 前缀混成一条。判据与 `resolveGovernanceSessionKey` 的兜底值同源，不再各写一份字面量。
   const sessionId = input.sessionId?.trim()
-  if (!sessionId || sessionId === 'unknown-session') return undefined
+  if (!sessionId || sessionId === UnknownGovernanceSessionId) return undefined
 
   return JSON.stringify([
     sessionId,

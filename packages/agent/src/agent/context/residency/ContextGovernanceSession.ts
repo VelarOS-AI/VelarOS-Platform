@@ -18,7 +18,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isEmpty, isNotNull, isNull, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { ContextRecordClassifier } from './admission'
 import type { ContextRecord } from './ContextRecord'
@@ -29,14 +29,20 @@ import {
   type ContextGovernanceConfig,
   type ContextGovernanceConfigInput,
   resolveContextGovernanceConfig,
-  resolveGovernanceWindowTokens,
 } from './governanceConfig'
 import {
   type GovernanceEpochReport,
+  type GovernanceEpochSource,
   measureProjectedTokens,
+  resolveProjectionBudget,
   runGovernanceEpoch,
   shouldOpenGovernanceEpoch,
 } from './GovernanceEpoch'
+import {
+  type GovernanceWindowDerivation,
+  type GovernanceWindowInput,
+  resolveGovernanceWindow,
+} from './governanceWindow'
 import { planHistoryIngest } from './ingest'
 import type { ContextMigrationEventSink } from './migrationLog'
 import { measureLedgerProjection } from './projection'
@@ -60,10 +66,27 @@ export interface ContextHandoffSignal {
   reason: Nullable<'low-saving-streak'>
 }
 
-/** 连续多少次低收益 epoch 触发转交建议。 */
-const HandoffLowSavingStreak = 2
-/** post-epoch 占用高于该百分比才认为"压不下去了"（设计留作扫参对象）。 */
-const HandoffOccupancyPercent = 35
+/**
+ * 消息 → 指纹的对象身份缓存。
+ *
+ * `syncHistory` 每轮要对**整条历史**逐条 `stableFingerprint`（键排序递归序列化），而 99% 的轮次
+ * 结论都是"前缀完全一致，只追加了尾巴"。清洗链在稳态下保持对象身份（每层都 `changed ? next :
+ * original`），所以已摄入那截绝大多数轮次是同一批引用——按身份缓存即可把每轮成本从 O(整条历史
+ * 字节数) 降到 O(新增尾巴)。WeakMap：消息被丢弃时条目自动回收，缓存不构成泄漏。
+ *
+ * 前提（也是全链既有纪律）：**没有人原地改写已经进过历史的消息对象**——要改就产生新对象。原地
+ * 改会让缓存给出陈旧指纹，前缀比对把已经变了的那截当成没变。
+ */
+const fingerprintByMessage = new WeakMap<ModelMessage, string>()
+
+function cachedStableFingerprint(message: ModelMessage): string {
+  const cached = fingerprintByMessage.get(message)
+  if (isPresent(cached)) return cached
+
+  const fingerprint = stableFingerprint(message)
+  fingerprintByMessage.set(message, fingerprint)
+  return fingerprint
+}
 
 export interface ContextGovernanceSyncInput {
   messages: readonly ModelMessage[]
@@ -74,6 +97,13 @@ export interface ContextGovernanceSyncInput {
    * 而不是只能退回 toolCallId。
    */
   payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
+  /**
+   * 本轮编译期实测的字符/token 密度。
+   *
+   * 摄入期就要拿到它：准入事件的 `tokensDelta` 是账本自己出的账，它按 4 记而治理器按实测记，
+   * 同一本账本就有了两个数（§16.5 挂账「stats() 密度」的同一根）。
+   */
+  charsPerToken?: LooseOptional<number>
 }
 
 export interface ContextGovernanceSyncResult {
@@ -99,6 +129,8 @@ export class ContextGovernanceSession {
   private ledgerRef: ContextResidencyLedger
   private ingestedFingerprints: string[] = []
   private nextTurn = 0
+  /** 跨批的轮边界状态：增量摄入与整批摄入必须对同一份历史给出同一套轮序（审计 V8/U22）。 */
+  private turnBoundarySeen = false
   private epochSeq = 0
   /**
    * 账本代数：每整本重建一次 +1。
@@ -108,9 +140,33 @@ export class ContextGovernanceSession {
    */
   private ledgerGeneration = 0
   private readonly reports: GovernanceEpochReport[] = []
-  private lastEpochRequestRecordId: Nullable<string> = null
+  /**
+   * 已消费过的 `context:distill` 请求身份 —— 存 **toolCallId 而不是记录 id**。
+   *
+   * 记录 id 是按序号发的，账本一重建就重新发一遍，同一条请求换了名字、旧游标当场失效；反过来
+   * 一条早就消费过的请求被重摄入回来，又会被当成新的再触发一次 epoch。toolCallId 由 provider
+   * 发号、跨重建逐字稳定，两种情况在结构上就分开了：旧请求天然不触发、新请求天然触发，
+   * `resetLedger` 因此不清它，`syncHistory` 也不需要"重建后对齐游标"那条特判（审计 R3/U19）。
+   */
+  private lastConsumedEpochRequestToolCallId: Nullable<string> = null
   private readonly distillRunner: ContextDistillRunner
   public updatedAt = 0
+  /**
+   * 最近一次编译期治理用的量纲（送核门窗口口径 + 字符/token 密度）。
+   *
+   * 手动 epoch（宿主 `compact_session`、缺页降级阶梯）拿不到编译期算出来的密度，也未必拿得到
+   * 模型窗口与固定开销；缺席时回落写死的 4 字符/token + cap，会让同一本账本的手动报告与自动
+   * 报告不同量纲——中文/JSON 密集会话实测密度约 1.5-2，占用因此被低估 2-3 倍，手动 epoch 当场
+   * 空转，而这两类报告又混在同一个 `reports[]` 里喂 handoff 判据（审计 V9 / U11）。
+   * 记住最近一次编译的量纲当回落，比让调用方各自去凑要可靠。
+   *
+   * 窗口侧记的是**推导入参**而不是算好的 G：手动路径可以只补一个自己知道的字段（比如模型窗口），
+   * 其余仍走上一次编译的实测值，最终仍由 `resolveGovernanceWindow` 这一个口算出 G。
+   */
+  private lastCompiledCharsPerToken: Nullable<number> = null
+  private lastCompiledWindowInput: GovernanceWindowInput = {}
+  /** 最近一次解析出来的治理窗口（编译器与 dashboard 共用，杜绝抄一份公式）。 */
+  private lastWindow: Nullable<GovernanceWindowDerivation> = null
 
   public constructor(
     config: ContextGovernanceConfig,
@@ -134,6 +190,11 @@ export class ContextGovernanceSession {
     return this.epochSeq
   }
 
+  /** 账本代数（每整本重建一次 +1）：诊断面与断言电池据此判断"这本账本被重建过没有"。 */
+  public get generation(): number {
+    return this.ledgerGeneration
+  }
+
   public epochReports(): readonly GovernanceEpochReport[] {
     return this.reports
   }
@@ -141,7 +202,9 @@ export class ContextGovernanceSession {
   /** 把本轮的 provider 历史同步进账本：前缀一致则增量追加，分叉则整本重建。 */
   public syncHistory(input: ContextGovernanceSyncInput): ContextGovernanceSyncResult {
     const { messages, at } = input
-    const fingerprints = messages.map((message) => stableFingerprint(message))
+    // 量纲先落地再摄入：重建出来的新账本要带着同一把尺子出生。
+    this.applyMeasuredCharsPerToken(input.charsPerToken)
+    const fingerprints = messages.map((message) => cachedStableFingerprint(message))
     const sharedPrefix = resolveSharedPrefixLength(this.ingestedFingerprints, fingerprints)
     const rebuilt = sharedPrefix < this.ingestedFingerprints.length
     if (rebuilt) this.resetLedger()
@@ -152,12 +215,13 @@ export class ContextGovernanceSession {
       const plan = planHistoryIngest(tail, {
         baseCreatedAt: at,
         startTurn: this.nextTurn,
+        turnBoundarySeen: this.turnBoundarySeen,
         payloadRefsByToolCallId: input.payloadRefsByToolCallId,
       })
       for (const admission of plan.inputs) this.ledgerRef.append(admission)
       this.nextTurn = plan.nextTurn
+      this.turnBoundarySeen = plan.turnBoundarySeen
     }
-
     this.ingestedFingerprints = fingerprints
     this.updatedAt = at
     return { rebuilt, appendedCount: tail.length }
@@ -177,17 +241,37 @@ export class ContextGovernanceSession {
   }
 
   /**
+   * 当前治理窗口 G 的完整推导（编译器组装投影预算 / dashboard 用同一份，不许各算各的）。
+   *
+   * 还没编译过时按已记住的入参现算一遍：默认入参下它退化成"只受送核门红线与 cap 约束"。
+   */
+  public governanceWindow(): GovernanceWindowDerivation {
+    return this.lastWindow ?? resolveGovernanceWindow(this.config, this.lastCompiledWindowInput)
+  }
+
+  /**
    * 轮边界治理：按需跑一次 epoch。
    *
-   * `modelWindowTokens` 缺省时 G 退化为 cap（`resolveGovernanceWindowTokens` 单源）。
-   * 返回 null 表示本轮既未触发也未跳过记账（账本为空）。
+   * G 由 `resolveGovernanceWindow` 从**送核门同一口径**导出（模型窗口 + 输出预留 + 安全余量 +
+   * 固定开销），不再是 `min(模型窗口, cap)`。返回 null 表示本轮既未触发也未跳过记账（账本为空）。
    */
-  public governTurn(input: {
-    at: number
-    modelWindowTokens?: LooseOptional<number>
-    charsPerToken?: LooseOptional<number>
-  }): Nullable<GovernanceEpochReport> {
-    return this.runEpoch(input, this.consumeModelEpochRequest())
+  public governTurn(
+    input: GovernanceWindowInput & {
+      at: number
+      charsPerToken?: LooseOptional<number>
+    }
+  ): Nullable<GovernanceEpochReport> {
+    // 编译期是唯一算得出真实量纲的地方，记下来给手动 epoch 当回落。
+    this.applyMeasuredCharsPerToken(input.charsPerToken)
+    this.lastCompiledWindowInput = {
+      modelWindowTokens: input.modelWindowTokens,
+      reservedOutputTokens: input.reservedOutputTokens,
+      safetyMarginPercent: input.safetyMarginPercent,
+      fixedOverheadTokens: input.fixedOverheadTokens,
+    }
+
+    const modelRequested = this.consumeModelEpochRequest()
+    return this.runEpoch(input, modelRequested, modelRequested ? 'model-tool' : 'watermark')
   }
 
   /**
@@ -195,26 +279,48 @@ export class ContextGovernanceSession {
    *
    * 语义与模型调 `context:distill` 完全一致——**请求开一次 epoch**，绕过水位触发线，但反空转、
    * 尾保护、达标即停等器械纪律一条不减。手动不等于强拆：压不下去的出路仍是转交，不是压尾。
+   *
+   * 量纲缺席时回落**最近一次编译**的窗口口径与密度，而不是回落写死的 cap 与 4 字符/token：
+   * 手动路径与自动路径必须在同一把尺子上，否则两类报告混进同一个 `reports[]` 会把 handoff
+   * 判据带偏。固定开销同理——手动 epoch 不知道本轮工具清单有多大，用上一次编译实测的就是了。
    */
-  public requestEpoch(input: {
-    at: number
-    modelWindowTokens?: LooseOptional<number>
-    charsPerToken?: LooseOptional<number>
-  }): Nullable<GovernanceEpochReport> {
-    return this.runEpoch(input, true)
+  public requestEpoch(
+    input: GovernanceWindowInput & {
+      at: number
+      charsPerToken?: LooseOptional<number>
+      source?: LooseOptional<GovernanceEpochSource>
+    }
+  ): Nullable<GovernanceEpochReport> {
+    const fallback = this.lastCompiledWindowInput
+    return this.runEpoch(
+      {
+        at: input.at,
+        modelWindowTokens: input.modelWindowTokens ?? fallback.modelWindowTokens,
+        reservedOutputTokens: input.reservedOutputTokens ?? fallback.reservedOutputTokens,
+        safetyMarginPercent: input.safetyMarginPercent ?? fallback.safetyMarginPercent,
+        fixedOverheadTokens: input.fixedOverheadTokens ?? fallback.fixedOverheadTokens,
+        charsPerToken: input.charsPerToken ?? this.lastCompiledCharsPerToken,
+      },
+      true,
+      input.source ?? 'host-request'
+    )
   }
 
   private runEpoch(
-    input: {
+    input: GovernanceWindowInput & {
       at: number
-      modelWindowTokens?: LooseOptional<number>
       charsPerToken?: LooseOptional<number>
     },
-    modelRequested: boolean
+    modelRequested: boolean,
+    source: GovernanceEpochSource
   ): Nullable<GovernanceEpochReport> {
+    const window = resolveGovernanceWindow(this.config, input)
+    this.lastWindow = window
+    // 记账口径随会话走：dashboard / stats() 与 epoch 报告必须是同一把尺子（§16.5 挂账）。
+    this.applyMeasuredCharsPerToken(input.charsPerToken)
     if (isEmpty(this.ledgerRef.list())) return null
 
-    const budgetTokens = resolveGovernanceWindowTokens(this.config, input.modelWindowTokens)
+    const budgetTokens = window.windowTokens
     const startedAt = Date.now()
     const epoch = this.epochSeq + 1
     // 只在 epoch 真的会开时才把待落地产物交出去：epoch 拿到就会消费，而它若以 below-trigger
@@ -230,9 +336,11 @@ export class ContextGovernanceSession {
       ledger: this.ledgerRef,
       config: this.config,
       budgetTokens,
+      window,
       epoch,
       at: input.at,
       modelRequested,
+      source,
       charsPerToken: input.charsPerToken,
       pendingDistills: willOpen ? this.distillRunner.takePending(this.ledgerGeneration) : [],
       ledgerGeneration: this.ledgerGeneration,
@@ -278,11 +386,7 @@ export class ContextGovernanceSession {
     const measurement = measureLedgerProjection({
       records: this.ledgerRef.list(),
       residency: this.ledgerRef.residencyVector(),
-      budget: {
-        tailProtectTurns: this.config.tailProtectTurns,
-        budgetTokens,
-        charsPerToken,
-      },
+      budget: resolveProjectionBudget(this.config, budgetTokens, charsPerToken),
     })
     const plan = planContextDistillation({
       ledger: this.ledgerRef,
@@ -334,19 +438,31 @@ export class ContextGovernanceSession {
     return true
   }
 
-  /** 转交信号：连续 N 次低收益 epoch 且 post-epoch 占用仍高。 */
+  /**
+   * 转交信号：连续 N 次低收益 epoch 且 post-epoch 占用仍高。
+   *
+   * **只看当前代账本的报告**：账本一重建（用户回滚/编辑历史、切会话、结构自愈）就换代，上一代那
+   * 两条"压不下去"的报告说的是另一段对话；`resetLedger` 不清 `reports`，不按代过滤就会在一段刚被
+   * 截短、占用极低的对话上继续弹"建议开新会话"（审计 U34 / U16）。
+   */
   public handoffSignal(): ContextHandoffSignal {
-    const applied = this.reports.filter((report) => isNotNull(report.trigger)).slice(-HandoffLowSavingStreak)
+    const streak = this.config.handoff.lowSavingStreak
+    const applied = this.reports
+      .filter(
+        (report) =>
+          isNotNull(report.trigger) && report.ledgerGeneration === this.ledgerGeneration
+      )
+      .slice(-streak)
     const recentSavingPercents = [...applied].reverse().map((report) => report.savingPercent)
     const last = applied.at(-1)
     const lastEpochAfterPercent = toNullable(last?.afterPercent)
     const lowSavingStreak =
-      applied.length >= HandoffLowSavingStreak &&
+      applied.length >= streak &&
       applied.every((report) => report.savingPercent < this.config.minEpochSavingPercent)
     const armed =
       lowSavingStreak &&
       isNotNull(lastEpochAfterPercent) &&
-      lastEpochAfterPercent > HandoffOccupancyPercent
+      lastEpochAfterPercent > this.config.handoff.occupancyPercent
 
     return {
       armed,
@@ -361,20 +477,32 @@ export class ContextGovernanceSession {
    *
    * 信号从账本结构里读，不从工具 handler 推 —— handler 侧信号需要一条穿过 ToolContext 的
    * 新端口，而这个事实本来就在历史里逐字可查；从账本读还天然可离线重放（B4 的前提）。
-   * 每条请求记录只消费一次，避免同一次调用在后续轮次反复触发 epoch。
+   * 每条请求**按 toolCallId 只消费一次**，避免同一次调用在后续轮次反复触发 epoch；账本重建把
+   * 旧请求原样带回来时，toolCallId 与游标相同，天然不再触发（审计 R3/U19）。
    */
   private consumeModelEpochRequest(): boolean {
+    const latest = this.findLatestEpochRequestToolCallId()
+    if (isNull(latest) || latest === this.lastConsumedEpochRequestToolCallId) return false
+
+    this.lastConsumedEpochRequestToolCallId = latest
+    return true
+  }
+
+  /**
+   * 账本里最后一条 `context:distill` 结果记录的 toolCallId（没有则 null）。
+   *
+   * 结构异常导致读不到 toolCallId 时回落记录 id：那条回落路径跨代不稳定，但"这一轮有没有请求"
+   * 仍然答得出，比整条信号消失好。
+   */
+  private findLatestEpochRequestToolCallId(): Nullable<string> {
     const records = this.ledgerRef.list()
     for (let index = records.length - 1; index >= 0; index -= 1) {
       const record = records[index]
-      if (record.kind !== 'tool-result' || record.toolName !== ContextEpochRequestToolName) continue
-      if (record.id === this.lastEpochRequestRecordId) return false
-
-      this.lastEpochRequestRecordId = record.id
-      return true
+      if (record.kind === 'tool-result' && record.toolName === ContextEpochRequestToolName)
+        return record.toolCallId ?? record.id
     }
 
-    return false
+    return null
   }
 
   private findRecordByRef(ref: string): Nullable<ContextRecord> {
@@ -394,6 +522,14 @@ export class ContextGovernanceSession {
     return null
   }
 
+  /** 记住实测量纲并推给当前账本；缺席不覆盖（见 `ContextResidencyLedger.setCharsPerToken`）。 */
+  private applyMeasuredCharsPerToken(value: LooseOptional<number>): void {
+    if (!isPresent(value)) return
+
+    this.lastCompiledCharsPerToken = value
+    this.ledgerRef.setCharsPerToken(value)
+  }
+
   private pushReport(report: GovernanceEpochReport): void {
     this.reports.push(report)
     if (this.reports.length > MaxRetainedEpochReports) {
@@ -402,12 +538,16 @@ export class ContextGovernanceSession {
   }
 
   private resetLedger(): void {
+    // 代数 +1 **先于**建账本：新账本要把新代数盖进自己发出的每一条事件里
+    // （事件流按 id 重放，跨代同名 id 必须能分开——审计 desktop-wiring 优化 6）。
+    this.ledgerGeneration += 1
     this.ledgerRef = this.createLedger()
     this.ingestedFingerprints = []
     this.nextTurn = 0
-    this.lastEpochRequestRecordId = null
-    // 代数 +1 并清空在途蒸馏：新一代的 id 与旧产物指向的完全不是同一批记录。
-    this.ledgerGeneration += 1
+    this.turnBoundarySeen = false
+    // `lastConsumedEpochRequestToolCallId` **刻意不清**：它认的是 provider 发的调用号，跨代稳定。
+    // 清了就等于"重摄入回来的旧请求再触发一次 epoch"，那正是 U19 的形态。
+    // 清空在途蒸馏：新一代的 id 与旧产物指向的完全不是同一批记录。
     this.distillRunner.reset()
   }
 
@@ -416,6 +556,9 @@ export class ContextGovernanceSession {
       config: this.config,
       classifier: this.classifier,
       sink: this.sink,
+      ledgerGeneration: this.ledgerGeneration,
+      // 量纲跨代携带：密度是**尺子**不是账本内容，换一本账本不该换一把尺子。
+      charsPerToken: this.lastCompiledCharsPerToken,
     })
   }
 }
@@ -427,7 +570,7 @@ export interface ContextGovernanceSessionRegistryOptions {
   classifier?: LooseOptional<ContextRecordClassifier>
   /** 迁移事件汇工厂；缺省关闭落盘（agent 包 host 无关，写盘是宿主的事）。 */
   sinkFactory?: LooseOptional<(sessionId: string) => Nullable<ContextMigrationEventSink>>
-  /** 最大跟踪会话数；超出按 updatedAt 淘汰最旧。 */
+  /** 最大跟踪会话数；超出按"最近使用"淘汰最旧的那个。 */
   maxTrackedSessions?: LooseOptional<number>
   /**
    * I2 蒸馏器（宿主注入的一次辅助模型调用）。缺省 = 治理退化为纯机械：
@@ -490,7 +633,12 @@ export class ContextGovernanceSessionRegistry {
     if (!key) return null
 
     const existing = this.sessions.get(key)
-    if (existing) return existing
+    if (existing) {
+      // 命中即"最近使用"：删了再塞把它挪到 Map 尾部（Map 保插入序 = 这里的 LRU 序）。
+      this.sessions.delete(key)
+      this.sessions.set(key, existing)
+      return existing
+    }
 
     const created = new ContextGovernanceSession(
       this.config,
@@ -527,12 +675,20 @@ export class ContextGovernanceSessionRegistry {
    */
   public requestEpoch(
     sessionId: LooseOptional<string>,
-    input: { at?: LooseOptional<number>; modelWindowTokens?: LooseOptional<number> } = {}
+    input: {
+      at?: LooseOptional<number>
+      modelWindowTokens?: LooseOptional<number>
+      /** 字符/token 密度；缺席时会话回落到最近一次编译期实测的量纲。 */
+      charsPerToken?: LooseOptional<number>
+      source?: LooseOptional<GovernanceEpochSource>
+    } = {}
   ): Nullable<GovernanceEpochReport> {
     return toNullable(
       this.peek(sessionId)?.requestEpoch({
         at: input.at ?? Date.now(),
         modelWindowTokens: input.modelWindowTokens,
+        charsPerToken: input.charsPerToken,
+        source: input.source,
       })
     )
   }
@@ -548,15 +704,20 @@ export class ContextGovernanceSessionRegistry {
     if (key) this.sessions.delete(key)
   }
 
+  /**
+   * 容量淘汰：按 Map 插入序（= LRU 序，`resolve` 命中时会把条目挪到尾部）从头删。
+   *
+   * 原实现按 `updatedAt` 升序删，而新建会话的 `updatedAt` 是 0（只有 `syncHistory` 才赋值），
+   * 于是满员之后**每次都把刚建的那个当场删掉**：它这一轮还能用（`resolve` 返回的是对象本身），
+   * 下一轮 peek 不到又重建一个，账本每轮从零开始，老的 128 个反而永远淘汰不掉（审计 V7）。
+   * 换成插入序就不需要任何时钟：刚建的条目恒在尾部，结构上不可能被本次淘汰选中。
+   */
   private evictOldestSessionsBeyondLimit(): void {
     if (this.sessions.size <= this.maxTrackedSessions) return
 
-    const oldestFirst = [...this.sessions.entries()].sort(
-      (left, right) => left[1].updatedAt - right[1].updatedAt
-    )
-    for (const [sessionId] of oldestFirst.slice(0, this.sessions.size - this.maxTrackedSessions)) {
-      this.sessions.delete(sessionId)
-    }
+    const overflow = this.sessions.size - this.maxTrackedSessions
+    const oldestFirst = [...this.sessions.keys()].slice(0, overflow)
+    for (const sessionId of oldestFirst) this.sessions.delete(sessionId)
   }
 }
 

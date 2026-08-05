@@ -1,5 +1,11 @@
+// 域：内置提示词段目录（行为知识三层里 Tier0 的**全集** + 几段宿主无关的 Tier1）。
+//
+// **Tier0 只有三段**——身份 / 品牌语气 / 内部实现边界。三段都走 `createCorePromptSegment`：
+// 不读 facts、不带谓词，渲染结果在构造期即固定，稳定前缀因此在同一会话内逐字不变。
+// 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
 import { isTrue } from '@velaros-ai/core'
 
+import { createCorePromptSegment, PromptSegmentPriority } from './segments/shared'
 import type { PromptSegmentDefinition } from './registry'
 import { PromptRegistry } from './registry'
 
@@ -44,36 +50,29 @@ function createBuiltInPromptSegments(
     options.primaryAgentIdentity?.trim() || PromptCatalog.identities.primaryAgent
 
   return [
-    {
-      id: 'core.identity',
-      label: 'Identity',
-      stability: 'stable',
-      source: 'built-in',
-      priority: 0,
-      render: (context) => context.identity?.trim() || primaryAgentIdentity,
-    },
-    {
+    createIdentityPromptSegment(primaryAgentIdentity),
+    createCorePromptSegment({
       id: 'core.brand-voice',
       label: 'Brand Voice',
-      stability: 'stable',
       source: 'built-in',
-      priority: 10,
-      render: () => PromptCatalog.brandVoice,
-    },
-    {
-      id: 'runtime.internal-implementation-boundary',
+      priority: PromptSegmentPriority.brandVoice,
+      text: PromptCatalog.brandVoice,
+    }),
+    createCorePromptSegment({
+      id: 'core.internal-implementation-boundary',
       label: 'Internal Implementation Boundary',
-      stability: 'dynamic',
-      source: 'runtime',
-      priority: 9010,
-      // dev 上下文不注入边界——开发者可自由讨论内部实现。
-      when: (context) => !isTrue(context.facts?.internalImplementationAccess),
-      render: () => '仅向用户说明宿主应用已授权公开的信息；内部实现细节留在开发上下文。',
-    },
+      source: 'built-in',
+      priority: PromptSegmentPriority.safetyBoundary,
+      // 2026-08-06 升 Tier0 并删除 `when: !facts.internalImplementationAccess`：那个 fact
+      // 全树**没有任何生产者**（`AgentDeveloperContext` 是已退役的 `never` 兼容位，PromptState
+      // 恒填 null），谓词因此恒为真——一条永远成立的判定挂在一条安全纪律上，只会让人以为
+      // 「存在关掉它的路径」。边界本身是不可变纪律，属 Tier0。
+      text: '仅向用户说明宿主应用已授权公开的信息；内部实现细节留在开发上下文。',
+    }),
     {
       id: 'runtime.datetime',
       label: 'Current Date Time',
-      stability: 'dynamic',
+      tier: 'runtime',
       source: 'runtime',
       priority: 9020,
       // P7-1 粒度钝化：原实现是 `toLocaleString()`（**带秒**且随 locale 变格式）——同一分钟内的
@@ -82,12 +81,16 @@ function createBuiltInPromptSegments(
       // 漂移的那一档；格式钉死本地时区的分钟位，与 locale / ICU 数据无关（P7 确定性序列化）。
       render: () => `当前时间：${formatMinutePrecisionLocalTime(new Date())}`,
     },
+    // ↓ 三段能力协议曾声明 `stable`，但它们的谓词读的是**逐轮重算**的 facts（本轮是否开启该
+    //   能力、最新一条 user 消息是否命中视觉意图正则）。段一开一关，稳定前缀就分叉一次，
+    //   连带其后的整段历史掉出 provider 前缀缓存。它们是 Tier1（按会话状态装配）不是 Tier0。
     {
       id: 'runtime.visual-widget-tools',
       label: 'Visual Output Tools',
-      stability: 'stable',
+      tier: 'runtime',
       source: 'built-in',
-      priority: 700,
+      retention: 'protected',
+      priority: PromptSegmentPriority.capabilityProtocol,
       when: (context) => isTrue(context.facts?.shouldInjectVisualWidgetPrompt),
       render: () =>
         [
@@ -98,9 +101,10 @@ function createBuiltInPromptSegments(
     {
       id: 'runtime.html-artifact-protocol',
       label: 'HTML Live Preview Protocol',
-      stability: 'stable',
+      tier: 'runtime',
       source: 'built-in',
-      priority: 705,
+      retention: 'protected',
+      priority: PromptSegmentPriority.capabilityProtocol + 5,
       when: (context) => isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
       render: () =>
         [
@@ -112,9 +116,10 @@ function createBuiltInPromptSegments(
     {
       id: 'runtime.visual-rendering-routing',
       label: 'Visual Rendering Routing',
-      stability: 'stable',
+      tier: 'runtime',
       source: 'built-in',
-      priority: 710,
+      retention: 'protected',
+      priority: PromptSegmentPriority.capabilityProtocol + 10,
       when: (context) =>
         isTrue(context.facts?.shouldInjectVisualWidgetPrompt) &&
         isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
@@ -126,11 +131,13 @@ function createBuiltInPromptSegments(
         ].join('\n'),
     },
     {
+      // 用户附加提示词刻意留在 Tier1：它可以在会话进行中被设置页改掉，进 Tier0 等于让一次
+      // 设置改动把稳定前缀连同整段历史一起作废。
       id: 'user.systemPromptAppend',
       label: 'User Prompt Appendix',
-      stability: 'dynamic',
+      tier: 'runtime',
       source: 'user',
-      priority: 10_000,
+      priority: PromptSegmentPriority.user,
       render: (context) => {
         const appendix = context.chatConfig?.systemPromptAppend?.trim()
         return appendix ? `用户附加提示词：\n${appendix}` : null
@@ -139,9 +146,31 @@ function createBuiltInPromptSegments(
   ]
 }
 
+/**
+ * Tier0 身份段。
+ *
+ * 身份是 **builder 作用域**的常量（主 Agent 一份、每个子 Agent 各一份），不是回合作用域，
+ * 因此由 `ContextBuilder.withIdentity` 在克隆出的注册表里**重新注册一次**本段，而不是在渲染期
+ * 读 `PromptRenderContext.identity`——渲染期读取会给 Tier0 开一条"按上下文变文本"的口子。
+ */
+function createIdentityPromptSegment(identity: string): PromptSegmentDefinition {
+  return createCorePromptSegment({
+    id: 'core.identity',
+    label: 'Identity',
+    source: 'built-in',
+    priority: PromptSegmentPriority.identity,
+    text: identity,
+  })
+}
+
 /** 创建带内置段的 SegmentRegistry。 */
 function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistry {
   return new PromptRegistry(createBuiltInPromptSegments(options))
 }
 
-export { PromptCatalog as BuiltInPromptCatalog, createBuiltInPromptRegistry, createBuiltInPromptSegments }
+export {
+  PromptCatalog as BuiltInPromptCatalog,
+  createBuiltInPromptRegistry,
+  createBuiltInPromptSegments,
+  createIdentityPromptSegment,
+}

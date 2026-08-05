@@ -10,7 +10,6 @@ import type {
   AgentWorkflowDefinition,
   AgentWorkflowRunResult,
   AppLocale,
-  ChatContextEvidenceRecord,
   SessionLineageContext,
   SubAgentStructuredOutputContract,
   SubAgentUsage,
@@ -19,7 +18,6 @@ import type {
   ToolCategoryOverview,
   ToolDescriptor,
   ToolExecutionApi,
-  ToolPermission,
   ToolSurfaceProfileId,
 } from '@velaros-ai/agent/protocol'
 import type { ApprovalPort, InteractionPort } from '@velaros-ai/agent/tool-contract'
@@ -46,11 +44,6 @@ export type { ToolCodingSessionApi } from './context/CodingSessionTypes'
 export type { ToolConversationContextApi } from './context/ConversationContextTypes'
 export type { ToolRoleApi } from './context/RoleContextTypes'
 export type { ToolRuntimeApi } from './context/RuntimeContextTypes'
-
-export interface ToolRuntimeEvidenceApi {
-  record: (records: readonly ChatContextEvidenceRecord[]) => void
-  list: () => readonly ChatContextEvidenceRecord[]
-}
 
 export interface ToolRoleSkillReadResult {
   descriptor: AgentSkillDescriptor
@@ -109,17 +102,13 @@ export interface KernelToolContext {
   developerContext?: LooseOptional<AgentDeveloperContext>
   agentSurfaceId?: LooseOptional<AgentSurfaceId>
   runtime?: ToolRuntimeApi
-  grantedPermissions: ReadonlySet<ToolPermission>
   planningMode: boolean
-  proposalMode: boolean
   isToolSystemEnabled: (toolName: string) => boolean
   codingSession: ToolCodingSessionApi
   skills: ToolSkillsApi
   activeContext: ToolActiveContextApi
   conversation: ToolConversationContextApi
   contextPayloadStore?: ContextPayloadStore
-  evidenceLedger?: readonly ChatContextEvidenceRecord[]
-  runtimeEvidence?: ToolRuntimeEvidenceApi
   role: ToolRoleApi
   approval: ApprovalPort
   interaction: InteractionPort
@@ -191,7 +180,6 @@ export interface SubAgentOptions {
   ) => Promise<SubAgentToolCategoryRequestResult>
   streamTextDeltas?: boolean
   softDeadlineAt?: number
-  turnCapDisabled?: boolean
   consumeRelayedGuidance?: () => Nullable<string>
   initialHistory?: ModelMessage[]
   onHistoryUpdate?: (history: ModelMessage[]) => void

@@ -24,6 +24,11 @@ class ContextRetrievalBoundedRecentMap<Value> {
     return value
   }
 
+  /** 显式失效一个键（会话删除/重置的清场通道）；不存在时是无操作。 */
+  public delete(key: string): void {
+    this.values.delete(key)
+  }
+
   public set(key: string, value: Value): void {
     if (this.values.has(key)) {
       this.values.delete(key)

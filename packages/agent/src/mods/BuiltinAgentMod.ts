@@ -7,10 +7,16 @@
 //  ① manifest 由既有单源**派生**（`Object.keys(collection)` / `createBuiltInPromptSegments()` /
 //     `listExecutionModes()`），不另立一份清单，故不可能与实现漂移；
 //  ② 绑定直接引用原实体，Loader 与投影全程不复制不包装，载荷对象同一性逐项保持。
+import { isBoolean, isString, optionalWhen, toOptional } from '@velaros-ai/core'
+
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import { listExecutionModes } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'
-import { type BuiltInPromptOptions, createBuiltInPromptSegments } from '../prompts'
+import {
+  type BuiltInPromptOptions,
+  createBuiltInPromptSegments,
+  resolvePromptSegmentStability,
+} from '../prompts'
 import type {
   AgentModExecutionModeContribution,
   AgentModManifest,
@@ -74,9 +80,9 @@ function toToolContribution(
   const readOnly = Reflect.get(tool, 'readOnly')
   return {
     name,
-    ...(typeof category === 'string' ? { categoryId: category } : {}),
-    ...(typeof summary === 'string' ? { summary } : {}),
-    ...(typeof readOnly === 'boolean' ? { readOnly } : {}),
+    categoryId: optionalWhen(isString(category), category),
+    summary: optionalWhen(isString(summary), summary),
+    readOnly: optionalWhen(isBoolean(readOnly), readOnly),
   }
 }
 
@@ -85,10 +91,10 @@ function toPromptSegmentContribution(
 ): AgentModPromptSegmentContribution {
   return {
     id: definition.id,
-    ...(definition.label ? { label: definition.label } : {}),
-    stability: definition.stability,
+    label: toOptional(definition.label),
+    stability: resolvePromptSegmentStability(definition.tier),
     priority: definition.priority,
-    ...(definition.retention ? { retention: definition.retention } : {}),
+    retention: toOptional(definition.retention),
   }
 }
 
@@ -98,7 +104,7 @@ function toExecutionModeContribution(
   return {
     id: descriptor.id,
     label: descriptor.label,
-    promptFeatureId: descriptor.prompt.promptFeatureId,
+    promptFeatureId: descriptor.prompt.legacyPromptFeatureId,
     sessionSticky: descriptor.stickiness.sessionSticky,
   }
 }

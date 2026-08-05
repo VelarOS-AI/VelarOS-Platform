@@ -20,6 +20,19 @@ class Semaphore {
 
   constructor(private readonly limit: number) {}
 
+  /**
+   * 本闸的并发上限——**全系统唯一的那个数**。
+   *
+   * 对外可读是刻意的：`agent:run_workflow` 的 lane 调度器按它开 runner，而不是自带一个常量。
+   * 曾经存在第二本账（workflow 自己的 `MaxWorkflowConcurrency`），净效果是模型拿到的
+   * `effective_limits.max_concurrency` 与实际排队行为漂移：声明 4，实际只有信号量剩余槽位
+   * 那么多能跑，而模型从任何返回值里都看不出自己被卡住。加第二个并发上限前先回答
+   * 「两个数漂移时以谁为准」——答不上就是不该加。
+   */
+  public get maxConcurrency(): number {
+    return this.limit
+  }
+
   /** 未达并发上限则立即占用；否则进入先进先出等待队列。 */
   public async acquire(): Promise<void> {
     if (this.active < this.limit) {
@@ -43,4 +56,20 @@ class Semaphore {
   }
 }
 
+/**
+ * 一次执行此刻的真实派发配额快照（`SubAgentDispatcher.describeExecutionLimits` 的返回形状）。
+ *
+ * 三个数**全是运行态真值**，不是任何一方的声明值。消费方（目前只有 `agent:run_workflow`）
+ * 拿它当自己的上限，并原样回显给模型——回显的必须是"你实际能拿到多少"，不是"你申请了多少"。
+ */
+interface SubAgentDispatchLimitsSnapshot {
+  /** 该执行的并发信号量上限（同时能有几个子 Agent 在跑）。 */
+  maxConcurrentSubAgents: number
+  /** 该执行的子 Agent 派发总量帽。 */
+  maxSubAgentsPerExecution: number
+  /** 总量帽还剩多少次可派发（已扣除本执行此前的派发）。 */
+  remainingDispatchBudget: number
+}
+
 export { Semaphore }
+export type { SubAgentDispatchLimitsSnapshot }

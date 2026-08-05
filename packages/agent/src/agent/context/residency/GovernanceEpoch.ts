@@ -12,8 +12,9 @@
  *  3. **I2 产物落地**：把上一个 epoch 之后异步跑完的蒸馏产物应用进账本（B2 起）。放在最前是因为
  *     它已经付过钱了，先落地能让 I0 少动几条记录；也因为它是本 epoch 唯一"来自过去"的输入。
  *  4. **I0 逐出**（免费、可召回）：pending-EVICT → 陈旧可重取 → 尾外低锚密度。
- *  5. **I1 规则骨架**（免费、保关键场）：把被降级的叙事段落折成六字段骨架记录 append 进账本，
- *     成员迁 SUMMARIZED。
+ *  5. **I1 规则骨架**（免费、保关键场）：把叙事段落折成六字段骨架记录 append 进账本，成员迁
+ *     SUMMARIZED。**先出骨架再迁成员**——骨架抽不出字段时返回 null，先迁的话这批记录已经从投影里
+ *     消失且无人代表，而账本只降不升，回滚不了（审计 R2）。
  *  6. 达标即停（`epochTargetPercent`），出 `GovernanceEpochReport`。
  *
  * **下一次蒸馏的规划不在这里**：本函数是纯的（同输入必同输出，可离线重放），而规划要问"有没有
@@ -25,12 +26,12 @@
  *  - **治理类记录不进候选**：P6 的护栏（权限判决 / 用户纠正 / 安全规则）连 EXCERPT 都不降。
  *  - **摘要不折摘要**：I1/I2 产物是压缩的终点，再折一次就是有损叠有损。
  */
-import { isEmpty, isNotNull, isPresent, isString } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { anchorDensityPerKiloChar } from './anchors'
 import type { ContextRecord, ContextResidency } from './ContextRecord'
-import { estimateResidencyTokens, residentChars } from './ContextRecord'
+import { estimateResidencyTokens } from './ContextRecord'
 import {
   type ContextDistillGateSignals,
   type ContextDistillProduct,
@@ -40,8 +41,14 @@ import {
   isContextSummaryText,
 } from './distill'
 import type { ContextDistillInstrument, ContextGovernanceConfig } from './governanceConfig'
+import type { GovernanceWindowDerivation } from './governanceWindow'
 import type { ContextMigrationCause } from './migrationLog'
-import { measureLedgerProjection } from './projection'
+import {
+  type ContextProjectionBudget,
+  type ContextProjectionMeasurement,
+  measureLedgerProjection,
+  residentChars,
+} from './projection'
 import type { ContextResidencyLedger } from './ResidencyLedger'
 import { buildContextSkeleton } from './skeleton'
 
@@ -80,6 +87,22 @@ export interface GovernanceEpochDistillReport {
   totals: ContextDistillTotals
 }
 
+/**
+ * 谁请求了这次 epoch。
+ *
+ * `trigger` 只分"水位 / 有人请求"两态，而"有人"是模型、宿主还是缺页阶梯，对离线重放与扫参是三件
+ * 不同的事（B4 要能把手动 epoch 从水位样本里剔出去，见审计 V9：两类报告混进同一个 reports[]）。
+ */
+export type GovernanceEpochSource =
+  /** 占用越过 `epochTriggerPercent`。 */
+  | 'watermark'
+  /** 模型调用 `context:distill` 声明阶段边界。 */
+  | 'model-tool'
+  /** 宿主手动请求（`compact_session` 一类）。 */
+  | 'host-request'
+  /** 缺页降级阶梯的 `govern-epoch` 级。 */
+  | 'overflow-recovery'
+
 /** 每次 epoch 的完整账（P8 测量原生：直接进 scoreboard，也是离线重放的输入）。 */
 export interface GovernanceEpochReport {
   epoch: number
@@ -88,6 +111,10 @@ export interface GovernanceEpochReport {
   skipReason: Nullable<GovernanceEpochSkipReason>
   /** 触发来源：水位 / 模型请求。 */
   trigger: Nullable<'watermark' | 'model-request'>
+  /**
+   * 请求来源（比 `trigger` 细一格）。未触发的轮次也照记——"谁问了但没开"同样是重放输入。
+   */
+  source: GovernanceEpochSource
   budgetTokens: number
   beforeTokens: number
   afterTokens: number
@@ -103,6 +130,22 @@ export interface GovernanceEpochReport {
   byInstrument: Record<'evict' | 'skeleton' | 'distill', number>
   /** I2 分账。 */
   distill: GovernanceEpochDistillReport
+  /**
+   * 本次记账用的字符/token 密度。
+   *
+   * 同一本账本用不同密度跑出来的 before/after/savingPercent 完全不同；报告里读不出量纲，离线重放
+   * 就无法复现，扫参时也分不清"阈值改了"还是"量纲变了"（审计 V9/U11 的记账落点）。
+   */
+  charsPerToken: number
+  /**
+   * 本次 G 的推导（送核门口径 → 固定开销 → 余量 → G）。
+   *
+   * `budgetTokens` 只答"分母是多少"，这里答"分母凭什么是这个数"：离线重放与扫参要靠它把
+   * 「阈值动了」和「送核门余量动了」分开。调用方没给推导（纯 epoch 单测）时为 null。
+   */
+  window: Nullable<GovernanceWindowDerivation>
+  /** 本次 epoch 所在的账本代数：账本一重建就换代，跨代报告不可比（审计 U34）。 */
+  ledgerGeneration: number
   durationMs: number
   at: number
 }
@@ -110,14 +153,18 @@ export interface GovernanceEpochReport {
 export interface RunGovernanceEpochInput {
   ledger: ContextResidencyLedger
   config: ContextGovernanceConfig
-  /** 治理窗口 G（token）= min(模型窗口, cap)。 */
+  /** 治理窗口 G（token）：由 `resolveGovernanceWindow` 从送核门口径导出。 */
   budgetTokens: number
+  /** G 的推导（记账用，原样进报告）；缺省时报告里为 null。 */
+  window?: LooseOptional<GovernanceWindowDerivation>
   /** 本次 epoch 号（从 1 起，由会话维护）。 */
   epoch: number
   /** 时刻（迁移事件的 `at`）。epoch 自身不取时钟。 */
   at: number
   /** 模型是否调用了 `context:distill` 声明阶段边界。 */
   modelRequested?: LooseOptional<boolean>
+  /** 请求来源（记账用；缺省按 `modelRequested` 推断）。 */
+  source?: LooseOptional<GovernanceEpochSource>
   /** 消息字符/token 的本轮实测密度；缺省保持历史上的 4 字符/token。 */
   charsPerToken?: LooseOptional<number>
   /** 耗时（毫秒）。调用方测量，本函数不取时钟。 */
@@ -172,12 +219,8 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   byInstrument.distill += distillOutcome.appliedByInstrument.distill
   byInstrument.skeleton += distillOutcome.appliedByInstrument.skeleton
 
-  const candidates = collectCandidates(
-    ledger,
-    config,
-    budgetTokens,
-    input.charsPerToken
-  )
+  const collected = collectCandidates(ledger, config, budgetTokens, input.charsPerToken)
+  const candidates = collected.candidates
   if (isEmpty(candidates)) {
     const after = measureProjectedTokens(
       ledger,
@@ -224,39 +267,78 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   }
 
   // ② I0 逐出：机械、免费、可召回。
-  const skeletonMembers: ContextRecord[] = []
+  //
+  // 占用**增量记账**：epoch 开始时量一次，之后每迁移一条就按 `residentChars(前) - residentChars(后)`
+  // 扣减。原实现每个候选都重新量一遍全账本（`residencyVector()` 造新 Map + 遍历全部记录），
+  // N=2000 条 × C=500 候选是 100 万次记录访问，还恰好发生在占用最高、用户最等不起的那一刻。
+  //
+  // **骨架成员只收集、不迁移**（审计 R2）：I1 要等这个循环跑完才知道成员集，而
+  // `buildContextSkeleton` 抽不出任何字段时返回 null —— "全是无标记纯叙述的 assistant 段落"
+  // 恰恰就是低锚密度那一档的常客，命中是常态而非边角。先迁后试算的顺序下，这批记录已经被迁成
+  // SUMMARIZED（非工具类 SUMMARIZED 在投影里整条消失），却没有骨架、没有墓碑、没有召回指针；
+  // 账本 append-only、驻留只降不升，回滚不了。宁可这一轮少省一点，也不能让内容无声蒸发。
+  const skeletonMembers: EpochCandidate[] = []
+  let projectedChars = collected.measurement.projectedChars
   for (const candidate of candidates) {
     // 达标即停 —— 但**模型请求的 epoch 例外**：模型调 `context:distill` 就是在说"这批结果我已经
     // 消化完了"，那些被取代/陈旧的快照该当场折掉，不该因为"现在还没胀到目标线"而留着。
     // 例外只覆盖免费且可召回的前两档（superseded / stale）；低锚密度那档仍只在真有压力时才动。
-    const belowTarget =
-      measureProjectedTokens(
-        ledger,
-        config,
-        budgetTokens,
-        input.charsPerToken
-      ) <= targetTokens
-    if (belowTarget && !(modelRequested && candidate.tier !== 'low-density')) break
+    // 达标后对低密度候选是 **continue 而不是 break**：候选按分排序，一条被反复召回（faultCount
+    // 高）的 superseded 记录会排到低密度候选之后，break 会把它连同后面全部免费档一起跳过（审计 U20）。
+    if (estimateResidencyTokens(projectedChars, input.charsPerToken ?? 4) <= targetTokens) {
+      if (!modelRequested) break
+      if (candidate.tier === 'low-density') continue
+    }
 
     const target = resolveEvictionTarget(candidate.record)
+    // 骨架关掉时（A0-truncation 臂）叙事仍走普通逐出：那一臂的定义就是"直接砍"，
+    // 给它补一道"没骨架就不砍"的保护等于把基线臂改造成另一臂。
+    if (config.instruments.skeleton && isSkeletonMember(candidate.record)) {
+      skeletonMembers.push(candidate)
+      // 增量记账**按"预计会迁"扣减**：不扣的话"达标即停"看不见骨架档的收益，会继续往下折本来
+      // 够不着的候选（这批候选恰好排在最后，等于变相取消达标即停）。骨架万一生成失败，这批记录
+      // 原样留在账本里，而报告里的 after 由 epoch 末尾的**真实度量**给出 —— 记账不会因此说谎。
+      projectedChars -= candidate.reclaimableChars
+      continue
+    }
+
     const cause: ContextMigrationCause = candidate.superseded ? 'superseded' : 'evict'
     const outcome = ledger.migrate(candidate.record.id, target, cause, input.at)
     if (!outcome.applied) continue
 
+    projectedChars -= Math.max(
+      0,
+      residentChars(candidate.record, candidate.residency) -
+        residentChars(candidate.record, outcome.residency)
+    )
     byInstrument.evict += 1
-    if (isSkeletonMember(candidate.record)) skeletonMembers.push(candidate.record)
   }
 
-  // ③ I1 规则骨架：把被降级的叙事段折成六字段骨架 append 进账本（P1：提升/新知识都是追加）。
-  if (config.instruments.skeleton && !isEmpty(skeletonMembers)) {
-    const skeleton = buildContextSkeleton({ members: skeletonMembers, epoch: input.epoch })
-    if (skeleton) {
-      appendSummaryRecord(ledger, {
-        text: skeleton.text,
-        memberIds: skeleton.memberIds,
-        at: input.at,
+  // ③ I1 规则骨架：先试算骨架，**产出非 null 才迁移成员**（顺序不可倒，理由见上）。
+  //
+  // 骨架成员只在骨架档记一次：按 `memberIds.length` 记完再补一遍 evict 会让 migrationCount 超过
+  // 实际迁移条数近一倍（审计 U18）。骨架没生成时一条都不记 —— 它们确实一条都没迁。
+  const skeleton = isEmpty(skeletonMembers)
+    ? null
+    : buildContextSkeleton({
+        members: skeletonMembers.map((candidate) => candidate.record),
+        epoch: input.epoch,
+        maxAnchors: config.distillation.maxRequiredAnchors,
       })
-      byInstrument.skeleton += skeleton.memberIds.length
+  if (skeleton) {
+    appendSummaryRecord(ledger, {
+      text: skeleton.text,
+      memberIds: skeleton.memberIds,
+      at: input.at,
+    })
+    for (const candidate of skeletonMembers) {
+      const migrated = ledger.migrate(
+        candidate.record.id,
+        resolveEvictionTarget(candidate.record),
+        'skeleton',
+        input.at
+      )
+      if (migrated.applied) byInstrument.skeleton += 1
     }
   }
 
@@ -301,11 +383,7 @@ function applyPendingDistills(
   const measurement = measureLedgerProjection({
     records: ledger.list(),
     residency: ledger.residencyVector(),
-    budget: {
-      tailProtectTurns: config.tailProtectTurns,
-      budgetTokens,
-      charsPerToken: input.charsPerToken,
-    },
+    budget: resolveProjectionBudget(config, budgetTokens, input.charsPerToken),
   })
 
   for (const product of products) {
@@ -417,8 +495,26 @@ export function measureProjectedTokens(
   return measureLedgerProjection({
     records: ledger.list(),
     residency: ledger.residencyVector(),
-    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens, charsPerToken },
+    budget: resolveProjectionBudget(config, budgetTokens, charsPerToken),
   }).projectedTokens
+}
+
+/**
+ * 治理配置 → 投影预算（尾保护两条判据 + 量纲）。
+ *
+ * 单源：投影、度量、候选收集、蒸馏规划四处都从这里取，少传一条尾保护判据就是**两套尾保护语义**。
+ */
+export function resolveProjectionBudget(
+  config: ContextGovernanceConfig,
+  budgetTokens: number,
+  charsPerToken?: LooseOptional<number>
+): ContextProjectionBudget {
+  return {
+    tailProtectTurns: config.tailProtectTurns,
+    tailProtectMaxRecords: config.tailProtectMaxRecords,
+    budgetTokens,
+    charsPerToken,
+  }
 }
 
 /**
@@ -433,13 +529,13 @@ function collectCandidates(
   config: ContextGovernanceConfig,
   budgetTokens: number,
   charsPerToken?: LooseOptional<number>
-): EpochCandidate[] {
+): { candidates: EpochCandidate[]; measurement: ContextProjectionMeasurement } {
   const records = ledger.list()
   const residencyVector = ledger.residencyVector()
   const measurement = measureLedgerProjection({
     records,
     residency: residencyVector,
-    budget: { tailProtectTurns: config.tailProtectTurns, budgetTokens, charsPerToken },
+    budget: resolveProjectionBudget(config, budgetTokens, charsPerToken),
   })
   const pendingEvictIds = new Set(ledger.pendingEvictions())
   const latestTurn = resolveLatestTurnOf(records)
@@ -483,16 +579,17 @@ function collectCandidates(
   }
 
   // 同分按账本序（老的先降）—— 排序确定，离线重放才可复现。
-  return candidates.sort(
-    (left, right) => left.score - right.score || left.record.seq - right.record.seq
-  )
+  candidates.sort((left, right) => left.score - right.score || left.record.seq - right.record.seq)
+  return { candidates, measurement }
 }
 
 /**
  * 可降级判据。
  *
- * 三类记录一律不进候选：
+ * 四类记录一律不进候选：
  *  - `governance`（P6 护栏，连 EXCERPT 都不降；system 消息降级还会破坏角色语义）；
+ *  - `pinned`（首条 user 任务陈述 / 蒸馏便签等结构性护栏）：**完全免疫**，账本层的 EXCERPT
+ *    地板只是拦住绕过候选集的直接迁移的第二道保险，不是给治理器留的"可以变薄"口子（审计 R7）；
  *  - `summary`（I1/I2 产物，压缩的终点，再折就是有损叠有损）；
  *  - 已是骨架文本的 assistant 消息（跨 epoch 复用同一判据，防止上一轮骨架被这一轮当叙事折掉）。
  */
@@ -548,6 +645,7 @@ function buildReport(
     applied: migrationCount > 0,
     skipReason,
     trigger,
+    source: input.source ?? (input.modelRequested ? 'model-tool' : 'watermark'),
     budgetTokens,
     beforeTokens,
     afterTokens,
@@ -568,6 +666,12 @@ function buildReport(
       gate: null,
       totals: createEmptyDistillTotals(),
     },
+    // 记账口径随报告一起出门：缺省 4 是 projection / ContextRecord 的同一条兜底。
+    charsPerToken: input.charsPerToken ?? 4,
+    // 窗口推导同理：报告里读不出"G 是怎么来的"，就没法在离线重放里区分
+    //「触发线改了」与「送核门余量变了」（量纲统一批的记账落点）。
+    window: toNullable(input.window),
+    ledgerGeneration: input.ledgerGeneration ?? 0,
     durationMs: Math.max(0, Math.floor(input.durationMs ?? 0)),
     at: input.at,
   }

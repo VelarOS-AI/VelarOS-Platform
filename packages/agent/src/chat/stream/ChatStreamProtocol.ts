@@ -237,7 +237,6 @@ export class ChatStreamProtocol {
                   result: event.result,
                   error: event.error,
                   effects: event.effects,
-                  evidence: event.evidence,
                   modelImage: event.modelImage,
                 } satisfies StreamToolResultPayload,
               },

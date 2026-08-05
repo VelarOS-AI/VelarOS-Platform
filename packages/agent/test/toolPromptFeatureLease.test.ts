@@ -28,7 +28,6 @@ const registry = new Map([
 function context(hasToolNameAccess: boolean) {
   return {
     role: { id: 'primary-agent' },
-    grantedPermissions: new Set(),
     codingSession: {
       isToolCategoryAllowed: () => true,
       hasToolCategoryAccess: () => true,

@@ -31,9 +31,16 @@ import type { AgentSkillDefinition, AgentSkillProvider } from './AgentSkillProvi
  * 选中意图断在半路且没有任何报错；只补读取侧则是选了却不提示，用户完全无感。
  *
  * ## 注入方式由 skillKind 决定，不是由来源决定
- * `role` 类技能注入全文常驻（只应由受信任的内置角色供应方产出），`capability` 类一律只注入
- * `skill:<id>` 指针、正文按需 tooling:read。把某个来源整体升格成全文注入等于把它的 token 成本
- * 变成每轮固定开销。
+ * `role` 类技能注入全文常驻，`capability` 类一律只注入 `skill:<id>` 指针、正文按需 tooling:read。
+ * 把某个来源整体升格成全文注入等于把它的 token 成本变成每轮固定开销。
+ *
+ * ## 全文常驻档需要**宿主盖章**（2026-08-06）
+ * `skillKind: 'role'` 只是声明；能不能真的全文常驻，看它的供应方 id 是否在
+ * `trustedRoleSkillProviderIds` 里——**缺省空集，即任何供应方都不许**。此前这道门只存在于
+ * Desktop 的 ModSkillProvider（把 mod 声明的 role 降级成 capability），也就是说：门在宿主的
+ * 一个适配器里，而真正读取 `skillKind` 的缝在这个类里。换一个宿主、或 Desktop 多接一条
+ * 供应方装配线，第三方文本就能拿到每回合全文常驻的提示词位（提示词注入面）。
+ * 判据同 design-principles §9.1：信任级是宿主盖章，且必须盖在执行门真正读取的那道缝上。
  */
 class AgentSkillRepository {
   private readonly skillsById = new Map<string, AgentSkillDefinition>()
@@ -44,7 +51,14 @@ class AgentSkillRepository {
    */
   private lastProviderVersions: Nullable<Array<LooseOptional<string>>> = null
 
-  constructor(private readonly providers: AgentSkillProvider[]) {
+  /** 允许产出全文常驻（`skillKind: 'role'`）技能的供应方 id；缺省空集 = 谁都不许。 */
+  private readonly trustedRoleSkillProviderIds: ReadonlySet<string>
+
+  constructor(
+    private readonly providers: AgentSkillProvider[],
+    options: { trustedRoleSkillProviderIds?: readonly string[] } = {}
+  ) {
+    this.trustedRoleSkillProviderIds = new Set(options.trustedRoleSkillProviderIds ?? [])
     this.reload()
   }
 
@@ -298,9 +312,10 @@ class AgentSkillRepository {
   }
 
   private shouldInjectFullMarkdown(skill: AgentSkillDefinition): boolean {
-    // 只有角色身份技能（skillKind='role'，仅内置角色供应方产出）注入全文常驻；
-    // 能力技能一律走 skill:<id> 指针，正文按需 tooling:read。
-    return skill.skillKind === 'role'
+    // 只有**受信任供应方**产出的角色身份技能注入全文常驻；能力技能一律走 skill:<id> 指针，
+    // 正文按需 tooling:read。声明 role 但来源未盖章 = 按 capability 处理（静默降级，
+    // 不抛错：一条技能的档位声明错了不该让整个技能库不可用）。
+    return skill.skillKind === 'role' && this.trustedRoleSkillProviderIds.has(skill.sourceId)
   }
 
   private formatLinkedSkillPrompt(

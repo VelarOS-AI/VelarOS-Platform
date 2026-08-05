@@ -31,7 +31,7 @@ function describePlanStepRefsForModel(
 const updatePlan = defineVelaTool<UpdatePlanInput>({
   name: 'plan:update',
   role: 'control',
-  category: 'general',
+  category: 'planning',
   summary: '更新当前 execution 的可见执行计划。',
   suitable: [
     '任务复杂、需要多个具体步骤时，应由模型自主创建计划。',
@@ -219,7 +219,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
 const getPlan = defineVelaTool<Record<string, never>>({
   name: 'plan:get',
   role: 'inspect',
-  category: 'general',
+  category: 'planning',
   summary: '读取当前 execution 的可见执行计划。',
   suitable: ['需要确认当前任务步骤、状态或系统推荐下一步。'],
   forbidden: ['不要用它修改计划。'],

@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai'
 import type {
   AgentContextPhase,
   ChatPromptFeatureId,
+  ExecutionModeId,
   PromptSegmentTrace,
   RunProfileId,
   SkippedPromptSegmentTrace,
@@ -44,9 +45,11 @@ interface BuildSystemPromptArgs {
   identity?: string
   /** 代码上下文信号。 */
   capabilityContext?: unknown
-  /** 用户选择的提示词特性。 */
+  /** 用户选择的提示词特性（能力轴）。 */
   promptFeatures?: ChatPromptFeatureId[]
   preparedToolCategories?: PromptStatePreparedToolCategories
+  /** 执行模式轴；缺席时读取点从旧形态折算。 */
+  executionModes?: readonly ExecutionModeId[]
   goalMode?: boolean
   /** 本次请求使用的运行策略。 */
   thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
@@ -103,6 +106,7 @@ class RunContext {
     capabilityContext,
     promptFeatures,
     preparedToolCategories,
+    executionModes,
     goalMode,
     thinkingDepth,
     runProfile,
@@ -120,6 +124,7 @@ class RunContext {
       capabilityContext,
       promptFeatures,
       preparedToolCategories,
+      executionModes,
       goalMode,
       effectiveThinkingDepth,
       runProfile,
@@ -139,6 +144,7 @@ class RunContext {
     capabilityContext,
     promptFeatures,
     preparedToolCategories,
+    executionModes,
     goalMode,
     thinkingDepth,
     runProfile,
@@ -154,6 +160,7 @@ class RunContext {
     thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
     promptFeatures?: ChatPromptFeatureId[]
     preparedToolCategories?: PromptStatePreparedToolCategories
+    executionModes?: readonly ExecutionModeId[]
     goalMode?: boolean
     runProfile?: LooseOptional<RunProfileId>
     contextPhase: AgentContextPhase
@@ -173,6 +180,7 @@ class RunContext {
       capabilityContext,
       promptFeatures,
       preparedToolCategories,
+      executionModes,
       goalMode,
       effectiveThinkingDepth,
       runProfile,
@@ -200,6 +208,7 @@ class RunContext {
     capabilityContext: _capabilityContext,
     promptFeatures,
     preparedToolCategories,
+    executionModes,
     goalMode,
     effectiveThinkingDepth,
     runProfile,
@@ -216,6 +225,7 @@ class RunContext {
     capabilityContext?: unknown
     promptFeatures?: ChatPromptFeatureId[]
     preparedToolCategories?: PromptStatePreparedToolCategories
+    executionModes?: readonly ExecutionModeId[]
     goalMode?: boolean
     effectiveThinkingDepth: AgentSystemRuntimeConfig['thinkingDepth']
     runProfile?: LooseOptional<RunProfileId>
@@ -241,6 +251,7 @@ class RunContext {
       messages,
       selectedPromptFeatures: promptFeatures,
       preparedToolCategories,
+      executionModes,
       goalMode,
       thinkingDepth: effectiveThinkingDepth,
       runProfile,

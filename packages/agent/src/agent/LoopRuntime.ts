@@ -35,7 +35,6 @@ interface SubAgentOptionsLike {
   roleId?: AgentRoleId
   delegation?: AgentDelegationContract
   streamTextDeltas?: boolean
-  turnCapDisabled?: boolean
   requestToolCategories?: (
     categories: ToolCategoryId[],
     reason: string,

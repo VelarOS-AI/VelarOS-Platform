@@ -5,8 +5,11 @@ import type {
   AgentContextPhaseReason,
   AgentSurfaceId,
   ChatPromptFeatureId,
+  ExecutionModeId,
 } from '@velaros-ai/agent/protocol'
-import { isTrue } from '@velaros-ai/core'
+import { isEmpty, isTrue } from '@velaros-ai/core'
+
+import { resolveExecutionModes } from '../execution-modes'
 
 interface AgentContextPhaseDecision {
   phase: AgentContextPhase
@@ -18,6 +21,8 @@ interface ResolveAgentContextPhaseInput {
   history: readonly ModelMessage[]
   agentSurfaceId?: LooseOptional<AgentSurfaceId>
   unattended?: boolean
+  /** 执行模式轴；缺席时由旧形态（promptFeatures 里的模式 id / goalMode）折算。 */
+  executionModes?: readonly ExecutionModeId[]
   goalMode?: boolean
   selectedSkillIds?: readonly string[]
   promptFeatures?: readonly ChatPromptFeatureId[]
@@ -44,7 +49,9 @@ function resolveAgentContextPhase(input: ResolveAgentContextPhaseInput): AgentCo
   if (input.turn > 1) return operational('continued-provider-loop')
   if (input.agentSurfaceId === 'scheduled-task') return operational('scheduled-task')
   if (isTrue(input.unattended)) return operational('unattended-execution')
-  if (isTrue(input.goalMode)) return operational('goal-mode')
+  // 拆轴后「任一执行模式在场」都算显式执行姿态：goal 照旧，plan 也不再需要靠
+  // `promptFeatures.length` 这条能力判据顺带命中（能力轴上已经没有 plan 了）。
+  if (!isEmpty(resolveExecutionModes(input))) return operational('execution-mode')
   if (input.selectedSkillIds?.some((id) => !!id.trim())) return operational('selected-skill')
   if (input.promptFeatures?.length) return operational('selected-capability')
   if (isTrue(input.hasActiveContext)) return operational('active-context')

@@ -128,7 +128,6 @@ function projectWorkerThreadEvent(event: AgentEvent): Nullable<WorkerThreadProje
           result: event.result,
           error: event.error,
           effects: event.effects,
-          evidence: event.evidence,
           modelImage: event.modelImage,
         },
       }
@@ -337,7 +336,6 @@ class ExecutionEventBus {
       result: payload.result,
       error: payload.error,
       effects: payload.effects,
-      evidence: payload.evidence,
       modelImage: payload.modelImage,
     })
   }

@@ -221,8 +221,16 @@ const agentWorkflowSchema: z.ZodType<AgentWorkflowDefinition> = z.object({
     'Multi-agent workflow',
     '缺省为 Multi-agent workflow。'
   ),
-  max_concurrency: withDefaultNote(clampedInt(1, 4), 4, '缺省 4，钳制到 1-4。'),
-  max_agents: withDefaultNote(clampedInt(1, 8), 8, '缺省 8，钳制到 1-8；仍计入 execution 级 32 上限。'),
+  // 这两条**不给 schema 默认值**。真实上限是 SubAgentDispatcher 的属性（并发信号量上限由宿主
+  // 配置 `maxConcurrentSubAgents` 决定，总量帽是该执行剩余的派发额度），在 schema 里再钉一个
+  // 常量就又造出第二本账：宿主把并发调到 8，模型不写这个字段却被 schema 默认值按死在 4。
+  // 因此这里只保证"是个正整数"，钳制交给解释器按运行时真值做，生效值经 effective_limits 回显。
+  max_concurrency: clampedInt(1, 64)
+    .optional()
+    .describe('可选。省略取派发器实际并发上限，生效值见 effective_limits。'),
+  max_agents: clampedInt(1, 8)
+    .optional()
+    .describe('可选。省略取执行剩余派发额度（上限 8），与 dispatch 共用 32 帽。'),
   steps: z.array(workflowStepSchema).min(1).max(12),
 }).strip()
 

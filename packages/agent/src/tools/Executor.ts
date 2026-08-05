@@ -24,7 +24,6 @@
 // 策略门与审批语义见 `./ExecutionPolicy.ts`。
 import {
   type AgentEvent,
-  type ChatContextEvidenceRecord,
   type ChatRuntimeEvent,
   type StreamToolCallPayload,
   type StreamToolMetadataPayload,
@@ -46,7 +45,6 @@ import { logRuntime } from "@velaros-ai/core/logger";
 import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { ContextPayloadStore } from "../agent/context/ContextPayloadStore";
-import { contextEvidenceLedger } from "../agent/ContextEvidenceLedger";
 import {
   resolveToolResultMiddlewares,
   type ToolResultMiddleware,
@@ -128,7 +126,6 @@ export interface ToolResult {
   result: unknown;
   modelResult?: unknown;
   error?: string;
-  evidence?: ChatContextEvidenceRecord[];
   modelImage?: ToolResultModelImage;
   effects?: StreamToolResultEffects;
   notices?: Array<Extract<AgentEvent, { type: "notice" }>>;
@@ -849,7 +846,7 @@ export class ToolExecutor {
     result: ToolResult,
   ): Promise<ToolResult> {
     // mod 接缝：结果收敛派发（物化之前）。放在物化前是为了让改写后的结果与
-    // displayResult / modelResult / evidence 全链保持同源，不出现「模型看到 A、UI 看到 B」。
+    // displayResult / modelResult 全链保持同源，不出现「模型看到 A、UI 看到 B」。
     if (this.seams?.has("tool-result:after")) {
       const outcome = await this.seams.dispatchToolResultAfter({
         toolCallId: result.toolCallId,
@@ -908,19 +905,6 @@ export class ToolExecutor {
       result: materialized.displayResult,
       modelResult: materialized.modelResult,
     };
-    const evidence = contextEvidenceLedger.extractToolEvidence({
-      toolCallId: finalResult.toolCallId,
-      toolName: finalResult.toolName,
-      args: tool.args,
-      result: finalResult.result,
-      error: finalResult.error,
-      effects: materialized.effects,
-      capabilityPorts: this.ctx.capabilityPorts,
-    });
-    if (evidence.length) {
-      finalResult.evidence = evidence;
-      this.ctx.runtimeEvidence?.record(evidence);
-    }
     tool.result = finalResult;
     // 唯一终结点收敛 tool span：所有终结路径（sibling/abort/blocked/loop-guard/正常/异常）都汇到此。
     // 用未物化的原始 result 派生状态/错误码（结构化失败码在 result.result.error），收敛后置空 handle，
@@ -933,7 +917,6 @@ export class ToolExecutor {
       result: finalResult.result,
       error: finalResult.error,
       effects: materialized.effects,
-      evidence: finalResult.evidence,
       modelImage: finalResult.modelImage
         ? {
             data: finalResult.modelImage.data,

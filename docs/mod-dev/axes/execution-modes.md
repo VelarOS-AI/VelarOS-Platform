@@ -21,7 +21,7 @@ z.strictObject({
 
 | 字段 | 说明 |
 | --- | --- |
-| `promptFeatureId` | 该模式对应的 prompt feature id；**可为 `null`**（模式不挂特性） |
+| `promptFeatureId` | 该模式**拆轴前**用来激活自己的 prompt feature id；**可为 `null`**（模式不挂特性）。2026-08-06 起模式的权威源是 `executionModes` 轴，这个 id 只用于把存量数据/旧宿主请求里的旧形态折算回模式轴（descriptor 侧字段名已改实为 `legacyPromptFeatureId`，manifest 字段名保持不变以免破线上 manifest） |
 | `sessionSticky` | 模式是否会话粘性（切了以后跟着会话走，而不是一轮就掉） |
 
 `sessionSticky` 是真实踩过的坑：模式的权威源必须**会话级稳定**，
@@ -49,7 +49,7 @@ manifest 三字段是它的**投影**——`BuiltinAgentMod.ts` 的 `toExecution
 {
   id: descriptor.id,
   label: descriptor.label,
-  promptFeatureId: descriptor.prompt.promptFeatureId,
+  legacyPromptFeatureId: descriptor.prompt.legacyPromptFeatureId,
   sessionSticky: descriptor.stickiness.sessionSticky,
 }
 ```

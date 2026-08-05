@@ -88,7 +88,6 @@ function createHarness() {
     log: logRuntime.tag('ToolContractExecutionFacadeProbe'),
     role: { id: 'assistant' },
     execution: null,
-    proposalMode: false,
     codingSession,
     getCurrentVisibleToolSurfaceProfile: () => null,
     getCurrentVisibleToolRegistrationSignature: (name: string) =>

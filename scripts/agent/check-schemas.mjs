@@ -125,6 +125,12 @@ const reviewSchema = {
   additionalProperties: false,
 }
 const fakeRuntime = new AgentWorkflowRuntime({
+  // 并发/总量的权威在派发器（P3 判决）：这里喂一份最宽松的真实快照，让归约语义探针不被配额干扰。
+  limits: {
+    maxConcurrentSubAgents: 4,
+    maxSubAgentsPerExecution: 32,
+    remainingDispatchBudget: 32,
+  },
   dispatch: async ({ call, input, round }) => {
     let structured_output
     if (call.id.startsWith('review')) {
@@ -199,6 +205,7 @@ const repeatRun = await fakeRuntime.run(agentWorkflowSchema.parse({
 }), { runId: 'check:repeat' })
 
 const degradedRuntime = new AgentWorkflowRuntime({
+  limits: { maxConcurrentSubAgents: 4, maxSubAgentsPerExecution: 32, remainingDispatchBudget: 32 },
   dispatch: async ({ call }) => {
     if (call.id === 'review-c') return { call_id: call.id, status: 'failed', summary: 'simulated provider failure' }
     return {

@@ -38,6 +38,7 @@ import {
   ExecutionStateMachine,
   ExecutionStore,
   extractGuidanceUserText,
+  resolveMainAgentGuidanceDelivery,
   SourceSessionGuard,
   SubAgentGuidanceRelayRegistry,
 } from '../../execution'
@@ -227,9 +228,9 @@ class ExecutionService {
     } finally {
       await this.seams.dispatchSessionLifecycle({
         phase: 'end',
-        executionId: record?.id ?? null,
+        executionId: toNullable(record?.id),
         sessionId: params.sourceSessionId,
-        status: record?.status ?? null,
+        status: toNullable(record?.status),
       })
     }
   }
@@ -337,20 +338,26 @@ class ExecutionService {
           this.guidanceRelayRegistry.enqueueRelay(executionId, relay.threadId, relay.message)
         }
 
-        if (planned.mainAgentMessage) {
-          authorization?.assertCurrent()
-          const enqueued = this.guidanceQueue.enqueue(executionId, {
-            role: 'user',
-            content: planned.mainAgentMessage,
-          })
-          this.assertGuidanceEnqueued(enqueued, '主控引导消息无效。')
-        }
+        // relay 是**纯增量**：无论辅助模型怎么规划，用户这条输入一律进主控队列——规划出改写就
+        // 用改写（带主控视角的理解），没有就用原文逐字入队。
+        //
+        // 这里曾经是 `if (planned.mainAgentMessage) { … } return`：规划说「与主控无关」时主控
+        // 一个字都收不到，用户在转录里看得见自己那句话、主控却从此不知道它存在，后续回答完全
+        // 不体现——用户只会认为「AI 无视我」。这类判断由一个小辅助模型说了算，判错的代价必须是
+        // 多花一点 token，而不是用户输入丢失（尺子12：可用性类 fail-open）。
+        authorization?.assertCurrent()
+        const delivery = resolveMainAgentGuidanceDelivery({
+          plannedMainAgentMessage: planned.mainAgentMessage,
+          originalMessage: request.message,
+        })
+        const enqueued = this.guidanceQueue.enqueue(executionId, delivery.message)
+        this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
 
         this.log.info('sub-agent guidance relay planned', {
           executionId,
           workerCount: activeWorkers.length,
           relayCount: planned.relays.length,
-          notifyMainAgent: !!planned.mainAgentMessage,
+          mainAgentDelivery: delivery.kind,
         })
         this.emitExecutionDebug(executionId)
         return

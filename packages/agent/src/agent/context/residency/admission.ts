@@ -14,7 +14,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isPresent, toNullable, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isPresent, toNullable, toOptional } from '@velaros-ai/core'
 
 import { buildContextRefEnvelope, type ContextRefEnvelope } from '../contextRefEnvelope'
 
@@ -23,6 +23,7 @@ import {
   type ContextRecord,
   type ContextRecordExcerpt,
   type ContextRecordKind,
+  type ContextRecordToolPart,
   type ContextResidency,
   createContextRecordId,
 } from './ContextRecord'
@@ -34,6 +35,7 @@ import {
   readMessageText,
   readToolCallFacts,
   readToolResultFacts,
+  type ToolResultFact,
 } from './messageFacts'
 import type { ContextMigrationCause } from './migrationLog'
 
@@ -51,8 +53,20 @@ export interface ContextClassificationInput {
 }
 
 /**
+ * `resolveDedupeTarget` 的**否决**哨兵：这条记录一律不参与去重。
+ *
+ * 端口原本只有"表态/弃权"两态，而弃权（nullish）会回落结构信号（args 里的 url/path）——于是
+ * 「文件读不去重」这类意图根本无法表达：注入方一弃权，`system:read('/tmp/a.log', 1..120)` 与
+ * 续读的 `120..240` 就同 key，前一页被当成"过时快照"折掉（审计 U42）。加第三态"否决"，
+ * 表达的是"我知道这个工具，且我确定它不该按目标去重"，与"我不认识这个工具"分开。
+ * 取一个不可能是 url/path 的字面量，避免与结构信号撞车。
+ */
+export const ContextDedupeVetoTarget = '@@velaros/no-dedupe@@'
+
+/**
  * 记录分类器端口：能力包/宿主注入领域语义的唯一入口。
  * 每个方法都可缺省；返回 nullish 表示"我不表态"，回落结构默认。
+ * `resolveDedupeTarget` 另有 {@link ContextDedupeVetoTarget} 一态表示"否决去重"。
  */
 export interface ContextRecordClassifier {
   isRefetchable?(input: ContextClassificationInput): LooseOptional<boolean>
@@ -70,6 +84,13 @@ export interface ContextAdmissionInput {
   toolArgs?: unknown
   /** 全保真层引用（PayloadStore）。 */
   payloadRef?: LooseOptional<string>
+  /**
+   * 并行工具结果的全保真层引用：toolCallId → payloadRef。
+   *
+   * 一条 `role:'tool'` 消息可装 N 份结果，只给第一份填 ref 会让第 2..N 份的墓碑指向别人的
+   * payload（审计 V12）。给整张表，per-part 各取各的。
+   */
+  payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
   /** 显式覆盖：P6 护栏类记录。 */
   pinned?: LooseOptional<boolean>
   /** 显式覆盖：可重取。 */
@@ -105,9 +126,11 @@ export function admitContextRecord(
   options: AdmitContextRecordOptions
 ): ContextAdmissionDecision {
   const config = options.config ?? DefaultContextGovernanceConfig
+  const priorRecords = options.priorRecords ?? []
   const text = readMessageText(input.message)
   const chars = estimateMessageChars(input.message)
-  const identity = resolveToolIdentity(input)
+  const results = readToolResultFacts(input.message)
+  const identity = resolveToolIdentity(input, results)
   const classification: ContextClassificationInput = {
     kind: input.kind,
     toolName: identity.toolName,
@@ -117,11 +140,18 @@ export function admitContextRecord(
     chars,
   }
 
-  const dedupeKey = resolveDedupeKey(classification, input, options.classifier)
+  // 多结果消息不参与语义去重：记录身份只认第一份结果，拿它的 `工具::目标` 去判定整条消息过时，
+  // 会连带把同消息里另外几份无关结果一起标 pending-EVICT。保守 = 不去重（也因此结构默认不可重取）。
+  const dedupeKey =
+    results.length > 1 ? null : resolveDedupeKey(classification, input, options.classifier)
   const refetchable = resolveRefetchable(classification, input, options.classifier, dedupeKey)
-  const pinned = resolvePinned(classification, input, options.classifier)
+  const openingUserRecord =
+    input.kind === 'user' && !priorRecords.some((prior) => prior.kind === 'user')
+  const pinned = resolvePinned(classification, input, options.classifier, openingUserRecord)
   const oversize = resolveOversizeKind(input.kind, chars, config)
   const id = createContextRecordId(options.seq)
+  const excerptMaxChars =
+    oversize === 'user-text' ? config.admission.userInlineMaxChars : config.admission.excerptMaxChars
   const excerpt = oversize
     ? buildRecordExcerpt({
         id,
@@ -130,13 +160,30 @@ export function admitContextRecord(
         toolCallId: identity.toolCallId,
         payloadRef: input.payloadRef,
         toolName: identity.toolName,
-        maxChars:
-          oversize === 'user-text'
-            ? config.admission.userInlineMaxChars
-            : config.admission.excerptMaxChars,
+        maxChars: excerptMaxChars,
       })
     : null
-  const admittedResidency: ContextResidency = oversize ? 'EXCERPT' : 'INLINE'
+  const toolParts = buildToolParts({
+    id,
+    results,
+    payloadRef: input.payloadRef,
+    payloadRefsByToolCallId: input.payloadRefsByToolCallId,
+    // 摘录预算按 part 均分：N 份结果各留各的头尾，总量仍在一份预算内。整条消息共用一份摘录
+    // 会让投影把同一段文本复制 N 遍写回 N 个 part —— 那是把消息放大而不是压缩（审计 V5）。
+    maxCharsPerPart: oversize
+      ? Math.max(1, Math.floor(excerptMaxChars / Math.max(1, results.length)))
+      : 0,
+  })
+  // **判了超长还不够，得真有素材才算 EXCERPT**（审计 R5）。摘录预算按 part 均分，于是存在一个
+  // 真实窗口：每个 part 都不超均分额度、整条消息却因 JSON 结构与转义开销越过阈值 —— 此时一份
+  // per-part 素材都建不出来，投影只能原样发全文，而账本上写着 EXCERPT。那条"48K/24K 安全阀"
+  // 于是变成"有时候不生效"，且没有任何记账偏差暴露它。这里把判据与渲染面对齐（同一个
+  // {@link hasExcerptRenderMaterial}）：素材建不出来就老老实实记 INLINE —— 发出去的字节一个不
+  // 变（本来就是全文），变的只是账本不再自相矛盾，治理器也不会以为这条还能靠"变薄"省下什么。
+  const admittedResidency: ContextResidency =
+    oversize && hasExcerptRenderMaterial({ kind: input.kind, excerpt, toolParts })
+      ? 'EXCERPT'
+      : 'INLINE'
 
   const record: ContextRecord = {
     id,
@@ -151,6 +198,7 @@ export function admitContextRecord(
     anchors: extractContextAnchors(text),
     message: input.message,
     excerpt,
+    toolParts,
     toolName: identity.toolName,
     toolCallId: identity.toolCallId,
     dedupeKey,
@@ -160,9 +208,99 @@ export function admitContextRecord(
 
   return {
     record,
-    cause: oversize ? 'admission-oversize' : 'admission',
-    supersededIds: collectSupersededIds(record, options.priorRecords ?? []),
+    // 因果跟着**实际落点**走：判超长却没摘出素材、最终以 INLINE 准入的记录记 `admission`，
+    // 否则事件流里会出现一条"超长准入"却全程全文的记录，离线重放读不出真相。
+    cause: admittedResidency === 'EXCERPT' ? 'admission-oversize' : 'admission',
+    supersededIds: collectSupersededIds(record, priorRecords),
   }
+}
+
+/**
+ * 这条记录在 EXCERPT 档**渲染得出信封吗**（准入判定与投影渲染的单源判据）。
+ *
+ * 工具结果一旦带 per-part 事实，渲染就走 per-part 信封（并行结果各拿各的身份，V5/V12），
+ * 记录级 `excerpt` 在那条路上根本不参与 —— 所以"有没有素材"必须按 part 问，不能看记录级摘录。
+ */
+export function hasExcerptRenderMaterial(record: {
+  kind: ContextRecordKind
+  excerpt: Nullable<ContextRecordExcerpt>
+  toolParts: readonly ContextRecordToolPart[]
+}): boolean {
+  if (record.kind === 'tool-result' && !isEmpty(record.toolParts))
+    return record.toolParts.some((part) => isNotNull(part.excerpt))
+
+  return isNotNull(record.excerpt)
+}
+
+/**
+ * per-part 摘录信封（并行工具结果专用）。
+ *
+ * 与 {@link buildExcerptEnvelope} 同形，只是身份、正文与 `originalLength` 都取这一个 part 的。
+ */
+export function buildToolPartExcerptEnvelope(
+  record: ContextRecord,
+  part: ContextRecordToolPart
+): Nullable<ContextRefEnvelope> {
+  const excerpt = part.excerpt
+  if (!excerpt) return null
+
+  return buildContextRefEnvelope({
+    __contextRef: 'tool-output',
+    ref: excerpt.ref,
+    toolCallId: part.toolCallId,
+    toolName: part.toolName,
+    payloadRef: toOptional(part.payloadRef),
+    excerpt: excerpt.text,
+    excerptKind: excerpt.kind,
+    excerptTruncated: excerpt.truncated,
+    originalLength: part.chars,
+    reason: excerpt.reason,
+    retrieval: {
+      tool: 'context:recall',
+      args: { ref: excerpt.ref, refKind: excerpt.refKind, reason: excerpt.reason },
+    },
+    meta: { recordId: record.id },
+  })
+}
+
+/**
+ * per-part 事实：身份、正文长度、召回引用、按需的头尾摘录。
+ *
+ * `maxCharsPerPart <= 0` = 本记录未超长，不需要摘录素材（投影按全文渲染，墓碑档仍要 ref）。
+ */
+function buildToolParts(input: {
+  id: string
+  results: readonly ToolResultFact[]
+  payloadRef: LooseOptional<string>
+  payloadRefsByToolCallId: LooseOptional<Readonly<Record<string, string>>>
+  maxCharsPerPart: number
+}): ContextRecordToolPart[] {
+  return input.results.map((result, index) => {
+    // 第一份结果沿用记录级 payloadRef（调用方只给单值时的既有形态），其余各取各的。
+    const payloadRef =
+      input.payloadRefsByToolCallId?.[result.toolCallId] ??
+      (index === 0 ? input.payloadRef?.trim() || null : null)
+    const excerpt =
+      input.maxCharsPerPart > 0 && result.text.length > input.maxCharsPerPart
+        ? buildRecordExcerpt({
+            id: input.id,
+            kind: 'tool-result',
+            text: result.text,
+            toolCallId: result.toolCallId,
+            payloadRef,
+            toolName: result.toolName,
+            maxChars: input.maxCharsPerPart,
+          })
+        : null
+
+    return {
+      toolCallId: result.toolCallId,
+      toolName: result.toolName,
+      chars: result.text.length,
+      excerpt,
+      payloadRef: toNullable(payloadRef),
+    }
+  })
 }
 
 /** EXCERPT 记录 → 召回信封（投影期拼装的唯一形态，与 v1 折叠桩逐字同形）。 */
@@ -267,11 +405,13 @@ function buildUserTextSafetyValveText(
   ].join('\n')
 }
 
-function resolveToolIdentity(input: ContextAdmissionInput): {
+function resolveToolIdentity(
+  input: ContextAdmissionInput,
+  results: readonly ToolResultFact[]
+): {
   toolName: Nullable<string>
   toolCallId: Nullable<string>
 } {
-  const results = readToolResultFacts(input.message)
   const first = results[0]
   if (first) return { toolName: first.toolName, toolCallId: first.toolCallId }
 
@@ -290,9 +430,14 @@ function resolveDedupeKey(
   if (!classification.toolName) return null
 
   const explicit = input.dedupeTarget?.trim()
+  if (explicit) return `${classification.toolName}::${explicit}`
+
+  // 注入方**否决**去重时到此为止：不回落结构信号。弃权（nullish）才回落——两者语义不同，
+  // 混在一起就没法表达"这个工具我认识，但它的两次调用不是同一份事实"（审计 U42）。
   const injected = classifier?.resolveDedupeTarget?.(classification)?.trim()
-  const structural = extractResourceLocator(input.toolArgs)
-  const target = explicit || injected || structural
+  if (injected === ContextDedupeVetoTarget) return null
+
+  const target = injected || extractResourceLocator(input.toolArgs)
   if (!target) return null
 
   return `${classification.toolName}::${target}`
@@ -316,9 +461,24 @@ function resolveRefetchable(
 function resolvePinned(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
-  classifier: LooseOptional<ContextRecordClassifier>
+  classifier: LooseOptional<ContextRecordClassifier>,
+  openingUserRecord: boolean
 ): boolean {
   if (isPresent(input.pinned)) return input.pinned
+
+  // 账本段的第一条 user 记录 = 任务陈述，结构性 pinned。
+  //
+  // **pinned 的真实语义是"治理器完全免疫"**：`GovernanceEpoch.isDegradable` 与
+  // `distill.isDistillable` 都对 pinned 直接返回 false，这条记录连 EXCERPT 都降不了；账本层的
+  // `clampResidencyForRecord` 地板（最低 EXCERPT）是**第二道保险**，防的是绕过候选集直接调
+  // `ledger.migrate` 的路径，而不是给治理器留一条"可以变薄"的口子（审计 R7：文案曾写成"地板
+  // EXCERPT，可以变薄"，与实现不符）。代价照实说：一条超长任务陈述会整段占住预算，压不下去的
+  // 出路是转交（handoff），不是压它。
+  //
+  // 它被折掉有两重后果：投影以 assistant 开头（Anthropic 直接 400，会话砖化），以及模型再也
+  // 看不到任务是什么——只剩骨架里那一行 220 字、还被排在整段账本之后（审计 V2）。
+  // 这条不交给注入分类器表态：它是 provider 结构约束，不是领域语义。
+  if (openingUserRecord) return true
 
   const injected = classifier?.isPinned?.(classification)
   if (isPresent(injected)) return injected

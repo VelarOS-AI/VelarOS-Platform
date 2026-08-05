@@ -155,8 +155,10 @@ const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 /**
  * 拦截 seam 闭集（裁决 9 机制②）。
  *
- * mod 只能挂接，不能发明新钩子。首批**真接线**的钩子由 Agent 的 mod seam 实现。
- * 与 docs/agent-mod-trunk.md 的残余清单；未接线者只有注册面与类型，dispatch 恒无调用点。
+ * mod 只能挂接，不能发明新钩子。**哪些 kind 今天真有派发点**由实现侧的
+ * `WiredSeamKindsByDispatcher`（`../mods/AgentModSeams`）逐条登记，本闭集不复述第二份；
+ * 未接线者只有注册面与类型，注册即收 `mod.seam-not-wired` 诊断，dispatch 恒无调用点。
+ * 叙述见 VelarOS-Platform 的 docs/agent/agent-mod-trunk.md。
  */
 const AgentModSeamKinds = [
   'session:start',
@@ -261,26 +263,46 @@ const AgentModSkillContributionSchema = z.strictObject({
 })
 type AgentModSkillContribution = z.infer<typeof AgentModSkillContributionSchema>
 
-/** space descriptor 的纯数据面（蓝图 §3.3：icon 降格为 icon-id，不接受组件/函数引用）。 */
+/**
+ * space 贡献的纯数据面（蓝图 §3.3：icon 降格为 icon-id，不接受组件/函数引用）。
+ *
+ * ## 今天真被消费的只有「工具配方」那几格
+ *
+ * `id` / `identityStrategy` / `boundCapabilityIds` / `inheritsSpaceIds` / `toolCategoryIds` /
+ * `residentToolNames` 有真实读者（宿主的工具注册表、常驻集与能力门）。其余几格
+ * （`descriptor` / `iconId` / `surfaceProfileId` / `turnContextSourceIds` / `promptSegmentIds`）
+ * **Desktop 尚未消费**：空间的文案、图标、每回合上下文源白名单，权威在壳内的枚举表
+ * （`apps/desktop/src/shared/capabilities/DesktopCapabilityScopeDescriptors.ts`）。
+ *
+ * 因此它们一律 optional，且随包官方 mod **不再声明**——声明了也不生效的字段是欺骗性装饰，
+ * 会让作者去改 manifest 里的标题然后重启发现什么都没变。schema 保留是给「将来翻转权威、
+ * 让壳的 descriptor 表从 mod 快照编译」留位置（那是 mod 主干重建批的事），不是给今天用的。
+ */
 const AgentModSpaceContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
-  descriptor: z.strictObject({
-    label: z.string(),
-    hint: z.string().optional(),
-    startTitle: z.string().optional(),
-    order: z.number().int().optional(),
-    localeKey: TrimmedIdSchema.optional(),
-  }),
+  /** **Desktop 尚未消费**：空间文案权威在壳内枚举表（见本 schema 头部说明）。 */
+  descriptor: z
+    .strictObject({
+      label: z.string(),
+      hint: z.string().optional(),
+      startTitle: z.string().optional(),
+      order: z.number().int().optional(),
+      localeKey: TrimmedIdSchema.optional(),
+    })
+    .optional(),
+  /** **Desktop 尚未消费**：图标语义名是壳的闭集（见本 schema 头部说明）。 */
   iconId: TrimmedIdSchema.optional(),
   identityStrategy: z.enum(['ordinal', 'path', 'origin']),
+  /** **Desktop 尚未消费**：surface 分档已按「谁在调用」收敛，与空间不同轴。 */
   surfaceProfileId: TrimmedIdSchema.optional(),
   boundCapabilityIds: tolerantArray(TrimmedIdSchema).optional(),
   /** 复用另一个空间已经拼装好的职责包；用于 Game 等项目型空间继承 Project 配方。 */
   inheritsSpaceIds: tolerantArray(TrimmedIdSchema).optional(),
   toolCategoryIds: tolerantArray(TrimmedIdSchema).optional(),
   residentToolNames: tolerantArray(TrimmedIdSchema).optional(),
-  /** 本 space 允许的 per-turn 上下文源白名单（mod 进入每回合上下文的唯一通道）。 */
+  /** **Desktop 尚未消费**：每回合上下文源白名单权威在壳内枚举表（见本 schema 头部说明）。 */
   turnContextSourceIds: tolerantArray(TrimmedIdSchema).optional(),
+  /** **Desktop 尚未消费**：提示词段按 mod 装载整体落地，不按空间二次过滤。 */
   promptSegmentIds: tolerantArray(TrimmedIdSchema).optional(),
 })
 type AgentModSpaceContribution = z.infer<typeof AgentModSpaceContributionSchema>

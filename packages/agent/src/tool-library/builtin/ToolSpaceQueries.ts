@@ -142,6 +142,9 @@ function summarizeToolSpacePageRef(
     name: card.name,
     categoryId: card.categoryId,
     summary: card.summary,
+    // 工具是调用面、技能是用法面：声明了 companion skill 的页在这里把 id 透出来，
+    // 模型不必先换入工具、读完描述才发现「深度用法在别处」。没声明的页恒为 null。
+    usageSkillId: toNullable(card.usageSkillId),
     availability: card.availability,
     toolOsState: card.toolOsState,
     risk: card.risk,

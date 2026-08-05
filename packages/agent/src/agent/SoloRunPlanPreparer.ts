@@ -6,6 +6,7 @@ import type {
   AgentSurfaceId,
   CapabilityScopeId,
   ChatPromptFeatureId,
+  ExecutionModeId,
   RunProfileId,
   RunProfileRuntimePolicy,
   RunProfileSelectionId,
@@ -16,14 +17,14 @@ import type {
   ToolSurfaceProfileId,
   TurnPlanningTelemetryPayload,
 } from '@velaros-ai/agent/protocol'
-import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import {
   type AgentRuntimeCapabilityPorts,
   resolveToolAllocationMetadata,
 } from '../capabilities'
-import { isExecutionModeSelected } from '../execution-modes'
+import { isExecutionModeActive, resolveExecutionModes } from '../execution-modes'
 
 import { compareStableStrings } from './context/residency/determinism'
 import {
@@ -128,6 +129,16 @@ interface PrepareSoloRunPlanForTurnInput<TContext extends SoloRunPlanToolContext
   /** 显式选中技能声明的工具门控并集（allowed-tools）；null/空 = 不限制。 */
   skillAllowedToolNames?: LooseOptional<readonly string[]>
   promptFeatures?: readonly ChatPromptFeatureId[]
+  /**
+   * 本次运行的思考深度，**由调用方一次算定**（`AgentExecutionConfig.thinkingDepth` ?? 系统设置）。
+   *
+   * 这里不再有第二个写者：档位默认只在宿主组装 run config 时作为**缺席默认**参与
+   * （Desktop 的 `ExecutionCoordinator` 读 `runProfilePolicy.defaults.thinkingDepth`），
+   * 进了 loop 就是既定事实。
+   */
+  thinkingDepth: ThinkingDepth
+  /** 执行模式轴；缺席时由旧形态（promptFeatures 里的模式 id / goalMode）折算。 */
+  executionModes?: readonly ExecutionModeId[]
   goalMode?: boolean
   contextPhase: AgentContextPhase
   activeCapabilityScopeId: CapabilityScopeId
@@ -174,25 +185,6 @@ interface SoloTurnPlanningSnapshot {
 }
 
 const PlanModeRequiredToolNames = ['plan:update', 'interaction:show_action_cards'] as const
-const ProposalModeRequiredToolNames = [
-  'proposal:get',
-  'proposal:review',
-  'interaction:ask_user',
-  'agent:dispatch',
-  'agent:run_workflow',
-  'artifact:produce',
-] as const
-const ProposalLifecycleToolNameSet = new Set<string>(['proposal:get', 'proposal:review'])
-const ProposalModeAllowedNonInspectToolNames = new Set<string>([
-  ...ProposalModeRequiredToolNames,
-  'job:read_output',
-  'job:wait',
-  'job:cancel',
-  'tooling:replace',
-  // tooling:read 是只读的技能/工具页读取入口：不带进来会把 runtime.available-skill-pages
-  // 索引段一起干掉（段的 when 依赖 tooling:read 在场），提案轮次对技能完全失明。
-  'tooling:read',
-])
 const GoalModeRequiredToolNames = ['goal:get', 'goal:create', 'goal:update'] as const
 const BootstrapSharedToolNames = [
   'tooling:map',
@@ -224,13 +216,6 @@ const SkillGateAlwaysKeptToolNames = new Set<string>([
   'context:recall',
   'context:distill',
 ])
-function filterProposalLifecycleToolsWhenDisabled(
-  tools: readonly string[],
-  promptFeatures?: readonly ChatPromptFeatureId[]
-): string[] {
-  if (isExecutionModeSelected('proposal', promptFeatures ?? [])) return [...tools]
-  return tools.filter((tool) => !ProposalLifecycleToolNameSet.has(tool))
-}
 
 function mergeToolCategoryCatalog(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>
@@ -296,8 +281,7 @@ function collectToolNamesFromCategories(
 }
 
 function resolvePromptFeatureProtectedToolNames(input: {
-  promptFeatures?: readonly ChatPromptFeatureId[]
-  goalMode?: boolean
+  executionModes: readonly ExecutionModeId[]
   contextPhase: AgentContextPhase
   budgetOverrideToolNames: readonly string[]
   selectedSkillToolNames?: LooseOptional<readonly string[]>
@@ -314,17 +298,12 @@ function resolvePromptFeatureProtectedToolNames(input: {
     }
   }
 
-  if (isExecutionModeSelected('plan', input.promptFeatures ?? [])) {
+  if (isExecutionModeActive('plan', input.executionModes)) {
     for (const toolName of PlanModeRequiredToolNames) {
       toolNames.add(toolName)
     }
   }
-  if (isExecutionModeSelected('proposal', input.promptFeatures ?? [])) {
-    for (const toolName of ProposalModeRequiredToolNames) {
-      toolNames.add(toolName)
-    }
-  }
-  if (isTrue(input.goalMode)) {
+  if (isExecutionModeActive('goal', input.executionModes)) {
     for (const toolName of GoalModeRequiredToolNames) {
       toolNames.add(toolName)
     }
@@ -422,7 +401,7 @@ function buildTurnPlanningSnapshotSignature(input: {
   budgetOverrideToolCategoryIds: readonly ToolCategoryId[]
   budgetOverrideToolNames: readonly string[]
   promptFeatures?: readonly ChatPromptFeatureId[]
-  goalMode?: boolean
+  executionModes: readonly ExecutionModeId[]
   contextPhase: AgentContextPhase
 }): string {
   return JSON.stringify({
@@ -440,7 +419,7 @@ function buildTurnPlanningSnapshotSignature(input: {
     budgetOverrideToolCategoryIds: sortedStrings(input.budgetOverrideToolCategoryIds),
     budgetOverrideToolNames: sortedStrings(input.budgetOverrideToolNames),
     promptFeatures: sortedStrings(input.promptFeatures ?? []),
-    goalMode: isTrue(input.goalMode),
+    executionModes: [...input.executionModes],
     contextPhase: input.contextPhase,
   })
 }
@@ -467,7 +446,14 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
   const expiredToolNameLeases =
     input.toolContext.codingSession.pruneExpiredToolNameLeases?.(input.turn) ?? []
   input.toolContext.codingSession.pruneExpiredToolCategoryLeases?.(input.turn)
-  input.toolContext.codingSession.setThinkingDepth?.(runProfileDefinition.defaults.thinkingDepth)
+  // 思考深度单源：写入调用方算定的那一个值，档位在这一层不再参与。
+  //
+  // 这里曾经是每轮无条件 `setThinkingDepth(档位默认)`（2026-08-06 改）：主会话第一轮就把用户在
+  // composer/设置里选的力度打回档位默认，而档位本身由模型窗口自动推（<192K→fast、≥1M→deep），
+  // 于是「换一个大窗口模型」= 主会话被静默切到 deep，用户没有任何入口关掉；反过来把默认调成
+  // 快速省钱的用户，子 agent 与辅助任务照办、主会话不办。被覆盖的值有真实后果
+  // （`coding/AutoVerification.ts` 的 runtime reminder 抑制只看 fast）。
+  input.toolContext.codingSession.setThinkingDepth?.(input.thinkingDepth)
   input.toolContext.codingSession.setToolSurfaceProfile?.(
     runProfileDefinition.defaults.toolSurfaceProfile,
     `run profile ${runProfile}`
@@ -493,20 +479,15 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
   const enabledToolCategoryIds = input.toolContext.codingSession.getEnabledToolCategories()
   const budgetOverrideToolCategoryIds =
     input.toolContext.codingSession.getBudgetOverrideToolCategories()
+  const activeExecutionModes = resolveExecutionModes(input)
   const budgetOverrideToolNames = resolvePromptFeatureProtectedToolNames({
-    promptFeatures: input.promptFeatures,
-    goalMode: input.goalMode,
+    executionModes: activeExecutionModes,
     contextPhase: input.contextPhase,
     budgetOverrideToolNames: input.toolContext.codingSession.getBudgetOverrideToolNames(),
     selectedSkillToolNames: input.skillAllowedToolNames,
   })
-  const effectiveConfiguredTools = input.configuredTools
-    ? filterProposalLifecycleToolsWhenDisabled(input.configuredTools, input.promptFeatures)
-    : undefined
-  const effectiveRoleAllowedTools = filterProposalLifecycleToolsWhenDisabled(
-    input.roleAllowedTools,
-    input.promptFeatures
-  )
+  const effectiveConfiguredTools = input.configuredTools ? [...input.configuredTools] : undefined
+  const effectiveRoleAllowedTools = [...input.roleAllowedTools]
   const planningSnapshotSignature = buildTurnPlanningSnapshotSignature({
     capabilityRevision: input.toolRegistry.getCapabilityRevision?.(),
     providerId: input.roleRuntime.providerId,
@@ -522,7 +503,7 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     budgetOverrideToolCategoryIds,
     budgetOverrideToolNames,
     promptFeatures: input.promptFeatures,
-    goalMode: input.goalMode,
+    executionModes: activeExecutionModes,
     contextPhase: input.contextPhase,
   })
   const canReusePlanningSnapshot = isEmpty(toolAllocatorRequests)
@@ -700,21 +681,12 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
   }
   const zoneAllocation = runPlan.context.zoneAllocation
   input.toolContext.codingSession.setUsableContextWindowTokens?.(zoneAllocation.usableContextWindow)
-  const proposalMode = isExecutionModeSelected('proposal', input.promptFeatures ?? [])
-  const descriptorByName = new Map(
-    runtimeToolCategories.flatMap((entry) => entry.tools.map((tool) => [tool.name, tool] as const))
-  )
   const skillGate = input.skillAllowedToolNames?.length
     ? new Set([...input.skillAllowedToolNames, ...SkillGateAlwaysKeptToolNames])
     : null
-  const operationalAllowedTools = (
-    proposalMode
-      ? runPlan.capabilities.residentToolNames.filter((toolName) => {
-          const role = descriptorByName.get(toolName)?.role
-          return role === 'inspect' || ProposalModeAllowedNonInspectToolNames.has(toolName)
-        })
-      : runPlan.capabilities.residentToolNames
-  ).filter((toolName) => !skillGate || skillGate.has(toolName))
+  const operationalAllowedTools = runPlan.capabilities.residentToolNames.filter(
+    (toolName) => !skillGate || skillGate.has(toolName)
+  )
   const allowedTools = filterToolsForContextPhase({
     tools: operationalAllowedTools,
     contextPhase: input.contextPhase,

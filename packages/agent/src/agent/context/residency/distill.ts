@@ -20,12 +20,17 @@
  *    （A2-distill-always）；`adaptive` = 再过三道判据（缺口够大 / 段落价值密度够高 / 预计节省
  *    ≥ 调用成本的若干倍）才花（A3，主臂）。三档共用同一条代码路径，差异只在 {@link resolveDistillGate}。
  */
-import { isEmpty, isRecord, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNonBlankString, isRecord, isString, toNullable } from '@velaros-ai/core'
 
-import { anchorDensityPerKiloChar, normalizeAnchorText } from './anchors'
+import {
+  anchorDensityPerKiloChar,
+  normalizeAnchorText,
+  toContextAnchorTexts,
+} from './anchors'
 import type { ContextRecord, ContextResidency } from './ContextRecord'
-import { estimateResidencyTokens, residentChars } from './ContextRecord'
+import { estimateResidencyTokens } from './ContextRecord'
 import type { ContextDistillInstrument, ContextGovernanceConfig } from './governanceConfig'
+import { residentChars } from './projection'
 import type { ContextResidencyLedger } from './ResidencyLedger'
 import {
   buildContextSkeleton,
@@ -66,6 +71,14 @@ export interface ContextDistillInput {
   goalHint: Nullable<string>
   /** 期望正文字符上限。 */
   targetChars: number
+  /**
+   * 整段输入的字符预算（规划期切段用的同一个数）。
+   *
+   * 宿主按它给成员分配预览额度。写死一个 per-message 常量会让"规划期按 48K 切段"与"实际只喂
+   * 2400 字符/条"两套预算互不知情：单条超大记录独占一段时，模型看到的不足全文的 5%，却被要求
+   * 逐字保留它没看过的锚点（审计 V14）。
+   */
+  maxInputChars: number
   /** 必须逐字保留的锚点：提示词里明示，产物按此逐条验证。 */
   requiredAnchors: readonly string[]
   /** 档位（宿主据此选辅助模型还是主模型）。 */
@@ -278,12 +291,14 @@ export function buildDistillProduct(input: {
   failure?: LooseOptional<ContextDistillRejection>
 }): ContextDistillProduct {
   const { request } = input
-  const failure = input.failure ?? null
+  const failure = toNullable(input.failure)
   const body = failure ? '' : extractDistilledBody(input.rawText ?? '')
+  // 机械锚点行渲染的就是 `requiredAnchors` 本身：要求模型逐字复现 24 条、产物里却只机械补 16 条
+  // （两个常量各定各的）是两头不讨好——多出来的那几条既抬高拒收概率又没进最终产物。
   const text = [
     `${DistillHeaderPrefix} epoch=${request.epoch} members=${request.members.length}]`,
     body,
-    renderContextAnchorLine(collectContextAnchorUnion(request.members)),
+    renderContextAnchorLine(request.requiredAnchors, request.requiredAnchors.length),
     renderContextRecallLine(request.members),
   ]
     .filter((line): line is string => Boolean(line))
@@ -309,7 +324,12 @@ export function buildSkeletonFallbackProduct(
   request: ContextDistillRequest,
   rejection: ContextDistillRejection
 ): ContextDistillProduct {
-  const skeleton = buildContextSkeleton({ members: request.members, epoch: request.epoch })
+  const skeleton = buildContextSkeleton({
+    members: request.members,
+    epoch: request.epoch,
+    // 回落骨架的锚点行与被拒产物同口径：两者代表同一批成员，条数不该因为走了哪条路而变。
+    maxAnchors: request.requiredAnchors.length,
+  })
   return {
     epoch: request.epoch,
     generation: request.generation,
@@ -366,8 +386,7 @@ export function extractDistilledBody(text: string): string {
 
   try {
     const parsed: unknown = JSON.parse(unfenced.slice(start, end + 1))
-    if (isRecord(parsed) && isString(parsed.summary) && parsed.summary.trim())
-      return parsed.summary.trim()
+    if (isRecord(parsed) && isNonBlankString(parsed.summary)) return parsed.summary.trim()
   } catch {
     // arch-guard:silent-catch-ok 模型没按 JSON 返回是常态，退回纯文本是设计中的兼容路径。
   }
@@ -421,14 +440,17 @@ function collectDistillSegments(input: PlanContextDistillationInput): DistillSeg
   return segments.filter((segment) => segment.chars >= config.distillation.minSegmentChars)
 }
 
-/** 可蒸馏判据：叙事面、未降级、非护栏、非摘要（摘要是压缩的终点，再折就是有损叠有损）。 */
+/**
+ * 可蒸馏判据：叙事面、未降级、非护栏、非摘要（摘要是压缩的终点，再折就是有损叠有损）。
+ * `pinned` 在这里与 `GovernanceEpoch.isDegradable` 同义 —— **完全免疫**，不是"降到 EXCERPT 为止"。
+ */
 function isDistillable(record: ContextRecord, residency: ContextResidency): boolean {
   if (record.kind !== 'user' && record.kind !== 'assistant') return false
   if (record.pinned || !record.message) return false
   if (residency !== 'INLINE' && residency !== 'EXCERPT') return false
 
   const content = record.message.content
-  return !(typeof content === 'string' && isContextSummaryText(content))
+  return !(isString(content) && isContextSummaryText(content))
 }
 
 function buildDistillRequest(
@@ -441,7 +463,8 @@ function buildDistillRequest(
   }
 ): ContextDistillRequest {
   const { config } = context
-  const requiredAnchors = collectContextAnchorUnion(segment.members).slice(
+  // 并集已按类别优先序（路径 → 命令 → 标识符 → 数字）排好，截断因此先丢数字锚而不是先丢路径。
+  const requiredAnchors = toContextAnchorTexts(collectContextAnchorUnion(segment.members)).slice(
     0,
     config.distillation.maxRequiredAnchors
   )
@@ -479,7 +502,7 @@ function countSegmentAnchors(members: readonly ContextRecord[]): number {
   const seen = new Set<string>()
   for (const member of members) {
     for (const anchor of member.anchors) {
-      const normalized = normalizeAnchorText(anchor)
+      const normalized = normalizeAnchorText(anchor.text)
       if (normalized) seen.add(normalized)
     }
   }
@@ -498,7 +521,7 @@ function resolveGoalHint(ledger: ContextResidencyLedger): Nullable<string> {
     if (record.kind !== 'user') continue
 
     const content = record.message?.content
-    const text = typeof content === 'string' ? content : readTextParts(content)
+    const text = isString(content) ? content : readTextParts(content)
     const normalized = text.replace(/\s+/g, ' ').trim()
     if (normalized) return normalized.slice(0, MaxGoalHintChars)
   }
@@ -507,7 +530,7 @@ function resolveGoalHint(ledger: ContextResidencyLedger): Nullable<string> {
 }
 
 function readTextParts(content: unknown): string {
-  if (!Array.isArray(content)) return ''
+  if (!isArray(content)) return ''
 
   return content
     .map((part) => (isRecord(part) && isString(part.text) ? part.text : ''))

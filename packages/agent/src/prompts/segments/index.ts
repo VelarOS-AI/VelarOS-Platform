@@ -1,5 +1,6 @@
 export type { RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from './runtime'
 export {
+  createCorePromptSegment,
   createRuntimePromptSegments,
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,

@@ -1,6 +1,7 @@
 import type { ModelMessage } from 'ai'
 
 import type {
+  ConfirmationRequestDetail,
   ExecutionRecord,
   ExecutionTaskPlanStep,
   ExecutionTaskRecord,
@@ -232,7 +233,8 @@ class ExecutionRecords {
   public setAwaitingConfirmation(
     executionId: string,
     message: string,
-    userActionCards?: UserActionCard[]
+    userActionCards?: UserActionCard[],
+    detail?: ConfirmationRequestDetail
   ): ExecutionRecord {
     return this.patchExecution(executionId, (current) => ({
       ...current,
@@ -240,6 +242,7 @@ class ExecutionRecords {
         message,
         askedAt: Date.now(),
         userActionCards,
+        detail,
       },
       updatedAt: Date.now(),
     }))

@@ -10,6 +10,8 @@ import type {
   ToolSurfaceProfileId,
 } from '../protocol/types/tool'
 
+import type { ToolDescriptionBudgetWaiver } from './ToolDescription'
+
 export type NonEmptyToolContractList<T = string> = readonly [T, ...T[]]
 
 /** 工具角色，统一别名到 core types 的 ToolRole（单一事实源，避免重复联合）。 */
@@ -24,6 +26,19 @@ export interface ToolContractDescriptionSpec {
   usage: NonEmptyToolContractList
   examples: NonEmptyToolContractList<Record<string, unknown>>
   notes: NonEmptyToolContractList
+  /**
+   * companion skill 的 id（对应 `skills-market/<id>.md`）——工具是调用面，这个 id 指向用法面。
+   *
+   * 声明后模型面描述末尾自动追加一条「深度用法先读 skill:<id>」，工具页卡片也透出该字段。
+   * 只声明不瘦身没有意义：这条轴存在的全部理由是把工艺深度搬出模型面描述（design-principles §8）。
+   * id 是否真有对应技能由 Desktop 侧构建期检查兜（技能目录是宿主产物，包内查不到）。
+   */
+  usageSkillId?: string
+  /**
+   * 软预算（1800 字符）豁免。**不是给「写长了懒得拆」用的**，见 ToolDescriptionBudgetWaiver：
+   * 理由只认 safety-protocol / meta-tool，且必须写 note 说明为什么属于该档。
+   */
+  descriptionBudgetWaiver?: ToolDescriptionBudgetWaiver
 }
 
 export interface ToolContractSurface<
@@ -55,6 +70,8 @@ export interface ToolContractRuntimeSpec<
   /** 工具角色，决定读改分离与执行策略。 */
   role: ToolContractRole
   description: string
+  /** 见 ToolContractDescriptionSpec.usageSkillId：companion skill 的 id，透到工具页卡片。 */
+  usageSkillId?: string
   schema: z.ZodType<TInput>
   surfaces?: Partial<Record<ToolSurfaceProfileId, ToolContractSurface<any, TInput, TContext>>>
   permissions: TPermission[]

@@ -1,3 +1,4 @@
+export type { SubAgentDispatchLimitsSnapshot } from './concurrency'
 export * from './host-ports'
 export type { SubAgentDispatchRequest } from './SubAgentDispatcher'
 export { resolveSubAgentExecutionKey, SubAgentDispatcher } from './SubAgentDispatcher'

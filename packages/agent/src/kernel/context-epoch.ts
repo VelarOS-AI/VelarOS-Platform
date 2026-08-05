@@ -21,6 +21,7 @@
 import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
+import { UnknownGovernanceSessionId } from '../agent/context/residency/sessionKey'
 
 import type { ProviderTurnEventReducer } from './provider-events'
 
@@ -146,7 +147,7 @@ function normalizePercent(value: number): number {
 
 export function buildKernelContextEpoch(input: BuildKernelContextEpochInput): KernelContextEpoch {
   const epoch: KernelContextEpoch = {
-    sessionId: normalizeLabel(input.sessionId, 'unknown-session'),
+    sessionId: normalizeLabel(input.sessionId, UnknownGovernanceSessionId),
     scope: normalizeOptionalLabel(input.scope),
     phase: input.phase,
     turn: normalizeOptionalNonNegativeInteger(input.turn),

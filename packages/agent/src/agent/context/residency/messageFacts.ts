@@ -10,7 +10,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isArray, isRecord, isString, Log, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isRecord, isString, Log, toNullable } from '@velaros-ai/core'
 
 import { readVerbatimString } from '../providerRequest/messageScan'
 
@@ -27,6 +27,8 @@ export interface ToolResultFact {
   toolName: string
   /** 结果正文（文本档）；结构化输出为 null。 */
   value: Nullable<string>
+  /** 结果正文的保真文本投影：文本档即原文，结构化档退化为稳定 JSON（per-part 摘录的素材）。 */
+  text: string
   isError: boolean
 }
 
@@ -54,7 +56,7 @@ export function estimateMessageChars(message: ModelMessage): number {
 
 /** 该消息是否携带工具调用片段（assistant 消息的 `tool-call` 结构位）。 */
 export function hasToolCallParts(message: ModelMessage): boolean {
-  return readToolCallFacts(message).length > 0
+  return !isEmpty(readToolCallFacts(message))
 }
 
 export function readToolCallFacts(message: ModelMessage): ToolCallFact[] {
@@ -86,6 +88,7 @@ export function readToolResultFacts(message: ModelMessage): ToolResultFact[] {
       toolCallId,
       toolName,
       value: output ? readVerbatimString(output.value) : null,
+      text: readContentText(part),
       isError: output?.type === 'error-text',
     })
   }
@@ -130,6 +133,14 @@ function readContentText(content: unknown): string {
     .filter(Boolean)
     .join('\n')
   if (direct.trim()) return direct
+
+  // tool-result 片段的正文在 `output.value` 里。不解包就会退化成整个 part 的 JSON 转储：
+  // 摘录预算被结构包裹与转义吃掉一大截，模型拿到的头尾都是 JSON 碎片而不是工具输出本身，
+  // 锚点也变成在转义后的文本上抽（审计 U23）。v1 的句柄化摘录的就是输出正文，这里对齐它。
+  if (isRecord(content.output)) {
+    const output = readContentText(content.output.value ?? content.output)
+    if (output.trim()) return output
+  }
 
   try {
     return JSON.stringify(content) ?? ''

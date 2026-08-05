@@ -60,6 +60,8 @@ const PortableContracts = [
       "./types.js",
       "./BrowserAddressHelper.js",
       "./BrowserScreenshotPolicy.js",
+      // 纯闭集/默认值/宽容守卫,零实现依赖——与 ScreenshotPolicy 同性质的契约级模块(2026-08-06 配置单源批)。
+      "./BrowserConfigDefaults.js",
     ]),
   },
   {

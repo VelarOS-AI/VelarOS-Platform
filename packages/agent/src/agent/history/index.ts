@@ -13,10 +13,6 @@ export {
   readCompactionSummaryBody,
 } from './contextOSMessage'
 export {
-  AgentHistorySummaryHighlightHelper,
-  AgentHistorySummaryHighlightHelper as SummaryHighlights,
-} from './highlights'
-export {
   buildInternalFollowUpContent,
   createInternalFollowUpMessage,
   InternalFollowUpPrefix,
@@ -46,16 +42,6 @@ export {
   sanitizeModelMessage,
   sanitizeModelMessageForProvider,
 } from './sanitize'
-export type { SummarySectionKey, SummarySections } from './sections'
-export {
-  AgentHistorySummarySections,
-  AgentHistorySummarySections as SummarySectionsHelper,
-} from './sections'
-export type { AgentHistoryTurn } from './summary'
-export {
-  AgentHistorySummaryHelper,
-  AgentHistorySummaryHelper as HistorySummary,
-} from './summary'
 export type {
   AgentTurnToolExecutor,
   AgentTurnToolResult,

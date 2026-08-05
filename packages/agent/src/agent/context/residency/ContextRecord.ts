@@ -16,6 +16,8 @@ import type { ModelMessage } from 'ai'
 
 import type { ContextRefRetrieval } from '../contextRefEnvelope'
 
+import type { ContextAnchor } from './anchors'
+
 /** 记录类别（设计稿 §3 七类）。 */
 export type ContextRecordKind =
   | 'user'
@@ -53,7 +55,7 @@ export type ContextResidencyVector = ReadonlyMap<string, ContextResidency>
 export interface ContextRecordBytes {
   /** 全文字符数（token 估算的输入）。 */
   full: number
-  /** EXCERPT 投影后的字符数；无摘录时等于 0。 */
+  /** 摘录素材的字符数；无摘录时等于 0。**不是** EXCERPT 投影的实际占用（信封与转义另计）。 */
   excerpt: number
 }
 
@@ -69,6 +71,24 @@ export interface ContextRecordExcerpt {
   reason: string
 }
 
+/**
+ * 一条 tool-result 记录里**单个** part 的事实。
+ *
+ * 一轮里模型可以并行发 N 个工具调用，`TurnHistory` 把 N 份结果装进**同一条** `role:'tool'` 消息。
+ * 记录仍是一条（不按 part 拆——配对约束靠消息壳成立），但身份与摘录必须落到 part 上：只认第一个
+ * 结果会让投影把第一份的信封写进全部 N 个 part，模型看到的 toolName/ref 张冠李戴，被指向错误的
+ * payload，消息还反而变大（审计 V5 / V12）。
+ */
+export interface ContextRecordToolPart {
+  toolCallId: string
+  toolName: string
+  /** 本 part 正文的字符数（信封的 `originalLength`）。 */
+  chars: number
+  /** 本 part 的摘录素材；正文没超过本 part 预算时为 null（投影按全文渲染）。 */
+  excerpt: Nullable<ContextRecordExcerpt>
+  payloadRef: Nullable<string>
+}
+
 export interface ContextRecord {
   /** 稳定 id（`ctx-r000001` 形态），跨会话重放不变。 */
   readonly id: string
@@ -79,18 +99,23 @@ export interface ContextRecord {
   readonly createdAt: number
   /** 所属对话轮序，从 0 起。尾保护窗口按它算。 */
   readonly turn: number
-  /** P6：护栏类记录，最低只降到 EXCERPT。 */
+  /**
+   * P6：护栏类记录。**治理器完全免疫**——不进 epoch 候选、不进蒸馏段；账本层的 EXCERPT 地板
+   * （{@link clampResidencyForRecord}）只是拦住绕过候选集的直接迁移的第二道保险，不是"可以变薄"。
+   */
   readonly pinned: boolean
   /** 文件读 / 页面快照类：可重取 → I0 优先逐出。 */
   readonly refetchable: boolean
   /** 准入判决（不可变）。当前驻留态在账本的向量里。 */
   readonly admittedResidency: ContextResidency
   readonly bytes: ContextRecordBytes
-  /** 规则抽取的关键场：路径 / 命令 / 数字 / 标识符。 */
-  readonly anchors: readonly string[]
+  /** 规则抽取的关键场：路径 / 命令 / 标识符 / 数字（带类别，骨架按类别入栏）。 */
+  readonly anchors: readonly ContextAnchor[]
   /** INLINE 投影正文。summary / env-delta / governance 同样以消息形态携带。 */
   readonly message: Nullable<ModelMessage>
   readonly excerpt: Nullable<ContextRecordExcerpt>
+  /** 并行工具结果的 per-part 事实（tool-result 记录专用；其余类别恒为空数组）。 */
+  readonly toolParts: readonly ContextRecordToolPart[]
   readonly toolName: Nullable<string>
   readonly toolCallId: Nullable<string>
   /**
@@ -131,20 +156,19 @@ export function createContextRecordId(seq: number): string {
   return `ctx-r${String(Math.max(0, Math.floor(seq))).padStart(6, '0')}`
 }
 
-/** 当前驻留态下这条记录占的字符数（投影与预算共用的单源）。 */
-export function residentChars(record: ContextRecord, residency: ContextResidency): number {
-  if (residency === 'INLINE') return record.bytes.full
-  if (residency === 'EXCERPT') return record.bytes.excerpt
-  return estimateTombstoneChars(record)
-}
+/**
+ * 缺席量纲时的字符/token 密度（与 v1 `estimateBlockTokens` 同口径：4 字符 1 token）。
+ *
+ * 它是**兜底**不是常量：真实密度由编译期一次 tokenize 实测（中文/JSON 密集会话约 1.5-2），
+ * 凡是能拿到实测值的地方都必须把它传进来——写死 4 会把占用低估 2-3 倍。
+ */
+export const DefaultResidencyCharsPerToken = 4
 
-/** 墓碑行的字符数：一行 id + 类别，量级恒定。 */
-export function estimateTombstoneChars(record: ContextRecord): number {
-  return record.id.length + record.kind.length + 48
-}
-
-/** 字符 → token 的粗估（与 v1 `estimateBlockTokens` 同口径：4 字符 1 token）。 */
-export function estimateResidencyTokens(chars: number, charsPerToken: number = 4): number {
-  const divisor = charsPerToken > 0 ? charsPerToken : 4
+/** 字符 → token 的粗估；`charsPerToken` 缺席时按 {@link DefaultResidencyCharsPerToken} 兜底。 */
+export function estimateResidencyTokens(
+  chars: number,
+  charsPerToken: number = DefaultResidencyCharsPerToken
+): number {
+  const divisor = charsPerToken > 0 ? charsPerToken : DefaultResidencyCharsPerToken
   return Math.max(0, Math.ceil(Math.max(0, chars) / divisor))
 }

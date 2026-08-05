@@ -65,20 +65,6 @@
       "file": "packages/game/src/runtime/diagnostics.ts"
     },
     {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "f5995e46d2870710",
-      "message": "packages/game/src/runtime/diagnostics.ts:94: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-double-cast-bridge",
-      "ruleId": "code-style/forbid-double-cast-bridge/double-cast-bridge",
-      "fingerprint": "3eeafe5c1d2f9065",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:214: `as unknown as …` double-cast bridge on \"input.handler as unknown as AgentModSeamHandler\". §12.5 禁绝——请在边界解析一次（zod / ForgivingSchema / 共享守卫），不要跳板强转。",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
-    },
-    {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "00efd10b7eb367b2",
@@ -151,13 +137,6 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "2c51043a349aa519",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:284: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "2d3d96ec8ef7d2dd",
       "message": "packages/browser/src/core/CdpInteractionEngine.ts:498: 值位 `Nullable<{ x: number; y: number }> | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/browser/src/core/CdpInteractionEngine.ts"
@@ -200,13 +179,6 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "414e338c3e75ab0e",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:407: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "466e75b93299d61c",
       "message": "packages/agent/src/execution/Store.ts:680: 值位 `number | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/agent/src/execution/Store.ts"
@@ -231,13 +203,6 @@
       "fingerprint": "5aadac1c153d8dc0",
       "message": "packages/model/src/ModelRequestPolicy.ts:14: 值位 `number | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/model/src/ModelRequestPolicy.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "5bc646b9e93243f0",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:273: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -301,13 +266,6 @@
       "fingerprint": "7b49920e59d8256e",
       "message": "packages/browser/src/tools/RecipeRun.ts:210: 值位 `string | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/browser/src/tools/RecipeRun.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "7fcab5e2f7177316",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:369: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -515,23 +473,9 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "e544d48cc3eccfbf",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:296: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "e8afa20cacf4ac4d",
       "message": "packages/ui/src/conversation/composer/utils/tintedSurfaceStyle.ts:185: 值位 `string | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/ui/src/conversation/composer/utils/tintedSurfaceStyle.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "eaf066bc27a56f4e",
-      "message": "packages/agent/src/capabilities/CapabilityExtensions.ts:304: 值位 `AgentRuntimeCapabilityPorts | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/agent/src/capabilities/CapabilityExtensions.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -553,13 +497,6 @@
       "fingerprint": "f28e811f9493b4d0",
       "message": "packages/agent/src/execution/plan-ledger.ts:168: 值位 `ExecutionTaskPlanStep | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/agent/src/execution/plan-ledger.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "f3fd642f8ac7a2f1",
-      "message": "packages/ui/src/conversation/tool-render/toolCallSummary.ts:24: 值位 `PathDisplayFormatter | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/ui/src/conversation/tool-render/toolCallSummary.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -604,13 +541,6 @@
       "file": "packages/agent/src/skills/FileSkillProvider.ts"
     },
     {
-      "checkId": "code-style/forbid-field-remap",
-      "ruleId": "code-style/forbid-field-remap/manual-field-remap",
-      "fingerprint": "56d7c54281f5fa23",
-      "message": "packages/agent/src/kernel/dispatch/SubAgentDispatcher.ts:1122: 8 same-name fields are copied from args. Prefer object spread plus explicit overrides, or move boundary mapping into a mapper/normalizer file. Fields: threadId, activationId, title, agentName, status, summary, error, result.",
-      "file": "packages/agent/src/kernel/dispatch/SubAgentDispatcher.ts"
-    },
-    {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "01cf889c2e4b7108",
@@ -648,23 +578,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "0eaa158ac32fef9b",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:84: \"this.sessions.get(sessionId) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "0f0d64823f59bf73",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1287: \"item.candidate.validTo ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "10d99f6d535a461f",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:469: \"this.sinkFactory?.(key) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -767,13 +683,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "3f937ee0eb571011",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:178: \"options.onDiagnostic ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "4444b3d00cb6a6f8",
       "message": "packages/agent/src/mods/AgentModRegistry.ts:149: \"this.axes.get(axis)?.get(key)?.modId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/agent/src/mods/AgentModRegistry.ts"
@@ -795,23 +704,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "47445e709496ebf7",
-      "message": "packages/agent/src/kernel/execution/ExecutionService.ts:232: \"record?.status ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/kernel/execution/ExecutionService.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "477b3d9d13522532",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:679: \"(this.authority.database .prepare( `SELECT legacy_evidence_id, legacy_ingest_se…\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "505d1d86faa7c89f",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:422: \"session.viewport ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -833,20 +728,6 @@
       "fingerprint": "58bdbca131aba3f3",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:307: \"input.input.sourceId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "5a3deb0486e5206b",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:316: \"session?.url ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "5abbe062db2a7626",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:317: \"session?.title ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -914,13 +795,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "7caf32cc8e37da03",
-      "message": "packages/agent/src/agent/context/residency/ResidencyLedger.ts:91: \"options.classifier ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/ResidencyLedger.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "7de998b314da5c8f",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:730: \"input.denyGeneration ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -963,27 +837,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "934d0fae3a71c200",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:504: \"this.peek(sessionId)?.requestEpoch({ at: input.at ?? Date.now(), modelWindowTok…\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "967652d44968c335",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:320: \"session?.viewport ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "98f289d4215098b0",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:202: \"this.siteContexts.get(sessionId) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "9acfa3c2279c934e",
       "message": "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx:391: \"hostRef.current?.parentElement ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx"
@@ -1022,20 +875,6 @@
       "fingerprint": "b14a687bd86573f6",
       "message": "packages/ui/src/conversation/internal/runtime.ts:115: \"value ?? undefined\" falls back to undefined. Keep the existing value or normalize at a boundary helper.",
       "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "b56a6c24d4f0dd95",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:385: \"targets.find((entry) => entry.id === options.targetId) ?? targets[0] ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "b953a61c45a135ff",
-      "message": "packages/agent/src/kernel/execution/ExecutionService.ts:230: \"record?.id ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/kernel/execution/ExecutionService.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -1117,13 +956,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "e3e41d95d75a868b",
-      "message": "packages/agent/src/agent/context/residency/ResidencyLedger.ts:92: \"options.sink ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/ResidencyLedger.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "e42ef22580daa173",
       "message": "packages/model/src/ProviderManifest.ts:248: \"ModelProviderOperationalManifestMap.get(providerId) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/model/src/ProviderManifest.ts"
@@ -1134,13 +966,6 @@
       "fingerprint": "ea363bda0e1203f9",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:286: \"input.input.sessionId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "ee5ef9eacda136a5",
-      "message": "packages/agent/src/agent/context/residency/distill.ts:281: \"input.failure ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/distill.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -1169,13 +994,6 @@
       "fingerprint": "f8f472ebabb1e3e2",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:310: \"input.input.executionId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "f9396e0e985cb151",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:492: \"this.peek(sessionId)?.handoffSignal() ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -1246,13 +1064,6 @@
       "fingerprint": "280ba4027834e2cb",
       "message": "packages/game/src/core/resolver.ts:52: \"Array.isArray(value)\" — use isArray(value).",
       "file": "packages/game/src/core/resolver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "32df34ec9a373c82",
-      "message": "packages/agent/src/agent/context/residency/skeleton.ts:246: \"Array.isArray(content)\" — use isArray(content).",
-      "file": "packages/agent/src/agent/context/residency/skeleton.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1348,13 +1159,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "8d39d43e45124634",
-      "message": "packages/agent/src/agent/context/residency/distill.ts:510: \"Array.isArray(content)\" — use isArray(content).",
-      "file": "packages/agent/src/agent/context/residency/distill.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
       "fingerprint": "9445d432a25782e8",
       "message": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts:136: \"Array.isArray(parsed['checkpoints'])\" — use isArray(parsed['checkpoints']).",
       "file": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts"
@@ -1390,13 +1194,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "ee9b0a6193edb039",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:141: \"Array.isArray(predicate.value)\" — use isArray(predicate.value).",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
       "fingerprint": "f6b670ab3f7053ea",
       "message": "packages/agent/src/mods/AgentModLoader.ts:143: \"Array.isArray(entries)\" — use isArray(entries).",
       "file": "packages/agent/src/mods/AgentModLoader.ts"
@@ -1421,13 +1218,6 @@
       "fingerprint": "50b8c4c70c1bd579",
       "message": "packages/agent/src/agent/TurnCapabilitySnapshot.ts:57: \"typeof entry === 'object' && entry !== null\" — `!== null` 与 `typeof … === 'object'` 联写时冗余；同一值应整体写成 isObject(entry)（等价于 typeof === 'object' 且排除 null）。",
       "file": "packages/agent/src/agent/TurnCapabilitySnapshot.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/merge-typeof-object-not-null",
-      "fingerprint": "77e380d84805703a",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:158: \"typeof value === 'object' && value !== null\" — `!== null` 与 `typeof … === 'object'` 联写时冗余；同一值应整体写成 isObject(value)（等价于 typeof === 'object' 且排除 null）。",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1467,13 +1257,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-boolean",
-      "fingerprint": "b3f2cb1305ebaf6c",
-      "message": "packages/agent/src/mods/BuiltinAgentMod.ts:79: \"typeof readOnly === 'boolean'\" — use isBoolean(readOnly).",
-      "file": "packages/agent/src/mods/BuiltinAgentMod.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-boolean",
       "fingerprint": "dfe681ccc348c1b2",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:633: \"typeof content.redacted === 'boolean'\" — use isBoolean(content.redacted).",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
@@ -1502,13 +1285,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
-      "fingerprint": "3143709347602ca7",
-      "message": "packages/memory/src/backend/Contract.ts:166: \"typeof backend.dream === 'function'\" — use isFunction(backend.dream).",
-      "file": "packages/memory/src/backend/Contract.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
       "fingerprint": "35bfd94f09af2de1",
       "message": "packages/ui/src/conversation/internal/runtime.ts:30: \"typeof value === 'function'\" — use isFunction(value).",
       "file": "packages/ui/src/conversation/internal/runtime.ts"
@@ -1516,37 +1292,9 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
-      "fingerprint": "4d2754bdaceed2fd",
-      "message": "packages/memory/src/backend/Contract.ts:169: \"typeof backend.governEvidenceEligibility === 'function'\" — use isFunction(backend.governEvidenceEligibility).",
-      "file": "packages/memory/src/backend/Contract.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
-      "fingerprint": "516653a3db43229b",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:160: \"typeof Reflect.get(value, 'then') === 'function'\" — use isFunction((Reflect.get(value, 'then'))).",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
       "fingerprint": "62258555dde1abcc",
       "message": "packages/html-artifacts/src/browser.ts:102: \"typeof cryptoApi.randomUUID === 'function'\" — use isFunction(cryptoApi.randomUUID).",
       "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
-      "fingerprint": "7281872a9c21308f",
-      "message": "packages/memory/src/backend/Contract.ts:168: \"typeof backend.governSourceEligibility === 'function'\" — use isFunction(backend.governSourceEligibility).",
-      "file": "packages/memory/src/backend/Contract.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-function",
-      "fingerprint": "8e2709b5c4e1988e",
-      "message": "packages/memory/src/backend/Contract.ts:165: \"typeof backend.erase === 'function'\" — use isFunction(backend.erase).",
-      "file": "packages/memory/src/backend/Contract.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1642,13 +1390,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-object-raw",
-      "fingerprint": "296796b09b19818b",
-      "message": "packages/agent/src/agent/context/residency/skeleton.ts:250: \"typeof part === 'object'\" — use isObject(part) (avoids treating `null` like a non-null object). @arch-guard:suspend if you truly need raw typeof.",
-      "file": "packages/agent/src/agent/context/residency/skeleton.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-object-raw",
       "fingerprint": "76994ecb09454762",
       "message": "packages/browser/src/core/CdpScreenshotEngine.ts:212: \"typeof options.region === 'object'\" — use isObject(options.region) (avoids treating `null` like a non-null object). @arch-guard:suspend if you truly need raw typeof.",
       "file": "packages/browser/src/core/CdpScreenshotEngine.ts"
@@ -1694,13 +1435,6 @@
       "fingerprint": "071fdc51200fe40d",
       "message": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts:246: \"typeof parsed['tag'] !== 'string'\" — use !isString(parsed['tag']).",
       "file": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "0b6a624ac0055933",
-      "message": "packages/agent/src/agent/context/residency/distill.ts:501: \"typeof content === 'string'\" — use isString(content).",
-      "file": "packages/agent/src/agent/context/residency/distill.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1811,13 +1545,6 @@
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "528ca4c636a6d7dd",
-      "message": "packages/agent/src/agent/context/contextRefEnvelope.ts:113: \"typeof record.__contextRef === 'string'\" — use isString(record.__contextRef).",
-      "file": "packages/agent/src/agent/context/contextRefEnvelope.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "528ca4c636a6d7dd",
       "message": "packages/agent/src/agent/context/contextRefEnvelope.ts:113: \"typeof record.ref === 'string'\" — use isString(record.ref).",
       "file": "packages/agent/src/agent/context/contextRefEnvelope.ts"
     },
@@ -1873,13 +1600,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "666bf3227001eff3",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:91: \"typeof typed.url === 'string'\" — use isString(typed.url).",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "6a64887e3be0665a",
       "message": "packages/memory/src/memory-tree/v2/IdentityKeys.ts:306: \"typeof value !== 'string'\" — use !isString(value).",
       "file": "packages/memory/src/memory-tree/v2/IdentityKeys.ts"
@@ -1894,13 +1614,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "712920310e2b570a",
-      "message": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts:448: \"typeof content === 'string'\" — use isString(content).",
-      "file": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "757de66c179cec76",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:242: \"typeof row.scope_type === 'string'\" — use isString(row.scope_type).",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -1911,13 +1624,6 @@
       "fingerprint": "7b8f255acbf5b9b8",
       "message": "packages/html-artifacts/src/security.ts:32: \"typeof value !== 'string'\" — use !isString(value).",
       "file": "packages/html-artifacts/src/security.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "7e6fdfe0da95bc14",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:92: \"typeof typed.title === 'string'\" — use isString(typed.title).",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1943,13 +1649,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "98c1245d8103df3e",
-      "message": "packages/agent/src/agent/context/residency/skeleton.ts:245: \"typeof content === 'string'\" — use isString(content).",
-      "file": "packages/agent/src/agent/context/residency/skeleton.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "9c8201304fbc6f78",
       "message": "packages/memory/src/memory-tree/v2/TreeManifest.ts:113: \"typeof raw === 'string'\" — use isString(raw).",
       "file": "packages/memory/src/memory-tree/v2/TreeManifest.ts"
@@ -1960,13 +1659,6 @@
       "fingerprint": "a1b74a2303538161",
       "message": "packages/html-artifacts/src/protocol.ts:452: \"typeof value !== 'string'\" — use !isString(value).",
       "file": "packages/html-artifacts/src/protocol.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "a33c857de949591f",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:351: \"typeof current.error === 'string'\" — use isString(current.error).",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -2006,13 +1698,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "b1d314efd07b2914",
-      "message": "packages/agent/src/agent/context/residency/distill.ts:431: \"typeof content === 'string'\" — use isString(content).",
-      "file": "packages/agent/src/agent/context/residency/distill.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "b361cdcf1c64f634",
       "message": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts:132: \"typeof parsed['treeHash'] !== 'string'\" — use !isString(parsed['treeHash']).",
       "file": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts"
@@ -2023,20 +1708,6 @@
       "fingerprint": "b3e52cfc20269c08",
       "message": "packages/memory/src/memory-tree/v2/storage/AtomicFile.ts:71: \"typeof data === 'string'\" — use isString(data).",
       "file": "packages/memory/src/memory-tree/v2/storage/AtomicFile.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "b4dbf4a939e19ba7",
-      "message": "packages/agent/src/agent/context/residency/skeleton.ts:250: \"typeof part.text === 'string'\" — use isString(part.text).",
-      "file": "packages/agent/src/agent/context/residency/skeleton.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "b5cf07cd2700b5c4",
-      "message": "packages/agent/src/mods/BuiltinAgentMod.ts:78: \"typeof summary === 'string'\" — use isString(summary).",
-      "file": "packages/agent/src/mods/BuiltinAgentMod.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -2076,20 +1747,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "c651d8fc0affe65a",
-      "message": "packages/agent/src/mods/BuiltinAgentMod.ts:77: \"typeof category === 'string'\" — use isString(category).",
-      "file": "packages/agent/src/mods/BuiltinAgentMod.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "ce880bd2a95616cc",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:343: \"typeof outcome.error === 'string'\" — use isString(outcome.error).",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "d196221497e06adb",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:241: \"typeof row.canonical_name === 'string'\" — use isString(row.canonical_name).",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -2100,13 +1757,6 @@
       "fingerprint": "d9639795c19f9161",
       "message": "packages/memory/src/memory-tree/v2/TreeManifest.ts:163: \"typeof entry === 'string'\" — use isString(entry).",
       "file": "packages/memory/src/memory-tree/v2/TreeManifest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "daf92bf72bf131fd",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:467: \"typeof input['identity'] !== 'string'\" — use !isString(input['identity']).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -2188,13 +1838,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "fad786e70c830699",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:96: \"typeof typed.url === 'string'\" — use isString(typed.url).",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "fc6f5e35d52c3a33",
       "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:436: \"typeof parsed['wrappingRootId'] !== 'string'\" — use !isString(parsed['wrappingRootId']).",
       "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
@@ -2265,27 +1908,6 @@
     {
       "checkId": "code-style/forbid-raw-timers",
       "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "b8bdf6fbfe9d749f",
-      "message": "packages/agent/src/agent/context/residency/distillRunner.ts:147: \"setTimeout(() => { controller.abort() resolve('timeout') }, timeoutMs)\" calls native setTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/agent/src/agent/context/residency/distillRunner.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "e37044d2f0d142d4",
-      "message": "packages/agent/src/agent/context/residency/distillRunner.ts:181: \"clearTimeout(timer)\" calls native clearTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/agent/src/agent/context/residency/distillRunner.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "e808963cce335bf8",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:103: \"setTimeout(resolveDelay, ms)\" calls native setTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
       "fingerprint": "ef5e72d131e6a24f",
       "message": "packages/ui/src/conversation/internal/timerScope.ts:58: \"globalThis.clearInterval(handle)\" calls native clearInterval. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
       "file": "packages/ui/src/conversation/internal/timerScope.ts"
@@ -2336,13 +1958,6 @@
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
       "fingerprint": "6b08a1fc622b9031",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:168: \"permissions.accessibility === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
-      "fingerprint": "6b08a1fc622b9031",
       "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:168: \"permissions.screenRecording === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
     },
@@ -2352,13 +1967,6 @@
       "fingerprint": "71a04cad911845e1",
       "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:158: \"this.consumer.retainFrames !== false\" uses !== against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
-      "fingerprint": "afd123eab1717c14",
-      "message": "packages/memory/src/vector/Backend.ts:304: \"options.includeGlobal !== false\" uses !== against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/vector/Backend.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2391,23 +1999,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "02fc3cf6891163ec",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:250: \"report.trigger === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "05fcb0d2871bdeba",
       "message": "packages/game/src/core/resolver.ts:58: \"patch === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/game/src/core/resolver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "061b0ba0f7d390a6",
-      "message": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts:281: \"record !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2580,13 +2174,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "895f3440246c5971",
-      "message": "packages/ui/src/conversation/composer/hooks/useComposerCommentMentionMenu.ts:67: \"query === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/ui/src/conversation/composer/hooks/useComposerCommentMentionMenu.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "8c13ca25e4cc86cc",
       "message": "packages/memory/src/memory-tree/v2/ErasureSaga.ts:978: \"parsed === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/ErasureSaga.ts"
@@ -2615,23 +2202,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "9211be6afc01d4e7",
-      "message": "packages/ui/src/conversation/composer/hooks/useComposerCommentMentionMenu.ts:71: \"query !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/ui/src/conversation/composer/hooks/useComposerCommentMentionMenu.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "95878af9122c24b2",
       "message": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts:307: \"prototype !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "95c4ec8eadc6f461",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:465: \"v2.payload_blob_ref !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2650,13 +2223,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "9c50aeccca9e9dcb",
-      "message": "packages/agent/src/agent/context/residency/distillRunner.ts:74: \"this.options.resolveDistiller() !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/distillRunner.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "9c76fd1682a9ee54",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:851: \"cursor.parentKey !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
@@ -2667,13 +2233,6 @@
       "fingerprint": "a1de70a688f2b857",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:749: \"existing !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "a59048f7e7b97cf0",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:310: \"report.trigger !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2730,13 +2289,6 @@
       "fingerprint": "bd25be918a2a4b16",
       "message": "packages/ui/src/conversation/internal/runtime.ts:38: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "bfc7a23b0bbf8c56",
-      "message": "packages/agent/src/agent/context/residency/distillRunner.ts:66: \"this.running !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/distillRunner.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2818,13 +2370,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "ea5e2672ea6cf63a",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:319: \"lastEpochAfterPercent !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "ea6bbd6a25b95aa7",
       "message": "packages/agent/src/agent/ExecutionLimits.ts:55: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/agent/ExecutionLimits.ts"
@@ -2874,20 +2419,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "0db4db59ab8e60f7",
-      "message": "packages/agent/src/agent/IntentSignals.ts:92: \"signal.requiresDiscovery === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/IntentSignals.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "21a7fde51deaf309",
-      "message": "packages/agent/src/agent/IntentSignals.ts:95: \"signal.requiresValidation === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/IntentSignals.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
       "fingerprint": "3831e554d8a1aa8e",
       "message": "packages/computer/src/runtime/ComputerSidecarProtocol.ts:60: \"parsed.ok === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/computer/src/runtime/ComputerSidecarProtocol.ts"
@@ -2895,23 +2426,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "39f0dc1ef46dbf6c",
-      "message": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts:348: \"input.modelRequested === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
       "fingerprint": "3e247db0e3d3aeab",
       "message": "packages/ui/src/conversation/composer/utils/chatDraftInsertion.utils.ts:42: \"detail.handled === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/ui/src/conversation/composer/utils/chatDraftInsertion.utils.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "4f9b05043f3d240e",
-      "message": "packages/agent/src/agent/IntentSignals.ts:94: \"signal.requiresMutation === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/IntentSignals.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2937,13 +2454,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "ef375f84cd8a74f6",
-      "message": "packages/agent/src/agent/IntentSignals.ts:93: \"signal.requiresEvidence === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/IntentSignals.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
       "fingerprint": "ef700987562131c4",
       "message": "packages/agent/src/agent/context/providerRequest/messageScan.ts:95: \"record.__truncated === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/agent/context/providerRequest/messageScan.ts"
@@ -2954,13 +2464,6 @@
       "fingerprint": "f3e81679ec69637d",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:202: \"projectionIndex.inspect(reconstructed.version, reconstructed.current) ?.matches…\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-true",
-      "fingerprint": "f52120f913c522d3",
-      "message": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts:151: \"input.modelRequested === true\" uses === against `true`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/context/residency/GovernanceEpoch.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -3000,13 +2503,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "1a2862e9a71e6e28",
-      "message": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts:69: \"context.itemIndex === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "230679f80e3ee1c9",
       "message": "packages/memory/src/files/Frontmatter.ts:159: \"canonical !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/files/Frontmatter.ts"
@@ -3038,13 +2534,6 @@
       "fingerprint": "380fb61ea5175750",
       "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:228: \"invalidBeforeLeaf !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "3ce9b6f586ccf1cd",
-      "message": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts:70: \"context.round === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -3196,13 +2685,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "cf7e7b863ba782d8",
-      "message": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts:64: \"context.input === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/agent/runner/AgentWorkflowCoordinator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "d1cd8a93356a5418",
       "message": "packages/agent/src/sub-agent/StructuredOutput.ts:96: \"node.additionalProperties !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/sub-agent/StructuredOutput.ts"
@@ -3245,13 +2727,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "f4193c832b9979c4",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:433: \"value === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "fa896cc2054d297e",
       "message": "packages/game/src/runtime/diagnostics.ts:43: \"input.line === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/game/src/runtime/diagnostics.ts"
@@ -3259,30 +2734,9 @@
     {
       "checkId": "code-style/forbid-single-property-conditional-spread",
       "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "035ee59414408d7a",
-      "message": "packages/agent/src/kernel/tool-output-store.ts:279: \"...(stored.sameAsToolCallId ? { sameAsToolCallId: stored.sameAsToolCallId } : {…\" 是单属性条件对象展开。请写成 `sameAsToolCallId: toOptional(stored.sameAsToolCallId)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/agent/src/kernel/tool-output-store.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "06b1bada1762f212",
-      "message": "packages/agent/src/mods/BuiltinAgentMod.ts:91: \"...(definition.retention ? { retention: definition.retention } : {})\" 是单属性条件对象展开。请写成 `retention: toOptional(definition.retention)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/agent/src/mods/BuiltinAgentMod.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
       "fingerprint": "ac513c71843649ba",
       "message": "packages/game/src/runtime/diagnostics.ts:42: \"...(input.file ? { file: input.file } : {})\" 是单属性条件对象展开。请写成 `file: toOptional(input.file)`，需要整组对象合并时才使用 spread。",
       "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "c6e0ff2b0ddd6c44",
-      "message": "packages/agent/src/mods/BuiltinAgentMod.ts:88: \"...(definition.label ? { label: definition.label } : {})\" 是单属性条件对象展开。请写成 `label: toOptional(definition.label)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/agent/src/mods/BuiltinAgentMod.ts"
     },
     {
       "checkId": "code-style/forbid-single-property-conditional-spread",
@@ -3360,13 +2814,6 @@
       "fingerprint": "10c74a77d71de62d",
       "message": "packages/browser/src/core/CloakBrowserLauncher.ts:101: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
       "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "11844659e40d5d79",
-      "message": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts:649: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts"
     },
     {
       "checkId": "code-style/forbid-swallowed-errors",
@@ -3509,13 +2956,6 @@
       "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
     },
     {
-      "checkId": "code-style/forbid-trivial-function-wrapper",
-      "ruleId": "code-style/forbid-trivial-function-wrapper/trivial-forwarder",
-      "fingerprint": "916a672128569ffb",
-      "message": "packages/ui/src/conversation/blocks/AssistantMessageSegments.tsx:392: 无意义透传封装 \"collectActivityBlocks(…) → collectToolCallBlocksFromMessageRenderSegment(…)\"。改为直接调用 collectToolCallBlocksFromMessageRenderSegment 或使用 export 再导出。",
-      "file": "packages/ui/src/conversation/blocks/AssistantMessageSegments.tsx"
-    },
-    {
       "checkId": "code-style/forbid-undefined-coalescing",
       "ruleId": "code-style/forbid-undefined-coalescing/coalesce-undefined",
       "fingerprint": "2b5060caca9726cf",
@@ -3574,23 +3014,9 @@
     {
       "checkId": "code-style/prefer-double-bang-over-nullish-false",
       "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
-      "fingerprint": "a87099ef5f5e164f",
-      "message": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts:487: \"this.peek(sessionId)?.recordFault(ref, at) ?? false\" — `?? false` 作 boolean 归一时请改为 `!!this.peek(sessionId)?.recordFault(ref, at)`（可 `arch-guard run --fix`）。",
-      "file": "packages/agent/src/agent/context/residency/ContextGovernanceSession.ts"
-    },
-    {
-      "checkId": "code-style/prefer-double-bang-over-nullish-false",
-      "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
       "fingerprint": "b1a2ebb2f90ddcbf",
       "message": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts:331: \"webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning() ?? fa…\" — `?? false` 作 boolean 归一时请改为 `!!webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning()`（可 `arch-guard run --fix`）。",
       "file": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-double-bang-over-nullish-false",
-      "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
-      "fingerprint": "bb06d7fedf156b66",
-      "message": "packages/memory/src/tools/memory/Memory.tool.ts:188: \"input.userConfirmed ?? false\" — `?? false` 作 boolean 归一时请改为 `!!input.userConfirmed`（可 `arch-guard run --fix`）。",
-      "file": "packages/memory/src/tools/memory/Memory.tool.ts"
     },
     {
       "checkId": "code-style/prefer-double-bang-over-nullish-false",
@@ -3616,13 +3042,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/empty-string-isEmpty",
-      "fingerprint": "440d6275ed084c18",
-      "message": "packages/agent/src/agent/ContextBuilder.ts:485: \"text === ''\" compares with an empty string. Use isEmpty(value) instead.",
-      "file": "packages/agent/src/agent/ContextBuilder.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/empty-string-isEmpty",
       "fingerprint": "bc0e218a76b9a625",
       "message": "packages/memory/src/knowledge/knowledge/ingestion/PathPolicy.ts:22: \"relativePath === ''\" compares with an empty string. Use isEmpty(value) instead.",
       "file": "packages/memory/src/knowledge/knowledge/ingestion/PathPolicy.ts"
@@ -3633,13 +3052,6 @@
       "fingerprint": "01128ecedb05a19a",
       "message": "packages/ui/src/lib/runtime.ts:14: \"value.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/ui/src/lib/runtime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "0d5574fdbc60be7c",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:251: \"definition.steps.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3665,30 +3077,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "1cf1d3c536589c67",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:493: \"decisions.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "1d7172be9b64dde4",
-      "message": "packages/agent/src/mods/AgentModSeams.ts:371: \"append.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/mods/AgentModSeams.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "1ea1ec743b30efeb",
       "message": "packages/model/src/PromptCacheModelOptions.ts:235: \"Object.keys(strippedOptions).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/model/src/PromptCacheModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "1fb8e127b58de54a",
-      "message": "packages/agent/src/agent/context/retrieval/PayloadReader.ts:240: \"parts.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/context/retrieval/PayloadReader.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3771,13 +3162,6 @@
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "3770ea71b922a4de",
-      "message": "packages/memory/src/vector/Backend.ts:120: \"entry.id.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/vector/Backend.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "3770ea71b922a4de",
       "message": "packages/memory/src/vector/Backend.ts:120: \"entry.text.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/vector/Backend.ts"
     },
@@ -3819,13 +3203,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "4a4bac4cfba9944a",
-      "message": "packages/agent/src/agent/model/PromptCache.ts:165: \"Object.keys(cleaned).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/model/PromptCache.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "4a62cd21830f748a",
       "message": "packages/ui/src/lib/runtime.ts:6: \"value.trim().length === 0\" checks emptiness through .length. Prefer **`isBlank(base)`** (isBlank is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/ui/src/lib/runtime.ts"
@@ -3833,23 +3210,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "4bb0317e38c70678",
-      "message": "packages/agent/src/agent/model/PromptCache.ts:103: \"Object.keys(nextProviderOptions).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/model/PromptCache.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "4ce83ed3ddbff821",
       "message": "packages/memory/src/files/Frontmatter.ts:87: \"paragraph.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/files/Frontmatter.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "52091cafdff8e326",
-      "message": "packages/agent/src/agent/ContextBuilder.ts:497: \"extras.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/ContextBuilder.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3927,13 +3290,6 @@
       "fingerprint": "7a42728c947e6f92",
       "message": "packages/model/src/PromptCacheModelOptions.ts:199: \"Object.keys(strippedOptions).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/model/src/PromptCacheModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "822a955533c50a61",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:465: \"step.group_path.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -4050,13 +3406,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "b011df1d4d55a5a1",
-      "message": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts:407: \"samples.length\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "b1b97cbe56fa2391",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:805: \"record.predecessorId.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
@@ -4078,13 +3427,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "b60a2c8e9727a1c5",
-      "message": "packages/agent/src/agent/model/PromptCache.ts:173: \"Object.keys(cleaned).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/model/PromptCache.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "b65915ec24ab505d",
       "message": "packages/browser/src/core/BrowserRecipeSkeletonBuilder.ts:147: \"primaryLinks.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/browser/src/core/BrowserRecipeSkeletonBuilder.ts"
@@ -4095,13 +3437,6 @@
       "fingerprint": "ba47f5f39decc9b6",
       "message": "packages/core/src/utils/string.ts:9: \"value.trim().length === 0\" checks emptiness through .length. Prefer **`isBlank(base)`** (isBlank is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/core/src/utils/string.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "bc07fafd5a473b22",
-      "message": "packages/agent/src/agent/context/residency/projection.ts:359: \"content.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/context/residency/projection.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -4144,13 +3479,6 @@
       "fingerprint": "cdedeea204114471",
       "message": "packages/memory/src/vector/Backend.ts:165: \"records.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/vector/Backend.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "d383d8f5b5dcd690",
-      "message": "packages/ui/src/conversation/composer/ChatInput.tsx:554: \"filesRef.current.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/ui/src/conversation/composer/ChatInput.tsx"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -4204,23 +3532,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "f728c5cbb99aef9b",
-      "message": "packages/agent/src/agent/context/retrieval/PayloadReader.ts:242: \"parts.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/context/retrieval/PayloadReader.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "f9b5ca8baa5a2954",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:401: \"reasons.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "fb05bd85b2f3c358",
-      "message": "packages/agent/src/agent/context/residency/messageFacts.ts:57: \"readToolCallFacts(message).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/agent/context/residency/messageFacts.ts"
     },
     {
       "checkId": "code-style/prefer-is-finite-number-guard",
@@ -4293,13 +3607,6 @@
       "file": "packages/agent/src/agent/control-plane/RuntimeRunPlanner.ts"
     },
     {
-      "checkId": "code-style/prefer-is-non-blank-string-guard",
-      "ruleId": "code-style/prefer-is-non-blank-string-guard/prefer-is-non-blank-string",
-      "fingerprint": "4f3ad978f408f4ff",
-      "message": "packages/agent/src/agent/context/residency/distill.ts:369: \"isRecord(parsed) && isString(parsed.summary) && parsed.summary.trim()\" — 请用 `isNonBlankString(parsed.summary)`（可 `arch-guard run --fix`）。",
-      "file": "packages/agent/src/agent/context/residency/distill.ts"
-    },
-    {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "07671e184bc21ecc",
@@ -4326,13 +3633,6 @@
       "fingerprint": "171c277fc921ca4c",
       "message": "packages/core/src/error.ts:110: `value` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：value as Record<string, unknown>",
       "file": "packages/core/src/error.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "1c79507f326122a0",
-      "message": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx:66: `advisory` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：advisory as Record<string, unknown>",
-      "file": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
@@ -4407,13 +3707,6 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "5404ec64cb248103",
-      "message": "packages/agent/src/tool-library/builtin/ActiveDirectives.ts:124: `constraint` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：constraint as Record<string, unknown>",
-      "file": "packages/agent/src/tool-library/builtin/ActiveDirectives.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "557b0255a628bf3b",
       "message": "packages/memory/src/memory-tree/TreeProjection.ts:156: `record.node` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：record.node as Record<string, unknown>",
       "file": "packages/memory/src/memory-tree/TreeProjection.ts"
@@ -4452,20 +3745,6 @@
       "fingerprint": "639afd105e87fe7f",
       "message": "packages/core/src/error.ts:145: `value` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：value as Record<string, unknown>",
       "file": "packages/core/src/error.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "710abfd41335a784",
-      "message": "packages/agent/src/agent/PromptState.ts:116: `part` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：part as Record<string, unknown>",
-      "file": "packages/agent/src/agent/PromptState.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "78073fff94a008d2",
-      "message": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx:56: `patch` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：patch as Record<string, unknown>",
-      "file": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
@@ -4575,13 +3854,6 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "c436ec082e0a6cb6",
-      "message": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx:27: `error` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：error as Record<string, unknown>",
-      "file": "packages/ui/src/conversation/tool-render/fileChange/FileChangeToolRender.tsx"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "c449563995c2f23c",
       "message": "packages/memory/src/memory-tree/Repository.ts:206: `parsed` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：parsed as Record<string, unknown>",
       "file": "packages/memory/src/memory-tree/Repository.ts"
@@ -4634,13 +3906,6 @@
       "fingerprint": "e4e345bd9ad3fbcd",
       "message": "packages/browser/src/tools/RecipeParser.ts:91: `parsed` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：parsed as Record<string, unknown>",
       "file": "packages/browser/src/tools/RecipeParser.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "ec1a67558635fbc0",
-      "message": "packages/agent/src/tool-library/builtin/ActiveDirectives.ts:117: `metadata` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：metadata as Record<string, unknown>",
-      "file": "packages/agent/src/tool-library/builtin/ActiveDirectives.ts"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
@@ -4837,13 +4102,6 @@
       "fingerprint": "05171adb222806a3",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:39: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "0652eef48a4986d9",
-      "message": "packages/game/src/core/schemas.ts:272: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/game/src/core/schemas.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5054,13 +4312,6 @@
       "fingerprint": "35a5d1547d390e22",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:784: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "369cfa90041b9ad4",
-      "message": "packages/ui/src/conversation/composer/ComposerCommentMentionMenu.tsx:24: \"ReactElement | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/ui/src/conversation/composer/ComposerCommentMentionMenu.tsx"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5282,13 +4533,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "5e3883a4f5518253",
-      "message": "packages/browser/src/core/CdpBrowserRuntime.ts:95: \"{ url?: string } | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/browser/src/core/CdpBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "5e73fc01a88e8152",
       "message": "packages/memory/src/memory-tree/v2/DreamRuns.ts:67: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/DreamRuns.ts"
@@ -5348,13 +4592,6 @@
       "fingerprint": "63a4953849e4910d",
       "message": "packages/html-artifacts/src/browser.ts:209: \"HtmlArtifactSnapshot | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "6549915523b041fd",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:872: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5558,13 +4795,6 @@
       "fingerprint": "8ac9224045f7554e",
       "message": "packages/computer/src/runtime/types.ts:102: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/computer/src/runtime/types.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "8eb9dcde2c8c2ffc",
-      "message": "packages/core/src/utils/nullish.ts:9: \"T | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/core/src/utils/nullish.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5808,13 +5038,6 @@
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "c03d871c131069c7",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:768: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c03d871c131069c7",
       "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:768: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
@@ -5824,13 +5047,6 @@
       "fingerprint": "c265ca7c0b2c4f39",
       "message": "packages/memory/src/memory-tree/v2/IdentityKeys.ts:32: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/IdentityKeys.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c2c3961bcb4b90ed",
-      "message": "packages/html-artifacts/src/frame-fit.ts:18: \"number | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/html-artifacts/src/frame-fit.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5950,13 +5166,6 @@
       "fingerprint": "dc7a371ca0bb85fc",
       "message": "packages/memory/src/memory-tree/v2/ErasureSaga.ts:165: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/ErasureSaga.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "dd8bab5921de00e5",
-      "message": "packages/html-artifacts/src/protocol.ts:288: \"string | null | undefined\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/html-artifacts/src/protocol.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -6101,13 +5310,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "f8e66543c05aba63",
-      "message": "packages/agent/src/agent/ExecutionLimits.ts:54: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/agent/src/agent/ExecutionLimits.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "fb148911f304b066",
       "message": "packages/memory/src/memory-tree/v2/ErasureSaga.ts:146: \"ReplacementIdentityV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/ErasureSaga.ts"
@@ -6178,23 +5380,9 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "b5f616041b3534c3",
-      "message": "packages/ui/src/conversation/render-slots/conversationRenderSlots.tsx:162: optional Nullable contract \"Nullable<ConversationRunMarkerView>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/ui/src/conversation/render-slots/conversationRenderSlots.tsx"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
       "fingerprint": "e6727ec6b29eb0c6",
       "message": "packages/browser/src/core/BrowserTargetHighlightScriptBuilder.ts:7: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
       "file": "packages/browser/src/core/BrowserTargetHighlightScriptBuilder.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/optional-nullable-contract",
-      "fingerprint": "e9cb47892158bd7d",
-      "message": "packages/ui/src/conversation/render-slots/conversationRenderSlots.tsx:124: optional Nullable contract \"Nullable<string>\" allows both null and undefined. Use \"LooseOptional<T>\" to express that absence explicitly.",
-      "file": "packages/ui/src/conversation/render-slots/conversationRenderSlots.tsx"
     },
     {
       "checkId": "code-style/prefer-number-or-null-ternary",
@@ -6241,23 +5429,9 @@
     {
       "checkId": "code-style/prefer-table-branching",
       "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "12189b5f49cf98c1",
-      "message": "packages/agent/src/agent/context/residency/ingest.ts:100: \"message.role\" maps 4 outcomes through repeated if branches ('tool', 'system', 'user'). Use switch for repeated explicit outcomes.",
-      "file": "packages/agent/src/agent/context/residency/ingest.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
       "fingerprint": "281f34e4bfc0d96a",
       "message": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts:89: \"button\" maps 3 outcomes through repeated if branches ('right', 'middle'). Use switch for repeated explicit outcomes.",
       "file": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "3a1cac5c45dd81cf",
-      "message": "packages/agent/src/agent/context/residency/ContextRecord.ts:136: \"residency\" maps 3 outcomes through repeated if branches ('INLINE', 'EXCERPT'). Use switch for repeated explicit outcomes.",
-      "file": "packages/agent/src/agent/context/residency/ContextRecord.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -6269,23 +5443,9 @@
     {
       "checkId": "code-style/prefer-table-branching",
       "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "6098d7684c75de24",
-      "message": "packages/memory/src/tools/memory/Memory.tool.ts:64: \"category\" maps 4 outcomes through repeated if branches ('session', 'user', 'reference'). Use switch for repeated explicit outcomes.",
-      "file": "packages/memory/src/tools/memory/Memory.tool.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
       "fingerprint": "6fae5649376a0f58",
       "message": "packages/agent/src/tools/ToolArgsSchemaValidator.ts:287: \"trimmed\" maps 2 outcomes through repeated if branches ('true', 'false'). Use switch for repeated explicit outcomes.",
       "file": "packages/agent/src/tools/ToolArgsSchemaValidator.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "88db71c683a7b425",
-      "message": "packages/memory/src/backend/Contract.ts:165: \"verb\" maps 4 outcomes through repeated if branches ('erase', 'dream', 'govern'). Use switch for repeated explicit outcomes.",
-      "file": "packages/memory/src/backend/Contract.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -6304,23 +5464,9 @@
     {
       "checkId": "code-style/prefer-table-branching",
       "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "c5d18bbb8da60a74",
-      "message": "packages/ui/src/conversation/blocks/messageBubbleRenderModel.ts:309: \"block.type\" maps 3 outcomes through repeated if branches ('scheduled-task-proposal', 'html-artifact'). Use switch for repeated explicit outcomes.",
-      "file": "packages/ui/src/conversation/blocks/messageBubbleRenderModel.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
       "fingerprint": "cecbf330249b0f8e",
       "message": "packages/model/src/ThinkingDepthModelOptions.ts:143: \"level\" maps 3 outcomes through repeated if branches ('off', 'ultra'). Use switch for repeated explicit outcomes.",
       "file": "packages/model/src/ThinkingDepthModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "e73327529ed09887",
-      "message": "packages/agent/src/agent/context/residency/projection.ts:245: \"record.kind\" maps 2 outcomes through repeated if branches ('tool-result', 'tool-call'). Use switch for repeated explicit outcomes.",
-      "file": "packages/agent/src/agent/context/residency/projection.ts"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -6710,13 +5856,6 @@
     {
       "checkId": "code-style/require-error-logging",
       "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "22fdbb6e37f97b4a",
-      "message": "packages/agent/src/workflow/AgentWorkflowRuntime.ts:215: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/workflow/AgentWorkflowRuntime.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
       "fingerprint": "245c127c1299c892",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:524: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
@@ -6734,13 +5873,6 @@
       "fingerprint": "4f94cbd45d910d4d",
       "message": "packages/game/src/runtime/diagnostics.ts:26: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
       "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "50509bee90bf4f02",
-      "message": "packages/agent/src/agent/PromptState.ts:249: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/agent/PromptState.ts"
     },
     {
       "checkId": "code-style/require-error-logging",
@@ -6892,23 +6024,9 @@
     {
       "checkId": "code-style/require-error-logging",
       "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "b2aa251086293c72",
-      "message": "packages/agent/src/agent/context/retrieval/PayloadReader.ts:236: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/agent/context/retrieval/PayloadReader.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
       "fingerprint": "b4a80ad3431cffde",
       "message": "packages/agent/src/mods/AgentModHostAssembly.ts:161: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
       "file": "packages/agent/src/mods/AgentModHostAssembly.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "b78a534ad4057efb",
-      "message": "packages/agent/src/agent/context/retrieval/PayloadReader.ts:649: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/agent/context/retrieval/PayloadReader.ts"
     },
     {
       "checkId": "code-style/require-error-logging",
@@ -6958,13 +6076,6 @@
       "fingerprint": "e32675876d9c1249",
       "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:151: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
       "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "e52626f12f7e023e",
-      "message": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts:255: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/agent/context/retrieval/ContextRetrievalService.ts"
     },
     {
       "checkId": "code-style/require-error-logging",

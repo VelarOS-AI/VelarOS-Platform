@@ -12,10 +12,60 @@
  *
  * 依赖纪律：不 import v1 压缩模块（B1 判死），正则在本文件单源。
  */
-import { sortedUniqueStrings } from './determinism'
+import { compareStableStrings } from './determinism'
 
 /** 单条记录保留的锚点上限：超过即噪声，且锚点本身也占预算。 */
 export const MaxContextAnchors = 24
+
+/**
+ * 锚点抽取的输入窗口上限。
+ *
+ * 工具输出可以是 MB 级（准入照样要算 bytes.full 与锚点，即便下一步就被摘录成 24K），对全文跑
+ * 六条全局正则会在主进程上卡出可感知的准入延迟。按**头尾各半**取窗口与摘录本身的头尾口径一致：
+ * 有价值的关键场（命令、路径、退出码）几乎都落在开头与结尾，中段是重复的日志体。
+ */
+const MaxAnchorScanChars = 128_000
+
+/**
+ * 锚点类别（抽取顺序即信息密度降序）。
+ *
+ * 类别在准入期就已知（是哪条正则抽出来的），过去却在记录上退化成无类型字符串，骨架只好用一条更
+ * 弱的正则二次分类——`0.24.0` 因此被当成文件路径塞进「文件」栏，把真实路径全顶掉（审计 V13）。
+ */
+export type ContextAnchorKind = 'path' | 'command' | 'identifier' | 'number'
+
+/** 类别优先序：截断与分栏一律按它，不按 UTF-16 码元序（数字恒排在字母前是纯偶然）。 */
+export const ContextAnchorKindOrder: readonly ContextAnchorKind[] = [
+  'path',
+  'command',
+  'identifier',
+  'number',
+]
+
+export interface ContextAnchor {
+  /** 归一后的锚点正文（比对与去重都在归一形上做）。 */
+  text: string
+  kind: ContextAnchorKind
+}
+
+/** 类别位次（越小越该保住）。 */
+export function contextAnchorKindRank(kind: ContextAnchorKind): number {
+  const rank = ContextAnchorKindOrder.indexOf(kind)
+  return rank < 0 ? ContextAnchorKindOrder.length : rank
+}
+
+/** 锚点的稳定序：先类别优先序，同类按码元序（确定性，禁 locale 比较）。 */
+export function compareContextAnchors(left: ContextAnchor, right: ContextAnchor): number {
+  return (
+    contextAnchorKindRank(left.kind) - contextAnchorKindRank(right.kind) ||
+    compareStableStrings(left.text, right.text)
+  )
+}
+
+/** 锚点 → 正文清单（提示词与骨架锚点行都只吃正文）。 */
+export function toContextAnchorTexts(anchors: readonly ContextAnchor[]): string[] {
+  return anchors.map((anchor) => anchor.text)
+}
 
 /** 文件路径 / 文件名锚（逐字沿用 v1）。 */
 const FileAnchorPattern =
@@ -76,31 +126,43 @@ export function normalizeAnchorText(value: string): string {
  * 从一段文本抽锚点。顺序确定：路径 → 命令 → 标识符 → 数字（信息密度降序），
  * 组内按出现序，整体去重后截到 `limit`。同输入必同输出。
  */
-export function extractContextAnchors(text: string, limit: number = MaxContextAnchors): string[] {
+export function extractContextAnchors(
+  text: string,
+  limit: number = MaxContextAnchors
+): ContextAnchor[] {
   if (!text.trim()) return []
 
-  const anchors: string[] = []
+  const scanned = sliceAnchorScanWindow(text)
+  const anchors: ContextAnchor[] = []
   const seen = new Set<string>()
-  const addAnchor = (raw: string): void => {
+  const addAnchor = (raw: string, kind: ContextAnchorKind): void => {
     const normalized = normalizeAnchorText(raw)
     if (!normalized || seen.has(normalized)) return
     seen.add(normalized)
-    anchors.push(normalized)
+    anchors.push({ text: normalized, kind })
   }
 
-  for (const match of text.matchAll(FileAnchorPattern)) addAnchor(match[0])
+  for (const match of scanned.matchAll(FileAnchorPattern)) addAnchor(match[0], 'path')
 
   for (const pattern of CommandAnchorPatterns) {
-    for (const match of text.matchAll(pattern)) addAnchor(trimCommandAnchor(match[0]))
+    for (const match of scanned.matchAll(pattern)) addAnchor(trimCommandAnchor(match[0]), 'command')
   }
 
-  for (const match of text.matchAll(IdentifierAnchorPattern)) addAnchor(match[0])
+  for (const match of scanned.matchAll(IdentifierAnchorPattern)) addAnchor(match[0], 'identifier')
 
   for (const pattern of NumberAnchorPatterns) {
-    for (const match of text.matchAll(pattern)) addAnchor(match[0])
+    for (const match of scanned.matchAll(pattern)) addAnchor(match[0], 'number')
   }
 
   return anchors.slice(0, Math.max(0, limit))
+}
+
+/** 抽取窗口：超长文本只扫头尾各半，中段（重复日志体）不进正则。 */
+function sliceAnchorScanWindow(text: string): string {
+  if (text.length <= MaxAnchorScanChars) return text
+
+  const half = Math.floor(MaxAnchorScanChars / 2)
+  return `${text.slice(0, half)}\n${text.slice(text.length - half)}`
 }
 
 /**
@@ -110,11 +172,6 @@ export function extractContextAnchors(text: string, limit: number = MaxContextAn
 export function anchorDensityPerKiloChar(anchorCount: number, chars: number): number {
   if (chars <= 0) return 0
   return (anchorCount * 1000) / chars
-}
-
-/** 锚点集合的稳定并集：多条记录合并成骨架时用（去重 + 码元序）。 */
-export function mergeAnchors(...groups: ReadonlyArray<readonly string[]>): string[] {
-  return sortedUniqueStrings(groups.flat())
 }
 
 function trimCommandAnchor(value: string): string {

@@ -11,18 +11,28 @@
 | 轴 | 主键 | 运行态绑定 | Desktop 接线 | 文档 |
 | --- | --- | --- | --- | --- |
 | `tools` | `name` | **必需** | ✅ 已接线 | [tools.md](./tools.md) |
-| `toolCategories` | `id` | 可选 | ⚠️ 未接线 | [tool-categories.md](./tool-categories.md) |
+| `toolCategories` | `id` | 可选 | ✅ 已接线 | [tool-categories.md](./tool-categories.md) |
 | `promptSegments` | `id` | 可选（否则须带 `text`） | ✅ 已接线 | [prompt-segments.md](./prompt-segments.md) |
-| `skills` | `id` | 可选 | ⚠️ 未接线 | [skills.md](./skills.md) |
-| `spaces` | `id` | **禁止** | ⚠️ 未接线 | [spaces.md](./spaces.md) |
-| `subAgentTypes` | `id` | 可选 | ⚠️ 未接线 | [sub-agent-types.md](./sub-agent-types.md) |
+| `skills` | `id` | 可选 | ✅ 已接线 | [skills.md](./skills.md) |
+| `spaces` | `id` | **禁止** | ✅ 已接线（只消费工具配方那几格） | [spaces.md](./spaces.md) |
+| `subAgentTypes` | `id` | 可选 | ✅ 已接线 | [sub-agent-types.md](./sub-agent-types.md) |
 | `turnContextSources` | `id` | **禁止** | ⚠️ 未接线 | [turn-context-sources.md](./turn-context-sources.md) |
 | `executionModes` | `id` | 可选 | ⚠️ 未接线 | [execution-modes.md](./execution-modes.md) |
-| `hooks` | `id` | **必需** | ✅ 已接线（4/15 kind） | [hooks.md](./hooks.md) |
+| `hooks` | `id` | **必需** | ✅ 已接线（5/15 kind） | [hooks.md](./hooks.md) |
 
-「⚠️ 未接线」= `DesktopAgentModUnroutedAxes`（`apps/desktop/src/main/kernel/AgentModRuntime.ts`）：
-宿主声明支持、Loader 也注册了，但还没接进任何运行时消费者，设置页显示为「未接线轴」
-（诊断码 `desktop.mod.axis-unrouted`）。**贡献这些轴今天不会报错，也不会生效。**
+「⚠️ 未接线」= `DesktopAgentModUnroutedAxes`（`apps/desktop/src/main/kernel/AgentModRuntime.ts`，
+由落点表 `DesktopAgentModAxisSinkNames` 取补集派生）：Desktop 还没把这条轴接进任何运行时消费者。
+**这两条轴不在 Desktop 的 `supportedAxes` 里**，因此：
+
+- 贡献它们不会报错，但**贡献会被 Loader 裁掉**（不进注册表），mod 状态落 `partial`；
+- 设置页那一行显示「未接线轴」，诊断码 `desktop.mod.axis-unrouted`；
+- 把它们写进 `requiredAxes` = **拒载**（fail-closed 如实生效）。别为了「保险」写上去。
+
+「✅ 已接线（只消费工具配方那几格）」：`spaces` 轴 Desktop 真正读的是
+`identityStrategy` / `boundCapabilityIds` / `inheritsSpaceIds` / `toolCategoryIds` / `residentToolNames`。
+`descriptor` / `iconId` / `surfaceProfileId` / `turnContextSourceIds` / `promptSegmentIds` 是**空格子**
+（schema 保留，随包官方 mod 已不再声明）：空间的文案、图标与每回合上下文源白名单权威在产品壳的
+枚举表里。改这几格不会有任何变化，也不会有诊断——所以别改，去改壳。
 
 ## 两族 ui 轴（住 `ui`，产品壳读）
 

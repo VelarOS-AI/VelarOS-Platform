@@ -4,7 +4,6 @@ import type {
   AgentWorkflowDefinition,
   AgentWorkflowRunResult,
   CapabilityScopeId,
-  ChatContextEvidenceRecord,
   ChatPromptFeatureId,
   SessionLineageContext,
   ToolCategoryId,
@@ -16,6 +15,7 @@ import type {
   AgentRuntimeCapabilityPorts,
   CapabilityValidationInterpreter,
 } from '../../capabilities'
+import type { SubAgentDispatchLimitsSnapshot } from '../../kernel/dispatch/concurrency'
 import type { SubAgentDispatchInput } from '../../kernel/dispatch/host-ports'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import type { CodingSessionSnapshot, RuntimeReminderProducer } from '../../reminders'
@@ -59,15 +59,6 @@ export interface RunnerConfigService {
   readonly chatConfig: AgentChatRuntimeConfig
 }
 
-export interface RunnerSessionContextSnapshot {
-  evidenceLedger: readonly ChatContextEvidenceRecord[]
-  contextView: unknown
-}
-
-export interface RunnerChatStateStore {
-  loadSessionContextSnapshot(sessionId: string): Promise<RunnerSessionContextSnapshot>
-}
-
 export interface RunnerToolRegistry {
   readonly names: string[]
 }
@@ -79,6 +70,16 @@ export interface RunnerSubAgentDispatcher<TToolContext extends RunnerToolContext
     events: ExecutionEventBus
     config: AgentExecutionConfig
   }): Promise<string>
+  /**
+   * 该执行此刻的真实派发配额（并发上限 + 总量帽剩余）。
+   *
+   * `agent:run_workflow` 用它当自己的上限并原样回显给模型；派发器是这些数字的唯一权威，
+   * workflow 侧**不许**再有一份声明常量（否则 `effective_limits` 会与实际排队行为漂移）。
+   */
+  describeExecutionLimits(args: {
+    executionId?: LooseOptional<string>
+    sessionId: string
+  }): SubAgentDispatchLimitsSnapshot
   clearExecution(executionKey: string): void
 }
 
@@ -121,7 +122,6 @@ export type RunnerToolContext = SoloLoopToolContext &
   QueryLoopToolContext & {
     sessionId: string
     resourceId?: LooseOptional<string>
-    proposalMode: boolean
     agentSurfaceId?: LooseOptional<AgentSurfaceId>
     developerContext?: LooseOptional<AgentDeveloperContext>
     sessionLineage?: LooseOptional<SessionLineageContext>
@@ -140,9 +140,6 @@ export interface RunnerBuildToolContextArgs {
   abortController: AbortController
   config: Partial<AgentExecutionConfig>
   codingSession: object
-  sessionContext?: {
-    evidenceLedger?: readonly ChatContextEvidenceRecord[]
-  }
   roleState: {
     getAllowedToolNames: () => string[]
     getEnabledToolCategories: () => ToolCategoryId[]

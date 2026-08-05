@@ -16,7 +16,7 @@ import {
 const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
   name: 'directive:list',
   role: 'inspect',
-  category: 'general',
+  category: 'context',
   summary: '列出当前 session 上下文保护区中仍然生效的用户长期指令。',
   suitable: ['需要确认本 session 已固定且不能被历史压缩丢失的禁令、偏好、流程或需求约束。'],
   forbidden: ['不要把普通保留上下文或跨 session 偏好当成 active directive。'],
@@ -45,7 +45,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
 }>({
   name: 'directive:upsert',
   role: 'control',
-  category: 'general',
+  category: 'context',
   summary: '把用户明确要求后续轮次持续遵守的重要指令写入当前 session 上下文保护区。',
   suitable: ['用户明确要求记住、始终遵守、后续都遵守，或给出禁止、权限、范围、流程等持续性边界。'],
   forbidden: ['不要因普通抱怨、一次性偏好、不确定表达或仅属于当前目标的临时条件自动写入。'],
@@ -131,7 +131,7 @@ const archiveActiveDirective = defineVelaTool<{
 }>({
   name: 'directive:archive',
   role: 'control',
-  category: 'general',
+  category: 'context',
   summary: '取消当前 session 上下文保护区中一个或多个已固定的长期指令。',
   suitable: ['用户明确说取消限制、不需要禁令、以后可以、刚才那条不要固定。'],
   forbidden: ['不要归档普通 active context；只处理 metadata.directive=true 的条目。'],

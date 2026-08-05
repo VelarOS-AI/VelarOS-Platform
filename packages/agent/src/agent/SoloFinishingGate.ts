@@ -1,11 +1,8 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  ExecutionTaskPlanStep,
-  StreamTurnEndPayload,
-} from '@velaros-ai/agent/protocol'
+import type { StreamTurnEndPayload } from '@velaros-ai/agent/protocol'
 import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
-import { isArray,isEmpty, isFunction, isPlainObject } from '@velaros-ai/core'
+import { isFunction, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
@@ -56,17 +53,12 @@ type SoloFinishingGateContinueReason =
   | 'verification-followup'
   | 'final-readiness'
   | 'user-guidance'
-  | 'execution-plan-required'
   | 'goal-status-required'
   | 'fresh-evidence-required'
 
 type SoloFinishingGateRepeatableReason = Extract<
   SoloFinishingGateContinueReason,
-  | 'verification-followup'
-  | 'final-readiness'
-  | 'execution-plan-required'
-  | 'goal-status-required'
-  | 'fresh-evidence-required'
+  'verification-followup' | 'final-readiness' | 'goal-status-required' | 'fresh-evidence-required'
 >
 
 interface SoloFinishingGateBlockTracker {
@@ -97,16 +89,7 @@ interface SoloGoalFinishingState {
   blockedAuditTurns?: LooseOptional<number>
 }
 
-interface SoloExecutionPlanFinishingState {
-  total: number
-  unresolved: Array<Pick<ExecutionTaskPlanStep, 'id' | 'title' | 'status'>>
-}
-
 const RepeatedFinishingGateBlockLimit = 3
-
-function isExecutionPlanStepResolved(step: Pick<ExecutionTaskPlanStep, 'status'>): boolean {
-  return step.status === 'completed' || step.status === 'skipped' || step.status === 'failed'
-}
 
 function createSoloFinishingGateBlockTracker(): SoloFinishingGateBlockTracker {
   return {
@@ -126,7 +109,6 @@ function isRepeatableFinishingGateReason(
   return (
     reason === 'verification-followup' ||
     reason === 'final-readiness' ||
-    reason === 'execution-plan-required' ||
     reason === 'goal-status-required' ||
     reason === 'fresh-evidence-required'
   )
@@ -163,20 +145,6 @@ function resolveBlockedFinishingGateResult(
   }
 
   return { status: 'continue', reason }
-}
-
-function buildExecutionPlanRequiredReminder(state: SoloExecutionPlanFinishingState): string {
-  const unresolved = state.unresolved
-    .slice(0, 6)
-    .map((step, index) => `${index + 1}. [${step.status}] ${step.title}`)
-    .join('\n')
-
-  return [
-    '[系统] 执行计划收尾检查未通过。',
-    `当前计划共有 ${state.total} 步，仍有 ${state.unresolved.length} 步未收束：`,
-    unresolved,
-    '必须继续推进这些步骤；如果某步已经完成、跳过或废弃，请先调用 plan:update 更新完整计划状态，再尝试收尾。',
-  ].join('\n')
 }
 
 function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string {
@@ -281,19 +249,10 @@ async function runSoloFinishingGate<
     return resolveBlockedFinishingGateResult(input, 'user-guidance')
   }
 
-  const executionPlanState = readExecutionPlanFinishingState(input.toolContext, input.log)
-  if (executionPlanState && !isEmpty(executionPlanState.unresolved)) {
-    input.history.push(createInternalFollowUpMessage(
-      buildExecutionPlanRequiredReminder(executionPlanState)
-    ))
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
-    input.log.debug('turn continued by execution plan gate', {
-      turn: input.turn,
-      unresolvedSteps: executionPlanState.unresolved.length,
-    })
-    return resolveBlockedFinishingGateResult(input, 'execution-plan-required')
-  }
-
+  // 「执行计划未收束就不许收尾」的运行时拦截已处决（2026-08-05 裁决，Desktop
+  // `docs/design-principles.md` §7 第 1 类）：未收束的计划步骤是**工作流编排纪律**，
+  // 不是不可逆伤害也不是已证明的空转，只许走提示词与技能文书。旧门连拦三轮会把
+  // 会话判成 error，模型即使已经答完也被锁死在收尾环上。
   if (input.goalMode && input.inspectGoalState) {
     await input.completeGoalOnSuccessfulFinish?.()
     const goalState = await input.inspectGoalState()
@@ -312,56 +271,6 @@ async function runSoloFinishingGate<
   input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
   input.log.debug('agent done', { turns: input.turn })
   return { status: 'completed' }
-}
-
-function readExecutionPlanFinishingState(
-  toolContext: unknown,
-  log: Pick<ScopedLog, 'warn'>
-): Nullable<SoloExecutionPlanFinishingState> {
-  if (!isPlainObject(toolContext)) return null
-  if (!hasExecutionPlanMaintenanceAccess(toolContext, log)) return null
-
-  const execution = toolContext.execution
-  if (!isPlainObject(execution) || !isFunction(execution.getCurrentPlan)) return null
-
-  try {
-    const plan = execution.getCurrentPlan() as ExecutionTaskPlanStep[]
-    if (!isArray(plan) || isEmpty(plan)) return null
-
-    return {
-      total: plan.length,
-      unresolved: plan
-        .filter((step) => !isExecutionPlanStepResolved(step))
-        .map((step) => ({
-          id: step.id,
-          title: step.title,
-          status: step.status,
-        })),
-    }
-  } catch (error) {
-    log.warn('execution plan readiness read failed', {
-      error: AppError.getMessage(error),
-    })
-    return null
-  }
-}
-
-function hasExecutionPlanMaintenanceAccess(
-  toolContext: unknown,
-  log: Pick<ScopedLog, 'warn'>
-): boolean {
-  if (!isPlainObject(toolContext)) return false
-  const codingSession = toolContext.codingSession
-  if (!isPlainObject(codingSession) || !isFunction(codingSession.hasPromptFeatureAccess)) return false
-
-  try {
-    return Boolean(codingSession.hasPromptFeatureAccess('plan'))
-  } catch (error) {
-    log.warn('execution plan access read failed', {
-      error: AppError.getMessage(error),
-    })
-    return false
-  }
 }
 
 function readCodingSessionSnapshot(

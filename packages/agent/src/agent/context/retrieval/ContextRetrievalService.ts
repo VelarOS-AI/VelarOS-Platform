@@ -8,6 +8,7 @@ import type {
   ChatContextReadToolPayloadRequest,
   ChatContextRetrievalIndexDiagnostics,
   ChatContextRetrievalIndexLoadSource,
+  ChatContextRetrievalIndexSourceFingerprint,
   ChatContextRetrievedPayload,
   ChatContextRetrievePayloadRequest,
   ChatContextSearchConversationHistoryItem,
@@ -28,7 +29,10 @@ import {
 } from "@velaros-ai/core";
 
 import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
+import type { ContextRecord } from "../residency/ContextRecord";
 import { compareStableStrings } from "../residency/determinism";
+import { readMessageText } from "../residency/messageFacts";
+import type { ContextResidencyLedger } from "../residency/ResidencyLedger";
 
 import { chatSearchRanking } from "./search/Ranking";
 import { chatSearchText } from "./search/Text";
@@ -40,8 +44,14 @@ import { ContextRetrievalIndexBuilder } from "./IndexBuilder";
 import {
   type ChatContextRetrievalIndexSnapshot,
   type ChatContextRetrievalIndexStore,
+  ChatContextRetrievalIndexVersion,
+  contextRetrievalFingerprintIsComparable,
+  contextRetrievalFingerprintsEqual,
 } from "./IndexSnapshot";
-import { ContextRetrievalPayloadReader } from "./PayloadReader";
+import {
+  ContextRetrievalPayloadReader,
+  paginateSerializedText,
+} from "./PayloadReader";
 import {
   ContextRetrievalQueryTraceStore,
   type ContextRetrievalQueryTraceStoreOptions,
@@ -60,6 +70,13 @@ import type {
 const DefaultRetrievalCountEntryLimit = 4_096;
 const DefaultIndexBuildTelemetrySessionLimit = 512;
 const DefaultTerminalOutputPayloadCandidateLimit = 64;
+/**
+ * 内存索引缓存的会话数上限。
+ *
+ * 缓存的是整份索引快照（长会话可达数 MB），所以宁小勿大：真正的热点只有"当前正在跑的那个
+ * 会话"，8 个槽位足以覆盖并行子 agent + 用户手动切换，再多只是拿内存换命不中的概率。
+ */
+const DefaultCachedIndexSessionLimit = 8;
 
 type ChatContextRetrievalIndexToolPayload =
   ChatContextRetrievalIndexSnapshot["toolPayloads"][number];
@@ -68,7 +85,20 @@ interface ChatContextRetrievalServiceOptions {
   maxRetrievalCountEntries?: LooseOptional<number>;
   maxIndexBuildTelemetrySessions?: LooseOptional<number>;
   maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
+  maxCachedIndexSessions?: LooseOptional<number>;
   queryTrace?: ContextRetrievalQueryTraceStoreOptions;
+}
+
+/** 账本 ref 解析结果：命中的记录 + 该 ref 对应的全保真层引用（per-part 优先）。 */
+interface ResolvedLedgerRecord {
+  record: ContextRecord;
+  payloadRef: Nullable<string>;
+}
+
+/** 内存索引缓存条目：快照 + 它成立时的源指纹。 */
+interface CachedRetrievalIndex {
+  fingerprint: ChatContextRetrievalIndexSourceFingerprint;
+  snapshot: ChatContextRetrievalIndexSnapshot;
 }
 
 /**
@@ -130,6 +160,14 @@ class ChatContextRetrievalService {
     string,
     Promise<ChatContextRetrievalIndexSnapshot>
   >();
+  /**
+   * sessionId → 最近一份索引快照 + 它的源指纹。
+   *
+   * 指纹一致就直接复用内存快照：省掉 readFile + JSON.parse 整份索引（长会话几十 MB），
+   * 只留一次目录 stat。`kind=all` 的一次召回本来要串行走两遍完整流程，未命中句柄时还要再来
+   * 两遍，这段延迟直接叠在模型等待上。
+   */
+  private readonly cachedIndexBySession: ContextRetrievalBoundedRecentMap<CachedRetrievalIndex>;
   private readonly terminalOutputPayloadCandidateLimit: number;
 
   constructor(
@@ -163,6 +201,12 @@ class ChatContextRetrievalService {
       options.maxTerminalOutputPayloadCandidates,
       DefaultTerminalOutputPayloadCandidateLimit,
     );
+    this.cachedIndexBySession = new ContextRetrievalBoundedRecentMap(
+      this.normalizeLimit(
+        options.maxCachedIndexSessions,
+        DefaultCachedIndexSessionLimit,
+      ),
+    );
     this.indexBuilder = new ContextRetrievalIndexBuilder(
       payloadStore,
       stateStore,
@@ -178,8 +222,10 @@ class ChatContextRetrievalService {
    * 按动态上下文 **`handle`** 拉取完整 `payload` 正文。
    *
    * `Handle` 分发：
-   * - `tool:*` / `ctx-payload:*` → `PayloadReader.retrieveToolPayload`
+   * - `tool:*` / `ctx-payload:*` / `ctx-user-payload:*` → `PayloadReader.retrieveToolPayload`
    * - `message:*` → `PayloadReader.retrieveMessagePayload`
+   * - 驻留账本认识的 ref（记录 id / payloadRef / toolCallId / 折叠信封 ref）→ 账本原文
+   *   （也是上面两条**未命中时**的兜底：全保真层被 GC 不等于内容没了）
    * - 其它 → `found=false`, `kind=unknown`
    *
    * `retrievalScopeId` 默认 `sessionId`；同一 `scope` 内重复请求同一 `handle` 会告警。
@@ -204,7 +250,12 @@ class ChatContextRetrievalService {
 
     // member=session：会话即资源作用域，工具 payload handle 不再做跨 context 可见性闸门；
     // 直接展开（句柄无效时 payloadReader 自然返回 found=false）。
-    if (handleId.startsWith("tool:") || handleId.startsWith("ctx-payload:")) {
+    // `ctx-user-payload:` = 超大 user 正文的全保真句柄，与工具 payload 同表落盘，同一条路展开。
+    if (
+      handleId.startsWith("tool:") ||
+      handleId.startsWith("ctx-payload:") ||
+      handleId.startsWith("ctx-user-payload:")
+    ) {
       const payload = await this.payloadReader.retrieveToolPayload({
         sessionId,
         handleId,
@@ -215,8 +266,26 @@ class ChatContextRetrievalService {
         repeated,
         retrievalCount,
       });
-      if (payload.found)
+      if (payload.found) {
         this.governanceSessions.recordFault(sessionId, handleId);
+        return payload;
+      }
+
+      // 全保真层没有（被 GC/未落盘），但驻留账本可能仍持有这条记录的原文——先问账本再判死。
+      const fromLedger = await this.retrieveLedgerRecordPayload({
+        sessionId,
+        handleId,
+        retrievalScopeId,
+        maxChars,
+        offset,
+        repeated,
+        retrievalCount,
+      });
+      if (fromLedger?.found) {
+        this.governanceSessions.recordFault(sessionId, handleId);
+        return fromLedger;
+      }
+
       return payload;
     }
 
@@ -232,6 +301,23 @@ class ChatContextRetrievalService {
       if (payload.found)
         this.governanceSessions.recordFault(sessionId, handleId);
       return payload;
+    }
+
+    // 驻留账本记录 id（`ctx-r000123`）与折叠信封里的任意 ref：账本自己就是权威副本。
+    // 超大 user 正文的安全阀发的正是记录 id 形态的 handle，没有这条路它就是死链（审计 U6/U10）。
+    const ledgerPayload = await this.retrieveLedgerRecordPayload({
+      sessionId,
+      handleId,
+      retrievalScopeId,
+      maxChars,
+      offset,
+      repeated,
+      retrievalCount,
+    });
+    if (ledgerPayload) {
+      if (ledgerPayload.found)
+        this.governanceSessions.recordFault(sessionId, handleId);
+      return ledgerPayload;
     }
 
     // 铁律1:匹配失败必须列出有效项供自纠,并自动把 ref 当 query 兜底搜一轮——
@@ -265,6 +351,137 @@ class ChatContextRetrievalService {
         ? { metadata: { fallbackSearch: fallbackSearch.items } }
         : {}),
     };
+  }
+
+  /**
+   * 驻留账本记录路由：把 handle 当**账本记录的引用**解析，命中即用账本里的原始消息取回全文。
+   *
+   * ## 为什么这条路必须存在
+   * 折叠信封给模型的 `ref` 有三种形态：`payloadRef`、`toolCallId`、以及**记录 id**
+   * （`ctx-r000123`）。前两种落在 payload 存储里，第三种此前没有任何解析器认识：超大 user 正文
+   * 的安全阀恰恰只能发第三种（user 消息没有 toolCallId，准入期也拿不到 payloadRef），
+   * 于是"正文在磁盘上、模型永远取不回"（审计 U6/U10）。
+   *
+   * ## 两级取回
+   * 1. 记录带 `payloadRef` → 交给 payload 读取器（全保真层，支持 jsonPath/offset 分页）；
+   * 2. 否则用账本自己持有的原始消息投影正文（账本记录内容不可变，是这段正文的权威副本）。
+   *
+   * 治理会话不存在（进程重启/未编译过）时返回 null，让调用方继续走未知 handle 的自纠路径。
+   */
+  private async retrieveLedgerRecordPayload(input: {
+    sessionId: string;
+    handleId: string;
+    retrievalScopeId: string;
+    maxChars: number;
+    offset: number;
+    repeated: boolean;
+    retrievalCount: number;
+  }): Promise<Nullable<ChatContextRetrievedPayload>> {
+    const session = this.governanceSessions.peek(input.sessionId);
+    if (!session) return null;
+
+    const resolved = this.findLedgerRecordByRef(session.ledger, input.handleId);
+    if (!resolved) return null;
+
+    const record = resolved.record;
+    const payloadRef = resolved.payloadRef?.trim();
+    if (payloadRef) {
+      const payload = await this.payloadReader.retrieveToolPayload({
+        sessionId: input.sessionId,
+        handleId: payloadRef,
+        retrievalScopeId: input.retrievalScopeId,
+        maxChars: input.maxChars,
+        offset: input.offset,
+        repeated: input.repeated,
+        retrievalCount: input.retrievalCount,
+      });
+      // 全保真层可能已被清理；只有真取到才用它，否则回落账本自持的正文。
+      if (payload.found)
+        return {
+          ...payload,
+          handleId: input.handleId,
+          metadata: { ...(payload.metadata ?? {}), recordId: record.id },
+        };
+    }
+
+    // 记录不带消息（合成/隐藏类）时退回它自己的摘录：宁可给"当时留下的那份"，
+    // 也不要让模型收到 found=true + 空正文。两者都没有就交回未知 handle 路径。
+    const fullText = record.message
+      ? readMessageText(record.message)
+      : (record.excerpt?.text ?? "");
+    if (!fullText) return null;
+
+    const window = paginateSerializedText(fullText, input.offset, input.maxChars);
+    return {
+      handleId: input.handleId,
+      sessionId: input.sessionId,
+      found: true,
+      kind: "context-record",
+      content: window.text,
+      repeated: input.repeated,
+      retrievalCount: input.retrievalCount,
+      warning:
+        [
+          window.beyondEnd
+            ? `offset=${window.offset} 已越过正文末尾(totalChars=${window.totalChars})；正文已读完。`
+            : null,
+          input.repeated
+            ? "当前执行范围内已检索过该记录；请先使用已返回内容，避免重复检索。"
+            : null,
+        ]
+          .filter((item): item is string => Boolean(item))
+          .join(" ") || null,
+      metadata: {
+        recordId: record.id,
+        recordKind: record.kind,
+        toolCallId: record.toolCallId,
+        payloadRef: record.payloadRef,
+        retrievalScopeId: input.retrievalScopeId,
+        offset: window.offset,
+        returnedChars: window.returnedChars,
+        totalChars: window.totalChars,
+        nextOffset: window.nextOffset,
+      },
+    };
+  }
+
+  /**
+   * 账本记录的 ref 解析：认记录 id、payloadRef、toolCallId（含 `tool:` 前缀形态）与折叠信封的
+   * excerpt.ref —— 与 `ContextGovernanceSession.recordFault` 的缺页记账口径逐条对齐
+   * （那边认哪几种，这边就必须能取回哪几种，否则会出现"记了 fault 却取不回"的错位）。
+   */
+  private findLedgerRecordByRef(
+    ledger: ContextResidencyLedger,
+    ref: string,
+  ): Nullable<ResolvedLedgerRecord> {
+    const key = ref.trim();
+    if (!key) return null;
+
+    const direct = ledger.get(key);
+    if (direct) return { record: direct, payloadRef: direct.payloadRef };
+
+    const bare = key.startsWith("tool:") ? key.slice("tool:".length) : key;
+    // **从新往旧扫**：同一个 toolCallId 会同时出现在 tool-call 与 tool-result 两条记录上，
+    // 正序扫必然先撞上只有参数、没有正文的那条调用记录（模型要的是结果）。倒序还顺带让
+    // "最近一次出现"胜出，符合模型手里的 ref 总是来自最近投影这一事实。
+    const records = ledger.list();
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      const record = records[index]!;
+      if (record.payloadRef === key || record.excerpt?.ref === key)
+        return { record, payloadRef: record.payloadRef };
+
+      // per-part 命中优先用**这一份**结果的 payloadRef：一条 role:'tool' 消息可装 N 份结果，
+      // 用记录级 ref 会把第 2..N 份指向第一份的 payload（S2 修的 V12 同款错位）。
+      const part = record.toolParts.find(
+        (candidate) =>
+          candidate.toolCallId === bare || candidate.excerpt?.ref === key,
+      );
+      if (part) return { record, payloadRef: part.payloadRef };
+      if (record.toolCallId === bare)
+        return { record, payloadRef: record.payloadRef };
+    }
+
+    return null;
   }
 
   /** 有效句柄样本(≤10):动态工具 payload handle + evidence id,供召回失败时模型自纠。 */
@@ -672,8 +889,28 @@ class ChatContextRetrievalService {
   }
 
   /**
+   * 硬失效通道：会话删除 / 重置时丢弃这个 sessionId 的全部进程内检索状态。
+   *
+   * 缓存判据是"源指纹一致就复用"，而会话被删后目录消失、指纹多半读不出来，于是**大多数**情况会
+   * 自然退化成重建 —— 但那是巧合不是保证：同一 sessionId 被复用、或目录被外部工具原样恢复到旧
+   * mtime 时，进程内会继续供应上一段对话的索引，而 8 个槽位的 LRU 让它可以活很久（审计 R8）。
+   * 治理侧已经认了"会话没了状态就该没"（`ContextGovernanceSessionRegistry.invalidateSession`），
+   * 检索侧跟上：宿主的会话删除路径两个都调。失效是幂等的，多调一次没有代价。
+   */
+  public invalidateSession(sessionId: LooseOptional<string>): void {
+    const key = sessionId?.trim();
+    if (!key) return;
+
+    this.cachedIndexBySession.delete(key);
+    this.indexBuildTelemetryBySession.delete(key);
+    // 在飞的那次 load 也要摘掉合流表：留着的话紧随其后的查询会 await 到一份基于旧数据的快照。
+    this.pendingIndexLoads.delete(key);
+  }
+
+  /**
    * 加载会话检索索引的核心路径（member=session：索引按 sessionId 唯一）。
    *
+   * 0. 采集当前源指纹；与内存缓存一致则直接复用（省掉整份索引的读盘 + 解析）
    * 1. indexStore.loadFresh(sessionId) — 磁盘有且未过期则直接返回
    * 2. 否则 indexBuilder.build → indexStore.save（save 失败仍返回内存 snapshot）
    * 3. 写入 indexBuildTelemetryBySession 供 diagnostics
@@ -697,10 +934,34 @@ class ChatContextRetrievalService {
   private async loadRetrievalIndexUncoalesced(
     normalizedSessionId: string,
   ): Promise<ChatContextRetrievalIndexSnapshot> {
+    // **构建之前**采样：build 读完数据后才取指纹，会把构建期间落盘的新 blob 算进指纹却不放进
+    // 快照，之后每次 loadFresh 都判 fresh，那条工具结果永久漏检索（审计 U7）。
+    const fingerprint = await this.readIndexSourceFingerprint(
+      normalizedSessionId,
+    );
+    const cached = this.cachedIndexBySession.get(normalizedSessionId);
+    if (
+      cached &&
+      this.isServiceableCachedIndex(cached, normalizedSessionId) &&
+      contextRetrievalFingerprintsEqual(cached.fingerprint, fingerprint)
+    ) {
+      this.indexBuildTelemetryBySession.set(normalizedSessionId, {
+        lastLoadSource: "fresh-index",
+        lastBuildDurationMs: null,
+        lastBuiltAt: cached.snapshot.builtAt,
+      });
+      return cached.snapshot;
+    }
+
     const freshIndex = await this.indexStore
       .loadFresh(normalizedSessionId)
       .catch(() => null);
     if (freshIndex) {
+      this.cacheRetrievalIndex(
+        normalizedSessionId,
+        freshIndex,
+        freshIndex.sourceFingerprint,
+      );
       this.indexBuildTelemetryBySession.set(normalizedSessionId, {
         lastLoadSource: "fresh-index",
         lastBuildDurationMs: null,
@@ -712,16 +973,60 @@ class ChatContextRetrievalService {
     const buildStartedAt = Date.now();
     const rebuiltIndex = await this.indexBuilder.build(normalizedSessionId);
     await this.indexStore
-      .save(normalizedSessionId, rebuiltIndex)
+      .save(normalizedSessionId, rebuiltIndex, { sourceFingerprint: fingerprint })
       .catch(
         () => undefined /* arch-guard:silent-catch-ok 索引已在内存重建成功；持久化失败只影响下次缓存命中，不应让本次召回失败。 */,
       );
+    this.cacheRetrievalIndex(normalizedSessionId, rebuiltIndex, fingerprint);
     this.indexBuildTelemetryBySession.set(normalizedSessionId, {
       lastLoadSource: "rebuilt-index",
       lastBuildDurationMs: Date.now() - buildStartedAt,
       lastBuiltAt: rebuiltIndex.builtAt,
     });
     return rebuiltIndex;
+  }
+
+  /** 宿主未实现指纹端口时返回 null：缓存与"传旧指纹"两项优化一起退化，行为回到端口之前。 */
+  private async readIndexSourceFingerprint(
+    sessionId: string,
+  ): Promise<Nullable<ChatContextRetrievalIndexSourceFingerprint>> {
+    const read = this.indexStore.readSourceFingerprint;
+    if (!read) return null;
+
+    return toNullable(
+      await read
+        .call(this.indexStore, sessionId)
+        .catch(
+          () => null /* arch-guard:silent-catch-ok 指纹是缓存判据，读不到就当"不可缓存"继续走磁盘路径。 */,
+        ),
+    );
+  }
+
+  /**
+   * 缓存条目自校验：快照的身份与 schema 版本必须与当前要的这一份对得上。
+   *
+   * 指纹只回答"源变没变"，回答不了"这份快照是谁的、还是不是当前结构"。同一 sessionId 复用、
+   * 或索引 schema 升级后旧条目继续服役，都是零报错的静默错答（审计 R8）。
+   */
+  private isServiceableCachedIndex(
+    cached: CachedRetrievalIndex,
+    sessionId: string,
+  ): boolean {
+    return (
+      cached.snapshot.sessionId === sessionId &&
+      cached.snapshot.version === ChatContextRetrievalIndexVersion
+    );
+  }
+
+  private cacheRetrievalIndex(
+    sessionId: string,
+    snapshot: ChatContextRetrievalIndexSnapshot,
+    fingerprint: Nullable<ChatContextRetrievalIndexSourceFingerprint>,
+  ): void {
+    // 指纹缺席（或三项全空）时不缓存：没有新鲜度判据的缓存等于把陈旧索引钉死在内存里。
+    if (!contextRetrievalFingerprintIsComparable(fingerprint) || !fingerprint) return;
+
+    this.cachedIndexBySession.set(sessionId, { fingerprint, snapshot });
   }
 
   private selectTerminalOutputPayloadCandidates(input: {

@@ -147,7 +147,6 @@ describe('model input compatibility', () => {
     let supportedInputModalities: readonly AgentModelInputModality[] = ['text']
     const context = {
       role: { id: 'assistant' },
-      grantedPermissions: new Set(),
       codingSession: {
         isToolCategoryAllowed: () => true,
         hasToolCategoryAccess: () => true,

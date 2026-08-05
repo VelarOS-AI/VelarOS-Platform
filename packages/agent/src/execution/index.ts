@@ -13,7 +13,7 @@ export {
   type ExecutionGuidanceFinalizationResult,
   ExecutionGuidanceQueue,
 } from './GuidanceQueue'
-export type { GuidanceRelayPlan } from './GuidanceRelayPlanner'
+export type { GuidanceRelayPlan, MainAgentGuidanceDelivery } from './GuidanceRelayPlanner'
 export {
   buildGuidanceRelayPrompt,
   extractGuidanceUserText,
@@ -21,6 +21,7 @@ export {
   GuidanceRelayPlanSchema,
   normalizeGuidanceRelayPlan,
   parseGuidanceRelayPlan,
+  resolveMainAgentGuidanceDelivery,
   resolveMainAgentGuidanceMessage,
 } from './GuidanceRelayPlanner'
 export type { PendingConfirmationResolvers, PendingInputResolvers } from './Interactions'

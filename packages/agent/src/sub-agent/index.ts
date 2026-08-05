@@ -15,8 +15,6 @@ export {
   formatSubAgentToolResult,
   parseSubAgentToolResult,
 } from './SubAgentResultBuilder'
-export type { SubAgentRunPreCheckResult } from './SubAgentRunPlanner'
-export { preCheckSubAgentDispatch } from './SubAgentRunPlanner'
 export type { CreateSubAgentSessionInput } from './SubAgentSessionStore'
 export { SubAgentSessionStore } from './SubAgentSessionStore'
 export type {

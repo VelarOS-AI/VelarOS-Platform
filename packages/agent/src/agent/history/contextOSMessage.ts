@@ -10,12 +10,16 @@ import { isEmpty,isString, trimmedStringOrEmpty } from '@velaros-ai/core'
  * 检索句柄）写出合成消息时都共用同一个前缀字面量，避免再出现不同模块字面量不一致
  * 导致静默不命中的问题。
  *
- * 消费者：
- *  - `history/sections.ts` 写摘要前缀和拆固定模板行；
- *  - `ContextEvidenceLedger.injectPinnedEvidenceMessage` 判断历史头部是不是合成
- *    摘要，决定要不要合并新的置顶证据；
- *  - `ContextEvidenceLedger.buildPinnedEvidenceText` 用 `PinnedEvidenceMarker`/
- *    `PinnedEvidenceInstruction` 写置顶证据块的头部。
+ * 现存消费者：
+ *  - `PromptState` 用 `CompactionSummaryMarker` 认出合成摘要消息；
+ *  - `history/internalMessages.ts` 用 `isContextOSGeneratedAssistantMessage` 过滤合成消息；
+ *  - `ContextRetrieval.tool.ts` 把 `PinnedEvidenceMarker`/`DynamicHandlesMarker` 写进工具说明。
+ *
+ * v1 的两个生产者已分别处决（`history/sections.ts` 摘要分段随死代码清理批、
+ * `ContextEvidenceLedger` 置顶证据回灌随同批行刑），因此 `CompactionSummaryInstruction` /
+ * `PinnedEvidenceInstruction` / `DynamicHandlesInstruction` / `ContextOSBlockMarkers` /
+ * `readCompactionSummaryBody` / `buildContextOSGeneratedAssistantMessage` 现在只剩**标记词表**
+ * 价值（留给治理 v2 将来的合成块生产者复用），运行时没有生产者。
  *
  * 任何新的合成消息生产者都应该直接引用这里的标记和说明，不要再复制字面量；
  * 旧的静默不命中问题就是双轨字面量造成的。
@@ -25,9 +29,8 @@ export const PinnedEvidenceMarker = '[置顶执行证据]'
 export const DynamicHandlesMarker = '[动态检索句柄]'
 
 /**
- * 合成助手消息允许出现的所有标记。当前只证据账本在用第一个，
- * 后两个是给未来"组装三段合成消息"的入口预留；如果后续一直没有这个入口需求，
- * 可以连同对应标记一起删掉。
+ * 合成助手消息允许出现的所有标记。三个都只剩标记词表价值（生产者已随 v1 压缩机整批处决）；
+ * 若治理 v2 最终不再需要"组装三段合成消息"这个入口，可以连同对应标记一起删掉。
  */
 export const ContextOSBlockMarkers: readonly string[] = [
   CompactionSummaryMarker,
@@ -38,7 +41,7 @@ export const ContextOSBlockMarkers: readonly string[] = [
 /**
  * 摘要段的标准说明文（写入合成消息时拼在 marker 后）。
  *
- * 由 `history/sections.ts` 直接引用作为 `COMPACTION_INSTRUCTION`。
+ * 原引用方 `history/sections.ts`（`COMPACTION_INSTRUCTION`）已删除，目前无生产者。
  */
 export const CompactionSummaryInstruction =
   '更早的对话已被压缩。请将下面的摘要视为被移除轮次的权威上下文。\n' +

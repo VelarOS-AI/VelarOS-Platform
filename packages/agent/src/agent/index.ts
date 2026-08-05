@@ -20,7 +20,7 @@ export type {
 } from './CodingSessionTracker'
 export { CodingSessionTracker } from './CodingSessionTracker'
 export * from './context'
-export type { BuiltContext, ContextSegment } from './ContextBuilder'
+export type { BuiltContext } from './ContextBuilder'
 export {
   ContextBuilder,
   ContextBuilderParts as ContextBuilderHelper,
@@ -36,8 +36,6 @@ export {
   contextDegradeStaircaseLength,
   resolveContextDegradeAction,
 } from './ContextDegradeLadder'
-export type { ExtractToolEvidenceInput } from './ContextEvidenceLedger'
-export { ContextEvidenceLedger, contextEvidenceLedger } from './ContextEvidenceLedger'
 export type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput } from './ContextPhase'
 export { resolveAgentContextPhase } from './ContextPhase'
 export {
@@ -134,10 +132,6 @@ export type {
   QueryTurnToolRegistry,
 } from './QueryTurn'
 export { QueryTurn as AgentQueryTurnHelper, QueryTurn } from './QueryTurn'
-export {
-  applyReasoningLanguagePreferenceToLatestUserMessage,
-  buildReasoningLanguageInstruction,
-} from './reasoning-language'
 export {
   AgentConnectionRetryHelper,
   AiSdkMaxRetries,

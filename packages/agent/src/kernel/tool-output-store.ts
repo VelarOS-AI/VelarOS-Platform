@@ -17,7 +17,7 @@
 //    模型逐字读的（如结构化契约返回），句柄化会让它永远读不到真内容。
 //  - 两种实现只在「全文存哪」上分叉：InMemory 走 toolCallId 的 tool-payload 通道，ContextPayload 走
 //    payloadRef。**refKind 必须显式传**——outputId 形如 `session:tool-output:1` 会被前缀推断误判。
-import { isFiniteNumber, isString, toNullable } from '@velaros-ai/core'
+import { isFiniteNumber, isString, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -25,6 +25,7 @@ import type {
   ContextPayloadStore,
 } from '../agent/context/ContextPayloadStore'
 import { buildContextRefEnvelope, type ContextRefEnvelope } from '../agent/context/contextRefEnvelope'
+import { resolveGovernanceSessionKey } from '../agent/context/residency/sessionKey'
 import { ToolResultCanonicalizer } from '../agent/context/ToolResultCanonicalizer'
 
 // B3:kernel 页出桩统一为 ContextRefEnvelope(唯一持久化桩;旧 __kernelRef 归档由
@@ -172,7 +173,7 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
     this.nextOutputId += 1
     const stored: KernelStoredToolOutput = {
       outputId,
-      sessionId: input.sessionId?.trim() || 'unknown-session',
+      sessionId: resolveGovernanceSessionKey(input.sessionId),
       toolCallId: input.toolCallId,
       toolName: input.toolName,
       output: input.output,
@@ -238,7 +239,7 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
         stored: null,
       }
 
-    const sessionId = input.sessionId?.trim() || 'unknown-session'
+    const sessionId = resolveGovernanceSessionKey(input.sessionId)
     const canonical = await this.canonicalizer.canonicalize({
       sessionId,
       toolCallId: input.toolCallId,
@@ -276,7 +277,7 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       },
       meta: {
         outputId: stored.outputId,
-        ...(stored.sameAsToolCallId ? { sameAsToolCallId: stored.sameAsToolCallId } : {}),
+        sameAsToolCallId: toOptional(stored.sameAsToolCallId),
       },
     })
 

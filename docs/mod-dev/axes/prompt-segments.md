@@ -24,9 +24,9 @@ z.strictObject({
 
 | 字段 | 说明 |
 | --- | --- |
-| `stability` | `stable` = 稳定段，进前缀缓存区；`dynamic` = 每轮可变段。**放错档会破坏 provider 前缀缓存** |
+| `stability` | **声明意图，不决定落点**（2026-08-06 行为知识三层）。mod 段一律落 Tier1（活动尾）；写 `stable` 也进不了稳定前缀 |
 | `priority` | 排序优先级，越小越靠前 |
-| `retention` | `protected` 表示该段必须逐轮保留，由独立生命周期负责控制容量 |
+| `retention` | 与 `stability` 同款：**声明意图，不决定落点**。声明段一律投影成 `normal`；`protected`（预算裁剪免死）由宿主按上下文治理发放，不接受第三方自报 |
 | `text` | 静态正文。缺席时正文由运行态绑定提供 |
 
 ## 正文的两条路
@@ -34,7 +34,7 @@ z.strictObject({
 **① 静态 `text`**——纯数据 mod 的路子：
 
 ```json
-{ "id": "acme.notes.guidance", "stability": "stable", "priority": 500,
+{ "id": "acme.notes.guidance", "stability": "dynamic", "priority": 500,
   "text": "查笔记时优先用 acme_notes_search，不要 grep 整个仓库。" }
 ```
 
@@ -45,7 +45,7 @@ const bindings: AgentModBindings = {
   promptSegments: {
     'acme.notes.guidance': {
       id: 'acme.notes.guidance',
-      stability: 'stable',
+      tier: 'runtime',
       source: 'mod:acme.notes',
       priority: 500,
       render: (context) => `当前笔记库：${context /* … */}`,
@@ -60,7 +60,7 @@ const bindings: AgentModBindings = {
 interface PromptSegmentDefinition {
   id: string
   label?: string
-  stability: PromptSegmentStability
+  tier: PromptSegmentTier          // 'core' | 'runtime' | 'skill'；mod 绑定一律 'runtime'
   source: PromptSegmentSource
   priority: number
   retention?: PromptSegmentRetention
@@ -81,7 +81,12 @@ projectAgentModPromptSegments(snapshot): PromptSegmentDefinition[]
 ```
 
 有绑定的**原样返回**（同一性保持）；只有 `text` 的声明段在投影里被物化成定义，
-`source` 统一打上 `` `mod:${record.modId}` ``——调试面板据此解释「这段从哪来」。
+`tier` 强制 `'runtime'`、`source` 统一打上 `` `mod:${record.modId}` ``——调试面板据此解释「这段从哪来」。
+
+**为什么 mod 段不许进稳定前缀**：稳定前缀是 Tier0（身份 / 安全 / 不可变纪律），逐字不变。
+放第三方文本进去有两个后果——它能排在安全类段之前，且只要它随上下文变一次，所有人的
+provider 前缀缓存连同其后的整段历史一起失效（成本以 token 计、静默发生）。
+同 ContextBuilder 的「mod 只能追加、不能重排官方段」判决。
 
 ## 预算与注入面
 

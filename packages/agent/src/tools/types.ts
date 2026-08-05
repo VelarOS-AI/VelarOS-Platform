@@ -35,7 +35,6 @@ interface ToolRegistryContext {
   role: {
     id: AgentRoleId
   }
-  grantedPermissions: ReadonlySet<ToolPermission>
   codingSession: ToolRegistryCodingSession
   capabilityPorts?: AgentRuntimeCapabilityPorts
   isToolSystemEnabled(toolName: string): boolean
@@ -45,6 +44,8 @@ interface ToolRegistryContext {
 
 interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContext> {
   description: string
+  /** companion skill id；描述末尾已带指路行，这里让工具页卡片也能结构化透出。 */
+  usageSkillId?: string
   role?: ToolRole
   permissions: ToolPermission[]
   capabilities?: ToolCapabilitySchema

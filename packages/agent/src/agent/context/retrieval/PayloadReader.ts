@@ -210,6 +210,48 @@ interface PaginatedJsonPathSelection {
   serialized: string
 }
 
+/** 非 jsonPath 路径的字符级窗口（正文分页的唯一形态）。 */
+interface PaginatedTextWindow {
+  offset: number
+  totalChars: number
+  returnedChars: number
+  nextOffset: Nullable<number>
+  text: string
+  /** offset 已越过正文末尾：模型多半在原地打转，必须显式告知而不是静默回第一页。 */
+  beyondEnd: boolean
+}
+
+/**
+ * 正文按 offset 开窗（**字符**语义）。
+ *
+ * jsonPath 命中数组时按条目分页（{@link paginateJsonPathSelection}），其余一切情况——包括
+ * 一整段 30 万字的 serializedResult——过去完全忽略 offset，每次都回同一段开头（审计 U31）：
+ * 模型照着 `nextOffset` 提示加 offset 重试，拿到逐字相同的内容直到熔断。这里给它真实的顺序读。
+ */
+function paginateSerializedText(
+  text: string,
+  offsetInput: LooseOptional<number>,
+  maxChars: number
+): PaginatedTextWindow {
+  const totalChars = text.length
+  const requested = Math.max(0, Math.round(offsetInput ?? 0))
+  const budget = Math.max(1, maxChars)
+  const beyondEnd = requested > 0 && requested >= totalChars
+  // 越界不回退到 0：回第一页正是"原地打转"的成因，宁可给空窗口 + 明确告警。
+  const offset = Math.min(requested, totalChars)
+  const window = text.slice(offset, offset + budget)
+  const end = offset + window.length
+
+  return {
+    offset,
+    totalChars,
+    returnedChars: window.length,
+    nextOffset: end < totalChars ? end : null,
+    text: window,
+    beyondEnd,
+  }
+}
+
 /**
  * jsonPath 命中数组时按 maxChars 预算从 offset 开始装填条目，供模型分页续读
  * （配合工具结果里 `__truncatedItems` 标记的 `nextOffset`）。非数组返回 null 走原路径。
@@ -234,12 +276,13 @@ function paginateJsonPathSelection(
     try {
       serializedItem = JSON.stringify(value[index], undefined, 1) ?? 'null'
     } catch {
+      // arch-guard:silent-catch-ok 单条不可序列化不该中断整页装填；占位符本身就是给模型的说明。
       serializedItem = '"[unserializable item]"'
     }
 
-    if (parts.length > 0 && used + serializedItem.length + 2 > budget) break
+    if (!isEmpty(parts) && used + serializedItem.length + 2 > budget) break
 
-    if (parts.length === 0 && serializedItem.length + 2 > budget) {
+    if (isEmpty(parts) && serializedItem.length + 2 > budget) {
       parts.push(`${serializedItem.slice(0, budget - 6)}...`)
       index += 1
       break
@@ -267,6 +310,7 @@ function paginateJsonPathSelection(
  * |------|------|----------|
  * | `tool:` | `retrieveToolPayload` | `payloadStore.toolResults` |
  * | `ctx-payload:` | `retrieveToolPayload` | 内容寻址键 / `payloadRef` |
+ * | `ctx-user-payload:` | `retrieveToolPayload` | 超大 user 正文的内容寻址键 |
  * | `message:` | `retrieveMessagePayload` | `stateStore.messages[index]` |
  *
  * ## 工具 `payload` 展开顺序
@@ -282,6 +326,14 @@ class ContextRetrievalPayloadReader {
   private readonly toolPayloadHandlePrefix = 'tool:'
   /** handle 前缀：按内容 hash 寻址，如 `ctx-payload:sha256:…`。 */
   private readonly contentAddressedPayloadRefPrefix = 'ctx-payload:'
+  /**
+   * handle 前缀：超大 user 正文的全保真层引用（`ctx-user-payload:<sessionId>:<hash>`）。
+   *
+   * 与 `ctx-payload:` 同表落盘（宿主适配器把用户长文同时写进 userMessages 与 toolResults），
+   * 只是键前缀不同。过去这一前缀**只有生产方没有消费方**：正文落了盘，任何 handle 都解析不到
+   * 它，用户原文永久取不回（审计 U6/U10）。
+   */
+  private readonly userTextPayloadRefPrefix = 'ctx-user-payload:'
 
   constructor(
     private readonly payloadStore: RetrievalPayloadStorePort,
@@ -299,7 +351,7 @@ class ContextRetrievalPayloadReader {
   public resolveEvidencePayloadHandle(evidence: ChatContextEvidenceRecord): LooseOptional<string> {
     if (
       evidence.fullPayloadRef?.startsWith(this.toolPayloadHandlePrefix) ||
-      evidence.fullPayloadRef?.startsWith(this.contentAddressedPayloadRefPrefix)
+      this.isContentAddressedRef(evidence.fullPayloadRef)
     ) return evidence.fullPayloadRef
 
     return evidence.toolCallId ? `${this.toolPayloadHandlePrefix}${evidence.toolCallId}` : null
@@ -328,7 +380,10 @@ class ContextRetrievalPayloadReader {
     retrievalScopeId: string
     maxChars: number
     jsonPath?: LooseOptional<string>
-    /** jsonPath 命中数组时的起始条目（0 起）,配合 __truncatedItems.nextOffset 续读。 */
+    /**
+     * 续读起点（0 起）。jsonPath 命中数组时是**条目**下标，其余情况是正文**字符**下标；
+     * 两条路径都在 metadata 里回带 `nextOffset`，模型按同一个字段推进即可。
+     */
     offset?: LooseOptional<number>
     repeated: boolean
     retrievalCount: number
@@ -444,12 +499,22 @@ class ContextRetrievalPayloadReader {
     const displayBudget = hasReferences
       ? Math.max(1_000, Math.floor(input.maxChars * 0.16))
       : Math.max(1_000, Math.floor(input.maxChars / 2))
+    // 字符级窗口:offset=0 时 window.text 就是从头 serializedBudget 字(与旧行为等价,只是
+    // 尾部截断标记由 nextOffset 元数据代替),offset>0 时才是真正的续读。
+    const window = paginateSerializedText(
+      payload.serializedResult,
+      input.offset,
+      serializedBudget
+    )
     const content = [
       toolCallId ? `toolCallId: ${toolCallId}` : null,
       payload.toolName ? `toolName: ${payload.toolName}` : null,
       payloadRef ? `payloadRef: ${payloadRef}` : null,
+      `chars: ${window.offset}-${window.offset + window.returnedChars}/${window.totalChars}${
+        isPresent(window.nextOffset) ? ` (续读传 offset=${window.nextOffset})` : ' (已到末尾)'
+      }`,
       'serializedResult:',
-      chatSearchText.truncate(payload.serializedResult, serializedBudget),
+      window.text,
       displayDiffersFromSerialized ? 'displayResult:' : null,
       displayDiffersFromSerialized
         ? chatSearchText.stringifyPayload(payload.displayResult, displayBudget)
@@ -476,6 +541,9 @@ class ContextRetrievalPayloadReader {
         jsonPath && jsonSelection && !jsonSelection.found
           ? `未找到 jsonPath ${jsonPath}：${jsonSelection.reason ?? 'unknown'}；已返回完整 payload 摘要。`
           : null,
+        window.beyondEnd
+          ? `offset=${window.offset} 已越过正文末尾(totalChars=${window.totalChars})；正文已读完，不要再加大 offset 重试。`
+          : null,
         input.repeated
           ? '当前执行范围内已检索过该 handle；请先使用已返回内容，避免重复检索。'
           : null,
@@ -488,6 +556,10 @@ class ContextRetrievalPayloadReader {
         retrievalScopeId: input.retrievalScopeId,
         jsonPath,
         jsonPathFound: !!jsonSelection?.found,
+        offset: window.offset,
+        returnedChars: window.returnedChars,
+        totalChars: window.totalChars,
+        nextOffset: window.nextOffset,
         referencedLogs: logSnippets.map((snippet) => ({
           path: snippet.path,
           source: snippet.source,
@@ -532,7 +604,7 @@ class ContextRetrievalPayloadReader {
       // toolCallId 存在 value 里，落到下方快照扫描按 value 匹配。
     }
 
-    if (handleId.startsWith(this.contentAddressedPayloadRefPrefix)) {
+    if (this.isContentAddressedRef(handleId)) {
       const directLookup = await this.loadDirectToolPayload(sessionId, handleId)
       if (directLookup.payload) return {
           payload: directLookup.payload,
@@ -586,7 +658,7 @@ class ContextRetrievalPayloadReader {
       return null
     }
 
-    if (!handleId.startsWith(this.contentAddressedPayloadRefPrefix)) return null
+    if (!this.isContentAddressedRef(handleId)) return null
 
     const directPayload = snapshot.toolResults[handleId]
     if (directPayload) return {
@@ -604,7 +676,7 @@ class ContextRetrievalPayloadReader {
       return {
         payload,
         storageKey,
-        toolCallId: payload.toolCallId ?? (storageKey.startsWith(this.contentAddressedPayloadRefPrefix)
+        toolCallId: payload.toolCallId ?? (this.isContentAddressedRef(storageKey)
           ? null
           : storageKey),
         payloadRef: handleId,
@@ -614,13 +686,21 @@ class ContextRetrievalPayloadReader {
     return null
   }
 
+  /** 内容寻址前缀（工具结果 payload 与 user 长文 payload 同表落盘，路由口径必须一致）。 */
+  private isContentAddressedRef(handleId: LooseOptional<string>): boolean {
+    return (
+      !!handleId?.startsWith(this.contentAddressedPayloadRefPrefix) ||
+      !!handleId?.startsWith(this.userTextPayloadRefPrefix)
+    )
+  }
+
   /**
    * found=false 时 metadata 里尽量留下可 debug 的 id 片段。
    */
   private buildMissingToolPayloadMetadata(handleId: string): Record<string, unknown> {
     if (handleId.startsWith(this.toolPayloadHandlePrefix)) return { toolCallId: handleId.slice(this.toolPayloadHandlePrefix.length) }
 
-    if (handleId.startsWith(this.contentAddressedPayloadRefPrefix)) return { payloadRef: handleId }
+    if (this.isContentAddressedRef(handleId)) return { payloadRef: handleId }
 
     return { handleId }
   }
@@ -647,6 +727,7 @@ class ContextRetrievalPayloadReader {
       // 大结果通常是模型想召回的;按体量降序,截前 20。
       return entries.sort((left, right) => right.chars - left.chars).slice(0, 20)
     } catch {
+      // arch-guard:silent-catch-ok 自纠候选是 best-effort：快照读不到时给空列表，不能让它压过主召回错误。
       return []
     }
   }
@@ -757,4 +838,8 @@ class ContextRetrievalPayloadReader {
   }
 }
 
-export { ContextRetrievalPayloadReader }
+export {
+  ContextRetrievalPayloadReader,
+  type PaginatedTextWindow,
+  paginateSerializedText,
+}

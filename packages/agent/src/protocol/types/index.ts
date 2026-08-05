@@ -7,6 +7,7 @@ import type {
   AgentSurfaceId,
   ChatPromptFeatureId,
   DebugModelMessage,
+  ExecutionModeId,
   StreamAssistantGeneratedFilePayload,
   StreamAssistantRawPayload,
   StreamToolResultEffects,
@@ -316,7 +317,11 @@ export interface ChatSendRequest {
   /** Composer 思考力度 5 档（off/low/medium/high/ultra）；优先于 thinkingDepth，决定本次请求 reasoning 力度。 */
   reasoningLevel?: ReasoningLevel
   model?: string
+  /** 能力轴：只表达「哪些能力本轮开着」。执行模式走 `executionModes`。 */
   promptFeatures?: ChatPromptFeatureId[]
+  /** 执行模式轴（权威）；缺席时由 `resolveChatSendRequestOptions` 从旧形态折算。 */
+  executionModes?: ExecutionModeId[]
+  /** @deprecated 已并入 `executionModes`；旧宿主入口保留，读取一律经 `resolveExecutionModes`。 */
   goalMode?: boolean
   /** 纯聊天模式，与 space 正交：由 active context 的 pureChatMode 显式传入，不再由 space===System 推断。 */
   pureChatMode?: boolean
@@ -482,7 +487,10 @@ export interface ChatContextRetrievePayloadRequest {
   sessionId: string
   handleId: string
   jsonPath?: LooseOptional<string>
-  /** jsonPath 命中数组时的起始条目（0 起）；配合 __truncatedItems 标记的 nextOffset 续读。 */
+  /**
+   * 续读起点（0 起）：jsonPath 命中数组时是**条目**下标，其余情况是正文**字符**下标；
+   * 两条路径都在返回的 metadata 里回带 `nextOffset`，模型按同一个字段推进。
+   */
   offset?: LooseOptional<number>
   retrievalScopeId?: LooseOptional<string>
   sessionLineage?: LooseOptional<SessionLineageContext>
@@ -979,7 +987,6 @@ export interface StoredChatSession {
   id: string
   /** 所属 folder id；成员会话搜索结果需要用它回到正确的侧边栏容器。 */
   folderId?: LooseOptional<string>
-  kind?: LooseOptional<'chat'>
   title: string
   titleManuallyEdited?: boolean
   isPinned?: boolean
@@ -989,8 +996,14 @@ export interface StoredChatSession {
   createdAt: number
   updatedAt: number
   thinkingDepth?: ThinkingDepth
+  /** @deprecated 已并入 `executionModes`；存量磁盘会话仍可能只有这一格，读入时折算。 */
   goalMode?: boolean
-  /** 会话执行模式粘性：上次发送实际生效的 prompt features（hook send 省略 config 时的回落默认）。 */
+  /**
+   * 会话执行模式粘性（权威轴）：上次发送实际生效的执行模式。
+   * hook send 省略 config 时回落到它，兑现「省略字段回落 session 默认」契约。
+   */
+  executionModes?: ExecutionModeId[]
+  /** 会话能力粘性：上次发送实际生效的 prompt features（**只含能力**，模式已拆到 `executionModes`）。 */
   promptFeatures?: ChatPromptFeatureId[]
   scope?: CapabilityScopeId
   pureChatMode?: boolean
@@ -1042,7 +1055,6 @@ export interface ChatSaveSessionStateRequest {
  */
 export interface ChatFolderRegistryEntry {
   id: string
-  kind: 'chat'
   title: string
   titleManuallyEdited: boolean
   isPinned: boolean
@@ -1053,11 +1065,6 @@ export interface ChatFolderRegistryEntry {
   archivedMembers?: Array<{
     memberSessionId: string
     archivedAt: number
-  }>
-  surfaceScope: Nullable<{
-    surface: string
-    resourceId?: string
-    metadata?: Record<string, unknown>
   }>
   /**
    * folder 级执行体绑定。缺省 = Velar Solo；存在 = 该 folder 的全部成员都由指定外部引擎执行。
@@ -1213,8 +1220,6 @@ export interface StreamToolResultPayload {
   error?: string
   /** 工具执行产生的副作用语义，由后端计算后附加，前端无需解析结果 */
   effects?: StreamToolResultEffects
-  /** 后端从工具结果中抽取的上下文证据，供压缩/召回 pipeline 使用 */
-  evidence?: ChatContextEvidenceRecord[]
   /** 工具提供给模型读取的图片数据，renderer 用它做聊天内预览。 */
   modelImage?: StreamToolResultModelImage
 }

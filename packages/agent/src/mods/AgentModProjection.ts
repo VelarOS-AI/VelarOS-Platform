@@ -59,6 +59,10 @@ function projectAgentModPromptSegments(
   const segments: PromptSegmentDefinition[] = []
   for (const record of snapshot.promptSegments) {
     if (record.payload) {
+      // payload 绑定保持同一性（狗粮不变量：随包 mod 装载后与直接枚举逐项等价）。这**不是**
+      // 下方声明段 tier/retention 硬写的漏洞：绑定是代码，只有随包内置 mod 能提供（盘上 pack
+      // 由 loadBindings 只读文本、不执行代码），信任边界在「随包」这个事实上。若将来任何装载器
+      // 开始执行第三方代码绑定，tier:'core' 与 retention:'protected' 的门必须在那个装载器落地。
       segments.push(record.payload)
       continue
     }
@@ -67,10 +71,17 @@ function projectAgentModPromptSegments(
     segments.push({
       id: declaration.id,
       label: declaration.label,
-      stability: declaration.stability,
+      // **mod 段一律 Tier1**：manifest 里的 `stability` 只是声明意图，不能决定层。
+      // 让 mod 自己声明 `stable` 等于把第三方文本放进稳定前缀——既能挤占安全类段之前的位置，
+      // 又能因为它逐轮变化把所有人的前缀缓存打掉（同 ContextBuilder「mod 只能追加不能重排」判决）。
+      tier: 'runtime',
       source: `mod:${record.modId}`,
       priority: declaration.priority,
-      retention: declaration.retention,
+      // **retention 与 tier 同款不透传**：`protected` 是「预算裁剪不许动我」的免死金牌，
+      // 由宿主按上下文治理发放（技能索引那种「用户显式选中的内容不得静默丢弃」）。
+      // 让 mod 在 manifest 里自报 protected，等于任何第三方都能把自己的文本钉死在预算里、
+      // 把裁剪压力全推给内置段——正是上一行 tier 判决要挡的同一条越权路径。
+      retention: 'normal',
       render: () => text,
     })
   }

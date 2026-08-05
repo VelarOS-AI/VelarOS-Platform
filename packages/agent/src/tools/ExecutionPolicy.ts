@@ -22,7 +22,6 @@ import type {
   AgentRoleId,
   CapabilityAutoApprovalNotice,
   CapabilityScopeId,
-  ChatContextEvidenceRecord,
   RunProfileSelectionId,
   ToolAvailabilityScope,
   ToolCapabilityEffectKind,
@@ -45,7 +44,6 @@ import {
   resolveToolAliases,
   resolveToolValidationHintProviders,
 } from '../capabilities'
-import { getExecutionMode } from '../execution-modes'
 
 import { decideToolCategoryAccess } from './access-policy'
 import {
@@ -61,40 +59,6 @@ import {
 } from './ToolArgsSchemaValidator'
 
 type ToolVisibleSurfaceProfileId = ToolSurfaceProfileId | 'base'
-
-// 方案模式执行门白名单单源自模式描述符（`ExecutionModeDescriptor.toolProjection`）。
-const ProposalModeAllowedNonInspectToolNames = new Set(
-  getExecutionMode('proposal').toolProjection.executionGateAllowedNonInspectTools
-)
-
-function evaluateProposalModeToolAccess(input: {
-  proposalMode: boolean
-  toolName: string
-  role?: ToolRole
-}): { allowed: boolean; reason: string } {
-  if (!input.proposalMode)
-    return {
-      allowed: true,
-      reason: 'proposal mode is off',
-    }
-
-  if (input.role === 'inspect')
-    return {
-      allowed: true,
-      reason: 'proposal mode permits inspection',
-    }
-
-  if (ProposalModeAllowedNonInspectToolNames.has(input.toolName))
-    return {
-      allowed: true,
-      reason: 'proposal mode explicitly permits this planning operation',
-    }
-
-  return {
-    allowed: false,
-    reason: `方案模式只允许调研、提问、只读评审和方案文档操作，禁止执行工具：${input.toolName}。请先完成并提交方案评审。`,
-  }
-}
 
 interface ToolExecutionPolicySurface<TSurfaceInput = any, TBaseInput = any> {
   schema: ToolSchema<TSurfaceInput>
@@ -170,7 +134,6 @@ interface ToolExecutionPolicyContext {
   abortSignal: AbortSignal
   log: ScopedLog
   planningMode?: boolean
-  proposalMode?: boolean
   codingSession: ToolExecutionPolicyCodingSession
   /** Concrete capability behavior is supplied by the composition root. */
   capabilityPorts?: AgentRuntimeCapabilityPorts
@@ -184,10 +147,6 @@ interface ToolExecutionPolicyContext {
   execution: LooseOptional<ToolExecutionPolicyExecution>
   emitProgress?: (chunk: string) => void
   updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
-  runtimeEvidence?: {
-    record(records: readonly ChatContextEvidenceRecord[]): void
-    list(): readonly ChatContextEvidenceRecord[]
-  }
 }
 
 type AnyVelaTool = ToolExecutionPolicyTool<any>
@@ -492,18 +451,6 @@ class ToolExecutionPolicy {
         ...canonicalNamePatch,
       }
 
-    const proposalModeDecision = this.evaluateProposalModeToolPolicy(
-      toolContext,
-      toolName,
-      this.toolRegistry.getDescriptor(toolName)?.role
-    )
-    if (!proposalModeDecision.allowed)
-      return {
-        allowed: false,
-        error: proposalModeDecision.reason,
-        ...canonicalNamePatch,
-      }
-
     return {
       allowed: true,
       prepared: {
@@ -721,22 +668,6 @@ class ToolExecutionPolicy {
   }
 
   /**
-   * 方案模式是宿主级只读边界，不依赖模型遵守提示词。
-   * inspect 工具始终可用；其余只开放提问、只读评审编排、受控产物写入和最终方案评审。
-   */
-  private evaluateProposalModeToolPolicy(
-    toolContext: ToolExecutionPolicyContext,
-    toolName: string,
-    role?: ToolRole
-  ): { allowed: boolean; reason: string } {
-    return evaluateProposalModeToolAccess({
-      proposalMode: !!toolContext.proposalMode,
-      toolName,
-      role,
-    })
-  }
-
-  /**
    * 获取工具角色（如 `control`）。
    * 供 ToolExecutor 判定嵌套/包装调用（timed/chain/reflect）是否触达控制类工具——
    * 控制/编排类工具（agent:dispatch、plan:update、interaction:show_action_cards 等）不应被嵌套调用。
@@ -803,6 +734,14 @@ class ToolExecutionPolicy {
       {
         riskScope: `tool-category:${categoryId}`,
         rememberRiskScope: false,
+        // 结构化信封与下面那段散文同一批产出：渲染层按 kind 画结构卡，散文只做兜底
+        // （旧会话存档 / 不认识该 kind 的消费方）。改文案不会再让结构卡静默退化。
+        detail: {
+          kind: 'tool-category-authorization',
+          categoryId,
+          categoryLabel,
+          toolName: input.toolName,
+        },
       }
     )
 
@@ -857,7 +796,7 @@ class ToolExecutionPolicy {
 
 }
 
-export { evaluateProposalModeToolAccess, ToolExecutionPolicy }
+export { ToolExecutionPolicy }
 export type {
   ToolExecutionDecision,
   ToolExecutionPolicyContext,

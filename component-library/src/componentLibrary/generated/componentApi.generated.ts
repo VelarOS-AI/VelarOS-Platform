@@ -1143,6 +1143,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "ChatConfirmationCard.detail",
+      "description": "结构化信封；缺席时按 `message` 散文渲染。",
+      "type": "LooseOptional<ConfirmationRequestDetail>"
+    },
+    {
       "name": "ChatConfirmationCard.onApprove",
       "description": "Auto-generated from TypeScript props.",
       "type": "() => void",
@@ -1361,12 +1366,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "ChatInputFunctionBar.proposalModeActive",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean",
-      "recommended": "Required"
-    },
-    {
       "name": "ChatInputFunctionBar.goalModeActive",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
@@ -1384,12 +1383,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "ChatInputFunctionBar.onClearPlanMode",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "() => void",
-      "recommended": "Required"
-    },
-    {
-      "name": "ChatInputFunctionBar.onClearProposalMode",
       "description": "Auto-generated from TypeScript props.",
       "type": "() => void",
       "recommended": "Required"
@@ -1439,12 +1432,12 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "ChatInputFunctionBar.activeCommentOptions",
+      "name": "ChatInputFunctionBar.activeMentionOptions",
       "description": "Auto-generated from TypeScript props.",
-      "type": "ChatInputCommentMentionOption[]"
+      "type": "ChatInputMentionableOption[]"
     },
     {
-      "name": "ChatInputFunctionBar.onRemoveCommentSelection",
+      "name": "ChatInputFunctionBar.onRemoveMentionSelection",
       "description": "Auto-generated from TypeScript props.",
       "type": "((id: string) => void)"
     },
@@ -2083,12 +2076,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "ComposerActiveChipsBar.proposalModeActive",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean",
-      "recommended": "Required"
-    },
-    {
       "name": "ComposerActiveChipsBar.goalModeActive",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
@@ -2106,12 +2093,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "ComposerActiveChipsBar.onClearPlanMode",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "() => void",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerActiveChipsBar.onClearProposalMode",
       "description": "Auto-generated from TypeScript props.",
       "type": "() => void",
       "recommended": "Required"
@@ -2161,12 +2142,12 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "ComposerActiveChipsBar.activeCommentOptions",
+      "name": "ComposerActiveChipsBar.activeMentionOptions",
       "description": "Auto-generated from TypeScript props.",
-      "type": "ChatInputCommentMentionOption[]"
+      "type": "ChatInputMentionableOption[]"
     },
     {
-      "name": "ComposerActiveChipsBar.onRemoveCommentSelection",
+      "name": "ComposerActiveChipsBar.onRemoveMentionSelection",
       "description": "Auto-generated from TypeScript props.",
       "type": "((id: string) => void)"
     },
@@ -2302,24 +2283,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "ComposerAddMenuFeatures.updatePlanMode",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "(enabled: boolean) => void",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerAddMenuFeatures.canToggleProposalFeature",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerAddMenuFeatures.proposalModeActive",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerAddMenuFeatures.updateProposalMode",
       "description": "Auto-generated from TypeScript props.",
       "type": "(enabled: boolean) => void",
       "recommended": "Required"
@@ -2565,26 +2528,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     }
   ],
-  ComposerCommentMentionMenu: [
-    {
-      "name": "ComposerCommentMentionMenu.menu",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "UseComposerCommentMentionMenuReturn",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerCommentMentionMenu.header",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "string",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerCommentMentionMenu.deleteLabel",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "string",
-      "recommended": "Required"
-    }
-  ],
   ComposerDropOverlay: [
     {
       "name": "ComposerDropOverlay.active",
@@ -2646,6 +2589,26 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ComposerFilePreview.onOpenFile",
       "description": "Auto-generated from TypeScript props.",
       "type": "((file: File) => void | Promise<void>)"
+    }
+  ],
+  ComposerMentionMenu: [
+    {
+      "name": "ComposerMentionMenu.menu",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "UseComposerMentionMenuReturn",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerMentionMenu.header",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ComposerMentionMenu.deleteLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
     }
   ],
   ComposerModelRunSelector: [
@@ -4358,16 +4321,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "MessageContentBlock.onResolveUserActionCard",
       "description": "Auto-generated from TypeScript props.",
       "type": "((request: UserActionCardResult) => void | Promise<void>)"
-    },
-    {
-      "name": "MessageContentBlock.consumedScheduledTaskProposalIds",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "ReadonlySet<string>"
-    },
-    {
-      "name": "MessageContentBlock.onScheduledTaskProposalConsumed",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "((proposalId: string) => void)"
     },
     {
       "name": "MessageContentBlock.onTranslateThinkingBlock",

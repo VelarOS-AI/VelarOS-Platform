@@ -58,7 +58,7 @@ export type {
   AgentModTurnContextAssembleOutcome,
   AgentModTurnContextSegmentView,
 } from './AgentModSeams'
-export { AgentModSeamDispatcher } from './AgentModSeams'
+export { AgentModSeamDispatcher, WiredSeamKinds } from './AgentModSeams'
 export type {
   BuiltinAgentModOptions,
   BuiltinAgentModPackage,

@@ -12,6 +12,21 @@ export const TurnContextProcessGeneration = `g_${Date.now().toString(36)}_${Math
   .toString(36)
   .slice(2, 10)}`
 
+let ledgerInstanceSeq = 0
+
+/**
+ * 账本实例代次 = 进程代次 + 实例序号。
+ *
+ * 账本被容量淘汰后重建时 `seq` 从 1 重新开始，而消费方的 cursor 还停在旧账本的 seq 20；
+ * 代次不换代的话 `peek` 的 `seq > 20` 会把重建后的前 20 条 delta 全部静默吞掉，连缺口提示都
+ * 没有（审计 U37）。换代让协议既有的"generation 不同直接替换 cursor"分支自动兜住这件事，
+ * 不需要任何额外通知机制。
+ */
+export function nextTurnContextLedgerGeneration(): string {
+  ledgerInstanceSeq += 1
+  return `${TurnContextProcessGeneration}.${ledgerInstanceSeq.toString(36)}`
+}
+
 export interface TurnContextLedgerAppendInput {
   occurredAt?: number
   label: string
@@ -154,7 +169,12 @@ export class TurnContextSessionLedgers {
     const existing = this.ledgers.get(sessionId)
     if (existing) return existing
 
-    const ledger = new TurnContextLedger(this.sourceId, this.options.maxEntries ?? DefaultLedgerMaxEntries)
+    // 每个账本实例一个代次：容量淘汰后重建的这一本 seq 从 1 起，旧 cursor 必须失配才不会吞它。
+    const ledger = new TurnContextLedger(
+      this.sourceId,
+      this.options.maxEntries ?? DefaultLedgerMaxEntries,
+      nextTurnContextLedgerGeneration(),
+    )
     this.ledgers.set(sessionId, ledger)
     while (this.ledgers.size > (this.options.maxSessions ?? DefaultMaxSessions)) {
       const oldest = this.ledgers.keys().next().value

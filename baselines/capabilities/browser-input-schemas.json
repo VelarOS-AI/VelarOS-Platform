@@ -3,7 +3,6 @@
   "browser:enter_site": "791e9cedcfef33087dde5c4e7f580aad938fa412f90853d81f0375a601467d64",
   "browser:leave_site": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:show_page": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
-  "browser:hide_page": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:site_context": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:list_page_targets": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:switch_page_target": "878df5f7b8a2316f227bef402a4d0c3be54460a867d557567e0985cbc94add3c",

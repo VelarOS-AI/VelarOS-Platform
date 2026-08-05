@@ -19,7 +19,6 @@ interface ResolvedToolExposure {
   tier: ToolExposureTier
   rank: number
   rankBoost: number
-  categoryRank: number
   alwaysResident: boolean
 }
 
@@ -74,13 +73,11 @@ function resolveToolExposure(
   const exposure = mergeToolExposurePolicies(descriptor?.exposure)
   const profilePolicy = exposure.profiles?.[profile]
   const alwaysResident = profilePolicy?.alwaysResident ?? isTrue(exposure.alwaysResident)
-  const categoryRank = Number.MAX_SAFE_INTEGER
 
   return {
     tier: exposure.tier ?? 'specialized',
     rank: exposure.rank ?? Number.MAX_SAFE_INTEGER,
     rankBoost: profilePolicy?.rankBoost ?? 0,
-    categoryRank,
     alwaysResident,
   }
 }
@@ -140,8 +137,8 @@ function sortToolsByBudgetPriority(
       getToolResidentBoost(right, protectedToolSet)
     if (leftScore !== rightScore) return leftScore - rightScore
 
-    if (leftExposure.categoryRank !== rightExposure.categoryRank) return leftExposure.categoryRank - rightExposure.categoryRank
-
+    // 这里曾有一级 categoryRank 次级排序（2026-08-06 删）：唯一的生产者把它硬编码成
+    // `Number.MAX_SAFE_INTEGER`，两边恒相等，比较永不生效。工具序的权威只有分数 + 稳定串序。
     // P7-2：同档位内的工具序进 prompt 字节，禁 locale 相关比较。
     return compareStableStrings(left, right)
   })

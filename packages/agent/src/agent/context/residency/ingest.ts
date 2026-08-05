@@ -30,14 +30,25 @@ export interface IngestHistoryOptions {
   createdAtStepMs?: LooseOptional<number>
   /** 起始轮序。 */
   startTurn?: LooseOptional<number>
+  /**
+   * 上一批摄入是否已经见过轮边界（增量摄入的续跑状态）。
+   *
+   * 轮序自增发生在**第二个及以后**的边界上，这个"见过没有"是跨批状态。不带着它走，一批以 user
+   * 消息结尾时下一批就得从 turn+1 起（预支），于是同一份历史逐条增量摄入与一次性整批摄入给出
+   * 两套轮序：`[0,1,1,2]` vs `[0,0,1,1]`，尾保护窗口跟着错位，离线重放与在线运行的账本不可比
+   * （审计 V8 / U22）。
+   */
+  turnBoundarySeen?: LooseOptional<boolean>
   /** 全保真层引用：toolCallId → payloadRef（PayloadStore 已存的原文）。 */
   payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
 }
 
 export interface HistoryIngestPlan {
   inputs: ContextAdmissionInput[]
-  /** 摄入后的下一个轮序（增量摄入用）。 */
+  /** 摄入后的下一个轮序（增量摄入用）：**当前轮**，不预支。 */
   nextTurn: number
+  /** 本批结束时是否已见过轮边界（下一批的 `turnBoundarySeen` 入参）。 */
+  turnBoundarySeen: boolean
 }
 
 /**
@@ -54,7 +65,7 @@ export function planHistoryIngest(
   const argsByToolCallId = new Map<string, unknown>()
   const inputs: ContextAdmissionInput[] = []
   let turn = Math.max(0, Math.floor(options.startTurn ?? 0))
-  let sawTurnBoundary = false
+  let sawTurnBoundary = !!options.turnBoundarySeen
 
   messages.forEach((message, index) => {
     if (isTurnBoundary(message)) {
@@ -76,10 +87,12 @@ export function planHistoryIngest(
       turn,
       toolArgs: toolCallId ? argsByToolCallId.get(toolCallId) : null,
       payloadRef: toolCallId ? toNullable(payloadRefs?.[toolCallId]) : null,
+      // 并行结果各取各的 ref：整张表交给准入，第 2..N 份才不会指向第一份的 payload。
+      payloadRefsByToolCallId: payloadRefs,
     })
   })
 
-  return { inputs, nextTurn: sawTurnBoundary ? turn + 1 : turn }
+  return { inputs, nextTurn: turn, turnBoundarySeen: sawTurnBoundary }
 }
 
 /** 把历史摄入一本账本（按序 append，每条都走准入钩子）。 */

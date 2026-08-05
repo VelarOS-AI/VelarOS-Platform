@@ -17,7 +17,7 @@ import {
 const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
   name: 'job:read_output',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   summary: '读取当前会话内核后台 job 的新增或完整输出。',
   suitable: [
     'agent:dispatch 已启动可等待子 Agent job，后续需要查看其结果或错误输出。',
@@ -30,8 +30,8 @@ const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
   ],
   usage: [
     '默认 mode=incremental，只返回新增输出并推进游标；需要完整缓存时用 mode=snapshot。',
-    'filter 是正则表达式，只保留匹配行；正则无效会返回 VALIDATION 错误。',
-    '如果没有新增输出，工具会明确返回 no new output，不代表 job 不存在。',
+    'filter 是正则表达式，只保留匹配行；正则无效会被忽略（返回全量输出并说明原因），不会报错。',
+    '「no new output」= 本次真的没有新增；「N new line(s), 0 matched the filter」= 有新增但一行没命中，此时用 mode=snapshot 或去掉 filter 复读。两者都不代表 job 不存在。',
   ],
   examples: [
     {
@@ -59,15 +59,17 @@ const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
     })
     if (!snapshot) return `Background job "${input.job_id}" was not found for this session.`
 
-    const output = filterBackgroundJobOutput(snapshot.output, input.filter)
-    return formatBackgroundJobOutput(snapshot, output)
+    return formatBackgroundJobOutput(
+      snapshot,
+      filterBackgroundJobOutput(snapshot.output, input.filter)
+    )
   },
 })
 
 const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
   name: 'job:wait',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   summary: '等待当前会话内核后台 job 完成并返回结果。',
   suitable: [
     'agent:dispatch 已启动一个或多个可等待子 Agent job，需要在继续决策前收束它们的结果。',
@@ -82,7 +84,7 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
     '提供 job_ids 时只等待当前会话拥有且匹配的 job；跨会话或不存在的 id 会被忽略。',
     '省略 job_ids 时等待调用瞬间当前会话内仍在运行的所有后台 job。',
     'timeout_ms 到期时返回当前状态和当前可读输出；返回 running 表示仍未完成。',
-    'filter 是正则表达式，只保留匹配行；正则无效会返回 VALIDATION 错误。',
+    'filter 是正则表达式，只保留匹配行；正则无效会被忽略（返回全量输出并说明原因），不会报错。',
   ],
   examples: [
     {
@@ -115,7 +117,7 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
 const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
   name: 'job:cancel',
   role: 'control',
-  category: 'general',
+  category: 'agent-control',
   summary: '取消当前会话内核后台 job。',
   suitable: [
     'agent:dispatch 启动的后台子 Agent 已不需要继续运行。',
@@ -150,7 +152,7 @@ const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
 
     const snapshot = await ctx.cancelBackgroundJob({ jobId: input.job_id })
     if (!snapshot) return `Background job "${input.job_id}" was not found for this session.`
-    return formatBackgroundJobOutput(snapshot, snapshot.output)
+    return formatBackgroundJobOutput(snapshot, filterBackgroundJobOutput(snapshot.output))
   },
 })
 

@@ -70,6 +70,93 @@ const OptionalParameterListSections: ReadonlySet<string> = new Set(['取值', '�
 
 const DescriptionSectionPrefix = '描述：'
 
+/**
+ * 单个工具描述的开发期硬上限（字符）。
+ *
+ * 这是**保底闸，不是预算**：模型面描述永不压缩——`适合：` / `禁止：` 是行为约束，
+ * 压掉等于删规则，而全部工具描述加起来也只占长上下文很小一块（现网全量 ≈5.2 万字符）。
+ * 因此唯一的防线是写的时候别写爆：单一职责工具正常够不到这个量级
+ * （现网 p50≈330、p90≈750、最大 ≈4k），撞线基本等于「这个工具该拆」，
+ * 或该把细节挪进 `tooling:read` 的按需正文。
+ */
+const ToolDescriptionMaxChars = 6_000
+
+function assertToolDescriptionWithinLimit(name: string, description: string): void {
+  if (description.length <= ToolDescriptionMaxChars) return
+
+  throw new AppError(
+    'VALIDATION',
+    `Tool ${name} description is ${description.length} chars, over the ${ToolDescriptionMaxChars} hard limit; split the tool or move detail out of the model-facing description`
+  )
+}
+
+/**
+ * 模型面工具描述的**软预算**（字符）——见 Desktop `docs/design-principles.md` §8。
+ *
+ * 与 6000 硬上限的分工：硬上限是「写爆了」的保底闸；软预算是「工具是调用面、技能是用法面」
+ * 这条判决的机械落点。复杂用法（多步协议、示例库、边角案例）模型会当作没看见或绕开，它属于
+ * 行为层 Tier-2，家在技能文书，不在每轮都随工具清单进上下文的描述里。
+ *
+ * 超预算只有两条合法出路，**没有第三条**（尤其没有「压缩描述」——`适合`/`禁止` 是行为约束，
+ * 逐节压缩等于删规则）：
+ *  1. 拆 companion skill：工艺深度搬进技能，契约声明 `usageSkillId` 指路，描述瘦身到调用面；
+ *  2. 显式豁免 `descriptionBudgetWaiver`，理由只认 `safety-protocol` / `meta-tool` 两种。
+ */
+const ToolDescriptionBudgetChars = 1_800
+
+/** 软预算豁免理由；只有这两种，别加第三种（加之前先改 §8 判决）。 */
+type ToolDescriptionBudgetWaiverReason =
+  /** 强制流程本身就是防损坏的安全约束，拆进技能等于拆护栏（技能可能没装、可能没被读）。 */
+  | 'safety-protocol'
+  /** `tooling:*` 这类自举工具——模型靠它才找得到技能，没有「先读技能」的余地。 */
+  | 'meta-tool'
+
+interface ToolDescriptionBudgetWaiver {
+  reason: ToolDescriptionBudgetWaiverReason
+  /** 为什么这个工具属于该档；必填，空白视同没写。写给下一个想砍它的人看。 */
+  note: string
+}
+
+const ToolDescriptionBudgetWaiverReasons: ReadonlySet<string> = new Set<
+  ToolDescriptionBudgetWaiverReason
+>(['safety-protocol', 'meta-tool'])
+
+function assertToolDescriptionWithinBudget(
+  name: string,
+  description: string,
+  waiver?: ToolDescriptionBudgetWaiver
+): void {
+  if (waiver) {
+    if (!ToolDescriptionBudgetWaiverReasons.has(waiver.reason)) {
+      throw new AppError(
+        'VALIDATION',
+        `Tool ${name} description budget waiver reason "${waiver.reason}" is not recognized; only safety-protocol / meta-tool are accepted`
+      )
+    }
+
+    if (isBlank(waiver.note)) {
+      throw new AppError(
+        'VALIDATION',
+        `Tool ${name} description budget waiver must carry a note explaining why the tool belongs to the ${waiver.reason} class`
+      )
+    }
+
+    return
+  }
+
+  if (description.length <= ToolDescriptionBudgetChars) return
+
+  throw new AppError(
+    'VALIDATION',
+    `Tool ${name} description is ${description.length} chars, over the ${ToolDescriptionBudgetChars} soft budget; move craft detail into a companion skill (declare usageSkillId) or declare descriptionBudgetWaiver with reason safety-protocol / meta-tool`
+  )
+}
+
+/** 声明了 companion skill 时追加到描述末尾的指路行（`注意` 分节的最后一条）。 */
+function renderUsageSkillNote(usageSkillId: string): string {
+  return `深度用法先读 skill:${usageSkillId}`
+}
+
 function normalizeDescriptionText(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
@@ -308,11 +395,6 @@ function compactStructuredToolDescription(description: string): string {
   return compactStructuredDescription(description, isStructuredToolDescription, '强制流程：')
 }
 
-/** 参数描述 tier-1 精简版：`取值：` 完整保留，其余分节各留首条。 */
-function compactStructuredParameterDescription(description: string): string {
-  return compactStructuredDescription(description, isStructuredParameterDescription, '取值：')
-}
-
 function structureToolDescriptionsForCategory<
   TTool extends ToolDescriptionLike,
   TMap extends Record<string, TTool>,
@@ -339,19 +421,25 @@ function structureToolDescriptionsForCategory<
 }
 
 export {
-  compactStructuredParameterDescription,
+  assertToolDescriptionWithinBudget,
+  assertToolDescriptionWithinLimit,
   compactStructuredToolDescription,
   isStructuredParameterDescription,
   isStructuredToolDescription,
   parseStructuredToolDescription,
   renderParameterDescription,
   renderToolDescription,
+  renderUsageSkillNote,
   structureToolDescriptionForModel,
   structureToolDescriptionsForCategory,
+  ToolDescriptionBudgetChars,
+  ToolDescriptionMaxChars,
 }
 export type {
   StructuredParameterDescriptionSpec,
   StructuredToolDescriptionParts,
   StructuredToolDescriptionSpec,
+  ToolDescriptionBudgetWaiver,
+  ToolDescriptionBudgetWaiverReason,
   ToolDescriptionDetail,
 }

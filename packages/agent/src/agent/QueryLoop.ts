@@ -5,6 +5,7 @@ import type { ModelMessage } from 'ai'
 import { resolveContextWindowBudget } from '@velaros-ai/agent'
 import type {
   AgentModelInputModality,
+  RunProfileSelectionId,
   SubAgentStructuredOutputContract,
   SubAgentUsage,
   ThinkingDepth,
@@ -16,7 +17,6 @@ import {
   isEmpty,
   isNull,
   isPresent,
-  isTrue,
   toNullable,
   toOptional,
 } from '@velaros-ai/core'
@@ -40,7 +40,7 @@ import {
   executeLoopTurnWithContextOverflowRecovery,
   runAgentLoop,
 } from './AgentLoop'
-import type { ContextGovernanceSessionRegistry } from './context'
+import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
 import { resolveContextDegradeAction } from './ContextDegradeLadder'
 import {
   type AgentExecutionLimitOverrides,
@@ -83,6 +83,7 @@ import type {
   QueryTurnToolRegistry,
 } from './QueryTurn'
 import type { AgentRoleResolution, ResolveAgentRoleOptions } from './RoleTypes'
+import { applyRunProfileToolExposure, resolveRunProfilePolicyForRuntime } from './RunProfile'
 import type {
   AgentChatRuntimeConfig,
   AgentSystemRuntimeConfig,
@@ -96,6 +97,11 @@ import {
 
 const MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts = 2
 const MaxSubAgentStructuredOutputRepairAttempts = 2
+/**
+ * 子 Agent 模型窗口未知时的保守回退（注入 `runtimeOverride` 的派发路径不带窗口）。
+ * 编辑预算与运行档判档共用它——两处各写一个数就是两本账。
+ */
+const SubAgentFallbackContextWindow = 128_000
 
 interface QueryLoopSubAgentRuntimeOverride {
   provider: AgentModelProvider
@@ -114,7 +120,6 @@ interface QueryLoopSubAgentOptions<TEvents extends QueryTurnEvents> extends SubA
    * 而非硬杀；未设置则不施加软上限。
    */
   softDeadlineAt?: number
-  turnCapDisabled?: boolean
   /** 主 Agent relay 的运行中引导；每条消息只在子 Agent 某一轮 turn 开始时消费一次。 */
   consumeRelayedGuidance?: () => Nullable<string> | Promise<Nullable<string>>
   /** 续跑：注入已有对话历史，跳过从零构造的首条 user 消息。 */
@@ -136,6 +141,11 @@ type QueryLoopToolContext = QueryTurnToolContext &
     selectedSkillIds?: string[]
     codingSession: {
       setUsableContextWindowTokens?: (tokens: Nullable<number>) => void
+      /**
+       * 父会话选定的运行档（`'auto'` = 按模型窗口自动判档）。子 Agent 继承它做工具面预算——
+       * 档位承诺的是「本次运行允许长期携带多少」，不是「只约束主会话」。
+       */
+      getRunProfile?: () => RunProfileSelectionId
     }
   }
 
@@ -356,11 +366,16 @@ class QueryLoop<
       args.opts.contextEpochScope?.trim() ||
       [
         'sub-agent',
-        args.parentCtx.sessionId?.trim() || 'unknown-session',
+        resolveGovernanceSessionKey(args.parentCtx.sessionId),
         delegation.identity?.trim() || roleResolution.id,
         Date.now().toString(36),
         Math.random().toString(36).slice(2),
       ].join(':')
+    // 治理账本键 = 本次派发的上下文作用域。子 agent 与父会话共用 sessionId（那是 PayloadStore 的
+    // 分区，动不得），但它跑的是另一条消息序列，共用一本账本会让父子交替编译每轮都整本重建
+    // （审计 U12）。作用域每次派发唯一、跨本子 agent 全部轮次稳定，正是账本要的粒度；缺页阶梯
+    // 强开 epoch 也必须查这同一个键，否则查到的是父会话的账本。
+    const governanceSessionId = contextEpochScope
     // 只有需要代码上下文的角色才收集信号，减少无关查询开销。
     // TODO: 子 Agent 通常短命，暂不做 incremental refresh；如未来 profile 显示长命子 Agent，可参考主面的 refresh 节奏。
     const capabilityContext = roleResolution.usesCapabilityContext
@@ -382,13 +397,27 @@ class QueryLoop<
     // 子 Agent 同样下发输入侧可用窗口，让其编辑工具按自身模型窗口做编辑预算（缺省回退保守默认）。
     childCtx.codingSession.setUsableContextWindowTokens?.(
       resolveContextWindowBudget({
-        contextWindow: roleRuntime.contextWindow ?? 128_000,
+        contextWindow: roleRuntime.contextWindow ?? SubAgentFallbackContextWindow,
       }).usableContextWindow
     )
+
+    // 运行档预算下沉到子面（审计 A9）：档位对用户的承诺是「本次运行允许长期携带多少」，不是
+    // 「只约束主会话」。此前主面走 `applyRunProfileToolExposure`、子面完全不走——一旦模型派出
+    // 三五个并行子 Agent，每个都端着完整工具面跑，预算最该生效的场景恰好是唯一不生效的场景。
+    //
+    // 判档规则：继承父会话**选定**的档位；选的是 `'auto'` 时按子 Agent 自己的模型窗口判，窗口未知
+    // （注入 runtimeOverride 的派发路径）时用与编辑预算同一个保守回退。显式选档永远赢——
+    // `resolveRunProfilePolicyForRuntime` 见到非 auto 的选择就直接采纳，不看窗口。
+    const subAgentRunProfile = resolveRunProfilePolicyForRuntime({
+      requested: args.parentCtx.codingSession.getRunProfile?.(),
+      contextWindow: roleRuntime.contextWindow ?? SubAgentFallbackContextWindow,
+      model: roleRuntime.model,
+    }).profile
 
     this.log.info('sub-agent start', {
       roleId: delegation.targetRoleId,
       allowedTools: allowedTools.length,
+      runProfile: subAgentRunProfile,
     })
 
     // maxSteps 已移除：子 Agent 跑到模型自主收手（无工具调用）或被中断为止。
@@ -404,11 +433,15 @@ class QueryLoop<
     let finishingReminderRounds = 0
     let reasoningOnlyVisibleAnswerRecoveries = 0
     let structuredOutputRepairAttempts = 0
-    const turnCapDisabled = isTrue(args.opts.turnCapDisabled)
+    // 这里曾有一格 `turnCapDisabled`（关闭轮数上限，2026-08-06 删）：全链唯一生产者硬编码
+    // `false`，从没有任何路径把它置真；更坏的是同一个布尔还被当作子 Agent 的目标模式开关
+    // （见下方 buildSystemPrompt 的 goalMode）——想给长跑型子 Agent 解除轮数熔断的人会顺手
+    // 改掉它的提示词人格，反之亦然。两件毫无关系的事不共用一个旋钮：轮数熔断的唯一权威是
+    // `executionLimits.subAgentMaxTurns`（null = 不设硬上限）。
     const subAgentMaxTurns = this.executionLimits.subAgentMaxTurns
     const windDownGuard = new LoopWindDownGuard({
       hardCapTurns: subAgentMaxTurns ?? Number.POSITIVE_INFINITY,
-      disabled: turnCapDisabled || isNull(subAgentMaxTurns),
+      disabled: isNull(subAgentMaxTurns),
       deadlineAt: toNullable(args.opts.softDeadlineAt),
     })
 
@@ -437,7 +470,7 @@ class QueryLoop<
     const runScope = toNullable(
       this.spanScopeFactory?.beginRun({
         runId: randomUUID(),
-        sessionId: args.parentCtx.sessionId?.trim() || 'unknown-session',
+        sessionId: resolveGovernanceSessionKey(args.parentCtx.sessionId),
         // Child runs currently inherit the parent session but not the renderer message envelope.
         rootInputId: null,
         agentName: delegation.identity?.trim() || roleResolution.id,
@@ -452,17 +485,44 @@ class QueryLoop<
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnToolContext = captureAgentTurnCapabilityContext(childCtx)
       const supportedInputModalities = new Set(roleRuntime.supportedInputModalities)
-      const allowedToolsForTurn = turnToolContext.getCurrentVisibleToolNames().filter(
+      const candidateToolsForTurn = turnToolContext.getCurrentVisibleToolNames().filter(
         (toolName) =>
           (turnToolRegistry.getDescriptor(toolName)?.requiredModelInputModalities ?? []).every(
             (modality) => supportedInputModalities.has(modality)
           )
       )
-      const toolSchemaChars = this.prepareToolSchemaChars(
+      const candidateToolSchemaChars = this.prepareToolSchemaChars(
         turnToolRegistry,
         turnToolContext,
-        allowedToolsForTurn
+        candidateToolsForTurn
       )
+      // 与主面（CapabilityRunPlanner）同一套预算装配件：按档位的 maxToolCount / maxToolSchemaChars
+      // 收窄本轮工具面。子面没有主面的换页阶梯，因此这里只做一次静态裁剪——alwaysResident 的工具
+      // 先占预算不被淘汰，其余按 tier/rank/schema 字节排队。
+      const { allowedTools: allowedToolsForTurn, droppedTools } = applyRunProfileToolExposure(
+        candidateToolsForTurn,
+        subAgentRunProfile,
+        {
+          toolDescriptors: turnToolContext.listTools('enabled'),
+          toolSchemaChars: candidateToolSchemaChars,
+        }
+      )
+      if (!isEmpty(droppedTools)) {
+        this.log.info('sub-agent tool exposure trimmed by run profile', {
+          turn,
+          runProfile: subAgentRunProfile,
+          exposed: allowedToolsForTurn.length,
+          dropped: droppedTools.length,
+        })
+      }
+      const toolSchemaChars = candidateToolSchemaChars
+        ? Object.fromEntries(
+            allowedToolsForTurn.map((toolName) => [
+              toolName,
+              candidateToolSchemaChars[toolName] ?? 0,
+            ])
+          )
+        : undefined
 
       const { systemPrompt } = await this.runContextHelper.buildSystemPrompt({
         chatConfig: args.chatConfig,
@@ -473,7 +533,10 @@ class QueryLoop<
         identity: delegation.identity,
         capabilityContext,
         thinkingDepth: args.opts.runtimeOverride?.thinkingDepth ?? args.systemConfig.thinkingDepth,
-        goalMode: turnCapDisabled,
+        // 子 Agent 不进目标模式：目标是**父会话**的状态（goal:* 工具族与 SoloFinishingGate 都住主面），
+        // 一次委派是有界的子任务，它自己没有「持续推进到目标达成」这层语义。写死 false 而不是留一个
+        // 半接线的入参——这一格曾经绑在 `turnCapDisabled` 上（恒 false），等于「声明有、永远关」。
+        goalMode: false,
       })
       const contextUsageOptions = this.contextUsage.buildContextUsageOptions(
         roleRuntime.model,
@@ -520,7 +583,6 @@ class QueryLoop<
                 modelRequestOptions: roleRuntime.modelRequestOptions,
                 systemPrompt,
                 history,
-                reasoningLanguage: args.systemConfig.reasoningLanguage,
                 contextWindow: roleRuntime.contextWindow,
                 supportedInputModalities: roleRuntime.supportedInputModalities,
                 contextUsageOptions,
@@ -532,6 +594,7 @@ class QueryLoop<
                 streamTextDeltas: !!args.opts.streamTextDeltas,
                 idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
                 contextEpochScope,
+                governanceSessionId,
                 // 观测：本轮 tool span 开启器（子 Agent 自己的 turn scope）；缺省 no-op。
                 toolSpanOpener: toOptional(spans.turnScope),
                 // mod 接缝：与主面同一派发器；缺省 null → 全链 no-op。
@@ -543,8 +606,9 @@ class QueryLoop<
             applyAction: async (action) => {
               if (action.kind !== 'govern-epoch') return false
 
-              const report = this.governanceSessions.requestEpoch(args.parentCtx.sessionId, {
+              const report = this.governanceSessions.requestEpoch(governanceSessionId, {
                 modelWindowTokens: roleRuntime.contextWindow,
+                source: 'overflow-recovery',
               })
               if (report?.applied) {
                 this.log.warn('sub-agent recovered context overflow via governance epoch', {
@@ -750,7 +814,13 @@ class QueryLoop<
       },
       runTurn,
     }
-    return runAgentLoop(surface)
+    try {
+      return await runAgentLoop(surface)
+    } finally {
+      // 子 agent 的账本随派发结束即弃：这条消息序列不会再被编译，留着只占 registry 的名额
+      // （每次派发一个键，长跑会话会把 128 个格子迅速填满，把真正长寿的父会话挤出去）。
+      this.governanceSessions.invalidateSession(governanceSessionId)
+    }
   }
 
   private prepareToolSchemaChars(

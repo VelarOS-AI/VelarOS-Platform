@@ -13,7 +13,7 @@
  *
  * 本类不做治理决策：什么时候降、降谁、降到哪，归 Governor（B1）。这里只提供"能被驱动"的机器。
  */
-import { toNullable } from '@velaros-ai/core'
+import { isFiniteNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -26,9 +26,9 @@ import {
   type ContextRecord,
   type ContextResidency,
   type ContextResidencyVector,
+  DefaultResidencyCharsPerToken,
   estimateResidencyTokens,
   isResidencyDowngrade,
-  residentChars,
 } from './ContextRecord'
 import { type ContextGovernanceConfig, DefaultContextGovernanceConfig } from './governanceConfig'
 import type {
@@ -36,11 +36,24 @@ import type {
   ContextMigrationEventSink,
   ContextResidencyMigrationEvent,
 } from './migrationLog'
+import { residentChars } from './projection'
 
 export interface ContextResidencyLedgerOptions {
   config?: LooseOptional<ContextGovernanceConfig>
   classifier?: LooseOptional<ContextRecordClassifier>
   sink?: LooseOptional<ContextMigrationEventSink>
+  /**
+   * 本账本的代数：一本账本 = 一代，会话整本重建时递增。
+   * 每条迁移/fault 事件都盖这个章，离线重放才能把跨代重名的记录 id（`ctx-r000001`）分开。
+   */
+  ledgerGeneration?: LooseOptional<number>
+  /**
+   * 记账量纲：字符/token 密度（缺省 4）。
+   *
+   * 与治理器、投影用同一个数——账本自己按 4 记、治理器按实测密度记，就会出现
+   * 「dashboard 说占了 3 万 token、epoch 报告说 8 万」这种同一本账两个数（§16.5 挂账）。
+   */
+  charsPerToken?: LooseOptional<number>
 }
 
 export interface ContextLedgerAppendResult {
@@ -62,6 +75,8 @@ export interface ContextLedgerStats {
   residentTokens: number
   /** 全部记录以 INLINE 计的字符占用（省下多少的分母）。 */
   fullChars: number
+  /** 本次统计用的字符/token 密度（读不出量纲的 token 数没法和别处对账）。 */
+  charsPerToken: number
 }
 
 /** 迁移被拒的原因（拒绝不抛异常——治理器可能批量试探，返回诊断更好用）。 */
@@ -84,12 +99,29 @@ export class ContextResidencyLedger {
   private readonly config: ContextGovernanceConfig
   private readonly classifier: Nullable<ContextRecordClassifier>
   private readonly sink: Nullable<ContextMigrationEventSink>
+  private readonly ledgerGeneration: number
   private nextSeq = 0
+  /** 记账量纲；由会话在每轮治理时按编译期实测值刷新（缺省 4）。 */
+  private charsPerToken = DefaultResidencyCharsPerToken
 
   public constructor(options: ContextResidencyLedgerOptions = {}) {
     this.config = options.config ?? DefaultContextGovernanceConfig
-    this.classifier = options.classifier ?? null
-    this.sink = options.sink ?? null
+    this.classifier = toNullable(options.classifier)
+    this.sink = toNullable(options.sink)
+    this.ledgerGeneration = options.ledgerGeneration ?? 0
+    this.setCharsPerToken(options.charsPerToken)
+  }
+
+  /**
+   * 刷新记账量纲。
+   *
+   * 非法/缺席值一律**保持当前值**而不是打回 4：治理链路上"这一次没量出密度"是常态
+   * （手动 epoch、空账本轮次），把它解释成"密度回到 4"会让同一本账本的统计在轮次之间跳来跳去。
+   */
+  public setCharsPerToken(value: LooseOptional<number>): void {
+    if (!isFiniteNumber(value) || value <= 0) return
+
+    this.charsPerToken = value
   }
 
   /** 追加一条记录：走准入钩子定初始驻留，落准入事件，标失效旧快照。 */
@@ -115,8 +147,12 @@ export class ContextResidencyLedger {
       from: null,
       to: record.admittedResidency,
       cause: decision.cause,
-      tokensDelta: estimateResidencyTokens(residentChars(record, record.admittedResidency)),
+      tokensDelta: estimateResidencyTokens(
+        residentChars(record, record.admittedResidency),
+        this.charsPerToken
+      ),
       at: record.createdAt,
+      ledgerGeneration: this.ledgerGeneration,
     }
     this.sink?.recordMigration(event)
 
@@ -185,8 +221,8 @@ export class ContextResidencyLedger {
         rejection: 'upgrade-not-allowed',
       }
 
-    const beforeTokens = estimateResidencyTokens(residentChars(record, from))
-    const afterTokens = estimateResidencyTokens(residentChars(record, target))
+    const beforeTokens = estimateResidencyTokens(residentChars(record, from), this.charsPerToken)
+    const afterTokens = estimateResidencyTokens(residentChars(record, target), this.charsPerToken)
     this.residency.set(recordId, target)
     this.pendingEvict.delete(recordId)
 
@@ -197,6 +233,7 @@ export class ContextResidencyLedger {
       cause,
       tokensDelta: afterTokens - beforeTokens,
       at,
+      ledgerGeneration: this.ledgerGeneration,
     }
     this.sink?.recordMigration(event)
 
@@ -222,6 +259,7 @@ export class ContextResidencyLedger {
       faultCount,
       ageMs: Math.max(0, at - record.createdAt),
       at,
+      ledgerGeneration: this.ledgerGeneration,
     })
     return faultCount
   }
@@ -261,8 +299,9 @@ export class ContextResidencyLedger {
       refetchableCount,
       totalFaults,
       residentChars: chars,
-      residentTokens: estimateResidencyTokens(chars),
+      residentTokens: estimateResidencyTokens(chars, this.charsPerToken),
       fullChars,
+      charsPerToken: this.charsPerToken,
     }
   }
 

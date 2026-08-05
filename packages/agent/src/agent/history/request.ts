@@ -1,7 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import type { ChatContextEvidenceRecord } from '@velaros-ai/agent/protocol'
-
 import { mapInternalFollowUpsForProvider } from './internalMessages'
 import { repairHistoryStructureForProvider } from './repair'
 import {
@@ -16,7 +14,6 @@ interface AgentHistoryToolContext {
   /** Opaque execution-session state carried through generic history preparation. */
   codingSession: unknown
   sessionId?: string
-  evidenceLedger?: readonly ChatContextEvidenceRecord[]
   /** canonical tool id → provider transport name for the current request. */
   getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>
 }

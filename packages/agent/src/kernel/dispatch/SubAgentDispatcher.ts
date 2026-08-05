@@ -72,7 +72,6 @@ import {
 } from '../../execution'
 import {
   buildSubAgentTaskResult,
-  preCheckSubAgentDispatch,
   resolveCustomSubAgentTypeConfig,
   type ResolvedSubAgentTypeConfig,
   resolveReadonlyMode,
@@ -88,7 +87,7 @@ import {
 import type { KernelBackgroundJobManager } from '../background-jobs'
 import type { ExecutionEventBus } from '../execution/ExecutionEventBus'
 
-import { Semaphore } from './concurrency'
+import { Semaphore, type SubAgentDispatchLimitsSnapshot } from './concurrency'
 import {
   type CustomSubAgentRegistry,
   type SubAgentConfigPort,
@@ -296,16 +295,48 @@ class SubAgentDispatcher {
     return this.agentRunner
   }
 
+  /** 并发上限的**唯一计算式**；`getSemaphore` 与 `describeExecutionLimits` 共用，杜绝两处默认值。 */
+  private resolveConcurrencyLimit(): number {
+    return (
+      this.configService.systemConfig.advancedRuntime?.maxConcurrentSubAgents ??
+      DefaultMaxConcurrentSubAgents
+    )
+  }
+
   /** 取得（或惰性创建）某次执行的并发信号量；上限取配置（advancedRuntime.maxConcurrentSubAgents）。 */
   private getSemaphore(executionKey: string): Semaphore {
     const existing = this.semaphores.get(executionKey)
     if (existing) return existing
-    const limit =
-      this.configService.systemConfig.advancedRuntime?.maxConcurrentSubAgents ??
-      DefaultMaxConcurrentSubAgents
-    const created = new Semaphore(limit)
+    const created = new Semaphore(this.resolveConcurrencyLimit())
     this.semaphores.set(executionKey, created)
     return created
+  }
+
+  /**
+   * 某次执行此刻的**真实**派发配额。
+   *
+   * 存在的唯一理由：`agent:run_workflow` 不许自带第二本并发/总量账。workflow 的 lane 调度器按
+   * `maxConcurrentSubAgents` 开 runner、按 `remainingDispatchBudget` 钳自己的 `max_agents`，
+   * 因此它回给模型的 `effective_limits` 就是运行时真值，而不是一个与信号量无关的声明常量。
+   *
+   * **只读、不建闸**：查配额不该给一个可能永远不派子 Agent 的执行留下一条信号量记录；
+   * 上限走 `resolveConcurrencyLimit()` 这个共用计算式，因此与 `getSemaphore` 建出来的那个数
+   * 恒等。已建闸时直接读闸上的值——配置在执行中途被改小也不会让 workflow 看到一个
+   * 与正在排队的那把闸不同的数。
+   */
+  public describeExecutionLimits(args: {
+    executionId?: LooseOptional<string>
+    sessionId: string
+  }): SubAgentDispatchLimitsSnapshot {
+    const executionKey = resolveSubAgentExecutionKey(args)
+    const maxConcurrentSubAgents =
+      this.semaphores.get(executionKey)?.maxConcurrency ?? this.resolveConcurrencyLimit()
+    const used = this.dispatchCountByExecution.get(executionKey) ?? 0
+    return {
+      maxConcurrentSubAgents,
+      maxSubAgentsPerExecution: DefaultMaxSubAgentsPerExecution,
+      remainingDispatchBudget: Math.max(0, DefaultMaxSubAgentsPerExecution - used),
+    }
   }
 
   public abortWorker(executionKey: string, threadId: string, reason?: string): boolean {
@@ -391,30 +422,6 @@ class SubAgentDispatcher {
         existingSession!
       )
       if (resumeEarly) return resumeEarly
-    }
-
-    if (!isResume) {
-      const preCheck = preCheckSubAgentDispatch({
-        prompt: dispatchRequest.input.prompt,
-        subagent_type: subagentType,
-        thread_id: requestedThreadId,
-      })
-      if (!preCheck.allow) {
-        const text = [
-          '已跳过本次子智能体派发：任务过于简单，建议主 Agent 直接完成。',
-          preCheck.reason ? `原因：${preCheck.reason}` : null,
-          preCheck.suggestedAction ? `建议：${preCheck.suggestedAction}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n')
-        return formatSubAgentTaskResultForParent(
-          buildSubAgentTaskResult({
-            threadId: requestedThreadId ?? `subagent:${randomUUID()}`,
-            text,
-            status: 'failed',
-          })
-        )
-      }
     }
 
     const title =
@@ -1119,26 +1126,20 @@ class SubAgentDispatcher {
    * （详见 ExecutionEventBus.forWorkerExecution）。
    */
   private emitWorkerStatus(args: WorkerStatusArgs): void {
+    const { threadId, activationId, title, agentName, status, summary, error, result } = args
     args.request.events.emitWorkerThread({
       kind: 'worker-thread',
       event: 'status',
-      threadId: args.threadId,
-      activationId: args.activationId,
+      ...{ threadId, activationId, title, agentName, status, summary, error, result },
       taskId: args.executionKey,
-      title: args.title,
-      agentName: args.agentName,
       roleId: args.typeConfig.roleId,
       phase: args.typeConfig.workerPhase,
-      status: args.status,
       timestamp: Date.now(),
       input: args.request.input.prompt,
-      summary: args.summary,
-      error: args.error,
       subagentType: this.resolveTypeKey(args.typeConfig),
       customAgentName: toNullable(args.typeConfig.customAgentName),
       mode: args.dispatchMode,
       model: toNullable(args.resolvedModel ?? args.request.input.model),
-      result: args.result,
     })
   }
 
@@ -1338,7 +1339,6 @@ class SubAgentDispatcher {
           contextEpochScope: threadId,
           context: request.input.description,
           softDeadlineAt: toOptional(execution.softDeadlineAt),
-          turnCapDisabled: false,
           consumeRelayedGuidance: control.relayHandle?.consumeRelayedGuidance,
           initialHistory: execution.initialHistory,
           onHistoryUpdate: execution.onHistoryUpdate,

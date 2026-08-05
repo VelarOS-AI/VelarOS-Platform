@@ -130,6 +130,24 @@ function resolveBaseZoneBudgets(
   >
 }
 
+/**
+ * 一个分区借用别人的空闲额度之后，本轮的有效上限。
+ *
+ * **借的是窗口的真实余量，不是别人账面上那份软上限之和**（考古 U30 的修复）。旧口径把可借额度
+ * 算成"别人的软上限减去别人的保底或实占"，可十个分区的软上限占比之和是 1.62、保底之和只有
+ * 0.43，于是空账本下随便哪个分区能借到的都已经超过整个窗口，外面那层钳制把每个分区都钳成
+ * "能借到全窗口"。后果不是"预算偏松"，是**根本没有分区预算**：超额恒为零，超额诊断永远是空的，
+ * 工具分区拿到的字符预算等于整个可用窗口，换页器形同虚设。
+ *
+ * 现在的口径：一个分区最多用到**窗口减去别人已经占住的部分**（别人占住的 = 保底与实占里的较大
+ * 者），下界是它自己的软上限（那是它的保证份额，不因别人挤占而被剥夺）。三条性质：① 恒不超过
+ * 可用窗口；② 随别人的实际占用单调收紧，账本填满时才真的产生超额，回收阶梯因此重新拿到信号；
+ * ③ 空账本下退化为"窗口减去别人的保底之和"，仍然宽松但有界。
+ *
+ * **没有把分区预算降级成纯诊断**：工具分区的字符预算有两个活消费者（运行计划里的工具描述预算、
+ * 溢出降级阶梯的收窄档）。改成"只报不约束"等于要另发明一个工具描述预算源，那比修借用语义的
+ * 改动更大。另注意送核门不看分区预算，本修复不改变任何一次请求的可发性。
+ */
 function resolveZoneEffectiveLimit(input: {
   zone: ContextWorkingSetZoneId
   usableContextWindow: number
@@ -137,7 +155,7 @@ function resolveZoneEffectiveLimit(input: {
   usedByZone: Record<ContextWorkingSetZoneId, number>
 }): number {
   const target = input.baseBudgets[input.zone]
-  let borrowableTokens = 0
+  let committedByOthers = 0
 
   for (const otherZone of ContextWorkingSetZoneIds) {
     if (otherZone === input.zone) {
@@ -145,11 +163,11 @@ function resolveZoneEffectiveLimit(input: {
     }
 
     const budget = input.baseBudgets[otherZone]
-    const protectedFloor = Math.max(budget.reservedTokens, input.usedByZone[otherZone])
-    borrowableTokens += Math.max(0, budget.limitTokens - protectedFloor)
+    committedByOthers += Math.max(budget.reservedTokens, input.usedByZone[otherZone])
   }
 
-  return Math.min(input.usableContextWindow, target.limitTokens + borrowableTokens)
+  const globalRemainder = input.usableContextWindow - committedByOthers
+  return Math.min(input.usableContextWindow, Math.max(target.limitTokens, globalRemainder))
 }
 
 export class ContextWorkingSetBudgetGovernor {

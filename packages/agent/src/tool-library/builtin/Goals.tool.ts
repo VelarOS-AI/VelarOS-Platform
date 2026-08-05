@@ -97,7 +97,7 @@ const goalConstraintSchema = z.object({
 const getGoal = defineVelaTool<Record<string, never>>({
   name: 'goal:get',
   role: 'inspect',
-  category: 'general',
+  category: 'planning',
   summary: '读取当前 session 的目标模式目标状态。',
   suitable: ['目标模式下需要确认目标是否已创建、完成或进入受阻审计。'],
   forbidden: ['不要用它修改目标状态。'],
@@ -130,7 +130,7 @@ const createGoal = defineVelaTool<{
 }>({
   name: 'goal:create',
   role: 'control',
-  category: 'general',
+  category: 'planning',
   summary: '为需要长时间持续工作的任务创建当前 session 活动目标。',
   suitable: [
     '模型判断任务需要长时间持续工作时，应自主创建活动目标。',
@@ -229,7 +229,7 @@ const updateGoal = defineVelaTool<{
 }>({
   name: 'goal:update',
   role: 'control',
-  category: 'general',
+  category: 'planning',
   summary: '更新当前 session 的统一目标状态，或把目标标记为完成/受阻。',
   suitable: [
     '需要同步目标、步骤或约束状态。',

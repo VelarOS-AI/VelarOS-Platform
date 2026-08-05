@@ -102,11 +102,21 @@ class ExecutionInteractions {
     // 切换 execution/task 状态，并把等待确认事件发给 UI。
     const execution = this.records.transition(executionId, 'awaiting_confirmation')
     this.records.setTaskStatus(execution.id, execution.currentTaskId, 'awaiting_confirmation')
-    this.records.setAwaitingConfirmation(executionId, message, options.userActionCards)
+    this.records.setAwaitingConfirmation(
+      executionId,
+      message,
+      options.userActionCards,
+      options.detail
+    )
     this.emitExecutionDebug(executionId)
     this.emitExecutionState(
       executionId,
-      ChatRuntimeEvents.awaitingConfirmation(executionId, message, options.userActionCards)
+      ChatRuntimeEvents.awaitingConfirmation(
+        executionId,
+        message,
+        options.userActionCards,
+        options.detail
+      )
     )
 
     return new Promise<ConfirmationDecision>((resolve, reject) => {

@@ -4,6 +4,7 @@ import type {
   AppLocale,
   CapabilityScopeId,
   ChatPromptFeatureId,
+  ExecutionModeId,
   PermissionConfirmationMode,
   PromptSegmentOverride,
   ReasoningLevel,
@@ -11,7 +12,6 @@ import type {
   SessionLineageContext,
   ThinkingDepth,
   ToolExecutionApi,
-  ToolPermission,
   ToolSurfaceProfileId,
 } from '@velaros-ai/agent/protocol'
 
@@ -28,7 +28,6 @@ export interface AgentChatRuntimeConfig {
 
 export interface AgentSystemRuntimeConfig {
   thinkingDepth: ThinkingDepth
-  reasoningLanguage: 'auto' | 'zh' | 'en'
   disabledToolNames: string[]
   prompt: {
     segmentOverrides: PromptSegmentOverride[]
@@ -65,8 +64,14 @@ export interface AgentExecutionConfig {
   thinkingDepth?: ThinkingDepth
   reasoningLevel?: ReasoningLevel
   sessionLineage?: LooseOptional<SessionLineageContext>
-  grantedPermissions?: ToolPermission[]
+  /** 能力轴：只表达「哪些能力本轮开着」。执行模式走 `executionModes`。 */
   promptFeatures?: ChatPromptFeatureId[]
+  /**
+   * 执行模式轴（权威）。缺席时读取点经 `resolveExecutionModes` 从旧形态折算，
+   * 因此尚未改写的宿主路径（定时任务 / 无人值守 / 外部引擎）零改动继续成立。
+   */
+  executionModes?: ExecutionModeId[]
+  /** @deprecated 已并入 `executionModes`；保留为旧宿主入口。 */
   goalMode?: boolean
   /** Enables a host-injected execution isolation resource for this run. */
   executionIsolationEnabled?: boolean

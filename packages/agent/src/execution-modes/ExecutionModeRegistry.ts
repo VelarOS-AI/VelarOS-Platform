@@ -1,89 +1,61 @@
-// 执行模式注册表：三个官方模式的首批预制 descriptor + 解析函数。
+// 执行模式注册表：两个官方模式的预制 descriptor + 模式轴归一/兼容折算。
 //
-// 行为逐字节不变——预制 descriptor 只是把此前散在提示词构建 / 工具门控 / 会话粘性三处的
-// 硬编码事实（提示词特性 id、方案模式执行门白名单、快照标志名、粘性/完成语义）**重表达为
-// 声明**，消费点改经本注册表解析单源。新模式 = 纯声明零改码（构造一份 descriptor 即可）。
-import type { ChatPromptFeatureId } from '@velaros-ai/agent/protocol'
-import { isNotNull, toNullable } from '@velaros-ai/core'
+// 预制 descriptor 把此前散在提示词构建与会话粘性两处的硬编码事实（提示词特性 id、
+// 快照标志名、粘性语义）**重表达为声明**，消费点改经本注册表解析单源。
+// 新模式 = 纯声明零改码（构造一份 descriptor 即可）。
+//
+// ## 为什么模式要有自己的轴（2026-08-06 拆轴）
+// 拆轴前，「执行模式」和「插件能力启用」共用 `promptFeatures` 一根 `string[]`：
+// plan 是数组里的一个 id，goal 是旁边一个布尔——同一个概念两种形态，且与能力混在一起。
+// 后果不是审美问题：
+//  - 「hook send 省略 promptFeatures」的回落语义对能力（缺席=不开）与模式（缺席=回落会话粘性）
+//    本就不同，挤在一根轴上只能二选一，于是出现过模式被漏传后静默消失的 footgun；
+//  - 能力面归一（按宿主目录剥除未登记 id）会顺手把模式 id 一起判成「未登记」；
+//  - 「模式选中了吗」在全树散成 `promptFeatures.includes('plan')` 与 `isTrue(goalMode)` 两种写法。
+//
+// 拆轴后：`executionModes: ExecutionModeId[]` 是权威源，`promptFeatures` 只留能力。
+// 旧形态不做破坏性迁移——{@link resolveExecutionModes} 在读取侧折算，因此存量会话与旧宿主
+// 请求路径（定时任务、无人值守、外部引擎）一个都不用改就继续成立。
+import type { ChatPromptFeatureId, ExecutionModeId } from '@velaros-ai/agent/protocol'
+import { isNotNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor, ExecutionModeId } from './ExecutionModeDescriptor'
+import type { ExecutionModeDescriptor } from './ExecutionModeDescriptor'
 
 /**
  * 目标模式（goal）。
  *
- * 无对应提示词特性——经 `AgentExecutionConfig.goalMode` 布尔 / 活跃目标推断驱动（见 PromptState 的
- * `goalMode: isTrue(goalMode) || hasActiveGoal`）。不施加工具执行边界；工具面另有
- * `GoalModeRequiredToolNames`（goal:get/goal:create/goal:update）保护集，属 SoloRunPlanPreparer
- * 曝光深水域，不并入执行门白名单。
+ * 拆轴前没有提示词特性——走 `AgentExecutionConfig.goalMode` 布尔 / 活跃目标推断（见 PromptState 的
+ * `goalMode: isTrue(goalMode) || hasActiveGoal`）。工具面另有 `GoalModeRequiredToolNames`
+ * （goal:get/goal:create/goal:update）保护集，属 SoloRunPlanPreparer 曝光深水域。
  */
 const goalModeDescriptor: ExecutionModeDescriptor = {
   id: 'goal',
   label: '目标模式',
-  prompt: { snapshotFlag: 'goalMode', promptFeatureId: null },
-  toolProjection: { readOnlyExecutionBoundary: false, executionGateAllowedNonInspectTools: [] },
+  prompt: { snapshotFlag: 'goalMode', legacyPromptFeatureId: null },
   stickiness: { sessionSticky: false },
-  completion: { kind: 'manual-exit' },
 }
 
 /**
  * 计划模式（plan）。
  *
- * 由 `plan` 提示词特性激活；提示词面注入计划维护/预览/建议段（`userRequestedPlan` 快照标志）。
- * 工具面**不限制执行**（ExecutionPolicy 的 planning-mode 门恒放行）。会话级粘滞。
+ * 提示词面由 `userRequestedPlan` 快照标志驱动；工具面**不限制执行**，只把计划工具保护进
+ * 本轮曝光集。会话级粘滞。
  */
 const planModeDescriptor: ExecutionModeDescriptor = {
   id: 'plan',
   label: '计划模式',
-  prompt: { snapshotFlag: 'userRequestedPlan', promptFeatureId: 'plan' },
-  toolProjection: { readOnlyExecutionBoundary: false, executionGateAllowedNonInspectTools: [] },
+  prompt: { snapshotFlag: 'userRequestedPlan', legacyPromptFeatureId: 'plan' },
   stickiness: { sessionSticky: true },
-  completion: { kind: 'manual-exit' },
-}
-
-/**
- * 方案模式（proposal）。
- *
- * 由 `proposal` 提示词特性激活；施加宿主级只读执行边界——非 inspect 工具默认拒绝执行，
- * 仅放行下列白名单（`ToolExecutionPolicy` 执行门单源）。会话级粘滞；完成语义为
- * 「批准后下轮自动退出」（`proposal:review` 批准返回 disabledPromptFeatures=['proposal']，
- * 由消费方一次性关停模式）。
- *
- * 注：本白名单是**执行门**白名单，与 `SoloRunPlanPreparer` 的**工具面曝光**白名单是两条独立
- * 校准的抗体（前者含 tooling:map、后者含 proposal:get，成员刻意不同），不可合并——曝光集合仍留
- * SoloRunPlanPreparer 深水域。
- */
-const proposalModeDescriptor: ExecutionModeDescriptor = {
-  id: 'proposal',
-  label: '方案模式',
-  prompt: { snapshotFlag: 'proposalMode', promptFeatureId: 'proposal' },
-  toolProjection: {
-    readOnlyExecutionBoundary: true,
-    executionGateAllowedNonInspectTools: [
-      'interaction:ask_user',
-      'proposal:review',
-      'artifact:produce',
-      'agent:dispatch',
-      'agent:run_workflow',
-      'job:read_output',
-      'job:wait',
-      'job:cancel',
-      // 工具空间三件套都是只读/编排操作:tooling:map 看目录、tooling:read 读 schema、tooling:replace 换页。
-      // 拦掉 map/read 会把方案模式的调研发现链路整个掐断(模型连有什么工具都查不了)。
-      'tooling:map',
-      'tooling:read',
-      'tooling:replace',
-    ],
-  },
-  stickiness: { sessionSticky: true },
-  completion: { kind: 'auto-exit-on-approval' },
 }
 
 /** 官方预制模式注册表（封闭轴集合，新增预制在此追加；用户/harness 亦可零改码构造新 descriptor）。 */
 const ExecutionModeRegistry: Readonly<Record<ExecutionModeId, ExecutionModeDescriptor>> = {
   goal: goalModeDescriptor,
   plan: planModeDescriptor,
-  proposal: proposalModeDescriptor,
 }
+
+/** 归一化时的稳定顺序（= 注册表声明序）：同一集合恒得同一数组，顺序抖动不会进任何指纹。 */
+const ExecutionModeOrder: readonly ExecutionModeId[] = ['goal', 'plan']
 
 /** 按 id 解析预制执行模式描述符。 */
 function getExecutionMode(id: ExecutionModeId): ExecutionModeDescriptor {
@@ -92,34 +64,96 @@ function getExecutionMode(id: ExecutionModeId): ExecutionModeDescriptor {
 
 /** 列出全部预制执行模式描述符。 */
 function listExecutionModes(): readonly ExecutionModeDescriptor[] {
-  return [goalModeDescriptor, planModeDescriptor, proposalModeDescriptor]
+  return [goalModeDescriptor, planModeDescriptor]
 }
 
-/** 由提示词特性反查其激活的执行模式（goal 无特性，永不命中）。 */
+/** 由**旧形态**提示词特性反查其激活的执行模式（goal 无特性，永不命中）。 */
 function resolveExecutionModeForPromptFeature(
   feature: ChatPromptFeatureId
 ): Nullable<ExecutionModeDescriptor> {
   return toNullable(
-    listExecutionModes().find((descriptor) => descriptor.prompt.promptFeatureId === feature)
+    listExecutionModes().find(
+      (descriptor) => descriptor.prompt.legacyPromptFeatureId === feature
+    )
   )
 }
 
+/** 模式 id 判定（轴是封闭集，注册表即全集）。 */
+function isExecutionModeId(value: unknown): value is ExecutionModeId {
+  return isString(value) && value in ExecutionModeRegistry
+}
+
 /**
- * 判定某执行模式是否被本轮选中——单源「哪个提示词特性 id 意味着哪个模式」的激活谓词。
- * 取代散装的 `promptFeatures?.includes('plan'|'proposal')`；goal 模式无特性恒 false。
+ * 模式轴归一：丢弃未知 id、去重、按注册表声明序排。
+ *
+ * 未知 id **静默丢弃**而不是抛错：轴是封闭集，磁盘/线上出现未知值只可能来自跨版本升降级，
+ * 为此锁死一次会话加载不划算（与 `resolveStoredPromptFeatures` 同一条宽容口径）。
  */
-function isExecutionModeSelected(
+function normalizeExecutionModes(values: readonly unknown[] = []): ExecutionModeId[] {
+  const selected = new Set(values.filter(isExecutionModeId))
+  return ExecutionModeOrder.filter((id) => selected.has(id))
+}
+
+/**
+ * 执行模式解析单源——**每个读取点都必须经过这里**，不许自己 `includes('plan')`。
+ *
+ * 折算顺序（并集，不是覆盖）：
+ *  1. 新轴 `executionModes`（权威）；
+ *  2. 旧形态 `promptFeatures` 里的模式特性 id（plan）；
+ *  3. 旧形态 `goalMode` 布尔。
+ *
+ * 取并集而不是「新轴存在就忽略旧的」：拆轴期两种形态会在同一条链路上共存（renderer 已写新轴、
+ * 某个中间层还在透传旧 goalMode），覆盖语义会让其中一半静默消失；而两种形态一致时并集与
+ * 任一单独形态**逐字相同**（幂等）。
+ */
+function resolveExecutionModes(source: {
+  executionModes?: LooseOptional<readonly unknown[]>
+  promptFeatures?: LooseOptional<readonly ChatPromptFeatureId[]>
+  goalMode?: unknown
+}): ExecutionModeId[] {
+  const modes = new Set<ExecutionModeId>(normalizeExecutionModes(source.executionModes ?? []))
+  for (const feature of source.promptFeatures ?? []) {
+    const descriptor = resolveExecutionModeForPromptFeature(feature)
+    if (descriptor) modes.add(descriptor.id)
+  }
+  if (isTrue(source.goalMode)) modes.add('goal')
+  return ExecutionModeOrder.filter((id) => modes.has(id))
+}
+
+/**
+ * 从能力轴剥除执行模式的旧形态 id。
+ *
+ * 模式已有自己的轴，留在 `promptFeatures` 里会让能力面（输入区菜单、feature→工具分类映射、
+ * 「本轮已选能力」提示词段）把一个执行模式当成插件能力展示。
+ */
+function stripExecutionModePromptFeatures(
+  features: readonly ChatPromptFeatureId[] = []
+): ChatPromptFeatureId[] {
+  const legacyIds = new Set(
+    listExecutionModes()
+      .map((descriptor) => descriptor.prompt.legacyPromptFeatureId)
+      .filter(isNotNull)
+  )
+  return features.filter((feature) => !legacyIds.has(feature))
+}
+
+/** 判定某执行模式是否在本轮模式轴里（读取点唯一谓词）。 */
+function isExecutionModeActive(
   id: ExecutionModeId,
-  promptFeatures: readonly ChatPromptFeatureId[]
+  modes: readonly ExecutionModeId[] = []
 ): boolean {
-  const feature = getExecutionMode(id).prompt.promptFeatureId
-  return isNotNull(feature) && promptFeatures.includes(feature)
+  return modes.includes(id)
 }
 
 export {
+  ExecutionModeOrder,
   ExecutionModeRegistry,
   getExecutionMode,
-  isExecutionModeSelected,
+  isExecutionModeActive,
+  isExecutionModeId,
   listExecutionModes,
+  normalizeExecutionModes,
   resolveExecutionModeForPromptFeature,
+  resolveExecutionModes,
+  stripExecutionModePromptFeatures,
 }

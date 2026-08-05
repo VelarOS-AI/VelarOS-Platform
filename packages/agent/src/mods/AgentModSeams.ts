@@ -8,7 +8,11 @@
 //  ③ **异常隔离**：单个钩子抛错只记诊断并跳过该钩子，绝不冒泡打断主链。
 //
 // 闭集在 `@velaros-ai/agent/protocol` 的 mods 契约（`AgentModSeamKinds`）——mod 只能挂接，
-// 不能发明新钩子。当前**真接线**的派发点见 docs/agent-mod-trunk.md；其余 kind 只有注册面与类型。
+// 不能发明新钩子。当前**真接线**的派发点由本文件的 `WiredSeamKindsByDispatcher` 逐条登记
+// （叙述见 VelarOS-Platform 的 docs/agent/agent-mod-trunk.md）；其余 kind 只有注册面与类型，
+// 注册它们会当场收到 `mod.seam-not-wired` 诊断。
+import { isEmpty, isFunction, isObject, isString, optionalWhen, toNullable } from '@velaros-ai/core'
+
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { AgentModDiagnostic, AgentModSeamKind } from '../protocol'
 
@@ -148,17 +152,42 @@ interface AgentModSeamRegistration {
 
 const MaxSeamDiagnostics = 200
 
+/**
+ * `AgentModSeamDispatcher` 上每个真实派发方法的名字（类型层派生，不手写）。
+ *
+ * 下面的 {@link WiredSeamKindsByDispatcher} 对本联合保持穷举：新增一个 `dispatch*` 方法却忘了
+ * 登记它派发哪些 kind = 编译红，而不是又长出一条「注册得进、永远不触发」的哑接缝。
+ */
+type AgentModSeamDispatchMethodName = {
+  [K in keyof AgentModSeamDispatcher]: K extends `dispatch${string}` ? K : never
+}[keyof AgentModSeamDispatcher]
+
+/**
+ * 派发方法 → 它真正读取 handlers 的 kind（**已接线名单的唯一来源**）。
+ *
+ * 闭集 `AgentModSeamKinds` 是「mod 能挂哪些钩子」的类型面，本表是「今天哪些钩子真会被调用」
+ * 的事实面。两者的差集不静默：{@link AgentModSeamDispatcher.register} 命中差集即记
+ * `mod.seam-not-wired` 诊断，沿 `getReport().diagnostics` 回到宿主的 mod 注册表页。
+ */
+const WiredSeamKindsByDispatcher = {
+  dispatchToolCallBefore: ['tool-call:before'],
+  dispatchToolResultAfter: ['tool-result:after'],
+  dispatchTurnContextAssemble: ['turn-context:assemble'],
+  dispatchSessionLifecycle: ['session:start', 'session:end'],
+} as const satisfies Record<AgentModSeamDispatchMethodName, readonly AgentModSeamKind[]>
+
+/** 已接线 kind 的扁平闭集（派生自 {@link WiredSeamKindsByDispatcher}，不许手写第二份）。 */
+const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
+  Object.values(WiredSeamKindsByDispatcher).flat()
+)
+
 function readErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
 }
 
 function isThenable(value: unknown): value is Promise<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof Reflect.get(value, 'then') === 'function'
-  )
+  return isObject(value) && isFunction(Reflect.get(value, 'then'))
 }
 
 /**
@@ -175,7 +204,7 @@ class AgentModSeamDispatcher {
   constructor(
     options: { onDiagnostic?: (diagnostic: AgentModDiagnostic) => void } = {}
   ) {
-    this.onDiagnostic = options.onDiagnostic ?? null
+    this.onDiagnostic = toNullable(options.onDiagnostic)
   }
 
   /** 打开 registration 阶段（Loader 装载前调用）。 */
@@ -206,12 +235,35 @@ class AgentModSeamDispatcher {
         `seam 钩子重复注册：mod「${input.modId}」已在 ${input.seam} 上注册过「${input.id}」。`
       )
     }
+    // 注册照常受理（闭集里的 kind 都是合法挂点，将来接线即生效），但「今天不会触发」这件事
+    // 必须当场说出来——否则 mod 作者唯一的线索是钩子一辈子不响。
+    if (!WiredSeamKinds.has(input.seam)) {
+      this.record({
+        code: 'mod.seam-not-wired',
+        message: `seam ${input.seam} 在本宿主的运行链上还没有派发点：mod「${input.modId}」的钩子「${input.id}」注册成功，但不会被调用。`,
+        modId: input.modId,
+      })
+    }
+    if (!isFunction(input.handler)) {
+      this.record({
+        code: 'mod.seam-handler-invalid',
+        message: `seam 钩子注册被拒：mod「${input.modId}」的钩子「${input.id}」的 handler 不是函数。`,
+        modId: input.modId,
+      })
+      return
+    }
+    // 窄化后单次 cast：input.handler 已在上面用 isFunction 验证过 callable；这里的类型收窄
+    // 只是把 `AgentModSeamHandler<TKind>`（对具体 TKind 具体化的事件/结果对）落到桶元素的
+    // `AgentModSeamHandler`（TKind 默认为整个联合）——两者在结构上兼容，只是逆变位置 TS
+    // 认定"不够重叠"（TS2352），拒绝单跳直接 cast。不是「外来数据未经校验」的双跳强转
+    // （§12.5 禁绝的是那种）：分两条语句表达同一次已验证窄化，不写成链式 `as unknown as`。
+    const validatedHandler: unknown = input.handler
     bucket.push({
       modId: input.modId,
       id: input.id,
       seam: input.seam,
       priority: input.priority ?? 100,
-      handler: input.handler as unknown as AgentModSeamHandler,
+      handler: validatedHandler as AgentModSeamHandler,
     })
     bucket.sort((left, right) =>
       left.priority === right.priority
@@ -340,7 +392,7 @@ class AgentModSeamDispatcher {
         current = { ...current, result: outcome.result }
         changed = true
       }
-      if (typeof outcome.error === 'string') {
+      if (isString(outcome.error)) {
         current = { ...current, error: outcome.error }
         changed = true
       }
@@ -348,7 +400,7 @@ class AgentModSeamDispatcher {
     if (!changed) return {}
     return {
       result: current.result,
-      ...(typeof current.error === 'string' ? { error: current.error } : {}),
+      error: optionalWhen(isString, current.error),
     }
   }
 
@@ -368,7 +420,7 @@ class AgentModSeamDispatcher {
         append.push({ ...item, id: `${entry.modId}.${item.id}` })
       }
     }
-    return append.length > 0 ? { append } : {}
+    return !isEmpty(append) ? { append } : {}
   }
 
   /** 会话生命周期派发（纯通知，无结果面）。 */
@@ -385,7 +437,7 @@ class AgentModSeamDispatcher {
   }
 }
 
-export { AgentModSeamDispatcher }
+export { AgentModSeamDispatcher, WiredSeamKinds, WiredSeamKindsByDispatcher }
 export type {
   AgentModSeamEventMap,
   AgentModSeamGenericEvent,

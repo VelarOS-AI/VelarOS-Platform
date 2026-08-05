@@ -283,6 +283,8 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
     // 叙事段刻意"长而稀"：锚点密度低才进 I0 候选（密集锚点的段落本来就不该被折）。
     const prose = '这里是一段没有硬事实的过程叙述。'.repeat(120)
     ingestHistoryIntoLedger(ledger, [
+      // 账本段第一条 user 记录是任务陈述，结构性 pinned（审计 V2）——要被折的叙事得排在它之后。
+      userMessage('开工'),
       userMessage(`目标是把 packages/agent/src/index.ts 接进新链路。${prose}`),
       assistantMessage(
         `决定改为走驻留账本；跑 bun run check 通过；未决：还要补 kernel 的哈希。${prose}`
@@ -290,10 +292,11 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
       ...buildPressureHistory(5, 4_000),
     ])
 
+    // 预算刻意给到"怎么折都到不了目标线"：本用例要看的是骨架内容，不是达标即停。
     const report = runGovernanceEpoch({
       ledger,
       config,
-      budgetTokens: 200_000,
+      budgetTokens: 1_000,
       epoch: 3,
       at: 1_000,
       modelRequested: true,
@@ -354,6 +357,63 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
     assert.equal(report.distill.mode, 'adaptive')
     assert.equal(report.distill.appliedProducts, 0)
     assert.equal(report.byInstrument.distill, 0)
+  })
+
+  void test('骨架抽不出字段时成员原样留在账本里（先试算后迁移，v3 · R2）', () => {
+    // 命中形态：全是"无标记纯叙述"的 assistant 段落 —— 零锚点（低锚密度候选的定义本身）、
+    // 无决策/未决/验证标志词，且**没有 user 成员**（`goal` 栏只由 user 记录填）。
+    // 于是 `buildContextSkeleton` 的 lines 与 anchors 双空，按约定返回 null。
+    //
+    // 旧顺序是"先 ledger.migrate 再 buildContextSkeleton"：这批记录已经被迁成 SUMMARIZED，
+    // 非工具类 SUMMARIZED 在投影里**整条消失**，却没有骨架、没有墓碑、也没有召回指针 ——
+    // 模型自己的推理轨迹从 prompt 里静默蒸发；账本 append-only、驻留只降不升，回滚不了。
+    const config = resolveContextGovernanceConfig({
+      tailProtectTurns: 0,
+      minEpochSavingPercent: 1,
+      epochTargetPercent: 1,
+      instruments: { skeleton: true, distill: 'off' },
+    })
+    const ledger = new ContextResidencyLedger({ config })
+    const prose = '这是一段没有硬事实的过程叙述。'.repeat(120)
+    ingestHistoryIntoLedger(ledger, [
+      // 首条 user 记录是 pinned 的任务陈述（不进候选），叙事全在 assistant 面。
+      userMessage('开工'),
+      assistantMessage(prose),
+      assistantMessage(`${prose}还是那样。`),
+    ])
+    const narrative = ledger.list().filter((record) => record.kind === 'assistant')
+    assert.equal(narrative.length, 2)
+    // 前提复现：这批成员确实抽不出骨架。
+    assert.equal(buildContextSkeleton({ members: narrative, epoch: 1 }), null)
+
+    const report = runGovernanceEpoch({
+      ledger,
+      config,
+      budgetTokens: 1_000,
+      epoch: 1,
+      at: 1_000,
+      modelRequested: true,
+    })
+
+    assert.equal(report.byInstrument.skeleton, 0)
+    assert.equal(
+      ledger.list().some((record) => record.kind === 'summary'),
+      false
+    )
+    for (const record of narrative) {
+      assert.equal(ledger.residencyOf(record.id), 'INLINE', '没有骨架代表它就不许折掉它')
+    }
+    // 内容仍在投影里，逐字未动。
+    const projected = projectContextLedger({
+      records: ledger.list(),
+      residency: ledger.residencyVector(),
+      budget: { tailProtectTurns: 0 },
+    })
+    assert.equal(projected.stats.hiddenCount, 0)
+    assert.equal(
+      projected.messages.filter((message) => String(message.content).includes(prose)).length,
+      2
+    )
   })
 
   void test('骨架生成是确定的：同输入必同字节', () => {
@@ -440,6 +500,8 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
     // 出路是 handoff，不是压尾（裁决 5）。
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 100,
+      // 条数闸也放到不咬合：本用例要的是"整本都在尾保护里"这一极端形态，两条判据都得盖住。
+      tailProtectMaxRecords: 1_000_000,
       epochTriggerPercent: 5,
       epochTargetPercent: 4,
       minEpochSavingPercent: 10,

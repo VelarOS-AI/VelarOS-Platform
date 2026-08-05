@@ -13,6 +13,8 @@
 //     provider request 与执行策略必须消费同一份 turnToolRegistry。
 //  ⑤ 领域语义与观测语义必须由 capability 注入。
 //  ⑥ 发布必须绑定精确 source/ref/tag 和同一已验明 tarball。
+//  ⑦ 治理账本键单源:'unknown-session' 字面量只许出现在 residency/sessionKey.ts,
+//     其余一律走 resolveGovernanceSessionKey()/UnknownGovernanceSessionId(注册键=查询键)。
 //
 // 有意的基线变化:VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成基线,
 // 并在提交信息里说明差异。
@@ -243,6 +245,38 @@ function scanMinimalKernelDependencyDirection() {
           rule: 'minimal-kernel-dependency-direction',
           fingerprint: `minimal-kernel-dependency-direction::${relativeFile}:${index + 1}`,
           message: `${relativeFile}:${index + 1}: Agent 两包不得 import 具体能力实现；请由能力包反向依赖 Agent 并在产品装配根注入。`,
+        })
+      })
+    }
+  }
+  return violations
+}
+
+// —— 防线⑦ 治理账本键单源 ——
+//
+// 「注册键 = 查询键」是无声失效型不变量：编译面注册用 A、缺页降级面查询用 B，`govern-epoch` 级
+// 对无身份会话恒查不到账本,一条错误日志都不会有(审计 R6)。收进
+// `resolveGovernanceSessionKey` / `UnknownGovernanceSessionId` 之后,把"只许一处写字面量"钉成
+// 机械规则,这条不变量才真的机械成立,而不是靠下一个人记得。
+const GovernanceSessionKeySingleSourceFile =
+  'packages/agent/src/agent/context/residency/sessionKey.ts'
+const UnknownGovernanceSessionLiteralPattern = /['"`]unknown-session['"`]/
+
+function scanGovernanceSessionKeySingleSource() {
+  const violations = []
+  for (const packageDir of KernelClusterPackages) {
+    const sourceDir = resolve(RepoRoot, packageDir, 'src')
+    if (!existsSync(sourceDir)) continue
+    for (const file of collectSourceFiles(sourceDir)) {
+      const relativeFile = normalizeSeparators(relative(RepoRoot, file))
+      if (relativeFile === GovernanceSessionKeySingleSourceFile) continue
+      const lines = stripCodeComments(readFileSync(file, 'utf8')).split('\n')
+      lines.forEach((line, index) => {
+        if (!UnknownGovernanceSessionLiteralPattern.test(line)) return
+        violations.push({
+          rule: 'governance-session-key-single-source',
+          fingerprint: `governance-session-key-single-source::${relativeFile}:${index + 1}`,
+          message: `${relativeFile}:${index + 1}: 治理账本键的兜底值只许写在 ${GovernanceSessionKeySingleSourceFile};此处请改用 resolveGovernanceSessionKey() / UnknownGovernanceSessionId。`,
         })
       })
     }
@@ -654,6 +688,7 @@ function main() {
     ...scanMinimalKernelDependencyDirection(),
     ...scanAgentTurnCapabilitySnapshotBoundary(),
     ...scanConcreteSemanticInjectionBoundary(),
+    ...scanGovernanceSessionKeySingleSource(),
     ...scanReleaseIdentityBoundary(),
   ]
   const currentFingerprints = violations.map((v) => v.fingerprint).sort()

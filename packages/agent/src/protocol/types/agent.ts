@@ -1,8 +1,4 @@
-import type {
-  ChatContextEvidenceRecord,
-  ChatRuntimeEvent,
-  StreamReconnectingPayload,
-} from './chatRuntime'
+import type { ChatRuntimeEvent, StreamReconnectingPayload } from './chatRuntime'
 import type {
   ExecutionTaskExecutionAdvice,
   ExecutionTaskPlanStep,
@@ -29,7 +25,7 @@ import type {
   ThinkingDepth,
 } from './team'
 import type { CapabilityScopeId } from './tool'
-import type { ToolCategoryId, ToolPermission, ToolSurfaceProfileId, UserActionCard } from './tool'
+import type { ToolCategoryId, ToolSurfaceProfileId, UserActionCard } from './tool'
 
 export type { RunProfileId, RunProfileSelectionId } from './runProfile'
 
@@ -38,8 +34,22 @@ export interface DebugModelMessage {
   content: unknown
 }
 
-/** Opaque prompt feature id registered by a product or capability package. */
+/**
+ * Opaque prompt feature id registered by a product or capability package.
+ *
+ * **只表达「这项能力本轮开着」**。执行模式（目标 / 计划）不是能力，走 {@link ExecutionModeId}
+ * 独立轴——2026-08-06 拆轴前它们挤在同一根数组里，于是「hook 省略 promptFeatures」这类漏传
+ * 会同时丢掉能力与模式，而两者的回落语义本就不同（能力缺席=不开，模式缺席=回落会话粘性）。
+ */
 export type ChatPromptFeatureId = string
+
+/**
+ * 执行模式轴（封闭集）。
+ *
+ * 与 prompt feature 正交：feature 回答「哪些能力开着」，模式回答「这一轮按什么执行姿态跑」。
+ * 官方预制两档，descriptor 单源见 `execution-modes/ExecutionModeRegistry`。
+ */
+export type ExecutionModeId = 'goal' | 'plan'
 
 /** 迁移期字段已清空；新场景只使用 AgentSurfaceId。 */
 export type AgentDeveloperContext = never
@@ -83,17 +93,19 @@ export interface RunProfileBudget {
   maxToolSchemaChars: Nullable<number>
 }
 
-/** Provider-neutral generation limits selected by a runtime profile. */
-export interface GenerationRequestPolicy {
-  temperature?: number
-  topP?: number
-  maxOutputTokens?: number
-}
-
+/**
+ * 档位提供的**缺席默认**——不是覆盖。显式配置（`AgentExecutionConfig.thinkingDepth` 等）永远赢，
+ * 档位只在那一格没给时兜底。
+ *
+ * 这里曾经还有一格 `modelRequestPolicy`（temperature / topP / maxOutputTokens，2026-08-06 删）：
+ * 三档各声明了一组采样参数，全仓零读取点。档位描述宣称 compact/balanced/expanded 是「运行成本
+ * 与发散度」三档，实际只有工具预算生效；调 temperature 的人在这里改半天没反应，把它接上去则
+ * 会让所有用户的采样参数在某次发版后突然变了。判决：采样参数交模型/供应商默认，档位只管
+ * 「本次运行允许长期携带多少」（工具面与提示词预算）。
+ */
 export interface RunProfileDefaults {
   thinkingDepth: ThinkingDepth
   toolSurfaceProfile: ToolSurfaceProfileId
-  modelRequestPolicy: GenerationRequestPolicy
 }
 
 export interface RunProfileDefinition {
@@ -154,7 +166,8 @@ export type AgentContextPhaseReason =
   | 'missing-user-request'
   | 'scheduled-task'
   | 'unattended-execution'
-  | 'goal-mode'
+  /** 任一执行模式在场（目标 / 计划）。2026-08-06 拆轴前只有 goal 会命中，故旧名为 goal-mode。 */
+  | 'execution-mode'
   | 'selected-skill'
   | 'selected-capability'
   | 'active-context'
@@ -328,7 +341,6 @@ export type StreamWorkerThreadChatEvent =
       result: unknown
       error?: string
       effects?: StreamToolResultEffects
-      evidence?: ChatContextEvidenceRecord[]
       modelImage?: StreamToolResultModelImage
     }
   | {
@@ -390,6 +402,40 @@ export interface ToolExecutionPlanUpdate {
   plan: ToolExecutionPlanItem[]
 }
 
+/**
+ * 一次确认请求的**结构化信封**（生产者与渲染层共用的单源）。
+ *
+ * 旧形态只有一根散文 `message`，渲染层想画结构卡就只能反解中文字面量
+ * （`if (lines[0] === '<某类授权请求标题>')` 一类的字面量比对）：提示文案改一个字，结构卡就静默退化成一行灰字，
+ * 没有任何门会红；写死的简体中文也让 en-US 永远触发不到结构布局。所以身份走本联合的 `kind`，
+ * 字段由生产者声明，`message` 降级为**兜底散文**——kind 缺席（旧会话存档、模型自由撰写的确认）
+ * 或渲染层不认识该 kind 时按散文渲染，永远不会白屏。
+ *
+ * 新增 kind 的规矩：**生产者与渲染分支同一批改**。只加类型不加生产者 = 死枝；
+ * 只加生产者不加分支 = 自动回落散文（安全，但结构信息白丢）。
+ */
+export type ConfirmationRequestDetail =
+  | {
+      /** 会话级工具类别授权：批准后本会话同类工具不再重复询问。 */
+      kind: 'tool-category-authorization'
+      categoryId: string
+      categoryLabel: string
+      toolName: string
+    }
+  | {
+      /** 外部 MCP 服务器上的一次工具调用。 */
+      kind: 'mcp-tool-call'
+      serverName: string
+      toolName: string
+    }
+  | {
+      /** 模型自动读取一份非内置技能的正文。 */
+      kind: 'skill-load'
+      skillId: string
+      label: string
+      description?: LooseOptional<string>
+    }
+
 export interface ToolConfirmationDecisionOptions {
   /** 需要用户亲自点击确认；不能被会话风险确认自动批准短路。 */
   requireManualApproval?: boolean
@@ -401,6 +447,8 @@ export interface ToolConfirmationDecisionOptions {
   rememberRiskScope?: boolean
   /** 使用一组通用用户动作卡片渲染本次确认。 */
   userActionCards?: UserActionCard[]
+  /** 本次确认的结构化信封；缺席时渲染层按 `message` 散文兜底。 */
+  detail?: ConfirmationRequestDetail
 }
 
 /** 一次工具执行审批的结构化决策（审批通道与 execution 确认机制共用的单一形状）。 */
@@ -447,8 +495,13 @@ export interface AgentConfig {
   /** 本次请求的 Composer 思考力度 5 档；adapter 会据此决定 reasoning 开关/力度/预算。 */
   reasoningLevel?: ReasoningLevel
   sessionLineage?: LooseOptional<SessionLineageContext>
-  grantedPermissions?: ToolPermission[]
   promptFeatures?: ChatPromptFeatureId[]
+  /**
+   * 执行模式轴（权威）。缺席时读取方按 {@link resolveExecutionModes} 从旧形态
+   * （`promptFeatures` 里的模式 id / `goalMode` 布尔）折算，存量宿主路径因此零改动可用。
+   */
+  executionModes?: ExecutionModeId[]
+  /** @deprecated 目标模式已并入 `executionModes`；保留为旧宿主入口，读取一律经 `resolveExecutionModes`。 */
   goalMode?: boolean
   scope?: CapabilityScopeId
   toolSurfaceProfile?: ToolSurfaceProfileId
@@ -536,8 +589,6 @@ export type AgentEvent =
       error?: string
       /** 工具副作用语义，后端计算后附加 */
       effects?: StreamToolResultEffects
-      /** 工具结果抽取出的上下文证据 */
-      evidence?: ChatContextEvidenceRecord[]
       /** 工具提供给模型读取的图片数据，renderer 用它做聊天内预览。 */
       modelImage?: StreamToolResultModelImage
     }

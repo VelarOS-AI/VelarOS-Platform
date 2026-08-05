@@ -1,5 +1,4 @@
 import type {
-  ChatContextEvidenceRecord,
   ChatMessage,
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
@@ -26,30 +25,16 @@ interface RetrievalPayloadStorePort {
 }
 
 /**
- * {@link RetrievalStateStorePort.loadSessionContextSnapshot} 的返回形状：
- * 索引构建仅需 evidenceLedger（Context OS 压缩视图 + 运行时账本）。
- */
-interface RetrievalSessionContextSnapshot {
-  /** Context OS 压缩视图；evidenceLedger 可能与 runtime ledger 重叠。 */
-  contextView: LooseOptional<{
-    evidenceLedger?: ChatContextEvidenceRecord[]
-  }>
-  /** 运行时 evidence 账本。 */
-  evidenceLedger: ChatContextEvidenceRecord[]
-}
-
-/**
- * state 读端口：会话消息与 Context OS 快照的按会话读取。
- * `loadSessionContextSnapshot` 可选——宿主未实现时索引以空 evidence 构建。
+ * state 读端口：会话消息的按会话读取。
+ *
+ * 2026-08-06 evidence 流协议链下线：本端口曾多一格 `loadSessionContextSnapshot`，
+ * 只为把宿主的 `session.runtime.evidenceLedger` 喂给索引构建。那条账本自始至终没有
+ * 生产者（`evidenceExtractors` 两仓零注册），整链已随协议字段一并处决，端口回到
+ * 「只读消息」的最小形状。
  */
 interface RetrievalStateStorePort {
   loadSessionMessages(sessionId: string): Promise<ChatMessage[]>
   loadSessionMessage(sessionId: string, index: number): Promise<Nullable<ChatMessage>>
-  loadSessionContextSnapshot?(sessionId: string): Promise<RetrievalSessionContextSnapshot>
 }
 
-export {
-  type RetrievalPayloadStorePort,
-  type RetrievalSessionContextSnapshot,
-  type RetrievalStateStorePort,
-}
+export { type RetrievalPayloadStorePort, type RetrievalStateStorePort }

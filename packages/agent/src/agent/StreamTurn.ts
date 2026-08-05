@@ -4,7 +4,6 @@ import type { EstimateContextUsageOptions } from '@velaros-ai/agent'
 import type {
   AppLocale,
   ChatRuntimeEvent,
-  ReasoningLanguagePreference,
   StreamAssistantRawPayload,
 } from '@velaros-ai/agent/protocol'
 import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
@@ -33,6 +32,7 @@ import {
   type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
+  resolveGovernanceSessionKey,
 } from './context'
 import {
   type AgentHistoryToolContext,
@@ -209,8 +209,6 @@ export interface ExecuteStreamTurnArgs<
   stableCutoff?: LooseOptional<number>
   /** 当前消息历史；本 helper 会在成功后追加 assistant 消息。 */
   history: ModelMessage[]
-  /** 可见 reasoning/thinking 文本语言偏好；auto 时不改写 user turn。 */
-  reasoningLanguage?: ReasoningLanguagePreference
   /** 当前模型上下文窗口；用于最终 provider payload send gate。 */
   contextWindow?: LooseOptional<number>
   /** Concrete inputs accepted by the selected model. Missing is text-only. */
@@ -387,13 +385,12 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 const toolChoiceName = this.resolveToolChoiceName(providerToolChoice)
                 const compiledRequest = await compileProviderSendRequest(
                   {
-                    sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
+                    sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
                     rawHistoryMessages: args.history,
                     leadingMessages: systemDelivery.leadingMessages,
                     tailBlocks: systemDelivery.tailBlocks,
                     phase: 'stream',
                     turn: args.turn,
-                    reasoningLanguage: args.reasoningLanguage,
                     payloadStore: args.toolContext.contextPayloadStore,
                     toolContext: args.toolContext,
                     model: args.model,
@@ -456,7 +453,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 })
                 recordKernelPrefixShapeDiagnostic(providerTurnReducer, prefixShapeRecord)
                 const contextEpoch = buildKernelContextEpoch({
-                  sessionId: args.toolContext.sessionId?.trim() || 'unknown-session',
+                  sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
                   scope: args.contextEpochScope,
                   phase: 'stream',
                   turn: args.turn,
@@ -844,7 +841,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
   private createProviderTurnReducer(
     args: ExecuteStreamTurnArgs<TToolContext>
   ): ProviderTurnEventReducer {
-    const sessionId = args.toolContext.sessionId?.trim() || 'unknown-session'
+    const sessionId = resolveGovernanceSessionKey(args.toolContext.sessionId)
     return new ProviderTurnEventReducer({
       turnId: `${sessionId}:stream:${args.turn}`,
     })

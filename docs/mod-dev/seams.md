@@ -54,7 +54,11 @@ compaction:before      skill:select           diagnostic:publish
 
 **mod 只能挂接，不能发明新钩子。**
 
-### 已真接线的四个派发点
+### 已真接线的四个派发点（覆盖 5 个 kind）
+
+**这张表在代码里有对应物**：`WiredSeamKindsByDispatcher`（`packages/agent/src/mods/AgentModSeams.ts`）
+按派发方法名登记它读取的 kind，对「类上所有 `dispatch*` 方法」保持类型层穷举——新增一个派发方法
+却忘了登记就编译红。`WiredSeamKinds` 由它派生，是「今天哪些钩子真会被调用」的唯一事实面。
 
 | seam | 调用点 | 语义 |
 | --- | --- | --- |
@@ -71,8 +75,10 @@ compaction:before      skill:select           diagnostic:publish
 `model-response:after`、`sub-agent:dispatch`、`compaction:before`、`skill:select`、
 `diagnostic:publish`。
 
-**它们只有注册面与类型，`dispatch` 没有调用点。** manifest 里挂这些 kind 不会报错，
-但 handler 永远收不到事件。接线时的已知落点：
+**它们只有注册面与类型，`dispatch` 没有调用点。** manifest 里挂这些 kind 注册照常成功
+（闭集里都是合法挂点，接线即生效），但 handler 今天收不到事件——所以 `register()` 会**当场**记一条
+`mod.seam-not-wired` 诊断，沿 `getReport().diagnostics` 回到宿主的 mod 注册表页。作者不必再靠
+「钩子一辈子不响」去发现这件事。接线时的已知落点：
 `turn:*` 需要给 `AgentLoopSurface` 加派发器字段并由 Solo / Query 两面装配；
 `sub-agent:dispatch` 落 `kernel/dispatch/SubAgentDispatcher.ts`；
 `compaction:before` 落上下文治理链。

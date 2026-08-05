@@ -1,16 +1,18 @@
 export type {
-  ExecutionModeCompletion,
-  ExecutionModeCompletionKind,
   ExecutionModeDescriptor,
   ExecutionModeId,
   ExecutionModePromptProjection,
   ExecutionModeStickiness,
-  ExecutionModeToolProjection,
 } from './ExecutionModeDescriptor'
 export {
+  ExecutionModeOrder,
   ExecutionModeRegistry,
   getExecutionMode,
-  isExecutionModeSelected,
+  isExecutionModeActive,
+  isExecutionModeId,
   listExecutionModes,
+  normalizeExecutionModes,
   resolveExecutionModeForPromptFeature,
+  resolveExecutionModes,
+  stripExecutionModePromptFeatures,
 } from './ExecutionModeRegistry'

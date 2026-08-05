@@ -32,7 +32,6 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     defaults: {
       thinkingDepth: 'fast',
       toolSurfaceProfile: 'guided',
-      modelRequestPolicy: { temperature: 0.15, topP: 0.85, maxOutputTokens: 8192 },
     },
     automaticToolCategories: [],
   },
@@ -49,7 +48,6 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     defaults: {
       thinkingDepth: 'balanced',
       toolSurfaceProfile: 'direct',
-      modelRequestPolicy: { temperature: 0.2, topP: 0.9, maxOutputTokens: 16_384 },
     },
     automaticToolCategories: [],
   },
@@ -66,7 +64,6 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     defaults: {
       thinkingDepth: 'deep',
       toolSurfaceProfile: 'expert',
-      modelRequestPolicy: { temperature: 0.25, topP: 0.95, maxOutputTokens: 32_768 },
     },
     automaticToolCategories: [],
   },

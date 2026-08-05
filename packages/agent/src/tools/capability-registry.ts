@@ -64,6 +64,7 @@ function descriptorForRegisteredTool<TTool extends RegistryTool<any>>(
     descriptorId: entry.descriptorId ?? name,
     name,
     description: entry.tool.description,
+    usageSkillId: entry.tool.usageSkillId,
     role: entry.tool.role,
     permissions: entry.tool.permissions,
     capabilities: entry.tool.capabilities,

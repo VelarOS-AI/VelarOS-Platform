@@ -70,7 +70,6 @@ describe('goal blocked lifecycle', () => {
   test('keeps blocked transition details in the goal tool contract instead of duplicating them in the prompt', () => {
     const segment = createTaskRuntimePromptSegments({
       goalMode: true,
-      proposalMode: false,
       executionPlanPreview: null,
     } as never).find((candidate) => candidate.id === 'runtime.goal-mode')
     const prompt = segment?.render({})

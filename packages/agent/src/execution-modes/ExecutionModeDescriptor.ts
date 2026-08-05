@@ -1,39 +1,30 @@
 // 域：执行模式能力化（宪章 §2「执行模式能力化」法条）。
 //
-// 一个执行模式 = 一份 ExecutionModeDescriptor 声明式捆绑：提示词段投影 + 工具面投影 +
-// 会话粘性规则 + 完成语义。三个官方模式（目标 / 计划 / 方案）重表达为首批预制 descriptor，
-// 经注册表装配；新模式 = 纯声明零改码。descriptor 只承载 host 无关的模式契约，
-// 只依赖 `@velaros-ai/agent/protocol` 的提示词特性 id。
-import type { ChatPromptFeatureId } from '@velaros-ai/agent/protocol'
+// 一个执行模式 = 一份 ExecutionModeDescriptor 声明式捆绑：提示词段投影 + 会话粘性规则。
+// 两个官方模式（目标 / 计划）重表达为首批预制 descriptor，经注册表装配；新模式 = 纯声明零改码。
+// descriptor 只承载 host 无关的模式契约，只依赖 `@velaros-ai/agent/protocol` 的提示词特性 id。
+//
+// **执行模式不带工具面投影**（2026-08-05 裁决，见 Desktop `docs/design-principles.md` §7）：
+// 「先方案后实施」这类工作流编排纪律只许走提示词与技能文书，禁运行时拦截。旧的
+// `toolProjection`（只读执行边界 + 执行门白名单）随方案模式一并处决，模式不再是工具门的输入。
+import type { ChatPromptFeatureId, ExecutionModeId } from '@velaros-ai/agent/protocol'
 
-/** 三个官方执行模式的稳定 id。新增预制模式在此并集追加。 */
-export type ExecutionModeId = 'goal' | 'plan' | 'proposal'
+export type { ExecutionModeId }
 
 /**
  * 提示词构建面投影声明。
  *
  * `snapshotFlag` 是本模式在 `RuntimePromptSnapshot` 上驱动提示词段（段 `when()` 判定）的
- * 布尔标志名——登记「哪个标志属于哪个模式」的单源；`promptFeatureId` 是激活本模式的
- * 提示词特性 id，goal 模式无对应特性（走 goalMode 布尔 / 活跃目标推断），故为 null。
+ * 布尔标志名——登记「哪个标志属于哪个模式」的单源。
+ *
+ * `legacyPromptFeatureId` 是**拆轴前**用来激活本模式的提示词特性 id：模式曾与插件能力挤在
+ * 同一根 `promptFeatures` 数组里（goal 走布尔、plan 走特性 id，两档形态还不一样）。拆轴后
+ * 权威源是 `executionModes`，这个 id 只剩一个用途——把存量会话 / 旧宿主请求里粘着的旧形态
+ * 折算回模式轴（{@link resolveExecutionModes}），并从能力轴上剥掉。goal 从来没有特性 id，为 null。
  */
 export interface ExecutionModePromptProjection {
-  snapshotFlag: 'goalMode' | 'userRequestedPlan' | 'proposalMode'
-  promptFeatureId: Nullable<ChatPromptFeatureId>
-}
-
-/**
- * 工具面投影声明。
- *
- * `readOnlyExecutionBoundary=true` 表示宿主级只读边界（方案模式：非 inspect 工具默认拒绝
- * 执行）；`executionGateAllowedNonInspectTools` 是只读边界下仍放行执行的非 inspect 工具名，
- * 是宿主执行门（`ToolExecutionPolicy`）的单源白名单。非只读边界的模式该列表为空。
- *
- * 注：方案模式另有一套「工具面曝光」白名单（`SoloRunPlanPreparer` 的 required/exposure 集合），
- * 与本执行门白名单是两条独立校准的抗体（成员刻意不同），不并入本字段——见 registry 深水登记。
- */
-export interface ExecutionModeToolProjection {
-  readOnlyExecutionBoundary: boolean
-  executionGateAllowedNonInspectTools: readonly string[]
+  snapshotFlag: 'goalMode' | 'userRequestedPlan'
+  legacyPromptFeatureId: Nullable<ChatPromptFeatureId>
 }
 
 /** 会话粘性声明：选中后是否跨回合 / 跨 hook send 会话级粘滞。 */
@@ -41,24 +32,15 @@ export interface ExecutionModeStickiness {
   sessionSticky: boolean
 }
 
-/** 完成语义：`manual-exit`=用户手动退出；`auto-exit-on-approval`=批准后下轮自动退出（方案模式）。 */
-export type ExecutionModeCompletionKind = 'manual-exit' | 'auto-exit-on-approval'
-
-export interface ExecutionModeCompletion {
-  kind: ExecutionModeCompletionKind
-}
-
 /**
  * 执行模式描述符——一个模式的声明式单源。
  *
- * 消费点（提示词构建 / 工具门控 / 粘性 / 完成）经注册表解析本描述符，不再各自硬编码
- * `if (planningMode)` / `if (proposalMode)` 与散装特性 id 判定。
+ * 消费点（提示词构建 / 粘性）经注册表解析本描述符，不再各自硬编码 `if (planningMode)`
+ * 与散装特性 id 判定。
  */
 export interface ExecutionModeDescriptor {
   id: ExecutionModeId
   label: string
   prompt: ExecutionModePromptProjection
-  toolProjection: ExecutionModeToolProjection
   stickiness: ExecutionModeStickiness
-  completion: ExecutionModeCompletion
 }

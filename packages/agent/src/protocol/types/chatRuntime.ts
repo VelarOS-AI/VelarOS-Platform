@@ -5,6 +5,7 @@ import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'
 
 import type { ContextUsageEstimate } from '../../agent/context/contextUsage'
 
+import type { ConfirmationRequestDetail } from './agent'
 import type { TeamExecutionPhase } from './team'
 import type { UserActionCard } from './tool'
 
@@ -237,8 +238,11 @@ export interface StreamErrorPayload {
 export interface StreamAwaitingConfirmationPayload {
   kind: 'awaiting-confirmation'
   executionId: string
+  /** 兜底散文：模型自由撰写的确认文案，或结构化 detail 的降级表述。 */
   confirmationMessage: string
   userActionCards?: UserActionCard[]
+  /** 结构化信封（生产者声明）；缺席时渲染层按 `confirmationMessage` 兜底。 */
+  confirmationDetail?: ConfirmationRequestDetail
 }
 
 export interface StreamAwaitingInputPayload {
@@ -404,13 +408,15 @@ export const ChatRuntimeEvents = {
   awaitingConfirmation(
     executionId: string,
     confirmationMessage: string,
-    userActionCards?: UserActionCard[]
+    userActionCards?: UserActionCard[],
+    confirmationDetail?: ConfirmationRequestDetail
   ): StreamAwaitingConfirmationPayload {
     return {
       kind: 'awaiting-confirmation',
       executionId,
       confirmationMessage,
       userActionCards,
+      confirmationDetail,
     }
   },
 

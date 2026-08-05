@@ -7,7 +7,6 @@ import type { SoloStreamLoop } from '../SoloLoop'
 
 import type { AgentSurfaceProfileProvider } from './AgentSurfaceProfile'
 import type {
-  RunnerChatStateStore,
   RunnerCodingSessionPolicyBundle,
   RunnerConfigService,
   RunnerExecutionEnvironmentPort,
@@ -36,7 +35,6 @@ export interface AgentRunnerInfrastructure {
   executionLimitOverrides?: AgentExecutionLimitOverrides
   configService: RunnerConfigService
   toolRegistry: RunnerToolRegistry
-  chatStateStore: RunnerChatStateStore
   codingSessionPolicy: RunnerCodingSessionPolicyBundle
   surfaceProfileProvider: AgentSurfaceProfileProvider
 }

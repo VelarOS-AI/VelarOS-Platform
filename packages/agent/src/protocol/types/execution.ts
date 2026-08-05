@@ -1,3 +1,4 @@
+import type { ConfirmationRequestDetail } from './agent'
 import type {
   AgentDelegationContract,
   AgentRoleExpectedOutputKind,
@@ -33,6 +34,8 @@ export interface ExecutionConfirmationRequest {
   message: string
   askedAt: number
   userActionCards?: UserActionCard[]
+  /** 结构化信封；缺席时消费方按 `message` 散文兜底。 */
+  detail?: ConfirmationRequestDetail
 }
 
 export interface ExecutionProvideInputRequest {
