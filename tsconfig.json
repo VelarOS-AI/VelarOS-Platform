@@ -123,6 +123,15 @@
       "@velaros-ai/ui/*": [
         "./packages/ui/src/*"
       ],
+      "@velaros-ai/remote-host": [
+        "./packages/remote-host/src/index.ts"
+      ],
+      "@velaros-ai/remote-host/client": [
+        "./packages/remote-host/src/client/index.ts"
+      ],
+      "@velaros-ai/remote-host/node": [
+        "./packages/remote-host/src/node/index.ts"
+      ],
       "@velaros-ai/project": [
         "./packages/project/src/index.ts"
       ],

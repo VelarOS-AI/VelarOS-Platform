@@ -1,0 +1,48 @@
+{
+  "name": "@velaros-ai/remote-host",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Remote capability node transport: headless node listener plus the client-side isolation adapter for `isolation: 'remote'` modules.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/kernel/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/remote-host"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/kernel": "workspace:*",
+    "ws": "^8.18.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.7.0"
+  }
+}

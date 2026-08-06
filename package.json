@@ -51,7 +51,8 @@
         "html-artifacts"
       ],
       "host": [
-        "serve-host"
+        "remote-host",
+   "serve-host"
       ],
       "surface": [
         "surface-protocol"
