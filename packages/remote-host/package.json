@@ -26,6 +26,18 @@
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "import": "./dist/mcp/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./composition": {
+      "types": "./dist/composition/index.d.ts",
+      "import": "./dist/composition/index.js"
+    },
+    "./composition/mod": {
+      "types": "./dist/composition/mod.d.ts",
+      "import": "./dist/composition/mod.js"
     }
   },
   "files": [
@@ -43,7 +55,8 @@
     "@velaros-ai/kernel": "workspace:*",
     "ws": "^8.18.3",
     "zod": "^4.3.6",
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@velaros-ai/agent": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

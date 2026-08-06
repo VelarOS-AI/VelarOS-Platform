@@ -299,6 +299,7 @@
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
+        "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "ws": "^8.18.3",
