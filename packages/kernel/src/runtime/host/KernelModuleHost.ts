@@ -29,6 +29,7 @@ import {
 } from './errors'
 import { KernelEventHub } from './event-bus'
 import {
+  type ExternalKernelModuleIsolation,
   type KernelModuleIsolationAdapter,
 } from './isolation'
 import {
@@ -110,7 +111,7 @@ export class KernelModuleHost {
   private readonly permissionBroker: KernelPermissionBroker
   private readonly stateBackend: KernelStateBackend
   private readonly isolationAdapters = new Map<
-    'worker' | 'sidecar',
+    ExternalKernelModuleIsolation,
     KernelModuleIsolationAdapter
   >()
   private activationOrder: readonly string[] = []

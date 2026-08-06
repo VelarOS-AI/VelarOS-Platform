@@ -10,7 +10,31 @@ import type { KernelStateStore } from './state.js'
 
 export type Awaitable<T> = T | Promise<T>
 
-export type KernelModuleIsolation = 'in-process' | 'worker' | 'sidecar'
+/**
+ * 部署决策的唯一表达位(宪章 §15 原则一 / Ring 0 第 9 项)。
+ *
+ * 默认 `in-process`,装配者选,Kernel 不预设。`remote` 表示 provider 住在另一台机器上,
+ * 由宿主注入的 isolation adapter 负责传输与生命周期映射;descriptor 之外零改动。
+ * `sidecar` 是 HostBridge 时代的存量值(§15.2 已判决自进程退役),新模块不要再声明。
+ */
+export type KernelModuleIsolation =
+  | 'in-process'
+  | 'worker'
+  | 'remote'
+  | 'sidecar'
+
+/**
+ * 合法 isolation 值的运行期单源。
+ *
+ * descriptor 校验必须读这份而不是自己抄一遍字面量数组——抄出来的那份不会跟着类型走,
+ * 加了新值就会出现「类型允许、校验拒绝」的死角(`remote` 落地时就踩了这个)。
+ */
+export const KernelModuleIsolationValues: readonly KernelModuleIsolation[] = [
+  'in-process',
+  'worker',
+  'remote',
+  'sidecar',
+]
 
 /**
  * Static declaration used to resolve a module graph before module code activates.

@@ -494,7 +494,8 @@ const VelarosModModuleSectionSchema = z.strictObject({
     tolerantCapabilityRef(VelarosModCapabilityRequirementSchema)
   ).default([]),
   permissions: tolerantArray(TrimmedIdSchema).default([]),
-  isolation: z.enum(['in-process', 'worker', 'sidecar']).default('in-process'),
+  isolation: z.enum(['in-process', 'worker', 'remote', 'sidecar'])
+    .default('in-process'),
   entry: TrimmedIdSchema.optional(),
   exportName: TrimmedIdSchema.optional(),
 })

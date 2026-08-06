@@ -6,8 +6,13 @@ import { z } from 'zod'
 
 import { KernelProtocolVersion } from './version'
 
-/** 能力模块的进程隔离形态。 */
-export const CapabilityIsolationSchema = z.enum(['in-process', 'worker', 'sidecar'])
+/** 能力模块的进程隔离形态(宪章 Ring 0 第 9 项:部署决策的唯一表达位)。 */
+export const CapabilityIsolationSchema = z.enum([
+  'in-process',
+  'worker',
+  'remote',
+  'sidecar',
+])
 export type CapabilityIsolation = z.infer<typeof CapabilityIsolationSchema>
 
 /** 模块提供的稳定能力令牌；调用方依赖令牌，不依赖实现包。 */

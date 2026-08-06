@@ -34,6 +34,30 @@ import {
   ModsSetEnabledRequestSchema,
   ModsSetEnabledResponseSchema,
 } from './mods'
+import {
+  RemoteNodeAuthenticateSchema,
+  RemoteNodeCancelSchema,
+  RemoteNodeCapabilityDescriptorSchema,
+  RemoteNodeChallengeSchema,
+  RemoteNodeClientFrameSchema,
+  RemoteNodeErrorSchema,
+  RemoteNodeFatalSchema,
+  RemoteNodeHelloSchema,
+  RemoteNodeIdentitySchema,
+  RemoteNodeInvokeSchema,
+  RemoteNodeManifestChangedSchema,
+  RemoteNodeManifestSchema,
+  RemoteNodeOperationDescriptorSchema,
+  RemoteNodePairedSchema,
+  RemoteNodePairSchema,
+  RemoteNodePingSchema,
+  RemoteNodePongSchema,
+  RemoteNodeProgressSchema,
+  RemoteNodeReadySchema,
+  RemoteNodeResultSchema,
+  RemoteNodeServerFrameSchema,
+  RemoteNodeToolDescriptorSchema,
+} from './remote-node'
 
 // 握手与能力协商域的 schema 分片。
 const handshakeWireSchemas = {
@@ -78,6 +102,32 @@ const modsWireSchemas = {
   ModsInstallFromDirectoryResponse: ModsInstallFromDirectoryResponseSchema,
 }
 
+// 远程能力节点 transport 绑定域(宪章 §15 原则一 isolation:'remote')。
+const remoteNodeWireSchemas = {
+  RemoteNodeIdentity: RemoteNodeIdentitySchema,
+  RemoteNodeOperationDescriptor: RemoteNodeOperationDescriptorSchema,
+  RemoteNodeCapabilityDescriptor: RemoteNodeCapabilityDescriptorSchema,
+  RemoteNodeToolDescriptor: RemoteNodeToolDescriptorSchema,
+  RemoteNodeManifest: RemoteNodeManifestSchema,
+  RemoteNodeError: RemoteNodeErrorSchema,
+  RemoteNodeHello: RemoteNodeHelloSchema,
+  RemoteNodePair: RemoteNodePairSchema,
+  RemoteNodeAuthenticate: RemoteNodeAuthenticateSchema,
+  RemoteNodeInvoke: RemoteNodeInvokeSchema,
+  RemoteNodeCancel: RemoteNodeCancelSchema,
+  RemoteNodePing: RemoteNodePingSchema,
+  RemoteNodeClientFrame: RemoteNodeClientFrameSchema,
+  RemoteNodeChallenge: RemoteNodeChallengeSchema,
+  RemoteNodePaired: RemoteNodePairedSchema,
+  RemoteNodeReady: RemoteNodeReadySchema,
+  RemoteNodeManifestChanged: RemoteNodeManifestChangedSchema,
+  RemoteNodeResult: RemoteNodeResultSchema,
+  RemoteNodeProgress: RemoteNodeProgressSchema,
+  RemoteNodePong: RemoteNodePongSchema,
+  RemoteNodeFatal: RemoteNodeFatalSchema,
+  RemoteNodeServerFrame: RemoteNodeServerFrameSchema,
+}
+
 /**
  * 全部协议 wire schema 的命名注册表，按域分片组装（§12.8 对象按域分片，不按时间生长）。
  *
@@ -88,4 +138,5 @@ export const KernelProtocolWireSchemas = {
   ...capabilityWireSchemas,
   ...identityWireSchemas,
   ...modsWireSchemas,
+  ...remoteNodeWireSchemas,
 }

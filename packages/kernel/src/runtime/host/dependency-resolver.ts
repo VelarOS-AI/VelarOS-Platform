@@ -1,10 +1,11 @@
 import { isBlank, isEmpty,isNotUndefined, isUndefined } from '@velaros-ai/core';
 
-import type {
-  CapabilityRequirement,
-  CapabilityToken,
-  KernelModuleDefinition,
-  KernelModuleManifest,
+import {
+  type CapabilityRequirement,
+  type CapabilityToken,
+  type KernelModuleDefinition,
+  KernelModuleIsolationValues,
+  type KernelModuleManifest,
 } from '../../contracts/abi'
 
 import { KernelHostError } from './errors'
@@ -104,7 +105,7 @@ export function validateManifest(
       { moduleId: manifest.id },
     )
   }
-  if (!['in-process', 'worker', 'sidecar'].includes(manifest.isolation)) {
+  if (!KernelModuleIsolationValues.includes(manifest.isolation)) {
     throw new KernelHostError(
       'INVALID_MANIFEST',
       `Module "${manifest.id}" has invalid isolation "${manifest.isolation}"`,
