@@ -586,6 +586,13 @@ describe('Velar Host extension journey without Desktop', () => {
         computer: { observe: true, control: true },
       },
       computer: { resourceRoots: [] },
+      // 远程节点保持关闭：本用例验证的是网页插件这一条链路，不该顺带把能力面开到本机之外。
+      remoteNode: {
+        enabled: false,
+        bindHost: '127.0.0.1',
+        portStart: 43_180,
+        portEnd: 43_190,
+      },
       confirmations: [],
     }
     const rejected = await controlFetch(runtime, '/v1/config', {

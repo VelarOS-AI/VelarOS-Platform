@@ -48,6 +48,10 @@ import {
   type VelarHostExtensionBridgeStatus,
 } from './extension-bridge'
 import { VelarHostPermissionBroker } from './permission-policy'
+import {
+  VelarHostRemoteNode,
+  type VelarHostRemoteNodeStatus,
+} from './remote-node'
 import { VelarHostToolGateway } from './tool-gateway'
 
 export const VelarHostVersion = '0.2.0'
@@ -70,7 +74,7 @@ export interface StartVelarHostOptions {
 }
 
 export interface VelarHostPublicStatus {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 2
   readonly version: string
   readonly pid: number
   readonly startedAt: number
@@ -84,6 +88,8 @@ export interface VelarHostPublicStatus {
   }
   readonly extension: VelarHostExtensionBridgeStatus
   readonly control: VelarHostControlServerStatus
+  /** 公共状态文件里只有远程节点的可观测事实；配对码与密钥材料永不落入本文件。 */
+  readonly remoteNode: VelarHostRemoteNodeStatus
 }
 
 export interface VelarHostRuntime {
@@ -94,6 +100,7 @@ export interface VelarHostRuntime {
   readonly controlUrl: string
   readonly status: VelarHostPublicStatus
   readonly extensionBridge: VelarHostExtensionBridge
+  readonly remoteNode: VelarHostRemoteNode
   stop(): Promise<void>
 }
 
@@ -127,6 +134,7 @@ export async function startVelarHost(
   let kernelClient: KernelClient | undefined
   let toolGateway: VelarHostToolGateway | undefined
   let extensionBridge: VelarHostExtensionBridge | undefined
+  let remoteNode: VelarHostRemoteNode | undefined
   let controlServer: VelarHostControlServer | undefined
   let status: VelarHostPublicStatus | undefined
   try {
@@ -188,11 +196,22 @@ export async function startVelarHost(
     const extension = await extensionBridge.start()
     const descriptor = booted.daemon.getDescriptor()
     const handshake = booted.service.handshake()
+    remoteNode = new VelarHostRemoteNode({
+      config,
+      toolGateway,
+      credentialPath: paths.remoteNodeCredentialPath,
+      auditRoot: paths.auditRoot,
+      dataRoot: paths.dataRoot,
+      hostVersion: VelarHostVersion,
+      modules: handshake.modules,
+    })
+    const remoteNodeStatus = await remoteNode.start()
     controlServer = new VelarHostControlServer({
       tokenPath: paths.controlTokenPath,
       config,
       computer,
       extensionBridge,
+      remoteNode,
       installComputer: options.computerInstaller
         ?? (() => installVelarHostComputer({ dataRoot: paths.dataRoot })),
       getHostStatus: () => {
@@ -204,7 +223,7 @@ export async function startVelarHost(
     })
     const control = await controlServer.start()
     status = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       version: VelarHostVersion,
       pid: process.pid,
       startedAt,
@@ -218,16 +237,23 @@ export async function startVelarHost(
       },
       extension,
       control,
+      remoteNode: remoteNodeStatus,
     }
     await writePublicStatus(paths.statusPath, status)
     let statusWrite = Promise.resolve()
-    const unsubscribeStatus = extensionBridge.subscribeStatus((extensionStatus) => {
+    const applyStatus = (patch: Partial<VelarHostPublicStatus>): void => {
       const previous = status
       if (!isPresent(previous)) return
-      const next = { ...previous, extension: extensionStatus }
+      const next = { ...previous, ...patch }
       status = next
       statusWrite = statusWrite.then(() => writePublicStatus(paths.statusPath, next))
-    })
+    }
+    const unsubscribeExtensionStatus = extensionBridge.subscribeStatus(
+      (extensionStatus) => applyStatus({ extension: extensionStatus }),
+    )
+    const unsubscribeRemoteNodeStatus = remoteNode.subscribeStatus(
+      (nodeStatus) => applyStatus({ remoteNode: nodeStatus }),
+    )
 
     let stopped = false
     const runtime: VelarHostRuntime = {
@@ -238,13 +264,16 @@ export async function startVelarHost(
         return status!
       },
       extensionBridge,
+      remoteNode,
       controlServer,
       controlUrl: controlServer.getControlUrl(),
       stop: async () => {
         if (stopped) return
         stopped = true
-        unsubscribeStatus()
+        unsubscribeExtensionStatus()
+        unsubscribeRemoteNodeStatus()
         await settleCleanup('控制服务', () => controlServer?.stop())
+        await settleCleanup('远程节点', () => remoteNode?.stop())
         await settleCleanup('插件桥', () => extensionBridge?.stop())
         await settleCleanup('工具网关', () => toolGateway?.dispose())
         await settleCleanup('Kernel 客户端', () => kernelClient?.dispose())
@@ -258,6 +287,7 @@ export async function startVelarHost(
     return runtime
   } catch (error) {
     await settleCleanup('启动失败后的控制服务', () => controlServer?.stop())
+    await settleCleanup('启动失败后的远程节点', () => remoteNode?.stop())
     await settleCleanup('启动失败后的插件桥', () => extensionBridge?.stop())
     await settleCleanup('启动失败后的工具网关', () => toolGateway?.dispose())
     await settleCleanup('启动失败后的 Kernel 客户端', () => kernelClient?.dispose())

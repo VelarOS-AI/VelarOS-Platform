@@ -26,6 +26,10 @@ export const VelarHostControlHtml: string = `<!doctype html>
         <span>项目</span>
         <div><strong id="project-value">—</strong><small id="project-path">—</small></div>
       </div>
+      <div class="summary-row">
+        <span>远程</span>
+        <div><strong id="remote-node-summary">—</strong><small id="remote-node-address">—</small></div>
+      </div>
     </section>
 
     <section class="panel connection-panel">
@@ -84,6 +88,38 @@ export const VelarHostControlHtml: string = `<!doctype html>
       </div>
     </section>
 
+    <section id="remote-panel" class="panel connection-panel remote-panel">
+      <div class="panel-title">
+        <h2>远程节点</h2>
+        <span id="remote-node-state-chip" class="status-chip neutral">未启用</span>
+      </div>
+      <div class="permission-groups">
+        <div class="toggles">
+          <label><span><strong>允许远程调用</strong><small>把本机能力面开放给一台已配对的 VelarOS 设备</small></span><input id="remote-node-enabled" type="checkbox"></label>
+        </div>
+      </div>
+      <label class="roots">
+        <span>监听地址（127.0.0.1 只对本机可见；改成其他地址会让配对入口出现在局域网上）</span>
+        <input id="remote-node-bind-host" type="text" spellcheck="false" autocomplete="off">
+      </label>
+      <div class="pair-card">
+        <div class="pair-main">
+          <div class="pair-code-block">
+            <span>配对码</span>
+            <div class="code-row">
+              <strong id="remote-node-code">—</strong>
+              <button id="copy-remote-node-code" type="button">复制</button>
+            </div>
+          </div>
+          <p id="remote-node-value">尚未启用远程节点。</p>
+        </div>
+        <div class="button-row">
+          <button id="pair-remote-node" type="button">配对</button>
+          <button id="revoke-remote-node" type="button" class="danger">撤销</button>
+        </div>
+      </div>
+    </section>
+
     <section class="panel computer-panel">
         <div class="panel-title">
           <h2>电脑控制</h2>
@@ -110,6 +146,7 @@ export const VelarHostControlHtml: string = `<!doctype html>
           <div><dt>Bridge</dt><dd id="bridge-value">—</dd></div>
           <div><dt>活动会话</dt><dd id="surface-value">0</dd></div>
           <div><dt>最近活动</dt><dd id="activity-value">尚无</dd></div>
+          <div><dt>远程客户端</dt><dd id="remote-node-client">尚未配对</dd></div>
           <div><dt>数据目录</dt><dd id="data-root-value">—</dd></div>
           <div><dt>配置版本</dt><dd id="revision-value">—</dd></div>
           <div><dt>控制地址</dt><dd id="control-value">—</dd></div>
@@ -216,7 +253,8 @@ dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; 
 .diagnostics-panel > summary { padding: 15px 16px; color: var(--muted); cursor: pointer; font-weight: 650; list-style-position: inside; }
 .diagnostics-content { padding: 0 16px 16px; }
 .roots { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; }
-textarea { width: 100%; margin-top: 8px; padding: 10px 11px; resize: vertical; color: inherit; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 10px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.remote-panel .roots { margin-bottom: 12px; }
+textarea, input[type=text] { width: 100%; margin-top: 8px; padding: 10px 11px; resize: vertical; color: inherit; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 10px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 button { min-height: 36px; padding: 0 13px; color: inherit; background: transparent; border: 1px solid #cdd5df; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 button:hover:not(:disabled) { border-color: #8b9bad; background: color-mix(in srgb, var(--text) 3%, transparent); }
@@ -262,6 +300,7 @@ export const VelarHostControlJs: string = `
   let currentConfig = null
   let dirty = false
   let refreshErrorVisible = false
+  let remoteNodePairing = null
 
   async function api(path, options = {}) {
     if (!token) throw new Error('缺少控制令牌。请在终端运行 velaros serve control，并使用输出的完整地址。')
@@ -304,6 +343,12 @@ export const VelarHostControlJs: string = `
     return label + state + ' · ' + new Date(activity.at).toLocaleTimeString()
   }
 
+  // 与 Host 侧 requiredConfirmations 的判据同源：只认回环本身，0.0.0.0 与具体网卡地址都算对外。
+  function isLoopbackHost(bindHost) {
+    const host = String(bindHost || '').trim().toLowerCase()
+    return host === 'localhost' || host === '::1' || host.startsWith('127.')
+  }
+
   function markDirty() {
     dirty = true
     byId('save-config').disabled = false
@@ -331,6 +376,46 @@ export const VelarHostControlJs: string = `
     accessibility.classList.toggle('allowed', Boolean(permissions.accessibility))
     screenRecording.classList.toggle('allowed', Boolean(permissions.screenRecording))
     byId('permission-list').hidden = false
+  }
+
+  function renderRemoteNode(remoteNode, config) {
+    const chip = byId('remote-node-state-chip')
+    const address = remoteNode.address || '未监听'
+    byId('remote-panel').dataset.connected = String(remoteNode.connected)
+    chip.textContent = !remoteNode.enabled
+      ? '未启用'
+      : remoteNode.connected ? '设备在线' : remoteNode.paired ? '设备已保存' : '等待配对'
+    chip.className = !remoteNode.enabled
+      ? 'status-chip neutral'
+      : remoteNode.connected ? 'status-chip' : 'status-chip warning'
+    byId('remote-node-summary').textContent = remoteNode.enabled
+      ? (remoteNode.connected ? '已连接' : remoteNode.paired ? '已配对' : '等待配对')
+      : '未启用'
+    byId('remote-node-address').textContent = remoteNode.enabled ? address : '本机能力面未对外开放'
+    byId('remote-node-address').title = address
+    byId('remote-node-client').textContent = remoteNode.paired
+      ? remoteNode.paired.clientName + ' · ' + remoteNode.paired.clientId
+      : '尚未配对'
+    byId('pair-remote-node').disabled = !remoteNode.enabled
+    byId('revoke-remote-node').disabled = !remoteNode.enabled || !remoteNode.paired
+    // 配对码只活在本页内存里：它来自配对应答，既不在状态轮询里，也不落任何文件。
+    const pairingActive = Boolean(remoteNodePairing) && remoteNodePairing.expiresAt > Date.now()
+    if (!pairingActive) remoteNodePairing = null
+    byId('remote-node-code').textContent = pairingActive ? remoteNodePairing.code : '—'
+    byId('copy-remote-node-code').disabled = !pairingActive
+    byId('remote-node-value').textContent = !remoteNode.enabled
+      ? '尚未启用远程节点。开启后本机能力面可被一台已配对的设备调用。'
+      : pairingActive
+        ? '有效期至 ' + new Date(remoteNodePairing.expiresAt).toLocaleTimeString() + '，在远程设备上输入。'
+        : remoteNode.connected
+          ? '远程设备已连接，能力面随权限开关实时收窄。'
+          : remoteNode.paired
+            ? '设备已配对，等待它连接到 ' + address + '。'
+            : '点击「配对」生成一次性配对码，并在远程设备上输入。'
+    if (!dirty) {
+      byId('remote-node-enabled').checked = config.remoteNode.enabled
+      byId('remote-node-bind-host').value = config.remoteNode.bindHost
+    }
   }
 
   function render(payload) {
@@ -384,6 +469,7 @@ export const VelarHostControlJs: string = `
       byId('resource-roots').value = currentConfig.computer.resourceRoots.join('\\n')
       byId('save-config').disabled = true
     }
+    renderRemoteNode(host.remoteNode, currentConfig)
     renderComputer(payload.computerAvailability)
   }
 
@@ -402,8 +488,8 @@ export const VelarHostControlJs: string = `
     }
   }
 
-  async function copyPairingCode() {
-    const value = byId('pairing-code').textContent.trim()
+  async function copyPairingCode(elementId) {
+    const value = byId(elementId).textContent.trim()
     if (!/^\\d{6}$/u.test(value)) return
     try {
       await navigator.clipboard.writeText(value)
@@ -450,6 +536,8 @@ export const VelarHostControlJs: string = `
     markDirty()
   })
   byId('resource-roots').addEventListener('input', markDirty)
+  byId('remote-node-enabled').addEventListener('change', markDirty)
+  byId('remote-node-bind-host').addEventListener('input', markDirty)
 
   byId('save-config').addEventListener('click', async () => {
     const button = byId('save-config')
@@ -476,6 +564,12 @@ export const VelarHostControlJs: string = `
             .map((value) => value.trim())
             .filter(Boolean),
         },
+        remoteNode: {
+          enabled: byId('remote-node-enabled').checked,
+          bindHost: byId('remote-node-bind-host').value.trim() || currentConfig.remoteNode.bindHost,
+          portStart: currentConfig.remoteNode.portStart,
+          portEnd: currentConfig.remoteNode.portEnd,
+        },
       }
       const confirmations = []
       if (!currentConfig.capabilities.project.write && next.capabilities.project.write && confirm('允许网页 Agent 修改当前项目？')) confirmations.push('project-write')
@@ -486,6 +580,8 @@ export const VelarHostControlJs: string = `
       if (!currentConfig.capabilities.system.execute && next.capabilities.system.execute && confirm('允许网页 Agent 运行本机命令并打开文件或应用？')) confirmations.push('system-execute')
       if (!currentConfig.capabilities.computer.observe && next.capabilities.computer.observe && confirm('允许网页 Agent 截取本机屏幕？')) confirmations.push('computer-observe')
       if (!currentConfig.capabilities.computer.control && next.capabilities.computer.control && confirm('允许网页 Agent 控制本机鼠标和键盘？')) confirmations.push('computer-control')
+      if (!currentConfig.remoteNode.enabled && next.remoteNode.enabled && confirm('允许一台已配对的远程 VelarOS 设备调用本机能力？')) confirmations.push('remote-node-enable')
+      if (!isLoopbackHost(next.remoteNode.bindHost) && next.remoteNode.bindHost !== currentConfig.remoteNode.bindHost && confirm('把远程节点绑定到 ' + next.remoteNode.bindHost + '？配对入口会出现在局域网上。')) confirmations.push('remote-node-expose')
       const payload = await api('/v1/config', { method: 'PUT', body: JSON.stringify({ ...next, confirmations }) })
       dirty = false
       render(payload)
@@ -496,7 +592,31 @@ export const VelarHostControlJs: string = `
     }
   })
 
-  byId('copy-pairing').addEventListener('click', () => void copyPairingCode())
+  byId('copy-pairing').addEventListener('click', () => void copyPairingCode('pairing-code'))
+  byId('copy-remote-node-code').addEventListener('click', () => void copyPairingCode('remote-node-code'))
+  byId('pair-remote-node').addEventListener('click', async () => {
+    const button = byId('pair-remote-node')
+    button.disabled = true
+    try {
+      const payload = await api('/v1/remote-node/pairing', { method: 'POST' })
+      remoteNodePairing = payload.pairing
+      render(payload)
+      setNotice('已生成远程节点配对码，请在远程设备上输入。')
+    } catch (error) {
+      setNotice(error.message || String(error), true)
+      button.disabled = false
+    }
+  })
+  byId('revoke-remote-node').addEventListener('click', async () => {
+    if (!confirm('撤销已配对的远程设备？该设备需要重新配对才能再次调用本机能力。')) return
+    try {
+      remoteNodePairing = null
+      render(await api('/v1/remote-node', { method: 'DELETE' }))
+      setNotice('远程设备凭据已清除。')
+    } catch (error) {
+      setNotice(error.message || String(error), true)
+    }
+  })
   byId('new-pairing').addEventListener('click', async () => {
     try {
       render(await api('/v1/extension/pairing', { method: 'POST' }))

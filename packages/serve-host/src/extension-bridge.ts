@@ -89,6 +89,8 @@ interface SurfaceRuntime {
   binding: ProviderSurfaceBinding
   contractId: string
   activeToolCallId: Nullable<string>
+  /** 在途调用的取消把手；surface 释放、页面断链或 Host 停机时拉掉。 */
+  activeToolAbort: Nullable<AbortController>
 }
 
 interface DeviceRuntime {
@@ -250,6 +252,7 @@ export class VelarHostExtensionBridge {
       type: 'disconnected',
     })
     device?.socket?.close(4000, 'Disconnected by Velar Host control')
+    this.abortDeviceTools(toNullable(device), 'Extension device was disconnected')
     device?.surfaces.clear()
     this.device = null
     await unlink(this.options.credentialPath).catch((error) => {
@@ -288,6 +291,7 @@ export class VelarHostExtensionBridge {
     if (device?.socket?.readyState === WebSocket.OPEN) {
       device.socket.close(1001, 'Velar Host stopped')
     }
+    this.abortDeviceTools(toNullable(device), 'Velar Host stopped')
     device?.surfaces.clear()
     for (const client of this.webSocketServer?.clients ?? []) client.terminate()
     for (const socket of this.networkSockets) socket.destroy()
@@ -303,6 +307,14 @@ export class VelarHostExtensionBridge {
     this.httpServer = undefined
     this.endpoint = undefined
     this.statusListeners.clear()
+  }
+
+  /** 取消该设备名下全部在途工具调用；best-effort，abort 之后各 surface 自己收尾。 */
+  private abortDeviceTools(device: Nullable<DeviceRuntime>, reason: string): void {
+    if (isNull(device)) return
+    for (const surface of device.surfaces.values()) {
+      surface.activeToolAbort?.abort(new Error(reason))
+    }
   }
 
   private isPairingAvailable(): boolean {
@@ -402,6 +414,8 @@ export class VelarHostExtensionBridge {
       if (attached?.socket === socket) {
         attached.socket = null
         attached.public.lastSeenAt = this.now()
+        // 页面没了，结果没有去处：在途工具调用必须当场取消，否则本机会继续跑一个无人认领的任务。
+        this.abortDeviceTools(attached, 'Extension page disconnected')
         this.emitStatus()
       }
     })
@@ -608,7 +622,12 @@ export class VelarHostExtensionBridge {
     }
     if (type === 'provider_surface_release') {
       const surfaceId = optionalString(event.surfaceId)
-      if (isNotNull(surfaceId)) device.surfaces.delete(surfaceId)
+      if (isNotNull(surfaceId)) {
+        device.surfaces.get(surfaceId)?.activeToolAbort?.abort(
+          new Error('Provider surface was released'),
+        )
+        device.surfaces.delete(surfaceId)
+      }
       this.emitStatus()
       return
     }
@@ -675,6 +694,7 @@ export class VelarHostExtensionBridge {
       binding,
       contractId,
       activeToolCallId: null,
+      activeToolAbort: toNullable(previous?.activeToolAbort),
     })
     this.emitStatus()
     this.enqueue(device, 'provider_surface_contract', {
@@ -723,11 +743,18 @@ export class VelarHostExtensionBridge {
         '同一官网会话一次只能执行一个 Velar Host 工具。',
       )
     } else {
+      const abort = new AbortController()
       surface.activeToolCallId = call.toolCallId
+      surface.activeToolAbort = abort
       try {
-        result = await this.options.toolGateway.execute(call, surface.workspaceSpace)
+        result = await this.options.toolGateway.execute(
+          call,
+          surface.workspaceSpace,
+          abort.signal,
+        )
       } finally {
         surface.activeToolCallId = null
+        surface.activeToolAbort = null
       }
     }
     this.enqueue(device, 'provider_surface_tool_result', {

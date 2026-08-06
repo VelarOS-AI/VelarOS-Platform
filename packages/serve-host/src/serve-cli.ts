@@ -172,7 +172,11 @@ export async function runServeCli(
           ? `${JSON.stringify(result)}\n`
           : !isNotNull(status)
             ? 'Velar Host is not running.\n'
-            : `Velar Host ${result.running ? 'is running' : 'has a stale status file'} (pid ${status.pid}).\n`,
+            : [
+                `Velar Host ${result.running ? 'is running' : 'has a stale status file'} (pid ${status.pid}).`,
+                describeRemoteNode(status.remoteNode),
+                '',
+              ].join('\n'),
         exitCode: result.running ? 0 : 1,
         envelope: result,
       }
@@ -242,6 +246,7 @@ export async function runServeCli(
             `Project: ${result.projectRoot}`,
             `Extension bridge: ${result.extension.endpoint}`,
             `Pairing code: ${result.extension.pairingCode ?? 'resume existing device'}`,
+            describeRemoteNode(result.remoteNode),
             `Control: ${runtime.controlUrl}`,
             `Data root: ${result.dataRoot}`,
             '',
@@ -282,13 +287,29 @@ async function readHostStatus(dataRoot?: string): Promise<Nullable<VelarHostPubl
   }
 }
 
+/**
+ * 远程节点一行摘要。
+ *
+ * 只在启用时打印监听地址——关闭态打地址会让人以为它在监听。配对码不在公共状态里，故这里
+ * 也永远打不出来，要配对得走 `velaros serve control`。
+ */
+function describeRemoteNode(remoteNode: VelarHostPublicStatus['remoteNode']): string {
+  if (!remoteNode.enabled) return 'Remote node: disabled'
+  const address = remoteNode.address ?? 'starting'
+  const pairing = isNotNull(remoteNode.paired)
+    ? `${remoteNode.paired.clientName}${remoteNode.connected ? ' (connected)' : ''}`
+    : 'unpaired'
+  return `Remote node: ${address} · ${pairing}`
+}
+
 function isVelarHostPublicStatus(value: unknown): value is VelarHostPublicStatus {
   if (!isPlainObject(value)) return false
   const control = Reflect.get(value, 'control')
-  return Reflect.get(value, 'schemaVersion') === 1
+  return Reflect.get(value, 'schemaVersion') === 2
     && Number.isInteger(Reflect.get(value, 'pid'))
     && isPlainObject(control)
     && isString(Reflect.get(control, 'endpoint'))
+    && isPlainObject(Reflect.get(value, 'remoteNode'))
 }
 
 function isProcessAlive(pid: number): boolean {

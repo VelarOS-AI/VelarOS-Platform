@@ -12,6 +12,10 @@ export interface VelarHostPaths {
   readonly credentialPath: string
   readonly controlTokenPath: string
   readonly statusPath: string
+  /** 远程节点的已配对客户端公钥；与插件设备凭据分目录，互不影响撤销。 */
+  readonly remoteNodeCredentialPath: string
+  /** 跨机调用的审计目录；只落元数据，不落任何调用载荷。 */
+  readonly auditRoot: string
 }
 
 export function defaultVelarHostDataRoot(): string {
@@ -45,5 +49,7 @@ export function createVelarHostPaths(dataRoot?: string): VelarHostPaths {
     credentialPath: join(root, 'extension', 'device.json'),
     controlTokenPath: join(root, 'control', 'token'),
     statusPath: join(root, 'host.json'),
+    remoteNodeCredentialPath: join(root, 'remoteNode', 'client.json'),
+    auditRoot: join(root, 'audit'),
   }
 }

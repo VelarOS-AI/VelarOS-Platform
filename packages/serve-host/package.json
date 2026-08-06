@@ -37,6 +37,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/office": "workspace:*",
+    "@velaros-ai/remote-host": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/system": "workspace:*",
     "@velaros-ai/project": "workspace:*",

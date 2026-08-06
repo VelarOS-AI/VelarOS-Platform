@@ -26,6 +26,7 @@ import {
   VelarHostControlJs,
 } from './control-page'
 import type { VelarHostExtensionBridge } from './extension-bridge'
+import type { VelarHostRemoteNode } from './remote-node'
 
 const ControlHost = '127.0.0.1'
 const DefaultControlPortStart = 43_160
@@ -37,6 +38,7 @@ export interface VelarHostControlServerOptions {
   readonly config: VelarHostConfigStore
   readonly computer: ComputerRuntimePort
   readonly extensionBridge: VelarHostExtensionBridge
+  readonly remoteNode: VelarHostRemoteNode
   readonly installComputer?: () => Promise<InstallVelarHostComputerResult>
   readonly getHostStatus: () => unknown
   readonly portStart?: number
@@ -170,6 +172,25 @@ export class VelarHostControlServer {
     if (request.method === 'DELETE' && url.pathname === '/v1/extension') {
       await this.options.extensionBridge.disconnectDevice()
       this.options.extensionBridge.startPairing()
+      this.json(response, 200, this.statusPayload())
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/remote-node/pairing') {
+      if (!this.options.remoteNode.isEnabled()) {
+        this.json(response, 409, { error: 'Remote node access is disabled' })
+        return
+      }
+      // 配对码只在这一条已鉴权的应答里出现；它不进 statusPayload，故也不会流向 host.json。
+      const pairing = this.options.remoteNode.startPairing()
+      this.json(response, 200, { ...this.statusPayload(), pairing })
+      return
+    }
+    if (request.method === 'DELETE' && url.pathname === '/v1/remote-node') {
+      if (!this.options.remoteNode.isEnabled()) {
+        this.json(response, 409, { error: 'Remote node access is disabled' })
+        return
+      }
+      await this.options.remoteNode.revokePairing()
       this.json(response, 200, this.statusPayload())
       return
     }

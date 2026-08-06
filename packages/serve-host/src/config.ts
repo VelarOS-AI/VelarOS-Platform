@@ -15,6 +15,8 @@ export const VelarHostCapabilityConfirmationSchema = z.enum([
   'system-execute',
   'computer-observe',
   'computer-control',
+  'remote-node-enable',
+  'remote-node-expose',
 ])
 export type VelarHostCapabilityConfirmation = z.infer<
   typeof VelarHostCapabilityConfirmationSchema
@@ -27,7 +29,47 @@ const VelarHostSystemCapabilitySchema = z.strictObject({
   execute: z.boolean(),
 })
 
+/**
+ * 远程能力节点开关。
+ *
+ * 这是本配置里唯一能把能力面送出本机的一节，故三个字段全部显式持久化、不留隐式默认：
+ * `bindHost` 默认回环，端口区间与插件桥、控制面一样是「区间内挑一个可用口」而不是单口硬绑。
+ */
+const VelarHostRemoteNodeSchema = z.strictObject({
+  enabled: z.boolean(),
+  bindHost: z.string().min(1).max(255),
+  portStart: z.number().int().min(1_024).max(65_535),
+  portEnd: z.number().int().min(1_024).max(65_535),
+})
+
 export const VelarHostConfigSchema = z.strictObject({
+  schemaVersion: z.literal(4),
+  capabilities: z.strictObject({
+    project: z.strictObject({
+      read: z.boolean(),
+      write: z.boolean(),
+      execute: z.boolean(),
+    }),
+    system: VelarHostSystemCapabilitySchema,
+    computer: z.strictObject({
+      observe: z.boolean(),
+      control: z.boolean(),
+    }),
+  }),
+  computer: z.strictObject({
+    resourceRoots: z.array(z.string().min(1).max(4_096)).max(16),
+  }),
+  remoteNode: VelarHostRemoteNodeSchema,
+})
+export type VelarHostConfig = z.infer<typeof VelarHostConfigSchema>
+
+/**
+ * v3 存量形状：与 v4 只差 `remoteNode` 一节。
+ *
+ * 新增是纯追加，能无损升级，故这里保留一条读取路径而不是让老配置整个失效——真正无法自动迁移
+ * 的形状变化（如 v2→v3 的能力轴改名）才该直接作废。
+ */
+const LegacyVelarHostConfigSchema = z.strictObject({
   schemaVersion: z.literal(3),
   capabilities: z.strictObject({
     project: z.strictObject({
@@ -45,7 +87,6 @@ export const VelarHostConfigSchema = z.strictObject({
     resourceRoots: z.array(z.string().min(1).max(4_096)).max(16),
   }),
 })
-export type VelarHostConfig = z.infer<typeof VelarHostConfigSchema>
 
 export const VelarHostConfigUpdateSchema = z.strictObject({
   capabilities: z.strictObject({
@@ -63,7 +104,8 @@ export const VelarHostConfigUpdateSchema = z.strictObject({
   computer: z.strictObject({
     resourceRoots: z.array(z.string().min(1).max(4_096)).max(16),
   }),
-  confirmations: z.array(VelarHostCapabilityConfirmationSchema).max(8),
+  remoteNode: VelarHostRemoteNodeSchema,
+  confirmations: z.array(VelarHostCapabilityConfirmationSchema).max(10),
 })
 export type VelarHostConfigUpdate = z.infer<typeof VelarHostConfigUpdateSchema>
 
@@ -72,14 +114,24 @@ export interface VelarHostConfigSnapshot {
   readonly value: VelarHostConfig
 }
 
+/** 默认端口区间：与插件桥（43137-43147）、控制面（43160-43170）错开，避免互相抢口。 */
+const DefaultRemoteNodePortStart = 43_180
+const DefaultRemoteNodePortEnd = 43_190
+
 const DefaultVelarHostConfig: VelarHostConfig = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   capabilities: {
     project: { read: true, write: false, execute: false },
     system: { observe: false, read: false, write: false, execute: false },
     computer: { observe: false, control: false },
   },
   computer: { resourceRoots: [] },
+  remoteNode: {
+    enabled: false,
+    bindHost: '127.0.0.1',
+    portStart: DefaultRemoteNodePortStart,
+    portEnd: DefaultRemoteNodePortEnd,
+  },
 }
 
 function cloneConfig(value: VelarHostConfig): VelarHostConfig {
@@ -97,7 +149,18 @@ function normalizeResourceRoots(roots: readonly string[]): string[] {
   return [...new Set(roots.map((root) => root.trim()).filter(Boolean))]
 }
 
-function assertSafeCapabilityDependencies(value: VelarHostConfig): void {
+/**
+ * 判定一个绑定地址是否仍留在本机回环内。
+ *
+ * 只认回环本身：`0.0.0.0` / `::` / 任何具体网卡地址都算「离开本机」，因为它们都会让配对入口
+ * 出现在局域网上。判据故意保守——认错一次的代价是多一次确认，反过来是静默对外开门。
+ */
+function isLoopbackBindHost(bindHost: string): boolean {
+  const host = bindHost.trim().toLowerCase()
+  return host === 'localhost' || host === '::1' || host.startsWith('127.')
+}
+
+function assertSafeConfigDependencies(value: VelarHostConfig): void {
   if (value.capabilities.project.write && !value.capabilities.project.read) {
     throw new Error('Project write access requires project read access')
   }
@@ -106,6 +169,9 @@ function assertSafeCapabilityDependencies(value: VelarHostConfig): void {
   }
   if (value.capabilities.system.write && !value.capabilities.system.read) {
     throw new Error('System write access requires system read access')
+  }
+  if (value.remoteNode.portStart > value.remoteNode.portEnd) {
+    throw new Error('Remote node access requires portStart to be at most portEnd')
   }
 }
 
@@ -138,6 +204,17 @@ function requiredConfirmations(
   if (!current.capabilities.computer.control && next.capabilities.computer.control) {
     confirmations.push('computer-control')
   }
+  // 远程节点是本配置里唯一把能力面送出本机的轴，故「开启」与「绑定地址离开回环」各要一次
+  // 显式确认；关闭与收窄回回环不需要——收紧永远不该被拦。
+  if (!current.remoteNode.enabled && next.remoteNode.enabled) {
+    confirmations.push('remote-node-enable')
+  }
+  if (
+    !isLoopbackBindHost(next.remoteNode.bindHost)
+    && next.remoteNode.bindHost !== current.remoteNode.bindHost
+  ) {
+    confirmations.push('remote-node-expose')
+  }
   return confirmations
 }
 
@@ -158,9 +235,21 @@ export class VelarHostConfigStore {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 })
     try {
       const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
-      const value = VelarHostConfigSchema.parse(parsed)
-      assertSafeCapabilityDependencies(value)
+      const current = VelarHostConfigSchema.safeParse(parsed)
+      const legacy = current.success ? null : LegacyVelarHostConfigSchema.safeParse(parsed)
+      // 升级只补默认值：远程节点一律以「关闭 + 回环」落地，绝不从老配置推断出一个已开启的对外面。
+      const value = current.success
+        ? current.data
+        : legacy?.success
+          ? VelarHostConfigSchema.parse({
+              ...legacy.data,
+              schemaVersion: 4,
+              remoteNode: cloneConfig(DefaultVelarHostConfig).remoteNode,
+            })
+          : VelarHostConfigSchema.parse(parsed)
+      assertSafeConfigDependencies(value)
       const store = new VelarHostConfigStore(path, value)
+      if (legacy?.success) await store.persist(value)
       return store
     } catch (error) {
       if (!isNodeError(error, 'ENOENT')) {
@@ -183,13 +272,17 @@ export class VelarHostConfigStore {
     const parsed = VelarHostConfigUpdateSchema.parse(input)
     const operation = this.mutation.then(async () => {
       const next = VelarHostConfigSchema.parse({
-        schemaVersion: 3,
+        schemaVersion: 4,
         capabilities: parsed.capabilities,
         computer: {
           resourceRoots: normalizeResourceRoots(parsed.computer.resourceRoots),
         },
+        remoteNode: {
+          ...parsed.remoteNode,
+          bindHost: parsed.remoteNode.bindHost.trim(),
+        },
       })
-      assertSafeCapabilityDependencies(next)
+      assertSafeConfigDependencies(next)
       const confirmations = new Set(parsed.confirmations)
       const missing = requiredConfirmations(this.value, next)
         .filter((confirmation) => !confirmations.has(confirmation))

@@ -21,6 +21,10 @@ import {
   type KernelClient,
   KernelProtocolVersion,
 } from '@velaros-ai/kernel/client'
+import type {
+  CapabilityCallResponse,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts/protocol'
 import { OfficeCapability } from '@velaros-ai/office/composition'
 import type { OfficeToolContext } from '@velaros-ai/office/contracts'
 import { officeTools } from '@velaros-ai/office/tools'
@@ -99,10 +103,39 @@ const ComputerControlToolNames = new Set([
   'computer:key',
 ])
 
-interface ToolRoute {
+/**
+ * Computer 各能力操作声明的权限位。
+ *
+ * 这是 `velaros.computer.sidecar` 模块内联声明的镜像——那张表没有导出口，而工具自带的权限
+ * 只有屏幕与输入两位，漏掉了辅助进程必需的 `process:exec`。远端调用方是逐权限判定的，
+ * 少报一位就会按不足的权限面放行。其余三个能力包的操作权限就是工具自带的那份，无需镜像。
+ */
+const ComputerOperationPermissions: ReadonlyMap<string, readonly string[]> = new Map([
+  ['screen_size', ['process:exec', 'screen:capture']],
+  ['screenshot', ['process:exec', 'screen:capture']],
+  ['mouse_move', ['process:exec', 'input:control']],
+  ['left_click', ['process:exec', 'input:control']],
+  ['type_text', ['process:exec', 'input:control']],
+  ['key', ['process:exec', 'input:control']],
+])
+
+/** 一条工具路由的对外投影；`permissions` 是该操作在 Kernel 侧声明的权限位。 */
+export interface VelarHostToolRoute {
   readonly descriptor: ProviderSurfaceToolDescriptor
   readonly capabilityId: string
   readonly operation: string
+  readonly permissions: readonly string[]
+}
+
+/** 绕过工具目录、直接落到 Kernel 能力面的一次调用。 */
+export interface VelarHostCapabilityCall {
+  readonly capabilityId: string
+  readonly operation: string
+  readonly scope: Nullable<ScopeRef>
+  readonly input: unknown
+}
+
+interface ToolRoute extends VelarHostToolRoute {
   readonly isAvailable?: () => boolean
 }
 
@@ -167,6 +200,7 @@ export class VelarHostToolGateway {
         },
         capabilityId: ProjectCapability.id,
         operation: name,
+        permissions: [...new Set(tool.permissions)],
       }))
     const computerRoutes: ToolRoute[] = Object.entries(computerTools)
       .flatMap(([fallbackName, tool]) => {
@@ -183,6 +217,7 @@ export class VelarHostToolGateway {
           },
           capabilityId: ComputerCapability.id,
           operation,
+          permissions: ComputerOperationPermissions.get(operation) ?? [],
         }]
       })
     const systemRoutes: ToolRoute[] = Object.entries(systemTools)
@@ -200,6 +235,7 @@ export class VelarHostToolGateway {
           },
           capabilityId: SystemCapability.id,
           operation: name,
+          permissions: [...new Set(tool.permissions)],
         }
       })
     const officeRoutes: ToolRoute[] = Object.entries(officeTools)
@@ -216,6 +252,7 @@ export class VelarHostToolGateway {
           },
           capabilityId: OfficeCapability.id,
           operation: name,
+          permissions: [...new Set(tool.permissions)],
           isAvailable: !isAvailable || !officeToolContextFactory
             ? undefined
             : () => isAvailable(officeToolContextFactory()),
@@ -275,9 +312,42 @@ export class VelarHostToolGateway {
     })
   }
 
+  /**
+   * 远程节点面：当前可见的全部路由，不按工作区空间收窄。
+   *
+   * 空间轴是网页会话的概念（一个 surface 绑一个工作区）；远端 Client 拿到的是整台机器的能力面，
+   * 唯一的收窄仍然是 Host 开关本身——两条面共用 `visibleRoutes`，开关翻转必须同时改变两者。
+   */
+  public remoteRoutes(): readonly VelarHostToolRoute[] {
+    return this.visibleRoutes(null)
+  }
+
+  /**
+   * 远程节点派发口：与工具面同一条 Kernel 会话、同一套权限 broker。
+   *
+   * `signal` 是必填而非可选——跨机调用的取消与超时全靠它，缺了就只能等对端 socket 断开，
+   * 在途的长任务会继续在本机跑完。
+   */
+  public callCapability(
+    call: VelarHostCapabilityCall,
+    signal: AbortSignal,
+  ): Promise<CapabilityCallResponse> {
+    const session = this.session
+    if (!isPresent(session)) throw new Error('Kernel 工具会话尚未启动。')
+    return session.call({
+      protocolVersion: KernelProtocolVersion,
+      callId: randomUUID(),
+      capabilityId: call.capabilityId,
+      operation: call.operation,
+      scope: call.scope,
+      input: call.input,
+    }, signal)
+  }
+
   public async execute(
     input: ProviderSurfaceToolCall,
     workspaceSpace: ProviderSurfaceWorkspaceSpace,
+    signal?: AbortSignal,
   ): Promise<ProviderSurfaceToolResult> {
     const call = ProviderSurfaceToolCallSchema.parse(input)
     const catalog = this.snapshot(workspaceSpace)
@@ -296,6 +366,8 @@ export class VelarHostToolGateway {
     if (!isPresent(route) || !visibleTools.has(call.toolName)) return this.denied(call, catalog.revision, `工具 ${call.toolName} 未被当前 Host 配置授权。`)
     const session = this.session
     if (!isPresent(session)) return this.error(call, catalog.revision, 'Kernel 工具会话尚未启动。')
+    // signal 一路带到 Kernel RPC：调用方（插件桥 / 远程节点）撤掉页面或断链时，本机的长任务
+    // 才会真的停下，而不是等它自己跑完再把结果丢给一个已经不存在的会话。
     const response = await session.call({
       protocolVersion: KernelProtocolVersion,
       callId: randomUUID(),
@@ -303,7 +375,7 @@ export class VelarHostToolGateway {
       operation: route.operation,
       scope: null,
       input: call.input,
-    })
+    }, signal)
     if (response.status !== 'ok') return response.error.code === 'PERMISSION_DENIED'
         ? this.denied(call, catalog.revision, response.error.message)
         : this.error(call, catalog.revision, response.error.message)
@@ -322,7 +394,10 @@ export class VelarHostToolGateway {
     await session?.dispose()
   }
 
-  private visibleRoutes(workspaceSpace: ProviderSurfaceWorkspaceSpace): ToolRoute[] {
+  /** `workspaceSpace` 为 `null` 表示不做空间收窄，只跟随 Host 开关（远程节点面）。 */
+  private visibleRoutes(
+    workspaceSpace: Nullable<ProviderSurfaceWorkspaceSpace>,
+  ): ToolRoute[] {
     const capabilities = this.config.snapshot().value.capabilities
     return [...this.routesByName.values()]
       .filter((route) => {
