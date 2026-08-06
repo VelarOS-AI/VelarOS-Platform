@@ -12,7 +12,29 @@ wire 契约不在本包,在 `@velaros-ai/kernel/contracts/protocol` 的 `remote-
 | --- | --- | --- |
 | `./node` | 被调侧(无头能力提供者) | WebSocket 监听、配对与验签、能力派发、幂等去重、截止与取消、审计 JSONL |
 | `./client` | 主调侧(完整宿主) | 连接与重连、`isolation: 'remote'` 隔离适配器、清单投影与命名空间化、凭据端口 |
+| `./mcp` | agent 面适配器 | 把一台节点投影成 MCP 服务器,供改不了的 agent 消费 |
 | `.` | 两侧共享 | 帧编解码、Ed25519 密钥与 challenge、清单摘要 |
+
+## agent 怎么接进来
+
+到 Host 只有 remote-node 一条线(一套配对认证、一份审计、一个授权核心);**agent 面统一是 MCP**,
+因为 Codex / Claude Code 这类外部 agent 永远不会有 VelarOS Kernel,MCP 是它们唯一都会说的协议。
+
+```jsonc
+// Codex / Claude Code 的 MCP server 配置
+{
+  "velaros-remote": {
+    "command": "velaros-remote-mcp",
+    "args": ["--url=ws://<host>:43180/v1/remote-node/ws", "--host=windows-main"],
+    // 首次配对用;配对码走环境变量而不是 args,免得进 shell 历史与进程列表
+    "env": { "VELAROS_REMOTE_NODE_PAIRING_CODE": "123456" }
+  }
+}
+```
+
+配对成功后凭据落盘,之后每次连接都是 challenge 签名,`env` 里的配对码就可以删掉了。
+
+Desktop 有 Kernel,可以额外走 `./client` 的能力级路线(多一道 Ring 0 权限闸);其它 agent 走 MCP。
 
 ## 边界
 

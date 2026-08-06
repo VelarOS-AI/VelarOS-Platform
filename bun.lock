@@ -294,7 +294,11 @@
     "packages/remote-host": {
       "name": "@velaros-ai/remote-host",
       "version": "0.1.0",
+      "bin": {
+        "velaros-remote-mcp": "./dist/mcp/bin.js",
+      },
       "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "ws": "^8.18.3",
@@ -316,6 +320,7 @@
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/office": "workspace:*",
         "@velaros-ai/project": "workspace:*",
+        "@velaros-ai/remote-host": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
         "@velaros-ai/system": "workspace:*",
         "ws": "^8.18.3",
