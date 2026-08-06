@@ -13,12 +13,45 @@ export interface CommandExecutionPlan {
 const readOnlyCommands = new Set([
   'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',
   'pwd', 'rg', 'sed', 'stat', 'tail', 'tree', 'uname', 'wc', 'which', 'whoami',
+  // Windows（cmd.exe / PowerShell）只读读法。可执行名在查表前已统一 toLowerCase()
+  // （见下方 isShellCommandReadOnly），按小写登记即可；PowerShell 命令名本就
+  // 不区分大小写。ls/cat/pwd 等 POSIX 名同时也是 PowerShell 内置别名，重合是有意的。
+  'dir', 'type', 'findstr', 'where', 'gci', 'get-childitem', 'get-content', 'gc',
+  'get-item', 'gi', 'select-string', 'sls', 'test-path',
 ])
 const mutatingGitCommands = new Set([
   'add', 'am', 'apply', 'bisect', 'branch', 'checkout', 'cherry-pick', 'clean', 'clone',
   'commit', 'fetch', 'merge', 'mv', 'pull', 'push', 'rebase', 'reset', 'restore', 'revert',
   'rm', 'stash', 'switch', 'tag',
 ])
+
+/**
+ * Windows（cmd.exe / PowerShell）下与下面两条 POSIX 黑名单对应的破坏性命令形态。
+ *
+ * 命令名和参数在 Windows 侧都不区分大小写（`DEL /F` 等价于 `del /f`），但 POSIX 那两条
+ * 正则不能因此改成不区分大小写——`RM -RF` 根本不是真实存在的 POSIX 命令，改了会让既有
+ * 判定的语义悄悄漂移，因此这里单独开一组、各自带 `/i`。单杠参数要求前面紧跟空白
+ * （而非 `--force` 里的第二个 `-`），避免跟 `del dist --force`（如 del-cli 清理脚本）、
+ * `npm run format` 这类常见跨平台命令误撞。
+ */
+const windowsDestructivePatterns: readonly RegExp[] = [
+  // del/erase/rd/rmdir 是 cmd.exe 原生命令；PowerShell 里 rm/ri/remove-item 同样是
+  // Remove-Item 的别名，强制/递归参数或目标落在注册表根路径都视同破坏性删除。
+  /\b(?:del|erase|rd|rmdir|ri|rm|remove-item)\b[^&|;\r\n]*(?:\s-(?:recurse|force)\b|\/[fsq]\b|\b(?:hklm|hkcu|hkcr|hku|hkcc|hkey_[a-z_]+)\b)/i,
+  /\bformat\s+[a-z]:/i,
+  /\bdiskpart\b|\bvssadmin\s+delete\b|\bbcdedit\b|\bbootrec\b/i,
+  /\breg\s+delete\b|\bremove-itemproperty\b/i,
+  /\bcipher\b[^&|;\r\n]*\/w\b|\bsdelete(?:64)?\b/i,
+  /\brestart-computer\b|\bstop-computer\b/i,
+]
+
+const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
+  /\brunas\b|\bstart-process\b[^&|;\r\n]*\s-verb(?:\s+|:)['"]?runas\b/i,
+  /\btakeown\b|\bicacls\b[^&|;\r\n]*\/reset\b/i,
+  // `icacls ... /grant` 单独出现很常见且通常无害（给单个文件加一条权限）；只有再叠加
+  // 递归 `/t` 才逼近"对根目录批量改权限"，因此用双 lookahead 要求二者同现、不论先后。
+  /\bicacls\b(?=[^&|;\r\n]*\/grant\b)(?=[^&|;\r\n]*\/t\b)/i,
+]
 
 function tokenize(command: string): string[] {
   return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)?.map((token) =>
@@ -70,8 +103,10 @@ export function analyzeCommandExecution(command: string): CommandExecutionPlan {
 
   const dangerousReason =
     /\brm\s+(?:-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\b|\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
+      || windowsDestructivePatterns.some((pattern) => pattern.test(trimmed))
       ? '该命令可能删除数据、破坏文件系统或终止关键进程。'
       : /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(trimmed)
+          || windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(trimmed))
         ? '该命令会以提升权限批量修改系统资源。'
         : null
   const reason =
