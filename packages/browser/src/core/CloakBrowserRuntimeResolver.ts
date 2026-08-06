@@ -49,9 +49,10 @@ function defaultPackageResolver(specifier: string): Nullable<string> {
   } catch (error) {
     if (!loggedResolutionMisses.has(specifier)) {
       loggedResolutionMisses.add(specifier)
-      log.debug('CloakBrowser package resolution missed（未安装为稳定态,同一 specifier 不再复读）', {
+      // 未安装是预期稳定态,不打 error 对象——整条 require 堆栈对「没装」这个事实零信息量。
+      log.debug('CloakBrowser 未安装(specifier 解析 miss,本次运行不再复读)', {
         specifier,
-        error,
+        reason: readString(asRecord(error), 'code') ?? String(error).split('\n')[0],
       })
     }
     return null
