@@ -92,7 +92,7 @@ class CloakBrowserRuntimeResolver implements CloakBrowserRuntimeProvider {
   private readonly resourceRuntime: BrowserResourceRuntime
 
   constructor(options: CloakBrowserRuntimeResolverOptions = {}) {
-    this.configuredResourceRoots = options.resourceRoots ?? null
+    this.configuredResourceRoots = toNullable(options.resourceRoots)
     this.packageResolver = options.packageResolver ?? defaultPackageResolver
     this.resourceRuntime = options.resourceRuntime ?? browserResourceRuntime
   }
