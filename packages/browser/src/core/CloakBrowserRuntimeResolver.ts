@@ -34,11 +34,26 @@ function nodeRequire(): ReturnType<typeof createRequire> {
   return createRequire(typeof __filename === 'string' ? __filename : import.meta.url)
 }
 
+/**
+ * 每个 specifier 的 miss 只记一次日志：未安装是稳定状态，而目录列表每次广播都会重探一遍,
+ * 逐次打 debug 会把启动日志刷成同一条堆栈的复读机。命中后清除记忆——卸载再 miss 时
+ * 状态发生了变化，值得再记一条。
+ */
+const loggedResolutionMisses = new Set<string>()
+
 function defaultPackageResolver(specifier: string): Nullable<string> {
   try {
-    return nodeRequire().resolve(specifier)
+    const resolved = nodeRequire().resolve(specifier)
+    loggedResolutionMisses.delete(specifier)
+    return resolved
   } catch (error) {
-    log.debug('CloakBrowser package resolution missed', { specifier, error })
+    if (!loggedResolutionMisses.has(specifier)) {
+      loggedResolutionMisses.add(specifier)
+      log.debug('CloakBrowser package resolution missed（未安装为稳定态,同一 specifier 不再复读）', {
+        specifier,
+        error,
+      })
+    }
     return null
   }
 }
