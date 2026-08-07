@@ -62,6 +62,13 @@ const PortableContracts = [
       "./BrowserScreenshotPolicy.js",
       // 纯闭集/默认值/宽容守卫,零实现依赖——与 ScreenshotPolicy 同性质的契约级模块(2026-08-06 配置单源批)。
       "./BrowserConfigDefaults.js",
+      // mod/空间身份常量:纯字符串,零运行时依赖。产品壳的空间门控声明(renderer 也读)只需要
+      // 这一个字符串——从 composition/mod 取会把 CloakBrowser 启动器整条 Node 侧依赖拖进渲染
+      // bundle,那正是它当初被劈出来的原因。补登记:劈出那笔漏登记,本门从此一直红着。
+      "./BrowserModIdentity.js",
+      // 「视图没接上」的跨层标记 + 纯判定函数:常量与零依赖 type guard,宿主用它把运行时事实
+      // 翻译成可执行指引(见 BrowserViewAttachment 文件头)。
+      "./BrowserViewAttachment.js",
     ]),
   },
   {

@@ -32,4 +32,8 @@ export {
   type BrowserScreenshotPolicyOptions,
   buildBrowserScreenshotOptions,
 } from './BrowserScreenshotPolicy.js'
+export {
+  BrowserViewNotAttachedReason,
+  isBrowserViewNotAttachedError,
+} from './BrowserViewAttachment.js'
 export type * from './types.js'

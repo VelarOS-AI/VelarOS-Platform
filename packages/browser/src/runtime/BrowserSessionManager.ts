@@ -27,6 +27,7 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserPageDiagnosticKind, BrowserPageDiagnosticLevel, BrowserUserActivityKind, BrowserViewportOptions } from '../core'
 import {
   BrowserPendingEventsBroker,
+  BrowserViewNotAttachedReason,
   buildSameViewNavigationBridgeScript,
 } from '../core'
 
@@ -206,7 +207,12 @@ class BrowserSessionManager {
         reject(
           new AppError(
             'VALIDATION',
-            '内嵌浏览器页面还没有准备好，请等页面区域出现后再执行浏览器操作。'
+            // 不写「请等页面区域出现」：页面区域不会自己出现，干等是死路——历史事故是模型
+            // 照着这句话把同一个工具重试了三分半钟，最后靠公开知识编了个答案。
+            // 宿主壳才知道该怎么补救，所以这里只陈述事实并打机器标记，由宿主翻译成可执行指引。
+            '内嵌浏览器视图没有接入：承载页面区域的会话界面没有挂载，重试同一操作不会让它出现。',
+            undefined,
+            { reason: BrowserViewNotAttachedReason, sessionId, timeoutMs }
           )
         )
       })
