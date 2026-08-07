@@ -6,6 +6,10 @@
  * 权威源接口，只动 desktop 边界映射，本层不动。
  */
 export type {
+  ConversationRewindFilePlan,
+  ConversationRewindPlan,
+} from './conversationRewindPlan'
+export type {
   ConversationMessageRunMarker,
   ConversationRunMarkerStatus,
   ConversationRunMarkerTurnKind,

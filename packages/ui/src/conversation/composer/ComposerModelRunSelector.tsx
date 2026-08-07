@@ -37,7 +37,10 @@ import type {
 } from './chatInputTypes'
 import {
   type ChatComposerCapabilityControl,
+  ComposerCapabilityChoiceMenuItems,
+  ComposerCapabilityChoiceSubmenu,
   ComposerCapabilityControls,
+  findComposerCapabilityChoiceBySubmenuId,
 } from './ComposerCapabilityControls'
 import {
   dispatchOnboardingComposerModelMenuOpened,
@@ -158,7 +161,10 @@ function ComposerModelRunSelectorImpl({
 }: ComposerModelRunSelectorProps): ReactElement {
   const composerPort = useConversationComposerPort()
   const [open, setOpen] = useState(false)
-  const [activeProvider, setActiveProvider] = useState<Nullable<string>>(null)
+  // 展开中的子菜单 —— **不只是 provider**：闭集档（外部引擎的审批档）也走子菜单，与 provider
+  // 共用这一格状态（级联菜单同时只开一层）。两者的 id 靠 `composerCapabilityChoiceSubmenuId`
+  // 的前缀区分。
+  const [activeSubmenuId, setActiveSubmenuId] = useState<Nullable<string>>(null)
   const isCompact = density === 'compact'
   const selectedProvider = useMemo(
     () =>
@@ -170,7 +176,7 @@ function ComposerModelRunSelectorImpl({
   const fallbackProvider = toNullable(modelSelector?.providers[0])
   const visibleProvider = selectedProvider ?? fallbackProvider
   const activeProviderOption = toNullable(
-    modelSelector?.providers.find((option) => option.value === activeProvider)
+    modelSelector?.providers.find((option) => option.value === activeSubmenuId)
   )
   const visibleModel =
     visibleProvider && modelSelector
@@ -211,6 +217,17 @@ function ComposerModelRunSelectorImpl({
   const modelMenuCapabilityControls = capabilityControls.filter(
     (control) => control.placement === 'model-menu'
   )
+  // 闭集档与其余形态分开画：前者是级联菜单项（与模型格同一套组件），后者仍是那条小工具条。
+  const modelMenuChoiceControls = modelMenuCapabilityControls.filter(
+    (control) => control.kind === 'choice'
+  )
+  const modelMenuOtherControls = modelMenuCapabilityControls.filter(
+    (control) => control.kind !== 'choice'
+  )
+  const activeChoiceControl = findComposerCapabilityChoiceBySubmenuId(
+    modelMenuChoiceControls,
+    activeSubmenuId
+  )
   const disabled =
     (!modelSelector || modelSelector.disabled || isEmpty(modelSelector.providers)) &&
     (!runProfile || runProfile.disabled) &&
@@ -222,7 +239,7 @@ function ComposerModelRunSelectorImpl({
       modelMenuCapabilityControls.every((control) => control.disabled))
   const handleOpenChange = useCallback((nextOpen: boolean): void => {
     setOpen(nextOpen)
-    if (!nextOpen) setActiveProvider(null)
+    if (!nextOpen) setActiveSubmenuId(null)
     else dispatchOnboardingComposerModelMenuOpened()
   }, [])
 
@@ -236,9 +253,9 @@ function ComposerModelRunSelectorImpl({
     <BusinessCascadingMenu
       open={open}
       onOpenChange={handleOpenChange}
-      activeSubmenuId={activeProvider}
-      onActiveSubmenuChange={setActiveProvider}
-      onCloseSubmenus={() => setActiveProvider(null)}
+      activeSubmenuId={activeSubmenuId}
+      onActiveSubmenuChange={setActiveSubmenuId}
+      onCloseSubmenus={() => setActiveSubmenuId(null)}
       side="top"
       align="end"
       sideOffset={8}
@@ -295,8 +312,13 @@ function ComposerModelRunSelectorImpl({
                 hint={t('chat.composerRunProfileHint')}
               />
             )}
+            <ComposerCapabilityChoiceMenuItems
+              controls={modelMenuChoiceControls}
+              menu={menu}
+              disabled={disabled}
+            />
             <ComposerCapabilityControls
-              controls={capabilityControls}
+              controls={modelMenuOtherControls}
               placement="model-menu"
               disabled={disabled}
             />
@@ -437,11 +459,21 @@ function ComposerModelRunSelectorImpl({
             )}
           </div>
 
+          {/* 子菜单同时只开一层：闭集档展开时 provider 面板必然不在（两者共用 activeSubmenuId）。 */}
+          {!!activeChoiceControl && (
+            <ComposerCapabilityChoiceSubmenu
+              control={activeChoiceControl}
+              menu={menu}
+              disabled={disabled || !!activeChoiceControl.disabled}
+            />
+          )}
+
           {!!(modelSelector && activeProviderOption) && (
             <BusinessCascadingSubmenuSection
               menu={menu}
+              // 宽度不在这里给：它由 `.composerModelRunMenuContent` 上那三个 CSS 变量钉死，
+              // 与主面板同宽。逐处传一个数字就会出现「模型子菜单 16rem、闭集档子菜单 18rem」。
               header={<Text tone="caption">{activeProviderOption.label}</Text>}
-              submenuWidth={isCompact ? '13rem' : '16rem'}
             >
               {activeProviderOption.models.map((option: ModelSelectOption) => {
                 const activeProviderVisibleModel = resolveVisibleProviderModel(

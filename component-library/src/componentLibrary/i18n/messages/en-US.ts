@@ -1156,6 +1156,7 @@ export const enUSMessages = {
     placeholder: 'Ask VelarOS Desktop…',
     suggestionTabHint: 'Tab',
     suggestionOpenHint: 'Open',
+    suggestionCycleHint: '{index}/{total}',
     memorySuggestionsTitle: 'Inspired by your memory',
     nextStepSuggestionsTitle: 'Suggested next steps',
     running: 'Running…',

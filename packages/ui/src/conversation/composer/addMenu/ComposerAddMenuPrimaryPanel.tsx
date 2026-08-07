@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  ChartBarIcon,
   ChatsCircleIcon,
   FileCodeIcon,
   ListChecksIcon,
@@ -55,7 +54,6 @@ export function ComposerAddMenuPrimaryPanel({
   features: {
     showSkillsSubmenu,
     showQuickPromptsSubmenu,
-    showRenderingSubmenu,
     showPluginsSubmenu,
     canTogglePlanFeature,
     planModeActive,
@@ -196,24 +194,6 @@ export function ComposerAddMenuPrimaryPanel({
             >
               <PuzzlePieceIcon size={14} />
               <Text className={menu.classes.itemLabel}>{t('chat.composerPlugins')}</Text>
-              <SubmenuDisclosureIcon size={12} className={menu.classes.disclosure} />
-            </Button>
-          )
-        )
-      case 'rendering':
-        return (
-          showRenderingSubmenu && (
-            <Button
-              variant="ghost"
-              size="block"
-              data-tour-id="chat-add-menu-rendering"
-              {...menu.getSubmenuTriggerProps<HTMLButtonElement>('rendering', {
-                className: menu.classes.item,
-              })}
-              disabled={disabled}
-            >
-              <ChartBarIcon size={14} />
-              <Text className={menu.classes.itemLabel}>{t('chat.composerRendering')}</Text>
               <SubmenuDisclosureIcon size={12} className={menu.classes.disclosure} />
             </Button>
           )

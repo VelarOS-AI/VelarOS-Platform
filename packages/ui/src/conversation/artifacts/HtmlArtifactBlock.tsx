@@ -298,6 +298,11 @@ const HtmlArtifactBlock = memo(function HtmlArtifactBlock({
             <span className={styles.runningDot} aria-hidden="true" />
             <Text>{t('chat.htmlArtifactLoading')}</Text>
           </div>
+        ) : presentation.inline === 'incomplete' ? (
+          // 流结束但一个字节都没拿到:静态终态,不能再转「生成中」的点。
+          <div className={styles.stateRoot} role="status">
+            <Text>{t('chat.htmlArtifactIncomplete')}</Text>
+          </div>
         ) : presentation.inline === 'streaming-preview' ? (
           <div className={styles.streamingInlineShell}>
             <div className={styles.streamingInlineStatus} role="status">

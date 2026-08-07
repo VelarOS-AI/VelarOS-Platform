@@ -212,6 +212,17 @@ export interface ConversationRenderSlots {
    * 行内代码（`inlineCode`）不属于本槽：它是句中片段，不是块级渲染器。
    */
   messageCodeBlock?: (props: ConversationCodeBlockSlotProps) => Nullable<ReactElement>
+  /**
+   * **替换槽**：运行中那一行（「思考中 · N 轮 · N 秒」）行首的**执行体标记**（官方件 = 旋转指示器）。
+   *
+   * 为什么是宿主槽而不是包内查表：这一格画的是**谁在跑**，而「谁」是宿主的会话拓扑知识
+   * （Velar 自己 / 外接的 agent 引擎，绑定权威在宿主的分组注册表）。本包既不认识引擎 id 闭集，
+   * 也不该内置各家的品牌图形，所以只交出 `sessionId` 让宿主自己答。
+   *
+   * 缺席（`undefined`）或返回 `null` = 官方旋转指示器，两者同义：宿主认不出这条会话归谁时，
+   * 「正在转」对任何执行体都成立，不需要编一个图形出来。
+   */
+  runningRuntimeMark?: (props: { sessionId: string }) => Nullable<ReactElement>
 }
 
 /** 浏览器截图组展示模式（渲染侧单源，desktop 组件消费此定义）。 */

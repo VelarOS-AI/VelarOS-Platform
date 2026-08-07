@@ -46,7 +46,7 @@ export interface ChatInputSelectionRange {
 
 // ─── Composer submenu ────────────────────────────────────────────────────────
 
-export type ComposerSubmenuId = 'quick-prompts' | 'rendering' | 'plugins' | 'skills'
+export type ComposerSubmenuId = 'quick-prompts' | 'plugins' | 'skills'
 
 // ─── Prompt feature label keys ───────────────────────────────────────────────
 

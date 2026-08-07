@@ -5000,6 +5000,12 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "SettingsRow.action",
       "description": "Auto-generated from TypeScript props.",
       "type": "ReactNode"
+    },
+    {
+      "name": "SettingsRow.control",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "SettingsControlWidth",
+      "defaultValue": "'auto'"
     }
   ],
   SettingsSection: [
@@ -5018,6 +5024,14 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "SettingsSection.titleAddon",
       "description": "展示在分区标题右侧的行内控件，例如刷新按钮。",
       "type": "ReactNode"
+    }
+  ],
+  SettingsStatus: [
+    {
+      "name": "SettingsStatus.tone",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "SettingsStatusTone",
+      "defaultValue": "'neutral'"
     }
   ],
   Skeleton: [

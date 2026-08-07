@@ -37,6 +37,7 @@ export default defineComponentLibraryEntry({
       'Spin',
       'SettingsSection',
       'SettingsRow',
+      'SettingsStatus',
     ],
     api: [
       {

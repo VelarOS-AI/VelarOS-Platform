@@ -602,6 +602,7 @@ export type ChatMessageConversationKind =
   | 'turn-input'
   | 'run-guidance'
   | 'interaction-reply'
+  | 'system-notice'
   | 'assistant-output'
 
 export interface ChatMessage {
@@ -660,7 +661,8 @@ export function resolveChatMessageConversationKind(
   if (
     message.conversationKind === 'turn-input' ||
     message.conversationKind === 'run-guidance' ||
-    message.conversationKind === 'interaction-reply'
+    message.conversationKind === 'interaction-reply' ||
+    message.conversationKind === 'system-notice'
   )
     return message.conversationKind
 
@@ -677,6 +679,12 @@ export function isRunGuidanceMessage(
   message: ChatMessageConversationSemanticInput
 ): boolean {
   return resolveChatMessageConversationKind(message) === 'run-guidance'
+}
+
+export function isSystemNoticeMessage(
+  message: ChatMessageConversationSemanticInput
+): boolean {
+  return resolveChatMessageConversationKind(message) === 'system-notice'
 }
 
 export interface ChatSuggestionItem {

@@ -3,15 +3,9 @@
 .root {
   @apply pointer-events-none absolute z-20 flex flex-col items-center gap-2;
   --scroll-navigator-theme-color: var(--primary);
-  --scroll-navigator-collapsed-background: color-mix(
-    in srgb,
-    var(--scroll-navigator-theme-color) 24%,
-    var(--card)
-  );
-  --scroll-navigator-collapsed-opacity: 0.48;
-  --scroll-navigator-collapsed-visible-width: 30%;
   top: 50%;
-  right: max(12px, calc((100% - 48rem - 88px) / 4));
+  /* 下限就是「离右边多远」：窄栏里也保住这段间距，绝不再压到 0 贴边压正文。 */
+  right: max(16px, calc((100% - 48rem - 88px) / 4));
   transform: translateY(-50%);
   transition:
     right 160ms ease-out,
@@ -86,28 +80,6 @@
 
 @media (max-width: 980px) {
   .root {
-    right: 10px;
-  }
-}
-
-@media (hover: hover) {
-  @container chat-conversation-body (max-width: 640px) {
-    .root {
-      right: 0;
-      opacity: var(--scroll-navigator-collapsed-opacity);
-      transform: translateY(-50%)
-        translateX(calc(100% - var(--scroll-navigator-collapsed-visible-width)));
-    }
-
-    .root:hover,
-    .root:focus-within {
-      opacity: 1;
-      transform: translateY(-50%) translateX(0);
-    }
-
-    .root:not(:hover):not(:focus-within) .rail,
-    .root:not(:hover):not(:focus-within) .followLayer {
-      background: var(--scroll-navigator-collapsed-background);
-    }
+    right: 16px;
   }
 }

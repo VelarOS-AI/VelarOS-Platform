@@ -29,6 +29,14 @@ const SCROLL_EDGE_THRESHOLD = 8
 const SECTION_SNAP_THRESHOLD = 12
 
 interface ChatScrollNavigatorProps {
+  /**
+   * 宿主把导航栏收起来了。
+   *
+   * 只有**自带头部**的宿主（浏览器空间的侧边聊天）才给得出这一位——收起开关归它的头部。
+   * 没有独立头部的宿主（主聊天页）不传，导航栏就恒显示：那种版面里它不压正文，
+   * 也没有一个「属于这段对话」的地方能放开关。
+   */
+  hidden?: boolean
   followLocked: boolean
   onFollowLockedChange: (locked: boolean) => void
   scrollRef: RefObject<Nullable<HTMLDivElement>>
@@ -129,6 +137,7 @@ function isSameNavigatorState(prev: ScrollNavigatorState, next: ScrollNavigatorS
 }
 
 function ChatScrollNavigatorInner({
+  hidden = false,
   followLocked,
   onFollowLockedChange,
   scrollRef,
@@ -224,7 +233,7 @@ function ChatScrollNavigatorInner({
     [scrollRef, transcriptNavigationRef]
   )
 
-  if (!navState.visible) return null
+  if (hidden || !navState.visible) return null
 
   return (
     <div className={styles.root}>

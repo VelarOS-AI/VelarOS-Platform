@@ -90,14 +90,13 @@
   flex-shrink: 0;
 }
 
+/**
+ * 停靠区不铺底、不做渐隐：输入框自身是不透明面，转录直接从它上方与两侧穿过去。
+ * 这里曾有一条 card 色 180deg 渐变当「淡出」，但深色制品滚到底下时会被糊成一片白雾，
+ * 比让内容干净地划过去更难看，故整条去掉。
+ */
 .inputDock {
   @apply pointer-events-none absolute bottom-0 left-0 right-0 z-10;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card) 0%, transparent) 0%,
-    color-mix(in srgb, var(--card) 88%, transparent) 24%,
-    var(--card) 100%
-  );
 }
 
 .inputDockInner {

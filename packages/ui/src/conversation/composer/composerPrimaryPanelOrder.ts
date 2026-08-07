@@ -13,7 +13,6 @@ export const COMPOSER_PRIMARY_PANEL_SLOT_ORDER = [
   'plan',
   'workbench-editor',
   'goal',
-  'rendering',
   'plugins',
   'skills',
 ] as const

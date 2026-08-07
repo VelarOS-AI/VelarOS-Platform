@@ -947,15 +947,21 @@
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--ui-space-2);
 }
 
+/*
+ * 15px —— 与页面标题（21px）和行标题（13px）拉开三档。
+ * 此前是 18px，与页面标题几乎同重：「记忆」tab 里「记忆」和「记忆运行」上下相邻却一样大，
+ * 读不出父子。附加操作靠 `justify-content: space-between` 推到行尾，不再贴着标题。
+ */
 .velar-settings-section-title {
   min-width: 0;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--foreground);
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .velar-settings-section-title-addon {
@@ -972,14 +978,38 @@
 
 .velar-settings-card {
   --settings-card-padding-x: 16px;
-  --settings-card-padding-y: 14px;
+  --settings-card-padding-y: 13px;
   --settings-card-padding-y-compact: 12px;
   --settings-card-padding-y-tight: 10px;
   --settings-card-padding-y-roomy: 18px;
-  --settings-card-gap: 10px;
-  --settings-card-divider-color: var(--surface-subtle);
-  --settings-row-control-width: min(100%, 212px);
+  /* 标题列与控件列之间的沟；行内多控件的间距另走 --ui-space-2。 */
+  --settings-card-gap: 24px;
+  /*
+   * 分隔线比卡底色**更浅**。
+   *
+   * 此前用的 `--surface-subtle`（约 5.5% 黑）比卡自己的底色（2.8%）还重，于是一张卡看上去
+   * 是「几条深灰横线」而不是「一块面」。这里从 `--border` 兑淡到 45%，只留一道气口。
+   */
+  --settings-card-divider-color: color-mix(in srgb, var(--border) 45%, transparent);
+  /*
+   * 控件槽的三个定宽档（见 Settings.tsx 的 `SettingsControlWidth`）。
+   * 没有「默认宽度」这一项是**刻意**的：默认档 `auto` 让控件用自己的固有宽度。
+   *
+   * 三个档一律用**绝对长度**：控件列是 `auto`（按内容定宽），此处再写百分比就是循环依赖
+   * ——`min(100%, 420px)` 的 100% 要对齐一个由内容决定的列宽，浏览器只能取小值，
+   * 结果是「加宽档反而更窄」。窄窗下改成整宽由 960px 断点统一接管。
+   */
+  --settings-control-w-sm: 148px;
+  --settings-control-w-md: 264px;
+  --settings-control-w-lg: 420px;
   overflow: hidden;
+  /*
+   * 无描边、无阴影，只用一块浅灰面。
+   *
+   * 中途试过加发丝描边来补层次，产品判决是**不要**：描边让每张卡都变成一个框，
+   * 整页读起来是一堆盒子。层次改由「分区标题降到 15px + 分区之间留白」承担，
+   * 卡本身只需要一块比页面底色浅一档的面把行圈在一起。
+   */
   border: none;
   border-radius: var(--ui-radius-panel);
   background: var(--surface-settings-card);
@@ -990,13 +1020,32 @@
   overflow: visible;
 }
 
+/*
+ * 两列：标题列吃掉剩余宽度，控件列按内容收缩。
+ *
+ * 此前是 `minmax(0, 1.45fr) minmax(160px, 228px)` —— 控件列**恒占 160-228px**，
+ * 于是只要 44px 的 Switch 也要在标题和自己之间空出一大片。现在控件列由控件自己撑开，
+ * 右边缘统一对齐、左边缘随内容，空档消失。
+ *
+ * 控件列写 `fit-content(50%)` 而不是裸 `auto`：`auto` 没有上界，一个标签很长的
+ * Select（`width: fit-content`，mod 贡献的下拉尤其可能）会把控件列一路撑开、把标题列压塌。
+ * 上界只能写在**轨道**上——轨道里的百分比对齐网格容器宽度，有定义；写成控件的
+ * `max-width: 50%` 又会掉进「百分比对齐由内容决定的列宽」那个循环依赖（`lg` 档踩过一次）。
+ */
 .velar-settings-row {
   position: relative;
   display: grid;
-  gap: var(--settings-card-gap);
+  align-items: center;
+  column-gap: var(--settings-card-gap);
+  row-gap: var(--ui-space-2);
   padding-inline: var(--settings-card-padding-x);
   padding-block: var(--settings-card-padding-y);
-  grid-template-columns: minmax(0, 1.45fr) minmax(160px, 228px);
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
+}
+
+/* `block` 档：控件掉到标题下方整宽（长文本 textarea / 复合控件组的正解）。 */
+.velar-settings-row[data-control='block'] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .velar-settings-card > .velar-settings-row:not(:last-child)::after {
@@ -1019,13 +1068,22 @@
   gap: var(--ui-space-2);
 }
 
+/*
+ * 13px —— `--ui-font-body` 与 `--ui-font-body-sm` 在令牌层是同一个 12px，
+ * 行标题与描述此前只靠字重和颜色分主次，太弱。这里显式抬一档，描述留在 12px。
+ */
 .velar-settings-row-title {
   font-weight: var(--font-weight-medium);
   color: var(--foreground);
-  font-size: var(--ui-font-body);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .velar-settings-row-action {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
   color: var(--muted-foreground);
   font-size: var(--ui-font-body-sm);
 }
@@ -1042,38 +1100,107 @@
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
+  gap: var(--ui-space-2);
 }
 
-.velar-settings-row-control > [data-slot='select-trigger'], .velar-settings-row-control > [data-slot='input'], .velar-settings-row-control > [data-slot='textarea'], .velar-settings-row-control > [data-slot='text-select'], .velar-settings-row-control [data-slot='select-trigger'], .velar-settings-row-control [data-slot='input'], .velar-settings-row-control [data-slot='textarea'], .velar-settings-row-control [data-slot='text-select'] {
-  width: var(--settings-row-control-width);
+/*
+ * 三个定宽档。宽度落在**槽**上而不是控件上，槽内唯一控件再撑满——
+ * 于是「怎么宽」只有一个说法，不必为每种 data-slot 各写一条。
+ */
+.velar-settings-row[data-control='sm'] .velar-settings-row-control {
+  width: var(--settings-control-w-sm);
 }
 
+.velar-settings-row[data-control='md'] .velar-settings-row-control {
+  width: var(--settings-control-w-md);
+}
+
+.velar-settings-row[data-control='lg'] .velar-settings-row-control {
+  width: var(--settings-control-w-lg);
+}
+
+.velar-settings-row:is([data-control='sm'], [data-control='md'], [data-control='lg']) .velar-settings-row-control > * {
+  width: 100%;
+}
+
+.velar-settings-row[data-control='block'] .velar-settings-row-control {
+  justify-content: stretch;
+}
+
+.velar-settings-row[data-control='block'] .velar-settings-row-control > * {
+  width: 100%;
+}
+
+/*
+ * `auto` 档**不给任何控件设宽** —— 它的含义就是「控件自己知道该多宽」。
+ *
+ * 这里曾经有一条兜底，给直接子级的 input/textarea/text-select 套 `md`。它是错的：
+ * 特异性比 Tailwind 的 `w-20` 高，于是一个只装 0–24 的数字框被撑成 264px——
+ * 和它取代的那条一刀切规则犯的是同一个错，只是范围小一点。
+ *
+ * 没有固有宽度的输入框，由调用方在**行**上声明 `control="sm|md|lg|block"`，
+ * 或者由控件自带宽度类；两条路都比壳替它猜一个值诚实。
+ * Select（`width:fit-content`）与 NumberInput（`width:auto` + 4.5rem 数字框）原生尺寸本来就对，
+ * 一律不碰。
+ */
 .velar-settings-row-control [data-slot='text-select'] [data-slot='input'] {
   width: 100%;
 }
 
-.velar-settings-row-control > [data-slot='number-input'] {
-  width: auto;
-  max-width: var(--settings-row-control-width);
-}
-
 @media (max-width: 960px) {
-  .velar-settings-row {
-    grid-template-columns: 1fr;
+  .velar-settings-row,
+  .velar-settings-row[data-control='block'] {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .velar-settings-row-control {
     justify-content: flex-start;
   }
 
-  .velar-settings-row-control > [data-slot='select-trigger'], .velar-settings-row-control > [data-slot='input'], .velar-settings-row-control > [data-slot='textarea'], .velar-settings-row-control > [data-slot='text-select'], .velar-settings-row-control [data-slot='select-trigger'], .velar-settings-row-control [data-slot='input'], .velar-settings-row-control [data-slot='textarea'], .velar-settings-row-control [data-slot='text-select'] {
+  .velar-settings-row:is([data-control='sm'], [data-control='md'], [data-control='lg']) .velar-settings-row-control {
     width: 100%;
   }
+}
 
-  .velar-settings-row-control > [data-slot='number-input'] {
-    width: auto;
-    max-width: 100%;
-  }
+/*
+ * 状态标记（`SettingsStatus`）。
+ *
+ * tone 直接映射既有 `--status-*` 令牌，不自造颜色（§12.9 双色种子体系）。
+ */
+.velar-settings-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--ui-space-1);
+  border-radius: var(--ui-radius-chip);
+  padding-inline: 7px;
+  padding-block: 1px;
+  background: var(--surface-subtle);
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-caption);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.velar-settings-status[data-tone='info'] {
+  background: var(--status-blue-soft);
+  color: var(--status-blue);
+}
+
+.velar-settings-status[data-tone='success'] {
+  background: var(--status-green-soft);
+  color: var(--status-green);
+}
+
+.velar-settings-status[data-tone='warning'] {
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+}
+
+.velar-settings-status[data-tone='danger'] {
+  background: var(--status-red-soft);
+  color: var(--status-red);
 }
 
 .velar-tool-disclosure-card {

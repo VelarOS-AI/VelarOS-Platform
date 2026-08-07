@@ -729,8 +729,60 @@
   outline-offset: 2px;
 }
 
-.rewindFileChoice {
-  @apply inline-flex items-center gap-2 text-[12px] font-medium text-foreground;
+.systemNoticeRow {
+  @apply mx-auto flex w-full max-w-[70ch] flex-col gap-1 px-3 py-1.5;
+}
+
+.systemNoticeHeader {
+  @apply flex items-center justify-center gap-1.5;
+}
+
+.systemNoticeIcon {
+  @apply shrink-0 text-muted-foreground;
+}
+
+.systemNoticeSummary {
+  @apply text-[11px] leading-relaxed text-muted-foreground;
+}
+
+.systemNoticeToggle {
+  @apply inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground underline-offset-2 hover:underline;
+}
+
+.systemNoticeCaret {
+  @apply transition-transform;
+}
+
+.systemNoticeCaretOpen {
+  @apply rotate-180 transition-transform;
+}
+
+.systemNoticeDetail {
+  @apply whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground;
+}
+
+.rewindFileNotice {
+  @apply text-[12px] leading-relaxed text-muted-foreground;
+}
+
+.rewindFileChoiceGroup {
+  @apply flex flex-col gap-2.5;
+}
+
+.rewindFileChoiceRow {
+  @apply flex items-start gap-2;
+}
+
+.rewindFileChoiceText {
+  @apply flex min-w-0 flex-col gap-0.5;
+}
+
+.rewindFileChoiceLabel {
+  @apply text-[12px] font-medium text-foreground;
+}
+
+.rewindFileChoiceHint {
+  @apply text-[11px] leading-relaxed text-muted-foreground;
 }
 
 .assistantMemoryButton:hover,

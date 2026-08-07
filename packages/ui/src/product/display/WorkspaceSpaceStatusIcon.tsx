@@ -3,7 +3,8 @@
  *
  * variants（封闭枚举，全仓共用一套）：`tone` = `default | running | paused`。
  * 样式：`.velar-space-status-icon` · 见 styles/components/。
- * 品牌端口：browser 分类品牌图标经 `renderBrowserIcon` 由宿主注入（透传给 WorkspaceSpaceIcon）。
+ * 品牌端口：browser / agent 分类的品牌图标经 `renderBrowserIcon` / `renderAgentIcon` 由宿主注入
+ * （透传给 WorkspaceSpaceIcon；agent 那格可缺席，缺席即回落通用机器人）。
  */
 import { type ReactElement } from 'react'
 
@@ -20,6 +21,8 @@ export interface WorkspaceSpaceStatusIconProps {
   tone?: WorkspaceSpaceStatusTone
   /** browser 图标名的品牌资产注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。 */
   renderBrowserIcon: (props: { size: number }) => ReactElement
+  /** agent 图标名的品牌资产注入点（可选，缺省回落通用机器人图形）；同样只做透传。 */
+  renderAgentIcon?: (props: { size: number }) => ReactElement
 }
 
 export function WorkspaceSpaceStatusIcon({
@@ -27,6 +30,7 @@ export function WorkspaceSpaceStatusIcon({
   running = false,
   tone = running ? 'running' : 'default',
   renderBrowserIcon,
+  renderAgentIcon,
 }: WorkspaceSpaceStatusIconProps): ReactElement {
   return (
     <span
@@ -43,6 +47,7 @@ export function WorkspaceSpaceStatusIcon({
         size={11}
         weight="bold"
         renderBrowserIcon={renderBrowserIcon}
+        renderAgentIcon={renderAgentIcon}
       />
     </span>
   )

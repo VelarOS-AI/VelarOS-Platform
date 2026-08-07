@@ -1,7 +1,7 @@
 import { memo, type ReactElement, type ReactNode } from 'react'
 
 import type { FileChangeSummaryListEntry } from '../cards/FileChangeSummaryList'
-import type { ConversationTurnContextView } from '../projection'
+import type { ConversationRewindPlan, ConversationTurnContextView } from '../projection'
 import type { BrowserScreenshotDisplayMode } from '../render-slots'
 import type {
   ChatInlineNoticeMeta,
@@ -16,6 +16,7 @@ import {
   type ConversationMessageRunMarker,
   type GoalCompletionActivitySummary,
 } from './messageBubbleRenderModel'
+import { SystemNoticeMessageRow } from './SystemNoticeMessageRow'
 import { UserMessageBubble } from './UserMessageBubble'
 
 import type {
@@ -26,6 +27,7 @@ import type {
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
 } from '#contracts'
+import { isSystemNoticeMessage } from '#contracts'
 import { isPresent } from '#internal/runtime'
 
 interface MessageBubbleProps {
@@ -67,7 +69,7 @@ interface MessageBubbleProps {
     text: string
   }) => Promise<void>
   canRewindToMessage?: boolean
-  canChooseRewindFiles?: boolean
+  getRewindPlan?: (messageId: string) => Nullable<ConversationRewindPlan>
 }
 
 const UserActionCardPresenceByMessage = new WeakMap<ChatMessage, boolean>()
@@ -193,12 +195,14 @@ function areToolSlotRenderPropsEqual(
 }
 
 function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
+  if (isSystemNoticeMessage(props.message)) return <SystemNoticeMessageRow message={props.message} />
+
   return props.message.role === 'user' ? (
     <UserMessageBubble
       message={props.message}
       onRewindToMessage={props.onRewindToMessage}
       canRewindToMessage={props.canRewindToMessage}
-      canChooseRewindFiles={props.canChooseRewindFiles}
+      getRewindPlan={props.getRewindPlan}
     />
   ) : (
     <AssistantMessageBubble
@@ -266,7 +270,7 @@ function areMessageBubblePropsEqual(
     prev.onRewindToMessage === next.onRewindToMessage &&
     prev.onTranslateThinkingBlock === next.onTranslateThinkingBlock &&
     prev.canRewindToMessage === next.canRewindToMessage &&
-    prev.canChooseRewindFiles === next.canChooseRewindFiles &&
+    prev.getRewindPlan === next.getRewindPlan &&
     areUserActionCardRenderPropsEqual(prev, next) &&
     areRunMarkersEqual(prev.runMarker, next.runMarker) &&
     areInlineNoticesEqual(prev.inlineNotice, next.inlineNotice)

@@ -252,12 +252,7 @@ export function normalizeIncomingFile(file: File, index: number): File {
 
 // ─── Submenu helpers ──────────────────────────────────────────────────────────
 
-export const ComposerSubmenuIds: ComposerSubmenuId[] = [
-  'quick-prompts',
-  'rendering',
-  'plugins',
-  'skills',
-]
+export const ComposerSubmenuIds: ComposerSubmenuId[] = ['quick-prompts', 'plugins', 'skills']
 
 // ─── Skill helpers ────────────────────────────────────────────────────────────
 

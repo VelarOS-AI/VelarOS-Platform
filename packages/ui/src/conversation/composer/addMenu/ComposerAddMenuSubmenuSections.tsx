@@ -40,11 +40,9 @@ export function ComposerAddMenuSubmenuSections({
   features: {
     showSkillsSubmenu,
     showQuickPromptsSubmenu,
-    showRenderingSubmenu,
     showPluginsSubmenu,
     availableSkills,
     quickPrompts,
-    renderingOptions,
     pluginOptions,
     selectedPromptFeatures,
     updatePromptFeatureGroup,
@@ -190,49 +188,6 @@ export function ComposerAddMenuSubmenuSections({
               })}
             </BusinessCascadingSubmenuSection>
           )}
-        </BusinessCascadingSubmenuSection>
-      )}
-
-      {showRenderingSubmenu && activeSubmenuId === 'rendering' && (
-        <BusinessCascadingSubmenuSection
-          menu={menu}
-          className={styles.composerPluginMenu}
-          submenuWidth="var(--chat-input-menu-plugin-width)"
-          header={t('chat.composerRenderingCount', { count: renderingOptions.length })}
-        >
-          {renderingOptions.map((option) => {
-            const selected = isPluginOptionSelected(option)
-            const Icon = option.icon
-
-            return (
-              <button
-                type="button"
-                key={option.id}
-                className={styles.composerPluginItem}
-                data-rendering-id={option.id}
-                data-tour-id={
-                  option.id === 'widget'
-                    ? 'chat-rendering-widget'
-                    : option.id === 'html-artifact'
-                      ? 'chat-rendering-html-artifact'
-                      : undefined
-                }
-                data-selected={selected}
-                aria-pressed={selected}
-                title={t(option.labelKey)}
-                onClick={() => updatePromptFeatureGroup(option, !selected)}
-                disabled={disabled}
-              >
-                <span className={styles.composerPluginIcon}>
-                  <Icon size={13} weight="fill" />
-                </span>
-                <span>{t(option.labelKey)}</span>
-                {selected && (
-                  <CheckIcon size={11} weight="bold" className={styles.composerPluginCheck} />
-                )}
-              </button>
-            )
-          })}
         </BusinessCascadingSubmenuSection>
       )}
 

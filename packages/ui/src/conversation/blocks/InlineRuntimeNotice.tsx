@@ -6,6 +6,7 @@ import { renderChatNoticeToneIcon, StyleUtils } from '@velaros-ai/ui'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
+import { useConversationRenderSlots } from '../render-slots'
 import {
   type ChatInlineNoticeMeta,
   type ChatInlineNoticeRuntimeSource,
@@ -21,12 +22,15 @@ const cx = StyleUtils.bindCx(styles)
 function InlineRuntimeNoticeInner({
   notice,
   runtimeSource = null,
+  sessionId,
 }: {
   notice: ChatInlineNoticeMeta
   runtimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
+  sessionId: string
 }): ReactElement {
   const { locale } = useConversationI18n()
   const translatorRuntime = useConversationTranslatorRuntime()
+  const slots = useConversationRenderSlots()
   const [clock, setClock] = useState(() => Date.now())
   const shouldRefreshRunningNotice =
     notice.tone === 'running' && runtimeSource?.runtime.status === 'running'
@@ -51,17 +55,21 @@ function InlineRuntimeNoticeInner({
     )
   }, [clock, locale, notice, runtimeSource, shouldRefreshRunningNotice, translatorRuntime])
 
-  // 运行态图标 = 旋转指示器，**不是**品牌帆标（判决，别改回去）。
-  // 判据两条：① 这一行的文案是「思考中 · N 轮 · N 秒」，一个**进度**指示；帆标在 12px 下读不出
-  // 「帆」，只看得出一个像船锚/旗子的形状，与「正在跑」无语义关系。② 品牌标记表达的是
-  // 「Velar 在跑」，而外部 agent 引擎会话根本不是 Velar 在跑——同一个图标在两种执行体下
-  // 都出现，就变成了一句不成立的断言。旋转指示器对两者都正确，因此不需要按会话注入不同图标。
+  // 运行态行首画的是**谁在跑**（执行体标记），由宿主经 `runningRuntimeMark` 槽给出：Velar 自己的
+  // 会话画帆标，外接引擎会话画那家自己的品牌标。
+  //
+  // 上一版在这里写死旋转指示器，理由是「品牌帆标表达『Velar 在跑』，而引擎会话不是 Velar 在跑，
+  // 同一个图标在两种执行体下都出现就是一句不成立的断言」——那个判据只否掉了**包内写死一个图形**，
+  // 没否掉「按会话给不同图形」。执行体身份是宿主知识（绑定权威在分组注册表），所以正路是把这一格
+  // 交出去，而不是退回一个对谁都不表态的转圈。宿主认不出这条会话归谁时槽回 `null`，仍回落转圈。
+  const runningMark =
+    displayNotice.tone === 'running' ? slots.runningRuntimeMark?.({ sessionId }) : null
   const noticeIcon =
-    displayNotice.tone === 'running' ? (
-      <SpinnerGapIcon className={styles.inlineNoticeRunningIcon} size={13} aria-hidden="true" />
-    ) : (
-      renderChatNoticeToneIcon(displayNotice.tone, 12)
-    )
+    displayNotice.tone === 'running'
+      ? (runningMark ?? (
+          <SpinnerGapIcon className={styles.inlineNoticeRunningIcon} size={13} aria-hidden="true" />
+        ))
+      : renderChatNoticeToneIcon(displayNotice.tone, 12)
 
   return (
     <div

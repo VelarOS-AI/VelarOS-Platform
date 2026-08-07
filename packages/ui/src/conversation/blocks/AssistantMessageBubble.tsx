@@ -359,7 +359,11 @@ export function AssistantMessageBubble({
           )}
 
           {showInlineNotice && (
-            <InlineRuntimeNotice notice={inlineNotice} runtimeSource={inlineNoticeRuntimeSource} />
+            <InlineRuntimeNotice
+              notice={inlineNotice}
+              runtimeSource={inlineNoticeRuntimeSource}
+              sessionId={sessionId}
+            />
           )}
         </div>
         {showGeneratedArtifacts && (

@@ -7,6 +7,7 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { ImagePreviewDialog } from '@velaros-ai/ui/primitives/overlays/ImagePreviewDialog'
 
 import { useConversationI18n } from '../i18n'
+import type { ConversationRewindPlan } from '../projection'
 import { useImagePreviewDialogMessages } from '../react-hooks/useImagePreviewDialogMessages'
 
 import {
@@ -62,12 +63,12 @@ function UserMessageBubbleInner({
   message,
   onRewindToMessage,
   canRewindToMessage = true,
-  canChooseRewindFiles = false,
+  getRewindPlan,
 }: {
   message: ChatMessage
   onRewindToMessage?: (messageId: string, options?: { restoreFiles?: boolean }) => Promise<void>
   canRewindToMessage?: boolean
-  canChooseRewindFiles?: boolean
+  getRewindPlan?: (messageId: string) => Nullable<ConversationRewindPlan>
 }): ReactElement {
   const { t, locale } = useConversationI18n()
   const imagePreviewMessages = useImagePreviewDialogMessages()
@@ -88,8 +89,11 @@ function UserMessageBubbleInner({
     }
   }, [previewItems.length, previewOpenIndex])
   const isRunGuidance = isRunGuidanceMessage(message)
-  const canShowRewindAction =
-    isConversationTurnInputMessage(message) && !!onRewindToMessage && canRewindToMessage
+  // 注意这里**不带** canRewindToMessage：确认框是 MessageRewindButton 的子树，把它的挂载条件
+  // 绑在「会话是否 idle」上，会让一个已经打开、用户已经选好选项的弹窗在会话转为运行中时凭空消失
+  // （hook 自驱、定时任务、排队提交 flush 都能在用户盯着弹窗时把会话推成非 idle）。
+  // 能不能回退由按钮内部按 disabled 处理：图标隐藏，但已打开的弹窗留着并禁用确认。
+  const canShowRewindAction = isConversationTurnInputMessage(message) && !!onRewindToMessage
   const hasUserActions = canShowRewindAction || !isBlank(copyText)
   const guidanceStatus = message.guidanceStatus ?? (isRunGuidance ? 'sent' : null)
   const guidanceLabel =
@@ -130,7 +134,7 @@ function UserMessageBubbleInner({
                     messageId={message.id}
                     disabled={!canRewindToMessage}
                     onRewind={onRewindToMessage}
-                    canChooseRewindFiles={canChooseRewindFiles}
+                    getRewindPlan={getRewindPlan}
                   />
                 )}
                 {!isBlank(copyText) && (

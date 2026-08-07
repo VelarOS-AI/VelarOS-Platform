@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpIcon } from '@phosphor-icons/react'
+import { ArrowsDownUpIcon, ArrowUpIcon } from '@phosphor-icons/react'
 import { useLatest } from 'ahooks'
 
 import { StyleUtils } from '@velaros-ai/ui'
@@ -17,11 +17,10 @@ import { useTimerScope } from '../react-hooks/useTimerScope'
 
 import { buildChatInputComposerAddMenuProps } from './hooks/buildChatInputComposerAddMenuProps'
 import {
-  findHighestConfidenceNextStepSuggestion,
   isNextStepSuggestionExactMatch,
   matchNextStepSuggestionPrefix,
-  NoNextStepSuggestionHighlightIndex,
-  resolveNextStepSuggestionKeyboardAction,
+  resolveInlineNextStepSuggestionIndex,
+  resolveInlineNextStepSuggestionKeyboardAction,
 } from './hooks/nextStepSuggestionCompletion.pure'
 import {
   type ChatInputVoiceInsertBridge,
@@ -76,7 +75,9 @@ import type { ChatComposerCapabilityControl } from './ComposerCapabilityControls
 import { ComposerDropOverlay } from './ComposerDropOverlay'
 import { ComposerFilePreview } from './ComposerFilePreview'
 import { ComposerMentionMenu } from './ComposerMentionMenu'
-import { ComposerNextStepSuggestionMenu } from './ComposerNextStepSuggestionMenu'
+// 下一步建议的**面板**形态（`ComposerNextStepSuggestionMenu`）已于 2026-08-06 退役：它压在输入框
+// 正上方、一次铺开三条整句，把对话最后几行挡掉，用户判「太重」。改为写进输入框本身的内联建议
+// （幽灵文本 + ↑↓ 切换），组件与样式原样留在包里待回滚，只是不再有人渲染它。
 import { ComposerSlashSkillMenu } from './ComposerSlashSkillMenu'
 import { ComposerToolbarLeading } from './ComposerToolbarLeading'
 import { ComposerToolbarRight } from './ComposerToolbarRight'
@@ -409,12 +410,10 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   const [draftLimitError, setDraftLimitError] = useState<Nullable<string>>(null)
   const [previewOpenIndex, setPreviewOpenIndex] = useState<Nullable<number>>(null)
   const [isStopPending, setIsStopPending] = useState(false)
-  const [followUpSuggestionsDismissed, setFollowUpSuggestionsDismissed] = useState(false)
-  const [dismissFollowUpSuggestionsWhenFilesClear, setDismissFollowUpSuggestionsWhenFilesClear] =
-    useState(false)
-  const [highlightedFollowUpSuggestionIndex, setHighlightedFollowUpSuggestionIndex] = useState(
-    NoNextStepSuggestionHighlightIndex
-  )
+  const [inlineSuggestionDismissed, setInlineSuggestionDismissed] = useState(false)
+  // 「用户拨到过第几条」；可见集合随输入前缀收缩时不改这一格，只在展示前夹取（见
+  // `resolveInlineNextStepSuggestionIndex`），这样退格回去还能回到原来那条。
+  const [inlineSuggestionIndex, setInlineSuggestionIndex] = useState(0)
   const imagePreviewMessages = useImagePreviewDialogMessages()
   const {
     composerMenuOpen,
@@ -521,71 +520,58 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     auxiliaryContentCount: selectedMentionCount,
   })
   const composerDisabled = interactionState.composerDisabled
+  // 建议出主进程时已按 confidence 降序排好，所以数组序**就是**优先级序：第 1 条即最高优先级，
+  // 提示条上的 `1/3` 直接是这个下标。输入框为空时全部候选可切换，开始输入后只留前缀命中项。
   const visibleFollowUpSuggestions = useMemo(
     () => matchNextStepSuggestionPrefix(followUpSuggestions, value),
     [followUpSuggestions, value]
   )
-  const recommendedFollowUpSuggestion = findHighestConfidenceNextStepSuggestion(
-    visibleFollowUpSuggestions
+  const inlineSuggestionCount = visibleFollowUpSuggestions.length
+  const activeInlineSuggestionIndex = resolveInlineNextStepSuggestionIndex(
+    inlineSuggestionIndex,
+    inlineSuggestionCount
   )
-  const highlightedFollowUpSuggestion =
-    visibleFollowUpSuggestions[highlightedFollowUpSuggestionIndex]
-  const followUpSuggestionForCompletion =
-    highlightedFollowUpSuggestion ?? recommendedFollowUpSuggestion
+  const activeInlineSuggestion = visibleFollowUpSuggestions[activeInlineSuggestionIndex]
+  const inlineSuggestionVisible =
+    !composerDisabled && !inlineSuggestionDismissed && !!activeInlineSuggestion
   const canAcceptInlineCompletion =
-    !composerDisabled &&
-    !!followUpSuggestionForCompletion &&
-    !isNextStepSuggestionExactMatch(followUpSuggestionForCompletion, value)
-  const visibleSelectedFollowUpSuggestionId = visibleFollowUpSuggestions.some(
-    (suggestion) =>
-      suggestion.id === selectedFollowUpSuggestionId &&
-      isNextStepSuggestionExactMatch(suggestion, value)
-  )
-    ? selectedFollowUpSuggestionId
-    : undefined
-  const activeFollowUpSuggestionId =
-    highlightedFollowUpSuggestion?.id ?? visibleSelectedFollowUpSuggestionId
-  const followUpSuggestionMenuOpen =
-    !followUpSuggestionsDismissed && !isEmpty(visibleFollowUpSuggestions)
-  const suggestionKeyboardHint = !composerDisabled
-    ? followUpSuggestionMenuOpen
-      ? canAcceptInlineCompletion
-        ? 'complete'
-        : null
-      : !isEmpty(visibleFollowUpSuggestions)
+    inlineSuggestionVisible &&
+    !!activeInlineSuggestion &&
+    !isNextStepSuggestionExactMatch(activeInlineSuggestion, value)
+  /**
+   * 幽灵层要与 textarea 逐像素对齐，靠的是「同一段文本、同一套排版」：已输入的那一截原样渲染成
+   * 透明，余量接在后面。因此只有当建议**字面**以已输入内容开头时才画——前缀匹配本身是归一化的
+   * （折空白、小写化），`add` 命中 `Add tests` 时两段宽度并不相等，那种情况就只留提示条不画幽灵。
+   */
+  const inlineGhostRemainder =
+    inlineSuggestionVisible && activeInlineSuggestion?.prompt.startsWith(value)
+      ? activeInlineSuggestion.prompt.slice(value.length)
+      : ''
+  /**
+   * 输入框右上角那枚提示条：`open` = 已被 Esc 收起、按 ↑ 唤回；`active` = 建议正显示且还有可说的
+   * （能切换或能补全）。只剩一条又已经原样落进输入框时两句都没得说，整枚提示条缺席——不留一个
+   * 空边框在那里。
+   */
+  const inlineSuggestionHint =
+    composerDisabled || inlineSuggestionCount === 0
+      ? null
+      : !inlineSuggestionVisible
         ? 'open'
-        : null
-    : null
+        : inlineSuggestionCount > 1 || canAcceptInlineCompletion
+          ? 'active'
+          : null
 
-  function dismissFollowUpSuggestionMenu(): void {
-    setFollowUpSuggestionsDismissed(true)
-    setHighlightedFollowUpSuggestionIndex(NoNextStepSuggestionHighlightIndex)
-  }
-
-  function requestFollowUpSuggestionMenuDismiss(): void {
-    if (!isEmpty(filesRef.current)) {
-      setDismissFollowUpSuggestionsWhenFilesClear(true)
-      return
-    }
-
-    dismissFollowUpSuggestionMenu()
-  }
-
+  // 新一批建议到达时重新唤出，并把指针停在宿主声明的已选项上（宿主每轮都清空 selectedId，
+  // 于是实际落点就是优先级最高的第 1 条）。`useLatest` 让 selectedId 只当种子读一次，
+  // 不会因为选中态变化把用户刚拨到的那条弹回去。
+  const selectedFollowUpSuggestionIdLatest = useLatest(selectedFollowUpSuggestionId)
   useEffect(() => {
-    setFollowUpSuggestionsDismissed(false)
-    setDismissFollowUpSuggestionsWhenFilesClear(false)
-    setHighlightedFollowUpSuggestionIndex(NoNextStepSuggestionHighlightIndex)
-  }, [followUpSuggestions])
-
-  // 附件从「有」变成「没有」时才收起下一步建议菜单；依赖表挂这个派生布尔而不是 files 身份，
-  // 宿主每帧重建 files 数组也不会让这条 effect 反复跑。
-  const hasAttachedFiles = !isEmpty(files)
-  useEffect(() => {
-    if (!dismissFollowUpSuggestionsWhenFilesClear || hasAttachedFiles) return
-
-    setDismissFollowUpSuggestionsWhenFilesClear(false)
-    dismissFollowUpSuggestionMenu()
-  }, [dismissFollowUpSuggestionsWhenFilesClear, hasAttachedFiles])
+    const selectedIndex = followUpSuggestions.findIndex(
+      (item) => item.id === selectedFollowUpSuggestionIdLatest.current
+    )
+    setInlineSuggestionDismissed(false)
+    setInlineSuggestionIndex(Math.max(selectedIndex, 0))
+  }, [followUpSuggestions, selectedFollowUpSuggestionIdLatest])
 
   const completeFollowUpSuggestion = (suggestion: ChatSuggestionItem): void => {
     onSelectFollowUpSuggestion?.(suggestion.id)
@@ -598,7 +584,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
 
   const sendFollowUpSuggestion = (suggestion: ChatSuggestionItem): void => {
     onSelectFollowUpSuggestion?.(suggestion.id)
-    requestFollowUpSuggestionMenuDismiss()
+    setInlineSuggestionDismissed(true)
     void requestSend({
       value: suggestion.prompt,
       files,
@@ -606,36 +592,36 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     })
   }
 
-  const handleFollowUpSuggestionKeyDown = (
+  const handleInlineSuggestionKeyDown = (
     event: React.KeyboardEvent<HTMLTextAreaElement>
   ): boolean => {
-    if (composerDisabled || isEmpty(visibleFollowUpSuggestions)) return false
-    const action = resolveNextStepSuggestionKeyboardAction(
-      event.key,
-      highlightedFollowUpSuggestionIndex,
-      visibleFollowUpSuggestions.length,
-      followUpSuggestionMenuOpen,
-      isEmpty(value),
-      onFilesChange ? files.length : 0
-    )
+    if (composerDisabled) return false
+    // 内联建议的四个键位（↑↓ / Tab / Enter / Esc）全是**无修饰键**的组合，所以按住任一修饰键时
+    // 整条路由让位：Shift+Enter 是换行、Shift+↑ 是选区、Shift+Tab 是反向切焦点，一个都不能被劫持。
+    if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false
+    const action = resolveInlineNextStepSuggestionKeyboardAction({
+      key: event.key,
+      activeIndex: activeInlineSuggestionIndex,
+      itemCount: inlineSuggestionCount,
+      visible: inlineSuggestionVisible,
+      inputEmpty: isEmpty(value),
+      canAccept: canAcceptInlineCompletion,
+    })
     if (action.kind === 'ignore') return false
-    if (action.kind === 'submit' && event.nativeEvent.isComposing) return false
+    // 输入法组字中的 Enter 是「上屏」，不是「发送这条建议」。
+    if (action.kind === 'send' && event.nativeEvent.isComposing) return false
 
     event.preventDefault()
-    if (action.kind === 'open') {
-      setDismissFollowUpSuggestionsWhenFilesClear(false)
-      setFollowUpSuggestionsDismissed(false)
-      setHighlightedFollowUpSuggestionIndex(action.index)
-    } else if (action.kind === 'highlight') {
-      setHighlightedFollowUpSuggestionIndex(action.index)
-    } else if (action.kind === 'submit') {
-      const suggestion = visibleFollowUpSuggestions[action.index]
-      if (suggestion) sendFollowUpSuggestion(suggestion)
-    } else if (action.kind === 'remove-attachment') {
-      handleRemoveFile(action.index)
-      if (action.dismissWhenEmpty) setDismissFollowUpSuggestionsWhenFilesClear(true)
-    } else {
-      dismissFollowUpSuggestionMenu()
+    if (action.kind === 'cycle') {
+      setInlineSuggestionIndex(action.index)
+    } else if (action.kind === 'restore') {
+      setInlineSuggestionDismissed(false)
+    } else if (action.kind === 'dismiss') {
+      setInlineSuggestionDismissed(true)
+    } else if (action.kind === 'accept') {
+      if (activeInlineSuggestion) completeFollowUpSuggestion(activeInlineSuggestion)
+    } else if (activeInlineSuggestion) {
+      sendFollowUpSuggestion(activeInlineSuggestion)
     }
 
     return true
@@ -1131,14 +1117,6 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
         deleteLabel={mentionables?.deleteLabel ?? t('common.remove')}
       />
 
-      <ComposerNextStepSuggestionMenu
-        suggestions={followUpSuggestionMenuOpen ? visibleFollowUpSuggestions : []}
-        selectedId={activeFollowUpSuggestionId}
-        onSelect={sendFollowUpSuggestion}
-        label={t('chat.nextStepSuggestionsTitle')}
-        disabled={composerDisabled}
-      />
-
       {beforeInput}
       <ChatInputCore
         filePreview={
@@ -1189,104 +1167,119 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
               onInsertMarker={insertVirtualPasteReferenceMarker}
               onRemove={removeVirtualPasteReference}
             />
-            <Textarea
-              ref={textareaRef}
-              variant="bare"
-              value={value}
-              maxLength={ChatComposerInputMaxChars}
-              onChange={(event) => {
-                applyTextareaValue(event.target.value, event.currentTarget)
-              }}
-              onSelect={(event) => {
-                updateSelectionFromTextarea(event.currentTarget, value.length)
-              }}
-              onPaste={(event) => {
-                const pastedText = event.clipboardData.getData('text/plain')
-                const selectionStart = event.currentTarget.selectionStart ?? value.length
-                const selectionEnd = event.currentTarget.selectionEnd ?? value.length
-                const nextRawValue = `${value.slice(0, selectionStart)}${pastedText}${value.slice(selectionEnd)}`
-                const shouldVirtualizePaste =
-                  !!onVirtualPasteReferencesChange &&
-                  shouldVirtualizePastedText({
-                    pastedText,
-                    nextInputLength: nextRawValue.length,
-                    maxInputChars: ChatComposerInputMaxChars,
-                  })
-                const pastedFiles = canAcceptFiles ? readClipboardFiles(event.clipboardData) : []
+            <div
+              className={cx(
+                'textareaField',
+                inlineSuggestionHint === 'active' && 'textareaFieldWideHint'
+              )}
+            >
+              <Textarea
+                ref={textareaRef}
+                variant="bare"
+                value={value}
+                maxLength={ChatComposerInputMaxChars}
+                onChange={(event) => {
+                  applyTextareaValue(event.target.value, event.currentTarget)
+                }}
+                onSelect={(event) => {
+                  updateSelectionFromTextarea(event.currentTarget, value.length)
+                }}
+                onPaste={(event) => {
+                  const pastedText = event.clipboardData.getData('text/plain')
+                  const selectionStart = event.currentTarget.selectionStart ?? value.length
+                  const selectionEnd = event.currentTarget.selectionEnd ?? value.length
+                  const nextRawValue = `${value.slice(0, selectionStart)}${pastedText}${value.slice(selectionEnd)}`
+                  const shouldVirtualizePaste =
+                    !!onVirtualPasteReferencesChange &&
+                    shouldVirtualizePastedText({
+                      pastedText,
+                      nextInputLength: nextRawValue.length,
+                      maxInputChars: ChatComposerInputMaxChars,
+                    })
+                  const pastedFiles = canAcceptFiles ? readClipboardFiles(event.clipboardData) : []
 
-                if (shouldVirtualizePaste) {
+                  if (shouldVirtualizePaste) {
+                    event.preventDefault()
+                    if (!isEmpty(pastedFiles)) appendFiles(pastedFiles)
+                    appendVirtualPasteReference(pastedText)
+                    return
+                  }
+
+                  const wouldExceedInputLimit =
+                    !!pastedText && nextRawValue.length > ChatComposerInputMaxChars
+
+                  if (wouldExceedInputLimit) {
+                    event.preventDefault()
+                    insertTextAtCursor(pastedText)
+                    return
+                  }
+
+                  if (isEmpty(pastedFiles)) return
+
                   event.preventDefault()
-                  if (!isEmpty(pastedFiles)) appendFiles(pastedFiles)
-                  appendVirtualPasteReference(pastedText)
-                  return
-                }
-
-                const wouldExceedInputLimit =
-                  !!pastedText && nextRawValue.length > ChatComposerInputMaxChars
-
-                if (wouldExceedInputLimit) {
-                  event.preventDefault()
-                  insertTextAtCursor(pastedText)
-                  return
-                }
-
-                if (isEmpty(pastedFiles)) return
-
-                event.preventDefault()
-                appendFiles(pastedFiles)
-                if (pastedText) {
-                  insertTextAtCursor(pastedText)
-                }
-              }}
-              onKeyDown={(event) => {
-                if (mentionMenu.handleKeyDown(event)) return
-                if (slashSkillMenu.handleKeyDown(event)) return
-                if (handleFollowUpSuggestionKeyDown(event)) return
-                if (
-                  !isComposing.current &&
-                  event.key === 'Tab' &&
-                  followUpSuggestionMenuOpen &&
-                  canAcceptInlineCompletion &&
-                  followUpSuggestionForCompletion
-                ) {
-                  event.preventDefault()
-                  completeFollowUpSuggestion(followUpSuggestionForCompletion)
-                  return
-                }
-                if (
-                  !isComposing.current &&
-                  event.key === 'Enter' &&
-                  !event.shiftKey &&
-                  followUpSuggestionMenuOpen &&
-                  interactionState.canSend
-                ) {
-                  requestFollowUpSuggestionMenuDismiss()
-                }
-                handleKeyDown(event)
-              }}
-              onCompositionStart={() => {
-                isComposing.current = true
-              }}
-              onCompositionEnd={() => {
-                isComposing.current = false
-              }}
-              placeholder={placeholder}
-              disabled={composerDisabled}
-              rows={isCompact ? 1 : 2}
-              className={cx('textarea', !!suggestionKeyboardHint && 'textareaWithCompletion')}
-            />
-            {!!suggestionKeyboardHint && (
-              <span className={styles.inlineCompletionHint} aria-hidden>
-                {suggestionKeyboardHint === 'open' && (
-                  <ArrowUpIcon size={10} weight="bold" aria-hidden />
-                )}
-                {t(
-                  suggestionKeyboardHint === 'open'
-                    ? 'chat.suggestionOpenHint'
-                    : 'chat.suggestionTabHint'
-                )}
-              </span>
-            )}
+                  appendFiles(pastedFiles)
+                  if (pastedText) {
+                    insertTextAtCursor(pastedText)
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (mentionMenu.handleKeyDown(event)) return
+                  if (slashSkillMenu.handleKeyDown(event)) return
+                  if (!isComposing.current && handleInlineSuggestionKeyDown(event)) return
+                  handleKeyDown(event)
+                }}
+                onCompositionStart={() => {
+                  isComposing.current = true
+                }}
+                onCompositionEnd={() => {
+                  isComposing.current = false
+                }}
+                // 幽灵文本已经占着这一格；再画一层占位符就是两段字叠在一起。
+                placeholder={inlineGhostRemainder && isEmpty(value) ? '' : placeholder}
+                disabled={composerDisabled}
+                rows={isCompact ? 1 : 2}
+                className={cx('textarea', !!inlineSuggestionHint && 'textareaWithCompletion')}
+              />
+              {!!inlineGhostRemainder && (
+                <div
+                  className={cx('inlineGhost', !!inlineSuggestionHint && 'inlineGhostWithHint')}
+                  aria-hidden
+                >
+                  <span className={styles.inlineGhostTyped}>{value}</span>
+                  {inlineGhostRemainder}
+                </div>
+              )}
+              {!!inlineSuggestionHint && (
+                <span className={styles.inlineCompletionHint} aria-hidden>
+                  {inlineSuggestionHint === 'open' ? (
+                    <>
+                      <ArrowUpIcon size={10} weight="bold" aria-hidden />
+                      {t('chat.suggestionOpenHint')}
+                    </>
+                  ) : (
+                    <>
+                      {inlineSuggestionCount > 1 && (
+                        <>
+                          <ArrowsDownUpIcon size={10} weight="bold" aria-hidden />
+                          {t('chat.suggestionCycleHint', {
+                            index: activeInlineSuggestionIndex + 1,
+                            total: inlineSuggestionCount,
+                          })}
+                        </>
+                      )}
+                      {canAcceptInlineCompletion && (
+                        <>
+                          {inlineSuggestionCount > 1 && (
+                            <span className={styles.inlineCompletionHintDivider}>·</span>
+                          )}
+                          {t('chat.suggestionTabHint')}
+                        </>
+                      )}
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
             {!!visibleLimitMessage && (
               <Text
                 className={cx('limitMessage', !!draftLimitError && 'limitMessageError')}

@@ -7,6 +7,7 @@ import type {
   ConversationMessageRunMarker,
   ConversationTurnContextView,
 } from '../projection'
+import type { ConversationRewindPlan } from '../projection'
 import { type SectionMetric } from '../react-hooks/scrollBehavior'
 import {
   type BrowserScreenshotDisplayMode,
@@ -97,7 +98,7 @@ export interface ChatTranscriptProps {
     text: string
   }) => Promise<void>
   canRewindToMessage?: boolean
-  canChooseRewindFiles?: boolean
+  getRewindPlan?: (messageId: string) => Nullable<ConversationRewindPlan>
 }
 
 function ChatTranscriptInner({
@@ -136,7 +137,7 @@ function ChatTranscriptInner({
   onRewindToMessage,
   onTranslateThinkingBlock,
   canRewindToMessage,
-  canChooseRewindFiles,
+  getRewindPlan,
 }: ChatTranscriptProps): ReactElement {
   const slots = useConversationRenderSlots()
 
@@ -185,7 +186,7 @@ function ChatTranscriptInner({
               onRewindToMessage={onRewindToMessage}
               onTranslateThinkingBlock={onTranslateThinkingBlock}
               canRewindToMessage={canRewindToMessage}
-              canChooseRewindFiles={canChooseRewindFiles}
+              getRewindPlan={getRewindPlan}
             />
           ),
         })}

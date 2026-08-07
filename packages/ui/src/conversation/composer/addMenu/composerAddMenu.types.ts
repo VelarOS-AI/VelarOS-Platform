@@ -32,7 +32,6 @@ export interface ComposerAddMenuAttachmentsProps {
 export interface ComposerAddMenuFeaturesProps {
   showSkillsSubmenu: boolean
   showQuickPromptsSubmenu: boolean
-  showRenderingSubmenu: boolean
   showPluginsSubmenu: boolean
   canTogglePlanFeature: boolean
   planModeActive: boolean
@@ -47,7 +46,6 @@ export interface ComposerAddMenuFeaturesProps {
   updateGoalMode: (enabled: boolean) => void
   availableSkills: ChatInputSkillOption[]
   quickPrompts: ChatInputManualTestPromptOption[]
-  renderingOptions: ChatInputPromptFeatureGroupOption[]
   pluginOptions: ChatInputPromptFeatureGroupOption[]
   selectedPromptFeatures: ReadonlySet<ChatPromptFeatureId>
   updatePromptFeatureGroup: (option: ChatInputPromptFeatureGroupOption, enabled: boolean) => void

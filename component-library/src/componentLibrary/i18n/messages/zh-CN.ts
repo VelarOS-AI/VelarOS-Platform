@@ -1110,6 +1110,7 @@ export const zhCNMessages = {
     placeholder: '输入任务…',
     suggestionTabHint: 'Tab 补全',
     suggestionOpenHint: '打开',
+    suggestionCycleHint: '{index}/{total}',
     memorySuggestionsTitle: '从你的记忆出发',
     nextStepSuggestionsTitle: '建议的下一步',
     running: '运行中…',

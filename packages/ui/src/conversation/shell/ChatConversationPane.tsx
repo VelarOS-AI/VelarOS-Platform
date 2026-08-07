@@ -28,6 +28,7 @@ import type {
   ConversationView,
   ConversationWorkerThread,
 } from '../projection'
+import type { ConversationRewindPlan } from '../projection'
 import {
   type BrowserScreenshotDisplayMode,
   useConversationRenderSlots,
@@ -89,6 +90,8 @@ export interface ChatConversationPaneProps {
   followLocked: boolean
   preflightUserActionCard?: LooseOptional<UserActionCardType>
   scrollRef: React.RefObject<Nullable<HTMLDivElement>>
+  /** 宿主收起了滚动导航栏；只有自带头部的宿主会传（开关归它的头部）。 */
+  scrollNavigatorHidden?: boolean
   streamSlot?: ReactNode
   variant?: 'default' | 'side'
   onOpenBrowserLink?: (url: string) => void | Promise<void>
@@ -105,6 +108,13 @@ export interface ChatConversationPaneProps {
   onSubmitInput?: (answer: string) => void | Promise<void>
   onContinueGoal?: (input: string) => unknown | Promise<unknown>
   onRewindToMessage?: (messageId: string, options?: { restoreFiles?: boolean }) => Promise<void>
+  /**
+   * 打开回溯确认框那一刻由宿主同步算出的预览。
+   *
+   * **不给它，回溯按钮点下去就什么都不会发生**（确认框由预览是否存在驱动）。接入方要么两个都给，
+   * 要么两个都不给（不给 onRewindToMessage 时按钮本身就不渲染）。
+   */
+  getRewindPlan?: (messageId: string) => Nullable<ConversationRewindPlan>
   onTranslateThinkingBlock?: (request: {
     messageId: string
     blockIndex: number
@@ -162,6 +172,7 @@ export function ChatConversationPane({
   preflightUserActionCard,
   scrollRef,
   streamSlot,
+  scrollNavigatorHidden = false,
   variant = 'default',
   onOpenBrowserLink,
   onOpenFileChange,
@@ -173,6 +184,7 @@ export function ChatConversationPane({
   onSubmitInput,
   onContinueGoal,
   onRewindToMessage,
+  getRewindPlan,
   onTranslateThinkingBlock,
   onDismissStickyDockItem,
   onFollowLockedChange,
@@ -697,7 +709,7 @@ export function ChatConversationPane({
               onRewindToMessage={onRewindToMessage}
               onTranslateThinkingBlock={onTranslateThinkingBlock}
               canRewindToMessage={canRewindToMessage}
-              canChooseRewindFiles={supportsProjectFiles}
+              getRewindPlan={getRewindPlan}
             />
             {!!streamSlot && <div className={styles.streamSlot}>{streamSlot}</div>}
             {!inlineNoticeMessageId && inlineNotice && (
@@ -723,9 +735,7 @@ export function ChatConversationPane({
                 onReviewFileChanges={onReviewFileChanges}
                 activeUserActionCardIds={transcriptActiveUserActionCardIds}
                 onResolveUserActionCard={resolveUserActionCard}
-                onRewindToMessage={onRewindToMessage}
                 onTranslateThinkingBlock={onTranslateThinkingBlock}
-                canRewindToMessage={canRewindToMessage}
               />
             )}
             {shouldRenderAwaitingInputCard && (
@@ -756,6 +766,7 @@ export function ChatConversationPane({
         </ScrollArea>
 
         <ChatScrollNavigator
+          hidden={scrollNavigatorHidden}
           followLocked={followLocked}
           onFollowLockedChange={onFollowLockedChange}
           scrollRef={scrollRef}

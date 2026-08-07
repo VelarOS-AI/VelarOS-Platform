@@ -4,11 +4,11 @@ import { useMemoizedFn } from 'ahooks'
 import type { ComposerSubmenuId } from '../chatInputTypes'
 import { OnboardingCloseComposerMenusEventName } from '../composerHostEvents'
 
-type ComposerMenuTourLock = 'primary' | 'rendering' | 'plugins'
+type ComposerMenuTourLock = 'primary' | 'plugins'
 
 function getComposerMenuTourLock(): Nullable<ComposerMenuTourLock> {
   const lock = document.documentElement.dataset.tourComposerMenuLock
-  return lock === 'primary' || lock === 'rendering' || lock === 'plugins' ? lock : null
+  return lock === 'primary' || lock === 'plugins' ? lock : null
 }
 
 export interface UseComposerAddMenuStateResult {
@@ -25,7 +25,7 @@ export function useComposerAddMenuState(): UseComposerAddMenuStateResult {
 
   const closeComposerSubmenus = useMemoizedFn((): void => {
     const tourLock = getComposerMenuTourLock()
-    if (tourLock === 'rendering' || tourLock === 'plugins') {
+    if (tourLock === 'plugins') {
       setComposerSubmenuId(tourLock)
       return
     }
@@ -42,13 +42,12 @@ export function useComposerAddMenuState(): UseComposerAddMenuStateResult {
 
   const handleComposerActiveSubmenuChange = useMemoizedFn((submenuId: Nullable<string>): void => {
     const tourLock = getComposerMenuTourLock()
-    if (tourLock === 'rendering' || tourLock === 'plugins') {
+    if (tourLock === 'plugins') {
       setComposerSubmenuId(tourLock)
       return
     }
     const nextSubmenuId: Nullable<ComposerSubmenuId> =
       submenuId === 'quick-prompts' ||
-      submenuId === 'rendering' ||
       submenuId === 'plugins' ||
       submenuId === 'skills'
         ? submenuId

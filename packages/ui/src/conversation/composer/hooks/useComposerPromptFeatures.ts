@@ -7,6 +7,7 @@ import {
   OfficePromptFeatureIds,
 } from '../chatInputUtils'
 
+import { filterComposerMenuPluginOptions } from './buildChatInputComposerAddMenuProps'
 import {
   applyPromptFeatureGroupSelection,
   buildActivePluginOptions,
@@ -67,8 +68,11 @@ export function useComposerPromptFeatures({
     [lockedPromptFeatures, promptFeatures, unavailablePromptFeatures]
   )
 
+  // 渲染那两格（widget / html-artifact）由宿主常开、模型自行触发，**不再是用户开关**：
+  // 芯片行同样不画它们，否则每条会话都常驻两枚点不掉的芯片（判决见
+  // `filterComposerMenuPluginOptions`）。
   const activePluginOptions = useMemo(
-    () => buildActivePluginOptions(selectedPromptFeatures),
+    () => filterComposerMenuPluginOptions(buildActivePluginOptions(selectedPromptFeatures)),
     [selectedPromptFeatures]
   )
   const pluginOptions = useMemo(

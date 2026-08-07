@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react'
 import {
+  CaretRightIcon,
   FlaskIcon,
   GlobeSimpleIcon,
   ImageIcon,
@@ -9,16 +10,19 @@ import {
 } from '@phosphor-icons/react'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import {
   BusinessCascadingMenuItem,
   type BusinessCascadingMenuRenderProps,
+  BusinessCascadingSubmenuSection,
 } from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
 
 import { ComposerMenuItemBody, ComposerMenuSwitchIndicator } from './addMenu/ComposerMenuItemChrome'
 
 import styles from './ChatInput.module.css'
 
-import { isEmpty,isString, isTrue } from '#internal/runtime'
+import { isEmpty,isString, isTrue, toNullable } from '#internal/runtime'
 
 export type ChatComposerCapabilityControlKind = 'toggle' | 'choice' | 'action'
 export type ChatComposerCapabilityPlacement = 'add-menu' | 'toolbar' | 'model-menu'
@@ -27,6 +31,11 @@ export interface ChatComposerCapabilityChoice {
   id: string
   label: string
   description?: string
+  /**
+   * 这一档要不要按危险画（红字）。**宿主声明，包内不猜**：哪一档危险是宿主/引擎才知道的事实
+   * （外部引擎的「完全访问」= 撤沙箱 + 不询问），组件库按名字猜就是抄一份会腐的闭集。
+   */
+  tone?: 'danger'
 }
 
 /**
@@ -82,6 +91,128 @@ function updateCapabilityControl(control: ChatComposerCapabilityControl, active:
   else void control.onAction?.()
 }
 
+/** 当前选中的那一档（`value` 不是字符串 / 不在清单里 ⇒ 没有选中项）。 */
+function selectedCapabilityChoice(
+  control: ChatComposerCapabilityControl
+): Nullable<ChatComposerCapabilityChoice> {
+  return toNullable(
+    (control.choices ?? []).find(
+      (choice) => isString(control.value) && choice.id === control.value
+    )
+  )
+}
+
+/**
+ * 闭集档在**级联菜单里**的子菜单 id。
+ *
+ * 与模型格的 provider id 共用同一个 `activeSubmenuId` 命名空间，所以带前缀：控件 id 是引擎声明的
+ * 自由字符串（`approval` / `personality` …），不加前缀迟早与某个 provider id 撞车，撞上的表现是
+ * 「点审批档弹出模型清单」。
+ */
+export function composerCapabilityChoiceSubmenuId(controlId: string): string {
+  return `capability-choice:${controlId}`
+}
+
+/** 当前展开的子菜单是哪一格闭集档（不是闭集档就返回 null，此时该渲染的是别的子菜单）。 */
+export function findComposerCapabilityChoiceBySubmenuId(
+  controls: readonly ChatComposerCapabilityControl[],
+  submenuId: Nullable<string>
+): Nullable<ChatComposerCapabilityControl> {
+  if (!submenuId) return null
+  return toNullable(
+    controls.find(
+      (control) =>
+        control.kind === 'choice' && composerCapabilityChoiceSubmenuId(control.id) === submenuId
+    )
+  )
+}
+
+/**
+ * 闭集档的**菜单形态**：一行菜单项（标题 + 当前档 + 展开箭头），点开是一层子菜单。
+ *
+ * 判决（2026-08-07）：上一版这一格是**原生 `<select>`**——同一个面板里模型格是级联菜单项、
+ * 推理档是滑杆，只有它是操作系统画的下拉框（自带边框、自带箭头、深浅色跟不上主题、选项正文
+ * 只能挤进原生 `title`）。它与旁边任何一格都不像同一个产品。现在走与模型格**同一个组件**，
+ * 逐档正文因此能如实渲染出来——审批档的「未预批准即拒」与「越界即失败」是安全语义，
+ * 一个 label 撑不起它们的差别。
+ */
+function CapabilityChoiceMenuTrigger({
+  control,
+  disabled,
+  menu,
+}: {
+  control: ChatComposerCapabilityControl
+  disabled: boolean
+  menu: BusinessCascadingMenuRenderProps
+}): ReactElement {
+  const selectedChoice = selectedCapabilityChoice(control)
+  return (
+    <BusinessCascadingMenuItem
+      menu={menu}
+      submenuId={composerCapabilityChoiceSubmenuId(control.id)}
+      title={selectedChoice?.description || control.description || control.label}
+      disabled={disabled || isEmpty(control.choices ?? [])}
+      trailing={
+        <span className={styles.composerCapabilityChoiceTrailing}>
+          <Text
+            tone="caption"
+            truncate
+            className={styles.composerCapabilityChoiceValue}
+            data-tone={selectedChoice?.tone}
+          >
+            {selectedChoice?.label ?? ''}
+          </Text>
+          <CaretRightIcon size={12} className={menu.classes.disclosure} />
+        </span>
+      }
+    >
+      {/* 不给帮助图标：这一行右边已经写着当前档，展开的子菜单里逐档都有正文。标题旁再挂一个
+          问号，是把「点开看」这件事说了两遍。控件自述仍留在行的原生 title 上。 */}
+      <ComposerMenuItemBody label={control.label} />
+    </BusinessCascadingMenuItem>
+  )
+}
+
+/** 闭集档的子菜单面板：逐档一行，正文如实渲染（安全档的差别就写在正文里）。 */
+export function ComposerCapabilityChoiceSubmenu({
+  control,
+  menu,
+  disabled = false,
+  submenuWidth = '17rem',
+}: {
+  control: ChatComposerCapabilityControl
+  menu: BusinessCascadingMenuRenderProps
+  disabled?: boolean
+  submenuWidth?: string
+}): ReactElement {
+  return (
+    <BusinessCascadingSubmenuSection
+      menu={menu}
+      header={<Text tone="caption">{control.label}</Text>}
+      submenuWidth={submenuWidth}
+    >
+      {(control.choices ?? []).map((choice) => (
+        <BusinessCascadingMenuItem
+          key={choice.id}
+          menu={menu}
+          selected={isString(control.value) && choice.id === control.value}
+          disabled={disabled}
+          title={choice.description || choice.label}
+          data-tone={choice.tone}
+          className={choice.tone === 'danger' ? styles.composerCapabilityChoiceDangerItem : undefined}
+          onClick={() => {
+            control.onChange?.(choice.id)
+            menu.close()
+          }}
+        >
+          <ComposerMenuItemBody label={choice.label} help={choice.description} />
+        </BusinessCascadingMenuItem>
+      ))}
+    </BusinessCascadingSubmenuSection>
+  )
+}
+
+/** 闭集档的**菜单外形态**（工具条 / 没有级联菜单可用的宿主）：走设计系统的下拉，不用原生控件。 */
 function CapabilityChoiceControl({
   control,
   disabled,
@@ -91,32 +222,28 @@ function CapabilityChoiceControl({
   disabled: boolean
   inMenu: boolean
 }): ReactElement {
-  // 选项正文（`choice.description`）此前**一格都没渲染**：声明方写了「这一档到底会发生什么」，
-  // 界面上一个字都看不到。安全相关的档（外部引擎的审批档）尤其不能这样——一个 label 撑不起
-  // 「未预批准即拒」与「越界即失败」的差别。当前选中项的正文提到 label 上，逐项正文落 option
-  // 的原生 title，两处都不新造组件。
-  const selectedChoice = (control.choices ?? []).find(
-    (choice) => isString(control.value) && choice.id === control.value
-  )
+  const selectedChoice = selectedCapabilityChoice(control)
   return (
-    <label
+    <span
       className={inMenu ? styles.providerCapabilityMenuChoice : styles.providerCapabilityChoice}
       title={selectedChoice?.description || control.description || control.label}
     >
       <span>{control.label}</span>
-      <select
-        aria-label={control.label}
-        value={isString(control.value) ? control.value : ''}
+      <Select
+        variant="bare"
+        size="xs"
+        value={isString(control.value) ? control.value : undefined}
         disabled={disabled}
-        onChange={(event) => control.onChange?.(event.target.value)}
-      >
-        {(control.choices ?? []).map((choice) => (
-          <option key={choice.id} value={choice.id} title={choice.description}>
-            {choice.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        options={(control.choices ?? []).map((choice) => ({
+          value: choice.id,
+          label: choice.label,
+          description: choice.description,
+          // Select 原语自带 danger 色调，直接透传（两处对「危险档长什么样」不各画一套）。
+          tone: choice.tone,
+        }))}
+        onChange={(next) => control.onChange?.(next)}
+      />
+    </span>
   )
 }
 
@@ -143,6 +270,34 @@ function ToolbarCapabilityControl({
       <ComposerCapabilityIcon name={control.icon} />
       <span>{control.label}</span>
     </Button>
+  )
+}
+
+/**
+ * 闭集档在级联菜单里的一组触发行。**只画 `kind: 'choice'` 的格子**，别的形态照旧走各自的渲染
+ * （宿主把两拨分开传；混在一起画会让开关与下拉共用同一层布局）。
+ *
+ * 展开后的面板由宿主渲染 —— 级联菜单的子菜单是**单开**的（`activeSubmenuId` 一格），面板与
+ * 模型格的 provider 面板是同一个位置的竞争者，只有宿主知道现在该画哪一个。
+ */
+export function ComposerCapabilityChoiceMenuItems({
+  controls,
+  menu,
+  disabled = false,
+}: ComposerCapabilityMenuItemsProps): Nullable<ReactElement> {
+  const choices = controls.filter((control) => control.kind === 'choice')
+  if (isEmpty(choices)) return null
+  return (
+    <>
+      {choices.map((control) => (
+        <CapabilityChoiceMenuTrigger
+          key={control.id}
+          control={control}
+          menu={menu}
+          disabled={disabled || !!control.disabled}
+        />
+      ))}
+    </>
   )
 }
 
