@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { HTML_ARTIFACT_HEIGHT_CONTROLLER_FACTORY_SOURCE } from '../dist/height-controller.js'
+import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from '../dist/size-controller.js'
 import {
   buildHtmlArtifactShellDocument,
   DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT,
+  DEFAULT_HTML_ARTIFACT_MAX_WIDTH_RATIO,
   HTML_ARTIFACT_WHEEL_MESSAGE_TYPE,
   inferHtmlArtifactContentKind,
   normalizeHtmlArtifactExternalUrl,
@@ -63,7 +64,7 @@ describe('HTML artifact runtime', () => {
     assert.match(shell, /demo-message/)
     assert.match(shell, /window\.artifactBridge/)
     assert.match(shell, new RegExp(HTML_ARTIFACT_WHEEL_MESSAGE_TYPE))
-    assert.match(shell, /\)\(720\);function invalidateHeightMeasurement/)
+    assert.match(shell, /\)\(720,3\);function invalidateHeightMeasurement/)
     assert.match(shell, /pendingPatches=\[\];invalidateHeightMeasurement\(\);applyPatches\(patches\)/)
     assert.match(shell, /shouldPublishMeasuredSize/)
     assert.doesNotMatch(shell, /widgetBridge|show_widget/)
@@ -73,14 +74,15 @@ describe('HTML artifact runtime', () => {
     const shell = buildHtmlArtifactShellDocument()
 
     assert.equal(DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT, 1200)
-    assert.match(shell, /\)\(1200\);function invalidateHeightMeasurement/)
+    assert.equal(DEFAULT_HTML_ARTIFACT_MAX_WIDTH_RATIO, 3)
+    assert.match(shell, /\)\(1200,3\);function invalidateHeightMeasurement/)
   })
 
   test('settles shrink, feedback, deduplication, and hard caps in one controller', () => {
-    const createHtmlArtifactHeightController = Function(
-      `return (${HTML_ARTIFACT_HEIGHT_CONTROLLER_FACTORY_SOURCE})`
+    const createHtmlArtifactSizeController = Function(
+      `return (${HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE})`
     )()
-    const controller = createHtmlArtifactHeightController(720)
+    const controller = createHtmlArtifactSizeController(720)
 
     assert.equal(
       controller.resolve({ baseHeight: 2000, clientHeight: 240, scrollHeight: 2000 }),
@@ -112,5 +114,48 @@ describe('HTML artifact runtime', () => {
       controller.resolve({ baseHeight: 480, clientHeight: 420, scrollHeight: 480 }),
       360
     )
+  })
+
+  test('freezes a content width that grows with the frame the host gives back', () => {
+    const createHtmlArtifactSizeController = Function(
+      `return (${HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE})`
+    )()
+    const controller = createHtmlArtifactSizeController(1200, 3)
+
+    // 100vw 子元素 / 百分比定位的装饰:宿主每加宽一次,测量宽就跟着长一次。
+    assert.equal(controller.resolveWidth({ baseWidth: 792, clientWidth: 760 }), 792)
+    assert.equal(controller.resolveWidth({ baseWidth: 824, clientWidth: 792 }), 824)
+    assert.equal(controller.resolveWidth({ baseWidth: 856, clientWidth: 824 }), 760)
+    // 冻结是粘滞的:DOM 变更不得解冻,否则每次 mutation 都会重启这条跑飞回路。
+    controller.invalidate()
+    assert.equal(controller.resolveWidth({ baseWidth: 1600, clientWidth: 760 }), 760)
+  })
+
+  test('keeps a genuinely wide layout and caps a runaway one', () => {
+    const createHtmlArtifactSizeController = Function(
+      `return (${HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE})`
+    )()
+
+    // 定宽 1400 的设计稿:宿主加宽后测量宽不再长,是真实需求宽,原样回传由宿主缩放。
+    const stable = createHtmlArtifactSizeController(1200, 3)
+    assert.equal(stable.resolveWidth({ baseWidth: 1432, clientWidth: 760 }), 1432)
+    assert.equal(stable.resolveWidth({ baseWidth: 1432, clientWidth: 1432 }), 1432)
+
+    // 一步跳到 3 倍以上:来不及攒够两轮证据,硬上限直接兜住。
+    const capped = createHtmlArtifactSizeController(1200, 3)
+    assert.equal(capped.resolveWidth({ baseWidth: 9000, clientWidth: 760 }), 2280)
+  })
+
+  test('stops scaling instead of shrinking an artifact into a sliver', () => {
+    const fit = resolveHtmlArtifactFrameFit({
+      fallbackHeight: 360,
+      maxViewportWidth: 600,
+      naturalHeight: 800,
+      naturalWidth: 6000,
+    })
+
+    assert.equal(fit.scale, 1)
+    assert.equal(fit.viewportWidth, 600)
+    assert.equal(fit.viewportHeight, 800)
   })
 })

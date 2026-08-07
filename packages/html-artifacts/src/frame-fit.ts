@@ -15,6 +15,14 @@ export interface HtmlArtifactFrameFitInput {
   preferViewportWidth?: boolean
 }
 
+/**
+ * Hosts render wide content by scaling it down, so an extreme width request turns into an unreadable
+ * sliver. Past this multiple of the host width the frame stops scaling and lets the document clip or
+ * scroll internally — the sandbox has its own width feedback guard, this is the last line of defence
+ * for any host or document shape that evades it.
+ */
+const MAX_SCALE_DOWN_WIDTH_RATIO = 4
+
 function readPositiveNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
@@ -24,9 +32,15 @@ function toDimension(value: number): number {
 }
 
 export function resolveHtmlArtifactFrameFit(input: HtmlArtifactFrameFitInput): HtmlArtifactFrameFit {
-  const reportedNaturalWidth = readPositiveNumber(input.naturalWidth)
+  const measuredNaturalWidth = readPositiveNumber(input.naturalWidth)
   const naturalHeight = readPositiveNumber(input.naturalHeight)
   const maxViewportWidth = readPositiveNumber(input.maxViewportWidth)
+  const reportedNaturalWidth =
+    measuredNaturalWidth &&
+    maxViewportWidth &&
+    measuredNaturalWidth > maxViewportWidth * MAX_SCALE_DOWN_WIDTH_RATIO
+      ? maxViewportWidth
+      : measuredNaturalWidth
   const naturalWidth =
     input.preferViewportWidth &&
     maxViewportWidth &&

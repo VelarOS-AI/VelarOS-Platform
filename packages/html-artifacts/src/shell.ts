@@ -1,5 +1,5 @@
-import { HTML_ARTIFACT_HEIGHT_CONTROLLER_FACTORY_SOURCE } from './height-controller.js'
 import type { HtmlArtifactRenderPatch } from './protocol.js'
+import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from './size-controller.js'
 
 export type HtmlArtifactContentKind = 'html' | 'svg'
 
@@ -22,6 +22,8 @@ export interface HtmlArtifactDocumentOptions {
   initialPatches?: readonly HtmlArtifactRenderPatch[]
   /** Maximum height the iframe runtime may request from its host before using internal scrolling. */
   maxReportedHeight?: number
+  /** Maximum content width the iframe runtime may request, as a multiple of the host width. */
+  maxWidthRatio?: number
 }
 
 export interface HtmlArtifactShellDocumentOptions extends HtmlArtifactDocumentOptions {
@@ -32,6 +34,12 @@ const DEFAULT_ROOT_ID = 'velaros-html-artifact-root'
 
 /** Safe default that prevents viewport-relative artifact CSS from growing an iframe forever. */
 export const DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT = 1200
+
+/**
+ * Safe default for how much wider than its host an artifact may declare itself. Wider content is
+ * scaled down by the host, so an unbounded width request collapses the artifact into a sliver.
+ */
+export const DEFAULT_HTML_ARTIFACT_MAX_WIDTH_RATIO = 3
 
 /** The iframe asks its host to continue a wheel gesture when the document itself cannot scroll. */
 export const HTML_ARTIFACT_WHEEL_MESSAGE_TYPE = 'velaros:html-artifact-wheel'
@@ -103,6 +111,12 @@ function resolveMaxReportedHeight(value: number | undefined): number {
     : DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT
 }
 
+function resolveMaxWidthRatio(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_HTML_ARTIFACT_MAX_WIDTH_RATIO
+}
+
 function resolveBodyStyle(
   kind: HtmlArtifactContentKind,
   bodyStyle: string | undefined
@@ -158,27 +172,34 @@ function bridgeHeadScript(messages: HtmlArtifactBridgeMessages): string {
   )
 }
 
-// 单一高度控制器(静态/live 两条测量路径共用):
-// - 只有真实 DOM/style patch 会使旧测量失效;宿主按回传高度调整 iframe 不会重置状态。
-// - 溢出时记录 scrollHeight 地板,避免 scrollHeight 与子元素几何值互相拉扯。
-// - 连续两轮随 viewport 等量增长即判定为 100vh/百分比反馈并冻结;无论是否识别成功,
-//   maxReportedHeight 都是硬上限,超过后由 iframe 内部滚动承接。
+// 单一尺寸控制器(静态/live 两条测量路径共用,高与宽同轨):
+// - 只有真实 DOM/style patch 会使旧测量失效;宿主按回传尺寸调整 iframe 不会重置状态。
+// - 高:溢出时记录 scrollHeight 地板,避免 scrollHeight 与子元素几何值互相拉扯;连续两轮随
+//   viewport 等量增长即判定为 100vh/百分比反馈并冻结;maxReportedHeight 是硬上限,超过后由
+//   iframe 内部滚动承接。
+// - 宽:回传宽会被宿主变成 iframe 宽 + 缩放比,所以「宽随视口长」同样是闭环——连续两轮随
+//   viewport 增长即冻结回宿主首个可用宽,maxWidthRatio 是硬上限。
 // - 回传在源头按 1px 容差去重,宿主只会收到唯一目标值,不会参与二次补偿。
-function heightControllerScript(maxReportedHeight: number): string {
+function sizeControllerScript(maxReportedHeight: number, maxWidthRatio: number): string {
   return (
-    `var heightController=(${HTML_ARTIFACT_HEIGHT_CONTROLLER_FACTORY_SOURCE})(${maxReportedHeight});` +
-    `function invalidateHeightMeasurement(){heightController.invalidate();}` +
+    `var sizeController=(${HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE})(${maxReportedHeight},${maxWidthRatio});` +
+    `function invalidateHeightMeasurement(){sizeController.invalidate();}` +
     `function resolveReportedHeight(base){` +
     `var doc=document.documentElement||{};` +
-    `return heightController.resolve({baseHeight:base,clientHeight:doc.clientHeight||0,scrollHeight:Math.max(doc.scrollHeight||0,(document.body&&document.body.scrollHeight)||0)});` +
+    `return sizeController.resolve({baseHeight:base,clientHeight:doc.clientHeight||0,scrollHeight:Math.max(doc.scrollHeight||0,(document.body&&document.body.scrollHeight)||0)});` +
     `}` +
-    `function shouldPublishMeasuredSize(height,width){return heightController.shouldPublish({height:height,width:width});}`
+    `function resolveReportedWidth(base){` +
+    `var doc=document.documentElement||{};` +
+    `return sizeController.resolveWidth({baseWidth:base,clientWidth:Math.max(doc.clientWidth||0,window.innerWidth||0)});` +
+    `}` +
+    `function shouldPublishMeasuredSize(height,width){return sizeController.shouldPublish({height:height,width:width});}`
   )
 }
 
 function resizeTailScript(
   messages: HtmlArtifactBridgeMessages,
-  maxReportedHeight: number
+  maxReportedHeight: number,
+  maxWidthRatio: number
 ): string {
   return (
     `(function(){` +
@@ -201,12 +222,13 @@ function resizeTailScript(
     `try{var bs=window.getComputedStyle(document.body);height+=(parseFloat(bs.paddingBottom)||0)+(parseFloat(bs.marginBottom)||0)+(parseFloat(bs.borderBottomWidth)||0);}catch(e){}` +
     `return{width:Math.max(1,Math.ceil(width)),height:Math.max(1,Math.ceil(height))};` +
     `}` +
-    // 高度在统一控制器内收敛并受硬上限约束;超过上限时保留 iframe 内部滚动。
-    `${heightControllerScript(maxReportedHeight)}function reportHeight(){` +
+    // 高与宽都在统一控制器内收敛并受硬上限约束;超过上限时保留 iframe 内部滚动/裁剪。
+    `${sizeControllerScript(maxReportedHeight, maxWidthRatio)}function reportHeight(){` +
     `var size=measureContentSize(document.body);` +
     `var height=resolveReportedHeight(size.height);` +
-    `if(!shouldPublishMeasuredSize(height,size.width))return;` +
-    `window.parent.postMessage({type:${jsString(messages.resize)},height:height,width:size.width,naturalHeight:height,naturalWidth:size.width,rendered:true},'*');` +
+    `var width=resolveReportedWidth(size.width);` +
+    `if(!shouldPublishMeasuredSize(height,width))return;` +
+    `window.parent.postMessage({type:${jsString(messages.resize)},height:height,width:width,naturalHeight:height,naturalWidth:width,rendered:true},'*');` +
     `}` +
     `if(window.ResizeObserver){new ResizeObserver(reportHeight).observe(document.body);}` +
     `if(window.MutationObserver&&(document.documentElement||document.body)){new MutationObserver(function(){invalidateHeightMeasurement();reportHeight();}).observe(document.documentElement||document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','width','height']});}` +
@@ -364,7 +386,8 @@ function patchRuntimeScript(rootExpression: string, _messages: HtmlArtifactBridg
 function liveRenderTailScript(
   rootId: string,
   messages: HtmlArtifactBridgeMessages,
-  maxReportedHeight: number
+  maxReportedHeight: number,
+  maxWidthRatio: number
 ): string {
   return (
     `(function(){${patchRuntimeScript(
@@ -396,12 +419,13 @@ function liveRenderTailScript(
     `}` +
     `var hasRendered=false;` +
     // 与静态文档路径共用同一控制器:精确收敛、源头去重、反馈冻结和硬上限。
-    `${heightControllerScript(maxReportedHeight)}function reportHeight(){` +
+    `${sizeControllerScript(maxReportedHeight, maxWidthRatio)}function reportHeight(){` +
     `if(!hasRendered)return;` +
     `var size=measureContentSize(root||document.body);` +
     `var height=resolveReportedHeight(size.height);` +
-    `if(!shouldPublishMeasuredSize(height,size.width))return;` +
-    `window.parent.postMessage({type:${jsString(messages.resize)},height:height,width:size.width,naturalHeight:height,naturalWidth:size.width,rendered:true},'*');` +
+    `var width=resolveReportedWidth(size.width);` +
+    `if(!shouldPublishMeasuredSize(height,width))return;` +
+    `window.parent.postMessage({type:${jsString(messages.resize)},height:height,width:width,naturalHeight:height,naturalWidth:width,rendered:true},'*');` +
     `}` +
     `function reportSoon(){` +
     `setTimeout(reportHeight,0);setTimeout(reportHeight,80);setTimeout(reportHeight,360);` +
@@ -466,6 +490,7 @@ export function buildHtmlArtifactDocument(
   const kind = options.contentKind ?? inferHtmlArtifactContentKind(content)
   const messages = resolveBridgeMessages(options.bridgeMessages)
   const maxReportedHeight = resolveMaxReportedHeight(options.maxReportedHeight)
+  const maxWidthRatio = resolveMaxWidthRatio(options.maxWidthRatio)
   const bodyStyle = resolveBodyStyle(kind, options.bodyStyle)
   const svgCss = kind === 'svg' ? options.svgFitCss ?? '' : ''
 
@@ -477,7 +502,7 @@ export function buildHtmlArtifactDocument(
       options.initialPatches ?? [],
       messages
     )}</script>` +
-    `<script>${resizeTailScript(messages, maxReportedHeight)}</script></body></html>`
+    `<script>${resizeTailScript(messages, maxReportedHeight, maxWidthRatio)}</script></body></html>`
   )
 }
 
@@ -488,6 +513,7 @@ export function buildHtmlArtifactShellDocument(
   const kind = options.contentKind ?? 'html'
   const messages = resolveBridgeMessages(options.bridgeMessages)
   const maxReportedHeight = resolveMaxReportedHeight(options.maxReportedHeight)
+  const maxWidthRatio = resolveMaxWidthRatio(options.maxWidthRatio)
   const bodyStyle = resolveBodyStyle(kind, options.bodyStyle)
   const svgCss = kind === 'svg' ? options.svgFitCss ?? '' : ''
 
@@ -497,6 +523,6 @@ export function buildHtmlArtifactShellDocument(
     `<style>${HIDE_IFRAME_SCROLLBAR_CSS}${options.designCss ?? ''}${svgCss}body{${bodyStyle}}#${escapeHtmlAttribute(rootId)}{width:100%;min-width:0;}</style>` +
     `<script>${bridgeHeadScript(messages)}</script></head><body>` +
     `<div id="${escapeHtmlAttribute(rootId)}"></div>` +
-    `<script>${liveRenderTailScript(rootId, messages, maxReportedHeight)}</script></body></html>`
+    `<script>${liveRenderTailScript(rootId, messages, maxReportedHeight, maxWidthRatio)}</script></body></html>`
   )
 }
