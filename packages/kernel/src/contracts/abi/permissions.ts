@@ -1,8 +1,21 @@
 import type { ResourceRef, ScopeRef } from './references.js'
 
 export interface KernelPermissionRequest {
+  /** The module that *provides* the capability being invoked. */
   readonly moduleId: string
   readonly generation: number
+  /**
+   * The module the invocation is being performed *on behalf of*, when the host knows it.
+   *
+   * `moduleId` alone cannot answer "who is the user authorising?": it is the capability's
+   * provider, so mod A invoking a capability owned by module B records the grant under B —
+   * and every later mod invoking B is then silently granted. Hosts that authenticate the
+   * caller pass it here so the grant ledger can key on the party actually being trusted.
+   *
+   * Host-owned and absent from {@link KernelModulePermissionRequest} on purpose: a module
+   * must never be able to name a caller other than itself.
+   */
+  readonly callerModuleId?: string
   readonly permission: string
   readonly reason?: string
   readonly scope?: ScopeRef

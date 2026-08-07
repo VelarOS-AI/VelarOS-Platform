@@ -148,16 +148,22 @@ export class Kernel {
     return isKernelCallableCapabilityService(service) ? service : null
   }
 
+  /**
+   * `attribution` names the party the invocation acts *on behalf of*, when the host has
+   * authenticated it. Without it the grant is keyed on the capability's provider, so one
+   * mod's approval silently covers every other mod that later calls the same provider.
+   */
   public async requestCapabilityPermission(
     capabilityId: string,
     request: KernelModulePermissionRequest,
+    attribution?: { readonly callerModuleId: string },
   ): Promise<KernelPermissionDecision> {
     const token = this.host.getActiveCapabilityToken(capabilityId)
     if (isUndefined(token)) return {
         status: 'denied',
         reason: `Capability "${capabilityId}" has no active provider`,
       }
-    return this.host.requestCapabilityPermission(token, request)
+    return this.host.requestCapabilityPermission(token, request, attribution)
   }
 
   /**

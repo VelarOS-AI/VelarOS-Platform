@@ -465,10 +465,16 @@ export class KernelModuleHost {
    * The caller supplies only the requested operation permission. Provider
    * module identity and generation are derived from the active service handle,
    * so a client cannot forge either field.
+   *
+   * `attribution` is a **separate parameter, not part of `request`**, precisely so it stays
+   * out of {@link KernelModulePermissionRequest}: only a host that has authenticated the
+   * caller may name it, and a module calling through its own scoped broker has no way to
+   * reach this argument.
    */
   public async requestCapabilityPermission(
     token: CapabilityToken,
     request: KernelModulePermissionRequest,
+    attribution?: { readonly callerModuleId: string },
   ): Promise<KernelPermissionDecision> {
     this.assertNotDisposed()
     const handle = this.serviceStore.getHandle(token)
@@ -489,6 +495,7 @@ export class KernelModuleHost {
       ...request,
       moduleId: handle.ownerModuleId,
       generation: handle.generation,
+      ...(attribution ? { callerModuleId: attribution.callerModuleId } : {}),
     })
   }
 
