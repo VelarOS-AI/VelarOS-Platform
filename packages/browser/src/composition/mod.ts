@@ -1,9 +1,7 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
+import { BrowserModId, BrowserSpaceId } from '../core/BrowserModIdentity'
 import { browserTools } from '../tools/Collection'
-
-const BrowserModId = 'velaros.browser' as const
-const BrowserSpaceId = 'browser' as const
 
 // @arch-guard:suspend code-style/require-chinese-comments 理由：本块为中文说明，技术标识符（availableInSpaces/localhost/composeAgentModSpaces 等）密度触发启发式误报。
 /**

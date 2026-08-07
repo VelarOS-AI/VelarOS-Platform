@@ -23,6 +23,7 @@ export {
   resolveBrowserAutomationMode,
   resolveBrowserSearchEngineId,
 } from './BrowserConfigDefaults.js'
+export { BrowserModId, BrowserSpaceId } from './BrowserModIdentity.js'
 export {
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,
