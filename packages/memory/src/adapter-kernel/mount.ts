@@ -43,6 +43,8 @@ export interface MemoryAdapterConfigPort {
   isComputerUseCaptureEnabled: () => boolean
   /** 执行生命周期采集开关。 */
   isExecutionCaptureEnabled: () => boolean
+  /** 单条会话的采集豁免；缺席 = 不豁免（与四个类别开关并列求合取）。 */
+  isSessionCaptureAllowed?: (sessionId: string) => boolean
 }
 
 /** Host composition supplies product context→Memory scope mapping. */
@@ -126,6 +128,7 @@ export class MemoryAdapterRuntime {
       isWorkspaceCaptureEnabled: config.isWorkspaceCaptureEnabled,
       isComputerUseCaptureEnabled: config.isComputerUseCaptureEnabled,
       isExecutionCaptureEnabled: config.isExecutionCaptureEnabled,
+      isSessionCaptureAllowed: config.isSessionCaptureAllowed,
       resolveScope: hostContext.resolveScope,
       environmentContextBlockOpenTag: hostContext.environmentContextBlockOpenTag,
     })

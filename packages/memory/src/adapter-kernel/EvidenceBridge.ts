@@ -20,6 +20,13 @@ interface MemoryEvidenceBridgeOptions {
   isWorkspaceCaptureEnabled?: () => boolean
   isComputerUseCaptureEnabled?: () => boolean
   isExecutionCaptureEnabled?: () => boolean
+  /**
+   * 单条会话的采集豁免（宿主态，逐会话覆盖全局采集开关）。
+   *
+   * 与四个 `is*CaptureEnabled` 是**并列的门，不是替代**：那四个答「这一类事件要不要记」，
+   * 本门答「这一条会话要不要记」。缺席 = 不豁免（宿主没有会话级策略时行为与从前一致）。
+   */
+  isSessionCaptureAllowed?: (sessionId: string) => boolean
   resolveScope: MemoryHostScopeResolver
   /** Host protocol marker excluded from user-stated Evidence. */
   environmentContextBlockOpenTag?: string
@@ -72,7 +79,8 @@ export class MemoryEvidenceBridge {
   ) {}
 
   public captureUserMessage(payload: MemoryHostUserMessageEvent): void {
-    if (!this.canCapture(this.options.isChatCaptureEnabled) || !isArray(payload.messages)) return
+    if (!this.canCapture(this.options.isChatCaptureEnabled, payload.sessionId)) return
+    if (!isArray(payload.messages)) return
     const message = [...payload.messages].reverse().find((candidate) => candidate?.role === 'user')
     if (!message) return
     // 冻结的环境回合上下文块（<environment-context>…）被 renderer 追加进 user 消息 textBlocks，
@@ -110,7 +118,7 @@ export class MemoryEvidenceBridge {
   }
 
   public captureSessionSnapshot(snapshot: MemoryHostSessionSnapshot): void {
-    if (!this.canCapture(this.options.isChatCaptureEnabled)) return
+    if (!this.canCapture(this.options.isChatCaptureEnabled, snapshot.sessionId)) return
     const sessionTitle = snapshot.title?.trim() ?? ''
     const workspaceRoot = snapshot.workspaceRoot?.trim() ?? ''
     const evidence = snapshot.messages
@@ -132,7 +140,7 @@ export class MemoryEvidenceBridge {
    * 同一 toolCallId 重放时由来源唯一键幂等去重。
    */
   public captureComputerUseObservation(input: ComputerUseObservationInput): void {
-    if (!this.canCapture(this.options.isComputerUseCaptureEnabled)) return
+    if (!this.canCapture(this.options.isComputerUseCaptureEnabled, input.sessionId)) return
     const description = this.describeComputerUseObservation(input.toolName, input.args)
     if (!description) return
 
@@ -162,7 +170,7 @@ export class MemoryEvidenceBridge {
 
   /** 工作区工具只记录已完成动作及最小目标线索，不复制命令输出或文件正文。 */
   public captureWorkspaceToolObservation(input: WorkspaceToolObservationInput): void {
-    if (!this.canCapture(this.options.isWorkspaceCaptureEnabled)) return
+    if (!this.canCapture(this.options.isWorkspaceCaptureEnabled, input.sessionId)) return
     const description = this.describeWorkspaceObservation(input)
     this.enqueue([
       {
@@ -190,7 +198,7 @@ export class MemoryEvidenceBridge {
 
   /** 执行生命周期只记录阶段/终态，不保存错误正文、模型输出或上下文载荷。 */
   public captureExecutionObservation(input: ExecutionObservationInput): void {
-    if (!this.canCapture(this.options.isExecutionCaptureEnabled)) return
+    if (!this.canCapture(this.options.isExecutionCaptureEnabled, input.sessionId)) return
     const kind = input.kind.trim()
     if (isBlank(kind)) return
     this.enqueue([
@@ -282,8 +290,11 @@ export class MemoryEvidenceBridge {
       })
   }
 
-  private canCapture(sourceEnabled?: () => boolean): boolean {
-    return this.options.isEnabled() && (sourceEnabled?.() ?? true)
+  private canCapture(sourceEnabled: LooseOptional<() => boolean>, sessionId: string): boolean {
+    if (!this.options.isEnabled()) return false
+    if (!(sourceEnabled?.() ?? true)) return false
+
+    return this.options.isSessionCaptureAllowed?.(sessionId) ?? true
   }
 
   private titleFromContent(content: string): string {

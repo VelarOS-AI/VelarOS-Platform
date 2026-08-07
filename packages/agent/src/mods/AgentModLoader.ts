@@ -82,6 +82,16 @@ type AgentModActivationStatus = 'active' | 'partial'
 interface AgentModActivationState {
   readonly modId: string
   readonly version: string
+  /**
+   * manifest 的展示元数据，缺省为空串。
+   *
+   * 装载态此前只回 id 与 version，宿主想在注册表里显示「这个 mod 是什么」就只能拿 id 顶上
+   * （Desktop 的设置页正是如此：整行只有 `velaros.system (system)`）。这三个字段 manifest
+   * 本来就有，装载时一并带出——它们是**装载事实的一部分**，不该逼每个宿主再读一遍 manifest。
+   */
+  readonly displayName: string
+  readonly description: string
+  readonly publisher: string
   readonly trust: AgentModTrustLevel
   readonly source: AgentModSourceKind
   readonly origin: string
@@ -90,6 +100,14 @@ interface AgentModActivationState {
   /** 本宿主无落点、被裁剪掉的轴（partial 态的原因）。 */
   readonly absentAxes: readonly AgentModContributionAxisName[]
   readonly contributionCount: number
+  /**
+   * 逐轴贡献条目数（只含**真落地**的轴；缺席轴不出现，不记 0）。
+   *
+   * 总数早就有了，但「16 项贡献」这一个数字说不清一个 mod 到底带来了什么。宿主要按
+   * 「工具 6 · 工具类别 4 · 空间 1」这样铺清单，就得有逐轴的账——它在这里是**顺手**的，
+   * 注册循环本来就逐轴逐条走了一遍。
+   */
+  readonly contributionsByAxis: Readonly<Partial<Record<AgentModContributionAxisName, number>>>
 }
 
 interface AgentModRejection {
@@ -443,6 +461,7 @@ class AgentModLoader {
     const modId = mod.manifest.id
     let contributionCount = 0
 
+    const contributionsByAxis: Partial<Record<AgentModContributionAxisName, number>> = {}
     for (const axis of mod.activeAxes) {
       const bindingRecord = readBindingRecord(mod.bindings, axis)
       for (const entry of readAxisEntries(mod.manifest, axis)) {
@@ -456,6 +475,7 @@ class AgentModLoader {
           payload,
         } as AgentModAxisRecord<typeof axis>)
         contributionCount += 1
+        contributionsByAxis[axis] = (contributionsByAxis[axis] ?? 0) + 1
       }
     }
 
@@ -492,6 +512,9 @@ class AgentModLoader {
     this.activated.set(modId, {
       modId,
       version: mod.manifest.version,
+      displayName: mod.manifest.displayName ?? '',
+      description: mod.manifest.description ?? '',
+      publisher: mod.manifest.publisher ?? '',
       trust: mod.manifest.trust,
       source: mod.source,
       origin: mod.origin,
@@ -499,6 +522,7 @@ class AgentModLoader {
       activeAxes: mod.activeAxes,
       absentAxes: mod.absentAxes,
       contributionCount,
+      contributionsByAxis,
     })
   }
 }

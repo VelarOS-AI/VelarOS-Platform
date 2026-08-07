@@ -4,7 +4,27 @@ import type { SerializedMessage } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNonBlankString,isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { buildInternalFollowUpContent } from '../agent/history/internalMessages'
 import { compactToolInputForModel } from '../tools/toolResultSerialization'
+
+/**
+ * 宿主写的系统通知（当前只有会话回退说明）在模型协议里只能以 user role 传输，但它**不是**一轮
+ * 用户诉求：直接当普通 user 消息投递，轮边界计数会把它算成一轮，默认只保护最近 2 轮的尾窗立刻
+ * 变成「通知轮 + 当前轮」，回退点之前那个真实轮次直接掉出保护、可被降级成摘要——恰好是回退之后
+ * 模型最需要看清的一段。
+ *
+ * 复用内部续跑的 `<sys_note>` 信封：`isInternalFollowUpMessage` 认得它，于是既不占轮边界，模型
+ * 读到的也是一段明确署名「系统」的说明，而不是一句冒充用户的话。
+ */
+function buildUserModelMessage(
+  message: SerializedMessage,
+  content: string | UserModelContentPart[]
+): ModelMessage {
+  if (message.conversationKind !== 'system-notice' || typeof content !== 'string')
+    return { role: 'user', content }
+
+  return { role: 'user', content: buildInternalFollowUpContent(content) }
+}
 
 type AssistantModelContentPart = { type: 'text'; text: string } | ToolCallPart
 type UserModelContentPart =
@@ -98,7 +118,7 @@ class ChatMessages {
       if (message.role === 'user') {
         const userContent = this.buildUserContent(message)
         if (userContent) {
-          modelMessages.push({ role: 'user', content: userContent })
+          modelMessages.push(buildUserModelMessage(message, userContent))
         }
         continue
       }
