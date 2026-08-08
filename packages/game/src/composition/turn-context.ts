@@ -3,7 +3,7 @@ import {
   type TurnContextAppendHub,
   TurnContextSessionLedgers,
 } from '@velaros-ai/agent/run-context'
-import { isFunction, toNullable } from '@velaros-ai/core'
+import { isFunction, isUndefined, toNullable } from '@velaros-ai/core'
 
 import { GameTurnContextSourceIds } from '../contracts.js'
 import type {
@@ -75,15 +75,30 @@ export class GameTurnContextCoordinator {
 
   public observeRun(sessionId: string, result: GameRunResult): void {
     this.observeErrors(sessionId, [...result.compileErrors, ...result.runtimeErrors])
+    const firstFrame = result.firstFrame
+    // 「首帧没读到」不是「场景是空的」。填 0 会让回合上下文说出一句
+    // 「包含 0 个实体，其中 0 个产生了可见画面」的**假话**——而且 blind 判据
+    // (`entityCount > 0`) 恰好在这时失效，唯一会喊「去看 errors」的那句话被一并吞掉。
+    // 观测失败必须以观测失败的样子出现,不许伪装成一个看起来很确定的零。
+    if (isUndefined(firstFrame)) {
+      this.lastScenes.delete(sessionId)
+      this.ledgers['game.scene-state'].replaceLatest(sessionId, {
+        label: `${result.scene} · 首帧没读到`,
+        summaryText:
+          `游戏场景“${result.scene}”已启动（${result.url}），但这一轮**没能读到首帧**：` +
+          '实体数与可见数当前不可知——别把它当成 0。' +
+          '用 game:query_state({select:"scene"}) 现取一次，再用 {select:"errors"} 看有没有报错。',
+        inspect: { tool: 'game:query_state', argsHint: { select: 'scene' } },
+      })
+      return
+    }
     this.observeScene(sessionId, {
       scene: result.scene,
       running: true,
       url: result.url,
-      // 首帧读得到就用真数：`entityCount: 0` 那种占位值会让「一个实体都没画出来」这条
-      // 事实在回合上下文里彻底隐身，而那正是最需要被看见的一档。
-      entityCount: result.firstFrame?.entityCount ?? 0,
-      renderedEntities: result.firstFrame?.renderedEntities ?? 0,
-      invisibleEntities: result.firstFrame?.invisibleEntities ?? 0,
+      entityCount: firstFrame.entityCount,
+      renderedEntities: firstFrame.renderedEntities,
+      invisibleEntities: firstFrame.invisibleEntities,
       fps: null,
       elapsedMs: result.readyMs,
     })

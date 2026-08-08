@@ -84,14 +84,35 @@ export class GameRuntimeDiagnostics {
       })
       originalConsoleError(...values)
     }
+    /**
+     * warn 也要收。Phaser 报「贴图 key 不存在」「动画 key 不存在」这一整族走的是
+     * `console.warn` —— 只补 `console.error` 等于把引擎最常用的那条抱怨通道留在表外，
+     * 于是画面上是占位棋盘格、`select:'errors'` 却干干净净。
+     */
+    // @arch-guard:suspend code-style/forbid-console 理由：本模块**就是** console 拦截器，跑在被服务的
+    // 游戏页面里(dist/browser/page.js)而不是主进程,Log 管线不在那儿;改走 Log 会把要拦的东西变成自己。
+    const originalConsoleWarn = console.warn
+    const capturedConsoleWarn = (...values: unknown[]) => {
+      this.report({
+        source: 'console',
+        message: values.map(stringifyConsoleValue).join(' '),
+      })
+      originalConsoleWarn(...values)
+    }
+    // @arch-guard:suspend code-style/forbid-console 理由：同上——安装拦截点，不是在打日志。
     console.error = capturedConsoleError
+    // @arch-guard:suspend code-style/forbid-console 理由：同上——安装拦截点，不是在打日志。
+    console.warn = capturedConsoleWarn
     window.addEventListener('error', onError)
     window.addEventListener('unhandledrejection', onUnhandledRejection)
 
     return () => {
       window.removeEventListener('error', onError)
       window.removeEventListener('unhandledrejection', onUnhandledRejection)
+      // @arch-guard:suspend code-style/forbid-console 理由：同上——卸载拦截点，还原原始实现。
       if (console.error === capturedConsoleError) console.error = originalConsoleError
+      // @arch-guard:suspend code-style/forbid-console 理由：同上——卸载拦截点，还原原始实现。
+      if (console.warn === capturedConsoleWarn) console.warn = originalConsoleWarn
     }
   }
 }
