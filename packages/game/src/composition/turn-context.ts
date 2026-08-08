@@ -89,9 +89,20 @@ export class GameTurnContextCoordinator {
     })
   }
 
+  /**
+   * `game.scene-state` 是**状态**不是事件流：它只回答「游戏现在什么样」，所以走
+   * `replaceLatest` 而不是 `append`——新状态到达即让旧状态失效。
+   *
+   * 不这么做就会出实测过的事故：能力重建时如实记下「游戏已停止」（当时确实停着），
+   * 随后 `game:run` 又记下运行态，两条一起投给下一回合，模型读了前一条就断定
+   * 「游戏已经停止了，需要先启动它」，白跑一次 `game:run`。
+   *
+   * 另外两个 source 保持 `append`：`game.runtime-errors`（每批报错是独立事实，
+   * 而且「报错已清零」要能与之前那批对照着读）与 `game.selection`（选中变更是流水）。
+   */
   public observeStop(sessionId: string, _result: GameStopResult): void {
     this.lastScenes.delete(sessionId)
-    this.ledgers['game.scene-state'].append(sessionId, {
+    this.ledgers['game.scene-state'].replaceLatest(sessionId, {
       label: '游戏已停止',
       summaryText: '游戏运行态已停止。',
       inspect: { tool: 'game:run' },
@@ -168,7 +179,8 @@ export class GameTurnContextCoordinator {
     if (this.lastScenes.get(sessionId) === signature) return
     this.lastScenes.set(sessionId, signature)
     const blind = scene.entityCount > 0 && scene.renderedEntities === 0
-    this.ledgers['game.scene-state'].append(sessionId, {
+    // 状态型 source：后来者取代前任（判决见 observeStop 上方注释）。
+    this.ledgers['game.scene-state'].replaceLatest(sessionId, {
       label: `${scene.scene} · ${scene.entityCount} 个实体 · 可见 ${scene.renderedEntities}`,
       summaryText: `游戏场景“${scene.scene}”当前${
         scene.running ? '正在运行' : '已停止'

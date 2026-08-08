@@ -84,6 +84,25 @@ export class TurnContextLedger {
     return delta
   }
 
+  /**
+   * **状态型 source 专用**：后来者取代前任，本账本永远只留最新一条。
+   *
+   * 事件型 source（「报了 3 条错」「用户选中了实体 X」）天然是流水——每条都是独立事实，
+   * 全都要投。**状态型 source 不是**：「游戏已停止」与「游戏正在运行」是同一个事实的两个
+   * 版本，把它们一起投给模型，模型就会读到自相矛盾的两句话。
+   *
+   * 实测事故：游戏能力重建时如实记了一条「游戏已停止」（**当时是对的**），随后 `game:run`
+   * 又记了一条运行态。两条都躺在账本里，下一回合被一起投出去，模型读了前一条，断定
+   * 「游戏已经停止了，需要先启动它」，于是多跑了一次 `game:run`。**陈旧不是记错，是没失效。**
+   *
+   * 语义刻意与容量淘汰区分：不动 `droppedBeforeSeq`。容量淘汰是「装不下了，你漏看了东西」，
+   * 需要向消费方报缺口；取代是「那条已经不成立了」，消费方本来就不该再看到它，不是缺口。
+   */
+  public replaceLatest(input: TurnContextLedgerAppendInput): TurnContextDelta {
+    this.items = []
+    return this.append(input)
+  }
+
   public peek(input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult {
     const tailSeq = this.nextSeq - 1
     const headSeq = !isEmpty(this.items) ? this.items[0]!.seq : this.nextSeq
@@ -161,6 +180,17 @@ export class TurnContextSessionLedgers {
   /** 唯一写入口：定稿 delta 并广播变更通知（供 pre-send chips 实时刷新）。 */
   public append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
     const delta = this.for(sessionId).append(input)
+    if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
+    return delta
+  }
+
+  /**
+   * 状态型 source 的写入口：语义见 {@link TurnContextLedger.replaceLatest}。
+   *
+   * 与 {@link append} 一样广播——pre-send chips 要立刻换成新状态，而不是等下一次事件。
+   */
+  public replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
+    const delta = this.for(sessionId).replaceLatest(input)
     if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
     return delta
   }
