@@ -22,6 +22,7 @@ import type { BrowserInteractionEngine } from './BrowserInteractionEngine'
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
 import type { BrowserRuntimeKernel } from './BrowserRuntimeInternals'
 import type { BrowserSession } from './BrowserRuntimeTypes'
+import { evaluateInWebContents } from './BrowserWebContentsEvaluator'
 
 type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
   session?: Electron.Session
@@ -114,7 +115,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    const result = (await session.webContents.executeJavaScript(
+    const result = (await evaluateInWebContents(
+      session.webContents,
       this.scripts.buildElementQueryScript(options),
       true
     )) as BrowserElementQueryResult
@@ -149,10 +151,18 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    return session.webContents.executeJavaScript(
+    // 主进程上限 = 页内超时 + 注入/序列化余量。页内那道 `Promise.race` 只在渲染进程还肯
+    // 回话时才有效；被脚本卡死或中途导航走时它永远不触发，兜底必须由这一侧拿着
+    // （AGENT-12 的第一因：一个永不 settle 的求值占死会话队列，把整条会话焊死）。
+    return evaluateInWebContents<BrowserEvaluateScriptResult>(
+      session.webContents,
       this.scripts.buildEvaluateScript(options),
-      true
-    ) as Promise<BrowserEvaluateScriptResult>
+      true,
+      {
+        label: 'evaluateScript',
+        timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000) + 10_000,
+      }
+    )
   }
 
   public override async readPageStorage(
@@ -167,7 +177,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    return session.webContents.executeJavaScript(
+    return evaluateInWebContents(
+      session.webContents,
       this.scripts.buildPageStorageScript(options),
       true
     ) as Promise<BrowserPageStorageResult>
@@ -257,7 +268,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    const result = (await session.webContents.executeJavaScript(
+    const result = (await evaluateInWebContents(
+      session.webContents,
       this.scripts.buildListMediaSourcesScript({
         limit,
         includeDataUrls,
@@ -288,7 +300,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    const result = (await session.webContents.executeJavaScript(
+    const result = (await evaluateInWebContents(
+      session.webContents,
       this.scripts.buildPageResourcesScript({ limit, includeIframes }),
       true
     )) as {
@@ -358,7 +371,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    const locator = (await session.webContents.executeJavaScript(
+    const locator = (await evaluateInWebContents(
+      session.webContents,
       this.scripts.buildResolveFileInputScript(options.target),
       true
     )) as { matched: boolean; selector: Nullable<string> }
@@ -468,7 +482,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
-    return session.webContents.executeJavaScript(
+    return evaluateInWebContents(
+      session.webContents,
       this.scripts.buildWaitForSelectorScript(options),
       true
     ) as Promise<BrowserWaitForSelectorResult>
@@ -493,7 +508,8 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
       )
     }
 
-    return session.webContents.executeJavaScript(
+    return evaluateInWebContents(
+      session.webContents,
       this.scripts.buildPageWaitScript(options),
       true
     ) as Promise<BrowserPageWaitResult>

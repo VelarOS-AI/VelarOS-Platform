@@ -43,6 +43,8 @@ export type { GameProjectOverview, GameSceneOverview } from '../core/index.js'
 export { summarizeGameProject } from '../core/index.js'
 // 就绪窄桥的**失败那一格**：宿主的就绪轮询要读它，键名两侧只能有一份。
 export { GameBuiltinHostBootErrorKey } from '../runtime/index.js'
+// 承载超时的判别式：宿主要靠它接上自己的连续失败熔断（判据两侧只能有一份）。
+export { isGamePageHostTimeout } from '../runtime/index.js'
 
 export interface GameCapabilityDescriptor {
   readonly id: 'game'

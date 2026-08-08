@@ -22,6 +22,7 @@ import type {
   BrowserRuntimePageDriverSession,
 } from './BrowserRuntimeInternals'
 import type { BrowserSession } from './BrowserRuntimeTypes'
+import { evaluateInWebContents } from './BrowserWebContentsEvaluator'
 
 /**
  * 交互域执行体（Electron 宿主）：embedded 分支（WebContents 输入合成、虚拟指针浮层、
@@ -376,7 +377,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (session.webContents.isDestroyed()) return
 
     try {
-      await session.webContents.executeJavaScript(
+      await evaluateInWebContents(
+        session.webContents,
         label && target.css
           ? this.scripts.buildTargetHighlightScript({ selector: target.css, label })
           : this.scripts.buildTargetHighlightFromTargetScript(target, toOptional(label)),
@@ -437,7 +439,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (session.webContents.isDestroyed() || path.length === 0) return
 
     try {
-      await session.webContents.executeJavaScript(
+      await evaluateInWebContents(
+        session.webContents,
         this.buildVirtualPointerScript(path, pressed),
         true
       )
@@ -458,7 +461,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (session.webContents.isDestroyed()) return
 
     try {
-      await session.webContents.executeJavaScript(
+      await evaluateInWebContents(
+        session.webContents,
         this.buildVirtualPointerScript([{ x, y }], pressed),
         true
       )
@@ -668,7 +672,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (session.webContents.isDestroyed()) return fallback
 
     try {
-      const size = (await session.webContents.executeJavaScript(
+      const size = (await evaluateInWebContents(
+        session.webContents,
         `(() => ({
   width: Math.max(1, Math.round(window.innerWidth || document.documentElement.clientWidth || ${fallback.width})),
   height: Math.max(1, Math.round(window.innerHeight || document.documentElement.clientHeight || ${fallback.height})),
@@ -692,7 +697,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (session.webContents.isDestroyed()) return
 
     try {
-      await session.webContents.executeJavaScript(this.buildPageZoomHudScript(zoomFactor), true)
+      await evaluateInWebContents(session.webContents, this.buildPageZoomHudScript(zoomFactor), true)
     } catch (error) {
       this.log.debug('显示浏览器缩放提示失败', {
         error: AppError.from(error).message,
@@ -754,7 +759,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
 
     // 滚动脚本返回滚动位置和最大滚动范围。
-    return session.webContents.executeJavaScript(
+    return evaluateInWebContents(
+      session.webContents,
       this.scripts.buildScrollScript(options),
       true
     ) as Promise<BrowserPageScrollResult>

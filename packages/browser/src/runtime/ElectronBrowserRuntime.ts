@@ -472,15 +472,19 @@ class ElectronBrowserRuntime {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<void> {
-    await this.actionQueue.run(sessionId, async () => {
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession) {
-        await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
-        return
-      }
+    await this.actionQueue.run(
+      sessionId,
+      async () => {
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (externalSession) {
+          await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
+          return
+        }
 
-      await this.ensureContextPageUnlocked(sessionId, context, abortSignal)
-    })
+        await this.ensureContextPageUnlocked(sessionId, context, abortSignal)
+      },
+      { signal: abortSignal, label: 'openPage' }
+    )
   }
 
   /** 展示浏览器页面并聚焦 WebContents。 */
@@ -489,22 +493,26 @@ class ElectronBrowserRuntime {
     context: BrowserSiteContext,
     abortSignal?: AbortSignal
   ): Promise<BrowserPageWindowState> {
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const externalSession = this.getExternalPageSession(sessionId)
-      if (externalSession) {
-        await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
-        await externalSession.driver.bringToFront()
-        externalSession.visible = true
-        return this.buildExternalWindowState(externalSession)
-      }
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const externalSession = this.getExternalPageSession(sessionId)
+        if (externalSession) {
+          await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
+          await externalSession.driver.bringToFront()
+          externalSession.visible = true
+          return this.buildExternalWindowState(externalSession)
+        }
 
-      const session = await this.ensureContextPageUnlocked(sessionId, context, abortSignal)
-      session.visible = true
-      this.interaction.focusWebContents(session)
+        const session = await this.ensureContextPageUnlocked(sessionId, context, abortSignal)
+        session.visible = true
+        this.interaction.focusWebContents(session)
 
-      return this.buildWindowState(session)
-    })
+        return this.buildWindowState(session)
+      },
+      { signal: abortSignal, label: 'showPage' }
+    )
   }
 
   /** 接管 renderer webContents，并恢复历史记录后打开目标页面。 */
@@ -521,52 +529,56 @@ class ElectronBrowserRuntime {
       navigationHistory,
     })
 
-    return this.actionQueue.run(sessionId, async () => {
-      abortSignal?.throwIfAborted()
-      const target = this.latestPresentationTargets.get(sessionId) ?? {
-        context,
-        webContentsId,
-        navigationHistory,
-      }
-      const embeddedWebContents = electron.webContents.fromId(target.webContentsId)
-      if (!embeddedWebContents || embeddedWebContents.isDestroyed()) {
-        throw new AppError('VALIDATION', '内嵌浏览器页面不可用，无法接管页面会话。')
-      }
-
-      const session = this.sessionManager.attachWebContents(sessionId, embeddedWebContents)
-      session.visible = true
-
-      // attach 只负责展示，绝不按 context.url 反向纠偏活页面：attach 请求在 IPC 到达时
-      // 快照 context，却排在 actionQueue 里模型/用户导航之后执行——用滞后的 context 强制
-      // loadURL 会把刚导航到的页面拉回去，形成两 URL 之间的自持振荡（页面来回闪烁的根因）。
-      // 页面 URL 是运行态唯一权威，context 经 did-finish-load 的 site-change 回调跟随页面。
-      if (this.getLoadedPageUrl(session)) {
-        if (this.isWebContentsLoading(session.webContents)) {
-          await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      async () => {
+        abortSignal?.throwIfAborted()
+        const target = this.latestPresentationTargets.get(sessionId) ?? {
+          context,
+          webContentsId,
+          navigationHistory,
         }
-        session.url = this.getLoadedPageUrl(session) ?? session.url
-      } else {
-        // 全新/占位 webview：先尝试恢复历史；恢复不了才按 context.url 加载。
-        const restored = await this.restoreNavigationHistory(
-          embeddedWebContents,
-          target.navigationHistory,
-          abortSignal
-        )
-        if (restored) {
-          await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
+        const embeddedWebContents = electron.webContents.fromId(target.webContentsId)
+        if (!embeddedWebContents || embeddedWebContents.isDestroyed()) {
+          throw new AppError('VALIDATION', '内嵌浏览器页面不可用，无法接管页面会话。')
+        }
+
+        const session = this.sessionManager.attachWebContents(sessionId, embeddedWebContents)
+        session.visible = true
+
+        // attach 只负责展示，绝不按 context.url 反向纠偏活页面：attach 请求在 IPC 到达时
+        // 快照 context，却排在 actionQueue 里模型/用户导航之后执行——用滞后的 context 强制
+        // loadURL 会把刚导航到的页面拉回去，形成两 URL 之间的自持振荡（页面来回闪烁的根因）。
+        // 页面 URL 是运行态唯一权威，context 经 did-finish-load 的 site-change 回调跟随页面。
+        if (this.getLoadedPageUrl(session)) {
+          if (this.isWebContentsLoading(session.webContents)) {
+            await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
+          }
           session.url = this.getLoadedPageUrl(session) ?? session.url
+        } else {
+          // 全新/占位 webview：先尝试恢复历史；恢复不了才按 context.url 加载。
+          const restored = await this.restoreNavigationHistory(
+            embeddedWebContents,
+            target.navigationHistory,
+            abortSignal
+          )
+          if (restored) {
+            await this.pageWaiter.waitForNavigationToSettle(session.webContents, abortSignal)
+            session.url = this.getLoadedPageUrl(session) ?? session.url
+          }
+          if (!this.getLoadedPageUrl(session)) {
+            await this.ensureContextPageUnlocked(sessionId, target.context, abortSignal)
+          }
         }
-        if (!this.getLoadedPageUrl(session)) {
-          await this.ensureContextPageUnlocked(sessionId, target.context, abortSignal)
+
+        if (session.viewport) {
+          await this.getPageDriver(sessionId, session).setViewport?.(session.viewport)
         }
-      }
 
-      if (session.viewport) {
-        await this.getPageDriver(sessionId, session).setViewport?.(session.viewport)
-      }
-
-      return this.buildWindowState(session)
-    })
+        return this.buildWindowState(session)
+      },
+      { signal: abortSignal, label: 'presentPage' }
+    )
   }
 
   /** 启动外部 CDP 浏览器窗口并挂接为当前 session 的页面 driver。 */
@@ -701,8 +713,16 @@ class ElectronBrowserRuntime {
     })
   }
 
-  /** 关闭会话并清空队列。 */
+  /**
+   * 关闭会话并清空队列。
+   *
+   * **先丢队列链，再排拆卸动作**：顺序反过来就是 AGENT-12 那条 brick 的最后一环——
+   * 队头卡了死结时，`closeSession` 自己也排在死结后面，于是「会话卡住 → 关不掉 →
+   * 重开还是那条卡住的队列」，只剩重启应用一条路。拆卸不与在飞动作抢一致性：
+   * WebContents 一销毁，在飞动作本来就会失败退出，而那正是我们要的结果。
+   */
   public async closeSession(sessionId: string): Promise<void> {
+    this.actionQueue.clear(sessionId)
     await this.actionQueue.run(sessionId, async () => {
       this.latestPresentationTargets.delete(sessionId)
       const externalSession = this.externalPageSessions.get(sessionId)
@@ -845,8 +865,10 @@ class ElectronBrowserRuntime {
     options: BrowserCaptureScreenshotOptions = {},
     abortSignal?: AbortSignal
   ): Promise<BrowserScreenshotArtifact> {
-    return this.actionQueue.run(sessionId, () =>
-      this.screenshot.captureScreenshot(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.screenshot.captureScreenshot(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'captureScreenshot' }
     )
   }
 
@@ -1022,8 +1044,10 @@ class ElectronBrowserRuntime {
     options: BrowserEvaluateScriptOptions,
     abortSignal?: AbortSignal
   ): Promise<BrowserEvaluateScriptResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.evaluateScript(sessionId, context, options, abortSignal)
+    return this.actionQueue.run(
+      sessionId,
+      () => this.pageData.evaluateScript(sessionId, context, options, abortSignal),
+      { signal: abortSignal, label: 'evaluateScript' }
     )
   }
 

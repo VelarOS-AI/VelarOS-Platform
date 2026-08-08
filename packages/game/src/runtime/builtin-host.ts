@@ -2,6 +2,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
 import { isEmpty, isNotNull, isNull, isPresent, isString } from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import {
   type GameAssetsManifest,
@@ -31,6 +32,9 @@ import type { GameDevServerReadyResult, GameManagedDevProcess } from './dev-serv
 
 /** 单个资产的回送上限；越界当场失败，绝不截半张图交给渲染器。 */
 const MaxServedFileBytes = 64 * 1024 * 1024
+
+/** 关服务等连接排空的上限；见 {@link GameBuiltinDevServer.stop}。 */
+const BuiltinDevServerCloseTimeoutMs = 5_000
 
 /**
  * 把请求路径解回清单里的原始写法（见 {@link GameBuiltinDevServer.serveDeclaredFile} 的判决）。
@@ -229,6 +233,17 @@ export class GameBuiltinDevServer {
     return new GameBuiltinManagedProcess(this, `http://127.0.0.1:${port}/`, port)
   }
 
+  /**
+   * 停服务 —— **有上限**。
+   *
+   * `server.close()` 的回调要等所有连接都消失才触发。`closeAllConnections()` 之后正常情形
+   * 立刻就绪，但只要有一条连接卡在内核态没被回收，这个 await 就永不返回；而
+   * `start()` 的第一句就是 `await this.stop()`，于是「重启游戏」会在这里静静挂死
+   * （AGENT-12 的同族形状：等外部资源的 await 没有上限）。
+   *
+   * 超时后**不再等**：句柄已经从字段上摘掉、监听套接字已经 close，残留连接由进程退出兜底。
+   * 停服务是清理，宁可留一条将死的连接，也不许把「重启」变成永久挂起。
+   */
   public async stop(): Promise<void> {
     const server = this.server
     this.server = null
@@ -236,9 +251,25 @@ export class GameBuiltinDevServer {
     this.port = 0
     if (!server) return
     server.closeAllConnections()
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve())
-    })
+    const timers = new TimerScope({ name: 'GameBuiltinDevServer.stop' })
+    try {
+      await timers.withTimeout(
+        BuiltinDevServerCloseTimeoutMs,
+        () =>
+          new Promise<void>((resolve) => {
+            server.close(() => resolve())
+          }),
+        {
+          label: 'builtin-dev-server-close',
+          timeoutMessage: `内置游戏静态服务关闭超过 ${BuiltinDevServerCloseTimeoutMs}ms。`,
+        },
+      )
+    } catch {
+      // arch-guard:silent-catch-ok 不是吞错：服务句柄已经摘掉、监听已 close，调用方要的
+      // 「这个端口不再对外服务」已经成立。继续等只会把清理变成挂起，那正是本文件要根治的病。
+    } finally {
+      timers.dispose()
+    }
   }
 
   private async handle(

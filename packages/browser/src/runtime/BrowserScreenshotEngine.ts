@@ -35,6 +35,7 @@ import {
   readFiniteNumber,
 } from './BrowserRuntimeInternals'
 import { type BrowserSession, DEFAULT_BROWSER_VIEWPORT } from './BrowserRuntimeTypes'
+import { evaluateInWebContents } from './BrowserWebContentsEvaluator'
 
 interface BrowserScreenshotDiffFrame {
   fingerprint: string
@@ -864,7 +865,8 @@ export class BrowserScreenshotEngine {
   ): Promise<Nullable<{ x: number; y: number; width: number; height: number }>> {
     if (region.selector?.trim()) {
       const selectorLiteral = JSON.stringify(region.selector.trim())
-      const resolved = (await session.webContents.executeJavaScript(
+      const resolved = (await evaluateInWebContents(
+        session.webContents,
         `(() => {
           const el = document.querySelector(${selectorLiteral});
           if (!el) return null;
@@ -1174,7 +1176,8 @@ export class BrowserScreenshotEngine {
         },
       })
       await windowRef.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-      await windowRef.webContents.executeJavaScript(
+      await evaluateInWebContents(
+        windowRef.webContents,
         'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
         true
       )
@@ -1275,7 +1278,8 @@ export class BrowserScreenshotEngine {
     if (session.webContents.isDestroyed()) return []
 
     try {
-      const labels = await session.webContents.executeJavaScript(
+      const labels = await evaluateInWebContents(
+        session.webContents,
         this.buildScreenshotElementLabelsScript(
           options.maxElements ?? DefaultScreenshotElementLabelLimit
         ),
@@ -1294,7 +1298,8 @@ export class BrowserScreenshotEngine {
     if (session.webContents.isDestroyed()) return
 
     try {
-      await session.webContents.executeJavaScript(
+      await evaluateInWebContents(
+        session.webContents,
         `(() => {
   const overlay = document.getElementById('__velaros_screenshot_labels__');
   if (overlay) overlay.remove();
@@ -1318,7 +1323,8 @@ export class BrowserScreenshotEngine {
 
     if (!session.webContents.isDestroyed()) {
       try {
-        const rawPageMetadata = await session.webContents.executeJavaScript(
+        const rawPageMetadata = await evaluateInWebContents(
+          session.webContents,
           this.buildScreenshotMetadataScript(),
           true
         )

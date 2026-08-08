@@ -15,6 +15,7 @@ import {
   GameProjectRuntime,
   type GameRuntimePageHost,
   GameRuntimePermissionDeniedError,
+  isGamePageHostTimeout,
   parseVisualColor,
 } from '../dist/runtime/index.js'
 
@@ -302,6 +303,120 @@ describe('GameProjectRuntime', () => {
     expect(runtime.isRunning()).toBeFalse()
     expect(closeCalls).toBe(1)
     expect(processHost.processes[0]?.stopCalls).toEqual([false])
+  })
+})
+
+/**
+ * AGENT-12：**一个工具不许无声吊死整条会话**。
+ *
+ * 现场是宿主的会话串行队列被一条永不 settle 的页面求值占死，于是 `pageHost.open()` 里的
+ * 每一步都永远等下去——`game:run` 14 分钟没有回执、舞台停在「正在接管」、abort 也解不开，
+ * 只能重启应用。下面三条把两层修法钉死：**等承载的 await 必须有上限**，
+ * 且**失败之后运行态必须回滚到干净**，下一次 game:run 不许受影响。
+ */
+describe('game runtime deadlines', () => {
+  const fastTimeouts = { pageOpenMs: 40, firstFrameMs: 30, pageOperationMs: 40 }
+  const never = () => new Promise<never>(() => {})
+
+  const workingPageHost = (open: () => Promise<void>): GameRuntimePageHost => ({
+    open,
+    close: async () => undefined,
+    screenshot: async () => ({
+      path: 'game.png',
+      width: 960,
+      height: 540,
+      capturedAt: 1,
+      overlay: true,
+    }),
+    query: async () => ({
+      select: 'scene',
+      scene: 'main',
+      running: true,
+      url: 'http://127.0.0.1:4173',
+      entityCount: 1,
+      renderedEntities: 1,
+      invisibleEntities: 0,
+      fps: 60,
+      elapsedMs: 3,
+    }),
+    input: async () => ({ appliedSteps: 0, droppedSteps: [] }),
+  })
+
+  test('承载永不就绪时 game:run 有限时间内返回终态失败，并回滚到未启动', async () => {
+    let closeCalls = 0
+    const processHost = new ProbeProcessHost()
+    const pageHost: GameRuntimePageHost = {
+      ...workingPageHost(never),
+      close: async () => {
+        closeCalls += 1
+      },
+    }
+    const runtime = new GameProjectRuntime(
+      '/tmp/runtime-probe',
+      project,
+      processHost,
+      pageHost,
+      undefined,
+      undefined,
+      fastTimeouts,
+    )
+
+    const error = await runtime.run({}).catch((thrown: unknown) => thrown)
+
+    // 终态、可执行、带得出「可以再发一次」这句结论。
+    expect(isGamePageHostTimeout(error)).toBeTrue()
+    expect((error as Error).message).toContain('可以安全地再发一次 game:run')
+    // 回滚：页面关了、dev server 停了、运行态是「未启动」。
+    expect(runtime.isRunning()).toBeFalse()
+    expect(closeCalls).toBe(1)
+    expect(processHost.processes[0]?.stopCalls).toEqual([false])
+  })
+
+  test('上一次挂死不许污染下一次：紧接着的 game:run 照常跑起来', async () => {
+    let openCalls = 0
+    const processHost = new ProbeProcessHost()
+    const pageHost = workingPageHost(async () => {
+      openCalls += 1
+      if (openCalls === 1) await never()
+    })
+    const runtime = new GameProjectRuntime(
+      '/tmp/runtime-probe',
+      project,
+      processHost,
+      pageHost,
+      undefined,
+      undefined,
+      fastTimeouts,
+    )
+
+    await runtime.run({}).catch(() => undefined)
+    const result = await runtime.run({})
+
+    expect(result.status).toBe('running')
+    expect(runtime.isRunning()).toBeTrue()
+    expect(openCalls).toBe(2)
+  })
+
+  test('首帧观测卡住只丢观测，绝不把「其实跑起来了」翻成失败', async () => {
+    const pageHost: GameRuntimePageHost = {
+      ...workingPageHost(async () => undefined),
+      query: never,
+    }
+    const runtime = new GameProjectRuntime(
+      '/tmp/runtime-probe',
+      project,
+      new ProbeProcessHost(),
+      pageHost,
+      undefined,
+      undefined,
+      fastTimeouts,
+    )
+
+    const result = await runtime.run({})
+
+    expect(result.status).toBe('running')
+    expect(result.firstFrame).toBeUndefined()
+    expect(runtime.isRunning()).toBeTrue()
   })
 })
 
