@@ -1201,6 +1201,12 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "ChatConversationPane.scrollNavigatorHidden",
+      "description": "宿主收起了滚动导航栏；只有自带头部的宿主会传（开关归它的头部）。",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
       "name": "ChatConversationPane.streamSlot",
       "description": "Auto-generated from TypeScript props.",
       "type": "ReactNode"
@@ -1261,6 +1267,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ChatConversationPane.onRewindToMessage",
       "description": "Auto-generated from TypeScript props.",
       "type": "((messageId: string, options?: { restoreFiles?: boolean; }) => Promise<void>)"
+    },
+    {
+      "name": "ChatConversationPane.getRewindPlan",
+      "description": "打开回溯确认框那一刻由宿主同步算出的预览。\n\n**不给它，回溯按钮点下去就什么都不会发生**（确认框由预览是否存在驱动）。接入方要么两个都给，\n要么两个都不给（不给 onRewindToMessage 时按钮本身就不渲染）。",
+      "type": "((messageId: string) => Nullable<ConversationRewindPlan>)"
     },
     {
       "name": "ChatConversationPane.onTranslateThinkingBlock",
@@ -1552,6 +1563,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
   ],
   ChatScrollNavigator: [
     {
+      "name": "ChatScrollNavigator.hidden",
+      "description": "宿主把导航栏收起来了。\n\n只有**自带头部**的宿主（浏览器空间的侧边聊天）才给得出这一位——收起开关归它的头部。\n没有独立头部的宿主（主聊天页）不传，导航栏就恒显示：那种版面里它不压正文，\n也没有一个「属于这段对话」的地方能放开关。",
+      "type": "boolean"
+    },
+    {
       "name": "ChatScrollNavigator.followLocked",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
@@ -1749,9 +1765,9 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "boolean"
     },
     {
-      "name": "ChatTranscript.canChooseRewindFiles",
+      "name": "ChatTranscript.getRewindPlan",
       "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
+      "type": "((messageId: string) => Nullable<ConversationRewindPlan>)"
     }
   ],
   Checkbox: [
@@ -2258,12 +2274,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "ComposerAddMenuFeatures.showRenderingSubmenu",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean",
-      "recommended": "Required"
-    },
-    {
       "name": "ComposerAddMenuFeatures.showPluginsSubmenu",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
@@ -2335,12 +2345,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ComposerAddMenuFeatures.quickPrompts",
       "description": "Auto-generated from TypeScript props.",
       "type": "ChatInputManualTestPromptOption[]",
-      "recommended": "Required"
-    },
-    {
-      "name": "ComposerAddMenuFeatures.renderingOptions",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "ChatInputPromptFeatureGroupOption[]",
       "recommended": "Required"
     },
     {
@@ -4241,9 +4245,9 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "boolean"
     },
     {
-      "name": "MessageBubble.canChooseRewindFiles",
+      "name": "MessageBubble.getRewindPlan",
       "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
+      "type": "((messageId: string) => Nullable<ConversationRewindPlan>)"
     }
   ],
   MessageContentBlock: [
@@ -5616,6 +5620,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "browser 图标名的品牌资产注入点：由宿主提供，本库不直依产品品牌资产。",
       "type": "(props: { size: number; }) => ReactElement",
       "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceSpaceIcon.renderAgentIcon",
+      "description": "agent 图标名的品牌资产注入点（外部执行体的真 logo）。\n\n**可选**，与 browser 不同：agent 空间不一定绑着某个认得出品牌的执行体，宿主给不出时回落\n通用机器人图形。给得出时由宿主决定画谁——本库不认识执行体注册表。",
+      "type": "((props: { size: number; }) => ReactElement)"
     }
   ],
   WorkspaceSpaceStatusIcon: [
@@ -5642,6 +5651,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "browser 图标名的品牌资产注入点：由宿主提供，透传给内部 WorkspaceSpaceIcon。",
       "type": "(props: { size: number; }) => ReactElement",
       "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceSpaceStatusIcon.renderAgentIcon",
+      "description": "agent 图标名的品牌资产注入点（可选，缺省回落通用机器人图形）；同样只做透传。",
+      "type": "((props: { size: number; }) => ReactElement)"
     }
   ],
 }

@@ -1,6 +1,10 @@
 {
   "name": "@velaros-ai/remote-host",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
   "velaros": {
     "platform": "0.6"
   },
