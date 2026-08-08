@@ -91,6 +91,39 @@ export interface GameEntityBehavior {
 }
 
 export type GameEntityScriptFactory = (context: GameEntityScriptContext) => GameEntityBehavior
+
+/**
+ * 把「猜错脚本契约」从**静默无效**变成一句看得见的话；没踩坑时返回 null。
+ *
+ * 实测事故（AGENT-11）：模型写 `update(dt, entity)`，而运行时只传 `delta` 一个参数，
+ * 于是 `entity` 恒为 `undefined`。它撞到 `Cannot read properties of undefined` 之后，
+ * 把修法选成了加一道防御 `if (!entity || !entity.transform) return` ——
+ * **一声不吭地每帧原地返回**。于是：画面照常渲染、`select:'errors'` 干干净净、
+ * `game:input` 回执 `appliedSteps:3 / droppedSteps:0`，而方块一动不动。
+ * 没有任何一处在说谎，合起来却让人（和模型）完全看不出坏在哪。
+ *
+ * 声明了第二个形参 = 十有八九正踩这个坑。**不阻断运行**（形参没用上也是合法写法），
+ * 只进诊断表：`game:query_state({select:'errors'})`、overlay 与
+ * `game.runtime-errors` 回合上下文都会带上它，模型下一轮就读得到正确契约。
+ *
+ * 抽成纯函数是为了可单测——Phaser Scene 在 Node 里立不起来。
+ */
+export function describeBehaviorContractMisuse(
+  entityId: string,
+  behavior: GameEntityBehavior
+): Nullable<string> {
+  const update = behavior.update
+  if (!update || update.length <= 1) return null
+  return (
+    `实体 ${entityId} 的脚本 update(...) 声明了 ${update.length} 个形参，` +
+    `但运行时只传 delta（毫秒）这一个——第二个参数恒为 undefined。` +
+    `读写位置用 context.getPosition() / context.setPosition(x, y)，` +
+    `读输入用 context.isActionDown('<action>')（动作在 game.project.json 的 input.actions 里声明）。` +
+    `没有 entity 形参，也没有 context.input。` +
+    `若脚本里写了 if (!entity) return 之类的防御，它会让这个错误彻底静默：每帧原地返回、` +
+    `画面照常、报错为空，但实体永远不动。`
+  )
+}
 export type GameScriptRegistry = Readonly<Record<string, GameEntityScriptFactory>>
 
 export interface PhaserGameRuntimeOptions {
@@ -913,6 +946,7 @@ function createProjectionSceneClass(
         }
         try {
           const behavior = factory(this.createScriptContext(record))
+          this.reportBehaviorContractMisuse(record.manifest.id, behavior)
           this.behaviors.push(behavior)
           behavior.create?.()
         } catch (error) {
@@ -921,6 +955,12 @@ function createProjectionSceneClass(
           this.reportError(error)
         }
       }
+    }
+
+    /** 判据见 {@link describeBehaviorContractMisuse}（抽在模块级是为了可单测）。 */
+    private reportBehaviorContractMisuse(entityId: string, behavior: GameEntityBehavior): void {
+      const misuse = describeBehaviorContractMisuse(entityId, behavior)
+      if (misuse) this.reportError(new Error(misuse))
     }
 
     private createScriptContext(record: RuntimeEntityRecord): GameEntityScriptContext {
