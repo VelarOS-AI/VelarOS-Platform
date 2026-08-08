@@ -301,7 +301,7 @@ export interface SerializedMessage {
    *
    * 模型协议只有 user/assistant 两种 role，宿主写的系统通知（回退说明）只能以 user role 传输——
    * 不带这个字段，主进程就分不清「用户说的」和「宿主替会话说的」，会把通知当成一轮真实用户诉求
-   * （轮边界计数、尾保护窗口、记忆信任级别全部按用户原话处理）。
+   * （轮边界计数、尾保护窗口、下游消费方的信任级别全部按用户原话处理）。
    */
   conversationKind?: ChatMessageConversationKind
   /** 来源 ChatMessage runId。 */
@@ -1091,9 +1091,9 @@ export interface ChatFolderRegistryEntry {
    * folder 级执行体绑定 —— **存量读取源，新数据不再往这里写**（2026-08-07 起改成员级）。
    *
    * 它曾是唯一的路由声明：一个 folder 全员由同一个外部引擎执行，于是「在当前对话里加一个
-   * 外部 agent 工作区」根本表达不出来，只能另开一个 folder。判决：绑定下沉到**成员**
-   * （见 {@link ChatFolderRegistryEntry.memberExecutionBindings}），外部 agent 工作区因此能与
-   * system / project / browser 并列在同一个 folder 里。
+   * 由外部引擎执行的成员」根本表达不出来，只能另开一个 folder。判决：绑定下沉到**成员**
+   * （见 {@link ChatFolderRegistryEntry.memberExecutionBindings}），外部引擎成员因此能与
+   * 其它资源范围的成员并列在同一个 folder 里。
    *
    * 存量 folders.json 里这一格仍然有效：解析顺序 = 成员级优先、缺席时回落本格。不做落盘迁移，
    * 少一次「迁移脚本写坏用户数据」的机会。
@@ -1107,7 +1107,7 @@ export interface ChatFolderRegistryEntry {
    * **成员级执行体绑定**：哪个成员会话由哪个外部引擎执行（2026-08-07 新增，写入面唯一权威）。
    *
    * 数组而不是 Record：与 `archivedMembers` 同形，JSON 里稳定可读；成员数是个位数，查表用 find
-   * 即可。缺席成员 = Velar 自己执行。单个成员的绑定创建后不可变——切执行体请新建工作区，
+   * 即可。缺席成员 = Velar 自己执行。单个成员的绑定创建后不可变——切执行体请新建成员，
    * 避免一条会话混入两种执行账本（这条与原来的 folder 级判决一致，只是粒度换了）。
    */
   memberExecutionBindings?: LooseOptional<

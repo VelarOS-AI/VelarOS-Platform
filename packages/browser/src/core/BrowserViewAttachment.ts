@@ -1,5 +1,7 @@
+import { isPlainObject } from '@velaros-ai/core'
+
 /**
- * 「内嵌浏览器视图没接上」这一失败态的**跨层标记**——宿主无关、零运行时依赖。
+ * 「内嵌浏览器视图没接上」这一失败态的**跨层标记**——宿主无关，只依赖 core 纯原语。
  *
  * 为什么需要一个标记而不是让各层各自 match 错误文案：这条失败态的**事实**只有运行时知道
  * （等 attach 超时了），而**补救办法**只有宿主壳知道（把会话页调到前台？重开会话？
@@ -18,10 +20,8 @@ export const BrowserViewNotAttachedReason = 'browser-view-not-attached' as const
  * 靠文案匹配的门会在某次文案微调后**静默失效**，而失效表现恰恰是模型重新陷入死循环。
  */
 export function isBrowserViewNotAttachedError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-
-  const context = (error as { context?: unknown }).context
-  if (!context || typeof context !== 'object') return false
-
-  return (context as { reason?: unknown }).reason === BrowserViewNotAttachedReason
+  if (!isPlainObject(error)) return false
+  const context = error.context
+  if (!isPlainObject(context)) return false
+  return context.reason === BrowserViewNotAttachedReason
 }

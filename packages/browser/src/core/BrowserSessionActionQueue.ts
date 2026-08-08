@@ -64,6 +64,7 @@ class BrowserSessionActionQueue {
     const previous = this.writeQueues.get(sessionId) ?? Promise.resolve()
     const slot = createQueueSlot()
     // 前一个 action 即使失败，也不能阻断后续排队操作。
+    // @arch-guard:suspend code-style/forbid-swallowed-errors 理由：这里 catch 的是**前驱**的链，不是调用方那条——前驱的错误已由 executeInTurn 原样抛给它自己的调用方。此处不吞，一次失败就会把整条链变成 rejected，后面所有排队者被连坐，那正是本次要消灭的死结。
     const tail = previous.catch(() => undefined).then(() => slot.released)
     this.writeQueues.set(sessionId, tail)
     void tail.then(() => {
@@ -128,6 +129,7 @@ class BrowserSessionActionQueue {
    * 队头死结时闭包永远不被调度，信号永远没人检查，中止对卡住的会话完全无效。
    */
   private async awaitTurn(previous: Promise<unknown>, signal?: AbortSignal): Promise<void> {
+    // @arch-guard:suspend code-style/forbid-swallowed-errors 理由：同 run()——等的是**前驱**的名额，前驱的错误归它自己的调用方；这里只关心「轮到我了没有」，成败无关。
     const settled = previous.catch(() => undefined)
     if (!signal) {
       await settled

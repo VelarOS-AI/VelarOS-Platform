@@ -39,6 +39,7 @@ const BrowserEvaluateSimplifyMaxEntries = 100
  * 因此**不许引用任何模块作用域标识符**（常量、import、其它 helper 都不行）。
  */
 function describeBrowserEvaluatedElement(node: any): any {
+  // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：本函数被 toString() 内联进页面执行，core 原语在页面上下文不存在；且这是「页面有没有 DOM」的能力探测，isPresent 表达不了。
   if (typeof Element === 'undefined' || !(node instanceof Element)) return null
   const attributes: Record<string, string> = {}
   for (const attr of [
@@ -89,13 +90,16 @@ function describeBrowserEvaluatedElement(node: any): any {
  * 会被 `toString()` 内联进页面脚本：**不许引用任何模块作用域标识符**。
  */
 function simplifyBrowserEvaluatedValue(value: any, depth = 0, path: any[] = []): any {
+  // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：本函数被 toString() 内联进页面执行，core 原语在页面上下文不存在；且 null 与 undefined 要原样回传（两者在求值结果里语义不同），不能并成 isPresent。
   if (value === null || value === undefined) return value
   const type = typeof value
   // ——— 标量：永远在深度检查之前如实返回（判决②）———
   if (type === 'string' || type === 'number' || type === 'boolean') return value
   if (type === 'bigint' || type === 'symbol' || type === 'function') return String(value)
   if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack || null }
+  // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：同上，页面内联 + DOM 能力探测。
   if (typeof Element !== 'undefined' && value instanceof Element) return describeBrowserEvaluatedElement(value)
+  // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：同上，页面内联 + DOM 能力探测。
   if (typeof Node !== 'undefined' && value instanceof Node) return {
       nodeType: value.nodeType,
       nodeName: value.nodeName,
@@ -112,6 +116,7 @@ function simplifyBrowserEvaluatedValue(value: any, depth = 0, path: any[] = []):
 
   path.push(value)
   try {
+    // @arch-guard:suspend code-style/forbid-raw-runtime-type-guards 理由：页面内联，isArray 在页面上下文不存在。
     if (Array.isArray(value)) return value
         .slice(0, 100)
         .map((item) => simplifyBrowserEvaluatedValue(item, depth + 1, path))
@@ -119,6 +124,7 @@ function simplifyBrowserEvaluatedValue(value: any, depth = 0, path: any[] = []):
     for (const key of Object.keys(value).slice(0, 100)) {
       try {
         output[key] = simplifyBrowserEvaluatedValue(value[key], depth + 1, path)
+        // @arch-guard:suspend code-style/require-error-logging 理由：错误没有被吞——它被写进 output[key] 成为该字段的值回传给调用方，这正是「取不到就说出来」的出声方式；页面内联无 Log 可用，抛出则会让整次求值失败。
       } catch (error) {
         output[key] = error instanceof Error ? error.message : String(error)
       }
