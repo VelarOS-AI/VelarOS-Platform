@@ -38,6 +38,7 @@ export type FilePresentationVariant =
   | 'toml'
   | 'tsx'
   | 'typescript'
+  | 'velarscript'
   | 'vue'
   | 'xml'
   | 'yaml'
@@ -66,6 +67,7 @@ const CodeExtensions = new Set([
   'ts',
   'tsx',
   'vue',
+  'vel',
   'xml',
   'yaml',
   'yml',
@@ -113,6 +115,7 @@ const FILE_PRESENTATION_VARIANT_COLORS: Record<FilePresentationVariant, string> 
   toml: '#9c4221',
   tsx: '#3178c6',
   typescript: '#3178c6',
+  velarscript: 'currentColor',
   video: '#c026d3',
   vue: '#42b883',
   xml: '#e37933',
@@ -137,6 +140,8 @@ function getFilePresentationVariantFromExtension(extension: string): FilePresent
   switch (extension) {
     case 'ts':
       return 'typescript'
+    case 'vel':
+      return 'velarscript'
     case 'tsx':
       return 'tsx'
     case 'js':
