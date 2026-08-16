@@ -6,7 +6,7 @@
   },
   "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "VelarOS",
   "sideEffects": false,
   "engines": {
@@ -99,7 +99,11 @@
     "directory": "packages/project"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/project#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

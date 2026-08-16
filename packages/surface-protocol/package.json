@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Host-neutral wire contracts for provider-owned VelarOS Agent Surfaces.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
@@ -21,7 +21,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "clean": "rm -rf dist",
@@ -43,7 +44,11 @@
     "directory": "packages/surface-protocol"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/surface-protocol#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

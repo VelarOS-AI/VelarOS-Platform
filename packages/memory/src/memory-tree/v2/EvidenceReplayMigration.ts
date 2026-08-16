@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 
 import BetterSqlite3 from 'better-sqlite3'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import { canonicalStringifyV2 } from './DiffChain'
@@ -153,7 +153,7 @@ interface V2EvidenceParityRowV2 {
 }
 
 /**
- * 旧 Desktop 共享库的只读 reader。以 SQLite readonly + query_only 双锁保证迁移代码无写权。
+ * 遗留共享库的只读 reader。以 SQLite readonly + query_only 双锁保证迁移代码无写权。
  */
 export class LegacyMemoryEvidenceSqliteReaderV2 implements LegacyMemoryEvidenceReaderV2 {
   private constructor(
@@ -853,23 +853,19 @@ export function computeMemoryEvidenceParityDigestV2(
 }
 
 function isValidCutoverAttestationV2(
-  input:
-    | MemoryAuthorityCutoverReceiptV2
-    | MemoryAuthorityUserSignoffV2
-    | null
-    | undefined
+  input: LooseOptional<MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSignoffV2>
 ): input is MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSignoffV2 {
   if (!input || !/^[0-9a-f]{64}$/.test(input.verificationDigest)) return false
   const timestamp =
     'verifiedAt' in input ? input.verifiedAt : input.confirmedAt
   const id = 'receiptId' in input ? input.receiptId : input.signoffId
-  return Number.isSafeInteger(timestamp) && timestamp >= 0 && id.length > 0
+  return Number.isSafeInteger(timestamp) && timestamp >= 0 && !isEmpty(id)
 }
 
 function resolveLegacyGovernanceTargetV2(
-  target: LegacyMemoryClaimGovernanceTargetV2 | null,
+  target: Nullable<LegacyMemoryClaimGovernanceTargetV2>,
   identityKeys: MemoryIdentityKeyServiceV2
-): { matchKey: string | null; reasonCode: string | null } {
+): { matchKey: Nullable<string>; reasonCode: Nullable<string> } {
   if (!target) return {
       matchKey: null,
       reasonCode: 'legacy_governance_target_missing',
@@ -900,6 +896,7 @@ function resolveLegacyGovernanceTargetV2(
       }
     }
   } catch {
+    // arch-guard:silent-catch-ok 遗留 scope 不可解析时返回明确的 reasonCode，继续处理其他证据。
     return {
       matchKey: null,
       reasonCode: 'legacy_governance_scope_unresolvable',
@@ -909,6 +906,7 @@ function resolveLegacyGovernanceTargetV2(
   try {
     value = JSON.parse(target.valueJson) as unknown
   } catch {
+    // arch-guard:silent-catch-ok 遗留治理值不是 JSON 时返回明确的 reasonCode，继续处理其他证据。
     return {
       matchKey: null,
       reasonCode: 'legacy_governance_value_invalid',
@@ -948,7 +946,7 @@ function normalizeLegacyEvidenceV2(row: LegacyMemoryEvidenceRowV2): {
     LegacySourceTypePatternV2.test(row.sourceType)
       ? null
       : 'source_type_invalid_defaulted_to_legacy_import',
-  ].filter((reason): reason is string => reason !== null)
+  ].filter((reason): reason is string => isNotNull(reason))
   return {
     input: {
       sourceType: normalizeLegacySourceTypeV2(row.sourceType),
@@ -982,7 +980,7 @@ function normalizeLegacyEvidenceV2(row: LegacyMemoryEvidenceRowV2): {
 
 function resolveLegacyScopeV2(row: LegacyMemoryEvidenceRowV2): {
   scope: IngestMemoryEvidenceInputV2['scope']
-  degradedReason: string | null
+  degradedReason: Nullable<string>
 } {
   if (row.workspaceRoot) {
     if (existsSync(row.workspaceRoot)) return {
@@ -996,7 +994,7 @@ function resolveLegacyScopeV2(row: LegacyMemoryEvidenceRowV2): {
       const origin = new URL(row.scopeId).origin
       if (origin !== 'null') return { scope: { type: 'origin', origin }, degradedReason: null }
     } catch {
-      // 旧 site scope 非 URL 时退为 global，并记录已知损耗。
+      // arch-guard:silent-catch-ok 遗留 site scope 不是 URL 时退为 global，并记录已知损耗。
     }
     return { scope: { type: 'global' }, degradedReason: 'site_origin_unresolvable' }
   }
@@ -1050,7 +1048,7 @@ function validateLegacyEvidenceSequenceV2(
 function mapLegacyEvidenceRowV2(row: Record<string, unknown>): LegacyMemoryEvidenceRowV2 {
   const text = (key: string): string => {
     const value = row[key]
-    if (typeof value !== 'string') {
+    if (!isString(value)) {
       throw new AppError('INVARIANT', `旧 Evidence ${key} 不是字符串。`)
     }
     return value
@@ -1090,9 +1088,9 @@ function parseLegacyMetadataV2(raw: string): {
 } {
   try {
     const value: unknown = JSON.parse(raw)
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) return { value: value as Record<string, unknown>, parsed: true }
+    if (isPlainObject(value)) return { value, parsed: true }
   } catch {
-    // 由调用方记录已知损耗；不得让一条坏 metadata 阻断全部 Evidence 正文重放。
+    // arch-guard:silent-catch-ok 返回 parsed=false，由调用方记录损耗；坏 metadata 不阻断正文重放。
   }
   return { value: {}, parsed: false }
 }

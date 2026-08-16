@@ -2,10 +2,8 @@
 
 贡献一个技能（Claude Code 式 `*.md` 技能的声明面）。**主键 = `id`；绑定可选。**
 
-> **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `skills`）。
-> 今天 Desktop 的技能仍走文件式供应方（`storage/skills/*.md`），不经 mod 轴。
-> 收敛时机：蓝图 §8.4 定为 **M2c**「skills / connectors / 插件闭集」批
-> ——该批本来就要把三个 registry 归一。
+> Platform 提供声明、注册和投影。产品宿主必须在 `supportedAxes` 中显式启用该轴，
+> 并把投影结果接入自己的技能目录；否则贡献会以 absent axis 报告。
 
 ## Schema
 
@@ -51,4 +49,3 @@ projectAgentModSkills(snapshot): AgentSkillDefinition[]
 `createBuiltinAgentModPackage()` **刻意不声明 skills 轴**：
 Agent Runtime 自身不带内置技能定义（技能由宿主的文件式供应方注入），
 声明空轴只会制造零消费者的假贡献。
-</content>

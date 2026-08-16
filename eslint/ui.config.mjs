@@ -1,7 +1,4 @@
-// VelarOS-UI eslint 配置——自 VelarOS-Desktop monorepo eslint.config.mjs 裁剪(R-ui-K1 拆仓):
-// 去掉 desktop 主进程/extension 面,保留 react/web 面(react-hooks),规则本体与 monorepo 逐字一致,
-// 保证同一份源码两仓 lint 语义不漂移。§12.9 组件形态封闭(uiComponentFormClosure/uiColorLiteralClosure)
-// 属检查脚本不属 eslint 规则,已按「各仓自持自己的质量门」收编进本仓 scripts/ui/check/。
+// UI 域的 React/Web lint 配置。组件形态与颜色约束由 scripts/ui/check/ 的专用门负责。
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -234,9 +231,8 @@ export default [
     rules: {
       ...commonRules,
       'react-hooks/rules-of-hooks': 'error',
-      // exhaustive-deps 处在「warn + 基线棘轮」阶段(与 Desktop docs/code-standard.md 附录 A-15 同判据):
-      // 它在 Desktop 侧抓到过两个真 bug(1f50cec7b 漏 sessionId 跨会话串台、81f959ce2 同类闭包),必须开;
-      // 但它对 ref / 稳定函数的假阳性有名,直接 error 会逼人写错代码,所以停在 warn。
+      // exhaustive-deps 处在 warn + 基线棘轮阶段：规则能发现真实的陈旧闭包问题，
+      // 但对 ref 与稳定函数仍有假阳性，直接升为 error 会诱导无效依赖。
       // 硬门不在 `bun run lint`(该命令 --quiet 只收 error),而在 `check:ui-hook-deps` 基线探针:
       // 存量违规逐文件记在 baselines/ui/react-hook-deps.json,只准缩小不准增长;该探针同时静态核对
       // 根 eslint 配置里不存在未登记的 warn 规则,防止 --quiet 静默吞掉新加的 warn。

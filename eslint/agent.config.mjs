@@ -1,5 +1,4 @@
-// VelarOS-Agent eslint 配置——自 VelarOS-Kernel eslint.config.mjs 裁剪(Agent 拆仓):
-// 去掉 core/kernel-* 面的 ignore 与 override,规则本体与上游逐字一致,保证同一份源码多仓 lint 语义不漂移。
+// ESLint configuration for the Agent domain.
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

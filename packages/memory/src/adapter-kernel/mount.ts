@@ -1,3 +1,5 @@
+import { isUndefined } from '@velaros-ai/core'
+
 import type { MemoryDomain } from '..'
 // 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
 import type {
@@ -73,11 +75,11 @@ export interface MountMemoryAdapterInput {
    * 记忆树领域服务（`@velaros-ai/memory` 的 MemoryDomain）。
    *
    * 它同时是**默认已注册后端**的来源与树档治理面（warmup / Dream 调度 / 树版本）的持有者。
-   * TODO(批三)：权威层迁到 `memory-files` 后本字段变可选——files-only 宿主不该被迫开一个
-   * SQLite 记忆树。
+   * TODO(memory-files-authority): 支持 files-only 宿主前，将树治理生命周期从本字段拆成独立端口，
+   * 并让 domain 成为可选输入。
    */
   domain: MemoryDomain
-  /** 宿主空闲信号端口（Desktop 由 Electron 实现，headless 可注入常量实现）。 */
+  /** 宿主空闲信号端口；桌面宿主读取平台状态，headless 宿主可注入常量实现。 */
   idleSignal: HostIdleSignalPort
   config: MemoryAdapterConfigPort
   hostContext: MemoryAdapterHostContextPort
@@ -104,7 +106,7 @@ export class MemoryAdapterRuntime {
     // 「默认已注册后端」：既有树领域服务原样包成后端，每个动词逐字转发 → 行为零变化。
     const defaultStore = createMemoryTreeStoreBackend(domain)
     this.store = (
-      input.store === undefined
+      isUndefined(input.store)
         ? undefined
         : resolveMemoryStoreBackend({
             registry: input.store.registry,

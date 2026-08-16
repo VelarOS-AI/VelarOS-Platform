@@ -1,4 +1,6 @@
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 /**
  * CDP Tracing 采集器：与传输层解耦，供外部 CDP driver（WebSocket transport）
@@ -137,9 +139,15 @@ export class CdpTraceCollector {
     if (!this.started) return
     try {
       await this.transport.send('Tracing.end')
-      const complete = await this.waitForComplete().catch(() => null)
+      const complete = await this.waitForComplete().catch(
+        () =>
+          // arch-guard:silent-catch-ok abort 不等待 trace 完整事件；超时或断连都按无 stream 清理。
+          null
+      )
       if (complete?.stream) {
-        await this.transport.send('IO.close', { handle: complete.stream }).catch(() => undefined)
+        await this.transport.send('IO.close', { handle: complete.stream }).catch(() => {
+          // arch-guard:silent-catch-ok abort 中关闭已失效的 CDP stream 是幂等清理。
+        })
       }
     } catch {
       // arch-guard:silent-catch-ok 停 trace 属清理路径：页面/标签页可能已销毁，此时唯一正确的
@@ -150,13 +158,16 @@ export class CdpTraceCollector {
   }
 
   private async waitForComplete(): Promise<CdpTracingCompleteEvent> {
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new AppError('EXECUTION_FAILED', '等待 trace 结束事件超时。')),
-        TraceCompleteTimeoutMs
-      ).unref?.()
-    })
-    return Promise.race([this.tracingCompleteEvent!, timeout])
+    const timers = new TimerScope({ name: 'CdpTraceCollector.waitForComplete' })
+    try {
+      return await timers.withTimeout(
+        TraceCompleteTimeoutMs,
+        () => this.tracingCompleteEvent!,
+        { timeoutMessage: '等待 trace 结束事件超时。', unref: true }
+      )
+    } finally {
+      timers.dispose()
+    }
   }
 
   private async readStream(handle: string): Promise<string> {
@@ -173,7 +184,9 @@ export class CdpTraceCollector {
         if (chunk.eof) break
       }
     } finally {
-      await this.transport.send('IO.close', { handle }).catch(() => undefined)
+      await this.transport.send('IO.close', { handle }).catch(() => {
+        // arch-guard:silent-catch-ok 读取失败时关闭 stream 不能覆盖真正的 IO.read 错误。
+      })
     }
     return chunks.join('')
   }
@@ -186,9 +199,9 @@ export class CdpTraceCollector {
       throw new AppError('EXECUTION_FAILED', 'trace 数据不是合法 JSON。')
     }
 
-    if (Array.isArray(parsed)) return parsed
+    if (isArray(parsed)) return parsed
     const events = (parsed as { traceEvents?: unknown }).traceEvents
-    if (Array.isArray(events)) return events
+    if (isArray(events)) return events
     throw new AppError('EXECUTION_FAILED', 'trace 数据里没有 traceEvents。')
   }
 
@@ -221,7 +234,7 @@ export async function captureCdpHeapSnapshot(
     'HeapProfiler.addHeapSnapshotChunk',
     (params) => {
       const chunk = params?.chunk
-      if (typeof chunk !== 'string' || chunk.length === 0) return
+      if (!isString(chunk) || isEmpty(chunk)) return
       chunks += 1
       bytes += Buffer.byteLength(chunk)
       sink(chunk)

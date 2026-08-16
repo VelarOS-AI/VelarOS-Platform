@@ -13,8 +13,8 @@
  * 作用域双轨（§九 9.5）：全局面住宿主 userData，项目面住仓根 `.velaros/memory/` 随 git 走。
  * **两条路径全部由宿主注入**，本文件对宿主目录布局零假设。
  *
- * TODO(批二)：`memory-vector` 入场后本后端仍是权威层——语义命中在 vector 侧产生，
- * 回到这里 `getItem` 取全文；本后端的 capture 是双写里先落地的那一写。
+ * 与 `memory-vector` 叠加时，本后端仍是权威层：向量索引只返回指针，再由 `getItem`
+ * 读取全文；capture 始终先写权威层，再更新派生索引。
  */
 
 import {
@@ -153,7 +153,7 @@ function hash(value: string): string {
  * 查询分词：空白/标点切词，CJK 连续段额外产生 2-gram。
  *
  * 中文不带空格，纯按空白切会把整句当成一个 token 而永不命中；2-gram 是零依赖前提下
- * 最便宜的可用近似。语义匹配是 `memory-vector` 的活（批二），这里只要「不笨到没法用」。
+ * 最便宜的可用近似。语义匹配由可选的 `memory-vector` 负责，本层提供可靠的词法回退。
  */
 function tokenize(value: string): string[] {
   const lowered = value.toLowerCase()
@@ -346,7 +346,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   }
 
   /**
-   * 权威层全量枚举（`MemoryAuthorityEnumeration` 端口，批二）——派生索引重建的唯一正当入口。
+   * 权威层全量枚举（`MemoryAuthorityEnumeration` 端口）——派生索引重建的唯一正当入口。
    *
    * 为什么不用 `recall('')` 代替：普通召回有 `limit` 与「按需全文」上限（一次最多读 24 份），
    * 那是**性能承诺**，不是缺陷。拿它当枚举会重建出一份看起来在工作的残缺索引，而残缺索引比
@@ -670,7 +670,7 @@ function optionalTags(
 /**
  * 构造一个 `memory-files` 后端。所有路径由宿主注入；包内不认识 userData 或仓根。
  *
- * 返回类型带上 `MemoryAuthorityEnumeration`：本档**自带全量枚举**，因此叠加编排（批二）不需要
+ * 返回类型带上 `MemoryAuthorityEnumeration`：本档**自带全量枚举**，因此叠加编排不需要
  * 宿主再注入一个枚举源，装上派生索引即可重建。
  */
 export function createMemoryFilesBackend(

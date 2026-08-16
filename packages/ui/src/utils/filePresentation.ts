@@ -136,7 +136,7 @@ export function getFileExtension(fileName: string): string {
   return normalizedName.slice(dotIndex + 1).toLowerCase()
 }
 
-function getFilePresentationVariantFromExtension(extension: string): FilePresentationVariant | null {
+function getFilePresentationVariantFromExtension(extension: string): Nullable<FilePresentationVariant> {
   switch (extension) {
     case 'ts':
       return 'typescript'

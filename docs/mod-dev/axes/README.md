@@ -8,7 +8,7 @@
 闭集常量 `AgentModContributionAxisNames`（`packages/agent/src/protocol/mods.ts`），
 **顺序即声明顺序**：
 
-| 轴 | 主键 | 运行态绑定 | Desktop 接线 | 文档 |
+| 轴 | 主键 | 运行态绑定 | Platform 投影 | 文档 |
 | --- | --- | --- | --- | --- |
 | `tools` | `name` | **必需** | ✅ 已接线 | [tools.md](./tools.md) |
 | `toolCategories` | `id` | 可选 | ✅ 已接线 | [tool-categories.md](./tool-categories.md) |
@@ -16,31 +16,25 @@
 | `skills` | `id` | 可选 | ✅ 已接线 | [skills.md](./skills.md) |
 | `spaces` | `id` | **禁止** | ✅ 已接线（只消费工具配方那几格） | [spaces.md](./spaces.md) |
 | `subAgentTypes` | `id` | 可选 | ✅ 已接线 | [sub-agent-types.md](./sub-agent-types.md) |
-| `turnContextSources` | `id` | **禁止** | ⚠️ 未接线 | [turn-context-sources.md](./turn-context-sources.md) |
-| `executionModes` | `id` | 可选 | ⚠️ 未接线 | [execution-modes.md](./execution-modes.md) |
+| `turnContextSources` | `id` | **禁止** | ✅ 纯数据 | [turn-context-sources.md](./turn-context-sources.md) |
+| `executionModes` | `id` | 可选 | ✅ 已投影 | [execution-modes.md](./execution-modes.md) |
 | `hooks` | `id` | **必需** | ✅ 已接线（5/15 kind） | [hooks.md](./hooks.md) |
 
-「⚠️ 未接线」= `DesktopAgentModUnroutedAxes`（`apps/desktop/src/main/kernel/AgentModRuntime.ts`，
-由落点表 `DesktopAgentModAxisSinkNames` 取补集派生）：Desktop 还没把这条轴接进任何运行时消费者。
-**这两条轴不在 Desktop 的 `supportedAxes` 里**，因此：
+Platform 为九轴提供 schema、注册表和纯函数投影；是否进入实际运行链由产品宿主的
+`AgentModHostProfile.supportedAxes` 决定。宿主不支持的轴进入 `absentAxes`，mod 以 `partial`
+状态激活；若该轴出现在 `requiredAxes`，则 fail closed 并拒载。作者必须查阅目标宿主的公开兼容表，
+不得根据某个私有实现猜测支持范围。
 
-- 贡献它们不会报错，但**贡献会被 Loader 裁掉**（不进注册表），mod 状态落 `partial`；
-- 设置页那一行显示「未接线轴」，诊断码 `desktop.mod.axis-unrouted`；
-- 把它们写进 `requiredAxes` = **拒载**（fail-closed 如实生效）。别为了「保险」写上去。
-
-「✅ 已接线（只消费工具配方那几格）」：`spaces` 轴 Desktop 真正读的是
-`identityStrategy` / `boundCapabilityIds` / `inheritsSpaceIds` / `toolCategoryIds` / `residentToolNames`。
-`descriptor` / `iconId` / `surfaceProfileId` / `turnContextSourceIds` / `promptSegmentIds` 是**空格子**
-（schema 保留，随包官方 mod 已不再声明）：空间的文案、图标与每回合上下文源白名单权威在产品壳的
-枚举表里。改这几格不会有任何变化，也不会有诊断——所以别改，去改壳。
+`spaces` 中 `descriptor`、`iconId`、`surfaceProfileId`、`turnContextSourceIds` 和
+`promptSegmentIds` 只在宿主明确投影时生效。未投影的展示字段不得被文档描述为已生效功能。
 
 ## 两族 ui 轴（住 `ui`，产品壳读）
 
 | 轴 | 内容 | 状态 | 文档 |
 | --- | --- | --- | --- |
-| `ui.settings` | 声明式设置分组 / 字段 DSL | ✅ 已实装（Desktop） | [ui-settings.md](./ui-settings.md) |
-| `ui.dock` / `ui.actions` / `ui.sidePanels` | 应用头部 Dock 项 / 右侧按钮区 / 右侧栏选项卡 | 契约已定，实装批次 **W1** | [ui-shell.md](./ui-shell.md) |
-| `pages` / `settingsRenderers` / `surfaces` / `tours` | 既有壳级轴 | 契约已定，硬编码引用 → 注册表收集未做 | [ui-shell.md](./ui-shell.md) |
+| `ui.settings` | 声明式设置分组 / 字段 DSL | 产品宿主协议 | [ui-settings.md](./ui-settings.md) |
+| `ui.dock` / `ui.actions` / `ui.sidePanels` | Dock、操作区和侧栏入口 | 产品宿主协议 | [ui-shell.md](./ui-shell.md) |
+| `pages` / `settingsRenderers` / `surfaces` / `tours` | 页面与产品界面扩展 | 产品宿主协议 | [ui-shell.md](./ui-shell.md) |
 
 **壳级 UI 轴不在 Agent 主干。** 在 `agent` 节里写 `pages` / `surfaces` / `tours` =
 未知贡献点 = 拒载。它们住 `ui` 节，Agent 侧读都不读。
@@ -88,4 +82,3 @@ DataOnlyAxes        = { 'spaces', 'turnContextSources' } // 带绑定 → mod.bi
 | `projectAgentModSubAgentTypes(snapshot)` | `SubAgentTypeDescriptor[]` |
 | `projectAgentModTurnContextSources(snapshot)` | `AgentModTurnContextSourceContribution[]`（纯声明） |
 | `projectAgentModExecutionModes(snapshot)` | `ExecutionModeDescriptor[]` |
-</content>

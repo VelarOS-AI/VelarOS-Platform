@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
   "type": "module",
   "sideEffects": false,
@@ -50,7 +50,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -75,7 +76,11 @@
     "directory": "packages/system"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/system#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

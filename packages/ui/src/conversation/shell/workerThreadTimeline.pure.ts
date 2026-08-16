@@ -125,7 +125,7 @@ function collectThreadIdsFromString(value: string, threadIds: Set<string>): void
     try {
       collectThreadIdsFromValue(JSON.parse(match[1]), threadIds)
     } catch {
-      // Ignore malformed historical tool payloads and keep the timestamp fallback.
+      // arch-guard:silent-catch-ok 历史工具载荷损坏时保留时间戳回退，不让旧记录击穿时间线。
     }
   }
 
@@ -134,7 +134,7 @@ function collectThreadIdsFromString(value: string, threadIds: Set<string>): void
   try {
     collectThreadIdsFromValue(JSON.parse(trimmed), threadIds)
   } catch {
-    // Ignore non-JSON textual summaries.
+    // arch-guard:silent-catch-ok 普通文本摘要不是 JSON，按文本路径继续处理。
   }
 }
 

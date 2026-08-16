@@ -81,8 +81,7 @@ interface ChatContextRetrievalIndexSaveOptions {
 
 /**
  * 检索索引存储**窄端口**：本单元只消费 `loadFresh` / `save`（+ 可选 `getDiagnostics`
- * 与 `readSourceFingerprint`）。宿主提供文件系统实现（Desktop 的
- * `ChatContextRetrievalIndexFileStore` 结构化满足），内核只认端口不认实现——落盘策略、
+ * 与 `readSourceFingerprint`）。宿主提供文件系统实现；内核只认端口不认实现——落盘策略、
  * 新鲜度指纹计算全在宿主侧。
  */
 interface ChatContextRetrievalIndexStore {

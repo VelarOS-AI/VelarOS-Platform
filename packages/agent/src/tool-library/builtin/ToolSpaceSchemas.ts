@@ -1,5 +1,5 @@
-// 域：工具空间三个控制工具的**模型面 schema 单源**。改这里等于改模型看到的参数契约，
-// 改前先读 Desktop `docs/agent-execution-hardening.md §1`（工具参数宽容八铁律）。
+// 域：工具空间控制工具的模型面 schema 单源。改这里等于改模型看到的参数契约；
+// 宽容解析的安全理由记录在下方注释和相应回归测试中。
 //
 // ## 组织
 // 五个 op 各有一份精确 schema（find/page/map/read/replace），`toolSpaceSchema` 把它们并成按 `op`

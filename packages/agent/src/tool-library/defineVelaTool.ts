@@ -1,6 +1,6 @@
 // tool-library 工具定义入口：generic 工具经此绑定核心面 KernelToolContext。
-// 与 Desktop 的 defineVelaTool（默认完整 ToolContext）同形，只是默认上下文收窄到 host 无关核心面；
-// 装配进宿主完整 ToolContext 时靠 TContext 逆变无摩擦兼容（宿主更宽，赋给更窄的核心面契约）。
+// 默认上下文收窄到 host-neutral 核心面；装配进产品宿主完整 ToolContext 时通过 TContext 逆变
+// 兼容更宽的宿主上下文。
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
 import {

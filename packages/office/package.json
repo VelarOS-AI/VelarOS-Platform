@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/office#readme",
   "bugs": {
@@ -45,7 +45,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
@@ -83,7 +84,7 @@
     "directory": "packages/office"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

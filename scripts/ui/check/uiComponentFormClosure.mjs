@@ -10,17 +10,14 @@
  *      / `HTMLAttributes` / `SVGProps` / `JSX.IntrinsicElements[...]` 等 DOM 全属性面(含 `Omit<…>` / `Pick<…>` 包裹)。
  *   2. **className/style 透传**:props 声明 `className` / `style` / `*ClassName` 成员。
  *
- * 扫描面口径(QH 批修正):原口径只认「名字以 `Props` 结尾的 interface / type 声明」,同一条法条对
- * 三类等价写法完全失明——判据上是逃生口,机械上看不见:
+ * 扫描面覆盖以下三类等价写法：
  *   ① **内联对象字面量 props**:`({ className }: { className?: string })`(CardKit 六件即此形态);
  *   ② **`Pick<X,'className'>` / `Omit<DOM,…> & { className?: string }` 转发**:出现在参数标注上或
  *      `*Props` 类型别名右侧,不是 interface 成员,原成员扫描直接跳过;
  *   ③ **导出 className 拼接函数**:`export function getXxxClassName(className?: string): string`
  *      ——把透传口从 prop 挪到函数签名,逃生口本质不变(TopBarControlFrame 四个)。
- * 现口径:props 契约面 = `*Props` 声明 ∪ **全部参数类型标注** ∪ 导出的 `*ClassName` 函数。
- *
- * 自 monorepo arch-guard-velaros 的 uiComponentFormClosure(§12.9)收编,指纹形态(声明名锚定,行无关)
- * 逐字保形。存量由 baselines/ui/ui-component-form-closure-baseline.json 逐条冻结,只降不升;新增即红。
+ * 契约面因此是 `*Props` 声明、全部参数类型标注与导出的 `*ClassName` 函数。指纹锚定
+ * 声明名且与行号无关；基线只允许收缩。
  */
 import { basename } from 'node:path'
 

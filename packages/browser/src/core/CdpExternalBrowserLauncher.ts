@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { isArray, isEmpty,isNonBlankString, isObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNonBlankString, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -209,7 +209,9 @@ class CdpExternalBrowserLauncher {
       ...(options.env ?? {}),
     }
 
-    await this.unlink(join(userDataDir, 'DevToolsActivePort')).catch(() => undefined)
+    await this.unlink(join(userDataDir, 'DevToolsActivePort')).catch(() => {
+      // arch-guard:silent-catch-ok 启动前清理允许文件不存在；新浏览器会写入自己的端口文件。
+    })
     const child = this.spawn(executablePath, this.buildLaunchArgs(userDataDir, options, {
       env: launchEnv,
       platform,
@@ -502,7 +504,7 @@ class CdpExternalBrowserLauncher {
         browserWebSocketPath: lines[1]?.trim() || '/devtools/browser',
       }
     }
-    // @arch-guard:suspend velaros/code-style/require-error-logging 理由：DevToolsActivePort 在 Chrome 写入前会反复 ENOENT，轮询路径不应刷 debug 日志。
+    // arch-guard:silent-catch-ok DevToolsActivePort 在 Chrome 写入前会反复缺席，轮询路径不刷日志。
     catch {
       return null
     }
@@ -600,8 +602,8 @@ class CdpExternalBrowserLauncher {
   }
 
   private parseTargetEntry(entry: unknown): Nullable<CdpTargetDescription> {
-    if (!isObject(entry)) return null
-    const record = entry as Record<string, unknown>
+    if (!isPlainObject(entry)) return null
+    const record = entry
     if (!isString(record.webSocketDebuggerUrl)) return null
 
     return {

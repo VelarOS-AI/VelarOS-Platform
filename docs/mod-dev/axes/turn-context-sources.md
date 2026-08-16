@@ -1,10 +1,6 @@
 # 轴：`turnContextSources`
 
-声明一个 per-turn 上下文源。**主键 = `id`；纯数据轴，禁止运行态绑定。**
-
-**这是 mod 贡献进入每回合上下文的唯一通道。**
-
-> **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `turnContextSources`）。
+声明一个每回合上下文源。**主键 = `id`；这是纯数据轴，不接受运行态绑定。**
 
 ## Schema
 
@@ -12,69 +8,42 @@
 
 ```ts
 z.strictObject({
-  id: TrimmedIdSchema,                                  // 主键
-  label: z.string().optional(),
-  spaces: tolerantArray(TrimmedIdSchema).optional(),    // 空数组 = 不限 space
-  rendererVisible: z.boolean().optional(),
+  id: TrimmedIdSchema,
+  label: z.string(),
+  defaultEnabled: z.boolean().optional(),
+  budgetTokens: z.number().int().nonnegative().optional(),
   priority: z.number().int().optional(),
 })
 ```
 
 | 字段 | 说明 |
 | --- | --- |
-| `spaces` | 本源在哪些 space 生效。**空数组表示不限 space** |
-| `rendererVisible` | 这条 delta 要不要在渲染层露出（chips / note） |
-| `priority` | 排序 |
+| `id` | 全宿主唯一的稳定标识符 |
+| `label` | 供诊断和产品界面使用的名称 |
+| `defaultEnabled` | 宿主首次发现该源时的建议缺省值，不覆盖用户已有选择 |
+| `budgetTokens` | 该源的提示词预算上限 |
+| `priority` | 多源 fan-in 时的稳定优先级 |
 
-## 纯数据轴
+## 为什么不接受 binding
 
-`turnContextSources` 在 `DataOnlyAxes` 里，传绑定即 `mod.binding-not-allowed`。
-`projectAgentModTurnContextSources(snapshot)` 直接返回 `record.declaration`——
-**它只是声明，不是 producer**。
+manifest 只声明上下文源的身份和预算，不能携带生产上下文的函数。若 bindings 中为该轴提供
+payload，Loader 会以 `mod.binding-not-allowed` 拒载。
 
-## 与运行时 source 契约的关系（重要）
+产品宿主负责把声明映射到自己公开的 `TurnContextDeltaSource` 实现，并明确来源权限、可访问数据、
+失败策略和预算执行。缺少宿主实现时，该轴只能作为 absent axis 报告，不能生成空上下文冒充成功。
 
-真正产出 delta 的是 `TurnContextDeltaSource`（`packages/core/src/types/turnContext.ts`）：
+## 宿主实现要求
+
+一个支持此轴的宿主至少应保证：
+
+1. source id 到生产者的映射是显式注册，不依赖命名猜测；
+2. 每个源独立执行权限和 token 预算；
+3. 单源失败不会破坏其他源，并留下结构化诊断；
+4. 同一回合使用固定配置与 generation 快照；
+5. 用户关闭的源不会被 pack 更新静默重新启用。
+
+Platform 的投影入口为：
 
 ```ts
-interface TurnContextDeltaSource {
-  id: TurnContextSourceId
-  scopes: readonly CapabilityScopeId[]      // 注意：叫 scopes，不叫 spaces
-  rendererVisible?: boolean
-  peekCached(input): TurnContextSourcePeekResult
-}
+projectAgentModTurnContextSources(snapshot): AgentModTurnContextSourceContribution[]
 ```
-
-manifest 上的 `spaces` 与运行时的 `scopes` **今天没有翻译层**——
-该轴在 Desktop 未接线，所以贡献一条声明不会凭空长出一个 producer。
-真正落地时需要的两件事：① 声明 → 注册；② producer 的 `scopes` 与 space 声明对齐。
-
-## 两道门（写空间的人必读）
-
-一条源要在某空间产出 delta，必须**同时**过两道门：
-
-- **gate1**：该空间的 `turnContextSourceIds` 白名单里有它；
-- **gate2**：该源自己的 `scopes` 里有这个空间 id。
-
-合取判定在 `ChatTurnContextFanIn.peek()`
-（`apps/desktop/src/main/chat/turncontext/FanIn.ts`）。
-详见 [spaces.md §三](./spaces.md#三turncontextsourceids两道门不是一道)。
-
-## Desktop 现有的六个源（参考，2026-07-30 核对）
-
-| id | producer | `scopes` |
-| --- | --- | --- |
-| `workspace.project-roots` | `createProjectRootsSource`（`main/chat/turncontext/ProjectRootsSource.ts`） | `[Project]` |
-| `browser.current-page` | `createBrowserCurrentPageSource`（`main/chat/turncontext/BrowserCurrentPageSource.ts`） | `[Browser]` |
-| `workspace.filesystem-touches` | `createTurnContextSources()`（`main/workspace/domain/signals/Coordinator.ts`） | `[Project]` |
-| `browser.manual-activity` | `packages/browser/src/core/BrowserActivityCoordinator.ts` | `['browser']` |
-| `memory.recall` | `MemoryTurnRecallCoordinator.createTurnContextSource`（`packages/memory/src/adapter-kernel/TurnRecallCoordinator.ts`） | 宿主注入；`rendererVisible: false` |
-| `task.lifecycle` | `packages/agent/src/kernel/background-jobs.ts` | 宿主注入（必填，空数组直接抛） |
-
-注册点集中在 `apps/desktop/src/main/bootstrap/composition/chat.ts`。
-
-> **跨空间源一律不要手写 `scopes`**：Desktop 用
-> `resolveTurnContextSourceScopes(sourceId)`（`apps/desktop/src/shared/capabilities/DesktopTurnContextPolicy.ts`）
-> 从 gate1 白名单反查后注入，两道门永远同底。`task.lifecycle` 曾因空间化重构把常量数组降级成 `[]`，
-> gate2 恒 false 让整条 task delta 通道静默失联（已修，`scripts/checks/kernelAssembly.mjs` ⑥ 锁）。
-</content>

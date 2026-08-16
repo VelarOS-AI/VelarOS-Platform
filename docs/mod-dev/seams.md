@@ -177,4 +177,3 @@ interface AgentModSessionLifecycleEvent {
 - 同进程无沙箱的任意代码执行；
 - **加载顺序覆盖**（同 id 一律拒载，不做「后者胜」）；
 - **全局 registry 即时修改**（写入只在 registration 阶段）。
-</content>

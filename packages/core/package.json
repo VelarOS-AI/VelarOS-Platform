@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
@@ -42,7 +42,8 @@
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "scripts": {
     "clean": "rm -rf dist",
@@ -62,7 +63,11 @@
     "directory": "packages/core"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

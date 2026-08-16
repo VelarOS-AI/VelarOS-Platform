@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isEmpty, isNull, isPlainObject, isString } from '@velaros-ai/core'
 
 import { canonicalStringifyV2 } from '../DiffChain'
 
@@ -109,8 +109,8 @@ export class MemoryKeyringStoreV2 {
       kind: 'file',
     })
 
-    if (currentGeneration === null) {
-      if (entries.length > 0) {
+    if (isNull(currentGeneration)) {
+      if (!isEmpty(entries)) {
         throw new AppError(
           MemoryStorageErrorCodesV2.corruption,
           'keyring 存在代际文件但缺少 CURRENT，拒绝猜测生效代。',
@@ -433,9 +433,9 @@ function parseKeyringFileV2(raw: string, expectedGeneration: number): MemoryKeyr
     parsed['generation'] !== expectedGeneration ||
     !Number.isSafeInteger(parsed['createdAt']) ||
     (parsed['createdAt'] as number) < 0 ||
-    typeof parsed['wrappingRootId'] !== 'string' ||
+    !isString(parsed['wrappingRootId']) ||
     !MemoryWrappingRootIdPatternV2.test(parsed['wrappingRootId'] as string) ||
-    typeof parsed['integrity'] !== 'string' ||
+    !isString(parsed['integrity']) ||
     !IntegrityPatternV2.test(parsed['integrity'] as string)
   ) {
     throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring 标量字段不符合 v2 严格格式。')
@@ -464,7 +464,7 @@ function parseKeyringKeysV2(input: unknown): MemoryKeyringKeysV2 {
       'keyring keys 字段不符合 v2 严格格式。'
     )
   }
-  if (typeof input['identity'] !== 'string' || typeof input['matchRoot'] !== 'string') {
+  if (!isString(input['identity']) || !isString(input['matchRoot'])) {
     throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring 基础密钥信封缺失。')
   }
   assertWrappedKeyEnvelopeV2(input['identity'], 'identity')
@@ -477,6 +477,7 @@ function parseKeyringKeysV2(input: unknown): MemoryKeyringKeysV2 {
       assertMemoryBlobIdV2(key)
       return true
     } catch {
+      // arch-guard:silent-catch-ok 这是 Map key 的验证谓词，false 会触发上层 corruption 诊断。
       return false
     }
   })
@@ -497,7 +498,7 @@ function parseWrappedMapV2(
   }
   const result: Record<string, string> = {}
   for (const [key, value] of Object.entries(input)) {
-    if (!validateKey(key) || typeof value !== 'string' || !value) {
+    if (!validateKey(key) || !isString(value) || isEmpty(value)) {
       throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring wrapped map 含非法条目。')
     }
     assertWrappedKeyEnvelopeV2(value, key)
@@ -529,9 +530,9 @@ function isStrictRecordV2(
 }
 
 function isPlainRecordV2(input: unknown): input is Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false
+  if (!isPlainObject(input)) return false
   const prototype: unknown = Object.getPrototypeOf(input)
-  return prototype === Object.prototype || prototype === null
+  return prototype === Object.prototype || isNull(prototype)
 }
 
 function assertGenerationV2(generation: number): void {

@@ -91,7 +91,7 @@ function assertToolDescriptionWithinLimit(name: string, description: string): vo
 }
 
 /**
- * 模型面工具描述的**软预算**（字符）——见 Desktop `docs/design-principles.md` §8。
+ * 模型面工具描述的软预算（字符）。
  *
  * 与 6000 硬上限的分工：硬上限是「写爆了」的保底闸；软预算是「工具是调用面、技能是用法面」
  * 这条判决的机械落点。复杂用法（多步协议、示例库、边角案例）模型会当作没看见或绕开，它属于

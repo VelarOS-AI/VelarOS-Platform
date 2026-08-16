@@ -11,14 +11,8 @@
  *   - 组件源码 `packages/ui/src/**.{ts,tsx}`(内联样式里的裸色值;styles/ 目录与生成物豁免)
  * 命中:`#rgb`/`#rrggbb`/`#rrggbbaa` 十六进制、`rgb(/rgba(`、`hsl(/hsla(` 字面量(`var(--…)` 与命名色不算)。
  *
- * 扫描面口径(QH 批修正,原口径有两处盲区):
- *   ① CSS 面原本只有 `styles/components/**`,组件同目录的 `*.module.css` 与 html-preview 沙箱样式表
- *      **完全隐形**——同一条法条对同一层代码两套待遇。现改为「全部 .css 减令牌层」,一条口径到底。
- *   ② `*.generated.*` 是**构建产物**(由 `scripts/ui/build/*.mjs` 从源 CSS 生成),却被钉进人工基线;
- *      重新生成即触发棘轮红,且真正该记账的源 CSS 反而在面外。产物一律豁免,只记账其源文件。
- *
- * 自 monorepo arch-guard-velaros 的 uiColorLiteralClosure(§12.9)收编;指纹改为「文件+字面量+序数」
- * 的行无关形态(比原行号型更稳:行位移不误判新违规,新增裸色值仍即红),语义等价=组件层不再新增裸色值。
+ * 扫描全部 UI CSS（令牌层除外）和组件 TypeScript 内联样式。生成物不参与基线，
+ * 只检查它们的源文件。指纹采用文件、字面量和序数，不因无关行号变化而漂移。
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'

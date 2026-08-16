@@ -2,7 +2,7 @@
 
 `@velaros-ai/ui` 的变更记录。遵循 [Keep a Changelog](https://keepachangelog.com/) 与
 [Semantic Versioning](https://semver.org/)。门面包背 semver 承诺（§12「门面收口」）；内部原子演化
-不进本记录。记录起点为组件库重生批次（`@velaros-ai/ui` 门面成型、`VelarOS-UI` 升格终局独立仓）。
+不进本记录。记录起点为 `@velaros-ai/ui` 公开门面与组件库成型。
 
 ## [Unreleased]
 

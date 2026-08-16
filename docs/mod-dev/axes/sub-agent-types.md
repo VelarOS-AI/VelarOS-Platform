@@ -2,8 +2,8 @@
 
 贡献一个子 agent 类型（`agent:dispatch` 可派发的角色）。**主键 = `id`；绑定可选。**
 
-> **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `subAgentTypes`）。
-> 收敛时机：蓝图 §8.4 定为 **M2c**，与 skills 同批（同一 registry 归一工位）。
+> Platform 提供声明、注册和投影。产品宿主必须在 `supportedAxes` 中显式启用该轴，
+> 并将投影结果并入自己的子 Agent 类型目录。
 
 ## Schema
 
@@ -64,4 +64,3 @@ projectAgentModSubAgentTypes(snapshot): SubAgentTypeDescriptor[]
 派子 agent 有既定纪律：并发上限、嵌套硬禁、避免「什么事都派子 agent」。
 贡献新类型时把 `description` 写清**什么时候该用它**——那段文字会进模型面，
 它是抑制滥用的第一道也是最便宜的一道。
-</content>

@@ -60,7 +60,7 @@ import { ManagedExecutionRunner, type RunManagedExecutionParams } from './Manage
 import { createToolExecutionApi } from './ToolExecutionApiFactory'
 
 interface ExecutionServiceOptions {
-  /** 准入断言端口：托管执行启动前断言已授权（Desktop 注入 cloudSessionAccess）。 */
+  /** 准入断言端口：托管执行启动前由产品宿主确认当前运行态已获授权。 */
   authGate: AuthGatePort
   /** 执行记录落盘路径端口：未显式传 store 时用于构建默认持久化 ExecutionStore。 */
   executionRecordsPath: ExecutionRecordsPathPort

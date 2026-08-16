@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isNotNull, isPresent } from '@velaros-ai/core'
 
 import { MemoryBlobStoreV2 } from './storage/BlobStore'
 import { ContentKeyServiceV2 } from './storage/ContentKeyService'
@@ -40,6 +40,7 @@ function expectThrows(run: () => unknown, message: string): unknown {
   try {
     run()
   } catch (error) {
+    // arch-guard:silent-catch-ok 探针在下方断言确实捕获到了错误。
     observed = error
   }
   check(observed instanceof Error, `${message}: 应抛错误`)
@@ -178,11 +179,11 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
     '来源不明的伪 forward 对象不得进入投影写路径'
   )
 
-  let latestDiff: MemoryTreeDiffV2 | null = null
+  let latestDiff: Nullable<MemoryTreeDiffV2> = null
   while (opened.store.version < MemoryTreeCheckpointIntervalV2) {
     const before = opened.store.current.nodes
     const beforeLeaf = before.find((node) => node.stableKey === 'concept:k2:leaf')
-    check(beforeLeaf !== undefined, '循环提交前 leaf 必须存在')
+    check(isPresent(beforeLeaf), '循环提交前 leaf 必须存在')
     const afterLeaf: MemoryTreeNodeStructV2 = {
       ...beforeLeaf,
       content: { ...beforeLeaf.content },
@@ -209,10 +210,10 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   }
   equal(opened.store.version, MemoryTreeCheckpointIntervalV2, '应推进到首个 checkpoint 间隔')
   const inspection = opened.store.inspectProjection()
-  check(inspection !== null, '投影代应存在')
+  check(isNotNull(inspection), '投影代应存在')
   equal(inspection.checkpointCount, 1, 'v64 应产生一个 checkpoint')
 
-  check(latestDiff !== null, '应记录最后一条 diff')
+  check(isNotNull(latestDiff), '应记录最后一条 diff')
   const backward = replayTreeDiffsBackwardV2(opened.store.current.nodes, [latestDiff])
   equal(backward.direction, 'backward', '逆放结果必须带 backward 来源')
   expectAppErrorCode(
@@ -225,7 +226,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   const invalidBeforeLeaf = opened.store.current.nodes.find(
     (node) => node.stableKey === 'concept:k2:leaf'
   )
-  check(invalidBeforeLeaf !== undefined, 'FK 回滚负控前 leaf 必须存在')
+  check(isPresent(invalidBeforeLeaf), 'FK 回滚负控前 leaf 必须存在')
   expectThrows(
     () =>
       opened.store.commitVersion({
@@ -316,7 +317,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
 
   const before65 = reopened.store.current.nodes
   const leaf64 = before65.find((node) => node.stableKey === 'concept:k2:leaf')
-  check(leaf64 !== undefined, 'v64 leaf 存在')
+  check(isPresent(leaf64), 'v64 leaf 存在')
   const leaf65 = {
     ...leaf64,
     content: { ...leaf64.content },
@@ -345,7 +346,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   )
 
   const generationBeforeTamper = readCurrentGenerationV2(authority.roots.indexDir)
-  check(generationBeforeTamper !== null, '篡改前 CURRENT index generation 存在')
+  check(isNotNull(generationBeforeTamper), '篡改前 CURRENT index generation 存在')
   const sealedPath = join(
     authority.roots.indexDir,
     `generation-${generationBeforeTamper}`,
@@ -362,7 +363,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   equal(recovered.store.version, 65, '派生代损坏不得影响 authority head')
   const generationAfterRecovery = readCurrentGenerationV2(authority.roots.indexDir)
   check(
-    generationAfterRecovery !== null && generationAfterRecovery > generationBeforeTamper,
+    isNotNull(generationAfterRecovery) && generationAfterRecovery > generationBeforeTamper,
     '派生重建必须切到新 generation'
   )
 

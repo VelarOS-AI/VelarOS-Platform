@@ -1,13 +1,11 @@
 # 壳级 UI 轴：`ui.dock` / `ui.actions` / `ui.sidePanels` 与三档渲染梯
 
-> **状态：契约已定，实装批次 W1–W3。**
-> 蓝图 §十是判决源；本页是面向开发者的参考章。
+> **状态：planned / not implemented。**
+> 本页记录设计方向，不构成可用 API 或兼容承诺。
 > **三轴的注册表今天还不存在**——壳里对应的三处是硬编码 JSX、计算数组与运行时数组。
-> W1 的第一份工作就是**把这三处硬编码变成注册表**，不是在既有注册表上加字段。
-> 在 W1 落地前，往 `ui` 节写这三根轴不会有任何效果（`ui` 节由壳读，Agent 侧读都不读）。
-
-判决全文：VelarOS-Desktop 仓 `docs/mod-architecture-blueprint.md` §十；
-内核边界重申：`docs/kernel-contract.md` §15.8。
+> 实装必须先引入版本化 schema、注册表、宿主端口与契约测试。在这些 owner 落地前，往 `ui` 节写
+> 这三根轴不会有任何效果。通用边界见
+> [Platform boundaries](../../architecture/platform-boundaries.md)。
 
 ---
 
@@ -173,12 +171,12 @@ monkey-patch 的代价不在装的那天，在壳重构的那天——
   注册项类型 `ToolRenderRegistration { toolNames: readonly string[]; component: ToolRenderComponent }`，
   未注册工具回落默认 `ToolCallBlock`。
   ⚠️ 类名与实例名只差一个字母，别写错。
-- `CodeViewerPreviewRendererRegistry`（Desktop `renderer/src/features/codeViewer/`）：
+- `CodeViewerPreviewRendererRegistry`：
   `defineCodeViewerPreviewRenderer({ id, extensions, matchesMediaType?, maxBytes?, component })`，
   由 `CodeViewerPreviewPane` 以 **Suspense + 错误边界**托管。
 - `ConversationRenderSlots` / `desktopConversationRenderSlots`：源码注释已写死
   「**有限具名集合**，非任意 children 洞」，缺注入时各 slot 默认渲染 `null`。
-  **这就是本裁决要的形状，已经在仓里跑了**——槽位注册表是把它正名 + 版本化 + 对外开放，
+  这是槽位注册表应复用的形状：为它定义公开名称、版本和扩展入口，
   不是从零发明一套机制。
 
 ---
@@ -199,15 +197,14 @@ monkey-patch 的代价不在装的那天，在壳重构的那天——
 
 ---
 
-## 七、实施波次
+## 七、实现顺序
 
-| 波 | 交付 | 完成判据 |
-| --- | --- | --- |
-| **W0**（已完成） | 契约并入文档 | 单源无二义；零代码 |
-| **W1** | 三轴注册表 + T1 档骨架 + builtin 迁移 | 绞杀者验收：`chatSpaceDock` / `topBarControls` / `buildChatWorkspaceStageAuxiliaryTabs` 的专有路径**物理删除**，不留双脑 |
-| **W2** | 渲染档：T1 卡片 DSL 解析器 + T2 沙箱渲染器接线（复用 `HtmlPreviewFrame`） | 一个 local-dev mod 能同时出 T1 卡与 T2 面板；T2 内崩溃不影响会话 |
-| **W3** | T3 档 + 槽位 + 命令总线 | 槽位替换件崩溃**回落官方实现**；`invoke-capability` 经 broker 有审计记录 |
+本页目前是设计记录，不是路线图承诺。采用此设计的产品宿主应按依赖顺序交付：
 
-**为什么 W1 先做轴而不是先做渲染**：三轴是**结构**，三档是**内容**。
-结构不落地，渲染档没有落点，只能先做成 demo——而 demo 不是自食狗粮。
-</content>
+1. 先定义版本化 schema、注册表、宿主端口和契约测试；
+2. 再实现 T1 数据 DSL，并迁移至少一个内置消费者验证单一路径；
+3. 然后接入 T2 沙箱渲染和逐贡献错误边界；
+4. 最后评估 T3 原生模块、命令总线、签名和回退机制。
+
+每一步都必须删除被替代的专用路径，避免新旧两套权威并存。结构先于渲染内容，否则只能得到
+无法证明宿主集成边界的演示代码。

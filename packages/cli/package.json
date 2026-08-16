@@ -5,9 +5,9 @@
     "platform": "0.6"
   },
   "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/cli#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
@@ -36,7 +36,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
@@ -63,7 +64,7 @@
     "directory": "packages/cli"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

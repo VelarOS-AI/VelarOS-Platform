@@ -151,7 +151,7 @@ class ManagedExecutionRunner {
       collaborationCoordinator,
     } = this.dependencies
     const startedAt = Date.now()
-    // TODO[主链路-20]: 托管执行模板第一步创建 execution record；后续 state/debug/工具等待都围绕这个 executionId 展开。
+    // 托管执行先创建 execution record；后续状态、调试和工具等待都围绕同一个 executionId 展开。
     const execution = records.createExecution({
       sourceSessionId: params.sourceSessionId,
       messages: params.messages,
@@ -212,7 +212,7 @@ class ManagedExecutionRunner {
     }
 
     try {
-      // TODO[主链路-22]: 这里回调到 SoloExecutionService 注入的 run，携带 abortController、executionApi 和带 ledger tap 的事件总线。
+      // 调用 SoloExecutionService 注入的 run，并传入取消控制器、执行 API 和带账本 tap 的事件总线。
       await params.run({
         execution,
         abortController,

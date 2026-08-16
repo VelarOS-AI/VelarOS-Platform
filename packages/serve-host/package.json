@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Independent headless Velar Host composition root for Kernel clients and the VelarOS browser extension.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -22,7 +22,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "clean": "rm -rf dist",
@@ -55,7 +56,11 @@
     "directory": "packages/serve-host"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/serve-host#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

@@ -13,6 +13,7 @@ wire 契约不在本包,在 `@velaros-ai/kernel/contracts/protocol` 的 `remote-
 | `./node` | 被调侧(无头能力提供者) | WebSocket 监听、配对与验签、能力派发、幂等去重、截止与取消、审计 JSONL |
 | `./client` | 主调侧(完整宿主) | 连接与重连、`isolation: 'remote'` 隔离适配器、清单投影与命名空间化、凭据端口 |
 | `./mcp` | agent 面适配器 | 把一台节点投影成 MCP 服务器,供改不了的 agent 消费 |
+| `./composition` | 宿主装配面 | 连接生命周期与动态工具投影；由宿主原生配置驱动，不声明或依赖 Mod |
 | `.` | 两侧共享 | 帧编解码、Ed25519 密钥与 challenge、清单摘要 |
 
 ## agent 怎么接进来
@@ -34,7 +35,8 @@ wire 契约不在本包,在 `@velaros-ai/kernel/contracts/protocol` 的 `remote-
 
 配对成功后凭据落盘,之后每次连接都是 challenge 签名,`env` 里的配对码就可以删掉了。
 
-Desktop 有 Kernel,可以额外走 `./client` 的能力级路线(多一道 Ring 0 权限闸);其它 agent 走 MCP。
+Desktop 把 `./composition` 作为所有内置 Agent 共用的 shared / on-demand 能力接入统一工具注册表；
+它不是需要下载或启用的 Mod。其它 agent 可走 MCP。
 
 ## 边界
 
@@ -49,6 +51,7 @@ Desktop 有 Kernel,可以额外走 `./client` 的能力级路线(多一道 Ring 
 ## 消费方
 
 - `@velaros-ai/serve-host` 消费 `./node`,让 `velaros serve` 成为可被远程驱动的节点。
-- Desktop 消费 `./client`。
+- Desktop 等完整宿主消费 `./composition`，并通过自己的权限与配置适配器完成装配。
 
-设计判决与 Windows 侧欠账见 VelarOS-Desktop 的 `docs/remote-capability-node.md`。
+本包的公开设计权威是导出的 contracts、包内测试与本 README。平台无关的 Windows 限制必须在
+本仓文档或公开 Issue 中记录，不能依赖消费方仓库里的隐藏欠账清单。

@@ -1,3 +1,4 @@
+import { isFinitePositiveNumber } from './positive-number.js'
 import type { HtmlArtifactRenderPatch } from './protocol.js'
 import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from './size-controller.js'
 
@@ -100,26 +101,26 @@ export function inferHtmlArtifactContentKind(content: string): HtmlArtifactConte
 }
 
 function resolveBridgeMessages(
-  messages: Partial<HtmlArtifactBridgeMessages> | undefined
+  messages: HtmlArtifactDocumentOptions['bridgeMessages']
 ): HtmlArtifactBridgeMessages {
   return { ...DEFAULT_BRIDGE_MESSAGES, ...messages }
 }
 
-function resolveMaxReportedHeight(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
+function resolveMaxReportedHeight(value: HtmlArtifactDocumentOptions['maxReportedHeight']): number {
+  return isFinitePositiveNumber(value)
     ? Math.max(1, Math.ceil(value))
     : DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT
 }
 
-function resolveMaxWidthRatio(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
+function resolveMaxWidthRatio(value: HtmlArtifactDocumentOptions['maxWidthRatio']): number {
+  return isFinitePositiveNumber(value)
     ? value
     : DEFAULT_HTML_ARTIFACT_MAX_WIDTH_RATIO
 }
 
 function resolveBodyStyle(
   kind: HtmlArtifactContentKind,
-  bodyStyle: string | undefined
+  bodyStyle: HtmlArtifactDocumentOptions['bodyStyle']
 ): string {
   if (bodyStyle) return bodyStyle
 

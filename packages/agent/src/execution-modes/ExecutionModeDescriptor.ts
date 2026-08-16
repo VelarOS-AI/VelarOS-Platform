@@ -4,7 +4,7 @@
 // 两个官方模式（目标 / 计划）重表达为首批预制 descriptor，经注册表装配；新模式 = 纯声明零改码。
 // descriptor 只承载 host 无关的模式契约，只依赖 `@velaros-ai/agent/protocol` 的提示词特性 id。
 //
-// **执行模式不带工具面投影**（2026-08-05 裁决，见 Desktop `docs/design-principles.md` §7）：
+// **执行模式不带工具面投影**：
 // 「先方案后实施」这类工作流编排纪律只许走提示词与技能文书，禁运行时拦截。旧的
 // `toolProjection`（只读执行边界 + 执行门白名单）随方案模式一并处决，模式不再是工具门的输入。
 import type { ChatPromptFeatureId, ExecutionModeId } from '@velaros-ai/agent/protocol'

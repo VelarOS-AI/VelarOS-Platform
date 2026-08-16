@@ -1,7 +1,7 @@
 /**
  * Knowledge 自有的 SQLite schema 迁移定义。
  *
- * 宿主迁移 runner 可以直接消费这一结构；Knowledge 不反向依赖 Desktop 的迁移类型或路径。
+ * 宿主迁移 runner 可以直接消费这一结构；Knowledge 不反向依赖任何产品宿主的迁移类型或路径。
  */
 export const KnowledgeEmbeddingProfileIsolationMigration = {
   version: 3,

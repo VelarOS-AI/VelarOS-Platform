@@ -368,11 +368,6 @@ function AssistantMessageSegmentsInner({
     let inlineActivityKey: Nullable<string> = null
     let trailingActivityElementRendered = false
 
-    const collectActivityBlocks = (
-      segment: MessageRenderSegment,
-      targetBlocks: ToolCallBlockType[]
-    ): void => collectToolCallBlocksFromMessageRenderSegment(segment, targetBlocks)
-
     const pushAfterToolCallElements = (segment: MessageRenderSegment): void => {
       renderedSegments.push(
         ...renderAfterToolCallElements(segment, `message-segment:${segment.key}`)
@@ -476,7 +471,7 @@ function AssistantMessageSegmentsInner({
       visibleMessageRenderSegments.forEach((segment) => {
         if (processedSegmentKeys.has(segment.key)) {
           processedActivityRenderers.push(() => renderMessageRenderSegment(segment))
-          collectActivityBlocks(segment, processedActivityBlocks)
+          collectToolCallBlocksFromMessageRenderSegment(segment, processedActivityBlocks)
         } else if (outsideSegmentKeys.has(segment.key)) {
           const renderedSegment = renderMessageRenderSegment(segment)
           if (renderedSegment) postDisclosureElements.push(renderedSegment)
@@ -536,7 +531,7 @@ function AssistantMessageSegmentsInner({
       if (shouldRenderInlineActivitySegment(segment, index)) {
         inlineActivityKey ??= segment.key
         inlineActivityRenderers.push(() => renderMessageRenderSegment(segment))
-        collectActivityBlocks(segment, inlineActivityBlocks)
+        collectToolCallBlocksFromMessageRenderSegment(segment, inlineActivityBlocks)
         inlineActivityAfterToolCallElements.push(
           ...renderAfterToolCallElements(segment, `inline-segment:${segment.key}`)
         )

@@ -14,6 +14,8 @@
 // Agent 主干因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用。
 //
 // IO 全部经 `AgentModPackReader` 注入：主干零文件系统依赖，宿主决定怎么读、读不读得动。
+import { isUndefined, toOptional } from '@velaros-ai/core'
+
 import type { AgentModDiagnostic } from '../protocol'
 import {
   AgentModPackProvidesId,
@@ -118,6 +120,7 @@ async function discoverAgentModPackages(input: {
         descriptor,
       })
     } catch (error) {
+      // arch-guard:silent-catch-ok 错误被转换为下方 mod.pack-unreadable 结构化诊断。
       // 「文件读不出来」与「文件在但没有 agent 节」是两种病，诊断分开报：前者去查安装/权限，
       // 后者去查 pack 的 provides 与 manifest 内容对不对得上。
       diagnostics.push({
@@ -136,7 +139,7 @@ async function discoverAgentModPackages(input: {
       }
       continue
     }
-    if (envelope.envelope.agent === undefined) {
+    if (isUndefined(envelope.envelope.agent)) {
       diagnostics.push({
         code: 'mod.pack-no-agent-section',
         message: `pack「${descriptor.id}」的 provides 含 ${AgentModPackProvidesId}，但 ${VelarosModManifestFileName} 里没有 agent 节，拒载。`,
@@ -156,9 +159,10 @@ async function discoverAgentModPackages(input: {
         source: 'pack',
         origin: descriptor.specifier,
         manifest: envelope.envelope.agent,
-        ...(bindings ? { bindings } : {}),
+        bindings: toOptional(bindings),
       })
     } catch (error) {
+      // arch-guard:silent-catch-ok 错误被转换为下方 mod.pack-bindings-unloadable 结构化诊断。
       diagnostics.push({
         code: 'mod.pack-bindings-unloadable',
         message: `pack「${descriptor.id}」的运行态绑定装载失败，拒载：${readErrorMessage(error)}`,

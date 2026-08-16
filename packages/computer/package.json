@@ -5,9 +5,9 @@
     "platform": "0.6"
   },
   "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/computer#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
@@ -37,7 +37,8 @@
     "dist",
     "runtime",
     "README.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -62,7 +63,7 @@
     "directory": "packages/computer"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

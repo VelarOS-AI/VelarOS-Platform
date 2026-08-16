@@ -1,8 +1,8 @@
 // MCP 接入通道（宪章 §2 第③通道）——单个外部 MCP 服务器的进程外连接。
 //
 // 复用官方 `@modelcontextprotocol/sdk` 客户端（stdio 传输），把连接/列表/调用/关闭收敛成一个
-// host 无关的连接对象。翻译与注册在 mcpToolTranslation.ts；desktop 侧装配见 apps/desktop
-// tools/mcp。SSE/HTTP 传输暂未实现（见文末 TODO）——进程外运行是 MCP 工具的天然隔离边界。
+// host 无关的连接对象。翻译与注册在 mcpToolTranslation.ts；具体宿主负责配置与装配。
+// SSE/HTTP 传输暂未实现（见文末 TODO）——进程外运行是 MCP 工具的天然隔离边界。
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'

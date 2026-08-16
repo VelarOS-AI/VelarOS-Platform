@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=20"
   },
@@ -439,10 +439,11 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
@@ -483,7 +484,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-UI.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/ui"
   },
   "imports": {
@@ -495,5 +496,9 @@
       "types": "./dist/conversation/internal/*.d.ts",
       "default": "./dist/conversation/internal/*.js"
     }
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/ui#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

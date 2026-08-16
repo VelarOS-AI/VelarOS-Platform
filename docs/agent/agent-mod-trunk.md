@@ -1,9 +1,9 @@
 # Agent Mod 主干（两级注册机的第二级）
 
-> 权威设计上游：VelarOS-Desktop `docs/mod-architecture-blueprint.md`（蓝图 v6）——裁决 9、
-> §3.1 四层模型、§3.2 领域 Mod Manifest、§3.4 两级注册机、§3.7 数据生命周期。
-> 本文只记录 **`packages/agent` 这一侧的落地形态**；与蓝图冲突时以蓝图为准，落地偏离在本文「偏离与理由」一节显式登记。
-> 宿主侧怎么接见 Desktop 仓 `docs/desktop-agent-mod-wiring.md`；外部 mod 开发者面见 [../mod-dev/](../mod-dev/README.md)。
+> 本文记录 `packages/agent` 的 Mod 主干，并与 [Mod 开发者契约](../mod-dev/README.md)、
+> 版本化 schema 和契约测试共同构成公开权威。通用所有权见
+> [Platform boundaries](../architecture/platform-boundaries.md)。宿主产品只拥有装配适配器，
+> 不得在仓外重新定义 Agent Mod 语义。
 
 ## 为什么主干住在这里
 
@@ -19,7 +19,7 @@
 ```
 
 Kernel 面收口不变：`createAgentKernelModule` 仍然只暴露 opaque `execute()`，Kernel 不吸收
-任何领域 schema（裁决 9）。宿主拿到 Kernel 的 pack 清单后，**自己**调 `assembleAgentMods` 装载
+任何领域 schema。宿主拿到 Kernel 的 pack 清单后，**自己**调 `assembleAgentMods` 装载
 Agent 轴，再把组装好的 runtime 注入 kernel module。
 
 ## 落位文件
@@ -63,13 +63,13 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 
 宽容边界（ForgivingSchema 铁律的本地口径）：**形态层宽容、语义层零宽容**。
 标量自动升成单元素数组、字符串自动 trim；未知字段 / 未知贡献轴 / 非法枚举 / 同轴主键重复 /
-`requiredAxes` 越界一律**拒载并给可读诊断**，绝不静默丢弃（蓝图 §3.4 C26：validate 先于任何归一化）。
+`requiredAxes` 越界一律**拒载并给可读诊断**，绝不静默丢弃；validate 必须先于任何归一化。
 
 ### 贡献轴（封闭集合，mod 不能发明新轴）
 
 | 轴 | 主键 | 运行态绑定 | 说明 |
 | --- | --- | --- | --- |
-| `tools` | `name` | **必需** | 工具名全宿主唯一；冲突拒载（裁决 5） |
+| `tools` | `name` | **必需** | 工具名全宿主唯一；冲突拒载 |
 | `toolCategories` | `id` | 可选 | 工具类别定义 |
 | `promptSegments` | `id` | 可选（否则须带 `text`） | 段正文二选一，都缺 = 拒载 |
 | `skills` | `id` | 可选 | 技能定义 |
@@ -185,10 +185,10 @@ const segments = projectAgentModPromptSegments(snapshot)
 - **IO 全注入**：`AgentModPackReader.readManifest` / `loadBindings` 由宿主实现。主干零 fs 依赖，
   因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；主干也**不 import kernel 协议包**，
   pack descriptor 以结构化契约声明。`readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
-  **实装状态（2026-07-30）**：Desktop 的 `createDesktopAgentModPackReader()` 只实现了 `readManifest`，
-  `loadBindings` 尚无宿主实现——外部 pack 的绑定通道（`tools` / `hooks`）因此还不通，待 P5/W3 补齐。
+  产品宿主必须公开自己是否实现 `loadBindings`。未实现时，外部 pack 不能贡献需要代码绑定的
+  `tools` 或 `hooks`；Loader 会明确拒载，而不是降级成空实现。
 
-### 分节单文件 `velaros.mod.json`（蓝图 v6 §8.3）
+### 分节单文件 `velaros.mod.json`
 
 一个 mod = 一个 manifest 文件，内分三节，**各 owner 只读各节**：
 
@@ -231,7 +231,7 @@ const segments = projectAgentModPromptSegments(snapshot)
   语义层零宽容（非法枚举、未知字段照旧拒载）。
 - **唯一的跨节动作是身份复核**：`module.id` 与 `agent.id` 不一致 → `mod.envelope-id-mismatch` 拒载
   （安装器按前者落盘、注册机按后者记账，两个身份之后永远对不上）。
-  两节都带 `id`/`version` 是已知冗余，等 agent 节瘦身时按蓝图「跨节元数据留顶层」收拢。
+  两节都带 `id`/`version` 是已知冗余；未来若收拢到顶层，必须提升 schema 版本并提供迁移说明。
 - **把整份信封当 agent 节喂给 `parseAgentModManifest`** 会得到专门的 `mod.manifest-is-envelope` 诊断，
   而不是难懂的「未知字段 module」。
 - **clean break**：旧文件名 `velaros.agent.mod.json` 与常量 `AgentModPackManifestFileName` 已删除，
@@ -253,9 +253,9 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 
 `loader.deactivate(modId)` 摘除该 mod 的全部贡献与钩子，并留 `mod.deactivated` 诊断：
 **其产出的持久化数据一律保留**（orphaned-but-preserved），重新装载即复活。主干不删任何用户数据；
-`uninstall` 的两段式清理与 `ownerModId` 归属索引归宿主与各数据 owner（蓝图 §3.7）。
+`uninstall` 的两段式清理与 `ownerModId` 归属索引由宿主和各数据 owner 负责。
 
-## 自食狗粮（裁决 6 / M1 不空转）
+## 内置消费者验证
 
 `createBuiltinAgentModPackage()` 把 Agent Runtime 自带的三轴做成第一个 bundled mod
 （`velaros.agent.builtin`，trust=`bundled-official`，恒加载），与外部 mod 走**同一条**管线：
@@ -275,7 +275,7 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 技能轴**刻意缺席**——Agent Runtime 自身不带内置技能定义（技能由宿主的文件式供应方注入），
 声明空轴只会制造零消费者的假贡献。
 
-## 残余清单（本批未做，显式登记）
+## Known limitations
 
 **未接线的 seam kind（只有注册面与类型，dispatch 无调用点）**：
 `turn:start`、`turn:end`、`prompt:compose`、`tool-call:after`、`model-request:before`、
@@ -285,8 +285,8 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 
 **未落的轴与字段**：
 
-- 壳级 UI 轴（pages / settingsRenderers / surfaces / tours）——按裁决归产品壳，不进 Agent manifest。
-- 蓝图 §3.3 的 `memoryScope`（记忆作用域策略）——那是具体能力包的语义，不属 Agent 中立主干；
+- 壳级 UI 轴（pages / settingsRenderers / surfaces / tours）归产品壳，不进 Agent manifest。
+- `memoryScope`（记忆作用域策略）是具体能力包的语义，不属 Agent 中立主干；
   应由该能力包自己的领域 manifest 轴承载。`check:agent-arch` 的架构哨兵也禁止 `packages/agent`
   (含 `protocol` 子路径)出现具体能力词汇。
 - `locale` 运行时合并链、`entitlements` 核验、`budget` 消费：字段形状已定，消费方随各自里程碑。
@@ -296,9 +296,9 @@ Loader / 投影 / 绑定装载 / 诊断消费面**一律不变**：主干仍然�
 
 ## 偏离与理由
 
-| 蓝图形态 | 本仓落地 | 理由 |
+| 设计候选 | 当前落地 | 理由 |
 | --- | --- | --- |
 | `contributes.promptFeatures` | `contributes.promptSegments` | 主干实际的领域轴是 prompt 段注册表（`PromptRegistry`），特性 id 是段的激活谓词输入，不是独立注册面 |
 | `SpaceContribution.memoryScope` | 未落 | 具体能力语义，见残余清单 |
-| `engines` 双轴 | 三字段（velaros / agent / shell） | 蓝图 §3.4 要求领域 manifest 另声明 capability API 版本；velaros+shell 仍是那「双轴」 |
-| 依赖求解 | 无 | 裁决 4：不写依赖求解器；semver 判定只做大版本兼容判定，复杂 range 属 npm 职责 |
+| `engines` 双轴 | 三字段（velaros / agent / shell） | 领域 manifest 还需声明 Agent capability API 版本 |
+| 依赖求解 | 无 | 本协议只做 semver 兼容判断；复杂求解属于包管理器职责 |

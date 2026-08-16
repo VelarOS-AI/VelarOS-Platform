@@ -2,14 +2,14 @@
   "name": "@velaros-ai/remote-host",
   "version": "0.1.0",
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   },
   "velaros": {
     "platform": "0.6"
   },
   "description": "Remote capability node transport: headless node listener plus the client-side isolation adapter for `isolation: 'remote'` modules.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -38,15 +38,12 @@
     "./composition": {
       "types": "./dist/composition/index.d.ts",
       "import": "./dist/composition/index.js"
-    },
-    "./composition/mod": {
-      "types": "./dist/composition/mod.d.ts",
-      "import": "./dist/composition/mod.js"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "clean": "rm -rf dist",
@@ -69,5 +66,14 @@
   },
   "bin": {
     "velaros-remote-mcp": "./dist/mcp/bin.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/remote-host"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/remote-host#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

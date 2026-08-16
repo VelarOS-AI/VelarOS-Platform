@@ -1,6 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 
+import { isFalse, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { type ComputerHelperLaunchSpec, resolveComputerHelper } from './ComputerHelperResolver'
 import {
@@ -48,7 +50,7 @@ export interface ComputerSidecarManagerOptions {
 interface PendingRequest {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
-  timer: ReturnType<typeof setTimeout>
+  timer: TimerLease
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
@@ -117,6 +119,7 @@ export class ComputerSidecarManager {
   private readonly spawnProcess: ComputerSidecarSpawner
   private readonly requestTimeoutMs: number
   private readonly onLog?: (message: string) => void
+  private readonly timers = new TimerScope({ name: 'ComputerSidecarManager' })
 
   private child: Nullable<ComputerSidecarProcess> = null
   private startPromise: Nullable<Promise<void>> = null
@@ -165,7 +168,7 @@ export class ComputerSidecarManager {
     try {
       const permissions = await this.request<ComputerPermissionStatus>('check', {})
       const permissionMissing =
-        permissions.accessibility === false || permissions.screenRecording === false
+        isFalse(permissions.accessibility) || isFalse(permissions.screenRecording)
       return {
         available: !permissionMissing,
         reason: permissionMissing ? 'permission-missing' : 'available',
@@ -220,7 +223,7 @@ export class ComputerSidecarManager {
 
     const id = this.nextRequestId++
     return new Promise<TResult>((resolvePromise, rejectPromise) => {
-      const timer = setTimeout(() => {
+      const timer = this.timers.after(this.requestTimeoutMs, () => {
         this.pending.delete(id)
         rejectPromise(
           new AppError('TIMEOUT', `Computer sidecar request "${command}" timed out`, undefined, {
@@ -229,7 +232,7 @@ export class ComputerSidecarManager {
             timeoutMs: this.requestTimeoutMs,
           })
         )
-      }, this.requestTimeoutMs)
+      }, { label: `computer-request:${id}` })
 
       this.pending.set(id, {
         resolve: (value) => resolvePromise(value as TResult),
@@ -240,7 +243,8 @@ export class ComputerSidecarManager {
       try {
         this.child!.stdin.write(encodeComputerRequest(id, command, payload))
       } catch (error) {
-        clearTimeout(timer)
+        // arch-guard:silent-catch-ok 写入失败会通过 rejectPromise 作为请求错误返回调用方。
+        timer.cancel()
         this.pending.delete(id)
         rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_WRITE_FAILED'))
       }
@@ -270,6 +274,7 @@ export class ComputerSidecarManager {
       try {
         child = this.spawnProcess(spec)
       } catch (error) {
+        // arch-guard:silent-catch-ok 启动失败会通过 rejectPromise 作为启动错误返回调用方。
         rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_SPAWN_FAILED'))
         return
       }
@@ -325,6 +330,7 @@ export class ComputerSidecarManager {
     // 清的是上一轮的值。不补这一手，一次瞬时启动失败就把 sidecar 永久钉死（详见类头导览）。
     // 身份校验保证不会误清掉后来那一轮的 startPromise。
     void startPromise.catch(() => {
+      // arch-guard:silent-catch-ok 拒绝由 startPromise 原样返回调用方；此处理器只修复内部状态。
       if (this.startPromise === startPromise) this.startPromise = null
     })
     return startPromise
@@ -336,6 +342,7 @@ export class ComputerSidecarManager {
     this.rejectAllPending(
       new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar disposed.')
     )
+    this.timers.dispose()
     this.teardown()
   }
 
@@ -349,6 +356,7 @@ export class ComputerSidecarManager {
       try {
         response = decodeComputerResponse(line)
       } catch (error) {
+        // arch-guard:silent-catch-ok 错误通过下方注入的 sidecar 日志端口留痕，再跳过单个坏帧。
         // 坏帧只丢这一行、不拖垮链路：helper 的 print 调试输出混进 stdout 是常态，
         // 为一行噪音杀掉整个 sidecar 会把可恢复问题升级成不可用。留痕后继续读下一行。
         this.log(`failed to decode sidecar line: ${AppError.getMessage(error)}`)
@@ -361,12 +369,12 @@ export class ComputerSidecarManager {
       }
 
       // id 缺失（helper 主动推的非应答行）无从关联，丢弃。
-      if (response.id === null) continue
+      if (isNull(response.id)) continue
       const pending = this.pending.get(response.id)
       // 找不到 pending = 该请求已超时摘除，迟到的结果对调用方已无意义（见类头导览「时序与关联」）。
       if (!pending) continue
       this.pending.delete(response.id)
-      clearTimeout(pending.timer)
+      pending.timer.cancel()
 
       if (response.ok) {
         pending.resolve(response.result)
@@ -396,7 +404,7 @@ export class ComputerSidecarManager {
 
   private rejectAllPending(error: Error): void {
     for (const [, pending] of this.pending) {
-      clearTimeout(pending.timer)
+      pending.timer.cancel()
       pending.reject(error)
     }
     this.pending.clear()

@@ -2,9 +2,8 @@
 
 贡献一个执行模式（目标模式 / 计划模式 / 方案模式那一类）。**主键 = `id`；绑定可选。**
 
-> **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `executionModes`）。
-> 但注意：**官方执行模式本身已经走 mod 轴**——它们是随包 mod `velaros.agent.builtin` 的贡献，
-> 由 Loader 装载（见下）。未接线指的是**外部 pack 贡献的**执行模式还没有落点。
+> Platform 提供声明、注册和投影，内置执行模式也经过同一条 mod 装载链。
+> 产品宿主必须在 `supportedAxes` 中声明支持并消费投影结果。
 
 ## Schema
 
@@ -68,4 +67,3 @@ projectAgentModExecutionModes(snapshot): ExecutionModeDescriptor[]
 绑定直接引用原 descriptor 对象。这是「注册机不空转 / 官方功能自食狗粮」的验收面之一：
 官方执行模式与外部 mod 走**同一条** validate → resolve → activate 管线，
 且探针断言 id / 顺序 / 载荷对象 `toBe` 同一性——**不可能漂移**。
-</content>

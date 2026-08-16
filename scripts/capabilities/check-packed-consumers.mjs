@@ -230,9 +230,7 @@ function assertManifestQuality(manifest, directoryName) {
     typeof manifest.description === 'string' && manifest.description.trim().length >= 20,
     `${label}: description must explain the public package`,
   )
-  const isOpenSourceWorkspace = manifest.name === '@velaros-ai/project'
-  const expectedLicense = isOpenSourceWorkspace ? 'MIT' : 'UNLICENSED'
-  assert(manifest.license === expectedLicense, `${label}: license must be ${expectedLicense}`)
+  assert(manifest.license === 'Apache-2.0', `${label}: license must be Apache-2.0`)
   assert(manifest.type === 'module', `${label}: only ESM packages are supported`)
   assert(manifest.engines?.node === '>=20.0.0', `${label}: engines.node must be >=20.0.0`)
   assert(manifest.sideEffects === false, `${label}: sideEffects must be false`)
@@ -240,10 +238,7 @@ function assertManifestQuality(manifest, directoryName) {
   assert(manifest.files?.includes('dist'), `${label}: files must include dist`)
   assert(manifest.files?.includes('README.md'), `${label}: files must include README.md`)
   assert(manifest.files?.includes('docs'), `${label}: files must include docs`)
-  assert(
-    isOpenSourceWorkspace === Boolean(manifest.files?.includes('LICENSE')),
-    `${label}: LICENSE publication policy is incorrect`,
-  )
+  assert(manifest.files?.includes('LICENSE'), `${label}: files must include LICENSE`)
   assert(manifest.exports?.['.'], `${label}: exports must define the root entry`)
   for (const [subpath, conditions] of Object.entries(manifest.exports)) {
     assert(

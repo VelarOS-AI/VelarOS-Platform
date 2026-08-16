@@ -1,13 +1,11 @@
 /**
  * 把既有记忆树领域服务包成一个 `MemoryStoreBackend`。
  *
- * 这是「行为零变化」的载体：每个动词都**逐字转发**到 `MemoryTreeDomain` 的同名调用，
- * 参数与副作用一律不改写。批一之后既有记忆链路仍旧跑在这个后端上，只是路径从
- * 「适配器直连 domain」变成「适配器经 capability token 解析到本后端」。
+ * 每个动词都转发到 `MemoryTreeDomain` 的同名调用，参数与副作用不改写。适配器通过
+ * capability token 解析本后端，而不是直接依赖具体存储实现。
  *
- * 定位（§九 9.1）：`memory-tree` 是**未来档**（加密树后端，WS3 资产的归宿）。它今天仍是
- * 已接线的权威层，`role` 因此标 `authority`；批三把权威迁到 `memory-files` 之后，这里改标
- * 未来档并只在装了树 mod 时出现。
+ * `memory-tree` 当前仍是默认权威层，因此 descriptor 的 `role` 为 `authority`。任何默认权威
+ * 迁移都必须先完成数据迁移和宿主切换，再调整这里的注册角色。
  */
 
 import type { MemoryTreeDomain } from '../memory-tree'

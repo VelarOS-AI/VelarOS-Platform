@@ -1,16 +1,6 @@
-// VelarOS-Platform eslint 共享规则基座。
-//
-// 由来:并仓时八个源仓的 eslint 配置原样搬进 eslint/<domain>.config.mjs,规则集因此被复制了七份。
-// QH 批门覆盖审计实测出这份复制的代价——同一条法条在各包待遇不同,而且没人看得出来:
-//   memory 域少 28 条(velaros-style 两条、@typescript-eslint 八条、no-lonely-if / prefer-template …),
-//   model 域少 44 条(整个 unicorn / simple-import-sort / velaros-style 族都没有),
-//   html-artifacts 干脆整包在根 ignores 里(零条规则)。
-// 这三个域现改为引用本基座,规则集有了单一权威源。agent / capabilities / core / kernel / ui 五域
-// 的 commonRules 与本文件逐字相同(md5 已核对,ui 只差 import 分组一处),迁移到本基座是纯机械动作,
-// 留给后续批次做——本批只动缺门的三个域,避免与并行实例撞车。
-//
-// 本基座只放「域无关」的部分:全局变量表、本地风格插件、公共规则集、TS 面规则、.d.ts 面豁免。
-// 域私有的 ignores / 路径豁免 / no-restricted-imports 留在各域配置里。
+// Shared ESLint rules for Platform domains. Keep domain-neutral globals, style rules,
+// TypeScript rules, and declaration-file exceptions here. Domain-specific ignores,
+// import boundaries, and path exceptions remain in each domain configuration.
 import js from '@eslint/js'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'

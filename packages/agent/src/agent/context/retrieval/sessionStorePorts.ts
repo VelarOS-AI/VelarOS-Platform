@@ -7,8 +7,8 @@ import type {
 /**
  * 检索单元消费的**会话存储窄端口**（宪章 §12.2「SessionStorePort 子接口」）。
  *
- * 只声明本单元实际读到的方法，不设计完整 SessionStorePort（那是 WS2 的活）。
- * 宿主的具体存储类（Desktop 的 `ChatPayloadStore` / `ChatStateStore`）字段更多，
+ * 只声明本单元实际读取的方法，不复制完整的 SessionStorePort。
+ * 宿主的具体存储类通常拥有更多字段，
  * 结构化满足这些端口即可注入；内核侧只依赖端口，与宿主持久化实现解耦。
  */
 

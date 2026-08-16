@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// 用途:§12.9 组件形态封闭两门(uiComponentFormClosure / uiColorLiteralClosure)的共享底座——
-// 文件收集 / 注释剥离 / 棘轮基线读写与报告。两门自 monorepo arch-guard-velaros 随 U2 拆仓退役
-// (指纹基线型棘轮门无法改读 sibling),按「各仓自持自己的质量门」判例收编进本仓自持。
+// Shared implementation for the UI component-form and color-literal ratchet gates:
+// file collection, comment stripping, baseline management, and reporting.
 //
 // 棘轮语义:门以现状为基线(baselines/ui/<rule>-baseline.json 冻结存量违规),新增违规即红,存量修复
 // 后基线条目自然 stale(不阻塞)。有意扩基线:VELAROS_UI_GATE_BASELINE_UPDATE=1 node scripts/ui/check/<门>.mjs。

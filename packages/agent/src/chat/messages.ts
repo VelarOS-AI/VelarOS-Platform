@@ -1,7 +1,7 @@
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
 import type { SerializedMessage } from '@velaros-ai/agent/protocol'
-import { isEmpty, isNonBlankString,isNumber } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isNumber, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { buildInternalFollowUpContent } from '../agent/history/internalMessages'
@@ -20,7 +20,7 @@ function buildUserModelMessage(
   message: SerializedMessage,
   content: string | UserModelContentPart[]
 ): ModelMessage {
-  if (message.conversationKind !== 'system-notice' || typeof content !== 'string')
+  if (message.conversationKind !== 'system-notice' || !isString(content))
     return { role: 'user', content }
 
   return { role: 'user', content: buildInternalFollowUpContent(content) }

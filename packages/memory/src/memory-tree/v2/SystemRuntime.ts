@@ -38,7 +38,7 @@ export interface MemorySystemRuntimeOpenReportV2 {
  *
  * 宿主只注入数据根与操作系统包装根；SQLite、密钥环、密文块、证据、梦境整理、
  * 意义整理、擦除、重灌与查询的所有权都留在 memory 包内。此组合根不包含
- * Desktop 权威切换或旧表删除动词。
+ * 产品宿主的权威切换或旧表删除动词。
  */
 export class MemorySystemRuntimeV2 {
   public readonly ingest: MemoryEvidenceIngestServiceV2

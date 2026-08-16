@@ -327,13 +327,17 @@ class CdpBrowserPageDownloadItem implements BrowserPageDriverDownloadItem {
 
   public cancel(): void {
     if (this.doneState === 'completed') {
-      void unlink(this.resolveSourcePath()).catch(() => undefined)
+      void unlink(this.resolveSourcePath()).catch(() => {
+        // arch-guard:silent-catch-ok 下载已完成后的源文件清理是幂等 best-effort，文件可能已被移动。
+      })
       return
     }
 
     void this.options.transport
       .send('Browser.cancelDownload', { guid: this.options.guid })
-      .catch(() => undefined)
+      .catch(() => {
+        // arch-guard:silent-catch-ok cancel 本身是尽力清理；本地状态仍会明确进入 cancelled。
+      })
     this.markDone('cancelled')
   }
 
@@ -407,7 +411,9 @@ class CdpBrowserPageDownloadItem implements BrowserPageDriverDownloadItem {
     } catch (renameError) {
       try {
         await copyFile(sourcePath, targetPath)
-        await unlink(sourcePath).catch(() => undefined)
+        await unlink(sourcePath).catch(() => {
+          // arch-guard:silent-catch-ok copy 已成功，源文件可能被浏览器并发移走；不能把成功下载改判失败。
+        })
       } catch (copyError) {
         this.options.appendDiagnostic({
           kind: 'download',
@@ -932,7 +938,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public isTracing(): boolean {
-    return this.traceCollector?.isRunning() ?? false
+    return !!this.traceCollector?.isRunning()
   }
 
   /** 采集 V8 堆快照，流式写入 sink。 */
@@ -988,7 +994,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public isScreencasting(): boolean {
-    return this.screencastRecorder?.isRunning() ?? false
+    return !!this.screencastRecorder?.isRunning()
   }
 
   /** 读取当前环境模拟状态（trace 元数据等旁路消费，不触发 CDP 调用）。 */
@@ -1293,7 +1299,19 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
     this.eventUnsubscribers.push(unsubscribeConsole)
     this.eventUnsubscribers.push(unsubscribeException)
-    void this.options.transport.send('Runtime.enable').catch(() => undefined)
+    void this.options.transport.send('Runtime.enable').catch((error) => {
+      this.appendDiagnostic({
+        kind: 'console',
+        level: 'warning',
+        message: 'CDP 页面诊断事件初始化失败。',
+        url: toNullable(this.currentUrl),
+        line: null,
+        column: null,
+        code: null,
+        capturedAt: Date.now(),
+        details: { error: AppError.from(error).message },
+      })
+    })
   }
 
   private subscribeToDownloadEvents(): void {

@@ -244,7 +244,7 @@ class ExecutionEventBus {
 
   /** 发送助手文本增量。 */
   public emitTextDelta(text: string): void {
-    // TODO[主链路-51]: 模型文本增量从 turn helper 进入事件总线，再由 ChatExecutionCoordinator 的 streamHelper 发送到 renderer。
+    // 模型文本增量从 turn helper 进入事件总线，再由宿主流桥接器发送到渲染端。
     this.emitAgent({
       type: 'text-delta',
       text,
@@ -296,7 +296,7 @@ class ExecutionEventBus {
 
   /** 工具开始执行时发给 UI，展示 tool call block。 */
   public emitToolStart(payload: StreamToolCallPayload): void {
-    // TODO[主链路-52]: tool-call 开始事件也走同一条 agent event 通道，UI 用它渲染工具卡片。
+    // tool-call 开始事件走同一条 agent event 通道，供宿主渲染工具状态。
     this.emitAgent({
       type: 'tool-start',
       toolCallId: payload.toolCallId,
@@ -329,7 +329,7 @@ class ExecutionEventBus {
 
   /** 工具执行完成或失败时发给 UI。 */
   public emitToolDone(payload: StreamToolResultPayload): void {
-    // TODO[主链路-53]: 工具结果先发给 UI，再由 AgentTurnHistoryHelper 写入 history 供下一轮模型读取。
+    // 工具结果先通知宿主，再由 AgentTurnHistoryHelper 写入 history 供下一轮模型读取。
     this.emitAgent({
       type: 'tool-done',
       toolCallId: payload.toolCallId,

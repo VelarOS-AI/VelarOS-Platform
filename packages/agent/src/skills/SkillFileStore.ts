@@ -48,7 +48,7 @@ interface SkillFrontmatter {
 }
 
 interface SkillFileStoreDependencies {
-  /** 技能目录解析器由宿主递入（Desktop 指向 storage/skills；headless 指向数据根下对应目录）。 */
+  /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
   skillsDir: () => string
 }
 

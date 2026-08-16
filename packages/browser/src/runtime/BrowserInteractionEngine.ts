@@ -1,6 +1,6 @@
 import electron from 'electron'
 
-import { toOptional } from '@velaros-ai/core'
+import { isEmpty, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTypeTextOptions, BrowserTypeTextResult } from '../core'
@@ -436,7 +436,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     path: BrowserPointerPoint[],
     pressed: boolean
   ): Promise<void> {
-    if (session.webContents.isDestroyed() || path.length === 0) return
+    if (session.webContents.isDestroyed() || isEmpty(path)) return
 
     try {
       await evaluateInWebContents(

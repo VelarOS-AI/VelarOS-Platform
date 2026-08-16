@@ -1,7 +1,8 @@
 # DevTools Performance Engine（vendor 产物）
 
 `devtoolsPerformanceEngine.mjs` 是生成文件，请勿手改；
-重新生成：`node scripts/build/buildDevtoolsPerformanceEngine.mjs`。
+重新生成：`bun run build:devtools-performance-engine`；
+机械校验：`bun run check:devtools-performance-engine`。
 
 ## 内容与来源
 
@@ -25,4 +26,5 @@
 
 - Node-only（Electron 主进程），依赖 Node ≥ 22 的 iterator helpers / Set 方法。
 - i18n 固定 en-US；formatter 输出为英文文本，供模型消费，不面向用户 UI。
+- VelarOS 总是向 formatter 传入明确的设备范围，不使用上游 CrUX 网络客户端；构建脚本会移除上游包内嵌的 Google API key。
 - 包内含少量懒加载 worker 的 `import.meta` 引用，trace 解析路径不会触发。

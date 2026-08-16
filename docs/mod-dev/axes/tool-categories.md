@@ -1,10 +1,6 @@
 # 轴：`toolCategories`
 
-定义一个工具类别，供 [`tools`](./tools.md) 轴的 `categoryId` 引用。
-**主键 = `id`；绑定可选。**
-
-> **Desktop 接线状态：未接线**（`DesktopAgentModUnroutedAxes` 含 `toolCategories`）。
-> 贡献不会报错，会在设置页显示为「未接线轴」，但不会进入 Desktop 的工具类别表。
+声明一个工具类别。**主键 = `id`；运行态绑定可选。**
 
 ## Schema
 
@@ -12,44 +8,27 @@
 
 ```ts
 z.strictObject({
-  id: TrimmedIdSchema,               // 主键
-  label: z.string(),                 // 必填
+  id: TrimmedIdSchema,
+  label: z.string(),
   description: z.string().optional(),
   order: z.number().int().optional(),
 })
 ```
 
-## 运行态绑定（可选）
+类别 id 在整个宿主内唯一。冲突以 `mod.contribution-conflict` 拒载，不允许后加载覆盖前加载。
 
-绑定值类型是 `ToolCategoryDefinition`（`@velaros-ai/agent/protocol`）：
+## 运行态绑定
 
-```ts
-interface ToolCategoryDefinition {
-  id: ToolCategoryId
-  label: string
-  description: string
-  toolOs: ToolCategoryOsDefinition
-}
-```
-
-没绑定就只有声明记录，`payload` 为 `null`；`projectAgentModToolCategories` 会**跳过**
-没有 payload 的记录（它只收 `record.payload` 非空的条目）。
-也就是说：**想让类别真正进入宿主的类别表，就得给绑定。**
-
-## 消费面
+绑定类型是 `ToolCategoryDefinition`。提供 binding 时，
+`projectAgentModToolCategories(snapshot)` 返回相同对象；只有声明而没有 binding 时，该条目保留在
+注册和诊断面，但不会生成一个虚构的运行时类别。
 
 ```ts
 projectAgentModToolCategories(snapshot): Record<string, ToolCategoryDefinition>
 ```
 
-## 与空间的关系（重要）
+## 与产品空间的关系
 
-**类别与空间的绑定方向今天是反的**：不是 space 列出自己的类别，而是**类别声明自己属于哪个 scope**。
-Desktop 的真实规则表是 `ToolSpaceCategoryRules`
-（`apps/desktop/src/shared/capabilities/DesktopToolSpacePolicy.ts`），每条形如
-`{ scope: 'shared' | 'system' | 'project' | 'browser' | 'virtual', tier: 'resident' | 'space-base' | 'space-extension' | 'on-demand', … }`。
-
-`AgentModSpaceContribution.toolCategoryIds`（[spaces 轴](./spaces.md)）是**声明式方向的目标形态**，
-今天在 Desktop 无消费者。两个方向最终会收敛成一个——收敛前，
-往 `toolCategories` 轴贡献不影响任何空间可见性判定。
-</content>
+类别描述“工具做什么”，产品空间策略描述“当前用户场景能看见和调用什么”，两者不能合并。
+产品宿主负责把类别映射到自己的空间、权限和审批策略，并公开映射规则。mod 不能通过新增类别绕过
+空间可见性或 capability broker。

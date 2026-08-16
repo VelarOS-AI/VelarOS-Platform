@@ -12,7 +12,7 @@ const DefaultIdleBatchSize = 400
 
 interface MemoryDreamSchedulerOptions {
   isEnabled: () => boolean
-  /** 空闲/电池/前台读数端口；Electron 实现由 Desktop 胶水注入，适配器本体不触碰 host API。 */
+  /** 空闲、电池和前台状态端口；具体实现由宿主注入，适配器本体不触碰平台 API。 */
   idleSignal: HostIdleSignalPort
   allowBatteryGrowth?: () => boolean
   tickIntervalMs?: number

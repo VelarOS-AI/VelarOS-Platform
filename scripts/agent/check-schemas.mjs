@@ -84,7 +84,7 @@ for (const spec of LockedToolBundles) {
   }
 }
 
-// agent-workflow 工具住在 desktop 壳(apps/desktop/src/main),无独立 dist 产物,就地构建其 inputSchema 面复核零参数退化。
+// agent-workflow schema 没有独立 dist 产物，因此在此直接构建 inputSchema 并检查零参数退化。
 try {
   const workflowBundle = bundleOf({ 'agent:run_workflow': { schema: agentWorkflowSchema } })
   const workflowTools = workflowBundle.tools.map((tool) => ({

@@ -12,7 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    // 导入 Platform 后根 node_modules/@types 含 Bun 类型,显式收窄回源仓的 @types 视野。
+    // Keep the Model package independent of Bun-specific ambient types from the workspace root.
     "types": [
       "node"
     ]

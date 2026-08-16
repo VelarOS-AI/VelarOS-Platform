@@ -8,7 +8,7 @@ import { useConversationI18n } from '../i18n'
 import styles from './MessageBubble.module.css'
 
 import type { ChatMessage } from '#contracts'
-import { isBlank } from '#internal/runtime'
+import { isBlank, isEmpty } from '#internal/runtime'
 
 /**
  * 系统通知行（`conversationKind: 'system-notice'`）。
@@ -27,7 +27,7 @@ function SystemNoticeMessageRowInner({ message }: { message: ChatMessage }): Nul
     .map((block) => block.text.trim())
     .filter((text) => !isBlank(text))
 
-  if (!paragraphs.length) return null
+  if (isEmpty(paragraphs)) return null
 
   const [summary, ...details] = paragraphs
 

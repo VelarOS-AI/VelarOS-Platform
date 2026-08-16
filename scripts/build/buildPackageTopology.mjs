@@ -199,8 +199,7 @@ function collectVelarosDeps(manifest) {
   return [...names].sort()
 }
 
-// packages/ 下的包目录:一律平铺一层(2026-07-30 QI 批把 capabilities/ 的四个包提到顶层后,
-// 这里不再需要「顶层 + 一层分组目录」的两级扫描特例;新包直接放 packages/<pkg>/)。
+// Workspace packages are flat: every package lives at packages/<package>/.
 function listPackageDirectories() {
   const found = []
   for (const entry of readdirSync(PACKAGES_DIR, { withFileTypes: true })) {

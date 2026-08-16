@@ -377,7 +377,7 @@ class QueryLoop<
     // 强开 epoch 也必须查这同一个键，否则查到的是父会话的账本。
     const governanceSessionId = contextEpochScope
     // 只有需要代码上下文的角色才收集信号，减少无关查询开销。
-    // TODO: 子 Agent 通常短命，暂不做 incremental refresh；如未来 profile 显示长命子 Agent，可参考主面的 refresh 节奏。
+    // TODO(performance): 若 profile 显示子 Agent 生命周期足够长，再引入 incremental refresh。
     const capabilityContext = roleResolution.usesCapabilityContext
       ? await args.collectCapabilityContext(history)
       : null

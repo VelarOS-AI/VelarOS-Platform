@@ -1,5 +1,4 @@
-// VelarOS-Core eslint 配置——自 VelarOS-Kernel eslint.config.mjs 原样承袭(core 拆仓):
-// 规则本体与 Kernel 逐字一致,保证同一份 core 源码两仓 lint 语义不漂移。
+// ESLint configuration for the Core domain.
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

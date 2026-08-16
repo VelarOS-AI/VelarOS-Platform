@@ -2,10 +2,8 @@
 
 往系统提示词里加一段。**主键 = `id`；正文二选一：`text` 或运行态绑定。**
 
-> **偏离登记**：蓝图 §3.2 写的是 `contributes.promptFeatures`。主干实际的领域轴是
-> **prompt 段注册表**（`PromptRegistry`）——特性 id 是段的激活谓词输入，不是独立注册面。
-> 故本仓落地名为 `promptSegments`（已在 [`docs/agent/agent-mod-trunk.md`](../../agent/agent-mod-trunk.md)
-> 的「偏离与理由」登记）。
+> 权威轴名是 `promptSegments`。它对应 `PromptRegistry` 中的 prompt 段；特性 id 只是段的
+> 激活条件输入，不是独立注册面。manifest 中使用其他轴名会被严格 schema 拒载。
 
 ## Schema
 
@@ -95,6 +93,5 @@ mod 贡献的常驻段计入**既有上下文治理预算**（`ProviderRequestCo
 
 > **注入面提醒**：mod 贡献的文本（提示词段 / 工具描述 / skill 正文）是 prompt injection 面。
 > 「标注来源信任级 + 非 bundled 文本不与系统指令同权」是**净新建能力，尚未落地**——
-> 蓝图裁决 8 明确：该防护随外部代码 mod 一同兑现，v1 阶段因为只有 bundled mod 而非 load-bearing。
-> 不要假设今天有这层隔离。
-</content>
+> 外部代码 mod 必须同时兑现来源标注、权限隔离和资源预算。不要沿用 bundled-only 环境的
+> 信任假设，也不要假设当前已有未文档化的隔离层。

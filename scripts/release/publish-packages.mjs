@@ -12,16 +12,6 @@
 // 破坏方式:任何在 ② 与 ③ 之间重新 pack、或者改成 `bun publish`(不带 tarball 路径)直接发目录,
 // 都会让 artifact 日志里的 sha256 变成一句无法核对的漂亮话。
 //
-// 为什么是一份而不是七份:七个源仓各带一份 publish-packages.mjs,并仓后 agent / capabilities /
-// core / kernel / memory / ui 六份已经在枚举同一个 packages/、跑同一套校验(纯格式分叉);
-// model 那份还是并仓前的单包形态(只发 packages/model),它独有的两条护栏已经并进来:
-//   · **tag ref 三元核验**(GITHUB_REF_TYPE / REF_NAME / REF 同时等于那个 tag)——另外六份只把
-//     `v${rootManifest.version}` 当标签**写进日志**,从不核验运行时 ref 真的是它;
-//   · **publishConfig.access 必须显式声明**——但不钉死成 'restricted'(html-artifacts 声明的是
-//     'public'),且改为按各包声明值传 --access,不再像七份旧脚本那样硬写 restricted 覆盖 manifest。
-// model 独有的第三条(「包版本 == 仓根 version」)是并仓前的锁步假设,火车形态下不成立,
-// 处置理由见 releaseTopology.mjs 文件头。
-//
 // 这趟发什么,有两个来源,**tag 优先**:
 //   · tag = `<包名或目录名>@<版本>` —— 单包发布,范围由 tag 钉死(见 releaseTopology 的
 //     resolveReleaseSelection);此时传 --only 直接红,开关不许推翻身份。

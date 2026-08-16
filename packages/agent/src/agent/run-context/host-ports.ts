@@ -16,7 +16,7 @@ import type {
  * 运行上下文读取的代码会话子面。
  *
  * 叠在提示词构建器约束的 {@link PromptStateCodingSession} 之上，补齐轮次载荷所需的
- * active 工具类别读取。Desktop 真实 `ToolCodingSessionApi`（更宽）结构上满足。
+ * active 工具类别读取。产品宿主可以用结构上更宽的会话 API 满足此端口。
  */
 export interface RunContextCodingSession extends PromptStateCodingSession {
   getActiveToolCategories(): ToolCategoryId[]
@@ -25,10 +25,10 @@ export interface RunContextCodingSession extends PromptStateCodingSession {
 /**
  * 运行上下文装配流经的工具上下文端口。
  *
- * 结构上是 Desktop `ToolContext` 的**装配实际读取/透传子集**，叠在提示词构建器的
+ * 结构上是产品宿主 ToolContext 的**装配实际读取/透传子集**，叠在提示词构建器的
  * {@link PromptStateToolContext} 约束之上（`execution` 由非空交互会话端口 `interaction`
  * 派生，故此处放宽为交互面 + 补齐轮次载荷读取的 `listTools`）。
- * Desktop 真实 ToolContext（更宽）结构上满足。
+ * 更宽的宿主 ToolContext 可以结构化满足此类型。
  */
 export type RunContextToolContext = Omit<
   PromptStateToolContext,

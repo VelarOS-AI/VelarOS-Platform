@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
-import { partitionComposerCapabilityOptions } from '../../packages/ui/src/conversation/composer/hooks/buildChatInputComposerAddMenuProps'
+import { filterComposerMenuPluginOptions } from '../../packages/ui/src/conversation/composer/hooks/buildChatInputComposerAddMenuProps'
 import {
   NoNextStepSuggestionHighlightIndex,
   resolveNextStepSuggestionHighlightIndex,
@@ -55,21 +55,17 @@ void describe('Platform-owned conversation composer behavior', () => {
     )
   })
 
-  void test('puts visual presentation choices under Rendering instead of Plugins', () => {
-    const partitioned = partitionComposerCapabilityOptions(buildAvailablePluginOptions())
+  void test('omits auto-triggered visual presentation choices from menu plugins', () => {
+    const menuPluginOptions = filterComposerMenuPluginOptions(buildAvailablePluginOptions())
 
-    assert.deepEqual(
-      partitioned.renderingOptions.map((option) => option.id),
-      ['html-artifact', 'widget']
-    )
     assert.equal(
-      partitioned.pluginOptions.some(
+      menuPluginOptions.some(
         (option) => option.id === 'widget' || option.id === 'html-artifact'
       ),
       false
     )
     assert.equal(
-      partitioned.pluginOptions.some((option) => option.id === 'office'),
+      menuPluginOptions.some((option) => option.id === 'office'),
       true
     )
   })
@@ -160,7 +156,7 @@ void describe('Platform-owned chat scroll navigator structure', () => {
       new URL('../../packages/ui/src/conversation/shell/ChatScrollNavigator.tsx', import.meta.url),
       'utf8'
     )
-    const visibilityGateIndex = source.indexOf('if (!navState.visible) return null')
+    const visibilityGateIndex = source.indexOf('if (hidden || !navState.visible) return null')
     const jumpControlsIndex = source.indexOf('<div className={styles.rail}>')
     const followLockIndex = source.indexOf('<div className={styles.followLayer}>')
 
@@ -170,7 +166,7 @@ void describe('Platform-owned chat scroll navigator structure', () => {
     assert.equal(source.includes('{navState.visible && ('), false)
   })
 
-  void test('collapses jump and follow controls as one narrow-width group', () => {
+  void test('keeps the narrow navigator inset instead of collapsing over content', () => {
     const stylesheet = readFileSync(
       new URL(
         '../../packages/ui/src/conversation/shell/ChatScrollNavigator.module.css',
@@ -178,22 +174,12 @@ void describe('Platform-owned chat scroll navigator structure', () => {
       ),
       'utf8'
     )
-    const narrowStyles = stylesheet.slice(
-      stylesheet.indexOf('@container chat-conversation-body (max-width: 640px)')
-    )
-
     assert.match(
-      narrowStyles,
-      /\.root\s*\{[^}]*opacity:\s*var\(--scroll-navigator-collapsed-opacity\);[^}]*transform:/s
+      stylesheet,
+      /@media\s*\(max-width:\s*980px\)\s*\{\s*\.root\s*\{[^}]*right:\s*16px;/s
     )
-    assert.match(
-      narrowStyles,
-      /\.root:hover,\s*\.root:focus-within\s*\{[^}]*opacity:\s*1;[^}]*transform:/s
-    )
-    assert.match(
-      narrowStyles,
-      /\.root:not\(:hover\):not\(:focus-within\) \.rail,\s*\.root:not\(:hover\):not\(:focus-within\) \.followLayer/
-    )
+    assert.equal(stylesheet.includes('@container chat-conversation-body'), false)
+    assert.equal(stylesheet.includes('--scroll-navigator-collapsed-opacity'), false)
   })
 })
 

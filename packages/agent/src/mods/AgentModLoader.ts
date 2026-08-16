@@ -9,6 +9,15 @@
 //  - mod 的某轴在本宿主无落点 → 该轴缺席、mod 仍以 `partial` 态激活，缺席轴进诊断；
 //  - `requiredAxes` 命中不支持的轴 → 直接拒载，不做残废激活。
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import {
+  isArray,
+  isBlank,
+  isEmpty,
+  isPlainObject,
+  isString,
+  isUndefined,
+  toNullable,
+} from '@velaros-ai/core'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'
@@ -85,9 +94,8 @@ interface AgentModActivationState {
   /**
    * manifest 的展示元数据，缺省为空串。
    *
-   * 装载态此前只回 id 与 version，宿主想在注册表里显示「这个 mod 是什么」就只能拿 id 顶上
-   * （Desktop 的设置页正是如此：整行只有 `velaros.system (system)`）。这三个字段 manifest
-   * 本来就有，装载时一并带出——它们是**装载事实的一部分**，不该逼每个宿主再读一遍 manifest。
+   * 装载态若只返回 id 与 version，宿主就无法在注册表中展示可读名称。这三个字段本来就在
+   * manifest 中，装载时一并带出；它们是装载事实的一部分，不应要求每个宿主再次读取 manifest。
    */
   readonly displayName: string
   readonly description: string
@@ -149,8 +157,7 @@ function readBindingRecord(
   axis: AgentModContributionAxisName
 ): Readonly<Record<string, unknown>> {
   const record = Reflect.get(bindings, axis)
-  if (typeof record !== 'object' || record === null) return {}
-  return record as Readonly<Record<string, unknown>>
+  return isPlainObject(record) ? record : {}
 }
 
 function readAxisEntries(
@@ -158,7 +165,7 @@ function readAxisEntries(
   axis: AgentModContributionAxisName
 ): readonly unknown[] {
   const entries = Reflect.get(manifest.contributes, axis)
-  return Array.isArray(entries) ? entries : []
+  return isArray(entries) ? entries : []
 }
 
 /**
@@ -264,7 +271,7 @@ class AgentModLoader {
       return {
         ok: false,
         rejection: {
-          modId: parsed.diagnostics[0]?.modId ?? null,
+          modId: toNullable(parsed.diagnostics[0]?.modId),
           origin: candidate.origin,
           diagnostics: parsed.diagnostics,
         },
@@ -343,7 +350,7 @@ class AgentModLoader {
     for (const axis of activeAxes) {
       const bindingRecord = readBindingRecord(bindings, axis)
       const isDataOnly = DataOnlyAxes.has(axis)
-      if (isDataOnly && Object.keys(bindingRecord).length > 0) {
+      if (isDataOnly && !isEmpty(Object.keys(bindingRecord))) {
         fail(
           'mod.binding-not-allowed',
           `${axis} 是纯数据轴，不接受运行态绑定（代码钩子只允许出现在工具 handler 与 seam 钩子上）。`,
@@ -354,7 +361,7 @@ class AgentModLoader {
       for (const entry of readAxisEntries(manifest, axis)) {
         const key = readAgentModContributionKey(axis, entry)
         const payload = Reflect.get(bindingRecord, key)
-        if (payload !== undefined) continue
+        if (!isUndefined(payload)) continue
         if (PayloadRequiredAxes.has(axis)) {
           fail(
             'mod.binding-missing',
@@ -365,7 +372,7 @@ class AgentModLoader {
         }
         if (axis === 'promptSegments') {
           const text = Reflect.get(entry as object, 'text')
-          if (typeof text === 'string' && text.trim() !== '') continue
+          if (isString(text) && !isBlank(text)) continue
           fail(
             'mod.binding-missing',
             `promptSegments 条目「${key}」既没有 text 也没有运行态绑定，无正文可注入。`,
@@ -375,7 +382,7 @@ class AgentModLoader {
       }
     }
 
-    if (diagnostics.length > 0)
+    if (!isEmpty(diagnostics))
       return {
         ok: false,
         rejection: {
@@ -437,7 +444,7 @@ class AgentModLoader {
         }
       }
 
-      if (diagnostics.length > 0) {
+      if (!isEmpty(diagnostics)) {
         this.reject({ modId, origin: candidate.origin, diagnostics })
         continue
       }
@@ -466,7 +473,7 @@ class AgentModLoader {
       const bindingRecord = readBindingRecord(mod.bindings, axis)
       for (const entry of readAxisEntries(mod.manifest, axis)) {
         const key = readAgentModContributionKey(axis, entry)
-        const payload = Reflect.get(bindingRecord, key) ?? null
+        const payload = toNullable(Reflect.get(bindingRecord, key))
         this.registry.register(axis, {
           axis,
           modId,
@@ -518,7 +525,7 @@ class AgentModLoader {
       trust: mod.manifest.trust,
       source: mod.source,
       origin: mod.origin,
-      status: mod.absentAxes.length > 0 ? 'partial' : 'active',
+      status: !isEmpty(mod.absentAxes) ? 'partial' : 'active',
       activeAxes: mod.activeAxes,
       absentAxes: mod.absentAxes,
       contributionCount,

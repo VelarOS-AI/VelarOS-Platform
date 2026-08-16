@@ -2,8 +2,8 @@
   "name": "velaros-platform",
   "version": "0.6.0",
   "private": true,
-  "description": "VelarOS 平台侧单版本火车 monorepo:kernel / agent / core / model / capabilities / memory / ui / html-artifacts 全部平台包的唯一家。",
-  "license": "UNLICENSED",
+  "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -52,7 +52,7 @@
       ],
       "host": [
         "remote-host",
-   "serve-host"
+        "serve-host"
       ],
       "surface": [
         "surface-protocol"
@@ -66,6 +66,7 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build": "node scripts/build/buildPackageTopology.mjs",
     "build:incremental": "node scripts/build/buildPackageTopology.mjs --incremental",
+    "build:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs",
     "typecheck": "node scripts/run-workspace-script.mjs typecheck",
     "test": "node scripts/run-workspace-script.mjs test",
     "//lint": "--quiet 只收 error:react-hooks/exhaustive-deps 刻意停在 warn(对 ref / 稳定函数假阳性有名,一刀 error 会逼人改坏代码),硬门由 check:ui-hook-deps 棘轮承担。该探针同时静态核对配置里没有未登记的 warn 规则,补回 --max-warnings=0 曾提供的「warn 不会被静默吞掉」保证。",
@@ -91,7 +92,7 @@
     "check:ui-color-literal": "node scripts/ui/check/uiColorLiteralClosure.mjs",
     "check:ui-hook-deps": "node scripts/ui/check/reactHookDeps.mjs",
     "build:component-library": "vite build --config component-library/vite.config.ts",
-    "//check:code-style": "语言级写法门(公开包 @velaros-ai/arch-guard/checks/code-style 的 37 条,与 Desktop 判据同源)。存量冻结在 .arch-guard/baseline.json,棘轮只减不增;逐条看用 check:code-style:report,收缩基线用 check:code-style:baseline。",
+    "//check:code-style": "语言级写法门使用固定提交的 @velaros-ai/arch-guard。存量冻结在 .arch-guard/baseline.json，棘轮只减不增；逐条查看用 check:code-style:report，收缩基线用 check:code-style:baseline。",
     "check:code-style": "arch-guard verify",
     "check:code-style:report": "arch-guard run --no-prune-stale-baseline",
     "check:code-style:fix": "arch-guard run --fix --no-prune-stale-baseline",
@@ -100,8 +101,11 @@
     "check:project-arch": "bun run --cwd packages/project check:arch",
     "check:project-agent-contract": "bun run --cwd packages/project check:agent-contract",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",
+    "check:dependency-security": "node scripts/security/checkPatchedDependencies.mjs && bun audit --ignore GHSA-5p2g-fcmc-qvqq --ignore GHSA-w3rx-r6r6-pgpr --ignore GHSA-w5hq-g745-h8pq",
+    "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
+    "check:public-readiness": "node scripts/quality/check-public-readiness.mjs",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
-    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:project-arch && bun run check:project-agent-contract && bun run check:agent-lab-package && bun run check:platform-generation",
+    "check:gates": "bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:project-arch && bun run check:project-agent-contract && bun run check:agent-lab-package && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:platform-generation",
     "//release": "发布链只有一条(scripts/release/)。release:verify 是 CI 预检,读 GITHUB_* 环境变量,本地跑必失败——那是设计,不是坏了。release:dry-run 是本地验明:列发布计划、真打 tarball、走 bun publish --dry-run,不发布任何东西。真发布只由 release-packages.yml 在 tag 上触发,刻意不提供本地入口(发 18 个包不可逆)。",
     "release:verify": "node scripts/release/verify-release-ref.mjs",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
@@ -109,35 +113,45 @@
     "test:suites": "bun run test:memory && bun run test:ui"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.3",
-    "@eslint/js": "^9.39.4",
+    "@electron/rebuild": "^4.2.0",
+    "@eslint/js": "^9.39.5",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/bun": "^1.3.13",
-    "@types/node": "^22.19.17",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
-    "@velaros-ai/arch-guard": "^0.2.0",
-    "@vitejs/plugin-react": "^6.0.4",
-    "electron": "^41.10.2",
-    "eslint": "^9.39.4",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "@velaros-ai/arch-guard": "github:Error-Zhang/VelarOS-Arch-Guard#f1f6dc1dfcb10913b9c7379636e0298453beedfa",
+    "@vitejs/plugin-react": "^6.0.5",
+    "brace-expansion": "1.1.18",
+    "chrome-devtools-frontend": "1.0.1652307",
+    "electron": "^41.10.5",
+    "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-eslint-comments": "^3.2.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "eslint-plugin-unicorn": "^64.0.0",
     "eslint-plugin-unused-imports": "^4.4.1",
-    "globals": "^17.6.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "globals": "^17.11.0",
+    "nanoid": "3.3.18",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "streamdown": "^2.5.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.7.0",
-    "vite": "^8.1.5"
+    "typescript": "^5.9.3",
+    "vite": "^8.2.1"
+  },
+  "overrides": {
+    "dompurify": "3.4.13",
+    "fast-uri": "3.1.5",
+    "hono": "4.13.2",
+    "js-yaml": "4.3.1",
+    "mermaid": "11.16.1"
   },
   "dependencies": {
     "@velaros-ai/agent-lab": "workspace:*",
@@ -157,10 +171,13 @@
     "@velaros-ai/system": "workspace:*",
     "@velaros-ai/ui": "workspace:*",
     "@velaros-ai/project": "workspace:*",
-    "better-sqlite3": "^12.9.0"
+    "better-sqlite3": "^12.11.1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git"
+  },
+  "patchedDependencies": {
+    "image-size@1.2.1": "patches/image-size@1.2.1.patch"
   }
 }

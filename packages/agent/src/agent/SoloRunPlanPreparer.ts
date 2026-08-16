@@ -133,7 +133,7 @@ interface PrepareSoloRunPlanForTurnInput<TContext extends SoloRunPlanToolContext
    * 本次运行的思考深度，**由调用方一次算定**（`AgentExecutionConfig.thinkingDepth` ?? 系统设置）。
    *
    * 这里不再有第二个写者：档位默认只在宿主组装 run config 时作为**缺席默认**参与
-   * （Desktop 的 `ExecutionCoordinator` 读 `runProfilePolicy.defaults.thinkingDepth`），
+   * （例如宿主可读取 `runProfilePolicy.defaults.thinkingDepth`），
    * 进了 loop 就是既定事实。
    */
   thinkingDepth: ThinkingDepth

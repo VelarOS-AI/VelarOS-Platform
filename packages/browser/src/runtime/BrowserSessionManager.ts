@@ -19,7 +19,7 @@
 //  - `failedMainFrameNavigations` 记住主框架失败，避免把失败页当成「已就绪」继续跑动作。
 import type electron from 'electron'
 
-import { isNumber, isPlainObject, isString,isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -199,7 +199,7 @@ class BrowserSessionManager {
       const timeout = this.timers.after(timeoutMs, () => {
         const waiters = this.attachWaiters.get(sessionId) ?? []
         const remainingWaiters = waiters.filter((waiter) => waiter.resolve !== resolve)
-        if (remainingWaiters.length > 0) {
+        if (!isEmpty(remainingWaiters)) {
           this.attachWaiters.set(sessionId, remainingWaiters)
         } else {
           this.attachWaiters.delete(sessionId)
@@ -708,7 +708,7 @@ class BrowserSessionManager {
   private readonly handleWebAuthnAccountSelection = (
     _event: electron.Event,
     details: electron.SelectWebauthnAccountDetails,
-    callback: (credentialId?: string | null) => void
+    callback: (credentialId?: LooseOptional<string>) => void
   ): void => {
     let settled = false
     const settle = (credentialId?: string): void => {
@@ -1053,7 +1053,7 @@ class BrowserSessionManager {
         })
       })
 
-      if (entries.length === 0) return null
+      if (isEmpty(entries)) return null
 
       return {
         entries,

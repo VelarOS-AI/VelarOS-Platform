@@ -319,7 +319,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     })
 
     try {
-      // TODO[主链路-40]: 连接重试包住真正的模型请求；只有还没产生可见输出/工具副作用时才允许重试。
+      // 连接重试包住真正的模型请求；只有尚未产生可见输出或工具副作用时才允许重试。
       let assistantContent: AssistantContentPart[] = []
       while (true) {
         const interrupted = { partial: null as Nullable<InterruptedStreamPartial> }
@@ -331,7 +331,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               turnState = this.createTurnState(args.turn)
               try {
                 requestAbortScope.signal.throwIfAborted()
-                // TODO[主链路-41]: 本轮真正发起 LLM 流式请求；system/history/tools/model 都在这里交给统一请求层，重试边界由 AgentConnectionRetryHelper 控制。
+                // system、history、tools 和 model 在这里交给统一请求层；重试边界由 AgentConnectionRetryHelper 控制。
                 args.events.emitRuntime(ChatRuntimeEvents.phase('requesting-model'))
                 this.log.info('model request start', {
                   turn: args.turn,
@@ -512,7 +512,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   )
                 )
 
-                // TODO[主链路-42]: fullStream 消费阶段会把文本增量发给 UI，并在遇到 tool-call 时立即 enqueue 工具执行。
+                // fullStream 消费阶段把文本增量通知宿主，并在遇到 tool-call 时立即排入工具执行队列。
                 return await streamConsumerHelper.consumeAssistantStream(stream.fullStream, turnState, {
                   ...args,
                   abortSignal: requestAbortScope.signal,
@@ -662,7 +662,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 
       const interruptedByRuntimeInput = this.wasInterruptedByRuntimeInput(args, turnState)
 
-      // TODO[主链路-43]: stream 结束后把 assistant 文本/tool-call 写回 history；如果有工具，外层 loop 会继续追加 tool result。
+      // stream 结束后把 assistant 文本和 tool-call 写回 history；外层 loop 继续追加 tool result。
       this.turnHistoryHelper.appendAssistantMessage(args.history, assistantContent)
       if (interruptedByRuntimeInput || !turnState.hasToolUse) {
         this.emitProviderTurnSnapshot(args, providerTurnReducer)

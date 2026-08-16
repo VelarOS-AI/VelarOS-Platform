@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
@@ -61,7 +61,8 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
@@ -85,7 +86,11 @@
     "directory": "packages/agent-lab"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/agent-lab#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

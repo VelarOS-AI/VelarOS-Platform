@@ -42,6 +42,14 @@ import { AppError } from "@velaros-ai/core/error";
 
 import { type AuditEvent, AuditJournal } from "../audit/journal.js";
 import { runBatch } from "../batch/runner.js";
+import {
+  MemoryProjectChangeFeed,
+  type ProjectChangeFeed,
+  type ProjectChangeFeedWriter,
+  type ProjectChangeLifecycle,
+  projectChangePatches,
+  type ProjectChangeRevision,
+} from "../change-feed.js";
 import { ProjectError } from "../errors.js";
 import { HookRegistry } from "../hooks/registry.js";
 import { PipelineRegistry } from "../pipeline/registry.js";
@@ -78,8 +86,8 @@ import { FileStore } from "./file-store.js";
 import { LockManager } from "./lock-manager.js";
 
 function resolveEvidenceTargetRange(
-  storedTarget: ResolvedTarget | undefined,
-  inputRange: Partial<Range> | undefined
+  storedTarget?: ResolvedTarget,
+  inputRange?: Partial<Range>
 ): Range | undefined {
   if (storedTarget?.range) return storedTarget.range;
   if (!inputRange || !isPresent(inputRange.startLine) || !isPresent(inputRange.endLine)) return undefined;
@@ -136,6 +144,8 @@ export interface CreateProjectKernelOptions {
   plugins?: ProjectPlugin[];
   includeBuiltinPlugins?: boolean;
   metadata?: Record<string, any>;
+  /** 宿主持有写端；编辑器等消费者只能从 kernel.changeFeed 读取。 */
+  changeFeed?: ProjectChangeFeedWriter;
 }
 
 /** Project Agent 与 Kernel capability 共用的项目内核接口。 */
@@ -143,6 +153,7 @@ export interface ProjectKernel {
   readonly root: string;
   readonly policy: CorePolicy;
   readonly providers: ProjectRuntimeProviders;
+  readonly changeFeed: ProjectChangeFeed;
   observe(input?: ObserveInput): Promise<ProjectSnapshot>;
   /** 列出相对工作区根目录的文件和目录。 */
   listFiles(input?: ObserveInput): Promise<FileListEntry[]>;
@@ -246,6 +257,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   readonly root: string;
   readonly policy: CorePolicy;
   readonly providers: ProjectRuntimeProviders;
+  readonly changeFeed: ProjectChangeFeed;
 
   readonly journal = new AuditJournal();
   readonly hooks = new HookRegistry();
@@ -257,6 +269,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   readonly fixers = new FixerRegistry();
   readonly locks = new LockManager();
   readonly store: FileStore;
+  private readonly changeFeedWriter: ProjectChangeFeedWriter;
 
   private targets = new Map<string, ResolvedTarget>();
   private evidence = new Map<string, EvidencePack>();
@@ -276,12 +289,54 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       ...(options.providers ?? {}),
       command: options.providers?.command ?? createNodeCommandProvider(),
     };
+    this.changeFeedWriter = options.changeFeed ?? new MemoryProjectChangeFeed();
+    this.changeFeed = this.changeFeedWriter;
     this.store = new FileStore(
       this.root,
       this.policy,
       this.providers.fileFilter,
       this.providers.command
     );
+  }
+
+  /**
+   * 把事务的最新投影写入 ChangeFeed。feed 故障只降级审计面，绝不能把已经成功的磁盘事务
+   * 伪装成失败；宿主 logger 会收到明确故障供健康状态上报。
+   */
+  private publishTransactionChange(
+    tx: StoredTransaction,
+    lifecycle: ProjectChangeLifecycle,
+    newIntents: readonly EditIntent[] = [],
+    revisions?: readonly ProjectChangeRevision[],
+  ): void {
+    try {
+      const previous = this.changeFeedWriter.get(tx.transactionId);
+      const intents = [...(previous?.intents ?? []), ...newIntents];
+      const reasons = [...new Set(intents.map((intent) => intent.reason?.trim()).filter(isPresent))];
+      this.changeFeedWriter.record({
+        transactionId: tx.transactionId,
+        lifecycle,
+        reason: optionalWhen(!isEmpty(reasons), reasons.join("; ")),
+        intents,
+        patches: projectChangePatches(tx.patches),
+        changedFiles: [...tx.changedFiles],
+        diff: tx.diff,
+        changedLines: tx.changedLines,
+        risk: tx.risk,
+        revisions: revisions ?? previous?.revisions ?? tx.baseSnapshots.map((snapshot) => ({
+          path: snapshot.path,
+          before: snapshot.revision,
+        })),
+        createdAt: tx.createdAt,
+        appliedAt: tx.appliedAt,
+      });
+    } catch (error) {
+      this.providers.logger?.warn?.("project.changeFeed.record.failed", {
+        transactionId: tx.transactionId,
+        lifecycle,
+        error: AppError.getMessage(error),
+      });
+    }
   }
 
   /** 安装插件，并记录插件接入事件。 */
@@ -1213,6 +1268,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const tx = await this.prepareTransaction(input);
     await this.hooks.emit("AfterPrepareEdit", this, tx);
     this.journal.record({ actor: "system", action: "prepare_edit", transactionId: tx.transactionId, outputSummary: `${tx.changedFiles.length} 个文件，${tx.changedLines} 行变更`, risk: tx.risk });
+    this.publishTransactionChange(tx, "prepared", input.operations);
     return tx;
   }
 
@@ -1227,6 +1283,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     if (tx.appliedAt || tx.status === "applied") {
       throw new ProjectError("INVALID_INPUT", `只能丢弃尚未应用的事务：${transactionId}`);
     }
+    this.publishTransactionChange(tx, "discarded");
     this.transactions.delete(transactionId);
     return { discarded: true };
   }
@@ -1282,6 +1339,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     this.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines);
     await this.hooks.emit("AfterPrepareEdit", this, preparedTx);
     this.journal.record({ actor: "system", action: "amend_edit", transactionId: preparedTx.transactionId, outputSummary: `${input.operations.length} amendment operation(s)`, risk: preparedTx.risk });
+    this.publishTransactionChange(tx, "amended", input.operations);
     return preparedTx;
   }
 
@@ -1478,6 +1536,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       };
       await this.hooks.emit("AfterApplyEdit", this, result);
       this.journal.record({ actor: "system", action: "apply_edit", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(","), risk: tx.risk });
+      this.publishTransactionChange(tx, "applied", [], tx.changedFiles.map((pathValue) => ({
+        path: pathValue,
+        before: oldRevisions[pathValue],
+        after: newRevisions[pathValue],
+      })));
       return result;
     } finally {
       await this.locks.unlock(lock.lockId);
@@ -1533,6 +1596,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     }
     await this.hooks.emit("AfterValidate", this, result);
     this.journal.record({ actor: "validator", action: "validate", transactionId: input.transactionId, outputSummary: result.ok ? "ok" : `${result.diagnostics.length} diagnostic(s)` });
+    if (input.transactionId) {
+      const tx = this.transactions.get(input.transactionId);
+      if (tx) this.publishTransactionChange(tx, result.ok ? "validated" : "validation_failed");
+    }
     return result;
   }
 
@@ -1562,13 +1629,16 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       //（与 applyEdit 一致，并用 skipFileFilter 还原 apply 时绕过 fileFilter 的文件）。
       const restoreByPath = await this.captureApplyRestoreState(tx.changedFiles);
       const writtenOrder: string[] = [];
+      const rolledBackRevisions: Record<string, string> = {};
       try {
         for (const patch of reversed) {
           const op = patch.metadata?.op;
           if (op === "create_file" || op === "rename_file_create") {
             await this.store.remove(patch.path, { skipFileFilter: true });
+            rolledBackRevisions[patch.path] = "deleted";
           } else {
-            await this.store.write(patch.path, patch.oldContent ?? "", { skipFileFilter: true });
+            const snapshot = await this.store.write(patch.path, patch.oldContent ?? "", { skipFileFilter: true });
+            rolledBackRevisions[patch.path] = snapshot.revision;
           }
           writtenOrder.push(patch.path);
         }
@@ -1590,6 +1660,12 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       };
       await this.hooks.emit("AfterRollback", this, result);
       this.journal.record({ actor: "system", action: "rollback", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(",") });
+      const beforeRollback = this.changeFeed.get(tx.transactionId)?.revisions ?? [];
+      this.publishTransactionChange(tx, "rolled_back", [], tx.changedFiles.map((pathValue) => ({
+        path: pathValue,
+        before: beforeRollback.find((revision) => revision.path === pathValue)?.after,
+        after: rolledBackRevisions[pathValue],
+      })));
       return result;
     } finally {
       await this.locks.unlock(lock.lockId);

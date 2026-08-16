@@ -1,12 +1,9 @@
 // 域:远程能力节点的产品面契约(宿主与 renderer 共用的纯身份与形状,零运行时依赖)。
 //
 // 薄壳可拆铁律②:任何领域判断进包,宿主侧只留端口适配 / 注册行 / UI 组件。因此本文件只放
-// 「名字与形状」,不放任何判断;宿主 import 本模块与 `./composition`,renderer 只 import 本模块。
+// 「名字与形状」,不放任何判断;宿主 import 本模块与 `./composition`。
 
-/** mod 身份。默认不启用,启用后工具面与设置页才出现(宪章 §16.3)。 */
-export const RemoteHostModId = 'velaros.remote-host'
-
-/** 工具类别 id。宿主只登记身份,实体工具由 mod 激活后动态投影进来。 */
+/** 工具类别 id。宿主只登记身份,实体工具由远程连接建立后动态投影进来。 */
 export const RemoteHostToolCategoryId = 'remote-host'
 
 /**

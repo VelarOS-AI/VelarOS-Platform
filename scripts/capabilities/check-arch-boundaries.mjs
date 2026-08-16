@@ -80,8 +80,7 @@ const PortableContracts = [
   },
 ];
 
-// packages/ 下的包目录:一律平铺一层(2026-07-30 QI 批把 capabilities/ 的四个包提到顶层后,
-// 这里不再需要「顶层 + 一层分组目录」的两级扫描特例;新包直接放 packages/<pkg>/)。
+// Workspace packages are flat: every package lives at packages/<package>/.
 function listPackageDirectories() {
   const found = [];
   for (const entry of readdirSync(PackagesRoot, { withFileTypes: true })) {
@@ -278,10 +277,8 @@ for (const expected of CapabilityPackages) {
       `${expected.name}: package description must explain the public responsibility`,
     );
   }
-  const isOpenSourceWorkspace = expected.name === "@velaros-ai/project";
-  const expectedLicense = isOpenSourceWorkspace ? "MIT" : "UNLICENSED";
-  if (manifest.license !== expectedLicense) {
-    fail(`${expected.name}: package license must be ${expectedLicense}`);
+  if (manifest.license !== "Apache-2.0") {
+    fail(`${expected.name}: package license must be Apache-2.0`);
   }
   if (manifest.engines?.node !== ">=20.0.0") {
     fail(`${expected.name}: engines.node must be >=20.0.0`);
@@ -294,13 +291,8 @@ for (const expected of CapabilityPackages) {
       fail(`${expected.name}: package files must include ${requiredFile}`);
     }
   }
-  if (isOpenSourceWorkspace && !manifest.files?.includes("LICENSE")) {
+  if (!manifest.files?.includes("LICENSE")) {
     fail(`${expected.name}: package files must include LICENSE`);
-  }
-  if (!isOpenSourceWorkspace && manifest.files?.includes("LICENSE")) {
-    fail(
-      `${expected.name}: restricted package must not publish a LICENSE file`,
-    );
   }
   // 入口冻结:合包按切片子路径给入口(无根导出——切片运行面互斥),单入口包仍是 '.'。
   for (const entrySubpath of expected.entrySubpaths) {
@@ -323,11 +315,11 @@ for (const expected of CapabilityPackages) {
     );
   }
   if (
-    manifest.publishConfig?.access !== "restricted" ||
+    manifest.publishConfig?.access !== "public" ||
     manifest.publishConfig?.registry !== "https://npm.pkg.github.com"
   ) {
     fail(
-      `${expected.name}: publishConfig must target restricted GitHub Packages`,
+      `${expected.name}: publishConfig must target public GitHub Packages`,
     );
   }
 
@@ -346,13 +338,8 @@ for (const expected of CapabilityPackages) {
       );
     }
   }
-  if (isOpenSourceWorkspace && !existsSync(licensePath)) {
+  if (!existsSync(licensePath)) {
     fail(`${expected.name}: missing package LICENSE`);
-  }
-  if (!isOpenSourceWorkspace && existsSync(licensePath)) {
-    fail(
-      `${expected.name}: restricted package must not contain a package LICENSE`,
-    );
   }
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {

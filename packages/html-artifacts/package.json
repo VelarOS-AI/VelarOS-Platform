@@ -12,15 +12,16 @@
     "iframe",
     "streaming"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Error-Zhang",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/html-artifacts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts.git"
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/html-artifacts"
   },
   "bugs": {
-    "url": "https://github.com/VelarOS-AI/VelarOS-HTML-Artifacts/issues"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
   "sideEffects": false,
   "type": "module",

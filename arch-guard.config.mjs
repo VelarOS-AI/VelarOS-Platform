@@ -7,16 +7,14 @@ import {
 /**
  * VelarOS Platform 仓库的 arch-guard 配置入口。
  *
- * **只装公开包的 `code-style/*` 语言级规则集**（37 条）——判据与 Desktop 同源、单一实现，
- * 见 Desktop `docs/code-standard.md` 附录 A。识别产品概念的 `velaros/*` 架构族住在 Desktop 私有
- * 插件里，不属于本仓；本仓各域的架构门是自持的 `check:*-arch` 脚本（见 docs/gate-coverage-matrix.md）。
+ * 只安装公开 `code-style/*` 语言级规则集（37 条）。Platform 的领域架构约束由仓内
+ * `check:*-arch` 脚本负责，覆盖关系见 `docs/gate-coverage-matrix.md`。
  *
  * **存量策略**：接门当天的存量一次冻结进 `.arch-guard/baseline.json`（棘轮：只减不增），
  * 新增违规即红。修掉存量后跑 `bun run check:code-style:baseline` 收缩基线。
  *
- * **依赖现状(临时)**：`devDependencies` 里的 `@velaros-ai/arch-guard` 暂指 `file:../VelarOS-Arch-Guard`
- * ——含 `checks/code-style` 入口的 **0.2.0 尚未发版**（npm / GH Packages 上只有 0.1.x）。
- * 主控发布 0.2.0 后改回 `"^0.2.0"`，这条 sibling 路径依赖即可拆除。
+ * arch-guard 依赖固定到公开 GitHub 仓库的完整提交，确保本地贡献者不需要私有 registry 凭据，
+ * 同时避免可变标签改变 CI 判据。
  *
  * 常用命令：
  *   bun run check:code-style            # 门（compact 一行结论，CI / agent 友好）
@@ -55,6 +53,15 @@ const platformCodeStyle = definePlugin({
       'code-style/forbid-raw-timers': {
         allowFiles: ['packages/core/src/utils/TimerScope.ts'],
       },
+      'code-style/forbid-console': {
+        allowFiles: [
+          'packages/game/src/runtime/diagnostics.ts',
+          'packages/ui/src/conversation/internal/runtime.ts',
+          'packages/memory/src/files/memory-files-probe.ts',
+          'packages/memory/src/vector/memory-vector-probe.ts',
+          'packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts',
+        ],
+      },
     },
   }),
 })
@@ -63,7 +70,7 @@ export default defineConfig({
   plugins: [platformCodeStyle],
   rules: {
     // 团队语言门：默认 warning 拦不住新增，本仓钉成 error——存量已冻结进基线，新增即红。
-    // 公开 API JSDoc 由规则自身分档豁免（见 Desktop docs/code-standard.md §5.1）。
+    // 公开 API JSDoc 由规则自身按文档类型分档豁免。
     'code-style/require-chinese-comments': { severity: 'error' },
   },
   files: {

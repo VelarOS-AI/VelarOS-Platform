@@ -109,14 +109,12 @@ locale: z.record(TrimmedIdSchema, z.record(TrimmedIdSchema, z.string())).optiona
 // { "<locale>": { "<key>": "<译文>" } }
 ```
 
-**但运行时 locale 查询链的合并实现尚未落地**——它随市场链路（M5 档）。
-理由：唯一需要运行时 locale 包（而非编译期 key）的群体是外部 mod，
-而外部代码 mod 到 M5 才落地；提前建 merge 链会连续三个里程碑零消费者。
+**运行时 locale 查询链的合并实现尚未落地。** 在宿主公开 locale 合并、优先级和回退契约前，
+manifest 中的 locale 只能作为保留形状，不能被描述为已生效功能。
 
 实践口径：
 
-- **bundled mod**：继续用编译期 `MessageKey`（Desktop 的
-  `renderer/src/i18n/messages/{zh-CN,en-US}.ts`）；
+- **bundled mod**：继续使用产品宿主编译期提供的本地化 key；
 - **外部 mod**：`descriptor.label` 这类字段今天就写**字面量**，
   `locale` 可以先填着（形状合法、不会拒载），但**不要指望它生效**；
 - `AgentModSpaceContribution.descriptor.localeKey` 同理——字段在，链没接。
@@ -151,39 +149,14 @@ locale: z.record(TrimmedIdSchema, z.record(TrimmedIdSchema, z.string())).optiona
 
 ---
 
-## 附：文档-代码漂移清单
 
-写本套件时核对出的、**文档与代码对不上的地方**。
-状态列在 2026-07-30 的漂移修复批后更新：**已修** = 代码/文档已改到位；**保留** = 判定为正确现状，
-只是蓝图措辞需按实形读。
+## 文档与代码漂移
 
-| # | 漂移 | 实形 | 状态 |
-| --- | --- | --- | --- |
-| 1 | 蓝图 §3.3 的 `SpaceContribution` | 真名 `AgentModSpaceContribution`（`packages/agent/src/protocol/mods.ts`）。另有 Desktop 的**同名不同形** `SpaceDescriptor`（7 字段，`DesktopCapabilityScopeDescriptors.ts`） | 保留（命名偏离，蓝图措辞按实形读） |
-| 2 | 蓝图 §3.3 / §3.2 说 gate2 是 `source.spaces` | 真实字段是 `TurnContextDeltaSource.scopes`（`packages/core/src/types/turnContext.ts`） | 保留（`scopes` 是终局名，空间枚举已泛化成 `CapabilityScopeId`） |
-| 3 | 蓝图 §3.2 的 `contributes.promptFeatures` | 落地名 `promptSegments`（已在 `docs/agent/agent-mod-trunk.md` 登记偏离） | 保留（偏离已登记） |
-| 4 | Desktop `docs/spaces-composable-dispatch.md` 曾指向不存在的空间描述文件并称「九字段」 | 活的是 `DesktopCapabilityScopeRegistry`，7 字段 | 已修（改指 Desktop 真家 + 七字段） |
-| 5 | `docs/mcp-integration-config.md` 说 `McpServerConfig` 住 `packages/core/src/types/system.ts` | 实住 Desktop 仓 `packages/ipc/src/desktopConfigContracts.ts` | 已修 |
-| 6 | `ToolRenderRegistry.ts` 文档注释示范 `defineToolRenderRegistration({...})` | 该函数**不存在**；真实用法是 `const registration: ToolRenderRegistration = {...}; export default registration` | 已修 |
-| 7 | 蓝图与本文均提 `VELAROS_PLUGIN_ARTIFACT_BASE` | Desktop / Platform 运行时代码**都不读它**；只在一条构建脚本注释里被提到，指 Cloud 侧变量。Desktop 的产物 base 是装配期注入的函数 `cloudAccountService.getPluginArtifactBaseUrl()` | 已修（Desktop 构建脚本注释点名真实装配面；`docs/mod-dev/integration.md` 本就写对） |
-| 8 | `agent-mod-trunk.md` 的宿主对接契约含 `AgentModPackReader.loadBindings` | Desktop 的 `createDesktopAgentModPackReader()` **只实现 `readManifest`**；结果是 installed pack 贡献不了 `tools` / `hooks` | 已修（文档标注「Desktop 未实装，绑定通道待 P5/W3」） |
+公开文档、schema、导出类型和实现必须在同一改动中保持一致。发现漂移时：
 
-### 附带发现的两个疑似运行时缺陷
+1. 以所属包的版本化 schema、导出类型和契约测试确认当前行为；
+2. 判断代码还是文档错误，不把消费方私有实现当作 Platform 权威；
+3. 在同一变更中修复 owner，并补上能阻止复发的机械检查；
+4. 将一次性调查记录留在 Git 或公开 Issue，不把临时批次清单留在长期开发者指南中。
 
-| # | 现象 | 处置 |
-| --- | --- | --- |
-| A | turn-context 源 `task.lifecycle`（`packages/agent/src/kernel/background-jobs.ts`）声明 `scopes: []`，而 `ChatTurnContextFanIn.peek()` 的 gate2 判定是 `source.scopes.includes(space)` → **恒 false**。三个空间的 gate1 白名单都列了它，实际永远拿不到 delta | **已修**：确认是空间化重构回归（`spaces: [Project, Browser, System]` → 改名 `scopes` 时值被降级成 `[]`）。`createTurnContextSource(scopes)` 改为必填宿主注入 + 空数组拒载；Desktop 用 `resolveTurnContextSourceScopes()` 从 gate1 白名单反查，两道门同底。探针锁在 `scripts/checks/kernelAssembly.mjs` ⑥ |
-| B | `workspace.editor-focus` / `workspace.editor-selection` 出现在 gate1 白名单（`DesktopCapabilityScopeDescriptors.ts`）、渲染层 id 允许表与 UI 类型联合里，但**两仓都没有对应的 `TurnContextDeltaSource` producer` | **已修（判死清除）**：gate1 白名单行、渲染层 id 允许表、UI `TurnContextSourceId` 联合成员、`ComposerActiveChipsBar` 里过滤这两个 id 的死分支全部移除 |
-
-两条「声明了但没人读」的死声明面，处置如下：
-
-- Desktop `SpaceDescriptor.memoryScope`（`SpaceMemoryScopeKind`）：**已单源化**（保字段、退 if 链）。
-  `resolveDesktopMemoryScope` 改为按 `descriptor.memoryScope` 语义名分派
-  （`site-origin` / `project-root` / `system`），空间枚举判等已删；未识别空间回落 system，
-  与旧 if 链真值表逐字节一致。（原判「无读取者」略偏：`ChatSuggestions.resolveChatSuggestionMemoryScope`
-  已在读该字段，真正的问题只是主映射还没读。）
-- Platform `getWorkspaceSpaceIconName`：**已退役**（整个 `packages/ui/src/product/display/workspaceSpace.ts` 删除）。
-  `WorkspaceSpaceIcon` / `WorkspaceSpaceStatusIcon` 的 prop 从 `space` 改成 `iconName`，
-  宿主查 `getSpaceDescriptor(space).iconName` 后递入——组件库不再认识空间枚举，
-  `SpaceDescriptor.iconName` 成为唯一声明轴。
-</content>
+未实现的贡献轴必须标为 planned / not implemented，不能用未来时设计冒充当前能力。

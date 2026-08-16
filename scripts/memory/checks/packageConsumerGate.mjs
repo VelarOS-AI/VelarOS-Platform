@@ -336,7 +336,7 @@ async function auditPackageRoot(
 
   assert.equal(manifest.name, specification.name)
   assert.equal(manifest.type, 'module')
-  assert.equal(manifest.license, 'UNLICENSED')
+  assert.equal(manifest.license, 'Apache-2.0')
   if (specification.allowSideEffects) {
     assert.notEqual(manifest.sideEffects, undefined)
   } else {

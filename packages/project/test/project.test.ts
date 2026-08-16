@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import type { EditOperation } from '../src/index'
-import { createProjectKernel, ProjectEditOperationSchema } from '../src/index'
+import { createProjectKernel, FileProjectChangeFeed, ProjectEditOperationSchema } from '../src/index'
 import { ProjectToolNames } from '../src/project-tool-names'
 
 describe('Project capability', () => {
@@ -349,6 +349,56 @@ describe('Project capability', () => {
       expect((await project.status()).locks).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('publishes durable typed transaction changes without exposing a write surface to consumers', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-project-change-feed-'))
+    const root = join(directory, 'project')
+    const feedPath = join(directory, 'host-state', 'changes.jsonl')
+    await mkdir(root)
+    let feed = new FileProjectChangeFeed({ path: feedPath })
+    try {
+      await writeFile(join(root, 'note.txt'), 'before\n')
+      const observed: string[] = []
+      const unsubscribe = feed.subscribe((change) => observed.push(change.lifecycle))
+      const project = await createProjectKernel({ root, changeFeed: feed })
+      const transaction = await project.prepareEdit({
+        operations: [{
+          reason: 'Rename the visible state',
+          operation: {
+            type: 'replace_text',
+            path: 'note.txt',
+            oldText: 'before',
+            newText: 'after',
+          },
+        }],
+      })
+
+      const prepared = project.changeFeed.get(transaction.transactionId)
+      expect(prepared?.lifecycle).toBe('prepared')
+      expect(prepared?.reason).toBe('Rename the visible state')
+      expect(prepared?.intents[0]?.operation.type).toBe('replace_text')
+      expect(prepared?.patches[0]?.path).toBe('note.txt')
+
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(project.changeFeed.get(transaction.transactionId)?.lifecycle).toBe('applied')
+      expect(project.changeFeed.get(transaction.transactionId)?.revisions[0]?.after).toBeTruthy()
+      await project.rollback({ transactionId: transaction.transactionId })
+      expect(project.changeFeed.get(transaction.transactionId)?.lifecycle).toBe('rolled_back')
+      expect(observed).toEqual(['prepared', 'validated', 'applied', 'rolled_back'])
+      unsubscribe()
+
+      feed.close()
+      feed = new FileProjectChangeFeed({ path: feedPath })
+      const restored = feed.get(transaction.transactionId)
+      expect(restored?.lifecycle).toBe('rolled_back')
+      expect(restored?.reason).toBe('Rename the visible state')
+      expect(feed.list()).toHaveLength(1)
+      expect((await readFile(feedPath, 'utf8')).trim().split('\n')).toHaveLength(4)
+    } finally {
+      feed.close()
+      await rm(directory, { recursive: true, force: true })
     }
   })
 })

@@ -361,6 +361,7 @@ class ContextRetrievalReferences {
     try {
       return JSON.parse(`"${value}"`)
     } catch {
+      // arch-guard:silent-catch-ok 内容不是合法 JSON string 时保留原始文本，避免预览解码破坏引用。
       return value
     }
   }

@@ -41,6 +41,7 @@ export function normalizeHtmlArtifactExternalUrl(
   try {
     parsed = new UrlConstructor(trimmed)
   } catch {
+    // arch-guard:silent-catch-ok 非法 URL 是预期的验证失败，公开契约以 null 明确拒绝。
     return null
   }
 

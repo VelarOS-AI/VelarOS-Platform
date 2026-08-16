@@ -42,7 +42,7 @@ export type MemoryBackendAwaitable<T> = T | Promise<T>
 /**
  * 后端在叠加语义里的角色（§九 9.2）。
  *
- * - `authority`：权威层，记忆内容的唯一真相住在这里（`memory-files`；迁移完成前是 `memory-tree`）。
+ * - `authority`：权威层，记忆内容的唯一真相住在这里（当前默认是 `memory-tree`，宿主可显式选择 `memory-files`）。
  * - `derived-index`：派生索引，丢了能重建，不是权威内容（`memory-vector`）。
  *
  * 角色不只是标签，是**解析期的安全判据**：`resolveMemoryStoreBackend` 一律跳过 `derived-index`
@@ -119,7 +119,7 @@ export interface MemoryBackendCaptureBatchOptions {
  * 一个可插拔的记忆后端。
  *
  * 实现方：`memory-files`（bundled 默认，权威层）、`memory-tree`（当前已接线的树后端）、
- * `memory-vector`（批二，派生索引）。消费方只有 `./adapter-kernel`——它经 capability token
+ * `memory-vector` 派生索引。消费方只有 `./adapter-kernel`——它经 capability token
  * 解析出后端，再把三端口接到宿主上。
  */
 export interface MemoryStoreBackend {

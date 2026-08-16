@@ -22,7 +22,7 @@ import { ComposerMenuItemBody, ComposerMenuSwitchIndicator } from './addMenu/Com
 
 import styles from './ChatInput.module.css'
 
-import { isEmpty,isString, isTrue, toNullable } from '#internal/runtime'
+import { isEmpty, isString, isTrue, optionalWhen, toNullable } from '#internal/runtime'
 
 export type ChatComposerCapabilityControlKind = 'toggle' | 'choice' | 'action'
 export type ChatComposerCapabilityPlacement = 'add-menu' | 'toolbar' | 'model-menu'
@@ -232,7 +232,7 @@ function CapabilityChoiceControl({
       <Select
         variant="bare"
         size="xs"
-        value={isString(control.value) ? control.value : undefined}
+        value={optionalWhen(isString, control.value)}
         disabled={disabled}
         options={(control.choices ?? []).map((choice) => ({
           value: choice.id,

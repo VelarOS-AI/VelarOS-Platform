@@ -34,9 +34,10 @@ import styles from './MessageBubble.module.css'
 
 import type { AppLocale } from '#contracts'
 import { AppError } from '#internal/result'
-import { isBlank } from '#internal/runtime'
+import { isBlank, Log, toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
+const log = Log.tag('message-rewind')
 
 const MESSAGE_ACTION_ICON_SIZE = 'icon-sm' satisfies IconButtonPresetSize
 
@@ -114,6 +115,7 @@ export function MessageRewindButton({
       })
     } catch (error) {
       const appError = AppError.from(error)
+      log.error('回溯消息失败', { code: appError.code, error: appError.message })
       showNoticeLatest.current?.({
         title: tLatest.current('chat.rewindErrorTitle'),
         description: appError.message.trim() || tLatest.current('chat.rewindErrorFallback'),
@@ -140,7 +142,7 @@ export function MessageRewindButton({
           disabled={isRewinding}
           onClick={() => {
             setFileChoice('conversation-only')
-            setPlan(getRewindPlan?.(messageId) ?? null)
+            setPlan(toNullable(getRewindPlan?.(messageId)))
           }}
         >
           <ClockCounterClockwiseIcon size={14} />

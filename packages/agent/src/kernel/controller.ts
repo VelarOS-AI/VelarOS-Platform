@@ -5,8 +5,8 @@
 // 注入。**方向单向**：门面调适配器，适配器绝不反向持有门面。
 //
 // **防复辟提示**：`wake` / `answer` / `approve` / `runtimeStatus` 看上去是「零价值转发」，别按 §3.2
-// 顺手删——它们是**架构面**：这层的价值在于把控制面收敛成一组闭集动词，让宿主实现可替换（Desktop /
-// headless / serve 各注一份），并让审批载荷经 `TApproval` 类型参数在派发点消除强转。删了转发就等于把
+// 顺手删——它们是**架构面**：这层的价值在于把控制面收敛成一组闭集动词，让桌面、headless 和
+// serve 等宿主注入各自实现，并让审批载荷经 `TApproval` 类型参数在派发点消除强转。删了转发就等于把
 // 每个调用点直接绑到某个具体宿主服务上。
 //
 // ## 两处**不是**纯转发、改动前先看清楚的地方
@@ -46,8 +46,8 @@ export interface KernelControllerAnswerInput extends KernelControllerTarget {
   answer: string
 }
 
-// 审批载荷对内核控制器是不透明的：默认 unknown，宿主适配器（如 Desktop 的 confirmation
-// 卡片结果 UserActionCardResult[]）用类型参数声明其正式类型，消除派发点的强转。
+// 审批载荷对内核控制器是不透明的：默认 unknown，宿主适配器用类型参数声明正式类型，
+// 从而消除派发点的强转。
 export interface KernelControllerApprovalInput<TApproval = unknown> extends KernelControllerTarget {
   approved: boolean
   rejectionMessage?: LooseOptional<string>

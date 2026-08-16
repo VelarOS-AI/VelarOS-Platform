@@ -96,7 +96,7 @@ export class MemoryAuthorityDatabaseV2 {
 
   /**
    * 暂时暴露给 package 内 repository/service 组合层；renderer 与宿主不得持有此句柄。
-   * v2 正式拆仓后由包内端口替换公开连接。
+   * Public consumers use the package-owned connection port instead of this internal handle.
    */
   public get database(): SQLiteDatabase {
     this.assertOpen()

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import type { MemoryTreeDiffOpV2, MemoryTreeNodeStructV2 } from './DiffChain'
@@ -334,7 +334,7 @@ export class MemoryMeaningCurationServiceV2 {
       try {
         this.dreamRuns.failRun(input.runId, 'CURATION_FAILED', input.committedAt ?? Date.now())
       } catch {
-        // run 可能尚未进入 running/validating，或 tree+run 已原子提交；原错误优先。
+        // arch-guard:silent-catch-ok run 可能尚未进入可失败状态或已原子提交；必须保留并抛出原错误。
       }
       throw error
     }
@@ -522,6 +522,7 @@ export class MemoryMeaningCurationServiceV2 {
     try {
       scope = this.resolveScope(concept.scope)
     } catch {
+      // arch-guard:silent-catch-ok 遗留治理项的 scope 不可解析时按“未命中 deny”处理。
       return null
     }
     const conceptStableKey = this.identityKeys.conceptStableKey({
@@ -552,7 +553,7 @@ export class MemoryMeaningCurationServiceV2 {
       .get(targetMatchKey) as
       | { governance_type: 'forgotten' | 'superseded' | 'erased' }
       | undefined
-    return row?.governance_type ?? null
+    return toNullable(row?.governance_type)
   }
 
   private prepareCommit(
@@ -694,13 +695,13 @@ export class MemoryMeaningCurationServiceV2 {
            LIMIT 1`
         )
         .get() as { id: string; sequence: number } | undefined
-      let identity: PreparedIdentityV2 | null = null
+      let identity: Nullable<PreparedIdentityV2> = null
       if (proposal.identity) {
         identity = {
           candidate: proposal.identity,
           id: this.randomId(),
           sequence: (activeIdentity?.sequence ?? 0) + 1,
-          predecessorId: activeIdentity?.id ?? null,
+          predecessorId: toNullable(activeIdentity?.id),
           statement: seal(proposal.identity.statement),
           globalMainline: seal(proposal.identity.globalMainline),
           supportingConceptIds: proposal.identity.supportingConceptKeys.map(
@@ -781,11 +782,11 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
-  private existingId(table: 'memory_concepts' | 'memory_episodes' | 'memory_claims', stableKey: string): string | null {
+  private existingId(table: 'memory_concepts' | 'memory_episodes' | 'memory_claims', stableKey: string): Nullable<string> {
     const row = this.authority.database
       .prepare(`SELECT id FROM ${table} WHERE stable_key = ?`)
       .get(stableKey) as { id: string } | undefined
-    return row?.id ?? null
+    return toNullable(row?.id)
   }
 
   private randomId(): string {
@@ -800,7 +801,7 @@ export class MemoryMeaningCurationServiceV2 {
 function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[] {
   const reasons: string[] = []
   if (!candidate.candidateKey) reasons.push('missing_candidate_key')
-  if (candidate.evidenceIds.length === 0) reasons.push('missing_evidence')
+  if (isEmpty(candidate.evidenceIds)) reasons.push('missing_evidence')
   if (candidate.kind === 'concept') {
     if (!ConceptTypesV2.has(candidate.conceptType)) reasons.push('invalid_concept_type')
     if (!candidate.name) reasons.push('missing_concept_name')
@@ -812,7 +813,7 @@ function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[]
     if (!candidate.episodeType || !candidate.title || !candidate.state || !candidate.phase) {
       reasons.push('missing_episode_structure')
     }
-    if (candidate.endedAt !== null && candidate.endedAt !== undefined && candidate.endedAt < candidate.startedAt) {
+    if (isPresent(candidate.endedAt) && candidate.endedAt < candidate.startedAt) {
       reasons.push('episode_time_reversed')
     }
     validateScoreV2(candidate.salience, 'salience', reasons)
@@ -839,7 +840,7 @@ function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[]
 function validateIdentityShapeV2(candidate: MemoryIdentityCandidateV2): string[] {
   const reasons: string[] = []
   if (!candidate.statement || !candidate.globalMainline) reasons.push('missing_identity_content')
-  if (candidate.evidenceIds.length === 0) reasons.push('missing_evidence')
+  if (isEmpty(candidate.evidenceIds)) reasons.push('missing_evidence')
   validateScoreV2(candidate.confidence, 'confidence', reasons)
   return reasons
 }
@@ -893,7 +894,7 @@ function buildMeaningTreeNodesV2(input: {
   concepts: readonly PreparedConceptV2[]
   episodes: readonly PreparedEpisodeV2[]
   claims: readonly PreparedClaimV2[]
-  identity: PreparedIdentityV2 | null
+  identity: Nullable<PreparedIdentityV2>
   activeIdentityEpochId: string
   globalMainlineNodeId: string
   createdAt: number
@@ -1056,8 +1057,8 @@ function persistConceptsV2(
         item.name.blobId,
         item.name.commitment,
         item.nameMatchKey,
-        item.description?.blobId ?? null,
-        item.description?.commitment ?? null,
+        toNullable(item.description?.blobId),
+        toNullable(item.description?.commitment),
         item.scope.scopeType,
         item.scope.scopeMatchKey,
         item.candidate.privacyClass,
@@ -1132,16 +1133,16 @@ function persistEpisodesV2(
         item.candidate.episodeType,
         item.title.blobId,
         item.title.commitment,
-        item.summary?.blobId ?? null,
-        item.summary?.commitment ?? null,
+        toNullable(item.summary?.blobId),
+        toNullable(item.summary?.commitment),
         item.candidate.state,
         item.candidate.startedAt,
-        item.candidate.endedAt ?? null,
+        toNullable(item.candidate.endedAt),
         item.scope.scopeType,
         item.scope.scopeMatchKey,
         item.primaryConcept.id,
-        item.result?.blobId ?? null,
-        item.result?.commitment ?? null,
+        toNullable(item.result?.blobId),
+        toNullable(item.result?.commitment),
         runId,
         item.candidate.salience,
         item.candidate.activation,
@@ -1216,15 +1217,15 @@ function persistClaimsV2(
         item.value.blobId,
         item.value.commitment,
         item.candidate.storageMode,
-        item.candidate.payloadRef ?? null,
-        item.summary?.blobId ?? null,
-        item.summary?.commitment ?? null,
+        toNullable(item.candidate.payloadRef),
+        toNullable(item.summary?.blobId),
+        toNullable(item.summary?.commitment),
         item.candidate.epistemicStatus,
         item.candidate.confidence,
         item.candidate.privacyClass,
         item.candidate.lifecycleState,
         item.candidate.validFrom,
-        item.candidate.validTo ?? null,
+        toNullable(item.candidate.validTo),
         runId,
         item.candidate.salience,
         item.candidate.consolidationStrength,
@@ -1284,7 +1285,7 @@ function persistRelationsV2(
         item.candidate.confidence,
         item.candidate.epistemicStatus,
         item.candidate.validFrom,
-        item.candidate.validTo ?? null,
+        toNullable(item.candidate.validTo),
         runId,
         item.candidate.activation,
         item.candidate.validTo ?? item.candidate.validFrom,

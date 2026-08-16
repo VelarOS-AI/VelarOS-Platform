@@ -1,6 +1,7 @@
 /// <reference path="./gifenc.d.ts" />
 import gifenc from 'gifenc'
 
+import { isEmpty, isFalse, isNumber, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { CdpTraceTransport } from './BrowserPerformanceTracing'
@@ -116,7 +117,9 @@ export class CdpScreencastRecorder {
     }
 
     try {
-      await this.transport.send('Page.stopScreencast').catch(() => undefined)
+      await this.transport.send('Page.stopScreencast').catch(() => {
+        // arch-guard:silent-catch-ok 已采集帧仍可返回；finally 会无条件释放本地录屏状态。
+      })
       return { frames: this.frames, frameLimitReached: this.frameLimitReached }
     } finally {
       this.frames = []
@@ -128,7 +131,9 @@ export class CdpScreencastRecorder {
   public async abort(): Promise<void> {
     if (!this.running) return
     try {
-      await this.transport.send('Page.stopScreencast').catch(() => undefined)
+      await this.transport.send('Page.stopScreencast').catch(() => {
+        // arch-guard:silent-catch-ok abort 是幂等清理，页面或 CDP 会话可能已销毁。
+      })
     } finally {
       this.frames = []
       this.cleanup()
@@ -138,15 +143,17 @@ export class CdpScreencastRecorder {
   private async handleFrame(params: CdpScreencastFrameEvent, maxFrames: number): Promise<void> {
     const sessionId = params?.sessionId
     // 每帧必须 ack，否则浏览器停发后续帧;帧限已到也要 ack 走完协议。
-    if (typeof sessionId === 'number') {
+    if (isNumber(sessionId)) {
       await this.transport
         .send('Page.screencastFrameAck', { sessionId })
-        .catch(() => undefined)
+        .catch(() => {
+          // arch-guard:silent-catch-ok 会话关闭时 ack 可能失败；当前帧仍可安全丢弃或消费。
+        })
     }
 
     if (!this.running || this.frameLimitReached) return
     const data = params?.data
-    if (typeof data !== 'string' || data.length === 0) return
+    if (!isString(data) || isEmpty(data)) return
 
     const frame: ScreencastCapturedFrame = {
       bytes: Buffer.from(data, 'base64'),
@@ -155,7 +162,7 @@ export class CdpScreencastRecorder {
       height: Math.max(1, Math.round(params?.metadata?.deviceHeight ?? 1)),
     }
     this.capturedFrameCount += 1
-    if (this.consumer.retainFrames !== false) this.frames.push(frame)
+    if (!isFalse(this.consumer.retainFrames)) this.frames.push(frame)
     try {
       this.consumer.onFrame?.(frame)
     } catch {
@@ -164,7 +171,9 @@ export class CdpScreencastRecorder {
     }
     if (this.capturedFrameCount >= maxFrames) {
       this.frameLimitReached = true
-      await this.transport.send('Page.stopScreencast').catch(() => undefined)
+      await this.transport.send('Page.stopScreencast').catch(() => {
+        // arch-guard:silent-catch-ok 达到帧上限后本地已停止接收；远端会话可能同时关闭。
+      })
     }
   }
 
@@ -201,7 +210,7 @@ export function encodeScreencastFramesToGif(
   frames: readonly ScreencastCapturedFrame[],
   options: EncodeScreencastGifOptions
 ): Buffer {
-  if (frames.length === 0) {
+  if (isEmpty(frames)) {
     throw new AppError('EXECUTION_FAILED', '录屏没有采集到任何帧（页面无变化或已隐藏）。')
   }
 
@@ -224,7 +233,7 @@ export function encodeScreencastFramesToGif(
 
     const nextTimestamp = frames[index + 1]?.timestamp
     const delayMs =
-      nextTimestamp !== undefined
+      isPresent(nextTimestamp)
         ? Math.min(
             MaxFrameDelayMs,
             Math.max(MinFrameDelayMs, Math.round((nextTimestamp - frame.timestamp) * 1000))

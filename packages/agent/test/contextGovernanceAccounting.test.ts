@@ -351,7 +351,7 @@ void describe('S2 · 锚点类别 / 轮序 / 计数（V13 / V8 / U18 / U20 / U23
         [
           '把 0.24.0 升到 0.24.2、18.2.0 升到 19.0.1、3.23.8 升到 3.24.1，',
           '改了 src/main/index.ts、src/main/agent/loop.ts、src/renderer/App.tsx、',
-          'packages/core/src/utils/ForgivingSchema.ts、docs/readme.md 与 apps/desktop/package.json，',
+          'packages/core/src/utils/ForgivingSchema.ts、docs/readme.md 与 products/desktop/package.json，',
           '跑 bun run check 通过 exit code 0。',
         ].join('')
       ),

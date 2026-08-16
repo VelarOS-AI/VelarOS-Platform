@@ -31,7 +31,7 @@ export interface ToolContractDescriptionSpec {
    *
    * 声明后模型面描述末尾自动追加一条「深度用法先读 skill:<id>」，工具页卡片也透出该字段。
    * 只声明不瘦身没有意义：这条轴存在的全部理由是把工艺深度搬出模型面描述（design-principles §8）。
-   * id 是否真有对应技能由 Desktop 侧构建期检查兜（技能目录是宿主产物，包内查不到）。
+   * id 是否真有对应技能由产品宿主在构建期检查，因为技能目录不属于此包产物。
    */
   usageSkillId?: string
   /**

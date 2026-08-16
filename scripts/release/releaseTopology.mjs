@@ -1,10 +1,4 @@
-// 单版本火车的「发布清单」单源:哪些包该发、按什么顺序发、发之前必须成立什么。
-//
-// 为什么存在:并仓前七个源仓各带一份 scripts/<domain>/release/publish-packages.mjs
-// (agent / capabilities / core / kernel / memory / model / ui,共 1111 行),并仓之后它们枚举的
-// 都是同一个 packages/ 目录、跑的是同一套校验——已经功能等价,只在格式与错误文案上分叉。
-// 本模块把共有判据收成唯一事实来源,由 verify-release-ref.mjs(CI 预检)与
-// publish-packages.mjs(真发布)共用;两者都不再各自枚举包。
+// Canonical release topology shared by release verification and publication.
 //
 // 关键不变量:
 //   ① **发布内容是声明过的,不是扫出来的**:发布集合与仓根 velaros.domainPackages 各域清单的
@@ -14,7 +8,7 @@
 //   ④ **每个包声明的平台代必须与仓根一致**(velaros.platform)——见下「两根轴」。
 //   ⑤ 可发布包的命令名必须唯一，且品牌入口 `velaros` 只能由 `@velaros-ai/cli` 拥有。
 //
-// 两根轴(2026-08-02 定,取代原「首次里程碑统一对齐」计划):
+// Version model:
 //   · **包版本**各自独立走 semver。破坏性变更升自己的位(0.x 下是 minor,1.x 下是 major),
 //     消费者按包升级,互不牵连。这也是现实:workspace 已经在 1.2.6,core 还在 0.3.x。
 //   · **平台代 `velaros.platform`** 表达「这批包属于同一代、互相兼容」。跨代才是整体破坏性
@@ -24,11 +18,8 @@
 // 「任意包破坏性变更」的公倍数,对没变的包是假信号;而且每个包只剩 patch 位一个自由度,
 // 没法表达「加了功能但没 break」。两根轴各管一件事,谁也不替谁说话。
 //
-// 为什么**不**校验「各包版本 == 仓根 version」:并仓前 memory / ui 的 verify-release 与 model 的
-// publish 都带这条锁步断言(源仓里仓根 version 就是那个包的版本)。火车形态下仓根 version 是
-// 火车号,各包版本独立。原样搬过来会让任何 tag 都发不出去;强行把可发布包对齐到 0.6.0
-// 又会打断 Desktop 已声明的 ^0.5.0 / ^1.2.5 等 range。锁步断言的真实目的由 ① 与 ④ 承接,
-// 锁步本身丢弃。改动这里前先读 README「版本方案」。
+// Package versions intentionally do not have to equal the root train version. Package SemVer
+// expresses package compatibility; velaros.platform expresses cross-package generation.
 
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
@@ -37,10 +28,8 @@ import ts from 'typescript'
 
 export const ReleaseRegistry = 'https://npm.pkg.github.com'
 
-// publishConfig.access 必须显式声明(承接 model 那份独有的 access 断言),但不钉死成
-// 'restricted':html-artifacts 声明的是 'public'。发布时按各包声明值传给 --access,
-// 而不是像七份旧脚本那样硬写 restricted 覆盖 manifest——门不该悄悄违背被检查者的声明。
-const AllowedAccess = new Set(['restricted', 'public'])
+// 所有第一方包均按公开包发布；显式声明可防止新增包意外回退为受限可见性。
+const AllowedAccess = new Set(['public'])
 
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 

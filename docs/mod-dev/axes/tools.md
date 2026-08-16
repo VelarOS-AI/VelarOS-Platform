@@ -28,7 +28,7 @@ z.strictObject({
 | `availableInSpaces` | 声明本工具在哪些 space 可用；只绑定类别，可按预算换入，不强制每轮发送 schema |
 | `residentInSpaces` | 声明本工具在哪些 space 常驻。**纯数据条目**——由宿主的常驻集算法消费，主干不解释 space 语义 |
 
-## 命名规则（裁决 5）
+## 命名规则
 
 VelarOS 内部、Manifest、权限策略与持久历史只认 canonical id：
 `namespace:tool`。命名空间允许小写字母、数字、点和短横线；具体工具名允许小写字母、
@@ -96,4 +96,4 @@ manifest 条目由工具实体**派生**（`toToolContribution` 读 `category` /
 工具的**常驻 surface** 计入既有上下文治理预算，不是另一套静态配额。
 mod 可以在 manifest 顶层声明 `budget.residentPromptTokens` 作为提示；
 超预算时由既有治理降级为按需通道（`tooling:map` / skill），
-**不新造一套静态配额双脑**（裁决 5）。
+**不要新造一套静态配额双脑。**

@@ -178,9 +178,8 @@ export type AnswerRequest = z.infer<typeof AnswerRequestSchema>
 /**
  * 动词 `approve`：审批一次待确认动作，批准或带理由拒绝（六动词之一，经 ApprovalPort）。
  *
- * 对齐控制器 `KernelControllerApprovalInput.approvalPayload`：审批载荷对内核不透明（宿主适配器声明其
- * 正式类型，如 Desktop 的 confirmation 卡片结果 `UserActionCardResult[]`——hooks cardResults 已上线的
- * 通道）。协议面按不透明信封 `z.unknown()` 承载，缺席用 null（§12.6）。
+ * 对齐控制器 `KernelControllerApprovalInput.approvalPayload`：审批载荷对内核不透明，由宿主适配器
+ * 声明正式类型。协议面按不透明信封 `z.unknown()` 承载，缺席时使用 null。
  */
 export const ApproveRequestSchema = z.strictObject({
   sessionId: z.string(),

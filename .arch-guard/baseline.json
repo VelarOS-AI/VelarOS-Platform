@@ -2,69 +2,6 @@
   "version": 1,
   "entries": [
     {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "27466a19dbc77275",
-      "message": "packages/game/src/runtime/diagnostics.ts:87: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "289adb51a075f845",
-      "message": "packages/memory/src/vector/memory-vector-probe.ts:379: \"console.info\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/memory/src/vector/memory-vector-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "393e05334cf6ec59",
-      "message": "packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts:317: \"console.info\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "71d9043e2e186e98",
-      "message": "packages/memory/src/files/memory-files-probe.ts:340: \"console.info\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/memory/src/files/memory-files-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "9ee88979951f2b16",
-      "message": "packages/game/src/runtime/diagnostics.ts:79: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "db9e3cc89dd2e5d7",
-      "message": "packages/ui/src/conversation/internal/runtime.ts:140: \"console.warn\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "e39fc4d2f17bbdb6",
-      "message": "packages/ui/src/conversation/internal/runtime.ts:141: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "e5d1cb50dd490130",
-      "message": "packages/ui/src/conversation/internal/runtime.ts:139: \"console.info\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/forbid-console",
-      "ruleId": "code-style/forbid-console/console-call",
-      "fingerprint": "f5995e46d2870710",
-      "message": "packages/game/src/runtime/diagnostics.ts:94: \"console.error\" writes outside the Log pipeline. Use Log.tag(scope).debug/info/warn/error or a domain logger.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "00efd10b7eb367b2",
@@ -112,20 +49,6 @@
       "fingerprint": "18d0a1bd26d4b83d",
       "message": "packages/project/src/plugins/typescript/ast.ts:99: 值位 `string | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/project/src/plugins/typescript/ast.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "1f79ce957ad5b75b",
-      "message": "packages/html-artifacts/src/shell.ts:95: 值位 `Partial<HtmlArtifactBridgeMessages> | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/html-artifacts/src/shell.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "1fc19f21934a86cd",
-      "message": "packages/html-artifacts/src/shell.ts:100: 值位 `number | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/html-artifacts/src/shell.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -242,13 +165,6 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "711174d1f914ecc3",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:857: 值位 `| MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSign…` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "750ab8b1b40f103a",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:518: 值位 `MemoryConceptCandidateV2 | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
@@ -287,13 +203,6 @@
       "fingerprint": "918bb699536f5b9b",
       "message": "packages/model/src/ModelRequestPolicy.ts:13: 值位 `number | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/model/src/ModelRequestPolicy.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "92cd9ec2531e074d",
-      "message": "packages/html-artifacts/src/shell.ts:108: 值位 `string | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/html-artifacts/src/shell.ts"
     },
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
@@ -403,13 +312,6 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "c5bee00b2fd01f72",
-      "message": "packages/html-artifacts/src/frame-fit.ts:18: 值位 `number | null | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/html-artifacts/src/frame-fit.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "cb912ad1c3b4bc19",
       "message": "packages/model/src/PromptCacheModelOptions.ts:359: 值位 `Record<string, unknown> | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/model/src/PromptCacheModelOptions.ts"
@@ -501,13 +403,6 @@
     {
       "checkId": "code-style/forbid-explicit-undefined-union",
       "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
-      "fingerprint": "f63b3254d291dce7",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:241: 值位 `Nullable<number> | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-explicit-undefined-union",
-      "ruleId": "code-style/forbid-explicit-undefined-union/undefined-value-union",
       "fingerprint": "f990ab67e1624f5d",
       "message": "packages/html-artifacts/src/protocol.ts:230: 值位 `number | null | undefined` 手写 `| undefined`（§12.6）。可选字段改 `?:`，值缺席改 `Nullable<T>`（null）。",
       "file": "packages/html-artifacts/src/protocol.ts"
@@ -543,30 +438,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "01cf889c2e4b7108",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:555: \"row?.governance_type ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "01e16e017c5733d7",
       "message": "packages/agent/src/execution/SubAgentGuidanceRelayRegistry.ts:126: \"worker.relayQueue.shift() ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/agent/src/execution/SubAgentGuidanceRelayRegistry.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "0492f56a14e981c4",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1135: \"item.summary?.blobId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "082145bc314b6939",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1143: \"item.result?.blobId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -578,23 +452,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "0f0d64823f59bf73",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1287: \"item.candidate.validTo ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "1a4fe615b79fedf3",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:309: \"input.input.sessionId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "1bc594e9d6a2a856",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:450: \"Reflect.get(bindingRecord, key) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -641,13 +501,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "260f641dc80eb9f9",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1060: \"item.description?.commitment ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "2c096c6f33a32c75",
       "message": "packages/model/src/ProviderRuntimeAvailability.ts:46: \"normalizeProviderRuntimeConfigs(providerCollection, providerRuntimeConfigs).fin…\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/model/src/ProviderRuntimeAvailability.ts"
@@ -665,13 +518,6 @@
       "fingerprint": "3791d98ea988a444",
       "message": "packages/core/src/utils/nullish.ts:15: \"value ?? undefined\" falls back to undefined. Keep the existing value or normalize at a boundary helper.",
       "file": "packages/core/src/utils/nullish.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "388fea1597552a06",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1136: \"item.summary?.commitment ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -718,23 +564,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "581e2614e9c184a0",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:703: \"activeIdentity?.id ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "58bdbca131aba3f3",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:307: \"input.input.sourceId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "5d028e2e480e96ea",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1144: \"item.result?.commitment ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -760,13 +592,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "646e58d78a4ef5d3",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:249: \"parsed.diagnostics[0]?.modId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "6d738cc078df5b9a",
       "message": "packages/browser/src/core/BrowserTargetHighlightScriptBuilder.ts:11: \"input.selector ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/browser/src/core/BrowserTargetHighlightScriptBuilder.ts"
@@ -774,37 +599,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "6d80ad9c3969d217",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:788: \"row?.id ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "6f33d4360cf4a5dd",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1221: \"item.summary?.commitment ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "776bb94537f21cc8",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:125: \"pageSession.driver.getEmulationState?.() ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "7de998b314da5c8f",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:730: \"input.denyGeneration ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "8259f06095090900",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1059: \"item.description?.blobId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -840,13 +637,6 @@
       "fingerprint": "9acfa3c2279c934e",
       "message": "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx:391: \"hostRef.current?.parentElement ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "a1f656266277ddf1",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1139: \"item.candidate.endedAt ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -900,13 +690,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "c2053c0c01df72fb",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1220: \"item.summary?.blobId ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "c8486e6ea0418439",
       "message": "packages/agent/src/agent/TurnCapabilitySnapshot.ts:89: \"inputSchemas.get(toolName) ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/agent/src/agent/TurnCapabilitySnapshot.ts"
@@ -921,13 +704,6 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "ccf5b4481a0fcbaf",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1227: \"item.candidate.validTo ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "d062832455a16b4e",
       "message": "packages/core/src/utils/nullish.ts:10: \"value ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/core/src/utils/nullish.ts"
@@ -935,23 +711,9 @@
     {
       "checkId": "code-style/forbid-nullish-churn",
       "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "d1d2a6bdeb061968",
-      "message": "packages/browser/src/core/CloakBrowserRuntimeResolver.ts:80: \"options.resourceRoots ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/browser/src/core/CloakBrowserRuntimeResolver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
       "fingerprint": "d6790b0e4a295aab",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:367: \"mapping?.evidence_id ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "de0dbe3ad2cd4b5b",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:319: \"input.identityChange ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -973,13 +735,6 @@
       "fingerprint": "f377ca362deb9b91",
       "message": "packages/agent/src/tools/access-policy.ts:45: \"decision.reasonCode ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/agent/src/tools/access-policy.ts"
-    },
-    {
-      "checkId": "code-style/forbid-nullish-churn",
-      "ruleId": "code-style/forbid-nullish-churn/fallback-to-nullish",
-      "fingerprint": "f7284f9cacceb448",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:1219: \"item.candidate.payloadRef ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-nullish-churn",
@@ -1008,13 +763,6 @@
       "fingerprint": "fe549ac1c1990b10",
       "message": "packages/ui/src/conversation/i18n/conversationTranslator.ts:27: \"translator ?? null\" falls back to null. Use toNullable(...) instead — a named export of @velaros-ai/core.",
       "file": "packages/ui/src/conversation/i18n/conversationTranslator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "01e79c09bb10865f",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:189: \"Array.isArray(parsed)\" — use isArray(parsed).",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1096,23 +844,9 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "5dd304e2660569dc",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:191: \"Array.isArray(events)\" — use isArray(events).",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
       "fingerprint": "655d15a9bc0c85ed",
       "message": "packages/memory/src/memory-tree/v2/TreeManifest.ts:144: \"Array.isArray(value['nodes'])\" — use isArray(value['nodes']).",
       "file": "packages/memory/src/memory-tree/v2/TreeManifest.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "6f477fd8a06c9c78",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:750: \"Array.isArray(parsed)\" — use isArray(parsed).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1190,13 +924,6 @@
       "fingerprint": "dea0eeb7d8644574",
       "message": "packages/agent/src/skills/SkillMarketClient.ts:175: \"Array.isArray(skills)\" — use isArray(skills).",
       "file": "packages/agent/src/skills/SkillMarketClient.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/array-is-array",
-      "fingerprint": "f6b670ab3f7053ea",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:143: \"Array.isArray(entries)\" — use isArray(entries).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1362,13 +1089,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-number",
-      "fingerprint": "6000348b53128177",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:141: \"typeof sessionId === 'number'\" — use isNumber(sessionId).",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-number",
       "fingerprint": "8b00d103a3318630",
       "message": "packages/memory/src/vector/Backend.ts:277: \"typeof value === 'number'\" — use isNumber(value).",
       "file": "packages/memory/src/vector/Backend.ts"
@@ -1393,13 +1113,6 @@
       "fingerprint": "76994ecb09454762",
       "message": "packages/browser/src/core/CdpScreenshotEngine.ts:212: \"typeof options.region === 'object'\" — use isObject(options.region) (avoids treating `null` like a non-null object). @arch-guard:suspend if you truly need raw typeof.",
       "file": "packages/browser/src/core/CdpScreenshotEngine.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-object-raw",
-      "fingerprint": "7feecd109304fccb",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:134: \"typeof record !== 'object'\" — use !isObject(record) && !isNull(record) (avoids treating `null` like a non-null object). @arch-guard:suspend if you truly need raw typeof.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1467,20 +1180,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "23f1ce10987cb578",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:800: \"typeof record.epochId === 'string'\" — use isString(record.epochId).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "2742eb1803a013b8",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:500: \"typeof value !== 'string'\" — use !isString(value).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "299619442996ef62",
       "message": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts:146: \"typeof candidate['treeHash'] !== 'string'\" — use !isString(candidate['treeHash']).",
       "file": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts"
@@ -1498,13 +1197,6 @@
       "fingerprint": "39a01720d42795ba",
       "message": "packages/agent/src/sub-agent/StructuredOutput.ts:91: \"typeof value !== 'string'\" — use !isString(value).",
       "file": "packages/agent/src/sub-agent/StructuredOutput.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "3cbd04bf76a6999c",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:224: \"typeof chunk !== 'string'\" — use !isString(chunk).",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1565,13 +1257,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "5d15e65970f4f9c8",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:438: \"typeof parsed['integrity'] !== 'string'\" — use !isString(parsed['integrity']).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "622b4a94a5dca0ec",
       "message": "packages/memory/src/memory-tree/v2/DreamRuns.ts:480: \"typeof value !== 'string'\" — use !isString(value).",
       "file": "packages/memory/src/memory-tree/v2/DreamRuns.ts"
@@ -1582,13 +1267,6 @@
       "fingerprint": "648783070db426ba",
       "message": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts:225: \"typeof record['ciphertext'] !== 'string'\" — use !isString(record['ciphertext']).",
       "file": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "648bae59801ec1a6",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:149: \"typeof data !== 'string'\" — use !isString(data).",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1670,13 +1348,6 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "a5742dc0334fe081",
-      "message": "packages/game/src/runtime/diagnostics.ts:23: \"typeof value === 'string'\" — use isString(value).",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "a5c22b58f2918e77",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:238: \"typeof row.predicate === 'string'\" — use isString(row.predicate).",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -1726,23 +1397,9 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "c0af884ec9d77e5e",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:350: \"typeof text === 'string'\" — use isString(text).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "c34d82bd1e68214c",
       "message": "packages/agent/src/agent/context/UserTextPayloadPlanner.ts:37: \"typeof part.text === 'string'\" — use isString(part.text).",
       "file": "packages/agent/src/agent/context/UserTextPayloadPlanner.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "c5daeefceed8dfb4",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:805: \"typeof record.predecessorId === 'string'\" — use isString(record.predecessorId).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1761,23 +1418,9 @@
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
       "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "daf92bf72bf131fd",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:467: \"typeof input['matchRoot'] !== 'string'\" — use !isString(input['matchRoot']).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
       "fingerprint": "dbd6bef0748e3b43",
       "message": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts:247: \"typeof parsed['ciphertext'] !== 'string'\" — use !isString(parsed['ciphertext']).",
       "file": "packages/memory/src/memory-tree/v2/storage/ContentKeyService.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "e1445e325c78e6fc",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:1053: \"typeof value !== 'string'\" — use !isString(value).",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
     },
     {
       "checkId": "code-style/forbid-raw-runtime-type-guards",
@@ -1836,46 +1479,11 @@
       "file": "packages/html-artifacts/src/browser.ts"
     },
     {
-      "checkId": "code-style/forbid-raw-runtime-type-guards",
-      "ruleId": "code-style/forbid-raw-runtime-type-guards/typeof-string",
-      "fingerprint": "fc6f5e35d52c3a33",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:436: \"typeof parsed['wrappingRootId'] !== 'string'\" — use !isString(parsed['wrappingRootId']).",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
       "checkId": "code-style/forbid-raw-timers",
       "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
       "fingerprint": "0616390ea506f56f",
       "message": "packages/ui/src/lib/timerScope.ts:29: \"globalThis.clearTimeout(handle)\" calls native clearTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
       "file": "packages/ui/src/lib/timerScope.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "19af3ed962f93ac6",
-      "message": "packages/memory/src/vector/memory-vector-probe.ts:245: \"setTimeout(resolve, 0)\" calls native setTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/memory/src/vector/memory-vector-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "3b4b97922a0e4ff5",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:243: \"clearTimeout(timer)\" calls native clearTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "89ed4bbaa9e4334c",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:154: \"setTimeout( () => reject(new AppError('EXECUTION_FAILED', '等待 trace 结束事件超时。')),…\" calls native setTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "95c732939ba0b20e",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:223: \"setTimeout(() => { this.pending.delete(id) rejectPromise( new AppError('TIMEOUT…\" calls native setTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
     },
     {
       "checkId": "code-style/forbid-raw-timers",
@@ -1887,23 +1495,9 @@
     {
       "checkId": "code-style/forbid-raw-timers",
       "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "a450b3a69858a8c2",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:399: \"clearTimeout(pending.timer)\" calls native clearTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
       "fingerprint": "a4de9f5dcb17e743",
       "message": "packages/ui/src/conversation/internal/timerScope.ts:60: \"globalThis.setInterval(callback, Math.max(0, Number.isFinite(intervalMs) ? inte…\" calls native setInterval. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
       "file": "packages/ui/src/conversation/internal/timerScope.ts"
-    },
-    {
-      "checkId": "code-style/forbid-raw-timers",
-      "ruleId": "code-style/forbid-raw-timers/raw-timer-call",
-      "fingerprint": "b5ffe7127381cc01",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:369: \"clearTimeout(pending.timer)\" calls native clearTimeout. Use TimerScope / useTimerScope so timers are tracked by lifecycle scope.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
     },
     {
       "checkId": "code-style/forbid-raw-timers",
@@ -1957,20 +1551,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
-      "fingerprint": "6b08a1fc622b9031",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:168: \"permissions.screenRecording === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
-      "fingerprint": "71a04cad911845e1",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:158: \"this.consumer.retainFrames !== false\" uses !== against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-false",
       "fingerprint": "c27007da93fbb32d",
       "message": "packages/browser/src/tools/Export.tool.ts:216: \"args.save !== false\" uses !== against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/browser/src/tools/Export.tool.ts"
@@ -1988,13 +1568,6 @@
       "fingerprint": "f7af97e85eecedea",
       "message": "packages/browser/src/tools/RecipeSteps.ts:55: \"record.matched === false\" uses === against `false`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/browser/src/tools/RecipeSteps.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "01d66b1cda72d659",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:832: \"node.content.blobRef !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2041,13 +1614,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "1475436099a6ebdd",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:365: \"generationAfterRecovery !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "164f263097a04e6b",
       "message": "packages/memory/src/memory-tree/v2/TreeManifest.ts:51: \"node.content.blobRef === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/TreeManifest.ts"
@@ -2062,13 +1628,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "1865389505af5f0e",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:869: \"node.content.blobRef === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "18d55358404e69e0",
       "message": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts:191: \"prototype !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/TreeProjectionIndex.ts"
@@ -2076,37 +1635,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "1a62419e5fd154b6",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:277: \"redactOp.after[0].content.blobRef === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "2224972a94e3dff6",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:330: \"identityChange === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "35f4f41b9509b7dc",
       "message": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts:182: \"current === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "4dc1ce4a9bbf8f86",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:364: \"response.id === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "4e643191cc42ac15",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:815: \"candidate.endedAt !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2125,37 +1656,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "76fe40d746239bba",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:692: \"node.parentKey === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "77fb9f8f192c9ef9",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:951: \"reason !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "7e6c12ebb0a92417",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:458: \"expectedBase !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "7f720a3cfb3dd287",
-      "message": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts:423: \"restored !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "82bc4db922d40b7c",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:313: \"node.parentKey === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2167,30 +1670,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "88eab77a6edcf139",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:534: \"prototype === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "8c13ca25e4cc86cc",
       "message": "packages/memory/src/memory-tree/v2/ErasureSaga.ts:978: \"parsed === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/ErasureSaga.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "8c68cb740b66d7b3",
-      "message": "packages/memory/src/vector/memory-vector-probe.ts:317: \"io.readTextFile(indexPath) !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/vector/memory-vector-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "8e49d788435c849a",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:838: \"node.parentKey === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2216,20 +1698,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "9948f8b854b60ae6",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:532: \"input === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "9c76fd1682a9ee54",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:851: \"cursor.parentKey !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "a1de70a688f2b857",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:749: \"existing !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -2244,30 +1712,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "aa1d34fe9fdcc107",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:348: \"generationBeforeTamper !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "ab67ce2e77c8cda7",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:843: \"node.parentKey !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "b4f307add2fdb302",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:127: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "b829166d55cf86b7",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:112: \"currentGeneration === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2300,13 +1747,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "c7c7ba067b6487e8",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:212: \"inspection !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "cdf1cda73c4f6f6e",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:356: \"denyGeneration === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -2317,13 +1757,6 @@
       "fingerprint": "d09d0a2260391a90",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:629: \"content.blobRef === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "d22e414f7308acf6",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:804: \"record.predecessorId === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2349,23 +1782,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "dc3157e19e78902a",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:792: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
       "fingerprint": "e110c271bc69c30d",
       "message": "packages/browser/src/tools/Performance.tool.ts:82: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/browser/src/tools/Performance.tool.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "e19c8ec0d5d45ff2",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:215: \"latestDiff !== null\" uses !== against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2387,27 +1806,6 @@
       "fingerprint": "ed53b956cc4ffd32",
       "message": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts:123: \"generation === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/storage/IndexGenerationStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "f4e43ff3e1721415",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:242: \"value === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "f61ee70d72b0d184",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:769: \"raw === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-null",
-      "fingerprint": "fd2d427a2f4118a7",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:134: \"record === null\" uses === against `null`. Prefer `isNull(...)` / `isNotNull(...)` (or `isPresent(...)` when excluding both null and undefined); otherwise add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2482,13 +1880,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "16601d11f956de9e",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:227: \"nextTimestamp !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "174d885642ef4ed8",
       "message": "packages/html-artifacts/src/protocol.ts:441: \"initialHeight === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/html-artifacts/src/protocol.ts"
@@ -2517,30 +1908,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "2d5ec3aa6773ce17",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:815: \"candidate.endedAt !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "2d75637d431b13d1",
       "message": "packages/agent/src/sub-agent/StructuredOutput.ts:115: \"node.properties !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/sub-agent/StructuredOutput.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "380fb61ea5175750",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:228: \"invalidBeforeLeaf !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "40aa03f82b1b4a2d",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:185: \"beforeLeaf !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2566,13 +1936,6 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "4c2f4b9b2bed6182",
-      "message": "packages/memory/src/adapter-kernel/mount.ts:105: \"input.store === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/adapter-kernel/mount.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "4daa17699459327b",
       "message": "packages/agent/src/sub-agent/StructuredOutput.ts:130: \"node.items !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/sub-agent/StructuredOutput.ts"
@@ -2587,37 +1950,9 @@
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
       "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "66244ec6466db5c9",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:955: \"commit.finishedAt !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
       "fingerprint": "68a25a7320e39ae5",
       "message": "packages/agent/src/sub-agent/StructuredOutput.ts:101: \"node.enum !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/agent/src/sub-agent/StructuredOutput.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "6c430462015f5c40",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:319: \"leaf64 !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "6e5d2c20a42c7982",
-      "message": "packages/agent/src/mods/AgentModHostAssembly.ts:139: \"envelope.envelope.agent === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/mods/AgentModHostAssembly.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "72757ee55d12af48",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:339: \"payload !== undefined\" uses !== against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2639,13 +1974,6 @@
       "fingerprint": "8abeb4ede0be6d58",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:161: \"value === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
-    },
-    {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "96904cf2dde6ece9",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:129: \"detail === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
     },
     {
       "checkId": "code-style/forbid-redundant-strict-literal-comparison",
@@ -2725,237 +2053,6 @@
       "file": "packages/ui/src/conversation/composer/utils/turnContextChipGroups.utils.ts"
     },
     {
-      "checkId": "code-style/forbid-redundant-strict-literal-comparison",
-      "ruleId": "code-style/forbid-redundant-strict-literal-comparison/compare-undefined",
-      "fingerprint": "fa896cc2054d297e",
-      "message": "packages/game/src/runtime/diagnostics.ts:43: \"input.line === undefined\" uses === against `undefined`. Prefer a simpler equivalent when semantics match; if narrowing requires this form, add `@arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：…` above.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "ac513c71843649ba",
-      "message": "packages/game/src/runtime/diagnostics.ts:42: \"...(input.file ? { file: input.file } : {})\" 是单属性条件对象展开。请写成 `file: toOptional(input.file)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "d0c997b054c62a98",
-      "message": "packages/game/src/runtime/diagnostics.ts:44: \"...(input.stack ? { stack: input.stack } : {})\" 是单属性条件对象展开。请写成 `stack: toOptional(input.stack)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "e0a02310095fd807",
-      "message": "packages/game/src/runtime/diagnostics.ts:66: \"...(event.filename ? { file: event.filename } : {})\" 是单属性条件对象展开。请写成 `file: toOptional(event.filename)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/forbid-single-property-conditional-spread",
-      "ruleId": "code-style/forbid-single-property-conditional-spread/prefer-to-optional-field",
-      "fingerprint": "eaaddf043ed4b12e",
-      "message": "packages/agent/src/mods/AgentModHostAssembly.ts:159: \"...(bindings ? { bindings } : {})\" 是单属性条件对象展开。请写成 `bindings: toOptional(bindings)`，需要整组对象合并时才使用 spread。",
-      "file": "packages/agent/src/mods/AgentModHostAssembly.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "0603e8f15a9626ea",
-      "message": "packages/html-artifacts/src/browser.ts:293: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "13ac6721414946e4",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:998: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "2d3a381b6ba54eca",
-      "message": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts:136: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "353efeb2a8032d15",
-      "message": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts:127: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "3557824688176a09",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:336: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-catch",
-      "fingerprint": "c5402b9cc976f3f5",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:1094: 空 catch 块静默吞错。请 rethrow / log / 返回 ErrorResult，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "06029901feb78380",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:334: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "10c74a77d71de62d",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:101: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "1fdb6ae885c4062f",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:181: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "2b69543dc99602c9",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:158: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "50e8ee351b5e1570",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:166: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "60f3543f590585f9",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:410: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "6b3b98b071129e56",
-      "message": "packages/browser/src/core/BrowserSessionActionQueue.ts:15: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserSessionActionQueue.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "7d2e75f74ede25eb",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:142: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "7debbade30c0fe5c",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:178: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "7e13ecbe42961c3e",
-      "message": "packages/browser/src/core/CdpExternalBrowserLauncher.ts:212: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CdpExternalBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "80ac4046d32099e0",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:176: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "86ec4e77ddcdc28c",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:330: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "93f313276dcacb3c",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:167: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "954ae2ffe01c7721",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:179: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "a1ccc9ce0be09a93",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:119: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "abea2323052c29d9",
-      "message": "packages/browser/src/core/BrowserSessionActionQueue.ts:14: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserSessionActionQueue.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "b5a552e37bec5cdc",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:142: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "cdc76d9afb2849dc",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:85: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "e49af440f5ed2c4f",
-      "message": "packages/browser/src/core/BrowserScreencastRecorder.ts:131: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserScreencastRecorder.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "eb897a2540f23b83",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:79: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "ebcaf82ceeec4284",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:1296: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/forbid-swallowed-errors",
-      "ruleId": "code-style/forbid-swallowed-errors/empty-promise-catch",
-      "fingerprint": "eda62f5fb10ed12d",
-      "message": "packages/browser/src/core/CloakBrowserLauncher.ts:164: `.catch(() => {})` 空吞 promise rejection。请处理错误，或加 `// arch-guard:silent-catch-ok <原因>` 说明为何静默。",
-      "file": "packages/browser/src/core/CloakBrowserLauncher.ts"
-    },
-    {
       "checkId": "code-style/forbid-undefined-coalescing",
       "ruleId": "code-style/forbid-undefined-coalescing/coalesce-undefined",
       "fingerprint": "2b5060caca9726cf",
@@ -2993,23 +2090,9 @@
     {
       "checkId": "code-style/prefer-double-bang-over-nullish-false",
       "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
-      "fingerprint": "00921a8b60757414",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:935: \"this.traceCollector?.isRunning() ?? false\" — `?? false` 作 boolean 归一时请改为 `!!this.traceCollector?.isRunning()`（可 `arch-guard run --fix`）。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-double-bang-over-nullish-false",
-      "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
       "fingerprint": "70ac646f5e7bb823",
       "message": "packages/ui/src/conversation/internal/timerScope.ts:92: \"lease?.cancel() ?? false\" — `?? false` 作 boolean 归一时请改为 `!!lease?.cancel()`（可 `arch-guard run --fix`）。",
       "file": "packages/ui/src/conversation/internal/timerScope.ts"
-    },
-    {
-      "checkId": "code-style/prefer-double-bang-over-nullish-false",
-      "ruleId": "code-style/prefer-double-bang-over-nullish-false/nullish-false-to-double-bang",
-      "fingerprint": "9878fcb79180bf1f",
-      "message": "packages/browser/src/core/CdpBrowserPageDriver.ts:991: \"this.screencastRecorder?.isRunning() ?? false\" — `?? false` 作 boolean 归一时请改为 `!!this.screencastRecorder?.isRunning()`（可 `arch-guard run --fix`）。",
-      "file": "packages/browser/src/core/CdpBrowserPageDriver.ts"
     },
     {
       "checkId": "code-style/prefer-double-bang-over-nullish-false",
@@ -3024,13 +2107,6 @@
       "fingerprint": "f1cf949c3e00f3bd",
       "message": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts:275: \"webContentsTraceSessions.get(this.webContents)?.collector.isRunning() ?? false\" — `?? false` 作 boolean 归一时请改为 `!!webContentsTraceSessions.get(this.webContents)?.collector.isRunning()`（可 `arch-guard run --fix`）。",
       "file": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/empty-string-isBlank",
-      "fingerprint": "189113452dcdd870",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:350: \"text.trim() !== ''\" compares with an empty string. Use isBlank(value) instead.",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3063,13 +2139,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "150a7f474c2dc396",
-      "message": "packages/browser/src/runtime/BrowserSessionManager.ts:1050: \"entries.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/runtime/BrowserSessionManager.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "15ea7df2ea63ef7a",
       "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:838: \"missing.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
@@ -3087,20 +2156,6 @@
       "fingerprint": "2385292790f1d176",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:601: \"record.stableKey.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "2495924d9e79a395",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:842: \"candidate.evidenceIds.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "24df5764b9b7dc67",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:498: \"mod.absentAxes.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3217,13 +2272,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "5a37d68f82b5d0eb",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:422: \"diagnostics.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "609f3b37fd420deb",
       "message": "packages/agent/src/tool-library/builtin/Plans.tool.ts:145: \"input.complete_step.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/agent/src/tool-library/builtin/Plans.tool.ts"
@@ -3238,30 +2286,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "6df76e59b653de52",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:360: \"diagnostics.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "6e7a9c77d3ca8665",
-      "message": "packages/browser/src/runtime/BrowserInteractionEngine.ts:437: \"path.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/runtime/BrowserInteractionEngine.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "6ed386e232a203a7",
       "message": "packages/agent/src/sub-agent/SubAgentResultBuilder.ts:31: \"snapshot.modifiedPaths.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/agent/src/sub-agent/SubAgentResultBuilder.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "70c07acd43a93453",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:269: \"input.ops.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3301,37 +2328,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "8f6aff012558cb43",
-      "message": "packages/browser/src/runtime/ElectronBrowserRuntime.ts:1853: \"navigationHistory.entries.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/runtime/ElectronBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "90fa6845d44a6d11",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:462: \"reasons.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "969be289c8d1a320",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:286: \"sections.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "99666f0fe897d068",
-      "message": "packages/agent/src/mods/AgentModLoader.ts:328: \"Object.keys(bindingRecord).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/agent/src/mods/AgentModLoader.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "9b0f430ec29a5fef",
-      "message": "packages/ui/src/conversation/internal/result.ts:47: \"Object.keys(this.context).length\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/ui/src/conversation/internal/result.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3353,13 +2352,6 @@
       "fingerprint": "9f583da35cbee699",
       "message": "packages/browser/src/core/BrowserRecipeSkeletonBuilder.ts:144: \"sectionHeadings.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/browser/src/core/BrowserRecipeSkeletonBuilder.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "a1f4f7e7775e50ed",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:801: \"record.epochId.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3402,13 +2394,6 @@
       "fingerprint": "af96031b05c2a01f",
       "message": "packages/model/src/PromptCacheModelOptions.ts:309: \"Object.keys(nextVelarosOptions).length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/model/src/PromptCacheModelOptions.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "b1b97cbe56fa2391",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:805: \"record.predecessorId.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3462,13 +2447,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "c55bc0700caea8ee",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:803: \"candidate.evidenceIds.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "c706feb97305128a",
       "message": "packages/agent/src/coding/verification.ts:67: \"!matchers.length\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/agent/src/coding/verification.ts"
@@ -3483,13 +2461,6 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "e368dd6a2a92e90b",
-      "message": "packages/browser/src/core/BrowserPerformanceTracing.ts:224: \"chunk.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/core/BrowserPerformanceTracing.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "e4277f8111bfd9e7",
       "message": "packages/memory/src/memory-tree/v2/DiffChain.ts:246: \"op.before.length !== 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/DiffChain.ts"
@@ -3497,30 +2468,9 @@
     {
       "checkId": "code-style/prefer-emptiness-helpers",
       "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "e4663942e569e4db",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:265: \"backward.nodes.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
       "fingerprint": "e861886350f673fd",
       "message": "packages/ui/src/conversation/internal/runtime.ts:14: \"value.length === 0\" checks emptiness through .length. Prefer **`isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/ui/src/conversation/internal/runtime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "f28473d898765f84",
-      "message": "packages/browser/src/runtime/BrowserSessionManager.ts:201: \"remainingWaiters.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/runtime/BrowserSessionManager.ts"
-    },
-    {
-      "checkId": "code-style/prefer-emptiness-helpers",
-      "ruleId": "code-style/prefer-emptiness-helpers/length-empty-check",
-      "fingerprint": "f38e7b28d3c92718",
-      "message": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts:262: \"metrics.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
-      "file": "packages/browser/src/core/BrowserPerformanceOrchestrator.ts"
     },
     {
       "checkId": "code-style/prefer-emptiness-helpers",
@@ -3535,13 +2485,6 @@
       "fingerprint": "f9b5ca8baa5a2954",
       "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:401: \"reasons.length > 0\" checks emptiness through .length. Prefer **`!isEmpty(base)`** (isEmpty is a @velaros-ai/core named export; replace base with the real receiver).",
       "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-finite-number-guard",
-      "ruleId": "code-style/prefer-is-finite-number-guard/prefer-is-finite-number",
-      "fingerprint": "1252b97490d7db12",
-      "message": "packages/html-artifacts/src/shell.ts:101: \"typeof value === 'number' && Number.isFinite(value) && value > 0\" — 请用 `isFiniteNumber(value)`（可 `arch-guard run --fix`）。",
-      "file": "packages/html-artifacts/src/shell.ts"
     },
     {
       "checkId": "code-style/prefer-is-finite-number-guard",
@@ -3563,13 +2506,6 @@
       "fingerprint": "38640d25308c5f4c",
       "message": "packages/html-artifacts/src/browser.ts:126: \"typeof value === 'number' && Number.isFinite(value) && value > 0\" — 请用 `isFiniteNumber(value)`（可 `arch-guard run --fix`）。",
       "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-finite-number-guard",
-      "ruleId": "code-style/prefer-is-finite-number-guard/prefer-is-finite-number",
-      "fingerprint": "467218484b6db621",
-      "message": "packages/html-artifacts/src/frame-fit.ts:19: \"typeof value === 'number' && Number.isFinite(value) && value > 0\" — 请用 `isFiniteNumber(value)`（可 `arch-guard run --fix`）。",
-      "file": "packages/html-artifacts/src/frame-fit.ts"
     },
     {
       "checkId": "code-style/prefer-is-finite-number-guard",
@@ -3710,13 +2646,6 @@
       "fingerprint": "557b0255a628bf3b",
       "message": "packages/memory/src/memory-tree/TreeProjection.ts:156: `record.node` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：record.node as Record<string, unknown>",
       "file": "packages/memory/src/memory-tree/TreeProjection.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "5cae2509366a86cf",
-      "message": "packages/ui/src/conversation/internal/result.ts:74: `value` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：value as Record<string, unknown>",
-      "file": "packages/ui/src/conversation/internal/result.ts"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
@@ -3868,13 +2797,6 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "d678fffaa5f4fd99",
-      "message": "packages/ui/src/conversation/internal/result.ts:64: `value` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：value as Record<string, unknown>",
-      "file": "packages/ui/src/conversation/internal/result.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "dcf7a3c6ac88e353",
       "message": "packages/agent/src/agent/retry.ts:397: `error` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：error as Record<string, unknown>",
       "file": "packages/agent/src/agent/retry.ts"
@@ -3896,13 +2818,6 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "e030e786371a8958",
-      "message": "packages/browser/src/core/CdpExternalBrowserLauncher.ts:604: `entry` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：entry as Record<string, unknown>",
-      "file": "packages/browser/src/core/CdpExternalBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "e4e345bd9ad3fbcd",
       "message": "packages/browser/src/tools/RecipeParser.ts:91: `parsed` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：parsed as Record<string, unknown>",
       "file": "packages/browser/src/tools/RecipeParser.ts"
@@ -3917,23 +2832,9 @@
     {
       "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
       "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
-      "fingerprint": "fa7e53c01b2c72fa",
-      "message": "packages/browser/src/runtime/ElectronBrowserRuntime.ts:1071: `result` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：result as Record<string, unknown>",
-      "file": "packages/browser/src/runtime/ElectronBrowserRuntime.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-guarded-record-cast",
-      "ruleId": "code-style/prefer-is-plain-object-over-guarded-record-cast/is-object-then-record-cast",
       "fingerprint": "fb3d39efaac71f48",
       "message": "packages/agent/src/execution/Store.ts:796: `value` 被 isObject 守卫后仍断言成 Record<string, unknown>。守卫改 `isPlainObject`（core 已有）即可直接读字段，断言整条删掉：value as Record<string, unknown>",
       "file": "packages/agent/src/execution/Store.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
-      "ruleId": "code-style/prefer-is-plain-object-over-object-array-guard/prefer-is-plain-object",
-      "fingerprint": "0be7c9e046056fe1",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:1093: \"typeof value === 'object' && value !== null && !Array.isArray(value)\" — 请用 `isPlainObject(value)` 收敛 isObject/!isArray 组合（可 `arch-guard run --fix`）。",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
@@ -3976,20 +2877,6 @@
       "fingerprint": "433cff739b516d90",
       "message": "packages/memory/src/memory-tree/v2/TreeManifest.ts:191: \"typeof value !== 'object' || value === null || Array.isArray(value)\" — 请用 `!isPlainObject(value)` 收敛 !x/!isObject/isArray 析取（可 `arch-guard run --fix`）。",
       "file": "packages/memory/src/memory-tree/v2/TreeManifest.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
-      "ruleId": "code-style/prefer-is-plain-object-over-object-array-guard/prefer-not-plain-object-or",
-      "fingerprint": "46cc0587e1e8c6e4",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:792: \"typeof value !== 'object' || value === null || Array.isArray(value)\" — 请用 `!isPlainObject(value)` 收敛 !x/!isObject/isArray 析取（可 `arch-guard run --fix`）。",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
-      "ruleId": "code-style/prefer-is-plain-object-over-object-array-guard/prefer-not-plain-object-or",
-      "fingerprint": "4af8f17ac74d007c",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:532: \"typeof input !== 'object' || input === null || Array.isArray(input)\" — 请用 `!isPlainObject(input)` 收敛 !x/!isObject/isArray 析取（可 `arch-guard run --fix`）。",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
     },
     {
       "checkId": "code-style/prefer-is-plain-object-over-object-array-guard",
@@ -4232,13 +3119,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "2026e0ab0eca7329",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:857: \"| MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSignoffV2 | null | undef…\" hand-writes a nullish type union. Use \"LooseOptional<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "2069c72936ea27fd",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:42: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
@@ -4288,13 +3168,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "2f050bb4cbda7b73",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:870: \"LegacyMemoryClaimGovernanceTargetV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "30b06e69321661b6",
       "message": "packages/game/src/core/schemas.ts:256: \"GameReference<'prefab'> | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/game/src/core/schemas.ts"
@@ -4305,13 +3178,6 @@
       "fingerprint": "332c8709340bade8",
       "message": "packages/memory/src/memory-tree/v2/evidence-replay-v2-probe.ts:170: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/evidence-replay-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "35a5d1547d390e22",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:784: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -4477,13 +3343,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "516cb2a948cd499b",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:697: \"PreparedIdentityV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "51a81d354fcf131e",
       "message": "packages/memory/src/memory-tree/v2/IdentityKeys.ts:33: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/IdentityKeys.ts"
@@ -4596,13 +3455,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "6549915523b041fd",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:872: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "68dd0ba3667cc004",
       "message": "packages/memory/src/memory-tree/v2/DreamRuns.ts:102: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/DreamRuns.ts"
@@ -4638,13 +3490,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "6e03a9b2e599d79b",
-      "message": "packages/ui/src/utils/filePresentation.ts:136: \"FilePresentationVariant | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/ui/src/utils/filePresentation.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "6ef88a61980bb903",
       "message": "packages/html-artifacts/src/protocol.ts:427: \"HtmlArtifactDescriptor | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/html-artifacts/src/protocol.ts"
@@ -4673,13 +3518,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "76f8bf44214d908d",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:181: \"MemoryTreeDiffV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "7794bf0076ebc722",
       "message": "packages/html-artifacts/src/protocol.ts:630: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/html-artifacts/src/protocol.ts"
@@ -4690,13 +3528,6 @@
       "fingerprint": "77c66ac9cccc0767",
       "message": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts:253: \"MemorySealedContentV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/EvidenceIngest.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "79e83d54b7368b4a",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:896: \"PreparedIdentityV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -4764,13 +3595,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "87827b8cff9e4633",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:985: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "88c05caa15b65b49",
       "message": "packages/browser/src/core/BrowserPathContainment.ts:16: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/browser/src/core/BrowserPathContainment.ts"
@@ -4823,13 +3647,6 @@
       "fingerprint": "949c9b75cbe1156d",
       "message": "packages/game/src/core/resolver.ts:29: \"GameReference<'prefab'> | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/game/src/core/resolver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "9538c99cada643b4",
-      "message": "packages/browser/src/runtime/BrowserSessionManager.ts:705: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/browser/src/runtime/BrowserSessionManager.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -4921,13 +3738,6 @@
       "fingerprint": "a566b625a8cfc6b8",
       "message": "packages/memory/src/memory-tree/v2/DreamRuns.ts:54: \"| MemoryDreamStartedRunV2 | MemoryDreamSkippedRunV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/DreamRuns.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "a578efa42789cd4a",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:248: \"MemoryTreeProjectionInspectionV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5037,23 +3847,9 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c03d871c131069c7",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:768: \"MemoryTreeIdentityChangeV2 | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "c265ca7c0b2c4f39",
       "message": "packages/memory/src/memory-tree/v2/IdentityKeys.ts:32: \"string | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/memory/src/memory-tree/v2/IdentityKeys.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "c2c3961bcb4b90ed",
-      "message": "packages/html-artifacts/src/frame-fit.ts:18: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/html-artifacts/src/frame-fit.ts"
     },
     {
       "checkId": "code-style/prefer-loose-optional",
@@ -5352,13 +4148,6 @@
     {
       "checkId": "code-style/prefer-loose-optional",
       "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
-      "fingerprint": "fe6149d1fd359ce4",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:253: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/prefer-loose-optional",
-      "ruleId": "code-style/prefer-loose-optional/inline-nullable-union",
       "fingerprint": "ff02c98f1df5132e",
       "message": "packages/game/src/core/schemas.ts:250: \"number | null\" hand-writes a nullish type union. Use \"Nullable<T>\" to express absence explicitly.",
       "file": "packages/game/src/core/schemas.ts"
@@ -5432,13 +4221,6 @@
       "fingerprint": "281f34e4bfc0d96a",
       "message": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts:89: \"button\" maps 3 outcomes through repeated if branches ('right', 'middle'). Use switch for repeated explicit outcomes.",
       "file": "packages/browser/src/runtime/ElectronWebContentsBrowserPageDriver.ts"
-    },
-    {
-      "checkId": "code-style/prefer-table-branching",
-      "ruleId": "code-style/prefer-table-branching/switch-instead-of-if-chain",
-      "fingerprint": "5250d910abe45ac8",
-      "message": "packages/ui/src/conversation/composer/ComposerCapabilityControls.tsx:72: \"normalized\" maps 3 outcomes through repeated if branches ('search', 'web', 'image'). Use switch for repeated explicit outcomes.",
-      "file": "packages/ui/src/conversation/composer/ComposerCapabilityControls.tsx"
     },
     {
       "checkId": "code-style/prefer-table-branching",
@@ -5835,282 +4617,9 @@
     {
       "checkId": "code-style/require-error-logging",
       "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "00ef64a4311c377f",
-      "message": "packages/memory/src/memory-tree/v2/meaning-curation-v2-probe.ts:37: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/meaning-curation-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "1e5aafccefc360d4",
-      "message": "packages/ui/src/conversation/blocks/MessageBubbleActions.tsx:101: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/blocks/MessageBubbleActions.tsx"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "22c70cfeac8f813d",
-      "message": "packages/html-artifacts/src/security.ts:43: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/html-artifacts/src/security.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "245c127c1299c892",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:524: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "3e5617ef83b8a839",
-      "message": "packages/memory/src/memory-tree/v2/MeaningCuration.ts:336: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/MeaningCuration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "4f94cbd45d910d4d",
-      "message": "packages/game/src/runtime/diagnostics.ts:26: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/game/src/runtime/diagnostics.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "569a1540525b4b56",
-      "message": "packages/memory/src/vector/Backend.ts:280: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/vector/Backend.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "57ffdf23bea8ab24",
-      "message": "packages/memory/src/memory-tree/v2/erasure-saga-v2-probe.ts:38: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/erasure-saga-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "604ecf1a48ef5b9d",
-      "message": "packages/agent/src/mods/AgentModHostAssembly.ts:120: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/mods/AgentModHostAssembly.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "61202c25b038f8bc",
-      "message": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts:136: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "6469daf868c6f6a3",
-      "message": "packages/ui/src/conversation/html-preview/htmlPreviewDocument.ts:77: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/html-preview/htmlPreviewDocument.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "66f01a49bf786085",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:204: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "675188d3b76ff76e",
-      "message": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts:56: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "69a2d69ff541b42f",
-      "message": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts:45: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/authority-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "6f616336ee504440",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:998: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "766b9679d4fb39eb",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:902: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "7bb662feab398b49",
-      "message": "packages/memory/src/memory-tree/v2/storage/Keyring.ts:479: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/storage/Keyring.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "83ca33cab63d1bcd",
-      "message": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts:127: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/shell/workerThreadTimeline.pure.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "857ba2a998984a99",
-      "message": "packages/memory/src/vector/Store.ts:162: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/vector/Store.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "8ad848b671b5107e",
-      "message": "packages/memory/src/vector/memory-vector-probe.ts:138: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/vector/memory-vector-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "8ce211d5e3141c72",
-      "message": "packages/memory/src/memory-tree/v2/TreeStore.ts:417: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/TreeStore.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "973fcc39227660a0",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:280: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "9f2a7a76068bca94",
-      "message": "packages/browser/src/core/CdpExternalBrowserLauncher.ts:506: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/browser/src/core/CdpExternalBrowserLauncher.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "9faee9e96b5c8bf1",
-      "message": "packages/ui/src/conversation/internal/result.ts:38: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/internal/result.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
       "fingerprint": "aa3883d5c115abb3",
       "message": "packages/html-artifacts/src/browser.ts:306: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
       "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "aaf17d3afe86bab9",
-      "message": "packages/memory/src/memory-tree/v2/meaning-curation-v2-probe.ts:352: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/meaning-curation-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "ae480d88c5e9f6ad",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:911: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "b4a80ad3431cffde",
-      "message": "packages/agent/src/mods/AgentModHostAssembly.ts:161: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/mods/AgentModHostAssembly.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "bda111f626a8767a",
-      "message": "packages/ui/src/conversation/html-preview/htmlPreviewDocument.ts:147: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/ui/src/conversation/html-preview/htmlPreviewDocument.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "be19ba9753e1afee",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:111: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "c2ec586d63bf9d45",
-      "message": "packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts:62: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/storage/storage-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "cf91f4271fa923c4",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:351: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "d3c041cceb3d1804",
-      "message": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts:1094: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/EvidenceReplayMigration.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "da2c999e7cd37727",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:242: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "e32675876d9c1249",
-      "message": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts:151: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/treediff-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "eb5febd3147d8acf",
-      "message": "packages/memory/src/memory-tree/v2/ingest-dream-v2-probe.ts:44: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/ingest-dream-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "f7ba6e94413b74ba",
-      "message": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts:42: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/memory/src/memory-tree/v2/tree-store-v2-probe.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "f851f927e6c6e08f",
-      "message": "packages/agent/src/agent/context/retrieval/References.ts:363: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/agent/src/agent/context/retrieval/References.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "f9a4ec281021bcc2",
-      "message": "packages/html-artifacts/src/browser.ts:293: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/html-artifacts/src/browser.ts"
-    },
-    {
-      "checkId": "code-style/require-error-logging",
-      "ruleId": "code-style/require-error-logging/silent-catch",
-      "fingerprint": "fadaaf313f83547f",
-      "message": "packages/computer/src/runtime/ComputerSidecarManager.ts:272: catch block handles an error without reporting it. Use Log/messageLatest, rethrow, or return an explicit ErrorResult.",
-      "file": "packages/computer/src/runtime/ComputerSidecarManager.ts"
     }
   ]
 }

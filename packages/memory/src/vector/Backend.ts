@@ -278,6 +278,7 @@ function stringifyValue(value: unknown): string {
   try {
     return JSON.stringify(value) ?? ''
   } catch {
+    // arch-guard:silent-catch-ok 任意元数据无法序列化时使用空文本，向量正文仍可继续索引。
     return ''
   }
 }

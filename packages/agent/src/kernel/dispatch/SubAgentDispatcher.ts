@@ -1,8 +1,8 @@
 // 域：按需子 Agent **派发决策与运行编排**（并发闸/熔断闸解析、类型路由、模型路由健康度反馈、
 // 写租约、沙箱作用域、worker 事件投影、失败/中断回灌）。
 //
-// 本体 host 无关，只认端口不认实现（见 ./host-ports）：Desktop 在 execution/Runtime.ts 注入具体
-// AgentRunner / ConfigService / 协作协调器 / 自定义 agent 注册表——它们结构上满足端口。文案格式化见
+// 本体 host 无关，只认端口不认实现（见 ./host-ports）：产品宿主注入具体的 Agent runner、
+// 配置服务、协作协调器与自定义 Agent 注册表，它们结构上满足端口。文案格式化见
 // ./result-format，指令拼装见 ./instruction，并发闸见 ./concurrency，进展账本/摘要见 ./SubAgentProgress*。
 //
 // ## 从哪读起

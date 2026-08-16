@@ -2463,7 +2463,7 @@ export const enUSMessages = {
     gitGithubTokenLabel: 'GitHub personal access token',
     gitGithubTokenHint:
       'Personal Access Token for GitHub HTTPS repositories, such as ghp_xxx. SSH repositories still use system Git configuration.',
-    gitGithubTokenPlaceholder: 'ghp_xxxxxxxxxxxxxxxxxxxx',
+    gitGithubTokenPlaceholder: 'ghp_example_token',
     gitPrivateKeyPathLabel: 'SSH private key path',
     gitPrivateKeyPathHint:
       'Private key path for Git SSH repositories, such as ~/.ssh/id_ed25519. Use the Access Token above for HTTPS repositories.',

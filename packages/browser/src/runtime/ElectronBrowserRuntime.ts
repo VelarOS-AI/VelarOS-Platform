@@ -121,7 +121,7 @@ function buildBrowserUserScriptExecutionSource(
     }
   })()`
 }
-import { isNonBlankString, isObject, isPresent,isString, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 
 const TurnContextRecentErrorWindowMs = 5 * 60 * 1000
 
@@ -1092,7 +1092,7 @@ class ElectronBrowserRuntime {
                 [{ code: source, url: `velaros-userscript://${input.script.id}.js` }],
                 false
               )
-        const payload = isObject(result) ? (result as Record<string, unknown>) : {}
+        const payload = isPlainObject(result) ? result : {}
         return {
           status: payload.ok ? 'success' : 'error',
           url,
@@ -1639,7 +1639,7 @@ class ElectronBrowserRuntime {
     fallbackUrl?: LooseOptional<string>
   ): void {
     const previousUrl = session.url
-    const resultRecord = isObject(result) ? (result as { url?: unknown; title?: unknown }) : {}
+    const resultRecord = isPlainObject(result) ? result : {}
     this.applyExternalPageState(
       session,
       {
@@ -1874,7 +1874,7 @@ class ElectronBrowserRuntime {
     abortSignal?.throwIfAborted()
     if (
       !navigationHistory ||
-      navigationHistory.entries.length === 0 ||
+      isEmpty(navigationHistory.entries) ||
       webContents.isDestroyed() ||
       !this.isPlaceholderUrl(webContents.getURL())
     )

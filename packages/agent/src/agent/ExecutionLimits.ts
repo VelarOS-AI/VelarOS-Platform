@@ -13,7 +13,7 @@
 //  - 把 `primaryMaxTurns` 设成有限值：长任务在无预警处停止，且停止点与任务语义无关。
 //  - 把 `modelStreamIdleTimeoutMs` 调大：真正的挂死要更久才暴露（这是唯一的"没反应"闸）。
 //  - 把墙钟调小：goal 模式的多日任务失去存在意义。
-// 所有值都可经 `overrides` 由宿主注入（Desktop 从 env 读），默认值只是**没配置时的立场**。
+// 所有值都可经 `overrides` 由宿主注入；默认值只定义未配置时的保守行为。
 const MaxNativeTimerDelayMs = 2_147_483_647
 
 interface AgentExecutionLimits {

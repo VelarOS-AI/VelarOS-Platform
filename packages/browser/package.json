@@ -5,9 +5,9 @@
     "platform": "0.6"
   },
   "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/browser#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
@@ -54,7 +54,8 @@
     "dist",
     "vendor",
     "README.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -100,7 +101,7 @@
     "directory": "packages/browser"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

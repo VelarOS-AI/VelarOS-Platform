@@ -1,6 +1,6 @@
 import type BetterSqlite3 from 'better-sqlite3'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isArray, isEmpty, isNotNull, isNull, isPlainObject, isString, isUndefined, toNullable } from '@velaros-ai/core'
 
 import type { ContentKeyServiceV2 } from './storage/ContentKeyService'
 import type { MemoryKeyringStoreV2 } from './storage/Keyring'
@@ -202,6 +202,7 @@ export class MemoryTreeStoreV2 {
           projectionIndex.inspect(reconstructed.version, reconstructed.current)
             ?.matchesAuthority === true
       } catch {
+        // arch-guard:silent-catch-ok 派生投影损坏等价于不匹配，下方会从 authority 立即重建。
         projectionMatches = false
       }
       if (!projectionMatches) {
@@ -245,12 +246,12 @@ export class MemoryTreeStoreV2 {
     }
   }
 
-  public inspectProjection(): MemoryTreeProjectionInspectionV2 | null {
+  public inspectProjection(): Nullable<MemoryTreeProjectionInspectionV2> {
     if (this.currentVersion < 1) return null
     return this.projectionIndex.inspect(this.currentVersion, this.currentReplay)
   }
 
-  public rebuildProjection(): number | null {
+  public rebuildProjection(): Nullable<number> {
     if (this.currentVersion < 1) return null
     return this.projectionIndex.persist(
       this.currentVersion,
@@ -266,7 +267,7 @@ export class MemoryTreeStoreV2 {
         currentVersion: this.currentVersion,
       })
     }
-    if (input.ops.length === 0 && !input.identityChange && !input.erasureCommit) {
+    if (isEmpty(input.ops) && !input.identityChange && !input.erasureCommit) {
       throw new AppError('VALIDATION', '空树变更不得创建新版本。')
     }
     if (
@@ -310,13 +311,13 @@ export class MemoryTreeStoreV2 {
       persistenceBase: this.currentReplay,
     })
     validateCommittedTreeStateV2(next.nodes)
-    const root = next.nodes.find((node) => node.parentKey === null)
+    const root = next.nodes.find((node) => isNull(node.parentKey))
     if (!root) throw new AppError('INVARIANT', '提交后树缺少根节点。')
     if (!next.nodes.some((node) => node.stableKey === input.globalMainlineNodeId)) {
       throw new AppError('VALIDATION', 'globalMainlineNodeId 不在提交后树状态中。')
     }
 
-    const identityChange = input.identityChange ?? null
+    const identityChange = toNullable(input.identityChange)
     const eventHash = hashTreeEventV2({
       previousEventHash: this.eventHead,
       version,
@@ -327,7 +328,7 @@ export class MemoryTreeStoreV2 {
     const createdAt = input.createdAt ?? Date.now()
     assertNonNegativeIntegerV2(createdAt, 'createdAt')
     const opsJson = canonicalStringifyV2(input.ops)
-    const identityChangeJson = identityChange === null ? null : canonicalStringifyV2(identityChange)
+    const identityChangeJson = isNull(identityChange) ? null : canonicalStringifyV2(identityChange)
     const diffSummaryJson = canonicalStringifyV2(summarizeTreeDiffOpsV2(input.ops))
 
     const commit = this.authority.database.transaction(() => {
@@ -415,6 +416,7 @@ export class MemoryTreeStoreV2 {
     try {
       this.projectionIndex.persist(version, next, this.checkpoints)
     } catch {
+      // arch-guard:silent-catch-ok projection 是可重建派生物；返回 false 让调用方得到明确降级状态。
       projectionPersisted = false
     }
     return {
@@ -689,7 +691,7 @@ function reconstructTreeFromAuthorityV2(
       !snapshot ||
       snapshot.tree_hash !== current.stateHash ||
       snapshot.event_head_hash !== row.event_hash ||
-      snapshot.root_node_id !== current.nodes.find((node) => node.parentKey === null)?.stableKey ||
+      snapshot.root_node_id !== current.nodes.find((node) => isNull(node.parentKey))?.stableKey ||
       !current.nodes.some((node) => node.stableKey === snapshot.global_mainline_node_id) ||
       snapshot.created_by_run_id !== row.created_by_run_id ||
       snapshot.created_at !== row.created_at ||
@@ -716,7 +718,7 @@ function reconstructTreeFromAuthorityV2(
       replayedVersion: version,
     })
   }
-  if (version > 0 && rows.length === 0) {
+  if (version > 0 && isEmpty(rows)) {
     const snapshot = database
       .prepare(`SELECT * FROM memory_tree_snapshots WHERE version = ?`)
       .get(version) as MemoryTreeSnapshotRowV2 | undefined
@@ -747,7 +749,7 @@ function parseMemoryTreeDiffRowV2(row: MemoryTreeDiffRowV2): MemoryTreeDiffV2 {
       version: row.version,
     })
   }
-  if (!Array.isArray(parsed) || !parsed.every(isMemoryTreeDiffOpV2)) {
+  if (!isArray(parsed) || !parsed.every(isMemoryTreeDiffOpV2)) {
     throw new AppError('INVARIANT', 'TreeDiff v2 ops_json 含非法结构事件。', undefined, {
       version: row.version,
     })
@@ -765,8 +767,8 @@ function parseMemoryTreeDiffRowV2(row: MemoryTreeDiffRowV2): MemoryTreeDiffV2 {
   }
 }
 
-function parseIdentityChangeJsonV2(raw: string | null): MemoryTreeIdentityChangeV2 | null {
-  if (raw === null) return null
+function parseIdentityChangeJsonV2(raw: Nullable<string>): Nullable<MemoryTreeIdentityChangeV2> {
+  if (isNull(raw)) return null
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -789,25 +791,25 @@ function validateIdentityChangeV2(change: MemoryTreeIdentityChangeV2): void {
 }
 
 function isIdentityChangeV2(value: unknown): value is MemoryTreeIdentityChangeV2 {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
+  if (!isPlainObject(value)) return false
+  const record = value
   const keys = Object.keys(record).sort()
   return (
     keys.length === 3 &&
     keys[0] === 'epochId' &&
     keys[1] === 'predecessorId' &&
     keys[2] === 'sequence' &&
-    typeof record.epochId === 'string' &&
-    record.epochId.length > 0 &&
+    isString(record.epochId) &&
+    !isEmpty(record.epochId) &&
     Number.isSafeInteger(record.sequence) &&
     (record.sequence as number) > 0 &&
-    (record.predecessorId === null ||
-      (typeof record.predecessorId === 'string' && record.predecessorId.length > 0))
+    (isNull(record.predecessorId) ||
+      (isString(record.predecessorId) && !isEmpty(record.predecessorId)))
   )
 }
 
 function validateCommittedTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]): void {
-  if (nodes.length === 0) {
+  if (isEmpty(nodes)) {
     throw new AppError('VALIDATION', '已提交树状态不得为空。')
   }
   const byKey = new Map<string, MemoryTreeNodeStructV2>()
@@ -829,18 +831,18 @@ function validateCommittedTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]):
     }
     if (
       node.content.redacted !== (node.visibilityState === 'redacted') ||
-      (node.content.redacted && node.content.blobRef !== null)
+      (node.content.redacted && isNotNull(node.content.blobRef))
     ) {
       throw new AppError('VALIDATION', '树节点 redact 状态位与内容引用不一致。')
     }
     byKey.set(node.stableKey, node)
   }
-  const roots = nodes.filter((node) => node.parentKey === null)
+  const roots = nodes.filter((node) => isNull(node.parentKey))
   if (roots.length !== 1 || roots[0]?.stableKey !== 'root' || roots[0].nodeType !== 'root') {
     throw new AppError('VALIDATION', '已提交树必须且只能有一个 stableKey=root 的根节点。')
   }
   for (const node of nodes) {
-    if (node.parentKey !== null && !byKey.has(node.parentKey)) {
+    if (isNotNull(node.parentKey) && !byKey.has(node.parentKey)) {
       throw new AppError('VALIDATION', '树节点引用了不存在的父节点。', undefined, {
         stableKey: node.stableKey,
         parentKey: node.parentKey,
@@ -848,7 +850,7 @@ function validateCommittedTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]):
     }
     const visited = new Set<string>()
     let cursor: MemoryTreeNodeStructV2 | undefined = node
-    while (cursor && cursor.parentKey !== null) {
+    while (cursor && isNotNull(cursor.parentKey)) {
       if (visited.has(cursor.stableKey)) {
         throw new AppError('VALIDATION', '已提交树存在父链环。', undefined, {
           stableKey: node.stableKey,
@@ -866,7 +868,7 @@ function assertReferencedBlobsExistV2(
 ): void {
   const blobRefs = [
     ...new Set(
-      nodes.flatMap((node) => (node.content.blobRef === null ? [] : [node.content.blobRef]))
+      nodes.flatMap((node) => (isNull(node.content.blobRef) ? [] : [node.content.blobRef]))
     ),
   ]
   const lookup = database.prepare(`SELECT state FROM memory_content_blobs WHERE blob_id = ?`)
@@ -952,7 +954,7 @@ function validateDreamRunCommitV2(
   if (commit.acceptedCount + commit.rejectedCount !== commit.candidateCount) {
     throw new AppError('VALIDATION', 'Dream 候选接受/拒绝计数与总数不一致。')
   }
-  if (commit.finishedAt !== undefined) {
+  if (!isUndefined(commit.finishedAt)) {
     assertNonNegativeIntegerV2(commit.finishedAt, 'dreamRunCommit.finishedAt')
   }
 }

@@ -69,4 +69,3 @@ seam 注册面与贡献注册表一样是两阶段的：
 
 单个钩子抛错只记诊断 `mod.seam-handler-failed` 并跳过该钩子，**绝不冒泡打断主链**。
 同步 seam 的钩子返回 Promise → `mod.seam-sync-contract-violation`，本次结果被忽略。
-</content>

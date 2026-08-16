@@ -5,8 +5,8 @@ import { MemoryStorageErrorCodesV2 } from './ErrorCodes'
 /**
  * OS 安全存储中的 wrapping root 端口。
  *
- * memory 包永远不 import Electron、Keychain 或 DPAPI。Desktop 可用 safeStorage 包装这一个
- * root，headless host 可接平台 keychain；keyring 只持 `wrappingRootId` 和被包装字节。
+ * memory 包永远不 import Electron、Keychain 或 DPAPI。桌面宿主可用系统安全存储包装这一个
+ * root，headless 宿主可接平台密钥服务；keyring 只持 `wrappingRootId` 和被包装字节。
  */
 export interface MemoryWrappingRootV2 {
   /** 稳定引用 id，格式冻结为 `wr-<小写 hex>`；不是密钥本身。 */

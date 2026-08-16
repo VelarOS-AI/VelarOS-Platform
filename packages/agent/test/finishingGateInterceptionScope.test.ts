@@ -1,10 +1,10 @@
-// 用途：把 2026-08-05「拦截三分法」裁决（Desktop `docs/design-principles.md` §7）钉成断言。
+// 用途：锁定收尾门的拦截边界，避免把提示词层工作流重新变成运行时强制门。
 //
 // 收尾门只许拦「不可逆的伤害」或「已证明的空转」，永远不许拦「我希望模型按某个流程走」。
-// 两条被处决的流程门在这里防回潮：
+// 两条已移除的流程门在这里防止回归：
 //  ① `execution-plan-required`——计划步骤没收束就不许收尾（连拦三轮把会话判 error）；
 //  ② 模型自建 goal 反向锁死会话——收尾门只在用户**显式**开启目标模式时才生效。
-// 同批处决的方案模式在执行模式注册表里也不许复活。
+// 已移除的方案模式也不得通过执行模式注册表复活。
 import { describe, expect, test } from 'bun:test'
 
 import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'

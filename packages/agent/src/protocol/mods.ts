@@ -5,7 +5,7 @@
 // 第二级 = Agent 领域 Loader（`@velaros-ai/agent` 的 `mods/`）：owner module 激活后
 // 加载本 manifest，把贡献轴分发进各自的注册面。
 //
-// 铁律（蓝图 §3.4 C26）：**validate 先于任何归一化**——冲突、非法、缺绑定一律拒载并给可读
+// 铁律：**validate 先于任何归一化**——冲突、非法、缺绑定一律拒载并给可读
 // 诊断，绝不静默降级、绝不静默丢弃。本文件的宽容只发生在**形态**层（标量→单元素数组、
 // 首尾空白），语义层零宽容。
 import { z } from 'zod'
@@ -102,7 +102,7 @@ function satisfiesComparator(version: SemverVersion, comparator: SemverComparato
  *
  * 支持形态：`*` / `x` / `1.2.3` / `=1.2.3` / `^1.2.3` / `~1.2.3` / `>=1.2.3` / `<2.0.0`，
  * 空白分隔 = 合取，`||` = 析取。刻意不实现 hyphen range 与预发布优先级——manifest 兼容轴
- * 只做大版本判定（蓝图 §3.2），复杂 range 属 npm 求解器职责（裁决 4：不写依赖求解器）。
+ * 只做兼容范围判定；复杂依赖求解属于包管理器职责，本协议不实现依赖求解器。
  */
 function isSemverRangeParsable(range: string): boolean {
   const clauses = range.split('||')
@@ -133,7 +133,7 @@ function satisfiesSemverRange(version: string, range: string): boolean {
 /**
  * Agent 领域贡献轴闭集。
  *
- * 贡献点由官方演进，mod 不能发明新轴（蓝图 §3.2）。壳级 UI 轴（pages/settingsRenderers/
+ * 贡献点由官方演进，mod 不能发明新轴。壳级 UI 轴（pages/settingsRenderers/
  * surfaces/tours）不在 Agent 主干——它们是产品壳的不透明信封，由壳自己的 manifest 面拥有。
  */
 const AgentModContributionAxisNames = [
@@ -153,7 +153,7 @@ type AgentModContributionAxisName = (typeof AgentModContributionAxisNames)[numbe
 const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 
 /**
- * 拦截 seam 闭集（裁决 9 机制②）。
+ * 拦截 seam 闭集。
  *
  * mod 只能挂接，不能发明新钩子。**哪些 kind 今天真有派发点**由实现侧的
  * `WiredSeamKindsByDispatcher`（`../mods/AgentModSeams`）逐条登记，本闭集不复述第二份；
@@ -212,7 +212,7 @@ const SemverVersionSchema = TrimmedIdSchema.refine(
 
 // ─── 各轴贡献条目 ────────────────────────────────────────────────────────────
 
-/** 工具贡献：`name` 是全宿主唯一键（裁决 5 工具名唯一性，冲突拒载）。 */
+/** 工具贡献：`name` 是全宿主唯一键，冲突时拒载。 */
 const AgentModToolContributionSchema = z.strictObject({
   name: CanonicalToolIdSchema,
   categoryId: TrimmedIdSchema.optional(),
@@ -264,23 +264,20 @@ const AgentModSkillContributionSchema = z.strictObject({
 type AgentModSkillContribution = z.infer<typeof AgentModSkillContributionSchema>
 
 /**
- * space 贡献的纯数据面（蓝图 §3.3：icon 降格为 icon-id，不接受组件/函数引用）。
+ * space 贡献只包含数据：图标使用语义标识符，manifest 不接受组件或函数引用。
  *
  * ## 今天真被消费的只有「工具配方」那几格
  *
  * `id` / `identityStrategy` / `boundCapabilityIds` / `inheritsSpaceIds` / `toolCategoryIds` /
  * `residentToolNames` 有真实读者（宿主的工具注册表、常驻集与能力门）。其余几格
  * （`descriptor` / `iconId` / `surfaceProfileId` / `turnContextSourceIds` / `promptSegmentIds`）
- * **Desktop 尚未消费**：空间的文案、图标、每回合上下文源白名单，权威在壳内的枚举表
- * （`apps/desktop/src/shared/capabilities/DesktopCapabilityScopeDescriptors.ts`）。
+ * 必须由产品宿主显式投影。Platform 保留这些可选字段，避免不同宿主另造 manifest 形状。
  *
- * 因此它们一律 optional，且随包官方 mod **不再声明**——声明了也不生效的字段是欺骗性装饰，
- * 会让作者去改 manifest 里的标题然后重启发现什么都没变。schema 保留是给「将来翻转权威、
- * 让壳的 descriptor 表从 mod 快照编译」留位置（那是 mod 主干重建批的事），不是给今天用的。
+ * 宿主必须公开自己消费哪些字段；不支持的字段经 partial activation 报告，不能伪装成已生效。
  */
 const AgentModSpaceContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
-  /** **Desktop 尚未消费**：空间文案权威在壳内枚举表（见本 schema 头部说明）。 */
+  /** 可选展示元数据；是否展示以及展示位置由产品宿主决定。 */
   descriptor: z
     .strictObject({
       label: z.string(),
@@ -290,19 +287,19 @@ const AgentModSpaceContributionSchema = z.strictObject({
       localeKey: TrimmedIdSchema.optional(),
     })
     .optional(),
-  /** **Desktop 尚未消费**：图标语义名是壳的闭集（见本 schema 头部说明）。 */
+  /** 由产品宿主解析的语义图标标识符。 */
   iconId: TrimmedIdSchema.optional(),
   identityStrategy: z.enum(['ordinal', 'path', 'origin']),
-  /** **Desktop 尚未消费**：surface 分档已按「谁在调用」收敛，与空间不同轴。 */
+  /** 由宿主选择的可选产品界面档案。 */
   surfaceProfileId: TrimmedIdSchema.optional(),
   boundCapabilityIds: tolerantArray(TrimmedIdSchema).optional(),
   /** 复用另一个空间已经拼装好的职责包；用于 Game 等项目型空间继承 Project 配方。 */
   inheritsSpaceIds: tolerantArray(TrimmedIdSchema).optional(),
   toolCategoryIds: tolerantArray(TrimmedIdSchema).optional(),
   residentToolNames: tolerantArray(TrimmedIdSchema).optional(),
-  /** **Desktop 尚未消费**：每回合上下文源白名单权威在壳内枚举表（见本 schema 头部说明）。 */
+  /** 宿主可为此空间启用的上下文源标识符。 */
   turnContextSourceIds: tolerantArray(TrimmedIdSchema).optional(),
-  /** **Desktop 尚未消费**：提示词段按 mod 装载整体落地，不按空间二次过滤。 */
+  /** 宿主可为此空间投影的提示词段标识符。 */
   promptSegmentIds: tolerantArray(TrimmedIdSchema).optional(),
 })
 type AgentModSpaceContribution = z.infer<typeof AgentModSpaceContributionSchema>
@@ -341,7 +338,7 @@ type AgentModExecutionModeContribution = z.infer<
   typeof AgentModExecutionModeContributionSchema
 >
 
-/** 钩子挂接声明（裁决 9 机制②）；handler 由运行态绑定提供，缺绑定拒载。 */
+/** 钩子挂接声明；handler 由运行态绑定提供，缺绑定拒载。 */
 const AgentModHookContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
   seam: AgentModSeamKindSchema,
@@ -367,13 +364,13 @@ type AgentModContributes = z.infer<typeof AgentModContributesSchema>
 
 // ─── manifest 龙骨 ───────────────────────────────────────────────────────────
 
-/** manifest 自身 schema 版本：演进通道，加字段靠它平滑（蓝图 §3.2）。 */
+/** manifest 自身 schema 版本：新增字段和兼容迁移必须通过此版本演进。 */
 const AgentModManifestSchemaVersion = 1 as const
 
 /**
  * pack 目录内的**分节单文件 manifest** 文件名（宿主组装入口按此名读取）。
  *
- * 蓝图 v6 §8.3：一个 mod = 一个 `velaros.mod.json`，内分 `module` / `agent` / `ui` 三节。
+ * 一个 mod 使用一个 `velaros.mod.json`，内分 `module` / `agent` / `ui` 三节。
  * 旧的 `velaros.agent.mod.json` 已 clean break 退役，不留文件名兼容。
  */
 const VelarosModManifestFileName = 'velaros.mod.json'
@@ -419,24 +416,24 @@ const AgentModManifestSchema = z.strictObject({
   /**
    * 声明的能力 scope。
    *
-   * v1 只是声明与审计元数据——真正的能力 enforcement 是尚未建成的层（蓝图 §3.2 注）；
+   * v1 只是声明与审计元数据；运行时能力 enforcement 由 capability broker 负责；
    * 既有工具类别可见性门不消费本字段，manifest 不得声称「走七门」。
    */
   permissions: tolerantArray(TrimmedIdSchema).optional(),
-  /** 硬需求轴：宿主不支持其中任一轴 → 拒载（不做残废激活，蓝图 §3.4 partial-activation 第 3 条）。 */
+  /** 硬需求轴：宿主不支持其中任一轴时拒载，不做残缺激活。 */
   requiredAxes: tolerantArray(AgentModContributionAxisNameSchema).optional(),
-  /** 付费资格声明（蓝图 §3.9 占位）：纯数据，不含价格、不做判定；核验住在 Cloud + 市场。 */
+  /** 付费资格声明：纯数据，不含价格、不做判定；核验由分发服务和产品宿主负责。 */
   entitlements: tolerantArray(TrimmedIdSchema).optional(),
   budget: z
     .strictObject({ residentPromptTokens: z.number().int().nonnegative().optional() })
     .optional(),
-  /** i18n 文案包（蓝图 §3.8）：v1 只定死字段形状，运行时合并链随市场链路。 */
+  /** i18n 文案包：v1 固定字段形状，是否合并及回退顺序由产品宿主公开。 */
   locale: z.record(TrimmedIdSchema, z.record(TrimmedIdSchema, z.string())).optional(),
   contributes: AgentModContributesSchema.default({}),
 })
 type AgentModManifest = z.infer<typeof AgentModManifestSchema>
 
-// ─── 分节单文件信封 velaros.mod.json（蓝图 v6 §8.3） ─────────────────────────
+// ─── 分节单文件信封 velaros.mod.json ────────────────────────────────────────
 //
 // 铁律 —— **各 owner 只读各节**：
 //   `module` → Kernel 读（窄 module descriptor：谁、什么版本、提供/依赖什么能力、怎么隔离）

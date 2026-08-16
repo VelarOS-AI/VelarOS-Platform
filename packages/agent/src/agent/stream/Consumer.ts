@@ -463,7 +463,7 @@ class StreamConsumer {
     const streamIterator = fullStream[Symbol.asyncIterator]();
     let shouldReturnStreamIterator = false;
     try {
-      // TODO[主链路-44]: 消费 AI SDK fullStream；文本/reasoning 直接变成 UI 增量，tool-call 会进入 ToolExecutor。
+      // 消费 AI SDK fullStream；文本和 reasoning 形成宿主增量，tool-call 进入 ToolExecutor。
       while (true) {
         const next = await this.readNextStreamPart(
           streamIterator,
@@ -491,7 +491,7 @@ class StreamConsumer {
         );
 
         if (part.type === "text-delta") {
-          // TODO[主链路-45]: 普通文本增量走 ExecutionEventBus.emitTextDelta，最终由 Desktop stream bridge 发回 renderer。
+          // 普通文本增量走 ExecutionEventBus.emitTextDelta，最终由宿主 stream bridge 发送到渲染端。
           flushReasoningTail();
           hasTextOutput = !!part.text || hasTextOutput;
           emitAssistantTextDelta(part.text);

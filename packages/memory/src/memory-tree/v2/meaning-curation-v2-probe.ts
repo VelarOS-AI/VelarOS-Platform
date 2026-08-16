@@ -35,6 +35,7 @@ function expectAppError(code: string, run: () => unknown, message: string): void
   try {
     run()
   } catch (error) {
+    // arch-guard:silent-catch-ok 探针在下方断言捕获到的错误类型与错误码。
     observed = error
   }
   check(observed instanceof AppError, `${message}: 应抛 AppError`)
@@ -350,6 +351,7 @@ function runMeaningCurationProbeV2(): void {
         try {
           return readFileSync(path)
         } catch {
+          // arch-guard:silent-catch-ok WAL 文件允许不存在；空缓冲区就是该探针的显式缺席值。
           return Buffer.alloc(0)
         }
       })

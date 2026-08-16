@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
@@ -78,7 +78,8 @@
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -104,11 +105,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Agent.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/agent"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/agent#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   }
 }

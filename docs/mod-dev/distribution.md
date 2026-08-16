@@ -1,162 +1,60 @@
-# 分发：bundled / installed / 市场 / 整合包
+# 分发：bundled、installed 与市场包
 
-一个 mod 到达用户机器有四条路。它们的**信任级、寻址方式、失败面**都不同。
+mod 到达用户设备的方式会改变其信任级、寻址方式和失败边界。本页只描述 Platform 的公开契约；
+具体产品宿主必须单独公开自己的安装和更新策略。
 
----
+## Bundled pack
 
-## 一、bundled = 编译期依赖
+bundled pack 是产品构建图中的普通依赖，不是运行时下载物。构建失败应在发布前暴露，运行时不再
+动态解析它的代码来源。
 
-**`bundled` 不是「随包下载物」，是构建图上的一条普通依赖。**
-谁编进来谁负责，构建图解析不了就是**构建期红**——运行时没有这一类失败面。
+Kernel 使用 `KernelBundledPack` 描述随包模块，`bundled:<moduleId>` 只是身份 URI，不能传给
+动态 `import`。产品宿主静态导入能力包的 `create*KernelModule()`，再通过
+`createBundledModPack` 和 `bootKernelDaemon({ modPacks })` 注入。Kernel 不应反向依赖具体产品能力。
 
-### Kernel 侧
+Agent 使用 `assembleAgentMods` 装配 bundled pack。缺省包含
+`createBuiltinAgentModPackage()`；宿主可传空数组显式关闭。bundled 先于 installed pack 注册，
+但顺序只决定谁先占用稳定主键，冲突始终拒载，绝不以“后加载覆盖”处理。
 
-`packages/kernel/src/serve/daemon/bundled-packs.ts`：
+## Installed pack
 
-```ts
-export interface KernelBundledPack {
-  readonly id: string
-  readonly version: string
-  readonly provides: readonly string[]
-  /** 编译期就在手的模块定义；specifier 只是身份回显，永不被 import。 */
-  readonly module: KernelModuleDefinition
-}
+installed pack 至少包含一个目录和 `velaros.mod.json`。Platform 公开
+`AgentModPackReader`、`AgentModHostProfile` 和 Loader 生命周期；产品宿主负责：
 
-export function bundledPackSpecifier(moduleId: string): string   // → `bundled:${moduleId}`
-export function createBundledModPack(input: { id; module; version?; provides? }): KernelBundledPack
-export function toBundledPackRecords(packs?): readonly KernelModPackRecord[]
-export function registerBundledPacks(store: KernelModStore, packs?): readonly KernelModPackRecord[]
-export const BundledKernelPacks: readonly KernelBundledPack[]
-```
+- 版本化寻址、注册表和原子写入；
+- `readManifest` 与代码型贡献所需的 `loadBindings`；
+- 启用、停用、升级、卸载和崩溃恢复；
+- 信任级映射、签名验证、权限审批和用户可见诊断。
 
-**`specifier` 是身份 URI，不是磁盘路径**：installed pack 的 specifier 可 import，
-bundled pack 的是 `` bundled:<moduleId> ``——带 scheme 的形态把两者机械分开，
-避免有人拿它去 `import`。
+如果 reader 没有为 `tools` 或 `hooks` 返回绑定，Loader 会以 `mod.binding-missing` 拒载，
+不会把代码型贡献降级成空实现。停用只移除运行态贡献；数据删除必须是独立、明确确认的步骤。
 
-`BundledKernelPacks` 里今天只有三个 **sidecar 目录桩**
-（`system.agent` / `system.model` / `system.browser`）：
-能力目录在 Kernel、实现在产品那一侧，`activate` 恒抛错。
-它们存在的理由是**目录可见性**——瘦客户端 handshake 前就得知道这个 Kernel 上有哪些能力。
+## 市场分发
 
-**内核不 import 任何具体能力包。** 具体能力的 bundled pack 归**宿主**的构建图：
-宿主静态 import 能力包的 `create*KernelModule()`，用 `createBundledModPack` 折成记录，
-经 `bootKernelDaemon({ modPacks })` 注入。
-让内核直接 import 能力包 = 把反向依赖焊进内核，架构门当场红。
+`marketplace-signed` 只有在宿主完成以下闭环后才可用：
 
-整批开关：`VELAROS_KERNEL_AUTO_SYSTEM_PACKS=0`（或 `false`）关掉 bundled 登记。
-注意 `registerBundledPacks` **刻意不传 `enabled`**——随包默认是「开」，
-但用户经 `mods.setEnabled` 停用过的 pack 必须跨重启保持关闭。
+1. 发布方私钥签名和应用内置公钥验证；
+2. 精确版本与摘要寻址，禁止 latest-only；
+3. 吊销、原子安装、失败回滚和可恢复升级；
+4. 权限声明与实际能力 broker 的一致验证；
+5. 可审计的发布者身份和安全响应渠道。
 
-### Agent 侧
+单独的 SHA-256 只能发现传输损坏，不能证明发布者身份。在完整闭环落地前，宿主必须对
+`marketplace-signed` fail closed。
 
-`assembleAgentMods` 的 `bundled` 缺省 = `[createBuiltinAgentModPackage()]`，
-即随包官方内置轴 `velaros.agent.builtin`。传空数组可显式关掉
-（Desktop 的 `activatePack` 就是这么做的，避免重复注册）。
+## 整合包
 
-装载顺序：**bundled 先、pack 后**（bundled 是有序数组，pack 平铺）。
-顺序只决定「谁先占住主键」——**冲突一律拒载并留诊断，不存在后者覆盖前者的加载顺序语义。**
+整合包应是精确列出成员、版本、摘要和顺序的 lockfile，不是运行时依赖求解器。冲突由整合包
+作者在发布时解决，运行时只按确定顺序平铺装载，并沿用普通 pack 的主键冲突规则。
 
----
+## 认证与测试
 
-## 二、installed = 目录
+公开分发至少需要：
 
-一个目录 + 一份 `velaros.mod.json`。Desktop 的落法：
+- schema、架构边界、权限和打包内容的机械检查；
+- 对 bundled pack 的持续集成和真实运行场景；
+- 对外部 pack 的隔离审核与抽样执行；
+- 明确记录未测试的宿主、平台和能力范围。
 
-| | |
-| --- | --- |
-| 安装根 | `storage/mods/<packId>/`（`storagePathService.getModPacksDir()`） |
-| 注册表 | `storage/mods/mod-registry.json`（`{ disabled?: string[]; external?: string[] }`） |
-| 记录类型 | `DesktopAgentModPackRecord extends AgentModPackDescriptorLike`，带 `kind: 'system' \| 'user' \| 'contrib'` 与 `ui: unknown` |
-| 服务 | `DesktopModService`：`listPacks()` / `getOverview()` / `setEnabled(id, enabled)` / `installFromDirectory(directory)` / `assembleAgentAxis()` |
-| 存储层 | `DesktopAgentModPackStore`：`list()` / `setEnabled(id, enabled)` / `installFromDirectory(directory)` |
-| reader | `createDesktopAgentModPackReader()` —— **只实现 `readManifest`**，没有 `loadBindings` |
-
-`kind` 的取法：外部登记目录 → `'contrib'`；安装根下的目录 → `'user'`；
-`'system'` 今天只出现在类型联合里。版本读不出时回落 `'0.0.0'`。
-
-### 已知缺口（如实登记）
-
-- **没有 uninstall**：`DesktopModService` 与 `DesktopAgentModPackStore` 都不提供卸载。
-  disable 是唯一的移除路径。3.7 的两段式 uninstall **契约已定，实装未开始**。
-- **没有 `loadBindings`**：installed pack 拿不到运行态绑定，
-  因此**贡献不了 `tools` 与 `hooks`**（缺绑定即拒载）。
-- **信任级门只放 bundled-official**：见 [getting-started.md §六](./getting-started.md#六现状与限制先读这条)。
-
----
-
-## 三、市场
-
-市场链路今天走的是**旧插件管道**（`AppResourcePluginInstaller`），
-它与 mod 的 pack 存储是两套东西。现状与缺口在
-[integration.md §三](./integration.md#三旧插件市场--appresourceplugin--p5-收敛对象)：
-
-| 能力 | 现状 |
-| --- | --- |
-| sha256 自校验 | ✅ 有（**防传输损坏，不是作者认证**） |
-| Ed25519 签名 / 内置公钥验签 / 吊销名单 | ❌ 欠账 |
-| 版本化寻址（去 latest-only） | ❌ 欠账 |
-| 回滚 | ❌ 欠账 |
-| 原子安装 | ⚠️ `rm` + `rename` 两步，中间崩溃无恢复 |
-
-**签名底线的判决**：`marketplace-signed` 需要「发布方私钥签名 / App 内置公钥验签 / 吊销名单」。
-可挪用的现成 Ed25519 基建是邀请码签发脚本 `invite-code.mjs`
-（私钥签发 + App 内置公钥 WebCrypto 验签）。
-落地时点判决：**版本化寻址 + 签名验签 + 回滚 + id 闭集开放化随第一个非 bundled 消费者先行落地**，
-不等 M5——因为独立分发一旦发生，「app 升级静默炸外部包」就从假想变成现实。
-
-**在签名与版本化寻址就绪之前，不要把 `trust: 'marketplace-signed'` 当成一条可用路径。**
-它的加载路径实例数今天是零。
-
----
-
-## 四、整合包（modpack）= lockfile
-
-**L3 占位，未实现。**
-
-判决只有一句：**整合包 = lockfile**——精确枚举成员 + 版本 + 顺序。
-冲突复杂度推给整合包**作者策展时**解决，运行时只做**平铺加载 + 确定性顺序**。
-
-**不写依赖求解器。** mod↔mod 的 `depends` / `conflicts` 字段
-**不预置进 v1 schema**（M5 前零消费者，焊进冻结 schema 违反自家 YAGNI 律）；
-真需要时靠 `manifestSchemaVersion` 平滑加字段。
-
-> **先例参照**：Minecraft 的 modpack 生态几十年只做对了一件事——
-> 整合包是一份**被人策展过的清单**，不是一个求解器的输出。
-> 求解器让作者以为冲突会被自动解决，于是没人去策展；
-> lockfile 让作者必须当场面对冲突，而这正是整合包的价值所在。
-
-首个真消费者是**官方出厂包**（= 当前完整产品形态，最好的自证）。
-用户级整合包语义（导入的合并 / 替换、已有配置去向、回滚、切包数据归属）
-推到市场链路就绪之后——**不为零人生态预建用户级导入语义**。
-
----
-
-## 五、认证 = agent-lab 模型
-
-mod 的质量门不是单测，是**真机跑分**。成本现实：一轮摩擦电池 ~45 分钟 + BYOK token +
-LLM 非确定性，**不可能**做到「每 mod × 每内核版本全量跑」。
-
-因此认证分三档：
-
-| 对象 | 认证方式 |
-| --- | --- |
-| **bundled 官方 mod** | 随主 friction 门跑（既有流程） |
-| **外部 mod 上架** | **官方审核 + 抽样跑电池**（非全跑） |
-| **mod 自带电池** | manifest 的 `battery` 字段指向旅程电池入口；**在认证机沙箱内执行 mod 的任意 JS** |
-
-三条约束：
-
-1. **认证是抽检，不是普适门。**
-2. **认证环境必须隔离**，且 hook 桥无自批准权限——
-   跑一个陌生 mod 的电池 = 在认证机上执行陌生代码。
-3. 电池形态铁律：**「同一会话持续推进一个任务」的连续旅程**，
-   不写散装单测 / 逐案例开会话的探针。
-
-构建期还有一层机械检查（`arch-guard` 的 `architectureChecks` 数组）：
-
-- `modManifestIntegrity`：bundled mod manifest 过 schema + 贡献引用存在性 + `engines` 字段存在；
-- `noEnumDispatchRegression`：对空间枚举成员的直接文本引用数做**棘轮**，只减不增。
-
-仓库**不设单测层**——质量门只有两层：构建期 check 链 + agent-lab 真机跑分。
-写 mod 时不要为它新建测试目录；要锁的规则做成 check 或 agent-lab 场景。
-</content>
+执行第三方 pack 自带的测试代码等同于执行第三方代码，必须在隔离环境中进行，不能继承发布机
+凭据，也不能拥有自动批准敏感操作的权限。

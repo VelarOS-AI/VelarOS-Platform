@@ -6,7 +6,14 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,9 +21,8 @@ import { fileURLToPath } from 'node:url'
 import { test } from 'bun:test'
 
 const cliPath = new URL('../dist/cli.js', import.meta.url)
-const installedBinPath = fileURLToPath(
-  new URL('../../../node_modules/.bin/velaros', import.meta.url),
-)
+const packageRoot = new URL('../', import.meta.url)
+const packageManifestPath = new URL('../package.json', import.meta.url)
 
 test('velaros cli composes product-owned namespaces through registration', async () => {
   const { createVelarosCliRouter } = await import(cliPath.href)
@@ -203,8 +209,14 @@ test('velaros cli module import is side-effect-free', () => {
   assert.equal(result.stderr, '')
 })
 
-test('installed velaros bin executes through its package-manager symlink', () => {
-  const result = spawnSync(installedBinPath, ['help'], { encoding: 'utf8' })
+test('published velaros bin target is executable through package metadata', () => {
+  const manifest = JSON.parse(readFileSync(packageManifestPath, 'utf8'))
+  assert.equal(manifest.bin?.velaros, './dist/bin.js')
+
+  const declaredBinPath = fileURLToPath(new URL(manifest.bin.velaros, packageRoot))
+  assert.notEqual(statSync(declaredBinPath).mode & 0o111, 0)
+
+  const result = spawnSync(declaredBinPath, ['help'], { encoding: 'utf8' })
 
   assert.equal(result.status, 0)
   assert.match(result.stdout, /VelarOS CLI/)

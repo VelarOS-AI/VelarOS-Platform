@@ -72,7 +72,7 @@
 判定器是 manifest 契约里自带的 `satisfiesSemverRange`（单源，Loader 复用）。
 支持形态：`*` / `x` / `1.2.3` / `=1.2.3` / `^1.2.3` / `~1.2.3` / `>=1.2.3` / `<2.0.0`，
 空白分隔 = 合取，`||` = 析取。**刻意不实现** hyphen range 与预发布优先级——
-manifest 兼容轴只做大版本判定，复杂 range 是 npm 求解器的职责（裁决 4：不写依赖求解器）。
+manifest 兼容轴只做版本范围判定；复杂依赖求解属于包管理器职责，本协议不实现依赖求解器。
 range 或 version 非法一律返回 `false`（fail-closed）。
 
 | 字段 | 对什么 | 谁检查 |
@@ -118,44 +118,20 @@ interface AgentModBindings {
 
 ---
 
-## 三、本地安装（Desktop）
+## 三、在产品宿主中安装
 
-Desktop 的 pack 存储与安装器在 `apps/desktop/src/main/storage/kernel/AgentModPackStore.ts`：
+Platform 定义 pack 格式、reader 端口和装载生命周期，但不规定某个产品的安装目录、注册表、
+设置界面或进程间通信协议。产品宿主负责实现：
 
-- 安装根：`storage/mods/<packId>/`
-- 注册表：`storage/mods/mod-registry.json`（记 `disabled[]` 与 `external[]`）
+- pack 发现、持久化和版本化寻址；
+- `AgentModPackReader.readManifest`，以及代码型贡献需要的 `loadBindings`；
+- 启用、停用、升级、卸载和恢复策略；
+- 签名验证、信任级映射、权限审批和用户可见诊断。
 
-三条路径：
-
-**① 从目录安装（原地登记，不复制）**
-
-`DesktopModService.installFromDirectory(directory)`
-（`apps/desktop/src/main/kernel/ModService.ts`）→
-`DesktopAgentModPackStore.installFromDirectory(directory)`。
-把目录路径登记进注册表的 `external[]`，pack `kind` 记为 `'contrib'`。
-UI 入口：设置页 → Mod 注册表 → 「从目录安装」（`settings.modsInstallAction`）。
-IPC 通道 `system:install-mod-from-directory`。
-
-**② 放进安装根**：`storage/mods/<packId>/velaros.mod.json`，`kind` = `'user'`。
-
-**③ bundled**：编译期依赖，走构建图不走安装器。见 [distribution.md](./distribution.md)。
-
-### 启停免重启
-
-`DesktopModService.setEnabled(id, enabled)` → IPC `system:set-mod-enabled`，
-返回 `{ ok, reloadRequired }`。
-
-- **启用**走 `DesktopAgentModRuntime.activatePack(pack)`，内部
-  `assembleAgentMods({ host, loader, bundled: [], packs: [pack], reader })`——
-  `bundled: []` 是刻意的，避免把随包 mod 重复注册一遍。
-- **停用**走 `loader.deactivate(modId)`：摘除该 mod 的全部贡献与钩子，留 `mod.deactivated` 诊断。
-  **持久化数据一律保留**（orphaned-but-preserved），重新启用即复活。
-
-`reloadRequired` 为真时说明这次改动需要重启才能完全生效（例如某些轴的落点在装配期一次性接线）。
-
-> **没有 uninstall。** `DesktopModService` 与 `DesktopAgentModPackStore` 都不提供卸载方法，
-> disable 是唯一的移除路径。3.7 契约里的「两段式 uninstall + 显式确认清理数据」
-> **契约已定，实装未开始**。
+本地开发应使用目标宿主公开的安装流程。不要依赖未公开的目录结构或内部接口。
+停用必须调用 `loader.deactivate(modId)` 摘除贡献和钩子；用户数据默认保留，清理数据必须是
+独立、明确确认的操作。bundled pack 是编译期依赖，不经过运行时安装器，详见
+[distribution.md](./distribution.md)。
 
 ---
 
@@ -289,36 +265,16 @@ interface AgentModPackReader {
 
 ---
 
-## 六、现状与限制（先读这条）
+## 六、宿主兼容性（先读这条）
 
-契约允许的和今天真能跑的不是一回事。以 **Desktop 宿主**为准：
+manifest 能通过解析，不代表每个产品宿主都支持全部行为。作者在发布前必须核对目标宿主公开的
+`AgentModHostProfile`：
 
-**① 外部 pack 的信任级门是关着的。**
-`createDesktopAgentModHostProfile` 写死 `allowedTrustLevels: ['bundled-official']`。
-`local-dev` / `marketplace-signed` 的 pack 一律 `mod.trust-not-allowed`。
-换句话说：今天从目录装进来的 pack，只有把 `trust` 写成 `bundled-official` 才进得了门。
+1. `allowedTrustLevels` 是否允许 pack 的信任级；
+2. `supportedAxes` 是否包含所需贡献轴；
+3. pack reader 是否为 `tools` 和 `hooks` 提供运行态绑定；
+4. 目标宿主实际派发哪些 seam kind；
+5. UI 声明是否属于该宿主公开支持的产品协议。
 
-**② Desktop 的 pack reader 没有 `loadBindings`。**
-`createDesktopAgentModPackReader`（`AgentModPackStore.ts`）只实现了 `readManifest`。
-`loadBindings` 是可选端口，未实现 = 外部 pack 拿不到运行态绑定 = **贡献不了 `tools` 与 `hooks`**
-（这两轴 `PayloadRequiredAxes` 必需绑定，缺绑定即 `mod.binding-missing` 拒载）。
-
-**③ 九轴里只有三轴在 Desktop 真接线。**
-`DesktopAgentModUnroutedAxes` 列的六轴——`toolCategories` / `skills` / `subAgentTypes` /
-`executionModes` / `spaces` / `turnContextSources`——注册表收得下，但宿主还没把它们接进任何
-运行时消费者，会在设置页显示为「未接线轴」。真正落地的是 `tools` / `promptSegments` / `hooks`。
-
-**①②③ 合起来的结论**：今天在 Desktop 上侧载一个外部 pack，实际能生效的组合是空的——
-它要么因信任级被拒，要么只能贡献纯数据轴而那些轴又未接线。
-**外部 pack 目前的实际价值是走通发现 / 校验 / 诊断链路，不是交付功能。**
-真正在跑的 mod 只有一个：随包官方内置轴 `velaros.agent.builtin`
-（`BuiltinAgentModId`，`createBuiltinAgentModPackage()`），它与外部 mod 走**完全相同**的
-validate → resolve → activate 管线——这是「注册机不空转」的自食狗粮验收线。
-
-**④ 壳级三轴的注册表还不存在。**
-`ui.settings` 已实装（见 [axes/ui-settings.md](./axes/ui-settings.md)）；
-`ui.dock` / `ui.actions` / `ui.sidePanels` 与三档渲染梯是**契约已定、实装批次 W1–W3**，
-今天壳里对应的位置还是硬编码 JSX 与计算数组。见 [axes/ui-shell.md](./axes/ui-shell.md)。
-
-**⑤ 15 个 seam kind 里只有 4 个有派发点。** 见 [seams.md](./seams.md)。
-</content>
+Platform 自带 `velaros.agent.builtin`，并让它经过与外部 pack 相同的
+validate → resolve → activate 管线。它验证装载机制，不代表任何具体产品宿主的全部兼容范围。

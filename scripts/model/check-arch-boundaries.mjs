@@ -13,7 +13,7 @@ const failures = []
 
 const expected = {
   name: '@velaros-ai/model',
-  repository: 'git+https://github.com/VelarOS-AI/VelarOS-Model.git',
+  repository: 'git+https://github.com/VelarOS-AI/VelarOS-Platform.git',
 }
 
 // 版本锁步已于 2026-08-02 丢弃:包版本各自独立走 semver(见 README「版本方案」与
@@ -33,8 +33,14 @@ if (!expectedPlatform) {
 if (manifest.repository?.url !== expected.repository) {
   failures.push(`repository must be ${expected.repository}`)
 }
-if (manifest.publishConfig?.access !== 'restricted') {
-  failures.push('publishConfig.access must remain restricted')
+if (manifest.license !== 'Apache-2.0') {
+  failures.push('license must be Apache-2.0')
+}
+if (!manifest.files?.includes('LICENSE')) {
+  failures.push('files must include LICENSE')
+}
+if (manifest.publishConfig?.access !== 'public') {
+  failures.push('publishConfig.access must be public')
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {
   failures.push('publishConfig.registry must remain GitHub Packages')

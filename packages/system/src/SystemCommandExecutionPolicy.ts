@@ -114,8 +114,7 @@ export function isSystemShellCommandReadOnly(command: string): boolean {
       return !!subcommand && !mutatingGitCommands.has(subcommand.toLowerCase())
     }
     const vetoes = mutatingArgumentsByCommand[executable]
-    if (vetoes && args.some((arg) => vetoes.some((pattern) => pattern.test(arg)))) return false
-    return true
+    return !(vetoes && args.some((arg) => vetoes.some((pattern) => pattern.test(arg))))
   })
 }
 

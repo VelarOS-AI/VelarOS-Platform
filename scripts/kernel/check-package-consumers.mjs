@@ -54,7 +54,7 @@ function assertPackageMetadata(manifest, directoryName) {
     typeof manifest.description === 'string' && manifest.description.length > 20,
     `${label}: description is required`,
   )
-  assert(manifest.license === 'UNLICENSED', `${label}: private package license must be explicit`)
+  assert(manifest.license === 'Apache-2.0', `${label}: package license must be Apache-2.0`)
   assert(manifest.type === 'module', `${label}: only ESM packages are supported`)
   assert(manifest.sideEffects === false, `${label}: sideEffects must be false`)
   assert(manifest.engines?.node === '>=20.0.0', `${label}: Node engine policy is missing`)
@@ -65,6 +65,7 @@ function assertPackageMetadata(manifest, directoryName) {
   assert(manifest.files?.includes('dist'), `${label}: dist is missing from files`)
   assert(manifest.files?.includes('README.md'), `${label}: README is missing from files`)
   assert(manifest.files?.includes('docs'), `${label}: docs are missing from files`)
+  assert(manifest.files?.includes('LICENSE'), `${label}: LICENSE is missing from files`)
   assert(
     manifest.repository?.directory === `packages/${directoryName}`,
     `${label}: repository.directory is incorrect`,
@@ -73,6 +74,7 @@ function assertPackageMetadata(manifest, directoryName) {
     manifest.publishConfig?.registry === 'https://npm.pkg.github.com',
     `${label}: publish registry is incorrect`,
   )
+  assert(manifest.publishConfig?.access === 'public', `${label}: package access must be public`)
 }
 
 async function collectFiles(directory) {

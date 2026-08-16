@@ -505,7 +505,7 @@ class SoloStreamLoop<
     )
 
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<SoloModeStreamLoopResult>> => {
-      // TODO[主链路-26]: 一轮模型调用从这里开始；每次循环最多发起一次 LLM 请求，tool result 可能把流程带回下一轮。
+      // 一轮模型调用从这里开始；每次循环最多发起一次 LLM 请求，tool result 可能把流程带回下一轮。
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnExecutionPolicy = new ToolExecutionPolicy(turnToolRegistry)
       if (turn > 1 && args.refreshCapabilityContext) {
@@ -596,7 +596,7 @@ class SoloStreamLoop<
       // run plan 已把物理模型窗口与 profile 工作集上限取最小值；后续估算、编译和降级必须共用它。
       const activeContextWindow = runPlan.context.contextWindow
 
-      // TODO[主链路-27]: 调模型前先构建本轮 system prompt、上下文片段和 step budget，这是本轮请求的主要提示词来源。
+      // 调模型前构建本轮 system prompt、上下文片段和 step budget。
       const promptStartedAt = Date.now()
       args.events.emitRuntime(ChatRuntimeEvents.phase('building-prompt'))
       this.log.info('prompt build start', {
@@ -740,7 +740,7 @@ class SoloStreamLoop<
         seams: this.seams,
       })
       try {
-        // TODO[主链路-30]: 进入单轮流式调用；executeStreamTurn 内部会通过统一请求层发起请求。
+        // 进入单轮流式调用；executeStreamTurn 通过统一请求层发起请求。
         // 缺页兜底（护栏 2，机制单源在 AgentLoop）不计入对外步数。
         const runtimeInputInterrupt = createAgentRuntimeInputInterruptScope(args.runtimeInput)
         let turnResult: StreamTurnResult
@@ -887,7 +887,7 @@ class SoloStreamLoop<
           consumeGuidance: args.consumeGuidance,
           // 收尾门只在**用户显式开启目标模式**时生效（2026-08-05 裁决）。模型自己调
           // goal:create 建起来的目标不得反向把会话锁死在收尾环上——那是模型自设的工作流
-          // 纪律，属拦截三分法第 1 类禁区（Desktop `docs/design-principles.md` §7）。
+          // 纪律，属于提示词层工作流，不能通过运行时拦截强制执行。
           goalMode: isTrue(args.config.goalMode),
           inspectGoalState: () => goalLifecycle.inspect(),
           completeGoalOnSuccessfulFinish: isTrue(args.config.goalMode)

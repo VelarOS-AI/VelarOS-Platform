@@ -5,9 +5,9 @@
     "platform": "0.6"
   },
   "description": "Renderer-neutral game domain contracts, Phaser runtime projection, agent tools, and host composition behind explicit subpaths.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "VelarOS",
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Capabilities#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/game#readme",
   "bugs": {
     "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
@@ -59,7 +59,8 @@
   "files": [
     "dist",
     "README.md",
-    "velaros.mod.json"
+    "velaros.mod.json",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -85,7 +86,7 @@
     "directory": "packages/game"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

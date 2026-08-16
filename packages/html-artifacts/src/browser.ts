@@ -291,7 +291,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     try {
       this.options.onError?.(error)
     } catch {
-      // Error callbacks are an application boundary and must not destabilize the stream runtime.
+      // arch-guard:silent-catch-ok 错误回调是应用边界，回调自身失败不得再次击穿流运行时。
     }
   }
 
@@ -304,6 +304,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     try {
       callback(...args)
     } catch (cause) {
+      // 回调异常会转换为结构化 host 错误，经 reportError 上报。
       this.reportError({
         phase: 'host',
         message: `${callbackName} callback failed`,

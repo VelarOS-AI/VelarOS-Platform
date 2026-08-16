@@ -5,7 +5,7 @@
     "platform": "0.6"
   },
   "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
@@ -59,7 +59,8 @@
     "dist",
     "README.md",
     "docs",
-    "examples"
+    "examples",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -95,15 +96,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Memory.git",
+    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/memory"
   },
-  "homepage": "https://github.com/VelarOS-AI/VelarOS-Memory/tree/main/packages/memory#readme",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/memory#readme",
   "bugs": {
-    "url": "https://github.com/VelarOS-AI/VelarOS-Memory/issues"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://npm.pkg.github.com"
   }
 }

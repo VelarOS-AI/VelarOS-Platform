@@ -1,6 +1,5 @@
-// 执行模式轴的纯解析面（无 loop / 无 node 依赖）从这里出，让 renderer 侧走
-// `@velaros-ai/agent/chat` 子路径拿到它——渲染层禁止 import 包根（Desktop 的
-// `check:renderer-agent` 门机械拦截）。
+// 执行模式轴的纯解析面（无 loop / 无 Node.js 依赖）从这里导出，供渲染层通过
+// `@velaros-ai/agent/chat` 子路径消费，避免渲染代码导入包含运行时能力的包根。
 export * from '../agent/context/contextUsage'
 export * from '../agent/run-context/TurnContextFormat'
 export * from '../agent/runner/GoalLifecycleProjection'

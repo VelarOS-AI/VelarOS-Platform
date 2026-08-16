@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isPresent } from '@velaros-ai/core'
+import { isEmpty, isFiniteNumber, isNull, isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageDriverEmulationState } from './BrowserPageDriver'
@@ -78,11 +78,15 @@ export class BrowserPerformanceOrchestrator {
         await driver.navigateTo(originUrl)
         await driver
           .waitForNetworkIdle?.({ idleMs: 800, timeoutMs: 10_000 })
-          ?.catch(() => undefined)
+          ?.catch(() => {
+            // arch-guard:silent-catch-ok 网络空闲等待是 trace 质量提示，不改变导航已经成功的事实。
+          })
       } catch (error) {
         // 回跳失败时终止录制，避免 trace 状态悬挂。
         this.traces.delete(sessionId)
-        await driver.stopTracing().catch(() => undefined)
+        await driver.stopTracing().catch(() => {
+          // arch-guard:silent-catch-ok 停止失败不能覆盖上方导航错误；trace 状态已从本地表移除。
+        })
         throw error
       }
     }
@@ -121,8 +125,9 @@ export class BrowserPerformanceOrchestrator {
       throw new AppError('EXECUTION_FAILED', '浏览器页面连接已断开，trace 录制丢失。')
     }
     const events = await pageSession.driver.stopTracing()
-    const emulation: Nullable<BrowserPageDriverEmulationState> =
-      pageSession.driver.getEmulationState?.() ?? null
+    const emulation: Nullable<BrowserPageDriverEmulationState> = toNullable(
+      pageSession.driver.getEmulationState?.()
+    )
 
     const recording = await this.traceEngine.parse(events, {
       cpuThrottling: emulation?.cpuThrottlingRate,
@@ -238,10 +243,10 @@ export class BrowserPerformanceOrchestrator {
     this.traces.clear()
   }
 
-  private resolveAutoStopMs(value: Nullable<number> | undefined): number {
-    if (value === null || value === 0) return 0
+  private resolveAutoStopMs(value: LooseOptional<number>): number {
+    if (isNull(value) || value === 0) return 0
     if (!isPresent(value)) return DefaultTraceAutoStopMs
-    if (!Number.isFinite(value) || value < 0) return DefaultTraceAutoStopMs
+    if (!isFiniteNumber(value) || value < 0) return DefaultTraceAutoStopMs
     return Math.min(60_000, Math.max(1_000, Math.round(value)))
   }
 }
@@ -259,7 +264,7 @@ export function extractKeyMetricsFromSummary(summary: string): string {
   let metrics: string[] = []
 
   const flush = (): void => {
-    if (currentSet && metrics.length > 0) {
+    if (currentSet && !isEmpty(metrics)) {
       sections.push(`${currentSet}: ${metrics.join(', ')}`)
     }
     metrics = []
@@ -283,5 +288,5 @@ export function extractKeyMetricsFromSummary(summary: string): string {
   }
   flush()
 
-  return sections.length > 0 ? sections.join(' | ') : '(未从摘要解析到 Core Web Vitals)'
+  return !isEmpty(sections) ? sections.join(' | ') : '(未从摘要解析到 Core Web Vitals)'
 }

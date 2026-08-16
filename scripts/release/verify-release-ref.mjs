@@ -10,11 +10,6 @@
 // ① 先跑不是因为它更重要,而是 expectedTag 要从同一次仓根 manifest 读取里取(那次读顺带就把
 // 发布集合校验完了);三条都是硬门,任何一条不成立都在 build 之前就退出。
 //
-// 为什么是一份而不是七份:并仓前七个源仓各带一份 verify-release-ref.mjs(ui 那份叫
-// verify-release.mjs),六份被 workflow 逐条 run。差异只有换行风格与错误文案,判据完全相同;
-// 唯一的语义差(memory / ui 的「各包版本 == 仓根 version」锁步)在火车形态下已不成立,
-// 处置理由见 releaseTopology.mjs 文件头。
-//
 // 谁核验它:kernel / agent 两域的 check:*-arch「防线:发布身份」按字面标记核对本文件与
 // publish-packages.mjs、release-packages.yml 三者(rule=release-artifact-identity)。
 // 下面 expectedTag / eventName / refType / ref / refName 五处判据是被逐条核验的标记,改写法要同时改门。

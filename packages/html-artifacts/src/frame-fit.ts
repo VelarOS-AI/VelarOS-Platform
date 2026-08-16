@@ -16,15 +16,14 @@ export interface HtmlArtifactFrameFitInput {
 }
 
 /**
- * Hosts render wide content by scaling it down, so an extreme width request turns into an unreadable
- * sliver. Past this multiple of the host width the frame stops scaling and lets the document clip or
- * scroll internally — the sandbox has its own width feedback guard, this is the last line of defence
- * for any host or document shape that evades it.
+ * 宿主会缩放过宽内容，极端宽度请求可能把正文压成无法阅读的细条。超过宿主宽度的这个倍数后，
+ * frame 停止继续缩放，改由文档内部裁切或滚动。沙箱自身还有宽度反馈保护；这里是宿主侧的
+ * 最后一道边界。
  */
 const MAX_SCALE_DOWN_WIDTH_RATIO = 4
 
-function readPositiveNumber(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+function readPositiveNumber(value: HtmlArtifactFrameFitInput['naturalWidth']) {
+  return isFinitePositiveNumber(value) ? value : null
 }
 
 function toDimension(value: number): number {
@@ -72,3 +71,4 @@ export function resolveHtmlArtifactFrameFit(input: HtmlArtifactFrameFitInput): H
     viewportWidth,
   }
 }
+import { isFinitePositiveNumber } from './positive-number.js'

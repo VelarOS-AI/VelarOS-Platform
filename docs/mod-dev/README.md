@@ -3,16 +3,14 @@
 面向**想给 VelarOS 加东西的人**：加一个工具、一段提示词、一个工作区、一块设置区，或者拦一下
 agent 的运行时行为。
 
-> **权威关系**：本套件是**参考手册**，不是判决源。架构判决住 **VelarOS-Desktop 仓**的
-> `docs/mod-architecture-blueprint.md`（蓝图 v6）与 `docs/kernel-contract.md`（§15 进程拓扑判决）。
-> 两者冲突时以那两份为准，改本套件。
+> **权威关系**：公开 Mod 契约由本套件、`packages/agent` / `packages/kernel` 中的版本化 schema
+> 与对应的契约测试共同定义；通用边界见 [Platform boundaries](../architecture/platform-boundaries.md)。
+> 文档与可执行契约冲突时必须在同一改动中修复，不能依赖仓外隐藏裁决。
 >
-> **宿主侧接线**：本套件写的是 **mod 作者面**（平台包提供什么）。同一条链的**宿主那一半**——Desktop
-> 怎么装配 loader、安装器与市场入口怎么接、MCP 工具服务器的判决——住 Desktop 仓
-> `docs/desktop-agent-mod-wiring.md`。写 mod 读这里，改宿主读那里，两份互为上下游。
+> **宿主侧接线**：本套件定义 Mod 作者能依赖的平台面。具体产品拥有 loader 装配、安装 UI、市场入口
+> 与产品策略，但不得扩写或改写公开 Platform 契约。
 >
-> 本套件的每个 API 名 / 字段名 / 文件名都对得上本仓 `packages/**` 或 Desktop 仓的真实代码；
-> 判决已定但尚未实装的部分一律标注「**契约已定，实装批次 X**」，不当成能用的东西写。
+> 尚未实装的能力明确标为 **planned / not implemented**，不作为可用 API 或兼容承诺。
 
 ## 目录
 
@@ -38,7 +36,7 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
 | --- | --- | --- |
 | `module` | **Kernel** | 窄 module descriptor：`id` / `version` / `apiVersion` / `provides` / `requires` / `optionalRequires` / `permissions` / `isolation` + 装载寻址 `entry` / `exportName` |
 | `agent` | **Agent 主干** | 九根能力轴 + `engines` / `trust` / `requiredAxes` / `budget` / `entitlements` / `locale` |
-| `ui` | **产品壳** | 壳级轴：`ui.settings`（已实装）+ `ui.dock` / `ui.actions` / `ui.sidePanels`（契约已定，实装批次 W1） |
+| `ui` | **产品壳** | 宿主专属 UI 声明；Platform 将其视为不透明信封，不承诺通用解析或兼容性 |
 
 「不透明信封」在这里比「透传」更强：**不是「读了但不解释」，而是根本不读别人那一节。**
 唯一的跨节动作是**身份复核**——`module.id` 与 `agent.id` 不一致即拒载
@@ -103,10 +101,8 @@ pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干
 宿主用 `AgentModHostProfile.allowedTrustLevels` 决定放行哪些；**缺省 = `['bundled-official']`**
 （fail-closed，见 `DefaultAllowedTrustLevels`）。不在集合内 → `mod.trust-not-allowed`。
 
-> **Desktop 现状**：`createDesktopAgentModHostProfile`
-> （`apps/desktop/src/main/kernel/AgentModRuntime.ts`）硬编码
-> `allowedTrustLevels: ['bundled-official']`。也就是说今天在 Desktop 上侧载一个
-> `trust: 'local-dev'` 的 pack 会被直接拒载。详见 [getting-started.md](./getting-started.md#六现状与限制先读这条)。
+产品宿主必须显式声明允许的信任级，并在自己的公开文档中说明签名、侧载和权限策略。
+Platform 的安全缺省只允许 `bundled-official`；宿主没有显式放行时，其他信任级一律拒载。
 
 ## 五、partial activation 与 `requiredAxes`
 
@@ -138,7 +134,7 @@ pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干
 | --- | --- | --- | --- |
 | **① 声明贡献点** | 平台需要**索引 / 展示 / 惰性加载**的东西 | manifest 静态枚举 | [axes/](./axes/README.md) |
 | **② 拦截 seam** | 需要**改变运行时行为**的东西 | 15 个闭集钩子 | [seams.md](./seams.md) |
-| **③ 开放数据面** | **平台还没想到、无法预先枚举**的东西 | custom entry / message + renderer | 蓝图裁决 9 ③；数据形状走 Agent protocol，渲染走壳的三档梯 |
+| **③ 开放数据面** | **平台还没想到、无法预先枚举**的东西 | custom entry / message + renderer | 数据形状走 Agent protocol，渲染走宿主定义的信任梯 |
 
 一句话判据：没想到的**数据形状**走数据面；没想到的**行为**走 seam；想清楚要**索引 / 展示**的
 能力走声明贡献点。

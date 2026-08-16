@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // 用途：把本包工具集合的 inputSchema 面序列化成 dist/schema-bundle.json 产物，
-// 供 check:schemas 等下游以「dist 产物」而非「源码可达性」消费(拆仓后浏览器仓随包分发本产物,
-// kernel 仓只读产物,不再 import 本包 src 深路径)。
+// 供下游从稳定的 dist 产物读取 schema，而不是 import 本包的源码深路径。
 //
 // 铁律:产出内容与 createToolSchemaBundle(io:'input') 逐字节等价——只换取货渠道,不漂移锁面。
 // declaredParameterCount 记录每个工具 zod shape 的字段数,让消费方无需 zod 源即可拦「零参数退化」。

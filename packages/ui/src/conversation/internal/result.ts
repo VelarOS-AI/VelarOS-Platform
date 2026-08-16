@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isNumber, isObject, isPresent, isString } from './runtime'
+import { isArray, isBoolean, isEmpty, isNumber, isObject, isPlainObject, isPresent, isString } from './runtime'
 
 import type { ErrorCode, Result as ResultValue, SerializedError } from '#contracts'
 
@@ -36,6 +36,7 @@ export class AppError extends Error {
     try {
       return isObject(error) ? JSON.stringify(error) : String(error)
     } catch {
+      // arch-guard:silent-catch-ok stringify 失败时使用不会执行用户代码的对象标签作为最终回退。
       return Object.prototype.toString.call(error)
     }
   }
@@ -44,7 +45,7 @@ export class AppError extends Error {
     return {
       code: this.code,
       message: this.message,
-      ...(Object.keys(this.context).length ? { context: this.context } : {}),
+      ...(!isEmpty(Object.keys(this.context)) ? { context: this.context } : {}),
     }
   }
 
@@ -60,8 +61,8 @@ export class AppError extends Error {
       }
       return null
     }
-    if (!isObject(value)) return null
-    const record = value as Record<string, unknown>
+    if (!isPlainObject(value)) return null
+    const record = value
     return (
       this.findMessage(record.message, depth + 1) ??
       this.findMessage(record.error, depth + 1) ??
@@ -70,8 +71,8 @@ export class AppError extends Error {
   }
 
   private static isSerialized(value: unknown): value is SerializedError {
-    if (!isObject(value)) return false
-    const record = value as Record<string, unknown>
+    if (!isPlainObject(value)) return false
+    const record = value
     return isString(record.code) && isString(record.message)
   }
 }

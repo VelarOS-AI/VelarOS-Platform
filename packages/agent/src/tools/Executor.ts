@@ -233,7 +233,7 @@ export class ToolExecutor {
       providerToolName: string;
     },
   ): void {
-    // TODO[主链路-47]: tool-call 从模型流进入这里；并发安全工具可并行，有副作用工具会排队串行。
+    // tool-call 从模型流进入这里；并发安全工具可并行，有副作用工具排队串行。
     const canonicalToolName = this.executionPolicy.resolveCanonicalToolName(
       toolName,
       this.ctx.capabilityPorts,
@@ -327,7 +327,7 @@ export class ToolExecutor {
    * 等待所有未完成的工具执行完毕，按顺序收集结果
    */
   public async collectAll(): Promise<ToolResult[]> {
-    // TODO[主链路-48]: 本轮 stream 结束后等待所有工具收敛，结果按接收顺序返回给 history。
+    // 本轮 stream 结束后等待所有工具收敛，结果按接收顺序返回给 history。
     while (this.hasPending) {
       this.drainQueue();
       const promises = this.tools
@@ -498,7 +498,7 @@ export class ToolExecutor {
     let activeExecutionContext: LooseOptional<ActiveToolExecutionContext> =
       null;
     try {
-      // TODO[主链路-49]: 真正执行工具前先做权限、参数和可执行性检查，失败结果也会作为 tool result 返回模型。
+      // 执行工具前先做权限、参数和可执行性检查；失败也作为 tool result 返回模型。
       const decision = this.executionPolicy.prepareExecution({
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
@@ -561,7 +561,7 @@ export class ToolExecutor {
         });
       }
 
-      // TODO[主链路-50]: 工具函数在这里被调用；输出会通过 emitToolDone 推给 UI，并在外层追加进下一轮模型 history。
+      // 工具函数在这里被调用；输出通过 emitToolDone 通知宿主，并在外层追加进下一轮模型 history。
       activeExecutionContext = {
         toolName: executionToolName,
         args: tool.args,

@@ -160,7 +160,7 @@ function parsePersisted(raw: string): Nullable<PersistedVectorIndex> {
     if (typeof parsed?.version !== 'string' || !Array.isArray(parsed.records)) return null
     return { version: parsed.version, records: parsed.records }
   } catch {
-    // 派生物损坏 = 当作没建过。抢救一份可以重建的东西是白付成本。
+    // arch-guard:silent-catch-ok 向量索引是可重建派生物；损坏时返回 null 触发完整重建。
     return null
   }
 }

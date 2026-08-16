@@ -1,3 +1,5 @@
+import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
+
 import type {
   MemoryTreeDiffOpV2,
   MemoryTreeDiffV2,
@@ -109,6 +111,7 @@ function expectValidationReject(run: () => unknown): ProbeAssertion['detail'] {
     run()
     return '预期 VALIDATION 拒绝，但调用未抛错'
   } catch (error) {
+    // arch-guard:silent-catch-ok 探针把错误码转换为明确的断言详情。
     const code = (error as { code?: unknown }).code
     if (code === 'VALIDATION') return undefined
     return `预期 VALIDATION，实得 code=${String(code)}`
@@ -126,7 +129,7 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
   }
   const checkReject = (name: string, run: () => unknown): void => {
     const detail = expectValidationReject(run)
-    assertions.push({ name, ok: detail === undefined, detail })
+    assertions.push({ name, ok: isUndefined(detail), detail })
   }
 
   // ── §1.1 值域拒绝（12）：静默转换是哈希毒药，一律 VALIDATION 炸在入口 ──
@@ -149,6 +152,7 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
     try {
       canonicalStringifyV2(10n)
     } catch (error) {
+      // arch-guard:silent-catch-ok 探针在下方断言捕获到的错误码。
       observedCode = (error as { code?: unknown }).code
     }
     check('§1.1 拒绝错误码为 VALIDATION', observedCode === 'VALIDATION', `code=${String(observedCode)}`)
@@ -262,7 +266,7 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
     TreeDiffV2ProbeFixture.nodes,
     [TreeDiffV2ProbeFixture.genesisDiff]
   )
-  check('§8 逆向重建回到空树（0 节点）', backward.nodes.length === 0)
+  check('§8 逆向重建回到空树（0 节点）', isEmpty(backward.nodes))
   check('§8 add 求逆为 remove', invertTreeDiffOpV2({ type: 'add', before: [], after: [FIXTURE_ROOT_NODE] }).type === 'remove')
   check(
     '§8 dormant 求逆为 reactivate',
@@ -274,10 +278,11 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
   try {
     validateTreeDiffOpV2(redactOp)
     redactOk =
-      redactOp.after[0].content.blobRef === null &&
+      isNull(redactOp.after[0].content.blobRef) &&
       redactOp.after[0].content.redacted &&
       redactOp.after[0].content.commitment === FIXTURE_LEAF_NODE.content.commitment
   } catch {
+    // arch-guard:silent-catch-ok 解析失败由 redactOk=false 明确进入下方断言结果。
     redactOk = false
   }
   check('§3.3 redact 销毁 blobRef、落 redacted、逐字节保留承诺', redactOk)

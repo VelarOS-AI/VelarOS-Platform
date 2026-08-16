@@ -60,10 +60,10 @@ if (manifest.dependencies?.['@velaros-ai/agent'] !== 'workspace:*') {
   fail('@velaros-ai/project must depend on the grouped @velaros-ai/agent package')
 }
 if (
-  manifest.publishConfig?.access !== 'restricted'
+  manifest.publishConfig?.access !== 'public'
   || manifest.publishConfig?.registry !== 'https://npm.pkg.github.com'
 ) {
-  fail('publishConfig must target restricted GitHub Packages')
+  fail('publishConfig must target public GitHub Packages')
 }
 
 for (const path of walk(RepoRoot)) {

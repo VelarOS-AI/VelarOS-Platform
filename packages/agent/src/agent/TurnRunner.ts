@@ -79,7 +79,7 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
   public async executeStreamTurn(
     args: ExecuteStreamTurnArgs<TToolContext>
   ): Promise<StreamTurnResult> {
-    // TODO[主链路-38]: turn 门面把“一轮流式模型调用”交给 StreamTurn，后者负责统一请求层调用和 assistant/tool 历史拼接。
+    // turn 门面把单轮流式模型调用交给 StreamTurn，由后者负责请求和 assistant/tool 历史拼接。
     return this.streamTurnHelper.executeStreamTurn({
       ...args,
       contextEpochGuard: args.contextEpochGuard ?? this.contextEpochGuard,
@@ -91,7 +91,7 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
     history: ModelMessage[],
     executor: AgentTurnToolExecutor
   ): Promise<AgentTurnToolResult[]> {
-    // TODO[主链路-39]: 工具调用完成后必须追加 tool result 到 history，下一轮模型才能看到工具输出。
+    // 工具调用完成后必须追加 tool result 到 history，下一轮模型才能看到工具输出。
     return this.turnHistoryHelper.appendToolResultsToHistory(history, executor)
   }
 

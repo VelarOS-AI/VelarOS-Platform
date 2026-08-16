@@ -1,6 +1,5 @@
-// MCP 接入通道适配器（宪章 §2「四通道一执行路」第③通道）。
-// 家=tool-library/mcp/：host 无关的连接 + 翻译；desktop 侧装配（provider/manager/config）在
-// apps/desktop tools/mcp。对外经 @velaros-ai/agent 桶暴露。
+// 与宿主无关的 MCP 连接和协议翻译适配器。产品宿主负责服务器发现、配置、生命周期管理，
+// 以及把翻译后的工具注册到自己的工具提供器。
 
 export { translateMcpCallResult } from './mcpCallResult'
 export type {

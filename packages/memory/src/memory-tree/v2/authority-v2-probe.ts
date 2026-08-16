@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import BetterSqlite3 from 'better-sqlite3'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError, isNotNull } from '@velaros-ai/core'
 
 import { MemoryBlobStoreV2 } from './storage/BlobStore'
 import { ContentKeyServiceV2 } from './storage/ContentKeyService'
@@ -43,6 +43,7 @@ function expectAppError(run: () => unknown, message: string): AppError {
   try {
     run()
   } catch (error) {
+    // arch-guard:silent-catch-ok 探针在下方断言捕获到的 AppError。
     observed = error
   }
   check(observed instanceof AppError, `${message}: 应抛 AppError`)
@@ -54,6 +55,7 @@ function expectThrows(run: () => unknown, message: string): unknown {
   try {
     run()
   } catch (error) {
+    // arch-guard:silent-catch-ok 探针在下方断言确实捕获到了错误。
     observed = error
   }
   check(observed instanceof Error, `${message}: 应抛错误`)
@@ -420,7 +422,7 @@ function runIndexGenerationEncryptionProbeV2(dataRoot: string): void {
   const onDisk = readFileSync(sealedPath)
   check(!onDisk.includes(secret), 'index generation 磁盘产物不得含明文投影')
   const restored = openCurrentMemoryIndexGenerationV2(opened.store.roots.indexDir, keyring)
-  check(restored !== null, 'CURRENT index generation 应可打开')
+  check(isNotNull(restored), 'CURRENT index generation 应可打开')
   equal(restored.generation, 1, '打开的 index generation 代号')
   equal(restored.plaintextArtifact.toString('utf8'), secret.toString('utf8'), 'index 解封')
   restored.plaintextArtifact.fill(0)

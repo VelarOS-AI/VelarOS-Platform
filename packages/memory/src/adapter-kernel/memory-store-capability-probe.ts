@@ -1,14 +1,14 @@
 /**
- * 记忆后端 capability token 构造级探针（bun 直驱，进程内 `KernelModuleHost`）。
+ * 记忆后端能力令牌的构造探针（由 Bun 直接运行，使用进程内 `KernelModuleHost`）。
  *
- * 验收批一的「端口收口」面：
- *  ① 两个后端档（默认树档 + `memory-files`）**并存注册**在同一个 host 上——叠加语义要成立，
- *     一个后端一个 token 是硬前提（§九 9.2）；
+ * 验证后端能力端口：
+ *  ① 两个后端档（默认树档 + `memory-files`）**并存注册**在同一个宿主上——叠加语义要成立，
+ *     一个后端一个令牌是硬前提；
  *  ② 按优先序解析：装了谁用谁，优先序换一下就换后端，**不改任何调用点**；
- *  ③ 一个都没装 → `undefined`（partial activation 的「没装就没有」，不是残废降级）；
+ *  ③ 一个都没装 → `undefined`（部分激活的「没装就没有」，不是残缺降级）；
  *  ④ `mountMemoryAdapter` 不传 `store` 时回落到默认树后端，且每个动词逐字转发 → 行为零变化；
- *  ⑤ 传 `store` 且解析到 `memory-files` 时，capture / recall 两端口确实落到文件后端；
- *  ⑥ **角色门（批二）**：`derived-index` 角色的后端**不会**被解析成权威后端，派生索引另有解析口。
+ *  ⑤ 传 `store` 且解析到 `memory-files` 时，采集与召回端口确实落到文件后端；
+ *  ⑥ **角色门**：`derived-index` 角色的后端**不会**被解析成权威后端，派生索引另有解析口。
  */
 
 import assert from 'node:assert/strict'
@@ -208,7 +208,7 @@ async function probeRegistryResolution(): Promise<void> {
   equal(
     resolveMemoryStoreBackend({ registry: host, preference: ['vector'] }),
     undefined,
-    '未注册的档（如批二的 memory-vector）解析为缺席',
+    '未注册的档（如可选的 memory-vector）解析为缺席',
   )
   equal(
     resolveMemoryStoreBackend({

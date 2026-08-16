@@ -1,9 +1,9 @@
-// 域：执行会话运行时的**宿主边界端口**（宪章 §12.2 窄端口注入）。
+// 域：执行会话运行时的宿主边界端口。
 //
 // 执行会话运行时（ExecutionService / ManagedExecutionRunner）本体 host 无关，只认端口不认实现：
 // 准入断言、执行记录落盘路径、资源作用域解析、协作信号、协作者账本、子 Agent 引导 relay 规划器
-// 全部由 Desktop 在装配处（execution/Runtime.ts）提供具体实现。这样 headless / BYOK / web 等宿主
-// 可注入各自的实现，而不必把 Desktop 具体服务拖进内核执行链路。
+// 全部由产品宿主在装配处提供具体实现。这样桌面、headless、BYOK 和 Web 等宿主
+// 可注入各自实现，而不会把某个产品的服务拖进内核执行链路。
 import type { GuidanceRelayPlan, SubAgentGuidanceRelayWorkerSnapshot } from '../../execution'
 import type { ExecutionResourceProvider } from '../../execution'
 
@@ -11,8 +11,8 @@ import type { ExecutionResourceProvider } from '../../execution'
  * 准入断言端口。
  *
  * 语义 = 「当前进程是否处于已授权运行态」的单点断言，把执行域对具体登录判定源
- * （Desktop 的 CloudSessionAccess 单例）的直接依赖收拢成一个窄接口：执行域只认端口，
- * 装配层注入实现。将来 headless / BYOK host 可注入放行 loopback 的实现。
+ * 直接依赖收拢成一个窄接口：执行域只认端口，装配层注入实现。headless 或 BYOK 宿主可提供
+ * 与其部署模型匹配的授权策略。
  */
 export interface AuthGatePort {
   /** 未处于已验证登录态时抛 `AppError('AUTH')`。 */
@@ -22,8 +22,7 @@ export interface AuthGatePort {
 /**
  * 执行记录落盘路径端口。
  *
- * 把 ExecutionStore 持久化路径对具体 storagePathService 的依赖收拢成一个窄接口，
- * Desktop 在装配处提供 `storagePathService.getExecutionRecordsPath()`。
+ * 把 ExecutionStore 持久化路径对具体存储服务的依赖收拢成一个窄接口。
  */
 export interface ExecutionRecordsPathPort {
   /** 返回执行记录持久化文件路径。 */
@@ -88,7 +87,7 @@ export interface ExecutionGuidanceRelayPlan {
  * 子 Agent 引导 relay 规划器端口。
  *
  * 用户对运行中会话追加引导时，规划面向各活跃子 Agent 的改写 relay 与主控消息。
- * Desktop 注入 SubAgentGuidanceRelayService（走辅助模型）。
+ * 产品宿主可注入使用辅助模型或确定性规则的 relay 规划器。
  */
 export interface ExecutionGuidanceRelayPlanner {
   planRelay(input: ExecutionGuidanceRelayPlanInput): Promise<ExecutionGuidanceRelayPlan>

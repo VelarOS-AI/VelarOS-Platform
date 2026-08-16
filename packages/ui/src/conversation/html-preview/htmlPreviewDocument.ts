@@ -75,7 +75,7 @@ function buildBrandTokenRootCss(): string {
 
     return declarations ? `:root{${declarations}}` : ''
   } catch {
-    // 非浏览器环境(如 SSR/单测)无 window——制品沙箱回落到内置浅色 token。
+    // arch-guard:silent-catch-ok 非浏览器环境无法读取样式，制品沙箱明确回落到内置浅色 token。
     return ''
   }
 }
@@ -145,6 +145,7 @@ function applyExportPatch(doc: Document, patch: HtmlArtifactRenderPatch): void {
     try {
       target = doc.body.querySelector(patch.target)
     } catch {
+      // arch-guard:silent-catch-ok 非法选择器只让当前 patch 无目标，不得中断其余文档更新。
       target = null
     }
   }

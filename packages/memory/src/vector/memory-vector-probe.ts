@@ -1,7 +1,7 @@
 /**
  * `memory-vector` 构造级探针（bun 直驱；嵌入端口注入假实现，不发一次网络请求、不落一个文件）。
  *
- * 验收批二判决（§九 9.2 / 9.4）里**每一条会被实现者写歪的**：
+ * 验证向量派生索引的关键不变量：
  *  ① **双写**：capture 走权威层，落地结果同批进派生索引；派生层抛错**不影响**权威层返回值；
  *  ② **并联 + 回捞全文**：语义命中的是指针，正文逐字来自权威层；索引里查不到任何内容副本；
  *  ③ **孤儿清理**：权威层已没有的指针不进结果，并被清出索引；
@@ -14,6 +14,8 @@
  */
 
 import assert from 'node:assert/strict'
+
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { MemoryDerivedIndexFailure } from '../backend/Layered'
 import { createLayeredMemoryStoreBackend } from '../backend/Layered'
@@ -69,7 +71,7 @@ function createFakeEmbedder(identity: string, dimensions = FakeEmbeddingDimensio
 function tokenize(text: string): string[] {
   const tokens: string[] = []
   for (const raw of text.toLowerCase().split(/[^\p{Letter}\p{Number}]+/u)) {
-    if (raw.length === 0) continue
+    if (!raw) continue
     if (/^[\p{Script=Han}]+$/u.test(raw)) {
       if (raw.length === 1) tokens.push(raw)
       for (let index = 0; index + 1 < raw.length; index += 1) tokens.push(raw.slice(index, index + 2))
@@ -136,6 +138,7 @@ async function probeDescriptor(): Promise<void> {
     // 契约上 capture 是 awaitable(同步实现也可能换成异步),await 才能同时兜住同步抛与 reject。
     await derived.capture(evidence('x', 'y'))
   } catch {
+    // arch-guard:silent-catch-ok 本探针只断言派生索引拒绝 capture，错误详情不参与契约。
     captureThrew = true
   }
   check(captureThrew, '直接拿派生索引 capture 当场抛错，不静默丢数据')
@@ -242,7 +245,7 @@ async function probeOrphanPruning(): Promise<void> {
   const results = await layered.recall('寒暄')
   equal(results.length, 0, '权威层认不出的指针不进结果（绝不返回一条没有内容的记忆）')
   // 清理是异步 best-effort（不挡召回），让出一轮事件循环再断言。
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  await TimerScope.sleep(0, { label: 'memory-vector-orphan-pruning' })
   equal(indexStore.size(), 0, '孤儿指针被清出索引')
 }
 
@@ -314,7 +317,7 @@ async function probeUninstall(): Promise<void> {
   await layered.rebuildDerivedIndexes()
 
   const indexPath = '/memory/.index/vector-index.json'
-  check(io.readTextFile(indexPath) !== null, '派生索引确实落了盘')
+  check(!!io.readTextFile(indexPath), '派生索引确实落了盘')
   const authorityBefore = Object.keys(io.snapshot()).filter((path) => path.startsWith('/memory/entries/'))
   equal(authorityBefore.length, 2, '权威层两个 markdown 文件在盘上')
 

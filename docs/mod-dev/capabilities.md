@@ -232,4 +232,3 @@ export interface MemoryBackendDescriptor {
 | `ownerModId` | 打在**派生索引**一侧；**权威文件不打 mod 标签**——权威内容不属于任何 mod |
 
 Platform 侧的实现地图见 [`docs/memory/memory-backends.md`](../memory/memory-backends.md)。
-</content>

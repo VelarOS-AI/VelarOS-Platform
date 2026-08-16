@@ -98,7 +98,9 @@ class PlaywrightCdpSessionTransport implements CdpBrowserPageDriverTransport {
       listener()
     }
     this.closeListeners.clear()
-    void this.session.detach?.().catch(() => undefined)
+    void this.session.detach?.().catch(() => {
+      // arch-guard:silent-catch-ok 会话关闭后 detach 是幂等清理，底层连接可能已经消失。
+    })
   }
 }
 
@@ -152,18 +154,28 @@ class CloakBrowserLauncher {
       const driver = new CdpBrowserPageDriver({
         transport,
         initialUrl: page.url(),
-        initialTitle: await page.title().catch(() => ''),
+        initialTitle: await page.title().catch(
+          () =>
+            // arch-guard:silent-catch-ok 页面标题不是启动前提，读取失败时使用空标题并继续刷新状态。
+            ''
+        ),
         downloadPath: options.downloadPath,
         onDispose: () => {
-          void page?.close?.().catch(() => undefined)
+          void page?.close?.().catch(() => {
+            // arch-guard:silent-catch-ok dispose 是幂等清理，页面可能已由浏览器端关闭。
+          })
         },
       })
       const disposeHost = (): void => {
         if (hostDisposed) return
         hostDisposed = true
-        void browser?.close().catch(() => undefined)
+        void browser?.close().catch(() => {
+          // arch-guard:silent-catch-ok dispose 是幂等清理，浏览器进程可能已经退出。
+        })
         if (ownsUserDataDir) {
-          void this.rm(userDataDir, { recursive: true, force: true }).catch(() => undefined)
+          void this.rm(userDataDir, { recursive: true, force: true }).catch(() => {
+            // arch-guard:silent-catch-ok 临时目录清理不改变已完成的 dispose 语义。
+          })
         }
       }
 
@@ -175,10 +187,16 @@ class CloakBrowserLauncher {
         dispose: disposeHost,
       }
     } catch (error) {
-      await page?.close?.().catch(() => undefined)
-      await browser?.close().catch(() => undefined)
+      await page?.close?.().catch(() => {
+        // arch-guard:silent-catch-ok 启动失败清理不能覆盖下方原始启动错误。
+      })
+      await browser?.close().catch(() => {
+        // arch-guard:silent-catch-ok 启动失败清理不能覆盖下方原始启动错误。
+      })
       if (ownsUserDataDir) {
-        await this.rm(userDataDir, { recursive: true, force: true }).catch(() => undefined)
+        await this.rm(userDataDir, { recursive: true, force: true }).catch(() => {
+          // arch-guard:silent-catch-ok 临时目录清理失败不能覆盖下方原始启动错误。
+        })
       }
       throw AppError.from(error, 'EXECUTION_FAILED')
     }

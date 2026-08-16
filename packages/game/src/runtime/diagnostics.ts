@@ -1,3 +1,5 @@
+import { isString, optionalWhen, toOptional } from '@velaros-ai/core'
+
 import type { GameRuntimeErrorRecord } from '../core/ports.js'
 
 export interface GameRuntimeErrorInput {
@@ -20,10 +22,11 @@ function normalizeSignature(input: GameRuntimeErrorInput): string {
 
 function stringifyConsoleValue(value: unknown): string {
   if (value instanceof Error) return value.stack ?? value.message
-  if (typeof value === 'string') return value
+  if (isString(value)) return value
   try {
     return JSON.stringify(value)
   } catch {
+    // arch-guard:silent-catch-ok 控制台值可能包含循环引用；String(value) 是明确的最终回退。
     return String(value)
   }
 }
@@ -39,9 +42,9 @@ export class GameRuntimeDiagnostics {
       signature,
       message: input.message,
       source: input.source,
-      ...(input.file ? { file: input.file } : {}),
-      ...(input.line === undefined ? {} : { line: input.line }),
-      ...(input.stack ? { stack: input.stack } : {}),
+      file: toOptional(input.file),
+      line: toOptional(input.line),
+      stack: toOptional(input.stack),
       count: (existing?.count ?? 0) + 1,
       firstAt: existing?.firstAt ?? at,
       lastAt: at,
@@ -63,9 +66,9 @@ export class GameRuntimeDiagnostics {
       this.report({
         source: 'runtime',
         message: event.message || 'Unknown window error',
-        ...(event.filename ? { file: event.filename } : {}),
-        ...(event.lineno > 0 ? { line: event.lineno } : {}),
-        ...(event.error instanceof Error && event.error.stack ? { stack: event.error.stack } : {}),
+        file: optionalWhen(event.filename, event.filename),
+        line: optionalWhen(event.lineno > 0, event.lineno),
+        stack: optionalWhen(event.error instanceof Error, (event.error as Error).stack),
       })
     }
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -73,7 +76,7 @@ export class GameRuntimeDiagnostics {
       this.report({
         source: 'runtime',
         message: reason instanceof Error ? reason.message : stringifyConsoleValue(reason),
-        ...(reason instanceof Error && reason.stack ? { stack: reason.stack } : {}),
+        stack: optionalWhen(reason instanceof Error, (reason as Error).stack),
       })
     }
     const originalConsoleError = console.error

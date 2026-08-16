@@ -1,3 +1,4 @@
+export * from './change-feed.js'
 export {
   ProjectEditIntentSchema,
   ProjectEditOperationSchema,

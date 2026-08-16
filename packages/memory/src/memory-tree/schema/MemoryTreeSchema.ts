@@ -6,8 +6,8 @@ type SQLiteDatabase = InstanceType<typeof BetterSqlite3>
  * 测试版 v1 记忆树权威 schema。
  * 这是基线 schema 的领域片段，不包含历史转换或兼容 SQL。
  *
- * schema 文本归属记忆产品：Desktop 迁移链内联本常量以保持单事务基线迁移逐字节不变，
- * serve / standalone host 走 applyMemoryTreeSchema 建表。宿主只递数据库解析器。
+ * schema 文本归属记忆产品：产品宿主可以把本常量内联到单事务迁移链，serve / standalone
+ * 宿主可调用 applyMemoryTreeSchema 建表。宿主只提供数据库解析器。
  */
 export const MemoryTreeSchemaSql = `
     CREATE TABLE IF NOT EXISTS memory_meta (
@@ -321,8 +321,8 @@ export const MemoryTreeSchemaSql = `
 /**
  * 把记忆树 schema 应用到宿主打开的共享连接（所有 CREATE 均 IF NOT EXISTS，幂等可重跑）。
  *
- * 记忆产品自带 schema 与迁移应用逻辑，宿主只递数据库解析器（§8 open/migrate 动词的落点）；
- * Desktop 现行迁移链仍内联 MemoryTreeSchemaSql 文本，两条路径共享同一份权威 schema 文本。
+ * 记忆产品自带 schema 与迁移应用逻辑，宿主只递数据库解析器。宿主若把建表文本嵌入自己的
+ * 迁移链，也必须复用 MemoryTreeSchemaSql，不得维护第二份 schema 定义。
  */
 export function applyMemoryTreeSchema(database: SQLiteDatabase): void {
   database.exec(MemoryTreeSchemaSql)

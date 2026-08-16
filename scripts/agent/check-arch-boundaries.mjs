@@ -552,12 +552,8 @@ function scanConcreteSemanticInjectionBoundary() {
 
 // —— 防线⑥ 发布必须绑定精确源码身份并发布已验明的同一 tarball ——
 //
-// 2026-08 合并:并仓前每域各核验自己那套 scripts/<domain>/release/*(七份功能等价的副本),
-// 现在全域共用 scripts/release/ 一条链,故契约指向那一份。**核验的语义一条没减,反而多两条**:
-// ① 旧 workflow 没有 publish 步骤,「发布链存在」当时无法机械断言,现在漏接 publish 即红;
-// ② 发布器必须自己核验运行时 ref 就是那个 tag(并仓前只有 model 那份这么做)。
-// 门与 kernel 域那份刻意**不共享代码**:每域独立按字面标记核对,一域的门被改弱不会连带放过其它域
-// (失败方向优先于去重——这里的重复是防线冗余,不是待清理的债)。
+// The Agent gate independently verifies the canonical release workflow, source identity,
+// and tarball publication markers. This redundancy is intentional defense in depth.
 function scanReleaseIdentityBoundary() {
   const violations = []
   const contracts = [

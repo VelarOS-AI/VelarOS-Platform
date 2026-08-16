@@ -2336,7 +2336,7 @@ export const zhCNMessages = {
     gitGithubTokenLabel: 'GitHub 个人访问令牌',
     gitGithubTokenHint:
       '用于 GitHub HTTPS 仓库拉取和上传的 Personal Access Token，例如 ghp_xxx；SSH 仓库仍使用系统 Git 配置。',
-    gitGithubTokenPlaceholder: 'ghp_xxxxxxxxxxxxxxxxxxxx',
+    gitGithubTokenPlaceholder: 'ghp_example_token',
     gitPrivateKeyPathLabel: 'SSH 私钥路径',
     gitPrivateKeyPathHint:
       '用于 Git SSH 仓库拉取和上传的私钥路径，例如 ~/.ssh/id_ed25519；HTTPS 仓库请使用上方 Access Token。',

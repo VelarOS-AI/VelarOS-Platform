@@ -1,5 +1,4 @@
-// VelarOS-Kernel eslint 配置——自 VelarOS-Desktop monorepo eslint.config.mjs 裁剪(K1 拆仓):
-// 去掉 desktop/renderer/react/extension 面,规则本体与 monorepo 逐字一致,保证同一份源码两仓 lint 语义不漂移。
+// Kernel 域 lint 配置：覆盖宿主中立的 contracts、runtime、client 与 serve 切片。
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 

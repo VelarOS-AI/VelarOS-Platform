@@ -9,8 +9,7 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@velaros-ai/core/*": ["./src/*"],
-      "@shared/*": ["../../apps/desktop/src/shared/*"]
+      "@velaros-ai/core/*": ["./src/*"]
     }
   },
   "include": [

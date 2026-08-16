@@ -1,19 +1,19 @@
 # VelarOS 记忆树产品愿景与重构架构
 
-> **⚑ 后端 mod 化定位（2026-07-29 判决，先读这条）**：记忆树**不再是「记忆库本体」，而是三个
-> 后端档里的一档**（`memory-tree` = 未来档，加密树后端）。默认档 = `memory-files`
+> **当前定位**：记忆树不是唯一的记忆实现，而是公开记忆后端中的一档
+> （`memory-tree` = 加密树后端）。默认档 = `memory-files`
 > （markdown 权威层，bundled 恒装）；增强档 = `memory-vector`（市场可选派生索引）。
-> **本文的能力清单一条未改**——五物理根 / Evidence 溯源 / Dream / TreeDiff / crypto-shred /
-> 统一意义模型全部原样成立；被改判的只有**宿主形态**：它从「记忆后端本身」变成一个可插拔后端，
+> 五物理根、Evidence 溯源、Dream、TreeDiff、crypto-shred 与统一意义模型仍属于该后端；
+> 它以可插拔后端而非唯一记忆实现的形态存在，
 > 经 capability token `velaros.memory.store.tree` 注册。
-> 判决全文见 VelarOS-Desktop 仓 `docs/kernel-contract.md` §15.7 与
-> `docs/mod-architecture-blueprint.md` §九；Platform 侧落位、接线图与批次进度见
-> [记忆后端 mod 化实现地图](./memory-backends.md)。
+> 当前后端所有权与宿主边界见 [Platform boundaries](../architecture/platform-boundaries.md)；
+> Platform 侧落位与接线图见 [记忆后端实现地图](./memory-backends.md)。
 >
-> 状态：候选技术架构已经第二 / 四 / 六轮修订。第六轮并入第五轮独立评审的七项最小补丁包：schema 逐表去明文 + 列级分类矩阵、五物理根、加密 index generation、privacy generation + 披露闸门、normalized erasure targets、DEK / keyring / root 三层密钥、物化基点权威表与双哈希规范。修订点见 [记忆树修订记录](./memory-tree-revision-notes.md)、[第三轮](./memory-tree-third-round-review.md) 与 [第五轮评审报告](./memory-tree-fifth-round-review.md)。工程实施已完成 S0 规范冻结、S1 物理根 / keyring / DEK、S2 独立 authority schema/open/migrate、S3 diff/snapshot/base/checkpoint 权威链、S4 Evidence/Dream CAS 管线、S5 统一意义模型/信任封顶/确定性投影、S6 两段式 Erasure Saga、S7 Evidence 只读重灌/治理 deny/parity 切权判定器，以及 S8 package-owned 组合根和同步查询门面；R-memory 已建立独立仓，并把工作区知识域劈为 `@velaros-ai/memory/knowledge`，长期记忆保持为瘦身后的 `@velaros-ai/memory`。S7/S8 只完成可验证迁移与完整读写组合能力；Desktop 权威指针切换和旧表 drop 仍锁在“同一报告摘要的真机回执 + 用户明示签字”双闸门之后。后续切片仍以 [现行冻结规范](./memory-tree-spec-freeze.md) 为准。
-> 日期：2026-07-13
-> 适用范围：VelarOS 桌面产品、`packages/memory`、记忆后台任务、Memory 页面与相关设置
-> 本文是后续大规模重构的候选技术架构；已确认需求以 [记忆树产品需求](./memory-tree-product-requirements.md) 为准，当前代码行为仍以现有模块文档为准。
+> 状态：架构基线。逐字节 schema、canonical serialization、hashing 和 TreeDiff 规则以
+> [现行冻结规范](./memory-tree-spec-freeze.md) 为准；产品行为以
+> [记忆树产品需求](./memory-tree-product-requirements.md) 为准。历史评审记录只解释设计来源，
+> 不覆盖当前代码、测试或冻结规范。
+> 适用范围：`@velaros-ai/memory`、产品宿主适配层、记忆后台任务和相关产品界面。
 
 ## 一句话定义
 
@@ -1304,17 +1304,17 @@ packages/memory/src/memory/
   recall/            # 基于树路径的召回规划
   storage/           # repository、FTS、vector、tree/evidence repositories
 
-apps/desktop/src/main/memory/
-  MemoryDreamCoordinator.ts  # 空闲/电源/前台执行策略与运行编排
-  MemoryEvidenceBridge.ts    # Chat/Execution/Workspace 等宿主事件适配
-  MemoryTreeIpc.ts           # 只暴露稳定查询、提案和运行状态
-  Curation.ts                # desktop model adapter
-  Service.ts                 # 应用 facade
+product-host/memory-adapter/
+  dream-coordinator   # 空闲、电源和前台执行策略与运行编排
+  evidence-bridge     # Chat、Execution、Workspace 等宿主事件适配
+  transport           # 只暴露稳定查询、提案和运行状态
+  model-adapter       # 产品模型服务适配
+  service             # 产品 facade
 
-apps/desktop/src/renderer/src/features/memory/
-  tree/              # 自然树 Canvas renderer、语义缩放、原位分支聚焦、增长 diff
-  chat/              # 查询树与变更提案
-  detail/            # 按需右侧抽屉
+product-host/memory-ui/
+  tree/               # 自然树 renderer、语义缩放、原位分支聚焦、增长 diff
+  chat/               # 查询树与变更提案
+  detail/             # 按需详情界面
 ```
 
 `packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/memory/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
@@ -1323,7 +1323,7 @@ apps/desktop/src/renderer/src/features/memory/
 
 现状代码存在四套彼此独立的“记忆”机制，重构必须明确各自去向，防止树变成第五套：
 
-1. **长期记忆（`packages/memory` + `apps/desktop/src/main/memory`）**：本文的重构对象，整体替换为统一意义模型。
+1. **长期记忆（`packages/memory` + 产品宿主适配层）**：本文的重构对象，整体替换为统一意义模型。
 2. **编码会话记忆辅助器（`packages/agent/src/agent/memory/**`）**：读旧 MemoryRecord 拼 prompt 段；其唯一写入口的生产者已消失，整体删除，能力由树路径召回接管。
 3. **句柄召回体系（`context:recall` / `context:distill` / 折叠桩）**：会话内工作记忆，存储在聊天存档，与长期记忆不共享任何状态。**保持独立**——它管理的是单会话的注意力，不是跨会话的认知。两者唯一的正式交点是采集：达到显著性门槛的会话事件经 `MemoryEvidenceBridge` 进入证据层；蒸馏便签中沉没于存档的重要事实由此获得进入长期层的通道，而不是把句柄体系并入树。
 4. **回合自动召回注入（`TurnRecallCoordinator`，turn-context 第八源）**：形态保留（异步、零阻塞、每会话去重、chips 可划掉），数据源从旧混合检索切换到树路径 facade。

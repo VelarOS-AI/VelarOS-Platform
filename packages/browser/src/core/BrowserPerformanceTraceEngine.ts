@@ -151,7 +151,7 @@ export async function formatBrowserTraceSummary(
 ): Promise<string> {
   const module = await loadEngineModule()
   const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace)
-  const formatter = new module.PerformanceTraceFormatter(focus)
+  const formatter = new module.PerformanceTraceFormatter(focus, 'ALL')
   return formatter.formatTraceSummary()
 }
 
@@ -185,7 +185,7 @@ export async function formatBrowserTraceInsight(
 
   const module = await loadEngineModule()
   const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace)
-  const formatter = new module.PerformanceInsightFormatter(focus, insight)
+  const formatter = new module.PerformanceInsightFormatter(focus, insight, 'ALL')
   return formatter.formatInsight()
 }
 
