@@ -25,6 +25,7 @@ import {
   areRunMarkersEqual,
   type ConversationMessageRunMarker,
 } from "./messageBubbleRenderModel";
+import { ToolActivityMotion } from "./ToolActivityMotion";
 
 import styles from "./MessageBubble.module.css";
 
@@ -57,6 +58,7 @@ const LazyHtmlArtifactBlock = lazy(async () =>
 
 type MessageContentBlockRenderContext = {
   isStreaming: boolean;
+  animateLiveToolActivity: boolean;
   autoCollapseThinking: boolean;
   sessionId: string;
   messageId: string;
@@ -86,6 +88,8 @@ type StructuredBlockRenderer = (
 
 interface MessageContentBlockProps {
   block: ContentBlock;
+  blockAnimationKey?: string;
+  animateLiveToolActivity?: boolean;
   isStreaming: boolean;
   autoCollapseThinking?: boolean;
   animateStreamingText: boolean;
@@ -110,17 +114,25 @@ interface MessageContentBlockProps {
 
 const STRUCTURED_BLOCK_RENDERERS = {
   "tool-call": (block, ctx) => (
-    <Suspense fallback={null}>
-      <LazyToolCallBlock
-        block={block as Extract<ContentBlock, { type: "tool-call" }>}
-        compact={shouldRenderToolBlockCompact(
-          (block as Extract<ContentBlock, { type: "tool-call" }>).toolName,
-        )}
-        sessionId={ctx.sessionId}
-        planUpdateIndex={ctx.planUpdateIndex}
-        formatPathForDisplay={ctx.formatPathForDisplay}
-      />
-    </Suspense>
+    <ToolActivityMotion
+      activityKey={`tool:${(block as Extract<ContentBlock, { type: "tool-call" }>).toolCallId}`}
+      blocks={[block as Extract<ContentBlock, { type: "tool-call" }>]}
+      isStreaming={ctx.animateLiveToolActivity}
+      messageId={ctx.messageId}
+      sessionId={ctx.sessionId}
+    >
+      <Suspense fallback={null}>
+        <LazyToolCallBlock
+          block={block as Extract<ContentBlock, { type: "tool-call" }>}
+          compact={shouldRenderToolBlockCompact(
+            (block as Extract<ContentBlock, { type: "tool-call" }>).toolName,
+          )}
+          sessionId={ctx.sessionId}
+          planUpdateIndex={ctx.planUpdateIndex}
+          formatPathForDisplay={ctx.formatPathForDisplay}
+        />
+      </Suspense>
+    </ToolActivityMotion>
   ),
   thinking: (block, ctx) => (
     <Suspense fallback={null}>
@@ -337,6 +349,8 @@ function renderReplaceableMarkdown({
 
 function MessageContentBlockInner({
   block,
+  blockAnimationKey,
+  animateLiveToolActivity = false,
   isStreaming,
   autoCollapseThinking = false,
   animateStreamingText,
@@ -379,6 +393,7 @@ function MessageContentBlockInner({
 
     return renderer(block, {
       isStreaming,
+      animateLiveToolActivity,
       autoCollapseThinking,
       sessionId,
       messageId,
@@ -406,6 +421,7 @@ function MessageContentBlockInner({
         <Suspense fallback={<PlainTextBlockFallback block={block} />}>
           <LazyStreamingTextBlock
             block={block}
+            animationKey={`${messageId}:${blockAnimationKey ?? blockIndex ?? "text"}`}
             animateText={isStreaming && animateStreamingText}
             isMessageStreaming={isStreaming}
             tailMarker={!isStreaming && runMarker ? runMarker : null}

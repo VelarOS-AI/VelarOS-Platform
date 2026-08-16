@@ -38,6 +38,7 @@ import {
   getToolDescription,
 } from "../tool-render/toolCallSummary";
 
+import { ToolActivityMotion } from "./ToolActivityMotion";
 import {
   ToolResultSummaryList,
   type ToolResultSummaryTone,
@@ -301,11 +302,15 @@ export function ToolActivityDisclosure({
 
 function ToolCallGroupInner({
   blocks,
+  animateLiveToolActivity,
+  messageId,
   sessionId,
   planUpdateIndexByToolCallId,
   formatPathForDisplay,
 }: {
   blocks: ToolCallBlockType[];
+  animateLiveToolActivity: boolean;
+  messageId: string;
   sessionId: string;
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>;
   formatPathForDisplay?: (path: string) => string;
@@ -318,6 +323,8 @@ function ToolCallGroupInner({
         <MergedToolCallRow
           key={group.key}
           group={group}
+          animateLiveToolActivity={animateLiveToolActivity}
+          messageId={messageId}
           sessionId={sessionId}
           planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
           formatPathForDisplay={formatPathForDisplay}
@@ -329,11 +336,15 @@ function ToolCallGroupInner({
 
 function MergedToolCallRowInner({
   group,
+  animateLiveToolActivity,
+  messageId,
   sessionId,
   planUpdateIndexByToolCallId,
   formatPathForDisplay,
 }: {
   group: MergedToolCallGroup;
+  animateLiveToolActivity: boolean;
+  messageId: string;
   sessionId: string;
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>;
   formatPathForDisplay?: (path: string) => string;
@@ -391,8 +402,8 @@ function MergedToolCallRowInner({
     group.representative.toolCallId,
   );
 
-  if (count <= 1)
-    return (
+  const content =
+    count <= 1 ? (
       <div className={styles.toolGroupRow}>
         <Suspense fallback={null}>
           <LazyToolCallBlock
@@ -404,43 +415,53 @@ function MergedToolCallRowInner({
           />
         </Suspense>
       </div>
+    ) : (
+      <ToolResultSummaryList
+        className={styles.toolGroupRow}
+        aria-label={displayName}
+        items={[
+          {
+            id: group.representative.toolCallId,
+            kind: inferToolLeadingKind(group.toolName),
+            tone: resolveMergedToolGroupTone(group.blocks),
+            title,
+            label: displayName,
+            detail: optionalWhenLazy(detailText, () => (
+              <>
+                {detailText}
+                {hasMoreDetails && (
+                  <span className={styles.mergedToolCallEllipsis}>…</span>
+                )}
+              </>
+            )),
+            detailTitle:
+              details.join(detailSeparator) || fallbackDetail || undefined,
+            statusLabel: statusLabel ?? `×${count}`,
+            statusTitle: statusLabel ?? `×${count}`,
+            actionLayout: optionalWhenLazy(commandCopyValue, () => "overlay"),
+            action: optionalWhen(
+              commandCopyValue,
+              <CopyButton
+                value={toOptional(commandCopyValue) ?? ""}
+                label={t("chat.commandCopy")}
+                copiedLabel={t("chat.codeBlockCopied")}
+              />,
+            ),
+          },
+        ]}
+      />
     );
 
   return (
-    <ToolResultSummaryList
-      className={styles.toolGroupRow}
-      aria-label={displayName}
-      items={[
-        {
-          id: group.representative.toolCallId,
-          kind: inferToolLeadingKind(group.toolName),
-          tone: resolveMergedToolGroupTone(group.blocks),
-          title,
-          label: displayName,
-          detail: optionalWhenLazy(detailText, () => (
-            <>
-              {detailText}
-              {hasMoreDetails && (
-                <span className={styles.mergedToolCallEllipsis}>…</span>
-              )}
-            </>
-          )),
-          detailTitle:
-            details.join(detailSeparator) || fallbackDetail || undefined,
-          statusLabel: statusLabel ?? `×${count}`,
-          statusTitle: statusLabel ?? `×${count}`,
-          actionLayout: optionalWhenLazy(commandCopyValue, () => "overlay"),
-          action: optionalWhen(
-            commandCopyValue,
-            <CopyButton
-              value={toOptional(commandCopyValue) ?? ""}
-              label={t("chat.commandCopy")}
-              copiedLabel={t("chat.codeBlockCopied")}
-            />,
-          ),
-        },
-      ]}
-    />
+    <ToolActivityMotion
+      activityKey={`tool:${group.blocks[0]?.toolCallId ?? group.representative.toolCallId}`}
+      blocks={group.blocks}
+      isStreaming={animateLiveToolActivity}
+      messageId={messageId}
+      sessionId={sessionId}
+    >
+      {content}
+    </ToolActivityMotion>
   );
 }
 
