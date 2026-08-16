@@ -61,7 +61,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@velaros-ai/core": "workspace:*",
@@ -194,7 +194,7 @@
     },
     "packages/kernel": {
       "name": "@velaros-ai/kernel",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "velaros-kernel-daemon": "./dist/serve/main.js",
       },
@@ -267,7 +267,7 @@
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/core": "workspace:*",

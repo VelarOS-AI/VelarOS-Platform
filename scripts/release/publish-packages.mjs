@@ -100,6 +100,27 @@ const run = (command, args, cwd) => {
   }
 }
 
+const assertRegistryManifest = (item, tarballPath) => {
+  const packedManifest = JSON.parse(
+    runForOutput('tar', ['-xOf', tarballPath, 'package/package.json'], root),
+  )
+  if (packedManifest.name !== item.manifest.name || packedManifest.version !== item.manifest.version) {
+    throw new Error(
+      `${item.manifest.name} tarball identity is ${packedManifest.name}@${packedManifest.version}, expected ${item.manifest.name}@${item.manifest.version}`,
+    )
+  }
+
+  for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+    for (const [dependency, specification] of Object.entries(packedManifest[field] ?? {})) {
+      if (typeof specification === 'string' && specification.startsWith('workspace:')) {
+        throw new Error(
+          `${item.manifest.name} tarball contains non-installable ${field}.${dependency}=${specification}`,
+        )
+      }
+    }
+  }
+}
+
 // 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、平台代、拓扑序),再谈这趟发几节车厢。
 const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(root)
 // 范围有两个来源,tag 优先:tag 是这次发布的身份,--only 只是 workflow_dispatch 手动收窄时用。
@@ -204,6 +225,10 @@ for (const item of selected) {
     if (!tarballEntries.includes('package/package.json')) {
       throw new Error(`${item.manifest.name} tarball is missing package/package.json`)
     }
+    // 工作树清单应继续用 workspace:* 保证单仓一致性；注册表清单则必须是普通版本号。
+    // 这道门检查真正将要发布的 tarball，防止有人绕过 bun 的 workspace 重写或换回目录发布，
+    // 造出 registry 接受、消费者却因 EUNSUPPORTEDPROTOCOL 无法安装的永久坏版本。
+    assertRegistryManifest(item, tarballPath)
     if (
       item.manifest.files?.includes('dist')
       && !tarballEntries.some((entry) => entry.startsWith('package/dist/'))

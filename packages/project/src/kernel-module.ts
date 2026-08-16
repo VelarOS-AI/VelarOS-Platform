@@ -89,7 +89,7 @@ export function createProjectKernelModule(
   return defineKernelModule({
     manifest: {
       id: 'velaros.project',
-      version: '2.0.0',
+      version: '2.0.1',
       apiVersion: KernelModuleApiVersion,
       provides: [ProjectCapability],
       requires: [],
