@@ -32,4 +32,14 @@ jobs:
         with:
           languages: javascript-typescript
       - name: Analyze
+        id: analyze
         uses: github/codeql-action/analyze@f52b05f4acaaa234e44466e66d29050e135ea9ef # v4.36.0
+        with:
+          upload: never
+      - name: Preserve CodeQL results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-javascript-typescript-sarif
+          path: ${{ steps.analyze.outputs.sarif-output }}
+          if-no-files-found: error
+          retention-days: 14
