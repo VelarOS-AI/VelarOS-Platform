@@ -334,6 +334,34 @@
   max-width: 100%;
 }
 
+.liveToolActivityGroup {
+  @apply flex w-full min-w-0 flex-col gap-2;
+  max-width: min(920px, 100%);
+}
+
+.toolActivityMotion {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  isolation: isolate;
+}
+
+.toolActivityMotionEnter {
+  animation: tool-activity-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.toolActivityMotionUpdatePulse {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: calc(var(--ui-radius-control) + 2px);
+  background: color-mix(in srgb, var(--control-checked) 10%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: tool-activity-update 240ms ease-out both;
+}
+
 .toolActivityToggle {
   @apply inline-flex max-w-full items-center gap-1 border-0 bg-transparent px-0 py-0.5 text-left;
   appearance: none;
@@ -1526,6 +1554,10 @@
   margin-top: 0.85rem;
 }
 
+.streamingMarkdownChunk :global([data-velar-stream-fade]) {
+  animation: streaming-text-tail-in 120ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .inlineNoticeRunning,
   .inlineNoticeRunning::after,
@@ -1533,6 +1565,7 @@
   .runningStatusDot,
   .assistantMemorySpinIcon,
   .thinkingPlainTextStreamingChar,
+  .streamingMarkdownChunk :global([data-velar-stream-fade]),
   .expandableCodeBlock[data-collapsed='true'] [data-streamdown='code-block-body'] {
     animation: none;
     transition: none;
@@ -1546,6 +1579,44 @@
   .toolActivityChevron,
   .toolActivityBodyShell {
     transition: none;
+  }
+
+  .toolActivityMotionEnter,
+  .toolActivityMotionUpdatePulse {
+    animation: none;
+  }
+}
+
+@keyframes tool-activity-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tool-activity-update {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  38% {
+    opacity: 1;
+  }
+}
+
+@keyframes streaming-text-tail-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 
@@ -1732,6 +1803,19 @@
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.liveThinkingBlock {
+  @apply flex w-full min-w-0 flex-col gap-1;
+  max-width: min(920px, 100%);
+  padding-block: 2px;
+}
+
+.liveThinkingLabel {
+  color: var(--foreground-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
 }
 
 .thinkingPlainTextStreamingChar {

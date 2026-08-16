@@ -9,7 +9,8 @@
  *    并发抢渲染（每 token 一次全量 session 更新）"导致的卡顿与闪现；代价是思考与正文按到达
  *    顺序串行逐帧吐（模型通常先想后写，因此基本是先把思考打完再打正文）。
  *  - 队首块若仍是最后一个块（还在持续接收），就保持直播逐帧吐。
- *  - 文本积压越大单帧字符预算越大；超上限整批排空（有界滞后）。
+ *  - 文本按真实经过时间累计字符额度；积压只温和提高每秒速率，不能放大单帧吐字量。
+ *    长帧恢复时也有严格单帧上限，不会为了“追赶”突然冒出一整段。
  *  - **干净收尾（end/done）平滑收尾**：挂起为 pendingTerminal，等 FIFO 积压逐帧吐完后才
  *    finalize，避免正文一次性闪现；其余终止/交互事件（error/aborted/awaiting/…）仍立即排空应用。
  */
@@ -84,9 +85,7 @@ interface PacerEventBlock<TEvent extends ChatStreamEvent> {
 }
 
 type PacerBlock<TEvent extends ChatStreamEvent> =
-  | PacerTextBlock
-  | PacerReasoningBlock
-  | PacerEventBlock<TEvent>
+  PacerTextBlock | PacerReasoningBlock | PacerEventBlock<TEvent>
 
 interface PacerSessionState<TEvent extends ChatStreamEvent> {
   blocks: Array<PacerBlock<TEvent>>
@@ -95,6 +94,10 @@ interface PacerSessionState<TEvent extends ChatStreamEvent> {
   pendingTerminals: TEvent[]
   /** reasoning 不进 FIFO、立即应用；这里按 id 记录已登记原文用于增量去重。 */
   reasoningRawText: Map<string, string>
+  /** 上一帧时间；空闲时重置，防止把后台停顿累计成下一次突发额度。 */
+  lastFrameTimeMs: Nullable<number>
+  /** 不足一个字符的额度跨帧结转；上限由 tuning.maxCharsPerFrame 约束。 */
+  charCredit: number
 }
 
 /** 干净收尾事件（end / done）——平滑吐完积压后再 finalize，而非立即强排空。 */
@@ -154,7 +157,12 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     if (last?.kind === 'text') {
       last.pendingChars += text
     } else {
-      this.insertBlock(state, { kind: 'text', key: `text:${sequence}`, seq: sequence, pendingChars: text })
+      this.insertBlock(state, {
+        kind: 'text',
+        key: `text:${sequence}`,
+        seq: sequence,
+        pendingChars: text,
+      })
     }
     this.scheduleSession(sessionId, state)
   }
@@ -210,14 +218,24 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
       if (last?.kind === 'event' && last.key === toolKey) {
         last.events.push(event)
       } else {
-        this.insertBlock(state, { kind: 'event', key: toolKey, seq: sequence, events: [event] })
+        this.insertBlock(state, {
+          kind: 'event',
+          key: toolKey,
+          seq: sequence,
+          events: [event],
+        })
       }
       this.scheduleSession(sessionId, state)
       return
     }
 
     // 其它结构事件（worker-thread / notice / debug / 非终止 state）各自成块。
-    this.insertBlock(state, { kind: 'event', key: `event:${sequence}`, seq: sequence, events: [event] })
+    this.insertBlock(state, {
+      kind: 'event',
+      key: `event:${sequence}`,
+      seq: sequence,
+      events: [event],
+    })
     this.scheduleSession(sessionId, state)
   }
 
@@ -281,22 +299,25 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     this.clearSession(sessionId)
   }
 
-  private emitBlockChunk(sessionId: string, block: PacerTextBlock | PacerReasoningBlock, maxChars: number): void {
+  private emitBlockChunk(
+    sessionId: string,
+    block: PacerTextBlock | PacerReasoningBlock,
+    maxChars: number
+  ): number {
     const emit = block.pendingChars.slice(0, Math.max(1, maxChars))
-    if (!emit) return
+    if (!emit) return 0
     block.pendingChars = block.pendingChars.slice(emit.length)
 
     if (block.kind === 'text') {
       this.options.applyTextChunk(sessionId, emit)
     } else {
-      this.options.applyDeferredLiveEvent(
-        sessionId,
-        {
-          type: 'reasoning',
-          payload: { id: block.reasoningId, text: emit },
-        } as TEvent
-      )
+      this.options.applyDeferredLiveEvent(sessionId, {
+        type: 'reasoning',
+        payload: { id: block.reasoningId, text: emit },
+      } as TEvent)
     }
+
+    return emit.length
   }
 
   private flushAllBlocks(sessionId: string, state: PacerSessionState<TEvent>): void {
@@ -333,7 +354,7 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     state.blocks = []
   }
 
-  private flushSession(sessionId: string): void {
+  private flushSession(sessionId: string, frameTimeMs: number): void {
     const state = this.sessions.get(sessionId)
     if (!state) return
 
@@ -364,19 +385,15 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
       (sum, block) => sum + (block.kind === 'event' ? block.events.length : 0),
       0
     )
-    // 平滑收尾中禁用 hardCap 整批排空：哪怕积压很大也按 maxChars 上限逐帧吐完，正文不再瞬现。
-    const budget = resolveStreamPaceBudget(
-      { backlogChars, backlogEvents },
-      this.options.tuning,
-      { smooth: draining }
-    )
-
-    if (budget.forceDrain) {
-      this.flushAllBlocks(sessionId, state)
-      this.applyPendingTerminals(sessionId, state)
-      this.sessions.delete(sessionId)
-      return
-    }
+    const elapsedMs = isPresent(state.lastFrameTimeMs)
+      ? Math.max(0, frameTimeMs - state.lastFrameTimeMs)
+      : undefined
+    state.lastFrameTimeMs = frameTimeMs
+    const budget = resolveStreamPaceBudget({ backlogChars, backlogEvents }, this.options.tuning, {
+      elapsedMs,
+      carriedCharCredit: state.charCredit,
+    })
+    state.charCredit = budget.availableCharCredit
 
     const front = state.blocks[0]
     front.started = true
@@ -389,8 +406,9 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
           applied += 1
         }
       }
-    } else {
-      this.emitBlockChunk(sessionId, front, budget.charBudget)
+    } else if (budget.charBudget > 0) {
+      const emittedChars = this.emitBlockChunk(sessionId, front, budget.charBudget)
+      state.charCredit = Math.max(0, state.charCredit - emittedChars)
     }
 
     // 队首已收尾且吐空则出队。
@@ -403,7 +421,8 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
 
   private rescheduleIfPending(sessionId: string, state: PacerSessionState<TEvent>): void {
     const hasPending = state.blocks.some(
-      (block) => blockPendingCharCount(block) > 0 || (block.kind === 'event' && !isEmpty(block.events))
+      (block) =>
+        blockPendingCharCount(block) > 0 || (block.kind === 'event' && !isEmpty(block.events))
     )
     // 平滑收尾中即使队首已吐空也要继续排帧，下一帧出队收尾块并应用终止事件。
     if (hasPending || !isEmpty(state.pendingTerminals)) {
@@ -412,13 +431,22 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     }
 
     // 仍有一个直播中的空队首块时保留 state（供后续增量并入），但不空转排帧。
+    state.lastFrameTimeMs = null
+    state.charCredit = 0
     if (isEmpty(state.blocks)) this.sessions.delete(sessionId)
   }
 
   private getSessionState(sessionId: string): PacerSessionState<TEvent> {
     let state = this.sessions.get(sessionId)
     if (!state) {
-      state = { blocks: [], frame: null, pendingTerminals: [], reasoningRawText: new Map() }
+      state = {
+        blocks: [],
+        frame: null,
+        pendingTerminals: [],
+        reasoningRawText: new Map(),
+        lastFrameTimeMs: null,
+        charCredit: 0,
+      }
       this.sessions.set(sessionId, state)
     }
     return state
@@ -434,8 +462,11 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
   private scheduleSession(sessionId: string, state: PacerSessionState<TEvent>): void {
     if (isPresent(state.frame)) return
 
-    state.frame = this.options.timers.nextFrame(() => this.flushSession(sessionId), {
-      label: `stream.pace.flush:${sessionId}`,
-    })
+    state.frame = this.options.timers.nextFrame(
+      (frameTimeMs) => this.flushSession(sessionId, frameTimeMs),
+      {
+        label: `stream.pace.flush:${sessionId}`,
+      }
+    )
   }
 }

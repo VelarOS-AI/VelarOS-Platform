@@ -2,10 +2,10 @@
  * 流式起搏预算（纯函数，无副作用、无环境全局，便于单测）。
  *
  * 设计目标：
- *  - 平稳：空闲时按 base 速率匀速吐字 / 应用事件。
- *  - 自适应：文本积压越多，单 tick 字符预算越大，渲染追得越快。
- *  - 单结构更新：结构事件固定每 tick 一个，避免多个块同帧更新造成卡顿。
- *  - 有界滞后：文本积压超过 hardCap 时排空文本（forceDrain），结构事件仍逐帧应用。
+ *  - 稳定：字符预算按真实经过时间累计，不再与显示器刷新率绑定。
+ *  - 平滑：积压只提高每秒速率，不直接放大单帧吐字量。
+ *  - 抗卡顿：长帧只按 `maxFrameIntervalMs` 计时，恢复后不会一次补吐整段。
+ *  - 单结构更新：结构事件固定每帧一个，避免多个工具卡同帧更新造成卡顿。
  */
 
 export interface StreamPaceBacklog {
@@ -16,33 +16,40 @@ export interface StreamPaceBacklog {
 }
 
 export interface StreamPaceBudget {
-  /** 本 tick 最多吐出的字符数。 */
+  /** 本帧最多吐出的字符数。 */
   charBudget: number
-  /** 本 tick 最多应用的结构事件数。 */
+  /** 本帧最多应用的结构事件数。 */
   eventBudget: number
-  /** 为 true 时本 tick 直接排空全部积压（积压超上限的兜底）。 */
-  forceDrain: boolean
+  /** 本帧计算完成、尚未消费的字符额度。实际吐字后由起搏器扣减。 */
+  availableCharCredit: number
 }
 
 export interface StreamPaceTuning {
-  baseChars: number
-  charGain: number
-  maxChars: number
-  hardCapChars: number
+  /** 无明显积压时的目标字符速率。 */
+  baseCharsPerSecond: number
+  /** 每个积压字符为目标速率增加的字符/秒；最终仍受 maxCharsPerSecond 限制。 */
+  backlogCharsPerSecondGain: number
+  /** 有积压时允许的最高字符速率。 */
+  maxCharsPerSecond: number
+  /** 单帧硬上限；主线程从卡顿中恢复也不能超过它。 */
+  maxCharsPerFrame: number
+  /** 单帧最多计入多少经过时间，避免长帧累积巨额额度。 */
+  maxFrameIntervalMs: number
+  /** 没有上一帧时间戳时使用的名义帧间隔。 */
+  nominalFrameIntervalMs: number
   baseEvents: number
 }
 
 /** 默认起搏参数；可在起搏器构造时覆盖，落地后按手感调。 */
 export const DefaultStreamPaceTuning: StreamPaceTuning = {
-  // 正文逐字打字效果：每帧只吐少量字符，避免一次性把整段答案瞬现。
-  // baseChars 为空闲匀速；charGain 为积压追赶增益；maxChars 封顶单帧吐字（防瞬现）。
-  baseChars: 16,
-  charGain: 0.06,
-  maxChars: 160,
-  // hardCap 触发 forceDrain（整批瞬排）——这是"正文突然出现一大块"的根因：快模型/大块 IPC
-  // delta 把积压瞬间顶过阈值时，整段正文会在一帧里全吐出。调高到只对病态级（>10 万字）兜底，
-  // 正常长度的回答即使来得很快，也始终按 maxChars 逐帧平滑吐字；收尾残余由 smooth 模式吐完。
-  hardCapChars: 100000,
+  // 96 chars/s 约等于 60Hz 下每帧 1～2 字；积压很大时平滑抬到 180 chars/s，
+  // 但任何一帧最多 6 字。这样既不会慢吞吞追尾，也不会突然冒出一整段。
+  baseCharsPerSecond: 96,
+  backlogCharsPerSecondGain: 0.08,
+  maxCharsPerSecond: 180,
+  maxCharsPerFrame: 6,
+  maxFrameIntervalMs: 34,
+  nominalFrameIntervalMs: 1000 / 60,
   baseEvents: 1,
 }
 
@@ -50,12 +57,15 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value))
 }
 
+function normalizeFinite(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback
+}
+
 export interface ResolveStreamPaceBudgetOptions {
-  /**
-   * 平滑收尾模式：禁用 hardCap 整批排空（forceDrain），即使积压很大也按 maxChars 上限
-   * 逐帧匀速吐完。收到 end/done 后用它把残余积压"平滑收尾"，避免正文一次性闪现。
-   */
-  smooth?: boolean
+  /** 当前帧距上一帧的真实时间。 */
+  elapsedMs?: number
+  /** 上一帧剩余的不足一字额度。 */
+  carriedCharCredit?: number
 }
 
 export function resolveStreamPaceBudget(
@@ -63,22 +73,48 @@ export function resolveStreamPaceBudget(
   tuning: StreamPaceTuning = DefaultStreamPaceTuning,
   options: ResolveStreamPaceBudgetOptions = {}
 ): StreamPaceBudget {
-  const backlogChars = Math.max(0, backlog.backlogChars)
-  const eventBudget = Math.max(1, Math.floor(tuning.baseEvents))
+  const backlogChars = Math.max(0, Math.floor(normalizeFinite(backlog.backlogChars, 0)))
+  const eventBudget = Math.max(1, Math.floor(normalizeFinite(tuning.baseEvents, 1)))
 
-  if (!options.smooth && backlogChars >= tuning.hardCapChars) return {
-      charBudget: Math.max(backlogChars, tuning.maxChars),
+  if (backlogChars === 0)
+    return {
+      charBudget: 0,
       eventBudget,
-      forceDrain: true,
+      availableCharCredit: 0,
     }
 
+  const baseRate = Math.max(1, normalizeFinite(tuning.baseCharsPerSecond, 1))
+  const maxRate = Math.max(baseRate, normalizeFinite(tuning.maxCharsPerSecond, baseRate))
+  const backlogGain = Math.max(0, normalizeFinite(tuning.backlogCharsPerSecondGain, 0))
+  const charsPerSecond = clamp(baseRate + backlogChars * backlogGain, baseRate, maxRate)
+  const maxCharsPerFrame = Math.max(1, Math.floor(normalizeFinite(tuning.maxCharsPerFrame, 1)))
+  const nominalFrameIntervalMs = Math.max(
+    0,
+    normalizeFinite(tuning.nominalFrameIntervalMs, 1000 / 60)
+  )
+  const maxFrameIntervalMs = Math.max(
+    nominalFrameIntervalMs,
+    normalizeFinite(tuning.maxFrameIntervalMs, nominalFrameIntervalMs)
+  )
+  const elapsedMs = clamp(
+    normalizeFinite(options.elapsedMs ?? nominalFrameIntervalMs, nominalFrameIntervalMs),
+    0,
+    maxFrameIntervalMs
+  )
+  const carriedCharCredit = clamp(
+    normalizeFinite(options.carriedCharCredit ?? 0, 0),
+    0,
+    maxCharsPerFrame
+  )
+  const availableCharCredit = clamp(
+    carriedCharCredit + (charsPerSecond * elapsedMs) / 1000,
+    0,
+    maxCharsPerFrame
+  )
+
   return {
-    charBudget: clamp(
-      Math.ceil(tuning.baseChars + backlogChars * tuning.charGain),
-      tuning.baseChars,
-      tuning.maxChars
-    ),
+    charBudget: Math.min(backlogChars, Math.floor(availableCharCredit), maxCharsPerFrame),
     eventBudget,
-    forceDrain: false,
+    availableCharCredit,
   }
 }

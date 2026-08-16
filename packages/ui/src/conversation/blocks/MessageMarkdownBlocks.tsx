@@ -1,7 +1,9 @@
 import React, {
+  createContext,
   memo,
   type ReactElement,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -9,7 +11,13 @@ import React, {
   useState,
 } from 'react'
 import { CaretRightIcon, GlobeHemisphereWestIcon } from '@phosphor-icons/react'
-import { type Components as StreamdownComponents, Streamdown } from 'streamdown'
+import {
+  Block as StreamdownBlock,
+  type BlockProps as StreamdownBlockProps,
+  type Components as StreamdownComponents,
+  Streamdown,
+  StreamdownContext,
+} from 'streamdown'
 
 import { StyleUtils } from '@velaros-ai/ui'
 
@@ -39,12 +47,29 @@ import { useMessageMarkdownComponents } from './useMessageMarkdownComponents'
 import styles from './MessageBubble.module.css'
 
 import type { TextBlock, ThinkingBlock as ThinkingContentBlock } from '#contracts'
-import { isBlank, isPresent, isString } from '#internal/runtime'
+import { isBlank, isObject, isPresent, isString, toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 const MESSAGE_STREAMDOWN_CLASS_NAME = 'space-y-0'
 const MaxThinkingAnimatedTextKeys = 500
 const ThinkingAnimatedTextLengthByKey = new Map<string, number>()
+const MaxStreamingTextAnimationKeys = 1_000
+const StreamingTextAnimatedLengthByKey = new Map<string, number>()
+const StreamingTextAnimationKeyContext = createContext<Nullable<string>>(null)
+const StreamFadeExcludedTagNames = new Set(['code', 'pre', 'svg', 'math', 'annotation'])
+
+interface StreamFadeNode {
+  type?: string
+  value?: string
+  tagName?: string
+  properties?: Record<string, unknown>
+  children?: StreamFadeNode[]
+}
+
+interface StreamFadePluginState {
+  previousTextLength: number
+  renderedTextLength: number
+}
 
 function countDisplayCharacters(text: string): number {
   return Array.from(text).length
@@ -68,6 +93,167 @@ function rememberThinkingAnimatedTextLength(blockKey: string, textLength: number
   ThinkingAnimatedTextLengthByKey.set(blockKey, textLength)
 }
 
+function rememberStreamingTextAnimatedLength(blockKey: string, textLength: number): void {
+  const previousLength = StreamingTextAnimatedLengthByKey.get(blockKey)
+  if (isPresent(previousLength)) {
+    StreamingTextAnimatedLengthByKey.delete(blockKey)
+    StreamingTextAnimatedLengthByKey.set(blockKey, Math.max(previousLength, textLength))
+    return
+  }
+
+  if (StreamingTextAnimatedLengthByKey.size >= MaxStreamingTextAnimationKeys) {
+    const oldestKey = StreamingTextAnimatedLengthByKey.keys().next().value
+    if (isString(oldestKey)) StreamingTextAnimatedLengthByKey.delete(oldestKey)
+  }
+  StreamingTextAnimatedLengthByKey.set(blockKey, textLength)
+}
+
+function isStreamFadeNode(value: unknown): value is StreamFadeNode {
+  return isObject(value)
+}
+
+function createStreamFadeTextNode(value: string): StreamFadeNode {
+  return { type: 'text', value }
+}
+
+function createStreamFadeAnimatedNode(value: string): StreamFadeNode {
+  return {
+    type: 'element',
+    tagName: 'span',
+    properties: { 'data-velar-stream-fade': true },
+    children: [createStreamFadeTextNode(value)],
+  }
+}
+
+export function resolveIncrementalStreamFadeText({
+  previousTextLength,
+  text,
+  textStart,
+}: {
+  previousTextLength: number
+  text: string
+  textStart: number
+}): { newText: string; unchangedText: string } {
+  const textEnd = textStart + text.length
+  if (isBlank(text) || textEnd <= previousTextLength) return { newText: '', unchangedText: text }
+
+  const unchangedLength = Math.max(0, Math.min(text.length, previousTextLength - textStart))
+  const unchangedText = text.slice(0, unchangedLength)
+  const newText = text.slice(unchangedLength)
+  if (isBlank(newText)) return { newText: '', unchangedText: text }
+
+  return { newText, unchangedText }
+}
+
+export function resolveStreamingTextFadeBaseline(rememberedTextLength?: number): number {
+  // 首次观察可能是刚创建的文本块，也可能是切回后已积累很长的运行中消息。统一把现有内容当基线，
+  // 等下一次增量再淡入，才能从构造上杜绝整段/整屏重播。
+  return rememberedTextLength ?? Number.MAX_SAFE_INTEGER
+}
+
+function animateNewStreamFadeText(
+  node: StreamFadeNode,
+  state: StreamFadePluginState,
+  cursor: { textLength: number }
+): StreamFadeNode[] {
+  const value = node.value ?? ''
+  const textStart = cursor.textLength
+  const textEnd = textStart + value.length
+  cursor.textLength = textEnd
+  const { newText, unchangedText } = resolveIncrementalStreamFadeText({
+    previousTextLength: state.previousTextLength,
+    text: value,
+    textStart,
+  })
+  if (!newText) return [node]
+
+  return [
+    ...(unchangedText ? [createStreamFadeTextNode(unchangedText)] : []),
+    createStreamFadeAnimatedNode(newText),
+  ]
+}
+
+function applyStreamFadeToNode(
+  node: StreamFadeNode,
+  state: StreamFadePluginState,
+  cursor: { textLength: number },
+  excluded = false
+): void {
+  const nextExcluded =
+    excluded || (node.type === 'element' && StreamFadeExcludedTagNames.has(node.tagName ?? ''))
+  if (nextExcluded || !node.children) return
+
+  for (let index = 0; index < node.children.length; index += 1) {
+    const child = node.children[index]
+    if (!child) continue
+
+    if (child.type === 'text') {
+      const replacements = animateNewStreamFadeText(child, state, cursor)
+      node.children.splice(index, 1, ...replacements)
+      index += replacements.length - 1
+      continue
+    }
+
+    applyStreamFadeToNode(child, state, cursor)
+  }
+}
+
+function createIncrementalStreamFadePlugin(state: StreamFadePluginState) {
+  return function incrementalStreamFadePlugin() {
+    return (tree: unknown): void => {
+      if (!isStreamFadeNode(tree)) return
+
+      const cursor = { textLength: 0 }
+      applyStreamFadeToNode(tree, state, cursor)
+      state.renderedTextLength = cursor.textLength
+    }
+  }
+}
+
+/**
+ * Streamdown 会在 streaming 模式里重解析最后一个 Markdown block。这里为每个解析块维护持久长度，
+ * 只把这次真正新增的尾部包成一个 span；旧节点、会话重挂载和完成态重组都不会重新淡入。
+ */
+function PersistentStreamingTextBlock(props: StreamdownBlockProps): ReactElement {
+  const animationKey = useContext(StreamingTextAnimationKeyContext)
+  const { isAnimating } = useContext(StreamdownContext)
+  const persistentBlockKey = animationKey ? `${animationKey}:streamdown:${props.index}` : null
+  const pluginStateRef = useRef<StreamFadePluginState>({
+    previousTextLength: 0,
+    renderedTextLength: 0,
+  })
+  const committedBlockKeyRef = useRef<Nullable<string>>(null)
+  const incrementalFadePlugin = useMemo(
+    () => createIncrementalStreamFadePlugin(pluginStateRef.current),
+    []
+  )
+  const shouldAnimate = isAnimating && isPresent(persistentBlockKey)
+  const hasCommittedCurrentBlock = committedBlockKeyRef.current === persistentBlockKey
+  const pluginState = pluginStateRef.current
+  pluginState.previousTextLength = shouldAnimate
+    ? resolveStreamingTextFadeBaseline(
+        hasCommittedCurrentBlock
+          ? StreamingTextAnimatedLengthByKey.get(persistentBlockKey)
+          : undefined
+      )
+    : Number.MAX_SAFE_INTEGER
+  pluginState.renderedTextLength = 0
+  const rehypePlugins = useMemo(
+    () =>
+      shouldAnimate ? [...(props.rehypePlugins ?? []), incrementalFadePlugin] : props.rehypePlugins,
+    [incrementalFadePlugin, props.rehypePlugins, shouldAnimate]
+  )
+
+  useLayoutEffect(() => {
+    if (!shouldAnimate || !persistentBlockKey) return
+
+    rememberStreamingTextAnimatedLength(persistentBlockKey, pluginState.renderedTextLength)
+    committedBlockKeyRef.current = persistentBlockKey
+  }, [persistentBlockKey, pluginState, props.content, shouldAnimate])
+
+  return <StreamdownBlock {...props} animatePlugin={null} rehypePlugins={rehypePlugins} />
+}
+
 function renderStreamingThinkingText(
   text: string,
   animatedTextStartIndex: number
@@ -79,15 +265,12 @@ function renderStreamingThinkingText(
   return (
     <>
       {characters.slice(0, normalizedStartIndex).join('')}
-      {characters.slice(normalizedStartIndex).map((char, offset) => {
-        const index = normalizedStartIndex + offset
-
-        return (
-          <span key={`${index}-${char}`} className={styles.thinkingPlainTextStreamingChar}>
-            {char}
-          </span>
-        )
-      })}
+      <span
+        key={`${normalizedStartIndex}:${characters.length}`}
+        className={styles.thinkingPlainTextStreamingChar}
+      >
+        {characters.slice(normalizedStartIndex).join('')}
+      </span>
     </>
   )
 }
@@ -109,9 +292,11 @@ function useStreamingThinkingAnimationStartIndex({
   blockKey: string
   text: string
 }): number {
+  const committedBlockKeyRef = useRef<Nullable<string>>(null)
   const textLength = useMemo(() => countDisplayCharacters(text), [text])
   const animatedTextStartIndex = useMemo(() => {
     if (!isStreaming) return textLength
+    if (committedBlockKeyRef.current !== blockKey) return textLength
 
     const rememberedLength = ThinkingAnimatedTextLengthByKey.get(blockKey)
     return isPresent(rememberedLength) ? Math.min(rememberedLength, textLength) : textLength
@@ -121,6 +306,7 @@ function useStreamingThinkingAnimationStartIndex({
     if (!isStreaming) return
 
     rememberThinkingAnimatedTextLength(blockKey, textLength)
+    committedBlockKeyRef.current = blockKey
   }, [blockKey, isStreaming, textLength])
 
   return animatedTextStartIndex
@@ -152,9 +338,12 @@ function ThinkingBlockInner({
   const [isTranslating, setIsTranslating] = useState(false)
   const [translateError, setTranslateError] = useState<Nullable<string>>(null)
   const autoTranslateRequestKeyRef = useRef<Nullable<string>>(null)
+  const wasStreamingRef = useRef(isStreaming)
   const { mounted: isMounted, visible: isVisible } = useDisclosurePresence(expanded)
   const fullDisplayText = getThinkingBlockDisplayText(block, locale)
-  const displayText = getStreamingThinkingDisplayText(fullDisplayText, { streaming: isStreaming })
+  const displayText = getStreamingThinkingDisplayText(fullDisplayText, {
+    streaming: isStreaming,
+  })
   const blockKey = `${messageId}:${blockIndex ?? 'thinking'}:${block.streamId ?? 'stream'}`
   const animatedTextStartIndex = useStreamingThinkingAnimationStartIndex({
     isStreaming,
@@ -170,6 +359,12 @@ function ThinkingBlockInner({
       setExpanded(false)
     }
   }, [autoCollapse])
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current
+    wasStreamingRef.current = isStreaming
+    if (wasStreaming && !isStreaming) setExpanded(false)
+  }, [isStreaming])
 
   useEffect(() => {
     if (buttonKind !== 'translate') {
@@ -231,6 +426,43 @@ function ThinkingBlockInner({
         ? t('chat.thinkingShowTranslation')
         : t('chat.thinkingTranslate')
 
+  const thinkingContent = (
+    <>
+      <pre className={styles.thinkingPlainText}>
+        {isStreaming
+          ? renderStreamingThinkingText(displayText, animatedTextStartIndex)
+          : displayText}
+      </pre>
+      {canTranslate && (
+        <div className={styles.thinkingTranslateRow}>
+          <button
+            type="button"
+            className={styles.thinkingTranslateButton}
+            disabled={isTranslating}
+            title={translateButtonLabel}
+            onClick={() => {
+              void handleTranslate()
+            }}
+          >
+            <GlobeHemisphereWestIcon size={13} aria-hidden="true" />
+            <span>{isTranslating ? t('chat.thinkingTranslating') : translateButtonLabel}</span>
+          </button>
+          {!!translateError && (
+            <span className={styles.thinkingTranslateError}>{translateError}</span>
+          )}
+        </div>
+      )}
+    </>
+  )
+
+  if (shouldRenderThinkingAsFlat({ autoCollapse, isStreaming }))
+    return (
+      <div className={styles.liveThinkingBlock} data-thinking-presentation="flat">
+        <div className={styles.liveThinkingLabel}>{label}</div>
+        {thinkingContent}
+      </div>
+    )
+
   return (
     <div className={cx('toolActivityDisclosure', 'thinkingBlock')}>
       <button
@@ -265,39 +497,22 @@ function ThinkingBlockInner({
           aria-hidden={!isVisible}
         >
           <div className={styles.toolActivityBodyFrame}>
-            <div className={styles.toolActivityBody}>
-              <pre className={styles.thinkingPlainText}>
-                {isStreaming
-                  ? renderStreamingThinkingText(displayText, animatedTextStartIndex)
-                  : displayText}
-              </pre>
-              {canTranslate && (
-                <div className={styles.thinkingTranslateRow}>
-                  <button
-                    type="button"
-                    className={styles.thinkingTranslateButton}
-                    disabled={isTranslating}
-                    title={translateButtonLabel}
-                    onClick={() => {
-                      void handleTranslate()
-                    }}
-                  >
-                    <GlobeHemisphereWestIcon size={13} aria-hidden="true" />
-                    <span>
-                      {isTranslating ? t('chat.thinkingTranslating') : translateButtonLabel}
-                    </span>
-                  </button>
-                  {!!translateError && (
-                    <span className={styles.thinkingTranslateError}>{translateError}</span>
-                  )}
-                </div>
-              )}
-            </div>
+            <div className={styles.toolActivityBody}>{thinkingContent}</div>
           </div>
         </div>
       )}
     </div>
   )
+}
+
+export function shouldRenderThinkingAsFlat({
+  autoCollapse,
+  isStreaming,
+}: {
+  autoCollapse: boolean
+  isStreaming: boolean
+}): boolean {
+  return isStreaming && !autoCollapse
 }
 
 export const ThinkingBlock = memo(ThinkingBlockInner)
@@ -306,25 +521,30 @@ ThinkingBlock.displayName = 'ThinkingBlock'
 function MessageStreamdownInner({
   text,
   isStreaming,
+  animationKey,
   components,
 }: {
   text: string
   isStreaming: boolean
+  animationKey?: string
   components: StreamdownComponents
 }): ReactElement {
   return (
-    <Streamdown
-      mode={resolveStreamdownMarkdownMode({ isStreaming })}
-      isAnimating={false}
-      animated={false}
-      plugins={STREAMDOWN_MARKDOWN_PLUGINS}
-      linkSafety={STREAMDOWN_MARKDOWN_LINK_SAFETY}
-      controls={STREAMDOWN_MARKDOWN_CONTROLS}
-      className={MESSAGE_STREAMDOWN_CLASS_NAME}
-      components={components}
-    >
-      {text}
-    </Streamdown>
+    <StreamingTextAnimationKeyContext.Provider value={toNullable(animationKey)}>
+      <Streamdown
+        mode={resolveStreamdownMarkdownMode({ isStreaming })}
+        isAnimating={isStreaming && !!animationKey}
+        animated={false}
+        BlockComponent={animationKey ? PersistentStreamingTextBlock : undefined}
+        plugins={STREAMDOWN_MARKDOWN_PLUGINS}
+        linkSafety={STREAMDOWN_MARKDOWN_LINK_SAFETY}
+        controls={STREAMDOWN_MARKDOWN_CONTROLS}
+        className={MESSAGE_STREAMDOWN_CLASS_NAME}
+        components={components}
+      >
+        {text}
+      </Streamdown>
+    </StreamingTextAnimationKeyContext.Provider>
   )
 }
 
@@ -389,6 +609,7 @@ MessageMarkdownBlock.displayName = 'MessageMarkdownBlock'
 
 function StreamingTextBlockInner({
   block,
+  animationKey,
   animateText,
   isMessageStreaming,
   tailMarker,
@@ -396,6 +617,7 @@ function StreamingTextBlockInner({
   onOpenProjectPath,
 }: {
   block: TextBlock
+  animationKey: string
   animateText: boolean
   isMessageStreaming: boolean
   tailMarker?: LooseOptional<ConversationMessageRunMarker>
@@ -442,6 +664,7 @@ function StreamingTextBlockInner({
         <MessageStreamdown
           text={streamdownText}
           isStreaming={animateText}
+          animationKey={animateText ? animationKey : undefined}
           components={components}
         />
         {!!tailMarkerNode && (

@@ -3,8 +3,10 @@ import React, {
   type ReactElement,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
@@ -100,8 +102,23 @@ function buildMessageSegmentSuffixStates(
   return suffixStates
 }
 
-function shouldRenderActivityGroupDisclosure(segment: MessageRenderSegment): boolean {
-  return segment.kind === 'activity-group' && !isEmpty(segment.blocks)
+export function shouldRenderActivityGroupDisclosure(
+  segment: MessageRenderSegment,
+  isStreaming: boolean
+): boolean {
+  return !isStreaming && segment.kind === 'activity-group' && !isEmpty(segment.blocks)
+}
+
+export function shouldAnimateLiveToolActivity({
+  armedMessageId,
+  isStreaming,
+  messageId,
+}: {
+  armedMessageId: Nullable<string>
+  isStreaming: boolean
+  messageId: string
+}): boolean {
+  return isStreaming && armedMessageId === messageId
 }
 
 function collectToolCallBlocksFromToolRenderSegment(
@@ -185,6 +202,12 @@ function AssistantMessageSegmentsInner({
   const { locale } = useConversationI18n()
   const translatorRuntime = useConversationTranslatorRuntime()
   const recentlyStreamingMessageIdRef = useRef<Nullable<string>>(null)
+  const [toolMotionArmedMessageId, setToolMotionArmedMessageId] = useState<Nullable<string>>(null)
+  const animateLiveToolActivity = shouldAnimateLiveToolActivity({
+    armedMessageId: toolMotionArmedMessageId,
+    isStreaming,
+    messageId,
+  })
   const shouldRevealStreamingText =
     isStreaming || recentlyStreamingMessageIdRef.current === messageId
 
@@ -197,6 +220,13 @@ function AssistantMessageSegmentsInner({
     if (recentlyStreamingMessageIdRef.current === messageId) {
       recentlyStreamingMessageIdRef.current = null
     }
+  }, [isStreaming, messageId])
+
+  // 首次挂载（含切回仍在运行的会话）先让现有工具卡提交并登记 revision，再武装后续入场动画。
+  // layout effect 的同步二次渲染发生在浏览器绘制前，因此旧卡不会在重挂载时集体重播；
+  // 此后真正新到达的 toolCallId 仍会正常播放一次入场。
+  useLayoutEffect(() => {
+    setToolMotionArmedMessageId(isStreaming ? messageId : null)
   }, [isStreaming, messageId])
 
   useEffect(() => {
@@ -275,6 +305,8 @@ function AssistantMessageSegmentsInner({
           <ToolCallGroup
             key={segment.key}
             blocks={segment.blocks}
+            animateLiveToolActivity={animateLiveToolActivity}
+            messageId={messageId}
             sessionId={sessionId}
             planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
             formatPathForDisplay={formatPathForDisplay}
@@ -285,6 +317,8 @@ function AssistantMessageSegmentsInner({
           <MergedToolCallRow
             key={segment.key}
             group={segment.group}
+            animateLiveToolActivity={animateLiveToolActivity}
+            messageId={messageId}
             sessionId={sessionId}
             planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
             formatPathForDisplay={formatPathForDisplay}
@@ -304,6 +338,8 @@ function AssistantMessageSegmentsInner({
       <MessageContentBlock
         key={segment.key}
         block={segment.block}
+        blockAnimationKey={segment.key}
+        animateLiveToolActivity={animateLiveToolActivity}
         isStreaming={isStreaming}
         autoCollapseThinking={options.autoCollapseThinking}
         animateStreamingText={shouldRevealStreamingText && segment.key === streamingTextSegmentKey}
@@ -347,11 +383,18 @@ function AssistantMessageSegmentsInner({
     const renderActivityGroupChildren = (): ReactNode[] =>
       segment.segments.map((childSegment) => renderToolRenderSegment(childSegment))
 
-    return shouldRenderActivityGroupDisclosure(segment) ? (
+    if (isStreaming)
+      return (
+        <div key={segment.key} className={styles.liveToolActivityGroup}>
+          {renderActivityGroupChildren()}
+        </div>
+      )
+
+    return shouldRenderActivityGroupDisclosure(segment, isStreaming) ? (
       <ToolActivityDisclosure
         key={segment.key}
         blocks={segment.blocks}
-        defaultExpanded={isStreaming}
+        autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
       >
         {() => renderActivityGroupChildren()}
       </ToolActivityDisclosure>
@@ -420,10 +463,15 @@ function AssistantMessageSegmentsInner({
             key={`processed-activity:${key ?? renderedSegments.length}`}
             blocks={blocks}
             autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
-            label={getProcessedActivityDisclosureLabel(blocks, locale, {
-              goalCompletionSummary,
-              responseDurationMs,
-            }, translatorRuntime)}
+            label={getProcessedActivityDisclosureLabel(
+              blocks,
+              locale,
+              {
+                goalCompletionSummary,
+                responseDurationMs,
+              },
+              translatorRuntime
+            )}
             isRunning={false}
           >
             {() => renderSegments()}
@@ -492,10 +540,15 @@ function AssistantMessageSegmentsInner({
             key={`processed-activity:${firstProcessedKey}`}
             blocks={processedActivityBlocks}
             autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
-            label={getProcessedActivityDisclosureLabel(processedActivityBlocks, locale, {
-              goalCompletionSummary,
-              responseDurationMs,
-            }, translatorRuntime)}
+            label={getProcessedActivityDisclosureLabel(
+              processedActivityBlocks,
+              locale,
+              {
+                goalCompletionSummary,
+                responseDurationMs,
+              },
+              translatorRuntime
+            )}
             isRunning={false}
           >
             {() => [

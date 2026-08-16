@@ -4258,6 +4258,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "MessageContentBlock.blockAnimationKey",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "MessageContentBlock.animateLiveToolActivity",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
       "name": "MessageContentBlock.isStreaming",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",
