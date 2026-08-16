@@ -60,7 +60,7 @@ function projectCategoryForTool(name: string): keyof typeof ProjectCategoryTools
 
 const ProjectAgentModManifest = Object.freeze({
   id: ProjectModId,
-  version: '2.0.0',
+  version: '2.0.1',
   publisher: 'VelarOS',
   displayName: 'VelarOS Project',
   description: '项目空间的文件、变更与执行职责包。',
