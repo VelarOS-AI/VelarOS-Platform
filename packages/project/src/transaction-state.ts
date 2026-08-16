@@ -15,7 +15,15 @@ import {
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-import { isArray, isNumber, isRecord, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isFiniteNumber,
+  isRecord,
+  isString,
+  isUndefined,
+  toOptional,
+} from '@velaros-ai/core'
 
 import type { StoredTransaction } from './core/project-kernel.js'
 import type { ProjectChangeRecordInput } from './change-feed.js'
@@ -79,7 +87,7 @@ function boundedString(value: unknown, maximum: number, label: string): asserts 
 }
 
 function optionalBoundedString(value: unknown, maximum: number, label: string): void {
-  if (value !== undefined) boundedString(value, maximum, label)
+  if (!isUndefined(value)) boundedString(value, maximum, label)
 }
 
 function isRisk(value: unknown): boolean {
@@ -102,14 +110,14 @@ function assertPatch(value: unknown): void {
   boundedString(value.diff, MaximumContentBytes, 'patch diff')
   if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0) fail('patch changed lines')
   if (!isRisk(value.risk)) fail('patch risk')
-  if (value.metadata !== undefined && !isRecord(value.metadata)) fail('patch metadata')
+  if (!isUndefined(value.metadata) && !isRecord(value.metadata)) fail('patch metadata')
 }
 
 function assertFileSnapshot(value: unknown): void {
   if (!isRecord(value)) fail('base snapshot must be an object')
   boundedString(value.path, MaximumPathBytes, 'base snapshot path')
   boundedString(value.revision, MaximumIdentifierBytes, 'base snapshot revision')
-  if (typeof value.exists !== 'boolean' || typeof value.isDirectory !== 'boolean' || typeof value.isBinary !== 'boolean') {
+  if (!isBoolean(value.exists) || !isBoolean(value.isDirectory) || !isBoolean(value.isBinary)) {
     fail('base snapshot flags')
   }
   optionalBoundedString(value.content, MaximumContentBytes, 'base snapshot content')
@@ -125,8 +133,8 @@ function assertStoredTransaction(value: unknown): asserts value is StoredTransac
   boundedString(value.diff, MaximumContentBytes, 'transaction diff')
   if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0) fail('transaction changed lines')
   if (!isRisk(value.risk)) fail('transaction risk')
-  if (!isNumber(value.createdAt) || !Number.isFinite(value.createdAt)) fail('transaction createdAt')
-  if (value.appliedAt !== undefined && (!isNumber(value.appliedAt) || !Number.isFinite(value.appliedAt))) {
+  if (!isFiniteNumber(value.createdAt)) fail('transaction createdAt')
+  if (!isUndefined(value.appliedAt) && !isFiniteNumber(value.appliedAt)) {
     fail('transaction appliedAt')
   }
   if (!isArray(value.baseSnapshots) || value.baseSnapshots.length > MaximumChangedFilesPerTransaction) {
@@ -149,17 +157,17 @@ function assertProjection(value: unknown): asserts value is ProjectChangeRecordI
   if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0) fail('projection changed lines')
   if (!isRisk(value.risk)) fail('projection risk')
   if (!isArray(value.revisions) || value.revisions.length > MaximumChangedFilesPerTransaction) fail('projection revisions')
-  if (!isNumber(value.createdAt) || !Number.isFinite(value.createdAt)) fail('projection createdAt')
-  if (value.appliedAt !== undefined && (!isNumber(value.appliedAt) || !Number.isFinite(value.appliedAt))) {
+  if (!isFiniteNumber(value.createdAt)) fail('projection createdAt')
+  if (!isUndefined(value.appliedAt) && !isFiniteNumber(value.appliedAt)) {
     fail('projection appliedAt')
   }
 }
 
 function assertFileState(value: unknown, label: string): asserts value is ProjectTransactionFileState {
-  if (!isRecord(value) || typeof value.exists !== 'boolean') fail(label)
+  if (!isRecord(value) || !isBoolean(value.exists)) fail(label)
   optionalBoundedString(value.content, MaximumContentBytes, label)
   if (value.exists && !isString(value.content)) fail(label)
-  if (!value.exists && value.content !== undefined) fail(label)
+  if (!value.exists && !isUndefined(value.content)) fail(label)
 }
 
 function assertPending(value: unknown): asserts value is ProjectTransactionPendingOperation {
@@ -205,7 +213,7 @@ function assertSnapshot(value: unknown, root: string): asserts value is ProjectT
     projectionIds.add(projection.transactionId)
   }
   const pending = value.pending
-  if (pending !== undefined) assertPending(pending)
+  if (!isUndefined(pending)) assertPending(pending)
 
   if (pending) {
     const transaction = transactionsById.get(pending.transactionId)
@@ -276,7 +284,7 @@ export class FileProjectTransactionStateStore {
       root: this.root,
       transactions: input.transactions,
       projections: input.projections,
-      ...(input.pending ? { pending: input.pending } : {}),
+      pending: toOptional(input.pending),
     }
     const source = JSON.stringify(next)
     if (new TextEncoder().encode(source).byteLength > MaximumStateBytes) fail('state file exceeds 256 MiB')
@@ -309,7 +317,7 @@ export class FileProjectTransactionStateStore {
         closeSync(directoryDescriptor)
       }
     } catch (error) {
-      if (descriptor !== undefined) closeSync(descriptor)
+      if (!isUndefined(descriptor)) closeSync(descriptor)
       try {
         unlinkSync(temporaryPath)
       } catch {
