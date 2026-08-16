@@ -24,9 +24,9 @@
 //  - **base revision 不匹配 → 先试 rebase，再失败才抛**：只有 `QueueRebaseFriendlyOperations`
 //    里那些"靠锚点定位、不依赖绝对偏移"的操作允许 rebase。把 `create_file`/`delete_file`
 //    放进这个集合会让"文件已被别人改过"被静默覆盖。
-//  - **多文件写入原子化靠逆序还原，不是靠事务日志**：`captureApplyRestoreState` 在写盘前抓
-//    每个路径的原始正文，任一补丁失败即按 `writtenOrder` 逆序回写。二进制/超限文件抓不到正文
-//    （`restorable: false`），此时**记账告警而不是静默跳过**——这是已知的部分原子性边界。
+//  - **多文件写入原子化有两档**：宿主提供 `transactionStatePath` 时，写盘前先提交可恢复计划，
+//    进程中断后由下一次 owner 启动恢复；不能完整捕获旧正文的事务在写前拒绝。无 durable state
+//    的嵌入式调用仍靠 `captureApplyRestoreState` + 逆序还原，并保留旧的二进制/超限告警边界。
 //  - **`rollback` 有前置全量预检**：任何非 create 补丁缺 `oldContent` 就整体拒绝。少了这一步，
 //    `patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
 //  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
@@ -48,6 +48,7 @@ import {
   type ProjectChangeFeedWriter,
   type ProjectChangeLifecycle,
   projectChangePatches,
+  type ProjectChangeRecordInput,
   type ProjectChangeRevision,
 } from "../change-feed.js";
 import { ProjectError } from "../errors.js";
@@ -61,6 +62,12 @@ import { PatchStrategyRegistry } from "../registry/patch-registry.js";
 import { PluginRegistry, type RegistrySink } from "../registry/plugin-registry.js";
 import { ValidatorRegistry } from "../registry/validator-registry.js";
 import { searchWithRipgrep } from "../search/ripgrep.js";
+import {
+  FileProjectTransactionStateStore,
+  type ProjectTransactionFileState,
+  type ProjectTransactionPendingOperation,
+  type ProjectTransactionRestoreEntry,
+} from "../transaction-state.js";
 import type { FileAdapterFactory, ProjectSymbol } from "../types/adapter.js";
 import type { BatchInput, BatchMetrics, BatchResult } from "../types/batch.js";
 import type { Diagnostic, DiffResult, ProjectStatus,Range, RiskLevel } from "../types/common.js";
@@ -146,6 +153,8 @@ export interface CreateProjectKernelOptions {
   metadata?: Record<string, any>;
   /** 宿主持有写端；编辑器等消费者只能从 kernel.changeFeed 读取。 */
   changeFeed?: ProjectChangeFeedWriter;
+  /** 宿主私有、项目根绑定的可恢复事务状态文件。 */
+  transactionStatePath?: string;
 }
 
 /** Project Agent 与 Kernel capability 共用的项目内核接口。 */
@@ -194,6 +203,10 @@ function revisionMismatch(message: string, details: any): ProjectError {
   );
 }
 
+function cloneStoredTransaction(transaction: StoredTransaction): StoredTransaction {
+  return structuredClone(transaction);
+}
+
 const QueueRebaseFriendlyOperations = new Set<string>([
   "replace_text",
   "delete_text",
@@ -228,14 +241,6 @@ const DefaultImplicitSearchExcludeGlobs = ["node_modules/**", ".git/**", "dist/*
 // 全部事务（含已准备未应用的）总量兜底；正常 prepare→apply 不受影响。
 const MaxRetainedTransactions = 1000;
 
-/**
- * 内核三张内存表的整体快照，供 CLI 把「一次进程内的会话」持久化到磁盘再恢复。
- *
- * 这是**唯一**允许外部读写 `targets` / `evidence` / `transactions` 的接缝。它存在的原因是
- * CLI 是多进程的（每条命令一个进程），而事务模型天然跨命令：`prepare` 与 `apply` 必须在两次
- * 进程里看到同一张事务表。没有这个接缝，CLI 侧只能强转穿透 private 字段——那既绕过类型系统，
- * 又让内核的字段重命名变成远端崩溃。
- */
 /** applyEdit 失败回滚所需的单个路径原始状态。 */
 interface ApplyRestoreState {
   existedBefore: boolean;
@@ -270,6 +275,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   readonly locks = new LockManager();
   readonly store: FileStore;
   private readonly changeFeedWriter: ProjectChangeFeedWriter;
+  private readonly transactionState?: FileProjectTransactionStateStore;
+  private readonly transactionProjections = new Map<string, ProjectChangeRecordInput>();
 
   private targets = new Map<string, ResolvedTarget>();
   private evidence = new Map<string, EvidencePack>();
@@ -297,45 +304,137 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       this.providers.fileFilter,
       this.providers.command
     );
+    if (options.transactionStatePath) {
+      this.transactionState = new FileProjectTransactionStateStore({
+        path: options.transactionStatePath,
+        root: this.root,
+      });
+      const durable = this.transactionState.snapshot();
+      for (const transaction of durable.transactions) {
+        this.transactions.set(transaction.transactionId, transaction);
+        if (transaction.status === "applied" || transaction.status === "rolled_back") {
+          this.terminalTransactionOrder.push(transaction.transactionId);
+        }
+      }
+      for (const projection of durable.projections) {
+        this.transactionProjections.set(projection.transactionId, projection);
+      }
+    }
+  }
+
+  private transactionStateValues(): StoredTransaction[] {
+    return [...this.transactions.values()];
+  }
+
+  private transactionProjectionValues(): ProjectChangeRecordInput[] {
+    return [...this.transactionProjections.values()];
+  }
+
+  private persistTransactionState(pending?: ProjectTransactionPendingOperation): void {
+    this.transactionState?.commit({
+      transactions: this.transactionStateValues(),
+      projections: this.transactionProjectionValues(),
+      pending,
+    });
   }
 
   /**
-   * 把事务的最新投影写入 ChangeFeed。feed 故障只降级审计面，绝不能把已经成功的磁盘事务
-   * 伪装成失败；宿主 logger 会收到明确故障供健康状态上报。
+   * apply/rollback 的文件与主状态已经提交后，Git 元数据或内存淘汰只属于附带治理。
+   * 它们的二次快照失败不能把一个已经成功落盘的事务伪装成失败。
+   */
+  private persistCommittedTransactionState(transactionId: string, reason: string): void {
+    try {
+      this.persistTransactionState();
+    } catch (error) {
+      this.providers.logger?.warn?.("project.transactionState.postCommit.failed", {
+        transactionId,
+        reason,
+        error: AppError.getMessage(error),
+      });
+    }
+  }
+
+  private transactionChangeProjection(
+    tx: StoredTransaction,
+    lifecycle: ProjectChangeLifecycle,
+    newIntents: readonly EditIntent[] = [],
+    revisions?: readonly ProjectChangeRevision[],
+  ): ProjectChangeRecordInput {
+    const previous = this.transactionProjections.get(tx.transactionId)
+      ?? this.changeFeedWriter.get(tx.transactionId);
+    const intents = [...(previous?.intents ?? []), ...newIntents];
+    const reasons = [...new Set(intents.map((intent) => intent.reason?.trim()).filter(isPresent))];
+    return {
+      transactionId: tx.transactionId,
+      lifecycle,
+      reason: optionalWhen(!isEmpty(reasons), reasons.join("; ")),
+      intents,
+      patches: projectChangePatches(tx.patches),
+      changedFiles: [...tx.changedFiles],
+      diff: tx.diff,
+      changedLines: tx.changedLines,
+      risk: tx.risk,
+      revisions: revisions ?? previous?.revisions ?? tx.baseSnapshots.map((snapshot) => ({
+        path: snapshot.path,
+        before: snapshot.revision,
+      })),
+      createdAt: tx.createdAt,
+      appliedAt: tx.appliedAt,
+    };
+  }
+
+  /**
+   * 先把事务与最新投影提交到唯一 durable state，再把审计投影追加到 ChangeFeed。
+   * feed 故障只降级审计面，不能让它领先于或否定已经提交的事务状态。
    */
   private publishTransactionChange(
     tx: StoredTransaction,
     lifecycle: ProjectChangeLifecycle,
     newIntents: readonly EditIntent[] = [],
     revisions?: readonly ProjectChangeRevision[],
+    removeTransaction = false,
   ): void {
+    const projection = this.transactionChangeProjection(tx, lifecycle, newIntents, revisions);
+    const previousProjection = this.transactionProjections.get(tx.transactionId);
+    const retainedTransaction = this.transactions.get(tx.transactionId);
+    this.transactionProjections.set(tx.transactionId, projection);
+    if (removeTransaction) this.transactions.delete(tx.transactionId);
     try {
-      const previous = this.changeFeedWriter.get(tx.transactionId);
-      const intents = [...(previous?.intents ?? []), ...newIntents];
-      const reasons = [...new Set(intents.map((intent) => intent.reason?.trim()).filter(isPresent))];
-      this.changeFeedWriter.record({
-        transactionId: tx.transactionId,
-        lifecycle,
-        reason: optionalWhen(!isEmpty(reasons), reasons.join("; ")),
-        intents,
-        patches: projectChangePatches(tx.patches),
-        changedFiles: [...tx.changedFiles],
-        diff: tx.diff,
-        changedLines: tx.changedLines,
-        risk: tx.risk,
-        revisions: revisions ?? previous?.revisions ?? tx.baseSnapshots.map((snapshot) => ({
-          path: snapshot.path,
-          before: snapshot.revision,
-        })),
-        createdAt: tx.createdAt,
-        appliedAt: tx.appliedAt,
-      });
+      this.persistTransactionState();
+    } catch (error) {
+      if (previousProjection) this.transactionProjections.set(tx.transactionId, previousProjection);
+      else this.transactionProjections.delete(tx.transactionId);
+      if (removeTransaction && retainedTransaction) this.transactions.set(tx.transactionId, retainedTransaction);
+      throw error;
+    }
+    try {
+      this.changeFeedWriter.record(projection);
     } catch (error) {
       this.providers.logger?.warn?.("project.changeFeed.record.failed", {
         transactionId: tx.transactionId,
         lifecycle,
         error: AppError.getMessage(error),
       });
+    }
+  }
+
+  private reconcileDurableChangeFeed(): void {
+    for (const projection of this.transactionProjections.values()) {
+      const current = this.changeFeedWriter.get(projection.transactionId);
+      if (current?.lifecycle === projection.lifecycle
+        && current.diff === projection.diff
+        && current.appliedAt === projection.appliedAt) {
+        continue;
+      }
+      try {
+        this.changeFeedWriter.record(projection);
+      } catch (error) {
+        this.providers.logger?.warn?.("project.changeFeed.reconcile.failed", {
+          transactionId: projection.transactionId,
+          lifecycle: projection.lifecycle,
+          error: AppError.getMessage(error),
+        });
+      }
     }
   }
 
@@ -975,6 +1074,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 记录已结束事务，并在超过保留上限时淘汰最旧的事务记录（保留磁盘外的内存治理）。 */
   private retainTerminalTransaction(transactionId: string): void {
+    this.terminalTransactionOrder = this.terminalTransactionOrder.filter((idValue) => idValue !== transactionId);
     this.terminalTransactionOrder.push(transactionId);
     while (this.terminalTransactionOrder.length > MaxRetainedTerminalTransactions) {
       const oldest = this.terminalTransactionOrder.shift();
@@ -998,6 +1098,131 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       });
     }
     return restoreByPath;
+  }
+
+  private transactionOwnedStates(
+    tx: StoredTransaction,
+    kind: ProjectTransactionPendingOperation["kind"],
+    pathValue: string,
+  ): ProjectTransactionFileState[] {
+    const patches = kind === "apply" ? tx.patches : [...tx.patches].reverse();
+    const states: ProjectTransactionFileState[] = [];
+    for (const patchValue of patches) {
+      if (patchValue.path !== pathValue) continue;
+      const op = patchValue.metadata?.op;
+      const deletes = kind === "apply"
+        ? op === "delete_file" || op === "rename_file_delete"
+        : op === "create_file" || op === "rename_file_create";
+      states.push(deletes
+        ? { exists: false }
+        : {
+            exists: true,
+            content: kind === "apply" ? patchValue.newContent ?? "" : patchValue.oldContent ?? "",
+          });
+    }
+    return states;
+  }
+
+  private durableRestorePlan(
+    tx: StoredTransaction,
+    kind: ProjectTransactionPendingOperation["kind"],
+    restoreByPath: Map<string, ApplyRestoreState>,
+  ): ProjectTransactionRestoreEntry[] {
+    const plan: ProjectTransactionRestoreEntry[] = [];
+    for (const pathValue of tx.changedFiles) {
+      const restore = restoreByPath.get(pathValue);
+      if (!restore?.restorable || (restore.existedBefore && !isString(restore.oldContent))) {
+        throw new ProjectError(
+          "PATCH_APPLY_ERROR",
+          `事务 ${tx.transactionId} 无法建立可恢复写盘计划：${pathValue}`,
+          { transactionId: tx.transactionId, path: pathValue, operation: kind },
+          "请把二进制或超限文件拆出该事务；可恢复事务只写入能够完整捕获旧正文的文件。",
+        );
+      }
+      const ownedStates = this.transactionOwnedStates(tx, kind, pathValue);
+      if (isEmpty(ownedStates)) {
+        throw new ProjectError(
+          "PATCH_APPLY_ERROR",
+          `事务 ${tx.transactionId} 的路径缺少可验证写盘状态：${pathValue}`,
+          { transactionId: tx.transactionId, path: pathValue, operation: kind },
+        );
+      }
+      plan.push({
+        path: pathValue,
+        exists: restore.existedBefore,
+        ...(restore.existedBefore ? { content: restore.oldContent! } : {}),
+        ownedStates,
+      });
+    }
+    return plan;
+  }
+
+  private fileStateMatches(
+    snapshot: FileSnapshot,
+    state: ProjectTransactionFileState,
+  ): boolean {
+    if (!state.exists) return !snapshot.exists;
+    return snapshot.exists
+      && !snapshot.isDirectory
+      && !snapshot.isBinary
+      && snapshot.content === state.content;
+  }
+
+  private async restoreDurableOperation(pending: ProjectTransactionPendingOperation): Promise<void> {
+    const tx = this.transactions.get(pending.transactionId);
+    if (!tx) {
+      throw new ProjectError(
+        "TRANSACTION_RECOVERY_CONFLICT",
+        `可恢复操作引用了不存在的事务：${pending.transactionId}`,
+        { pending },
+      );
+    }
+    for (const restore of [...pending.restore].reverse()) {
+      const current = await this.store.snapshot(restore.path, true, { skipFileFilter: true });
+      if (this.fileStateMatches(current, restore)) continue;
+      if (!restore.ownedStates.some((state) => this.fileStateMatches(current, state))) {
+        throw new ProjectError(
+          "TRANSACTION_RECOVERY_CONFLICT",
+          `事务恢复拒绝覆盖无法归属于本事务的外部内容：${restore.path}`,
+          {
+            transactionId: pending.transactionId,
+            operation: pending.kind,
+            path: restore.path,
+            actualRevision: current.revision,
+          },
+          "请先人工保全当前文件，再决定保留外部内容还是事务恢复点。",
+        );
+      }
+      if (restore.exists) {
+        await this.store.write(restore.path, restore.content!, { skipFileFilter: true });
+      } else {
+        await this.store.remove(restore.path, { skipFileFilter: true });
+      }
+    }
+    tx.status = pending.previousStatus;
+    this.persistTransactionState();
+  }
+
+  private beginDurableOperation(
+    tx: StoredTransaction,
+    kind: ProjectTransactionPendingOperation["kind"],
+    restoreByPath: Map<string, ApplyRestoreState>,
+  ): ProjectTransactionPendingOperation | undefined {
+    if (!this.transactionState) return undefined;
+    const pending: ProjectTransactionPendingOperation = {
+      kind,
+      transactionId: tx.transactionId,
+      previousStatus: tx.status,
+      restore: this.durableRestorePlan(tx, kind, restoreByPath),
+    };
+    this.persistTransactionState(pending);
+    return pending;
+  }
+
+  public async initializeTransactionState(): Promise<void> {
+    const pending = this.transactionState?.snapshot().pending;
+    if (pending) await this.restoreDurableOperation(pending);
+    this.reconcileDurableChangeFeed();
   }
 
   /** apply 写盘失败时，按逆序把已写文件还原到本次 apply 前的状态，使多文件写入保持原子性。 */
@@ -1265,10 +1490,16 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   public async prepareEdit(input: PrepareEditInput): Promise<PreparedTransaction> {
     await this.hooks.emit("BeforePrepareEdit", this, input);
     await this.decide("prepare_edit", undefined, input);
+    const transactionsBeforePrepare = new Map(this.transactions);
     const tx = await this.prepareTransaction(input);
+    try {
+      this.publishTransactionChange(tx, "prepared", input.operations);
+    } catch (error) {
+      this.transactions = transactionsBeforePrepare;
+      throw error;
+    }
     await this.hooks.emit("AfterPrepareEdit", this, tx);
     this.journal.record({ actor: "system", action: "prepare_edit", transactionId: tx.transactionId, outputSummary: `${tx.changedFiles.length} 个文件，${tx.changedLines} 行变更`, risk: tx.risk });
-    this.publishTransactionChange(tx, "prepared", input.operations);
     return tx;
   }
 
@@ -1283,8 +1514,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     if (tx.appliedAt || tx.status === "applied") {
       throw new ProjectError("INVALID_INPUT", `只能丢弃尚未应用的事务：${transactionId}`);
     }
-    this.publishTransactionChange(tx, "discarded");
-    this.transactions.delete(transactionId);
+    this.publishTransactionChange(tx, "discarded", [], undefined, true);
     return { discarded: true };
   }
 
@@ -1318,28 +1548,34 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       },
     );
 
-    preparedTx.patches.push(
-      ...amendment.patches.map((patchValue) => ({
-        ...patchValue,
-        metadata: {
-          ...(patchValue.metadata ?? {}),
-          amendedFromTransactionId: preparedTx.transactionId,
-        },
-      })),
-    );
-    preparedTx.baseSnapshots.push(...amendment.baseSnapshots);
-    preparedTx.metadata = {
-      ...(preparedTx.metadata ?? {}),
-      amendmentMetadata: toOptional(input.metadata),
-      amendedAt: Date.now(),
-      amendmentCount: Number(preparedTx.metadata?.amendmentCount ?? 0) + 1,
-    };
-    preparedTx.status = "prepared";
-    this.refreshTransactionSummary(preparedTx);
-    this.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines);
+    const transactionBeforeAmend = cloneStoredTransaction(tx);
+    try {
+      preparedTx.patches.push(
+        ...amendment.patches.map((patchValue) => ({
+          ...patchValue,
+          metadata: {
+            ...(patchValue.metadata ?? {}),
+            amendedFromTransactionId: preparedTx.transactionId,
+          },
+        })),
+      );
+      preparedTx.baseSnapshots.push(...amendment.baseSnapshots);
+      preparedTx.metadata = {
+        ...(preparedTx.metadata ?? {}),
+        amendmentMetadata: toOptional(input.metadata),
+        amendedAt: Date.now(),
+        amendmentCount: Number(preparedTx.metadata?.amendmentCount ?? 0) + 1,
+      };
+      preparedTx.status = "prepared";
+      this.refreshTransactionSummary(preparedTx);
+      this.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines);
+      this.publishTransactionChange(tx, "amended", input.operations);
+    } catch (error) {
+      this.transactions.set(input.transactionId, transactionBeforeAmend);
+      throw error;
+    }
     await this.hooks.emit("AfterPrepareEdit", this, preparedTx);
     this.journal.record({ actor: "system", action: "amend_edit", transactionId: preparedTx.transactionId, outputSummary: `${input.operations.length} amendment operation(s)`, risk: preparedTx.risk });
-    this.publishTransactionChange(tx, "amended", input.operations);
     return preparedTx;
   }
 
@@ -1463,35 +1699,45 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const newRevisions: Record<string, string> = {};
       const rebasedFiles = new Set<string>();
       const createdFiles: string[] = [];
+      const transactionBeforePreflight = cloneStoredTransaction(tx);
+      let restoreByPath: Map<string, ApplyRestoreState>;
+      let pending: ProjectTransactionPendingOperation | undefined;
 
-      // 写盘前先为每个受影响路径捕获原始状态，供失败回滚使用。
-      // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
-      const restoreByPath = await this.captureApplyRestoreState(tx.changedFiles);
+      try {
+        // 在 durable write-ahead plan 之前完成全部 revision/rebase 判定，保证计划里记录的
+        // owned state 就是后面实际可能写入磁盘的内容。
+        for (let patchIndex = 0; patchIndex < tx.patches.length; patchIndex += 1) {
+          let patch = tx.patches[patchIndex];
+          if (!patch.baseRevision) continue;
+          const current = await this.store.snapshot(patch.path, true, { skipFileFilter: true });
+          oldRevisions[patch.path] = current.revision;
+          if (!current.exists || current.revision === patch.baseRevision) continue;
+          const canReplayRolledBackPatch =
+            isRestoringRolledBackTransaction &&
+            isString(patch.oldContent) &&
+            current.content === patch.oldContent;
+          if (canReplayRolledBackPatch) continue;
+          const rebased = await this.tryRebasePatch(patch, current);
+          if (!rebased) {
+            throw revisionMismatch(`${patch.path} 的补丁 base revision 已变化`, { expected: patch.baseRevision, actual: current.revision });
+          }
+          patch = rebased;
+          tx.patches[patchIndex] = rebased;
+          rebasedFiles.add(rebased.path);
+        }
+
+        // 写盘前先为每个受影响路径捕获原始状态，供失败回滚使用。
+        // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
+        restoreByPath = await this.captureApplyRestoreState(tx.changedFiles);
+        pending = this.beginDurableOperation(tx, "apply", restoreByPath);
+      } catch (error) {
+        this.transactions.set(tx.transactionId, transactionBeforePreflight);
+        throw error;
+      }
       const writtenOrder: string[] = [];
 
       try {
-        for (let patchIndex = 0; patchIndex < tx.patches.length; patchIndex += 1) {
-          let patch = tx.patches[patchIndex];
-          if (patch.baseRevision) {
-            const current = await this.store.snapshot(patch.path, true, { skipFileFilter: true });
-            oldRevisions[patch.path] = current.revision;
-            if (current.exists && current.revision !== patch.baseRevision) {
-              const canReplayRolledBackPatch =
-                isRestoringRolledBackTransaction &&
-                isString(patch.oldContent) &&
-                current.content === patch.oldContent;
-              if (!canReplayRolledBackPatch) {
-                // 只有保留了足够 intent 元数据的操作才允许安全 rebase。
-                const rebased = await this.tryRebasePatch(patch, current);
-                if (!rebased) {
-                  throw revisionMismatch(`${patch.path} 的补丁 base revision 已变化`, { expected: patch.baseRevision, actual: current.revision });
-                }
-                patch = rebased;
-                tx.patches[patchIndex] = rebased;
-                rebasedFiles.add(rebased.path);
-              }
-            }
-          }
+        for (const patch of tx.patches) {
           const op = patch.metadata?.op;
           if (op === "delete_file" || op === "rename_file_delete") {
             await this.store.remove(patch.path, { skipFileFilter: true });
@@ -1512,9 +1758,30 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         }
       } catch (writeError) {
         // 多文件写入原子化：任一补丁失败时，按逆序把已写文件还原到本次 apply 前的状态。
-        await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
+        if (pending) await this.restoreDurableOperation(pending);
+        else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
         throw writeError;
       }
+      const previousStatus = pending?.previousStatus ?? tx.status;
+      const previousAppliedAt = tx.appliedAt;
+      tx.status = "applied";
+      tx.appliedAt = Date.now();
+      const appliedRevisions = tx.changedFiles.map((pathValue) => ({
+        path: pathValue,
+        before: oldRevisions[pathValue],
+        after: newRevisions[pathValue],
+      }));
+      try {
+        this.publishTransactionChange(tx, "applied", [], appliedRevisions);
+      } catch (stateError) {
+        tx.status = previousStatus;
+        tx.appliedAt = previousAppliedAt;
+        if (pending) await this.restoreDurableOperation(pending);
+        else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
+        throw stateError;
+      }
+
+      // Git intent-to-add 是已提交文件事务的附带可见性，不进入崩溃恢复提交点。
       const gitTrackedFiles = await this.trackCreatedFilesInGit(createdFiles);
       if (gitTrackedFiles.length > 0) {
         tx.metadata = {
@@ -1522,9 +1789,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           gitTrackedFiles,
         };
       }
-      tx.status = "applied";
-      tx.appliedAt = Date.now();
       this.retainTerminalTransaction(tx.transactionId);
+      this.persistCommittedTransactionState(tx.transactionId, "git metadata or terminal retention");
       const result: ApplyResult = {
         status: "applied",
         transactionId: tx.transactionId,
@@ -1536,11 +1802,6 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       };
       await this.hooks.emit("AfterApplyEdit", this, result);
       this.journal.record({ actor: "system", action: "apply_edit", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(","), risk: tx.risk });
-      this.publishTransactionChange(tx, "applied", [], tx.changedFiles.map((pathValue) => ({
-        path: pathValue,
-        before: oldRevisions[pathValue],
-        after: newRevisions[pathValue],
-      })));
       return result;
     } finally {
       await this.locks.unlock(lock.lockId);
@@ -1590,16 +1851,29 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       }
     }
     result = { ...result, ok: result.diagnostics.every((d) => d.severity !== "error") };
-    if (input.transactionId) {
-      const tx = this.transactions.get(input.transactionId);
-      if (tx && result.ok) tx.status = "validated";
+    const transaction = input.transactionId
+      ? this.transactions.get(input.transactionId)
+      : undefined;
+    const previousStatus = transaction?.status;
+    const preservesTerminalStatus = previousStatus === "applied" || previousStatus === "rolled_back";
+    if (transaction && result.ok && !preservesTerminalStatus) transaction.status = "validated";
+    if (transaction) {
+      try {
+        const lifecycle = result.ok
+          ? previousStatus === "applied"
+            ? "applied"
+            : previousStatus === "rolled_back"
+              ? "rolled_back"
+              : "validated"
+          : "validation_failed";
+        this.publishTransactionChange(transaction, lifecycle);
+      } catch (error) {
+        if (previousStatus) transaction.status = previousStatus;
+        throw error;
+      }
     }
     await this.hooks.emit("AfterValidate", this, result);
     this.journal.record({ actor: "validator", action: "validate", transactionId: input.transactionId, outputSummary: result.ok ? "ok" : `${result.diagnostics.length} diagnostic(s)` });
-    if (input.transactionId) {
-      const tx = this.transactions.get(input.transactionId);
-      if (tx) this.publishTransactionChange(tx, result.ok ? "validated" : "validation_failed");
-    }
     return result;
   }
 
@@ -1608,7 +1882,9 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     await this.hooks.emit("BeforeRollback", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
-    if (!tx.appliedAt) throw new ProjectError("INVALID_INPUT", `只能回滚已应用的事务：${input.transactionId}`);
+    if (!tx.appliedAt || tx.status !== "applied") {
+      throw new ProjectError("INVALID_INPUT", `只能回滚已应用的事务：${input.transactionId}`);
+    }
     const lock = await this.locks.lock(tx.changedFiles, `rollback:${tx.transactionId}`);
     try {
       const reversed = [...tx.patches].reverse();
@@ -1628,6 +1904,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       // 捕获回滚前状态；任一步写盘失败时按逆序还原，保持 rollback 自身的原子性
       //（与 applyEdit 一致，并用 skipFileFilter 还原 apply 时绕过 fileFilter 的文件）。
       const restoreByPath = await this.captureApplyRestoreState(tx.changedFiles);
+      const pending = this.beginDurableOperation(tx, "rollback", restoreByPath);
       const writtenOrder: string[] = [];
       const rolledBackRevisions: Record<string, string> = {};
       try {
@@ -1643,15 +1920,35 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           writtenOrder.push(patch.path);
         }
       } catch (rollbackError) {
-        await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
+        if (pending) await this.restoreDurableOperation(pending);
+        else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
         throw rollbackError;
       }
+      const beforeRollback = this.transactionProjections.get(tx.transactionId)?.revisions
+        ?? this.changeFeed.get(tx.transactionId)?.revisions
+        ?? [];
+      const previousStatus = pending?.previousStatus ?? tx.status;
+      tx.status = "rolled_back";
+      const rollbackRevisions = tx.changedFiles.map((pathValue) => ({
+        path: pathValue,
+        before: beforeRollback.find((revision) => revision.path === pathValue)?.after,
+        after: rolledBackRevisions[pathValue],
+      }));
+      try {
+        this.publishTransactionChange(tx, "rolled_back", [], rollbackRevisions);
+      } catch (stateError) {
+        tx.status = previousStatus;
+        if (pending) await this.restoreDurableOperation(pending);
+        else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
+        throw stateError;
+      }
+
       const gitTrackedFiles = isArray(tx.metadata?.gitTrackedFiles)
         ? tx.metadata.gitTrackedFiles.filter(isString)
         : [];
       const gitUntrackedFiles = await this.untrackCreatedFilesFromGit(gitTrackedFiles);
-      tx.status = "rolled_back";
       this.retainTerminalTransaction(tx.transactionId);
+      this.persistCommittedTransactionState(tx.transactionId, "git metadata or terminal retention");
       const result: RollbackResult = {
         status: "rolled_back",
         transactionId: tx.transactionId,
@@ -1660,12 +1957,6 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       };
       await this.hooks.emit("AfterRollback", this, result);
       this.journal.record({ actor: "system", action: "rollback", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(",") });
-      const beforeRollback = this.changeFeed.get(tx.transactionId)?.revisions ?? [];
-      this.publishTransactionChange(tx, "rolled_back", [], tx.changedFiles.map((pathValue) => ({
-        path: pathValue,
-        before: beforeRollback.find((revision) => revision.path === pathValue)?.after,
-        after: rolledBackRevisions[pathValue],
-      })));
       return result;
     } finally {
       await this.locks.unlock(lock.lockId);
@@ -1813,6 +2104,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 /** 创建项目内核，并安装 core plugin 与调用方传入的插件。 */
 export async function createProjectKernel(options: CreateProjectKernelOptions): Promise<ProjectKernel> {
   const project = new ProjectKernelImpl(options);
+  await project.initializeTransactionState();
   if (options.includeBuiltinPlugins ?? true) await project.install(corePlugin());
   for (const plugin of options.plugins ?? []) await project.install(plugin);
   return project;
