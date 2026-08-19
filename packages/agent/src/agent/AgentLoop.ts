@@ -17,6 +17,7 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type { ModelSpanHandle, RunSpanScope, TurnSpanScope } from '../kernel'
 
+import type { ProviderRequestSnapshot } from './context'
 import type { ContextDegradeAction } from './ContextDegradeLadder'
 import type { AgentLoopSurface } from './LoopSurface'
 import { isContextOverflowError, isContextOverflowReplayUnsafe } from './retry'
@@ -151,6 +152,7 @@ interface LoopTurnSpanUsage {
   costUsd?: LooseOptional<number>
   finishReason?: LooseOptional<string>
   requestFingerprint?: LooseOptional<string>
+  providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
 
 interface LoopTurnPromptAudit {
@@ -191,6 +193,7 @@ function endLoopTurnSpansOk(
     promptSegments: audit.promptSegments,
     skippedPromptSegments: audit.skippedPromptSegments,
     capabilityContextAudit: [],
+    providerRequest: toNullable(result.providerRequestSnapshot),
   })
   spans.turnScope?.end({ status: 'ok' })
 }

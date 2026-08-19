@@ -16,6 +16,7 @@ import { compareStableStrings } from '../residency/determinism'
 
 import { shortHash } from './contentHash'
 import { sortedStrings, sumPositive, type ToolReferenceScan } from './messageScan'
+import { encodeProviderRequestAuditValue } from './serialization'
 
 /** 校验相位标记：目前仅编译期一处出核，保留类型以备未来 seam 扩展。 */
 export type AssertProviderRequestInvariantPhase = 'compile'
@@ -56,12 +57,18 @@ export function buildProviderRequestFingerprint(
   const toolChoiceVisible = toolChoiceName ? availableToolNameSet.has(toolChoiceName) : null
   const roleSequence = messages.map((message) => message.role)
   const toolSchemaCharEntries = normalizeToolSchemaCharEntries(input.toolSchemaChars)
+  const toolSchemaHashEntries = Object.entries(input.toolSchemaHashes ?? {})
+    .map(([toolName, hash]) => [toolName.trim(), hash.trim()] as const)
+    .filter(([toolName, hash]) => !isBlank(toolName) && !isBlank(hash))
+    .sort(([left], [right]) => compareStableStrings(left, right))
   const toolSchemaCharsTotal = sumPositive(toolSchemaCharEntries.map(([, chars]) => chars))
   const systemHash = shortHash(input.systemPrompt)
+  const messageHash = shortHash(JSON.stringify(encodeProviderRequestAuditValue(messages)))
   const toolSurfaceHash = shortHash(
     JSON.stringify({
       availableToolNames,
       toolSchemaChars: toolSchemaCharEntries,
+      toolSchemaHashes: toolSchemaHashEntries,
     })
   )
   const prefixHash = shortHash(
@@ -70,11 +77,13 @@ export function buildProviderRequestFingerprint(
       toolSurface: {
         availableToolNames,
         toolSchemaChars: toolSchemaCharEntries,
+        toolSchemaHashes: toolSchemaHashEntries,
       },
     })
   )
   const fingerprintSeed = JSON.stringify({
     prefixHash,
+    messageHash,
     roles: roleSequence,
     availableToolNames,
     historyToolNames,
@@ -91,6 +100,7 @@ export function buildProviderRequestFingerprint(
     systemHash,
     toolSurfaceHash,
     prefixHash,
+    messageHash,
     toolSchemaCharsTotal,
     messageCount: messages.length,
     roleSequence,

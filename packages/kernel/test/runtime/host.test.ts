@@ -55,6 +55,50 @@ function moduleDefinition(options: {
 }
 
 describe('KernelModuleHost', () => {
+  test('projects a deterministic read-only composition snapshot before and after activation', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    host.registerModules([
+      moduleDefinition({
+        id: 'module.consumer',
+        requires: [{ id: ValueCapability.id, versionRange: '^1.0.0' }],
+      }),
+      moduleDefinition({
+        id: 'module.provider',
+        provides: [ValueCapability],
+        permissions: ['fs:read'],
+        activate(context) {
+          context.registerService(ValueCapability, { read: () => 'ready' })
+        },
+      }),
+    ])
+
+    const before = host.describeComposition()
+    expect(before.schemaVersion).toBe(1)
+    expect(before.moduleOrder).toEqual(['module.provider', 'module.consumer'])
+    expect(before.modules.map((module) => module.manifest.id)).toEqual([
+      'module.consumer',
+      'module.provider',
+    ])
+    expect(before.capabilities).toEqual([
+      {
+        id: ValueCapability.id,
+        version: ValueCapability.version,
+        providerModuleId: 'module.provider',
+        active: false,
+        activeGeneration: null,
+      },
+    ])
+
+    await host.start()
+    const active = host.describeComposition()
+    expect(active.capabilities[0]).toMatchObject({ active: true, activeGeneration: 1 })
+    expect(active.modules.find((module) => module.manifest.id === 'module.provider'))
+      .toMatchObject({ status: 'ready', generation: 1 })
+    expect(Object.isFrozen(active)).toBeTrue()
+    expect(Object.isFrozen(active.moduleOrder)).toBeTrue()
+    expect(JSON.parse(JSON.stringify(active))).toEqual(active)
+  })
+
   test('resolves and starts dependencies deterministically', async () => {
     const activationOrder: string[] = []
     const host = new KernelModuleHost({ apiVersion: 1 })

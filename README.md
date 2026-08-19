@@ -30,7 +30,11 @@ VelarOS Platform is a Bun workspace with 19 packages. Packages are versioned ind
 | Surface protocol | `@velaros-ai/surface-protocol` |
 | Evaluation | `@velaros-ai/agent-lab` |
 
-The package inventory in the root `package.json` is the machine-checked source of truth. Public package APIs live in package manifests and package READMEs; architecture and protocol decisions live in this repository's `docs/` tree.
+The package inventory in the root `package.json` is the machine-checked source of truth. The
+[generated package catalog](docs/generated/package-catalog.json) exposes the same inventory, package
+versions, descriptions, and public export subpaths to tooling without creating a second configuration
+surface. Public package APIs live in package manifests and package READMEs; architecture and protocol
+decisions live in this repository's `docs/` tree.
 
 ## Requirements
 

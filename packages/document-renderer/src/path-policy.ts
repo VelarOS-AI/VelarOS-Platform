@@ -1,6 +1,8 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 
+import { isEmpty } from '@velaros-ai/core'
+
 export class RendererPathDeniedError extends Error {
   public constructor(message: string) {
     super(message)
@@ -10,7 +12,7 @@ export class RendererPathDeniedError extends Error {
 
 function isInside(root: string, target: string): boolean {
   const path = relative(root, target)
-  return path === '' || (!path.startsWith('..') && !isAbsolute(path))
+  return isEmpty(path) || (!path.startsWith('..') && !isAbsolute(path))
 }
 
 function requireInside(root: string, target: string, label: string): void {

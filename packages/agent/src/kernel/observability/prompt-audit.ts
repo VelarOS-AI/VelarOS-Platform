@@ -22,6 +22,7 @@ import { dirname } from 'node:path'
 import { isArray, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ProviderRequestSnapshot } from '../../agent/context/ProviderRequestSnapshot'
 import {
   JSONL_LINE_SEPARATOR,
   parseJsonlWithTailTolerance,
@@ -53,6 +54,8 @@ export interface PromptAuditRecord {
   promptSegments: readonly unknown[]
   skippedPromptSegments: readonly unknown[]
   capabilityContextAudit: readonly unknown[]
+  /** 最终 provider-visible system/messages/tools/toolChoice；旧记录缺席。 */
+  providerRequest?: LooseOptional<ProviderRequestSnapshot>
 }
 
 /** 序列化一条审计记录成 JSONL 行（规范键序 + 行尾分隔符）。 */

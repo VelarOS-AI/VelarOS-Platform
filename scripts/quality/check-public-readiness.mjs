@@ -111,17 +111,18 @@ function checkPackageMetadata() {
     const directoryPath = join(packageRoot, directory)
     const manifest = readJson(join(directoryPath, 'package.json'))
     const label = manifest.name ?? `packages/${directory}`
+    const publishable = manifest.private !== true
     const expectedHomepage = `https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/${directory}#readme`
     const licensePath = join(directoryPath, 'LICENSE')
 
     if (manifest.name !== `@velaros-ai/${directory}`) fail(`${label}: package name does not match its directory`)
     if (manifest.license !== 'Apache-2.0') fail(`${label}: license must be Apache-2.0`)
-    if (manifest.publishConfig?.access !== 'public') fail(`${label}: publish access must be public`)
-    if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') fail(`${label}: registry is not canonical`)
+    if (publishable && manifest.publishConfig?.access !== 'public') fail(`${label}: publish access must be public`)
+    if (publishable && manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') fail(`${label}: registry is not canonical`)
     if (manifest.repository?.url !== canonicalRepository) fail(`${label}: repository URL is not canonical`)
     if (manifest.repository?.directory !== `packages/${directory}`) fail(`${label}: repository directory is not canonical`)
-    if (manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
-    if (manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
+    if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
+    if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
     if (!manifest.files?.includes('LICENSE')) fail(`${label}: package files do not include LICENSE`)
     if (!existsSync(join(directoryPath, 'README.md'))) fail(`${label}: README.md is missing`)
     if (!existsSync(licensePath)) fail(`${label}: LICENSE is missing`)

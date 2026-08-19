@@ -46,6 +46,7 @@ import {
   KernelCapabilityUnavailableError,
 } from '../capability-invocation'
 import type {
+  KernelCompositionSnapshot,
   KernelModuleHost,
   KernelModuleSnapshot,
 } from '../host'
@@ -219,6 +220,11 @@ export class KernelService {
       kernelVersion: this.options.kernelVersion,
       modules: this.options.host.listModules().map(toDescriptor),
     }
+  }
+
+  /** 本机诊断/CLI 可直接 JSON 序列化；远端 wire 仍只走版本化协议。 */
+  public describeComposition(): KernelCompositionSnapshot {
+    return this.options.host.describeComposition()
   }
 
   public async health(): Promise<KernelServiceHealth> {

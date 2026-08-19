@@ -24,6 +24,7 @@ import {
   type ContextActiveTaskInput,
   type ContextPayloadStore,
   type ContextPinnedEvidenceInput,
+  type ProviderToolDefinitionSnapshotInput,
 } from "./context";
 
 /**
@@ -99,6 +100,10 @@ interface ToolSchemaHashEstimatorRegistry<TContext> {
 interface ProviderToolTransportContext {
   /** canonical tool id 到供应方安全的请求内名称。 */
   getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>;
+}
+
+interface ProviderToolDefinitionContext {
+  describeToolInputSchema?: (toolName: string) => unknown;
 }
 
 interface ContextUsageEmitTarget {
@@ -255,6 +260,38 @@ class ProviderTurnRequestHelper {
         return hash ? [[providerToolName, hash] as const] : [];
       }),
     );
+  }
+
+  /** 捕获模型真正看到的工具定义；执行函数和宿主对象不会进入审计快照。 */
+  public resolveProviderToolDefinitions(
+    tools: ToolSet,
+    toolContext: unknown,
+    transportPlan: ProviderToolTransportPlan,
+    toolSchemaChars: Readonly<Record<string, number>>,
+    toolSchemaHashes?: Readonly<Record<string, string>>,
+  ): ProviderToolDefinitionSnapshotInput[] {
+    const definitionContext = toolContext as ProviderToolDefinitionContext;
+    return Object.keys(tools)
+      .sort(compareStableStrings)
+      .map((providerToolName) => {
+        const canonicalName =
+          transportPlan.providerToCanonical[providerToolName] ??
+          providerToolName;
+        const tool = tools[providerToolName];
+        const description = isPlainObject(tool) && isString(tool.description)
+          ? tool.description
+          : "";
+        return {
+          name: providerToolName,
+          canonicalName,
+          description,
+          inputSchema: toNullable(
+            definitionContext.describeToolInputSchema?.(canonicalName),
+          ),
+          schemaChars: Math.max(0, toolSchemaChars[providerToolName] ?? 0),
+          schemaHash: toNullable(toolSchemaHashes?.[providerToolName]),
+        };
+      });
   }
 
   /** 强制工具选择也必须使用与 tools key 相同的 provider-safe 身份。 */

@@ -18,6 +18,7 @@ import {
   KernelCapabilityInvoker,
 } from './capability-invocation'
 import {
+  type KernelCompositionSnapshot,
   KernelModuleHost,
   type KernelModuleHostOptions,
   type KernelModuleSnapshot,
@@ -126,6 +127,11 @@ export class Kernel {
 
   public listModules(): readonly KernelModuleSnapshot[] {
     return this.host.listModules()
+  }
+
+  /** 可序列化的只读组合快照；不提供任何运行时改写入口。 */
+  public describeComposition(): KernelCompositionSnapshot {
+    return this.host.describeComposition()
   }
 
   public hasCapability(capabilityId: string): boolean {

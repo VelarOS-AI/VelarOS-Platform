@@ -16,6 +16,13 @@ interface ServiceEntry {
   readonly service: object
 }
 
+export interface KernelActiveServiceSnapshot {
+  readonly capabilityId: string
+  readonly capabilityVersion: string
+  readonly ownerModuleId: string
+  readonly generation: number
+}
+
 export class KernelServiceStore {
   private readonly entries = new Map<string, Set<ServiceEntry>>()
   private readonly activeEntries = new Map<string, ServiceEntry>()
@@ -33,6 +40,18 @@ export class KernelServiceStore {
           id: capabilityId,
           version: entry.capabilityVersion,
         })
+  }
+
+  /** 只读、稳定排序的活动服务目录；不暴露实现对象或可调用句柄。 */
+  public listActiveServices(): readonly KernelActiveServiceSnapshot[] {
+    return [...this.activeEntries.entries()]
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([capabilityId, entry]) => Object.freeze({
+        capabilityId,
+        capabilityVersion: entry.capabilityVersion,
+        ownerModuleId: entry.ownerModuleId,
+        generation: entry.generation,
+      }))
   }
 
   public get<TService extends object>(

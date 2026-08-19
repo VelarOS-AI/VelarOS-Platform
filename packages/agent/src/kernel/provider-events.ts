@@ -42,6 +42,8 @@ export interface ProviderRequestFingerprint {
   systemHash: string
   toolSurfaceHash: string
   prefixHash: string
+  /** 最终 provider-visible messages 的规范内容哈希；角色序列相同不再被误判成同一请求。 */
+  messageHash: string
   toolSchemaCharsTotal: number
   messageCount: number
   roleSequence: string[]

@@ -5,6 +5,28 @@ export type SystemMetricLevel = 'normal' | 'warn' | 'high' | 'unknown'
 export type SystemGlobalSearchMode = 'paths' | 'content'
 export type SystemGlobalSearchPathMatchMode = 'contains' | 'exact' | 'fuzzy'
 export type SystemBackgroundTaskStatus = 'running' | 'exited' | 'unknown'
+/** 已批准命令在操作系统进程层实际采用的文件副作用边界。 */
+export type SystemProcessConfinementMode =
+  | 'read-only'
+  | 'workspace-write'
+  | 'danger-full-access'
+/** `partial` 只能作为可观测事实，不能被需要绝对边界的调用方当作 `full`。 */
+export type SystemProcessConfinementEnforcement = 'none' | 'partial' | 'full'
+export type SystemProcessConfinementBackend =
+  | 'none'
+  | 'bubblewrap'
+  | 'seatbelt'
+  | 'host'
+
+/** 一次真实进程启动的约束证据；审批事实与约束事实必须分开记录。 */
+export interface SystemProcessConfinementEvidence {
+  mode: SystemProcessConfinementMode
+  enforcement: SystemProcessConfinementEnforcement
+  backend: SystemProcessConfinementBackend
+  reason: string
+  /** 受约束模式下真实批准的写根；`danger-full-access` 为空表示不采用 allowlist。 */
+  writableRoots: string[]
+}
 export type SystemDefaultEditorId =
   | 'velaros-light'
   | 'system'
@@ -122,6 +144,8 @@ export interface SystemCommandResult {
   outputWindow?: SystemCommandOutputWindow
   outputContinuation?: SystemCommandOutputContinuation
   success: boolean
+  /** 缺席仅用于兼容旧宿主；新执行器必须报告真实的进程约束事实。 */
+  confinement?: SystemProcessConfinementEvidence
   backgroundProcess?: SystemBackgroundProcessInfo
   verification: SystemVerificationSummary
   systemToolSuggestion?: LooseOptional<SystemToolInstallSuggestion>

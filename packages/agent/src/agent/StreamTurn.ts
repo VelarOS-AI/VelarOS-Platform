@@ -28,10 +28,12 @@ import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import { normalizeModelRequestError } from './model/ModelRequestError'
 import {
+  assertProviderRequestSnapshotReconstructable,
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
+  type ProviderRequestSnapshot,
   resolveGovernanceSessionKey,
 } from './context'
 import {
@@ -257,6 +259,7 @@ export interface StreamTurnResult {
   costUsd?: LooseOptional<number>
   finishReason?: LooseOptional<string>
   requestFingerprint?: LooseOptional<string>
+  providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
 
 /**
@@ -307,6 +310,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     const startedAt = Date.now()
     let didLogTurnEnd = false
     let providerTurnReducer: LooseOptional<ProviderTurnEventReducer> = null
+    let providerRequestSnapshot: LooseOptional<ProviderRequestSnapshot> = null
     let streamContinuationRecoveries = 0
     let reasoningOnlyVisibleAnswerRecoveries = 0
     const turnAbortScope = createLinkedAbortScope(
@@ -378,6 +382,13 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   aiTools,
                   toolTransportPlan
                 )
+                const providerTools = this.turnRequestHelper.resolveProviderToolDefinitions(
+                  aiTools,
+                  args.toolContext,
+                  toolTransportPlan,
+                  toolSchemaChars,
+                  toolSchemaHashes
+                )
                 const providerToolChoice = this.turnRequestHelper.resolveProviderToolChoice(
                   toolTransportPlan,
                   args.toolChoice
@@ -396,6 +407,9 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     model: args.model,
                     systemPrompt: providerSystem,
                     toolSchemaChars,
+                    toolSchemaHashes,
+                    providerTools,
+                    providerToolChoice,
                     availableToolNames: providerAvailableToolNames,
                     toolChoiceName,
                     toolNameAliases: toolTransportPlan.canonicalToProvider,
@@ -424,6 +438,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   model: args.model,
                 })
                 this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
+                assertProviderRequestSnapshotReconstructable(compiledRequest.providerRequest)
+                providerRequestSnapshot = compiledRequest.providerRequest
                 providerTurnReducer = this.createProviderTurnReducer(args)
                 providerTurnReducer.apply({ type: 'turn-started' })
                 providerTurnReducer.apply({
@@ -680,6 +696,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         costUsd: toNullable(turnState.costUsd),
         finishReason: toNullable(turnState.finishReason),
         requestFingerprint: toNullable(turnState.requestFingerprint),
+        providerRequestSnapshot: toOptional(providerRequestSnapshot),
       }
     } catch (error) {
       if (isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {

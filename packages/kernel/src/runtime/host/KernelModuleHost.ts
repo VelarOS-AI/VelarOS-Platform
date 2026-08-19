@@ -58,6 +58,26 @@ export interface KernelModuleSnapshot {
   readonly error?: string
 }
 
+export interface KernelCompositionCapabilitySnapshot {
+  readonly id: string
+  readonly version: string
+  readonly providerModuleId: string
+  readonly active: boolean
+  readonly activeGeneration: Nullable<number>
+}
+
+/**
+ * 运行组合的只读机器视图。它描述“装了什么、按什么顺序、哪些服务真的活动”，不接受 patch，
+ * 因而不能绕过 Ring 0 的模块注册、权限或生命周期裁决。
+ */
+export interface KernelCompositionSnapshot {
+  readonly schemaVersion: 1
+  readonly apiVersion: number
+  readonly moduleOrder: readonly string[]
+  readonly modules: readonly KernelModuleSnapshot[]
+  readonly capabilities: readonly KernelCompositionCapabilitySnapshot[]
+}
+
 interface ModuleRecord {
   readonly definition: KernelModuleDefinition
   readonly generation: number
@@ -522,6 +542,38 @@ export class KernelModuleHost {
         return 0
       })
       .map((record) => this.snapshot(record))
+  }
+
+  public describeComposition(): KernelCompositionSnapshot {
+    const plan = this.resolvePlan()
+    const activeServices = new Map(
+      this.serviceStore.listActiveServices().map((service) => [service.capabilityId, service])
+    )
+    const capabilities = [...plan.capabilityProviders.entries()]
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([id, provider]) => {
+        const active = activeServices.get(id)
+        return Object.freeze({
+          id,
+          version: provider.capability.version,
+          providerModuleId: provider.moduleId,
+          active: Boolean(
+            active
+            && active.ownerModuleId === provider.moduleId
+            && active.capabilityVersion === provider.capability.version
+          ),
+          activeGeneration: active?.ownerModuleId === provider.moduleId
+            ? active.generation
+            : null,
+        })
+      })
+    return Object.freeze({
+      schemaVersion: 1,
+      apiVersion: this.options.apiVersion,
+      moduleOrder: Object.freeze([...plan.order]),
+      modules: Object.freeze([...this.listModules()]),
+      capabilities: Object.freeze(capabilities),
+    })
   }
 
   public async checkHealth(): Promise<readonly KernelModuleSnapshot[]> {

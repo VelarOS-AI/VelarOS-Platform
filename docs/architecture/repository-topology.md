@@ -1,6 +1,6 @@
 # Repository topology
 
-VelarOS Platform is a flat Bun workspace. Every publishable package lives directly under `packages/`; domain ownership is declared by `velaros.domainPackages` in the root manifest rather than inferred from directory depth.
+VelarOS Platform is a flat Bun workspace. Every publishable package lives directly under `packages/`; domain ownership is declared by `velaros.domainPackages` in the root manifest rather than inferred from directory depth. `docs/generated/package-catalog.json` is a read-only projection of that declaration and each package manifest; it is never edited as a second source of truth.
 
 ## Domains
 
@@ -40,7 +40,11 @@ An approved topology change must update:
 3. build and release topology;
 4. domain ownership and architecture gates;
 5. isolated packed-consumer tests;
-6. this document and the root package inventory;
+6. the root package inventory and the generated package catalog (`bun run generate:package-catalog`);
 7. affected consumers through released package versions.
 
 Temporary local links are useful for debugging but are not release evidence. Published packages must be tested from packed artifacts without ambient workspace declarations, private registries, or absolute paths.
+
+`bun run check:package-catalog` compares the committed catalog byte for byte with a fresh projection.
+The output deliberately contains no timestamp, host path, or dependency-install state, so identical
+manifests produce identical output on every supported development host.

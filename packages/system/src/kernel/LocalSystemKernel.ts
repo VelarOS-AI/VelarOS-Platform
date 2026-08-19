@@ -1,7 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { lstat, readdir } from 'node:fs/promises'
-import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'node:os'
+import { cpus, freemem, homedir, loadavg, platform, release, tmpdir, totalmem } from 'node:os'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -35,6 +35,8 @@ import type {
   SystemOpenPathResult,
   SystemOpenPortInfo,
   SystemOpenPortQueryOptions,
+  SystemProcessConfinementEvidence,
+  SystemProcessConfinementMode,
   SystemProcessInfo,
   SystemProcessQueryOptions,
   SystemRevealPathResult,
@@ -46,6 +48,10 @@ import {
   type CommandSpec,
   SystemPlatformCompatibility,
 } from '../SystemPlatformCompatibility.js'
+import {
+  buildSystemProcessConfinementSpawnSpec,
+  type SystemProcessConfinementProvider,
+} from '../SystemProcessConfinement.js'
 import {
   type ByteStats,
   parseCpuUsagePercent,
@@ -71,6 +77,17 @@ export interface LocalSystemKernelOptions {
   cwd: string
   homeDir?: string
   platform?: NodeJS.Platform
+  /**
+   * 同机命令的进程约束策略。缺省保持兼容的 `danger-full-access`，但仍在结果中明确报告
+   * `enforcement:none`；受约束模式没有可用后端时会失败关闭。
+   */
+  processConfinement?: {
+    mode: SystemProcessConfinementMode
+    workspaceRoot?: string
+    writeRoots?: readonly string[]
+    network?: boolean
+    provider?: SystemProcessConfinementProvider
+  }
 }
 
 export function createLocalSystemKernel(options: LocalSystemKernelOptions): LocalSystemKernel {
@@ -82,6 +99,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   private readonly homeDir: string
   private readonly hostPlatform: NodeJS.Platform
   private readonly platformTools: SystemPlatformCompatibility
+  private readonly processConfinement: NonNullable<LocalSystemKernelOptions['processConfinement']>
   private readonly workingDirectory: string
 
   constructor(options: LocalSystemKernelOptions) {
@@ -93,6 +111,10 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       env: process.env,
     })
     this.workingDirectory = root
+    this.processConfinement = options.processConfinement ?? {
+      mode: 'danger-full-access',
+      workspaceRoot: root,
+    }
   }
 
   public async inspectEnvironment(commands: string[] = []): Promise<SystemEnvironmentInspection> {
@@ -446,9 +468,9 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     const cwd = this.resolvePath(options.cwd ?? this.workingDirectory ?? this.homeDir)
     const startedAt = Date.now()
     if (options.background) {
-      const child = spawn(command, {
+      const confined = this.buildCommandSpawnSpec(command)
+      const child = spawn(confined.spec.file, confined.spec.args, {
         cwd,
-        shell: this.getShellPath(),
         detached: this.platformTools.shouldUseDetachedProcessGroup(),
         stdio: 'ignore',
         env: process.env,
@@ -498,10 +520,12 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         timedOut: false,
         aborted: false,
         backgroundProcess,
+        confinement: confined.evidence,
       })
     }
 
-    const result = await this.runShellCapture(command, cwd, {
+    const confined = this.buildCommandSpawnSpec(command)
+    const result = await this.runShellCapture(command, confined.spec, confined.evidence, cwd, {
       timeoutMs: options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxOutputChars: options.maxOutputChars ?? DEFAULT_OUTPUT_CHARS,
       abortSignal,
@@ -676,6 +700,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       timedOut: boolean
       aborted: boolean
       backgroundProcess?: SystemCommandResult['backgroundProcess']
+      confinement: SystemProcessConfinementEvidence
     }
   ): SystemCommandResult {
     const success = result.exitCode === 0 && !result.timedOut && !result.aborted
@@ -691,6 +716,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       aborted: result.aborted,
       truncated: false,
       success,
+      confinement: result.confinement,
       backgroundProcess: result.backgroundProcess,
       verification: {
         kind: 'unknown',
@@ -725,6 +751,8 @@ export class LocalSystemKernel implements SystemToolSystemApi {
    */
   private runShellCapture(
     command: string,
+    spawnSpec: CommandSpec,
+    confinement: SystemProcessConfinementEvidence,
     cwd: string,
     options: {
       timeoutMs?: number
@@ -738,11 +766,11 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     stderr: string
     timedOut: boolean
     aborted: boolean
+    confinement: SystemProcessConfinementEvidence
   }> {
     return new Promise((resolvePromise, rejectPromise) => {
-      const child = spawn(command, {
+      const child = spawn(spawnSpec.file, spawnSpec.args, {
         cwd,
-        shell: this.getShellPath(),
         detached: this.platformTools.shouldUseDetachedProcessGroup(),
         env: process.env,
       })
@@ -767,7 +795,12 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         timeout?.cancel()
         timers.cancelAll()
         options.abortSignal?.removeEventListener('abort', abort)
-        resolvePromise({ ...result, timedOut, aborted })
+        resolvePromise({
+          ...result,
+          timedOut,
+          aborted,
+          confinement,
+        })
       }
 
       const abort = () => {
@@ -819,6 +852,29 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         finish({ exitCode, signal, stdout, stderr })
       })
     })
+  }
+
+  private buildCommandSpawnSpec(command: string) {
+    return buildSystemProcessConfinementSpawnSpec(
+      {
+        spec: this.platformTools.getShellCommandSpec(command, {
+          env: process.env,
+          shellPath: this.getShellPath(),
+        }),
+        policy: {
+          mode: this.processConfinement.mode,
+          workspaceRoot: this.processConfinement.workspaceRoot ?? this.workingDirectory,
+          writeRoots: this.processConfinement.writeRoots,
+          network: this.processConfinement.network,
+        },
+      },
+      {
+        platform: this.hostPlatform,
+        env: process.env,
+        provider: this.processConfinement.provider,
+        tempDir: tmpdir(),
+      }
+    )
   }
 
   private async runPlatformCommand(
@@ -952,7 +1008,13 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       ? `where ${this.platformTools.quoteShellArg(name)}`
       : `command -v ${this.platformTools.quoteShellArg(name)}`
     // 探测命令失败即"命令不存在"，由下面的 exitCode 判定表达，不需要额外的容忍开关。
-    const result = await this.runShellCapture(probeCommand, homedir())
+    const confined = this.buildCommandSpawnSpec(probeCommand)
+    const result = await this.runShellCapture(
+      probeCommand,
+      confined.spec,
+      confined.evidence,
+      homedir()
+    )
     const commandPath = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] : null
     return {
       available: Boolean(commandPath),

@@ -60,8 +60,17 @@ describe('Kernel', () => {
     kernel.registerModule(valueModule())
 
     expect(kernel.hasCapability(ValueCapability.id)).toBeFalse()
+    expect(kernel.describeComposition().capabilities[0]).toMatchObject({
+      id: ValueCapability.id,
+      active: false,
+    })
     await kernel.start()
     expect(kernel.hasCapability(ValueCapability.id)).toBeTrue()
+    expect(kernel.describeComposition().capabilities[0]).toMatchObject({
+      id: ValueCapability.id,
+      active: true,
+      activeGeneration: 1,
+    })
     expect(kernel.resolveCallableCapability(ValueCapability.id)).not.toBeNull()
     expect(kernel.getCapability(ValueCapability)).toBeDefined()
 

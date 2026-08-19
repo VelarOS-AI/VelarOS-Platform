@@ -75,6 +75,11 @@ import type {
   ContextWorkingSetZoneId,
 } from './ContextWorkingSetZones'
 import {
+  buildProviderRequestSnapshot,
+  type ProviderRequestSnapshot,
+  type ProviderToolDefinitionSnapshotInput,
+} from './ProviderRequestSnapshot'
+import {
   buildContextDashboardMessage,
   type ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
@@ -121,6 +126,9 @@ export interface CompileProviderRequestInput {
   availableToolNames?: readonly string[]
   toolChoiceName?: LooseOptional<string>
   toolSchemaChars?: Record<string, number>
+  toolSchemaHashes?: Record<string, string>
+  providerTools?: readonly ProviderToolDefinitionSnapshotInput[]
+  providerToolChoice?: unknown
   toolPayloadRefsByToolCallId?: Record<string, string>
   retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
   activeTask?: LooseOptional<ContextActiveTaskInput>
@@ -170,6 +178,8 @@ export interface CompiledProviderRequest {
   estimate: ContextUsageEstimate
   decision: ProviderRequestCompileDecision
   requestFingerprint: ProviderRequestFingerprint
+  /** 真实组装终点的可持久化请求快照；发送前由 turn 路径校验完整性。 */
+  providerRequest: ProviderRequestSnapshot
   /** 本轮跑过的治理 epoch 报告；未触发时为 null。 */
   governanceEpoch?: LooseOptional<GovernanceEpochReport>
   /** 会话累计已应用的 epoch 代数（跳过的 epoch 不计代，与 dashboard 上的号同源）。 */
@@ -266,6 +276,8 @@ export class ProviderRequestCompiler {
       canonicalProviderMessages,
       toolNameAliases
     )
+    const providerSystem = rewriteCanonicalToolReferences(input.systemPrompt, toolNameAliases)
+    const providerInput = { ...input, systemPrompt: providerSystem }
     const historyRewriteFingerprint = buildProviderHistoryRewriteFingerprint([
       ...(input.historyRewriteSignals ?? []),
       ...buildGovernanceRewriteSignals(governance.report, projection.stats.ledgerFingerprint),
@@ -275,30 +287,39 @@ export class ProviderRequestCompiler {
 
     // Ring 0 出核地板：指纹（共享扫描）+ 不变量校验，出核前必过。
     const requestFingerprint = buildProviderRequestFingerprint(
-      input,
+      providerInput,
       providerMessages,
       resolveSharedToolReferenceScan(scratch, providerMessages)
     )
-    assertProviderRequestInvariants(input, requestFingerprint, 'compile')
+    assertProviderRequestInvariants(providerInput, requestFingerprint, 'compile')
+    const providerRequest = buildProviderRequestSnapshot({
+      model: input.model,
+      system: providerSystem,
+      messages: providerMessages,
+      tools: input.providerTools,
+      toolChoice: input.providerToolChoice,
+      requestFingerprint,
+    })
 
     // stage ⑥：budget 钳制（估算 + 账本 + 分配 + 决策）。
     //
     // 门量的必须是**真要发出去的那份字节**（投影后 + 装饰后 + 别名改写后），所以这一次 tokenize
     // 不能省；能省的是窗口口径——`ruler` 已经把 usable/红线算过一遍，这里原样复用，不再抄公式。
     const budget = runBudgetStage({
-      input,
+      input: providerInput,
       providerMessages,
       classifiedBlocks: classified.blocks,
       window: governance.window,
     })
 
     return {
-      system: rewriteCanonicalToolReferences(input.systemPrompt, toolNameAliases),
+      system: providerSystem,
       messages: providerMessages,
       ledger: budget.ledger,
       estimate: budget.estimate,
       decision: budget.decision,
       requestFingerprint,
+      providerRequest,
       governanceEpoch: governance.report,
       governanceEpochSeq: governance.session.epoch,
       governanceOccupancyPercent: projection.stats.occupancyPercent,

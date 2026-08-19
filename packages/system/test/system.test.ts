@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,8 +14,118 @@ import {
   isSystemShellCommandReadOnly,
   shouldReapForegroundProcessGroupAfterExit,
 } from '../src/SystemCommandExecutionPolicy'
+import {
+  buildSystemProcessConfinementSpawnSpec,
+  buildSystemSeatbeltProfile,
+} from '../src/SystemProcessConfinement'
 
 describe('System capability', () => {
+  test('reports explicit full access instead of pretending an unconfined process is sandboxed', () => {
+    const result = buildSystemProcessConfinementSpawnSpec({
+      spec: { file: '/bin/sh', args: ['-lc', 'true'] },
+      policy: { mode: 'danger-full-access', workspaceRoot: '/workspace' },
+    })
+
+    expect(result.spec).toEqual({ file: '/bin/sh', args: ['-lc', 'true'] })
+    expect(result.evidence).toEqual({
+      mode: 'danger-full-access',
+      enforcement: 'none',
+      backend: 'none',
+      reason: 'explicit-danger-full-access',
+      writableRoots: [],
+    })
+  })
+
+  test('builds deterministic platform confinement profiles with an observable backend', () => {
+    const policy = {
+      mode: 'workspace-write' as const,
+      workspaceRoot: process.cwd(),
+      writeRoots: [tmpdir()],
+      network: false,
+    }
+    const mac = buildSystemProcessConfinementSpawnSpec(
+      { spec: { file: '/bin/sh', args: ['-lc', 'true'] }, policy },
+      { platform: 'darwin', sandboxExecPath: '/sandbox-exec', sandboxExecAvailable: true }
+    )
+    const linux = buildSystemProcessConfinementSpawnSpec(
+      { spec: { file: '/bin/sh', args: ['-lc', 'true'] }, policy },
+      { platform: 'linux', bubblewrapPath: '/bwrap', bubblewrapAvailable: true }
+    )
+
+    expect(mac.evidence).toMatchObject({
+      mode: 'workspace-write',
+      enforcement: 'full',
+      backend: 'seatbelt',
+      reason: 'enforced',
+    })
+    expect(mac.evidence.writableRoots).toContain(process.cwd())
+    expect(mac.evidence.writableRoots).toHaveLength(2)
+    expect(mac.spec.file).toBe('/sandbox-exec')
+    expect(mac.profile).toBe(buildSystemSeatbeltProfile(policy))
+    expect(mac.profile).toContain('(deny network*)')
+    expect(mac.profile).toContain(`(subpath "${process.cwd()}")`)
+    expect(linux.evidence.backend).toBe('bubblewrap')
+    expect(linux.spec.args).toContain('--unshare-net')
+    expect(linux.spec.args).toContain(process.cwd())
+  })
+
+  test('fails closed when a confined mode has no usable platform backend', () => {
+    expect(() =>
+      buildSystemProcessConfinementSpawnSpec(
+        {
+          spec: { file: 'cmd.exe', args: ['/c', 'exit 0'] },
+          policy: { mode: 'read-only', workspaceRoot: 'C:\\workspace' },
+        },
+        { platform: 'win32' }
+      )
+    ).toThrow('已拒绝以裸进程继续执行')
+
+    expect(() =>
+      buildSystemProcessConfinementSpawnSpec(
+        {
+          spec: { file: '/bin/sh', args: ['-lc', 'true'] },
+          policy: { mode: 'read-only', workspaceRoot: '/workspace' },
+        },
+        { platform: 'linux', bubblewrapAvailable: false }
+      )
+    ).toThrow('已拒绝以裸进程继续执行')
+  })
+
+  test.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))(
+    'enforces real Seatbelt workspace writes and blocks writes outside the approved root',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'velaros-seatbelt-root-'))
+      const outside = await mkdtemp(join(tmpdir(), 'velaros-seatbelt-outside-'))
+      try {
+        const allowedPath = join(root, 'allowed.txt')
+        const deniedPath = join(outside, 'denied.txt')
+        const policy = { mode: 'workspace-write' as const, workspaceRoot: root }
+        const allowed = buildSystemProcessConfinementSpawnSpec(
+          {
+            spec: { file: '/bin/sh', args: ['-lc', `printf allowed > '${allowedPath}'`] },
+            policy,
+          },
+          { platform: 'darwin' }
+        )
+        const denied = buildSystemProcessConfinementSpawnSpec(
+          {
+            spec: { file: '/bin/sh', args: ['-lc', `printf denied > '${deniedPath}'`] },
+            policy,
+          },
+          { platform: 'darwin' }
+        )
+
+        expect(spawnSync(allowed.spec.file, allowed.spec.args).status).toBe(0)
+        expect(await readFile(allowedPath, 'utf8')).toBe('allowed')
+        expect(spawnSync(denied.spec.file, denied.spec.args).status).not.toBe(0)
+        expect(existsSync(deniedPath)).toBe(false)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+        await rm(outside, { recursive: true, force: true })
+      }
+    }
+  )
+
   test('publishes only canonical system tool ids', () => {
     expect(Object.keys(systemTools).toSorted()).toEqual(Object.values(SystemToolNames).toSorted())
     expect(Object.keys(systemTools).every((name) => name.startsWith('system:'))).toBe(true)

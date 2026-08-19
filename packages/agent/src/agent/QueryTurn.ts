@@ -42,10 +42,12 @@ import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import { normalizeModelRequestError } from './model/ModelRequestError'
 import {
+  assertProviderRequestSnapshotReconstructable,
   compileProviderSendRequest,
   type ContextGovernanceSessionRegistry,
   type ContextPayloadStore,
   ProviderRequestCompiler,
+  type ProviderRequestSnapshot,
   resolveGovernanceSessionKey,
 } from './context'
 import {
@@ -181,6 +183,7 @@ export interface QueryTurnResult {
   costUsd?: LooseOptional<number>
   finishReason?: LooseOptional<string>
   requestFingerprint?: LooseOptional<string>
+  providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
 
 const MaxQueryStreamContinuationRecoveryAttempts = 1
@@ -379,6 +382,13 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         aiTools,
         toolTransportPlan
       )
+      const providerTools = this.turnRequestHelper.resolveProviderToolDefinitions(
+        aiTools,
+        args.toolContext,
+        toolTransportPlan,
+        toolSchemaChars,
+        toolSchemaHashes
+      )
       const compiledRequest = await compileProviderSendRequest(
         {
           sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
@@ -391,6 +401,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           model: args.model,
           systemPrompt: args.systemPrompt,
           toolSchemaChars,
+          toolSchemaHashes,
+          providerTools,
           availableToolNames: providerAvailableToolNames,
           toolNameAliases: toolTransportPlan.canonicalToProvider,
           activeTask: contextWorkingSetInputs.activeTask,
@@ -417,6 +429,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         model: args.model,
       })
       this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
+      assertProviderRequestSnapshotReconstructable(compiledRequest.providerRequest)
       providerTurnReducer = this.createProviderTurnReducer(args)
       providerTurnReducer.apply({ type: 'turn-started' })
       providerTurnReducer.apply({
@@ -578,6 +591,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         costUsd: toNullable(turnState.costUsd),
         finishReason: toNullable(turnState.finishReason),
         requestFingerprint: toNullable(turnState.requestFingerprint),
+        providerRequestSnapshot: compiledRequest.providerRequest,
       }
     } catch (error) {
       if (!didLogTurnEnd) {

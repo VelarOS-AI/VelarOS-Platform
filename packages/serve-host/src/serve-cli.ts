@@ -8,7 +8,9 @@ import {
   isPlainObject,
   isPresent,
   isString,
+  isTrue,
   stringifyPretty,
+  toNullable,
   toOptional,
 } from '@velaros-ai/core'
 
@@ -255,17 +257,11 @@ export async function runServeCli(
         ],
       },
     }
-    if (parsed.command === 'start') {
-      return await startHost(parsed, options)
-    }
-    if (parsed.command === 'computer-install' && isPresent(parsed.pythonCommand)) {
-      return await installComputerOffline(command, parsed)
-    }
+    if (parsed.command === 'start') return await startHost(parsed, options)
+    if (parsed.command === 'computer-install' && isPresent(parsed.pythonCommand)) return await installComputerOffline(command, parsed)
     if (parsed.command === 'computer-install') {
       const status = await readHostStatus(parsed.dataRoot)
-      if (!isNotNull(status) || !isProcessAlive(status.pid)) {
-        return await installComputerOffline(command, parsed)
-      }
+      if (!isNotNull(status) || !isProcessAlive(status.pid)) return await installComputerOffline(command, parsed)
     }
 
     const status = await requireRunningHost(parsed.dataRoot)
@@ -404,8 +400,7 @@ function commandEnvelope(command: ServeCommand, result: unknown): unknown {
 }
 
 function formatManagementResult(command: ServeCommand, result: unknown): string {
-  if (command === 'status' && isManagementStatusPayload(result)) {
-    return [
+  if (command === 'status' && isManagementStatusPayload(result)) return [
       `Velar Host is running (pid ${result.host.pid}).`,
       `Project: ${result.host.projectRoot}`,
       `Data root: ${result.host.dataRoot}`,
@@ -413,23 +408,16 @@ function formatManagementResult(command: ServeCommand, result: unknown): string 
       describeRemoteNode(result.host.remoteNode),
       '',
     ].join('\n')
-  }
   if (command === 'config-show' && isPlainObject(result)) return `${stringifyPretty(result)}\n`
   if (command === 'config-apply') return 'Host configuration applied.\n'
   if (command === 'computer-probe' && isManagementStatusPayload(result)) {
     const available = isPlainObject(result.computerAvailability)
-      && Reflect.get(result.computerAvailability, 'available') === true
+      && isTrue(Reflect.get(result.computerAvailability, 'available'))
     return `Computer runtime: ${available ? 'available' : 'unavailable'}.\n`
   }
-  if (command === 'computer-install' && isManagementStatusPayload(result)) {
-    return 'Computer runtime installed and checked by the running Host.\n'
-  }
-  if ((command === 'extension-pair' || command === 'extension-disconnect') && isManagementStatusPayload(result)) {
-    return formatPairing('Extension', result.host.extension.pairingCode, result.host.extension.pairingExpiresAt)
-  }
-  if (command === 'remote-pair' && isManagementStatusPayload(result) && isPresent(result.pairing)) {
-    return formatPairing('Remote node', result.pairing.code, result.pairing.expiresAt)
-  }
+  if (command === 'computer-install' && isManagementStatusPayload(result)) return 'Computer runtime installed and checked by the running Host.\n'
+  if ((command === 'extension-pair' || command === 'extension-disconnect') && isManagementStatusPayload(result)) return formatPairing('Extension', result.host.extension.pairingCode, result.host.extension.pairingExpiresAt)
+  if (command === 'remote-pair' && isManagementStatusPayload(result) && isPresent(result.pairing)) return formatPairing('Remote node', result.pairing.code, result.pairing.expiresAt)
   if (command === 'remote-revoke') return 'Remote node pairing revoked.\n'
   return `${stringifyPretty(result)}\n`
 }
@@ -525,8 +513,8 @@ function attachTerminalReporter(
     if (next.connected !== remoteNode.connected) {
       emit(next.connected ? 'Remote node client connected.' : 'Remote node client disconnected.')
     }
-    const nextClient = next.paired?.clientName ?? null
-    const previousClient = remoteNode.paired?.clientName ?? null
+    const nextClient = toNullable(next.paired?.clientName)
+    const previousClient = toNullable(remoteNode.paired?.clientName)
     if (nextClient !== previousClient) {
       emit(isNotNull(nextClient) ? `Remote node paired with ${nextClient}.` : 'Remote node pairing revoked.')
     }

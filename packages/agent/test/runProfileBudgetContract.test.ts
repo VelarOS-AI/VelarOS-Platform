@@ -6,6 +6,7 @@ import type { ToolDescriptor } from '@velaros-ai/agent/protocol'
 
 import {
   applyRunProfileToolExposure,
+  describeRunProfiles,
   resolveRunProfilePolicyForRuntime,
   RunProfileDefinitions,
 } from '../src/agent/RunProfile'
@@ -18,6 +19,21 @@ function toolDescriptor(name: string, chars: number): ToolDescriptor {
 }
 
 void describe('run profile budget contract', () => {
+  void test('publishes a deterministic frozen profile catalog without a patch surface', () => {
+    const snapshot = describeRunProfiles()
+
+    assert.equal(snapshot.schemaVersion, 1)
+    assert.equal(snapshot.defaultSelection, 'auto')
+    assert.deepEqual(snapshot.profiles.map((profile) => profile.id), [
+      'balanced',
+      'compact',
+      'expanded',
+    ])
+    assert.equal(Object.isFrozen(snapshot), true)
+    assert.equal(Object.isFrozen(snapshot.profiles), true)
+    assert.deepEqual(JSON.parse(JSON.stringify(snapshot)), snapshot)
+  })
+
   void test('profile defaults carry no sampling parameters', () => {
     // 三档曾各声明 temperature/topP/maxOutputTokens，全仓零读取点：档位描述宣称是「运行成本与
     // 发散度」三档，实际只有工具预算生效。别再把采样参数塞回缺席默认里而不接线。

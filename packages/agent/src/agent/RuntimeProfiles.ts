@@ -18,6 +18,17 @@ const UnknownContextWindowFallback = 128_000
 const BalancedContextWindowThreshold = 192_000
 const ExpandedContextWindowThreshold = 1_000_000
 
+export interface AgentRunProfileCatalogSnapshot {
+  readonly schemaVersion: 1
+  readonly defaultSelection: RunProfileSelectionId
+  readonly automaticSelection: {
+    readonly unknownContextWindowFallback: number
+    readonly balancedAtOrAbove: number
+    readonly expandedAtOrAbove: number
+  }
+  readonly profiles: readonly RunProfileDefinition[]
+}
+
 const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   compact: {
     id: 'compact',
@@ -67,6 +78,31 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     },
     automaticToolCategories: [],
   },
+}
+
+/** 只读 profile 目录；用于诊断和配置解释，不提供运行期覆盖 Ring 0/执行策略的 patch 入口。 */
+function describeRunProfiles(): AgentRunProfileCatalogSnapshot {
+  const profiles = Object.keys(RunProfileDefinitions)
+    .sort()
+    .map((id) => {
+      const profile = RunProfileDefinitions[id as RunProfileId]
+      return Object.freeze({
+        ...profile,
+        budget: Object.freeze({ ...profile.budget }),
+        defaults: Object.freeze({ ...profile.defaults }),
+        automaticToolCategories: Object.freeze([...profile.automaticToolCategories]),
+      })
+    })
+  return Object.freeze({
+    schemaVersion: 1,
+    defaultSelection: DefaultRunProfileSelectionId,
+    automaticSelection: Object.freeze({
+      unknownContextWindowFallback: UnknownContextWindowFallback,
+      balancedAtOrAbove: BalancedContextWindowThreshold,
+      expandedAtOrAbove: ExpandedContextWindowThreshold,
+    }),
+    profiles: Object.freeze(profiles),
+  })
 }
 
 /**
@@ -154,6 +190,7 @@ export {
   AutoRunProfileSelectionId,
   DefaultRunProfileSelectionId,
   DefaultToolSurfaceProfileId,
+  describeRunProfiles,
   getToolSurfaceFallbackChain,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,

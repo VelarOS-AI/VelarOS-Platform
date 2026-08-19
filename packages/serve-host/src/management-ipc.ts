@@ -6,12 +6,13 @@ import {
   type Socket,
 } from 'node:net'
 
+import { z } from 'zod'
+
 import type {
   ComputerAvailability,
   ComputerRuntimePort,
 } from '@velaros-ai/computer/runtime'
-import { AppError, isPresent, toNullable } from '@velaros-ai/core'
-import { z } from 'zod'
+import { AppError, isPresent, isUndefined, Log, toNullable } from '@velaros-ai/core'
 
 import type { InstallVelarHostComputerResult } from './computer-installer'
 import {
@@ -189,6 +190,9 @@ export class VelarHostManagementServer {
         || message.startsWith('Explicit confirmation required:')
         || message.includes(' requires ')
         || message.endsWith(' is disabled')
+      if (!requestError) {
+        Log.tag('VelarHostManagement').warn('Host 本地管理操作执行失败。', { error, requestId })
+      }
       this.writeFailure(socket, requestError ? 'REQUEST_ERROR' : 'EXECUTION_ERROR', message, requestId)
     }
   }
@@ -292,7 +296,7 @@ export async function callVelarHostManagement<Result = unknown>(
         schemaVersion: ManagementProtocolVersion,
         requestId,
         operation,
-        ...(payload === undefined ? {} : { payload }),
+        ...(isUndefined(payload) ? {} : { payload }),
       })}\n`)
     })
     socket.on('data', (chunk: Buffer) => {

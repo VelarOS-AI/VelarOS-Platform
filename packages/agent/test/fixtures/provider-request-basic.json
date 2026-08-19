@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "model": "fixture-model",
+  "system": "Use project__read before editing.",
+  "messages": [
+    {
+      "content": "Inspect src/main.ts",
+      "role": "user"
+    }
+  ],
+  "tools": [
+    {
+      "name": "project__read",
+      "canonicalName": "project:read",
+      "description": "Read a project file.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "schemaChars": 128,
+      "schemaHash": "schema-read-v1"
+    }
+  ],
+  "toolChoice": {
+    "toolName": "project__read",
+    "type": "tool"
+  },
+  "requestFingerprint": {
+    "id": "a660cc0fd8cd5533",
+    "systemHash": "22433632cfcb10c4",
+    "toolSurfaceHash": "81fd4d8f8bb79c50",
+    "prefixHash": "4dc8ec1148da92f5",
+    "messageHash": "d9f2e0d3e59a247e",
+    "toolSchemaCharsTotal": 128,
+    "messageCount": 1,
+    "roleSequence": [
+      "user"
+    ],
+    "availableToolNames": [
+      "project__read"
+    ],
+    "historyToolNames": [],
+    "missingHistoryToolNames": [],
+    "toolChoiceName": "project__read",
+    "toolChoiceVisible": true,
+    "contextRefCount": 0,
+    "historyToolCallIds": [],
+    "historyToolResultIds": []
+  }
+}

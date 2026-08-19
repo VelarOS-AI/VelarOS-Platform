@@ -128,8 +128,7 @@ export const previewOfficeDocumentSchema = z.object({
     ),
 })
 
-// Static import keeps the dependency inside standalone Host bundles. The cast preserves the
-// deliberately narrow surface used by this tool instead of leaking Mammoth's full API.
+// 静态导入确保独立 Host bundle 收入该依赖；这里仅保留工具实际使用的窄接口，避免泄漏 Mammoth 全量 API。
 export const mammoth = mammothPackage as MammothModule
 
 export async function normalizePreviewInput(

@@ -12,3 +12,13 @@ VelarOS 的 library-first 微内核。一个领域只发布一个包，职责通
 Kernel 默认与完整宿主同进程、同生命周期；`serve` 只是同一运行栈的可选部署方式，不是第二个内核。
 Desktop / Workbench 等完整宿主直接组合公共 `Kernel`，只选择能力模块、产品权限策略与生命周期
 失败策略；不得在产品仓重写能力版本解析、调用权限门或 host 生命周期。
+
+## 只读组合快照
+
+`Kernel.describeComposition()` 与 `KernelService.describeComposition()` 返回确定性、冻结的
+`KernelCompositionSnapshot`：模块解析顺序、声明与生命周期状态，以及能力提供者、是否真实激活和
+当前 generation。`active: false` 明确区分“manifest 声明了能力”和“本代服务已经注册成功”。
+
+这是观测面，不是配置面。Kernel 不提供把快照反向 patch 回运行时的入口；模块注册、权限、激活、
+回滚与服务所有权仍由 Ring 0 裁决。可选 serve 部署继续受版本化 wire 协议和握手约束，本地快照
+不会暗中扩大远端协议或授权。

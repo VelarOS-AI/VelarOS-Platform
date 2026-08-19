@@ -11,6 +11,7 @@ import { toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { ProviderRequestSnapshot } from '../../agent/context/ProviderRequestSnapshot'
 import type {
   ExecutionSpan,
   ExecutionSpanStatus,
@@ -117,6 +118,7 @@ export interface TurnSpanScope extends ToolSpanOpener {
     promptSegments: readonly unknown[]
     skippedPromptSegments: readonly unknown[]
     capabilityContextAudit: readonly unknown[]
+    providerRequest: Nullable<ProviderRequestSnapshot>
   }): void
   /** 收敛本 turn span。 */
   end(outcome: { status: ExecutionSpanStatus }): void
@@ -538,6 +540,7 @@ class LedgerTurnSpanScope implements TurnSpanScope {
     promptSegments: readonly unknown[]
     skippedPromptSegments: readonly unknown[]
     capabilityContextAudit: readonly unknown[]
+    providerRequest: Nullable<ProviderRequestSnapshot>
   }): void {
     const append = this.deps.promptAuditAppend
     if (!append) return
@@ -555,6 +558,7 @@ class LedgerTurnSpanScope implements TurnSpanScope {
           promptSegments: input.promptSegments,
           skippedPromptSegments: input.skippedPromptSegments,
           capabilityContextAudit: input.capabilityContextAudit,
+          providerRequest: input.providerRequest,
         }),
       'record prompt audit'
     )

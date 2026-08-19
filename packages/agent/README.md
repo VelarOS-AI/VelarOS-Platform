@@ -66,6 +66,16 @@ Agent 消息帧的进程(RPC 前脸、日志分析、外部桥接)不该被迫�
 `src/kernel/observability/` 把回合拆成 span 树落盘(`run` / `turn` / `model` / `tool` /
 `capability` / `policy` 六类),消费方是宿主的 span 账本。
 
+**最终请求可重建**。请求编译器在 provider 边界生成 `ProviderRequestSnapshot`，保存模型实际
+看到的 alias、改写后 system、消息、工具描述与精确 schema、tool choice 及 fingerprint，但不保存
+密钥、client 或执行函数。真正发送前会核对可见工具与快照能否一一重建；schema 缺失或工具面漂移
+会以不变量错误拒绝发送。fingerprint 同时绑定最终 system、消息内容与工具 schema hash，不能用
+“角色序列相同”冒充“请求相同”。无密钥 fixture 覆盖这条边界。
+
+Prompt audit sidecar 可保存完整快照供本机诊断，但它不是 session authority。它可能含有用户与模型
+内容，宿主必须遵守保留策略，并在导出前脱敏。`describeRunProfiles()` 只读暴露 compact、balanced、
+expanded 的预算及自动选择阈值，用于解释运行行为，不提供覆盖权限、工具执行或 Kernel 策略的入口。
+
 **子 agent**。`SubAgentDispatcher` 派发并发子任务;结果回填父会话时带来源前缀,防止并行结果串台。
 
 **mod 两级注册机的第二级**。`AgentModLoader` 按 manifest 装载九条贡献轴,`AgentModSeamDispatcher`

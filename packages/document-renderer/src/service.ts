@@ -1,3 +1,5 @@
+import { isObject, isString } from '@velaros-ai/core'
+
 import { RendererPathDeniedError } from './path-policy'
 import {
   type DocumentRendererErrorCode,
@@ -28,8 +30,8 @@ function errorResponse(
 export async function executeRendererRequest(input: unknown): Promise<DocumentRendererResponse> {
   const parsed = DocumentRendererRequestSchema.safeParse(input)
   if (!parsed.success) {
-    const requestId = typeof input === 'object' && input !== null
-      && 'requestId' in input && typeof input.requestId === 'string'
+    const requestId = isObject(input)
+      && 'requestId' in input && isString(input.requestId)
       ? input.requestId
       : 'invalid-request'
     return errorResponse(requestId, 'INVALID_REQUEST', parsed.error.message)

@@ -164,8 +164,10 @@ export type {
 } from './RoleTypes'
 export * from './run-context'
 export * from './runner'
+export type { AgentRunProfileCatalogSnapshot } from './RunProfile'
 export {
   applyRunProfileToolExposure,
+  describeRunProfiles,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
   RunProfileDefinitions,

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 
 import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas'
 
+import { Log } from '@velaros-ai/core'
 import {
   buildOfficePreviewHtml,
   type OfficePreviewKind,
@@ -108,22 +109,17 @@ export async function renderOfficeDocument(input: {
   }
 }
 
-type PdfJsDocument = {
-  numPages: number
-  getPage(pageNumber: number): Promise<{
-    getViewport(input: { scale: number }): { width: number; height: number }
-    render(input: Record<string, unknown>): { promise: Promise<void> }
-  }>
-  destroy(): Promise<void> | void
-}
-
 function pdfStandardFontDataUrl(): string | undefined {
   const resourcesRoot = process.env.VELAROS_DOCUMENT_RENDERER_RESOURCES_ROOT?.trim()
   if (resourcesRoot) return `${pathToFileURL(join(resourcesRoot, 'pdfjs-standard-fonts')).href}/`
   try {
     const packagePath = require.resolve('pdfjs-dist/package.json')
     return `${pathToFileURL(join(dirname(packagePath), 'standard_fonts')).href}/`
-  } catch {
+  } catch (error) {
+    Log.tag('DocumentRenderer').warn(
+      '未找到 PDF.js 标准字体目录，将继续使用 PDF.js 的默认字体策略。',
+      { error },
+    )
     return undefined
   }
 }
@@ -144,9 +140,7 @@ export async function renderPdfPage(input: {
   }
 
   Object.assign(globalThis, { DOMMatrix, ImageData, Path2D })
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs') as unknown as {
-    getDocument(input: Record<string, unknown>): { promise: Promise<PdfJsDocument> }
-  }
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const task = pdfjs.getDocument({
     data: new Uint8Array(await readFile(paths.inputPath)),
     isEvalSupported: false,

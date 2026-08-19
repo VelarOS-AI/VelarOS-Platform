@@ -96,6 +96,7 @@ export interface ExecutionSpanDebugPromptAudit {
   promptSegments: readonly unknown[]
   skippedPromptSegments: readonly unknown[]
   capabilityContextAudit: readonly unknown[]
+  providerRequest?: PromptAuditRecord['providerRequest']
 }
 
 /** 一次 run 的调试投影（按 runId 分组，与 §2.3「一会话多次 run 追加同文件」对齐）。 */
@@ -275,6 +276,7 @@ function projectTurn(
       promptSegments: audit.promptSegments,
       skippedPromptSegments: audit.skippedPromptSegments,
       capabilityContextAudit: audit.capabilityContextAudit,
+      providerRequest: audit.providerRequest,
     }
   }
   return projection

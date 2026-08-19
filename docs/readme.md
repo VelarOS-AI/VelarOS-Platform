@@ -8,12 +8,15 @@ This directory is the authoritative documentation entry point for VelarOS Platfo
 | --- | --- |
 | [Platform boundaries](architecture/platform-boundaries.md) | Deciding whether behavior belongs to Platform, a host, or a product |
 | [Repository topology](architecture/repository-topology.md) | Adding a package, changing a dependency direction, or working across domains |
+| [Runtime assurance and observability](architecture/runtime-assurance.md) | Inspecting composition, model requests, or process confinement without changing authority |
 | [Engineering standard](engineering/code-standard.md) | Writing or reviewing code, tests, comments, generated artifacts, or documentation |
 | [Decision records](decisions/README.md) | Changing public protocols, storage, permissions, package ownership, or compatibility policy |
 | [Gate coverage matrix](gate-coverage-matrix.md) | Finding the checks that cover a package or identifying a missing gate |
 | [Velar Host packaging and release](host-release.md) | Building the terminal-first Host installers or publishing a three-platform candidate |
 
-The root [README](../README.md) contains the package inventory, setup instructions, and merge-gate commands.
+The root [README](../README.md) contains the human-readable package inventory, setup instructions, and
+merge-gate commands. The [generated package catalog](generated/package-catalog.json) is the deterministic
+machine-readable projection of the root manifest and package manifests.
 
 ## Mod development
 

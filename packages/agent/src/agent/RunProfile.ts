@@ -9,6 +9,7 @@ import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@v
 
 import { compareStableStrings } from './context/residency/determinism'
 import {
+  describeRunProfiles,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
   resolveRunProfileWorkingSetContextWindow,
@@ -326,8 +327,10 @@ function applyToolSchemaCharBudget(
 
 export {
   applyRunProfileToolExposure,
+  describeRunProfiles,
   resolveRunProfileForRuntime,
   resolveRunProfilePolicyForRuntime,
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 }
+export type { AgentRunProfileCatalogSnapshot } from './RuntimeProfiles'
