@@ -233,7 +233,6 @@ describe('Velar Host extension journey without Desktop', () => {
     })
     expect(runtime.status.kernel.moduleIds).toEqual([
       'velaros.computer.sidecar',
-      'velaros.office',
       'velaros.project',
       'velaros.system',
     ])
@@ -834,39 +833,37 @@ describe('Velar Host extension journey without Desktop', () => {
 
     send(socket, {
       type: 'event',
-      eventId: 'office-prepare',
+      eventId: 'project-write-prepare',
       event: {
         type: 'provider_surface_prepare',
-        correlationId: 'office-prepare-1',
-        surfaceId: 'surface-office',
+        correlationId: 'project-write-prepare-1',
+        surfaceId: 'surface-project-write',
         workspaceBindingId: projectWorkspaceBindingId,
         providerConversationId: null,
         providerParentMessageId: null,
         message: null,
       },
     })
-    const officeContractCommand = await inbox.next('command')
+    const projectContractCommand = await inbox.next('command')
     await inbox.next('event_ack')
-    const officeContractEnvelope = officeContractCommand.command as Record<string, unknown>
-    const officeContractPayload = officeContractEnvelope.payload as {
+    const projectContractEnvelope = projectContractCommand.command as Record<string, unknown>
+    const projectContractPayload = projectContractEnvelope.payload as {
       binding: { toolContract: { id: string; catalogRevision: string } }
       toolCatalog: { tools: Array<{ name: string }> }
     }
-    expect(officeContractPayload.toolCatalog.tools.some((tool) =>
-      tool.name === 'office:create_word_document')).toBe(true)
-    expect(officeContractPayload.toolCatalog.tools.some((tool) =>
+    expect(projectContractPayload.toolCatalog.tools.some((tool) =>
       tool.name === 'project:write')).toBe(true)
-    expect(officeContractPayload.toolCatalog.tools.some((tool) =>
-      tool.name === 'office:convert_document_to_markdown')).toBe(false)
-    send(socket, { type: 'ack', sequence: officeContractEnvelope.sequence })
+    expect(projectContractPayload.toolCatalog.tools.some((tool) =>
+      tool.name.startsWith('office:'))).toBe(false)
+    send(socket, { type: 'ack', sequence: projectContractEnvelope.sequence })
 
     const projectWriteResult = await callProviderTool({
       socket,
       inbox,
       eventId: 'project-write-report',
-      surfaceId: 'surface-office',
-      contractId: officeContractPayload.binding.toolContract.id,
-      catalogRevision: officeContractPayload.binding.toolContract.catalogRevision,
+      surfaceId: 'surface-project-write',
+      contractId: projectContractPayload.binding.toolContract.id,
+      catalogRevision: projectContractPayload.binding.toolContract.catalogRevision,
       toolCallId: 'project-write-report-1',
       toolName: 'project:write',
       toolInput: {
@@ -879,42 +876,6 @@ describe('Velar Host extension journey without Desktop', () => {
     expect(await readFile(join(workspaceRoot, 'reports', 'host-write-e2e.md'), 'utf8'))
       .toContain('Project write is available')
 
-    send(socket, {
-      type: 'event',
-      eventId: 'office-word',
-      event: {
-        type: 'provider_surface_tool_call',
-        correlationId: 'office-word-1',
-        surfaceId: 'surface-office',
-        call: {
-          protocolVersion: ProviderSurfaceProtocolVersion,
-          contractId: officeContractPayload.binding.toolContract.id,
-          catalogRevision: officeContractPayload.binding.toolContract.catalogRevision,
-          toolCallId: 'office-word-1',
-          toolName: 'office:create_word_document',
-          input: {
-            outputPath: 'reports/host-e2e.docx',
-            title: 'Host E2E',
-            content: '# Host E2E\n\nOffice capability is callable through Kernel.',
-          },
-        },
-      },
-    })
-    await expectToolProgress(socket, inbox, {
-      surfaceId: 'surface-office',
-      toolCallId: 'office-word-1',
-    })
-    const officeResultCommand = await inbox.next('command')
-    await inbox.next('event_ack')
-    const officeResultEnvelope = officeResultCommand.command as Record<string, unknown>
-    const officeResult = (officeResultEnvelope.payload as {
-      result: { status: string; output: { kind: string; bytes: number } }
-    }).result
-    expect(officeResult).toMatchObject({ status: 'success', output: { kind: 'docx' } })
-    expect(officeResult.output.bytes).toBeGreaterThan(1_000)
-    const wordBytes = await readFile(join(workspaceRoot, 'reports', 'host-e2e.docx'))
-    expect(wordBytes.subarray(0, 2).toString()).toBe('PK')
-    send(socket, { type: 'ack', sequence: officeResultEnvelope.sequence })
     socket.terminate()
     const managementEndpoint = runtime.status.management.endpoint
     await runtime.stop()

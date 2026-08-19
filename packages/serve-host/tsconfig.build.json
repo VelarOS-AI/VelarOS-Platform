@@ -17,7 +17,6 @@
       "@velaros-ai/core/*": ["./packages/core/dist/*"],
       "@velaros-ai/kernel": ["./packages/kernel/dist/index.d.ts"],
       "@velaros-ai/kernel/*": ["./packages/kernel/dist/*"],
-      "@velaros-ai/office": ["./packages/office/dist/index.d.ts"],
       "@velaros-ai/surface-protocol": ["./packages/surface-protocol/dist/index.d.ts"],
       "@velaros-ai/system": ["./packages/system/dist/index.d.ts"],
       "@velaros-ai/project": ["./packages/project/dist/index.d.ts"]

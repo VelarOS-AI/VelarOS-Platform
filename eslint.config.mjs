@@ -68,6 +68,7 @@ const Domains = [
       'packages/computer/**',
       'packages/development/**',
       'packages/office/**',
+      'packages/document-renderer/**',
       'packages/system/**',
       'packages/project/**',
       'packages/game/**',
@@ -98,7 +99,11 @@ const Domains = [
   {
     name: 'host',
     config: kernelConfig,
-    globs: ['packages/serve-host/**', 'products/host/**'],
+    globs: [
+      'packages/serve-host/**',
+      'products/document-renderer/**',
+      'products/host/**',
+    ],
   },
 ]
 

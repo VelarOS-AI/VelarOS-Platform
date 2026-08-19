@@ -43,11 +43,6 @@ async function main(): Promise<void> {
     resourcesRoot,
     'computer-runtime',
   )
-  process.env.VELAROS_PDFJS_STANDARD_FONTS_ROOT = join(
-    resourcesRoot,
-    'pdfjs-standard-fonts',
-  )
-
   const defaultProjectRoot =
     process.env.VELAROS_HOST_PROJECT_ROOT?.trim() || join(homedir(), 'VelarOS')
   await mkdir(defaultProjectRoot, { recursive: true })

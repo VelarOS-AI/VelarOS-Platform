@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "paths": {
+      "@velaros-ai/office/renderer": ["./packages/office/dist/renderer.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

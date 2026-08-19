@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/serve-host",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -37,7 +37,6 @@
     "@velaros-ai/computer": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "@velaros-ai/office": "workspace:*",
     "@velaros-ai/remote-host": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/system": "workspace:*",

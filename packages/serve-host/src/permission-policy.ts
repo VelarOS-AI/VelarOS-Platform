@@ -18,9 +18,7 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
     const capabilities = this.config.snapshot().value.capabilities
     const granted = request.moduleId === 'velaros.project'
       ? this.projectPermissionGranted(request.permission, capabilities.project)
-      : request.moduleId === 'velaros.office'
-        ? this.officePermissionGranted(request.permission, capabilities.project)
-        : request.moduleId === 'velaros.system'
+      : request.moduleId === 'velaros.system'
           ? this.systemPermissionGranted(request.permission, capabilities.system)
       : request.moduleId === 'velaros.computer.sidecar'
         ? this.computerPermissionGranted(request.permission, capabilities.computer)
@@ -58,21 +56,6 @@ export class VelarHostPermissionBroker implements KernelPermissionBroker {
     if (permission === 'process:exec' || permission === 'screen:capture') return policy.observe
     if (permission === 'input:control') return policy.control
     return false
-  }
-
-  private officePermissionGranted(
-    permission: string,
-    policy: { read: boolean; write: boolean },
-  ): boolean {
-    switch (permission) {
-      case 'fs:read':
-        return policy.read
-      case 'fs:write':
-      case 'process:exec':
-        return policy.write
-      default:
-        return false
-    }
   }
 
   private systemPermissionGranted(

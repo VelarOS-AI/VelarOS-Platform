@@ -10,10 +10,13 @@ Office 是 `@velaros-ai` 品牌下的办公文档能力聚合包。它负责创�
 | `@velaros-ai/office/tools` | 模型工具集合 `officeTools` |
 | `@velaros-ai/office/contracts` | 宿主端口和工具上下文类型 |
 | `@velaros-ai/office/runtime` | MarkItDown 与可选资源运行时 |
+| `@velaros-ai/office/renderer` | 独立文档渲染产品使用的窄解析与渲染原语 |
 | `@velaros-ai/office/composition` | Kernel module 组合入口 |
 | `@velaros-ai/office` | 上述职责入口的聚合导出 |
 
 业务代码应依赖最窄的职责入口，只有需要完整 Office 空间时才使用根聚合入口。
+`renderer` 入口不代表宿主内置渲染；它只供独立安装、独立发布的 Document Renderer
+命令能力包消费。Velar Host 不依赖此入口，也不注册 Office/PDF 渲染工具。
 
 ## 模型工具
 

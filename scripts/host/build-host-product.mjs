@@ -104,18 +104,6 @@ async function copyRuntimeResources(destination) {
     join(destination, 'computer-runtime'),
     { recursive: true },
   )
-  await cp(
-    join(
-      repoRoot,
-      'packages',
-      'office',
-      'node_modules',
-      'pdfjs-dist',
-      'standard_fonts',
-    ),
-    join(destination, 'pdfjs-standard-fonts'),
-    { recursive: true },
-  )
 }
 
 async function buildHostBinary(targetRoot, target) {

@@ -16,7 +16,6 @@ import {
   createDefaultKernelModStorePaths,
   InProcessKernelTransport,
 } from '@velaros-ai/kernel/serve'
-import { createOfficeKernelModule } from '@velaros-ai/office/composition'
 import { installProjectApprovalProvider } from '@velaros-ai/project/composition'
 import { createProjectKernelModule } from '@velaros-ai/project/kernel'
 import {
@@ -28,7 +27,6 @@ import {
 } from '@velaros-ai/system'
 
 import {
-  createVelarHostOfficeToolContext,
   createVelarHostProjectToolContext,
   createVelarHostSystemToolContext,
 } from './capability-contexts'
@@ -54,7 +52,7 @@ import {
 } from './remote-node'
 import { VelarHostToolGateway } from './tool-gateway'
 
-export const VelarHostVersion = '0.2.0'
+export const VelarHostVersion = '0.2.1'
 export const VelarHostKernelVersion = '0.3.2'
 const HostLog = Log.tag('VelarHost')
 
@@ -154,14 +152,6 @@ export async function startVelarHost(
           resolveContext: (_scope, signal) =>
             createVelarHostSystemToolContext(system, signal),
         }),
-        createOfficeKernelModule({
-          resolveContext: (_scope, signal) => createVelarHostOfficeToolContext({
-            projectRoot,
-            system,
-            config,
-            signal,
-          }),
-        }),
         createComputerKernelModule({
           runtime: computer,
           disposeInjectedRuntime: !isPresent(options.computerRuntime),
@@ -170,16 +160,7 @@ export async function startVelarHost(
       permissionBroker: new VelarHostPermissionBroker(config),
     })
     kernelClient = new KernelClient(new InProcessKernelTransport(booted.service))
-    toolGateway = new VelarHostToolGateway(
-      kernelClient,
-      config,
-      () => createVelarHostOfficeToolContext({
-        projectRoot,
-        system,
-        config,
-        signal: new AbortController().signal,
-      }),
-    )
+    toolGateway = new VelarHostToolGateway(kernelClient, config)
     await toolGateway.start()
     extensionBridge = new VelarHostExtensionBridge({
       credentialPath: paths.credentialPath,

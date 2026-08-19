@@ -54,6 +54,9 @@
         "remote-host",
         "serve-host"
       ],
+      "products": [
+        "document-renderer"
+      ],
       "surface": [
         "surface-protocol"
       ],

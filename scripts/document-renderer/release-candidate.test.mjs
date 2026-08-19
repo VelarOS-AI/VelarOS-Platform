@@ -10,44 +10,44 @@ import {
 } from './release-candidate.mjs'
 
 const identity = {
-  product: 'host',
-  version: '0.2.1',
-  tag: 'host-v0.2.1',
+  product: 'document-renderer',
+  version: '0.2.0',
+  tag: 'document-renderer-v0.2.0',
   sourceRepository: 'VelarOS-AI/VelarOS-Platform',
   sourceCommit: 'a'.repeat(40),
 }
 
-test('Host staged manifests bind one installer to one source identity', () => {
+test('Document Renderer staged manifests bind one capability pack to one source identity', () => {
   const stage = buildStageManifest({
     identity,
     channel: 'stable',
     platform: 'darwin-arm64',
     artifact: {
-      fileName: 'Velar-Host.dmg',
+      fileName: 'Velar-Document Renderer.dmg',
       sizeBytes: 42,
       sha256: 'b'.repeat(64),
     },
   })
-  assert.equal(stage.product, 'host')
+  assert.equal(stage.product, 'document-renderer')
   assert.equal(stage.sourceCommit, identity.sourceCommit)
   assert.deepEqual(stage.artifacts, [
     {
-      fileName: 'Velar-Host.dmg',
+      fileName: 'Velar-Document Renderer.dmg',
       sizeBytes: 42,
       sha256: 'b'.repeat(64),
-      role: 'installer',
+      role: 'capability-pack',
     },
   ])
 })
 
-test('Host candidate finalization requires all three native platforms', () => {
+test('Document Renderer candidate finalization requires all three native platforms', () => {
   const stages = platforms.map((platform, index) =>
     buildStageManifest({
       identity,
       channel: 'canary',
       platform,
       artifact: {
-        fileName: `host-${platform}`,
+        fileName: `document-renderer-${platform}`,
         sizeBytes: index + 1,
         sha256: String(index).repeat(64),
       },
@@ -70,11 +70,11 @@ test('Host candidate finalization requires all three native platforms', () => {
         channel: 'canary',
         stages: stages.slice(1),
       }),
-    /Missing staged Host installer/u,
+    /Missing staged Document Renderer capability pack/u,
   )
 })
 
-test('Host release arguments make remote writes explicit', () => {
+test('Document Renderer release arguments make remote writes explicit', () => {
   assert.deepEqual(
     parseArguments(['plan', '--dry-run', '--channel', 'canary']),
     {

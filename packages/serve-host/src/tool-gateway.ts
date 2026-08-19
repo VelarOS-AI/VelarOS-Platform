@@ -25,9 +25,6 @@ import type {
   CapabilityCallResponse,
   ScopeRef,
 } from '@velaros-ai/kernel/contracts/protocol'
-import { OfficeCapability } from '@velaros-ai/office/composition'
-import type { OfficeToolContext } from '@velaros-ai/office/contracts'
-import { officeTools } from '@velaros-ai/office/tools'
 import { projectTools } from '@velaros-ai/project/agent'
 import {
   ProjectToolNames,
@@ -140,8 +137,6 @@ interface ToolRoute extends VelarHostToolRoute {
   readonly isAvailable?: () => boolean
 }
 
-export type VelarHostOfficeToolContextFactory = () => OfficeToolContext
-
 function compactDescription(description: string): string {
   const compact = description.replace(/\s+/gu, ' ').trim()
   return compact.length <= 320 ? compact : `${compact.slice(0, 317)}...`
@@ -186,7 +181,6 @@ export class VelarHostToolGateway {
   public constructor(
     private readonly kernel: KernelClient,
     private readonly config: VelarHostConfigStore,
-    officeToolContextFactory?: VelarHostOfficeToolContextFactory,
   ) {
     const projectRoutes: ToolRoute[] = Object.entries(projectTools)
       .map(([name, tool]) => ({
@@ -239,28 +233,8 @@ export class VelarHostToolGateway {
           permissions: [...new Set(tool.permissions)],
         }
       })
-    const officeRoutes: ToolRoute[] = Object.entries(officeTools)
-      .map(([fallbackName, tool]) => {
-        const name = tool.name ?? fallbackName
-        const isAvailable = tool.isAvailable
-        return {
-          descriptor: {
-            name,
-            description: compactDescription(tool.description),
-            inputSchema: schemaToInputSchema(tool.schema),
-            category: 'office',
-            readOnly: !tool.permissions.includes('fs:write'),
-          },
-          capabilityId: OfficeCapability.id,
-          operation: name,
-          permissions: [...new Set(tool.permissions)],
-          isAvailable: !isAvailable || !officeToolContextFactory
-            ? undefined
-            : () => isAvailable(officeToolContextFactory()),
-        }
-      })
     this.routesByName = new Map(
-      [...projectRoutes, ...systemRoutes, ...officeRoutes, ...computerRoutes]
+      [...projectRoutes, ...systemRoutes, ...computerRoutes]
         .map((route) => [route.descriptor.name, route]),
     )
   }
@@ -286,11 +260,6 @@ export class VelarHostToolGateway {
         {
           capabilityId: SystemCapability.id,
           operations: Object.values(systemTools).map((tool) => tool.name).filter(isString),
-          scope: null,
-        },
-        {
-          capabilityId: OfficeCapability.id,
-          operations: Object.values(officeTools).map((tool) => tool.name).filter(isString),
           scope: null,
         },
       ],
@@ -406,7 +375,6 @@ export class VelarHostToolGateway {
         if (
           workspaceSpace === 'project'
           && route.capabilityId !== ProjectCapability.id
-          && route.capabilityId !== OfficeCapability.id
         ) return false
         if (
           workspaceSpace === 'system'
@@ -423,7 +391,6 @@ export class VelarHostToolGateway {
         if (ProjectExecuteOperations.includes(
           route.operation as (typeof ProjectExecuteOperations)[number],
         )) return capabilities.project.execute
-        if (route.capabilityId === OfficeCapability.id) return capabilities.project.write
         if (SystemObserveOperations.has(route.operation)) return capabilities.system.observe
         if (SystemReadOperations.has(route.operation)) return capabilities.system.read
         if (SystemWriteOperations.has(route.operation)) return capabilities.system.write

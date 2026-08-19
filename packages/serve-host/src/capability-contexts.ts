@@ -5,13 +5,11 @@ import {
   defaultDenyApprovalPort,
 } from '@velaros-ai/agent/tool-contract'
 import { AppError } from '@velaros-ai/core/error'
-import type { OfficeToolContext } from '@velaros-ai/office/contracts'
 import type { ProjectToolContext } from '@velaros-ai/project/agent'
 import { withProjectApproval } from '@velaros-ai/project/composition'
 import { isPathInsideProjectRoot } from '@velaros-ai/project/files'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 import type {
-  LocalSystemKernel,
   SystemToolContext,
   SystemToolSystemApi,
 } from '@velaros-ai/system'
@@ -26,62 +24,6 @@ export function createVelarHostSystemToolContext(
     abortSignal: signal,
     system,
     approval: defaultDenyApprovalPort,
-  }
-}
-
-export function createVelarHostOfficeToolContext(input: {
-  readonly projectRoot: string
-  readonly system: LocalSystemKernel
-  readonly config: VelarHostConfigStore
-  readonly signal: AbortSignal
-}): OfficeToolContext {
-  const projectRoot = resolve(input.projectRoot)
-  let activeRoot = projectRoot
-
-  const resolveInsideProject = (path: string): string => {
-    const target = isAbsolute(path) ? resolve(path) : resolve(activeRoot, path)
-    if (!isPathInsideProjectRoot(projectRoot, target)) {
-      throw new Error(`Office 路径超出 Host 项目边界：${path}`)
-    }
-    return target
-  }
-
-  return {
-    abortSignal: input.signal,
-    office: {
-      hasProjectRoot: () => true,
-      project: {
-        getRootPath: () => activeRoot,
-        async runInDirectory<T>(cwd: string, action: () => Promise<T>): Promise<T> {
-          const previous = activeRoot
-          activeRoot = resolveInsideProject(cwd)
-          try {
-            return await action()
-          } finally {
-            activeRoot = previous
-          }
-        },
-        async prepareMutation(request) {
-          const approved = input.config.snapshot().value.capabilities.project.write
-          const requestedRoot = request.cwd ? resolveInsideProject(request.cwd) : activeRoot
-          return {
-            approved,
-            rootPath: requestedRoot,
-            switched: requestedRoot !== projectRoot,
-            alreadyAuthorized: approved,
-            rejectionMessage: approved ? null : 'Velar Host 未授权修改当前项目。',
-            message: approved ? '当前项目已授权。' : '当前项目未授权写入。',
-            authorizationScope: 'project',
-          }
-        }
-      },
-      system: {
-        inspectEnvironment: (commands) => input.system.inspectEnvironment(commands),
-        createSystemToolInstallSuggestion: () => null,
-        runCommand: (command, options, allowDangerous) =>
-          input.system.runCommand(command, options, allowDangerous, input.signal),
-      },
-    },
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/office",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -37,6 +37,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer.d.ts",
+      "import": "./dist/renderer.js"
     },
     "./tools": {
       "types": "./dist/tools.d.ts",
