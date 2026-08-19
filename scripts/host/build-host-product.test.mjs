@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  artifactTrust,
   currentTarget,
   macInfoPlist,
   macLaunchScript,
@@ -45,4 +46,12 @@ test('macOS signing modes cannot be mixed', () => {
     () => parseArguments(['--notarize', '--adhoc']),
     /cannot be used together/u,
   )
+  assert.deepEqual(artifactTrust('darwin-arm64', { notarize: true, adHoc: false }), {
+    signature: 'developer-id',
+    notarized: true,
+  })
+  assert.deepEqual(artifactTrust('darwin-arm64', { notarize: false, adHoc: true }), {
+    signature: 'ad-hoc',
+    notarized: false,
+  })
 })

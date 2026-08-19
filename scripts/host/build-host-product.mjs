@@ -374,6 +374,15 @@ async function sourceIdentity() {
   }
 }
 
+function artifactTrust(target, options) {
+  return target === 'darwin-arm64'
+    ? {
+        signature: options.adHoc ? 'ad-hoc' : 'developer-id',
+        notarized: options.notarize === true,
+      }
+    : { signature: 'unsigned', notarized: false }
+}
+
 async function build(options = {}) {
   const target = currentTarget(options.host)
   const targetRoot = join(outputRoot, target)
@@ -396,6 +405,7 @@ async function build(options = {}) {
     fileName: artifact.split(/[\\/]/u).at(-1),
     sizeBytes: (await stat(artifact)).size,
     sha256: await sha256(artifact),
+    trust: artifactTrust(target, options),
     ...identity,
   }
   const manifestPath = join(releaseRoot, `host-artifact-${target}.json`)
@@ -417,6 +427,7 @@ if (
 }
 
 export {
+  artifactTrust,
   build,
   currentTarget,
   macInfoPlist,

@@ -196,6 +196,8 @@ async function reusableMacArtifact(context) {
       manifest.platform === 'darwin-arm64' &&
       manifest.sourceCommit === context.sourceCommit &&
       manifest.sourceDirty === false &&
+      manifest.trust?.signature === 'developer-id' &&
+      manifest.trust?.notarized === true &&
       manifest.sizeBytes === (await stat(artifactPath)).size &&
       manifest.sha256 === (await sha256(artifactPath))
     return reusable ? { manifestPath, artifactPath } : null

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  assertCandidateArtifactTrust,
   buildCandidateManifest,
   buildStageManifest,
   parseArguments,
@@ -86,5 +87,22 @@ test('Host release arguments make remote writes explicit', () => {
   assert.throws(
     () => parseArguments(['stage', '--platform', 'darwin-x64']),
     /--platform/u,
+  )
+})
+
+test('macOS staging rejects development-signed artifacts', () => {
+  assert.doesNotThrow(() =>
+    assertCandidateArtifactTrust(
+      { trust: { signature: 'developer-id', notarized: true } },
+      'darwin-arm64',
+    ),
+  )
+  assert.throws(
+    () =>
+      assertCandidateArtifactTrust(
+        { trust: { signature: 'ad-hoc', notarized: false } },
+        'darwin-arm64',
+      ),
+    /Developer ID signing and notarization/u,
   )
 })

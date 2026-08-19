@@ -144,6 +144,16 @@ function buildCandidateManifest({ identity, channel, stages }) {
   }
 }
 
+function assertCandidateArtifactTrust(artifactManifest, platform) {
+  if (
+    platform === 'darwin-arm64' &&
+    (artifactManifest.trust?.signature !== 'developer-id' ||
+      artifactManifest.trust?.notarized !== true)
+  ) {
+    throw new Error('macOS Host candidates require Developer ID signing and notarization')
+  }
+}
+
 class GitHubReleaseClient {
   constructor(repository, token) {
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository)) {
@@ -340,6 +350,7 @@ async function stage(options) {
       )
     }
   }
+  assertCandidateArtifactTrust(artifactManifest, options.platform)
   const artifactPath = resolve(
     dirname(options.artifactManifest),
     artifactManifest.fileName,
@@ -439,6 +450,7 @@ if (
 }
 
 export {
+  assertCandidateArtifactTrust,
   buildCandidateManifest,
   buildStageManifest,
   GitHubReleaseClient,
