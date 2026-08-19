@@ -332,10 +332,7 @@ async function resolveAppImageTool() {
   return 'appimagetool'
 }
 
-async function packageLinux({ targetRoot, binaryPath, version }) {
-  const appDir = join(targetRoot, 'Velar_Host.AppDir')
-  const binaryDestination = join(appDir, 'usr', 'bin', 'velar-host')
-  const resourcesRoot = join(appDir, 'usr', 'share', 'velar-host')
+async function stageLinuxDesktopFiles(appDir) {
   const iconDirectory = join(
     appDir,
     'usr',
@@ -345,11 +342,7 @@ async function packageLinux({ targetRoot, binaryPath, version }) {
     'scalable',
     'apps',
   )
-  await mkdir(dirname(binaryDestination), { recursive: true })
   await mkdir(iconDirectory, { recursive: true })
-  await copyFile(binaryPath, binaryDestination)
-  await chmod(binaryDestination, 0o755)
-  await copyRuntimeResources(resourcesRoot)
   await copyFile(
     join(hostProductRoot, 'linux', 'AppRun'),
     join(appDir, 'AppRun'),
@@ -361,10 +354,24 @@ async function packageLinux({ targetRoot, binaryPath, version }) {
   )
   const iconPath = join(iconDirectory, 'velar-host.svg')
   await copyFile(join(hostProductRoot, 'assets', 'velar-host.svg'), iconPath)
+  // appimagetool validates the desktop entry against an icon at the AppDir root even though
+  // the same icon is also installed in the freedesktop hicolor hierarchy.
+  await copyFile(iconPath, join(appDir, 'velar-host.svg'))
   await symlink(
     'usr/share/icons/hicolor/scalable/apps/velar-host.svg',
     join(appDir, '.DirIcon'),
   )
+}
+
+async function packageLinux({ targetRoot, binaryPath, version }) {
+  const appDir = join(targetRoot, 'Velar_Host.AppDir')
+  const binaryDestination = join(appDir, 'usr', 'bin', 'velar-host')
+  const resourcesRoot = join(appDir, 'usr', 'share', 'velar-host')
+  await mkdir(dirname(binaryDestination), { recursive: true })
+  await copyFile(binaryPath, binaryDestination)
+  await chmod(binaryDestination, 0o755)
+  await copyRuntimeResources(resourcesRoot)
+  await stageLinuxDesktopFiles(appDir)
   const artifact = join(releaseRoot, `Velar-Host-${version}-x86_64.AppImage`)
   await mkdir(releaseRoot, { recursive: true })
   const appImageTool = await resolveAppImageTool()
@@ -452,4 +459,5 @@ export {
   macLaunchScript,
   parseArguments,
   readHostVersion,
+  stageLinuxDesktopFiles,
 }

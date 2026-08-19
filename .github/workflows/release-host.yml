@@ -96,7 +96,21 @@ jobs:
         shell: pwsh
         run: |
           bun install --frozen-lockfile
-          choco install nsis --no-progress -y
+          $nsisInstalled = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install nsis --no-progress -y
+            if ($LASTEXITCODE -eq 0) {
+              $nsisInstalled = $true
+              break
+            }
+            if ($attempt -lt 3) {
+              Write-Warning "NSIS install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (10 * $attempt)
+            }
+          }
+          if (-not $nsisInstalled) {
+            throw "NSIS installation failed after 3 attempts."
+          }
       - name: Build Windows Host installer
         run: bun run package:host:win
       - name: Stage Windows Host installer

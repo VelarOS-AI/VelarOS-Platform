@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, readlink, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -8,6 +11,7 @@ import {
   macInfoPlist,
   macLaunchScript,
   parseArguments,
+  stageLinuxDesktopFiles,
 } from './build-host-product.mjs'
 
 test('Host product packaging only accepts native release targets', () => {
@@ -70,4 +74,26 @@ test('macOS signing modes cannot be mixed', () => {
     '--sign',
     '-',
   ])
+})
+
+test('Linux AppDir exposes the desktop icon at both required paths', async () => {
+  const appDir = await mkdtemp(join(tmpdir(), 'velar-host-appdir-'))
+  try {
+    await stageLinuxDesktopFiles(appDir)
+    const rootIcon = await readFile(join(appDir, 'velar-host.svg'), 'utf8')
+    const installedIcon = await readFile(
+      join(
+        appDir,
+        'usr/share/icons/hicolor/scalable/apps/velar-host.svg',
+      ),
+      'utf8',
+    )
+    assert.equal(rootIcon, installedIcon)
+    assert.equal(
+      await readlink(join(appDir, '.DirIcon')),
+      'usr/share/icons/hicolor/scalable/apps/velar-host.svg',
+    )
+  } finally {
+    await rm(appDir, { recursive: true, force: true })
+  }
 })
