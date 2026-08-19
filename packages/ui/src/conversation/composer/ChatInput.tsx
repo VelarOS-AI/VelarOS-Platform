@@ -179,6 +179,8 @@ export interface ChatInputFeaturesControl {
   turnContextDeltas?: TurnContextDelta[]
   /** Workbench 当前可见文件的轻索引；只展示一枚，切换时原位替换。 */
   workbenchCurrentFilePath?: string
+  /** Workbench 当前文件 chip 的移除动作；缺席时 chip 保持只读。 */
+  onDismissWorkbenchCurrentFile?: () => void
   onDismissTurnContextDelta?: (id: string) => void
   lockedPromptFeatures?: ChatPromptFeatureId[]
   promptFeatures?: ChatPromptFeatureId[]
@@ -372,6 +374,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   } = control.features ?? {}
   const {
     onRemoveBrowserElementSelection,
+    onDismissWorkbenchCurrentFile,
     onDismissTurnContextDelta,
     onOpenSkillDetail,
     onPromptFeaturesChange,
@@ -1145,6 +1148,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
             onRemoveBrowserElementSelection={onRemoveBrowserElementSelection}
             turnContextDeltas={turnContextDeltas}
             workbenchCurrentFilePath={workbenchCurrentFilePath}
+            onDismissWorkbenchCurrentFile={onDismissWorkbenchCurrentFile}
             onDismissTurnContextDelta={onDismissTurnContextDelta}
             activePluginOptions={activePluginOptions}
             activeSkillOptions={activeSkillOptions}
@@ -1320,6 +1324,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                 onRemoveBrowserElementSelection={onRemoveBrowserElementSelection}
                 turnContextDeltas={turnContextDeltas}
                 workbenchCurrentFilePath={workbenchCurrentFilePath}
+                onDismissWorkbenchCurrentFile={onDismissWorkbenchCurrentFile}
                 onDismissTurnContextDelta={onDismissTurnContextDelta}
                 activePluginOptions={activePluginOptions}
                 activeSkillOptions={activeSkillOptions}

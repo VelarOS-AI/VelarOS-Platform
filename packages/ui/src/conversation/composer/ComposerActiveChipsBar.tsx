@@ -107,6 +107,7 @@ export interface ComposerActiveChipsBarProps {
   turnContextDeltas?: TurnContextDelta[]
   /** Workbench 当前可见文件；稳定状态只显示一枚，不参与历史 delta 分组。 */
   workbenchCurrentFilePath?: string
+  onDismissWorkbenchCurrentFile?: () => void
   onDismissTurnContextDelta?: (id: string) => void
   activePluginOptions: ChatInputPromptFeatureGroupOption[]
   activeSkillOptions: ChatInputSkillOption[]
@@ -133,6 +134,7 @@ function ComposerActiveChipsBarInner({
   onRemoveBrowserElementSelection,
   turnContextDeltas,
   workbenchCurrentFilePath,
+  onDismissWorkbenchCurrentFile,
   onDismissTurnContextDelta,
   activePluginOptions,
   activeSkillOptions,
@@ -238,6 +240,8 @@ function ComposerActiveChipsBarInner({
                   label={resolveCurrentFileLabel(workbenchCurrentFilePath)}
                   icon={<FileCodeIcon size={12} weight="bold" />}
                   disabled={disabled}
+                  onRemove={onDismissWorkbenchCurrentFile}
+                  removeAriaLabel={resolveCurrentFileLabel(workbenchCurrentFilePath)}
                 />,
               ]
             : []),

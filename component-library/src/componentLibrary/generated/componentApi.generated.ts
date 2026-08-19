@@ -1426,6 +1426,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "string"
     },
     {
+      "name": "ChatInputFunctionBar.onDismissWorkbenchCurrentFile",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void)"
+    },
+    {
       "name": "ChatInputFunctionBar.onDismissTurnContextDelta",
       "description": "Auto-generated from TypeScript props.",
       "type": "((id: string) => void)"
@@ -2139,6 +2144,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ComposerActiveChipsBar.workbenchCurrentFilePath",
       "description": "Workbench 当前可见文件；稳定状态只显示一枚，不参与历史 delta 分组。",
       "type": "string"
+    },
+    {
+      "name": "ComposerActiveChipsBar.onDismissWorkbenchCurrentFile",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void)"
     },
     {
       "name": "ComposerActiveChipsBar.onDismissTurnContextDelta",

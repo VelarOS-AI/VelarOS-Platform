@@ -6,10 +6,14 @@
 
 ## [Unreleased]
 
+## [0.2.4] — Workbench composer parity
+
 ### Added
 
 - `FileTypeIcon` recognizes `.vel` files and renders the official borderless
   VelarScript V/S mark with theme-aware contrast.
+- Workbench 当前文件 chip 新增可选移除回调；未传回调时外观与交互保持不变，
+  传入后复用 Desktop 同一套“悬浮图标变 ×”的 chip 行为。
 - `@velaros-ai/ui/conversation/render-slots` 增两格**替换槽**：`messageMarkdown` / `messageCodeBlock`
   （+ props 契约 `ConversationMarkdownSlotProps` / `ConversationCodeBlockSlotProps`）。两格为**可选**
   属性，缺席 = 官方内置件原行为；替换件弃权（返回 `null`）或渲染抛错一律回落官方件。

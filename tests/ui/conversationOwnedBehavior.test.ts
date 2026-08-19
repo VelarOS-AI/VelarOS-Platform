@@ -29,6 +29,24 @@ function createDraftTarget(input: {
 }
 
 void describe('Platform-owned conversation composer behavior', () => {
+  void test('keeps the Workbench current-file chip removable through the shared chip behavior', () => {
+    const inputSource = readFileSync(
+      new URL('../../packages/ui/src/conversation/composer/ChatInput.tsx', import.meta.url),
+      'utf8'
+    )
+    const chipsSource = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ComposerActiveChipsBar.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.match(inputSource, /onDismissWorkbenchCurrentFile/)
+    assert.match(chipsSource, /chipDataPluginId="workbench-current-file"/)
+    assert.match(chipsSource, /onRemove=\{onDismissWorkbenchCurrentFile\}/)
+  })
+
   void test('keeps Widget and HTML Live Preview independently selectable', () => {
     const options = buildAvailablePluginOptions()
     const widget = options.find((option) => option.id === 'widget')
