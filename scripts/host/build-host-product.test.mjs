@@ -97,3 +97,12 @@ test('Linux AppDir exposes the desktop icon at both required paths', async () =>
     await rm(appDir, { recursive: true, force: true })
   }
 })
+
+test('Windows installer quotes the complete NSIS output-name option', async () => {
+  const installer = await readFile(
+    new URL('../../products/host/windows/installer.nsi', import.meta.url),
+    'utf8',
+  )
+  assert.match(installer, /File "\/oname=Velar Host\.exe" "\$\{HOST_BINARY\}"/u)
+  assert.doesNotMatch(installer, /File \/oname="Velar Host\.exe"/u)
+})

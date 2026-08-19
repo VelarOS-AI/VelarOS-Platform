@@ -35,7 +35,7 @@ InstallDirRegKey HKCU "Software\VelarOS\Host" "InstallLocation"
 
 Section "Velar Host" SEC_HOST
   SetOutPath "$INSTDIR"
-  File /oname="Velar Host.exe" "${HOST_BINARY}"
+  File "/oname=Velar Host.exe" "${HOST_BINARY}"
   SetOutPath "$INSTDIR\resources"
   File /r "${HOST_RESOURCES}\*"
 
