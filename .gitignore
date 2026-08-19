@@ -11,7 +11,9 @@ coverage/
 .vite/
 demo-dist/
 dist-host/
+dist-document-renderer/
 release/host/
+release/document-renderer/
 *.tsbuildinfo
 .velaros-workspace
 .idea
