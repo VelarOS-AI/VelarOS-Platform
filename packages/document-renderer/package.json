@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/document-renderer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "velaros": {
     "platform": "0.6",

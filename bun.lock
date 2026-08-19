@@ -172,7 +172,7 @@
     },
     "packages/document-renderer": {
       "name": "@velaros-ai/document-renderer",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "velar-document-renderer": "./dist/cli.js",
       },
@@ -334,7 +334,7 @@
     },
     "packages/serve-host": {
       "name": "@velaros-ai/serve-host",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/computer": "workspace:*",

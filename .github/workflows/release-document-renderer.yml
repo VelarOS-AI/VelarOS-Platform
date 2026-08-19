@@ -62,6 +62,7 @@ jobs:
 
       - name: Verify independent Renderer and Host boundary
         run: |
+          node scripts/build/buildPackageTopology.mjs --for @velaros-ai/document-renderer
           bun run --cwd packages/document-renderer typecheck
           bun run --cwd packages/document-renderer test
           bunx tsc --noEmit -p products/document-renderer/tsconfig.json
