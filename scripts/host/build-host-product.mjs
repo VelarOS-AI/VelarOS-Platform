@@ -7,6 +7,7 @@ import {
   cp,
   mkdir,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -17,7 +18,9 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+// macOS exposes /tmp through /private/tmp. Bun resolves the entrypoint to its real path, so the
+// build cwd must use that same identity or workspace package resolution can fall outside tsconfig.
+const repoRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 const hostProductRoot = join(repoRoot, 'products', 'host')
 const outputRoot = join(repoRoot, 'dist-host')
 const releaseRoot = join(repoRoot, 'release', 'host')
