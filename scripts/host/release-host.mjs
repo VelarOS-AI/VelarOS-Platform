@@ -83,15 +83,18 @@ async function preflight({ requirePublishConfig = true } = {}) {
     '--untracked-files=all',
   ])
   if (status) throw new Error('Host releases require a clean working tree')
-  const branch = await command('git', [
+  const configuredSourceRef = process.env.VELAROS_RELEASE_SOURCE_REF?.trim()
+  const branch = configuredSourceRef || (await command('git', [
     'symbolic-ref',
     '--quiet',
     '--short',
     'HEAD',
-  ])
+  ]))
   await command('git', ['fetch', '--quiet'])
   const sourceCommit = await command('git', ['rev-parse', 'HEAD'])
-  const upstreamCommit = await command('git', ['rev-parse', '@{upstream}'])
+  const upstreamCommit = configuredSourceRef
+    ? await command('git', ['rev-parse', `origin/${configuredSourceRef}`])
+    : await command('git', ['rev-parse', '@{upstream}'])
   if (sourceCommit !== upstreamCommit) {
     throw new Error(
       'Current Host source commit must be pushed before remote native builds',

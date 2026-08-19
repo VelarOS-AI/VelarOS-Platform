@@ -59,6 +59,9 @@ pushed Apple Silicon checkout:
 bun run release:host --channel stable
 ```
 
+An isolated detached release worktree may set `VELAROS_RELEASE_SOURCE_REF=main`; the preflight then
+requires its exact `HEAD` to equal `origin/main` before dispatching the remote builds.
+
 Useful safe modes:
 
 ```sh
