@@ -12,6 +12,11 @@ import type { ComputerRuntimePort } from '@velaros-ai/computer/runtime'
 import { ProviderSurfaceProtocolVersion } from '@velaros-ai/surface-protocol'
 
 import { startVelarHost, type VelarHostRuntime } from '../src/host'
+import {
+  callVelarHostManagement,
+  type VelarHostManagementOperation,
+} from '../src/management-ipc'
+import { runServeCli } from '../src/serve-cli'
 
 class MessageInbox {
   private readonly messages: Array<Record<string, unknown>> = []
@@ -196,28 +201,12 @@ class FakeComputerRuntime implements ComputerRuntimePort {
   }
 }
 
-function controlAuth(runtime: VelarHostRuntime): { endpoint: string; token: string } {
-  const url = new URL(runtime.controlUrl)
-  const token = new URLSearchParams(url.hash.slice(1)).get('token')
-  if (token === null) throw new Error('Control URL is missing its fragment token')
-  return { endpoint: url.origin, token }
-}
-
-function controlFetch(
+function manage<Result = unknown>(
   runtime: VelarHostRuntime,
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const { endpoint, token } = controlAuth(runtime)
-  return fetch(`${endpoint}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Origin: endpoint,
-      ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...init.headers,
-    },
-  })
+  operation: VelarHostManagementOperation,
+  payload?: unknown,
+): Promise<Result> {
+  return callVelarHostManagement<Result>(runtime.status.management.endpoint, operation, payload)
 }
 
 describe('Velar Host extension journey without Desktop', () => {
@@ -542,20 +531,19 @@ describe('Velar Host extension journey without Desktop', () => {
     socket.terminate()
   })
 
-  test('uses the control plane to grant Computer tools and returns screenshots as artifacts', async () => {
+  test('uses local management IPC to grant Computer tools and returns screenshots as artifacts', async () => {
     temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-host-computer-e2e-'))
     const workspaceRoot = join(temporaryRoot, 'workspace')
     const dataRoot = join(temporaryRoot, 'data')
     const computer = new FakeComputerRuntime()
-    await Bun.write(join(workspaceRoot, 'proof.txt'), 'CONTROL_PLANE_OK\n')
+    await Bun.write(join(workspaceRoot, 'proof.txt'), 'MANAGEMENT_IPC_OK\n')
+    await Bun.write(join(dataRoot, 'control', 'token'), 'retired-token\n')
 
     runtime = await startVelarHost({
       projectRoot: workspaceRoot,
       dataRoot,
       portStart: 0,
       portEnd: 0,
-      controlPortStart: 0,
-      controlPortEnd: 0,
       pairingCode: '654321',
       computerRuntime: computer,
       computerInstaller: () => Promise.resolve({
@@ -567,17 +555,36 @@ describe('Velar Host extension journey without Desktop', () => {
       }),
     })
 
-    const page = await fetch(runtime.status.control.endpoint)
-    expect(page.status).toBe(200)
-    expect(page.headers.get('content-security-policy')).toContain("default-src 'none'")
-    const pageHtml = await page.text()
-    expect(pageHtml).toContain('Velar Host')
-    expect(pageHtml).toContain('浏览器插件')
-    expect(pageHtml).toContain('详细信息')
-    expect(pageHtml).toContain('>保存<')
-    expect(pageHtml).not.toContain('Desktop')
-    expect(pageHtml).not.toContain('聊天输入')
-    expect((await fetch(`${runtime.status.control.endpoint}/v1/status`)).status).toBe(401)
+    expect(runtime.status.management.endpoint.startsWith('http')).toBe(false)
+    expect(runtime.status.management.kind).toBe(process.platform === 'win32' ? 'pipe' : 'unix')
+    if (process.platform !== 'win32') {
+      expect((await stat(runtime.status.management.endpoint)).isSocket()).toBe(true)
+    }
+    const publicStatus = JSON.parse(await readFile(runtime.paths.statusPath, 'utf8')) as {
+      schemaVersion: number
+      management?: unknown
+      control?: unknown
+    }
+    expect(publicStatus.schemaVersion).toBe(3)
+    expect(publicStatus.management).toBeDefined()
+    expect(publicStatus.control).toBeUndefined()
+    await expect(stat(join(dataRoot, 'control', 'token'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    const statusCli = await runServeCli(['status', '--data-root', dataRoot, '--json'])
+    expect(statusCli.exitCode).toBe(0)
+    expect(JSON.parse(statusCli.text)).toMatchObject({
+      running: true,
+      host: { pid: process.pid, schemaVersion: 3 },
+    })
+    const configCli = await runServeCli(['config', 'show', '--data-root', dataRoot, '--json'])
+    expect(configCli.exitCode).toBe(0)
+    expect(JSON.parse(configCli.text)).toMatchObject({
+      capabilities: { project: { read: true } },
+      confirmations: [],
+    })
+    const remotePairCli = await runServeCli(['remote', 'pair', '--data-root', dataRoot, '--json'])
+    expect(remotePairCli.exitCode).toBe(1)
+    expect(remotePairCli.error?.code).toBe('REQUEST_ERROR')
 
     const unsafeUpdate = {
       capabilities: {
@@ -595,15 +602,13 @@ describe('Velar Host extension journey without Desktop', () => {
       },
       confirmations: [],
     }
-    const rejected = await controlFetch(runtime, '/v1/config', {
-      method: 'PUT',
-      body: JSON.stringify(unsafeUpdate),
+    await expect(manage(runtime, 'config.apply', unsafeUpdate)).rejects.toMatchObject({
+      code: 'REQUEST_ERROR',
     })
-    expect(rejected.status).toBe(400)
 
-    const enabled = await controlFetch(runtime, '/v1/config', {
-      method: 'PUT',
-      body: JSON.stringify({
+    const enabledPayload = await manage<{
+      config: { value: { capabilities: { computer: { control: boolean } } } }
+    }>(runtime, 'config.apply', {
         ...unsafeUpdate,
         confirmations: [
           'project-write',
@@ -615,21 +620,21 @@ describe('Velar Host extension journey without Desktop', () => {
           'computer-observe',
           'computer-control',
         ],
-      }),
     })
-    expect(enabled.status).toBe(200)
-    const enabledPayload = await enabled.json() as {
-      config: { value: { capabilities: { computer: { control: boolean } } } }
-    }
     expect(enabledPayload.config.value.capabilities.computer.control).toBe(true)
 
-    const probe = await controlFetch(runtime, '/v1/computer/probe', { method: 'POST' })
-    expect((await probe.json() as { computerAvailability: { available: boolean } })
+    const probe = await manage<{ computerAvailability: { available: boolean } }>(
+      runtime,
+      'computer.probe',
+    )
+    expect(probe
       .computerAvailability.available).toBe(true)
 
-    const installed = await controlFetch(runtime, '/v1/computer/install', { method: 'POST' })
-    expect(installed.status).toBe(200)
-    expect((await installed.json() as { installation: { installed: boolean } })
+    const installed = await manage<{ installation: { installed: boolean } }>(
+      runtime,
+      'computer.install',
+    )
+    expect(installed
       .installation.installed).toBe(true)
 
     const socket = await openExtensionSocket(runtime.status.extension.endpoint)
@@ -850,8 +855,29 @@ describe('Velar Host extension journey without Desktop', () => {
     expect(officeContractPayload.toolCatalog.tools.some((tool) =>
       tool.name === 'office:create_word_document')).toBe(true)
     expect(officeContractPayload.toolCatalog.tools.some((tool) =>
+      tool.name === 'project:write')).toBe(true)
+    expect(officeContractPayload.toolCatalog.tools.some((tool) =>
       tool.name === 'office:convert_document_to_markdown')).toBe(false)
     send(socket, { type: 'ack', sequence: officeContractEnvelope.sequence })
+
+    const projectWriteResult = await callProviderTool({
+      socket,
+      inbox,
+      eventId: 'project-write-report',
+      surfaceId: 'surface-office',
+      contractId: officeContractPayload.binding.toolContract.id,
+      catalogRevision: officeContractPayload.binding.toolContract.catalogRevision,
+      toolCallId: 'project-write-report-1',
+      toolName: 'project:write',
+      toolInput: {
+        path: 'reports/host-write-e2e.md',
+        content: '# Host write E2E\n\nProject write is available through the Host catalog.\n',
+        mode: 'create',
+      },
+    })
+    expect(projectWriteResult.status).toBe('success')
+    expect(await readFile(join(workspaceRoot, 'reports', 'host-write-e2e.md'), 'utf8'))
+      .toContain('Project write is available')
 
     send(socket, {
       type: 'event',
@@ -890,5 +916,11 @@ describe('Velar Host extension journey without Desktop', () => {
     expect(wordBytes.subarray(0, 2).toString()).toBe('PK')
     send(socket, { type: 'ack', sequence: officeResultEnvelope.sequence })
     socket.terminate()
+    const managementEndpoint = runtime.status.management.endpoint
+    await runtime.stop()
+    runtime = undefined
+    if (process.platform !== 'win32') {
+      await expect(stat(managementEndpoint)).rejects.toMatchObject({ code: 'ENOENT' })
+    }
   })
 })

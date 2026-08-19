@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 import type { SKRSContext2D } from '@napi-rs/canvas'
 import ExcelJS, { type CellValue } from 'exceljs'
 import JSZip from 'jszip'
+import mammothPackage from 'mammoth'
 import { z } from 'zod'
 
 import {
@@ -27,7 +28,6 @@ import {
   type OfficeToolContext,
   outputPathSchema,
   prepareOfficeOutputPath,
-  requireFromOfficeModule,
   resolveLibreOfficeCommand,
   rm,
   writeFile,
@@ -128,7 +128,9 @@ export const previewOfficeDocumentSchema = z.object({
     ),
 })
 
-export const mammoth = requireFromOfficeModule('mammoth') as MammothModule
+// Static import keeps the dependency inside standalone Host bundles. The cast preserves the
+// deliberately narrow surface used by this tool instead of leaking Mammoth's full API.
+export const mammoth = mammothPackage as MammothModule
 
 export async function normalizePreviewInput(
   ctx: OfficeToolContext,

@@ -1,5 +1,5 @@
-import { mkdir, rename, unlink, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 
 import {
   type ComputerRuntimePort,
@@ -38,15 +38,15 @@ import {
   velarHostComputerResourceRoot,
 } from './computer-installer'
 import { VelarHostConfigStore } from './config'
-import {
-  VelarHostControlServer,
-  type VelarHostControlServerStatus,
-} from './control-server'
 import { createVelarHostPaths, type VelarHostPaths } from './data-root'
 import {
   VelarHostExtensionBridge,
   type VelarHostExtensionBridgeStatus,
 } from './extension-bridge'
+import {
+  VelarHostManagementServer,
+  type VelarHostManagementStatus,
+} from './management-ipc'
 import { VelarHostPermissionBroker } from './permission-policy'
 import {
   VelarHostRemoteNode,
@@ -63,8 +63,6 @@ export interface StartVelarHostOptions {
   readonly projectRoot?: string
   readonly portStart?: number
   readonly portEnd?: number
-  readonly controlPortStart?: number
-  readonly controlPortEnd?: number
   readonly pairingCode?: string
   /** Test/product seam; default is the packaged Computer sidecar runtime. */
   readonly computerRuntime?: ComputerRuntimePort
@@ -74,7 +72,7 @@ export interface StartVelarHostOptions {
 }
 
 export interface VelarHostPublicStatus {
-  readonly schemaVersion: 2
+  readonly schemaVersion: 3
   readonly version: string
   readonly pid: number
   readonly startedAt: number
@@ -87,7 +85,7 @@ export interface VelarHostPublicStatus {
     readonly moduleIds: readonly string[]
   }
   readonly extension: VelarHostExtensionBridgeStatus
-  readonly control: VelarHostControlServerStatus
+  readonly management: VelarHostManagementStatus
   /** 公共状态文件里只有远程节点的可观测事实；配对码与密钥材料永不落入本文件。 */
   readonly remoteNode: VelarHostRemoteNodeStatus
 }
@@ -96,8 +94,7 @@ export interface VelarHostRuntime {
   readonly paths: VelarHostPaths
   readonly config: VelarHostConfigStore
   readonly computer: ComputerRuntimePort
-  readonly controlServer: VelarHostControlServer
-  readonly controlUrl: string
+  readonly managementServer: VelarHostManagementServer
   readonly status: VelarHostPublicStatus
   readonly extensionBridge: VelarHostExtensionBridge
   readonly remoteNode: VelarHostRemoteNode
@@ -114,6 +111,7 @@ export async function startVelarHost(
   const projectRoot = resolve(options.projectRoot?.trim() || process.cwd())
   await mkdir(paths.dataRoot, { recursive: true, mode: 0o700 })
   await mkdir(paths.runtimeRoot, { recursive: true, mode: 0o700 })
+  await removeLegacyWebManagementState(paths.dataRoot)
 
   const config = await VelarHostConfigStore.open(paths.configPath)
   const computer = options.computerRuntime ?? new ComputerSidecarManager({
@@ -135,7 +133,7 @@ export async function startVelarHost(
   let toolGateway: VelarHostToolGateway | undefined
   let extensionBridge: VelarHostExtensionBridge | undefined
   let remoteNode: VelarHostRemoteNode | undefined
-  let controlServer: VelarHostControlServer | undefined
+  let managementServer: VelarHostManagementServer | undefined
   let status: VelarHostPublicStatus | undefined
   try {
     booted = await bootKernelDaemon({
@@ -206,8 +204,8 @@ export async function startVelarHost(
       modules: handshake.modules,
     })
     const remoteNodeStatus = await remoteNode.start()
-    controlServer = new VelarHostControlServer({
-      tokenPath: paths.controlTokenPath,
+    managementServer = new VelarHostManagementServer({
+      endpoint: paths.managementEndpoint,
       config,
       computer,
       extensionBridge,
@@ -218,12 +216,10 @@ export async function startVelarHost(
         if (!isPresent(status)) throw new Error('Velar Host is still starting')
         return status
       },
-      portStart: toOptional(options.controlPortStart),
-      portEnd: toOptional(options.controlPortEnd),
     })
-    const control = await controlServer.start()
+    const management = await managementServer.start()
     status = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       version: VelarHostVersion,
       pid: process.pid,
       startedAt,
@@ -236,7 +232,7 @@ export async function startVelarHost(
         moduleIds: handshake.modules.map((module) => module.id),
       },
       extension,
-      control,
+      management,
       remoteNode: remoteNodeStatus,
     }
     await writePublicStatus(paths.statusPath, status)
@@ -265,14 +261,13 @@ export async function startVelarHost(
       },
       extensionBridge,
       remoteNode,
-      controlServer,
-      controlUrl: controlServer.getControlUrl(),
+      managementServer,
       stop: async () => {
         if (stopped) return
         stopped = true
         unsubscribeExtensionStatus()
         unsubscribeRemoteNodeStatus()
-        await settleCleanup('控制服务', () => controlServer?.stop())
+        await settleCleanup('本地管理服务', () => managementServer?.stop())
         await settleCleanup('远程节点', () => remoteNode?.stop())
         await settleCleanup('插件桥', () => extensionBridge?.stop())
         await settleCleanup('工具网关', () => toolGateway?.dispose())
@@ -286,7 +281,7 @@ export async function startVelarHost(
     }
     return runtime
   } catch (error) {
-    await settleCleanup('启动失败后的控制服务', () => controlServer?.stop())
+    await settleCleanup('启动失败后的本地管理服务', () => managementServer?.stop())
     await settleCleanup('启动失败后的远程节点', () => remoteNode?.stop())
     await settleCleanup('启动失败后的插件桥', () => extensionBridge?.stop())
     await settleCleanup('启动失败后的工具网关', () => toolGateway?.dispose())
@@ -339,4 +334,15 @@ async function settleCleanup(
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error && error.code === code
+}
+
+/** One-way migration: remove the retired HTTP control token without deleting unknown files. */
+async function removeLegacyWebManagementState(dataRoot: string): Promise<void> {
+  const directory = join(dataRoot, 'control')
+  await unlink(join(directory, 'token')).catch((error) => {
+    if (!isNodeError(error, 'ENOENT')) throw error
+  })
+  await rmdir(directory).catch((error) => {
+    if (!isNodeError(error, 'ENOENT') && !isNodeError(error, 'ENOTEMPTY')) throw error
+  })
 }

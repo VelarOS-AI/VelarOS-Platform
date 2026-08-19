@@ -96,7 +96,7 @@ export class VelarosCliRouter {
 
       const childArgv = argv.slice(1)
       const runNamespace = this.namespaceRunners[namespace]
-      if (runNamespace) return await runNamespace(childArgv, { cwd })
+      if (runNamespace) return await runNamespace(childArgv, { ...options, cwd })
 
       throw new VelarosCliError('UNKNOWN_NAMESPACE', `Unknown namespace: ${namespace}`, 2, {
         namespace,

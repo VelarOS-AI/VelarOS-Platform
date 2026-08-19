@@ -20,7 +20,10 @@ export async function main(
   argv = process.argv.slice(2),
   cwd = process.cwd()
 ): Promise<VelarosCliNamespaceRunResult> {
-  const result = await runVelarosCli(argv, { cwd })
+  const result = await runVelarosCli(argv, {
+    cwd,
+    write: (text) => process.stdout.write(text),
+  })
   const stream = result.exitCode === 0 ? process.stdout : process.stderr
   stream.write(result.text)
   process.exitCode = result.exitCode

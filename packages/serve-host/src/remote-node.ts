@@ -46,11 +46,11 @@ const RemoteNodeLog = Log.tag('VelarHostRemoteNode')
  * 状态轮询间隔。
  *
  * `RemoteNodeServer` 不提供状态订阅——配对与连接都在 wire 上完成，Node 侧没有回调位。因此这里
- * 主动拉取并按内容去重，节奏跟控制页自己的刷新（2.5s）同量级，不追求更快。
+ * 主动拉取并按内容去重；管理终端只消费变化事件，不追求毫秒级刷新。
  */
 const RemoteNodeStatusPollMs = 2_000
 
-/** 配对票据只在 HTTP 应答里出现一次；它绝不进入 `host.json`，也不进入任何状态广播。 */
+/** 配对票据只在本地 IPC 应答里出现一次；它绝不进入 `host.json`，也不进入任何状态广播。 */
 export interface VelarHostRemoteNodePairing {
   readonly code: string
   readonly expiresAt: number
@@ -422,7 +422,7 @@ export class VelarHostRemoteNode {
       && binding.portEnd === desired.portEnd
   }
 
-  /** 按内容去重：轮询每 2 秒一次，无变化时不该惊动状态文件写入与控制页。 */
+  /** 按内容去重：轮询每 2 秒一次，无变化时不该惊动状态文件写入与管理终端。 */
   private emitStatus(): void {
     const status = this.getStatus()
     const key = JSON.stringify(status)
@@ -455,4 +455,3 @@ function capabilityIdentities(
   }
   return identities
 }
-

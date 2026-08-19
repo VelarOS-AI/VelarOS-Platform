@@ -23,6 +23,7 @@
     "packages/**/*.d.ts",
     "component-library/**/*.ts",
     "component-library/**/*.tsx",
+    "products/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx"
   ],

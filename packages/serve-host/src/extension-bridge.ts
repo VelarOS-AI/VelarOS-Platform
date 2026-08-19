@@ -251,7 +251,7 @@ export class VelarHostExtensionBridge {
       version: ExternalAgentBridgeProtocolVersion,
       type: 'disconnected',
     })
-    device?.socket?.close(4000, 'Disconnected by Velar Host control')
+    device?.socket?.close(4000, 'Disconnected by Velar Host management')
     this.abortDeviceTools(toNullable(device), 'Extension device was disconnected')
     device?.surfaces.clear()
     this.device = null

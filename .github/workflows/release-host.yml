@@ -1,0 +1,172 @@
+name: Release Host
+
+# Host follows the Desktop release split: macOS is built, signed, notarized, and staged on the
+# release Mac; Windows and Linux are built natively here. The final marker is uploaded only after
+# all three staged manifests bind to the same source commit and Host version.
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Candidate channel
+        type: choice
+        options:
+          - stable
+          - canary
+        default: stable
+      dry_run:
+        description: Build and validate without writing the private release repository
+        type: boolean
+        default: false
+      confirm_upload:
+        description: Explicitly confirm writes to the private release repository
+        type: boolean
+        default: false
+      replace_existing:
+        description: Replace a damaged Host candidate under the same version
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release-candidates
+    outputs:
+      host_needed: ${{ steps.plan.outputs.host_needed }}
+    steps:
+      - name: Require explicit upload confirmation
+        if: ${{ !inputs.dry_run && !inputs.confirm_upload }}
+        run: |
+          echo "::error::Set confirm_upload=true for a real upload, or dry_run=true for build-only validation."
+          exit 1
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify Host product and release contracts
+        run: |
+          bun run --cwd packages/serve-host typecheck
+          bun run --cwd packages/serve-host test
+          bun run test:host-product
+
+      - name: Plan immutable Host candidate
+        id: plan
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+        run: |
+          args=(plan --channel "${{ inputs.channel }}")
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then args+=(--dry-run); fi
+          node scripts/host/release-candidate.mjs "${args[@]}"
+
+  release-windows:
+    needs: release-gate
+    if: ${{ needs.release-gate.outputs.host_needed == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+    environment: release-candidates
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies and NSIS
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          choco install nsis --no-progress -y
+      - name: Build Windows Host installer
+        run: bun run package:host:win
+      - name: Stage Windows Host installer
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+        run: |
+          args=(stage --channel "${{ inputs.channel }}" --platform win32-x64 --artifact-manifest release/host/host-artifact-win32-x64.json)
+          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
+          node scripts/host/release-candidate.mjs "${args[@]}"
+
+  release-linux:
+    needs: release-gate
+    if: ${{ needs.release-gate.outputs.host_needed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: release-candidates
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Install pinned AppImage packaging tool
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 1.9.1 --repo AppImage/appimagetool --pattern appimagetool-x86_64.AppImage --dir "$RUNNER_TEMP/appimagetool"
+          chmod +x "$RUNNER_TEMP/appimagetool/appimagetool-x86_64.AppImage"
+          echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool/appimagetool-x86_64.AppImage" >> "$GITHUB_ENV"
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+      - name: Build Linux Host AppImage
+        run: bun run package:host:linux
+      - name: Stage Linux Host installer
+        if: ${{ !inputs.dry_run }}
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+        run: |
+          args=(stage --channel "${{ inputs.channel }}" --platform linux-x64 --artifact-manifest release/host/host-artifact-linux-x64.json)
+          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
+          node scripts/host/release-candidate.mjs "${args[@]}"
+
+  finalize-host:
+    needs:
+      - release-gate
+      - release-windows
+      - release-linux
+    if: >-
+      ${{ always() && !inputs.dry_run && inputs.confirm_upload &&
+          needs.release-gate.result == 'success' &&
+          needs.release-gate.outputs.host_needed == 'true' &&
+          needs.release-windows.result == 'success' &&
+          needs.release-linux.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release-candidates
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Finalize three-platform Host candidate
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+        run: |
+          args=(finalize --channel "${{ inputs.channel }}")
+          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
+          node scripts/host/release-candidate.mjs "${args[@]}"

@@ -33,7 +33,7 @@ const VelarHostSystemCapabilitySchema = z.strictObject({
  * 远程能力节点开关。
  *
  * 这是本配置里唯一能把能力面送出本机的一节，故三个字段全部显式持久化、不留隐式默认：
- * `bindHost` 默认回环，端口区间与插件桥、控制面一样是「区间内挑一个可用口」而不是单口硬绑。
+ * `bindHost` 默认回环，端口区间与插件桥一样是「区间内挑一个可用口」而不是单口硬绑。
  */
 const VelarHostRemoteNodeSchema = z.strictObject({
   enabled: z.boolean(),
@@ -114,7 +114,7 @@ export interface VelarHostConfigSnapshot {
   readonly value: VelarHostConfig
 }
 
-/** 默认端口区间：与插件桥（43137-43147）、控制面（43160-43170）错开，避免互相抢口。 */
+/** 默认端口区间：与插件桥（43137-43147）错开，避免互相抢口。 */
 const DefaultRemoteNodePortStart = 43_180
 const DefaultRemoteNodePortEnd = 43_190
 

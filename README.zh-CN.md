@@ -51,6 +51,8 @@ bun run check
 `bun run check` 是合入总门：构建全部包、类型检查、lint、测试、架构边界和公开发布不变量必须同时通过。
 
 架构、包边界与开发者指南从[文档索引](docs/readme.md)开始阅读。
+独立安装、以终端为唯一运行界面的 Host 产品及其原生发布流程见
+[`docs/host-release.md`](docs/host-release.md)。
 
 ## 贡献与安全
 

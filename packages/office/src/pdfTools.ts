@@ -33,6 +33,7 @@ import {
   type OfficeToolContext,
   outputPathSchema,
   requireFromOfficeModule,
+  resolve,
   runOfficeSystemCommand,
 } from './officeShared'
 
@@ -498,6 +499,8 @@ export function resolvePdfPageNumbers(
 
 // pdfjs 的标准字体路径从包安装位置推导，失败时交给 pdfjs 使用默认策略。
 export function getPdfjsStandardFontDataUrl(): string | undefined {
+  const packagedRoot = process.env.VELAROS_PDFJS_STANDARD_FONTS_ROOT?.trim()
+  if (packagedRoot) return `${resolve(packagedRoot).replaceAll('\\', '/')}/`
   try {
     const packageJsonPath = requireFromOfficeModule.resolve('pdfjs-dist/package.json')
     return `${dirname(packageJsonPath).replaceAll('\\', '/')}/standard_fonts/`

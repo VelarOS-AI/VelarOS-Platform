@@ -61,6 +61,7 @@ const ProjectReadOperations = Object.freeze([
 ])
 
 const ProjectWriteOperations = Object.freeze([
+  ProjectToolNames.write,
   ProjectToolNames.edit,
   ProjectToolNames.rollback,
 ])

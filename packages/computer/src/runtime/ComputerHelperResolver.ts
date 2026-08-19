@@ -194,6 +194,8 @@ export function resolveComputerHelper(
 
 /** Source assets shipped by `@velaros-ai/computer`, used by explicit host installers. */
 export function resolveBundledComputerRuntimeSourceRoot(): string {
+  const packagedRoot = process.env.VELAROS_COMPUTER_RUNTIME_SOURCE_ROOT?.trim()
+  if (packagedRoot) return resolve(packagedRoot)
   return resolve(fileURLToPath(new URL('../../runtime', import.meta.url)))
 }
 

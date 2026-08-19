@@ -10,6 +10,8 @@ coverage/
 .turbo/
 .vite/
 demo-dist/
+dist-host/
+release/host/
 *.tsbuildinfo
 .velaros-workspace
 .idea

@@ -32,12 +32,22 @@ velaros agent manifest --json
 velaros agent status --workspace-root . [--task-id <id>|--latest] [--full] [--json]
 velaros serve [start] [--project-root /path/to/project] [--data-root /path/to/data]
 velaros serve status [--data-root /path/to/data] [--json]
-velaros serve control [--data-root /path/to/data]
+velaros serve config show [--data-root /path/to/data] [--json]
+velaros serve config apply --file ./host-config-update.json [--data-root /path/to/data] [--json]
+velaros serve computer probe [--data-root /path/to/data] [--json]
 velaros serve computer install [--data-root /path/to/data] [--python COMMAND] [--json]
+velaros serve extension pair [--data-root /path/to/data] [--json]
+velaros serve extension disconnect [--data-root /path/to/data] [--json]
+velaros serve remote pair [--data-root /path/to/data] [--json]
+velaros serve remote revoke [--data-root /path/to/data] [--json]
 ```
 
-`agent` 只读取 `.velaros/agent-runs`；`serve` 的 Host 实现、权限、数据根、控制页与 Extension
-Bridge 全部仍由 `@velaros-ai/serve-host` 拥有，CLI 只注册并格式化它的命名空间结果。
+可用 `velaros serve config show > host-config-update.json` 生成可编辑配置，再通过 `config apply`
+应用；扩大高风险能力时，必须在文件的 `confirmations` 中显式确认命令返回的项目。
+
+`agent` 只读取 `.velaros/agent-runs`；`serve` 的 Host 实现、权限、数据根、本地管理 IPC 与
+Extension Bridge 全部仍由 `@velaros-ai/serve-host` 拥有，CLI 只注册、转发前台事件并格式化其
+命名空间结果。Host 不提供网页控制面，也不开放管理 HTTP 端口。
 
 ## 公共入口
 

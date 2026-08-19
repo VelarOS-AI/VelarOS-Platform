@@ -115,8 +115,14 @@ test('velaros cli exposes serve through the Host-owned namespace runner', async 
   assert.deepEqual(parsed.result.commands, [
     'start',
     'status',
-    'control',
+    'config show',
+    'config apply',
+    'computer probe',
     'computer install',
+    'extension pair',
+    'extension disconnect',
+    'remote pair',
+    'remote revoke',
   ])
 
   const invalid = await runVelarosCli(['serve', 'status', '--not-a-real-option', '--json'])

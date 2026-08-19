@@ -1,7 +1,11 @@
 import { toNullable } from '@velaros-ai/core'
 
 import { formatVelarosCliError, formatVelarosCliSuccess } from './output.js'
-import { VelarosCliError, type VelarosCliNamespaceRunResult } from './types.js'
+import {
+  VelarosCliError,
+  type VelarosCliNamespaceRunResult,
+  type VelarosCliRunOptions,
+} from './types.js'
 
 /**
  * `serve-host` owns Host behavior; this adapter only turns its neutral result into the
@@ -9,13 +13,13 @@ import { VelarosCliError, type VelarosCliNamespaceRunResult } from './types.js'
  */
 export async function runServeNamespace(
   argv: string[],
-  options: { cwd?: string } = {},
+  options: VelarosCliRunOptions = {},
 ): Promise<VelarosCliNamespaceRunResult> {
   const startedAt = Date.now()
   const json = argv.includes('--json')
   const cwd = options.cwd ?? process.cwd()
   const { runServeCli } = await import('@velaros-ai/serve-host/cli')
-  const result = await runServeCli(argv, { cwd })
+  const result = await runServeCli(argv, { cwd, onEvent: options.write })
 
   if (result.error)
     return formatVelarosCliError(

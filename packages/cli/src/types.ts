@@ -4,6 +4,8 @@ export const VelarosCliSchemaVersion = 1
 
 export interface VelarosCliRunOptions {
   cwd?: string
+  /** Optional foreground event sink used by long-running namespaces. */
+  write?: (text: string) => void
 }
 
 export interface VelarosCliSuccessEnvelope {

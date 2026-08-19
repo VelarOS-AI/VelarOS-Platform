@@ -51,6 +51,8 @@ bun run check
 `bun run check` is the merge gate. It builds all packages, type-checks, lints, runs tests, validates architectural boundaries, and checks public-release invariants.
 
 Start with the [documentation index](docs/readme.md) for architecture, package boundaries, and developer guides.
+The independently installable, terminal-first Host product and its native release flow are documented in
+[`docs/host-release.md`](docs/host-release.md).
 
 ## Contributing and security
 

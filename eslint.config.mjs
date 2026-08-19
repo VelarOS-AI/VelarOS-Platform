@@ -98,7 +98,7 @@ const Domains = [
   {
     name: 'host',
     config: kernelConfig,
-    globs: ['packages/serve-host/**'],
+    globs: ['packages/serve-host/**', 'products/host/**'],
   },
 ]
 

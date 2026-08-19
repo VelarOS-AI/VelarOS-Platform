@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Velar Host
+Comment=Run the VelarOS Host and pair browser extensions
+Exec=velar-host
+Icon=velar-host
+Terminal=true
+Categories=Development;Utility;
