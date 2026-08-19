@@ -62,8 +62,10 @@ jobs:
 
       - name: Verify Host product and release contracts
         run: |
+          node scripts/build/buildPackageTopology.mjs --for @velaros-ai/serve-host
           bun run --cwd packages/serve-host typecheck
           bun run --cwd packages/serve-host test
+          bun run typecheck:host-product
           bun run test:host-product
 
       - name: Plan immutable Host candidate
