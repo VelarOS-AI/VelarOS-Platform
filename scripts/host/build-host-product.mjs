@@ -123,6 +123,13 @@ async function buildHostBinary(targetRoot, target) {
   const binaryName = `velar-host${descriptor.extension}`
   const binaryPath = join(targetRoot, binaryName)
   await mkdir(targetRoot, { recursive: true })
+  // A clean Bun workspace links package roots whose exports point at dist/. Build the Host's
+  // declared dependency closure first so packaging never succeeds only because stale dist exists.
+  await run('node', [
+    'scripts/build/buildPackageTopology.mjs',
+    '--for',
+    '@velaros-ai/serve-host',
+  ])
   await run('bun', [
     'build',
     join(hostProductRoot, 'src', 'bin.ts'),
