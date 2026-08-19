@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   artifactTrust,
   currentTarget,
+  macCodesignArguments,
   macInfoPlist,
   macLaunchScript,
   parseArguments,
@@ -54,4 +55,19 @@ test('macOS signing modes cannot be mixed', () => {
     signature: 'ad-hoc',
     notarized: false,
   })
+  assert.deepEqual(macCodesignArguments('Developer ID', false), [
+    '--force',
+    '--timestamp',
+    '--options',
+    'runtime',
+    '--sign',
+    'Developer ID',
+  ])
+  assert.deepEqual(macCodesignArguments('-', true), [
+    '--force',
+    '--options',
+    'runtime',
+    '--sign',
+    '-',
+  ])
 })

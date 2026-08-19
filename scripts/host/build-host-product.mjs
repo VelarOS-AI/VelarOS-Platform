@@ -179,8 +179,7 @@ async function signMacBundle({ appPath, binaryPath, launcherPath, adHoc }) {
     : process.env.VELAROS_HOST_CODESIGN_IDENTITY?.trim() ||
       'REDACTED_DEVELOPER_IDENTITY'
   const entitlements = join(hostProductRoot, 'macos', 'entitlements.plist')
-  const common = ['--force', '--options', 'runtime', '--sign', identity]
-  if (!adHoc) common.splice(2, 0, '--timestamp')
+  const common = macCodesignArguments(identity, adHoc)
   await run('codesign', [...common, '--entitlements', entitlements, binaryPath])
   await run('codesign', [...common, launcherPath])
   await run('codesign', [...common, '--entitlements', entitlements, appPath])
@@ -192,6 +191,17 @@ async function signMacBundle({ appPath, binaryPath, launcherPath, adHoc }) {
     appPath,
   ])
   return identity
+}
+
+function macCodesignArguments(identity, adHoc) {
+  return [
+    '--force',
+    ...(adHoc ? [] : ['--timestamp']),
+    '--options',
+    'runtime',
+    '--sign',
+    identity,
+  ]
 }
 
 async function packageMac({
@@ -437,6 +447,7 @@ export {
   artifactTrust,
   build,
   currentTarget,
+  macCodesignArguments,
   macInfoPlist,
   macLaunchScript,
   parseArguments,
