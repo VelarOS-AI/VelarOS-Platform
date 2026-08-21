@@ -113,7 +113,7 @@ interface HtmlArtifactPromptTurnInput {
 }
 
 const HtmlArtifactVisualSignal =
-  /(?:可视化|图表|架构图|流程图|原型|看板|仪表盘|chart|diagram|dashboard|prototype|preview|artifact|html|svg|canvas)/iu
+  /(?:可视化|图表|架构图|流程图|原型|看板|仪表盘|页面|网页|卡片|落地页|实时预览|复杂说明|复杂展示|交互|互动|讲解|演示|动态效果|实时效果|chart|diagram|dashboard|prototype|preview|artifact|html|svg|canvas|page|card|landing page|real-time|interactive|interaction|explain|explanation|demo|visual)/iu
 
 function readPromptMessageText(message: ModelMessage): string {
   if (isString(message.content)) return message.content
@@ -168,7 +168,13 @@ class PromptStateBuilder {
     runProfile,
     contextPhase = 'operational',
   }: BuildRuntimePromptStateArgs): Promise<RuntimeStateContextResult> {
-    const promptFeatures = this.promptFeaturePolicy.normalize(selectedPromptFeatures ?? [])
+    const activeCapabilityScope = toolContext.codingSession.getActiveCapabilityScope()
+    const promptFeatures = this.promptFeaturePolicy.normalizeForScope
+      ? this.promptFeaturePolicy.normalizeForScope(
+          selectedPromptFeatures ?? [],
+          activeCapabilityScope
+        )
+      : this.promptFeaturePolicy.normalize(selectedPromptFeatures ?? [])
     const requestedFeatures = [
       ...new Set([...promptFeatures, ...toolContext.codingSession.getEnabledPromptFeatures()]),
     ]
@@ -179,7 +185,18 @@ class PromptStateBuilder {
       promptFeatures: requestedFeatures,
       goalMode,
     })
-    const enabledPromptFeatures = stripExecutionModePromptFeatures(requestedFeatures)
+    const enabledPromptFeatureCandidates = stripExecutionModePromptFeatures(requestedFeatures)
+    // 会话粘性里可能仍带着其他作用域的内置协议；合并所有来源后再按当前作用域收口，
+    // 否则宿主在第一步筛掉的 feature 会被 codingSession 的旧值重新带回来。
+    const enabledPromptFeatures = this.promptFeaturePolicy.normalizeForScope
+      ? this.promptFeaturePolicy.normalizeForScope(
+          enabledPromptFeatureCandidates,
+          activeCapabilityScope
+        )
+      : enabledPromptFeatureCandidates
+    const describedPromptFeatures = enabledPromptFeatures.filter(
+      (feature) => this.promptFeaturePolicy.shouldDescribeAsSelected?.(feature) ?? true
+    )
     const selectedPromptFeatureSet = new Set(enabledPromptFeatures)
     const toolCategoryOverviews = this.resolveToolCategoryOverviews(
       toolContext,
@@ -205,7 +222,7 @@ class PromptStateBuilder {
       developerContext: null,
       agentSurfaceId: toolContext.agentSurfaceId ?? 'chat',
       contextPhase,
-      activeCapabilityScope: toolContext.codingSession.getActiveCapabilityScope(),
+      activeCapabilityScope,
       toolCategories: enabledCategories.map((entry) => entry.category.id),
       toolSurfaceProfile: toolContext.codingSession.getToolSurfaceProfile(),
       runProfile:
@@ -218,7 +235,7 @@ class PromptStateBuilder {
       canUpdatePlan: enabledToolNames.has('plan:update'),
       userRequestedPlan: isExecutionModeActive('plan', activeExecutionModes),
       goalMode: isExecutionModeActive('goal', activeExecutionModes),
-      selectedPromptFeatureLabels: enabledPromptFeatures.map((feature) =>
+      selectedPromptFeatureLabels: describedPromptFeatures.map((feature) =>
         this.promptFeaturePolicy.getLabel(feature)
       ),
       enabledPromptFeatures: [...enabledPromptFeatures],
@@ -243,7 +260,7 @@ class PromptStateBuilder {
         workflowType: runtimeSnapshot.workflowType,
         activeCapabilityScope: runtimeSnapshot.activeCapabilityScope,
         selectedPromptFeatures: enabledPromptFeatures,
-        hasSelectedPromptFeatures: !isEmpty(enabledPromptFeatures),
+        hasSelectedPromptFeatures: !isEmpty(describedPromptFeatures),
         shouldInjectHtmlArtifactPrompt: shouldInjectHtmlArtifactPromptForTurn({
           selectedPromptFeatureSet,
           messages,

@@ -12,7 +12,16 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import {
+  configureAppRuntimeFacts,
+  readAppRuntimeFacts,
+} from '../src/agent/AppRuntimeFacts'
 import { ContextBuilder } from '../src/agent/ContextBuilder'
+import {
+  type BuildRuntimePromptStateArgs,
+  PromptStateBuilder,
+  shouldInjectHtmlArtifactPromptForTurn,
+} from '../src/agent/PromptState'
 import { projectAgentModPromptSegments } from '../src/mods/AgentModProjection'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
 import {
@@ -23,12 +32,12 @@ import {
   PromptRegistry,
   PromptSegmentPriority,
 } from '../src/prompts'
+import type { RuntimePromptFeaturePolicy } from '../src/tools'
 
 /** Tier0 的全集。改这张表 = 改稳定前缀的内容，必须是有意的。 */
 const CoreTierSegmentIds = [
   'core.identity',
   'core.brand-voice',
-  'core.internal-implementation-boundary',
 ]
 
 function buildPrompt(facts: Record<string, unknown> = {}): ReturnType<ContextBuilder['build']> {
@@ -60,27 +69,13 @@ void describe('Tier0 是稳定前缀的全部内容', () => {
     assert.equal(prefixes[1], prefixes[2])
   })
 
-  void test('段改名后，存量 override 仍按旧 id 生效（否则用户关掉的段悄悄复活）', () => {
-    // 段 id 是持久化配置的主键：内部实现边界段升 Tier0 时 `runtime.*` 改成了 `core.*`，
-    // 磁盘上写着旧 id 的 override 若不归一，失配的表现是「那段又回来了」且毫无线索。
-    const composed = createBuiltInPromptRegistry().compose({
-      overrides: [
-        {
-          id: 'runtime.internal-implementation-boundary',
-          enabled: false,
-          reason: null,
-          updatedAt: 0,
-        },
-      ],
-    })
+  void test('不再注入内部实现信息披露限制', () => {
+    const built = buildPrompt()
 
     assert.ok(
-      composed.skipped.some((entry) => entry.id === 'core.internal-implementation-boundary'),
-      '旧 id 的 override 必须归一到现 id 上并关停该段'
+      !built.segments.some((entry) => entry.id.includes('internal-implementation-boundary'))
     )
-    assert.ok(
-      !composed.stableParts.some((entry) => entry.id === 'core.internal-implementation-boundary')
-    )
+    assert.doesNotMatch(built.systemPrompt, /授权公开的信息|内部实现细节留在开发上下文/u)
   })
 
   void test('绕过工厂手写的带谓词 Tier0 段，注册面机械拒收', () => {
@@ -117,6 +112,36 @@ void describe('Tier0 是稳定前缀的全部内容', () => {
 })
 
 void describe('能力协议段与技能段已下沉活动尾', () => {
+  void test('首条命令前已有宿主平台、架构与 Shell，且环境段受预算保护', () => {
+    const originalFacts = readAppRuntimeFacts()
+    try {
+      configureAppRuntimeFacts({
+        appVersion: '0.6.1',
+        platform: 'darwin',
+        arch: 'arm64',
+        osRelease: '25.6.0',
+        shell: '/bin/zsh',
+        homeDir: '/Users/example',
+        userDataRoot: '/Users/example/Library/Application Support/VelarOS',
+        velarHookHttpUrl: null,
+        velarHookEndpointFilePath: null,
+      })
+
+      const built = buildPrompt()
+      const segment = built.segments.find((entry) => entry.id === 'runtime.environment')
+
+      assert.ok(segment)
+      assert.equal(segment.stability, 'dynamic')
+      assert.equal(segment.retention, 'protected')
+      assert.match(segment.text, /操作系统：macOS \/ darwin/u)
+      assert.match(segment.text, /CPU 架构：arm64/u)
+      assert.match(segment.text, /命令 Shell：\/bin\/zsh/u)
+      assert.match(segment.text, /首条|以这里声明的操作系统与 Shell 为准/u)
+    } finally {
+      configureAppRuntimeFacts(originalFacts)
+    }
+  })
+
   void test('HTML 实时预览协议段是 Tier1（开启时进活动尾，不动前缀）', () => {
     const off = buildPrompt()
     const on = buildPrompt({ shouldInjectHtmlArtifactPrompt: true })
@@ -133,6 +158,122 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
     const built = buildPrompt({ shouldInjectVisualWidgetPrompt: true })
 
     assert.ok(built.segments.some((entry) => entry.id === 'runtime.visual-widget-tools'))
+    assert.match(built.systemPrompt, /默认使用 Markdown/u)
+    assert.match(built.systemPrompt, /复杂说明展示/u)
+  })
+
+  void test('按复杂度区分 Markdown、HTML Live Preview 与 Widget', () => {
+    const built = buildPrompt({
+      shouldInjectVisualWidgetPrompt: true,
+      shouldInjectHtmlArtifactPrompt: true,
+    })
+
+    assert.match(built.systemPrompt, /呈现方式默认使用 Markdown/u)
+    assert.match(built.systemPrompt, /简单、直观的 HTML 实时效果.*HTML Live Preview/u)
+    assert.match(built.systemPrompt, /复杂说明展示.*Widget/u)
+    assert.match(built.systemPrompt, /需要交互、演示或进一步讲解/u)
+  })
+
+  void test('交互或进一步讲解请求会加载视觉呈现路由', () => {
+    assert.equal(
+      shouldInjectHtmlArtifactPromptForTurn({
+        selectedPromptFeatureSet: new Set(['html-artifact']),
+        messages: [{ role: 'user', content: '请进一步讲解，并做一个可以互动的演示。' }],
+        workflowType: 'chat',
+      }),
+      true
+    )
+    assert.equal(
+      shouldInjectHtmlArtifactPromptForTurn({
+        selectedPromptFeatureSet: new Set(['html-artifact']),
+        messages: [{ role: 'user', content: '做一个简单卡片页面，实时看看效果。' }],
+        workflowType: 'chat',
+      }),
+      true
+    )
+    assert.equal(
+      shouldInjectHtmlArtifactPromptForTurn({
+        selectedPromptFeatureSet: new Set(['html-artifact']),
+        messages: [{ role: 'user', content: '普通说明就可以。' }],
+        workflowType: 'chat',
+      }),
+      false
+    )
+  })
+
+  void test('内置呈现协议不冒充本轮已选能力，并允许宿主按工作区收窄', async () => {
+    const builtInRendererPolicy: RuntimePromptFeaturePolicy = {
+      normalize: (features) => [...new Set([...features, 'widget', 'html-artifact'])],
+      normalizeForScope: (features, scope) =>
+        [...new Set([...features, 'widget', 'html-artifact'])].filter(
+          (feature) => feature !== 'html-artifact' || scope === 'system'
+        ),
+      getLabel: (feature) =>
+        feature === 'html-artifact' ? 'HTML Live Preview' : feature === 'office' ? 'Office' : feature,
+      shouldDescribeAsSelected: (feature) =>
+        feature !== 'widget' && feature !== 'html-artifact',
+      getCategoriesForFeatures: () => [],
+      getFeaturesForCategories: () => [],
+      getRequiredFeatureForTool: () => null,
+      isOfficeFeature: (feature) => feature === 'office',
+    }
+    const buildArgs = (scope: 'system' | 'project'): BuildRuntimePromptStateArgs => ({
+      toolContext: {
+        locale: 'zh-CN',
+        sessionId: 'prompt-built-in-renderers',
+        codingSession: {
+          getEnabledPromptFeatures: () => ['html-artifact'],
+          getActiveCapabilityScope: () => scope,
+          getToolSurfaceProfile: () => 'default' as never,
+          getRunProfile: () => null,
+        },
+        execution: {
+          getCurrentPlan: () => [],
+          getCurrentExecutionAdvice: () => null,
+        },
+        listToolCategories: () => [],
+      },
+      roleResolution: {
+        id: 'assistant' as never,
+        label: 'Assistant',
+        workflowType: 'chat',
+        allowedTools: [],
+      },
+      messages: [{ role: 'user', content: '普通说明即可。' }],
+      preparedToolCategories: { enabled: [], all: [] },
+    })
+    const builder = new PromptStateBuilder(builtInRendererPolicy)
+
+    const projectState = await builder.build(buildArgs('project'))
+    assert.deepEqual(projectState.facts.selectedPromptFeatures, ['widget'])
+    const projectSelectedCapabilitySegment = projectState.segments.find(
+      (entry) => entry.id === 'runtime.selected-capability-hints'
+    )
+    assert.ok(projectSelectedCapabilitySegment)
+    assert.equal(
+      projectSelectedCapabilitySegment.when?.(),
+      false
+    )
+
+    const systemState = await builder.build({
+      ...buildArgs('system'),
+      selectedPromptFeatures: ['office'],
+    })
+    assert.deepEqual(systemState.facts.selectedPromptFeatures, [
+      'office',
+      'widget',
+      'html-artifact',
+    ])
+    const systemSelectedCapabilitySegment = systemState.segments.find(
+      (entry) => entry.id === 'runtime.selected-capability-hints'
+    )
+    assert.ok(systemSelectedCapabilitySegment)
+    const selectedCapabilityText = systemSelectedCapabilitySegment.render({}) ?? ''
+    assert.match(
+      selectedCapabilityText,
+      /本轮已选能力：Office/u
+    )
+    assert.doesNotMatch(selectedCapabilityText, /Widget|HTML Live Preview/u)
   })
 
   void test('技能段是 Tier2 且 protected：预算裁剪不得把它裁掉', () => {

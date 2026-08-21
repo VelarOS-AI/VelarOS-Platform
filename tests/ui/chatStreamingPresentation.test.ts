@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   shouldAnimateLiveToolActivity,
@@ -44,6 +46,27 @@ function activitySegment(block: ToolCallBlock): MessageRenderSegment {
 }
 
 void describe('live chat activity presentation', () => {
+  void test('keeps closed consecutive disclosures inline while exit content is still mounted', () => {
+    const stylesheet = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+          import.meta.url
+        )
+      ),
+      'utf8'
+    )
+
+    assert.match(
+      stylesheet,
+      /\.toolActivitySummaryRow\s*>\s*\.toolActivityDisclosure:has\(> \.toolActivityToggle\[aria-expanded='true'\]\)/
+    )
+    assert.doesNotMatch(
+      stylesheet,
+      /\.toolActivitySummaryRow\s*>\s*\.toolActivityDisclosure:has\(\.toolActivityBodyShell\)/
+    )
+  })
+
   void test('keeps thinking and tool activity flat while the message is streaming', () => {
     const block = toolBlock('tool-1')
 

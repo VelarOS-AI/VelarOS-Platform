@@ -83,10 +83,7 @@ function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefiniti
  * 提示词里，且没有任何线索指向「我改过 id」。改一次名就在这里补一行，别指望迁移脚本
  * （overrides 落在宿主的系统配置里，包这边够不着）。
  */
-const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {
-  // 2026-08-06 内部实现边界段升 Tier0（见 catalog.ts 的判决注释）。
-  'runtime.internal-implementation-boundary': 'core.internal-implementation-boundary',
-}
+const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
 
 /** protected 段属于上下文保护区，不允许被运行配置的 prompt 预算裁剪。 */
 type PromptSegmentRetention = 'normal' | 'protected'

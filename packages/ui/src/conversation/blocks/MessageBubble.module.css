@@ -233,7 +233,9 @@
   width: auto;
 }
 
-.toolActivitySummaryRow > .toolActivityDisclosure:has(.toolActivityBodyShell) {
+/* 收起动画会继续挂载 body；只让真实展开项占满一行，避免连续标题在动画期间被挤成多行。 */
+.toolActivitySummaryRow
+  > .toolActivityDisclosure:has(> .toolActivityToggle[aria-expanded='true']) {
   flex-basis: 100%;
   width: min(920px, 100%);
 }

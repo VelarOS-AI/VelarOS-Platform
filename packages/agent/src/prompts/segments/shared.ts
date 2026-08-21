@@ -76,7 +76,7 @@ export interface RuntimePromptSnapshot {
 /**
  * 段优先级带（按行为知识三层分带；层序由注册表保证，带内数值只决定同层内部顺序与裁剪判据）。
  *
- * Tier0（core，0–99）：身份、品牌语气、安全边界。
+ * Tier0（core，0–99）：内置身份与品牌语气；宿主自有不可变纪律可使用预留的安全边界位。
  * Tier1（runtime，1_000–8_999）：运行态指导。`capabilityProtocol` 是用户显式开启的能力协议段；
  *   `runtimeAdvice` 是执行模式/计划一类本轮建议。
  * Tier2（skill，9_000）：技能索引与命中指针。
@@ -87,6 +87,7 @@ export interface RuntimePromptSnapshot {
 export const PromptSegmentPriority = {
   identity: 0,
   brandVoice: 10,
+  // 对外兼容的通用纪律优先级；内置目录不再注册信息披露边界段。
   safetyBoundary: 20,
   runtime: 1_000,
   capabilityProtocol: 1_200,

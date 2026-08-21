@@ -1,9 +1,11 @@
 // 域：内置提示词段目录（行为知识三层里 Tier0 的**全集** + 几段宿主无关的 Tier1）。
 //
-// **Tier0 只有三段**——身份 / 品牌语气 / 内部实现边界。三段都走 `createCorePromptSegment`：
+// **Tier0 只有两段**——身份 / 品牌语气。两段都走 `createCorePromptSegment`：
 // 不读 facts、不带谓词，渲染结果在构造期即固定，稳定前缀因此在同一会话内逐字不变。
 // 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
 import { isTrue } from '@velaros-ai/core'
+
+import { type AppRuntimeFacts, readAppRuntimeFacts } from '../agent/AppRuntimeFacts'
 
 import { createCorePromptSegment, PromptSegmentPriority } from './segments/shared'
 import type { PromptSegmentDefinition } from './registry'
@@ -42,6 +44,42 @@ function formatMinutePrecisionLocalTime(now: Date): string {
   ].join(' ')
 }
 
+const RuntimePlatformLabels: Readonly<Record<string, string | undefined>> = {
+  darwin: 'macOS',
+  linux: 'Linux',
+  win32: 'Windows',
+}
+
+function formatRuntimeFact(value: string | null | undefined): Nullable<string> {
+  const normalized = value?.trim().replace(/[\r\n]+/gu, ' ')
+  return normalized || null
+}
+
+/** 把宿主已配置的进程级事实渲染成模型首条命令前即可读取的环境说明。 */
+function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
+  const platform = formatRuntimeFact(facts.platform)
+  const platformLabel = platform ? RuntimePlatformLabels[platform] : null
+  const rows: Array<[string, Nullable<string>]> = [
+    ['宿主应用版本', formatRuntimeFact(facts.appVersion)],
+    ['操作系统', platform ? `${platformLabel ? `${platformLabel} / ` : ''}${platform}` : null],
+    ['CPU 架构', formatRuntimeFact(facts.arch)],
+    ['系统版本', formatRuntimeFact(facts.osRelease)],
+    ['命令 Shell', formatRuntimeFact(facts.shell)],
+    ['用户主目录', formatRuntimeFact(facts.homeDir)],
+    ['应用数据目录', formatRuntimeFact(facts.userDataRoot)],
+    ['Velar Hooks HTTP 端点', formatRuntimeFact(facts.velarHookHttpUrl)],
+    ['Velar Hooks 描述文件', formatRuntimeFact(facts.velarHookEndpointFilePath)],
+  ]
+  const availableRows = rows.filter((row): row is [string, string] => !!row[1])
+  if (availableRows.length === 0) return null
+
+  return [
+    '当前运行环境：',
+    ...availableRows.map(([label, value]) => `- ${label}：${value}`),
+    '生成命令时以这里声明的操作系统与 Shell 为准；只有需要更细的实时状态或工具可用性时才检查环境。',
+  ].join('\n')
+}
+
 /** 创建内置基础 prompt 段。 */
 function createBuiltInPromptSegments(
   options: BuiltInPromptOptions = {}
@@ -58,17 +96,15 @@ function createBuiltInPromptSegments(
       priority: PromptSegmentPriority.brandVoice,
       text: PromptCatalog.brandVoice,
     }),
-    createCorePromptSegment({
-      id: 'core.internal-implementation-boundary',
-      label: 'Internal Implementation Boundary',
-      source: 'built-in',
-      priority: PromptSegmentPriority.safetyBoundary,
-      // 2026-08-06 升 Tier0 并删除 `when: !facts.internalImplementationAccess`：那个 fact
-      // 全树**没有任何生产者**（`AgentDeveloperContext` 是已退役的 `never` 兼容位，PromptState
-      // 恒填 null），谓词因此恒为真——一条永远成立的判定挂在一条安全纪律上，只会让人以为
-      // 「存在关掉它的路径」。边界本身是不可变纪律，属 Tier0。
-      text: '仅向用户说明宿主应用已授权公开的信息；内部实现细节留在开发上下文。',
-    }),
+    {
+      id: 'runtime.environment',
+      label: 'Current Runtime Environment',
+      tier: 'runtime',
+      source: 'runtime',
+      retention: 'protected',
+      priority: PromptSegmentPriority.runtime,
+      render: () => formatRuntimeEnvironment(readAppRuntimeFacts()),
+    },
     {
       id: 'runtime.datetime',
       label: 'Current Date Time',
@@ -94,8 +130,9 @@ function createBuiltInPromptSegments(
       when: (context) => isTrue(context.facts?.shouldInjectVisualWidgetPrompt),
       render: () =>
         [
-          'Widget 能力已开启。',
-          '复杂内嵌 SVG、HTML、图表、Canvas、WebGL 或交互组件先读取 skill:widget-visual-output；普通说明使用 Markdown。',
+          'Widget 是宿主内置的呈现方式，不属于用户本轮选择的能力。',
+          '默认使用 Markdown；普通说明、简短回答和不需要专门视觉承载的内容都保持 Markdown。',
+          '需要复杂说明展示、复杂图表、数据驱动状态、多状态或多步骤交互、Canvas/WebGL，或需要用户探索并进一步讲解时，才使用 Widget，并先读取 skill:widget-visual-output。',
         ].join('\n'),
     },
     {
@@ -108,8 +145,8 @@ function createBuiltInPromptSegments(
       when: (context) => isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
       render: () =>
         [
-          'HTML 实时预览能力已开启。',
-          '轻量流式 HTML/SVG 页面、卡片、落地页、静态内容或轻交互预览先读取 skill:html-artifact-output；普通说明使用 Markdown。',
+          'HTML Live Preview 是宿主内置的呈现方式，不属于用户本轮选择的能力。',
+          '当简单 HTML 页面、卡片、落地页、静态内容、轻交互或即时视觉效果比 Markdown 更直观时，使用 HTML Live Preview，并先读取 skill:html-artifact-output。',
           '实时预览直接输出 <artifact>/<patch> 流式协议；artifact:produce 仅用于导出可下载资源。',
         ].join('\n'),
     },
@@ -125,9 +162,9 @@ function createBuiltInPromptSegments(
         isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
       render: () =>
         [
-          'Widget 与 HTML 实时预览已同时开启，默认只选择最适合当前任务的一种。',
-          '简单页面、卡片、落地页、静态内容和轻交互优先使用 HTML 实时预览；复杂图表、Canvas/WebGL、数据驱动界面、多状态或多步交互优先使用 Widget。',
-          '只有用户明确要求，或任务确实包含两种用途不同的呈现时，才在同一回复中同时使用两种能力。',
+          '呈现方式默认使用 Markdown；普通说明无需改成可视化内容。',
+          '简单、直观的 HTML 实时效果和轻交互使用 HTML Live Preview；复杂说明展示、复杂图表、数据驱动界面、多状态或多步骤交互使用 Widget。',
+          '用户需要交互、演示或进一步讲解时，按内容复杂度在两者中选择最合适的一种；只有任务确实包含两种用途不同的呈现时才同时使用。',
         ].join('\n'),
     },
     {
