@@ -21,13 +21,8 @@ export interface AgentIntentPlan {
   domains: AgentIntentDomain[]
   complexity: 'low' | 'single-domain' | 'multi-domain'
   confidence: 'low' | 'medium' | 'high'
-  requiresEvidence: boolean
   requiresCapabilityEvidence: boolean
   requiresToolDiscovery: boolean
-  requiresMutation: boolean
-  requiresValidation: boolean
-  evidenceCategoryIds: ToolCategoryId[]
-  minimumActionIds: string[]
 }
 
 export interface AgentRuntimePlan {
@@ -99,13 +94,6 @@ export interface RecoveryRunPlan {
   }
 }
 
-export interface ValidationRunPlan {
-  evidenceRequired: boolean
-  evidenceCategoryIds: ToolCategoryId[]
-  minimumActionIds: string[]
-  finishingGate: 'none' | 'remind' | 'validate'
-}
-
 export type AgentRunPlanLedgerSource = ControlPlaneLedgerSource
 
 export type AgentRunPlanLedgerEntry = ControlPlaneLedgerEntry
@@ -119,7 +107,6 @@ export interface AgentRunPlan {
   context: ContextRunPlan
   prompt: PromptRunPlan
   recovery: RecoveryRunPlan
-  validation: ValidationRunPlan
   ledger: AgentRunPlanLedgerEntry[]
 }
 

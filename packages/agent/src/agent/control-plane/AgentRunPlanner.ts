@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 
-import type { RunProfileSelectionId, ToolCategoryId } from '@velaros-ai/agent/protocol'
+import type { RunProfileSelectionId } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { AgentRuntimeCapabilityPorts } from '../../capabilities'
@@ -20,7 +20,6 @@ import type {
   CapabilityRunPlan,
   ContextRunPlan,
   RecoveryRunPlan,
-  ValidationRunPlan,
 } from './AgentRunPlan'
 import { agentRunPlanLedgerFactory } from './AgentRunPlanLedger'
 import { capabilityRunPlanner, type PlanCapabilityRunInput } from './CapabilityRunPlanner'
@@ -56,15 +55,8 @@ class AgentIntentPlanner {
       domains,
       complexity: this.resolveComplexity(domains),
       confidence: domains.includes('unknown') || isEmpty(domains) ? 'low' : 'medium',
-      requiresEvidence: requiresCapabilityEvidence,
       requiresCapabilityEvidence,
       requiresToolDiscovery: !isEmpty(domains),
-      requiresMutation: signals.requiresMutation,
-      requiresValidation: signals.requiresValidation,
-      evidenceCategoryIds: [
-        ...new Set(signals.domains.flatMap((domain) => domain.categories)),
-      ],
-      minimumActionIds: signals.minimumActionIds,
     }
   }
 
@@ -91,13 +83,8 @@ class AgentIntentPlanner {
       domains: [],
       complexity: 'low',
       confidence: 'low',
-      requiresEvidence: false,
       requiresCapabilityEvidence: false,
       requiresToolDiscovery: false,
-      requiresMutation: false,
-      requiresValidation: false,
-      evidenceCategoryIds: [],
-      minimumActionIds: [],
     }
   }
 
@@ -175,13 +162,6 @@ class AgentRunPlanLedgerComposer {
   }
 }
 
-export interface BuildValidationRunPlanInput {
-  requiresEvidence: boolean
-  requiresValidation: boolean
-  evidenceCategoryIds: readonly ToolCategoryId[]
-  minimumActionIds: readonly string[]
-}
-
 export interface BuildAgentRunPlanInput
   extends Omit<PlanCapabilityRunInput, 'messages' | 'runProfile' | 'toolSchemaCharBudget'> {
   history: ModelMessage[]
@@ -192,19 +172,6 @@ export interface BuildAgentRunPlanInput
 }
 
 class AgentRunPlanComposer {
-  public buildValidation(input: BuildValidationRunPlanInput): ValidationRunPlan {
-    return {
-      evidenceRequired: input.requiresEvidence,
-      evidenceCategoryIds: [...new Set(input.evidenceCategoryIds)],
-      minimumActionIds: [...new Set(input.minimumActionIds)],
-      finishingGate: input.requiresValidation
-        ? 'validate'
-        : input.requiresEvidence
-          ? 'remind'
-          : 'none',
-    }
-  }
-
   public build(input: BuildAgentRunPlanInput): AgentRunPlan {
     const intent = agentIntentPlanner.plan({
       messages: input.history,
@@ -235,7 +202,6 @@ class AgentRunPlanComposer {
       pageFaults: capabilities.pageFaults,
       recovery,
     })
-    const validation = this.buildValidation(intent)
     const ledger = agentRunPlanLedgerComposer.build({
       intent,
       context,
@@ -253,7 +219,6 @@ class AgentRunPlanComposer {
       context,
       prompt,
       recovery,
-      validation,
       ledger,
     }
   }

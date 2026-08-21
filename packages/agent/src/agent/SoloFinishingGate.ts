@@ -10,7 +10,6 @@ import type { AutoVerificationGateResult } from '../coding'
 import { evaluateKernelFinalReadiness } from '../kernel'
 import type { CodingSessionSnapshot } from '../reminders'
 
-import type { AgentRunEvidenceGateResult } from './control-plane/AgentRunEvidenceTracker'
 import { createInternalFollowUpMessage } from './history'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
 import { consumeSoloRuntimeGuidance } from './SoloRuntimeGuidance'
@@ -37,7 +36,6 @@ interface RunSoloFinishingGateInput<
   runAutomaticVerification(input: {
     toolContext: TToolContext
   }): Promise<AutoVerificationGateResult>
-  evaluateRunEvidence?: () => AgentRunEvidenceGateResult
   runtimeInput?: AgentRuntimeInputPort
   consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
   goalMode?: boolean
@@ -54,11 +52,10 @@ type SoloFinishingGateContinueReason =
   | 'final-readiness'
   | 'user-guidance'
   | 'goal-status-required'
-  | 'fresh-evidence-required'
 
 type SoloFinishingGateRepeatableReason = Extract<
   SoloFinishingGateContinueReason,
-  'verification-followup' | 'final-readiness' | 'goal-status-required' | 'fresh-evidence-required'
+  'verification-followup' | 'final-readiness' | 'goal-status-required'
 >
 
 interface SoloFinishingGateBlockTracker {
@@ -109,8 +106,7 @@ function isRepeatableFinishingGateReason(
   return (
     reason === 'verification-followup' ||
     reason === 'final-readiness' ||
-    reason === 'goal-status-required' ||
-    reason === 'fresh-evidence-required'
+    reason === 'goal-status-required'
   )
 }
 
@@ -170,25 +166,9 @@ async function runSoloFinishingGate<
 >(
   input: RunSoloFinishingGateInput<TToolContext, TEvents>
 ): Promise<SoloFinishingGateResult> {
-  const runEvidence = input.evaluateRunEvidence?.()
-  if (runEvidence && !runEvidence.allowed) {
-    const missing = runEvidence.missingActionIds
-    input.history.push(
-      createInternalFollowUpMessage(
-        missing.length > 0
-          ? `[系统] 本次任务缺少当前执行的必要操作证据：${missing.join('、')}。请执行缺失操作并依据新结果收尾，不能复用历史任务结果。`
-          : '[系统] 本次任务需要当前执行产生的新证据。请先调用适用能力读取、执行或验证当前状态，再依据新结果收尾；历史任务结果不能替代本次证据。'
-      )
-    )
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
-    input.log.debug('turn blocked by fresh evidence gate', {
-      turn: input.turn,
-      missingActionIds: runEvidence.missingActionIds,
-      observedActionIds: runEvidence.observedActionIds,
-    })
-    return resolveBlockedFinishingGateResult(input, 'fresh-evidence-required')
-  }
-
+  // 「缺少理想的新证据」不是不可逆安全边界，也不能证明模型正在空转，因此不得在收尾期
+  // 反复退回模型。能力规划与提示词仍可鼓励读取/验证；最终是否如实说明无证据、无能力、
+  // 权限被拒或工具失败，由模型回答承担，不能再用成功工具调用作为结束资格。
   const finishingReminders = await input.tickLoopReminders({
     mode: 'solo',
     phase: 'finishing',

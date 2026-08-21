@@ -11,13 +11,11 @@ export type {
   PromptRunPlan,
   RecoveryRunPlan,
   ToolPageFault,
-  ValidationRunPlan,
 } from './AgentRunPlan'
 export { AgentRunPlanLedgerFactory, agentRunPlanLedgerFactory } from './AgentRunPlanLedger'
 export type {
   BuildAgentRunPlanInput,
   BuildAgentRunPlanLedgerInput,
-  BuildValidationRunPlanInput,
   PlanAgentIntentInput,
 } from './AgentRunPlanner'
 export {

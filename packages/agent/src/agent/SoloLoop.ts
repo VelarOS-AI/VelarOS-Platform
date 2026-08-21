@@ -54,7 +54,6 @@ import {
   type ToolExecutorEvents,
 } from '../tools'
 
-import { AgentRunEvidenceTracker } from './control-plane/AgentRunEvidenceTracker'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -483,7 +482,6 @@ class SoloStreamLoop<
     // 工具参数流中断/非法的反应式自纠计数；一旦有工具调用成功即清零。
     let interruptedToolCallRecoveryAttempts = 0
     const finishingGateBlockTracker = createSoloFinishingGateBlockTracker()
-    const runEvidenceTracker = new AgentRunEvidenceTracker()
     // 目标生命周期：整个 solo 执行共享一个实例，收尾门同轮 inspect→record 复用单次取数。
     const goalLifecycle = new SoloGoalLifecycle(args.toolContext.activeContext)
     if (isTrue(args.config.goalMode)) {
@@ -590,7 +588,6 @@ class SoloStreamLoop<
         toolSchemaChars,
         promptToolCategories,
       } = preparedRunPlan
-      runEvidenceTracker.require(runPlan.validation)
       // 工具列表在缺页降级（narrow-tools 档）时可能被收窄，故用 let。
       let allowedTools = preparedRunPlan.allowedTools
       // run plan 已把物理模型窗口与 profile 工作集上限取最小值；后续估算、编译和降级必须共用它。
@@ -842,18 +839,6 @@ class SoloStreamLoop<
             events: args.events,
             log: this.log,
           })
-          const categoryByToolName = new Map(
-            args.toolContext
-              .listTools('all')
-              .map((tool) => [tool.name, tool.categoryId] as const)
-          )
-          runEvidenceTracker.record(
-            toolUseContinuation.toolResults.map((result) => ({
-              toolName: result.toolName,
-              categoryId: toOptional(categoryByToolName.get(result.toolName)),
-              succeeded: !result.error,
-            }))
-          )
           if (toolUseContinuation.status === 'completed') {
             runScope?.end({ status: 'ok' })
             return loopFinish({ status: 'completed' })
@@ -882,7 +867,6 @@ class SoloStreamLoop<
           emitAbort: () => this.runtimeHelper.emitAbort(args.events),
           tickLoopReminders,
           runAutomaticVerification,
-          evaluateRunEvidence: () => runEvidenceTracker.evaluate(),
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
           // 收尾门只在**用户显式开启目标模式**时生效（2026-08-05 裁决）。模型自己调

@@ -125,7 +125,6 @@ export interface CapabilityIntentSignal {
   requiresEvidence?: boolean
   requiresMutation?: boolean
   requiresValidation?: boolean
-  minimumActionIds?: readonly string[]
 }
 
 export interface CapabilityIntentClassifierContext {

@@ -27,7 +27,6 @@ export interface AgentIntentDomainSignal {
   requiresEvidence: boolean
   requiresMutation: boolean
   requiresValidation: boolean
-  minimumActionIds: string[]
 }
 
 export interface AgentIntentSignals {
@@ -36,7 +35,6 @@ export interface AgentIntentSignals {
   requiresMutation: boolean
   requiresValidation: boolean
   hasCapabilityUncertainty: boolean
-  minimumActionIds: string[]
 }
 
 function normalizeIntentText(text: string): string {
@@ -87,16 +85,12 @@ function mergeIntentSignals(signals: readonly CapabilityIntentSignal[]): AgentIn
       requiresEvidence: false,
       requiresMutation: false,
       requiresValidation: false,
-      minimumActionIds: [],
     }
     current.categories = [...new Set([...current.categories, ...(signal.categoryIds ?? [])])]
     current.requiresDiscovery ||= !!signal.requiresDiscovery
     current.requiresEvidence ||= !!signal.requiresEvidence
     current.requiresMutation ||= !!signal.requiresMutation
     current.requiresValidation ||= !!signal.requiresValidation
-    current.minimumActionIds = [
-      ...new Set([...current.minimumActionIds, ...(signal.minimumActionIds ?? [])]),
-    ]
     byDomain.set(signal.domainId, current)
   }
   return [...byDomain.values()]
@@ -119,7 +113,6 @@ function detectAgentIntentSignals(
       requiresEvidence: false,
       requiresMutation: false,
       requiresValidation: false,
-      minimumActionIds: [],
     })
   }
   return {
@@ -128,7 +121,6 @@ function detectAgentIntentSignals(
     requiresMutation: domains.some((domain) => domain.requiresMutation),
     requiresValidation: domains.some((domain) => domain.requiresValidation),
     hasCapabilityUncertainty,
-    minimumActionIds: [...new Set(domains.flatMap((domain) => domain.minimumActionIds))],
   }
 }
 

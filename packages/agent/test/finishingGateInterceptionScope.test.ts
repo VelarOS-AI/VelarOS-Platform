@@ -52,6 +52,20 @@ function createFinishingGateHarness(options: {
 }
 
 void describe('finishing gate no longer intercepts workflow discipline', () => {
+  void test('missing runtime evidence cannot block an actionable request from finishing', async () => {
+    const harness = createFinishingGateHarness({})
+    harness.history.push({
+      role: 'user',
+      content:
+        '你在当前会话中写入一个长期偏好：需要动手时先向我提交方案，得到批准后再执行。',
+    })
+
+    const result = await runSoloFinishingGate(harness.input)
+
+    expect(result.status).toBe('completed')
+    expect(harness.history).toHaveLength(1)
+  })
+
   void test('unresolved execution plan steps do not block the turn from completing', async () => {
     const harness = createFinishingGateHarness({ unresolvedPlanSteps: true })
     const result = await runSoloFinishingGate(harness.input)
