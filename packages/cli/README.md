@@ -10,6 +10,7 @@ Office 或 Memory 的模型能力复制成另一套 CLI。领域原生命令已�
 ## 给谁使用
 
 - 用户、Agent 与 CI：通过 `velaros agent ...` 查看工作区 Agent 任务制品。
+- 终端用户：通过 `velaros terminal` 启动独立安装的 Termel 产品。
 - 产品开发者：使用 `VelarosCliRouter` 显式注册产品自有的运维命名空间。
 
 Desktop、Workbench 与 Extension 都不拥有这条命令；应用只在开发或部署流程中消费 CLI，
@@ -27,13 +28,15 @@ npm install --global @velaros-ai/cli
 
 ```sh
 velaros help
+velaros terminal
 velaros agent manifest --json
 velaros agent status --workspace-root . [--task-id <id>|--latest] [--full] [--json]
 ```
 
-`agent` 只读取 `.velaros/agent-runs`。原 `serve` 产品命名空间已迁移到独立的
-[VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal)，其命令入口是 `velar`；
-Platform CLI 不再依赖或装配 Terminal 的运行时、权限、数据根、IPC 与 Extension Bridge。
+`agent` 只读取 `.velaros/agent-runs`。终端 Agent 产品已经迁移到独立的
+[Termel](https://example.invalid/private-repository)，其独立命令是 `termel`；
+`velaros terminal` 只负责启动它，Platform CLI 不依赖或装配 Termel 的运行时、权限、数据根、IPC
+与 Extension Bridge。
 
 ## 公共入口
 
@@ -42,7 +45,7 @@ Platform CLI 不再依赖或装配 Terminal 的运行时、权限、数据根、
 | `@velaros-ai/cli` | `VelarosCliRouter`、`createVelarosCliRouter()` 与相关类型 |
 | `@velaros-ai/cli/cli` | `main()` 与 Router 库面；导入无副作用，真实 bin 使用独立入口启动 |
 
-默认只注册 `agent`。产品可以显式注入其他非工具型运维命名空间；路由器不维护领域
+默认注册 `agent` 与外部产品入口 `terminal`。产品可以显式注入其他非工具型运维命名空间；路由器不维护领域
 白名单，也不自动扫描 PATH 或安装目录，避免命令集合随机器环境漂移。
 
 ```ts

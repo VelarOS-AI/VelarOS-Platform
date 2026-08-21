@@ -55,6 +55,7 @@ test('velaros cli composes product-owned namespaces through registration', async
   assert.deepEqual(JSON.parse(help.text).result.namespaces, [
     'agent',
     'browser',
+    'terminal',
   ])
 })
 
@@ -102,6 +103,20 @@ test('velaros cli exposes agent as a formal namespace', async () => {
   assert.equal(parsed.kind, 'velaros.cli.agent.manifest')
   assert.equal(parsed.result.namespace, 'agent')
   assert.deepEqual(parsed.result.commands, ['help', 'manifest', 'status'])
+})
+
+test('velaros terminal delegates to the independent Termel command', async () => {
+  const { runVelarosCli } = await import(cliPath.href)
+  const command = process.env.VELAROS_TERMEL_COMMAND
+  process.env.VELAROS_TERMEL_COMMAND = process.execPath
+  try {
+    const result = await runVelarosCli(['terminal', '--version'], { cwd: process.cwd() })
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.text, '')
+  } finally {
+    if (command === undefined) delete process.env.VELAROS_TERMEL_COMMAND
+    else process.env.VELAROS_TERMEL_COMMAND = command
+  }
 })
 
 test('velaros agent status reads task artifacts without a script bridge', async () => {
@@ -201,6 +216,7 @@ test('published velaros bin target is executable through package metadata', () =
   assert.equal(result.status, 0)
   assert.match(result.stdout, /VelarOS CLI/)
   assert.match(result.stdout, /agent \.\.\./)
+  assert.match(result.stdout, /terminal \.\.\./)
   assert.doesNotMatch(result.stdout, /serve \.\.\./)
   assert.equal(result.stderr, '')
 })

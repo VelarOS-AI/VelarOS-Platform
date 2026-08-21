@@ -25,7 +25,7 @@ export async function main(
     write: (text) => process.stdout.write(text),
   })
   const stream = result.exitCode === 0 ? process.stdout : process.stderr
-  stream.write(result.text)
+  if (result.text) stream.write(result.text)
   process.exitCode = result.exitCode
   return result
 }

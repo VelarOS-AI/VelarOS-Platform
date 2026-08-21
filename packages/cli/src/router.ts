@@ -2,6 +2,7 @@ import { isFalse } from '@velaros-ai/core'
 
 import { runAgentCli } from './agent.js'
 import { formatVelarosCliError, formatVelarosCliSuccess } from './output.js'
+import { runTerminalCli } from './terminal.js'
 import {
   VelarosCliError,
   type VelarosCliNamespaceRunResult,
@@ -34,6 +35,7 @@ export interface CreateVelarosCliRouterOptions {
 
 const BuiltinNamespaceRunners: Readonly<Record<string, VelarosCliNamespaceRunner>> = {
   agent: runAgentCli,
+  terminal: runTerminalCli,
 }
 
 /**
