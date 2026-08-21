@@ -258,7 +258,9 @@ const AgentModSkillContributionSchema = z.strictObject({
   name: z.string(),
   description: z.string().optional(),
   skillKind: z.enum(['role', 'capability']).optional(),
-  spaces: tolerantArray(TrimmedIdSchema).optional(),
+  spaces: tolerantArray(TrimmedIdSchema).refine((spaces) => !isEmpty(spaces), {
+    message: 'Skill 必须显式声明至少一个 spaces',
+  }),
   priority: z.number().int().optional(),
 })
 type AgentModSkillContribution = z.infer<typeof AgentModSkillContributionSchema>

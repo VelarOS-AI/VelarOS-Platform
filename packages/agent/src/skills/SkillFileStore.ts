@@ -28,7 +28,7 @@ interface SkillFileRecord {
   enabled: boolean
   /** 去掉 frontmatter 的正文。 */
   markdown: string
-  /** 可见能力作用域（frontmatter `spaces: [scope-a, scope-b]`）；空 = 通用。 */
+  /** 可见能力作用域（frontmatter `spaces: [scope-a, scope-b]`）；必填且非空。 */
   spaces: string[]
   /** 索引排序优先级（frontmatter `priority: 60`）；越小越靠前，空用 provider 默认。 */
   priority: Nullable<number>
@@ -268,6 +268,9 @@ class SkillFileStore {
     if (isBlank(body)) {
       throw new AppError('VALIDATION', 'skill-body-empty')
     }
+    if (isEmpty(parseFrontmatterList(data.spaces))) {
+      throw new AppError('VALIDATION', 'skill-frontmatter-spaces-missing')
+    }
 
     const id = options.id?.trim() || slugify(name)
     if (!id) {
@@ -332,8 +335,12 @@ class SkillFileStore {
    * 用 marker 文件防止重复导入；已存在同名文件时跳过（用户文件优先）。
    */
   public migrateLegacyEntries(
-    entries: ReadonlyArray<{ label?: unknown; description?: unknown; markdown?: unknown }>
+    entries: ReadonlyArray<{ label?: unknown; description?: unknown; markdown?: unknown }>,
+    spaces: readonly string[]
   ): number {
+    if (isEmpty(spaces)) {
+      throw new AppError('VALIDATION', 'legacy-skill-spaces-missing')
+    }
     const markerPath = join(this.dir(), '.migrated-config-skills')
     if (existsSync(markerPath)) return 0
 
@@ -351,6 +358,7 @@ class SkillFileStore {
         '---',
         `name: ${label}`,
         ...(description ? [`description: ${description}`] : []),
+        `spaces: [${spaces.join(', ')}]`,
         '---',
         '',
       ].join('\n')
@@ -479,6 +487,11 @@ class SkillFileStore {
       const baseDir = isDirStyle ? dirname(filePath) : null
       const id = isDirStyle ? basename(dirname(filePath)) : basename(filePath, '.md')
       const parsedPriority = Number.parseInt(data.priority ?? '', 10)
+      const spaces = parseFrontmatterList(data.spaces)
+      if (isEmpty(spaces)) {
+        this.log.warn('技能缺少必填的 spaces 声明，忽略该文件', { filePath })
+        return null
+      }
       const record: SkillFileRecord = {
         id,
         name: data.name?.trim() || id,
@@ -488,7 +501,7 @@ class SkillFileStore {
         updatedAt: Math.round(stats.mtimeMs),
         enabled: this.isSkillEnabled(id),
         markdown: body.trim(),
-        spaces: parseFrontmatterList(data.spaces),
+        spaces,
         priority: Number.isFinite(parsedPriority) ? parsedPriority : null,
         argumentHint: data['argument-hint']?.trim() || null,
         allowedTools: parseFrontmatterList(data['allowed-tools']),

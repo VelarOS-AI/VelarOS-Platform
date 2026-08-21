@@ -34,7 +34,8 @@ export interface SkillSummary {
   toggleable?: boolean
   deletable?: boolean
   revealable?: boolean
-  capabilityScopes?: CapabilityScopeId[]
+  /** 必填且非空；通用 Skill 也必须显式列出宿主支持的全部空间。 */
+  capabilityScopes: CapabilityScopeId[]
 }
 
 export interface SkillListRequest {

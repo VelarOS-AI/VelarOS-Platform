@@ -236,7 +236,7 @@ describe('agent mod loader', () => {
               provides: ['velaros.agent'],
             },
             agent: createManifest({
-              contributes: { skills: [{ id: 'skill.one', name: 'One' }] },
+              contributes: { skills: [{ id: 'skill.one', name: 'One', spaces: ['system'] }] },
             }),
             // 壳级节：agent 侧不解析，它的形状怎么变都不该影响装载。
             ui: { pages: [{ id: 'page.one', renderer: 'whatever' }] },

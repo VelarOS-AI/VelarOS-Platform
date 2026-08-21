@@ -296,10 +296,8 @@ class AgentSkillRepository {
     skill: AgentSkillDefinition,
     capabilityScope?: CapabilityScopeId
   ): boolean {
-    const allowedSpaces = skill.capabilityScopes ?? []
-    if (isEmpty(allowedSpaces)) return true
-    if (!capabilityScope) return true
-    return allowedSpaces.includes(capabilityScope)
+    if (!capabilityScope) return false
+    return skill.capabilityScopes.includes(capabilityScope)
   }
 
   private hasAutoInjectPromptFeature(

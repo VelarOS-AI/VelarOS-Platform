@@ -5,6 +5,7 @@ import type {
   CapabilityScopeId,
   ChatPromptFeatureId,
 } from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 /**
  * 技能类型——行为知识三层模型里 Tier2 的两个子类，决定注入方式：
@@ -40,9 +41,9 @@ interface AgentSkillDefinition extends AgentSkillDescriptor {
   /**
    * 技能可见/可触发的能力作用域。
    *
-   * 空数组表示通用；指定范围时，列表、tooling:read 和自动注入都只在对应作用域生效。
+   * 必填且非空；通用 Skill 也必须由宿主显式列出全部空间，新增空间时重新作出可见性裁决。
    */
-  capabilityScopes?: readonly CapabilityScopeId[]
+  capabilityScopes: readonly CapabilityScopeId[]
 }
 
 /**
@@ -82,7 +83,7 @@ function createSkillDefinition(args: {
   /** 技能类型；省略默认 capability（指针 + 按需读取）。role 只应由内置角色供应方显式声明。 */
   skillKind?: AgentSkillKind
   autoInjectPromptFeatures?: readonly ChatPromptFeatureId[]
-  capabilityScopes?: readonly CapabilityScopeId[]
+  capabilityScopes: readonly CapabilityScopeId[]
   enabled?: boolean
   userVisible?: boolean
   argumentHint?: LooseOptional<string>
@@ -91,6 +92,9 @@ function createSkillDefinition(args: {
   sourceResourceId?: LooseOptional<string>
   allowedTools?: readonly string[]
 }): AgentSkillDefinition {
+  if (isEmpty(args.capabilityScopes)) {
+    throw new TypeError(`Skill「${args.id}」必须显式声明至少一个 capabilityScopes`)
+  }
   return {
     id: args.id,
     label: args.label,
@@ -111,7 +115,7 @@ function createSkillDefinition(args: {
     autoInjectPromptFeatures: args.autoInjectPromptFeatures
       ? [...args.autoInjectPromptFeatures]
       : [],
-    capabilityScopes: args.capabilityScopes ? [...args.capabilityScopes] : [],
+    capabilityScopes: [...args.capabilityScopes],
   }
 }
 

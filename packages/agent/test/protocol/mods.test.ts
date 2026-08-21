@@ -116,6 +116,28 @@ describe('manifest 解析', () => {
     if (!result.ok) return
     expect(listAgentModDeclaredAxes(result.manifest)).toEqual(['tools'])
   })
+
+  test('Skill 贡献必须显式声明非空 spaces', () => {
+    for (const skill of [
+      { id: 's1', name: 'Missing spaces' },
+      { id: 's2', name: 'Empty spaces', spaces: [] },
+    ]) {
+      const result = parseAgentModManifest(
+        baseManifest({ contributes: { skills: [skill] } })
+      )
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.diagnostics[0]?.code).toBe('mod.manifest-invalid')
+    }
+
+    expect(
+      parseAgentModManifest(
+        baseManifest({
+          contributes: { skills: [{ id: 's3', name: 'Scoped', spaces: ['system'] }] },
+        })
+      ).ok
+    ).toBe(true)
+  })
 })
 
 describe('契约常量', () => {
@@ -151,7 +173,9 @@ describe('分节单文件信封', () => {
     const uiSection = { pages: [{ id: 'p1', kind: 'whatever-the-shell-says' }] }
     const result = parseVelarosModEnvelope({
       module: baseModuleSection(),
-      agent: baseManifest({ contributes: { skills: [{ id: 's1', name: 'S' }] } }),
+      agent: baseManifest({
+        contributes: { skills: [{ id: 's1', name: 'S', spaces: ['system'] }] },
+      }),
       ui: uiSection,
     })
 
