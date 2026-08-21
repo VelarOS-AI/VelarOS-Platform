@@ -1,7 +1,7 @@
 /**
  * 开关，持久二元状态切换。
  *
- * variants（封闭枚举，全仓共用一套）：`tone` = `default | neutral`；`size` = `default | sm | xs`。
+ * variants（封闭枚举，全仓共用一套）：`tone` = `default | neutral`；`size` = `md | sm | xs`。
  * 样式：`.velar-switch` · 见 styles/components/。
  */
 import React, { memo } from 'react'
@@ -16,14 +16,14 @@ const switchVariants = cva('velar-switch', {
       neutral: 'velar-switch-tone-neutral',
     },
     size: {
-      default: 'velar-switch-size-default',
+      md: 'velar-switch-size-md',
       sm: 'velar-switch-size-sm',
       xs: 'velar-switch-size-xs',
     },
   },
   defaultVariants: {
     tone: 'default',
-    size: 'default',
+    size: 'sm',
   },
 })
 

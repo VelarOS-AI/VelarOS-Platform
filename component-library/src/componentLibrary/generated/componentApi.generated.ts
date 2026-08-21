@@ -5175,8 +5175,8 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     {
       "name": "Switch.size",
       "description": "Auto-generated from TypeScript props.",
-      "type": "\"default\" | \"sm\" | \"xs\" | null",
-      "defaultValue": "'default'"
+      "type": "\"sm\" | \"md\" | \"xs\" | null",
+      "defaultValue": "'sm'"
     },
     {
       "name": "Switch.tone",
