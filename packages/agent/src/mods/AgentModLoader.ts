@@ -101,6 +101,8 @@ interface AgentModActivationState {
   readonly description: string
   readonly publisher: string
   readonly trust: AgentModTrustLevel
+  /** 由信封 `module.permissions` 投影而来的已声明权限闭集。 */
+  readonly permissions: readonly string[]
   readonly source: AgentModSourceKind
   readonly origin: string
   readonly status: AgentModActivationStatus
@@ -523,6 +525,7 @@ class AgentModLoader {
       description: mod.manifest.description ?? '',
       publisher: mod.manifest.publisher ?? '',
       trust: mod.manifest.trust,
+      permissions: mod.manifest.permissions ?? [],
       source: mod.source,
       origin: mod.origin,
       status: !isEmpty(mod.absentAxes) ? 'partial' : 'active',

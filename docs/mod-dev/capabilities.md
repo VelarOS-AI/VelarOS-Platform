@@ -11,17 +11,23 @@
 
 ```ts
 interface CapabilityToken<TService extends object = object> {
-  readonly id: string
-  readonly version: string
+  readonly id: string;
+  readonly version: string;
 }
 
 interface CapabilityRequirement {
-  readonly id: string
-  readonly versionRange?: string
+  readonly id: string;
+  readonly versionRange?: string;
 }
 
-function createCapabilityToken<TService extends object>(id: string, version = '1.0.0'): CapabilityToken<TService>
-function requireCapability(token: CapabilityToken, versionRange?: string): CapabilityRequirement
+function createCapabilityToken<TService extends object>(
+  id: string,
+  version = "1.0.0",
+): CapabilityToken<TService>;
+function requireCapability(
+  token: CapabilityToken,
+  versionRange?: string,
+): CapabilityRequirement;
 ```
 
 token 是**稳定的服务身份 + 编译期服务类型**；它**不携带任何实现**，
@@ -32,12 +38,12 @@ manifest 的 `module` 节写的就是它们的 JSON 投影：
 ```ts
 const VelarosModCapabilityTokenSchema = z.strictObject({
   id: TrimmedIdSchema,
-  version: TrimmedIdSchema.default('1.0.0'),
-})
+  version: TrimmedIdSchema.default("1.0.0"),
+});
 const VelarosModCapabilityRequirementSchema = z.strictObject({
   id: TrimmedIdSchema,
   versionRange: SemverRangeSchema.optional(),
-})
+});
 ```
 
 **形态层宽容**：`provides` / `requires` 里写裸 id 字符串等价于 `{ id }`
@@ -49,14 +55,14 @@ const VelarosModCapabilityRequirementSchema = z.strictObject({
 
 ```ts
 interface KernelModuleManifest {
-  readonly id: string
-  readonly version: string
-  readonly apiVersion: number
-  readonly provides: readonly CapabilityToken[]
-  readonly requires: readonly CapabilityRequirement[]
-  readonly optionalRequires: readonly CapabilityRequirement[]
-  readonly permissions: readonly string[]
-  readonly isolation: KernelModuleIsolation      // 'in-process' | 'worker' | 'sidecar'
+  readonly id: string;
+  readonly version: string;
+  readonly apiVersion: number;
+  readonly provides: readonly CapabilityToken[];
+  readonly requires: readonly CapabilityRequirement[];
+  readonly optionalRequires: readonly CapabilityRequirement[];
+  readonly permissions: readonly string[];
+  readonly isolation: KernelModuleIsolation; // 'in-process' | 'worker' | 'sidecar'
 }
 ```
 
@@ -80,9 +86,11 @@ bundled pack 走构建图，没有寻址问题。
 
 ```ts
 defineKernelModule({
-  manifest: { /* KernelModuleManifest */ },
-  activate(context: KernelModuleActivateContext) { /* … */ },
-})
+  manifest: {/* KernelModuleManifest */},
+  activate(context: KernelModuleActivateContext) {
+    /* … */
+  },
+});
 ```
 
 Kernel 生命周期：`register → activate → ready → suspend → dispose`。
@@ -95,17 +103,19 @@ Kernel 生命周期：`register → activate → ready → suspend → dispose`�
 
 ```ts
 type KernelPermissionDecision =
-  | { readonly status: 'granted'; readonly grantId?: string }
-  | { readonly status: 'denied';  readonly reason: string }
+  | { readonly status: "granted"; readonly grantId?: string }
+  | { readonly status: "denied"; readonly reason: string };
 
 /** Host-owned authority boundary. Modules never implement or replace it. */
 interface KernelPermissionBroker {
-  request(request: KernelPermissionRequest): Promise<KernelPermissionDecision>
+  request(request: KernelPermissionRequest): Promise<KernelPermissionDecision>;
 }
 
 /** Module-scoped view that cannot forge module or generation identity. */
 interface KernelModulePermissionBroker {
-  request(request: KernelModulePermissionRequest): Promise<KernelPermissionDecision>
+  request(
+    request: KernelModulePermissionRequest,
+  ): Promise<KernelPermissionDecision>;
 }
 ```
 
@@ -125,10 +135,14 @@ mod 拿到的是引用不是路径，这是权限面能被审计的前提。
 `agent` 节的 `permissions` 字段**v1 只是声明与审计元数据**。
 既有的工具类别可见性门不消费该字段——
 **manifest 不得声称「走七门」**，七门管的是工具类别可见性，不 enforce mod 的能力 scope。
-真正的能力 enforcement 是尚未建成的层。
+真正的能力 enforcement 在 Kernel capability broker：Platform 提供 ABI，具体宿主负责公开权限
+目录、导入确认、授权账本与审计。Desktop 已把它接入 `.velarmod` 扫描/导入流程；其他宿主没有
+显式装配 broker 时仍是默认 deny，不能因为 manifest 有声明就视为已经获权。
 
 `module` 节的 `permissions` 是 `KernelModuleManifest.permissions`，
 它是 broker 请求的合法性依据（模块申请自己没声明的权限即越界）。
+完整包格式、当前 Desktop 权限目录与逐项批准流程见
+[package-format-v1.md](./package-format-v1.md)。
 
 ---
 
@@ -147,22 +161,24 @@ mod 拿到的是引用不是路径，这是权限面能被审计的前提。
 `packages/memory/src/adapter-kernel/MemoryStoreCapability.ts`：
 
 ```ts
-export const MemoryStoreCapabilityNamespace = 'velaros.memory.store'
-export const DefaultMemoryStoreCapabilityVersion = '1.0.0'
+export const MemoryStoreCapabilityNamespace = "velaros.memory.store";
+export const DefaultMemoryStoreCapabilityVersion = "1.0.0";
 
-export interface MemoryStoreCapabilityService { readonly backend: MemoryStoreBackend }
+export interface MemoryStoreCapabilityService {
+  readonly backend: MemoryStoreBackend;
+}
 
-export function memoryStoreCapabilityId(backendId: string): string
-  // → `velaros.memory.store.${backendId}`，空 id 即抛
+export function memoryStoreCapabilityId(backendId: string): string;
+// → `velaros.memory.store.${backendId}`，空 id 即抛
 
 export function createMemoryStoreCapabilityToken(
   backendId: string,
   version = DefaultMemoryStoreCapabilityVersion,
-): CapabilityToken<MemoryStoreCapabilityService>
+): CapabilityToken<MemoryStoreCapabilityService>;
 
 export function createMemoryStoreKernelModule(
   options: CreateMemoryStoreKernelModuleOptions,
-): KernelModuleDefinition
+): KernelModuleDefinition;
 ```
 
 **为什么一个后端一个 token 而不是一个共享 token**：
@@ -183,17 +199,21 @@ token 是 mod 轴机制；主干只该持有与实现无关的窄动词契约。
 `packages/memory/src/backend/Contract.ts` 只描述**动词**，不假设后端是树、是文件还是向量库：
 
 ```ts
-export type MemoryBackendRole = 'authority' | 'derived-index'
+export type MemoryBackendRole = "authority" | "derived-index";
 
 export type MemoryBackendVerb =
-  | 'capture' | 'recall' | 'inspect'      // 必备：任何后端的入场券
-  | 'erase'   | 'dream'  | 'govern'      // 可选：按能力声明
+  | "capture"
+  | "recall"
+  | "inspect" // 必备：任何后端的入场券
+  | "erase"
+  | "dream"
+  | "govern"; // 可选：按能力声明
 
 export interface MemoryBackendDescriptor {
-  readonly id: string                     // 'files' / 'tree' / 'vector'；token 由它派生
-  readonly role: MemoryBackendRole
-  readonly displayName: string
-  readonly verbs: readonly MemoryBackendVerb[]
+  readonly id: string; // 'files' / 'tree' / 'vector'；token 由它派生
+  readonly role: MemoryBackendRole;
+  readonly displayName: string;
+  readonly verbs: readonly MemoryBackendVerb[];
 }
 ```
 
@@ -206,11 +226,11 @@ export interface MemoryBackendDescriptor {
 
 ### 5.4 三档与叠加
 
-| 档 | mod | 分发 | 角色 | 缺席时 |
-| --- | --- | --- | --- | --- |
-| 默认档 | `memory-files` | **bundled 恒装** | **权威层**：markdown + frontmatter | 不存在——恒装 |
-| 增强档 | `memory-vector` | 市场可选 | **派生索引**：语义召回增强 | recall 退回文件索引 + 全文检索，**功能面不缺**只是召回变笨 |
-| 未来档 | `memory-tree` | 市场可选（未发布） | 加密树后端 | 不存在——未发布 |
+| 档     | mod             | 分发               | 角色                               | 缺席时                                                     |
+| ------ | --------------- | ------------------ | ---------------------------------- | ---------------------------------------------------------- |
+| 默认档 | `memory-files`  | **bundled 恒装**   | **权威层**：markdown + frontmatter | 不存在——恒装                                               |
+| 增强档 | `memory-vector` | 市场可选           | **派生索引**：语义召回增强         | recall 退回文件索引 + 全文检索，**功能面不缺**只是召回变笨 |
+| 未来档 | `memory-tree`   | 市场可选（未发布） | 加密树后端                         | 不存在——未发布                                             |
 
 - **files = 权威层，恒在**：记忆内容的唯一真相住在文件里。
 - **vector 装后**：capture **双写**（文件权威 + 索引派生）；
@@ -223,12 +243,12 @@ export interface MemoryBackendDescriptor {
 
 ### 5.5 与数据生命周期的对齐
 
-| 动作 | 记忆后端的落法 |
-| --- | --- |
-| install | 注册后端，不触碰任何既有记忆数据 |
+| 动作             | 记忆后端的落法                                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| install          | 注册后端，不触碰任何既有记忆数据                                                                                                              |
 | enable / disable | disable `memory-vector` → 派生索引进 orphaned-but-preserved，权威文件零变化；重新 enable **重建即可**（派生物天生可重建，不需要「复活」语义） |
-| uninstall | 两段式照旧；`memory-vector` 的「清理数据」删的只是索引。`memory-files` 恒装，**不提供卸载路径**——卸载权威层不是卸载语义，是删数据 |
-| upgrade | 索引 schema 变更走**重建**而非迁移 |
-| `ownerModId` | 打在**派生索引**一侧；**权威文件不打 mod 标签**——权威内容不属于任何 mod |
+| uninstall        | 两段式照旧；`memory-vector` 的「清理数据」删的只是索引。`memory-files` 恒装，**不提供卸载路径**——卸载权威层不是卸载语义，是删数据             |
+| upgrade          | 索引 schema 变更走**重建**而非迁移                                                                                                            |
+| `ownerModId`     | 打在**派生索引**一侧；**权威文件不打 mod 标签**——权威内容不属于任何 mod                                                                       |
 
 Platform 侧的实现地图见 [`docs/memory/memory-backends.md`](../memory/memory-backends.md)。

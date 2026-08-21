@@ -3,8 +3,8 @@
 // 两级注册机的接缝就在这里：
 //  第一级 Kernel Module Host 只认窄 descriptor，它把「装了哪些 pack、在哪个目录」告诉宿主；
 //  第二级 Agent Loader 只认领域 manifest。宿主（各产品装配层）在中间做三件事：
-//  按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.mod.json`、**取 agent 节**
-//  → 连同运行态绑定喂给 Loader。
+//  按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.mod.json`、取 agent 节并
+//  用 `module.permissions` 覆盖领域权限投影 → 连同运行态绑定喂给 Loader。
 //
 // 分节单文件（蓝图 v6 §8.3）：一个 mod 一个 `velaros.mod.json`，`module` 节归 Kernel、
 // `agent` 节归本主干、`ui` 节归产品壳。本文件只取 agent 节，另外两节读都不读。
@@ -158,7 +158,11 @@ async function discoverAgentModPackages(input: {
       packages.push({
         source: 'pack',
         origin: descriptor.specifier,
-        manifest: envelope.envelope.agent,
+        // 权限的单一事实在信封顶层；agent.permissions 只是领域元数据，不得放大权限面。
+        manifest: {
+          ...envelope.envelope.agent,
+          permissions: envelope.envelope.module.permissions,
+        },
         bindings: toOptional(bindings),
       })
     } catch (error) {
@@ -196,12 +200,9 @@ interface AgentModAssembly {
  *
  * 顺序只决定「谁先占住主键」——冲突一律拒载并留诊断，不存在后者覆盖前者的加载顺序语义。
  */
-async function assembleAgentMods(
-  input: AssembleAgentModsInput
-): Promise<AgentModAssembly> {
+async function assembleAgentMods(input: AssembleAgentModsInput): Promise<AgentModAssembly> {
   const loader =
-    input.loader ??
-    new AgentModLoader({ host: input.host, onDiagnostic: input.onDiagnostic })
+    input.loader ?? new AgentModLoader({ host: input.host, onDiagnostic: input.onDiagnostic })
 
   const bundled = input.bundled ?? [createBuiltinAgentModPackage()]
   const discovery =

@@ -18,7 +18,8 @@ Agent 使用 `assembleAgentMods` 装配 bundled pack。缺省包含
 
 ## Installed pack
 
-installed pack 至少包含一个目录和 `velaros.mod.json`。Platform 公开
+installed pack 的标准输入是一个 `.velarmod`，包根至少包含 `velaros.mod.json`。源码目录只用于
+开发工具的 validate/pack 阶段，不允许作为普通用户的拖拽分发格式。Platform 公开
 `AgentModPackReader`、`AgentModHostProfile` 和 Loader 生命周期；产品宿主负责：
 
 - 版本化寻址、注册表和原子写入；
