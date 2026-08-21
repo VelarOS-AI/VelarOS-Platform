@@ -72,7 +72,7 @@ describe('bundled packs', () => {
 
   test('loads a host-injected bundled capability pack without importing anything', async () => {
     const store = emptyStore()
-    // Shape of what a host (Desktop / Workbench / velaros serve) injects for a
+    // Shape of what a host (Desktop / Workbench / VelarOS Terminal) injects for a
     // capability it compiled in.
     const pack = createBundledModPack({ id: 'system.probe', module: probeModule })
     expect(pack.version).toBe('2.1.0')

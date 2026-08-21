@@ -190,34 +190,6 @@
       "repositoryDirectory": "packages/agent-lab"
     },
     {
-      "domain": "host",
-      "directory": "packages/remote-host",
-      "name": "@velaros-ai/remote-host",
-      "version": "0.1.0",
-      "description": "Remote capability node transport: headless node listener plus the client-side isolation adapter for `isolation: 'remote'` modules.",
-      "exportSubpaths": [
-        ".",
-        "./client",
-        "./composition",
-        "./contracts",
-        "./mcp",
-        "./node"
-      ],
-      "repositoryDirectory": "packages/remote-host"
-    },
-    {
-      "domain": "host",
-      "directory": "packages/serve-host",
-      "name": "@velaros-ai/serve-host",
-      "version": "0.2.2",
-      "description": "Independent headless Velar Host composition root for Kernel clients and the VelarOS browser extension.",
-      "exportSubpaths": [
-        ".",
-        "./cli"
-      ],
-      "repositoryDirectory": "packages/serve-host"
-    },
-    {
       "domain": "html-artifacts",
       "directory": "packages/html-artifacts",
       "name": "@velaros-ai/html-artifacts",

@@ -51,8 +51,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/cli"
   },
   "dependencies": {
-    "@velaros-ai/core": "workspace:*",
-    "@velaros-ai/serve-host": "workspace:*"
+    "@velaros-ai/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

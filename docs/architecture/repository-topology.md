@@ -14,7 +14,6 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Memory | `packages/memory` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
-| Host | `packages/remote-host`, `packages/serve-host` |
 | Surface | `packages/surface-protocol` |
 | Evaluation | `packages/agent-lab` |
 
@@ -30,6 +29,11 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | `tests/<domain>/` | Cross-package or maintained domain test suites |
 | `docs/` | Public architecture, specifications, guides, and decision records |
 | `component-library/` | UI component catalog consuming `@velaros-ai/ui` |
+
+Product composition and release repositories depend on these packages through published APIs. In
+particular, terminal UI, Host composition, and remote-node transport are owned by the independent
+[VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal) repository; Platform must not
+import its product source.
 
 ## Adding or moving a package
 

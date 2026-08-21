@@ -97,13 +97,9 @@ const Domains = [
     globs: ['packages/html-artifacts/**'],
   },
   {
-    name: 'host',
+    name: 'document-renderer',
     config: kernelConfig,
-    globs: [
-      'packages/serve-host/**',
-      'products/document-renderer/**',
-      'products/host/**',
-    ],
+    globs: ['products/document-renderer/**'],
   },
 ]
 

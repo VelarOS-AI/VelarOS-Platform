@@ -17,7 +17,7 @@ export interface FormatVelarosCliSuccessInput {
   result: unknown
   json: boolean
   text?: string
-  /** 命令执行成功但探针结果为 false 时允许返回非零，例如 `serve status`。 */
+  /** 命令执行成功但探针结果为 false 时允许返回非零，例如产品注入的 `status` 探针。 */
   exitCode?: number
 }
 

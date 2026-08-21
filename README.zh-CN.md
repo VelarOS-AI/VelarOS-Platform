@@ -14,7 +14,8 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 仓库结构
 
-VelarOS Platform 是包含 19 个包的 Bun workspace。各包独立遵循 semver，并通过统一的 `velaros.platform` 代号声明跨包兼容性。
+VelarOS Platform 包含 18 个 package workspace，其中 17 个独立发布。公开包各自遵循 semver，
+并通过统一的 `velaros.platform` 代号声明跨包兼容性。
 
 | 领域 | 包 |
 | --- | --- |
@@ -26,7 +27,6 @@ VelarOS Platform 是包含 19 个包的 Bun workspace。各包独立遵循 semve
 | 记忆 | `@velaros-ai/memory` |
 | UI | `@velaros-ai/ui` |
 | HTML 工件 | `@velaros-ai/html-artifacts` |
-| Host | `@velaros-ai/remote-host`、`@velaros-ai/serve-host` |
 | Surface 协议 | `@velaros-ai/surface-protocol` |
 | 评测 | `@velaros-ai/agent-lab` |
 
@@ -51,8 +51,8 @@ bun run check
 `bun run check` 是合入总门：构建全部包、类型检查、lint、测试、架构边界和公开发布不变量必须同时通过。
 
 架构、包边界与开发者指南从[文档索引](docs/readme.md)开始阅读。
-独立安装、以终端为唯一运行界面的 Host 产品及其原生发布流程见
-[`docs/host-release.md`](docs/host-release.md)。
+独立安装的终端产品、Host 组合、远程节点传输与原生发布生命周期现归
+[VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal) 所有。
 
 ## 贡献与安全
 

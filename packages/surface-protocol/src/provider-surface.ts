@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * Provider-owned Agent Surface contract used by web extensions and other thin
- * clients. It is deliberately host-neutral: Desktop and `velaros serve` are
+ * clients. It is deliberately host-neutral: Desktop and VelarOS Terminal are
  * peer implementations of this boundary.
  */
 export const ProviderSurfaceProtocolVersion = 1 as const

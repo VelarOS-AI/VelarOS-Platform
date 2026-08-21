@@ -9,8 +9,7 @@ Office 或 Memory 的模型能力复制成另一套 CLI。领域原生命令已�
 
 ## 给谁使用
 
-- 用户、Agent 与 CI：通过 `velaros agent ...` 查看工作区 Agent 任务制品，通过
-  `velaros serve ...` 启动或管理可选的无界面 Velar Host。
+- 用户、Agent 与 CI：通过 `velaros agent ...` 查看工作区 Agent 任务制品。
 - 产品开发者：使用 `VelarosCliRouter` 显式注册产品自有的运维命名空间。
 
 Desktop、Workbench 与 Extension 都不拥有这条命令；应用只在开发或部署流程中消费 CLI，
@@ -19,7 +18,7 @@ Desktop、Workbench 与 Extension 都不拥有这条命令；应用只在开发�
 ## 安装与命令
 
 配置好 VelarOS GitHub Packages 权限后，全局安装 `@velaros-ai/cli` 即可获得唯一的 `velaros`
-可执行文件；仓库开发依赖则使用 `bun add --dev @velaros-ai/cli`。不要单独从 Host 包寻找第二个入口。
+可执行文件；仓库开发依赖则使用 `bun add --dev @velaros-ai/cli`。
 
 ```sh
 npm install --global @velaros-ai/cli
@@ -30,24 +29,11 @@ npm install --global @velaros-ai/cli
 velaros help
 velaros agent manifest --json
 velaros agent status --workspace-root . [--task-id <id>|--latest] [--full] [--json]
-velaros serve [start] [--project-root /path/to/project] [--data-root /path/to/data]
-velaros serve status [--data-root /path/to/data] [--json]
-velaros serve config show [--data-root /path/to/data] [--json]
-velaros serve config apply --file ./host-config-update.json [--data-root /path/to/data] [--json]
-velaros serve computer probe [--data-root /path/to/data] [--json]
-velaros serve computer install [--data-root /path/to/data] [--python COMMAND] [--json]
-velaros serve extension pair [--data-root /path/to/data] [--json]
-velaros serve extension disconnect [--data-root /path/to/data] [--json]
-velaros serve remote pair [--data-root /path/to/data] [--json]
-velaros serve remote revoke [--data-root /path/to/data] [--json]
 ```
 
-可用 `velaros serve config show > host-config-update.json` 生成可编辑配置，再通过 `config apply`
-应用；扩大高风险能力时，必须在文件的 `confirmations` 中显式确认命令返回的项目。
-
-`agent` 只读取 `.velaros/agent-runs`；`serve` 的 Host 实现、权限、数据根、本地管理 IPC 与
-Extension Bridge 全部仍由 `@velaros-ai/serve-host` 拥有，CLI 只注册、转发前台事件并格式化其
-命名空间结果。Host 不提供网页控制面，也不开放管理 HTTP 端口。
+`agent` 只读取 `.velaros/agent-runs`。原 `serve` 产品命名空间已迁移到独立的
+[VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal)，其命令入口是 `velar`；
+Platform CLI 不再依赖或装配 Terminal 的运行时、权限、数据根、IPC 与 Extension Bridge。
 
 ## 公共入口
 
@@ -56,7 +42,7 @@ Extension Bridge 全部仍由 `@velaros-ai/serve-host` 拥有，CLI 只注册、
 | `@velaros-ai/cli` | `VelarosCliRouter`、`createVelarosCliRouter()` 与相关类型 |
 | `@velaros-ai/cli/cli` | `main()` 与 Router 库面；导入无副作用，真实 bin 使用独立入口启动 |
 
-默认注册 `agent` 与 `serve`。产品可以显式注入其他非工具型运维命名空间；路由器不维护领域
+默认只注册 `agent`。产品可以显式注入其他非工具型运维命名空间；路由器不维护领域
 白名单，也不自动扫描 PATH 或安装目录，避免命令集合随机器环境漂移。
 
 ```ts

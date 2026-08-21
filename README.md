@@ -14,7 +14,8 @@ The source code is licensed under the [Apache License 2.0](LICENSE). Third-party
 
 ## Repository structure
 
-VelarOS Platform is a Bun workspace with 19 packages. Packages are versioned independently and declare a shared `velaros.platform` generation for cross-package compatibility.
+VelarOS Platform has 18 package workspaces, 17 of which are published independently. Published
+packages declare a shared `velaros.platform` generation for cross-package compatibility.
 
 | Domain | Packages |
 | --- | --- |
@@ -26,7 +27,6 @@ VelarOS Platform is a Bun workspace with 19 packages. Packages are versioned ind
 | Memory | `@velaros-ai/memory` |
 | UI | `@velaros-ai/ui` |
 | HTML artifacts | `@velaros-ai/html-artifacts` |
-| Hosts | `@velaros-ai/remote-host`, `@velaros-ai/serve-host` |
 | Surface protocol | `@velaros-ai/surface-protocol` |
 | Evaluation | `@velaros-ai/agent-lab` |
 
@@ -55,8 +55,8 @@ bun run check
 `bun run check` is the merge gate. It builds all packages, type-checks, lints, runs tests, validates architectural boundaries, and checks public-release invariants.
 
 Start with the [documentation index](docs/readme.md) for architecture, package boundaries, and developer guides.
-The independently installable, terminal-first Host product and its native release flow are documented in
-[`docs/host-release.md`](docs/host-release.md).
+The independently installable terminal product, Host composition, remote-node transport, and native
+release lifecycle now live in [VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal).
 
 ## Contributing and security
 

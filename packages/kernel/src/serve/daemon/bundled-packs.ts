@@ -18,7 +18,7 @@ import { type KernelModStore, registerSystemModPacks } from './mod-store'
  * 依赖方向(§15.2 ⑤→④→③→②)决定了**谁能编进来**:
  *  - 本包是第 ② 层的 serve 配件,不认识任何具体能力包(workspace / computer-runtime /
  *    Project / System …),所以本文件的 bundled 清单里只有**内核自己能构造**的 sidecar 目录桩;
- *  - 具体能力的 bundled pack 归**宿主**(第 ⑤ 层:Desktop / Workbench / `velaros serve`)的
+ *  - 具体能力的 bundled pack 归**宿主**(第 ⑤ 层:Desktop / Workbench / VelarOS Terminal)的
  *    构建图:宿主静态 import 能力包的 `create*KernelModule()`,用 {@link createBundledModPack}
  *    折成记录,经 `bootKernelDaemon({ modPacks })` 注入。
  *
