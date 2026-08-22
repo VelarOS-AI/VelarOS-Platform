@@ -182,7 +182,7 @@ async function findClickPointFromBounds(
   return { x: centerX, y: centerY }
 }
 
-function normalizeMatchText(value: Nullable<string> | undefined): string {
+function normalizeMatchText(value: Optional<Nullable<string>>): string {
   return value?.trim().toLowerCase() ?? ''
 }
 

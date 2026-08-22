@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 /** 为二进制对象创建对象地址，并在替换或卸载时释放。 */
-export function useObjectUrl(blob: Blob | undefined): string | undefined {
+export function useObjectUrl(blob: Optional<Blob>): Optional<string> {
   const [url, setUrl] = useState<string | undefined>(undefined)
 
   useEffect(() => {

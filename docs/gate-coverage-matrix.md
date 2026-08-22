@@ -41,7 +41,7 @@ The full check builds every package, runs type checking, lint, tests, maintained
 
 | Gate | Responsibility |
 | --- | --- |
-| `check:code-style` | Prevents new architecture/style violations beyond the reviewed baseline |
+| `check:code-style` | Requires zero language-level architecture/style errors without a baseline |
 | `check:dependency-security` | Runs patched-dependency probes and the documented dependency audit policy |
 | `check:devtools-performance-engine` | Rebuilds and byte-compares the pinned third-party performance bundle |
 | `check:public-readiness` | Verifies public metadata, licenses, links, secret patterns, and local-path hygiene |
@@ -49,7 +49,7 @@ The full check builds every package, runs type checking, lint, tests, maintained
 
 ## Baselines
 
-Baselines are ratchets, not exemptions for new code. A change may reduce a baseline after fixing findings; it must not regenerate a larger baseline to make a gate pass. High-risk categories such as swallowed errors and unlogged failures should be removed before cosmetic categories.
+Domain compatibility baselines are ratchets, not exemptions for new code. A change may reduce a domain baseline after fixing findings; it must not regenerate a larger baseline to make a gate pass. `check:code-style` deliberately has no baseline: language-level errors must be fixed in source. High-risk categories such as swallowed errors and unlogged failures should be removed before cosmetic categories.
 
 ## Pull request expectation
 

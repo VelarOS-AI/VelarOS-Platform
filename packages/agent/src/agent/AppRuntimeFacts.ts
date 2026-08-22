@@ -15,13 +15,13 @@ export interface AppRuntimeFacts {
   /** 平台标识，如 "darwin" / "win32" / "linux"。 */
   platform: Nullable<string>
   /** CPU 架构，如 "arm64" / "x64"。 */
-  arch?: Nullable<string>
+  arch?: LooseOptional<string>
   /** 操作系统版本，如 Darwin kernel release 或 Windows release。 */
-  osRelease?: Nullable<string>
+  osRelease?: LooseOptional<string>
   /** 实际承载命令执行的 shell 路径。 */
-  shell?: Nullable<string>
+  shell?: LooseOptional<string>
   /** 当前用户主目录。 */
-  homeDir?: Nullable<string>
+  homeDir?: LooseOptional<string>
   /** userData 存储根目录（会话数据与本地索引等落盘位置的父目录）。 */
   userDataRoot: Nullable<string>
   /** velar hooks 本地 HTTP 端点 URL，如 "http://127.0.0.1:48741"。 */

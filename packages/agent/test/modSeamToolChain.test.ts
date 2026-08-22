@@ -233,7 +233,7 @@ describe('mod seam tool chain', () => {
     seams.register({
       modId: 'probe.mod',
       id: 'before',
-      seam: 'tool-call:before',
+      event: 'tool-call:before',
       handler: (event) => {
         seen.push(`before:${event.toolName}:${event.sessionId ?? 'null'}`)
         return { args: { ...event.args, value: 'rewritten' } }
@@ -242,7 +242,7 @@ describe('mod seam tool chain', () => {
     seams.register({
       modId: 'probe.mod',
       id: 'after',
-      seam: 'tool-result:after',
+      event: 'tool-result:after',
       handler: (event) => {
         seen.push(`after:${event.toolName}`)
         return { result: { rewritten: true, from: event.result } }
@@ -282,7 +282,7 @@ describe('mod seam tool chain', () => {
     seams.register({
       modId: 'probe.mod',
       id: 'lifecycle-only',
-      seam: 'session:start',
+      event: 'session:start',
       handler: () => {
         sessionHookCalls += 1
       },

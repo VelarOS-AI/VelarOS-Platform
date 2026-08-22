@@ -28,10 +28,7 @@ export function wrapMemoryKeyV2(root: MemoryWrappingRootV2, key: Buffer): string
   assertRawMemoryKeyV2(key)
   const wrapped = root.wrapKey(Buffer.from(key))
   if (!Buffer.isBuffer(wrapped) || wrapped.length === 0) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      'wrapping root 返回了无效的密钥信封。'
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'wrapping root 返回了无效的密钥信封。')
   }
   return wrapped.toString('base64')
 }
@@ -55,26 +52,17 @@ export function unwrapMemoryKeyV2(root: MemoryWrappingRootV2, wrappedBase64: str
 
 export function decodeCanonicalBase64V2(value: string, label: string): Buffer {
   if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      `${label} 不是规范 base64。`
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.corruption, `${label} 不是规范 base64。`)
   }
   const decoded = Buffer.from(value, 'base64')
   if (decoded.toString('base64') !== value) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      `${label} 不是规范 base64。`
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.corruption, `${label} 不是规范 base64。`)
   }
   return decoded
 }
 
 export function assertRawMemoryKeyV2(key: Buffer): void {
   if (!Buffer.isBuffer(key) || key.length !== 32) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      'memory key 必须是 32 字节。'
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'memory key 必须是 32 字节。')
   }
 }

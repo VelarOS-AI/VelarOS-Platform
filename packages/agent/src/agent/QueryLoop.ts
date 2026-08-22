@@ -272,10 +272,11 @@ class QueryLoop<
     /** 宿主工具集合的类别索引。 */
     private readonly getToolNamesForCategories: QueryLoopToolCategoryResolver,
     /**
-     * 可选执行观测 span 端口（#37 阶段 C 片 2；D6 端口纪律）。缺省 no-op——无宿主账本装配时零观测零付费。
-     * 装配时每次子 Agent 委派 = 一个**独立顶层 run span**（新 runId、`parentSpanId:null`、落父会话同一 span
-     * 账本、靠 sessionId 与父关联，不嵌父 dispatch tool span），下辖本子 Agent 每轮的 turn/model span，
-     * 并把 turn scope 作 tool span 开启器注入本轮 QueryTurn 的 ToolExecutor。
+     * 可选执行观测区段端口（#37 阶段 C 片 2；D6 端口纪律）。缺省为空操作，未装配宿主账本时
+     * 不产生观测与开销。装配后，每次子智能体委派都会创建独立的顶层运行区段：使用新的
+     * `runId`，令 `parentSpanId` 为空，并写入父会话的同一账本；它通过 `sessionId` 与父级关联，
+     * 不嵌入父级派发工具区段。该区段下辖子智能体各轮的回合与模型区段，并把回合作用域作为
+     * 工具区段开启器注入本轮 `QueryTurn` 的 `ToolExecutor`。
      */
     private readonly spanScopeFactory: LooseOptional<ExecutionSpanScopeFactory> = null,
     executionLimitOverrides: AgentExecutionLimitOverrides = {},

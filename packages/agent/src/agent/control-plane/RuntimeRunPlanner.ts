@@ -71,7 +71,7 @@ class ContextRunPlanner {
   }
 
   private resolveToolSchemaBudgetScale(value: unknown): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return 1
+    if (!isFiniteNumber(value)) return 1
     return Math.min(1, Math.max(0.25, value))
   }
 

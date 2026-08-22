@@ -1,4 +1,6 @@
 import type { TurnContextDelta, TurnContextSourceId } from '#contracts'
+import { isUndefined } from '#internal/runtime'
+
 
 export interface TurnContextChipGroup {
   id: string
@@ -33,7 +35,7 @@ export function groupTurnContextChips(deltas: readonly TurnContextDelta[]): Turn
     }
 
     const existingIndex = groupsByLabel.get(baseLabel)
-    if (existingIndex === undefined) {
+    if (isUndefined(existingIndex)) {
       groupsByLabel.set(baseLabel, groups.length)
       groups.push({
         id: delta.id,

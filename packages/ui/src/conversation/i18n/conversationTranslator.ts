@@ -4,6 +4,8 @@ import type {
 } from './ConversationLocalizationProvider'
 
 import type { AppLocale } from '#contracts'
+import { isNotNull,toNullable } from '#internal/runtime'
+
 
 /** React 外纯模型消费的最小翻译端口。 */
 export interface ConversationTranslator {
@@ -24,11 +26,11 @@ export class ConversationTranslatorRuntime implements ConversationTranslator {
   private translator: Nullable<ConversationTranslator>
 
   public constructor(translator?: ConversationTranslator) {
-    this.translator = translator ?? null
+    this.translator = toNullable(translator)
   }
 
   public get isConfigured(): boolean {
-    return this.translator !== null
+    return isNotNull(this.translator)
   }
 
   public configure(translator: ConversationTranslator): this {

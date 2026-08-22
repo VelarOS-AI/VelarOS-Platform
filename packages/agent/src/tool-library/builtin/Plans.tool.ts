@@ -3,7 +3,7 @@ import { z } from 'zod'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
-import { isPresent, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
 import { defineVelaTool } from '../defineVelaTool'
 
@@ -142,7 +142,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     // 空数组视为"没有要完成的步骤"(宽容:模型重报计划时常带 complete_step: [])。
     const hasComplete =
       isPresent(input.complete_step) &&
-      !(Array.isArray(input.complete_step) && input.complete_step.length === 0)
+      !(isArray(input.complete_step) && isEmpty(input.complete_step))
 
     // 空调用 = 无操作:回带当前计划状态,不报错(宽容:模型偶尔空传不该被判失败)。
     if (!hasPlan && !hasComplete && !input.lifecycle && !input.explanation)

@@ -1,3 +1,5 @@
+import { toNullable } from '@velaros-ai/core'
+
 import type {
   AgentProviderRuntimeConfig,
   ChatProviderId,
@@ -7,6 +9,7 @@ import type {
   ModelProviderCollection,
   ModelProviderConfiguredInput,
 } from './ModelProviderCollection'
+
 
 export type ProviderRuntimeAvailabilityOptions = ModelProviderAvailabilityOptions
 export type ProviderRuntimeConfiguredInput = ModelProviderConfiguredInput
@@ -43,14 +46,13 @@ export function getFirstConfiguredProviderRuntimeConfig(
   options: ProviderRuntimeAvailabilityOptions = {},
 ): Nullable<AgentProviderRuntimeConfig> {
   return (
-    normalizeProviderRuntimeConfigs(providerCollection, providerRuntimeConfigs).find(
+    toNullable(normalizeProviderRuntimeConfigs(providerCollection, providerRuntimeConfigs).find(
       (runtimeConfig) =>
         isProviderRuntimeConfigured(providerCollection, {
           runtimeConfig,
           providerRuntimeConfigs,
           ...options,
         }),
-    )
-    ?? null
+    ))
   )
 }

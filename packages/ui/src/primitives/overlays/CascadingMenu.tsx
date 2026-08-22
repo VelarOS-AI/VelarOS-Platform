@@ -101,7 +101,7 @@ export interface CascadingMenuProps {
 const DefaultCloseDelayMs = 220
 
 function composeHandler<EventType>(
-  userHandler: ((event: EventType) => void) | undefined,
+  userHandler: Optional<((event: EventType) => void)>,
   menuHandler: (event: EventType) => void
 ): (event: EventType) => void {
   return (event) => {

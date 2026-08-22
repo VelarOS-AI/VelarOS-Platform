@@ -79,7 +79,7 @@ function parseModelSelection(value: unknown): ModelSelection {
 
 function parseModelRuntimeContext(value: unknown): ModelRuntimeContext {
   const record = requireRecord(value, 'Model Runtime context 必须显式提供。')
-  if (!Array.isArray(record.providerRuntimeConfigs)) {
+  if (!isArray(record.providerRuntimeConfigs)) {
     throw new AppError(
       'VALIDATION',
       'Model Runtime context.providerRuntimeConfigs 必须是数组。'
@@ -89,7 +89,7 @@ function parseModelRuntimeContext(value: unknown): ModelRuntimeContext {
     record.openRouter,
     'Model Runtime context.openRouter 必须显式提供。'
   )
-  if (typeof openRouter.useFreeModelsForDebug !== 'boolean') {
+  if (!isBoolean(openRouter.useFreeModelsForDebug)) {
     throw new AppError(
       'VALIDATION',
       'Model Runtime context.openRouter.useFreeModelsForDebug 必须是布尔值。'
@@ -110,7 +110,7 @@ function parseRuntimeConfig(value: unknown): AgentProviderRuntimeConfig {
     record.provider,
     'providerRuntimeConfigs.provider 必须显式提供。'
   )
-  if (typeof record.enabled !== 'boolean') {
+  if (!isBoolean(record.enabled)) {
     throw new AppError('VALIDATION', `${provider}.enabled 必须是布尔值。`)
   }
 

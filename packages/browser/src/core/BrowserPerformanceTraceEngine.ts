@@ -1,5 +1,6 @@
 import { gzipSync } from 'node:zlib'
 
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -104,7 +105,7 @@ export class BrowserPerformanceTraceEngine {
     events: unknown[],
     metadata: BrowserTraceParseMetadata
   ): Promise<BrowserParsedTraceRecording> {
-    if (events.length === 0) {
+    if (isEmpty(events)) {
       throw new AppError('EXECUTION_FAILED', '性能 trace 没有采集到任何事件。')
     }
 

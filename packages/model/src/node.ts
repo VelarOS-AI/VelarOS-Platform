@@ -1,8 +1,7 @@
 /**
- * Node.js host entry.
+ * `Node.js` 宿主入口。
  *
- * This entry extends the portable package root with filesystem-backed provider
- * script loading, VM adapters, and the default runtime composition.
+ * 本入口在可移植包根能力上补充基于文件系统的提供方脚本加载、虚拟机适配器和默认运行时装配。
  */
 export * from './index'
 export {

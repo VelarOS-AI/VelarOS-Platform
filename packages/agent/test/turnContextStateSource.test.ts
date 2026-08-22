@@ -8,12 +8,12 @@ import {
 /**
  * 状态型 source 的「后来者取代」语义。
  *
- * 实测事故：游戏能力重建时如实记了一条「游戏已停止」，随后 game:run 记了运行态，
- * 两条一起投给下一回合 → 模型读了前一条，断定「游戏已经停止了，需要先启动它」。
+ * 实测事故：运行能力重建时如实记了一条「服务已停止」，随后启动操作记了运行态，
+ * 两条一起投给下一回合 → 模型读了前一条，断定「服务已经停止了，需要先启动它」。
  * 陈旧不是记错，是没失效。这一组把失效钉死，同时钉死事件型 source 不受影响。
  */
 
-const SourceId = 'game.scene-state' as never
+const SourceId = 'example.service-state' as never
 
 function peekLabels(ledger: TurnContextLedger, afterSeq = 0): string[] {
   return ledger.peek({ afterSeq, generation: null }).deltas.map((delta) => delta.label)
@@ -23,23 +23,23 @@ describe('state-like turn context sources supersede instead of accumulate', () =
   test('replaceLatest keeps only the newest state', () => {
     const ledger = new TurnContextLedger(SourceId, 100)
 
-    ledger.replaceLatest({ label: '游戏已停止', summaryText: '游戏运行态已停止。' })
-    ledger.replaceLatest({ label: 'main · 1 个实体 · 可见 1', summaryText: '正在运行。' })
+    ledger.replaceLatest({ label: '服务已停止', summaryText: '服务运行态已停止。' })
+    ledger.replaceLatest({ label: '服务正在运行', summaryText: '正在运行。' })
 
     // 从零 cursor 读：只应看到当前状态，绝不能同时看到「已停止」。
-    expect(peekLabels(ledger)).toEqual(['main · 1 个实体 · 可见 1'])
+    expect(peekLabels(ledger)).toEqual(['服务正在运行'])
   })
 
   test('a consumer that never read the stale state never sees it', () => {
     const ledger = new TurnContextLedger(SourceId, 100)
 
-    ledger.replaceLatest({ label: '游戏已停止', summaryText: '停了。' })
+    ledger.replaceLatest({ label: '服务已停止', summaryText: '停了。' })
     // 消费方还没 peek（cursor 仍在 0），此时新状态到达。
-    ledger.replaceLatest({ label: '游戏正在运行', summaryText: '跑起来了。' })
+    ledger.replaceLatest({ label: '服务正在运行', summaryText: '跑起来了。' })
 
     const labels = peekLabels(ledger)
-    expect(labels).not.toContain('游戏已停止')
-    expect(labels).toEqual(['游戏正在运行'])
+    expect(labels).not.toContain('服务已停止')
+    expect(labels).toEqual(['服务正在运行'])
   })
 
   test('seq keeps advancing so an old cursor still receives the new state', () => {
@@ -68,30 +68,30 @@ describe('state-like turn context sources supersede instead of accumulate', () =
   test('append still accumulates for event-like sources', () => {
     const ledger = new TurnContextLedger(SourceId, 100)
 
-    ledger.append({ label: '3 条游戏报错', summaryText: 'x' })
-    ledger.append({ label: '游戏报错已清零', summaryText: 'y' })
+    ledger.append({ label: '3 条运行错误', summaryText: 'x' })
+    ledger.append({ label: '运行错误已清零', summaryText: 'y' })
 
     // 事件型 source 的行为一个字都不能变。
-    expect(peekLabels(ledger)).toEqual(['3 条游戏报错', '游戏报错已清零'])
+    expect(peekLabels(ledger)).toEqual(['3 条运行错误', '运行错误已清零'])
   })
 
   test('replaceLatest only clears the source it is called on', () => {
     const sceneState = new TurnContextSessionLedgers(SourceId, { notifyRenderer: false })
-    const runtimeErrors = new TurnContextSessionLedgers('game.runtime-errors' as never, {
+    const runtimeErrors = new TurnContextSessionLedgers('example.runtime-errors' as never, {
       notifyRenderer: false,
     })
 
-    runtimeErrors.append('s1', { label: '3 条游戏报错', summaryText: 'x' })
-    sceneState.replaceLatest('s1', { label: '游戏已停止', summaryText: 'a' })
-    sceneState.replaceLatest('s1', { label: '游戏正在运行', summaryText: 'b' })
+    runtimeErrors.append('s1', { label: '3 条运行错误', summaryText: 'x' })
+    sceneState.replaceLatest('s1', { label: '服务已停止', summaryText: 'a' })
+    sceneState.replaceLatest('s1', { label: '服务正在运行', summaryText: 'b' })
 
     // 另一个 source 的账本不受牵连（五源单 cursor 协议里各源账本互不相干）。
     expect(
       runtimeErrors.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
-    ).toEqual(['3 条游戏报错'])
+    ).toEqual(['3 条运行错误'])
     expect(
       sceneState.peek('s1', { afterSeq: 0, generation: null }).deltas.map((d) => d.label),
-    ).toEqual(['游戏正在运行'])
+    ).toEqual(['服务正在运行'])
   })
 
   test('replaceLatest is scoped per session', () => {

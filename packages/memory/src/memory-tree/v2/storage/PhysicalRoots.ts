@@ -55,7 +55,9 @@ export function formatBackupSnapshotNameV2(at: number | Date = Date.now()): stri
 /** index 根内代际目录路径（`index/generation-<n>/`）。 */
 export function indexGenerationDirV2(indexDir: string, generation: number): string {
   if (!Number.isSafeInteger(generation) || generation < 1) {
-    throw new AppError('VALIDATION', 'index 代号必须是正整数。', undefined, { generation })
+    throw new AppError('VALIDATION', 'index 代号必须是正整数。', undefined, {
+      generation,
+    })
   }
   return join(indexDir, `generation-${generation}`)
 }

@@ -8,14 +8,14 @@ import type { TimerLease } from '#internal/timerScope'
 
 const LiveStatusMinVisibleMs = 900
 
-function normalizeLiveStatusText(value: string | undefined): string | undefined {
+function normalizeLiveStatusText(value: Optional<string>): Optional<string> {
   const normalized = value?.trim()
   return optionalWhen(normalized && !isEmpty(normalized), normalized)
 }
 
 /** 对话 live status 文案队列：最短可见时长内不闪烁切换。 */
 export function useQueuedLiveStatusText(
-  value: string | undefined,
+  value: Optional<string>,
   enabled: boolean,
   resetKey: string
 ): string | undefined {

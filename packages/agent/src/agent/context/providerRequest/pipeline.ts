@@ -1,10 +1,9 @@
 /**
- * Ring 1 治理管线契约（宪章 §2 六 stage）。
+ * 第一环治理管线契约，对应宪章 §2 的六个阶段。
  *
- * stage 统一形态：`(draft, scratch) → draft + rewriteSignals`——host 可整序重排 / 替换单
- * stage / 经 session_before_compact 语义整体接管（本批不建扩展宿主，类型上可插拔即可）。
- * scratch 是跨 stage 的共享上下文：单体现在共享的中间扫描结果（ToolReferenceScan 等）落此，
- * 拆分后各 stage 从 scratch 取用，禁止重复全量扫描（红队点名的性能悬崖）。
+ * 阶段统一接受草稿与临时上下文，返回改写后的草稿及历史改写信号。宿主可以重排或替换单个阶段，
+ * 也可通过 `session_before_compact` 整体接管语义。临时上下文保存跨阶段共享的扫描结果，例如
+ * `ToolReferenceScan`；拆分后的各阶段必须复用这些结果，禁止重复执行全量扫描。
  */
 import type { ModelMessage } from 'ai'
 

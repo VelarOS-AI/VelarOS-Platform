@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
+import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
@@ -16,18 +17,18 @@ import {
 export const MemoryDreamPipelineVersionV2 = 1
 
 export interface MemoryDreamModelProfileV2 {
-  readonly provider: string | null
-  readonly model: string | null
+  readonly provider: Nullable<string>
+  readonly model: Nullable<string>
 }
 
 export interface MemoryDreamEvidenceDescriptorV2 {
   readonly id: string
   readonly ingestSequence: number
   readonly eligibilityState: 'active' | 'source_deleted' | 'excluded' | 'erased'
-  readonly payloadBlobRef: string | null
-  readonly payloadCommitment: string | null
-  readonly metadataBlobRef: string | null
-  readonly metadataCommitment: string | null
+  readonly payloadBlobRef: Nullable<string>
+  readonly payloadCommitment: Nullable<string>
+  readonly metadataBlobRef: Nullable<string>
+  readonly metadataCommitment: Nullable<string>
 }
 
 export interface MemoryDreamStartedRunV2 {
@@ -50,10 +51,9 @@ export interface MemoryDreamSkippedRunV2 {
   readonly treeVersionBefore: number
 }
 
-export type StartMemoryDreamRunResultV2 =
-  | MemoryDreamStartedRunV2
-  | MemoryDreamSkippedRunV2
-  | null
+export type StartMemoryDreamRunResultV2 = Nullable<
+  MemoryDreamStartedRunV2 | MemoryDreamSkippedRunV2
+>
 
 export interface MemoryDreamValidationStatsV2 {
   readonly tokenUsage: number
@@ -64,7 +64,7 @@ export interface MemoryDreamValidationStatsV2 {
 
 export interface CommitMemoryDreamTreeInputV2 extends MemoryDreamValidationStatsV2 {
   readonly ops: readonly MemoryTreeDiffOpV2[]
-  readonly identityChange?: MemoryTreeIdentityChangeV2 | null
+  readonly identityChange?: LooseOptional<MemoryTreeIdentityChangeV2>
   readonly activeIdentityEpochId: string
   readonly globalMainlineNodeId: string
   readonly committedAt?: number
@@ -73,7 +73,7 @@ export interface CommitMemoryDreamTreeInputV2 extends MemoryDreamValidationStats
 
 export interface MaterializedMemoryDreamEvidenceV2 {
   readonly payload: Buffer
-  readonly metadata: Buffer | null
+  readonly metadata: Nullable<Buffer>
 }
 
 interface MemoryDreamRunRowV2 {
@@ -84,8 +84,8 @@ interface MemoryDreamRunRowV2 {
   frontier_after: number
   tree_version_before: number
   tree_version_after: number
-  model_provider: string | null
-  model: string | null
+  model_provider: Nullable<string>
+  model: Nullable<string>
   token_usage: number
   candidate_count: number
   accepted_count: number
@@ -96,10 +96,10 @@ interface MemoryDreamEvidenceRowV2 {
   id: string
   ingest_sequence: number
   eligibility_state: MemoryDreamEvidenceDescriptorV2['eligibilityState']
-  payload_blob_ref: string | null
-  payload_commitment: string | null
-  metadata_blob_ref: string | null
-  metadata_commitment: string | null
+  payload_blob_ref: Nullable<string>
+  payload_commitment: Nullable<string>
+  metadata_blob_ref: Nullable<string>
+  metadata_commitment: Nullable<string>
 }
 
 /**
@@ -156,7 +156,8 @@ export class MemoryDreamRunCoordinatorV2 {
     const existing = this.authority.database
       .prepare(`SELECT * FROM memory_dream_runs WHERE input_fingerprint = ?`)
       .get(fingerprint) as MemoryDreamRunRowV2 | undefined
-    if (existing?.state === 'committed') return {
+    if (existing?.state === 'committed')
+      return {
         kind: 'skipped',
         runId: existing.id,
         inputFingerprint: fingerprint,
@@ -262,10 +263,7 @@ export class MemoryDreamRunCoordinatorV2 {
     try {
       const metadata =
         descriptor.metadataBlobRef && descriptor.metadataCommitment
-          ? this.contentKeys.openContent(
-              descriptor.metadataBlobRef,
-              descriptor.metadataCommitment
-            )
+          ? this.contentKeys.openContent(descriptor.metadataBlobRef, descriptor.metadataCommitment)
           : null
       return { payload, metadata }
     } catch (error) {
@@ -322,7 +320,7 @@ export class MemoryDreamRunCoordinatorV2 {
     input: CommitMemoryDreamTreeInputV2
   ): CommitMemoryTreeVersionResultV2 {
     validateStatsV2(input)
-    if (input.ops.length === 0 && !input.identityChange) {
+    if (isEmpty(input.ops) && !input.identityChange) {
       throw new AppError('VALIDATION', '零结构变更批次必须使用 commitNoop。')
     }
     const row = this.readValidatingRun(runId, input)
@@ -477,7 +475,7 @@ function validateStatsV2(stats: MemoryDreamValidationStatsV2): void {
 }
 
 function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0) {
+  if (!isString(value) || value.length === 0) {
     throw new AppError('VALIDATION', `${label} 不得为空。`)
   }
 }

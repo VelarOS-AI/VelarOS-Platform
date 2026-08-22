@@ -1,3 +1,4 @@
+import { isNull, isUndefined } from '@velaros-ai/core'
 // 域：Agent 执行的**收尾闸门**（什么时候必须停下来）。
 //
 // ## 为什么轮数上限默认是 null（不是漏配）
@@ -22,11 +23,11 @@ interface AgentExecutionLimits {
   /** Goal 模式或已建立活动目标的主 Agent 墙钟硬上限。 */
   goalExecutionWallClockTimeoutMs: number
   /** 主 Agent 轮次上限；null 表示不按轮次收尾。 */
-  primaryMaxTurns: number | null
+  primaryMaxTurns: Nullable<number>
   /** 单个子 Agent 到点后的软收尾时间。 */
   subAgentSoftDeadlineMs: number
   /** 子 Agent 轮次上限；null 表示不按轮次收尾。 */
-  subAgentMaxTurns: number | null
+  subAgentMaxTurns: Nullable<number>
   /** 单次模型流连续没有任何新数据时的判死时间。 */
   modelStreamIdleTimeoutMs: number
 }
@@ -44,15 +45,13 @@ const DefaultAgentExecutionLimits = Object.freeze({
 
 function assertPositiveTimerDelay(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0 || value > MaxNativeTimerDelayMs) {
-    throw new RangeError(
-      `${field} 必须是正安全整数，且不大于 ${MaxNativeTimerDelayMs}。`
-    )
+    throw new RangeError(`${field} 必须是正安全整数，且不大于 ${MaxNativeTimerDelayMs}。`)
   }
   return value
 }
 
-function assertOptionalMaxTurns(value: number | null, field: string): number | null {
-  if (value === null) return null
+function assertOptionalMaxTurns(value: Nullable<number>, field: string): Nullable<number> {
+  if (isNull(value)) return null
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${field} 必须为 null 或正安全整数。`)
   }
@@ -62,14 +61,12 @@ function assertOptionalMaxTurns(value: number | null, field: string): number | n
 function resolveAgentExecutionLimits(
   overrides: AgentExecutionLimitOverrides = {}
 ): AgentExecutionLimits {
-  const primaryMaxTurns =
-    overrides.primaryMaxTurns === undefined
-      ? DefaultAgentExecutionLimits.primaryMaxTurns
-      : overrides.primaryMaxTurns
-  const subAgentMaxTurns =
-    overrides.subAgentMaxTurns === undefined
-      ? DefaultAgentExecutionLimits.subAgentMaxTurns
-      : overrides.subAgentMaxTurns
+  const primaryMaxTurns = isUndefined(overrides.primaryMaxTurns)
+    ? DefaultAgentExecutionLimits.primaryMaxTurns
+    : overrides.primaryMaxTurns
+  const subAgentMaxTurns = isUndefined(overrides.subAgentMaxTurns)
+    ? DefaultAgentExecutionLimits.subAgentMaxTurns
+    : overrides.subAgentMaxTurns
   const standardExecutionWallClockTimeoutMs = assertPositiveTimerDelay(
     overrides.standardExecutionWallClockTimeoutMs ??
       DefaultAgentExecutionLimits.standardExecutionWallClockTimeoutMs,
@@ -88,29 +85,18 @@ function resolveAgentExecutionLimits(
   return {
     standardExecutionWallClockTimeoutMs,
     goalExecutionWallClockTimeoutMs,
-    primaryMaxTurns: assertOptionalMaxTurns(
-      primaryMaxTurns,
-      'primaryMaxTurns'
-    ),
+    primaryMaxTurns: assertOptionalMaxTurns(primaryMaxTurns, 'primaryMaxTurns'),
     subAgentSoftDeadlineMs: assertPositiveTimerDelay(
       overrides.subAgentSoftDeadlineMs ?? DefaultAgentExecutionLimits.subAgentSoftDeadlineMs,
       'subAgentSoftDeadlineMs'
     ),
-    subAgentMaxTurns: assertOptionalMaxTurns(
-      subAgentMaxTurns,
-      'subAgentMaxTurns'
-    ),
+    subAgentMaxTurns: assertOptionalMaxTurns(subAgentMaxTurns, 'subAgentMaxTurns'),
     modelStreamIdleTimeoutMs: assertPositiveTimerDelay(
-      overrides.modelStreamIdleTimeoutMs ??
-        DefaultAgentExecutionLimits.modelStreamIdleTimeoutMs,
+      overrides.modelStreamIdleTimeoutMs ?? DefaultAgentExecutionLimits.modelStreamIdleTimeoutMs,
       'modelStreamIdleTimeoutMs'
     ),
   }
 }
 
-export {
-  DefaultAgentExecutionLimits,
-  MaxNativeTimerDelayMs,
-  resolveAgentExecutionLimits,
-}
+export { DefaultAgentExecutionLimits, MaxNativeTimerDelayMs, resolveAgentExecutionLimits }
 export type { AgentExecutionLimitOverrides, AgentExecutionLimits }

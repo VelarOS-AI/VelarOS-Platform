@@ -1,6 +1,9 @@
 /** 仅用于声明公共 API 的空值联合类型。 */
 export type Nullish = undefined | null
 
+/** 使用 `undefined` 表达缺席的值类型；属性本身可省略时仍优先使用 `?`。 */
+export type Optional<T> = T | undefined
+
 /** 仅允许 `null` 的可空值。 */
 export type Nullable<T> = T | null
 

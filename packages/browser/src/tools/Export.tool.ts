@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { stringifyPretty } from '@velaros-ai/core'
+import { isFalse, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserPageScriptBuilder, buildBrowserPageSnapshotName } from '../core'
@@ -154,7 +154,7 @@ const browserExportPage = defineBrowserTool<{
           mode: 'expression',
           timeoutMs: 15_000,
         }) as { content?: string; truncated?: boolean; url?: string }
-        if (args.save !== false && result.content) {
+        if (!isFalse(args.save) && result.content) {
           const artifactFormat =
             format === 'html' ? 'html' : format === 'markdown' ? 'markdown' : 'text'
           const saved = await createArtifactManager(ctx).writeArtifact({
@@ -213,7 +213,7 @@ const browserExportPage = defineBrowserTool<{
           mode: 'expression',
           timeoutMs: 10_000,
         })
-        if (args.save !== false) {
+        if (!isFalse(args.save)) {
           const saved = await createArtifactManager(ctx).writeArtifact({
             context,
             kind: 'extract',

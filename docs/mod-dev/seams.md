@@ -1,6 +1,6 @@
-# 拦截 seam
+# Hook 生命周期事件
 
-**用途判据**：需要**改变运行时行为**的东西走 seam；
+**用途判据**：需要**改变运行时行为**的东西走 Hook；
 需要平台**索引 / 展示 / 惰性加载**的东西走[声明贡献点](./axes/README.md)；
 平台**还没想到、无法预先枚举**的东西走开放数据面。
 
@@ -31,18 +31,19 @@ manifest 侧的声明形状见 [axes/hooks.md](./axes/hooks.md)。
 
 ### ③ 异常隔离
 
-单个钩子抛错只记诊断 `mod.seam-handler-failed` 并跳过该钩子，**绝不冒泡打断主链**。
+单个 Hook 抛错只记诊断 `mod.seam-handler-failed` 并跳过该 Hook，**绝不冒泡打断主链**。
 诊断环形缓冲上限 `MaxSeamDiagnostics = 200`。
-同步 seam 的钩子返回 thenable → `mod.seam-sync-contract-violation`，本次结果被忽略。
+超过声明的 `timeoutMs`（缺省 5000ms）会 abort `AgentModHookContext.signal` 并记
+`mod.hook-timeout`。同步事件的 Hook 返回 thenable → `mod.seam-sync-contract-violation`，本次结果被忽略。
 
 > **零钩子零开销**：缺省实例零钩子——所有 `dispatch*` 走空数组快路径返回空结果，
 > 主链行为逐字节不变。
 
 ---
 
-## 二、闭集 15 个 kind
+## 二、闭集 15 个 event
 
-`AgentModSeamKinds`：
+`AgentModHookEvents`（`AgentModSeamKinds` 仅作过渡导出别名）：
 
 ```
 session:start          session:end            turn:start
@@ -54,17 +55,17 @@ compaction:before      skill:select           diagnostic:publish
 
 **mod 只能挂接，不能发明新钩子。**
 
-### 已真接线的四个派发点（覆盖 5 个 kind）
+### 已真接线的四个派发点（覆盖 5 个 event）
 
 **这张表在代码里有对应物**：`WiredSeamKindsByDispatcher`（`packages/agent/src/mods/AgentModSeams.ts`）
 按派发方法名登记它读取的 kind，对「类上所有 `dispatch*` 方法」保持类型层穷举——新增一个派发方法
 却忘了登记就编译红。`WiredSeamKinds` 由它派生，是「今天哪些钩子真会被调用」的唯一事实面。
 
-| seam | 调用点 | 语义 |
+| event | 调用点 | 语义 |
 | --- | --- | --- |
 | `tool-call:before` | `packages/agent/src/tools/Executor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
 | `tool-result:after` | `packages/agent/src/tools/Executor.ts` `finalizeResult()`（物化之前） | 可改写 result / error；放在物化前保证模型面与 UI 面同源 |
-| `turn-context:assemble` | `packages/agent/src/agent/ContextBuilder.ts` `build()`（段排序后、预算裁剪前） | **同步**派发；可追加 dynamic 段，追加段同样计入 prompt 预算 |
+| `turn-context:assemble` | `packages/agent/src/agent/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
 | `session:start` / `session:end` | `packages/agent/src/kernel/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 `finally`，异常路径也发 |
 
 四个调用点全部走 `seams?.has(kind)` 快路径。
@@ -132,14 +133,17 @@ interface AgentModSessionLifecycleEvent {
 
 ---
 
-## 四、折叠语义（多个 mod 挂同一缝时）
+## 四、折叠语义（多个 Mod 挂同一 event 时）
 
-| seam | 派发方式 | 折叠规则 |
+| event | 派发方式 | 折叠规则 |
 | --- | --- | --- |
 | `tool-call:before` | 异步，按优先级顺序 | **第一个给出 `block` 的钩子即短路**（拦下只减不增）；`args` 沿优先级顺序**逐个折叠**，后一个钩子看到的是前一个改写后的入参 |
 | `tool-result:after` | 异步，按优先级顺序 | `result` / `error` 逐个折叠；无人改动则返回空结果（原值原样） |
-| `turn-context:assemble` | **同步** | 各钩子追加的段取**并集**；每条追加段的 id 被强制加前缀 `` `${modId}.${item.id}` `` |
-| `session:start` / `session:end` | 异步，顺序 await | 纯通知，无结果面 |
+| `turn-context:assemble` | 异步、按优先级顺序 | 各 Hook 追加的段取**并集**；每条追加段的 id 被强制加前缀 `` `${modId}.${item.id}` `` |
+| `session:start` / `session:end` | 异步，blocking 并发等待 | 纯通知，无结果面；background 只启动不阻塞 |
+
+`matcher` 在折叠前由 dispatcher 统一判定；`background` 永远忽略 outcome。稳定排序是
+`priority → modId → hookId`，不依赖包发现顺序。
 
 `turn-context:assemble` 的 id 前缀不是装饰：没有它，两个 mod 追加同名段就会在下游互相覆盖。
 

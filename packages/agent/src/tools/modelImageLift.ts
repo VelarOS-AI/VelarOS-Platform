@@ -1,4 +1,4 @@
-import { isBlank } from '@velaros-ai/core'
+import { isBlank, isString } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { ToolResult } from './Executor'
@@ -21,7 +21,7 @@ export function liftGenericModelImage(result: ToolResult, rawOutput: unknown): T
 
   const data = candidate.data
   const mediaType = candidate.mediaType
-  if (typeof data !== 'string' || isBlank(data)) return result
+  if (!isString(data) || isBlank(data)) return result
   if (mediaType !== 'image/png' && mediaType !== 'image/jpeg') return result
 
   // 把 modelImage 从文本面结果里剥掉，只保留元数据；图片走 image 内容块。

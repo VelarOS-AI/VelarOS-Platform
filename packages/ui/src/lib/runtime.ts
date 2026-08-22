@@ -1,55 +1,63 @@
 export function isArray(value: unknown): value is unknown[] {
-  return Array.isArray(value)
+  return Object.prototype.toString.call(value) === '[object Array]'
 }
 
 export function isBlank(value: string): boolean {
-  return value.trim().length === 0
+  return !value.trim()
 }
 
 export function isBoolean(value: unknown): value is boolean {
-  return typeof value === 'boolean'
+  return Boolean(value) === value
 }
 
 export function isEmpty(value: string | readonly unknown[]): boolean {
-  return value.length === 0
+  return Boolean(value[Symbol.iterator]().next().done)
 }
 
 export function isFalse(value: unknown): value is false {
-  return value === false
+  return isBoolean(value) && !value
 }
 
 export function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
+  return Number.isFinite(value as number)
 }
 
 export function isFunction(value: unknown): value is Function {
-  return typeof value === 'function'
+  return value instanceof Function
 }
 
 export function isNumber(value: unknown): value is number {
-  return typeof value === 'number'
+  return Object.prototype.toString.call(value) === '[object Number]' && Object(value) !== value
 }
 
 export function isPresent<T>(value: T): value is NonNullable<T> {
-  return value != null
+  return !isNull(value) && !isUndefined(value)
 }
 
 export function isString(value: unknown): value is string {
-  return typeof value === 'string'
+  return Object.prototype.toString.call(value) === '[object String]' && Object(value) !== value
 }
 
-export function optionalWhen<T>(condition: unknown, value: T): T | undefined {
+export function isNull(value: unknown): value is null {
+  return Object.is(value, null)
+}
+
+export function isUndefined(value: unknown): value is undefined {
+  return Object.is(value, undefined)
+}
+
+export function optionalWhen<T>(condition: unknown, value: T): Optional<T> {
   return condition ? value : undefined
 }
 
-export function optionalWhenLazy<T>(condition: unknown, value: () => T): T | undefined {
+export function optionalWhenLazy<T>(condition: unknown, value: () => T): Optional<T> {
   return condition ? value() : undefined
 }
 
-export function toNullable<T>(value: T | undefined): T | null {
-  return value ?? null
+export function toNullable<T>(value: Optional<T>): Nullable<T> {
+  return isUndefined(value) ? null : value
 }
 
-export function toOptional<T>(value: T | null | undefined): T | undefined {
-  return value ?? undefined
+export function toOptional<T>(value: LooseOptional<T>): Optional<T> {
+  return isNull(value) ? undefined : value
 }

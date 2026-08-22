@@ -8,7 +8,7 @@
 
 import { isEmpty } from './utils/array.js'
 import { optionalWhen } from './utils/optionalWhen.js'
-import { isArray, isBoolean, isNumber, isObject, isPresent, isString } from './typeGuards'
+import { isArray, isBoolean, isNumber, isObject, isPlainObject,isPresent, isString } from './typeGuards'
 
 export type ErrorCode =
   | 'UNKNOWN'
@@ -106,8 +106,8 @@ export class AppError extends Error {
       return null
     }
 
-    if (isObject(value)) {
-      const record = value as Record<string, unknown>
+    if (isPlainObject(value)) {
+      const record = value
       return (
         this.readStringField(record, 'message') ??
         this.findMessage(record.error, depth + 1) ??
@@ -140,9 +140,9 @@ export class AppError extends Error {
       return null
     }
 
-    if (!isObject(value)) return null
+    if (!isPlainObject(value)) return null
 
-    const record = value as Record<string, unknown>
+    const record = value
     const nestedCode =
       this.getCode(record.error, depth + 1) ??
       this.getCode(record.cause, depth + 1) ??
@@ -222,9 +222,9 @@ export class AppError extends Error {
   }
 
   private static isSerializedError(value: unknown): value is SerializedError {
-    if (!isObject(value)) return false
+    if (!isPlainObject(value)) return false
 
-    const record = value as Record<string, unknown>
+    const record = value
     return (
       isString(record.code) &&
       isString(record.message) &&

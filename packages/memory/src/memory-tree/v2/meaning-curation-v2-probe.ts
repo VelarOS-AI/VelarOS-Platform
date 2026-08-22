@@ -92,13 +92,12 @@ function runMeaningCurationProbeV2(): void {
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-    const ingest = new MemoryEvidenceIngestServiceV2(
+    const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
+    const tree = MemoryTreeStoreV2.open({
       authority,
       contentKeys,
-      identityKeys,
-      blobs
-    )
-    const tree = MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store
+      keyring,
+    }).store
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
     const curation = new MemoryMeaningCurationServiceV2(
       authority,
@@ -344,17 +343,16 @@ function runMeaningCurationProbeV2(): void {
     )
     authority.checkpoint()
     const diskBytes = Buffer.concat(
-      [
-        authority.roots.authorityDatabasePath,
-        `${authority.roots.authorityDatabasePath}-wal`,
-      ].map((path) => {
-        try {
-          return readFileSync(path)
-        } catch {
-          // arch-guard:silent-catch-ok WAL 文件允许不存在；空缓冲区就是该探针的显式缺席值。
-          return Buffer.alloc(0)
+      [authority.roots.authorityDatabasePath, `${authority.roots.authorityDatabasePath}-wal`].map(
+        (path) => {
+          try {
+            return readFileSync(path)
+          } catch {
+            // arch-guard:silent-catch-ok WAL 文件允许不存在；空缓冲区就是该探针的显式缺席值。
+            return Buffer.alloc(0)
+          }
         }
-      })
+      )
     )
     check(!diskBytes.includes(Buffer.from('个人 AI 操作系统')), '意义正文不得进入 authority/WAL')
     check(!diskBytes.includes(Buffer.from('外部来源的低信任结论')), 'Claim 正文不得明文落库')

@@ -1,12 +1,10 @@
 import { randomBytes } from 'node:crypto'
 
+import { isString, isUndefined, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryBlobStoreV2 } from './storage/BlobStore'
-import type {
-  ContentKeyServiceV2,
-  MemorySealedContentV2,
-} from './storage/ContentKeyService'
+import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyService'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import { canonicalStringifyV2 } from './DiffChain'
 import {
@@ -15,18 +13,11 @@ import {
   normalizeOriginV2,
 } from './IdentityKeys'
 
-export type MemoryEvidenceEligibilityStateV2 =
-  | 'active'
-  | 'source_deleted'
-  | 'excluded'
-  | 'erased'
+export type MemoryEvidenceEligibilityStateV2 = 'active' | 'source_deleted' | 'excluded' | 'erased'
 
 export type MemoryPrivacyClassV2 = 'standard' | 'personal' | 'sensitive'
 export type MemoryEvidenceTrustLevelV2 =
-  | 'user_stated'
-  | 'system_observed'
-  | 'agent_derived'
-  | 'external_content'
+  'user_stated' | 'system_observed' | 'agent_derived' | 'external_content'
 
 export type MemoryEvidenceScopeInputV2 =
   | { readonly type: 'global' }
@@ -36,10 +27,10 @@ export type MemoryEvidenceScopeInputV2 =
 export interface IngestMemoryEvidenceInputV2 {
   readonly sourceType: string
   readonly trustLevel: MemoryEvidenceTrustLevelV2
-  readonly sourceId?: string | null
-  readonly sourceReference?: string | null
-  readonly sessionId?: string | null
-  readonly executionId?: string | null
+  readonly sourceId?: LooseOptional<string>
+  readonly sourceReference?: LooseOptional<string>
+  readonly sessionId?: LooseOptional<string>
+  readonly executionId?: LooseOptional<string>
   readonly scope: MemoryEvidenceScopeInputV2
   readonly occurredAt: number
   readonly payload: Buffer | string
@@ -53,17 +44,17 @@ export interface MemoryEvidenceRecordV2 {
   readonly id: string
   readonly ingestSequence: number
   readonly sourceType: string
-  readonly sourceId: string | null
-  readonly sourceMatchKey: string | null
-  readonly sessionId: string | null
-  readonly executionId: string | null
+  readonly sourceId: Nullable<string>
+  readonly sourceMatchKey: Nullable<string>
+  readonly sessionId: Nullable<string>
+  readonly executionId: Nullable<string>
   readonly scopeType: string
-  readonly scopeMatchKey: string | null
+  readonly scopeMatchKey: Nullable<string>
   readonly occurredAt: number
   readonly payloadBlobRef: string
   readonly payloadCommitment: string
-  readonly metadataBlobRef: string | null
-  readonly metadataCommitment: string | null
+  readonly metadataBlobRef: Nullable<string>
+  readonly metadataCommitment: Nullable<string>
   readonly privacyClass: MemoryPrivacyClassV2
   readonly eligibilityState: MemoryEvidenceEligibilityStateV2
   readonly createdAt: number
@@ -78,17 +69,17 @@ interface MemoryEvidenceRowV2 {
   id: string
   ingest_sequence: number
   source_type: string
-  source_id: string | null
-  source_match_key: string | null
-  session_id: string | null
-  execution_id: string | null
+  source_id: Nullable<string>
+  source_match_key: Nullable<string>
+  session_id: Nullable<string>
+  execution_id: Nullable<string>
   scope_type: string
-  scope_match_key: string | null
+  scope_match_key: Nullable<string>
   occurred_at: number
-  payload_blob_ref: string | null
-  payload_commitment: string | null
-  metadata_blob_ref: string | null
-  metadata_commitment: string | null
+  payload_blob_ref: Nullable<string>
+  payload_commitment: Nullable<string>
+  metadata_blob_ref: Nullable<string>
+  metadata_commitment: Nullable<string>
   privacy_class: MemoryPrivacyClassV2
   eligibility_state: MemoryEvidenceEligibilityStateV2
   created_at: number
@@ -113,9 +104,9 @@ export class MemoryEvidenceIngestServiceV2 {
       ? this.identityKeys.sourceReferenceMatchKey(input.sourceReference)
       : null
     const payload = this.contentKeys.sealContent(input.payload)
-    let metadata: MemorySealedContentV2 | null = null
+    let metadata: Nullable<MemorySealedContentV2> = null
     try {
-      if (input.metadata !== undefined) {
+      if (!isUndefined(input.metadata)) {
         metadata = this.contentKeys.sealContent(canonicalStringifyV2(input.metadata))
       }
       const id = this.randomId()
@@ -147,9 +138,14 @@ export class MemoryEvidenceIngestServiceV2 {
     const row = this.authority.database
       .prepare(`SELECT * FROM memory_evidence WHERE id = ?`)
       .get(evidenceId) as MemoryEvidenceRowV2 | undefined
-    if (!row) throw new AppError('NOT_FOUND', '待恢复 Evidence 不存在。', undefined, { evidenceId })
+    if (!row)
+      throw new AppError('NOT_FOUND', '待恢复 Evidence 不存在。', undefined, {
+        evidenceId,
+      })
     if (row.eligibility_state === 'active') {
-      throw new AppError('CONFLICT', 'Evidence 已处于 active。', undefined, { evidenceId })
+      throw new AppError('CONFLICT', 'Evidence 已处于 active。', undefined, {
+        evidenceId,
+      })
     }
     if (row.eligibility_state === 'erased') {
       throw new AppError('VALIDATION', 'erased Evidence 是终态，不得复活。', undefined, {
@@ -186,7 +182,7 @@ export class MemoryEvidenceIngestServiceV2 {
         : null
     try {
       const resealedPayload = this.contentKeys.sealContent(payload)
-      let resealedMetadata: MemorySealedContentV2 | null = null
+      let resealedMetadata: Nullable<MemorySealedContentV2> = null
       try {
         if (metadata) resealedMetadata = this.contentKeys.sealContent(metadata)
         const record = this.insertEvidence({
@@ -229,9 +225,9 @@ export class MemoryEvidenceIngestServiceV2 {
   public recoverOrphanedBlobs(): number {
     const registered = new Set(
       (
-        this.authority.database
-          .prepare(`SELECT blob_id FROM memory_content_blobs`)
-          .all() as Array<{ blob_id: string }>
+        this.authority.database.prepare(`SELECT blob_id FROM memory_content_blobs`).all() as Array<{
+          blob_id: string
+        }>
       ).map((row) => row.blob_id)
     )
     let recovered = 0
@@ -247,10 +243,10 @@ export class MemoryEvidenceIngestServiceV2 {
     id: string
     input: IngestMemoryEvidenceInputV2
     scopeType: string
-    scopeMatchKey: string | null
-    sourceMatchKey: string | null
+    scopeMatchKey: Nullable<string>
+    sourceMatchKey: Nullable<string>
     payload: MemorySealedContentV2
-    metadata: MemorySealedContentV2 | null
+    metadata: Nullable<MemorySealedContentV2>
     createdAt: number
   }): MemoryEvidenceRecordV2 {
     assertNonNegativeSafeIntegerV2(input.createdAt, 'createdAt')
@@ -281,17 +277,17 @@ export class MemoryEvidenceIngestServiceV2 {
           input.id,
           input.input.sourceType,
           input.input.trustLevel,
-          input.input.sourceId ?? null,
+          toNullable(input.input.sourceId),
           input.sourceMatchKey,
-          input.input.sessionId ?? null,
-          input.input.executionId ?? null,
+          toNullable(input.input.sessionId),
+          toNullable(input.input.executionId),
           input.scopeType,
           input.scopeMatchKey,
           input.input.occurredAt,
           input.payload.blobId,
           input.payload.commitment,
-          input.metadata?.blobId ?? null,
-          input.metadata?.commitment ?? null,
+          toNullable(input.metadata?.blobId),
+          toNullable(input.metadata?.commitment),
           input.input.privacyClass,
           input.input.eligibilityState ?? 'active',
           sequenceRow.integer_value,
@@ -304,17 +300,17 @@ export class MemoryEvidenceIngestServiceV2 {
       id: input.id,
       ingestSequence,
       sourceType: input.input.sourceType,
-      sourceId: input.input.sourceId ?? null,
+      sourceId: toNullable(input.input.sourceId),
       sourceMatchKey: input.sourceMatchKey,
-      sessionId: input.input.sessionId ?? null,
-      executionId: input.input.executionId ?? null,
+      sessionId: toNullable(input.input.sessionId),
+      executionId: toNullable(input.input.executionId),
       scopeType: input.scopeType,
       scopeMatchKey: input.scopeMatchKey,
       occurredAt: input.input.occurredAt,
       payloadBlobRef: input.payload.blobId,
       payloadCommitment: input.payload.commitment,
-      metadataBlobRef: input.metadata?.blobId ?? null,
-      metadataCommitment: input.metadata?.commitment ?? null,
+      metadataBlobRef: toNullable(input.metadata?.blobId),
+      metadataCommitment: toNullable(input.metadata?.commitment),
       privacyClass: input.input.privacyClass,
       eligibilityState: input.input.eligibilityState ?? 'active',
       createdAt: input.createdAt,
@@ -323,7 +319,7 @@ export class MemoryEvidenceIngestServiceV2 {
 
   private resolveScope(scope: MemoryEvidenceScopeInputV2): {
     scopeType: string
-    scopeMatchKey: string | null
+    scopeMatchKey: Nullable<string>
   } {
     if (scope.type === 'global') return { scopeType: 'global', scopeMatchKey: null }
     if (scope.type === 'workspace') {
@@ -425,7 +421,7 @@ function validateIngestInputV2(input: IngestMemoryEvidenceInputV2): void {
     throw new AppError('VALIDATION', 'privacyClass 非法。')
   }
   if (
-    input.eligibilityState !== undefined &&
+    !isUndefined(input.eligibilityState) &&
     !['active', 'source_deleted', 'excluded'].includes(input.eligibilityState)
   ) {
     throw new AppError('VALIDATION', 'eligibilityState 非法。')
@@ -433,7 +429,7 @@ function validateIngestInputV2(input: IngestMemoryEvidenceInputV2): void {
 }
 
 function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0) {
+  if (!isString(value) || value.length === 0) {
     throw new AppError('VALIDATION', `${label} 不得为空。`)
   }
 }

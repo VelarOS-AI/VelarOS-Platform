@@ -77,7 +77,7 @@ class OpenAICompatibleModelAdapter extends ModelAdapter {
   }
 
   /** 移除 AI SDK 自动生成的空 Bearer 头。 */
-  private stripBlankAuthorization(init: OpenAIFetchInit | undefined): OpenAIFetchInit | undefined {
+  private stripBlankAuthorization(init: Optional<OpenAIFetchInit>): Optional<OpenAIFetchInit> {
     if (!init?.headers) return init
 
     const headers = new Headers(init.headers)
@@ -96,7 +96,7 @@ class OpenAICompatibleModelAdapter extends ModelAdapter {
   /** Ollama OpenAI endpoint accepts native `options.num_ctx`; expose it via env config. */
   private injectOllamaContextOptions(
     input: Parameters<OpenAIFetch>[0],
-    init: OpenAIFetchInit | undefined
+    init: Optional<OpenAIFetchInit>
   ): OpenAIFetchInit | undefined {
     const contextWindow = this.localModelEnvironment.resolveOllamaContextWindow()
     if (!contextWindow || !this.isChatCompletionsRequest(input) || !isString(init?.body)) return init

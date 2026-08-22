@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve } from 'node:path'
 
-import { clamp, compact, first, isBlank, isEmpty, last, toNullable, truncate, unique } from '@velaros-ai/core'
+import { clamp, compact, first, isBlank, isEmpty, isFalse, last, toNullable, truncate, unique } from '@velaros-ai/core'
 
 import type {
   KnowledgeCodeIntelligenceApi,
@@ -880,7 +880,7 @@ class KnowledgeWorkspace {
       isDirectory,
       relativePath,
     })
-    if (hostDecision === false) return false
+    if (isFalse(hostDecision)) return false
 
     if (isDirectory && (name.startsWith('.') || DEFAULT_HIDDEN_DIRECTORIES.has(name))) return false
     return name !== '.DS_Store' && !name.endsWith('.map')

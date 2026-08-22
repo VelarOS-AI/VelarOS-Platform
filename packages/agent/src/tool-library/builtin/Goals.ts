@@ -211,9 +211,9 @@ function buildGoalStateUpsertInput(input: {
 }
 
 /**
- * goal 侧步骤引擎参数:failed 不计入已解决(failed 步骤挡目标收尾,由 assertGoalCanComplete 把关);
- * 无 in_progress 时晋升可回退到任意位置的第一个 pending。
- * 匹配器与 plan 共享(NFKC/全角冒号归一/唯一子串命中,比旧 goal 匹配器更宽容)。
+ * 目标侧步骤引擎参数：失败步骤不计入已解决，由 `assertGoalCanComplete` 阻止目标收尾；
+ * 没有进行中步骤时，可回退并晋升任意位置的第一个待办步骤。
+ * 匹配器与计划共享规则：统一为 `NFKC`、归一化全角冒号、支持唯一子串命中，因而比旧目标匹配器宽容。
  */
 const GoalStepEngineOptions: StepEngineOptions = {
   kindLabel: 'goal',

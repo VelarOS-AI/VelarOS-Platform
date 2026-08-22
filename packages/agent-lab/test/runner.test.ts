@@ -247,7 +247,7 @@ describe("continuous journey runner", () => {
       executorId: "executor-a",
       adapterVersion: "1",
       cliVersion: null,
-      provider: identityReads++ === 0 ? null : "airjelly",
+      provider: identityReads++ === 0 ? null : "test-provider",
       model: identityReads === 1 ? null : "deepseek/deepseek-v4-pro",
       modelRevision: null,
       contextWindow: null,
@@ -276,7 +276,7 @@ describe("continuous journey runner", () => {
 
     expect(identityReads).toBe(2);
     expect(result.manifest.executor).toMatchObject({
-      provider: "airjelly",
+      provider: "test-provider",
       model: "deepseek/deepseek-v4-pro",
     });
   });

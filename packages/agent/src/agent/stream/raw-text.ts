@@ -13,9 +13,9 @@ import {
  */
 class AgentRawStreamTextExtractor {
   public extractReasoningDeltaFromRawChunk(rawValue: unknown): string {
-    if (!rawValue || !isObject(rawValue)) return ''
+    if (!rawValue || !isPlainObject(rawValue)) return ''
 
-    const record = rawValue as Record<string, unknown>
+    const record = rawValue
     const anthropicReasoningText = this.extractAnthropicReasoningText(record)
     if (anthropicReasoningText) return anthropicReasoningText
 
@@ -30,9 +30,9 @@ class AgentRawStreamTextExtractor {
         if (!choice || !isObject(choice)) return ''
 
         const delta = (choice as { delta?: unknown }).delta
-        if (!delta || !isObject(delta)) return ''
+        if (!delta || !isPlainObject(delta)) return ''
 
-        const deltaRecord = delta as Record<string, unknown>
+        const deltaRecord = delta
         return (
           this.readReasoningText(deltaRecord.reasoning_content) ||
           this.readReasoningText(deltaRecord.reasoningContent) ||
@@ -48,9 +48,9 @@ class AgentRawStreamTextExtractor {
   }
 
   public extractVisibleTextFromRawChunk(rawValue: unknown): string {
-    if (!rawValue || !isObject(rawValue)) return ''
+    if (!rawValue || !isPlainObject(rawValue)) return ''
 
-    const record = rawValue as Record<string, unknown>
+    const record = rawValue
     const anthropicText = this.extractAnthropicVisibleText(record)
     if (anthropicText) return anthropicText
 
@@ -62,9 +62,9 @@ class AgentRawStreamTextExtractor {
 
     return choices
       .map((choice) => {
-        if (!choice || !isObject(choice)) return ''
+        if (!choice || !isPlainObject(choice)) return ''
 
-        const choiceRecord = choice as Record<string, unknown>
+        const choiceRecord = choice
         return [
           this.extractChoiceVisibleText(choiceRecord.delta),
           this.extractChoiceVisibleText(choiceRecord.message),
@@ -115,9 +115,9 @@ class AgentRawStreamTextExtractor {
   }
 
   private extractResponseReasoningItemText(item: unknown): string {
-    if (!item || !isObject(item)) return ''
+    if (!item || !isPlainObject(item)) return ''
 
-    const record = item as Record<string, unknown>
+    const record = item
     return record.type === 'reasoning' ? this.readReasoningText(record.summary) : ''
   }
 
@@ -165,34 +165,34 @@ class AgentRawStreamTextExtractor {
   }
 
   private extractResponseOutputItemText(item: unknown): string {
-    if (!item || !isObject(item)) return ''
+    if (!item || !isPlainObject(item)) return ''
 
-    const record = item as Record<string, unknown>
+    const record = item
     return record.type === 'message' ? this.readVisibleText(record.content) : ''
   }
 
   private extractChoiceVisibleText(value: unknown): string {
-    if (!value || !isObject(value)) return ''
+    if (!value || !isPlainObject(value)) return ''
 
-    const record = value as Record<string, unknown>
+    const record = value
     return [this.readVisibleText(record.refusal), this.readVisibleText(record.content)].join('')
   }
 
   private readVisibleText(value: unknown): string {
     if (isString(value)) return value
     if (isArray(value)) return value.map((item) => this.readVisibleText(item)).join('')
-    if (!value || !isObject(value)) return ''
+    if (!value || !isPlainObject(value)) return ''
 
-    const record = value as Record<string, unknown>
+    const record = value
     return this.readVisibleText(record.text) || this.readVisibleText(record.content)
   }
 
   private readReasoningText(value: unknown): string {
     if (isString(value)) return value
     if (isArray(value)) return value.map((item) => this.readReasoningText(item)).join('')
-    if (!value || !isObject(value)) return ''
+    if (!value || !isPlainObject(value)) return ''
 
-    const record = value as Record<string, unknown>
+    const record = value
     return (
       this.readReasoningText(record.text) ||
       this.readReasoningText(record.content) ||

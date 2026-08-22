@@ -43,11 +43,11 @@ const executionSpanBaseFields = {
   /** 树形指针（宪章 §6 同构）；根 span（run）无父，用 Nullable 表达缺席。 */
   parentSpanId: z.string().nullable(),
   /**
-   * 所属执行 run 的 id（同一次 agent 执行的全部 span 共享；账本按 runId 分组而非按文件切分）。
+   * 所属运行的标识（同一次智能体执行的全部区段共享；账本按 `runId` 分组而非按文件切分）。
    *
-   * **会话级记录无 run，用 null 表达缺席**（§12.6，贴 `parentSpanId` 口径）：注意力 outcome 回学镜像是只写
-   * 会话级审计、不隶属某次 agent run，故其 runId 为 null，取代旧的伪 runId 魔法哨兵 `'attention-outcome'`。
-   * run/turn/model/tool/policy span 恒有真实 runId。
+   * **会话级记录不隶属某次运行，用空值表达缺席**（§12.6，与 `parentSpanId` 口径一致）：注意力结果
+   * 回学镜像只写会话级审计，不隶属某次智能体运行，故其 `runId` 为空，取代旧的伪标识哨兵
+   * `'attention-outcome'`。运行、回合、模型、工具与策略区段始终具有真实的 `runId`。
    */
   runId: z.string().nullable(),
   sessionId: z.string(),
@@ -67,9 +67,10 @@ export const RunSpanSchema = z.strictObject({
   /** 触发本次执行的输入 id（缺席用 null）。 */
   rootInputId: z.string().nullable(),
   /**
-   * 子 Agent 可辨识标注：子 Agent 身份/角色名（主 Agent 根 run 用 null）。子 Agent 的执行是**独立顶层
-   * run span**（新 runId、`parentSpanId:null`、落同一会话账本、靠 sessionId 与父关联，不嵌父 dispatch tool
-   * span），本字段令其在同会话多 run 树里可辨识。宪章 §6 纯追加可选，主 major 内不改。
+   * 子智能体可辨识标注：记录子智能体身份或角色名，主智能体根运行使用空值。子智能体执行是
+   * **独立顶层运行区段**：使用新的 `runId`，令 `parentSpanId` 为空，写入同一会话账本，通过
+   * `sessionId` 与父级关联，且不嵌入父级派发工具区段。本字段使它能在同会话多运行树中被辨识。
+   * 宪章 §6 允许纯追加，主版本内不修改。
    */
   agentName: z.string().nullable(),
   /** 派发来源（子 Agent 由哪个父角色/派发链发起；主 Agent 根 run 用 null）。 */

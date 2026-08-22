@@ -3,10 +3,11 @@
  *
  * 一律具名导出：本包作为 npm 库嵌入宿主，禁改 `globalThis` 与 `String.prototype`。
  */
+import { isEmpty } from './array.js'
 
 /** 是否为空或纯空白。 */
 export function isBlank(value: string): boolean {
-  return value.trim().length === 0
+  return isEmpty(value.trim())
 }
 
 /** 超出 `maxLen` 时截断并加省略号。 */

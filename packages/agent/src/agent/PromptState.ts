@@ -218,7 +218,7 @@ class PromptStateBuilder {
       roleLabel: roleResolution.label,
       workflowType: roleResolution.workflowType,
       thinkingDepth: thinkingDepth ?? 'balanced',
-      // AgentDeveloperContext is an intentionally retired compatibility slot (`never`).
+      // `AgentDeveloperContext` 是刻意停用的兼容槽位，类型固定为 `never`。
       developerContext: null,
       agentSurfaceId: toolContext.agentSurfaceId ?? 'chat',
       contextPhase,

@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type {
   BrowserPageInspection,
@@ -141,10 +141,10 @@ function buildBrowserRecipeSummary(
 ): string {
   const parts = [
     inspection.title ? `页面标题是 ${inspection.title}` : null,
-    sectionHeadings.length > 0 ? `可见主要分区 ${sectionHeadings.length} 个` : null,
-    inspection.actions.length > 0 ? `主要动作 ${inspection.actions.length} 个` : null,
-    inspection.formFields.length > 0 ? `表单字段 ${inspection.formFields.length} 个` : null,
-    primaryLinks.length > 0 ? `可跟进链接 ${primaryLinks.length} 个` : null,
+    !isEmpty(sectionHeadings) ? `可见主要分区 ${sectionHeadings.length} 个` : null,
+    !isEmpty(inspection.actions) ? `主要动作 ${inspection.actions.length} 个` : null,
+    !isEmpty(inspection.formFields) ? `表单字段 ${inspection.formFields.length} 个` : null,
+    !isEmpty(primaryLinks) ? `可跟进链接 ${primaryLinks.length} 个` : null,
   ].filter(Boolean)
 
   return parts.join('，') || `为 ${inspection.url} 生成的基础页面 recipe`

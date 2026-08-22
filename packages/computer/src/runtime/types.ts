@@ -1,12 +1,6 @@
 /** Phase 1 desktop-control command surface shared by mac/win helpers. */
 export type ComputerCommand =
-  | 'check'
-  | 'screen_size'
-  | 'screenshot'
-  | 'mouse_move'
-  | 'left_click'
-  | 'type'
-  | 'key'
+  'check' | 'screen_size' | 'screenshot' | 'mouse_move' | 'left_click' | 'type' | 'key'
 
 /** A request sent to the Python helper over the stdio protocol. */
 export interface ComputerHelperRequest {
@@ -17,27 +11,26 @@ export interface ComputerHelperRequest {
 
 /** A successful response decoded from the helper. */
 export interface ComputerHelperSuccess<TResult = unknown> {
-  id: number | null
+  id: Nullable<number>
   ok: true
   result: TResult
 }
 
 /** A failure response decoded from the helper. */
 export interface ComputerHelperFailure {
-  id: number | null
+  id: Nullable<number>
   ok: false
   error: { code: string; message: string }
 }
 
 export type ComputerHelperResponse<TResult = unknown> =
-  | ComputerHelperSuccess<TResult>
-  | ComputerHelperFailure
+  ComputerHelperSuccess<TResult> | ComputerHelperFailure
 
 /** Result of `check` — desktop-control availability and OS permissions. */
 export interface ComputerPermissionStatus {
   platform: string
   accessibility: boolean
-  screenRecording: boolean | null
+  screenRecording: Nullable<boolean>
 }
 
 /** Result of `screen_size`. */
@@ -99,6 +92,6 @@ export type ComputerAvailabilityReason =
 export interface ComputerAvailability {
   available: boolean
   reason: ComputerAvailabilityReason
-  detail: string | null
+  detail: Nullable<string>
   permissions?: ComputerPermissionStatus
 }

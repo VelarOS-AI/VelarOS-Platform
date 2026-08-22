@@ -103,7 +103,7 @@ class GitIgnoreSystemSearchPolicy implements SystemSearchIgnorePolicy {
   }
 }
 
-async function findSystemSearchRepoRoot(startPath: string): Promise<string | null> {
+async function findSystemSearchRepoRoot(startPath: string): Promise<Nullable<string>> {
   let currentPath = resolve(startPath)
   const startStats = await stat(currentPath).catch(() => null)
   if (startStats?.isFile()) currentPath = dirname(currentPath)
@@ -124,10 +124,7 @@ async function readIgnoreLines(path: string): Promise<string[]> {
   return content.split(/\r?\n/u)
 }
 
-function parseGitIgnoreRule(
-  rawLine: string,
-  baseRelativePath: string
-): GitIgnoreRule | null {
+function parseGitIgnoreRule(rawLine: string, baseRelativePath: string): Nullable<GitIgnoreRule> {
   let line = rawLine.trimEnd()
   if (line.length === 0 || line.startsWith('#')) return null
 
@@ -158,14 +155,13 @@ function matchesGitIgnoreRule(
   candidateRelativePath: string,
   isDirectory: boolean
 ): boolean {
-  const candidateSegments = candidateRelativePath
-    .split('/')
-    .filter((segment) => segment.length > 0)
+  const candidateSegments = candidateRelativePath.split('/').filter((segment) => segment.length > 0)
   if (isEmpty(candidateSegments)) return false
 
-  const baseSegments = isEmpty(rule.baseRelativePath) || rule.baseRelativePath === '.'
-    ? []
-    : rule.baseRelativePath.split('/').filter((segment) => segment.length > 0)
+  const baseSegments =
+    isEmpty(rule.baseRelativePath) || rule.baseRelativePath === '.'
+      ? []
+      : rule.baseRelativePath.split('/').filter((segment) => segment.length > 0)
   if (!startsWithSegments(candidateSegments, baseSegments)) return false
 
   const scopedSegments = candidateSegments.slice(baseSegments.length)

@@ -1,10 +1,6 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type {
-  MemoryConceptType,
-  MemoryEvidenceCategory,
-  MemoryEvidenceRecord,
-} from './Types'
+import type { MemoryConceptType, MemoryEvidenceCategory, MemoryEvidenceRecord } from './Types'
 
 const MaxSemanticCandidates = 8
 const MaxSemanticClauseChars = 420
@@ -39,10 +35,11 @@ function semanticClauses(content: string): string[] {
   return content
     .replace(/\r\n?/g, '\n')
     .split(/[\n；;。！？!?]+/u)
-    .map((clause) => clause
-      .replace(/^[\s>*#\-–—•\d.)、]+/u, '')
-      .replace(/^[“”"'‘’]+|[“”"'‘’]+$/gu, '')
-      .trim()
+    .map((clause) =>
+      clause
+        .replace(/^[\s>*#\-–—•\d.)、]+/u, '')
+        .replace(/^[“”"'‘’]+|[“”"'‘’]+$/gu, '')
+        .trim()
     )
     .filter((clause) => clause.length >= 4 && clause.length <= MaxSemanticClauseChars)
 }
@@ -80,10 +77,12 @@ function candidate(
 }
 
 function interactionPreference(value: string): boolean {
-  return /(回复|回答|输出|结论|细节|格式|风格|证据|说明|称呼|语言|简洁|详细|优先|先|不要|必须|response|answer|output|format|style|evidence|concise|detail)/iu.test(value)
+  return /(回复|回答|输出|结论|细节|格式|风格|证据|说明|称呼|语言|简洁|详细|优先|先|不要|必须|response|answer|output|format|style|evidence|concise|detail)/iu.test(
+    value
+  )
 }
 
-function extractChineseCandidate(clause: string): MemorySemanticCandidate | null {
+function extractChineseCandidate(clause: string): Nullable<MemorySemanticCandidate> {
   let match = clause.match(/^(?:我|用户)(?:的)?(?:长期)?偏好(?:是|为|：|:)?\s*(.+)$/u)
   if (match?.[1]) return candidate('preference', clause, match[1])
 
@@ -91,7 +90,8 @@ function extractChineseCandidate(clause: string): MemorySemanticCandidate | null
   if (match?.[1]) return candidate('preference', clause, match[1], 0.96)
 
   match = clause.match(/^(?:我|用户)(?:希望|要求|需要)\s*(.+)$/u)
-  if (match?.[1]) return interactionPreference(match[1])
+  if (match?.[1])
+    return interactionPreference(match[1])
       ? candidate('preference', clause, match[1], 0.94)
       : candidate('goal', clause, match[1], 0.9)
 
@@ -101,7 +101,9 @@ function extractChineseCandidate(clause: string): MemorySemanticCandidate | null
   match = clause.match(/^(?:我|用户)(?:计划|打算|想要|准备|正在努力)\s*(.+)$/u)
   if (match?.[1]) return candidate('goal', clause, match[1], 0.94)
 
-  match = clause.match(/^(?:我|用户)(?:目前|现在)?正在(?:做|处理|推进|构建|开发|学习|研究)\s*(.+)$/u)
+  match = clause.match(
+    /^(?:我|用户)(?:目前|现在)?正在(?:做|处理|推进|构建|开发|学习|研究)\s*(.+)$/u
+  )
   if (match?.[1]) return candidate('task', clause, match[1], 0.96)
 
   match = clause.match(/^(?:当前|现在)(?:的)?(?:项目|工作)(?:是|为|：|:)?\s*(.+)$/u)
@@ -113,8 +115,11 @@ function extractChineseCandidate(clause: string): MemorySemanticCandidate | null
   match = clause.match(/^(?:我|用户)(?:通常|习惯于?|一贯)\s*(.+)$/u)
   if (match?.[1]) return candidate('procedure', clause, match[1], 0.9)
 
-  match = clause.match(/^(?:我是|用户是|我目前是|用户目前是|我的职业是|用户的职业是|我的身份是|用户的身份是)\s*(.+)$/u)
-  if (match?.[1]) return candidate('fact', clause, match[1], 0.96, {
+  match = clause.match(
+    /^(?:我是|用户是|我目前是|用户目前是|我的职业是|用户的职业是|我的身份是|用户的身份是)\s*(.+)$/u
+  )
+  if (match?.[1])
+    return candidate('fact', clause, match[1], 0.96, {
       type: 'user',
       name: '用户画像',
       stableDiscriminator: 'user:profile',
@@ -122,11 +127,15 @@ function extractChineseCandidate(clause: string): MemorySemanticCandidate | null
   return null
 }
 
-function extractEnglishCandidate(clause: string): MemorySemanticCandidate | null {
-  let match = clause.match(/^(?:I prefer|My (?:long-term )?preference is|The user prefers)\s+(.+)$/iu)
+function extractEnglishCandidate(clause: string): Nullable<MemorySemanticCandidate> {
+  let match = clause.match(
+    /^(?:I prefer|My (?:long-term )?preference is|The user prefers)\s+(.+)$/iu
+  )
   if (match?.[1]) return candidate('preference', clause, match[1])
 
-  match = clause.match(/^(?:I want to|I plan to|My (?:long-term )?goal is|The user's goal is)\s+(.+)$/iu)
+  match = clause.match(
+    /^(?:I want to|I plan to|My (?:long-term )?goal is|The user's goal is)\s+(.+)$/iu
+  )
   if (match?.[1]) return candidate('goal', clause, match[1], 0.96)
 
   match = clause.match(/^(?:I am|I'm)\s+(?:working on|building|developing|researching)\s+(.+)$/iu)
@@ -138,8 +147,11 @@ function extractEnglishCandidate(clause: string): MemorySemanticCandidate | null
   match = clause.match(/^(?:I usually|The user usually)\s+(.+)$/iu)
   if (match?.[1]) return candidate('procedure', clause, match[1], 0.9)
 
-  match = clause.match(/^(?:I am|I'm|The user is|My role is|The user's role is)\s+(?:an?\s+)?(.+)$/iu)
-  if (match?.[1]) return candidate('fact', clause, match[1], 0.92, {
+  match = clause.match(
+    /^(?:I am|I'm|The user is|My role is|The user's role is)\s+(?:an?\s+)?(.+)$/iu
+  )
+  if (match?.[1])
+    return candidate('fact', clause, match[1], 0.92, {
       type: 'user',
       name: '用户画像',
       stableDiscriminator: 'user:profile',

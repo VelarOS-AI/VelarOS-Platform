@@ -59,19 +59,6 @@ export const CapabilityOwners = [
     ],
   },
   {
-    owner: 'game',
-    packages: [
-      {
-        directory: 'game',
-        name: '@velaros-ai/game',
-        entrySubpaths: ['./core', './runtime', './tools', './composition'],
-        sourceRoots: ['core', 'runtime', 'tools', 'composition'],
-        electronRoots: [],
-        schemaExports: [],
-      },
-    ],
-  },
-  {
     owner: 'system',
     packages: [
       {

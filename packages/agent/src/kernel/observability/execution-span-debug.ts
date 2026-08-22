@@ -292,12 +292,12 @@ function pickModelSpan(children: readonly ExecutionSpan[]): Nullable<ModelSpan> 
 }
 
 /**
- * span 排序的唯一谓词：开始时刻升序，**同刻按 spanId 码元序**。
+ * 执行区段排序的唯一谓词：开始时刻升序，**同刻按 `spanId` 码元序**。
  *
- * 平手键不是装饰：同一毫秒内开出的 span 很常见（一轮里 model/tool span 连开），没有平手键时
- * `Array#sort` 的相对序由输入顺序决定，同一份账本在两台机器上能投出不同的 turns 顺序，
- * 而这份投影正是 get_debug / agent-lab 的对账输入。用码元序（`compareStableStrings` 单源）而非
- * `localeCompare`，理由同 determinism 模块：后者随 ICU 数据与 locale 变化。
+ * 平手键不是装饰：同一毫秒内开启多个区段很常见，例如一轮里连续开启模型与工具区段。没有
+ * 平手键时，`Array#sort` 的相对顺序由输入决定，同一份账本在两台机器上可能投出不同的回合顺序，
+ * 而这份投影正是 `get_debug` 与 `agent-lab` 的对账输入。这里使用 `compareStableStrings` 提供的
+ * 码元序，不使用 `localeCompare`；后者会随 `ICU` 数据和地区设置变化。
  */
 function compareSpansChronologically(left: ExecutionSpan, right: ExecutionSpan): number {
   if (left.startedAt !== right.startedAt) return left.startedAt - right.startedAt

@@ -1,3 +1,12 @@
+import { isFiniteNumber } from './runtime'
+
+const cancelTimeout = globalThis.clearTimeout.bind(globalThis)
+const scheduleTimeout = globalThis.setTimeout.bind(globalThis)
+
+function normalizeTimerDelay(value: number): number {
+  return Math.max(0, isFiniteNumber(value) ? value : 0)
+}
+
 type TimerKind = 'animation-frame' | 'timeout'
 
 export interface TimerLease {
@@ -26,12 +35,12 @@ export class TimerScope {
     this.assertActive()
     const record: TimerRecord = {
       kind: 'timeout',
-      cancelNative: () => globalThis.clearTimeout(handle),
+      cancelNative: () => cancelTimeout(handle),
     }
-    const handle = globalThis.setTimeout(() => {
+    const handle = scheduleTimeout(() => {
       if (!this.records.delete(record)) return
       callback()
-    }, Math.max(0, Number.isFinite(delayMs) ? delayMs : 0))
+    }, normalizeTimerDelay(delayMs))
     this.records.add(record)
     return this.createLease(record)
   }

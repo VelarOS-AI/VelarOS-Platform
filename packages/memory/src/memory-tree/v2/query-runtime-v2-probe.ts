@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict'
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,9 +22,7 @@ function equal<T>(actual: T, expected: T, message: string): void {
   assertionCount += 1
 }
 
-function createProbeWrappingRootV2(
-  secret = randomBytes(32)
-): MemoryWrappingRootV2 {
+function createProbeWrappingRootV2(secret = randomBytes(32)): MemoryWrappingRootV2 {
   const key = Buffer.from(secret)
   const id = `wr-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
   return {
@@ -38,24 +31,14 @@ function createProbeWrappingRootV2(
       const iv = randomBytes(12)
       const cipher = createCipheriv('aes-256-gcm', key, iv)
       cipher.setAAD(Buffer.from(id, 'utf8'))
-      const ciphertext = Buffer.concat([
-        cipher.update(raw),
-        cipher.final(),
-      ])
+      const ciphertext = Buffer.concat([cipher.update(raw), cipher.final()])
       return Buffer.concat([iv, cipher.getAuthTag(), ciphertext])
     },
     unwrapKey(wrapped): Buffer {
-      const decipher = createDecipheriv(
-        'aes-256-gcm',
-        key,
-        wrapped.subarray(0, 12)
-      )
+      const decipher = createDecipheriv('aes-256-gcm', key, wrapped.subarray(0, 12))
       decipher.setAAD(Buffer.from(id, 'utf8'))
       decipher.setAuthTag(wrapped.subarray(12, 28))
-      return Buffer.concat([
-        decipher.update(wrapped.subarray(28)),
-        decipher.final(),
-      ])
+      return Buffer.concat([decipher.update(wrapped.subarray(28)), decipher.final()])
     },
   }
 }
@@ -79,11 +62,7 @@ function runQueryRuntimeProbeV2(): void {
     equal(empty.indexState, 'missing', '空树尚无查询 index')
     equal(empty.items.length, 0, '空树不返回伪造结果')
     equal(runtime.query.inspectTreeStructure().nodes.length, 0, '空树结构为空')
-    equal(
-      runtime.query.refreshSearchIndex().indexedNodeCount,
-      0,
-      '空树显式刷新应产出可用空 index'
-    )
+    equal(runtime.query.refreshSearchIndex().indexedNodeCount, 0, '空树显式刷新应产出可用空 index')
     const emptyReady = runtime.query.recall({ query: 'VelarOS' })
     equal(emptyReady.indexState, 'ready', '空 index 也应匹配当前双键')
     check(!emptyReady.degraded, '可用空 index 不应伪报降级')
@@ -203,16 +182,8 @@ function runQueryRuntimeProbeV2(): void {
     equal(missingIndex.indexState, 'missing', '同步 recall 不得隐式建 index')
     check(missingIndex.degraded, '缺 index 时应标记降级')
     equal(missingIndex.items.length, 1, '缺 index 时只返回当前主线')
-    equal(
-      missingIndex.items[0]?.retrievalReason,
-      'active-path-fallback',
-      '缺 index 时只走主线路径'
-    )
-    equal(
-      missingIndex.items[0]?.path.at(-1)?.label,
-      '继续建设 VelarOS',
-      '主线降级只解密最终路径'
-    )
+    equal(missingIndex.items[0]?.retrievalReason, 'active-path-fallback', '缺 index 时只走主线路径')
+    equal(missingIndex.items[0]?.path.at(-1)?.label, '继续建设 VelarOS', '主线降级只解密最终路径')
 
     const refreshed = runtime.query.refreshSearchIndex()
     equal(refreshed.snapshotVersion, 1, 'index 锚定已提交树版本')
@@ -223,10 +194,7 @@ function runQueryRuntimeProbeV2(): void {
     equal(searched.indexState, 'ready', '显式刷新后 index ready')
     check(!searched.degraded, 'ready index 不应标记降级')
     equal(searched.items[0]?.retrievalReason, 'search', '命中走 search')
-    check(
-      searched.items[0]?.episodeIds.length === 1,
-      '搜索结果应携带 Episode provenance'
-    )
+    check(searched.items[0]?.episodeIds.length === 1, '搜索结果应携带 Episode provenance')
     check(
       searched.items[0]?.evidenceIds.includes(deliveryEvidence.id),
       '搜索结果应携带 active Evidence provenance'
@@ -234,9 +202,7 @@ function runQueryRuntimeProbeV2(): void {
 
     const structure = runtime.query.inspectTreeStructure()
     equal(structure.snapshotVersion, 1, '结构投影锚定树版本')
-    const claimNode = structure.nodes.find(
-      (node) => node.subjectType === 'claim'
-    )
+    const claimNode = structure.nodes.find((node) => node.subjectType === 'claim')
     check(claimNode, '结构投影应包含敏感 Claim 的稳定标识')
     const hidden = runtime.query.recall({
       query: '',
@@ -249,11 +215,7 @@ function runQueryRuntimeProbeV2(): void {
       branchTreeNodeId: claimNode.treeNodeId,
       revealSensitive: true,
     })
-    equal(
-      revealed.items[0]?.path.at(-1)?.label,
-      '用户的私密部署口令',
-      '宿主授权后才解密敏感正文'
-    )
+    equal(revealed.items[0]?.path.at(-1)?.label, '用户的私密部署口令', '宿主授权后才解密敏感正文')
     const sensitiveSearch = runtime.query.recall({ query: '私密部署口令' })
     check(
       sensitiveSearch.items.every((item) => isEmpty(item.claimIds)),
@@ -314,6 +276,4 @@ check(
   assertionCount >= ExpectedMinimumAssertionsV2,
   `S8 查询/运行时探针断言不足：${assertionCount}`
 )
-process.stdout.write(
-  `memory query/runtime v2 probe: ${assertionCount} assertions\n`
-)
+process.stdout.write(`memory query/runtime v2 probe: ${assertionCount} assertions\n`)

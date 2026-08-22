@@ -48,6 +48,10 @@ Electron 内嵌 WebContents,和外部 Chrome 的 CDP 连接。本包的答案是
 
 **登录墙**。`BrowserLoginDetection` 负责识别「撞上登录 / 验证 / 支付」这类必须交还给人的场景。
 
+**工作区制品与 recipe 策略归 Browser Core**。`BrowserWorkspaceFileAccess` 负责主根内写入、
+主根优先且历史根只读的兼容访问；`BrowserRecipePreview` 负责 recipe 路径、同源与预览投影。
+Desktop 只注入站点根、Electron 会话和产品 IPC，不再各自维护一份浏览器领域规则。
+
 **CDP 侧的登录态与 Electron partition 互不通**:CDP profile 按 member / site 存在宿主注入的
 数据根下,**刻意不与 Electron partition 互操作**——两套登录存储不桥接是判决,不是欠账。
 

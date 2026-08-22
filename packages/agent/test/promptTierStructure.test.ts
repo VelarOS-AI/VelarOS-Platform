@@ -328,7 +328,7 @@ void describe('装配顺序是 (tier, priority, id) 的纯函数', () => {
     seams.register({
       modId: 'demo-mod',
       id: 'append-turn-context',
-      seam: 'turn-context:assemble',
+      event: 'turn-context:assemble',
       handler: () => ({ append: [{ id: 'seam-segment', text: '接缝追加的活动尾段' }] }),
     })
     const builder = new ContextBuilder(createBuiltInPromptRegistry(), seams)

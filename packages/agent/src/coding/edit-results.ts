@@ -1,4 +1,4 @@
-import { isArray, isEmpty, isFalse, isObject, isString,isTrue } from '@velaros-ai/core'
+import { isArray, isEmpty, isFalse, isObject, isPlainObject,isString,isTrue } from '@velaros-ai/core'
 
 import { hasVerificationRelevantModifiedPaths } from './paths'
 
@@ -35,12 +35,12 @@ class CodingSessionEditResultHelper {
   }
 
   public extractModifiedPaths(result: unknown): string[] {
-    if (!result || !isObject(result)) return []
+    if (!result || !isPlainObject(result)) return []
 
     const paths: string[] = []
-    const record = result as Record<string, unknown>
+    const record = result
 
-    // Capability mutations may return a changed-resource list.
+    // 能力变更可能返回已修改资源列表。
     const changedFiles = record.changedFiles
     if (isArray(changedFiles)) {
       changedFiles.forEach((p) => {
@@ -59,10 +59,10 @@ class CodingSessionEditResultHelper {
     const files = record.files
     if (isArray(files)) {
       files.forEach((file) => {
-        if (!file || !isObject(file)) return
+        if (!file || !isPlainObject(file)) return
 
         for (const key of ['path', 'fromPath', 'toPath'] as const) {
-          const value = (file as Record<string, unknown>)[key]
+          const value = (file)[key]
           if (isString(value) && value) {
             paths.push(value)
           }

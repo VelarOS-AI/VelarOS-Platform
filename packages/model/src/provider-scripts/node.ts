@@ -1,8 +1,8 @@
 /**
- * Node.js provider-script loader entry.
+ * `Node.js` 提供方脚本加载入口。
  *
- * Import this subpath only in trusted host processes. Browser and renderer
- * consumers should depend on `ProviderScriptRegistryPort` from the package root.
+ * 仅可信宿主进程可导入此子路径。浏览器和渲染器消费者应依赖包根入口导出的
+ * `ProviderScriptRegistryPort`。
  */
 export {
   type ProviderScriptDefinition,

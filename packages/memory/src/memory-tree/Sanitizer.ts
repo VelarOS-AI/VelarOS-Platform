@@ -1,4 +1,4 @@
-import { isArray, isBlank,isObject, isString } from '@velaros-ai/core'
+import { isArray, isBlank, isPlainObject,isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -64,9 +64,9 @@ function sanitizeMetadataValue(value: unknown, depth: number = 0): unknown {
   if (depth > 5) return '[TRUNCATED_METADATA]'
   if (isString(value)) return redactSecrets(normalizeEvidenceText(value, 2_000))
   if (isArray(value)) return value.slice(0, 100).map((item) => sanitizeMetadataValue(item, depth + 1))
-  if (!isObject(value)) return value
+  if (!isPlainObject(value)) return value
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
+    Object.entries(value)
       .slice(0, 100)
       .map(([key, item]) => [key.slice(0, 120), sanitizeMetadataValue(item, depth + 1)])
   )

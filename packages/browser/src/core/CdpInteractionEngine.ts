@@ -495,7 +495,7 @@ export class CdpInteractionEngine {
   }
 
   protected readBrowserPointerPoint(
-    value: Nullable<{ x: number; y: number }> | undefined
+    value: Optional<Nullable<{ x: number; y: number }>>
   ): Nullable<{ x: number; y: number }> {
     if (!value) return null
     if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) return null

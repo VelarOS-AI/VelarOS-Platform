@@ -10,7 +10,7 @@ import { browserTools } from '../tools/Collection'
  * 为什么浏览器能力要伸进项目空间：前端开发最高频的一句话是「起服务，打开 localhost:3000
  * 看看渲染对不对」。此前项目空间唯一的取网口是 `web:read`——只回正文文本，不能截图、
  * 不能点击，于是「改一行 CSS 看效果」在产品里跨不过去，用户只能另开一个没有项目根的
- * 浏览器会话（看不到代码、也改不了代码）。同一条裁决在游戏空间已经实锤过一次代价。
+ * 浏览器会话（看不到代码、也改不了代码）。跨空间重复能力会让这条常见工作流付出额外切换代价。
  *
  * 只写进 `availableInSpaces`、**不写** `residentInSpaces`：客居 = 可用不常驻。项目空间每轮
  * 的 schema 仍是项目那套，浏览器工具留在 loadable 由模型按名换入（`browser:enter_site`
@@ -18,7 +18,7 @@ import { browserTools } from '../tools/Collection'
  *
  * 装配前提：本 mod 与 project mod 同装（Desktop 出厂即如此）。`composeAgentModSpaces`
  * 对不存在的空间**当场抛错**——那是刻意的，引用一个没人贡献的空间属于无效装配。
- * game 空间 `inheritsSpaceIds: ['project']`，因此自动继承本条，不需要再点名一次。
+ * 继承 project 配方的其他空间也会自动继承本条，不需要再点名一次。
  */
 const BrowserGuestSpaceIds = ['project'] as const
 

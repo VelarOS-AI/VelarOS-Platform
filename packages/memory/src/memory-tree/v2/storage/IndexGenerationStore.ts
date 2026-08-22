@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { isNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { canonicalStringifyV2 } from '../DiffChain'
@@ -41,7 +42,7 @@ interface MemoryIndexGenerationEnvelopeV2 {
 export interface MemoryIndexGenerationSealReportV2 {
   readonly generation: number
   readonly encryptedByteLength: number
-  readonly replacedGeneration: number | null
+  readonly replacedGeneration: Nullable<number>
 }
 
 /**
@@ -118,9 +119,9 @@ export function sealMemoryIndexGenerationV2(
 export function openCurrentMemoryIndexGenerationV2(
   indexDir: string,
   keyring: MemoryKeyringStoreV2
-): { generation: number; plaintextArtifact: Buffer } | null {
+): Nullable<{ generation: number; plaintextArtifact: Buffer }> {
   const generation = readCurrentGenerationV2(indexDir)
-  if (generation === null) return null
+  if (isNull(generation)) return null
   const generationDir = indexGenerationDirV2(indexDir, generation)
   const artifactPath = join(generationDir, IndexArtifactFileNameV2)
   if (!existsSync(artifactPath)) {
@@ -179,7 +180,7 @@ export function pruneMemoryIndexGenerationsV2(
   keyring: MemoryKeyringStoreV2
 ): readonly number[] {
   const current = readCurrentGenerationV2(indexDir)
-  if (current === null) return []
+  if (isNull(current)) return []
   const removed: number[] = []
   for (const entry of listGenerationEntriesV2(indexDir, {
     suffix: '',
@@ -208,7 +209,7 @@ function parseIndexEnvelopeV2(
       error
     )
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  if (!isPlainObject(parsed)) {
     throw new AppError(MemoryStorageErrorCodesV2.corruption, 'index generation 信封必须是对象。')
   }
   const record = parsed as Record<string, unknown>
@@ -220,9 +221,9 @@ function parseIndexEnvelopeV2(
     record['format'] !== IndexEnvelopeFormatV2 ||
     record['generation'] !== expectedGeneration ||
     record['algorithm'] !== IndexEnvelopeAlgorithmV2 ||
-    typeof record['iv'] !== 'string' ||
-    typeof record['tag'] !== 'string' ||
-    typeof record['ciphertext'] !== 'string'
+    !isString(record['iv']) ||
+    !isString(record['tag']) ||
+    !isString(record['ciphertext'])
   ) {
     throw new AppError(
       MemoryStorageErrorCodesV2.corruption,

@@ -1,4 +1,7 @@
+import { toNullable } from '@velaros-ai/core'
+
 import type { ChatProviderId, ProviderScriptManifest } from './ModelContracts'
+
 
 export const OpenAICompatibleGatewayDefaultBaseURL = 'http://localhost:3001/v1'
 
@@ -245,7 +248,7 @@ const ModelProviderOperationalManifestMap = new Map(
 export function getModelProviderOperationalManifest(
   providerId: ChatProviderId
 ): Nullable<ModelProviderOperationalManifest> {
-  return ModelProviderOperationalManifestMap.get(providerId) ?? null
+  return toNullable(ModelProviderOperationalManifestMap.get(providerId))
 }
 
 export function getModelProviderIdsByAdapterKind(

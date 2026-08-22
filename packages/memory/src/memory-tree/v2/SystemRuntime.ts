@@ -1,7 +1,4 @@
-import {
-  type MemoryAuthorityOpenReportV2,
-  openMemoryAuthorityV2,
-} from './AuthorityDatabase'
+import { type MemoryAuthorityOpenReportV2, openMemoryAuthorityV2 } from './AuthorityDatabase'
 import { MemoryDreamRunCoordinatorV2 } from './DreamRuns'
 import { MemoryErasureServiceV2 } from './ErasureSaga'
 import { MemoryEvidenceIngestServiceV2 } from './EvidenceIngest'
@@ -10,15 +7,8 @@ import { MemoryIdentityKeyServiceV2 } from './IdentityKeys'
 import { MemoryMeaningCurationServiceV2 } from './MeaningCuration'
 import { MemoryQueryFacadeV2 } from './QueryFacade'
 import type { MemoryWrappingRootV2 } from './storage'
-import {
-  ContentKeyServiceV2,
-  MemoryBlobStoreV2,
-  MemoryKeyringStoreV2,
-} from './storage'
-import {
-  type MemoryTreeStoreOpenReportV2,
-  MemoryTreeStoreV2,
-} from './TreeStore'
+import { ContentKeyServiceV2, MemoryBlobStoreV2, MemoryKeyringStoreV2 } from './storage'
+import { type MemoryTreeStoreOpenReportV2, MemoryTreeStoreV2 } from './TreeStore'
 
 export interface OpenMemorySystemRuntimeOptionsV2 {
   readonly dataRoot: string
@@ -49,9 +39,7 @@ export class MemorySystemRuntimeV2 {
   public readonly query: MemoryQueryFacadeV2
 
   private constructor(
-    private readonly authority: ReturnType<
-      typeof openMemoryAuthorityV2
-    >['store'],
+    private readonly authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
     services: {
       ingest: MemoryEvidenceIngestServiceV2
       dream: MemoryDreamRunCoordinatorV2
@@ -69,9 +57,7 @@ export class MemorySystemRuntimeV2 {
     this.query = services.query
   }
 
-  public static open(
-    options: OpenMemorySystemRuntimeOptionsV2
-  ): {
+  public static open(options: OpenMemorySystemRuntimeOptionsV2): {
     runtime: MemorySystemRuntimeV2
     report: MemorySystemRuntimeOpenReportV2
   } {
@@ -80,31 +66,20 @@ export class MemorySystemRuntimeV2 {
     })
     try {
       const authority = authorityOpen.store
-      const keyring = MemoryKeyringStoreV2.open(
-        authority.roots.keyringDir,
-        options.wrappingRoot,
-        { now: options.now }
-      ).store
+      const keyring = MemoryKeyringStoreV2.open(authority.roots.keyringDir, options.wrappingRoot, {
+        now: options.now,
+      }).store
       const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
       const contentKeys = new ContentKeyServiceV2(keyring, blobs)
       const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-      const ingest = new MemoryEvidenceIngestServiceV2(
-        authority,
-        contentKeys,
-        identityKeys,
-        blobs
-      )
+      const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
       const recoveredOrphanBlobCount = ingest.recoverOrphanedBlobs()
       const treeOpen = MemoryTreeStoreV2.open({
         authority,
         contentKeys,
         keyring,
       })
-      const dream = new MemoryDreamRunCoordinatorV2(
-        authority,
-        contentKeys,
-        treeOpen.store
-      )
+      const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, treeOpen.store)
       const meaning = new MemoryMeaningCurationServiceV2(
         authority,
         contentKeys,
@@ -112,26 +87,15 @@ export class MemorySystemRuntimeV2 {
         treeOpen.store,
         dream
       )
-      const erasure = new MemoryErasureServiceV2(
-        authority,
-        contentKeys,
-        keyring,
-        treeOpen.store
-      )
-      const resumedErasureCount = erasure.resumePending(
-        options.now?.() ?? Date.now()
-      ).length
+      const erasure = new MemoryErasureServiceV2(authority, contentKeys, keyring, treeOpen.store)
+      const resumedErasureCount = erasure.resumePending(options.now?.() ?? Date.now()).length
       const replay = new MemoryEvidenceReplayMigrationV2(
         authority,
         ingest,
         contentKeys,
         identityKeys
       )
-      const query = new MemoryQueryFacadeV2(
-        authority,
-        contentKeys,
-        treeOpen.store
-      )
+      const query = new MemoryQueryFacadeV2(authority, contentKeys, treeOpen.store)
       return {
         runtime: new MemorySystemRuntimeV2(authority, {
           ingest,
@@ -160,9 +124,7 @@ export class MemorySystemRuntimeV2 {
   }
 }
 
-export function openMemorySystemRuntimeV2(
-  options: OpenMemorySystemRuntimeOptionsV2
-): {
+export function openMemorySystemRuntimeV2(options: OpenMemorySystemRuntimeOptionsV2): {
   runtime: MemorySystemRuntimeV2
   report: MemorySystemRuntimeOpenReportV2
 } {

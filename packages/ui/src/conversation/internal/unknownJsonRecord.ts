@@ -1,3 +1,4 @@
+import { optionalWhen } from './runtime'
 import {
   isArray,
   isBlank,
@@ -73,7 +74,7 @@ export function peekLooseString(
   key: string
 ): string | undefined {
   const value = record?.[key]
-  return isString(value) ? value : undefined
+  return optionalWhen(isString, value)
 }
 
 export function peekLooseBoolean(
@@ -81,7 +82,7 @@ export function peekLooseBoolean(
   key: string
 ): boolean | undefined {
   const value = record?.[key]
-  return isBoolean(value) ? value : undefined
+  return optionalWhen(isBoolean, value)
 }
 
 export function readStringArray(

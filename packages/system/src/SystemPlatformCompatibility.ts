@@ -38,10 +38,10 @@ export type DirectorySymlinkType = 'dir' | 'junction'
 const UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 const DefaultWindowsExecutableExtensions = ['.EXE', '.CMD', '.BAT', '.COM']
 
-function readCurrentProcess(): {
+function readCurrentProcess(): Nullable<{
   platform?: RuntimePlatform
   env?: NodeJS.ProcessEnv
-} | null {
+}> {
   const currentProcess = (
     globalThis as typeof globalThis & {
       process?: { platform?: RuntimePlatform; env?: NodeJS.ProcessEnv }

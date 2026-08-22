@@ -1,16 +1,15 @@
 /**
- * 折叠桩统一信封(阶段二 B1:地基)。
+ * 折叠桩统一信封，是阶段二 B1 的基础设施。
  *
- * 现状:模型可见的"内容被折叠"标记有 8+ 种皮(__kernelRef/__truncated/__contextSummary/
- * 多种 __contextRef 值),各层用各自的字符串嗅探互认,召回 affordance 不一致——模型要
- * 认识每一种皮是纯心智负担。本模块提供:
- *  - 统一信封类型与 builder(B2 起各生产者逐批接入);
- *  - isFoldStubText:唯一的廉价嗅探谓词(含全部旧键),各层互认从此单点维护;
- *  - normalizeLegacyFoldStub:旧键→信封的只读归一(B3 历史装载用;绝不回写归档)。
+ * 模型可见的旧折叠标记存在多种形态，各层曾用各自的字符串探测并提供不一致的召回入口。本模块
+ * 提供统一信封构造器、覆盖全部旧键的唯一探测谓词 `isFoldStubText`，以及只读归一旧桩的
+ * `normalizeLegacyFoldStub`。历史归一绝不回写归档。
  *
- * 铁律:机器生产的桩,retrieval.args 必须带显式 refKind——别依赖前缀推断
- * (InMemory kernel outputId 形如 session:tool-output:1,会被冒号数推断误判成 evidence)。
+ * 机器生成的桩必须在 `retrieval.args.refKind` 中显式标明引用类型，不得依赖前缀推断；例如内存内核
+ * 生成的 `outputId` 可能形如 `session:tool-output:1`，按冒号数量推断会误判为证据引用。
  */
+
+import { isNumber, isPlainObject, isString,isTrue } from '@velaros-ai/core'
 
 export type ContextRefKind =
   | 'tool-output'
@@ -65,10 +64,10 @@ export function buildContextRefEnvelope(
 }
 
 /**
- * 旧键清单(读兼容,永不删除 __truncated/__kernelRef 的识别):
- * - __kernelRef:'tool-output' 是唯一持久化进模型历史的桩,旧归档永远含旧键;
- * - __truncated 由 core toolResultSerialization 独立生产(顶层超长桩),该生产者迁移前持续存在;
- * - __contextSummary 是 attention grounded summary 的旧判别键(B3 改名)。
+ * 旧键清单用于读取兼容，不能删除对 `__truncated` 与 `__kernelRef` 的识别：
+ * - `__kernelRef: 'tool-output'` 曾持久化进模型历史，旧归档会长期包含该键；
+ * - `__truncated` 由核心工具结果序列化逻辑独立生产，在生产者迁移前持续存在；
+ * - `__contextSummary` 是注意力有据摘要在 B3 改名前使用的判别键。
  */
 const FoldStubSniffTokens = [
   '"__contextRef"',
@@ -92,13 +91,13 @@ export function isFoldStubText(value: string): boolean {
 
 /** 结构化判定:解析后的对象是否为(任意代际的)折叠桩对象。 */
 export function isFoldStubRecord(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (!isPlainObject(value)) return false
   const record = value as Record<string, unknown>
   return (
-    typeof record.__contextRef === 'string' ||
-    typeof record.__kernelRef === 'string' ||
-    record.__truncated === true ||
-    typeof record.__contextSummary === 'string'
+    isString(record.__contextRef) ||
+    isString(record.__kernelRef) ||
+    isTrue(record.__truncated) ||
+    isString(record.__contextSummary)
   )
 }
 
@@ -108,9 +107,9 @@ export function isFoldStubRecord(value: unknown): boolean {
  * 宽容边界,其余字段缺失/异形由消费方按可选字段兜住,不在此收紧。
  */
 export function isContextRefEnvelope(value: unknown): value is ContextRefEnvelope {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (!isPlainObject(value)) return false
   const record = value as Record<string, unknown>
-  return typeof record.__contextRef === 'string' && typeof record.ref === 'string'
+  return isString(record.__contextRef) && isString(record.ref)
 }
 
 /**
@@ -118,14 +117,14 @@ export function isContextRefEnvelope(value: unknown): value is ContextRefEnvelop
  * 认不出的形状原样返回 null,调用方保留原文。
  */
 export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnvelope> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (!isPlainObject(value)) return null
   const record = value as Record<string, unknown>
 
   // 新信封:原样透传。
   if (isContextRefEnvelope(value)) return value
 
   const readString = (key: string): string | undefined =>
-    typeof record[key] === 'string' ? (record[key] as string) : undefined
+    isString(record[key]) ? (record[key] as string) : undefined
 
   // __kernelRef:'tool-output'(唯一持久化桩)。
   if (record.__kernelRef === 'tool-output') {
@@ -140,7 +139,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       toolName: readString('toolName'),
       payloadRef,
       excerpt: readString('preview'),
-      originalLength: typeof record.chars === 'number' ? (record.chars as number) : undefined,
+      originalLength: isNumber(record.chars) ? (record.chars as number) : undefined,
       retrieval: {
         tool: 'context:recall',
         args: { ref, refKind: payloadRef ? 'payload-ref' : 'tool-payload' },
@@ -149,7 +148,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
   }
 
   // __truncated 整体桩(sanitize/core 顶层)。
-  if (record.__truncated === true) {
+  if (isTrue(record.__truncated)) {
     const toolCallId = readString('toolCallId')
     if (!toolCallId) return null
     return buildContextRefEnvelope({
@@ -157,7 +156,7 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
       ref: toolCallId,
       toolCallId,
       originalLength:
-        typeof record.originalLength === 'number' ? (record.originalLength as number) : undefined,
+        isNumber(record.originalLength) ? (record.originalLength as number) : undefined,
       retrieval: {
         tool: 'context:recall',
         args: { ref: toolCallId, refKind: 'tool-payload' },

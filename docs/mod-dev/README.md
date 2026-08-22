@@ -19,8 +19,9 @@ agent 的运行时行为。
 | [getting-started.md](./getting-started.md)     | 从零写一个最小 mod：manifest → 本地安装 → 启停 → 读诊断    |
 | [package-format-v1.md](./package-format-v1.md) | `.velarmod` 压缩包、扫描/信任/权限确认、内置构建与发布流程 |
 | [axes/README.md](./axes/README.md)             | 十一根贡献轴的索引与总表（九根 agent 轴 + 两族 ui 轴）     |
-| [seams.md](./seams.md)                         | 拦截 seam：改变运行时行为的那条缝，15 个 kind、4 个已接线  |
+| [seams.md](./seams.md)                         | Hook 生命周期：15 个 event、匹配/折叠语义与 5 个已接线事件 |
 | [capabilities.md](./capabilities.md)           | capability token 与权限 broker；记忆后端当案例             |
+| [product-agent-surfaces.md](./product-agent-surfaces.md) | 领域产品如何组合 State、Memory、Skill、Workflow 与 Agent 表面 |
 | [integration.md](./integration.md)             | MCP / velar-hooks / 旧插件市场 三者与 mod 的定位边界       |
 | [distribution.md](./distribution.md)           | bundled / installed / 市场 / 整合包，以及认证模型          |
 | [conventions.md](./conventions.md)             | 数据生命周期、ownerModId、i18n、语义词汇墙与依赖方向       |
@@ -60,7 +61,7 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
         永不解析任何领域贡献轴
 
 第二级  Agent 领域 Loader          packages/agent/src/mods/
-        解析 agent 节，把贡献分发进九个注册面 + 拦截 seam
+        解析 agent 节，把贡献分发进九个注册面 + Hook 派发器
 
 壳级    产品壳自己的注册表          解析 ui 节；不穿过 Kernel、不穿过 Agent 主干
 ```
@@ -84,7 +85,7 @@ pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干
 | **discover**   | 从 Kernel pack 清单折算候选包（`discoverAgentModPackages`）；bundled 走构建图不走发现 | 跳过一律留痕：`mod.pack-disabled` / `mod.pack-not-agent-axis` / `mod.pack-unreadable` / `mod.pack-no-agent-section` / `mod.pack-bindings-unloadable` |
 | **validate**   | manifest schema + `engines` 三轴 + `trust` + 绑定完整性 + `requiredAxes`              | 拒载并给可读诊断                                                                                                                                     |
 | **resolve**    | 平铺解析：mod id 唯一、轴内主键全宿主唯一（含工具名）                                 | 冲突 → **整包拒载**（`mod.duplicate-id` / `mod.tool-name-conflict` / `mod.contribution-conflict`），不做「后者覆盖前者」                             |
-| **activate**   | 逐轴写进注册表，钩子写进 seam 派发器，推进 generation                                 | —                                                                                                                                                    |
+| **activate**   | 逐轴写进注册表，Hook 写进 `loader.hooks`，推进 generation                                  | —                                                                                                                                                    |
 | **deactivate** | `loader.deactivate(modId)` 摘除全部贡献与钩子                                         | 留 `mod.deactivated` 诊断；**用户数据一律保留**（见 conventions.md）                                                                                 |
 
 **铁律：validate 先于任何归一化。** 冲突、非法、缺绑定一律拒载并给可读诊断，
@@ -97,9 +98,9 @@ pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干
 
 | 值                   | 含义                  | 能力边界                                                 |
 | -------------------- | --------------------- | -------------------------------------------------------- |
-| `bundled-official`   | 随包官方              | 可贡献代码钩子（工具 handler / seam handler）            |
-| `marketplace-signed` | 市场签名              | 宿主内置公钥验签通过后，可按宿主公开能力目录请求权限     |
-| `local-dev`          | 开发者本机 / 用户导入 | 未签名来源；可请求公开目录内能力，但必须在导入时逐项批准 |
+| `bundled-official`   | 随包官方              | 可使用进程内函数 binding；仍受声明、策略和权限门约束             |
+| `marketplace-signed` | 市场签名              | 验签通过后，可按宿主公开目录请求权限与宿主实现的隔离载体         |
+| `local-dev`          | 开发者本机 / 用户导入 | 未签名来源；可请求公开能力，导入/运行时均须显式批准，不得 import 进宿主 |
 
 宿主用 `AgentModHostProfile.allowedTrustLevels` 决定放行哪些；**缺省 = `['bundled-official']`**
 （fail-closed，见 `DefaultAllowedTrustLevels`）。不在集合内 → `mod.trust-not-allowed`。
@@ -136,13 +137,13 @@ Platform 的安全缺省只允许 `bundled-official`；宿主没有显式放行�
 | 机制             | 用途判据                                 | 形态                              | 文档                                              |
 | ---------------- | ---------------------------------------- | --------------------------------- | ------------------------------------------------- |
 | **① 声明贡献点** | 平台需要**索引 / 展示 / 惰性加载**的东西 | manifest 静态枚举                 | [axes/](./axes/README.md)                         |
-| **② 拦截 seam**  | 需要**改变运行时行为**的东西             | 15 个闭集钩子                     | [seams.md](./seams.md)                            |
+| **② Hook**       | 需要**改变运行时行为**的东西             | 15 个闭集 event + matcher/mode/timeout | [seams.md](./seams.md)                            |
 | **③ 开放数据面** | **平台还没想到、无法预先枚举**的东西     | custom entry / message + renderer | 数据形状走 Agent protocol，渲染走宿主定义的信任梯 |
 
-一句话判据：没想到的**数据形状**走数据面；没想到的**行为**走 seam；想清楚要**索引 / 展示**的
+一句话判据：没想到的**数据形状**走数据面；没想到的**行为**走 Hook；想清楚要**索引 / 展示**的
 能力走声明贡献点。
 
-**贡献点是封闭集合，由官方演进——mod 不能发明新贡献点、新轴、新 seam kind、新 manifest 节。**
+**贡献点是封闭集合，由官方演进——mod 不能发明新贡献点、新轴、新 Hook event、新 manifest 节。**
 觉得词表不够用，走沙箱 HTML（T2 档），不走「加个自定义词条」。
 
 ## 七、去哪找源码

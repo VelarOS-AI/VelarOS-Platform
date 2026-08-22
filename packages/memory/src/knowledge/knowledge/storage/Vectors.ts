@@ -1,7 +1,7 @@
 import * as lancedb from '@lancedb/lancedb'
 import { DataType } from 'apache-arrow'
 
-import { first, isBlank, isEmpty, isPresent } from '@velaros-ai/core'
+import { first, isBlank, isEmpty, isPresent,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -218,7 +218,7 @@ class KnowledgeVectors {
       path: this.storagePathProvider.getLanceDatabasePath(),
       tableName: `${KNOWLEDGE_VECTOR_TABLE_PREFIX}*`,
       rowCount,
-      dimensions: dimensions.size === 1 ? (first([...dimensions]) ?? null) : null,
+      dimensions: dimensions.size === 1 ? (toNullable(first([...dimensions]))) : null,
       indices,
     })
   }

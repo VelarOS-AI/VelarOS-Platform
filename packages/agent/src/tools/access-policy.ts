@@ -3,12 +3,14 @@ import type {
   CapabilityScopeId,
   ToolCategoryId,
 } from '@velaros-ai/agent/protocol'
+import { toNullable } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
   decideCapabilityScopeCategory,
   resolveCapabilityScopeId,
 } from '../capabilities'
+
 
 type ToolCategoryUnavailableReason = string
 
@@ -42,7 +44,7 @@ function decideToolCategoryAccess(
   })
   return {
     allowed: decision.allowed,
-    reason: decision.reasonCode ?? null,
+    reason: toNullable(decision.reasonCode),
     message: decision.message,
   }
 }

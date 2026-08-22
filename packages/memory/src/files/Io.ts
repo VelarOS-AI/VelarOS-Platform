@@ -1,3 +1,4 @@
+import { toNullable } from '@velaros-ai/core'
 /**
  * `memory-files` 的文件系统端口。
  *
@@ -59,7 +60,7 @@ export function createInMemoryMemoryFilesIo(
         .sort()
     },
     readTextFile(path) {
-      return files.get(normalize(path)) ?? null
+      return toNullable(files.get(normalize(path)))
     },
     writeTextFile(path, content) {
       files.set(normalize(path), content)

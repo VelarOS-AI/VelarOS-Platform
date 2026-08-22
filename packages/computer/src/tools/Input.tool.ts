@@ -6,7 +6,7 @@ import { ComputerControlCapability } from './Capabilities'
 import { requireComputerAvailable } from './Context'
 import { defineComputerTool } from './Types'
 
-/** Move the cursor to a coordinate without clicking. */
+/** 将光标移动到指定坐标，不执行点击。 */
 const computerMove = defineComputerTool<{ x: number; y: number }>({
   name: 'computer:move',
   role: 'control',
@@ -40,7 +40,7 @@ const computerMove = defineComputerTool<{ x: number; y: number }>({
   },
 })
 
-/** Click at a coordinate (button + count configurable). */
+/** 在指定坐标点击，可配置鼠标按键与点击次数。 */
 const computerClick = defineComputerTool<{
   x: number
   y: number
@@ -90,7 +90,7 @@ const computerClick = defineComputerTool<{
   },
 })
 
-/** Type literal text into the focused element. */
+/** 向当前聚焦元素输入原样文本。 */
 const computerType = defineComputerTool<{ text: string }>({
   name: 'computer:type',
   role: 'control',
@@ -117,7 +117,7 @@ const computerType = defineComputerTool<{ text: string }>({
   },
 })
 
-/** Press a key or key combination (e.g. "cmd+a", "enter"). */
+/** 按下单键或组合键，例如 `cmd+a`、`enter`。 */
 const computerKey = defineComputerTool<{ keys: string }>({
   name: 'computer:key',
   role: 'control',

@@ -207,7 +207,7 @@ class BrowserRecipeRunner {
 
   private buildRunArtifactName(
     recipe: BrowserRecipeSkeleton,
-    runName: string | undefined,
+    runName: Optional<string>,
     startedAt: number,
     suffix: string
   ): string {

@@ -21,6 +21,8 @@
  * 一行机制都不用新造。
  */
 
+import { isFunction } from '@velaros-ai/core'
+
 import type { MemoryEvidenceRecord, MemoryRecallItem } from '../memory-tree/Types'
 
 import type { MemoryBackendDescriptor, MemoryStoreBackend } from './Contract'
@@ -63,7 +65,7 @@ export function resolveAuthorityEnumeration(
   backend: MemoryStoreBackend,
 ): MemoryAuthorityEnumeration | undefined {
   const candidate = backend as Partial<MemoryAuthorityEnumeration>
-  return typeof candidate.listAll === 'function'
+  return isFunction(candidate.listAll)
     ? (candidate as MemoryAuthorityEnumeration)
     : undefined
 }

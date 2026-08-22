@@ -28,7 +28,6 @@ const DomainWords = [
   'office',
   'computer',
   'project',
-  'game',
 ]
 
 /**

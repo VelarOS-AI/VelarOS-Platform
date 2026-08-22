@@ -39,7 +39,7 @@ describe('model span identity', () => {
     const spans = beginLoopTurnSpans(runScope, {
       turn: 1,
       roleId: 'primary-agent',
-      provider: 'airjelly',
+      provider: 'test-provider',
       model: 'auto',
       providerModel: 'deepseek/deepseek-v4-pro',
     })
@@ -72,7 +72,7 @@ describe('model span identity', () => {
     const spans = beginLoopTurnSpans(runScope, {
       turn: 1,
       roleId: 'primary-agent',
-      provider: 'airjelly',
+      provider: 'test-provider',
       model: 'auto',
       providerModel: 'deepseek/deepseek-v4-pro',
     })

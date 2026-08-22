@@ -9,6 +9,8 @@
  * 在写回时保序输出——后端不认识的字段是用户或未来档的资产，不许被静默吞掉。
  */
 
+import { isBlank, isEmpty,isUndefined } from '@velaros-ai/core'
+
 /** frontmatter 里的三个一等字段之外，后端自己也会写的保留 key（写回时保序在前）。 */
 const ReservedAttributeOrder = [
   'id',
@@ -83,8 +85,8 @@ function firstParagraph(body: string): string {
   for (const line of body.split('\n')) {
     const trimmed = line.trim()
     if (/^\s{0,3}#{1,6}\s+/u.test(line)) continue
-    if (trimmed.length === 0) {
-      if (paragraph.length > 0) break
+    if (isEmpty(trimmed)) {
+      if (!isEmpty(paragraph)) break
       continue
     }
     paragraph.push(trimmed)
@@ -107,7 +109,7 @@ export function parseMemoryFileDocument(
   const lines = text.split('\n')
 
   let cursor = 0
-  while (cursor < lines.length && lines[cursor].trim().length === 0) cursor += 1
+  while (cursor < lines.length && isBlank(lines[cursor].trim())) cursor += 1
 
   const fields = new Map<string, string>()
   let hadFrontmatter = false
@@ -156,7 +158,7 @@ export function parseMemoryFileDocument(
       type = value
       continue
     }
-    if (canonical !== undefined) continue
+    if (!isUndefined(canonical)) continue
     attributes[key] = value
   }
 
@@ -177,7 +179,7 @@ export function parseMemoryFileDocument(
 /** frontmatter 值需要加引号的场景：首尾空白、以特殊标点开头、含换行。 */
 function encodeValue(value: string): string {
   const normalized = value.replaceAll('\n', ' ').trim()
-  if (normalized.length === 0) return "''"
+  if (isEmpty(normalized)) return "''"
   if (/^[#&*!|>%@`[{]/u.test(normalized) || normalized !== value) return `'${normalized.replaceAll("'", "''")}'`
   return normalized
 }
@@ -203,7 +205,7 @@ export function serializeMemoryFileDocument(
   ]
   for (const key of ReservedAttributeOrder) {
     const value = attributes[key]
-    if (value === undefined) continue
+    if (isUndefined(value)) continue
     lines.push(`${key}: ${encodeValue(value)}`)
     delete attributes[key]
   }

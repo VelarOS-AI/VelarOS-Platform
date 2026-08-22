@@ -1,5 +1,7 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
+import { isEmpty } from '@velaros-ai/core'
+
 export interface KnowledgePathPlatform {
   isAbsolute(path: string): boolean
   relative(from: string, to: string): string
@@ -19,13 +21,11 @@ export function isRelativePathInsideRoot(
   platform: KnowledgePathPlatform = DefaultPathPlatform
 ): boolean {
   return (
-    relativePath === ''
-    || relativePath === '.'
-    || (
-      relativePath !== '..'
-      && !relativePath.startsWith(`..${platform.sep}`)
-      && !platform.isAbsolute(relativePath)
-    )
+    isEmpty(relativePath) ||
+    relativePath === '.' ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${platform.sep}`) &&
+      !platform.isAbsolute(relativePath))
   )
 }
 
@@ -33,7 +33,7 @@ export function getRelativePathInsideRoot(
   rootPath: string,
   candidatePath: string,
   platform: KnowledgePathPlatform = DefaultPathPlatform
-): string | null {
+): Nullable<string> {
   const relativePath = platform.relative(
     platform.resolve(rootPath),
     platform.resolve(candidatePath)

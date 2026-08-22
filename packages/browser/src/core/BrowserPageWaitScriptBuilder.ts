@@ -227,7 +227,7 @@ class BrowserPageWaitScriptBuilder {
   }
 
 
-  private normalizeString(value: string | undefined): Nullable<string> {
+  private normalizeString(value: Optional<string>): Nullable<string> {
     if (!isString(value)) return null
     const trimmed = value.trim()
     return isEmpty(trimmed) ? null : trimmed

@@ -21,7 +21,7 @@ import type {
   AgentModContributionAxisName,
   AgentModManifest,
 } from '../src/protocol'
-import { AgentModManifestSchemaVersion } from '../src/protocol'
+import { AgentModManifestSchemaVersion, parseAgentModManifest } from '../src/protocol'
 
 const AllAxes: readonly AgentModContributionAxisName[] = [
   'tools',
@@ -495,13 +495,135 @@ describe('注册表两阶段与 generation', () => {
 })
 
 describe('seam 派发器', () => {
+  test('event 是标准字段，旧 seam 输入只作解析别名', () => {
+    const modern = parseAgentModManifest({
+      ...createManifest(),
+      contributes: {
+        hooks: [{ id: 'modern', event: 'session:start' }],
+      },
+    })
+    const legacy = parseAgentModManifest({
+      ...createManifest(),
+      contributes: {
+        hooks: [{ id: 'legacy', seam: 'session:start' }],
+      },
+    })
+
+    expect(modern.ok).toBe(true)
+    expect(legacy.ok).toBe(true)
+    if (!modern.ok || !legacy.ok) return
+    expect(modern.manifest.contributes.hooks?.[0]).toEqual({
+      id: 'modern',
+      event: 'session:start',
+      mode: 'blocking',
+    })
+    expect(legacy.manifest.contributes.hooks?.[0]).toEqual({
+      id: 'legacy',
+      event: 'session:start',
+      mode: 'blocking',
+    })
+  })
+
+  test('matcher 在派发器单点生效，编译期与外部 binding 不各自解释', async () => {
+    const dispatcher = new AgentModSeamDispatcher()
+    let calls = 0
+    dispatcher.beginRegistration()
+    dispatcher.register({
+      modId: 'probe',
+      id: 'matched',
+      event: 'tool-call:before',
+      matcher: { toolNames: ['probe:allowed'] },
+      handler: () => {
+        calls += 1
+        return { args: { matched: true } }
+      },
+    })
+    dispatcher.seal()
+
+    const skipped = await dispatcher.dispatchToolCallBefore({
+      toolCallId: 'call-skipped',
+      toolName: 'probe:other',
+      args: {},
+      sessionId: null,
+    })
+    const matched = await dispatcher.dispatchToolCallBefore({
+      toolCallId: 'call-matched',
+      toolName: 'probe:allowed',
+      args: {},
+      sessionId: null,
+    })
+
+    expect(skipped).toEqual({})
+    expect(matched.args).toEqual({ matched: true })
+    expect(calls).toBe(1)
+  })
+
+  test('blocking Hook 超时后 abort signal 并隔离，主链继续', async () => {
+    const dispatcher = new AgentModSeamDispatcher()
+    let aborted = false
+    dispatcher.beginRegistration()
+    dispatcher.register({
+      modId: 'probe',
+      id: 'slow',
+      event: 'tool-call:before',
+      timeoutMs: 100,
+      handler: (_event, context) =>
+        new Promise((resolve) => {
+          context.signal.addEventListener('abort', () => {
+            aborted = true
+            resolve({ args: { tooLate: true } })
+          }, { once: true })
+        }),
+    })
+    dispatcher.seal()
+
+    const outcome = await dispatcher.dispatchToolCallBefore({
+      toolCallId: 'call-timeout',
+      toolName: 'probe:slow',
+      args: {},
+      sessionId: null,
+    })
+
+    expect(outcome).toEqual({})
+    expect(aborted).toBe(true)
+    expect(dispatcher.listDiagnostics().at(-1)?.code).toBe('mod.hook-timeout')
+  })
+
+  test('background Hook 只观察，返回的拦截/改写结果不进主链', async () => {
+    const dispatcher = new AgentModSeamDispatcher()
+    let observed = false
+    dispatcher.beginRegistration()
+    dispatcher.register({
+      modId: 'probe',
+      id: 'observer',
+      event: 'tool-call:before',
+      mode: 'background',
+      handler: () => {
+        observed = true
+        return { block: { reason: 'must be ignored' }, args: { ignored: true } }
+      },
+    })
+    dispatcher.seal()
+
+    const outcome = await dispatcher.dispatchToolCallBefore({
+      toolCallId: 'call-background',
+      toolName: 'probe:observe',
+      args: {},
+      sessionId: null,
+    })
+    await Promise.resolve()
+
+    expect(observed).toBe(true)
+    expect(outcome).toEqual({})
+  })
+
   test('钩子异常被隔离成诊断，不打断派发链', async () => {
     const dispatcher = new AgentModSeamDispatcher()
     dispatcher.beginRegistration()
     dispatcher.register({
       modId: 'probe.a',
       id: 'boom',
-      seam: 'tool-call:before',
+      event: 'tool-call:before',
       priority: 1,
       handler: () => {
         throw new Error('钩子炸了')
@@ -510,7 +632,7 @@ describe('seam 派发器', () => {
     dispatcher.register({
       modId: 'probe.b',
       id: 'rewrite',
-      seam: 'tool-call:before',
+      event: 'tool-call:before',
       priority: 2,
       handler: () => ({ args: { rewritten: true } }),
     })
@@ -533,7 +655,7 @@ describe('seam 派发器', () => {
     dispatcher.register({
       modId: 'probe.a',
       id: 'block',
-      seam: 'tool-call:before',
+      event: 'tool-call:before',
       priority: 1,
       handler: () => ({ block: { reason: '策略拒绝' } }),
     })
@@ -541,7 +663,7 @@ describe('seam 派发器', () => {
     dispatcher.register({
       modId: 'probe.b',
       id: 'later',
-      seam: 'tool-call:before',
+      event: 'tool-call:before',
       priority: 2,
       handler: () => {
         laterRan = true
@@ -568,7 +690,7 @@ describe('seam 派发器', () => {
       dispatcher.register({
         modId: 'probe',
         id: 'late',
-        seam: 'turn:start',
+        event: 'turn:start',
         handler: () => undefined,
       })
     ).toThrow(/已封存/u)
@@ -580,7 +702,7 @@ describe('seam 派发器', () => {
     dispatcher.register({
       modId: 'probe',
       id: 'async',
-      seam: 'turn-context:assemble',
+      event: 'turn-context:assemble',
       handler: (() =>
         Promise.resolve({ append: [{ id: 'x', text: 'x' }] })) as never,
     })
@@ -597,6 +719,29 @@ describe('seam 派发器', () => {
     )
   })
 
+  test('异步宿主入口可承载 command 形态的 turn-context Hook', async () => {
+    const dispatcher = new AgentModSeamDispatcher()
+    dispatcher.beginRegistration()
+    dispatcher.register({
+      modId: 'probe',
+      id: 'async-context',
+      event: 'turn-context:assemble',
+      handler: async () => ({ append: [{ id: 'external', text: 'context' }] }),
+    })
+    dispatcher.seal()
+
+    const outcome = await dispatcher.dispatchTurnContextAssembleAsync({
+      stableSegments: [],
+      dynamicSegments: [],
+    })
+
+    expect(outcome.append).toEqual([{
+      id: 'probe.external',
+      text: 'context',
+    }])
+    expect(dispatcher.listDiagnostics()).toEqual([])
+  })
+
   test('mod 钩子经 hooks 轴装载后进入派发链', async () => {
     const loader = new AgentModLoader({ host: createHost() })
     const seen: string[] = []
@@ -606,7 +751,7 @@ describe('seam 派发器', () => {
         origin: '/packs/hook',
         manifest: createManifest({
           contributes: {
-            hooks: [{ id: 'trace', seam: 'session:start', priority: 5 }],
+            hooks: [{ id: 'trace', event: 'session:start', priority: 5 }],
           },
         }),
         bindings: {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 
+import { isArray, isNotNull, isNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -48,7 +49,7 @@ export function buildMemoryTreeBaseManifestV2(
   }
   const blobRefs = [
     ...new Set(
-      sortedNodes.flatMap((node) => (node.content.blobRef === null ? [] : [node.content.blobRef]))
+      sortedNodes.flatMap((node) => (isNull(node.content.blobRef) ? [] : [node.content.blobRef]))
     ),
   ].sort(compareCodeUnitV2)
   const redactedStableKeys = sortedNodes
@@ -110,7 +111,7 @@ export function computeMemoryTreeBaseHashesV2(
 }
 
 export function parseMemoryTreeBaseStateV2(raw: Buffer | string): MemoryTreeBaseStateV2 {
-  const source = typeof raw === 'string' ? raw : raw.toString('utf8')
+  const source = isString(raw) ? raw : raw.toString('utf8')
   let parsed: unknown
   try {
     parsed = JSON.parse(source)
@@ -141,7 +142,7 @@ function isMemoryTreeBaseStateV2(value: unknown): value is MemoryTreeBaseStateV2
     value['format'] !== MemoryTreeBaseStateFormatV2 ||
     !Number.isSafeInteger(value['baseVersion']) ||
     (value['baseVersion'] as number) < 1 ||
-    !Array.isArray(value['nodes']) ||
+    !isArray(value['nodes']) ||
     !value['nodes'].every(isMemoryTreeNodeStructV2) ||
     !isStrictRecordV2(value['manifest'], [
       'baseVersion',
@@ -152,17 +153,18 @@ function isMemoryTreeBaseStateV2(value: unknown): value is MemoryTreeBaseStateV2
       'redactedCount',
       'redactedStableKeys',
     ])
-  ) return false
+  )
+    return false
   const manifest = value['manifest']
   return (
     manifest['format'] === 'velaros.memory.tree-base-manifest.v2' &&
     manifest['baseVersion'] === value['baseVersion'] &&
-    Array.isArray(manifest['blobRefs']) &&
-    manifest['blobRefs'].every((entry) => typeof entry === 'string') &&
-    Array.isArray(manifest['nodeStableKeys']) &&
-    manifest['nodeStableKeys'].every((entry) => typeof entry === 'string') &&
-    Array.isArray(manifest['redactedStableKeys']) &&
-    manifest['redactedStableKeys'].every((entry) => typeof entry === 'string') &&
+    isArray(manifest['blobRefs']) &&
+    manifest['blobRefs'].every((entry) => isString(entry)) &&
+    isArray(manifest['nodeStableKeys']) &&
+    manifest['nodeStableKeys'].every((entry) => isString(entry)) &&
+    isArray(manifest['redactedStableKeys']) &&
+    manifest['redactedStableKeys'].every((entry) => isString(entry)) &&
     Number.isSafeInteger(manifest['nodeCount']) &&
     Number.isSafeInteger(manifest['redactedCount'])
   )
@@ -188,9 +190,9 @@ function isStrictRecordV2(
   value: unknown,
   expectedKeys: readonly string[]
 ): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!isPlainObject(value)) return false
   const prototype: unknown = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) return false
+  if (prototype !== Object.prototype && isNotNull(prototype)) return false
   const actualKeys = Object.keys(value).sort()
   const sortedExpected = [...expectedKeys].sort()
   return (

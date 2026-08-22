@@ -78,8 +78,9 @@ expanded 的预算及自动选择阈值，用于解释运行行为，不提供�
 
 **子 agent**。`SubAgentDispatcher` 派发并发子任务;结果回填父会话时带来源前缀,防止并行结果串台。
 
-**mod 两级注册机的第二级**。`AgentModLoader` 按 manifest 装载九条贡献轴,`AgentModSeamDispatcher`
-派发拦截钩子,`assembleAgentMods` 是宿主把 Kernel pack 清单接进来的入口。
+**mod 两级注册机的第二级**。`AgentModLoader` 按 manifest 装载九条贡献轴，`loader.hooks`
+（`AgentModHookDispatcher`）派发标准生命周期 Hook，`assembleAgentMods` 是宿主把 Kernel pack
+清单接进来的入口。编译期函数 binding 与外部 command binding 共用同一声明和派发管线。
 **贡献轴是封闭集合**,由官方演进,mod 只能挂接不能发明。落地细节见
 [`docs/agent/agent-mod-trunk.md`](../../docs/agent/agent-mod-trunk.md)。
 `src/kernel-module.ts` 是**第一级**边界:它把 Agent 运行时当作不透明的注入物交给 Kernel,
@@ -146,7 +147,7 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
         ↓
 @velaros-ai/agent           ← 本包:执行机制
         ↑ 经 AgentRuntimeCapabilityPorts 注入
-@velaros-ai/{browser,project,development,computer,memory,office,system,cli,game}
+@velaros-ai/{browser,project,development,computer,memory,office,system,cli}
                               领域能力包:提供工具与领域解释,自己不认识 agent 循环
 ```
 

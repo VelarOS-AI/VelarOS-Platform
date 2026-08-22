@@ -235,7 +235,7 @@ export function getChatNoticeMeta(
   }
 }
 
-function buildInlineNoticeText(title: string, detail: string | undefined): string {
+function buildInlineNoticeText(title: string, detail: Optional<string>): string {
   const parts: string[] = []
   if (!isBlank(title)) parts.push(title)
 
@@ -275,7 +275,7 @@ function formatRunningElapsedShort(
 function buildRunningInlineNoticeText(
   runtime: ChatStatusRuntime,
   locale: AppLocale,
-  options: ChatInlineNoticeOptions | undefined,
+  options: Optional<ChatInlineNoticeOptions>,
   conversationTranslate: ConversationTranslate
 ): string {
   const liveSummary = options?.liveTraceSummary?.trim() || null

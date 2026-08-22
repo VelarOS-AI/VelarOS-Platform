@@ -26,7 +26,9 @@ import {
 export const MemoryBlobIdPatternV2 = /^[0-9a-f]{32}$/
 
 /** 生成随机 blob_id（128-bit CSPRNG → 32 hex）。 */
-export function generateMemoryBlobIdV2(random: (byteLength: number) => Buffer = randomBytes): string {
+export function generateMemoryBlobIdV2(
+  random: (byteLength: number) => Buffer = randomBytes
+): string {
   const id = random(16).toString('hex')
   assertMemoryBlobIdV2(id)
   return id
@@ -41,7 +43,7 @@ export function assertMemoryBlobIdV2(blobId: string): void {
 
 export class MemoryBlobStoreV2 {
   private readonly blobsDir: string
-  private readonly hooks: StorageStepHooksV2 | undefined
+  private readonly hooks?: StorageStepHooksV2
 
   constructor(blobsDir: string, options: { hooks?: StorageStepHooksV2 } = {}) {
     this.blobsDir = blobsDir
@@ -61,17 +63,24 @@ export class MemoryBlobStoreV2 {
   public writeBlob(blobId: string, envelope: Buffer): void {
     const blobPath = this.pathForBlob(blobId)
     if (existsSync(blobPath)) {
-      throw new AppError('INVARIANT', 'blob 只写一次，禁止覆盖已存在的密文。', undefined, { blobId })
+      throw new AppError('INVARIANT', 'blob 只写一次，禁止覆盖已存在的密文。', undefined, {
+        blobId,
+      })
     }
     mkdirSync(dirname(blobPath), { recursive: true })
-    writeFileAtomicV2(blobPath, envelope, { label: `blob-${blobId}`, hooks: this.hooks })
+    writeFileAtomicV2(blobPath, envelope, {
+      label: `blob-${blobId}`,
+      hooks: this.hooks,
+    })
   }
 
   /** 读取密文信封字节；缺失即 NOT_FOUND。完整性验证（GCM tag）发生在解密层。 */
   public readBlob(blobId: string): Buffer {
     const blobPath = this.pathForBlob(blobId)
     if (!existsSync(blobPath)) {
-      throw new AppError('NOT_FOUND', '指定 blob 不存在。', undefined, { blobId })
+      throw new AppError('NOT_FOUND', '指定 blob 不存在。', undefined, {
+        blobId,
+      })
     }
     return readFileSync(blobPath)
   }

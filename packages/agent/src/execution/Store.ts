@@ -10,7 +10,7 @@ import type {
   StreamExecutionGraphPayload,
   StreamStatePayload,
 } from '@velaros-ai/agent/protocol'
-import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPlainObject,isPresent, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
@@ -677,7 +677,7 @@ class ExecutionStore {
     return events.slice(-this.eventRetentionLimit)
   }
 
-  private resolveEventRetentionLimit(limit: number | undefined): number {
+  private resolveEventRetentionLimit(limit: Optional<number>): number {
     if (!isPresent(limit)) return DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT
     if (!Number.isFinite(limit) || limit < 1) {
       throw new Error('ExecutionStore eventRetentionLimit must be a positive number.')
@@ -686,7 +686,7 @@ class ExecutionStore {
     return Math.floor(limit)
   }
 
-  private resolveRecordRetentionLimit(limit: number | undefined): number {
+  private resolveRecordRetentionLimit(limit: Optional<number>): number {
     if (!isPresent(limit)) return DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT
     if (!Number.isFinite(limit) || limit < 1) {
       throw new Error('ExecutionStore recordRetentionLimit must be a positive number.')
@@ -733,8 +733,8 @@ class ExecutionStore {
   }
 
   private isPersistedExecutionStoreFile(value: unknown): value is PersistedExecutionStoreFile {
-    if (!isObject(value)) return false
-    const record = value as Record<string, unknown>
+    if (!isPlainObject(value)) return false
+    const record = value
     return (
       record.version === PERSISTED_EXECUTION_STORE_VERSION &&
       this.isFiniteNumber(record.savedAt) &&
@@ -744,8 +744,8 @@ class ExecutionStore {
 
   /** 校验持久化对象是否能安全进入恢复和调试图投影。 */
   private isExecutionRecord(value: unknown): value is ExecutionRecord {
-    if (!isObject(value)) return false
-    const record = value as Record<string, unknown>
+    if (!isPlainObject(value)) return false
+    const record = value
     const executionId = record.id
     const currentTaskId = record.currentTaskId
     if (
@@ -770,8 +770,8 @@ class ExecutionStore {
   }
 
   private isExecutionTaskRecord(value: unknown): value is ExecutionTaskRecord {
-    if (!isObject(value)) return false
-    const task = value as Record<string, unknown>
+    if (!isPlainObject(value)) return false
+    const task = value
     return (
       isString(task.id) &&
       (task.kind === 'root' || task.kind === 'delegated') &&
@@ -792,8 +792,8 @@ class ExecutionStore {
     value: unknown,
     executionId: string
   ): value is ExecutionEventRecord {
-    if (!isObject(value)) return false
-    const event = value as Record<string, unknown>
+    if (!isPlainObject(value)) return false
+    const event = value
     return (
       isString(event.id) &&
       event.executionId === executionId &&

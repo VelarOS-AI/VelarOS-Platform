@@ -43,7 +43,7 @@ Desktop v1 目录：
 | ------ | --------------------------------------------------------------------------------------------------- |
 | 常规   | `fs:read`, `browser:control`                                                                        |
 | 敏感   | `network`, `memory:read`, `system:open`, `screen:capture`                                           |
-| 高风险 | `fs:write`, `memory:write`, `input:control`, `process:exec`, `agent:execute`, `process:exec:unsafe` |
+| 高风险 | `fs:write`, `memory:write`, `input:control`, `process:exec`, `agent:execute`, `agent:hooks`, `agent:tools`, `process:exec:unsafe` |
 
 风险级决定展示强度，不替代用户决定，也不表示宿主绕过操作系统自身权限、工作区范围或执行确认。
 
@@ -57,6 +57,18 @@ Desktop v1 的声明式 `invoke-capability` 公开面也是闭集，但覆盖当
 
 “能力已在 Kernel 内注册”不等于“自动成为外部 Mod API”。新增操作必须显式进入版本化公开目录，并补齐
 输入约束、权限与审计测试；这避免未来内部模块一注册就被旧 Mod 意外调用。目录应持续扩展，但不能隐式扩展。
+
+### 2.1 Agent Tool command handler
+
+外部包需要工具代码时，在 `agent.contributes.tools[]` 同时声明根类型为 `object` 的标准
+`inputSchema` 与 `handler:{type:"command",entry,permissions?}`。编译期 Mod 可以省略这两个字段，继续
+由构建图提供同名 `VelaTool` binding；两者进入 Loader 后使用同一 Tool contribution 与执行语义。
+
+- `entry` 只能是包内相对路径，不是 PATH 命令或绝对可执行文件；宿主不得把它 import 到 Electron main；
+- 工具权限上界为 `tools[].permissions ∪ handler.permissions`，且每项都必须包含在
+  `module.permissions` 和用户批准集合中；具体宿主还可为受控命令启动声明固定基础权限；
+- JSON Schema 编译失败必须拒载，不能静默退化成任意对象；stdin/stdout 必须是有版本、有界 JSON；
+- `module.isolation` 不表达逐次 command handler 的执行方式，不要求也不建议为此写成 `sidecar`。
 
 ## 3. 信任不由 Mod 自报
 
@@ -93,7 +105,7 @@ manifest 中的 `agent.trust` 是构建意图，不是最终信任事实：
 - 内置身份、版本、权限和贡献仍来自同一 manifest，不另写一份产品清单；
 - “是否显示在 Mods 页”由宿主目录决定，Mod 不得自称 internal 把自己隐藏；
 - Browser 工作区、System 工作区、Project 工作区、Agent 内置轴、网页 Agent 桥与外部 Agent
-  引擎属于隐藏的内置 Mod；Game、Pet 等可作为用户可见的官方可选 Mod；
+  引擎属于隐藏的内置 Mod；产品或发行方可以另行装配用户可见的可选 Mod；
 - Remote Host 是独立宿主产品，不因为共享 Kernel 就伪装成 Mod。
 
 `velaros.agent-engines` 只把 Claude Code/Codex 的身份、权限和生命周期纳入 Mod 标准。driver、目录

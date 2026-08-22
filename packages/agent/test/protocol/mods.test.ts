@@ -94,6 +94,65 @@ describe('manifest 解析', () => {
     expect(result.diagnostics[0]?.message).toContain('namespace:tool')
   })
 
+  test('外部工具声明与编译期 binding 共用同一 Tool contribution', () => {
+    const external = parseAgentModManifest(
+      baseManifest({
+        contributes: {
+          tools: [{
+            name: 'probe:run',
+            categoryId: 'agent-control',
+            summary: 'Run the probe command handler.',
+            readOnly: true,
+            permissions: ['fs:read'],
+            inputSchema: {
+              type: 'object',
+              properties: { value: { type: 'string' } },
+              required: ['value'],
+              additionalProperties: false,
+            },
+            handler: {
+              type: 'command',
+              entry: 'handlers/probe.mjs',
+              permissions: ['network'],
+            },
+          }],
+        },
+      })
+    )
+    expect(external.ok).toBe(true)
+    if (!external.ok) return
+    expect(external.manifest.contributes.tools?.[0]).toMatchObject({
+      name: 'probe:run',
+      permissions: ['fs:read'],
+      handler: { type: 'command', entry: 'handlers/probe.mjs', permissions: ['network'] },
+    })
+
+    // 编译期 Mod 仍可只声明贡献元数据，再由构建图提供 VelaTool binding。
+    expect(parseAgentModManifest(baseManifest({
+      contributes: { tools: [{ name: 'probe:compiled' }] },
+    })).ok).toBe(true)
+  })
+
+  test('外部工具 command handler 拒绝未知字段与非对象 JSON Schema', () => {
+    for (const tool of [
+      {
+        name: 'probe:unknown',
+        inputSchema: { type: 'object' },
+        handler: { type: 'command', entry: 'probe.mjs', shell: true },
+      },
+      {
+        name: 'probe:schema',
+        inputSchema: 'not-a-json-schema-object',
+        handler: { type: 'command', entry: 'probe.mjs' },
+      },
+    ]) {
+      const result = parseAgentModManifest(baseManifest({ contributes: { tools: [tool] } }))
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.diagnostics[0]?.code).toBe('mod.manifest-invalid')
+    }
+  })
+
   test('requiredAxes 必须是自己实际贡献的轴', () => {
     const result = parseAgentModManifest(
       baseManifest({ requiredAxes: ['spaces'], contributes: {} })

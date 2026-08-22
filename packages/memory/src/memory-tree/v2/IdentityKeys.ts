@@ -2,6 +2,7 @@ import { createHash, createHmac } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { parse as parsePath } from 'node:path'
 
+import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryKeyringStoreV2 } from './storage/Keyring'
@@ -29,8 +30,8 @@ export interface MemoryDreamFingerprintInputV2 {
   readonly frontierBefore: number
   readonly evidenceIds: readonly string[]
   readonly modelProfile: {
-    readonly provider: string | null
-    readonly model: string | null
+    readonly provider: Nullable<string>
+    readonly model: Nullable<string>
   }
   readonly pipelineVersion: number
 }
@@ -84,12 +85,9 @@ export function canonicalizeWorkspacePathV2(value: string): string {
   try {
     canonical = realpathSync.native(value)
   } catch (error) {
-    throw new AppError(
-      'VALIDATION',
-      'workspace path 无法解析为文件系统权威路径。',
-      error,
-      { value }
-    )
+    throw new AppError('VALIDATION', 'workspace path 无法解析为文件系统权威路径。', error, {
+      value,
+    })
   }
   return normalizeCanonicalPathV2(canonical)
 }
@@ -127,9 +125,7 @@ export function normalizeSourceReferenceV2(value: string): string {
   }
 }
 
-export function computeDreamInputFingerprintV2(
-  input: MemoryDreamFingerprintInputV2
-): string {
+export function computeDreamInputFingerprintV2(input: MemoryDreamFingerprintInputV2): string {
   assertNonNegativeIntegerV2(input.frontierBefore, 'frontierBefore')
   assertPositiveIntegerV2(input.pipelineVersion, 'pipelineVersion')
   for (const evidenceId of input.evidenceIds) {
@@ -206,20 +202,13 @@ export class MemoryIdentityKeyServiceV2 {
    * 跨库治理只比较语义身份，不继承旧 stable_key，也不依赖模型生成的标题。
    * 该 keyed token 只用于 forgotten/superseded/erased 的候选写回 deny。
    */
-  public claimGovernanceMatchKey(
-    input: MemoryClaimGovernanceMatchInputV2
-  ): string {
+  public claimGovernanceMatchKey(input: MemoryClaimGovernanceMatchInputV2): string {
     const normalizedContentHash = createHash('sha256')
       .update(normalizeIdentityTextV2(input.content), 'utf8')
       .digest('hex')
     return this.identityHmac(
       GovernanceMatchKeyPrefixV2,
-      [
-        'claim-governance',
-        input.conceptStableKey,
-        input.predicate,
-        normalizedContentHash,
-      ],
+      ['claim-governance', input.conceptStableKey, input.predicate, normalizedContentHash],
       32
     )
   }
@@ -240,10 +229,7 @@ export class MemoryIdentityKeyServiceV2 {
   }
 
   public originScopeMatchKey(origin: string): string {
-    return this.matchKey(
-      'scope',
-      canonicalStringifyV2(['origin', normalizeOriginV2(origin)])
-    )
+    return this.matchKey('scope', canonicalStringifyV2(['origin', normalizeOriginV2(origin)]))
   }
 
   public sourceReferenceMatchKey(sourceReference: string): string {
@@ -256,9 +242,7 @@ export class MemoryIdentityKeyServiceV2 {
 
   private identityHmac(
     prefix:
-      | typeof StableKeyPrefixV2
-      | typeof ClaimGroupKeyPrefixV2
-      | typeof GovernanceMatchKeyPrefixV2,
+      typeof StableKeyPrefixV2 | typeof ClaimGroupKeyPrefixV2 | typeof GovernanceMatchKeyPrefixV2,
     segments: readonly string[],
     hexLength: number
   ): string {
@@ -278,7 +262,9 @@ export class MemoryIdentityKeyServiceV2 {
 
   private matchKey(purpose: MemoryMatchKeyPurposeV2, normalizedInput: string): string {
     if (!MemoryMatchKeyPurposesV2.includes(purpose)) {
-      throw new AppError('VALIDATION', '未知 match-key purpose。', undefined, { purpose })
+      throw new AppError('VALIDATION', '未知 match-key purpose。', undefined, {
+        purpose,
+      })
     }
     const root = this.keyring.getMatchRootKey()
     let purposeKey: Buffer | undefined
@@ -297,13 +283,13 @@ export class MemoryIdentityKeyServiceV2 {
 }
 
 function assertStringV2(value: unknown, label: string): asserts value is string {
-  if (typeof value !== 'string') {
+  if (!isString(value)) {
     throw new AppError('VALIDATION', `${label} 必须是字符串。`)
   }
 }
 
 function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0) {
+  if (!isString(value) || isEmpty(value)) {
     throw new AppError('VALIDATION', `${label} 不得为空。`)
   }
 }

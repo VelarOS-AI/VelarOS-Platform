@@ -3,10 +3,7 @@ import { isFalse, toNullable } from '@velaros-ai/core'
 import type { BrowserRecipeSkeleton } from '../core'
 
 import { createArtifactManager } from './Context'
-import {
-  type BrowserRecipeRunStepResult,
-  buildRecipeExecutionPlan,
-} from './RecipePlan'
+import { type BrowserRecipeRunStepResult, buildRecipeExecutionPlan } from './RecipePlan'
 import { browserRecipeReader } from './RecipeReader'
 import { browserRecipeRunner } from './RecipeRun'
 import type { BrowserRecipeRunVariables } from './RecipeVariables'
@@ -48,7 +45,7 @@ export interface ReadBrowserRecipeSkeletonResult {
   summary: {
     url: string
     title: string
-    sourceSnapshotPath: string | null
+    sourceSnapshotPath: Nullable<string>
     inputCount: number
     requiredInputNames: string[]
     optionalInputNames: string[]
@@ -146,7 +143,10 @@ class BrowserRecipeArtifacts {
   ): Promise<ReadBrowserRecipeSkeletonResult> {
     ctx.abortSignal.throwIfAborted()
 
-    const { path: recipePath, recipe } = await browserRecipeReader.readRecipeSkeleton(input.path, ctx)
+    const { path: recipePath, recipe } = await browserRecipeReader.readRecipeSkeleton(
+      input.path,
+      ctx
+    )
     const executionPlan = buildRecipeExecutionPlan(recipe, input.inputs ?? {}, input.maxSteps)
 
     return {
@@ -226,4 +226,4 @@ class BrowserRecipeArtifacts {
 
 const browserRecipeArtifacts = new BrowserRecipeArtifacts()
 
-export { BrowserRecipeArtifacts,browserRecipeArtifacts }
+export { BrowserRecipeArtifacts, browserRecipeArtifacts }

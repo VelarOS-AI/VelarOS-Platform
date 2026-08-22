@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
+import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { UserTextPayloadReference } from '../history/sanitize'
@@ -30,13 +31,13 @@ export interface PersistUserTextPayloadsResult {
 function readUserTextContent(message: ModelMessage): Nullable<string> {
   if (message.role !== 'user') return null
   const content = message.content
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return null
+  if (isString(content)) return content
+  if (!isArray(content)) return null
 
   const textParts = content
-    .filter((part) => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
+    .filter((part) => isRecord(part) && part.type === 'text' && isString(part.text))
     .map((part) => (part as { text: string }).text)
-  if (textParts.length === 0) return null
+  if (isEmpty(textParts)) return null
   return textParts.join('\n')
 }
 
@@ -95,7 +96,7 @@ export class UserTextPayloadPlanner {
       })
     }
 
-    if (pending.length > 0) {
+    if (!isEmpty(pending)) {
       if (this.payloadStore.putUserTextMany) {
         await this.payloadStore.putUserTextMany(pending)
       } else if (this.payloadStore.putUserText) {

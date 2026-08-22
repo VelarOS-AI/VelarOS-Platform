@@ -12,9 +12,15 @@
 // （叙述见 VelarOS-Platform 的 docs/agent/agent-mod-trunk.md）；其余 kind 只有注册面与类型，
 // 注册它们会当场收到 `mod.seam-not-wired` 诊断。
 import { isEmpty, isFunction, isObject, isString, optionalWhen, toNullable } from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
-import type { AgentModDiagnostic, AgentModSeamKind } from '../protocol'
+import type {
+  AgentModDiagnostic,
+  AgentModHookExecutionMode,
+  AgentModHookMatcher,
+  AgentModSeamKind,
+} from '../protocol'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
 
@@ -125,8 +131,22 @@ interface AgentModSeamOutcomeMap {
   'diagnostic:publish': void
 }
 
+/**
+ * 所有 Hook 载体共用的上下文。
+ *
+ * `signal` 在超时时会 abort；编译期 binding 可以直接响应，外部 command 适配器则用它
+ * 终止子进程。这个第二参数不破坏现有的单参函数 binding。
+ */
+interface AgentModHookContext {
+  readonly modId: string
+  readonly hookId: string
+  readonly event: AgentModSeamKind
+  readonly signal: AbortSignal
+}
+
 type AgentModSeamHandler<TKind extends AgentModSeamKind = AgentModSeamKind> = (
-  event: AgentModSeamEventMap[TKind]
+  event: AgentModSeamEventMap[TKind],
+  context: AgentModHookContext
 ) =>
   | AgentModSeamOutcomeMap[TKind]
   | void
@@ -137,20 +157,29 @@ interface AgentModSeamRegistrationInput<
 > {
   readonly modId: string
   readonly id: string
-  readonly seam: TKind
+  readonly event: TKind
   readonly priority?: number
+  readonly matcher?: AgentModHookMatcher
+  readonly mode?: AgentModHookExecutionMode
+  readonly timeoutMs?: number
   readonly handler: AgentModSeamHandler<TKind>
 }
 
 interface AgentModSeamRegistration {
   readonly modId: string
   readonly id: string
-  readonly seam: AgentModSeamKind
+  readonly event: AgentModSeamKind
   readonly priority: number
+  readonly matcher?: AgentModHookMatcher
+  readonly mode: AgentModHookExecutionMode
+  readonly timeoutMs: number
   readonly handler: AgentModSeamHandler
 }
 
 const MaxSeamDiagnostics = 200
+const DefaultHookTimeoutMs = 5_000
+const MinimumHookTimeoutMs = 100
+const MaximumHookTimeoutMs = 30_000
 
 /**
  * `AgentModSeamDispatcher` 上每个真实派发方法的名字（类型层派生，不手写）。
@@ -173,6 +202,7 @@ const WiredSeamKindsByDispatcher = {
   dispatchToolCallBefore: ['tool-call:before'],
   dispatchToolResultAfter: ['tool-result:after'],
   dispatchTurnContextAssemble: ['turn-context:assemble'],
+  dispatchTurnContextAssembleAsync: ['turn-context:assemble'],
   dispatchSessionLifecycle: ['session:start', 'session:end'],
 } as const satisfies Record<AgentModSeamDispatchMethodName, readonly AgentModSeamKind[]>
 
@@ -188,6 +218,29 @@ function readErrorMessage(error: unknown): string {
 
 function isThenable(value: unknown): value is Promise<unknown> {
   return isObject(value) && isFunction(Reflect.get(value, 'then'))
+}
+
+function resolveHookTimeoutMs(value?: number): number {
+  if (!Number.isFinite(value)) return DefaultHookTimeoutMs
+  return Math.max(MinimumHookTimeoutMs, Math.min(MaximumHookTimeoutMs, Math.trunc(value!)))
+}
+
+function includesString(values: LooseOptional<readonly string[]>, value: unknown): boolean {
+  return !values || (isString(value) && values.includes(value))
+}
+
+/** matcher 字段间 AND，列表内 OR；事件缺字段时 fail-closed。 */
+function matchesHook(
+  matcher: LooseOptional<AgentModHookMatcher>,
+  event: unknown
+): boolean {
+  if (!matcher) return true
+  if (!isObject(event)) return false
+  return (
+    includesString(matcher.toolNames, Reflect.get(event, 'toolName')) &&
+    includesString(matcher.phases, Reflect.get(event, 'phase')) &&
+    includesString(matcher.statuses, Reflect.get(event, 'status'))
+  )
 }
 
 /**
@@ -226,28 +279,28 @@ class AgentModSeamDispatcher {
   ): void {
     if (this.sealed) {
       throw new Error(
-        `seam 注册面已封存：mod「${input.modId}」的钩子「${input.id}」不能在运行阶段注册。`
+        `Hook 注册面已封存：mod「${input.modId}」的 Hook「${input.id}」不能在运行阶段注册。`
       )
     }
-    const bucket = this.handlers.get(input.seam) ?? []
+    const bucket = this.handlers.get(input.event) ?? []
     if (bucket.some((entry) => entry.modId === input.modId && entry.id === input.id)) {
       throw new Error(
-        `seam 钩子重复注册：mod「${input.modId}」已在 ${input.seam} 上注册过「${input.id}」。`
+        `Hook 重复注册：mod「${input.modId}」已在 ${input.event} 上注册过「${input.id}」。`
       )
     }
     // 注册照常受理（闭集里的 kind 都是合法挂点，将来接线即生效），但「今天不会触发」这件事
     // 必须当场说出来——否则 mod 作者唯一的线索是钩子一辈子不响。
-    if (!WiredSeamKinds.has(input.seam)) {
+    if (!WiredSeamKinds.has(input.event)) {
       this.record({
         code: 'mod.seam-not-wired',
-        message: `seam ${input.seam} 在本宿主的运行链上还没有派发点：mod「${input.modId}」的钩子「${input.id}」注册成功，但不会被调用。`,
+        message: `Hook event ${input.event} 在本宿主的运行链上还没有派发点：mod「${input.modId}」的 Hook「${input.id}」注册成功，但不会被调用。`,
         modId: input.modId,
       })
     }
     if (!isFunction(input.handler)) {
       this.record({
         code: 'mod.seam-handler-invalid',
-        message: `seam 钩子注册被拒：mod「${input.modId}」的钩子「${input.id}」的 handler 不是函数。`,
+        message: `Hook 注册被拒：mod「${input.modId}」的 Hook「${input.id}」的 handler 不是函数。`,
         modId: input.modId,
       })
       return
@@ -261,16 +314,19 @@ class AgentModSeamDispatcher {
     bucket.push({
       modId: input.modId,
       id: input.id,
-      seam: input.seam,
+      event: input.event,
       priority: input.priority ?? 100,
+      matcher: input.matcher,
+      mode: input.mode ?? 'blocking',
+      timeoutMs: resolveHookTimeoutMs(input.timeoutMs),
       handler: validatedHandler as AgentModSeamHandler,
     })
     bucket.sort((left, right) =>
       left.priority === right.priority
-        ? compareStableStrings(left.id, right.id)
+        ? compareStableStrings(left.modId, right.modId) || compareStableStrings(left.id, right.id)
         : left.priority - right.priority
     )
-    this.handlers.set(input.seam, bucket)
+    this.handlers.set(input.event, bucket)
   }
 
   /** 摘除某 mod 的全部钩子（deactivate 用）。 */
@@ -311,32 +367,66 @@ class AgentModSeamDispatcher {
   ): void {
     this.record({
       code: 'mod.seam-handler-failed',
-      message: `seam ${entry.seam} 的钩子「${entry.id}」抛出异常并被隔离：${readErrorMessage(error)}`,
+      message: `Hook ${entry.event} 的「${entry.id}」抛出异常并被隔离：${readErrorMessage(error)}`,
       modId: entry.modId,
     })
   }
 
-  /** 异步派发单个钩子；异常被隔离成诊断（性质③）。 */
+  private createContext(
+    entry: AgentModSeamRegistration,
+    signal: AbortSignal
+  ): AgentModHookContext {
+    return {
+      modId: entry.modId,
+      hookId: entry.id,
+      event: entry.event,
+      signal,
+    }
+  }
+
+  /** 异步派发单个钩子；异常/超时被隔离成诊断（性质③）。 */
   private async invoke(
     entry: AgentModSeamRegistration,
     event: never
   ): Promise<unknown> {
+    const controller = new AbortController()
+    const timers = new TimerScope({ name: `AgentModHook.${entry.modId}.${entry.id}` })
     try {
-      return await entry.handler(event)
+      const timedOut = Symbol('hook-timeout')
+      const timeout = new Promise<typeof timedOut>((resolve) => {
+        timers.after(entry.timeoutMs, () => resolve(timedOut), { unref: true })
+      })
+      const outcome = await Promise.race([
+        Promise.resolve(entry.handler(event, this.createContext(entry, controller.signal))),
+        timeout,
+      ])
+      if (outcome === timedOut) {
+        controller.abort()
+        this.record({
+          code: 'mod.hook-timeout',
+          message: `Hook ${entry.event} 的「${entry.id}」超过 ${entry.timeoutMs}ms，已中止并隔离。`,
+          modId: entry.modId,
+        })
+        return undefined
+      }
+      return outcome
     } catch (error) {
       this.recordHandlerFailure(entry, error)
       return undefined
+    } finally {
+      timers.dispose()
     }
   }
 
   /** 同步派发单个钩子；返回 thenable 视为契约违规（同步 seam 不等待）。 */
   private invokeSync(entry: AgentModSeamRegistration, event: never): unknown {
+    const controller = new AbortController()
     try {
-      const outcome = entry.handler(event)
+      const outcome = entry.handler(event, this.createContext(entry, controller.signal))
       if (isThenable(outcome)) {
         this.record({
           code: 'mod.seam-sync-contract-violation',
-          message: `seam ${entry.seam} 是同步派发点，钩子「${entry.id}」返回了 Promise；本次结果被忽略。`,
+          message: `Hook ${entry.event} 是同步派发点，「${entry.id}」返回了 Promise；本次结果被忽略。`,
           modId: entry.modId,
         })
         return undefined
@@ -364,6 +454,11 @@ class AgentModSeamDispatcher {
       const current: AgentModToolCallBeforeEvent = args
         ? { ...event, args }
         : event
+      if (!matchesHook(entry.matcher, current)) continue
+      if (entry.mode === 'background') {
+        void this.invoke(entry, current as never)
+        continue
+      }
       const outcome = (await this.invoke(entry, current as never)) as
         | AgentModToolCallBeforeOutcome
         | undefined
@@ -384,6 +479,11 @@ class AgentModSeamDispatcher {
     let current = event
     let changed = false
     for (const entry of bucket) {
+      if (!matchesHook(entry.matcher, current)) continue
+      if (entry.mode === 'background') {
+        void this.invoke(entry, current as never)
+        continue
+      }
       const outcome = (await this.invoke(entry, current as never)) as
         | AgentModToolResultAfterOutcome
         | undefined
@@ -413,7 +513,41 @@ class AgentModSeamDispatcher {
 
     const append: AgentModTurnContextAppendage[] = []
     for (const entry of bucket) {
+      if (!matchesHook(entry.matcher, event)) continue
+      if (entry.mode === 'background') {
+        void this.invoke(entry, event as never)
+        continue
+      }
       const outcome = this.invokeSync(entry, event as never) as
+        | AgentModTurnContextAssembleOutcome
+        | undefined
+      for (const item of outcome?.append ?? []) {
+        append.push({ ...item, id: `${entry.modId}.${item.id}` })
+      }
+    }
+    return !isEmpty(append) ? { append } : {}
+  }
+
+  /**
+   * 回合上下文组装的异步宿主入口。
+   *
+   * Desktop 等支持外部 command 载体的宿主必须走此入口，避免为了对齐外部 Hook
+   * 而在主进程使用 spawnSync。折叠顺序与同步入口完全一致。
+   */
+  public async dispatchTurnContextAssembleAsync(
+    event: AgentModTurnContextAssembleEvent
+  ): Promise<AgentModTurnContextAssembleOutcome> {
+    const bucket = this.handlers.get('turn-context:assemble')
+    if (!bucket || bucket.length === 0) return {}
+
+    const append: AgentModTurnContextAppendage[] = []
+    for (const entry of bucket) {
+      if (!matchesHook(entry.matcher, event)) continue
+      if (entry.mode === 'background') {
+        void this.invoke(entry, event as never)
+        continue
+      }
+      const outcome = (await this.invoke(entry, event as never)) as
         | AgentModTurnContextAssembleOutcome
         | undefined
       for (const item of outcome?.append ?? []) {
@@ -431,14 +565,36 @@ class AgentModSeamDispatcher {
       event.phase === 'start' ? 'session:start' : 'session:end'
     const bucket = this.handlers.get(kind)
     if (!bucket || bucket.length === 0) return
+    const blocking: Array<Promise<unknown>> = []
     for (const entry of bucket) {
-      await this.invoke(entry, event as never)
+      if (!matchesHook(entry.matcher, event)) continue
+      const task = this.invoke(entry, event as never)
+      if (entry.mode === 'blocking') blocking.push(task)
     }
+    await Promise.all(blocking)
   }
 }
 
-export { AgentModSeamDispatcher, WiredSeamKinds, WiredSeamKindsByDispatcher }
+/** 标准 Hook 命名；Seam 常量只作旧调用方的兼容别名。 */
+const WiredHookEventsByDispatcher = WiredSeamKindsByDispatcher
+const WiredHookEvents = WiredSeamKinds
+
+export {
+  AgentModSeamDispatcher as AgentModHookDispatcher,
+  AgentModSeamDispatcher,
+  WiredHookEvents,
+  WiredHookEventsByDispatcher,
+  WiredSeamKinds,
+  WiredSeamKindsByDispatcher,
+}
 export type {
+  AgentModHookContext,
+  AgentModSeamEventMap as AgentModHookEventMap,
+  AgentModSeamGenericEvent as AgentModHookGenericEvent,
+  AgentModSeamHandler as AgentModHookHandler,
+  AgentModSeamOutcomeMap as AgentModHookOutcomeMap,
+  AgentModSeamRegistration as AgentModHookRegistration,
+  AgentModSeamRegistrationInput as AgentModHookRegistrationInput,
   AgentModSeamEventMap,
   AgentModSeamGenericEvent,
   AgentModSeamHandler,

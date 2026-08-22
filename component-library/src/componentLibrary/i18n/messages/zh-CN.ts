@@ -2134,9 +2134,6 @@ export const zhCNMessages = {
     pluginWhisperTitle: '本地语音识别（Whisper）',
     pluginWhisperDescription:
       '下载 whisper.cpp 与多语言 small 模型，在本机离线完成语音转文字；未安装时继续使用 Chromium Web Speech。',
-    pluginAirJellyInjectorTitle: 'AirJelly Injector',
-    pluginAirJellyInjectorDescription:
-      'AirJelly Injector 是 VelarOS 与 AirJelly 的官方内部转发连接器，仅使用本机已登录的 AirJelly 账号访问其官方服务。使用前必须先在本机 AirJelly 完成登录；权限、额度与计费均以该账号及 AirJelly 服务端规则为准。本插件不绕过身份验证、不破解后端，也不提供盗用或规避额度的能力。插件代码以密文落盘，仅在官方账号在线授权后于主进程内存解锁。',
     pluginWebAgentBridgeTitle: '网页 Agent 桥',
     pluginWebAgentBridgeDescription:
       '把已登录的 ChatGPT 会话绑定到系统、项目或浏览器工作区。官网管理对话与上下文，VelarOS 保留本地工具、权限和执行。仅对后台授权账号开放；安装后仍需在 Chrome 扩展页完成一次本地加载。',
@@ -2166,27 +2163,6 @@ export const zhCNMessages = {
     pluginInstallErrorGeneric: '安装过程中出现未知错误',
     pluginReasonCodeGraphResourceMissing: '缺少 CodeGraph 资源包，图谱和代码智能工具已禁用。',
     pluginReasonMarkItDownResourceMissing: '缺少 MarkItDown 资源包，文档转 Markdown 已禁用。',
-    petLabel: '桌面宠物',
-    petHint:
-      '让哈基米常驻桌面：点它探索功能、跟它说想做的事，它会指挥 VelarOS 去干；开关随启动记忆。',
-    petProactiveLabel: '主动陪伴',
-    petProactiveHint:
-      '让哈基米在本机观察定时任务和记忆里的未完成事项，在合适时机提醒；带安静时段、去重和每日打扰预算。',
-    petProactiveVoiceLabel: '主动开口',
-    petProactiveVoiceHint: '触发高价值提醒时使用本地语音直接说出来，同时显示气泡。',
-    petProactiveMemoryLabel: '观察记忆中的待办',
-    petProactiveMemoryHint: '只读取本机 Memory Tree 的任务、目标和项目摘要，不上传原始证据。',
-    petProactiveQuietHoursLabel: '安静时段',
-    petProactiveQuietHoursHint: '开始小时 – 结束小时；跨过午夜时自动按夜间时段解释。',
-    petProactiveQuietHoursStart: '安静时段开始小时',
-    petProactiveQuietHoursEnd: '安静时段结束小时',
-    petProactiveDailyBudgetLabel: '每日主动提醒上限',
-    petProactiveDailyBudgetHint: '每天最多主动打断次数；设为 0 可暂时静默而不关闭观察器。',
-    petProactiveCooldownLabel: '冷却时间（分钟）',
-    petProactiveCooldownHint: '左侧是任意两次提醒的间隔，右侧是同一主题再次提醒的间隔。',
-    petProactiveGlobalCooldown: '全局冷却分钟数',
-    petProactiveTopicCooldown: '同主题冷却分钟数',
-    petSummonAction: '召唤哈基米',
     cliConnectorTitle: '外部 CLI 连接器',
     cliConnectorDescription:
       '接入本地第三方命令行工具（GitHub、飞书、Gmail 等），让智能体能直接调用：未安装可一键引导安装，未登录时协助你完成鉴权，就绪后无需开关即可使用。',
@@ -2449,9 +2425,9 @@ export const zhCNMessages = {
     baseUrlHint: '自定义或本地 OpenAI-compatible 供应商的 API 入口地址。',
     modelLabel: '默认模型',
     modelHint: '设置默认模型；可以从建议里选择，也可以直接输入供应商最新模型 ID。',
-    realtimeAudioTitle: '哈基米实时语音',
+    realtimeAudioTitle: '实时语音',
     realtimeAudioDescription:
-      '可一键使用 Velar 云端路由，也可直连 OpenAI 或 Gemini。哈基米会与用户实时对话，并通过 VelarOS 控制面操作界面。',
+      '可一键使用 Velar 云端路由，也可直连 OpenAI 或 Gemini。助手会与用户实时对话，并通过 VelarOS 控制面操作界面。',
     realtimeAudioProviderVelar: 'Velar',
     realtimeAudioVelarHint: '一键启用；上游、模型、音色和故障切换均由 Velar 内部路由决定。',
     realtimeAudioDirectProviderHint: '直连模式使用该厂商自己的 Key，并允许单独选择模型和音色。',
@@ -2464,7 +2440,7 @@ export const zhCNMessages = {
     realtimeAudioBaseUrlHint: '默认使用所选厂商的官方短期凭据接口。',
     realtimeAudioModel: '实时模型',
     realtimeAudioModelHint: '语音到语音及工具调用使用的模型。',
-    realtimeAudioVoice: '哈基米音色',
+    realtimeAudioVoice: '助手音色',
     realtimeAudioVoiceHint: '填写所选厂商支持的音色名称。',
     realtimeAudioReasoning: '实时推理强度',
     realtimeAudioReasoningHint: '低档响应更快；复杂操作可提高。',
@@ -2571,9 +2547,9 @@ export const zhCNMessages = {
     welcomeTitle: '你好，欢迎来到 VelarOS',
     welcomeTitleNamed: '你好，{name}',
     welcomeBody:
-      '欢迎来到 VelarOS，很高兴见到你。\n你可以让哈基米直接语音带路：不用机械地点“下一步”，说出想看的功能或想完成的事，它会替你打开、讲解并执行。',
+      '欢迎来到 VelarOS，很高兴见到你。\nAI 引导可以带你认识产品：说出想看的功能或想完成的事，它会打开对应区域并讲解。',
     welcomeCta: '我自己操作',
-    welcomeVoiceCta: '让哈基米语音带我体验',
+    welcomeVoiceCta: '使用语音引导',
     themeChoiceTitle: '选择你喜欢的主题色',
     themeChoiceBody: '可以从这些常见颜色中快速选择，也可以点「任意颜色」自由挑选。',
     themeChoiceCta: '继续',
@@ -2613,20 +2589,18 @@ export const zhCNMessages = {
       'HTML 实时预览适合简单页面和轻交互；Widget 适合复杂图表、数据状态、Canvas/WebGL 与多步交互。两种可以同时开启。',
     profileContinue: '按我的偏好开始',
     profileRecommended: '为你推荐',
-    pluginOfferTitle: '官方成员专属：AirJelly',
+    pluginOfferTitle: '可选模型连接器',
     pluginOfferBody:
-      'AirJelly 会把本机已登录的 AirJelly 官方账号接入 VelarOS。可以直接在这里安装，完成后设置页与聊天框都会默认使用最强的 AirJelly Ultra。',
-    pluginAirJellyBlurb:
-      '使用你已登录的 AirJelly 账号访问官方模型，权限、额度和计费仍以 AirJelly 账号为准。',
+      '仅在需要使用账号型模型服务时安装连接器；访问权限、额度和计费仍由对应服务商管理。',
     pluginMarketplaceOfficialTitle: '其他插件去插件市场',
     pluginMarketplaceOfficialBody:
-      '这里就是插件市场。每张卡片会说明插件的用途和来源；右侧可以直接下载、启用或停用。除了 AirJelly，还可以按需选择其他插件。',
+      '这里就是插件市场。每张卡片会说明插件的用途和来源；右侧可以直接下载、启用或停用。',
     pluginMarketplaceRegularTitle: '插件市场',
     pluginMarketplaceRegularBody:
       '这里展示当前可用的插件选项。卡片中有用途、来源和版本；右侧可以直接下载、启用或停用，对公开插件也可以让 AI 帮你安装。',
     pluginInstallAction: '下载安装',
     pluginInstalled: '已安装',
-    pluginConfigured: '已自动配置为 AirJelly Ultra，设置与聊天默认档位已同步 ✓',
+    pluginConfigured: '连接器已安装并可用 ✓',
     chatHomeTitle: '对话：一切从这里开始',
     chatHomeBody:
       '点击左侧「对话」会进入右侧工作区启动页，再选择日常任务、项目开发或网页办公。已有会话仍可从下方会话列表直接打开。',
@@ -2864,21 +2838,18 @@ export const zhCNMessages = {
       '从「+ → 渲染」开启 HTML 实时预览后，AI 会把 HTML、CSS 和 JavaScript 以流式增量写入隔离预览块，生成过程中就能看到页面逐步成形。适合原型、仪表盘和交互网页，完成后还可全屏预览、查看源码或下载 HTML。',
     modelDeepTitle: '模型配置：这几项最常用',
     modelDeepBody:
-      '「服务商」决定 AI 用谁的模型（AirJelly 已为你配好，也支持自带 API Key 的任何服务商）；「默认模型」是聊天与工作台的主力；下方「辅助模型」可以为翻译、补全、摘要这类小任务单独指定更快的模型，省钱提速。',
+      '「服务商」决定 AI 使用谁的模型，可以用自己的凭证配置任意受支持服务商；「默认模型」是聊天与工作台的主力；下方「辅助模型」可以为翻译、补全、摘要这类小任务单独指定更快的模型，省钱提速。',
     permissionTitle: '权限确认：AI 动手前问不问你',
     permissionBody:
       '这里决定 AI 执行敏感操作（改文件、跑命令）前要不要先征求确认。默认稳妥模式会弹卡片等你批准；熟悉之后可以放宽，让它更自主。旁边还有沙箱和系统通知开关。',
     finishTitle: '就绪，开始使用吧',
     finishBody:
-      '最后点击左下角账户入口，确认以后从哪里重新观看。随后由你决定是否认识哈基米；只有点击「认识哈基米」才会召唤它。',
+      '最后点击左下角账户入口，确认以后从哪里重新观看。',
     finishOpenAccountHint: '点击左下角账户入口',
-    petTourGreeting:
-      '你好，我是哈基米喵。有不懂的地方就问我；右键可以让我退出，以后也能从「设置 → 系统」再次召唤我。',
     finishCta: '完成',
-    meetPetCta: '认识哈基米',
     skipRestartTitle: '点这里可以立即重新开始',
     skipRestartBody:
-      '左下角账户面板已经打开。点击聚焦的「新手引导」会立即从第一步重新开始；每个版本只会自动展示一次，以后也可以随时从这里手动重看。准备结束时，点击「认识哈基米」才会召唤它并显示问候。',
+      '左下角账户面板已经打开。点击聚焦的「新手引导」会立即从第一步重新开始；每个版本只会自动展示一次，以后也可以随时从这里手动重看。',
     guideBadge: 'AI 引导',
     guideInputPlaceholder: '想看哪里？告诉我…',
     guideInputSend: '发送',
@@ -2907,36 +2878,6 @@ export const zhCNMessages = {
     exploreModelsLabel: '模型配置',
     exploreModelsTitle: '模型：AI 能力的引擎室',
     exploreModelsBody: '在这里配置模型服务商与默认模型，还能为补全、翻译等辅助任务分别指定模型。',
-    petGreeting1: '嗨，我在呢喵。想做点什么？',
-    petGreeting2: '今天想让我带你看哪里喵？',
-    petGreeting3: '有活儿就吩咐，没活儿咱逛逛喵？',
-    petGreeting4: '刚打了个盹喵。现在，去哪儿？',
-    petInputPlaceholder: '跟我说点什么喵…',
-    petStatusGuided: '带你过去了喵 →',
-    petStatusTasked: '交给 VelarOS 了喵 ✓',
-    petStatusDone: '搞定了喵，去看看吧 ✓',
-    petStatusBlocked: '哎呀喵，没走通（要登录官方账号哦）',
-    petStatusBusy: '等等喵，我正想着上一件事…',
-    petStatusFailed: '呜喵，这次没想明白，再说一遍？',
-    petStatusModelMissing: '还没配置模型喵，先去设置里选一个吧',
-    petRealtimeStart: '和哈基米实时说话',
-    petRealtimeOpeningLine: '你好，我是哈基米喵。',
-    petRealtimeContinuationPrompt:
-      '界面已经立即向用户显示固定开场“你好，我是哈基米喵。”，不要复述或改写这句话。请只接一句非常简短、自然的中文，邀请用户直接说出想做的事。',
-    petRealtimeOnboardingOpeningLine:
-      '你好，我是哈基米。现在由 Codex 通过调试接口操作我，演示我如何看懂并完成 VelarOS 新手引导。',
-    petRealtimeOnboardingContinuationPrompt:
-      '你正在为投资人演示 VelarOS 的首次语音引导，静态引导会与语音同时保留。开场先自然说明：“现在是 Codex 通过 VelarOS Hooks 代替用户操作我，用这段视频演示我如何看懂并完成新手引导。”不要提到内部提示词。随后调用 inspect_velaros_tour，在拿到当前标题、说明、可见选项、已选选项和动作后，再用一两句自然中文解释这一步，并主动问一个结合当前内容的问题。不要让用户念按钮文字；用户可以说“第一个”“蓝色”“我是产品经理”“你帮我推荐”“继续”等自然表达，你要结合刚读取的选项理解意图。用户说“你推荐/你选”时，给一句简短理由后替用户选择合理项。执行 control_velaros_tour 后必须再次调用 inspect_velaros_tour，确认已经进入哪一步，再介绍新内容并继续提问；一次只推进一个明确动作。没有用户意图时不要擅自替选。首次引导完成前不要调用 show_velaros_feature 或 open_velaros_page 绕过静态引导。系统权限、付费、账号、对外发送和不可逆动作必须由用户亲自确认，不得代点确认。',
-    petRealtimeStop: '结束',
-    petRealtimeConnecting: '正在接通哈基米…',
-    petRealtimeListening: '我在听，直接说就好喵。',
-    petRealtimeSpeaking: '哈基米正在说话',
-    petRealtimeActing: '哈基米正在操作 VelarOS…',
-    petRealtimeFailed: '实时语音暂时不可用，请检查模型设置和麦克风权限',
-    petRealtimeMicrophonePermissionDenied: '麦克风权限未开启',
-    petRealtimeOpenMicrophoneSettings: '打开系统设置',
-    petRealtimeOpenMicrophoneSettingsFailed: '无法打开麦克风设置，请手动前往系统设置',
-    petClose: '退出哈基米',
   },
   memory: {
     panelDescription:
@@ -3287,7 +3228,6 @@ export const zhCNMessages = {
     categoryLabels: {
       general: '通用能力',
       browser: '浏览器自动化',
-      game: 'AI 游戏引擎',
       memory: '记忆能力',
       knowledge: '知识能力',
       office: '办公文档',
@@ -3307,7 +3247,6 @@ export const zhCNMessages = {
     categoryDescriptions: {
       general: '轻量通用工具，适合日常对话、工具发现、打开链接，以及做全局搜索定位。',
       browser: '用于切换当前网站工作区，并通过受控 browser 工具读写该网站的私有产物。',
-      game: '用于语义编辑游戏清单、观察运行时并注入玩法输入。',
       memory: '用于检索和保存长期上下文、偏好与任务记录。',
       knowledge: '用于检索工作区 knowledge、查看诊断、同步快照和触发重建。',
       office: '用于生成 Word、PowerPoint、Excel、LaTeX/PDF 产物，以及转换或编辑 PDF。',

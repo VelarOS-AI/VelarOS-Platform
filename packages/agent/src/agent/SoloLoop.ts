@@ -403,9 +403,9 @@ class SoloStreamLoop<
     /** 用于估算工具 schema 占用并生成 AI SDK tool set。 */
     private readonly toolRegistry: SoloLoopToolRegistry<TContext>,
     /**
-     * 可选执行观测 span 端口（D6 端口纪律）。缺省 no-op——无宿主账本装配（headless / web 桥 /
-     * 子 Agent QueryLoop）时零观测零付费；装配时本 loop 产 run/turn/model span，并把 turn scope
-     * 作 tool span 开启器注入每轮 ToolExecutor。
+     * 可选执行观测区段端口（D6 端口纪律）。缺省为空操作；无宿主账本装配（无界面运行、网页桥、
+     * 子智能体 `QueryLoop`）时不产生观测与开销。装配后，本循环创建运行、回合与模型区段，并把
+     * 回合作用域作为工具区段开启器注入每轮 `ToolExecutor`。
      */
     private readonly spanScopeFactory: LooseOptional<ExecutionSpanScopeFactory> = null,
     executionLimitOverrides: AgentExecutionLimitOverrides = {},

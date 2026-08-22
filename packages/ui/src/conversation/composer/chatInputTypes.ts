@@ -102,13 +102,12 @@ export interface ChatInputMentionableOption {
 /**
  * **可引用项**接入 composer 的网关。
  *
- * 来源无关：工作台行内评论、游戏空间选中实体、任何声明「我的 delta 走 mention 面不走 chip 面」
+ * 来源无关：工作台行内评论、空间选中对象、任何声明「我的 delta 走 mention 面不走 chip 面」
  * 的 mod，都只是它的一种来源。`@` 菜单列出 `available`，可移除/多选；选中项以 chip 显示，
  * 发送后由上层消费。
  *
  * `header` / `deleteLabel` **由来源注入**：菜单不替任何来源起名字。上一版把这条通道写死叫「评论」，
- * 而实际唯一的填充者是游戏空间选中实体——于是在游戏里按 `@`，面板顶着「评论」、条目旁的垃圾桶
- * 写着「删除评论」。
+ * 但其他来源可能提供选中对象；来源文案必须由调用方提供，不能让面板错误显示成「评论」。
  */
 export interface ChatInputMentionables {
   available: ChatInputMentionableOption[]

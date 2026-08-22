@@ -6,7 +6,10 @@ export interface BrowserCommandSpec {
 export class BrowserPlatformCompatibility {
   constructor(private readonly platform: NodeJS.Platform = process.platform) {}
 
-  public getProcessTreeKillCommandSpec(pid: number, signal: NodeJS.Signals): BrowserCommandSpec | null {
+  public getProcessTreeKillCommandSpec(
+    pid: number,
+    signal: NodeJS.Signals
+  ): Nullable<BrowserCommandSpec> {
     if (this.platform !== 'win32') return null
     return {
       file: 'taskkill.exe',

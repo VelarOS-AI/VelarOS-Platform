@@ -53,7 +53,7 @@ function isDetailTruncated(detailNode: HTMLElement, fullDetail: string): boolean
 function useDetailOverflow(
   detailRef: React.RefObject<Nullable<HTMLSpanElement>>,
   detail: React.ReactNode,
-  fullDetail: string | undefined
+  fullDetail: Optional<string>
 ): boolean {
   const [detailOverflowing, setDetailOverflowing] = useState(false)
 

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
+import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserControlCapability } from './Capabilities'
@@ -8,16 +9,16 @@ import { requireActiveBrowserSite } from './Context'
 import { defineBrowserTool } from './Types'
 
 /**
- * 性能分析工具（吸收自 chrome-devtools-mcp 的 performance_* 工具组）。
+ * 性能分析工具，沿用 `chrome-devtools-mcp` 的 `performance_*` 工具能力。
  *
- * 背后是 DevTools 官方 trace 引擎：录制 CDP Tracing → 解析出 LCP/INP/CLS
- * 等指标与 insights → 按需对单个 insight 深挖。
+ * 底层使用开发者工具官方追踪引擎：通过 `CDP Tracing` 录制数据，解析 `LCP`、`INP`、`CLS`
+ * 等指标与诊断结论，并支持按需深入分析单项结论。
  */
 const browserPerformance = defineBrowserTool<{
   // action 可省略:带 insightSetId/insightName 时 schema transform 推断为 analyze_insight。
   action?: 'start_trace' | 'stop_trace' | 'analyze_insight' | 'take_heapsnapshot'
   reload?: boolean
-  autoStopMs?: number | null
+  autoStopMs?: LooseOptional<number>
   insightSetId?: string
   insightName?: string
   path?: string
@@ -45,13 +46,15 @@ const browserPerformance = defineBrowserTool<{
     // 手动停止并返回分析摘要
     { action: 'stop_trace' },
     // 对 trace 摘要里的某个 insight 出详细分析
-    { action: 'analyze_insight', insightSetId: 'NAV-1', insightName: 'LCPBreakdown' },
+    {
+      action: 'analyze_insight',
+      insightSetId: 'NAV-1',
+      insightName: 'LCPBreakdown',
+    },
     // 采集 V8 堆快照落盘（配合 memlab 排查泄漏）
     { action: 'take_heapsnapshot' },
   ],
-  notes: [
-    'trace 与堆快照落盘 artifacts/ 下，DevTools 面板或 memlab 可直接消费。',
-  ],
+  notes: ['trace 与堆快照落盘 artifacts/ 下，DevTools 面板或 memlab 可直接消费。'],
   schema: z
     .object({
       // 宽容:action 可省略——带 insightSetId/insightName 时推断为 analyze_insight(模型连续
@@ -60,26 +63,31 @@ const browserPerformance = defineBrowserTool<{
         .enum(['start_trace', 'stop_trace', 'analyze_insight', 'take_heapsnapshot'])
         .optional()
         .describe(
-        parameterDescription({
-          description: '性能/内存分析动作。',
-          values: [
-            'start_trace：开始录制性能 trace。',
-            'stop_trace：停止录制并返回分析摘要。',
-            'analyze_insight：对最近一次 trace 的指定 insight 输出详细分析。',
-            'take_heapsnapshot：采集 V8 堆快照并落盘。',
-          ],
-          notes: ['省略时:带 insightSetId/insightName 视为 analyze_insight;否则必填。'],
-        })
-      ),
-      reload: z.boolean().optional().describe(
-        parameterDescription({
-          description: 'start_trace 是否先重载页面录完整加载；默认 true，录交互时传 false。',
-        })
-      ),
+          parameterDescription({
+            description: '性能/内存分析动作。',
+            values: [
+              'start_trace：开始录制性能 trace。',
+              'stop_trace：停止录制并返回分析摘要。',
+              'analyze_insight：对最近一次 trace 的指定 insight 输出详细分析。',
+              'take_heapsnapshot：采集 V8 堆快照并落盘。',
+            ],
+            notes: ['省略时:带 insightSetId/insightName 视为 analyze_insight;否则必填。'],
+          })
+        ),
+      reload: z
+        .boolean()
+        .optional()
+        .describe(
+          parameterDescription({
+            description: 'start_trace 是否先重载页面录完整加载；默认 true，录交互时传 false。',
+          })
+        ),
       autoStopMs: z
         .number()
         .nullable()
-        .transform((value) => (value === null ? null : Math.min(60_000, Math.max(1000, Math.round(value)))))
+        .transform((value) =>
+          isNull(value) ? null : Math.min(60_000, Math.max(1000, Math.round(value)))
+        )
         .optional()
         .describe(
           parameterDescription({
@@ -87,25 +95,41 @@ const browserPerformance = defineBrowserTool<{
             notes: ['范围 [1000,60000],超出自动钳制。'],
           })
         ),
-      insightSetId: z.string().min(1).max(120).optional().describe(
-        parameterDescription({
-          description: 'analyze_insight 的 insight 集合 id（取自 trace 摘要清单）。',
-        })
-      ),
-      insightName: z.string().min(1).max(120).optional().describe(
-        parameterDescription({
-          description: 'analyze_insight 的 insight 名称，例如 LCPBreakdown。',
-        })
-      ),
-      path: z.string().min(1).max(300).optional().describe(
-        parameterDescription({
-          description: 'take_heapsnapshot 保存相对路径；缺省 artifacts/memory/ 下按时间戳命名。',
-        })
-      ),
+      insightSetId: z
+        .string()
+        .min(1)
+        .max(120)
+        .optional()
+        .describe(
+          parameterDescription({
+            description: 'analyze_insight 的 insight 集合 id（取自 trace 摘要清单）。',
+          })
+        ),
+      insightName: z
+        .string()
+        .min(1)
+        .max(120)
+        .optional()
+        .describe(
+          parameterDescription({
+            description: 'analyze_insight 的 insight 名称，例如 LCPBreakdown。',
+          })
+        ),
+      path: z
+        .string()
+        .min(1)
+        .max(300)
+        .optional()
+        .describe(
+          parameterDescription({
+            description: 'take_heapsnapshot 保存相对路径；缺省 artifacts/memory/ 下按时间戳命名。',
+          })
+        ),
     })
     // 缺 action 但带 insight 字段 → 推断 analyze_insight(这两个字段只属于该动作,推断无歧义)。
     .transform((input) => {
-      if (!input.action && (input.insightSetId?.trim() || input.insightName?.trim())) return { ...input, action: 'analyze_insight' as const }
+      if (!input.action && (input.insightSetId?.trim() || input.insightName?.trim()))
+        return { ...input, action: 'analyze_insight' as const }
       return input
     })
     .superRefine((input, ctx) => {

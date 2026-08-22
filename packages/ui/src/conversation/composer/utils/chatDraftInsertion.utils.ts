@@ -1,4 +1,4 @@
-import { isBlank, isString } from '#internal/runtime'
+import { isBlank, isString,isTrue } from '#internal/runtime'
 export const InsertChatDraftEventName = 'velaros:insert-chat-draft'
 
 interface InsertChatDraftEventDetail {
@@ -39,7 +39,7 @@ export function requestInsertChatDraft(text: string, options?: { replace?: boole
     replace: options?.replace,
   }
   window.dispatchEvent(new CustomEvent(InsertChatDraftEventName, { detail }))
-  return detail.handled === true
+  return isTrue(detail.handled)
 }
 
 export function claimChatDraftInsertion(event: Event): Nullable<ClaimedChatDraftInsertion> {

@@ -38,7 +38,7 @@ import { HtmlArtifactSourceCode } from './HtmlArtifactSourceCode'
 import styles from '../html-preview/HtmlPreview.module.css'
 
 import type { HtmlArtifactBlock as HtmlArtifactContentBlock } from '#contracts'
-import { isObject } from '#internal/runtime'
+import { isPlainObject } from '#internal/runtime'
 
 interface HtmlArtifactScrollAnchor {
   container: HTMLElement | Window
@@ -209,8 +209,8 @@ const HtmlArtifactBlock = memo(function HtmlArtifactBlock({
   // 自动修复已移除:iframe 渲染真损坏时只在卡片内联提示,由用户决定重试(重载 iframe),
   // 不再向对话注入任何消息。良性运行时错误静默忽略。
   useEventListener(HTML_PREVIEW_ERROR_EVENT, (event: Event) => {
-    if (!(event instanceof CustomEvent) || !isObject(event.detail)) return
-    const detail = event.detail as Record<string, unknown>
+    if (!(event instanceof CustomEvent) || !isPlainObject(event.detail)) return
+    const detail = event.detail
     if (detail.artifactId !== block.artifactId) return
     if (!isGenuineArtifactRenderBreak(detail.phase)) return
     setRenderBroken(true)

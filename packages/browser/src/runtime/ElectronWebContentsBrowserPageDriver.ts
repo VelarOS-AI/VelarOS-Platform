@@ -272,7 +272,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 
   public isTracing(): boolean {
-    return webContentsTraceSessions.get(this.webContents)?.collector.isRunning() ?? false
+    return !!webContentsTraceSessions.get(this.webContents)?.collector.isRunning()
   }
 
   public async captureHeapSnapshot(
@@ -328,7 +328,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 
   public isScreencasting(): boolean {
-    return webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning() ?? false
+    return !!webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning()
   }
 
   public executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T> {

@@ -266,7 +266,7 @@ class RunContext {
     }
 
     // build 会应用用户的 segmentOverrides，并返回追踪信息。
-    const built = builder.build(
+    const built = await builder.buildAsync(
       chatConfig,
       {
         facts: runtimeState.facts,

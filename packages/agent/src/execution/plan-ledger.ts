@@ -163,9 +163,9 @@ class ExecPlanLedger {
   }
 
   private resolveManualPlanStepId(
-    explicitId: string | undefined,
+    explicitId: Optional<string>,
     title: string,
-    existingStep: ExecutionTaskPlanStep | undefined,
+    existingStep: Optional<ExecutionTaskPlanStep>,
     usedIds: Set<string>,
   ): string {
     const candidates = [

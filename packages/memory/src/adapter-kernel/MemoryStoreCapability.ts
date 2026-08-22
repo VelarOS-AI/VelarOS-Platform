@@ -1,22 +1,13 @@
 /**
- * 记忆后端的 capability token 族与 kernel 模块注册（kernel-contract §15.7 裁决二 / §九 9.3）。
+ * 记忆后端能力令牌族与内核模块注册，对应内核契约 §15.7 裁决二和第九章 9.3。
  *
- * **不开第十根轴**：后端经 `velaros.memory.store.<backendId>` 这一族 capability token 注册与
- * 发现，走既有 mod 轴与 capability registry。为记忆开一根 `memoryBackends` 轴，下一个能力域
- * 就会照抄，五套并行扩展系统按域重新长回来。
+ * 后端通过 `velaros.memory.store.<backendId>` 这一族能力令牌注册和发现，复用既有模组轴与能力
+ * 登记处，不为记忆另建扩展轴。令牌属于内核应用二进制接口机制，因此放在适配层；主干只持有
+ * 与实现无关的窄动词契约，并保持适配层到主干的单向依赖。
  *
- * **为什么 token 住这里而不是主干**：token 是 mod 轴机制（`@velaros-ai/kernel/contracts/abi`），
- * 主干只该持有与实现无关的窄动词契约（`../backend/Contract`）。方向铁律 adapter-kernel → 主干
- * 单向也强制了这个落点——主干不得反向依赖适配器。Kernel 本体有具体能力语义硬墙，
- * `memory` 属于能力实现，不能进入 Kernel。
- *
- * **为什么一个后端一个 token 而不是一个共享 token**：`KernelServiceStore` 对同一 capability id
- * 只允许一个 active 服务（重复注册即 `DUPLICATE_SERVICE`）。三档要能**叠加**（§九 9.2 权威层
- * 恒在、派生层可摘），就必须各占一个 id；共享 id 会把叠加语义降级成三选一。
- *
- * **为什么是普通服务对象而不是 callable capability**：后端解析是记忆产品**进程内**的实现选择，
- * 消费者只有本适配器。对外那张需要审计与权限门的面仍然是 `velaros.memory`
- * （见 `./kernel-module`），一条没减。
+ * 每个后端使用独立令牌，因为 `KernelServiceStore` 对同一能力标识只允许一个活动服务。独立标识
+ * 使权威层与可拆卸派生层能够叠加，而不会退化为三选一。后端解析是进程内实现选择，所以注册为
+ * 普通服务对象；面向外部且需要审计与权限门的能力仍由 `velaros.memory` 提供。
  */
 
 import { isEmpty } from '@velaros-ai/core'

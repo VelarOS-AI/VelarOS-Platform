@@ -58,7 +58,7 @@ describe('execution observability protocol', () => {
       status: 'ok' as const,
       metrics: emptyExecutionSpanMetrics(),
       category: 'model' as const,
-      provider: 'airjelly',
+      provider: 'test-provider',
       model: 'deepseek/deepseek-v4-pro',
       requestFingerprint: null,
       finishReason: null,

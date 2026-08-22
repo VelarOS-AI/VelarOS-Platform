@@ -68,7 +68,7 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 
 ```
 ⑤ 宿主层        Desktop / Workbench / VelarOS Terminal / 瘦客户端
-④ 能力 mod 列    project / development / system / browser / game / memory / office / computer
+④ 能力 mod 列    project / development / system / browser / memory / office / computer
 ③ Agent 平台主干  loop + 九轴注册机 + seams + 会话权威 + 上下文治理
 ② Kernel 库      module host + capability registry + 权限 broker + 事件流 + state
 ① 契约层        纯类型，零运行时

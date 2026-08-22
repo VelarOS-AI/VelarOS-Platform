@@ -612,7 +612,7 @@ function normalizeLanguageModelDescriptor(
 
 function normalizeProviderSettings(
   config: ModelAdapterConfig,
-  settings: UserAdapterProviderSettings | undefined
+  settings: Optional<UserAdapterProviderSettings>
 ): UserAdapterProviderSettings {
   return {
     apiKey: settings?.apiKey ?? config.apiKey,

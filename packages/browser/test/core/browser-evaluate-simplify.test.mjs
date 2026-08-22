@@ -10,9 +10,9 @@ import {
 } from '../../dist/core/index.js'
 
 /**
- * `simplify` 是所有 evaluateScript 的公共出口（browser 工具族 + game 的 query/input/screenshot
- * 探针都从这里出结果）。它曾经把嵌套对象吃成 `'[object Object]'`、把 DAG 共享引用误判成
- * `'[Circular]'`，导致 game:query_state 读不出实体坐标。这三组用例就是把那两条判决钉死。
+ * `simplify` 是所有 evaluateScript 的公共出口，浏览器工具与宿主注入的页面探针都从这里出结果。
+ * 它曾经把嵌套对象吃成 `'[object Object]'`、把 DAG 共享引用误判成 `'[Circular]'`，导致结构化
+ * 页面状态读不出深层坐标。这三组用例就是把那两条判决钉死。
  */
 
 // ── ① 深层嵌套的真值必须活着 ──────────────────────────────────

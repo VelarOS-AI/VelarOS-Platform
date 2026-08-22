@@ -31,7 +31,7 @@ export type ChatProviderId =
 
 export type ReasoningLevel = 'off' | 'low' | 'medium' | 'high' | 'ultra'
 export type RunProfileSelectionId = 'auto' | 'compact' | 'balanced' | 'expanded'
-export type WorkspaceSpaceKind = 'project' | 'browser' | 'system' | 'game' | 'engine'
+export type WorkspaceSpaceKind = string
 export type AgentRoleId = 'chat' | 'operator' | 'architect' | 'coder' | 'browser' | 'primary-agent'
 export type ExecutionTaskStatus =
   | 'pending'
@@ -63,7 +63,6 @@ export type ToolCategoryId =
   | 'context'
   | 'planning'
   | 'interaction'
-  | 'pet'
   | 'web'
   | 'browser'
   | 'browser-core'
@@ -73,7 +72,6 @@ export type ToolCategoryId =
   | 'browser-events'
   | 'browser-files'
   | 'browser-advanced'
-  | 'game'
   | 'memory'
   | 'knowledge'
   | 'office'
@@ -89,6 +87,7 @@ export type ToolCategoryId =
   | 'project-changes'
   | 'project-execution'
   | 'development-code'
+  | (string & {})
 
 export type ToolPermission =
   | 'fs:read'
@@ -577,16 +576,7 @@ export interface BrowserElementSelection {
   >
 }
 
-export type TurnContextSourceId =
-  | 'workspace.filesystem-touches'
-  | 'workspace.project-roots'
-  | 'task.lifecycle'
-  | 'browser.manual-activity'
-  | 'browser.current-page'
-  | 'memory.recall'
-  | 'game.runtime-errors'
-  | 'game.selection'
-  | 'game.scene-state'
+export type TurnContextSourceId = string
 
 export interface TurnContextDelta {
   id: string

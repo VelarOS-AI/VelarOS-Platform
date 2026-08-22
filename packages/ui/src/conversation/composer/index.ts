@@ -1,13 +1,11 @@
 /**
- * `@velaros-ai/ui/conversation/composer` — 会话输入框第五原子（pass-5 renderer 収官战役収尾）。
+ * `@velaros-ai/ui/conversation/composer` 提供会话输入框原子。
  *
- * 聊天页最后一块渲染件入包：输入框 / 附件槽 / 发送控件 / 队列草稿 UI / 模型·推理选择 / 「+」菜单 /
- * skill·评论·下一步补全菜单 / 语音输入。数据 + 会话层回调经 `ChatComposerControl` 投影穿过（主注入面），
- * 环境 IPC 能力（本地语音三件 / 云特性 / 提示 toast）经 `ConversationComposerPort` 注入。宿主只保留
- * 草稿队列提交 wiring（`useChatPageComposerSurface` 深耦合 chatStore + IPC）+ 端口/插槽实现胶水。
+ * 本包包含输入框、附件槽、发送控件、队列草稿、模型与推理选择、添加菜单、技能与评论补全、下一步
+ * 建议及语音输入。数据和会话回调通过 `ChatComposerControl` 投影，环境能力通过
+ * `ConversationComposerPort` 注入；宿主只保留草稿提交及端口、插槽装配。
  *
- * 第二消费者：`ScheduledTaskComposerDialog` 复用本包的输入框零件（ComposerFilePreview /
- * ComposerModelRunSelector / ComposerAddMenu / useChatInputFileAttachments 等）拼装定时任务专用编辑面。
+ * `ScheduledTaskComposerDialog` 也会复用本包零件，拼装定时任务专用编辑面。
  */
 
 // ── 组合层组件 ──────────────────────────────────────────────────────────────

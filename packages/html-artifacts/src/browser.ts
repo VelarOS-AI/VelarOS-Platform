@@ -1,3 +1,4 @@
+import { isFiniteNumber, isFunction, isObject, isString, Log } from './internal-runtime.js'
 import {
   DEFAULT_HTML_ARTIFACT_HEIGHT,
   type HtmlArtifactProtocolEvent,
@@ -12,6 +13,8 @@ import {
   HTML_ARTIFACT_WHEEL_MESSAGE_TYPE,
   type HtmlArtifactBridgeMessages,
 } from './shell.js'
+
+const log = Log.tag('HtmlArtifactBrowserHost')
 
 export type HtmlArtifactHostErrorPhase = 'host' | 'protocol' | 'runtime' | 'security'
 
@@ -75,8 +78,8 @@ export interface HtmlArtifactController {
   readonly ready: Promise<HTMLIFrameElement>
   write(chunk: string): HtmlArtifactProtocolEvent[]
   finish(): HtmlArtifactProtocolEvent[]
-  consume(chunks: AsyncIterable<string> | Iterable<string>): Promise<HtmlArtifactSnapshot | null>
-  getSnapshot(artifactId?: string): HtmlArtifactSnapshot | null
+  consume(chunks: AsyncIterable<string> | Iterable<string>): Promise<Nullable<HtmlArtifactSnapshot>>
+  getSnapshot(artifactId?: string): Nullable<HtmlArtifactSnapshot>
   reset(): void
   dispose(): void
 }
@@ -99,7 +102,7 @@ export class DomHtmlArtifactEnvironment implements HtmlArtifactBrowserEnvironmen
 
   public createBridgeId(): string {
     const cryptoApi = globalThis.crypto
-    if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
+    if (cryptoApi && isFunction(cryptoApi.randomUUID)) return cryptoApi.randomUUID()
 
     this.fallbackId += 1
     return `${Date.now().toString(36)}-${this.fallbackId.toString(36)}`
@@ -122,20 +125,18 @@ export class DomHtmlArtifactEnvironment implements HtmlArtifactBrowserEnvironmen
   }
 }
 
-function normalizeDimension(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? Math.max(1, Math.ceil(value))
-    : fallback
+function normalizeDimension(value: Optional<number>, fallback: number): number {
+  return isFiniteNumber(value) && value > 0 ? Math.max(1, Math.ceil(value)) : fallback
 }
 
-function readMessagePayload(value: unknown): MessagePayload | null {
-  if (!value || typeof value !== 'object') return null
+function readMessagePayload(value: unknown): Nullable<MessagePayload> {
+  if (!value || !isObject(value)) return null
   const type = (value as { type?: unknown }).type
-  return typeof type === 'string' ? (value as MessagePayload) : null
+  return isString(type) ? (value as MessagePayload) : null
 }
 
 function readString(value: unknown): string {
-  return typeof value === 'string' ? value : ''
+  return isString(value) ? value : ''
 }
 
 /**
@@ -151,7 +152,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
   private readonly initialHeight: number
   private readonly parser: HtmlArtifactProtocolParser
   private bridgeMessages: HtmlArtifactBridgeMessages
-  private latestArtifactId: string | null = null
+  private latestArtifactId: Nullable<string> = null
   private disposed = false
   private consuming = false
   private frameReady = false
@@ -162,7 +163,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     target: HTMLElement,
     private readonly options: MountHtmlArtifactOptions = {}
   ) {
-    if (!target || typeof target.replaceChildren !== 'function') {
+    if (!target || !isFunction(target.replaceChildren)) {
       throw new TypeError('HtmlArtifactRuntime target must be an HTMLElement')
     }
 
@@ -206,7 +207,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
 
   readonly consume = async (
     chunks: AsyncIterable<string> | Iterable<string>
-  ): Promise<HtmlArtifactSnapshot | null> => {
+  ): Promise<Nullable<HtmlArtifactSnapshot>> => {
     this.assertActive()
     if (this.consuming) throw new Error('HTML artifact runtime is already consuming a stream')
 
@@ -224,7 +225,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
 
   readonly getSnapshot = (
     artifactId = this.latestArtifactId ?? ''
-  ): HtmlArtifactSnapshot | null => this.parser.getSnapshot(artifactId)
+  ): Nullable<HtmlArtifactSnapshot> => this.parser.getSnapshot(artifactId)
 
   readonly reset = (): void => {
     this.assertActive()
@@ -290,13 +291,13 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
   private reportError(error: HtmlArtifactHostError): void {
     try {
       this.options.onError?.(error)
-    } catch {
-      // arch-guard:silent-catch-ok 错误回调是应用边界，回调自身失败不得再次击穿流运行时。
+    } catch (cause) {
+      log.warn('HTML artifact 错误回调执行失败。', { cause })
     }
   }
 
   private invoke<T extends unknown[]>(
-    callback: ((...args: T) => void) | undefined,
+    callback: Optional<(...args: T) => void>,
     callbackName: string,
     ...args: T
   ): void {
@@ -304,7 +305,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     try {
       callback(...args)
     } catch (cause) {
-      // 回调异常会转换为结构化 host 错误，经 reportError 上报。
+      log.warn('HTML artifact 宿主回调执行失败。', { callbackName, cause })
       this.reportError({
         phase: 'host',
         message: `${callbackName} callback failed`,
@@ -325,7 +326,10 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
 
     const frameWindow = this.iframe.contentWindow
     if (!frameWindow) {
-      this.reportError({ phase: 'host', message: 'HTML artifact iframe is not available' })
+      this.reportError({
+        phase: 'host',
+        message: 'HTML artifact iframe is not available',
+      })
       return
     }
     frameWindow.postMessage(payload, '*')
@@ -342,11 +346,18 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
           break
         case 'artifact-update':
           this.latestArtifactId = event.artifact.id
-          this.post({ type: this.bridgeMessages.render, html: event.html, patches: [] })
+          this.post({
+            type: this.bridgeMessages.render,
+            html: event.html,
+            patches: [],
+          })
           break
         case 'artifact-patch':
           this.latestArtifactId = event.artifact.id
-          this.post({ type: this.bridgeMessages.patch, patches: [event.patch] })
+          this.post({
+            type: this.bridgeMessages.patch,
+            patches: [event.patch],
+          })
           break
         case 'artifact-diagnostic':
           this.reportError({
@@ -398,7 +409,10 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
         if (url) {
           this.invoke(this.options.onLink, 'onLink', url)
         } else {
-          this.reportError({ phase: 'security', message: 'Blocked an invalid artifact URL' })
+          this.reportError({
+            phase: 'security',
+            message: 'Blocked an invalid artifact URL',
+          })
         }
         break
       }

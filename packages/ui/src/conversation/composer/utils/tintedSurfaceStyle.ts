@@ -33,18 +33,20 @@ const DARK_CONTENT_LIGHTNESS_MAX = 0.88
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
 
-export function parseHexColor(color: string | undefined): Rgb | null {
+export function parseHexColor(color: Optional<string>): Nullable<Rgb> {
   if (!color) return null
 
   const value = color.trim()
   const hex = value.startsWith('#') ? value.slice(1) : value
-  if (/^[0-9a-fA-F]{3}$/.test(hex)) return {
+  if (/^[0-9a-fA-F]{3}$/.test(hex))
+    return {
       r: parseInt(hex[0] + hex[0], 16),
       g: parseInt(hex[1] + hex[1], 16),
       b: parseInt(hex[2] + hex[2], 16),
     }
 
-  if (/^[0-9a-fA-F]{6}$/.test(hex)) return {
+  if (/^[0-9a-fA-F]{6}$/.test(hex))
+    return {
       r: parseInt(hex.slice(0, 2), 16),
       g: parseInt(hex.slice(2, 4), 16),
       b: parseInt(hex.slice(4, 6), 16),
@@ -137,8 +139,7 @@ export function contrastRatio(first: Rgb, second: Rgb): number {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-const makeColor = (h: number, s: number, l: number): Rgb =>
-  hslToRgb({ h, s, l: clamp(l, 0, 1) })
+const makeColor = (h: number, s: number, l: number): Rgb => hslToRgb({ h, s, l: clamp(l, 0, 1) })
 
 const getReadableSaturation = (saturation: number): number =>
   saturation < NEUTRAL_SATURATION_THRESHOLD ? 0 : clamp(saturation, MIN_SATURATION, MAX_SATURATION)
@@ -181,8 +182,8 @@ const deriveDarkForeground = (accent: Hsl, background: Rgb): string => {
  * 给定 accent 与**已有背景**（hex），仅推导可读前景色；背景仍由 CSS token 负责。
  */
 export function getTintedSurfaceForeground(
-  accentColor: string | undefined,
-  backgroundColor: string | undefined,
+  accentColor: Optional<string>,
+  backgroundColor: Optional<string>,
   isDarkMode: boolean
 ): TintedSurfaceForegroundStyle {
   const accentRgb = parseHexColor(accentColor)
@@ -199,7 +200,9 @@ export function getTintedSurfaceForeground(
     ? deriveDarkForeground(accentHsl, backgroundRgb)
     : deriveLightForeground(accentHsl, backgroundRgb)
 
-  const style: TintedSurfaceForegroundStyle = { '--tinted-surface-fg': foreground }
+  const style: TintedSurfaceForegroundStyle = {
+    '--tinted-surface-fg': foreground,
+  }
   foregroundCache.set(cacheKey, style)
   return style
 }

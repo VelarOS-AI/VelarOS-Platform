@@ -5,8 +5,8 @@
 // ## 从哪读起
 // 两条链，入口各一：
 //  1. `buildToolDiscoveryCards` —— 页的唯一来源，直通 tool-space-resolver，不做任何加工。
-//  2. `buildToolActivationGuide` —— 页 → 激活指引。先按 `card.availability` 选 method
-//     （direct_call / page_in_only / request_approval / request_user_action / inspect_reasons），
+//  2. `buildToolActivationGuide` —— 页 → 激活指引。先按 `card.availability` 选择激活方式
+//     （`direct_call`、`page_in_only`、`request_approval`、`request_user_action`、`inspect_reasons`），
 //     再由 `withActivationDependencies` 补上 `buildToolDependencyGuides` 算出的依赖清单与
 //     `buildActivationFlow` 拼出的分步流程。`buildToolActivationRef` 是它的模型面瘦身版。
 //

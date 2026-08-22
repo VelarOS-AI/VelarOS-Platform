@@ -9,9 +9,9 @@ export interface HtmlArtifactFrameFit {
 
 export interface HtmlArtifactFrameFitInput {
   fallbackHeight: number
-  maxViewportWidth?: number | null
-  naturalHeight?: number | null
-  naturalWidth?: number | null
+  maxViewportWidth?: LooseOptional<number>
+  naturalHeight?: LooseOptional<number>
+  naturalWidth?: LooseOptional<number>
   preferViewportWidth?: boolean
 }
 
@@ -30,7 +30,9 @@ function toDimension(value: number): number {
   return Math.max(1, Math.ceil(value))
 }
 
-export function resolveHtmlArtifactFrameFit(input: HtmlArtifactFrameFitInput): HtmlArtifactFrameFit {
+export function resolveHtmlArtifactFrameFit(
+  input: HtmlArtifactFrameFitInput
+): HtmlArtifactFrameFit {
   const measuredNaturalWidth = readPositiveNumber(input.naturalWidth)
   const naturalHeight = readPositiveNumber(input.naturalHeight)
   const maxViewportWidth = readPositiveNumber(input.maxViewportWidth)
@@ -49,7 +51,8 @@ export function resolveHtmlArtifactFrameFit(input: HtmlArtifactFrameFitInput): H
   const fallbackHeight = toDimension(readPositiveNumber(input.fallbackHeight) ?? 1)
   const fallbackWidth = toDimension(maxViewportWidth ?? naturalWidth ?? 1)
 
-  if (!naturalWidth || !naturalHeight || !maxViewportWidth) return {
+  if (!naturalWidth || !naturalHeight || !maxViewportWidth)
+    return {
       contentHeight: fallbackHeight,
       contentWidth: fallbackWidth,
       locked: false,

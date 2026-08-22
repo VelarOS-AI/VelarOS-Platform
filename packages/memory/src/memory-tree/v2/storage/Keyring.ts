@@ -75,7 +75,7 @@ export interface MemoryKeyringStoreOptionsV2 {
  */
 export class MemoryKeyringStoreV2 {
   private readonly keyringDir: string
-  private readonly hooks: StorageStepHooksV2 | undefined
+  private readonly hooks?: StorageStepHooksV2
   private readonly now: () => number
   private readonly random: (byteLength: number) => Buffer
   private root: MemoryWrappingRootV2

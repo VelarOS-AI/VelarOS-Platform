@@ -1,12 +1,11 @@
 /**
- * @velaros-ai/ui/conversation — 聊天渲染门面包。
+ * `@velaros-ai/ui/conversation` 是聊天渲染门面包。
  *
- * 用户新 UI 的会话渲染件：消息块管线、工具卡族、流式起搏、以及宿主能力注入端口。
- * 底座（CardKit / ActionCard / 原语）留在 @velaros-ai/ui，本包消费之；本包零 rendererIpc、
- * 零 react-router——宿主能力一律经注入端口（i18n / action / render-slot）反转进来。
+ * 本包提供消息块管线、工具卡、流式起搏和宿主能力注入端口。基础卡片与原语仍由
+ * `@velaros-ai/ui` 提供；本包不直接依赖渲染器进程通信或路由，国际化、动作和渲染插槽等宿主能力
+ * 均通过端口反向注入。
  *
- * 门面收口：对外只暴露少数分区（`.` / `./stream` / `./i18n`），内部原子（stream / i18n /
- * 后续的 tool-render / cards / blocks / shell）是实现细节，外部禁直依内部深路径。
+ * 对外只暴露约定分区，流式、国际化、工具渲染、卡片、消息块和会话壳等内部原子禁止深路径依赖。
  */
 export * from './blocks'
 export * from './cards'

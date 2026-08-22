@@ -27,7 +27,7 @@ export function scriptKindForPath(path: string): ts.ScriptKind {
   return ts.ScriptKind.TS
 }
 
-function nameText(name: ts.PropertyName | ts.BindingName | undefined): string | undefined {
+function nameText(name: Optional<ts.PropertyName | ts.BindingName>): Optional<string> {
   if (!name) return undefined
   if (ts.isIdentifier(name)) return name.text
   if (ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text
@@ -96,7 +96,7 @@ function parseTsUncached(path: string, content: string): ParseTsResult {
 
   function push(
     kind: TsAstSymbol['kind'],
-    name: string | undefined,
+    name: Optional<string>,
     node: ts.Node,
     container?: string,
     exported = false

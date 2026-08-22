@@ -7,7 +7,7 @@ import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { adaptTextToContentLineEndings, countChangedLines, includesLineEndingAware, resolveLineEndingAwareTextMatch } from "../utils/text.js";
 
-function patch(path: string, baseRevision: string | undefined, oldContent: string, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
+function patch(path: string, baseRevision: Optional<string>, oldContent: string, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
   const changedLines = countChangedLines(diff);
   return {

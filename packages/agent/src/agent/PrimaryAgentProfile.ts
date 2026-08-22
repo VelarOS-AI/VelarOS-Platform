@@ -27,7 +27,7 @@ interface PrimaryAgentProfileSkillRepository {
 /** 显式选中技能的 allowed-tools 并集；没有任何选中技能声明门控时返回 null（不限制）。 */
 function resolveSelectedSkillAllowedTools(
   skillDescriptors: readonly AgentSkillDescriptor[],
-  selectedSkillIds: readonly string[] | undefined
+  selectedSkillIds: Optional<readonly string[]>
 ): Nullable<string[]> {
   const selected = new Set((selectedSkillIds ?? []).map((id) => id.trim()).filter(Boolean))
   if (selected.size === 0) return null

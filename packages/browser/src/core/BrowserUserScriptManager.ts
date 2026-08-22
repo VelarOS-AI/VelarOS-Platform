@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isObject, isPresent, isString, optionalWhen, stringifyPretty,toOptional } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isPlainObject,isPresent, isString, optionalWhen, stringifyPretty,toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord, ProjectReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './types.js'
@@ -175,10 +175,10 @@ function requireStoredPatterns(value: unknown, field: string, optional: boolean)
 
 function requireStoredLastRun(value: unknown): LooseOptional<BrowserUserScriptLastRun> {
   if (!isPresent(value)) return undefined
-  if (!isObject(value)) {
+  if (!isPlainObject(value)) {
     throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun 无效。')
   }
-  const stored = value as Record<string, unknown>
+  const stored = value
   const status = stored.status
   if (status !== 'success' && status !== 'error' && status !== 'unsupported') {
     throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun.status 无效。')
@@ -201,10 +201,10 @@ function requireStoredLastRun(value: unknown): LooseOptional<BrowserUserScriptLa
 }
 
 function requireStoredScript(value: unknown): BrowserUserScriptRecord {
-  if (!isObject(value)) {
+  if (!isPlainObject(value)) {
     throw new AppError('VALIDATION', '浏览器用户脚本索引包含无效记录。')
   }
-  const stored = value as Record<string, unknown>
+  const stored = value
   const id = assertScriptId(isString(stored.id) ? stored.id : '')
   if (!isString(stored.name) || !isNonBlankString(stored.version)) {
     throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 缺少名称或版本。`)

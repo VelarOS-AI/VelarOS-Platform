@@ -1,4 +1,4 @@
-import { isBlank, isEmpty } from '@velaros-ai/core'
+import { isBlank, isEmpty,toNullable } from '@velaros-ai/core'
 interface SubAgentGuidanceRelayWorkerSnapshot {
   threadId: string
   title: string
@@ -123,7 +123,7 @@ class SubAgentGuidanceRelayRegistry {
     const worker = this.workersByExecutionId.get(executionId)?.get(threadId)
     if (!worker || isEmpty(worker.relayQueue)) return null
 
-    return worker.relayQueue.shift() ?? null
+    return toNullable(worker.relayQueue.shift())
   }
 }
 

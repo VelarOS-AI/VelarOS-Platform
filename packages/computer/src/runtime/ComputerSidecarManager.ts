@@ -60,12 +60,12 @@ const STDERR_TAIL_LIMIT = 8_000
 const READY_HANDSHAKE_ID = 0
 
 /**
- * 默认 spawner。两处形态是刻意的：
- * - **argv 直传、不过 shell**：解释器与脚本路径都由 `ComputerHelperResolver` 从固定布局算出，
- *   不拼命令行字符串，也就没有注入面（`shell: true` 会把整条路径变成可注入的命令）。
- * - **继承父进程 env**：helper 是随插件分发的自包含 venv，需要 PATH/HOME 等定位系统 API 与
- *   显示会话；这里只额外钉死两个 Python 行为开关（不缓冲、不写 .pyc）以保证 stdio 协议实时、
- *   且不往插件目录里落编译产物。
+ * 默认辅助进程启动器。两项行为是刻意设计：
+ * - **参数数组直传，不经过命令解释器**：解释器和脚本路径由 `ComputerHelperResolver` 从固定布局
+ *   解析，不拼接命令行字符串，因而不产生命令注入面。
+ * - **继承父进程环境**：辅助程序是随插件分发的自包含虚拟环境，需要 `PATH`、`HOME` 等信息定位
+ *   系统接口与显示会话。这里只额外固定两个 Python 行为开关，关闭缓冲并禁止写入 `.pyc`，保证
+ *   标准输入输出协议实时且不在插件目录生成编译产物。
  */
 function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess {
   const child: ChildProcessWithoutNullStreams = spawn(

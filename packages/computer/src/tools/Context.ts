@@ -32,14 +32,14 @@ export async function requireComputerAvailable(ctx: ComputerToolContext): Promis
   throw new AppError('PERMISSION', unavailableMessage(availability))
 }
 
-/** Build a reason-specific, non-self-install gate message for the agent/UI. */
+/** 按不可用原因生成面向智能体与界面的门禁消息，并明确禁止自行安装依赖。 */
 function unavailableMessage(availability: ComputerAvailability): string {
   const detail = availability.detail?.trim()
   const suffix = detail ? `（${detail}）` : ''
 
   switch (availability.reason) {
     case 'permission-missing':
-      // The one gate the agent should route to the user: OS-level permission.
+      // 这是唯一应交给用户处理的门禁：操作系统权限。
       return `桌面控制被系统权限拦截${suffix}。请在「系统设置 → 隐私与安全性」为本应用授予「辅助功能」和「屏幕录制」权限，然后重试；不要尝试绕过权限。`
 
     case 'unsupported-platform':

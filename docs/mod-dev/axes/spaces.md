@@ -3,7 +3,7 @@
 空间是 Mod Loader 装配能力的产品面。它声明会话身份、职责包、常驻工具和每回合上下文，
 但不实现文件、浏览器或系统操作。具体行为必须由单一职责包贡献，再由空间配方组合。
 
-`@velaros-ai` 是最外层品牌 scope；Project、System、Browser、Game 等是品牌下的聚合语言，
+`@velaros-ai` 是最外层品牌 scope；Project、System、Browser 等是品牌下的聚合语言，
 职责通过包的子入口暴露。不要为每个空间复制一套读写、执行或代码理解实现。
 
 ## 声明契约
@@ -47,11 +47,10 @@
 | System | `velaros.system` | `ordinal` | 系统文件、执行、进程、桌面 |
 | Project | `velaros.project` | `path` | 项目文件、原子变更、项目执行 |
 | Browser | `velaros.browser` | `origin` | 浏览器会话、观察、交互与页面数据 |
-| Game | `velaros.game` | `path` | 继承 Project，再增加游戏编辑、运行和观察 |
 
 Project 的职责类别是 `project-files`、`project-changes`、`project-execution`。
 Development 不是一个重复的项目空间，而是可组合进 Project 的代码理解职责包，只贡献
-`development:query-code`。Game 通过 `inheritsSpaceIds: ['project']` 获得 Project 基础能力。
+`development:query-code`。其他项目型空间可以通过 `inheritsSpaceIds: ['project']` 复用这份基础能力。
 
 ## 工具身份
 

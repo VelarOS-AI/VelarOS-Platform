@@ -2233,9 +2233,6 @@ export const enUSMessages = {
     pluginWhisperTitle: 'Local Speech Recognition (Whisper)',
     pluginWhisperDescription:
       'Downloads whisper.cpp and the multilingual small model for offline speech-to-text. Chromium Web Speech remains the fallback when it is not installed.',
-    pluginAirJellyInjectorTitle: 'AirJelly Injector',
-    pluginAirJellyInjectorDescription:
-      'AirJelly Injector is an official internal forwarding connector between VelarOS and AirJelly. It only uses the AirJelly account already signed in on this device to access official AirJelly services. You must sign in to the local AirJelly app first; access, quota, and billing remain governed by that account and AirJelly server policies. This plugin does not bypass authentication, compromise the backend, steal credits, or evade usage limits. Its code stays encrypted on disk and unlocks only in main-process memory for an authorized official account.',
     pluginWebAgentBridgeTitle: 'Web Agent Bridge',
     pluginWebAgentBridgeDescription:
       'Binds signed-in ChatGPT conversations to System, Project, or Browser workspaces. The website owns conversation context while VelarOS retains local tools, permissions, and execution. Access requires account authorization; Chrome still requires one local extension load after installation.',
@@ -2268,32 +2265,6 @@ export const enUSMessages = {
       'CodeGraph resource package is missing; graph and code intelligence features are disabled.',
     pluginReasonMarkItDownResourceMissing:
       'MarkItDown resource package is missing; document-to-Markdown conversion is disabled.',
-    petLabel: 'Desktop pet',
-    petHint:
-      'Keep Hajimi on your desktop: click to explore features or tell it what to do — it drives VelarOS for you. The switch persists across launches.',
-    petProactiveLabel: 'Proactive companionship',
-    petProactiveHint:
-      'Let Hajimi locally observe scheduled tasks and remembered open loops, with quiet hours, deduplication, and a daily interruption budget.',
-    petProactiveVoiceLabel: 'Speak proactively',
-    petProactiveVoiceHint:
-      'Speak high-value reminders with local text-to-speech while showing the same message in a bubble.',
-    petProactiveMemoryLabel: 'Observe remembered open loops',
-    petProactiveMemoryHint:
-      'Reads only local Memory Tree task, goal, and project summaries; raw evidence is not uploaded.',
-    petProactiveQuietHoursLabel: 'Quiet hours',
-    petProactiveQuietHoursHint:
-      'Start hour – end hour; a range crossing midnight is interpreted as an overnight window.',
-    petProactiveQuietHoursStart: 'Quiet hours start',
-    petProactiveQuietHoursEnd: 'Quiet hours end',
-    petProactiveDailyBudgetLabel: 'Daily proactive limit',
-    petProactiveDailyBudgetHint:
-      'Maximum proactive interruptions per day; set to 0 to stay silent without disabling observation.',
-    petProactiveCooldownLabel: 'Cooldowns (minutes)',
-    petProactiveCooldownHint:
-      'The left value separates any two reminders; the right value delays the same topic.',
-    petProactiveGlobalCooldown: 'Global cooldown in minutes',
-    petProactiveTopicCooldown: 'Same-topic cooldown in minutes',
-    petSummonAction: 'Summon Hajimi',
     cliConnectorTitle: 'External CLI connectors',
     cliConnectorDescription:
       'Connect local third-party CLIs (GitHub, Lark, Gmail, etc.) so the agent can call them directly: install with one guided step, authenticate when needed, and use them without any toggle once ready.',
@@ -2584,9 +2555,9 @@ export const enUSMessages = {
     baseUrlHint: 'API endpoint for a custom or local OpenAI-compatible provider.',
     modelLabel: 'Default model',
     modelHint: 'Sets the default model. Pick a suggestion or type the provider’s latest model ID.',
-    realtimeAudioTitle: 'Hajimi realtime voice',
+    realtimeAudioTitle: 'Realtime voice',
     realtimeAudioDescription:
-      'Use Velar routing with one switch, or connect OpenAI or Gemini directly. Hajimi can talk live and operate VelarOS through its control plane.',
+      'Use Velar routing with one switch, or connect OpenAI or Gemini directly. The assistant can talk live and operate VelarOS through its control plane.',
     realtimeAudioProviderVelar: 'Velar',
     realtimeAudioVelarHint:
       'One-click mode: Velar chooses the upstream, model, voice, and fallback route internally.',
@@ -2602,7 +2573,7 @@ export const enUSMessages = {
       'Defaults to the selected provider’s official short-lived credential endpoint.',
     realtimeAudioModel: 'Realtime model',
     realtimeAudioModelHint: 'Model used for speech-to-speech and tool calling.',
-    realtimeAudioVoice: 'Hajimi voice',
+    realtimeAudioVoice: 'Assistant voice',
     realtimeAudioVoiceHint: 'Enter a voice name supported by the selected provider.',
     realtimeAudioReasoning: 'Realtime reasoning effort',
     realtimeAudioReasoningHint: 'Low responds faster; raise it for more complex operations.',
@@ -2716,9 +2687,9 @@ export const enUSMessages = {
     welcomeTitle: 'Hi, welcome to VelarOS',
     welcomeTitleNamed: 'Hi, {name}',
     welcomeBody:
-      'Welcome to VelarOS. It is great to meet you.\nHajimi can guide you by voice: instead of clicking through a tour, say what you want to see or do and Hajimi will open it, explain it, and carry it out.',
+      'Welcome to VelarOS. It is great to meet you.\nThe AI guide can walk you through the product: say what you want to see or do and it will open the relevant area and explain it.',
     welcomeCta: 'Explore manually',
-    welcomeVoiceCta: 'Let Hajimi guide me by voice',
+    welcomeVoiceCta: 'Use voice guidance',
     themeChoiceTitle: 'Choose a theme color',
     themeChoiceBody:
       'Pick one of these familiar colors for a quick start, or choose any color you like.',
@@ -2760,20 +2731,18 @@ export const enUSMessages = {
       'HTML Live Preview handles simple pages and light interactions; Widget handles complex charts, data-driven states, Canvas/WebGL, and multi-step interactions. You can enable both.',
     profileContinue: 'Start with my preferences',
     profileRecommended: 'Recommended for you',
-    pluginOfferTitle: 'For official members: AirJelly',
+    pluginOfferTitle: 'Optional model connectors',
     pluginOfferBody:
-      'AirJelly connects the AirJelly account already signed in on this device to VelarOS. After installation, both Settings and the chat composer will default to the strongest AirJelly Ultra tier.',
-    pluginAirJellyBlurb:
-      'Use your signed-in AirJelly account for official model access; permissions, quota, and billing remain tied to that account.',
+      'Install a connector only when you want to use an account-backed model service. Access, quota, and billing remain governed by that provider.',
     pluginMarketplaceOfficialTitle: 'Find other plugins in the marketplace',
     pluginMarketplaceOfficialBody:
-      'This is the plugin marketplace. Each card explains a plugin’s purpose and source, while the controls on the right let you download, enable, or disable it. Beyond AirJelly, you can add other plugins as needed.',
+      'This is the plugin marketplace. Each card explains a plugin’s purpose and source, while the controls on the right let you download, enable, or disable it.',
     pluginMarketplaceRegularTitle: 'Plugin marketplace',
     pluginMarketplaceRegularBody:
       'These are the available plugin options. Each card shows its purpose, source, and version; use the controls on the right to download, enable, or disable it, or ask the AI to install a public plugin.',
     pluginInstallAction: 'Install',
     pluginInstalled: 'Installed',
-    pluginConfigured: 'AirJelly Ultra is now the shared Settings and chat default ✓',
+    pluginConfigured: 'The connector is installed and ready ✓',
     chatHomeTitle: 'Conversations: where everything starts',
     chatHomeBody:
       'Click Conversations on the left to open the workspace launcher on the right, then choose Daily tasks, Project coding, or Web work. Existing conversations still open directly from the list below.',
@@ -3023,21 +2992,18 @@ export const enUSMessages = {
       'Enable HTML Live Preview from “+ → Rendering”. The AI streams HTML, CSS, and JavaScript into an isolated preview block so you can watch the page take shape while it is generated. It works well for prototypes, dashboards, and interactive pages, with fullscreen preview, source view, and HTML download afterward.',
     modelDeepTitle: 'Model settings that matter',
     modelDeepBody:
-      '“Provider” decides whose models the AI uses (AirJelly is configured for you; any BYOK provider works too). “Default model” powers chat and the workbench. “Auxiliary models” below let you assign faster models to small jobs like translation and completion.',
+      '“Provider” decides whose models the AI uses; configure any supported provider with your own credentials. “Default model” powers chat and the workbench. “Auxiliary models” below let you assign faster models to small jobs like translation and completion.',
     permissionTitle: 'Permissions: ask before acting?',
     permissionBody:
       'This controls whether the AI asks before sensitive actions (editing files, running commands). The safe default shows an approval card; loosen it later for more autonomy. Sandbox and notification switches live here too.',
     finishTitle: 'You’re all set',
     finishBody:
-      'Finally, select the account entry at the bottom left to see exactly where this tour can be replayed. You can then decide whether to meet Hajimi; it appears only after you choose “Meet Hajimi”.',
+      'Finally, select the account entry at the bottom left to see exactly where this tour can be replayed.',
     finishOpenAccountHint: 'Select the account entry at the bottom left',
-    petTourGreeting:
-      'Hi, I’m Hajimi. Ask me whenever something is unclear. Right-click to dismiss me, and summon me again later from Settings → System.',
     finishCta: 'Done',
-    meetPetCta: 'Meet Hajimi',
     skipRestartTitle: 'Click here to restart now',
     skipRestartBody:
-      'The lower-left account panel is open. Select the highlighted “Onboarding tour” item to restart from the first step now. Each version appears automatically only once, and you can replay it here anytime. Choose “Meet Hajimi” when you are ready to summon it and see its greeting.',
+      'The lower-left account panel is open. Select the highlighted “Onboarding tour” item to restart from the first step now. Each version appears automatically only once, and you can replay it here anytime.',
     guideBadge: 'AI guide',
     guideInputPlaceholder: 'Where to? Tell me…',
     guideInputSend: 'Send',
@@ -3068,37 +3034,6 @@ export const enUSMessages = {
     exploreModelsTitle: 'Models: the engine room',
     exploreModelsBody:
       'Configure providers and default models here, and assign separate models to auxiliary jobs like completion and translation.',
-    petGreeting1: 'Meow — I’m here. What shall we do?',
-    petGreeting2: 'Where should I take you today, meow?',
-    petGreeting3: 'Got a task? Or shall we wander, meow?',
-    petGreeting4: 'Just woke up from a nap, meow. Where to?',
-    petInputPlaceholder: 'Tell me something, meow…',
-    petStatusGuided: 'Taking you there, meow →',
-    petStatusTasked: 'Handed to VelarOS, meow ✓',
-    petStatusDone: 'Done, meow — go take a look ✓',
-    petStatusBlocked: 'Hmm meow, that didn’t work (official sign-in needed)',
-    petStatusBusy: 'Hold on meow, still thinking about the last thing…',
-    petStatusFailed: 'Mrrp, lost my train of thought. Say it again?',
-    petStatusModelMissing: 'No model configured yet, meow — pick one in Settings',
-    petRealtimeStart: 'Talk live with Hajimi',
-    petRealtimeOpeningLine: "Hi, I'm Hajimi.",
-    petRealtimeContinuationPrompt:
-      'The UI has already shown the fixed opening line “Hi, I’m Hajimi.” Do not repeat or rephrase it. Add only one very short, natural English sentence inviting the user to say what they want to do.',
-    petRealtimeOnboardingOpeningLine:
-      "Hi, I'm Hajimi. Codex is operating me through the debug interface to demonstrate how I understand and complete the VelarOS onboarding tour.",
-    petRealtimeOnboardingContinuationPrompt:
-      'You are demonstrating the first-time VelarOS voice tour to investors while the static tour remains visible. Begin by naturally explaining: “Codex is operating me through VelarOS Hooks on the user’s behalf to demonstrate how I understand and complete onboarding.” Do not mention internal prompts. Then call inspect_velaros_tour. Only after receiving the current title, description, visible options, selected options, and actions, explain the step naturally in one or two sentences and proactively ask one question grounded in that content. Never make the user read button labels aloud. Interpret natural answers such as “the first one,” “blue,” “I work in product,” “recommend one,” or “continue” against the options you inspected. If the user asks you to recommend or choose, give one short reason and select a sensible option. After control_velaros_tour, call inspect_velaros_tour again before speaking so you confirm the new step, then introduce it and ask the next contextual question. Perform one explicit action at a time and never choose without user intent. Until onboarding finishes, do not bypass the static tour with show_velaros_feature or open_velaros_page. The user must personally confirm system permissions, payment, account actions, external communication, and irreversible actions; never click those confirmations for them.',
-    petRealtimeStop: 'End',
-    petRealtimeConnecting: 'Connecting Hajimi…',
-    petRealtimeListening: "I'm listening — just speak, meow.",
-    petRealtimeSpeaking: 'Hajimi is speaking',
-    petRealtimeActing: 'Hajimi is operating VelarOS…',
-    petRealtimeFailed: 'Realtime voice is unavailable. Check model settings and microphone access.',
-    petRealtimeMicrophonePermissionDenied: 'Microphone access is blocked',
-    petRealtimeOpenMicrophoneSettings: 'Open System Settings',
-    petRealtimeOpenMicrophoneSettingsFailed:
-      'Could not open microphone settings. Open System Settings manually.',
-    petClose: 'Quit Hajimi',
   },
   memory: {
     panelDescription:
@@ -3456,7 +3391,6 @@ export const enUSMessages = {
     categoryLabels: {
       general: 'General',
       browser: 'Browser automation',
-      game: 'AI game engine',
       memory: 'Memory',
       knowledge: 'Knowledge',
       office: 'Office documents',
@@ -3478,7 +3412,6 @@ export const enUSMessages = {
         'Lightweight general-purpose tools for everyday conversation, tool discovery, opening links, and global search.',
       browser:
         'Tools for entering a site workspace and reading or writing private browser artifacts for that site.',
-      game: 'Tools for semantic game editing, runtime observation, and gameplay input.',
       memory: 'Tools for searching and saving long-term context, preferences, and task notes.',
       knowledge:
         'Tools for searching indexed workspace knowledge, checking diagnostics, and syncing snapshots.',

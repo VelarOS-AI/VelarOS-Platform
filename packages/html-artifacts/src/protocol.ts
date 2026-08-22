@@ -1,3 +1,11 @@
+import {
+  isFiniteNumber,
+  isNotNull,
+  isString,
+  isUndefined,
+  toNullable,
+} from './internal-runtime.js'
+
 export const DEFAULT_HTML_ARTIFACT_HEIGHT = 360
 export const HTML_ARTIFACT_PROTOCOL_VERSION = '1'
 
@@ -85,8 +93,8 @@ export interface HtmlArtifactProtocolStreamState {
   enabled: boolean
   mode: HtmlArtifactProtocolMode
   buffer: string
-  activeArtifact: HtmlArtifactDescriptor | null
-  activeAction: HtmlArtifactActionState | null
+  activeArtifact: Nullable<HtmlArtifactDescriptor>
+  activeAction: Nullable<HtmlArtifactActionState>
   artifactsById: Record<string, HtmlArtifactSnapshot>
   anonymousArtifactCounter: number
   limits: Required<HtmlArtifactProtocolLimits>
@@ -102,12 +110,12 @@ export interface HtmlArtifactProtocolStateSnapshot {
   readonly enabled: boolean
   readonly mode: HtmlArtifactProtocolMode
   readonly buffer: string
-  readonly activeArtifact: Readonly<HtmlArtifactDescriptor> | null
-  readonly activeAction:
-    | (Readonly<Omit<HtmlArtifactActionState, 'emittedDiagnostics'>> & {
-        readonly emittedDiagnostics: readonly string[]
-      })
-    | null
+  readonly activeArtifact: Nullable<Readonly<HtmlArtifactDescriptor>>
+  readonly activeAction: Nullable<
+    Readonly<Omit<HtmlArtifactActionState, 'emittedDiagnostics'>> & {
+      readonly emittedDiagnostics: readonly string[]
+    }
+  >
   readonly artifactsById: Readonly<Record<string, Readonly<HtmlArtifactSnapshot>>>
   readonly anonymousArtifactCounter: number
   readonly limits: Readonly<Required<HtmlArtifactProtocolLimits>>
@@ -136,9 +144,7 @@ export class HtmlArtifactProtocolParser {
     const activeAction = this.currentState.activeAction
       ? Object.freeze({
           ...this.currentState.activeAction,
-          emittedDiagnostics: Object.freeze([
-            ...this.currentState.activeAction.emittedDiagnostics,
-          ]),
+          emittedDiagnostics: Object.freeze([...this.currentState.activeAction.emittedDiagnostics]),
         })
       : null
     return Object.freeze({
@@ -160,7 +166,7 @@ export class HtmlArtifactProtocolParser {
     return finalizeHtmlArtifactProtocol(this.currentState)
   }
 
-  public getSnapshot(artifactId: string): HtmlArtifactSnapshot | null {
+  public getSnapshot(artifactId: string): Nullable<HtmlArtifactSnapshot> {
     const snapshot = this.currentState.artifactsById[artifactId]
     return snapshot ? { ...snapshot } : null
   }
@@ -172,7 +178,11 @@ export class HtmlArtifactProtocolParser {
 
 export type HtmlArtifactProtocolEvent =
   | { type: 'markdown'; text: string }
-  | { type: 'artifact-open'; artifact: HtmlArtifactDescriptor; protocolText: string }
+  | {
+      type: 'artifact-open'
+      artifact: HtmlArtifactDescriptor
+      protocolText: string
+    }
   | {
       type: 'artifact-update'
       artifact: HtmlArtifactDescriptor
@@ -192,7 +202,11 @@ export type HtmlArtifactProtocolEvent =
       diagnostic: HtmlArtifactProtocolDiagnostic
       protocolText: string
     }
-  | { type: 'artifact-close'; artifact: HtmlArtifactDescriptor; protocolText: string }
+  | {
+      type: 'artifact-close'
+      artifact: HtmlArtifactDescriptor
+      protocolText: string
+    }
 
 interface ParsedTag {
   raw: string
@@ -227,10 +241,8 @@ export function createHtmlArtifactProtocolStreamState(
   }
 }
 
-function normalizeLimit(value: number | null | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? Math.round(value)
-    : fallback
+function normalizeLimit(value: LooseOptional<number>, fallback: number): number {
+  return isFiniteNumber(value) && value > 0 ? Math.round(value) : fallback
 }
 
 function resolveProtocolLimits(
@@ -266,7 +278,7 @@ function clampArtifactTitle(title: string): string {
   return normalizedTitle.slice(0, MAX_ARTIFACT_TITLE_LENGTH) || 'HTML Live Preview'
 }
 
-function normalizeExplicitArtifactId(id: string): string | null {
+function normalizeExplicitArtifactId(id: string): Nullable<string> {
   const normalizedId = id
     .trim()
     .replace(/[^\w.-]+/g, '-')
@@ -276,7 +288,7 @@ function normalizeExplicitArtifactId(id: string): string | null {
   return normalizedId || null
 }
 
-function parsePositiveHeight(value: string | null): number | undefined {
+function parsePositiveHeight(value: Nullable<string>): number | undefined {
   if (!value) return undefined
 
   const numericValue = +value
@@ -285,21 +297,21 @@ function parsePositiveHeight(value: string | null): number | undefined {
   return Math.max(160, Math.min(Math.round(numericValue), 1200))
 }
 
-function readArtifactProtocolVersion(value: string | null | undefined): string | null {
+function readArtifactProtocolVersion(value: LooseOptional<string>): Nullable<string> {
   if (!value) return HTML_ARTIFACT_PROTOCOL_VERSION
 
   const normalized = value.trim()
   return normalized === HTML_ARTIFACT_PROTOCOL_VERSION ? normalized : null
 }
 
-function parseTag(tagText: string, expectedName: string): ParsedTag | null {
+function parseTag(tagText: string, expectedName: string): Nullable<ParsedTag> {
   const openMatch = tagText.match(/^<([A-Za-z][\w:-]*)([\s\S]*)>$/)
   if (!openMatch || openMatch[1] !== expectedName) return null
 
   const attributes: Record<string, string> = {}
   const attributeText = openMatch[2] ?? ''
   const attributePattern = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
-  let match: RegExpExecArray | null
+  let match: Nullable<RegExpExecArray>
 
   while ((match = attributePattern.exec(attributeText))) {
     const key = match[1]
@@ -314,24 +326,19 @@ function findPartialProtocolStart(
   text: string,
   candidates: readonly string[] = PARTIAL_PROTOCOL_CANDIDATES
 ): number {
-  const maxCandidateLength = Math.max(
-    ...candidates.map((candidate) => candidate.length)
-  )
+  const maxCandidateLength = Math.max(...candidates.map((candidate) => candidate.length))
   const startIndex = Math.max(0, text.length - maxCandidateLength + 1)
 
   for (let index = startIndex; index < text.length; index += 1) {
     const suffix = text.slice(index)
-    if (
-      suffix &&
-      candidates.some((candidate) => candidate.startsWith(suffix))
-    ) return index
+    if (suffix && candidates.some((candidate) => candidate.startsWith(suffix))) return index
   }
 
   return -1
 }
 
 function findTagEnd(text: string, openIndex: number): number {
-  let quote: string | null = null
+  let quote: Nullable<string> = null
 
   for (let index = openIndex + 1; index < text.length; index += 1) {
     const char = text[index]
@@ -382,14 +389,15 @@ function readArtifactProtocolText(
   return state.artifactsById[artifact.id]?.protocolText ?? ''
 }
 
-function appendArtifactProtocolText(
-  state: HtmlArtifactProtocolStreamState,
-  text: string
-): void {
+function appendArtifactProtocolText(state: HtmlArtifactProtocolStreamState, text: string): void {
   if (!state.activeArtifact || !text) return
 
   const artifact = state.activeArtifact
-  const existing = state.artifactsById[artifact.id] ?? { ...artifact, html: '', protocolText: '' }
+  const existing = state.artifactsById[artifact.id] ?? {
+    ...artifact,
+    html: '',
+    protocolText: '',
+  }
   state.artifactsById[artifact.id] = {
     ...existing,
     protocolText: clipText(
@@ -422,11 +430,9 @@ function updateArtifactHtml(
   })
 }
 
-function readArtifactFromTag(
-  tag: ParsedTag
-): HtmlArtifactDescriptor | null {
+function readArtifactFromTag(tag: ParsedTag): Nullable<HtmlArtifactDescriptor> {
   const rawId = tag.attributes.id ?? tag.attributes.artifactId
-  if (typeof rawId !== 'string') return null
+  if (!isString(rawId)) return null
 
   const id = normalizeExplicitArtifactId(rawId)
   if (!id) return null
@@ -435,10 +441,10 @@ function readArtifactFromTag(
   if (!protocolVersion) return null
 
   const title = clampArtifactTitle(tag.attributes.title ?? id)
-  const initialHeight = parsePositiveHeight(tag.attributes.height ?? null)
+  const initialHeight = parsePositiveHeight(toNullable(tag.attributes.height))
   const artifact = { id, protocolVersion, title }
 
-  return initialHeight === undefined ? artifact : { ...artifact, initialHeight }
+  return isUndefined(initialHeight) ? artifact : { ...artifact, initialHeight }
 }
 
 function readActionType(tag: ParsedTag): HtmlArtifactActionType {
@@ -448,8 +454,8 @@ function readActionType(tag: ParsedTag): HtmlArtifactActionType {
   return 'replace'
 }
 
-function normalizePatchMetadata(value: string | null | undefined): string | undefined {
-  if (typeof value !== 'string') return undefined
+function normalizePatchMetadata(value: LooseOptional<string>): string | undefined {
+  if (!isString(value)) return undefined
 
   const normalized = value.trim().slice(0, MAX_PATCH_METADATA_LENGTH)
   return normalized || undefined
@@ -578,7 +584,7 @@ function processArtifactMode(
     styleId: normalizePatchMetadata(parsedTag.attributes.id),
     scriptId: normalizePatchMetadata(parsedTag.attributes.id),
     encoding: readActionEncoding(parsedTag),
-    baseHtml: activeArtifact ? state.artifactsById[activeArtifact.id]?.html ?? '' : '',
+    baseHtml: activeArtifact ? (state.artifactsById[activeArtifact.id]?.html ?? '') : '',
     html: '',
     emittedLength: 0,
     emittedDiagnostics: [],
@@ -627,7 +633,7 @@ function findSafeHtmlEmitEnds(html: string, startIndex: number): number[] {
 
 function findSafeCssEmitEnds(css: string, startIndex: number): number[] {
   const ends: number[] = []
-  let quote: string | null = null
+  let quote: Nullable<string> = null
   let escaped = false
   let inComment = false
   let braceDepth = 0
@@ -715,10 +721,7 @@ function decodeUtf8Bytes(bytes: number[]): string {
       const third = bytes[index + 2] ?? 0
       const fourth = bytes[index + 3] ?? 0
       const codePoint =
-        ((first & 0x07) << 18) |
-        ((second & 0x3f) << 12) |
-        ((third & 0x3f) << 6) |
-        (fourth & 0x3f)
+        ((first & 0x07) << 18) | ((second & 0x3f) << 12) | ((third & 0x3f) << 6) | (fourth & 0x3f)
       output += String.fromCodePoint(codePoint)
       index += 3
       continue
@@ -730,7 +733,7 @@ function decodeUtf8Bytes(bytes: number[]): string {
   return output
 }
 
-function decodeBase64Utf8(value: string): string | null {
+function decodeBase64Utf8(value: string): Nullable<string> {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
   const normalized = value.replace(/\s+/g, '')
   const bytes: number[] = []
@@ -799,7 +802,7 @@ function readActionPayload(
   if (action.encoding !== 'base64') return rawPayload
 
   const decoded = decodeBase64Utf8(rawPayload)
-  if (decoded !== null) return decoded
+  if (isNotNull(decoded)) return decoded
 
   emitActionDiagnostic(
     state,
@@ -871,10 +874,7 @@ function emitActionHtmlAtLength(
     return
   }
 
-  const rootHtml =
-    action.type === 'append'
-      ? `${action.baseHtml}${html}`
-      : html
+  const rootHtml = action.type === 'append' ? `${action.baseHtml}${html}` : html
   updateArtifactHtml(state, events, artifact, rootHtml, isStreaming)
   action.emittedLength = endIndex
 }
@@ -892,10 +892,10 @@ function emitSafeActionProgress(
     action.encoding === 'base64'
       ? []
       : action.type === 'style'
-      ? findSafeCssEmitEnds(action.html, action.emittedLength)
-      : action.type === 'script'
-        ? []
-      : findSafeHtmlEmitEnds(action.html, action.emittedLength)
+        ? findSafeCssEmitEnds(action.html, action.emittedLength)
+        : action.type === 'script'
+          ? []
+          : findSafeHtmlEmitEnds(action.html, action.emittedLength)
   const emitEnds = [...safeEnds]
 
   if (final && action.emittedLength < action.html.length) {
@@ -922,10 +922,7 @@ function appendActionHtml(
   if (!state.activeArtifact || !action) return
 
   if (trackProtocol) appendArtifactProtocolText(state, htmlChunk)
-  action.html = clipText(
-    `${action.html}${htmlChunk}`,
-    state.limits.maxActionPayloadLength
-  )
+  action.html = clipText(`${action.html}${htmlChunk}`, state.limits.maxActionPayloadLength)
   emitSafeActionProgress(state, events, isStreaming, final)
 }
 

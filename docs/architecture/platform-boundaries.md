@@ -10,12 +10,14 @@ VelarOS Desktop is the first shipping product, desktop shell, validation product
 
 | Owner | Responsibilities |
 | --- | --- |
-| VelarOS Platform | Kernel contracts and runtime, Agent runtime, model adapters, reusable capabilities, memory, host-neutral UI, surface protocols, evaluation, and reusable host processes |
+| VelarOS Platform | Kernel contracts and runtime, Agent runtime, model adapters, reusable capabilities, memory, host-neutral UI, surface protocols, and evaluation |
 | Product hosts | Native process integration, product composition, user-facing policy, account/session adapters, packaging, and product-specific persistence roots |
 | Cloud services | Accounts, entitlements, organization policy, remote service state, and service-side enforcement |
 | Mods | Declared contributions behind the versioned mod envelope and the permissions granted by a host |
 
 Product hosts depend on Platform packages through published APIs. Platform packages do not import product source code, private product prompts, host UI, product configuration files, or product-only persistence.
+VelarOS Terminal is one such product host and owns its Host composition and remote-node transport in
+its own repository.
 
 ## Contract authority
 

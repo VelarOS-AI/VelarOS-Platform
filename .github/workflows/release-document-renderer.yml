@@ -2,7 +2,7 @@ name: Release Document Renderer
 
 # The renderer is an independent command capability pack. macOS is built, signed, notarized, and
 # staged on the release Mac; Windows and Linux are built natively here. Nothing in this workflow
-# installs or registers renderer code in Velar Host.
+# installs or registers renderer code in VelarOS Terminal.
 
 on:
   workflow_dispatch:
@@ -60,14 +60,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Verify independent Renderer and Host boundary
+      - name: Verify independent Renderer boundary
         run: |
           node scripts/build/buildPackageTopology.mjs --for @velaros-ai/document-renderer
           bun run --cwd packages/document-renderer typecheck
           bun run --cwd packages/document-renderer test
           bunx tsc --noEmit -p products/document-renderer/tsconfig.json
           node --test scripts/document-renderer/*.test.mjs
-          (cd packages/serve-host && bun test test/host-renderer-boundary.test.ts)
 
       - name: Plan immutable Renderer candidate
         id: plan

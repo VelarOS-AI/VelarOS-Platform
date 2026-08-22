@@ -153,14 +153,16 @@ type AgentModContributionAxisName = (typeof AgentModContributionAxisNames)[numbe
 const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 
 /**
- * 拦截 seam 闭集。
+ * Hook 生命周期事件闭集。
  *
- * mod 只能挂接，不能发明新钩子。**哪些 kind 今天真有派发点**由实现侧的
+ * mod 只能挂接，不能发明新事件。**哪些事件今天真有派发点**由实现侧的
  * `WiredSeamKindsByDispatcher`（`../mods/AgentModSeams`）逐条登记，本闭集不复述第二份；
  * 未接线者只有注册面与类型，注册即收 `mod.seam-not-wired` 诊断，dispatch 恒无调用点。
- * 叙述见 VelarOS-Platform 的 docs/agent/agent-mod-trunk.md。
+ *
+ * 新 manifest 一律使用 `event`。`seam` 只是 v1 编译期 Mod 的过渡输入别名，解析后不再存在；
+ * 外部 `.velarmod` 与编译期 Mod 因此消费同一份规范化声明。
  */
-const AgentModSeamKinds = [
+const AgentModHookEvents = [
   'session:start',
   'session:end',
   'turn:start',
@@ -178,9 +180,16 @@ const AgentModSeamKinds = [
   'diagnostic:publish',
 ] as const
 
-type AgentModSeamKind = (typeof AgentModSeamKinds)[number]
+type AgentModHookEvent = (typeof AgentModHookEvents)[number]
 
-const AgentModSeamKindSchema = z.enum(AgentModSeamKinds)
+const AgentModHookEventSchema = z.enum(AgentModHookEvents)
+
+/** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
+const AgentModSeamKinds = AgentModHookEvents
+/** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
+type AgentModSeamKind = AgentModHookEvent
+/** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
+const AgentModSeamKindSchema = AgentModHookEventSchema
 
 // ─── 形态层宽容原语 ──────────────────────────────────────────────────────────
 
@@ -190,6 +199,12 @@ function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
     (value) => (isString(value) ? [value] : value),
     z.array(schema)
   )
+}
+
+function tolerantNonEmptyArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
+  return tolerantArray(schema).refine((value) => !isEmpty(value), {
+    message: '匹配列表不能为空',
+  })
 }
 
 const TrimmedIdSchema = z
@@ -212,16 +227,58 @@ const SemverVersionSchema = TrimmedIdSchema.refine(
 
 // ─── 各轴贡献条目 ────────────────────────────────────────────────────────────
 
+/**
+ * 磁盘 Mod 的受控命令 handler。
+ *
+ * 编译期 Mod 仍以同 id 的函数 binding 作为载体；外部 Mod 不允许 import 进宿主进程，
+ * 因此用 command 载体经 stdin/stdout JSON 协议执行。handler 只是可移植声明，具体
+ * sandbox / permission broker 由宿主在进入 Loader 前适配；module.isolation 不表达本 handler 的执行方式。
+ */
+const AgentModCommandHandlerSchema = z.strictObject({
+  type: z.literal('command'),
+  entry: TrimmedIdSchema,
+  permissions: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
+})
+type AgentModCommandHandler = z.infer<typeof AgentModCommandHandlerSchema>
+
 /** 工具贡献：`name` 是全宿主唯一键，冲突时拒载。 */
 const AgentModToolContributionSchema = z.strictObject({
   name: CanonicalToolIdSchema,
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
+  /** 工具行为本身的权限上界；运行态 VelaTool.permissions 必须保留。 */
+  permissions: tolerantArray(TrimmedIdSchema).optional(),
+  /** 外部 command 工具的标准 JSON Schema；编译期 binding 可继续只提供 Zod schema。 */
+  inputSchema: z.record(z.string(), z.unknown()).optional(),
+  /** 缺席表示由编译期 Mod 提供同名 VelaTool binding。 */
+  handler: AgentModCommandHandlerSchema.optional(),
   /** 声明本工具在哪些 space 可用；只绑定类别，不把完整 schema 钉死在常驻集。 */
   availableInSpaces: tolerantArray(TrimmedIdSchema).optional(),
   /** 声明本工具在哪些 space 常驻（数据条目，由宿主常驻集算法消费）。 */
   residentInSpaces: tolerantArray(TrimmedIdSchema).optional(),
+}).superRefine((value, context) => {
+  if (!value.handler) return
+  if (!value.inputSchema) {
+    context.addIssue({
+      code: 'custom',
+      path: ['inputSchema'],
+      message: 'command 工具必须声明标准 JSON inputSchema',
+    })
+  } else if (value.inputSchema.type !== 'object') {
+    context.addIssue({
+      code: 'custom',
+      path: ['inputSchema', 'type'],
+      message: 'command 工具 inputSchema 根类型必须是 object',
+    })
+  }
+  if (!value.categoryId) {
+    context.addIssue({
+      code: 'custom',
+      path: ['categoryId'],
+      message: 'command 工具必须声明职责类别 categoryId',
+    })
+  }
 })
 type AgentModToolContribution = z.infer<typeof AgentModToolContributionSchema>
 
@@ -295,7 +352,7 @@ const AgentModSpaceContributionSchema = z.strictObject({
   /** 由宿主选择的可选产品界面档案。 */
   surfaceProfileId: TrimmedIdSchema.optional(),
   boundCapabilityIds: tolerantArray(TrimmedIdSchema).optional(),
-  /** 复用另一个空间已经拼装好的职责包；用于 Game 等项目型空间继承 Project 配方。 */
+  /** 复用另一个空间已经拼装好的职责包；例如项目型空间继承 Project 配方。 */
   inheritsSpaceIds: tolerantArray(TrimmedIdSchema).optional(),
   toolCategoryIds: tolerantArray(TrimmedIdSchema).optional(),
   residentToolNames: tolerantArray(TrimmedIdSchema).optional(),
@@ -340,13 +397,64 @@ type AgentModExecutionModeContribution = z.infer<
   typeof AgentModExecutionModeContributionSchema
 >
 
-/** 钩子挂接声明；handler 由运行态绑定提供，缺绑定拒载。 */
+/**
+ * Hook 匹配器。字段之间是 AND，字段内列表是 OR；事件不具备声明字段时匹配失败。
+ * 闭合形状是刻意的：新匹配维度必须经过协议版本演进，外部 Mod 不能自定义解释器。
+ */
+const AgentModHookMatcherSchema = z.strictObject({
+  toolNames: tolerantNonEmptyArray(CanonicalToolIdSchema).optional(),
+  phases: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
+  statuses: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
+})
+type AgentModHookMatcher = z.infer<typeof AgentModHookMatcherSchema>
+
+/** @deprecated 新代码使用通用 AgentModCommandHandlerSchema。 */
+const AgentModCommandHookHandlerSchema = AgentModCommandHandlerSchema
+/** @deprecated 新代码使用通用 AgentModCommandHandler。 */
+type AgentModCommandHookHandler = AgentModCommandHandler
+
+const AgentModHookExecutionModes = ['blocking', 'background'] as const
+type AgentModHookExecutionMode = (typeof AgentModHookExecutionModes)[number]
+
+/**
+ * Hook 挂接声明。
+ *
+ * - `blocking`：顺序等待，可在具有结果面的事件上拦截/改写；
+ * - `background`：只观察，并发启动且忽略返回值，不得阻塞或改写主链。
+ *
+ * 函数 binding 与 command handler 共用本声明。`handler` 缺席表示使用编译期 binding；
+ * 磁盘包若声明 command，Desktop 宿主在进入通用 Loader 前将其适配为同形 binding。
+ */
 const AgentModHookContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
-  seam: AgentModSeamKindSchema,
+  event: AgentModHookEventSchema.optional(),
+  /** @deprecated 过渡输入别名；解析结果只保留 `event`。 */
+  seam: AgentModHookEventSchema.optional(),
   priority: z.number().int().optional(),
   reason: z.string().optional(),
-})
+  matcher: AgentModHookMatcherSchema.optional(),
+  mode: z.enum(AgentModHookExecutionModes).default('blocking'),
+  timeoutMs: z.number().int().min(100).max(30_000).optional(),
+  handler: AgentModCommandHandlerSchema.optional(),
+}).superRefine((value, context) => {
+  if (!value.event && !value.seam) {
+    context.addIssue({
+      code: 'custom',
+      path: ['event'],
+      message: '必须声明 Hook event',
+    })
+  }
+  if (value.event && value.seam && value.event !== value.seam) {
+    context.addIssue({
+      code: 'custom',
+      path: ['seam'],
+      message: '`event` 与过渡别名 `seam` 不得冲突',
+    })
+  }
+}).transform(({ seam, ...value }) => ({
+  ...value,
+  event: value.event ?? seam!,
+}))
 type AgentModHookContribution = z.infer<typeof AgentModHookContributionSchema>
 
 const AgentModContributesSchema = z.strictObject({
@@ -690,12 +798,18 @@ function parseAgentModManifest(
 }
 
 export {
+  AgentModCommandHandlerSchema,
+  AgentModCommandHookHandlerSchema,
   AgentModContributesSchema,
   AgentModContributionAxisNames,
   AgentModContributionAxisNameSchema,
   AgentModEnginesSchema,
   AgentModExecutionModeContributionSchema,
   AgentModHookContributionSchema,
+  AgentModHookEvents,
+  AgentModHookEventSchema,
+  AgentModHookExecutionModes,
+  AgentModHookMatcherSchema,
   AgentModManifestSchema,
   AgentModManifestSchemaVersion,
   AgentModPackProvidesId,
@@ -722,12 +836,17 @@ export {
   VelarosModModuleSectionSchema,
 }
 export type {
+  AgentModCommandHandler,
+  AgentModCommandHookHandler,
   AgentModContributes,
   AgentModContributionAxisName,
   AgentModDiagnostic,
   AgentModEngines,
   AgentModExecutionModeContribution,
   AgentModHookContribution,
+  AgentModHookEvent,
+  AgentModHookExecutionMode,
+  AgentModHookMatcher,
   AgentModManifest,
   AgentModManifestParseResult,
   AgentModPromptSegmentContribution,

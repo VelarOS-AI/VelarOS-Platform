@@ -1,3 +1,4 @@
+import { isArray, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { readCurrentGenerationV2 } from './storage/GenerationPointer'
@@ -94,7 +95,7 @@ export class MemoryTreeProjectionIndexV2 {
   public inspect(
     treeVersion: number,
     authority: MemoryTreeReplayResultV2
-  ): MemoryTreeProjectionInspectionV2 | null {
+  ): Nullable<MemoryTreeProjectionInspectionV2> {
     assertTreeVersionV2(treeVersion)
     assertForwardReplayResultForPersistenceV2(authority)
     const opened = openCurrentMemoryIndexGenerationV2(this.indexDir, this.keyring)
@@ -129,11 +130,11 @@ function parseTreeProjectionArtifactV2(raw: Buffer): MemoryTreeProjectionArtifac
     parsed['format'] !== TreeProjectionArtifactFormatV2 ||
     !Number.isSafeInteger(parsed['treeVersion']) ||
     (parsed['treeVersion'] as number) < 1 ||
-    typeof parsed['treeHash'] !== 'string' ||
+    !isString(parsed['treeHash']) ||
     !/^[0-9a-f]{64}$/.test(parsed['treeHash']) ||
-    !Array.isArray(parsed['nodes']) ||
+    !isArray(parsed['nodes']) ||
     !parsed['nodes'].every(isMemoryTreeNodeStructV2) ||
-    !Array.isArray(parsed['checkpoints'])
+    !isArray(parsed['checkpoints'])
   ) {
     throw new AppError('VALIDATION', '树投影派生代不符合 v2 严格格式。')
   }
@@ -143,9 +144,9 @@ function parseTreeProjectionArtifactV2(raw: Buffer): MemoryTreeProjectionArtifac
       !isStrictRecordV2(candidate, ['nodes', 'treeHash', 'version']) ||
       !Number.isSafeInteger(candidate['version']) ||
       (candidate['version'] as number) < 1 ||
-      typeof candidate['treeHash'] !== 'string' ||
+      !isString(candidate['treeHash']) ||
       !/^[0-9a-f]{64}$/.test(candidate['treeHash']) ||
-      !Array.isArray(candidate['nodes']) ||
+      !isArray(candidate['nodes']) ||
       !candidate['nodes'].every(isMemoryTreeNodeStructV2)
     ) {
       throw new AppError('VALIDATION', '树投影 checkpoint 不符合 v2 严格格式。')
@@ -186,9 +187,9 @@ function isStrictRecordV2(
   value: unknown,
   expectedKeys: readonly string[]
 ): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!isPlainObject(value)) return false
   const prototype: unknown = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) return false
+  if (prototype !== Object.prototype && isNotNull(prototype)) return false
   const actual = Object.keys(value).sort()
   const expected = [...expectedKeys].sort()
   return actual.length === expected.length && actual.every((key, index) => key === expected[index])

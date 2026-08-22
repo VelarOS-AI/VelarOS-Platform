@@ -1,30 +1,16 @@
 /**
- * GovernanceEpoch —— 唯一的缓存重建点（上下文治理 v2 · §4B）。
+ * `GovernanceEpoch` 是上下文治理第二版唯一允许重建缓存的边界。
  *
- * 轮与轮之间投影严格只追加，前缀逐字不变，缓存全命中；降级只在 **epoch 边界**一次性应用，
- * 每 epoch 恰好一次缓存失效。命名取 `GovernanceEpoch`（设计 §11 裁决 4）——
- * `kernel/context-epoch.ts` 是请求陈旧守卫，与本模块无关。
+ * 轮间投影严格只追加并保持前缀逐字不变；所有降级都在治理周期边界一次性应用，每个周期只造成
+ * 一次缓存失效。执行顺序固定为：判定触发条件、估算节省并阻止空转、落地已完成的 I2 蒸馏产物、
+ * 执行 I0 可召回逐出、生成 I1 规则骨架，达到 `epochTargetPercent` 后立即停止并生成报告。
+ * 骨架必须先成功生成再迁移成员，防止账本只降不升时出现不可恢复的数据缺口。
  *
- * ## 一次 epoch 的固定顺序
- *  1. **触发判定**：投影占用 > `epochTriggerPercent × G`，或模型调用 `context:distill` 声明阶段完成。
- *  2. **反空转**：先估这次能省多少，低于 `minEpochSavingPercent` 就整个跳过并记事件 ——
- *     宁可带着高占用多跑一轮，也不为 3% 的收益炸掉整条 KV 缓存。
- *  3. **I2 产物落地**：把上一个 epoch 之后异步跑完的蒸馏产物应用进账本（B2 起）。放在最前是因为
- *     它已经付过钱了，先落地能让 I0 少动几条记录；也因为它是本 epoch 唯一"来自过去"的输入。
- *  4. **I0 逐出**（免费、可召回）：pending-EVICT → 陈旧可重取 → 尾外低锚密度。
- *  5. **I1 规则骨架**（免费、保关键场）：把叙事段落折成六字段骨架记录 append 进账本，成员迁
- *     SUMMARIZED。**先出骨架再迁成员**——骨架抽不出字段时返回 null，先迁的话这批记录已经从投影里
- *     消失且无人代表，而账本只降不升，回滚不了（审计 R2）。
- *  6. 达标即停（`epochTargetPercent`），出 `GovernanceEpochReport`。
+ * 下一次蒸馏的规划属于 `ContextGovernanceSession`，判据属于 `distill.ts`；本模块保持纯函数，
+ * 以便相同输入得到相同输出并支持离线重放。
  *
- * **下一次蒸馏的规划不在这里**：本函数是纯的（同输入必同输出，可离线重放），而规划要问"有没有
- * 蒸馏器 / 有没有在飞的请求"这类会话运行态。规划归 `ContextGovernanceSession`，判据归 `distill.ts`。
- *
- * ## 三条硬不变量
- *  - **尾保护不设旁路**（§11 裁决 5）：尾保护窗口内的记录治理器永不选中。极端压力的出路是
- *    handoff，不是压尾——压掉模型正在用的最近两轮，省下的 token 会以更多轮次的形式还回来。
- *  - **治理类记录不进候选**：P6 的护栏（权限判决 / 用户纠正 / 安全规则）连 EXCERPT 都不降。
- *  - **摘要不折摘要**：I1/I2 产物是压缩的终点，再折一次就是有损叠有损。
+ * 三条硬性不变量：尾保护窗口内记录永不降级；权限判决、用户纠正与安全规则等治理记录不进入
+ * 候选；I1 与 I2 摘要是压缩终点，不允许再次折叠。极端压力应转入交接流程，不能破坏尾保护。
  */
 import { isEmpty, isNotNull, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -642,7 +628,7 @@ function collectCandidates(
 /** 工具消息中的每一份结果都有内容寻址引用，才能保证 page-out 后无需重跑外部工具。 */
 function hasCompletePayloadBacking(record: ContextRecord): boolean {
   if (record.kind !== 'tool-result') return false
-  if (record.toolParts.length > 0)
+  if (!isEmpty(record.toolParts))
     return record.toolParts.every((part) => isPresent(part.payloadRef))
   return isPresent(record.payloadRef)
 }

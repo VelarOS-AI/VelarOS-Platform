@@ -83,13 +83,12 @@ function runProjectedClosureProbeV2(dataRoot: string): void {
   const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
   const contentKeys = new ContentKeyServiceV2(keyring, blobs)
   const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-  const ingest = new MemoryEvidenceIngestServiceV2(
+  const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
+  const tree = MemoryTreeStoreV2.open({
     authority,
     contentKeys,
-    identityKeys,
-    blobs
-  )
-  const tree = MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store
+    keyring,
+  }).store
   const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
   const curation = new MemoryMeaningCurationServiceV2(
     authority,
@@ -156,12 +155,7 @@ function runProjectedClosureProbeV2(dataRoot: string): void {
     .prepare(`SELECT id FROM memory_identity_epochs WHERE ended_at IS NULL`)
     .pluck()
     .get() as string
-  const erasure = new MemoryErasureServiceV2(
-    authority,
-    contentKeys,
-    keyring,
-    tree
-  )
+  const erasure = new MemoryErasureServiceV2(authority, contentKeys, keyring, tree)
   const preview = erasure.preview({ type: 'concept', id: conceptId })
   equal(preview.closure.conceptIds.length, 1, '闭包含目标 Concept')
   equal(preview.closure.evidenceIds.length, 1, '闭包含支撑 Evidence')
@@ -227,9 +221,7 @@ function runProjectedClosureProbeV2(dataRoot: string): void {
   check(activeIdentityId !== oldIdentityId, '替代 Identity 必须是新 epoch')
   equal(
     authority.database
-      .prepare(
-        `SELECT identity_statement_blob_ref FROM memory_identity_epochs WHERE id = ?`
-      )
+      .prepare(`SELECT identity_statement_blob_ref FROM memory_identity_epochs WHERE id = ?`)
       .pluck()
       .get(oldIdentityId),
     null,
@@ -285,10 +277,7 @@ function runProjectedClosureProbeV2(dataRoot: string): void {
       '第二段必须 crypto-shred DEK'
     )
   }
-  check(
-    erasure.isDenied({ type: 'concept', id: conceptId }),
-    'targets 退役后基表墓碑仍是查询权威'
-  )
+  check(erasure.isDenied({ type: 'concept', id: conceptId }), 'targets 退役后基表墓碑仍是查询权威')
   equal(erasure.purge(confirmed.requestId, 6).state, 'verified', 'purge 重试幂等')
   equal(erasure.resumePending(7).length, 0, 'verified saga 不再进入恢复队列')
   equal(
@@ -308,13 +297,12 @@ function runPreProjectionEvidenceProbeV2(dataRoot: string): void {
   const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
   const contentKeys = new ContentKeyServiceV2(keyring, blobs)
   const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-  const ingest = new MemoryEvidenceIngestServiceV2(
+  const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
+  const tree = MemoryTreeStoreV2.open({
     authority,
     contentKeys,
-    identityKeys,
-    blobs
-  )
-  const tree = MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store
+    keyring,
+  }).store
   const evidence = ingest.ingest({
     sourceType: 'chat',
     trustLevel: 'user_stated',
@@ -324,16 +312,14 @@ function runPreProjectionEvidenceProbeV2(dataRoot: string): void {
     privacyClass: 'personal',
     createdAt: 1,
   })
-  const erasure = new MemoryErasureServiceV2(
-    authority,
-    contentKeys,
-    keyring,
-    tree
-  )
+  const erasure = new MemoryErasureServiceV2(authority, contentKeys, keyring, tree)
   const confirmed = erasure.confirm(erasure.preview({ type: 'evidence', id: evidence.id }), 2)
   equal(confirmed.redactVersion, 1, '未投影 Evidence 擦除也必须推进 CAS 版本')
   equal(tree.current.nodes.length, 2, '空树擦除应建立 root + 中性主线')
-  check(tree.current.nodes.some((node) => node.stableKey === 'root'), '空树擦除补 root')
+  check(
+    tree.current.nodes.some((node) => node.stableKey === 'root'),
+    '空树擦除补 root'
+  )
   check(
     tree.current.nodes.some((node) => node.namespace === 'identity'),
     '空树擦除补中性 Identity'

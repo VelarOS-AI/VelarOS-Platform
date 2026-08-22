@@ -1,14 +1,12 @@
 /**
- * Ring 1 stage ③——retained-context（ContextWorkingSetOS 的 provider-visible blocks）。
+ * 第一环第三阶段：注入 `ContextWorkingSetOS` 中提供方可见的保留上下文。
  *
- * active-task 与 pinned-evidence 区的块作为「硬保留上下文」**追加**在消息序列尾部一条 user 消息：
- * 它们是上下文，不替代最新用户指令。
+ * `active-task` 与 `pinned-evidence` 区的块作为硬保留上下文，追加为消息序列尾部的一条用户消息；
+ * 它们只补充上下文，不替代最新用户指令。
  *
- * 为什么追加而非前插：保留块按 updatedAt 排序、内容易变，前插 message[0] 会让任一 artifact 触碰
- * 即击穿整段消息前缀缓存——与注意力粘滞「稳定前缀」目标自相矛盾。追加在尾部把易变内容留在
- * prompt-cache 断点之后（与 turn-context 同侧），既有 `message:<index>` 号一律不动（offset=0），
- * 顺带消除旧 `remapMessageBlockId` 前插重映射的档位碰撞（注入块与原 message[0] 都映射到
- * `message:0`）。
+ * 保留块按 `updatedAt` 排序且内容易变，若前插到首条消息，任一制品变化都会击穿整段前缀缓存。
+ * 尾部追加可把易变内容留在提示词缓存断点之后，并保持既有 `message:<index>` 编号不变，同时避免
+ * 旧 `remapMessageBlockId` 前插重映射造成编号碰撞。
  */
 import type { ModelMessage } from 'ai'
 

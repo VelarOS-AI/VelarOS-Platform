@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 const darkModeListeners = new Set<() => void>()
-let darkModeObserver: MutationObserver | null = null
+let darkModeObserver: Nullable<MutationObserver> = null
 
 function subscribeDarkMode(onStoreChange: () => void): () => void {
   darkModeListeners.add(onStoreChange)

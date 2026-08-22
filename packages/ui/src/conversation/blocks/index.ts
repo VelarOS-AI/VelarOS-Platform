@@ -1,12 +1,10 @@
 /**
- * blocks 原子——消息内工具活动 / 提供方制品组 / 模型图片组 / 系统工具安装建议卡 + 工具结果汇总列表
- * （pass-1）+ 气泡族（MessageBubble / User·Assistant / Segments / Footer / StatusMarker / InlineRuntimeNotice /
- * UserAttachmentGallery，pass-3b1）+ 消息动作行（MessageActionList/Row/MessageBubbleActions）+ 渲染模型/成本/
- * 动作项/思考翻译/live-text 纯工具 + 品牌帆标。渲染件纯呈现，viewmodel/IPC 走投影 + 宿主 hook/slot 注入。
+ * 消息块原子包含工具活动、提供方制品、模型图片、系统工具安装建议、工具结果汇总、消息气泡、
+ * 动作行、渲染模型、成本、思考翻译与品牌帆标。渲染组件只负责呈现，视图模型与进程通信能力通过
+ * 投影及宿主钩子、插槽注入。
  *
- * 门面收口：只导出宿主消费点需要的符号（MessageBubble / StatusMarker / 渲染模型 / 成本 / 动作项 /
- * 思考翻译 / live-text / 帆标）；气泡族内部件（Assistant 气泡 / User 气泡 / Inline 提示 / Action 行 等）是
- * MessageBubble 的实现细节，仅包内相对 import，不进门面。
+ * 门面只导出宿主消费所需符号；助手气泡、用户气泡、内联提示和动作行等内部组件均属于
+ * `MessageBubble` 实现细节，只允许包内相对导入。
  */
 export * from './AssistantProviderArtifactGroup'
 export * from './chatActionItems'

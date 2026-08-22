@@ -1,3 +1,5 @@
+import { isEmpty,isTrue } from '@velaros-ai/core'
+
 import type {
   CapabilityValidationInterpreter,
   CapabilityValidationStatus,
@@ -58,13 +60,13 @@ class CodingSessionVerificationHelper {
   public isPassedVerificationResult(toolName: string, result: unknown): boolean {
     return this.interpreters.some(
       (interpreter) =>
-        interpreter.matches(toolName) && interpreter.isPassed?.(toolName, result) === true
+        interpreter.matches(toolName) && isTrue(interpreter.isPassed?.(toolName, result))
     )
   }
 
   public evidenceMatches(cited: string, observed: string): boolean {
     const matchers = this.interpreters.filter((interpreter) => interpreter.evidenceMatches)
-    if (!matchers.length) return cited.trim() === observed.trim()
+    if (isEmpty(matchers)) return cited.trim() === observed.trim()
     return matchers.some((interpreter) => interpreter.evidenceMatches?.(cited, observed))
   }
 }

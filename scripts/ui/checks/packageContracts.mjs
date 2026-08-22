@@ -27,6 +27,7 @@ const utilityTypeNames = [
   "LooseOptional",
   "Nullable",
   "Nullish",
+  "Optional",
   "PlainObject",
 ];
 

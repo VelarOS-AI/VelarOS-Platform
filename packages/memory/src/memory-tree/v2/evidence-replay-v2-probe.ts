@@ -1,17 +1,6 @@
 import assert from 'node:assert/strict'
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from 'node:crypto'
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from 'node:fs'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -81,10 +70,7 @@ function runEvidenceReplayProbeV2(): void {
     seedLegacyDatabaseV2(legacyPath, join(probeRoot, 'missing-workspace'))
     const legacyHashBefore = fileSha256V2(legacyPath)
     const sourceDatabaseId = `sha256:${legacyHashBefore}`
-    const reader = LegacyMemoryEvidenceSqliteReaderV2.open(
-      legacyPath,
-      sourceDatabaseId
-    )
+    const reader = LegacyMemoryEvidenceSqliteReaderV2.open(legacyPath, sourceDatabaseId)
 
     const authority = openMemoryAuthorityV2(join(probeRoot, 'v2')).store
     const keyring = MemoryKeyringStoreV2.open(
@@ -94,13 +80,12 @@ function runEvidenceReplayProbeV2(): void {
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-    const ingest = new MemoryEvidenceIngestServiceV2(
+    const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
+    const tree = MemoryTreeStoreV2.open({
       authority,
       contentKeys,
-      identityKeys,
-      blobs
-    )
-    const tree = MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store
+      keyring,
+    }).store
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
     const curation = new MemoryMeaningCurationServiceV2(
       authority,
@@ -167,8 +152,8 @@ function runEvidenceReplayProbeV2(): void {
          WHERE replay.legacy_evidence_id = 'e-erased'`
       )
       .get() as {
-      payload_blob_ref: string | null
-      payload_commitment: string | null
+      payload_blob_ref: Nullable<string>
+      payload_commitment: Nullable<string>
       eligibility_state: string
     }
     equal(tombstone.payload_blob_ref, null, '擦除项不得复制旧正文')
@@ -176,9 +161,7 @@ function runEvidenceReplayProbeV2(): void {
     equal(tombstone.eligibility_state, 'erased', '擦除项保持墓碑态')
     equal(
       authority.database
-        .prepare(
-          `SELECT integer_value FROM memory_meta WHERE key = 'privacy_generation'`
-        )
+        .prepare(`SELECT integer_value FROM memory_meta WHERE key = 'privacy_generation'`)
         .pluck()
         .get(),
       1,
@@ -199,12 +182,12 @@ function runEvidenceReplayProbeV2(): void {
       '治理 target 必须是 keyed token'
     )
 
-    const degradedMetadata = readReplayMetadataV2(
-      authority,
-      contentKeys,
-      'e-degraded'
+    const degradedMetadata = readReplayMetadataV2(authority, contentKeys, 'e-degraded')
+    equal(
+      degradedMetadata['legacyWorkspaceRoot'],
+      join(probeRoot, 'missing-workspace'),
+      '旧路径仅进入密文 metadata'
     )
-    equal(degradedMetadata['legacyWorkspaceRoot'], join(probeRoot, 'missing-workspace'), '旧路径仅进入密文 metadata')
     equal(degradedMetadata['metadataParseState'], 'invalid_json', '坏 metadata 不阻断正文')
     equal(
       authority.database
@@ -302,9 +285,7 @@ function runEvidenceReplayProbeV2(): void {
         (decision) =>
           decision.candidateKey === 'legacy-governed-claim' &&
           decision.decision === 'rejected' &&
-          decision.reasons.some((reason) =>
-            reason.startsWith('legacy_governance_denied:')
-          )
+          decision.reasons.some((reason) => reason.startsWith('legacy_governance_denied:'))
       ),
       '候选账本必须给出跨库治理 deny 原因'
     )
@@ -383,16 +364,9 @@ function runEvidenceReplayProbeV2(): void {
     deepEqual(tamperedReport.missing, ['parity'], '自校验失败必须归入 parity')
 
     equal(fileSha256V2(legacyPath), legacyHashBefore, '旧权威库必须逐字节保持只读')
+    equal(readLegacyScalarV2(legacyPath, `SELECT count(*) FROM memory_evidence`), 4, '旧表不得删除')
     equal(
-      readLegacyScalarV2(legacyPath, `SELECT count(*) FROM memory_evidence`),
-      4,
-      '旧表不得删除'
-    )
-    equal(
-      readLegacyScalarV2(
-        legacyPath,
-        `SELECT content FROM memory_evidence WHERE id = 'e-erased'`
-      ),
+      readLegacyScalarV2(legacyPath, `SELECT content FROM memory_evidence WHERE id = 'e-erased'`),
       '旧 erased 正文只留在只读旧库，不得被迁移器改写',
       '旧库历史字节不得被清理器提前修改'
     )
@@ -403,10 +377,7 @@ function runEvidenceReplayProbeV2(): void {
       '旧 erased 正文只留在只读旧库，不得被迁移器改写',
     ]) {
       check(
-        !directoryContainsV2(
-          authority.roots.memoryRoot,
-          Buffer.from(plaintext, 'utf8')
-        ),
+        !directoryContainsV2(authority.roots.memoryRoot, Buffer.from(plaintext, 'utf8')),
         `v2 五物理根不得出现明文：${plaintext}`
       )
     }
@@ -559,10 +530,7 @@ function readReplayMetadataV2(
     metadata_blob_ref: string
     metadata_commitment: string
   }
-  const plaintext = contentKeys.openContent(
-    row.metadata_blob_ref,
-    row.metadata_commitment
-  )
+  const plaintext = contentKeys.openContent(row.metadata_blob_ref, row.metadata_commitment)
   try {
     return JSON.parse(plaintext.toString('utf8')) as Record<string, unknown>
   } finally {

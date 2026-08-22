@@ -145,7 +145,9 @@ function runV1UpgradeProbeV2(dataRoot: string): void {
 }
 
 function runOpenAndSchemaProbeV2(dataRoot: string): void {
-  const first = openMemoryAuthorityV2(dataRoot, { now: () => 1_753_500_000_000 })
+  const first = openMemoryAuthorityV2(dataRoot, {
+    now: () => 1_753_500_000_000,
+  })
   equal(first.report.databaseCreated, true, '首次 open 应创建独立 authority 数据库')
   equal(first.report.previousSchemaVersion, 0, '首次 open 的前版本应为 0')
   equal(first.report.schemaVersion, MemoryAuthoritySchemaVersionV2, 'schema 版本')

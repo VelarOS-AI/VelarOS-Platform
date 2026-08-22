@@ -4,7 +4,7 @@ import { ComputerObserveCapability } from './Capabilities'
 import { requireComputerAvailable } from './Context'
 import { defineComputerTool } from './Types'
 
-/** Capture the primary display so the model can visually locate UI elements. */
+/** 截取主显示器，供模型通过画面定位界面元素。 */
 const computerScreenshot = defineComputerTool<Record<string, never>>({
   name: 'computer:screenshot',
   role: 'inspect',

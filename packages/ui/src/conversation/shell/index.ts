@@ -1,11 +1,9 @@
 /**
- * shell 原子（pass-4 収口）——会话壳三件（`ChatConversationPane` / `ChatTranscript` / `ChatScrollNavigator`）
- * + 其派生 hook（transcript 模型 / 窗口 / 滚动 / live-status / awaiting-confirmation）+ 纯 util（交互状态 /
- * 派生索引 / 翻页哨兵 / rafSchedule / worker 线程时间轴）+ 动作注入端口 `ConversationActionPort`。
+ * 会话壳原子包含 `ChatConversationPane`、`ChatTranscript`、`ChatScrollNavigator`，以及派生钩子、
+ * 交互状态与索引工具、翻页哨兵、动画帧调度、工作线程时间轴和动作注入端口。
  *
- * 门面收口：只导出宿主消费点需要的符号（会话壳三件 + 动作端口 + live-status hook + worker 线程时间轴）；
- * 4 个 pane 私有 hook（transcript 模型 / 窗口 / 滚动 / awaiting）是 ChatConversationPane 的实现细节，
- * 仅包内相对 import，不进门面。
+ * 门面只导出宿主消费所需的会话壳组件、动作端口、活动状态钩子和工作线程时间轴。转录模型、窗口、
+ * 滚动和等待状态等面板私有钩子属于 `ChatConversationPane` 实现细节，只允许包内相对导入。
  */
 export type { ChatConversationPaneProps } from './ChatConversationPane'
 export { ChatConversationPane } from './ChatConversationPane'

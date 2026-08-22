@@ -51,7 +51,7 @@ export interface DisclosureProps
   lazyRootMargin?: string
 }
 
-function toCssSize(value: number | string | undefined): string | undefined {
+function toCssSize(value: Optional<number | string>): Optional<string> {
   if (!isPresent(value)) return undefined
 
   return isNumber(value) ? `${value}px` : value

@@ -112,12 +112,12 @@ class WorkflowBudgetExhaustedError extends Error {}
 class WorkflowAbortedError extends Error {}
 
 /**
- * 有界深拷贝：解释器**每一次跨步骤传值都过这里**（step 输出、pipeline item、call input、seed）。
+ * 有界深拷贝：解释器**每一次跨步骤传值都经过这里**，包括步骤输出、管线条目、调用输入与种子值。
  *
- * 两件事一起做，缺一不可：**JSON round-trip** 把值收敛成纯数据（切断原型/闭包/引用共享——
- * 后续 step 拿到的必须是快照，否则 reducer 改一处会回溯改掉上游 step 已记录的输出），
+ * 两件事一起做，缺一不可：**通过 `JSON` 往返序列化**把值收敛成纯数据，切断原型、闭包和引用共享；
+ * 后续步骤必须拿到快照，否则归并器修改一处会回溯改掉上游步骤已记录的输出。
  * **字节上限**挡住"一个 step 返回 10MB 把后续全部撑爆"。字节数按 UTF-8 计而非 `.length`：
- * 中文 JSON 的字符数只有字节数的三分之一，按字符卡等于实际放宽三倍。
+ * 中文 `JSON` 的字符数只有字节数的三分之一，按字符限制等于实际放宽三倍。
  */
 function boundedClone<T>(value: T, label: string): T {
   const serialized = JSON.stringify(value)

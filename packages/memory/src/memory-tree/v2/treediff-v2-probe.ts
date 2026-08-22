@@ -1,10 +1,6 @@
 import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
 
-import type {
-  MemoryTreeDiffOpV2,
-  MemoryTreeDiffV2,
-  MemoryTreeNodeStructV2,
-} from './DiffChain'
+import type { MemoryTreeDiffOpV2, MemoryTreeDiffV2, MemoryTreeNodeStructV2 } from './DiffChain'
 import {
   buildRedactTreeDiffOpV2,
   canonicalStringifyV2,
@@ -21,17 +17,14 @@ import {
 /**
  * 记忆树 v2 逐字节回归探针（规范附录 A 的可执行兑现物 / S0 回归门）。
  *
- * 冻结档 [docs/memory-tree-spec-freeze.md](../../../../../docs/memory-tree-spec-freeze.md)
- * 声称"代码 = 规范 + 逐字节探针校验"。本文件是该主张的唯一在库兑现物：把附录 A 的
- * canonical 行为向量与 A.2 双锚点哈希固化成可复算 fixture + 断言，由
- * `scripts/checks/memoryTreeDiffProbe.mjs` 编入 `bun run check` 链机械复跑。
+ * 冻结文档 `docs/memory-tree-spec-freeze.md` 声明“代码等于规范加逐字节探针校验”。本文件将附录 A
+ * 的规范行为向量与 A.2 双锚点哈希固化为可复算样例和断言，并由
+ * `scripts/checks/memoryTreeDiffProbe.mjs` 纳入检查链反复执行。
  *
- * 铁律（与规范附录 A 一致）：**任何触碰 §1/§2 的实现变更必须先过本 fixture；
- * fixture 失配 = 规范破坏，不是"更新期望值"的理由**。要改锚点值 = 走规范版本变更
- * （`.v2` → `.v3` 域字符串整体推进），不得原地改常数迁就代码漂移。
+ * 任何触碰 §1 或 §2 的实现变更都必须通过本样例；失配代表规范被破坏，不能通过更新期望值解决。
+ * 锚点变化必须推进规范版本和域字符串，不得原地修改常数迁就实现漂移。
  *
- * fixture 全字段（root + leaf 两节点的 14 字段各一份）与本探针同源；规范附录 A.2 抄录
- * 同一 fixture 的全部字段值，使锚点可**纯从规范文档复算**（对抗校验批 A 的 D1 缺口整改）。
+ * 根节点与叶节点的全部字段由本探针和规范附录 A.2 共享，使锚点能够仅凭规范文档复算。
  */
 
 const FIXTURE_ROOT_NODE: MemoryTreeNodeStructV2 = {
@@ -41,7 +34,11 @@ const FIXTURE_ROOT_NODE: MemoryTreeNodeStructV2 = {
   namespace: 'root',
   subjectType: 'root',
   subjectId: 'root',
-  content: { blobRef: null, commitment: `c2:${'00'.repeat(32)}`, redacted: false },
+  content: {
+    blobRef: null,
+    commitment: `c2:${'00'.repeat(32)}`,
+    redacted: false,
+  },
   mainlineScore: 1,
   confidence: 1,
   activation: 1,
@@ -155,7 +152,11 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
       // arch-guard:silent-catch-ok 探针在下方断言捕获到的错误码。
       observedCode = (error as { code?: unknown }).code
     }
-    check('§1.1 拒绝错误码为 VALIDATION', observedCode === 'VALIDATION', `code=${String(observedCode)}`)
+    check(
+      '§1.1 拒绝错误码为 VALIDATION',
+      observedCode === 'VALIDATION',
+      `code=${String(observedCode)}`
+    )
   }
 
   // ── §1.2 / §1.3 canonical 行为向量（A.1，9）──
@@ -173,20 +174,14 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
     canonicalStringifyV2({ a: 1, Z: 2 }).startsWith('{"Z":2,"a":1}')
   )
   check('§1.3 -0 序列化为 0', canonicalStringifyV2(-0) === '0')
-  check(
-    '§1.2 嵌套对象键排序（x 先于 y）',
-    canonicalStringifyV2({ y: 1, x: 2 }) === '{"x":2,"y":1}'
-  )
+  check('§1.2 嵌套对象键排序（x 先于 y）', canonicalStringifyV2({ y: 1, x: 2 }) === '{"x":2,"y":1}')
   check('§1.2 数组保序（顺序是语义）', canonicalStringifyV2([3, 1, 2]) === '[3,1,2]')
+  check('§1.2 null 是显著值（≠ 缺席）', canonicalStringifyV2({ a: null }) === '{"a":null}')
+  check('§1.3 字符串最小转义（控制字符）', canonicalStringifyV2('a\nb') === '"a\\nb"')
   check(
-    '§1.2 null 是显著值（≠ 缺席）',
-    canonicalStringifyV2({ a: null }) === '{"a":null}'
+    '§1.3 数字最短往返表示',
+    canonicalStringifyV2(0.1) === '0.1' && canonicalStringifyV2(1e21) === '1e+21'
   )
-  check(
-    '§1.3 字符串最小转义（控制字符）',
-    canonicalStringifyV2('a\nb') === '"a\\nb"'
-  )
-  check('§1.3 数字最短往返表示', canonicalStringifyV2(0.1) === '0.1' && canonicalStringifyV2(1e21) === '1e+21')
 
   // ── §1.3 评分量化（3）──
   check('§1.3 量化 0.1+0.2 → 0.3', quantizeTreeScoreV2(0.1 + 0.2) === 0.3)
@@ -206,9 +201,10 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
   )
   check(
     '§2.1/§0 域绑进哈希文档（canonical 首成员为 domain）',
-    canonicalStringifyV2({ domain: 'velaros.memory.tree-state.v2', nodes: [] }).startsWith(
-      '{"domain":"velaros.memory.tree-state.v2"'
-    )
+    canonicalStringifyV2({
+      domain: 'velaros.memory.tree-state.v2',
+      nodes: [],
+    }).startsWith('{"domain":"velaros.memory.tree-state.v2"')
   )
   check(
     '§2.1 任一节点字段变更翻转哈希',
@@ -262,16 +258,21 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
     forward.stateHash
   )
   check('§8 正向重放节点数 = 2', forward.nodes.length === 2)
-  const backward = replayTreeDiffsBackwardV2(
-    TreeDiffV2ProbeFixture.nodes,
-    [TreeDiffV2ProbeFixture.genesisDiff]
-  )
+  const backward = replayTreeDiffsBackwardV2(TreeDiffV2ProbeFixture.nodes, [
+    TreeDiffV2ProbeFixture.genesisDiff,
+  ])
   check('§8 逆向重建回到空树（0 节点）', isEmpty(backward.nodes))
-  check('§8 add 求逆为 remove', invertTreeDiffOpV2({ type: 'add', before: [], after: [FIXTURE_ROOT_NODE] }).type === 'remove')
+  check(
+    '§8 add 求逆为 remove',
+    invertTreeDiffOpV2({ type: 'add', before: [], after: [FIXTURE_ROOT_NODE] }).type === 'remove'
+  )
   check(
     '§8 dormant 求逆为 reactivate',
-    invertTreeDiffOpV2({ type: 'dormant', before: [FIXTURE_LEAF_NODE], after: [FIXTURE_LEAF_NODE] }).type ===
-      'reactivate'
+    invertTreeDiffOpV2({
+      type: 'dormant',
+      before: [FIXTURE_LEAF_NODE],
+      after: [FIXTURE_LEAF_NODE],
+    }).type === 'reactivate'
   )
   const redactOp = buildRedactTreeDiffOpV2([FIXTURE_LEAF_NODE])
   let redactOk = false
@@ -292,7 +293,11 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
     after: [
       {
         ...FIXTURE_LEAF_NODE,
-        content: { blobRef: null, commitment: `c2:${'cd'.repeat(32)}`, redacted: true },
+        content: {
+          blobRef: null,
+          commitment: `c2:${'cd'.repeat(32)}`,
+          redacted: true,
+        },
         visibilityState: 'redacted',
       },
     ],
@@ -300,5 +305,9 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
   checkReject('§3.3 redact 改写承诺即非法', () => validateTreeDiffOpV2(rewriteCommitment))
 
   const failures = assertions.filter((assertion) => !assertion.ok)
-  return { total: assertions.length, passed: assertions.length - failures.length, failures }
+  return {
+    total: assertions.length,
+    passed: assertions.length - failures.length,
+    failures,
+  }
 }

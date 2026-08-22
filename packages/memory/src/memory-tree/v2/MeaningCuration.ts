@@ -1,14 +1,11 @@
 import { randomBytes } from 'node:crypto'
 
-import { AppError, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
+import { AppError, isEmpty, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import type { MemoryTreeDiffOpV2, MemoryTreeNodeStructV2 } from './DiffChain'
 import { canonicalStringifyV2, quantizeTreeScoreV2 } from './DiffChain'
-import type {
-  MemoryDreamRunCoordinatorV2,
-  MemoryDreamValidationStatsV2,
-} from './DreamRuns'
+import type { MemoryDreamRunCoordinatorV2, MemoryDreamValidationStatsV2 } from './DreamRuns'
 import type { MemoryPrivacyClassV2 } from './EvidenceIngest'
 import {
   canonicalizeWorkspacePathV2,
@@ -70,7 +67,7 @@ export interface MemoryConceptCandidateV2 extends MemoryMeaningCandidateBaseV2 {
   readonly kind: 'concept'
   readonly conceptType: string
   readonly name: string
-  readonly description?: string | null
+  readonly description?: LooseOptional<string>
   readonly scope: MemoryMeaningScopeV2
   readonly privacyClass: MemoryPrivacyClassV2
   readonly lifecycleState: string
@@ -84,14 +81,14 @@ export interface MemoryEpisodeCandidateV2 extends MemoryMeaningCandidateBaseV2 {
   readonly kind: 'episode'
   readonly episodeType: string
   readonly title: string
-  readonly summary?: string | null
+  readonly summary?: LooseOptional<string>
   readonly state: string
   readonly startedAt: number
-  readonly endedAt?: number | null
+  readonly endedAt?: LooseOptional<number>
   readonly scope: MemoryMeaningScopeV2
   readonly primaryConceptKey: string
   readonly phase: string
-  readonly result?: string | null
+  readonly result?: LooseOptional<string>
   readonly salience: number
   readonly activation: number
 }
@@ -102,15 +99,15 @@ export interface MemoryClaimCandidateV2 extends MemoryMeaningCandidateBaseV2 {
   readonly predicate: string
   readonly title: string
   readonly value: unknown
-  readonly summary?: string | null
+  readonly summary?: LooseOptional<string>
   readonly storageMode: 'full' | 'index_only' | 'reference'
-  readonly payloadRef?: string | null
+  readonly payloadRef?: LooseOptional<string>
   readonly epistemicStatus: string
   readonly confidence: number
   readonly privacyClass: MemoryPrivacyClassV2
   readonly lifecycleState: string
   readonly validFrom: number
-  readonly validTo?: number | null
+  readonly validTo?: LooseOptional<number>
   readonly salience: number
   readonly consolidationStrength: number
   readonly activation: number
@@ -132,7 +129,7 @@ export interface MemoryRelationCandidateV2 extends MemoryMeaningCandidateBaseV2 
   readonly confidence: number
   readonly epistemicStatus: string
   readonly validFrom: number
-  readonly validTo?: number | null
+  readonly validTo?: LooseOptional<number>
   readonly activation: number
 }
 
@@ -154,7 +151,7 @@ export interface MemoryIdentityCandidateV2 {
 
 export interface MemoryMeaningProposalV2 {
   readonly candidates: readonly MemoryMeaningCandidateV2[]
-  readonly identity?: MemoryIdentityCandidateV2 | null
+  readonly identity?: LooseOptional<MemoryIdentityCandidateV2>
 }
 
 export interface MemoryMeaningCandidateDecisionV2 {
@@ -182,7 +179,7 @@ interface AcceptedMeaningProposalV2 {
   episodes: MemoryEpisodeCandidateV2[]
   claims: MemoryClaimCandidateV2[]
   relations: MemoryRelationCandidateV2[]
-  identity: MemoryIdentityCandidateV2 | null
+  identity: Nullable<MemoryIdentityCandidateV2>
   decisions: MemoryMeaningCandidateDecisionV2[]
   candidateCount: number
 }
@@ -190,7 +187,7 @@ interface AcceptedMeaningProposalV2 {
 interface ResolvedMeaningScopeV2 {
   scopeType: string
   scopeId: string
-  scopeMatchKey: string | null
+  scopeMatchKey: Nullable<string>
 }
 
 interface PreparedBlobV2 extends MemorySealedContentV2 {
@@ -204,7 +201,7 @@ interface PreparedConceptV2 {
   scope: ResolvedMeaningScopeV2
   nameMatchKey: string
   name: PreparedBlobV2
-  description: PreparedBlobV2 | null
+  description: Nullable<PreparedBlobV2>
 }
 
 interface PreparedEpisodeV2 {
@@ -214,8 +211,8 @@ interface PreparedEpisodeV2 {
   scope: ResolvedMeaningScopeV2
   primaryConcept: PreparedConceptV2
   title: PreparedBlobV2
-  summary: PreparedBlobV2 | null
-  result: PreparedBlobV2 | null
+  summary: Nullable<PreparedBlobV2>
+  result: Nullable<PreparedBlobV2>
 }
 
 interface PreparedClaimV2 {
@@ -225,7 +222,7 @@ interface PreparedClaimV2 {
   groupKey: string
   subjectConcept: PreparedConceptV2
   value: PreparedBlobV2
-  summary: PreparedBlobV2 | null
+  summary: Nullable<PreparedBlobV2>
 }
 
 interface PreparedRelationV2 {
@@ -239,7 +236,7 @@ interface PreparedIdentityV2 {
   candidate: MemoryIdentityCandidateV2
   id: string
   sequence: number
-  predecessorId: string | null
+  predecessorId: Nullable<string>
   statement: PreparedBlobV2
   globalMainline: PreparedBlobV2
   supportingConceptIds: readonly string[]
@@ -250,7 +247,7 @@ interface PreparedIdentityV2 {
 interface PreparedMeaningCommitV2 {
   participant: MemoryTreeAuthorityCommitParticipantV2
   ops: readonly MemoryTreeDiffOpV2[]
-  identityChange: MemoryTreeIdentityChangeV2 | null
+  identityChange: Nullable<MemoryTreeIdentityChangeV2>
   activeIdentityEpochId: string
   globalMainlineNodeId: string
   cleanupAfterFailure(): void
@@ -282,7 +279,7 @@ export class MemoryMeaningCurationServiceV2 {
       acceptedCount: accepted.decisions.filter((item) => item.decision !== 'rejected').length,
       rejectedCount: accepted.decisions.filter((item) => item.decision === 'rejected').length,
     }
-    let prepared: PreparedMeaningCommitV2 | null = null
+    let prepared: Nullable<PreparedMeaningCommitV2> = null
     try {
       if (stats.acceptedCount > 0) prepared = this.prepareCommit(input.runId, accepted)
       this.dreamRuns.markValidating(
@@ -300,12 +297,8 @@ export class MemoryMeaningCurationServiceV2 {
         stats
       )
       if (!prepared) {
-        this.dreamRuns.commitNoop(
-          input.runId,
-          stats,
-          input.committedAt ?? Date.now()
-        )
-      } else if (prepared.ops.length === 0 && prepared.identityChange === null) {
+        this.dreamRuns.commitNoop(input.runId, stats, input.committedAt ?? Date.now())
+      } else if (isEmpty(prepared.ops) && isNull(prepared.identityChange)) {
         this.dreamRuns.commitNoop(
           input.runId,
           stats,
@@ -345,10 +338,7 @@ export class MemoryMeaningCurationServiceV2 {
     const seen = new Set<string>()
     const conceptCandidates = new Map(
       proposal.candidates
-        .filter(
-          (candidate): candidate is MemoryConceptCandidateV2 =>
-            candidate.kind === 'concept'
-        )
+        .filter((candidate): candidate is MemoryConceptCandidateV2 => candidate.kind === 'concept')
         .map((candidate) => [candidate.candidateKey, candidate])
     )
     const concepts: MemoryConceptCandidateV2[] = []
@@ -398,7 +388,7 @@ export class MemoryMeaningCurationServiceV2 {
           reasons.push(`legacy_governance_denied:${governanceType}`)
         }
       }
-      if (reasons.length > 0) {
+      if (!isEmpty(reasons)) {
         decisions.push({
           candidateKey: candidate.candidateKey,
           kind: candidate.kind,
@@ -426,20 +416,20 @@ export class MemoryMeaningCurationServiceV2 {
     ])
     rejectBrokenDependenciesV2(episodes, claims, relations, acceptedKeys, decisions)
     const rejectedKeys = new Set(
-      decisions
-        .filter((item) => item.decision === 'rejected')
-        .map((item) => item.candidateKey)
+      decisions.filter((item) => item.decision === 'rejected').map((item) => item.candidateKey)
     )
-    let identity: MemoryIdentityCandidateV2 | null = null
+    let identity: Nullable<MemoryIdentityCandidateV2> = null
     if (proposal.identity) {
       const reasons = validateIdentityShapeV2(proposal.identity)
       const trust = this.readEvidenceTrust(proposal.identity.evidenceIds)
       reasons.push(...trust.reasons)
       if (trust.externalOnly) reasons.push('external_content_cannot_support_identity')
       if (
-        [...proposal.identity.supportingConceptKeys,
-        ...proposal.identity.supportingEpisodeKeys,
-        ...proposal.identity.supportingClaimKeys].some((key) => rejectedKeys.has(key))
+        [
+          ...proposal.identity.supportingConceptKeys,
+          ...proposal.identity.supportingEpisodeKeys,
+          ...proposal.identity.supportingClaimKeys,
+        ].some((key) => rejectedKeys.has(key))
       ) {
         reasons.push('identity_depends_on_rejected_candidate')
       }
@@ -459,10 +449,10 @@ export class MemoryMeaningCurationServiceV2 {
       decisions.push({
         candidateKey: 'identity',
         kind: 'identity',
-        decision: reasons.length === 0 ? 'accepted' : 'rejected',
+        decision: isEmpty(reasons) ? 'accepted' : 'rejected',
         reasons,
       })
-      if (reasons.length === 0) identity = proposal.identity
+      if (isEmpty(reasons)) identity = proposal.identity
     }
 
     return {
@@ -482,7 +472,8 @@ export class MemoryMeaningCurationServiceV2 {
     reasons: string[]
   } {
     const reasons: string[] = []
-    if (evidenceIds.length === 0) return { levels: [], externalOnly: false, reasons: ['missing_evidence'] }
+    if (evidenceIds.length === 0)
+      return { levels: [], externalOnly: false, reasons: ['missing_evidence'] }
     const lookup = this.authority.database.prepare(
       `SELECT id, trust_level, eligibility_state
        FROM memory_evidence
@@ -508,15 +499,15 @@ export class MemoryMeaningCurationServiceV2 {
     }
     return {
       levels,
-      externalOnly: levels.length > 0 && levels.every((level) => level === 'external_content'),
+      externalOnly: !isEmpty(levels) && levels.every((level) => level === 'external_content'),
       reasons,
     }
   }
 
   private readLegacyGovernanceDeny(
     claim: MemoryClaimCandidateV2,
-    concept: MemoryConceptCandidateV2 | undefined
-  ): 'forgotten' | 'superseded' | 'erased' | null {
+    concept: Optional<MemoryConceptCandidateV2>
+  ): Nullable<'forgotten' | 'superseded' | 'erased'> {
     if (!concept) return null
     let scope: ResolvedMeaningScopeV2
     try {
@@ -550,9 +541,7 @@ export class MemoryMeaningCurationServiceV2 {
          ORDER BY deny_generation DESC, governance_type
          LIMIT 1`
       )
-      .get(targetMatchKey) as
-      | { governance_type: 'forgotten' | 'superseded' | 'erased' }
-      | undefined
+      .get(targetMatchKey) as { governance_type: 'forgotten' | 'superseded' | 'erased' } | undefined
     return toNullable(row?.governance_type)
   }
 
@@ -645,13 +634,8 @@ export class MemoryMeaningCurationServiceV2 {
           summary: candidate.summary ? seal(candidate.summary) : null,
         }
       })
-      const claimByCandidate = new Map(
-        claims.map((item) => [item.candidate.candidateKey, item])
-      )
-      const entityMaps: Record<
-        MemoryMeaningEntityKindV2,
-        ReadonlyMap<string, { id: string }>
-      > = {
+      const claimByCandidate = new Map(claims.map((item) => [item.candidate.candidateKey, item]))
+      const entityMaps: Record<MemoryMeaningEntityKindV2, ReadonlyMap<string, { id: string }>> = {
         concept: conceptByCandidate,
         episode: episodeByCandidate,
         claim: claimByCandidate,
@@ -765,7 +749,8 @@ export class MemoryMeaningCurationServiceV2 {
   }
 
   private resolveScope(scope: MemoryMeaningScopeV2): ResolvedMeaningScopeV2 {
-    if (scope.type === 'global') return { scopeType: 'global', scopeId: 'global', scopeMatchKey: null }
+    if (scope.type === 'global')
+      return { scopeType: 'global', scopeId: 'global', scopeMatchKey: null }
     if (scope.type === 'workspace') {
       const scopeId = canonicalizeWorkspacePathV2(scope.rootPath)
       return {
@@ -782,7 +767,10 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
-  private existingId(table: 'memory_concepts' | 'memory_episodes' | 'memory_claims', stableKey: string): Nullable<string> {
+  private existingId(
+    table: 'memory_concepts' | 'memory_episodes' | 'memory_claims',
+    stableKey: string
+  ): Nullable<string> {
     const row = this.authority.database
       .prepare(`SELECT id FROM ${table} WHERE stable_key = ?`)
       .get(stableKey) as { id: string } | undefined
@@ -821,7 +809,8 @@ function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[]
   }
   if (candidate.kind === 'claim') {
     if (!candidate.predicate || !candidate.title) reasons.push('missing_claim_structure')
-    if (!EpistemicStatusesV2.has(candidate.epistemicStatus)) reasons.push('invalid_epistemic_status')
+    if (!EpistemicStatusesV2.has(candidate.epistemicStatus))
+      reasons.push('invalid_epistemic_status')
     if (!LifecycleStatesV2.has(candidate.lifecycleState)) reasons.push('invalid_lifecycle')
     validateScoreV2(candidate.confidence, 'confidence', reasons)
     validateScoreV2(candidate.salience, 'salience', reasons)
@@ -830,7 +819,8 @@ function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[]
   }
   if (candidate.kind === 'relation') {
     if (!candidate.relationType) reasons.push('missing_relation_type')
-    if (!EpistemicStatusesV2.has(candidate.epistemicStatus)) reasons.push('invalid_epistemic_status')
+    if (!EpistemicStatusesV2.has(candidate.epistemicStatus))
+      reasons.push('invalid_epistemic_status')
     validateScoreV2(candidate.confidence, 'confidence', reasons)
     validateScoreV2(candidate.activation, 'activation', reasons)
   }
@@ -873,9 +863,7 @@ function rejectBrokenDependenciesV2(
     }
   }
   const rejected = new Set(
-    decisions
-      .filter((item) => item.decision === 'rejected')
-      .map((item) => item.candidateKey)
+    decisions.filter((item) => item.decision === 'rejected').map((item) => item.candidateKey)
   )
   for (const relation of relations) {
     if (
@@ -908,7 +896,11 @@ function buildMeaningTreeNodesV2(input: {
       namespace: 'root',
       subjectType: 'root',
       subjectId: 'root',
-      content: { blobRef: null, commitment: `c2:${'0'.repeat(64)}`, redacted: false },
+      content: {
+        blobRef: null,
+        commitment: `c2:${'0'.repeat(64)}`,
+        redacted: false,
+      },
       mainlineScore: 1,
       confidence: 1,
       activation: 1,
@@ -1012,7 +1004,9 @@ function buildMeaningTreeOpsV2(
 ): MemoryTreeDiffOpV2[] {
   const currentByKey = new Map(current.map((node) => [node.stableKey, node]))
   return [...desired]
-    .sort((left, right) => (left.stableKey < right.stableKey ? -1 : left.stableKey > right.stableKey ? 1 : 0))
+    .sort((left, right) =>
+      left.stableKey < right.stableKey ? -1 : left.stableKey > right.stableKey ? 1 : 0
+    )
     .flatMap((node): MemoryTreeDiffOpV2[] => {
       const existing = currentByKey.get(node.stableKey)
       if (!existing) return [{ type: 'add', before: [], after: [node] }]
@@ -1372,12 +1366,11 @@ function registerBlobV2(
     .run(blob.blobId, blob.byteLength, createdAt)
 }
 
-function requiredMapValueV2<T>(
-  map: ReadonlyMap<string, T>,
-  key: string,
-  label: string
-): T {
+function requiredMapValueV2<T>(map: ReadonlyMap<string, T>, key: string, label: string): T {
   const value = map.get(key)
-  if (!value) throw new AppError('VALIDATION', `${label} 引用了未接受候选。`, undefined, { key })
+  if (!value)
+    throw new AppError('VALIDATION', `${label} 引用了未接受候选。`, undefined, {
+      key,
+    })
   return value
 }

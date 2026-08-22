@@ -1,7 +1,7 @@
 # Velar Document Renderer
 
 An independently installed command capability pack for Office and PDF rendering. It is not a
-Velar Host module, is not registered in the Host tool catalog, and has its own native dependencies
+VelarOS Terminal module, is not registered in the Terminal tool catalog, and has its own native dependencies
 and release lifecycle.
 
 The executable accepts exactly one JSON request per process and writes exactly one JSON response.

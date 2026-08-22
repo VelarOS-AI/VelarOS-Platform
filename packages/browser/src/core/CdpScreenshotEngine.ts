@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isPlainObject } from '@velaros-ai/core'
+import { isFiniteNumber, isObject, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -163,7 +163,7 @@ export class CdpScreenshotEngine {
     }
 
     const readNumber = (value: unknown, fallback: number): number =>
-      typeof value === 'number' && Number.isFinite(value) ? value : fallback
+      isFiniteNumber(value) ? value : fallback
 
     return {
       viewportWidth: readNumber(pageMetadata.viewportWidth, DEFAULT_BROWSER_VIEWPORT.width),
@@ -209,7 +209,7 @@ export class CdpScreenshotEngine {
     metadata: BrowserScreenshotMetadata,
     options: BrowserCaptureScreenshotOptions
   ): BrowserPageDriverScreenshotOptions {
-    if (options.region && typeof options.region === 'object' && 'width' in options.region) {
+    if (options.region && isObject(options.region) && 'width' in options.region) {
       const region = options.region as { x?: number; y?: number; width?: number; height?: number }
       return {
         mode: 'region',

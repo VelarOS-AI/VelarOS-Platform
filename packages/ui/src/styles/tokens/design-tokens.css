@@ -20,22 +20,3 @@
 @import './theme-light.css';
 @import './theme-dark.css';
 @import './seed-presets.css';
-
-/*
- * Game product surface tokens. They intentionally resolve through the shared semantic palette so
- * the incubating Desktop shell and the future standalone game application render the same stage
- * and tool cards without either product owning hard-coded colors.
- */
-:root {
-  --game-stage-surface: var(--background);
-  --game-stage-border: var(--border);
-  --game-stage-foreground: var(--foreground);
-  --game-status-background: var(--background-muted-strong);
-  --game-status-foreground: var(--foreground-secondary);
-  --game-viewport-background: color-mix(in oklab, var(--background) 18%, var(--color-black));
-  --game-card-accent: var(--status-blue);
-  --game-card-accent-soft: var(--status-blue-soft);
-  --game-card-success: var(--status-green);
-  --game-card-warning: var(--status-amber);
-  --game-card-error: var(--status-red);
-}

@@ -110,7 +110,7 @@ class OpenAIModelAdapter extends ModelAdapter {
   /** 归一化 OpenRouter 路由配置。 */
   private normalizeOpenRouterRouting(
     modelId: string,
-    options: ModelRequestOptions | undefined,
+    options: Optional<ModelRequestOptions>,
     thinkingDepth: ModelAdapterConfig['thinkingDepth']
   ): NormalizedOpenRouterRouting {
     const routing = options?.openRouter
@@ -145,7 +145,7 @@ class OpenAIModelAdapter extends ModelAdapter {
    * providerPreferences 会合并进 body.provider。
    */
   private injectOpenRouterRouting(
-    init: OpenAIFetchInit | undefined,
+    init: Optional<OpenAIFetchInit>,
     routing: NormalizedOpenRouterRouting
   ): OpenAIFetchInit | undefined {
     const shouldInjectAutoRouterPlugin =

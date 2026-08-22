@@ -19,10 +19,6 @@ const InternalImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](@velaros-ai\/[^/'"]+)/;
 const ElectronImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*)['"]/;
-const GameRendererImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](?:phaser(?:\/[^'"]*)?|@babylonjs\/[^'"]*)['"]/;
-const RelativeModuleImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](\.\.?\/[^'"]+)['"]/g;
 const ConcreteAgentRuntimeImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/;
 const CoreTypesImport =
@@ -410,43 +406,6 @@ for (const expected of CapabilityPackages) {
       fail(
         `${expected.name}: only ${expected.electronRoots.map((slice) => `src/${slice}`).join(" / ") || "(none)"} may import Electron (${relative(packageRoot, path)})`,
       );
-    }
-    if (expected.owner === "game") {
-      const sourceRelativePath = relative(sourceRoot, path);
-      const sourceSlice = sourceRelativePath.includes("/")
-        ? sourceRelativePath.split("/")[0]
-        : sourceRelativePath.replace(/\.[^.]+$/u, "");
-      if (sourceSlice === "core" && GameRendererImport.test(source)) {
-        fail(
-          `${expected.name}: renderer import leaked into core (${relative(packageRoot, path)})`,
-        );
-      }
-      const allowedSliceImports = {
-        contracts: new Set(["contracts"]),
-        core: new Set(["contracts", "core"]),
-        runtime: new Set(["contracts", "core", "runtime"]),
-        tools: new Set(["contracts", "core", "tools"]),
-        composition: new Set([
-          "contracts",
-          "core",
-          "runtime",
-          "tools",
-          "composition",
-        ]),
-      };
-      for (const match of source.matchAll(RelativeModuleImport)) {
-        const targetPath = resolve(dirname(path), match[1]);
-        if (!targetPath.startsWith(`${sourceRoot}/`)) continue;
-        const targetRelativePath = relative(sourceRoot, targetPath);
-        const targetSlice = targetRelativePath.includes("/")
-          ? targetRelativePath.split("/")[0]
-          : targetRelativePath.replace(/\.[^.]+$/u, "");
-        if (!allowedSliceImports[sourceSlice]?.has(targetSlice)) {
-          fail(
-            `${expected.name}: ${sourceSlice} cannot import ${targetSlice} (${relative(packageRoot, path)})`,
-          );
-        }
-      }
     }
     for (const match of source.matchAll(
       new RegExp(InternalImport.source, "g"),

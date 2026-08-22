@@ -3,7 +3,15 @@ import { existsSync } from 'node:fs'
 
 import BetterSqlite3 from 'better-sqlite3'
 
-import { AppError, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
+import {
+  AppError,
+  isEmpty,
+  isNotNull,
+  isNull,
+  isPlainObject,
+  isString,
+  toNullable,
+} from '@velaros-ai/core'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import { canonicalStringifyV2 } from './DiffChain'
@@ -29,11 +37,7 @@ const TrustLevelsV2 = new Set<MemoryEvidenceTrustLevelV2>([
   'agent_derived',
   'external_content',
 ])
-const PrivacyClassesV2 = new Set<MemoryPrivacyClassV2>([
-  'standard',
-  'personal',
-  'sensitive',
-])
+const PrivacyClassesV2 = new Set<MemoryPrivacyClassV2>(['standard', 'personal', 'sensitive'])
 const ReplayableEligibilityV2 = new Set<MemoryEvidenceEligibilityStateV2>([
   'active',
   'source_deleted',
@@ -67,8 +71,8 @@ export interface LegacyMemoryEvidenceRowV2 {
 export interface LegacyMemoryGovernanceRowV2 {
   readonly governanceType: 'forgotten' | 'superseded' | 'erased'
   readonly legacyTargetId: string
-  readonly legacyEvidenceId: string | null
-  readonly target: LegacyMemoryClaimGovernanceTargetV2 | null
+  readonly legacyEvidenceId: Nullable<string>
+  readonly target: Nullable<LegacyMemoryClaimGovernanceTargetV2>
 }
 
 export interface LegacyMemoryClaimGovernanceTargetV2 {
@@ -131,10 +135,9 @@ export interface MemoryAuthorityUserSignoffV2 {
 
 export interface MemoryAuthorityCutoverDecisionV2 {
   readonly ready: boolean
-  readonly missing: ReadonlyArray<| 'parity'
-    | 'true_device_verification'
-    | 'user_signoff'
-    | 'digest_mismatch'>
+  readonly missing: ReadonlyArray<
+    'parity' | 'true_device_verification' | 'user_signoff' | 'digest_mismatch'
+  >
 }
 
 interface ReplayLedgerRowV2 {
@@ -147,8 +150,8 @@ interface ReplayLedgerRowV2 {
 interface V2EvidenceParityRowV2 {
   id: string
   eligibility_state: MemoryEvidenceEligibilityStateV2
-  payload_blob_ref: string | null
-  payload_commitment: string | null
+  payload_blob_ref: Nullable<string>
+  payload_commitment: Nullable<string>
   ingest_sequence: number
 }
 
@@ -200,7 +203,8 @@ export class LegacyMemoryEvidenceSqliteReaderV2 implements LegacyMemoryEvidenceR
       !hasLegacyTableV2(this.database, 'memory_claims') ||
       !hasLegacyTableV2(this.database, 'memory_claim_evidence') ||
       !hasLegacyTableV2(this.database, 'memory_concepts')
-    ) return []
+    )
+      return []
     return (
       this.database
         .prepare(
@@ -222,25 +226,25 @@ export class LegacyMemoryEvidenceSqliteReaderV2 implements LegacyMemoryEvidenceR
         .all() as Array<{
         legacy_target_id: string
         governance_type: LegacyMemoryGovernanceRowV2['governanceType']
-        legacy_evidence_id: string | null
-        predicate: string | null
-        value_json: string | null
-        concept_type: string | null
-        canonical_name: string | null
-        scope_type: string | null
-        scope_id: string | null
+        legacy_evidence_id: Nullable<string>
+        predicate: Nullable<string>
+        value_json: Nullable<string>
+        concept_type: Nullable<string>
+        canonical_name: Nullable<string>
+        scope_type: Nullable<string>
+        scope_id: Nullable<string>
       }>
     ).map((row) => ({
       governanceType: row.governance_type,
       legacyTargetId: row.legacy_target_id,
       legacyEvidenceId: row.legacy_evidence_id,
       target:
-        typeof row.predicate === 'string' &&
-        typeof row.value_json === 'string' &&
-        typeof row.concept_type === 'string' &&
-        typeof row.canonical_name === 'string' &&
-        typeof row.scope_type === 'string' &&
-        typeof row.scope_id === 'string'
+        isString(row.predicate) &&
+        isString(row.value_json) &&
+        isString(row.concept_type) &&
+        isString(row.canonical_name) &&
+        isString(row.scope_type) &&
+        isString(row.scope_id)
           ? {
               kind: 'claim',
               conceptType: row.concept_type,
@@ -286,8 +290,7 @@ export class MemoryEvidenceReplayMigrationV2 {
       const existing = this.readLedger(reader.sourceDatabaseId, row.id)
       if (row.eligibilityState === 'erased') {
         const tombstone =
-          existing ??
-          this.insertErasedTombstone(reader.sourceDatabaseId, row, replayedAt)
+          existing ?? this.insertErasedTombstone(reader.sourceDatabaseId, row, replayedAt)
         if (existing) alreadyReplayedCount += 1
         else tombstoneCount += 1
         this.recordGovernance({
@@ -305,12 +308,7 @@ export class MemoryEvidenceReplayMigrationV2 {
       const normalized = normalizeLegacyEvidenceV2(row)
       const evidenceId = existing
         ? existing.evidence_id
-        : this.ingestWithLedger(
-            reader.sourceDatabaseId,
-            row,
-            normalized.input,
-            replayedAt
-          ).id
+        : this.ingestWithLedger(reader.sourceDatabaseId, row, normalized.input, replayedAt).id
       if (existing) alreadyReplayedCount += 1
       else replayedCount += 1
       for (const reasonCode of normalized.knownLossReasons) {
@@ -344,33 +342,26 @@ export class MemoryEvidenceReplayMigrationV2 {
       }
     }
 
-    let denyGeneration: number | null = null
+    let denyGeneration: Nullable<number> = null
     for (const governance of reader.listGovernance()) {
       const mapping = governance.legacyEvidenceId
         ? this.readLedger(reader.sourceDatabaseId, governance.legacyEvidenceId)
         : null
-      const target = resolveLegacyGovernanceTargetV2(
-        governance.target,
-        this.identityKeys
-      )
-      if (target.matchKey && denyGeneration === null) {
-        denyGeneration = this.ensureReplayDenyGeneration(
-          reader.sourceDatabaseId,
-          replayedAt
-        )
+      const target = resolveLegacyGovernanceTargetV2(governance.target, this.identityKeys)
+      if (target.matchKey && isNull(denyGeneration)) {
+        denyGeneration = this.ensureReplayDenyGeneration(reader.sourceDatabaseId, replayedAt)
       }
       this.recordGovernance({
         sourceDatabaseId: reader.sourceDatabaseId,
         governanceType: governance.governanceType,
         legacyTargetId: governance.legacyTargetId,
         legacyEvidenceId: governance.legacyEvidenceId,
-        evidenceId: mapping?.evidence_id ?? null,
+        evidenceId: toNullable(mapping?.evidence_id),
         targetMatchKey: target.matchKey,
         denyGeneration: target.matchKey ? denyGeneration : null,
         disposition: target.matchKey ? 'applied' : 'known_loss',
         reasonCode:
-          target.reasonCode ??
-          `legacy_${governance.governanceType}_governance_deny_applied`,
+          target.reasonCode ?? `legacy_${governance.governanceType}_governance_deny_applied`,
         recordedAt: replayedAt,
       })
     }
@@ -410,7 +401,7 @@ export class MemoryEvidenceReplayMigrationV2 {
       legacyEvidenceId: string
       legacyIngestSequence: number
       evidenceId: string
-      v2IngestSequence: number | null
+      v2IngestSequence: Nullable<number>
       outcome: ReplayLedgerRowV2['outcome'] | 'missing' | 'orphan'
       payloadMatched: boolean
       eligibilityMatched: boolean
@@ -462,7 +453,7 @@ export class MemoryEvidenceReplayMigrationV2 {
       if (!eligibilityMatched) eligibilityMismatchCount += 1
       let payloadMatched = false
       if (mapping.outcome === 'tombstone') {
-        if (v2.payload_blob_ref !== null || v2.payload_commitment !== null) {
+        if (isNotNull(v2.payload_blob_ref) || isNotNull(v2.payload_commitment)) {
           payloadMismatchCount += 1
         } else {
           payloadMatched = true
@@ -492,10 +483,7 @@ export class MemoryEvidenceReplayMigrationV2 {
         })
         continue
       }
-      const plaintext = this.contentKeys.openContent(
-        v2.payload_blob_ref,
-        v2.payload_commitment
-      )
+      const plaintext = this.contentKeys.openContent(v2.payload_blob_ref, v2.payload_commitment)
       try {
         if (plaintext.equals(Buffer.from(sourceRow.content, 'utf8'))) {
           payloadMatched = true
@@ -588,9 +576,7 @@ export class MemoryEvidenceReplayMigrationV2 {
     input: IngestMemoryEvidenceInputV2,
     replayedAt: number
   ): { id: string } {
-    let captured:
-      | ReturnType<MemoryEvidenceIngestServiceV2['ingest']>
-      | undefined
+    let captured: ReturnType<MemoryEvidenceIngestServiceV2['ingest']> | undefined
     try {
       const replay = this.authority.database.transaction(() => {
         captured = this.ingest.ingest(input)
@@ -601,13 +587,7 @@ export class MemoryEvidenceReplayMigrationV2 {
                evidence_id, outcome, replayed_at
              ) VALUES (?, ?, ?, ?, 'replayed', ?)`
           )
-          .run(
-            sourceDatabaseId,
-            legacy.id,
-            legacy.ingestSequence,
-            captured.id,
-            replayedAt
-          )
+          .run(sourceDatabaseId, legacy.id, legacy.ingestSequence, captured.id, replayedAt)
       })
       replay()
       return { id: captured!.id }
@@ -674,31 +654,29 @@ export class MemoryEvidenceReplayMigrationV2 {
     }
   }
 
-  private readLedger(sourceDatabaseId: string, legacyEvidenceId: string): ReplayLedgerRowV2 | null {
-    return (
-      (this.authority.database
+  private readLedger(
+    sourceDatabaseId: string,
+    legacyEvidenceId: string
+  ): Nullable<ReplayLedgerRowV2> {
+    return toNullable(
+      this.authority.database
         .prepare(
           `SELECT legacy_evidence_id, legacy_ingest_sequence, evidence_id, outcome
            FROM memory_evidence_replay_ledger
            WHERE source_database_id = ? AND legacy_evidence_id = ?`
         )
-        .get(sourceDatabaseId, legacyEvidenceId) as ReplayLedgerRowV2 | undefined) ?? null
+        .get(sourceDatabaseId, legacyEvidenceId) as ReplayLedgerRowV2 | undefined
     )
   }
 
   private recordGovernance(input: {
     sourceDatabaseId: string
-    governanceType:
-      | 'eligibility'
-      | 'forgotten'
-      | 'superseded'
-      | 'erased'
-      | 'scope_degraded'
+    governanceType: 'eligibility' | 'forgotten' | 'superseded' | 'erased' | 'scope_degraded'
     legacyTargetId: string
-    legacyEvidenceId: string | null
-    evidenceId: string | null
-    targetMatchKey?: string | null
-    denyGeneration?: number | null
+    legacyEvidenceId: Nullable<string>
+    evidenceId: Nullable<string>
+    targetMatchKey?: LooseOptional<string>
+    denyGeneration?: LooseOptional<number>
     disposition: 'applied' | 'pending' | 'known_loss'
     reasonCode: string
     recordedAt: number
@@ -726,18 +704,15 @@ export class MemoryEvidenceReplayMigrationV2 {
         input.legacyTargetId,
         input.legacyEvidenceId ?? '',
         input.evidenceId,
-        input.targetMatchKey ?? null,
-        input.denyGeneration ?? null,
+        toNullable(input.targetMatchKey),
+        toNullable(input.denyGeneration),
         input.disposition,
         input.reasonCode,
         input.recordedAt
       )
   }
 
-  private ensureReplayDenyGeneration(
-    sourceDatabaseId: string,
-    recordedAt: number
-  ): number {
+  private ensureReplayDenyGeneration(sourceDatabaseId: string, recordedAt: number): number {
     const existing = this.authority.database
       .prepare(
         `SELECT max(deny_generation)
@@ -745,8 +720,8 @@ export class MemoryEvidenceReplayMigrationV2 {
          WHERE source_database_id = ? AND deny_generation IS NOT NULL`
       )
       .pluck()
-      .get(sourceDatabaseId) as number | null
-    if (existing !== null) return existing
+      .get(sourceDatabaseId) as Nullable<number>
+    if (isNotNull(existing)) return existing
     const next = this.authority.database
       .prepare(
         `UPDATE memory_meta
@@ -795,14 +770,11 @@ export class MemoryEvidenceReplayMigrationV2 {
 
 export function evaluateMemoryAuthorityCutoverV2(input: {
   report: MemoryEvidenceParityReportV2
-  trueDeviceReceipt?: MemoryAuthorityCutoverReceiptV2 | null
-  userSignoff?: MemoryAuthorityUserSignoffV2 | null
+  trueDeviceReceipt?: LooseOptional<MemoryAuthorityCutoverReceiptV2>
+  userSignoff?: LooseOptional<MemoryAuthorityUserSignoffV2>
 }): MemoryAuthorityCutoverDecisionV2 {
   const missing: Array<MemoryAuthorityCutoverDecisionV2['missing'][number]> = []
-  const {
-    verificationDigest,
-    ...unsignedReport
-  } = input.report
+  const { verificationDigest, ...unsignedReport } = input.report
   const reportDigestValid =
     /^[0-9a-f]{64}$/.test(input.report.mappingDigest) &&
     /^[0-9a-f]{64}$/.test(input.report.governanceDigest) &&
@@ -817,25 +789,20 @@ export function evaluateMemoryAuthorityCutoverV2(input: {
   ) {
     missing.push('parity')
   }
-  const trueDeviceReceipt = isValidCutoverAttestationV2(
-    input.trueDeviceReceipt
-  )
+  const trueDeviceReceipt = isValidCutoverAttestationV2(input.trueDeviceReceipt)
     ? input.trueDeviceReceipt
     : null
-  const userSignoff = isValidCutoverAttestationV2(input.userSignoff)
-    ? input.userSignoff
-    : null
+  const userSignoff = isValidCutoverAttestationV2(input.userSignoff) ? input.userSignoff : null
   if (!trueDeviceReceipt) missing.push('true_device_verification')
   if (!userSignoff) missing.push('user_signoff')
   if (
     (trueDeviceReceipt &&
       trueDeviceReceipt.verificationDigest !== input.report.verificationDigest) ||
-    (userSignoff &&
-      userSignoff.verificationDigest !== input.report.verificationDigest)
+    (userSignoff && userSignoff.verificationDigest !== input.report.verificationDigest)
   ) {
     missing.push('digest_mismatch')
   }
-  return { ready: missing.length === 0, missing }
+  return { ready: isEmpty(missing), missing }
 }
 
 export function computeMemoryEvidenceParityDigestV2(
@@ -856,8 +823,7 @@ function isValidCutoverAttestationV2(
   input: LooseOptional<MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSignoffV2>
 ): input is MemoryAuthorityCutoverReceiptV2 | MemoryAuthorityUserSignoffV2 {
   if (!input || !/^[0-9a-f]{64}$/.test(input.verificationDigest)) return false
-  const timestamp =
-    'verifiedAt' in input ? input.verifiedAt : input.confirmedAt
+  const timestamp = 'verifiedAt' in input ? input.verifiedAt : input.confirmedAt
   const id = 'receiptId' in input ? input.receiptId : input.signoffId
   return Number.isSafeInteger(timestamp) && timestamp >= 0 && !isEmpty(id)
 }
@@ -866,11 +832,13 @@ function resolveLegacyGovernanceTargetV2(
   target: Nullable<LegacyMemoryClaimGovernanceTargetV2>,
   identityKeys: MemoryIdentityKeyServiceV2
 ): { matchKey: Nullable<string>; reasonCode: Nullable<string> } {
-  if (!target) return {
+  if (!target)
+    return {
       matchKey: null,
       reasonCode: 'legacy_governance_target_missing',
     }
-  if (!target.conceptType || !target.conceptName || !target.predicate) return {
+  if (!target.conceptType || !target.conceptName || !target.predicate)
+    return {
       matchKey: null,
       reasonCode: 'legacy_governance_identity_incomplete',
     }
@@ -883,10 +851,7 @@ function resolveLegacyGovernanceTargetV2(
     } else if (target.conceptScopeType === 'workspace') {
       scopeType = 'workspace'
       scopeId = canonicalizeWorkspacePathV2(target.conceptScopeId)
-    } else if (
-      target.conceptScopeType === 'site' ||
-      target.conceptScopeType === 'origin'
-    ) {
+    } else if (target.conceptScopeType === 'site' || target.conceptScopeType === 'origin') {
       scopeType = 'origin'
       scopeId = normalizeOriginV2(target.conceptScopeId)
     } else {
@@ -983,11 +948,15 @@ function resolveLegacyScopeV2(row: LegacyMemoryEvidenceRowV2): {
   degradedReason: Nullable<string>
 } {
   if (row.workspaceRoot) {
-    if (existsSync(row.workspaceRoot)) return {
+    if (existsSync(row.workspaceRoot))
+      return {
         scope: { type: 'workspace', rootPath: row.workspaceRoot },
         degradedReason: null,
       }
-    return { scope: { type: 'global' }, degradedReason: 'workspace_path_unresolvable' }
+    return {
+      scope: { type: 'global' },
+      degradedReason: 'workspace_path_unresolvable',
+    }
   }
   if (row.scopeType === 'site' || row.scopeType === 'origin') {
     try {
@@ -996,12 +965,14 @@ function resolveLegacyScopeV2(row: LegacyMemoryEvidenceRowV2): {
     } catch {
       // arch-guard:silent-catch-ok 遗留 site scope 不是 URL 时退为 global，并记录已知损耗。
     }
-    return { scope: { type: 'global' }, degradedReason: 'site_origin_unresolvable' }
+    return {
+      scope: { type: 'global' },
+      degradedReason: 'site_origin_unresolvable',
+    }
   }
   return {
     scope: { type: 'global' },
-    degradedReason:
-      row.scopeType === 'global' ? null : 'legacy_scope_unknown_flattened',
+    degradedReason: row.scopeType === 'global' ? null : 'legacy_scope_unknown_flattened',
   }
 }
 
@@ -1133,18 +1104,13 @@ function assertLegacyEvidenceSchemaV2(database: SQLiteDatabase): void {
 
 function hasLegacyTableV2(database: SQLiteDatabase, table: string): boolean {
   return Boolean(
-    database
-      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
-      .get(table)
+    database.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)
   )
 }
 
 function assertSourceDatabaseIdV2(value: string): void {
   if (!SourceDatabaseIdPatternV2.test(value)) {
-    throw new AppError(
-      'VALIDATION',
-      'sourceDatabaseId 必须是旧库文件的 SHA-256 身份。'
-    )
+    throw new AppError('VALIDATION', 'sourceDatabaseId 必须是旧库文件的 SHA-256 身份。')
   }
 }
 

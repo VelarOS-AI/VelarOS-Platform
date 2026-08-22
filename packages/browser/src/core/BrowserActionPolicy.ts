@@ -1,4 +1,7 @@
+import { isNotNull } from '@velaros-ai/core'
+
 import type { BrowserActionPolicyConfig } from './types'
+
 
 export interface BrowserActionPolicyRequest {
   action: string
@@ -25,7 +28,7 @@ function normalizeActionSet(
 ): Set<string> {
   const normalized = (values ?? [])
     .map(normalizePolicyAction)
-    .filter((value): value is string => value !== null)
+    .filter((value): value is string => isNotNull(value))
   return new Set(normalized)
 }
 
@@ -36,7 +39,7 @@ function normalizeRequestActions(
   const actions = [
     normalizePolicyAction(request.action),
     ...(request.aliases ?? []).map(normalizePolicyAction),
-  ].filter((value): value is string => value !== null)
+  ].filter((value): value is string => isNotNull(value))
 
   return actions.filter((action) => {
     if (seen.has(action)) return false

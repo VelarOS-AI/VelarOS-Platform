@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import type BetterSqlite3 from 'better-sqlite3'
 
-import { first,isArray, isBlank, isEmpty, isObject, isString, toNullable } from '@velaros-ai/core'
+import { first,isArray, isBlank, isEmpty, isPlainObject,isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -203,7 +203,7 @@ const RecallPredicateByCategory: Record<MemoryEvidenceRecord['category'], string
 function parseJsonObject(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value)
-    return isObject(parsed) ? (parsed as Record<string, unknown>) : {}
+    return isPlainObject(parsed) ? (parsed) : {}
   } catch (error) {
     log.warn('invalid JSON in memory tree row', { error })
     return {}

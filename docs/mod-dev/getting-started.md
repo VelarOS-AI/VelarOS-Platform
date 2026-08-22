@@ -102,7 +102,7 @@ range 或 version 非法一律返回 `false`（fail-closed）。
 
 ## 二、运行态绑定（哪些轴要写代码）
 
-manifest 是**声明**；工具的 handler、seam 的 handler 这类**代码**叫**运行态绑定**，
+manifest 是**声明**；工具的 handler、Hook 的 handler 这类**代码**叫**运行态绑定**，
 经 `AgentModBindings` 交给 Loader：
 
 ```ts
@@ -113,7 +113,7 @@ interface AgentModBindings {
   readonly skills?: Readonly<Record<string, AgentSkillDefinition>>;
   readonly subAgentTypes?: Readonly<Record<string, SubAgentTypeDescriptor>>;
   readonly executionModes?: Readonly<Record<string, ExecutionModeDescriptor>>;
-  readonly hooks?: Readonly<Record<string, AgentModSeamHandler>>;
+  readonly hooks?: Readonly<Record<string, AgentModHookHandler>>;
 }
 ```
 
@@ -125,7 +125,7 @@ interface AgentModBindings {
 | **不接受绑定** | `DataOnlyAxes = { 'spaces', 'turnContextSources' }` | `mod.binding-not-allowed` 拒载                   |
 | **二选一**     | `promptSegments`：有 `text` 或有绑定                | 都缺 → `mod.binding-missing`                     |
 
-代码钩子只存在于四处白名单：工具 handler、seam handler、provider 注入（fail-closed）、
+代码钩子只存在于四处白名单：工具 handler、Hook handler、provider 注入（fail-closed）、
 壳级组件引用（T3 档）。**函数进不了 manifest**——`identityStrategy` 是闭集字符串不是 resolver，
 `when?` 是闭集条件不是谓词函数，理由都一样。
 
@@ -219,8 +219,9 @@ interface AgentModDiagnostic {
 | `mod.contribution-conflict`         | resolve      | 其他轴的主键与别的 mod 撞了                                   |
 | `mod.axis-absent`                   | activate     | 某轴无落点，以 partial 态激活                                 |
 | `mod.deactivated`                   | deactivate   | 已停用，数据按孤儿保全语义保留                                |
-| `mod.seam-handler-failed`           | 运行期       | 某个钩子抛异常，被隔离成诊断并跳过                            |
-| `mod.seam-sync-contract-violation`  | 运行期       | 同步 seam 的钩子返回了 Promise，本次结果被忽略                |
+| `mod.seam-handler-failed`           | 运行期       | Hook 抛异常，被隔离成诊断并跳过（诊断码为兼容保留）       |
+| `mod.seam-sync-contract-violation`  | 运行期       | 同步 Hook 返回 Promise，本次结果被忽略（诊断码为兼容保留）      |
+| `mod.hook-timeout`                  | 运行期       | Hook 超时，`signal` 被 abort，本次结果被隔离                      |
 
 ---
 
@@ -302,8 +303,8 @@ manifest 能通过解析，不代表每个产品宿主都支持全部行为。�
 
 1. `allowedTrustLevels` 是否允许 pack 的信任级；
 2. `supportedAxes` 是否包含所需贡献轴；
-3. pack reader 是否为 `tools` 和 `hooks` 提供运行态绑定；
-4. 目标宿主实际派发哪些 seam kind；
+3. pack reader 是否为 `tools` 提供运行态绑定，以及是否实现外部 Hook 载体；
+4. 目标宿主实际派发哪些 Hook event；
 5. UI 声明是否属于该宿主公开支持的产品协议。
 
 Platform 自带 `velaros.agent.builtin`，并让它经过与外部 pack 相同的

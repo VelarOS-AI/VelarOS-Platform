@@ -1,6 +1,20 @@
 import { createHash } from 'node:crypto'
 
-import { isArray, isObject, isRecord, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isEmpty,
+  isFiniteNumber,
+  isNotNull,
+  isNull,
+  isNumber,
+  isObject,
+  isPlainObject,
+  isRecord,
+  isString,
+  isUndefined,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 /**
@@ -124,8 +138,8 @@ export function canonicalStringifyV2(value: unknown): string {
 }
 
 function sortValue(value: unknown): unknown {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value
-  if (typeof value === 'number') {
+  if (isNull(value) || isBoolean(value) || isString(value)) return value
+  if (isNumber(value)) {
     if (!Number.isFinite(value)) {
       throw new AppError('VALIDATION', 'canonical 序列化拒绝非有限数。')
     }
@@ -133,7 +147,7 @@ function sortValue(value: unknown): unknown {
   }
   if (isArray(value))
     return value.map((item) => {
-      if (item === undefined) {
+      if (isUndefined(item)) {
         throw new AppError('VALIDATION', 'canonical 序列化拒绝数组中的 undefined。')
       }
       return sortValue(item)
@@ -142,7 +156,7 @@ function sortValue(value: unknown): unknown {
     return Object.fromEntries(
       Object.keys(value)
         .sort(compareCodeUnit)
-        .filter((key) => value[key] !== undefined)
+        .filter((key) => !isUndefined(value[key]))
         .map((key) => [key, sortValue(value[key])])
     )
   throw new AppError(
@@ -154,11 +168,11 @@ function sortValue(value: unknown): unknown {
 /** 纯数据对象判定：原型必须是 Object.prototype 或 null，挡住 Date/Map/类实例的静默降级。 */
 function isPlainRecord(value: Record<string, unknown>): boolean {
   const prototype: unknown = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
+  return prototype === Object.prototype || isNull(prototype)
 }
 
 function describeValueKind(value: unknown): string {
-  if (value === undefined) return 'undefined'
+  if (isUndefined(value)) return 'undefined'
   if (isObject(value)) return `非纯对象 ${Object.prototype.toString.call(value)}`
   return typeof value
 }
@@ -193,7 +207,7 @@ export function hashTreeEventV2(input: {
       previousEventHash: input.previousEventHash,
       version: input.version,
       baseVersion: input.baseVersion,
-      identityChange: input.identityChange ?? null,
+      identityChange: toNullable(input.identityChange),
       ops: input.ops,
     })
   )
@@ -243,12 +257,12 @@ export function validateTreeDiffOpV2(op: MemoryTreeDiffOpV2): void {
   }
   switch (op.type) {
     case 'add':
-      if (op.before.length !== 0 || op.after.length !== 1) {
+      if (!isEmpty(op.before) || op.after.length !== 1) {
         throw new AppError('VALIDATION', 'TreeDiff v2 add 事件形状必须是 0 → 1。')
       }
       return
     case 'remove':
-      if (op.before.length !== 1 || op.after.length !== 0) {
+      if (op.before.length !== 1 || !isEmpty(op.after)) {
         throw new AppError('VALIDATION', 'TreeDiff v2 remove 事件形状必须是 1 → 0。')
       }
       return
@@ -287,7 +301,7 @@ export function validateTreeDiffOpV2(op: MemoryTreeDiffOpV2): void {
       }
       return
     case 'redact': {
-      if (op.before.length === 0 || op.before.length !== op.after.length) {
+      if (isEmpty(op.before) || op.before.length !== op.after.length) {
         throw new AppError('VALIDATION', 'TreeDiff v2 redact 必须逐节点成对改写。')
       }
       const afterByKey = new Map(op.after.map((node) => [node.stableKey, node]))
@@ -296,7 +310,7 @@ export function validateTreeDiffOpV2(op: MemoryTreeDiffOpV2): void {
         if (!after) {
           throw new AppError('VALIDATION', 'TreeDiff v2 redact 的 before/after 节点集必须同键。')
         }
-        if (after.content.blobRef !== null || !after.content.redacted) {
+        if (isNotNull(after.content.blobRef) || !after.content.redacted) {
           throw new AppError(
             'VALIDATION',
             'TreeDiff v2 redact 后节点必须销毁 blob 引用并落 redacted 占位。'
@@ -416,10 +430,7 @@ class MemoryTreeReplayResultValueV2 implements MemoryTreeReplayResultV2 {
 function isEligibleForwardReplayResultV2(
   result: MemoryTreeReplayResultV2
 ): result is MemoryTreeReplayResultValueV2 {
-  return (
-    result instanceof MemoryTreeReplayResultValueV2 &&
-    result.isEligibleForForwardPersistence()
-  )
+  return result instanceof MemoryTreeReplayResultValueV2 && result.isEligibleForForwardPersistence()
 }
 
 function toSortedNodes(map: ReadonlyMap<string, MemoryTreeNodeStructV2>): MemoryTreeNodeStructV2[] {
@@ -447,7 +458,7 @@ export function replayTreeDiffsForwardV2(
 ): MemoryTreeReplayResultV2 {
   const persistenceBaseMatches =
     initial.length === 0 ||
-    (options.persistenceBase !== undefined &&
+    (!isUndefined(options.persistenceBase) &&
       isEligibleForwardReplayResultV2(options.persistenceBase) &&
       canonicalStringifyV2(initial) === canonicalStringifyV2(options.persistenceBase.nodes))
   let state: ReadonlyMap<string, MemoryTreeNodeStructV2> = new Map(
@@ -455,7 +466,7 @@ export function replayTreeDiffsForwardV2(
   )
   let expectedBase: Nullable<number> = null
   for (const diff of diffs) {
-    if (expectedBase !== null && diff.baseVersion !== expectedBase) {
+    if (isNotNull(expectedBase) && diff.baseVersion !== expectedBase) {
       throw new AppError(
         'INTERNAL',
         `TreeDiff v2 链断裂：v${diff.version} 基线为 ${diff.baseVersion}，期望 ${expectedBase}。`
@@ -489,12 +500,7 @@ export function replayTreeDiffsBackwardV2(
     ...options,
     validateOps: false,
   })
-  return new MemoryTreeReplayResultValueV2(
-    result.nodes,
-    result.stateHash,
-    'backward',
-    false
-  )
+  return new MemoryTreeReplayResultValueV2(result.nodes, result.stateHash, 'backward', false)
 }
 
 /**
@@ -554,7 +560,11 @@ export function buildRedactTreeDiffOpV2(
     before: targets,
     after: targets.map((node) => ({
       ...node,
-      content: { blobRef: null, commitment: node.content.commitment, redacted: true },
+      content: {
+        blobRef: null,
+        commitment: node.content.commitment,
+        redacted: true,
+      },
       visibilityState: 'redacted',
     })),
   }
@@ -562,8 +572,8 @@ export function buildRedactTreeDiffOpV2(
 
 /** 结构事件的运行时守卫（存储层读回 ops_json 时使用）。 */
 export function isMemoryTreeDiffOpV2(value: unknown): value is MemoryTreeDiffOpV2 {
-  if (!isObject(value)) return false
-  const record = value as Record<string, unknown>
+  if (!isPlainObject(value)) return false
+  const record = value
   if (
     !isString(record.type) ||
     !(MemoryTreeDiffOpTypesV2 as readonly string[]).includes(record.type)
@@ -575,7 +585,7 @@ export function isMemoryTreeDiffOpV2(value: unknown): value is MemoryTreeDiffOpV
 
 export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNodeStructV2 {
   if (!isRecord(value)) return false
-  const record = value as Record<string, unknown>
+  const record = value
   const expectedKeys = [
     'activation',
     'confidence',
@@ -595,19 +605,20 @@ export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNod
   if (
     actualKeys.length !== expectedKeys.length ||
     !actualKeys.every((key, index) => key === expectedKeys[index])
-  ) return false
+  )
+    return false
   if (
     !isString(record.stableKey) ||
-    record.stableKey.length === 0 ||
-    (!isString(record.parentKey) && record.parentKey !== null) ||
+    isEmpty(record.stableKey) ||
+    (!isString(record.parentKey) && isNotNull(record.parentKey)) ||
     !isString(record.nodeType) ||
-    record.nodeType.length === 0 ||
+    isEmpty(record.nodeType) ||
     !isString(record.namespace) ||
-    record.namespace.length === 0 ||
+    isEmpty(record.namespace) ||
     !isString(record.subjectType) ||
-    record.subjectType.length === 0 ||
+    isEmpty(record.subjectType) ||
     !isString(record.subjectId) ||
-    record.subjectId.length === 0 ||
+    isEmpty(record.subjectId) ||
     !isFiniteTreeNumberV2(record.mainlineScore) ||
     !isFiniteTreeNumberV2(record.confidence) ||
     !isFiniteTreeNumberV2(record.activation) ||
@@ -618,7 +629,8 @@ export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNod
       record.visibilityState as MemoryTreeVisibilityStateV2
     ) ||
     !isRecord(record.content)
-  ) return false
+  )
+    return false
   const content = record.content as Record<string, unknown>
   const contentKeys = Object.keys(content).sort()
   return (
@@ -626,20 +638,20 @@ export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNod
     contentKeys[0] === 'blobRef' &&
     contentKeys[1] === 'commitment' &&
     contentKeys[2] === 'redacted' &&
-    (content.blobRef === null ||
+    (isNull(content.blobRef) ||
       (isString(content.blobRef) && /^[0-9a-f]{32}$/.test(content.blobRef))) &&
     isString(content.commitment) &&
     /^c2:[0-9a-f]{64}$/.test(content.commitment) &&
-    typeof content.redacted === 'boolean'
+    isBoolean(content.redacted)
   )
 }
 
 function isFiniteTreeNumberV2(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
+  return isFiniteNumber(value)
 }
 
 function isSafeTreeTimestampV2(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  return isNumber(value) && Number.isSafeInteger(value) && value >= 0
 }
 
 function cloneTreeNodeV2(node: MemoryTreeNodeStructV2): MemoryTreeNodeStructV2 {

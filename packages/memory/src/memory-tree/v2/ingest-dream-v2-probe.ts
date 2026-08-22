@@ -86,13 +86,12 @@ function runIngestDreamProbeV2(): void {
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
-    const ingest = new MemoryEvidenceIngestServiceV2(
+    const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
+    const tree = MemoryTreeStoreV2.open({
       authority,
       contentKeys,
-      identityKeys,
-      blobs
-    )
-    const tree = MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store
+      keyring,
+    }).store
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
 
     equal(normalizeIdentityTextV2('  Ｖelar—OS  '), 'velar os', 'identity NFKC/空白')
@@ -383,9 +382,7 @@ function runIngestDreamProbeV2(): void {
   }
 }
 
-function seedIdentityEpochV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store']
-): void {
+function seedIdentityEpochV2(authority: ReturnType<typeof openMemoryAuthorityV2>['store']): void {
   authority.database
     .prepare(
       `INSERT INTO memory_identity_epochs(

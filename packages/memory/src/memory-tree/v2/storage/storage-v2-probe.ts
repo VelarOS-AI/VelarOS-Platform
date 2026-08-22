@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict'
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -23,10 +18,7 @@ import { MemoryBlobStoreV2 } from './BlobStore'
 import { ContentKeyServiceV2 } from './ContentKeyService'
 import { MemoryStorageErrorCodesV2 } from './ErrorCodes'
 import { MemoryKeyringStoreV2 } from './Keyring'
-import {
-  formatBackupSnapshotNameV2,
-  openMemoryPhysicalRootsV2,
-} from './PhysicalRoots'
+import { formatBackupSnapshotNameV2, openMemoryPhysicalRootsV2 } from './PhysicalRoots'
 import type { MemoryWrappingRootV2 } from './WrappingRoot'
 
 const CrashStepsV2 = [
@@ -150,12 +142,12 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
     equal(identity.length, 32, 'identity key 长度')
     equal(matchRoot.length, 32, 'match root key 长度')
     check(!identity.equals(matchRoot), 'identity key 与 match root key 必须独立')
-    const initialKeyring = readFileSync(
-      join(roots.keyringDir, 'generation-1.keyring.json'),
-      'utf8'
-    )
+    const initialKeyring = readFileSync(join(roots.keyringDir, 'generation-1.keyring.json'), 'utf8')
     check(!initialKeyring.includes(identity.toString('base64')), 'keyring 不得落盘裸 identity key')
-    check(!initialKeyring.includes(matchRoot.toString('base64')), 'keyring 不得落盘裸 match root key')
+    check(
+      !initialKeyring.includes(matchRoot.toString('base64')),
+      'keyring 不得落盘裸 match root key'
+    )
   } finally {
     identity.fill(0)
     matchRoot.fill(0)
@@ -295,10 +287,9 @@ function runCrashRecoveryProbeV2(dataRoot: string, crashStep: string): void {
   )
   equal(generationFiles(roots.keyringDir).length, 1, `${crashStep}: 最终只保留 CURRENT`)
   check(
-    !readFileSync(
-      join(roots.keyringDir, generationFiles(roots.keyringDir)[0]),
-      'utf8'
-    ).includes(blobId),
+    !readFileSync(join(roots.keyringDir, generationFiles(roots.keyringDir)[0]), 'utf8').includes(
+      blobId
+    ),
     `${crashStep}: 可存活代际中不得含已销毁 DEK`
   )
   const reopened = MemoryKeyringStoreV2.open(roots.keyringDir, root).store

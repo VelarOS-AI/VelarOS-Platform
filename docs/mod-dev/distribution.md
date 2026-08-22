@@ -28,7 +28,9 @@ installed pack 的标准输入是一个 `.velarmod`，包根至少包含 `velaro
 - 信任级映射、签名验证、权限审批和用户可见诊断。
 
 如果 reader 没有为 `tools` 或 `hooks` 返回绑定，Loader 会以 `mod.binding-missing` 拒载，
-不会把代码型贡献降级成空实现。停用只移除运行态贡献；数据删除必须是独立、明确确认的步骤。
+不会把代码型贡献降级成空实现。外部 Hook 若由宿主实现，reader 应先把受控
+command 载体适配成通用 `AgentModHookHandler`，再交给同一 Loader。停用只移除运行态贡献；
+数据删除必须是独立、明确确认的步骤。
 
 ## 市场分发
 

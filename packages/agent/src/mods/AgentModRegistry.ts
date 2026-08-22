@@ -8,6 +8,7 @@
 //
 // 明确不做：全局 registry 即时修改、加载顺序覆盖、giant context 注入。
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { isTrue,toNullable } from '@velaros-ai/core'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import type { PromptSegmentDefinition } from '../prompts'
@@ -29,6 +30,7 @@ import type { SubAgentTypeDescriptor } from '../sub-agent'
 import type { VelaTool } from '../tool-library'
 
 import type { AgentModSeamHandler } from './AgentModSeams'
+
 
 /** 一条贡献记录：声明（manifest 条目）+ 运行态载荷（缺席即纯数据轴）。 */
 interface AgentModContributionRecord<TDeclaration = unknown, TPayload = unknown> {
@@ -142,11 +144,11 @@ class AgentModRegistry {
 
   /** 某轴主键是否已被占用（resolve 阶段的冲突预检）。 */
   public has(axis: AgentModContributionAxisName, key: string): boolean {
-    return this.axes.get(axis)?.has(key) === true
+    return isTrue(this.axes.get(axis)?.has(key))
   }
 
   public findOwner(axis: AgentModContributionAxisName, key: string): Nullable<string> {
-    return this.axes.get(axis)?.get(key)?.modId ?? null
+    return toNullable(this.axes.get(axis)?.get(key)?.modId)
   }
 
   public register<TAxis extends AgentModContributionAxisName>(

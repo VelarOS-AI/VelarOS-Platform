@@ -10,6 +10,7 @@ import { enUS, zhCN } from 'react-day-picker/locale'
 
 import { useUiLocalization } from '../../i18n/UiLocalizationProvider'
 import { cn } from '../../lib/cn'
+import { isEmpty } from '../../lib/runtime'
 import { isPresent,optionalWhen } from '../../lib/runtime'
 import { Button } from '../buttons/Button'
 import { Popover, PopoverAnchor, PopoverContent } from '../overlays/Popover'
@@ -174,7 +175,7 @@ export const CalendarRange = memo(function CalendarRange({
         selected={selectedRange}
         defaultMonth={defaultMonth}
         month={nullableDateToOptional(controlledMonth)}
-        disabled={disabled ? true : disabledDates.length > 0 ? disabledDates : undefined}
+        disabled={disabled ? true : !isEmpty(disabledDates) ? disabledDates : undefined}
         disableNavigation={disabled}
         startMonth={nullableDateToOptional(minDate)}
         endMonth={nullableDateToOptional(maxDate)}

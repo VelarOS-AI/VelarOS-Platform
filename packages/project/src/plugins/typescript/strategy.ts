@@ -9,7 +9,7 @@ import { countChangedLines } from "../../utils/text.js";
 
 import { parseTs } from "./ast.js";
 
-function patch(path: string, baseRevision: string | undefined, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
+function patch(path: string, baseRevision: Optional<string>, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
   const changedLines = countChangedLines(diff);
   return {
@@ -46,7 +46,7 @@ function findSymbolRange(input: PatchStrategyInput): { start: number; end: numbe
 }
 
 /** 把 body 节点的 `{...}` 区间（含花括号）转成「花括号之间」的内容区间。 */
-function innerBody(body: { startOffset?: number; endOffset?: number } | undefined): { start: number; end: number } | undefined {
+function innerBody(body: Optional<{ startOffset?: number; endOffset?: number }>): Optional<{ start: number; end: number }> {
   if (!isPresent(body?.startOffset) || !isPresent(body?.endOffset)) return undefined;
   // body 至少形如 `{}`（长度 2）才有意义；内容区间为开括号后到闭括号前。
   if (body.endOffset < body.startOffset + 2) return undefined;

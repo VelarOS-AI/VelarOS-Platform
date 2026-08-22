@@ -38,6 +38,7 @@ import { ReplaceableRenderSlot } from '../render-slots/ReplaceableRenderSlot'
 import styles from './MessageBubble.module.css'
 
 import type { HtmlArtifactBlock as HtmlArtifactContentBlock } from '#contracts'
+import { isArray } from '#internal/runtime'
 import { isEmpty, isString } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
@@ -331,7 +332,7 @@ function renderOfficialCodeBlock({
  */
 function extractCodeBlockText(children: unknown): string {
   if (isString(children)) return children
-  if (Array.isArray(children))
+  if (isArray(children))
     return children.map((child) => extractCodeBlockText(child)).join('')
   if (React.isValidElement(children))
     return extractCodeBlockText((children.props as { children?: unknown }).children)

@@ -54,9 +54,8 @@ const DEFAULT_BRIDGE_MESSAGES: HtmlArtifactBridgeMessages = {
   error: 'velaros-html-artifact-error',
 }
 
-// CDATA and Markdown fences are common wrappers in model output, but CDATA is not transparent in
-// HTML parsing. Normalize only wrappers around the entire source before rendering; partial streams
-// may legitimately be missing their closing wrapper.
+// 模型输出常用 `CDATA` 或 Markdown 代码围栏包裹内容，但解析 HTML 时 `CDATA` 并非透明包装。
+// 渲染前只归一化包住完整源码的外层包装；局部流式内容可以合理地暂缺闭合包装。
 const SOURCE_FENCE_OPEN_PATTERN = /^```[\w-]*[ \t]*\r?\n/
 const SOURCE_FENCE_CLOSE_PATTERN = /\r?\n```[ \t]*$/
 const SOURCE_CDATA_OPEN = '<![CDATA['

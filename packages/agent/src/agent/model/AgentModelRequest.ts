@@ -98,8 +98,8 @@ type ModelRequestPolicyTarget = {
 }
 
 function applyPolicyNumber(
-  current: number | undefined,
-  policyValue: number | undefined
+  current: Optional<number>,
+  policyValue: Optional<number>
 ): number | undefined {
   if (isFiniteNumber(current)) return current
   return isFiniteNumber(policyValue) ? policyValue : current

@@ -504,7 +504,7 @@ class KernelBackgroundJobManager {
 
   private selectWaitJobIds(
     sessionId: string,
-    requestedJobIds: readonly string[] | undefined
+    requestedJobIds: Optional<readonly string[]>
   ): string[] {
     const normalizedIds = (requestedJobIds ?? []).map((id) => id.trim()).filter(Boolean)
     if (!isEmpty(normalizedIds)) return [...new Set(normalizedIds)].filter((id) => this.jobs.get(id)?.sessionId === sessionId)

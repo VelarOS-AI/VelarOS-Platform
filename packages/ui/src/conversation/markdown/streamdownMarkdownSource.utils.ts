@@ -85,7 +85,7 @@ function wrapUnfencedDirectoryTreeBlocks(markdown: string): string {
       continue
     }
 
-    if (isDirectoryTreeLine(line) || (treeRun.length > 0 && isEmpty(line.trim()))) {
+    if (isDirectoryTreeLine(line) || (!isEmpty(treeRun) && isEmpty(line.trim()))) {
       treeRun.push(line)
       continue
     }

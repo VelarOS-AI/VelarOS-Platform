@@ -1,4 +1,4 @@
-import { isPlainObject, isString } from '@velaros-ai/core'
+import { isFalse, isPlainObject, isString, isTrue, numberOrNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -55,11 +55,11 @@ export function decodeComputerResponse<TResult = unknown>(
   if (!isPlainObject(parsed))
     throw new AppError('COMPUTER_PROTOCOL_INVALID', 'Computer-helper response is not an object')
 
-  const id = typeof parsed.id === 'number' ? parsed.id : null
+  const id = numberOrNull(parsed.id)
 
-  if (parsed.ok === true) return { id, ok: true, result: parsed.result as TResult }
+  if (isTrue(parsed.ok)) return { id, ok: true, result: parsed.result as TResult }
 
-  if (parsed.ok === false) {
+  if (isFalse(parsed.ok)) {
     const error = isPlainObject(parsed.error) ? parsed.error : {}
     return {
       id,

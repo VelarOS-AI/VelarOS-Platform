@@ -117,13 +117,13 @@ describe('usageSkillId companion skill pointer', () => {
 
   test('surfaces the companion skill id on the tooling:map card', () => {
     const descriptor = {
-      name: 'game:scene_edit',
-      description: 'Edit game manifests through semantic operations.',
+      name: 'example:document_edit',
+      description: 'Edit structured documents through semantic operations.',
       role: 'edit',
       permissions: ['fs:write'],
-      categoryId: 'game',
+      categoryId: 'example',
       systemEnabled: true,
-      usageSkillId: 'game-scene-authoring',
+      usageSkillId: 'structured-document-authoring',
     }
     const context = {
       codingSession: {
@@ -131,12 +131,12 @@ describe('usageSkillId companion skill pointer', () => {
         isToolCategoryAllowed: () => true,
         getEnabledPromptFeatures: () => [],
       },
-      getCurrentVisibleToolNames: () => ['game:scene_edit'],
+      getCurrentVisibleToolNames: () => ['example:document_edit'],
       listCapabilityPages: () => [{
-        id: 'tool:game:scene_edit',
+        id: 'tool:example:document_edit',
         kind: 'tool',
-        name: 'game:scene_edit',
-        categoryId: 'game',
+        name: 'example:document_edit',
+        categoryId: 'example',
         descriptor,
         permissions: ['fs:write'],
         availability: 'visible',
@@ -160,8 +160,8 @@ describe('usageSkillId companion skill pointer', () => {
     } as never)
 
     expect(result.categories[0]?.tools[0]).toMatchObject({
-      name: 'game:scene_edit',
-      usageSkillId: 'game-scene-authoring',
+      name: 'example:document_edit',
+      usageSkillId: 'structured-document-authoring',
     })
   })
 

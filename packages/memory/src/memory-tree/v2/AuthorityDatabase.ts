@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 
 import BetterSqlite3 from 'better-sqlite3'
 
+import { isEmpty, isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -144,7 +145,7 @@ function inspectAuthorityIdentityV2(database: SQLiteDatabase): number {
   const schemaVersion = readIntegerPragmaV2(database, 'user_version')
   const userTables = listUserTablesV2(database)
 
-  if (applicationId === 0 && schemaVersion === 0 && userTables.length === 0) return 0
+  if (applicationId === 0 && schemaVersion === 0 && isEmpty(userTables)) return 0
 
   if (applicationId !== MemoryAuthorityApplicationIdV2) {
     throw new AppError(
@@ -313,7 +314,7 @@ function listUserTablesV2(database: SQLiteDatabase): string[] {
 
 function readIntegerPragmaV2(database: SQLiteDatabase, pragma: string): number {
   const value = database.pragma(pragma, { simple: true })
-  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+  if (!isNumber(value) || !Number.isSafeInteger(value)) {
     throw new AppError('INVARIANT', 'SQLite pragma 未返回安全整数。', undefined, { pragma, value })
   }
   return value

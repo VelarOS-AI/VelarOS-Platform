@@ -11,6 +11,8 @@ import {
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
+import { isString } from '@velaros-ai/core'
+
 /**
  * 存储物理层的原子文件底座（WS3-S1）。
  *
@@ -32,7 +34,7 @@ export interface StorageStepHooksV2 {
   beforeStep?(step: string): void
 }
 
-export function invokeStorageStepV2(hooks: StorageStepHooksV2 | undefined, step: string): void {
+export function invokeStorageStepV2(hooks: Optional<StorageStepHooksV2>, step: string): void {
   hooks?.beforeStep?.(step)
 }
 
@@ -68,7 +70,7 @@ export function writeFileAtomicV2(
     directory,
     `${basename(filePath)}.${randomBytes(4).toString('hex')}${StorageTempFileSuffixV2}`
   )
-  const payload = typeof data === 'string' ? Buffer.from(data, 'utf8') : data
+  const payload = isString(data) ? Buffer.from(data, 'utf8') : data
   invokeStorageStepV2(options.hooks, `${options.label}:write-temp`)
   const fd = openSync(tempPath, 'wx')
   try {

@@ -15,7 +15,10 @@
 //  - **组装是纯函数**：同一输入恒得同一提示词（金标轨迹逐字节比对依赖它）。
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
+import type {
+  AgentModSeamDispatcher,
+  AgentModTurnContextAppendage,
+} from '../mods/AgentModSeams'
 import {
   createBuiltInPromptRegistry,
   createIdentityPromptSegment,
@@ -303,6 +306,28 @@ class ContextBuilder {
       chatConfig: config,
     })
     const dynamicParts = this.appendModTurnContext(composition)
+    return this.finalizeBuild(composition, dynamicParts, options)
+  }
+
+  /** 支持外部 command Hook 的宿主入口；不阻塞主进程。 */
+  public async buildAsync(
+    config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>,
+    context: Omit<PromptRenderContext, 'chatConfig'> = {},
+    options: { promptBudget?: LooseOptional<PromptBudgetOptions> } = {}
+  ): Promise<BuiltContext> {
+    const composition = this.registry.compose({
+      ...context,
+      chatConfig: config,
+    })
+    const dynamicParts = await this.appendModTurnContextAsync(composition)
+    return this.finalizeBuild(composition, dynamicParts, options)
+  }
+
+  private finalizeBuild(
+    composition: PromptCompositionResult,
+    dynamicParts: PromptContribution[],
+    options: { promptBudget?: LooseOptional<PromptBudgetOptions> }
+  ): BuiltContext {
     const budgeted = applyPromptBudget({
       stableParts: composition.stableParts,
       dynamicParts,
@@ -339,7 +364,7 @@ class ContextBuilder {
   }
 
   /**
-   * mod 接缝：`turn-context:assemble` 同步派发。
+   * mod Hook：`turn-context:assemble` 同步兼容入口。
    *
    * 缺省或无钩子时原样返回 composition.dynamicParts（同一数组引用，零分配）。
    */
@@ -358,6 +383,31 @@ class ContextBuilder {
       stableSegments: composition.stableParts.map(toView),
       dynamicSegments: composition.dynamicParts.map(toView),
     })
+    return this.applyModTurnContextOutcome(composition, outcome)
+  }
+
+  private async appendModTurnContextAsync(
+    composition: PromptCompositionResult
+  ): Promise<PromptContribution[]> {
+    if (!this.seams?.has('turn-context:assemble')) return composition.dynamicParts
+
+    const toView = (part: PromptContribution) => ({
+      id: part.id,
+      stability: part.stability,
+      source: part.source,
+      priority: part.priority,
+    })
+    const outcome = await this.seams.dispatchTurnContextAssembleAsync({
+      stableSegments: composition.stableParts.map(toView),
+      dynamicSegments: composition.dynamicParts.map(toView),
+    })
+    return this.applyModTurnContextOutcome(composition, outcome)
+  }
+
+  private applyModTurnContextOutcome(
+    composition: PromptCompositionResult,
+    outcome: { append?: readonly AgentModTurnContextAppendage[] }
+  ): PromptContribution[] {
     const appended = outcome.append ?? []
     if (appended.length === 0) return composition.dynamicParts
 

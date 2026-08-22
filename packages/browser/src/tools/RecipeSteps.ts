@@ -1,3 +1,4 @@
+import { isFalse, isPlainObject,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -36,9 +37,9 @@ function readTargetHints(operation: BrowserRecipeStepOperation, stepId: string) 
     }
 
   const target = operation.action.target
-  const targetCss = target?.css ?? null
-  const targetRole = target?.role ?? null
-  const targetText = target?.text ?? null
+  const targetCss = toNullable(target?.css)
+  const targetRole = toNullable(target?.role)
+  const targetText = toNullable(target?.text)
 
   return {
     targetCss,
@@ -49,10 +50,10 @@ function readTargetHints(operation: BrowserRecipeStepOperation, stepId: string) 
 }
 
 function isOperationMiss(operation: BrowserRecipeStepOperation, result: unknown): boolean {
-  if (!result || typeof result !== 'object') return false
+  if (!result || !isPlainObject(result) ) return false
 
-  const record = result as Record<string, unknown>
-  if (operation.kind === 'target_action' || operation.kind === 'wait_for_selector') return record.matched === false
+  const record = result
+  if (operation.kind === 'target_action' || operation.kind === 'wait_for_selector') return isFalse(record.matched)
 
   return false
 }

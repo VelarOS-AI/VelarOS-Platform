@@ -1,7 +1,7 @@
 # Velar Document Renderer product
 
 This product packages `@velaros-ai/document-renderer` as an independently installed command
-capability pack. It is never copied into Velar Host and Host has no renderer-specific installer,
+capability pack. It is never copied into VelarOS Terminal and Terminal has no renderer-specific installer,
 module, permission branch, or tool route.
 
 Each platform archive contains one native executable, PDF standard-font data, a capability-pack

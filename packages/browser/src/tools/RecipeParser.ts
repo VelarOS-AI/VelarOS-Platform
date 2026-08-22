@@ -1,4 +1,4 @@
-import { isArray, isNumber, isObject, isString } from '@velaros-ai/core'
+import { isArray, isNumber, isPlainObject,isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageInspection, BrowserRecipeSkeleton } from '../core'
@@ -53,7 +53,7 @@ interface BrowserRecipeRunRecord {
 export function parseRecipeSkeleton(path: string, content: string): BrowserRecipeSkeleton {
   const parsed = parseJsonArtifact(path, content, ' recipe skeleton')
 
-  const record = isObject(parsed) ? (parsed as Record<string, unknown>) : null
+  const record = isPlainObject(parsed) ? (parsed) : null
   // 最小结构校验：version=1 且包含 suggestedSteps。
   if (!record || record.version !== 1 || !isArray(record.suggestedSteps)) {
     throw new AppError('VALIDATION', `无效的 recipe skeleton：${path}`)
@@ -66,7 +66,7 @@ export function parseRecipeSkeleton(path: string, content: string): BrowserRecip
 export function parseBrowserPageSnapshot(path: string, content: string): BrowserPageInspection {
   const parsed = parseJsonArtifact(path, content, '页面快照')
 
-  const record = isObject(parsed) ? (parsed as Record<string, unknown>) : null
+  const record = isPlainObject(parsed) ? (parsed) : null
   // 快照必须包含 inspectPage 产出的核心字段。
   if (
     !record ||
@@ -88,7 +88,7 @@ export function parseBrowserPageSnapshot(path: string, content: string): Browser
 export function parseBrowserRecipeRunRecord(path: string, content: string): BrowserRecipeRunRecord {
   const parsed = parseJsonArtifact(path, content, '运行记录')
 
-  const record = isObject(parsed) ? (parsed as Record<string, unknown>) : null
+  const record = isPlainObject(parsed) ? (parsed) : null
   // run record 只做必要字段校验，兼容未来追加字段。
   if (
     !record ||

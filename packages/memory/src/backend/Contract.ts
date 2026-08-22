@@ -1,23 +1,14 @@
 /**
- * 记忆后端窄端口（kernel-contract §15.7 裁决一 / mod-architecture-blueprint §九）。
+ * 记忆后端窄端口，对应内核契约 §15.7 裁决一和模组架构蓝图第九章。
  *
- * 这一层**只描述动词**，不假设后端是树、是文件还是向量库，也不下沉任何后端 schema：
- * 端口一旦假设某个后端形态，换后端就等于改核（「冻端口不冻 schema」的自然延伸）。
+ * 本层只描述动词，不假设后端采用树、文件或向量库，也不下沉任何后端数据结构。它只复用记忆
+ * 领域自身的数据传输对象，不引入 `SQLite`、文件系统、向量库或内核应用二进制接口类型。
  *
- * 因此本文件：
- * - 只复用记忆产品自持的领域 DTO（Evidence / RecallItem / RecallOptions），不引入 SQLite、
- *   文件系统、向量库或 Kernel ABI 的任何类型；
- * - 动词表收敛为 **4 必备 + 2 能力扩展**（2026-08-05 产品裁决）：权威层后端必须声明
- *   `capture / recall / inspect / archive`，`dream / govern` 由后端按能力声明——缺席即
- *   partial activation 的「没装就没有」（§15.7 裁决二），不新造降级词汇。
+ * 权威层必须声明 `capture`、`recall`、`inspect`、`archive` 四个动词；`dream` 与 `govern`
+ * 是按能力声明的扩展。这里使用归档而非擦除，是因为现有实现只退出普通召回而不删除内容；可证明
+ * 擦除必须另行提供工具和界面入口，不能提前写入动词表。
  *
- * **为什么是 `archive` 而不是 §8 原本的 `erase`**：两个实现（files / tree）做的都是归档
- * ——退出普通召回、内容不删。名字叫 erase 会让设置页上的用户读到「记忆可以删」，而没有任何
- * 路径能物理删除一条记忆。「可证明擦除」是另一件事，它落地时必须自带工具与 UI 入口，
- * 在那之前不写进动词表（见 docs 的记忆产品需求清单）。
- *
- * capability token 与 kernel 模块注册**不在这里**：那是 mod 轴机制，住 `./adapter-kernel`
- * （方向铁律：adapter-kernel → 主干单向；主干不得反向依赖适配器）。
+ * 能力令牌与内核模块注册属于模组轴机制，放在 `adapter-kernel`，主干不得反向依赖适配器。
  */
 
 import { isFunction } from '@velaros-ai/core'

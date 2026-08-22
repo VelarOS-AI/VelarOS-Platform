@@ -27,7 +27,7 @@ import { createPortal } from 'react-dom'
 import { useEventListener, useLatest, useMemoizedFn } from 'ahooks'
 
 import { cn } from '../../lib/cn'
-import { isFunction, isPresent, optionalWhen,toNullable } from '../../lib/runtime'
+import { isFunction, isPresent, optionalWhen, toNullable, toOptional } from '../../lib/runtime'
 type PopoverSide = 'top' | 'right' | 'bottom' | 'left'
 type PopoverAlign = 'start' | 'center' | 'end'
 type PopoverWidthStrategy = 'content' | 'anchor' | 'adaptive'
@@ -133,10 +133,10 @@ function getElementForTarget(
 }
 
 function getParentPopoverLayerId(anchorElement: Nullable<HTMLElement>): Nullable<string> {
-  return (
+  return toNullable(
     anchorElement
       ?.closest<HTMLElement>(PopoverLayerSelector)
-      ?.dataset.velarPopoverLayerId ?? null
+      ?.dataset.velarPopoverLayerId
   )
 }
 
@@ -307,9 +307,11 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     // `data-velar-theme-scope` onto the portalled content so app-level CSS can
     // re-apply the matching token set. App-agnostic: the attribute value is opaque.
     const themeScope =
-      anchorElement
-        ?.closest<HTMLElement>('[data-velar-theme-scope]')
-        ?.getAttribute('data-velar-theme-scope') ?? undefined
+      toOptional(
+        anchorElement
+          ?.closest<HTMLElement>('[data-velar-theme-scope]')
+          ?.getAttribute('data-velar-theme-scope')
+      )
     const composedRef = useMemo(
       () => composeRefs<HTMLDivElement>(ref, setContentElement),
       [ref, setContentElement]
@@ -443,7 +445,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
         ref={composedRef}
         data-slot="popover-content"
         data-velar-popover-layer-id={layerId}
-        data-velar-popover-parent-layer-id={parentPopoverLayerId ?? undefined}
+        data-velar-popover-parent-layer-id={toOptional(parentPopoverLayerId)}
         data-velar-theme-scope={themeScope}
         className={cn('velar-popover-content', className)}
         style={{

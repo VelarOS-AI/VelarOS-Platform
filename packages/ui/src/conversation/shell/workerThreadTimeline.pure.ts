@@ -1,6 +1,7 @@
 import type { ConversationWorkerThread } from '../projection'
 
 import type { ChatMessage } from '#contracts'
+import { isFiniteNumber } from '#internal/runtime'
 import { isArray, isEmpty, isRecord, isString, toNullable } from '#internal/runtime'
 
 type ToolCallBlock = Extract<ChatMessage['blocks'][number], { type: 'tool-call' }>
@@ -50,7 +51,7 @@ function sortWorkerThreadsByStartTime(
 }
 
 function readFiniteTimestamp(value: unknown): Nullable<number> {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  return isFiniteNumber(value) ? value : null
 }
 
 function readThreadId(value: unknown): Nullable<string> {
@@ -103,7 +104,7 @@ function createPendingWorkerThreadFromDispatchToolCall(
     model: readDispatchArg(args, 'model'),
     startedAt,
     updatedAt: startedAt,
-    input: prompt ?? description ?? null,
+    input: toNullable(prompt ?? description),
     output: null,
     summary: title,
     error: null,
@@ -346,14 +347,14 @@ function findWorkerThreadAnchorToolCallId(
   )
   if (exactAnchor) return exactAnchor.toolCallId
 
-  return findNearestTranscriptAnchor(anchorIndex.dispatchAnchors, thread.startedAt)?.toolCallId ?? null
+  return toNullable(findNearestTranscriptAnchor(anchorIndex.dispatchAnchors, thread.startedAt)?.toolCallId)
 }
 
 function findWorkerThreadAnchorMessageId(
   anchorIndex: WorkerThreadTranscriptAnchorIndex,
   thread: ConversationWorkerThread
 ): Nullable<string> {
-  return findAnchorAtOrBefore(anchorIndex.messageAnchors, thread.startedAt)?.messageId ?? null
+  return toNullable(findAnchorAtOrBefore(anchorIndex.messageAnchors, thread.startedAt)?.messageId)
 }
 
 function appendPendingDispatchAgentPlaceholders(

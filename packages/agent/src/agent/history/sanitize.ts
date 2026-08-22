@@ -1,14 +1,11 @@
 /**
- * provider 回放前的历史**结构清洗**（不是压缩）。
+ * 提供方回放前的历史结构清洗；这里不负责压缩。
  *
- * B1 分界：本文件曾同时兼着三条 v1 压缩路径 —— aggregate tool-result budget（280K 总预算截断）、
- * conversation 级 micro-compact、超大 user 正文安全阀。三条全部随上下文治理 v2 下线：
- *  - 预算与降级归**驻留账本**（准入规则 + GovernanceEpoch），唯一治理点，可解释可回放；
- *  - 48K user 安全阀升格为准入层的 kind 感知规则（语义逐字对齐，见 `residency/admission`）。
+ * B1 起，工具结果总预算、会话级微压缩和超大用户正文安全阀都迁入上下文治理第二版。预算与降级
+ * 统一由驻留账本处理，超大用户正文则由准入层按记录类型处理。
  *
- * 留在这里的是**救命逻辑，一行不动**：孤儿 tool-result 剥除、tool-call 组回填/移除、二进制/图片
- * 剪枝、非法代理对修复、provider 私有 metadata 剥离。历史上一次结构损坏就能永久锁死会话
- * （每次 send 都被 `assertValidModelHistory` 拦下），所以这条路径与压缩策略必须分开演化。
+ * 本文件只保留防止会话锁死的结构修复：剥除孤儿工具结果、回填或移除工具调用组、裁剪二进制与
+ * 图片、修复非法代理对、剥离提供方私有元数据。该路径必须与压缩策略独立演进。
  */
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 

@@ -40,8 +40,8 @@ import type { VelaTool } from '../tool-library'
 
 import type { AgentModAxisRecord, AgentModRegistrySnapshot } from './AgentModRegistry'
 import { AgentModRegistry } from './AgentModRegistry'
-import type { AgentModSeamHandler } from './AgentModSeams'
-import { AgentModSeamDispatcher } from './AgentModSeams'
+import type { AgentModHookHandler } from './AgentModSeams'
+import { AgentModHookDispatcher } from './AgentModSeams'
 
 /**
  * 运行态绑定：manifest 条目主键 → 该条目的运行态载荷。
@@ -57,7 +57,7 @@ interface AgentModBindings {
   readonly skills?: Readonly<Record<string, AgentSkillDefinition>>
   readonly subAgentTypes?: Readonly<Record<string, SubAgentTypeDescriptor>>
   readonly executionModes?: Readonly<Record<string, ExecutionModeDescriptor>>
-  readonly hooks?: Readonly<Record<string, AgentModSeamHandler>>
+  readonly hooks?: Readonly<Record<string, AgentModHookHandler>>
 }
 
 type AgentModSourceKind = 'bundled' | 'pack'
@@ -179,7 +179,9 @@ function readAxisEntries(
  */
 class AgentModLoader {
   public readonly registry: AgentModRegistry
-  public readonly seams: AgentModSeamDispatcher
+  public readonly hooks: AgentModHookDispatcher
+  /** @deprecated 新调用方使用 `hooks`。 */
+  public readonly seams: AgentModHookDispatcher
 
   private readonly host: AgentModHostProfile
   private readonly supportedAxes: ReadonlySet<AgentModContributionAxisName>
@@ -191,12 +193,17 @@ class AgentModLoader {
   constructor(options: {
     host: AgentModHostProfile
     registry?: AgentModRegistry
-    seams?: AgentModSeamDispatcher
+    hooks?: AgentModHookDispatcher
+    /** @deprecated 新调用方使用 `hooks`。 */
+    seams?: AgentModHookDispatcher
     onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
   }) {
     this.host = options.host
     this.registry = options.registry ?? new AgentModRegistry()
-    this.seams = options.seams ?? new AgentModSeamDispatcher({ onDiagnostic: options.onDiagnostic })
+    this.hooks = options.hooks ?? options.seams ?? new AgentModHookDispatcher({
+      onDiagnostic: options.onDiagnostic,
+    })
+    this.seams = this.hooks
     this.supportedAxes = new Set(options.host.supportedAxes)
     this.allowedTrustLevels = new Set(options.host.allowedTrustLevels ?? DefaultAllowedTrustLevels)
   }
@@ -204,7 +211,7 @@ class AgentModLoader {
   /** 装载一批候选包；重复调用会在既有注册表之上继续追加（id/主键冲突照样拒载）。 */
   public load(packages: readonly AgentModPackage[]): AgentModLoadReport {
     this.registry.beginRegistration()
-    this.seams.beginRegistration()
+    this.hooks.beginRegistration()
     try {
       const validated: ValidatedAgentMod[] = []
       for (const candidate of packages) {
@@ -216,7 +223,7 @@ class AgentModLoader {
       for (const mod of resolved) this.activate(mod)
     } finally {
       const generation = this.registry.endRegistration()
-      this.seams.seal()
+      this.hooks.seal()
       void generation
     }
     return this.getReport()
@@ -226,10 +233,10 @@ class AgentModLoader {
   public deactivate(modId: string): boolean {
     if (!this.activated.has(modId)) return false
     this.registry.beginRegistration()
-    this.seams.beginRegistration()
+    this.hooks.beginRegistration()
     try {
       this.registry.removeMod(modId)
-      this.seams.removeMod(modId)
+      this.hooks.removeMod(modId)
       this.activated.delete(modId)
       this.diagnostics.push({
         code: 'mod.deactivated',
@@ -238,7 +245,7 @@ class AgentModLoader {
       })
     } finally {
       this.registry.endRegistration()
-      this.seams.seal()
+      this.hooks.seal()
     }
     return true
   }
@@ -248,7 +255,7 @@ class AgentModLoader {
       generation: this.registry.generation,
       activated: Object.freeze([...this.activated.values()]),
       rejected: Object.freeze([...this.rejected]),
-      diagnostics: Object.freeze([...this.diagnostics, ...this.seams.listDiagnostics()]),
+      diagnostics: Object.freeze([...this.diagnostics, ...this.hooks.listDiagnostics()]),
     })
   }
 
@@ -492,18 +499,24 @@ class AgentModLoader {
       if (!mod.activeAxes.includes('hooks')) break
       const declaration = entry as {
         id: string
-        seam: never
+        event: never
         priority?: number
+        matcher?: never
+        mode?: 'blocking' | 'background'
+        timeoutMs?: number
       }
       const handler = Reflect.get(
         readBindingRecord(mod.bindings, 'hooks'),
         declaration.id
-      ) as AgentModSeamHandler
-      this.seams.register({
+      ) as AgentModHookHandler
+      this.hooks.register({
         modId,
         id: declaration.id,
-        seam: declaration.seam,
+        event: declaration.event,
         priority: declaration.priority,
+        matcher: declaration.matcher,
+        mode: declaration.mode,
+        timeoutMs: declaration.timeoutMs,
         handler,
       })
     }

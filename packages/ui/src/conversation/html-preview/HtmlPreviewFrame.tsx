@@ -28,7 +28,7 @@ import { buildHtmlPreviewFrameShell } from './htmlPreviewDocument'
 
 import styles from './HtmlPreview.module.css'
 
-import { isEmpty, isNull, isNumber, isObject, isPresent, isTrue, numberOrNull, toOptional } from '#internal/runtime'
+import { isEmpty, isNull, isNumber, isObject, isPresent, isTrue, numberOrNull, toNullable, toOptional } from '#internal/runtime'
 import type { TimerLease } from '#internal/timerScope'
 import { readStringScalar as readString } from '#internal/unknownJsonRecord'
 
@@ -388,7 +388,7 @@ export function HtmlPreviewFrame({
 
   // 平铺后 iframe 内部无可滚,滚轮必须交还页面:iframe 文档转发的 wheel 消息在这里代滚宿主。
   const scrollHostContainer = useMemoizedFn((deltaY: number, deltaX: number): void => {
-    let current: Nullable<HTMLElement> = hostRef.current?.parentElement ?? null
+    let current: Nullable<HTMLElement> = toNullable(hostRef.current?.parentElement)
     while (current) {
       const style = window.getComputedStyle(current)
       if (

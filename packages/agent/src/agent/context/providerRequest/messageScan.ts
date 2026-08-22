@@ -5,7 +5,7 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isArray, isObject, isString } from '@velaros-ai/core'
+import { isArray, isObject, isPlainObject, isString,isTrue } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { isRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
@@ -88,11 +88,12 @@ export function countContextRefs(value: unknown, visited: WeakSet<object> = new 
 
   if (isArray(value)) return value.reduce<number>((count, item) => count + countContextRefs(item, visited), 0)
 
-  const record = value as Record<string, unknown>
+  if (!isPlainObject(value)) return 0
+  const record = value
   const ownRef =
     Object.prototype.hasOwnProperty.call(record, '__contextRef') ||
     Object.prototype.hasOwnProperty.call(record, '__kernelRef') ||
-    record.__truncated === true ||
+    isTrue(record.__truncated) ||
     Object.prototype.hasOwnProperty.call(record, '__contextSummary')
       ? 1
       : 0

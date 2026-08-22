@@ -6,11 +6,12 @@ import {
   timingSafeEqual,
 } from 'node:crypto'
 
+import { isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { canonicalStringifyV2 } from '../DiffChain'
 
-import { generateMemoryBlobIdV2,type MemoryBlobStoreV2 } from './BlobStore'
+import { generateMemoryBlobIdV2, type MemoryBlobStoreV2 } from './BlobStore'
 import { MemoryStorageErrorCodesV2 } from './ErrorCodes'
 import { type MemoryKeyringStoreV2 } from './Keyring'
 import { decodeCanonicalBase64V2 } from './WrappingRoot'
@@ -61,8 +62,7 @@ export class ContentKeyServiceV2 {
   }
 
   public sealContent(content: Buffer | string): MemorySealedContentV2 {
-    const contentBytes =
-      typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content)
+    const contentBytes = isString(content) ? Buffer.from(content, 'utf8') : Buffer.from(content)
     const blobId = generateMemoryBlobIdV2(this.random)
     const dek = this.randomExact(32)
     const commitmentNonce = this.randomExact(32)
@@ -114,10 +114,7 @@ export class ContentKeyServiceV2 {
       const envelope = parseContentEnvelopeV2(this.blobs.readBlob(blobId))
       const iv = decodeContentBase64V2(envelope.iv, 'content envelope iv')
       const tag = decodeContentBase64V2(envelope.tag, 'content envelope tag')
-      const ciphertext = decodeContentBase64V2(
-        envelope.ciphertext,
-        'content envelope ciphertext'
-      )
+      const ciphertext = decodeContentBase64V2(envelope.ciphertext, 'content envelope ciphertext')
       if (iv.length !== 12 || tag.length !== 16) {
         throw new AppError(
           MemoryStorageErrorCodesV2.blobCorrupted,
@@ -141,10 +138,7 @@ export class ContentKeyServiceV2 {
       }
       try {
         const payload = parseContentPayloadV2(plaintext)
-        const nonce = decodeContentBase64V2(
-          payload.commitmentNonce,
-          'content commitment nonce'
-        )
+        const nonce = decodeContentBase64V2(payload.commitmentNonce, 'content commitment nonce')
         const content = decodeContentBase64V2(payload.content, 'content bytes')
         let verified = false
         try {
@@ -223,33 +217,20 @@ function decodeContentBase64V2(value: string, label: string): Buffer {
   try {
     return decodeCanonicalBase64V2(value, label)
   } catch (error) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      `${label} 不是规范 base64。`,
-      error
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, `${label} 不是规范 base64。`, error)
   }
 }
 
 function parseContentEnvelopeV2(raw: Buffer): MemoryContentEnvelopeV2 {
-  const parsed = parseStrictJsonV2(raw, [
-    'format',
-    'algorithm',
-    'iv',
-    'tag',
-    'ciphertext',
-  ])
+  const parsed = parseStrictJsonV2(raw, ['format', 'algorithm', 'iv', 'tag', 'ciphertext'])
   if (
     parsed['format'] !== ContentEnvelopeFormatV2 ||
     parsed['algorithm'] !== ContentEnvelopeAlgorithmV2 ||
-    typeof parsed['iv'] !== 'string' ||
-    typeof parsed['tag'] !== 'string' ||
-    typeof parsed['ciphertext'] !== 'string'
+    !isString(parsed['iv']) ||
+    !isString(parsed['tag']) ||
+    !isString(parsed['ciphertext'])
   ) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      'content envelope 字段非法。'
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content envelope 字段非法。')
   }
   return {
     format: ContentEnvelopeFormatV2,
@@ -264,13 +245,10 @@ function parseContentPayloadV2(raw: Buffer): MemoryContentPayloadV2 {
   const parsed = parseStrictJsonV2(raw, ['format', 'commitmentNonce', 'content'])
   if (
     parsed['format'] !== ContentPayloadFormatV2 ||
-    typeof parsed['commitmentNonce'] !== 'string' ||
-    typeof parsed['content'] !== 'string'
+    !isString(parsed['commitmentNonce']) ||
+    !isString(parsed['content'])
   ) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      'content payload 字段非法。'
-    )
+    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content payload 字段非法。')
   }
   return {
     format: ContentPayloadFormatV2,
@@ -279,10 +257,7 @@ function parseContentPayloadV2(raw: Buffer): MemoryContentPayloadV2 {
   }
 }
 
-function parseStrictJsonV2(
-  raw: Buffer,
-  expectedKeys: readonly string[]
-): Record<string, unknown> {
+function parseStrictJsonV2(raw: Buffer, expectedKeys: readonly string[]): Record<string, unknown> {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw.toString('utf8'))
@@ -293,18 +268,15 @@ function parseStrictJsonV2(
       error
     )
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      'content envelope 必须是纯对象。'
-    )
+  if (!isPlainObject(parsed)) {
+    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content envelope 必须是纯对象。')
   }
   const prototype: unknown = Object.getPrototypeOf(parsed)
   const record = parsed as Record<string, unknown>
   const actual = Object.keys(record).sort()
   const expected = [...expectedKeys].sort()
   if (
-    (prototype !== Object.prototype && prototype !== null) ||
+    (prototype !== Object.prototype && isNotNull(prototype)) ||
     actual.length !== expected.length ||
     !actual.every((key, index) => key === expected[index])
   ) {

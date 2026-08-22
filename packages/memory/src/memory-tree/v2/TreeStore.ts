@@ -1,6 +1,17 @@
 import type BetterSqlite3 from 'better-sqlite3'
 
-import { AppError, isArray, isEmpty, isNotNull, isNull, isPlainObject, isString, isUndefined, toNullable } from '@velaros-ai/core'
+import {
+  AppError,
+  isArray,
+  isEmpty,
+  isNotNull,
+  isNull,
+  isPlainObject,
+  isString,
+  isTrue,
+  isUndefined,
+  toNullable,
+} from '@velaros-ai/core'
 
 import type { ContentKeyServiceV2 } from './storage/ContentKeyService'
 import type { MemoryKeyringStoreV2 } from './storage/Keyring'
@@ -37,7 +48,7 @@ interface MemoryTreeDiffRowV2 {
   version: number
   base_version: number
   ops_json: string
-  identity_change_json: string | null
+  identity_change_json: Nullable<string>
   op_count: number
   previous_event_hash: string
   event_hash: string
@@ -76,13 +87,13 @@ interface MemoryTreeBaseRowV2 {
 export interface MemoryTreeIdentityChangeV2 {
   readonly epochId: string
   readonly sequence: number
-  readonly predecessorId: string | null
+  readonly predecessorId: Nullable<string>
 }
 
 export interface CommitMemoryTreeVersionInputV2 {
   readonly expectedBaseVersion: number
   readonly ops: readonly MemoryTreeDiffOpV2[]
-  readonly identityChange?: MemoryTreeIdentityChangeV2 | null
+  readonly identityChange?: LooseOptional<MemoryTreeIdentityChangeV2>
   readonly activeIdentityEpochId: string
   readonly globalMainlineNodeId: string
   readonly frontierEvidenceSequence: number
@@ -198,9 +209,9 @@ export class MemoryTreeStoreV2 {
     if (reconstructed.version > 0) {
       let projectionMatches = false
       try {
-        projectionMatches =
-          projectionIndex.inspect(reconstructed.version, reconstructed.current)
-            ?.matchesAuthority === true
+        projectionMatches = isTrue(
+          projectionIndex.inspect(reconstructed.version, reconstructed.current)?.matchesAuthority
+        )
       } catch {
         // arch-guard:silent-catch-ok 派生投影损坏等价于不匹配，下方会从 authority 立即重建。
         projectionMatches = false
@@ -253,11 +264,7 @@ export class MemoryTreeStoreV2 {
 
   public rebuildProjection(): Nullable<number> {
     if (this.currentVersion < 1) return null
-    return this.projectionIndex.persist(
-      this.currentVersion,
-      this.currentReplay,
-      this.checkpoints
-    )
+    return this.projectionIndex.persist(this.currentVersion, this.currentReplay, this.checkpoints)
   }
 
   public commitVersion(input: CommitMemoryTreeVersionInputV2): CommitMemoryTreeVersionResultV2 {
@@ -928,17 +935,13 @@ function assertFrontierAdvanceIsValidV2(
 }
 
 function readMemoryMetaV2(database: SQLiteDatabase, key: string): number {
-  const row = database
-    .prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`)
-    .get(key) as { integer_value: number } | undefined
+  const row = database.prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`).get(key) as
+    { integer_value: number } | undefined
   if (!row) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
   return row.integer_value
 }
 
-function validateDreamRunCommitV2(
-  commit: MemoryDreamRunCommitV2,
-  createdByRunId: string
-): void {
+function validateDreamRunCommitV2(commit: MemoryDreamRunCommitV2, createdByRunId: string): void {
   assertNonEmptyV2(commit.runId, 'dreamRunCommit.runId')
   if (commit.runId !== createdByRunId) {
     throw new AppError('VALIDATION', 'Dream run id 必须与 tree createdByRunId 一致。')

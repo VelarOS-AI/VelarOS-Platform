@@ -38,19 +38,12 @@ class FileSkillProvider implements AgentSkillProvider {
   public listSkills(): AgentSkillDefinition[] {
     return this.store.list().map((record) =>
       createSkillDefinition({
-        id: record.id,
+        ...record,
         label: record.name,
-        description: record.description,
         provider: this,
         roleIds: [...this.roleIds],
         priority: record.priority ?? UserFileSkillDefaultPriority,
-        markdown: record.markdown,
-        enabled: record.enabled,
         capabilityScopes: resolveFileSkillScopes(record.spaces),
-        argumentHint: record.argumentHint,
-        baseDir: record.baseDir,
-        resourcePaths: record.resourcePaths,
-        allowedTools: record.allowedTools,
       })
     )
   }

@@ -77,7 +77,7 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 | `subAgentTypes` | `id` | 可选 | 子 agent 类型 |
 | `turnContextSources` | `id` | **禁止** | per-turn 上下文源；mod 进入每回合上下文的唯一通道 |
 | `executionModes` | `id` | 可选 | 执行模式 descriptor |
-| `hooks` | `id` | **必需** | 拦截 seam 挂接（机制②）；handler 由绑定提供 |
+| `hooks` | `id` | **必需** | Hook event 挂接；编译期函数或宿主受控 command 适配为同形 binding |
 
 壳级 UI 轴（`pages` / `settingsRenderers` / `surfaces` / `tours`）**不在 Agent 主干**——它们是产品壳
 的不透明信封，归壳自己的 manifest 面。在 Agent manifest 里写它们 = 未知贡献点 = 拒载。
@@ -100,15 +100,22 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 - **stale-reject**：`isStale()` / `assertFresh()`；generation 推进后旧快照判失效，绝不静默回退到旧值。
 - 明确不做：全局 registry 即时修改、加载顺序覆盖（同 id 一律拒载而非后者覆盖）、giant context 注入。
 
-## 拦截 seam（机制②）
+## Hook 生命周期（机制②）
 
-闭集 15 个 kind（`AgentModSeamKinds`）。三条不可协商性质：
+闭集 15 个 event（`AgentModHookEvents`）。manifest 标准字段是 `event`；`seam` 只作过渡
+输入别名，解析后归一为 `event`。编译期与外部载体共用 matcher / mode / timeout /
+context / outcome / 排序 / 诊断协议，只在运行容器与信任级上分流。三条不可协商性质：
 
 1. **两阶段**：`beginRegistration()` → `register()` → `seal()`；封存后注册即抛。
 2. **权限不可旁路**：钩子结果面只有「拦下」与「改写」，**没有放行字段**。
    `tool-call:before` 的入参改写发生在策略门**之前**，改写后照样过完整策略/校验/审批管线；
    会话生命周期钩子是纯通知，不能否决执行（准入单源仍是 `authGate` 与策略门）。
-3. **异常隔离**：单钩子抛错只记诊断（`mod.seam-handler-failed`）并跳过，绝不冒泡打断主链。
+3. **异常隔离**：单 Hook 抛错只记诊断（`mod.seam-handler-failed`）并跳过；超时则
+   abort `AgentModHookContext.signal` 并记 `mod.hook-timeout`，绝不冒泡打断主链。
+
+`matcher` 字段间 AND、列表内 OR，事件缺字段时 fail-closed。`blocking` 按
+`priority → modId → hookId` 确定性执行；`background` 只观察，返回的拦截/改写不进主链。
+默认超时 5000ms，协议允许 100–30000ms。
 
 ### 已真接线的派发点
 
@@ -116,7 +123,7 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 | --- | --- | --- |
 | `tool-call:before` | `src/tools/Executor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
 | `tool-result:after` | `src/tools/Executor.ts` `finalizeResult()`（物化之前） | 可改写 result/error；放在物化前保证模型面与 UI 面同源 |
-| `turn-context:assemble` | `src/agent/ContextBuilder.ts` `build()`（段排序后、预算裁剪前） | **同步**派发；可追加 dynamic 段，追加段同样计入 prompt 预算 |
+| `turn-context:assemble` | `src/agent/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
 | `session:start` / `session:end` | `src/kernel/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 finally，异常路径也发 |
 
 四个调用点全部走 `seams?.has(kind)` 快路径——未注入或零钩子时行为逐字节不变。
@@ -186,7 +193,8 @@ const segments = projectAgentModPromptSegments(snapshot)
   因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；主干也**不 import kernel 协议包**，
   pack descriptor 以结构化契约声明。`readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
   产品宿主必须公开自己是否实现 `loadBindings`。未实现时，外部 pack 不能贡献需要代码绑定的
-  `tools` 或 `hooks`；Loader 会明确拒载，而不是降级成空实现。
+  `tools` 或 `hooks`；实现 command Hook 的宿主必须先将其适配为 `AgentModHookHandler`，
+  并在宿主边界执行路径包含、权限、超时、输出上限和进程约束。Loader 不为安全缺口降级。
 
 ### 分节单文件 `velaros.mod.json`
 

@@ -3,7 +3,7 @@
 // **Tier0 只有两段**——身份 / 品牌语气。两段都走 `createCorePromptSegment`：
 // 不读 facts、不带谓词，渲染结果在构造期即固定，稳定前缀因此在同一会话内逐字不变。
 // 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
-import { isTrue } from '@velaros-ai/core'
+import { isEmpty, isTrue } from '@velaros-ai/core'
 
 import { type AppRuntimeFacts, readAppRuntimeFacts } from '../agent/AppRuntimeFacts'
 
@@ -50,7 +50,7 @@ const RuntimePlatformLabels: Readonly<Record<string, string | undefined>> = {
   win32: 'Windows',
 }
 
-function formatRuntimeFact(value: string | null | undefined): Nullable<string> {
+function formatRuntimeFact(value: LooseOptional<string>): Nullable<string> {
   const normalized = value?.trim().replace(/[\r\n]+/gu, ' ')
   return normalized || null
 }
@@ -71,7 +71,7 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
     ['Velar Hooks 描述文件', formatRuntimeFact(facts.velarHookEndpointFilePath)],
   ]
   const availableRows = rows.filter((row): row is [string, string] => !!row[1])
-  if (availableRows.length === 0) return null
+  if (isEmpty(availableRows)) return null
 
   return [
     '当前运行环境：',

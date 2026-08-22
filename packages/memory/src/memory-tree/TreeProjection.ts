@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { isObject, isString,toNullable } from '@velaros-ai/core'
+import { isPlainObject,isString,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryTreeNodeRecord } from './Types'
@@ -148,11 +148,11 @@ export function validateTreeProjection(
 }
 
 export function isMemoryTreeDiffOp(value: unknown): value is MemoryTreeDiffOp {
-  if (!isObject(value)) return false
-  const record = value as Record<string, unknown>
+  if (!isPlainObject(value)) return false
+  const record = value
   if (!isString(record.type)) return false
   if (record.type === 'remove') return isString(record.stableKey)
-  if (!['add', 'update', 'move'].includes(record.type) || !isObject(record.node)) return false
-  const node = record.node as Record<string, unknown>
+  if (!['add', 'update', 'move'].includes(record.type) || !isPlainObject(record.node)) return false
+  const node = record.node
   return isString(node.id) && isString(node.stableKey) && isString(node.nodeType)
 }

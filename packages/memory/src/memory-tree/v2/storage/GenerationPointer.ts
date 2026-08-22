@@ -45,7 +45,9 @@ export function commitCurrentGenerationV2(
   options: { label?: string; hooks?: StorageStepHooksV2 } = {}
 ): void {
   if (!Number.isSafeInteger(generation) || generation < 1) {
-    throw new AppError('VALIDATION', '生效代号必须是正整数。', undefined, { generation })
+    throw new AppError('VALIDATION', '生效代号必须是正整数。', undefined, {
+      generation,
+    })
   }
   writeFileAtomicV2(join(directoryPath, CurrentPointerFileNameV2), String(generation), {
     label: options.label ?? 'current',
@@ -71,12 +73,20 @@ export function listGenerationEntriesV2(
   const entries: GenerationEntryV2[] = []
   for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
     if (options.kind === 'file' ? !entry.isFile() : !entry.isDirectory()) continue
-    if (!entry.name.startsWith(GenerationEntryPrefix) || !entry.name.endsWith(options.suffix)) continue
-    const digits = entry.name.slice(GenerationEntryPrefix.length, entry.name.length - options.suffix.length)
+    if (!entry.name.startsWith(GenerationEntryPrefix) || !entry.name.endsWith(options.suffix))
+      continue
+    const digits = entry.name.slice(
+      GenerationEntryPrefix.length,
+      entry.name.length - options.suffix.length
+    )
     if (!/^[0-9]+$/.test(digits)) continue
     const generation = Number(digits)
     if (!Number.isSafeInteger(generation) || generation < 1) continue
-    entries.push({ generation, name: entry.name, path: join(directoryPath, entry.name) })
+    entries.push({
+      generation,
+      name: entry.name,
+      path: join(directoryPath, entry.name),
+    })
   }
   return entries.sort((left, right) => left.generation - right.generation)
 }

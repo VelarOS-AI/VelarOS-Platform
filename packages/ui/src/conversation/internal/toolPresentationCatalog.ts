@@ -60,7 +60,6 @@ const ToolPresentationByName: Readonly<Record<string, ToolPresentationMetadata>>
 const PrefixKinds: ReadonlyArray<readonly [string, ToolRenderKind]> = [
   ['browser:', 'browser'],
   ['computer:', 'system'],
-  ['game:', 'generic'],
   ['office:', 'office-doc'],
   ['system:', 'system'],
 ]

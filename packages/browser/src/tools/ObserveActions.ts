@@ -17,7 +17,7 @@ interface ObserveActionDraft {
 
 export function buildObserveActionsResult(
   inspection: BrowserPageInspection,
-  instruction: string | undefined,
+  instruction: Optional<string>,
   limit: number
 ): BrowserObserveActionsResult {
   const tokens = tokenizeObserveInstruction(instruction)
@@ -188,7 +188,7 @@ function describeFormField(field: BrowserPageFormField): string {
   )
 }
 
-function tokenizeObserveInstruction(instruction: string | undefined): string[] {
+function tokenizeObserveInstruction(instruction: Optional<string>): string[] {
   return String(instruction ?? '')
     .toLowerCase()
     .split(/[^a-z0-9\u4e00-\u9fff]+/u)

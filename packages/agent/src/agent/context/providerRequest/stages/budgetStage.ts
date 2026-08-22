@@ -1,10 +1,9 @@
 /**
- * Ring 1 stage ⑥——budget 钳制。
+ * 第一环第六阶段：预算钳制。
  *
- * 估算上下文用量 → 用注意力账目 + 去重账目拼 zone 账本 → ContextWorkingSetBudgetGovernor 分配 zone
- * 预算并标注 → 解析压力类型与 okToSend 门。okToSend=false 时由 compileWithReclaim 驱动回收阶梯
- * （stage ④）再压。压缩水位数学（`ContextUsageCompactionPercent` 等）住在 core/contextUsage，
- * 本 stage 一克不动。
+ * 本阶段先估算上下文用量，再合并注意力与去重账目，由 `ContextWorkingSetBudgetGovernor` 分配各区
+ * 预算并标注，最后解析压力类型与发送门。发送门关闭时，`compileWithReclaim` 会驱动第四阶段的
+ * 回收阶梯继续压缩。压缩水位公式仍由 `core/contextUsage` 单独维护，本阶段不修改其语义。
  */
 import type { ModelMessage } from 'ai'
 

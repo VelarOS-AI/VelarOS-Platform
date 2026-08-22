@@ -12,6 +12,8 @@
  * 新代码优先用 `undefined`；仅在 JSON／IPC、DOM/React ref、序列化必须用 `null` 时写 `null`。
  */
 type Nullish = undefined | null
+/** 显式的 `undefined` 缺席值；属性本身可省略时仍优先使用 `?`。 */
+type Optional<T> = T | undefined
 type Nullable<T> = T | null
 type PlainObject = Record<string, unknown>
 type JsonStringifyReplacerValue =

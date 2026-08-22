@@ -21,7 +21,7 @@ export interface RankedKnowledgeCandidate {
 }
 
 /** 规范化搜索 limit，避免调用方传入过大或非法数量。 */
-export function normalizeSearchLimit(limit: number | undefined): number {
+export function normalizeSearchLimit(limit: Optional<number>): number {
   return clamp(
     limit ?? KnowledgeIndexConfig.DEFAULT_SEARCH_LIMIT,
     1,
@@ -201,7 +201,7 @@ function calculateTimeDecayScore(
  * @deprecated 内部实现已改为无状态纯函数；新代码不需要创建 helper 实例。
  */
 export class KnowledgeQueryHelper {
-  public normalizeSearchLimit(limit: number | undefined): number {
+  public normalizeSearchLimit(limit: Optional<number>): number {
     return normalizeSearchLimit(limit)
   }
 

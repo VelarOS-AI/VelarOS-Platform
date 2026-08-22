@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 import type { SkillMarketCatalog, SkillMarketEntry } from '@velaros-ai/agent/protocol'
+import { isArray } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
@@ -172,7 +173,7 @@ class SkillMarketClient {
     }
 
     const skills = asRecord(parsed)?.skills
-    if (!Array.isArray(skills)) {
+    if (!isArray(skills)) {
       throw new AppError('VALIDATION', 'skill-manifest-invalid')
     }
 

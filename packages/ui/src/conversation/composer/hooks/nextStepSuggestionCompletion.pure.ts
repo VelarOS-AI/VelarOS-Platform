@@ -1,4 +1,5 @@
 import type { ChatSuggestionItem } from '#contracts'
+import { isEmpty } from '#internal/runtime'
 
 export const NoNextStepSuggestionHighlightIndex = -1
 
@@ -22,7 +23,7 @@ export function matchNextStepSuggestionPrefix(
   input: string
 ): ChatSuggestionItem[] {
   if (input.includes('\n')) return []
-  if (input.length === 0) return [...suggestions]
+  if (isEmpty(input)) return [...suggestions]
 
   const normalizedPrefix = normalizeCompletionText(input)
   if (!normalizedPrefix) return []

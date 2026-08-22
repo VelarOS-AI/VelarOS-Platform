@@ -20,7 +20,7 @@ interface ComposerMentionMenuProps {
  * 聊天输入 `@` 弹出的**可引用项**列表（内联在 composer 顶部，随查询过滤，可就地移除/切换选中）。
  *
  * 表头与移除按钮文案由调用方注入（`header` / `deleteLabel`）：来源不同说法就不同
- * （工作台是"评论"，游戏空间是"选中实体"），菜单本身不替任何来源起名字。
+ * （例如“评论”或“选中对象”），菜单本身不替任何来源起名字。
  */
 export function ComposerMentionMenu({
   menu,

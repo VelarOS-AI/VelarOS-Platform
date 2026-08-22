@@ -1,4 +1,5 @@
 import type { ToolAvailabilityScope } from '@velaros-ai/agent/protocol'
+import { isObject, isString,toNullable } from '@velaros-ai/core'
 
 /**
  * 单个 Agent turn 开始时捕获的只读注册表视图。
@@ -54,10 +55,9 @@ function captureAgentTurnCapabilityContext<
   if (context.describeToolInputSchema) {
     for (const entry of toolsByScope.get('catalog') ?? []) {
       if (
-        typeof entry === 'object' &&
-        entry !== null &&
+        isObject(entry) &&
         'name' in entry &&
-        typeof entry.name === 'string'
+        isString(entry.name)
       ) {
         inputSchemas.set(entry.name, context.describeToolInputSchema(entry.name))
       }
@@ -86,7 +86,7 @@ function captureAgentTurnCapabilityContext<
     ...(context.describeToolInputSchema
       ? {
           describeToolInputSchema: {
-            value: (toolName: string) => inputSchemas.get(toolName) ?? null,
+            value: (toolName: string) => toNullable(inputSchemas.get(toolName)),
           },
         }
       : {}),

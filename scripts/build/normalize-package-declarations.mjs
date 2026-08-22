@@ -28,6 +28,7 @@ const utilityTypeNames = [
   'LooseOptional',
   'Nullable',
   'Nullish',
+  'Optional',
   'PlainObject',
 ]
 
@@ -41,6 +42,7 @@ if (!configuredUtilityModule) {
   writeFileSync(
     utilityDeclaration,
     `export type Nullish = undefined | null
+export type Optional<T> = T | undefined
 export type Nullable<T> = T | null
 export type PlainObject = Record<string, unknown>
 export type JsonStringifyReplacerValue =

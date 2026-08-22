@@ -1,34 +1,18 @@
 /**
- * ProviderRequestCompiler——Ring 1 治理管线（ContextAssembler 官方实现）的装配入口 + 公共契约。
+ * `ProviderRequestCompiler` 是第一环治理管线的装配入口，也是 `ContextAssembler` 的正式实现。
  *
- * ## B1 换心：五条压缩路径 → 一条账本路径
- * v1 的六 stage 里有四条各自在改写历史（注意力路由逐轮打分折叠、microCompaction 最近 N 条窗口、
- * tool-result 去重/句柄化、回收阶梯 pass 间重压），彼此不知情，且**每条都在重写消息视图**——
- * 前缀字节一变，整条下游 KV 缓存全灭。B1 把它们整体换成一条路：
+ * B1 将原先彼此独立的历史压缩路径统一为驻留账本：会话历史先由
+ * `ContextGovernanceSession.syncHistory` 增量摄入，在轮边界由 `governTurn` 执行唯一治理，
+ * 最后由 `projectContextLedger` 确定性投影。结构清洗、保留上下文和预算钳制仍各守原有职责。
  *
- *   会话历史 → `ContextGovernanceSession.syncHistory`（增量摄入驻留账本）
- *           → 轮边界 `governTurn`（唯一治理点：需要时跑一次 GovernanceEpoch）
- *           → `projectContextLedger`（确定性投影，唯一 prompt 组装口）
+ * 治理未触发时，账本记录均为内联态，投影保持原消息对象与顺序，编译结果与清洗后的历史逐字节
+ * 等价。只有真正执行过治理周期，投影才会变化。
  *
- * 剩下的 stage 各守其位、语义不变：
- *   ① history-sanitize   providerRequest/stages/historySanitizeStage（孤儿自愈，救命逻辑，保留）
- *   ③ retained-context   providerRequest/stages/retainedContextStage（provider-visible blocks）
- *   ⑥ budget             providerRequest/stages/budgetStage（预算钳制 + 出核决策）
+ * `tailBlocks` 是易变内容的唯一合法位置；动态系统提示、上下文仪表盘和保留上下文均排在历史之后，
+ * 避免每轮击穿稳定前缀缓存。
  *
- * ## 行为对齐（切换的验收线）
- * 治理未触发时（低占用），账本全是准入态 INLINE，投影输出与摄入的消息**同一批对象、同一顺序**
- * ——编译器出口逐字节等价于切换前的"清洗后历史"。只有 epoch 真正跑过，投影才与输入不同。
- *
- * ## 活动尾（P7-1 的落点）
- * `tailBlocks` 是易变内容的唯一合法位置：系统提示词的 dynamic 层、context-dashboard、
- * retained-context 一律排在历史之后。它们放前缀里就是每请求一次全历史缓存失效。
- *
- * ## 传输装饰在投影之后（摄入面 ≠ 发送面）
- * prompt-cache 断点是**回合本地**的改写：每轮挪到最新那条 user 消息上、并从上一条剥掉。
- * 它若贴在摄入之前，同一条 user 消息"本轮带、下轮不带"，逐条内容指纹的前缀比对就会在每个新
- * 用户回合分叉 → 整本账本重建（驻留态清零、在飞蒸馏作废、前缀从墓碑形态弹回全文，正是本设计
- * 要消灭的那件事）。所以账本摄入未装饰的历史，装饰统一贴在投影之后、活动尾之前——provider
- * 收到的字节与装饰在上游时逐字相同。
+ * 提示词缓存断点属于回合本地装饰，必须在账本投影之后、活动尾之前添加。账本只摄入未装饰历史，
+ * 防止同一用户消息因断点迁移而改变指纹、触发整本账本重建；提供方最终收到的字节保持不变。
  */
 import type { ModelMessage } from 'ai'
 

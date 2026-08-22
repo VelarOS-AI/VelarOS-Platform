@@ -10,8 +10,8 @@ type ModelRequestPolicyTarget = {
 
 /** 调用方显式给的值优先；策略只在缺席或非有限数时兜底，不覆盖显式意图。 */
 function applyPolicyNumber(
-  current: number | undefined,
-  policyValue: number | undefined
+  current: Optional<number>,
+  policyValue: Optional<number>
 ): number | undefined {
   if (isFiniteNumber(current)) return current
   return isFiniteNumber(policyValue) ? policyValue : current

@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isFunction,isNumber, isObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isBoolean, isFunction,isNumber, isObject, isPlainObject,isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -243,8 +243,8 @@ class RetryPolicy {
     if (isString(appError.code) && ContextOverflowErrorCodes.has(appError.code.toLowerCase()))
       return true
 
-    if (isObject(error)) {
-      const record = error as Record<string, unknown>
+    if (isPlainObject(error)) {
+      const record = error
       const code = isString(record.code) ? record.code.toLowerCase() : null
       const type = isString(record.type) ? record.type.toLowerCase() : null
       if (
@@ -329,8 +329,8 @@ class RetryPolicy {
         .join(' ')
     }
 
-    if (isObject(error)) {
-      const record = error as Record<string, unknown>
+    if (isPlainObject(error)) {
+      const record = error
       return [
         isString(record.name) ? record.name : null,
         isString(record.type) ? record.type : null,
@@ -392,9 +392,9 @@ class RetryPolicy {
       return null
     }
 
-    if (!isObject(error)) return null
+    if (!isPlainObject(error)) return null
 
-    const record = error as Record<string, unknown>
+    const record = error
     return (
       this.readRetryAfterDelayMsFromRecord(record) ??
       this.readRetryAfterDelayMs(record.cause, depth + 1) ??
@@ -408,8 +408,8 @@ class RetryPolicy {
     const headers =
       record.responseHeaders ??
       record.headers ??
-      (isObject(record.response) ? (record.response as Record<string, unknown>).headers : null) ??
-      (isObject(record.data) ? (record.data as Record<string, unknown>).responseHeaders : null)
+      (isPlainObject(record.response) ? (record.response).headers : null) ??
+      (isPlainObject(record.data) ? (record.data).responseHeaders : null)
     const retryAfterMs = this.parseRetryAfterMsHeader(this.readHeader(headers, 'retry-after-ms'))
     if (isPresent(retryAfterMs)) return retryAfterMs
 
@@ -436,9 +436,9 @@ class RetryPolicy {
       return null
     }
 
-    if (!isObject(headers)) return null
+    if (!isPlainObject(headers)) return null
 
-    for (const [candidate, value] of Object.entries(headers as Record<string, unknown>)) {
+    for (const [candidate, value] of Object.entries(headers)) {
       if (candidate.toLowerCase() === key && isPresent(value)) return String(value)
     }
     return null
@@ -472,7 +472,7 @@ class RetryPolicy {
 
     if (isString(error)) return this.isNonConnectionApiMessage(error)
 
-    if (!isObject(error)) return false
+    if (!isPlainObject(error)) return false
 
     if (isArray(error))
       return error.some((item) => this.hasExplicitNonConnectionApiFailure(item, depth + 1))
@@ -504,7 +504,7 @@ class RetryPolicy {
       )
     }
 
-    const record = error as Record<string, unknown>
+    const record = error
     return (
       this.isNonConnectionApiCode(record.code) ||
       this.isNonConnectionApiCode(record.type) ||
@@ -532,7 +532,7 @@ class RetryPolicy {
 
     if (isString(error)) return this.isTransientApiMessage(error)
 
-    if (!isObject(error)) return false
+    if (!isPlainObject(error)) return false
 
     if (isArray(error)) return error.some((item) => this.hasTransientApiFailure(item, depth + 1))
 
@@ -561,7 +561,7 @@ class RetryPolicy {
       )
     }
 
-    const record = error as Record<string, unknown>
+    const record = error
     return (
       this.isTransientApiCode(record.code) ||
       this.isTransientApiCode(record.type) ||
@@ -666,9 +666,9 @@ function isContextOverflowReplayUnsafe(error: unknown, depth = 0): boolean {
 function isContextOverflowReplayUnsafeDetails(
   value: unknown
 ): value is ContextOverflowReplayUnsafeDetails {
-  if (!isObject(value)) return false
+  if (!isPlainObject(value)) return false
 
-  const record = value as Record<string, unknown>
+  const record = value
   return isBoolean(record.hasVisibleOutput) && isBoolean(record.hasToolUse)
 }
 

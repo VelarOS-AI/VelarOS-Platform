@@ -13,6 +13,8 @@
  * 这个后端因此从不承担「没有我就不行」的角色，也没有任何调用点需要判断它在不在。
  */
 
+import { isBoolean, isEmpty, isNull, isNumber, isString,isUndefined } from '@velaros-ai/core'
+
 import type { MemoryBackendDescriptor, MemoryBackendStats } from '../backend/Contract'
 import type {
   MemoryAuthorityEnumeration,
@@ -117,7 +119,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
         updatedAt: record.occurredAt || record.createdAt || 0,
         text: buildIndexText(record.title, '', record.content),
       }))
-      .filter((entry) => entry.id.length > 0 && entry.text.length > 0)
+      .filter((entry) => !isEmpty(entry.id) && !isEmpty(entry.text))
     return this.embedAndUpsert(pending)
   }
 
@@ -159,10 +161,10 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
     options: MemoryRecallOptions = {},
   ): Promise<MemoryRecallItem[]> {
     const trimmed = (query ?? '').trim()
-    if (trimmed.length === 0) return []
+    if (isEmpty(trimmed)) return []
 
     const records = this.store.list().filter((record) => matchesScope(record, options))
-    if (records.length === 0) return []
+    if (isEmpty(records)) return []
 
     const [embedded] = await this.embedder.embed([trimmed])
     const queryVector = normalize(embedded ?? [])
@@ -272,9 +274,9 @@ function buildIndexText(title: string, summary: string, body: string): string {
 }
 
 function stringifyValue(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (isString(value)) return value
+  if (isNull(value) || isUndefined(value)) return ''
+  if (isNumber(value) || isBoolean(value)) return String(value)
   try {
     return JSON.stringify(value) ?? ''
   } catch {

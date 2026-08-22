@@ -1,3 +1,14 @@
+import { isFiniteNumber } from './runtime'
+
+const cancelInterval = globalThis.clearInterval.bind(globalThis)
+const cancelTimeout = globalThis.clearTimeout.bind(globalThis)
+const scheduleInterval = globalThis.setInterval.bind(globalThis)
+const scheduleTimeout = globalThis.setTimeout.bind(globalThis)
+
+function normalizeTimerDelay(value: number): number {
+  return Math.max(0, isFiniteNumber(value) ? value : 0)
+}
+
 type TimerKind = 'animation-frame' | 'interval' | 'timeout'
 
 interface TimerTaskOptions {
@@ -35,12 +46,12 @@ export class TimerScope {
     this.assertActive()
     const record: TimerRecord = {
       kind: 'timeout',
-      cancelNative: () => globalThis.clearTimeout(handle),
+      cancelNative: () => cancelTimeout(handle),
     }
-    const handle = globalThis.setTimeout(() => {
+    const handle = scheduleTimeout(() => {
       if (!this.records.delete(record)) return
       callback()
-    }, Math.max(0, Number.isFinite(delayMs) ? delayMs : 0))
+    }, normalizeTimerDelay(delayMs))
     this.records.add(record)
     const lease = this.createLease(record)
     this.bindAbortSignal(lease, options.signal)
@@ -55,9 +66,9 @@ export class TimerScope {
     this.assertActive()
     const record: TimerRecord = {
       kind: 'interval',
-      cancelNative: () => globalThis.clearInterval(handle),
+      cancelNative: () => cancelInterval(handle),
     }
-    const handle = globalThis.setInterval(callback, Math.max(0, Number.isFinite(intervalMs) ? intervalMs : 0))
+    const handle = scheduleInterval(callback, normalizeTimerDelay(intervalMs))
     this.records.add(record)
     const lease = this.createLease(record)
     this.bindAbortSignal(lease, options.signal)
@@ -89,7 +100,7 @@ export class TimerScope {
   }
 
   public cancel(lease?: LooseOptional<TimerLease>): boolean {
-    return lease?.cancel() ?? false
+    return !!lease?.cancel()
   }
 
   public dispose(): void {

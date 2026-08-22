@@ -1,6 +1,6 @@
 import type { TextStreamPart, ToolSet } from 'ai'
 
-import { isArray, isEmpty, isFiniteNumber, isObject,isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isFiniteNumber,isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 
 import type {
   StreamDiagnostics,
@@ -27,8 +27,8 @@ function readProviderCacheWriteInputTokens(part: unknown): Nullable<number> {
 function readNestedNumber(value: unknown, path: readonly string[]): Nullable<number> {
   let current = value
   for (const key of path) {
-    if (!current || !isObject(current)) return null
-    current = (current as Record<string, unknown>)[key]
+    if (!current || !isPlainObject(current)) return null
+    current = (current)[key]
   }
   return isFiniteNumber(current) ? current : null
 }

@@ -465,8 +465,8 @@ function resolveRefetchable(
   const injected = classifier?.isRefetchable?.(classification)
   if (isPresent(injected)) return injected
 
-  // 不再把“参数里有 URL/path”解释成“安全可重跑”。写文件、提交、上传与浏览器交互同样带定位符，
-  // 结构猜测会把有副作用的结果错误地放进陈旧可重取档。宿主认识能力语义时必须显式表态；未知工具
+  // 不再把“参数里有资源定位符”解释成“安全可重跑”。有副作用的能力同样可能携带定位符，
+  // 结构猜测会把其结果错误地放进陈旧可重取档。宿主认识能力语义时必须显式表态；未知工具
   // 保守留在普通驻留档，若已有 payloadRef，治理器仍可走内容寻址的无副作用 page-out。
   return false
 }

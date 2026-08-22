@@ -1,5 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto'
 
+import {
+  isArray,
+  isEmpty,
+  isPlainObject,
+  isString,
+  isUndefined,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
@@ -9,11 +17,7 @@ import {
   type MemoryTreeDiffOpV2,
   type MemoryTreeNodeStructV2,
 } from './DiffChain'
-import type {
-  ContentKeyServiceV2,
-  MemoryKeyringStoreV2,
-  MemorySealedContentV2,
-} from './storage'
+import type { ContentKeyServiceV2, MemoryKeyringStoreV2, MemorySealedContentV2 } from './storage'
 import type {
   MemoryTreeAuthorityCommitParticipantV2,
   MemoryTreeIdentityChangeV2,
@@ -21,13 +25,7 @@ import type {
 } from './TreeStore'
 
 export type MemoryErasureTargetTypeV2 =
-  | 'evidence'
-  | 'concept'
-  | 'episode'
-  | 'claim'
-  | 'relation'
-  | 'identity_epoch'
-  | 'tree_node'
+  'evidence' | 'concept' | 'episode' | 'claim' | 'relation' | 'identity_epoch' | 'tree_node'
 
 export interface MemoryErasureTargetV2 {
   readonly type: MemoryErasureTargetTypeV2
@@ -65,7 +63,7 @@ export interface MemoryErasureStatusV2 {
   readonly state: 'confirmed' | 'purging' | 'verified' | 'stalled'
   readonly redactVersion: number
   readonly privacyGeneration: number
-  readonly verifiedAt: number | null
+  readonly verifiedAt: Nullable<number>
 }
 
 interface MemoryErasureRequestRowV2 {
@@ -74,7 +72,7 @@ interface MemoryErasureRequestRowV2 {
   redact_version: number
   privacy_generation: number
   state: MemoryErasureStatusV2['state']
-  verified_at: number | null
+  verified_at: Nullable<number>
 }
 
 interface ActiveIdentityRowV2 {
@@ -88,7 +86,7 @@ interface ActiveIdentityRowV2 {
 interface ReplacementIdentityV2 {
   id: string
   sequence: number
-  predecessorId: string | null
+  predecessorId: Nullable<string>
   statement: MemorySealedContentV2
   globalMainline: MemorySealedContentV2
 }
@@ -127,7 +125,10 @@ export class MemoryErasureServiceV2 {
     }
   }
 
-  public confirm(preview: MemoryErasurePreviewV2, confirmedAt = Date.now()): MemoryErasureConfirmedV2 {
+  public confirm(
+    preview: MemoryErasurePreviewV2,
+    confirmedAt = Date.now()
+  ): MemoryErasureConfirmedV2 {
     assertNonNegativeIntegerV2(confirmedAt, 'confirmedAt')
     const refreshed = this.preview(preview.closure.target)
     if (
@@ -143,7 +144,7 @@ export class MemoryErasureServiceV2 {
     const activeIdentity = this.readActiveIdentity()
     const identityAffected =
       !activeIdentity || preview.closure.identityEpochIds.includes(activeIdentity.id)
-    let replacement: ReplacementIdentityV2 | null = null
+    let replacement: Nullable<ReplacementIdentityV2> = null
     try {
       if (identityAffected) replacement = this.prepareReplacementIdentity(activeIdentity)
       const currentNodes = this.treeStore.current.nodes
@@ -153,7 +154,7 @@ export class MemoryErasureServiceV2 {
           node.visibilityState !== 'redacted'
       )
       const ops: MemoryTreeDiffOpV2[] = []
-      if (redactionTargets.length > 0) ops.push(buildRedactTreeDiffOpV2(redactionTargets))
+      if (!isEmpty(redactionTargets)) ops.push(buildRedactTreeDiffOpV2(redactionTargets))
       if (this.treeStore.version === 0) ops.push(createRootAddOpV2(confirmedAt))
       if (replacement) ops.push(createIdentityMainlineAddOpV2(replacement, confirmedAt))
 
@@ -162,7 +163,7 @@ export class MemoryErasureServiceV2 {
         throw new AppError('INVARIANT', 'Erasure 无法确定提交后的 active identity。')
       }
       const globalMainlineNodeId = `identity:${activeIdentityEpochId}`
-      const identityChange: MemoryTreeIdentityChangeV2 | null = replacement
+      const identityChange: Nullable<MemoryTreeIdentityChangeV2> = replacement
         ? {
             epochId: replacement.id,
             sequence: replacement.sequence,
@@ -291,7 +292,8 @@ export class MemoryErasureServiceV2 {
            LIMIT 1`
         )
         .get(target.type, target.id)
-    ) return true
+    )
+      return true
     const tombstoneQueries: Partial<Record<MemoryErasureTargetTypeV2, string>> = {
       evidence: `SELECT 1 FROM memory_evidence WHERE id = ? AND eligibility_state = 'erased'`,
       concept: `SELECT 1 FROM memory_concepts WHERE id = ? AND lifecycle_state = 'erased'`,
@@ -300,10 +302,12 @@ export class MemoryErasureServiceV2 {
       identity_epoch: `SELECT 1 FROM memory_identity_epochs
                        WHERE id = ? AND identity_statement_blob_ref IS NULL`,
     }
-    if (target.type === 'relation') return !this.authority.database
-      .prepare(`SELECT 1 FROM memory_relations WHERE id = ?`)
-      .get(target.id)
-    if (target.type === 'tree_node') return (
+    if (target.type === 'relation')
+      return !this.authority.database
+        .prepare(`SELECT 1 FROM memory_relations WHERE id = ?`)
+        .get(target.id)
+    if (target.type === 'tree_node')
+      return (
         this.treeStore.current.nodes.find((node) => node.stableKey === target.id)
           ?.visibilityState === 'redacted'
       )
@@ -317,7 +321,9 @@ export class MemoryErasureServiceV2 {
       target.type === 'tree_node' &&
       !this.treeStore.current.nodes.some((node) => node.stableKey === target.id)
     ) {
-      throw new AppError('NOT_FOUND', '擦除目标树节点不存在。', undefined, { ...target })
+      throw new AppError('NOT_FOUND', '擦除目标树节点不存在。', undefined, {
+        ...target,
+      })
     }
     const evidence = new Set<string>()
     const concepts = new Set<string>()
@@ -378,7 +384,13 @@ export class MemoryErasureServiceV2 {
     addLinkedEvidenceV2(this.authority, 'memory_concept_evidence', 'concept_id', concepts, evidence)
     addLinkedEvidenceV2(this.authority, 'memory_episode_evidence', 'episode_id', episodes, evidence)
     addLinkedEvidenceV2(this.authority, 'memory_claim_evidence', 'claim_id', claims, evidence)
-    addLinkedEvidenceV2(this.authority, 'memory_relation_evidence', 'relation_id', relations, evidence)
+    addLinkedEvidenceV2(
+      this.authority,
+      'memory_relation_evidence',
+      'relation_id',
+      relations,
+      evidence
+    )
 
     const endpoints = [
       ...[...concepts].map((id) => ['concept', id] as const),
@@ -391,11 +403,19 @@ export class MemoryErasureServiceV2 {
           OR (target_type = ? AND target_id = ?)`
     )
     for (const [kind, id] of endpoints) {
-      for (const row of relationLookup.all(kind, id, kind, id) as Array<{ id: string }>) {
+      for (const row of relationLookup.all(kind, id, kind, id) as Array<{
+        id: string
+      }>) {
         relations.add(row.id)
       }
     }
-    addLinkedEvidenceV2(this.authority, 'memory_relation_evidence', 'relation_id', relations, evidence)
+    addLinkedEvidenceV2(
+      this.authority,
+      'memory_relation_evidence',
+      'relation_id',
+      relations,
+      evidence
+    )
 
     for (const identity of this.authority.database
       .prepare(
@@ -456,13 +476,13 @@ export class MemoryErasureServiceV2 {
     }
   }
 
-  private prepareReplacementIdentity(active: ActiveIdentityRowV2 | null): ReplacementIdentityV2 {
+  private prepareReplacementIdentity(active: Nullable<ActiveIdentityRowV2>): ReplacementIdentityV2 {
     const statement = this.contentKeys.sealContent('我是持续帮助用户的 AI 助手')
     try {
       return {
         id: this.randomId(),
         sequence: (active?.sequence ?? 0) + 1,
-        predecessorId: active?.id ?? null,
+        predecessorId: toNullable(active?.id),
         statement,
         globalMainline: this.contentKeys.sealContent('继续根据用户当前目标提供帮助'),
       }
@@ -478,7 +498,7 @@ export class MemoryErasureServiceV2 {
     nextVersion: number
     currentPrivacyGeneration: number
     privacyGeneration: number
-    replacement: ReplacementIdentityV2 | null
+    replacement: Nullable<ReplacementIdentityV2>
     confirmedAt: number
   }): MemoryTreeAuthorityCommitParticipantV2 {
     return {
@@ -489,11 +509,7 @@ export class MemoryErasureServiceV2 {
              SET integer_value = ?, updated_at = ?
              WHERE key = 'privacy_generation' AND integer_value = ?`
           )
-          .run(
-            input.privacyGeneration,
-            input.confirmedAt,
-            input.currentPrivacyGeneration
-          )
+          .run(input.privacyGeneration, input.confirmedAt, input.currentPrivacyGeneration)
         if (privacy.changes !== 1) {
           throw new AppError('CONFLICT', 'privacy_generation CAS 失败。')
         }
@@ -557,12 +573,7 @@ export class MemoryErasureServiceV2 {
         )
         for (const [targetType, ids] of closureTargetEntriesV2(input.closure)) {
           for (const id of ids) {
-            targetInsert.run(
-              input.requestId,
-              targetType,
-              id,
-              input.privacyGeneration
-            )
+            targetInsert.run(input.requestId, targetType, id, input.privacyGeneration)
           }
         }
       },
@@ -581,10 +592,7 @@ export class MemoryErasureServiceV2 {
         this.keyring.getContentDek(blobId).fill(0)
         throw new AppError('INVARIANT', 'Erasure blob 的 DEK 仍可恢复。', undefined, { blobId })
       } catch (error) {
-        if (
-          !(error instanceof AppError) ||
-          error.code !== 'MEMORY_DEK_DESTROYED'
-        ) {
+        if (!(error instanceof AppError) || error.code !== 'MEMORY_DEK_DESTROYED') {
           throw error
         }
       }
@@ -595,9 +603,9 @@ export class MemoryErasureServiceV2 {
     }
   }
 
-  private readActiveIdentity(): ActiveIdentityRowV2 | null {
-    return (
-      (this.authority.database
+  private readActiveIdentity(): Nullable<ActiveIdentityRowV2> {
+    return toNullable(
+      this.authority.database
         .prepare(
           `SELECT id, sequence,
                   supporting_concept_ids_json,
@@ -607,7 +615,7 @@ export class MemoryErasureServiceV2 {
            WHERE ended_at IS NULL
            LIMIT 1`
         )
-        .get() as ActiveIdentityRowV2 | undefined) ?? null
+        .get() as ActiveIdentityRowV2 | undefined
     )
   }
 
@@ -616,7 +624,7 @@ export class MemoryErasureServiceV2 {
       .prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`)
       .pluck()
       .get(key) as number | undefined
-    if (value === undefined) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
+    if (isUndefined(value)) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
     return value
   }
 
@@ -624,7 +632,10 @@ export class MemoryErasureServiceV2 {
     const row = this.authority.database
       .prepare(`SELECT * FROM memory_erasure_requests WHERE id = ?`)
       .get(requestId) as MemoryErasureRequestRowV2 | undefined
-    if (!row) throw new AppError('NOT_FOUND', 'Erasure request 不存在。', undefined, { requestId })
+    if (!row)
+      throw new AppError('NOT_FOUND', 'Erasure request 不存在。', undefined, {
+        requestId,
+      })
     return row
   }
 
@@ -697,11 +708,7 @@ function applyAuthorityTombstonesV2(
      WHERE id IN`,
     closure.identityEpochIds
   )
-  runForIdsV2(
-    authority,
-    `DELETE FROM memory_relations WHERE id IN`,
-    closure.relationIds
-  )
+  runForIdsV2(authority, `DELETE FROM memory_relations WHERE id IN`, closure.relationIds)
 }
 
 function addSolelySupportedObjectsV2(
@@ -840,12 +847,10 @@ function addCandidateLedgerBlobsV2(
         throw new AppError('INVARIANT', 'Candidate ledger JSON 损坏。', error)
       }
       if (
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        !Array.isArray(parsed) &&
-        Array.isArray((parsed as Record<string, unknown>)['readSet']) &&
+        isPlainObject(parsed) &&
+        isArray((parsed as Record<string, unknown>)['readSet']) &&
         ((parsed as Record<string, unknown>)['readSet'] as unknown[]).some(
-          (id) => typeof id === 'string' && evidenceIds.has(id)
+          (id) => isString(id) && evidenceIds.has(id)
         )
       ) {
         blobIds.add(ledger.blob_ref)
@@ -870,7 +875,7 @@ function collectBlobColumnsV2(
       `SELECT ${columns.join(', ')} FROM ${table}
        WHERE ${idColumn} IN (${placeholdersV2(ids)})`
     )
-    .all(...ids) as Array<Record<string, string | null>>
+    .all(...ids) as Array<Record<string, Nullable<string>>>
   for (const row of rows) {
     for (const column of columns) {
       const value = row[column]
@@ -891,7 +896,11 @@ function createRootAddOpV2(createdAt: number): MemoryTreeDiffOpV2 {
         namespace: 'root',
         subjectType: 'root',
         subjectId: 'root',
-        content: { blobRef: null, commitment: `c2:${'0'.repeat(64)}`, redacted: false },
+        content: {
+          blobRef: null,
+          commitment: `c2:${'0'.repeat(64)}`,
+          redacted: false,
+        },
         mainlineScore: 1,
         confidence: 1,
         activation: 1,
@@ -958,12 +967,47 @@ function assertTargetExistsV2(
   }
   if (target.type === 'tree_node') return
   const table = tableByType[target.type]
-  if (
-    !table ||
-    !authority.database.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(target.id)
-  ) {
-    throw new AppError('NOT_FOUND', '擦除目标不存在。', undefined, { ...target })
+  if (!table || !authority.database.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(target.id)) {
+    throw new AppError('NOT_FOUND', '擦除目标不存在。', undefined, {
+      ...target,
+    })
   }
+}
+
+function isMemoryErasureTargetV2(value: unknown): value is MemoryErasureTargetV2 {
+  if (!isPlainObject(value) || !isString(value['id'])) return false
+  switch (value['type']) {
+    case 'evidence':
+    case 'concept':
+    case 'episode':
+    case 'claim':
+    case 'relation':
+    case 'identity_epoch':
+    case 'tree_node':
+      return true
+    default:
+      return false
+  }
+}
+
+function isStringArrayV2(value: unknown): value is readonly string[] {
+  return isArray(value) && value.every(isString)
+}
+
+function isMemoryErasureClosureV2(value: unknown): value is MemoryErasureClosureV2 {
+  return (
+    isPlainObject(value) &&
+    value['format'] === 'velaros.memory.erasure-closure.v2' &&
+    isMemoryErasureTargetV2(value['target']) &&
+    isStringArrayV2(value['evidenceIds']) &&
+    isStringArrayV2(value['conceptIds']) &&
+    isStringArrayV2(value['episodeIds']) &&
+    isStringArrayV2(value['claimIds']) &&
+    isStringArrayV2(value['relationIds']) &&
+    isStringArrayV2(value['identityEpochIds']) &&
+    isStringArrayV2(value['treeStableKeys']) &&
+    isStringArrayV2(value['blobIds'])
+  )
 }
 
 function parseClosureV2(raw: string): MemoryErasureClosureV2 {
@@ -973,18 +1017,13 @@ function parseClosureV2(raw: string): MemoryErasureClosureV2 {
   } catch (error) {
     throw new AppError('INVARIANT', 'Erasure closure JSON 损坏。', error)
   }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    (parsed as Record<string, unknown>)['format'] !== 'velaros.memory.erasure-closure.v2'
-  ) {
+  if (!isMemoryErasureClosureV2(parsed)) {
     throw new AppError('INVARIANT', 'Erasure closure 格式非法。')
   }
   if (raw !== canonicalStringifyV2(parsed)) {
     throw new AppError('INVARIANT', 'Erasure closure 不是 canonical 字节。')
   }
-  return parsed as MemoryErasureClosureV2
+  return parsed
 }
 
 function mapErasureStatusV2(row: MemoryErasureRequestRowV2): MemoryErasureStatusV2 {
@@ -1004,7 +1043,9 @@ function addColumnValuesV2(
   params: readonly string[]
 ): void {
   if (params.length === 0) return
-  for (const row of authority.database.prepare(sql).all(...params) as Array<{ id: string }>) {
+  for (const row of authority.database.prepare(sql).all(...params) as Array<{
+    id: string
+  }>) {
     target.add(row.id)
   }
 }
@@ -1030,7 +1071,7 @@ function intersectsJsonIdsV2(raw: string, values: ReadonlySet<string>): boolean 
   } catch (error) {
     throw new AppError('INVARIANT', 'Identity support ids JSON 损坏。', error)
   }
-  if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+  if (!isArray(parsed) || !parsed.every((item) => isString(item))) {
     throw new AppError('INVARIANT', 'Identity support ids 必须是字符串数组。')
   }
   return parsed.some((item) => values.has(item))

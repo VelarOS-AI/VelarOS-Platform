@@ -1,3 +1,5 @@
+import { isString } from './internal-runtime.js'
+
 const DEFAULT_ALLOWED_EXTERNAL_URL_PROTOCOLS = ['http:', 'https:'] as const
 
 interface UrlLike {
@@ -18,9 +20,7 @@ function normalizeProtocol(protocol: string): string {
   return normalized.endsWith(':') ? normalized : `${normalized}:`
 }
 
-function resolveAllowedProtocols(
-  protocols: readonly string[] | null | undefined
-): Set<string> {
+function resolveAllowedProtocols(protocols: LooseOptional<readonly string[]>): Set<string> {
   const values = protocols?.length ? protocols : DEFAULT_ALLOWED_EXTERNAL_URL_PROTOCOLS
   return new Set(values.map(normalizeProtocol).filter(Boolean))
 }
@@ -28,8 +28,8 @@ function resolveAllowedProtocols(
 export function normalizeHtmlArtifactExternalUrl(
   value: unknown,
   options: NormalizeHtmlArtifactExternalUrlOptions = {}
-): string | null {
-  if (typeof value !== 'string') return null
+): Nullable<string> {
+  if (!isString(value)) return null
 
   const trimmed = value.trim()
   if (!trimmed) return null

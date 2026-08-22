@@ -11,7 +11,7 @@ import type { UserActionCardView } from '../projection'
 import styles from './UserActionCard.module.css'
 
 import type { UserActionFormField } from '#contracts'
-import { isArray, isBlank,isEmpty, isString } from '#internal/runtime'
+import { isArray, isBlank,isEmpty, isString,toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 
@@ -19,7 +19,7 @@ const cx = StyleUtils.bindCx(styles)
 function groupFieldsIntoPages(fields: readonly UserActionFormField[]): UserActionFormField[][] {
   const pages: UserActionFormField[][] = []
   for (const field of fields) {
-    if (field.id.endsWith('_other') && pages.length > 0) {
+    if (field.id.endsWith('_other') && !isEmpty(pages)) {
       pages[pages.length - 1]!.push(field)
     } else {
       pages.push([field])
@@ -67,13 +67,13 @@ export function AskUserCarousel({
   const submitEntry = viewModel.actionEntries.find((entry) => entry.action.kind === 'submit_form')
 
   const primaryField =
-    currentPage.find(
+    toNullable(currentPage.find(
       (field) => field.type === 'radio' || field.type === 'checkboxes' || field.type === 'select'
-    ) ?? null
+    ))
   const otherField =
-    currentPage.find(
+    toNullable(currentPage.find(
       (field) => field.type === 'text' || field.type === 'textarea' || field.type === 'number'
-    ) ?? null
+    ))
   const isMulti = primaryField?.type === 'checkboxes'
 
   const rawSelected = primaryField ? viewModel.formValues[primaryField.id] : undefined

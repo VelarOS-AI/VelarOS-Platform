@@ -9,7 +9,7 @@ import { BrowserSessionActionQueue } from '../../dist/core/index.js'
  *
  * 这三组用例钉的是一条 brick 级事故（AGENT-12）：`webContents.executeJavaScript` 在渲染进程
  * 被脚本卡死时永不返回，它占死队头，后面的 `presentPage` / `closeSession` 全部排在死结后面，
- * `game:run` 14 分钟没有回执、abort 无效、只能重启应用。
+ * 后续页面动作 14 分钟没有回执、abort 无效、只能重启应用。
  */
 
 const never = () => new Promise(() => {})

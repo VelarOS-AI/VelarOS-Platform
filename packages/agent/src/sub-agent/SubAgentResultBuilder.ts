@@ -7,6 +7,7 @@ import type {
   SubAgentWindDownReason,
   TeamModelSelectionTrace,
 } from '@velaros-ai/agent/protocol'
+import { isEmpty } from '@velaros-ai/core'
 
 import type { CodingSessionSnapshot } from '../reminders/types'
 
@@ -23,12 +24,12 @@ interface BuildSubAgentTaskResultInput {
 }
 
 function buildArtifactsFromSnapshot(
-  snapshot: CodingSessionSnapshot | undefined
+  snapshot: Optional<CodingSessionSnapshot>
 ): SubAgentTaskArtifacts | undefined {
   if (!snapshot) return undefined
 
   const artifacts: SubAgentTaskArtifacts = {}
-  if (snapshot.modifiedPaths.length > 0) {
+  if (!isEmpty(snapshot.modifiedPaths)) {
     artifacts.changed_paths = [...snapshot.modifiedPaths]
   }
   if (snapshot.latestVerificationStatus) {

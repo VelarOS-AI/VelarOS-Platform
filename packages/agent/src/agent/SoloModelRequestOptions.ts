@@ -10,8 +10,8 @@ import type { AgentExecutionConfig } from './RuntimeConfiguration'
 const HtmlArtifactMinimumOutputTokens = 24_000
 
 function resolveSoloTurnModelRequestOptions(
-  options: AgentModelRequestOptions | undefined,
-  promptFeatures: AgentExecutionConfig['promptFeatures'] | undefined
+  options: Optional<AgentModelRequestOptions>,
+  promptFeatures: Optional<AgentExecutionConfig['promptFeatures']>
 ): AgentModelRequestOptions | undefined {
   if (!promptFeatures?.includes('html-artifact')) return options
 

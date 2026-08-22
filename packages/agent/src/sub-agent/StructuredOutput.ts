@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { AgentOutputJsonSchema } from '@velaros-ai/agent/protocol'
-import { isEmpty, isRecord } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isRecord, isString,isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 const MaxStructuredOutputSchemaBytes = 16 * 1024
@@ -54,7 +54,7 @@ function assertIntegerBound(
   min: number,
   max: number
 ): void {
-  if (value === undefined) return
+  if (isUndefined(value)) return
   if (!Number.isInteger(value) || (value as number) < min || (value as number) > max) {
     throw new AppError('VALIDATION', `${label} 必须是 ${min}-${max} 的整数。`)
   }
@@ -84,22 +84,22 @@ function inspectSchemaNode(
     )
   }
 
-  if (node.type !== undefined && !AllowedSchemaTypes.has(String(node.type))) {
+  if (!isUndefined(node.type) && !AllowedSchemaTypes.has(String(node.type))) {
     throw new AppError('VALIDATION', `${path}.type 不受支持：${String(node.type)}。`)
   }
-  if (node.required !== undefined) {
-    if (!Array.isArray(node.required) || node.required.some((value) => typeof value !== 'string')) {
+  if (!isUndefined(node.required)) {
+    if (!isArray(node.required) || node.required.some((value) => !isString(value))) {
       throw new AppError('VALIDATION', `${path}.required 必须是字符串数组。`)
     }
   }
   if (
-    node.additionalProperties !== undefined &&
-    typeof node.additionalProperties !== 'boolean'
+    !isUndefined(node.additionalProperties) &&
+    !isBoolean(node.additionalProperties)
   ) {
     throw new AppError('VALIDATION', `${path}.additionalProperties 首版只支持 boolean。`)
   }
-  if (node.enum !== undefined) {
-    if (!Array.isArray(node.enum) || node.enum.length > MaxStructuredOutputSchemaEnumValues) {
+  if (!isUndefined(node.enum)) {
+    if (!isArray(node.enum) || node.enum.length > MaxStructuredOutputSchemaEnumValues) {
       throw new AppError(
         'VALIDATION',
         `${path}.enum 最多 ${MaxStructuredOutputSchemaEnumValues} 项。`
@@ -112,7 +112,7 @@ function inspectSchemaNode(
   assertIntegerBound(node.minItems, `${path}.minItems`, 0, 256)
   assertIntegerBound(node.maxItems, `${path}.maxItems`, 0, 256)
 
-  if (node.properties !== undefined) {
+  if (!isUndefined(node.properties)) {
     if (!isRecord(node.properties)) {
       throw new AppError('VALIDATION', `${path}.properties 必须是对象。`)
     }
@@ -127,7 +127,7 @@ function inspectSchemaNode(
       inspectSchemaNode(child, `${path}.properties.${key}`, depth + 1, state)
     }
   }
-  if (node.items !== undefined) {
+  if (!isUndefined(node.items)) {
     inspectSchemaNode(node.items, `${path}.items`, depth + 1, state)
   }
 }
@@ -195,7 +195,7 @@ function parseSubAgentStructuredOutput(
   return {
     success: false,
     issues: result.error.issues.slice(0, 3).map((issue) => {
-      const path = issue.path.length > 0 ? issue.path.join('.') : '$'
+      const path = !isEmpty(issue.path) ? issue.path.join('.') : '$'
       return `${path}: ${issue.message}`
     }),
   }

@@ -10,7 +10,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
  *
  * 存在的理由是一次 brick 级事故（AGENT-12）：`webContents.executeJavaScript` 在渲染进程
  * 被脚本卡死 / 页面正在导航走时**永不 settle**，它占住队头，后面所有动作——包括
- * `game:run` 的 `presentPage`、包括清理用的 `closeSession`——全都排在死结后面，
+ * 后续的 `presentPage`、包括清理用的 `closeSession`——全都排在死结后面，
  * 14 分钟不返回，abort 也救不回来（信号只在排队闭包**内部**被检查，闭包压根没被调度），
  * 只有重启应用。**一个永不 settle 的 promise 不许换来一条永久瘫痪的会话。**
  */

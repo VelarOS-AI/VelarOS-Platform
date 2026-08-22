@@ -5,7 +5,7 @@
  * switch（那份与宿主 `SpaceDescriptor.iconName` 靠人工同步，必漂）。宿主直接把
  * `descriptor.iconName` 递进来；新空间声明 iconName 即接入，本文件零改动。
  *
- * variants（封闭枚举，全仓共用一套）：`iconName` = `desktop | folder-open | browser | game-controller | agent`。
+ * variants（封闭枚举，全仓共用一套）：`iconName` = `desktop | folder-open | browser | agent`。
  * 品牌端口：browser / agent 两个图标名的具体资产由宿主经 `renderBrowserIcon` / `renderAgentIcon`
  * 注入——本库不承载产品品牌资产，也不认识「这条会话跑的是哪个外部执行体」。
  */
@@ -13,7 +13,6 @@ import { type ReactElement } from 'react'
 import {
   DesktopIcon,
   FolderOpenIcon,
-  GameControllerIcon,
   type IconWeight,
   RobotIcon,
 } from '@phosphor-icons/react'
@@ -23,7 +22,6 @@ export type WorkspaceSpaceIconName =
   | 'desktop'
   | 'folder-open'
   | 'browser'
-  | 'game-controller'
   | 'agent'
 
 export interface WorkspaceSpaceIconProps {
@@ -54,8 +52,6 @@ export function WorkspaceSpaceIcon({
       return <FolderOpenIcon size={size} weight={weight} />
     case 'browser':
       return renderBrowserIcon({ size })
-    case 'game-controller':
-      return <GameControllerIcon size={size} weight={weight} />
     case 'agent':
       return renderAgentIcon ? renderAgentIcon({ size }) : <RobotIcon size={size} weight={weight} />
     case 'desktop':

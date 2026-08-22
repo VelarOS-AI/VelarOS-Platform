@@ -10,6 +10,8 @@
  * **一条都不适用**。
  */
 
+import { isArray, isNull, isString } from '@velaros-ai/core'
+
 import type { MemoryFilesIo } from '../files/Io'
 
 import type { MemoryVectorIndexRecord, MemoryVectorIndexStore } from './Contract'
@@ -82,7 +84,7 @@ export function createFileVectorIndexStore(
     if (loaded) return
     loaded = true
     const raw = io.readTextFile(path)
-    if (raw === null) return
+    if (isNull(raw)) return
     const parsed = parsePersisted(raw)
     if (!parsed) return
     version = parsed.version
@@ -98,7 +100,7 @@ export function createFileVectorIndexStore(
   }
 
   const flush = (): void => {
-    if (version === null && records.size === 0) {
+    if (isNull(version) && records.size === 0) {
       io.deleteFile(path)
       return
     }
@@ -157,7 +159,7 @@ export function createFileVectorIndexStore(
 function parsePersisted(raw: string): Nullable<PersistedVectorIndex> {
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedVectorIndex>
-    if (typeof parsed?.version !== 'string' || !Array.isArray(parsed.records)) return null
+    if (!isString(parsed?.version) || !isArray(parsed.records)) return null
     return { version: parsed.version, records: parsed.records }
   } catch {
     // arch-guard:silent-catch-ok 向量索引是可重建派生物；损坏时返回 null 触发完整重建。

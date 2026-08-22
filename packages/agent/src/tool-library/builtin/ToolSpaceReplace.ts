@@ -102,7 +102,7 @@ function summarizeReplacePages(
 }
 
 /** 从结构化工具描述里抽出「示例：」整段，作为换入后首调的正确形状参考。 */
-function extractToolExampleSection(description: string | null | undefined): Nullable<string> {
+function extractToolExampleSection(description: LooseOptional<string>): Nullable<string> {
   if (!description) return null
   const block = description
     .split(/\n{2,}/)
@@ -140,13 +140,17 @@ function buildReplaceNextTurnHint(input: {
   requiresUserActionDetails: readonly ToolSpaceReplacePageDetail[]
   skippedPageDetails: readonly ToolSpaceReplacePageDetail[]
 }): string {
-  if (!isEmpty(input.preparedTools)) return '具体工具页已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
+  if (!isEmpty(input.preparedTools))
+    return '具体工具页已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
 
-  if (!isEmpty(input.enabledCapabilities)) return '能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。'
+  if (!isEmpty(input.enabledCapabilities))
+    return '能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。'
 
-  if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails)) return '没有新的工具页被换入；请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
+  if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails))
+    return '没有新的工具页被换入；请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
 
-  if (!isEmpty(input.skippedPageDetails)) return '没有新的工具页被换入；请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。'
+  if (!isEmpty(input.skippedPageDetails))
+    return '没有新的工具页被换入；请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。'
 
   return '没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。'
 }
@@ -260,9 +264,7 @@ export async function replaceToolSpacePages(
     }
   }
 
-  const categoriesToEnable = [
-    ...new Set(enabledCapabilities),
-  ]
+  const categoriesToEnable = [...new Set(enabledCapabilities)]
   enabledCapabilities.length = 0
   if (!isEmpty(categoriesToEnable)) {
     if (ctx.requestToolCategoryAccess) {
@@ -311,7 +313,9 @@ export async function replaceToolSpacePages(
     if (card.kind === 'capability') {
       // 「不可关停的分类」是具体产品策略，由注入侧在 requestToolCategoryAccess / 描述符层表达；
       // 本层无保护名单，展开出的分类一律可关。
-      disabledCapabilities.push(...expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId]))
+      disabledCapabilities.push(
+        ...expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
+      )
       continue
     }
     requiresUserAction.push(id)
@@ -337,9 +341,7 @@ export async function replaceToolSpacePages(
     // 换入即给正确示例：照其字段名与结构调用，避免首调凭摘要猜参数被 schema 打回。
     preparedToolExamples: buildPreparedToolExamples([...preparedToolSet], cardsById),
     pageOutTools: [...new Set(pageOutTools)],
-    enabledCapabilities: [
-      ...new Set([...enabledCapabilities, ...refreshedCapabilityResidency]),
-    ],
+    enabledCapabilities: [...new Set([...enabledCapabilities, ...refreshedCapabilityResidency])],
     disabledCapabilities: [...new Set(disabledCapabilities)],
     enabledPromptFeatures: finalPromptFeaturesToEnable,
     requiresApproval: [...new Set(requiresApproval)],
@@ -369,9 +371,7 @@ export async function replaceToolSpacePages(
     activeThisTurn: false,
     nextTurnHint: buildReplaceNextTurnHint({
       preparedTools: [...preparedToolSet],
-      enabledCapabilities: [
-        ...new Set([...enabledCapabilities, ...refreshedCapabilityResidency]),
-      ],
+      enabledCapabilities: [...new Set([...enabledCapabilities, ...refreshedCapabilityResidency])],
       requiresApprovalDetails,
       requiresUserActionDetails,
       skippedPageDetails,

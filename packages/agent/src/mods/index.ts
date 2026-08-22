@@ -42,6 +42,13 @@ export type {
 } from './AgentModRegistry'
 export { AgentModRegistry, AgentModStaleSnapshotError } from './AgentModRegistry'
 export type {
+  AgentModHookContext,
+  AgentModHookEventMap,
+  AgentModHookGenericEvent,
+  AgentModHookHandler,
+  AgentModHookOutcomeMap,
+  AgentModHookRegistration,
+  AgentModHookRegistrationInput,
   AgentModSeamEventMap,
   AgentModSeamGenericEvent,
   AgentModSeamHandler,
@@ -58,7 +65,12 @@ export type {
   AgentModTurnContextAssembleOutcome,
   AgentModTurnContextSegmentView,
 } from './AgentModSeams'
-export { AgentModSeamDispatcher, WiredSeamKinds } from './AgentModSeams'
+export {
+  AgentModHookDispatcher,
+  AgentModSeamDispatcher,
+  WiredHookEvents,
+  WiredSeamKinds,
+} from './AgentModSeams'
 export type {
   BuiltinAgentModOptions,
   BuiltinAgentModPackage,

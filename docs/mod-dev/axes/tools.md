@@ -12,6 +12,9 @@ z.strictObject({
   categoryId: TrimmedIdSchema.optional(),
   summary: z.string().optional(),
   readOnly: z.boolean().optional(),
+  permissions: tolerantArray(TrimmedIdSchema).optional(),
+  inputSchema: z.record(z.string(), z.unknown()).optional(),
+  handler: AgentModCommandHandlerSchema.optional(),
   /** 只绑定可用类别，不强制常驻 schema。 */
   availableInSpaces: tolerantArray(TrimmedIdSchema).optional(),
   /** 声明本工具在哪些 space 常驻（数据条目，由宿主常驻集算法消费）。 */
@@ -25,6 +28,9 @@ z.strictObject({
 | `categoryId` | 归入哪个工具类别；类别本身可由 [`toolCategories`](./tool-categories.md) 轴贡献 |
 | `summary` | 简述（宿主诊断面 / 工具目录展示用） |
 | `readOnly` | 只读工具标记 |
+| `permissions` | 工具行为权限上界；运行态 `VelaTool.permissions` 必须保留 |
+| `inputSchema` | 外部 command 工具的标准 JSON Schema；根类型必须是 `object` |
+| `handler` | 外部受控载体：`{ type: 'command', entry, permissions? }`；编译期绑定省略 |
 | `availableInSpaces` | 声明本工具在哪些 space 可用；只绑定类别，可按预算换入，不强制每轮发送 schema |
 | `residentInSpaces` | 声明本工具在哪些 space 常驻。**纯数据条目**——由宿主的常驻集算法消费，主干不解释 space 语义 |
 
@@ -65,6 +71,40 @@ const bindings: AgentModBindings = {
 默认上下文是 host 无关的核心面 `KernelToolContext`
 （`packages/agent/src/tool-library/defineVelaTool.ts`）。
 工具参数用宽容原语拼——铁律见 [conventions.md](../conventions.md#二工具参数的宽容铁律)。
+
+### 外部 command binding
+
+外部 `.velarmod` 不向宿主暴露可 import 的 main 模块。宿主 reader 识别同一 contribution 上的
+`inputSchema + handler`，先把 JSON Schema 编译成运行态 schema，再物化同名 `VelaTool` binding；
+从进入 `AgentModLoader` 开始，它与编译期 binding 完全共用注册、投影与执行主链。
+
+```json
+{
+  "name": "acme.notes:search",
+  "categoryId": "knowledge",
+  "permissions": ["fs:read"],
+  "inputSchema": {
+    "type": "object",
+    "properties": { "query": { "type": "string" } },
+    "required": ["query"],
+    "additionalProperties": false
+  },
+  "handler": {
+    "type": "command",
+    "entry": "tools/search.mjs",
+    "permissions": ["network"]
+  }
+}
+```
+
+协议只定义可移植声明；包内路径、进程沙箱、权限 broker、JSON stdin/stdout、输出上限与中止语义
+由具体宿主实现。`module.isolation` 是 Kernel module 装载元数据，不表示 command handler 载体，
+宿主不得要求它等于 `sidecar`。运行态工具权限必须取
+`tools[].permissions ∪ handler.permissions` 的明确并集，不能在适配时丢失。
+
+若外部工具引用同一包通过 `toolCategories` 声明的类别，宿主适配器必须同时提供对应
+`ToolCategoryDefinition` binding，再把类别与工具交给同一个 Loader；只保留 declaration 会因没有运行态
+payload 而在投影时被丢弃。类别的宿主域与初始装载状态由具体宿主确定，不能由外部包越权指定。
 
 ## 消费面
 

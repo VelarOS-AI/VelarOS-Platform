@@ -82,7 +82,7 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeComposition {
  *
  * 需要声明具体实例类型时使用 {@link DefaultModelRuntimeComposition}。
  */
-// eslint-disable-next-line no-redeclare -- TypeScript 需要保留同名类型契约与构造器值。
+
 export const ModelRuntimeComposition = DefaultModelRuntimeComposition
 
 /**
