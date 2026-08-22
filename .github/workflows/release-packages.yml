@@ -45,6 +45,8 @@ jobs:
   publish:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    outputs:
+      consumer-matrix: ${{ steps.consumer-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -70,3 +72,108 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ONLY: ${{ github.event.inputs.only }}
+      # 只有发布器成功退出后才生成消费仓矩阵。这样「包未发出」不可能进入升级阶段。
+      - id: consumer-matrix
+        run: echo "matrix=$(node scripts/release/consumer-matrix.mjs)" >> "$GITHUB_OUTPUT"
+
+  sync-consumers:
+    name: Update ${{ matrix.id }}
+    needs: publish
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.publish.outputs.consumer-matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: platform
+          persist-credentials: false
+      # 跨仓 checkout、推更新分支和建 PR 共用一个最小权限 token。仓库需要配置
+      # VELAROS_CONSUMER_UPDATE_TOKEN，权限仅限消费仓 contents:write / pull_requests:write
+      # 以及 GitHub Packages read；不使用发布 job 的 GITHUB_TOKEN 越权碰其它仓库。
+      - name: Require cross-repository update credential
+        run: |
+          if [ -z "$CONSUMER_TOKEN" ]; then
+            echo "::error::VELAROS_CONSUMER_UPDATE_TOKEN is required for consumer updates"
+            exit 1
+          fi
+        env:
+          CONSUMER_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ matrix.repository }}
+          token: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+          path: consumer
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Align released Platform packages
+        run: |
+          args=(--consumer "$GITHUB_WORKSPACE/consumer" --release-ref "$GITHUB_REF_NAME")
+          if [ -n "$ONLY" ]; then
+            args+=(--only "$ONLY")
+          fi
+          bun platform/scripts/release/sync-platform-consumer.mjs "${args[@]}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+          ONLY: ${{ github.event.inputs.only }}
+      - name: Verify frozen cloud install
+        if: matrix.lockfile == 'bun'
+        run: bun install --frozen-lockfile --ignore-scripts
+        working-directory: consumer
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+      - name: Verify cloud install without creating a lockfile
+        if: matrix.lockfile == 'none'
+        run: bun install --no-save --ignore-scripts
+        working-directory: consumer
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+      - name: Verify consumer
+        if: matrix.verifyCommand != ''
+        run: ${{ matrix.verifyCommand }}
+        working-directory: consumer
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+      - id: changes
+        name: Detect dependency changes
+        run: |
+          if git status --porcelain | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: consumer
+      - name: Push update branch and open pull request
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          selection="$GITHUB_REF_NAME"
+          if [ -n "$ONLY" ]; then
+            selection="${selection}--${ONLY}"
+          fi
+          safe_ref="$(printf '%s' "$selection" | tr -c 'A-Za-z0-9._-' '-')"
+          branch="automation/platform-${safe_ref}"
+          git config user.name "VelarOS Platform Bot"
+          git config user.email "platform-bot@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A
+          git commit -m "chore: update Platform packages for ${GITHUB_REF_NAME}"
+          gh auth setup-git
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch --depth=1 origin "$branch:refs/remotes/origin/$branch"
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+          if ! gh pr list --repo "$REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number' | grep -q '[0-9]'; then
+            gh pr create \
+              --repo "$REPOSITORY" \
+              --head "$branch" \
+              --title "chore: update Platform packages for ${GITHUB_REF_NAME}" \
+              --body "Platform release ${GITHUB_REF_NAME} is published. This PR aligns direct dependencies, refreshes the lockfile from GitHub Packages, rejects local-link resolutions, and has passed the configured consumer verification."
+          fi
+        working-directory: consumer
+        env:
+          GH_TOKEN: ${{ secrets.VELAROS_CONSUMER_UPDATE_TOKEN }}
+          ONLY: ${{ github.event.inputs.only }}
+          REPOSITORY: ${{ matrix.repository }}

@@ -256,3 +256,40 @@ export function resolveReleaseSelection(rootManifest, ordered, refName) {
     reason: `expected ${trainTag} (full train) or <package>@<version> (single package)`,
   }
 }
+
+/**
+ * 在 tag 已经确定发布身份之后，再应用 workflow_dispatch 的 --only 收窄。
+ * 发布器和消费仓更新器必须共用这一处，否则会出现「发了 A、却去升级 B」的分叉。
+ */
+export function selectReleasedPackages(rootManifest, ordered, refName, selectors = []) {
+  const selection = resolveReleaseSelection(rootManifest, ordered, refName)
+  if (selection.kind === 'unknown') {
+    throw new Error(`Unknown release ref ${refName ?? '(missing)'}: ${selection.reason}`)
+  }
+  if (selection.kind === 'package') {
+    if (selectors.length > 0) {
+      throw new Error(
+        `--only cannot narrow a single-package tag (${selection.tag}); the tag already names what ships`,
+      )
+    }
+    return { selection, packages: selection.packages }
+  }
+
+  if (selectors.length === 0) return { selection, packages: ordered }
+
+  const chosen = new Set()
+  for (const selector of selectors) {
+    const match = ordered.find(
+      (item) => item.manifest.name === selector || item.directoryName === selector,
+    )
+    if (!match) {
+      const known = ordered.map((item) => item.manifest.name).join(', ')
+      throw new Error(`--only ${selector} matches no declared release package. Declared: ${known}`)
+    }
+    chosen.add(match.manifest.name)
+  }
+  return {
+    selection,
+    packages: ordered.filter((item) => chosen.has(item.manifest.name)),
+  }
+}

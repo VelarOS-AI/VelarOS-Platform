@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "consumers": [
+    {
+      "id": "desktop",
+      "repository": "VelarOS-AI/VelarOS-Desktop",
+      "lockfile": "bun",
+      "verifyCommand": "bun run typecheck"
+    },
+    {
+      "id": "workbench",
+      "repository": "VelarOS-AI/VelarOS-Workbench",
+      "lockfile": "bun",
+      "verifyCommand": "bun run typecheck"
+    },
+    {
+      "id": "termel",
+      "repository": "VelarOS-AI/VelarOS-Termel",
+      "lockfile": "bun",
+      "verifyCommand": "bun run typecheck"
+    },
+    {
+      "id": "labs",
+      "repository": "VelarOS-AI/VelarOS-Labs",
+      "lockfile": "bun",
+      "verifyCommand": "bun run check"
+    },
+    {
+      "id": "velarscript-editor",
+      "repository": "VelarOS-AI/VelarScript-Editor",
+      "lockfile": "none",
+      "verifyCommand": ""
+    }
+  ]
+}

@@ -44,6 +44,7 @@ import {
   collectReleasePackages,
   ReleaseRegistry,
   resolveReleaseSelection,
+  selectReleasedPackages,
 } from './releaseTopology.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
@@ -64,24 +65,6 @@ const readOnlySelectors = (argv) => {
     }
   }
   return selectors
-}
-
-// 按包名或目录名选取,拒绝模糊匹配:发布不可逆,「你是不是想发这个」的猜测不配出现在这里。
-const selectPackages = (packages, selectors) => {
-  if (selectors.length === 0) return packages
-  const chosen = new Set()
-  for (const selector of selectors) {
-    const match = packages.find(
-      (item) => item.manifest.name === selector || item.directoryName === selector,
-    )
-    if (!match) {
-      const known = packages.map((item) => item.manifest.name).join(', ')
-      throw new Error(`--only ${selector} matches no declared release package. Declared: ${known}`)
-    }
-    chosen.add(match.manifest.name)
-  }
-  // 保持拓扑序:选取只做过滤,不重排——被依赖者仍然先发。
-  return packages.filter((item) => chosen.has(item.manifest.name))
 }
 
 const runForOutput = (command, args, cwd) => {
@@ -127,15 +110,14 @@ const { rootManifest, platformGeneration, ordered } = await collectReleasePackag
 // 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
 const tagSelection = resolveReleaseSelection(rootManifest, ordered, process.env.GITHUB_REF_NAME)
 const onlySelectors = readOnlySelectors(process.argv)
-if (tagSelection.kind === 'package' && onlySelectors.length > 0) {
-  throw new Error(
-    `--only cannot narrow a single-package tag (${tagSelection.tag}); the tag already names what ships`,
-  )
-}
-const selected =
-  tagSelection.kind === 'package'
-    ? tagSelection.packages
-    : selectPackages(ordered, onlySelectors)
+const selected = selectReleasedPackages(
+  rootManifest,
+  ordered,
+  // 本地 dry-run 没有 GitHub ref，沿用完整火车作为模拟身份；真发布仍在下方 taggedRelease
+  // 硬门要求精确 tag，不能借这个回退绕过发布身份。
+  tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : process.env.GITHUB_REF_NAME,
+  onlySelectors,
+).packages
 const releaseTag = tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : tagSelection.tag
 const expectedRef = `refs/tags/${releaseTag}`
 
