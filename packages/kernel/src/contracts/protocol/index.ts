@@ -5,6 +5,7 @@
 export * from './capability'
 export * from './handshake'
 export * from './identity'
+export * from './mod-manifest'
 export * from './mods'
 export * from './negotiation'
 export * from './remote-node'

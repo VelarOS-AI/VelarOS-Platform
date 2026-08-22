@@ -19,10 +19,10 @@
     "id": "acme.notes",
     "version": "1.2.0",
     "apiVersion": 1,
-    "provides": [{ "id": "velaros.agent", "version": "1.0.0" }],
+    "provides": [],
     "requires": [],
     "permissions": ["fs:read"],
-    "isolation": "worker"
+    "isolation": "in-process"
   },
   "agent": {
     "id": "acme.notes",
@@ -67,9 +67,8 @@
 
 逐字段的约束见 [axes/README.md](./axes/README.md) 与各轴单页。这里只讲**为什么长这样**：
 
-- **`module.provides` 必须含 `velaros.agent`**，pack 才会被喂给 Agent Loader。
-  常量是 `AgentModPackProvidesId`（`= 'velaros.agent'`，与 `AgentCapability` 令牌同值）。
-  不含它 → 跳过并留 `mod.pack-not-agent-axis`，交由其 owner module 装载。
+- **有没有 `agent` 节是唯一的 Agent 路由依据**。`module.provides` 只列这个 Mod 真正注册的
+  callable capability；纯 Skill、Prompt、Hook 或 UI Mod 应写空数组，不能塞路由标记。
 - **`module.id` 与 `agent.id` 必须一致**，否则 `mod.envelope-id-mismatch` 拒载。
   两节都带 `id` / `version` 是已知冗余，等 agent 节瘦身时按「跨节元数据留顶层」收拢。
 - **`manifestSchemaVersion` 是 `z.literal(1)`**（常量 `AgentModManifestSchemaVersion`），
@@ -199,9 +198,8 @@ interface AgentModDiagnostic {
 | 码                                  | 阶段         | 意思                                                          |
 | ----------------------------------- | ------------ | ------------------------------------------------------------- |
 | `mod.pack-disabled`                 | discover     | 用户停用了这个 pack，本次不装载                               |
-| `mod.pack-not-agent-axis`           | discover     | `provides` 不含 `velaros.agent`                               |
 | `mod.pack-unreadable`               | discover     | `velaros.mod.json` 读不出来                                   |
-| `mod.pack-no-agent-section`         | discover     | 文件在，但没有 `agent` 节                                     |
+| `mod.pack-agent-section-absent`     | discover     | 文件有效但未声明 `agent` 节，Agent owner 不处理               |
 | `mod.pack-bindings-unloadable`      | discover     | 运行态绑定装载抛错                                            |
 | `mod.envelope-invalid`              | 信封解析     | 分节形状或 `module` 节非法                                    |
 | `mod.envelope-id-mismatch`          | 信封解析     | `module.id` ≠ `agent.id`                                      |

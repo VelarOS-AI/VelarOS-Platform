@@ -3,13 +3,10 @@ import { describe, expect, test } from 'bun:test'
 import {
   AgentModContributionAxisNames,
   AgentModManifestSchemaVersion,
-  AgentModPackProvidesId,
   isSemverRangeParsable,
   listAgentModDeclaredAxes,
   parseAgentModManifest,
-  parseVelarosModEnvelope,
   satisfiesSemverRange,
-  VelarosModManifestFileName,
 } from '../../src/protocol/mods'
 
 function baseManifest(overrides: Record<string, unknown> = {}) {
@@ -200,7 +197,7 @@ describe('manifest 解析', () => {
 })
 
 describe('契约常量', () => {
-  test('贡献轴是封闭集合，pack 接缝常量稳定', () => {
+  test('贡献轴是封闭集合', () => {
     expect(AgentModContributionAxisNames).toEqual([
       'tools',
       'toolCategories',
@@ -212,75 +209,19 @@ describe('契约常量', () => {
       'executionModes',
       'hooks',
     ])
-    expect(VelarosModManifestFileName).toBe('velaros.mod.json')
-    expect(AgentModPackProvidesId).toBe('velaros.agent')
   })
 })
 
-describe('分节单文件信封', () => {
+describe('Agent manifest misuse diagnostics', () => {
   function baseModuleSection(overrides: Record<string, unknown> = {}) {
     return {
       id: 'probe.mod',
       version: '1.0.0',
       apiVersion: 1,
-      provides: ['velaros.agent'],
+      provides: [],
       ...overrides,
     }
   }
-
-  test('三节归位：module 校验、agent/ui 原样交还给各自 owner', () => {
-    const uiSection = { pages: [{ id: 'p1', kind: 'whatever-the-shell-says' }] }
-    const result = parseVelarosModEnvelope({
-      module: baseModuleSection(),
-      agent: baseManifest({
-        contributes: { skills: [{ id: 's1', name: 'S', spaces: ['system'] }] },
-      }),
-      ui: uiSection,
-    })
-
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    // module 节被归一化成 kernel descriptor 形状（标量 id → 令牌，默认值补齐）。
-    expect(result.envelope.module.provides).toEqual([
-      { id: 'velaros.agent', version: '1.0.0' },
-    ])
-    expect(result.envelope.module.isolation).toBe('in-process')
-    // ui 节零解析：agent 侧不认识它，原样传出去。
-    expect(result.envelope.ui).toBe(uiSection)
-    // agent 节也没被信封层解释，交给 parseAgentModManifest。
-    expect(parseAgentModManifest(result.envelope.agent).ok).toBe(true)
-  })
-
-  test('agent 节可缺席（纯 kernel mod），ui 节亦然', () => {
-    const result = parseVelarosModEnvelope({ module: baseModuleSection() })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.envelope.agent).toBeUndefined()
-  })
-
-  test('第四节 / 缺 module 节一律拒载', () => {
-    const extraSection = parseVelarosModEnvelope({
-      module: baseModuleSection(),
-      shell: {},
-    })
-    expect(extraSection.ok).toBe(false)
-
-    const noModule = parseVelarosModEnvelope({ agent: baseManifest() })
-    expect(noModule.ok).toBe(false)
-    if (noModule.ok) return
-    expect(noModule.diagnostics[0]?.code).toBe('mod.envelope-invalid')
-  })
-
-  test('两节各报一个 id = 事故形态，拒载', () => {
-    const result = parseVelarosModEnvelope({
-      module: baseModuleSection({ id: 'probe.mod' }),
-      agent: baseManifest({ id: 'other.mod' }),
-    })
-
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.diagnostics[0]?.code).toBe('mod.envelope-id-mismatch')
-  })
 
   test('把整份信封当 agent 节喂进来时诊断说清病因', () => {
     const result = parseAgentModManifest({

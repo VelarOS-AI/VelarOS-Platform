@@ -46,9 +46,10 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
 唯一的跨节动作是**身份复核**——`module.id` 与 `agent.id` 不一致即拒载
 （诊断码 `mod.envelope-id-mismatch`），因为一个 mod 不能有两个身份。
 
-信封 schema 在 `packages/agent/src/protocol/mods.ts`：`VelarosModEnvelopeSchema`（`z.strictObject`，
-发明第四节即拒载）、`VelarosModModuleSectionSchema`、`AgentModManifestSchema`。
-文件名常量 `VelarosModManifestFileName = 'velaros.mod.json'`。
+信封与 `module` schema 的唯一事实源在
+`packages/kernel/src/contracts/protocol/mod-manifest.ts`：`VelarosModEnvelopeSchema`
+（`z.strictObject`，发明第四节即拒载）、`VelarosModModuleSectionSchema` 与文件名常量。
+Agent 只拥有 `packages/agent/src/protocol/mods.ts` 里的 `AgentModManifestSchema`。
 
 > **旧格式已 clean break**：`velaros.agent.mod.json` 与常量 `AgentModPackManifestFileName`
 > 已物理删除，不留文件名兼容。
@@ -66,13 +67,13 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
 壳级    产品壳自己的注册表          解析 ui 节；不穿过 Kernel、不穿过 Agent 主干
 ```
 
-pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干的 Loader 一处**
-（kernel-contract §15.1 原则三：每份状态单一 owner）。Kernel 保留 module ABI 的生命周期原语，
-但不持有 pack 管理。
+pack 的**发现 / 校验 / 装载 / 启停**只有一个宿主入口。统一入口先解析一次
+`velaros.mod.json`，再按 section 路由到 Kernel、Agent 与产品壳；各领域 Loader 只是入口内部的
+owner，不是另一条安装或信任通道。
 
-宿主在两级之间做三件事（`AgentModHostAssembly.ts`）：
-按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.mod.json` 并**取 agent 节** →
-连同运行态绑定喂给 `AgentModLoader`。
+Agent owner 的接缝（`AgentModHostAssembly.ts`）读取每个启用 pack 的同一份信封：存在
+`agent` 节才交给 `AgentModLoader`。`module.provides` 从此只声明真实 callable capability，
+不能再兼任“这是 Agent pack”的路由标记。
 
 ## 三、生命周期
 
@@ -82,7 +83,7 @@ pack 的**发现 / 校验 / 装载 / 启停**唯一 owner = **Agent 平台主干
 
 | 阶段           | 干什么                                                                                | 失败会怎样                                                                                                                                           |
 | -------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **discover**   | 从 Kernel pack 清单折算候选包（`discoverAgentModPackages`）；bundled 走构建图不走发现 | 跳过一律留痕：`mod.pack-disabled` / `mod.pack-not-agent-axis` / `mod.pack-unreadable` / `mod.pack-no-agent-section` / `mod.pack-bindings-unloadable` |
+| **discover**   | 从统一 pack 清单读取信封并按 `agent` section 路由（`discoverAgentModPackages`） | 跳过一律留痕：`mod.pack-disabled` / `mod.pack-agent-section-absent` / `mod.pack-unreadable` / `mod.pack-bindings-unloadable` |
 | **validate**   | manifest schema + `engines` 三轴 + `trust` + 绑定完整性 + `requiredAxes`              | 拒载并给可读诊断                                                                                                                                     |
 | **resolve**    | 平铺解析：mod id 唯一、轴内主键全宿主唯一（含工具名）                                 | 冲突 → **整包拒载**（`mod.duplicate-id` / `mod.tool-name-conflict` / `mod.contribution-conflict`），不做「后者覆盖前者」                             |
 | **activate**   | 逐轴写进注册表，Hook 写进 `loader.hooks`，推进 generation                                  | —                                                                                                                                                    |

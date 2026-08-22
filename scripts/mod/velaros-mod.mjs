@@ -5,11 +5,11 @@ import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 
 import JSZip from 'jszip'
 
+import { parseAgentModManifest } from '../../packages/agent/src/protocol/mods.ts'
 import {
-  parseAgentModManifest,
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '../../packages/agent/src/protocol/mods.ts'
+} from '../../packages/kernel/src/contracts/protocol/mod-manifest.ts'
 
 const ArchiveExtension = '.velarmod'
 const DeterministicDate = new Date('1980-01-01T00:00:00.000Z')

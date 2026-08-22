@@ -184,14 +184,15 @@ const segments = projectAgentModPromptSegments(snapshot)
 ### pack 布局与筛选规则
 
 - 宿主从 `@velaros-ai/kernel/client` 的 `mods/list` 拿到 `KernelModPackDescriptor { id, kind, version, enabled, provides, specifier }`。
-- **筛选**：`enabled === true` 且 `provides` 含 `AgentModPackProvidesId`（= `'velaros.agent'`，与 `AgentCapability` 令牌同值）
-  的 pack 才归 Agent 轴；其余留诊断跳过（`mod.pack-disabled` / `mod.pack-not-agent-axis`），不静默丢。
+- **路由**：每个 `enabled === true` 的 pack 都从统一入口读取一次信封；存在 `agent` 节才归
+  Agent owner。缺席留 `mod.pack-agent-section-absent` 诊断，`module.provides` 不参与领域路由。
 - **布局**：`specifier` 指向 pack 包目录，其中必须有 `VelarosModManifestFileName`（= `velaros.mod.json`，
   见下节「分节单文件」）。读不出即拒载（`mod.pack-unreadable`）；文件在但没有 `agent` 节是另一种病，
-  另给 `mod.pack-no-agent-section`——两者都不静默跳过。
+  另给 `mod.pack-agent-section-absent`——两者都不静默跳过。
 - **IO 全注入**：`AgentModPackReader.readManifest` / `loadBindings` 由宿主实现。主干零 fs 依赖，
-  因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；主干也**不 import kernel 协议包**，
-  pack descriptor 以结构化契约声明。`readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
+  因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；信封验证复用
+  `@velaros-ai/kernel/contracts/protocol` 的唯一 schema，pack descriptor 仍以结构化契约声明。
+  `readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
   产品宿主必须公开自己是否实现 `loadBindings`。未实现时，外部 pack 不能贡献需要代码绑定的
   `tools` 或 `hooks`；实现 command Hook 的宿主必须先将其适配为 `AgentModHookHandler`，
   并在宿主边界执行路径包含、权限、超时、输出上限和进程约束。Loader 不为安全缺口降级。
@@ -212,7 +213,7 @@ const segments = projectAgentModPromptSegments(snapshot)
     "id": "acme.notes",
     "version": "1.2.0",
     "apiVersion": 1,
-    "provides": [{ "id": "velaros.agent", "version": "1.0.0" }],
+    "provides": [{ "id": "acme.notes", "version": "1.0.0" }],
     "requires": [],
     "permissions": ["project:read"],
     "isolation": "in-process",

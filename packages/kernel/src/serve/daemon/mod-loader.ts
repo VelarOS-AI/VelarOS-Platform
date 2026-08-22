@@ -4,20 +4,23 @@ import { pathToFileURL } from 'node:url'
 
 import {
   isArray,
-  isBlank,
   isFalse,
   isFunction,
   isNotUndefined,
   isNull,
   isObject,
-  isPlainObject,
   isString,
   isUndefined,
   Log,
   optionalWhen,
   stringifyPretty,
+  toOptional,
 } from '@velaros-ai/core'
 import type { KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
+import {
+  parseVelarosModEnvelope,
+  VelarosModManifestFileName,
+} from '@velaros-ai/kernel/contracts/protocol'
 
 import {
   BundledSpecifierScheme,
@@ -134,9 +137,6 @@ function isKernelModuleDefinition(
     && isFunction(activate)
 }
 
-/** Pack manifest file name — one sectioned file per mod (blueprint v6 §8.3). */
-export const VelarosModManifestFileName = 'velaros.mod.json'
-
 /**
  * Install a user/contrib pack directory into the store index.
  *
@@ -169,37 +169,24 @@ export async function installModPackFromDirectory(
       cause: error,
     })
   }
-  if (!isPlainObject(parsed)) {
+  const envelope = parseVelarosModEnvelope(parsed, { origin: manifestPath })
+  if (!envelope.ok) {
     throw new Error(
-      `${VelarosModManifestFileName} root must be an object: ${manifestPath}`,
+      envelope.diagnostics
+        .map((diagnostic) => `${diagnostic.path ?? '<root>'}: ${diagnostic.message}`)
+        .join('; '),
     )
   }
-  const moduleSection = Reflect.get(parsed, 'module')
-  if (
-    !isPlainObject(moduleSection)
-  ) {
-    throw new Error(
-      `${VelarosModManifestFileName} must declare a "module" section: ${manifestPath}`,
-    )
-  }
-  const id = readRequiredString(moduleSection, 'id')
-  const version = readRequiredString(moduleSection, 'version')
-  const entryValue = Reflect.get(moduleSection, 'entry')
-  const relativeSpecifier = isString(entryValue)
-    && !isBlank(entryValue.trim())
-    ? entryValue.trim()
-    : './index.js'
-  const exportNameValue = Reflect.get(moduleSection, 'exportName')
+  const moduleSection = envelope.envelope.module
+  const relativeSpecifier = moduleSection.entry ?? './index.js'
   const pack: KernelModPackRecord = {
-    id,
+    id: moduleSection.id,
     kind,
-    version,
+    version: moduleSection.version,
     specifier: resolve(absolute, relativeSpecifier),
-    ...(isString(exportNameValue) && !isBlank(exportNameValue.trim())
-      ? { exportName: exportNameValue.trim() }
-      : {}),
+    exportName: toOptional(moduleSection.exportName),
     enabled: true,
-    provides: readCapabilityIds(moduleSection, manifestPath),
+    provides: moduleSection.provides.map((token) => token.id),
   }
   await access(pack.specifier)
   store.register(pack)
@@ -266,45 +253,6 @@ export async function persistModIndex(store: KernelModStore): Promise<void> {
     `${stringifyPretty({ packs })}\n`,
     { encoding: 'utf8', mode: 0o600 },
   )
-}
-
-/**
- * Reads capability ids from the module section's `provides`.
- *
- * Tolerant in shape only: a bare id string and a `{ id, version }` token both
- * mean the same capability. Anything else is a manifest error, not a default.
- */
-function readCapabilityIds(
-  moduleSection: object,
-  manifestPath: string,
-): readonly string[] {
-  const provides = Reflect.get(moduleSection, 'provides')
-  if (isUndefined(provides)) return []
-  if (!isArray(provides)) {
-    throw new Error(
-      `${VelarosModManifestFileName} "module.provides" must be an array: ${manifestPath}`,
-    )
-  }
-  return provides.map((entry) => {
-    if (isString(entry) && !isBlank(entry.trim())) return entry.trim()
-    if (isObject(entry)) {
-      const id = Reflect.get(entry, 'id')
-      if (isString(id) && !isBlank(id.trim())) return id.trim()
-    }
-    throw new Error(
-      `${VelarosModManifestFileName} "module.provides" entries must be a capability id or {id}: ${manifestPath}`,
-    )
-  })
-}
-
-function readRequiredString(input: object, field: string): string {
-  const value = Reflect.get(input, field)
-  if (!isString(value) || isBlank(value.trim())) {
-    throw new Error(
-      `${VelarosModManifestFileName} field "module.${field}" must be a non-empty string`,
-    )
-  }
-  return value.trim()
 }
 
 function isNodeError(error: unknown, code: string): boolean {

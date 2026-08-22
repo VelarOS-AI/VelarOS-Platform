@@ -152,7 +152,7 @@ describe('agent mod loader', () => {
     }
   })
 
-  test('宿主组装入口缺省恒加载内置 mod，并把不含 Agent 轴的 pack 留痕跳过', async () => {
+  test('宿主组装入口缺省恒加载内置 mod，并按 agent section 路由 pack', async () => {
     const { report } = await assembleAgentMods({
       host: createHost(),
       packs: [
@@ -167,20 +167,25 @@ describe('agent mod loader', () => {
           id: 'pack.disabled',
           version: '1.0.0',
           enabled: false,
-          provides: ['velaros.agent'],
+          provides: [],
           specifier: '/packs/disabled',
         },
       ],
       reader: {
-        readManifest: () => {
-          throw new Error('不应读取被跳过的 pack')
-        },
+        readManifest: ({ descriptor }) => ({
+          module: {
+            id: descriptor.id,
+            version: descriptor.version,
+            apiVersion: 1,
+            provides: descriptor.provides,
+          },
+        }),
       },
     })
 
     expect(report.activated.map((state) => state.modId)).toEqual([BuiltinAgentModId])
     expect(report.diagnostics.map((item) => item.code)).toEqual(
-      expect.arrayContaining(['mod.pack-not-agent-axis', 'mod.pack-disabled'])
+      expect.arrayContaining(['mod.pack-agent-section-absent', 'mod.pack-disabled'])
     )
   })
 
@@ -193,7 +198,7 @@ describe('agent mod loader', () => {
           id: 'pack.broken',
           version: '1.0.0',
           enabled: true,
-          provides: ['velaros.agent'],
+          provides: [],
           specifier: '/packs/broken',
         },
       ],
@@ -212,7 +217,7 @@ describe('agent mod loader', () => {
     expect(diagnostic?.message).toContain('ENOENT')
   })
 
-  test('读 velaros.mod.json 取 agent 节装载，module/ui 两节读都不读', async () => {
+  test('Agent 路由只看 agent section，空 provides 也正常装载', async () => {
     const { report } = await assembleAgentMods({
       host: createHost(),
       bundled: [],
@@ -221,7 +226,7 @@ describe('agent mod loader', () => {
           id: 'pack.enveloped',
           version: '1.0.0',
           enabled: true,
-          provides: ['velaros.agent'],
+          provides: [],
           specifier: '/packs/enveloped',
         },
       ],
@@ -233,7 +238,7 @@ describe('agent mod loader', () => {
               id: 'probe.mod',
               version: '0.1.0',
               apiVersion: 1,
-              provides: ['velaros.agent'],
+              provides: [],
             },
             agent: createManifest({
               contributes: { skills: [{ id: 'skill.one', name: 'One', spaces: ['system'] }] },
@@ -259,7 +264,7 @@ describe('agent mod loader', () => {
           id: 'pack.no-agent-section',
           version: '1.0.0',
           enabled: true,
-          provides: ['velaros.agent'],
+          provides: [],
           specifier: '/packs/no-agent-section',
         },
       ],
@@ -269,7 +274,7 @@ describe('agent mod loader', () => {
             id: 'probe.mod',
             version: '0.1.0',
             apiVersion: 1,
-            provides: ['velaros.agent'],
+            provides: [],
           },
         }),
       },
@@ -277,7 +282,7 @@ describe('agent mod loader', () => {
 
     expect(report.activated).toEqual([])
     const codes = report.diagnostics.map((item) => item.code)
-    expect(codes).toContain('mod.pack-no-agent-section')
+    expect(codes).toContain('mod.pack-agent-section-absent')
     expect(codes).not.toContain('mod.pack-unreadable')
   })
 
@@ -290,7 +295,7 @@ describe('agent mod loader', () => {
           id: 'pack.bad-envelope',
           version: '1.0.0',
           enabled: true,
-          provides: ['velaros.agent'],
+          provides: [],
           specifier: '/packs/bad-envelope',
         },
       ],

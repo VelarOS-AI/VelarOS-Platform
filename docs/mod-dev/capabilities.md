@@ -62,7 +62,7 @@ interface KernelModuleManifest {
   readonly requires: readonly CapabilityRequirement[];
   readonly optionalRequires: readonly CapabilityRequirement[];
   readonly permissions: readonly string[];
-  readonly isolation: KernelModuleIsolation; // 'in-process' | 'worker' | 'sidecar'
+  readonly isolation: KernelModuleIsolation; // 'in-process' | 'worker' | 'remote' | 'sidecar'
 }
 ```
 
@@ -70,15 +70,15 @@ manifest 的 `module` 节 schema（`VelarosModModuleSectionSchema`）与它一�
 另加两个**装载寻址**字段 `entry` / `exportName`——它们只对 installed pack 有意义，
 bundled pack 走构建图，没有寻址问题。
 
-> **单一事实来源在 `@velaros-ai/kernel/contracts/abi`**；
-> `packages/agent/src/protocol/mods.ts` 里那份是它的**磁盘 JSON 投影，不是第二个定义**。
-> schema 住 `@velaros-ai/agent/protocol` 而不是 core，是因为**依赖方向**：契约层不得反向依赖 Kernel 库。
-> Kernel 侧读同一节时用它自己的窄读取器——各读各节，正是分节信封要的形状。
+> **单一事实来源在 `@velaros-ai/kernel`**：ABI 定义运行态形状，
+> `@velaros-ai/kernel/contracts/protocol` 的 `mod-manifest` 是唯一磁盘 JSON schema。
+> Agent 与产品壳只消费统一入口路由给自己的不透明 section，不再各抄一份 module parser。
 
 ### `isolation` 是部署轴，不是架构轴
 
 **进程边界是部署决策，不是架构决策。** 换 `isolation` 值就换部署形态，descriptor 之外零改动。
-默认 `'in-process'`——能力 mod 进程内装载是默认，要隔离才声明。
+默认 `'in-process'`——能力 mod 进程内装载是默认，要隔离才声明。`worker` / `remote` 仍由 Host
+注入同一 `KernelModuleIsolationAdapter` 接缝；`sidecar` 只为旧 HostBridge 产物兼容，新 Mod 不得使用。
 
 ---
 

@@ -1,10 +1,10 @@
 // 域：宿主组装入口（Kernel pack 清单 → Agent 领域 Loader）。
 //
 // 两级注册机的接缝就在这里：
-//  第一级 Kernel Module Host 只认窄 descriptor，它把「装了哪些 pack、在哪个目录」告诉宿主；
-//  第二级 Agent Loader 只认领域 manifest。宿主（各产品装配层）在中间做三件事：
-//  按 `provides` 筛出含 Agent 轴的 pack → 读 pack 目录里的 `velaros.mod.json`、取 agent 节并
-//  用 `module.permissions` 覆盖领域权限投影 → 连同运行态绑定喂给 Loader。
+//  第一级统一 Mod 入口只认 pack descriptor，它把「装了哪些 pack、在哪个目录」告诉宿主；
+//  第二级 Agent Loader 只认领域 manifest。宿主（各产品装配层）读取每个启用 pack 的同一份
+//  `velaros.mod.json`，有 `agent` 节就路由给本 owner，再用 `module.permissions` 覆盖领域权限投影。
+//  `module.provides` 只表示真实 capability，绝不兼任领域路由标记。
 //
 // 分节单文件（蓝图 v6 §8.3）：一个 mod 一个 `velaros.mod.json`，`module` 节归 Kernel、
 // `agent` 节归本主干、`ui` 节归产品壳。本文件只取 agent 节，另外两节读都不读。
@@ -15,13 +15,12 @@
 //
 // IO 全部经 `AgentModPackReader` 注入：主干零文件系统依赖，宿主决定怎么读、读不读得动。
 import { isUndefined, toOptional } from '@velaros-ai/core'
-
-import type { AgentModDiagnostic } from '../protocol'
 import {
-  AgentModPackProvidesId,
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '../protocol'
+} from '@velaros-ai/kernel/contracts/protocol'
+
+import type { AgentModDiagnostic } from '../protocol'
 
 import type {
   AgentModBindings,
@@ -83,7 +82,7 @@ function readErrorMessage(error: unknown): string {
 /**
  * discover：把 Kernel 的 pack 清单折算成 Agent 候选包。
  *
- * 跳过一律留痕（禁用 / 不含 Agent 轴 / 读不出 manifest 各有诊断码），绝不静默丢弃。
+ * 跳过一律留痕（禁用 / 未声明 Agent 节 / 读不出 manifest 各有诊断码），绝不静默丢弃。
  */
 async function discoverAgentModPackages(input: {
   packs: readonly AgentModPackDescriptorLike[]
@@ -102,16 +101,6 @@ async function discoverAgentModPackages(input: {
       })
       continue
     }
-    if (!descriptor.provides.includes(AgentModPackProvidesId)) {
-      diagnostics.push({
-        code: 'mod.pack-not-agent-axis',
-        message: `pack「${descriptor.id}」的 provides 不含 ${AgentModPackProvidesId}，不属 Agent 轴，交由其 owner module 装载。`,
-        modId: descriptor.id,
-        origin: descriptor.specifier,
-      })
-      continue
-    }
-
     let raw: unknown
     try {
       raw = await input.reader.readManifest({
@@ -141,8 +130,8 @@ async function discoverAgentModPackages(input: {
     }
     if (isUndefined(envelope.envelope.agent)) {
       diagnostics.push({
-        code: 'mod.pack-no-agent-section',
-        message: `pack「${descriptor.id}」的 provides 含 ${AgentModPackProvidesId}，但 ${VelarosModManifestFileName} 里没有 agent 节，拒载。`,
+        code: 'mod.pack-agent-section-absent',
+        message: `pack「${descriptor.id}」未声明 agent 节，Agent owner 不处理；其他 section 仍由各自 owner 接收。`,
         modId: descriptor.id,
         origin: descriptor.specifier,
       })

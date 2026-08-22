@@ -25,6 +25,12 @@ import {
   KernelSessionIdentitySchema,
 } from './identity'
 import {
+  VelarosModCapabilityRequirementSchema,
+  VelarosModCapabilityTokenSchema,
+  VelarosModEnvelopeSchema,
+  VelarosModModuleSectionSchema,
+} from './mod-manifest'
+import {
   KernelModPackDescriptorSchema,
   KernelModPackKindSchema,
   ModsInstallFromDirectoryRequestSchema,
@@ -92,6 +98,10 @@ const identityWireSchemas = {
 }
 
 const modsWireSchemas = {
+  VelarosModCapabilityToken: VelarosModCapabilityTokenSchema,
+  VelarosModCapabilityRequirement: VelarosModCapabilityRequirementSchema,
+  VelarosModModuleSection: VelarosModModuleSectionSchema,
+  VelarosModEnvelope: VelarosModEnvelopeSchema,
   KernelModPackKind: KernelModPackKindSchema,
   KernelModPackDescriptor: KernelModPackDescriptorSchema,
   ModsListRequest: ModsListRequestSchema,
