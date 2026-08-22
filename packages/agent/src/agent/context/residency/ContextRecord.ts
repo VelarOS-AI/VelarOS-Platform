@@ -106,6 +106,13 @@ export interface ContextRecord {
   readonly pinned: boolean
   /** 文件读 / 页面快照类：可重取 → I0 优先逐出。 */
   readonly refetchable: boolean
+  /**
+   * 准入后额外保持直接驻留的轮数。用于失败原因、用户指令与召回结果等短期高价值记录；
+   * fault 发生后的动态延长由账本维护，不改写记录。
+   */
+  readonly warmLeaseTurns: number
+  /** 包含失败根因或错误输出；治理器在升温租约内不得将其逐出。 */
+  readonly failureEvidence: boolean
   /** 准入判决（不可变）。当前驻留态在账本的向量里。 */
   readonly admittedResidency: ContextResidency
   readonly bytes: ContextRecordBytes

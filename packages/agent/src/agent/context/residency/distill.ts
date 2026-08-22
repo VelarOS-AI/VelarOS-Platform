@@ -36,6 +36,7 @@ import {
   buildContextSkeleton,
   collectContextAnchorUnion,
   isContextSkeletonText,
+  MaxContextSummaryMembers,
   renderContextAnchorLine,
   renderContextRecallLine,
 } from './skeleton'
@@ -423,7 +424,11 @@ function collectDistillSegments(input: PlanContextDistillationInput): DistillSeg
     const chars = residentChars(record, residency.get(record.id) ?? record.admittedResidency)
     if (chars <= 0) continue
 
-    if (current.chars + chars > config.distillation.maxInputChars && !isEmpty(current.members)) {
+    if (
+      (current.chars + chars > config.distillation.maxInputChars ||
+        current.members.length >= MaxContextSummaryMembers) &&
+      !isEmpty(current.members)
+    ) {
       segments.push(current)
       current = { members: [], chars: 0 }
       if (segments.length >= config.distillation.maxSegmentsPerEpoch) break

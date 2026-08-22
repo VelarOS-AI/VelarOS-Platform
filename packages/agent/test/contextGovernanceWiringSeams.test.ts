@@ -47,7 +47,7 @@ function appendToolResult(
 }
 
 void describe('classifier port · dedupe veto (审计 U42/U24)', () => {
-  test('弃权回落结构信号：同一绝对路径的两次分页读被判为同一目标', () => {
+  test('弃权保守关闭可重取：结构目标存在也不会擅自把旧结果判成可逐出快照', () => {
     const ledger = new ContextResidencyLedger()
     appendToolResult(ledger, {
       toolCallId: 'call-1',
@@ -65,7 +65,8 @@ void describe('classifier port · dedupe veto (审计 U42/U24)', () => {
     })
 
     assert.equal(second.record.dedupeKey, 'system:read::/tmp/build.log')
-    assert.equal(second.supersededIds.length, 1, '弃权时结构信号会把上一页判成过时快照')
+    assert.equal(second.record.refetchable, false)
+    assert.equal(second.supersededIds.length, 0)
   })
 
   test('否决哨兵不回落结构信号：两次分页读互不取代', () => {

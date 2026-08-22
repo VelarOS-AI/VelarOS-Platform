@@ -85,6 +85,8 @@ export interface ContextDistillAdaptiveConfig {
 
 /** I2 蒸馏的成本护栏与产物规格（档位之外的全部旋钮）。 */
 export interface ContextDistillConfig {
+  /** prompt 中同时保留的最近摘要数；更老摘要转为隐藏冷记录，原始成员仍可精确检索。 */
+  maxResidentSummaries: number
   /** 每个 epoch 最多规划几段蒸馏（并发仍恒为 1，多出来的排队）。 */
   maxSegmentsPerEpoch: number
   /** 单次蒸馏的输入字符上限（沿用 v1 `MaxSummarizerInputChars` 的 48K）。 */
@@ -117,6 +119,27 @@ export interface ContextEvictionConfig {
   lowAnchorDensityPerKiloChar: number
   /** 认定"陈旧"的最小轮距：可重取记录至少落后当前轮这么多轮才进 I0 候选。 */
   staleRefetchableTurnDistance: number
+  /** 单个用户轮内长自主执行时的记录距离兜底；避免只按 user turn 计算导致永不陈旧。 */
+  staleRefetchableRecordDistance: number
+  /**
+   * 已有内容寻址 payload 的工具结果进入冷驻留候选前至少等待的轮距。
+   *
+   * 这条路不重新执行工具，只把 prompt 正文换成精确 payload 引用；因此它比“可重取”更可靠，
+   * 但仍要给当前任务留出足够的直接使用窗口。
+   */
+  payloadBackedTurnDistance: number
+  /** payload-backed 记录在单轮长执行中的最小记录距离。 */
+  payloadBackedRecordDistance: number
+}
+
+/** 缺页后的升温与防抖策略。 */
+export interface ContextFaultRecoveryConfig {
+  /** 第一次缺页后保持重新驻留的轮数。后续缺页按 2 的幂次延长。 */
+  baseWarmLeaseTurns: number
+  /** 单次升温租约上限。 */
+  maxWarmLeaseTurns: number
+  /** 同一记录累计缺页达到该次数后，在当前账本代内保持驻留。 */
+  stickyAfterFaults: number
 }
 
 /**
@@ -166,6 +189,8 @@ export interface ContextGovernanceConfig {
   instruments: ContextInstrumentConfig
   /** I0 机械逐出的选段阈值。 */
   eviction: ContextEvictionConfig
+  /** 召回缺页后的升温、防抖与粘滞保护。 */
+  faultRecovery: ContextFaultRecoveryConfig
   /** 转交布防阈值。 */
   handoff: ContextHandoffConfig
   /** I2 蒸馏的成本护栏与 adaptive 判据（档位在 `instruments.distill`）。 */
@@ -186,10 +211,22 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   // （`skipReason: 'no-distiller'`），所以默认开档对 headless / 测试 / 无模型环境是安全的。
   instruments: { skeleton: true, distill: 'aux' },
   // 逐字沿用 B1 起 `GovernanceEpoch.ts` 里的模块常量值：搬进配置面是为了 B4 能扫，不是改行为。
-  eviction: { lowAnchorDensityPerKiloChar: 2, staleRefetchableTurnDistance: 2 },
+  eviction: {
+    lowAnchorDensityPerKiloChar: 2,
+    staleRefetchableTurnDistance: 2,
+    staleRefetchableRecordDistance: 24,
+    payloadBackedTurnDistance: 6,
+    payloadBackedRecordDistance: 24,
+  },
+  faultRecovery: {
+    baseWarmLeaseTurns: 6,
+    maxWarmLeaseTurns: 48,
+    stickyAfterFaults: 3,
+  },
   // 同上：逐字沿用 B1 起 `ContextGovernanceSession.ts` 里的 HandoffLowSavingStreak / HandoffOccupancyPercent。
   handoff: { lowSavingStreak: 2, occupancyPercent: 35 },
   distillation: {
+    maxResidentSummaries: 8,
     maxSegmentsPerEpoch: 1,
     maxInputChars: 48_000,
     targetChars: 2_400,
@@ -273,12 +310,21 @@ export interface ContextGovernanceConfigInput {
   eviction?: LooseOptional<{
     lowAnchorDensityPerKiloChar?: LooseOptional<number>
     staleRefetchableTurnDistance?: LooseOptional<number>
+    staleRefetchableRecordDistance?: LooseOptional<number>
+    payloadBackedTurnDistance?: LooseOptional<number>
+    payloadBackedRecordDistance?: LooseOptional<number>
+  }>
+  faultRecovery?: LooseOptional<{
+    baseWarmLeaseTurns?: LooseOptional<number>
+    maxWarmLeaseTurns?: LooseOptional<number>
+    stickyAfterFaults?: LooseOptional<number>
   }>
   handoff?: LooseOptional<{
     lowSavingStreak?: LooseOptional<number>
     occupancyPercent?: LooseOptional<number>
   }>
   distillation?: LooseOptional<{
+    maxResidentSummaries?: LooseOptional<number>
     maxSegmentsPerEpoch?: LooseOptional<number>
     maxInputChars?: LooseOptional<number>
     targetChars?: LooseOptional<number>
@@ -315,6 +361,21 @@ export function resolveContextGovernanceConfig(
     defaults.admission.inlineMaxChars,
     200,
     1_000_000
+  )
+  const baseWarmLeaseTurns = clampInteger(
+    input?.faultRecovery?.baseWarmLeaseTurns,
+    defaults.faultRecovery.baseWarmLeaseTurns,
+    1,
+    10_000
+  )
+  const maxWarmLeaseTurns = Math.max(
+    baseWarmLeaseTurns,
+    clampInteger(
+      input?.faultRecovery?.maxWarmLeaseTurns,
+      defaults.faultRecovery.maxWarmLeaseTurns,
+      1,
+      100_000
+    )
   )
 
   return {
@@ -366,6 +427,34 @@ export function resolveContextGovernanceConfig(
         0,
         1_000
       ),
+      staleRefetchableRecordDistance: clampInteger(
+        input?.eviction?.staleRefetchableRecordDistance,
+        defaults.eviction.staleRefetchableRecordDistance,
+        0,
+        100_000
+      ),
+      payloadBackedTurnDistance: clampInteger(
+        input?.eviction?.payloadBackedTurnDistance,
+        defaults.eviction.payloadBackedTurnDistance,
+        0,
+        10_000
+      ),
+      payloadBackedRecordDistance: clampInteger(
+        input?.eviction?.payloadBackedRecordDistance,
+        defaults.eviction.payloadBackedRecordDistance,
+        0,
+        100_000
+      ),
+    },
+    faultRecovery: {
+      baseWarmLeaseTurns,
+      maxWarmLeaseTurns,
+      stickyAfterFaults: clampInteger(
+        input?.faultRecovery?.stickyAfterFaults,
+        defaults.faultRecovery.stickyAfterFaults,
+        1,
+        100
+      ),
     },
     handoff: {
       // streak 至少 1：连续 0 次低收益就布防 = 一开机就劝人换会话。
@@ -414,6 +503,12 @@ function resolveDistillationConfig(
   )
 
   return {
+    maxResidentSummaries: clampInteger(
+      input?.maxResidentSummaries,
+      defaults.maxResidentSummaries,
+      1,
+      100
+    ),
     maxSegmentsPerEpoch: clampInteger(input?.maxSegmentsPerEpoch, defaults.maxSegmentsPerEpoch, 1, 8),
     maxInputChars,
     targetChars,

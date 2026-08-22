@@ -16,6 +16,7 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isPresent, toNullable, toOptional } from '@velaros-ai/core'
 
+import { hasFailureSignal } from '../ContextLedger'
 import { buildContextRefEnvelope, type ContextRefEnvelope } from '../contextRefEnvelope'
 
 import { extractContextAnchors } from './anchors'
@@ -50,6 +51,8 @@ export interface ContextClassificationInput {
   toolArgs: unknown
   text: string
   chars: number
+  /** 工具错误形态或正文失败信号。 */
+  failureEvidence: boolean
 }
 
 /**
@@ -72,6 +75,8 @@ export interface ContextRecordClassifier {
   isRefetchable?(input: ContextClassificationInput): LooseOptional<boolean>
   resolveDedupeTarget?(input: ContextClassificationInput): LooseOptional<string>
   isPinned?(input: ContextClassificationInput): LooseOptional<boolean>
+  /** 在尾保护之外继续保持直接驻留的额外轮数。 */
+  resolveWarmLeaseTurns?(input: ContextClassificationInput): LooseOptional<number>
 }
 
 export interface ContextAdmissionInput {
@@ -97,6 +102,8 @@ export interface ContextAdmissionInput {
   refetchable?: LooseOptional<boolean>
   /** 显式覆盖：语义去重的目标定位符。 */
   dedupeTarget?: LooseOptional<string>
+  /** 显式覆盖：准入后的额外升温租约。 */
+  warmLeaseTurns?: LooseOptional<number>
   /** summary 专用：被折叠的成员记录 id。 */
   memberIds?: readonly string[]
 }
@@ -131,6 +138,7 @@ export function admitContextRecord(
   const chars = estimateMessageChars(input.message)
   const results = readToolResultFacts(input.message)
   const identity = resolveToolIdentity(input, results)
+  const failureEvidence = results.some((result) => result.isError) || hasFailureSignal(text)
   const classification: ContextClassificationInput = {
     kind: input.kind,
     toolName: identity.toolName,
@@ -138,6 +146,7 @@ export function admitContextRecord(
     toolArgs: input.toolArgs,
     text,
     chars,
+    failureEvidence,
   }
 
   // 多结果消息不参与语义去重：记录身份只认第一份结果，拿它的 `工具::目标` 去判定整条消息过时，
@@ -148,6 +157,7 @@ export function admitContextRecord(
   const openingUserRecord =
     input.kind === 'user' && !priorRecords.some((prior) => prior.kind === 'user')
   const pinned = resolvePinned(classification, input, options.classifier, openingUserRecord)
+  const warmLeaseTurns = resolveWarmLeaseTurns(classification, input, options.classifier)
   const oversize = resolveOversizeKind(input.kind, chars, config)
   const id = createContextRecordId(options.seq)
   const excerptMaxChars =
@@ -193,6 +203,8 @@ export function admitContextRecord(
     turn: Math.max(0, Math.floor(input.turn)),
     pinned,
     refetchable,
+    warmLeaseTurns,
+    failureEvidence,
     admittedResidency,
     bytes: { full: chars, excerpt: excerpt ? excerpt.text.length : 0 },
     anchors: extractContextAnchors(text),
@@ -367,14 +379,14 @@ function buildRecordExcerpt(input: {
       ? 'tool-payload'
       : 'context-handle'
 
-  // user 正文的摘录逐字沿用 v1 安全阀形态：头部摘录 + 一行取回提示（非 JSON 信封）。
+  // user 正文保留头尾，避免结尾约束、附件说明或纠正被头部截断吞掉。完整正文只通过持久 ref 召回；
   // 投影期 user 记录只换正文不换角色，所以这里存的就是最终要贴进消息的文本。
   if (input.kind === 'user') {
-    const head = sliceHead(input.text, Math.max(0, input.maxChars - 200)).trimEnd()
+    const text = buildUserTextSafetyValveText(input.text, input.maxChars, ref, refKind)
     return {
-      text: buildUserTextSafetyValveText(input.text.length, head, ref, refKind),
+      text,
       kind: 'text',
-      truncated: head.length < input.text.length,
+      truncated: text.length < input.text.length,
       ref,
       refKind,
       reason: 'need the full user message',
@@ -393,16 +405,15 @@ function buildRecordExcerpt(input: {
 }
 
 function buildUserTextSafetyValveText(
-  originalLength: number,
-  excerpt: string,
+  original: string,
+  maxChars: number,
   ref: string,
   refKind: ContextRecordExcerpt['refKind']
 ): string {
-  return [
-    excerpt,
-    '',
-    `[user text truncated before provider replay; originalLength=${originalLength}; use context:recall(ref:"${ref}", refKind:"${refKind}") for the full text.]`,
-  ].join('\n')
+  const guidance = `[user text partially resident; originalLength=${original.length}; visible=head+tail; use context:recall(ref:"${ref}", refKind:"${refKind}", offset:0) for the exact full text.]`
+  const excerptBudget = Math.max(1, maxChars - guidance.length - 2)
+  const excerpt = sliceHeadTailExcerpt(original, excerptBudget).trim()
+  return [excerpt, '', guidance].join('\n')
 }
 
 function resolveToolIdentity(
@@ -447,15 +458,34 @@ function resolveRefetchable(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
   classifier: LooseOptional<ContextRecordClassifier>,
-  dedupeKey: Nullable<string>
+  _dedupeKey: Nullable<string>
 ): boolean {
   if (isPresent(input.refetchable)) return input.refetchable
 
   const injected = classifier?.isRefetchable?.(classification)
   if (isPresent(injected)) return injected
 
-  // 结构默认：带资源定位符的工具结果 = 可重取（同一个 url/path 再跑一次就能拿回来）。
-  return classification.kind === 'tool-result' && isPresent(dedupeKey)
+  // 不再把“参数里有 URL/path”解释成“安全可重跑”。写文件、提交、上传与浏览器交互同样带定位符，
+  // 结构猜测会把有副作用的结果错误地放进陈旧可重取档。宿主认识能力语义时必须显式表态；未知工具
+  // 保守留在普通驻留档，若已有 payloadRef，治理器仍可走内容寻址的无副作用 page-out。
+  return false
+}
+
+function resolveWarmLeaseTurns(
+  classification: ContextClassificationInput,
+  input: ContextAdmissionInput,
+  classifier: LooseOptional<ContextRecordClassifier>
+): number {
+  if (isPresent(input.warmLeaseTurns)) return Math.max(0, Math.floor(input.warmLeaseTurns))
+
+  const injected = classifier?.resolveWarmLeaseTurns?.(classification)
+  if (isPresent(injected)) return Math.max(0, Math.floor(injected))
+
+  // 普通 user 轮在尾窗口滑出后再保留四轮，避免多阶段任务刚进入执行就把中途纠正折掉。
+  if (classification.kind === 'user') return 4
+  // 错误正文通常仍在下一批修复/验证里使用，比普通工具输出多保留一个短阶段。
+  if (classification.failureEvidence) return 8
+  return 0
 }
 
 function resolvePinned(

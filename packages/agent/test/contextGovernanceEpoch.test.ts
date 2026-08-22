@@ -13,6 +13,7 @@ import { describe, test } from 'bun:test'
 
 import { buildSystemPromptDelivery } from '../src/agent'
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
+import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
 import {
   ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
@@ -30,6 +31,11 @@ import { projectContextLedger } from '../src/agent/context/residency/projection'
 import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
 import { buildContextSkeleton } from '../src/agent/context/residency/skeleton'
 import { buildKernelPrefixShape } from '../src/kernel/prefix-shape'
+
+const RefetchableReadClassifier: ContextRecordClassifier = {
+  isRefetchable: (input) =>
+    input.toolName === 'read_file' || input.toolName === 'inspect_page' ? true : undefined,
+}
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }
@@ -103,7 +109,7 @@ void describe('governance epoch · 触发与反空转 (§4B)', () => {
 
   void test('模型请求可以在水位之下开 epoch', () => {
     const config = resolveContextGovernanceConfig({ tailProtectTurns: 0, minEpochSavingPercent: 1 })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, buildPressureHistory(6, 4_000))
 
     const report = runGovernanceEpoch({
@@ -125,7 +131,7 @@ void describe('governance epoch · 触发与反空转 (§4B)', () => {
       tailProtectTurns: 0,
       minEpochSavingPercent: 99,
     })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, buildPressureHistory(4, 2_000))
     const before = stableStringify([...ledger.residencyVector()])
 
@@ -145,6 +151,97 @@ void describe('governance epoch · 触发与反空转 (§4B)', () => {
 })
 
 void describe('governance epoch · I0 逐出与硬不变量', () => {
+  void test('payload-backed 工具结果可冷驻留，未知且无 payload 的结果保持原位', () => {
+    const config = resolveContextGovernanceConfig({
+      tailProtectTurns: 0,
+      minEpochSavingPercent: 1,
+      epochTargetPercent: 1,
+      eviction: { payloadBackedTurnDistance: 0 },
+      instruments: { skeleton: false, distill: 'off' },
+    })
+    const ledger = new ContextResidencyLedger({ config })
+    const backed = ledger.append({
+      kind: 'tool-result',
+      message: toolResultMessage('call-backed', 'unknown_tool', 'A'.repeat(20_000)),
+      createdAt: 1,
+      turn: 0,
+      toolArgs: { path: '/repo/a' },
+      payloadRef: 'ctx-payload:session:backed',
+    }).record
+    const unbacked = ledger.append({
+      kind: 'tool-result',
+      message: toolResultMessage('call-unbacked', 'unknown_tool', 'B'.repeat(20_000)),
+      createdAt: 2,
+      turn: 0,
+      toolArgs: { path: '/repo/b' },
+    }).record
+
+    runGovernanceEpoch({
+      ledger,
+      config,
+      budgetTokens: 200_000,
+      epoch: 1,
+      at: 1_000,
+      modelRequested: true,
+    })
+
+    assert.equal(ledger.residencyOf(backed.id), 'EVICTED')
+    assert.equal(ledger.residencyOf(unbacked.id), 'INLINE')
+  })
+
+  void test('fault 后自动 page-in 并在升温租约内免于重复逐出', () => {
+    const config = resolveContextGovernanceConfig({
+      tailProtectTurns: 0,
+      minEpochSavingPercent: 1,
+      epochTargetPercent: 1,
+      eviction: { staleRefetchableTurnDistance: 0 },
+      faultRecovery: { baseWarmLeaseTurns: 2, maxWarmLeaseTurns: 8 },
+      instruments: { skeleton: false, distill: 'off' },
+    })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
+    const record = ledger.append({
+      kind: 'tool-result',
+      message: toolResultMessage('call-warm', 'read_file', 'W'.repeat(20_000)),
+      createdAt: 1,
+      turn: 0,
+      toolArgs: { path: '/repo/warm.ts' },
+    }).record
+    ledger.migrate(record.id, 'EVICTED', 'evict', 2)
+    ledger.recordFault(record.id, 3)
+    ledger.append({
+      kind: 'assistant',
+      message: assistantMessage('继续处理'),
+      createdAt: 4,
+      turn: 1,
+    })
+
+    runGovernanceEpoch({
+      ledger,
+      config,
+      budgetTokens: 200_000,
+      epoch: 1,
+      at: 5,
+      modelRequested: true,
+    })
+    assert.equal(ledger.residencyOf(record.id), 'INLINE')
+
+    ledger.append({
+      kind: 'assistant',
+      message: assistantMessage('已经跨过升温阶段'),
+      createdAt: 6,
+      turn: 3,
+    })
+    runGovernanceEpoch({
+      ledger,
+      config,
+      budgetTokens: 200_000,
+      epoch: 2,
+      at: 7,
+      modelRequested: true,
+    })
+    assert.equal(ledger.residencyOf(record.id), 'EVICTED')
+  })
+
   void test('尾保护窗口内的记录永不被选中（裁决 5：不设旁路）', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 2,
@@ -204,7 +301,11 @@ void describe('governance epoch · I0 逐出与硬不变量', () => {
       epochTargetPercent: 1,
     })
     const sink = new InMemoryContextMigrationEventSink()
-    const ledger = new ContextResidencyLedger({ config, sink })
+    const ledger = new ContextResidencyLedger({
+      config,
+      sink,
+      classifier: RefetchableReadClassifier,
+    })
     const stale = ledger.append({
       kind: 'tool-result',
       message: toolResultMessage('call-1', 'inspect_page', 'page v1 '.repeat(2_000)),
@@ -241,7 +342,7 @@ void describe('governance epoch · I0 逐出与硬不变量', () => {
       minEpochSavingPercent: 1,
       epochTargetPercent: 1,
     })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, buildPressureHistory(6, 4_000))
 
     runGovernanceEpoch({
@@ -316,6 +417,7 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
     assert.ok(text.includes('- 决策：'))
     assert.ok(text.includes('packages/agent/src/index.ts'))
     assert.ok(text.includes('bun run check'))
+    for (const memberId of skeleton.memberIds) assert.ok(text.includes(memberId))
   })
 
   void test('骨架自身不会在下一次 epoch 里被当叙事再折一遍', () => {
@@ -324,16 +426,66 @@ void describe('governance epoch · I1 规则骨架与 I2 显式降级', () => {
       minEpochSavingPercent: 1,
       epochTargetPercent: 1,
     })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, [
-      assistantMessage('决定采用账本；bun run check 通过'),
+      assistantMessage(`决定采用账本；bun run check 通过。${'这里是过程叙述。'.repeat(200)}`),
       ...buildPressureHistory(5, 4_000),
     ])
-    runGovernanceEpoch({ ledger, config, budgetTokens: 200_000, epoch: 1, at: 1, modelRequested: true })
+    runGovernanceEpoch({ ledger, config, budgetTokens: 1_000, epoch: 1, at: 1, modelRequested: true })
     const skeleton = ledger.list().find((record) => record.kind === 'summary')!
 
     runGovernanceEpoch({ ledger, config, budgetTokens: 200_000, epoch: 2, at: 2, modelRequested: true })
     assert.equal(ledger.residencyOf(skeleton.id), 'INLINE')
+  })
+
+  void test('摘要驻留数量有界，旧摘要转入隐藏冷层且不做摘要叠摘要', () => {
+    const config = resolveContextGovernanceConfig({
+      tailProtectTurns: 0,
+      minEpochSavingPercent: 1,
+      epochTargetPercent: 1,
+      instruments: { skeleton: true, distill: 'off' },
+      distillation: { maxResidentSummaries: 3 },
+    })
+    const ledger = new ContextResidencyLedger({ config })
+    ledger.append({ kind: 'user', message: userMessage('开工'), createdAt: 0, turn: 0 })
+
+    for (let index = 0; index < 5; index += 1) {
+      ledger.append({
+        kind: 'assistant',
+        message: assistantMessage(
+          `决定完成阶段 ${index}。${'这里是可折叠的过程叙述。'.repeat(220)}`
+        ),
+        createdAt: index + 1,
+        turn: index + 1,
+      })
+      runGovernanceEpoch({
+        ledger,
+        config,
+        budgetTokens: 1_000,
+        epoch: index + 1,
+        at: index + 1,
+        modelRequested: true,
+      })
+    }
+
+    const summaries = ledger.list().filter((record) => record.kind === 'summary')
+    const residentSummaries = summaries.filter((record) => ledger.residencyOf(record.id) === 'INLINE')
+    assert.equal(summaries.length, 5)
+    assert.equal(residentSummaries.length, 3)
+    assert.equal(ledger.residencyOf(summaries[0]!.id), 'SUMMARIZED')
+    assert.equal(ledger.residencyOf(summaries[1]!.id), 'SUMMARIZED')
+
+    const projected = projectContextLedger({
+      records: ledger.list(),
+      residency: ledger.residencyVector(),
+      budget: { tailProtectTurns: 0 },
+    })
+    assert.equal(
+      projected.messages.filter((message) =>
+        String(message.content).startsWith('[context-skeleton')
+      ).length,
+      3
+    )
   })
 
   void test('没有待落地产物时 epoch 的 I2 分账全零，档位仍照实记账', () => {
@@ -458,7 +610,7 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
       minEpochSavingPercent: 1,
       epochTargetPercent: 1,
     })
-    const session = new ContextGovernanceSession(config, null, null)
+    const session = new ContextGovernanceSession(config, RefetchableReadClassifier, null)
     const history = [
       ...buildPressureHistory(5, 4_000),
       toolCallMessage('call-distill', 'context:distill', { facts: ['x'] }),
@@ -489,10 +641,11 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
 
     session.ledger.migrate(record.id, 'EVICTED', 'evict', 6)
     assert.equal(session.recordFault('ctx-payload:abc', 10), true)
-    assert.equal(session.recordFault('tool:call-7', 20), true)
-    assert.equal(session.recordFault(record.id, 30), true)
+    // 第一次缺页已经恢复驻留；别名再命中时无需重复计 fault，也不会再召回同一正文。
+    assert.equal(session.recordFault('tool:call-7', 20), false)
+    assert.equal(session.recordFault(record.id, 30), false)
     assert.equal(session.recordFault('nope', 40), false)
-    assert.equal(session.ledger.faultCountOf(record.id), 3)
+    assert.equal(session.ledger.faultCountOf(record.id), 1)
   })
 
   void test('连续两次零收益 epoch 且占用仍高 → 布防转交', () => {
@@ -566,7 +719,8 @@ void describe('准入层 · 48K 超长 user 正文安全阀（裁决 2）', () =
     const message = projected.messages[0]!
     assert.equal(message.role, 'user')
     const content = String(message.content)
-    assert.ok(content.includes('user text truncated before provider replay'))
+    assert.ok(content.includes('user text partially resident'))
+    assert.ok(content.includes('visible=head+tail'))
     assert.ok(content.includes('ctx-payload:user-1'))
   })
 
@@ -680,6 +834,7 @@ void describe('编译器切换 · 行为对齐', () => {
 
   void test('治理水位使用 tokenizer 与 MMU 校准后的消息密度', () => {
     const registry = new ContextGovernanceSessionRegistry({
+      classifier: RefetchableReadClassifier,
       config: {
         cap: 10_000,
         tailProtectTurns: 1,
@@ -701,7 +856,10 @@ void describe('编译器切换 · 行为对齐', () => {
     assert.equal(compiled.governanceEpoch?.trigger, 'watermark')
     assert.equal(compiled.governanceEpoch?.applied, true)
     assert.ok((compiled.governanceEpoch?.beforeTokens ?? 0) > 7_000)
-    assert.ok((compiled.governanceOccupancyPercent ?? 100) <= 40)
+    assert.ok(
+      (compiled.governanceEpoch?.afterTokens ?? Number.MAX_SAFE_INTEGER) <
+        (compiled.governanceEpoch?.beforeTokens ?? 0)
+    )
   })
 
   void test('dashboard 开启时只在尾部追加一块，历史段不动', () => {

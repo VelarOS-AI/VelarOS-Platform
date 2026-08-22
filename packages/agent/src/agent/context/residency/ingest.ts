@@ -9,6 +9,8 @@
  * `velarosInternal.kind === 'follow-up'`）不单独计一轮——否则一次用户会话里的内部续跑会把尾保护
  * 窗口挤空。
  */
+import { createHash } from 'node:crypto'
+
 import type { ModelMessage } from 'ai'
 
 import { toNullable } from '@velaros-ai/core'
@@ -17,7 +19,7 @@ import { isInternalFollowUpMessage } from '../../history/internalMessages'
 
 import type { ContextAdmissionInput } from './admission'
 import type { ContextRecordKind } from './ContextRecord'
-import { hasToolCallParts, readToolCallFacts, readToolResultFacts } from './messageFacts'
+import { hasToolCallParts, readMessageText, readToolCallFacts, readToolResultFacts } from './messageFacts'
 import type { ContextLedgerAppendResult, ContextResidencyLedger } from './ResidencyLedger'
 
 export interface IngestHistoryOptions {
@@ -41,6 +43,8 @@ export interface IngestHistoryOptions {
   turnBoundarySeen?: LooseOptional<boolean>
   /** 全保真层引用：toolCallId → payloadRef（PayloadStore 已存的原文）。 */
   payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
+  /** 超长 user 正文的内容哈希 → payloadRef。 */
+  userTextPayloadRefsByHash?: LooseOptional<Readonly<Record<string, string>>>
 }
 
 export interface HistoryIngestPlan {
@@ -62,6 +66,7 @@ export function planHistoryIngest(
   const baseCreatedAt = options.baseCreatedAt ?? 0
   const step = options.createdAtStepMs ?? 1
   const payloadRefs = options.payloadRefsByToolCallId
+  const userTextPayloadRefs = options.userTextPayloadRefsByHash
   const argsByToolCallId = new Map<string, unknown>()
   const inputs: ContextAdmissionInput[] = []
   let turn = Math.max(0, Math.floor(options.startTurn ?? 0))
@@ -79,6 +84,10 @@ export function planHistoryIngest(
 
     const firstResult = readToolResultFacts(message)[0]
     const toolCallId = firstResult ? firstResult.toolCallId : null
+    const userTextPayloadRef =
+      message.role === 'user'
+        ? userTextPayloadRefs?.[createHash('sha256').update(readMessageText(message)).digest('hex')]
+        : undefined
 
     inputs.push({
       kind: resolveRecordKind(message),
@@ -86,7 +95,9 @@ export function planHistoryIngest(
       createdAt: baseCreatedAt + index * step,
       turn,
       toolArgs: toolCallId ? argsByToolCallId.get(toolCallId) : null,
-      payloadRef: toolCallId ? toNullable(payloadRefs?.[toolCallId]) : null,
+      payloadRef: toolCallId
+        ? toNullable(payloadRefs?.[toolCallId])
+        : toNullable(userTextPayloadRef),
       // 并行结果各取各的 ref：整张表交给准入，第 2..N 份才不会指向第一份的 payload。
       payloadRefsByToolCallId: payloadRefs,
     })

@@ -23,6 +23,7 @@ import {
 } from '../src/agent/context/contextUsage'
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
+import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
 import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
 import {
   type ContextGovernanceConfigInput,
@@ -35,6 +36,10 @@ import {
   type GovernanceWindowInput,
   resolveGovernanceWindow,
 } from '../src/agent/context/residency/governanceWindow'
+
+const RefetchableReadClassifier: ContextRecordClassifier = {
+  isRefetchable: (input) => (input.toolName === 'read_file' ? true : undefined),
+}
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }
@@ -250,7 +255,10 @@ void describe('量纲统一 ④ · 端到端：治理器先醒，门后红', () 
    *  ② 第一次 applied 的 epoch 发生时，那一轮请求仍然是可发送的。
    */
   void test('长历史增长过程中，epoch 在送核门变红之前就已经跑过', async () => {
-    const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    const registry = new ContextGovernanceSessionRegistry({
+      config: { dashboard: false },
+      classifier: RefetchableReadClassifier,
+    })
     const compiler = new ProviderRequestCompiler(registry)
     const history: ModelMessage[] = []
     const systemPrompt = `你是 VelarOS 的执行体。${'规则说明。'.repeat(400)}`

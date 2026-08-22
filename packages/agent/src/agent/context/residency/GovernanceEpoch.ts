@@ -50,7 +50,7 @@ import {
   residentChars,
 } from './projection'
 import type { ContextResidencyLedger } from './ResidencyLedger'
-import { buildContextSkeleton } from './skeleton'
+import { buildContextSkeleton, MaxContextSummaryMembers } from './skeleton'
 
 const log = logRuntime.tag('GovernanceEpoch')
 
@@ -176,7 +176,11 @@ export interface RunGovernanceEpochInput {
 }
 
 /** 候选来源档（越靠前越机械、越该先降）。 */
-type EpochCandidateTier = 'superseded' | 'stale-refetchable' | 'low-density'
+type EpochCandidateTier =
+  | 'superseded'
+  | 'stale-refetchable'
+  | 'payload-backed'
+  | 'low-density'
 
 interface EpochCandidate {
   record: ContextRecord
@@ -218,6 +222,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   const distillOutcome = applyPendingDistills(input, budgetTokens)
   byInstrument.distill += distillOutcome.appliedByInstrument.distill
   byInstrument.skeleton += distillOutcome.appliedByInstrument.skeleton
+  byInstrument.evict += distillOutcome.archivedSummaries
 
   const collected = collectCandidates(ledger, config, budgetTokens, input.charsPerToken)
   const candidates = collected.candidates
@@ -294,6 +299,9 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
     // 骨架关掉时（A0-truncation 臂）叙事仍走普通逐出：那一臂的定义就是"直接砍"，
     // 给它补一道"没骨架就不砍"的保护等于把基线臂改造成另一臂。
     if (config.instruments.skeleton && isSkeletonMember(candidate.record)) {
+      // 每个骨架成员都必须在摘要里留下精确召回指针；满批后留给下一 epoch，不能把未列出的成员
+      // 一并迁成 SUMMARIZED。
+      if (skeletonMembers.length >= MaxContextSummaryMembers) continue
       skeletonMembers.push(candidate)
       // 增量记账**按"预计会迁"扣减**：不扣的话"达标即停"看不见骨架档的收益，会继续往下折本来
       // 够不着的候选（这批候选恰好排在最后，等于变相取消达标即停）。骨架万一生成失败，这批记录
@@ -326,11 +334,15 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
         maxAnchors: config.distillation.maxRequiredAnchors,
       })
   if (skeleton) {
-    appendSummaryRecord(ledger, {
-      text: skeleton.text,
-      memberIds: skeleton.memberIds,
-      at: input.at,
-    })
+    byInstrument.evict += appendSummaryRecord(
+      ledger,
+      {
+        text: skeleton.text,
+        memberIds: skeleton.memberIds,
+        at: input.at,
+      },
+      config.distillation.maxResidentSummaries
+    )
     for (const candidate of skeletonMembers) {
       const migrated = ledger.migrate(
         candidate.record.id,
@@ -354,6 +366,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
 interface AppliedDistillOutcome {
   appliedProducts: number
   appliedByInstrument: { distill: number; skeleton: number }
+  archivedSummaries: number
   staleProducts: number
 }
 
@@ -374,6 +387,7 @@ function applyPendingDistills(
   const outcome: AppliedDistillOutcome = {
     appliedProducts: 0,
     appliedByInstrument: { distill: 0, skeleton: 0 },
+    archivedSummaries: 0,
     staleProducts: 0,
   }
   if (isEmpty(products)) return outcome
@@ -405,11 +419,15 @@ function applyPendingDistills(
       continue
     }
 
-    appendSummaryRecord(ledger, {
-      text: product.text,
-      memberIds: members.map((member) => member.id),
-      at: input.at,
-    })
+    outcome.archivedSummaries += appendSummaryRecord(
+      ledger,
+      {
+        text: product.text,
+        memberIds: members.map((member) => member.id),
+        at: input.at,
+      },
+      config.distillation.maxResidentSummaries
+    )
     const cause: ContextMigrationCause = product.instrument === 'distill' ? 'distill' : 'skeleton'
     for (const member of members) {
       const migrated = ledger.migrate(member.id, resolveEvictionTarget(member), cause, input.at)
@@ -430,23 +448,47 @@ function applyPendingDistills(
 /**
  * 追加摘要记录（I1 与 I2 共用）。
  *
- * `pinned: true` 不是特权而是常识：摘要是压缩的终点，再折一次就是有损叠有损。
+ * 摘要是压缩终点，不参与普通候选与二次摘要；但同时驻留数量有硬上限，更老摘要会整条转入隐藏
+ * 冷层。这里没有摘要叠摘要：原始成员仍在账本/检索层，只有 prompt 里的摘要视图有界。
  * `turn` 归属它所代表的最早成员轮次：摘要是旧历史的替身，必须排在受保护的当前任务之前；
  * 若错误挂到最新轮，它会落在活动尾并可能让 provider 历史以 assistant 收尾。
  */
 function appendSummaryRecord(
   ledger: ContextResidencyLedger,
-  input: { text: string; memberIds: readonly string[]; at: number }
-): void {
+  input: { text: string; memberIds: readonly string[]; at: number },
+  maxResidentSummaries: number
+): number {
   ledger.append({
     kind: 'summary',
     message: { role: 'assistant', content: input.text },
     createdAt: input.at,
     turn: resolveSummaryTurn(ledger, input.memberIds),
-    pinned: true,
+    pinned: false,
     refetchable: false,
     memberIds: [...input.memberIds],
   })
+  return archiveOldSummaries(ledger, maxResidentSummaries, input.at)
+}
+
+function archiveOldSummaries(
+  ledger: ContextResidencyLedger,
+  maxResidentSummaries: number,
+  at: number
+): number {
+  const resident = ledger
+    .list()
+    .filter((record) => record.kind === 'summary')
+    .filter((record) => {
+      const residency = ledger.residencyOf(record.id)
+      return residency === 'INLINE' || residency === 'EXCERPT'
+    })
+    .sort((left, right) => left.seq - right.seq)
+  const archiveCount = Math.max(0, resident.length - Math.max(1, maxResidentSummaries))
+  let archived = 0
+  for (const record of resident.slice(0, archiveCount)) {
+    if (ledger.migrate(record.id, 'SUMMARIZED', 'summary-archive', at).applied) archived += 1
+  }
+  return archived
 }
 
 function resolveSummaryTurn(
@@ -539,29 +581,43 @@ function collectCandidates(
   })
   const pendingEvictIds = new Set(ledger.pendingEvictions())
   const latestTurn = resolveLatestTurnOf(records)
+  const latestSeq = records.reduce((latest, record) => Math.max(latest, record.seq), 0)
   const candidates: EpochCandidate[] = []
 
   for (const record of records) {
     if (measurement.tailProtectedRecordIds.has(record.id)) continue
     if (!isDegradable(record)) continue
+    if (ledger.isEvictionProtected(record.id, latestTurn)) continue
 
     const residency = residencyVector.get(record.id) ?? record.admittedResidency
     if (residency !== 'INLINE' && residency !== 'EXCERPT') continue
 
     const superseded = pendingEvictIds.has(record.id)
     const stale =
-      record.refetchable && latestTurn - record.turn >= config.eviction.staleRefetchableTurnDistance
+      record.refetchable &&
+      (latestTurn - record.turn >= config.eviction.staleRefetchableTurnDistance ||
+        latestSeq - record.seq >= config.eviction.staleRefetchableRecordDistance)
+    const payloadBacked =
+      record.kind === 'tool-result' &&
+      hasCompletePayloadBacking(record) &&
+      (latestTurn - record.turn >= config.eviction.payloadBackedTurnDistance ||
+        latestSeq - record.seq >= config.eviction.payloadBackedRecordDistance)
     const density = anchorDensityPerKiloChar(record.anchors.length, record.bytes.full)
-    const lowDensity = density < config.eviction.lowAnchorDensityPerKiloChar
+    // 低锚密度只说明叙事适合做骨架，不能证明未知工具输出可以无副作用重取。工具结果只有明确
+    // superseded/refetchable，或每个 part 都已有内容寻址 payload 时才进入冷驻留候选。
+    const lowDensity =
+      isSkeletonMember(record) && density < config.eviction.lowAnchorDensityPerKiloChar
 
-    if (!superseded && !stale && !lowDensity) continue
+    if (!superseded && !stale && !payloadBacked && !lowDensity) continue
 
     const tier: EpochCandidateTier = superseded
       ? 'superseded'
       : stale
         ? 'stale-refetchable'
-        : 'low-density'
-    const tierScore = superseded ? 0 : stale ? 100 : 200
+        : payloadBacked
+          ? 'payload-backed'
+          : 'low-density'
+    const tierScore = superseded ? 0 : stale ? 100 : payloadBacked ? 150 : 200
     const faultPenalty = ledger.faultCountOf(record.id) * 50
     const reclaimableChars = Math.max(
       0,
@@ -581,6 +637,14 @@ function collectCandidates(
   // 同分按账本序（老的先降）—— 排序确定，离线重放才可复现。
   candidates.sort((left, right) => left.score - right.score || left.record.seq - right.record.seq)
   return { candidates, measurement }
+}
+
+/** 工具消息中的每一份结果都有内容寻址引用，才能保证 page-out 后无需重跑外部工具。 */
+function hasCompletePayloadBacking(record: ContextRecord): boolean {
+  if (record.kind !== 'tool-result') return false
+  if (record.toolParts.length > 0)
+    return record.toolParts.every((part) => isPresent(part.payloadRef))
+  return isPresent(record.payloadRef)
 }
 
 /**
@@ -634,6 +698,7 @@ function buildReport(
   distillOutcome: AppliedDistillOutcome = {
     appliedProducts: 0,
     appliedByInstrument: { distill: 0, skeleton: 0 },
+    archivedSummaries: 0,
     staleProducts: 0,
   }
 ): GovernanceEpochReport {

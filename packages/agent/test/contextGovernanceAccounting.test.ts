@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
 import { renderContextDashboardText } from '../src/agent/context/residency/dashboard'
 import {
   DefaultContextGovernanceConfig,
@@ -29,6 +30,10 @@ import {
 } from '../src/agent/context/residency/projection'
 import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
 import { buildContextSkeleton } from '../src/agent/context/residency/skeleton'
+
+const RefetchableReadClassifier: ContextRecordClassifier = {
+  isRefetchable: (input) => (input.toolName === 'read_file' ? true : undefined),
+}
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }
@@ -81,7 +86,7 @@ function measureRenderedChars(messages: readonly ModelMessage[]): number {
 void describe('S2 · 尾保护量纲（V1）', () => {
   void test('单用户轮的长自主运行不再整本免疫：条数闸把候选放出来并真降占用', () => {
     const config = resolveContextGovernanceConfig({ minEpochSavingPercent: 1 })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, buildAutonomousRun(40, 6_000))
 
     const budget = resolveProjectionBudget(config, 20_000)
@@ -420,14 +425,14 @@ void describe('S2 · 锚点类别 / 轮序 / 计数（V13 / V8 / U18 / U20 / U23
     assert.equal(report.migrationCount, migrated)
   })
 
-  void test('模型请求的 epoch 达标后仍折掉排在低密度候选之后的陈旧快照', () => {
+  void test('重复缺页达到阈值后升级为粘滞驻留，不再被后续 epoch 逐出', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 0,
       minEpochSavingPercent: 1,
       epochTargetPercent: 99,
       instruments: { skeleton: false, distill: 'off' },
     })
-    const ledger = new ContextResidencyLedger({ config })
+    const ledger = new ContextResidencyLedger({ config, classifier: RefetchableReadClassifier })
     ingestHistoryIntoLedger(ledger, [
       userMessage('第一轮'),
       // 低密度叙事（score 200 档，排在前面）。
@@ -438,11 +443,14 @@ void describe('S2 · 锚点类别 / 轮序 / 计数（V13 / V8 / U18 / U20 / U23
       userMessage('第三轮'),
     ])
     const stale = ledger.list().find((record) => record.kind === 'tool-result')!
-    // faultCount 把陈旧快照的排序分抬到低密度候选之后（U20 的触发形态）。
+    // 连续缺页会指数延长租约，达到阈值后在当前账本代保持驻留。
+    ledger.migrate(stale.id, 'EVICTED', 'evict', 0)
     ledger.recordFault(stale.id, 1)
+    ledger.migrate(stale.id, 'EVICTED', 'evict', 1)
     ledger.recordFault(stale.id, 2)
+    ledger.migrate(stale.id, 'EVICTED', 'evict', 2)
     ledger.recordFault(stale.id, 3)
-    ledger.recordFault(stale.id, 4)
+    assert.equal(ledger.isStickyAfterFault(stale.id), true)
 
     runGovernanceEpoch({
       ledger,
@@ -452,7 +460,7 @@ void describe('S2 · 锚点类别 / 轮序 / 计数（V13 / V8 / U18 / U20 / U23
       at: 1_000,
       modelRequested: true,
     })
-    assert.equal(ledger.residencyOf(stale.id), 'EVICTED')
+    assert.equal(ledger.residencyOf(stale.id), 'INLINE')
   })
 
   void test('超长工具结果的摘录取输出正文，不是 part 的 JSON 转储', () => {

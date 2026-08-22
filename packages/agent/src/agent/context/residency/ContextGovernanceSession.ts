@@ -97,6 +97,8 @@ export interface ContextGovernanceSyncInput {
    * 而不是只能退回 toolCallId。
    */
   payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
+  /** 超长 user 正文的内容哈希 → 持久 payloadRef。 */
+  userTextPayloadRefsByHash?: LooseOptional<Readonly<Record<string, string>>>
   /**
    * 本轮编译期实测的字符/token 密度。
    *
@@ -217,6 +219,7 @@ export class ContextGovernanceSession {
         startTurn: this.nextTurn,
         turnBoundarySeen: this.turnBoundarySeen,
         payloadRefsByToolCallId: input.payloadRefsByToolCallId,
+        userTextPayloadRefsByHash: input.userTextPayloadRefsByHash,
       })
       for (const admission of plan.inputs) this.ledgerRef.append(admission)
       this.nextTurn = plan.nextTurn

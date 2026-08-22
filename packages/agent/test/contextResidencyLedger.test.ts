@@ -138,8 +138,27 @@ void describe('context residency ledger · admission (§4A)', () => {
     assert.equal(appended.record.bytes.excerpt, 0)
   })
 
-  void test('same tool + same target marks the older snapshot pending-EVICT without touching it', () => {
+  void test('unknown tools are not treated as safely refetchable just because args contain a path', () => {
     const ledger = new ContextResidencyLedger()
+    const appended = ledger.append({
+      kind: 'tool-result',
+      message: toolResultMessage('call-write', 'unknown_mutation', 'done'),
+      createdAt: 1,
+      turn: 0,
+      toolArgs: { path: '/repo/output.bin' },
+    })
+
+    assert.equal(appended.record.dedupeKey, 'unknown_mutation::/repo/output.bin')
+    assert.equal(appended.record.refetchable, false)
+    assert.deepEqual(appended.supersededIds, [])
+  })
+
+  void test('same tool + same target marks the older snapshot pending-EVICT without touching it', () => {
+    const ledger = new ContextResidencyLedger({
+      classifier: {
+        isRefetchable: (input) => (input.toolName === 'inspect_page' ? true : undefined),
+      },
+    })
     const first = ledger.append({
       kind: 'tool-result',
       message: toolResultMessage('call-1', 'inspect_page', 'page v1'),
@@ -217,7 +236,7 @@ void describe('context residency ledger · migrations (P1/P2/P6)', () => {
     assert.equal(sink.listMigrations().length, 4)
   })
 
-  void test('faults are counted and reported', () => {
+  void test('faults are counted, page the record back in and report recovery', () => {
     const sink = new InMemoryContextMigrationEventSink()
     const ledger = new ContextResidencyLedger({ sink })
     const record = ledger.append({
@@ -229,10 +248,16 @@ void describe('context residency ledger · migrations (P1/P2/P6)', () => {
 
     ledger.migrate(record.id, 'EVICTED', 'evict', 200)
     assert.equal(ledger.recordFault(record.id, 300), 1)
-    assert.equal(ledger.recordFault(record.id, 400), 2)
-    assert.equal(ledger.faultCountOf(record.id), 2)
-    assert.equal(sink.listFaults()[1]?.ageMs, 300)
-    assert.equal(ledger.stats().totalFaults, 2)
+    assert.equal(ledger.residencyOf(record.id), 'INLINE')
+    assert.ok((ledger.warmUntilTurnOf(record.id) ?? -1) >= 6)
+    assert.equal(ledger.faultCountOf(record.id), 1)
+    assert.equal(sink.listFaults()[0]?.ageMs, 200)
+    assert.equal(ledger.stats().totalFaults, 1)
+    assert.ok(
+      sink.listMigrations().some(
+        (event) => event.recordId === record.id && event.cause === 'fault-page-in'
+      )
+    )
   })
 })
 

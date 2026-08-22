@@ -29,6 +29,7 @@ import {
   DefaultResidencyCharsPerToken,
   estimateResidencyTokens,
   isResidencyDowngrade,
+  residencyRank,
 } from './ContextRecord'
 import { type ContextGovernanceConfig, DefaultContextGovernanceConfig } from './governanceConfig'
 import type {
@@ -70,6 +71,10 @@ export interface ContextLedgerStats {
   pinnedCount: number
   refetchableCount: number
   totalFaults: number
+  /** 当前轮仍受准入/缺页升温租约保护的记录数。 */
+  warmProtectedCount: number
+  /** 因重复缺页而在当前账本代保持驻留的记录数。 */
+  stickyFaultCount: number
   /** 当前驻留态下的字符与 token 占用。 */
   residentChars: number
   residentTokens: number
@@ -95,6 +100,10 @@ export class ContextResidencyLedger {
   private readonly recordsById = new Map<string, ContextRecord>()
   private readonly residency = new Map<string, ContextResidency>()
   private readonly faults = new Map<string, number>()
+  /** 记录 id → 保护到哪个 turn（含）。准入租约与 fault 指数退避共用。 */
+  private readonly warmUntilTurn = new Map<string, number>()
+  /** 重复缺页达到阈值后，本账本代内不再逐出。重建自然清空。 */
+  private readonly stickyFaults = new Set<string>()
   private readonly pendingEvict = new Set<string>()
   private readonly config: ContextGovernanceConfig
   private readonly classifier: Nullable<ContextRecordClassifier>
@@ -138,6 +147,9 @@ export class ContextResidencyLedger {
     this.records.push(record)
     this.recordsById.set(record.id, record)
     this.residency.set(record.id, record.admittedResidency)
+    if (record.warmLeaseTurns > 0) {
+      this.warmUntilTurn.set(record.id, record.turn + record.warmLeaseTurns)
+    }
     for (const supersededId of decision.supersededIds) {
       this.pendingEvict.add(supersededId)
     }
@@ -181,6 +193,23 @@ export class ContextResidencyLedger {
 
   public faultCountOf(recordId: string): number {
     return this.faults.get(recordId) ?? 0
+  }
+
+  /** 记录是否仍在升温租约内，或已因重复缺页升级为本代粘滞驻留。 */
+  public isEvictionProtected(recordId: string, currentTurn: number): boolean {
+    this.assertKnown(recordId)
+    if (this.stickyFaults.has(recordId)) return true
+    return currentTurn <= (this.warmUntilTurn.get(recordId) ?? -1)
+  }
+
+  public warmUntilTurnOf(recordId: string): Nullable<number> {
+    this.assertKnown(recordId)
+    return toNullable(this.warmUntilTurn.get(recordId))
+  }
+
+  public isStickyAfterFault(recordId: string): boolean {
+    this.assertKnown(recordId)
+    return this.stickyFaults.has(recordId)
   }
 
   public pendingEvictions(): string[] {
@@ -253,15 +282,57 @@ export class ContextResidencyLedger {
     const record = this.assertKnown(recordId)
     const faultCount = this.faultCountOf(recordId) + 1
     this.faults.set(recordId, faultCount)
+    const residencyAtFault = this.residencyOf(recordId)
     this.sink?.recordFault({
       recordId,
-      residency: this.residencyOf(recordId),
+      residency: residencyAtFault,
       faultCount,
       ageMs: Math.max(0, at - record.createdAt),
       at,
       ledgerGeneration: this.ledgerGeneration,
     })
+
+    const currentTurn = this.records.reduce((latest, candidate) => Math.max(latest, candidate.turn), 0)
+    const recovery = this.config.faultRecovery
+    const exponentialLease = recovery.baseWarmLeaseTurns * 2 ** Math.min(20, faultCount - 1)
+    const leaseTurns = Math.min(recovery.maxWarmLeaseTurns, exponentialLease)
+    const currentLease = this.warmUntilTurn.get(recordId) ?? -1
+    this.warmUntilTurn.set(recordId, Math.max(currentLease, currentTurn + leaseTurns))
+    if (faultCount >= recovery.stickyAfterFaults) this.stickyFaults.add(recordId)
+
+    // fault 证明这条记录当前仍有用：恢复到它的准入驻留态。超长内容只回到 EXCERPT，不把 300K
+    // 正文突然塞回 prompt；普通内容回到 INLINE。迁移是显式事件，缓存只在真实 fault 后失效一次。
+    if (residencyAtFault !== 'EXPIRED') this.pageIn(recordId, record.admittedResidency, at)
     return faultCount
+  }
+
+  /** 缺页后的显式升温通道；普通治理仍只能调用 migrate 单向降级。 */
+  private pageIn(recordId: string, to: ContextResidency, at: number): ContextMigrationOutcome {
+    const record = this.assertKnown(recordId)
+    const from = this.residencyOf(recordId)
+    const target = clampResidencyForRecord(record, to)
+    if (residencyRank(target) >= residencyRank(from)) return {
+        applied: false,
+        event: null,
+        residency: from,
+        rejection: 'no-op',
+      }
+
+    const beforeTokens = estimateResidencyTokens(residentChars(record, from), this.charsPerToken)
+    const afterTokens = estimateResidencyTokens(residentChars(record, target), this.charsPerToken)
+    this.residency.set(recordId, target)
+    this.pendingEvict.delete(recordId)
+    const event: ContextResidencyMigrationEvent = {
+      recordId,
+      from,
+      to: target,
+      cause: 'fault-page-in',
+      tokensDelta: afterTokens - beforeTokens,
+      at,
+      ledgerGeneration: this.ledgerGeneration,
+    }
+    this.sink?.recordMigration(event)
+    return { applied: true, event, residency: target, rejection: null }
   }
 
   public stats(): ContextLedgerStats {
@@ -276,6 +347,8 @@ export class ContextResidencyLedger {
     let fullChars = 0
     let pinnedCount = 0
     let refetchableCount = 0
+    const latestTurn = this.records.reduce((latest, record) => Math.max(latest, record.turn), 0)
+    let warmProtectedCount = 0
 
     for (const record of this.records) {
       const residency = this.residencyOf(record.id)
@@ -284,6 +357,7 @@ export class ContextResidencyLedger {
       fullChars += record.bytes.full
       if (record.pinned) pinnedCount += 1
       if (record.refetchable) refetchableCount += 1
+      if (this.isEvictionProtected(record.id, latestTurn)) warmProtectedCount += 1
     }
 
     let totalFaults = 0
@@ -298,6 +372,8 @@ export class ContextResidencyLedger {
       pinnedCount,
       refetchableCount,
       totalFaults,
+      warmProtectedCount,
+      stickyFaultCount: this.stickyFaults.size,
       residentChars: chars,
       residentTokens: estimateResidencyTokens(chars, this.charsPerToken),
       fullChars,

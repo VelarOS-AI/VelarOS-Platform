@@ -55,6 +55,11 @@ function buildRuntimeToolCapabilityMap(
   if (hasAnyRuntimeTool(snapshot, ["context:distill"])) {
     lines.push("长任务阶段转折点可调用 context:distill 保存关键事实和进度。");
   }
+  if (hasAnyRuntimeTool(snapshot, ["context:handoff"])) {
+    lines.push(
+      "只有安全压缩后仍无法继续时，才调用 context:handoff 请求用户批准交接；系统不会自动交接。",
+    );
+  }
   return lines.join("\n");
 }
 

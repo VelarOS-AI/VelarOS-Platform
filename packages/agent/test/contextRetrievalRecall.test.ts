@@ -14,6 +14,9 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
 import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
 import { ChatContextRetrievalService } from '../src/agent/context/retrieval/ContextRetrievalService'
 import type {
@@ -124,6 +127,71 @@ function userMessage(text: string): ModelMessage {
 }
 
 describe('S3 · 超大 user 正文的端到端召回', () => {
+  test('统一发送路径持久化全文、账本拿到 payloadRef，并向模型展示头尾', async () => {
+    const fullText = `开头约束 ${'中'.repeat(60_000)} 结尾约束必须保留`
+    const payloadStore = new InMemoryContextPayloadStore()
+    const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    const compiler = new ProviderRequestCompiler(registry)
+
+    const compiled = await compileProviderSendRequest(
+      {
+        sessionId: SessionId,
+        rawHistoryMessages: [userMessage(fullText)],
+        phase: 'stream',
+        payloadStore,
+        model: 'gpt-test',
+        systemPrompt: 'system',
+        contextWindow: 200_000,
+      },
+      compiler
+    )
+
+    const record = registry.peek(SessionId)!.ledger.list()[0]!
+    assert.ok(record.payloadRef?.startsWith('ctx-user-payload:'))
+    assert.equal(record.excerpt?.ref, record.payloadRef)
+    const projected = String(compiled.providerMessages[0]?.content)
+    assert.ok(projected.includes('开头约束'))
+    assert.ok(projected.includes('结尾约束必须保留'))
+    assert.ok(projected.includes(record.payloadRef!))
+
+    const stored = (await payloadStore.listForSession(SessionId)).find(
+      (candidate) => candidate.payloadRef === record.payloadRef
+    )
+    assert.equal(stored?.serializedResult, fullText)
+
+    const service = createService({
+      payloadStore: createPayloadStore({
+        toolResults: stored
+          ? {
+              [stored.payloadRef]: {
+                serializedResult: stored.serializedResult,
+                displayResult: stored.serializedResult,
+                toolCallId: stored.toolCallId,
+                toolName: stored.toolName,
+                payloadRef: stored.payloadRef,
+                hash: stored.hash,
+              },
+            }
+          : {},
+      }),
+      registry,
+    })
+    const recalled = await service.retrieveContextPayload({
+      sessionId: SessionId,
+      handleId: record.payloadRef!,
+      maxChars: 100_000,
+    })
+    assert.equal(recalled.found, true)
+    assert.ok(recalled.content?.includes('开头约束'))
+    const recalledTail = await service.retrieveContextPayload({
+      sessionId: SessionId,
+      handleId: record.payloadRef!,
+      offset: fullText.length - 10,
+      maxChars: 100_000,
+    })
+    assert.ok(recalledTail.content?.includes('结尾约束必须保留'))
+  })
+
   test('账本记录 id 形态的句柄能取回全文（U6/U10）', async () => {
     const fullText = `任务陈述开头 ${'长'.repeat(60_000)} 任务陈述结尾`
     const registry = new ContextGovernanceSessionRegistry()

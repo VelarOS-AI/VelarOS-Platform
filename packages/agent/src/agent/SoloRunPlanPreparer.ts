@@ -215,6 +215,7 @@ const SkillGateAlwaysKeptToolNames = new Set<string>([
   'interaction:show_action_cards',
   'context:recall',
   'context:distill',
+  'context:handoff',
 ])
 
 function mergeToolCategoryCatalog(

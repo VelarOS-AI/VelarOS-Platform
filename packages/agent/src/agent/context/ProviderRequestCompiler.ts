@@ -130,6 +130,8 @@ export interface CompileProviderRequestInput {
   providerTools?: readonly ProviderToolDefinitionSnapshotInput[]
   providerToolChoice?: unknown
   toolPayloadRefsByToolCallId?: Record<string, string>
+  /** 超长 user 正文的内容哈希 → 持久 payloadRef；准入信封用它跨进程精确召回。 */
+  userTextPayloadRefsByHash?: Readonly<Record<string, string>>
   retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
   activeTask?: LooseOptional<ContextActiveTaskInput>
   pinnedEvidence?: readonly ContextPinnedEvidenceInput[]
@@ -358,6 +360,7 @@ export class ProviderRequestCompiler {
       messages,
       at,
       payloadRefsByToolCallId: input.toolPayloadRefsByToolCallId,
+      userTextPayloadRefsByHash: input.userTextPayloadRefsByHash,
       charsPerToken: ruler.charsPerToken,
     })
     if (sync.rebuilt) {

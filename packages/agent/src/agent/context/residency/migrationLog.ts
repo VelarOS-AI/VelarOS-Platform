@@ -30,6 +30,10 @@ export type ContextMigrationCause =
   | 'expire'
   /** 语义去重：同工具同目标的旧快照被新的取代。 */
   | 'superseded'
+  /** 缺页召回：把冷记录重新升温，避免同一内容反复召回。 */
+  | 'fault-page-in'
+  /** 摘要驻留上限：旧摘要退到隐藏冷层，原始成员继续由检索面提供。 */
+  | 'summary-archive'
 
 /**
  * 账本代数：整本重建（用户回滚/编辑历史/结构自愈）一次 +1。

@@ -58,8 +58,8 @@ const SkeletonItemMaxChars = 220
  * 多出来的 8 条既抬高拒收概率、又根本没进最终产物——两头不讨好。
  */
 const DefaultMaxSkeletonAnchors = DefaultContextGovernanceConfig.distillation.maxRequiredAnchors
-/** 召回指针行最多几条。 */
-const MaxSkeletonRecallRefs = 12
+/** 每份摘要最多代表的记录数；每个成员都必须在产物里留下精确召回指针。 */
+export const MaxContextSummaryMembers = 12
 /** 骨架整体字符上限：骨架自己超预算就不叫压缩了。 */
 const MaxSkeletonChars = 3_200
 
@@ -131,7 +131,9 @@ export interface ContextSkeletonResult {
  * 它既占预算又让模型以为"这里已经总结过了"。
  */
 export function buildContextSkeleton(input: ContextSkeletonInput): Nullable<ContextSkeletonResult> {
-  const members = [...input.members].sort((left, right) => left.seq - right.seq)
+  const members = [...input.members]
+    .sort((left, right) => left.seq - right.seq)
+    .slice(0, MaxContextSummaryMembers)
   if (isEmpty(members)) return null
 
   const anchors = collectContextAnchorUnion(members)
@@ -148,9 +150,10 @@ export function buildContextSkeleton(input: ContextSkeletonInput): Nullable<Cont
   )
   const recallLine = renderContextRecallLine(members)
   const header = `${SkeletonHeaderPrefix} epoch=${input.epoch} members=${members.length}]`
-  const text = clampSkeletonText(
-    [header, ...lines, anchorLine, recallLine].filter((line): line is string => Boolean(line)).join('\n')
-  )
+  const body = [header, ...lines, anchorLine]
+    .filter((line): line is string => Boolean(line))
+    .join('\n')
+  const text = clampSkeletonText(body, recallLine)
 
   return { text, anchors, memberIds }
 }
@@ -199,11 +202,12 @@ export function renderContextRecallLine(members: readonly ContextRecord[]): Null
   const refs: string[] = []
   const seen = new Set<string>()
   for (const member of members) {
-    const ref = member.excerpt?.ref ?? member.payloadRef ?? member.toolCallId
+    // 每条账本记录都能由 context:recall 直接按 ctx-r... 读取；payload/tool ref 只是更稳定的跨重建别名。
+    const ref = member.excerpt?.ref ?? member.payloadRef ?? member.toolCallId ?? member.id
     if (!ref || seen.has(ref)) continue
     seen.add(ref)
     refs.push(ref)
-    if (refs.length >= MaxSkeletonRecallRefs) break
+    if (refs.length >= MaxContextSummaryMembers) break
   }
   if (isEmpty(refs)) return null
 
@@ -311,8 +315,14 @@ function renderSkeletonField(field: ContextSkeletonField, items: readonly string
   return `- ${SkeletonFieldLabels[field]}：${items.join(' | ')}`
 }
 
-function clampSkeletonText(text: string): string {
-  if (text.length <= MaxSkeletonChars) return text
+function clampSkeletonText(body: string, protectedTail: Nullable<string>): string {
+  if (!protectedTail) {
+    if (body.length <= MaxSkeletonChars) return body
+    return `${body.slice(0, MaxSkeletonChars - 1)}…`
+  }
 
-  return `${text.slice(0, MaxSkeletonChars - 1)}…`
+  const bodyBudget = Math.max(1, MaxSkeletonChars - protectedTail.length - 1)
+  const clampedBody =
+    body.length <= bodyBudget ? body : `${body.slice(0, Math.max(0, bodyBudget - 1))}…`
+  return `${clampedBody}\n${protectedTail}`
 }
