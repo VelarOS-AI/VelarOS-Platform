@@ -62,9 +62,9 @@ export interface ModelProviderOperationalManifest {
 const BaseModelProviderOperationalManifests = [
   {
     id: 'velar',
-    label: 'Velar',
+    label: 'VelarOS',
     defaultBaseURL: '',
-    description: '由 VelarOS Cloud 按工作类型自动选择和编排模型，无需配置密钥或模型。',
+    description: '由 VelarOS Cloud 提供 OpenRouter 精选模型与费用目录，无需配置密钥。',
     defaultApiKey: 'velar-managed',
     apiKeyOptional: true,
     enabledByDefault: true,

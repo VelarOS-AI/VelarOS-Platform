@@ -125,7 +125,7 @@
       "domain": "capabilities",
       "directory": "packages/system",
       "name": "@velaros-ai/system",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
       "exportSubpaths": [
         ".",
@@ -135,7 +135,8 @@
         "./execution",
         "./files",
         "./platform-compatibility",
-        "./processes"
+        "./processes",
+        "./shared-resources"
       ],
       "repositoryDirectory": "packages/system"
     },

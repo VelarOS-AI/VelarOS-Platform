@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/system",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -46,6 +46,10 @@
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
+    },
+    "./shared-resources": {
+      "types": "./dist/VelarOSSharedResourceStore.d.ts",
+      "import": "./dist/VelarOSSharedResourceStore.js"
     }
   },
   "files": [
@@ -57,7 +61,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/system-search-visibility.test.ts",
+    "test": "bun run build && bun test test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system"
   },
   "dependencies": {

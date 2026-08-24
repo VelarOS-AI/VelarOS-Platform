@@ -38,4 +38,9 @@ export type * from './SystemContracts'
 export * from './SystemPlatformCompatibility'
 export * from './SystemProcessConfinement'
 export * from './SystemProcessParsers'
+export {
+  resolveVelarOSSharedDataRoot,
+  resolveVelarOSSharedResourcesRoot,
+  type VelarOSSharedResourceStoreOptions,
+} from './VelarOSSharedResourceStore'
 export type { SystemToolContext, SystemToolSystemApi, ToolContext, VelaTool } from './Types'
