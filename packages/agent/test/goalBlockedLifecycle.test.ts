@@ -67,6 +67,42 @@ describe('goal blocked lifecycle', () => {
     expect(harness.readArtifact()?.metadata?.goalStatus).toBe('blocked')
   })
 
+  test('lets the model pause, resume, and cancel its own goal without deleting the record', async () => {
+    const harness = createGoalToolContext()
+
+    await goalTools['goal:create'].execute(
+      {
+        objective: '完成跨轮次发布准备',
+        steps: [{ step: '等待发布窗口', status: 'in_progress' }],
+      },
+      harness.context
+    )
+
+    const paused = await goalTools['goal:update'].execute(
+      { status: 'paused' },
+      harness.context
+    )
+    expect(paused.status).toBe('paused')
+    expect(harness.readArtifact()?.status).toBe('active')
+    expect(harness.readArtifact()?.metadata?.pausedAt).toBeNumber()
+
+    const resumed = await goalTools['goal:update'].execute(
+      { status: 'active' },
+      harness.context
+    )
+    expect(resumed.status).toBe('active')
+    expect(harness.readArtifact()?.metadata?.pausedAt).toBeNull()
+    expect(harness.readArtifact()?.metadata?.resumedAt).toBeNumber()
+
+    const cancelled = await goalTools['goal:update'].execute(
+      { status: 'cancelled' },
+      harness.context
+    )
+    expect(cancelled.status).toBe('cancelled')
+    expect(harness.readArtifact()?.status).toBe('completed')
+    expect(harness.readArtifact()?.metadata?.cancelledAt).toBeNumber()
+  })
+
   test('keeps blocked transition details in the goal tool contract instead of duplicating them in the prompt', () => {
     const segment = createTaskRuntimePromptSegments({
       goalMode: true,

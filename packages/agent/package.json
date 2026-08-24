@@ -73,6 +73,30 @@
     "./tool-contract": {
       "types": "./dist/tool-contract/index.d.ts",
       "import": "./dist/tool-contract/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/tool-library/mcp/index.d.ts",
+      "import": "./dist/tool-library/mcp/index.js"
+    },
+    "./mods": {
+      "types": "./dist/mods/index.d.ts",
+      "import": "./dist/mods/index.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge/index.d.ts",
+      "import": "./dist/bridge/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "import": "./dist/session/index.js"
+    },
+    "./remote": {
+      "types": "./dist/remote/index.d.ts",
+      "import": "./dist/remote/index.js"
+    },
+    "./remote/mcp": {
+      "types": "./dist/remote/mcp/index.d.ts",
+      "import": "./dist/remote/mcp/index.js"
     }
   },
   "files": [
@@ -94,14 +118,17 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "gpt-tokenizer": "^3.0.1",
+    "jszip": "^3.10.1",
     "ai": "^6.0.168",
     "execa": "^9.6.1",
     "typescript": "^5.7.0",
+    "ws": "^8.18.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@ai-sdk/provider": "3.0.8",
-    "@types/node": "^22.19.17"
+    "@types/node": "^22.19.17",
+    "@types/ws": "^8.18.1"
   },
   "repository": {
     "type": "git",

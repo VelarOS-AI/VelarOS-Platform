@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '@velaros-ai/agent/protocol'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
@@ -7,7 +8,7 @@ import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
 import { defineVelaTool } from '../defineVelaTool'
 
-import type { UpdatePlanInput } from './Plans'
+import type { PlanLifecycle, UpdatePlanInput } from './Plans'
 import {
   completePlanSteps,
   formatActivePlanContent,
@@ -19,6 +20,23 @@ import {
 import { describeStepRefsForModel } from './StepRefs'
 
 const planStepRefSchema = z.union([z.string().trim().min(1).max(160), z.number().int().positive()])
+const PlanArtifactId = 'active-plan'
+const PlanLifecycleValues = ['active', 'paused', 'completed', 'archived'] as const
+const PlanLifecycleSet = new Set<unknown>(PlanLifecycleValues)
+
+function readPlanLifecycle(
+  artifacts: readonly ActiveContextArtifact[],
+  plan: readonly ExecutionTaskPlanStep[]
+): PlanLifecycle {
+  const artifact = artifacts
+    .filter((candidate) => candidate.id === PlanArtifactId && candidate.kind === 'plan')
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+  const stored = artifact?.metadata?.planLifecycle
+  if (PlanLifecycleSet.has(stored)) return stored as PlanLifecycle
+  if (artifact?.status === 'archived') return 'archived'
+  if (artifact?.status === 'completed') return 'completed'
+  return resolvePlanLifecycle({ plan: toUserPlanSteps(plan) })
+}
 
 /** 计划步骤 → 模型可引用清单(共享步骤引擎;执行计划的标题字段是 title)。 */
 function describePlanStepRefsForModel(
@@ -36,18 +54,24 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
   suitable: [
     '任务复杂、需要多个具体步骤时，应由模型自主创建计划。',
     '需要同步现有计划进度。',
+    '需要暂停、恢复、完成或归档当前计划。',
   ],
   forbidden: ['不要为简单单步任务创建计划；用户明确要求不用计划时不得自主启用。'],
   usage: [
     '首次为复杂任务传入 plan 会自主启用计划模式；先只建立计划，再按计划模式要求向用户确认后实施。',
     '维护计划最省心的方式:直接传完整 plan 列表(每步带 status:pending/in_progress/completed),这一项就能建立并同步整个计划,想改哪步就改它的 status。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题;步骤没有 id,别自造 "step-1"),host 标记 completed 并自动推进下一个 pending。',
+    'lifecycle=paused 暂停计划并结束本次推进；后续用 lifecycle=active 恢复。',
+    'lifecycle=completed 表示计划已执行完成；lifecycle=archived 表示用户改变目标或废弃旧方案。',
     'plan 和 complete_step 可以一起传(先按 plan 重建、再完成引用步骤);两个都不传则视为读取当前计划、不报错。',
   ],
   examples: [
     { plan: [{ step: "实现", status: "in_progress" }, { step: "验证", status: "pending" }] },
     { complete_step: 1 },
     { complete_step: ['实现', '验证'] },
+    { lifecycle: 'paused' },
+    { lifecycle: 'active' },
+    { lifecycle: 'completed' },
   ],
   notes: [
     '返回里的 steps 字段给出每步 ref(序号)+标题+状态,下次引用照它传。首次自主建计划不要与实施工具同批；进入实施后，进度更新可与对应执行工具同批发出。',
@@ -66,6 +90,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
             description: '计划生命周期。',
             values: [
               'active：计划仍在执行。',
+              'paused：计划已暂停，可在后续恢复。',
               'completed：当前任务已完成。',
               'archived：用户改变目标或废弃旧方案。',
             ],
@@ -145,13 +170,19 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
       !(isArray(input.complete_step) && isEmpty(input.complete_step))
 
     // 空调用 = 无操作:回带当前计划状态,不报错(宽容:模型偶尔空传不该被判失败)。
-    if (!hasPlan && !hasComplete && !input.lifecycle && !input.explanation)
+    if (!hasPlan && !hasComplete && !input.lifecycle && !input.explanation) {
+      const artifacts = await ctx.activeContext.listActiveContextArtifacts({
+        status: 'all',
+        kinds: ['plan'],
+      })
       return {
         updated: false,
         noop: true,
+        lifecycle: readPlanLifecycle(artifacts, previousPlan),
         plan: previousPlan,
         steps: describePlanStepRefsForModel(previousPlan),
       }
+    }
 
     // 基线列表:传了完整 plan 就用它重建,否则沿用旧计划。
     // complete_step 与 plan 可组合:先重建、再针对重建后的列表完成引用步骤。
@@ -184,15 +215,21 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     const plan = interaction.updateCurrentPlan(updateWithPlan)
     const lifecycle = resolvePlanLifecycle(updateWithPlan)
     await ctx.activeContext.upsertActiveContextArtifact({
-      id: 'active-plan',
+      id: PlanArtifactId,
       kind: 'plan',
       scope: 'session',
-      status: lifecycle === 'archived' ? 'archived' : lifecycle,
+      status:
+        lifecycle === 'archived'
+          ? 'archived'
+          : lifecycle === 'completed'
+            ? 'completed'
+            : 'active',
       resourceId: null,
       title: input.explanation?.trim() || '当前执行计划',
       content: formatActivePlanContent(toNullable(input.explanation), plan),
       metadata: {
         source: 'plan:update',
+        planLifecycle: lifecycle,
         executionId: interaction.executionId,
         planStepCount: plan.length,
       },
@@ -234,7 +271,12 @@ const getPlan = defineVelaTool<Record<string, never>>({
 
     // 同时返回任务、推荐动作和执行建议，方便模型恢复当前执行上下文。
     const currentPlan = interaction.getCurrentPlan()
+    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
+      status: 'all',
+      kinds: ['plan'],
+    })
     return {
+      lifecycle: readPlanLifecycle(artifacts, currentPlan),
       plan: currentPlan,
       // 显式可引用 ref(1-based 序号):complete_step 直接照 ref 传,别自造 id。
       steps: describePlanStepRefsForModel(currentPlan),

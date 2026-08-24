@@ -81,3 +81,19 @@ export {
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 } from './BuiltinAgentMod'
+export type {
+  InstallScannedVelarModArchiveRequest,
+  PreparedVelarModInstall,
+  VelarModArchiveEntry,
+  VelarModArchiveFinding,
+  VelarModArchiveImporterOptions,
+  VelarModArchiveInstallFailureReason,
+  VelarModArchiveScanReport,
+  VelarModArchiveSignatureVerifier,
+  VelarModPermissionDescriptor,
+} from './VelarModArchiveImporter'
+export {
+  VelarModArchiveExtension,
+  VelarModArchiveImporter,
+  VelarModSignatureFileName,
+} from './VelarModArchiveImporter'

@@ -72,3 +72,4 @@ function createDevelopmentToolApi(codeIndex: DevelopmentCodeIndexApi): Developme
 
 export { createDevelopmentToolApi, executeDevelopmentLanguageQuery }
 export type { DevelopmentCodeIndexApi, DevelopmentIndexQuery }
+export * from './ExternalLanguageService'

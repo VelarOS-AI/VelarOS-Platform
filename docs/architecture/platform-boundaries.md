@@ -16,8 +16,11 @@ VelarOS Desktop is the first shipping product, desktop shell, validation product
 | Mods | Declared contributions behind the versioned mod envelope and the permissions granted by a host |
 
 Product hosts depend on Platform packages through published APIs. Platform packages do not import product source code, private product prompts, host UI, product configuration files, or product-only persistence.
-VelarOS Terminal is one such product host and owns its Host composition and remote-node transport in
-its own repository.
+VelarOS Terminal is one such product host and owns its final Host composition. Host-neutral remote-node
+transport, Agent bridge, MCP, session, and model-profile mechanisms are Platform domain responsibilities;
+products supply native lifecycle, persistence, credentials, policy, and UI adapters. The complete owner
+decision and clean-break migration are recorded in
+[`0001-agent-product-common-kernel.md`](../decisions/0001-agent-product-common-kernel.md).
 
 ## Contract authority
 

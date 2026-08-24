@@ -1140,6 +1140,9 @@
 
   & [data-streamdown='code-block'] {
     position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
     margin: 0.75rem 0 0.9rem;
     overflow: hidden;
     padding: 0 !important;
@@ -1189,18 +1192,20 @@
     white-space: nowrap;
   }
 
-  & [data-streamdown='code-block'] > :global(div.sticky) {
-    position: absolute;
-    top: 5px;
-    right: 8px;
-    display: flex;
-    height: 24px;
-    align-items: center;
-    margin: 0 !important;
-    pointer-events: auto;
+  & [data-streamdown='code-block'] > :global(div:has(> [data-streamdown='code-block-actions'])) {
+    display: contents !important;
   }
 
   & [data-streamdown='code-block-actions'] {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    z-index: 2;
+    display: flex;
+    height: 24px;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 0 !important;
     gap: 0 !important;
     padding: 0 !important;
     border: none !important;
@@ -1208,6 +1213,7 @@
     background: transparent !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    pointer-events: auto !important;
   }
 
   & .htmlCodeBlockRenderButton {

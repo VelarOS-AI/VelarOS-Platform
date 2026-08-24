@@ -20,12 +20,18 @@
 
 | 子路径 | 一句话职责 |
 | --- | --- |
-| `@velaros-ai/agent` | 运行时主干:循环、上下文、提示词、工具注册与执行、执行账本、子 agent 派发、技能、mod 装载 |
+| `@velaros-ai/agent` | 运行时主干:循环、上下文、提示词、工具注册与执行、执行账本、子 agent 派发、技能、mod 装载与 `.velarmod` 安全导入、MCP 多传输连接 |
 | `@velaros-ai/agent/node` | **仅 Node Host**：工具目录 revision、租约校验、schema 自恢复与单调用执行门面；Node 内建模块不会进入 browser-safe 子路径 |
 | `@velaros-ai/agent/chat` | **browser-safe** 聊天客户端公共面:会话投影、搜索、上下文用量与回合环境格式化 |
 | `@velaros-ai/agent/chat-stream` | 聊天流协议与消费者(`ChatStreamProtocol` / `ChatStreamConsumer` / 会话流日志) |
 | `@velaros-ai/agent/run-context` | 回合上下文账本与追加通道，供能力适配器接入，不暴露 Agent 根运行时 |
 | `@velaros-ai/agent/tool-contract` | 工具定义、审批端口、描述构造与 schema 辅助，只承载 Agent 工具契约 |
+| `@velaros-ai/agent/mcp` | stdio / HTTP / SSE 连接、OAuth 挑战、工具与资源的 MCP 公共机制 |
+| `@velaros-ai/agent/mods` | Agent Mod 装载/投影以及 `.velarmod` 扫描、信任与安装事务 |
+| `@velaros-ai/agent/bridge` | External Agent Bridge 的 loopback transport 与有界 replay/dedup/配对节流状态机；产品保留凭据、Session 和工具适配 |
+| `@velaros-ai/agent/session` | Agent 产品公共的 Session catalog/谱系/归档/执行租约与后台 Agent 生命周期契约；产品保留 SQLite/文件/Cloud adapter |
+| `@velaros-ai/agent/remote` | 远程节点清单到 Agent 工具面的宿主无关投影与连接生命周期 |
+| `@velaros-ai/agent/remote/mcp` | 把 Kernel remote-node 传输投影成外部 Agent 可消费的 MCP 服务 |
 | `@velaros-ai/agent/protocol` | **版本化 wire 契约**(zod schema + 推导类型),跨进程 / 跨版本传输用 |
 | `@velaros-ai/agent/protocol/{agent-capability,execution,message,session,lease,mods,observability,external-agent-bridge}` | 按契约族细分的按需入口 |
 
@@ -81,10 +87,17 @@ expanded 的预算及自动选择阈值，用于解释运行行为，不提供�
 **mod 两级注册机的第二级**。`AgentModLoader` 按 manifest 装载九条贡献轴，`loader.hooks`
 （`AgentModHookDispatcher`）派发标准生命周期 Hook，`assembleAgentMods` 是宿主把 Kernel pack
 清单接进来的入口。编译期函数 binding 与外部 command binding 共用同一声明和派发管线。
+外部公开安装统一经 `VelarModArchiveImporter` 的扫描票据、摘要复核、信任确认、权限子集校验与
+安全暂存事务；签名根、权限目录和面向用户的错误文案仍由宿主注入或投影。
 **贡献轴是封闭集合**,由官方演进,mod 只能挂接不能发明。落地细节见
 [`docs/agent/agent-mod-trunk.md`](../../docs/agent/agent-mod-trunk.md)。
 `src/kernel-module.ts` 是**第一级**边界:它把 Agent 运行时当作不透明的注入物交给 Kernel,
 自己从不解析领域 manifest。
+
+**MCP 与产品 Session 公共层**。`McpClientConnection` 统一 stdio、Streamable HTTP、SSE、
+resource 与 OAuth 挑战归一；产品只提供配置、凭据持久化、授权交互和审批默认值。
+`@velaros-ai/agent/session` 提供 catalog、谱系、租约、恢复、便携归档以及 Goal / Plan / Question /
+Permission 应用服务，持久化引擎、产品 Session 类型和 UI 状态不进入公共契约。
 
 ## 典型用法
 

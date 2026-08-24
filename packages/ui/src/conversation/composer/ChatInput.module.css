@@ -1013,8 +1013,11 @@
  * （当前档、模型名、推理档刻度），弹层又按内容测宽，于是换个模型名整颗面板就宽一截、窄一截。
  * 三格一起写死（`width` + `min/max-width`）才是真固定；行内文字该截断的靠自己的 truncate。
  * 取值 17rem：推理档滑杆最多六格刻度（low…ultra）在这个宽度下不挤，模型行也放得下常见型号名。
+ *
+ * 这里的面板三格是兜底；真正的宽度权威在下方 popover 容器变量。基础级联菜单会给主面板
+ * `min/max-width: 100%`，如果只钉面板，样式装载顺序一变就会重新拿按内容测量的外层宽度当基准。
  */
-.composerModelRunMenuPrimary {
+.composerModelRunMenuPrimary:global(.velar-cascading-menu-primary-panel) {
   width: 17rem;
   min-width: 17rem;
   max-width: 17rem;
@@ -1022,24 +1025,33 @@
 }
 
 /*
- * 子菜单（模型清单、闭集档清单）宽度**也钉死**：基类只给 width 与 min-width，max 是
- * `min(22rem, …)`，于是一行长型号名就把整块拉宽——与主面板同一个病。三格一起写死，并与主面板
- * 同宽（17rem），展开时两块是齐的。
+ * 主菜单容器与子菜单（模型清单、闭集档清单）宽度**一起钉死**。主面板的 100% 必须先有
+ * 固定外层基准；子菜单则由同一组变量约束。两块同宽（17rem），展开时也是齐的。
  */
-.composerModelRunMenuContent[data-slot='popover-content'] {
+.composerModelRunMenuContent:global(.velar-cascading-menu-content)[data-slot='popover-content'] {
+  --cascading-menu-primary-width: 17rem;
+  --cascading-menu-primary-min-width: 17rem;
+  --cascading-menu-primary-max-width: 17rem;
   --cascading-menu-submenu-width: 17rem;
   --cascading-menu-submenu-min-width: 17rem;
   --cascading-menu-submenu-max-width: 17rem;
   animation: none;
 }
 
-.composerModelRunMenuContentCompact[data-slot='popover-content'] {
+.composerModelRunMenuContent.composerModelRunMenuContentCompact:global(
+    .velar-cascading-menu-content
+  )[data-slot='popover-content'] {
+  --cascading-menu-primary-width: 13.5rem;
+  --cascading-menu-primary-min-width: 13.5rem;
+  --cascading-menu-primary-max-width: 13.5rem;
   --cascading-menu-submenu-width: 13.5rem;
   --cascading-menu-submenu-min-width: 13.5rem;
-  --cascading-menu-submenu-max-width: min(13.5rem, calc(100vw - 32px));
+  --cascading-menu-submenu-max-width: 13.5rem;
 }
 
-.composerModelRunMenuPrimaryCompact {
+.composerModelRunMenuPrimary.composerModelRunMenuPrimaryCompact:global(
+    .velar-cascading-menu-primary-panel
+  ) {
   width: 13.5rem;
   min-width: 13.5rem;
   max-width: 13.5rem;

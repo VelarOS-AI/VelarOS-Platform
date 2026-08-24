@@ -166,6 +166,35 @@ void describe('Platform-owned conversation composer behavior', () => {
       { kind: 'remove-attachment', dismissWhenEmpty: false, index: 1 }
     )
   })
+
+  void test('keeps model and run menus fixed at the popover boundary', () => {
+    const stylesheet = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ChatInput.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const defaultMenu = stylesheet.match(
+      /\.composerModelRunMenuContent:global\(\.velar-cascading-menu-content\)\[data-slot='popover-content'\]\s*\{(?<rules>[^}]*)\}/
+    )?.groups?.rules
+    const compactMenu = stylesheet.match(
+      /\.composerModelRunMenuContent\.composerModelRunMenuContentCompact:global\(\s*\.velar-cascading-menu-content\s*\)\[data-slot='popover-content'\]\s*\{(?<rules>[^}]*)\}/
+    )?.groups?.rules
+
+    assert.ok(defaultMenu)
+    assert.ok(compactMenu)
+    assert.match(
+      stylesheet,
+      /\.composerModelRunMenuPrimary:global\(\.velar-cascading-menu-primary-panel\)/
+    )
+    for (const dimension of ['width', 'min-width', 'max-width']) {
+      assert.match(defaultMenu, new RegExp(`--cascading-menu-primary-${dimension}: 17rem;`))
+      assert.match(defaultMenu, new RegExp(`--cascading-menu-submenu-${dimension}: 17rem;`))
+      assert.match(compactMenu, new RegExp(`--cascading-menu-primary-${dimension}: 13\\.5rem;`))
+      assert.match(compactMenu, new RegExp(`--cascading-menu-submenu-${dimension}: 13\\.5rem;`))
+    }
+  })
 })
 
 void describe('Platform-owned chat scroll navigator structure', () => {

@@ -50,6 +50,8 @@ interface SkillFrontmatter {
 interface SkillFileStoreDependencies {
   /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
   skillsDir: () => string
+  /** 兼容没有声明 spaces 的外部 Skill；为空时保持 Platform 的 fail-closed 必填语义。 */
+  defaultSpaces?: readonly string[]
 }
 
 const DisabledSkillStateFileName = '.disabled-skills.json'
@@ -169,11 +171,15 @@ function slugify(name: string): string {
 class SkillFileStore {
   private readonly log = logRuntime.tag('SkillFileStore')
   private readonly skillsDir: () => string
+  private readonly defaultSpaces: readonly string[]
   private readonly parseCache = new Map<string, { mtimeMs: number; record: SkillFileRecord }>()
   private readonly listeners = new Set<() => void>()
 
   constructor(dependencies: SkillFileStoreDependencies) {
     this.skillsDir = dependencies.skillsDir
+    this.defaultSpaces = [...new Set(
+      (dependencies.defaultSpaces ?? []).map((space) => space.trim().toLowerCase()).filter(Boolean)
+    )]
   }
 
   public subscribe(listener: () => void): () => void {
@@ -268,7 +274,7 @@ class SkillFileStore {
     if (isBlank(body)) {
       throw new AppError('VALIDATION', 'skill-body-empty')
     }
-    if (isEmpty(parseFrontmatterList(data.spaces))) {
+    if (isEmpty(parseFrontmatterList(data.spaces)) && isEmpty(this.defaultSpaces)) {
       throw new AppError('VALIDATION', 'skill-frontmatter-spaces-missing')
     }
 
@@ -487,7 +493,8 @@ class SkillFileStore {
       const baseDir = isDirStyle ? dirname(filePath) : null
       const id = isDirStyle ? basename(dirname(filePath)) : basename(filePath, '.md')
       const parsedPriority = Number.parseInt(data.priority ?? '', 10)
-      const spaces = parseFrontmatterList(data.spaces)
+      const declaredSpaces = parseFrontmatterList(data.spaces)
+      const spaces = isEmpty(declaredSpaces) ? [...this.defaultSpaces] : declaredSpaces
       if (isEmpty(spaces)) {
         this.log.warn('技能缺少必填的 spaces 声明，忽略该文件', { filePath })
         return null

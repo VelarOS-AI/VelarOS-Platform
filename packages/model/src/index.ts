@@ -27,6 +27,7 @@ export {
 export type { ModelAdapterRegistryPort } from './ModelAdapterRegistryPort'
 export * from './ModelCatalog'
 export type * from './ModelContracts'
+export * from './ModelProfiles'
 export {
   type ModelProviderAvailabilityOptions,
   ModelProviderCollection,
@@ -34,6 +35,7 @@ export {
   type ModelProviderConfiguredInput,
   type ModelProviderPreset,
 } from './ModelProviderCollection'
+export * from './ModelProviderRetry'
 export { applyModelRequestPolicy } from './ModelRequestPolicy'
 export {
   ModelRequestClient,
@@ -57,6 +59,7 @@ export type {
   ModelRequestTextInput,
   ModelRequestTransport,
 } from './ModelRequestTypes'
+export * from './ModelUsage'
 export { OpenAICompatibleModelAdapter } from './OpenAICompatibleModelAdapter'
 export { OpenAIModelAdapter } from './OpenAIModelAdapter'
 export {

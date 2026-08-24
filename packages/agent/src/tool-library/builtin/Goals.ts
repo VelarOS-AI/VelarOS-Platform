@@ -202,7 +202,8 @@ function buildGoalStateUpsertInput(input: {
     metadata: {
       ...(input.artifact.metadata ?? {}),
       goal: true,
-      goalStatus: 'active',
+      // 修改暂停目标的描述/步骤/约束不等于恢复执行；生命周期只能由显式 status 迁移。
+      goalStatus: previous.status === 'paused' ? 'paused' : 'active',
       blockedAuditTurns: previous.blockedAuditTurns,
       steps: input.steps ?? previous.steps,
       constraints: input.constraints ?? previous.constraints,
@@ -240,17 +241,29 @@ function isResolvedGoalStep(step: GoalStep): boolean {
   return step.status === 'completed' || step.status === 'skipped'
 }
 
-function buildGoalTerminalUpsertInput(input: {
+function buildGoalLifecycleUpsertInput(input: {
   artifact: ActiveContextArtifact
-  status: Exclude<GoalStatus, 'active'>
+  status: Exclude<GoalStatus, 'removed'>
   now: number
 }): ActiveContextUpsertInput {
   const previous = toGoalSnapshot(input.artifact)
+  const terminal =
+    input.status === 'complete' || input.status === 'blocked' || input.status === 'cancelled'
+  const transitionMetadata =
+    input.status === 'active'
+      ? { terminalAt: null, pausedAt: null, resumedAt: input.now }
+      : input.status === 'paused'
+        ? { terminalAt: null, pausedAt: input.now }
+        : input.status === 'blocked'
+          ? { terminalAt: input.now, blockedAt: input.now }
+          : input.status === 'cancelled'
+            ? { terminalAt: input.now, cancelledAt: input.now }
+            : { terminalAt: input.now }
   return {
     id: input.artifact.id,
     kind: 'requirement',
     scope: input.artifact.scope,
-    status: 'completed',
+    status: terminal ? 'completed' : 'active',
     resourceId: input.artifact.resourceId,
     title: input.artifact.title,
     content: input.artifact.content,
@@ -260,9 +273,17 @@ function buildGoalTerminalUpsertInput(input: {
       goal: true,
       goalStatus: input.status,
       blockedAuditTurns: previous.blockedAuditTurns,
-      terminalAt: input.now,
+      ...transitionMetadata,
     },
   }
+}
+
+function buildGoalTerminalUpsertInput(input: {
+  artifact: ActiveContextArtifact
+  status: 'complete' | 'blocked' | 'cancelled'
+  now: number
+}): ActiveContextUpsertInput {
+  return buildGoalLifecycleUpsertInput(input)
 }
 
 function assertGoalCanComplete(goal: GoalSnapshot): void {
@@ -281,6 +302,7 @@ function assertGoalCanComplete(goal: GoalSnapshot): void {
 
 export {
   assertGoalCanComplete,
+  buildGoalLifecycleUpsertInput,
   buildGoalStateUpsertInput,
   buildGoalTerminalUpsertInput,
   buildGoalUpsertInput,

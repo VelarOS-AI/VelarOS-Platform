@@ -32,14 +32,16 @@ export const planStatusSchema = z.enum([
   'skipped',
 ] satisfies [UserPlanStatus, ...UserPlanStatus[]])
 
-export const planLifecycleSchema = z.enum(['active', 'completed', 'archived'])
+export type PlanLifecycle = 'active' | 'paused' | 'completed' | 'archived'
+
+export const planLifecycleSchema = z.enum(['active', 'paused', 'completed', 'archived'])
 
 /** plan:update 工具入参。 */
 export type UpdatePlanInput = {
   /** 本次计划变更的简短说明。 */
   explanation?: LooseOptional<string>
-  /** 计划生命周期；完成或用户改变目标时应显式归档。 */
-  lifecycle?: 'active' | 'completed' | 'archived'
+  /** 计划生命周期；可暂停/恢复，完成或用户改变目标时应显式收尾。 */
+  lifecycle?: PlanLifecycle
   /** 当前完整计划列表，而不是增量 patch。 */
   plan?: UserPlanStep[]
   /** 标记当前计划中的一个或多个步骤已完成；传步骤 id、标题或 1-based 序号。 */
@@ -54,8 +56,8 @@ interface PlanStepCompletionResult {
   allStepsResolved: boolean
 }
 
-export function resolvePlanLifecycle(input: UpdatePlanInput): 'active' | 'completed' | 'archived' {
-  if (input.lifecycle === 'completed' || input.lifecycle === 'archived') return input.lifecycle
+export function resolvePlanLifecycle(input: UpdatePlanInput): PlanLifecycle {
+  if (input.lifecycle) return input.lifecycle
 
   const hasSteps = !!input.plan?.length
   const allTerminal = hasSteps && input.plan!.every(

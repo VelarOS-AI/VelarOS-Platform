@@ -9,8 +9,8 @@ import { defineVelaTool } from '../defineVelaTool'
 import { directiveTypeSchema } from './ActiveDirectives'
 import {
   assertGoalCanComplete,
+  buildGoalLifecycleUpsertInput,
   buildGoalStateUpsertInput,
-  buildGoalTerminalUpsertInput,
   buildGoalUpsertInput,
   completeGoalStep,
   findCurrentGoalArtifact,
@@ -28,7 +28,7 @@ function describeGoalStepRefsForModel(
   return describeStepRefsForModel(steps, (step) => step.step)
 }
 
-const goalStatusSchema = z.enum(['complete', 'blocked'])
+const goalStatusSchema = z.enum(['active', 'paused', 'complete', 'blocked', 'cancelled'])
 const goalStepSchema = z.object({
   id: z.string().min(1).max(80).optional().describe(
     parameterDescription({
@@ -221,7 +221,7 @@ const createGoal = defineVelaTool<{
 })
 
 const updateGoal = defineVelaTool<{
-  status?: 'complete' | 'blocked'
+  status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
   objective?: string
   steps?: GoalStep[]
   complete_step?: string | number
@@ -230,27 +230,34 @@ const updateGoal = defineVelaTool<{
   name: 'goal:update',
   role: 'control',
   category: 'planning',
-  summary: '更新当前 session 的统一目标状态，或把目标标记为完成/受阻。',
+  summary: '更新当前 session 的目标，支持暂停、恢复、完成、受阻或取消。',
   suitable: [
     '需要同步目标、步骤或约束状态。',
-    '目标已实际完成，或模型确认存在无法继续推进的真实阻碍。',
+    '需要暂停或恢复目标。',
+    '目标已实际完成、用户取消目标，或模型确认存在无法继续推进的真实阻碍。',
   ],
   forbidden: [
     '不要用它创建目标。',
     '不要仅因为任务困难、耗时、结果不确定或希望获得澄清就草率标记 blocked。',
+    '不要在用户仍要求继续推进时把目标标记 cancelled。',
   ],
   usage: [
     '维护步骤最省心:传完整 steps 列表(每步带 status),这一项就能同步全部步骤;想改哪步就改它的 status。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题,别自造 id);host 标记 completed 并推进下一个 pending。steps 与 complete_step 可一起传。',
     'status=complete 宣布目标完成:未收尾的 pending/in_progress 步骤会被自动标完成,不用逐个 complete_step。',
     'status=blocked 宣布目标受阻:模型确认缺少必要授权、用户输入或外部状态等真实阻碍导致无法继续推进时,可以自行调用,不需要等待多轮审计。',
+    'status=paused 暂停目标并结束本次推进；后续得到继续指令时用 status=active 恢复。',
+    'status=cancelled 只用于用户取消、目标被明确替换或已确认不再需要继续的情况。',
     '所有字段都不传则视为读取当前目标、不报错。',
   ],
   examples: [
     { steps: [{ step: '跑验证', status: 'in_progress' }] },
     { complete_step: 1 },
+    { status: 'paused' },
+    { status: 'active' },
     { status: 'complete' },
     { status: 'blocked' },
+    { status: 'cancelled' },
   ],
   notes: ['返回里的 steps 字段给出每步 ref(序号)+标题+状态,下次引用照它传。目标进入终态后,目标模式收尾门才允许本次执行完成。'],
   schema: z
@@ -259,10 +266,13 @@ const updateGoal = defineVelaTool<{
         .optional()
         .describe(
           parameterDescription({
-            description: '目标终态；不传时仅更新目标状态字段。',
+            description: '目标生命周期状态；不传时仅更新目标内容字段。',
             values: [
+              'active：恢复暂停的目标并继续推进。',
+              'paused：暂停目标并结束本次推进，保留后续恢复入口。',
               'complete：目标已经真正完成。',
               'blocked：模型确认存在无法继续推进的真实阻碍。',
+              'cancelled：用户取消、目标被替换或明确不再需要继续。',
             ],
           })
         ),
@@ -313,7 +323,8 @@ const updateGoal = defineVelaTool<{
       kinds: ['requirement'],
     })
     const artifact = findCurrentGoalArtifact(artifacts)
-    if (!artifact || toGoalSnapshot(artifact).status !== 'active') {
+    const currentStatus = artifact ? toGoalSnapshot(artifact).status : null
+    if (!artifact || (currentStatus !== 'active' && currentStatus !== 'paused')) {
       throw new AppError('VALIDATION', 'No active goal exists. Use goal:create first.')
     }
 
@@ -368,7 +379,7 @@ const updateGoal = defineVelaTool<{
     }
     const updatedArtifact = input.status
       ? await ctx.activeContext.upsertActiveContextArtifact(
-          buildGoalTerminalUpsertInput({
+          buildGoalLifecycleUpsertInput({
             artifact: currentArtifact,
             status: input.status,
             now: Date.now(),

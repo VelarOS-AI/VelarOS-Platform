@@ -92,7 +92,7 @@ function buildCompletedAssistantMessage(t: Translate): ChatMessage {
       },
       {
         type: 'text',
-        text: t('componentLibrary.chatExample.assistantCompletedBody'),
+        text: `${t('componentLibrary.chatExample.assistantCompletedBody')}\n\n\`\`\`\nhost=api.internal\ntimeout=30\nretries=2\n\`\`\``,
       },
     ],
   }

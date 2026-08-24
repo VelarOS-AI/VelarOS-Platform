@@ -10,8 +10,11 @@
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
+        "./bridge",
         "./chat",
         "./chat-stream",
+        "./mcp",
+        "./mods",
         "./node",
         "./protocol",
         "./protocol/agent-capability",
@@ -22,7 +25,10 @@
         "./protocol/mods",
         "./protocol/observability",
         "./protocol/session",
+        "./remote",
+        "./remote/mcp",
         "./run-context",
+        "./session",
         "./tool-contract"
       ],
       "repositoryDirectory": "packages/agent"
@@ -199,6 +205,9 @@
         "./contracts",
         "./contracts/abi",
         "./contracts/protocol",
+        "./remote",
+        "./remote/client",
+        "./remote/node",
         "./runtime",
         "./serve",
         "./serve/updater"
@@ -235,7 +244,10 @@
         "./catalog",
         "./contracts",
         "./node",
-        "./provider-scripts/node"
+        "./profiles",
+        "./provider-retry",
+        "./provider-scripts/node",
+        "./usage"
       ],
       "repositoryDirectory": "packages/model"
     },

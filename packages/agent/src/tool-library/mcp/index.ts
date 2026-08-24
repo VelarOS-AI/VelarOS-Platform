@@ -3,12 +3,17 @@
 
 export { translateMcpCallResult } from './mcpCallResult'
 export type {
+  McpAuthorizationProvider,
   McpConnectionSpec,
   McpRawCallResult,
+  McpResourceContent,
+  McpResourceDescriptor,
   McpToolAnnotations,
   McpToolDescriptor,
+  McpTransportKind,
 } from './McpClientConnection'
 export {
+  McpAuthorizationRequiredError,
   McpCallTimeoutMs,
   McpClientConnection,
   McpConnectTimeoutMs,

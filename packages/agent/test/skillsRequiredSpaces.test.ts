@@ -40,4 +40,20 @@ describe('Skill 必填空间声明', () => {
       })
     ).toThrow('必须显式声明至少一个 capabilityScopes')
   })
+
+  test('宿主可为兼容格式显式提供受限默认空间', () => {
+    const root = mkdtempSync(join(tmpdir(), 'agent-skill-default-spaces-'))
+    const store = new SkillFileStore({
+      skillsDir: () => root,
+      defaultSpaces: ['termel'],
+    })
+    try {
+      writeFileSync(join(root, 'compatible.md'), '---\nname: Compatible\n---\n# Compatible\n')
+
+      expect(store.get('compatible')?.spaces).toEqual(['termel'])
+      expect(store.saveContent('---\nname: Saved\n---\n# Saved\n').spaces).toEqual(['termel'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

@@ -26,14 +26,23 @@ function resolveFileSkillScopes(spaces: readonly string[]): string[] {
  * frontmatter 支持 spaces/priority/argument-hint——与内置 catalog 平权的触发维度。
  */
 class FileSkillProvider implements AgentSkillProvider {
-  readonly id = 'skill-files'
-  readonly kind: AgentSkillProvider['kind'] = 'global'
-  readonly label = '技能文件'
+  readonly id: string
+  readonly kind: AgentSkillProvider['kind']
+  readonly label: string
 
   constructor(
     private readonly store: SkillFileStore,
-    private readonly roleIds: readonly AgentRoleId[]
-  ) {}
+    private readonly roleIds: readonly AgentRoleId[],
+    options: {
+      readonly id?: string
+      readonly kind?: AgentSkillProvider['kind']
+      readonly label?: string
+    } = {}
+  ) {
+    this.id = options.id?.trim() || 'skill-files'
+    this.kind = options.kind ?? 'global'
+    this.label = options.label?.trim() || '技能文件'
+  }
 
   public listSkills(): AgentSkillDefinition[] {
     return this.store.list().map((record) =>

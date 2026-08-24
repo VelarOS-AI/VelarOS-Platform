@@ -8,6 +8,9 @@ VelarOS 的 library-first 微内核。一个领域只发布一个包，职责通
 - `@velaros-ai/kernel/client`：serve 模式和瘦客户端接入面。
 - `@velaros-ai/kernel/serve`：可选 daemon/RPC 装配。
 - `@velaros-ai/kernel/serve/updater`：共享 Runtime 安装、切换与回滚。
+- `@velaros-ai/kernel/remote`：remote isolation adapter、清单投影与两端共享算法。
+- `@velaros-ai/kernel/remote/client`：配对、认证、重连、调用与凭据端口。
+- `@velaros-ai/kernel/remote/node`：无头能力节点服务端、审计与调用幂等。
 
 Kernel 默认与完整宿主同进程、同生命周期；`serve` 只是同一运行栈的可选部署方式，不是第二个内核。
 Desktop / Workbench 等完整宿主直接组合公共 `Kernel`，只选择能力模块、产品权限策略与生命周期

@@ -19,6 +19,9 @@
 | `@velaros-ai/model/contracts` | 任何地方 | 纯类型契约,编译后 JavaScript 为空。UI、配置层、跨进程协议优先从这里拿类型 |
 | `@velaros-ai/model/catalog` | 任何地方 | 纯数据 + 纯函数:`ModelCatalog`、`ProviderManifest`、`LocalModelEnvironment` |
 | `@velaros-ai/model` | browser-safe | 可移植公共 API:契约、catalog、policy、adapter、请求客户端、依赖注入端口 |
+| `@velaros-ai/model/profiles` | 任何地方 | profile 凭据来源解析与脱敏投影，不读取宿主全局环境 |
+| `@velaros-ai/model/provider-retry` | 任何地方 | provider 无关的瞬时错误分类、退避计划与可取消等待 |
+| `@velaros-ai/model/usage` | 任何地方 | usage 归一、注入式定价与聚合原语 |
 | `@velaros-ai/model/node` | Node ≥ 20 | Node 宿主装配:默认 composition、adapter registry、文件系统 provider-script registry、VM adapter、`NodeLocalModelEnvironment` |
 | `@velaros-ai/model/provider-scripts/node` | Node ≥ 20 | 只要 provider-script loader 时的窄入口(自己装 composition 的宿主用) |
 | `@velaros-ai/model/ProviderScriptContextWindow` | 任何地方 | 稳定的上下文窗口兼容入口 |
@@ -57,6 +60,9 @@
 - **横切选项族** —— `PromptCacheModelOptions`(前缀缓存断点)、
   `ThinkingDepthModelOptions`(推理力度 / OpenRouter reasoning 合并)、
   `ModelRequestPolicy`、`ProviderRuntimeAvailability`、`EmbeddingModelSelection`。
+- **产品共用连接机制** —— `ModelProfiles` 通过显式配置、凭据库和环境快照解析 profile，
+  `ModelProviderRetry` 提供 provider 无关的瞬时错误分类与可取消退避，`ModelUsage` 统一 usage
+  归一和注入式价格计算。配置文件布局、安全存储、fallback 顺序与使用量展示仍由产品决定。
 - **`createModelKernelModule()`** —— 把 provider 解析做成 Kernel callable capability
   (`velaros.model`)。**Kernel 从不自己创建或发现 registry**,必须由产品注入。
 

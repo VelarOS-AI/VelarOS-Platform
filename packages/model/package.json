@@ -35,6 +35,18 @@
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
     },
+    "./profiles": {
+      "types": "./dist/ModelProfiles.d.ts",
+      "import": "./dist/ModelProfiles.js"
+    },
+    "./provider-retry": {
+      "types": "./dist/ModelProviderRetry.d.ts",
+      "import": "./dist/ModelProviderRetry.js"
+    },
+    "./usage": {
+      "types": "./dist/ModelUsage.d.ts",
+      "import": "./dist/ModelUsage.js"
+    },
     "./node": {
       "types": "./dist/node.d.ts",
       "import": "./dist/node.js"

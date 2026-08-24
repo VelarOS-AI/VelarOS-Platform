@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 import { type ComponentType, createElement, type ReactElement, type ReactNode } from 'react'
@@ -121,7 +122,11 @@ const i18nValue: ConversationI18nContextValue = {
 }
 
 /** 直接驱动 `components.pre`：绕开 Streamdown 解析，只验围栏渲染器这一格的改道。 */
-function CodeFenceProbe(): ReactElement {
+function CodeFenceProbe({
+  languageClassName = 'language-ts',
+}: {
+  languageClassName?: string
+}): ReactElement {
   const components = useMessageMarkdownComponents(undefined, undefined, 'open', {
     isStreaming: false,
   })
@@ -130,11 +135,18 @@ function CodeFenceProbe(): ReactElement {
   return createElement(
     Pre,
     null,
-    createElement('code', { className: 'language-ts' }, 'const answer = 42')
+    createElement(
+      'code',
+      languageClassName ? { className: languageClassName } : null,
+      'const answer = 42'
+    )
   )
 }
 
-function renderCodeFence(slots: ConversationRenderSlots): string {
+function renderCodeFence(
+  slots: ConversationRenderSlots,
+  languageClassName = 'language-ts'
+): string {
   return renderToStaticMarkup(
     createElement(
       ConversationLocalizationProvider,
@@ -142,7 +154,7 @@ function renderCodeFence(slots: ConversationRenderSlots): string {
       createElement(
         ConversationRenderSlotsProvider,
         { slots },
-        createElement(CodeFenceProbe)
+        createElement(CodeFenceProbe, { languageClassName })
       )
     ) as ReactElement
   )
@@ -154,6 +166,36 @@ void describe('会话替换槽（messageCodeBlock）', () => {
 
     assert.match(markup, /data-block="true"/)
     assert.match(markup, /const answer = 42/)
+  })
+
+  void test('未声明语言的围栏默认标记为 text', () => {
+    const markup = renderCodeFence(createSlots({}), '')
+
+    assert.match(markup, /class="language-text"/)
+  })
+
+  void test('工具栏布局由共享组件自身保证，不依赖消费端生成 Streamdown 工具类', () => {
+    const stylesheet = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const codeBlockRules = stylesheet.match(
+      /& \[data-streamdown='code-block'\] \{(?<rules>[^}]*)\}/
+    )?.groups?.rules
+    const actionRules = stylesheet.match(
+      /& \[data-streamdown='code-block-actions'\] \{(?<rules>[^}]*)\}/
+    )?.groups?.rules
+
+    assert.ok(codeBlockRules)
+    assert.match(codeBlockRules, /display: flex;/)
+    assert.match(codeBlockRules, /flex-direction: column;/)
+    assert.ok(actionRules)
+    assert.match(actionRules, /position: absolute;/)
+    assert.match(actionRules, /display: flex;/)
+    assert.match(actionRules, /justify-content: flex-end;/)
   })
 
   void test('注入替换件时围栏改由替换件渲染，并拿到语言与正文', () => {
@@ -172,6 +214,18 @@ void describe('会话替换槽（messageCodeBlock）', () => {
     assert.match(markup, /data-language="ts"/)
     assert.match(markup, /const answer = 42/)
     assert.doesNotMatch(markup, /data-block="true"/)
+  })
+
+  void test('替换件收到的未声明语言同样归一为 text', () => {
+    const markup = renderCodeFence(
+      createSlots({
+        messageCodeBlock: ({ language }) =>
+          createElement('section', { 'data-language': language }),
+      }),
+      ''
+    )
+
+    assert.match(markup, /data-language="text"/)
   })
 
   void test('替换件返回 null（弃权）回落官方实现', () => {

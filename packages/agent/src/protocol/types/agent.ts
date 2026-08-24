@@ -398,7 +398,7 @@ export interface ToolExecutionPlanItem {
 
 export interface ToolExecutionPlanUpdate {
   explanation?: LooseOptional<string>
-  lifecycle?: 'active' | 'completed' | 'archived'
+  lifecycle?: 'active' | 'paused' | 'completed' | 'archived'
   plan: ToolExecutionPlanItem[]
 }
 

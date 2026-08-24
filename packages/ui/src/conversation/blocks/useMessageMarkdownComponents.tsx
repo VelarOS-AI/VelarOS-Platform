@@ -42,6 +42,7 @@ import { isArray } from '#internal/runtime'
 import { isEmpty, isString } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
+const DefaultCodeBlockLanguage = 'text'
 const NonExpandableCodeBlockLanguages = new Set(['mermaid'])
 const RenderableHtmlCodeBlockLanguages = new Set(['html', 'htm'])
 const TailMarkerCandidateTags = ['p', 'li', 'h1', 'h2', 'h3', 'h4'] as const
@@ -63,6 +64,13 @@ function readCodeLanguage(className: unknown): string {
   if (!isString(className)) return ''
 
   return className.match(CodeLanguageClassPattern)?.[1]?.toLowerCase() ?? ''
+}
+
+function normalizeCodeBlockClassName(className: unknown): string {
+  const normalizedClassName = isString(className) ? className.trim() : ''
+  if (readCodeLanguage(normalizedClassName)) return normalizedClassName
+
+  return [normalizedClassName, `language-${DefaultCodeBlockLanguage}`].filter(Boolean).join(' ')
 }
 
 function readCodeText(children: unknown): string {
@@ -353,9 +361,11 @@ function MarkdownPreWithExpandableCode({
     children?: unknown
     className?: unknown
   }
-  const language = readCodeLanguage(childProps.className)
+  const codeBlockClassName = normalizeCodeBlockClassName(childProps.className)
+  const language = readCodeLanguage(codeBlockClassName)
   const blockChild = React.cloneElement(childElement, {
     'data-block': 'true',
+    className: codeBlockClassName,
   })
   const official = renderOfficialCodeBlock({
     blockChild,
