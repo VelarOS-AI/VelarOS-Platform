@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-08-24
+
+### Added
+
+- `@velaros-ai/ui/conversation/composer` 新增 `ChatSurfaceComposer`：由共享的
+  `default` / `side` 表面形态统一派生输入框密度，Desktop 与 Workbench 只注入
+  `ChatComposerControl`，不再分别维护紧凑模式条件。
+- 新增封闭契约的 `TaskWorkspace`、任务列表、详情与回放布局，并登记到组件图鉴。
+
+### Changed
+
+- `run-guidance` 只作为当前运行的内部状态：运行中不创建新会话分段，完成后与同一运行的
+  assistant 活动统一折叠到一个“已处理”入口，展开后保留引导内容。
+
 ## [0.2.4] — Workbench composer parity
 
 ### Added

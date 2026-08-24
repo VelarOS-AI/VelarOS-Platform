@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:远程能力节点 Client 侧的本地契约面——可替换端口、失败分档与事件形状。
 //
 // wire 帧形状冻结在 `@velaros-ai/kernel/contracts/protocol` 的 remote-node,本文件一个字都不改;

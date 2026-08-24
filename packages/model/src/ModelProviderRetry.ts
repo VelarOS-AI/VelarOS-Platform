@@ -1,3 +1,15 @@
+import {
+  isEmpty,
+  isFiniteNumber,
+  isFunction,
+  isObject,
+  isPlainObject,
+  isPresent,
+  isString,
+  isTrue,
+} from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 const DefaultInitialDelayMs = 2_000
 const DefaultMaxDelayMs = 30_000
 
@@ -18,7 +30,7 @@ export interface ModelProviderRetryDecision {
 export function planModelProviderRetry(
   error: unknown,
   options: ModelProviderRetryOptions,
-): ModelProviderRetryDecision | null {
+): Nullable<ModelProviderRetryDecision> {
   const facts = collectErrorFacts(error)
   const lower = facts.messages.join(' ').toLowerCase()
   if (isPermanentFailure(lower) || facts.codes.has('ABORT_ERR')) return null
@@ -58,19 +70,7 @@ export function planModelProviderRetry(
 
 export async function waitForModelRetry(delayMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) throw abortError(signal)
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(done, Math.max(0, delayMs))
-    const abort = (): void => {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', abort)
-      reject(abortError(signal))
-    }
-    function done(): void {
-      signal.removeEventListener('abort', abort)
-      resolve()
-    }
-    signal.addEventListener('abort', abort, { once: true })
-  })
+  await TimerScope.sleep(delayMs, { label: 'ModelProviderRetry.wait', signal })
 }
 
 interface ErrorFacts {
@@ -106,56 +106,57 @@ function collectErrorFacts(root: unknown): ErrorFacts {
   }
   const queue: Array<{ readonly value: unknown; readonly depth: number }> = [{ value: root, depth: 0 }]
   const seen = new Set<unknown>()
-  while (queue.length > 0) {
+  while (!isEmpty(queue)) {
     const item = queue.shift()!
-    if (item.depth > 4 || item.value === null || item.value === undefined || seen.has(item.value)) continue
+    if (item.depth > 4 || !isPresent(item.value) || seen.has(item.value)) continue
     seen.add(item.value)
-    if (typeof item.value === 'string') {
+    if (isString(item.value)) {
       pushMessage(facts.messages, item.value)
       continue
     }
-    if (typeof item.value !== 'object') continue
-    const record = item.value as Record<string, unknown>
+    if (!isPlainObject(item.value)) continue
+    const record = item.value
     for (const key of ['status', 'statusCode']) {
       const status = Number(record[key])
       if (Number.isInteger(status) && status >= 100 && status <= 599) facts.statuses.add(status)
     }
-    if (typeof record.code === 'string') facts.codes.add(record.code.toUpperCase())
-    if (record.isRetryable === true || record.retryable === true) facts.retryable = true
-    if (typeof record.message === 'string') pushMessage(facts.messages, record.message)
+    if (isString(record.code)) facts.codes.add(record.code.toUpperCase())
+    if (isTrue(record.isRetryable) || isTrue(record.retryable)) facts.retryable = true
+    if (isString(record.message)) pushMessage(facts.messages, record.message)
     mergeHeaders(facts.headers, record.headers)
     mergeHeaders(facts.headers, record.responseHeaders)
     for (const key of ['cause', 'data', 'error', 'lastError', 'response']) {
-      if (record[key] !== undefined) queue.push({ value: record[key], depth: item.depth + 1 })
+      if (isPresent(record[key])) queue.push({ value: record[key], depth: item.depth + 1 })
     }
   }
-  if (facts.messages.length === 0) pushMessage(facts.messages, String(root))
+  if (isEmpty(facts.messages)) pushMessage(facts.messages, String(root))
   return facts
 }
 
 function mergeHeaders(target: Record<string, string>, input: unknown): void {
-  if (!input || typeof input !== 'object') return
-  if (typeof (input as { get?: unknown }).get === 'function') {
+  if (!isObject(input)) return
+  const get = Reflect.get(input, 'get')
+  if (isFunction(get)) {
     for (const name of ['retry-after-ms', 'retry-after']) {
-      const value = (input as { get(name: string): unknown }).get(name)
-      if (typeof value === 'string') target[name] = value
+      const value = Reflect.apply(get, input, [name])
+      if (isString(value)) target[name] = value
     }
     return
   }
   for (const [name, value] of Object.entries(input)) {
-    if (typeof value === 'string') target[name.toLowerCase()] = value
+    if (isString(value)) target[name.toLowerCase()] = value
   }
 }
 
-function retryAfter(headers: Record<string, string>, now: number): number | null {
+function retryAfter(headers: Record<string, string>, now: number): Nullable<number> {
   const milliseconds = Number.parseFloat(headers['retry-after-ms'] ?? '')
-  if (Number.isFinite(milliseconds) && milliseconds >= 0) return milliseconds
+  if (isFiniteNumber(milliseconds) && milliseconds >= 0) return milliseconds
   const value = headers['retry-after']
   if (!value) return null
   const seconds = Number.parseFloat(value)
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000)
+  if (isFiniteNumber(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000)
   const at = Date.parse(value)
-  return Number.isFinite(at) && at > now ? at - now : null
+  return isFiniteNumber(at) && at > now ? at - now : null
 }
 
 function isPermanentFailure(message: string): boolean {
@@ -171,7 +172,7 @@ function isPermanentFailure(message: string): boolean {
   ])
 }
 
-function retryMessage(kind: ModelProviderRetryDecision['kind'], message: string | undefined): string {
+function retryMessage(kind: ModelProviderRetryDecision['kind'], message?: string): string {
   const compact = message?.replace(/\s+/gu, ' ').trim().slice(0, 180)
   if (compact) return compact
   if (kind === 'rate-limit') return 'Provider rate limit reached'
@@ -188,8 +189,8 @@ function includesAny(value: string, candidates: readonly string[]): boolean {
   return candidates.some((candidate) => value.includes(candidate))
 }
 
-function positive(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+function positive(value: LooseOptional<number>, fallback: number): number {
+  return isFiniteNumber(value) && value > 0 ? value : fallback
 }
 
 function abortError(signal: AbortSignal): Error {

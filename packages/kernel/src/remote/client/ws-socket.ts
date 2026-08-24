@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:`RemoteNodeSocket` 端口的默认实现——Electron 主进程里的 `ws`。
 //
 // 单独成文件是为了把对 `ws` 的编译期依赖收在一处:测试与未来的替代传输注入自己的

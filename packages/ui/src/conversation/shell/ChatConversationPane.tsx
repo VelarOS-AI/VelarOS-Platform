@@ -60,7 +60,7 @@ import type {
 } from '#contracts'
 import { isConversationTurnInputMessage } from '#contracts'
 import { buildGoalDockViewModel } from '#internal/goalLifecycle'
-import { isEmpty, isPresent, last, Log, optionalWhenLazy, toNullable, toOptional } from '#internal/runtime'
+import { isEmpty, isPresent, Log, optionalWhenLazy, toNullable, toOptional } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 const log = Log.tag('chat-conversation-pane')
@@ -382,6 +382,7 @@ export function ChatConversationPane({
   }, [inlineNotice?.tone, presentationRuntime, visibleRuntimeSummary])
   const {
     messageRunMarkerMap,
+    latestAssistantMessageId,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
@@ -398,12 +399,8 @@ export function ChatConversationPane({
     shouldRenderAwaitingInputCard,
   })
   const isTranscriptRunActive = isRunActive
-  const fallbackAssistantMessageId = optionalWhenLazy(
-    last(visibleMessages)?.role === 'assistant',
-    () => last(visibleMessages)!.id
-  )
   const activeAssistantMessageId = isTranscriptRunActive
-    ? (streamingAssistantMessageId ?? fallbackAssistantMessageId)
+    ? (streamingAssistantMessageId ?? latestAssistantMessageId)
     : null
   const transcriptNavigationRef = useRef<Nullable<ChatTranscriptNavigationHandle>>(null)
   const { windowMessages, isWindowAtLoadedTop } = useChatTranscriptWindow({
@@ -461,7 +458,7 @@ export function ChatConversationPane({
     [activeDockPlanItemId, goalLifecycleDockItemId]
   )
   const hideGoalToolBlocks = !!goalDockModel || !!activeDockGoalBlock
-  const inlineNoticeMessageId = activeAssistantMessageId ?? fallbackAssistantMessageId
+  const inlineNoticeMessageId = activeAssistantMessageId ?? latestAssistantMessageId
   const stickyDockItems = useMemo<SessionStickyDockItem[]>(() => {
     const dockItems: SessionStickyDockItem[] = []
 

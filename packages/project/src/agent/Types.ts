@@ -7,6 +7,7 @@ import type {
   ToolContractSurface,
 } from '@velaros-ai/agent/tool-contract'
 
+import type { ProjectCodeQuery } from '../project-code-query.js'
 import type {
   ProjectAuthorizationDecision,
   ProjectCommandResult,
@@ -32,6 +33,8 @@ export interface ProjectToolApi {
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
   ) => Promise<ProjectCommandResult>
+  /** Project 内置代码理解入口；宿主可用 CodeGraph 覆盖同一 action 面的增强查询。 */
+  queryCode: (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown>
 }
 
 export interface ProjectToolSystemApi {

@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // Node 侧监听端:把注入进来的 Kernel 能力面暴露给**唯一一台**已配对的远端 Client。
 //
 // 宪章 §15 原则三反过来读同样成立:Node 不是宿主的一半,它是宿主伸到另一台机器上的一只手。

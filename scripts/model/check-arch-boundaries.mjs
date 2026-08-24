@@ -104,6 +104,7 @@ for (const file of sourceFiles) {
       specifier === '@velaros-ai/core' ||
       specifier === '@velaros-ai/core/error' ||
       specifier === '@velaros-ai/core/logger' ||
+      specifier === '@velaros-ai/core/utils/TimerScope' ||
       specifier === '@velaros-ai/kernel/contracts/abi'
     if (!allowed) {
       failures.push(

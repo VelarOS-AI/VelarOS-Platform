@@ -1,9 +1,9 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 调用侧运行时:并发闸、终态回放缓存,以及「一个 callId 有且只有一帧终态」这条不变量的看守。
 //
 // 刻意不认识连接:终态从哪条 socket 出去是 Server 的判断(断线期间产生的结果要留在缓存里等重连
 // 来取),runner 只负责执行、计时、去重与审计。
-import { isNotNull, isUndefined, toNullable } from '@velaros-ai/core'
+import { isNotNull, isUndefined, Log, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   RemoteNodeCancel,
@@ -18,6 +18,8 @@ import type {
   RemoteNodeAuditSink,
   RemoteNodeCapabilityInvoker,
 } from './contracts'
+
+const log = Log.tag('RemoteNodeCallRunner')
 
 /** 终态回放缓存容量。够覆盖一次断线重连窗口内的在途调用,不做成无界的调用历史。 */
 export const RemoteNodeCompletedCallCapacity = 256
@@ -336,8 +338,9 @@ export class RemoteNodeCallRunner {
   private recordActivity(event: RemoteNodeActivityEvent): void {
     try {
       this.options.activity?.record(event)
-    } catch {
-      // The security audit remains independent and authoritative for transport activity.
+    } catch (error) {
+      // 产品活动投影只做可观测性；失败不能反向影响权威安全审计或执行结果。
+      log.debug('远程节点活动投影写入失败。', { error, event })
     }
   }
 }

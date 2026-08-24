@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+
 import type { AgentSessionEventPort } from './event-port'
 
 export interface AgentQuestionRequest {
@@ -111,7 +113,7 @@ export class AgentQuestionService {
         requested.set(event.payload.id, event.payload)
       }
       if ((event.type === 'question.resolved' || event.type === 'question.rejected') && isRecord(event.payload)) {
-        if (typeof event.payload.requestId === 'string') resolved.add(event.payload.requestId)
+        if (isString(event.payload.requestId)) resolved.add(event.payload.requestId)
       }
     }
     let recovered = 0
@@ -135,12 +137,12 @@ export class AgentQuestionService {
 
 function isQuestionRequest(value: unknown): value is AgentQuestionRequest {
   return isRecord(value)
-    && typeof value.id === 'string'
-    && typeof value.sessionId === 'string'
-    && typeof value.question === 'string'
-    && Array.isArray(value.options)
+    && isString(value.id)
+    && isString(value.sessionId)
+    && isString(value.question)
+    && isArray(value.options)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
 }

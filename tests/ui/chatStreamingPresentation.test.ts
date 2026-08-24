@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   shouldAnimateLiveToolActivity,
   shouldRenderActivityGroupDisclosure,
+  shouldRenderProcessedActivityDisclosure,
 } from '../../packages/ui/src/conversation/blocks/AssistantMessageSegments'
 import type { MessageRenderSegment } from '../../packages/ui/src/conversation/blocks/messageBubbleRenderModel'
 import {
@@ -86,6 +87,25 @@ void describe('live chat activity presentation', () => {
         armedMessageId: 'message-1',
         isStreaming: true,
         messageId: 'message-1',
+      }),
+      true
+    )
+  })
+
+  void test('only folds grouped guidance activity after the owning run is processed', () => {
+    assert.equal(
+      shouldRenderProcessedActivityDisclosure({
+        hasFinalSummaryText: false,
+        hasGroupedRunActivity: true,
+        shouldUseProcessedActivityBoundary: false,
+      }),
+      false
+    )
+    assert.equal(
+      shouldRenderProcessedActivityDisclosure({
+        hasFinalSummaryText: false,
+        hasGroupedRunActivity: true,
+        shouldUseProcessedActivityBoundary: true,
       }),
       true
     )

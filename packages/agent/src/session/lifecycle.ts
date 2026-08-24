@@ -20,7 +20,7 @@ export class AgentSessionLeaseConflictError extends Error {
  * Platform 不探测 OS 进程，也不拥有持久化。
  */
 export function resolveAgentSessionLeaseClaim(
-  current: AgentSessionLease | null,
+  current: Nullable<AgentSessionLease>,
   claim: AgentSessionLeaseClaim,
   isProcessAlive: (pid: number) => boolean,
   now: number,
@@ -51,6 +51,6 @@ export function isTerminalAgentBackgroundState(state: AgentBackgroundAgentState)
     || state === 'interrupted'
 }
 
-export function normalizeAgentSessionListLimit(limit: number | undefined): number {
+export function normalizeAgentSessionListLimit(limit?: number): number {
   return Math.max(1, Math.min(limit ?? 100, 1_000))
 }

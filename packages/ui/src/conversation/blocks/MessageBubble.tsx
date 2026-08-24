@@ -55,6 +55,7 @@ interface MessageBubbleProps {
   runtimeCostContexts?: ConversationTurnContextView[]
   goalCompletionSummary?: LooseOptional<GoalCompletionActivitySummary>
   activityLeadingElement?: LooseOptional<ReactElement>
+  activityTrailingElement?: LooseOptional<ReactElement>
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
   onOpenBrowserLink?: (url: string) => void | Promise<void>
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
@@ -227,6 +228,7 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       runtimeCostContexts={props.runtimeCostContexts}
       goalCompletionSummary={props.goalCompletionSummary}
       activityLeadingElement={props.activityLeadingElement}
+      activityTrailingElement={props.activityTrailingElement}
       renderAfterToolCall={props.renderAfterToolCall}
       onOpenBrowserLink={props.onOpenBrowserLink}
       onOpenFileChange={props.onOpenFileChange}
@@ -262,6 +264,7 @@ function areMessageBubblePropsEqual(
     prev.runtimeCostContexts === next.runtimeCostContexts &&
     prev.goalCompletionSummary === next.goalCompletionSummary &&
     prev.activityLeadingElement === next.activityLeadingElement &&
+    prev.activityTrailingElement === next.activityTrailingElement &&
     areToolSlotRenderPropsEqual(prev, next) &&
     prev.onOpenBrowserLink === next.onOpenBrowserLink &&
     prev.onOpenFileChange === next.onOpenFileChange &&

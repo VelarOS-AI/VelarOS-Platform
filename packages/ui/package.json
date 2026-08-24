@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/ui",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "velaros": {
     "platform": "0.6"
   },
@@ -352,6 +352,10 @@
     "./product/layout/TopBarControlFrame": {
       "types": "./dist/product/layout/TopBarControlFrame.d.ts",
       "import": "./dist/product/layout/TopBarControlFrame.js"
+    },
+    "./product/layout/TaskWorkspace": {
+      "types": "./dist/product/layout/TaskWorkspace.d.ts",
+      "import": "./dist/product/layout/TaskWorkspace.js"
     },
     "./product/menus/BusinessCascadingMenu": {
       "types": "./dist/product/menus/BusinessCascadingMenu.d.ts",

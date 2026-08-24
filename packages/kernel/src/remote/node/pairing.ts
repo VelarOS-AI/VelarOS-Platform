@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 配对闸:一次性人工仪式的节奏控制(六位码 + 有效期 + 失败锁定)。
 //
 // 单独成文是因为这里的每一条判断都是安全语义,不该淹没在连接状态机里。

@@ -1,16 +1,31 @@
-import { type ChildProcessWithoutNullStreams,spawn } from 'node:child_process'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { readFile, realpath } from 'node:fs/promises'
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+
+import {
+  isArray,
+  isEmpty,
+  isNull,
+  isNumber,
+  isPlainObject,
+  isString,
+  Log,
+  toNullable,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
+import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
+const log = Log.tag('ExternalLanguageService')
 
 export interface ExternalLanguageDiagnostic {
   readonly severity: 'error' | 'warning' | 'info'
   readonly path: string
   readonly line: number
   readonly column: number
-  readonly endLine: number | null
-  readonly endColumn: number | null
-  readonly code: string | null
+  readonly endLine: Nullable<number>
+  readonly endColumn: Nullable<number>
+  readonly code: Nullable<string>
   readonly source: string
   readonly message: string
 }
@@ -19,23 +34,23 @@ export interface ExternalLanguageStatus {
   readonly state: 'idle' | 'ready' | 'unavailable' | 'error'
   readonly server: string
   readonly openFiles: number
-  readonly error: string | null
+  readonly error: Nullable<string>
 }
 
 export interface ExternalLanguageLocation {
   readonly path: string
   readonly line: number
   readonly column: number
-  readonly endLine: number | null
-  readonly endColumn: number | null
-  readonly preview: string | null
+  readonly endLine: Nullable<number>
+  readonly endColumn: Nullable<number>
+  readonly preview: Nullable<string>
 }
 
 export interface ExternalLanguageHover {
   readonly path: string
   readonly line: number
   readonly column: number
-  readonly kind: string | null
+  readonly kind: Nullable<string>
   readonly display: string
   readonly documentation: string
 }
@@ -63,13 +78,13 @@ export const BuiltinExternalLanguageServers: readonly ExternalLanguageServerSpec
 interface PendingResponse {
   readonly resolve: (value: unknown) => void
   readonly reject: (error: Error) => void
-  readonly timer: ReturnType<typeof setTimeout>
+  readonly timer: TimerLease
   readonly removeAbort: () => void
 }
 
 interface PendingDiagnostics {
   readonly resolve: (value: readonly ExternalLanguageDiagnostic[]) => void
-  readonly timer: ReturnType<typeof setTimeout>
+  readonly timer: TimerLease
 }
 
 interface OpenDocument {
@@ -97,10 +112,10 @@ export class ExternalLanguageService {
     const errors = [...this.unavailable.values()]
     const ready = clients.some((client) => client.status().state === 'ready')
     return {
-      state: ready ? 'ready' : errors.length > 0 ? 'unavailable' : 'idle',
+      state: ready ? 'ready' : !isEmpty(errors) ? 'unavailable' : 'idle',
       server: clients.map((client) => client.spec.id).join(', ') || 'external',
       openFiles: clients.reduce((total, client) => total + client.status().openFiles, 0),
-      error: ready ? null : errors.at(-1) ?? null,
+      error: ready ? null : toNullable(errors.at(-1)),
     }
   }
 
@@ -115,7 +130,7 @@ export class ExternalLanguageService {
     return results
   }
 
-  public async hover(path: string, line: number, column: number, signal?: AbortSignal): Promise<ExternalLanguageHover | null> {
+  public async hover(path: string, line: number, column: number, signal?: AbortSignal): Promise<Nullable<ExternalLanguageHover>> {
     const file = await this.resolveFile(path)
     const client = await this.requireClient(file, signal)
     return client.hover(file, line, column, signal)
@@ -146,7 +161,7 @@ export class ExternalLanguageService {
     throw new Error(`No installed language server is available for ${extension}.`)
   }
 
-  private async clientFor(file: string, signal?: AbortSignal): Promise<ExternalLanguageServerClient | null> {
+  private async clientFor(file: string, signal?: AbortSignal): Promise<Nullable<ExternalLanguageServerClient>> {
     const extension = extname(file).toLowerCase()
     const candidates = this.specs.filter((spec) => spec.extensions.includes(extension))
     for (const spec of candidates) {
@@ -159,8 +174,15 @@ export class ExternalLanguageService {
         this.clients.set(spec.id, client)
         return client
       } catch (error) {
-        await client.stop().catch(() => undefined)
-        this.unavailable.set(spec.id, `${spec.id}: ${errorMessage(error)}`)
+        let failure = `${spec.id}: ${errorMessage(error)}`
+        log.debug('语言服务启动失败，准备清理子进程。', { error, server: spec.id })
+        try {
+          await client.stop()
+        } catch (stopError) {
+          failure = `${failure}; cleanup: ${errorMessage(stopError)}`
+          log.debug('语言服务启动失败后的清理也未完成。', { error: stopError, server: spec.id })
+        }
+        this.unavailable.set(spec.id, failure)
       }
     }
     return null
@@ -187,14 +209,15 @@ export class ExternalLanguageService {
 }
 
 class ExternalLanguageServerClient {
-  private child: ChildProcessWithoutNullStreams | null = null
+  private child: Nullable<ChildProcessWithoutNullStreams> = null
+  private readonly timers = new TimerScope({ name: 'ExternalLanguageServerClient' })
   private sequence = 0
   private stdout = Buffer.alloc(0)
   private readonly responses = new Map<number, PendingResponse>()
   private readonly pendingDiagnostics = new Map<string, PendingDiagnostics[]>()
   private readonly documents = new Map<string, OpenDocument>()
   private state: ExternalLanguageStatus['state'] = 'idle'
-  private error: string | null = null
+  private error: Nullable<string> = null
 
   public constructor(
     private readonly projectRoot: string,
@@ -258,7 +281,7 @@ class ExternalLanguageServerClient {
         const index = entries.indexOf(pending)
         if (index >= 0) entries.splice(index, 1)
         if (entries.length === 0) this.pendingDiagnostics.delete(uri)
-        clearTimeout(pending.timer)
+        pending.timer.cancel()
         signal?.removeEventListener('abort', onAbort)
         if (error) reject(error)
         else resolveDone(value)
@@ -266,7 +289,9 @@ class ExternalLanguageServerClient {
       const onAbort = () => finish([], abortError())
       const pending: PendingDiagnostics = {
         resolve: finish,
-        timer: setTimeout(() => finish([]), 8_000),
+        timer: this.timers.after(8_000, () => finish([]), {
+          label: `${this.spec.id}.diagnostics`,
+        }),
       }
       const entries = this.pendingDiagnostics.get(uri) ?? []
       entries.push(pending)
@@ -277,7 +302,7 @@ class ExternalLanguageServerClient {
     return waiting
   }
 
-  public async hover(file: string, line: number, column: number, signal?: AbortSignal): Promise<ExternalLanguageHover | null> {
+  public async hover(file: string, line: number, column: number, signal?: AbortSignal): Promise<Nullable<ExternalLanguageHover>> {
     await this.open(file)
     const value = await this.request('textDocument/hover', positionParams(file, line, column), signal)
     if (!isRecord(value)) return null
@@ -298,7 +323,7 @@ class ExternalLanguageServerClient {
       ? { ...positionParams(file, line, column), context: { includeDeclaration: true } }
       : positionParams(file, line, column)
     const value = await this.request(method, params, signal)
-    const entries = Array.isArray(value) ? value : value ? [value] : []
+    const entries = isArray(value) ? value : value ? [value] : []
     return entries.flatMap((entry) => {
       const location = normalizeLspLocation(entry)
       return location ? [location] : []
@@ -309,19 +334,24 @@ class ExternalLanguageServerClient {
     const child = this.child
     this.child = null
     this.state = 'idle'
-    if (!child) return
+    if (!child) {
+      this.timers.dispose()
+      return
+    }
     try {
       await this.requestWithChild(child, 'shutdown', {}, undefined, 1_000)
       this.notifyWithChild(child, 'exit', {})
-    } catch {
+    } catch (error) {
+      log.debug('语言服务关闭握手失败，改为终止进程。', { error, server: this.spec.id })
       child.kill('SIGTERM')
     }
     child.stdin.end()
     await Promise.race([
       new Promise<void>((resolveDone) => child.once('exit', () => resolveDone())),
-      new Promise<void>((resolveDone) => setTimeout(resolveDone, 1_000)),
+      this.timers.sleep(1_000, { label: `${this.spec.id}.stop` }),
     ])
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    if (isNull(child.exitCode) && isNull(child.signalCode)) child.kill('SIGKILL')
+    this.timers.dispose()
   }
 
   private async open(file: string): Promise<void> {
@@ -363,7 +393,7 @@ class ExternalLanguageServerClient {
         const pending = this.responses.get(id)
         if (!pending) return
         this.responses.delete(id)
-        clearTimeout(pending.timer)
+        pending.timer.cancel()
         pending.removeAbort()
         if (error) reject(error)
         else resolveDone(value)
@@ -373,7 +403,11 @@ class ExternalLanguageServerClient {
       this.responses.set(id, {
         resolve: (value) => finish(value),
         reject: (error) => finish(undefined, error),
-        timer: setTimeout(() => finish(undefined, new Error(`${this.spec.id} request timed out: ${method}`)), timeoutMs),
+        timer: this.timers.after(
+          timeoutMs,
+          () => finish(undefined, new Error(`${this.spec.id} request timed out: ${method}`)),
+          { label: `${this.spec.id}.${method}` }
+        ),
         removeAbort: () => signal?.removeEventListener('abort', onAbort),
       })
     })
@@ -414,29 +448,31 @@ class ExternalLanguageServerClient {
         this.handleMessage(JSON.parse(body) as unknown)
       } catch (error) {
         this.error = `Invalid ${this.spec.id} message: ${errorMessage(error)}`
+        log.debug('语言服务忽略了非法的 JSON-RPC 消息。', { error, server: this.spec.id })
       }
     }
   }
 
   private handleMessage(value: unknown): void {
     if (!isRecord(value)) return
-    if (typeof value.id === 'number' && ('result' in value || 'error' in value)) {
+    if (isNumber(value.id) && ('result' in value || 'error' in value)) {
       const pending = this.responses.get(value.id)
       if (!pending) return
-      if (isRecord(value.error)) pending.reject(new Error(typeof value.error.message === 'string' ? value.error.message : 'Language request failed.'))
+      if (isRecord(value.error)) pending.reject(new Error(isString(value.error.message) ? value.error.message : 'Language request failed.'))
       else pending.resolve(value.result)
       return
     }
     if (value.method !== 'textDocument/publishDiagnostics' || !isRecord(value.params)) return
-    const uri = typeof value.params.uri === 'string' ? value.params.uri : null
+    const uri = isString(value.params.uri) ? value.params.uri : null
     if (!uri) return
     let path: string
     try {
       path = fileURLToPath(uri)
-    } catch {
+    } catch (error) {
+      log.debug('语言服务忽略了非法的诊断 URI。', { error, server: this.spec.id, uri })
       return
     }
-    const diagnostics = Array.isArray(value.params.diagnostics)
+    const diagnostics = isArray(value.params.diagnostics)
       ? value.params.diagnostics.flatMap((entry) => {
           const normalized = normalizeLspDiagnostic(path, this.spec.id, entry)
           return normalized ? [normalized] : []
@@ -462,54 +498,55 @@ function positionParams(path: string, line: number, column: number): Record<stri
   }
 }
 
-function normalizeLspDiagnostic(path: string, source: string, value: unknown): ExternalLanguageDiagnostic | null {
+function normalizeLspDiagnostic(path: string, source: string, value: unknown): Nullable<ExternalLanguageDiagnostic> {
   if (!isRecord(value) || !isRecord(value.range) || !isRecord(value.range.start)) return null
   const start = value.range.start
   const end = isRecord(value.range.end) ? value.range.end : null
-  const message = typeof value.message === 'string' ? value.message.trim() : ''
-  if (typeof start.line !== 'number' || typeof start.character !== 'number' || !message) return null
+  const message = trimmedStringOrEmpty(value.message)
+  if (!isNumber(start.line) || !isNumber(start.character) || !message) return null
   const severity = value.severity === 2 ? 'warning' : value.severity === 3 || value.severity === 4 ? 'info' : 'error'
   return {
     severity,
     path,
     line: start.line + 1,
     column: start.character + 1,
-    endLine: end && typeof end.line === 'number' ? end.line + 1 : null,
-    endColumn: end && typeof end.character === 'number' ? end.character + 1 : null,
-    code: typeof value.code === 'string' || typeof value.code === 'number' ? String(value.code) : null,
+    endLine: end && isNumber(end.line) ? end.line + 1 : null,
+    endColumn: end && isNumber(end.character) ? end.character + 1 : null,
+    code: isString(value.code) || isNumber(value.code) ? String(value.code) : null,
     source,
     message,
   }
 }
 
-function normalizeLspLocation(value: unknown): ExternalLanguageLocation | null {
+function normalizeLspLocation(value: unknown): Nullable<ExternalLanguageLocation> {
   if (!isRecord(value)) return null
-  const uri = typeof value.uri === 'string' ? value.uri : typeof value.targetUri === 'string' ? value.targetUri : null
+  const uri = isString(value.uri) ? value.uri : isString(value.targetUri) ? value.targetUri : null
   const range = isRecord(value.range) ? value.range : isRecord(value.targetSelectionRange) ? value.targetSelectionRange : null
   if (!uri || !range || !isRecord(range.start)) return null
   const start = range.start
   const end = isRecord(range.end) ? range.end : null
-  if (typeof start.line !== 'number' || typeof start.character !== 'number') return null
+  if (!isNumber(start.line) || !isNumber(start.character)) return null
   try {
     return {
       path: fileURLToPath(uri),
       line: start.line + 1,
       column: start.character + 1,
-      endLine: end && typeof end.line === 'number' ? end.line + 1 : null,
-      endColumn: end && typeof end.character === 'number' ? end.character + 1 : null,
+      endLine: end && isNumber(end.line) ? end.line + 1 : null,
+      endColumn: end && isNumber(end.character) ? end.character + 1 : null,
       preview: null,
     }
-  } catch {
+  } catch (error) {
+    log.debug('语言服务忽略了非法的跳转 URI。', { error, uri })
     return null
   }
 }
 
 function markupText(value: unknown): string {
-  if (typeof value === 'string') return value.trim()
-  if (Array.isArray(value)) return value.map(markupText).filter(Boolean).join('\n')
+  if (isString(value)) return value.trim()
+  if (isArray(value)) return value.map(markupText).filter(Boolean).join('\n')
   if (!isRecord(value)) return ''
-  if (typeof value.language === 'string' && typeof value.value === 'string') return `\`\`\`${value.language}\n${value.value}\n\`\`\``
-  if (typeof value.value === 'string') return value.value.trim()
+  if (isString(value.language) && isString(value.value)) return `\`\`\`${value.language}\n${value.value}\n\`\`\``
+  if (isString(value.value)) return value.value.trim()
   return ''
 }
 
@@ -522,5 +559,5 @@ function errorMessage(value: unknown): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
 }

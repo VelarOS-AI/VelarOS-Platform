@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:设备凭据的落盘实现。
 //
 // 私钥是这条跨机链路上唯一的长期秘密,也是本文件唯一真正的约束来源:

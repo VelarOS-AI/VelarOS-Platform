@@ -8,7 +8,13 @@ const languageQueryFields = {
   maxDepth: z.number().transform((value) => Math.min(16, Math.max(0, Math.round(value)))).optional(),
 }
 
-const DevelopmentQuerySchema = z.discriminatedUnion('action', [
+/**
+ * Project 代码理解工具的稳定 action 契约。
+ *
+ * 语言服务 action 由内置运行时直接执行；索引/图谱 action 在 CodeGraph 资源可用时由其增强。
+ * 两组 action 共用一个 `project:query-code` 工具，Agent 不感知宿主选择的后端。
+ */
+const ProjectCodeQuerySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('search_symbols'),
     query: z.string().min(1),
@@ -105,10 +111,10 @@ const DevelopmentQuerySchema = z.discriminatedUnion('action', [
   }),
 ])
 
-type DevelopmentQueryInput = z.input<typeof DevelopmentQuerySchema>
-type DevelopmentQuery = z.output<typeof DevelopmentQuerySchema>
+type ProjectCodeQueryInput = z.input<typeof ProjectCodeQuerySchema>
+type ProjectCodeQuery = z.output<typeof ProjectCodeQuerySchema>
 
-const DevelopmentLanguageActions = [
+const ProjectCodeLanguageActions = [
   'find_symbols',
   'list_exports',
   'find_imports',
@@ -118,23 +124,23 @@ const DevelopmentLanguageActions = [
   'analyze_symbol_impact',
 ] as const
 
-type DevelopmentLanguageAction = (typeof DevelopmentLanguageActions)[number]
-type DevelopmentLanguageQuery = Extract<DevelopmentQuery, { action: DevelopmentLanguageAction }>
-type DevelopmentIndexQuery = Exclude<DevelopmentQuery, DevelopmentLanguageQuery>
+type ProjectCodeLanguageAction = (typeof ProjectCodeLanguageActions)[number]
+type ProjectCodeLanguageQuery = Extract<ProjectCodeQuery, { action: ProjectCodeLanguageAction }>
+type ProjectCodeIndexQuery = Exclude<ProjectCodeQuery, ProjectCodeLanguageQuery>
 
-const DevelopmentLanguageActionSet = new Set<string>(DevelopmentLanguageActions)
+const ProjectCodeLanguageActionSet = new Set<string>(ProjectCodeLanguageActions)
 
-function isDevelopmentLanguageQuery(
-  input: DevelopmentQuery
-): input is DevelopmentLanguageQuery {
-  return DevelopmentLanguageActionSet.has(input.action)
+function isProjectCodeLanguageQuery(
+  input: ProjectCodeQuery
+): input is ProjectCodeLanguageQuery {
+  return ProjectCodeLanguageActionSet.has(input.action)
 }
 
-export { DevelopmentLanguageActions, DevelopmentQuerySchema, isDevelopmentLanguageQuery }
+export { isProjectCodeLanguageQuery,ProjectCodeLanguageActions, ProjectCodeQuerySchema }
 export type {
-  DevelopmentIndexQuery,
-  DevelopmentLanguageAction,
-  DevelopmentLanguageQuery,
-  DevelopmentQuery,
-  DevelopmentQueryInput,
+  ProjectCodeIndexQuery,
+  ProjectCodeLanguageAction,
+  ProjectCodeLanguageQuery,
+  ProjectCodeQuery,
+  ProjectCodeQueryInput,
 }

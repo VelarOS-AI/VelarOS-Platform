@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:关闭码判决与重连退避——「还试不试」的那张表。
 //
 // 与 `./handshake` 是同一类文件:把决定从连接层的噪声里摘出来,单独一眼能看完。默认姿态是

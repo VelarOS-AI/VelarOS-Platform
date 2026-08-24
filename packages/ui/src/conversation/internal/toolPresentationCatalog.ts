@@ -43,7 +43,7 @@ const ToolPresentationByName: Readonly<Record<string, ToolPresentationMetadata>>
   'project:edit': metadata('file-change', ['file-change'], true),
   'project:rollback': metadata('edit-rollback', ['file-change'], true),
   'project:run': metadata('command', ['command'], true),
-  'development:query-code': metadata('search', ['search']),
+  'project:query-code': metadata('search', ['search']),
   'web:search': metadata('search', undefined, true),
   'web:read': metadata('browse-remote', undefined, true),
   'artifact:produce': metadata('artifact', undefined, true),

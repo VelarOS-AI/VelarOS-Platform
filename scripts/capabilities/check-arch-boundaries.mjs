@@ -42,6 +42,7 @@ const PortableContracts = [
     exportKey: "./contracts",
     contractsFile: "src/contracts.ts",
     modules: new Set([
+      "./project-code-query.js",
       "./project-contracts.js",
       "./project-root-source.js",
       "./project-tool-names.js",

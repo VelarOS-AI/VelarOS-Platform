@@ -1,23 +1,22 @@
+import { AppError } from '@velaros-ai/core/error'
 import type { ProjectToolContext } from '@velaros-ai/project/agent'
-
-import type { DevelopmentToolApi } from '../Development.tool'
 import {
-  type DevelopmentIndexQuery,
-  type DevelopmentLanguageQuery,
-  type DevelopmentQuery,
-  isDevelopmentLanguageQuery,
-} from '../query-schema'
+  isProjectCodeLanguageQuery,
+  type ProjectCodeIndexQuery,
+  type ProjectCodeLanguageQuery,
+  type ProjectCodeQuery,
+} from '@velaros-ai/project/contracts'
 
-import { executeDevelopmentOperation } from './DevelopmentResult'
+import { executeDevelopmentOperation, withCodeQuerySource } from './DevelopmentResult'
 import { developmentLanguageOperations } from './LanguageOperations'
 
-interface DevelopmentCodeIndexApi {
+interface ProjectCodeIndexApi {
   isAvailable(): boolean
-  query(input: DevelopmentIndexQuery, context: ProjectToolContext): Promise<unknown>
+  query(input: ProjectCodeIndexQuery, context: ProjectToolContext): Promise<unknown>
 }
 
-async function executeDevelopmentLanguageQuery(
-  input: DevelopmentLanguageQuery,
+async function executeProjectCodeLanguageQuery(
+  input: ProjectCodeLanguageQuery,
   context: ProjectToolContext
 ): Promise<unknown> {
   switch (input.action) {
@@ -60,16 +59,21 @@ async function executeDevelopmentLanguageQuery(
   }
 }
 
-function createDevelopmentToolApi(codeIndex: DevelopmentCodeIndexApi): DevelopmentToolApi {
-  return Object.freeze({
-    isCodeQueryAvailable: () => codeIndex.isAvailable(),
-    queryCode: (input: DevelopmentQuery, context: ProjectToolContext) =>
-      isDevelopmentLanguageQuery(input)
-        ? executeDevelopmentLanguageQuery(input, context)
-        : codeIndex.query(input, context),
-  })
+function createProjectCodeQuery(
+  codeIndex: ProjectCodeIndexApi
+): (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown> {
+  return async (input, context) => {
+    if (isProjectCodeLanguageQuery(input)) return executeProjectCodeLanguageQuery(input, context)
+    if (!codeIndex.isAvailable()) {
+      throw new AppError(
+        'UNAVAILABLE',
+        '此代码图谱查询需要安装并启用 CodeGraph；内置符号、引用和诊断 action 仍可使用。'
+      )
+    }
+    return codeIndex.query(input, context).then((result) => withCodeQuerySource('codegraph', result))
+  }
 }
 
-export { createDevelopmentToolApi, executeDevelopmentLanguageQuery }
-export type { DevelopmentCodeIndexApi, DevelopmentIndexQuery }
+export { createProjectCodeQuery, executeProjectCodeLanguageQuery }
+export type { ProjectCodeIndexApi, ProjectCodeIndexQuery }
 export * from './ExternalLanguageService'

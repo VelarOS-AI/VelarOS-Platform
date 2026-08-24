@@ -39,7 +39,7 @@ import styles from './MessageBubble.module.css'
 
 import type { HtmlArtifactBlock as HtmlArtifactContentBlock } from '#contracts'
 import { isArray } from '#internal/runtime'
-import { isEmpty, isString } from '#internal/runtime'
+import { isEmpty, isString, trimmedStringOrEmpty } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
 const DefaultCodeBlockLanguage = 'text'
@@ -67,7 +67,7 @@ function readCodeLanguage(className: unknown): string {
 }
 
 function normalizeCodeBlockClassName(className: unknown): string {
-  const normalizedClassName = isString(className) ? className.trim() : ''
+  const normalizedClassName = trimmedStringOrEmpty(className)
   if (readCodeLanguage(normalizedClassName)) return normalizedClassName
 
   return [normalizedClassName, `language-${DefaultCodeBlockLanguage}`].filter(Boolean).join(' ')

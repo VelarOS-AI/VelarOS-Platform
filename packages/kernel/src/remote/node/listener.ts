@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 监听端管路:端口探测 + 升级路径把关。除此之外不含任何协议语义。
 import { createServer, type Server } from 'node:http'
 import type { Socket } from 'node:net'

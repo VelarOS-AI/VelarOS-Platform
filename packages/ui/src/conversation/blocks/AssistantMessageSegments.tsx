@@ -121,6 +121,20 @@ export function shouldAnimateLiveToolActivity({
   return isStreaming && armedMessageId === messageId
 }
 
+export function shouldRenderProcessedActivityDisclosure({
+  hasFinalSummaryText,
+  hasGroupedRunActivity,
+  shouldUseProcessedActivityBoundary,
+}: {
+  hasFinalSummaryText: boolean
+  hasGroupedRunActivity: boolean
+  shouldUseProcessedActivityBoundary: boolean
+}): boolean {
+  return (
+    hasFinalSummaryText || (hasGroupedRunActivity && shouldUseProcessedActivityBoundary)
+  )
+}
+
 function collectToolCallBlocksFromToolRenderSegment(
   segment: ToolRenderSegment,
   blocks: ToolCallBlockType[]
@@ -170,6 +184,7 @@ function AssistantMessageSegmentsInner({
   onTranslateThinkingBlock,
   activityLeadingElement = null,
   activityTrailingElement = null,
+  hasGroupedRunActivity = false,
   goalCompletionSummary = null,
   questionMessage = null,
   renderAfterToolCall,
@@ -196,6 +211,7 @@ function AssistantMessageSegmentsInner({
   }) => Promise<void>
   activityLeadingElement?: LooseOptional<ReactElement>
   activityTrailingElement?: LooseOptional<ReactElement>
+  hasGroupedRunActivity?: boolean
   goalCompletionSummary?: LooseOptional<GoalCompletionActivitySummary>
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
 }): ReactElement {
@@ -267,6 +283,14 @@ function AssistantMessageSegmentsInner({
   )
   const hasFinalSummaryText =
     shouldUseProcessedActivityBoundary && processedActivitySummaryBoundaryIndex >= 0
+  const shouldRenderProcessedActivity = shouldRenderProcessedActivityDisclosure({
+    hasFinalSummaryText,
+    hasGroupedRunActivity,
+    shouldUseProcessedActivityBoundary,
+  })
+  const processedActivityBoundaryIndex = hasFinalSummaryText
+    ? processedActivitySummaryBoundaryIndex
+    : visibleMessageRenderSegments.length
   const shouldAutoCollapseProcessedActivity =
     !isStreaming && recentlyStreamingMessageIdRef.current === messageId
   const segmentSuffixStates = useMemo(
@@ -417,7 +441,7 @@ function AssistantMessageSegmentsInner({
       )
     }
 
-    if (!hasFinalSummaryText && activityLeadingElement) {
+    if (!shouldRenderProcessedActivity && activityLeadingElement) {
       renderedSegments.push(
         <React.Fragment key="activity-leading">{activityLeadingElement}</React.Fragment>
       )
@@ -457,7 +481,7 @@ function AssistantMessageSegmentsInner({
         return segments
       }
 
-      if (hasFinalSummaryText) {
+      if (shouldRenderProcessedActivity) {
         renderedSegments.push(
           <ToolActivityDisclosure
             key={`processed-activity:${key ?? renderedSegments.length}`}
@@ -504,11 +528,11 @@ function AssistantMessageSegmentsInner({
       renderedSegments.push(...afterToolCallElements)
     }
 
-    if (hasFinalSummaryText) {
+    if (shouldRenderProcessedActivity) {
       const { processedSegments, outsideSegments, trailingSegments } =
         partitionProcessedActivitySummarySegments(
           visibleMessageRenderSegments,
-          processedActivitySummaryBoundaryIndex
+          processedActivityBoundaryIndex
         )
       const outsideSegmentKeys = new Set(outsideSegments.map((segment) => segment.key))
       const processedSegmentKeys = new Set(processedSegments.map((segment) => segment.key))

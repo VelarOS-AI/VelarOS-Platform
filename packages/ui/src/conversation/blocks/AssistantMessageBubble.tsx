@@ -102,6 +102,7 @@ export function AssistantMessageBubble({
   runtimeCostContexts = EmptyRuntimeCostContexts,
   goalCompletionSummary = null,
   activityLeadingElement = null,
+  activityTrailingElement = null,
   renderAfterToolCall,
   onOpenBrowserLink,
   onOpenFileChange,
@@ -135,6 +136,7 @@ export function AssistantMessageBubble({
   runtimeCostContexts?: ConversationTurnContextView[]
   goalCompletionSummary?: LooseOptional<GoalCompletionActivitySummary>
   activityLeadingElement?: LooseOptional<ReactElement>
+  activityTrailingElement?: LooseOptional<ReactElement>
   renderAfterToolCall?: (block: ToolCallBlockType) => Nullable<ReactNode>
   onOpenBrowserLink?: (url: string) => void | Promise<void>
   onOpenFileChange?: (entry: FileChangeSummaryListEntry) => void | Promise<void>
@@ -257,7 +259,7 @@ export function AssistantMessageBubble({
     [visibleBlocks]
   )
   const slots = useConversationRenderSlots()
-  const activityTrailingElement = useMemo(() => {
+  const messageArtifactActivityTrailingElement = useMemo(() => {
     const elements: ReactElement[] = []
 
     if (hasBrowserScreenshotGroup) {
@@ -300,7 +302,17 @@ export function AssistantMessageBubble({
     isStreaming,
     runMarker,
   })
-  const generatedActivityTrailingElement = showGeneratedArtifacts ? activityTrailingElement : null
+  const generatedActivityTrailingElement = showGeneratedArtifacts
+    ? messageArtifactActivityTrailingElement
+    : null
+  const combinedActivityTrailingElement =
+    activityTrailingElement || generatedActivityTrailingElement ? (
+      <>
+        {activityTrailingElement}
+        {generatedActivityTrailingElement}
+      </>
+    ) : null
+  const hasGroupedRunActivity = !!activityLeadingElement || !!activityTrailingElement
   const hasVisibleActionItems = hasActionItems && showGeneratedArtifacts
 
   if (
@@ -308,7 +320,7 @@ export function AssistantMessageBubble({
     !hasVisibleActionItems &&
     !showInlineNotice &&
     !activityLeadingElement &&
-    !generatedActivityTrailingElement
+    !combinedActivityTrailingElement
   )
     return null
 
@@ -339,7 +351,8 @@ export function AssistantMessageBubble({
             goalCompletionSummary={goalCompletionSummary}
             questionMessage={questionMessage}
             activityLeadingElement={activityLeadingElement}
-            activityTrailingElement={generatedActivityTrailingElement}
+            activityTrailingElement={combinedActivityTrailingElement}
+            hasGroupedRunActivity={hasGroupedRunActivity}
             renderAfterToolCall={renderAfterToolCall}
           />
 

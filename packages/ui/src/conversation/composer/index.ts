@@ -18,6 +18,7 @@ export type {
 } from './addMenu/composerAddMenu.types'
 export type {
   ChatComposerControl,
+  ChatComposerDensity,
   ChatComposerInputControl,
   ChatComposerModelRunSummary,
   ChatComposerModelSelectorControl,
@@ -39,6 +40,14 @@ export type {
   ChatInputSuggestionControl,
 } from './ChatInput'
 export { ChatInput } from './ChatInput'
+export type {
+  ChatSurfaceComposerProps,
+  ChatSurfaceVariant,
+} from './ChatSurfaceComposer'
+export {
+  ChatSurfaceComposer,
+  resolveChatSurfaceComposerDensity,
+} from './ChatSurfaceComposer'
 export { ComposerAddMenu } from './ComposerAddMenu'
 export type {
   ChatComposerCapabilityChoice,

@@ -11,7 +11,15 @@ import type {
 import { buildChatTranscriptDerivedIndexes } from './chatTranscriptDerivedIndexes'
 
 import type { ChatMessage, ChatProviderId, ModelPricingCatalog } from '#contracts'
-import { isEmpty, isFiniteNumber, isNumber, isPositiveNumber, isPresent, isTrue } from '#internal/runtime'
+import {
+  isEmpty,
+  isFiniteNumber,
+  isNumber,
+  isPositiveNumber,
+  isPresent,
+  isTrue,
+  toNullable,
+} from '#internal/runtime'
 
 type RuntimeUsageTelemetry = ConversationRuntimeView['usageTelemetry']
 type RuntimeUsageTelemetryEntry = RuntimeUsageTelemetry[number]
@@ -114,6 +122,7 @@ interface UseChatConversationTranscriptModelOptions {
 
 export interface UseChatConversationTranscriptModelReturn {
   messageRunMarkerMap: Map<string, ConversationMessageRunMarker>
+  latestAssistantMessageId: Nullable<string>
   latestCompletedAssistantMessageId: Nullable<string>
   runtimeCostContextMap: Map<string, ConversationTurnContextView[]>
   planUpdateIndexByToolCallId: Map<string, number>
@@ -254,6 +263,7 @@ export function useChatConversationTranscriptModel({
 
   return {
     messageRunMarkerMap,
+    latestAssistantMessageId: toNullable(latestAssistantMessage?.id),
     latestCompletedAssistantMessageId,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,

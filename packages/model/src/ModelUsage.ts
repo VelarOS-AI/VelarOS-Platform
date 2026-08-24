@@ -1,6 +1,8 @@
+import { isFiniteNumber, isNull, isPlainObject, isPresent, toNullable } from '@velaros-ai/core'
+
 export interface ModelPricingRates {
-  readonly inputPerMillion: number | null
-  readonly outputPerMillion: number | null
+  readonly inputPerMillion: Nullable<number>
+  readonly outputPerMillion: Nullable<number>
 }
 
 export interface ModelRunUsage {
@@ -9,7 +11,7 @@ export interface ModelRunUsage {
   readonly reasoningTokens: number
   readonly cachedInputTokens: number
   readonly totalTokens: number
-  readonly cost: number | null
+  readonly cost: Nullable<number>
 }
 
 export interface ModelUsageSummary extends ModelRunUsage {
@@ -32,9 +34,9 @@ export function normalizeModelRunUsage(value: unknown, pricing?: ModelPricingRat
     ?? tokenValue(value, ['cachedInputTokens'])
     ?? 0
   const totalTokens = tokenValue(value, ['totalTokens']) ?? inputTokens + outputTokens
-  const inputRate = pricing?.inputPerMillion ?? null
-  const outputRate = pricing?.outputPerMillion ?? null
-  const cost = inputRate === null || outputRate === null
+  const inputRate = toNullable(pricing?.inputPerMillion)
+  const outputRate = toNullable(pricing?.outputPerMillion)
+  const cost = isNull(inputRate) || isNull(outputRate)
     ? null
     : ((inputTokens * inputRate) + (outputTokens * outputRate)) / 1_000_000
   return { inputTokens, outputTokens, reasoningTokens, cachedInputTokens, totalTokens, cost }
@@ -48,7 +50,7 @@ export function normalizePersistedModelUsage(value: Record<string, unknown>): Mo
     reasoningTokens: positiveNumber(value.reasoningTokens),
     cachedInputTokens: positiveNumber(value.cachedInputTokens),
     totalTokens: positiveNumber(value.totalTokens),
-    cost: typeof value.cost === 'number' && Number.isFinite(value.cost) && value.cost >= 0
+    cost: isFiniteNumber(value.cost) && value.cost >= 0
       ? value.cost
       : null,
   }
@@ -60,14 +62,14 @@ export function summarizeModelUsage(usages: readonly ModelRunUsage[]): ModelUsag
   let reasoningTokens = 0
   let cachedInputTokens = 0
   let totalTokens = 0
-  let cost: number | null = null
+  let cost: Nullable<number> = null
   for (const usage of usages) {
     inputTokens += usage.inputTokens
     outputTokens += usage.outputTokens
     reasoningTokens += usage.reasoningTokens
     cachedInputTokens += usage.cachedInputTokens
     totalTokens += usage.totalTokens
-    if (usage.cost !== null) cost = (cost ?? 0) + usage.cost
+    if (isPresent(usage.cost)) cost = (cost ?? 0) + usage.cost
   }
   return {
     inputTokens,
@@ -81,21 +83,21 @@ export function summarizeModelUsage(usages: readonly ModelRunUsage[]): ModelUsag
   }
 }
 
-function tokenValue(value: unknown, path: readonly string[]): number | null {
+function tokenValue(value: unknown, path: readonly string[]): Nullable<number> {
   let current = value
   for (const key of path) {
     if (!isRecord(current)) return null
     current = current[key]
   }
-  return typeof current === 'number' && Number.isFinite(current) && current >= 0
+  return isFiniteNumber(current) && current >= 0
     ? Math.round(current)
     : null
 }
 
 function positiveNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+  return isFiniteNumber(value) && value >= 0 ? value : 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
 }

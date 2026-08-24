@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 门面:完整宿主(Mac / Desktop)一侧的远程能力节点接入面。
 //
 // 装配顺序是固定的,顺序错了会得到一张空能力面:

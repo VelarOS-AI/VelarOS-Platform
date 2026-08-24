@@ -462,6 +462,11 @@
   max-width: 100%;
 }
 
+:global(.velar-transcript-run-activity) {
+  @apply flex w-full min-w-0 flex-col gap-2;
+  max-width: 100%;
+}
+
 .assistantBubble :global(.velar-tool-disclosure-card[data-tone='running']),
 .assistantBubble :global(.velar-compact-tool-row-running) {
   background: color-mix(in srgb, var(--foreground-tertiary) 5%, var(--card)) !important;

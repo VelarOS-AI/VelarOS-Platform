@@ -1131,7 +1131,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     {
       "name": "ChatComposer.density",
       "description": "Auto-generated from TypeScript props.",
-      "type": "\"default\" | \"compact\"",
+      "type": "ChatComposerDensity",
       "defaultValue": "'default'"
     }
   ],
@@ -1594,6 +1594,25 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ChatScrollNavigator.transcriptNavigationRef",
       "description": "Auto-generated from TypeScript props.",
       "type": "RefObject<Nullable<ChatTranscriptNavigationHandle>>"
+    }
+  ],
+  ChatSurfaceComposer: [
+    {
+      "name": "ChatSurfaceComposer.control",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatComposerControl",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatSurfaceComposer.variant",
+      "description": "会话表面的布局形态；侧栏形态由组件库统一使用紧凑输入框。",
+      "type": "ChatSurfaceVariant",
+      "defaultValue": "'default'"
+    },
+    {
+      "name": "ChatSurfaceComposer.density",
+      "description": "仅供不遵循表面默认策略的专用宿主显式覆盖。",
+      "type": "ChatComposerDensity"
     }
   ],
   ChatTranscript: [
@@ -4205,6 +4224,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "LooseOptional<ReactElement<unknown, string | JSXElementConstructor<any>>>"
     },
     {
+      "name": "MessageBubble.activityTrailingElement",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<ReactElement<unknown, string | JSXElementConstructor<any>>>"
+    },
+    {
       "name": "MessageBubble.renderAfterToolCall",
       "description": "Auto-generated from TypeScript props.",
       "type": "((block: ToolCallBlockType) => Nullable<ReactNode>)"
@@ -5212,6 +5236,96 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "\"default\" | \"outline\" | \"secondary\" | \"success\" | \"warning\" | \"error\" | \"info\" | null",
       "defaultValue": "'default'"
+    }
+  ],
+  TaskDetailRow: [
+    {
+      "name": "TaskDetailRow.label",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskDetailRow.value",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    }
+  ],
+  TaskListRow: [
+    {
+      "name": "TaskListRow.leading",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskListRow.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskListRow.metadata",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskListRow.trailing",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskListRow.actions",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ReactNode"
+    },
+    {
+      "name": "TaskListRow.selected",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "TaskListRow.subdued",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "TaskListRow.forceActionsVisible",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "TaskListRow.onSelect",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "TaskListRow.selectLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    }
+  ],
+  TaskWorkspace: [
+    {
+      "name": "TaskWorkspace.detailOpen",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    }
+  ],
+  TaskWorkspacePane: [
+    {
+      "name": "TaskWorkspacePane.ariaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "TaskWorkspacePane.size",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"detail\" | \"replay\"",
+      "defaultValue": "'detail'"
     }
   ],
   Text: [

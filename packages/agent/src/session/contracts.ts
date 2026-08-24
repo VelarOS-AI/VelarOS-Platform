@@ -26,11 +26,11 @@ export interface AgentSessionMetadata<TProductData = unknown> {
   readonly id: string
   readonly title: string
   readonly kind: string
-  readonly parentSessionId: string | null
+  readonly parentSessionId: Nullable<string>
   readonly status: AgentSessionLifecycleStatus
   readonly createdAt: number
   readonly updatedAt: number
-  readonly archivedAt: number | null
+  readonly archivedAt: Nullable<number>
   readonly productData: TProductData
 }
 
@@ -38,7 +38,7 @@ export interface CreateAgentSessionMetadataInput<TProductData = unknown> {
   readonly id?: string
   readonly title?: string
   readonly kind: string
-  readonly parentSessionId?: string | null
+  readonly parentSessionId?: LooseOptional<string>
   readonly productData: TProductData
 }
 
@@ -50,7 +50,7 @@ export interface AgentSessionCatalogQuery {
 /** 产品持久化实现（SQLite/文件/Cloud）必须适配的公共 Session application port。 */
 export interface AgentSessionCatalogPort<TSession extends AgentSessionMetadata = AgentSessionMetadata> {
   create(input: CreateAgentSessionMetadataInput<TSession['productData']>): Promise<TSession> | TSession
-  get(id: string): Promise<TSession | null> | TSession | null
+  get(id: string): Promise<Nullable<TSession>> | Nullable<TSession>
   list(query?: AgentSessionCatalogQuery): Promise<readonly TSession[]> | readonly TSession[]
   archive(id: string): Promise<TSession> | TSession
   restore(id: string): Promise<TSession> | TSession
@@ -71,7 +71,7 @@ export interface AgentSessionLeaseClaim {
 }
 
 export interface AgentSessionLeasePort {
-  get(sessionId: string): Promise<AgentSessionLease | null> | AgentSessionLease | null
+  get(sessionId: string): Promise<Nullable<AgentSessionLease>> | Nullable<AgentSessionLease>
   claim(input: AgentSessionLeaseClaim): Promise<AgentSessionLease> | AgentSessionLease
   heartbeat(sessionId: string, ownerId: string): Promise<AgentSessionLease> | AgentSessionLease
   release(sessionId: string, ownerId: string): Promise<void> | void
@@ -88,22 +88,22 @@ export interface AgentBackgroundAgent {
   readonly id: string
   readonly sessionId: string
   readonly title: string
-  readonly pid: number | null
+  readonly pid: Nullable<number>
   readonly state: AgentBackgroundAgentState
   readonly startedAt: number
   readonly updatedAt: number
-  readonly completedAt: number | null
-  readonly exitCode: number | null
+  readonly completedAt: Nullable<number>
+  readonly exitCode: Nullable<number>
 }
 
 export interface AgentBackgroundAgentPort<TAgent extends AgentBackgroundAgent = AgentBackgroundAgent> {
-  get(id: string): Promise<TAgent | null> | TAgent | null
+  get(id: string): Promise<Nullable<TAgent>> | Nullable<TAgent>
   list(input?: { includeCompleted?: boolean; limit?: number }): Promise<readonly TAgent[]> | readonly TAgent[]
   markRunning(id: string, pid: number): Promise<TAgent> | TAgent
   finish(
     id: string,
     state: Extract<AgentBackgroundAgentState, 'completed' | 'failed' | 'stopped' | 'interrupted'>,
-    exitCode?: number | null
+    exitCode?: LooseOptional<number>
   ): Promise<TAgent> | TAgent
 }
 

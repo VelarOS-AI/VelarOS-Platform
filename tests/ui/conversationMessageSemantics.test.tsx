@@ -4,6 +4,10 @@ import { describe, test } from 'node:test'
 import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
+import {
+  type ConversationBlockHooks,
+  ConversationBlockHooksProvider,
+} from '../../packages/ui/src/conversation/blocks/conversationBlockHooks'
 import { UserMessageBubble } from '../../packages/ui/src/conversation/blocks/UserMessageBubble'
 import type { ChatMessage } from '../../packages/ui/src/conversation/contracts'
 import {
@@ -15,6 +19,8 @@ import {
   type ConversationI18nContextValue,
   ConversationLocalizationProvider,
 } from '../../packages/ui/src/conversation/i18n'
+import { ChatTranscript } from '../../packages/ui/src/conversation/shell/ChatTranscript'
+import { buildChatTranscriptMessagePresentations } from '../../packages/ui/src/conversation/shell/chatTranscriptActivityGrouping'
 import { buildChatTranscriptDerivedIndexes } from '../../packages/ui/src/conversation/shell/chatTranscriptDerivedIndexes'
 import {
   computeChatTranscriptSectionStarts,
@@ -102,6 +108,74 @@ void describe('会话消息语义', () => {
 
     assert.equal(derived.assistantQuestionMap.get(firstAssistant.id), turn)
     assert.equal(derived.assistantQuestionMap.get(secondAssistant.id), turn)
+    assert.equal(derived.latestAssistantMessage?.id, secondAssistant.id)
+  })
+
+  void test('引导把同一运行的 assistant 片段挂到最后一条回复统一呈现', () => {
+    const turn = message('turn', 'user', 'turn-input')
+    const firstAssistant = message('assistant-1', 'assistant')
+    const firstGuidance = message('guidance-1', 'user', 'run-guidance')
+    const interactionReply = message('reply', 'user', 'interaction-reply')
+    const secondAssistant = message('assistant-2', 'assistant')
+    const secondGuidance = message('guidance-2', 'user', 'run-guidance')
+    const finalAssistant = message('assistant-final', 'assistant')
+    const presentations = buildChatTranscriptMessagePresentations([
+      turn,
+      firstAssistant,
+      firstGuidance,
+      interactionReply,
+      secondAssistant,
+      secondGuidance,
+      finalAssistant,
+    ])
+
+    assert.deepEqual(
+      presentations.map((presentation) => presentation.message.id),
+      ['turn', 'assistant-final']
+    )
+    assert.deepEqual(
+      presentations[1]?.activityLeadingMessages.map((entry) => entry.id),
+      ['assistant-1', 'guidance-1', 'reply', 'assistant-2', 'guidance-2']
+    )
+    assert.deepEqual(presentations[1]?.activityTrailingMessages, [])
+  })
+
+  void test('新 assistant 片段到达前，引导留在当前活动尾部且不触发前文折叠', () => {
+    const turn = message('turn', 'user', 'turn-input')
+    const assistant = message('assistant', 'assistant')
+    const guidance = message('guidance', 'user', 'run-guidance')
+    const presentations = buildChatTranscriptMessagePresentations([turn, assistant, guidance])
+
+    assert.deepEqual(
+      presentations.map((presentation) => presentation.message.id),
+      ['turn', 'assistant']
+    )
+    assert.deepEqual(presentations[1]?.activityLeadingMessages, [])
+    assert.deepEqual(
+      presentations[1]?.activityTrailingMessages.map((entry) => entry.id),
+      ['guidance']
+    )
+  })
+
+  void test('没有引导时不改变原始消息呈现', () => {
+    const messages = [
+      message('turn', 'user', 'turn-input'),
+      message('assistant-1', 'assistant'),
+      message('assistant-2', 'assistant'),
+    ]
+    const presentations = buildChatTranscriptMessagePresentations(messages)
+
+    assert.deepEqual(
+      presentations.map((presentation) => presentation.message.id),
+      messages.map((entry) => entry.id)
+    )
+    assert.ok(
+      presentations.every(
+        (presentation) =>
+          presentation.activityLeadingMessages.length === 0 &&
+          presentation.activityTrailingMessages.length === 0
+      )
+    )
   })
 })
 
@@ -111,9 +185,89 @@ const localization: ConversationI18nContextValue = {
     if (key === 'chat.guidedConversation') return '已引导对话'
     if (key === 'chat.copyGuidance') return '复制引导'
     if (key === 'chat.codeBlockCopied') return '已复制'
+    if (key === 'chat.processedActivity') return '已处理'
     return key
   },
 }
+const blockHooks: ConversationBlockHooks = {
+  useAutoTranslateThinkingEnabled: () => false,
+  useMessageActionView: () => ({
+    actionItems: [],
+    actionRows: [],
+    formatPathForDisplay: (path) => path,
+    hasActionItems: false,
+    openPathInLight: async () => {},
+  }),
+}
+
+function guidanceTranscriptMessages(): ChatMessage[] {
+  return [
+    message('turn', 'user', 'turn-input'),
+    {
+      ...message('assistant-before-guidance', 'assistant'),
+      blocks: [{ type: 'thinking', text: '先检查当前页面。' }],
+    },
+    message('guidance', 'user', 'run-guidance'),
+    {
+      ...message('assistant-after-guidance', 'assistant'),
+      blocks: [],
+    },
+  ]
+}
+
+void test('运行中将引导与前后 assistant 片段保持在同一个平铺活动里', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      ConversationLocalizationProvider,
+      { value: localization },
+      createElement(
+        ConversationBlockHooksProvider,
+        { value: blockHooks },
+        createElement(ChatTranscript, {
+          messages: guidanceTranscriptMessages(),
+          sessionId: 'session',
+          getIsStreaming: (entry) => entry.id === 'assistant-before-guidance',
+        })
+      )
+    ) as ReactElement
+  )
+
+  assert.match(markup, /data-chat-run-activity="true"/)
+  assert.match(markup, /data-chat-message="guidance"/)
+  assert.doesNotMatch(markup, />已处理</)
+})
+
+void test('运行完成后只留下一个已处理入口，并把引导内容收进其中', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      ConversationLocalizationProvider,
+      { value: localization },
+      createElement(
+        ConversationBlockHooksProvider,
+        { value: blockHooks },
+        createElement(ChatTranscript, {
+          messages: guidanceTranscriptMessages(),
+          sessionId: 'session',
+          getRunMarker: (entry) =>
+            entry.id === 'assistant-after-guidance'
+              ? {
+                  messageId: entry.id,
+                  status: 'completed',
+                  detail: null,
+                  turnCount: 1,
+                  turnKind: 'turn',
+                  timestamp: 2,
+                }
+              : null,
+        })
+      )
+    ) as ReactElement
+  )
+
+  assert.match(markup, /aria-expanded="false"/)
+  assert.match(markup, />已处理</)
+  assert.doesNotMatch(markup, /data-chat-message="guidance"/)
+})
 
 void test('运行内引导复用气泡视觉，但展示自己的标签和复制语义', () => {
   const markup = renderToStaticMarkup(

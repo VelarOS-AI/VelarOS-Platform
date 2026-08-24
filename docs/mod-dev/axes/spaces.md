@@ -45,12 +45,12 @@
 | 空间 | Mod | 身份 | 职责组合 |
 | --- | --- | --- | --- |
 | System | `velaros.system` | `ordinal` | 系统文件、执行、进程、桌面 |
-| Project | `velaros.project` | `path` | 项目文件、原子变更、项目执行 |
+| Project | `velaros.project` | `path` | 项目文件、代码理解、原子变更、项目执行 |
 | Browser | `velaros.browser` | `origin` | 浏览器会话、观察、交互与页面数据 |
 
-Project 的职责类别是 `project-files`、`project-changes`、`project-execution`。
-Development 不是一个重复的项目空间，而是可组合进 Project 的代码理解职责包，只贡献
-`development:query-code`。其他项目型空间可以通过 `inheritsSpaceIds: ['project']` 复用这份基础能力。
+Project 的职责类别是 `project-files`、`development-code`、`project-changes`、`project-execution`。
+代码理解直接由 Project Mod 贡献为 `project:query-code`；CodeGraph 只是同一工具的可选增强后端，
+不再拥有独立 Development Mod。其他项目型空间可以通过 `inheritsSpaceIds: ['project']` 复用这份基础能力。
 
 ## 工具身份
 
@@ -60,7 +60,7 @@ Development 不是一个重复的项目空间，而是可组合进 Project 的�
 project:read
 system:processes
 browser:observe
-development:query-code
+project:query-code
 ```
 
 不支持冒号的 Provider 可以在传输边界映射成 `namespace__tool`，但注册表、权限、历史、审批、

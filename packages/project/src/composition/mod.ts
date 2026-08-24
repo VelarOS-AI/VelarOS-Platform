@@ -2,6 +2,7 @@ import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 
 import {
   projectChangeTools,
+  projectCodeTools,
   projectExecutionTools,
   projectFileTools,
   projectTools,
@@ -30,6 +31,12 @@ const ProjectToolCategories = Object.freeze({
     description: '项目边界内受治理的命令执行。',
     toolOs: { domain: 'project', defaultState: 'resident' },
   }),
+  'development-code': Object.freeze<ToolCategoryDefinition>({
+    id: 'development-code',
+    label: 'Code intelligence',
+    description: '项目内置的代码符号、引用、依赖、诊断与影响面查询。',
+    toolOs: { domain: 'project', defaultState: 'resident' },
+  }),
 })
 
 /**
@@ -41,6 +48,7 @@ const ProjectResidentToolNames = new Set<string>([
   ProjectToolNames.read,
   ProjectToolNames.list,
   ProjectToolNames.search,
+  ProjectToolNames.queryCode,
   ProjectToolNames.edit,
   ProjectToolNames.write,
   ProjectToolNames.run,
@@ -50,6 +58,7 @@ const ProjectCategoryTools = Object.freeze({
   'project-files': projectFileTools,
   'project-changes': projectChangeTools,
   'project-execution': projectExecutionTools,
+  'development-code': projectCodeTools,
 })
 
 function projectCategoryForTool(name: string): keyof typeof ProjectCategoryTools {
@@ -60,10 +69,10 @@ function projectCategoryForTool(name: string): keyof typeof ProjectCategoryTools
 
 const ProjectAgentModManifest = Object.freeze({
   id: ProjectModId,
-  version: '2.0.2',
+  version: '2.0.3',
   publisher: 'VelarOS',
   displayName: 'VelarOS Project',
-  description: '项目空间的文件、变更与执行职责包。',
+  description: '项目空间的文件、代码理解、变更与执行职责包。',
   manifestSchemaVersion: 1,
   engines: { velaros: '*', agent: '*' },
   trust: 'bundled-official',

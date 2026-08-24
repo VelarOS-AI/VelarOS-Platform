@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import { isEmpty } from '@velaros-ai/core'
+
 export type AgentPermissionReply = 'once' | 'session' | 'always' | 'reject'
 export type AgentPermissionAction = 'allow' | 'deny' | 'ask'
 export type AgentPermissionRisk = 'low' | 'high'
@@ -94,7 +96,7 @@ export function findLastMatchingAgentPermissionRule(
   rules: readonly AgentPermissionRule[],
   permission: string,
   pattern: string
-): AgentPermissionRule | null {
+): Nullable<AgentPermissionRule> {
   for (let index = rules.length - 1; index >= 0; index -= 1) {
     const rule = rules[index]!
     if (
@@ -115,10 +117,10 @@ export function agentPermissionWildcardMatch(value: string, pattern: string): bo
 }
 
 export function normalizeAgentPermissionPatterns(
-  patterns: readonly string[] | undefined
+  patterns?: readonly string[]
 ): readonly string[] {
   const normalized = [...new Set((patterns ?? ['*']).map((pattern) => pattern.trim()).filter(Boolean))]
-  return Object.freeze(normalized.length > 0 ? normalized : ['*'])
+  return Object.freeze(!isEmpty(normalized) ? normalized : ['*'])
 }
 
 function requireNonEmpty(value: string, field: string): string {

@@ -1,7 +1,9 @@
 import { createServer, type Server } from 'node:http'
 import type { Socket } from 'node:net'
 
-import { type WebSocket,WebSocketServer } from 'ws'
+import { type WebSocket, WebSocketServer } from 'ws'
+
+import { isString } from '@velaros-ai/core'
 
 import { ExternalAgentBridgeProtocolDescriptor } from '../protocol/external-agent-bridge'
 
@@ -11,7 +13,7 @@ export const ExternalAgentBridgeDefaultPortEnd = 43_147
 export const ExternalAgentBridgeMaxSocketPayloadBytes = 32 * 1_024 * 1_024
 
 export function isExternalAgentBridgeExtensionOrigin(origin: unknown): origin is string {
-  return typeof origin === 'string' && /^chrome-extension:\/\/[a-p]{32}$/u.test(origin)
+  return isString(origin) && /^chrome-extension:\/\/[a-p]{32}$/u.test(origin)
 }
 
 export interface ExternalAgentBridgeLoopbackServerOptions {
@@ -30,14 +32,14 @@ export interface ExternalAgentBridgeLoopbackServerOptions {
  * 配对、凭据、设备/Session 与工具执行全部通过产品回调留在宿主。
  */
 export class ExternalAgentBridgeLoopbackServer {
-  private server: Server | null = null
-  private webSocketServer: WebSocketServer | null = null
+  private server: Nullable<Server> = null
+  private webSocketServer: Nullable<WebSocketServer> = null
   private readonly networkSockets = new Set<Socket>()
-  private endpointValue: string | null = null
+  private endpointValue: Nullable<string> = null
 
   public constructor(private readonly options: ExternalAgentBridgeLoopbackServerOptions) {}
 
-  public get endpoint(): string | null {
+  public get endpoint(): Nullable<string> {
     return this.endpointValue
   }
 
@@ -68,7 +70,7 @@ export class ExternalAgentBridgeLoopbackServer {
     this.endpointValue = null
   }
 
-  private async tryStart(port: number): Promise<string | null> {
+  private async tryStart(port: number): Promise<Nullable<string>> {
     const socketPath = this.options.socketPath ?? ExternalAgentBridgeProtocolDescriptor.socketPath
     const webSocketServer = new WebSocketServer({
       noServer: true,
@@ -124,7 +126,7 @@ export class ExternalAgentBridgeLoopbackServer {
       return null
     }
     const address = server.address()
-    if (!address || typeof address === 'string') {
+    if (!address || isString(address)) {
       webSocketServer.close()
       server.close()
       throw new Error('External Agent Bridge did not bind a TCP port')

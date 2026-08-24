@@ -189,7 +189,7 @@ function collectRenderedSectionTops(scrollEl: HTMLDivElement): SectionMetric[] {
   const containerTop = scrollEl.getBoundingClientRect().top
   const metrics: SectionMetric[] = []
   const nodes = scrollEl.querySelectorAll<HTMLElement>(
-    '[data-message-id][data-message-role="user"]'
+    '[data-message-id][data-message-role="user"][data-conversation-kind="turn-input"]'
   )
   for (const node of nodes) {
     if (node.offsetHeight <= 0) continue

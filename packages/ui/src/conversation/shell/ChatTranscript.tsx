@@ -1,4 +1,4 @@
-import { Fragment, memo, type ReactElement, type ReactNode, useLayoutEffect } from 'react'
+import { Fragment, memo, type ReactElement, type ReactNode, useLayoutEffect, useMemo } from 'react'
 
 import { MessageBubble } from '../blocks/MessageBubble'
 import { type GoalCompletionActivitySummary } from '../blocks/messageBubbleRenderModel'
@@ -18,6 +18,11 @@ import type {
   ChatInlineNoticeRuntimeSource,
 } from '../status/chatStatus'
 
+import {
+  buildChatTranscriptMessagePresentations,
+  type ChatTranscriptMessagePresentation,
+} from './chatTranscriptActivityGrouping'
+
 import type {
   ChatMessage,
   ChatProviderId,
@@ -26,7 +31,7 @@ import type {
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
 } from '#contracts'
-import { toNullable } from '#internal/runtime'
+import { isEmpty, toNullable } from '#internal/runtime'
 
 const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 
@@ -140,13 +145,62 @@ function ChatTranscriptInner({
   getRewindPlan,
 }: ChatTranscriptProps): ReactElement {
   const slots = useConversationRenderSlots()
+  const messagePresentations = useMemo(
+    () => buildChatTranscriptMessagePresentations(messages),
+    [messages]
+  )
 
   useLayoutEffect(() => {
     markFirstChatTranscriptCommit()
   }, [])
 
-  const renderMessageItem = (message: ChatMessage): ReactElement => {
+  const renderActivityMessages = (activityMessages: ChatMessage[]): Nullable<ReactElement> => {
+    if (isEmpty(activityMessages)) return null
+
+    return (
+      <div className="velar-transcript-run-activity" data-chat-run-activity="true">
+        {activityMessages.map((message) => {
+          const beforeMessage = renderBeforeMessage?.(message)
+          const afterMessage = renderAfterMessage?.(message)
+
+          return (
+            <Fragment key={message.id}>
+              {beforeMessage}
+              {renderMessageItem(message, { forceActivityFlat: true })}
+              {afterMessage}
+            </Fragment>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const renderMessageItem = (
+    message: ChatMessage,
+    options: {
+      forceActivityFlat?: boolean
+      presentation?: ChatTranscriptMessagePresentation
+    } = {}
+  ): ReactElement => {
     const inlineNotice = toNullable(getInlineNotice?.(message))
+    const forceActivityFlat = !!options.forceActivityFlat
+    const activityLeadingMessages = options.presentation?.activityLeadingMessages ?? []
+    const activityTrailingMessages = options.presentation?.activityTrailingMessages ?? []
+    const groupedRunIsStreaming = [
+      message,
+      ...activityLeadingMessages,
+      ...activityTrailingMessages,
+    ].some((activityMessage) => !!getIsStreaming?.(activityMessage))
+    const groupedActivityLeadingElement = renderActivityMessages(activityLeadingMessages)
+    const ownActivityLeadingElement = renderActivityLeadingElement?.(message)
+    const activityLeadingElement =
+      groupedActivityLeadingElement || ownActivityLeadingElement ? (
+        <>
+          {groupedActivityLeadingElement}
+          {ownActivityLeadingElement}
+        </>
+      ) : null
+    const activityTrailingElement = renderActivityMessages(activityTrailingMessages)
 
     return (
       <div className={itemClassName} data-chat-message={message.id}>
@@ -159,8 +213,8 @@ function ChatTranscriptInner({
               browserScreenshotDisplayMode={browserScreenshotDisplayMode}
               sessionId={sessionId}
               questionMessage={toNullable(getQuestionMessage?.(message))}
-              isStreaming={!!getIsStreaming?.(message)}
-              runMarker={toNullable(getRunMarker?.(message))}
+              isStreaming={forceActivityFlat || groupedRunIsStreaming}
+              runMarker={forceActivityFlat ? null : toNullable(getRunMarker?.(message))}
               inlineNotice={inlineNotice}
               inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
               showToolDetails={showToolDetails}
@@ -170,12 +224,15 @@ function ChatTranscriptInner({
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
               activeProjectRoot={activeProjectRoot}
               projectRoots={projectRoots}
-              canShowFileChangeSummary={canShowFileChangeSummary}
+              canShowFileChangeSummary={forceActivityFlat ? false : canShowFileChangeSummary}
               billingModel={billingModel}
               pricingCatalog={pricingCatalog}
               runtimeCostContexts={getRuntimeCostContexts?.(message) ?? EmptyRuntimeCostContexts}
-              goalCompletionSummary={toNullable(getGoalCompletionSummary?.(message))}
-              activityLeadingElement={renderActivityLeadingElement?.(message)}
+              goalCompletionSummary={
+                forceActivityFlat ? null : toNullable(getGoalCompletionSummary?.(message))
+              }
+              activityLeadingElement={activityLeadingElement}
+              activityTrailingElement={activityTrailingElement}
               renderAfterToolCall={renderAfterToolCall}
               onOpenBrowserLink={onOpenBrowserLink}
               onOpenFileChange={onOpenFileChange}
@@ -196,14 +253,15 @@ function ChatTranscriptInner({
 
   return (
     <div className={className} data-chat-transcript={sessionId}>
-      {messages.map((message) => {
+      {messagePresentations.map((presentation) => {
+        const { message } = presentation
         const beforeMessage = renderBeforeMessage?.(message)
         const afterMessage = renderAfterMessage?.(message)
 
         return (
           <Fragment key={message.id}>
             {beforeMessage}
-            {renderMessageItem(message)}
+            {renderMessageItem(message, { presentation })}
             {afterMessage}
           </Fragment>
         )

@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 import { isString, isUndefined, Log } from '@velaros-ai/core'
 import {
   type RemoteNodeClientFrame,

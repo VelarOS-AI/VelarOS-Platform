@@ -10,6 +10,8 @@ import assert from 'node:assert/strict'
 import { APICallError } from '@ai-sdk/provider'
 import { test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
+
 const retryModulePath = new URL('../dist/agent/retry.js', import.meta.url)
 
 function cloudApiError(statusCode, code, message) {
@@ -66,4 +68,31 @@ test('Cloud rate-limit errors are terminal while an unclassified 503 stays retry
 
   assert.equal(policy.shouldRetryConnectionError(cloudRateLimit, 1, { abortSignal }), false)
   assert.equal(policy.shouldRetryConnectionError(genericUnavailable, 1, { abortSignal }), true)
+})
+
+test('A stalled model stream retries only before visible output or tool side effects', async () => {
+  const { RetryPolicy } = await import(retryModulePath.href)
+  const policy = new RetryPolicy()
+  const abortSignal = new AbortController().signal
+  const stalled = new AppError(
+    'MODEL_STREAM_STALLED',
+    '模型流已超过 300000ms 没有返回新数据，已中止本轮请求。'
+  )
+
+  assert.equal(policy.shouldRetryConnectionError(stalled, 1, { abortSignal }), true)
+  assert.equal(policy.shouldRetryConnectionError(stalled, 2, { abortSignal }), false)
+  assert.equal(
+    policy.shouldRetryConnectionError(stalled, 1, {
+      abortSignal,
+      hasVisibleOutput: () => true,
+    }),
+    false
+  )
+  assert.equal(
+    policy.shouldRetryConnectionError(stalled, 1, {
+      abortSignal,
+      hasToolUse: () => true,
+    }),
+    false
+  )
 })

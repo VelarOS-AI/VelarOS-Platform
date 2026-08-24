@@ -52,6 +52,7 @@ function projectContext(signal: AbortSignal): ProjectToolContext {
         authorizationScope: 'project',
       }),
       runCommand: async () => ({}) as never,
+      queryCode: async (input) => ({ action: input.action, source: 'built-in-test' }),
     },
     system: { canStartBackgroundCommands: () => false },
     approval: defaultDenyApprovalPort,
@@ -59,7 +60,7 @@ function projectContext(signal: AbortSignal): ProjectToolContext {
 }
 
 describe('Project Kernel module', () => {
-  test('registers only the seven canonical project operations', async () => {
+  test('registers the canonical Project operations including built-in code understanding', async () => {
     let service: ProjectCapabilityService | undefined
     const module = createProjectKernelModule({
       resolveContext: (_scope, signal) => projectContext(signal),
@@ -74,6 +75,7 @@ describe('Project Kernel module', () => {
       'project:read',
       'project:list',
       'project:search',
+      'project:query-code',
       'project:write',
       'project:edit',
       'project:rollback',
@@ -85,6 +87,12 @@ describe('Project Kernel module', () => {
       .toEqual(['fs:read', 'fs:write'])
     expect(service?.getOperationMetadata('project:write')?.permissions)
       .toEqual(['fs:read', 'fs:write'])
+    await expect(service?.invoke(
+      'project:query-code',
+      undefined,
+      { action: 'find_symbols', query: 'UserService' },
+      new AbortController().signal,
+    )).resolves.toEqual({ action: 'find_symbols', source: 'built-in-test' })
     await expect(service?.invoke(
       'project:list',
       undefined,

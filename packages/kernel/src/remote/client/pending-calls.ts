@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:在途调用簿——「每个调用恰好 settle 一次」的唯一实现处。
 //
 // 单独成文件是因为这条纪律最容易在连接层的噪声里被磨掉:出口只有 `settle()` 一个,它先从

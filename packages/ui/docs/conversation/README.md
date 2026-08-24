@@ -62,7 +62,7 @@ Slot 面是 §12.9 意义上的**封闭有限具名集合**,不是任意扩展�
 | --- | --- |
 | `.` | 会话壳(`ChatConversationPane` / `ChatTranscript` / `ChatScrollNavigator`)、气泡族、消息块分发器、消息动作行、渲染模型与纯 util、`ConversationBlockHooks` |
 | `./contracts` | 框架无关的纯展示 DTO 与结构化 `Result<T>` 契约 |
-| `./composer` | 输入框(`ChatComposer` / `ChatInput`)+ 全部零件 + `ConversationComposerPort` |
+| `./composer` | 会话表面输入框(`ChatSurfaceComposer`)、底层组合器(`ChatComposer` / `ChatInput`)+ 全部零件 + `ConversationComposerPort` |
 | `./stream` | `ChatStreamPacer` + `streamPaceBudget` |
 | `./tool-render` | `ToolRendererRegistry` / `ToolCallBlock` / 工具能力注入契约 / 工具展示名与摘要纯 util |
 | `./render-slots` | `ConversationRenderSlots` + Provider / hook |
@@ -73,6 +73,10 @@ Slot 面是 §12.9 意义上的**封闭有限具名集合**,不是任意扩展�
 
 **重件走独立子路径是有意的**:`./artifacts` 与 `./html-preview` 按需 lazy 加载,
 这样任意 root import 都不会预载沙箱。
+
+Desktop 与 Workbench 的普通会话面统一使用 `ChatSurfaceComposer`:宿主只传
+`control` 与会话表面的 `variant`,组件库负责把主会话映射为默认密度、侧栏映射为紧凑密度。
+只有不遵循普通会话表面规则的专用宿主才显式覆盖 `density`;不要在产品仓按窗口状态重复判断。
 
 ## 宿主端口
 

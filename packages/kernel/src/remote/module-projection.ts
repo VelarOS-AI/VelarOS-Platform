@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:把 Node 清单投影成本机 Kernel 认得的模块面与 Agent 主干认得的工具面。
 //
 // ## 命名空间是硬性要求,不是审美

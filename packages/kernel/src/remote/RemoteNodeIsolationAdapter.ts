@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:`isolation: 'remote'` 的宿主注入适配器——远端能力在本机 Kernel 上的落点。
 //
 // ## 为什么调用要绕这一圈

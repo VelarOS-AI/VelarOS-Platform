@@ -12,6 +12,7 @@ import {
   isShellCommandReadOnly,
 } from '../command-execution-policy.js'
 import { ProjectEditOperationsSchema } from '../edit-schema.js'
+import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../project-code-query.js'
 import { ProjectToolNames } from '../project-tool-names.js'
 
 import { executeAgentProjectRead, executeAgentProjectSearch } from './ProjectKernelPort.js'
@@ -469,6 +470,36 @@ const projectRun = defineProjectTool<{
   execute: runProjectCommand,
 })
 
+const projectQueryCode = defineProjectTool<ProjectCodeQuery>({
+  name: ProjectToolNames.queryCode,
+  category: 'development-code',
+  role: 'inspect',
+  summary: '查询项目代码的符号、引用、依赖、诊断和影响范围。',
+  suitable: [
+    '需要语义级符号、引用、导入关系、诊断或影响面分析。',
+    '需要在 CodeGraph 可用时构建或查询结构化代码图谱。',
+  ],
+  forbidden: ['普通字面量或正则搜索应使用 project:search。'],
+  protocol: ['先选择 action，再提供该 action 所需的字段。'],
+  usage: [
+    'find_symbols、find_references、language_diagnostics 等 action 始终由内置语言服务提供。',
+    'search_symbols、callers、impact、build_index 等图谱 action 需要安装并启用 CodeGraph。',
+  ],
+  examples: [
+    { action: 'find_references', symbol: 'UserService', path: 'src/user.ts' },
+    { action: 'search_symbols', query: 'UserService', limit: 20 },
+  ],
+  notes: [
+    'CodeGraph 是同一工具的可选增强后端，不会改变工具身份。',
+    '关系类 action 的 nodeId 必须来自前序查询结果，不要猜测。',
+  ],
+  schema: ProjectCodeQuerySchema,
+  permissions: ['fs:read'],
+  exposure: { tier: 'common', rank: 25 },
+  isConcurrencySafe: () => true,
+  execute: (input, context) => context.project.queryCode(input, context),
+})
+
 const projectFileTools: ProjectToolCollection = Object.freeze({
   [ProjectToolNames.read]: projectRead,
   [ProjectToolNames.list]: projectList,
@@ -482,8 +513,12 @@ const projectChangeTools: ProjectToolCollection = Object.freeze({
 const projectExecutionTools: ProjectToolCollection = Object.freeze({
   [ProjectToolNames.run]: projectRun,
 })
+const projectCodeTools: ProjectToolCollection = Object.freeze({
+  [ProjectToolNames.queryCode]: projectQueryCode,
+})
 const projectTools: ProjectToolCollection = Object.freeze({
   ...projectFileTools,
+  ...projectCodeTools,
   ...projectChangeTools,
   ...projectExecutionTools,
 })
@@ -491,6 +526,7 @@ const projectTools: ProjectToolCollection = Object.freeze({
 export {
   defineProjectTool,
   projectChangeTools,
+  projectCodeTools,
   projectExecutionTools,
   projectFileTools,
   projectTools,

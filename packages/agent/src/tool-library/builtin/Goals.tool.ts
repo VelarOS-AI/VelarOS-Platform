@@ -138,7 +138,7 @@ const createGoal = defineVelaTool<{
   ],
   forbidden: [
     '不要为短小、可立即完成的任务创建目标；用户明确要求不用目标模式时不得自主启用。',
-    '不要在已有活动目标时重复创建；改完成/阻塞状态请用 goal:update。',
+    '不要在已有活动目标时重复创建；改目标内容或完成/阻塞状态请用 goal:update。重复调用只会返回并保留当前目标。',
   ],
   usage: [
     '预计任务会长时间运行、跨多轮推进或等待后台工作时，可主动创建目标；普通任务不要创建。',
@@ -151,7 +151,7 @@ const createGoal = defineVelaTool<{
       steps: [{ step: '定位保存失败路径', status: 'in_progress' }],
     },
   ],
-  notes: ['同一 session 同时只允许一个活动目标。'],
+  notes: ['同一 session 同时只允许一个活动目标；重复创建是幂等读取，不会覆盖当前目标。'],
   schema: z.object({
     objective: z.string().trim().min(1).max(2000).describe(
       parameterDescription({
@@ -199,7 +199,13 @@ const createGoal = defineVelaTool<{
     })
     const current = findCurrentGoalArtifact(artifacts)
     if (current && toGoalSnapshot(current).status === 'active') {
-      throw new AppError('VALIDATION', 'Active goal already exists. Use goal:get or goal:update.')
+      const goal = toGoalSnapshot(current)
+      return {
+        status: goal.status,
+        goal,
+        reused: true,
+        nextAction: 'An active goal already exists and was preserved. Use goal:update to change or complete it.',
+      }
     }
 
     const artifact = await ctx.activeContext.upsertActiveContextArtifact(

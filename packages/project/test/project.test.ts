@@ -14,6 +14,7 @@ describe('Project capability', () => {
       'project:read',
       'project:list',
       'project:search',
+      'project:query-code',
       'project:write',
       'project:edit',
       'project:rollback',

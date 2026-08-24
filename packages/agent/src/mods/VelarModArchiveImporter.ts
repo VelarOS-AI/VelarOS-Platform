@@ -5,7 +5,15 @@ import { basename, extname, join, posix } from 'node:path'
 
 import JSZip, { type JSZipObject } from 'jszip'
 
-import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNumber,
+  isPlainObject,
+  isPresent,
+  stringifyPretty,
+  trimmedStringOrEmpty,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   parseVelarosModEnvelope,
@@ -60,7 +68,7 @@ export interface VelarModArchiveScanReport {
   readonly trust: {
     readonly kind: 'marketplace-signed' | 'user-imported'
     readonly label: string
-    readonly signatureKeyId: string | null
+    readonly signatureKeyId: Nullable<string>
   }
   readonly permissions: readonly VelarModPermissionDescriptor[]
   readonly contributions: Readonly<Record<string, number>>
@@ -100,7 +108,7 @@ export interface VelarModArchiveSignatureVerifier {
 }
 
 export interface VelarModArchiveImporterOptions {
-  readonly resolvePermission: (permission: string) => VelarModPermissionDescriptor | null
+  readonly resolvePermission: (permission: string) => Nullable<VelarModPermissionDescriptor>
   readonly signatureVerifier?: VelarModArchiveSignatureVerifier
   readonly scanSessionTtlMs?: number
   readonly now?: () => number
@@ -170,7 +178,7 @@ function readZipSizes(entry: JSZipObject): { compressed: number; expanded: numbe
 }
 
 function readText(value: unknown): string {
-  return isString(value) ? value.trim() : ''
+  return trimmedStringOrEmpty(value)
 }
 
 function readAgentMetadata(agent: unknown, fallbackId: string) {
@@ -187,7 +195,7 @@ function countContributions(agent: unknown): Readonly<Record<string, number>> {
   if (!isPlainObject(agent) || !isPlainObject(agent.contributes)) return {}
   return Object.fromEntries(
     Object.entries(agent.contributes)
-      .filter(([, entries]) => isArray(entries) && entries.length > 0)
+      .filter(([, entries]) => isArray(entries) && !isEmpty(entries))
       .map(([axis, entries]) => [axis, (entries as readonly unknown[]).length]),
   )
 }
@@ -247,7 +255,7 @@ export class VelarModArchiveImporter {
     const declared = new Set(session.report.permissions.map((permission) => permission.id))
     const grantedPermissions = [...new Set(request.grantedPermissions.map((value) => value.trim()).filter(Boolean))]
     const invalid = grantedPermissions.filter((permission) => !declared.has(permission))
-    if (invalid.length > 0) {
+    if (!isEmpty(invalid)) {
       throw new AppError(
         'SECURITY',
         `Granted permissions were not declared by the Mod: ${invalid.join(', ')}`,
@@ -258,7 +266,7 @@ export class VelarModArchiveImporter {
         },
       )
     }
-    if (session.report.trust.kind === 'user-imported' && request.trustConfirmed !== true) {
+    if (session.report.trust.kind === 'user-imported' && !request.trustConfirmed) {
       throw new AppError(
         'SECURITY',
         'An unsigned imported Mod requires explicit source trust confirmation.',
@@ -283,7 +291,7 @@ export class VelarModArchiveImporter {
         }
         await writeFile(
           join(stagingDirectory, VelarosModManifestFileName),
-          `${JSON.stringify(stamped, null, 2)}\n`,
+          `${stringifyPretty(stamped)}\n`,
           'utf8',
         )
       }
@@ -326,12 +334,12 @@ export class VelarModArchiveImporter {
     const zipEntries = Object.values(zip.files)
     for (const entry of zipEntries) {
       const unixMode = entry.unixPermissions
-      if (typeof unixMode === 'number' && (unixMode & 0o170000) === 0o120000) {
+      if (isNumber(unixMode) && (unixMode & 0o170000) === 0o120000) {
         throw new AppError('SECURITY', `Mod archives cannot contain symbolic links: ${entry.unsafeOriginalName ?? entry.name}`)
       }
     }
     const files = zipEntries.filter((entry) => !entry.dir)
-    if (files.length === 0 || files.length > MaxFileCount) {
+    if (isEmpty(files) || files.length > MaxFileCount) {
       throw new AppError('SECURITY', `Mod archive file count must be between 1 and ${MaxFileCount}.`)
     }
 
@@ -389,7 +397,7 @@ export class VelarModArchiveImporter {
 
     const { module, agent } = parsedEnvelope.envelope
     const findings: VelarModArchiveFinding[] = []
-    if (agent !== undefined) {
+    if (isPresent(agent)) {
       const parsedAgent = parseAgentModManifest(agent, { origin: path })
       if (!parsedAgent.ok) {
         throw new AppError('VALIDATION', parsedAgent.diagnostics
@@ -423,7 +431,7 @@ export class VelarModArchiveImporter {
     }
 
     const metadata = readAgentMetadata(agent, module.id)
-    let signatureKeyId: string | null = null
+    let signatureKeyId: Nullable<string> = null
     const verifier = this.options.signatureVerifier
     const signatureFileName = verifier?.fileName ?? VelarModSignatureFileName
     const signatureEntry = entries.find((entry) => entry.path === signatureFileName)
@@ -432,7 +440,7 @@ export class VelarModArchiveImporter {
       try {
         signatureRaw = JSON.parse(signatureEntry.bytes.toString('utf8'))
       } catch {
-        // Shape failure is reported below by the verifier or as unsupported.
+        // arch-guard:silent-catch-ok 签名 JSON 的形态错误由下方验证器或不支持分支统一报告。
       }
       if (!verifier) findings.push({
         severity: 'blocking',

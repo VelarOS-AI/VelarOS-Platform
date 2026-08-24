@@ -118,6 +118,7 @@ type ConnectionRetryBlockReason =
   | 'max_attempts'
   | 'non_connection_api_error'
   | 'not_transient_connection_error'
+  | 'stalled_retry_exhausted'
   | 'tool_use_emitted'
   | 'visible_output_emitted'
 
@@ -211,6 +212,9 @@ class RetryPolicy {
     const appError = AppError.from(error)
     if (this.isAbortError(appError)) return 'abort_error'
 
+    // 一次 idle stall 已经消耗完整判死窗口；只允许一次安全重发，避免同一半开上游连续空等。
+    if (appError.code === 'MODEL_STREAM_STALLED' && attempt > 1)
+      return 'stalled_retry_exhausted'
     if (attempt > MaxConnectionRetryAttempts) return 'max_attempts'
 
     // 可见输出或工具调用已经发给 UI/历史后，重放流会复制 delta 或工具调用条目。
@@ -260,6 +264,9 @@ class RetryPolicy {
   public isTransientConnectionError(error: AppError): boolean {
     if (this.hasExplicitNonConnectionApiFailure(error)) return false
 
+    // idle reader 主动切断半开模型流时，错误已经证明该请求不再前进。它与 socket timeout
+    // 具有相同的恢复语义：仅由上层在尚无可见输出/工具副作用时重发，或保留部分输出后续写。
+    if (error.code === 'MODEL_STREAM_STALLED') return true
     if (error.code === 'NETWORK' || error.code === 'TIMEOUT') return true
     if (this.hasTransientApiFailure(error)) return true
     if (this.isRetryableEmptyPreOutputStream(error)) return true

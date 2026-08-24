@@ -11,12 +11,14 @@ import { goalTools } from '../src/tool-library/builtin/Goals.tool'
 function createGoalToolContext() {
   let artifact: ActiveContextArtifact | null = null
   let now = 1_000
+  let writes = 0
 
   const activeContext = {
     listActiveContextArtifacts: async () => (artifact ? [artifact] : []),
     upsertActiveContextArtifact: async (
       input: ActiveContextUpsertInput
     ): Promise<ActiveContextArtifact> => {
+      writes += 1
       now += 1
       artifact = {
         id: input.id ?? 'active-goal',
@@ -42,10 +44,30 @@ function createGoalToolContext() {
       activeContext,
     } as never,
     readArtifact: () => artifact,
+    readWrites: () => writes,
   }
 }
 
 describe('goal blocked lifecycle', () => {
+  test('treats a repeated create as an idempotent read without replacing the active goal', async () => {
+    const harness = createGoalToolContext()
+
+    await goalTools['goal:create'].execute(
+      { objective: '完成完整项目交付' },
+      harness.context
+    )
+    const repeated = await goalTools['goal:create'].execute(
+      { objective: '模型重复创建的另一个目标' },
+      harness.context
+    )
+
+    expect(repeated.status).toBe('active')
+    expect(repeated.reused).toBe(true)
+    expect(repeated.goal.objective).toBe('完成完整项目交付')
+    expect(harness.readArtifact()?.content).toBe('完成完整项目交付')
+    expect(harness.readWrites()).toBe(1)
+  })
+
   test('allows the model to mark a fresh active goal blocked without a multi-turn audit', async () => {
     const harness = createGoalToolContext()
 

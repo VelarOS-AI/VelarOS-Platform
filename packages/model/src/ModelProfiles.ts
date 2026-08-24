@@ -1,8 +1,10 @@
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 export type ModelProfileCredentialSource = 'config' | 'environment' | 'not-required' | 'missing'
 
 export interface ModelProfileStorePort<TProfile> {
   list(): Promise<readonly TProfile[]> | readonly TProfile[]
-  get(id: string): Promise<TProfile | null> | TProfile | null
+  get(id: string): Promise<Nullable<TProfile>> | Nullable<TProfile>
   save(profile: TProfile): Promise<void> | void
   remove(id: string): Promise<void> | void
   activate(id: string): Promise<void> | void
@@ -10,7 +12,7 @@ export interface ModelProfileStorePort<TProfile> {
 
 /** Secret storage is a product adapter (Keychain/Credential Manager/encrypted config), not Model-owned I/O. */
 export interface ModelCredentialStorePort {
-  get(profileId: string): Promise<string | null> | string | null
+  get(profileId: string): Promise<Nullable<string>> | Nullable<string>
   set(profileId: string, credential: string): Promise<void> | void
   clear(profileId: string): Promise<void> | void
 }
@@ -25,7 +27,7 @@ export interface ModelConnectionProbePort<TResolved> {
 
 export function resolveModelProfileCredentialSource(input: {
   readonly configuredCredential: string
-  readonly environmentName: string | null
+  readonly environmentName: Nullable<string>
   readonly environment: Readonly<Record<string, string | undefined>>
   readonly credentialOptional: boolean
 }): ModelProfileCredentialSource {
@@ -36,7 +38,7 @@ export function resolveModelProfileCredentialSource(input: {
 
 export function resolveModelProfileCredential(input: {
   readonly configuredCredential: string
-  readonly environmentName: string | null
+  readonly environmentName: Nullable<string>
   readonly environment: Readonly<Record<string, string | undefined>>
 }): string {
   return input.configuredCredential.trim()
@@ -56,19 +58,21 @@ export async function runModelConnectionProbe<T>(
   signal?: AbortSignal,
   timeoutMs = 20_000
 ): Promise<T> {
+  const timers = new TimerScope({ name: 'ModelConnectionProbe' })
   const controller = new AbortController()
   const forwardAbort = (): void => controller.abort(signal?.reason)
   signal?.addEventListener('abort', forwardAbort, { once: true })
   if (signal?.aborted) forwardAbort()
-  const timeout = setTimeout(
+  const timeout = timers.after(
+    timeoutMs,
     () => controller.abort(new Error('Connection check timed out.')),
-    timeoutMs
+    { unref: true }
   )
-  timeout.unref?.()
   try {
     return await operation(controller.signal)
   } finally {
-    clearTimeout(timeout)
+    timeout.cancel()
     signal?.removeEventListener('abort', forwardAbort)
+    timers.dispose()
   }
 }

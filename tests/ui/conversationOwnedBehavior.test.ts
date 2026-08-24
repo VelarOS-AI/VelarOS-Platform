@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
+import { resolveChatSurfaceComposerDensity } from '../../packages/ui/src/conversation/composer/ChatSurfaceComposer'
 import { filterComposerMenuPluginOptions } from '../../packages/ui/src/conversation/composer/hooks/buildChatInputComposerAddMenuProps'
 import {
   NoNextStepSuggestionHighlightIndex,
@@ -29,6 +30,15 @@ function createDraftTarget(input: {
 }
 
 void describe('Platform-owned conversation composer behavior', () => {
+  void test('derives one composer density policy from the shared conversation surface variant', () => {
+    assert.equal(resolveChatSurfaceComposerDensity({ variant: 'default' }), 'default')
+    assert.equal(resolveChatSurfaceComposerDensity({ variant: 'side' }), 'compact')
+    assert.equal(
+      resolveChatSurfaceComposerDensity({ variant: 'side', density: 'default' }),
+      'default'
+    )
+  })
+
   void test('keeps the Workbench current-file chip removable through the shared chip behavior', () => {
     const inputSource = readFileSync(
       new URL('../../packages/ui/src/conversation/composer/ChatInput.tsx', import.meta.url),

@@ -1,5 +1,15 @@
 import { randomUUID } from 'node:crypto'
 
+import {
+  isArray,
+  isEmpty,
+  isNonBlankString,
+  isNull,
+  isNumber,
+  isPlainObject,
+  isString,
+} from '@velaros-ai/core'
+
 import type { AgentSessionEventPort } from './event-port'
 
 export type AgentPlanStatus = 'draft' | 'approved' | 'complete' | 'cancelled'
@@ -17,7 +27,7 @@ export interface AgentPlan {
   readonly objective: string
   readonly steps: readonly AgentPlanStep[]
   readonly status: AgentPlanStatus
-  readonly reviewFeedback: string | null
+  readonly reviewFeedback: Nullable<string>
   readonly createdAt: number
   readonly updatedAt: number
 }
@@ -25,8 +35,8 @@ export interface AgentPlan {
 export class AgentPlanService {
   public constructor(private readonly sessions: AgentSessionEventPort) {}
 
-  public get(sessionId: string): AgentPlan | null {
-    let plan: AgentPlan | null = null
+  public get(sessionId: string): Nullable<AgentPlan> {
+    let plan: Nullable<AgentPlan> = null
     for (const event of this.sessions.readEvents(sessionId)) {
       if (event.type === 'plan.created' && isPlan(event.payload)) {
         plan = { ...event.payload, sessionId }
@@ -175,7 +185,7 @@ function createSteps(values: readonly string[]): AgentPlanStep[] {
 
 function normalizeSteps(values: readonly string[]): string[] {
   const steps = values.map((value) => requireText(value, 'Plan step'))
-  if (steps.length < 1 || steps.length > 24) throw new Error('A plan requires 1 to 24 steps.')
+  if (isEmpty(steps) || steps.length > 24) throw new Error('A plan requires 1 to 24 steps.')
   return steps.map((step) => step.slice(0, 1_000))
 }
 
@@ -188,30 +198,30 @@ function freezePlan(plan: AgentPlan): AgentPlan {
 
 function isPlan(value: unknown): value is AgentPlan {
   return isRecord(value)
-    && typeof value.id === 'string'
-    && typeof value.sessionId === 'string'
-    && typeof value.objective === 'string'
-    && Array.isArray(value.steps)
+    && isString(value.id)
+    && isString(value.sessionId)
+    && isString(value.objective)
+    && isArray(value.steps)
     && value.steps.every(isPlanStep)
     && value.status === 'draft'
-    && (value.reviewFeedback === null || typeof value.reviewFeedback === 'string')
-    && typeof value.createdAt === 'number'
-    && typeof value.updatedAt === 'number'
+    && (isNull(value.reviewFeedback) || isString(value.reviewFeedback))
+    && isNumber(value.createdAt)
+    && isNumber(value.updatedAt)
 }
 
 function isPlanDraft(value: Record<string, unknown>): value is Record<string, unknown> & {
   objective: string
   steps: AgentPlanStep[]
 } {
-  return typeof value.objective === 'string'
-    && Array.isArray(value.steps)
+  return isString(value.objective)
+    && isArray(value.steps)
     && value.steps.every(isPlanStep)
 }
 
 function isPlanStep(value: unknown): value is AgentPlanStep {
   return isRecord(value)
-    && typeof value.id === 'string'
-    && typeof value.text === 'string'
+    && isString(value.id)
+    && isString(value.text)
     && isPlanStepStatus(value.status)
 }
 
@@ -219,7 +229,7 @@ function isPlanStepUpdate(value: Record<string, unknown>): value is Record<strin
   stepId: string
   status: AgentPlanStepStatus
 } {
-  return typeof value.stepId === 'string' && isPlanStepStatus(value.status)
+  return isString(value.stepId) && isPlanStepStatus(value.status)
 }
 
 function isPlanStepStatus(value: unknown): value is AgentPlanStepStatus {
@@ -232,10 +242,10 @@ function requireText(value: string, label: string): string {
   return normalized
 }
 
-function stringValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+function stringValue(value: unknown): Nullable<string> {
+  return isNonBlankString(value) ? value.trim() : null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
 }

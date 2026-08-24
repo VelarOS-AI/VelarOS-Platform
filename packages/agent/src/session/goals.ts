@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import { isNumber, isPlainObject, isString } from '@velaros-ai/core'
+
 import type { AgentSessionEventPort } from './event-port'
 
 export type AgentGoalStatus = 'active' | 'complete' | 'blocked' | 'cancelled'
@@ -20,8 +22,8 @@ export class AgentGoalService {
     private readonly nextId: () => string = randomUUID
   ) {}
 
-  public get(sessionId: string): AgentGoal | null {
-    let goal: AgentGoal | null = null
+  public get(sessionId: string): Nullable<AgentGoal> {
+    let goal: Nullable<AgentGoal> = null
     for (const event of this.sessions.readEvents(sessionId)) {
       if (event.type === 'goal.created' && isGoal(event.payload)) goal = event.payload
       if (event.type === 'goal.updated' && goal && isGoalUpdate(event.payload)) {
@@ -63,20 +65,20 @@ export class AgentGoalService {
 
 function isGoal(value: unknown): value is AgentGoal {
   return isRecord(value)
-    && typeof value.id === 'string'
-    && typeof value.sessionId === 'string'
-    && typeof value.objective === 'string'
+    && isString(value.id)
+    && isString(value.sessionId)
+    && isString(value.objective)
     && value.status === 'active'
-    && typeof value.createdAt === 'number'
-    && typeof value.updatedAt === 'number'
+    && isNumber(value.createdAt)
+    && isNumber(value.updatedAt)
 }
 
 function isGoalUpdate(value: unknown): value is Pick<AgentGoal, 'id' | 'status'> {
   return isRecord(value)
-    && typeof value.id === 'string'
+    && isString(value.id)
     && (value.status === 'complete' || value.status === 'blocked' || value.status === 'cancelled')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
 }

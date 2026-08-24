@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:握手判决——从一枚 challenge 到「签名 / 配对 / 停手」三选一。
 //
 // 抽成纯函数是为了让这张判定表可以单独盯:授权是这条跨机链路唯一的门,它的分支不该埋在

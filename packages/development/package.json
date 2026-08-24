@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/development",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Development-space code understanding contracts, tools, and Project-space composition.",
+  "description": "Reusable language-service runtime for the Project code-understanding tool.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "type": "module",
@@ -19,17 +19,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./contracts": {
-      "types": "./dist/contracts.d.ts",
-      "import": "./dist/contracts.js"
-    },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "import": "./dist/runtime/index.js"
-    },
-    "./composition": {
-      "types": "./dist/composition/index.d.ts",
-      "import": "./dist/composition/index.js"
     }
   },
   "files": [

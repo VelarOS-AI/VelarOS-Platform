@@ -3,6 +3,7 @@ const ProjectToolNames = Object.freeze({
   read: 'project:read',
   list: 'project:list',
   search: 'project:search',
+  queryCode: 'project:query-code',
   write: 'project:write',
   edit: 'project:edit',
   rollback: 'project:rollback',

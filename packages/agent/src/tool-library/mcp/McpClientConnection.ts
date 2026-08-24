@@ -11,7 +11,16 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { ErrorCode } from '@modelcontextprotocol/sdk/types.js'
 
-import { isArray, isBoolean, isPresent, isRecord, isString, Log, toOptional } from '@velaros-ai/core'
+import {
+  isArray,
+  isBoolean,
+  isPresent,
+  isRecord,
+  isString,
+  Log,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
@@ -29,7 +38,7 @@ export type McpTransportKind = 'stdio' | 'http' | 'sse' | 'auto'
  * 归一化成可展示、可恢复的协议错误，不授予 Platform 发起授权交互或写入凭据的权限。
  */
 export interface McpAuthorizationProvider extends OAuthClientProvider {
-  readonly authorizationUrl?: Nullable<URL>
+  readonly authorizationUrl?: LooseOptional<URL>
 }
 
 /** host 无关的 MCP 连接规格；enabled/autoApprove/retry 等宿主策略不在此层。 */
@@ -40,7 +49,7 @@ export interface McpConnectionSpec {
   args: readonly string[]
   env: Readonly<Record<string, string>>
   cwd: Nullable<string>
-  url?: Nullable<string>
+  url?: LooseOptional<string>
   headers?: Readonly<Record<string, string>>
   authProvider?: OAuthClientProvider
   client?: {
@@ -123,7 +132,9 @@ export class McpClientConnection {
     if (this.client) return
     if (this.pendingAuthorization) {
       const provider = this.spec.authProvider as McpAuthorizationProvider | undefined
-      throw new McpAuthorizationRequiredError(provider?.authorizationUrl?.toString() ?? null)
+      throw new McpAuthorizationRequiredError(
+        toNullable(provider?.authorizationUrl?.toString())
+      )
     }
 
     const transportKinds = this.spec.transport === 'auto'
@@ -152,7 +163,9 @@ export class McpClientConnection {
             await this.closeClientQuietly(client)
             await this.closeTransportQuietly(transport)
           }
-          throw new McpAuthorizationRequiredError(provider?.authorizationUrl?.toString() ?? null)
+          throw new McpAuthorizationRequiredError(
+            toNullable(provider?.authorizationUrl?.toString())
+          )
         }
         await this.closeClientQuietly(client)
         await this.closeTransportQuietly(transport)
@@ -206,8 +219,8 @@ export class McpClientConnection {
         resources.push({
           uri: resource.uri,
           name: resource.name || resource.uri,
-          description: resource.description ?? null,
-          mimeType: resource.mimeType ?? null,
+          description: toNullable(resource.description),
+          mimeType: toNullable(resource.mimeType),
         })
       }
       cursor = response.nextCursor
@@ -229,7 +242,7 @@ export class McpClientConnection {
     )
     return response.contents.map((content) => ({
       uri: content.uri,
-      mimeType: content.mimeType ?? null,
+      mimeType: toNullable(content.mimeType),
       text: 'text' in content ? content.text : null,
       blob: 'blob' in content ? content.blob : null,
     }))

@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:Node 侧(无头能力提供者)向宿主索取的注入端口。
 //
 // 宪章 §15 原则三:Node 零会话权威——它不认识会话、不持 Agent 主干,只把本机能力面摊开给

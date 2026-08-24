@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 追加式审计日志(JSONL)。跨机能力面必须留痕:Node 是别人机器上的一只手,谁在什么时候
 // 让它做了什么,必须能离线复核。
 import { appendFile, mkdir } from 'node:fs/promises'

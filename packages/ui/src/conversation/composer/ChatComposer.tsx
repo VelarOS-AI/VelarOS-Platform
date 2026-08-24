@@ -110,9 +110,11 @@ export interface ChatComposerControl {
   slots?: ChatComposerSlots
 }
 
-interface ChatComposerProps {
+export type ChatComposerDensity = 'default' | 'compact'
+
+export interface ChatComposerProps {
   control: ChatComposerControl
-  density?: 'default' | 'compact'
+  density?: ChatComposerDensity
 }
 
 export function ChatComposer({ control, density = 'default' }: ChatComposerProps): ReactElement {

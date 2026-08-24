@@ -1,4 +1,4 @@
-// Platform Kernel owns the host-neutral remote-node implementation.
+// Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:跨机能力节点的 Client 侧连接——握手、判活、重连与会话状态。
 //
 // 在途调用簿在 `./pending-calls`,握手判定表在 `./handshake`;本文件只管这条链路本身。

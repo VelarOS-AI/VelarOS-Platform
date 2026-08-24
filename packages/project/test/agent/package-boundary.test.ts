@@ -43,7 +43,7 @@ describe('Project Agent boundary', () => {
     expect(violations).toEqual([])
   })
 
-  test('tool context exposes only the ports used by the seven-tool surface', () => {
+  test('tool context exposes only the ports used by the Project tool surface', () => {
     const source = readFileSync(resolve(SourceRoot, 'Types.ts'), 'utf8')
     for (const field of [
       'getRootPath',
@@ -52,6 +52,7 @@ describe('Project Agent boundary', () => {
       'runWithApproval',
       'prepareMutation',
       'runCommand',
+      'queryCode',
     ]) expect(source).toContain(field)
     for (const removedField of [
       'codingSession',

@@ -1,3 +1,5 @@
+import { isArray, isBoolean, isNumber, isPlainObject, isString } from '@velaros-ai/core'
+
 export const VelarosAgentSessionArchiveFormat = 'velaros.agent-session' as const
 export const VelarosAgentSessionArchiveSchemaVersion = 1 as const
 
@@ -71,14 +73,18 @@ export function parseAgentSessionArchiveEnvelope(input: unknown, options: {
   if (!Number.isInteger(input.productSchemaVersion) || Number(input.productSchemaVersion) <= 0) {
     throw new Error('Session archive productSchemaVersion must be a positive integer.')
   }
-  if (typeof input.exportedAt !== 'string' || Number.isNaN(Date.parse(input.exportedAt))) {
+  if (!isString(input.exportedAt) || Number.isNaN(Date.parse(input.exportedAt))) {
     throw new Error('Session archive exportedAt must be an ISO timestamp.')
   }
-  if (typeof input.sanitized !== 'boolean') throw new Error('Session archive sanitized must be boolean.')
-  if (!Array.isArray(input.resources) || input.resources.length > (options.maximumResources ?? 1_000)) {
+  if (!isBoolean(input.sanitized)) throw new Error('Session archive sanitized must be boolean.')
+  if (!isArray(input.resources) || input.resources.length > (options.maximumResources ?? 1_000)) {
     throw new Error(`Session archive resources exceed the ${options.maximumResources ?? 1_000} entry limit.`)
   }
-  if (!Array.isArray(input.events) || input.events.length > (options.maximumEvents ?? 100_000)) {
+  if (
+    !isArray(input.events)
+    || !input.events.every(isAgentSessionArchiveEvent)
+    || input.events.length > (options.maximumEvents ?? 100_000)
+  ) {
     throw new Error(`Session archive events exceed the ${options.maximumEvents ?? 100_000} entry limit.`)
   }
   return Object.freeze({
@@ -95,10 +101,19 @@ export function parseAgentSessionArchiveEnvelope(input: unknown, options: {
 }
 
 function requireText(value: unknown, field: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} cannot be empty.`)
+  if (!isString(value) || !value.trim()) throw new Error(`${field} cannot be empty.`)
   return value.trim()
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return isPlainObject(value)
+}
+
+function isAgentSessionArchiveEvent(value: unknown): value is AgentSessionArchiveEvent {
+  return (
+    isRecord(value)
+    && isString(value.type)
+    && isNumber(value.createdAt)
+    && 'payload' in value
+  )
 }
