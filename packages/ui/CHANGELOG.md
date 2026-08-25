@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.9] — 2026-08-25
+
 ### Changed
 
 - 会话卡片契约统一为 `conversationCards` / `conversationCardContent`：宿主卡渲染到会话正文，`SessionStickyDock` 只承载由会话壳派生的 Plan / Goal 状态卡。

@@ -420,7 +420,10 @@ export function ChatConversationPane({
     [activeDockPlanItemId, goalLifecycleDockItemId]
   )
   const inlineNoticeMessageId = activeAssistantMessageId ?? latestAssistantMessageId
-  const conversationCards = runtime.conversationCards ?? runtime.stickyDockItems ?? []
+  const conversationCards = useMemo(
+    () => runtime.conversationCards ?? runtime.stickyDockItems ?? [],
+    [runtime.conversationCards, runtime.stickyDockItems]
+  )
   const dismissConversationCard = onDismissConversationCard ?? onDismissStickyDockItem
   const inlineConversationCards = useMemo<ReactElement[]>(() => {
     const cards: ReactElement[] = []

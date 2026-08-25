@@ -1279,6 +1279,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((request: { messageId: string; blockIndex: number; text: string; }) => Promise<void>)"
     },
     {
+      "name": "ChatConversationPane.onDismissConversationCard",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((itemId: string) => void)"
+    },
+    {
       "name": "ChatConversationPane.onDismissStickyDockItem",
       "description": "Auto-generated from TypeScript props.",
       "type": "((itemId: string) => void)"
@@ -1670,21 +1675,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "ChatTranscript.showToolDetails",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
-    },
-    {
-      "name": "ChatTranscript.hidePlanToolBlocks",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
-    },
-    {
-      "name": "ChatTranscript.hiddenPlanToolCallId",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "LooseOptional<string>"
-    },
-    {
-      "name": "ChatTranscript.hideGoalToolBlocks",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean"
     },
@@ -4160,21 +4150,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "MessageBubble.showToolDetails",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
-    },
-    {
-      "name": "MessageBubble.hidePlanToolBlocks",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "boolean"
-    },
-    {
-      "name": "MessageBubble.hiddenPlanToolCallId",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "LooseOptional<string>"
-    },
-    {
-      "name": "MessageBubble.hideGoalToolBlocks",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean"
     },

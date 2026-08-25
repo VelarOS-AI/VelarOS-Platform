@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
@@ -13,7 +13,7 @@
     "packages/*"
   ],
   "velaros": {
-    "trainVersion": "0.6.4",
+    "trainVersion": "0.6.5",
     "trainNote": "根 version 是火车版本号,只用来给整列发车的 tag 命名;各包版本独立走 semver,见 README「版本方案」。",
     "//platform": "平台代:同一代内各包互相兼容,跨代才是整体破坏性升级。每个包在自己的 velaros.platform 里声明同一个值,随包发布,消费者装完也读得到;releaseTopology 的不变量④机械核对一致性。",
     "//domainPackages": "各域的包目录单源。域架构门(check:*-arch)据此把「包集合冻结」收敛到本域,新增包必须同时登记此处与该域的 owners 表。",

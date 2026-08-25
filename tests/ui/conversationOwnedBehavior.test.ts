@@ -37,7 +37,7 @@ void describe('Platform-owned conversation card placement', () => {
 
     assert.match(
       source,
-      /const conversationCards = runtime\.conversationCards \?\? runtime\.stickyDockItems \?\? \[\]/u
+      /const conversationCards = useMemo\(\s*\(\) => runtime\.conversationCards \?\? runtime\.stickyDockItems \?\? \[\],\s*\[runtime\.conversationCards, runtime\.stickyDockItems\]\s*\)/u
     )
     assert.match(source, /for \(const item of conversationCards\)/u)
     assert.match(source, /\{inlineConversationCards\}\s*\{!!streamSlot/u)
