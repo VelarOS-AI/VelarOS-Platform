@@ -1190,6 +1190,23 @@
     margin: 0;
   }
 
+  & .previewableCodeBlock {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+  }
+
+  & .previewableCodeBlockToggleSlot {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    z-index: 3;
+  }
+
+  & .previewableCodeBlock[data-view='source'] .previewableCodeBlockToggleSlot {
+    right: 64px;
+  }
+
   & [data-streamdown='code-block-header'] {
     display: flex;
     height: 2.125rem;
@@ -1242,23 +1259,19 @@
     pointer-events: auto !important;
   }
 
-  & .htmlCodeBlockRenderButton {
-    position: absolute;
-    top: 5px;
-    right: 64px;
-    z-index: 2;
+  & .previewableCodeBlockToggleButton {
     width: 24px;
     height: 24px;
     padding: 0 !important;
-    border-color: color-mix(in srgb, var(--border) 86%, transparent) !important;
+    border-color: transparent !important;
     border-radius: var(--ui-radius-control-sm) !important;
     background: transparent !important;
     color: color-mix(in srgb, var(--foreground-secondary) 86%, transparent) !important;
     box-shadow: none !important;
   }
 
-  & .htmlCodeBlockRenderButton:hover,
-  & .htmlCodeBlockRenderButton:focus-visible {
+  & .previewableCodeBlockToggleButton:hover,
+  & .previewableCodeBlockToggleButton:focus-visible {
     border-color: color-mix(in srgb, var(--border) 83%, transparent) !important;
     background: color-mix(in srgb, var(--card) 78%, transparent) !important;
     color: var(--foreground) !important;

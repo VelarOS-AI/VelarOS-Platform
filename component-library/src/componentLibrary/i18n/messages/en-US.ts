@@ -1173,6 +1173,8 @@ export const enUSMessages = {
     codeBlockCollapse: 'Collapse code',
     codeBlockLines: '{count} lines',
     codeBlockCopy: 'Copy code',
+    codeBlockShowSource: 'Show source',
+    codeBlockShowPreview: 'Show preview',
     codeBlockRenderHtml: 'Render as webpage',
     codeBlockCopied: 'Copied',
     commandCopy: 'Copy command',

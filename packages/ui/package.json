@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/ui",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "velaros": {
     "platform": "0.6"
   },
@@ -467,13 +467,15 @@
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
+    "@streamdown/mermaid": "^1.0.2",
     "@velaros-ai/html-artifacts": "workspace:*",
     "ahooks": "^3.9.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "react-day-picker": "^9.14.0",
     "streamdown": "^2.5.0",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "type-fest": "^4.41.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

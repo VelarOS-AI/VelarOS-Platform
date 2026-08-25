@@ -103,8 +103,10 @@ function isGenuineArtifactRenderBreak(phase: unknown): boolean {
 
 const HtmlArtifactBlock = memo(function HtmlArtifactBlock({
   block,
+  sourceToggleAction,
 }: {
   block: HtmlArtifactContentBlock
+  sourceToggleAction?: React.ReactNode
 }): React.ReactElement {
   const { t } = useConversationI18n()
   const timers = useTimerScope('HtmlArtifactBlock')
@@ -279,6 +281,7 @@ const HtmlArtifactBlock = memo(function HtmlArtifactBlock({
               showCodeLabel={t('chat.htmlArtifactShowCode')}
               hideCodeLabel={t('chat.htmlArtifactHideCode')}
               actionButtonClassName={styles.actionButton}
+              sourceToggleAction={sourceToggleAction}
               onDownload={handleDownload}
               onOpenPreview={() => setLayerOpen(true)}
               onReload={() => {

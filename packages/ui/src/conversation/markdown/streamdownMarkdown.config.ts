@@ -1,6 +1,7 @@
 import { cjk } from '@streamdown/cjk'
 import { code } from '@streamdown/code'
 import { createMathPlugin } from '@streamdown/math'
+import { mermaid } from '@streamdown/mermaid'
 import type { ControlsConfig, LinkSafetyConfig, PluginConfig } from 'streamdown'
 
 export type StreamdownMarkdownMode = 'static' | 'streaming'
@@ -13,6 +14,7 @@ export const STREAMDOWN_MARKDOWN_PLUGINS = {
   cjk,
   code,
   math,
+  mermaid,
 } satisfies PluginConfig
 
 export const STREAMDOWN_MARKDOWN_CONTROLS = {

@@ -12,6 +12,7 @@ import {
   type ConversationI18nContextValue,
   ConversationLocalizationProvider,
 } from '../../packages/ui/src/conversation/i18n'
+import { STREAMDOWN_MARKDOWN_PLUGINS } from '../../packages/ui/src/conversation/markdown/streamdownMarkdown.config'
 import {
   type ConversationRenderSlots,
   ConversationRenderSlotsProvider,
@@ -124,11 +125,13 @@ const i18nValue: ConversationI18nContextValue = {
 /** 直接驱动 `components.pre`：绕开 Streamdown 解析，只验围栏渲染器这一格的改道。 */
 function CodeFenceProbe({
   languageClassName = 'language-ts',
+  isStreaming = false,
 }: {
   languageClassName?: string
+  isStreaming?: boolean
 }): ReactElement {
   const components = useMessageMarkdownComponents(undefined, undefined, 'open', {
-    isStreaming: false,
+    isStreaming,
   })
   const Pre = components.pre as ComponentType<{ children: ReactNode }>
 
@@ -145,7 +148,8 @@ function CodeFenceProbe({
 
 function renderCodeFence(
   slots: ConversationRenderSlots,
-  languageClassName = 'language-ts'
+  languageClassName = 'language-ts',
+  isStreaming = false
 ): string {
   return renderToStaticMarkup(
     createElement(
@@ -154,7 +158,7 @@ function renderCodeFence(
       createElement(
         ConversationRenderSlotsProvider,
         { slots },
-        createElement(CodeFenceProbe, { languageClassName })
+        createElement(CodeFenceProbe, { languageClassName, isStreaming })
       )
     ) as ReactElement
   )
@@ -172,6 +176,22 @@ void describe('会话替换槽（messageCodeBlock）', () => {
     const markup = renderCodeFence(createSlots({}), '')
 
     assert.match(markup, /class="language-text"/)
+  })
+
+  void test('声明式图表完成后默认进入预览并提供统一源码入口', () => {
+    const markup = renderCodeFence(createSlots({}), 'language-mermaid')
+
+    assert.equal(STREAMDOWN_MARKDOWN_PLUGINS.mermaid.name, 'mermaid')
+    assert.match(markup, /data-view="preview"/)
+    assert.match(markup, /aria-label="chat\.codeBlockShowSource"/)
+  })
+
+  void test('声明式图表流式生成时回退源码且不暴露切换按钮', () => {
+    const markup = renderCodeFence(createSlots({}), 'language-mermaid', true)
+
+    assert.match(markup, /data-view="source"/)
+    assert.match(markup, /data-streamdown="code-block"/)
+    assert.doesNotMatch(markup, /chat\.codeBlockShowPreview/)
   })
 
   void test('工具栏布局由共享组件自身保证，不依赖消费端生成 Streamdown 工具类', () => {

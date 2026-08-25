@@ -1127,6 +1127,8 @@ export const zhCNMessages = {
     codeBlockCollapse: '收起代码',
     codeBlockLines: '{count} 行',
     codeBlockCopy: '复制代码',
+    codeBlockShowSource: '显示源码',
+    codeBlockShowPreview: '显示预览',
     codeBlockRenderHtml: '渲染为网页',
     codeBlockCopied: '已复制',
     commandCopy: '复制命令',

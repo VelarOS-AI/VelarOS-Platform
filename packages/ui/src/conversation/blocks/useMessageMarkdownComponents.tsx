@@ -13,9 +13,15 @@ import {
   ArrowSquareOutIcon,
   CaretDoubleDownIcon,
   CaretDoubleUpIcon,
-  PlayIcon,
+  CodeIcon,
+  EyeIcon,
 } from '@phosphor-icons/react'
-import { type Components as StreamdownComponents } from 'streamdown'
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+  CodeBlockDownloadButton,
+  type Components as StreamdownComponents,
+} from 'streamdown'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Link } from '@velaros-ai/ui/primitives/display/Link'
@@ -43,7 +49,7 @@ import { isEmpty, isString, trimmedStringOrEmpty } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
 const DefaultCodeBlockLanguage = 'text'
-const NonExpandableCodeBlockLanguages = new Set(['mermaid'])
+const DiagramCodeBlockLanguages = new Set(['mermaid'])
 const RenderableHtmlCodeBlockLanguages = new Set(['html', 'htm'])
 const TailMarkerCandidateTags = ['p', 'li', 'h1', 'h2', 'h3', 'h4'] as const
 // PERF GUARD: 不要静态导入 HtmlArtifactBlock；它会继续拉入 HtmlPreviewFrame 和源码预览，
@@ -127,6 +133,88 @@ function measureRenderedCodeBlockLines(container: Nullable<HTMLDivElement>): Nul
   return Math.max(1, Math.ceil(contentHeight / effectiveLineHeight))
 }
 
+type PreviewableCodeBlockView = 'preview' | 'source'
+
+function PreviewableCodeBlockToggle({
+  view,
+  onToggle,
+}: {
+  view: PreviewableCodeBlockView
+  onToggle: () => void
+}): ReactElement {
+  const { t } = useConversationI18n()
+  const showingPreview = view === 'preview'
+
+  return (
+    <IconButton
+      label={t(showingPreview ? 'chat.codeBlockShowSource' : 'chat.codeBlockShowPreview')}
+      size="icon-sm"
+      variant="ghost"
+      className={styles.previewableCodeBlockToggleButton}
+      onClick={onToggle}
+    >
+      {showingPreview ? <CodeIcon size={14} /> : <EyeIcon size={14} />}
+    </IconButton>
+  )
+}
+
+/**
+ * 通用的「代码 ↔ 可视结果」容器。解析器只负责提供 preview；视图状态、流式回退和源码入口
+ * 由这一层统一，后续接入新的声明式格式时无需再造一套交互。
+ */
+function PreviewableCodeBlockFrame({
+  code,
+  language,
+  isStreaming,
+  initialView,
+  renderPreview,
+}: {
+  code: string
+  language: string
+  isStreaming: boolean
+  initialView: PreviewableCodeBlockView
+  renderPreview: (toggleAction: ReactElement) => ReactElement
+}): ReactElement {
+  const [selection, setSelection] = useState<{
+    code: string
+    view: PreviewableCodeBlockView
+  }>(() => ({
+    code,
+    view: initialView,
+  }))
+  const selectedView = selection.code === code ? selection.view : initialView
+  const view = isStreaming ? 'source' : selectedView
+  const handleToggle = useCallback((): void => {
+    if (isStreaming) return
+
+    setSelection({
+      code,
+      view: view === 'preview' ? 'source' : 'preview',
+    })
+  }, [code, isStreaming, view])
+  const toggleAction = <PreviewableCodeBlockToggle view={view} onToggle={handleToggle} />
+
+  return (
+    <div className={styles.previewableCodeBlock} data-view={view}>
+      {view === 'preview' ? (
+        renderPreview(toggleAction)
+      ) : (
+        <>
+          <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
+            <CodeBlock code={code} language={language} isIncomplete={isStreaming}>
+              <CodeBlockDownloadButton code={code} language={language} />
+              <CodeBlockCopyButton code={code} />
+            </CodeBlock>
+          </ExpandableCodeBlockFrame>
+          {!isStreaming && (
+            <div className={styles.previewableCodeBlockToggleSlot}>{toggleAction}</div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function RenderableHtmlCodeBlockFrame({
   children,
   code,
@@ -138,7 +226,6 @@ function RenderableHtmlCodeBlockFrame({
 }): ReactElement {
   const { t } = useConversationI18n()
   const reactId = useId()
-  const [showHtmlPreview, setShowHtmlPreview] = useState(false)
   const artifactId = useMemo(
     () => `markdown-html-code-${reactId.replace(/[^a-zA-Z0-9_-]+/gu, '-')}`,
     [reactId]
@@ -155,36 +242,54 @@ function RenderableHtmlCodeBlockFrame({
     [artifactId, code, t]
   )
 
-  if (showHtmlPreview)
-    return (
-      <Suspense
-        fallback={
-          <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
-            {children}
-          </ExpandableCodeBlockFrame>
-        }
-      >
-        <LazyHtmlArtifactBlock block={block} />
-      </Suspense>
-    )
-
   return (
-    <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
-      <>
-        {children}
-        {!isStreaming && (
-          <IconButton
-            label={t('chat.codeBlockRenderHtml')}
-            size="icon-sm"
-            variant="outline"
-            className={styles.htmlCodeBlockRenderButton}
-            onClick={() => setShowHtmlPreview(true)}
-          >
-            <PlayIcon size={14} aria-hidden="true" />
-          </IconButton>
-        )}
-      </>
-    </ExpandableCodeBlockFrame>
+    <PreviewableCodeBlockFrame
+      code={code}
+      language="html"
+      isStreaming={isStreaming}
+      initialView="source"
+      renderPreview={(toggleAction) => (
+        <Suspense
+          fallback={
+            <>
+              <ExpandableCodeBlockFrame code={code} isStreaming={false}>
+                {children}
+              </ExpandableCodeBlockFrame>
+              <div className={styles.previewableCodeBlockToggleSlot}>{toggleAction}</div>
+            </>
+          }
+        >
+          <LazyHtmlArtifactBlock block={block} sourceToggleAction={toggleAction} />
+        </Suspense>
+      )}
+    />
+  )
+}
+
+function RenderableDiagramCodeBlockFrame({
+  children,
+  code,
+  language,
+  isStreaming,
+}: {
+  children: ReactElement
+  code: string
+  language: string
+  isStreaming: boolean
+}): ReactElement {
+  return (
+    <PreviewableCodeBlockFrame
+      code={code}
+      language={language}
+      isStreaming={isStreaming}
+      initialView="preview"
+      renderPreview={(toggleAction) => (
+        <>
+          {children}
+          <div className={styles.previewableCodeBlockToggleSlot}>{toggleAction}</div>
+        </>
+      )}
+    />
   )
 }
 
@@ -305,7 +410,7 @@ function ExpandableCodeBlockFrame({
   )
 }
 
-/** 官方代码块渲染的三条分支（mermaid 直渲 / 可运行 HTML / 可展开框），原样抽出以便充当替换槽的回落。 */
+/** 官方代码块渲染的三条分支（声明式预览 / 可运行 HTML / 可展开框），抽出以便充当替换槽的回落。 */
 function renderOfficialCodeBlock({
   blockChild,
   language,
@@ -317,7 +422,12 @@ function renderOfficialCodeBlock({
   code: string
   isStreaming: boolean
 }): ReactElement {
-  if (NonExpandableCodeBlockLanguages.has(language)) return blockChild
+  if (DiagramCodeBlockLanguages.has(language))
+    return (
+      <RenderableDiagramCodeBlockFrame code={code} language={language} isStreaming={isStreaming}>
+        {blockChild}
+      </RenderableDiagramCodeBlockFrame>
+    )
 
   if (isRenderableHtmlCodeBlockLanguage(language))
     return (

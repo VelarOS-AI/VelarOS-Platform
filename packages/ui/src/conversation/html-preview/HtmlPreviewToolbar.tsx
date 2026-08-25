@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { type ReactNode, useCallback, useRef, useState } from 'react'
 import {
   ArrowsClockwiseIcon,
   CheckIcon,
@@ -27,6 +27,7 @@ export interface HtmlPreviewToolbarProps {
   showCodeLabel: string
   hideCodeLabel: string
   actionButtonClassName: string
+  sourceToggleAction?: ReactNode
   onDownload: () => void
   onOpenPreview?: () => void
   onReload: () => void
@@ -44,6 +45,7 @@ export function HtmlPreviewToolbar({
   showCodeLabel,
   hideCodeLabel,
   actionButtonClassName,
+  sourceToggleAction,
   onDownload,
   onOpenPreview,
   onReload,
@@ -108,15 +110,17 @@ export function HtmlPreviewToolbar({
           <CornersOutIcon size={14} />
         </IconButton>
       )}
-      <IconButton
-        label={showCode ? hideCodeLabel : showCodeLabel}
-        size="icon-sm"
-        variant={showCode ? 'secondary' : 'ghost'}
-        className={actionButtonClassName}
-        onClick={onToggleCode}
-      >
-        <CodeIcon size={14} />
-      </IconButton>
+      {sourceToggleAction ?? (
+        <IconButton
+          label={showCode ? hideCodeLabel : showCodeLabel}
+          size="icon-sm"
+          variant={showCode ? 'secondary' : 'ghost'}
+          className={actionButtonClassName}
+          onClick={onToggleCode}
+        >
+          <CodeIcon size={14} />
+        </IconButton>
+      )}
     </>
   )
 }
