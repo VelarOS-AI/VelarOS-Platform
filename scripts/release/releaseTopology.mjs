@@ -24,7 +24,7 @@
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import ts from 'typescript'
+import * as TypeScriptModule from 'typescript'
 
 export const ReleaseRegistry = 'https://npm.pkg.github.com'
 
@@ -38,10 +38,23 @@ const manifestBinCommands = (manifest) => {
   return Object.keys(manifest.bin ?? {})
 }
 
+// TypeScript is CommonJS today. Node and Bun expose its namespace/default interop differently
+// across platforms, so resolve the parser from either standards-compatible shape explicitly.
+export const resolveTypeScriptJsoncParser = (moduleNamespace) => {
+  const parser =
+    moduleNamespace.parseConfigFileTextToJson ?? moduleNamespace.default?.parseConfigFileTextToJson
+  if (typeof parser !== 'function') {
+    throw new TypeError('TypeScript does not expose parseConfigFileTextToJson')
+  }
+  return parser
+}
+
+const parseConfigFileTextToJson = resolveTypeScriptJsoncParser(TypeScriptModule)
+
 // bun.lock 是 JSONC(带注释、尾逗号),沿用七份旧脚本一致的做法:借 TypeScript 的 tsconfig
 // 解析器读,不为一处解析再引一个 JSONC 依赖。
 const readJsonc = async (file) => {
-  const parsed = ts.parseConfigFileTextToJson(file, await readFile(file, 'utf8'))
+  const parsed = parseConfigFileTextToJson(file, await readFile(file, 'utf8'))
   if (parsed.error) {
     throw new Error(`Unable to parse ${file}: TypeScript diagnostic ${parsed.error.code}`)
   }

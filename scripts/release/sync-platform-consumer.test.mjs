@@ -2,7 +2,23 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { desiredSpecification, replaceRequirementSource } from './sync-platform-consumer.mjs'
-import { selectReleasedPackages } from './releaseTopology.mjs'
+import { resolveTypeScriptJsoncParser, selectReleasedPackages } from './releaseTopology.mjs'
+
+test('resolves the TypeScript JSONC parser from namespace and default interop shapes', () => {
+  const directParser = () => ({ config: {} })
+  const defaultParser = () => ({ config: {} })
+
+  assert.equal(
+    resolveTypeScriptJsoncParser({ parseConfigFileTextToJson: directParser }),
+    directParser,
+  )
+  assert.equal(
+    resolveTypeScriptJsoncParser({
+      default: { parseConfigFileTextToJson: defaultParser },
+    }),
+    defaultParser,
+  )
+})
 
 test('preserves ordinary semver range intent while replacing the version', () => {
   assert.equal(desiredSpecification('^0.5.1', '0.6.0'), '^0.6.0')
