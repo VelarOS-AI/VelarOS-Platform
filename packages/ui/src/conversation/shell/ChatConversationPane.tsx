@@ -34,10 +34,9 @@ import {
   useConversationRenderSlots,
 } from '../render-slots'
 import { getChatInlineNoticeMeta } from '../status/chatStatus'
-import { isGoalToolBlockActive, isGoalToolStateToolName } from '../tool-render/goal/goalToolBlock'
 import { getPlanToolBlockSignature, isPlanToolBlockComplete } from '../tool-render/plan/planToolBlock'
 
-import { isChatInteractionRunActive,resolveChatInteractionState } from './chatInteractionState'
+import { isChatInteractionRunActive, resolveChatInteractionState } from './chatInteractionState'
 import { ChatScrollNavigator } from './ChatScrollNavigator'
 import { ChatTranscript, type ChatTranscriptNavigationHandle } from './ChatTranscript'
 import { useConversationActionPort } from './conversationActionPort'
@@ -120,6 +119,8 @@ export interface ChatConversationPaneProps {
     blockIndex: number
     text: string
   }) => Promise<void>
+  onDismissConversationCard?: (itemId: string) => void
+  /** @deprecated 旧宿主回调名；新代码使用 `onDismissConversationCard`。 */
   onDismissStickyDockItem?: (itemId: string) => void
   onFollowLockedChange: (locked: boolean) => void
   onResolvePreflightUserActionCard?: (result: UserActionCardResult) => void
@@ -138,25 +139,6 @@ function getLatestPlanToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlock
       const block = message.blocks[blockIndex]
 
       if (block.type === 'tool-call' && block.toolName === 'plan:update') return block
-    }
-  }
-
-  return null
-}
-
-function getLatestGoalToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlockType> {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = messages[messageIndex]
-
-    if (isConversationTurnInputMessage(message)) return null
-    if (message.role !== 'assistant') {
-      continue
-    }
-
-    for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = message.blocks[blockIndex]
-
-      if (block.type === 'tool-call' && isGoalToolStateToolName(block.toolName)) return block
     }
   }
 
@@ -186,6 +168,7 @@ export function ChatConversationPane({
   onRewindToMessage,
   getRewindPlan,
   onTranslateThinkingBlock,
+  onDismissConversationCard,
   onDismissStickyDockItem,
   onFollowLockedChange,
   onResolvePreflightUserActionCard,
@@ -275,19 +258,7 @@ export function ChatConversationPane({
     shouldRenderAwaitingInputCard ||
     shouldRenderAwaitingConfirmationCard ||
     !isEmpty(activeUserActionCardIds)
-  const stickyUserActionCardIds = useMemo(
-    () =>
-      runtime.stickyDockItems
-        .filter((item) => item.kind === 'user-action-card')
-        .map((item) => item.card.id),
-    [runtime.stickyDockItems]
-  )
-  const transcriptActiveUserActionCardIds = useMemo(() => {
-    if (isEmpty(stickyUserActionCardIds)) return activeUserActionCardIds
-    if (isEmpty(activeUserActionCardIds)) return stickyUserActionCardIds
-
-    return [...activeUserActionCardIds, ...stickyUserActionCardIds]
-  }, [activeUserActionCardIds, stickyUserActionCardIds])
+  const transcriptActiveUserActionCardIds = activeUserActionCardIds
 
   const refreshGoalLifecycle = useCallback(async (): Promise<void> => {
     try {
@@ -425,11 +396,6 @@ export function ChatConversationPane({
 
     return latestPlanBlock && !isPlanToolBlockComplete(latestPlanBlock) ? latestPlanBlock : null
   }, [messages])
-  const activeDockGoalBlock = useMemo(() => {
-    const latestGoalBlock = getLatestGoalToolBlock(messages)
-
-    return latestGoalBlock && isGoalToolBlockActive(latestGoalBlock) ? latestGoalBlock : null
-  }, [messages])
   const activeDockPlanItemId = optionalWhenLazy(
     activeDockPlanBlock,
     () => `plan-update:${activeDockPlanBlock!.toolCallId}`
@@ -437,10 +403,6 @@ export function ChatConversationPane({
   const goalLifecycleDockItemId = optionalWhenLazy(
     goalDockModel,
     () => `goal-lifecycle:${goalDockModel!.id}:${goalDockModel!.status}`
-  )
-  const preflightDockItemId = optionalWhenLazy(
-    preflightUserActionCard,
-    () => `preflight-action:${preflightUserActionCard!.id}`
   )
   const activeDockPlanRevealKey = optionalWhenLazy(activeDockPlanBlock, () =>
     getPlanToolBlockSignature(activeDockPlanBlock!)
@@ -457,91 +419,98 @@ export function ChatConversationPane({
     () => [goalLifecycleDockItemId, activeDockPlanItemId].filter(isPresent),
     [activeDockPlanItemId, goalLifecycleDockItemId]
   )
-  const hideGoalToolBlocks = !!goalDockModel || !!activeDockGoalBlock
   const inlineNoticeMessageId = activeAssistantMessageId ?? latestAssistantMessageId
-  const stickyDockItems = useMemo<SessionStickyDockItem[]>(() => {
-    const dockItems: SessionStickyDockItem[] = []
+  const conversationCards = runtime.conversationCards ?? runtime.stickyDockItems ?? []
+  const dismissConversationCard = onDismissConversationCard ?? onDismissStickyDockItem
+  const inlineConversationCards = useMemo<ReactElement[]>(() => {
+    const cards: ReactElement[] = []
 
-    for (const item of runtime.stickyDockItems) {
+    for (const item of conversationCards) {
       const onDismiss = optionalWhenLazy(
-        onDismissStickyDockItem,
-        () => () => onDismissStickyDockItem!(item.id)
+        dismissConversationCard,
+        () => () => dismissConversationCard!(item.id)
       )
 
-      if (item.kind === 'user-action-card') {
-        // wizard 分发 / onOpenArtifact 在宿主 stickyDockItemContent slot 实现内处理。
-        dockItems.push({
-          id: item.id,
-          createdAt: item.createdAt,
-          content: slots.stickyDockItemContent({
-            kind: 'user-action-card',
-            card: item.card,
-            sessionId,
-            onDismiss,
-            onOpenArtifact: onOpenProjectPath,
-          }),
-        })
-        continue
-      }
-
       if (item.kind === 'handoff-suggestion') {
-        dockItems.push({
-          id: item.id,
-          createdAt: item.createdAt,
-          content: slots.stickyDockItemContent({
-            kind: 'handoff-suggestion',
-            card: item.card,
-            sessionId,
-            onResolve: (resolution) =>
-              actionPort.resolveHandoffSuggestion({
-                sessionId,
-                cardId: item.card.id,
-                // 只有"确认转交"这个正向动作算批准；拒绝/跳过/关闭一律进冷却。
-                approved: resolution.approved && resolution.actionKind === 'acknowledge',
-              }),
-            onDismiss,
-            onOpenArtifact: onOpenProjectPath,
-          }),
+        const content = slots.conversationCardContent({
+          kind: 'handoff-suggestion',
+          card: item.card,
+          sessionId,
+          onResolve: (resolution) =>
+            actionPort.resolveHandoffSuggestion({
+              sessionId,
+              cardId: item.card.id,
+              // 只有"确认转交"这个正向动作算批准；拒绝/跳过/关闭一律进冷却。
+              approved: resolution.approved && resolution.actionKind === 'acknowledge',
+            }),
+          onOpenArtifact: onOpenProjectPath,
         })
+        if (content)
+          cards.push(
+            <div key={item.id} className={styles.inlineConversationCard}>
+              {content}
+            </div>
+          )
         continue
       }
 
       if (item.kind === 'project-auto-approval') {
-        dockItems.push({
-          id: item.id,
-          createdAt: item.createdAt,
-          content: slots.stickyDockItemContent({
-            kind: 'project-auto-approval',
-            notice: item.notice,
-            onDismiss,
-          }),
+        const content = slots.conversationCardContent({
+          kind: 'project-auto-approval',
+          notice: item.notice,
+          onDismiss,
         })
+        if (content)
+          cards.push(
+            <div key={item.id} className={styles.inlineConversationCard}>
+              {content}
+            </div>
+          )
       }
     }
 
-    if (preflightUserActionCard && preflightDockItemId) {
-      dockItems.push({
-        id: preflightDockItemId,
-        createdAt: preflightUserActionCard.createdAt,
-        content: slots.stickyDockItemContent({
-          kind: 'preflight-action',
-          card: preflightUserActionCard,
-          sessionId,
-          onOpenArtifact: onOpenProjectPath,
-          onResolve: (resolution) =>
-            onResolvePreflightUserActionCard?.({
-              cardId: preflightUserActionCard.id,
-              ...resolution,
-            }),
-        }),
+    if (preflightUserActionCard) {
+      const content = slots.conversationCardContent({
+        kind: 'preflight-action',
+        card: preflightUserActionCard,
+        sessionId,
+        onOpenArtifact: onOpenProjectPath,
+        onResolve: (resolution) =>
+          onResolvePreflightUserActionCard?.({
+            cardId: preflightUserActionCard.id,
+            ...resolution,
+          }),
       })
+      if (content)
+        cards.push(
+          <div
+            key={`preflight-action:${preflightUserActionCard.id}`}
+            className={styles.inlineConversationCard}
+          >
+            {content}
+          </div>
+        )
     }
+
+    return cards
+  }, [
+    actionPort,
+    conversationCards,
+    dismissConversationCard,
+    onOpenProjectPath,
+    onResolvePreflightUserActionCard,
+    preflightUserActionCard,
+    sessionId,
+    slots,
+  ])
+  const stickyDockItems = useMemo<SessionStickyDockItem[]>(() => {
+    const dockItems: SessionStickyDockItem[] = []
 
     if (goalDockModel && goalLifecycleDockItemId) {
       dockItems.push({
         id: goalLifecycleDockItemId,
         createdAt: goalDockModel.updatedAt,
-        content: slots.stickyDockItemContent({
+        content: slots.conversationCardContent({
           kind: 'goal-lifecycle',
           model: goalDockModel,
           busy: goalLifecycleBusy,
@@ -565,7 +534,6 @@ export function ChatConversationPane({
 
     return dockItems
   }, [
-    actionPort,
     activeDockPlanBlock,
     activeDockPlanItemId,
     goalDockModel,
@@ -573,13 +541,6 @@ export function ChatConversationPane({
     goalLifecycleDockItemId,
     handleContinueGoal,
     handleGoalLifecycleAction,
-    onDismissStickyDockItem,
-    onOpenProjectPath,
-    onResolvePreflightUserActionCard,
-    preflightDockItemId,
-    preflightUserActionCard,
-    runtime.stickyDockItems,
-    sessionId,
     slots,
   ])
   const getTranscriptQuestionMessage = useCallback(
@@ -664,12 +625,8 @@ export function ChatConversationPane({
               variant={variant}
               items={stickyDockItems}
               barLabel={t('sessionStickyDock.barLabel')}
-              autoRevealKey={
-                preflightDockItemId ?? goalLifecycleRevealKey ?? activeDockPlanRevealKey
-              }
-              spotlightItemIds={
-                preflightDockItemId ? [preflightDockItemId] : activeDockStatusSpotlightItemIds
-              }
+              autoRevealKey={goalLifecycleRevealKey ?? activeDockPlanRevealKey}
+              spotlightItemIds={activeDockStatusSpotlightItemIds}
             />
             {!isEmpty(workerThreadPlacement.beforeTranscript)
               ? renderWorkerThreadPanel(workerThreadPlacement.beforeTranscript)
@@ -686,8 +643,6 @@ export function ChatConversationPane({
               getInlineNotice={getTranscriptInlineNotice}
               inlineNoticeRuntimeSource={inlineNoticeRuntimeSource}
               showToolDetails
-              hideGoalToolBlocks={hideGoalToolBlocks}
-              hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
               activeProjectRoot={activeProjectRoot}
               projectRoots={projectRoots}
@@ -708,6 +663,7 @@ export function ChatConversationPane({
               canRewindToMessage={canRewindToMessage}
               getRewindPlan={getRewindPlan}
             />
+            {inlineConversationCards}
             {!!streamSlot && <div className={styles.streamSlot}>{streamSlot}</div>}
             {!inlineNoticeMessageId && inlineNotice && (
               <MessageBubble
@@ -717,8 +673,6 @@ export function ChatConversationPane({
                 inlineNotice={inlineNotice}
                 inlineNoticeRuntimeSource={inlineNoticeRuntimeSource}
                 showToolDetails
-                hideGoalToolBlocks={hideGoalToolBlocks}
-                hiddenPlanToolCallId={activeDockPlanBlock?.toolCallId}
                 planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
                 activeProjectRoot={activeProjectRoot}
                 projectRoots={projectRoots}

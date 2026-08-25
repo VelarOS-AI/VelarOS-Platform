@@ -14,22 +14,14 @@ import type {
 import type { GoalDockViewModel } from '#internal/goalLifecycle'
 
 /**
- * 顶栏坞项内容的**判别联合注入面**（pass-4 収口）：会话壳产出坞项元数据（id/createdAt/reveal/spotlight），
- * 内容按 `kind` 交宿主 `stickyDockItemContent` slot 渲染。宿主实现在各 kind 内处理专属卡的宿主耦合
- * （wizard 分发 / 权限页导航 / i18n）。`plan-update` 由包内 PlanToolRender 直渲，不进本联合。
+ * 会话卡片内容的判别联合注入面。会话壳决定卡片属于正文还是系统 sticky dock，
+ * 宿主只按 `kind` 处理专属渲染和回传（wizard 分发 / 权限页导航 / i18n）。
  *
- * **加一张宿主自有坞卡时只有一条路**：在本联合加一个 kind，带上它自己的回传回调
+ * **加一张宿主自有会话卡时只有一条路**：在本联合加一个 kind，带上它自己的回传回调
  * （`onResolve` / `onAction`）。不要在坞项 id 上编码身份、也不要往 `window` 上挂
  * `velaros:*-resolve` 全局事件——那条旁路当天能做完，代价是身份可冒充、通道谁都能派发。
  */
-export type ConversationStickyDockContent =
-  | {
-      kind: 'user-action-card'
-      card: UserActionCard
-      sessionId: string
-      onDismiss?: () => void
-      onOpenArtifact?: (path: string) => unknown
-    }
+export type ConversationCardContent =
   | {
       /**
        * 宿主自有的会话转交建议卡。与 `user-action-card` 分开的理由是**身份与回传**：
@@ -40,7 +32,6 @@ export type ConversationStickyDockContent =
       card: UserActionCard
       sessionId: string
       onResolve: (resolution: UserActionResolution) => void
-      onDismiss?: () => void
       onOpenArtifact?: (path: string) => unknown
     }
   | {
@@ -62,6 +53,9 @@ export type ConversationStickyDockContent =
       onAction: (action: ChatGoalLifecycleAction) => Promise<boolean>
       onContinue: () => void | Promise<void>
     }
+
+/** @deprecated 仅供已发布的旧宿主完成跨版本升级；新代码使用 `ConversationCardContent`。 */
+export type ConversationStickyDockContent = ConversationCardContent
 
 /**
  * `messageMarkdown` 替换槽的 props。
@@ -184,9 +178,11 @@ export interface ConversationRenderSlots {
     onReviewEntries?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
   }) => Nullable<ReactElement>
   /**
-   * 顶栏坞项内容（pass-4 収口）——见 `ConversationStickyDockContent`。宿主渲染专属卡并处理其宿主耦合。
+   * 会话卡片内容——见 `ConversationCardContent`。宿主渲染专属卡并处理其宿主耦合。
    */
-  stickyDockItemContent: (content: ConversationStickyDockContent) => Nullable<ReactElement>
+  conversationCardContent: (content: ConversationCardContent) => Nullable<ReactElement>
+  /** @deprecated 旧宿主的 slot 名兼容入口；位置仍由新版会话壳决定。 */
+  stickyDockItemContent?: (content: ConversationCardContent) => Nullable<ReactElement>
   /**
    * 单消息渲染错误边界（pass-4 収口）——ChatTranscript 每条消息经此包裹。宿主实现 `RenderErrorBoundary` +
    * `ChatMessageRenderFailureAlert`（含 staleModuleRecovery 自愈耦合，留宿主）；缺注入时直接透传 children。
@@ -246,6 +242,7 @@ const defaultConversationRenderSlots: ConversationRenderSlots = {
   askUser: () => null,
   userActionCard: () => null,
   messageFileChangeSummary: () => null,
+  conversationCardContent: () => null,
   stickyDockItemContent: () => null,
   renderMessageBoundary: ({ children }) => <>{children}</>,
 }

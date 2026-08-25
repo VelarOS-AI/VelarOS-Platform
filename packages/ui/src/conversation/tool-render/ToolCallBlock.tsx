@@ -13,6 +13,7 @@ import {
   type ToolRenderRegistration,
   ToolRenderRegistry,
 } from './ToolRenderRegistry'
+import { shouldUseDefaultTranscriptToolRenderer } from './toolRenderToolNames'
 
 import type { ToolCallBlock as ToolCallBlockType } from '#contracts'
 import { isArray } from '#internal/runtime'
@@ -66,8 +67,11 @@ export const ToolCallBlock = memo(
     formatPathForDisplay,
     registry = ToolRenderRegistry,
   }: ToolCallBlockProps): React.ReactElement => {
-    const CustomRender = registry.get(block.toolName)
-    if (CustomRender && CustomRender !== DefaultToolRender) return (
+    const CustomRender = shouldUseDefaultTranscriptToolRenderer(block.toolName)
+      ? DefaultToolRender
+      : registry.get(block.toolName)
+    if (CustomRender && CustomRender !== DefaultToolRender)
+      return (
         <Suspense
           fallback={
             <DefaultToolRender

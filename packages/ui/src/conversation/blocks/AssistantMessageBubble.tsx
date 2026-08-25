@@ -90,9 +90,6 @@ export function AssistantMessageBubble({
   inlineNotice = null,
   inlineNoticeRuntimeSource = null,
   showToolDetails = true,
-  hidePlanToolBlocks = false,
-  hiddenPlanToolCallId = null,
-  hideGoalToolBlocks = false,
   planUpdateIndexByToolCallId,
   activeProjectRoot = null,
   projectRoots = EmptyProjectRoots,
@@ -121,9 +118,6 @@ export function AssistantMessageBubble({
   inlineNotice?: LooseOptional<ChatInlineNoticeMeta>
   inlineNoticeRuntimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
   showToolDetails?: boolean
-  hidePlanToolBlocks?: boolean
-  hiddenPlanToolCallId?: LooseOptional<string>
-  hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
@@ -214,9 +208,6 @@ export function AssistantMessageBubble({
     streamingTextSegmentKey,
   } = useMemo(() => {
     const visibleBlocks = getVisibleMessageBlocks(message, showToolDetails, {
-      hidePlanToolBlocks,
-      hiddenPlanToolCallId,
-      hideGoalToolBlocks,
       activeUserActionCardIds,
       showThinkingProcess,
     })
@@ -239,9 +230,6 @@ export function AssistantMessageBubble({
     }
   }, [
     activeUserActionCardIds,
-    hideGoalToolBlocks,
-    hidePlanToolBlocks,
-    hiddenPlanToolCallId,
     message,
     showThinkingProcess,
     showToolDetails,

@@ -4,7 +4,6 @@ import {
 } from '../i18n/conversationTranslator'
 import type { ConversationMessageRunMarker } from '../projection'
 import type { ChatInlineNoticeMeta } from '../status/chatStatus'
-import { isGoalToolStateToolName } from '../tool-render/goal/goalToolBlock'
 import {
   isToolActivitySummaryExcludedToolCall,
   type ToolActivitySummaryExclusionPredicate,
@@ -46,10 +45,6 @@ export interface MessageRenderSegmentOptions {
 }
 
 export interface VisibleMessageBlockOptions {
-  hidePlanToolBlocks?: boolean
-  /** 置顶执行中的计划只隐藏对应快照；历史已落盘计划必须继续留在 transcript。 */
-  hiddenPlanToolCallId?: LooseOptional<string>
-  hideGoalToolBlocks?: boolean
   /** 纯展示过滤：false 时保留消息数据，只从当前渲染树移除 thinking block。 */
   showThinkingProcess?: boolean
   /** 当前仍在等待作答的阻塞式动作卡 id；用于判断卡片是「待答」还是「已答」，据此决定是否隐藏同消息内的叙述文本。 */
@@ -253,13 +248,6 @@ export function getVisibleMessageBlocks(
       visibleBlocks.push(block)
       return
     }
-
-    if (
-      block.toolName === 'plan:update' &&
-      (options.hidePlanToolBlocks || block.toolCallId === options.hiddenPlanToolCallId)
-    )
-      return
-    if (options.hideGoalToolBlocks && isGoalToolStateToolName(block.toolName)) return
 
     if (showToolDetails) visibleBlocks.push(block)
   })

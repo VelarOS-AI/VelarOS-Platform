@@ -7,7 +7,6 @@ import type {
   ChatInlineNoticeMeta,
   ChatInlineNoticeRuntimeSource,
 } from '../status/chatStatus'
-import { isGoalToolStateToolName } from '../tool-render/goal/goalToolBlock'
 
 import { AssistantMessageBubble } from './AssistantMessageBubble'
 import {
@@ -40,9 +39,6 @@ interface MessageBubbleProps {
   inlineNotice?: LooseOptional<ChatInlineNoticeMeta>
   inlineNoticeRuntimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
   showToolDetails?: boolean
-  hidePlanToolBlocks?: boolean
-  hiddenPlanToolCallId?: LooseOptional<string>
-  hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
@@ -76,7 +72,6 @@ interface MessageBubbleProps {
 const UserActionCardPresenceByMessage = new WeakMap<ChatMessage, boolean>()
 const WorkerThreadAnchorToolPresenceByMessage = new WeakMap<ChatMessage, boolean>()
 const PlanToolPresenceByMessage = new WeakMap<ChatMessage, boolean>()
-const GoalToolPresenceByMessage = new WeakMap<ChatMessage, boolean>()
 
 function hasUserActionCardBlock(message: ChatMessage): boolean {
   const cached = UserActionCardPresenceByMessage.get(message)
@@ -123,21 +118,6 @@ function hasPlanToolBlock(message: ChatMessage): boolean {
   return false
 }
 
-function hasGoalToolBlock(message: ChatMessage): boolean {
-  const cached = GoalToolPresenceByMessage.get(message)
-  if (isPresent(cached)) return cached
-
-  for (const block of message.blocks) {
-    if (block.type === 'tool-call' && isGoalToolStateToolName(block.toolName)) {
-      GoalToolPresenceByMessage.set(message, true)
-      return true
-    }
-  }
-
-  GoalToolPresenceByMessage.set(message, false)
-  return false
-}
-
 function areUserActionCardRenderPropsEqual(
   prev: Readonly<MessageBubbleProps>,
   next: Readonly<MessageBubbleProps>
@@ -148,18 +128,6 @@ function areUserActionCardRenderPropsEqual(
     prev.activeUserActionCardIds === next.activeUserActionCardIds &&
     prev.onResolveUserActionCard === next.onResolveUserActionCard
   )
-}
-
-function areToolVisibilityPropsEqual(
-  prev: Readonly<MessageBubbleProps>,
-  next: Readonly<MessageBubbleProps>
-): boolean {
-  const hasPlanTool = hasPlanToolBlock(prev.message) || hasPlanToolBlock(next.message)
-  if (hasPlanTool && prev.hidePlanToolBlocks !== next.hidePlanToolBlocks) return false
-  if (hasPlanTool && prev.hiddenPlanToolCallId !== next.hiddenPlanToolCallId) return false
-
-  const hasGoalTool = hasGoalToolBlock(prev.message) || hasGoalToolBlock(next.message)
-  return !(hasGoalTool && prev.hideGoalToolBlocks !== next.hideGoalToolBlocks)
 }
 
 function arePlanToolRenderPropsEqual(
@@ -216,9 +184,6 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       inlineNotice={props.inlineNotice}
       inlineNoticeRuntimeSource={props.inlineNoticeRuntimeSource}
       showToolDetails={props.showToolDetails}
-      hidePlanToolBlocks={props.hidePlanToolBlocks}
-      hiddenPlanToolCallId={props.hiddenPlanToolCallId}
-      hideGoalToolBlocks={props.hideGoalToolBlocks}
       planUpdateIndexByToolCallId={props.planUpdateIndexByToolCallId}
       activeProjectRoot={props.activeProjectRoot}
       projectRoots={props.projectRoots}
@@ -253,7 +218,6 @@ function areMessageBubblePropsEqual(
     prev.isStreaming === next.isStreaming &&
     prev.inlineNoticeRuntimeSource === next.inlineNoticeRuntimeSource &&
     prev.showToolDetails === next.showToolDetails &&
-    areToolVisibilityPropsEqual(prev, next) &&
     arePlanToolRenderPropsEqual(prev, next) &&
     prev.activeProjectRoot === next.activeProjectRoot &&
     prev.projectRoots === next.projectRoots &&

@@ -99,7 +99,7 @@ T1 的 DSL **不发明新视觉语汇**，它是既有零件盒的**数据化投
 - **`when?` 是闭集条件表达式，不是谓词函数**——v1 只认已登记的条件键
   （如 `space` / `stageVisible` / `debugFeatures`）。函数进 manifest = 代码钩子越过白名单。
 - **命名去歧义（重要）**：本轴的 **Dock = 应用头部 Dock**（`App.tsx` 里 `TopBar` 的兄弟层），
-  **不是**会话内的 `SessionStickyDock`（投影类型 `ConversationStickyDockItem`）。
+  **不是**会话内只承载 Plan / Goal 状态卡的 `SessionStickyDock`。
   两个「dock」今天同时存在于代码里，文档与实施必须始终带限定词。
 
 **为什么恰好是这三根**：它们是聊天页**唯一三处「壳愿意让别人放东西」的常驻表面**

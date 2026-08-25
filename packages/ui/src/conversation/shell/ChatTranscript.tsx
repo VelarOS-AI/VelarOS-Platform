@@ -91,9 +91,6 @@ export interface ChatTranscriptProps {
   getInlineNotice?: (message: ChatMessage) => Nullable<ChatInlineNoticeMeta>
   inlineNoticeRuntimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
   showToolDetails?: boolean
-  hidePlanToolBlocks?: boolean
-  hiddenPlanToolCallId?: LooseOptional<string>
-  hideGoalToolBlocks?: boolean
   planUpdateIndexByToolCallId?: ReadonlyMap<string, number>
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
@@ -137,9 +134,6 @@ function ChatTranscriptInner({
   getInlineNotice,
   inlineNoticeRuntimeSource = null,
   showToolDetails = true,
-  hidePlanToolBlocks = false,
-  hiddenPlanToolCallId = null,
-  hideGoalToolBlocks = false,
   planUpdateIndexByToolCallId,
   activeProjectRoot,
   projectRoots,
@@ -273,9 +267,6 @@ function ChatTranscriptInner({
               inlineNotice={inlineNotice}
               inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
               showToolDetails={showToolDetails}
-              hidePlanToolBlocks={hidePlanToolBlocks}
-              hiddenPlanToolCallId={hiddenPlanToolCallId}
-              hideGoalToolBlocks={hideGoalToolBlocks}
               planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
               activeProjectRoot={activeProjectRoot}
               projectRoots={projectRoots}

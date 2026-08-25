@@ -17,6 +17,7 @@ export type {
   ConversationTurnContextView,
 } from './conversationRunMarkerView'
 export type {
+  ConversationCardItem,
   ConversationRuntimeView,
   ConversationStickyDockItem,
 } from './conversationRuntimeView'

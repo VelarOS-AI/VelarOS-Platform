@@ -49,6 +49,10 @@
   @apply flex min-w-0 flex-col;
 }
 
+.inlineConversationCard {
+  @apply flex min-w-0 w-full;
+}
+
 .thinkingRow {
   @apply flex justify-center;
 }

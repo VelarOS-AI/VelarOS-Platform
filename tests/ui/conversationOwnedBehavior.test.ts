@@ -16,6 +16,37 @@ import {
 import { canClaimChatDraftInsertion } from '../../packages/ui/src/conversation/composer/utils/chatDraftInsertion.utils'
 import { claimChatPromptFeatureActivation } from '../../packages/ui/src/conversation/composer/utils/chatPromptFeatureActivation.utils'
 import { activateMarkdownTailMarker } from '../../packages/ui/src/conversation/markdown/markdownTailMarker.utils'
+import { shouldUseDefaultTranscriptToolRenderer } from '../../packages/ui/src/conversation/tool-render/toolRenderToolNames'
+
+void describe('Platform-owned conversation card placement', () => {
+  void test('reserves rich transcript renderers for tools outside Plan and Goal lifecycle state', () => {
+    assert.equal(shouldUseDefaultTranscriptToolRenderer('plan:update'), true)
+    assert.equal(shouldUseDefaultTranscriptToolRenderer('goal:create'), true)
+    assert.equal(shouldUseDefaultTranscriptToolRenderer('goal:update'), true)
+    assert.equal(shouldUseDefaultTranscriptToolRenderer('project:read_file'), false)
+  })
+
+  void test('derives the sticky dock from Plan and Goal while rendering conversation cards inline', () => {
+    const source = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/shell/ChatConversationPane.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.match(
+      source,
+      /const conversationCards = runtime\.conversationCards \?\? runtime\.stickyDockItems \?\? \[\]/u
+    )
+    assert.match(source, /for \(const item of conversationCards\)/u)
+    assert.match(source, /\{inlineConversationCards\}\s*\{!!streamSlot/u)
+    assert.match(source, /if \(goalDockModel && goalLifecycleDockItemId\)/u)
+    assert.match(source, /if \(activeDockPlanBlock && activeDockPlanItemId\)/u)
+    assert.doesNotMatch(source, /hideGoalToolBlocks=/u)
+    assert.doesNotMatch(source, /hiddenPlanToolCallId=/u)
+  })
+})
 
 function createDraftTarget(input: {
   connected?: boolean

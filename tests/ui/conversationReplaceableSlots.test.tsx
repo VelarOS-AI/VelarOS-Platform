@@ -31,7 +31,7 @@ function createSlots(overrides: Partial<ConversationRenderSlots>): ConversationR
     askUser: () => null,
     userActionCard: () => null,
     messageFileChangeSummary: () => null,
-    stickyDockItemContent: () => null,
+    conversationCardContent: () => null,
     renderMessageBoundary: ({ children }) => createElement('div', null, children),
     ...overrides,
   }
