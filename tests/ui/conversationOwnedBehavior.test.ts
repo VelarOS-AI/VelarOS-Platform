@@ -223,6 +223,24 @@ void describe('Platform-owned chat scroll navigator structure', () => {
     assert.equal(source.includes('{navState.visible && ('), false)
   })
 
+  void test('suspends bottom following before every upward navigator action', () => {
+    const source = readFileSync(
+      new URL('../../packages/ui/src/conversation/shell/ChatScrollNavigator.tsx', import.meta.url),
+      'utf8'
+    )
+    const topSuspendIndex = source.indexOf(
+      'scrollEl.dispatchEvent(new Event(AutoScrollSuspendEventName, { bubbles: true }))'
+    )
+    const topNavigationIndex = source.indexOf("scrollToEdge('top')")
+    const previousBranchIndex = source.indexOf("if (direction === 'previous')")
+    const sectionNavigationIndex = source.indexOf('scrollToSection(direction)')
+
+    assert.ok(topSuspendIndex >= 0)
+    assert.ok(topNavigationIndex > topSuspendIndex)
+    assert.ok(previousBranchIndex > topNavigationIndex)
+    assert.ok(sectionNavigationIndex > previousBranchIndex)
+  })
+
   void test('keeps the narrow navigator inset instead of collapsing over content', () => {
     const stylesheet = readFileSync(
       new URL(

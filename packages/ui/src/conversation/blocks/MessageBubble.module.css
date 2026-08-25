@@ -463,8 +463,29 @@
 }
 
 :global(.velar-transcript-run-activity) {
-  @apply flex w-full min-w-0 flex-col gap-2;
+  @apply flex w-full min-w-0 flex-row flex-wrap items-start gap-x-3 gap-y-2;
   max-width: 100%;
+}
+
+:global(.velar-transcript-run-activity)
+  > :global([data-chat-run-activity-layout='inline']) {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+:global(.velar-transcript-run-activity)
+  > :global([data-chat-run-activity-layout='block']) {
+  flex: 1 0 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+:global(.velar-transcript-run-activity)
+  > :global([data-chat-run-activity-layout='inline']):has(.toolActivityToggle[aria-expanded='true']) {
+  flex-basis: 100%;
+  width: 100%;
 }
 
 .assistantBubble :global(.velar-tool-disclosure-card[data-tone='running']),

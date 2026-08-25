@@ -175,6 +175,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "PopoverSide"
     },
     {
+      "name": "AnchoredPopover.sideOffset",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number"
+    },
+    {
       "name": "AnchoredPopover.align",
       "description": "Auto-generated from TypeScript props.",
       "type": "PopoverAlign"
@@ -188,11 +193,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "AnchoredPopover.onInteractOutside",
       "description": "Auto-generated from TypeScript props.",
       "type": "((event: Event) => void)"
-    },
-    {
-      "name": "AnchoredPopover.sideOffset",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "number"
     },
     {
       "name": "AnchoredPopover.viewportPadding",
@@ -3546,16 +3546,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     },
     {
-      "name": "Flex.gap",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
-      "defaultValue": "'md'"
-    },
-    {
       "name": "Flex.align",
       "description": "Auto-generated from TypeScript props.",
       "type": "\"center\" | \"end\" | \"start\" | \"stretch\" | \"baseline\" | null",
       "defaultValue": "'stretch'"
+    },
+    {
+      "name": "Flex.gap",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
+      "defaultValue": "'md'"
     },
     {
       "name": "Flex.justify",
@@ -3583,16 +3583,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     },
     {
-      "name": "Grid.gap",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
-      "defaultValue": "'md'"
-    },
-    {
       "name": "Grid.align",
       "description": "Auto-generated from TypeScript props.",
       "type": "\"center\" | \"end\" | \"start\" | \"stretch\" | null",
       "defaultValue": "'stretch'"
+    },
+    {
+      "name": "Grid.gap",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
+      "defaultValue": "'md'"
     },
     {
       "name": "Grid.justify",
@@ -3890,6 +3890,12 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     },
     {
+      "name": "Inline.align",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"center\" | \"end\" | \"start\" | \"stretch\" | null",
+      "defaultValue": "'center'"
+    },
+    {
       "name": "Inline.wrap",
       "description": "Auto-generated from TypeScript props.",
       "type": "\"wrap\" | \"nowrap\" | null",
@@ -3900,12 +3906,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | null",
       "defaultValue": "'md'"
-    },
-    {
-      "name": "Inline.align",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "\"center\" | \"end\" | \"start\" | \"stretch\" | null",
-      "defaultValue": "'center'"
     },
     {
       "name": "Inline.justify",
@@ -4543,6 +4543,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "PopoverSide"
     },
     {
+      "name": "PopoverContent.sideOffset",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number"
+    },
+    {
       "name": "PopoverContent.align",
       "description": "Auto-generated from TypeScript props.",
       "type": "PopoverAlign"
@@ -4556,11 +4561,6 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "PopoverContent.onInteractOutside",
       "description": "Auto-generated from TypeScript props.",
       "type": "((event: Event) => void)"
-    },
-    {
-      "name": "PopoverContent.sideOffset",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "number"
     },
     {
       "name": "PopoverContent.viewportPadding",
@@ -5152,16 +5152,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     },
     {
-      "name": "Stack.gap",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
-      "defaultValue": "'md'"
-    },
-    {
       "name": "Stack.align",
       "description": "Auto-generated from TypeScript props.",
       "type": "\"center\" | \"end\" | \"start\" | \"stretch\" | null",
       "defaultValue": "'stretch'"
+    },
+    {
+      "name": "Stack.gap",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"sm\" | \"lg\" | \"md\" | \"none\" | \"xs\" | \"xl\" | null",
+      "defaultValue": "'md'"
     }
   ],
   Steps: [

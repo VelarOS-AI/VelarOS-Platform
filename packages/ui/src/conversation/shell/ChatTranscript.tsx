@@ -53,6 +53,19 @@ export function shouldForceGroupedActivityFlat(groupedRunIsStreaming: boolean): 
   return groupedRunIsStreaming
 }
 
+/** 完成态中只有纯内部活动消息可以参与跨消息横排；正文、引导和卡片维持整行。 */
+export function shouldInlineGroupedActivityMessage(
+  message: ChatMessage,
+  forceActivityFlat: boolean
+): boolean {
+  return (
+    !forceActivityFlat &&
+    message.role === 'assistant' &&
+    !isEmpty(message.blocks) &&
+    message.blocks.every((block) => block.type === 'thinking' || block.type === 'tool-call')
+  )
+}
+
 /**
  * 渲染窗口的导航契约：由 useChatTranscriptWindow 实现，ChatScrollNavigator 消费。
  * section = turn-input；运行内 guidance/reply 不创建新 section。
@@ -174,7 +187,15 @@ function ChatTranscriptInner({
           return (
             <Fragment key={message.id}>
               {beforeMessage}
-              {renderMessageItem(message, { forceActivityFlat })}
+              {renderMessageItem(message, {
+                forceActivityFlat,
+                groupedActivityLayout: shouldInlineGroupedActivityMessage(
+                  message,
+                  forceActivityFlat
+                )
+                  ? 'inline'
+                  : 'block',
+              })}
               {afterMessage}
             </Fragment>
           )
@@ -187,6 +208,7 @@ function ChatTranscriptInner({
     message: ChatMessage,
     options: {
       forceActivityFlat?: boolean
+      groupedActivityLayout?: 'inline' | 'block'
       presentation?: ChatTranscriptMessagePresentation
     } = {}
   ): ReactElement => {
@@ -199,6 +221,14 @@ function ChatTranscriptInner({
       ...activityLeadingMessages,
       ...activityTrailingMessages,
     ].some((activityMessage) => !!getIsStreaming?.(activityMessage))
+    const groupedRunMarker = [
+      ...activityLeadingMessages,
+      message,
+      ...activityTrailingMessages,
+    ].reduce<Nullable<ConversationMessageRunMarker>>(
+      (marker, activityMessage) => toNullable(getRunMarker?.(activityMessage)) ?? marker,
+      null
+    )
     const forceGroupedActivityFlat = shouldForceGroupedActivityFlat(groupedRunIsStreaming)
     const groupedActivityLeadingElement = renderActivityMessages(
       activityLeadingMessages,
@@ -218,7 +248,11 @@ function ChatTranscriptInner({
     )
 
     return (
-      <div className={itemClassName} data-chat-message={message.id}>
+      <div
+        className={itemClassName}
+        data-chat-message={message.id}
+        data-chat-run-activity-layout={options.groupedActivityLayout}
+      >
         {/* 消息级渲染兜底经 renderMessageBoundary slot 注入宿主 RenderErrorBoundary（自愈耦合留宿主）。 */}
         {slots.renderMessageBoundary({
           message,
@@ -229,7 +263,7 @@ function ChatTranscriptInner({
               sessionId={sessionId}
               questionMessage={toNullable(getQuestionMessage?.(message))}
               isStreaming={forceActivityFlat || groupedRunIsStreaming}
-              runMarker={forceActivityFlat ? null : toNullable(getRunMarker?.(message))}
+              runMarker={forceActivityFlat ? null : groupedRunMarker}
               inlineNotice={inlineNotice}
               inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
               showToolDetails={showToolDetails}

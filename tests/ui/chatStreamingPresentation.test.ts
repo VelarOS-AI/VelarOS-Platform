@@ -20,7 +20,10 @@ import {
   resolveToolActivityMotionKind,
 } from '../../packages/ui/src/conversation/blocks/ToolActivityMotion'
 import type { ToolCallBlock } from '../../packages/ui/src/conversation/contracts'
-import { shouldForceGroupedActivityFlat } from '../../packages/ui/src/conversation/shell/ChatTranscript'
+import {
+  shouldForceGroupedActivityFlat,
+  shouldInlineGroupedActivityMessage,
+} from '../../packages/ui/src/conversation/shell/ChatTranscript'
 
 function toolBlock(toolCallId: string, options: Partial<ToolCallBlock> = {}): ToolCallBlock {
   return {
@@ -121,6 +124,34 @@ void describe('live chat activity presentation', () => {
   void test('restores grouped pre-guidance disclosures after the owning run completes', () => {
     assert.equal(shouldForceGroupedActivityFlat(true), true)
     assert.equal(shouldForceGroupedActivityFlat(false), false)
+
+    assert.equal(
+      shouldInlineGroupedActivityMessage(
+        {
+          id: 'activity-only',
+          role: 'assistant',
+          timestamp: 1,
+          blocks: [
+            { type: 'thinking', text: '检查。' },
+            toolBlock('tool-inline'),
+          ],
+        },
+        false
+      ),
+      true
+    )
+    assert.equal(
+      shouldInlineGroupedActivityMessage(
+        {
+          id: 'activity-with-text',
+          role: 'assistant',
+          timestamp: 1,
+          blocks: [{ type: 'text', text: '阶段汇报。' }],
+        },
+        false
+      ),
+      false
+    )
   })
 
   void test('only folds grouped guidance activity after the owning run is processed', () => {

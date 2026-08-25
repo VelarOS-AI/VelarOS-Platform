@@ -28,14 +28,16 @@ function appendTurnPresentations(
     return
   }
 
+  const firstGuidanceIndex = turnMessages.findIndex(isRunGuidanceMessage)
   let anchorIndex = -1
-  for (let index = turnMessages.length - 1; index >= 0; index -= 1) {
+  for (let index = firstGuidanceIndex - 1; index >= 0; index -= 1) {
     if (turnMessages[index]?.role === 'assistant') {
       anchorIndex = index
       break
     }
   }
 
+  // 锚定引导前已经挂载的 assistant，插入引导时不换宿主、不重置其内部折叠状态。
   // 引导刚写入、但本轮尚未产出任何 assistant 消息时没有可承载活动的气泡，保持原顺序。
   if (anchorIndex < 0) {
     turnMessages.forEach((message) => {

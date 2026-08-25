@@ -12,6 +12,7 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
 import { useConversationI18n } from '../i18n'
 import {
+  AutoScrollSuspendEventName,
   findNextSectionTop,
   findPreviousSectionTop,
   resolveSectionNavigationTargetTop,
@@ -183,10 +184,11 @@ function ChatScrollNavigatorInner({
   }, [refreshState, scrollRef, scheduleRefresh])
 
   const scrollToTop = useCallback((): void => {
-    if (transcriptNavigationRef?.current?.scrollToEdge('top')) return
-
     const scrollEl = scrollRef.current
     if (!scrollEl) return
+
+    scrollEl.dispatchEvent(new Event(AutoScrollSuspendEventName, { bubbles: true }))
+    if (transcriptNavigationRef?.current?.scrollToEdge('top')) return
 
     // 回顶瞬时跳转：平滑滚动动画无收益，直接到位。
     scrollEl.scrollTo({ top: 0, behavior: 'auto' })
@@ -209,6 +211,10 @@ function ChatScrollNavigatorInner({
     (direction: 'previous' | 'next'): void => {
       const scrollEl = scrollRef.current
       if (!scrollEl) return
+
+      if (direction === 'previous') {
+        scrollEl.dispatchEvent(new Event(AutoScrollSuspendEventName, { bubbles: true }))
+      }
 
       if (transcriptNavigationRef?.current?.scrollToSection(direction)) return
 

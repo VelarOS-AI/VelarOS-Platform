@@ -2,6 +2,8 @@
  * 会话滚动行为纯策略（自动跟随 / 分节导航 / 滚动恢复）。零耦合叶子,随会话渲染件入包;
  * 宿主 `@utils/dom/scrollBehavior.utils` 另有同源副本(pass-4 shell 迁移后统一)。
  */
+import { isFiniteNumber } from '#internal/runtime'
+
 export interface SectionMetric {
   top: number
 }
@@ -168,16 +170,43 @@ export function resolveAutoScrollPinnedAfterScroll({
 // scrollTop 上移误判成「用户上滑」而停跟随（那正是「工具卡插入后不再自动跟随」的根因）。
 export function shouldAutoScrollAfterContentResize({
   pinned,
+  previousScrollTop,
+  currentScrollTop,
+  isNearBottom,
+  movementTolerancePx = 0,
 }: AutoScrollAfterContentResizeInput): boolean {
-  return pinned
+  if (!pinned) return false
+  if (isNearBottom) return true
+  if (!isFiniteNumber(previousScrollTop) || !isFiniteNumber(currentScrollTop)) return true
+
+  return currentScrollTop >= previousScrollTop - Math.max(0, movementTolerancePx)
 }
 
-export function shouldStartImmediateAutoScroll({ pinned }: ImmediateAutoScrollInput): boolean {
-  return pinned
+export function shouldStartImmediateAutoScroll({
+  pinned,
+  previousScrollTop,
+  currentScrollTop,
+  isNearBottom,
+  movementTolerancePx = 0,
+}: ImmediateAutoScrollInput): boolean {
+  if (!pinned) return false
+  if (isNearBottom) return true
+  if (!isFiniteNumber(previousScrollTop) || !isFiniteNumber(currentScrollTop)) return true
+
+  return currentScrollTop >= previousScrollTop - Math.max(0, movementTolerancePx)
 }
 
-export function shouldCommitScheduledAutoScroll({ pinned }: ScheduledAutoScrollInput): boolean {
-  return pinned
+export function shouldCommitScheduledAutoScroll({
+  pinned,
+  scheduledScrollTop,
+  currentScrollTop,
+  isNearBottom,
+  movementTolerancePx = 0,
+}: ScheduledAutoScrollInput): boolean {
+  if (!pinned) return false
+  if (isNearBottom) return true
+
+  return currentScrollTop >= scheduledScrollTop - Math.max(0, movementTolerancePx)
 }
 
 export function resolveRestoredScrollTop({

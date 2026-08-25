@@ -111,7 +111,7 @@ void describe('会话消息语义', () => {
     assert.equal(derived.latestAssistantMessage?.id, secondAssistant.id)
   })
 
-  void test('引导把同一运行的 assistant 片段挂到最后一条回复统一呈现', () => {
+  void test('引导把同一运行的后续片段挂到引导前 assistant，保持原组件身份', () => {
     const turn = message('turn', 'user', 'turn-input')
     const firstAssistant = message('assistant-1', 'assistant')
     const firstGuidance = message('guidance-1', 'user', 'run-guidance')
@@ -131,13 +131,13 @@ void describe('会话消息语义', () => {
 
     assert.deepEqual(
       presentations.map((presentation) => presentation.message.id),
-      ['turn', 'assistant-final']
+      ['turn', 'assistant-1']
     )
+    assert.deepEqual(presentations[1]?.activityLeadingMessages, [])
     assert.deepEqual(
-      presentations[1]?.activityLeadingMessages.map((entry) => entry.id),
-      ['assistant-1', 'guidance-1', 'reply', 'assistant-2', 'guidance-2']
+      presentations[1]?.activityTrailingMessages.map((entry) => entry.id),
+      ['guidance-1', 'reply', 'assistant-2', 'guidance-2', 'assistant-final']
     )
-    assert.deepEqual(presentations[1]?.activityTrailingMessages, [])
   })
 
   void test('新 assistant 片段到达前，引导留在当前活动尾部且不触发前文折叠', () => {
