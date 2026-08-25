@@ -265,7 +265,7 @@
       "domain": "ui",
       "directory": "packages/ui",
       "name": "@velaros-ai/ui",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
       "exportSubpaths": [
         ".",

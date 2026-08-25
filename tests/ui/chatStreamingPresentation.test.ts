@@ -72,7 +72,10 @@ void describe('live chat activity presentation', () => {
       ),
       'utf8'
     )
-    assert.match(source, /autoCollapseAfterPaint\s*&&\s*!hasRunningTool/u)
+    assert.match(
+      source,
+      /!!\(autoCollapseAfterPaint\s*\|\|\s*autoCollapseOnMount\)\s*&&\s*!hasRunningTool/u
+    )
     assert.doesNotMatch(source, /useRef\(\s*autoCollapseAfterPaint/u)
   })
 
