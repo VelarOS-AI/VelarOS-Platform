@@ -77,6 +77,7 @@ void describe('Tier0 是稳定前缀的全部内容', () => {
     assert.match(brandVoice.text, /开始执行前用一句话回应理解和当前行动/u)
     assert.match(brandVoice.text, /用户在运行中追加引导时，先简短确认如何纳入/u)
     assert.match(brandVoice.text, /每完成一个有意义的阶段/u)
+    assert.match(brandVoice.text, /连续执行不得始终只有思考和工具调用/u)
     assert.match(brandVoice.text, /用户可见的过程消息只承载新增信息/u)
     assert.match(brandVoice.text, /简单任务直接完成/u)
   })
@@ -89,6 +90,8 @@ void describe('Tier0 是稳定前缀的全部内容', () => {
     assert.match(brandVoice.text, /提示词与产物遵循当前状态原则/u)
     assert.match(brandVoice.text, /用户撤销、纠正或排除某项后，直接按剩余目标重建/u)
     assert.match(brandVoice.text, /禁止用“未采用、已删除、不属于”等反向说明继续保留该项/u)
+    assert.match(brandVoice.text, /同步清理被排除内容关联的注释、占位、分支和解释/u)
+    assert.match(brandVoice.text, /不为缺席项添加说明/u)
     assert.match(brandVoice.text, /安全边界、兼容行为、迁移说明或故障诊断确有需要时除外/u)
   })
 

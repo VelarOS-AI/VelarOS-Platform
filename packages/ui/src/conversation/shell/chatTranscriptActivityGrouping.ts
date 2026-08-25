@@ -8,11 +8,17 @@ export interface ChatTranscriptMessagePresentation {
   activityTrailingMessages: ChatMessage[]
 }
 
+export interface ChatTranscriptMessagePresentationOptions {
+  /** 正常完成的最终 assistant 承担整轮唯一的「已处理」边界。 */
+  isCompletedAssistant?: (message: ChatMessage) => boolean
+}
+
 function appendTurnPresentations(
   messages: readonly ChatMessage[],
   startIndex: number,
   endIndex: number,
-  presentations: ChatTranscriptMessagePresentation[]
+  presentations: ChatTranscriptMessagePresentation[],
+  options: ChatTranscriptMessagePresentationOptions
 ): void {
   const turnMessages = messages.slice(startIndex, endIndex)
   const hasGuidance = turnMessages.some(isRunGuidanceMessage)
@@ -29,15 +35,21 @@ function appendTurnPresentations(
   }
 
   const firstGuidanceIndex = turnMessages.findIndex(isRunGuidanceMessage)
-  let anchorIndex = -1
+  let activeAnchorIndex = -1
   for (let index = firstGuidanceIndex - 1; index >= 0; index -= 1) {
     if (turnMessages[index]?.role === 'assistant') {
-      anchorIndex = index
+      activeAnchorIndex = index
       break
     }
   }
 
-  // 锚定引导前已经挂载的 assistant，插入引导时不换宿主、不重置其内部折叠状态。
+  const completedAnchorIndex = turnMessages.findLastIndex(
+    (message) => message.role === 'assistant' && !!options.isCompletedAssistant?.(message)
+  )
+  const anchorIndex = completedAnchorIndex >= 0 ? completedAnchorIndex : activeAnchorIndex
+
+  // 运行中锚定引导前已经挂载的 assistant，插入引导时不换宿主、不重置内部状态；只有正常
+  // 完成后才切到最终 assistant，让它把总结留在外面，并承载整轮唯一的「已处理」。
   // 引导刚写入、但本轮尚未产出任何 assistant 消息时没有可承载活动的气泡，保持原顺序。
   if (anchorIndex < 0) {
     turnMessages.forEach((message) => {
@@ -83,7 +95,8 @@ function appendTurnPresentations(
  * 的渲染归属，使运行中保持平铺，完成后由最后一条 assistant 消息统一收进「已处理」。
  */
 export function buildChatTranscriptMessagePresentations(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessage[],
+  options: ChatTranscriptMessagePresentationOptions = {}
 ): ChatTranscriptMessagePresentation[] {
   if (isEmpty(messages)) return []
 
@@ -94,10 +107,10 @@ export function buildChatTranscriptMessagePresentations(
     const message = messages[index]
     if (!message || !isConversationTurnInputMessage(message)) continue
 
-    appendTurnPresentations(messages, sectionStartIndex, index, presentations)
+    appendTurnPresentations(messages, sectionStartIndex, index, presentations, options)
     sectionStartIndex = index
   }
 
-  appendTurnPresentations(messages, sectionStartIndex, messages.length, presentations)
+  appendTurnPresentations(messages, sectionStartIndex, messages.length, presentations, options)
   return presentations
 }

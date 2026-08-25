@@ -48,9 +48,9 @@ interface ChatTranscriptNavigationState {
   hasNextSection: boolean
 }
 
-/** 引导归组只在整轮运行中压平内部活动；完成态必须保留各块原有的折叠组件。 */
-export function shouldForceGroupedActivityFlat(groupedRunIsStreaming: boolean): boolean {
-  return groupedRunIsStreaming
+/** 同一轮归组后的子消息始终压平；折叠边界只由承载整轮的 assistant 生成一次。 */
+export function shouldForceGroupedActivityFlat(hasGroupedRunActivity: boolean): boolean {
+  return hasGroupedRunActivity
 }
 
 /** 完成态中只有纯内部活动消息可以参与跨消息横排；正文、引导和卡片维持整行。 */
@@ -164,8 +164,12 @@ function ChatTranscriptInner({
 }: ChatTranscriptProps): ReactElement {
   const slots = useConversationRenderSlots()
   const messagePresentations = useMemo(
-    () => buildChatTranscriptMessagePresentations(messages),
-    [messages]
+    () =>
+      buildChatTranscriptMessagePresentations(messages, {
+        isCompletedAssistant: (message) =>
+          !getIsStreaming?.(message) && getRunMarker?.(message)?.status === 'completed',
+      }),
+    [getIsStreaming, getRunMarker, messages]
   )
 
   useLayoutEffect(() => {
@@ -229,7 +233,9 @@ function ChatTranscriptInner({
       (marker, activityMessage) => toNullable(getRunMarker?.(activityMessage)) ?? marker,
       null
     )
-    const forceGroupedActivityFlat = shouldForceGroupedActivityFlat(groupedRunIsStreaming)
+    const forceGroupedActivityFlat = shouldForceGroupedActivityFlat(
+      !isEmpty(activityLeadingMessages) || !isEmpty(activityTrailingMessages)
+    )
     const groupedActivityLeadingElement = renderActivityMessages(
       activityLeadingMessages,
       forceGroupedActivityFlat

@@ -111,7 +111,7 @@ void describe('会话消息语义', () => {
     assert.equal(derived.latestAssistantMessage?.id, secondAssistant.id)
   })
 
-  void test('引导把同一运行的后续片段挂到引导前 assistant，保持原组件身份', () => {
+  void test('运行中把引导后的片段挂到引导前 assistant，保持原组件身份', () => {
     const turn = message('turn', 'user', 'turn-input')
     const firstAssistant = message('assistant-1', 'assistant')
     const firstGuidance = message('guidance-1', 'user', 'run-guidance')
@@ -138,6 +138,27 @@ void describe('会话消息语义', () => {
       presentations[1]?.activityTrailingMessages.map((entry) => entry.id),
       ['guidance-1', 'reply', 'assistant-2', 'guidance-2', 'assistant-final']
     )
+  })
+
+  void test('正常完成后由最终 assistant 承载整轮活动和外部总结', () => {
+    const turn = message('turn', 'user', 'turn-input')
+    const firstAssistant = message('assistant-1', 'assistant')
+    const guidance = message('guidance', 'user', 'run-guidance')
+    const finalAssistant = message('assistant-final', 'assistant')
+    const presentations = buildChatTranscriptMessagePresentations(
+      [turn, firstAssistant, guidance, finalAssistant],
+      { isCompletedAssistant: (entry) => entry.id === finalAssistant.id }
+    )
+
+    assert.deepEqual(
+      presentations.map((presentation) => presentation.message.id),
+      ['turn', 'assistant-final']
+    )
+    assert.deepEqual(
+      presentations[1]?.activityLeadingMessages.map((entry) => entry.id),
+      ['assistant-1', 'guidance']
+    )
+    assert.deepEqual(presentations[1]?.activityTrailingMessages, [])
   })
 
   void test('新 assistant 片段到达前，引导留在当前活动尾部且不触发前文折叠', () => {
@@ -210,7 +231,18 @@ function guidanceTranscriptMessages(): ChatMessage[] {
     message('guidance', 'user', 'run-guidance'),
     {
       ...message('assistant-after-guidance', 'assistant'),
-      blocks: [],
+      blocks: [
+        { type: 'thinking', text: '根据补充要求完成剩余检查。' },
+        {
+          type: 'tool-call',
+          toolCallId: 'tool-final',
+          toolName: 'system:read',
+          args: {},
+          result: { ok: true },
+          isRunning: false,
+        },
+        { type: 'text', text: '最终总结留在已处理外面。' },
+      ],
     },
   ]
 }
@@ -268,6 +300,7 @@ void test('旧会话运行完成后只留下一个已处理入口，并把引导
   assert.equal(markup.match(/>已处理</g)?.length, 1)
   assert.match(markup, /aria-expanded="false"/)
   assert.doesNotMatch(markup, /data-chat-message="guidance"/)
+  assert.match(markup, /最终总结留在已处理外面。/)
 })
 
 void test('运行内引导复用气泡视觉，但展示自己的标签和复制语义', () => {

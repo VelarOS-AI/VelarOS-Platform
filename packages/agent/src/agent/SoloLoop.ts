@@ -106,6 +106,10 @@ import {
   buildSoloToolSchemaTelemetry,
 } from './SoloLoopTelemetryBuilder'
 import { resolveSoloTurnModelRequestOptions } from './SoloModelRequestOptions'
+import {
+  advanceSoloProcessUpdateCadence,
+  createSoloProcessUpdateCadenceState,
+} from './SoloProcessUpdateCadence'
 import { prepareSoloRunPlanForTurn } from './SoloRunPlanPreparer'
 import { consumeSoloRuntimeGuidance } from './SoloRuntimeGuidance'
 import { runSoloToolSpaceBootstrapFallback } from './SoloToolSpaceBootstrapFallback'
@@ -481,6 +485,7 @@ class SoloStreamLoop<
     })
     // 工具参数流中断/非法的反应式自纠计数；一旦有工具调用成功即清零。
     let interruptedToolCallRecoveryAttempts = 0
+    let processUpdateCadence = createSoloProcessUpdateCadenceState()
     const finishingGateBlockTracker = createSoloFinishingGateBlockTracker()
     // 目标生命周期：整个 solo 执行共享一个实例，收尾门同轮 inspect→record 复用单次取数。
     const goalLifecycle = new SoloGoalLifecycle(args.toolContext.activeContext)
@@ -842,6 +847,13 @@ class SoloStreamLoop<
           if (toolUseContinuation.status === 'completed') {
             runScope?.end({ status: 'ok' })
             return loopFinish({ status: 'completed' })
+          }
+          const processUpdate = advanceSoloProcessUpdateCadence(processUpdateCadence, {
+            hasVisibleText: !!turnResult.hasVisibleText,
+          })
+          processUpdateCadence = processUpdate.state
+          if (processUpdate.reminder) {
+            args.history.push(createInternalFollowUpMessage(processUpdate.reminder))
           }
           return loopContinue()
         }

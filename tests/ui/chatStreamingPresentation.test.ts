@@ -121,7 +121,7 @@ void describe('live chat activity presentation', () => {
     )
   })
 
-  void test('restores grouped pre-guidance disclosures after the owning run completes', () => {
+  void test('keeps grouped child activity flat so the owning run creates one disclosure', () => {
     assert.equal(shouldForceGroupedActivityFlat(true), true)
     assert.equal(shouldForceGroupedActivityFlat(false), false)
 

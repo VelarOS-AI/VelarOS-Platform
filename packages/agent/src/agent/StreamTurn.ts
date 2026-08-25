@@ -7,7 +7,7 @@ import type {
   StreamAssistantRawPayload,
 } from '@velaros-ai/agent/protocol'
 import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
-import { isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -247,6 +247,8 @@ export interface ExecuteStreamTurnArgs<
 export interface StreamTurnResult {
   /** 本轮 assistant 是否产生过 tool call。 */
   hasToolUse: boolean
+  /** 本轮是否向用户输出过非空正文；reasoning 和 tool call 不计入。 */
+  hasVisibleText?: boolean
   /** 当前 provider 回合在派发任何工具副作用前为新运行时输入让路。 */
   interruptedByRuntimeInput?: boolean
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
@@ -690,6 +692,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
       })
       return {
         hasToolUse: interruptedByRuntimeInput ? false : turnState.hasToolUse,
+        hasVisibleText: !isBlank(turnState.accumulatedText),
         interruptedByRuntimeInput,
         inputTokens: toNullable(turnState.inputTokens),
         outputTokens: toNullable(turnState.outputTokens),
