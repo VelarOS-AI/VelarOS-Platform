@@ -88,28 +88,28 @@ function isToolActivityRendererLoaded(): boolean {
 }
 
 export function shouldInitiallyExpandToolActivityDisclosure({
-  autoCollapseOnMount,
+  autoCollapseAfterPaint,
   defaultExpanded,
   hasRunningTool,
 }: {
-  autoCollapseOnMount: boolean;
+  autoCollapseAfterPaint: boolean;
   defaultExpanded: boolean;
   hasRunningTool: boolean;
 }): boolean {
-  return autoCollapseOnMount || defaultExpanded || hasRunningTool;
+  return autoCollapseAfterPaint || defaultExpanded || hasRunningTool;
 }
 
 export function ToolActivityDisclosure({
   blocks,
   children,
-  autoCollapseOnMount = false,
+  autoCollapseAfterPaint = false,
   defaultExpanded = false,
   isRunning,
   label,
 }: {
   blocks?: ToolCallBlockType[];
   children: ReactNode | (() => ReactNode);
-  autoCollapseOnMount?: boolean;
+  autoCollapseAfterPaint?: boolean;
   defaultExpanded?: boolean;
   isRunning?: boolean;
   label?: string;
@@ -119,14 +119,12 @@ export function ToolActivityDisclosure({
   const activityBlocks = blocks ?? EmptyToolActivityBlocks;
   const hasRunningTool =
     isRunning ?? activityBlocks.some((block) => block.isRunning);
-  const shouldAutoCollapseAfterMountRef = useRef(
-    autoCollapseOnMount && !hasRunningTool,
-  );
-  const shouldAutoCollapseAfterMount = shouldAutoCollapseAfterMountRef.current;
-  // 刚结束流式的「已处理」组会以新容器挂载。先继承展开态，待浏览器至少绘制一帧后再
-  // 切到折叠态，CSS 才有真实的起止状态可用于播放收起动画。
+  const shouldAutoCollapseAfterPaint =
+    autoCollapseAfterPaint && !hasRunningTool;
+  // 完成信号可能在容器已经挂载后到达。信号保持实时，先呈现展开态，再在浏览器绘制后
+  // 切到折叠态，使原地完成和新容器挂载都能执行同一条自动收起路径。
   const shouldInitiallyExpand = shouldInitiallyExpandToolActivityDisclosure({
-    autoCollapseOnMount: shouldAutoCollapseAfterMount,
+    autoCollapseAfterPaint: shouldAutoCollapseAfterPaint,
     defaultExpanded,
     hasRunningTool,
   });
@@ -167,7 +165,7 @@ export function ToolActivityDisclosure({
   }, []);
 
   useEffect(() => {
-    if (!shouldAutoCollapseAfterMount) return;
+    if (!shouldAutoCollapseAfterPaint) return;
 
     let collapseFrame: ReturnType<typeof timers.nextFrame> | undefined;
     const paintedExpandedFrame = timers.nextFrame(
@@ -187,7 +185,7 @@ export function ToolActivityDisclosure({
       paintedExpandedFrame.cancel();
       collapseFrame?.cancel();
     };
-  }, [shouldAutoCollapseAfterMount, timers]);
+  }, [shouldAutoCollapseAfterPaint, timers]);
 
   useEffect(() => {
     if (contentRequested && contentIsLazy) {

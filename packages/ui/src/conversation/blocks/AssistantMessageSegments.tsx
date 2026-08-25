@@ -427,7 +427,7 @@ function AssistantMessageSegmentsInner({
       <ToolActivityDisclosure
         key={segment.key}
         blocks={segment.blocks}
-        autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
+        autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
       >
         {() => renderActivityGroupChildren()}
       </ToolActivityDisclosure>
@@ -476,7 +476,7 @@ function AssistantMessageSegmentsInner({
           <ToolActivityDisclosure
             key={`processed-activity:${key ?? renderedSegments.length}`}
             blocks={blocks}
-            autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
+            autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
             label={getProcessedActivityDisclosureLabel(
               blocks,
               locale,
@@ -602,7 +602,7 @@ function AssistantMessageSegmentsInner({
           <ToolActivityDisclosure
             key={`processed-activity:${firstProcessedKey}`}
             blocks={processedActivityBlocks}
-            autoCollapseOnMount={shouldAutoCollapseProcessedActivity}
+            autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
             label={getProcessedActivityDisclosureLabel(
               processedActivityBlocks,
               locale,

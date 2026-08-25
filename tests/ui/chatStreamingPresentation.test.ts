@@ -15,6 +15,7 @@ import {
   resolveStreamingTextFadeBaseline,
   shouldRenderThinkingAsFlat,
 } from '../../packages/ui/src/conversation/blocks/MessageMarkdownBlocks'
+import { shouldInitiallyExpandToolActivityDisclosure } from '../../packages/ui/src/conversation/blocks/MessageToolActivity'
 import {
   getToolActivityMotionRevision,
   resolveToolActivityMotionKind,
@@ -52,6 +53,29 @@ function activitySegment(block: ToolCallBlock): MessageRenderSegment {
 }
 
 void describe('live chat activity presentation', () => {
+  void test('keeps the completion-collapse request live after the disclosure has mounted', () => {
+    assert.equal(
+      shouldInitiallyExpandToolActivityDisclosure({
+        autoCollapseAfterPaint: true,
+        defaultExpanded: false,
+        hasRunningTool: false,
+      }),
+      true
+    )
+
+    const source = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../packages/ui/src/conversation/blocks/MessageToolActivity.tsx',
+          import.meta.url
+        )
+      ),
+      'utf8'
+    )
+    assert.match(source, /autoCollapseAfterPaint\s*&&\s*!hasRunningTool/u)
+    assert.doesNotMatch(source, /useRef\(\s*autoCollapseAfterPaint/u)
+  })
+
   void test('keeps closed consecutive disclosures inline while exit content is still mounted', () => {
     const stylesheet = readFileSync(
       fileURLToPath(

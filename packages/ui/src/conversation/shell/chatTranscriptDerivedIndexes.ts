@@ -20,6 +20,24 @@ export interface ChatTranscriptDerivedIndexes {
   activeAwaitingInputMessageId: Nullable<string>
 }
 
+export function resolveActiveTranscriptAssistantMessageId({
+  isRunActive,
+  streamingAssistantMessageId,
+  latestAssistantMessageId,
+  latestAssistantRunMarker,
+}: {
+  isRunActive: boolean
+  streamingAssistantMessageId?: LooseOptional<string>
+  latestAssistantMessageId?: LooseOptional<string>
+  latestAssistantRunMarker?: LooseOptional<Pick<ConversationMessageRunMarker, 'status'>>
+}): Nullable<string> {
+  if (!isRunActive) return null
+  if (streamingAssistantMessageId) return streamingAssistantMessageId
+  if (!latestAssistantMessageId || latestAssistantRunMarker?.status === 'completed') return null
+
+  return latestAssistantMessageId
+}
+
 export function buildChatTranscriptDerivedIndexes({
   messages,
   messageRunMarkerMap,

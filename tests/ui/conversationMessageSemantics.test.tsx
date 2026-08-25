@@ -21,7 +21,10 @@ import {
 } from '../../packages/ui/src/conversation/i18n'
 import { ChatTranscript } from '../../packages/ui/src/conversation/shell/ChatTranscript'
 import { buildChatTranscriptMessagePresentations } from '../../packages/ui/src/conversation/shell/chatTranscriptActivityGrouping'
-import { buildChatTranscriptDerivedIndexes } from '../../packages/ui/src/conversation/shell/chatTranscriptDerivedIndexes'
+import {
+  buildChatTranscriptDerivedIndexes,
+  resolveActiveTranscriptAssistantMessageId,
+} from '../../packages/ui/src/conversation/shell/chatTranscriptDerivedIndexes'
 import {
   computeChatTranscriptSectionStarts,
   resolveChatTranscriptWindowMessages,
@@ -109,6 +112,33 @@ void describe('会话消息语义', () => {
     assert.equal(derived.assistantQuestionMap.get(firstAssistant.id), turn)
     assert.equal(derived.assistantQuestionMap.get(secondAssistant.id), turn)
     assert.equal(derived.latestAssistantMessage?.id, secondAssistant.id)
+  })
+
+  void test('引导开始后不会把上一条已完成 assistant 重新标记为流式', () => {
+    assert.equal(
+      resolveActiveTranscriptAssistantMessageId({
+        isRunActive: true,
+        latestAssistantMessageId: 'assistant-completed',
+        latestAssistantRunMarker: { status: 'completed' },
+      }),
+      null
+    )
+    assert.equal(
+      resolveActiveTranscriptAssistantMessageId({
+        isRunActive: true,
+        streamingAssistantMessageId: 'assistant-current',
+        latestAssistantMessageId: 'assistant-completed',
+        latestAssistantRunMarker: { status: 'completed' },
+      }),
+      'assistant-current'
+    )
+    assert.equal(
+      resolveActiveTranscriptAssistantMessageId({
+        isRunActive: true,
+        latestAssistantMessageId: 'assistant-current',
+      }),
+      'assistant-current'
+    )
   })
 
   void test('运行中把引导后的片段挂到引导前 assistant，保持原组件身份', () => {

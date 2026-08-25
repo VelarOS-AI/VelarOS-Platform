@@ -39,6 +39,7 @@ import { getPlanToolBlockSignature, isPlanToolBlockComplete } from '../tool-rend
 import { isChatInteractionRunActive, resolveChatInteractionState } from './chatInteractionState'
 import { ChatScrollNavigator } from './ChatScrollNavigator'
 import { ChatTranscript, type ChatTranscriptNavigationHandle } from './ChatTranscript'
+import { resolveActiveTranscriptAssistantMessageId } from './chatTranscriptDerivedIndexes'
 import { useConversationActionPort } from './conversationActionPort'
 import { useAwaitingConfirmationUserActionCards } from './useAwaitingConfirmationUserActionCards'
 import { useChatConversationScroll } from './useChatConversationScroll'
@@ -370,9 +371,14 @@ export function ChatConversationPane({
     shouldRenderAwaitingInputCard,
   })
   const isTranscriptRunActive = isRunActive
-  const activeAssistantMessageId = isTranscriptRunActive
-    ? (streamingAssistantMessageId ?? latestAssistantMessageId)
-    : null
+  const activeAssistantMessageId = resolveActiveTranscriptAssistantMessageId({
+    isRunActive: isTranscriptRunActive,
+    streamingAssistantMessageId,
+    latestAssistantMessageId,
+    latestAssistantRunMarker: latestAssistantMessageId
+      ? messageRunMarkerMap.get(latestAssistantMessageId)
+      : null,
+  })
   const transcriptNavigationRef = useRef<Nullable<ChatTranscriptNavigationHandle>>(null)
   const { windowMessages, isWindowAtLoadedTop } = useChatTranscriptWindow({
     messages: visibleMessages,
