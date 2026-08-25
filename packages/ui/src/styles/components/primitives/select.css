@@ -8,7 +8,11 @@
   gap: var(--ui-space-control-y);
   font-weight: var(--font-weight-medium);
   color: var(--foreground);
-  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
   outline-style: none;
   font-size: var(--ui-font-body);
   width: fit-content;
@@ -28,7 +32,7 @@
   background: var(--control-themed-hover-bg);
 }
 
-.velar-select-variant-default[data-state='open'] {
+.velar-select-variant-default[data-state="open"] {
   background: var(--control-themed-open-bg);
   border-color: transparent;
 }
@@ -43,7 +47,8 @@
   box-shadow: none;
 }
 
-.velar-select-variant-default[data-disabled], .velar-select-variant-bare[data-disabled] {
+.velar-select-variant-default[data-disabled],
+.velar-select-variant-bare[data-disabled] {
   background: var(--control-themed-disabled-bg);
 }
 
@@ -57,19 +62,28 @@
   box-shadow: none;
 }
 
-.velar-select-variant-bare:hover, .velar-select-variant-bare[data-state='open'] {
+.velar-select-variant-bare:hover,
+.velar-select-variant-bare[data-state="open"] {
   background: rgba(255, 255, 255, 0.92);
   border-color: transparent;
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04), 0 10px 24px rgba(15, 15, 15, 0.1);
+  box-shadow:
+    0 1px 2px rgba(15, 15, 15, 0.04),
+    0 10px 24px rgba(15, 15, 15, 0.1);
 }
 
 .velar-select-variant-bare:focus-visible {
   background: rgba(255, 255, 255, 0.92);
   border-color: transparent;
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04), 0 10px 24px rgba(15, 15, 15, 0.1), 0 0 0 4px rgba(15, 15, 15, 0.05);
+  box-shadow:
+    0 1px 2px rgba(15, 15, 15, 0.04),
+    0 10px 24px rgba(15, 15, 15, 0.1),
+    0 0 0 4px rgba(15, 15, 15, 0.05);
 }
 
-.velar-select-variant-default[data-disabled]:hover, .velar-select-variant-bare[data-disabled]:hover, .velar-select-variant-bare[data-disabled]:focus-visible, .velar-select-variant-bare[data-disabled][data-state='open'] {
+.velar-select-variant-default[data-disabled]:hover,
+.velar-select-variant-bare[data-disabled]:hover,
+.velar-select-variant-bare[data-disabled]:focus-visible,
+.velar-select-variant-bare[data-disabled][data-state="open"] {
   border-color: transparent;
   background: var(--control-themed-disabled-bg);
   box-shadow: none;
@@ -111,7 +125,7 @@
   color: var(--muted-foreground);
 }
 
-.velar-select-trigger[data-tone='danger'] .velar-select-trigger-content {
+.velar-select-trigger[data-tone="danger"] .velar-select-trigger-content {
   color: var(--destructive);
 }
 
@@ -143,7 +157,7 @@
   animation: rise-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.velar-select-content[data-size='xs'] {
+.velar-select-content[data-size="xs"] {
   padding: 4px;
   border-radius: var(--ui-radius-control);
   box-shadow: 0 18px 42px rgba(15, 15, 15, 0.12);
@@ -158,7 +172,7 @@
   overscroll-behavior: contain;
 }
 
-.velar-select-content[data-size='xs'] .velar-select-viewport {
+.velar-select-content[data-size="xs"] .velar-select-viewport {
   gap: 2px;
 }
 
@@ -172,7 +186,11 @@
   justify-content: space-between;
   gap: var(--ui-space-2);
   color: var(--foreground);
-  transition: color var(--ui-transition-fast), background-color var(--ui-transition-fast), border-color var(--ui-transition-fast), opacity var(--ui-transition-fast);
+  transition:
+    color var(--ui-transition-fast),
+    background-color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    opacity var(--ui-transition-fast);
   outline-style: none;
   border-radius: var(--ui-radius-control-sm);
   padding-inline: var(--ui-space-control-x-sm);
@@ -180,7 +198,8 @@
   font-size: var(--ui-font-body);
 }
 
-.velar-select-item:hover, .velar-select-item[data-highlighted] {
+.velar-select-item:hover,
+.velar-select-item[data-highlighted] {
   background: var(--control-gray-hover-bg);
 }
 
@@ -189,7 +208,7 @@
   opacity: 0.45;
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item {
+.velar-select-content[data-size="xs"] .velar-select-item {
   min-height: 30px;
   padding-inline: 10px;
   padding-block: 5px;
@@ -203,7 +222,7 @@
   gap: var(--ui-space-2);
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-content {
+.velar-select-content[data-size="xs"] .velar-select-item-content {
   gap: 7px;
 }
 
@@ -215,12 +234,12 @@
   color: var(--foreground);
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-icon img {
+.velar-select-content[data-size="xs"] .velar-select-item-icon img {
   width: 16px;
   height: 16px;
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-icon svg {
+.velar-select-content[data-size="xs"] .velar-select-item-icon svg {
   width: 14px;
   height: 14px;
 }
@@ -233,7 +252,7 @@
   gap: 6px;
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-meta {
+.velar-select-content[data-size="xs"] .velar-select-item-meta {
   gap: 4px;
 }
 
@@ -251,7 +270,7 @@
   line-height: 1.45;
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-description {
+.velar-select-content[data-size="xs"] .velar-select-item-description {
   font-size: var(--ui-font-xs);
   line-height: 1.35;
 }
@@ -262,12 +281,38 @@
   color: var(--foreground);
 }
 
-.velar-select-item[data-tone='danger'] .velar-select-item-label,
-.velar-select-item[data-tone='danger'] .velar-select-item-indicator {
+.velar-select-item-help {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground-tertiary);
+  cursor: help;
+}
+
+.velar-select-item-help:hover,
+.velar-select-item-help:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--foreground-secondary);
+}
+
+.velar-select-item-help-tip {
+  display: block;
+  max-width: 22rem;
+  white-space: pre-line;
+  line-height: var(--ui-line-normal);
+}
+
+.velar-select-item[data-tone="danger"] .velar-select-item-label,
+.velar-select-item[data-tone="danger"] .velar-select-item-indicator {
   color: var(--destructive);
 }
 
-.velar-select-content[data-size='xs'] .velar-select-item-indicator svg {
+.velar-select-content[data-size="xs"] .velar-select-item-indicator svg {
   width: 14px;
   height: 14px;
 }

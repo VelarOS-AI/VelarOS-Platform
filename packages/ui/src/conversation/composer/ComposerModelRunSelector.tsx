@@ -6,136 +6,160 @@ import {
   useEffect,
   useMemo,
   useState,
-} from 'react'
-import { CaretDownIcon, CaretRightIcon, QuestionIcon } from '@phosphor-icons/react'
+} from "react";
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  QuestionIcon,
+} from "@phosphor-icons/react";
 
-import { cn } from '@velaros-ai/ui/lib/cn'
-import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
-import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
+import { cn } from "@velaros-ai/ui/lib/cn";
+import { Button } from "@velaros-ai/ui/primitives/buttons/Button";
+import { Text } from "@velaros-ai/ui/primitives/display/Text";
+import { Switch } from "@velaros-ai/ui/primitives/forms/Switch";
+import { BubbleTooltip } from "@velaros-ai/ui/primitives/overlays/Tooltip";
 import {
   BusinessCascadingMenu,
   BusinessCascadingMenuItem,
   BusinessCascadingSubmenuSection,
-} from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
+} from "@velaros-ai/ui/product/menus/BusinessCascadingMenu";
 
-import type { ConversationMessageKey as MessageKey } from '../i18n'
+import type { ConversationMessageKey as MessageKey } from "../i18n";
 
+import { ComposerMenuHelpIcon } from "./addMenu/ComposerMenuItemChrome";
 import type {
   ChatComposerModelRunSummary,
   ChatComposerModelSelectorControl,
   ChatComposerProviderModelSelectOption,
   ChatComposerReasoningControl,
-} from './ChatComposer'
-import type { ModelSelectOption } from './chatInputTypes'
+} from "./ChatComposer";
+import type { ModelSelectOption } from "./chatInputTypes";
 import type {
   ChatInputPureChatControl,
   ChatInputRunProfileControl,
   ChatInputThinkingDepthControl,
   ChatInputThinkingVisibilityControl,
-} from './chatInputTypes'
+} from "./chatInputTypes";
 import {
   type ChatComposerCapabilityControl,
   ComposerCapabilityChoiceMenuItems,
   ComposerCapabilityChoiceSubmenu,
   ComposerCapabilityControls,
   findComposerCapabilityChoiceBySubmenuId,
-} from './ComposerCapabilityControls'
+} from "./ComposerCapabilityControls";
 import {
   dispatchOnboardingComposerModelMenuOpened,
   OnboardingCloseComposerMenusEventName,
-} from './composerHostEvents'
-import { ComposerTierSlider } from './ComposerTierSlider'
-import { useConversationComposerPort } from './conversationComposerPort'
+} from "./composerHostEvents";
+import { ComposerTierSlider } from "./ComposerTierSlider";
+import { useConversationComposerPort } from "./conversationComposerPort";
 
-import styles from './ChatInput.module.css'
+import styles from "./ChatInput.module.css";
 
-import type { RunProfileSelectionId } from '#contracts'
-import type { ReasoningLevel } from '#contracts'
-import { first, isEmpty,toNullable } from '#internal/runtime'
+import type { RunProfileSelectionId } from "#contracts";
+import type { ReasoningLevel } from "#contracts";
+import { first, isEmpty, toNullable } from "#internal/runtime";
 
 interface ComposerRunProfileOption {
-  value: RunProfileSelectionId
-  labelKey: MessageKey
+  value: RunProfileSelectionId;
+  labelKey: MessageKey;
 }
 
 interface ComposerThinkingDepthOption {
-  value: ReasoningLevel
-  labelKey: MessageKey
+  value: ReasoningLevel;
+  labelKey: MessageKey;
 }
 
 export interface ComposerModelRunSelectorProps {
-  t: (key: MessageKey) => string
-  modelSelector?: ChatComposerModelSelectorControl
+  t: (key: MessageKey) => string;
+  modelSelector?: ChatComposerModelSelectorControl;
   /** 摘要按钮文案覆盖（宿主给的如实摘要优先于包内回落，见 ChatComposerModelRunSummary）。 */
-  modelRunSummary?: ChatComposerModelRunSummary
-  reasoning?: ChatComposerReasoningControl
-  runProfile?: ChatInputRunProfileControl
-  thinkingDepth?: ChatInputThinkingDepthControl
-  thinkingVisibility?: ChatInputThinkingVisibilityControl
-  pureChat?: ChatInputPureChatControl
-  capabilityControls?: ChatComposerCapabilityControl[]
-  density?: 'default' | 'compact'
+  modelRunSummary?: ChatComposerModelRunSummary;
+  reasoning?: ChatComposerReasoningControl;
+  runProfile?: ChatInputRunProfileControl;
+  thinkingDepth?: ChatInputThinkingDepthControl;
+  thinkingVisibility?: ChatInputThinkingVisibilityControl;
+  pureChat?: ChatInputPureChatControl;
+  capabilityControls?: ChatComposerCapabilityControl[];
+  density?: "default" | "compact";
 }
 
 const RunProfileOptions: ComposerRunProfileOption[] = [
-  { value: 'compact', labelKey: 'chat.composerRunProfile_compact' },
-  { value: 'balanced', labelKey: 'chat.composerRunProfile_balanced' },
-  { value: 'expanded', labelKey: 'chat.composerRunProfile_expanded' },
-]
+  { value: "compact", labelKey: "chat.composerRunProfile_compact" },
+  { value: "balanced", labelKey: "chat.composerRunProfile_balanced" },
+  { value: "expanded", labelKey: "chat.composerRunProfile_expanded" },
+];
 
 const ThinkingDepthOptions: ComposerThinkingDepthOption[] = [
-  { value: 'low', labelKey: 'chat.composerThinkingDepth_low' },
-  { value: 'medium', labelKey: 'chat.composerThinkingDepth_medium' },
-  { value: 'high', labelKey: 'chat.composerThinkingDepth_high' },
-  { value: 'ultra', labelKey: 'chat.composerThinkingDepth_ultra' },
-]
+  { value: "low", labelKey: "chat.composerThinkingDepth_low" },
+  { value: "medium", labelKey: "chat.composerThinkingDepth_medium" },
+  { value: "high", labelKey: "chat.composerThinkingDepth_high" },
+  { value: "ultra", labelKey: "chat.composerThinkingDepth_ultra" },
+];
 
 const LegacyThinkingDepthOptions: ComposerThinkingDepthOption[] = [
-  { value: 'off', labelKey: 'chat.composerThinkingDepth_off' },
+  { value: "off", labelKey: "chat.composerThinkingDepth_off" },
   ...ThinkingDepthOptions,
-]
+];
 
 function getSelectedModelLabel(
   providerOption: Nullable<ChatComposerProviderModelSelectOption>,
-  model: string
+  model: string,
 ): string {
-  const selectedModel = providerOption?.models.find((option) => option.value === model)
-  return selectedModel?.label ?? model
+  const selectedModel = providerOption?.models.find(
+    (option) => option.value === model,
+  );
+  return selectedModel?.label ?? model;
 }
 
 function getProviderModelDisplayLabel(
   providerOption: ChatComposerProviderModelSelectOption,
   visibleProvider: Nullable<ChatComposerProviderModelSelectOption>,
-  selectedModel: string
+  selectedModel: string,
 ): string {
-  const model = resolveVisibleProviderModel(providerOption, visibleProvider, selectedModel)
+  const model = resolveVisibleProviderModel(
+    providerOption,
+    visibleProvider,
+    selectedModel,
+  );
 
-  return getSelectedModelLabel(providerOption, model)
+  return getSelectedModelLabel(providerOption, model);
 }
 
 function resolveVisibleProviderModel(
   providerOption: ChatComposerProviderModelSelectOption,
   visibleProvider: Nullable<ChatComposerProviderModelSelectOption>,
-  selectedModel: string
+  selectedModel: string,
 ): string {
   const candidate =
     visibleProvider?.value === providerOption.value
       ? selectedModel.trim() || providerOption.defaultModel
-      : providerOption.defaultModel
+      : providerOption.defaultModel;
 
-  if (providerOption.models.some((option) => option.value === candidate)) return candidate
+  if (providerOption.models.some((option) => option.value === candidate))
+    return candidate;
 
-  return providerOption.defaultModel || first(providerOption.models)?.value || candidate
+  return (
+    providerOption.defaultModel ||
+    first(providerOption.models)?.value ||
+    candidate
+  );
 }
 
-function MenuSectionHeader({ label, hint }: { label: string; hint: string }): ReactElement {
+function MenuSectionHeader({
+  label,
+  hint,
+}: {
+  label: string;
+  hint: string;
+}): ReactElement {
   return (
     <div className={styles.composerModelRunMenuHeaderRow}>
       <Text className={styles.composerModelRunMenuHeader}>{label}</Text>
       <BubbleTooltip
-        content={<span className={styles.composerModelRunMenuHelpTip}>{hint}</span>}
+        content={
+          <span className={styles.composerModelRunMenuHelpTip}>{hint}</span>
+        }
         side="top"
         align="end"
       >
@@ -144,7 +168,7 @@ function MenuSectionHeader({ label, hint }: { label: string; hint: string }): Re
         </span>
       </BubbleTooltip>
     </div>
-  )
+  );
 }
 
 function ComposerModelRunSelectorImpl({
@@ -157,34 +181,41 @@ function ComposerModelRunSelectorImpl({
   thinkingVisibility,
   pureChat,
   capabilityControls = [],
-  density = 'default',
+  density = "default",
 }: ComposerModelRunSelectorProps): ReactElement {
-  const composerPort = useConversationComposerPort()
-  const [open, setOpen] = useState(false)
+  const composerPort = useConversationComposerPort();
+  const [open, setOpen] = useState(false);
   // 展开中的子菜单 —— **不只是 provider**：闭集档（外部引擎的审批档）也走子菜单，与 provider
   // 共用这一格状态（级联菜单同时只开一层）。两者的 id 靠 `composerCapabilityChoiceSubmenuId`
   // 的前缀区分。
-  const [activeSubmenuId, setActiveSubmenuId] = useState<Nullable<string>>(null)
-  const isCompact = density === 'compact'
+  const [activeSubmenuId, setActiveSubmenuId] =
+    useState<Nullable<string>>(null);
+  const isCompact = density === "compact";
   const selectedProvider = useMemo(
     () =>
       toNullable(
-        modelSelector?.providers.find((option) => option.value === modelSelector.provider)
+        modelSelector?.providers.find(
+          (option) => option.value === modelSelector.provider,
+        ),
       ),
-    [modelSelector?.provider, modelSelector?.providers]
-  )
-  const fallbackProvider = toNullable(modelSelector?.providers[0])
-  const visibleProvider = selectedProvider ?? fallbackProvider
+    [modelSelector?.provider, modelSelector?.providers],
+  );
+  const fallbackProvider = toNullable(modelSelector?.providers[0]);
+  const visibleProvider = selectedProvider ?? fallbackProvider;
   const activeProviderOption = toNullable(
-    modelSelector?.providers.find((option) => option.value === activeSubmenuId)
-  )
+    modelSelector?.providers.find((option) => option.value === activeSubmenuId),
+  );
   const visibleModel =
     visibleProvider && modelSelector
-      ? resolveVisibleProviderModel(visibleProvider, visibleProvider, modelSelector.model)
-      : ''
+      ? resolveVisibleProviderModel(
+          visibleProvider,
+          visibleProvider,
+          modelSelector.model,
+        )
+      : "";
   const selectedModelLabel = modelSelector
     ? getSelectedModelLabel(visibleProvider, visibleModel)
-    : t('chat.selectModel')
+    : t("chat.selectModel");
   // 宿主给的摘要优先，且**两格一起接管**：没有模型目录时包内回落的「选择模型」是一句做不到的
   // 承诺（用户点开是空菜单），而两格各自回落时，宿主根本无从表达「这两个轴现在是同一件事」——
   // 真机上模型格与推理档格双双处于「跟随引擎设置」，包内各画各的，按钮就渲染成
@@ -193,61 +224,70 @@ function ComposerModelRunSelectorImpl({
     modelRunSummary?.primaryLabel ??
     (modelSelector && visibleProvider
       ? `${visibleProvider.label} / ${selectedModelLabel}`
-      : selectedModelLabel)
+      : selectedModelLabel);
   const visibleRunProfileValue =
-    runProfile?.value === 'expanded' && !composerPort.experimentalFeaturesEnabled
-      ? 'balanced'
-      : runProfile?.value
+    runProfile?.value === "expanded" &&
+    !composerPort.experimentalFeaturesEnabled
+      ? "balanced"
+      : runProfile?.value;
   const visibleRunProfileOptions = composerPort.experimentalFeaturesEnabled
     ? RunProfileOptions
-    : RunProfileOptions.filter((option) => option.value !== 'expanded')
+    : RunProfileOptions.filter((option) => option.value !== "expanded");
   const selectedReasoningLabel =
     reasoning?.summaryLabel ??
-    reasoning?.options.find((option) => option.value === reasoning.value)?.label
+    reasoning?.options.find((option) => option.value === reasoning.value)
+      ?.label;
   // 运行档那一格：宿主给了摘要就整格听它的（**包括「这一格什么都不用说」**——`secondaryLabel`
   // 缺席时不渲染，而不是回落到 Velar 的「自动」，那是外部执行体根本没有的概念）。
   const selectedRunProfileLabel = runProfile
     ? t(
-        visibleRunProfileOptions.find((option) => option.value === visibleRunProfileValue)
-          ?.labelKey ?? 'chat.composerRunProfile_auto'
+        visibleRunProfileOptions.find(
+          (option) => option.value === visibleRunProfileValue,
+        )?.labelKey ?? "chat.composerRunProfile_auto",
       )
     : modelRunSummary
       ? modelRunSummary.secondaryLabel
-      : (selectedReasoningLabel ?? t('chat.composerRunProfile_auto'))
+      : (selectedReasoningLabel ?? t("chat.composerRunProfile_auto"));
   const modelMenuCapabilityControls = capabilityControls.filter(
-    (control) => control.placement === 'model-menu'
-  )
+    (control) => control.placement === "model-menu",
+  );
   // 闭集档与其余形态分开画：前者是级联菜单项（与模型格同一套组件），后者仍是那条小工具条。
   const modelMenuChoiceControls = modelMenuCapabilityControls.filter(
-    (control) => control.kind === 'choice'
-  )
+    (control) => control.kind === "choice",
+  );
   const modelMenuOtherControls = modelMenuCapabilityControls.filter(
-    (control) => control.kind !== 'choice'
-  )
+    (control) => control.kind !== "choice",
+  );
   const activeChoiceControl = findComposerCapabilityChoiceBySubmenuId(
     modelMenuChoiceControls,
-    activeSubmenuId
-  )
+    activeSubmenuId,
+  );
   const disabled =
-    (!modelSelector || modelSelector.disabled || isEmpty(modelSelector.providers)) &&
+    (!modelSelector ||
+      modelSelector.disabled ||
+      isEmpty(modelSelector.providers)) &&
     (!runProfile || runProfile.disabled) &&
     (!reasoning || reasoning.disabled) &&
     (!thinkingDepth || thinkingDepth.disabled) &&
     (!thinkingVisibility || thinkingVisibility.disabled) &&
     (!pureChat || pureChat.disabled) &&
     (isEmpty(modelMenuCapabilityControls) ||
-      modelMenuCapabilityControls.every((control) => control.disabled))
+      modelMenuCapabilityControls.every((control) => control.disabled));
   const handleOpenChange = useCallback((nextOpen: boolean): void => {
-    setOpen(nextOpen)
-    if (!nextOpen) setActiveSubmenuId(null)
-    else dispatchOnboardingComposerModelMenuOpened()
-  }, [])
+    setOpen(nextOpen);
+    if (!nextOpen) setActiveSubmenuId(null);
+    else dispatchOnboardingComposerModelMenuOpened();
+  }, []);
 
   useEffect(() => {
-    const closeMenu = (): void => handleOpenChange(false)
-    window.addEventListener(OnboardingCloseComposerMenusEventName, closeMenu)
-    return () => window.removeEventListener(OnboardingCloseComposerMenusEventName, closeMenu)
-  }, [handleOpenChange])
+    const closeMenu = (): void => handleOpenChange(false);
+    window.addEventListener(OnboardingCloseComposerMenusEventName, closeMenu);
+    return () =>
+      window.removeEventListener(
+        OnboardingCloseComposerMenusEventName,
+        closeMenu,
+      );
+  }, [handleOpenChange]);
 
   return (
     <BusinessCascadingMenu
@@ -262,7 +302,7 @@ function ComposerModelRunSelectorImpl({
       widthStrategy="content"
       className={cn(
         styles.composerModelRunMenuContent,
-        isCompact && styles.composerModelRunMenuContentCompact
+        isCompact && styles.composerModelRunMenuContentCompact,
       )}
       anchor={({ getAnchorProps }) => (
         <Button
@@ -279,11 +319,19 @@ function ComposerModelRunSelectorImpl({
               : selectedModelDisplayLabel
           }
         >
-          <Text tone="strong" truncate className={styles.composerModelRunSelectorModelLabel}>
+          <Text
+            tone="strong"
+            truncate
+            className={styles.composerModelRunSelectorModelLabel}
+          >
             {selectedModelDisplayLabel}
           </Text>
           {!!selectedRunProfileLabel && (
-            <Text tone="caption" truncate className={styles.composerModelRunSelectorRunLabel}>
+            <Text
+              tone="caption"
+              truncate
+              className={styles.composerModelRunSelectorRunLabel}
+            >
               {selectedRunProfileLabel}
             </Text>
           )}
@@ -295,10 +343,10 @@ function ComposerModelRunSelectorImpl({
         <>
           <div
             {...(menu.getPrimaryPanelProps({
-              role: 'menu',
+              role: "menu",
               className: cn(
                 styles.composerModelRunMenuPrimary,
-                isCompact && styles.composerModelRunMenuPrimaryCompact
+                isCompact && styles.composerModelRunMenuPrimaryCompact,
               ),
               // getPrimaryPanelProps 内部消费 placementLevel 转成 data-attr、运行态不回传；其返回类型
               // 在 dist 声明发射中过宽（泄漏 placementLevel），此处 cast 收窄到 DOM 属性，行为不变。
@@ -308,8 +356,8 @@ function ComposerModelRunSelectorImpl({
           >
             {!!runProfile && (
               <MenuSectionHeader
-                label={t('chat.composerRunProfile')}
-                hint={t('chat.composerRunProfileHint')}
+                label={t("chat.composerRunProfile")}
+                hint={t("chat.composerRunProfileHint")}
               />
             )}
             <ComposerCapabilityChoiceMenuItems
@@ -325,19 +373,24 @@ function ComposerModelRunSelectorImpl({
             {!!runProfile && (
               <div className={styles.composerModelRunMenuSegment}>
                 <ComposerTierSlider
-                  value={visibleRunProfileValue ?? 'auto'}
+                  value={visibleRunProfileValue ?? "auto"}
                   options={visibleRunProfileOptions.map((option) => ({
                     value: option.value,
                     label: t(option.labelKey),
                   }))}
                   onChange={runProfile.onChange}
                   disabled={runProfile.disabled}
-                  ariaLabel={t('chat.composerRunProfile')}
+                  ariaLabel={t("chat.composerRunProfile")}
                 />
               </div>
             )}
 
-            {!!reasoning && <MenuSectionHeader label={reasoning.label} hint={reasoning.hint} />}
+            {!!reasoning && (
+              <MenuSectionHeader
+                label={reasoning.label}
+                hint={reasoning.hint}
+              />
+            )}
             {!!reasoning && (
               <div className={styles.composerModelRunMenuSegment}>
                 <ComposerTierSlider
@@ -352,8 +405,8 @@ function ComposerModelRunSelectorImpl({
 
             {!!thinkingDepth && (
               <MenuSectionHeader
-                label={t('chat.composerThinkingDepth')}
-                hint={t('chat.composerThinkingDepthHint')}
+                label={t("chat.composerThinkingDepth")}
+                hint={t("chat.composerThinkingDepthHint")}
               />
             )}
             {!!thinkingDepth && (
@@ -369,7 +422,7 @@ function ComposerModelRunSelectorImpl({
                   }))}
                   onChange={thinkingDepth.onChange}
                   disabled={thinkingDepth.disabled}
-                  ariaLabel={t('chat.composerThinkingDepth')}
+                  ariaLabel={t("chat.composerThinkingDepth")}
                 />
               </div>
             )}
@@ -379,12 +432,12 @@ function ComposerModelRunSelectorImpl({
               // 只在宿主没给说明时退回包内的纯段头，不替它编一句「模型来自哪里」。
               (modelSelector.hint ? (
                 <MenuSectionHeader
-                  label={modelSelector.label || t('chat.composerModelSection')}
+                  label={modelSelector.label || t("chat.composerModelSection")}
                   hint={modelSelector.hint}
                 />
               ) : (
                 <Text className={styles.composerModelRunMenuHeader}>
-                  {modelSelector.label || t('chat.composerModelSection')}
+                  {modelSelector.label || t("chat.composerModelSection")}
                 </Text>
               ))}
 
@@ -393,9 +446,10 @@ function ComposerModelRunSelectorImpl({
                   const modelLabel = getProviderModelDisplayLabel(
                     providerOption,
                     visibleProvider,
-                    modelSelector.model
-                  )
-                  const selected = providerOption.value === visibleProvider?.value
+                    modelSelector.model,
+                  );
+                  const selected =
+                    providerOption.value === visibleProvider?.value;
 
                   return (
                     <BusinessCascadingMenuItem
@@ -405,12 +459,20 @@ function ComposerModelRunSelectorImpl({
                       selected={selected}
                       label={`${providerOption.label} / ${modelLabel}`}
                       title={
-                        providerOption.description || `${providerOption.label} / ${modelLabel}`
+                        providerOption.description ||
+                        `${providerOption.label} / ${modelLabel}`
                       }
-                      disabled={modelSelector.disabled || isEmpty(providerOption.models)}
-                      trailing={<CaretRightIcon size={12} className={menu.classes.disclosure} />}
+                      disabled={
+                        modelSelector.disabled || isEmpty(providerOption.models)
+                      }
+                      trailing={
+                        <CaretRightIcon
+                          size={12}
+                          className={menu.classes.disclosure}
+                        />
+                      }
                     />
-                  )
+                  );
                 })
               : null}
 
@@ -420,7 +482,7 @@ function ComposerModelRunSelectorImpl({
                 interaction="leaf"
                 selected={pureChat.value}
                 showSelectedIndicator={false}
-                label={t('chat.composerPureChatMode')}
+                label={t("chat.composerPureChatMode")}
                 disabled={pureChat.disabled}
                 onClick={() => pureChat.onChange(!pureChat.value)}
                 trailing={
@@ -442,9 +504,11 @@ function ComposerModelRunSelectorImpl({
                 interaction="leaf"
                 selected={thinkingVisibility.value}
                 showSelectedIndicator={false}
-                label={t('chat.composerThinkingVisibility')}
+                label={t("chat.composerThinkingVisibility")}
                 disabled={thinkingVisibility.disabled}
-                onClick={() => thinkingVisibility.onChange(!thinkingVisibility.value)}
+                onClick={() =>
+                  thinkingVisibility.onChange(!thinkingVisibility.value)
+                }
                 trailing={
                   <Switch
                     size="xs"
@@ -479,11 +543,11 @@ function ComposerModelRunSelectorImpl({
                 const activeProviderVisibleModel = resolveVisibleProviderModel(
                   activeProviderOption,
                   visibleProvider,
-                  modelSelector.model
-                )
+                  modelSelector.model,
+                );
                 const selected =
                   activeProviderOption.value === visibleProvider?.value &&
-                  option.value === activeProviderVisibleModel
+                  option.value === activeProviderVisibleModel;
 
                 return (
                   <BusinessCascadingMenuItem
@@ -493,28 +557,38 @@ function ComposerModelRunSelectorImpl({
                     disabled={option.disabled}
                     title={option.description || option.label}
                     trailing={
-                      option.meta ? (
-                        <Text tone="caption" className={styles.composerModelMenuItemMeta}>
+                      option.help ? (
+                        <ComposerMenuHelpIcon content={option.help} />
+                      ) : option.meta ? (
+                        <Text
+                          tone="caption"
+                          className={styles.composerModelMenuItemMeta}
+                        >
                           {option.meta}
                         </Text>
                       ) : undefined
                     }
                     onClick={() => {
-                      modelSelector.onChange(activeProviderOption.value, option.value)
-                      menu.close()
+                      modelSelector.onChange(
+                        activeProviderOption.value,
+                        option.value,
+                      );
+                      menu.close();
                     }}
                   >
-                    <Text className={menu.classes.itemLabel}>{option.label}</Text>
+                    <Text className={menu.classes.itemLabel}>
+                      {option.label}
+                    </Text>
                   </BusinessCascadingMenuItem>
-                )
+                );
               })}
             </BusinessCascadingSubmenuSection>
           )}
         </>
       )}
     </BusinessCascadingMenu>
-  )
+  );
 }
 
-export const ComposerModelRunSelector = memo(ComposerModelRunSelectorImpl)
-ComposerModelRunSelector.displayName = 'ComposerModelRunSelector'
+export const ComposerModelRunSelector = memo(ComposerModelRunSelectorImpl);
+ComposerModelRunSelector.displayName = "ComposerModelRunSelector";
