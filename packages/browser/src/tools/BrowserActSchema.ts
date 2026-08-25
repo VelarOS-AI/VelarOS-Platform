@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isNumber, isPresent, isString } from '@velaros-ai/core'
+import { isNumber, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 
 import type { BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue } from '../core'
 
@@ -652,6 +652,44 @@ const browserActExactSchema = z.discriminatedUnion('action', [
   browserActConfigureEmulationSchema,
 ])
 
+/**
+ * 部分供应商对深层对象参数的函数调用支持较弱，却能稳定产出扁平字符串字段。这里允许模型把
+ * inspect 返回的 ref/css 直接放进 targetRef/targetCss（drag 的起点同理），运行时再无损还原为
+ * 统一 target 对象。没有定位信息时仍然失败，绝不猜测页面元素。
+ */
+function expandBrowserActTargetAliases(input: unknown): unknown {
+  if (!isPlainObject(input)) return input
+
+  const expanded = { ...input }
+  const targetRef = isString(input.targetRef) && input.targetRef.trim()
+    ? input.targetRef.trim()
+    : null
+  const targetCss = isString(input.targetCss) && input.targetCss.trim()
+    ? input.targetCss.trim()
+    : null
+  const sourceRef = isString(input.sourceRef) && input.sourceRef.trim()
+    ? input.sourceRef.trim()
+    : null
+  const sourceCss = isString(input.sourceCss) && input.sourceCss.trim()
+    ? input.sourceCss.trim()
+    : null
+
+  if (!isPlainObject(input.target) && (targetRef || targetCss)) {
+    expanded.target = {
+      ...(targetRef ? { ref: targetRef } : {}),
+      ...(targetCss ? { css: targetCss } : {}),
+    }
+  }
+  if (!isPlainObject(input.source) && (sourceRef || sourceCss)) {
+    expanded.source = {
+      ...(sourceRef ? { ref: sourceRef } : {}),
+      ...(sourceCss ? { css: sourceCss } : {}),
+    }
+  }
+
+  return expanded
+}
+
 const browserActSchema = z
   .object({
     action: browserActActionSchema.describe(
@@ -688,9 +726,31 @@ const browserActSchema = z
         description: 'target 动作要操作的元素定位线索，或 drag 动作的终点元素定位线索。',
       })
     ),
+    targetRef: z.string().min(1).max(200).optional().describe(
+      parameterDescription({
+        description: 'target/drag 动作的目标元素 ref，例如 inspect 返回的 @e4。',
+        usage: ['弱模型或不便生成嵌套对象时，优先直接传这个字段。'],
+      })
+    ),
+    targetCss: z.string().min(1).max(1000).optional().describe(
+      parameterDescription({
+        description: 'target/drag 动作的目标元素 CSS selector。',
+        usage: ['已有 targetRef 时无需重复传。'],
+      })
+    ),
     source: browserTargetHintSchema.optional().describe(
       parameterDescription({
         description: 'drag 动作的起点元素定位线索。',
+      })
+    ),
+    sourceRef: z.string().min(1).max(200).optional().describe(
+      parameterDescription({
+        description: 'drag 动作起点元素的 ref，例如 inspect 返回的 @e3。',
+      })
+    ),
+    sourceCss: z.string().min(1).max(1000).optional().describe(
+      parameterDescription({
+        description: 'drag 动作起点元素的 CSS selector。',
       })
     ),
     value: z.union([z.string(), z.array(z.string().max(1000)).min(1).max(50)]).optional().describe(
@@ -898,7 +958,7 @@ const browserActSchema = z
     ),
   })
   .superRefine((input, ctx) => {
-    const exactParseResult = browserActExactSchema.safeParse(input)
+    const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(input))
     if (exactParseResult.success) return
 
     for (const issue of exactParseResult.error.issues) {
@@ -1022,7 +1082,7 @@ function normalizeBrowserActInput(input: BrowserActExactInput): ParsedBrowserAct
 
 function parseBrowserActInput(input: unknown): ParsedBrowserActInput {
   const parsed = browserActSchema.parse(input)
-  const exactParseResult = browserActExactSchema.safeParse(parsed)
+  const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(parsed))
   if (!exactParseResult.success) throw exactParseResult.error
 
   return normalizeBrowserActInput(exactParseResult.data)

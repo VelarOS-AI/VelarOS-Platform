@@ -38,6 +38,7 @@ import {
   endLoopTurnSpansError,
   endLoopTurnSpansOk,
   executeLoopTurnWithContextOverflowRecovery,
+  restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
 } from './AgentLoop'
 import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
@@ -594,6 +595,8 @@ class QueryLoop<
                 events: args.opts.events,
                 streamTextDeltas: !!args.opts.streamTextDeltas,
                 idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
+                onModelRequestRetry: (error) =>
+                  restartLoopTurnModelSpanAfterRetry(spans, error),
                 contextEpochScope,
                 governanceSessionId,
                 // 观测：本轮 tool span 开启器（子 Agent 自己的 turn scope）；缺省 no-op。

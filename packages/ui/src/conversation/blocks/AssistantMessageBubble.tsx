@@ -87,6 +87,7 @@ export function AssistantMessageBubble({
   questionMessage = null,
   isStreaming = false,
   runMarker = null,
+  implicitlyCompletedRun = false,
   inlineNotice = null,
   inlineNoticeRuntimeSource = null,
   showToolDetails = true,
@@ -115,6 +116,7 @@ export function AssistantMessageBubble({
   questionMessage?: LooseOptional<ChatMessage>
   isStreaming?: boolean
   runMarker?: LooseOptional<ConversationMessageRunMarker>
+  implicitlyCompletedRun?: boolean
   inlineNotice?: LooseOptional<ChatInlineNoticeMeta>
   inlineNoticeRuntimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
   showToolDetails?: boolean
@@ -323,6 +325,7 @@ export function AssistantMessageBubble({
           <AssistantMessageSegments
             messageRenderSegments={messageRenderSegments}
             isStreaming={isStreaming}
+            implicitlyCompletedRun={implicitlyCompletedRun}
             messageId={message.id}
             lastTextSegmentKey={lastTextSegmentKey}
             streamingTextSegmentKey={streamingTextSegmentKey}

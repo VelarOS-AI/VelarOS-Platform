@@ -7,6 +7,7 @@ import type {
   BrowserPageDriver,
   BrowserPageDriverPointerListener,
   BrowserPageDriverState,
+  BrowserSystemPointerDriver,
 } from './BrowserPageDriver'
 import type { BrowserPageScriptBuilder } from './BrowserPageScriptBuilder'
 import {
@@ -32,6 +33,16 @@ export interface BrowserTargetActionInternalEffectSnapshot extends BrowserTarget
 
 export type BrowserTargetActionClickMode = 'dom' | 'coordinate'
 
+interface BrowserViewportScreenMetrics {
+  focused: boolean
+  screenX: number
+  screenY: number
+  outerWidth: number
+  outerHeight: number
+  innerWidth: number
+  innerHeight: number
+}
+
 const BrowserTargetActionEffectSampleLineLimit = 200
 
 /**
@@ -46,6 +57,7 @@ const BrowserTargetActionEffectSampleLineLimit = 200
  */
 export class CdpInteractionEngine {
   protected readonly log = logRuntime.tag('BrowserInteractionEngine')
+  private systemPointerDriver: Nullable<BrowserSystemPointerDriver> = null
 
   constructor(
     protected readonly kernel: BrowserPageDriverKernel,
@@ -56,6 +68,11 @@ export class CdpInteractionEngine {
       pointer: BrowserPagePreviewPointerEvent
     ) => void>
   ) {}
+
+  /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
+  public setSystemPointerDriver(driver: LooseOptional<BrowserSystemPointerDriver>): void {
+    this.systemPointerDriver = toNullable(driver)
+  }
 
   // ---- kernel 桥接 ----
   // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
@@ -100,6 +117,64 @@ export class CdpInteractionEngine {
 
   protected delay(ms: number): Promise<void> {
     return this.kernel.delay(ms)
+  }
+
+  /**
+   * 把页面 CSS 坐标换算为桌面逻辑坐标并尝试移动原生系统指针。
+   *
+   * 外部浏览器需要扣除窗口边框和浏览器工具栏；Electron webview 的 screenX/screenY 已由
+   * Chromium 映射到 guest viewport 原点。任何探测或权限失败都返回 false，由调用方继续走
+   * 合成输入和统一兜底箭头，不能让可视化能力影响真实页面动作。
+   */
+  protected async tryMoveSystemPointer(
+    driver: BrowserPageDriver,
+    point: BrowserPointerPoint,
+    visible: boolean,
+    durationMs: number
+  ): Promise<boolean> {
+    const systemPointerDriver = this.systemPointerDriver
+    if (!visible || !systemPointerDriver) return false
+
+    try {
+      await driver.bringToFront()
+      const metrics = await driver.executeJavaScript<BrowserViewportScreenMetrics>(`(() => ({
+  focused: document.hasFocus(),
+  screenX: Number(window.screenX || window.screenLeft || 0),
+  screenY: Number(window.screenY || window.screenTop || 0),
+  outerWidth: Number(window.outerWidth || window.innerWidth || 0),
+  outerHeight: Number(window.outerHeight || window.innerHeight || 0),
+  innerWidth: Number(window.innerWidth || document.documentElement.clientWidth || 0),
+  innerHeight: Number(window.innerHeight || document.documentElement.clientHeight || 0),
+}))()`)
+      if (!metrics.focused) return false
+      if (
+        !isFiniteNumber(metrics.screenX) ||
+        !isFiniteNumber(metrics.screenY) ||
+        !isFiniteNumber(metrics.outerWidth) ||
+        !isFiniteNumber(metrics.outerHeight) ||
+        !isFiniteNumber(metrics.innerWidth) ||
+        !isFiniteNumber(metrics.innerHeight)
+      ) return false
+
+      const horizontalInset = driver.kind === 'external'
+        ? Math.max(0, (metrics.outerWidth - metrics.innerWidth) / 2)
+        : 0
+      const verticalInset = driver.kind === 'external'
+        ? Math.max(0, metrics.outerHeight - metrics.innerHeight - horizontalInset)
+        : 0
+
+      return systemPointerDriver.move({
+        x: Math.round(metrics.screenX + horizontalInset + point.x),
+        y: Math.round(metrics.screenY + verticalInset + point.y),
+        durationMs: clampInteger(durationMs, 0, 800, 0),
+      })
+    } catch (error) {
+      this.log.debug('系统指针不可用，改用浏览器兜底指针', {
+        driverKind: driver.kind,
+        error: AppError.from(error).message,
+      })
+      return false
+    }
   }
 
   private requireExternalPageSession(sessionId: string): ExternalBrowserPageSession {
@@ -438,6 +513,14 @@ export class CdpInteractionEngine {
       }
 
     try {
+      if (input.externalSession) {
+        await this.tryMoveSystemPointer(
+          input.driver,
+          clickPoint,
+          input.externalSession.visible,
+          220
+        )
+      }
       await input.driver.clickCoordinates({
         x: clickPoint.x,
         y: clickPoint.y,
@@ -477,6 +560,14 @@ export class CdpInteractionEngine {
         failureReason: 'not-interactable',
       }
 
+    if (input.externalSession) {
+      await this.tryMoveSystemPointer(
+        input.driver,
+        hoverPoint,
+        input.externalSession.visible,
+        220
+      )
+    }
     await input.driver.moveMouse({
       x: hoverPoint.x,
       y: hoverPoint.y,
@@ -566,6 +657,12 @@ export class CdpInteractionEngine {
     const point = this.clampExternalViewportPoint(options.x, options.y)
     const button = options.button ?? 'left'
     const clickCount = clampInteger(options.clickCount, 1, 5, 1)
+    await this.tryMoveSystemPointer(
+      externalSession.driver,
+      point,
+      externalSession.visible,
+      220
+    )
     await externalSession.driver.clickCoordinates({
       ...options,
       x: point.x,
@@ -647,14 +744,30 @@ export class CdpInteractionEngine {
     const source = this.clampExternalViewportPoint(sourcePoint.x, sourcePoint.y)
     const target = this.clampExternalViewportPoint(targetPoint.x, targetPoint.y)
 
-    await input.driver.dragCoordinates({
-      startX: source.x,
-      startY: source.y,
-      endX: target.x,
-      endY: target.y,
-      steps: input.steps,
-      onPointerEvent: this.createPreviewPointerListener(input.sessionId, input.externalSession, 'drag'),
-    })
+    const usesSystemPointer = await this.tryMoveSystemPointer(
+      input.driver,
+      source,
+      input.externalSession.visible,
+      180
+    )
+    await Promise.all([
+      input.driver.dragCoordinates({
+        startX: source.x,
+        startY: source.y,
+        endX: target.x,
+        endY: target.y,
+        steps: input.steps,
+        onPointerEvent: this.createPreviewPointerListener(input.sessionId, input.externalSession, 'drag'),
+      }),
+      usesSystemPointer
+        ? this.tryMoveSystemPointer(
+            input.driver,
+            target,
+            input.externalSession.visible,
+            Math.min(520, Math.max(180, input.steps * 24))
+          )
+        : Promise.resolve(false),
+    ])
 
     const state = await this.refreshExternalPageState(
       input.sessionId,
@@ -688,6 +801,12 @@ export class CdpInteractionEngine {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持鼠标移动。')
     }
     const point = this.clampExternalViewportPoint(options.x, options.y)
+    await this.tryMoveSystemPointer(
+      externalSession.driver,
+      point,
+      externalSession.visible,
+      220
+    )
     await externalSession.driver.moveMouse({
       ...point,
       onPointerEvent: this.createPreviewPointerListener(

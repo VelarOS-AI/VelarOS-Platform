@@ -36,6 +36,7 @@ interface MessageBubbleProps {
   questionMessage?: LooseOptional<ChatMessage>
   isStreaming?: boolean
   runMarker?: LooseOptional<ConversationMessageRunMarker>
+  implicitlyCompletedRun?: boolean
   inlineNotice?: LooseOptional<ChatInlineNoticeMeta>
   inlineNoticeRuntimeSource?: LooseOptional<ChatInlineNoticeRuntimeSource>
   showToolDetails?: boolean
@@ -181,6 +182,7 @@ function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
       questionMessage={props.questionMessage}
       isStreaming={props.isStreaming}
       runMarker={props.runMarker}
+      implicitlyCompletedRun={props.implicitlyCompletedRun}
       inlineNotice={props.inlineNotice}
       inlineNoticeRuntimeSource={props.inlineNoticeRuntimeSource}
       showToolDetails={props.showToolDetails}
@@ -216,6 +218,7 @@ function areMessageBubblePropsEqual(
     prev.sessionId === next.sessionId &&
     prev.questionMessage === next.questionMessage &&
     prev.isStreaming === next.isStreaming &&
+    prev.implicitlyCompletedRun === next.implicitlyCompletedRun &&
     prev.inlineNoticeRuntimeSource === next.inlineNoticeRuntimeSource &&
     prev.showToolDetails === next.showToolDetails &&
     arePlanToolRenderPropsEqual(prev, next) &&

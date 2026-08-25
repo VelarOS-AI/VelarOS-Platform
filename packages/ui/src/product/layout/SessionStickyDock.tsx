@@ -27,6 +27,8 @@ export interface SessionStickyDockProps {
   initialCollapsed?: boolean
   /** 变化时自动展开一次；用于计划更新这类临时顶层提示。 */
   autoRevealKey?: string
+  /** 变化时强制收起一次；用于目标进入完成等终态时关闭仍残留的计划卡。 */
+  autoCollapseKey?: string
   /** 自动展开期间只展示这些条目；用户手动展开时仍展示全部。 */
   spotlightItemIds?: string[]
   /** 与 ChatConversationPane variant 一致，用于抵消 messageListInner 的顶 padding。 */
@@ -34,6 +36,7 @@ export interface SessionStickyDockProps {
 }
 
 export function SessionStickyDock({
+  autoCollapseKey,
   autoRevealKey,
   barLabel,
   initialCollapsed = true,
@@ -45,6 +48,7 @@ export function SessionStickyDock({
   const [spotlightActive, setSpotlightActive] = useState(false)
   const prevLenRef = useRef(0)
   const prevAutoRevealKeyRef = useRef<string | undefined>(autoRevealKey)
+  const prevAutoCollapseKeyRef = useRef<string | undefined>(autoCollapseKey)
   const skipMountPeekRef = useRef(true)
   const spotlightIdSet = useMemo(() => new Set(spotlightItemIds), [spotlightItemIds])
 
@@ -85,6 +89,14 @@ export function SessionStickyDock({
     setCollapsed(false)
     setSpotlightActive(spotlightIdSet.size > 0)
   }, [autoRevealKey, spotlightIdSet])
+
+  useEffect(() => {
+    if (!autoCollapseKey || autoCollapseKey === prevAutoCollapseKeyRef.current) return
+
+    prevAutoCollapseKeyRef.current = autoCollapseKey
+    setCollapsed(true)
+    setSpotlightActive(false)
+  }, [autoCollapseKey])
 
   if (items.length === 0) return null
 

@@ -35,4 +35,8 @@ export {
   BrowserViewNotAttachedReason,
   isBrowserViewNotAttachedError,
 } from './BrowserViewAttachment.js'
+export {
+  BrowserFallbackVirtualPointer,
+  buildBrowserFallbackVirtualPointerSvg,
+} from './BrowserVirtualPointer.js'
 export type * from './types.js'

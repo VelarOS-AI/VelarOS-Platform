@@ -4,6 +4,7 @@ import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
   endLoopTurnSpansOk,
+  restartLoopTurnModelSpanAfterRetry,
 } from '../src/agent/AgentLoop'
 import type {
   ModelSpanOutcome,
@@ -86,6 +87,55 @@ describe('model span identity', () => {
       status: 'error',
       errorCode: 'QUOTA_EXCEEDED',
       errorMessage: '模型服务额度已用尽，请补充额度或切换服务商后重试。',
+    })
+  })
+
+  test('records a recovered provider retry as a failed request before the successful attempt', () => {
+    const outcomes: ModelSpanOutcome[] = []
+    let opened = 0
+    const turnScope: TurnSpanScope = {
+      beginModelSpan: () => {
+        opened += 1
+        return { end: (value) => outcomes.push(value) }
+      },
+      beginToolSpan: () => null,
+      recordPolicySpan: () => undefined,
+      recordCapabilitySpan: () => undefined,
+      recordPromptAudit: () => undefined,
+      end: () => undefined,
+    }
+    const runScope: RunSpanScope = {
+      beginTurn: () => turnScope,
+      end: () => undefined,
+    }
+    const spans = beginLoopTurnSpans(runScope, {
+      turn: 1,
+      roleId: 'primary-agent',
+      provider: 'airjelly',
+      model: 'lite',
+      providerModel: 'lite',
+    })
+
+    restartLoopTurnModelSpanAfterRetry(spans, {
+      code: 'MODEL_STREAM_STALLED',
+      message: '模型流停止前进',
+    })
+    endLoopTurnSpansOk(
+      spans,
+      { inputTokens: 20, outputTokens: 4, finishReason: 'stop' },
+      { systemPrompt: '', promptSegments: [], skippedPromptSegments: [] }
+    )
+
+    expect(opened).toBe(2)
+    expect(outcomes).toHaveLength(2)
+    expect(outcomes[0]).toMatchObject({
+      status: 'error',
+      errorCode: 'MODEL_STREAM_STALLED',
+    })
+    expect(outcomes[1]).toMatchObject({
+      status: 'ok',
+      tokensIn: 20,
+      tokensOut: 4,
     })
   })
 })

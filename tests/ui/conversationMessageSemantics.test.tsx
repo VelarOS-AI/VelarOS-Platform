@@ -191,6 +191,41 @@ void describe('会话消息语义', () => {
     assert.deepEqual(presentations[1]?.activityTrailingMessages, [])
   })
 
+  void test('下一轮已经开始时为漏失 marker 的上一轮补齐完成边界', () => {
+    const turn = message('turn', 'user', 'turn-input')
+    const firstAssistant = message('assistant-1', 'assistant')
+    const guidance = message('guidance', 'user', 'run-guidance')
+    const finalAssistant = message('assistant-final', 'assistant')
+    const nextTurn = message('turn-2', 'user', 'turn-input')
+    const presentations = buildChatTranscriptMessagePresentations([
+      turn,
+      firstAssistant,
+      guidance,
+      finalAssistant,
+      nextTurn,
+    ])
+
+    assert.deepEqual(
+      presentations.map((presentation) => presentation.message.id),
+      ['turn', 'assistant-final', 'turn-2']
+    )
+    assert.equal(presentations[1]?.implicitlyCompletedRun, true)
+    assert.deepEqual(
+      presentations[1]?.activityLeadingMessages.map((entry) => entry.id),
+      ['assistant-1', 'guidance']
+    )
+  })
+
+  void test('显式失败 marker 阻止 turn 边界把上一轮推断为完成', () => {
+    const assistant = message('assistant-failed', 'assistant')
+    const presentations = buildChatTranscriptMessagePresentations(
+      [message('turn', 'user', 'turn-input'), assistant, message('turn-2', 'user', 'turn-input')],
+      { hasRunMarker: (entry) => entry.id === assistant.id }
+    )
+
+    assert.equal(presentations[1]?.implicitlyCompletedRun, false)
+  })
+
   void test('新 assistant 片段到达前，引导留在当前活动尾部且不触发前文折叠', () => {
     const turn = message('turn', 'user', 'turn-input')
     const assistant = message('assistant', 'assistant')
@@ -376,6 +411,31 @@ void test('旧会话运行完成后只留下一个已处理入口，并把引导
                   timestamp: 2,
                 }
               : null,
+        })
+      )
+    ) as ReactElement
+  )
+
+  assert.equal(markup.match(/>已处理</g)?.length, 1)
+  assert.match(markup, /aria-expanded="false"/)
+  assert.doesNotMatch(markup, /data-chat-message="guidance"/)
+  assert.match(markup, /最终总结留在已处理外面。/)
+})
+
+void test('真实长任务在下一轮开始后即使漏存完成 marker 也生成已处理折叠', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      ConversationLocalizationProvider,
+      { value: localization },
+      createElement(
+        ConversationBlockHooksProvider,
+        { value: blockHooks },
+        createElement(ChatTranscript, {
+          messages: [
+            ...guidanceTranscriptMessages(),
+            message('next-independent-task', 'user', 'turn-input'),
+          ],
+          sessionId: 'session',
         })
       )
     ) as ReactElement

@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises'
+import { open, stat } from 'node:fs/promises'
 
 import { isEmpty,isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -65,6 +65,7 @@ export interface AtomicReadResult {
 export async function executeAtomicRead(input: AtomicReadInput): Promise<AtomicReadResult> {
   const resolvedPath = resolveSystemPathInput(input.path)
   const safeStartLine = input.startLine ? Math.max(1, input.startLine) : 1
+  await assertRegularSystemTextFile(resolvedPath)
 
   if (isNumber(input.endLine)) {
     if (safeStartLine > input.endLine) {
@@ -110,6 +111,22 @@ export async function executeAtomicRead(input: AtomicReadInput): Promise<AtomicR
     totalLines,
     maxChars: input.maxChars,
   })
+}
+
+async function assertRegularSystemTextFile(resolvedPath: string): Promise<void> {
+  try {
+    const metadata = await stat(resolvedPath)
+    if (metadata.isFile()) return
+    if (metadata.isDirectory()) {
+      throw new AppError('VALIDATION', `Path is a directory, not a file: ${resolvedPath}`)
+    }
+    throw new AppError(
+      'VALIDATION',
+      `Path is not a regular text file: ${resolvedPath}`
+    )
+  } catch (err) {
+    throw normalizeReadError(err, resolvedPath)
+  }
 }
 
 interface AtomicReadResultBuildInput {

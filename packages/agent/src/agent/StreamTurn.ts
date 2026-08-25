@@ -242,6 +242,8 @@ export interface ExecuteStreamTurnArgs<
   contextEpochScope?: LooseOptional<string>
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
   onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
+  /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
+  onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
 }
 
 export interface StreamTurnResult {
@@ -562,6 +564,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               hasVisibleOutput: () => turnState.hasVisibleOutput,
               hasToolUse: () => turnState.hasToolUse,
               onRetry: (error, attempt) => {
+                args.onModelRequestRetry?.(error, attempt)
                 args.events.emitRuntime(
                   ChatRuntimeEvents.retryingTurn(
                     args.turn,

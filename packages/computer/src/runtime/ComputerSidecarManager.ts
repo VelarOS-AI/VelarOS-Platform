@@ -193,8 +193,12 @@ export class ComputerSidecarManager {
     return this.request<ComputerScreenshot>('screenshot', {})
   }
 
-  public async mouseMove(x: number, y: number): Promise<ComputerMoveResult> {
-    return this.request<ComputerMoveResult>('mouse_move', { x, y })
+  public async mouseMove(
+    x: number,
+    y: number,
+    options: { durationMs?: number } = {}
+  ): Promise<ComputerMoveResult> {
+    return this.request<ComputerMoveResult>('mouse_move', { x, y, ...options })
   }
 
   public async leftClick(

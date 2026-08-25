@@ -157,6 +157,8 @@ export interface ExecuteQueryTurnArgs<
   governanceSessionId?: LooseOptional<string>
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
   onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
+  /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
+  onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
   /**
    * 可选观测 tool span 开启器（#37 阶段 C 片 2）。子 Agent 的 QueryLoop 每轮把 turn scope 作开启器注入，
    * 令本轮内 ToolExecutor 产 tool span（挂在子 Agent 自己的 turn span 下）；缺省 no-op（零观测零付费）。
@@ -256,7 +258,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
             abortSignal: args.toolContext.abortSignal,
             hasVisibleOutput: () => !!activeTurnState?.hasVisibleOutput,
             hasToolUse: () => !!activeTurnState?.hasToolUse,
-            onRetry: (_error, attempt) => {
+            onRetry: (error, attempt) => {
+              args.onModelRequestRetry?.(error, attempt)
               args.events?.emitRuntime(
                 ChatRuntimeEvents.reconnecting(attempt, MaxConnectionRetryAttempts)
               )

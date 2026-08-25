@@ -274,4 +274,19 @@ describe('System capability', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  test.skipIf(process.platform === 'win32')(
+    'rejects device files as text input and write-copy sources',
+    async () => {
+      await expect(executeAtomicRead({ path: '/dev/null' })).rejects.toThrow(
+        'Path is not a regular text file'
+      )
+      await expect(
+        resolveAtomicWriteContent({
+          path: join(tmpdir(), 'velaros-system-device-copy.txt'),
+          source: { path: '/dev/null', startLine: 1, endLine: 1 },
+        })
+      ).rejects.toThrow('Path is not a regular text file')
+    }
+  )
 })

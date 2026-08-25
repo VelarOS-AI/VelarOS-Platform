@@ -33,6 +33,10 @@ export interface ConversationRunMarkerView {
  */
 export interface ConversationMessageRunMarker extends ConversationRunMarkerView {
   messageId: string
+  /** 此消息所属执行的开始时间；随消息标记持久化，后续执行不会覆盖。 */
+  startedAt?: number
+  /** 此消息所属执行的最终耗时；随消息标记持久化，避免从会话级最新执行时间反推。 */
+  durationMs?: number
   goalMode?: boolean
   workspaceCheckpointDiff?: {
     capturedAt: number

@@ -115,6 +115,10 @@ async function executeLoopTurnWithContextOverflowRecovery<TTurnResult>(
 interface LoopTurnSpans {
   turnScope: Nullable<TurnSpanScope>
   modelSpan: Nullable<ModelSpanHandle>
+  modelIdentity: {
+    provider: string
+    model: string
+  }
 }
 
 /**
@@ -142,7 +146,14 @@ function beginLoopTurnSpans(
       requestFingerprint: null,
     }),
   )
-  return { turnScope, modelSpan }
+  return {
+    turnScope,
+    modelSpan,
+    modelIdentity: {
+      provider: input.provider,
+      model: input.providerModel?.trim() || input.model,
+    },
+  }
 }
 
 /** 双面 turn 结果的观测富化子面（StreamTurnResult / QueryTurnResult 结构上都满足）。 */
@@ -164,6 +175,32 @@ interface LoopTurnPromptAudit {
 interface LoopTurnSpanFailure {
   code: string
   message: string
+}
+
+/**
+ * 一次连接级重试代表一次真实 provider 请求失败：先收敛当前 model span，再为下一次请求开新 span。
+ * 若只保留最终成功 span，外部监督会把已恢复的流停滞/限流误报为零次。
+ */
+function restartLoopTurnModelSpanAfterRetry(
+  spans: LoopTurnSpans,
+  failure: LoopTurnSpanFailure
+): void {
+  spans.modelSpan?.end({
+    status: 'error',
+    finishReason: null,
+    errorCode: failure.code,
+    errorMessage: failure.message,
+    tokensIn: null,
+    tokensOut: null,
+    costUsd: null,
+    requestFingerprint: null,
+  })
+  spans.modelSpan = toNullable(
+    spans.turnScope?.beginModelSpan({
+      ...spans.modelIdentity,
+      requestFingerprint: null,
+    })
+  )
 }
 
 /**
@@ -224,6 +261,7 @@ export {
   endLoopTurnSpansError,
   endLoopTurnSpansOk,
   executeLoopTurnWithContextOverflowRecovery,
+  restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
 }
 export type {

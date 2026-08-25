@@ -59,6 +59,7 @@ import {
   endLoopTurnSpansError,
   endLoopTurnSpansOk,
   executeLoopTurnWithContextOverflowRecovery,
+  restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
 } from './AgentLoop'
 import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
@@ -771,6 +772,8 @@ class SoloStreamLoop<
                 abortSignal: args.abortController.signal,
                 runtimeInputInterruptSignal: runtimeInputInterrupt.signal,
                 idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
+                onModelRequestRetry: (error) =>
+                  restartLoopTurnModelSpanAfterRetry(spans, error),
                 turn,
               }),
             resolveAction: (attempt) =>

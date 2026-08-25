@@ -17,4 +17,13 @@ test('browser:act discovery summary names its primary navigation and interaction
   assert.match(browserAct.description, /^描述：[^\n]*跳转/mu)
   assert.match(browserAct.description, /^描述：[^\n]*点击/mu)
   assert.match(browserAct.description, /^描述：[^\n]*填写/mu)
+  assert.match(browserAct.description, /targetRef/u)
+
+  const weakModelTargetInput = browserAct.schema.safeParse({
+    action: 'target',
+    targetAction: 'fill',
+    targetRef: '@e4',
+    value: 'stable',
+  })
+  assert.equal(weakModelTargetInput.success, true)
 })

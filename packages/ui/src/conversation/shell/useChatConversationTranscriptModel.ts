@@ -24,8 +24,53 @@ import {
 type RuntimeUsageTelemetry = ConversationRuntimeView['usageTelemetry']
 type RuntimeUsageTelemetryEntry = RuntimeUsageTelemetry[number]
 
+interface GoalCompletionRunWindowInput {
+  runMarker: ConversationMessageRunMarker
+  lastRunStartedAt: Nullable<number>
+  lastRunFinishedAt: Nullable<number>
+}
+
+interface GoalCompletionRunWindow {
+  startedAt: Nullable<number>
+  finishedAt: number
+  durationMs: Nullable<number>
+}
+
 function isRuntimeTimestamp(value: LooseOptional<number>): value is number {
   return isFiniteNumber(value) && value >= 0
+}
+
+/**
+ * 优先使用消息级执行时间。会话级时间只表示最近一次执行；完成后若立即追加任务，
+ * 它会被下一次执行覆盖，不能再拿来反推上一条完成消息的耗时。
+ */
+export function resolveGoalCompletionRunWindow({
+  runMarker,
+  lastRunStartedAt,
+  lastRunFinishedAt,
+}: GoalCompletionRunWindowInput): GoalCompletionRunWindow {
+  const finishedAt = runMarker.timestamp
+  const markerStartedAt = isRuntimeTimestamp(runMarker.startedAt) ? runMarker.startedAt : null
+  const runtimeStartedAt =
+    isRuntimeTimestamp(lastRunStartedAt) && lastRunStartedAt <= finishedAt
+      ? lastRunStartedAt
+      : null
+  const startedAt = markerStartedAt ?? runtimeStartedAt
+  const markerDurationMs = isFiniteNumber(runMarker.durationMs)
+    ? Math.max(0, runMarker.durationMs)
+    : null
+  const inferredDurationMs =
+    isRuntimeTimestamp(startedAt) && finishedAt >= startedAt ? finishedAt - startedAt : null
+  const runtimeFinishedAt =
+    isRuntimeTimestamp(lastRunFinishedAt) && lastRunFinishedAt === finishedAt
+      ? lastRunFinishedAt
+      : finishedAt
+
+  return {
+    startedAt,
+    finishedAt: markerDurationMs === null ? runtimeFinishedAt : finishedAt,
+    durationMs: markerDurationMs ?? inferredDurationMs,
+  }
 }
 
 function filterUsageTelemetryByRunWindow(
@@ -204,14 +249,15 @@ export function useChatConversationTranscriptModel({
     const runMarker = messageRunMarkerMap.get(latestCompletedAssistantMessageId)
     if (runMarker?.status !== 'completed' || !isTrue(runMarker.goalMode)) return nextMap
 
-    const finishedAt = runtime.lastRunFinishedAt ?? runMarker.timestamp
-    const durationMs =
-      isRuntimeTimestamp(runtime.lastRunStartedAt) && isRuntimeTimestamp(finishedAt)
-        ? Math.max(0, finishedAt - runtime.lastRunStartedAt)
-        : null
+    const runWindow = resolveGoalCompletionRunWindow({
+      runMarker,
+      lastRunStartedAt: runtime.lastRunStartedAt,
+      lastRunFinishedAt: runtime.lastRunFinishedAt,
+    })
+    const { durationMs, finishedAt, startedAt } = runWindow
     const runUsageTelemetry = filterUsageTelemetryByRunWindow(
       runtime.usageTelemetry,
-      runtime.lastRunStartedAt,
+      startedAt,
       finishedAt
     )
     const assistantMessage = latestCompletedAssistantMessage

@@ -157,7 +157,8 @@ def mouse_move(payload: "dict[str, Any]") -> "dict[str, Any]":
     pyautogui = load_pyautogui()
     x = int(payload["x"])
     y = int(payload["y"])
-    pyautogui.moveTo(x, y)
+    duration = max(0.0, min(float(payload.get("durationMs") or 0) / 1000.0, 0.8))
+    pyautogui.moveTo(x, y, duration=duration)
     return {"x": x, "y": y}
 
 

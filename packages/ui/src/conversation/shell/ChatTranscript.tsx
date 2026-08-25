@@ -162,6 +162,7 @@ function ChatTranscriptInner({
       buildChatTranscriptMessagePresentations(messages, {
         isCompletedAssistant: (message) =>
           !getIsStreaming?.(message) && getRunMarker?.(message)?.status === 'completed',
+        hasRunMarker: (message) => !!getRunMarker?.(message),
       }),
     [getIsStreaming, getRunMarker, messages]
   )
@@ -264,6 +265,9 @@ function ChatTranscriptInner({
               questionMessage={toNullable(getQuestionMessage?.(message))}
               isStreaming={forceActivityFlat || groupedRunIsStreaming}
               runMarker={forceActivityFlat ? null : groupedRunMarker}
+              implicitlyCompletedRun={
+                !forceActivityFlat && !!options.presentation?.implicitlyCompletedRun
+              }
               inlineNotice={inlineNotice}
               inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
               showToolDetails={showToolDetails}

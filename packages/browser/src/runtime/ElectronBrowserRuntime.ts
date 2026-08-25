@@ -229,6 +229,7 @@ class ElectronBrowserRuntime {
     this.externalBrowserLauncher =
       options.externalBrowserLauncher ?? new CdpExternalBrowserLauncher()
     this.backgroundBrowserLauncher = options.backgroundBrowserLauncher ?? new CloakBrowserLauncher()
+    this.interaction.setSystemPointerDriver(options.systemPointerDriver)
     this.sessionManager = new BrowserSessionManager({
       callbacks: this.withActivityCallbacks(options),
       diagnostics: this.diagnostics,
@@ -247,6 +248,9 @@ class ElectronBrowserRuntime {
     }
     if (options.backgroundBrowserLauncher) {
       this.backgroundBrowserLauncher = options.backgroundBrowserLauncher
+    }
+    if ('systemPointerDriver' in options) {
+      this.interaction.setSystemPointerDriver(options.systemPointerDriver)
     }
     this.sessionManager.setCallbacks(this.withActivityCallbacks(options))
   }
@@ -1921,7 +1925,7 @@ class ElectronBrowserRuntime {
   /** 限制单次缩放步进。 */
   /** 页面内短暂显示缩放百分比，模拟浏览器触发缩放后的右上角提示。 */
   /** 构造页面缩放提示脚本。 */
-  /** 生成从上一次位置到目标点的缓动路径，用于页面内光标轨迹。 */
+  /** 生成从上一次位置到目标点的缓动路径，用于页面内光标平滑移动。 */
   /** Electron 输入事件：移动鼠标。 */
   /** Electron 输入事件：点击坐标。 */
   /** 等待一小段时间，便于用户看到按压反馈。 */
@@ -1929,7 +1933,7 @@ class ElectronBrowserRuntime {
     return TimerScope.sleep(ms, { label: 'ElectronBrowserRuntime.delay' })
   }
 
-  /** 沿路径动画展示页面内 macOS 风格光标和鼠标轨迹。 */
+  /** 沿路径动画展示页面内 macOS 风格光标。 */
   /** 在页面内渲染一个虚拟指针，用于截图可视化鼠标位置。 */
   /** 构建虚拟指针脚本。 */
   /** 构造导航结果。 */

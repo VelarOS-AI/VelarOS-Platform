@@ -5,10 +5,12 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTypeTextOptions, BrowserTypeTextResult } from '../core'
 import {
+  BrowserFallbackVirtualPointer,
   type BrowserPageDriver,
   type BrowserPageScriptBuilder,
   type BrowserPointerPoint,
   type BrowserTargetRefStore,
+  buildBrowserFallbackVirtualPointerSvg,
   CdpInteractionEngine,
   clampInteger,
   clampZoomFactor,
@@ -33,7 +35,7 @@ import { evaluateInWebContents } from './BrowserWebContentsEvaluator'
  * actionQueue 内被调用。
  */
 export class BrowserInteractionEngine extends CdpInteractionEngine {
-  /** 记录每个 WebContents 的最新页面内指针位置，用于绘制连续轨迹。 */
+  /** 记录每个 WebContents 的最新页面内指针位置，用于平滑移动虚拟指针。 */
   private readonly pointerPositions = new Map<number, BrowserPointerPoint>()
 
   constructor(
@@ -112,12 +114,40 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       result: initialActionResult,
       clickMode,
     })
-    const actionResult = await this.dispatchCoordinateTargetActionIfNeeded({
-      sessionId,
-      driver,
-      options: hydratedOptions,
-      result: healedActionResult,
-    })
+    const targetPointerPoint =
+      (hydratedOptions.action === 'click' || hydratedOptions.action === 'hover') &&
+      healedActionResult.matched &&
+      healedActionResult.clickMethod === 'coordinate'
+        ? this.readBrowserPointerPoint(healedActionResult.clickPoint)
+        : null
+    const targetPointer = targetPointerPoint
+      ? await this.clampViewportPoint(session, targetPointerPoint.x, targetPointerPoint.y)
+      : null
+    if (targetPointer) {
+      await this.animateVirtualPointer(
+        session,
+        this.buildPointerPath(session, targetPointer.x, targetPointer.y),
+        false
+      )
+      this.focusWebContents(session)
+      if (hydratedOptions.action === 'click') {
+        await this.updateVirtualPointer(session, targetPointer.x, targetPointer.y, true)
+      }
+    }
+    let actionResult: BrowserTargetActionResult
+    try {
+      actionResult = await this.dispatchCoordinateTargetActionIfNeeded({
+        sessionId,
+        driver,
+        options: hydratedOptions,
+        result: healedActionResult,
+      })
+    } finally {
+      if (targetPointer && hydratedOptions.action === 'click') {
+        await this.delay(90)
+        await this.updateVirtualPointer(session, targetPointer.x, targetPointer.y, false)
+      }
+    }
 
     if (actionResult.matched) {
       void this.highlightTarget(
@@ -313,13 +343,28 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     const source = await this.clampViewportPoint(session, sourcePoint.x, sourcePoint.y)
     const target = await this.clampViewportPoint(session, targetPoint.x, targetPoint.y)
 
-    await driver.dragCoordinates({
-      startX: source.x,
-      startY: source.y,
-      endX: target.x,
-      endY: target.y,
-      steps,
-    })
+    await this.animateVirtualPointer(
+      session,
+      this.buildPointerPath(session, source.x, source.y),
+      false
+    )
+    this.focusWebContents(session)
+    await this.updateVirtualPointer(session, source.x, source.y, true)
+    const dragPointerPath = this.buildPointerPath(session, target.x, target.y)
+    try {
+      await Promise.all([
+        driver.dragCoordinates({
+          startX: source.x,
+          startY: source.y,
+          endX: target.x,
+          endY: target.y,
+          steps,
+        }),
+        this.animateVirtualPointer(session, dragPointerPath, true),
+      ])
+    } finally {
+      await this.updateVirtualPointer(session, target.x, target.y, false)
+    }
 
     if (options.waitForNavigation) {
       await this.pageWaiter.waitForTargetActionToSettle(session.webContents, abortSignal)
@@ -438,10 +483,15 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
   ): Promise<void> {
     if (session.webContents.isDestroyed() || isEmpty(path)) return
 
+    const durationMs = path.length > 1 ? Math.min(420, Math.max(150, path.length * 14)) : 0
+    const lastPoint = path.at(-1)
+    if (!lastPoint) return
+
     try {
+      this.focusWebContents(session)
       await evaluateInWebContents(
         session.webContents,
-        this.buildVirtualPointerScript(path, pressed),
+        this.buildVirtualPointerScript(path, pressed, durationMs),
         true
       )
     } catch (error) {
@@ -458,136 +508,121 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     y: number,
     pressed: boolean
   ): Promise<void> {
-    if (session.webContents.isDestroyed()) return
-
-    try {
-      await evaluateInWebContents(
-        session.webContents,
-        this.buildVirtualPointerScript([{ x, y }], pressed),
-        true
-      )
-    } catch (error) {
-      this.log.debug('更新浏览器虚拟指针浮层失败', {
-        error: AppError.from(error).message,
-      })
-      // 即使浮层渲染失败，鼠标输入也应继续执行。
-    }
+    return this.animateVirtualPointer(session, [{ x, y }], pressed)
   }
 
-  private buildVirtualPointerScript(path: BrowserPointerPoint[], pressed: boolean): string {
+  private buildVirtualPointerScript(
+    path: BrowserPointerPoint[],
+    pressed: boolean,
+    durationMs: number
+  ): string {
+    const pointerAppearance = BrowserFallbackVirtualPointer
+    const pointerSvg = buildBrowserFallbackVirtualPointerSvg()
     const payload = JSON.stringify({
       path,
       pressed,
-      durationMs: path.length > 1 ? Math.min(420, Math.max(150, path.length * 14)) : 0,
+      durationMs,
     })
 
     return `(() => {
   const payload = ${payload};
   const pointerId = '__velaros_virtual_pointer__';
-  const pulseId = '__velaros_virtual_pointer_pulse__';
-  const trailId = '__velaros_virtual_pointer_trail__';
-  const hotspotX = 5;
-  const hotspotY = 3;
-  const svgNamespace = 'http://www.w3.org/2000/svg';
-  const ensureTrail = () => {
-    let trail = document.getElementById(trailId);
-    if (!trail) {
-      trail = document.createElementNS(svgNamespace, 'svg');
-      trail.id = trailId;
-      trail.setAttribute('aria-hidden', 'true');
-      Object.assign(trail.style, {
-        position: 'fixed',
-        inset: '0',
-        width: '100vw',
-        height: '100vh',
-        overflow: 'visible',
-        zIndex: '2147483646',
-        pointerEvents: 'none',
-      });
-      (document.body || document.documentElement).appendChild(trail);
-    }
-    return trail;
-  };
+  const motionKey = '__velaros_virtual_pointer_motion__';
+  const hotspotX = ${pointerAppearance.hotspotX};
+  const hotspotY = ${pointerAppearance.hotspotY};
   let pointer = document.getElementById(pointerId);
   if (!pointer) {
     pointer = document.createElement('div');
     pointer.id = pointerId;
     pointer.setAttribute('aria-hidden', 'true');
-    pointer.innerHTML = '<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 3L5.85 22.4L11.3 16.95L15.15 25.35L18.75 23.68L14.9 15.5L23.25 15.38L5 3Z" fill="white" stroke="rgba(0,0,0,0.42)" stroke-width="3.8" stroke-linejoin="round"/><path d="M5 3L5.85 22.4L11.3 16.95L15.15 25.35L18.75 23.68L14.9 15.5L23.25 15.38L5 3Z" fill="#111111" stroke="white" stroke-width="1.35" stroke-linejoin="round"/></svg><span id="' + pulseId + '"></span>';
+    pointer.innerHTML = '${pointerSvg}';
     Object.assign(pointer.style, {
       position: 'fixed',
       left: '0',
       top: '0',
-      width: '28px',
-      height: '28px',
+      width: '${pointerAppearance.width}px',
+      height: '${pointerAppearance.height}px',
       zIndex: '2147483647',
       pointerEvents: 'none',
-      opacity: '0.98',
+      opacity: '1',
       transformOrigin: hotspotX + 'px ' + hotspotY + 'px',
       transition: 'opacity 110ms ease',
-      filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))'
-    });
-    const pulse = pointer.querySelector('#' + pulseId);
-    Object.assign(pulse.style, {
-      position: 'absolute',
-      left: (hotspotX - 11) + 'px',
-      top: (hotspotY - 11) + 'px',
-      width: '22px',
-      height: '22px',
-      borderRadius: '999px',
-      border: '1.5px solid rgba(255, 255, 255, 0.86)',
-      background: 'rgba(10, 132, 255, 0.28)',
-      boxShadow: '0 0 0 1px rgba(10, 132, 255, 0.35)',
-      opacity: '0',
-      transform: 'scale(0.85)',
-      transition: 'opacity 100ms ease, transform 120ms ease'
+      filter: '${pointerAppearance.filter}'
     });
     (document.body || document.documentElement).appendChild(pointer);
   }
   const points = Array.isArray(payload.path) ? payload.path : [];
   const lastPoint = points[points.length - 1];
   if (!lastPoint) return false;
-  if (points.length > 1) {
-    const trail = ensureTrail();
-    const line = document.createElementNS(svgNamespace, 'polyline');
-    line.setAttribute('points', points.map((point) => point.x + ',' + point.y).join(' '));
-    line.setAttribute('fill', 'none');
-    line.setAttribute('stroke', 'rgba(10, 132, 255, 0.72)');
-    line.setAttribute('stroke-width', '2.4');
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('stroke-linejoin', 'round');
-    Object.assign(line.style, {
-      filter: 'drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18))',
-      transition: 'opacity 420ms ease 760ms, stroke-dashoffset ' + payload.durationMs + 'ms cubic-bezier(0.16, 1, 0.3, 1)',
-    });
-    trail.appendChild(line);
-    const length = typeof line.getTotalLength === 'function' ? line.getTotalLength() : 0;
-    if (length > 0) {
-      line.style.strokeDasharray = String(length);
-      line.style.strokeDashoffset = String(length);
-      requestAnimationFrame(() => {
-        line.style.strokeDashoffset = '0';
-      });
-    }
-    window.setTimeout(() => {
-      line.style.opacity = '0';
-      window.setTimeout(() => line.remove(), 520);
-    }, Math.max(240, payload.durationMs));
-  }
-  const pulse = pointer.querySelector('#' + pulseId);
-  const setPointer = (point, isPressed) => {
+  const glyph = pointer.querySelector('svg');
+  const motion = window[motionKey] || (window[motionKey] = {});
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  motion.generation = Number(motion.generation || 0) + 1;
+  const generation = motion.generation;
+  if (motion.idleTimer) clearTimeout(motion.idleTimer);
+
+  const cancelGlyphAnimations = () => {
+    if (!glyph?.getAnimations) return;
+    for (const animation of glyph.getAnimations()) animation.cancel();
+  };
+  const animateGlyph = (frames, options) => {
+    if (reducedMotion || !glyph?.animate) return;
+    cancelGlyphAnimations();
+    glyph.animate(frames, options);
+  };
+  const scheduleIdleWiggle = () => {
+    if (reducedMotion || !glyph) return;
+    const clickRemaining = Math.max(0, Number(motion.clickUntil || 0) - performance.now());
+    const wiggle = () => {
+      if (motion.generation !== generation || !pointer.isConnected) return;
+      animateGlyph(
+        [
+          { transform: 'translate(0, 0) rotate(0deg)' },
+          { transform: 'translate(-0.2px, 0.15px) rotate(-2.2deg)', offset: 0.3 },
+          { transform: 'translate(0.2px, -0.1px) rotate(1.8deg)', offset: 0.62 },
+          { transform: 'translate(-0.05px, 0) rotate(-0.7deg)', offset: 0.82 },
+          { transform: 'translate(0, 0) rotate(0deg)' },
+        ],
+        { duration: 420, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+      );
+      motion.idleTimer = setTimeout(wiggle, 4200);
+    };
+    motion.idleTimer = setTimeout(wiggle, 3400 + clickRemaining);
+  };
+  const setPointer = (point) => {
     pointer.style.transform =
-      'translate(' + (point.x - hotspotX) + 'px, ' + (point.y - hotspotY) + 'px) scale(' + (isPressed ? '0.92' : '1') + ')';
+      'translate(' + (point.x - hotspotX) + 'px, ' + (point.y - hotspotY) + 'px)';
     pointer.dataset.x = String(point.x);
     pointer.dataset.y = String(point.y);
-    pointer.dataset.pressed = isPressed ? 'true' : 'false';
-    if (pulse) {
-      pulse.style.opacity = isPressed ? '1' : '0';
-      pulse.style.transform = isPressed ? 'scale(1.55)' : 'scale(0.85)';
-    }
   };
+  const now = performance.now();
+  const clickAnimationActive = Number(motion.clickUntil || 0) > now;
+  if (payload.pressed) {
+    motion.clickUntil = now + 260;
+    animateGlyph(
+      [
+        { transform: 'scale(1) rotate(0deg)' },
+        { transform: 'scale(0.88) rotate(-1.8deg)', offset: 0.34 },
+        { transform: 'scale(1.035) rotate(0.8deg)', offset: 0.72 },
+        { transform: 'scale(1) rotate(0deg)' },
+      ],
+      { duration: 260, easing: 'cubic-bezier(0.2, 0.85, 0.2, 1)' }
+    );
+  } else if (points.length > 1) {
+    motion.clickUntil = 0;
+    animateGlyph(
+      [
+        { transform: 'scale(0.985) rotate(-1.1deg)' },
+        { transform: 'scale(1) rotate(0deg)' },
+      ],
+      { duration: 180, easing: 'cubic-bezier(0.18, 0.75, 0.2, 1)' }
+    );
+  } else if (!clickAnimationActive) {
+    cancelGlyphAnimations();
+  }
+  scheduleIdleWiggle();
   if (points.length === 1 || payload.durationMs <= 0) {
-    setPointer(lastPoint, payload.pressed);
+    setPointer(lastPoint);
     return true;
   }
 
@@ -605,12 +640,12 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       setPointer({
         x: Math.round(current.x + (next.x - current.x) * localProgress),
         y: Math.round(current.y + (next.y - current.y) * localProgress),
-      }, false);
+      });
       if (rawProgress < 1) {
         requestAnimationFrame(frame);
         return;
       }
-      setPointer(lastPoint, payload.pressed);
+      setPointer(lastPoint);
       resolve(true);
     };
     frame();

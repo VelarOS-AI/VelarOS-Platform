@@ -178,6 +178,7 @@ function collectToolCallBlocksFromMessageRenderSegment(
 function AssistantMessageSegmentsInner({
   messageRenderSegments,
   isStreaming,
+  implicitlyCompletedRun = false,
   messageId,
   lastTextSegmentKey,
   streamingTextSegmentKey,
@@ -200,6 +201,7 @@ function AssistantMessageSegmentsInner({
 }: {
   messageRenderSegments: MessageRenderSegment[]
   isStreaming: boolean
+  implicitlyCompletedRun?: boolean
   messageId: string
   lastTextSegmentKey?: string
   streamingTextSegmentKey?: LooseOptional<string>
@@ -277,11 +279,12 @@ function AssistantMessageSegmentsInner({
   )
   const shouldUseProcessedActivityBoundary = useMemo(
     () =>
+      implicitlyCompletedRun ||
       shouldUseProcessedActivitySummaryBoundary({
         isStreaming,
         runMarker,
       }),
-    [isStreaming, runMarker]
+    [implicitlyCompletedRun, isStreaming, runMarker]
   )
   const processedActivitySummaryBoundaryIndex = useMemo(
     () =>

@@ -6,11 +6,15 @@ export interface ChatTranscriptMessagePresentation {
   message: ChatMessage
   activityLeadingMessages: ChatMessage[]
   activityTrailingMessages: ChatMessage[]
+  /** 后续独立 turn 已经开始、但宿主漏存完成 marker 时，用 turn 边界补齐上一轮的已处理语义。 */
+  implicitlyCompletedRun: boolean
 }
 
 export interface ChatTranscriptMessagePresentationOptions {
   /** 正常完成的最终 assistant 承担整轮唯一的「已处理」边界。 */
   isCompletedAssistant?: (message: ChatMessage) => boolean
+  /** 任意显式运行 marker 都优先于 turn 边界推断，避免把失败或等待态误判为完成。 */
+  hasRunMarker?: (message: ChatMessage) => boolean
 }
 
 function appendTurnPresentations(
@@ -22,15 +26,37 @@ function appendTurnPresentations(
 ): void {
   const turnMessages = messages.slice(startIndex, endIndex)
   const hasGuidance = turnMessages.some(isRunGuidanceMessage)
+  const turnIsClosed = endIndex < messages.length
+  const completedAnchorIndex = turnMessages.findLastIndex(
+    (message) => message.role === 'assistant' && !!options.isCompletedAssistant?.(message)
+  )
+  const terminalAnchorIndex = turnMessages.findLastIndex(
+    (message) => message.role === 'assistant' && !!options.hasRunMarker?.(message)
+  )
+  const lastAssistantIndex = turnMessages.findLastIndex(
+    (message) => message.role === 'assistant'
+  )
+  const implicitCompletedAnchorIndex =
+    turnIsClosed && completedAnchorIndex < 0 && terminalAnchorIndex < 0
+      ? lastAssistantIndex
+      : -1
+
+  const pushPresentation = (
+    message: ChatMessage,
+    index: number,
+    activityLeadingMessages: ChatMessage[] = [],
+    activityTrailingMessages: ChatMessage[] = []
+  ): void => {
+    presentations.push({
+      message,
+      activityLeadingMessages,
+      activityTrailingMessages,
+      implicitlyCompletedRun: index === implicitCompletedAnchorIndex,
+    })
+  }
 
   if (!hasGuidance) {
-    turnMessages.forEach((message) => {
-      presentations.push({
-        message,
-        activityLeadingMessages: [],
-        activityTrailingMessages: [],
-      })
-    })
+    turnMessages.forEach((message, index) => pushPresentation(message, index))
     return
   }
 
@@ -43,22 +69,20 @@ function appendTurnPresentations(
     }
   }
 
-  const completedAnchorIndex = turnMessages.findLastIndex(
-    (message) => message.role === 'assistant' && !!options.isCompletedAssistant?.(message)
-  )
-  const anchorIndex = completedAnchorIndex >= 0 ? completedAnchorIndex : activeAnchorIndex
+  const anchorIndex =
+    completedAnchorIndex >= 0
+      ? completedAnchorIndex
+      : implicitCompletedAnchorIndex >= 0
+        ? implicitCompletedAnchorIndex
+        : terminalAnchorIndex >= 0
+          ? terminalAnchorIndex
+          : activeAnchorIndex
 
   // 运行中锚定引导前已经挂载的 assistant，插入引导时不换宿主、不重置内部状态；只有正常
   // 完成后才切到最终 assistant，让它把总结留在外面，并承载整轮唯一的「已处理」。
   // 引导刚写入、但本轮尚未产出任何 assistant 消息时没有可承载活动的气泡，保持原顺序。
   if (anchorIndex < 0) {
-    turnMessages.forEach((message) => {
-      presentations.push({
-        message,
-        activityLeadingMessages: [],
-        activityTrailingMessages: [],
-      })
-    })
+    turnMessages.forEach((message, index) => pushPresentation(message, index))
     return
   }
 
@@ -80,11 +104,12 @@ function appendTurnPresentations(
   turnMessages.forEach((message, index) => {
     if (groupedMessageIndexes.has(index)) return
 
-    presentations.push({
+    pushPresentation(
       message,
-      activityLeadingMessages: index === anchorIndex ? activityLeadingMessages : [],
-      activityTrailingMessages: index === anchorIndex ? activityTrailingMessages : [],
-    })
+      index,
+      index === anchorIndex ? activityLeadingMessages : [],
+      index === anchorIndex ? activityTrailingMessages : []
+    )
   })
 }
 

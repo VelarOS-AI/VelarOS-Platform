@@ -421,6 +421,16 @@ export function ChatConversationPane({
       goalDockModel!.blockedAuditTurns,
     ].join(':')
   )
+  const goalLifecycleCollapseKey = optionalWhenLazy(
+    goalLifecycleArtifact && !goalDockModel,
+    () =>
+      [
+        goalLifecycleArtifact!.id,
+        goalLifecycleArtifact!.status,
+        goalLifecycleArtifact!.metadata?.goalStatus,
+        goalLifecycleArtifact!.updatedAt,
+      ].join(':')
+  )
   const activeDockStatusSpotlightItemIds = useMemo(
     () => [goalLifecycleDockItemId, activeDockPlanItemId].filter(isPresent),
     [activeDockPlanItemId, goalLifecycleDockItemId]
@@ -635,6 +645,7 @@ export function ChatConversationPane({
               items={stickyDockItems}
               barLabel={t('sessionStickyDock.barLabel')}
               autoRevealKey={goalLifecycleRevealKey ?? activeDockPlanRevealKey}
+              autoCollapseKey={goalLifecycleCollapseKey}
               spotlightItemIds={activeDockStatusSpotlightItemIds}
             />
             {!isEmpty(workerThreadPlacement.beforeTranscript)

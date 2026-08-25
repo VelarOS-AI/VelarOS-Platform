@@ -19,6 +19,22 @@ export interface BrowserPageDriverPointerEvent {
   button?: LooseOptional<BrowserMouseButton>
 }
 
+/** 页面 CSS 坐标已经换算为桌面逻辑坐标后的系统指针移动请求。 */
+export interface BrowserSystemPointerMoveOptions {
+  x: number
+  y: number
+  durationMs: number
+}
+
+/**
+ * 宿主注入的系统指针能力。
+ *
+ * 返回 false 表示当前环境、权限或可见性不允许使用系统指针，浏览器运行时随即改画统一兜底箭头。
+ */
+export interface BrowserSystemPointerDriver {
+  move(options: BrowserSystemPointerMoveOptions): Promise<boolean>
+}
+
 export type BrowserPageDriverPointerListener = (
   event: BrowserPageDriverPointerEvent
 ) => void
