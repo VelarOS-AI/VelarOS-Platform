@@ -95,7 +95,7 @@
     },
     "packages/browser": {
       "name": "@velaros-ai/browser",
-      "version": "0.2.9",
+      "version": "0.2.10",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/core": "workspace:*",
