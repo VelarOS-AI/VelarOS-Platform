@@ -3778,6 +3778,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
+      "name": "HtmlPreviewToolbar.sourceToggleAction",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "React.ReactNode"
+    },
+    {
       "name": "HtmlPreviewToolbar.onDownload",
       "description": "Auto-generated from TypeScript props.",
       "type": "() => void",
