@@ -74,7 +74,7 @@ void describe('live chat activity presentation', () => {
     )
     assert.match(
       source,
-      /!!\(autoCollapseAfterPaint\s*\|\|\s*autoCollapseOnMount\)\s*&&\s*!hasRunningTool/u
+      /autoCollapseAfterPaint\s*&&\s*!hasRunningTool/u
     )
     assert.doesNotMatch(source, /useRef\(\s*autoCollapseAfterPaint/u)
   })

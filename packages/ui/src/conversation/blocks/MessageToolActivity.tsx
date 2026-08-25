@@ -103,7 +103,6 @@ export function ToolActivityDisclosure({
   blocks,
   children,
   autoCollapseAfterPaint = false,
-  autoCollapseOnMount,
   defaultExpanded = false,
   isRunning,
   label,
@@ -111,7 +110,6 @@ export function ToolActivityDisclosure({
   blocks?: ToolCallBlockType[];
   children: ReactNode | (() => ReactNode);
   autoCollapseAfterPaint?: boolean;
-  autoCollapseOnMount?: boolean;
   defaultExpanded?: boolean;
   isRunning?: boolean;
   label?: string;
@@ -122,7 +120,7 @@ export function ToolActivityDisclosure({
   const hasRunningTool =
     isRunning ?? activityBlocks.some((block) => block.isRunning);
   const shouldAutoCollapseAfterPaint =
-    !!(autoCollapseAfterPaint || autoCollapseOnMount) && !hasRunningTool;
+    autoCollapseAfterPaint && !hasRunningTool;
   // 完成信号可能在容器已经挂载后到达。信号保持实时，先呈现展开态，再在浏览器绘制后
   // 切到折叠态，使原地完成和新容器挂载都能执行同一条自动收起路径。
   const shouldInitiallyExpand = shouldInitiallyExpandToolActivityDisclosure({
