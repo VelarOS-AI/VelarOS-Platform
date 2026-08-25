@@ -109,6 +109,15 @@ export function shouldRenderActivityGroupDisclosure(
   return !isStreaming && segment.kind === 'activity-group' && !isEmpty(segment.blocks)
 }
 
+/** 完成态「已处理」内部只有真正的折叠项参与连续横排；正文和卡片仍各自占行。 */
+export function shouldGroupProcessedActivityDisclosure(
+  segment: MessageRenderSegment
+): boolean {
+  return (
+    shouldRenderActivityGroupDisclosure(segment, false) || messageSegmentStartsThinking(segment)
+  )
+}
+
 export function shouldAnimateLiveToolActivity({
   armedMessageId,
   isStreaming,
@@ -536,13 +545,19 @@ function AssistantMessageSegmentsInner({
         )
       const outsideSegmentKeys = new Set(outsideSegments.map((segment) => segment.key))
       const processedSegmentKeys = new Set(processedSegments.map((segment) => segment.key))
-      const processedActivityRenderers: ActivitySegmentRenderer[] = []
+      const processedActivityEntries: Array<{
+        segment: MessageRenderSegment
+        render: ActivitySegmentRenderer
+      }> = []
       const processedActivityBlocks: ToolCallBlockType[] = []
       const postDisclosureElements: ReactNode[] = []
 
       visibleMessageRenderSegments.forEach((segment) => {
         if (processedSegmentKeys.has(segment.key)) {
-          processedActivityRenderers.push(() => renderMessageRenderSegment(segment))
+          processedActivityEntries.push({
+            segment,
+            render: () => renderMessageRenderSegment(segment),
+          })
           collectToolCallBlocksFromMessageRenderSegment(segment, processedActivityBlocks)
         } else if (outsideSegmentKeys.has(segment.key)) {
           const renderedSegment = renderMessageRenderSegment(segment)
@@ -556,8 +571,51 @@ function AssistantMessageSegmentsInner({
         )
       })
 
+      const renderProcessedActivityEntries = (): ReactNode[] => {
+        const elements: ReactNode[] = []
+        let inlineElements: ReactElement[] = []
+        let inlineKey: Nullable<string> = null
+
+        const flushInlineElements = (): void => {
+          if (isEmpty(inlineElements)) return
+
+          if (inlineElements.length === 1) {
+            elements.push(inlineElements[0])
+          } else {
+            elements.push(
+              <div
+                key={`processed-activity-row:${inlineKey ?? elements.length}`}
+                className={styles.toolActivitySummaryRow}
+              >
+                {inlineElements}
+              </div>
+            )
+          }
+
+          inlineElements = []
+          inlineKey = null
+        }
+
+        processedActivityEntries.forEach(({ segment, render }) => {
+          const element = render()
+          if (!element) return
+
+          if (shouldGroupProcessedActivityDisclosure(segment)) {
+            inlineKey ??= segment.key
+            inlineElements.push(element)
+            return
+          }
+
+          flushInlineElements()
+          elements.push(element)
+        })
+
+        flushInlineElements()
+        return elements
+      }
+
       const includeLeadingElement = !!activityLeadingElement
-      if (!isEmpty(processedActivityRenderers) || includeLeadingElement) {
+      if (!isEmpty(processedActivityEntries) || includeLeadingElement) {
         const firstProcessedKey = processedSegments[0]?.key ?? 'leading'
         renderedSegments.push(
           <ToolActivityDisclosure
@@ -579,9 +637,7 @@ function AssistantMessageSegmentsInner({
               ...(activityLeadingElement
                 ? [<React.Fragment key="activity-leading">{activityLeadingElement}</React.Fragment>]
                 : []),
-              ...processedActivityRenderers
-                .map((renderSegment) => renderSegment())
-                .filter(isPresent),
+              ...renderProcessedActivityEntries(),
               ...(activityTrailingElement
                 ? [
                     <React.Fragment key="activity-trailing">

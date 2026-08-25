@@ -303,13 +303,12 @@ const browserActWaitForSelectorSchema = z
           'hidden：元素不存在或不可见。',
           'detached：元素不在 DOM 中。',
         ],
-        notes: ['省略时保持旧行为，等待 attached；visible=true 时等价于 state=visible。'],
+        notes: ['省略时等待 attached；visible=true 时等价于 state=visible。'],
       })
     ),
     visible: z.boolean().optional().describe(
       parameterDescription({
-        description: '是否要求匹配元素可见。',
-        notes: ['兼容旧字段；新调用优先使用 state=visible。'],
+        description: 'state=visible 的布尔简写。',
       })
     ),
     timeoutMs: z.number().int().positive().max(60000).optional().describe(

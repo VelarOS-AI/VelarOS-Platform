@@ -87,7 +87,7 @@ export interface RuntimePromptSnapshot {
 export const PromptSegmentPriority = {
   identity: 0,
   brandVoice: 10,
-  // 对外兼容的通用纪律优先级；内置目录不再注册信息披露边界段。
+  // 对外兼容的通用纪律优先级；内置 Tier0 保持身份与品牌语气两段。
   safetyBoundary: 20,
   runtime: 1_000,
   capabilityProtocol: 1_200,
@@ -176,8 +176,7 @@ export function createTextPromptSegment(args: {
 /**
  * Tier2 技能段（角色技能全文档位）。
  *
- * `retention: 'protected'` 不是保守起见：技能索引承载的是**用户显式选中**的意图，
- * 被 run-profile 预算裁掉等于把用户亲手选的技能静默丢弃，而模型对此毫无感知。
+ * 技能索引承载用户显式选择，`retention: 'protected'` 保证该意图跨预算裁剪保留。
  */
 export function createSkillPromptSegment(id: string, text: string): PromptSegmentDefinition {
   return createTextPromptSegment({

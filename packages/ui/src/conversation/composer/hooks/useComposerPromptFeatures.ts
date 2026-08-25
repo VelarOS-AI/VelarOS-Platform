@@ -68,9 +68,7 @@ export function useComposerPromptFeatures({
     [lockedPromptFeatures, promptFeatures, unavailablePromptFeatures]
   )
 
-  // 渲染那两格（widget / html-artifact）由宿主常开、模型自行触发，**不再是用户开关**：
-  // 芯片行同样不画它们，否则每条会话都常驻两枚点不掉的芯片（判决见
-  // `filterComposerMenuPluginOptions`）。
+  // 菜单与芯片行共用用户可选能力口径；内置呈现协议由宿主按工作区注入。
   const activePluginOptions = useMemo(
     () => filterComposerMenuPluginOptions(buildActivePluginOptions(selectedPromptFeatures)),
     [selectedPromptFeatures]

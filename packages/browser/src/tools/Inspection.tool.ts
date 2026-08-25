@@ -178,7 +178,7 @@ const browserObserveActions = defineBrowserTool<{
   notes: [
     '候选来自当前页面 inspection，不调用外部 LLM。',
     'ignoreSelectors 会在生成候选前过滤对应子树，适合排除 cookie banner、固定导航和广告容器。',
-    '每个候选包含 actionId、preview 和 replay；target 类动作额外保留兼容旧调用方的 actionInput。',
+    '每个候选包含 actionId、preview 和 replay；target 类动作同时提供 actionInput。',
     '原生 select 会作为需要 value 的 select 候选返回；value 可按 option value 或可见文本匹配。',
     'file input 会作为 upload 候选返回；执行时用 browser:upload_file 并补 filePath。',
     '自定义 dropdown 触发器会带 twoStep=true；先执行 click，再重新 observe 选项。',

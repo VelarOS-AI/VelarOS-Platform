@@ -3,7 +3,7 @@
  *
  * 这一组锁的是「分层是结构，不是先例」：
  *  ① Tier0 是稳定前缀的全部内容，且**逐轮字节不变**——任何按 facts 开关的段都不许进去；
- *  ② 曾经声明 `stable` 却按本轮输入开关的能力协议段（HTML 实时预览 / Widget）已下沉 Tier1；
+ *  ② 按本轮输入开关的能力协议段（HTML 实时预览 / Widget）属于 Tier1；
  *  ③ 技能段是 Tier2，落活动尾且 `protected`（预算裁剪不得吞掉用户显式选中的技能）；
  *  ④ 装配顺序是 (tier, priority, id) 的纯函数——注册顺序改变不改变输出字节；
  *  ⑤ mod 贡献段一律 Tier1，manifest 里写 `stability: 'stable'` 也进不了稳定前缀。
@@ -67,6 +67,29 @@ void describe('Tier0 是稳定前缀的全部内容', () => {
 
     assert.equal(prefixes[0], prefixes[1])
     assert.equal(prefixes[1], prefixes[2])
+  })
+
+  void test('核心语气要求克制且有信息量的阶段沟通', () => {
+    const built = buildPrompt()
+    const brandVoice = built.segments.find((segment) => segment.id === 'core.brand-voice')
+
+    assert.ok(brandVoice)
+    assert.match(brandVoice.text, /开始执行前用一句话回应理解和当前行动/u)
+    assert.match(brandVoice.text, /用户在运行中追加引导时，先简短确认如何纳入/u)
+    assert.match(brandVoice.text, /每完成一个有意义的阶段/u)
+    assert.match(brandVoice.text, /用户可见的过程消息只承载新增信息/u)
+    assert.match(brandVoice.text, /简单任务直接完成/u)
+  })
+
+  void test('核心纪律要求按当前状态表达，不保留被排除方案', () => {
+    const built = buildPrompt()
+    const brandVoice = built.segments.find((segment) => segment.id === 'core.brand-voice')
+
+    assert.ok(brandVoice)
+    assert.match(brandVoice.text, /提示词与产物遵循当前状态原则/u)
+    assert.match(brandVoice.text, /用户撤销、纠正或排除某项后，直接按剩余目标重建/u)
+    assert.match(brandVoice.text, /禁止用“未采用、已删除、不属于”等反向说明继续保留该项/u)
+    assert.match(brandVoice.text, /安全边界、兼容行为、迁移说明或故障诊断确有需要时除外/u)
   })
 
   void test('不再注入内部实现信息披露限制', () => {
@@ -154,11 +177,11 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
     assert.equal(on.systemPrompt.slice(0, on.stableCutoff), off.systemPrompt.slice(0, off.stableCutoff))
   })
 
-  void test('Widget 协议段的 fact 现在真的有生产者驱动（不再是永不命中的死段）', () => {
+  void test('Widget 协议段由视觉意图 fact 激活', () => {
     const built = buildPrompt({ shouldInjectVisualWidgetPrompt: true })
 
     assert.ok(built.segments.some((entry) => entry.id === 'runtime.visual-widget-tools'))
-    assert.match(built.systemPrompt, /默认使用 Markdown/u)
+    assert.match(built.systemPrompt, /普通说明和简短回答使用 Markdown/u)
     assert.match(built.systemPrompt, /复杂说明展示/u)
   })
 
@@ -168,7 +191,7 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
       shouldInjectHtmlArtifactPrompt: true,
     })
 
-    assert.match(built.systemPrompt, /呈现方式默认使用 Markdown/u)
+    assert.match(built.systemPrompt, /普通说明使用 Markdown/u)
     assert.match(built.systemPrompt, /简单、直观的 HTML 实时效果.*HTML Live Preview/u)
     assert.match(built.systemPrompt, /复杂说明展示.*Widget/u)
     assert.match(built.systemPrompt, /需要交互、演示或进一步讲解/u)
@@ -201,7 +224,7 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
     )
   })
 
-  void test('内置呈现协议不冒充本轮已选能力，并允许宿主按工作区收窄', async () => {
+  void test('本轮已选能力只列用户选择项，并允许宿主按工作区收窄', async () => {
     const builtInRendererPolicy: RuntimePromptFeaturePolicy = {
       normalize: (features) => [...new Set([...features, 'widget', 'html-artifact'])],
       normalizeForScope: (features, scope) =>

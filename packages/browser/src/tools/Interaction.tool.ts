@@ -597,7 +597,7 @@ const browserWaitForSelector = defineBrowserTool<{
   summary: '等待页面元素出现。',
   suitable: ['点击、跳转、输入或异步加载后等待元素出现、可见、隐藏或移除。'],
   forbidden: ['不要用它等待任意文本；文本检查用页面查询或检查工具。'],
-  usage: ['传 selector；新调用优先传 state，旧 visible=true 等价于 state=visible；同源 iframe 内元素可用 `iframe[...] >> .inner`。'],
+  usage: ['传 selector 和 state；visible=true 等价于 state=visible；同源 iframe 内元素可用 `iframe[...] >> .inner`。'],
   examples: [{ selector: ".results", state: 'visible' }, { selector: 'iframe[name="checkout"] >> .ready', state: 'visible' }],
   notes: ['等待期间不应并发执行其他页面操作。', '`>>` 只进入同源 iframe；跨域 iframe 和 OOPIF 不在当前页面脚本路径内。'],
   schema: z.object({
@@ -615,13 +615,12 @@ const browserWaitForSelector = defineBrowserTool<{
           'hidden：元素不存在或不可见。',
           'detached：元素不在 DOM 中。',
         ],
-        notes: ['省略时等待 attached；visible=true 作为兼容字段仍可用。'],
+        notes: ['省略时等待 attached。'],
       })
     ),
     visible: z.boolean().optional().describe(
       parameterDescription({
-        description: '是否要求匹配元素可见。',
-        notes: ['兼容旧字段；新调用优先使用 state=visible。'],
+        description: 'state=visible 的布尔简写。',
       })
     ),
     timeoutMs: z
@@ -877,7 +876,6 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
   summary: '在已进入的浏览器会话中跳转 URL、点击、填写、滚动或等待页面。',
   suitable: [
     '需要直接访问 URL，或点击、填写、选择、清空、选中文本、前进、后退、刷新、滚动、键鼠、等待、视口、缩放、网络或环境模拟控制当前 browser 页面。',
-    '需要替代旧的单一 browser 交互工具时使用。',
   ],
   forbidden: [
     '不要用它进入或退出 browser site 模式；站点会话仍用 browser:enter_site/browser:leave_site。',

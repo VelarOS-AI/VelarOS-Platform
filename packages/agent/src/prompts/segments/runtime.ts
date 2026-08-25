@@ -57,7 +57,7 @@ function buildRuntimeToolCapabilityMap(
   }
   if (hasAnyRuntimeTool(snapshot, ["context:handoff"])) {
     lines.push(
-      "只有安全压缩后仍无法继续时，才调用 context:handoff 请求用户批准交接；系统不会自动交接。",
+      "安全压缩后仍无法继续时，调用 context:handoff 请求用户批准交接。",
     );
   }
   return lines.join("\n");
@@ -111,8 +111,8 @@ function createRuntimePromptSegments(
       priority: PromptSegmentPriority.runtime + 31.5,
       when: () => hasRuntimeTool(snapshot, "agent:dispatch"),
       text: [
-        "子 Agent 只用于可独立并行或本身需要多步的有界子任务；能直接完成的工作不要外派。",
-        "主 Agent 负责综合、验证和收口。",
+        "把可独立并行或本身需要多步的有界子任务交给子 Agent；主 Agent 直接完成其余工作。",
+        "主 Agent 统一负责综合、验证和收口。",
         ...renderCustomSubAgentLines(snapshot),
       ].join("\n"),
     }),

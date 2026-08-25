@@ -15,7 +15,7 @@ export interface BuiltInPromptOptions {
   /**
    * 宿主为主 Agent 提供的身份说明。
    *
-   * 身份属于应用装配，不属于 Agent Runtime；未提供时使用不含产品名称的中性身份。
+   * 身份由应用装配；未提供时使用产品中性的默认身份。
    */
   primaryAgentIdentity?: string
 }
@@ -29,6 +29,9 @@ const PromptCatalog = {
     '以完成用户目标为导向；能执行就执行，受限时交付可用部分并说明最小缺口。',
     '先给结论和结果，再补必要上下文与证据。',
     '表达和产物保持简洁、稳定、边界清楚；细节程度服从用户要求。',
+    '提示词与产物遵循当前状态原则：用户撤销、纠正或排除某项后，直接按剩余目标重建；禁止用“未采用、已删除、不属于”等反向说明继续保留该项，安全边界、兼容行为、迁移说明或故障诊断确有需要时除外。',
+    '对需要多步或耗时的执行任务保持克制而有信息量的过程沟通：开始执行前用一句话回应理解和当前行动；用户在运行中追加引导时，先简短确认如何纳入；每完成一个有意义的阶段，或发现会改变方向的事实时，用一两句话汇报已得结果与下一步。',
+    '用户可见的过程消息只承载新增信息：阶段结果、方向变化和下一步；简单任务直接完成，最终答复保持自洽。',
   ].join('\n'),
   identities: {
     primaryAgent: NeutralPrimaryAgentIdentity,
@@ -76,7 +79,7 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
   return [
     '当前运行环境：',
     ...availableRows.map(([label, value]) => `- ${label}：${value}`),
-    '生成命令时以这里声明的操作系统与 Shell 为准；只有需要更细的实时状态或工具可用性时才检查环境。',
+    '生成命令时以这里声明的操作系统与 Shell 为准；需要更细的实时状态或工具可用性时再检查环境。',
   ].join('\n')
 }
 
@@ -111,15 +114,10 @@ function createBuiltInPromptSegments(
       tier: 'runtime',
       source: 'runtime',
       priority: 9020,
-      // P7-1 粒度钝化：原实现是 `toLocaleString()`（**带秒**且随 locale 变格式）——同一分钟内的
-      // 两次请求也会产出不同字节。段本身已随 dynamic 层整体下沉到活动尾（不再挤在稳定前缀与
-      // 历史之间，见 `StreamTurn.buildSystemPromptDelivery`），钝化到分钟再消掉尾块自身逐请求
-      // 漂移的那一档；格式钉死本地时区的分钟位，与 locale / ICU 数据无关（P7 确定性序列化）。
+      // 动态时间段使用固定本地格式和分钟精度，减少活动尾字节抖动并保持跨 locale 确定性。
       render: () => `当前时间：${formatMinutePrecisionLocalTime(new Date())}`,
     },
-    // ↓ 三段能力协议曾声明 `stable`，但它们的谓词读的是**逐轮重算**的 facts（本轮是否开启该
-    //   能力、最新一条 user 消息是否命中视觉意图正则）。段一开一关，稳定前缀就分叉一次，
-    //   连带其后的整段历史掉出 provider 前缀缓存。它们是 Tier1（按会话状态装配）不是 Tier0。
+    // 视觉协议按逐轮 facts 激活，统一留在 Tier1 活动尾，保持 Tier0 稳定前缀逐字不变。
     {
       id: 'runtime.visual-widget-tools',
       label: 'Visual Output Tools',
@@ -130,9 +128,8 @@ function createBuiltInPromptSegments(
       when: (context) => isTrue(context.facts?.shouldInjectVisualWidgetPrompt),
       render: () =>
         [
-          'Widget 是宿主内置的呈现方式，不属于用户本轮选择的能力。',
-          '默认使用 Markdown；普通说明、简短回答和不需要专门视觉承载的内容都保持 Markdown。',
-          '需要复杂说明展示、复杂图表、数据驱动状态、多状态或多步骤交互、Canvas/WebGL，或需要用户探索并进一步讲解时，才使用 Widget，并先读取 skill:widget-visual-output。',
+          '普通说明和简短回答使用 Markdown。',
+          '复杂说明展示、复杂图表、数据驱动状态、多状态或多步骤交互、Canvas/WebGL，以及供用户探索或进一步讲解的内容使用 Widget，并先读取 skill:widget-visual-output。',
         ].join('\n'),
     },
     {
@@ -145,8 +142,7 @@ function createBuiltInPromptSegments(
       when: (context) => isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
       render: () =>
         [
-          'HTML Live Preview 是宿主内置的呈现方式，不属于用户本轮选择的能力。',
-          '当简单 HTML 页面、卡片、落地页、静态内容、轻交互或即时视觉效果比 Markdown 更直观时，使用 HTML Live Preview，并先读取 skill:html-artifact-output。',
+          '简单 HTML 页面、卡片、落地页、静态内容、轻交互和即时视觉效果使用 HTML Live Preview，并先读取 skill:html-artifact-output。',
           '实时预览直接输出 <artifact>/<patch> 流式协议；artifact:produce 仅用于导出可下载资源。',
         ].join('\n'),
     },
@@ -162,9 +158,9 @@ function createBuiltInPromptSegments(
         isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
       render: () =>
         [
-          '呈现方式默认使用 Markdown；普通说明无需改成可视化内容。',
+          '普通说明使用 Markdown。',
           '简单、直观的 HTML 实时效果和轻交互使用 HTML Live Preview；复杂说明展示、复杂图表、数据驱动界面、多状态或多步骤交互使用 Widget。',
-          '用户需要交互、演示或进一步讲解时，按内容复杂度在两者中选择最合适的一种；只有任务确实包含两种用途不同的呈现时才同时使用。',
+          '用户需要交互、演示或进一步讲解时，按内容复杂度选择呈现方式；两种呈现承担不同用途时可以同时使用。',
         ].join('\n'),
     },
     {
@@ -186,9 +182,8 @@ function createBuiltInPromptSegments(
 /**
  * Tier0 身份段。
  *
- * 身份是 **builder 作用域**的常量（主 Agent 一份、每个子 Agent 各一份），不是回合作用域，
- * 因此由 `ContextBuilder.withIdentity` 在克隆出的注册表里**重新注册一次**本段，而不是在渲染期
- * 读 `PromptRenderContext.identity`——渲染期读取会给 Tier0 开一条"按上下文变文本"的口子。
+ * 身份是 builder 作用域的常量（主 Agent 一份、每个子 Agent 各一份）。
+ * `ContextBuilder.withIdentity` 在克隆注册表时登记本段，使 Tier0 在同一 builder 内逐字稳定。
  */
 function createIdentityPromptSegment(identity: string): PromptSegmentDefinition {
   return createCorePromptSegment({

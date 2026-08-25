@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   shouldAnimateLiveToolActivity,
+  shouldGroupProcessedActivityDisclosure,
   shouldRenderActivityGroupDisclosure,
   shouldRenderProcessedActivityDisclosure,
 } from '../../packages/ui/src/conversation/blocks/AssistantMessageSegments'
@@ -19,6 +20,7 @@ import {
   resolveToolActivityMotionKind,
 } from '../../packages/ui/src/conversation/blocks/ToolActivityMotion'
 import type { ToolCallBlock } from '../../packages/ui/src/conversation/contracts'
+import { shouldForceGroupedActivityFlat } from '../../packages/ui/src/conversation/shell/ChatTranscript'
 
 function toolBlock(toolCallId: string, options: Partial<ToolCallBlock> = {}): ToolCallBlock {
   return {
@@ -66,6 +68,30 @@ void describe('live chat activity presentation', () => {
       stylesheet,
       /\.toolActivitySummaryRow\s*>\s*\.toolActivityDisclosure:has\(\.toolActivityBodyShell\)/
     )
+
+    const block = toolBlock('tool-inline', { isRunning: false })
+    const thinkingSegment: MessageRenderSegment = {
+      kind: 'segment',
+      key: 'thinking:inline',
+      segment: {
+        kind: 'block',
+        key: 'thinking:inline',
+        block: { type: 'thinking', text: '继续检查。' },
+      },
+    }
+    const textSegment: MessageRenderSegment = {
+      kind: 'segment',
+      key: 'text:break',
+      segment: {
+        kind: 'block',
+        key: 'text:break',
+        block: { type: 'text', text: '正文另起一行。' },
+      },
+    }
+
+    assert.equal(shouldGroupProcessedActivityDisclosure(activitySegment(block)), true)
+    assert.equal(shouldGroupProcessedActivityDisclosure(thinkingSegment), true)
+    assert.equal(shouldGroupProcessedActivityDisclosure(textSegment), false)
   })
 
   void test('keeps thinking and tool activity flat while the message is streaming', () => {
@@ -90,6 +116,11 @@ void describe('live chat activity presentation', () => {
       }),
       true
     )
+  })
+
+  void test('restores grouped pre-guidance disclosures after the owning run completes', () => {
+    assert.equal(shouldForceGroupedActivityFlat(true), true)
+    assert.equal(shouldForceGroupedActivityFlat(false), false)
   })
 
   void test('only folds grouped guidance activity after the owning run is processed', () => {

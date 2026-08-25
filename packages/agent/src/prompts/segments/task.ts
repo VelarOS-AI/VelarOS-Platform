@@ -28,7 +28,7 @@ export function createTaskRuntimePromptSegments(
       source: 'runtime',
       priority: PromptSegmentPriority.runtimeAdvice + 1,
       when: () => snapshot.goalMode,
-      text: '当前执行绑定到持久目标：持续推进并维护任务账本；仅在真正达成或无法继续时按 goal 工具契约更新状态。',
+      text: '当前执行绑定到持久目标：持续推进并维护任务账本；真正达成或无法继续时按 goal 工具契约更新状态。',
     }),
   ]
 }

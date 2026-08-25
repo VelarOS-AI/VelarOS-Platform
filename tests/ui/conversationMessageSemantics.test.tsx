@@ -234,10 +234,11 @@ void test('运行中将引导与前后 assistant 片段保持在同一个平铺�
 
   assert.match(markup, /data-chat-run-activity="true"/)
   assert.match(markup, /data-chat-message="guidance"/)
+  assert.doesNotMatch(markup, /aria-expanded=/)
   assert.doesNotMatch(markup, />已处理</)
 })
 
-void test('运行完成后只留下一个已处理入口，并把引导内容收进其中', () => {
+void test('旧会话运行完成后只留下一个已处理入口，并把引导内容收进其中', () => {
   const markup = renderToStaticMarkup(
     createElement(
       ConversationLocalizationProvider,
@@ -264,8 +265,8 @@ void test('运行完成后只留下一个已处理入口，并把引导内容收
     ) as ReactElement
   )
 
+  assert.equal(markup.match(/>已处理</g)?.length, 1)
   assert.match(markup, /aria-expanded="false"/)
-  assert.match(markup, />已处理</)
   assert.doesNotMatch(markup, /data-chat-message="guidance"/)
 })
 

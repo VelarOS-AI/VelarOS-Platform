@@ -48,6 +48,11 @@ interface ChatTranscriptNavigationState {
   hasNextSection: boolean
 }
 
+/** 引导归组只在整轮运行中压平内部活动；完成态必须保留各块原有的折叠组件。 */
+export function shouldForceGroupedActivityFlat(groupedRunIsStreaming: boolean): boolean {
+  return groupedRunIsStreaming
+}
+
 /**
  * 渲染窗口的导航契约：由 useChatTranscriptWindow 实现，ChatScrollNavigator 消费。
  * section = turn-input；运行内 guidance/reply 不创建新 section。
@@ -154,7 +159,10 @@ function ChatTranscriptInner({
     markFirstChatTranscriptCommit()
   }, [])
 
-  const renderActivityMessages = (activityMessages: ChatMessage[]): Nullable<ReactElement> => {
+  const renderActivityMessages = (
+    activityMessages: ChatMessage[],
+    forceActivityFlat: boolean
+  ): Nullable<ReactElement> => {
     if (isEmpty(activityMessages)) return null
 
     return (
@@ -166,7 +174,7 @@ function ChatTranscriptInner({
           return (
             <Fragment key={message.id}>
               {beforeMessage}
-              {renderMessageItem(message, { forceActivityFlat: true })}
+              {renderMessageItem(message, { forceActivityFlat })}
               {afterMessage}
             </Fragment>
           )
@@ -191,7 +199,11 @@ function ChatTranscriptInner({
       ...activityLeadingMessages,
       ...activityTrailingMessages,
     ].some((activityMessage) => !!getIsStreaming?.(activityMessage))
-    const groupedActivityLeadingElement = renderActivityMessages(activityLeadingMessages)
+    const forceGroupedActivityFlat = shouldForceGroupedActivityFlat(groupedRunIsStreaming)
+    const groupedActivityLeadingElement = renderActivityMessages(
+      activityLeadingMessages,
+      forceGroupedActivityFlat
+    )
     const ownActivityLeadingElement = renderActivityLeadingElement?.(message)
     const activityLeadingElement =
       groupedActivityLeadingElement || ownActivityLeadingElement ? (
@@ -200,7 +212,10 @@ function ChatTranscriptInner({
           {ownActivityLeadingElement}
         </>
       ) : null
-    const activityTrailingElement = renderActivityMessages(activityTrailingMessages)
+    const activityTrailingElement = renderActivityMessages(
+      activityTrailingMessages,
+      forceGroupedActivityFlat
+    )
 
     return (
       <div className={itemClassName} data-chat-message={message.id}>
