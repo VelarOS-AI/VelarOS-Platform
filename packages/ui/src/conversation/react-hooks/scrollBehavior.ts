@@ -1,6 +1,6 @@
 /**
  * 会话滚动行为纯策略（自动跟随 / 分节导航 / 滚动恢复）。零耦合叶子,随会话渲染件入包;
- * 宿主 `@utils/dom/scrollBehavior.utils` 另有同源副本(pass-4 shell 迁移后统一)。
+ * 宿主通过 `@velaros-ai/ui/conversation` 复用这里的实现，滚动判定只有这一份权威来源。
  */
 import { isFiniteNumber } from '#internal/runtime'
 
@@ -164,10 +164,8 @@ export function resolveAutoScrollPinnedAfterScroll({
   return isAtBottom ?? isNearBottom
 }
 
-// 内容增长/重排（流式吐字、工具卡插入、活动组折叠）引起的 scrollTop 变化是内容驱动的，
-// 不是用户意图——浏览器的滚动锚定不会派发 scroll 事件，所以「是否跟随」只由 scroll 事件
-// (resolveAutoScrollPinnedAfterScroll) 决定。这里只要仍在跟随就贴底，绝不因内容重排把
-// scrollTop 上移误判成「用户上滑」而停跟随（那正是「工具卡插入后不再自动跟随」的根因）。
+// 内容增长/重排只允许容差内的锚定偏移继续跟随；显著向上移动优先解释为用户导航，
+// 即使 scroll 事件尚未更新 pinned，也不会被 resize 或下一帧重新拉回底部。
 export function shouldAutoScrollAfterContentResize({
   pinned,
   previousScrollTop,
