@@ -3,6 +3,7 @@ export type MessageMarkdownHrefTarget =
   | { kind: 'web'; url: string }
   | { kind: 'external-protocol'; url: string }
   | { kind: 'project-file'; path: string }
+  | { kind: 'text'; text: string }
   | { kind: 'passthrough'; href: string }
 
 const WebLinkPattern = /^https?:\/\//i
@@ -77,8 +78,9 @@ const KnownFileReferenceExtensionSet = new Set([
   'yml',
   'zsh',
 ])
-const FileReferencePattern =
-  /^(?!.*\s)(?!.*(?:&&|\|\||[;<>`]))(?:~[\\/]|\.{1,2}[\\/]|[A-Za-z]:[\\/]|[\\/])?[\w@.+~-]+(?:[\\/][\w@.+~-]+)*\.[A-Za-z0-9][A-Za-z0-9.-]{0,15}(?::\d+(?::\d+)?)?$/u
+const FileReferenceCandidatePattern =
+  /^(?!.*\s)(?!.*(?:&&|\|\||[;<>`]))(?:~[\\/]|\.{1,2}[\\/]|[A-Za-z]:[\\/]|[\\/]{1,2})?[\w@.+~-]+(?:[\\/][\w@.+~-]+)*\.[A-Za-z0-9][A-Za-z0-9.-]{0,15}(?::\d+(?::\d+)?)?$/u
+const AbsoluteFileReferencePattern = /^(?:[A-Za-z]:[\\/]|[\\/]{1,2})/u
 
 function stripFileReferenceLocation(value: string): string {
   return value.replace(/:\d+(?::\d+)?$/u, '')
@@ -97,7 +99,7 @@ function normalizeFileUrlPath(href: string): Nullable<string> {
   return URL.canParse(href) ? new URL(href).pathname : href.replace(FileUrlPattern, '')
 }
 
-export function isMessageMarkdownFileReference(value: string): boolean {
+function isMessageMarkdownFileReferenceCandidate(value: string): boolean {
   const trimmed = value.trim()
   if (
     isBlank(trimmed) ||
@@ -108,7 +110,15 @@ export function isMessageMarkdownFileReference(value: string): boolean {
     /(?:^|\s)(?:cd|node|npm|npx|pnpm|yarn|bun|python|python3|sh|bash|zsh|git)\s/u.test(trimmed)
   ) return false
 
-  return FileReferencePattern.test(trimmed) && hasKnownFileReferenceExtension(trimmed)
+  return FileReferenceCandidatePattern.test(trimmed) && hasKnownFileReferenceExtension(trimmed)
+}
+
+export function isMessageMarkdownFileReference(value: string): boolean {
+  const trimmed = value.trim()
+
+  return (
+    AbsoluteFileReferencePattern.test(trimmed) && isMessageMarkdownFileReferenceCandidate(trimmed)
+  )
 }
 
 export function normalizeMessageMarkdownFileReference(value: string): Nullable<string> {
@@ -129,6 +139,8 @@ export function resolveMessageMarkdownHrefTarget(href: string): MessageMarkdownH
 
   const filePath = normalizeMessageMarkdownFileReference(link)
   if (filePath) return { kind: 'project-file', path: filePath }
+
+  if (isMessageMarkdownFileReferenceCandidate(link)) return { kind: 'text', text: link }
 
   return { kind: 'passthrough', href }
 }

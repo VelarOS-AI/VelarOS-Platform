@@ -116,6 +116,14 @@ export interface AutoScrollWheelDecision {
   shouldSuspendAutoScroll: boolean
 }
 
+export interface TranscriptWindowFollowEndAfterScrollInput {
+  currentFollowEnd: boolean
+  previousScrollTop: number
+  currentScrollTop: number
+  isAtBottom: boolean
+  movementTolerancePx?: number
+}
+
 export function resolveAutoScrollPinnedAfterReset({
   currentPinned,
   resetKeyChanged,
@@ -141,6 +149,21 @@ export function resolveAutoScrollWheelDecision(
     shouldPreventDefault: false,
     shouldSuspendAutoScroll: shouldSuspendAutoScrollForWheel(deltaY),
   }
+}
+
+export function resolveTranscriptWindowFollowEndAfterScroll({
+  currentFollowEnd,
+  previousScrollTop,
+  currentScrollTop,
+  isAtBottom,
+  movementTolerancePx = 1,
+}: TranscriptWindowFollowEndAfterScrollInput): boolean {
+  const tolerance = Math.max(0, movementTolerancePx)
+  if (currentScrollTop < previousScrollTop - tolerance) return false
+
+  return !currentFollowEnd && currentScrollTop > previousScrollTop + tolerance && isAtBottom
+    ? true
+    : currentFollowEnd
 }
 
 export function resolveAutoScrollPinnedAfterScroll({

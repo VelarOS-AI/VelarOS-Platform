@@ -24,10 +24,17 @@ function signalCounts(
   const calls = collectToolCalls(observation);
   const repeatCounts = new Map<string, number>();
   const toolMapCounts = new Map<string, number>();
+  let previousRetryKey: string | null = null;
+  let consecutiveRetryCount = 0;
   for (const call of calls) {
     const input = JSON.stringify(call.input);
     const retryKey = `${call.name}\u0000${input}`;
-    repeatCounts.set(retryKey, (repeatCounts.get(retryKey) ?? 0) + 1);
+    consecutiveRetryCount = retryKey === previousRetryKey ? consecutiveRetryCount + 1 : 1;
+    repeatCounts.set(
+      retryKey,
+      Math.max(repeatCounts.get(retryKey) ?? 0, consecutiveRetryCount),
+    );
+    previousRetryKey = retryKey;
     if (call.name === "tooling:map") {
       toolMapCounts.set(input, (toolMapCounts.get(input) ?? 0) + 1);
     }
@@ -40,7 +47,7 @@ function signalCounts(
       key: `retry:${key}`,
       count,
       abortAt: thresholds.retryAbort,
-      reason: `同一工具与参数在本次等待窗口重复 ${count} 次`,
+      reason: `同一工具与参数在本次等待窗口连续重复 ${count} 次`,
     });
   }
   for (const [key, count] of toolMapCounts) {

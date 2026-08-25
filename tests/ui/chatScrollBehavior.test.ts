@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import {
+  resolveTranscriptWindowFollowEndAfterScroll,
   shouldAutoScrollAfterContentResize,
   shouldCommitScheduledAutoScroll,
   shouldStartImmediateAutoScroll,
@@ -49,6 +50,36 @@ void describe('chat auto-scroll ownership', () => {
         currentScrollTop: 1400,
         isNearBottom: true,
         movementTolerancePx: 48,
+      }),
+      true
+    )
+  })
+
+  void test('keeps the transcript window anchored after upward intent until the user returns down', () => {
+    assert.equal(
+      resolveTranscriptWindowFollowEndAfterScroll({
+        currentFollowEnd: true,
+        previousScrollTop: 1600,
+        currentScrollTop: 1200,
+        isAtBottom: false,
+      }),
+      false
+    )
+    assert.equal(
+      resolveTranscriptWindowFollowEndAfterScroll({
+        currentFollowEnd: false,
+        previousScrollTop: 1200,
+        currentScrollTop: 1500,
+        isAtBottom: false,
+      }),
+      false
+    )
+    assert.equal(
+      resolveTranscriptWindowFollowEndAfterScroll({
+        currentFollowEnd: false,
+        previousScrollTop: 1500,
+        currentScrollTop: 1600,
+        isAtBottom: true,
       }),
       true
     )

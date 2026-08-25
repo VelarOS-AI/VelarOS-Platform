@@ -473,6 +473,8 @@ function useBaseMarkdownComponents({
             />
           )
 
+        if (linkTarget.kind === 'text') return <span>{props.children}</span>
+
         if (linkTarget.kind === 'web')
           return (
             <span className={styles.markdownWebLinkGroup}>

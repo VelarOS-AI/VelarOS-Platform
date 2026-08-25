@@ -8,13 +8,15 @@
  *   - 回顶：滑到已加载顶部；已在顶部且磁盘还有更旧消息时触发加载更旧消息
  *   - 到底：回到末尾窗口并重新跟随（流式贴底由 useScrollToBottom 负责）
  *
- * 流式「在底部才跟随」由滚动钩子在页面节点层处理，这里不重复实现。
+ * 流式贴底判定仍由滚动钩子负责；这里镜像其暂停/恢复结果，避免窗口切片在新消息到达时重建末尾。
  */
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLatest } from 'ahooks'
 
 import {
+  AutoScrollSuspendEventName,
   resolveSectionNavigationTargetTop,
+  resolveTranscriptWindowFollowEndAfterScroll,
   type SectionMetric,
 } from '../react-hooks/scrollBehavior'
 
@@ -28,6 +30,7 @@ import { isEmpty, isNumber } from '#internal/runtime'
 const WindowMessageBudget = 60
 const SectionSnapThreshold = 12
 const ScrollEdgeThreshold = 8
+const FollowEndScrollTolerance = 1
 
 interface UseChatTranscriptWindowOptions {
   messages: ChatMessage[]
@@ -210,6 +213,7 @@ export function useChatTranscriptWindow({
 }: UseChatTranscriptWindowOptions): UseChatTranscriptWindowReturn {
   const [state, setState] = useState<TranscriptWindowState>(InitialWindowState)
   const pendingScrollRef = useRef<Nullable<PendingScroll>>(null)
+  const lastScrollTopRef = useRef(0)
   // member=session：会话即工作区，transcript 窗口 scope key 就是 sessionId。
   const transcriptWindowScopeKey = sessionId
 
@@ -239,8 +243,60 @@ export function useChatTranscriptWindow({
   // 切换会话或 workspace context 时重置为末尾跟随窗口。
   useEffect(() => {
     pendingScrollRef.current = null
+    lastScrollTopRef.current = scrollRef.current?.scrollTop ?? 0
     setState(InitialWindowState)
-  }, [transcriptWindowScopeKey])
+  }, [scrollRef, transcriptWindowScopeKey])
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return
+
+    lastScrollTopRef.current = scrollEl.scrollTop
+    const suspendEndFollow = (): void => {
+      setState((current) =>
+        current.followEnd
+          ? {
+              ...current,
+              followEnd: false,
+              anchorIndex: rangeRef.current.startIndex,
+            }
+          : current
+      )
+    }
+    const updateEndFollowAfterScroll = (): void => {
+      const previousScrollTop = lastScrollTopRef.current
+      const currentScrollTop = scrollEl.scrollTop
+      const isAtBottom =
+        currentScrollTop + scrollEl.clientHeight >=
+        scrollEl.scrollHeight - ScrollEdgeThreshold
+      lastScrollTopRef.current = currentScrollTop
+
+      setState((current) => {
+        const followEnd = resolveTranscriptWindowFollowEndAfterScroll({
+          currentFollowEnd: current.followEnd,
+          previousScrollTop,
+          currentScrollTop,
+          isAtBottom,
+          movementTolerancePx: FollowEndScrollTolerance,
+        })
+        if (followEnd === current.followEnd) return current
+
+        return {
+          ...current,
+          followEnd,
+          anchorIndex: followEnd ? 0 : rangeRef.current.startIndex,
+        }
+      })
+    }
+
+    scrollEl.addEventListener(AutoScrollSuspendEventName, suspendEndFollow)
+    scrollEl.addEventListener('scroll', updateEndFollowAfterScroll, { passive: true })
+
+    return () => {
+      scrollEl.removeEventListener(AutoScrollSuspendEventName, suspendEndFollow)
+      scrollEl.removeEventListener('scroll', updateEndFollowAfterScroll)
+    }
+  }, [rangeRef, scrollRef])
 
   const queueScroll = useCallback(
     (pending: PendingScroll, next: Partial<TranscriptWindowState>): void => {

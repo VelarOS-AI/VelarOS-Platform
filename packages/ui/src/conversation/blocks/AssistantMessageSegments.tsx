@@ -442,7 +442,6 @@ function AssistantMessageSegmentsInner({
     let inlineActivityBlocks: ToolCallBlockType[] = []
     let inlineActivityAfterToolCallElements: ReactNode[] = []
     let inlineActivityKey: Nullable<string> = null
-    let trailingActivityElementRendered = false
 
     const pushAfterToolCallElements = (segment: MessageRenderSegment): void => {
       renderedSegments.push(
@@ -456,39 +455,21 @@ function AssistantMessageSegmentsInner({
       )
     }
 
-    const flushInlineActivitySegments = (options: { includeTrailing?: boolean } = {}): void => {
+    const flushInlineActivitySegments = (): void => {
       const renderers = [...inlineActivityRenderers]
       const blocks = [...inlineActivityBlocks]
       const afterToolCallElements = [...inlineActivityAfterToolCallElements]
       const key = inlineActivityKey
-      const includeTrailingElement = !!(
-        options.includeTrailing &&
-        activityTrailingElement &&
-        !trailingActivityElementRendered
-      )
 
-      if (isEmpty(renderers) && !includeTrailingElement && isEmpty(afterToolCallElements)) return
-
-      if (includeTrailingElement) {
-        trailingActivityElementRendered = true
-      }
+      if (isEmpty(renderers) && isEmpty(afterToolCallElements)) return
 
       inlineActivityRenderers = []
       inlineActivityBlocks = []
       inlineActivityAfterToolCallElements = []
       inlineActivityKey = null
 
-      const renderSegments = (): ReactNode[] => {
-        const segments = renderers.map((renderSegment) => renderSegment()).filter(isPresent)
-
-        if (includeTrailingElement && activityTrailingElement) {
-          segments.push(
-            <React.Fragment key="activity-trailing">{activityTrailingElement}</React.Fragment>
-          )
-        }
-
-        return segments
-      }
+      const renderSegments = (): ReactNode[] =>
+        renderers.map((renderSegment) => renderSegment()).filter(isPresent)
 
       if (shouldRenderProcessedActivity) {
         renderedSegments.push(
@@ -638,13 +619,6 @@ function AssistantMessageSegmentsInner({
                 ? [<React.Fragment key="activity-leading">{activityLeadingElement}</React.Fragment>]
                 : []),
               ...renderProcessedActivityEntries(),
-              ...(activityTrailingElement
-                ? [
-                    <React.Fragment key="activity-trailing">
-                      {activityTrailingElement}
-                    </React.Fragment>,
-                  ]
-                : []),
             ]}
           </ToolActivityDisclosure>
         )
@@ -657,6 +631,11 @@ function AssistantMessageSegmentsInner({
         if (renderedSegment) renderedSegments.push(renderedSegment)
         pushAfterToolCallElements(segment)
       })
+      if (activityTrailingElement) {
+        renderedSegments.push(
+          <React.Fragment key="activity-trailing">{activityTrailingElement}</React.Fragment>
+        )
+      }
       return renderedSegments
     }
 
@@ -674,14 +653,17 @@ function AssistantMessageSegmentsInner({
       const renderedSegment = renderMessageRenderSegment(segment)
       if (!renderedSegment) return
 
-      flushInlineActivitySegments({
-        includeTrailing: !isEmpty(inlineActivityRenderers),
-      })
+      flushInlineActivitySegments()
       renderedSegments.push(renderedSegment)
       pushAfterToolCallElements(segment)
     })
 
-    flushInlineActivitySegments({ includeTrailing: true })
+    flushInlineActivitySegments()
+    if (activityTrailingElement) {
+      renderedSegments.push(
+        <React.Fragment key="activity-trailing">{activityTrailingElement}</React.Fragment>
+      )
+    }
     return renderedSegments
   }
 

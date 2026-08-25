@@ -460,13 +460,28 @@ export function createBuiltinDetectors(
           string,
           { call: ToolCallRecord; count: number }
         >();
+        let previousKey: string | null = null;
+        let consecutiveCount = 0;
         for (const call of collectToolCalls(observation)) {
-          if (call.input === null) continue;
+          if (call.input === null) {
+            previousKey = null;
+            consecutiveCount = 0;
+            continue;
+          }
           const serializedInput = canonicalJson(call.input);
-          if (serializedInput === "{}") continue;
+          if (serializedInput === "{}") {
+            previousKey = null;
+            consecutiveCount = 0;
+            continue;
+          }
           const key = `${call.name}\u0000${serializedInput}`;
           const current = groups.get(key);
-          groups.set(key, { call, count: (current?.count ?? 0) + 1 });
+          consecutiveCount = key === previousKey ? consecutiveCount + 1 : 1;
+          groups.set(key, {
+            call,
+            count: Math.max(current?.count ?? 0, consecutiveCount),
+          });
+          previousKey = key;
         }
         return [...groups.values()]
           .filter(({ count }) => count >= thresholds.retryWarn)
@@ -475,7 +490,7 @@ export function createBuiltinDetectors(
               "tool-retry-loop",
               "warn",
               "loop",
-              `同一工具与参数重复 ${count} 次: ${call.name}`,
+              `同一工具与参数连续重复 ${count} 次: ${call.name}`,
               [reference("turns", call.id, call.turnId)],
               { count, abortAt: thresholds.retryAbort },
             ),

@@ -270,6 +270,60 @@ void test('运行中将引导与前后 assistant 片段保持在同一个平铺�
   assert.doesNotMatch(markup, />已处理</)
 })
 
+void test('运行中追加引导不会插到既有 assistant 块之间', () => {
+  const beforeGuidance: ChatMessage = {
+    ...message('assistant-before-guidance', 'assistant'),
+    blocks: [
+      { type: 'text', text: '先说明处理方式。' },
+      {
+        type: 'tool-call',
+        toolCallId: 'tool-before-guidance',
+        toolName: 'system:run',
+        args: {},
+        result: { ok: true },
+        isRunning: false,
+      },
+      { type: 'text', text: '引导前已经产生的后续正文。' },
+    ],
+  }
+  const afterGuidance = {
+    ...message('assistant-after-guidance', 'assistant'),
+    blocks: [{ type: 'text' as const, text: '收到引导后的继续执行。' }],
+  }
+  const guidance = {
+    ...message('guidance', 'user', 'run-guidance'),
+    blocks: [{ type: 'text' as const, text: '追加要求内容标记。' }],
+  }
+  const markup = renderToStaticMarkup(
+    createElement(
+      ConversationLocalizationProvider,
+      { value: localization },
+      createElement(
+        ConversationBlockHooksProvider,
+        { value: blockHooks },
+        createElement(ChatTranscript, {
+          messages: [
+            message('turn', 'user', 'turn-input'),
+            beforeGuidance,
+            guidance,
+            afterGuidance,
+          ],
+          sessionId: 'session',
+          getIsStreaming: (entry) => entry.id === beforeGuidance.id,
+        })
+      )
+    ) as ReactElement
+  )
+
+  const existingContentIndex = markup.indexOf('引导前已经产生的后续正文。')
+  const guidanceIndex = markup.indexOf('追加要求内容标记。')
+  const afterGuidanceIndex = markup.indexOf('收到引导后的继续执行。')
+
+  assert.ok(existingContentIndex >= 0)
+  assert.ok(guidanceIndex > existingContentIndex)
+  assert.ok(afterGuidanceIndex > guidanceIndex)
+})
+
 void test('旧会话运行完成后只留下一个已处理入口，并把引导内容收进其中', () => {
   const markup = renderToStaticMarkup(
     createElement(
