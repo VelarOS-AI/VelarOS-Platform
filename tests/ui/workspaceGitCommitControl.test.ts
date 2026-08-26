@@ -18,16 +18,24 @@ void describe('WorkspaceGitCommitControl ownership', () => {
 
     assert.match(control, /buildBranchTrie\(branches, namespace\)/)
     assert.match(control, /<FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
-    assert.match(control, /runRemoteAction\('fetch'\)/)
+    assert.match(control, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
     assert.match(
       control,
-      /updateAction[\s\S]*commitAction[\s\S]*uploadAction[\s\S]*gitCompactActionDivider[\s\S]*branchCreate/
+      /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*branchCreate/
     )
+    assert.doesNotMatch(control, /updateAction|onUpdate|gitCompactActionDivider/)
+    assert.match(control, /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/)
+    assert.match(control, /onUpload\(branch\)/)
+    assert.match(control, /--workspace-git-theme-color/)
     assert.match(control, /<Dialog[\s\S]*createDialogTitle/)
     assert.match(control, /useState\(true\)/)
     assert.match(control, /checked=\{checkoutCreatedBranch\}/)
     assert.match(styles, /\.gitCompactMenu[\s\S]*background-color:[^;]+!important/)
+    assert.match(styles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
+    assert.match(styles, /\.gitCompactFooter[\s\S]*padding:\s*2\.5px 3px 3px/)
     assert.match(styles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
     assert.match(styles, /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/)
+    assert.match(styles, /\.gitCompactBranchRow\[data-current='true'\][\s\S]*workspace-git-theme-color/)
+    assert.match(styles, /\.gitCompactBranchRow:hover \.gitCompactBranchHoverActions[\s\S]*opacity:\s*1/)
   })
 })

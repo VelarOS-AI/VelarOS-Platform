@@ -3,10 +3,10 @@ import {
   type FormEvent,
   type ReactElement,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
-  ArrowDownIcon,
   ArrowDownLeftIcon,
   ArrowUpIcon,
   CaretDownIcon,
@@ -47,7 +47,6 @@ export type WorkspaceGitCommitControlAction =
   | 'create'
   | 'fetch'
   | 'switch'
-  | 'update'
   | 'upload'
 
 export interface WorkspaceGitControlBranch {
@@ -77,9 +76,9 @@ export interface WorkspaceGitControlSummary {
 export interface WorkspaceGitCommitControlMessages {
   branchSearchPlaceholder: string
   branchCreate: string
+  checkoutAction: string
   commitAction: string
   fetchAction: string
-  updateAction: string
   uploadAction: string
   localBranches: string
   remoteBranches: string
@@ -98,6 +97,7 @@ export interface WorkspaceGitCommitControlProps {
   messages: WorkspaceGitCommitControlMessages
   disabled?: boolean
   commitDisabled?: boolean
+  themeColor?: string
   variant?: WorkspaceGitCommitControlVariant
   layout?: WorkspaceGitCommitControlLayout
   onMenuOpen?: () => void | Promise<void>
@@ -109,8 +109,7 @@ export interface WorkspaceGitCommitControlProps {
     branch: string,
     options: { checkout: boolean }
   ) => boolean | void | Promise<boolean | void>
-  onUpdate: () => void | Promise<void>
-  onUpload: () => void | Promise<void>
+  onUpload: (branch: WorkspaceGitControlBranch) => void | Promise<void>
   onFetch: () => void | Promise<void>
   onOpenCommit: () => void
   onActionError?: (
@@ -119,7 +118,7 @@ export interface WorkspaceGitCommitControlProps {
   ) => void | Promise<void>
 }
 
-type PendingAction = 'create' | 'fetch' | 'update' | 'upload' | `switch:${string}`
+type PendingAction = 'create' | 'fetch' | `switch:${string}` | `upload:${string}`
 
 interface BranchTrieNode {
   segment: string
@@ -128,8 +127,20 @@ interface BranchTrieNode {
   children: Map<string, BranchTrieNode>
 }
 
-const BRANCH_LIST_ROW_PADDING_PX = 10
+const BRANCH_LIST_ROW_PADDING_PX = 5
 const BRANCH_TREE_INDENT_STEP_PX = 14
+
+function resolveThemeColor(anchor: Nullable<HTMLElement>): Nullable<string> {
+  if (!anchor) return null
+  const probe = anchor.ownerDocument.createElement('span')
+  probe.style.position = 'absolute'
+  probe.style.visibility = 'hidden'
+  probe.style.color = 'var(--workspace-git-theme-color)'
+  anchor.append(probe)
+  const color = anchor.ownerDocument.defaultView?.getComputedStyle(probe).color.trim() ?? ''
+  probe.remove()
+  return color || null
+}
 
 function insertBranchTrie(
   root: Map<string, BranchTrieNode>,
@@ -210,12 +221,12 @@ export function WorkspaceGitCommitControl({
   messages,
   disabled = false,
   commitDisabled = false,
+  themeColor,
   variant = 'branch-menu-actions',
   layout = 'pill',
   onMenuOpen,
   onSwitchBranch,
   onCreateBranch,
-  onUpdate,
   onUpload,
   onFetch,
   onOpenCommit,
@@ -228,6 +239,8 @@ export function WorkspaceGitCommitControl({
   const [checkoutCreatedBranch, setCheckoutCreatedBranch] = useState(true)
   const [collapsedBranchGroups, setCollapsedBranchGroups] = useState<Set<string>>(new Set())
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [resolvedThemeColor, setResolvedThemeColor] = useState<Nullable<string>>(null)
+  const themeAnchorRef = useRef<HTMLButtonElement>(null)
   const status = summary.status
 
   const branches = useMemo(() => {
@@ -255,6 +268,12 @@ export function WorkspaceGitCommitControl({
   const isBusy = pendingAction !== null
   const isDirty = !status.isClean
   const tooltip = isDirty ? messages.changedFiles(status.changedFiles) : messages.clean
+  const themeStyle = {
+    '--workspace-git-theme-color': themeColor ?? 'var(--primary)',
+  } as CSSProperties
+  const portalThemeStyle = {
+    '--workspace-git-theme-color': resolvedThemeColor ?? 'var(--primary)',
+  } as CSSProperties
 
   function reportActionError(error: unknown, action: WorkspaceGitCommitControlAction): void {
     void onActionError?.(error, action)
@@ -263,6 +282,7 @@ export function WorkspaceGitCommitControl({
   function handleMenuOpenChange(open: boolean): void {
     setMenuOpen(open)
     if (open) {
+      setResolvedThemeColor(resolveThemeColor(themeAnchorRef.current))
       void Promise.resolve(onMenuOpen?.()).catch((error: unknown) => {
         reportActionError(error, 'refresh')
       })
@@ -340,16 +360,27 @@ export function WorkspaceGitCommitControl({
     }
   }
 
-  async function runRemoteAction(action: 'fetch' | 'update' | 'upload'): Promise<void> {
+  async function fetchBranches(): Promise<void> {
     if (disabled || isBusy) return
 
     try {
-      setPendingAction(action)
-      if (action === 'fetch') await onFetch()
-      else if (action === 'update') await onUpdate()
-      else await onUpload()
+      setPendingAction('fetch')
+      await onFetch()
     } catch (error) {
-      reportActionError(error, action)
+      reportActionError(error, 'fetch')
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function uploadBranch(branch: WorkspaceGitControlBranch): Promise<void> {
+    if (disabled || isBusy || branch.kind === 'remote') return
+
+    try {
+      setPendingAction(`upload:${branch.name}`)
+      await onUpload(branch)
+    } catch (error) {
+      reportActionError(error, 'upload')
     } finally {
       setPendingAction(null)
     }
@@ -369,6 +400,7 @@ export function WorkspaceGitCommitControl({
       accent={layout !== 'pill'}
       plain={layout === 'pill'}
       className={styles.gitCompactControl}
+      style={themeStyle}
     >
       <AnchoredPopover
         open={menuOpen}
@@ -379,9 +411,13 @@ export function WorkspaceGitCommitControl({
         align="start"
         sideOffset={6}
         widthStrategy="content"
+        style={portalThemeStyle}
         anchor={({ getAnchorProps }) => (
           <Button
-            {...getAnchorProps<HTMLButtonElement>({ disabled: disabled || isBusy })}
+            {...getAnchorProps<HTMLButtonElement>({
+              disabled: disabled || isBusy,
+              ref: themeAnchorRef,
+            })}
             variant="ghost"
             size="sm"
             className={getTopBarControlMainButtonClassName(styles.gitCompactButton)}
@@ -415,61 +451,55 @@ export function WorkspaceGitCommitControl({
               placeholder={messages.branchSearchPlaceholder}
               onChange={(event) => setBranchSearch(event.target.value)}
             />
-            <button
-              type="button"
-              className={styles.gitCompactCreateToggle}
-              disabled={disabled || isBusy}
-              title={messages.fetchAction}
-              aria-label={messages.fetchAction}
-              onClick={() => void runRemoteAction('fetch')}
-            >
-              {pendingAction === 'fetch' ? (
-                <SpinnerGapIcon size={14} className={styles.gitCompactSpin} />
-              ) : (
-                <ArrowDownLeftIcon size={14} />
-              )}
-            </button>
           </div>
+          <button
+            type="button"
+            className={styles.gitCompactFetchButton}
+            disabled={disabled || isBusy}
+            title={messages.fetchAction}
+            aria-label={messages.fetchAction}
+            onClick={() => void fetchBranches()}
+          >
+            {pendingAction === 'fetch' ? (
+              <SpinnerGapIcon size={14} className={styles.gitCompactSpin} />
+            ) : (
+              <ArrowDownLeftIcon size={14} />
+            )}
+          </button>
         </div>
 
+        <div className={styles.gitCompactBranchList}>
+          <BranchGroup
+            namespace="local"
+            label={messages.localBranches}
+            branches={localBranches}
+            currentBranch={activeBranch}
+            pendingAction={pendingAction}
+            collapsedGroups={collapsedBranchGroups}
+            searching={searchingBranches}
+            checkoutAction={messages.checkoutAction}
+            uploadAction={messages.uploadAction}
+            onToggleGroup={toggleBranchGroup}
+            onSelect={(branch) => void switchBranch(branch)}
+            onUpload={(branch) => void uploadBranch(branch)}
+          />
+          <BranchGroup
+            namespace="remote"
+            label={messages.remoteBranches}
+            branches={remoteBranches}
+            currentBranch={activeBranch}
+            pendingAction={pendingAction}
+            collapsedGroups={collapsedBranchGroups}
+            searching={searchingBranches}
+            checkoutAction={messages.checkoutAction}
+            uploadAction={messages.uploadAction}
+            onToggleGroup={toggleBranchGroup}
+            onSelect={(branch) => void switchBranch(branch)}
+            onUpload={(branch) => void uploadBranch(branch)}
+          />
+        </div>
         {variant === 'branch-menu-actions' && (
-          <div className={styles.gitCompactActions}>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled || isBusy}
-              onClick={() => void runRemoteAction('update')}
-            >
-              {pendingAction === 'update' ? (
-                <SpinnerGapIcon size={14} className={styles.gitCompactSpin} />
-              ) : (
-                <ArrowDownIcon size={14} />
-              )}
-              {messages.updateAction}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled || commitDisabled || isBusy}
-              onClick={openCommitTool}
-            >
-              <GitCommitIcon size={14} />
-              {messages.commitAction}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled || isBusy}
-              onClick={() => void runRemoteAction('upload')}
-            >
-              {pendingAction === 'upload' ? (
-                <SpinnerGapIcon size={14} className={styles.gitCompactSpin} />
-              ) : (
-                <ArrowUpIcon size={14} />
-              )}
-              {messages.uploadAction}
-            </Button>
-            <div className={styles.gitCompactActionDivider} />
+          <div className={styles.gitCompactFooter}>
             <Button
               variant="ghost"
               size="sm"
@@ -481,31 +511,6 @@ export function WorkspaceGitCommitControl({
             </Button>
           </div>
         )}
-
-        <div className={styles.gitCompactBranchList}>
-          <BranchGroup
-            namespace="local"
-            label={messages.localBranches}
-            branches={localBranches}
-            currentBranch={activeBranch}
-            pendingAction={pendingAction}
-            collapsedGroups={collapsedBranchGroups}
-            searching={searchingBranches}
-            onToggleGroup={toggleBranchGroup}
-            onSelect={(branch) => void switchBranch(branch)}
-          />
-          <BranchGroup
-            namespace="remote"
-            label={messages.remoteBranches}
-            branches={remoteBranches}
-            currentBranch={activeBranch}
-            pendingAction={pendingAction}
-            collapsedGroups={collapsedBranchGroups}
-            searching={searchingBranches}
-            onToggleGroup={toggleBranchGroup}
-            onSelect={(branch) => void switchBranch(branch)}
-          />
-        </div>
       </AnchoredPopover>
 
       {variant === 'inline-actions' && (
@@ -523,7 +528,7 @@ export function WorkspaceGitCommitControl({
       )}
 
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
-        <DialogContent className={styles.gitCreateBranchDialog}>
+        <DialogContent className={styles.gitCreateBranchDialog} style={portalThemeStyle}>
           <DialogHeader>
             <DialogTitle>{messages.createDialogTitle}</DialogTitle>
             <DialogDescription>
@@ -562,6 +567,7 @@ export function WorkspaceGitCommitControl({
                   {messages.cancel}
                 </Button>
                 <Button
+                  className={styles.gitCreateBranchSubmit}
                   size="sm"
                   disabled={!newBranchName.trim() || disabled || isBusy}
                   type="submit"
@@ -589,8 +595,11 @@ function BranchGroup({
   pendingAction,
   collapsedGroups,
   searching,
+  checkoutAction,
+  uploadAction,
   onToggleGroup,
   onSelect,
+  onUpload,
 }: {
   namespace: 'local' | 'remote'
   label: string
@@ -599,8 +608,11 @@ function BranchGroup({
   pendingAction: PendingAction | null
   collapsedGroups: Set<string>
   searching: boolean
+  checkoutAction: string
+  uploadAction: string
   onToggleGroup: (pathPrefix: string) => void
   onSelect: (branch: WorkspaceGitControlBranch) => void
+  onUpload: (branch: WorkspaceGitControlBranch) => void
 }): ReactElement | null {
   if (!branches.length) return null
 
@@ -614,27 +626,60 @@ function BranchGroup({
     const current = branch.kind !== 'remote' && (branch.current || branch.name === currentBranch)
     const switching = pendingAction === `switch:${branch.name}`
     const rowStyle: CSSProperties = { paddingLeft }
+    const uploading = pendingAction === `upload:${branch.name}`
 
     return (
-      <button
+      <div
         key={`${branch.kind ?? 'local'}:${branch.name}`}
-        type="button"
         className={styles.gitCompactBranchRow}
-        style={rowStyle}
         data-current={current || undefined}
-        disabled={pendingAction !== null}
         title={branch.name}
-        onClick={() => onSelect(branch)}
       >
-        {switching ? (
-          <SpinnerGapIcon size={13} className={styles.gitCompactSpin} />
-        ) : (
-          <GitBranchIcon size={13} weight={current ? 'fill' : 'regular'} />
-        )}
-        <span>{getBranchDisplayName(branch.name)}</span>
-        {current && branch.upstream && <small>{branch.upstream}</small>}
-        <CaretRightIcon size={11} className={styles.gitCompactBranchChevron} />
-      </button>
+        <button
+          type="button"
+          className={styles.gitCompactBranchSelect}
+          style={rowStyle}
+          disabled={pendingAction !== null || current}
+          onClick={() => onSelect(branch)}
+        >
+          {switching ? (
+            <SpinnerGapIcon size={13} className={styles.gitCompactSpin} />
+          ) : (
+            <GitBranchIcon size={13} weight={current ? 'fill' : 'regular'} />
+          )}
+          <span>{getBranchDisplayName(branch.name)}</span>
+          {current && branch.upstream && <small>{branch.upstream}</small>}
+          <CaretRightIcon size={11} className={styles.gitCompactBranchChevron} />
+        </button>
+        <div className={styles.gitCompactBranchHoverActions} role="group">
+          <button
+            type="button"
+            disabled={pendingAction !== null || current}
+            title={checkoutAction}
+            aria-label={`${checkoutAction} ${branch.name}`}
+            onClick={() => onSelect(branch)}
+          >
+            <GitBranchIcon size={12} />
+            <span>{checkoutAction}</span>
+          </button>
+          {branch.kind !== 'remote' && (
+            <button
+              type="button"
+              disabled={pendingAction !== null}
+              title={uploadAction}
+              aria-label={`${uploadAction} ${branch.name}`}
+              onClick={() => onUpload(branch)}
+            >
+              {uploading ? (
+                <SpinnerGapIcon size={12} className={styles.gitCompactSpin} />
+              ) : (
+                <ArrowUpIcon size={12} />
+              )}
+              <span>{uploadAction}</span>
+            </button>
+          )}
+        </div>
+      </div>
     )
   }
 
@@ -674,7 +719,6 @@ function BranchGroup({
   return (
     <section className={styles.gitCompactBranchGroup} aria-label={label}>
       <div className={styles.gitCompactBranchSectionHeader}>
-        <CaretDownIcon size={11} />
         <span>{label}</span>
       </div>
       {groupKeys.map((key) => renderTrieNode(branchTrie.get(key)!, 0))}

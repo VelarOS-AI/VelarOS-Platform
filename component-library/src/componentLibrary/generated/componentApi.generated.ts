@@ -5755,6 +5755,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "false"
     },
     {
+      "name": "WorkspaceGitCommitControl.themeColor",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
       "name": "WorkspaceGitCommitControl.variant",
       "description": "Auto-generated from TypeScript props.",
       "type": "WorkspaceGitCommitControlVariant",
@@ -5784,15 +5789,9 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     },
     {
-      "name": "WorkspaceGitCommitControl.onUpdate",
-      "description": "Auto-generated from TypeScript props.",
-      "type": "() => void | Promise<void>",
-      "recommended": "Required"
-    },
-    {
       "name": "WorkspaceGitCommitControl.onUpload",
       "description": "Auto-generated from TypeScript props.",
-      "type": "() => void | Promise<void>",
+      "type": "(branch: WorkspaceGitControlBranch) => void | Promise<void>",
       "recommended": "Required"
     },
     {

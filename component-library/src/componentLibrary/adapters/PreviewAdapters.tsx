@@ -83,9 +83,9 @@ export function WorkspaceGitCommitControlPreview({
       messages={{
         branchSearchPlaceholder: t('topBar.gitBranchSearchPlaceholder'),
         branchCreate: t('topBar.gitCreateAndSwitchBranch'),
+        checkoutAction: t('topBar.gitCheckoutCreatedBranch'),
         commitAction: t('topBar.gitCommit'),
         fetchAction: t('topBar.gitFetch'),
-        updateAction: t('topBar.gitUpdate'),
         uploadAction: t('topBar.gitUpload'),
         localBranches: t('topBar.gitBranchSectionLocal'),
         remoteBranches: t('topBar.gitBranchSectionRemote'),
@@ -100,7 +100,6 @@ export function WorkspaceGitCommitControlPreview({
       }}
       onSwitchBranch={() => undefined}
       onCreateBranch={() => undefined}
-      onUpdate={() => undefined}
       onUpload={() => undefined}
       onFetch={() => undefined}
       onOpenCommit={() => undefined}

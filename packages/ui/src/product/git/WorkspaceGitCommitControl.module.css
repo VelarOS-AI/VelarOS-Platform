@@ -99,8 +99,9 @@
 .gitCompactMenuHeader {
   display: flex;
   align-items: center;
-  height: 44px;
-  padding: 7px 8px;
+  gap: 6px;
+  height: 37px;
+  padding: 3.5px 4px;
 }
 
 .gitCompactSearchField {
@@ -117,8 +118,13 @@
 }
 
 .gitCompactSearchField:focus-within {
-  border-color: color-mix(in srgb, var(--foreground) 42%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 54%,
+    var(--border-strong, var(--workbench-border, var(--border)))
+  );
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--workspace-git-theme-color, var(--primary)) 12%, transparent);
 }
 
 .gitCompactSearchIcon {
@@ -146,39 +152,48 @@
   box-shadow: none;
 }
 
-.gitCompactCreateToggle {
+.gitCompactFetchButton {
   display: flex;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 0;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   color: var(--workbench-text-muted, var(--muted-foreground));
   background: transparent;
 }
 
-.gitCompactCreateToggle:hover:not(:disabled),
-.gitCompactCreateToggle:focus-visible {
-  color: var(--workbench-text, var(--foreground));
-  background: var(--control-gray-hover-bg, var(--workbench-hover, var(--accent)));
+.gitCompactFetchButton:hover:not(:disabled),
+.gitCompactFetchButton:focus-visible {
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 28%,
+    transparent
+  );
+  color: var(--workspace-git-theme-color, var(--primary));
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 10%,
+    transparent
+  );
   outline: none;
 }
 
-.gitCompactCreateToggle:disabled {
+.gitCompactFetchButton:disabled {
   opacity: 0.48;
 }
 
-.gitCompactActions {
+.gitCompactFooter {
   display: flex;
-  flex-direction: column;
-  padding: 0 6px 6px;
-  border-bottom: 1px solid var(--border, var(--workbench-border));
+  padding: 2.5px 3px 3px;
+  border-top: 1px solid var(--border, var(--workbench-border));
 }
 
-.gitCompactActions > button {
+.gitCompactFooter > button {
+  width: 100%;
   justify-content: flex-start;
   gap: 8px;
   min-width: 0;
@@ -189,15 +204,9 @@
   font-weight: 500;
 }
 
-.gitCompactActions > button > svg {
+.gitCompactFooter > button > svg {
   flex: 0 0 auto;
-  color: var(--workbench-text-muted, var(--muted-foreground));
-}
-
-.gitCompactActionDivider {
-  height: 1px;
-  margin: 3px 4px;
-  background: var(--border, var(--workbench-border));
+  color: var(--workspace-git-theme-color, var(--primary));
 }
 
 .gitCreateBranchDialog {
@@ -249,7 +258,7 @@
   width: 14px;
   height: 14px;
   margin: 0;
-  accent-color: var(--primary);
+  accent-color: var(--workspace-git-theme-color, var(--primary));
 }
 
 .gitCreateBranchDialogActions {
@@ -259,11 +268,45 @@
   margin-left: auto;
 }
 
+.gitCreateBranchSubmit {
+  border-color: var(--workspace-git-theme-color, var(--primary));
+  background: var(--workspace-git-theme-color, var(--primary));
+  color: var(--primary-foreground);
+}
+
+.gitCreateBranchSubmit:hover:not(:disabled) {
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 84%,
+    var(--foreground)
+  );
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 84%,
+    var(--foreground)
+  );
+}
+
+.gitCreateBranchSubmit:disabled {
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 34%,
+    transparent
+  );
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 28%,
+    var(--card, var(--background-panel-strong, var(--background)))
+  );
+  color: color-mix(in srgb, var(--primary-foreground) 74%, transparent);
+}
+
 .gitCompactBranchList {
   min-height: 64px;
   max-height: min(232px, calc(100vh - 224px));
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .gitCompactBranchGroup {
@@ -279,8 +322,7 @@
   display: flex;
   height: 28px;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  padding: 0 5px;
   color: var(--workbench-text, var(--foreground));
   font-size: 11px;
   font-weight: 600;
@@ -294,11 +336,11 @@
 
 .gitCompactBranchTreeHeader {
   display: flex;
-  width: calc(100% - 8px);
+  width: calc(100% - 4px);
   height: 28px;
   align-items: center;
   gap: 6px;
-  margin-inline: 4px;
+  margin-inline: 2px;
   border: 0;
   border-radius: 6px;
   color: var(--workbench-text, var(--foreground));
@@ -338,49 +380,71 @@
 }
 
 .gitCompactBranchRow {
+  position: relative;
   display: flex;
-  width: calc(100% - 8px);
+  width: calc(100% - 4px);
   min-width: 0;
   height: 28px;
-  align-items: center;
-  gap: 6px;
-  margin-inline: 4px;
-  border: 0;
+  align-items: stretch;
+  margin-inline: 2px;
   border-radius: var(--workbench-radius, var(--ui-radius-control, 6px));
   color: var(--workbench-text, var(--foreground));
+  background: transparent;
+}
+
+.gitCompactBranchRow:hover,
+.gitCompactBranchRow:focus-within {
+  background: var(--control-gray-hover-bg, var(--workbench-hover, var(--accent)));
+}
+
+.gitCompactBranchRow[data-current='true'] {
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 14%,
+    var(--git-compact-menu-bg)
+  );
+}
+
+.gitCompactBranchSelect {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  align-items: center;
+  gap: 6px;
+  padding-right: 7px;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
   background: transparent;
   font: inherit;
   font-size: 11px;
   text-align: left;
 }
 
-.gitCompactBranchRow:hover:not(:disabled),
-.gitCompactBranchRow:focus-visible {
-  background: var(--control-gray-hover-bg, var(--workbench-hover, var(--accent)));
+.gitCompactBranchSelect:focus-visible {
+  outline: 1px solid color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 48%,
+    transparent
+  );
+  outline-offset: -1px;
 }
 
-.gitCompactBranchRow:focus-visible {
-  outline: none;
+.gitCompactBranchSelect:disabled {
+  opacity: 0.72;
 }
 
-.gitCompactBranchRow[data-current='true'] {
-  background: var(--control-checked-surface, var(--workbench-selection-bg, var(--accent)));
-}
-
-.gitCompactBranchRow:disabled {
-  opacity: 0.64;
-}
-
-.gitCompactBranchRow > svg {
+.gitCompactBranchSelect > svg {
   flex: 0 0 auto;
   color: var(--workbench-text-muted, var(--muted-foreground));
 }
 
-.gitCompactBranchRow[data-current='true'] > svg:first-child {
-  color: var(--status-yellow, var(--primary));
+.gitCompactBranchRow[data-current='true'] .gitCompactBranchSelect > svg:first-child {
+  color: var(--workspace-git-theme-color, var(--primary));
 }
 
-.gitCompactBranchRow > span {
+.gitCompactBranchSelect > span {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -388,10 +452,78 @@
   white-space: nowrap;
 }
 
-.gitCompactBranchRow > small {
+.gitCompactBranchSelect > small {
   flex: 0 0 auto;
   color: var(--workbench-text-muted, var(--muted-foreground));
   font-size: 9px;
+}
+
+.gitCompactBranchRow:hover .gitCompactBranchSelect > span,
+.gitCompactBranchRow:focus-within .gitCompactBranchSelect > span {
+  padding-right: 86px;
+}
+
+.gitCompactBranchHoverActions {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 5px;
+  opacity: 0;
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 6%,
+    var(--git-compact-menu-bg) 94%
+  );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 14%, transparent);
+  pointer-events: none;
+  transform: translateX(3px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.gitCompactBranchRow:hover .gitCompactBranchHoverActions,
+.gitCompactBranchRow:focus-within .gitCompactBranchHoverActions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.gitCompactBranchHoverActions > button {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--workbench-text-muted, var(--muted-foreground));
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.gitCompactBranchHoverActions > button:hover:not(:disabled),
+.gitCompactBranchHoverActions > button:focus-visible {
+  color: var(--workspace-git-theme-color, var(--primary));
+  background: color-mix(
+    in srgb,
+    var(--workspace-git-theme-color, var(--primary)) 12%,
+    transparent
+  );
+  outline: none;
+}
+
+.gitCompactBranchHoverActions > button:disabled {
+  opacity: 0.42;
 }
 
 .gitCompactBranchChevron {
