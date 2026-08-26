@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/ui",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "velaros": {
     "platform": "0.6"
   },
@@ -124,6 +124,10 @@
     "./primitives/forms/Input": {
       "types": "./dist/primitives/forms/Input.d.ts",
       "import": "./dist/primitives/forms/Input.js"
+    },
+    "./primitives/forms/SearchField": {
+      "types": "./dist/primitives/forms/SearchField.d.ts",
+      "import": "./dist/primitives/forms/SearchField.js"
     },
     "./primitives/forms/NumberInput": {
       "types": "./dist/primitives/forms/NumberInput.d.ts",
@@ -304,6 +308,10 @@
     "./product/display/chatNoticePresentation": {
       "types": "./dist/product/display/chatNoticePresentation.d.ts",
       "import": "./dist/product/display/chatNoticePresentation.js"
+    },
+    "./product/git/WorkspaceGitCommitControl": {
+      "types": "./dist/product/git/WorkspaceGitCommitControl.d.ts",
+      "import": "./dist/product/git/WorkspaceGitCommitControl.js"
     },
     "./product/layout/ActionCard": {
       "types": "./dist/product/layout/ActionCard.d.ts",

@@ -663,6 +663,7 @@ export const zhCNMessages = {
     gitCreateBranchExists: '该本地分支已存在。',
     gitCreateConfirm: '创建',
     gitCreateAndCheckoutConfirm: '创建并检出',
+    gitCheckoutCreatedBranch: '签出',
     gitCreatePending: '创建中…',
     gitCreateSuccessTitle: '已创建分支',
     gitCreateSuccessDescription: '已创建 {branch}。',

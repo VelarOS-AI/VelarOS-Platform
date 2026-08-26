@@ -1,0 +1,67 @@
+/* @velaros-no-tailwind */
+
+.velar-search-field {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding-inline: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-control-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  transition:
+    border-color var(--ui-transition-fast),
+    box-shadow var(--ui-transition-fast),
+    color var(--ui-transition-fast);
+}
+
+.velar-search-field[data-size='default'] {
+  height: var(--ui-control-height-sm);
+}
+
+.velar-search-field[data-size='sm'] {
+  height: var(--ui-control-height-xs);
+}
+
+.velar-search-field:hover:not([data-disabled='true']) {
+  border-color: var(--border-strong);
+}
+
+.velar-search-field:focus-within {
+  border-color: var(--ring);
+  color: var(--foreground);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.08);
+}
+
+.velar-search-field[data-disabled='true'] {
+  opacity: 0.5;
+}
+
+.velar-search-field-icon {
+  flex: none;
+}
+
+.velar-search-field .velar-search-field-input {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.velar-search-field .velar-search-field-input:focus,
+.velar-search-field .velar-search-field-input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.velar-search-field .velar-search-field-input::-webkit-search-cancel-button {
+  display: none;
+}

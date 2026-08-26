@@ -4144,6 +4144,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "LooseOptional<ConversationMessageRunMarker>"
     },
     {
+      "name": "MessageBubble.implicitlyCompletedRun",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
       "name": "MessageBubble.inlineNotice",
       "description": "Auto-generated from TypeScript props.",
       "type": "LooseOptional<ChatInlineNoticeMeta>"
@@ -4842,6 +4847,14 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "'y'"
     }
   ],
+  SearchField: [
+    {
+      "name": "SearchField.size",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"default\" | \"sm\" | null",
+      "defaultValue": "'sm'"
+    }
+  ],
   SegmentedControl: [
     {
       "name": "SegmentedControl.ariaLabel",
@@ -4940,6 +4953,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     {
       "name": "SessionStickyDock.autoRevealKey",
       "description": "变化时自动展开一次；用于计划更新这类临时顶层提示。",
+      "type": "string"
+    },
+    {
+      "name": "SessionStickyDock.autoCollapseKey",
+      "description": "变化时强制收起一次；用于目标进入完成等终态时关闭仍残留的计划卡。",
       "type": "string"
     },
     {
@@ -5709,6 +5727,90 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "WidgetToolShell.rootRef",
       "description": "Auto-generated from TypeScript props.",
       "type": "React.Ref<HTMLDivElement>"
+    }
+  ],
+  WorkspaceGitCommitControl: [
+    {
+      "name": "WorkspaceGitCommitControl.summary",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceGitControlSummary",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.messages",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceGitCommitControlMessages",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.disabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.commitDisabled",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.variant",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceGitCommitControlVariant",
+      "defaultValue": "'branch-menu-actions'"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.layout",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "WorkspaceGitCommitControlLayout",
+      "defaultValue": "'pill'"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onMenuOpen",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void | Promise<void>)"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onSwitchBranch",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(branch: string, options?: { create?: boolean; startPoint?: string; }) => boolean | void | Promise<boolean | void>",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onCreateBranch",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(branch: string, options: { checkout: boolean; }) => boolean | void | Promise<boolean | void>",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onUpdate",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void | Promise<void>",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onUpload",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void | Promise<void>",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onFetch",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void | Promise<void>",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onOpenCommit",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "() => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "WorkspaceGitCommitControl.onActionError",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((error: unknown, action: WorkspaceGitCommitControlAction) => void | Promise<void>)"
     }
   ],
   WorkspaceSpaceIcon: [

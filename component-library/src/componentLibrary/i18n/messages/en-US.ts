@@ -690,6 +690,7 @@ export const enUSMessages = {
     gitCreateBranchExists: 'That local branch already exists.',
     gitCreateConfirm: 'Create',
     gitCreateAndCheckoutConfirm: 'Create and checkout',
+    gitCheckoutCreatedBranch: 'Checkout',
     gitCreatePending: 'Creating…',
     gitCreateSuccessTitle: 'Branch created',
     gitCreateSuccessDescription: 'Created {branch}.',

@@ -13,9 +13,9 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { CalendarDatePicker } from '@velaros-ai/ui/primitives/forms/Calendar'
 import { Checkbox } from '@velaros-ai/ui/primitives/forms/Checkbox'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { NumberInput } from '@velaros-ai/ui/primitives/forms/NumberInput'
 import { Picker } from '@velaros-ai/ui/primitives/forms/Picker'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
@@ -124,7 +124,7 @@ function SettingsSearchInputPreview(): ReactElement {
   const { t } = useI18n()
 
   return (
-    <Input
+    <SearchField
       size="sm"
       placeholder={t('componentLibrary.searchPlaceholder')}
       aria-label={t('componentLibrary.searchAriaLabel')}
@@ -223,14 +223,13 @@ export function InputExtensionExamples(): ReactElement {
 export const fieldRecommendations = [
   {
     id: 'compact-filter',
-    title: 'Popover filter field',
+    title: 'Unified search field',
     description:
-      'Settings search popovers use an Input size="sm" with a localized placeholder.',
+      'Search surfaces use SearchField so the icon, transparent input and whole-field focus state stay consistent.',
     preview: <SettingsSearchInputPreview />,
-    code: `// Generic settings search popover
-<Input
+    code: `// Generic search surface
+<SearchField
   size="sm"
-  className={styles.searchInput}
   value={query}
   placeholder={t('componentLibrary.searchPlaceholder')}
   onChange={(event) => onQueryChange(event.target.value)}

@@ -1,18 +1,20 @@
+import { useI18n } from '@catalog/i18n'
 import {
   CheckCircleIcon,
   CheckIcon,
   ClockIcon,
   CodeIcon,
   FolderOpenIcon,
-  GitBranchIcon,
   PlusIcon,
   SidebarSimpleIcon,
 } from '@phosphor-icons/react'
 import type { ReactElement, ReactNode } from 'react'
 
-import { ChatInteractionNotice } from '@velaros-ai/ui'
+import {
+  ChatInteractionNotice,
+  WorkspaceGitCommitControl,
+} from '@velaros-ai/ui'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-import { Badge } from '@velaros-ai/ui/primitives/display/Badge'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
@@ -59,14 +61,50 @@ export function WorkspaceGitCommitControlPreview({
   changedFiles?: number
   deletions?: number
 }): ReactElement {
+  const { t } = useI18n()
+
   return (
-    <Button size="sm" variant="outline">
-      <GitBranchIcon size={15} />
-      <span>{branch}</span>
-      <Badge variant="secondary">{changedFiles}</Badge>
-      <span className="catalog-preview-additions">+{additions}</span>
-      <span className="catalog-preview-deletions">−{deletions}</span>
-    </Button>
+    <WorkspaceGitCommitControl
+      summary={{
+        repository: true,
+        status: {
+          branch,
+          isClean: changedFiles === 0,
+          changedFiles,
+        },
+        branches: [
+          { name: branch, current: true, kind: 'local' },
+          { name: 'feature/component-library', kind: 'local' },
+          { name: 'feature/workbench-shell', kind: 'local' },
+          { name: 'origin/main', kind: 'remote' },
+        ],
+        lineStats: { additions, deletions },
+      }}
+      messages={{
+        branchSearchPlaceholder: t('topBar.gitBranchSearchPlaceholder'),
+        branchCreate: t('topBar.gitCreateAndSwitchBranch'),
+        commitAction: t('topBar.gitCommit'),
+        fetchAction: t('topBar.gitFetch'),
+        updateAction: t('topBar.gitUpdate'),
+        uploadAction: t('topBar.gitUpload'),
+        localBranches: t('topBar.gitBranchSectionLocal'),
+        remoteBranches: t('topBar.gitBranchSectionRemote'),
+        createDialogTitle: t('topBar.gitCreateDialogTitle'),
+        createDialogDescription: () => t('topBar.gitCreateBranchHint'),
+        createBranchPlaceholder: t('topBar.gitCreateBranchName'),
+        checkoutCreatedBranch: t('topBar.gitCheckoutCreatedBranch'),
+        cancel: t('common.cancel'),
+        create: t('topBar.gitCreateConfirm'),
+        clean: t('topBar.gitClean'),
+        changedFiles: (count) => t('topBar.gitDirtyTooltip', { files: count }),
+      }}
+      onSwitchBranch={() => undefined}
+      onCreateBranch={() => undefined}
+      onUpdate={() => undefined}
+      onUpload={() => undefined}
+      onFetch={() => undefined}
+      onOpenCommit={() => undefined}
+    />
   )
 }
 
