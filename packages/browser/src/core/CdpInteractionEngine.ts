@@ -163,7 +163,9 @@ export class CdpInteractionEngine {
         ? Math.max(0, metrics.outerHeight - metrics.innerHeight - horizontalInset)
         : 0
 
-      return systemPointerDriver.move({
+      // 必须 await：不 await 就是把 promise 原样返回，异步拒绝会绕过下面的 catch，
+      // 「系统指针不可用 → 改用浏览器兜底指针」这条降级根本不会执行。
+      return await systemPointerDriver.move({
         x: Math.round(metrics.screenX + horizontalInset + point.x),
         y: Math.round(metrics.screenY + verticalInset + point.y),
         durationMs: clampInteger(durationMs, 0, 800, 0),
