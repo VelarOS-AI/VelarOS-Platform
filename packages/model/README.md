@@ -47,6 +47,9 @@
   `createModelRuntimeComposition()` 是工厂。
 - **`ModelProviderCollection`** —— 清单、catalog、凭据与 runtime config 的统一所有者。
   可变的 provider-script 状态归**这一个实例**,不从进程全局兜底读。
+- **`ProviderModelCatalogService`** —— 动态模型目录的 provider 协议层：统一构造
+  OpenAI-compatible / OpenRouter / Anthropic / Google 的模型列表请求并归一响应。
+  产品仍负责凭据存储、调用时机、IPC 与 UI 投影，并显式注入自己的 composition 与网络传输。
 - **`ModelAdapter`** —— 新增 provider 的抽象基类。内置
   OpenAI / OpenAI-compatible / Anthropic / Google / DeepSeek / Velar 云
   以及两个动态形态:`ProviderScriptModelAdapter`(受信脚本)与 `UserJsModelAdapter`(用户 JS)。

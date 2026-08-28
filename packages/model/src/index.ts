@@ -71,6 +71,11 @@ export {
   resolveSessionPromptCacheKey,
 } from './PromptCacheModelOptions'
 export * from './ProviderManifest'
+export {
+  type ProviderModelCatalogAttribution,
+  ProviderModelCatalogService,
+  type ProviderModelCatalogServiceOptions,
+} from './ProviderModelCatalogService'
 export { ProviderRawStreamText } from './ProviderRawStreamText'
 export * from './ProviderRuntimeAvailability'
 export {

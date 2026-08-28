@@ -235,7 +235,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.4.8",
+      "version": "0.4.9",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",
