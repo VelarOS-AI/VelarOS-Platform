@@ -19,6 +19,9 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 
+// 判定 helper 一律取包内 lib/runtime：UI 包对外承诺运行时零 VelarOS 依赖，
+// 从 @velaros-ai/core 取会让外部消费者构建时解析不到（package.json 里本就没这条依赖）。
+import { isEmpty, isPresent } from '../../lib/runtime'
 import { Button } from '../../primitives/buttons/Button'
 import { Input } from '../../primitives/forms/Input'
 import { AnchoredPopover } from '../../primitives/overlays/AnchoredPopover'
@@ -52,20 +55,20 @@ export type WorkspaceGitCommitControlAction =
 export interface WorkspaceGitControlBranch {
   name: string
   current?: boolean
-  upstream?: string | null
+  upstream?: LooseOptional<string>
   kind?: 'local' | 'remote'
 }
 
 export interface WorkspaceGitControlStatus {
   branch: string
-  upstream?: string | null
+  upstream?: LooseOptional<string>
   isClean: boolean
   changedFiles: number
 }
 
 export interface WorkspaceGitControlSummary {
   repository: boolean
-  status?: WorkspaceGitControlStatus | null
+  status?: LooseOptional<WorkspaceGitControlStatus>
   branches: WorkspaceGitControlBranch[]
   lineStats: {
     additions: number
@@ -231,20 +234,20 @@ export function WorkspaceGitCommitControl({
   onFetch,
   onOpenCommit,
   onActionError,
-}: WorkspaceGitCommitControlProps): ReactElement | null {
+}: WorkspaceGitCommitControlProps): Nullable<ReactElement> {
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchSearch, setBranchSearch] = useState('')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
   const [checkoutCreatedBranch, setCheckoutCreatedBranch] = useState(true)
   const [collapsedBranchGroups, setCollapsedBranchGroups] = useState<Set<string>>(new Set())
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<Nullable<PendingAction>>(null)
   const [resolvedThemeColor, setResolvedThemeColor] = useState<Nullable<string>>(null)
   const themeAnchorRef = useRef<HTMLButtonElement>(null)
   const status = summary.status
 
   const branches = useMemo(() => {
-    if (summary.branches.length || !status?.branch) return summary.branches
+    if (!isEmpty(summary.branches) || !status?.branch) return summary.branches
     return [
       {
         name: status.branch,
@@ -265,7 +268,7 @@ export function WorkspaceGitCommitControl({
   const localBranches = filteredBranches.filter((branch) => branch.kind !== 'remote')
   const remoteBranches = filteredBranches.filter((branch) => branch.kind === 'remote')
   const searchingBranches = normalizedSearch.length > 0
-  const isBusy = pendingAction !== null
+  const isBusy = isPresent(pendingAction)
   const isDirty = !status.isClean
   const tooltip = isDirty ? messages.changedFiles(status.changedFiles) : messages.clean
   const themeStyle = {
@@ -332,8 +335,10 @@ export function WorkspaceGitCommitControl({
         targetBranch,
         remote && !localExists ? { create: true, startPoint: branch.name } : undefined
       )
+      // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：回调签名是 boolean | void，undefined（宿主没返回值）表示「照常继续」，只有显式 false 才中止；写成 !completed 会把 undefined 一并判成中止，是行为变更而非等价简化。
       if (completed === false) return
       handleMenuOpenChange(false)
+      // @arch-guard:suspend code-style/require-error-logging 理由：错误经 reportActionError 交给宿主注入的 onActionError 上报；UI 包对宿主日志零依赖，组件层不自持 Log。
     } catch (error) {
       reportActionError(error, 'switch')
     } finally {
@@ -349,11 +354,13 @@ export function WorkspaceGitCommitControl({
     try {
       setPendingAction('create')
       const completed = await onCreateBranch(branchName, { checkout: checkoutCreatedBranch })
+      // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：同上，回调是 boolean | void，undefined 表示继续，只有显式 false 才中止。
       if (completed === false) return
       setNewBranchName('')
       setCheckoutCreatedBranch(true)
       setCreateDialogOpen(false)
     } catch (error) {
+      // @arch-guard:suspend code-style/require-error-logging 理由：经 reportActionError → 宿主 onActionError 上报；UI 包不自持 Log。
       reportActionError(error, 'create')
     } finally {
       setPendingAction(null)
@@ -367,6 +374,7 @@ export function WorkspaceGitCommitControl({
       setPendingAction('fetch')
       await onFetch()
     } catch (error) {
+      // @arch-guard:suspend code-style/require-error-logging 理由：经 reportActionError → 宿主 onActionError 上报；UI 包不自持 Log。
       reportActionError(error, 'fetch')
     } finally {
       setPendingAction(null)
@@ -380,6 +388,7 @@ export function WorkspaceGitCommitControl({
       setPendingAction(`upload:${branch.name}`)
       await onUpload(branch)
     } catch (error) {
+      // @arch-guard:suspend code-style/require-error-logging 理由：经 reportActionError → 宿主 onActionError 上报；UI 包不自持 Log。
       reportActionError(error, 'upload')
     } finally {
       setPendingAction(null)
@@ -605,7 +614,7 @@ function BranchGroup({
   label: string
   branches: WorkspaceGitControlBranch[]
   currentBranch: string
-  pendingAction: PendingAction | null
+  pendingAction: Nullable<PendingAction>
   collapsedGroups: Set<string>
   searching: boolean
   checkoutAction: string
@@ -613,8 +622,8 @@ function BranchGroup({
   onToggleGroup: (pathPrefix: string) => void
   onSelect: (branch: WorkspaceGitControlBranch) => void
   onUpload: (branch: WorkspaceGitControlBranch) => void
-}): ReactElement | null {
-  if (!branches.length) return null
+}): Nullable<ReactElement> {
+  if (isEmpty(branches)) return null
 
   const branchTrie = buildBranchTrie(branches, namespace)
   const { groupKeys, leafKeys } = partitionRootBranchTrieKeys(branchTrie)
@@ -639,7 +648,7 @@ function BranchGroup({
           type="button"
           className={styles.gitCompactBranchSelect}
           style={rowStyle}
-          disabled={pendingAction !== null || current}
+          disabled={isPresent(pendingAction) || current}
           onClick={() => onSelect(branch)}
         >
           {switching ? (
@@ -654,7 +663,7 @@ function BranchGroup({
         <div className={styles.gitCompactBranchHoverActions} role="group">
           <button
             type="button"
-            disabled={pendingAction !== null || current}
+            disabled={isPresent(pendingAction) || current}
             title={checkoutAction}
             aria-label={`${checkoutAction} ${branch.name}`}
             onClick={() => onSelect(branch)}
@@ -665,7 +674,7 @@ function BranchGroup({
           {branch.kind !== 'remote' && (
             <button
               type="button"
-              disabled={pendingAction !== null}
+              disabled={isPresent(pendingAction)}
               title={uploadAction}
               aria-label={`${uploadAction} ${branch.name}`}
               onClick={() => onUpload(branch)}
@@ -683,10 +692,10 @@ function BranchGroup({
     )
   }
 
-  function renderTrieNode(node: BranchTrieNode, depth: number): ReactElement | null {
+  function renderTrieNode(node: BranchTrieNode, depth: number): Nullable<ReactElement> {
     const rowPadding = BRANCH_LIST_ROW_PADDING_PX + depth * BRANCH_TREE_INDENT_STEP_PX
     const childKeys = sortedBranchTrieKeys(node.children)
-    if (!childKeys.length) return node.branch ? renderBranchRow(node.branch, rowPadding) : null
+    if (isEmpty(childKeys)) return node.branch ? renderBranchRow(node.branch, rowPadding) : null
 
     const expanded = searching || !collapsedGroups.has(node.pathPrefix)
     return (

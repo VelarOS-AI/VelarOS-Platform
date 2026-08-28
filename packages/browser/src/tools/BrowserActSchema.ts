@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isNumber, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import { isNonBlankString, isNumber, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
 
 import type { BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue } from '../core'
 
@@ -661,29 +661,29 @@ function expandBrowserActTargetAliases(input: unknown): unknown {
   if (!isPlainObject(input)) return input
 
   const expanded = { ...input }
-  const targetRef = isString(input.targetRef) && input.targetRef.trim()
+  const targetRef = isNonBlankString(input.targetRef)
     ? input.targetRef.trim()
     : null
-  const targetCss = isString(input.targetCss) && input.targetCss.trim()
+  const targetCss = isNonBlankString(input.targetCss)
     ? input.targetCss.trim()
     : null
-  const sourceRef = isString(input.sourceRef) && input.sourceRef.trim()
+  const sourceRef = isNonBlankString(input.sourceRef)
     ? input.sourceRef.trim()
     : null
-  const sourceCss = isString(input.sourceCss) && input.sourceCss.trim()
+  const sourceCss = isNonBlankString(input.sourceCss)
     ? input.sourceCss.trim()
     : null
 
   if (!isPlainObject(input.target) && (targetRef || targetCss)) {
     expanded.target = {
-      ...(targetRef ? { ref: targetRef } : {}),
-      ...(targetCss ? { css: targetCss } : {}),
+      ref: toOptional(targetRef),
+      css: toOptional(targetCss),
     }
   }
   if (!isPlainObject(input.source) && (sourceRef || sourceCss)) {
     expanded.source = {
-      ...(sourceRef ? { ref: sourceRef } : {}),
-      ...(sourceCss ? { css: sourceCss } : {}),
+      ref: toOptional(sourceRef),
+      css: toOptional(sourceCss),
     }
   }
 

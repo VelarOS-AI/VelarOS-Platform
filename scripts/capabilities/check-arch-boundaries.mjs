@@ -66,6 +66,10 @@ const PortableContracts = [
       // 「视图没接上」的跨层标记 + 纯判定函数:常量与零依赖 type guard,宿主用它把运行时事实
       // 翻译成可执行指引(见 BrowserViewAttachment 文件头)。
       "./BrowserViewAttachment.js",
+      // 虚拟指针外观常量 + 纯 SVG 拼装函数:26 行、零 import,与上面两条同性质。补登记——
+      // 3a864c7 把它从实现里劈出来时漏了登记,与 ModIdentity 是同一笔账。它必须能从契约入口
+      // 取到:同一份常量要同时喂给页面注入脚本和宿主预览 UI(见文件头,两处各画一份必然漂移)。
+      "./BrowserVirtualPointer.js",
     ]),
   },
   {

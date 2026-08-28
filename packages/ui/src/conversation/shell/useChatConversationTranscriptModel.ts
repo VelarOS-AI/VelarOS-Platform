@@ -14,6 +14,7 @@ import type { ChatMessage, ChatProviderId, ModelPricingCatalog } from '#contract
 import {
   isEmpty,
   isFiniteNumber,
+  isNull,
   isNumber,
   isPositiveNumber,
   isPresent,
@@ -68,7 +69,7 @@ export function resolveGoalCompletionRunWindow({
 
   return {
     startedAt,
-    finishedAt: markerDurationMs === null ? runtimeFinishedAt : finishedAt,
+    finishedAt: isNull(markerDurationMs) ? runtimeFinishedAt : finishedAt,
     durationMs: markerDurationMs ?? inferredDurationMs,
   }
 }
