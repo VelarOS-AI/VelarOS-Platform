@@ -1,5 +1,5 @@
 import { memo, type ReactElement, useEffect, useMemo, useState } from 'react'
-import { CursorClickIcon, PulseIcon, SignpostIcon } from '@phosphor-icons/react'
+import { CursorClickIcon, PulseIcon, SignpostIcon, UsersThreeIcon } from '@phosphor-icons/react'
 
 import { StyleUtils } from '@velaros-ai/ui'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
@@ -104,13 +104,26 @@ function UserMessageBubbleInner({
         : guidanceStatus === 'sent'
           ? t('chat.guidedConversation')
           : null
-  const statusLabel = guidanceLabel
-  const statusIcon = !!guidanceLabel && (
-    <SignpostIcon
-      size={11}
-      weight={guidanceStatus === 'sent' ? 'fill' : 'regular'}
-      className={styles.guidedInputLabelIcon}
-    />
+  // 同伴署名：这条 user 消息是同组另一条会话写的，不是用户本人。
+  //
+  // 与引导标签**互斥且优先**：一条消息不可能既是用户的运行中引导、又是同伴投来的，而万一两个
+  // 字段同时出现（旧数据 / 上游拼装出错），"这不是用户说的"是更要紧的那条信息——先让人知道
+  // 作者是谁，再谈它是不是引导。
+  const peerOrigin = message.peerOrigin
+  const peerLabel = peerOrigin
+    ? t('chat.peerMessageFrom', { name: peerOrigin.title ?? peerOrigin.sessionId })
+    : null
+  const statusLabel = peerLabel ?? guidanceLabel
+  const statusIcon = peerLabel ? (
+    <UsersThreeIcon size={11} weight="fill" className={styles.guidedInputLabelIcon} />
+  ) : (
+    !!guidanceLabel && (
+      <SignpostIcon
+        size={11}
+        weight={guidanceStatus === 'sent' ? 'fill' : 'regular'}
+        className={styles.guidedInputLabelIcon}
+      />
+    )
   )
   return (
     <div
@@ -120,11 +133,11 @@ function UserMessageBubbleInner({
       data-conversation-kind={resolveChatMessageConversationKind(message)}
     >
       <div className={styles.userRow}>
-        {(hasUserActions || guidanceLabel) && (
+        {(hasUserActions || statusLabel) && (
           <div
             className={cx(
               'userLeftMeta',
-              optionalWhenLazy(guidanceLabel, () => 'userLeftMetaWithGuidance')
+              optionalWhenLazy(statusLabel, () => 'userLeftMetaWithGuidance')
             )}
           >
             {hasUserActions && (

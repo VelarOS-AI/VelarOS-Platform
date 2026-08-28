@@ -636,6 +636,23 @@ export interface ChatMessage {
   }
   serializedStoredInWorkspace?: boolean
   guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent'
+  /**
+   * 非空 = 这条 `role: 'user'` 的消息由**同组的另一条会话**写入，不是用户本人。
+   *
+   * 为什么是独立字段而不是新增一个 `conversationKind`：两者是正交的两根轴。
+   * `conversationKind` 是**结构轴**——这条消息起不起一轮、能不能回退到它、是不是分段边界；
+   * 而"谁写的、能不能当用户证词采信"是**归属轴**。同伴消息**确实**起一轮真实执行，所以它必须
+   * 保持 `turn-input`：把它挪进一个新 kind，会连带丢掉回退按钮、分页分段起点、
+   * 「最近一次用户请求」映射、活动分组的轮次边界——而且一处编译错误都不会有。
+   */
+  peerOrigin?: {
+    /** 发信同伴的会话 id。 */
+    sessionId: string
+    /** 发信同伴的会话标题；未知时为 null。 */
+    title: Nullable<string>
+    /** 双方所在的会话组 id。 */
+    folderId: string
+  }
   timestamp: number
 }
 
@@ -675,6 +692,17 @@ export function isSystemNoticeMessage(
   message: ChatMessageConversationSemanticInput
 ): boolean {
   return resolveChatMessageConversationKind(message) === 'system-notice'
+}
+
+/**
+ * 这条消息是不是同组同伴写的。
+ *
+ * 刻意**不**走 {@link resolveChatMessageConversationKind}：那个函数解析的是结构轴，而这里问的是
+ * 归属轴（见 {@link ChatMessage.peerOrigin}）。两根轴同时成立是常态——一条同伴消息既是
+ * `turn-input`，又不是用户本人写的。
+ */
+export function isPeerOriginMessage(message: Pick<ChatMessage, 'peerOrigin'>): boolean {
+  return !!message.peerOrigin
 }
 
 export interface ChatSuggestionItem {
