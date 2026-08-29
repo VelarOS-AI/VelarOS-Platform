@@ -218,6 +218,31 @@ function buildRichAttachmentPayload(content: MessageClipboardContent): string {
   )
 }
 
+function dataUrlBlob(value: string, fallbackMediaType: string): Nullable<Blob> {
+  const separator = value.indexOf(',')
+  if (!value.startsWith('data:') || separator < 0) return null
+
+  const metadata = value.slice(5, separator)
+  const encoded = value.slice(separator + 1)
+  const parts = metadata.split(';')
+  const mediaType = parts[0]?.trim() || fallbackMediaType
+
+  try {
+    if (parts.includes('base64')) {
+      const decoded = atob(encoded)
+      const bytes = new Uint8Array(decoded.length)
+      for (let index = 0; index < decoded.length; index += 1) {
+        bytes[index] = decoded.charCodeAt(index)
+      }
+      return new Blob([bytes], { type: mediaType })
+    }
+
+    return new Blob([decodeURIComponent(encoded)], { type: mediaType })
+  } catch {
+    return null
+  }
+}
+
 export async function writeMessageClipboardContent(
   content: MessageClipboardContent
 ): Promise<void> {
@@ -246,7 +271,8 @@ export async function writeMessageClipboardContent(
     (asset) => !!asset.dataUrl && ClipboardItemConstructor.supports?.(asset.mediaType)
   )
   if (nativeImage?.dataUrl) {
-    item[nativeImage.mediaType] = await fetch(nativeImage.dataUrl).then((response) => response.blob())
+    const imageBlob = dataUrlBlob(nativeImage.dataUrl, nativeImage.mediaType)
+    if (imageBlob) item[nativeImage.mediaType] = imageBlob
   }
 
   try {

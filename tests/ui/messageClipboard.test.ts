@@ -115,6 +115,7 @@ void describe('shared rich message clipboard', () => {
   void test('writes rich HTML and a native image while retaining plain-text fallback', async () => {
     const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
     const clipboardItemDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ClipboardItem')
+    const fetchDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
     const writes: Array<Record<string, Blob>> = []
     const plainWrites: string[] = []
 
@@ -142,6 +143,12 @@ void describe('shared rich message clipboard', () => {
     Object.defineProperty(globalThis, 'ClipboardItem', {
       configurable: true,
       value: TestClipboardItem,
+    })
+    Object.defineProperty(globalThis, 'fetch', {
+      configurable: true,
+      value: async () => {
+        throw new Error('message clipboard must not fetch attachment data URLs')
+      },
     })
 
     try {
@@ -182,6 +189,8 @@ void describe('shared rich message clipboard', () => {
       if (clipboardItemDescriptor)
         Object.defineProperty(globalThis, 'ClipboardItem', clipboardItemDescriptor)
       else Reflect.deleteProperty(globalThis, 'ClipboardItem')
+      if (fetchDescriptor) Object.defineProperty(globalThis, 'fetch', fetchDescriptor)
+      else Reflect.deleteProperty(globalThis, 'fetch')
     }
 
     assert.equal(writes.length, 1)
@@ -193,5 +202,6 @@ void describe('shared rich message clipboard', () => {
     assert.equal(plainWrites.length, 0)
     assert.equal(await writes[0]!['text/plain']!.text(), '带图复制\n\nImage: screen.png')
     assert.match(await writes[0]!['text/html']!.text(), /data:image\/png;base64,AQID/u)
+    assert.deepEqual([...new Uint8Array(await writes[0]!['image/png']!.arrayBuffer())], [1, 2, 3])
   })
 })
