@@ -443,8 +443,10 @@ function MarkdownPreWithExpandableCode({
 function MarkdownTableWithExpandableViewport({
   children,
   node: _node,
-  ...tableProps
-}: React.ComponentPropsWithoutRef<'table'> & { node?: unknown }): ReactElement {
+}: {
+  children?: React.ReactNode
+  node?: unknown
+}): ReactElement {
   const { t } = useConversationI18n()
   const { containerRef, expanded, hasOverflow, setExpanded } =
     useExpandableConversationViewport('[data-conversation-table-viewport]')
@@ -453,7 +455,7 @@ function MarkdownTableWithExpandableViewport({
   return (
     <div ref={containerRef} data-collapsed={collapsed} data-streamdown="table-wrapper">
       <div data-conversation-table-viewport>
-        <table data-streamdown="table" {...tableProps}>
+        <table data-streamdown="table">
           {children}
         </table>
       </div>
