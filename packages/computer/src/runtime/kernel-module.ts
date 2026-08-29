@@ -23,7 +23,7 @@ import type {
   ComputerTypeResult,
 } from './types'
 
-export const ComputerKernelModuleVersion = '0.2.6'
+export const ComputerKernelModuleVersion = '0.2.7'
 
 export interface ComputerRuntimePort {
   isReady(): boolean
