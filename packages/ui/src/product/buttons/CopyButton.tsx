@@ -18,6 +18,7 @@ export interface CopyButtonProps extends Omit<
   label: string
   copiedLabel?: string
   iconSize?: number
+  onCopy?: () => Promise<void>
 }
 
 export const CopyButton = memo(
@@ -26,6 +27,7 @@ export const CopyButton = memo(
     label,
     copiedLabel = 'Copied',
     iconSize = 14,
+    onCopy,
     className,
     variant = 'ghost',
     size = 'icon-sm',
@@ -48,7 +50,8 @@ export const CopyButton = memo(
     )
 
     const handleCopy = useLockFn(async (): Promise<void> => {
-      await navigator.clipboard.writeText(value)
+      if (onCopy) await onCopy()
+      else await navigator.clipboard.writeText(value)
       setCopied(true)
       scheduleResetCopied()
     })

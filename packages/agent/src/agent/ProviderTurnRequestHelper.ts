@@ -16,6 +16,8 @@ import {
 import { AppError } from "@velaros-ai/core/error";
 import type { ScopedLog } from "@velaros-ai/core/logger";
 
+import { completeToolTransportNameAliases } from "../tools/ToolIdentity";
+
 import { compareStableStrings } from "./context/residency/determinism";
 import {
   buildToolPayloadRefsForProviderMessages,
@@ -26,7 +28,6 @@ import {
   type ContextPinnedEvidenceInput,
   type ProviderToolDefinitionSnapshotInput,
 } from "./context";
-import { completeToolTransportNameAliases } from "../tools/ToolIdentity";
 
 /**
  * Stream 与 Query 两条 turn 链路在"把一个 turn 组装成 provider 请求"上的公共逻辑。

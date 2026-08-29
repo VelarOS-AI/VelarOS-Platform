@@ -114,8 +114,8 @@ export type {
   ToolTransportProjection,
 } from './ToolIdentity'
 export {
-  createProviderToolReferenceCanonicalizer,
   completeToolTransportNameAliases,
+  createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,

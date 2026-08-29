@@ -373,7 +373,6 @@ export function AssistantMessageBubble({
         {showGeneratedArtifacts && (
           <AssistantMessageFooter
             message={message}
-            answerText={copyText}
             answerCostEstimate={answerCostEstimate}
             copyLabel={t('chat.copyAnswer')}
             copiedLabel={t('chat.codeBlockCopied')}

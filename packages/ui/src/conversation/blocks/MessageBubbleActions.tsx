@@ -25,6 +25,10 @@ import {
   formatMessageTime,
 } from './messageBubbleRenderModel'
 import {
+  type MessageClipboardContent,
+  writeMessageClipboardContent,
+} from './messageClipboard'
+import {
   formatMessageCostEstimate,
   type MessageCostEstimate as MessageCostEstimateValue,
 } from './messageCostEstimate'
@@ -42,22 +46,23 @@ const log = Log.tag('message-rewind')
 const MESSAGE_ACTION_ICON_SIZE = 'icon-sm' satisfies IconButtonPresetSize
 
 export function MessageCopyButton({
-  text,
+  content,
   label,
   copiedLabel,
 }: {
-  text: string
+  content: MessageClipboardContent
   label: string
   copiedLabel: string
 }): Nullable<ReactElement> {
-  if (isBlank(text)) return null
+  if (isBlank(content.plainText)) return null
 
   return (
     <CopyButton
-      value={text}
+      value={content.plainText}
       label={label}
       copiedLabel={copiedLabel}
       size={MESSAGE_ACTION_ICON_SIZE}
+      onCopy={() => writeMessageClipboardContent(content)}
     />
   )
 }

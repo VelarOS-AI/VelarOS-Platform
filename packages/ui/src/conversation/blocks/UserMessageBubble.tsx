@@ -19,6 +19,7 @@ import {
   buildPreviewItems,
   extractMessageText,
 } from './messageBubbleRenderModel'
+import { buildMessageClipboardContent } from './messageClipboard'
 import { UserAttachmentGallery } from './UserAttachmentGallery'
 
 import styles from './MessageBubble.module.css'
@@ -73,6 +74,7 @@ function UserMessageBubbleInner({
   const { t, locale } = useConversationI18n()
   const imagePreviewMessages = useImagePreviewDialogMessages()
   const copyText = useMemo(() => extractMessageText(message), [message])
+  const clipboardContent = useMemo(() => buildMessageClipboardContent(message), [message])
   const attachments = message.attachments ?? EmptyAttachments
   const imageAttachments = message.serialized?.imageAttachments ?? EmptyImageAttachments
   const browserElementSelections = message.browserElementSelections ?? EmptyBrowserElementSelections
@@ -94,7 +96,7 @@ function UserMessageBubbleInner({
   // （hook 自驱、定时任务、排队提交 flush 都能在用户盯着弹窗时把会话推成非 idle）。
   // 能不能回退由按钮内部按 disabled 处理：图标隐藏，但已打开的弹窗留着并禁用确认。
   const canShowRewindAction = isConversationTurnInputMessage(message) && !!onRewindToMessage
-  const hasUserActions = canShowRewindAction || !isBlank(copyText)
+  const hasUserActions = canShowRewindAction || !isBlank(clipboardContent.plainText)
   const guidanceStatus = message.guidanceStatus ?? (isRunGuidance ? 'sent' : null)
   const guidanceLabel =
     guidanceStatus === 'awaiting-decision'
@@ -150,9 +152,9 @@ function UserMessageBubbleInner({
                     getRewindPlan={getRewindPlan}
                   />
                 )}
-                {!isBlank(copyText) && (
+                {!isBlank(clipboardContent.plainText) && (
                   <MessageCopyButton
-                    text={copyText}
+                    content={clipboardContent}
                     label={t(isRunGuidance ? 'chat.copyGuidance' : 'chat.copyPrompt')}
                     copiedLabel={t('chat.codeBlockCopied')}
                   />

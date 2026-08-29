@@ -247,8 +247,8 @@ function createProviderToolReferenceCanonicalizer(
 }
 
 export {
-  createProviderToolReferenceCanonicalizer,
   completeToolTransportNameAliases,
+  createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,
