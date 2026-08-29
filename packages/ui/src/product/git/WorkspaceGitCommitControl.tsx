@@ -14,7 +14,6 @@ import {
   FolderIcon,
   GitBranchIcon,
   GitCommitIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
@@ -24,6 +23,7 @@ import {
 import { isEmpty, isPresent } from '../../lib/runtime'
 import { Button } from '../../primitives/buttons/Button'
 import { Input } from '../../primitives/forms/Input'
+import { SearchField } from '../../primitives/forms/SearchField'
 import { AnchoredPopover } from '../../primitives/overlays/AnchoredPopover'
 import {
   Dialog,
@@ -449,13 +449,10 @@ export function WorkspaceGitCommitControl({
         )}
       >
         <div className={styles.gitCompactMenuHeader}>
-          <div className={styles.gitCompactSearchField}>
-            <MagnifyingGlassIcon size={14} className={styles.gitCompactSearchIcon} />
-            <Input
+          <div className={styles.gitCompactSearchSlot}>
+            <SearchField
               autoFocus
-              variant="ghost"
               size="sm"
-              className={styles.gitCompactInput}
               value={branchSearch}
               placeholder={messages.branchSearchPlaceholder}
               onChange={(event) => setBranchSearch(event.target.value)}

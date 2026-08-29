@@ -104,12 +104,14 @@
   padding: 3.5px 4px;
 }
 
-.gitCompactSearchField {
-  display: flex;
+.gitCompactSearchSlot {
   min-width: 0;
   flex: 1;
   height: 100%;
-  align-items: center;
+}
+
+.gitCompactSearchSlot :global(.velar-search-field) {
+  height: 100%;
   gap: 6px;
   padding: 0 7px;
   border: 1px solid var(--border-strong, var(--workbench-border, var(--border)));
@@ -117,7 +119,7 @@
   background: var(--card, var(--background-panel-strong, var(--background)));
 }
 
-.gitCompactSearchField:focus-within {
+.gitCompactSearchSlot :global(.velar-search-field:focus-within) {
   border-color: color-mix(
     in srgb,
     var(--workspace-git-theme-color, var(--primary)) 54%,
@@ -127,29 +129,9 @@
     color-mix(in srgb, var(--workspace-git-theme-color, var(--primary)) 12%, transparent);
 }
 
-.gitCompactSearchIcon {
-  flex: 0 0 auto;
-  color: var(--workbench-text-muted, var(--muted-foreground));
-}
-
-.gitCompactInput {
-  --control-themed-bg: transparent;
-  --control-themed-open-bg: transparent;
-  min-width: 0;
-  height: 100%;
-  flex: 1;
-  padding: 0;
-  border: 0;
-  background-color: transparent !important;
-  box-shadow: none;
+.gitCompactSearchSlot :global(.velar-search-field-input) {
   font-size: 11px;
   font-weight: 500;
-}
-
-.gitCompactInput:focus-visible {
-  border-color: transparent;
-  background-color: transparent !important;
-  box-shadow: none;
 }
 
 .gitCompactFetchButton {

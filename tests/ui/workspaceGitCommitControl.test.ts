@@ -18,7 +18,8 @@ void describe('WorkspaceGitCommitControl ownership', () => {
 
     assert.match(control, /buildBranchTrie\(branches, namespace\)/)
     assert.match(control, /<FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
-    assert.match(control, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
+    assert.match(control, /gitCompactSearchSlot[\s\S]*<SearchField[\s\S]*gitCompactFetchButton/)
+    assert.doesNotMatch(control, /gitCompactSearchIcon|gitCompactInput/)
     assert.match(
       control,
       /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*branchCreate/
@@ -34,7 +35,10 @@ void describe('WorkspaceGitCommitControl ownership', () => {
     assert.match(styles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
     assert.match(styles, /\.gitCompactFooter[\s\S]*padding:\s*2\.5px 3px 3px/)
     assert.match(styles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
-    assert.match(styles, /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/)
+    assert.match(
+      styles,
+      /\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*11px/
+    )
     assert.match(styles, /\.gitCompactBranchRow\[data-current='true'\][\s\S]*workspace-git-theme-color/)
     assert.match(styles, /\.gitCompactBranchRow:hover \.gitCompactBranchHoverActions[\s\S]*opacity:\s*1/)
   })
