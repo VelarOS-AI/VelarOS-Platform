@@ -1,5 +1,14 @@
 import type { ChatMessage, ToolCallBlock } from '#contracts'
-import { isRecord } from '#internal/runtime'
+import {
+  isArray,
+  isEmpty,
+  isFiniteNumber,
+  isNonBlankString,
+  isRecord,
+  isString,
+  Log,
+  toNullable,
+} from '#internal/runtime'
 
 export const VelarMessageClipboardMime = 'web application/x-velaros-message-attachments+json'
 const VelarMessageClipboardLegacyMime = VelarMessageClipboardMime.replace(/^web /u, '')
@@ -7,6 +16,7 @@ const VelarMessageClipboardHtmlAttribute = 'data-velaros-message-attachments'
 const MaxVelarMessageClipboardPayloadChars = 64 * 1_024 * 1_024
 const MaxVelarMessageClipboardAssets = 32
 const Base64ChunkSize = 0x8000
+const log = Log.tag('message-clipboard')
 
 export interface MessageClipboardAsset {
   id: string
@@ -74,7 +84,7 @@ function fileHref(path: string): string {
 
 function readString(record: Nullable<Record<string, unknown>>, key: string): Nullable<string> {
   const value = record?.[key]
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+  return isNonBlankString(value) ? value.trim() : null
 }
 
 function readToolAssetPath(block: ToolCallBlock): Nullable<string> {
@@ -117,7 +127,7 @@ function collectMessageClipboardAssets(message: ChatMessage): MessageClipboardAs
       name: attachment.name,
       mediaType: attachment.mediaType,
       size: attachment.size,
-      lastModified: attachment.lastModified ?? null,
+      lastModified: toNullable(attachment.lastModified),
       dataUrl: image ? dataUrl(image.mediaType, image.data) : null,
       path: attachment.path?.trim() || null,
     })
@@ -186,7 +196,7 @@ function collectExternalLinks(message: ChatMessage, assets: MessageClipboardAsse
 function buildPlainText(messageText: string, externalLinks: string[]): string {
   const sections: string[] = []
   if (messageText) sections.push(messageText)
-  if (externalLinks.length) sections.push(externalLinks.join('\n'))
+  if (!isEmpty(externalLinks)) sections.push(externalLinks.join('\n'))
 
   return sections.join('\n\n')
 }
@@ -265,7 +275,8 @@ function dataUrlBlob(value: string, fallbackMediaType: string): Nullable<Blob> {
     }
 
     return new Blob([decodeURIComponent(encoded)], { type: mediaType })
-  } catch {
+  } catch (error) {
+    log.warn('解析剪贴板数据 URL 失败', { error })
     return null
   }
 }
@@ -284,7 +295,8 @@ function readVelarClipboardData(dataTransfer: DataTransfer): string {
     )
     const encodedPayload = marker?.[1] ?? marker?.[2] ?? ''
     return encodedPayload ? decodeClipboardPayload(encodedPayload) : ''
-  } catch {
+  } catch (error) {
+    log.warn('读取 VelarOS 剪贴板数据失败', { error })
     return ''
   }
 }
@@ -299,20 +311,19 @@ function restoreClipboardFile(value: unknown): Nullable<File> {
   const path = value['path']
   if (
     (kind !== 'image' && kind !== 'file')
-    || typeof name !== 'string'
-    || !name.trim()
+    || !isNonBlankString(name)
     || name.length > 1_024
-    || typeof mediaType !== 'string'
+    || !isString(mediaType)
     || mediaType.length > 255
   ) return null
 
-  const normalizedPath = typeof path === 'string' && path.trim() ? path.trim() : null
-  const blob = typeof data === 'string' ? dataUrlBlob(data, mediaType) : null
+  const normalizedPath = isNonBlankString(path) ? path.trim() : null
+  const blob = isString(data) ? dataUrlBlob(data, mediaType) : null
   if (!blob && !normalizedPath) return null
 
   const declaredLastModified = value['lastModified']
   const lastModified =
-    typeof declaredLastModified === 'number' && Number.isFinite(declaredLastModified)
+    isFiniteNumber(declaredLastModified)
       ? declaredLastModified
       : Date.now()
   const file = new File(blob ? [blob] : [], name.trim(), {
@@ -328,7 +339,7 @@ function restoreClipboardFile(value: unknown): Nullable<File> {
   }
 
   const declaredSize = value['size']
-  if (!blob && typeof declaredSize === 'number' && Number.isFinite(declaredSize) && declaredSize >= 0) {
+  if (!blob && isFiniteNumber(declaredSize) && declaredSize >= 0) {
     Object.defineProperty(file, 'size', {
       configurable: true,
       value: declaredSize,
@@ -346,14 +357,15 @@ export function readVelarMessageClipboard(
 
   try {
     const payload: unknown = JSON.parse(raw)
-    if (!isRecord(payload) || payload['version'] !== 1 || typeof payload['text'] !== 'string') return null
+    if (!isRecord(payload) || payload['version'] !== 1 || !isString(payload['text'])) return null
 
-    const assets = Array.isArray(payload['assets'])
+    const assets = isArray(payload['assets'])
       ? payload['assets'].slice(0, MaxVelarMessageClipboardAssets)
       : []
     const files = assets.map(restoreClipboardFile).filter((file): file is File => !!file)
     return { text: payload['text'], files }
-  } catch {
+  } catch (error) {
+    log.warn('解析 VelarOS 剪贴板载荷失败', { error })
     return null
   }
 }
@@ -384,7 +396,8 @@ export async function writeMessageClipboardContent(
 
   try {
     await clipboard.write([new ClipboardItemConstructor(item)])
-  } catch {
+  } catch (error) {
+    log.warn('写入富剪贴板失败，回退到纯文本', { error })
     await clipboard.writeText(content.plainText)
   }
 }

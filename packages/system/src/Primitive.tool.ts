@@ -39,7 +39,7 @@ const CompactProcessCommandChars = 480
 
 function compactProcessCommand<
   TEntry extends { command?: LooseOptional<string> },
->(entry: TEntry, includeFullCommand: boolean | undefined): TEntry & {
+>(entry: TEntry, includeFullCommand?: boolean): TEntry & {
   commandChars?: number
   commandTruncated?: true
 } {

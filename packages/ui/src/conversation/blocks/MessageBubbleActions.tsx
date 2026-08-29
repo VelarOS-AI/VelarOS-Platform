@@ -38,7 +38,7 @@ import styles from './MessageBubble.module.css'
 
 import type { AppLocale } from '#contracts'
 import { AppError } from '#internal/result'
-import { isBlank, Log, toNullable } from '#internal/runtime'
+import { isBlank, isEmpty, Log, toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 const log = Log.tag('message-rewind')
@@ -54,7 +54,7 @@ export function MessageCopyButton({
   label: string
   copiedLabel: string
 }): Nullable<ReactElement> {
-  if (isBlank(content.plainText) && content.assets.length === 0) return null
+  if (isBlank(content.plainText) && isEmpty(content.assets)) return null
 
   return (
     <CopyButton

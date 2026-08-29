@@ -31,6 +31,7 @@ import {
   normalizeMessageMarkdownFileReference,
   resolveMessageMarkdownHrefTarget,
 } from '../markdown/messageMarkdownLinks.utils'
+import { useTimerScope } from '../react-hooks/useTimerScope'
 import { useConversationRenderSlots } from '../render-slots'
 import { ReplaceableRenderSlot } from '../render-slots/ReplaceableRenderSlot'
 
@@ -108,6 +109,7 @@ function useExpandableConversationViewport(viewportSelector: string): {
   hasOverflow: boolean
   setExpanded: React.Dispatch<React.SetStateAction<boolean>>
 } {
+  const timers = useTimerScope('useExpandableConversationViewport')
   const containerRef = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState(false)
   const [hasOverflow, setHasOverflow] = useState(false)
@@ -126,7 +128,9 @@ function useExpandableConversationViewport(viewportSelector: string): {
     }
 
     measure()
-    const animationFrameId = window.requestAnimationFrame(measure)
+    const animationFrameLease = timers.nextFrame(measure, {
+      label: 'conversation.expandable-viewport.measure',
+    })
     const resizeObserver = new ResizeObserver(measure)
     resizeObserver.observe(viewport)
     if (viewport.firstElementChild) resizeObserver.observe(viewport.firstElementChild)
@@ -142,12 +146,12 @@ function useExpandableConversationViewport(viewportSelector: string): {
     })
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId)
+      animationFrameLease.cancel()
       intersectionObserver.disconnect()
       mutationObserver.disconnect()
       resizeObserver.disconnect()
     }
-  }, [viewportSelector])
+  }, [timers, viewportSelector])
 
   return { containerRef, expanded, hasOverflow, setExpanded }
 }

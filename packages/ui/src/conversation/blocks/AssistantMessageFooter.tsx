@@ -11,7 +11,7 @@ import type { MessageCostEstimate as MessageCostEstimateValue } from './messageC
 import styles from './MessageBubble.module.css'
 
 import type { AppLocale, ChatMessage } from '#contracts'
-import { isBlank } from '#internal/runtime'
+import { isBlank, isEmpty } from '#internal/runtime'
 
 function AssistantMessageFooterInner({
   message,
@@ -27,7 +27,7 @@ function AssistantMessageFooterInner({
   locale: AppLocale
 }): Nullable<ReactElement> {
   const clipboardContent = useMemo(() => buildMessageClipboardContent(message), [message])
-  if (isBlank(clipboardContent.plainText) && clipboardContent.assets.length === 0) return null
+  if (isBlank(clipboardContent.plainText) && isEmpty(clipboardContent.assets)) return null
 
   return (
     <div className={styles.assistantCopyFooter}>
