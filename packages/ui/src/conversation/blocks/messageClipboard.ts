@@ -1,22 +1,33 @@
 import type { ChatMessage, ToolCallBlock } from '#contracts'
 import { isRecord } from '#internal/runtime'
 
-const RichClipboardAttachmentMime = 'web application/x-velaros-message-attachments+json'
+export const VelarMessageClipboardMime = 'web application/x-velaros-message-attachments+json'
+const VelarMessageClipboardLegacyMime = VelarMessageClipboardMime.replace(/^web /u, '')
+const MaxVelarMessageClipboardPayloadChars = 64 * 1_024 * 1_024
+const MaxVelarMessageClipboardAssets = 32
 
 export interface MessageClipboardAsset {
   id: string
   kind: 'image' | 'file'
   name: string
   mediaType: string
+  size: number
+  lastModified: Nullable<number>
   dataUrl: Nullable<string>
   path: Nullable<string>
 }
 
 export interface MessageClipboardContent {
+  messageText: string
   plainText: string
   html: string
   uriList: string
   assets: MessageClipboardAsset[]
+}
+
+export interface VelarMessageClipboardPaste {
+  text: string
+  files: File[]
 }
 
 function escapeHtml(value: string): string {
@@ -85,6 +96,8 @@ function collectMessageClipboardAssets(message: ChatMessage): MessageClipboardAs
       kind: attachment.kind,
       name: attachment.name,
       mediaType: attachment.mediaType,
+      size: attachment.size,
+      lastModified: attachment.lastModified ?? null,
       dataUrl: image ? dataUrl(image.mediaType, image.data) : null,
       path: attachment.path?.trim() || null,
     })
@@ -98,6 +111,8 @@ function collectMessageClipboardAssets(message: ChatMessage): MessageClipboardAs
         kind: block.mediaType.toLowerCase().startsWith('image/') ? 'image' : 'file',
         name,
         mediaType: block.mediaType,
+        size: block.size,
+        lastModified: null,
         dataUrl: block.data ? dataUrl(block.mediaType, block.data) : null,
         path: null,
       })
@@ -111,6 +126,8 @@ function collectMessageClipboardAssets(message: ChatMessage): MessageClipboardAs
       kind: 'image',
       name: path ? basename(path) : block.title?.trim() || block.toolName,
       mediaType: block.modelImage.mediaType,
+      size: 0,
+      lastModified: null,
       dataUrl: dataUrl(block.modelImage.mediaType, block.modelImage.data),
       path,
     })
@@ -119,67 +136,52 @@ function collectMessageClipboardAssets(message: ChatMessage): MessageClipboardAs
   return assets
 }
 
-function buildPlainText(message: ChatMessage, assets: MessageClipboardAsset[]): string {
-  const sections: string[] = []
-  const text = message.blocks
+function buildMessageText(message: ChatMessage): string {
+  return message.blocks
     .filter((block) => block.type === 'text')
     .map((block) => block.text.trimEnd())
     .filter(Boolean)
     .join('\n\n')
     .trim()
-  if (text) sections.push(text)
+}
 
-  const references = assets.map((asset) => {
-    const target = asset.path?.trim()
-    const prefix = asset.kind === 'image' ? 'Image' : 'File'
-    return target ? `${prefix}: ${asset.name} (${target})` : `${prefix}: ${asset.name}`
-  })
+function collectExternalLinks(message: ChatMessage, assets: MessageClipboardAsset[]): string[] {
+  const links = new Set<string>()
+  for (const asset of assets) {
+    if (!asset.path) continue
+    const href = fileHref(asset.path)
+    if (href) links.add(href)
+  }
+
   for (const block of message.blocks) {
-    if (block.type === 'assistant-source' && block.url.trim()) {
-      references.push(`${block.title?.trim() || 'Source'}: ${block.url.trim()}`)
+    const url = block.type === 'assistant-source' ? block.url.trim() : ''
+    if (/^https?:\/\//u.test(url)) {
+      links.add(url)
     }
   }
-  if (references.length) sections.push(references.join('\n'))
+
+  return [...links]
+}
+
+function buildPlainText(messageText: string, externalLinks: string[]): string {
+  const sections: string[] = []
+  if (messageText) sections.push(messageText)
+  if (externalLinks.length) sections.push(externalLinks.join('\n'))
 
   return sections.join('\n\n')
 }
 
-function buildHtml(message: ChatMessage, assets: MessageClipboardAsset[]): string {
+function buildHtml(messageText: string, externalLinks: string[]): string {
   const fragments: string[] = []
-  const text = message.blocks
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text.trimEnd())
-    .filter(Boolean)
-    .join('\n\n')
-    .trim()
-  if (text) {
-    fragments.push(`<div style="white-space:pre-wrap">${escapeHtml(text).replaceAll('\n', '<br>')}</div>`)
-  }
-
-  for (const asset of assets) {
-    const pathUrl = asset.path ? fileHref(asset.path) : ''
-    const href = asset.dataUrl || pathUrl
-    const name = escapeHtml(asset.name)
-    if (asset.kind === 'image' && href) {
-      fragments.push(
-        `<figure><img src="${escapeHtml(href)}" alt="${name}" style="max-width:100%;height:auto"><figcaption>${name}</figcaption></figure>`
-      )
-      continue
-    }
-    if (href) {
-      const download = asset.dataUrl ? ` download="${name}"` : ''
-      fragments.push(`<div><a href="${escapeHtml(href)}"${download}>${name}</a></div>`)
-      continue
-    }
-    fragments.push(`<div>${name}</div>`)
-  }
-
-  for (const block of message.blocks) {
-    if (block.type !== 'assistant-source' || !block.url.trim()) continue
-    const url = block.url.trim()
+  if (messageText) {
     fragments.push(
-      `<div><a href="${escapeHtml(url)}">${escapeHtml(block.title?.trim() || url)}</a></div>`
+      `<div style="white-space:pre-wrap">${escapeHtml(messageText).replaceAll('\n', '<br>')}</div>`
     )
+  }
+
+  for (const url of externalLinks) {
+    const escapedUrl = escapeHtml(url)
+    fragments.push(`<div><a href="${escapedUrl}">${escapedUrl}</a></div>`)
   }
 
   return `<div data-velaros-message-clipboard="true">${fragments.join('')}</div>`
@@ -187,35 +189,32 @@ function buildHtml(message: ChatMessage, assets: MessageClipboardAsset[]): strin
 
 export function buildMessageClipboardContent(message: ChatMessage): MessageClipboardContent {
   const assets = collectMessageClipboardAssets(message)
-  const uris = new Set<string>()
-  for (const asset of assets) {
-    if (!asset.path) continue
-    const href = fileHref(asset.path)
-    if (href) uris.add(href)
-  }
-  for (const block of message.blocks) {
-    if (block.type === 'assistant-source' && /^https?:\/\//u.test(block.url.trim()))
-      uris.add(block.url.trim())
-  }
+  const messageText = buildMessageText(message)
+  const externalLinks = collectExternalLinks(message, assets)
 
   return {
-    plainText: buildPlainText(message, assets),
-    html: buildHtml(message, assets),
-    uriList: [...uris].join('\r\n'),
+    messageText,
+    plainText: buildPlainText(messageText, externalLinks),
+    html: buildHtml(messageText, externalLinks),
+    uriList: externalLinks.join('\r\n'),
     assets,
   }
 }
 
 function buildRichAttachmentPayload(content: MessageClipboardContent): string {
-  return JSON.stringify(
-    content.assets.map((asset) => ({
+  return JSON.stringify({
+    version: 1,
+    text: content.messageText,
+    assets: content.assets.map((asset) => ({
       kind: asset.kind,
       name: asset.name,
       mediaType: asset.mediaType,
+      size: asset.size,
+      lastModified: asset.lastModified,
       dataUrl: asset.dataUrl,
       path: asset.path,
-    }))
-  )
+    })),
+  })
 }
 
 function dataUrlBlob(value: string, fallbackMediaType: string): Nullable<Blob> {
@@ -243,6 +242,86 @@ function dataUrlBlob(value: string, fallbackMediaType: string): Nullable<Blob> {
   }
 }
 
+function readVelarClipboardData(dataTransfer: DataTransfer): string {
+  try {
+    return (
+      dataTransfer.getData(VelarMessageClipboardMime)
+      || dataTransfer.getData(VelarMessageClipboardLegacyMime)
+    )
+  } catch {
+    return ''
+  }
+}
+
+function restoreClipboardFile(value: unknown): Nullable<File> {
+  if (!isRecord(value)) return null
+
+  const kind = value['kind']
+  const name = value['name']
+  const mediaType = value['mediaType']
+  const data = value['dataUrl']
+  const path = value['path']
+  if (
+    (kind !== 'image' && kind !== 'file')
+    || typeof name !== 'string'
+    || !name.trim()
+    || name.length > 1_024
+    || typeof mediaType !== 'string'
+    || mediaType.length > 255
+  ) return null
+
+  const normalizedPath = typeof path === 'string' && path.trim() ? path.trim() : null
+  const blob = typeof data === 'string' ? dataUrlBlob(data, mediaType) : null
+  if (!blob && !normalizedPath) return null
+
+  const declaredLastModified = value['lastModified']
+  const lastModified =
+    typeof declaredLastModified === 'number' && Number.isFinite(declaredLastModified)
+      ? declaredLastModified
+      : Date.now()
+  const file = new File(blob ? [blob] : [], name.trim(), {
+    type: mediaType,
+    lastModified,
+  })
+
+  if (normalizedPath) {
+    Object.defineProperty(file, 'path', {
+      configurable: true,
+      value: normalizedPath,
+    })
+  }
+
+  const declaredSize = value['size']
+  if (!blob && typeof declaredSize === 'number' && Number.isFinite(declaredSize) && declaredSize >= 0) {
+    Object.defineProperty(file, 'size', {
+      configurable: true,
+      value: declaredSize,
+    })
+  }
+
+  return file
+}
+
+export function readVelarMessageClipboard(
+  dataTransfer: DataTransfer
+): Nullable<VelarMessageClipboardPaste> {
+  const raw = readVelarClipboardData(dataTransfer)
+  if (!raw || raw.length > MaxVelarMessageClipboardPayloadChars) return null
+
+  try {
+    const payload: unknown = JSON.parse(raw)
+    if (!isRecord(payload) || payload['version'] !== 1 || typeof payload['text'] !== 'string') return null
+
+    const assets = Array.isArray(payload['assets'])
+      ? payload['assets'].slice(0, MaxVelarMessageClipboardAssets)
+      : []
+    const files = assets.map(restoreClipboardFile).filter((file): file is File => !!file)
+    return { text: payload['text'], files }
+  } catch {
+    return null
+  }
+}
+
 export async function writeMessageClipboardContent(
   content: MessageClipboardContent
 ): Promise<void> {
@@ -261,19 +340,9 @@ export async function writeMessageClipboardContent(
   if (content.uriList && ClipboardItemConstructor.supports?.('text/uri-list')) {
     item['text/uri-list'] = new Blob([content.uriList], { type: 'text/uri-list' })
   }
-  if (ClipboardItemConstructor.supports?.(RichClipboardAttachmentMime)) {
-    item[RichClipboardAttachmentMime] = new Blob([buildRichAttachmentPayload(content)], {
-      type: RichClipboardAttachmentMime,
-    })
-  }
-
-  const nativeImage = content.assets.find(
-    (asset) => !!asset.dataUrl && ClipboardItemConstructor.supports?.(asset.mediaType)
-  )
-  if (nativeImage?.dataUrl) {
-    const imageBlob = dataUrlBlob(nativeImage.dataUrl, nativeImage.mediaType)
-    if (imageBlob) item[nativeImage.mediaType] = imageBlob
-  }
+  item[VelarMessageClipboardMime] = new Blob([buildRichAttachmentPayload(content)], {
+    type: VelarMessageClipboardMime,
+  })
 
   try {
     await clipboard.write([new ClipboardItemConstructor(item)])

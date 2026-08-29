@@ -3,6 +3,8 @@ import { describe, test } from 'node:test'
 
 import {
   buildMessageClipboardContent,
+  readVelarMessageClipboard,
+  VelarMessageClipboardMime,
   writeMessageClipboardContent,
 } from '../../packages/ui/src/conversation/blocks/messageClipboard'
 import type { ChatMessage } from '../../packages/ui/src/conversation/contracts'
@@ -58,10 +60,10 @@ void describe('shared rich message clipboard', () => {
     )
 
     assert.equal(content.assets.length, 2)
-    assert.match(content.plainText, /请检查这些附件/u)
-    assert.match(content.plainText, /Image: screen\.png/u)
-    assert.match(content.plainText, /File: notes\.md \(\/tmp\/Velar Files\/notes\.md\)/u)
-    assert.match(content.html, /src="data:image\/png;base64,AQID"/u)
+    assert.equal(content.messageText, '请检查这些附件')
+    assert.equal(content.plainText, '请检查这些附件\n\nfile:///tmp/Velar%20Files/notes.md')
+    assert.doesNotMatch(content.plainText, /Image:|File:/u)
+    assert.doesNotMatch(content.html, /data:image\/png/u)
     assert.match(content.html, /href="file:\/\/\/tmp\/Velar%20Files\/notes\.md"/u)
     assert.equal(content.uriList, 'file:///tmp/Velar%20Files/notes.md')
   })
@@ -105,14 +107,16 @@ void describe('shared rich message clipboard', () => {
         ['image', 'chart.jpg'],
       ]
     )
-    assert.match(content.html, /download="report\.pdf"/u)
-    assert.match(content.html, /data:application\/pdf;base64,JVBERg==/u)
-    assert.match(content.html, /data:image\/jpeg;base64,\/9j\//u)
+    assert.doesNotMatch(content.html, /data:application\/pdf|data:image\/jpeg/u)
+    assert.match(content.html, /href="file:\/\/\/tmp\/chart\.jpg"/u)
     assert.match(content.html, /href="https:\/\/velaros\.ai\/docs"/u)
-    assert.match(content.plainText, /VelarOS Docs: https:\/\/velaros\.ai\/docs/u)
+    assert.equal(
+      content.plainText,
+      '已经生成。\n\nfile:///tmp/chart.jpg\nhttps://velaros.ai/docs'
+    )
   })
 
-  void test('writes rich HTML and a native image while retaining plain-text fallback', async () => {
+  void test('keeps external copy link-only and restores internal image attachments', async () => {
     const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
     const clipboardItemDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ClipboardItem')
     const fetchDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
@@ -195,13 +199,55 @@ void describe('shared rich message clipboard', () => {
 
     assert.equal(writes.length, 1)
     assert.deepEqual(Object.keys(writes[0]!).sort(), [
-      'image/png',
       'text/html',
       'text/plain',
+      VelarMessageClipboardMime,
     ])
     assert.equal(plainWrites.length, 0)
-    assert.equal(await writes[0]!['text/plain']!.text(), '带图复制\n\nImage: screen.png')
-    assert.match(await writes[0]!['text/html']!.text(), /data:image\/png;base64,AQID/u)
-    assert.deepEqual([...new Uint8Array(await writes[0]!['image/png']!.arrayBuffer())], [1, 2, 3])
+    assert.equal(await writes[0]!['text/plain']!.text(), '带图复制')
+    assert.doesNotMatch(await writes[0]!['text/html']!.text(), /data:image\/png/u)
+
+    const internalPayload = await writes[0]![VelarMessageClipboardMime]!.text()
+    const restored = readVelarMessageClipboard({
+      getData: (type: string) => (type === VelarMessageClipboardMime ? internalPayload : ''),
+    } as DataTransfer)
+    assert.ok(restored)
+    assert.equal(restored.text, '带图复制')
+    assert.equal(restored.files.length, 1)
+    assert.equal(restored.files[0]!.name, 'screen.png')
+    assert.equal(restored.files[0]!.type, 'image/png')
+    assert.deepEqual(
+      [...new Uint8Array(await restored.files[0]!.arrayBuffer())],
+      [1, 2, 3]
+    )
+  })
+
+  void test('restores internal path-only files without exposing placeholder prose', () => {
+    const restored = readVelarMessageClipboard({
+      getData: (type: string) =>
+        type === VelarMessageClipboardMime
+          ? JSON.stringify({
+              version: 1,
+              text: '检查文件',
+              assets: [
+                {
+                  kind: 'file',
+                  name: 'notes.md',
+                  mediaType: 'text/markdown',
+                  size: 8,
+                  lastModified: 123,
+                  dataUrl: null,
+                  path: '/tmp/notes.md',
+                },
+              ],
+            })
+          : '',
+    } as DataTransfer)
+
+    assert.ok(restored)
+    assert.equal(restored.text, '检查文件')
+    assert.equal(restored.files.length, 1)
+    assert.equal(restored.files[0]!.size, 8)
+    assert.equal((restored.files[0] as File & { path?: string }).path, '/tmp/notes.md')
   })
 })

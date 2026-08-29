@@ -8,6 +8,7 @@ import { Textarea } from '@velaros-ai/ui/primitives/forms/Textarea'
 import { Stack } from '@velaros-ai/ui/primitives/layout/Stack'
 import { ImagePreviewDialog } from '@velaros-ai/ui/primitives/overlays/ImagePreviewDialog'
 
+import { readVelarMessageClipboard } from '../blocks/messageClipboard'
 import { useConversationI18n } from '../i18n'
 import { useAutoFocus } from '../react-hooks/useAutoFocus'
 import { useAutoResize } from '../react-hooks/useAutoResize'
@@ -1189,7 +1190,9 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                   updateSelectionFromTextarea(event.currentTarget, value.length)
                 }}
                 onPaste={(event) => {
-                  const pastedText = event.clipboardData.getData('text/plain')
+                  const velarClipboard = readVelarMessageClipboard(event.clipboardData)
+                  const pastedText =
+                    velarClipboard?.text ?? event.clipboardData.getData('text/plain')
                   const selectionStart = event.currentTarget.selectionStart ?? value.length
                   const selectionEnd = event.currentTarget.selectionEnd ?? value.length
                   const nextRawValue = `${value.slice(0, selectionStart)}${pastedText}${value.slice(selectionEnd)}`
@@ -1200,7 +1203,9 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                       nextInputLength: nextRawValue.length,
                       maxInputChars: ChatComposerInputMaxChars,
                     })
-                  const pastedFiles = canAcceptFiles ? readClipboardFiles(event.clipboardData) : []
+                  const pastedFiles = canAcceptFiles
+                    ? (velarClipboard?.files ?? readClipboardFiles(event.clipboardData))
+                    : []
 
                   if (shouldVirtualizePaste) {
                     event.preventDefault()
@@ -1218,7 +1223,13 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                     return
                   }
 
-                  if (isEmpty(pastedFiles)) return
+                  if (isEmpty(pastedFiles)) {
+                    if (velarClipboard) {
+                      event.preventDefault()
+                      if (pastedText) insertTextAtCursor(pastedText)
+                    }
+                    return
+                  }
 
                   event.preventDefault()
                   appendFiles(pastedFiles)

@@ -56,7 +56,7 @@ export const CopyButton = memo(
       scheduleResetCopied()
     })
 
-    if (!value) return null
+    if (!value && !onCopy) return null
 
     const buttonLabel = copied ? copiedLabel : label
 

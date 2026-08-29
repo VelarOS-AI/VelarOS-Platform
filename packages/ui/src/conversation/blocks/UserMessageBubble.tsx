@@ -152,7 +152,7 @@ function UserMessageBubbleInner({
                     getRewindPlan={getRewindPlan}
                   />
                 )}
-                {!isBlank(clipboardContent.plainText) && (
+                {(!isBlank(clipboardContent.plainText) || clipboardContent.assets.length > 0) && (
                   <MessageCopyButton
                     content={clipboardContent}
                     label={t(isRunGuidance ? 'chat.copyGuidance' : 'chat.copyPrompt')}

@@ -54,7 +54,7 @@ export function MessageCopyButton({
   label: string
   copiedLabel: string
 }): Nullable<ReactElement> {
-  if (isBlank(content.plainText)) return null
+  if (isBlank(content.plainText) && content.assets.length === 0) return null
 
   return (
     <CopyButton

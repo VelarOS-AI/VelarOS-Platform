@@ -27,7 +27,7 @@ function AssistantMessageFooterInner({
   locale: AppLocale
 }): Nullable<ReactElement> {
   const clipboardContent = useMemo(() => buildMessageClipboardContent(message), [message])
-  if (isBlank(clipboardContent.plainText)) return null
+  if (isBlank(clipboardContent.plainText) && clipboardContent.assets.length === 0) return null
 
   return (
     <div className={styles.assistantCopyFooter}>
