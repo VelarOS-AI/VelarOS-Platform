@@ -16,6 +16,7 @@ import {
 import { canClaimChatDraftInsertion } from '../../packages/ui/src/conversation/composer/utils/chatDraftInsertion.utils'
 import { claimChatPromptFeatureActivation } from '../../packages/ui/src/conversation/composer/utils/chatPromptFeatureActivation.utils'
 import { activateMarkdownTailMarker } from '../../packages/ui/src/conversation/markdown/markdownTailMarker.utils'
+import { getToolDetailSummary } from '../../packages/ui/src/conversation/tool-render/toolCallSummary'
 import { shouldUseDefaultTranscriptToolRenderer } from '../../packages/ui/src/conversation/tool-render/toolRenderToolNames'
 
 void describe('Platform-owned conversation card placement', () => {
@@ -86,6 +87,40 @@ void describe('Platform-owned conversation composer behavior', () => {
     assert.match(inputSource, /onDismissWorkbenchCurrentFile/)
     assert.match(chipsSource, /chipDataPluginId="workbench-current-file"/)
     assert.match(chipsSource, /onRemove=\{onDismissWorkbenchCurrentFile\}/)
+  })
+
+  void test('keeps image attachment removal compact across Desktop and Workbench consumers', () => {
+    const source = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ChatInputImageThumb.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.equal(source.match(/size=\{14\}/gu)?.length, 2)
+    assert.equal(source.match(/shape="round"/gu)?.length, 2)
+    assert.doesNotMatch(source, /size="icon-sm"/u)
+  })
+
+  void test('shows the context distill progress note with a fact fallback', () => {
+    assert.equal(
+      getToolDetailSummary({
+        toolName: 'context:distill',
+        args: {
+          facts: ['修复已完成'],
+          note: '已完成定向验证；下一步运行完整检查。',
+        },
+      }),
+      '已完成定向验证；下一步运行完整检查。'
+    )
+    assert.equal(
+      getToolDetailSummary({
+        toolName: 'context:distill',
+        args: { facts: ['保留这条关键事实'] },
+      }),
+      '保留这条关键事实'
+    )
   })
 
   void test('keeps Widget and HTML Live Preview independently selectable', () => {

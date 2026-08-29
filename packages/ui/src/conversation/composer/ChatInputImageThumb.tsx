@@ -33,7 +33,8 @@ function ChatInputImageThumb({
         <ImageIcon size={16} className={styles.fileChipName} />
         <IconButton
           label={removeLabel}
-          size="icon-sm"
+          size={14}
+          shape="round"
           onClick={onRemove}
           disabled={disabled}
           className={styles.fileRemoveBtn}
@@ -57,7 +58,8 @@ function ChatInputImageThumb({
       </Button>
       <IconButton
         label={removeLabel}
-        size="icon-sm"
+        size={14}
+        shape="round"
         onClick={onRemove}
         disabled={disabled}
         className={styles.fileRemoveBtn}

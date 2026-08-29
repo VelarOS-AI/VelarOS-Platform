@@ -188,6 +188,24 @@ function getToolReadSkillNames(toolName: string, args: Nullable<Record<string, a
     .filter((id) => !isBlank(id))
 }
 
+/**
+ * `context:distill` 没有 path/query 这类通用主参数；它真正有用的行内信息是阶段便签，
+ * 其次才是首条蒸馏事实。若这里不认 `note/facts`，紧凑工具行就只剩工具名，用户无法判断
+ * 这次上下文整理保存了什么进度。
+ */
+function getContextDistillPreview(
+  toolName: string,
+  args: Nullable<Record<string, any>>
+): Nullable<string> {
+  if (toolName !== 'context:distill') return null
+
+  const note = readString(args, 'note')
+  if (note && !isBlank(note)) return normalizeInline(note)
+
+  const firstFact = readStringArray(args, 'facts').find((fact) => !isBlank(fact))
+  return firstFact ? normalizeInline(firstFact) : null
+}
+
 function formatToolReadSkillNames(
   toolName: string,
   args: Nullable<Record<string, any>>,
@@ -282,6 +300,9 @@ export function getToolDetailItems(
 
     details.push(detail)
   }
+
+  pushDetail(getContextDistillPreview(block.toolName, args))
+  if (!isEmpty(details)) return details
 
   getToolReadSkillNames(block.toolName, args).forEach(pushDetail)
   if (!isEmpty(details)) return details
@@ -439,6 +460,7 @@ export function getToolDetailSummary(
   const args = asRecord(block.args)
   const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(args, 'cwd'))
   return (
+    getContextDistillPreview(block.toolName, args) ??
     formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
     getPrimaryArgPreview(args, cwdFormatter, locale, runtime)
   )
