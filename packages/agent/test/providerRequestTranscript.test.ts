@@ -8,6 +8,7 @@ import { decodeProviderRequestAuditValue } from '../src/agent/context/providerRe
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
 import { assertProviderRequestSnapshotReconstructable } from '../src/agent/context/ProviderRequestSnapshot'
 import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
+import { ProviderTurnRequestHelper } from '../src/agent/ProviderTurnRequestHelper'
 import {
   parsePromptAuditText,
   serializePromptAuditLine,
@@ -87,6 +88,101 @@ void describe('provider request transcript', () => {
       () => assertProviderRequestSnapshotReconstructable(compiled.providerRequest),
       /tool schemas are missing/
     )
+  })
+
+  void test('fails locally before provider send when any compiled tool name is invalid', () => {
+    const compiler = new ProviderRequestCompiler(
+      new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    )
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'run status' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'system:run',
+            input: { command: 'git status' },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'system:run',
+            output: { type: 'text', value: 'clean' },
+          },
+        ],
+      },
+      { role: 'user', content: 'continue' },
+    ]
+
+    assert.throws(
+      () =>
+        compiler.compile({
+          model: 'fixture-model',
+          systemPrompt: 'system',
+          messages,
+          contextWindow: 200_000,
+        }),
+      /provider history contains invalid tool names: system:run/
+    )
+  })
+
+  void test('rewrites a page-out historical tool before it reaches the provider input', () => {
+    const helper = new ProviderTurnRequestHelper({} as never, 'stream')
+    const transportPlan = helper.captureToolTransportPlan({
+      getCurrentVisibleToolTransportNames: () => ({
+        'tooling:map': 'tooling__map',
+      }),
+    })
+    const requestAliases = helper.resolveProviderRequestToolNameAliases(transportPlan, [
+      'system:run',
+    ])
+    const compiler = new ProviderRequestCompiler(
+      new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+    )
+    const compiled = compiler.compile({
+      model: 'fixture-model',
+      systemPrompt: 'system',
+      messages: [
+        { role: 'user', content: 'run status' },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'system:run',
+              input: { command: 'git status' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'system:run',
+              output: { type: 'text', value: 'clean' },
+            },
+          ],
+        },
+        { role: 'user', content: 'continue' },
+      ] as ModelMessage[],
+      availableToolNames: ['tooling__map'],
+      toolSchemaChars: { tooling__map: 64 },
+      toolNameAliases: requestAliases,
+      contextWindow: 200_000,
+    })
+
+    assert.deepEqual(compiled.requestFingerprint.historyToolNames, ['system__run'])
+    assert.equal(transportPlan.providerToCanonical.system__run, undefined)
   })
 
   void test('persists the assembled request in the prompt audit sidecar', () => {

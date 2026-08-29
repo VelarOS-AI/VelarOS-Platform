@@ -5,7 +5,7 @@
  * 传输名是一次请求的编译产物，不得写回注册表、权限策略或持久历史。
  */
 
-import { assertCanonicalToolId } from '@velaros-ai/agent/tool-contract'
+import { assertCanonicalToolId, isCanonicalToolId } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
@@ -86,6 +86,59 @@ function createToolTransportNamePlan(canonicalIds: readonly string[]): ToolTrans
     canonicalToProvider: Object.freeze(canonicalToProvider),
     providerToCanonical: Object.freeze(providerToCanonical),
   })
+}
+
+/**
+ * 补全仅存在于历史中的 canonical 工具名传输别名。
+ *
+ * 动态工具空间只会把当前可见工具放进 provider tools，但历史里仍可能保留已经 page-out 的
+ * tool-call/result。它们不是本轮可调用能力，却仍属于 provider 输入结构，名字同样必须满足供应方
+ * 的字符集。这里只补请求历史的序列化别名；调用响应的 advertised 映射仍由可见工具快照单独维护，
+ * 不能借此把历史工具重新开放出来。
+ */
+function completeToolTransportNameAliases(
+  existingAliases: Readonly<Record<string, string>>,
+  historicalToolNames: readonly string[]
+): Readonly<Record<string, string>> {
+  const completed = { ...existingAliases }
+  const occupiedByProviderName = new Map<string, string>()
+
+  for (const [canonicalId, providerName] of Object.entries(completed)) {
+    const occupiedBy = occupiedByProviderName.get(providerName)
+    if (occupiedBy && occupiedBy !== canonicalId)
+      throw new Error(
+        `provider tool name collision: "${canonicalId}" and "${occupiedBy}" both compile to "${providerName}"`
+      )
+    occupiedByProviderName.set(providerName, canonicalId)
+  }
+
+  const missingCanonicalIds = [...new Set(historicalToolNames)]
+    .filter(
+      (toolName) =>
+        !completed[toolName] &&
+        !ProviderToolNamePattern.test(toolName) &&
+        isCanonicalToolId(toolName)
+    )
+    .sort()
+
+  for (const canonicalId of missingCanonicalIds) {
+    let providerName = providerToolNameCandidate(canonicalId)
+    const occupiedBy = occupiedByProviderName.get(providerName)
+    if (occupiedBy && occupiedBy !== canonicalId) {
+      const hash = stableToolNameHash(canonicalId)
+      providerName = `${providerName.slice(0, 64 - hash.length - 2)}__${hash}`
+    }
+    const finalOccupiedBy = occupiedByProviderName.get(providerName)
+    if (finalOccupiedBy && finalOccupiedBy !== canonicalId)
+      throw new Error(
+        `provider tool name collision: "${canonicalId}" and "${finalOccupiedBy}" both compile to "${providerName}"`
+      )
+
+    completed[canonicalId] = providerName
+    occupiedByProviderName.set(providerName, canonicalId)
+  }
+
+  return Object.freeze(completed)
 }
 
 /**
@@ -195,6 +248,7 @@ function createProviderToolReferenceCanonicalizer(
 
 export {
   createProviderToolReferenceCanonicalizer,
+  completeToolTransportNameAliases,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,

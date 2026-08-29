@@ -398,5 +398,17 @@ void describe("provider response tool identity", () => {
 
     expect(plan.providerToolNames).toEqual(["tooling:map"]);
     expect(plan.historyToolNames).toContain("project:read");
+
+    const transportPlan = helper.captureToolTransportPlan({
+      getCurrentVisibleToolTransportNames: () => ({
+        "tooling:map": "tooling__map",
+      }),
+    });
+    const requestAliases = helper.resolveProviderRequestToolNameAliases(
+      transportPlan,
+      plan.historyToolNames,
+    );
+    expect(requestAliases["project:read"]).toBe("project__read");
+    expect(transportPlan.providerToCanonical.project__read).toBeUndefined();
   });
 });

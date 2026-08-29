@@ -115,6 +115,7 @@ export type {
 } from './ToolIdentity'
 export {
   createProviderToolReferenceCanonicalizer,
+  completeToolTransportNameAliases,
   createToolTransportNamePlan,
   createToolTransportProjection,
   ProviderToolNamePattern,

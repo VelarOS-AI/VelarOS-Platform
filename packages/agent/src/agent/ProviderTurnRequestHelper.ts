@@ -26,6 +26,7 @@ import {
   type ContextPinnedEvidenceInput,
   type ProviderToolDefinitionSnapshotInput,
 } from "./context";
+import { completeToolTransportNameAliases } from "../tools/ToolIdentity";
 
 /**
  * Stream 与 Query 两条 turn 链路在"把一个 turn 组装成 provider 请求"上的公共逻辑。
@@ -197,6 +198,19 @@ class ProviderTurnRequestHelper {
       ),
     );
     return Object.freeze({ canonicalToProvider, providerToCanonical });
+  }
+
+  /**
+   * 把已换出工具的历史名字也编译成 provider-safe 输入名，但不扩张响应解码的 advertised 工具面。
+   */
+  public resolveProviderRequestToolNameAliases(
+    transportPlan: ProviderToolTransportPlan,
+    historyToolNames: readonly string[],
+  ): Readonly<Record<string, string>> {
+    return completeToolTransportNameAliases(
+      transportPlan.canonicalToProvider,
+      historyToolNames,
+    );
   }
 
   /**

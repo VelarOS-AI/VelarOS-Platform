@@ -5,9 +5,11 @@ import {
   isCanonicalToolId,
 } from '../src/tool-contract/identity'
 import {
+  completeToolTransportNameAliases,
   createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
   createToolTransportProjection,
+  ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
   rewriteProviderToolReferences,
 } from '../src/tools/ToolIdentity'
@@ -56,6 +58,22 @@ describe('canonical tool identity', () => {
     expect(() =>
       createToolTransportProjection(registered, ['browser:inspect_page'])
     ).toThrow('absent from the registered transport plan')
+  })
+
+  it('compiles page-out historical tools without advertising them as callable', () => {
+    const visible = createToolTransportNamePlan(['tooling:map']).canonicalToProvider
+    const requestAliases = completeToolTransportNameAliases(visible, [
+      'system:run',
+      'tooling:map',
+      'legacy_safe_name',
+    ])
+
+    expect(requestAliases).toEqual({
+      'tooling:map': 'tooling__map',
+      'system:run': 'system__run',
+    })
+    expect(ProviderToolNamePattern.test(requestAliases['system:run']!)).toBe(true)
+    expect(visible['system:run']).toBeUndefined()
   })
 
   it('rewrites only complete canonical references in model-visible text', () => {

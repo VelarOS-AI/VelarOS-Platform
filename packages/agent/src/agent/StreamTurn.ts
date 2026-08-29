@@ -366,6 +366,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 )
                 const toolTransportPlan =
                   this.turnRequestHelper.captureToolTransportPlan(args.toolContext)
+                const providerRequestToolNameAliases =
+                  this.turnRequestHelper.resolveProviderRequestToolNameAliases(
+                    toolTransportPlan,
+                    providerToolNamePlan.historyToolNames
+                  )
                 // P7 确定性序列化：工具清单顺序直接进 prompt 字节，禁 locale 相关比较。
                 const providerAvailableToolNames = Object.keys(aiTools).sort(compareStableStrings)
                 const contextWorkingSetInputs = await this.turnRequestHelper.resolveContextWorkingSetInputs(
@@ -416,7 +421,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     providerToolChoice,
                     availableToolNames: providerAvailableToolNames,
                     toolChoiceName,
-                    toolNameAliases: toolTransportPlan.canonicalToProvider,
+                    toolNameAliases: providerRequestToolNameAliases,
                     activeTask: contextWorkingSetInputs.activeTask,
                     pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
                     contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,

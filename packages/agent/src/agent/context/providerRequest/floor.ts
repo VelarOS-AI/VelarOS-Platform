@@ -7,10 +7,11 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isBlank, isEmpty, isFalse } from '@velaros-ai/core'
+import { isBlank, isEmpty, isFalse, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProviderRequestFingerprint } from '../../../kernel/provider-events'
+import { ProviderToolNamePattern } from '../../../tools/ToolIdentity'
 import type { CompileProviderRequestInput } from '../ProviderRequestCompiler'
 import { compareStableStrings } from '../residency/determinism'
 
@@ -122,6 +123,42 @@ export function assertProviderRequestInvariants(
   phase: AssertProviderRequestInvariantPhase
 ): void {
   const issues: string[] = []
+
+  const invalidAvailableToolNames = requestFingerprint.availableToolNames.filter(
+    (toolName) => !ProviderToolNamePattern.test(toolName)
+  )
+  if (!isEmpty(invalidAvailableToolNames))
+    issues.push(`provider tools contain invalid names: ${invalidAvailableToolNames.join(', ')}`)
+
+  const invalidHistoryToolNames = requestFingerprint.historyToolNames.filter(
+    (toolName) => !ProviderToolNamePattern.test(toolName)
+  )
+  if (!isEmpty(invalidHistoryToolNames))
+    issues.push(`provider history contains invalid tool names: ${invalidHistoryToolNames.join(', ')}`)
+
+  if (
+    requestFingerprint.toolChoiceName &&
+    !ProviderToolNamePattern.test(requestFingerprint.toolChoiceName)
+  )
+    issues.push(`toolChoice contains invalid provider name: ${requestFingerprint.toolChoiceName}`)
+
+  const invalidProviderDefinitionNames = (input.providerTools ?? [])
+    .map((tool) => tool.name)
+    .filter((toolName) => !ProviderToolNamePattern.test(toolName))
+  if (!isEmpty(invalidProviderDefinitionNames))
+    issues.push(
+      `provider tool definitions contain invalid names: ${invalidProviderDefinitionNames.join(', ')}`
+    )
+
+  if (
+    isPlainObject(input.providerToolChoice) &&
+    input.providerToolChoice.type === 'tool' &&
+    isString(input.providerToolChoice.toolName) &&
+    !ProviderToolNamePattern.test(input.providerToolChoice.toolName)
+  )
+    issues.push(
+      `provider tool choice contains invalid name: ${input.providerToolChoice.toolName}`
+    )
 
   // 历史里出现过但本轮未暴露的工具是动态工具空间的正常状态：
   // 过去的 tool-call/tool-result 只是回放事实，不要求当前 provider tools 仍包含同名 schema。
