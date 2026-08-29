@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import { searchToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
 import {
   parseToolSpaceQueryMethodInput,
-  ToolSpaceQueryPageLimitMax,
   toolSpaceQueryMethodSchema,
+  ToolSpaceQueryPageLimitMax,
 } from '../src/tool-library/builtin/ToolSpaceSchemas'
 
 describe('tool space find projection', () => {

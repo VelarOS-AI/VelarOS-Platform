@@ -88,14 +88,12 @@ function scopeProjectListPatterns(
 ): LooseOptional<string[]> {
   if (!patterns) return undefined
   const base = path?.trim().replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '')
-  if (!base || base === '.' || base.startsWith('/') || /^[a-zA-Z]:\//.test(base)) {
+  if (!base || base === '.' || base.startsWith('/') || /^[a-zA-Z]:\//.test(base))
     return [...patterns]
-  }
   return patterns.map((pattern) => {
     const portable = pattern.trim().replaceAll('\\', '/').replace(/^\.\//, '')
-    if (!portable || portable.startsWith('/') || portable === base || portable.startsWith(`${base}/`)) {
+    if (!portable || portable.startsWith('/') || portable === base || portable.startsWith(`${base}/`))
       return portable
-    }
     return `${base}/${portable}`
   })
 }

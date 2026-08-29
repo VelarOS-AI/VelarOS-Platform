@@ -162,11 +162,11 @@ void describe('Platform-owned conversation composer behavior', () => {
     )
     const collapsedTableViewportStyles =
       styles.match(
-        /\[data-streamdown='table-wrapper'\]\[data-collapsed='true'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n  \}/u
+        /\[data-streamdown='table-wrapper'\]\[data-collapsed='true'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n {2}\}/u
       )?.groups?.body ?? ''
     const expandedTableViewportStyles =
       styles.match(
-        /\[data-streamdown='table-wrapper'\]\[data-collapsed='false'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n  \}/u
+        /\[data-streamdown='table-wrapper'\]\[data-collapsed='false'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n {2}\}/u
       )?.groups?.body ?? ''
 
     assert.match(collapsedTableViewportStyles, /max-height: 400px !important;/u)
@@ -194,17 +194,17 @@ void describe('Platform-owned conversation composer behavior', () => {
     )
     const codeBodyStyles =
       styles.match(
-        /& \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n  \}/u
+        /& \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n {2}\}/u
       )?.groups?.body ?? ''
     const collapsedCodeStyles =
       styles.match(
-        /\.expandableCodeBlock\[data-collapsed='true'\] \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n  \}/u
+        /\.expandableCodeBlock\[data-collapsed='true'\] \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n {2}\}/u
       )?.groups?.body ?? ''
     const collapseSlotStyles =
-      styles.match(/\.expandableCodeBlockCollapseSlot \{(?<body>[\s\S]*?)\n  \}/u)?.groups
+      styles.match(/\.expandableCodeBlockCollapseSlot \{(?<body>[\s\S]*?)\n {2}\}/u)?.groups
         ?.body ?? ''
     const collapseButtonStyles =
-      styles.match(/\.expandableCodeBlockCollapseButton \{(?<body>[\s\S]*?)\n  \}/u)?.groups
+      styles.match(/\.expandableCodeBlockCollapseButton \{(?<body>[\s\S]*?)\n {2}\}/u)?.groups
         ?.body ?? ''
 
     assert.match(codeBodyStyles, /overflow-x: auto;/u)

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 
-import type { ExecutionTaskPlanStep } from '@velaros-ai/agent/protocol'
 import { describe, test } from 'bun:test'
+
+import type { ExecutionTaskPlanStep } from '@velaros-ai/agent/protocol'
 
 import { hasRunningOwnSelfStep } from '../src/execution/task-ledger'
 
