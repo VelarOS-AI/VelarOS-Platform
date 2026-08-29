@@ -167,6 +167,7 @@ export function ChatConversationMessageStatesExample(): ReactElement {
 
 export function ChatInputExample(): ReactElement {
   const [value, setValue] = useState('')
+  const [files, setFiles] = useState<File[]>([])
   const { t } = useI18n()
 
   return (
@@ -180,8 +181,8 @@ export function ChatInputExample(): ReactElement {
               onSend: () => undefined,
             },
             attachments: {
-              files: [],
-              onFilesChange: () => undefined,
+              files,
+              onFilesChange: setFiles,
             },
             features: {
               promptFeatures: [],

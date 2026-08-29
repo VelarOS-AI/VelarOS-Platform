@@ -3066,6 +3066,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "14"
     },
     {
+      "name": "CopyButton.onCopy",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => Promise<void>)"
+    },
+    {
       "name": "CopyButton.variant",
       "description": "Auto-generated from TypeScript props.",
       "type": "\"link\" | \"default\" | \"destructive\" | \"destructiveOutline\" | \"destructiveGhost\" | \"outline\" | \"secondary\" | \"ghost\" | null",

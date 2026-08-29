@@ -94,6 +94,18 @@ export function DefaultToolCardExample(): ReactElement {
       <ToolCard
         block={{
           type: 'tool-call',
+          toolCallId: 'context-distill-ok',
+          toolName: 'context:distill',
+          args: {
+            note: '修复已完成定向验证，下一步运行完整检查。',
+            facts: ['附件删除按钮在 Desktop 与 Workbench 共用同一组件。'],
+          },
+          result: { success: true },
+        }}
+      />
+      <ToolCard
+        block={{
+          type: 'tool-call',
           toolCallId: 'read-run',
           toolName: 'project:read',
           args: { path: 'src/greeter.ts' },
