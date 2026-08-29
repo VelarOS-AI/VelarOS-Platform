@@ -4,6 +4,8 @@ import type { AgentModelInputModality } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty, isRecord, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { DefaultModelInputModalities } from '../../tools/model-input-policy'
+
 function mediaTypeModality(value: unknown): AgentModelInputModality | undefined {
   if (!isString(value)) return undefined
   if (value.startsWith('image/')) return 'image'
@@ -62,7 +64,7 @@ function assertModelInputCompatibility(input: {
   supportedInputModalities?: readonly AgentModelInputModality[]
   model: string
 }): void {
-  const supported = new Set(input.supportedInputModalities ?? ['text'])
+  const supported = new Set(input.supportedInputModalities ?? DefaultModelInputModalities)
   const missing = collectRequiredModelInputModalities(input.messages).filter(
     (modality) => !supported.has(modality)
   )

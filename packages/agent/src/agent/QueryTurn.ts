@@ -134,7 +134,7 @@ export interface ExecuteQueryTurnArgs<
   systemPrompt: string
   history: ModelMessage[]
   contextWindow?: LooseOptional<number>
-  /** Concrete inputs accepted by the selected model. Missing is text-only. */
+  /** Concrete inputs accepted by the selected model. Missing means unknown, not unsupported. */
   supportedInputModalities?: readonly AgentModelInputModality[]
   contextUsageOptions?: EstimateContextUsageOptions
   toolSchemaChars?: Readonly<Record<string, number>>

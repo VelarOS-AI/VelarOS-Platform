@@ -38,7 +38,7 @@ interface ToolRegistryContext {
   codingSession: ToolRegistryCodingSession
   capabilityPorts?: AgentRuntimeCapabilityPorts
   isToolSystemEnabled(toolName: string): boolean
-  /** 本轮实际模型声明支持的输入类型；缺席时注册表按 text-only fail closed。 */
+  /** 本轮实际模型声明支持的输入类型；缺席表示未知，注册表允许 provider 实际尝试。 */
   getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
 }
 

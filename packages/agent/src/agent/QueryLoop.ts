@@ -32,6 +32,7 @@ import {
   compileSubAgentOutputSchema,
   parseSubAgentStructuredOutput,
 } from '../sub-agent/StructuredOutput'
+import { DefaultModelInputModalities } from '../tools/model-input-policy'
 
 import {
   beginLoopTurnSpans,
@@ -343,7 +344,7 @@ class QueryLoop<
           providerModel: args.opts.runtimeOverride.model,
           contextWindow: undefined,
           supportedInputModalities:
-            args.opts.runtimeOverride.supportedInputModalities ?? ['text'],
+            args.opts.runtimeOverride.supportedInputModalities ?? DefaultModelInputModalities,
           modelRequestOptions: args.opts.runtimeOverride.modelRequestOptions,
           resolutionSource: 'injected',
           resolutionTrace: [],

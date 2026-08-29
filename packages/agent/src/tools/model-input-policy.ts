@@ -8,13 +8,17 @@ interface ToolModelInputContext {
   getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
 }
 
-const DefaultModelInputModalities = ['text'] as const satisfies readonly AgentModelInputModality[]
+const DefaultModelInputModalities = [
+  'text',
+  'image',
+  'audio',
+] as const satisfies readonly AgentModelInputModality[]
 
 /**
  * 判断一个工具产生的模型输入是否能被本轮实际模型消费。
  *
- * 模型能力没有注入时按 text-only 处理，避免旧宿主或不完整测试上下文把图片/音频工具
- * 暴露给无法声明接收这些输入的 provider。
+ * 模型能力没有注入时表示“未知”而不是“不支持”：允许 provider 实际尝试，只有模型明确
+ * 排除某种输入时才隐藏对应工具，避免把可用的多模态模型误判成纯文本模型。
  */
 function isToolCompatibleWithModelInputs(
   tool: ToolModelInputRequirements,

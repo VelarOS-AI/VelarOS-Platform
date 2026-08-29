@@ -43,7 +43,7 @@ export interface ProviderModelCatalogEntry {
   id: string
   label: string
   contextWindow?: number
-  /** Inputs the concrete model transport explicitly accepts. Unknown is fail-closed to text. */
+  /** Inputs the concrete model transport explicitly accepts. Missing means unknown, not unsupported. */
   inputModalities?: readonly ModelInputModality[]
   available?: boolean
   minPlan?: string

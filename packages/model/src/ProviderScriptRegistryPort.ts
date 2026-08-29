@@ -13,7 +13,7 @@ export interface ProviderScriptRuntimeMetadata {
   model?: LooseOptional<string>
   providerModel?: LooseOptional<string>
   contextWindow?: LooseOptional<number>
-  /** Authoritative concrete-model input contract. Missing means text-only, never "guess vision". */
+  /** Authoritative concrete-model input contract. Missing means unknown; the provider may attempt it. */
   inputModalities?: LooseOptional<readonly ModelInputModality[]>
   fallbackReason?: LooseOptional<string>
   config?: unknown

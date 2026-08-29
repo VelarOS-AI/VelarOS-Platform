@@ -36,7 +36,7 @@ interface ResolvedAgentModelRuntime {
   model: string
   providerModel: string
   contextWindow?: number
-  /** Explicit concrete-model input contract; missing provider metadata is text-only. */
+  /** Explicit concrete-model input contract; unknown metadata allows a provider attempt. */
   supportedInputModalities: readonly ModelInputModality[]
   modelRequestOptions?: ModelRequestOptions
   resolutionSource: 'provider-collection'
@@ -49,6 +49,12 @@ interface ResolvedAgentModelRuntime {
   }>
   fallbackReason?: string
 }
+
+const UnknownModelInputModalities = [
+  'text',
+  'image',
+  'audio',
+] as const satisfies readonly ModelInputModality[]
 
 type ResolutionTraceEntry = ResolvedAgentModelRuntime['resolutionTrace'][number]
 
@@ -250,7 +256,9 @@ class AgentModelResolver {
       providerModel: runtimeModel,
       contextWindow,
       supportedInputModalities:
-        providerScriptMetadata?.inputModalities ?? catalogInputModalities ?? ['text'],
+        providerScriptMetadata?.inputModalities ??
+        catalogInputModalities ??
+        UnknownModelInputModalities,
       modelRequestOptions,
       resolutionSource: 'provider-collection',
       resolutionTrace: runtimeTrace,

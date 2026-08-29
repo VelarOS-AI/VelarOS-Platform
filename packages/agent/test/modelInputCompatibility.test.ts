@@ -54,6 +54,13 @@ describe('model input compatibility', () => {
         model: 'vision-model',
       })
     ).not.toThrow()
+
+    expect(() =>
+      assertModelInputCompatibility({
+        messages: imageHistory,
+        model: 'unknown-model',
+      })
+    ).not.toThrow()
   })
 
   test('does not infer media modalities from arbitrary tool input or JSON output fields', () => {

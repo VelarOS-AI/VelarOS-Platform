@@ -213,7 +213,7 @@ export interface ExecuteStreamTurnArgs<
   history: ModelMessage[]
   /** 当前模型上下文窗口；用于最终 provider payload send gate。 */
   contextWindow?: LooseOptional<number>
-  /** Concrete inputs accepted by the selected model. Missing is text-only. */
+  /** Concrete inputs accepted by the selected model. Missing means unknown, not unsupported. */
   supportedInputModalities?: readonly AgentModelInputModality[]
   /** loop 侧已经带上输出预留、安全余量和校准系数的估算配置。 */
   contextUsageOptions?: EstimateContextUsageOptions

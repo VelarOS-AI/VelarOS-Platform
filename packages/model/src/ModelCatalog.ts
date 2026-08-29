@@ -320,8 +320,8 @@ const LmStudioProviderCatalog = {
 
 const OpenAICompatibleGatewayProviderCatalog = {
   provider: 'freellmapi',
-  defaultModel: 'auto',
-  models: [{ id: 'auto', contextWindow: 200_000 }],
+  defaultModel: '',
+  models: [],
 } satisfies SharedProviderCatalog
 
 const sharedProviderCatalogs = [

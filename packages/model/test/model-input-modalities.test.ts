@@ -18,8 +18,9 @@ module.exports = {
     enabledByDefault: true,
     defaultModel: 'text-model',
     models: [
-      { id: 'text-model', label: 'Text Model' },
-      { id: 'vision-model', label: 'Vision Model', inputModalities: ['text', 'image'] }
+      { id: 'text-model', label: 'Text Model', inputModalities: ['text'] },
+      { id: 'vision-model', label: 'Vision Model', inputModalities: ['text', 'image'] },
+      { id: 'unknown-model', label: 'Unknown Model' }
     ]
   },
   resolveRuntimeMetadata({ model }) {
@@ -34,7 +35,7 @@ module.exports = {
 `
 
 describe('model input modalities', () => {
-  test('normalizes provider declarations and fails unknown capability closed to text', async () => {
+  test('honors explicit declarations and lets models with unknown capabilities attempt media', async () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
@@ -69,8 +70,41 @@ describe('model input modalities', () => {
       selection('vision-model'),
       runtimeContext
     )
+    const unknownRuntime = await composition.agentModelResolver.resolve(
+      selection('unknown-model'),
+      runtimeContext
+    )
 
     expect(textRuntime.supportedInputModalities).toEqual(['text'])
     expect(visionRuntime.supportedInputModalities).toEqual(['text', 'image'])
+    expect(unknownRuntime.supportedInputModalities).toEqual(['text', 'image', 'audio'])
+  })
+
+  test('lets a generic OpenAI-compatible gateway attempt media for unknown models', async () => {
+    const composition = createModelRuntimeComposition({
+      providerScripts: { configPaths: [] },
+    })
+    const runtime = await composition.agentModelResolver.resolve(
+      {
+        provider: 'freellmapi',
+        model: 'gpt-5.6-sol',
+        apiKey: 'test-key',
+        baseURL: 'https://gateway.example.test/v1',
+      },
+      {
+        providerRuntimeConfigs: [
+          {
+            provider: 'freellmapi',
+            enabled: true,
+            apiKey: 'test-key',
+            baseURL: 'https://gateway.example.test/v1',
+            defaultModel: 'gpt-5.6-sol',
+          },
+        ],
+        openRouter: { useFreeModelsForDebug: false },
+      }
+    )
+
+    expect(runtime.supportedInputModalities).toEqual(['text', 'image', 'audio'])
   })
 })
