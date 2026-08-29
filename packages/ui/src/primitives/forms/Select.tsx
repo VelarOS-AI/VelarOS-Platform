@@ -4,7 +4,13 @@
  * variants（封闭枚举，全仓共用一套）：`variant` = `default | bare`；`size` = `default | sm | xs`。
  * 样式：`.velar-select-trigger` · 见 styles/components/。
  */
-import { memo, type ReactElement, type ReactNode, useMemo } from "react";
+import {
+  memo,
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useState,
+} from "react";
 import {
   CaretDownIcon,
   CheckIcon,
@@ -16,6 +22,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 import { isPresent, toNullable } from "../../lib/runtime";
 import { BubbleTooltip } from "../overlays/Tooltip";
+
+import { SearchField } from "./SearchField";
 
 const selectVariants = cva("velar-select-trigger", {
   variants: {
@@ -56,6 +64,10 @@ export interface SelectProps<T extends string = string> extends VariantProps<
   className?: string;
   /** Forwarded to the trigger for pairing with `<Label htmlFor={id}>`. */
   id?: string;
+  /** Renders a fixed search field above the scrollable options. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
   onChange: (value: T) => void;
 }
 
@@ -66,10 +78,15 @@ function SelectImpl<T extends string>({
   disabled = false,
   className,
   id,
+  searchable = false,
+  searchPlaceholder = "Search options",
+  emptyMessage = "No matching options",
   variant,
   size,
   onChange,
 }: SelectProps<T>): ReactElement {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const resolvedSize = size ?? "default";
   const iconSize = resolvedSize === "xs" ? 14 : 16;
   const sideOffset = resolvedSize === "xs" ? 8 : 10;
@@ -85,11 +102,28 @@ function SelectImpl<T extends string>({
       toNullable(options.find((option) => option.value === normalizedValue)),
     [options, normalizedValue],
   );
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!searchable || !normalizedQuery) return options;
+
+    return options.filter((option) =>
+      [option.label, option.description, option.value]
+        .filter(isPresent)
+        .some((candidate) => candidate.toLocaleLowerCase().includes(normalizedQuery)),
+    );
+  }, [options, query, searchable]);
+
+  function handleOpenChange(nextOpen: boolean): void {
+    setOpen(nextOpen);
+    if (!nextOpen) setQuery("");
+  }
 
   return (
     <SelectPrimitive.Root
+      open={open}
       value={normalizedValue}
       disabled={disabled}
+      onOpenChange={handleOpenChange}
       onValueChange={(next) => onChange(next as T)}
     >
       <SelectPrimitive.Trigger
@@ -123,8 +157,28 @@ function SelectImpl<T extends string>({
           position="popper"
           sideOffset={sideOffset}
         >
+          {searchable && (
+            <div
+              className={"velar-select-search"}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <SearchField
+                autoFocus
+                size="sm"
+                value={query}
+                aria-label={searchPlaceholder}
+                placeholder={searchPlaceholder}
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  event.stopPropagation();
+                  if (event.key === "Escape") handleOpenChange(false);
+                }}
+              />
+            </div>
+          )}
           <SelectPrimitive.Viewport className={"velar-select-viewport"}>
-            {options.map((option) => (
+            {visibleOptions.map((option) => (
               <SelectPrimitive.Item
                 key={option.value}
                 value={option.value}
@@ -180,6 +234,11 @@ function SelectImpl<T extends string>({
                 </SelectPrimitive.ItemIndicator>
               </SelectPrimitive.Item>
             ))}
+            {visibleOptions.length === 0 && (
+              <div className={"velar-select-empty"} role="status">
+                {emptyMessage}
+              </div>
+            )}
           </SelectPrimitive.Viewport>
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>

@@ -4913,6 +4913,21 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "string"
     },
     {
+      "name": "Select.searchable",
+      "description": "Renders a fixed search field above the scrollable options.",
+      "type": "boolean"
+    },
+    {
+      "name": "Select.searchPlaceholder",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
+      "name": "Select.emptyMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string"
+    },
+    {
       "name": "Select.onChange",
       "description": "Auto-generated from TypeScript props.",
       "type": "(value: T) => void",

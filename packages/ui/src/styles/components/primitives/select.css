@@ -141,7 +141,9 @@
 
 .velar-select-content {
   z-index: 50;
+  display: flex;
   overflow: hidden;
+  flex-direction: column;
   border-style: solid;
   border-width: 1px;
   background-color: var(--color-white);
@@ -165,11 +167,55 @@
 
 .velar-select-viewport {
   display: flex;
+  min-height: 0;
   max-height: inherit;
   flex-direction: column;
   gap: var(--ui-space-1);
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.velar-select-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.velar-select-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.velar-select-viewport::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: var(--ui-radius-round);
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+
+.velar-select-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-tertiary);
+  background-clip: padding-box;
+}
+
+.velar-select-search {
+  flex-shrink: 0;
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.velar-select-search .velar-search-field {
+  width: 100%;
+}
+
+.velar-select-empty {
+  padding: 20px var(--ui-space-control-x-sm);
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-normal);
+  text-align: center;
 }
 
 .velar-select-content[data-size="xs"] .velar-select-viewport {
