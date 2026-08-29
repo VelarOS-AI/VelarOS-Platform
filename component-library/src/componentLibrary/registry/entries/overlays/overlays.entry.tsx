@@ -14,7 +14,7 @@ export default defineComponentLibraryEntry({
     domain: 'Overlay',
     source: '@velaros-ai/ui/primitives/overlays',
     usage:
-      'Use Dialog for generic blocking flows; SettingsPanelDialog for Velar settings-style panels (soft chroming, footer band). Popover/AnchoredPopover for contextual surfaces; Tooltip for hover hints; CascadingMenu for nested menus; ImagePreviewDialog for attachment review.',
+      'Use Dialog for generic blocking flows; SettingsPanelDialog for Velar settings-style panels (soft chroming, footer band). Popover/AnchoredPopover for contextual surfaces; Tooltip for hover hints; CascadingMenu for nested menus with lifecycle-safe delayed close; ImagePreviewDialog for attachment review.',
     avoid:
       'Do not use overlays as page layout. Keep menus compact and avoid hidden side effects in examples.',
     apiComponents: [

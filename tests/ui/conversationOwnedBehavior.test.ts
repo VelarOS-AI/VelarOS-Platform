@@ -123,6 +123,17 @@ void describe('Platform-owned conversation composer behavior', () => {
     )
   })
 
+  void test('recreates cascading menu timers after lifecycle cleanup', () => {
+    const source = readFileSync(
+      new URL('../../packages/ui/src/primitives/overlays/CascadingMenu.tsx', import.meta.url),
+      'utf8'
+    )
+
+    assert.match(source, /!timersRef\.current \|\| timersRef\.current\.isDisposed/u)
+    assert.match(source, /if \(timersRef\.current === timers\) timersRef\.current = null/u)
+    assert.match(source, /closeTimerRef\.current = null/u)
+  })
+
   void test('keeps Widget and HTML Live Preview independently selectable', () => {
     const options = buildAvailablePluginOptions()
     const widget = options.find((option) => option.id === 'widget')

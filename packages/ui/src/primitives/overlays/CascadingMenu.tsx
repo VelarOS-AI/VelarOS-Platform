@@ -16,7 +16,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { useLatest, useUnmount } from 'ahooks'
+import { useLatest } from 'ahooks'
 
 import {
   AnchoredPopover,
@@ -161,9 +161,23 @@ export function CascadingMenu({
   const onActiveSubmenuChangeLatest = useLatest(onActiveSubmenuChange)
   const onCloseSubmenusLatest = useLatest(onCloseSubmenus)
   const onOpenChangeLatest = useLatest(onOpenChange)
-  if (!timersRef.current) {
+  if (!timersRef.current || timersRef.current.isDisposed) {
     timersRef.current = new TimerScope({ name: 'CascadingMenu' })
   }
+
+  useEffect(() => {
+    const timers =
+      timersRef.current && !timersRef.current.isDisposed
+        ? timersRef.current
+        : new TimerScope({ name: 'CascadingMenu' })
+    timersRef.current = timers
+
+    return () => {
+      timers.dispose()
+      if (timersRef.current === timers) timersRef.current = null
+      closeTimerRef.current = null
+    }
+  }, [])
 
   const clearSubmenuCloseTimer = useCallback((): void => {
     closeTimerRef.current?.cancel()
@@ -500,10 +514,6 @@ export function CascadingMenu({
     ownerDocument.addEventListener('keydown', handleKeyboardNavigation)
     return () => ownerDocument.removeEventListener('keydown', handleKeyboardNavigation)
   }, [close, closeSubmenus, keyboardNavigation, open])
-
-  useUnmount(() => {
-    timersRef.current?.dispose()
-  })
 
   useLayoutEffect(() => {
     if (open) {
