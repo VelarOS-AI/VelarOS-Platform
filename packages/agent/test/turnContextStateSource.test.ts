@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  type TurnContextAppendBus,
   TurnContextLedger,
   TurnContextSessionLedgers,
 } from '../src/agent/run-context/TurnContextLedger'
@@ -20,6 +21,19 @@ function peekLabels(ledger: TurnContextLedger, afterSeq = 0): string[] {
 }
 
 describe('state-like turn context sources supersede instead of accumulate', () => {
+  test('host append notifications depend on a structural bus rather than a concrete class', () => {
+    const emitted: Array<[string, string]> = []
+    const appendBus: TurnContextAppendBus = {
+      subscribe: () => () => undefined,
+      emit: (sessionId, sourceId) => emitted.push([sessionId, sourceId]),
+    }
+    const ledgers = new TurnContextSessionLedgers(SourceId, { appendHub: appendBus })
+
+    ledgers.append('s1', { label: '运行中', summaryText: '正在运行。' })
+
+    expect(emitted).toEqual([['s1', SourceId]])
+  })
+
   test('replaceLatest keeps only the newest state', () => {
     const ledger = new TurnContextLedger(SourceId, 100)
 

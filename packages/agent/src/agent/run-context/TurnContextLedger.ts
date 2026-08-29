@@ -135,13 +135,25 @@ const DefaultMaxSessions = 64
 export type TurnContextAppendListener = (sessionId: string, sourceId: TurnContextSourceId) => void
 
 /**
+ * 宿主与能力包之间的写入通知窄接口。
+ *
+ * 能力包只依赖这个结构契约，不依赖 {@link TurnContextAppendHub} 的具体类身份。这样宿主升级
+ * Agent 包时，即使能力包仍由另一个兼容版本构建，也不会因为类的 private 字段变成名义类型
+ * 而在装配边界产生两份互不兼容的声明。
+ */
+export interface TurnContextAppendBus {
+  subscribe(listener: TurnContextAppendListener): () => void
+  emit(sessionId: string, sourceId: TurnContextSourceId): void
+}
+
+/**
  * 环境 delta 写入通知总线（每宿主一个实例，经 composition 注入给账本与订阅方）。
  *
  * 可见 source 的 append 广播给订阅方（IPC 推送层自行防抖后通知 renderer 重新 peek）。
  * 状态收进实例后，多宿主同进程装配各持一份、互不串会话/串宿主——不再靠模块级全局 Set。
  * 监听器异常逐个隔离，绝不冒泡进账本写入。
  */
-export class TurnContextAppendHub {
+export class TurnContextAppendHub implements TurnContextAppendBus {
   private readonly listeners = new Set<TurnContextAppendListener>()
 
   /** 订阅任意 source 的 delta 写入；返回退订函数。 */
@@ -173,7 +185,7 @@ export class TurnContextSessionLedgers {
       maxSessions?: number
       notifyRenderer?: boolean
       /** 可见 source 的写入广播总线（每宿主一个实例，经 composition 注入）；缺省则不广播。 */
-      appendHub?: TurnContextAppendHub
+      appendHub?: TurnContextAppendBus
     } = {},
   ) {}
 

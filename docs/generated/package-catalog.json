@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -37,7 +37,7 @@
       "domain": "capabilities",
       "directory": "packages/browser",
       "name": "@velaros-ai/browser",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
       "exportSubpaths": [
         "./composition",

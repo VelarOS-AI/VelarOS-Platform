@@ -28,7 +28,7 @@
 // Electron 原生事件，外部侧只能靠 CDP 回读，强行合并会让其中一侧退化成轮询。
 import electron from 'electron'
 
-import type { TurnContextAppendHub } from '@velaros-ai/agent/run-context'
+import type { TurnContextAppendBus } from '@velaros-ai/agent/run-context'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -220,7 +220,7 @@ class ElectronBrowserRuntime {
 
   constructor(
     options: ElectronBrowserRuntimeOptions = {},
-    turnContextAppendHub?: TurnContextAppendHub
+    turnContextAppendHub?: TurnContextAppendBus
   ) {
     // 可见活动写入广播总线由宿主装配注入（每宿主一个实例）；不并入 options 回调袋，
     // 避免经 setOptions/setCallbacks 反复重放这个构造期单例依赖。

@@ -25,7 +25,7 @@
 // 取消一个会话要连带取消它派生出的整棵任务树（子 Agent 会以父任务 id 或父会话 id 再起任务），
 // 故走 `collectLineageClosure` 的不动点闭包而不是一趟 filter。判据见该方法。
 //
-import { type TurnContextAppendHub, TurnContextSessionLedgers } from '@velaros-ai/agent'
+import { type TurnContextAppendBus, TurnContextSessionLedgers } from '@velaros-ai/agent'
 import type { CapabilityScopeId, TurnContextDeltaSource } from '@velaros-ai/agent/protocol'
 import {
   isEmpty,
@@ -62,7 +62,7 @@ export interface KernelBackgroundJobManagerOptions {
   outputStore?: KernelBackgroundJobOutputStore
   onTerminal?: (job: KernelBackgroundJob) => void
   /** task.lifecycle 可见 delta 的写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
-  turnContextAppendHub?: TurnContextAppendHub
+  turnContextAppendHub?: TurnContextAppendBus
 }
 
 export interface KernelBackgroundJob {

@@ -1,5 +1,5 @@
 import {
-  type TurnContextAppendHub,
+  type TurnContextAppendBus,
   TurnContextSessionLedgers,
 } from '@velaros-ai/agent/run-context'
 import { isNumber,toNullable, toOptional } from '@velaros-ai/core'
@@ -19,7 +19,7 @@ interface BrowserActivityCoordinatorOptions {
   sleep?: (ms: number) => Promise<void>
   onWaitStateChange?: (sessionId: string, state: BrowserUserActivityWaitState) => void
   /** 可见活动写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
-  turnContextAppendHub?: TurnContextAppendHub
+  turnContextAppendHub?: TurnContextAppendBus
 }
 
 interface BrowserUserActivityWaitResult {
