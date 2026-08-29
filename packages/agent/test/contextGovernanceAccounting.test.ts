@@ -280,6 +280,24 @@ void describe('S2 · 并行工具结果 per-part 投影（V5 / V12）', () => {
     const record = ledger.append({ kind: 'tool-result', message, createdAt: 1, turn: 0 }).record
     assert.equal(record.admittedResidency, 'EXCERPT')
     assert.equal(record.toolParts.length, 3)
+    assert.equal(record.toolName, null)
+    assert.equal(record.toolCallId, null)
+    assert.equal(record.payloadRef, null)
+
+    const dashboard = renderContextDashboardText({
+      epoch: 0,
+      stats: ledger.stats(),
+      records: ledger.list(),
+      residency: ledger.residencyVector(),
+      projectedTokens: 1_000,
+      budgetTokens: 200_000,
+    })
+    assert.match(dashboard, /parallel-tools\(3\)/u)
+    assert.doesNotMatch(dashboard, /ctx-r\d+\/read_file=/u)
+    assert.match(dashboard, /latest: ctx-r\d+\/parallel-tools\(3\)/u)
+    assert.match(dashboard, /read_file=tool:c1/u)
+    assert.match(dashboard, /web_read=tool:c2/u)
+    assert.match(dashboard, /inspect_page=tool:c3/u)
 
     const projected = projectContextLedger({
       records: ledger.list(),
@@ -317,6 +335,37 @@ void describe('S2 · 并行工具结果 per-part 投影（V5 / V12）', () => {
       return envelope.ref
     })
     assert.deepEqual(refs, ['c1', 'c2', 'c3'])
+  })
+
+  void test('dashboard 区分仍在排队与已消费但无需压缩的模型请求', () => {
+    const ledger = new ContextResidencyLedger()
+    ledger.append({
+      kind: 'user',
+      message: userMessage('short context'),
+      createdAt: 1,
+      turn: 0,
+    })
+
+    const dashboard = renderContextDashboardText({
+      epoch: 0,
+      stats: ledger.stats(),
+      records: ledger.list(),
+      residency: ledger.residencyVector(),
+      projectedTokens: 3,
+      budgetTokens: 200_000,
+      lastEpochAttempt: {
+        source: 'model-tool',
+        applied: false,
+        skipReason: 'no-candidates',
+        migrationCount: 0,
+        byInstrument: { evict: 0, skeleton: 0, distill: 0 },
+      },
+    })
+
+    assert.match(
+      dashboard,
+      /compaction: request=consumed source=model-tool applied=no skip=no-candidates migrations=0/u
+    )
   })
 
   void test('多结果消息不参与语义去重：不会拿第一份的目标把整条判过时', () => {

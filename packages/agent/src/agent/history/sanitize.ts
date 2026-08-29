@@ -82,10 +82,12 @@ export interface SanitizeModelHistoryOptions {
 
 const MaxRecentToolResultContentImagesToKeep = 1
 
-const HistoricalImagePlaceholder = '[historical image omitted before provider replay]'
-const HistoricalFilePlaceholder = '[historical file omitted before provider replay]'
+const HistoricalImagePlaceholder =
+  '[historical image bytes omitted only from this later provider replay; the image may have been visible in its original turn]'
+const HistoricalFilePlaceholder =
+  '[historical file bytes omitted only from this later provider replay; the file may have been available in its original turn]'
 const HistoricalToolImagePlaceholder =
-  '[historical tool image omitted before provider replay; use the artifact reference in this tool result instead]'
+  '[historical tool image bytes omitted only from this later provider replay; it may have been visible in the original tool result; use the artifact reference in this tool result instead]'
 const InvalidTextSurrogatePattern =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 const EmptyResponseReplayPrefixes = [

@@ -381,6 +381,9 @@ export class ProviderRequestCompiler {
     if (!governance.session.config.dashboard) return blocks
 
     const ledger = governance.session.ledger
+    const lastEpochAttempt = governance.session
+      .epochReports()
+      .findLast((report) => report.ledgerGeneration === governance.session.generation)
     const dashboard = buildContextDashboardMessage({
       epoch: governance.session.epoch,
       stats: ledger.stats(),
@@ -388,6 +391,7 @@ export class ProviderRequestCompiler {
       residency: ledger.residencyVector(),
       projectedTokens: stats.projectedTokens,
       budgetTokens: governance.window.windowTokens,
+      lastEpochAttempt,
     })
     if (dashboard) blocks.push(dashboard)
     return blocks

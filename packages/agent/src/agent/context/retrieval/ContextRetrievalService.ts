@@ -31,7 +31,10 @@ import {
 import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
 import type { ContextRecord } from "../residency/ContextRecord";
 import { compareStableStrings } from "../residency/determinism";
-import { readMessageText } from "../residency/messageFacts";
+import {
+  readMessageText,
+  readToolResultFacts,
+} from "../residency/messageFacts";
 import type { ContextResidencyLedger } from "../residency/ResidencyLedger";
 
 import { chatSearchRanking } from "./search/Ranking";
@@ -50,7 +53,9 @@ import {
 } from "./IndexSnapshot";
 import {
   ContextRetrievalPayloadReader,
+  paginateJsonPathSelection,
   paginateSerializedText,
+  selectJsonPath,
 } from "./PayloadReader";
 import {
   ContextRetrievalQueryTraceStore,
@@ -93,6 +98,8 @@ interface ChatContextRetrievalServiceOptions {
 interface ResolvedLedgerRecord {
   record: ContextRecord;
   payloadRef: Nullable<string>;
+  toolCallId: Nullable<string>;
+  toolName: Nullable<string>;
 }
 
 /** 内存索引缓存条目：快照 + 它成立时的源指纹。 */
@@ -277,6 +284,7 @@ class ChatContextRetrievalService {
         handleId,
         retrievalScopeId,
         maxChars,
+        jsonPath,
         offset,
         repeated,
         retrievalCount,
@@ -310,6 +318,7 @@ class ChatContextRetrievalService {
       handleId,
       retrievalScopeId,
       maxChars,
+      jsonPath,
       offset,
       repeated,
       retrievalCount,
@@ -373,6 +382,7 @@ class ChatContextRetrievalService {
     handleId: string;
     retrievalScopeId: string;
     maxChars: number;
+    jsonPath: Nullable<string>;
     offset: number;
     repeated: boolean;
     retrievalCount: number;
@@ -391,6 +401,7 @@ class ChatContextRetrievalService {
         handleId: payloadRef,
         retrievalScopeId: input.retrievalScopeId,
         maxChars: input.maxChars,
+        jsonPath: input.jsonPath,
         offset: input.offset,
         repeated: input.repeated,
         retrievalCount: input.retrievalCount,
@@ -406,10 +417,116 @@ class ChatContextRetrievalService {
 
     // 记录不带消息（合成/隐藏类）时退回它自己的摘录：宁可给"当时留下的那份"，
     // 也不要让模型收到 found=true + 空正文。两者都没有就交回未知 handle 路径。
-    const fullText = record.message
-      ? readMessageText(record.message)
-      : (record.excerpt?.text ?? "");
+    const matchedResult =
+      resolved.toolCallId && record.message
+        ? readToolResultFacts(record.message).find(
+            (result) => result.toolCallId === resolved.toolCallId,
+          )
+        : null;
+    // 直接召回一条并行 tool-result 记录时，先返回轻量、可寻址的子结果清单，而不是任意挑第一份
+    // 正文。否则模型只能看见第一项的 toolCallId，想召回第二项时会在 record 邻接、会话搜索和
+    // 终端搜索之间反复试探；大结果还会把审计本身继续撑大。拿到清单后再用 `tool:<toolCallId>`
+    // 精确取正文/jsonPath，既保留完整可达性，也不把 N 份 payload 再塞回上下文。
+    if (!resolved.toolCallId && record.toolParts.length > 1) {
+      const manifest = {
+        recordId: record.id,
+        kind: "parallel-tool-results",
+        results: record.toolParts.map((part) => ({
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          payloadRef: part.payloadRef,
+          chars: part.chars,
+        })),
+      };
+      const serialized = JSON.stringify(manifest);
+      const window = paginateSerializedText(
+        serialized,
+        input.offset,
+        input.maxChars,
+      );
+      return {
+        handleId: input.handleId,
+        sessionId: input.sessionId,
+        found: true,
+        kind: "context-record",
+        content: window.text,
+        repeated: input.repeated,
+        retrievalCount: input.retrievalCount,
+        warning:
+          [
+            input.jsonPath
+              ? "并行结果组句柄返回子结果清单；请改用目标 toolCallId 再执行 jsonPath。"
+              : null,
+            input.repeated
+              ? "当前执行范围内已检索过该并行结果组；请按清单中的 toolCallId 精确召回，避免重复检索组记录。"
+              : null,
+          ]
+            .filter((item): item is string => Boolean(item))
+            .join(" ") || null,
+        metadata: {
+          recordId: record.id,
+          recordKind: record.kind,
+          retrievalScopeId: input.retrievalScopeId,
+          parallelToolResultCount: record.toolParts.length,
+          offset: window.offset,
+          returnedChars: window.returnedChars,
+          totalChars: window.totalChars,
+          nextOffset: window.nextOffset,
+        },
+      };
+    }
+    // 命中 per-part ref 时只回这一份结果。整条 role:'tool' 消息可能装着多个并行结果；把消息全文
+    // 拼起来会让请求 tooling:map 的召回先出现 directive:list，且后续 jsonPath 在错误根对象上失效。
+    const fullText =
+      matchedResult?.text ??
+      (record.message
+        ? readMessageText(record.message)
+        : (record.excerpt?.text ?? ""));
     if (!fullText) return null;
+
+    const jsonSelection = input.jsonPath
+      ? selectJsonPath(fullText, input.jsonPath)
+      : null;
+    if (input.jsonPath && jsonSelection?.found) {
+      const paged = paginateJsonPathSelection(
+        jsonSelection.value,
+        input.offset,
+        input.maxChars,
+      );
+      const selectedText = paged
+        ? paged.serialized
+        : chatSearchText.stringifyPayload(jsonSelection.value, input.maxChars);
+      return {
+        handleId: input.handleId,
+        sessionId: input.sessionId,
+        found: true,
+        kind: "context-record",
+        content: selectedText,
+        repeated: input.repeated,
+        retrievalCount: input.retrievalCount,
+        warning: input.repeated
+          ? "当前执行范围内已检索过该记录和 jsonPath；请先使用已返回内容，避免重复检索。"
+          : null,
+        metadata: {
+          recordId: record.id,
+          recordKind: record.kind,
+          toolCallId: resolved.toolCallId,
+          toolName: resolved.toolName,
+          payloadRef: resolved.payloadRef,
+          retrievalScopeId: input.retrievalScopeId,
+          jsonPath: input.jsonPath,
+          jsonPathFound: true,
+          ...(paged
+            ? {
+                offset: paged.offset,
+                returnedItems: paged.returnedItems,
+                totalItems: paged.totalItems,
+                nextOffset: paged.nextOffset,
+              }
+            : {}),
+        },
+      };
+    }
 
     const window = paginateSerializedText(fullText, input.offset, input.maxChars);
     return {
@@ -425,6 +542,9 @@ class ChatContextRetrievalService {
           window.beyondEnd
             ? `offset=${window.offset} 已越过正文末尾(totalChars=${window.totalChars})；正文已读完。`
             : null,
+          input.jsonPath && jsonSelection && !jsonSelection.found
+            ? `未找到 jsonPath ${input.jsonPath}：${jsonSelection.reason ?? "unknown"}；已返回该工具结果正文。`
+            : null,
           input.repeated
             ? "当前执行范围内已检索过该记录；请先使用已返回内容，避免重复检索。"
             : null,
@@ -434,9 +554,12 @@ class ChatContextRetrievalService {
       metadata: {
         recordId: record.id,
         recordKind: record.kind,
-        toolCallId: record.toolCallId,
-        payloadRef: record.payloadRef,
+        toolCallId: resolved.toolCallId,
+        toolName: resolved.toolName,
+        payloadRef: resolved.payloadRef,
         retrievalScopeId: input.retrievalScopeId,
+        jsonPath: input.jsonPath,
+        jsonPathFound: !!jsonSelection?.found,
         offset: window.offset,
         returnedChars: window.returnedChars,
         totalChars: window.totalChars,
@@ -458,7 +581,13 @@ class ChatContextRetrievalService {
     if (!key) return null;
 
     const direct = ledger.get(key);
-    if (direct) return { record: direct, payloadRef: direct.payloadRef };
+    if (direct)
+      return {
+        record: direct,
+        payloadRef: direct.payloadRef,
+        toolCallId: direct.toolCallId,
+        toolName: direct.toolName,
+      };
 
     const bare = key.startsWith("tool:") ? key.slice("tool:".length) : key;
     // **从新往旧扫**：同一个 toolCallId 会同时出现在 tool-call 与 tool-result 两条记录上，
@@ -468,17 +597,35 @@ class ChatContextRetrievalService {
     for (let index = records.length - 1; index >= 0; index -= 1) {
       const record = records[index]!;
       if (record.payloadRef === key || record.excerpt?.ref === key)
-        return { record, payloadRef: record.payloadRef };
+        return {
+          record,
+          payloadRef: record.payloadRef,
+          toolCallId: record.toolCallId,
+          toolName: record.toolName,
+        };
 
       // per-part 命中优先用**这一份**结果的 payloadRef：一条 role:'tool' 消息可装 N 份结果，
       // 用记录级 ref 会把第 2..N 份指向第一份的 payload（S2 修的 V12 同款错位）。
       const part = record.toolParts.find(
         (candidate) =>
-          candidate.toolCallId === bare || candidate.excerpt?.ref === key,
+          candidate.toolCallId === bare ||
+          candidate.payloadRef === key ||
+          candidate.excerpt?.ref === key,
       );
-      if (part) return { record, payloadRef: part.payloadRef };
+      if (part)
+        return {
+          record,
+          payloadRef: part.payloadRef,
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+        };
       if (record.toolCallId === bare)
-        return { record, payloadRef: record.payloadRef };
+        return {
+          record,
+          payloadRef: record.payloadRef,
+          toolCallId: record.toolCallId,
+          toolName: record.toolName,
+        };
     }
 
     return null;

@@ -662,6 +662,9 @@ function buildToolSpacePagesFromCapabilities(pages: ToolCapabilityPage[]): ToolS
 
 function buildToolSpacePages(ctx: ToolSpaceResolverContext): ToolSpacePage[] {
   const capabilityPages = ctx.listCapabilityPages?.()
+  const capabilityPageCategoryIds = capabilityPages
+    ? new Set(capabilityPages.map((page) => page.categoryId))
+    : null
   const visibleToolNames = capabilityPages
     ? new Set<string>()
     : new Set(ctx.getCurrentVisibleToolNames())
@@ -696,7 +699,12 @@ function buildToolSpacePages(ctx: ToolSpaceResolverContext): ToolSpacePage[] {
     const categoryAllowed = ctx.codingSession.isToolCategoryAllowed?.(entry.category.id) ?? true
     const categoryEnabled = ctx.codingSession.hasToolCategoryAccess(entry.category.id)
     const requiresApproval = requiresToolCategoryApproval(ctx, entry.category.id)
-    if (!isEmpty(entry.tools)) {
+    // 宿主提供 capability 页时，它已经按当前角色/模型输入能力裁过工具。分类页必须跟同一份
+    // 裁决走；否则 catalog 里有工具、当前角色却一个都看不到时会留下 toolNames=[] 的幽灵分类。
+    if (
+      !isEmpty(entry.tools) &&
+      (!capabilityPageCategoryIds || capabilityPageCategoryIds.has(entry.category.id))
+    ) {
       cards.push(
         createCapabilityPage({
           capabilityPorts: ctx.capabilityPorts,

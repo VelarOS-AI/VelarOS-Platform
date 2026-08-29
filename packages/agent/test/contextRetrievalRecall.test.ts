@@ -289,6 +289,125 @@ describe('S3 · 超大 user 正文的端到端召回', () => {
     assert.ok(payload.content?.includes('RRRR'))
   })
 
+  test('并行 inline 工具按 toolCallId 隔离召回并执行 jsonPath', async () => {
+    const registry = new ContextGovernanceSessionRegistry()
+    const session = registry.resolve(SessionId)!
+    session.syncHistory({
+      messages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool-call', toolCallId: 'call_directives', toolName: 'directive:list', input: {} },
+            { type: 'tool-call', toolCallId: 'call_map', toolName: 'tooling:map', input: {} },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_directives',
+              toolName: 'directive:list',
+              output: { type: 'text', value: '{"directives":[],"count":0}' },
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call_map',
+              toolName: 'tooling:map',
+              output: {
+                type: 'text',
+                value: '{"statusSummary":{"total":59,"totalTools":49},"categories":["agent-control"]}',
+              },
+            },
+          ],
+        },
+      ] as ModelMessage[],
+      at: 1,
+    })
+
+    const service = createService({ payloadStore: createPayloadStore(), registry })
+    const recalled = await service.retrieveContextPayload({
+      sessionId: SessionId,
+      handleId: 'tool:call_map',
+      jsonPath: '$.statusSummary',
+      maxChars: 8_000,
+    })
+
+    assert.equal(recalled.found, true)
+    assert.match(recalled.content ?? '', /"total"\s*:\s*59/u)
+    assert.doesNotMatch(recalled.content ?? '', /directives/u)
+    assert.equal(recalled.metadata?.toolCallId, 'call_map')
+    assert.equal(recalled.metadata?.toolName, 'tooling:map')
+    assert.equal(recalled.metadata?.jsonPathFound, true)
+  })
+
+  test('并行结果组句柄先暴露全部子调用 ID，再按子调用精确召回', async () => {
+    const registry = new ContextGovernanceSessionRegistry()
+    const session = registry.resolve(SessionId)!
+    session.syncHistory({
+      messages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool-call', toolCallId: 'call_directives', toolName: 'directive:list', input: {} },
+            { type: 'tool-call', toolCallId: 'call_map', toolName: 'tooling:map', input: {} },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_directives',
+              toolName: 'directive:list',
+              output: { type: 'text', value: '{"directives":[],"count":0}' },
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call_map',
+              toolName: 'tooling:map',
+              output: {
+                type: 'text',
+                value: '{"statusSummary":{"total":59,"totalTools":49}}',
+              },
+            },
+          ],
+        },
+      ] as ModelMessage[],
+      at: 1,
+      payloadRefsByToolCallId: {
+        call_directives: `ctx-payload:${SessionId}:directives`,
+        call_map: `ctx-payload:${SessionId}:map`,
+      },
+    })
+
+    const record = session.ledger.list().find((candidate) => candidate.kind === 'tool-result')!
+    assert.equal(record.payloadRef, null)
+    assert.equal(record.toolParts[0]?.payloadRef, `ctx-payload:${SessionId}:directives`)
+    assert.equal(record.toolParts[1]?.payloadRef, `ctx-payload:${SessionId}:map`)
+    const service = createService({ payloadStore: createPayloadStore(), registry })
+    const manifest = await service.retrieveContextPayload({
+      sessionId: SessionId,
+      handleId: record.id,
+      maxChars: 8_000,
+    })
+
+    assert.equal(manifest.found, true)
+    assert.equal(manifest.metadata?.parallelToolResultCount, 2)
+    assert.match(manifest.content ?? '', /call_directives/u)
+    assert.match(manifest.content ?? '', /call_map/u)
+    assert.doesNotMatch(manifest.content ?? '', /statusSummary/u)
+
+    const recalled = await service.retrieveContextPayload({
+      sessionId: SessionId,
+      handleId: 'tool:call_map',
+      jsonPath: '$.statusSummary',
+      maxChars: 8_000,
+    })
+    assert.match(recalled.content ?? '', /"total"\s*:\s*59/u)
+    assert.doesNotMatch(recalled.content ?? '', /directives/u)
+  })
+
   test('refKind 推断：ctx-user-payload 是 payload-ref、记录 id 是 context-handle（U6）', () => {
     assert.equal(inferRecallRefKind('ctx-user-payload:session-a:hash-1'), 'payload-ref')
     assert.equal(inferRecallRefKind('ctx-r000012'), 'context-handle')

@@ -4,7 +4,8 @@
 // ## 从哪读起
 // 只有一条链：`readRequestedSkillPages` → 逐个 id → `readRequestedSkillPage`
 // （`readSkillPageId` 认前缀 + 注入侧 `skills.readRoleSkill` 取正文）→ `buildSkillReadPage` 定形。
-// 前置是 `confirmAutoLoadedSkillPages`：首次读取某技能会向用户征求同意，被拒的 id 直接跳过。
+// 前置是 `confirmAutoLoadedSkillPages`：内置/用户显式选择的技能直接读取；未选择的外部技能首次
+// 读取会向用户征求同意，被拒的 id 直接跳过。
 //
 // ## 关键不变量
 //  1. **被拒 id 必须写进返回文案且明说"不要重试"**。只是静默跳过的话，模型会把空结果当成

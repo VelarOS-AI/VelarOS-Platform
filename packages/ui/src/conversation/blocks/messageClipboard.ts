@@ -3,8 +3,10 @@ import { isRecord } from '#internal/runtime'
 
 export const VelarMessageClipboardMime = 'web application/x-velaros-message-attachments+json'
 const VelarMessageClipboardLegacyMime = VelarMessageClipboardMime.replace(/^web /u, '')
+const VelarMessageClipboardHtmlAttribute = 'data-velaros-message-attachments'
 const MaxVelarMessageClipboardPayloadChars = 64 * 1_024 * 1_024
 const MaxVelarMessageClipboardAssets = 32
+const Base64ChunkSize = 0x8000
 
 export interface MessageClipboardAsset {
   id: string
@@ -41,6 +43,24 @@ function escapeHtml(value: string): string {
 
 function dataUrl(mediaType: string, data: string): string {
   return data.startsWith('data:') ? data : `data:${mediaType};base64,${data}`
+}
+
+function encodeClipboardPayload(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += Base64ChunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + Base64ChunkSize))
+  }
+  return btoa(binary)
+}
+
+function decodeClipboardPayload(value: string): string {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new TextDecoder().decode(bytes)
 }
 
 function fileHref(path: string): string {
@@ -171,7 +191,7 @@ function buildPlainText(messageText: string, externalLinks: string[]): string {
   return sections.join('\n\n')
 }
 
-function buildHtml(messageText: string, externalLinks: string[]): string {
+function buildHtml(messageText: string, externalLinks: string[], richPayload: string): string {
   const fragments: string[] = []
   if (messageText) {
     fragments.push(
@@ -184,6 +204,10 @@ function buildHtml(messageText: string, externalLinks: string[]): string {
     fragments.push(`<div><a href="${escapedUrl}">${escapedUrl}</a></div>`)
   }
 
+  fragments.push(
+    `<span ${VelarMessageClipboardHtmlAttribute}="${encodeClipboardPayload(richPayload)}" hidden></span>`
+  )
+
   return `<div data-velaros-message-clipboard="true">${fragments.join('')}</div>`
 }
 
@@ -191,13 +215,17 @@ export function buildMessageClipboardContent(message: ChatMessage): MessageClipb
   const assets = collectMessageClipboardAssets(message)
   const messageText = buildMessageText(message)
   const externalLinks = collectExternalLinks(message, assets)
-
-  return {
+  const content: MessageClipboardContent = {
     messageText,
     plainText: buildPlainText(messageText, externalLinks),
-    html: buildHtml(messageText, externalLinks),
+    html: '',
     uriList: externalLinks.join('\r\n'),
     assets,
+  }
+
+  return {
+    ...content,
+    html: buildHtml(messageText, externalLinks, buildRichAttachmentPayload(content)),
   }
 }
 
@@ -244,10 +272,18 @@ function dataUrlBlob(value: string, fallbackMediaType: string): Nullable<Blob> {
 
 function readVelarClipboardData(dataTransfer: DataTransfer): string {
   try {
-    return (
+    const customPayload = (
       dataTransfer.getData(VelarMessageClipboardMime)
       || dataTransfer.getData(VelarMessageClipboardLegacyMime)
     )
+    if (customPayload) return customPayload
+
+    const html = dataTransfer.getData('text/html')
+    const marker = html.match(
+      new RegExp(`${VelarMessageClipboardHtmlAttribute}=(?:"([^"]*)"|'([^']*)')`, 'u')
+    )
+    const encodedPayload = marker?.[1] ?? marker?.[2] ?? ''
+    return encodedPayload ? decodeClipboardPayload(encodedPayload) : ''
   } catch {
     return ''
   }
@@ -340,9 +376,11 @@ export async function writeMessageClipboardContent(
   if (content.uriList && ClipboardItemConstructor.supports?.('text/uri-list')) {
     item['text/uri-list'] = new Blob([content.uriList], { type: 'text/uri-list' })
   }
-  item[VelarMessageClipboardMime] = new Blob([buildRichAttachmentPayload(content)], {
-    type: VelarMessageClipboardMime,
-  })
+  if (ClipboardItemConstructor.supports?.(VelarMessageClipboardMime)) {
+    item[VelarMessageClipboardMime] = new Blob([buildRichAttachmentPayload(content)], {
+      type: VelarMessageClipboardMime,
+    })
+  }
 
   try {
     await clipboard.write([new ClipboardItemConstructor(item)])

@@ -76,6 +76,30 @@ function runInProjectDirectory<T>(
   return cwd ? context.project.runInDirectory(cwd, action) : action()
 }
 
+/**
+ * Agent callers naturally express include/exclude globs relative to the directory being listed.
+ * The Project kernel intentionally matches portable project-root-relative paths. Accept both forms
+ * at the Agent boundary so `path: "scripts/build", include: ["*.mjs"]` does not silently return an
+ * empty list while callers that already provide `scripts/build/*.mjs` retain identical behavior.
+ */
+function scopeProjectListPatterns(
+  path: LooseOptional<string>,
+  patterns: LooseOptional<readonly string[]>
+): LooseOptional<string[]> {
+  if (!patterns) return undefined
+  const base = path?.trim().replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '')
+  if (!base || base === '.' || base.startsWith('/') || /^[a-zA-Z]:\//.test(base)) {
+    return [...patterns]
+  }
+  return patterns.map((pattern) => {
+    const portable = pattern.trim().replaceAll('\\', '/').replace(/^\.\//, '')
+    if (!portable || portable.startsWith('/') || portable === base || portable.startsWith(`${base}/`)) {
+      return portable
+    }
+    return `${base}/${portable}`
+  })
+}
+
 const ProjectRangeSchema = z.object({
   startLine: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
@@ -124,6 +148,7 @@ const projectList = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '在项目根目录内列出或按 glob 发现文件和目录。',
+  protocol: ['include/exclude 默认相对 path 匹配；已经写成项目根相对路径的 glob 也可直接使用。'],
   examples: [{ path: '.', maxDepth: 2 }],
   schema: z.object({
     path: z.string().optional(),
@@ -142,8 +167,8 @@ const projectList = defineProjectTool<{
     const limit = input.limit ?? 200
     const entries = await kernel.listFiles({
       path: input.path,
-      include: input.include,
-      exclude: input.exclude,
+      include: scopeProjectListPatterns(input.path, input.include),
+      exclude: scopeProjectListPatterns(input.path, input.exclude),
       recursive: input.recursive,
       maxDepth: input.maxDepth,
       maxFiles: limit + 1,
@@ -531,4 +556,5 @@ export {
   projectFileTools,
   projectTools,
   runInProjectDirectory,
+  scopeProjectListPatterns,
 }

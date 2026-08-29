@@ -211,11 +211,16 @@ export function admitContextRecord(
     message: input.message,
     excerpt,
     toolParts,
-    toolName: identity.toolName,
-    toolCallId: identity.toolCallId,
+    // 一条 role:'tool' 消息可承载多份并行结果，此时没有诚实的“记录级第一工具”。具体身份只在
+    // toolParts 中表达，避免 dashboard、错误信息和记录 id 把整条消息错归到第一份结果。
+    toolName: results.length > 1 ? null : identity.toolName,
+    toolCallId: results.length > 1 ? null : identity.toolCallId,
     dedupeKey,
     memberIds: input.memberIds ?? [],
-    payloadRef: toNullable(input.payloadRef),
+    // 一条 role:'tool' 消息装多个并行结果时，记录级 payloadRef 不能再指向第一项：按记录 id
+    // 召回会因此绕过并行清单，静默返回第一项旧正文。每份全保真引用都已经落在 toolParts 上；
+    // 记录级身份只对单结果成立。
+    payloadRef: results.length > 1 ? null : toNullable(input.payloadRef),
   }
 
   return {

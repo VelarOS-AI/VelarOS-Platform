@@ -201,15 +201,15 @@ void describe('shared rich message clipboard', () => {
     assert.deepEqual(Object.keys(writes[0]!).sort(), [
       'text/html',
       'text/plain',
-      VelarMessageClipboardMime,
     ])
     assert.equal(plainWrites.length, 0)
     assert.equal(await writes[0]!['text/plain']!.text(), '带图复制')
-    assert.doesNotMatch(await writes[0]!['text/html']!.text(), /data:image\/png/u)
+    const internalHtml = await writes[0]!['text/html']!.text()
+    assert.doesNotMatch(internalHtml, /data:image\/png/u)
+    assert.match(internalHtml, /data-velaros-message-attachments=/u)
 
-    const internalPayload = await writes[0]![VelarMessageClipboardMime]!.text()
     const restored = readVelarMessageClipboard({
-      getData: (type: string) => (type === VelarMessageClipboardMime ? internalPayload : ''),
+      getData: (type: string) => (type === 'text/html' ? internalHtml : ''),
     } as DataTransfer)
     assert.ok(restored)
     assert.equal(restored.text, '带图复制')

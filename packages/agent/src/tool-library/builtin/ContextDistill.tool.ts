@@ -80,10 +80,11 @@ const distillContext = defineVelaTool<DistillContextInput>({
     return {
       distilled: true,
       epochRequested: true,
+      compactionStatus: 'queued_for_next_turn_boundary',
       facts: input.facts,
       note: toNullable(input.note),
       effect:
-        '已请求在下一个轮边界开一次上下文压缩：陈旧/重复的旧结果降级为可召回墓碑，被折叠的叙事段合成规则骨架。原文可用 context:recall(ref=toolCallId, refKind:"tool-payload") 取回。',
+        '压缩请求已排队，尚未在本次工具回包中完成；下一个轮边界会尝试把陈旧/重复的旧结果降级为可召回墓碑，并把叙事段合成规则骨架。之后以 context-dashboard 的 epoch/summarized/evicted 变化判断是否实际生效。原文可用 context:recall(ref=toolCallId, refKind:"tool-payload") 取回。',
     }
   },
 })

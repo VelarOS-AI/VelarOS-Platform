@@ -44,20 +44,23 @@ const refreshShellEnvironment = defineSystemTool<Record<string, never>>({
 const listBackgroundTasks = defineSystemTool<{
   limit?: number
   onlyRunning?: boolean
+  taskId?: string
 }>({
   name: SystemToolNames.listTasks,
   role: 'inspect',
   summary: '列出后台任务。',
   suitable: ['查 dev server、watcher 或长任务状态。'],
   forbidden: ['不要查系统全部进程。'],
-  usage: ['传 limit/onlyRunning。'],
+  usage: ['传 taskId 精确查询 system:run 返回的后台任务；或传 limit/onlyRunning 查看任务列表。'],
   examples: [
     // 全部后台任务（含已结束）
     {},
     // 只看还在运行的
     { onlyRunning: true },
+    // 精确查询 system:run 返回的后台任务
+    { taskId: 'task-abc123' },
   ],
-  notes: ['只返回产品记录。'],
+  notes: ['只返回产品记录；不要把 system:run 的 taskId 交给 job:*。'],
   schema: z.object({
     limit: z.number().int().positive().max(100).optional().describe(
       parameterDescription({
@@ -69,12 +72,21 @@ const listBackgroundTasks = defineSystemTool<{
         description: '是否只返回运行中任务。',
       })
     ),
+    taskId: z.string().min(1).max(120).optional().describe(
+      parameterDescription({
+        description: '精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。',
+      })
+    ),
   }),
   permissions: [],
   isConcurrencySafe: () => true,
-  execute: async ({ limit, onlyRunning }, ctx) => {
+  execute: async ({ limit, onlyRunning, taskId }, ctx) => {
     // onlyRunning 可过滤掉已结束的历史任务。
-    const tasks = await ctx.system.listBackgroundTasks({ limit, onlyRunning })
+    const tasks = await ctx.system.listBackgroundTasks({
+      limit: taskId ? undefined : limit,
+      onlyRunning,
+      taskId,
+    })
 
     return {
       // count 给调用方提供轻量摘要。

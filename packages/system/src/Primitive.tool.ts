@@ -35,23 +35,49 @@ type SystemToolCapabilitySchema = ToolCapabilitySchema & {
   metadata: Readonly<Record<string, unknown>>
 }
 
+const CompactProcessCommandChars = 480
+
+function compactProcessCommand<
+  TEntry extends { command?: LooseOptional<string> },
+>(entry: TEntry, includeFullCommand: boolean | undefined): TEntry & {
+  commandChars?: number
+  commandTruncated?: true
+} {
+  const command = entry.command
+  if (includeFullCommand || !command || command.length <= CompactProcessCommandChars) return entry
+
+  const headChars = 320
+  const tailChars = 120
+  const omittedChars = command.length - headChars - tailChars
+  return {
+    ...entry,
+    command: `${command.slice(0, headChars)}\n…[${omittedChars} chars omitted]…\n${command.slice(-tailChars)}`,
+    commandChars: command.length,
+    commandTruncated: true,
+  }
+}
+
 function commandLogQuery(logPath: string): string {
   return (logPath.split(/[\\/]/u).at(-1) ?? logPath).slice(0, 240)
 }
 
 function exposeCommandOutputWindow(result: SystemCommandResult): SystemCommandResult {
+  const managedLogPath = result.logPath ?? result.backgroundProcess?.logPath
+  const continuationQuery = managedLogPath ? commandLogQuery(managedLogPath) : undefined
   return {
     ...result,
     outputWindow: {
       retained: 'tail',
-      complete: !result.truncated,
+      complete: !result.truncated && !result.backgroundProcess,
       endPreserved: true,
     },
-    ...(result.truncated && result.logPath
+    ...(continuationQuery && (result.truncated || result.backgroundProcess)
       ? {
           outputContinuation: {
             kind: 'session-terminal-log' as const,
-            query: commandLogQuery(result.logPath),
+            query: continuationQuery,
+            tool: 'context:recall' as const,
+            args: { query: continuationQuery, kind: 'terminal' as const },
           },
         }
       : {}),
@@ -358,12 +384,12 @@ const bash = defineSystemTool<{
   forbidden: ['不要执行危险写命令、长期服务或重复命令，除非已有用户意图或确认。'],
   protocol: [
     '属于当前项目的命令必须使用 project:run。',
-    '默认使用系统临时目录作为 cwd；不要假设 /tmp、$PATH 或其他 POSIX 语法在 Windows 可用。',
+    '默认使用当前会话的隔离工作区作为 cwd；不要假设 /tmp、$PATH 或其他 POSIX 语法在 Windows 可用。',
     'Windows 使用 cmd.exe 语法；命令探测用 where，环境变量用 %NAME%。macOS/Linux 使用 POSIX shell 语法。',
     '系统执行拒绝项目 cwd 时改用 project:run。',
-    '长期服务传 background=true；危险命令会走确认流程。',
+    '长期服务传 background=true；危险命令会走确认流程。后台命令状态只用返回的 backgroundProcess.statusContinuation 查询，不要使用 job:*。',
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
-    '需要完整日志时按 outputContinuation.query 使用会话终端输出召回；不要把内部 logPath 当普通系统文件直接读取。',
+    '需要完整日志或后台命令输出时直接执行 outputContinuation.tool/args；不要用 job:*，也不要把内部 logPath 当普通系统文件直接读取。',
   ],
   usage: [
     '传 command；需要特定目录时传 cwd。',
@@ -439,6 +465,14 @@ const bash = defineSystemTool<{
         ports: plan.ports,
         reason: plan.reason,
         autoStarted: plan.shouldStartInBackground && !background,
+        ...(result.backgroundProcess.taskId
+          ? {
+              statusContinuation: {
+                tool: SystemToolNames.listTasks,
+                args: { taskId: result.backgroundProcess.taskId },
+              },
+            }
+          : {}),
       },
     }
   },
@@ -453,6 +487,7 @@ const ps = defineSystemTool<{
   filter?: string
   onlyRunning?: boolean
   includeCwd?: boolean
+  includeFullCommand?: boolean
 }>({
   name: SystemToolNames.processes,
   role: 'inspect',
@@ -462,6 +497,7 @@ const ps = defineSystemTool<{
   usage: [
     'include 默认同时返回 processes、ports、tasks；用 limit 控制每类数量。',
     '找"某服务/某 app 归属的进程或端口"优先用 filter：对进程名+完整命令行联合模糊匹配（进程名常常只是 Electron/node，服务特征在命令行里）。',
+    '命令行默认有界显示；确实需要逐字完整命令时才传 includeFullCommand=true。',
   ],
   examples: [
     { include: ['processes', 'ports'], processName: 'node', limit: 20 },
@@ -486,10 +522,23 @@ const ps = defineSystemTool<{
     ),
     onlyRunning: z.boolean().optional().describe(parameterDescription({ description: '任务列表是否只返回运行中任务。' })),
     includeCwd: z.boolean().optional().describe(parameterDescription({ description: '是否尝试补充进程 cwd。' })),
+    includeFullCommand: z.boolean().optional().describe(parameterDescription({
+      description: '是否返回完整命令行；默认只返回有界的头尾摘要，并用 commandTruncated 标记。',
+    })),
   }),
   permissions: [],
   isConcurrencySafe: () => true,
-  execute: async ({ include, limit, pid, processName, port, filter, onlyRunning, includeCwd }, ctx) => {
+  execute: async ({
+    include,
+    limit,
+    pid,
+    processName,
+    port,
+    filter,
+    onlyRunning,
+    includeCwd,
+    includeFullCommand,
+  }, ctx) => {
     const includeSet = new Set(include && include.length > 0 ? include : ['processes', 'ports', 'tasks'])
     const result: Record<string, unknown> = { sampledAt: new Date().toISOString() }
     // filter 在工具层后过滤（进程名+命令行联合），存在时先取全量再截 limit，
@@ -515,7 +564,9 @@ const ps = defineSystemTool<{
         name: processName,
         includeCwd,
       })
-      const finalItems = applyFilter(items)
+      const finalItems = applyFilter(items).map((item) =>
+        compactProcessCommand(item, includeFullCommand)
+      )
       result.processes = { count: finalItems.length, items: finalItems }
     }
 
@@ -527,12 +578,16 @@ const ps = defineSystemTool<{
         port,
         includeCwd,
       })
-      const finalItems = applyFilter(items)
+      const finalItems = applyFilter(items).map((item) =>
+        compactProcessCommand(item, includeFullCommand)
+      )
       result.ports = { count: finalItems.length, items: finalItems }
     }
 
     if (includeSet.has('tasks')) {
-      const items = await ctx.system.listBackgroundTasks({ limit, onlyRunning })
+      const items = (await ctx.system.listBackgroundTasks({ limit, onlyRunning })).map((item) =>
+        compactProcessCommand(item, includeFullCommand)
+      )
       result.tasks = { count: items.length, items }
     }
 

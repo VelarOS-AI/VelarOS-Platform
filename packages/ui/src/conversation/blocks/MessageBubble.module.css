@@ -144,24 +144,6 @@
   background: var(--background-muted);
 }
 
-.userImageMeta {
-  @apply flex items-center justify-between gap-2;
-  padding: 8px 10px 9px;
-}
-
-.userImageName {
-  @apply min-w-0 flex-1 truncate;
-  color: var(--foreground);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.userImageSize {
-  @apply shrink-0;
-  color: var(--foreground-secondary);
-  font-size: 11px;
-}
-
 .userFileList {
   @apply flex flex-wrap gap-2;
 }
@@ -1564,6 +1546,8 @@
     color: var(--foreground);
     font-weight: 650;
     line-height: 1.45;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   & [data-streamdown='table-wrapper'] td {

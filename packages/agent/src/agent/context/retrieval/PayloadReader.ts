@@ -37,7 +37,7 @@ interface DirectToolPayloadLookupResult {
 
 type JsonPathSegment = string | number
 
-interface JsonPathSelection {
+export interface JsonPathSelection {
   found: boolean
   value: unknown
   reason?: string
@@ -160,7 +160,7 @@ function parseJsonPath(path: string): Nullable<JsonPathSegment[]> {
   return segments
 }
 
-function selectJsonPath(serialized: string, path: string): JsonPathSelection {
+export function selectJsonPath(serialized: string, path: string): JsonPathSelection {
   let root: unknown
   try {
     root = JSON.parse(serialized)
@@ -202,7 +202,7 @@ function selectJsonPath(serialized: string, path: string): JsonPathSelection {
   return { found: true, value: current }
 }
 
-interface PaginatedJsonPathSelection {
+export interface PaginatedJsonPathSelection {
   offset: number
   returnedItems: number
   totalItems: number
@@ -257,7 +257,7 @@ function paginateSerializedText(
  * （配合工具结果里 `__truncatedItems` 标记的 `nextOffset`）。非数组返回 null 走原路径。
  * 单条目超预算时退化为该条目的字符截断,保证永远有推进,分页不会卡死。
  */
-function paginateJsonPathSelection(
+export function paginateJsonPathSelection(
   value: unknown,
   offsetInput: LooseOptional<number>,
   maxChars: number

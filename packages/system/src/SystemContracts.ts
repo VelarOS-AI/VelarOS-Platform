@@ -105,6 +105,11 @@ export interface SystemBackgroundProcessInfo {
   fallbackTerminateCommand: Nullable<string>
   requested: boolean
   autoStarted: boolean
+  /** 精确查询该系统后台任务状态；不能交给内核 job:* 工具。 */
+  statusContinuation?: {
+    tool: 'system:list-tasks'
+    args: { taskId: string }
+  }
 }
 
 export interface SystemVerificationSummary {
@@ -127,6 +132,9 @@ export interface SystemCommandOutputContinuation {
   kind: 'session-terminal-log'
   /** 交给会话终端输出召回能力的稳定查询词。 */
   query: string
+  /** 可直接执行的召回工具，避免把系统命令误交给 job:*。 */
+  tool: 'context:recall'
+  args: { query: string; kind: 'terminal' }
 }
 
 export interface SystemCommandResult {
@@ -272,6 +280,7 @@ export interface SystemBackgroundTaskRecord {
 
 export interface SystemBackgroundTaskQueryOptions {
   limit?: number
+  taskId?: string
   sessionId?: string
   sessionIds?: string[]
   onlyRunning?: boolean

@@ -43,6 +43,7 @@ const ToolOsStateValues = [
   'unavailable',
 ] as const
 const toolDiscoveryToolOsStateSchema = z.enum(ToolOsStateValues)
+export const ToolSpaceQueryPageLimitMax = 50
 
 export const toolAvailabilitySchema = z.enum(ToolDiscoveryAvailabilityValues)
 
@@ -121,7 +122,7 @@ export const toolSpaceFindSchema = toolSpaceBaseSchema.extend({
     .number()
     .int()
     .min(1)
-    .max(50)
+    .max(ToolSpaceQueryPageLimitMax)
     .default(12)
     .describe(parameterDescription({ description: '最多返回多少张工具页卡片。' })),
   cursor: z
@@ -166,7 +167,7 @@ export const toolSpacePageSchema = toolSpaceBaseSchema.extend({
     .number()
     .int()
     .min(1)
-    .max(80)
+    .max(ToolSpaceQueryPageLimitMax)
     .default(24)
     .describe(parameterDescription({ description: '本页最多返回多少张工具页。' })),
   cursor: z
@@ -337,7 +338,7 @@ const toolSpaceQueryMethodObjectSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(80)
+    .max(ToolSpaceQueryPageLimitMax)
     .optional()
     .describe(parameterDescription({ description: 'find/page 模式最多返回多少张工具页。' })),
   cursor: z

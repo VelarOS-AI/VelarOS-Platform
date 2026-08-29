@@ -466,6 +466,15 @@ export function mapToolDiscoveryCards(
   input: z.output<typeof toolSpaceMapSchema>
 ) {
   const allCards = buildToolDiscoveryCards(ctx)
+  // toolOsState/kind 是“本次展开哪些状态页”的过滤器，不得把分类的完整工具名索引一起裁掉。
+  // 模型常用 resident 过滤快速看常驻面；若 toolNames 也跟着变空，它会误判该能力没有 loadable 工具。
+  const allToolNamesByCategoryId = new Map<ToolCategoryId, string[]>()
+  for (const card of allCards) {
+    if (card.kind !== 'tool') continue
+    const names = allToolNamesByCategoryId.get(card.categoryId) ?? []
+    names.push(card.name)
+    allToolNamesByCategoryId.set(card.categoryId, names)
+  }
   const expandedCategoryIds = expandToolCategoryFilterInput(ctx, input)
   const filteredCards = filterToolSpaceCards(allCards, expandedCategoryIds, input)
   const grouped = new Map<ToolCategoryId, ToolDiscoveryCard[]>()
@@ -496,7 +505,8 @@ export function mapToolDiscoveryCards(
     const tools = cards.filter((card) => card.kind === 'tool')
     const plugins = cards.filter((card) => card.kind === 'plugin')
     const visibleTools = tools.slice(0, effectiveMaxToolsPerCategory)
-    const toolNames = tools.map((card) => card.name).sort(compareStableStrings)
+    const toolNames = [...(allToolNamesByCategoryId.get(categoryId) ?? [])]
+      .sort(compareStableStrings)
     const definition = capability
       ? {
           label: capability.name,

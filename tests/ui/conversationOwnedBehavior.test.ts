@@ -97,10 +97,59 @@ void describe('Platform-owned conversation composer behavior', () => {
       ),
       'utf8'
     )
+    const styles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ChatInput.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const imageThumbButtonStyles =
+      styles.match(/\.imageThumbButton\s*\{(?<body>[^}]*)\}/su)?.groups?.body ?? ''
 
     assert.equal(source.match(/size=\{14\}/gu)?.length, 2)
     assert.equal(source.match(/shape="round"/gu)?.length, 2)
     assert.doesNotMatch(source, /size="icon-sm"/u)
+    assert.match(
+      styles,
+      /\.imageThumbButton\s*\{[^}]*width: fit-content;[^}]*min-width: 44px;[^}]*max-width: 160px;[^}]*height: 44px;/su
+    )
+    assert.match(
+      styles,
+      /\.imageThumbImg\s*\{[^}]*width: auto;[^}]*min-width: 44px;[^}]*max-width: 160px;[^}]*height: 44px;/su
+    )
+    assert.doesNotMatch(imageThumbButtonStyles, /(?:^|\n)\s*width: 44px;/u)
+  })
+
+  void test('renders sent image attachments without filename or size chrome', () => {
+    const source = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/UserAttachmentGallery.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.match(source, /className=\{styles\.userImagePreview\}/u)
+    assert.doesNotMatch(source, /styles\.userImageMeta/u)
+    assert.doesNotMatch(source, /styles\.userImageName/u)
+    assert.doesNotMatch(source, /styles\.userImageSize/u)
+  })
+
+  void test('keeps Latin table headers intact instead of breaking identifiers anywhere', () => {
+    const styles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const tableHeaderStyles =
+      styles.match(/\[data-streamdown='table-wrapper'\] th\s*\{(?<body>[^}]*)\}/su)?.groups?.body
+      ?? ''
+
+    assert.match(tableHeaderStyles, /overflow-wrap: normal;/u)
+    assert.match(tableHeaderStyles, /word-break: normal;/u)
   })
 
   void test('shows the context distill progress note with a fact fallback', () => {

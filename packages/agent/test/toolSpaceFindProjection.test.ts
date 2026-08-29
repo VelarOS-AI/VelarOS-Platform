@@ -1,8 +1,34 @@
 import { describe, expect, test } from 'bun:test'
 
 import { searchToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
+import {
+  parseToolSpaceQueryMethodInput,
+  ToolSpaceQueryPageLimitMax,
+  toolSpaceQueryMethodSchema,
+} from '../src/tool-library/builtin/ToolSpaceSchemas'
 
 describe('tool space find projection', () => {
+  test('keeps the provider-facing and op-specific page limits aligned', () => {
+    const atLimit = {
+      op: 'find' as const,
+      query: 'read project file',
+      limit: ToolSpaceQueryPageLimitMax,
+    }
+    expect(toolSpaceQueryMethodSchema.safeParse(atLimit).success).toBe(true)
+    expect(parseToolSpaceQueryMethodInput(atLimit).limit).toBe(ToolSpaceQueryPageLimitMax)
+
+    const aboveLimit = { ...atLimit, limit: ToolSpaceQueryPageLimitMax + 1 }
+    expect(toolSpaceQueryMethodSchema.safeParse(aboveLimit).success).toBe(false)
+    expect(() => parseToolSpaceQueryMethodInput(aboveLimit)).toThrow()
+
+    expect(
+      toolSpaceQueryMethodSchema.safeParse({
+        op: 'page',
+        limit: ToolSpaceQueryPageLimitMax + 1,
+      }).success
+    ).toBe(false)
+  })
+
   test('returns a compact routing card and leaves detailed diagnostics out of history', () => {
     const descriptor = {
       name: 'project:read',

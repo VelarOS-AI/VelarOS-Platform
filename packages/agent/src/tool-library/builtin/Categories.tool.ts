@@ -77,7 +77,9 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
   protocol: ['detail="full" 时技能页额外返回按需读取说明；默认 brief 即技能正文。'],
   usage: ['传 skill:<id>（来自任务提示词里的「可按需读取的技能」索引）。'],
   examples: [{ ids: ['skill:global:coding-style'], detail: 'full' }],
-  notes: ['首次读取某技能会弹确认卡征求用户同意；用户拒绝后不要重试，改用其他方式继续。'],
+  notes: [
+    '内置技能和用户显式选择的技能直接读取；只有未选择的外部技能首次读取时弹确认卡，用户拒绝后不要重试。',
+  ],
   schema: toolSpaceReadMethodSchema,
   permissions: [],
   isConcurrencySafe: () => true,

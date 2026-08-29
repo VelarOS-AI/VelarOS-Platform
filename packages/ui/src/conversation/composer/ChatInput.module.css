@@ -255,8 +255,11 @@
 
 .imageThumbButton {
   @apply block border-0 bg-transparent p-0;
-  width: 44px;
+  width: fit-content;
+  min-width: 44px;
+  max-width: 160px;
   height: 44px;
+  overflow: hidden;
   cursor: zoom-in;
 }
 
@@ -265,7 +268,11 @@
 }
 
 .imageThumbImg {
-  @apply block h-11 w-11 object-contain;
+  @apply block object-contain;
+  width: auto;
+  min-width: 44px;
+  max-width: 160px;
+  height: 44px;
 }
 
 .fileRemoveBtn {

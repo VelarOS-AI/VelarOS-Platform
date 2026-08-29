@@ -165,6 +165,108 @@ describe('usageSkillId companion skill pointer', () => {
     })
   })
 
+  test('does not expose a catalog-only category after the role capability filter removes every tool', () => {
+    const context = {
+      codingSession: {
+        hasToolCategoryAccess: () => true,
+        isToolCategoryAllowed: () => true,
+        getEnabledPromptFeatures: () => [],
+      },
+      getCurrentVisibleToolNames: () => [],
+      listCapabilityPages: () => [],
+      listToolCategories: () => [{
+        category: {
+          id: 'planning',
+          label: 'Planning',
+          description: 'Plan tools.',
+          toolOs: { domain: 'injected', defaultState: 'resident' },
+        },
+        enabled: true,
+        tools: [{
+          name: 'plan:update',
+          description: 'Update the visible execution plan.',
+          role: 'control',
+          permissions: [],
+          categoryId: 'planning',
+          systemEnabled: true,
+        }],
+      }],
+    }
+
+    const result = mapToolDiscoveryCards(context as never, {
+      op: 'map',
+      kind: 'all',
+      categoryIds: [],
+      domainIds: [],
+      toolOsStates: [],
+      categoryLimit: 12,
+      maxToolsPerCategory: 8,
+    } as never)
+
+    expect(result.categories).toEqual([])
+  })
+
+  test('keeps the complete tool name index when a state filter only expands the resident capability card', () => {
+    const descriptor = {
+      name: 'plan:update',
+      description: 'Update the visible execution plan.',
+      role: 'control',
+      permissions: [],
+      categoryId: 'planning',
+      systemEnabled: true,
+    }
+    const context = {
+      codingSession: {
+        hasToolCategoryAccess: () => true,
+        isToolCategoryAllowed: () => true,
+        getEnabledPromptFeatures: () => [],
+      },
+      getCurrentVisibleToolNames: () => [],
+      listCapabilityPages: () => [{
+        id: 'tool:plan:update',
+        kind: 'tool',
+        name: descriptor.name,
+        categoryId: descriptor.categoryId,
+        descriptor,
+        permissions: [],
+        availability: 'loadable',
+        schemaState: 'visible',
+        schemaPolicy: 'preview',
+        nextAction: 'replace_page',
+        resident: false,
+        reasons: [{ layer: 'resident', code: 'loadable', message: 'loadable' }],
+      }],
+      listToolCategories: () => [{
+        category: {
+          id: 'planning',
+          label: 'Planning',
+          description: 'Plan tools.',
+          toolOs: { domain: 'injected', defaultState: 'resident' },
+        },
+        enabled: true,
+        tools: [descriptor],
+      }],
+    }
+
+    const result = mapToolDiscoveryCards(context as never, {
+      op: 'map',
+      kind: 'all',
+      categoryIds: [],
+      domainIds: [],
+      toolOsStates: ['resident'],
+      categoryLimit: 12,
+      maxToolsPerCategory: 8,
+    } as never)
+
+    expect(result.categories[0]).toMatchObject({
+      categoryId: 'planning',
+      toolNames: ['plan:update'],
+      tools: [],
+      totalToolCount: 0,
+      totalToolNameCount: 1,
+    })
+  })
+
   test('counts the appended pointer against the budget', () => {
     // 指路行是模型面描述的一部分，不能靠「它是自动加的」逃过预算。
     const budgetEdge = defineProbeTool({ fillerChars: 1_500 })

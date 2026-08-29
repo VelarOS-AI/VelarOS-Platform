@@ -149,8 +149,6 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
         shell: '/bin/zsh',
         homeDir: '/Users/example',
         userDataRoot: '/Users/example/Library/Application Support/VelarOS',
-        velarHookHttpUrl: null,
-        velarHookEndpointFilePath: null,
       })
 
       const built = buildPrompt()
@@ -162,6 +160,7 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
       assert.match(segment.text, /操作系统：macOS \/ darwin/u)
       assert.match(segment.text, /CPU 架构：arm64/u)
       assert.match(segment.text, /命令 Shell：\/bin\/zsh/u)
+      assert.doesNotMatch(segment.text, /Velar Hooks/u)
       assert.match(segment.text, /首条|以这里声明的操作系统与 Shell 为准/u)
     } finally {
       configureAppRuntimeFacts(originalFacts)

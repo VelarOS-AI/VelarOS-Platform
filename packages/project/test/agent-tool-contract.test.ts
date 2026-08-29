@@ -3,7 +3,11 @@ import { z } from 'zod'
 
 import { isCanonicalToolId, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
-import { defineProjectTool, projectTools } from '../src/agent/Project.tool'
+import {
+  defineProjectTool,
+  projectTools,
+  scopeProjectListPatterns,
+} from '../src/agent/Project.tool'
 import {
   type AgentProjectKernelPort,
   executeAgentProjectRead,
@@ -63,6 +67,16 @@ describe('Project model-facing tool contract', () => {
     }).success).toBe(true)
     expect(writeTool.description).toContain('project:edit')
     expect(projectTools[ProjectToolNames.edit].description).toContain('project:write')
+  })
+
+  test('accepts list globs relative to the requested directory without breaking root-relative globs', () => {
+    expect(scopeProjectListPatterns('scripts/build', ['*.mjs'])).toEqual([
+      'scripts/build/*.mjs',
+    ])
+    expect(
+      scopeProjectListPatterns('scripts/build', ['scripts/build/linkedWorkspacePackages.mjs'])
+    ).toEqual(['scripts/build/linkedWorkspacePackages.mjs'])
+    expect(scopeProjectListPatterns('.', ['scripts/**/*.mjs'])).toEqual(['scripts/**/*.mjs'])
   })
 
   test('projects rich kernel reads onto the narrow Agent contract', async () => {

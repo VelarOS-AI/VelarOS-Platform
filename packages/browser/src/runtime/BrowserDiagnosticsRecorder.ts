@@ -45,6 +45,20 @@ class BrowserDiagnosticsRecorder {
       }
     }
   }
+
+  /**
+   * Electron injects development-only security notices through its own `node:electron` source.
+   * They describe the host shell, not the inspected site, and therefore must not be projected as
+   * page diagnostics. Site-originated CSP and console messages remain untouched.
+   */
+  public shouldRecordConsoleMessage(message: string, sourceId: string): boolean {
+    const normalizedSource = sourceId.trim().toLowerCase()
+    const normalizedMessage = message.trimStart()
+    return !(
+      normalizedSource.startsWith('node:electron/') &&
+      normalizedMessage.includes('Electron Security Warning')
+    )
+  }
 }
 
 export { BrowserDiagnosticsRecorder }

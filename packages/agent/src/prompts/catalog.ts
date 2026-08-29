@@ -71,8 +71,6 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
     ['命令 Shell', formatRuntimeFact(facts.shell)],
     ['用户主目录', formatRuntimeFact(facts.homeDir)],
     ['应用数据目录', formatRuntimeFact(facts.userDataRoot)],
-    ['Velar Hooks HTTP 端点', formatRuntimeFact(facts.velarHookHttpUrl)],
-    ['Velar Hooks 描述文件', formatRuntimeFact(facts.velarHookEndpointFilePath)],
   ]
   const availableRows = rows.filter((row): row is [string, string] => !!row[1])
   if (isEmpty(availableRows)) return null

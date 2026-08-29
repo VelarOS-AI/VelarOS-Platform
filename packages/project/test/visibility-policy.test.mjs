@@ -8,6 +8,9 @@ test('Project owns tool and project visibility policy', async () => {
   const project = await import(packageEntryPath.href)
 
   assert.equal(project.shouldSkipProjectDirectory('.git'), true)
+  assert.equal(project.shouldRestrictProjectModelPathSegment('.git'), true)
+  assert.equal(project.shouldSkipProjectDirectory('build'), true)
+  assert.equal(project.shouldRestrictProjectModelPathSegment('build'), false)
   assert.equal(project.shouldSkipProjectDirectory('src'), false)
   assert.equal(
     project.shouldSkipProjectDiscoveryDirectory('.env', new Set()),

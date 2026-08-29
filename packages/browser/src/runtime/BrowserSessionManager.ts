@@ -597,6 +597,7 @@ class BrowserSessionManager {
     webContents.on('console-message', (details) => {
       if (!isCurrentWebContents()) return
       if (this.tryRecordConsoleUserActivity(sessionId, details.message, details.sourceId)) return
+      if (!this.diagnostics.shouldRecordConsoleMessage(details.message, details.sourceId)) return
 
       this.diagnostics.record(session, {
         kind: 'console',

@@ -10,6 +10,15 @@ import { toNullable } from '@velaros-ai/core'
 import { type ExecRouting } from './routing'
 import type { ExecutionTaskLedgerStore } from './store-types'
 
+export function hasRunningOwnSelfStep(
+  plan: readonly ExecutionTaskPlanStep[],
+  roleId: string
+): boolean {
+  return plan.some(
+    (step) => step.mode === 'self' && step.roleId === roleId && step.status === 'running'
+  )
+}
+
 class ExecRecordSeverity {
   public getExecutionStatusSeverity(status: ExecutionRecord['status']): ExecutionEventSeverity {
     switch (status) {
@@ -169,6 +178,9 @@ class ExecTaskLedger {
   public startOwnSelfStepIfNeeded(executionId: string, taskId: string): void {
     const task = this.findTask(executionId, taskId)!
     if (task.linkedPlanStepId || !task.roleId) return
+    // 每个 turn 都会刷新角色记录；这不是“开始下一步”的信号。已有自执行步骤运行时必须保持原状，
+    // 否则连续流式 turn 会把所有无依赖步骤逐个点成 running，连只读 plan 查询也表现为写操作。
+    if (hasRunningOwnSelfStep(task.executionPlan, task.roleId)) return
 
     const step = this.routingCoordinator.findFirstActionableSelfStep(task.executionPlan, task.roleId)
     if (!step || step.status !== 'pending') return

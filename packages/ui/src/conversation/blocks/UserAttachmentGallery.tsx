@@ -2,7 +2,6 @@ import { memo, type ReactElement, useMemo } from 'react'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import {
   buildImageAttachmentSrc,
@@ -100,12 +99,6 @@ function UserAttachmentGalleryInner({
                   className={styles.userImagePreview}
                   loading="lazy"
                 />
-                <div className={styles.userImageMeta}>
-                  <Text className={styles.userImageName} title={attachment.name}>
-                    {attachment.name}
-                  </Text>
-                  <Text className={styles.userImageSize}>{formatAttachmentSize(attachment.size)}</Text>
-                </div>
               </Button>
             )
           })}

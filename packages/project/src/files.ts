@@ -3,6 +3,8 @@ export {
   ProjectDiscoverySkippedDirectoryNames,
   ProjectExcludedDirectoryNames,
   ProjectHiddenDirectoryAllowlist,
+  ProjectModelRestrictedDirectoryNames,
+  shouldRestrictProjectModelPathSegment,
   shouldSkipProjectDirectory,
   shouldSkipProjectDiscoveryDirectory,
 } from './project-visibility.js'

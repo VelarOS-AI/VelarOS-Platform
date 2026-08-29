@@ -345,6 +345,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
     return tasks
       .filter((task) => {
+        if (options.taskId && task.id !== options.taskId) return false
         if (options.sessionId && task.sessionId !== options.sessionId) return false
         if (sessionIds.size > 0 && (!task.sessionId || !sessionIds.has(task.sessionId))) return false
         if (options.onlyRunning && task.status !== 'running') return false

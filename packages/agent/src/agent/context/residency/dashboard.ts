@@ -14,11 +14,15 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { ContextRecord, ContextResidency } from './ContextRecord'
 import { compareStableStrings } from './determinism'
+import type { GovernanceEpochReport } from './GovernanceEpoch'
 import { residentChars, resolveEffectiveResidency } from './projection'
 import type { ContextLedgerStats } from './ResidencyLedger'
 
 /** 最大持仓榜的条数。 */
 const TopHoldingCount = 3
+/** 最近记录只给短索引；它回答“刚才那批调用落在哪”，不和最大持仓榜混为一谈。 */
+const LatestHoldingCount = 3
+const LatestParallelToolPartCount = 4
 
 const DashboardMarker = '[context-dashboard]'
 
@@ -29,6 +33,18 @@ export interface ContextDashboardInput {
   residency: ReadonlyMap<string, ContextResidency>
   projectedTokens: number
   budgetTokens: number
+  /**
+   * 当前账本最近一次治理尝试。
+   *
+   * `epoch` 只在真正迁移后递增；模型请求被消费但因无候选/收益不足而跳过时仍是 0。把尝试结果
+   * 单列，模型才能区分“仍在排队”和“已经执行但无需压缩”。
+   */
+  lastEpochAttempt?: LooseOptional<
+    Pick<
+      GovernanceEpochReport,
+      'source' | 'applied' | 'skipReason' | 'migrationCount' | 'byInstrument'
+    >
+  >
 }
 
 /** 渲染 dashboard 尾块；无记录时返回 null（空账本不值得占一条消息）。 */
@@ -54,11 +70,34 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
 
   const top = renderTopHoldings(holdings)
   if (top) lines.push(top)
+  const latest = renderLatestHoldings(holdings)
+  if (latest) lines.push(latest)
+  const epochAttempt = renderLastEpochAttempt(input.lastEpochAttempt)
+  if (epochAttempt) lines.push(epochAttempt)
   lines.push(
     'Non-inline records stay retrievable via context:recall; call context:distill when a phase is done to request one compaction epoch.'
   )
 
   return lines.join('\n')
+}
+
+function renderLastEpochAttempt(
+  attempt: ContextDashboardInput['lastEpochAttempt']
+): Nullable<string> {
+  if (!attempt) return null
+
+  const skip = attempt.skipReason ?? 'none'
+  return [
+    'compaction:',
+    'request=consumed',
+    `source=${attempt.source}`,
+    `applied=${attempt.applied ? 'yes' : 'no'}`,
+    `skip=${skip}`,
+    `migrations=${attempt.migrationCount}`,
+    `evict=${attempt.byInstrument.evict}`,
+    `skeleton=${attempt.byInstrument.skeleton}`,
+    `distill=${attempt.byInstrument.distill}`,
+  ].join(' ')
 }
 
 /** dashboard 尾块的识别谓词（转录/调试面共用，避免各写各的前缀嗅探）。 */
@@ -71,6 +110,7 @@ interface DashboardHolding {
   label: string
   residency: ContextResidency
   chars: number
+  toolParts: ReadonlyArray<{ toolCallId: string; toolName: string }>
 }
 
 /**
@@ -86,9 +126,16 @@ function collectHoldings(input: ContextDashboardInput): DashboardHolding[] {
     const residency = resolveEffectiveResidency(record, declared)
     return {
       id: record.id,
-      label: record.toolName ?? record.kind,
+      label:
+        record.toolParts.length > 1
+          ? `parallel-tools(${record.toolParts.length})`
+          : (record.toolName ?? record.kind),
       residency,
       chars: residentChars(record, residency),
+      toolParts: record.toolParts.map((part) => ({
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+      })),
     }
   })
 }
@@ -117,5 +164,27 @@ function renderTopHoldings(holdings: readonly DashboardHolding[]): Nullable<stri
 
   return `top: ${top
     .map((holding) => `${holding.id}/${holding.label}=${Math.round(holding.chars / 1000)}k`)
+    .join(' ')}`
+}
+
+/**
+ * 最大持仓只回答“谁最占空间”，不能被模型拿来猜“刚完成的并行组”。这里单列账本尾部，并对
+ * 最新并行结果暴露少量真实子调用 ID；模型可直接按 `tool:<id>` 精确召回，不再先扫 record 邻接。
+ */
+function renderLatestHoldings(holdings: readonly DashboardHolding[]): Nullable<string> {
+  const latest = holdings.slice(-LatestHoldingCount)
+  if (isEmpty(latest)) return null
+
+  return `latest: ${latest
+    .map((holding) => {
+      if (holding.toolParts.length <= 1) return `${holding.id}/${holding.label}`
+
+      const refs = holding.toolParts
+        .slice(0, LatestParallelToolPartCount)
+        .map((part) => `${part.toolName}=tool:${part.toolCallId}`)
+        .join(',')
+      const remaining = holding.toolParts.length - LatestParallelToolPartCount
+      return `${holding.id}/${holding.label}[${refs}${remaining > 0 ? `,+${remaining}` : ''}]`
+    })
     .join(' ')}`
 }
