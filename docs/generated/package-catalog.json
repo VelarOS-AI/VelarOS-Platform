@@ -235,7 +235,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.4.9",
+      "version": "0.4.11",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",
@@ -265,7 +265,7 @@
       "domain": "ui",
       "directory": "packages/ui",
       "name": "@velaros-ai/ui",
-      "version": "0.2.18",
+      "version": "0.2.25",
       "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
       "exportSubpaths": [
         ".",
