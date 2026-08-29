@@ -152,6 +152,78 @@ void describe('Platform-owned conversation composer behavior', () => {
     assert.match(tableHeaderStyles, /word-break: normal;/u)
   })
 
+  void test('keeps conversation tables at a 400px scroll viewport until fully expanded', () => {
+    const styles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const collapsedTableViewportStyles =
+      styles.match(
+        /\[data-streamdown='table-wrapper'\]\[data-collapsed='true'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n  \}/u
+      )?.groups?.body ?? ''
+    const expandedTableViewportStyles =
+      styles.match(
+        /\[data-streamdown='table-wrapper'\]\[data-collapsed='false'\][\s\S]*?> \[data-conversation-table-viewport\] \{(?<body>[\s\S]*?)\n  \}/u
+      )?.groups?.body ?? ''
+
+    assert.match(collapsedTableViewportStyles, /max-height: 400px !important;/u)
+    assert.match(collapsedTableViewportStyles, /overflow-y: auto !important;/u)
+    assert.match(collapsedTableViewportStyles, /overscroll-behavior: contain;/u)
+    assert.match(expandedTableViewportStyles, /max-height: none !important;/u)
+    assert.match(expandedTableViewportStyles, /overflow-y: hidden !important;/u)
+    assert.doesNotMatch(styles, /table-wrapper'\] > :global\(div:not\(\.flex\)\)/u)
+  })
+
+  void test('keeps code at a 400px scroll viewport and expands the whole block in one click', () => {
+    const styles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const source = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/useMessageMarkdownComponents.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const codeBodyStyles =
+      styles.match(
+        /& \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n  \}/u
+      )?.groups?.body ?? ''
+    const collapsedCodeStyles =
+      styles.match(
+        /\.expandableCodeBlock\[data-collapsed='true'\] \[data-streamdown='code-block-body'\] \{(?<body>[\s\S]*?)\n  \}/u
+      )?.groups?.body ?? ''
+    const collapseSlotStyles =
+      styles.match(/\.expandableCodeBlockCollapseSlot \{(?<body>[\s\S]*?)\n  \}/u)?.groups
+        ?.body ?? ''
+    const collapseButtonStyles =
+      styles.match(/\.expandableCodeBlockCollapseButton \{(?<body>[\s\S]*?)\n  \}/u)?.groups
+        ?.body ?? ''
+
+    assert.match(codeBodyStyles, /overflow-x: auto;/u)
+    assert.match(collapsedCodeStyles, /max-height: 400px !important;/u)
+    assert.match(collapsedCodeStyles, /overflow-y: auto !important;/u)
+    assert.match(
+      styles,
+      /\.expandableCodeBlock\[data-collapsed='false'\] \[data-streamdown='code-block-body'\] \{\s*max-height: none !important;\s*overflow-y: hidden !important;/u
+    )
+    assert.match(source, /baseMarkdownComponents\.table\s*=\s*MarkdownTableWithExpandableViewport/u)
+    assert.equal(source.match(/onClick=\{\(\) => setExpanded\(true\)\}/gu)?.length, 2)
+    assert.match(collapseSlotStyles, /position: absolute;/u)
+    assert.match(collapseSlotStyles, /bottom: 8px;/u)
+    assert.match(collapseSlotStyles, /pointer-events: none;/u)
+    assert.match(collapseButtonStyles, /border: 0;/u)
+    assert.match(collapseButtonStyles, /background: transparent;/u)
+    assert.match(collapseButtonStyles, /animation: expandable-block-control-drift 2\.8s/u)
+  })
+
   void test('shows the context distill progress note with a fact fallback', () => {
     assert.equal(
       getToolDetailSummary({

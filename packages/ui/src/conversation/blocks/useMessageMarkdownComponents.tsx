@@ -28,13 +28,6 @@ import { Link } from '@velaros-ai/ui/primitives/display/Link'
 
 import { useConversationI18n } from '../i18n'
 import {
-  countCodeBlockLines,
-  EXPANDABLE_CODE_BLOCK_INITIAL_VISIBLE_LINES,
-  getNextVisibleCodeBlockLines,
-  shouldCollapseCodeBlock,
-  shouldShowCodeBlockCollapseButton,
-} from '../markdown/expandableCodeBlock.utils'
-import {
   normalizeMessageMarkdownFileReference,
   resolveMessageMarkdownHrefTarget,
 } from '../markdown/messageMarkdownLinks.utils'
@@ -60,11 +53,8 @@ const LazyHtmlArtifactBlock = lazy(async () =>
   }))
 )
 
-interface ExpandableCodeBlockState {
-  code: string
-  visibleLines: number
-  measuredTotalLines: Nullable<number>
-}
+const ConversationExpandableViewportHeightPx = 400
+const ConversationExpandableViewportOverflowTolerancePx = 1
 
 function readCodeLanguage(className: unknown): string {
   if (!isString(className)) return ''
@@ -112,25 +102,54 @@ function MarkdownExternalOpenButton({ label, url }: { label: string; url: string
   )
 }
 
-function readCssPixelValue(value: string): number {
-  const parsed = Number.parseFloat(value)
+function useExpandableConversationViewport(viewportSelector: string): {
+  containerRef: React.RefObject<Nullable<HTMLDivElement>>
+  expanded: boolean
+  hasOverflow: boolean
+  setExpanded: React.Dispatch<React.SetStateAction<boolean>>
+} {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [hasOverflow, setHasOverflow] = useState(false)
 
-  return Number.isFinite(parsed) ? parsed : 0
-}
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const viewport = container?.querySelector<HTMLElement>(viewportSelector)
+    if (!container || !viewport) return
 
-function measureRenderedCodeBlockLines(container: Nullable<HTMLDivElement>): Nullable<number> {
-  const body = container?.querySelector<HTMLElement>('[data-streamdown="code-block-body"]')
-  if (!body || body.scrollHeight <= 0) return null
+    const measure = (): void => {
+      setHasOverflow(
+        viewport.scrollHeight >
+          ConversationExpandableViewportHeightPx +
+            ConversationExpandableViewportOverflowTolerancePx
+      )
+    }
 
-  const computedStyle = window.getComputedStyle(body)
-  const lineHeight = readCssPixelValue(computedStyle.lineHeight)
-  const fontSize = readCssPixelValue(computedStyle.fontSize)
-  const effectiveLineHeight = lineHeight > 0 ? lineHeight : Math.max(fontSize * 1.62, 1)
-  const verticalPadding =
-    readCssPixelValue(computedStyle.paddingTop) + readCssPixelValue(computedStyle.paddingBottom)
-  const contentHeight = Math.max(0, body.scrollHeight - verticalPadding)
+    measure()
+    const animationFrameId = window.requestAnimationFrame(measure)
+    const resizeObserver = new ResizeObserver(measure)
+    resizeObserver.observe(viewport)
+    if (viewport.firstElementChild) resizeObserver.observe(viewport.firstElementChild)
+    const intersectionObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) measure()
+    })
+    intersectionObserver.observe(container)
+    const mutationObserver = new MutationObserver(measure)
+    mutationObserver.observe(viewport, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
 
-  return Math.max(1, Math.ceil(contentHeight / effectiveLineHeight))
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      intersectionObserver.disconnect()
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+    }
+  }, [viewportSelector])
+
+  return { containerRef, expanded, hasOverflow, setExpanded }
 }
 
 type PreviewableCodeBlockView = 'preview' | 'source'
@@ -200,7 +219,7 @@ function PreviewableCodeBlockFrame({
         renderPreview(toggleAction)
       ) : (
         <>
-          <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
+          <ExpandableCodeBlockFrame>
             <CodeBlock code={code} language={language} isIncomplete={isStreaming}>
               <CodeBlockDownloadButton code={code} language={language} />
               <CodeBlockCopyButton code={code} />
@@ -252,7 +271,7 @@ function RenderableHtmlCodeBlockFrame({
         <Suspense
           fallback={
             <>
-              <ExpandableCodeBlockFrame code={code} isStreaming={false}>
+              <ExpandableCodeBlockFrame>
                 {children}
               </ExpandableCodeBlockFrame>
               <div className={styles.previewableCodeBlockToggleSlot}>{toggleAction}</div>
@@ -293,90 +312,14 @@ function RenderableDiagramCodeBlockFrame({
   )
 }
 
-function ExpandableCodeBlockFrame({
-  children,
-  code,
-  isStreaming = false,
-}: {
-  children: ReactElement
-  code: string
-  isStreaming?: boolean
-}): ReactElement {
+function ExpandableCodeBlockFrame({ children }: { children: ReactElement }): ReactElement {
   const { t } = useConversationI18n()
-  const codeBlockRef = useRef<HTMLDivElement>(null)
-  const [expansionState, setExpansionState] = useState<ExpandableCodeBlockState>(() => ({
-    code,
-    visibleLines: EXPANDABLE_CODE_BLOCK_INITIAL_VISIBLE_LINES,
-    measuredTotalLines: null,
-  }))
-  const totalLines = useMemo(() => countCodeBlockLines(code), [code])
-  const stateMatchesCode = expansionState.code === code
-  const visibleLines = stateMatchesCode
-    ? expansionState.visibleLines
-    : EXPANDABLE_CODE_BLOCK_INITIAL_VISIBLE_LINES
-  const measuredTotalLines = stateMatchesCode ? expansionState.measuredTotalLines : null
-
-  useLayoutEffect(() => {
-    const nextMeasuredTotalLines = measureRenderedCodeBlockLines(codeBlockRef.current)
-    setExpansionState((current) => {
-      const currentMatchesCode = current.code === code
-      const currentVisibleLines = currentMatchesCode
-        ? current.visibleLines
-        : EXPANDABLE_CODE_BLOCK_INITIAL_VISIBLE_LINES
-      const currentMeasuredTotalLines = currentMatchesCode ? current.measuredTotalLines : null
-      if (
-        currentMatchesCode &&
-        currentVisibleLines === visibleLines &&
-        currentMeasuredTotalLines === nextMeasuredTotalLines
-      )
-        return current
-
-      return {
-        code,
-        visibleLines,
-        measuredTotalLines: nextMeasuredTotalLines,
-      }
-    })
-  }, [code, visibleLines])
-  const setVisibleLines = useCallback(
-    (nextVisibleLines: number): void => {
-      setExpansionState((current) => ({
-        code,
-        visibleLines: nextVisibleLines,
-        measuredTotalLines: current.code === code ? current.measuredTotalLines : null,
-      }))
-    },
-    [code]
-  )
-
-  const collapsed = shouldCollapseCodeBlock({
-    isStreaming,
-    measuredTotalLines,
-    totalLines,
-    visibleLines,
-  })
-  const showCollapseButton = shouldShowCodeBlockCollapseButton({
-    isStreaming,
-    measuredTotalLines,
-    totalLines,
-    visibleLines,
-  })
-  const nextVisibleLines = getNextVisibleCodeBlockLines({
-    measuredTotalLines,
-    totalLines,
-    visibleLines,
-  })
-  const style = {
-    '--chat-code-block-visible-height': `${visibleLines * 1.62 + 1.4}em`,
-  } as React.CSSProperties & Record<'--chat-code-block-visible-height', string>
+  const { containerRef, expanded, hasOverflow, setExpanded } =
+    useExpandableConversationViewport('[data-streamdown="code-block-body"]')
+  const collapsed = !expanded
 
   return (
-    <div
-      ref={codeBlockRef}
-      className={styles.expandableCodeBlock}
-      data-collapsed={collapsed}
-      style={style}
-    >
+    <div ref={containerRef} className={styles.expandableCodeBlock} data-collapsed={collapsed}>
       {children}
       {collapsed && (
         <button
@@ -385,14 +328,14 @@ function ExpandableCodeBlockFrame({
           aria-expanded="false"
           aria-label={t('chat.codeBlockExpand')}
           title={t('chat.codeBlockExpand')}
-          onClick={() => setVisibleLines(nextVisibleLines)}
+          onClick={() => setExpanded(true)}
         >
           <span className={styles.expandableCodeBlockButton} aria-hidden="true">
             <CaretDoubleDownIcon size={18} weight="bold" />
           </span>
         </button>
       )}
-      {showCollapseButton && (
+      {hasOverflow && expanded && (
         <div className={styles.expandableCodeBlockCollapseSlot}>
           <button
             type="button"
@@ -400,7 +343,7 @@ function ExpandableCodeBlockFrame({
             aria-expanded="true"
             aria-label={t('chat.codeBlockCollapse')}
             title={t('chat.codeBlockCollapse')}
-            onClick={() => setVisibleLines(EXPANDABLE_CODE_BLOCK_INITIAL_VISIBLE_LINES)}
+            onClick={() => setExpanded(false)}
           >
             <CaretDoubleUpIcon size={18} weight="bold" aria-hidden="true" />
           </button>
@@ -436,11 +379,7 @@ function renderOfficialCodeBlock({
       </RenderableHtmlCodeBlockFrame>
     )
 
-  return (
-    <ExpandableCodeBlockFrame code={code} isStreaming={isStreaming}>
-      {blockChild}
-    </ExpandableCodeBlockFrame>
-  )
+  return <ExpandableCodeBlockFrame>{blockChild}</ExpandableCodeBlockFrame>
 }
 
 /**
@@ -501,6 +440,55 @@ function MarkdownPreWithExpandableCode({
   )
 }
 
+function MarkdownTableWithExpandableViewport({
+  children,
+  node: _node,
+  ...tableProps
+}: React.ComponentPropsWithoutRef<'table'> & { node?: unknown }): ReactElement {
+  const { t } = useConversationI18n()
+  const { containerRef, expanded, hasOverflow, setExpanded } =
+    useExpandableConversationViewport('[data-conversation-table-viewport]')
+  const collapsed = !expanded
+
+  return (
+    <div ref={containerRef} data-collapsed={collapsed} data-streamdown="table-wrapper">
+      <div data-conversation-table-viewport>
+        <table data-streamdown="table" {...tableProps}>
+          {children}
+        </table>
+      </div>
+      {collapsed && (
+        <button
+          type="button"
+          className={styles.expandableCodeBlockOverlay}
+          aria-expanded="false"
+          aria-label={t('chat.richExpand')}
+          title={t('chat.richExpand')}
+          onClick={() => setExpanded(true)}
+        >
+          <span className={styles.expandableCodeBlockButton} aria-hidden="true">
+            <CaretDoubleDownIcon size={18} weight="bold" />
+          </span>
+        </button>
+      )}
+      {hasOverflow && expanded && (
+        <div className={styles.expandableCodeBlockCollapseSlot}>
+          <button
+            type="button"
+            className={styles.expandableCodeBlockCollapseButton}
+            aria-expanded="true"
+            aria-label={t('chat.richCollapse')}
+            title={t('chat.richCollapse')}
+            onClick={() => setExpanded(false)}
+          >
+            <CaretDoubleUpIcon size={18} weight="bold" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function useBaseMarkdownComponents({
   isStreaming = false,
   onOpenBrowserLink,
@@ -551,6 +539,8 @@ function useBaseMarkdownComponents({
         </Link>
       )
     }) as StreamdownComponents['inlineCode']
+    baseMarkdownComponents.table =
+      MarkdownTableWithExpandableViewport as StreamdownComponents['table']
 
     if (onOpenBrowserLink || onOpenProjectPath) {
       baseMarkdownComponents.a = (({
