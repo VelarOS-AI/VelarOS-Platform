@@ -86,7 +86,7 @@ describe('model input modalities', () => {
     })
     const runtime = await composition.agentModelResolver.resolve(
       {
-        provider: 'freellmapi',
+        provider: 'openai-compatible-gateway',
         model: 'gpt-5.6-sol',
         apiKey: 'test-key',
         baseURL: 'https://gateway.example.test/v1',
@@ -94,7 +94,7 @@ describe('model input modalities', () => {
       {
         providerRuntimeConfigs: [
           {
-            provider: 'freellmapi',
+            provider: 'openai-compatible-gateway',
             enabled: true,
             apiKey: 'test-key',
             baseURL: 'https://gateway.example.test/v1',

@@ -25,7 +25,7 @@ export type ChatProviderId =
   | 'volcengine'
   | 'ollama'
   | 'lmstudio'
-  | 'freellmapi'
+  | 'openai-compatible-gateway'
   | 'custom'
   | (string & {})
 

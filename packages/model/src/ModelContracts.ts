@@ -16,7 +16,7 @@ export type BuiltInChatProviderId =
   | 'volcengine'
   | 'ollama'
   | 'lmstudio'
-  | 'freellmapi'
+  | 'openai-compatible-gateway'
   | 'custom'
 
 declare const InjectedChatProviderIdBrand: unique symbol

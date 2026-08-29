@@ -19,7 +19,7 @@ const DefaultEmbeddingModelsByProvider: Partial<
   zhipu: 'embedding-3',
   mistral: 'mistral-embed',
   ollama: 'nomic-embed-text',
-  freellmapi: 'text-embedding-3-large',
+  'openai-compatible-gateway': 'text-embedding-3-large',
   custom: 'text-embedding-3-large',
 }
 

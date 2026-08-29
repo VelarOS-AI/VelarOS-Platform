@@ -20,7 +20,7 @@ export const DirectOpenAICompatibleProviderIds = [
   'volcengine',
   'ollama',
   'lmstudio',
-  'freellmapi',
+  'openai-compatible-gateway',
 ] as const satisfies readonly ChatProviderId[]
 
 export type ModelProviderAdapterKind =
@@ -216,10 +216,10 @@ const BaseModelProviderOperationalManifests = [
     validationKind: 'openai-compatible-models',
   },
   {
-    id: 'freellmapi',
+    id: 'openai-compatible-gateway',
     label: 'OpenAI-compatible Gateway',
     defaultBaseURL: OpenAICompatibleGatewayDefaultBaseURL,
-    description: '连接任意 OpenAI-compatible 聚合网关或本地服务，默认示例地址兼容本机 FreeLLMAPI。',
+    description: '连接任意 OpenAI-compatible 聚合网关或本地服务。',
     defaultApiKeyEnv: 'OPENAI_COMPATIBLE_GATEWAY_API_KEY',
     adapterKind: 'openai-compatible',
     validationKind: 'openai-compatible-models',

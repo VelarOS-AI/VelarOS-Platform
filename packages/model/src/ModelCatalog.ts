@@ -319,7 +319,7 @@ const LmStudioProviderCatalog = {
 } satisfies SharedProviderCatalog
 
 const OpenAICompatibleGatewayProviderCatalog = {
-  provider: 'freellmapi',
+  provider: 'openai-compatible-gateway',
   defaultModel: '',
   models: [],
 } satisfies SharedProviderCatalog
