@@ -137,8 +137,8 @@ async function preflight({ requirePublishConfig = true } = {}) {
       '--jq',
       '.visibility',
     ])
-    if (visibility !== 'PRIVATE')
-      throw new Error(`${targetRepository} must remain private`)
+    if (visibility !== 'PUBLIC')
+      throw new Error(`${targetRepository} must remain public`)
     const secrets = JSON.parse(
       await command('gh', [
         'secret',

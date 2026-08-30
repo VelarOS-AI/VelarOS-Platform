@@ -35,7 +35,7 @@
         "@types/react-dom": "^19.2.4",
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
-        "@velaros-ai/arch-guard": "github:Error-Zhang/VelarOS-Arch-Guard#f1f6dc1dfcb10913b9c7379636e0298453beedfa",
+        "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#f1f6dc1dfcb10913b9c7379636e0298453beedfa",
         "@vitejs/plugin-react": "^6.0.5",
         "brace-expansion": "1.1.18",
         "chrome-devtools-frontend": "1.0.1652307",
@@ -963,7 +963,7 @@
 
     "@velaros-ai/agent-lab": ["@velaros-ai/agent-lab@workspace:packages/agent-lab"],
 
-    "@velaros-ai/arch-guard": ["@velaros-ai/arch-guard@github:Error-Zhang/VelarOS-Arch-Guard#f1f6dc1", { "dependencies": { "picomatch": "^4.0.3", "typescript": "^5.7.0" }, "bin": { "arch-guard": "bin/arch-guard.mjs" } }, "VelarOS-AI-VelarOS-Arch-Guard-f1f6dc1", "sha512-G59ViTDW7RP5GF6YcAU53AY+LK4uG1NmXA4bHr4iC6Lwy+2g9lWEhtXpHSCoyN5NgJSCVu3crSiOWgMS68j7oA=="],
+    "@velaros-ai/arch-guard": ["@velaros-ai/arch-guard@github:VelarOS-AI/VelarOS-Arch-Guard#f1f6dc1", { "dependencies": { "picomatch": "^4.0.3", "typescript": "^5.7.0" }, "bin": { "arch-guard": "bin/arch-guard.mjs" } }, "VelarOS-AI-VelarOS-Arch-Guard-f1f6dc1", "sha512-G59ViTDW7RP5GF6YcAU53AY+LK4uG1NmXA4bHr4iC6Lwy+2g9lWEhtXpHSCoyN5NgJSCVu3crSiOWgMS68j7oA=="],
 
     "@velaros-ai/browser": ["@velaros-ai/browser@workspace:packages/browser"],
 

@@ -189,13 +189,13 @@ class GitHubReleaseClient {
       : response.arrayBuffer()
   }
 
-  async assertPrivate() {
+  async assertPublic() {
     const repository = await this.request(
       `https://api.github.com/repos/${this.repository}`,
     )
-    if (repository.private !== true) {
+    if (repository.private !== false || repository.visibility !== 'public') {
       throw new Error(
-        `Refusing to upload Document Renderer capability packs to non-private ${this.repository}`,
+        `Refusing to upload Document Renderer capability packs to non-public ${this.repository}`,
       )
     }
   }
@@ -218,7 +218,7 @@ class GitHubReleaseClient {
         body: JSON.stringify({
           tag_name: identity.tag,
           name: `Velar Document Renderer v${identity.version} candidate`,
-          body: `Private Velar Document Renderer candidate from ${identity.sourceRepository}@${identity.sourceCommit}.`,
+          body: `Public Velar Document Renderer candidate from ${identity.sourceRepository}@${identity.sourceCommit}.`,
           draft: false,
           prerelease: true,
           make_latest: 'false',
@@ -310,7 +310,7 @@ async function plan(options) {
     return { identity, needed: true }
   }
   const client = clientFromEnvironment()
-  await client.assertPrivate()
+  await client.assertPublic()
   const release = await client.findRelease(identity.tag)
   if (!release) {
     await output('renderer_needed', true)
@@ -373,7 +373,7 @@ async function stage(options) {
     artifact: actual,
   })
   const client = clientFromEnvironment()
-  await client.assertPrivate()
+  await client.assertPublic()
   const release = await client.ensureRelease(identity)
   await client.uploadBytes(
     release,
@@ -397,7 +397,7 @@ async function stage(options) {
 async function finalize(options) {
   const identity = await releaseIdentity()
   const client = clientFromEnvironment()
-  await client.assertPrivate()
+  await client.assertPublic()
   const release = await client.findRelease(identity.tag)
   if (!release) throw new Error(`Missing staged release ${identity.tag}`)
   const stages = []

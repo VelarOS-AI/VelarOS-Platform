@@ -15,11 +15,11 @@ on:
           - canary
         default: stable
       dry_run:
-        description: Build and validate without writing the private release repository
+        description: Build and validate without writing the public release repository
         type: boolean
         default: false
       confirm_upload:
-        description: Explicitly confirm writes to the private release repository
+        description: Explicitly confirm writes to the public release repository
         type: boolean
         default: false
       replace_existing:

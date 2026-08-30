@@ -126,7 +126,7 @@
     "@types/react-dom": "^19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
-    "@velaros-ai/arch-guard": "github:Error-Zhang/VelarOS-Arch-Guard#f1f6dc1dfcb10913b9c7379636e0298453beedfa",
+    "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#f1f6dc1dfcb10913b9c7379636e0298453beedfa",
     "@vitejs/plugin-react": "^6.0.5",
     "brace-expansion": "1.1.18",
     "chrome-devtools-frontend": "1.0.1652307",
