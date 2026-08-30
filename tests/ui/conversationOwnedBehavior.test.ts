@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
-import { resolveChatSurfaceComposerDensity } from '../../packages/ui/src/conversation/composer/ChatSurfaceComposer'
 import { shouldRemoveLastChatInputFile } from '../../packages/ui/src/conversation/composer/chatInputUtils'
+import { resolveChatSurfaceComposerDensity } from '../../packages/ui/src/conversation/composer/ChatSurfaceComposer'
 import { filterComposerMenuPluginOptions } from '../../packages/ui/src/conversation/composer/hooks/buildChatInputComposerAddMenuProps'
 import {
   NoNextStepSuggestionHighlightIndex,
