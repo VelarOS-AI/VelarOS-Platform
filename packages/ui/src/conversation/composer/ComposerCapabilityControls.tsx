@@ -328,8 +328,6 @@ export function ComposerCapabilityMenuItems({
             interaction="leaf"
             icon={<ComposerCapabilityIcon name={control.icon} />}
             title={control.description || control.label}
-            selected={active}
-            showSelectedIndicator={false}
             disabled={isDisabled}
             onClick={() => updateCapabilityControl(control, active)}
             trailing={

@@ -89,6 +89,39 @@ void describe('Platform-owned conversation composer behavior', () => {
     assert.match(chipsSource, /onRemove=\{onDismissWorkbenchCurrentFile\}/)
   })
 
+  void test('keeps enabled composer toggle rows transparent until hover or keyboard focus', () => {
+    const selectorSource = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ComposerModelRunSelector.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const capabilitySource = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ComposerCapabilityControls.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const menuStyles = readFileSync(
+      new URL(
+        '../../packages/ui/src/styles/components/primitives/cascading-menu.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.doesNotMatch(selectorSource, /selected=\{pureChat\.value\}/u)
+    assert.doesNotMatch(selectorSource, /selected=\{thinkingVisibility\.value\}/u)
+    assert.doesNotMatch(capabilitySource, /selected=\{active\}/u)
+    assert.equal(selectorSource.match(/<ComposerMenuSwitchIndicator checked=/gu)?.length, 2)
+    assert.match(
+      menuStyles,
+      /\.velar-cascading-menu-item:hover, \.velar-cascading-menu-item:focus-visible,[^{]+\{\s*background: var\(--cascading-menu-item-hover-bg\);/u
+    )
+  })
+
   void test('keeps image attachment removal compact across Desktop and Workbench consumers', () => {
     const source = readFileSync(
       new URL(

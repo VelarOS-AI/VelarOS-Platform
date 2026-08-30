@@ -10,8 +10,9 @@ interface VelarOSSharedResourceStoreOptions {
 /**
  * VelarOS 产品族共享数据根的磁盘 ABI v1。
  *
- * 共享根只承载可重新下载、可被多个 VelarOS 产品复用的安装产物；产品配置、项目索引、
- * 缓存与启停状态不得写入这里。VELAROS_SHARED_DATA_ROOT 供便携部署与测试显式改根。
+ * `shared/resources` 只承载可重新下载的安装产物；`shared/account` 承载当前系统用户下
+ * 各 VelarOS 产品可选择复用的账号会话。产品配置、项目索引、缓存与启停状态不得写入这里。
+ * VELAROS_SHARED_DATA_ROOT 供便携部署与测试显式改根。
  */
 function resolveVelarOSSharedDataRoot(
   options: VelarOSSharedResourceStoreOptions = {}
@@ -42,7 +43,15 @@ function resolveVelarOSSharedResourcesRoot(
   return join(resolveVelarOSSharedDataRoot(options), 'shared', 'resources')
 }
 
+/** 组织级账号根：<VelarOS shared data>/shared/account/v1。 */
+function resolveVelarOSSharedAccountRoot(
+  options: VelarOSSharedResourceStoreOptions = {}
+): string {
+  return join(resolveVelarOSSharedDataRoot(options), 'shared', 'account', 'v1')
+}
+
 export {
+  resolveVelarOSSharedAccountRoot,
   resolveVelarOSSharedDataRoot,
   resolveVelarOSSharedResourcesRoot,
   type VelarOSSharedResourceStoreOptions,

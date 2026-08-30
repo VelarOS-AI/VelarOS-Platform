@@ -40,6 +40,7 @@ export * from './SystemProcessConfinement'
 export * from './SystemProcessParsers'
 export type { SystemToolContext, SystemToolSystemApi, ToolContext, VelaTool } from './Types'
 export {
+  resolveVelarOSSharedAccountRoot,
   resolveVelarOSSharedDataRoot,
   resolveVelarOSSharedResourcesRoot,
   type VelarOSSharedResourceStoreOptions,

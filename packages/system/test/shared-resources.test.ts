@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import {
+  resolveVelarOSSharedAccountRoot,
   resolveVelarOSSharedDataRoot,
   resolveVelarOSSharedResourcesRoot,
 } from '../src/VelarOSSharedResourceStore'
@@ -34,5 +35,13 @@ describe('VelarOS shared resource store', () => {
       env: { VELAROS_SHARED_DATA_ROOT: '/portable/VelarOS' },
       homeDirectory: '/ignored',
     })).toBe(join('/portable/VelarOS', 'shared', 'resources'))
+  })
+
+  test('places product-family account sessions under a versioned shared root', () => {
+    expect(resolveVelarOSSharedAccountRoot({
+      platform: 'linux',
+      env: { VELAROS_SHARED_DATA_ROOT: '/portable/VelarOS' },
+      homeDirectory: '/ignored',
+    })).toBe(join('/portable/VelarOS', 'shared', 'account', 'v1'))
   })
 })

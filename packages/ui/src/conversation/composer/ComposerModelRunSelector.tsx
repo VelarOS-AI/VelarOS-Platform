@@ -16,7 +16,6 @@ import {
 import { cn } from "@velaros-ai/ui/lib/cn";
 import { Button } from "@velaros-ai/ui/primitives/buttons/Button";
 import { Text } from "@velaros-ai/ui/primitives/display/Text";
-import { Switch } from "@velaros-ai/ui/primitives/forms/Switch";
 import { BubbleTooltip } from "@velaros-ai/ui/primitives/overlays/Tooltip";
 import {
   BusinessCascadingMenu,
@@ -26,7 +25,10 @@ import {
 
 import type { ConversationMessageKey as MessageKey } from "../i18n";
 
-import { ComposerMenuHelpIcon } from "./addMenu/ComposerMenuItemChrome";
+import {
+  ComposerMenuHelpIcon,
+  ComposerMenuSwitchIndicator,
+} from "./addMenu/ComposerMenuItemChrome";
 import type {
   ChatComposerModelRunSummary,
   ChatComposerModelSelectorControl,
@@ -480,21 +482,10 @@ function ComposerModelRunSelectorImpl({
               <BusinessCascadingMenuItem
                 menu={menu}
                 interaction="leaf"
-                selected={pureChat.value}
-                showSelectedIndicator={false}
                 label={t("chat.composerPureChatMode")}
                 disabled={pureChat.disabled}
                 onClick={() => pureChat.onChange(!pureChat.value)}
-                trailing={
-                  <Switch
-                    size="xs"
-                    checked={pureChat.value}
-                    disabled={pureChat.disabled}
-                    className={styles.composerMenuSwitch}
-                    onClick={(event) => event.stopPropagation()}
-                    onCheckedChange={pureChat.onChange}
-                  />
-                }
+                trailing={<ComposerMenuSwitchIndicator checked={pureChat.value} />}
               />
             )}
 
@@ -502,22 +493,13 @@ function ComposerModelRunSelectorImpl({
               <BusinessCascadingMenuItem
                 menu={menu}
                 interaction="leaf"
-                selected={thinkingVisibility.value}
-                showSelectedIndicator={false}
                 label={t("chat.composerThinkingVisibility")}
                 disabled={thinkingVisibility.disabled}
                 onClick={() =>
                   thinkingVisibility.onChange(!thinkingVisibility.value)
                 }
                 trailing={
-                  <Switch
-                    size="xs"
-                    checked={thinkingVisibility.value}
-                    disabled={thinkingVisibility.disabled}
-                    className={styles.composerMenuSwitch}
-                    onClick={(event) => event.stopPropagation()}
-                    onCheckedChange={thinkingVisibility.onChange}
-                  />
+                  <ComposerMenuSwitchIndicator checked={thinkingVisibility.value} />
                 }
               />
             )}

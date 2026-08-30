@@ -328,7 +328,7 @@
     },
     "packages/ui": {
       "name": "@velaros-ai/ui",
-      "version": "0.2.25",
+      "version": "0.2.26",
       "dependencies": {
         "@phosphor-icons/react": "^2.1.10",
         "@radix-ui/react-dialog": "^1.1.15",
