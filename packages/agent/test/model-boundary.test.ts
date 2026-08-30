@@ -97,13 +97,14 @@ describe('Agent Model boundary', () => {
 
   test('unwraps Agent-owned config exactly once at the injected Model capability boundary', async () => {
     const observed: unknown[] = []
+    const controller = new AbortController()
     const runtime = new ModelRuntime({
       createAgentProvider: (selection) => {
         observed.push(['provider', selection])
         return (() => undefined) as never
       },
-      resolveRoleRuntime: (selection, runtimeContext) => {
-        observed.push(['role', selection, runtimeContext])
+      resolveRoleRuntime: (selection, runtimeContext, signal) => {
+        observed.push(['role', selection, runtimeContext, signal])
         return Promise.resolve({}) as never
       },
     })
@@ -117,7 +118,8 @@ describe('Agent Model boundary', () => {
       {
         modelRuntimeContext: { providerRuntimeConfigs: [], openRouter: {} },
         hostOnlyField: 'must-not-leak',
-      }
+      },
+      controller.signal
     )
 
     expect(observed).toEqual([
@@ -126,6 +128,7 @@ describe('Agent Model boundary', () => {
         'role',
         { provider: 'test', model: 'role' },
         { providerRuntimeConfigs: [], openRouter: {} },
+        controller.signal,
       ],
     ])
   })

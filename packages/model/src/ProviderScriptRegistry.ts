@@ -27,6 +27,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
@@ -80,6 +81,8 @@ export interface ProviderScriptRegistryOptions {
   configPaths?: readonly string[]
   hostBridge?: Partial<ProviderScriptHostBridge>
   clearRequireCache?: boolean
+  /** Provider 脚本运行时元数据探测的宿主级硬上限。 */
+  runtimeMetadataTimeoutMs?: number
 }
 
 export interface ProviderScriptInput {
@@ -97,6 +100,7 @@ export interface ProviderScriptRuntimeInput {
   model?: LooseOptional<string>
   config?: LooseOptional<ModelAdapterConfig>
   helpers: ProviderScriptHelpers
+  signal?: AbortSignal
 }
 
 export interface ProviderScriptHelpers {
@@ -171,6 +175,7 @@ const ProviderScriptRequire = createRequire(
 const BuiltInProviderIds = new Set<string>(
   ModelProviderOperationalManifests.map((manifest) => manifest.id)
 )
+const DefaultRuntimeMetadataTimeoutMs = 15_000
 
 function resolveProviderScriptDevConfigCandidates(
   cwd = process.cwd(),
@@ -205,6 +210,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
   private homeDir: string
   private configPaths: readonly string[]
   private readonly clearRequireCache: boolean
+  private readonly runtimeMetadataTimeoutMs: number
   private hostBridge: Partial<ProviderScriptHostBridge>
   private loaded = false
   private activeConfigPath: Nullable<string> = null
@@ -217,6 +223,8 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
       options.configPaths ?? resolveProviderScriptDevConfigCandidates(this.cwd, this.homeDir)
     this.hostBridge = options.hostBridge ?? {}
     this.clearRequireCache = options.clearRequireCache ?? true
+    this.runtimeMetadataTimeoutMs =
+      toPositiveInteger(options.runtimeMetadataTimeoutMs) ?? DefaultRuntimeMetadataTimeoutMs
   }
 
   public configureHost(hostBridge: Partial<ProviderScriptHostBridge>): void {
@@ -360,22 +368,39 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
 
   public async resolveRuntimeMetadata(
     config: ModelAdapterConfig,
-    model: string
+    model: string,
+    signal?: AbortSignal
   ): Promise<Nullable<ProviderScriptRuntimeMetadata>> {
     const script = this.requireProviderScript(config.provider)
-    if (!script.definition.resolveRuntimeMetadata) return null
+    const resolveRuntimeMetadata = script.definition.resolveRuntimeMetadata
+    if (!resolveRuntimeMetadata) return null
 
-    return normalizeRuntimeMetadata(
-      await script.definition.resolveRuntimeMetadata({
-        provider: config.provider,
-        apiKey: config.apiKey,
-        baseURL: config.baseURL,
-        defaultModel: model,
-        model,
-        config,
-        helpers: script.helpers,
-      })
-    )
+    const timers = new TimerScope({ name: 'ProviderScriptRuntimeMetadata' })
+    try {
+      return normalizeRuntimeMetadata(
+        await timers.withTimeout(
+          this.runtimeMetadataTimeoutMs,
+          (operationSignal) =>
+            resolveRuntimeMetadata({
+              provider: config.provider,
+              apiKey: config.apiKey,
+              baseURL: config.baseURL,
+              defaultModel: model,
+              model,
+              config,
+              helpers: script.helpers,
+              signal: operationSignal,
+            }),
+          {
+            signal,
+            timeoutMessage: `Provider script runtime metadata timed out after ${this.runtimeMetadataTimeoutMs}ms.`,
+            unref: true,
+          }
+        )
+      )
+    } finally {
+      timers.dispose()
+    }
   }
 
   public async fetchTavily(

@@ -44,7 +44,8 @@ export interface ProviderScriptRegistryPort {
   ): Promise<ProviderModelCatalogEntry[]>
   resolveRuntimeMetadata(
     config: ModelAdapterConfig,
-    model: string
+    model: string,
+    signal?: AbortSignal
   ): Promise<Nullable<ProviderScriptRuntimeMetadata>>
   fetchTavily(
     path: '/api/tavily/search' | '/api/tavily/extract',

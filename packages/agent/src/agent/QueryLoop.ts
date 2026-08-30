@@ -186,7 +186,8 @@ interface QueryLoopRuntime {
   createAgentProvider(input: unknown): QueryTurnProvider
   resolveRoleRuntime(
     selection: unknown,
-    runtimeContext?: unknown
+    runtimeContext?: unknown,
+    signal?: AbortSignal
   ): Promise<QueryLoopRoleRuntime>
 }
 
@@ -351,7 +352,10 @@ class QueryLoop<
         }
       : await this.runtimeHelper.resolveRoleRuntime(
           args.chatConfig.modelSelection,
-          args.systemConfig.modelRuntimeContext
+          args.systemConfig.modelRuntimeContext,
+          args.opts.workerAbortSignal
+            ? AbortSignal.any([args.parentCtx.abortSignal, args.opts.workerAbortSignal])
+            : args.parentCtx.abortSignal
         )
     const delegationPolicy = resolveCapabilityDelegationPolicy(args.parentCtx.capabilityPorts)
     const { allowedTools, allowedCategories } = resolveSubAgentToolScope({

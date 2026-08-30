@@ -32,11 +32,13 @@ class ModelRuntime implements RunnerModelRuntimePort {
 
   public resolveRoleRuntime(
     config: Parameters<RunnerModelCapabilityPort['resolveRoleRuntime']>[0],
-    systemRuntimeConfig: Parameters<RunnerModelCapabilityPort['resolveRoleRuntime']>[1]
+    systemRuntimeConfig: Parameters<RunnerModelCapabilityPort['resolveRoleRuntime']>[1],
+    signal?: AbortSignal
   ): Promise<RunnerResolvedAgentRuntime> {
     return this.modelCapability.resolveRoleRuntime(
       asRecord(config)?.modelSelection ?? config,
-      asRecord(systemRuntimeConfig)?.modelRuntimeContext ?? systemRuntimeConfig
+      asRecord(systemRuntimeConfig)?.modelRuntimeContext ?? systemRuntimeConfig,
+      signal
     )
   }
 

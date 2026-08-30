@@ -46,11 +46,13 @@ class AgentModelRuntime {
 
   public async resolveRoleRuntime(
     selection: unknown,
-    runtimeContext?: unknown
+    runtimeContext?: unknown,
+    signal?: AbortSignal
   ) {
     return this.modelResolver.resolve(
       parseModelSelection(selection),
-      parseModelRuntimeContext(runtimeContext)
+      parseModelRuntimeContext(runtimeContext),
+      signal
     )
   }
 }

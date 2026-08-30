@@ -185,7 +185,8 @@ type SoloLoopToolContext = StreamTurnToolContext &
 interface SoloLoopRuntime<TEvents extends SoloLoopEvents> {
   resolveRoleRuntime(
     selection: unknown,
-    runtimeContext?: unknown
+    runtimeContext?: unknown,
+    signal?: AbortSignal
   ): Promise<SoloLoopRoleRuntime>
   handleStreamError(
     error: unknown,
@@ -518,9 +519,11 @@ class SoloStreamLoop<
       }
 
       // 通过宿主注入的 model port 解析本轮实际 provider/model；Agent Runtime 不持有具体 Model 实现。
+      args.events.emitRuntime(ChatRuntimeEvents.phase('preparing'))
       const resolvedRoleRuntime = await this.runtimeHelper.resolveRoleRuntime(
         args.config,
-        args.systemConfig
+        args.systemConfig,
+        args.abortController.signal
       )
       const roleRuntime: SoloLoopRoleRuntime = {
         ...resolvedRoleRuntime,

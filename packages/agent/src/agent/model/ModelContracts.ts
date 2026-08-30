@@ -46,6 +46,7 @@ export interface AgentModelResolverPort {
   createAgentProvider(selection: unknown): AgentModelProvider
   resolveRoleRuntime(
     selection: unknown,
-    runtimeContext?: unknown
+    runtimeContext?: unknown,
+    signal?: AbortSignal
   ): Promise<ResolvedAgentModelRuntime>
 }

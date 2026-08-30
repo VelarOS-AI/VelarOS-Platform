@@ -89,7 +89,8 @@ class AgentModelResolver {
 
   public async resolve(
     selection: ModelSelection,
-    runtimeContext: ModelRuntimeContext
+    runtimeContext: ModelRuntimeContext,
+    signal?: AbortSignal
   ): Promise<ResolvedAgentModelRuntime> {
     const modelResolution = this.providers.resolveModelSelection(
       selection.provider,
@@ -143,6 +144,7 @@ class AgentModelResolver {
       adapter,
       resolutionTrace: trace,
       fallbackReason,
+      signal,
     })
   }
 
@@ -183,6 +185,7 @@ class AgentModelResolver {
     adapter?: LooseOptional<AgentProviderAdapterConfig>
     resolutionTrace: ResolvedAgentModelRuntime['resolutionTrace']
     fallbackReason?: string
+    signal?: AbortSignal
   }): Promise<ResolvedAgentModelRuntime> {
     const resolvedModel = this.resolveRuntimeModel(
       input.providerId,
@@ -197,6 +200,7 @@ class AgentModelResolver {
       adapter: input.adapter,
       thinkingDepth: input.thinkingDepth,
       reasoningLevel: input.reasoningLevel,
+      signal: input.signal,
     })
     const runtimeModel =
       providerScriptMetadata?.providerModel
@@ -350,6 +354,7 @@ class AgentModelResolver {
     adapter: LooseOptional<AgentProviderAdapterConfig>
     thinkingDepth: LooseOptional<ThinkingDepth>
     reasoningLevel: LooseOptional<ReasoningLevel>
+    signal?: AbortSignal
   }): Promise<Nullable<ProviderScriptRuntimeMetadata>> {
     const manifest = this.providers.requireOperationalManifest(input.providerId)
     if (manifest.adapterKind !== 'provider-script') return null
@@ -364,9 +369,11 @@ class AgentModelResolver {
           thinkingDepth: input.thinkingDepth,
           reasoningLevel: toNullable(input.reasoningLevel),
         },
-        input.model
+        input.model,
+        input.signal
       )
     } catch (error) {
+      if (input.signal?.aborted) throw input.signal.reason ?? error
       const fallbackReason =
         `${manifest.label} provider script metadata unavailable: ${AppError.getMessage(error)}`
       this.log.warn('provider script model context fallback', {
