@@ -181,6 +181,34 @@ export function mergeChatInputFiles(currentFiles: File[], nextFiles: Iterable<Fi
   return mergedFiles
 }
 
+export interface ChatInputAttachmentBackspaceInput {
+  key: string
+  value: string
+  fileCount: number
+  canChangeFiles: boolean
+  isComposing: boolean
+  hasModifier: boolean
+}
+
+/** 空输入框里的无修饰退格键属于附件栈：每次移除最后加入的一项。 */
+export function shouldRemoveLastChatInputFile({
+  key,
+  value,
+  fileCount,
+  canChangeFiles,
+  isComposing,
+  hasModifier,
+}: ChatInputAttachmentBackspaceInput): boolean {
+  return (
+    key === 'Backspace' &&
+    value.length === 0 &&
+    fileCount > 0 &&
+    canChangeFiles &&
+    !isComposing &&
+    !hasModifier
+  )
+}
+
 export function hasDraggedFiles(dataTransfer?: LooseOptional<DataTransfer>): boolean {
   if (!dataTransfer) return false
   return Array.from(dataTransfer.items).some((item) => item.kind === 'file')

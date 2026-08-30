@@ -71,7 +71,11 @@ import type {
   ChatInputThinkingVisibilityControl,
   ChatVirtualPasteReference,
 } from './chatInputTypes'
-import { formatChatInputFileSize, hasDraggedFiles } from './chatInputUtils'
+import {
+  formatChatInputFileSize,
+  hasDraggedFiles,
+  shouldRemoveLastChatInputFile,
+} from './chatInputUtils'
 import type { ChatComposerCapabilityControl } from './ComposerCapabilityControls'
 import { ComposerDropOverlay } from './ComposerDropOverlay'
 import { ComposerFilePreview } from './ComposerFilePreview'
@@ -1238,6 +1242,20 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
                   }
                 }}
                 onKeyDown={(event) => {
+                  if (
+                    shouldRemoveLastChatInputFile({
+                      key: event.key,
+                      value,
+                      fileCount: files.length,
+                      canChangeFiles: !!onFilesChange && !composerDisabled,
+                      isComposing: isComposing.current || event.nativeEvent.isComposing,
+                      hasModifier: event.shiftKey || event.altKey || event.metaKey || event.ctrlKey,
+                    })
+                  ) {
+                    event.preventDefault()
+                    handleRemoveFile(files.length - 1)
+                    return
+                  }
                   if (mentionMenu.handleKeyDown(event)) return
                   if (slashSkillMenu.handleKeyDown(event)) return
                   if (!isComposing.current && handleInlineSuggestionKeyDown(event)) return

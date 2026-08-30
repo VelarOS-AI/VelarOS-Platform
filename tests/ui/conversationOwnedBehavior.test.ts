@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 import { resolveChatSurfaceComposerDensity } from '../../packages/ui/src/conversation/composer/ChatSurfaceComposer'
+import { shouldRemoveLastChatInputFile } from '../../packages/ui/src/conversation/composer/chatInputUtils'
 import { filterComposerMenuPluginOptions } from '../../packages/ui/src/conversation/composer/hooks/buildChatInputComposerAddMenuProps'
 import {
   NoNextStepSuggestionHighlightIndex,
@@ -62,6 +63,25 @@ function createDraftTarget(input: {
 }
 
 void describe('Platform-owned conversation composer behavior', () => {
+  void test('uses Backspace to remove the last attachment only after text is empty', () => {
+    const base = {
+      key: 'Backspace',
+      value: '',
+      fileCount: 2,
+      canChangeFiles: true,
+      isComposing: false,
+      hasModifier: false,
+    }
+
+    assert.equal(shouldRemoveLastChatInputFile(base), true)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, value: 'a' }), false)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, fileCount: 0 }), false)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, canChangeFiles: false }), false)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, isComposing: true }), false)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, hasModifier: true }), false)
+    assert.equal(shouldRemoveLastChatInputFile({ ...base, key: 'Delete' }), false)
+  })
+
   void test('derives one composer density policy from the shared conversation surface variant', () => {
     assert.equal(resolveChatSurfaceComposerDensity({ variant: 'default' }), 'default')
     assert.equal(resolveChatSurfaceComposerDensity({ variant: 'side' }), 'compact')
