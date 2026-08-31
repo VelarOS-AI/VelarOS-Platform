@@ -1,6 +1,6 @@
 import type { Connection, Table } from '@lancedb/lancedb'
 
-import { first, isBlank, isEmpty, isPresent,toNullable } from '@velaros-ai/core'
+import { first, isBlank, isEmpty, isNumber, isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -362,7 +362,7 @@ class KnowledgeVectors {
     const vectorField = schema.fields.find((field) => field.name === 'vector')
     if (!vectorField) return null
     const listSize = (vectorField.type as { listSize?: unknown }).listSize
-    return typeof listSize === 'number' && Number.isInteger(listSize) && listSize > 0
+    return isNumber(listSize) && Number.isInteger(listSize) && listSize > 0
       ? listSize
       : null
   }
