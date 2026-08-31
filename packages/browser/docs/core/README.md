@@ -9,8 +9,7 @@
 
 - `BrowserPageDriver` 契约本体;
 - CDP 页面驱动(`CdpBrowserPageDriver` + `CdpWebSocketTransport`);
-- 外部 / 内置浏览器启动器(`CdpExternalBrowserLauncher`、`CloakBrowserLauncher`、
-  `CloakBrowserRuntimeResolver`);
+- 外部浏览器启动器(`CdpExternalBrowserLauncher`);
 - 全部页面**脚本构建器**(`BrowserPageScriptBuilder` 一族);
 - CDP 网络 / 模拟 / 性能追踪控制器;
 - 挂起事件 broker、工作区产物管理器、共享纯函数;
@@ -107,7 +106,7 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
 ## 依赖注入
 
 `CdpBrowserRuntime` 必须注入 `artifactAccess`(产物列举 / 读 / 写的最小文件端口)
-与 `scripts`(`BrowserPageScriptBuilder`);前后台 `BrowserExternalPageLauncher` 可选。
+与 `scripts`(`BrowserPageScriptBuilder`);`BrowserExternalPageLauncher` 可选。
 `CdpExternalBrowserLauncher` 的进程、文件系统、网络、时钟与 driver 连接**都可替换**,
 方便测试与非标准宿主接入。
 
@@ -116,7 +115,6 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
 - 实现 `BrowserPageDriver` → 接入新的浏览器后端;
 - 实现 `BrowserExternalPageLauncher` → 接入远程浏览器或容器;
 - 实现 `CdpWorkspaceFileAccess` → 接入对象存储、沙箱或虚拟文件系统;
-- 注入 `BrowserResourceRuntimeRegistry` → 接入自定义资源目录。
 
 ## 用法
 

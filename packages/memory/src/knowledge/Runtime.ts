@@ -52,7 +52,8 @@ export class DefaultKnowledgeRuntime implements KnowledgeRuntime {
     const vectorFailures = new VectorFailureMonitor()
     this.knowledgeVectors = new KnowledgeVectors(
       new KnowledgeVectorQuery(),
-      providers.storagePathProvider
+      providers.storagePathProvider,
+      providers.loadLanceDb
     )
     this.vectorStore = this.knowledgeVectors
     const mutationService = new KnowledgeMutation(

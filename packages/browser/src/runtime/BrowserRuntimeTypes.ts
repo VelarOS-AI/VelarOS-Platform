@@ -82,7 +82,6 @@ export interface BrowserExternalPageLauncher {
 export interface ElectronBrowserRuntimeOptions {
   createPageDriver?: BrowserPageDriverFactory
   externalBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
-  backgroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
   /** 可见页面优先使用的操作系统原生指针；返回 false 时由浏览器绘制统一兜底箭头。 */
   systemPointerDriver?: LooseOptional<BrowserSystemPointerDriver>
   onSessionSiteChange?: (

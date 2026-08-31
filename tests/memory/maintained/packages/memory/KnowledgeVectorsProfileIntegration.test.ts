@@ -7,8 +7,10 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import Database from 'better-sqlite3'
 
@@ -27,6 +29,11 @@ import {
 } from '@velaros-ai/memory/knowledge'
 
 let storagePath = ''
+const memoryPackageRequire = createRequire(resolve('packages/memory/package.json'))
+
+function loadLanceDb() {
+  return import(pathToFileURL(memoryPackageRequire.resolve('@lancedb/lancedb')).href)
+}
 
 before(async () => {
   storagePath = await mkdtemp(join(tmpdir(), 'velaros-vector-profiles-'))
@@ -73,9 +80,13 @@ function buildChunk(model: string, content: string, vector: number[]) {
 }
 
 test('keeps profiles and revisions isolated in real LanceDB tables', async () => {
-  const store = new KnowledgeVectors(new KnowledgeVectorQuery(), {
-    getLanceDatabasePath: () => storagePath,
-  })
+  const store = new KnowledgeVectors(
+    new KnowledgeVectorQuery(),
+    {
+      getLanceDatabasePath: () => storagePath,
+    },
+    loadLanceDb
+  )
   await store.warmup()
   const runtimeA = {
     provider: 'openai' as KnowledgeEmbeddingProviderId,

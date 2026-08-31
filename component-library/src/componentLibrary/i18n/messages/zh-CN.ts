@@ -2129,8 +2129,6 @@ export const zhCNMessages = {
     pluginCodeGraphDescription: '工作台代码图谱、符号关系和代码智能工具的本地运行时。',
     pluginMarkItDownTitle: 'MarkItDown',
     pluginMarkItDownDescription: '把 Office、PDF、HTML 和文本类文件转换成 Markdown 的文档运行时。',
-    pluginCloakBrowserTitle: 'CloakBrowser',
-    pluginCloakBrowserDescription: '后台浏览器代理使用的代码驱动浏览器运行时。',
     pluginComputerUseTitle: 'Computer Use',
     pluginComputerUseDescription:
       '桌面控制运行时：自带 Python venv（截屏、鼠标键盘），装好后 Computer Use 才可用；不安装则桌面控制不可用。',

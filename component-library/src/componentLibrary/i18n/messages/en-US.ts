@@ -2227,9 +2227,6 @@ export const enUSMessages = {
     pluginMarkItDownTitle: 'MarkItDown',
     pluginMarkItDownDescription:
       'Document runtime that converts Office, PDF, HTML, and text-like files into Markdown.',
-    pluginCloakBrowserTitle: 'CloakBrowser',
-    pluginCloakBrowserDescription:
-      'Code-driven browser runtime used by background browser delegates.',
     pluginComputerUseTitle: 'Computer Use',
     pluginComputerUseDescription:
       'Desktop-control runtime with a self-contained Python venv (screenshots, mouse & keyboard). Install it to enable Computer Use; without it, desktop control is unavailable.',

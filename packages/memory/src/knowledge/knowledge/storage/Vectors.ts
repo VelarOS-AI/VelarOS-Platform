@@ -1,5 +1,4 @@
-import * as lancedb from '@lancedb/lancedb'
-import { DataType } from 'apache-arrow'
+import type { Connection, Table } from '@lancedb/lancedb'
 
 import { first, isBlank, isEmpty, isPresent,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -11,7 +10,11 @@ import {
   buildEmbeddingProfileIdentity,
   buildVectorStoreStats,
 } from '../../shared'
-import type { KnowledgeStoragePathProvider } from '../../Types'
+import type {
+  KnowledgeLanceDbLoader,
+  KnowledgeLanceDbModule,
+  KnowledgeStoragePathProvider,
+} from '../../Types'
 import type {
   KnowledgeEmbeddingProviderId,
   KnowledgeRecord,
@@ -49,9 +52,10 @@ interface KnowledgeVectorWriteResult {
  * 选择的分区，不会删除、重建或合并其它 profile 的向量。
  */
 class KnowledgeVectors {
-  /** LanceDB 连接，懒加载创建。 */
-  private connection: Nullable<lancedb.Connection> = null
-  private readonly tables = new Map<string, lancedb.Table>()
+  /** LanceDB 插件模块与连接均按需加载；未安装插件时保持 null。 */
+  private lanceDb: Nullable<KnowledgeLanceDbModule> = null
+  private connection: Nullable<Connection> = null
+  private readonly tables = new Map<string, Table>()
   private readonly knownTableNames = new Set<string>()
   /** 初始化共享 Promise，防止并发重复连接。 */
   private initializePromise: Nullable<Promise<void>> = null
@@ -61,11 +65,13 @@ class KnowledgeVectors {
 
   constructor(
     private readonly helper: KnowledgeVectorQuery,
-    private readonly storagePathProvider: KnowledgeStoragePathProvider
+    private readonly storagePathProvider: KnowledgeStoragePathProvider,
+    private readonly loadLanceDb?: KnowledgeLanceDbLoader
   ) {}
 
   /** 预热连接；模型切换和启动都不会遍历或重建向量。 */
   public async warmup(): Promise<void> {
+    if (!this.loadLanceDb) return
     await this.ensureInitialized()
   }
 
@@ -76,6 +82,7 @@ class KnowledgeVectors {
     this.knownTableNames.clear()
     this.connection?.close()
     this.connection = null
+    this.lanceDb = null
     this.initializePromise = null
     this.ensureIndexesPromises.clear()
     this.indexesReady.clear()
@@ -177,6 +184,14 @@ class KnowledgeVectors {
 
   /** 聚合所有保留 profile 表的只读诊断；不会借诊断触发重建。 */
   public async getStats(): Promise<KnowledgeVectorStoreStats> {
+    if (!this.loadLanceDb)
+      return {
+        path: this.storagePathProvider.getLanceDatabasePath(),
+        tableName: `${KNOWLEDGE_VECTOR_TABLE_PREFIX}*`,
+        rowCount: 0,
+        dimensions: null,
+        indices: [],
+      }
     await this.ensureInitialized()
     const tableNames = [...this.knownTableNames]
       .filter((name) => this.isKnowledgeVectorTable(name))
@@ -227,6 +242,9 @@ class KnowledgeVectors {
   private async ensureInitialized(): Promise<void> {
     if (this.connection) return
     if (this.initializePromise) return this.initializePromise
+    if (!this.loadLanceDb) {
+      throw new AppError('UNAVAILABLE', 'LanceDB 向量插件尚未安装或未启用')
+    }
 
     this.initializePromise = this.initialize()
       .catch((error) => {
@@ -244,7 +262,9 @@ class KnowledgeVectors {
 
   /** 连接后只登记当前 profile 协议的物理表。 */
   private async initialize(): Promise<void> {
-    this.connection = await lancedb.connect(this.storagePathProvider.getLanceDatabasePath())
+    if (!this.loadLanceDb) throw new AppError('UNAVAILABLE', 'LanceDB 向量插件尚未安装或未启用')
+    this.lanceDb = await this.loadLanceDb()
+    this.connection = await this.lanceDb.connect(this.storagePathProvider.getLanceDatabasePath())
     const tableNames = await this.connection.tableNames()
     tableNames
       .filter((tableName) => this.isKnowledgeVectorTable(tableName))
@@ -259,7 +279,7 @@ class KnowledgeVectors {
   }
 
   /** 按表名懒加载；不存在时返回 null。 */
-  private async getTable(tableName: string): Promise<Nullable<lancedb.Table>> {
+  private async getTable(tableName: string): Promise<Nullable<Table>> {
     await this.ensureInitialized()
     const cached = this.tables.get(tableName)
     if (cached) return cached
@@ -271,7 +291,7 @@ class KnowledgeVectors {
   }
 
   /** 使用第一批向量行创建 profile 专属表。 */
-  private async createTable(tableName: string, rows: KnowledgeVectorRow[]): Promise<lancedb.Table> {
+  private async createTable(tableName: string, rows: KnowledgeVectorRow[]): Promise<Table> {
     if (!this.connection) throw new AppError('UNKNOWN', 'LanceDB 连接尚未初始化')
 
     const table = await this.connection.createTable(tableName, rows)
@@ -281,7 +301,7 @@ class KnowledgeVectors {
   }
 
   /** 串行化单表索引创建。 */
-  private async ensureIndexes(tableName: string, table: lancedb.Table): Promise<void> {
+  private async ensureIndexes(tableName: string, table: Table): Promise<void> {
     if (this.indexesReady.has(tableName)) return
     const pending = this.ensureIndexesPromises.get(tableName)
     if (pending) return pending
@@ -298,14 +318,16 @@ class KnowledgeVectors {
   }
 
   /** 创建缺失的标量索引和向量索引。 */
-  private async ensureIndexesInternal(tableName: string, table: lancedb.Table): Promise<void> {
+  private async ensureIndexesInternal(tableName: string, table: Table): Promise<void> {
+    const lanceDb = this.lanceDb
+    if (!lanceDb) throw new AppError('UNAVAILABLE', 'LanceDB 向量插件尚未加载')
     const indices = await table.listIndices()
     const existingColumns = new Set(indices.flatMap((index) => index.columns))
 
     for (const { column, type } of KNOWLEDGE_VECTOR_SCALAR_INDEXES) {
       if (existingColumns.has(column)) continue
       await table.createIndex(column, {
-        config: type === 'btree' ? lancedb.Index.btree() : lancedb.Index.bitmap(),
+        config: type === 'btree' ? lanceDb.Index.btree() : lanceDb.Index.bitmap(),
         replace: false,
         waitTimeoutSeconds: KnowledgeIndexConfig.VECTOR_INDEX_WAIT_TIMEOUT_SECONDS,
       })
@@ -315,7 +337,7 @@ class KnowledgeVectors {
     if (rowCount < KnowledgeIndexConfig.VECTOR_INDEX_MIN_ROWS) return
     if (!existingColumns.has('vector')) {
       await table.createIndex('vector', {
-        config: lancedb.Index.ivfFlat({ distanceType: 'cosine' }),
+        config: lanceDb.Index.ivfFlat({ distanceType: 'cosine' }),
         replace: false,
         waitTimeoutSeconds: KnowledgeIndexConfig.VECTOR_INDEX_WAIT_TIMEOUT_SECONDS,
       })
@@ -324,7 +346,7 @@ class KnowledgeVectors {
   }
 
   /** 校验查询/写入向量维度是否与该 profile 表 schema 匹配。 */
-  private async assertVectorDimensions(table: lancedb.Table, dimensions: number): Promise<void> {
+  private async assertVectorDimensions(table: Table, dimensions: number): Promise<void> {
     const tableDimensions = await this.getVectorDimensions(table)
     if (!isPresent(tableDimensions) || tableDimensions === dimensions) return
 
@@ -335,11 +357,14 @@ class KnowledgeVectors {
   }
 
   /** 从 Arrow schema 读取固定长度向量维度。 */
-  private async getVectorDimensions(table: lancedb.Table): Promise<Nullable<number>> {
+  private async getVectorDimensions(table: Table): Promise<Nullable<number>> {
     const schema = await table.schema()
     const vectorField = schema.fields.find((field) => field.name === 'vector')
-    if (!vectorField || !DataType.isFixedSizeList(vectorField.type)) return null
-    return vectorField.type.listSize
+    if (!vectorField) return null
+    const listSize = (vectorField.type as { listSize?: unknown }).listSize
+    return typeof listSize === 'number' && Number.isInteger(listSize) && listSize > 0
+      ? listSize
+      : null
   }
 }
 

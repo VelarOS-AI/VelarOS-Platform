@@ -1,4 +1,4 @@
-// 域：外部浏览器（Chrome / CloakBrowser）的页面驱动——纯 CDP 实现的 `BrowserPageDriver`。
+// 域：外部 Chrome 页面的驱动——纯 CDP 实现的 `BrowserPageDriver`。
 //
 // **为什么需要这份导览**：本文件是「一个 CDP target = 一个 driver 实例」这条不变量的载体，
 // 同时承载订阅生命周期、下载状态机、对话框拦截与诊断缓冲四条独立时序。任一条单独读都会得出

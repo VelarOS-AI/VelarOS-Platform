@@ -41,7 +41,7 @@ export interface CdpWorkspaceFileAccess {
   ): Promise<WorkspaceWriteFileResult>
 }
 
-/** host-injected 依赖:工作区文件访问、脚本构建、前/后台 launcher。 */
+/** host-injected 依赖:工作区文件访问、脚本构建与外部浏览器 launcher。 */
 export interface CdpBrowserRuntimeOptions {
   /** 浏览器工作区文件访问（宿主按 member/site 注入数据根 browser 分区）。 */
   artifactAccess: CdpWorkspaceFileAccess
@@ -49,8 +49,6 @@ export interface CdpBrowserRuntimeOptions {
   scripts: BrowserPageScriptBuilder
   /** 前台可见外部浏览器 launcher（协助登录，`CdpExternalBrowserLauncher`）。 */
   foregroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
-  /** 后台 headless launcher（默认 `CloakBrowserLauncher`）。 */
-  backgroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
 }
 
 /**
@@ -73,7 +71,6 @@ export class CdpBrowserRuntime {
   private readonly pendingEvents = new BrowserPendingEventsBroker()
   private readonly artifactAccess: CdpWorkspaceFileAccess
   private readonly foregroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
-  private readonly backgroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
 
   /** 外部 CDP 页面会话注册表（headless 无 webview,全部是 external）。 */
   private readonly sessions = new Map<string, ExternalBrowserPageSession>()
@@ -115,7 +112,6 @@ export class CdpBrowserRuntime {
   constructor(options: CdpBrowserRuntimeOptions) {
     this.artifactAccess = options.artifactAccess
     this.foregroundBrowserLauncher = options.foregroundBrowserLauncher
-    this.backgroundBrowserLauncher = options.backgroundBrowserLauncher
     this.interaction = new CdpInteractionEngine(this.kernel, options.scripts, this.targetRefs)
     const diagnosticsLimits: BrowserDiagnosticsLimits = {
       maxEntries: CdpBrowserRuntimeMaxDiagnosticEntries,
@@ -156,14 +152,12 @@ export class CdpBrowserRuntime {
     this.performance.dispose()
   }
 
-  /** 暴露双 launcher 供宿主启动会话（前台协助登录 / 后台 headless）。 */
+  /** 暴露外部浏览器 launcher 供宿主启动会话。 */
   public getLaunchers(): {
     foreground: LooseOptional<BrowserExternalPageLauncher>
-    background: LooseOptional<BrowserExternalPageLauncher>
   } {
     return {
       foreground: this.foregroundBrowserLauncher,
-      background: this.backgroundBrowserLauncher,
     }
   }
 

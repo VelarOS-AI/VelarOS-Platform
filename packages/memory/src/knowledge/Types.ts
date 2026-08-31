@@ -25,6 +25,14 @@ export interface KnowledgeStoragePathProvider {
   getLanceDatabasePath: () => string
 }
 
+/**
+ * LanceDB 增强插件注入的最小模块端口。
+ * `@velaros-ai/memory` 只在真正需要向量读写时调用它；宿主未安装插件时省略该端口，知识库仍保留
+ * SQLite/FTS 文本检索与工作区摄入，不会因为原生库缺席而阻断启动。
+ */
+export type KnowledgeLanceDbModule = typeof import('@lancedb/lancedb')
+export type KnowledgeLanceDbLoader = () => Promise<KnowledgeLanceDbModule>
+
 export interface KnowledgeEmbeddingRuntime {
   /** Opaque provider identity. Knowledge does not know a model catalog. */
   provider: KnowledgeEmbeddingProviderId
@@ -211,6 +219,8 @@ export interface KnowledgeRuntimeProviders {
   httpClient: KnowledgeHttpClient
   databaseProvider: KnowledgeDatabaseProvider
   storagePathProvider: KnowledgeStoragePathProvider
+  /** 由 LanceDB 资源插件注入；缺席表示只启用文本检索。 */
+  loadLanceDb?: KnowledgeLanceDbLoader
   embeddingRequestFactory: EmbeddingRequestFactory
   codeIntelligence?: KnowledgeCodeIntelligenceApi
   indexingPolicy?: KnowledgeIndexingPolicy

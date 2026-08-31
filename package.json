@@ -170,7 +170,7 @@
     "@velaros-ai/system": "workspace:*",
     "@velaros-ai/ui": "workspace:*",
     "@velaros-ai/project": "workspace:*",
-    "better-sqlite3": "^12.11.1"
+    "better-sqlite3": "^13.0.3"
   },
   "repository": {
     "type": "git",

@@ -21,8 +21,8 @@
 //  - **`activityCoordinator` 是构造期单例依赖**：广播总线由宿主装配注入，刻意**不并入**
 //    `options` 回调袋——并进去会经 `setOptions` / `setCallbacks` 被反复重放。
 //
-// ## 三种页面后端，一条驱动接口（非显然的妥协）
-// 内嵌 WebContents / 外部 Chrome（CDP）/ 后台 CloakBrowser 都收敛到 `BrowserPageDriver`。
+// ## 两种页面后端，一条驱动接口（非显然的妥协）
+// 内嵌 WebContents / 外部 Chrome（CDP）都收敛到 `BrowserPageDriver`。
 // 外部会话住 `externalPageSessions`，不占 Electron WebContents。两类会话的状态刷新路径
 // （`refreshPageDriverSessionState` vs `refreshExternalPageState`）刻意分开：内嵌侧拿得到
 // Electron 原生事件，外部侧只能靠 CDP 回读，强行合并会让其中一侧退化成轮询。
@@ -46,7 +46,6 @@ import {
   type BrowserUserActivityWaitState,
   CdpExternalBrowserLauncher,
   type CdpExternalBrowserLaunchOptions,
-  CloakBrowserLauncher,
 } from '../core'
 import {
   getBrowserUrlCandidate,
@@ -151,8 +150,6 @@ class ElectronBrowserRuntime {
   private createPageDriver: BrowserPageDriverFactory
   /** 外部浏览器启动器，负责启动 Chrome/Chromium 并返回 page-level CDP driver。 */
   private externalBrowserLauncher: BrowserExternalPageLauncher
-  /** 后台浏览器启动器，默认使用 CloakBrowser/Playwright，不占用前台 WebView。 */
-  private backgroundBrowserLauncher: BrowserExternalPageLauncher
   /** 会话和 WebContents 事件管理器。 */
   private readonly sessionManager: BrowserSessionManager
   /** 外部浏览器页面会话；当前通过 CDP driver 接入，不依赖 Electron WebContents。 */
@@ -228,7 +225,6 @@ class ElectronBrowserRuntime {
     this.createPageDriver = options.createPageDriver ?? createElectronWebContentsBrowserPageDriver
     this.externalBrowserLauncher =
       options.externalBrowserLauncher ?? new CdpExternalBrowserLauncher()
-    this.backgroundBrowserLauncher = options.backgroundBrowserLauncher ?? new CloakBrowserLauncher()
     this.interaction.setSystemPointerDriver(options.systemPointerDriver)
     this.sessionManager = new BrowserSessionManager({
       callbacks: this.withActivityCallbacks(options),
@@ -245,9 +241,6 @@ class ElectronBrowserRuntime {
     }
     if (options.externalBrowserLauncher) {
       this.externalBrowserLauncher = options.externalBrowserLauncher
-    }
-    if (options.backgroundBrowserLauncher) {
-      this.backgroundBrowserLauncher = options.backgroundBrowserLauncher
     }
     if ('systemPointerDriver' in options) {
       this.interaction.setSystemPointerDriver(options.systemPointerDriver)
@@ -598,22 +591,6 @@ class ElectronBrowserRuntime {
       options,
       this.externalBrowserLauncher,
       { activate: true, visible: true },
-      abortSignal
-    )
-  }
-
-  public async launchBackgroundBrowserPage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: CdpExternalBrowserLaunchOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserPageWindowState> {
-    return this.launchBrowserPageWithLauncher(
-      sessionId,
-      context,
-      options,
-      this.backgroundBrowserLauncher,
-      { activate: false, visible: false },
       abortSignal
     )
   }
