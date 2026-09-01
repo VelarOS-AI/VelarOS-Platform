@@ -166,6 +166,15 @@ function checkRuntimeDependencyOwnership() {
     }
   }
 
+  const cliManifest = readJson(join(packageRoot, 'cli', 'package.json'))
+  for (const dependency of ['@velaros-ai/remote-host', '@velaros-ai/serve-host']) {
+    for (const section of [...runtimeSections, 'peerDependencies']) {
+      if (cliManifest[section]?.[dependency]) {
+        fail(`@velaros-ai/cli: retired host ${dependency} must not return through ${section}`)
+      }
+    }
+  }
+
   const rendererManifest = readJson(join(packageRoot, 'document-renderer', 'package.json'))
   for (const dependency of ['@napi-rs/canvas', 'pdfjs-dist']) {
     for (const section of [...runtimeSections, 'peerDependencies']) {

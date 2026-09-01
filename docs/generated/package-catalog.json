@@ -53,7 +53,7 @@
       "domain": "capabilities",
       "directory": "packages/cli",
       "name": "@velaros-ai/cli",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
       "exportSubpaths": [
         ".",
