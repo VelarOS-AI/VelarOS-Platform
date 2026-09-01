@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/computer",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "velaros": {
     "platform": "0.6"
   },
@@ -48,10 +48,12 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/computer"
   },
   "dependencies": {
-    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

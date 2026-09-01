@@ -97,7 +97,7 @@ const computer: ToolComputerApi = {
 ## 边界:本包不负责什么
 
 - **不做权限决策、不实现审批 UI**——确认流程住宿主,本包只要求 context 里有确认端口。
-- **不拥有产品 IPC、不依赖 `@velaros-ai/agent`**。工具只定义自己和自己的 context 契约;
+- **不拥有产品 IPC，也不私有安装 `@velaros-ai/agent`**。工具只定义自己和自己的 context 契约;
   谁来执行、怎么排队、界面长什么样,由宿主组合。
 - **tools 切片不直接访问操作系统**,只经 `ToolComputerApi`;runtime 切片**不注册 agent 工具**。
 - 不打包 Python 解释器本身;`resolveHelper` 与 `spawnProcess` 都可被宿主整个替换,
@@ -106,7 +106,7 @@ const computer: ToolComputerApi = {
 ## 与相邻包的关系
 
 - 上游只有 `@velaros-ai/core`(错误模型、工具契约原语)与 `zod`。
-- 与 `@velaros-ai/agent` 是**被注入关系**:本包不 import 它,宿主在装配根把 `computerTools`
+- 与 `@velaros-ai/agent` 是**宿主 peer 关系**：本包只引用统一的工具契约，宿主在装配根把 `computerTools`
   注册进 agent 运行时。
 - `src/runtime/kernel-module.ts` 提供可选的 Kernel 模块适配器(`createComputerKernelModule`),
   默认**不接管**调用方注入的 runtime 生命周期。

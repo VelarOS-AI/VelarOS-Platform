@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/project",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "velaros": {
     "platform": "0.6"
   },
@@ -73,7 +73,6 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "diff": "^8.0.4",
@@ -82,6 +81,9 @@
     "picomatch": "^4.0.3",
     "typescript": "^5.0.0",
     "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

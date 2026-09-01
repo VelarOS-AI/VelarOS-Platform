@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/development",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "velaros": {
     "platform": "0.6"
   },
@@ -40,10 +40,12 @@
   },
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
-    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/project": "workspace:*",
     "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

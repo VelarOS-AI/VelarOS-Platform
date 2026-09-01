@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/document-renderer",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "velaros": {
     "platform": "0.6",
@@ -38,9 +38,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/document-renderer"
   },
   "dependencies": {
-    "@napi-rs/canvas": "1.0.8",
     "@velaros-ai/office": "workspace:*",
-    "pdfjs-dist": "5.4.394",
     "zod": "^4.3.6"
   },
   "devDependencies": {

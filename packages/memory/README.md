@@ -102,7 +102,7 @@ const items = memory.domain.recall('技术说明偏好')
 
 ## 边界:本包不负责什么
 
-- **不依赖 `@velaros-ai/agent`**、不碰 Desktop IPC、不碰渲染层代码、不认识应用私有的提示词 manifest。
+- **不私有安装 `@velaros-ai/agent`**、不碰 Desktop IPC、不碰渲染层代码、不认识应用私有的提示词 manifest；Agent 契约由宿主 peer 提供。
 - 根入口**不依赖 `/knowledge`**;工作区知识与嵌入是那边的事。
 - **不拥有数据库连接**:打开、事务调度、关闭都归宿主;写入串行化也由宿主在数据库层做,
   领域方法**不创建隐藏的全局锁**。

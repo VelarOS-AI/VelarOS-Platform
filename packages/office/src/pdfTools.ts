@@ -46,6 +46,8 @@ export interface PdfjsModule {
       numPages: number
       getPage(pageNumber: number): Promise<{
         getTextContent(): Promise<{ items: Array<{ str?: string }> }>
+        getViewport(input: { scale: number }): { width: number; height: number }
+        render(input: Record<string, unknown>): { promise: Promise<void> }
       }>
     }>
     destroy(): Promise<void> | void
@@ -71,7 +73,7 @@ export type PdfjsNodeGlobals = {
  * 「可选三成员」的视图，其余代码只跟这个视图打交道，不再各自断言。
  */
 function readPdfjsNodeGlobals(): PdfjsNodeGlobals {
-  return globalThis
+  return globalThis as PdfjsNodeGlobals
 }
 
 // 确保 Node 进程拥有 pdfjs 需要的 DOMMatrix/ImageData/Path2D 全局对象。
@@ -194,7 +196,7 @@ export async function ensurePdfjsNodeGlobals(): Promise<void> {
 // 懒加载 pdfjs，并在加载前准备好 Node 运行时的图形全局对象。
 export async function loadPdfjs(): Promise<PdfjsModule> {
   await ensurePdfjsNodeGlobals()
-  const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   if (!isPdfjsModule(pdfjs)) {
     throw new AppError('EXECUTION_FAILED', 'pdfjs-dist did not expose getDocument.')
   }

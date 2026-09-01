@@ -56,8 +56,8 @@ if (
 ) {
   fail('@velaros-ai/project/agent must expose the integrated Agent adapter')
 }
-if (manifest.dependencies?.['@velaros-ai/agent'] !== 'workspace:*') {
-  fail('@velaros-ai/project must depend on the grouped @velaros-ai/agent package')
+if (manifest.peerDependencies?.['@velaros-ai/agent'] !== 'workspace:*') {
+  fail('@velaros-ai/project must use the host-owned @velaros-ai/agent peer')
 }
 if (
   manifest.publishConfig?.access !== 'public'

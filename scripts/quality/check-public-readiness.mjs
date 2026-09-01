@@ -130,6 +130,54 @@ function checkPackageMetadata() {
   }
 }
 
+function checkRuntimeDependencyOwnership() {
+  const runtimeSections = ['dependencies', 'optionalDependencies']
+  const capabilityDirectories = readdirSync(packageRoot)
+    .filter((directory) => existsSync(join(packageRoot, directory, 'package.json')))
+
+  for (const directory of capabilityDirectories) {
+    const manifest = readJson(join(packageRoot, directory, 'package.json'))
+    if (manifest.name !== '@velaros-ai/agent') {
+      for (const section of runtimeSections) {
+        if (manifest[section]?.['@velaros-ai/agent']) {
+          fail(
+            `${manifest.name}: @velaros-ai/agent must be a peer owned by the host, not a private ${section} runtime`,
+          )
+        }
+      }
+    }
+
+    for (const section of runtimeSections) {
+      for (const dependency of Object.keys(manifest[section] ?? {})) {
+        if (/^(?:@huggingface\/transformers|onnxruntime(?:-|$))/u.test(dependency)) {
+          fail(`${manifest.name}: optional inference stack must not be a bundled ${section} dependency (${dependency})`)
+        }
+      }
+    }
+  }
+
+  const memoryManifest = readJson(join(packageRoot, 'memory', 'package.json'))
+  if (memoryManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2') {
+    fail('@velaros-ai/memory: LanceDB must remain an injected peer runtime')
+  }
+  for (const section of runtimeSections) {
+    if (memoryManifest[section]?.['@lancedb/lancedb']) {
+      fail(`@velaros-ai/memory: LanceDB must not be installed through ${section}`)
+    }
+  }
+
+  const rendererManifest = readJson(join(packageRoot, 'document-renderer', 'package.json'))
+  for (const dependency of ['@napi-rs/canvas', 'pdfjs-dist']) {
+    for (const section of [...runtimeSections, 'peerDependencies']) {
+      if (rendererManifest[section]?.[dependency]) {
+        fail(
+          `@velaros-ai/document-renderer: ${dependency} belongs to @velaros-ai/office and must not be duplicated in ${section}`,
+        )
+      }
+    }
+  }
+}
+
 function checkTextHygiene() {
   for (const filePath of walk(repositoryRoot).filter(isTextFile)) {
     const content = readFileSync(filePath, 'utf8')
@@ -170,6 +218,7 @@ function checkMarkdownLinks() {
 
 checkRootFiles()
 checkPackageMetadata()
+checkRuntimeDependencyOwnership()
 checkTextHygiene()
 checkMarkdownLinks()
 

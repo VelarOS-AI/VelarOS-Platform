@@ -80,7 +80,7 @@ Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
 
 ## 边界:本包不负责什么
 
-- **不注册产品 IPC、不拥有聊天 / 会话编排、不 import 渲染进程代码、不依赖 `@velaros-ai/agent`。**
+- **不注册产品 IPC、不拥有聊天 / 会话编排、不 import 渲染进程代码，也不私有安装 `@velaros-ai/agent`。**
 - **Electron 只许在 `src/runtime/**` 下 import**(值和类型都算)——capability 架构门机械执法。
   另外三个切片保持 host 无关。
 - **跨切片访问走包内相对 import**(`src/tools` → `../core`),**永远不走包说明符**。
@@ -90,7 +90,7 @@ Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
 ## 与相邻包的关系
 
 - 上游只有 `@velaros-ai/core` 与 `zod`(外加 `gifenc` 用于录屏编码)。
-- 与 `@velaros-ai/agent` 是**被注入关系**:本包不 import 它,宿主在装配根把 `browserTools`
+- 与 `@velaros-ai/agent` 是**宿主 peer 关系**：本包只引用统一的工具契约，宿主在装配根把 `browserTools`
   注册进 agent 运行时。
 - `src/runtime/kernel-module.ts` 提供可选的 Kernel 模块适配器。
 - `vendor/devtools-performance-engine` 是随包发布的性能分析引擎产物,由 `browser:performance` 消费。

@@ -1,16 +1,14 @@
-import { readFile, stat, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
-import { dirname, extname, join } from 'node:path'
+import { stat, writeFile } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas'
-
-import { Log } from '@velaros-ai/core'
 import {
   buildOfficePreviewHtml,
+  OfficePdfPageRenderError,
   type OfficePreviewKind,
   parseOfficePreview,
   renderOfficePreviewPng,
+  renderPdfPagePng,
 } from '@velaros-ai/office/renderer'
 
 import { resolveRendererPaths } from './path-policy'
@@ -26,7 +24,6 @@ const OfficeInputKinds = new Map<string, OfficePreviewKind>([
   ['.xlsx', 'xlsx'],
 ])
 const MaximumPdfPixels = 40_000_000
-const require = createRequire(import.meta.url)
 
 export class UnsupportedRendererFormatError extends Error {
   public constructor(message: string) {
@@ -112,16 +109,7 @@ export async function renderOfficeDocument(input: {
 function pdfStandardFontDataUrl(): string | undefined {
   const resourcesRoot = process.env.VELAROS_DOCUMENT_RENDERER_RESOURCES_ROOT?.trim()
   if (resourcesRoot) return `${pathToFileURL(join(resourcesRoot, 'pdfjs-standard-fonts')).href}/`
-  try {
-    const packagePath = require.resolve('pdfjs-dist/package.json')
-    return `${pathToFileURL(join(dirname(packagePath), 'standard_fonts')).href}/`
-  } catch (error) {
-    Log.tag('DocumentRenderer').warn(
-      '未找到 PDF.js 标准字体目录，将继续使用 PDF.js 的默认字体策略。',
-      { error },
-    )
-    return undefined
-  }
+  return undefined
 }
 
 export async function renderPdfPage(input: {
@@ -139,48 +127,29 @@ export async function renderPdfPage(input: {
     throw new UnsupportedRendererFormatError('render-pdf-page output must be a .png file.')
   }
 
-  Object.assign(globalThis, { DOMMatrix, ImageData, Path2D })
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const task = pdfjs.getDocument({
-    data: new Uint8Array(await readFile(paths.inputPath)),
-    isEvalSupported: false,
-    standardFontDataUrl: pdfStandardFontDataUrl(),
-    useWorkerFetch: false,
-  })
-  const document = await task.promise
   try {
-    const pageNumber = input.page ?? 1
-    if (pageNumber > document.numPages) {
-      throw new UnsupportedRendererFormatError(
-        `PDF contains ${document.numPages} page(s); requested page ${pageNumber}.`,
-      )
-    }
-    const page = await document.getPage(pageNumber)
-    const scale = input.scale ?? 1.5
-    const viewport = page.getViewport({ scale })
-    const width = Math.max(1, Math.ceil(viewport.width))
-    const height = Math.max(1, Math.ceil(viewport.height))
-    if (width * height > MaximumPdfPixels) {
-      throw new UnsupportedRendererFormatError(
-        `Rendered PDF page exceeds the ${MaximumPdfPixels.toLocaleString('en-US')} pixel safety limit.`,
-      )
-    }
-    const canvas = createCanvas(width, height)
-    const context = canvas.getContext('2d')
-    await page.render({ canvasContext: context, viewport }).promise
-    const buffer = canvas.toBuffer('image/png')
-    await writeFile(paths.outputPath, buffer)
+    const rendered = await renderPdfPagePng({
+      inputPath: paths.inputPath,
+      maximumPixels: MaximumPdfPixels,
+      page: input.page,
+      scale: input.scale,
+      standardFontDataUrl: pdfStandardFontDataUrl(),
+    })
+    await writeFile(paths.outputPath, rendered.buffer)
     return {
       kind: 'png',
       path: paths.outputPath,
-      bytes: buffer.byteLength,
-      width,
-      height,
-      page: pageNumber,
-      pageCount: document.numPages,
-      scale,
+      bytes: rendered.buffer.byteLength,
+      width: rendered.width,
+      height: rendered.height,
+      page: rendered.page,
+      pageCount: rendered.pageCount,
+      scale: rendered.scale,
     }
-  } finally {
-    await document.destroy()
+  } catch (error) {
+    if (error instanceof OfficePdfPageRenderError) {
+      throw new UnsupportedRendererFormatError(error.message)
+    }
+    throw error
   }
 }

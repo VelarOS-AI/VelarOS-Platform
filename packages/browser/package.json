@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/browser",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "velaros": {
     "platform": "0.6"
   },
@@ -67,13 +67,13 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser"
   },
   "dependencies": {
-    "@velaros-ai/agent": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "gifenc": "^1.0.3",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
+    "@velaros-ai/agent": "workspace:*",
     "@types/react": "^19.0.0",
     "electron": ">=41.0.0",
     "react": "^19.0.0"
