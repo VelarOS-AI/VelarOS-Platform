@@ -217,7 +217,7 @@
       "domain": "memory",
       "directory": "packages/memory",
       "name": "@velaros-ai/memory",
-      "version": "0.3.8",
+      "version": "0.3.9",
       "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
       "exportSubpaths": [
         ".",
