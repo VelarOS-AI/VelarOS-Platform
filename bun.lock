@@ -217,7 +217,7 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "dependencies": {
         "@velaros-ai/agent": "workspace:*",
         "@velaros-ai/core": "workspace:*",

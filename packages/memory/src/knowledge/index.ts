@@ -31,6 +31,8 @@ export type {
   KnowledgeEmbeddingRuntime,
   KnowledgeHttpClient,
   KnowledgeIndexingPolicy,
+  KnowledgeLanceDbLoader,
+  KnowledgeLanceDbModule,
   KnowledgeProjectApi,
   KnowledgeRuntimeProviders,
   KnowledgeStoragePathProvider,
