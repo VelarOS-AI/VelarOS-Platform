@@ -1,4 +1,4 @@
-import type { Connection, Table } from '@lancedb/lancedb'
+import type { Table } from '@lancedb/lancedb'
 
 import { first, isBlank, isEmpty, isNumber, isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -11,6 +11,7 @@ import {
   buildVectorStoreStats,
 } from '../../shared'
 import type {
+  KnowledgeLanceDbConnection,
   KnowledgeLanceDbLoader,
   KnowledgeLanceDbModule,
   KnowledgeStoragePathProvider,
@@ -54,7 +55,7 @@ interface KnowledgeVectorWriteResult {
 class KnowledgeVectors {
   /** LanceDB 插件模块与连接均按需加载；未安装插件时保持 null。 */
   private lanceDb: Nullable<KnowledgeLanceDbModule> = null
-  private connection: Nullable<Connection> = null
+  private connection: Nullable<KnowledgeLanceDbConnection> = null
   private readonly tables = new Map<string, Table>()
   private readonly knownTableNames = new Set<string>()
   /** 初始化共享 Promise，防止并发重复连接。 */

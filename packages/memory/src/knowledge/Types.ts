@@ -1,3 +1,4 @@
+import type { Connection as LanceDbConnection } from '@lancedb/lancedb'
 import type BetterSqlite3 from 'better-sqlite3'
 
 import {
@@ -32,8 +33,13 @@ export interface KnowledgeStoragePathProvider {
  */
 type LanceDbPackage = typeof import('@lancedb/lancedb')
 
+export type KnowledgeLanceDbConnection = Pick<
+  LanceDbConnection,
+  'tableNames' | 'openTable' | 'createTable' | 'close'
+>
+
 export interface KnowledgeLanceDbModule {
-  connect: LanceDbPackage['connect']
+  connect: (path: string) => Promise<KnowledgeLanceDbConnection>
   Index: Pick<LanceDbPackage['Index'], 'btree' | 'bitmap' | 'ivfFlat'>
 }
 export type KnowledgeLanceDbLoader = () => Promise<KnowledgeLanceDbModule>
