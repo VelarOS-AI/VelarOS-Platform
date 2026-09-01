@@ -41,12 +41,15 @@ const manifestBinCommands = (manifest) => {
 // TypeScript is CommonJS today. Node and Bun expose its namespace/default interop differently
 // across platforms, so resolve the parser from either standards-compatible shape explicitly.
 export const resolveTypeScriptJsoncParser = (moduleNamespace) => {
-  const parser =
-    moduleNamespace.parseConfigFileTextToJson ?? moduleNamespace.default?.parseConfigFileTextToJson
-  if (typeof parser !== 'function') {
-    throw new TypeError('TypeScript does not expose parseConfigFileTextToJson')
+  let candidate = moduleNamespace
+  for (let depth = 0; depth < 3 && candidate; depth += 1) {
+    if (typeof candidate.parseConfigFileTextToJson === 'function') {
+      return candidate.parseConfigFileTextToJson
+    }
+    if (candidate.default === candidate) break
+    candidate = candidate.default
   }
-  return parser
+  throw new TypeError('TypeScript does not expose parseConfigFileTextToJson')
 }
 
 const parseConfigFileTextToJson = resolveTypeScriptJsoncParser(TypeScriptModule)

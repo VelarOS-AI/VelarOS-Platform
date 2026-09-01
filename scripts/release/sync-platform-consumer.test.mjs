@@ -18,6 +18,12 @@ test('resolves the TypeScript JSONC parser from namespace and default interop sh
     }),
     defaultParser,
   )
+  assert.equal(
+    resolveTypeScriptJsoncParser({
+      default: { default: { parseConfigFileTextToJson: defaultParser } },
+    }),
+    defaultParser,
+  )
 })
 
 test('preserves ordinary semver range intent while replacing the version', () => {
