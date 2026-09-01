@@ -47,8 +47,8 @@ export interface PdfjsModule {
       getPage(pageNumber: number): Promise<{
         getTextContent(): Promise<{ items: Array<{ str?: string }> }>
       }>
-      destroy(): Promise<void> | void
     }>
+    destroy(): Promise<void> | void
   }
 }
 
@@ -524,20 +524,19 @@ export async function extractPdfTextPages(
     standardFontDataUrl: getPdfjsStandardFontDataUrl(),
   })
   const document = await loadingTask.promise
+  const pageCount = document.numPages
   const requestedPages = options.pages
     ? [...new Set(options.pages)]
     : Array.from(
-        { length: Math.min(document.numPages, options.maxPages ?? document.numPages) },
+        { length: Math.min(pageCount, options.maxPages ?? pageCount) },
         (_, index) => index + 1
       )
-  const invalidPage = requestedPages.find(
-    (pageNumber) => pageNumber < 1 || pageNumber > document.numPages
-  )
+  const invalidPage = requestedPages.find((pageNumber) => pageNumber < 1 || pageNumber > pageCount)
   if (!isUndefined(invalidPage)) {
-    await document.destroy()
+    await loadingTask.destroy()
     throw new AppError(
       'VALIDATION',
-      `PDF 页码 ${invalidPage} 超出有效范围 1-${document.numPages}。`
+      `PDF 页码 ${invalidPage} 超出有效范围 1-${pageCount}。`
     )
   }
   const pages: ExtractedPdfTextPage[] = []
@@ -554,9 +553,9 @@ export async function extractPdfTextPages(
       pages.push({ page: pageNumber, text })
     }
   } finally {
-    await document.destroy()
+    await loadingTask.destroy()
   }
-  return { pageCount: document.numPages, pages }
+  return { pageCount, pages }
 }
 
 // 将用户传入的标题、作者、主题和关键词写入输出 PDF。
