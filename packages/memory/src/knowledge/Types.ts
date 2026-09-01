@@ -33,10 +33,15 @@ export interface KnowledgeStoragePathProvider {
  */
 type LanceDbPackage = typeof import('@lancedb/lancedb')
 
-export type KnowledgeLanceDbConnection = Pick<
-  LanceDbConnection,
-  'tableNames' | 'openTable' | 'createTable' | 'close'
->
+export interface KnowledgeLanceDbConnection {
+  tableNames: () => ReturnType<LanceDbConnection['tableNames']>
+  openTable: (name: string) => ReturnType<LanceDbConnection['openTable']>
+  createTable: (
+    name: string,
+    data: Parameters<LanceDbConnection['createTable']>[1]
+  ) => ReturnType<LanceDbConnection['createTable']>
+  close: () => void
+}
 
 export interface KnowledgeLanceDbModule {
   connect: (path: string) => Promise<KnowledgeLanceDbConnection>
