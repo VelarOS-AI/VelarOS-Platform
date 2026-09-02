@@ -2265,31 +2265,6 @@ export const enUSMessages = {
       'CodeGraph resource package is missing; graph and code intelligence features are disabled.',
     pluginReasonMarkItDownResourceMissing:
       'MarkItDown resource package is missing; document-to-Markdown conversion is disabled.',
-    cliConnectorTitle: 'External CLI connectors',
-    cliConnectorDescription:
-      'Connect local third-party CLIs (GitHub, Lark, Gmail, etc.) so the agent can call them directly: install with one guided step, authenticate when needed, and use them without any toggle once ready.',
-    cliConnectorLoading: 'Detecting CLI status…',
-    cliConnectorEmpty: 'No CLI connectors available.',
-    cliConnectorStatusChecking: 'Checking…',
-    cliConnectorStatusReady: 'Ready',
-    cliConnectorStatusMissing: 'Not installed',
-    cliConnectorStatusUnauthenticated: 'Not signed in',
-    cliConnectorStatusError: 'Error',
-    cliConnectorInstallAction: 'Install',
-    cliConnectorRetryAction: 'Retry install',
-    cliConnectorInstalling: 'Installing…',
-    cliConnectorInstallFailed: 'Install failed: {reason}',
-    cliConnectorInstallFailedNoCommand:
-      'No automatic install command for this platform; please install manually from the docs',
-    cliConnectorInstallTimeout: 'Install timed out; run the install command manually in a terminal',
-    cliConnectorAuthAction: 'Sign in',
-    cliConnectorAskModelAction: 'Let the model set it up',
-    cliConnectorInstallAskModelPrompt:
-      'Please install and configure the local CLI "{connector}" (executable {executable}): install it using the method for the current platform, guide me through authentication, then run its verification command to confirm it works.',
-    cliConnectorAuthAskModelPrompt:
-      'The local CLI "{connector}" (executable {executable}) is installed but not signed in. Guide me through authentication: provide the login command, handle any authorization URL it prints, and confirm once authenticated.',
-    cliConnectorUpstreamLink: 'View docs',
-    cliConnectorVersion: 'Version {version}',
     languageLabel: 'Interface language',
     languageHint: 'Switch the desktop interface language.',
     runStrategyLabel: 'Run strategy',
