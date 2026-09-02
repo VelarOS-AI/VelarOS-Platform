@@ -142,6 +142,25 @@ void describe('Platform-owned conversation composer behavior', () => {
     )
   })
 
+  void test('keeps the compact composer summary focused on the selected model', () => {
+    const selectorSource = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/composer/ComposerModelRunSelector.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    assert.match(
+      selectorSource,
+      /const selectedModelDisplayLabel =\s*modelRunSummary\?\.primaryLabel \?\?\s*selectedModelLabel;/u
+    )
+    assert.doesNotMatch(
+      selectorSource,
+      /\$\{visibleProvider\.label\}\s*\/\s*\$\{selectedModelLabel\}/u
+    )
+  })
+
   void test('keeps image attachment removal compact across Desktop and Workbench consumers', () => {
     const source = readFileSync(
       new URL(

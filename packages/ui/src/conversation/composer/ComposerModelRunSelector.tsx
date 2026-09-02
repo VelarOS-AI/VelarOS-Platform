@@ -218,15 +218,10 @@ function ComposerModelRunSelectorImpl({
   const selectedModelLabel = modelSelector
     ? getSelectedModelLabel(visibleProvider, visibleModel)
     : t("chat.selectModel");
-  // 宿主给的摘要优先，且**两格一起接管**：没有模型目录时包内回落的「选择模型」是一句做不到的
-  // 承诺（用户点开是空菜单），而两格各自回落时，宿主根本无从表达「这两个轴现在是同一件事」——
-  // 真机上模型格与推理档格双双处于「跟随引擎设置」，包内各画各的，按钮就渲染成
-  // 「Codex / 跟随 Codex 设置」紧跟「跟随 Codex 设置」，同一句话连出现两次。
+  // 常规模型摘要只显示模型名，厂商身份留在展开菜单里分组；宿主摘要仍可接管外部执行体文案。
   const selectedModelDisplayLabel =
     modelRunSummary?.primaryLabel ??
-    (modelSelector && visibleProvider
-      ? `${visibleProvider.label} / ${selectedModelLabel}`
-      : selectedModelLabel);
+    selectedModelLabel;
   const visibleRunProfileValue =
     runProfile?.value === "expanded" &&
     !composerPort.experimentalFeaturesEnabled
