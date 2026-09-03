@@ -1335,12 +1335,16 @@ export interface BrowserPageWaitResult {
 export interface BrowserViewportOptions {
   width: number
   height: number
+  /** 是否启用 Chromium 的移动设备 viewport 语义；缺省保持桌面兼容行为。 */
+  mobile?: boolean
 }
 
 export interface BrowserViewportResult {
   url: string
   width: number
   height: number
+  /** 实际应用的移动设备 viewport 语义；旧实现可能不返回此字段。 */
+  mobile?: boolean
   capturedAt: number
 }
 

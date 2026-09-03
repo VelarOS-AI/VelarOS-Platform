@@ -19,6 +19,7 @@ import {
   type BrowserPageDriverNetworkRequestDetailsResult,
   type BrowserPageDriverNetworkResponseBodyResult,
   type BrowserPageDriverState,
+  buildBrowserViewportDeviceMetrics,
   captureCdpHeapSnapshot,
   type CdpScreencastConsumerOptions,
   CdpScreencastRecorder,
@@ -525,15 +526,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       })
     }
 
-    const width = Math.max(1, Math.round(options.width))
-    const height = Math.max(1, Math.round(options.height))
-    await this.debuggerSend('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
-      screenWidth: width,
-      screenHeight: height,
-      deviceScaleFactor: 1,
-      mobile: false,
+    const metrics = buildBrowserViewportDeviceMetrics(options)
+    await this.debuggerSend('Emulation.setDeviceMetricsOverride', { ...metrics })
+    await this.debuggerSend('Emulation.setTouchEmulationEnabled', {
+      enabled: metrics.mobile,
     })
   }
 

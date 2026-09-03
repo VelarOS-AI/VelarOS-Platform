@@ -867,18 +867,20 @@ export class CdpInteractionEngine {
     abortSignal?.throwIfAborted()
     const width = clampInteger(options.width, 320, 3840, DEFAULT_BROWSER_VIEWPORT.width)
     const height = clampInteger(options.height, 240, 2160, DEFAULT_BROWSER_VIEWPORT.height)
+    const mobile = options.mobile === true
     const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
     if (!pageSession.driver.setViewport) {
       throw new AppError('VALIDATION', '当前浏览器 driver 不支持 viewport 调整。')
     }
 
-    await pageSession.driver.setViewport({ width, height })
+    await pageSession.driver.setViewport({ width, height, mobile })
     const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
 
     return {
       url: state.url || context.url,
       width,
       height,
+      mobile,
       capturedAt: Date.now(),
     }
   }

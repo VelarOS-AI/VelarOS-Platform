@@ -972,7 +972,11 @@ class ElectronBrowserRuntime {
   ): Promise<BrowserViewportResult> {
     return this.actionQueue.run(sessionId, async () => {
       const result = await this.interaction.setViewport(sessionId, context, options, abortSignal)
-      const viewport = { width: result.width, height: result.height }
+      const viewport = {
+        width: result.width,
+        height: result.height,
+        mobile: result.mobile === true,
+      }
       const externalSession = this.getExternalPageSession(sessionId)
       if (externalSession) {
         externalSession.viewport = viewport

@@ -75,6 +75,7 @@ import {
   type CdpScreencastStartOptions,
   type ScreencastCapturedFrame,
 } from './BrowserScreencastRecorder'
+import { buildBrowserViewportDeviceMetrics } from './BrowserViewport'
 import {
   CdpWebSocketTransport,
   type CdpWebSocketTransportConnectOptions,
@@ -749,11 +750,12 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
+    const metrics = buildBrowserViewportDeviceMetrics(options)
     await this.options.transport.send('Emulation.setDeviceMetricsOverride', {
-      width: Math.round(options.width),
-      height: Math.round(options.height),
-      deviceScaleFactor: 1,
-      mobile: false,
+      ...metrics,
+    })
+    await this.options.transport.send('Emulation.setTouchEmulationEnabled', {
+      enabled: metrics.mobile,
     })
   }
 
