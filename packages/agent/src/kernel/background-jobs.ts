@@ -10,16 +10,19 @@
 //
 // ## ② 输出缓冲：两级存储 + 一个易错的偏移量
 // 内存环形缓冲（`outputByJob` + `outputBaseOffsetByJob`）保最近 `outputMaxChars` 字符；宿主注入
-// `outputStore` 时输出同时落盘，任务收尾后**释放内存副本**（`releaseCachedOutputIfArtifactBacked`）。
+// `outputStore` 时输出同时落盘。内存环不因落盘成功而删除：它是后续 artifact 读取失败时的有界
+// 降级副本；终态任务整体仍由 TTL + 条数上限回收。
 // **`baseOffset` 是已丢弃的字符数，不是数组下标**：读取时必须 `slice(offset - baseOffset)`，
 // 把这里写成 `slice(offset)` 会在缓冲发生过截断后返回错位的内容——而且只在长输出任务上才复现。
 // 消费式读取（`consume: true`）推进 `outputReadOffsetByJob` 实现增量读；快照式读取不推进。
 // 两种模式共用一个函数正是为了保证"增量与快照看到的是同一份内容"。
 //
 // ## ③ 并发与时序
-// `waitForSession` 把等待者挂进 `waiters` 集合，任何状态迁移后 `notifyWaiters` 全量重扫。
-// 注册后**必须立刻自查一次**（`check()`）：任务可能在 await 之前就已收敛，漏掉这次自查等待者会
-// 永远挂着。超时可选——缺席 = 无限等，是刻意的（见 `normalizeWaitTimeoutMs` 的判据）。
+// `waitForSession` 是显式 job:wait 的 wait-all；`waitForNextTerminalForSession` 是主 Agent 收尾停泊的
+// wait-any。两者把等待者挂进 `waiters` 集合，任何状态迁移后 `notifyWaiters` 全量重扫。
+// 注册后**必须立刻自查一次**（`check()`）：任务可能在选中与 await 之间就已收敛，漏掉
+// 这次自查等待者会永远挂着。wait-any 额外监听 AbortSignal，用户停止主 execution 时不能
+// 被后台 job 卡住。超时可选——缺席 = 无限等，是刻意的（见 `normalizeWaitTimeoutMs` 的判据）。
 //
 // ## ④ 取消的传递性
 // 取消一个会话要连带取消它派生出的整棵任务树（子 Agent 会以父任务 id 或父会话 id 再起任务），
@@ -117,6 +120,13 @@ export interface WaitForKernelBackgroundJobsInput {
   timeoutMs?: number
 }
 
+export interface WaitForNextKernelBackgroundJobInput {
+  timeoutMs?: number
+  signal?: AbortSignal
+  /** 只在已注册等待者且确认至少一个选中任务仍在运行时调用。 */
+  onWaiting?: () => void
+}
+
 function cloneJob(job: KernelBackgroundJob): KernelBackgroundJob {
   return { ...job }
 }
@@ -124,6 +134,7 @@ function cloneJob(job: KernelBackgroundJob): KernelBackgroundJob {
 const DefaultOutputMaxChars = 64 * 1024
 const DefaultTerminalJobTtlMs = 10 * 60 * 1_000
 const DefaultTerminalJobLimit = 200
+const DefaultJobPreviewMaxChars = 2_000
 
 function assertNonBlank(value: string, label: string): string {
   const trimmed = value.trim()
@@ -225,6 +236,21 @@ class KernelBackgroundJobManager {
     return cloneJob(job)
   }
 
+  /** 终态已由取消竞态率先发布时，允许 worker 把随后构造好的结构化结果补进 artifact。 */
+  public appendTerminalArtifact(id: string, artifact: string): KernelBackgroundJob {
+    const job = this.requireJob(id)
+    if (job.status === 'running') {
+      throw new AppError(
+        'CONFLICT',
+        `Kernel background job "${id}" is still running`,
+        undefined,
+        { jobId: id, jobStatus: job.status }
+      )
+    }
+    this.appendTerminalOutput(id, artifact)
+    return cloneJob(job)
+  }
+
   public readOutputForSession(
     sessionId: string,
     id: string
@@ -272,6 +298,76 @@ class KernelBackgroundJobManager {
     return this.snapshotSelectedJobs(normalizedSessionId, jobIds)
   }
 
+  /**
+   * 等待调用瞬间本会话正在运行的任务中**任意一个**进入终态。
+   *
+   * 这是主 Agent 收尾停泊的窄接口：一个子 Agent 收敛就唤醒主循环，让模型读取该
+   * job artifact 后重新决策；不在这里等全部任务。显式 `job:wait` 仍走 waitForSession wait-all。
+   *
+   * 返回值是不含输出的薄 job 快照，唤醒路径不读 artifact。null 表示调用时无运行任务、
+   * 超时、任务被删除，或 signal 已中止。调用方须在
+   * null 之后再 drain 一次 task.lifecycle，覆盖「先 drain、随后完成、本方看到无 running」的窗口。
+   */
+  public async waitForNextTerminalForSession(
+    sessionId: string,
+    input: WaitForNextKernelBackgroundJobInput = {}
+  ): Promise<Nullable<KernelBackgroundJob>> {
+    const normalizedSessionId = assertNonBlank(sessionId, 'sessionId')
+    const jobIds = this.selectWaitJobIds(normalizedSessionId, undefined)
+    if (isEmpty(jobIds) || input.signal?.aborted) return null
+
+    const timeoutMs = normalizeWaitTimeoutMs(input.timeoutMs)
+    if (timeoutMs === 0) return null
+
+    return new Promise<Nullable<KernelBackgroundJob>>((resolve) => {
+      let timer: Nullable<TimerLease> = null
+      let settled = false
+      const signal = input.signal
+      const done = (job: Nullable<KernelBackgroundJob>) => {
+        if (settled) return
+        settled = true
+        timer?.cancel()
+        this.waiters.delete(check)
+        signal?.removeEventListener('abort', onAbort)
+        resolve(job)
+      }
+      const onAbort = () => done(null)
+      const check = () => {
+        const terminal = this.firstTerminalJob(normalizedSessionId, jobIds)
+        if (terminal) {
+          done(terminal)
+          return
+        }
+        // dropSession/prune 可能在等待期间移除选中任务；已无任何可观测任务时不再挂死。
+        if (jobIds.every((id) => !this.isJobVisibleForSession(normalizedSessionId, id))) {
+          done(null)
+        }
+      }
+
+      this.waiters.add(check)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      if (isPresent(timeoutMs)) {
+        timer = this.timers.after(timeoutMs, () => done(null), {
+          label: 'waitForNextTerminalForSession',
+          unref: true,
+        })
+      }
+
+      // 注册后自查：堵住「选中 running 后立即完成」的 lost wake-up。
+      check()
+      if (signal?.aborted) onAbort()
+      if (!settled) {
+        try {
+          input.onWaiting?.()
+        } catch (error) {
+          logRuntime.tag('KernelBackgroundJobManager').warn('background wait observer failed', {
+            error,
+          })
+        }
+      }
+    })
+  }
+
   public recordStalledJobs(input: { sessionId?: string; now?: number } = {}): number {
     if (this.stalledAfterMs <= 0) return 0
 
@@ -298,12 +394,18 @@ class KernelBackgroundJobManager {
     return queued
   }
 
-  public complete(id: string, input: { result?: string } = {}): KernelBackgroundJob {
-    return this.finish(id, 'completed', { result: input.result })
+  public complete(
+    id: string,
+    input: { result?: string; artifact?: string } = {}
+  ): KernelBackgroundJob {
+    return this.finish(id, 'completed', { result: input.result, artifact: input.artifact })
   }
 
-  public fail(id: string, input: { error?: string } = {}): KernelBackgroundJob {
-    return this.finish(id, 'failed', { error: input.error })
+  public fail(
+    id: string,
+    input: { error?: string; artifact?: string } = {}
+  ): KernelBackgroundJob {
+    return this.finish(id, 'failed', { error: input.error, artifact: input.artifact })
   }
 
   public cancelSession(sessionId: string): number {
@@ -393,7 +495,16 @@ class KernelBackgroundJobManager {
     for (const sessionKey of pending) {
       this.turnContextLedgers.clearSession(sessionKey)
     }
-    this.outputStore?.dropSession(normalizedSessionId)
+    if (this.outputStore) {
+      try {
+        this.outputStore.dropSession(normalizedSessionId)
+      } catch (error) {
+        logRuntime.tag('KernelBackgroundJobManager').warn('background job artifact session cleanup failed', {
+          sessionId: normalizedSessionId,
+          error,
+        })
+      }
+    }
     if (droppedIds.size > 0) this.notifyWaiters()
     return droppedIds.size
   }
@@ -431,28 +542,27 @@ class KernelBackgroundJobManager {
     input: {
       result?: string
       error?: string
+      artifact?: string
     }
   ): KernelBackgroundJob {
     const job = this.requireRunning(id)
     job.status = status
     job.completedAt = this.now()
     if (input.result?.trim()) {
-      job.result = input.result.trim()
+      job.result = truncateJobPreview(input.result)
     }
     if (input.error?.trim()) {
-      job.error = input.error.trim()
+      job.error = truncateJobPreview(input.error)
     }
-    this.appendTerminalOutput(job.id, job.result ?? job.error)
-    this.releaseCachedOutputIfArtifactBacked(job.id)
+    const artifact = input.artifact?.trim() || job.result || job.error
+    this.appendTerminalOutput(job.id, artifact)
 
     const outcome = status === 'completed' ? '完成' : '失败'
-    const detail = (status === 'completed' ? job.result : job.error)?.trim()
     this.turnContextLedgers.append(job.sessionId, {
       occurredAt: job.completedAt,
       label: `${job.label} ${outcome}`,
-      summaryText: `后台任务「${job.label}」已${outcome}${
-        detail ? `：${detail.length > 120 ? `${detail.slice(0, 120)}…` : detail}` : '。'
-      }`,
+      // 只递送状态与读取柄手；子 Agent 全量结果留在 job artifact，由主模型按需读。
+      summaryText: `后台任务「${job.label}」已${outcome}。请读取该任务的 job 输出后再决定下一步。`,
       inspect: { tool: 'job:read_output', argsHint: { job_id: job.id } },
     })
     this.cancelHandlerByJob.delete(job.id)
@@ -484,7 +594,8 @@ class KernelBackgroundJobManager {
     this.turnContextLedgers.append(job.sessionId, {
       occurredAt: now,
       label: `${job.label} 已取消`,
-      summaryText: `后台任务「${job.label}」已被取消。`,
+      summaryText: `后台任务「${job.label}」已被取消。如需核对取消前输出，请读取该任务的 job 输出。`,
+      inspect: { tool: 'job:read_output', argsHint: { job_id: job.id } },
     })
   }
 
@@ -517,6 +628,24 @@ class KernelBackgroundJobManager {
   private isJobRunningForSession(sessionId: string, id: string): boolean {
     const job = this.jobs.get(id)
     return isPresent(job) && job.sessionId === sessionId && job.status === 'running'
+  }
+
+  private isJobVisibleForSession(sessionId: string, id: string): boolean {
+    return this.jobs.get(id)?.sessionId === sessionId
+  }
+
+  private firstTerminalJob(
+    sessionId: string,
+    jobIds: readonly string[]
+  ): Nullable<KernelBackgroundJob> {
+    const firstTerminal = jobIds
+      .map((id) => this.jobs.get(id))
+      .filter(isPresent)
+      .filter((job) => job.sessionId === sessionId && job.status !== 'running')
+      .sort(compareTerminalJobs)[0]
+    // wait-any 是控制面唤醒，绝不在这里读 outputStore；全量制品只能由
+    // 主模型后续显式 job:read_output 进入数据面。
+    return firstTerminal ? cloneJob(firstTerminal) : null
   }
 
   private snapshotSelectedJobs(
@@ -580,14 +709,6 @@ class KernelBackgroundJobManager {
     }
   }
 
-  private releaseCachedOutputIfArtifactBacked(id: string): void {
-    if (!this.outputStore || this.outputStoreDisabledJobs.has(id)) return
-    if (!this.outputStore.readAll({ jobId: id })) return
-
-    this.outputByJob.delete(id)
-    this.outputBaseOffsetByJob.delete(id)
-  }
-
   private shouldPruneTerminalJob(job: KernelBackgroundJob, now: number): boolean {
     if (job.status === 'running') return false
     if (this.terminalJobTtlMs < 0) return false
@@ -597,6 +718,16 @@ class KernelBackgroundJobManager {
   }
 
   private dropJobState(id: string): void {
+    if (this.outputStore) {
+      try {
+        this.outputStore.dropJob(id)
+      } catch (error) {
+        logRuntime.tag('KernelBackgroundJobManager').warn('background job artifact cleanup failed', {
+          jobId: id,
+          error,
+        })
+      }
+    }
     this.jobs.delete(id)
     this.outputByJob.delete(id)
     this.outputBaseOffsetByJob.delete(id)
@@ -604,7 +735,6 @@ class KernelBackgroundJobManager {
     this.outputStoreErrorByJob.delete(id)
     this.outputStoreDisabledJobs.delete(id)
     this.cancelHandlerByJob.delete(id)
-    this.outputStore?.dropJob(id)
   }
 
   private requireRunning(id: string): KernelBackgroundJob {
@@ -672,15 +802,19 @@ class KernelBackgroundJobManager {
     input: { consume: boolean }
   ): { output: string; truncated: boolean; omittedChars?: number } {
     if (this.outputStore && !this.outputStoreDisabledJobs.has(id)) {
-      const offset = input.consume ? this.outputReadOffsetByJob.get(id) ?? 0 : 0
-      const stored = input.consume
-        ? this.outputStore.read({ jobId: id, offset })
-        : this.outputStore.readAll({ jobId: id })
-      if (stored) {
-        if (input.consume) {
-          this.outputReadOffsetByJob.set(id, stored.nextOffset)
+      try {
+        const offset = input.consume ? this.outputReadOffsetByJob.get(id) ?? 0 : 0
+        const stored = input.consume
+          ? this.outputStore.read({ jobId: id, offset })
+          : this.outputStore.readAll({ jobId: id })
+        if (stored) {
+          if (input.consume) {
+            this.outputReadOffsetByJob.set(id, stored.nextOffset)
+          }
+          return { output: stored.output, truncated: false }
         }
-        return { output: stored.output, truncated: false }
+      } catch (error) {
+        this.disableOutputStoreForJob(id, error, input.consume ? 'read' : 'readAll')
       }
     }
 
@@ -700,6 +834,17 @@ class KernelBackgroundJobManager {
       truncated: baseOffset > 0,
       omittedChars: optionalWhen(isPositiveNumber, baseOffset),
     }
+  }
+
+  private disableOutputStoreForJob(id: string, error: unknown, operation: string): void {
+    const message = AppError.getMessage(error)
+    this.outputStoreDisabledJobs.add(id)
+    this.outputStoreErrorByJob.set(id, message)
+    logRuntime.tag('KernelBackgroundJobManager').warn('background job artifact access failed', {
+      jobId: id,
+      operation,
+      error,
+    })
   }
 
   /**
@@ -826,6 +971,13 @@ function normalizeTerminalJobTtlMs(ttlMs: LooseOptional<number>): number {
 function normalizeTerminalJobLimit(limit: LooseOptional<number>): number {
   if (!isFiniteNumber(limit)) return DefaultTerminalJobLimit
   return Math.max(0, Math.floor(limit))
+}
+
+function truncateJobPreview(value: string): string {
+  const trimmed = value.trim()
+  return trimmed.length <= DefaultJobPreviewMaxChars
+    ? trimmed
+    : `${trimmed.slice(0, DefaultJobPreviewMaxChars - 1)}…`
 }
 
 function compareTerminalJobs(left: KernelBackgroundJob, right: KernelBackgroundJob): number {

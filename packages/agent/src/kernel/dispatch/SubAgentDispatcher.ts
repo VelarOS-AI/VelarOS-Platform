@@ -50,7 +50,16 @@ import type {
   UserActionCard,
 } from '@velaros-ai/agent/protocol'
 import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/agent/tool-contract'
-import { isBoolean, isEmpty, isFunction, Log, optionalWhen, toNullable,toOptional, truncate } from '@velaros-ai/core'
+import {
+  isBoolean,
+  isEmpty,
+  isFunction,
+  Log,
+  optionalWhen,
+  toNullable,
+  toOptional,
+  truncate,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -98,6 +107,7 @@ import {
 } from './host-ports'
 import { buildSubAgentDispatchInstruction } from './instruction'
 import {
+  formatSubAgentBackgroundArtifact,
   formatSubAgentFailureRedispatchGuidance,
   formatSubAgentHighRiskConfirmationStatus,
   formatSubAgentStartedMessage,
@@ -721,13 +731,15 @@ class SubAgentDispatcher {
         })
       }
 
+      // 先把完整结构化结果写入 job artifact，再发布 terminal worker 事件。
+      // 这样 UI/父 Agent 看到 completed 时，job:read_output 已经可读，不存在「先通知后落盘」窗口。
+      this.completeSubAgentBackgroundJob(args.backgroundJobId, taskResult)
       this.emitWorkerStatus({
         ...args.statusBase,
         status: 'completed',
         summary: truncate(taskResult.summary.trim(), 200),
         result: taskResult,
       })
-      this.completeSubAgentBackgroundJob(args.backgroundJobId, taskResult.summary)
       return formatSubAgentTaskResultForParent(taskResult, args.statusBase.agentName)
     } catch (error) {
       const appError = AppError.from(error)
@@ -740,13 +752,13 @@ class SubAgentDispatcher {
         })
         this.sessionStore.appendRunResult(args.threadId, taskResult)
         this.sessionStore.setStatus(args.threadId, 'aborted')
+        this.failSubAgentBackgroundJob(args.backgroundJobId, taskResult)
         this.emitWorkerStatus({
           ...args.statusBase,
           status: 'aborted',
           summary: '子智能体已中断。',
           result: taskResult,
         })
-        this.failSubAgentBackgroundJob(args.backgroundJobId, '子智能体已中断。')
         if (args.request.parentCtx.abortSignal.aborted || !relayHandle?.abortSignal.aborted) {
           throw appError
         }
@@ -761,6 +773,7 @@ class SubAgentDispatcher {
       })
       this.sessionStore.appendRunResult(args.threadId, taskResult)
       this.sessionStore.setStatus(args.threadId, 'failed')
+      this.failSubAgentBackgroundJob(args.backgroundJobId, taskResult)
       this.emitWorkerStatus({
         ...args.statusBase,
         status: 'failed',
@@ -768,7 +781,6 @@ class SubAgentDispatcher {
         error: message,
         result: taskResult,
       })
-      this.failSubAgentBackgroundJob(args.backgroundJobId, message)
       return formatSubAgentTaskResultForParent(taskResult, args.statusBase.agentName)
     } finally {
       relayHandle = null
@@ -787,12 +799,18 @@ class SubAgentDispatcher {
     if (!this.backgroundJobManager) return null
 
     try {
+      const jobId = `${args.threadId}:background:${randomUUID()}`
       const job = this.backgroundJobManager.start({
-        id: `${args.threadId}:background:${randomUUID()}`,
+        id: jobId,
         sessionId: args.request.parentCtx.sessionId,
         kind: 'sub-agent',
         label: args.title,
-        onCancel: () => this.cancelAsyncWorker(args.executionKey, args.threadId),
+        // KernelBackgroundJobManager 在把 cancelled 通知/唤醒发出前同步调 onCancel。
+        // 先写入完整 aborted envelope，确保主 Agent 被唤醒时 job:read_output 已有终态制品。
+        onCancel: () => {
+          this.appendCancelledSubAgentArtifact(jobId, args.threadId)
+          this.cancelAsyncWorker(args.executionKey, args.threadId)
+        },
       })
       return job.id
     } catch (error) {
@@ -801,29 +819,79 @@ class SubAgentDispatcher {
     }
   }
 
-  private completeSubAgentBackgroundJob(jobId: Nullable<string>, summary: string): void {
+  private completeSubAgentBackgroundJob(
+    jobId: Nullable<string>,
+    taskResult: SubAgentTaskResult
+  ): void {
     if (!jobId || !this.backgroundJobManager) return
 
+    const artifact = this.buildSubAgentBackgroundArtifact(taskResult)
     try {
-      this.backgroundJobManager.complete(jobId, { result: truncate(summary.trim(), 2_000) })
+      this.backgroundJobManager.complete(jobId, {
+        result: truncate(taskResult.summary.trim(), 2_000),
+        artifact,
+      })
     } catch (error) {
       this.log.warn('sub-agent background job completion failed', AppError.from(error))
     }
   }
 
-  private failSubAgentBackgroundJob(jobId: Nullable<string>, errorMessage: string): void {
+  private failSubAgentBackgroundJob(
+    jobId: Nullable<string>,
+    taskResult: SubAgentTaskResult
+  ): void {
     if (!jobId || !this.backgroundJobManager) return
 
+    const artifact = this.buildSubAgentBackgroundArtifact(taskResult)
     try {
-      this.backgroundJobManager.fail(jobId, { error: truncate(errorMessage.trim(), 2_000) })
+      this.backgroundJobManager.fail(jobId, {
+        error: truncate(taskResult.summary.trim(), 2_000),
+        artifact,
+      })
     } catch (error) {
       const appError = AppError.from(error)
       // 用户取消后台任务与子 Agent 抛错回灌是两条独立赛道，谁先到不确定：取消先到时这里必然撞
       // 「任务已终态」冲突——那是正常竞态不是故障，不该刷 warn。判据走 code + context.jobStatus
       // （KernelBackgroundJobManager 的结构化契约），**不许 sniff message 文案**：文案一改这条
       // 静默失效，只表现为日志噪音，没有任何门会喊红。
-      if (appError.code === 'CONFLICT' && appError.context.jobStatus === 'cancelled') return
+      if (appError.code === 'CONFLICT' && appError.context.jobStatus === 'cancelled') {
+        // cancel handler 已在 cancelled 通知前同步写入同等的 aborted envelope；
+        // worker 收尾只发布自身 terminal event，不再重复追加同一份制品。
+        return
+      }
       this.log.warn('sub-agent background job failure update failed', appError)
+    }
+  }
+
+  private buildSubAgentBackgroundArtifact(taskResult: SubAgentTaskResult): string {
+    const formatted = formatSubAgentBackgroundArtifact(taskResult)
+    if (formatted.degraded) {
+      // structured_output 可能携带不可 JSON 序列化值；artifact 降级成文本摘要，
+      // 绝不能反向把已收敛的子 Agent 标成失败。
+      this.log.warn(
+        'sub-agent background artifact serialization failed',
+        AppError.from(formatted.error)
+      )
+    }
+    return formatted.artifact
+  }
+
+  private appendCancelledSubAgentArtifact(jobId: string, threadId: string): void {
+    if (!this.backgroundJobManager) return
+
+    const taskResult = buildSubAgentTaskResult({
+      threadId,
+      text: '子智能体已中断。',
+      status: 'aborted',
+      windDownReason: 'user_interrupt',
+    })
+    try {
+      this.backgroundJobManager.appendTerminalArtifact(
+        jobId,
+        this.buildSubAgentBackgroundArtifact(taskResult)
+      )
+    } catch (error) {
+      this.log.warn('cancelled sub-agent artifact append failed', AppError.from(error))
     }
   }
 

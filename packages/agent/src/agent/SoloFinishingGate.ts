@@ -12,6 +12,7 @@ import type { CodingSessionSnapshot } from '../reminders'
 
 import { createInternalFollowUpMessage } from './history'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
+import type { SoloBackgroundCompletionGateResult } from './SoloBackgroundCompletionGate'
 import { consumeSoloRuntimeGuidance } from './SoloRuntimeGuidance'
 
 interface SoloFinishingGateEvents {
@@ -38,6 +39,8 @@ interface RunSoloFinishingGateInput<
   }): Promise<AutoVerificationGateResult>
   runtimeInput?: AgentRuntimeInputPort
   consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
+  /** 在 runtime input takeOrSeal 与 goal 成功提交之前，处理后台任务通知或停泊 wait-any。 */
+  settlePendingBackgroundJobs?: () => Promise<SoloBackgroundCompletionGateResult>
   goalMode?: boolean
   inspectGoalState?: () => Promise<SoloGoalFinishingState>
   completeGoalOnSuccessfulFinish?: () => Promise<void>
@@ -50,6 +53,7 @@ type SoloFinishingGateContinueReason =
   | 'finishing-reminder'
   | 'verification-followup'
   | 'final-readiness'
+  | 'background-task'
   | 'user-guidance'
   | 'goal-status-required'
 
@@ -207,6 +211,26 @@ async function runSoloFinishingGate<
       audit: finalReadiness.audit,
     })
     return resolveBlockedFinishingGateResult(input, 'final-readiness')
+  }
+
+  // 顺序不可后移：consumeSoloRuntimeGuidance(before-complete) 会原子 takeOrSeal，
+  // goalMode 也会在下方提交 successful completion。后台停泊必须先于两者，
+  // 否则等待期间的用户 steer 无法唤醒，或 goal 在子 Agent 结果审阅前被提前标完成。
+  const backgroundGate = await input.settlePendingBackgroundJobs?.()
+  if (backgroundGate && backgroundGate.status !== 'ready') {
+    if (backgroundGate.status === 'interrupted' && input.abortSignal.aborted) {
+      input.emitAbort()
+      input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+      return { status: 'aborted' }
+    }
+
+    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.log.debug('turn continued by background completion gate', {
+      turn: input.turn,
+      status: backgroundGate.status,
+      reason: backgroundGate.status === 'continue' ? backgroundGate.reason : 'runtime-input',
+    })
+    return resolveBlockedFinishingGateResult(input, 'background-task')
   }
 
   if (input.abortSignal.aborted) {

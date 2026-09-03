@@ -106,6 +106,82 @@ void describe('finishing gate no longer intercepts workflow discipline', () => {
     expect(result.status).toBe('continue')
     expect(result.status === 'continue' ? result.reason : null).toBe('goal-status-required')
   })
+
+  void test('background completion boundary runs before runtime input sealing and goal completion', async () => {
+    const harness = createFinishingGateHarness({})
+    let takeOrSealCalls = 0
+    let goalCompletionCalls = 0
+    let goalInspectionCalls = 0
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      runtimeInput: {
+        take: () => null,
+        takeOrSeal: () => {
+          takeOrSealCalls += 1
+          return { status: 'sealed' as const }
+        },
+        onInputAccepted: () => () => undefined,
+      },
+      settlePendingBackgroundJobs: async () => ({
+        status: 'continue' as const,
+        reason: 'background-terminal' as const,
+      }),
+      goalMode: true,
+      completeGoalOnSuccessfulFinish: async () => {
+        goalCompletionCalls += 1
+      },
+      inspectGoalState: async () => {
+        goalInspectionCalls += 1
+        return { exists: true, terminal: true, status: 'complete' as const }
+      },
+    })
+
+    expect(result).toEqual({ status: 'continue', reason: 'background-task' })
+    expect(takeOrSealCalls).toBe(0)
+    expect(goalCompletionCalls).toBe(0)
+    expect(goalInspectionCalls).toBe(0)
+  })
+
+  void test('goal completion is committed once only after the background boundary reports ready', async () => {
+    const harness = createFinishingGateHarness({})
+    const order: string[] = []
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      settlePendingBackgroundJobs: async () => {
+        order.push('background-ready')
+        return { status: 'ready' as const }
+      },
+      goalMode: true,
+      completeGoalOnSuccessfulFinish: async () => {
+        order.push('goal-complete')
+      },
+      inspectGoalState: async () => {
+        order.push('goal-inspect')
+        return { exists: true, terminal: true, status: 'complete' as const }
+      },
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(order).toEqual(['background-ready', 'goal-complete', 'goal-inspect'])
+  })
+
+  void test('execution abort during background park settles as aborted, never completed', async () => {
+    const harness = createFinishingGateHarness({})
+    const controller = new AbortController()
+    let abortEvents = 0
+    controller.abort('stop')
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      abortSignal: controller.signal,
+      emitAbort: () => {
+        abortEvents += 1
+      },
+      settlePendingBackgroundJobs: async () => ({ status: 'interrupted' as const }),
+    })
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(abortEvents).toBe(1)
+  })
 })
 
 void describe('proposal is no longer an execution mode', () => {

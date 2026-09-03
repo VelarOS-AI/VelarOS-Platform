@@ -94,6 +94,10 @@ import type {
 } from './RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
 import { createAgentRuntimeInputInterruptScope } from './RuntimeInputPort'
+import {
+  runSoloBackgroundCompletionGate,
+  type SoloAwaitPendingBackgroundJobs,
+} from './SoloBackgroundCompletionGate'
 import { applySoloContextDegradeAction } from './SoloContextDegradeActionExecutor'
 import {
   createSoloFinishingGateBlockTracker,
@@ -313,11 +317,10 @@ interface ExecuteSoloModeStreamLoopArgs<
    */
   consumeTurnContextNote?: () => Nullable<string>
   /**
-   * 隐式等待：模型想收尾时，若本会话还有后台子 agent 在跑，则阻塞等它们完成（返回 true），
-   * 不让对话结束；没有在跑的则返回 false 正常收尾。配合 consumeTurnContextNote 形成
-   * 「派发 async → 父继续/等待 → 子完成注入结果 → 父收口」的闭环。
+   * 隐式停泊：模型申请收尾时 wait-any，任意一个后台子 Agent 收敛就唤醒主循环。
+   * signal 同时覆盖 execution abort 与新 runtime input，确保停泊可中断、用户 steer 可立即被接管。
    */
-  awaitPendingBackgroundJobs?: () => Promise<boolean>
+  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
   /** 向 UI 输出 agent/state/debug 事件的总线。 */
   events: TEvents
 }
@@ -851,6 +854,8 @@ class SoloStreamLoop<
             log: this.log,
           })
           if (toolUseContinuation.status === 'completed') {
+            // 隐藏回合上限是防无限工具循环的最终安全熔断；该强制终态不被后台停泊
+            // 重新打开，否则失控模型可借后台任务绕过 hard cap。
             runScope?.end({ status: 'ok' })
             return loopFinish({ status: 'completed' })
           }
@@ -887,6 +892,20 @@ class SoloStreamLoop<
           runAutomaticVerification,
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
+          // 放在 finishing gate 内部的 takeOrSeal/goal commit 之前：等待可被 execution
+          // abort 或新 runtime input 唤醒，每次只等一个后台终态。
+          settlePendingBackgroundJobs: () =>
+            runSoloBackgroundCompletionGate({
+              turn,
+              history: args.history,
+              executionAbortSignal: args.abortController.signal,
+              runtimeInput: args.runtimeInput,
+              consumeTurnContextNote: args.consumeTurnContextNote,
+              awaitPendingBackgroundJobs: args.awaitPendingBackgroundJobs,
+              emitWaitingPhase: () =>
+                args.events.emitRuntime(ChatRuntimeEvents.phase('waiting-background')),
+              log: this.log,
+            }),
           // 收尾门只在**用户显式开启目标模式**时生效（2026-08-05 裁决）。模型自己调
           // goal:create 建起来的目标不得反向把会话锁死在收尾环上——那是模型自设的工作流
           // 纪律，属于提示词层工作流，不能通过运行时拦截强制执行。
@@ -902,17 +921,6 @@ class SoloStreamLoop<
         if (finishingGate.status === 'continue') return loopContinue()
         if (finishingGate.status === 'error') {
           await goalLifecycle.recordBlockedTerminal()
-        }
-        // 隐式等待：模型想收尾，但本会话还有后台子 agent 在跑 → 不结束对话，阻塞等它们完成再继续。
-        // 下一轮 turn-start 由 consumeTurnContextNote 把完成结果注入历史，模型据此续作/收口。
-        if (finishingGate.status === 'completed' && args.awaitPendingBackgroundJobs) {
-          const waitedForPending = await args.awaitPendingBackgroundJobs()
-          if (waitedForPending) {
-            this.log.info('implicit wait for pending background sub-agents before finishing', {
-              turn,
-            })
-            return loopContinue()
-          }
         }
         runScope?.end({
           status:

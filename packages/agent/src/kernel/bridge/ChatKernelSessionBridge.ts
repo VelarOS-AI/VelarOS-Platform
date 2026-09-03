@@ -72,12 +72,19 @@ interface KernelChatBackgroundJobCancelInput {
   jobId: string
 }
 
+interface KernelImplicitBackgroundWaitInput {
+  signal?: AbortSignal
+  onWaiting?: () => void
+}
+
 /**
  * 一轮聊天执行的运行选项：桥把后台 job 生命周期以闭包形式递给宿主执行协调器。
  * 是本桥与注入的 {@link KernelChatExecutionCoordinator} 之间的端口契约。
  */
 interface KernelChatRunOptions {
-  awaitPendingBackgroundJobs?: () => Promise<boolean>
+  awaitPendingBackgroundJobs?: (
+    input?: KernelImplicitBackgroundWaitInput
+  ) => Promise<boolean>
   readBackgroundJobOutput?: (
     input: KernelChatBackgroundJobReadInput
   ) => Promise<Nullable<KernelBackgroundJobOutputSnapshot>>
@@ -462,11 +469,17 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     // （pre-send chips / mid-run note）恰好一次送达；不再有 run-start internalFollowUps 特例。
     this.backgroundJobManager.recordStalledJobs({ sessionId })
     const options: KernelChatRunOptions = {
-      // 隐式等待：模型想收尾时若本会话仍有后台子 agent 在跑，阻塞等它们完成（waitForSession 对
-      // 当下仍在运行的 job 会阻塞，返回其快照；无在跑 job 时立即返回 []）。返回是否等过 → 决定是否续跑。
-      awaitPendingBackgroundJobs: async () => {
-        const snapshots = await this.backgroundJobManager.waitForSession(sessionId, {})
-        return snapshots.length > 0
+      // 隐式停泊是 wait-any：任意一个后台子 Agent 收敛就唤醒主循环处理该通知，
+      // 剩余任务仍可继续运行。显式 job:wait 保持 waitForSession wait-all 语义。
+      awaitPendingBackgroundJobs: async (input = {}) => {
+        const snapshot = await this.backgroundJobManager.waitForNextTerminalForSession(
+          sessionId,
+          {
+            signal: input.signal,
+            onWaiting: input.onWaiting,
+          }
+        )
+        return isPresent(snapshot)
       },
       readBackgroundJobOutput: async (input) => {
         const reader =

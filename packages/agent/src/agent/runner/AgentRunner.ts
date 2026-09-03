@@ -24,6 +24,7 @@ import type { PrimaryAgentProfile } from '../PrimaryAgentProfile'
 import type { QueryLoop } from '../QueryLoop'
 import type { AgentExecutionConfig } from '../RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from '../RuntimeInputPort'
+import type { SoloAwaitPendingBackgroundJobs } from '../SoloBackgroundCompletionGate'
 import type { SoloStreamLoop } from '../SoloLoop'
 
 import type {
@@ -53,7 +54,7 @@ import type {
 interface AgentRunnerConfig extends AgentExecutionConfig {
   surfaceProfile?: AgentSurfaceProfile
   consumeTurnContextNote?: () => Nullable<string>
-  awaitPendingBackgroundJobs?: () => Promise<boolean>
+  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
   readBackgroundJobOutput?: RunnerReadBackgroundJobOutput
   waitBackgroundJobs?: RunnerWaitBackgroundJobs
   cancelBackgroundJob?: RunnerCancelBackgroundJob

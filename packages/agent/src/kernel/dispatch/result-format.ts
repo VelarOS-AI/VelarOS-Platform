@@ -51,6 +51,28 @@ function formatSubAgentTaskResultForParent(
   return name ? `【子 agent「${name}」的返回】\n${formatted}` : formatted
 }
 
+type SubAgentBackgroundArtifactFormatResult =
+  | { artifact: string; degraded: false }
+  | { artifact: string; degraded: true; error: unknown }
+
+/** 后台制品序列化是可降级的旁路，不得反向改写子 Agent 已收敛的终态。 */
+function formatSubAgentBackgroundArtifact(
+  result: SubAgentTaskResult
+): SubAgentBackgroundArtifactFormatResult {
+  try {
+    return {
+      artifact: formatSubAgentTaskResultForParent(result),
+      degraded: false,
+    }
+  } catch (error) {
+    return {
+      artifact: result.summary.trim() || '子智能体已收敛，但结果无法序列化。',
+      degraded: true,
+      error,
+    }
+  }
+}
+
 /**
  * 失败后的结构化重派引导：给父 Agent 明确的收敛路径，同时提醒熔断规则，
  * 防止"原样重发直到成功"的滥用循环。
@@ -96,9 +118,11 @@ function formatSubAgentStartedMessage(
 }
 
 export {
+  formatSubAgentBackgroundArtifact,
   formatSubAgentFailureRedispatchGuidance,
   formatSubAgentHighRiskConfirmationStatus,
   formatSubAgentStartedMessage,
   formatSubAgentTaskResultForParent,
   resolveSubAgentAgentName,
 }
+export type { SubAgentBackgroundArtifactFormatResult }
