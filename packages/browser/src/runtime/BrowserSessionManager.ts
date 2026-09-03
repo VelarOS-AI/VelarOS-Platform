@@ -15,7 +15,8 @@
 // `?? true` 之类的回落等于把整个权限面关掉。每次裁决都写一条诊断事件——降级必须留痕。
 //
 // ## 时序坑
-//  - 事件桥脚本（用户活动 / 同视图导航）必须在**每次导航后**重注入：document 换了就没了；
+//  - 用户活动 bridge 必须在**每次导航后**重注入：document 换了就没了；新窗口导航只能由
+//    主进程处理，禁止再从页面 capture 阶段抢走站点 click handler；
 //  - `failedMainFrameNavigations` 记住主框架失败，避免把失败页当成「已就绪」继续跑动作。
 import type electron from 'electron'
 
@@ -25,11 +26,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserPageDiagnosticKind, BrowserPageDiagnosticLevel, BrowserUserActivityKind, BrowserViewportOptions } from '../core'
-import {
-  BrowserPendingEventsBroker,
-  BrowserViewNotAttachedReason,
-  buildSameViewNavigationBridgeScript,
-} from '../core'
+import { BrowserPendingEventsBroker, BrowserViewNotAttachedReason } from '../core'
 
 import { type BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import { type BrowserPageWaiter } from './BrowserPageWaiter'
@@ -71,7 +68,175 @@ interface BrowserDialogEventSource {
   ): void
 }
 
+type BrowserPopupNavigationResolution =
+  | { kind: 'route'; url: string; loadOptions?: electron.LoadURLOptions }
+  | { kind: 'bootstrap' }
+  | { kind: 'deny'; reason: string }
+
+type BrowserPopupUrlResolution =
+  | { kind: 'route'; url: string }
+  | { kind: 'bootstrap' }
+  | { kind: 'deny'; reason: string }
+
+interface BrowserPopupBootstrapLease {
+  release: () => void
+}
+
 const BrowserUserActivityConsolePrefix = '__VELAROS_BROWSER_USER_ACTIVITY__:'
+const BrowserPopupBootstrapLifetimeMs = 30_000
+const BrowserPopupBootstrapRetryDelayMs = 250
+const MaxBrowserPopupBootstrapsPerSession = 4
+const ControlledNamedPopupWidth = 900
+const ControlledNamedPopupHeight = 700
+const ControlledNamedPopupMinWidth = 480
+const ControlledNamedPopupMinHeight = 320
+const ControlledNamedPopupMaxWidth = 1_600
+const ControlledNamedPopupMaxHeight = 1_200
+
+function buildBrowserPopupLoadOptions(
+  details: electron.HandlerDetails
+): electron.LoadURLOptions | undefined {
+  const loadOptions: electron.LoadURLOptions = {}
+  let hasOptions = false
+
+  if (details.referrer?.url) {
+    loadOptions.httpReferrer = details.referrer
+    hasOptions = true
+  }
+
+  if (details.postBody) {
+    const rawContentType = details.postBody.contentType.replace(/[\r\n]+/g, '').trim()
+    const rawBoundary = details.postBody.boundary?.replace(/[\r\n]+/g, '').trim()
+    const contentType =
+      rawBoundary && /^multipart\/form-data\b/i.test(rawContentType) && !/;\s*boundary=/i.test(rawContentType)
+        ? `${rawContentType}; boundary=${rawBoundary}`
+        : rawContentType
+
+    loadOptions.postData = details.postBody.data
+    if (contentType) loadOptions.extraHeaders = `Content-Type: ${contentType}\n`
+    hasOptions = true
+  }
+
+  return hasOptions ? loadOptions : undefined
+}
+
+function buildBrowserPopupWindowOptions(
+  openerWebContents: electron.WebContents,
+  interactive: boolean
+): electron.BrowserWindowConstructorOptions {
+  return {
+    show: false,
+    focusable: interactive,
+    skipTaskbar: !interactive,
+    ...(interactive
+      ? {
+          width: ControlledNamedPopupWidth,
+          height: ControlledNamedPopupHeight,
+          minWidth: ControlledNamedPopupMinWidth,
+          minHeight: ControlledNamedPopupMinHeight,
+          maxWidth: ControlledNamedPopupMaxWidth,
+          maxHeight: ControlledNamedPopupMaxHeight,
+          center: true,
+          frame: true,
+          titleBarStyle: 'default' as const,
+          transparent: false,
+          opacity: 1,
+          modal: false,
+          fullscreen: false,
+          kiosk: false,
+          alwaysOnTop: false,
+          resizable: true,
+          movable: true,
+          minimizable: true,
+          maximizable: true,
+          closable: true,
+          fullscreenable: true,
+        }
+      : {}),
+    webPreferences: {
+      session: openerWebContents.session,
+      preload: undefined,
+      zoomFactor: 1,
+      javascript: true,
+      nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      nodeIntegrationInWorker: false,
+      contextIsolation: true,
+      sandbox: true,
+      webviewTag: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      disableDialogs: true,
+    },
+  }
+}
+
+function isNamedPopupFrame(frameName: LooseOptional<string>): boolean {
+  const value = frameName?.trim()
+  return Boolean(value && !value.startsWith('_'))
+}
+
+function resolveBrowserPopupUrl(
+  rawUrl: LooseOptional<string>,
+  disposition: LooseOptional<string>,
+  openerUrl?: LooseOptional<string>
+): BrowserPopupUrlResolution {
+  if (disposition === 'save-to-disk') return { kind: 'deny', reason: 'download-disposition' }
+
+  const value = rawUrl?.trim()
+  if (!value) return { kind: 'bootstrap' }
+
+  try {
+    const url = new URL(value)
+    if (url.protocol === 'about:' && url.pathname === 'blank') return { kind: 'bootstrap' }
+    if (url.protocol === 'blob:') {
+      try {
+        const opener = new URL(openerUrl ?? '')
+        if (url.origin === opener.origin && url.origin !== 'null')
+          return { kind: 'route', url: url.toString() }
+      } catch {
+        // arch-guard:silent-catch-ok opener 不是标准 URL 时，blob 按不受支持协议拒绝。
+      }
+      return { kind: 'deny', reason: 'unsupported-blob-origin' }
+    }
+    if (url.protocol === 'file:') {
+      try {
+        if (new URL(openerUrl ?? '').protocol === 'file:')
+          return { kind: 'route', url: url.toString() }
+      } catch {
+        // arch-guard:silent-catch-ok 发起页来源不合法时按跨信任域 file 导航拒绝。
+      }
+      return { kind: 'deny', reason: 'untrusted-file-navigation' }
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:')
+      return { kind: 'deny', reason: `unsupported-protocol:${url.protocol}` }
+
+    return {
+      kind: 'route',
+      url: url.toString(),
+    }
+  } catch {
+    return { kind: 'deny', reason: 'invalid-url' }
+  }
+}
+
+function resolveBrowserPopupNavigation(
+  details: electron.HandlerDetails,
+  openerUrl?: LooseOptional<string>
+): BrowserPopupNavigationResolution {
+  const initiatorUrl = details.referrer?.url || openerUrl
+  const resolution = resolveBrowserPopupUrl(
+    details.url,
+    String(details.disposition),
+    initiatorUrl
+  )
+  if (resolution.kind !== 'route') return resolution
+
+  return {
+    ...resolution,
+    loadOptions: buildBrowserPopupLoadOptions(details),
+  }
+}
 
 /**
  * Electron 的 `WebContents` 类型里没有 `dialog` 事件（它是运行时存在、d.ts 未声明的一条），
@@ -151,6 +316,10 @@ class BrowserSessionManager {
   private readonly permissionHandlerDisposers = new Set<() => void>()
   /** 普通 Session Event 监听器的反注册函数。 */
   private readonly electronSessionEventDisposers = new Set<() => void>()
+  /** `window.open('')` 的真实子页面；命名窗口保留原生提交，未命名窗口短暂承接赋 URL。 */
+  private readonly popupBootstraps = new Map<string, Set<BrowserPopupBootstrapLease>>()
+  /** 受控 popup 仍归属于 opener 会话，下载/权限必须继续走同一治理链。 */
+  private readonly popupSessionOwners = new WeakMap<electron.WebContents, BrowserSessionLookup>()
   private readonly timers = new TimerScope({ name: 'BrowserSessionManager' })
   private readonly diagnostics: BrowserDiagnosticsRecorder
   private readonly pageWaiter: BrowserPageWaiter
@@ -233,6 +402,8 @@ class BrowserSessionManager {
       return existing
     }
 
+    this.closePopupBootstraps(sessionId)
+
     const currentUrl = webContents.getURL()
     // about:blank 不能覆盖已有会话 URL，否则会丢失 site context。
     const sessionUrl = currentUrl && !this.isPlaceholderUrl(currentUrl) ? currentUrl : existing?.url
@@ -263,6 +434,7 @@ class BrowserSessionManager {
   /** 关闭并清理某个浏览器会话。 */
   public closeSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
+    this.closePopupBootstraps(sessionId)
     if (!session) return
 
     this.sessions.delete(sessionId)
@@ -277,6 +449,9 @@ class BrowserSessionManager {
   public closeAllSessions(): void {
     for (const sessionId of [...this.sessions.keys()]) {
       this.closeSession(sessionId)
+    }
+    for (const sessionId of [...this.popupBootstraps.keys()]) {
+      this.closePopupBootstraps(sessionId)
     }
 
     this.failedMainFrameNavigations.clear()
@@ -398,6 +573,419 @@ class BrowserSessionManager {
     }
   }
 
+  /**
+   * 新窗口请求的唯一裁决点。
+   *
+   * 普通 HTTP(S) 链接与表单折叠进当前受控页面；file 只允许由本地 file 页面继续发起；
+   * 空白 bootstrap 保留一个受限的真实子 WebContents，让站点可先拿 WindowProxy、稍后赋 URL。
+   */
+  private handleWindowOpenRequest(
+    sessionId: string,
+    session: BrowserSession,
+    webContents: electron.WebContents,
+    details: electron.HandlerDetails
+  ): electron.WindowOpenHandlerResponse {
+    if (this.sessions.get(sessionId)?.webContents !== webContents) return { action: 'deny' }
+
+    const resolution = resolveBrowserPopupNavigation(details, webContents.getURL())
+    const diagnosticDetails = {
+      url: details.url,
+      frameName: details.frameName,
+      disposition: details.disposition,
+      referrer: toNullable(details.referrer?.url),
+      method: details.postBody ? 'POST' : 'GET',
+    }
+
+    if (resolution.kind === 'route') {
+      this.recordBrowserEvent(session, {
+        kind: 'popup',
+        level: 'info',
+        message: `页面请求在当前视图打开链接：${resolution.url}`,
+        url: resolution.url,
+        details: {
+          ...diagnosticDetails,
+          routedToCurrentView: false,
+          routingStatus: 'queued',
+        },
+      })
+      this.routePopupNavigation(
+        sessionId,
+        session,
+        webContents,
+        resolution.url,
+        diagnosticDetails,
+        resolution.loadOptions
+      )
+      return { action: 'deny' }
+    }
+
+    if (resolution.kind === 'bootstrap') {
+      const nativeNamedPopup = isNamedPopupFrame(details.frameName)
+      if ((this.popupBootstraps.get(sessionId)?.size ?? 0) >= MaxBrowserPopupBootstrapsPerSession) {
+        this.recordBrowserEvent(session, {
+          kind: 'popup',
+          level: 'warning',
+          message: '页面同时创建了过多空白新窗口，请求已拒绝。',
+          url: webContents.getURL() || session.url,
+          details: {
+            ...diagnosticDetails,
+            routedToCurrentView: false,
+            routingStatus: 'blocked',
+            reason: 'bootstrap-limit',
+          },
+        })
+        return { action: 'deny' }
+      }
+
+      this.recordBrowserEvent(session, {
+        kind: 'popup',
+        level: 'info',
+        message: '页面创建空白跳转上下文，等待目标地址。',
+        url: webContents.getURL() || session.url,
+        details: {
+          ...diagnosticDetails,
+          routedToCurrentView: false,
+          routingStatus: 'bootstrap',
+        },
+      })
+      return {
+        action: 'allow',
+        outlivesOpener: false,
+        overrideBrowserWindowOptions: buildBrowserPopupWindowOptions(
+          webContents,
+          nativeNamedPopup
+        ),
+      }
+    }
+
+    this.recordBrowserEvent(session, {
+      kind: 'popup',
+      level: 'warning',
+      message: `页面新窗口请求被拒绝：${details.url || 'about:blank'}`,
+      url: details.url || webContents.getURL() || session.url,
+      details: {
+        ...diagnosticDetails,
+        routedToCurrentView: false,
+        routingStatus: 'blocked',
+        reason: resolution.reason,
+      },
+    })
+    return { action: 'deny' }
+  }
+
+  /** 立即执行用户触发的 popup 导航，并只在真实完成后记录 routed=true。 */
+  private routePopupNavigation(
+    sessionId: string,
+    session: BrowserSession,
+    webContents: electron.WebContents,
+    url: string,
+    diagnosticDetails: Record<string, unknown>,
+    loadOptions?: electron.LoadURLOptions,
+    onSettled?: () => void
+  ): void {
+    void (async () => {
+      try {
+        // 页面点击与普通同视图链接一样属于用户优先导航，不能排在 Agent 动作队列后面；
+        // 新 loadURL 会自然中止旧导航，等待器负责把结果归因给各自调用方。
+        await this.pageWaiter.loadUrl(webContents, url, undefined, loadOptions)
+        if (this.sessions.get(sessionId)?.webContents !== webContents) return
+
+        this.recordBrowserEvent(session, {
+          kind: 'popup',
+          level: 'info',
+          message: `页面链接已在当前视图打开：${url}`,
+          url,
+          details: {
+            ...diagnosticDetails,
+            routedToCurrentView: true,
+            routingStatus: 'completed',
+          },
+        })
+      } catch (error) {
+        const message = AppError.from(error).message
+        if (this.sessions.get(sessionId)?.webContents === webContents) {
+          this.recordBrowserEvent(session, {
+            kind: 'popup',
+            level: 'warning',
+            message: `页面链接未能在当前视图打开：${url}`,
+            url,
+            details: {
+              ...diagnosticDetails,
+              routedToCurrentView: false,
+              routingStatus: 'failed',
+              error: message,
+            },
+          })
+        }
+        this.log.warn('failed to route browser popup into controlled window', {
+          sessionId,
+          url,
+          error: message,
+        })
+      } finally {
+        onSettled?.()
+      }
+    })()
+  }
+
+  /** 接管 Electron 原生创建的子窗，承接延迟赋 URL 或命名表单的原生提交。 */
+  private bindPopupBootstrapWindow(
+    sessionId: string,
+    session: BrowserSession,
+    openerWebContents: electron.WebContents,
+    popupWindow: electron.BrowserWindow,
+    details: electron.DidCreateWindowDetails
+  ): void {
+    const initiatorUrl = details.referrer?.url || openerWebContents.getURL()
+    const nativeNamedPopup = isNamedPopupFrame(details.frameName)
+    const initialResolution = resolveBrowserPopupUrl(
+      details.url,
+      String(details.disposition),
+      initiatorUrl
+    )
+    if (
+      initialResolution.kind !== 'bootstrap' ||
+      this.sessions.get(sessionId)?.webContents !== openerWebContents
+    ) {
+      if (!popupWindow.isDestroyed()) popupWindow.destroy()
+      return
+    }
+
+    const popupWebContents = popupWindow.webContents
+    const leases = this.popupBootstraps.get(sessionId) ?? new Set<BrowserPopupBootstrapLease>()
+    this.popupBootstraps.set(sessionId, leases)
+
+    let released = false
+    let releasing = false
+    let releaseRetryCount = 0
+    let routingStarted = false
+    let navigationHandlingStarted = false
+    let nativePopupActivated = false
+    let timeout: Nullable<TimerLease> = null
+    const release = (): void => {
+      if (released || releasing) return
+      releasing = true
+      timeout?.cancel()
+      timeout = null
+
+      try {
+        if (!popupWindow.isDestroyed()) popupWindow.destroy()
+      } catch (error) {
+        releasing = false
+        this.log.debug('清理浏览器空白 popup 失败', {
+          sessionId,
+          error: AppError.from(error).message,
+        })
+        if (releaseRetryCount < 2) {
+          releaseRetryCount += 1
+          timeout = this.timers.after(BrowserPopupBootstrapRetryDelayMs, release, {
+            label: 'browser.popup-bootstrap.release-retry',
+          })
+        }
+        return
+      }
+
+      released = true
+      releasing = false
+      this.popupSessionOwners.delete(popupWebContents)
+      leases.delete(lease)
+      if (leases.size === 0) this.popupBootstraps.delete(sessionId)
+    }
+    const lease: BrowserPopupBootstrapLease = { release }
+    leases.add(lease)
+    this.popupSessionOwners.set(popupWebContents, { sessionId, session })
+
+    const routeBootstrapUrl = (
+      rawUrl: string,
+      loadOptions?: electron.LoadURLOptions,
+      details: Record<string, unknown> = {}
+    ): void => {
+      if (routingStarted) return
+
+      const resolution = resolveBrowserPopupUrl(
+        rawUrl,
+        'default',
+        initiatorUrl
+      )
+      if (resolution.kind === 'bootstrap') return
+      if (resolution.kind === 'deny') {
+        this.recordBrowserEvent(session, {
+          kind: 'popup',
+          level: 'warning',
+          message: `空白新窗口的目标地址被拒绝：${rawUrl}`,
+          url: rawUrl || openerWebContents.getURL() || session.url,
+          details: {
+            ...details,
+            routedToCurrentView: false,
+            routingStatus: 'blocked',
+            reason: resolution.reason,
+          },
+        })
+        release()
+        return
+      }
+
+      routingStarted = true
+      const diagnosticDetails = {
+        ...details,
+        source: 'blank-popup-bootstrap',
+      }
+      this.recordBrowserEvent(session, {
+        kind: 'popup',
+        level: 'info',
+        message: `空白新窗口请求在当前视图打开链接：${resolution.url}`,
+        url: resolution.url,
+        details: {
+          ...diagnosticDetails,
+          routedToCurrentView: false,
+          routingStatus: 'queued',
+        },
+      })
+      this.routePopupNavigation(
+        sessionId,
+        session,
+        openerWebContents,
+        resolution.url,
+        diagnosticDetails,
+        loadOptions,
+        release
+      )
+    }
+
+    popupWebContents.on('will-navigate', (event, url) => {
+      const currentPopupUrl = popupWebContents.getURL()
+      const currentPopupResolution = resolveBrowserPopupUrl(
+        currentPopupUrl,
+        'default',
+        initiatorUrl
+      )
+      const navigationInitiatorUrl =
+        currentPopupUrl && currentPopupResolution.kind !== 'bootstrap'
+          ? currentPopupUrl
+          : initiatorUrl
+      const resolution = resolveBrowserPopupUrl(url, 'default', navigationInitiatorUrl)
+      if (resolution.kind === 'bootstrap') return
+
+      if (nativeNamedPopup) {
+        if (resolution.kind === 'deny') {
+          event.preventDefault()
+          this.recordBrowserEvent(session, {
+            kind: 'popup',
+            level: 'warning',
+            message: `命名新窗口的目标地址被拒绝：${url}`,
+            url: url || openerWebContents.getURL() || session.url,
+            details: {
+              url,
+              source: 'named-popup',
+              routedToCurrentView: false,
+              routingStatus: 'blocked',
+              reason: resolution.reason,
+            },
+          })
+          if (!nativePopupActivated) release()
+          return
+        }
+
+        if (!nativePopupActivated) {
+          try {
+            popupWindow.setMaximumSize(
+              ControlledNamedPopupMaxWidth,
+              ControlledNamedPopupMaxHeight
+            )
+            popupWindow.setMinimumSize(
+              ControlledNamedPopupMinWidth,
+              ControlledNamedPopupMinHeight
+            )
+            popupWindow.setSize(
+              ControlledNamedPopupWidth,
+              ControlledNamedPopupHeight,
+              false
+            )
+            popupWindow.center()
+            popupWindow.show()
+          } catch (error) {
+            event.preventDefault()
+            this.log.warn('failed to show controlled named browser popup', {
+              sessionId,
+              url,
+              error: AppError.from(error).message,
+            })
+            release()
+            return
+          }
+
+          nativePopupActivated = true
+          timeout?.cancel()
+          timeout = null
+          this.recordBrowserEvent(session, {
+            kind: 'popup',
+            level: 'info',
+            message: `命名新窗口已按页面原始提交语义打开：${resolution.url}`,
+            url: resolution.url,
+            details: {
+              url: resolution.url,
+              frameName: details.frameName,
+              source: 'named-popup',
+              routedToCurrentView: false,
+              routingStatus: 'opened-controlled-popup',
+              method: 'preserved-by-browser',
+            },
+          })
+        }
+        return
+      }
+
+      event.preventDefault()
+      if (navigationHandlingStarted) return
+      navigationHandlingStarted = true
+      const referrer = details.referrer?.url ? details.referrer : undefined
+      routeBootstrapUrl(
+        url,
+        referrer ? { httpReferrer: referrer } : undefined,
+        { url, method: 'GET' }
+      )
+    })
+    popupWebContents.setWindowOpenHandler((details) => {
+      const resolution = resolveBrowserPopupNavigation(
+        details,
+        nativeNamedPopup ? popupWebContents.getURL() : initiatorUrl
+      )
+      if (resolution.kind === 'route') {
+        if (nativeNamedPopup) {
+          void popupWebContents.loadURL(resolution.url, resolution.loadOptions).catch((error) => {
+            this.log.warn('failed to route nested browser popup in its controlled window', {
+              sessionId,
+              url: resolution.url,
+              error: AppError.from(error).message,
+            })
+          })
+          return { action: 'deny' }
+        }
+        routeBootstrapUrl(resolution.url, resolution.loadOptions, {
+          url: resolution.url,
+          method: details.postBody ? 'POST' : 'GET',
+        })
+      } else if (resolution.kind === 'deny') {
+        routeBootstrapUrl(details.url, undefined, {
+          url: details.url,
+          method: details.postBody ? 'POST' : 'GET',
+        })
+      }
+      return { action: 'deny' }
+    })
+    popupWebContents.on('destroyed', release)
+    timeout = this.timers.after(BrowserPopupBootstrapLifetimeMs, release, {
+      label: 'browser.popup-bootstrap.expire',
+    })
+  }
+
+  private closePopupBootstraps(sessionId: string): void {
+    const leases = this.popupBootstraps.get(sessionId)
+    if (!leases) return
+
+    for (const lease of [...leases]) lease.release()
+  }
+
   /** 给 WebContents 绑定导航、console 和销毁事件。 */
   private bindWebContentsEvents(
     sessionId: string,
@@ -407,38 +995,11 @@ class BrowserSessionManager {
     const isCurrentWebContents = (): boolean =>
       this.sessions.get(sessionId)?.webContents === webContents
 
-    webContents.setWindowOpenHandler((details) => {
-      this.recordBrowserEvent(session, {
-        kind: 'popup',
-        level: 'info',
-        message: `页面请求打开新窗口：${details.url}`,
-        url: details.url || webContents.getURL() || session.url,
-        details: {
-          url: details.url,
-          frameName: details.frameName,
-          disposition: details.disposition,
-          referrer: toNullable(details.referrer?.url),
-          routedToCurrentView: true,
-        },
-      })
-      // 新窗口统一改为当前内嵌 view 导航，避免页面逃出受控 WebContents。
-      try {
-        void this.pageWaiter.loadUrl(webContents, this.normalizeUrl(details.url)).catch((error) => {
-          this.log.warn('failed to route browser popup into controlled window', {
-            sessionId,
-            url: details.url,
-            error: AppError.from(error).message,
-          })
-        })
-      } catch (error) {
-        this.log.warn('failed to normalize browser popup URL', {
-          sessionId,
-          url: details.url,
-          error: AppError.from(error).message,
-        })
-      }
-
-      return { action: 'deny' }
+    webContents.setWindowOpenHandler((details) =>
+      this.handleWindowOpenRequest(sessionId, session, webContents, details)
+    )
+    webContents.on('did-create-window', (popupWindow, details) => {
+      this.bindPopupBootstrapWindow(sessionId, session, webContents, popupWindow, details)
     })
     const dialogEvents = asBrowserDialogEventSource(webContents)
 
@@ -495,8 +1056,7 @@ class BrowserSessionManager {
     webContents.on('dom-ready', () => {
       if (!isCurrentWebContents()) return
 
-      // 每次 DOM ready 都重新安装 bridge，因为页面脚本环境会随导航重建。
-      void this.installSameViewNavigationBridge(sessionId, webContents)
+      // 页面侧只观察活动，不再捕获/改写 click 或 window.open；新窗口策略由主进程唯一持有。
       void this.installUserActivityBridge(sessionId, webContents)
     })
     webContents.on('before-input-event', (_event, input) => {
@@ -628,6 +1188,7 @@ class BrowserSessionManager {
       if (isCurrentWebContents()) {
         this.sessions.delete(sessionId)
         this.failedMainFrameNavigations.delete(sessionId)
+        this.closePopupBootstraps(sessionId)
       }
     })
   }
@@ -647,7 +1208,18 @@ class BrowserSessionManager {
     })
     electronSession.on('will-download', (_event, item, downloadWebContents) => {
       const lookup = this.findSessionByWebContents(downloadWebContents)
-      if (!lookup) return
+      if (!lookup) {
+        if (downloadWebContents && this.popupSessionOwners.has(downloadWebContents)) {
+          try {
+            item.cancel()
+          } catch (error) {
+            this.log.debug('取消失去 opener 的 popup 下载失败', {
+              error: AppError.from(error).message,
+            })
+          }
+        }
+        return
+      }
 
       const filename = item.getFilename()
       const totalBytes = item.getTotalBytes()
@@ -760,6 +1332,10 @@ class BrowserSessionManager {
     const url = requestingWebContents?.getURL() || lookup?.session.url || null
 
     if (!lookup) {
+      if (requestingWebContents && this.popupSessionOwners.has(requestingWebContents)) {
+        callback(false)
+        return
+      }
       const granted = this.resolveUnmanagedPermissionRequest({
         permission,
         url,
@@ -853,6 +1429,10 @@ class BrowserSessionManager {
     for (const [sessionId, session] of this.sessions) {
       if (session.webContents === webContents) return { sessionId, session }
     }
+
+    const popupOwner = this.popupSessionOwners.get(webContents)
+    if (popupOwner && this.sessions.get(popupOwner.sessionId) === popupOwner.session)
+      return popupOwner
 
     return null
   }
@@ -1103,24 +1683,6 @@ class BrowserSessionManager {
         error: AppError.from(error).message,
       })
       // The embedded webview may already be tearing down with its React owner.
-    }
-  }
-
-  /** 安装同视图导航 bridge。 */
-  private async installSameViewNavigationBridge(
-    sessionId: string,
-    webContents: electron.WebContents
-  ): Promise<void> {
-    try {
-      if (webContents.isDestroyed()) return
-
-      await webContents.executeJavaScript(buildSameViewNavigationBridgeScript(), true)
-    } catch (error) {
-      this.log.warn('failed to install browser same-view navigation bridge', {
-        sessionId,
-        url: webContents.isDestroyed() ? null : webContents.getURL(),
-        error: AppError.from(error).message,
-      })
     }
   }
 

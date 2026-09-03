@@ -23,6 +23,13 @@ class FakeWebContents extends EventEmitter {
   }
 }
 
+class LoadableFakeWebContents extends FakeWebContents {
+  async loadURL(url, options) {
+    this.loaded = { url, options }
+    queueMicrotask(() => this.emit('did-finish-load'))
+  }
+}
+
 test("parallel navigation waits share and release native WebContents listeners", async () => {
   const { BrowserPageWaiter } = await import(packagePath.href);
   const waiter = new BrowserPageWaiter();
@@ -62,4 +69,27 @@ test("subframe failures do not consume the shared main-frame failure listener", 
   webContents.emit("did-stop-loading");
   await wait;
   assert.equal(webContents.eventNames().length, 0);
+});
+
+test("loadUrl forwards POST and referrer options to Electron", async () => {
+  const { BrowserPageWaiter } = await import(packagePath.href);
+  const waiter = new BrowserPageWaiter();
+  const webContents = new LoadableFakeWebContents();
+  const options = {
+    httpReferrer: "https://origin.test/start",
+    extraHeaders: "Content-Type: application/x-www-form-urlencoded\n",
+    postData: [{ bytes: Buffer.from("query=velaros") }],
+  };
+
+  await waiter.loadUrl(
+    webContents,
+    "https://destination.test/submit",
+    undefined,
+    options,
+  );
+
+  assert.deepEqual(webContents.loaded, {
+    url: "https://destination.test/submit",
+    options,
+  });
 });

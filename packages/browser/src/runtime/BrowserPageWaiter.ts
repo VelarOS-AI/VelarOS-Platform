@@ -1,4 +1,8 @@
-import type { Event as ElectronEvent, WebContents } from "electron";
+import type {
+  Event as ElectronEvent,
+  LoadURLOptions,
+  WebContents,
+} from "electron";
 
 import {
   isBlank,
@@ -45,6 +49,7 @@ class BrowserPageWaiter {
     webContents: WebContents,
     url: string,
     abortSignal?: AbortSignal,
+    loadOptions?: LoadURLOptions,
   ): Promise<void> {
     return new Promise((resolveLoad, rejectLoad) => {
       if (!this.isLiveWebContents(webContents)) {
@@ -156,7 +161,7 @@ class BrowserPageWaiter {
           ),
         );
         abortSignal?.addEventListener("abort", handleAbort, { once: true });
-        void webContents.loadURL(url).catch((error) => {
+        void webContents.loadURL(url, loadOptions).catch((error) => {
           if (this.isNavigationAbort(error)) {
             sawNavigationAbort = true;
             return;

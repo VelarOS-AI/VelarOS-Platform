@@ -1,81 +1,12 @@
-/** 构造同视图导航 bridge，拦截 target=_blank 链接和 window.open。 */
+/**
+ * 保留旧同视图导航 bridge 的兼容入口。
+ *
+ * 新窗口请求现在只由 Electron 主进程的 `setWindowOpenHandler` 裁决。页面侧不能在 capture
+ * 阶段接管链接：那会抢在站点自己的 click/SPA handler 之前执行，令占位 `href="#"` 等链接
+ * 丢失真正的导航逻辑。旧入口仍返回一个无副作用脚本，避免已发布调用方在升级时断裂。
+ */
 function buildSameViewNavigationBridgeScript(): string {
-  return `(() => {
-  const bridgeKey = '__velaros_same_view_navigation_bridge__';
-  if (window[bridgeKey]) return true;
-  Object.defineProperty(window, bridgeKey, {
-    value: true,
-    configurable: false,
-    enumerable: false,
-    writable: false
-  });
-
-  const resolveNavigableUrl = (rawUrl) => {
-    if (!rawUrl) return null;
-    const value = String(rawUrl).trim();
-    if (!value || value.toLowerCase().startsWith('javascript:')) return null;
-    try {
-      const url = new URL(value, window.location.href);
-      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const shouldRouteInCurrentView = (rawUrl, rawTarget) => {
-    const url = resolveNavigableUrl(rawUrl);
-    if (!url) return null;
-    const target = String(rawTarget || '').trim().toLowerCase();
-    return target === '_blank' || target === '_new' || target === 'blank' ? url : null;
-  };
-
-  const routeInCurrentView = (url) => {
-    window.location.assign(url);
-  };
-
-  document.addEventListener('click', (event) => {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-
-    const target = event.target;
-    const anchor = target && typeof target.closest === 'function'
-      ? target.closest('a[href]')
-      : null;
-    if (!anchor || anchor.hasAttribute('download')) return;
-
-    const baseTarget = document.querySelector('base[target]')?.getAttribute('target') || '';
-    const nextUrl = shouldRouteInCurrentView(
-      anchor.getAttribute('href') || anchor.href,
-      anchor.getAttribute('target') || baseTarget
-    );
-    if (!nextUrl) return;
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    routeInCurrentView(nextUrl);
-  }, true);
-
-  const nativeWindowOpen = window.open.bind(window);
-  window.open = (url, target, features) => {
-    const nextUrl = shouldRouteInCurrentView(url, target || '_blank');
-    if (nextUrl) {
-      routeInCurrentView(nextUrl);
-      return null;
-    }
-
-    return nativeWindowOpen(url, target, features);
-  };
-
-  return true;
-})()`
+  return 'true'
 }
 
 export { buildSameViewNavigationBridgeScript }
