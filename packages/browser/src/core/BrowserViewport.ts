@@ -25,6 +25,6 @@ export function buildBrowserViewportDeviceMetrics(
     screenWidth: width,
     screenHeight: height,
     deviceScaleFactor: 1,
-    mobile: options.mobile === true,
+    mobile: Boolean(options.mobile),
   }
 }

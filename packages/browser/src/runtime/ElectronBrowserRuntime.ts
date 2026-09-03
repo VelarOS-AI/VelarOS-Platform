@@ -975,7 +975,7 @@ class ElectronBrowserRuntime {
       const viewport = {
         width: result.width,
         height: result.height,
-        mobile: result.mobile === true,
+        mobile: Boolean(result.mobile),
       }
       const externalSession = this.getExternalPageSession(sessionId)
       if (externalSession) {
