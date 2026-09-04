@@ -814,7 +814,15 @@ class KernelBackgroundJobManager {
           return { output: stored.output, truncated: false }
         }
       } catch (error) {
-        this.disableOutputStoreForJob(id, error, input.consume ? 'read' : 'readAll')
+        const operation = input.consume ? 'read' : 'readAll'
+        const message = AppError.getMessage(error)
+        this.outputStoreDisabledJobs.add(id)
+        this.outputStoreErrorByJob.set(id, message)
+        logRuntime.tag('KernelBackgroundJobManager').warn('background job artifact access failed', {
+          jobId: id,
+          operation,
+          error,
+        })
       }
     }
 
@@ -834,17 +842,6 @@ class KernelBackgroundJobManager {
       truncated: baseOffset > 0,
       omittedChars: optionalWhen(isPositiveNumber, baseOffset),
     }
-  }
-
-  private disableOutputStoreForJob(id: string, error: unknown, operation: string): void {
-    const message = AppError.getMessage(error)
-    this.outputStoreDisabledJobs.add(id)
-    this.outputStoreErrorByJob.set(id, message)
-    logRuntime.tag('KernelBackgroundJobManager').warn('background job artifact access failed', {
-      jobId: id,
-      operation,
-      error,
-    })
   }
 
   /**
