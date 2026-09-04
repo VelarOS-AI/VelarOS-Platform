@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "velaros": {
     "platform": "0.6"
   },
