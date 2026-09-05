@@ -73,6 +73,20 @@ const BaseModelProviderOperationalManifests = [
     validationKind: 'velar-managed',
   },
   {
+    id: 'velar-dev',
+    label: 'Velar Dev',
+    defaultBaseURL: '',
+    description: '由 VelarOS Cloud 为授权账户提供的内部模型目录，无需配置密钥。',
+    defaultApiKey: 'velar-dev-managed',
+    apiKeyOptional: true,
+    enabledByDefault: true,
+    managedByCloud: true,
+    adapterKind: 'openai-compatible',
+    validationKind: 'velar-managed',
+    compatibilityNote:
+      'Velar Dev 当前只提供聊天模型；记忆和知识库 embedding 继续使用宿主单独选择的向量服务。',
+  },
+  {
     id: 'openrouter',
     label: 'OpenRouter',
     defaultBaseURL: 'https://openrouter.ai/api/v1',

@@ -92,6 +92,9 @@ export {
   resolveThinkingDepthEffort,
 } from './ThinkingDepthModelOptions'
 export {
+  isVelarCloudManagedProviderId,
+  type VelarCloudManagedProviderId,
+  VelarCloudManagedProviderIds,
   VelarCloudModelRuntime,
   velarCloudModelRuntime,
   type VelarCloudModelRuntimeBinding,

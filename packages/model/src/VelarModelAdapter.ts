@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
-import { isPlainObject, isString, Log } from '@velaros-ai/core'
+import { isBlank, isPlainObject, isString, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
@@ -8,7 +9,12 @@ import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from './ModelContr
 import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 import { mergeOpenRouterReasoning } from './ThinkingDepthModelOptions'
-import type { VelarCloudModelRuntime } from './VelarCloudModelRuntime'
+import {
+  isVelarCloudManagedProviderId,
+  type VelarCloudManagedProviderId,
+  VelarCloudManagedProviderIds,
+  type VelarCloudModelRuntime,
+} from './VelarCloudModelRuntime'
 
 type VelarFetchInit = Parameters<typeof fetch>[1]
 
@@ -43,30 +49,53 @@ export class VelarModelAdapter extends ModelAdapter {
     providers: ModelProviderCollection,
     private readonly cloudRuntime: VelarCloudModelRuntime
   ) {
-    super(['velar'] satisfies readonly ChatProviderId[], providers)
+    super(VelarCloudManagedProviderIds, providers)
   }
 
   public createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory {
-    const runtime = this.cloudRuntime.require()
+    const providerId = this.requireManagedProviderId(config.provider)
+    const runtime = this.cloudRuntime.require(providerId)
     const provider = createOpenAI({
-      apiKey: 'velar-managed',
+      apiKey: providerId === 'velar-dev' ? 'velar-dev-managed' : 'velar-managed',
       baseURL: runtime.baseURL,
-      name: 'velar',
+      name: providerId,
       fetch: (input, init) =>
         runtime.fetch(
           input,
-          injectVelarThinkingRouting(init, config.thinkingDepth, config.reasoningLevel)
+          providerId === 'velar'
+            ? injectVelarThinkingRouting(init, config.thinkingDepth, config.reasoningLevel)
+            : init
         ),
     })
-    return (modelId) => applyPromptCacheProviderOptions(provider.chat(modelId || 'velar/auto'))
+    return (modelId) => {
+      if (providerId === 'velar' && isBlank(modelId))
+        return applyPromptCacheProviderOptions(provider.chat('velar/auto'))
+      if (isBlank(modelId)) {
+        throw new AppError(
+          'VALIDATION',
+          'Velar Dev 模型必须由 Cloud 动态目录显式选择。'
+        )
+      }
+
+      // Cloud 下发的公共模型 ID 是不透明契约，Platform 不加前缀、不拆分也不规范化。
+      return applyPromptCacheProviderOptions(provider.chat(modelId))
+    }
   }
 
   public createEmbeddingRequest(
-    _config: ModelAdapterConfig,
+    config: ModelAdapterConfig,
     _model: string,
     texts: string[]
   ): EmbeddingRequest {
-    const runtime = this.cloudRuntime.require()
+    const providerId = this.requireManagedProviderId(config.provider)
+    if (providerId === 'velar-dev') {
+      throw new AppError(
+        'VALIDATION',
+        'Velar Dev 当前只提供聊天模型，不支持 embedding。'
+      )
+    }
+
+    const runtime = this.cloudRuntime.require('velar')
     return {
       url: `${runtime.baseURL}/embeddings`,
       headers: { Authorization: 'Bearer velar-managed' },
@@ -75,6 +104,11 @@ export class VelarModelAdapter extends ModelAdapter {
         input: texts,
       },
     }
+  }
+
+  private requireManagedProviderId(providerId: ChatProviderId): VelarCloudManagedProviderId {
+    if (isVelarCloudManagedProviderId(providerId)) return providerId
+    throw new AppError('VALIDATION', `不是 Velar Cloud 托管 provider：${providerId}`)
   }
 }
 

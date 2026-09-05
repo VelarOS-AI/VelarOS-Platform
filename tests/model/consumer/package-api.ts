@@ -8,6 +8,8 @@ import {
   type ModelRequestClientOptions,
   type ModelRequestServiceOptions,
   type ModelRequestTransport,
+  type VelarCloudManagedProviderId,
+  VelarCloudManagedProviderIds,
   VelarCloudModelRuntime,
   VelarModelAdapter,
 } from '@velaros-ai/model'
@@ -61,6 +63,7 @@ const composition = createModelRuntimeComposition({
 const compositionContract: ModelRuntimeComposition = composition
 const providers: ModelProviderCollection = composition.providerCollection
 const cloudRuntime: VelarCloudModelRuntime = compositionContract.velarCloudRuntime
+const cloudProvider: VelarCloudManagedProviderId = VelarCloudManagedProviderIds[1]
 const defaultComposition = new DefaultModelRuntimeComposition({
   providerScripts,
 })
@@ -85,6 +88,7 @@ const modelEnvironment = new LocalModelEnvironment({
 void providers
 void compositionContract
 void cloudRuntime
+void cloudProvider
 void client
 void adapter
 void cloudAdapter

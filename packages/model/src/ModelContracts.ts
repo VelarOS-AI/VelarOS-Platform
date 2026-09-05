@@ -1,6 +1,7 @@
 /** Built-in providers whose concrete integration is owned by Model Runtime. */
 export type BuiltInChatProviderId =
   | 'velar'
+  | 'velar-dev'
   | 'openrouter'
   | 'openai'
   | 'anthropic'

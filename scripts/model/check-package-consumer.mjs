@@ -535,6 +535,8 @@ assert.equal(
 )
 assert.equal(typeof runtime.ModelRequestClient, 'function')
 assert.equal(typeof runtime.VelarCloudModelRuntime, 'function')
+assert.deepEqual(runtime.VelarCloudManagedProviderIds, ['velar', 'velar-dev'])
+assert.equal(typeof runtime.isVelarCloudManagedProviderId, 'function')
 assert.equal(typeof runtime.OpenAiOnlyModels.has, 'function')
 assert.equal(runtime.OpenAiOnlyModels.add, undefined)
 assert.equal(runtime.DefaultModelRuntimeComposition, undefined)

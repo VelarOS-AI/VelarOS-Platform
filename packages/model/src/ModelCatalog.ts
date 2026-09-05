@@ -29,6 +29,7 @@ export function isDirectOpenAICompatibleProvider(providerId: ChatProviderId): bo
 
 export const CustomModelProviderIds = [
   'velar',
+  'velar-dev',
   'openrouter',
   'openai',
   'anthropic',
@@ -150,6 +151,18 @@ const VelarSharedProviderCatalog = {
     { id: VelarAutoModelId, contextWindow: 200_000 },
     { id: 'velar/embedding', contextWindow: 8_192 },
   ],
+} satisfies SharedProviderCatalog
+
+/**
+ * Velar Dev 的目录由 Cloud 按账号授权动态下发。
+ *
+ * Platform 只把 Cloud 公共模型 ID 当作不透明字符串传递，不能在本地维护一份会漂移的
+ * 静态目录，也不能在目录不可用时回退到 Velar 或 OpenRouter。
+ */
+const VelarDevSharedProviderCatalog = {
+  provider: 'velar-dev',
+  defaultModel: '',
+  models: [],
 } satisfies SharedProviderCatalog
 
 const CustomProviderCatalog = {
@@ -363,6 +376,7 @@ const sharedProviderCatalogs = [
   OpenAICompatibleGatewayProviderCatalog,
   CustomProviderCatalog,
   VelarSharedProviderCatalog,
+  VelarDevSharedProviderCatalog,
 ] as const satisfies readonly SharedProviderCatalog[]
 
 export const SharedProviderCatalogs: readonly SharedProviderCatalog[] = sharedProviderCatalogs.map(

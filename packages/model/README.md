@@ -60,6 +60,10 @@
 - **`LocalModelEnvironment` / `ModelEnvironmentPort`** —— 不可变的显式环境快照与最小读取端口
   (Ollama 的 baseURL / model / 上下文窗口 / 可见模型都从这里解析)。
 - **`VelarCloudModelRuntime`** —— 托管模型连接绑定,**宿主独占**,属于 composition。
+  `velar` 与 `velar-dev` 各自注册、各自撤销，未注册的服务会直接报错，不会跨服务或向
+  OpenRouter 回退。`velar-dev` 的模型目录由 Cloud 按账户授权动态下发；Platform 将其中的
+  公共模型 ID 作为不透明字符串原样传给 Cloud，不维护静态副本。该服务当前只支持
+  聊天模型，embedding 不会回退到原有 Velar 链路。
 - **横切选项族** —— `PromptCacheModelOptions`(前缀缓存断点)、
   `ThinkingDepthModelOptions`(推理力度 / OpenRouter reasoning 合并)、
   `ModelRequestPolicy`、`ProviderRuntimeAvailability`、`EmbeddingModelSelection`。
@@ -92,6 +96,20 @@ await models.agentModelRuntime.resolveRoleRuntime(
     openRouter: { useFreeModelsForDebug: false },
   },
 )
+```
+
+Cloud 授权模型必须按服务绑定；宿主只注入带账户认证的 Cloud `fetch`，不能把上游密钥交给
+Model Runtime。`velar-dev` 的默认 enabled 只表示绑定完成后运行配置可用；账户可见性与授权
+仍由宿主下发的 managed model 列表和 Cloud 服务端决定，未绑定时请求会直接失败：
+
+```ts
+models.velarCloudRuntime.registerProvider('velar-dev', {
+  baseURL: `${cloudBaseURL}/v1/velar-dev`,
+  fetch: authenticatedCloudFetch,
+})
+
+// 退出账户或 Cloud 撤权后立刻移除这一条绑定，不影响原有 Velar。
+models.velarCloudRuntime.unregisterProvider('velar-dev')
 ```
 
 可移植宿主显式注入环境(不读进程全局):

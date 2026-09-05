@@ -65,6 +65,10 @@ export function isModelProviderEmbeddingCapable(
   providerCollection: ModelProviderCollection,
   provider: ChatProviderId,
 ): boolean {
+  // Velar Dev 的 Cloud 网关只暴露动态聊天目录与 chat/completions。
+  // 不能因其复用 OpenAI-compatible 聊天适配器就把它误判为 embedding provider。
+  if (provider === 'velar-dev') return false
+
   return EmbeddingAdapterKinds.has(
     providerCollection.requireOperationalManifest(provider).adapterKind,
   )
