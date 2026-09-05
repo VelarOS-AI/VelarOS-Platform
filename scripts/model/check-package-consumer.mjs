@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 import { assertLockfileConsistency } from './checks/lockfileConsistency.mjs'
+import { safePackPackage } from '../release/safe-package-pack.mjs'
 
 const ScriptDirectory = dirname(fileURLToPath(import.meta.url))
 const RepositoryRoot = resolve(ScriptDirectory, '..')
@@ -310,18 +311,10 @@ async function assertPublishedDeclarations(
 async function packPackage(specification, archiveDirectory) {
   const archiveName = archiveNameFor(specification.name)
   const archivePath = join(archiveDirectory, archiveName)
-  run(
-    'bun',
-    [
-      'pm',
-      'pack',
-      '--filename',
-      archivePath,
-      '--ignore-scripts',
-      '--quiet',
-    ],
-    { cwd: specification.directory }
-  )
+  await safePackPackage({
+    filename: archivePath,
+    packageDirectory: specification.directory,
+  })
   return archivePath
 }
 

@@ -20,6 +20,7 @@ import ts from 'typescript'
 
 import { CapabilityPackages } from './capability-owners.mjs'
 import { InstalledPackageResolver } from './lib/installed-package-resolver.mjs'
+import { safePackPackage } from '../release/safe-package-pack.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesRoot = path.join(repositoryRoot, 'packages')
@@ -710,7 +711,10 @@ export declare const uiConflictProbe: true
 `,
   )
   await writeFile(path.join(probeSource, 'index.js'), 'export const uiConflictProbe = true\n')
-  run('bun', ['pm', 'pack', '--destination', probePack, '--ignore-scripts'], probeSource)
+  await safePackPackage({
+    destination: probePack,
+    packageDirectory: probeSource,
+  })
   const tarballs = (await readdir(probePack)).filter((entry) => entry.endsWith('.tgz'))
   assert(tarballs.length === 1, 'UI conflict probe must produce exactly one tarball')
   return path.join(probePack, tarballs[0])
@@ -795,11 +799,10 @@ void [AppError, BrowserSessionManager, probe, uiConflictProbe]
 
 async function packPackage(packageDirectory, packedDirectory) {
   const before = new Set(await readdir(packedDirectory))
-  run(
-    'bun',
-    ['pm', 'pack', '--destination', packedDirectory, '--ignore-scripts'],
+  await safePackPackage({
+    destination: packedDirectory,
     packageDirectory,
-  )
+  })
   const tarball = (await readdir(packedDirectory)).find(
     (entry) => entry.endsWith('.tgz') && !before.has(entry),
   )

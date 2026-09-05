@@ -436,7 +436,9 @@ function scanReleaseIdentityBoundary() {
         "['status', '--porcelain', '--untracked-files=all']",
         // The publisher must verify that the runtime ref is the selected tag.
         'process.env.GITHUB_REF === expectedRef',
-        "['pm', 'pack', '--destination', packDirectory, '--ignore-scripts']",
+        'safePackPackage({',
+        'destination: packDirectory,',
+        'packageDirectory: item.directory,',
         'sourceSha,',
         'fileName: tarballs[0]',
         'sizeBytes:',

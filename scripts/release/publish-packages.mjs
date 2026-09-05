@@ -30,7 +30,7 @@
 //
 // 谁核验它:kernel / agent 两域的 check:*-arch「防线:发布身份」按字面标记核对本文件与
 // verify-release-ref.mjs、release-packages.yml 三者(rule=release-artifact-identity)。
-// 被核验的标记 = git rev-parse / git status --porcelain --untracked-files=all / bun pm pack 的参数 /
+// 被核验的标记 = git rev-parse / git status --porcelain --untracked-files=all / 安全打包入口 /
 // artifact 里的 sourceSha·fileName·sizeBytes·sha256 / publish 的第一参数是 tarballPath。
 // 改这些写法要同时改门,别加豁免。
 
@@ -46,6 +46,7 @@ import {
   resolveReleaseSelection,
   selectReleasedPackages,
 } from './releaseTopology.mjs'
+import { safePackPackage } from './safe-package-pack.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dryRun = process.argv.includes('--dry-run')
@@ -191,7 +192,11 @@ if (!skipBuild) {
 for (const item of selected) {
   const packDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-pack-'))
   try {
-    run('bun', ['pm', 'pack', '--destination', packDirectory, '--ignore-scripts'], item.directory)
+    await safePackPackage({
+      destination: packDirectory,
+      packageDirectory: item.directory,
+      stdio: 'inherit',
+    })
     const tarballs = (await readdir(packDirectory)).filter((file) => file.endsWith('.tgz'))
     if (tarballs.length !== 1) {
       throw new Error(`${item.manifest.name} produced ${tarballs.length} package tarballs`)

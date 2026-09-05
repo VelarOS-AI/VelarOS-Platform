@@ -18,6 +18,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
+import { safePackPackage } from '../release/safe-package-pack.mjs'
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesRoot = path.join(repositoryRoot, 'packages')
 const packageScope = '@velaros-ai/'
@@ -490,7 +492,10 @@ export declare const uiConflictProbe: true
 `,
   )
   await writeFile(path.join(probeSource, 'index.js'), 'export const uiConflictProbe = true\n')
-  run('bun', ['pm', 'pack', '--destination', probePack, '--ignore-scripts'], probeSource)
+  await safePackPackage({
+    destination: probePack,
+    packageDirectory: probeSource,
+  })
   const probeTarballs = (await readdir(probePack)).filter((entry) => entry.endsWith('.tgz'))
   assert(probeTarballs.length === 1, 'UI conflict probe must produce exactly one tarball')
   const probeInstall = path.join(consumerNodeModules, '@velaros-ai', 'ui-conflict-probe')
@@ -582,11 +587,10 @@ try {
     )
 
     const before = new Set(await readdir(packedDirectory))
-    run(
-      'bun',
-      ['pm', 'pack', '--destination', packedDirectory, '--ignore-scripts'],
+    await safePackPackage({
+      destination: packedDirectory,
       packageDirectory,
-    )
+    })
     const tarball = (await readdir(packedDirectory)).find(
       (entry) => entry.endsWith('.tgz') && !before.has(entry),
     )

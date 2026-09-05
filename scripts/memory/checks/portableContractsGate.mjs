@@ -15,6 +15,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  runGuardedCommand,
+  safePackPackage,
+} from '../../release/safe-package-pack.mjs'
+
 const RepositoryRoot = resolve(import.meta.dirname, '../../..')
 const TypeScriptCli = resolve(RepositoryRoot, 'node_modules/typescript/bin/tsc')
 const ViteCli = resolve(RepositoryRoot, 'node_modules/vite/bin/vite.js')
@@ -35,6 +40,22 @@ export class PortableContractsGate {
   }
 
   async run() {
+    await runGuardedCommand({
+      args: [
+        resolve(
+          this.repositoryRoot,
+          'scripts/build/buildPackageTopology.mjs'
+        ),
+        '--for',
+        '@velaros-ai/memory',
+      ],
+      command: process.execPath,
+      cwd: this.repositoryRoot,
+      operation: 'Memory portable-contract package build',
+      stdio: 'inherit',
+      timeoutMs: 300_000,
+    })
+
     const temporaryRoot = await mkdtemp(
       join(tmpdir(), 'velaros-portable-contracts-')
     )
@@ -75,11 +96,10 @@ export class PortableContractsGate {
       specification.name.replace('@velaros-ai/', '')
     )
     await mkdir(archiveDirectory, { recursive: true })
-    this.runCommand(
-      'bun',
-      ['pm', 'pack', '--destination', archiveDirectory],
-      specification.directory
-    )
+    await safePackPackage({
+      destination: archiveDirectory,
+      packageDirectory: specification.directory,
+    })
 
     const archives = (await readdir(archiveDirectory))
       .filter((fileName) => fileName.endsWith('.tgz'))

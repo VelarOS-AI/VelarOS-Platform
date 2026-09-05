@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { safePackPackage } from "../../release/safe-package-pack.mjs";
+
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -85,11 +87,10 @@ async function verifyPackage(packageDirectory) {
 
   const temporary = await mkdtemp(path.join(tmpdir(), "velaros-ui-contract-"));
   try {
-    capture(
-      "bun",
-      ["pm", "pack", "--destination", temporary, "--ignore-scripts"],
+    await safePackPackage({
+      destination: temporary,
       packageDirectory,
-    );
+    });
     const tarballs = (await readdir(temporary)).filter((file) =>
       file.endsWith(".tgz"),
     );
@@ -126,11 +127,10 @@ async function verifyExternalConsumer() {
         "packages",
         packageName,
       );
-      capture(
-        "bun",
-        ["pm", "pack", "--destination", temporary, "--ignore-scripts"],
+      await safePackPackage({
+        destination: temporary,
         packageDirectory,
-      );
+      });
     }
     for (const file of await readdir(temporary)) {
       if (file.endsWith(".tgz"))
@@ -292,11 +292,10 @@ async function packLocalHtmlArtifactsDependency(destination) {
   }
 
   const before = new Set(await readdir(destination));
-  capture(
-    "bun",
-    ["pm", "pack", "--destination", destination, "--ignore-scripts"],
+  await safePackPackage({
+    destination,
     packageDirectory,
-  );
+  });
   const created = (await readdir(destination)).filter(
     (file) => file.endsWith(".tgz") && !before.has(file),
   );
