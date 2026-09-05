@@ -1,10 +1,10 @@
 # Platform 0.6.13 migration
 
-This document describes the source and API changes prepared for the 0.6.13 release train. Package publication, registry availability, and consumer installation are pending verification. The version table is the release target, not a publication receipt.
+Platform 0.6.13 is published as tag `v0.6.13` from source commit `a071b7d9429d2b8e239eb963ca90b7d1e106a89d`. The tag and main branch are available on the official remote. Desktop, Workbench, and Termel consume the published registry packages and have passed frozen installation and their final product checks.
 
-## Package targets
+## Published packages
 
-| Package | Target version | Migration scope |
+| Package | Published version | Migration scope |
 | --- | --- | --- |
 | `@velaros-ai/agent` | `0.6.9` | Shared execution stack, host lifecycle and retry hooks, tool-call identity, shared discovery contract, execution correctness fixes. |
 | `@velaros-ai/model` | `0.5.0` | Generic `ModelRequestClient`; scenario ownership moves to callers. |
@@ -37,7 +37,7 @@ The shared model retry loop always rejects replay after cancellation, an abort e
 
 `ToolExecutionPolicyContext.toolCallId` carries the model call's identity into the derived execution context. It remains optional on a base context because that context exists before a tool call; the shared executor supplies it for a dispatched call. Host bridges must forward this identity to approval, tool execution, and durable records rather than generate a replacement ID. Tool-call history, the result, and host records can then refer to the same invocation.
 
-The Agent package also contains the earlier cancellation, call/result finalization, run-scoped loop guard, and context replay fixes. Consumers must validate the official package artifact that contains these fixes when replacing a package patch.
+Published Agent `0.6.9` also contains the cancellation, call/result finalization, run-scoped loop guard, and context replay fixes. The installed packages were compared with the actual published artifacts.
 
 ## Termel host integration
 
@@ -45,7 +45,7 @@ Termel's `packages/termel-runtime/src/agent-execution-stack.ts` adapts its host 
 
 Termel continues to own session events and durable history, steering input, history compaction policy, usage and budgets, provider selection and fallback, worker workspaces, and local/remote approval. The primary run connects these controls through the lifecycle and retry hooks. Workers explicitly disable model retry and partial continuation. This preserves product policy while giving both paths the same turn, tool, cancellation, and finishing implementation.
 
-This integration is a source migration. Its release acceptance requires running the consumer against the published Agent package, including primary and worker execution; a workspace-source test alone is insufficient.
+Termel consumes published Agent `0.6.9`. Its final `bun run check` passed types, 259 tests, and the product build, including the maintained primary and worker execution coverage.
 
 ## Model request clients and scenario ownership
 
@@ -128,19 +128,26 @@ Import `ComputerOperationMetadata` and `ComputerToolOperations` from `@velaros-a
 
 ## Official package rollout and evidence
 
-Replace the prior fixed-version Agent Bun patch with the official package only after the target version is readable from the configured registry and its artifact contains the fixes. Update dependency manifests and lockfiles together, then remove the obsolete Agent patch registration and file. Preserve unrelated package patches. Do not use a sibling source import, local `dist`, or `file:`/`link:` dependency as evidence of an official-package upgrade.
+All nine packages in the version table are published to GitHub Packages. Desktop, Workbench, and Termel have updated their manifests and lockfiles, installed the registry versions, and passed frozen installation. Each dependency graph has one physical Agent instance. Across 21 installed package copies, all 8,653 files match the actual published artifacts; each checked archive hash matches its publication record.
 
-Follow [the consumer update workflow](platform-consumer-updates.md) for publication visibility, targeted lockfile updates, frozen installation, and consumer validation. Record each stage separately:
+Actions run `33961895633` could not start its job because of billing availability. Publication completed through the maintained [explicit local release entry](local-package-release.md): `release:local v0.6.13 --only agent,model,computer,development,project,memory,browser,office,system`. This path completed frozen installation, the full `bun run check`, a fresh build, and per-package source/tag/remote/worktree verification. Every published tarball was the validated artifact, with its hash checked before publication.
 
-| Stage | Current evidence status |
+The [consumer update workflow](platform-consumer-updates.md) remains the reference for future registry upgrades. The completed delivery has the following evidence:
+
+| Stage | Verified result |
 | --- | --- |
-| API and host source migration | Implemented in the working changes described above. |
-| Candidate source validation | Platform builds, type checks, tests, and suites passed; lint and all 37 architecture/style checks passed. Remaining release gates are still running. Desktop candidate checks passed all 19 type partitions and its build. |
-| Provider schema snapshot regression | 32 focused tests passed, including unload/replacement during context preparation and Solo/Query execution. Two probes using Desktop's real ToolRegistry preserved the original schema and rejected stale execution after unload or replacement. Scoped lint and all 37 architecture/style checks passed for the changed files. |
-| Target package versions | Listed in this document; publication evidence pending. |
-| Registry visibility and packed public exports | Pending release verification. |
-| Desktop, Workbench, and Termel official-package installation | Pending consumer manifest, lockfile, and frozen-install evidence. |
-| Official installed-package behavior and consumer checks | Pending results tied to the published versions; candidate source and earlier patch validation do not establish these results. |
-| Real application and live-model acceptance | Performed by the product user after receiving the candidate build. |
+| Release identity | Tag `v0.6.13`, source `a071b7d9429d2b8e239eb963ca90b7d1e106a89d`; main and tag pushed to the official remote. |
+| Platform quality gates | Full `bun run check` and the subsequent fresh release build passed, including types, tests, suites, lint, architecture/style and release gates. |
+| Provider schema snapshot regression | 32 focused tests passed, including unload/replacement during context preparation and Solo/Query execution. Two probes using Desktop's real ToolRegistry preserved the original schema and rejected stale execution after unload or replacement. |
+| Packed host contract consumer | Maintained `check:host-contract-consumer` safely packs eight packages, installs their complete first-party closure in isolation, passes strict NodeNext with `skipLibCheck: false`, and builds Computer contracts for the browser. The fixture consumes public host ports without repository ambient types. |
+| Registry publication | Nine package records include the source SHA, tag, tarball SHA256 and registry integrity. |
+| Consumer installation and dependency graph | Desktop, Workbench and Termel installed official packages and passed frozen installation; each has one physical Agent instance. |
+| Installed payload verification | 21 package copies, 8,653 files, zero differences from the actual published artifacts. |
+| Desktop final official-package checks | All 19 type partitions, `build:incremental`, and 10 focused tests passed. |
+| Workbench final official-package checks | Typecheck, production build, product boundaries, and 17 tests across three files passed. |
+| Termel final official-package checks | `bun run check` passed types, 259 tests, and the product build. |
+| Real application and live-model acceptance | The product user performs acceptance using the resulting builds. |
 
-Release verification should cover primary and worker execution, lifecycle persistence ordering, safe retry and fallback, cancellation, tool-call identity and results, shared schema/permission discovery, scenario outputs, and standalone versus tree-enabled memory mounting. Preserve the earlier storage receipt and stream recovery regression coverage when replacing the patch. Add actual package versions, registry receipts, consumer lock evidence, and check results to this section when available.
+The delivery evidence bundle contains `published-artifacts.json`, `consumer-graph-verification.json`, and `installed-payload-verification.json`. Publication and each product's final check logs are retained separately, so package identity, dependency resolution, byte comparison, and product behavior remain independently reviewable.
+
+The maintained regression coverage includes primary and worker execution, lifecycle persistence ordering, safe retry and fallback, cancellation, tool-call identity and results, schema/permission discovery, scenario outputs, storage receipts, stream recovery, and standalone versus tree-enabled memory mounting. Real application acceptance covers these flows with the user's model services and working data.
