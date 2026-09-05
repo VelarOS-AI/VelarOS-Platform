@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "velaros": {
     "platform": "0.6"
   },
@@ -114,6 +114,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent"
   },
   "dependencies": {
+    "@types/json-schema": "7.0.15",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",

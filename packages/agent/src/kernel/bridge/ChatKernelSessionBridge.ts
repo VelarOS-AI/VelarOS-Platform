@@ -37,7 +37,7 @@ import type {
   ExecutionResolveConfirmationRequest,
   UserActionCardResult,
 } from '@velaros-ai/agent/protocol'
-import { isArray, isBlank, isEmpty,isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -82,9 +82,7 @@ interface KernelImplicitBackgroundWaitInput {
  * 是本桥与注入的 {@link KernelChatExecutionCoordinator} 之间的端口契约。
  */
 interface KernelChatRunOptions {
-  awaitPendingBackgroundJobs?: (
-    input?: KernelImplicitBackgroundWaitInput
-  ) => Promise<boolean>
+  awaitPendingBackgroundJobs?: (input?: KernelImplicitBackgroundWaitInput) => Promise<boolean>
   readBackgroundJobOutput?: (
     input: KernelChatBackgroundJobReadInput
   ) => Promise<Nullable<KernelBackgroundJobOutputSnapshot>>
@@ -131,6 +129,35 @@ interface KernelChatExecutionService {
 interface PendingKernelChatRun<TRenderTarget> {
   renderTarget: TRenderTarget
   payload: ChatSendRequest
+  admission: KernelChatSubmissionDeferred
+  completion: KernelChatSubmissionDeferred
+  cancelled: boolean
+}
+
+/** 每条输入自己的准入与执行收尾；合并 wake 不合并这些回执。 */
+interface KernelChatSubmission {
+  accepted: Promise<void>
+  /** 本条执行已收尾；准入失败、排队取消或宿主执行抛错时拒绝。 */
+  completed: Promise<void>
+}
+
+interface KernelChatSubmissionDeferred {
+  promise: Promise<void>
+  resolve: () => void
+  reject: (error: unknown) => void
+}
+
+function createSubmissionDeferred(): KernelChatSubmissionDeferred {
+  let resolve!: () => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<void>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  void promise.catch(() => {
+    // arch-guard:silent-catch-ok send 调用者只观察 accepted；原 promise 的拒绝仍供 submit 调用者读取。
+  })
+  return { promise, resolve, reject }
 }
 
 interface KernelSessionAuthorization {
@@ -156,6 +183,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   private readonly policy: KernelSessionPolicy
   private readonly backgroundJobManager: KernelBackgroundJobManager
   private readonly pendingRuns = new Map<string, Array<PendingKernelChatRun<TRenderTarget>>>()
+  private readonly activeRuns = new Map<string, PendingKernelChatRun<TRenderTarget>>()
   private nextInputId = 1
 
   constructor(private readonly options: ChatKernelSessionBridgeOptions<TRenderTarget>) {
@@ -172,25 +200,51 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   public async send(renderTarget: TRenderTarget, payload: ChatSendRequest): Promise<void> {
+    await this.submit(renderTarget, payload).accepted
+  }
+
+  public submit(renderTarget: TRenderTarget, payload: ChatSendRequest): KernelChatSubmission {
     const scopeId = payload.sessionId
     const input = this.buildSendInput(payload, scopeId)
-    if (!isPresent(input)) {
-      void this.runExecutionCoordinator(renderTarget, payload)
-      return
+    const run: PendingKernelChatRun<TRenderTarget> = {
+      renderTarget,
+      payload,
+      admission: createSubmissionDeferred(),
+      completion: createSubmissionDeferred(),
+      cancelled: false,
     }
+    if (!isPresent(input)) {
+      run.admission.resolve()
+      void this.runExecutionCoordinator(run)
+    } else {
+      this.enqueue(scopeId, run)
+      void this.admitRun(scopeId, input, run)
+    }
+    return {
+      accepted: run.admission.promise,
+      completed: run.completion.promise,
+    }
+  }
 
-    const run: PendingKernelChatRun<TRenderTarget> = { renderTarget, payload }
-    this.enqueue(scopeId, run)
+  private async admitRun(
+    sessionId: string,
+    input: KernelControllerSendInput,
+    run: PendingKernelChatRun<TRenderTarget>
+  ): Promise<void> {
     try {
       await this.controller.send(input)
+      run.admission.resolve()
     } catch (error) {
-      this.removePending(scopeId, run)
-      throw error
+      this.removePending(sessionId, run)
+      run.admission.reject(error)
+      run.completion.reject(error)
     }
   }
 
   public async cancel(input: string | { sessionId: string }): Promise<KernelCancelResult> {
-    return this.controller.cancel({ sessionId: isString(input) ? input : input.sessionId })
+    return this.controller.cancel({
+      sessionId: isString(input) ? input : input.sessionId,
+    })
   }
 
   public async provideGuidance(
@@ -245,7 +299,9 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   public async answer(payload: ExecutionProvideInputRequest): Promise<void> {
-    await this.controller.answer({ ...payload } satisfies KernelControllerAnswerInput)
+    await this.controller.answer({
+      ...payload,
+    } satisfies KernelControllerAnswerInput)
   }
 
   public async approve(payload: ExecutionResolveConfirmationRequest): Promise<void> {
@@ -338,6 +394,8 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       cancel: async (target) => {
         this.runCoordinator.interrupt(target.sessionId)
         this.clearPending(target.sessionId)
+        const active = this.activeRuns.get(target.sessionId)
+        if (active) active.cancelled = true
         this.backgroundJobManager.cancelSession(target.sessionId)
         const aborted = this.options.executionService.abortSourceSession(target.sessionId)
         try {
@@ -413,6 +471,12 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   }
 
   private clearPending(sessionId: string): void {
+    for (const run of this.pendingRuns.get(sessionId) ?? []) {
+      run.cancelled = true
+      const error = new AppError('EXECUTION_ABORTED', 'Queued chat execution was cancelled')
+      run.admission.reject(error)
+      run.completion.reject(error)
+    }
     this.pendingRuns.delete(sessionId)
   }
 
@@ -434,10 +498,24 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       while (true) {
         const run = this.shift(sessionId)
         if (!isPresent(run)) return
-
-        await this.inputStore.promoteSteers(sessionId)
-        await this.inputStore.promoteNextQueued(sessionId)
-        await this.runExecutionCoordinator(run.renderTarget, run.payload)
+        this.activeRuns.set(sessionId, run)
+        try {
+          await run.admission.promise
+          await this.inputStore.promoteSteers(sessionId)
+          await this.inputStore.promoteNextQueued(sessionId)
+          if (run.cancelled) {
+            run.completion.reject(
+              new AppError('EXECUTION_ABORTED', 'Chat execution was cancelled before starting')
+            )
+            continue
+          }
+          await this.runExecutionCoordinator(run)
+        } catch (error) {
+          run.completion.reject(error)
+          this.log.error('聊天输入准备失败', AppError.from(error))
+        } finally {
+          this.activeRuns.delete(sessionId)
+        }
       }
     } finally {
       await this.inputStore.dropSession(sessionId)
@@ -445,14 +523,13 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
   }
 
-  private async runExecutionCoordinator(
-    renderTarget: TRenderTarget,
-    payload: ChatSendRequest
-  ): Promise<void> {
+  private async runExecutionCoordinator(run: PendingKernelChatRun<TRenderTarget>): Promise<void> {
     try {
-      const options = this.buildExecutionRunOptions(payload.sessionId)
-      await this.options.executionCoordinator.run(renderTarget, payload, options)
+      const options = this.buildExecutionRunOptions(run.payload.sessionId)
+      await this.options.executionCoordinator.run(run.renderTarget, run.payload, options)
+      run.completion.resolve()
     } catch (error) {
+      run.completion.reject(error)
       this.log.error('聊天执行异步失败', AppError.from(error))
     }
   }
@@ -472,13 +549,10 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       // 隐式停泊是 wait-any：任意一个后台子 Agent 收敛就唤醒主循环处理该通知，
       // 剩余任务仍可继续运行。显式 job:wait 保持 waitForSession wait-all 语义。
       awaitPendingBackgroundJobs: async (input = {}) => {
-        const snapshot = await this.backgroundJobManager.waitForNextTerminalForSession(
-          sessionId,
-          {
-            signal: input.signal,
-            onWaiting: input.onWaiting,
-          }
-        )
+        const snapshot = await this.backgroundJobManager.waitForNextTerminalForSession(sessionId, {
+          signal: input.signal,
+          onWaiting: input.onWaiting,
+        })
         return isPresent(snapshot)
       },
       readBackgroundJobOutput: async (input) => {
@@ -498,7 +572,6 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
     return options
   }
-
 }
 
 export { ChatKernelSessionBridge }
@@ -507,4 +580,5 @@ export type {
   KernelChatExecutionCoordinator,
   KernelChatExecutionService,
   KernelChatRunOptions,
+  KernelChatSubmission,
 }

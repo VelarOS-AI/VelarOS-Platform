@@ -59,24 +59,33 @@ function isKernelWriteLikeTool(input: {
 }
 
 class KernelToolLoopGuard {
-  private readonly writeSuccessCounts = new Map<string, number>()
+  private lastWriteSuccess: Nullable<{ key: string; count: number }> = null
   private lastFailureBatchKey: Nullable<string> = null
   private lastFailureBatchCount = 0
 
   public checkRepeatedWriteLikeSuccess(input: KernelToolLoopGuardInput): Nullable<string> {
     if (!input.writeLike) return null
 
-    const count = this.writeSuccessCounts.get(buildSuccessKey(input)) ?? 0
+    const key = buildSuccessKey(input)
+    const count = this.lastWriteSuccess?.key === key ? this.lastWriteSuccess.count : 0
     if (count < 2) return null
 
     return `Tool "${input.toolName}" with the same arguments already succeeded 2 times. Stop repeating the write and inspect the current state before trying again.`
   }
 
   public recordSuccess(input: KernelToolLoopGuardInput): void {
-    if (!input.writeLike) return
+    // A successful inspection or a different mutation gives the agent a new
+    // state to act on. Keep only the current write streak, bounded for long runs.
+    if (!input.writeLike) {
+      this.lastWriteSuccess = null
+      return
+    }
 
     const key = buildSuccessKey(input)
-    this.writeSuccessCounts.set(key, (this.writeSuccessCounts.get(key) ?? 0) + 1)
+    this.lastWriteSuccess = {
+      key,
+      count: this.lastWriteSuccess?.key === key ? this.lastWriteSuccess.count + 1 : 1,
+    }
   }
 
   public recordFailureBatch(

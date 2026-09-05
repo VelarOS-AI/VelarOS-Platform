@@ -19,9 +19,9 @@ import {
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel/contracts/abi'
 
-import type { MemoryBackendDescriptor, MemoryStoreBackend } from '..'
 // 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
 import { listMissingAuthorityMemoryVerbs } from '../backend/Contract'
+import type { MemoryBackendDescriptor, MemoryStoreBackend } from '../index'
 
 /** token 族前缀。完整 id = `${MemoryStoreCapabilityNamespace}.${backendId}`。 */
 export const MemoryStoreCapabilityNamespace = 'velaros.memory.store'

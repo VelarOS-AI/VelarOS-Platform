@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import type { ModelMessage } from 'ai'
+import { jsonSchema, type ModelMessage, tool, type ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
 import { decodeProviderRequestAuditValue } from '../src/agent/context/providerRequest/serialization'
@@ -13,6 +13,7 @@ import {
   parsePromptAuditText,
   serializePromptAuditLine,
 } from '../src/kernel/observability/prompt-audit'
+import { ToolExecutionPolicy } from '../src/tools/ExecutionPolicy'
 
 const fixtureUrl = new URL('./fixtures/provider-request-basic.json', import.meta.url)
 
@@ -89,6 +90,97 @@ void describe('provider request transcript', () => {
       /tool schemas are missing/
     )
   })
+
+  for (const mutation of ['unload', 'replace'] as const) {
+    void test(`keeps the sent schema after provider ${mutation} during context preparation`, async () => {
+      const originalSchema = {
+        type: 'object' as const,
+        properties: { path: { type: 'string' as const } },
+        required: ['path'],
+        additionalProperties: false,
+      }
+      const liveTools: ToolSet = {
+        project__read: tool({
+          description: 'Read a project file.',
+          inputSchema: jsonSchema(async () => {
+            await Promise.resolve()
+            return originalSchema
+          }),
+        }),
+      }
+      const turnTools = { ...liveTools }
+      let currentSignature: string | null = 'read-v1'
+      const helper = new ProviderTurnRequestHelper({} as never, 'stream')
+      // StreamTurn awaits this host read after producing aiTools from its turn registry.
+      await helper.resolveContextWorkingSetInputs({
+        activeContext: {
+          listActiveContextArtifacts: async () => {
+            await Promise.resolve()
+            if (mutation === 'unload') {
+              delete liveTools.project__read
+              currentSignature = null
+            } else {
+              liveTools.project__read = tool({
+                description: 'Replacement contract.',
+                inputSchema: jsonSchema({
+                  type: 'object',
+                  properties: { replacement: { type: 'number' } },
+                  required: ['replacement'],
+                }),
+              })
+              currentSignature = 'read-v2'
+            }
+            liveTools.next_turn_only = tool({ inputSchema: jsonSchema({ type: 'object' }) })
+            return []
+          },
+        },
+      })
+      const definitions = await helper.resolveProviderToolDefinitions(
+        turnTools,
+        {
+          canonicalToProvider: { 'project:read': 'project__read' },
+          providerToCanonical: { project__read: 'project:read' },
+        },
+        { project__read: 128 },
+        { project__read: 'schema-read-v1' }
+      )
+
+      assert.deepEqual(definitions.map((definition) => definition.name), ['project__read'])
+      assert.equal(definitions[0].description, 'Read a project file.')
+      assert.deepEqual(definitions[0].inputSchema, originalSchema)
+      const compiler = new ProviderRequestCompiler(
+        new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+      )
+      const compiled = compiler.compile({
+        model: 'fixture-model',
+        systemPrompt: 'Read the file.',
+        messages: [{ role: 'user', content: 'Inspect src/main.ts' }],
+        availableToolNames: ['project__read'],
+        providerTools: definitions,
+        toolSchemaChars: { project__read: 128 },
+        contextWindow: 200_000,
+      })
+      assertProviderRequestSnapshotReconstructable(compiled.providerRequest)
+
+      // Snapshot fidelity does not authorize an implementation whose live claim changed.
+      const policy = new ToolExecutionPolicy({
+        get: () => undefined,
+        getDescriptor: () => null,
+        listAvailable: () => [],
+        getRegistrationSignature: () => 'read-v1',
+        getCurrentRegistrationSignature: () => currentSignature,
+      })
+      const decision = policy.prepareExecution({
+        toolName: 'project:read',
+        args: { path: 'src/main.ts' },
+        baseContext: { getCurrentVisibleToolRegistrationSignature: () => 'read-v1' },
+        abortSignal: new AbortController().signal,
+        emitProgress: () => undefined,
+        updateMetadata: () => undefined,
+      } as never)
+      assert.deepEqual(decision, { allowed: false, error: 'Stale tool call: project:read' })
+    })
+  }
 
   void test('fails locally before provider send when any compiled tool name is invalid', () => {
     const compiler = new ProviderRequestCompiler(

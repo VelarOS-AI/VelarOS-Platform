@@ -54,6 +54,7 @@ export const ContextEpochRequestToolName = 'context:distill'
 /** 每会话保留的 epoch 报告条数（转交信号只看最近若干次，无限留等于内存泄漏）。 */
 const MaxRetainedEpochReports = 32
 const DefaultMaxTrackedSessions = 128
+const MaxRecentEpochRequestIds = 128
 
 /** 转交信号（设计 §4）：连续 2 次 epoch 节省率不足且 post-epoch 占用仍高 → 建议开新会话。 */
 export interface ContextHandoffSignal {
@@ -142,15 +143,14 @@ export class ContextGovernanceSession {
    */
   private ledgerGeneration = 0
   private readonly reports: GovernanceEpochReport[] = []
+  /** 本轮新摄入的阶段请求；同一边界的多个请求合并为一次 epoch。 */
+  private pendingEpochRequestToolCallId: Nullable<string> = null
   /**
-   * 已消费过的 `context:distill` 请求身份 —— 存 **toolCallId 而不是记录 id**。
-   *
-   * 记录 id 是按序号发的，账本一重建就重新发一遍，同一条请求换了名字、旧游标当场失效；反过来
-   * 一条早就消费过的请求被重摄入回来，又会被当成新的再触发一次 epoch。toolCallId 由 provider
-   * 发号、跨重建逐字稳定，两种情况在结构上就分开了：旧请求天然不触发、新请求天然触发，
-   * `resetLedger` 因此不清它，`syncHistory` 也不需要"重建后对齐游标"那条特判（审计 R3/U19）。
+   * 最近观察到的请求身份，补足分支切换后当前账本缺席的那一段。
+   * 回滚只读此窗口，不刷新顺序；当前账本中的历史身份另由摄入差分识别。
+   * 请求同时离开当前历史与此有限窗口后，再次导入会按新观察处理。
    */
-  private lastConsumedEpochRequestToolCallId: Nullable<string> = null
+  private readonly recentEpochRequestToolCallIds = new Set<string>()
   private readonly distillRunner: ContextDistillRunner
   public updatedAt = 0
   /**
@@ -209,10 +209,11 @@ export class ContextGovernanceSession {
     const fingerprints = messages.map((message) => cachedStableFingerprint(message))
     const sharedPrefix = resolveSharedPrefixLength(this.ingestedFingerprints, fingerprints)
     const rebuilt = sharedPrefix < this.ingestedFingerprints.length
-    if (rebuilt) this.resetLedger()
-
     const from = rebuilt ? 0 : sharedPrefix
     const tail = messages.slice(from)
+    this.syncModelEpochRequests(tail, rebuilt)
+    if (rebuilt) this.resetLedger()
+
     if (!isEmpty(tail)) {
       const plan = planHistoryIngest(tail, {
         baseCreatedAt: at,
@@ -475,37 +476,40 @@ export class ContextGovernanceSession {
     }
   }
 
-  /**
-   * 模型是否在**最新一轮**调用了 `context:distill`（= 请求开一次 epoch）。
-   *
-   * 信号从账本结构里读，不从工具 handler 推 —— handler 侧信号需要一条穿过 ToolContext 的
-   * 新端口，而这个事实本来就在历史里逐字可查；从账本读还天然可离线重放（B4 的前提）。
-   * 每条请求**按 toolCallId 只消费一次**，避免同一次调用在后续轮次反复触发 epoch；账本重建把
-   * 旧请求原样带回来时，toolCallId 与游标相同，天然不再触发（审计 R3/U19）。
-   */
+  /** 消费摄入差分确认的新请求；继续编译同一段历史不会再次触发。 */
   private consumeModelEpochRequest(): boolean {
-    const latest = this.findLatestEpochRequestToolCallId()
-    if (isNull(latest) || latest === this.lastConsumedEpochRequestToolCallId) return false
-
-    this.lastConsumedEpochRequestToolCallId = latest
+    if (isNull(this.pendingEpochRequestToolCallId)) return false
+    this.pendingEpochRequestToolCallId = null
     return true
   }
 
   /**
-   * 账本里最后一条 `context:distill` 结果记录的 toolCallId（没有则 null）。
-   *
-   * 结构异常导致读不到 toolCallId 时回落记录 id：那条回落路径跨代不稳定，但"这一轮有没有请求"
-   * 仍然答得出，比整条信号消失好。
+   * 在重建前对照现有账本，只有新出现的 toolCallId 才产生阶段事件。
+   * 扫描旧账本仅发生在尾部包含阶段请求时；普通增量摄入保持原有成本。
    */
-  private findLatestEpochRequestToolCallId(): Nullable<string> {
-    const records = this.ledgerRef.list()
-    for (let index = records.length - 1; index >= 0; index -= 1) {
-      const record = records[index]
-      if (record.kind === 'tool-result' && record.toolName === ContextEpochRequestToolName)
-        return record.toolCallId ?? record.id
+  private syncModelEpochRequests(messages: readonly ModelMessage[], rebuilt: boolean): void {
+    const requestIds = readEpochRequestToolCallIds(messages)
+    if (rebuilt && !requestIds.includes(this.pendingEpochRequestToolCallId ?? '')) {
+      this.pendingEpochRequestToolCallId = null
     }
+    if (isEmpty(requestIds)) return
 
-    return null
+    const previousRequestIds = new Set(
+      readEpochRequestToolCallIds(
+        this.ledgerRef.list().map((record) => record.message).filter(isNotNull)
+      )
+    )
+    for (const requestId of requestIds) {
+      if (previousRequestIds.has(requestId) || this.recentEpochRequestToolCallIds.has(requestId))
+        continue
+
+      this.pendingEpochRequestToolCallId = requestId
+      this.recentEpochRequestToolCallIds.add(requestId)
+      if (this.recentEpochRequestToolCallIds.size > MaxRecentEpochRequestIds) {
+        const oldest = this.recentEpochRequestToolCallIds.values().next().value
+        if (oldest) this.recentEpochRequestToolCallIds.delete(oldest)
+      }
+    }
   }
 
   private findRecordByRef(ref: string): Nullable<ContextRecord> {
@@ -548,8 +552,7 @@ export class ContextGovernanceSession {
     this.ingestedFingerprints = []
     this.nextTurn = 0
     this.turnBoundarySeen = false
-    // `lastConsumedEpochRequestToolCallId` **刻意不清**：它认的是 provider 发的调用号，跨代稳定。
-    // 清了就等于"重摄入回来的旧请求再触发一次 epoch"，那正是 U19 的形态。
+    // 阶段请求在重建前已按稳定调用身份完成差分；保留这份独立于记录编号的待消费状态。
     // 清空在途蒸馏：新一代的 id 与旧产物指向的完全不是同一批记录。
     this.distillRunner.reset()
   }
@@ -722,6 +725,17 @@ export class ContextGovernanceSessionRegistry {
     const oldestFirst = [...this.sessions.keys()].slice(0, overflow)
     for (const sessionId of oldestFirst) this.sessions.delete(sessionId)
   }
+}
+
+function readEpochRequestToolCallIds(messages: readonly ModelMessage[]): string[] {
+  return messages.flatMap((message) => {
+    if (message.role !== 'tool') return []
+    return message.content.flatMap((part) =>
+      part.type === 'tool-result' && part.toolName === ContextEpochRequestToolName
+        ? [part.toolCallId]
+        : []
+    )
+  })
 }
 
 /** 两串指纹的公共前缀长度。 */

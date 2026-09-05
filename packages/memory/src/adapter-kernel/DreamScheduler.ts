@@ -2,7 +2,7 @@ import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { MemoryDomain, MemoryDreamRunResult } from '..'
+import type { MemoryDomain, MemoryDreamRunResult } from '../index'
 
 import type { HostIdleSignalPort } from './HostSignals'
 

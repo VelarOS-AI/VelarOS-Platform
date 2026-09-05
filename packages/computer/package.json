@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/computer",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "velaros": {
     "platform": "0.6"
   },
@@ -31,6 +31,10 @@
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
     }
   },
   "files": [

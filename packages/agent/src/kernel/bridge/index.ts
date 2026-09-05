@@ -3,5 +3,6 @@ export type {
   KernelChatExecutionCoordinator,
   KernelChatExecutionService,
   KernelChatRunOptions,
+  KernelChatSubmission,
 } from './ChatKernelSessionBridge'
 export { ChatKernelSessionBridge } from './ChatKernelSessionBridge'

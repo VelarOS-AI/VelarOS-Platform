@@ -1,7 +1,7 @@
 import type {
   MemoryEvidenceInput,
   MemoryScopeId,
-} from '..'
+} from '../index'
 
 export interface MemoryHostScopeInput {
   sessionId: string

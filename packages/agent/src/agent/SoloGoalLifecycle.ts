@@ -44,7 +44,8 @@ function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGo
       status: 'missing',
     }
 
-  const status = readSoloGoalStatus(goal)
+  const snapshot = toGoalSnapshot(goal)
+  const status = snapshot.status
   return {
     exists: true,
     terminal:
@@ -55,6 +56,7 @@ function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGo
       status === 'removed',
     status:
       status === 'paused' || status === 'cancelled' || status === 'removed' ? 'blocked' : status,
+    canComplete: status === 'active' && !snapshot.steps.some((step) => step.status === 'failed'),
     objective: goal.content,
     blockedAuditTurns: readSoloGoalBlockedAuditTurns(goal),
   }

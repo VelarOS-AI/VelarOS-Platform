@@ -5,12 +5,14 @@ import type {
   KernelModuleActivateContext,
 } from '@velaros-ai/kernel/contracts/abi'
 
+import { ComputerOperationMetadata, ComputerToolOperations } from '../../src/contracts'
 import {
   ComputerCapability,
   type ComputerRuntimeCapabilityService,
   type ComputerRuntimePort,
   createComputerKernelModule,
 } from '../../src/runtime'
+import { computerTools } from '../../src/tools'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,
@@ -82,6 +84,14 @@ describe('computer kernel module', () => {
       'process:exec',
       'input:control',
     ])
+    for (const [name, metadata] of Object.entries(ComputerOperationMetadata)) {
+      expect(service?.getOperationMetadata(name)).toEqual(metadata)
+      expect(Object.isFrozen(metadata.permissions)).toBe(true)
+    }
+    expect(Object.keys(ComputerToolOperations).sort()).toEqual(Object.keys(computerTools).sort())
+    for (const operation of Object.values(ComputerToolOperations)) {
+      expect(ComputerOperationMetadata[operation].permissions).toContain('process:exec')
+    }
     expect(await service?.invoke(
       'screenshot',
       undefined,

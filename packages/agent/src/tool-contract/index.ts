@@ -1,6 +1,7 @@
 export * from './approval'
 export * from './concepts'
 export * from './define'
+export * from './discovery'
 export * from './examples'
 export * from './ForgivingSchema'
 export * from './identity'

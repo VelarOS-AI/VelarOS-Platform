@@ -5,7 +5,7 @@
 
 它拥有 provider id 与清单、模型目录、鉴权与显式环境解析、OpenRouter 路由、
 上下文窗口元数据、provider adapter、provider script 契约、运行时模型解析、
-请求选项、embedding 模型选择、provider 运行时可用性,以及后端辅助模型请求服务。
+请求选项、embedding 模型选择、provider 运行时可用性,以及通用模型请求客户端。
 
 依赖只有 `@velaros-ai/core` 与外部模型 SDK(AI SDK 6 系)。
 **不依赖** Agent 执行、Workspace、Computer、System、Office、Browser、Memory 或 Desktop。
@@ -73,8 +73,11 @@
 - **`createModelKernelModule()`** —— 把 provider 解析做成 Kernel callable capability
   (`velaros.model`)。**Kernel 从不自己创建或发现 registry**,必须由产品注入。
 
-`ModelRequestService` 是 **deprecated** 的兼容类,只为那几个还没搬走的产品专用方法留着;
-通用请求一律 `ModelRequestClient`。
+`ModelRequestService` 是 **deprecated** 的 `ModelRequestClient` 构造与类型兼容别名。
+所有请求使用通用的 `generateText`、`generateObject`、`streamText` 或 `collectTextStream`。
+场景的提示词、endpoint、输出 schema、超时与回退由产品的场景 owner 组合：Desktop 的聊天
+辅助任务、引导 relay、调度规则、Git 提交标题，以及 Workbench 的行内补全各自维护请求语义。
+Model 统一负责 transport、请求策略和通用输出读取；新增场景不扩展本包的方法清单。
 
 ## 典型用法
 

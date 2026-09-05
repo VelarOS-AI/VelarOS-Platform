@@ -4,12 +4,13 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { isProjectCodeLanguageQuery } from '@velaros-ai/project/contracts'
 import { createProjectKernel } from '@velaros-ai/project/runtime'
 
 import {
   createProjectCodeQuery,
+  executeProjectCodeLanguageQuery,
+  type LanguageToolContext,
 } from '../src'
 
 describe('@velaros-ai/development', () => {
@@ -42,40 +43,66 @@ describe('@velaros-ai/development', () => {
     )
   })
 
-  test('executes built-in language actions without CodeGraph', async () => {
+  test('executes language actions with only workspace and source-read ports', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-project-code-query-'))
     try {
       await writeFile(join(root, 'user.ts'), 'export class UserService {}\n')
       const kernel = await createProjectKernel({ root })
-      const queryCode = createProjectCodeQuery({
-        isAvailable: () => false,
-        query: async () => null,
-      })
-      const context = {
+      let directory: string | null = null
+      const context: LanguageToolContext = {
         abortSignal: new AbortController().signal,
         project: {
           getRootPath: () => root,
-          runInDirectory: async (_path: string, action: () => Promise<unknown>) => action(),
-          kernel: async () => kernel,
-          runWithApproval: async (action: () => Promise<unknown>) => action(),
-          prepareMutation: async () => ({ approved: false }),
-          runCommand: async () => ({}),
-          queryCode,
+          runInDirectory: async (path, action) => {
+            directory = path
+            return action()
+          },
+          kernel: async () => ({
+            listFiles: kernel.listFiles.bind(kernel),
+            read: kernel.read.bind(kernel),
+            listSymbols: kernel.listSymbols.bind(kernel),
+          }),
         },
-        system: { canStartBackgroundCommands: () => false },
-        approval: defaultDenyApprovalPort,
       }
 
-      const result = await queryCode(
-        { action: 'find_symbols', query: 'UserService', exact: true },
-        context as never
+      const result = await executeProjectCodeLanguageQuery(
+        { action: 'find_symbols', query: 'UserService', exact: true, cwd: '.' },
+        context
       )
       expect(result).toMatchObject({
         source: 'language-service',
         symbolCount: 1,
       })
+      expect(directory).toBe('.')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  test('cancellation during source discovery stops before file reads', async () => {
+    const abort = new AbortController()
+    let reads = 0
+    const context: LanguageToolContext = {
+      abortSignal: abort.signal,
+      project: {
+        getRootPath: () => '/project',
+        runInDirectory: async (_path, action) => action(),
+        kernel: async () => ({
+          listFiles: async () => {
+            abort.abort(new Error('language query cancelled'))
+            return [{ path: 'source.ts', type: 'file' }]
+          },
+          read: async () => {
+            reads += 1
+            throw new Error('cancelled query must not read source')
+          },
+          listSymbols: async () => [],
+        }),
+      },
+    }
+    await expect(
+      executeProjectCodeLanguageQuery({ action: 'find_symbols' }, context)
+    ).rejects.toThrow('language query cancelled')
+    expect(reads).toBe(0)
   })
 })

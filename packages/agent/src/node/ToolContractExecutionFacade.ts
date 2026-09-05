@@ -1,8 +1,11 @@
 // Node Host 面：Agent 工具契约目录、租约与单调用执行的唯一实现。
 import { createHash } from 'node:crypto'
 
-import { isArray, isEmpty, isNull, isPlainObject, isString } from '@velaros-ai/core'
+import { isEmpty, isNull, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+
+import { readToolSchemaDiscoveryNames, ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
+export { ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
 
 import type { ToolDescriptor as RegistryToolDescriptor } from '../protocol'
 import {
@@ -65,54 +68,8 @@ export interface ToolContractExecutionBinding<TContext extends ToolContractExecu
   readonly runInSessionScope: <T>(run: () => Promise<T>) => Promise<T>
 }
 
-/** 两条自恢复工具随每份目录常驻，避免模型在 schema 漂移后失去恢复路径。 */
-export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Object.freeze([
-  {
-    name: ToolCatalogDiscoveryToolName,
-    description: '重新读取当前 VelarOS 工具目录及其目录版本。',
-    category: 'agent-control',
-    readOnly: true,
-    inputSchema: {
-      type: 'object',
-      properties: {},
-      additionalProperties: false,
-    },
-  },
-  {
-    name: ToolSchemaDiscoveryToolName,
-    description: '按工具名读取当前版本的真实参数结构；调用不熟悉的工具前先使用它。',
-    category: 'agent-control',
-    readOnly: true,
-    inputSchema: {
-      type: 'object',
-      properties: {
-        names: {
-          type: 'array',
-          items: { type: 'string', minLength: 1 },
-          minItems: 1,
-          maxItems: 12,
-        },
-      },
-      required: ['names'],
-      additionalProperties: false,
-    },
-  },
-])
-
 function normalizeSchema(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {}
-}
-
-function readRequestedToolNames(input: Record<string, unknown>): string[] {
-  if (!isArray(input.names)) return []
-  return [
-    ...new Set(
-      input.names
-        .filter((value): value is string => isString(value))
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ].slice(0, 12)
 }
 
 /**
@@ -210,7 +167,7 @@ export class ToolContractExecutionFacade<
     tools: ToolCatalogEntry[],
     catalogRevision: string,
   ): VelarToolResultEnvelope {
-    const names = readRequestedToolNames(envelope.input)
+    const names = readToolSchemaDiscoveryNames(envelope.input)
     if (isEmpty(names)) return this.errorEnvelope(
         envelope,
         catalogRevision,

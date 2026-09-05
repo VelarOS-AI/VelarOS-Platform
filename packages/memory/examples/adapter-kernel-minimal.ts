@@ -7,7 +7,7 @@ declare const input: MountMemoryAdapterInput
 
 const adapter = new MemoryAdapterRuntime(input)
 
-await adapter.service.warmup()
+await adapter.service?.warmup()
 const source = adapter.turnRecall.createTurnContextSource()
 
 void source

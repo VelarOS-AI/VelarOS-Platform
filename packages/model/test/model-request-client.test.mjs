@@ -8,10 +8,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  ModelRequestClient,
-  ModelRequestService,
-} from '@velaros-ai/model'
+import { ModelRequestClient } from '../src/ModelRequestClient'
+import { ModelRequestService } from '../src/ModelRequestService'
 
 test('accepts a third-party transport and preserves caller endpoint', async () => {
   const envelopes = []
@@ -64,4 +62,104 @@ test('legacy service remains an instanceof the generic client', () => {
   }
 
   assert.ok(new ModelRequestService({ transport }) instanceof ModelRequestClient)
+})
+
+test('policy preserves explicit request values and forwards streaming lifecycle callbacks', async () => {
+  let captured
+  const abort = new AbortController()
+  const onError = () => undefined
+  const client = new ModelRequestClient({
+    transport: {
+      generateText: async () => {
+        throw new Error('not used')
+      },
+      createObjectOutput: () => undefined,
+      streamText: (envelope) => {
+        captured = envelope
+        return {
+          textStream: (async function* () {
+            yield 'answer'
+          })(),
+        }
+      },
+    },
+  })
+  const stream = client.streamText(
+    {
+      endpoint: 'caller.owned-purpose',
+      model: 'fixture-model',
+      messages: [{ role: 'user', content: 'input' }],
+      maxOutputTokens: 64,
+      temperature: 0,
+      maxRetries: 0,
+      abortSignal: abort.signal,
+      onError,
+    },
+    {
+      requestPolicy: { temperature: 0.4, topP: 0.8, maxOutputTokens: 256 },
+    }
+  )
+  const chunks = []
+  for await (const text of stream.textStream) chunks.push(text)
+  assert.equal(chunks.join(''), 'answer')
+  assert.deepEqual(captured, {
+    endpoint: 'caller.owned-purpose',
+    request: {
+      model: 'fixture-model',
+      messages: [{ role: 'user', content: 'input' }],
+      maxOutputTokens: 64,
+      temperature: 0,
+      topP: 0.8,
+      maxRetries: 0,
+      abortSignal: abort.signal,
+      onError,
+    },
+  })
+})
+
+test('collection closes the source as soon as the caller stop condition is satisfied', async () => {
+  let nextChunks = 0
+  let closed = false
+  const client = new ModelRequestClient({
+    transport: {
+      generateText: async () => {
+        throw new Error('not used')
+      },
+      createObjectOutput: () => undefined,
+      streamText: () => ({
+        textStream: (async function* () {
+          try {
+            for (const text of ['ab', 'cd', 'unexpected']) {
+              nextChunks += 1
+              yield text
+            }
+          } finally {
+            closed = true
+          }
+        })(),
+      }),
+    },
+  })
+  assert.equal(
+    await client.collectTextStream({
+      endpoint: 'caller.bounded-output',
+      model: 'fixture-model',
+      messages: [],
+      stopWhen: (text) => text.length >= 4,
+    }),
+    'abcd'
+  )
+  assert.equal(nextChunks, 2)
+  assert.equal(closed, true)
+})
+
+test('the compatibility constructor exposes the same generic request surface', () => {
+  assert.equal(ModelRequestService, ModelRequestClient)
+  assert.deepEqual(Object.getOwnPropertyNames(ModelRequestClient.prototype).sort(), [
+    'collectTextStream',
+    'constructor',
+    'generateObject',
+    'generateText',
+    'streamText',
+  ])
 })

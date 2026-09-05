@@ -1,5 +1,5 @@
 import { isFunction } from '@velaros-ai/core'
-import { type ProjectToolContext,runInProjectDirectory } from '@velaros-ai/project/agent'
+import { runInProjectDirectory } from '@velaros-ai/project/agent'
 
 import {
   analyzeImpactWithService,
@@ -16,6 +16,7 @@ import {
   type LanguageDiagnosticRecord,
   type LanguageDiagnosticsInput,
   type LanguageExportRecord,
+  type LanguageToolContext,
   type ListExportsInput,
 } from './LanguageService'
 
@@ -24,7 +25,7 @@ async function findSymbols(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)
@@ -47,7 +48,7 @@ async function listExports(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)
@@ -69,7 +70,7 @@ async function findImports(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)
@@ -91,7 +92,7 @@ async function findReferences(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)
@@ -113,7 +114,7 @@ async function findImporters(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   if (!input.targetPath && !input.specifier)
     return { error: 'targetPath 和 specifier 至少需要提供一个。' }
@@ -144,7 +145,7 @@ async function analyzeSymbolImpact(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)
@@ -176,7 +177,7 @@ async function languageDiagnostics(
     language?: string
     cwd?: string
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ) {
   return runInProjectDirectory(ctx, input.cwd, async () => {
     const services = selectLanguageServices(input)

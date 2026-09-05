@@ -1,3 +1,12 @@
+export type {
+  AgentExecutionStack,
+  AgentExecutionStackOptions,
+  AgentExecutionStackRunnerOptions,
+  AgentExecutionStackToolContext,
+  AgentExecutionStackToolRegistry,
+  AgentExecutionStackWithQuery,
+} from './AgentExecutionStack'
+export { createAgentExecutionStack } from './AgentExecutionStack'
 export type { AgentRunnerConfig } from './AgentRunner'
 export { AgentRunner } from './AgentRunner'
 export type {

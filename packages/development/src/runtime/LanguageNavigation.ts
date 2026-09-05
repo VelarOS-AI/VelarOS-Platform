@@ -1,5 +1,4 @@
 import { isEmpty } from '@velaros-ai/core'
-import type { ProjectToolContext } from '@velaros-ai/project/agent'
 
 import { jsTsLanguageService } from './JsTsNavigation'
 import {
@@ -8,6 +7,7 @@ import {
   type LanguageReferenceRecord,
   languageServiceRegistry,
   type LanguageSymbolRecord,
+  type LanguageToolContext,
   type LanguageToolsPlugin,
 } from './LanguageService'
 import { DefaultNavigationLimit as DefaultLimit } from './LanguageService'
@@ -87,7 +87,7 @@ export async function analyzeImpactWithService(
     extensions?: string[]
     maxDepth?: number
   },
-  ctx: ProjectToolContext
+  ctx: LanguageToolContext
 ): Promise<{
   language: string
   definitions: LanguageSymbolRecord[]

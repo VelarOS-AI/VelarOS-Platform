@@ -3,6 +3,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { AgentModelRetryPolicy } from './RunLifecycle'
+
 /** 第一次重试的基础延迟。 */
 const ConnectionRetryBaseDelayMs = 3_000
 /** 退避封顶。超过这条线后不再翻倍，给瞬态故障留足缓冲又不让用户傻等。 */
@@ -104,6 +106,7 @@ const NonConnectionApiErrorMessageMatchers: NonConnectionApiErrorMatcher[] = [
 ]
 
 interface ConnectionRetryOptions {
+  policy?: AgentModelRetryPolicy
   phase: 'stream' | 'query'
   turn: Nullable<number>
   abortSignal: AbortSignal
@@ -153,7 +156,9 @@ class RetryPolicy {
       try {
         return await operation()
       } catch (error) {
-        const blockReason = this.getConnectionRetryBlockReason(error, attempt, options)
+        const blockReason = options.policy
+          ? this.getReplaySafetyBlockReason(error, options)
+          : this.getConnectionRetryBlockReason(error, attempt, options)
         if (blockReason) {
           const appError = AppError.from(error)
           if (this.isTransientConnectionError(appError)) {
@@ -170,7 +175,14 @@ class RetryPolicy {
         }
 
         const appError = AppError.from(error)
-        const delayMs = this.getRetryDelayMs(attempt, error)
+        const decision = options.policy
+          ? await options.policy.onFailure({ error, attempt, abortSignal: options.abortSignal })
+          : { delayMs: this.getRetryDelayMs(attempt, error) }
+        if (!decision) throw error
+        if (!Number.isFinite(decision.delayMs) || decision.delayMs < 0) {
+          throw new AppError('VALIDATION', 'Model retry delay must be finite and non-negative.')
+        }
+        const delayMs = decision.delayMs
         options.onRetry?.(appError, attempt)
         this.log.warn('transient model connection issue, retrying', {
           phase: options.phase,
@@ -196,6 +208,17 @@ class RetryPolicy {
     }
   ): boolean {
     return !this.getConnectionRetryBlockReason(error, attempt, options)
+  }
+
+  private getReplaySafetyBlockReason(
+    error: unknown,
+    options: Pick<ConnectionRetryOptions, 'abortSignal' | 'hasVisibleOutput' | 'hasToolUse'>
+  ): Nullable<ConnectionRetryBlockReason> {
+    if (options.abortSignal.aborted) return 'abort_signal'
+    if (this.isAbortError(AppError.from(error))) return 'abort_error'
+    if (options.hasToolUse?.()) return 'tool_use_emitted'
+    if (options.hasVisibleOutput?.()) return 'visible_output_emitted'
+    return null
   }
 
   private getConnectionRetryBlockReason(

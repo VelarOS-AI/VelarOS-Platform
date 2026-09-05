@@ -62,6 +62,7 @@ void describe('runtime input settlement', () => {
     const acceptedQueue = new ExecutionGuidanceQueue()
     const acceptedId = 'execution:accepted-before-seal'
     const acceptedMessage = userMessage('accepted')
+    acceptedQueue.port(acceptedId)
 
     assert.deepEqual(acceptedQueue.enqueue(acceptedId, acceptedMessage), {
       status: 'accepted',
@@ -88,6 +89,7 @@ void describe('runtime input settlement', () => {
   void test('finalization exposes accepted pending input instead of clearing it', () => {
     const queue = new ExecutionGuidanceQueue()
     const executionId = 'execution:pending'
+    queue.port(executionId)
 
     assert.deepEqual(queue.enqueue(executionId, userMessage('must settle')), {
       status: 'accepted',
@@ -141,6 +143,7 @@ void describe('runtime input settlement', () => {
   void test('pending guidance closes the drain-to-request race immediately', () => {
     const queue = new ExecutionGuidanceQueue()
     const executionId = 'execution:interrupt-before-subscribe'
+    queue.port(executionId)
 
     assert.deepEqual(queue.enqueue(executionId, userMessage('use existing evidence')), {
       status: 'accepted',
@@ -149,5 +152,22 @@ void describe('runtime input settlement', () => {
     const interrupt = createAgentRuntimeInputInterruptScope(queue.port(executionId))
     assert.equal(interrupt.signal.aborted, true)
     interrupt.dispose()
+  })
+
+  void test('late producers and retained ports cannot reopen a cleared execution', () => {
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'execution:cleared'
+    const port = queue.port(executionId)
+    assert.deepEqual(port.takeOrSeal(), { status: 'sealed' })
+    assert.deepEqual(queue.clear(executionId), { status: 'cleared' })
+
+    const unsubscribe = port.onInputAccepted(() => assert.fail('closed lane notified'))
+    assert.deepEqual(port.takeOrSeal(), { status: 'sealed' })
+    assert.deepEqual(queue.finalize(executionId), { status: 'sealed' })
+    assert.deepEqual(queue.enqueue(executionId, userMessage('late input')), {
+      status: 'closed', reason: 'execution-settled',
+    })
+    assert.equal(port.take(), null)
+    unsubscribe()
   })
 })

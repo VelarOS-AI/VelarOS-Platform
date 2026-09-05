@@ -30,14 +30,16 @@
 
 ## `mountMemoryAdapter(...)` —— 单一装配入口
 
-宿主一次调用完成接线:传入记忆领域 + 三个窄宿主端口,拿回三个挂载点。
+宿主一次调用完成接线：提供权威后端、配置与作用域端口；树治理按宿主需求显式接入。
 
 ```ts
 import { mountMemoryAdapter } from '@velaros-ai/memory/adapter-kernel'
 
 const memory = mountMemoryAdapter({
-  domain: memoryRuntime.memoryDomainService,
-  idleSignal: createDesktopMemoryHostIdleSignal(), // Electron 实现留在宿主胶水里
+  tree: {
+    domain: memoryRuntime.memoryDomainService,
+    idleSignal: createDesktopMemoryHostIdleSignal(), // Electron 实现留在宿主胶水里
+  },
   config: { isEnabled, isBackgroundGrowthEnabled, allowBatteryGrowth, isAutomaticDeepRecallEnabled },
   hostContext: {
     turnContextScopes: ['system', 'project', 'browser'],
@@ -48,10 +50,10 @@ const memory = mountMemoryAdapter({
 })
 
 turnContextFanIn.register(memory.turnRecall.createTurnContextSource())
-// memory.evidenceBridge → 聊天采集;memory.service → IPC / warmup / close
+// memory.evidenceBridge → 聊天采集；可选的 memory.service → 树治理 IPC / warmup / close
 ```
 
-`MemoryAdapterRuntime` 是它的 class 形态,`mountMemoryAdapter` 是兼容工厂。
+`MemoryAdapterRuntime` 是显式生命周期对象，`mountMemoryAdapter` 是同一装配路径的函数入口。
 
 ## 后端解析(`velaros.memory.store.*`)
 
@@ -65,18 +67,21 @@ host.registerModule(createMemoryStoreKernelModule({
 }))
 
 const memory = mountMemoryAdapter({
-  domain,                                   // 仍是树的治理门面(warmup / Dream)
   store: { registry: host, preference: ['files', 'tree'] },
-  /* idleSignal, config, hostContext … */
+  config,
+  hostContext,
 })
 memory.storeDescriptor.id // 'files'
+memory.service // null：独立后端不启动树治理
 ```
 
 - **每档后端一个 token**(`velaros.memory.store.files` / `.tree` / `.vector`)。
   内核服务存储对同一 capability id 只允许一个活动服务,而三档必须能**叠加**、不能互相顶掉
   ——所以是三个 token,不是一个。
-- 省略 `store` → 回落到把 `domain` 包成 `tree` 后端,逐字转发每个动词(**行为保持**的默认)。
-- 什么都解析不到 → `undefined`,即 partial activation 的「**缺席,不是降级**」语义。
+- 已解析或分层装配的后端直接通过 `backend` 传入；`backend` 与 `store` 不能同时提供。
+- 省略 `store` / `backend`，或注册表未解析到后端时，只能回落显式提供的 `tree.domain`。
+- 没有权威后端且没有显式树回落时，装配报错。角色与必备动词验证同时覆盖直接注入和注册表选择。
+- `tree: { domain, idleSignal }` 独立决定树治理是否创建，可以与文件权威层共存；服务句柄缺席时为 `null`。
 - 采集桥与回合召回协调器**只消费那个窄端口**,所以没有整合管线的后端(如 `memory-files`)
   单纯没有 `dream` 动词,不需要假装有。
 
@@ -104,8 +109,11 @@ headless 宿主注入一个常量实现即可。
 
 ## 生命周期与并发
 
-每个记忆 domain 建**一个**适配器实例。宿主 ready 后 `service.warmup()`,退出前 `service.close()`。
-Dream scheduler 由实例持有,**不使用进程全局计时器**;同一 domain 不应挂多个并发 scheduler。
+每个权威后端建一个适配器实例。接入树治理时，宿主 ready 后调用 `service?.warmup()`，退出前
+调用 `service?.close()`。Dream scheduler 由树治理服务实例持有；同一 domain 只挂一个 scheduler。
+独立文件后端仅需采集与召回端口，不创建树领域服务或空闲计时器。
+
+旧调用方将顶层 `domain` / `idleSignal` 移入 `tree`，并按可选服务句柄处理生命周期。
 
 ## 错误模型
 

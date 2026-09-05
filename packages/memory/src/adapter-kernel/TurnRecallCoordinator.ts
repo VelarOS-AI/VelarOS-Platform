@@ -3,7 +3,7 @@ import { isEmpty, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { MemoryRecallItem, MemoryStoreBackend } from '..'
+import type { MemoryRecallItem, MemoryStoreBackend } from '../index'
 
 import type { MemoryHostScopeResolver } from './HostContracts'
 

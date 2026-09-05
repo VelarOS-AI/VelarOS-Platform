@@ -28,7 +28,6 @@ interface AutoVerificationCodingSession {
   finalizeReminderConsumeResult: (result: Nullable<RuntimeReminderConsumeResult>) => void
   recordVerificationReminderIssued: () => void
   hasToolCategoryAccess: (category: ToolCategoryId) => boolean
-  recordVerificationPlanResult: (result: CapabilityValidationRunResult) => void
   recordVerificationFailure: (
     command: string,
     status: 'failed' | 'timed-out',

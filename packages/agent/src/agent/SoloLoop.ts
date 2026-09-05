@@ -44,7 +44,7 @@ import {
   runAutomaticVerification,
   tickLoopReminders,
 } from '../coding'
-import type { ExecutionSpanScopeFactory } from '../kernel'
+import { type ExecutionSpanScopeFactory, KernelToolLoopGuard } from '../kernel'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
 import {
   ToolExecutionPolicy,
@@ -87,6 +87,7 @@ import {
 import type { AgentModelRequestOptions } from './model'
 import type { PromptStatePreparedToolCategories } from './PromptState'
 import type { AgentRoleResolution } from './RoleTypes'
+import type { AgentModelRetryPolicy,AgentRunLifecycle } from './RunLifecycle'
 import type {
   AgentChatRuntimeConfig,
   AgentExecutionConfig,
@@ -285,6 +286,8 @@ interface ExecuteSoloModeStreamLoopArgs<
   TContext extends SoloLoopToolContext = SoloLoopToolContext,
   TEvents extends SoloLoopEvents = SoloLoopEvents,
 > {
+  lifecycle?: AgentRunLifecycle<TContext>
+  modelRetry?: AgentModelRetryPolicy
   /** 会被循环原地追加 assistant/tool/system reminder 消息的历史。 */
   history: ModelMessage[]
   /** 本次 Agent 执行配置。 */
@@ -479,6 +482,7 @@ class SoloStreamLoop<
   public async execute(
     args: ExecuteSoloModeStreamLoopArgs<TContext, TEvents>
   ): Promise<SoloModeStreamLoopResult> {
+    const toolLoopGuard = new KernelToolLoopGuard()
     let capabilityContext = args.capabilityContext
     // maxSteps 已移除（不再暴露给用户/模型）。循环跑到模型自主收手、出错、被中断或墙钟超时为止；
     // 另有隐藏步数熔断兜底「快转」（护栏 1，机制单源在 LoopWindDownGuard）：到软上限注入收尾提醒，
@@ -513,6 +517,8 @@ class SoloStreamLoop<
     )
 
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<SoloModeStreamLoopResult>> => {
+      await args.lifecycle?.beforeTurn?.({ turn, history: args.history, toolContext: args.toolContext, abortSignal: args.abortController.signal })
+      args.abortController.signal.throwIfAborted()
       // 一轮模型调用从这里开始；每次循环最多发起一次 LLM 请求，tool result 可能把流程带回下一轮。
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnExecutionPolicy = new ToolExecutionPolicy(turnToolRegistry)
@@ -745,6 +751,7 @@ class SoloStreamLoop<
 
       // ToolExecutor 在单轮内收集并执行 tool calls；每轮新建，避免跨轮状态污染。
       let executor = new ToolExecutor(args.toolContext, args.events, turnExecutionPolicy, {
+        loopGuard: toolLoopGuard,
         toolSpanOpener: toOptional(spans.turnScope),
         seams: this.seams,
       })
@@ -778,6 +785,7 @@ class SoloStreamLoop<
                 abortSignal: args.abortController.signal,
                 runtimeInputInterruptSignal: runtimeInputInterrupt.signal,
                 idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
+                modelRetry: args.modelRetry,
                 onModelRequestRetry: (error) =>
                   restartLoopTurnModelSpanAfterRetry(spans, error),
                 turn,
@@ -804,6 +812,7 @@ class SoloStreamLoop<
             // 上下文超限发生在请求建立阶段、工具尚未执行，重置 executor 以确保干净重放。
             onBeforeRetry: () => {
               executor = new ToolExecutor(args.toolContext, args.events, turnExecutionPolicy, {
+                loopGuard: toolLoopGuard,
                 toolSpanOpener: toOptional(spans.turnScope),
                 seams: this.seams,
               })
@@ -853,7 +862,9 @@ class SoloStreamLoop<
             events: args.events,
             log: this.log,
           })
-          if (toolUseContinuation.status === 'completed') {
+          const disposition = await args.lifecycle?.onTurnSettled?.({ turn, history: args.history, toolContext: args.toolContext, abortSignal: args.abortController.signal, result: turnResult })
+          args.abortController.signal.throwIfAborted()
+          if (disposition === 'stop' || toolUseContinuation.status === 'completed') {
             // 隐藏回合上限是防无限工具循环的最终安全熔断；该强制终态不被后台停泊
             // 重新打开，否则失控模型可借后台任务绕过 hard cap。
             runScope?.end({ status: 'ok' })
@@ -869,7 +880,16 @@ class SoloStreamLoop<
           return loopContinue()
         }
 
+        const disposition = await args.lifecycle?.onTurnSettled?.({ turn, history: args.history, toolContext: args.toolContext, abortSignal: args.abortController.signal, result: turnResult })
+        args.abortController.signal.throwIfAborted()
+        if (disposition === 'stop') {
+          runScope?.end({ status: 'ok' })
+          return loopFinish({ status: 'completed' })
+        }
+        if (disposition === 'continue') return loopContinue()
+
         const bootstrapFallback = runSoloToolSpaceBootstrapFallback({
+
           turn,
           history: args.history,
           bootstrapToolChoice,
@@ -912,7 +932,12 @@ class SoloStreamLoop<
           goalMode: isTrue(args.config.goalMode),
           inspectGoalState: () => goalLifecycle.inspect(),
           completeGoalOnSuccessfulFinish: isTrue(args.config.goalMode)
-            ? () => goalLifecycle.recordSuccessfulCompletion().then(() => undefined)
+            ? async () => {
+                const completed = await goalLifecycle.recordSuccessfulCompletion()
+                if (!completed && !(await goalLifecycle.inspect()).terminal) {
+                  throw new AppError('INVARIANT', '目标状态在最终提交前发生变化，无法完成本次执行。')
+                }
+              }
             : undefined,
           recordGoalCompletionAttempt: () => goalLifecycle.recordCompletionAttempt(),
           finishingGateBlockTracker,
@@ -939,6 +964,7 @@ class SoloStreamLoop<
         // 截断可允许两次分批收敛，普通非法 JSON 只允许一次，避免重复空烧额度。
         const recoveryKind = resolveInterruptedToolCallRecoveryKind(appError)
         if (
+          (args.modelRetry?.allowPartialContinuation ?? true) &&
           appError.code === 'MODEL_STREAM_INTERRUPTED' &&
           !args.abortController.signal.aborted &&
           interruptedToolCallRecoveryAttempts <

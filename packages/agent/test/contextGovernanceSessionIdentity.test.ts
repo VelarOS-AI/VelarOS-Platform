@@ -248,6 +248,68 @@ void describe('S1 · 重建后的陈旧 epoch 请求与转交信号（U19 / U34 
 
   const distillPair = distillPairOf('call-distill')
 
+  void test('回滚和恢复近期分支只重放历史，独立调用仍触发一次阶段请求', () => {
+    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
+    const first = [userMessage('first phase'), ...distillPairOf('distill-a')]
+    const second = [...first, userMessage('second phase'), ...distillPairOf('distill-b')]
+
+    for (const [index, messages] of [first, second].entries()) {
+      session.syncHistory({ messages, at: index + 1 })
+      assert.equal(session.governTurn({ at: index + 1 })?.trigger, 'model-request')
+    }
+
+    for (const [index, messages] of [first, second, first].entries()) {
+      session.syncHistory({ messages: structuredClone(messages), at: index + 3 })
+      assert.equal(session.governTurn({ at: index + 3 })?.trigger, null)
+    }
+
+    session.syncHistory({
+      messages: [...first, userMessage('new branch'), ...distillPairOf('distill-c')],
+      at: 6,
+    })
+    assert.equal(session.governTurn({ at: 6 })?.trigger, 'model-request')
+    assert.equal(session.governTurn({ at: 7 })?.trigger, null)
+  })
+
+  void test('当前历史中的旧请求即使超出近期窗口，回滚重建也不会再次消费', () => {
+    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
+    const first = [userMessage('first phase'), ...distillPairOf('distill-0')]
+    const messages = [...first]
+    for (let index = 1; index <= 128; index += 1) {
+      messages.push(userMessage(`phase ${index}`), ...distillPairOf(`distill-${index}`))
+    }
+    session.syncHistory({ messages, at: 1 })
+    assert.equal(session.governTurn({ at: 1 })?.trigger, 'model-request')
+
+    session.syncHistory({ messages: structuredClone(first), at: 2 })
+    assert.equal(session.governTurn({ at: 2 })?.trigger, null)
+  })
+
+  void test('同时离开当前历史和有限近期窗口的请求再次导入时按新观察处理', () => {
+    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
+    for (let index = 0; index <= 128; index += 1) {
+      session.syncHistory({
+        messages: [userMessage(`branch ${index}`), ...distillPairOf(`distill-${index}`)],
+        at: index,
+      })
+      assert.equal(session.governTurn({ at: index })?.trigger, 'model-request')
+    }
+
+    session.syncHistory({
+      messages: [userMessage('branch 0'), ...distillPairOf('distill-0')],
+      at: 129,
+    })
+    assert.equal(session.governTurn({ at: 129 })?.trigger, 'model-request')
+    assert.equal(session.governTurn({ at: 130 })?.trigger, null)
+  })
+
+  void test('同步回滚会撤销已移出历史且尚未消费的阶段请求', () => {
+    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
+    session.syncHistory({ messages: [userMessage('task'), ...distillPair], at: 1 })
+    session.syncHistory({ messages: [userMessage('task')], at: 2 })
+    assert.equal(session.governTurn({ at: 2 })?.trigger, null)
+  })
+
   void test('账本重建后，历史里那条旧的 context:distill 不再被消费一次', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 0,

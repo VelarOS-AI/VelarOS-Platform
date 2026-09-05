@@ -131,6 +131,8 @@ interface ToolExecutionPolicyExecution {
 }
 
 interface ToolExecutionPolicyContext {
+  /** Original model call identity for host approval and durable tool execution. */
+  toolCallId?: string
   abortSignal: AbortSignal
   log: ScopedLog
   planningMode?: boolean
@@ -331,6 +333,7 @@ class ToolExecutionPolicy {
 
     const toolContext = this.createToolContext(
       request.baseContext,
+      request.toolCallId,
       toolName,
       request.abortSignal,
       request.emitProgress,
@@ -385,6 +388,7 @@ class ToolExecutionPolicy {
 
     const toolContext = this.createToolContext(
       request.baseContext,
+      request.toolCallId,
       toolName,
       request.abortSignal,
       request.emitProgress,
@@ -468,6 +472,9 @@ class ToolExecutionPolicy {
     args: LooseOptional<Record<string, unknown>>,
     toolName: string
   ): Promise<unknown> {
+    if (prepared.toolContext.abortSignal.aborted) {
+      throw new AppError('EXECUTION_ABORTED', 'Tool execution cancelled before start')
+    }
     // 在执行前用工具自身的 zod schema 校验参数完整性。
     // 当 LLM 流式传输中途被截断时，@ai-sdk 会将不完整的 JSON 解析为
     // 部分对象（例如 blocks 变成空数组），导致工具静默产出损坏的文件。
@@ -521,6 +528,10 @@ class ToolExecutionPolicy {
       toolName,
       toolContext: prepared.toolContext,
     })
+    // Approval is asynchronous; cancellation during that wait must prevent the side effect.
+    if (prepared.toolContext.abortSignal.aborted) {
+      throw new AppError('EXECUTION_ABORTED', 'Tool execution cancelled before start')
+    }
     if (approvalSkipped) {
       // 用户拒绝授权时不执行工具，但返回结构化“已跳过”结果给模型。
       this.recordSuccess({
@@ -780,18 +791,20 @@ class ToolExecutionPolicy {
   /** 为单个工具派生上下文：使用独立 abortSignal 和工具专属日志 tag。 */
   private createToolContext(
     baseContext: ToolExecutionPolicyContext,
+    toolCallId: string,
     toolName: string,
     abortSignal: AbortSignal,
     emitProgress?: (chunk: string) => void,
     updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
   ): ToolExecutionPolicyContext {
-    return {
-      ...baseContext,
-      abortSignal,
-      log: logRuntime.tag(`Tool:${toolName}`),
-      emitProgress: emitProgress ?? baseContext.emitProgress,
-      updateMetadata: updateMetadata ?? baseContext.updateMetadata,
-    }
+    // Query contexts inherit host ports from a frozen parent. Preserve that prototype chain.
+    return Object.create(baseContext, {
+      toolCallId: { value: toolCallId, enumerable: true },
+      abortSignal: { value: abortSignal, enumerable: true },
+      log: { value: logRuntime.tag(`Tool:${toolName}`), enumerable: true },
+      emitProgress: { value: emitProgress ?? baseContext.emitProgress, enumerable: true },
+      updateMetadata: { value: updateMetadata ?? baseContext.updateMetadata, enumerable: true },
+    })
   }
 
 }

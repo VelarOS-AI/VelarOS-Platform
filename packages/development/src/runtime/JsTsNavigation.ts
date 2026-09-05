@@ -739,6 +739,7 @@ async function collectDiagnostics(
   ctx: LanguageToolContext,
   input: LanguageDiagnosticsInput
 ): Promise<LanguageDiagnosticsResult> {
+  ctx.abortSignal.throwIfAborted()
   const limit = input.limit ?? DefaultLimit
   const rootPath = ctx.project.getRootPath()
   const target = resolveProjectFile(rootPath, input.path)

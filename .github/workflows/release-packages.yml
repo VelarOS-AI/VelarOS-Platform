@@ -23,6 +23,11 @@ on:
         description: '只发这几个包(逗号分隔,如 agent-lab);留空 = 整列火车全发'
         required: false
         default: ''
+      update_consumers:
+        description: '发布后为全部已登记消费仓创建依赖升级 PR'
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       # 整列火车
@@ -79,7 +84,8 @@ jobs:
   sync-consumers:
     name: Update ${{ matrix.id }}
     needs: publish
-    if: github.ref_type == 'tag'
+    # 产品代码可能需要同步迁移；跨仓升级由发布者显式选择。
+    if: github.ref_type == 'tag' && inputs.update_consumers == true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

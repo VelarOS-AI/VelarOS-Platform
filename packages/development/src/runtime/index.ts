@@ -9,6 +9,7 @@ import {
 
 import { executeDevelopmentOperation, withCodeQuerySource } from './DevelopmentResult'
 import { developmentLanguageOperations } from './LanguageOperations'
+import type { LanguageToolContext } from './LanguageService'
 
 interface ProjectCodeIndexApi {
   isAvailable(): boolean
@@ -17,8 +18,9 @@ interface ProjectCodeIndexApi {
 
 async function executeProjectCodeLanguageQuery(
   input: ProjectCodeLanguageQuery,
-  context: ProjectToolContext
+  context: LanguageToolContext
 ): Promise<unknown> {
+  context.abortSignal.throwIfAborted()
   switch (input.action) {
     case 'find_symbols': {
       const { action: _action, ...args } = input
@@ -77,3 +79,4 @@ function createProjectCodeQuery(
 export { createProjectCodeQuery, executeProjectCodeLanguageQuery }
 export type { ProjectCodeIndexApi, ProjectCodeIndexQuery }
 export * from './ExternalLanguageService'
+export type { LanguageReadPort, LanguageToolContext } from './LanguageService'

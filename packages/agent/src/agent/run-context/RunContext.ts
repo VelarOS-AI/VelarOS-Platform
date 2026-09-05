@@ -30,7 +30,7 @@ import type {
 import type { RunContextToolContext } from './host-ports'
 import { type BuildTurnContextPayloadArgs, TurnPayload } from './TurnPayload'
 
-interface BuildSystemPromptArgs {
+interface BuildSystemPromptArgs<TContext extends RunContextToolContext> {
   /** 聊天模型配置。 */
   chatConfig: AgentChatRuntimeConfig
   /** 系统配置。 */
@@ -40,7 +40,7 @@ interface BuildSystemPromptArgs {
   /** 已解析角色。 */
   roleResolution: AgentRoleResolution
   /** 工具上下文。 */
-  toolContext: RunContextToolContext
+  toolContext: TContext
   /** 可选身份覆盖，常用于子智能体。 */
   identity?: string
   /** 代码上下文信号。 */
@@ -75,7 +75,7 @@ interface AssembledSystemPrompt {
  * 负责把角色、技能、运行时状态和能力包注入的上下文拼成最终系统提示词，
  * 同时生成轮次上下文调试载荷，供执行图/调试面板使用。
  */
-class RunContext {
+class RunContext<TContext extends RunContextToolContext = RunContextToolContext> {
   /** 构建轮次上下文调试载荷。 */
   private readonly turnContextPayloadBuilder = new TurnPayload()
   /** 收集运行时提示词片段，例如工具提示、系统状态、开发环境上下文。 */
@@ -111,7 +111,7 @@ class RunContext {
     thinkingDepth,
     runProfile,
     promptBudget,
-  }: BuildSystemPromptArgs): Promise<AssembledSystemPrompt> {
+  }: BuildSystemPromptArgs<TContext>): Promise<AssembledSystemPrompt> {
     const effectiveThinkingDepth = thinkingDepth ?? systemConfig.thinkingDepth
     // 角色行为单一来源：只注入角色技能段（BuiltinRole 全文 + 命中 skill 指针），不再另发角色 systemPrompt。
     // 常规/子智能体入口无阶段门控（contextPhase 缺省），编码召回只看空间根绑定。
@@ -155,7 +155,7 @@ class RunContext {
     systemConfig: AgentSystemRuntimeConfig
     messages: ModelMessage[]
     roleResolution: AgentRoleResolution
-    toolContext: RunContextToolContext
+    toolContext: TContext
     capabilityContext?: unknown
     thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
     promptFeatures?: ChatPromptFeatureId[]
@@ -221,7 +221,7 @@ class RunContext {
     systemConfig: AgentSystemRuntimeConfig
     messages: ModelMessage[]
     roleResolution: AgentRoleResolution
-    toolContext: RunContextToolContext
+    toolContext: TContext
     capabilityContext?: unknown
     promptFeatures?: ChatPromptFeatureId[]
     preparedToolCategories?: PromptStatePreparedToolCategories
@@ -238,7 +238,15 @@ class RunContext {
     roleSegments: PromptSegmentDefinition[]
   }): Promise<AssembledSystemPrompt> {
     const promptToolContext: PromptStateToolContext = {
-      ...toolContext,
+      // 冻结的 turn context 通过原型继承宿主能力，展开对象会丢失这些端口。
+      locale: toolContext.locale,
+      sessionId: toolContext.sessionId,
+      developerContext: toolContext.developerContext,
+      agentSurfaceId: toolContext.agentSurfaceId,
+      capabilityPorts: toolContext.capabilityPorts,
+      codingSession: toolContext.codingSession,
+      skills: toolContext.skills,
+      listToolCategories: (scope) => toolContext.listToolCategories(scope),
       // 计划/建议读取走非空交互会话端口：无 execution 的宿主降级为空计划，不再 `execution!` 撞 null。
       execution: toolContext.interaction,
       canDispatchSubAgents: !!toolContext.dispatchSubAgent,
@@ -287,7 +295,7 @@ class RunContext {
   }
 
   /** 构建本轮轮次上下文载荷。 */
-  public buildTurnContextPayload(args: BuildTurnContextPayloadArgs) {
+  public buildTurnContextPayload(args: Omit<BuildTurnContextPayloadArgs, 'toolContext'> & { toolContext: TContext }) {
     return this.turnContextPayloadBuilder.build(args)
   }
 

@@ -18,13 +18,13 @@ import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
 import { createMemoryFilesBackend, MemoryFilesBackendId } from '../files'
 import { createInMemoryMemoryFilesIo } from '../files/Io'
-import { createMemoryVectorBackend, MemoryVectorBackendId } from '../vector'
 import {
   createMemoryTreeStoreBackend,
   MemoryDomain,
   type MemoryStoreBackend,
   MemoryTreeBackendId,
-} from '..'
+} from '../index'
+import { createMemoryVectorBackend, MemoryVectorBackendId } from '../vector'
 
 import {
   createMemoryStoreCapabilityToken,
@@ -124,11 +124,13 @@ function createFilesBackend(): MemoryStoreBackend {
 
 function mountInput(domain: MemoryDomain) {
   return {
-    domain,
-    idleSignal: {
-      getIdleSeconds: () => 0,
-      isOnBatteryPower: () => false,
-      isAppFocused: () => true,
+    tree: {
+      domain,
+      idleSignal: {
+        getIdleSeconds: () => 0,
+        isOnBatteryPower: () => false,
+        isAppFocused: () => true,
+      },
     },
     config: {
       isEnabled: () => true,

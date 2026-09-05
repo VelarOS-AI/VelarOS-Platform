@@ -22,6 +22,7 @@
 | --- | --- | --- |
 | `@velaros-ai/computer/runtime` | `src/runtime` | 可注入的 OS 级 sidecar 管理器 + JSON Lines 协议 |
 | `@velaros-ai/computer/tools` | `src/tools` | 宿主注入式的观察 / 输入控制 agent 工具 |
+| `@velaros-ai/computer/contracts` | `src/contracts` | 工具到能力操作的映射与 Kernel 同源权限元数据，无原生运行时初始化 |
 
 切片细节见 [`docs/runtime/README.md`](./docs/runtime/README.md) 与
 [`docs/tools/README.md`](./docs/tools/README.md)。

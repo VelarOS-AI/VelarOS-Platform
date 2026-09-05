@@ -58,6 +58,27 @@ const forbiddenPublishedPathFragments = [
 ]
 const portableContractsFixtures = new Map([
   [
+    '@velaros-ai/computer',
+    {
+      bundleName: 'computer-contracts',
+      source: `import {
+  ComputerOperationMetadata,
+  ComputerToolOperations,
+  type ComputerOperation,
+} from '@velaros-ai/computer/contracts'
+
+export interface ComputerContractsTypeFixture {
+  operation: ComputerOperation
+}
+
+Object.assign(globalThis, { __velarosComputerContractsBrowserGate: {
+  ComputerOperationMetadata,
+  ComputerToolOperations,
+} })
+`,
+    },
+  ],
+  [
     '@velaros-ai/project',
     {
       bundleName: 'project-contracts',
@@ -154,6 +175,28 @@ Object.assign(globalThis, { __velarosSystemContractsBrowserGate: SystemContracts
   ],
 ])
 const consumerTypeFixtures = new Map([
+  [
+    '@velaros-ai/development',
+    `import {
+  executeProjectCodeLanguageQuery,
+  type LanguageReadPort,
+  type LanguageToolContext,
+} from '@velaros-ai/development/runtime'
+
+declare const source: LanguageReadPort
+
+const languageContext: LanguageToolContext = {
+  abortSignal: new AbortController().signal,
+  project: {
+    getRootPath: () => '/workspace/example',
+    runInDirectory: async (_path, action) => action(),
+    kernel: async () => source,
+  },
+}
+
+void executeProjectCodeLanguageQuery({ action: 'find_symbols' }, languageContext)
+`,
+  ],
   [
     '@velaros-ai/office',
     `import type {

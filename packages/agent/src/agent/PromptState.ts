@@ -69,7 +69,7 @@ interface PromptStateSkillsApi {
 
 interface PromptStateToolContext {
   locale: RuntimePromptSnapshot['locale']
-  sessionId: string
+  sessionId?: string
   developerContext?: LooseOptional<AgentDeveloperContext>
   agentSurfaceId?: LooseOptional<AgentSurfaceId>
   capabilityPorts?: AgentRuntimeCapabilityPorts

@@ -1,7 +1,17 @@
 import { isEmpty, isPresent, optionalWhenLazy, toNullable } from '@velaros-ai/core'
-import type { ProjectToolContext } from '@velaros-ai/project/agent'
+import type { AgentProjectKernelPort } from '@velaros-ai/project/agent'
 
-export type LanguageToolContext = ProjectToolContext
+/** Source inspection consumes no project mutation, execution, or approval capability. */
+export type LanguageReadPort = Pick<AgentProjectKernelPort, 'listFiles' | 'read' | 'listSymbols'>
+
+export interface LanguageToolContext {
+  abortSignal: AbortSignal
+  project: {
+    getRootPath(): string
+    runInDirectory<T>(path: string, action: () => Promise<T>): Promise<T>
+    kernel(): Promise<LanguageReadPort>
+  }
+}
 
 export interface LanguageQueryInput extends Record<string, any> {
   path?: string
@@ -250,7 +260,9 @@ export async function collectSourceFiles(
   input: SourceFileSelection,
   defaultExtensions: readonly string[]
 ): Promise<{ files: string[]; truncated: boolean }> {
+  ctx.abortSignal.throwIfAborted()
   const kernel = await ctx.project.kernel()
+  ctx.abortSignal.throwIfAborted()
   const extensions = normalizeExtensionsWithDefault(input.extensions, defaultExtensions)
   const selectedPath = optionalWhenLazy(input.path?.trim(), () =>
     normalizeSourcePath(input.path!.trim())
@@ -266,6 +278,7 @@ export async function collectSourceFiles(
     maxDepth: input.maxDepth ?? DefaultNavigationMaxDepth,
     maxFiles: maxFiles + 1,
   })
+  ctx.abortSignal.throwIfAborted()
   const files = entries
     .filter((entry) => entry.type === 'file' && hasMatchingExtension(entry.path, extensions))
     .map((entry) => entry.path)
@@ -278,8 +291,11 @@ export async function readSourceFile(
   ctx: LanguageToolContext,
   path: string
 ): Promise<Nullable<string>> {
+  ctx.abortSignal.throwIfAborted()
   const kernel = await ctx.project.kernel()
+  ctx.abortSignal.throwIfAborted()
   const result = await kernel.read({ path, maxBytes: MaxReadableSourceBytes })
+  ctx.abortSignal.throwIfAborted()
   if (result.snapshot.isBinary || !result.content) return null
   return result.content
 }

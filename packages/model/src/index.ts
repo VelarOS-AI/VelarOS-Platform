@@ -36,13 +36,9 @@ export {
   type ModelProviderPreset,
 } from './ModelProviderCollection'
 export * from './ModelProviderRetry'
+export { ModelRequestClient, type ModelRequestClientOptions } from './ModelRequestClient'
 export { applyModelRequestPolicy } from './ModelRequestPolicy'
-export {
-  ModelRequestClient,
-  type ModelRequestClientOptions,
-  ModelRequestService,
-  type ModelRequestServiceOptions,
-} from './ModelRequestService'
+export { ModelRequestService, type ModelRequestServiceOptions } from './ModelRequestService'
 export type {
   ModelRequestEndpoint,
   ModelRequestGenerateText,

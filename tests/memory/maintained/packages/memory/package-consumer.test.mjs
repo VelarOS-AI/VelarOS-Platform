@@ -93,11 +93,13 @@ test('kernel adapter factory returns an explicit lifecycle object', () => {
   }
   const always = () => true
   const adapter = mountMemoryAdapter({
-    domain,
-    idleSignal: {
-      getIdleSeconds: () => 0,
-      isOnBatteryPower: () => false,
-      isAppFocused: () => true,
+    tree: {
+      domain,
+      idleSignal: {
+        getIdleSeconds: () => 0,
+        isOnBatteryPower: () => false,
+        isAppFocused: () => true,
+      },
     },
     config: {
       isEnabled: always,

@@ -8,6 +8,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'
+import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
 import { listExecutionModes, resolveExecutionModeForPromptFeature } from '../src/execution-modes'
 
 function createFinishingGateHarness(options: {
@@ -145,8 +146,17 @@ void describe('finishing gate no longer intercepts workflow discipline', () => {
   void test('goal completion is committed once only after the background boundary reports ready', async () => {
     const harness = createFinishingGateHarness({})
     const order: string[] = []
+    const queue = new ExecutionGuidanceQueue()
+    const runtimeInput = queue.port('goal-commit-order')
     const result = await runSoloFinishingGate({
       ...harness.input,
+      runtimeInput: {
+        ...runtimeInput,
+        takeOrSeal: () => {
+          order.push('input-seal')
+          return runtimeInput.takeOrSeal()
+        },
+      },
       settlePendingBackgroundJobs: async () => {
         order.push('background-ready')
         return { status: 'ready' as const }
@@ -157,12 +167,94 @@ void describe('finishing gate no longer intercepts workflow discipline', () => {
       },
       inspectGoalState: async () => {
         order.push('goal-inspect')
-        return { exists: true, terminal: true, status: 'complete' as const }
+        return { exists: true, terminal: false, status: 'active' as const, canComplete: true }
       },
     })
 
     expect(result).toEqual({ status: 'completed' })
-    expect(order).toEqual(['background-ready', 'goal-complete', 'goal-inspect'])
+    expect(order).toEqual(['background-ready', 'goal-inspect', 'input-seal', 'goal-complete'])
+  })
+
+  void test('an unfinished goal leaves guidance open for the next turn', async () => {
+    const harness = createFinishingGateHarness({})
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'goal-needs-repair'
+    const runtimeInput = queue.port(executionId)
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      runtimeInput,
+      goalMode: true,
+      inspectGoalState: async () => ({
+        exists: true, terminal: false, status: 'active', canComplete: false,
+      }),
+      completeGoalOnSuccessfulFinish: async () => {
+        throw new Error('unready goal must not be committed')
+      },
+    })
+
+    expect(result).toEqual({ status: 'continue', reason: 'goal-status-required' })
+    const correction = { role: 'user' as const, content: '先修失败的测试' }
+    expect(queue.enqueue(executionId, correction)).toEqual({ status: 'accepted' })
+    expect(runtimeInput.take()).toEqual(correction)
+  })
+
+  void test('guidance accepted during goal inspection is consumed before any goal commit', async () => {
+    const harness = createFinishingGateHarness({})
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'goal-inspection-steer'
+    const runtimeInput = queue.port(executionId)
+    const correction = { role: 'user' as const, content: '先处理新发现的问题' }
+    let commits = 0
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      runtimeInput,
+      goalMode: true,
+      inspectGoalState: async () => {
+        expect(queue.enqueue(executionId, correction)).toEqual({ status: 'accepted' })
+        return { exists: true, terminal: false, status: 'active', canComplete: true }
+      },
+      completeGoalOnSuccessfulFinish: async () => { commits += 1 },
+    })
+
+    expect(result).toEqual({ status: 'continue', reason: 'user-guidance' })
+    expect(commits).toBe(0)
+    expect(harness.history).toEqual([correction])
+    expect(queue.enqueue(executionId, correction)).toEqual({ status: 'accepted' })
+  })
+
+  void test('a failed goal commit propagates failure after sealing instead of continuing a closed run', async () => {
+    const harness = createFinishingGateHarness({})
+    const queue = new ExecutionGuidanceQueue()
+    const executionId = 'goal-commit-failed'
+    const runtimeInput = queue.port(executionId)
+    await expect(runSoloFinishingGate({
+      ...harness.input,
+      runtimeInput,
+      goalMode: true,
+      inspectGoalState: async () => ({
+        exists: true, terminal: false, status: 'active', canComplete: true,
+      }),
+      completeGoalOnSuccessfulFinish: async () => { throw new Error('goal write failed') },
+    })).rejects.toThrow('goal write failed')
+    expect(queue.enqueue(executionId, { role: 'user', content: 'late' })).toEqual({
+      status: 'closed', reason: 'execution-settled',
+    })
+  })
+
+  void test('abort during goal commit settles as aborted after the input boundary', async () => {
+    const harness = createFinishingGateHarness({})
+    const controller = new AbortController()
+    const result = await runSoloFinishingGate({
+      ...harness.input,
+      abortSignal: controller.signal,
+      runtimeInput: new ExecutionGuidanceQueue().port('abort-goal-commit'),
+      goalMode: true,
+      inspectGoalState: async () => ({
+        exists: true, terminal: false, status: 'active', canComplete: true,
+      }),
+      completeGoalOnSuccessfulFinish: async () => { controller.abort('stop') },
+    })
+    expect(result).toEqual({ status: 'aborted' })
   })
 
   void test('execution abort during background park settles as aborted, never completed', async () => {

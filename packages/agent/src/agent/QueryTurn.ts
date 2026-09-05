@@ -24,6 +24,7 @@ import {
   emitCompletedProviderTurnSnapshot,
   type KernelContextEpochGuardLike,
   KernelPrefixShapeTracker,
+  KernelToolLoopGuard,
   ProviderTurnEventReducer,
   type ProviderTurnSnapshot,
   recordKernelContextEpochDiagnostic,
@@ -65,6 +66,7 @@ import {
 } from './model'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
 import { AgentConnectionRetryHelper, AiSdkMaxRetries, MaxConnectionRetryAttempts } from './retry'
+import type { AgentModelRetryPolicy } from './RunLifecycle'
 import {
   buildOutputTruncationContinuationPrompt,
   type InterruptedStreamPartial,
@@ -158,12 +160,14 @@ export interface ExecuteQueryTurnArgs<
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
   onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
   /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
+  modelRetry?: AgentModelRetryPolicy
   onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
   /**
    * 可选观测 tool span 开启器（#37 阶段 C 片 2）。子 Agent 的 QueryLoop 每轮把 turn scope 作开启器注入，
    * 令本轮内 ToolExecutor 产 tool span（挂在子 Agent 自己的 turn span 下）；缺省 no-op（零观测零付费）。
    */
   toolSpanOpener?: LooseOptional<ToolSpanOpener>
+  toolLoopGuard?: KernelToolLoopGuard
   /**
    * 可选 mod 拦截 seam 派发器（裁决 9 机制②）；由 QueryLoop 逐轮透传。缺省 null → 本轮
    * ToolExecutor 全链 no-op，行为逐字节不变。子面与主面共用同一派发器，钩子的「拦下/改写」
@@ -235,6 +239,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
   ): Promise<QueryTurnResult> {
     // turnState 每次尝试整体新建（同 StreamTurn S7 纪律）：连接重试/续写恢复后不带失败尝试的
     // usage 残留；hasVisibleOutput/hasToolUse 由 activeTurnState 指针实时反映当前尝试。
+    const toolLoopGuard = args.toolLoopGuard ?? new KernelToolLoopGuard()
     let activeTurnState: Nullable<StreamConsumerTurnState> = null
     let connectionContinuationRecoveries = 0
     let outputTruncationRecoveries = 0
@@ -248,15 +253,16 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
             interrupted.partial = null
             const turnState = this.createTurnState(args)
             activeTurnState = turnState
-            return this.executeStreamingQueryTurn(args, turnState, (partial) => {
+            return this.executeStreamingQueryTurn({ ...args, toolLoopGuard }, turnState, (partial) => {
               interrupted.partial = partial
             })
           },
           {
+            policy: args.modelRetry,
             phase: 'query',
             turn: null,
             abortSignal: args.toolContext.abortSignal,
-            hasVisibleOutput: () => !!activeTurnState?.hasVisibleOutput,
+            hasVisibleOutput: () => !!activeTurnState?.hasVisibleOutput || (!!args.modelRetry && !!activeTurnState?.hasReasoningOutput),
             hasToolUse: () => !!activeTurnState?.hasToolUse,
             onRetry: (error, attempt) => {
               args.onModelRequestRetry?.(error, attempt)
@@ -268,6 +274,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         )
         return preservedText ? { ...result, text: `${preservedText}${result.text}` } : result
       } catch (error) {
+        if (!(args.modelRetry?.allowPartialContinuation ?? true)) throw error
         const partial = interrupted.partial
         const appError = AppError.from(error)
         const outputWasTruncated = isOutputTruncationError(appError)
@@ -335,6 +342,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     turnState: StreamConsumerTurnState,
     onInterruptedPartial?: (partial: InterruptedStreamPartial) => void
   ): Promise<QueryTurnResult> {
+    const toolLoopGuard = args.toolLoopGuard ?? new KernelToolLoopGuard()
     const toolRegistry = args.toolRegistry ?? this.toolRegistry
     const executionPolicy =
       toolRegistry === this.toolRegistry
@@ -390,9 +398,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         aiTools,
         toolTransportPlan
       )
-      const providerTools = this.turnRequestHelper.resolveProviderToolDefinitions(
+      const providerTools = await this.turnRequestHelper.resolveProviderToolDefinitions(
         aiTools,
-        args.toolContext,
         toolTransportPlan,
         toolSchemaChars,
         toolSchemaHashes
@@ -526,6 +533,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         executionPolicy,
         {
           providerTurnReducer,
+          loopGuard: toolLoopGuard,
           onProviderTurnSnapshot: args.onProviderTurnSnapshot,
           // 观测：子 Agent 本轮 tool span 开启器（QueryLoop 注入的 turn scope）；缺省 no-op。
           toolSpanOpener: args.toolSpanOpener,

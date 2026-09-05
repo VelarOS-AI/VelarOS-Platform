@@ -6,11 +6,24 @@ This document is the public implementation guide for memory storage in VelarOS P
 
 The package provides three composable storage roles:
 
-- `memory-tree` is the current default authority when a host supplies `MemoryDomain`.
+- `memory-tree` is the fallback authority when a host explicitly supplies `tree` governance.
 - `memory-files` is a file-backed authority with human-readable Markdown records.
 - `memory-vector` is an optional derived index. It accelerates recall but never owns memory content.
 
-`mountMemoryAdapter()` still requires a `MemoryDomain` and falls back to the tree authority when the host does not select another registered backend. A files-only host therefore still needs the tree domain for lifecycle services. Removing that requirement is an open implementation task and must preserve the adapter lifecycle contract.
+`mountMemoryAdapter()` accepts either an already assembled `backend` or a capability-registry
+`store` selection. A standalone backend does not require `MemoryDomain`, idle signals, or tree
+startup work. Hosts opt into tree lifecycle separately with `tree: { domain, idleSignal }`;
+`adapter.service` is `null` when that port is absent. An explicit tree can coexist with another
+authority when a host still needs to govern existing tree data. Backend names do not control
+that lifecycle.
+
+The adapter rejects simultaneous `backend` and `store` inputs, an invalid authority, or a
+selection with no authority and no explicit tree fallback. Direct backend injection uses the
+same authority-role and required-verb checks as registry selection.
+
+Existing hosts move the former top-level `domain` and `idleSignal` fields into `tree` and
+guard `service` lifecycle calls. Registry selection remains available unchanged. Hosts that
+already assembled layered storage can pass it directly as `backend`.
 
 ## Invariants
 

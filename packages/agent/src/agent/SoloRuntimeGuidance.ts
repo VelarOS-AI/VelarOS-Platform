@@ -4,7 +4,7 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
 
-type SoloRuntimeGuidancePhase = 'turn-start' | 'before-complete'
+type SoloRuntimeGuidancePhase = 'turn-start' | 'before-goal-check' | 'before-complete'
 
 interface ConsumeSoloRuntimeGuidanceInput {
   turn: number

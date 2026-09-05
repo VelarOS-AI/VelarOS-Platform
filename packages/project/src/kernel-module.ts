@@ -15,6 +15,7 @@ import {
 
 import { projectTools } from './agent/Project.tool.js'
 import type { ProjectToolContext, VelaTool } from './agent/Types.js'
+import { PROJECT_PACKAGE_VERSION } from './core/defaults.js'
 
 export type ProjectToolContextResolver = (
   scope: LooseOptional<ScopeRef>,
@@ -89,7 +90,7 @@ export function createProjectKernelModule(
   return defineKernelModule({
     manifest: {
       id: 'velaros.project',
-      version: '2.0.7',
+      version: PROJECT_PACKAGE_VERSION,
       apiVersion: KernelModuleApiVersion,
       provides: [ProjectCapability],
       requires: [],

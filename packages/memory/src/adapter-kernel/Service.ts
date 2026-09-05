@@ -13,7 +13,7 @@ import type {
   MemoryTreeDiagnostics,
   MemoryTreeIntegrityReport,
   MemoryTreeState,
-} from '..'
+} from '../index'
 
 import { MemoryDreamScheduler } from './DreamScheduler'
 import type { HostIdleSignalPort } from './HostSignals'

@@ -101,7 +101,39 @@ Permission 应用服务，持久化引擎、产品 Session 类型和 UI 状态�
 
 ## 典型用法
 
-装配运行时的最小形状——注入能力端口、给出中性的主 Agent 身份:
+默认执行栈由 `createAgentExecutionStack` 装配。宿主提供模型端口、工具目录和产品策略；
+工厂配对 `RunContext`、`TurnRunner`、Solo/Query，共享提示词策略、治理登记处、运行限制和 Mod 接缝。
+
+```ts
+import { createAgentExecutionStack, createBuiltInPromptRegistry } from '@velaros-ai/agent'
+
+const stack = createAgentExecutionStack({
+  model: hostModelResolver,
+  toolRegistry: hostToolRegistry,
+  promptRegistry: createBuiltInPromptRegistry({
+    primaryAgentIdentity: '你是 Acme 应用中的研究助手。',
+  }),
+})
+await stack.executeSolo(soloRun)
+stack.clearSession(sessionId) // 宿主删除或替换会话时释放治理状态
+```
+
+需要子 Agent 的宿主提供 `query: { roleEngine, getToolNamesForCategories }`，返回值才包含
+`executeQuery` 和 `createRunner`。后者接收上下文构建端口、主 Agent 身份、派发器、配置、
+surface 与 coding-session 策略，并在返回前把 Runner 绑定到派发器。只运行 Solo 的宿主
+不需要构造 Query 依赖。工具目录整体替换时创建新栈；跨栈保留会话治理时显式复用
+`governanceSessions`。宿主上下文结构化满足 `AgentExecutionStackToolContext`，
+`RunContext<TContext>` 保留同一上下文泛型；`AgentRunnerComponents` 的必填项只包含实际依赖。
+
+每次 `executeSolo` / `executeQuery` 可提供 `lifecycle`：`beforeTurn` 在工具快照和请求编译前
+运行，`onTurnSettled` 在 assistant/tool 历史齐备后运行，二者都被等待。宿主可在后者落盘、
+检查费用，返回 `stop` 结束当前运行，或返回 `continue` 提交已追加的后续输入；缺省沿用标准收尾。
+持久化抛错会结束当前运行，不会再发起下一轮请求。`modelRetry.onFailure` 在同一重试循环中
+选择等待时间或停止；取消、可见输出和工具调用始终先禁止重试。产品要求输出后直接失败时设置
+`allowPartialContinuation: false`。工具执行上下文的 `toolCallId` 是模型原始调用身份，可用于
+宿主审批和持久化记录关联。
+
+领域能力注入仍由宿主负责:
 
 ```ts
 import {
@@ -144,7 +176,7 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
 
 ## 边界:本包不负责什么
 
-- **不是装配根**。谁来实例化、谁持有生命周期,是宿主的事。
+- **宿主拥有产品装配根**。宿主决定能力、策略与生命周期；默认执行栈工厂负责包内执行组件配对。
 - **不实现模型供应商**(去 `@velaros-ai/model`)、**不实现记忆 / 知识存储**(去 `@velaros-ai/memory`)、
   **不实现浏览器 / 工作区 / 办公 / 桌面控制**(去各能力包)、**不做 UI**(去 `@velaros-ai/ui`)。
 - **不拥有 Electron、产品 IPC、Desktop 配置、渲染进程代码、应用私有 manifest**。
@@ -174,6 +206,14 @@ const request = RunTurnRequestSchema.parse(payload) // 严格对象,未知字段
 统一用 `@velaros-ai/core/error` 的 `AppError` + 稳定错误码:可选宿主能力未配置 → `UNAVAILABLE`,
 输入错误 → `VALIDATION`。provider / 工具 / 协议错误**在边界处归一一次**,内部继续传规范形态。
 Abort 信号表示取消,**不要**转成普通失败后重试。
+
+## Execution lifecycle
+
+- A managed execution opens its runtime input lane at startup. User guidance is accepted before auxiliary relay planning; late relay results are checked against the current execution owner and authorization.
+- Finishing checks that can continue the loop run before the final atomic input seal. Goal readiness is inspected before sealing, and a successful goal commit follows that boundary.
+- Tool cancellation covers pre-call hooks and approval preparation. A cancelled preparation cannot start the tool's side effect.
+- Tool results remain paired with accepted calls when result storage or publication fails. `TOOL_RESULT_FINALIZATION_FAILED` stops the run after recording an explicit result; the operation may already have taken effect, so recovery must inspect state before retrying.
+- Each solo/query run owns its tool loop guard across turns and retries. A successful inspection or different mutation resets the repeated-write streak; repeated collection of one result batch does not count as another failure.
 
 ## 兼容策略
 

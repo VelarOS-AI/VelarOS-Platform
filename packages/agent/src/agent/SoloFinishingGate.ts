@@ -86,6 +86,8 @@ interface SoloGoalFinishingState {
   exists: boolean
   terminal: boolean
   status: SoloGoalFinishingStatus
+  /** Read-only readiness for the control plane's final goal commit. */
+  canComplete?: boolean
   objective?: LooseOptional<string>
   blockedAuditTurns?: LooseOptional<number>
 }
@@ -239,28 +241,31 @@ async function runSoloFinishingGate<
     return { status: 'aborted' }
   }
 
-  const guidance = await consumeSoloRuntimeGuidance({
-    turn: input.turn,
-    phase: 'before-complete',
-    history: input.history,
-    runtimeInput: input.runtimeInput,
-    consumeGuidance: input.consumeGuidance,
-    log: input.log,
-  })
-  if (guidance.consumed) {
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
-    input.log.debug('turn continued by user guidance', { turn: input.turn })
-    return resolveBlockedFinishingGateResult(input, 'user-guidance')
-  }
-
   // 「执行计划未收束就不许收尾」的运行时拦截已处决（2026-08-05 裁决，Desktop
   // `docs/design-principles.md` §7 第 1 类）：未收束的计划步骤是**工作流编排纪律**，
   // 不是不可逆伤害也不是已证明的空转，只许走提示词与技能文书。旧门连拦三轮会把
   // 会话判成 error，模型即使已经答完也被锁死在收尾环上。
+  let shouldCompleteGoal = false
   if (input.goalMode && input.inspectGoalState) {
-    await input.completeGoalOnSuccessfulFinish?.()
+    const guidance = await consumeSoloRuntimeGuidance({
+      turn: input.turn,
+      phase: 'before-goal-check',
+      history: input.history,
+      runtimeInput: input.runtimeInput,
+      consumeGuidance: input.consumeGuidance,
+      log: input.log,
+    })
+    if (guidance.consumed) {
+      input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+      input.log.debug('turn continued by user guidance', { turn: input.turn })
+      return resolveBlockedFinishingGateResult(input, 'user-guidance')
+    }
     const goalState = await input.inspectGoalState()
-    if (!goalState.terminal) {
+    shouldCompleteGoal =
+      !goalState.terminal &&
+      !!goalState.canComplete &&
+      !!input.completeGoalOnSuccessfulFinish
+    if (!goalState.terminal && !shouldCompleteGoal) {
       await input.recordGoalCompletionAttempt?.(goalState)
       input.history.push(createInternalFollowUpMessage(buildGoalStatusRequiredReminder(goalState)))
       input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
@@ -270,6 +275,32 @@ async function runSoloFinishingGate<
       })
       return resolveBlockedFinishingGateResult(input, 'goal-status-required')
     }
+  }
+
+  // 所有可能续轮的检查均先于最终输入边界执行。
+  // 异步目标检查期间接收的输入也优先于目标提交。
+  const finalGuidance = await consumeSoloRuntimeGuidance({
+    turn: input.turn,
+    phase: 'before-complete',
+    history: input.history,
+    runtimeInput: input.runtimeInput,
+    consumeGuidance: input.consumeGuidance,
+    log: input.log,
+  })
+  if (finalGuidance.consumed) {
+    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    return resolveBlockedFinishingGateResult(input, 'user-guidance')
+  }
+  if (input.abortSignal.aborted) {
+    input.emitAbort()
+    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    return { status: 'aborted' }
+  }
+  if (shouldCompleteGoal) await input.completeGoalOnSuccessfulFinish?.()
+  if (input.abortSignal.aborted) {
+    input.emitAbort()
+    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    return { status: 'aborted' }
   }
 
   input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))

@@ -3,8 +3,8 @@
 //
 // 从哪读起:发布集合与顺序不在本文件里判——那是 releaseTopology.mjs(唯一事实来源)的活。
 // 本文件只负责三件事,顺序不可换:
-//   ① **身份**:把这批 tarball 绑死到一个精确的源码身份(HEAD SHA + GITHUB_SHA + 那个 tag 的 ref)
-//      与一棵干净的工作树;
+//   ① **身份**:把这批 tarball 绑死到精确 HEAD 与干净工作树。CI 核对 GitHub tag 上下文；
+//      显式 --local-tag 核对官方 origin 的实际远端 tag，并在发布器内运行完整质量门；
 //   ② **打包并验明**:每个包 pack 出**恰好一个** tarball,记下 size + sha256,并断言构建产物真的进了包;
 //   ③ **发布那一份已验明的 tarball**(而不是让 registry 重新从工作树打包)。
 //
@@ -15,7 +15,7 @@
 // 这趟发什么,有两个来源,**tag 优先**:
 //   · tag = `<包名或目录名>@<版本>` —— 单包发布,范围由 tag 钉死(见 releaseTopology 的
 //     resolveReleaseSelection);此时传 --only 直接红,开关不许推翻身份。
-//   · tag = `v<火车号>` —— 整列发车,可再用 `--only <名字[,名字…]>` 手动收窄(workflow_dispatch)。
+//   · tag = `v<火车号>` —— 整列发车,可再用 `--only <名字[,名字…]>` 手动收窄。
 // --only **只做减法,不做豁免**:releaseTopology 的全量校验(声明集 ↔ 磁盘、版本 ↔ bun.lock、
 // 平台代、拓扑序)照跑,身份四条前置一条不减,选取发生在校验之后。所以「只发一个包」拿到的
 // 仍是一趟验明过的火车,不是绕开火车的小路。
@@ -41,6 +41,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
+  assertLocalReleaseIdentity,
+  parseReleaseArguments,
+  runLocalReleaseChecks,
+} from './local-release-identity.mjs'
+import {
   collectReleasePackages,
   ReleaseRegistry,
   resolveReleaseSelection,
@@ -49,24 +54,7 @@ import {
 import { safePackPackage } from './safe-package-pack.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
-const dryRun = process.argv.includes('--dry-run')
-const skipBuild = process.argv.includes('--skip-build')
-
-const readOnlySelectors = (argv) => {
-  const selectors = []
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] !== '--only') continue
-    const value = argv[index + 1]
-    if (!value || value.startsWith('--')) {
-      throw new Error('--only requires at least one package name, e.g. --only agent-lab')
-    }
-    for (const entry of value.split(',')) {
-      const trimmed = entry.trim()
-      if (trimmed) selectors.push(trimmed)
-    }
-  }
-  return selectors
-}
+const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(process.argv.slice(2))
 
 const runForOutput = (command, args, cwd) => {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', env: process.env })
@@ -107,16 +95,19 @@ const assertRegistryManifest = (item, tarballPath) => {
 
 // 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、平台代、拓扑序),再谈这趟发几节车厢。
 const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(root)
-// 范围有两个来源,tag 优先:tag 是这次发布的身份,--only 只是 workflow_dispatch 手动收窄时用。
+// tag 是发布身份，来自 CI 上下文或显式 --local-tag；--only 只能手动收窄范围。
 // 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
-const tagSelection = resolveReleaseSelection(rootManifest, ordered, process.env.GITHUB_REF_NAME)
-const onlySelectors = readOnlySelectors(process.argv)
+const requestedTag = localTag ?? process.env.GITHUB_REF_NAME
+const tagSelection = resolveReleaseSelection(rootManifest, ordered, requestedTag)
+if (localTag && tagSelection.kind === 'unknown') {
+  throw new Error(`Unknown local release tag ${localTag}: ${tagSelection.reason}`)
+}
 const selected = selectReleasedPackages(
   rootManifest,
   ordered,
   // 本地 dry-run 没有 GitHub ref，沿用完整火车作为模拟身份；真发布仍在下方 taggedRelease
   // 硬门要求精确 tag，不能借这个回退绕过发布身份。
-  tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : process.env.GITHUB_REF_NAME,
+  tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : requestedTag,
   onlySelectors,
 ).packages
 const releaseTag = tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : tagSelection.tag
@@ -127,20 +118,30 @@ const sourceSha = runForOutput('git', ['rev-parse', 'HEAD'], root)
 if (!/^[a-f0-9]{40}$/u.test(sourceSha)) {
   throw new Error(`Expected a full source commit SHA, received: ${sourceSha}`)
 }
-if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== sourceSha) {
-  throw new Error(
-    `GITHUB_SHA ${process.env.GITHUB_SHA} does not match checked out source ${sourceSha}`,
-  )
-}
-if (!dryRun && !process.env.GITHUB_SHA) {
-  throw new Error('GITHUB_SHA must identify the exact source commit for publishing')
-}
-const taggedRelease =
-  process.env.GITHUB_REF_TYPE === 'tag'
-  && process.env.GITHUB_REF_NAME === releaseTag
-  && process.env.GITHUB_REF === expectedRef
-if (!dryRun && !taggedRelease) {
-  throw new Error(`Publishing requires the exact release tag ${expectedRef}`)
+const assertLocalIdentity = () => assertLocalReleaseIdentity({
+  root,
+  tag: localTag,
+  repository: rootManifest.repository,
+  expectedSourceSha: sourceSha,
+  runForOutput,
+})
+if (localTag) assertLocalIdentity()
+else {
+  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== sourceSha) {
+    throw new Error(
+      `GITHUB_SHA ${process.env.GITHUB_SHA} does not match checked out source ${sourceSha}`,
+    )
+  }
+  if (!dryRun && !process.env.GITHUB_SHA) {
+    throw new Error('GITHUB_SHA must identify the exact source commit for publishing')
+  }
+  const taggedRelease =
+    process.env.GITHUB_REF_TYPE === 'tag'
+    && process.env.GITHUB_REF_NAME === releaseTag
+    && process.env.GITHUB_REF === expectedRef
+  if (!dryRun && !taggedRelease) {
+    throw new Error(`Publishing requires the exact release tag ${expectedRef}`)
+  }
 }
 const workingTreeStatus = runForOutput(
   'git',
@@ -158,6 +159,7 @@ if (!dryRun && skipBuild) {
 }
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
+if (localTag) console.info('release mode: explicit local tag; full quality gates run before publication')
 console.info(`registry: ${ReleaseRegistry}`)
 console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
@@ -181,6 +183,15 @@ if (workingTreeStatus && dryRun) {
 if (skipBuild) {
   console.warn('! --skip-build: packing whatever dist/ is already on disk, not a fresh build')
 }
+if (localTag) {
+  runLocalReleaseChecks({
+    root,
+    packageManager: rootManifest.packageManager,
+    assertIdentity: assertLocalIdentity,
+    run,
+    runForOutput,
+  })
+}
 
 // —— ② 打包并验明 ——
 // 先整仓构建再逐包 pack:包间是拓扑依赖,单包构建拿不到上游 dist。build:package 是给将来
@@ -188,6 +199,7 @@ if (skipBuild) {
 if (!skipBuild) {
   run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
 }
+if (localTag) assertLocalIdentity()
 
 for (const item of selected) {
   const packDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-pack-'))
@@ -249,6 +261,12 @@ for (const item of selected) {
       '--ignore-scripts',
     ]
     if (dryRun) publishArgs.push('--dry-run')
+    if (!dryRun) {
+      if (createHash('sha256').update(await readFile(tarballPath)).digest('hex') !== artifact.sha256) {
+        throw new Error(`${item.manifest.name} tarball changed after validation`)
+      }
+      if (localTag) assertLocalIdentity()
+    }
     run('bun', publishArgs, root)
   } finally {
     await rm(packDirectory, { recursive: true, force: true })

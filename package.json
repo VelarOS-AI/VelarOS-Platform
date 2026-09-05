@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
@@ -13,7 +13,7 @@
     "packages/*"
   ],
   "velaros": {
-    "trainVersion": "0.6.12",
+    "trainVersion": "0.6.13",
     "trainNote": "根 version 是火车版本号,只用来给整列发车的 tag 命名;各包版本独立走 semver,见 README「版本方案」。",
     "//platform": "平台代:同一代内各包互相兼容,跨代才是整体破坏性升级。每个包在自己的 velaros.platform 里声明同一个值,随包发布,消费者装完也读得到;releaseTopology 的不变量④机械核对一致性。",
     "//domainPackages": "各域的包目录单源。域架构门(check:*-arch)据此把「包集合冻结」收敛到本域,新增包必须同时登记此处与该域的 owners 表。",
@@ -109,12 +109,15 @@
     "check:devtools-performance-engine": "bun scripts/browser/buildDevtoolsPerformanceEngine.mjs --check",
     "check:public-readiness": "node scripts/quality/check-public-readiness.mjs",
     "check:platform-generation": "node scripts/release/check-platform-generation.mjs",
-    "check:gates": "bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:project-arch && bun run check:project-agent-contract && bun run check:agent-lab-package && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:platform-generation && bun run check:package-catalog",
-    "//release": "发布链只有一条(scripts/release/)。release:verify 是 CI 预检,读 GITHUB_* 环境变量,本地跑必失败——那是设计,不是坏了。release:dry-run 是本地验明:列发布计划、真打 tarball、走 bun publish --dry-run,不发布任何东西。真发布只由 release-packages.yml 在 tag 上触发,刻意不提供本地入口(发 16 个包不可逆)。",
+    "check:gates": "bun run check:host-contract-consumer && bun run check:release-source && bun run check:package-pack-safety && bun run check:kernel-schemas && bun run check:kernel-arch && bun run check:core-semantic-vocabulary && bun run check:agent-schemas && bun run check:agent-arch && bun run check:agent-browser && bun run check:conversation-semantics && bun run check:capabilities-schemas && bun run check:capabilities-arch && bun run check:model-arch && bun run check:memory-boundaries && bun run check:memory-knowledge-profile && bun run probe:memory && bun run check:ui-form-closure && bun run check:ui-color-literal && bun run check:ui-hook-deps && bun run check:ui-package-contracts && bun run check:ui-component-library && bun run check:code-style && bun run check:html-artifacts-package && bun run check:project-arch && bun run check:project-agent-contract && bun run check:agent-lab-package && bun run check:dependency-security && bun run check:devtools-performance-engine && bun run check:public-readiness && bun run check:platform-generation && bun run check:package-catalog",
+    "//release": "发布链统一在 scripts/release/。CI tag 发布保持 release:verify 身份预检和完整质量门；release:local <tag> 是显式本地维护入口，核验官方 origin 的远端 tag、HEAD 和干净工作树，强制冻结安装、完整 check 与新构建，再发布同一份已校验 tarball。release:dry-run 只模拟，不发布。",
     "release:verify": "node scripts/release/verify-release-ref.mjs",
     "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
     "check": "bun run check:package-pack-boundary && bun run build && bun run typecheck && bun run lint && bun run test && bun run test:suites && bun run check:gates",
-    "test:suites": "bun run test:memory && bun run test:ui"
+    "test:suites": "bun run test:memory && bun run test:ui",
+    "release:local": "node scripts/release/publish-packages.mjs --local-tag",
+    "check:release-source": "node --test scripts/release/local-release-identity.test.mjs",
+    "check:host-contract-consumer": "node scripts/release/check-host-contract-consumer.mjs"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",

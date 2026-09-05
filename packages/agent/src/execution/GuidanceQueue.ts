@@ -44,8 +44,8 @@ class ExecutionGuidanceQueue {
     if (!hasUserVisibleGuidance(message))
       return { status: 'invalid', reason: 'empty-or-non-user-message' }
 
-    const lane = this.lane(executionId)
-    if (lane.sealed) return { status: 'closed', reason: 'execution-settled' }
+    const lane = this.lanesByExecutionId.get(executionId)
+    if (!lane || lane.sealed) return { status: 'closed', reason: 'execution-settled' }
 
     lane.messages.push(message)
     for (const listener of [...lane.inputAcceptedListeners]) listener()
@@ -60,7 +60,8 @@ class ExecutionGuidanceQueue {
   }
 
   public consumeOrSeal(executionId: string): AgentRuntimeInputResult {
-    const lane = this.lane(executionId)
+    const lane = this.lanesByExecutionId.get(executionId)
+    if (!lane) return { status: 'sealed' }
     const message = lane.messages.shift()
     if (message) return { status: 'input', message }
 
@@ -70,7 +71,8 @@ class ExecutionGuidanceQueue {
   }
 
   public finalize(executionId: string): ExecutionGuidanceFinalizationResult {
-    const lane = this.lane(executionId)
+    const lane = this.lanesByExecutionId.get(executionId)
+    if (!lane) return { status: 'sealed' }
     lane.sealed = true
     lane.inputAcceptedListeners.clear()
     if (!isEmpty(lane.messages))
@@ -79,6 +81,8 @@ class ExecutionGuidanceQueue {
   }
 
   public port(executionId: string): AgentRuntimeInputPort {
+    // 仅执行启动会创建输入通道；迟到的生产者和保留端口不能重新打开通道。
+    this.lane(executionId)
     return {
       take: () => this.consume(executionId),
       takeOrSeal: () => this.consumeOrSeal(executionId),
@@ -88,16 +92,20 @@ class ExecutionGuidanceQueue {
 
   public clear(executionId: string): ExecutionGuidanceClearResult {
     const lane = this.lanesByExecutionId.get(executionId)
+    if (lane) {
+      lane.sealed = true
+      lane.inputAcceptedListeners.clear()
+    }
     if (lane && !isEmpty(lane.messages))
       return { status: 'retained', pendingCount: lane.messages.length }
 
-    lane?.inputAcceptedListeners.clear()
     this.lanesByExecutionId.delete(executionId)
     return { status: 'cleared' }
   }
 
   private onInputAccepted(executionId: string, listener: () => void): () => void {
-    const lane = this.lane(executionId)
+    const lane = this.lanesByExecutionId.get(executionId)
+    if (!lane) return () => undefined
     if (!isEmpty(lane.messages)) {
       listener()
       return () => undefined

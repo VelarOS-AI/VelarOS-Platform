@@ -16,7 +16,7 @@ import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../project-code-q
 import { ProjectToolNames } from '../project-tool-names.js'
 
 import { executeAgentProjectRead, executeAgentProjectSearch } from './ProjectKernelPort.js'
-import type { ProjectToolContext,VelaTool } from './Types.js'
+import type { ProjectToolApi, ProjectToolContext, VelaTool } from './Types.js'
 
 type ProjectToolCollection = Readonly<Record<string, VelaTool<any>>>
 
@@ -69,7 +69,7 @@ function defineProjectTool<TInput extends Record<string, any>>(input: {
 }
 
 function runInProjectDirectory<T>(
-  context: ProjectToolContext,
+  context: { project: Pick<ProjectToolApi, 'runInDirectory'> },
   cwd: LooseOptional<string>,
   action: () => Promise<T>
 ): Promise<T> {

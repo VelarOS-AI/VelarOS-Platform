@@ -7,6 +7,7 @@ import {
   projectFileTools,
   projectTools,
 } from '../agent/Project.tool.js'
+import { PROJECT_PACKAGE_VERSION } from '../core/defaults.js'
 import { ProjectToolNames } from '../project-tool-names.js'
 
 const ProjectModId = 'velaros.project' as const
@@ -69,7 +70,7 @@ function projectCategoryForTool(name: string): keyof typeof ProjectCategoryTools
 
 const ProjectAgentModManifest = Object.freeze({
   id: ProjectModId,
-  version: '2.0.7',
+  version: PROJECT_PACKAGE_VERSION,
   publisher: 'VelarOS',
   displayName: 'VelarOS Project',
   description: '项目空间的文件、代码理解、变更与执行职责包。',

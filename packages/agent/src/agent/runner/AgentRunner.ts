@@ -95,7 +95,6 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     domainServices: AgentRunnerDomainServices,
     infrastructure: AgentRunnerInfrastructure
   ) {
-    void components.runtimeHelper
     this.contextHelper = components.contextHelper
     this.primaryAgentStreamLoop = components.primaryAgentStreamLoop
     this.queryLoop = components.queryLoop

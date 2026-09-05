@@ -42,6 +42,7 @@ export {
   type MemoryAdapterMount,
   MemoryAdapterRuntime,
   type MemoryAdapterStorePort,
+  type MemoryAdapterTreePort,
   mountMemoryAdapter,
   type MountMemoryAdapterInput,
 } from './mount'

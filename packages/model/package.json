@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/model",
-  "version": "0.4.13",
+  "version": "0.5.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -75,6 +75,7 @@
     "prepack": "bun run build"
   },
   "dependencies": {
+    "@types/json-schema": "7.0.15",
     "@ai-sdk/anthropic": "^3.0.71",
     "@ai-sdk/google": "^3.0.64",
     "@ai-sdk/openai": "^3.0.53",

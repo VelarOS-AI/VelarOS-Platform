@@ -9,6 +9,8 @@ import {
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel/contracts/abi'
 
+import { ComputerOperationMetadata } from '../contracts'
+
 import {
   ComputerSidecarManager,
   type ComputerSidecarManagerOptions,
@@ -176,68 +178,47 @@ function createComputerCapabilityService(
 ): ComputerRuntimeCapabilityService {
   const callable = createKernelCallableCapability({
     ensure_available: {
-      metadata: {
-        permissions: ['process:exec'],
-        reason: 'Check whether the desktop-control sidecar is available.',
-      },
+      metadata: ComputerOperationMetadata.ensure_available,
       invoke: (_scope, input) => {
         parseEmptyInput(input)
         return runtime.ensureAvailable()
       },
     },
     screen_size: {
-      metadata: {
-        permissions: ['process:exec', 'screen:capture'],
-        reason: 'Read the active display dimensions.',
-      },
+      metadata: ComputerOperationMetadata.screen_size,
       invoke: (_scope, input) => {
         parseEmptyInput(input)
         return runtime.screenSize()
       },
     },
     screenshot: {
-      metadata: {
-        permissions: ['process:exec', 'screen:capture'],
-        reason: 'Capture the active display.',
-      },
+      metadata: ComputerOperationMetadata.screenshot,
       invoke: (_scope, input) => {
         parseEmptyInput(input)
         return runtime.screenshot()
       },
     },
     mouse_move: {
-      metadata: {
-        permissions: ['process:exec', 'input:control'],
-        reason: 'Move the system pointer.',
-      },
+      metadata: ComputerOperationMetadata.mouse_move,
       invoke: (_scope, input) => {
         const { x, y } = parseCoordinateInput(input)
         return runtime.mouseMove(x, y)
       },
     },
     left_click: {
-      metadata: {
-        permissions: ['process:exec', 'input:control'],
-        reason: 'Click at a display coordinate.',
-      },
+      metadata: ComputerOperationMetadata.left_click,
       invoke: (_scope, input) => {
         const { x, y, ...options } = parseClickInput(input)
         return runtime.leftClick(x, y, options)
       },
     },
     type_text: {
-      metadata: {
-        permissions: ['process:exec', 'input:control'],
-        reason: 'Type text into the active application.',
-      },
+      metadata: ComputerOperationMetadata.type_text,
       invoke: (_scope, input) =>
         runtime.typeText(parseBoundedString(input, 'text', MaxTypeTextLength)),
     },
     key: {
-      metadata: {
-        permissions: ['process:exec', 'input:control'],
-        reason: 'Send a bounded keyboard chord.',
-      },
+      metadata: ComputerOperationMetadata.key,
       invoke: (_scope, input) =>
         runtime.key(parseBoundedString(input, 'keys', MaxKeyChordLength)),
     },

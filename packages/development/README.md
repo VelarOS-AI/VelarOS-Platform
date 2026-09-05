@@ -9,6 +9,11 @@ TypeScript Language Service 缓存和统一 action 路由。`createProjectCodeQu
 语言服务 action；宿主可以注入 `ProjectCodeIndexApi`，在 CodeGraph 安装并启用后为同一个工具
 覆盖图谱、依赖、调用链和索引 action。CodeGraph 缺失不会隐藏基础工具。
 
+`executeProjectCodeLanguageQuery()` accepts `LanguageToolContext`: an abort signal, scoped
+working-directory access, and `listFiles` / `read` / `listSymbols` source ports. A language-only
+host does not supply approval, command execution, mutation, or system capabilities. The optional
+CodeGraph overlay retains `ProjectToolContext` at the Project query boundary.
+
 `ExternalLanguageService` 负责外部 language server 的进程生命周期、JSON-RPC framing、
 超时/取消、诊断与导航结果的有界归一。宿主保留二进制与资源发现、启用策略、进程环境和状态展示，
 不会由 Development 静默下载或启动任意可执行文件。

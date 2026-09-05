@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/memory",
-  "version": "0.3.13",
+  "version": "0.4.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -81,6 +81,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/memory"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "better-sqlite3": "^13.0.3",
@@ -88,7 +89,6 @@
   },
   "devDependencies": {
     "@lancedb/lancedb": "^0.27.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.17",
     "apache-arrow": "^18.1.0",
     "typescript": "^5.7.0"

@@ -60,9 +60,10 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.8",
+      "version": "0.6.9",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
+        "@types/json-schema": "7.0.15",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "ai": "^6.0.168",
@@ -95,7 +96,7 @@
     },
     "packages/browser": {
       "name": "@velaros-ai/browser",
-      "version": "0.2.15",
+      "version": "0.2.16",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -136,7 +137,7 @@
     },
     "packages/computer": {
       "name": "@velaros-ai/computer",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -160,7 +161,7 @@
     },
     "packages/development": {
       "name": "@velaros-ai/development",
-      "version": "1.0.5",
+      "version": "1.1.0",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@velaros-ai/core": "workspace:*",
@@ -219,8 +220,9 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.3.13",
+      "version": "0.4.0",
       "dependencies": {
+        "@types/better-sqlite3": "^7.6.13",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "better-sqlite3": "^13.0.3",
@@ -228,7 +230,6 @@
       },
       "devDependencies": {
         "@lancedb/lancedb": "^0.27.2",
-        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^22.19.17",
         "apache-arrow": "^18.1.0",
         "typescript": "^5.7.0",
@@ -243,12 +244,13 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.4.13",
+      "version": "0.5.0",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",
         "@ai-sdk/openai": "^3.0.53",
         "@ai-sdk/provider": "3.0.8",
+        "@types/json-schema": "7.0.15",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "ai": "^6.0.168",
@@ -260,7 +262,7 @@
     },
     "packages/office": {
       "name": "@velaros-ai/office",
-      "version": "1.1.4",
+      "version": "1.1.5",
       "dependencies": {
         "@napi-rs/canvas": "1.0.8",
         "@velaros-ai/core": "workspace:*",
@@ -284,7 +286,7 @@
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -326,7 +328,7 @@
     },
     "packages/system": {
       "name": "@velaros-ai/system",
-      "version": "1.1.4",
+      "version": "1.1.5",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",

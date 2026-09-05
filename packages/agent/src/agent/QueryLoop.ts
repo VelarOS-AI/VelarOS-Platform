@@ -25,7 +25,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import { resolveCapabilityDelegationPolicy } from '../capabilities'
 import { type AutoVerificationToolContext, tickLoopReminders } from '../coding'
-import type { ExecutionSpanScopeFactory } from '../kernel'
+import { type ExecutionSpanScopeFactory, KernelToolLoopGuard } from '../kernel'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
 import {
   buildStructuredOutputRepairPrompt,
@@ -85,6 +85,7 @@ import type {
   QueryTurnToolRegistry,
 } from './QueryTurn'
 import type { AgentRoleResolution, ResolveAgentRoleOptions } from './RoleTypes'
+import type { AgentModelRetryPolicy,AgentRunLifecycle } from './RunLifecycle'
 import { applyRunProfileToolExposure, resolveRunProfilePolicyForRuntime } from './RunProfile'
 import type {
   AgentChatRuntimeConfig,
@@ -223,6 +224,8 @@ interface ExecuteQueryLoopArgs<
   TEvents extends QueryTurnEvents = QueryTurnEvents,
   TSignals = unknown,
 > {
+  lifecycle?: AgentRunLifecycle<TContext>
+  modelRetry?: AgentModelRetryPolicy
   /** 父 Agent 委派给子 Agent 的任务文本。 */
   task: string
   /** 子 Agent 运行选项，可限制工具类别、角色和最大步数。 */
@@ -309,6 +312,7 @@ class QueryLoop<
 
   /** 执行一次子 Agent 委派任务。 */
   public async execute(args: ExecuteQueryLoopArgs<TContext, TEvents, TSignals>): Promise<string> {
+    const toolLoopGuard = new KernelToolLoopGuard()
     const startedAt = Date.now()
     const compiledStructuredOutput = args.opts.structuredOutputContract
       ? compileSubAgentOutputSchema(args.opts.structuredOutputContract.schema)
@@ -489,6 +493,8 @@ class QueryLoop<
       args.parentCtx.abortSignal.aborted || !!args.opts.workerAbortSignal?.aborted
 
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<string>> => {
+      await args.lifecycle?.beforeTurn?.({ turn, history, toolContext: childCtx, abortSignal: childCtx.abortSignal })
+      childCtx.abortSignal.throwIfAborted()
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnToolContext = captureAgentTurnCapabilityContext(childCtx)
       const supportedInputModalities = new Set(roleRuntime.supportedInputModalities)
@@ -595,11 +601,13 @@ class QueryLoop<
                 contextUsageOptions,
                 toolSchemaChars,
                 toolContext: turnToolContext,
+                toolLoopGuard,
                 toolRegistry: turnToolRegistry,
                 allowedTools: allowedToolsForTurn,
                 events: args.opts.events,
                 streamTextDeltas: !!args.opts.streamTextDeltas,
                 idleStallTimeoutMs: this.executionLimits.modelStreamIdleTimeoutMs,
+                modelRetry: args.modelRetry,
                 onModelRequestRetry: (error) =>
                   restartLoopTurnModelSpanAfterRetry(spans, error),
                 contextEpochScope,
@@ -638,6 +646,7 @@ class QueryLoop<
         } catch (error) {
           const appError = AppError.from(error)
           if (
+            (args.modelRetry?.allowPartialContinuation ?? true) &&
             this.shouldRecoverReasoningOnlyEmptyResponse(
               error,
               args,
@@ -702,7 +711,18 @@ class QueryLoop<
         usageCostUsd = (usageCostUsd ?? 0) + result.costUsd
       }
 
+      const disposition = await args.lifecycle?.onTurnSettled?.({ turn, history, toolContext: childCtx, abortSignal: childCtx.abortSignal, result })
+      childCtx.abortSignal.throwIfAborted()
+      if (disposition === 'stop') {
+        args.opts.onHistoryUpdate?.(history)
+        reportUsage()
+        runScope?.end({ status: 'ok' })
+        return loopFinish(result.text)
+      }
+      if (disposition === 'continue' && !result.hasToolUse) return loopContinue()
+
       if (!result.hasToolUse) {
+
         // 收尾轮：模型停止工具调用，此时才允许注入 postEditReminder。
         // 这与主 agent 面保持一致：不在每次 edit 后触发，只在模型真正停下来时才提醒。
         // 提醒轮次有上限，超过后即便仍有提醒也强制收尾，避免无限轮询。

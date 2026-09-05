@@ -98,6 +98,8 @@ interface StreamConsumerTurnState {
   hasDispatchedToolUse?: boolean;
   accumulatedText: string;
   hasVisibleOutput: boolean;
+  /** Reasoning actually projected to the event bus; distinct from a visible answer. */
+  hasReasoningOutput?: boolean;
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>;
   /**
@@ -261,6 +263,7 @@ class StreamConsumer {
         type: "assistant-reasoning-delta",
         text,
       });
+      turnState.hasReasoningOutput = true;
       args.events.emitReasoningDelta({ id: reasoningStreamId, text });
     };
     const emitReasoningDelta = (id: string, rawText: string): void => {

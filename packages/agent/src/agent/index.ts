@@ -163,6 +163,7 @@ export type {
   WorkflowType,
 } from './RoleTypes'
 export * from './run-context'
+export type { AgentModelRetryPolicy,AgentRunLifecycle, AgentTurnBoundary, AgentTurnSettlement } from './RunLifecycle'
 export * from './runner'
 export type { AgentRunProfileCatalogSnapshot } from './RunProfile'
 export {

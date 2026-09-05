@@ -10,7 +10,6 @@ import type {
   RunnerCodingSessionPolicyBundle,
   RunnerConfigService,
   RunnerExecutionEnvironmentPort,
-  RunnerModelRuntimePort,
   RunnerSubAgentDispatcher,
   RunnerToolContext,
   RunnerToolContextBuilder,
@@ -18,7 +17,6 @@ import type {
 } from './host-ports'
 
 export interface AgentRunnerComponents<TToolContext extends RunnerToolContext> {
-  runtimeHelper: RunnerModelRuntimePort
   contextHelper: RunnerToolContextBuilder<TToolContext>
   primaryAgentStreamLoop: SoloStreamLoop<TToolContext, ExecutionEventBus>
   queryLoop: QueryLoop<TToolContext, ExecutionEventBus>

@@ -1,15 +1,17 @@
-import { isUndefined } from '@velaros-ai/core'
+import { isEmpty, isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
-import type { MemoryDomain } from '..'
 // 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
-import type {
-  MemoryBackendDescriptor,
-  MemoryStoreBackend,
+import {
+  listMissingAuthorityMemoryVerbs,
+  type MemoryBackendDescriptor,
+  type MemoryStoreBackend,
 } from '../backend/Contract'
 import {
   createMemoryTreeStoreBackend,
   MemoryTreeBackendId,
 } from '../backend/TreeStoreBackend'
+import type { MemoryDomain } from '../index'
 
 import { MemoryEvidenceBridge } from './EvidenceBridge'
 import type { MemoryHostScopeResolver } from './HostContracts'
@@ -60,8 +62,8 @@ export interface MemoryAdapterHostContextPort {
  * 后端解析端口（kernel-contract §15.7 裁决二）。
  *
  * 宿主把进程内 `KernelModuleHost`（结构上满足 `MemoryStoreCapabilityRegistry`）与后端优先序
- * 递进来，适配器经 `velaros.memory.store.<id>` token 解析出该用哪个后端。**不传即默认**：
- * 回落到把 `domain` 包成的树后端，与 token 未引入前逐字等价。
+ * 递进来，适配器经 `velaros.memory.store.<id>` token 解析出该用哪个后端。
+ * 显式提供 tree 时，未解析到后端会使用该树；独立后端宿主缺少权威层则明确拒绝装配。
  */
 export interface MemoryAdapterStorePort {
   readonly registry: MemoryStoreCapabilityRegistry
@@ -70,20 +72,20 @@ export interface MemoryAdapterStorePort {
   readonly capabilityVersion?: string
 }
 
-export interface MountMemoryAdapterInput {
-  /**
-   * 记忆树领域服务（`@velaros-ai/memory` 的 MemoryDomain）。
-   *
-   * 它同时是**默认已注册后端**的来源与树档治理面（warmup / Dream 调度 / 树版本）的持有者。
-   * TODO(memory-files-authority): 支持 files-only 宿主前，将树治理生命周期从本字段拆成独立端口，
-   * 并让 domain 成为可选输入。
-   */
+/** Tree lifecycle is an explicit host choice, independent of the selected authority backend. */
+export interface MemoryAdapterTreePort {
   domain: MemoryDomain
-  /** 宿主空闲信号端口；桌面宿主读取平台状态，headless 宿主可注入常量实现。 */
   idleSignal: HostIdleSignalPort
+}
+
+export interface MountMemoryAdapterInput {
+  /** 已完成权威层/派生索引装配的后端，与 store 解析端口互斥。 */
+  backend?: MemoryStoreBackend
+  /** 树治理的显式接入；缺席时不创建 warmup / Dream / idle signal 生命周期。 */
+  tree?: MemoryAdapterTreePort
   config: MemoryAdapterConfigPort
   hostContext: MemoryAdapterHostContextPort
-  /** 可选：经 capability token 解析后端。缺席时用 `domain` 包成的默认树后端。 */
+  /** 经 capability token 解析后端；未选中时仅允许回落显式提供的 tree。 */
   store?: MemoryAdapterStorePort
 }
 
@@ -94,26 +96,32 @@ export interface MountMemoryAdapterInput {
  * - `service` → Dream 调度生命周期 + 治理门面（供 IPC/warmup/close）。
  */
 export class MemoryAdapterRuntime {
-  public readonly service: MemoryService
+  public readonly service: Nullable<MemoryService>
   public readonly evidenceBridge: MemoryEvidenceBridge
   public readonly turnRecall: MemoryTurnRecallCoordinator
   /** 本次装配实际选中的记忆后端（capture / recall 两端口的落点）。 */
   public readonly store: MemoryStoreBackend
 
   constructor(input: MountMemoryAdapterInput) {
-    const { domain, idleSignal, config, hostContext } = input
-
-    // 「默认已注册后端」：既有树领域服务原样包成后端，每个动词逐字转发 → 行为零变化。
-    const defaultStore = createMemoryTreeStoreBackend(domain)
-    this.store = (
-      isUndefined(input.store)
-        ? undefined
-        : resolveMemoryStoreBackend({
-            registry: input.store.registry,
-            preference: input.store.preference,
-            capabilityVersion: input.store.capabilityVersion,
-          })
-    ) ?? defaultStore
+    const { tree, config, hostContext } = input
+    if (isPresent(input.backend) && isPresent(input.store)) {
+      throw new AppError('VALIDATION', 'Memory adapter requires one backend selection source.')
+    }
+    const selected = input.backend ?? (input.store && resolveMemoryStoreBackend(input.store))
+    const store = selected ?? (tree && createMemoryTreeStoreBackend(tree.domain))
+    if (!store) {
+      throw new AppError('UNAVAILABLE', 'Memory adapter has no authority backend.')
+    }
+    const missingVerbs = listMissingAuthorityMemoryVerbs(store)
+    if (store.descriptor.role !== 'authority' || !isEmpty(missingVerbs)) {
+      throw new AppError(
+        'VALIDATION',
+        'Memory adapter requires a complete authority backend.',
+        undefined,
+        { backendId: store.descriptor.id, missingVerbs }
+      )
+    }
+    this.store = store
 
     this.turnRecall = new MemoryTurnRecallCoordinator({
       recall: (query, options) => this.store.recall(query, options),
@@ -135,14 +143,15 @@ export class MemoryAdapterRuntime {
       environmentContextBlockOpenTag: hostContext.environmentContextBlockOpenTag,
     })
 
-    // 树档自己的治理面（warmup / Dream 调度 / 树版本 / 完整性校验）仍直连 domain：那是
-    // `memory-tree` 档的生命周期，不属于后端无关的窄端口。files-only 宿主不需要它。
-    this.service = new MemoryService(domain, {
-      idleSignal,
-      isAutoMemoryEnabled: config.isEnabled,
-      isBackgroundGrowthEnabled: config.isBackgroundGrowthEnabled,
-      allowBatteryGrowth: config.allowBatteryGrowth,
-    })
+    // 宿主可显式保留树档治理，或只挂载独立后端；后端名称不决定其它存储的生命周期。
+    this.service = tree
+      ? new MemoryService(tree.domain, {
+          idleSignal: tree.idleSignal,
+          isAutoMemoryEnabled: config.isEnabled,
+          isBackgroundGrowthEnabled: config.isBackgroundGrowthEnabled,
+          allowBatteryGrowth: config.allowBatteryGrowth,
+        })
+      : null
   }
 
   /** 选中后端的自述，供宿主诊断面展示「记忆跑在哪个后端上」。 */

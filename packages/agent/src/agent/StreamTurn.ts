@@ -59,6 +59,7 @@ import {
   markContextOverflowReplayUnsafe,
   MaxConnectionRetryAttempts,
 } from './retry'
+import type { AgentModelRetryPolicy } from './RunLifecycle'
 import {
   buildOutputTruncationContinuationPrompt,
   type ConsumeAssistantStreamArgs,
@@ -243,6 +244,7 @@ export interface ExecuteStreamTurnArgs<
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
   onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
   /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
+  modelRetry?: AgentModelRetryPolicy
   onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
 }
 
@@ -391,9 +393,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   aiTools,
                   toolTransportPlan
                 )
-                const providerTools = this.turnRequestHelper.resolveProviderToolDefinitions(
+                const providerTools = await this.turnRequestHelper.resolveProviderToolDefinitions(
                   aiTools,
-                  args.toolContext,
                   toolTransportPlan,
                   toolSchemaChars,
                   toolSchemaHashes
@@ -563,10 +564,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               }
             },
             {
+              policy: args.modelRetry,
               phase: 'stream',
               turn: args.turn,
               abortSignal: turnAbortScope.signal,
-              hasVisibleOutput: () => turnState.hasVisibleOutput,
+              hasVisibleOutput: () => turnState.hasVisibleOutput || (!!args.modelRetry && !!turnState.hasReasoningOutput),
               hasToolUse: () => turnState.hasToolUse,
               onRetry: (error, attempt) => {
                 args.onModelRequestRetry?.(error, attempt)
@@ -588,6 +590,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
             assistantContent = interrupted.partial?.assistantContent ?? assistantContent
             break
           }
+          if (!(args.modelRetry?.allowPartialContinuation ?? true)) throw error
           if (
             this.shouldRecoverReasoningOnlyEmptyResponse(
               error,

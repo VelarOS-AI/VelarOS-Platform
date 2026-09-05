@@ -38,7 +38,6 @@ import {
   ExecutionStateMachine,
   ExecutionStore,
   extractGuidanceUserText,
-  resolveMainAgentGuidanceDelivery,
   SourceSessionGuard,
   SubAgentGuidanceRelayRegistry,
 } from '../../execution'
@@ -52,6 +51,7 @@ import type {
   AuthGatePort,
   ExecutionActivitySignalsPort,
   ExecutionCollaborationPort,
+  ExecutionGuidanceRelayPlanInput,
   ExecutionGuidanceRelayPlanner,
   ExecutionRecordsPathPort,
   ExecutionResourcePort,
@@ -315,7 +315,7 @@ class ExecutionService {
     authorization?.assertCurrent()
     const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
-    if (!executionId) {
+    if (!executionId || this.isTerminalStatus(this.getExecution(executionId).status)) {
       throw new AppError('VALIDATION', '当前会话没有正在运行的执行，无法发送引导。')
     }
 
@@ -324,52 +324,7 @@ class ExecutionService {
       throw new AppError('VALIDATION', '引导消息为空或不是用户消息。')
     }
 
-    const activeWorkers = this.guidanceRelayRegistry.listActiveWorkers(executionId)
-    if (!isEmpty(activeWorkers) && this.guidanceRelayService) {
-      try {
-        authorization?.assertCurrent()
-        const planned = await this.guidanceRelayService.planRelay({
-          userGuidance,
-          workers: activeWorkers,
-        })
-        authorization?.assertCurrent()
-
-        for (const relay of planned.relays) {
-          this.guidanceRelayRegistry.enqueueRelay(executionId, relay.threadId, relay.message)
-        }
-
-        // relay 是**纯增量**：无论辅助模型怎么规划，用户这条输入一律进主控队列——规划出改写就
-        // 用改写（带主控视角的理解），没有就用原文逐字入队。
-        //
-        // 这里曾经是 `if (planned.mainAgentMessage) { … } return`：规划说「与主控无关」时主控
-        // 一个字都收不到，用户在转录里看得见自己那句话、主控却从此不知道它存在，后续回答完全
-        // 不体现——用户只会认为「AI 无视我」。这类判断由一个小辅助模型说了算，判错的代价必须是
-        // 多花一点 token，而不是用户输入丢失（尺子12：可用性类 fail-open）。
-        authorization?.assertCurrent()
-        const delivery = resolveMainAgentGuidanceDelivery({
-          plannedMainAgentMessage: planned.mainAgentMessage,
-          originalMessage: request.message,
-        })
-        const enqueued = this.guidanceQueue.enqueue(executionId, delivery.message)
-        this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
-
-        this.log.info('sub-agent guidance relay planned', {
-          executionId,
-          workerCount: activeWorkers.length,
-          relayCount: planned.relays.length,
-          mainAgentDelivery: delivery.kind,
-        })
-        this.emitExecutionDebug(executionId)
-        return
-      } catch (error) {
-        if (error instanceof AppError && error.code === 'AUTH') throw error
-        this.log.warn('sub-agent guidance relay failed; falling back to main-agent queue', {
-          executionId,
-          error: AppError.getMessage(error),
-        })
-      }
-    }
-
+    // 在辅助模型工作前接收原始输入，使它及时抢占主轮。
     authorization?.assertCurrent()
     const enqueued = this.guidanceQueue.enqueue(executionId, request.message)
     this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
@@ -380,6 +335,49 @@ class ExecutionService {
     })
 
     this.emitExecutionDebug(executionId)
+
+    const activeWorkers = this.guidanceRelayRegistry.listActiveWorkers(executionId)
+    if (!isEmpty(activeWorkers) && this.guidanceRelayService) {
+      void this.relayAcceptedGuidance(
+        request.sessionId,
+        executionId,
+        { userGuidance, workers: activeWorkers },
+        authorization
+      )
+    }
+  }
+
+  private async relayAcceptedGuidance(
+    sessionId: string,
+    executionId: string,
+    input: ExecutionGuidanceRelayPlanInput,
+    authorization?: { assertCurrent(): void }
+  ): Promise<void> {
+    try {
+      const planner = this.guidanceRelayService
+      if (!planner) return
+      const planned = await planner.planRelay(input)
+      authorization?.assertCurrent()
+      if (
+        this.sourceSessionGuard.getActiveExecutionId(sessionId) !== executionId ||
+        this.isTerminalStatus(this.getExecution(executionId).status)
+      ) return
+
+      for (const relay of planned.relays) {
+        this.guidanceRelayRegistry.enqueueRelay(executionId, relay.threadId, relay.message)
+      }
+      this.log.info('sub-agent guidance relay planned', {
+        executionId,
+        workerCount: input.workers.length,
+        relayCount: planned.relays.length,
+      })
+      this.emitExecutionDebug(executionId)
+    } catch (error) {
+      this.log.warn('sub-agent guidance relay failed after main-agent input acceptance', {
+        executionId,
+        error: AppError.getMessage(error),
+      })
+    }
   }
 
   /** renderer 中断指定 worker 线程，不影响主 execution。 */

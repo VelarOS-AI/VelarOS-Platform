@@ -134,25 +134,29 @@ function buildPreparedToolExamples(
  * 一条都不落空是硬要求——返回空串等于让模型自己猜下一步，实测会退化成重复 page-in 同一张不可用页。
  */
 function buildReplaceNextTurnHint(input: {
+  alreadyResidentTools: readonly string[]
   preparedTools: readonly string[]
   enabledCapabilities: readonly ToolCategoryId[]
   requiresApprovalDetails: readonly ToolSpaceReplacePageDetail[]
   requiresUserActionDetails: readonly ToolSpaceReplacePageDetail[]
   skippedPageDetails: readonly ToolSpaceReplacePageDetail[]
 }): string {
+  const residentHint = isEmpty(input.alreadyResidentTools)
+    ? ''
+    : `工具 ${input.alreadyResidentTools.join('、')} 已驻留，本轮即可直接调用。`
+  const hints = residentHint ? [residentHint] : []
   if (!isEmpty(input.preparedTools))
-    return '具体工具页已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。'
+    hints.push(`工具 ${input.preparedTools.join('、')} 已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。`)
+  else if (!isEmpty(input.enabledCapabilities))
+    hints.push('能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。')
+  else if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails))
+    hints.push('请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。')
+  else if (!isEmpty(input.skippedPageDetails))
+    hints.push('请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。')
+  else if (isEmpty(hints))
+    hints.push('没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。')
 
-  if (!isEmpty(input.enabledCapabilities))
-    return '能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。'
-
-  if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails))
-    return '没有新的工具页被换入；请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
-
-  if (!isEmpty(input.skippedPageDetails))
-    return '没有新的工具页被换入；请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。'
-
-  return '没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。'
+  return hints.join('\n')
 }
 
 export async function replaceToolSpacePages(
@@ -166,6 +170,7 @@ export async function replaceToolSpacePages(
   const pageIn = [...new Set(input.pageIn)]
   const pageOut = [...new Set(input.pageOut)]
   const missingPages = [...pageIn, ...pageOut].filter((id) => !cardsById.has(id))
+  const alreadyResidentTools: string[] = []
   const preparedTools: string[] = []
   const pageOutTools: string[] = []
   const enabledCapabilities: ToolCategoryId[] = []
@@ -198,6 +203,7 @@ export async function replaceToolSpacePages(
     // 注意：插件已启用时 availability 同样是 visible，必须先于下面的 plugin 分支判断，
     // 否则会把“已开启的插件”错误回报成 requiresUserAction。
     if (card.availability === 'visible') {
+      if (card.kind === 'tool') alreadyResidentTools.push(card.name)
       continue
     }
     if (card.kind === 'plugin') {
@@ -292,11 +298,6 @@ export async function replaceToolSpacePages(
     requiresApproval.push(pending.id)
   }
 
-  // 反馈闭环:换入目标本轮已经可见(跨 run 驻留恢复/本就常驻)时,明确告诉模型
-  // "已驻留,直接调用"——否则模型每条消息都习惯性 map+replace 一轮纯仪式
-  // (真机:跨 run 恢复生效后模型仍连续 4 轮重复换入同一工具,因为结果从不说已可用)。
-  const visibleNow = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
-  const alreadyResidentTools = preparedTools.filter((name) => visibleNow.has(name))
   if (!isEmpty(preparedTools)) {
     ctx.codingSession.enableToolNames(preparedTools, input.reason)
   }
@@ -368,8 +369,9 @@ export async function replaceToolSpacePages(
     // 已可见的换入目标本轮即可直接调用,不必等下一轮。
     alreadyResidentTools,
     effectiveTurn: 'next' as const,
-    activeThisTurn: false,
+    activeThisTurn: !isEmpty(alreadyResidentTools),
     nextTurnHint: buildReplaceNextTurnHint({
+      alreadyResidentTools,
       preparedTools: [...preparedToolSet],
       enabledCapabilities: [...new Set([...enabledCapabilities, ...refreshedCapabilityResidency])],
       requiresApprovalDetails,
@@ -377,8 +379,8 @@ export async function replaceToolSpacePages(
       skippedPageDetails,
     }),
     message:
-      alreadyResidentTools.length === preparedTools.length && !isEmpty(alreadyResidentTools)
-        ? `换入目标已全部驻留(${alreadyResidentTools.join('、')}),本轮即可直接调用,无需再 tooling:replace。`
+      !isEmpty(alreadyResidentTools)
+        ? `工具 ${alreadyResidentTools.join('、')} 已驻留，本轮即可直接调用。`
         : 'ContextOS 工具页替换已处理。',
   }
 }
