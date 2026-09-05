@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/office",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "velaros": {
     "platform": "0.6"
   },
@@ -78,7 +78,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:*"
+    "@velaros-ai/agent": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

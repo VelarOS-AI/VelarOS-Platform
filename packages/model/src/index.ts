@@ -40,19 +40,25 @@ export { ModelRequestClient, type ModelRequestClientOptions } from './ModelReque
 export { applyModelRequestPolicy } from './ModelRequestPolicy'
 export { ModelRequestService, type ModelRequestServiceOptions } from './ModelRequestService'
 export type {
+  ModelRequestDecodedObjectInput,
   ModelRequestEndpoint,
   ModelRequestGenerateText,
   ModelRequestGenerateTextInput,
+  ModelRequestGenerateTextResult,
   ModelRequestLanguageModel,
   ModelRequestMessages,
   ModelRequestObjectInput,
+  ModelRequestObjectOutput,
   ModelRequestObjectOutputInput,
   ModelRequestOpenStreamInput,
+  ModelRequestOutput,
+  ModelRequestOutputDecoder,
   ModelRequestStreamText,
   ModelRequestStreamTextInput,
   ModelRequestStreamTextInputToString,
   ModelRequestStreamTextResult,
   ModelRequestTextInput,
+  ModelRequestTextOutput,
   ModelRequestTransport,
 } from './ModelRequestTypes'
 export * from './ModelUsage'

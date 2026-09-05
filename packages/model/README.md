@@ -74,7 +74,10 @@
   (`velaros.model`)。**Kernel 从不自己创建或发现 registry**,必须由产品注入。
 
 `ModelRequestService` 是 **deprecated** 的 `ModelRequestClient` 构造与类型兼容别名。
-所有请求使用通用的 `generateText`、`generateObject`、`streamText` 或 `collectTextStream`。
+所有请求使用通用的 `generateText`、`generateObject`、`generateDecodedObject`、`streamText`
+或 `collectTextStream`。`generateObject` 的返回类型由 AI SDK `FlexibleSchema` 推导；需要把
+schema 输出转换成领域值时使用 `generateDecodedObject({ decodeOutput })`，decoder 的输入类型
+仍由 schema 决定。旧 `mapOutput` 仅保留同类型归一化兼容入口。
 场景的提示词、endpoint、输出 schema、超时与回退由产品的场景 owner 组合：Desktop 的聊天
 辅助任务、引导 relay、调度规则、Git 提交标题，以及 Workbench 的行内补全各自维护请求语义。
 Model 统一负责 transport、请求策略和通用输出读取；新增场景不扩展本包的方法清单。
@@ -134,6 +137,31 @@ import { ModelRequestClient } from '@velaros-ai/model'
 
 const client = new ModelRequestClient({ transport })
 const text = await client.generateText({ endpoint: 'my-app.summary', model, prompt })
+```
+
+类型化结构化输出与领域转换：
+
+```ts
+const account = await client.generateObject({
+  endpoint: 'my-app.account',
+  model,
+  system: 'Extract one account.',
+  messages,
+  schema: accountSchema,
+  schemaName: 'Account',
+  schemaDescription: 'One validated account.',
+})
+
+const accountId = await client.generateDecodedObject({
+  endpoint: 'my-app.account-id',
+  model,
+  system: 'Extract one account.',
+  messages,
+  schema: accountSchema,
+  schemaName: 'Account',
+  schemaDescription: 'One validated account.',
+  decodeOutput: (output) => output.id,
+})
 ```
 
 `examples/minimal.ts` 随包发布,并在发布门禁里以 NodeNext + `skipLibCheck: false` 编译——

@@ -19,6 +19,7 @@ The full check builds every package, runs type checking, lint, tests, maintained
 | Core | `check:core-semantic-vocabulary` | Keeps product-domain vocabulary out of the shared core |
 | Agent | `check:agent-schemas` | Tool and protocol schema stability |
 | Agent | `check:agent-arch` | Agent package dependency boundaries |
+| Agent | `check:agent-public-api` | Published entrypoints, declaration snapshots, and compatibility alias policy |
 | Agent | `check:agent-browser` | Browser-facing Agent contracts |
 | Agent | `check:conversation-semantics` | Conversation state semantics |
 | Capabilities | `check:capabilities-schemas` | Capability input-schema snapshots |

@@ -60,7 +60,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.9",
+      "version": "0.6.10",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",
@@ -96,7 +96,7 @@
     },
     "packages/browser": {
       "name": "@velaros-ai/browser",
-      "version": "0.2.16",
+      "version": "0.2.17",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -111,7 +111,7 @@
       },
       "peerDependencies": {
         "@types/react": "^19.0.0",
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
         "electron": ">=41.0.0",
         "react": "^19.0.0",
       },
@@ -137,7 +137,7 @@
     },
     "packages/computer": {
       "name": "@velaros-ai/computer",
-      "version": "0.2.11",
+      "version": "0.2.12",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -148,7 +148,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/core": {
@@ -161,7 +161,7 @@
     },
     "packages/development": {
       "name": "@velaros-ai/development",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@velaros-ai/core": "workspace:*",
@@ -173,7 +173,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/document-renderer": {
@@ -220,7 +220,7 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@velaros-ai/core": "workspace:*",
@@ -236,7 +236,7 @@
       },
       "peerDependencies": {
         "@lancedb/lancedb": "^0.27.2",
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
       "optionalPeers": [
         "@lancedb/lancedb",
@@ -244,7 +244,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",
@@ -262,7 +262,7 @@
     },
     "packages/office": {
       "name": "@velaros-ai/office",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "dependencies": {
         "@napi-rs/canvas": "1.0.8",
         "@velaros-ai/core": "workspace:*",
@@ -281,12 +281,12 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.0.8",
+      "version": "2.0.9",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -312,7 +312,7 @@
         "globals": "^17.6.0",
       },
       "peerDependencies": {
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/surface-protocol": {
@@ -328,7 +328,7 @@
     },
     "packages/system": {
       "name": "@velaros-ai/system",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -339,7 +339,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@velaros-ai/agent": "workspace:*",
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/ui": {

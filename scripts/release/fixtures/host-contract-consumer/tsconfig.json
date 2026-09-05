@@ -11,6 +11,7 @@
     ]
   },
   "include": [
-    "consumer.ts"
+    "consumer.ts",
+    "model-structured-output.ts"
   ]
 }

@@ -1,13 +1,22 @@
-import { generateText, Output as AiOutput, streamText, type ToolSet } from 'ai'
+import {
+  generateText,
+  Output as AiOutput,
+  streamText,
+  type ToolSet,
+} from 'ai'
 
 import type {
   ModelRequestEnvelope,
   ModelRequestGenerateText,
   ModelRequestGenerateTextInput,
+  ModelRequestGenerateTextResult,
+  ModelRequestObjectOutput,
   ModelRequestObjectOutputInput,
+  ModelRequestOutput,
   ModelRequestStreamText,
   ModelRequestStreamTextInput,
   ModelRequestStreamTextResult,
+  ModelRequestTextOutput,
   ModelRequestTransport,
 } from './ModelRequestTypes'
 
@@ -25,10 +34,10 @@ class AiSdkModelRequestTransport implements ModelRequestTransport {
     this.streamTextImpl = options.streamText ?? streamText
   }
 
-  public generateText(
-    envelope: ModelRequestEnvelope<ModelRequestGenerateTextInput>
-  ): ReturnType<ModelRequestGenerateText> {
-    return this.generateTextImpl(envelope.request)
+  public generateText<TOutput extends ModelRequestOutput = ModelRequestTextOutput>(
+    envelope: ModelRequestEnvelope<ModelRequestGenerateTextInput<TOutput>>
+  ): ModelRequestGenerateTextResult<TOutput> {
+    return this.generateTextImpl<ToolSet, TOutput>(envelope.request)
   }
 
   public streamText<TToolSet extends ToolSet = ToolSet>(
@@ -37,11 +46,11 @@ class AiSdkModelRequestTransport implements ModelRequestTransport {
     return this.streamTextImpl<TToolSet>(envelope.request)
   }
 
-  public createObjectOutput(
-    input: ModelRequestObjectOutputInput
-  ): ModelRequestGenerateTextInput['output'] {
+  public createObjectOutput<TOutput>(
+    input: ModelRequestObjectOutputInput<TOutput>
+  ): ModelRequestObjectOutput<TOutput> {
     return AiOutput.object({
-      schema: input.schema as Parameters<typeof AiOutput.object>[0]['schema'],
+      schema: input.schema,
       name: input.schemaName,
       description: input.schemaDescription,
     })

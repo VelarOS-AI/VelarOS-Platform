@@ -13,6 +13,9 @@ TypeScript Language Service 缓存和统一 action 路由。`createProjectCodeQu
 working-directory access, and `listFiles` / `read` / `listSymbols` source ports. A language-only
 host does not supply approval, command execution, mutation, or system capabilities. The optional
 CodeGraph overlay retains `ProjectToolContext` at the Project query boundary.
+The language-operation path scopes directories through that injected port directly, so loading it
+does not load the Project Agent tool barrel. Project wire/query guards remain on the portable
+`@velaros-ai/project/contracts` entry.
 
 `ExternalLanguageService` 负责外部 language server 的进程生命周期、JSON-RPC framing、
 超时/取消、诊断与导航结果的有界归一。宿主保留二进制与资源发现、启用策略、进程环境和状态展示，

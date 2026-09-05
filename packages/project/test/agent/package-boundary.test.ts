@@ -26,7 +26,7 @@ function listTypeScriptFiles(directory: string): string[] {
 
 describe('Project Agent boundary', () => {
   test('depends on the grouped Agent package through explicit subpaths', () => {
-    expect(PackageManifest.peerDependencies?.['@velaros-ai/agent']).toBe('workspace:*')
+    expect(PackageManifest.peerDependencies?.['@velaros-ai/agent']).toBe('workspace:^')
     for (const path of listTypeScriptFiles(SourceRoot)) {
       const source = readFileSync(path, 'utf8')
       expect(source).not.toMatch(/from ['"]@velaros-ai\/agent['"]/)

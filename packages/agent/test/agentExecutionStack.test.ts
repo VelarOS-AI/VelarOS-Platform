@@ -354,6 +354,46 @@ test('host settlement failure ends the run without replaying a completed request
   expect(history.some((message) => message.role === 'assistant')).toBe(true)
 })
 
+test('in-flight Solo cancellation settles as aborted after the provider stream starts', async () => {
+  const fixture = createModel()
+  let notifyStarted: () => void = () => undefined
+  const streamStarted = new Promise<void>((resolve) => {
+    notifyStarted = resolve
+  })
+  fixture.model.doStream = async ({ abortSignal }) => ({
+    stream: new ReadableStream({
+      start(controller) {
+        const abort = () => controller.error(
+          abortSignal?.reason ?? new Error('fixture stream aborted')
+        )
+        if (abortSignal?.aborted) abort()
+        else abortSignal?.addEventListener('abort', abort, { once: true })
+        notifyStarted()
+      },
+    }),
+  })
+
+  const stack = createAgentExecutionStack({ model: fixture.port, toolRegistry })
+  const abortController = new AbortController()
+  const history: ModelMessage[] = [{ role: 'user', content: 'cancel after start' }]
+  const execution = stack.executeSolo({
+    history,
+    config: { sessionId: 'cancel-after-start', modelSelection: chatConfig.modelSelection },
+    chatConfig,
+    systemConfig,
+    abortController,
+    toolContext: createContext('cancel-after-start', abortController),
+    resolution,
+    events: new ExecutionEventBus(),
+  })
+
+  await streamStarted
+  abortController.abort(new Error('user cancelled active stream'))
+
+  await expect(execution).resolves.toEqual({ status: 'aborted' })
+  expect(history.some((message) => message.role === 'assistant')).toBe(false)
+})
+
 test('Query awaits the same settlement port before returning its result', async () => {
   const model = createModel()
   const stack = createAgentExecutionStack({ model: model.port, toolRegistry,

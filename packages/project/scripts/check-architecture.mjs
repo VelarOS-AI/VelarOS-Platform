@@ -56,7 +56,7 @@ if (
 ) {
   fail('@velaros-ai/project/agent must expose the integrated Agent adapter')
 }
-if (manifest.peerDependencies?.['@velaros-ai/agent'] !== 'workspace:*') {
+if (manifest.peerDependencies?.['@velaros-ai/agent'] !== 'workspace:^') {
   fail('@velaros-ai/project must use the host-owned @velaros-ai/agent peer')
 }
 if (

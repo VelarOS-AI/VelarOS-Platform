@@ -72,7 +72,14 @@ const run = (command, args, cwd) => {
   }
 }
 
-const assertRegistryManifest = (item, tarballPath) => {
+const expectedPackedWorkspaceSpecification = (specification, version) => {
+  if (specification === 'workspace:*') return version
+  if (specification === 'workspace:^') return `^${version}`
+  if (specification === 'workspace:~') return `~${version}`
+  throw new Error(`Unsupported workspace dependency specification: ${specification}`)
+}
+
+const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
   const packedManifest = JSON.parse(
     runForOutput('tar', ['-xOf', tarballPath, 'package/package.json'], root),
   )
@@ -83,6 +90,19 @@ const assertRegistryManifest = (item, tarballPath) => {
   }
 
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+    for (const [dependency, specification] of Object.entries(item.manifest[field] ?? {})) {
+      if (typeof specification !== 'string' || !specification.startsWith('workspace:')) continue
+      const workspaceVersion = workspaceVersions.get(dependency)
+      if (!workspaceVersion) {
+        throw new Error(`${item.manifest.name} references unknown workspace package ${dependency}`)
+      }
+      const expected = expectedPackedWorkspaceSpecification(specification, workspaceVersion)
+      if (packedManifest[field]?.[dependency] !== expected) {
+        throw new Error(
+          `${item.manifest.name} tarball rewrote ${field}.${dependency} to ${packedManifest[field]?.[dependency] ?? '(missing)'}, expected ${expected}`,
+        )
+      }
+    }
     for (const [dependency, specification] of Object.entries(packedManifest[field] ?? {})) {
       if (typeof specification === 'string' && specification.startsWith('workspace:')) {
         throw new Error(
@@ -95,6 +115,9 @@ const assertRegistryManifest = (item, tarballPath) => {
 
 // 全量校验先跑完(声明集 ↔ 磁盘、版本 ↔ bun.lock、平台代、拓扑序),再谈这趟发几节车厢。
 const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(root)
+const workspaceVersions = new Map(
+  ordered.map((item) => [item.manifest.name, item.manifest.version]),
+)
 // tag 是发布身份，来自 CI 上下文或显式 --local-tag；--only 只能手动收窄范围。
 // 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
 const requestedTag = localTag ?? process.env.GITHUB_REF_NAME
@@ -227,7 +250,7 @@ for (const item of selected) {
     // 工作树清单应继续用 workspace:* 保证单仓一致性；注册表清单则必须是普通版本号。
     // 这道门检查真正将要发布的 tarball，防止有人绕过 bun 的 workspace 重写或换回目录发布，
     // 造出 registry 接受、消费者却因 EUNSUPPORTEDPROTOCOL 无法安装的永久坏版本。
-    assertRegistryManifest(item, tarballPath)
+    assertRegistryManifest(item, tarballPath, workspaceVersions)
     if (
       item.manifest.files?.includes('dist')
       && !tarballEntries.some((entry) => entry.startsWith('package/dist/'))

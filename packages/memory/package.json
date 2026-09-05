@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/memory",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -94,7 +94,7 @@
     "typescript": "^5.7.0"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:*",
+    "@velaros-ai/agent": "workspace:^",
     "@lancedb/lancedb": "^0.27.2"
   },
   "peerDependenciesMeta": {

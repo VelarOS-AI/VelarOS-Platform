@@ -1,5 +1,4 @@
 import { isFunction } from '@velaros-ai/core'
-import { runInProjectDirectory } from '@velaros-ai/project/agent'
 
 import {
   analyzeImpactWithService,
@@ -19,6 +18,14 @@ import {
   type LanguageToolContext,
   type ListExportsInput,
 } from './LanguageService'
+
+function runInProjectDirectory<T>(
+  context: Pick<LanguageToolContext, 'project'>,
+  cwd: LooseOptional<string>,
+  action: () => Promise<T>
+): Promise<T> {
+  return cwd ? context.project.runInDirectory(cwd, action) : action()
+}
 
 async function findSymbols(
   input: FindSymbolsInput & {

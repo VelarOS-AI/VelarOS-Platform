@@ -1,4 +1,8 @@
-import { createAgentExecutionStack, type AgentModelRetryPolicy, type AgentRunLifecycle } from '@velaros-ai/agent'
+import {
+  createAgentExecutionStack,
+  type AgentModelRetryPolicy,
+  type AgentRunLifecycle,
+} from '@velaros-ai/agent/runtime'
 import { ToolContractDiscoveryDescriptors, readToolSchemaDiscoveryNames } from '@velaros-ai/agent/tool-contract'
 import { ModelRequestClient } from '@velaros-ai/model'
 import { executeProjectCodeLanguageQuery, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development/runtime'

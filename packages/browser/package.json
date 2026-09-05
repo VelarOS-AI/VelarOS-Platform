@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/browser",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "velaros": {
     "platform": "0.6"
   },
@@ -73,7 +73,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:*",
+    "@velaros-ai/agent": "workspace:^",
     "@types/react": "^19.0.0",
     "electron": ">=41.0.0",
     "react": "^19.0.0"

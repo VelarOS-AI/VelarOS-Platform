@@ -20,7 +20,9 @@
 
 | 子路径 | 一句话职责 |
 | --- | --- |
-| `@velaros-ai/agent` | 运行时主干:循环、上下文、提示词、工具注册与执行、执行账本、子 agent 派发、技能、mod 装载与 `.velarmod` 安全导入、MCP 多传输连接 |
+| `@velaros-ai/agent` | 现有消费者的兼容聚合入口；正式新接入按下面的稳定子路径选择依赖面 |
+| `@velaros-ai/agent/runtime` | **Stable runtime API**：默认执行栈、每次运行的 lifecycle/retry、运行限制、档位和提示词目录 |
+| `@velaros-ai/agent/host` | **Stable host API**：宿主注入端口、能力扩展契约、输入/事件接口与 Kernel 装配适配器 |
 | `@velaros-ai/agent/node` | **仅 Node Host**：工具目录 revision、租约校验、schema 自恢复与单调用执行门面；Node 内建模块不会进入 browser-safe 子路径 |
 | `@velaros-ai/agent/chat` | **browser-safe** 聊天客户端公共面:会话投影、搜索、上下文用量与回合环境格式化 |
 | `@velaros-ai/agent/chat-stream` | 聊天流协议与消费者(`ChatStreamProtocol` / `ChatStreamConsumer` / 会话流日志) |
@@ -105,7 +107,10 @@ Permission 应用服务，持久化引擎、产品 Session 类型和 UI 状态�
 工厂配对 `RunContext`、`TurnRunner`、Solo/Query，共享提示词策略、治理登记处、运行限制和 Mod 接缝。
 
 ```ts
-import { createAgentExecutionStack, createBuiltInPromptRegistry } from '@velaros-ai/agent'
+import {
+  createAgentExecutionStack,
+  createBuiltInPromptRegistry,
+} from '@velaros-ai/agent/runtime'
 
 const stack = createAgentExecutionStack({
   model: hostModelResolver,
@@ -136,17 +141,8 @@ surface 与 coding-session 策略，并在返回前把 Runner 绑定到派发器
 领域能力注入仍由宿主负责:
 
 ```ts
-import {
-  type AgentRuntimeCapabilityPorts,
-  ContextBuilder,
-  createBuiltInPromptRegistry,
-  MonotonicExecutionIdFactory,
-} from '@velaros-ai/agent'
-
-// 提示词目录:主 Agent 身份由宿主注入,包内默认刻意保持产品中性
-const prompts = new ContextBuilder(createBuiltInPromptRegistry({
-  primaryAgentIdentity: '你是 Acme 应用中的研究助手。',
-}))
+import type { AgentRuntimeCapabilityPorts } from '@velaros-ai/agent/host'
+import { MonotonicExecutionIdFactory } from '@velaros-ai/agent/runtime'
 
 // 领域能力经端口注入,运行时不解释这些 id
 const capabilities: AgentRuntimeCapabilityPorts = {
@@ -220,3 +216,12 @@ Abort 信号表示取消,**不要**转成普通失败后重试。
 公共类型的破坏性变化按 SemVer 升主版本;新增构造参数必须可选或带默认实现。
 `protocol` 同一主版本内只做向后兼容扩展——改字段含义、删字段、收紧已接受输入都要升协议主版本。
 **内部目录不属于兼容承诺**,消费者只依赖 `package.json#exports` 声明的入口。
+
+根入口保留给现有消费者。新宿主从 `runtime`、`host` 或对应领域子路径导入；循环、回合、上下文
+降级和收尾步骤属于运行时实现，不作为新宿主的装配接缝。兼容别名、替代名称和最早移除主版本记录在
+[`docs/public-api-policy.json`](docs/public-api-policy.json)。`check:agent-public-api` 对全部发布入口和
+导出声明做机器快照比较，同时要求每个根 export alias 都有明确状态；有意增加或改变 API 时先审查
+兼容性并提升 Agent 包版本，再用 `VELAROS_AGENT_PUBLIC_API_UPDATE=1` 更新基线。纯新增按兼容变化记录；
+删除入口或符号必须提升主版本；声明形状变化默认按破坏性处理，确认向后兼容时同时设置
+`VELAROS_AGENT_PUBLIC_API_CHANGE=additive`。基线同时绑定 Agent 包版本；仅提升包版本且声明不变时，
+也运行一次更新命令，防止后续 API 变化复用已经发布过的版本号。

@@ -54,7 +54,13 @@ try {
     dependencies: { ...dependencies, '@types/node': nodeTypesVersion },
     overrides: dependencies,
   }, null, 2)}\n`)
-  for (const file of ['consumer.ts', 'browser.ts', 'tsconfig.json']) {
+  for (const file of [
+    'consumer.ts',
+    'browser.ts',
+    'model-structured-output.ts',
+    'runtime.mjs',
+    'tsconfig.json',
+  ]) {
     await copyFile(path.join(fixtureDirectory, file), path.join(consumerDirectory, file))
   }
   await runGuardedCommand({
@@ -70,7 +76,11 @@ try {
     command: 'bun', args: ['build', './browser.ts', '--target=browser', '--outdir=browser-dist'],
     cwd: consumerDirectory, operation: 'Browser Computer contracts bundle', stdio: 'inherit',
   })
-  console.info('✓ packed host contracts: isolated install, strict NodeNext declarations and browser bundle')
+  await runGuardedCommand({
+    command: process.execPath, args: ['runtime.mjs'], cwd: consumerDirectory,
+    operation: 'Execute packed host runtime contracts', stdio: 'inherit',
+  })
+  console.info('✓ packed host contracts: isolated install, strict NodeNext declarations, browser bundle and runtime execution')
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true })
 }

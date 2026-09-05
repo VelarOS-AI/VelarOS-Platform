@@ -2,6 +2,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, extname, relative, resolve } from "node:path";
 
+import ts from "typescript";
+
 import { CapabilityPackages, RepositoryUrl } from "./capability-owners.mjs";
 
 const RepoRoot = resolve(import.meta.dir, "../..");
@@ -218,6 +220,76 @@ function dependencyEntries(manifest) {
   ];
 }
 
+function importsRuntimeSpecifier(source, specifier) {
+  const sourceFile = ts.createSourceFile(
+    "capability-source.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let importsRuntime = false;
+
+  const visit = (node) => {
+    if (importsRuntime) return;
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteralLike(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === specifier
+    ) {
+      if (ts.isExportDeclaration(node)) {
+        if (node.isTypeOnly) return;
+        if (
+          node.exportClause &&
+          ts.isNamedExports(node.exportClause) &&
+          node.exportClause.elements.every((element) => element.isTypeOnly)
+        ) return;
+        importsRuntime = true;
+        return;
+      }
+
+      const clause = node.importClause;
+      if (!clause?.isTypeOnly) {
+        const bindings = clause?.namedBindings;
+        const namedTypesOnly =
+          !clause?.name &&
+          bindings &&
+          ts.isNamedImports(bindings) &&
+          bindings.elements.every((element) => element.isTypeOnly);
+        if (!namedTypesOnly) importsRuntime = true;
+      }
+      return;
+    }
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteralLike(node.moduleReference.expression) &&
+      node.moduleReference.expression.text === specifier
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteralLike(node.arguments[0]) &&
+      node.arguments[0].text === specifier &&
+      (
+        node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require")
+      )
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return importsRuntime;
+}
+
 // VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
 // 「capabilities 域的包集合」。域包清单单源 = 仓根 package.json 的
 // velaros.domainPackages.capabilities;新增能力包必须同时登记该清单与 capability-owners.mjs。
@@ -344,11 +416,13 @@ for (const expected of CapabilityPackages) {
 
   for (const [section, dependencies] of dependencyEntries(manifest)) {
     for (const [name, version] of Object.entries(dependencies)) {
+      const expectedWorkspaceVersion =
+        section === "peerDependencies" ? "workspace:^" : "workspace:*";
       const internal = KnownByName.get(name);
       if (internal) {
-        if (version !== "workspace:*") {
+        if (version !== expectedWorkspaceVersion) {
           fail(
-            `${expected.name}: internal ${section} dependency ${name} must use workspace:*`,
+            `${expected.name}: internal ${section} dependency ${name} must use ${expectedWorkspaceVersion}`,
           );
         }
         if (
@@ -361,19 +435,19 @@ for (const expected of CapabilityPackages) {
         }
         continue;
       }
-      // 单版本火车:Core / Kernel 等平台包已与能力包同仓；同仓依赖一律 workspace:*,
-      // 发布时由包管理器代换成具体版本。
+      // 同仓运行时依赖用 workspace:* 精确绑定；peer 用 workspace:^ 声明同一兼容线，
+      // 发布时由包管理器代换成普通 semver，避免补丁升级制造伪 peer 冲突。
       if (WorkspacePackageNames.has(name)) {
-        if (version !== "workspace:*") {
+        if (version !== expectedWorkspaceVersion) {
           fail(
-            `${expected.name}: platform ${section} dependency ${name} must use workspace:* (single version train)`,
+            `${expected.name}: platform ${section} dependency ${name} must use ${expectedWorkspaceVersion}`,
           );
         }
         continue;
       }
-      if (version === "workspace:*") {
+      if (version.startsWith("workspace:")) {
         fail(
-          `${expected.name}: external ${section} dependency ${name} cannot use workspace:*`,
+          `${expected.name}: external ${section} dependency ${name} cannot use a workspace range`,
         );
       }
     }
@@ -391,6 +465,14 @@ for (const expected of CapabilityPackages) {
     if (ConcreteAgentRuntimeImport.test(source)) {
       fail(
         `${expected.name}: capability code must use an explicit Agent contract or runtime subpath in ${relative(packageRoot, path)}`,
+      );
+    }
+    if (
+      expected.directory === "development" &&
+      importsRuntimeSpecifier(source, "@velaros-ai/project/agent")
+    ) {
+      fail(
+        `${expected.name}: lightweight language reads must not load the Project Agent runtime barrel in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {

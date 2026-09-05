@@ -33,7 +33,7 @@ test('accepts a third-party transport and preserves caller endpoint', async () =
     model: 'fixture-model',
     prompt: 'hello',
   })
-  const object = await client.generateObject({
+  const object = await client.generateDecodedObject({
     endpoint: 'third-party.extract',
     model: 'fixture-model',
     system: 'extract',
@@ -41,14 +41,25 @@ test('accepts a third-party transport and preserves caller endpoint', async () =
     schema: {},
     schemaName: 'Fixture',
     schemaDescription: 'fixture schema',
+    decodeOutput: async (output) => output.value,
+  })
+  const legacyMappedObject = await client.generateObject({
+    endpoint: 'third-party.legacy-extract',
+    model: 'fixture-model',
+    system: 'extract',
+    messages: [{ role: 'user', content: 'hello' }],
+    schema: {},
+    schemaName: 'LegacyFixture',
+    schemaDescription: 'legacy fixture schema',
     mapOutput: (output) => output.value,
   })
 
   assert.equal(text, 'transport response')
   assert.equal(object, 42)
+  assert.equal(legacyMappedObject, 42)
   assert.deepEqual(
     envelopes.map((envelope) => envelope.endpoint),
-    ['third-party.summary', 'third-party.extract']
+    ['third-party.summary', 'third-party.extract', 'third-party.legacy-extract']
   )
 })
 
@@ -158,6 +169,7 @@ test('the compatibility constructor exposes the same generic request surface', (
   assert.deepEqual(Object.getOwnPropertyNames(ModelRequestClient.prototype).sort(), [
     'collectTextStream',
     'constructor',
+    'generateDecodedObject',
     'generateObject',
     'generateText',
     'streamText',

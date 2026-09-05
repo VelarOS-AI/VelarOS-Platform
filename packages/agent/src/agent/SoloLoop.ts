@@ -958,6 +958,7 @@ class SoloStreamLoop<
         return loopFinish({ status: finishingGate.status })
       } catch (error) {
         const appError = AppError.from(error)
+        const aborted = args.abortController.signal.aborted
         // 观测：本轮 provider 回合出错收敛（幂等——try 内已 ok 收敛则此处吞掉）。
         endLoopTurnSpansError(spans, appError)
         // 反应式自纠：安全拒绝未完整参数后，按真实原因给一次有界纠正机会。
@@ -966,7 +967,7 @@ class SoloStreamLoop<
         if (
           (args.modelRetry?.allowPartialContinuation ?? true) &&
           appError.code === 'MODEL_STREAM_INTERRUPTED' &&
-          !args.abortController.signal.aborted &&
+          !aborted &&
           interruptedToolCallRecoveryAttempts <
             SoloInterruptedToolCallRecoveryLimits[recoveryKind]
         ) {
@@ -995,14 +996,14 @@ class SoloStreamLoop<
           args.events,
           this.log
         )
-        if (!args.abortController.signal.aborted) {
+        if (!aborted) {
           await goalLifecycle.recordBlockedTerminal()
         }
         // 错误分支也必须 emit turnEnd，否则 UI 上对应轮次会一直停在“进行中”，
         // ChatRuntime 的 turnStart/turnEnd 计数也无法收敛。
         args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))
-        runScope?.end({ status: 'error' })
-        return loopFinish({ status: 'error' })
+        runScope?.end({ status: aborted ? 'aborted' : 'error' })
+        return loopFinish({ status: aborted ? 'aborted' : 'error' })
       }
     }
 

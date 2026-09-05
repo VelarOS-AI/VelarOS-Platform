@@ -23,10 +23,11 @@ export * from './context'
 export type { BuiltContext } from './ContextBuilder'
 export {
   ContextBuilder,
-  ContextBuilderParts as ContextBuilderHelper,
   contextBuilderHelper,
   ContextBuilderParts,
 } from './ContextBuilder'
+/** @deprecated 请改用 `ContextBuilderParts`；该别名保留至 Agent 1.0。 */
+export { ContextBuilderParts as ContextBuilderHelper } from './ContextBuilder'
 export type {
   ContextDegradeAction,
   ContextDegradeActionKind,
@@ -50,8 +51,9 @@ export * from './history'
 export {
   AgentToolResultHelper,
   agentToolResultHelper,
-  AgentToolResultHelper as ToolResults,
 } from './history/turn'
+/** @deprecated 请改用 `AgentToolResultHelper`；该别名保留至 Agent 1.0。 */
+export { AgentToolResultHelper as ToolResults } from './history/turn'
 export type {
   AgentIntentDomainSignal,
   AgentIntentSignalDomain,
@@ -105,10 +107,11 @@ export type {
   RuntimeStateContextResult,
 } from './PromptState'
 export {
-  PromptStateBuilder as AgentRuntimePromptStateBuilder,
   PromptStateBuilder,
   shouldInjectHtmlArtifactPromptForTurn,
 } from './PromptState'
+/** @deprecated 请改用 `PromptStateBuilder`；该别名保留至 Agent 1.0。 */
+export { PromptStateBuilder as AgentRuntimePromptStateBuilder } from './PromptState'
 export type {
   ExecuteQueryLoopArgs,
   QueryLoopRoleEngine,
@@ -122,7 +125,9 @@ export type {
   QueryLoopToolRegistry,
   QueryLoopTurnRunner,
 } from './QueryLoop'
-export { QueryLoop as AgentQueryLoop, QueryLoop } from './QueryLoop'
+export { QueryLoop } from './QueryLoop'
+/** @deprecated 请改用 `QueryLoop`；该别名保留至 Agent 1.0。 */
+export { QueryLoop as AgentQueryLoop } from './QueryLoop'
 export type {
   ExecuteQueryTurnArgs,
   QueryTurnEvents,
@@ -131,7 +136,9 @@ export type {
   QueryTurnToolContext,
   QueryTurnToolRegistry,
 } from './QueryTurn'
-export { QueryTurn as AgentQueryTurnHelper, QueryTurn } from './QueryTurn'
+export { QueryTurn } from './QueryTurn'
+/** @deprecated 请改用 `QueryTurn`；该别名保留至 Agent 1.0。 */
+export { QueryTurn as AgentQueryTurnHelper } from './QueryTurn'
 export {
   AgentConnectionRetryHelper,
   AiSdkMaxRetries,
@@ -140,8 +147,9 @@ export {
   isContextOverflowReplayUnsafe,
   markContextOverflowReplayUnsafe,
   MaxConnectionRetryAttempts,
-  AgentConnectionRetryHelper as RetryPolicy,
 } from './retry'
+/** @deprecated 请改用 `AgentConnectionRetryHelper`；该别名保留至 Agent 1.0。 */
+export { AgentConnectionRetryHelper as RetryPolicy } from './retry'
 export { AgentRoleEngine } from './RoleEngine'
 export type { AgentRoleToolCategoryResolver } from './RolePolicy'
 export { AgentRolePolicy } from './RolePolicy'
@@ -163,7 +171,12 @@ export type {
   WorkflowType,
 } from './RoleTypes'
 export * from './run-context'
-export type { AgentModelRetryPolicy,AgentRunLifecycle, AgentTurnBoundary, AgentTurnSettlement } from './RunLifecycle'
+export type {
+  AgentModelRetryPolicy,
+  AgentRunLifecycle,
+  AgentTurnBoundary,
+  AgentTurnSettlement,
+} from './RunLifecycle'
 export * from './runner'
 export type { AgentRunProfileCatalogSnapshot } from './RunProfile'
 export {
@@ -211,7 +224,9 @@ export type {
   SoloLoopTurnRunner,
   SoloModeStreamLoopResult,
 } from './SoloLoop'
-export { SoloStreamLoop as AgentSoloModeStreamLoop, SoloStreamLoop } from './SoloLoop'
+export { SoloStreamLoop } from './SoloLoop'
+/** @deprecated 请改用 `SoloStreamLoop`；该别名保留至 Agent 1.0。 */
+export { SoloStreamLoop as AgentSoloModeStreamLoop } from './SoloLoop'
 export type {
   BuildSoloRunProfileTelemetryInput,
   BuildSoloToolSchemaTelemetryInput,
@@ -276,7 +291,9 @@ export type {
   StreamTurnToolRegistry,
 } from './StreamTurn'
 export { buildSystemPromptDelivery, PromptCacheMinStableSystemChars } from './StreamTurn'
-export { StreamTurn as AgentStreamTurnHelper, StreamTurn } from './StreamTurn'
+export { StreamTurn } from './StreamTurn'
+/** @deprecated 请改用 `StreamTurn`；该别名保留至 Agent 1.0。 */
+export { StreamTurn as AgentStreamTurnHelper } from './StreamTurn'
 export type {
   ToolSpaceBootstrapDecision,
   ToolSpaceBootstrapPlan,
@@ -296,4 +313,6 @@ export {
   captureAgentTurnCapabilitySnapshot,
 } from './TurnCapabilitySnapshot'
 export type { TurnRunnerToolRegistry } from './TurnRunner'
-export { TurnRunner as AgentTurnHelper, TurnRunner } from './TurnRunner'
+export { TurnRunner } from './TurnRunner'
+/** @deprecated 请改用 `TurnRunner`；该别名保留至 Agent 1.0。 */
+export { TurnRunner as AgentTurnHelper } from './TurnRunner'

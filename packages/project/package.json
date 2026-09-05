@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/project",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "velaros": {
     "platform": "0.6"
   },
@@ -83,7 +83,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:*"
+    "@velaros-ai/agent": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

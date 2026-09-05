@@ -18,7 +18,7 @@ GitHub Actions 无法调度时，Platform 提供显式本地维护入口。它�
 在经过核验的 tag checkout 中运行：
 
 ```sh
-bun run release:local v0.6.13 --only agent,model,computer,development,project,memory,browser,office,system
+bun run release:local v0.6.14 --only agent,browser,computer,project,development,memory,model,office,system
 ```
 
 `--only` 沿用现有发布拓扑的规则：只收窄整列 tag 的包集合，全量声明、版本与锁文件、平台代和依赖拓扑仍需通过验证。单包 tag 已确定范围，不能再加 `--only`。缺失、重复或未知参数直接失败。`--local-tag` 是真实发布模式；本地模拟仍使用 `bun run release:dry-run`。

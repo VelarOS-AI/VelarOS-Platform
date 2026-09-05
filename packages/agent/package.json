@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "0.6.9",
+  "version": "0.6.10",
   "velaros": {
     "platform": "0.6"
   },
@@ -17,6 +17,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./host": {
+      "types": "./dist/host/index.d.ts",
+      "import": "./dist/host/index.js"
     },
     "./node": {
       "types": "./dist/node/index.d.ts",
@@ -110,6 +118,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/agent/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "check:browser": "node ../../scripts/agent/check-browser-surface.mjs",
+    "check:public-api": "node ../../scripts/agent/check-public-api.mjs",
     "test": "bun run build && bun run check:browser && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/agent"
   },

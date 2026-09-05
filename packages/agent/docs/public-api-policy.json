@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "rootEntrypoint": {
+    "status": "compatibility-umbrella",
+    "recommendedEntrypoints": [
+      "./runtime",
+      "./host",
+      "./protocol",
+      "./tool-contract"
+    ],
+    "earliestRemovalMajor": 1
+  },
+  "deprecatedAliases": [
+    {
+      "entrypoint": ".",
+      "name": "AgentQueryLoop",
+      "replacement": "QueryLoop",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "AgentQueryTurnHelper",
+      "replacement": "QueryTurn",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "AgentRuntimePromptStateBuilder",
+      "replacement": "PromptStateBuilder",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "AgentSoloModeStreamLoop",
+      "replacement": "SoloStreamLoop",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "AgentStreamTurnHelper",
+      "replacement": "StreamTurn",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "AgentTurnHelper",
+      "replacement": "TurnRunner",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "ContextBuilderHelper",
+      "replacement": "ContextBuilderParts",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "RetryPolicy",
+      "replacement": "AgentConnectionRetryHelper",
+      "earliestRemovalMajor": 1
+    },
+    {
+      "entrypoint": ".",
+      "name": "ToolResults",
+      "replacement": "AgentToolResultHelper",
+      "earliestRemovalMajor": 1
+    }
+  ],
+  "supportedAliases": [
+    {
+      "entrypoint": ".",
+      "name": "AgentStreamConsumerHelper",
+      "target": "StreamConsumer"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ChatMessages",
+      "target": "ChatMessageHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecAgentEvents",
+      "target": "ExecutionAgentEventLedger"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecDebugPayload",
+      "target": "ExecutionDebugPayloadBuilder"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecInteractions",
+      "target": "ExecutionInteractions"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecPlanLedger",
+      "target": "ExecutionPlanLedgerHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecPlanState",
+      "target": "ExecutionPlanStateHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecRecordSeverity",
+      "target": "ExecutionRecordSeverityHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecRecordSummary",
+      "target": "ExecutionRecordSummaryHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecRecords",
+      "target": "ExecutionRecords"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecRouting",
+      "target": "ExecutionRoutingCoordinator"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecSessionGuard",
+      "target": "SourceSessionGuard"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecStateMachine",
+      "target": "ExecutionStateMachine"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecStore",
+      "target": "ExecutionStore"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecTaskLedger",
+      "target": "ExecutionTaskLedgerHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ExecWorkflowRoute",
+      "target": "ExecutionWorkflowRouteHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "HistoryMessages",
+      "target": "AgentHistoryMessageHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "RawStreamText",
+      "target": "AgentRawStreamTextExtractor"
+    },
+    {
+      "entrypoint": ".",
+      "name": "StreamDiagnosticRecorder",
+      "target": "AgentStreamDiagnosticRecorder"
+    },
+    {
+      "entrypoint": ".",
+      "name": "StreamDiagnosticsHelper",
+      "target": "AgentStreamDiagnosticHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "ToolRegistry",
+      "target": "ToolRegistryHelper"
+    },
+    {
+      "entrypoint": ".",
+      "name": "TurnHistory",
+      "target": "AgentTurnHistoryHelper"
+    }
+  ]
+}

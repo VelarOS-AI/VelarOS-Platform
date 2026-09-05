@@ -4,6 +4,7 @@ import { AiSdkModelRequestTransport } from './AiSdkModelRequestTransport'
 import type { ModelRequestOptions } from './ModelContracts'
 import { applyModelRequestPolicy } from './ModelRequestPolicy'
 import type {
+  ModelRequestDecodedObjectInput,
   ModelRequestGenerateText,
   ModelRequestObjectInput,
   ModelRequestOpenStreamInput,
@@ -65,6 +66,24 @@ class ModelRequestClient {
   public async generateObject<TOutput = unknown>(
     input: ModelRequestObjectInput<TOutput>
   ): Promise<TOutput> {
+    const output = await this.#requestObject(input)
+    return input.mapOutput ? input.mapOutput(output) : output
+  }
+
+  public async generateDecodedObject<TSchemaOutput, TOutput>(
+    input: ModelRequestDecodedObjectInput<TSchemaOutput, TOutput>
+  ): Promise<TOutput> {
+    return input.decodeOutput(await this.#requestObject(input))
+  }
+
+  async #requestObject<TSchemaOutput>(
+    input: ModelRequestObjectInput<TSchemaOutput> | ModelRequestDecodedObjectInput<TSchemaOutput, unknown>
+  ): Promise<TSchemaOutput> {
+    const output = this.transport.createObjectOutput({
+      schema: input.schema,
+      schemaName: input.schemaName,
+      schemaDescription: input.schemaDescription,
+    })
     const result = await this.transport.generateText({
       endpoint: input.endpoint,
       request: applyModelRequestPolicy(
@@ -72,11 +91,7 @@ class ModelRequestClient {
           model: input.model,
           system: input.system,
           messages: input.messages,
-          output: this.transport.createObjectOutput({
-            schema: input.schema,
-            schemaName: input.schemaName,
-            schemaDescription: input.schemaDescription,
-          }),
+          output,
           maxRetries: input.maxRetries,
           maxOutputTokens: input.maxOutputTokens,
           abortSignal: input.abortSignal,
@@ -85,7 +100,7 @@ class ModelRequestClient {
       ),
     })
 
-    return input.mapOutput ? input.mapOutput(result.output) : (result.output as TOutput)
+    return result.output
   }
 
   public async collectTextStream(input: ModelRequestStreamTextInputToString): Promise<string> {
