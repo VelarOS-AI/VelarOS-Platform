@@ -4,6 +4,60 @@ import { isEmpty, isPresent } from "@velaros-ai/core";
 
 import { chatSearchText } from "./Text";
 
+const PathHintExtensions = new Set([
+  "cjs", "css", "cts", "go", "html", "java", "js", "json", "jsx", "kt", "log",
+  "md", "mjs", "mts", "py", "rs", "scss", "sh", "sql", "swift", "toml", "ts",
+  "tsx", "txt", "xml", "yaml", "yml",
+]);
+const PathHintTrailingPunctuation = `),.;:'"\`]`;
+
+function isAsciiPathSegmentCharacter(character: LooseOptional<string>): boolean {
+  if (!character) return false;
+  const code = character.charCodeAt(0);
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    character === "_" ||
+    character === "." ||
+    character === "-"
+  );
+}
+
+function isCompletePathToken(value: string): boolean {
+  let start = 0;
+  if (value.startsWith("~/")) start = 2;
+  else if (value.startsWith("/")) start = 1;
+
+  let segmentLength = 0;
+  let hasDirectorySeparator = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "/") {
+      if (segmentLength === 0) return false;
+      hasDirectorySeparator = true;
+      segmentLength = 0;
+      continue;
+    }
+    if (!isAsciiPathSegmentCharacter(character)) return false;
+    segmentLength += 1;
+  }
+  return hasDirectorySeparator && segmentLength > 0;
+}
+
+function trimPathHintPunctuation(value: string): string {
+  let end = value.length;
+  while (end > 0 && PathHintTrailingPunctuation.includes(value[end - 1] ?? "")) end -= 1;
+  return value.slice(0, end);
+}
+
+function hasCompletePathHintExtension(value: string): boolean {
+  const basenameStart = value.lastIndexOf("/") + 1;
+  const extensionStart = value.lastIndexOf(".");
+  if (extensionStart <= basenameStart || extensionStart === value.length - 1) return false;
+  return PathHintExtensions.has(value.slice(extensionStart + 1).toLowerCase());
+}
+
 /**
  * {@link chatSearchRanking.rankContextText} 的完整打分输出。
  * 供会话搜索、history 搜索、terminal 搜索与 query trace 共用。
@@ -112,13 +166,6 @@ class ChatSearchRanking {
     "tool",
     "with",
   ]);
-
-  /**
-   * 路径 hint 正则：匹配 `src/foo/bar.ts` 形式目录路径，或带常见源码/配置扩展名的文件名。
-   * 全局匹配，collectPathHints 内最多保留 16 条、单条至少 4 字符。
-   */
-  private readonly pathHintPattern =
-    /(?:[~.]?\/)?(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:[cm]?[jt]sx?|json|md|css|scss|py|rs|go|java|kt|swift|ya?ml|toml|html|xml|sh|sql|log|txt)/gi;
 
   /**
    * 标识符 token 正则：JS/TS 风格变量名，至少 3 字符（`\w$` 重复 2 次 + 首字符）。
@@ -369,22 +416,45 @@ class ChatSearchRanking {
     };
   }
 
-  /**
-   * 用 pathHintPattern 扫描文本，去掉尾部标点，小写化，最多 16 条。
-   * @param text query 或正文
-   */
+  /** 单向扫描路径 token，去掉尾部标点，小写化，最多 16 条。 */
   private collectPathHints(text: string): string[] {
     const hints = new Set<string>();
-    for (const match of text.matchAll(this.pathHintPattern)) {
-      let end = match[0]?.length ?? 0;
-      while (end > 0 && `),.;:'"\`]`.includes(match[0]?.[end - 1] ?? '')) end -= 1;
-      const value = match[0]?.slice(0, end).toLowerCase();
-      if (value && value.length >= 4) {
-        hints.add(value);
+    const addHint = (rawValue: string): void => {
+      const value = trimPathHintPunctuation(rawValue).toLowerCase();
+      if (value.length >= 4) hints.add(value);
+    };
+
+    for (let index = 0; index < text.length && hints.size < 16;) {
+      const character = text[index] ?? "";
+      const startsHomePath = character === "~" && text[index + 1] === "/";
+      if (!startsHomePath && character !== "/" && !isAsciiPathSegmentCharacter(character)) {
+        index += 1;
+        continue;
       }
-      if (hints.size >= 16) {
-        break;
+
+      const tokenStart = index;
+      if (startsHomePath) index += 2;
+      while (index < text.length) {
+        const tokenCharacter = text[index] ?? "";
+        if (tokenCharacter === "/" && text[index + 1] === "/") break;
+        if (tokenCharacter !== "/" && !isAsciiPathSegmentCharacter(tokenCharacter)) break;
+        index += 1;
       }
+
+      let pathMatchEnd = index;
+      while (pathMatchEnd > tokenStart && text[pathMatchEnd - 1] === "/") pathMatchEnd -= 1;
+      const pathToken = text.slice(tokenStart, pathMatchEnd);
+      if (isCompletePathToken(pathToken)) {
+        addHint(pathToken);
+      } else {
+        const fileToken = trimPathHintPunctuation(
+          pathToken.slice(pathToken.lastIndexOf("/") + 1),
+        );
+        if (hasCompletePathHintExtension(fileToken)) addHint(fileToken);
+      }
+
+      if (index === tokenStart) index += 1;
+      else if (text[index] === "/" && text[index + 1] === "/") index += 2;
     }
     return [...hints];
   }
