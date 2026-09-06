@@ -186,6 +186,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git"
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git"
   }
 }

@@ -4,7 +4,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 
 import ts from "typescript";
 
-import { CapabilityPackages, RepositoryUrl } from "./capability-owners.mjs";
+import { CapabilityPackages } from "./capability-owners.mjs";
 
 const RepoRoot = resolve(import.meta.dir, "../..");
 const PackagesRoot = resolve(RepoRoot, "packages");
@@ -294,6 +294,10 @@ function importsRuntimeSpecifier(source, specifier) {
 // 「capabilities 域的包集合」。域包清单单源 = 仓根 package.json 的
 // velaros.domainPackages.capabilities;新增能力包必须同时登记该清单与 capability-owners.mjs。
 const RootManifest = readJson(resolve(RepoRoot, "package.json"));
+const RepositoryUrl = RootManifest.repository?.url;
+if (typeof RepositoryUrl !== "string" || RepositoryUrl.length === 0) {
+  fail("root package.json must declare repository.url");
+}
 const RegisteredDirectories = [
   ...(RootManifest.velaros?.domainPackages?.capabilities ?? []),
 ].sort();

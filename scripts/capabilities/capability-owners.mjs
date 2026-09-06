@@ -1,6 +1,3 @@
-export const RepositoryUrl =
-  'git+https://github.com/VelarOS-AI/VelarOS-Platform.git'
-
 // P7a 合并后的能力包清单。字段语义:
 //   directory      相对 packages/ 的目录(平铺一层,如 project)
 //   entrySubpaths  package.json exports 里必须带 types+import 的入口键;单入口包写 ['.'],

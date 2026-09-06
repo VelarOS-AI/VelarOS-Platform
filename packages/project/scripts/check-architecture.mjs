@@ -12,6 +12,7 @@ import {
 } from 'node:path'
 
 const RepoRoot = resolve(import.meta.dirname, '..')
+const WorkspaceRoot = resolve(RepoRoot, '../..')
 const ManifestPath = resolve(RepoRoot, 'package.json')
 const SourceRoot = resolve(RepoRoot, 'src')
 const SourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
@@ -27,6 +28,7 @@ const ConcreteCoreTypeName =
   /\b(?:Browser|Project|Workbench|Model|Memory|Knowledge)[A-Z_a-z0-9]*/
 
 const manifest = JSON.parse(readFileSync(ManifestPath, 'utf8'))
+const rootManifest = JSON.parse(readFileSync(resolve(WorkspaceRoot, 'package.json'), 'utf8'))
 const failures = []
 const fail = (message) => failures.push(message)
 
@@ -44,7 +46,7 @@ if (versionConstant !== manifest.version) {
     `PROJECT_PACKAGE_VERSION (${versionConstant ?? 'not found'}) must match package.json version (${manifest.version})`,
   )
 }
-if (manifest.repository?.url !== 'git+https://github.com/VelarOS-AI/VelarOS-Platform.git') {
+if (manifest.repository?.url !== rootManifest.repository?.url) {
   fail('repository URL must point to VelarOS-Platform')
 }
 if (manifest.repository?.directory !== 'packages/project') {

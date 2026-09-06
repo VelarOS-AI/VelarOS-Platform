@@ -17,7 +17,7 @@
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/html-artifacts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
     "directory": "packages/html-artifacts"
   },
   "bugs": {

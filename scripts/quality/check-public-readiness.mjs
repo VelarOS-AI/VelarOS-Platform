@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const packageRoot = join(repositoryRoot, 'packages')
-const canonicalRepository = 'git+https://github.com/VelarOS-AI/VelarOS-Platform.git'
+const officialRepository = 'https://github.com/VelarOS-AI/VelarOS-Platform.git'
 const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
 const requiredPackageNoticeFiles = new Map([
   ['browser', [
@@ -164,7 +164,7 @@ function checkPackageMetadata() {
 
   if (rootManifest.private !== true) fail('root workspace must remain private to prevent accidental publication')
   if (rootManifest.license !== 'Apache-2.0') fail('root license must be Apache-2.0')
-  if (rootManifest.repository?.url !== canonicalRepository) fail('root repository URL is not canonical')
+  if (rootManifest.repository?.url !== officialRepository) fail('root repository URL is not canonical')
 
   const rootLicense = readFileSync(join(repositoryRoot, 'LICENSE'), 'utf8')
   for (const directory of [...expectedDirectories].sort()) {
@@ -180,7 +180,7 @@ function checkPackageMetadata() {
     if (manifest.license !== 'Apache-2.0') fail(`${label}: license must be Apache-2.0`)
     if (publishable && manifest.publishConfig?.access !== 'public') fail(`${label}: publish access must be public`)
     if (publishable && manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') fail(`${label}: registry is not canonical`)
-    if (manifest.repository?.url !== canonicalRepository) fail(`${label}: repository URL is not canonical`)
+    if (manifest.repository?.url !== rootManifest.repository.url) fail(`${label}: repository URL is not canonical`)
     if (manifest.repository?.directory !== `packages/${directory}`) fail(`${label}: repository directory is not canonical`)
     if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
     if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)

@@ -13,7 +13,6 @@ const failures = []
 
 const expected = {
   name: '@velaros-ai/model',
-  repository: 'git+https://github.com/VelarOS-AI/VelarOS-Platform.git',
 }
 
 // 版本锁步已于 2026-08-02 丢弃:包版本各自独立走 semver(见 README「版本方案」与
@@ -30,8 +29,8 @@ if (!expectedPlatform) {
     `package platform generation ${manifest.velaros?.platform ?? 'missing'} must match root ${expectedPlatform}`,
   )
 }
-if (manifest.repository?.url !== expected.repository) {
-  failures.push(`repository must be ${expected.repository}`)
+if (manifest.repository?.url !== rootManifest.repository?.url) {
+  failures.push(`repository must be ${rootManifest.repository?.url ?? 'declared by the root manifest'}`)
 }
 if (manifest.license !== 'Apache-2.0') {
   failures.push('license must be Apache-2.0')
