@@ -17,6 +17,7 @@ const requiredPackageNoticeFiles = new Map([
   ['office', [
     'THIRD_PARTY_NOTICES.md',
     'third-party-licenses/pptxgenjs-MIT.txt',
+    'vendor/pptxgenjs/README.md',
   ]],
   ['ui', [
     'THIRD_PARTY_NOTICES.md',
@@ -131,6 +132,16 @@ function checkRootFiles() {
   }
   if (!/^\*\s+@Error-Zhang\s*$/mu.test(codeowners)) {
     fail('.github/CODEOWNERS does not assign the public maintainer')
+  }
+
+  const pptxPatchRecord = readFileSync(
+    join(repositoryRoot, 'packages/office/vendor/pptxgenjs/README.md'),
+    'utf8',
+  )
+  for (const marker of ['reviewed local security patches', "UUID helper's", 'relationship paths']) {
+    if (!pptxPatchRecord.includes(marker)) {
+      fail(`PptxGenJS public patch record is missing: ${marker}`)
+    }
   }
 }
 

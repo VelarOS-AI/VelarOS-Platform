@@ -263,7 +263,12 @@ function buildDiagnosticBlock(messageBlock: ContextWorkingSetBlock): Nullable<Co
 }
 
 function normalizeBlockIdPart(value: string): string {
-  const normalized = value.trim().replace(/[^\w.-]+/gu, '-').replace(/^-+|-+$/gu, '')
+  const replaced = value.trim().replace(/[^\w.-]+/gu, '-')
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const normalized = replaced.slice(start, end)
   return normalized || 'unnamed'
 }
 

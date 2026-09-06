@@ -164,8 +164,29 @@ function compileSubAgentOutputSchema(
 
 function extractJsonCandidate(text: string): string {
   const trimmed = text.trim()
-  const fenced = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/giu)]
-  if (fenced.length === 1 && fenced[0]?.[1]) return fenced[0][1].trim()
+  const fenced: string[] = []
+  let cursor = 0
+  while (cursor < trimmed.length) {
+    const open = trimmed.indexOf('```', cursor)
+    if (open < 0) break
+    const close = trimmed.indexOf('```', open + 3)
+    if (close < 0) break
+    const body = stripStructuredOutputFenceLanguage(trimmed.slice(open + 3, close))
+    fenced.push(body)
+    cursor = close + 3
+  }
+  if (fenced.length === 1 && fenced[0]) return fenced[0]
+  return trimmed
+}
+
+function stripStructuredOutputFenceLanguage(value: string): string {
+  const trimmed = value.trim()
+  const lower = trimmed.toLowerCase()
+  for (const language of ['markdown', 'json', 'md']) {
+    if (!lower.startsWith(language)) continue
+    return trimmed.slice(language.length).trim()
+  }
+
   return trimmed
 }
 

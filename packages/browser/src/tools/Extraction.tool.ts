@@ -6,6 +6,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { BrowserPageScriptBuilder } from '../core'
+import { encodeBrowserScriptStringLiteral } from '../core/BrowserScriptLiteral'
 
 import { browserExtractSchema, parseBrowserExtractInput } from './BrowserExtractSchema'
 import { BrowserArtifactWriteCapability, BrowserControlCapability } from './Capabilities'
@@ -249,6 +250,7 @@ const browserPaginateExtract = defineBrowserTool<{
     const nextBtnSelector =
       nextPageSelector ||
       'a[rel="next"], button[aria-label*="next" i], button[aria-label*="下一页"], a[aria-label*="next" i], [class*="next"]:not([disabled]), [class*="pagination"] a:last-child'
+    const nextButtonSelectorLiteral = encodeBrowserScriptStringLiteral(nextBtnSelector)
 
     for (let page = 0; page < maxPages; page++) {
       ctx.abortSignal.throwIfAborted()
@@ -268,7 +270,7 @@ const browserPaginateExtract = defineBrowserTool<{
 
       // 检查下一页按钮是否存在且未禁用。
       const hasNext = await ctx.browser.evaluateScript({
-        script: `(() => { const el = document.querySelector(${JSON.stringify(nextBtnSelector)}); return !!(el && !el.getAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true') })()`,
+        script: `(() => { const el = document.querySelector(${nextButtonSelectorLiteral}); return !!(el && !el.getAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true') })()`,
         mode: 'expression',
         timeoutMs: 5000,
       }) as { result?: unknown }
@@ -276,7 +278,7 @@ const browserPaginateExtract = defineBrowserTool<{
 
       // 点击下一页后短暂等待页面内容更新。
       await ctx.browser.evaluateScript({
-        script: `(() => { const el = document.querySelector(${JSON.stringify(nextBtnSelector)}); if (el) { el.click(); return true } return false })()`,
+        script: `(() => { const el = document.querySelector(${nextButtonSelectorLiteral}); if (el) { el.click(); return true } return false })()`,
         mode: 'expression',
         timeoutMs: 5000,
       })

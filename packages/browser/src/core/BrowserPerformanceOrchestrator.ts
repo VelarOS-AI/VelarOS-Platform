@@ -271,20 +271,38 @@ export function extractKeyMetricsFromSummary(summary: string): string {
   }
 
   for (const line of summary.split('\n')) {
-    const setMatch = /^##\s*insight set id:\s*(.+)$/.exec(line)
-    if (setMatch) {
-      flush()
-      currentSet = setMatch[1]!.trim()
-      continue
+    const setPrefix = '## insight set id:'
+    if (line.startsWith('##')) {
+      const header = line.slice(2).trimStart()
+      if (header.startsWith(setPrefix.slice(3))) {
+        const setId = header.slice(setPrefix.length - 3).trim()
+        if (setId) {
+          flush()
+          currentSet = setId
+          continue
+        }
+      }
     }
-    // 顶层 CWV:恰好 2 空格 + `- NAME: value`(排除 4 空格的 breakdown 子项)。
-    const metricMatch = /^ {2}-\s*(LCP|CLS|INP|FCP|TTFB):\s*(.+)$/.exec(line)
-    if (metricMatch) {
-      const name = metricMatch[1]!
-      // 去掉 event/nodeId 等尾部细节,只留数值。
-      const value = metricMatch[2]!.replace(/,\s*(event|nodeId|bounds):.*$/, '').trim()
-      metrics.push(`${name} ${value}`)
+    // 顶层 CWV:恰好 2 空格 + `-NAME: value`(排除 4 空格的 breakdown 子项)。
+    if (!line.startsWith('  -')) continue
+    const metric = line.slice(3).trimStart()
+    const separator = metric.indexOf(':')
+    if (separator < 0) continue
+    const name = metric.slice(0, separator).trimEnd()
+    if (!['LCP', 'CLS', 'INP', 'FCP', 'TTFB'].includes(name)) continue
+    let value = metric.slice(separator + 1).trim()
+    let suffixCursor = 0
+    while (suffixCursor < value.length) {
+      const comma = value.indexOf(',', suffixCursor)
+      if (comma < 0) break
+      const suffix = value.slice(comma + 1).trimStart()
+      if (suffix.startsWith('event:') || suffix.startsWith('nodeId:') || suffix.startsWith('bounds:')) {
+        value = value.slice(0, comma).trimEnd()
+        break
+      }
+      suffixCursor = comma + 1
     }
+    if (value) metrics.push(`${name} ${value}`)
   }
   flush()
 

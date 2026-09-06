@@ -38,7 +38,10 @@ export class VelarCloudModelRuntime {
     providerId: VelarCloudManagedProviderId,
     binding: VelarCloudModelRuntimeBinding
   ): void {
-    const baseURL = binding.baseURL.trim().replace(/\/+$/u, '')
+    const trimmed = binding.baseURL.trim()
+    let end = trimmed.length
+    while (end > 0 && trimmed[end - 1] === '/') end -= 1
+    const baseURL = trimmed.slice(0, end)
     if (!baseURL) {
       throw new AppError('VALIDATION', `${providerId} Cloud 模型服务地址不能为空。`)
     }

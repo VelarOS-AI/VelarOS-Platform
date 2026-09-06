@@ -116,15 +116,21 @@ function collectThreadIdsFromString(value: string, threadIds: Set<string>): void
   const trimmed = value.trim()
   if (isEmpty(trimmed)) return
 
-  const subAgentResultPattern =
-    /<subagent-result type="application\/json">\s*([\s\S]*?)\s*<\/subagent-result>/gu
-  let match: Nullable<RegExpExecArray>
-
-  while ((match = subAgentResultPattern.exec(trimmed))) {
-    if (!match[1]) continue
+  const openMarker = '<subagent-result type="application/json">'
+  const closeMarker = '</subagent-result>'
+  let cursor = 0
+  while (cursor < trimmed.length) {
+    const open = trimmed.indexOf(openMarker, cursor)
+    if (open < 0) break
+    const bodyStart = open + openMarker.length
+    const close = trimmed.indexOf(closeMarker, bodyStart)
+    if (close < 0) break
+    const body = trimmed.slice(bodyStart, close).trim()
+    cursor = close + closeMarker.length
+    if (!body) continue
 
     try {
-      collectThreadIdsFromValue(JSON.parse(match[1]), threadIds)
+      collectThreadIdsFromValue(JSON.parse(body), threadIds)
     } catch {
       // arch-guard:silent-catch-ok 历史工具载荷损坏时保留时间戳回退，不让旧记录击穿时间线。
     }

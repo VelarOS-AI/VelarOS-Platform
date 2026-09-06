@@ -50,7 +50,10 @@ export class LocalModelEnvironment implements ModelEnvironmentPort {
   public resolveOllamaBaseURL(defaultBaseURL: string): string {
     const configured =
       this.readString(OllamaEnvNames.baseURL) || this.readString('OLLAMA_HOST')
-    const raw = (configured || defaultBaseURL).trim().replace(/\/+$/u, '')
+    const trimmed = (configured || defaultBaseURL).trim()
+    let end = trimmed.length
+    while (end > 0 && trimmed[end - 1] === '/') end -= 1
+    const raw = trimmed.slice(0, end)
     const baseURL = raw && !/^https?:\/\//iu.test(raw) ? `http://${raw}` : raw
     if (!baseURL) return ''
 

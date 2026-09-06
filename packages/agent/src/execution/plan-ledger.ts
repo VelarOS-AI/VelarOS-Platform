@@ -188,11 +188,14 @@ class ExecPlanLedger {
   }
 
   private slugifyPlanStepTitle(title: string): string {
-    return title
+    const replaced = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 48)
+    let start = 0
+    let end = replaced.length
+    while (replaced[start] === '-') start += 1
+    while (end > start && replaced[end - 1] === '-') end -= 1
+    return replaced.slice(start, end).slice(0, 48)
   }
 
   private normalizePlanTitle(title: string): string {

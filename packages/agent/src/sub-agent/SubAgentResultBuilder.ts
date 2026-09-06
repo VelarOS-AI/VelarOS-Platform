@@ -69,12 +69,17 @@ function formatSubAgentToolResult(result: SubAgentTaskResult): string {
 }
 
 function parseSubAgentToolResult(value: string): Nullable<SubAgentTaskResult> {
-  const match = value.match(
-    /<subagent-result type="application\/json">\s*([\s\S]*?)\s*<\/subagent-result>/
-  )
-  if (!match?.[1]) return null
+  const openMarker = '<subagent-result type="application/json">'
+  const closeMarker = '</subagent-result>'
+  const open = value.indexOf(openMarker)
+  if (open < 0) return null
+  const bodyStart = open + openMarker.length
+  const close = value.indexOf(closeMarker, bodyStart)
+  if (close < 0) return null
+  const body = value.slice(bodyStart, close).trim()
+  if (!body) return null
   try {
-    return JSON.parse(match[1]) as SubAgentTaskResult
+    return JSON.parse(body) as SubAgentTaskResult
   } catch {
     // arch-guard:silent-catch-ok 输入是模型产出的文本，非法 JSON 是**预期内**的常态而非故障；
     // null 就是「这段不是结构化子 Agent 结果」的信号，调用方据此回落到纯文本路径。

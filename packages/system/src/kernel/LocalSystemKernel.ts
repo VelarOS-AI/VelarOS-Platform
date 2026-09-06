@@ -1004,7 +1004,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   }
 
   private platformOpenCommand(targetPath: string): { command: string; args: string[] } {
-    const commandSpec = this.platformTools.getOpenExternalFallbackSpec(targetPath, process.env)
+    const commandSpec = this.platformTools.getOpenExternalFallbackSpec(targetPath)
     return { command: commandSpec.file, args: commandSpec.args }
   }
 

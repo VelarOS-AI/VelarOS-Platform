@@ -79,9 +79,11 @@ export interface ContextLedgerEntry {
  * toolFailureReason 特征（ContextAttentionPolicyEngine 打分）共用的单源正则。
  */
 export function hasFailureSignal(contentText: string): boolean {
-  return /(?:^|\n)\s*(?:error|fatal):|\b(failed|failure|exception|stderr|exit code|timeout|denied)\b/iu.test(
-    contentText
-  )
+  for (const line of contentText.split('\n')) {
+    const start = line.trimStart().toLowerCase()
+    if (start.startsWith('error:') || start.startsWith('fatal:')) return true
+  }
+  return /\b(failed|failure|exception|stderr|exit code|timeout|denied)\b/iu.test(contentText)
 }
 
 export function estimateBlockChars(value: unknown): number {

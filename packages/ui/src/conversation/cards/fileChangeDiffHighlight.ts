@@ -140,17 +140,6 @@ const ShellKeywords = new Set([
   'while',
 ])
 
-const JavaScriptTokenPattern =
-  /\/\/.*|\/\*.*?\*\/|`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:0[xX][\da-fA-F]+|0[bB][01]+|0[oO][0-7]+|\d+(?:\.\d+)?(?:e[+-]?\d+)?n?)\b|\b[A-Za-z_$][\w$]*\b|=>|===|!==|==|!=|<=|>=|\+\+|--|&&|\|\||[{}()[\].,;:?]|[+\-*/%=&|!<>~^]+|\s+|./giu
-const JsonTokenPattern =
-  /"(?:\\.|[^"\\])*"|-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b|\b(?:false|null|true)\b|[{}[\],:]|\s+|./giu
-const CssTokenPattern =
-  /\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|@[A-Za-z_-][\w-]*|#[\da-fA-F]{3,8}\b|[-+]?(?:\d*\.)?\d+(?:[a-z%]+)?\b|[{}:;(),.]|[-_A-Za-z][\w-]*(?=\s*:)|[.#]?[-_A-Za-z][\w-]*|\s+|./giu
-const MarkupTokenPattern =
-  /<!--.*?-->|<!doctype.*?>|<\/?|\/?>|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z][\w:-]*(?=\s*=)|[A-Za-z][\w:-]*|=|\s+|./giu
-const ShellTokenPattern =
-  /#.*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\$[A-Za-z_][\w]*|--?[\w-]+|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][\w-]*\b|[|&;(){}<>]|[^\s|&;(){}<>]+|\s+|./gu
-
 function getPathExtension(path: string): string {
   const cleanPath = path.split(/[?#]/u)[0] ?? path
   const baseName = cleanPath.split(/[\\/]/u).at(-1)?.toLowerCase() ?? cleanPath.toLowerCase()
@@ -208,24 +197,234 @@ function readNextNonWhitespace(text: string, index: number): string {
   return ''
 }
 
-function tokenizeByPattern(
+function isAsciiIdentifierStart(character: LooseOptional<string>): boolean {
+  if (!character) return false
+  const code = character.charCodeAt(0)
+  return character === '_' || character === '$'
+    || (code >= 65 && code <= 90)
+    || (code >= 97 && code <= 122)
+}
+
+function isAsciiDigit(character: LooseOptional<string>): boolean {
+  if (!character) return false
+  const code = character.charCodeAt(0)
+  return code >= 48 && code <= 57
+}
+
+function isDigitForRadix(character: LooseOptional<string>, radix: 2 | 8 | 16): boolean {
+  if (!character) return false
+  const code = character.charCodeAt(0)
+  if (code >= 48 && code < 48 + Math.min(radix, 10)) return true
+  return radix === 16 && ((code >= 65 && code <= 70) || (code >= 97 && code <= 102))
+}
+
+function scanCodeNumberEnd(line: string, start: number, language: DiffCodeLanguage): number {
+  let index = start
+  if (line[index] === '-' || (language === 'css' && line[index] === '+')) index += 1
+
+  if (
+    language === 'javascript'
+    && line[index] === '0'
+    && (line[index + 1] === 'x' || line[index + 1] === 'X'
+      || line[index + 1] === 'b' || line[index + 1] === 'B'
+      || line[index + 1] === 'o' || line[index + 1] === 'O')
+  ) {
+    const marker = line[index + 1]?.toLowerCase()
+    const radix = marker === 'x' ? 16 : marker === 'b' ? 2 : 8
+    index += 2
+    while (isDigitForRadix(line[index], radix)) index += 1
+    if (line[index] === 'n') index += 1
+    return index
+  }
+
+  while (isAsciiDigit(line[index])) index += 1
+  if (line[index] === '.') {
+    index += 1
+    while (isAsciiDigit(line[index])) index += 1
+  }
+
+  if (line[index] === 'e' || line[index] === 'E') {
+    let exponentEnd = index + 1
+    if (line[exponentEnd] === '+' || line[exponentEnd] === '-') exponentEnd += 1
+    const exponentStart = exponentEnd
+    while (isAsciiDigit(line[exponentEnd])) exponentEnd += 1
+    if (exponentEnd > exponentStart) index = exponentEnd
+  }
+
+  if (language === 'javascript' && line[index] === 'n') index += 1
+  if (language === 'css') {
+    while (isAsciiIdentifierStart(line[index]) || line[index] === '%' || line[index] === '-') index += 1
+  }
+  return index
+}
+
+function scanCssSelectorEnd(line: string, start: number): number {
+  let index = start + 1
+  while (
+    isAsciiIdentifierStart(line[index])
+    || isAsciiDigit(line[index])
+    || line[index] === '-'
+  ) index += 1
+  return index
+}
+
+function scanCodeLineTokens(line: string, language: DiffCodeLanguage): Array<{ value: string; index: number }> {
+  const scanned: Array<{ value: string; index: number }> = []
+  const push = (start: number, end: number): void => {
+    scanned.push({ value: line.slice(start, end), index: start })
+  }
+  let index = 0
+  while (index < line.length) {
+    const start = index
+    const character = line[index] ?? ''
+
+    if (/\s/u.test(character)) {
+      while (index < line.length && /\s/u.test(line[index] ?? '')) index += 1
+      push(start, index)
+      continue
+    }
+
+    if (language === 'markup' && line.startsWith('<!--', index)) {
+      const close = line.indexOf('-->', index + 4)
+      index = close < 0 ? line.length : close + 3
+      push(start, index)
+      continue
+    }
+    if (language === 'markup' && line.slice(index, index + 9).toLowerCase() === '<!doctype') {
+      const close = line.indexOf('>', index + 9)
+      index = close < 0 ? line.length : close + 1
+      push(start, index)
+      continue
+    }
+    if ((language === 'javascript' || language === 'css') && line.startsWith('/*', index)) {
+      const close = line.indexOf('*/', index + 2)
+      index = close < 0 ? line.length : close + 2
+      push(start, index)
+      continue
+    }
+    if (language === 'javascript' && line.startsWith('//', index)) {
+      push(start, line.length)
+      break
+    }
+    if (
+      language === 'shell'
+      && character === '#'
+      && (index === 0 || /\s/u.test(line[index - 1] ?? '') || '|&;(){}<>'.includes(line[index - 1] ?? ''))
+    ) {
+      push(start, line.length)
+      break
+    }
+
+    const isQuoted = character === '"' || character === "'"
+      || (language === 'javascript' && character === '`')
+    if (isQuoted) {
+      index += 1
+      while (index < line.length) {
+        if (line[index] === '\\') {
+          index = Math.min(line.length, index + 2)
+          continue
+        }
+        if (line[index] === character) {
+          index += 1
+          break
+        }
+        index += 1
+      }
+      push(start, index)
+      continue
+    }
+
+    if (language === 'markup') {
+      const punctuation = line.startsWith('</', index) || line.startsWith('/>', index)
+        ? line.slice(index, index + 2)
+        : '<>='.includes(character) ? character : ''
+      if (punctuation) {
+        index += punctuation.length
+        push(start, index)
+        continue
+      }
+    }
+
+    if (
+      language === 'css'
+      && (character === '.' || character === '#')
+      && (isAsciiIdentifierStart(line[index + 1])
+        || (character === '#' && isAsciiDigit(line[index + 1]))
+        || line[index + 1] === '-')
+    ) {
+      index = scanCssSelectorEnd(line, start)
+      push(start, index)
+      continue
+    }
+
+    const hasSignedNumber = (character === '-' && language !== 'javascript')
+      || (character === '+' && language === 'css')
+    if (isAsciiDigit(character)
+      || (hasSignedNumber && (isAsciiDigit(line[index + 1])
+        || (line[index + 1] === '.' && isAsciiDigit(line[index + 2]))))
+      || (character === '.' && isAsciiDigit(line[index + 1]))) {
+      index = scanCodeNumberEnd(line, start, language)
+      push(start, index)
+      continue
+    }
+
+    if (isAsciiIdentifierStart(character) || (language === 'css' && (character === '-' || character === '@'))) {
+      index += 1
+      while (index < line.length) {
+        const next = line[index]
+        if (!isAsciiIdentifierStart(next) && !isAsciiDigit(next)
+          && !((language === 'css' || language === 'markup' || language === 'shell') && next === '-')
+          && !(language === 'markup' && next === ':')
+          && !(language === 'shell' && next === '#')) break
+        index += 1
+      }
+      push(start, index)
+      continue
+    }
+
+    if (language === 'shell' && !'|&;(){}<>'.includes(character)) {
+      index += 1
+      while (
+        index < line.length
+        && !/\s/u.test(line[index] ?? '')
+        && !'|&;(){}<>'.includes(line[index] ?? '')
+      ) index += 1
+      push(start, index)
+      continue
+    }
+
+    const operatorCharacters = language === 'javascript'
+      ? '+-*/%=&|!<>~^'
+      : language === 'shell' ? '|&;(){}<>' : ''
+    if (operatorCharacters.includes(character)) {
+      index += 1
+      while (index < line.length && operatorCharacters.includes(line[index] ?? '')) index += 1
+      push(start, index)
+      continue
+    }
+
+    index += 1
+    push(start, index)
+  }
+  return scanned
+}
+
+function tokenizeByScanner(
   line: string,
-  pattern: RegExp,
+  language: DiffCodeLanguage,
   resolveKind: (value: string, index: number, line: string) => DiffCodeTokenKind
 ): DiffCodeToken[] {
   const tokens: DiffCodeToken[] = []
 
-  pattern.lastIndex = 0
-  for (const match of line.matchAll(pattern)) {
-    const value = match[0]
-    pushToken(tokens, resolveKind(value, match.index ?? 0, line), value)
+  for (const token of scanCodeLineTokens(line, language)) {
+    pushToken(tokens, resolveKind(token.value, token.index, line), token.value)
   }
 
   return tokens
 }
 
 function tokenizeJavaScriptLine(line: string): DiffCodeToken[] {
-  return tokenizeByPattern(line, JavaScriptTokenPattern, (value, index, source) => {
+  return tokenizeByScanner(line, 'javascript', (value, index, source) => {
     if (/^\s+$/u.test(value)) return 'plain'
     if (value.startsWith('//') || value.startsWith('/*')) return 'comment'
     if (value.startsWith('"') || value.startsWith("'") || value.startsWith('`')) return 'string'
@@ -255,7 +454,7 @@ function tokenizeJavaScriptLine(line: string): DiffCodeToken[] {
 }
 
 function tokenizeJsonLine(line: string): DiffCodeToken[] {
-  return tokenizeByPattern(line, JsonTokenPattern, (value, index, source) => {
+  return tokenizeByScanner(line, 'json', (value, index, source) => {
     if (/^\s+$/u.test(value)) return 'plain'
     if (value.startsWith('"')) return readNextNonWhitespace(source, index + value.length) === ':' ? 'property' : 'string'
     if (/^-?\d/u.test(value)) return 'number'
@@ -267,22 +466,22 @@ function tokenizeJsonLine(line: string): DiffCodeToken[] {
 }
 
 function tokenizeCssLine(line: string): DiffCodeToken[] {
-  return tokenizeByPattern(line, CssTokenPattern, (value, index, source) => {
+  return tokenizeByScanner(line, 'css', (value, index, source) => {
     if (/^\s+$/u.test(value)) return 'plain'
     if (value.startsWith('/*')) return 'comment'
     if (value.startsWith('"') || value.startsWith("'")) return 'string'
     if (value.startsWith('@')) return 'keyword'
     if (/^[-+]?(?:\d*\.)?\d/u.test(value) || /^#[\da-fA-F]{3,8}\b/u.test(value)) return 'number'
     if (/^[{}:;(),.]$/u.test(value)) return 'punctuation'
-    if (readNextNonWhitespace(source, index + value.length) === ':') return 'property'
     if (value.startsWith('.') || value.startsWith('#')) return 'tag'
+    if (readNextNonWhitespace(source, index + value.length) === ':') return 'property'
 
     return 'plain'
   })
 }
 
 function tokenizeMarkupLine(line: string): DiffCodeToken[] {
-  return tokenizeByPattern(line, MarkupTokenPattern, (value, index, source) => {
+  return tokenizeByScanner(line, 'markup', (value, index, source) => {
     if (/^\s+$/u.test(value)) return 'plain'
     if (value.startsWith('<!--')) return 'comment'
     if (/^<!doctype/i.test(value)) return 'keyword'
@@ -296,7 +495,7 @@ function tokenizeMarkupLine(line: string): DiffCodeToken[] {
 }
 
 function tokenizeShellLine(line: string): DiffCodeToken[] {
-  return tokenizeByPattern(line, ShellTokenPattern, (value) => {
+  return tokenizeByScanner(line, 'shell', (value) => {
     if (/^\s+$/u.test(value)) return 'plain'
     if (value.startsWith('#')) return 'comment'
     if (value.startsWith('"') || value.startsWith("'")) return 'string'
@@ -304,7 +503,7 @@ function tokenizeShellLine(line: string): DiffCodeToken[] {
     if (/^--?[\w-]+$/u.test(value)) return 'attribute'
     if (/^\d/u.test(value)) return 'number'
     if (ShellKeywords.has(value)) return 'keyword'
-    if (/^[|&;(){}<>]$/u.test(value)) return 'operator'
+    if (/^[|&;(){}<>]+$/u.test(value)) return 'operator'
 
     return 'plain'
   })

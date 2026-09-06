@@ -46,11 +46,14 @@ interface HtmlArtifactScrollAnchor {
 }
 
 function buildArtifactDownloadFilename(title: string): string {
-  const baseName = title
+  const replaced = title
     .trim()
     .replace(/[^\p{L}\p{N}._-]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const baseName = replaced.slice(start, end).slice(0, 80)
 
   return `${baseName || 'html-artifact'}.html`
 }

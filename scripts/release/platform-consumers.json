@@ -24,12 +24,6 @@
       "repository": "VelarOS-AI/VelarOS-Labs",
       "lockfile": "bun",
       "verifyCommand": "bun run check"
-    },
-    {
-      "id": "velarscript-editor",
-      "repository": "VelarOS-AI/VelarScript-Editor",
-      "lockfile": "none",
-      "verifyCommand": ""
     }
   ]
 }

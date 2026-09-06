@@ -124,11 +124,18 @@ const conceptTypeByCategory: Readonly<Record<string, MemoryConceptType>> = {
 }
 
 function slugify(value: string): string {
-  const normalized = value
+  const replaced = value
     .toLowerCase()
     .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-    .replace(/^-+|-+$/gu, '')
-  return (normalized || 'memory').slice(0, 60).replace(/-+$/u, '') || 'memory'
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const normalized = replaced.slice(start, end) || 'memory'
+  const limited = normalized.slice(0, 60)
+  let limitedEnd = limited.length
+  while (limitedEnd > 0 && limited[limitedEnd - 1] === '-') limitedEnd -= 1
+  return limited.slice(0, limitedEnd) || 'memory'
 }
 
 function hash(value: string): string {

@@ -659,11 +659,36 @@ function getSmartParseNumber(size, xyDir, layout) {
  * @returns {string} UUID
  */
 function getUuid(uuidFormat) {
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function')
+        throw new Error('A cryptographically secure random source is required');
+    const randomValues = new Uint8Array(uuidFormat.length);
+    globalThis.crypto.getRandomValues(randomValues);
+    let randomIndex = 0;
     return uuidFormat.replace(/[xy]/g, function (c) {
-        const r = (Math.random() * 16) | 0;
+        const r = randomValues[randomIndex++] & 0xf;
         const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
+}
+
+function resolvePresentationArchiveTarget(target) {
+    if (typeof target !== 'string' || target.includes('\0') || target.startsWith('/') || /^[A-Za-z]:[\\/]/.test(target))
+        throw new Error('Invalid presentation relationship target');
+    const resolved = ['ppt', 'slides'];
+    for (const segment of target.replace(/\\/g, '/').split('/')) {
+        if (!segment || segment === '.')
+            continue;
+        if (segment === '..') {
+            if (resolved.length <= 1)
+                throw new Error('Presentation relationship target escapes the archive root');
+            resolved.pop();
+            continue;
+        }
+        resolved.push(segment);
+    }
+    if (resolved.length <= 2)
+        throw new Error('Invalid empty presentation relationship target');
+    return resolved.join('/');
 }
 /**
  * Replace special XML characters with HTML-encoded strings
@@ -6962,7 +6987,7 @@ class PptxGenJS {
                     else if (!data.includes(';'))
                         data = 'image/png;' + data;
                     // C: Add media
-                    zip.file(rel.Target.replace('..', 'ppt'), data.split(',').pop(), { base64: true });
+                    zip.file(resolvePresentationArchiveTarget(rel.Target), data.split(',').pop(), { base64: true });
                 }
             });
         };

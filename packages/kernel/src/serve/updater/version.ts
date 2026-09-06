@@ -78,16 +78,19 @@ function satisfiesComparator(
   version: KernelSemanticVersion,
   comparator: string,
 ): boolean {
-  const match = /^(>=|<=|>|<|=)?\s*(.+)$/.exec(comparator)
-  if (isNull(match)) {
+  const trimmed = comparator.trim()
+  const operators = ['>=', '<=', '>', '<', '='] as const
+  const operator = operators.find((candidate) => trimmed.startsWith(candidate))
+  const versionText = trimmed.slice(operator?.length ?? 0).trim()
+  if (!versionText) {
     throw new KernelUpdaterError(
       'INVALID_VERSION_RANGE',
       `Invalid Kernel version range comparator "${comparator}"`,
       { versionRange: comparator },
     )
   }
-  const comparison = compareParsed(version, parseRangeVersion(match[2] ?? ''))
-  switch (match[1] ?? '=') {
+  const comparison = compareParsed(version, parseRangeVersion(versionText))
+  switch (operator ?? '=') {
     case '>':
       return comparison > 0
     case '>=':

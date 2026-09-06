@@ -38,6 +38,9 @@ is derived from `pptxgenjs` version `4.0.1`, licensed under the MIT License,
 copyright 2015-2022 Brent Ely. The package-local notice and complete license
 text are distributed in `packages/office/THIRD_PARTY_NOTICES.md` and
 `packages/office/third-party-licenses/pptxgenjs-MIT.txt`.
+The distributed ESM runtime includes VelarOS security patches for cryptographic
+UUID generation and archive-safe media relationship path resolution; its public
+API and upstream TypeScript declarations remain unchanged.
 
 ## Manually resolved dependency metadata
 

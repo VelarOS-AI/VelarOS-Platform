@@ -37,6 +37,11 @@ export type DirectorySymlinkType = 'dir' | 'junction'
 
 const UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 const DefaultWindowsExecutableExtensions = ['.EXE', '.CMD', '.BAT', '.COM']
+const TrustedWindowsCommandShell = 'C:\\Windows\\System32\\cmd.exe'
+
+function isPathTextSeparator(character: LooseOptional<string>): boolean {
+  return character === '/' || character === '\\'
+}
 
 function readCurrentProcess(): Nullable<{
   platform?: RuntimePlatform
@@ -95,16 +100,24 @@ export class SystemPlatformCompatibility {
   public trimTrailingPathTextSeparators(path: string): string {
     const trimmed = path.trim()
     if (!trimmed) return ''
-    if (/^[\\/]+$/.test(trimmed)) return trimmed[0] === '\\' ? '\\' : '/'
-    return trimmed.replace(/[\\/]+$/g, '')
+    let end = trimmed.length
+    while (end > 0 && isPathTextSeparator(trimmed[end - 1])) end -= 1
+    if (end === 0) return trimmed[0] === '\\' ? '\\' : '/'
+    return trimmed.slice(0, end)
   }
 
   public stripLeadingPathTextSeparators(path: string): string {
-    return path.replace(/^[\\/]+/g, '')
+    let start = 0
+    while (isPathTextSeparator(path[start])) start += 1
+    return path.slice(start)
   }
 
   public stripWrappingPathTextSeparators(path: string): string {
-    return path.replace(/^[\\/]+|[\\/]+$/g, '')
+    let start = 0
+    let end = path.length
+    while (isPathTextSeparator(path[start])) start += 1
+    while (end > start && isPathTextSeparator(path[end - 1])) end -= 1
+    return path.slice(start, end)
   }
 
   public normalizePathTextForComparison(path: string): string {
@@ -168,7 +181,7 @@ export class SystemPlatformCompatibility {
   public getShellCommandSpec(command: string, options: ShellCommandSpecOptions = {}): CommandSpec {
     if (this.isWindows())
       return {
-        file: this.getWindowsCommandShell(options.env),
+        file: this.getWindowsCommandShell(),
         args: ['/d', '/s', '/c', command],
       }
 
@@ -180,7 +193,7 @@ export class SystemPlatformCompatibility {
 
   public getPreferredShellPath(env: NodeJS.ProcessEnv = this.env): string {
     return this.isWindows()
-      ? this.getWindowsCommandShell(env)
+      ? this.getWindowsCommandShell()
       : this.getPreferredPosixShellPath(env)
   }
 
@@ -227,14 +240,11 @@ export class SystemPlatformCompatibility {
     return this.isWindows() ? 'electron.cmd' : 'electron'
   }
 
-  public getOpenExternalFallbackSpec(
-    target: string,
-    env: NodeJS.ProcessEnv = this.env
-  ): CommandSpec {
+  public getOpenExternalFallbackSpec(target: string): CommandSpec {
     if (this.isMacOS()) return { file: 'open', args: [target] }
     if (this.isWindows())
       return {
-        file: this.getWindowsCommandShell(env),
+        file: this.getWindowsCommandShell(),
         args: ['/c', 'start', '', target],
       }
     return { file: 'xdg-open', args: [target] }
@@ -243,8 +253,7 @@ export class SystemPlatformCompatibility {
   public getOpenApplicationCommandSpec(
     application: string,
     args: string[] = [],
-    targetPath?: string,
-    env: NodeJS.ProcessEnv = this.env
+    targetPath?: string
   ): CommandSpec {
     if (this.isMacOS())
       return {
@@ -258,7 +267,7 @@ export class SystemPlatformCompatibility {
       }
     if (this.isWindows())
       return {
-        file: this.getWindowsCommandShell(env),
+        file: this.getWindowsCommandShell(),
         args: ['/c', 'start', '', application, ...(targetPath ? [targetPath] : []), ...args],
       }
     return {
@@ -440,8 +449,8 @@ export class SystemPlatformCompatibility {
     return Array.from(new Set([commandName, ...pathExts.map((ext) => `${commandName}${ext}`)]))
   }
 
-  private getWindowsCommandShell(env: NodeJS.ProcessEnv = this.env): string {
-    return env.ComSpec ?? env.COMSPEC ?? 'cmd.exe'
+  private getWindowsCommandShell(): string {
+    return TrustedWindowsCommandShell
   }
 
   private getWindowsPowerShellCommandSpec(command: string): CommandSpec {

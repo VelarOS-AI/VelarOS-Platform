@@ -60,10 +60,12 @@ function resolveSessionPromptCacheKey(
   const trimmed = sessionId?.trim()
   if (!trimmed || trimmed === UnknownGovernanceSessionId) return undefined
 
-  const safePrefix = trimmed
-    .replace(/[^A-Za-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, SessionPromptCacheKeyPrefixMaxChars)
+  const replaced = trimmed.replace(/[^A-Za-z0-9_-]+/g, '-')
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const safePrefix = replaced.slice(start, end).slice(0, SessionPromptCacheKeyPrefixMaxChars)
   const prefix = safePrefix || 'session'
   return `session-${prefix}-${hashPromptCacheKey(trimmed)}`
 }

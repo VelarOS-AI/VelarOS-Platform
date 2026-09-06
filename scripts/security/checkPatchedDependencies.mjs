@@ -33,14 +33,16 @@ function assertVendoredPptxGenJs() {
   assert(runtimeText.startsWith('/* PptxGenJS 4.0.1 '), 'Vendored PptxGenJS runtime version changed')
   assert(typesText.startsWith('// Type definitions for pptxgenjs 4.0.1'), 'Vendored PptxGenJS types version changed')
   assert(runtimeText.includes("import JSZip from 'jszip';"), 'Vendored PptxGenJS must keep JSZip external')
+  assert(runtimeText.includes("typeof globalThis.crypto.getRandomValues !== 'function'"), 'Vendored PptxGenJS Web Crypto UUID patch is missing')
+  assert(runtimeText.includes('resolvePresentationArchiveTarget(rel.Target)'), 'Vendored PptxGenJS archive path patch is missing')
   assert(!/image-size/i.test(runtimeText), 'Vendored PptxGenJS unexpectedly references image-size')
   assert(
-    sha256(runtime) === '05844c5625e2cda3b449eb967c2246dd57ca57341886a7c28eeebca263b29bd4',
-    'Vendored PptxGenJS runtime changed; review the upstream diff and security boundary',
+    sha256(runtime) === '1d5b4af9da57182a1b6c3f7308c5cefe32d3b034709ceb2b95c7f0b7c60565f4',
+    'Vendored PptxGenJS patched runtime changed; review the upstream and local security diffs',
   )
   assert(
     sha256(types) === '0726d015dbcb55ccfa75546cb2fd43fe13a0dfeb783d08572f1c62f59193bbe5',
-    'Vendored PptxGenJS type declarations changed; review the upstream diff',
+    'Vendored PptxGenJS upstream type declarations changed; review the public API diff',
   )
 }
 

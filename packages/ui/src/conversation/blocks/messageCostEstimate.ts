@@ -65,10 +65,23 @@ function getAnthropicClaudeAliases(model: string): string[] {
   const aliases = new Set<string>()
   const [, tail = model] = model.includes('/') ? model.split(/\/(.+)/u) : ['', model]
   const normalizedTail = stripGatewayModelPrefixes(tail)
-  const canonicalTail = normalizedTail.replace(
-    /^(claude-(?:sonnet|opus|haiku))-(\d+)-(\d+)(.*)$/u,
-    '$1-$2.$3$4'
-  )
+  let canonicalTail = normalizedTail
+  for (const family of ['claude-sonnet', 'claude-opus', 'claude-haiku']) {
+    const prefix = `${family}-`
+    if (!normalizedTail.startsWith(prefix)) continue
+    let majorEnd = prefix.length
+    while (/\d/u.test(normalizedTail[majorEnd] ?? '')) majorEnd += 1
+    if (majorEnd === prefix.length || normalizedTail[majorEnd] !== '-') break
+    let minorEnd = majorEnd + 1
+    while (/\d/u.test(normalizedTail[minorEnd] ?? '')) minorEnd += 1
+    const major = normalizedTail.slice(prefix.length, majorEnd)
+    const minor = normalizedTail.slice(majorEnd + 1, minorEnd)
+    if (minor) {
+      const suffix = normalizedTail.slice(minorEnd)
+      canonicalTail = `${family}-${major}.${minor}${suffix}`
+    }
+    break
+  }
 
   if (canonicalTail !== normalizedTail) {
     aliases.add(canonicalTail)

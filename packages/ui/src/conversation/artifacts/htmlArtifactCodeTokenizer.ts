@@ -21,7 +21,6 @@ export interface HtmlArtifactCodeToken {
   value: string
 }
 
-const HtmlArtifactTagPattern = /<!--[\s\S]*?-->|<!doctype[\s\S]*?>|<\/?[A-Za-z][^<>]*?>/giu
 const CssTokenPattern =
   /\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|@[A-Za-z_-][\w-]*|#[\da-fA-F]{3,8}\b|[-+]?(?:\d*\.)?\d+(?:[a-z%]+)?\b|[{}:;(),]|[.#]?[A-Za-z_-][\w-]*(?=\s*\{)|[A-Za-z_-][\w-]*(?=\s*:)|[A-Za-z_-][\w-]*|\s+|./gu
 const ScriptTokenPattern =
@@ -70,6 +69,54 @@ function pushHtmlArtifactToken(
   value: string
 ): void {
   if (value) tokens.push({ kind, value })
+}
+
+function isAsciiLetter(character: LooseOptional<string>): boolean {
+  if (!character) return false
+  const code = character.charCodeAt(0)
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+}
+
+function findNextHtmlTag(
+  source: string,
+  startIndex: number
+): Nullable<{ start: number; end: number; segment: string }> {
+  let searchFrom = startIndex
+  while (searchFrom < source.length) {
+    const start = source.indexOf('<', searchFrom)
+    if (start < 0) return null
+
+    if (source.startsWith('<!--', start)) {
+      const commentEnd = source.indexOf('-->', start + 4)
+      if (commentEnd < 0) return null
+      const end = commentEnd + 3
+      return { start, end, segment: source.slice(start, end) }
+    }
+
+    const doctypePrefix = source.slice(start, start + 9).toLowerCase()
+    const nameStart = source[start + 1] === '/' ? start + 2 : start + 1
+    if (doctypePrefix !== '<!doctype' && !isAsciiLetter(source[nameStart])) {
+      searchFrom = start + 1
+      continue
+    }
+
+    let quote: Nullable<string> = null
+    for (let index = nameStart + 1; index < source.length; index += 1) {
+      const character = source[index] ?? ''
+      if (quote && character === quote) {
+        quote = null
+      } else if (!quote && (character === '"' || character === "'")) {
+        quote = character
+      } else if (!quote && character === '>') {
+        const end = index + 1
+        return { start, end, segment: source.slice(start, end) }
+      } else if (!quote && character === '<') {
+        break
+      }
+    }
+    searchFrom = start + 1
+  }
+  return null
 }
 
 function readHtmlTagName(segment: string): string {
@@ -221,18 +268,16 @@ export function tokenizeHtmlArtifactSource(source: string): HtmlArtifactCodeToke
   let cursor = 0
 
   while (cursor < source.length) {
-    HtmlArtifactTagPattern.lastIndex = cursor
-    const match = HtmlArtifactTagPattern.exec(source)
-    if (!match?.[0]) {
+    const match = findNextHtmlTag(source, cursor)
+    if (!match) {
       pushHtmlArtifactToken(tokens, 'Text', source.slice(cursor))
       break
     }
 
-    const segment = match[0]
-    const start = match.index
+    const { segment, start } = match
     pushHtmlArtifactToken(tokens, 'Text', source.slice(cursor, start))
     tokens.push(...tokenizeHtmlArtifactTag(segment))
-    cursor = start + segment.length
+    cursor = match.end
 
     const tagName = readHtmlTagName(segment)
     if ((tagName === 'style' || tagName === 'script') && isOpeningHtmlTag(segment)) {

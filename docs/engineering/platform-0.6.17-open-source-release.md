@@ -45,9 +45,10 @@ upstream license and notice material supplied for each bundled runtime component
 
 - Every published package contains the Apache-2.0 `LICENSE`, a package `NOTICE`, and any additional
   third-party notices required by files shipped in that package.
-- `@velaros-ai/office` carries a reviewed, hash-pinned PptxGenJS 4.0.1 ESM runtime. PptxGenJS does
-  not execute its declared `image-size` dependency, so the vendored runtime removes that unused
-  vulnerable parser from consumer installations while retaining JSZip as an ordinary dependency.
+- `@velaros-ai/office` carries a reviewed, hash-pinned PptxGenJS 4.0.1 ESM runtime with local
+  security patches for Web Crypto UUIDs and archive-safe media paths. PptxGenJS does not execute
+  its declared `image-size` dependency, so the vendored runtime removes that unused vulnerable
+  parser from consumer installations while retaining JSZip as an ordinary dependency.
 - macOS release signing requires an explicitly supplied signing identity. Local development builds
   can select ad-hoc signing.
 - CodeQL uploads results to the repository security view in addition to retaining the workflow

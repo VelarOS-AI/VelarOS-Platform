@@ -116,7 +116,9 @@ export function extractResourceLocator(value: unknown): Nullable<string> {
 function normalizeUrlLocator(raw: string): string {
   const hashIndex = raw.indexOf('#')
   const withoutHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw
-  return withoutHash.replace(/\/+$/, '')
+  let end = withoutHash.length
+  while (end > 0 && withoutHash[end - 1] === '/') end -= 1
+  return withoutHash.slice(0, end)
 }
 
 function readContentText(content: unknown): string {

@@ -71,11 +71,69 @@ export function toContextAnchorTexts(anchors: readonly ContextAnchor[]): string[
 const FileAnchorPattern =
   /\b[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|scss|html|toml|yaml|yml|sql|py|rb|go|rs|java|kt|swift|sh)\b/g
 
-/** 验证 / 构建命令锚（逐字沿用 v1）。 */
-const CommandAnchorPatterns = [
-  /\b(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?[A-Za-z0-9_./:-]+(?:\s+[A-Za-z0-9_./:=@-]+){0,5}/g,
-  /\b(?:pytest|jest|vitest|tsc|cargo\s+test|go\s+test)\b(?:\s+[A-Za-z0-9_./:=@-]+){0,5}/g,
-]
+const PackageRunnerCommands = new Set(['bun', 'npm', 'pnpm', 'yarn'])
+const DirectVerificationCommands = new Set(['pytest', 'jest', 'vitest', 'tsc'])
+const CommandArgumentPattern = /^[A-Za-z0-9_./:=@-]+$/u
+
+function unwrapCommandToken(value: string): string {
+  const markdownLinkBoundary = value.indexOf('](')
+  const token = markdownLinkBoundary >= 0 ? value.slice(0, markdownLinkBoundary) : value
+  const openingWrappers = '`([{"\'*<'
+  const closingWrappers = '`)]},;"\'*>.'
+  let start = 0
+  let end = token.length
+  while (start < end && openingWrappers.includes(token[start] ?? '')) start += 1
+  while (end > start && closingWrappers.includes(token[end - 1] ?? '')) end -= 1
+  return token.slice(start, end)
+}
+
+function isCommandContinuation(value: string): boolean {
+  if (!CommandArgumentPattern.test(value)) return false
+  return !CommandAnchorStopWords.has(value.toLowerCase())
+}
+
+function closesWrappedCommand(value: string): boolean {
+  if (value.includes('](')) return true
+  const last = value.at(-1)
+  return last === '`' || last === ')' || last === ']' || last === '}'
+    || last === '"' || last === "'" || last === '*' || last === '>'
+}
+
+function extractCommandAnchors(text: string): string[] {
+  const commands: string[] = []
+  for (const line of text.split('\n')) {
+    const rawTokens = line.trim().split(/\s+/u)
+    const tokens = rawTokens.map(unwrapCommandToken)
+    for (let index = 0; index < tokens.length; index += 1) {
+      const executable = tokens[index] ?? ''
+      let requiredEnd = index + 1
+      if (PackageRunnerCommands.has(executable)) {
+        if (tokens[requiredEnd] === 'run') requiredEnd += 1
+        if (!CommandArgumentPattern.test(tokens[requiredEnd] ?? '')) continue
+        requiredEnd += 1
+      } else if (DirectVerificationCommands.has(executable)) {
+        // 可执行文件名本身已经是有效的验证锚点。
+      } else if ((executable === 'cargo' || executable === 'go') && tokens[requiredEnd] === 'test') {
+        requiredEnd += 1
+      } else {
+        continue
+      }
+
+      let end = requiredEnd
+      while (
+        !closesWrappedCommand(rawTokens[end - 1] ?? '')
+        && end < tokens.length
+        && end - requiredEnd < 5
+        && isCommandContinuation(tokens[end] ?? '')
+      ) {
+        end += 1
+      }
+      commands.push(tokens.slice(index, end).join(' '))
+      index = end - 1
+    }
+  }
+  return commands
+}
 
 /** 命令锚的散文停止词：命令后面接的自然语言不算命令的一部分（逐字沿用 v1）。 */
 const CommandAnchorStopWords = new Set([
@@ -104,11 +162,39 @@ const CommandAnchorStopWords = new Set([
  * 数字锚。三类：带语义前缀的数（exit code 1 / port 5173 / line 42）、点分版本号、
  * 三位以上的裸数（计数与规模）。单个裸数字不收——那是噪声。
  */
+const SemanticNumberPrefixPattern =
+  /\b(?:exit(?:[ \t]+code)?|status|code|port|line|row|column|offset|退出码|端口|行)\b/giu
 const NumberAnchorPatterns = [
-  /\b(?:exit(?:\s+code)?|status|code|port|line|row|column|offset|退出码|端口|行)\s*[:=#]?\s*\d+\b/gi,
   /\bv?\d+\.\d+(?:\.\d+)+\b/g,
   /\b\d{3,}\b/g,
 ]
+
+function extractSemanticNumberAnchors(text: string): string[] {
+  const anchors: string[] = []
+  for (const match of text.matchAll(SemanticNumberPrefixPattern)) {
+    const start = match.index
+    let cursor = start + match[0].length
+    let hasWhitespace = false
+    while (cursor < text.length && /\s/u.test(text[cursor] ?? '')) {
+      hasWhitespace = true
+      cursor += 1
+    }
+    const separator = text[cursor]
+    const hasSeparator = separator === ':' || separator === '=' || separator === '#'
+    if (hasSeparator) {
+      cursor += 1
+      while (cursor < text.length && /\s/u.test(text[cursor] ?? '')) cursor += 1
+    } else if (!hasWhitespace) {
+      continue
+    }
+
+    const digitsStart = cursor
+    while (cursor < text.length && /\d/u.test(text[cursor] ?? '')) cursor += 1
+    if (cursor === digitsStart || /[A-Za-z0-9_]/u.test(text[cursor] ?? '')) continue
+    anchors.push(text.slice(start, cursor))
+  }
+  return anchors
+}
 
 /** 标识符锚：snake_case 与多词 PascalCase/camelCase 符号名（单词普通英文不收）。 */
 const IdentifierAnchorPattern =
@@ -144,12 +230,11 @@ export function extractContextAnchors(
 
   for (const match of scanned.matchAll(FileAnchorPattern)) addAnchor(match[0], 'path')
 
-  for (const pattern of CommandAnchorPatterns) {
-    for (const match of scanned.matchAll(pattern)) addAnchor(trimCommandAnchor(match[0]), 'command')
-  }
+  for (const command of extractCommandAnchors(scanned)) addAnchor(trimCommandAnchor(command), 'command')
 
   for (const match of scanned.matchAll(IdentifierAnchorPattern)) addAnchor(match[0], 'identifier')
 
+  for (const numberAnchor of extractSemanticNumberAnchors(scanned)) addAnchor(numberAnchor, 'number')
   for (const pattern of NumberAnchorPatterns) {
     for (const match of scanned.matchAll(pattern)) addAnchor(match[0], 'number')
   }
@@ -175,7 +260,12 @@ export function anchorDensityPerKiloChar(anchorCount: number, chars: number): nu
 }
 
 function trimCommandAnchor(value: string): string {
-  const normalized = normalizeAnchorText(value).replace(/[.,;，。；]+$/g, '')
+  const trimPunctuation = (text: string): string => {
+    let end = text.length
+    while (end > 0 && '.,;，。；'.includes(text[end - 1] ?? '')) end -= 1
+    return text.slice(0, end)
+  }
+  const normalized = trimPunctuation(normalizeAnchorText(value))
   const tokens = normalized.split(' ').filter(Boolean)
   if (tokens.length <= 2) return normalized
 
@@ -186,8 +276,8 @@ function trimCommandAnchor(value: string): string {
   const stopIndex = tokens.findIndex(
     (token, index) =>
       index >= minimumCommandTokens &&
-      CommandAnchorStopWords.has(token.replace(/[.,;，。；]+$/g, '').toLowerCase())
+      CommandAnchorStopWords.has(trimPunctuation(token).toLowerCase())
   )
   const selected = stopIndex >= 0 ? tokens.slice(0, stopIndex) : tokens
-  return selected.join(' ').replace(/[.,;，。；]+$/g, '')
+  return trimPunctuation(selected.join(' '))
 }

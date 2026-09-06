@@ -118,7 +118,7 @@ class ChatSearchRanking {
    * 全局匹配，collectPathHints 内最多保留 16 条、单条至少 4 字符。
    */
   private readonly pathHintPattern =
-    /[~./\w-]*[\w.-]+\/[\w./-]+|[\w.-]+\.(?:[cm]?[jt]sx?|json|md|css|scss|py|rs|go|java|kt|swift|ya?ml|toml|html|xml|sh|sql|log|txt)/gi;
+    /(?:[~.]?\/)?(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:[cm]?[jt]sx?|json|md|css|scss|py|rs|go|java|kt|swift|ya?ml|toml|html|xml|sh|sql|log|txt)/gi;
 
   /**
    * 标识符 token 正则：JS/TS 风格变量名，至少 3 字符（`\w$` 重复 2 次 + 首字符）。
@@ -376,7 +376,9 @@ class ChatSearchRanking {
   private collectPathHints(text: string): string[] {
     const hints = new Set<string>();
     for (const match of text.matchAll(this.pathHintPattern)) {
-      const value = match[0]?.replace(/[),.;:'"`\]]+$/g, "").toLowerCase();
+      let end = match[0]?.length ?? 0;
+      while (end > 0 && `),.;:'"\`]`.includes(match[0]?.[end - 1] ?? '')) end -= 1;
+      const value = match[0]?.slice(0, end).toLowerCase();
       if (value && value.length >= 4) {
         hints.add(value);
       }

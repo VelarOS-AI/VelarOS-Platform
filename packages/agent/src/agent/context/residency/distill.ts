@@ -373,8 +373,7 @@ export function extractDistilledBody(text: string): string {
   const trimmed = text.trim()
   if (!trimmed) return ''
 
-  const fenceMatch = trimmed.match(/^```(?:json|markdown|md)?\s*([\S\s]*?)\s*```$/i)
-  const unfenced = fenceMatch?.[1]?.trim() ?? trimmed
+  const unfenced = extractDistillFenceBody(trimmed) ?? trimmed
   const start = unfenced.indexOf('{')
   const end = unfenced.lastIndexOf('}')
   if (start < 0 || end <= start) return unfenced
@@ -387,6 +386,19 @@ export function extractDistilledBody(text: string): string {
   }
 
   return unfenced
+}
+
+function extractDistillFenceBody(value: string): Nullable<string> {
+  if (!value.startsWith('```') || !value.endsWith('```') || value.length < 6) return null
+
+  const body = value.slice(3, -3).trim()
+  const lower = body.toLowerCase()
+  for (const language of ['markdown', 'json', 'md']) {
+    if (!lower.startsWith(language)) continue
+    return body.slice(language.length).trim()
+  }
+
+  return body
 }
 
 interface DistillSegment {

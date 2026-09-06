@@ -380,7 +380,7 @@ class QueryLoop<
         resolveGovernanceSessionKey(args.parentCtx.sessionId),
         delegation.identity?.trim() || roleResolution.id,
         Date.now().toString(36),
-        Math.random().toString(36).slice(2),
+        randomUUID(),
       ].join(':')
     // 治理账本键 = 本次派发的上下文作用域。子 agent 与父会话共用 sessionId（那是 PayloadStore 的
     // 分区，动不得），但它跑的是另一条消息序列，共用一本账本会让父子交替编译每轮都整本重建

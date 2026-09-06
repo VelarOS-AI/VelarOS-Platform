@@ -1350,7 +1350,15 @@ export class MemoryTreeRepository {
     // 避免每次召回都做一次数万行的长文本全表匹配拖垮同步路径。
     const likeTerms = (isEmpty(searchTerms) ? [normalizedQuery] : searchTerms)
       .slice(0, 12)
-      .map((term) => `%${term.replace(/[%_]/g, '\\$&')}%`)
+      .map((term) => {
+        let escaped = ''
+        for (const character of term) {
+          escaped += character === '\\' || character === '%' || character === '_'
+            ? `\\${character}`
+            : character
+        }
+        return `%${escaped}%`
+      })
     const likeClause = likeTerms
       .map(() => `(c.summary LIKE ? ESCAPE '\\' OR c.value_json LIKE ? ESCAPE '\\' OR concept.canonical_name LIKE ? ESCAPE '\\')`)
       .join(' OR ')

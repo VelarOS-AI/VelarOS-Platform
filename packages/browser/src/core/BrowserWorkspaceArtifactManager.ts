@@ -316,14 +316,18 @@ function getBrowserSiteOrigin(url: string): Nullable<string> {
 
 /** 将任意标题/路径片段转成安全文件名。 */
 function slugifyArtifactName(value: LooseOptional<string>, fallbackPrefix: string): string {
-  const normalized =
+  const replaced =
     value
       ?.trim()
       .toLowerCase()
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/[^a-z0-9]+/gi, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 80) ?? ''
+      ?? ''
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const normalized = replaced.slice(start, end).slice(0, 80)
 
   if (normalized) return normalized
 

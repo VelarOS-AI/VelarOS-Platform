@@ -3,6 +3,8 @@ import { z } from "zod";
 import { renderParameterDescription as parameterDescription } from "@velaros-ai/agent/tool-contract";
 import { requiredResultLimit } from "@velaros-ai/agent/tool-contract";
 
+import { encodeBrowserScriptStringLiteral } from "../core/BrowserScriptLiteral";
+
 export const browserReadPageStorageSchema = z.object({
   includeLocalStorage: z
     .boolean()
@@ -275,8 +277,8 @@ export type BrowserReadPageDataInput = z.infer<
 export function normalizeBrowserReadPageData(
   input: BrowserReadPageDataInput,
 ): BrowserEvaluateScriptInput {
-  const selector = JSON.stringify(input.selector ?? "");
-  const attribute = JSON.stringify(input.attribute ?? "");
+  const selector = encodeBrowserScriptStringLiteral(input.selector ?? "");
+  const attribute = encodeBrowserScriptStringLiteral(input.attribute ?? "");
   const maxChars = input.maxChars ?? 4000;
   const limit = input.limit ?? 20;
 

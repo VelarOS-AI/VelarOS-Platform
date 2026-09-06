@@ -298,7 +298,9 @@ export class ProviderModelCatalogService {
   }
 
   private appendPath(baseURL: string, path: string): string {
-    const url = new URL(`${baseURL.replace(/\/+$/u, '')}/${path}`)
+    let end = baseURL.length
+    while (end > 0 && baseURL[end - 1] === '/') end -= 1
+    const url = new URL(`${baseURL.slice(0, end)}/${path}`)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new AppError('VALIDATION', `模型目录地址协议不受支持：${url.protocol}`)
     }

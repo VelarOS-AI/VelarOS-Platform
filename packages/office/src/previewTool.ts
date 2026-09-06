@@ -9,12 +9,20 @@ import type { SKRSContext2D } from '@napi-rs/canvas'
 import ExcelJS, { type CellValue } from 'exceljs'
 import JSZip from 'jszip'
 import mammothPackage from 'mammoth'
+import { type DefaultTreeAdapterTypes, parseFragment, serialize } from 'parse5'
 import { z } from 'zod'
 
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
-import { isArray,isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
 
 import {
   AppError,
@@ -704,38 +712,190 @@ export function getOfficePartNumber(name: string): number {
   return Number(name.match(/(\d+)\.xml$/)?.[1] ?? 0)
 }
 
-/**
- * 剥掉转换产物里的可执行内容。
- *
- * 判据（§5.3b ④安全门 / ⑥非显然妥协）——mammoth 的输出会被写成 `.html` 落到用户工作区，
- * 用户随后**在浏览器里打开它**；文档本身可能来自邮件或下载，因此必须当不可信内容处理。
- * 这里是正则剥离而不是真正的 HTML 解析器：判据是威胁模型有限（file:// 本地页面、无凭据、
- * 无同源资源可偷）+ 不想为预览引入一个 DOM 解析依赖。**替代方案（引 sanitize-html）被否**
- * 是因为它会把这个按需能力的体积成本摊到整包上。
- * 边界：这条防线只针对"文档里夹带脚本"，**不足以**用来渲染任意来源的 HTML；
- * 若将来把预览产物挂进应用内 webview（同源、有凭据），必须换成真解析器再谈。
- */
+const PreviewAllowedTags = new Set([
+  'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2', 'h3',
+  'h4', 'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 's', 'section',
+  'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead',
+  'tr', 'u', 'ul',
+])
+const PreviewDropWithContentTags = new Set([
+  'applet', 'audio', 'base', 'embed', 'form', 'frame', 'frameset', 'iframe', 'input',
+  'link', 'math', 'meta', 'noscript', 'object', 'script', 'style', 'svg', 'template',
+  'video',
+])
+const PreviewAllowedClasses = new Set(['abstract', 'subtitle'])
+const PreviewRasterDataMimeTypes = new Set(['gif', 'jpeg', 'png', 'webp'])
+const MaxPreviewImageDataUrlChars = 8 * 1024 * 1024
+
+function isSafePreviewRasterDataUrl(value: string): boolean {
+  if (value.length > MaxPreviewImageDataUrlChars) return false
+  const comma = value.indexOf(',')
+  if (comma < 0) return false
+  const metadata = value.slice(0, comma).toLowerCase()
+  const mimePrefix = 'data:image/'
+  const suffix = ';base64'
+  if (!metadata.startsWith(mimePrefix) || !metadata.endsWith(suffix)) return false
+  const mimeType = metadata.slice(mimePrefix.length, -suffix.length)
+  if (!PreviewRasterDataMimeTypes.has(mimeType)) return false
+
+  const payload = value.slice(comma + 1)
+  if (!payload || payload.length % 4 !== 0) return false
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0
+  for (let index = 0; index < payload.length - padding; index += 1) {
+    const code = payload.charCodeAt(index)
+    const isBase64Character = (code >= 48 && code <= 57)
+      || (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || code === 43
+      || code === 47
+    if (!isBase64Character) return false
+  }
+  for (let index = payload.length - padding; index < payload.length; index += 1) {
+    if (payload[index] !== '=') return false
+  }
+  return true
+}
+
+function isSafePreviewDimension(value: string): boolean {
+  if (!/^\d{1,4}$/u.test(value)) return false
+  const dimension = Number(value)
+  return dimension >= 1 && dimension <= 8192
+}
+
+function isSafePreviewClassList(value: string): boolean {
+  const tokens = value.trim().split(/\s+/u)
+  return !isEmpty(tokens) && tokens.every((token) => PreviewAllowedClasses.has(token))
+}
+
+function isSafePreviewHref(value: string): boolean {
+  const normalized = value.trim()
+  if (!normalized) return false
+  if (normalized.startsWith('#')) return true
+  if (!URL.canParse(normalized)) return false
+  const parsed = new URL(normalized)
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:'
+}
+
+function sanitizePreviewChildren(parent: DefaultTreeAdapterTypes.ParentNode): void {
+  for (let index = 0; index < parent.childNodes.length;) {
+    const node = parent.childNodes[index]
+    if (!node) break
+
+    if (node.nodeName === '#comment' || node.nodeName === '#documentType') {
+      parent.childNodes.splice(index, 1)
+      continue
+    }
+    if (node.nodeName === '#text') {
+      index += 1
+      continue
+    }
+
+    const element = node as DefaultTreeAdapterTypes.Element
+    const tagName = element.tagName.toLowerCase()
+    if (PreviewDropWithContentTags.has(tagName)) {
+      parent.childNodes.splice(index, 1)
+      continue
+    }
+    if (tagName === 'img') {
+      const source = element.attrs.find((attribute) => attribute.name.toLowerCase() === 'src')
+      if (!source || !isSafePreviewRasterDataUrl(source.value)) {
+        parent.childNodes.splice(index, 1)
+        continue
+      }
+    }
+
+    sanitizePreviewChildren(element)
+    if (!PreviewAllowedTags.has(tagName)) {
+      for (const child of element.childNodes) child.parentNode = parent
+      parent.childNodes.splice(index, 1, ...element.childNodes)
+      index += element.childNodes.length
+      continue
+    }
+
+    element.attrs = element.attrs.filter((attribute) => {
+      const name = attribute.name.toLowerCase()
+      if (name === 'class') return isSafePreviewClassList(attribute.value)
+      if (tagName === 'a' && name === 'href') return isSafePreviewHref(attribute.value)
+      if (tagName === 'a' && name === 'title') return true
+      if (tagName === 'img' && name === 'src') return isSafePreviewRasterDataUrl(attribute.value)
+      if (tagName === 'img' && (name === 'alt' || name === 'title')) return true
+      if (tagName === 'img' && (name === 'width' || name === 'height'))
+        return isSafePreviewDimension(attribute.value)
+      if ((tagName === 'td' || tagName === 'th') && (name === 'colspan' || name === 'rowspan'))
+        return /^\d{1,3}$/u.test(attribute.value)
+      return false
+    })
+    index += 1
+  }
+}
+
+/** Parse and allowlist Mammoth HTML before writing a browser-openable preview. */
 export function sanitizePreviewHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/href\s*=\s*(['"])\s*javascript:[\s\S]*?\1/gi, 'href="#"')
+  const fragment = parseFragment(html)
+  sanitizePreviewChildren(fragment)
+  return serialize(fragment)
 }
 
 export function htmlToText(html: string): string {
-  return decodeHtmlText(html.replace(/<[^>]*>/g, ' '))
+  const fragment = parseFragment(html)
+  const parts: string[] = []
+  const visit = (node: DefaultTreeAdapterTypes.Node): void => {
+    if (node.nodeName === '#text') {
+      parts.push((node as DefaultTreeAdapterTypes.TextNode).value)
+      return
+    }
+    if ('childNodes' in node) {
+      parts.push(' ')
+      for (const child of node.childNodes) visit(child)
+      parts.push(' ')
+    }
+  }
+  visit(fragment)
+  return parts.join(' ')
 }
 
 export function decodeHtmlText(text: string): string {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+  const namedEntities: Record<string, string> = {
+    amp: '&', apos: "'", gt: '>', lt: '<', nbsp: '\u00a0', quot: '"',
+  }
+  let decoded = ''
+  for (let index = 0; index < text.length;) {
+    if (text[index] !== '&') {
+      decoded += text[index]
+      index += 1
+      continue
+    }
+
+    const end = text.indexOf(';', index + 1)
+    if (end < 0 || end - index > 12) {
+      decoded += '&'
+      index += 1
+      continue
+    }
+
+    const entity = text.slice(index + 1, end)
+    let replacement = namedEntities[entity]
+    if (!replacement && entity.startsWith('#')) {
+      const hexadecimal = entity[1]?.toLowerCase() === 'x'
+      const digits = entity.slice(hexadecimal ? 2 : 1)
+      const validDigits = hexadecimal ? /^[0-9a-f]+$/iu.test(digits) : /^\d+$/u.test(digits)
+      if (validDigits) {
+        const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10)
+        replacement = codePoint > 0 && codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+          ? String.fromCodePoint(codePoint)
+          : '\ufffd'
+      }
+    }
+
+    if (isUndefined(replacement)) {
+      decoded += '&'
+      index += 1
+      continue
+    }
+    decoded += replacement
+    index = end + 1
+  }
+  return decoded
 }
 
 export const decodeXmlText = decodeHtmlText

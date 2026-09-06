@@ -342,6 +342,12 @@ void describe('I2 蒸馏 · 验证与回落（骨架永远是保底）', () => {
 
   void test('解析容错：Markdown 围栏与 {"summary":…} 都能取出正文', () => {
     assert.equal(extractDistilledBody('```json\n{"summary":"正文"}\n```'), '正文')
+    assert.equal(extractDistilledBody('```json {"summary":"单行正文"}```'), '单行正文')
+    assert.equal(extractDistilledBody('```json{"summary":"无分隔正文"}```'), '无分隔正文')
+    assert.equal(extractDistilledBody('```markdown 单行 Markdown 正文```'), '单行 Markdown 正文')
+    assert.equal(extractDistilledBody('```markdown无分隔 Markdown 正文```'), '无分隔 Markdown 正文')
+    assert.equal(extractDistilledBody('```md无分隔短标记正文```'), '无分隔短标记正文')
+    assert.equal(extractDistilledBody('```markdown\n多行 Markdown 正文\n```'), '多行 Markdown 正文')
     assert.equal(extractDistilledBody('```\n纯文本正文\n```'), '纯文本正文')
     assert.equal(extractDistilledBody('  没包装的正文  '), '没包装的正文')
   })

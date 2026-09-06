@@ -17,4 +17,4 @@
 `contents:write`、`pull_requests:write` 和 GitHub Packages `read` 权限。凭据缺失、包未发布、
 锁文件污染、安装失败或消费仓验证失败都会让对应矩阵项失败，不创建 PR。
 
-正式远程清单包含 Desktop、Workbench、Termel、VelarOS Labs 和 VelarScript Editor。
+正式远程清单包含 Desktop、Workbench、Termel 和 VelarOS Labs。

@@ -37,6 +37,9 @@ describe('project approval context', () => {
       'rm -f -r ./victim',
       'rm --recursive --force ./victim',
       'rm -r --force ./victim',
+      'RM -RF /',
+      '/bin/RM -Rf /',
+      'RM --RECURSIVE --FORCE /',
     ]) {
       const plan = analyzeCommandExecution(command)
       expect(plan.isDangerous).toBe(true)

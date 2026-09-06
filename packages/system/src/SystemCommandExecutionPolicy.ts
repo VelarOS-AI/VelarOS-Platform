@@ -140,16 +140,17 @@ function hasDangerousRecursiveForceRemove(command: string): boolean {
   return command.split(/&&|\|\||[;|\r\n]/).some((segment) => {
     const tokens = tokenize(segment.trim())
     return tokens.some((token, index) => {
-      if (token.split('/').at(-1) !== 'rm') return false
+      if (token.split('/').at(-1)?.toLowerCase() !== 'rm') return false
       let recursive = false
       let force = false
       for (const argument of tokens.slice(index + 1)) {
         if (argument === '--') break
-        if (argument === '--recursive') recursive = true
-        if (argument === '--force') force = true
+        const normalizedArgument = argument.toLowerCase()
+        if (normalizedArgument === '--recursive') recursive = true
+        if (normalizedArgument === '--force') force = true
         if (argument.startsWith('-') && !argument.startsWith('--')) {
-          const shortOptions = argument.slice(1)
-          recursive ||= shortOptions.includes('r') || shortOptions.includes('R')
+          const shortOptions = normalizedArgument.slice(1)
+          recursive ||= shortOptions.includes('r')
           force ||= shortOptions.includes('f')
         }
         if (recursive && force) return true
@@ -204,7 +205,7 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
   }
   const dangerousReason =
     hasDangerousRecursiveForceRemove(trimmed)
-      || /\brm\s+(?:-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\b|\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
+      || /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
       || windowsDestructivePatterns.some((pattern) => pattern.test(trimmed))
       ? '该命令可能删除数据、破坏文件系统或终止关键进程。'
       : /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(trimmed)

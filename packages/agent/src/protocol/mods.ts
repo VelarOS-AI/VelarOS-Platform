@@ -36,7 +36,6 @@ type SemverComparator =
   | { kind: '^' | '~'; version: SemverVersion }
 
 const SemverVersionPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u
-const SemverComparatorPattern = /^(\^|~|>=|<=|>|<|=)?\s*(.+)$/u
 
 /** 解析 `x.y.z`（预发布/构建元数据被忽略）；非法返回 null。 */
 function parseSemverVersion(text: string): Nullable<SemverVersion> {
@@ -58,11 +57,11 @@ function compareSemver(left: SemverVersion, right: SemverVersion): number {
 function parseSemverComparator(text: string): Nullable<SemverComparator> {
   const trimmed = text.trim()
   if (isEmpty(trimmed) || trimmed === '*' || trimmed === 'x') return { kind: 'any' }
-  const match = SemverComparatorPattern.exec(trimmed)
-  if (!match) return null
-  const version = parseSemverVersion(match[2] ?? '')
+  const operators = ['>=', '<=', '^', '~', '>', '<', '='] as const
+  const operator = operators.find((candidate) => trimmed.startsWith(candidate))
+  const version = parseSemverVersion(trimmed.slice(operator?.length ?? 0).trim())
   if (!version) return null
-  const kind = (match[1] ?? '=') as Exclude<SemverComparator, { kind: 'any' }>['kind']
+  const kind = operator ?? '='
   return { kind, version }
 }
 

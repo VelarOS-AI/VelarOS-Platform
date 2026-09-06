@@ -25,10 +25,40 @@ function isProjectTargetDetail(detail: Nullable<string>): boolean {
 
   if (!normalized) return false
 
-  return (
-    /^(写入|保存|输出|生成到).*(system|系统|session|会话).*(工区|工作区)$/.test(normalized) ||
-    /^(write|save|output|export).*\b(system workspace|system work area)\b/.test(normalized)
-  )
+  const chineseAction = ['写入', '保存', '输出', '生成到'].find((value) => normalized.startsWith(value))
+  if (chineseAction) {
+    const hasTarget = ['system', '系统', 'session', '会话']
+      .some((value) => normalized.includes(value, chineseAction.length))
+    return hasTarget
+      && (normalized.endsWith('工区') || normalized.endsWith('工作区'))
+  }
+
+  const englishAction = ['write', 'save', 'output', 'export'].some((value) => normalized.startsWith(value))
+  return englishAction
+    && (includesAsciiWordPhrase(normalized, 'system workspace')
+      || includesAsciiWordPhrase(normalized, 'system work area'))
+}
+
+function includesAsciiWordPhrase(value: string, phrase: string): boolean {
+  let cursor = 0
+  while (cursor <= value.length - phrase.length) {
+    const index = value.indexOf(phrase, cursor)
+    if (index < 0) return false
+    const before = value[index - 1]
+    const after = value[index + phrase.length]
+    if (!isAsciiWordCharacter(before) && !isAsciiWordCharacter(after)) return true
+    cursor = index + 1
+  }
+  return false
+}
+
+function isAsciiWordCharacter(value: LooseOptional<string>): boolean {
+  if (!value) return false
+  const code = value.charCodeAt(0)
+  return value === '_'
+    || (code >= 48 && code <= 57)
+    || (code >= 65 && code <= 90)
+    || (code >= 97 && code <= 122)
 }
 
 function getVisiblePlanObjective(step: PlanToolStepPreview): Nullable<string> {

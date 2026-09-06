@@ -97,10 +97,14 @@ export interface RemoteNodeProjectionInput {
  * id 需要的是唯一与稳定,不是可读——可读性由 `hostName` 自己承担。
  */
 export function slugifyRemoteHostName(hostName: string): string {
-  const slug = hostName
+  const replaced = hostName
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, '-')
-    .replaceAll(/^-+|-+$/gu, '')
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const slug = replaced.slice(start, end)
   if (isNonBlankString(slug)) return slug
   return `host-${createHash('sha256').update(hostName).digest('hex').slice(0, 8)}`
 }

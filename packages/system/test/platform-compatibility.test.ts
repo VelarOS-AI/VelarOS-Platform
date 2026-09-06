@@ -50,6 +50,29 @@ describe('SystemPlatformCompatibility', () => {
       file: 'C:\\Windows\\System32\\cmd.exe',
       args: ['/d', '/s', '/c', 'echo ready'],
     })
+    expect(new SystemPlatformCompatibility({
+      platform: 'win32',
+      env: { ComSpec: 'C:\\Users\\attacker\\cmd.exe' },
+    }).getOpenExternalFallbackSpec('https://example.com')).toEqual({
+      file: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/c', 'start', '', 'https://example.com'],
+    })
+    expect(new SystemPlatformCompatibility({
+      platform: 'win32',
+      env: {
+        ComSpec: 'cmd.exe',
+        COMSPEC: 'powershell.exe',
+        SystemRoot: 'D:\\CustomWindows',
+      },
+    }).getShellCommandSpec('echo ready').file).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(new SystemPlatformCompatibility({
+      platform: 'win32',
+      env: { ComSpec: '.\\cmd.exe', WINDIR: 'relative-root' },
+    }).getPreferredShellPath()).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(new SystemPlatformCompatibility({
+      platform: 'win32',
+      env: { ComSpec: 'E:\\Tools\\not-cmd.exe' },
+    }).getOpenApplicationCommandSpec('notepad.exe').file).toBe('C:\\Windows\\System32\\cmd.exe')
     expect(windows.getDirectorySymlinkType()).toBe('junction')
     expect(windows.shouldUseDetachedProcessGroup()).toBe(false)
 

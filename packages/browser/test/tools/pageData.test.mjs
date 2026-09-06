@@ -45,3 +45,31 @@ test("controlled page data execution only forwards owner-generated scripts", asy
   assert.match(forwarded.script, /text\.slice\(0, 120\)/u);
   assert.equal("preset" in forwarded, false);
 });
+
+test("controlled selector data is encoded as inert JavaScript source", async () => {
+  const { browserTools } = await import(packagePath.href);
+  let forwarded;
+  const selector = `a');globalThis.pwned=true;//\n\u2028${'`'}${'${alert(1)}'}`;
+
+  await browserTools["browser:read_page_data"].execute(
+    { preset: "selector_count", selector },
+    {
+      abortSignal: { throwIfAborted() {} },
+      browser: {
+        isActive: () => true,
+        evaluateScript: async (input) => {
+          forwarded = input;
+          return { count: 0 };
+        },
+      },
+    },
+  );
+
+  assert.equal(forwarded.script.includes(selector), false);
+  assert.equal(forwarded.script.includes("globalThis.pwned"), false);
+  const functionBody = new Function("document", forwarded.script);
+  assert.deepEqual(functionBody({ querySelectorAll: (received) => {
+    assert.equal(received, selector);
+    return [];
+  } }), { count: 0 });
+});

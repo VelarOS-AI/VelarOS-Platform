@@ -81,7 +81,7 @@ void describe('context residency ledger · anchors', () => {
     const texts = anchors.map((anchor) => anchor.text)
     assert.ok(texts.includes('packages/agent/src/index.ts'))
     // 命令锚逐字沿用 v1 的停止词裁剪：散文停止词（and/or/then…）才断，介词不断。
-    assert.ok(texts.some((anchor) => anchor.startsWith('bun run check')))
+    assert.ok(texts.includes('bun run check on packages/agent/src/index.ts'))
     assert.ok(texts.includes('ContextResidencyLedger'))
     assert.ok(texts.some((anchor) => anchor.toLowerCase().includes('exit code 3')))
     assert.deepEqual(anchors, extractContextAnchors(text))
@@ -93,6 +93,52 @@ void describe('context residency ledger · anchors', () => {
     assert.deepEqual(anchors.find((anchor) => anchor.text.startsWith('bun run'))?.kind, 'command')
     assert.deepEqual(anchors.find((anchor) => anchor.text === 'ContextResidencyLedger')?.kind, 'identifier')
   })
+
+  void test('recognizes Markdown-wrapped commands without consuming surrounding prose', () => {
+    const anchors = extractContextAnchors(
+      'Run `bun run check` then explain the result; use (npm test) afterwards and `pytest tests/unit.py -q` passed.'
+    ).filter((anchor) => anchor.kind === 'command')
+
+    assert.deepEqual(anchors.map((anchor) => anchor.text), [
+      'bun run check',
+      'npm test',
+      'pytest tests/unit.py -q',
+    ])
+  })
+
+  void test('preserves ordinary positional command arguments until a prose stop word', () => {
+    const commands = extractContextAnchors(
+      'bun test foo and report; bun run check on packages/agent then explain.'
+    ).filter((anchor) => anchor.kind === 'command')
+
+    assert.deepEqual(commands.map((anchor) => anchor.text), [
+      'bun test foo',
+      'bun run check on packages/agent',
+    ])
+  })
+
+  for (const [source, expected] of [
+    ['"bun run check" afterwards', 'bun run check'],
+    ["'npm test' afterwards", 'npm test'],
+    ['**pnpm run build** afterwards', 'pnpm run build'],
+    ['[yarn test](https://example.com) afterwards', 'yarn test'],
+    ['<pytest tests/unit.py> afterwards', 'pytest tests/unit.py'],
+  ] as const) {
+    void test(`stops a wrapped command at its closing boundary: ${expected}`, () => {
+      const commands = extractContextAnchors(source).filter((anchor) => anchor.kind === 'command')
+      assert.deepEqual(commands.map((anchor) => anchor.text), [expected])
+    })
+  }
+
+  for (const [source, expected] of [
+    ['exit code\n1', 'exit code 1'],
+    ['line\r\n42', 'line 42'],
+    ['port:\n5173', 'port: 5173'],
+  ] as const) {
+    void test(`preserves a semantic number across line endings: ${expected}`, () => {
+      assert.deepEqual(extractContextAnchors(source, 1), [{ text: expected, kind: 'number' }])
+    })
+  }
 })
 
 void describe('context residency ledger · admission (§4A)', () => {
