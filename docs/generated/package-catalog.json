@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.11",
+      "version": "0.6.12",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -67,7 +67,7 @@
       "domain": "capabilities",
       "directory": "packages/computer",
       "name": "@velaros-ai/computer",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
       "exportSubpaths": [
         "./contracts",

@@ -5,7 +5,8 @@ import {
   extractSerializationHintsFromToolInput,
   serializeToolResultForModel,
 } from '@velaros-ai/agent'
-import { isEmpty,isFalse, toNullable } from '@velaros-ai/core'
+import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
+import { isEmpty, isFalse, toNullable } from '@velaros-ai/core'
 
 interface AgentTurnToolResult {
   toolCallId: string
@@ -18,6 +19,7 @@ interface AgentTurnToolResult {
     data: string
     mediaType: string
   }
+  modelContent?: ToolResultModelContentPart[]
 }
 
 interface AgentTurnToolExecutor {
@@ -74,17 +76,19 @@ class TurnHistory {
     executor: AgentTurnToolExecutor
   ): Promise<AgentTurnToolResult[]> {
     const toolResults = await executor.collectAll()
-    const latestModelImageToolCallId = [...toolResults]
-      .reverse()
-      .find((result) => !!result.modelImage)?.toolCallId
     history.push({
       role: 'tool',
-      content: toolResults.map((result) => ({
-        type: 'tool-result' as const,
-        toolCallId: result.toolCallId,
-        toolName: result.toolName,
-        output: result.error
-          ? {
+      content: toolResults.map((result) => {
+        const serializedResult = agentToolResultHelper.serializeForModel(
+          toNullable(result.modelResult ?? result.result),
+          result.args
+        )
+        if (result.error)
+          return {
+            type: 'tool-result' as const,
+            toolCallId: result.toolCallId,
+            toolName: result.toolName,
+            output: {
               type: 'error-text' as const,
               value: agentToolResultHelper.serializeForModel(
                 toNullable(result.modelResult ?? result.result) ?? {
@@ -94,33 +98,44 @@ class TurnHistory {
                 },
                 result.args
               ),
-            }
-          : result.modelImage && result.toolCallId === latestModelImageToolCallId
-            ? {
-                type: 'content' as const,
-                value: [
-                  {
-                    type: 'text' as const,
-                    text: agentToolResultHelper.serializeForModel(
-                      toNullable(result.modelResult ?? result.result),
-                      result.args
-                    ),
-                  },
-                  {
-                    type: 'image-data' as const,
-                    data: result.modelImage.data,
-                    mediaType: result.modelImage.mediaType,
-                  },
-                ],
-              }
-            : {
-                type: 'text' as const,
-                value: agentToolResultHelper.serializeForModel(
-                  toNullable(result.modelResult ?? result.result),
-                  result.args
-                ),
-              },
-      })),
+            },
+          }
+
+        const modelContent = [...(result.modelContent ?? [])]
+        if (result.modelImage && !modelContent.some((part) =>
+          part.type === 'image-data' &&
+          part.data === result.modelImage?.data &&
+          part.mediaType === result.modelImage.mediaType
+        )) {
+          modelContent.push({
+            type: 'image-data',
+            data: result.modelImage.data,
+            mediaType: result.modelImage.mediaType,
+          })
+        }
+
+        const modelContentText = modelContent
+          .filter((part): part is Extract<ToolResultModelContentPart, { type: 'text' }> =>
+            part.type === 'text'
+          )
+          .map((part) => part.text)
+          .join('\n')
+          .trim()
+        const modelContentRepresentsResult = !!modelContentText &&
+          agentToolResultHelper.serializeForModel(modelContentText, result.args) === serializedResult
+        const providerContent = modelContentRepresentsResult
+          ? modelContent
+          : [{ type: 'text' as const, text: serializedResult }, ...modelContent]
+
+        return {
+          type: 'tool-result' as const,
+          toolCallId: result.toolCallId,
+          toolName: result.toolName,
+          output: !isEmpty(modelContent)
+            ? { type: 'content' as const, value: providerContent }
+            : { type: 'text' as const, value: serializedResult },
+        }
+      }),
     })
 
     const terminalError = executor.getTerminalError()
@@ -185,6 +200,6 @@ class TurnHistory {
   }
 }
 
-export { agentToolResultHelper, ToolResults,TurnHistory }
+export { agentToolResultHelper, ToolResults, TurnHistory }
 export type { AgentTurnToolExecutor, AgentTurnToolResult }
-export { ToolResults as AgentToolResultHelper,TurnHistory as AgentTurnHistoryHelper }
+export { ToolResults as AgentToolResultHelper, TurnHistory as AgentTurnHistoryHelper }

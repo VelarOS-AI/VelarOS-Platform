@@ -80,14 +80,14 @@ export interface SanitizeModelHistoryOptions {
   stripProviderSpecificMetadata?: boolean
 }
 
-const MaxRecentToolResultContentImagesToKeep = 1
+const MaxRecentToolResultContentMessagesToKeep = 1
 
 const HistoricalImagePlaceholder =
   '[historical image bytes omitted only from this later provider replay; the image may have been visible in its original turn]'
 const HistoricalFilePlaceholder =
   '[historical file bytes omitted only from this later provider replay; the file may have been available in its original turn]'
-const HistoricalToolImagePlaceholder =
-  '[historical tool image bytes omitted only from this later provider replay; it may have been visible in the original tool result; use the artifact reference in this tool result instead]'
+const HistoricalToolMediaPlaceholder =
+  '[historical tool media bytes omitted only from this later provider replay; they may have been visible or audible in the original tool result; use the artifact reference in this tool result instead]'
 const InvalidTextSurrogatePattern =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 const EmptyResponseReplayPrefixes = [
@@ -919,11 +919,15 @@ function pruneToolResultBinaryContentForProvider(
     })
   })
 
-  if (references.length <= MaxRecentToolResultContentImagesToKeep) return { history, changedMessages: 0 }
+  const messageIndexes = [...new Set(references.map((reference) => reference.messageIndex))]
+  if (messageIndexes.length <= MaxRecentToolResultContentMessagesToKeep)
+    return { history, changedMessages: 0 }
 
+  const recentMessageIndexes = messageIndexes.slice(-MaxRecentToolResultContentMessagesToKeep)
+  const protectedMessageIndexes = new Set(recentMessageIndexes)
   const protectedKeys = new Set(
     references
-      .slice(-MaxRecentToolResultContentImagesToKeep)
+      .filter((reference) => protectedMessageIndexes.has(reference.messageIndex))
       .map((reference) => `${reference.messageIndex}:${reference.partIndex}`)
   )
   let changedMessages = 0
@@ -946,7 +950,7 @@ function pruneToolResultBinaryContentForProvider(
           ...output,
           value: output.value.map((contentPart) =>
             isToolResultBinaryContentPart(contentPart)
-              ? { type: 'text', text: HistoricalToolImagePlaceholder }
+              ? { type: 'text', text: HistoricalToolMediaPlaceholder }
               : contentPart
           ),
         },

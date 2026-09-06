@@ -4,6 +4,7 @@ import type {
   StreamToolResultEffects,
   ToolCategoryDefinition,
   ToolCategoryId,
+  ToolResultModelContentPart,
 } from '@velaros-ai/agent/protocol'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
@@ -43,6 +44,8 @@ export interface ToolResultModelImage {
 
 export interface ToolResultMiddlewareResult {
   result: unknown
+  /** Ordered provider-visible blocks appended by this middleware. */
+  modelContent?: readonly ToolResultModelContentPart[]
   modelImage?: ToolResultModelImage
   effects?: StreamToolResultEffects
   notices?: Array<Extract<AgentEvent, { type: 'notice' }>>

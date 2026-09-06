@@ -53,11 +53,15 @@ thirdPartyAgent.registerMany(Object.values(computerTools), () => ({
 
 ## 生命周期与并发
 
-工具定义无状态。每次调用由宿主创建 context;并发、排队与资源互斥由注入的 `ToolComputerApi` 负责。
+工具定义本身无状态。截图坐标绑定由注入的 runtime 持有：`computer:screenshot` 返回 `snapshotId`，
+`primary-display` 的 `computer:click` 必须原样带回；runtime 要在真实输入前校验该截图仍属于当前主屏
+布局。内置 helper 用有界表保存最近 32 个绑定，主屏、尺寸、缩放或原点变化后拒绝旧坐标。
+每次调用由宿主创建 context；并发、排队与资源互斥也由注入的 `ToolComputerApi` 负责。
 
 ## 错误模型
 
-输入由 Zod 在执行边界校验。环境不可用以 `ComputerAvailability` **返回**(不抛);
+输入由 Zod 在执行边界校验。缺少、过期或布局不匹配的 `snapshotId` 以 `VALIDATION` 抛出，Agent 应
+重新截图而不是重试旧点击。环境不可用以 `ComputerAvailability` **返回**(不抛);
 运行失败由注入的 API 抛出。**审批拒绝与取消要保持独立错误码**,不要压成普通执行失败
 ——否则重试逻辑会把用户的「不同意」当成偶发故障再试一次。
 

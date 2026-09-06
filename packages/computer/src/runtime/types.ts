@@ -47,6 +47,8 @@ export interface ComputerScreenSize {
 export interface ComputerScreenshot {
   base64: string
   format: 'jpeg'
+  /** Opaque binding required when a tool clicks a point measured from this screenshot. */
+  snapshotId: string
   /** 图片宽度（逻辑分辨率，等于 displayWidth）；模型工具把该局部坐标加 originX 后执行点击。 */
   width: number
   /** 图片高度（逻辑分辨率，等于 displayHeight）；模型工具把该局部坐标加 originY 后执行点击。 */
@@ -69,7 +71,33 @@ export interface ComputerClickResult {
   y: number
   button: string
   count: number
+  coordinateSpace?: ComputerCoordinateSpace
+  displayId?: number
+  snapshotId?: string
 }
+
+export type ComputerCoordinateSpace = 'primary-display' | 'global'
+
+interface ComputerClickModifiers {
+  button?: 'left' | 'right' | 'middle'
+  count?: number
+}
+
+export interface ComputerGlobalClickOptions extends ComputerClickModifiers {
+  /** Omission remains a global-coordinate click for direct runtime compatibility. */
+  coordinateSpace?: 'global'
+  snapshotId?: never
+}
+
+export interface ComputerPrimaryDisplayClickOptions extends ComputerClickModifiers {
+  coordinateSpace: 'primary-display'
+  /** Opaque identifier returned by the screenshot that supplied x/y. */
+  snapshotId: string
+}
+
+export type ComputerClickOptions =
+  | ComputerGlobalClickOptions
+  | ComputerPrimaryDisplayClickOptions
 
 export interface ComputerTypeResult {
   typed: number

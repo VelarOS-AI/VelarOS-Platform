@@ -17,6 +17,7 @@ import {
 } from './ComputerSidecarManager'
 import type {
   ComputerAvailability,
+  ComputerClickOptions,
   ComputerClickResult,
   ComputerKeyResult,
   ComputerMoveResult,
@@ -25,7 +26,7 @@ import type {
   ComputerTypeResult,
 } from './types'
 
-export const ComputerKernelModuleVersion = '0.2.7'
+export const ComputerKernelModuleVersion = '0.2.8'
 
 export interface ComputerRuntimePort {
   isReady(): boolean
@@ -36,7 +37,7 @@ export interface ComputerRuntimePort {
   leftClick(
     x: number,
     y: number,
-    options?: { button?: 'left' | 'right' | 'middle'; count?: number },
+    options?: ComputerClickOptions,
   ): Promise<ComputerClickResult>
   typeText(text: string): Promise<ComputerTypeResult>
   key(keys: string): Promise<ComputerKeyResult>
@@ -107,40 +108,88 @@ function parseEmptyInput(input: unknown): void {
 }
 
 function parseCoordinateInput(input: unknown): { x: number; y: number } {
-  return readCoordinates(parseStrictObject(input, ['x', 'y']))
+  return readCoordinates(parseStrictObject(input, ['x', 'y']), true)
 }
 
-function readCoordinates(record: Readonly<Record<string, unknown>>): {
+function readCoordinates(
+  record: Readonly<Record<string, unknown>>,
+  allowNegative: boolean,
+): {
   x: number
   y: number
 } {
-  return { x: readCoordinate(record.x, 'x'), y: readCoordinate(record.y, 'y') }
+  return {
+    x: readCoordinate(record.x, 'x', allowNegative),
+    y: readCoordinate(record.y, 'y', allowNegative),
+  }
 }
 
-function readCoordinate(value: unknown, field: string): number {
-  // 只设下界不设上界：屏幕分辨率是运行期事实，上界归 sidecar 与工具 schema，这里越权钉死会在
-  // 高分屏/多显示器上误拒合法坐标。
-  if (!isFiniteNumber(value) || value < 0)
-    throw invalidCapabilityInput(field, 'expected a finite number >= 0')
+function readCoordinate(value: unknown, field: string, allowNegative: boolean): number {
+  // 虚拟桌面的全局原点可落在任意显示器，负坐标合法；只有截图内的主屏局部坐标要求非负。
+  // 不设固定上界：屏幕分辨率是运行期事实，上界由 snapshot helper 对实际截图校验。
+  if (!isFiniteNumber(value) || (!allowNegative && value < 0))
+    throw invalidCapabilityInput(
+      field,
+      allowNegative ? 'expected a finite number' : 'expected a finite number >= 0',
+    )
   return value
 }
 
-function parseClickInput(input: unknown): {
-  x: number
-  y: number
-  button?: ClickButton
-  count?: number
-} {
-  const record = parseStrictObject(input, ['x', 'y', 'button', 'count'])
-  const { x, y } = readCoordinates(record)
-  // 省略（`undefined`）是合法的「不指定」；`null` 或任何别的值都是错误输入。缺席用 null 在包内传递，
-  // 到出口处一次 toOptional 归一（§1.5：null↔undefined 只在边界转一次）。
-  return {
-    x,
-    y,
-    button: toOptional(readClickButton(record.button)),
-    count: toOptional(readClickCount(record.count)),
+function parseClickInput(input: unknown): { x: number; y: number } & ComputerClickOptions {
+  const record = parseStrictObject(input, [
+    'x',
+    'y',
+    'button',
+    'count',
+    'coordinateSpace',
+    'snapshotId',
+  ])
+  const coordinateSpace = readCoordinateSpace(record.coordinateSpace)
+  const { x, y } = readCoordinates(record, coordinateSpace === 'global')
+  const snapshotId = readSnapshotId(record.snapshotId)
+  const button = toOptional(readClickButton(record.button))
+  const count = toOptional(readClickCount(record.count))
+  if (coordinateSpace === 'primary-display') {
+    if (!isPresent(snapshotId))
+      throw invalidCapabilityInput(
+        'snapshotId',
+        'required when coordinateSpace is primary-display',
+      )
+    return { x, y, button, count, coordinateSpace, snapshotId }
   }
+  if (isPresent(snapshotId))
+    throw invalidCapabilityInput(
+      'snapshotId',
+      'must be omitted when coordinateSpace is global',
+    )
+  return { x, y, button, count, coordinateSpace }
+}
+
+function readCoordinateSpace(
+  value: unknown,
+): NonNullable<ComputerClickOptions['coordinateSpace']> {
+  if (isUndefined(value)) return 'global'
+  if (value !== 'global' && value !== 'primary-display')
+    throw invalidCapabilityInput(
+      'coordinateSpace',
+      'expected global or primary-display',
+    )
+  return value
+}
+
+function readSnapshotId(value: unknown): Nullable<string> {
+  if (isUndefined(value)) return null
+  if (
+    !isString(value)
+    || value.length < 8
+    || value.length > 128
+    || !/^[A-Za-z0-9_-]+$/.test(value)
+  )
+    throw invalidCapabilityInput(
+      'snapshotId',
+      'expected an opaque screenshot identifier of 8-128 URL-safe characters',
+    )
+  return value
 }
 
 function readClickButton(value: unknown): Nullable<ClickButton> {
@@ -234,10 +283,7 @@ function createComputerCapabilityService(
     leftClick: (
       x: number,
       y: number,
-      options?: {
-        button?: 'left' | 'right' | 'middle'
-        count?: number
-      },
+      options?: ComputerClickOptions,
     ) => runtime.leftClick(x, y, options),
     typeText: (text: string) => runtime.typeText(text),
     key: (keys: string) => runtime.key(keys),

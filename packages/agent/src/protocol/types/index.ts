@@ -14,6 +14,7 @@ import type {
   StreamToolResultModelImage,
   StreamTurnContextPayload,
   StreamWorkerThreadPayload,
+  ToolResultModelContentPart,
 } from './agent'
 import type { StreamStatePayload } from './chatRuntime'
 import type {
@@ -106,6 +107,8 @@ export interface ToolCallBlock {
   widgetArtifactSnapshot?: ChatSessionWidgetArtifactVersion
   /** 工具提供给模型读取的图片数据，仅用于聊天界面预览，持久化时会卸载。 */
   modelImage?: StreamToolResultModelImage
+  /** 工具提供给模型读取的有序内容块；二进制内容持久化时应卸载。 */
+  modelContent?: ToolResultModelContentPart[]
 }
 
 export interface ChatSessionWidgetArtifactRef {
@@ -1263,6 +1266,8 @@ export interface StreamToolResultPayload {
   effects?: StreamToolResultEffects
   /** 工具提供给模型读取的图片数据，renderer 用它做聊天内预览。 */
   modelImage?: StreamToolResultModelImage
+  /** 工具提供给下一模型轮次的有序文本、图片与文件内容块。 */
+  modelContent?: ToolResultModelContentPart[]
 }
 
 export interface StreamToolProgressPayload {

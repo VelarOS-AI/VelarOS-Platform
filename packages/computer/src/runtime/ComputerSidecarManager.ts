@@ -12,6 +12,7 @@ import {
 } from './ComputerSidecarProtocol'
 import type {
   ComputerAvailability,
+  ComputerClickOptions,
   ComputerClickResult,
   ComputerCommand,
   ComputerKeyResult,
@@ -58,6 +59,14 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 const STDERR_TAIL_LIMIT = 8_000
 /** helper 启动完成时主动发来的握手行用 id=0，与任何真实请求 id（从 1 递增）不冲突。 */
 const READY_HANDSHAKE_ID = 0
+const SnapshotValidationErrorCodes = new Set([
+  'screen_snapshot_required',
+  'screen_snapshot_stale',
+  'screen_snapshot_unexpected',
+  'screen_coordinate_out_of_bounds',
+  'screen_coordinate_space_invalid',
+  'screen_state_invalid',
+])
 
 /**
  * 默认辅助进程启动器。两项行为是刻意设计：
@@ -204,7 +213,7 @@ export class ComputerSidecarManager {
   public async leftClick(
     x: number,
     y: number,
-    options: { button?: 'left' | 'right' | 'middle'; count?: number } = {}
+    options: ComputerClickOptions = {}
   ): Promise<ComputerClickResult> {
     return this.request<ComputerClickResult>('left_click', { x, y, ...options })
   }
@@ -383,8 +392,11 @@ export class ComputerSidecarManager {
       if (response.ok) {
         pending.resolve(response.result)
       } else {
+        const errorCode = SnapshotValidationErrorCodes.has(response.error.code)
+          ? 'VALIDATION'
+          : 'COMPUTER_HELPER_ERROR'
         pending.reject(
-          new AppError('COMPUTER_HELPER_ERROR', `${response.error.code}: ${response.error.message}`, undefined, {
+          new AppError(errorCode, `${response.error.code}: ${response.error.message}`, undefined, {
             helperErrorCode: response.error.code,
           })
         )

@@ -7,6 +7,7 @@ import {
 
 import type {
   ComputerAvailability,
+  ComputerClickOptions,
   ComputerClickResult,
   ComputerKeyResult,
   ComputerMoveResult,
@@ -30,11 +31,14 @@ export interface ToolComputerApi {
   screenshot: () => Promise<ComputerScreenshot>
   /** Move the cursor using virtual-desktop global logical coordinates. */
   mouseMove: (x: number, y: number) => Promise<ComputerMoveResult>
-  /** Click using virtual-desktop global logical coordinates. */
+  /**
+   * Click in the selected coordinate space. Primary-display coordinates must carry the
+   * snapshotId returned by screenshot(); the runtime validates it immediately before input.
+   */
   click: (
     x: number,
     y: number,
-    options?: { button?: 'left' | 'right' | 'middle'; count?: number }
+    options?: ComputerClickOptions
   ) => Promise<ComputerClickResult>
   /** Type literal text at the current focus. */
   typeText: (text: string) => Promise<ComputerTypeResult>

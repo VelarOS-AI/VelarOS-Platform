@@ -38,6 +38,10 @@ response (stdout): {"id": <number>, "ok": true,  "result": <any>}\n
 一个装配根通常只建**一个** `ComputerSidecarManager`。首次动作时才懒启动子进程;
 每个请求有独立超时;sidecar 退出会**拒绝所有未完成请求**;应用退出必须 `dispose()`。
 
+截图绑定使用主屏设备身份与几何。macOS 使用系统 display id；Windows/Linux 的首选 screeninfo
+路径组合系统设备名和枚举位置，能区分同名、同尺寸屏幕。只有退回缺少设备身份的 mss 路径时，
+绑定才能校验几何变化，无法区分几何完全相同的主屏互换。
+
 资源注册表应由宿主创建并注入。导出的默认单例只为 0.x 兼容保留,**不适合当多租户状态容器**。
 
 `createComputerKernelModule()` 默认**不接管**调用方注入的 runtime——只有显式设置
@@ -73,6 +77,10 @@ try {
   const availability = await manager.ensureAvailable()
   if (availability.available) {
     const shot = await manager.screenshot()
+    await manager.leftClick(120, 80, {
+      coordinateSpace: 'primary-display',
+      snapshotId: shot.snapshotId,
+    })
   }
 } finally {
   manager.dispose()
@@ -82,4 +90,6 @@ try {
 ## 扩展点
 
 实现 `ComputerRuntimePort` 可接入原生扩展、远程桌面服务或 WebDriver;
-实现 `ComputerSidecarSpawner` 可替换进程载体。
+实现 `ComputerSidecarSpawner` 可替换进程载体。自定义 runtime 处理 `primary-display` 点击时必须在
+真实输入前验证 `snapshotId`，并在主屏布局变化或绑定未知时 fail closed；省略 coordinateSpace 的
+既有调用仍是全局坐标。

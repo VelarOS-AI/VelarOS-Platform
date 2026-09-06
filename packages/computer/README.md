@@ -45,7 +45,8 @@
 确认端口缺席时**不得默认放行**。
 
 **坐标 1:1**。截图始终按逻辑分辨率抓取,这样模型从图上读到的坐标可以直接拿去点击,
-中间不需要缩放换算。
+中间不需要缩放换算。每张截图还返回不透明的 `snapshotId`;主屏局部坐标点击必须把它原样带回,
+helper 会在真实点击前确认主屏、尺寸、缩放和原点没有变化,再执行坐标换算。
 
 ## 典型用法
 
@@ -71,6 +72,10 @@ try {
   if (!availability.available) throw new Error(availability.detail ?? availability.reason)
   const shot = await manager.screenshot()
   await consume(shot)
+  await manager.leftClick(120, 80, {
+    coordinateSpace: 'primary-display',
+    snapshotId: shot.snapshotId,
+  })
 } finally {
   manager.dispose() // 进程退出必须释放
 }
@@ -87,7 +92,7 @@ const computer: ToolComputerApi = {
   screenSize: () => manager.screenSize(),
   screenshot: () => manager.screenshot(),
   mouseMove: (x, y) => manager.mouseMove(x, y),
-  click: (x, y, options) => manager.click(x, y, options),
+  click: (x, y, options) => manager.leftClick(x, y, options),
   typeText: (text) => manager.typeText(text),
   key: (keys) => manager.key(keys),
 }
@@ -117,4 +122,5 @@ const computer: ToolComputerApi = {
 
 切片子路径即兼容面。现有工具名、`ToolComputerApi` 必选成员、协议函数保持兼容;
 新增高风险能力**不会自动进默认启用面**;协议字段只能向后兼容地增加,破坏性 wire 变更要升协议版本。
-版本随平台单版本火车推进。
+直接使用 runtime 的旧 `leftClick(x, y)` 调用仍按全局坐标工作;Agent 工具的主屏截图坐标点击必须携带
+`snapshotId`,避免布局改变后落到错误位置。版本随平台单版本火车推进。

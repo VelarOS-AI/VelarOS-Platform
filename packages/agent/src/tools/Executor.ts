@@ -30,6 +30,7 @@ import {
   type StreamToolProgressPayload,
   type StreamToolResultEffects,
   type StreamToolResultPayload,
+  type ToolResultModelContentPart,
 } from "@velaros-ai/agent/protocol";
 import {
   isArray,
@@ -76,7 +77,7 @@ import {
   buildToolFailureResult as buildStructuredToolFailureResult,
   type ToolFailureBuildOptions,
 } from "./ExecutionPolicyFailures";
-import { liftGenericModelImage } from "./modelImageLift";
+import { liftGenericModelContent } from "./modelImageLift";
 
 const log = logRuntime.tag("ToolExecutor");
 const ToolAbortSettlementGraceMs = 250;
@@ -140,6 +141,7 @@ export interface ToolResult {
   result: unknown;
   modelResult?: unknown;
   error?: string;
+  modelContent?: ToolResultModelContentPart[];
   modelImage?: ToolResultModelImage;
   effects?: StreamToolResultEffects;
   notices?: Array<Extract<AgentEvent, { type: "notice" }>>;
@@ -908,15 +910,34 @@ export class ToolExecutor {
         if (middleware.matches && !middleware.matches(context)) continue;
         const transformed = await middleware.transform(context);
         if (!transformed) continue;
+        const middlewareModelContent = [...(transformed.modelContent ?? [])];
+        if (
+          transformed.modelImage &&
+          ![...(enhanced.modelContent ?? []), ...middlewareModelContent].some(
+            (part) =>
+              part.type === "image-data" &&
+              part.data === transformed.modelImage?.data &&
+              part.mediaType === transformed.modelImage.mediaType,
+          )
+        ) {
+          middlewareModelContent.push({
+            type: "image-data",
+            data: transformed.modelImage.data,
+            mediaType: transformed.modelImage.mediaType,
+          });
+        }
         enhanced = {
           ...enhanced,
           result: transformed.result,
+          modelContent: !isEmpty(middlewareModelContent)
+            ? [...(enhanced.modelContent ?? []), ...middlewareModelContent]
+            : enhanced.modelContent,
           modelImage: transformed.modelImage ?? enhanced.modelImage,
           effects: transformed.effects ?? enhanced.effects,
           notices: [...(enhanced.notices ?? []), ...(transformed.notices ?? [])],
         };
       }
-      return liftGenericModelImage(enhanced, enhanced.result);
+      return liftGenericModelContent(enhanced, enhanced.result);
     } catch (error) {
       throw new AppError(
         "TOOL_RESULT_FINALIZATION_FAILED",
@@ -1169,6 +1190,7 @@ export class ToolExecutor {
             mediaType: finalResult.modelImage.mediaType,
           }
         : undefined,
+      modelContent: finalResult.modelContent,
     });
     return finalResult;
   }

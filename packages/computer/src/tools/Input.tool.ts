@@ -4,17 +4,36 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 import { isPresent, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ComputerCoordinateSpace } from '../runtime'
+
 import { ComputerControlCapability } from './Capabilities'
 import { requireComputerAvailable } from './Context'
 import { type ComputerToolContext, defineComputerTool } from './Types'
-
-type ComputerCoordinateSpace = 'primary-display' | 'global'
 
 export interface ComputerPointInput extends Record<string, unknown> {
   x: number
   y: number
   coordinateSpace?: ComputerCoordinateSpace
 }
+
+interface ComputerClickModifiers {
+  button?: 'left' | 'right' | 'middle'
+  count?: number
+}
+
+export type ComputerClickInput = Record<string, unknown> & {
+  x: number
+  y: number
+} & ComputerClickModifiers & (
+  | {
+      coordinateSpace?: 'primary-display'
+      snapshotId: string
+    }
+  | {
+      coordinateSpace: 'global'
+      snapshotId?: never
+    }
+)
 
 interface ResolvedComputerPoint {
   x: number
@@ -23,6 +42,7 @@ interface ResolvedComputerPoint {
   localY: number
   coordinateSpace: ComputerCoordinateSpace
   displayId?: number
+  snapshotId?: string
 }
 
 const primaryDisplayPointShape = {
@@ -50,6 +70,17 @@ const globalPointShape = {
     parameterDescription({ description: '显式全局虚拟桌面坐标。' })
   ),
 }
+
+const snapshotIdSchema = z
+  .string()
+  .min(8)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .describe(
+    parameterDescription({
+      description: 'computer:screenshot 返回的不透明 snapshotId；必须原样传回。',
+    })
+  )
 
 const computerPointSchema = z.union([
   z.object(primaryDisplayPointShape),
@@ -100,6 +131,7 @@ function projectComputerPointResult<TResult extends object>(
     globalX: point.x,
     globalY: point.y,
     displayId: optionalWhen(isPresent, point.displayId),
+    snapshotId: optionalWhen(isPresent, point.snapshotId),
   }
 }
 
@@ -127,21 +159,25 @@ const computerMove = defineComputerTool<ComputerPointInput>({
 })
 
 /** 在指定坐标点击，可配置鼠标按键与点击次数。 */
-const computerClick = defineComputerTool<ComputerPointInput & {
-  button?: 'left' | 'right' | 'middle'
-  count?: number
-}>({
+const computerClick = defineComputerTool<ComputerClickInput>({
   name: 'computer:click',
   role: 'control',
   summary: '在屏幕坐标点击桌面或原生应用。',
   suitable: ['点击桌面按钮、菜单、输入框等元素。'],
-  forbidden: ['网页内点击用 browser 工具；未截图确认坐标不要盲点。'],
-  usage: ['传截图内 x、y；可选 button 和 count（双击传 2）。全局坐标需显式传 coordinateSpace=global。'],
-  examples: [{ x: 756, y: 342 }],
-  notes: ['启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。'],
+  forbidden: ['网页内点击用 browser 工具；不要省略或复用其他截图的 snapshotId。'],
+  usage: [
+    '点击截图内位置：传 x、y 和同一次 computer:screenshot 返回的 snapshotId。',
+    '可选 button 和 count（双击传 2）；显式全局坐标传 coordinateSpace=global，且不要传 snapshotId。',
+  ],
+  examples: [{ x: 756, y: 342, snapshotId: 'screen_example_snapshot_01' }],
+  notes: [
+    'helper 会在真实点击前校验截图绑定；主屏或布局变化后旧 snapshotId 会被拒绝，请重新截图。',
+    '启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。',
+  ],
   schema: z.union([
     z.object({
       ...primaryDisplayPointShape,
+      snapshotId: snapshotIdSchema,
       button: z
         .enum(['left', 'right', 'middle'])
         .optional()
@@ -153,7 +189,7 @@ const computerClick = defineComputerTool<ComputerPointInput & {
         .max(3)
         .optional()
         .describe(parameterDescription({ description: '点击次数，双击传 2。默认 1。' })),
-    }),
+    }).strict(),
     z.object({
       ...globalPointShape,
       button: z
@@ -167,7 +203,7 @@ const computerClick = defineComputerTool<ComputerPointInput & {
         .max(3)
         .optional()
         .describe(parameterDescription({ description: '点击次数，双击传 2。默认 1。' })),
-    }),
+    }).strict(),
   ]),
   permissions: ['input:control'],
   capabilities: ComputerControlCapability,
@@ -175,12 +211,43 @@ const computerClick = defineComputerTool<ComputerPointInput & {
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()
     await requireComputerAvailable(ctx)
-    const point = await resolveComputerPoint(input, ctx)
-    const result = await ctx.computer.click(point.x, point.y, {
+
+    if (input.coordinateSpace === 'global') {
+      const result = await ctx.computer.click(input.x, input.y, {
+        button: input.button,
+        count: input.count,
+        coordinateSpace: 'global',
+      })
+      return projectComputerPointResult(result, {
+        x: result.x,
+        y: result.y,
+        localX: input.x,
+        localY: input.y,
+        coordinateSpace: 'global',
+      })
+    }
+
+    if (!input.snapshotId)
+      throw new AppError(
+        'VALIDATION',
+        '主屏截图坐标点击必须携带 computer:screenshot 返回的 snapshotId。请重新截图定位。'
+      )
+
+    const result = await ctx.computer.click(input.x, input.y, {
       button: input.button,
       count: input.count,
+      coordinateSpace: 'primary-display',
+      snapshotId: input.snapshotId,
     })
-    return projectComputerPointResult(result, point)
+    return projectComputerPointResult(result, {
+      x: result.x,
+      y: result.y,
+      localX: input.x,
+      localY: input.y,
+      coordinateSpace: 'primary-display',
+      displayId: result.displayId,
+      snapshotId: input.snapshotId,
+    })
   },
 })
 

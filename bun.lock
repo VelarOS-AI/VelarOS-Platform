@@ -60,7 +60,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.11",
+      "version": "0.6.12",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",
@@ -137,7 +137,7 @@
     },
     "packages/computer": {
       "name": "@velaros-ai/computer",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",

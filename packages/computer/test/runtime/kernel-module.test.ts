@@ -8,6 +8,8 @@ import type {
 import { ComputerOperationMetadata, ComputerToolOperations } from '../../src/contracts'
 import {
   ComputerCapability,
+  type ComputerClickOptions,
+  ComputerKernelModuleVersion,
   type ComputerRuntimeCapabilityService,
   type ComputerRuntimePort,
   createComputerKernelModule,
@@ -31,6 +33,8 @@ function createCaptureContext(
 describe('computer kernel module', () => {
   test('maps callable operations to precise permissions and strict input', async () => {
     let disposed = false
+    const clicks: Array<{ x: number; y: number; options?: ComputerClickOptions }> = []
+    const moves: Array<{ x: number; y: number }> = []
     let service: ComputerRuntimeCapabilityService | undefined
     const runtime = {
       isReady: () => false,
@@ -45,6 +49,7 @@ describe('computer kernel module', () => {
       screenshot: async () => ({
         base64: 'image',
         format: 'jpeg' as const,
+        snapshotId: 'screen_test_snapshot_01',
         width: 100,
         height: 80,
         displayWidth: 100,
@@ -54,9 +59,13 @@ describe('computer kernel module', () => {
         originY: 0,
         scaleFactor: 1,
       }),
-      mouseMove: async (x: number, y: number) => ({ x, y }),
-      leftClick: async () => {
-        throw new Error('not called')
+      mouseMove: async (x: number, y: number) => {
+        moves.push({ x, y })
+        return { x, y }
+      },
+      leftClick: async (x: number, y: number, options?: ComputerClickOptions) => {
+        clicks.push({ x, y, options })
+        return { x, y, button: options?.button ?? 'left', count: options?.count ?? 1 }
       },
       typeText: async () => {
         throw new Error('not called')
@@ -98,18 +107,95 @@ describe('computer kernel module', () => {
       {},
       new AbortController().signal,
     )).toMatchObject({ width: 100, height: 80 })
+    await service?.invoke(
+      'mouse_move',
+      undefined,
+      { x: -1, y: 2 },
+      new AbortController().signal,
+    )
+    expect(moves).toEqual([{ x: -1, y: 2 }])
     expect(() =>
       service?.invoke(
         'mouse_move',
         undefined,
-        { x: -1, y: 2 },
+        { x: Number.POSITIVE_INFINITY, y: 2 },
         new AbortController().signal,
       )).toThrow('Computer capability input is invalid')
+    expect(() =>
+      service?.invoke(
+        'left_click',
+        undefined,
+        { x: 10, y: 20, coordinateSpace: 'primary-display' },
+        new AbortController().signal,
+      )).toThrow('Computer capability input is invalid')
+    expect(() =>
+      service?.invoke(
+        'left_click',
+        undefined,
+        {
+          x: -10,
+          y: 20,
+          coordinateSpace: 'primary-display',
+          snapshotId: 'screen_test_snapshot_01',
+        },
+        new AbortController().signal,
+      )).toThrow('Computer capability input is invalid')
+    expect(() =>
+      service?.invoke(
+        'left_click',
+        undefined,
+        {
+          x: 10,
+          y: 20,
+          coordinateSpace: 'global',
+          snapshotId: 'screen_test_snapshot_01',
+        },
+        new AbortController().signal,
+      )).toThrow('Computer capability input is invalid')
+    await service?.invoke(
+      'left_click',
+      undefined,
+      {
+        x: 10,
+        y: 20,
+        coordinateSpace: 'primary-display',
+        snapshotId: 'screen_test_snapshot_01',
+      },
+      new AbortController().signal,
+    )
+    await service?.invoke(
+      'left_click',
+      undefined,
+      { x: -30, y: 40 },
+      new AbortController().signal,
+    )
+    expect(clicks).toEqual([
+      {
+        x: 10,
+        y: 20,
+        options: {
+          button: undefined,
+          count: undefined,
+          coordinateSpace: 'primary-display',
+          snapshotId: 'screen_test_snapshot_01',
+        },
+      },
+      {
+        x: -30,
+        y: 40,
+        options: {
+          button: undefined,
+          count: undefined,
+          coordinateSpace: 'global',
+        },
+      },
+    ])
     expect(module.manifest.permissions).toEqual([
       'process:exec',
       'screen:capture',
       'input:control',
     ])
+    expect(module.manifest.version).toBe(ComputerKernelModuleVersion)
     await lifecycle?.dispose?.()
     expect(disposed).toBe(false)
 

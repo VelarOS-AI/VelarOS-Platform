@@ -12,18 +12,24 @@ from __future__ import annotations
 
 import base64
 import os
+import zlib
 from io import BytesIO
 from typing import Any
 
 import mss
 from PIL import Image
 
-from computer_helper_common import run_stdio_loop
+from computer_helper_common import (
+    ScreenSnapshotRegistry,
+    parse_click_coordinate_binding,
+    run_stdio_loop,
+)
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 os.environ.setdefault("PYAUTOGUI_HIDE_SUPPORT_PROMPT", "1")
 
 _PYAUTOGUI: Any | None = None
+SCREEN_SNAPSHOTS = ScreenSnapshotRegistry()
 
 KEY_ALIASES = {
     "cmd": "win",
@@ -79,21 +85,21 @@ def primary_monitor() -> "dict[str, Any]":
     try:
         from screeninfo import get_monitors
 
-        for monitor in get_monitors():
+        monitors = get_monitors()
+        for index, monitor in enumerate(monitors):
             if getattr(monitor, "is_primary", False):
                 return {
-                    "displayId": 0,
+                    "displayId": stable_monitor_id(monitor, index),
                     "width": int(monitor.width),
                     "height": int(monitor.height),
                     "scaleFactor": 1.0,
                     "originX": int(monitor.x),
                     "originY": int(monitor.y),
                 }
-        monitors = get_monitors()
         if monitors:
             monitor = monitors[0]
             return {
-                "displayId": 0,
+                "displayId": stable_monitor_id(monitor, 0),
                 "width": int(monitor.width),
                 "height": int(monitor.height),
                 "scaleFactor": 1.0,
@@ -107,6 +113,8 @@ def primary_monitor() -> "dict[str, Any]":
         if len(sct.monitors) <= 1:
             raise RuntimeError("No Linux display monitor is available.")
         monitor = sct.monitors[1]
+    # mss exposes geometry but no stable device identity. In this fallback only geometry changes
+    # can invalidate a binding; equal-geometry primary swaps require screeninfo above.
     return {
         "displayId": 0,
         "width": int(monitor["width"]),
@@ -115,6 +123,13 @@ def primary_monitor() -> "dict[str, Any]":
         "originX": int(monitor["left"]),
         "originY": int(monitor["top"]),
     }
+
+
+def stable_monitor_id(monitor: Any, index: int) -> int:
+    """Combine the OS device name and stable screeninfo order for this process."""
+    name = str(getattr(monitor, "name", "") or "").strip()
+    identity = f"{name or 'unnamed'}\0{index}"
+    return zlib.crc32(identity.encode("utf-8"))
 
 
 def screen_size(_payload: "dict[str, Any]") -> "dict[str, Any]":
@@ -139,9 +154,11 @@ def screenshot(payload: "dict[str, Any]") -> "dict[str, Any]":
     buffer = BytesIO()
     image.save(buffer, format="JPEG", quality=int(payload.get("quality") or 75), optimize=True)
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    snapshot_id = SCREEN_SNAPSHOTS.capture(display, primary_monitor())
     return {
         "base64": encoded,
         "format": "jpeg",
+        "snapshotId": snapshot_id,
         "width": image.width,
         "height": image.height,
         "displayWidth": display["width"],
@@ -163,13 +180,30 @@ def mouse_move(payload: "dict[str, Any]") -> "dict[str, Any]":
 
 
 def left_click(payload: "dict[str, Any]") -> "dict[str, Any]":
-    pyautogui = load_pyautogui()
     x = int(payload["x"])
     y = int(payload["y"])
+    coordinate_space, snapshot_id = parse_click_coordinate_binding(payload)
     button = str(payload.get("button") or "left")
     count = int(payload.get("count") or 1)
+    pyautogui = load_pyautogui()
+    display = None
+    if coordinate_space == "primary-display":
+        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
+            snapshot_id, x, y, primary_monitor()
+        )
+    # Keep the display lookup and validation directly adjacent to the input call.
     pyautogui.click(x=x, y=y, button=button, clicks=count, interval=0.08)
-    return {"x": x, "y": y, "button": button, "count": count}
+    result = {
+        "x": x,
+        "y": y,
+        "button": button,
+        "count": count,
+        "coordinateSpace": coordinate_space,
+    }
+    if display is not None:
+        result["displayId"] = display["displayId"]
+        result["snapshotId"] = snapshot_id
+    return result
 
 
 def type_text(payload: "dict[str, Any]") -> "dict[str, Any]":

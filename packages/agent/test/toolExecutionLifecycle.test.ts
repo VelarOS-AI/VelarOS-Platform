@@ -531,6 +531,71 @@ describe('tool execution lifecycle', () => {
     expect(h.emitted).toHaveLength(2)
   })
 
+  test('keeps ordered model content contributed by capability result middleware', async () => {
+    const h = harness(() => ({ ok: true }))
+    const modelContent = [
+      { type: 'text' as const, text: 'captured media' },
+      { type: 'image-data' as const, data: 'image-data', mediaType: 'image/png' },
+      { type: 'file-data' as const, data: 'audio-data', mediaType: 'audio/mpeg' },
+    ]
+    h.context.capabilityPorts = {
+      extensions: [{
+        descriptor: {
+          id: 'test.model-content', version: '1.0.0',
+          toolNames: ['probe:write'], categoryIds: [], operationIds: [],
+        },
+        resultMiddlewares: [{
+          id: 'model-content',
+          transform: ({ result }) => ({ result, modelContent }),
+        }],
+      }],
+    }
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+
+    const result = await call(executor, 'model-content')
+
+    expect(result.modelContent).toEqual(modelContent)
+    expect(result.modelImage).toEqual({ data: 'image-data', mediaType: 'image/png' })
+    expect(h.emitted[0]).toMatchObject({ modelContent })
+  })
+
+  test('preserves legacy images contributed by multiple result middlewares', async () => {
+    const h = harness(() => ({ ok: true }))
+    h.context.capabilityPorts = {
+      extensions: [{
+        descriptor: {
+          id: 'test.legacy-images', version: '1.0.0',
+          toolNames: ['probe:write'], categoryIds: [], operationIds: [],
+        },
+        resultMiddlewares: [
+          {
+            id: 'first-image',
+            priority: 10,
+            transform: ({ result }) => ({
+              result,
+              modelImage: { data: 'first-image', mediaType: 'image/png' },
+            }),
+          },
+          {
+            id: 'second-image',
+            priority: 20,
+            transform: ({ result }) => ({
+              result,
+              modelImage: { data: 'second-image', mediaType: 'image/jpeg' },
+            }),
+          },
+        ],
+      }],
+    }
+    const result = await call(new ToolExecutor(h.context, h.events, h.policy), 'legacy-images')
+
+    expect(result.modelContent).toEqual([
+      { type: 'image-data', data: 'first-image', mediaType: 'image/png' },
+      { type: 'image-data', data: 'second-image', mediaType: 'image/jpeg' },
+    ])
+    expect(result.modelImage).toEqual({ data: 'second-image', mediaType: 'image/jpeg' })
+  })
+
   test('a finalization failure preserves call/result pairing and stops queued side effects', async () => {
     let writes = 0
     const h = harness(() => { writes++; return { ok: true } })

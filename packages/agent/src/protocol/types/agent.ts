@@ -342,6 +342,7 @@ export type StreamWorkerThreadChatEvent =
       error?: string
       effects?: StreamToolResultEffects
       modelImage?: StreamToolResultModelImage
+      modelContent?: ToolResultModelContentPart[]
     }
   | {
       type: 'notice'
@@ -537,6 +538,16 @@ export interface StreamToolResultModelImage {
   mediaType: 'image/png' | 'image/jpeg'
 }
 
+/**
+ * Provider-neutral content blocks that a tool result can expose directly to the next model turn.
+ * Binary data is base64 encoded and kept outside the ordinary textual result so serialization and
+ * context compaction never turn media bytes into JSON text.
+ */
+export type ToolResultModelContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image-data'; data: string; mediaType: string }
+  | { type: 'file-data'; data: string; mediaType: string; filename?: string }
+
 export interface StreamAssistantGeneratedFilePayload {
   id: string
   mediaType: string
@@ -591,6 +602,8 @@ export type AgentEvent =
       effects?: StreamToolResultEffects
       /** 工具提供给模型读取的图片数据，renderer 用它做聊天内预览。 */
       modelImage?: StreamToolResultModelImage
+      /** 工具提供给下一模型轮次的有序文本、图片与文件内容块。 */
+      modelContent?: ToolResultModelContentPart[]
     }
   | {
       type: 'notice'
