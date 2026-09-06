@@ -158,4 +158,9 @@ export function liftGenericModelContent(result: ToolResult, rawOutput: unknown):
   }
 }
 
-export { liftGenericModelContent as liftGenericModelImage }
+/**
+ * Backward-compatible public entry point for callers that still use the original image-only name.
+ */
+export function liftGenericModelImage(result: ToolResult, rawOutput: unknown): ToolResult {
+  return liftGenericModelContent(result, rawOutput)
+}
