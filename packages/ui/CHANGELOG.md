@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.2.30] — 2026-09-06
+
+### Changed
+
+- 发布包现随附 Apache-2.0 `NOTICE` 与 Tailwind CSS 第三方许可文本。
+
 ## [0.2.29] — 2026-09-02
 
 ### Fixed

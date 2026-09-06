@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/ui",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "velaros": {
     "platform": "0.6"
   },
@@ -452,7 +452,10 @@
     "README.md",
     "CHANGELOG.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "third-party-licenses"
   ],
   "publishConfig": {
     "access": "public",

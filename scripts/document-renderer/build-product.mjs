@@ -17,13 +17,15 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { stageThirdPartyLicenses } from './third-party-licenses.mjs'
+
 const execFileAsync = promisify(execFile)
 const repoRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 const productRoot = join(repoRoot, 'products', 'document-renderer')
 const outputRoot = join(repoRoot, 'dist-document-renderer')
 const releaseRoot = join(repoRoot, 'release', 'document-renderer')
-const requireFromRenderer = createRequire(
-  join(repoRoot, 'packages', 'document-renderer', 'package.json'),
+const requireFromOffice = createRequire(
+  join(repoRoot, 'packages', 'office', 'package.json'),
 )
 const supportedTargets = new Map([
   ['darwin-arm64', {
@@ -100,6 +102,15 @@ async function readVersion() {
   return manifest.version
 }
 
+async function readBunVersion() {
+  const manifest = JSON.parse(
+    await readFile(join(repoRoot, 'package.json'), 'utf8'),
+  )
+  const match = /^bun@(.+)$/u.exec(manifest.packageManager ?? '')
+  if (!match) throw new Error('package.json#packageManager must pin an exact Bun version')
+  return match[1]
+}
+
 async function resolveBunExecutable(target) {
   const locator = target === 'win32-x64' ? 'where.exe' : 'which'
   const { stdout } = await run(locator, ['bun'])
@@ -150,7 +161,7 @@ exec "$PACK_ROOT/runtime/bun" "$PACK_ROOT/app/renderer.js" "$@"
 `
 }
 
-async function stagePack(targetRoot, target, bundlePath, version) {
+async function stagePack(targetRoot, target, buildOutput, version, bunVersion) {
   const descriptor = supportedTargets.get(target)
   const executable = `velar-document-renderer${descriptor.launcherExtension}`
   const packRoot = join(targetRoot, 'Velar Document Renderer')
@@ -158,18 +169,10 @@ async function stagePack(targetRoot, target, bundlePath, version) {
   const runtimeRoot = join(packRoot, 'runtime')
   await mkdir(appRoot, { recursive: true })
   await mkdir(runtimeRoot, { recursive: true })
-  await copyFile(bundlePath, join(appRoot, 'renderer.js'))
+  await copyFile(buildOutput.bundlePath, join(appRoot, 'renderer.js'))
+  const pdfjsRoot = dirname(requireFromOffice.resolve('pdfjs-dist/package.json'))
   await copyFile(
-    join(
-      repoRoot,
-      'packages',
-      'document-renderer',
-      'node_modules',
-      'pdfjs-dist',
-      'legacy',
-      'build',
-      'pdf.worker.mjs',
-    ),
+    join(pdfjsRoot, 'legacy', 'build', 'pdf.worker.mjs'),
     join(appRoot, 'pdf.worker.mjs'),
   )
   const runtimePath = join(runtimeRoot, descriptor.runtimeName)
@@ -177,11 +180,14 @@ async function stagePack(targetRoot, target, bundlePath, version) {
   await chmod(runtimePath, 0o755)
   const launcherPath = join(packRoot, executable)
   await writeFile(launcherPath, launcherScript(target), { mode: 0o755 })
-  const canvasRoot = dirname(requireFromRenderer.resolve('@napi-rs/canvas/package.json'))
-  const canvasSource = await realpath(join(
+  const canvasRoot = dirname(requireFromOffice.resolve('@napi-rs/canvas/package.json'))
+  const canvasPlatformRoot = await realpath(join(
     canvasRoot,
     '..',
     descriptor.canvasPackage,
+  ))
+  const canvasSource = await realpath(join(
+    canvasPlatformRoot,
     descriptor.canvasBinary,
   ))
   const canvasPath = join(packRoot, 'canvas.node')
@@ -192,7 +198,7 @@ async function stagePack(targetRoot, target, bundlePath, version) {
     { recursive: true },
   )
   await cp(
-    join(repoRoot, 'packages', 'document-renderer', 'node_modules', 'pdfjs-dist', 'standard_fonts'),
+    join(pdfjsRoot, 'standard_fonts'),
     join(packRoot, 'pdfjs-standard-fonts'),
     { recursive: true },
   )
@@ -200,15 +206,41 @@ async function stagePack(targetRoot, target, bundlePath, version) {
     join(repoRoot, 'packages', 'document-renderer', 'LICENSE'),
     join(packRoot, 'LICENSE'),
   )
+  await copyFile(
+    join(repoRoot, 'packages', 'document-renderer', 'NOTICE'),
+    join(packRoot, 'NOTICE'),
+  )
+  const thirdParty = await stageThirdPartyLicenses({
+    additionalPackages: [
+      { packageRoot: canvasRoot },
+      {
+        packageRoot: canvasPlatformRoot,
+        additionalLicenseFiles: [join(canvasRoot, 'LICENSE')],
+      },
+      {
+        packageRoot: pdfjsRoot,
+        additionalLicenseFiles: [
+          join(pdfjsRoot, 'standard_fonts', 'LICENSE_FOXIT'),
+          join(pdfjsRoot, 'standard_fonts', 'LICENSE_LIBERATION'),
+        ],
+      },
+    ],
+    bunVersion,
+    metafilePath: buildOutput.metafilePath,
+    packRoot,
+    productRoot,
+    repositoryRoot: repoRoot,
+  })
   await writeFile(
     join(packRoot, 'capability-pack.json'),
     `${JSON.stringify(capabilityPackManifest(version, target, executable), null, 2)}\n`,
   )
-  return { packRoot, launcherPath, runtimePath, canvasPath }
+  return { packRoot, launcherPath, runtimePath, canvasPath, thirdParty }
 }
 
 async function buildApplication(targetRoot) {
   const bundlePath = join(targetRoot, 'renderer.js')
+  const metafilePath = join(targetRoot, 'renderer-metafile.json')
   await mkdir(targetRoot, { recursive: true })
   await run('node', [
     'scripts/build/buildPackageTopology.mjs',
@@ -221,9 +253,10 @@ async function buildApplication(targetRoot) {
     '--target=bun',
     '--minify',
     '--external=@napi-rs/canvas',
+    `--metafile=${metafilePath}`,
     `--outfile=${bundlePath}`,
   ])
-  return bundlePath
+  return { bundlePath, metafilePath }
 }
 
 function macCodesignArguments(identity, adHoc) {
@@ -237,6 +270,19 @@ function macCodesignArguments(identity, adHoc) {
   ]
 }
 
+function resolveMacCodesignIdentity(options, environment = process.env) {
+  if (options.adHoc) return '-'
+  const identity = environment.VELAROS_RENDERER_CODESIGN_IDENTITY?.trim()
+    || environment.VELAROS_HOST_CODESIGN_IDENTITY?.trim()
+  if (!identity) {
+    throw new Error(
+      'Developer ID signing requires VELAROS_RENDERER_CODESIGN_IDENTITY '
+      + 'or VELAROS_HOST_CODESIGN_IDENTITY',
+    )
+  }
+  return identity
+}
+
 async function archivePack({ targetRoot, target, packRoot, version, options }) {
   const descriptor = supportedTargets.get(target)
   const artifact = join(
@@ -245,7 +291,11 @@ async function archivePack({ targetRoot, target, packRoot, version, options }) {
   )
   await mkdir(releaseRoot, { recursive: true })
   if (target === 'darwin-arm64') {
-    await run('ditto', ['-c', '-k', '--keepParent', packRoot, artifact])
+    await run(
+      'ditto',
+      ['-c', '-k', '--norsrc', '--noextattr', '--noacl', '--keepParent', packRoot, artifact],
+      { env: { COPYFILE_DISABLE: '1' } },
+    )
     if (options.notarize) {
       const profile = process.env.APPLE_KEYCHAIN_PROFILE?.trim() || 'velaros-notary'
       await run('xcrun', [
@@ -281,11 +331,7 @@ async function archivePack({ targetRoot, target, packRoot, version, options }) {
 
 async function signMacFiles(runtimePath, canvasPath, options) {
   if (process.platform !== 'darwin') return null
-  const identity = options.adHoc
-    ? '-'
-    : process.env.VELAROS_RENDERER_CODESIGN_IDENTITY?.trim()
-      || process.env.VELAROS_HOST_CODESIGN_IDENTITY?.trim()
-      || 'REDACTED_DEVELOPER_IDENTITY'
+  const identity = resolveMacCodesignIdentity(options)
   const common = macCodesignArguments(identity, options.adHoc)
   await run('codesign', [
     ...common,
@@ -329,11 +375,12 @@ function artifactTrust(target, options) {
 async function build(options = {}) {
   const target = currentTarget(options.host)
   const version = await readVersion()
+  const bunVersion = await readBunVersion()
   const targetRoot = join(outputRoot, target)
   await rm(targetRoot, { recursive: true, force: true })
   await mkdir(targetRoot, { recursive: true })
-  const bundlePath = await buildApplication(join(targetRoot, 'compiled'))
-  const staged = await stagePack(targetRoot, target, bundlePath, version)
+  const buildOutput = await buildApplication(join(targetRoot, 'compiled'))
+  const staged = await stagePack(targetRoot, target, buildOutput, version, bunVersion)
   if (target === 'darwin-arm64') {
     await signMacFiles(staged.runtimePath, staged.canvasPath, options)
   }
@@ -385,5 +432,7 @@ export {
   launcherScript,
   macCodesignArguments,
   parseArguments,
+  readBunVersion,
   readVersion,
+  resolveMacCodesignIdentity,
 }

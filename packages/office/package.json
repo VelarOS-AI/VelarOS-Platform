@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/office",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "velaros": {
     "platform": "0.6"
   },
@@ -49,8 +49,12 @@
   },
   "files": [
     "dist",
+    "vendor",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "third-party-licenses"
   ],
   "sideEffects": false,
   "engines": {
@@ -74,7 +78,6 @@
     "mammoth": "^1.12.0",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.2.108",
-    "pptxgenjs": "^4.0.1",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

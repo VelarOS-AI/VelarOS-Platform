@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/browser",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "velaros": {
     "platform": "0.6"
   },
@@ -55,7 +55,9 @@
     "vendor",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

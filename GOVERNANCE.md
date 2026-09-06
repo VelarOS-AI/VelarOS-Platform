@@ -22,7 +22,11 @@ If consensus is not possible, maintainers document the competing options, risks,
 
 New maintainers are added based on sustained, high-quality contributions and sound judgment across code, review, security, and community conduct. Maintainers who are inactive or unable to meet the role's responsibilities may step down or be removed by the remaining maintainers.
 
-The current maintainer set is represented by repository access controls. A public maintainer roster will be added before the repository accepts external contributions.
+Current maintainers:
+
+- [Error-Zhang](https://github.com/Error-Zhang) — maintainer and release maintainer.
+
+Repository access controls remain the authority for current write and release permissions. This roster documents that authority for contributors and must be updated whenever maintainer access changes.
 
 ## Releases
 

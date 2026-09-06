@@ -86,6 +86,24 @@ function resolvedVersion(lockfile, packageName) {
   return resolution.slice(prefix.length)
 }
 
+function requirementIsSatisfied(resolution, requirement) {
+  const pinnedGitHubRequirement = /^github:([^#]+)#([a-f0-9]{40})$/iu.exec(requirement)
+  if (!pinnedGitHubRequirement) return Bun.semver.satisfies(resolution, requirement)
+
+  // Bun stores an immutable GitHub commit with a seven-character abbreviation in the
+  // package resolution even when package.json pins the complete SHA. Accept only that
+  // exact canonical shortening; branches, tags, other repositories, and unrelated SHAs
+  // must continue to fail closed.
+  const lockedGitHubResolution = /^github:([^#]+)#([a-f0-9]{7,40})$/iu.exec(resolution)
+  if (!lockedGitHubResolution) return false
+  const [, requiredRepository, requiredSha] = pinnedGitHubRequirement
+  const [, lockedRepository, lockedSha] = lockedGitHubResolution
+  return (
+    requiredRepository.toLowerCase() === lockedRepository.toLowerCase()
+    && requiredSha.toLowerCase().startsWith(lockedSha.toLowerCase())
+  )
+}
+
 const lockfilePath = path.join(repositoryRoot, 'bun.lock')
 const lockfile = Bun.JSONC.parse(await Bun.file(lockfilePath).text())
 const workspaceRecords = await readWorkspaceRecords()
@@ -115,7 +133,7 @@ for (const [packageName, packageRequirements] of requirements) {
   const version = resolvedVersion(lockfile, packageName)
   for (const { location, range } of packageRequirements) {
     assert(
-      Bun.semver.satisfies(version, range),
+      requirementIsSatisfied(version, range),
       `${location} requires ${range}, but bun.lock resolves ${version}`,
     )
   }

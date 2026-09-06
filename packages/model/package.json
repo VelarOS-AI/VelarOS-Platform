@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/model",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -64,7 +64,8 @@
     "dist",
     "README.md",
     "examples",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

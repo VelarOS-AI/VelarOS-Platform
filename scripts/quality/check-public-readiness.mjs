@@ -7,7 +7,23 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const packageRoot = join(repositoryRoot, 'packages')
 const canonicalRepository = 'git+https://github.com/VelarOS-AI/VelarOS-Platform.git'
 const canonicalIssues = 'https://github.com/VelarOS-AI/VelarOS-Platform/issues'
-const ignoredDirectories = new Set([
+const requiredPackageNoticeFiles = new Map([
+  ['browser', [
+    'THIRD_PARTY_NOTICES.md',
+    'vendor/devtools-performance-engine/LICENSE.chrome-devtools-frontend',
+    'vendor/devtools-performance-engine/LICENSE.chrome-devtools-mcp',
+    'vendor/devtools-performance-engine/NOTICE.md',
+  ]],
+  ['office', [
+    'THIRD_PARTY_NOTICES.md',
+    'third-party-licenses/pptxgenjs-MIT.txt',
+  ]],
+  ['ui', [
+    'THIRD_PARTY_NOTICES.md',
+    'third-party-licenses/tailwindcss-MIT.txt',
+  ]],
+])
+const ignoredDirectoryNames = new Set([
   '.git',
   '.idea',
   '.turbo',
@@ -16,10 +32,13 @@ const ignoredDirectories = new Set([
   'coverage',
   'demo-dist',
   'dist',
+  'dist-document-renderer',
   'node_modules',
   'out',
 ])
+const ignoredRootDirectories = new Set(['release'])
 const requiredRootFiles = [
+  '.github/CODEOWNERS',
   'CODE_OF_CONDUCT.md',
   'CONTRIBUTING.md',
   'GOVERNANCE.md',
@@ -32,12 +51,19 @@ const requiredRootFiles = [
   'THIRD_PARTY_NOTICES.md',
 ]
 const forbiddenText = [
-  { label: 'developer-local workspace path', pattern: /\/Users\/mac\/WebstormProjects\//g },
-  { label: 'private author email', pattern: /zhenglian0906@gmail\.com/gi },
+  {
+    label: 'developer-local macOS user path',
+    pattern: /\/Users\/(?!(?:example|plaintext|velaros)(?=\/|[^A-Za-z0-9._-]|$))[^/\s"'`]+/gi,
+  },
+  { label: 'personal Gmail address', pattern: /\b[A-Z0-9._%+-]+@gmail\.com\b/gi },
   { label: 'retired license metadata', pattern: new RegExp(`\\b${['UN', 'LICENSED'].join('')}\\b`, 'g') },
   {
     label: 'retired split repository URL',
     pattern: /github\.com\/VelarOS-AI\/VelarOS-HTML-Artifacts\b/gi,
+  },
+  {
+    label: 'non-public VelarOS repository URL',
+    pattern: /github\.com\/VelarOS-AI\/(?:VelarOS-(?:Cloud|Desktop|Extension|Labs|Termel|Workbench|Workspace|Website)|VelarScript-Website)\b/gi,
   },
   { label: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g },
   { label: 'OpenAI API key', pattern: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
@@ -58,8 +84,14 @@ function readJson(filePath) {
 function walk(directory) {
   const files = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue
     const entryPath = join(directory, entry.name)
+    if (
+      entry.isDirectory()
+      && (
+        ignoredDirectoryNames.has(entry.name)
+        || (directory === repositoryRoot && ignoredRootDirectories.has(entry.name))
+      )
+    ) continue
     if (entry.isDirectory()) files.push(...walk(entryPath))
     else if (entry.isFile()) files.push(entryPath)
   }
@@ -71,7 +103,7 @@ function isTextFile(filePath) {
   if (
     new Set([
       '.cjs', '.css', '.html', '.js', '.json', '.jsonl', '.jsx', '.md', '.mjs',
-      '.scss', '.sh', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml',
+      '.py', '.scss', '.sh', '.toml', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
     ]).has(extension)
   ) {
     return true
@@ -82,6 +114,23 @@ function isTextFile(filePath) {
 function checkRootFiles() {
   for (const file of requiredRootFiles) {
     if (!existsSync(join(repositoryRoot, file))) fail(`missing required root file: ${file}`)
+  }
+
+  const readme = readFileSync(join(repositoryRoot, 'README.md'), 'utf8')
+  const chineseReadme = readFileSync(join(repositoryRoot, 'README.zh-CN.md'), 'utf8')
+  const governance = readFileSync(join(repositoryRoot, 'GOVERNANCE.md'), 'utf8')
+  const codeowners = readFileSync(join(repositoryRoot, '.github/CODEOWNERS'), 'utf8')
+  if (!readme.includes('public source repository for VelarOS Platform')) {
+    fail('README.md does not identify the repository as public source')
+  }
+  if (!chineseReadme.includes('VelarOS Platform 的公开源码仓库')) {
+    fail('README.zh-CN.md does not identify the repository as public source')
+  }
+  if (!governance.includes('[Error-Zhang](https://github.com/Error-Zhang)')) {
+    fail('GOVERNANCE.md does not publish the current maintainer roster')
+  }
+  if (!/^\*\s+@Error-Zhang\s*$/mu.test(codeowners)) {
+    fail('.github/CODEOWNERS does not assign the public maintainer')
   }
 }
 
@@ -114,6 +163,7 @@ function checkPackageMetadata() {
     const publishable = manifest.private !== true
     const expectedHomepage = `https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/${directory}#readme`
     const licensePath = join(directoryPath, 'LICENSE')
+    const noticePath = join(directoryPath, 'NOTICE')
 
     if (manifest.name !== `@velaros-ai/${directory}`) fail(`${label}: package name does not match its directory`)
     if (manifest.license !== 'Apache-2.0') fail(`${label}: license must be Apache-2.0`)
@@ -124,9 +174,34 @@ function checkPackageMetadata() {
     if (publishable && manifest.homepage !== expectedHomepage) fail(`${label}: homepage is not canonical`)
     if (publishable && manifest.bugs?.url !== canonicalIssues) fail(`${label}: issue tracker is not canonical`)
     if (!manifest.files?.includes('LICENSE')) fail(`${label}: package files do not include LICENSE`)
+    if (!manifest.files?.includes('NOTICE')) fail(`${label}: package files do not include NOTICE`)
     if (!existsSync(join(directoryPath, 'README.md'))) fail(`${label}: README.md is missing`)
     if (!existsSync(licensePath)) fail(`${label}: LICENSE is missing`)
     else if (readFileSync(licensePath, 'utf8') !== rootLicense) fail(`${label}: LICENSE differs from the root license`)
+    if (!existsSync(noticePath)) fail(`${label}: NOTICE is missing`)
+    else if (!readFileSync(noticePath, 'utf8').includes('Copyright 2026 VelarOS-AI contributors')) {
+      fail(`${label}: NOTICE is missing the project attribution`)
+    }
+
+    for (const noticeFile of requiredPackageNoticeFiles.get(directory) ?? []) {
+      const topLevelEntry = noticeFile.split('/', 1)[0]
+      if (!existsSync(join(directoryPath, noticeFile))) {
+        fail(`${label}: required third-party notice file is missing (${noticeFile})`)
+      }
+      if (!manifest.files?.includes(topLevelEntry)) {
+        fail(`${label}: package files do not ship ${topLevelEntry}`)
+      }
+    }
+  }
+
+  for (const noticeFile of [
+    'third-party-licenses/buffers-0.1.1-MIT.txt',
+    'third-party-licenses/dependency-license-overrides.json',
+    'packages/ui/third-party-licenses/tailwindcss-MIT.txt',
+  ]) {
+    if (!existsSync(join(repositoryRoot, noticeFile))) {
+      fail(`missing third-party license text: ${noticeFile}`)
+    }
   }
 }
 

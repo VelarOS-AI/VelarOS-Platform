@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/project",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "velaros": {
     "platform": "0.6"
   },
@@ -59,7 +59,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "clean": "node scripts/build/clean-package.mjs",

@@ -8,7 +8,7 @@ VelarOS Desktop is the first shipping product, the desktop shell, and the refere
 
 ## Project status
 
-This repository is being prepared for its public release. New work is held to public-source standards now: no private product assumptions, machine-specific paths, credentials, undocumented authority, or hidden build requirements may enter the Platform.
+This is the public source repository for VelarOS Platform. New work is held to public-source standards: no private product assumptions, machine-specific paths, credentials, undocumented authority, or hidden build requirements may enter the Platform.
 
 The source code is licensed under the [Apache License 2.0](LICENSE). Third-party software retains its original licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
@@ -55,8 +55,8 @@ bun run check
 `bun run check` is the merge gate. It builds all packages, type-checks, lints, runs tests, validates architectural boundaries, and checks public-release invariants.
 
 Start with the [documentation index](docs/readme.md) for architecture, package boundaries, and developer guides.
-The independently installable terminal product, Host composition, remote-node transport, and native
-release lifecycle now live in [VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal).
+The independently installable VelarOS Termel product owns its Host composition, remote-node
+transport, and native release lifecycle.
 
 ## Contributing and security
 

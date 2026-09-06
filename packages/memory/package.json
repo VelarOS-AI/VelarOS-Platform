@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/memory",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "velaros": {
     "platform": "0.6"
   },
@@ -60,7 +60,8 @@
     "README.md",
     "docs",
     "examples",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

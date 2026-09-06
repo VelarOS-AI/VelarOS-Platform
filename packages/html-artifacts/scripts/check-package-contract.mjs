@@ -11,6 +11,9 @@ const readme = await readFile(path.join(repositoryRoot, 'README.md'), 'utf8')
 for (const field of ['description', 'license', 'repository']) {
   if (!manifest[field]) throw new Error(`${manifest.name} is missing package.json#${field}`)
 }
+if (manifest.license !== 'Apache-2.0') {
+  throw new Error(`${manifest.name} must use the repository Apache-2.0 license`)
+}
 if (!manifest.engines?.node) throw new Error(`${manifest.name} is missing a Node.js engine range`)
 if (manifest.sideEffects === undefined) throw new Error(`${manifest.name} must declare sideEffects`)
 if (manifest.publishConfig?.access !== 'public') {
@@ -26,9 +29,9 @@ const privatePackageClaims = [
   /私有[^\n]{0,80}@velaros-ai/u,
   /@velaros-ai[^\n]{0,80}私有/u,
 ]
-// 本包是全仓唯一的公开包，最要紧的一条是「别把自己写成私有的」——装不上的人会照文档去申请
-// 根本不需要的权限。文档合并成单份中文 README 后（2026-07-30 判决废除 api.zh-CN 与双语 README），
-// 这条断言跟着收到 README.md 一处；章节标题不再钉，理由见 scripts/capabilities/check-arch-boundaries.mjs。
+// 包文档不得把公开包写成私有包，否则安装者会去申请并不需要的仓库权限。
+// 文档合并成单份中文 README 后，这条断言跟着收到 README.md 一处；章节标题不再钉，
+// 理由见 scripts/capabilities/check-arch-boundaries.mjs。
 for (const pattern of privatePackageClaims) {
   if (pattern.test(readme)) {
     throw new Error('README.md must not describe the public package or scope as private')
@@ -118,7 +121,7 @@ try {
       'utf8'
     )
   )
-  for (const requiredFile of ['README.md']) {
+  for (const requiredFile of ['README.md', 'LICENSE', 'NOTICE']) {
     await access(
       path.join(
         temporaryDirectory,

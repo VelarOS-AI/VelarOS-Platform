@@ -6,10 +6,10 @@
  */
 import { stat } from 'node:fs/promises'
 
-import PptxGenJS from 'pptxgenjs'
-
 import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+
+import PptxGenJS from '../vendor/pptxgenjs/pptxgen.es.js'
 
 import {
   buildProjectMutationSkippedResult,

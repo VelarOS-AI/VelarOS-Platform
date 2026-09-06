@@ -18,7 +18,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type PptxPresentation = InstanceType<typeof import('pptxgenjs').default>
+type PptxPresentation = InstanceType<typeof import('../vendor/pptxgenjs/pptxgen.es.js').default>
 type PptxSlide = ReturnType<PptxPresentation['addSlide']>
 type PptxTextOptions = NonNullable<Parameters<PptxSlide['addText']>[1]>
 type PptxTableRows = Parameters<PptxSlide['addTable']>[0]

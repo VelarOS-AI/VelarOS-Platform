@@ -8,7 +8,7 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 项目状态
 
-本仓库正在为后续公开发布进行正规化。从现在起，新增内容全部按公开源码标准维护：Platform 不得依赖私有产品假设、本机路径、凭据、仓外隐藏裁决或未记录的构建条件。
+本仓库是 VelarOS Platform 的公开源码仓库。新增内容全部按公开源码标准维护：Platform 不得依赖私有产品假设、本机路径、凭据、仓外隐藏裁决或未记录的构建条件。
 
 第一方源码采用 [Apache License 2.0](LICENSE)。第三方软件继续遵循其原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
@@ -51,8 +51,7 @@ bun run check
 `bun run check` 是合入总门：构建全部包、类型检查、lint、测试、架构边界和公开发布不变量必须同时通过。
 
 架构、包边界与开发者指南从[文档索引](docs/readme.md)开始阅读。
-独立安装的终端产品、Host 组合、远程节点传输与原生发布生命周期现归
-[VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal) 所有。
+独立安装的 VelarOS Termel 产品负责自己的 Host 组合、远程节点传输与原生发布生命周期。
 
 ## 贡献与安全
 

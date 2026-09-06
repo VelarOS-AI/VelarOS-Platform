@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 — 2026-09-06
+
 - Add `RealTaskRecord`, deterministic outcome/health auditing, privacy-safe reports, and atomic real-task bundles.
 - Add reviewed `RealTaskCase` promotion contracts for explicit single-case replay.
 - Distinguish sequential feedback retries from redundant parallel failure fan-out.

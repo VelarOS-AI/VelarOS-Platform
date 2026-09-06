@@ -31,7 +31,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | `component-library/` | UI component catalog consuming `@velaros-ai/ui` |
 
 Product composition and release repositories depend on these packages through published APIs. The
-independent [VelarOS Terminal](https://github.com/VelarOS-AI/VelarOS-Terminal) repository owns its TUI,
+independent VelarOS Termel product owns its TUI,
 final Host composition, product policy, persistence adapters, packaging, and release. Host-neutral
 remote-node transport and reusable Agent-product mechanisms remain in their Platform domain packages.
 Platform must not import Terminal product source; see

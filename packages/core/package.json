@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -43,7 +43,8 @@
     "dist",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "clean": "rm -rf dist",

@@ -34,7 +34,7 @@ velaros agent status --workspace-root . [--task-id <id>|--latest] [--full] [--js
 ```
 
 `agent` 只读取 `.velaros/agent-runs`。终端 Agent 产品已经迁移到独立的
-[Termel](https://example.invalid/private-repository)，其独立命令是 `termel`；
+Termel，其独立命令是 `termel`；
 `velaros terminal` 只负责启动它，Platform CLI 不依赖或装配 Termel 的运行时、权限、数据根、IPC
 与 Extension Bridge。
 

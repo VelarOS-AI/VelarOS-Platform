@@ -12,8 +12,10 @@
   以及它们的传递依赖。
   License: BSD-3-Clause, Copyright The Chromium Authors。
 - **消费方式**：入口子集、locales/codemirror stub 的做法吸收自
-  [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)
-  （Apache-2.0, Copyright Google LLC）。
+  [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/2d944f9f4e6b107a6b42fb82c7e957384883bf7d)
+  commit `2d944f9f4e6b107a6b42fb82c7e957384883bf7d` 的
+  `src/devtools/DevtoolsUtils.ts`、`src/tools/performance.ts` 与
+  `src/trace-processing/parse.ts`（Apache-2.0, Copyright Google LLC）。
 
 ## 导出面
 

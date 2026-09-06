@@ -52,9 +52,11 @@ const repositoryHelperTypeNames = new Set([
   'Nullish',
   'PlainObject',
 ])
-const forbiddenPublishedPathFragments = [
-  '/Users/example',
-  'WebstormProjects',
+const forbiddenPublishedPathPatterns = [
+  {
+    label: 'developer-local macOS user path',
+    pattern: /\/Users\/(?!(?:example|plaintext|velaros)(?=\/|[^A-Za-z0-9._-]|$))[^/\s"'`]+/iu,
+  },
 ]
 const portableContractsFixtures = new Map([
   [
@@ -403,11 +405,11 @@ async function assertNoAmbientHelperTypes(packageName, installedDirectory) {
 
 async function assertNoUserSpecificPaths(packageName, installedDirectory) {
   for (const filePath of await collectFiles(installedDirectory)) {
-    const contents = await readFile(filePath)
-    for (const fragment of forbiddenPublishedPathFragments) {
+    const contents = await readFile(filePath, 'utf8')
+    for (const { label, pattern } of forbiddenPublishedPathPatterns) {
       assert(
-        !contents.includes(Buffer.from(fragment)),
-        `${packageName}: published ${path.relative(installedDirectory, filePath)} contains user-specific path fragment ${fragment}`,
+        !pattern.test(contents),
+        `${packageName}: published ${path.relative(installedDirectory, filePath)} contains ${label}`,
       )
     }
   }

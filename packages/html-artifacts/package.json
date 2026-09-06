@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/html-artifacts",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "velaros": {
     "platform": "0.6"
   },
@@ -52,7 +52,8 @@
   "files": [
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "NOTICE"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",

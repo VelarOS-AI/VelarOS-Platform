@@ -8,6 +8,7 @@ import {
   launcherScript,
   macCodesignArguments,
   parseArguments,
+  resolveMacCodesignIdentity,
 } from './build-product.mjs'
 
 test('Document Renderer packaging only accepts native release targets', () => {
@@ -55,4 +56,26 @@ test('macOS signing modes remain explicit', () => {
     '--sign',
     '-',
   ])
+  assert.equal(resolveMacCodesignIdentity({ adHoc: true }, {}), '-')
+  assert.equal(
+    resolveMacCodesignIdentity(
+      { adHoc: false },
+      {
+        VELAROS_RENDERER_CODESIGN_IDENTITY: '  renderer release identity  ',
+        VELAROS_HOST_CODESIGN_IDENTITY: 'host release identity',
+      },
+    ),
+    'renderer release identity',
+  )
+  assert.equal(
+    resolveMacCodesignIdentity(
+      { adHoc: false },
+      { VELAROS_HOST_CODESIGN_IDENTITY: 'host release identity' },
+    ),
+    'host release identity',
+  )
+  assert.throws(
+    () => resolveMacCodesignIdentity({ adHoc: false }, {}),
+    /VELAROS_RENDERER_CODESIGN_IDENTITY or VELAROS_HOST_CODESIGN_IDENTITY/u,
+  )
 })

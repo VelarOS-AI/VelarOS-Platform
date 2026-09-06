@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/kernel",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "velaros": {
     "platform": "0.6"
   },
@@ -70,7 +70,8 @@
     "dist",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "clean": "rm -rf dist",

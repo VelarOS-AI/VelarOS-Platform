@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent-lab",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "velaros": {
     "platform": "0.6"
   },
@@ -62,7 +62,8 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",

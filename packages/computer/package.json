@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/computer",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "velaros": {
     "platform": "0.6"
   },
@@ -42,7 +42,8 @@
     "runtime",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

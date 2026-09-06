@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
@@ -7,53 +7,41 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const requireFromOffice = createRequire(join(repositoryRoot, 'packages/office/package.json'))
-const requireFromPptxGen = createRequire(requireFromOffice.resolve('pptxgenjs'))
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-function runImageProbe(label, input) {
-  const imageSizeEntry = requireFromPptxGen.resolve('image-size')
-  const probe = [
-    `const imageSize = require(${JSON.stringify(imageSizeEntry)})`,
-    `const input = Buffer.from(${JSON.stringify(input.toString('base64'))}, 'base64')`,
-    "try { imageSize(input); process.exitCode = 2 } catch { process.exitCode = 0 }",
-  ].join(';')
-  const result = spawnSync(process.execPath, ['-e', probe], {
-    encoding: 'utf8',
-    timeout: 1_000,
-  })
-  assert(!result.error, `${label}: parser did not terminate safely (${result.error?.message})`)
-  assert(result.status === 0, `${label}: malformed input was not rejected`)
+function sha256(content) {
+  return createHash('sha256').update(content).digest('hex')
 }
 
-function createMalformedIcns() {
-  const input = Buffer.alloc(16)
-  input.write('icns', 0, 'ascii')
-  input.writeUInt32BE(input.length, 4)
-  input.write('ic07', 8, 'ascii')
-  input.writeUInt32BE(0, 12)
-  return input
-}
+function assertVendoredPptxGenJs() {
+  const officePackagePath = join(repositoryRoot, 'packages/office/package.json')
+  const rootPackagePath = join(repositoryRoot, 'package.json')
+  const officePackage = JSON.parse(readFileSync(officePackagePath, 'utf8'))
+  const rootPackage = JSON.parse(readFileSync(rootPackagePath, 'utf8'))
+  const runtimePath = join(repositoryRoot, 'packages/office/vendor/pptxgenjs/pptxgen.es.js')
+  const typesPath = join(repositoryRoot, 'packages/office/vendor/pptxgenjs/pptxgen.es.d.ts')
+  const runtime = readFileSync(runtimePath)
+  const types = readFileSync(typesPath)
+  const runtimeText = runtime.toString('utf8')
+  const typesText = types.toString('utf8')
 
-function createMalformedJxl() {
-  const input = Buffer.alloc(24)
-  input.writeUInt32BE(12, 0)
-  input.write('JXL ', 4, 'ascii')
-  input.writeUInt32BE(0, 12)
-  input.write('loop', 16, 'ascii')
-  return input
-}
-
-function createMalformedHeif() {
-  const input = Buffer.alloc(24)
-  input.writeUInt32BE(16, 0)
-  input.write('ftyp', 4, 'ascii')
-  input.write('heic', 8, 'ascii')
-  input.writeUInt32BE(0, 16)
-  input.write('loop', 20, 'ascii')
-  return input
+  assert(!officePackage.dependencies?.pptxgenjs, 'Office must use the audited vendored PptxGenJS runtime')
+  assert(!rootPackage.patchedDependencies?.['image-size@1.2.1'], 'The obsolete image-size patch must stay removed')
+  assert(runtimeText.startsWith('/* PptxGenJS 4.0.1 '), 'Vendored PptxGenJS runtime version changed')
+  assert(typesText.startsWith('// Type definitions for pptxgenjs 4.0.1'), 'Vendored PptxGenJS types version changed')
+  assert(runtimeText.includes("import JSZip from 'jszip';"), 'Vendored PptxGenJS must keep JSZip external')
+  assert(!/image-size/i.test(runtimeText), 'Vendored PptxGenJS unexpectedly references image-size')
+  assert(
+    sha256(runtime) === '05844c5625e2cda3b449eb967c2246dd57ca57341886a7c28eeebca263b29bd4',
+    'Vendored PptxGenJS runtime changed; review the upstream diff and security boundary',
+  )
+  assert(
+    sha256(types) === '0726d015dbcb55ccfa75546cb2fd43fe13a0dfeb783d08572f1c62f59193bbe5',
+    'Vendored PptxGenJS type declarations changed; review the upstream diff',
+  )
 }
 
 function collectJavaScriptFiles(directory) {
@@ -81,9 +69,7 @@ function assertExcelJsUsesOnlyUuidV4() {
   assert(!/\b(?:v3|v5|v6)\s*[:(]/.test(content), 'ExcelJS now uses a uuid API covered by CVE-2026-41907')
 }
 
-runImageProbe('ICNS zero-length entry', createMalformedIcns())
-runImageProbe('JXL zero-length box', createMalformedJxl())
-runImageProbe('HEIF zero-length box', createMalformedHeif())
+assertVendoredPptxGenJs()
 assertExcelJsUsesOnlyUuidV4()
 
-console.log('Patched dependency probes passed.')
+console.log('Dependency security probes passed.')

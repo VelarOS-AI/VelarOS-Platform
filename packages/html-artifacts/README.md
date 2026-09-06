@@ -2,7 +2,7 @@
 
 **把模型的增量文本流,直接变成一个实时、隔离的 HTML 界面。**
 
-本仓唯一的 MIT 开源包(html-artifacts 域,住 `packages/html-artifacts`)。
+该包与 Platform 其余第一方源码一致，采用 Apache License 2.0。
 它是零运行时依赖的浏览器库:统一负责协议解析、iframe 生命周期、补丁传输、
 受限高度协商、链接校验和资源清理——接入方不用自己拼 `postMessage` 和流式渲染那一摊。
 
@@ -140,4 +140,4 @@ npm run demo
 
 ## 许可证
 
-MIT © 2026 Error-Zhang(见 [LICENSE](./LICENSE))。
+Apache License 2.0 © 2026 VelarOS-AI contributors（见 [LICENSE](./LICENSE)）。

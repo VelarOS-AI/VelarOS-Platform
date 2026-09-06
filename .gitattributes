@@ -1,0 +1,2 @@
+# Preserve reviewed third-party distribution bytes exactly; its header contains mixed line endings.
+packages/office/vendor/pptxgenjs/pptxgen.es.js binary

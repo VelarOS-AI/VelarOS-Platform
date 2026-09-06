@@ -1,0 +1,8 @@
+{
+  "buffers@0.1.1": {
+    "license": "MIT",
+    "licenseFile": "third-party-licenses/buffers-0.1.1-MIT.txt",
+    "evidence": "https://sources.debian.org/copyright/license/node-buffers/0.1.1-2/",
+    "note": "The npm tarball omits license metadata and a license file. Debian records the upstream package as MIT and links the upstream licensing commit 1b745ee35d33eb166e15ef1866073a07c6d7de87."
+  }
+}
