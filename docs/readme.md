@@ -12,6 +12,7 @@ This directory is the authoritative documentation entry point for VelarOS Platfo
 | [Engineering standard](engineering/code-standard.md) | Writing or reviewing code, tests, comments, generated artifacts, or documentation |
 | [Decision records](decisions/README.md) | Changing public protocols, storage, permissions, package ownership, or compatibility policy |
 | [Gate coverage matrix](gate-coverage-matrix.md) | Finding the checks that cover a package or identifying a missing gate |
+| [Platform 0.6.18 package source release](engineering/platform-0.6.18-package-source-release.md) | Reviewing the metadata-only package update that makes GitHub source association durable |
 | [Platform 0.6.17 open-source release](engineering/platform-0.6.17-open-source-release.md) | Reviewing the first public release, package versions, history boundary, and release verification |
 | VelarOS Termel | Independent terminal product, Host composition, remote nodes, packaging, and release |
 
