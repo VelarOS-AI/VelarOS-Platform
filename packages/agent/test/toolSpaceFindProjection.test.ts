@@ -37,6 +37,7 @@ describe('tool space find projection', () => {
       permissions: ['fs:read'],
       categoryId: 'project-files',
       systemEnabled: true,
+      usageSkillId: 'project-file-reading',
     }
     const context = {
       codingSession: {
@@ -78,6 +79,7 @@ describe('tool space find projection', () => {
       id: 'tool:project:read',
       name: 'project:read',
       resident: true,
+      usageSkillId: 'project-file-reading',
       activation: {
         method: 'direct_call',
         nextTool: 'project:read',

@@ -5,6 +5,8 @@ import { toNullable } from '@velaros-ai/core'
 
 import { defineVelaTool } from '../defineVelaTool'
 
+import { AgentContextSignalCapability } from './Capabilities'
+
 // 手动蒸馏受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
 // 10 × 400 的契约大致相当，同时允许长阶段为每个已完成工作项保留独立可寻址的事实。
 const DistilledFactMaxChars = 240
@@ -71,6 +73,7 @@ const distillContext = defineVelaTool<DistillContextInput>({
   notes: ['蒸馏便签本身不会被折叠，是压缩后仍在的断点锚；不要重复记录同一事实。'],
   schema: distillContextSchema,
   permissions: [],
+  capabilities: AgentContextSignalCapability,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()

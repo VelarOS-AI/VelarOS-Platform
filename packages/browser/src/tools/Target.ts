@@ -11,8 +11,10 @@ import type { BrowserElementTargetHint } from '../core'
  */
 export const browserTargetHintSchema = z
   .object({
-    /** 来自最近一次页面 snapshot/inspection 的短引用。 */
-    ref: z.string().min(1).nullable().optional(),
+    /** 来自一次页面 snapshot/inspection 的 generation 引用。 */
+    ref: z.string().min(1).nullable().optional().describe(
+      '页面观察返回的完整 ref，例如 @e3:g2。必须原样传回；新一次 inspect/标注截图会生成新的 generation。'
+    ),
     /** 优先使用的 CSS selector。 */
     css: z.string().min(1).nullable().optional(),
     /** 可访问性角色，作为辅助定位信息。 */

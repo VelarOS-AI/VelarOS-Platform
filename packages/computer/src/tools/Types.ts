@@ -28,9 +28,9 @@ export interface ToolComputerApi {
   screenSize: () => Promise<ComputerScreenSize>
   /** Capture the primary display (always at logical resolution for 1:1 click coords). */
   screenshot: () => Promise<ComputerScreenshot>
-  /** Move the cursor without clicking. */
+  /** Move the cursor using virtual-desktop global logical coordinates. */
   mouseMove: (x: number, y: number) => Promise<ComputerMoveResult>
-  /** Click at a coordinate. */
+  /** Click using virtual-desktop global logical coordinates. */
   click: (
     x: number,
     y: number,

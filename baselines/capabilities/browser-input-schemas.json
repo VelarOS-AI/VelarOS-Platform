@@ -1,5 +1,5 @@
 {
-  "__sharedDefs": "e2290211920d5b7567279340fdf00cec5dc41fce64064e2a6da3166e76383945",
+  "__sharedDefs": "afb18b6af2f0a809e71b5091a1a4d726e6e0bebce0685ef25e4879accca178e4",
   "browser:enter_site": "791e9cedcfef33087dde5c4e7f580aad938fa412f90853d81f0375a601467d64",
   "browser:leave_site": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:show_page": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
@@ -20,7 +20,7 @@
   "browser:get_network_response_body": "8f329559fbf12b649238238aa845a648649ff07fab4fa80721205935c8d84f95",
   "browser:list_page_errors": "c7ff9b24d46d7b6dc267a73eb840e17b10889db9976a18f14fba7bf930de355d",
   "browser:get_element_bounds": "db3f8cf87bb8e6d19b23486bd01948fc0f226399049a423b5dbc43b9b855f124",
-  "browser:act": "e1d0cf1d98f374bf75e1c3080a0b56001f251013a981b3e213225f74f6b6cca9",
+  "browser:act": "0da5568b89a7734433b53c44cc5755f3e7ea167e4f82f6373aa6e75f1d8c08f3",
   "browser:list_pending_events": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
   "browser:wait_for_pending_event": "02fb8f27cd12af37b14653136adfbd463ac32138cdadee20d6a94efbca42cfce",
   "browser:handle_dialog": "64d8e0208e7bb9977cf226fa67679156fa8e7432a0c531a4bbcc0373930c3a65",

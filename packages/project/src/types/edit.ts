@@ -1,4 +1,4 @@
-import type { RiskLevel } from "./common.js";
+import type { JsonValue, RiskLevel } from "./common.js";
 import type { FileSnapshot } from "./snapshot.js";
 
 /** project 内核可转换为补丁的所有编辑原语联合类型。 */
@@ -28,6 +28,12 @@ export interface ReplaceTextOperation {
   /** 可选精确锚点；除非 constraints 另有指定，否则应唯一存在。 */
   oldText?: string;
   newText: string;
+  /** 安全断言：总匹配数必须等于该值；不决定修改数量。 */
+  expectedMatches?: number;
+  /** 只修改第几个匹配（1-based）。 */
+  occurrence?: number;
+  /** 修改全部匹配。 */
+  replaceAll?: boolean;
   anchors?: {
     before?: string;
     after?: string;
@@ -51,6 +57,8 @@ export interface InsertTextAtAnchorOperation {
   position: "before" | "after";
   text: string;
   expectedMatches?: number;
+  occurrence?: number;
+  replaceAll?: boolean;
   skipIfAlreadyPresent?: boolean;
 }
 
@@ -73,6 +81,9 @@ export interface DeleteTextOperation {
   /** 目标文件路径；没有 targetId 时必填。 */
   path?: string;
   oldText?: string;
+  expectedMatches?: number;
+  occurrence?: number;
+  replaceAll?: boolean;
 }
 
 export interface CreateFileOperation {
@@ -165,7 +176,10 @@ export interface JsonPatchOperation {
   type: "json_patch";
   /** 目标 JSON 文件路径；没有 targetId 时必填。 */
   path?: string;
-  patches: Array<{ op: "add" | "remove" | "replace"; path: string; value?: any }>;
+  patches: Array<
+    | { op: "add" | "replace"; path: string; value: JsonValue }
+    | { op: "remove"; path: string }
+  >;
 }
 
 export interface CustomEditOperation {

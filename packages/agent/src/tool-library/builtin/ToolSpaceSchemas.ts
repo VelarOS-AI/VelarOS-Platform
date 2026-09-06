@@ -448,12 +448,21 @@ export const toolSpaceReplaceMethodSchema = toolSpaceReplaceSchema
   .omit({ op: true })
   .strip()
   .superRefine((value, issueCtx) => {
-    if (!isEmpty(value.pageIn) || !isEmpty(value.pageOut)) return
-
-    issueCtx.addIssue({
-      code: 'custom',
-      message: 'replace 至少需要 pageIn 或 pageOut 一个目标。',
-      path: ['pageIn'],
+    if (isEmpty(value.pageIn) && isEmpty(value.pageOut)) {
+      issueCtx.addIssue({
+        code: 'custom',
+        message: 'replace 至少需要 pageIn 或 pageOut 一个目标。',
+        path: ['pageIn'],
+      })
+    }
+    const pageOut = new Set(value.pageOut)
+    value.pageIn.forEach((id, index) => {
+      if (!pageOut.has(id)) return
+      issueCtx.addIssue({
+        code: 'custom',
+        message: `pageIn 与 pageOut 不能包含同一目标：${id}。`,
+        path: ['pageIn', index],
+      })
     })
   })
 

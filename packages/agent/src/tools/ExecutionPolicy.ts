@@ -8,8 +8,8 @@
 // ## 判定链（每一环都可能终止执行）
 //  1. **可用性**（空间/角色/运行档是否允许该工具出现）；
 //  2. **能力域与作用域**（该工具要动的资源是否在本会话已授权范围内）；
-//  3. **审批**（破坏性/越界操作要用户点头；自动批准只在显式声明的档发生并留通知）；
-//  4. **参数与前置条件**。
+//  3. **参数与前置条件**（先拒绝无效输入，避免为无法执行的调用请求授权）；
+//  4. **审批**（破坏性/越界操作要用户点头；自动批准只在显式声明的档发生并留通知）。
 //
 // ## 关键不变量（改这些会破什么）
 //  - **默认拒绝**：判定不出结论按拒绝（fail-closed）。任何「拿不到策略就放行」= 门变装饰。
@@ -32,7 +32,14 @@ import type {
   ToolRole,
   ToolSurfaceProfileId,
 } from '@velaros-ai/agent/protocol'
-import { isPlainObject, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isPlainObject,
+  isPresent,
+  optionalWhenLazy,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -179,6 +186,12 @@ interface ToolExecutionPrepared {
   tool: AnyVelaTool
   /** 模型发出调用时激活的工具表面；为空则使用主 schema。 */
   selectedSurface?: LooseOptional<ToolExecutionPolicySurface<any, any>>
+  /** schema 与 surface normalize 之后的实际工具参数；旧的外部 prepared 调用方可省略。 */
+  effectiveArgs?: Record<string, unknown>
+  /** prepare 阶段的校验结果；旧调用方省略时 executePrepared 会兼容性补算。 */
+  validationResult?: ToolArgsValidationResult<any>
+  /** prepare 时绑定的注册签名；实际准入时用于识别等待期间的替换或卸载。 */
+  registrationSignature?: LooseOptional<string>
   /** 为当前工具覆写过 log/abortSignal 的上下文。 */
   toolContext: ToolExecutionPolicyContext
 }
@@ -225,6 +238,15 @@ class ToolExecutionPolicy {
   private readonly log = logRuntime.tag('ToolExecutionPolicy')
 
   constructor(private readonly toolRegistry: ToolExecutionPolicyRegistry) {}
+
+  private readCurrentRegistrationSignature(toolName: string): LooseOptional<string> {
+    return toNullable(
+      (
+        this.toolRegistry.getCurrentRegistrationSignature ??
+        this.toolRegistry.getRegistrationSignature
+      )?.call(this.toolRegistry, toolName)
+    )
+  }
 
   /**
    * 修复 provider 偶发的工具名大小写漂移，并接住旧会话残留的历史工具名。
@@ -291,9 +313,17 @@ class ToolExecutionPolicy {
     const baseResult = toolArgsSchemaValidator.validateWithNormalization(input.tool.schema, baseArgs)
     if (!baseResult.success) return baseResult
 
+    const requestedArgs = surfaceResult.requestedArgs
+    const adjustments = toolArgsSchemaValidator.describeAdjustments(
+      requestedArgs,
+      baseResult.args
+    )
+
     return {
       ...baseResult,
-      normalized: true,
+      requestedArgs,
+      normalized: !isEmpty(adjustments),
+      adjustments,
     }
   }
 
@@ -306,13 +336,7 @@ class ToolExecutionPolicy {
     const advertisedRegistrationSignature =
       request.baseContext.getCurrentVisibleToolRegistrationSignature?.(toolName)
     if (advertisedRegistrationSignature) {
-      const currentRegistrationSignature =
-        toNullable(
-          (
-            this.toolRegistry.getCurrentRegistrationSignature ??
-            this.toolRegistry.getRegistrationSignature
-          )?.call(this.toolRegistry, toolName)
-        )
+      const currentRegistrationSignature = this.readCurrentRegistrationSignature(toolName)
       if (currentRegistrationSignature !== advertisedRegistrationSignature)
         return {
           allowed: false,
@@ -362,14 +386,8 @@ class ToolExecutionPolicy {
     const canonicalNamePatch = toolName === request.toolName ? {} : { toolName }
     const advertisedRegistrationSignature =
       request.baseContext.getCurrentVisibleToolRegistrationSignature?.(toolName)
+    const currentRegistrationSignature = this.readCurrentRegistrationSignature(toolName)
     if (advertisedRegistrationSignature) {
-      const currentRegistrationSignature =
-        toNullable(
-          (
-            this.toolRegistry.getCurrentRegistrationSignature ??
-            this.toolRegistry.getRegistrationSignature
-          )?.call(this.toolRegistry, toolName)
-        )
       if (currentRegistrationSignature !== advertisedRegistrationSignature)
         return {
           allowed: false,
@@ -396,28 +414,8 @@ class ToolExecutionPolicy {
     )
     const selectedSurface = this.resolveToolSurface(tool, toolContext, toolName)
     const requestArgs = request.args ?? {}
-    // 某些工具调用可被 CodingSessionTracker 判定为重复，直接返回提示给模型。
-    const redundantToolCallMessage = toolContext.codingSession.getRedundantToolCallMessage(
-      toolName,
-      requestArgs
-    )
-    if (redundantToolCallMessage) {
-      // 拦截事件落 log，便于线下排障：当模型卡在"反复同参重试"或"重复加载能力"时，
-      // 在 ToolExecutionPolicy 这条 tag 下能直接搜到所有被拦截的调用、message 前缀和
-      // toolName。message 截短到 200 字符以免日志膨胀。
-      this.log.info('redundant tool call intercepted', {
-        toolName,
-        toolCallId: request.toolCallId,
-        message: redundantToolCallMessage.slice(0, 200),
-      })
-      return {
-        allowed: false,
-        error: redundantToolCallMessage,
-        ...canonicalNamePatch,
-      }
-    }
 
-    // 再走一遍 Registry 可见性过滤，覆盖权限、系统禁用、角色 allowList、isAvailable。
+    // 走一遍 Registry 可见性过滤，覆盖权限、系统禁用、角色 allowList、isAvailable。
     // 反射代理会对 loadable 目标传入 all；普通直接调用仍固定为 enabled。
     const available = this.toolRegistry.listAvailable(
       toolContext,
@@ -439,13 +437,43 @@ class ToolExecutionPolicy {
       args: request.args,
       toolContext,
     })
+    const effectiveArgs = normalizedForPolicy.success
+      ? normalizedForPolicy.args
+      : requestArgs
     if (
       request.args &&
-      !selectedSurface &&
       normalizedForPolicy.success &&
       normalizedForPolicy.normalized
     ) {
-      toolArgsSchemaValidator.replaceRecordContents(request.args, normalizedForPolicy.args)
+      // base surface 的 provider 输入与执行输入同形，可原地收敛，令历史、去重和审批看到实际参数。
+      // profile surface 可能有意使用另一套参数形状，只回显调整，不把 base 参数写回 provider 历史。
+      if (!selectedSurface) {
+        toolArgsSchemaValidator.replaceRecordContents(request.args, normalizedForPolicy.args)
+      }
+      request.updateMetadata?.({
+        metadata: {
+          inputAdjusted: true,
+          inputAdjustments: normalizedForPolicy.adjustments,
+        },
+      })
+    }
+
+    // 去重必须看 schema/default/surface normalize 后真正会执行的参数，避免同义输入绕过。
+    const redundantToolCallMessage = toolContext.codingSession.getRedundantToolCallMessage(
+      toolName,
+      effectiveArgs
+    )
+    if (redundantToolCallMessage) {
+      this.log.info('redundant tool call intercepted', {
+        toolName,
+        toolCallId: request.toolCallId,
+        message: redundantToolCallMessage.slice(0, 200),
+      })
+      return {
+        allowed: false,
+        error: redundantToolCallMessage,
+        ...canonicalNamePatch,
+      }
     }
 
     const planningModeDecision = this.evaluatePlanningModeToolPolicy(toolContext)
@@ -461,9 +489,65 @@ class ToolExecutionPolicy {
         toolName,
         tool,
         selectedSurface,
+        effectiveArgs,
+        validationResult: normalizedForPolicy,
+        registrationSignature: toNullable(
+          advertisedRegistrationSignature ?? currentRegistrationSignature
+        ),
         toolContext,
       },
     }
+  }
+
+  /**
+   * 实际执行槽授予后的轻量复检。只读取 prepare 缓存的 effectiveArgs，绝不再次运行
+   * schema 或 surface normalize；用来关闭排队期间注册表、可用性和 session 去重状态变化的窗口。
+   */
+  public revalidatePreparedExecution(
+    prepared: ToolExecutionPrepared,
+    effectiveArgs: Record<string, unknown>
+  ): LooseOptional<string> {
+    const toolName = prepared.toolName
+    const currentRegistrationSignature = this.readCurrentRegistrationSignature(toolName)
+    if (
+      (
+        isPresent(prepared.registrationSignature) ||
+        isPresent(currentRegistrationSignature)
+      ) &&
+      currentRegistrationSignature !== prepared.registrationSignature
+    ) return `Stale tool call: ${toolName}`
+
+    const currentTool = this.toolRegistry.get(toolName)
+    if (!currentTool) {
+      prepared.toolContext.codingSession.recordInvisibleToolCall?.(toolName)
+      return `No such tool: ${toolName}`
+    }
+    if (
+      !isPresent(prepared.registrationSignature) &&
+      !isPresent(currentRegistrationSignature) &&
+      currentTool !== prepared.tool
+    ) return `Stale tool call: ${toolName}`
+
+    const available = this.toolRegistry.listAvailable(
+      prepared.toolContext,
+      [toolName],
+      'enabled'
+    )
+    if (!available.some((entry) => entry.name === toolName)) {
+      prepared.toolContext.codingSession.recordInvisibleToolCall?.(toolName)
+      return `Tool is not available in the current context: ${toolName}`
+    }
+
+    const redundantToolCallMessage =
+      prepared.toolContext.codingSession.getRedundantToolCallMessage(toolName, effectiveArgs)
+    if (!redundantToolCallMessage) return null
+
+    this.log.info('redundant tool call intercepted after queue admission', {
+      toolName,
+      toolCallId: prepared.toolContext.toolCallId,
+      message: redundantToolCallMessage.slice(0, 200),
+    })
+    return redundantToolCallMessage
   }
 
   /** 执行已经准备好的工具定义。 */
@@ -479,7 +563,7 @@ class ToolExecutionPolicy {
     // 当 LLM 流式传输中途被截断时，@ai-sdk 会将不完整的 JSON 解析为
     // 部分对象（例如 blocks 变成空数组），导致工具静默产出损坏的文件。
     // 在这里拦截为 VALIDATION，并把 schema issues 放进结构化工具失败结果。
-    const parseResult = this.validateAndNormalizeToolInput({
+    const parseResult = prepared.validationResult ?? this.validateAndNormalizeToolInput({
       tool: prepared.tool,
       selectedSurface: prepared.selectedSurface,
       args: toOptional(args),
@@ -519,10 +603,6 @@ class ToolExecutionPolicy {
         }
       )
     }
-    if (args && parseResult.normalized) {
-      toolArgsSchemaValidator.replaceRecordContents(args, parseResult.args)
-    }
-
     // 是否需要人工确认完全由注入的审批端口和风险策略裁决；执行器不解释能力领域。
     const approvalSkipped = await this.ensureSessionToolApproval({
       toolName,
@@ -588,7 +668,9 @@ class ToolExecutionPolicy {
 
   /** 这些错误表示执行应整体终止，而不是只作为普通工具错误交给模型修复。 */
   public isTerminalExecutionError(error: AppError): boolean {
-    return error.code === 'EXECUTION_ABORTED' || error.code === 'EXECUTION_DENIED'
+    return error.code === 'EXECUTION_ABORTED'
+      || error.code === 'EXECUTION_DENIED'
+      || error.code === 'TOOL_RESULT_FINALIZATION_FAILED'
   }
 
   /** 把准入失败变成模型和 UI 都能读懂的结构化工具结果。 */
@@ -689,10 +771,14 @@ class ToolExecutionPolicy {
   }
 
   /** 查询工具自己的并发安全声明；声明抛错时按不安全处理。 */
-  public resolveConcurrencySafe(toolName: string, input: unknown): boolean {
+  public resolveConcurrencySafe(
+    toolName: string,
+    input: unknown,
+    fallback = false,
+  ): boolean {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)
     const definition = this.toolRegistry.get(canonicalToolName)
-    if (!definition?.isConcurrencySafe) return false
+    if (!definition?.isConcurrencySafe) return fallback
     if (!isPlainObject(input)) return false
 
     try {

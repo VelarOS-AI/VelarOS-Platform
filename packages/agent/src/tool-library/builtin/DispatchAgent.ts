@@ -4,7 +4,7 @@ import type { SubAgentTypeId } from '@velaros-ai/agent/protocol'
 import {
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isPresent } from '@velaros-ai/core'
 
 /**
  * 子 Agent 授权用的分类 id：本层只校形状。可委派性由注入的 capability delegation policy 在执行期判
@@ -22,10 +22,11 @@ const dispatchAgentSchema = z.object({
     .min(2)
     .max(40)
     .regex(/^[A-Za-z][A-Za-z -]*$/)
+    .optional()
     .describe(
       parameterDescription({
         description:
-          '子 Agent 的英文代号名，必须由模型在派发时填写，用于 UI 展示；不要使用数字，例如 Atlas、Forge、Scout、Beacon。',
+          '新建子 Agent 时必填的英文代号名，用于 UI 展示；续跑或中断已有线程时可省略。不要使用数字，例如 Atlas、Forge、Scout、Beacon。',
       })
     ),
   subagent_type: z
@@ -33,30 +34,30 @@ const dispatchAgentSchema = z.object({
     .trim()
     .min(1)
     .max(64)
-    .default('general')
+    .optional()
     .describe(
       parameterDescription({
         description:
-          '子 Agent 类型 id。只使用运行时 SubAgentTypeProvider 已公开的类型。',
+          '子 Agent 类型 id。新建时省略则为 general；续跑时省略则继承原线程类型。只使用运行时 SubAgentTypeProvider 已公开的类型。',
       })
     ),
   tool_scope: z
     .enum(['type_default', 'inherit', 'custom'])
-    .default('type_default')
+    .optional()
     .describe(
       parameterDescription({
         description:
-          '子 Agent 工具授权模式：type_default 使用子 Agent 类型默认能力；inherit 继承父 Agent 当前已启用能力；custom 使用 tool_categories 指定能力。',
+          '子 Agent 工具授权模式。新建时省略则为 type_default；续跑时省略则继承原线程。inherit 继承父 Agent 当前已启用能力；custom 使用 tool_categories 指定能力。',
       })
     ),
   tool_categories: z
     .array(subAgentToolCategorySchema)
     .max(8)
-    .default([])
+    .optional()
     .describe(
       parameterDescription({
         description:
-          'tool_scope=custom 时指定子 Agent 可用的工具分类。为方便查询和申请，系统会始终保留 general 分类。',
+          'tool_scope=custom 时指定子 Agent 可用的工具分类。续跑时省略则继承原线程分类。为方便查询和申请，系统会始终保留 general 分类。',
       })
     ),
   prompt: z
@@ -64,9 +65,10 @@ const dispatchAgentSchema = z.object({
     .trim()
     .min(1)
     .max(12_000)
+    .optional()
     .describe(
       parameterDescription({
-        description: '交给子 Agent 的完整任务说明，应自洽且可独立执行。',
+        description: '新建或续跑时交给子 Agent 的完整任务说明，应自洽且可独立执行；中断时省略。',
       })
     ),
   description: z
@@ -88,7 +90,7 @@ const dispatchAgentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '可选：复用已有子 Agent 线程 id 以续跑、查询状态或中断。',
+        description: '可选：复用已有子 Agent 线程 id 以续跑或中断。',
       })
     ),
   mode: z
@@ -160,13 +162,59 @@ const dispatchAgentSchema = z.object({
       })
     ),
 }).superRefine((value, issueCtx) => {
-  if (value.tool_scope !== 'custom' || !isEmpty(value.tool_categories)) return
+  if (value.interrupt) {
+    if (!value.thread_id) {
+      issueCtx.addIssue({
+        code: 'custom',
+        message: 'interrupt=true 时必须指定 thread_id。',
+        path: ['thread_id'],
+      })
+    }
+    return
+  }
+
+  if (!value.prompt) {
+    issueCtx.addIssue({
+      code: 'custom',
+      message: '新建或续跑子 Agent 时必须提供 prompt。',
+      path: ['prompt'],
+    })
+  }
+
+  if (!value.thread_id && !value.agent_name) {
+    issueCtx.addIssue({
+      code: 'custom',
+      message: '新建子 Agent 时必须提供 agent_name。',
+      path: ['agent_name'],
+    })
+  }
+
+  if (value.tool_scope !== 'custom') return
+  // 续跑时可只重申 custom scope，分类仍从已有 session 继承；新建或显式传 []
+  // 则没有可执行的授权集，直接给参数错误。
+  if (value.thread_id && !isPresent(value.tool_categories)) return
+  if (!isEmpty(value.tool_categories ?? [])) return
 
   issueCtx.addIssue({
     code: 'custom',
     message: 'tool_scope=custom 时至少需要指定一个 tool_categories。',
     path: ['tool_categories'],
   })
+}).overwrite((value) => {
+  if (value.interrupt) return {
+    thread_id: value.thread_id,
+    mode: value.mode,
+    interrupt: true,
+  }
+
+  return value.thread_id
+    ? value
+    : {
+      ...value,
+      subagent_type: value.subagent_type ?? 'general',
+      tool_scope: value.tool_scope ?? 'type_default',
+      tool_categories: value.tool_categories ?? [],
+    }
 })
 
 type DispatchAgentInput = z.infer<typeof dispatchAgentSchema>

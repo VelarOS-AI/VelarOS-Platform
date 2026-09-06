@@ -19,6 +19,28 @@ import { ProjectToolNames } from '../src/project-tool-names'
 const ModelToolSchemaCharacterBudget = 40_000
 
 describe('Project model-facing tool contract', () => {
+  test('declares authoritative read, write, and execution capability classes', () => {
+    const expectedEffects = {
+      'project:read': 'read',
+      'project:list': 'read',
+      'project:search': 'read',
+      'project:query-code': 'read',
+      'project:write': 'write',
+      'project:edit': 'write',
+      'project:rollback': 'write',
+      'project:run': 'execute',
+    } as const
+
+    for (const [name, effectKind] of Object.entries(expectedEffects)) {
+      const tool = projectTools[name]
+      expect(tool?.capabilities?.effectKind).toBe(effectKind)
+      expect(tool?.readOnly).toBe(effectKind === 'read')
+      expect(tool?.capabilities?.readScopes).toContain('project')
+      expect(tool?.capabilities?.canReadArbitrarySource).toBe(false)
+    }
+    expect(projectTools['project:run']?.capabilities?.process?.execution).toBe('input-dependent')
+  })
+
   test('keeps the public tool surface precise and canonical', () => {
     expect(Object.keys(projectTools)).toEqual(Object.values(ProjectToolNames))
     expect(Object.keys(projectTools).every(isCanonicalToolId)).toBe(true)
@@ -125,6 +147,110 @@ describe('Project model-facing tool contract', () => {
     expect(JSON.stringify(result.files)).not.toContain('/private/workspace/src/example.ts')
     expect(JSON.stringify(result.files)).not.toContain('private-content-hash')
     expect(JSON.stringify(result.files).match(/export const example = true/g)).toHaveLength(1)
+  })
+
+  test('shares the read character budget across files and exposes per-file continuations', async () => {
+    const receivedMaxChars: number[] = []
+    const project = {
+      read: async ({ path, maxChars }: { path: string; maxChars: number }) => {
+        receivedMaxChars.push(maxChars)
+        const content = 'abcdefghij'.slice(0, maxChars)
+        return {
+          snapshot: {
+            path,
+            exists: true,
+            isDirectory: false,
+            isBinary: false,
+            revision: `revision-${path}`,
+          },
+          content,
+          truncated: true,
+          hasMore: true,
+          continuation: {
+            path,
+            range: { startLine: 1, startColumn: content.length + 1 },
+            maxChars,
+            baseRevision: `revision-${path}`,
+          },
+        }
+      },
+      status: async () => ({ root: '/private/workspace', validators: [] }),
+    } as unknown as AgentProjectKernelPort
+
+    const result = await executeAgentProjectRead(project, {
+      path: ['first.txt', 'second.txt'],
+      maxChars: 6,
+    })
+
+    expect(receivedMaxChars).toEqual([3, 3])
+    expect(result.files.map((file) => file.content).join('').length).toBe(6)
+    expect(result.files[0]?.continuation).toEqual({
+      path: 'first.txt',
+      range: { startLine: 1, startColumn: 4 },
+      maxChars: 3,
+      baseRevisions: { 'first.txt': 'revision-first.txt' },
+    })
+    expect(
+      projectTools[ProjectToolNames.read].schema.safeParse(result.files[0]?.continuation).success
+    ).toBe(true)
+    expect(result.files[1]?.continuation?.path).toBe('second.txt')
+  })
+
+  test('rejects a shared read budget that cannot advance every requested file', async () => {
+    let reads = 0
+    const project = {
+      read: async () => {
+        reads += 1
+        throw new Error('read should not run')
+      },
+      status: async () => ({ root: '/private/workspace', validators: [] }),
+    } as unknown as AgentProjectKernelPort
+
+    expect(
+      projectTools[ProjectToolNames.read].schema.safeParse({
+        path: ['first.txt', 'second.txt'],
+        maxChars: 1,
+      }).success
+    ).toBe(false)
+    await expect(
+      executeAgentProjectRead(project, {
+        path: ['first.txt', 'second.txt'],
+        maxChars: 1,
+      })
+    ).rejects.toMatchObject({
+      reason: 'INVALID_INPUT',
+      details: { maxChars: 1, pathCount: 2 },
+    })
+    expect(reads).toBe(0)
+  })
+
+  test('keeps the default character bound when an endLine is supplied', async () => {
+    let receivedInput: Record<string, unknown> | undefined
+    const project = {
+      read: async (input: Record<string, unknown>) => {
+        receivedInput = input
+        return {
+          snapshot: {
+            path: input.path as string,
+            exists: true,
+            isDirectory: false,
+            isBinary: false,
+          },
+          content: '',
+          truncated: false,
+          hasMore: false,
+        }
+      },
+      status: async () => ({ root: '/private/workspace', validators: [] }),
+    } as unknown as AgentProjectKernelPort
+
+    const result = await executeAgentProjectRead(project, {
+      path: 'large.txt',
+      range: { startLine: 1, endLine: 1_000_000 },
+    })
+
+    expect(receivedInput?.maxChars).toBe(500_000)
+    expect(result.appliedDefaultBound).toEqual({ maxChars: 500_000 })
   })
 
   test('turns unreadable read targets into explicit path-discovery guidance', async () => {
@@ -242,6 +368,24 @@ describe('Project model-facing tool contract', () => {
     ]
 
     expect(executableSamples.every((operation) => ProjectEditOperationSchema.safeParse(operation).success)).toBe(true)
+    expect(ProjectEditOperationSchema.safeParse({
+      type: 'json_patch',
+      path: 'a.json',
+      patches: [{ op: 'replace', path: '/value' }],
+    }).success).toBe(false)
+    expect(ProjectEditOperationSchema.safeParse({
+      type: 'json_patch',
+      path: 'a.json',
+      patches: [{ op: 'remove', path: '/value', value: 1 }],
+    }).success).toBe(false)
+    expect(ProjectEditOperationSchema.safeParse({
+      type: 'replace_text',
+      path: 'a.ts',
+      oldText: 'a',
+      newText: 'b',
+      occurrence: 1,
+      replaceAll: true,
+    }).success).toBe(false)
     expect(
       retiredTypes.every(
         (type) => !ProjectEditOperationSchema.safeParse({ type, path: 'a.ts', text: 'x' }).success

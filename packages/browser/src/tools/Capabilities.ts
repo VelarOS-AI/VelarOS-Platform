@@ -22,6 +22,13 @@ export const BrowserObserveCapability = {
   reason: 'browser page observation',
 } satisfies BrowserToolCapabilitySchema
 
+/** 只读等待会占用同一页面事件通道，不能与其它等待并发。 */
+export const BrowserWaitCapability = {
+  ...BrowserObserveCapability,
+  concurrency: 'unsafe',
+  reason: 'browser pending event wait',
+} satisfies BrowserToolCapabilitySchema
+
 export const BrowserControlCapability = {
   effectKind: 'external',
   readScopes: ['browser'],

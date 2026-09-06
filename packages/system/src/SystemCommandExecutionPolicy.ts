@@ -36,11 +36,25 @@ const readOnlyCommands = new Set([
   'dir', 'type', 'findstr', 'where', 'gci', 'get-childitem', 'get-content', 'gc',
   'get-item', 'gi', 'select-string', 'sls', 'test-path',
 ])
-const mutatingGitCommands = new Set([
-  'add', 'am', 'apply', 'bisect', 'branch', 'checkout', 'cherry-pick', 'clean', 'clone',
-  'commit', 'fetch', 'merge', 'mv', 'pull', 'push', 'rebase', 'reset', 'restore', 'revert',
-  'rm', 'stash', 'switch', 'tag',
+const readOnlyGitCommands = new Set([
+  'annotate', 'blame', 'cat-file', 'check-attr', 'check-ignore', 'check-mailmap',
+  'check-ref-format', 'count-objects', 'describe', 'diff', 'diff-files', 'diff-index',
+  'diff-tree', 'for-each-ref', 'grep', 'help', 'log', 'ls-files', 'ls-remote', 'ls-tree',
+  'merge-base', 'name-rev', 'range-diff', 'rev-list', 'rev-parse', 'shortlog', 'show',
+  'show-branch', 'status', 'verify-commit', 'verify-pack', 'verify-tag', 'version',
+  'whatchanged',
 ])
+const gitGlobalOptionsWithValue = new Set([
+  '-C', '-c', '--config-env', '--git-dir', '--namespace', '--work-tree',
+])
+const gitGlobalOptionsWithoutValue = new Set([
+  '-p', '-P', '--bare', '--glob-pathspecs', '--icase-pathspecs', '--literal-pathspecs',
+  '--no-advice', '--no-lazy-fetch', '--no-optional-locks', '--no-pager',
+  '--no-replace-objects', '--noglob-pathspecs', '--paginate',
+])
+const gitGlobalOptionsWithInlineValue = [
+  '--config-env=', '--exec-path=', '--git-dir=', '--namespace=', '--work-tree=',
+] as const
 
 /**
  * 白名单命令里仍然能改盘的参数形态。
@@ -90,6 +104,61 @@ function tokenize(command: string): string[] {
   ) ?? []
 }
 
+function hasInlineGitGlobalOptionValue(token: string): boolean {
+  if (token.startsWith('-C') && token.length > 2) return true
+  if (token.startsWith('-c') && token.length > 2 && token.includes('=')) return true
+  return gitGlobalOptionsWithInlineValue.some((prefix) =>
+    token.startsWith(prefix) && token.length > prefix.length
+  )
+}
+
+function findGitSubcommandIndex(args: readonly string[]): number {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index]
+    if (!token) return -1
+    if (token === '--') {
+      const subcommand = args[index + 1]
+      return subcommand && !subcommand.startsWith('-') ? index + 1 : -1
+    }
+    if (!token.startsWith('-')) return index
+    if (gitGlobalOptionsWithValue.has(token)) {
+      if (!args[index + 1]) return -1
+      index += 1
+      continue
+    }
+    if (gitGlobalOptionsWithoutValue.has(token) || hasInlineGitGlobalOptionValue(token)) continue
+    return -1
+  }
+  return -1
+}
+
+function hasMutatingGitArguments(args: readonly string[]): boolean {
+  return args.some((argument) => argument === '--output' || argument.startsWith('--output='))
+}
+
+function hasDangerousRecursiveForceRemove(command: string): boolean {
+  return command.split(/&&|\|\||[;|\r\n]/).some((segment) => {
+    const tokens = tokenize(segment.trim())
+    return tokens.some((token, index) => {
+      if (token.split('/').at(-1) !== 'rm') return false
+      let recursive = false
+      let force = false
+      for (const argument of tokens.slice(index + 1)) {
+        if (argument === '--') break
+        if (argument === '--recursive') recursive = true
+        if (argument === '--force') force = true
+        if (argument.startsWith('-') && !argument.startsWith('--')) {
+          const shortOptions = argument.slice(1)
+          recursive ||= shortOptions.includes('r') || shortOptions.includes('R')
+          force ||= shortOptions.includes('f')
+        }
+        if (recursive && force) return true
+      }
+      return false
+    })
+  })
+}
+
 function extractPorts(command: string): number[] {
   const ports = new Set<number>()
   for (const match of command.matchAll(/(?:--port(?:=|\s+)|(?:^|\s)-p\s+|:)(\d{2,5})\b/g)) {
@@ -110,8 +179,12 @@ export function isSystemShellCommandReadOnly(command: string): boolean {
     if (!executable || !readOnlyCommands.has(executable)) return false
     const args = tokens.slice(executableIndex + 1)
     if (executable === 'git') {
-      const subcommand = args.find((token) => !token.startsWith('-'))
-      return !!subcommand && !mutatingGitCommands.has(subcommand.toLowerCase())
+      const subcommandIndex = findGitSubcommandIndex(args)
+      if (subcommandIndex < 0) return false
+      const subcommand = args[subcommandIndex]
+      return !!subcommand
+        && readOnlyGitCommands.has(subcommand)
+        && !hasMutatingGitArguments(args.slice(subcommandIndex + 1))
     }
     const vetoes = mutatingArgumentsByCommand[executable]
     return !(vetoes && args.some((arg) => vetoes.some((pattern) => pattern.test(arg))))
@@ -130,7 +203,8 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
     ports: [],
   }
   const dangerousReason =
-    /\brm\s+(?:-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\b|\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
+    hasDangerousRecursiveForceRemove(trimmed)
+      || /\brm\s+(?:-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\b|\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
       || windowsDestructivePatterns.some((pattern) => pattern.test(trimmed))
       ? '该命令可能删除数据、破坏文件系统或终止关键进程。'
       : /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(trimmed)

@@ -70,6 +70,10 @@ function createPlanToolContext() {
       interaction,
       codingSession: { enablePromptFeatures: () => undefined },
     } as never,
+    beginExecution: (executionId: string) => {
+      interaction.executionId = executionId
+      plan = []
+    },
     readArtifact: () => artifact,
   }
 }
@@ -119,5 +123,88 @@ describe('plan lifecycle tools', () => {
     expect(completed.activeContextStatus).toBe('completed')
     expect(harness.readArtifact()?.status).toBe('completed')
     expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('completed')
+  })
+
+  test('keeps paused and archived lifecycle whenever lifecycle is omitted', async () => {
+    const harness = createPlanToolContext()
+
+    await plansTools['plan:update'].execute(
+      { plan: [{ step: '检查生命周期', status: 'in_progress' }] },
+      harness.context
+    )
+    await plansTools['plan:update'].execute({ lifecycle: 'paused' }, harness.context)
+
+    const paused = await plansTools['plan:update'].execute(
+      { explanation: '等待外部条件' },
+      harness.context
+    )
+    expect(paused.activeContextStatus).toBe('paused')
+    expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('paused')
+
+    const maintained = await plansTools['plan:update'].execute(
+      { plan: [{ step: '检查生命周期', status: 'in_progress', objective: '继续核对' }] },
+      harness.context
+    )
+    expect(maintained.activeContextStatus).toBe('paused')
+
+    const resolvedWhilePaused = await plansTools['plan:update'].execute(
+      { complete_step: 1 },
+      harness.context
+    )
+    expect(resolvedWhilePaused.allStepsResolved).toBe(true)
+    expect(resolvedWhilePaused.activeContextStatus).toBe('paused')
+
+    await plansTools['plan:update'].execute({ lifecycle: 'archived' }, harness.context)
+    const archived = await plansTools['plan:update'].execute(
+      { explanation: '用户已更换方案' },
+      harness.context
+    )
+    expect(archived.activeContextStatus).toBe('archived')
+    expect(harness.readArtifact()?.status).toBe('archived')
+    expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('archived')
+  })
+
+  test('automatically completes an active plan when all steps become terminal', async () => {
+    const harness = createPlanToolContext()
+
+    await plansTools['plan:update'].execute(
+      { plan: [{ step: '完成验证', status: 'in_progress' }] },
+      harness.context
+    )
+    const completed = await plansTools['plan:update'].execute(
+      { complete_step: 1 },
+      harness.context
+    )
+
+    expect(completed.allStepsResolved).toBe(true)
+    expect(completed.activeContextStatus).toBe('completed')
+    expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('completed')
+  })
+
+  test('does not inherit a completed artifact from a previous execution', async () => {
+    const harness = createPlanToolContext()
+
+    await plansTools['plan:update'].execute(
+      {
+        lifecycle: 'completed',
+        plan: [{ step: '旧执行已完成', status: 'completed' }],
+      },
+      harness.context
+    )
+    expect(harness.readArtifact()?.metadata?.executionId).toBe('plan-lifecycle-execution')
+
+    harness.beginExecution('next-execution')
+    const beforeCreate = await plansTools['plan:get'].execute({}, harness.context)
+    expect(beforeCreate.lifecycle).toBe('active')
+
+    const created = await plansTools['plan:update'].execute(
+      { plan: [{ step: '新执行正在进行', status: 'in_progress' }] },
+      harness.context
+    )
+
+    expect(created.isInitialPlan).toBe(true)
+    expect(created.activeContextStatus).toBe('active')
+    expect(harness.readArtifact()?.metadata?.executionId).toBe('next-execution')
+    expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('active')
   })
 })

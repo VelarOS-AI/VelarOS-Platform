@@ -1,5 +1,7 @@
 import { type z } from 'zod'
 
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
+
 import { defineVelaTool } from '../defineVelaTool'
 
 import {
@@ -10,6 +12,23 @@ import {
   toolSpaceReplaceMethodSchema,
   toolSpaceSchema,
 } from './Categories'
+
+const ToolingReadCapability = {
+  effectKind: 'read',
+  readScopes: ['agent-tool-space'],
+  canReadArbitrarySource: false,
+  concurrency: 'safe',
+  reason: 'agent tool-space discovery',
+} satisfies ToolCapabilitySchema
+
+const ToolingWriteCapability = {
+  effectKind: 'write',
+  readScopes: ['agent-tool-space'],
+  writeScopes: ['agent-tool-space'],
+  canReadArbitrarySource: false,
+  concurrency: 'unsafe',
+  reason: 'agent tool-space residency update',
+} satisfies ToolCapabilitySchema
 
 const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>({
   name: 'tooling:map',
@@ -40,7 +59,7 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   ],
   usage: [
     '按意图搜索时传 op="find" 和 query；只有查全局或分类清单时才省略 op。用 categoryIds/toolOsStates 缩小范围；判断下一步优先读 toolOsState。',
-    'domainIds 的合法取值来自本工具返回的 categories[].toolOs.domain；没先看过就不要凭猜传域名。',
+    'domainIds 的合法取值见返回的 filters.validDomainIds；拼错值会进入 filters.unknownDomainIds，且不会扩大成全量结果。',
   ],
   examples: [
     { op: 'find', query: 'read document' },
@@ -53,6 +72,7 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   ],
   schema: toolSpaceQueryMethodSchema,
   permissions: [],
+  capabilities: ToolingReadCapability,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
     const parsed = parseToolSpaceQueryMethodInput(input)
@@ -82,6 +102,7 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
   ],
   schema: toolSpaceReadMethodSchema,
   permissions: [],
+  capabilities: ToolingReadCapability,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) =>
     runToolSpace(
@@ -116,6 +137,7 @@ const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSch
   ],
   schema: toolSpaceReplaceMethodSchema,
   permissions: [],
+  capabilities: ToolingWriteCapability,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) =>
     runToolSpace(

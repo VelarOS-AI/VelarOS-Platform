@@ -4,7 +4,11 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 
 import type { BrowserPendingEventKind } from '../core'
 
-import { BrowserControlCapability, BrowserObserveCapability } from './Capabilities'
+import {
+  BrowserControlCapability,
+  BrowserObserveCapability,
+  BrowserWaitCapability,
+} from './Capabilities'
 import { hasPendingBrowserEvent, requireActiveBrowserSite } from './Context'
 import { waitForPendingEvent } from './PendingEvents'
 import { defineBrowserTool } from './Types'
@@ -63,7 +67,7 @@ const browserWaitForPendingEvent = defineBrowserTool<{
     ),
   }),
   permissions: ['network'],
-  capabilities: BrowserObserveCapability,
+  capabilities: BrowserWaitCapability,
   isAvailable: (ctx) => ctx.browser.isActive(),
   isConcurrencySafe: () => false,
   execute: async ({ kind = 'download', timeoutMs }, ctx) => {

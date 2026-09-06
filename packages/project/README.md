@@ -33,6 +33,14 @@ CodeGraph 是可选增强资源，不拥有第二个工具身份，也不会决�
 完整单文件内容使用浅层 `project:write`；精确文本、符号、导入、JSON 与多操作原子事务
 使用 `project:edit`。两者共享同一套 Project Kernel 授权、事务和回滚边界。
 
+`project:read.maxChars` 是一次调用中所有文件共享的总预算；每个被截断的文件都返回可再次
+传给 `project:read` 的 `continuation`。续读落在超长行中时使用 1-based UTF-16
+`startColumn`，不会跳过该行剩余内容。
+
+文本编辑中的 `expectedMatches` 只断言文件内的匹配总数。多处匹配时用 1-based
+`occurrence` 选择一处，或传 `replaceAll: true` 明确修改全部。JSON Patch 的 `add` 与
+`replace` 必须携带 JSON `value`；路径按 JSON Pointer 解析，且不会自动创建缺失的父节点。
+
 ## 可恢复事务与 Desktop 边界
 
 需要跨进程重启继续 apply/rollback 的宿主，应把状态和 ChangeFeed 放在宿主私有目录，

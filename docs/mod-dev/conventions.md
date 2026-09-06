@@ -56,6 +56,11 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 | `buildAppliedAdjustments(...)` / `AppliedAdjustment` | 把「我替你改了什么」回报给模型 |
 | `buildValidItemsHint(...)` | 报错时告诉模型合法值是什么 |
 
+统一执行门会把 schema 实际产出的参数作为 effective args 写回调用历史，并通过工具元数据返回
+`inputAdjustments`。因此 `.default()`、`clampedInt()`、类型纠正和 `.strip()` 删除的字段都可对账；
+工具实现与去重账本只读取这份生效参数。领域工具若还做了 schema 之外的业务调整，继续使用
+`buildAppliedAdjustments(...)` 在结果里说明，不能静默改变目标、路径或写入值。
+
 注意这与 **manifest** 的宽容口径**不同**：manifest 是
 **形态层宽容、语义层零宽容**（未知字段即拒载）。
 两处口径不同是有意的——manifest 的读者是开发者与安装器，工具参数的读者是模型。

@@ -47,9 +47,9 @@ export interface ComputerScreenSize {
 export interface ComputerScreenshot {
   base64: string
   format: 'jpeg'
-  /** 图片宽度（逻辑分辨率，等于 displayWidth）；与点击坐标空间 1:1 一致。 */
+  /** 图片宽度（逻辑分辨率，等于 displayWidth）；模型工具把该局部坐标加 originX 后执行点击。 */
   width: number
-  /** 图片高度（逻辑分辨率，等于 displayHeight）；与点击坐标空间 1:1 一致。 */
+  /** 图片高度（逻辑分辨率，等于 displayHeight）；模型工具把该局部坐标加 originY 后执行点击。 */
   height: number
   displayWidth: number
   displayHeight: number

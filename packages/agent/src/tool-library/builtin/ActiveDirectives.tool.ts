@@ -12,6 +12,7 @@ import {
   listActiveDirectives as listActiveDirectiveArtifacts,
   upsertActiveDirective as upsertActiveDirectiveArtifact,
 } from './ActiveDirectives'
+import { AgentContextReadCapability, AgentContextWriteCapability } from './Capabilities'
 
 const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
   name: 'directive:list',
@@ -25,6 +26,7 @@ const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
   notes: ['用于取消或更新约束前的检查。'],
   schema: z.object({}),
   permissions: [],
+  capabilities: AgentContextReadCapability,
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => {
     const directives = await listActiveDirectiveArtifacts(ctx.activeContext)
@@ -113,6 +115,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
       ),
   }),
   permissions: [],
+  capabilities: AgentContextWriteCapability,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
     const directive = await upsertActiveDirectiveArtifact(ctx.activeContext, input)
@@ -170,6 +173,7 @@ const archiveActiveDirective = defineVelaTool<{
       message: '至少传 ids、title 或 directiveType 之一。',
     }),
   permissions: [],
+  capabilities: AgentContextWriteCapability,
   isConcurrencySafe: () => false,
   execute: (input, ctx) => archiveActiveDirectives(ctx.activeContext, input),
 })

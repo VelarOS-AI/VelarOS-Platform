@@ -714,6 +714,11 @@ const browserActSchema = z
           'configure_network：配置外部 CDP 浏览器网络状态。',
           'configure_emulation：配置外部 CDP 浏览器环境模拟。',
         ],
+        usage: [
+          '条件必填：target 需要 targetAction 和 target/targetRef/targetCss；drag 需要 source/sourceRef/sourceCss 和 target/targetRef/targetCss。',
+          '条件必填：type 需要 text；press_key 需要 key；move_mouse/click_coordinates 需要 x+y；wait_for_selector/url/function/text 分别需要 selector/urlPattern/expression/text。',
+          '条件必填：set_viewport 需要 width+height；set_page_zoom 需要 zoomAction，且 zoomAction=set 需要 zoomFactor；navigate 需要 navigationAction 或 url，goto 需要 url。',
+        ],
       })
     ),
     targetAction: z.enum(['click', 'fill', 'select', 'clear', 'select_all', 'scroll_into_view', 'focus', 'hover', 'check', 'uncheck']).optional().describe(
@@ -728,8 +733,8 @@ const browserActSchema = z
     ),
     targetRef: z.string().min(1).max(200).optional().describe(
       parameterDescription({
-        description: 'target/drag 动作的目标元素 ref，例如 inspect 返回的 @e4。',
-        usage: ['弱模型或不便生成嵌套对象时，优先直接传这个字段。'],
+        description: 'target/drag 动作的目标元素 ref，例如 inspect 返回的 @e4:g2。',
+        usage: ['弱模型或不便生成嵌套对象时，优先直接传这个字段；必须原样传回 generation 后缀。'],
       })
     ),
     targetCss: z.string().min(1).max(1000).optional().describe(
@@ -745,7 +750,7 @@ const browserActSchema = z
     ),
     sourceRef: z.string().min(1).max(200).optional().describe(
       parameterDescription({
-        description: 'drag 动作起点元素的 ref，例如 inspect 返回的 @e3。',
+        description: 'drag 动作起点元素的 ref，例如 inspect 返回的 @e3:g2；必须原样传回 generation 后缀。',
       })
     ),
     sourceCss: z.string().min(1).max(1000).optional().describe(
@@ -968,6 +973,16 @@ const browserActSchema = z
         path: issue.path,
       })
     }
+  })
+  .overwrite((input) => {
+    const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(input))
+    // superRefine 已经把精确分支错误映射到公开扁平 schema；失败时必须原样返回，让
+    // safeParse 以结构化 issue 收口，不能在 overwrite 内再 throw 破坏 safeParse 契约。
+    if (!exactParseResult.success) return input
+
+    // overwrite 保留公开 object shape / JSON Schema，同时让首次 zod parse 的 data 就是
+    // 真正执行的 action 分支：剔除其他 action 字段、展开 target aliases，并补齐 goto 默认值。
+    return normalizeBrowserActInput(exactParseResult.data)
   })
 
 type BrowserActExactInput = z.output<typeof browserActExactSchema>

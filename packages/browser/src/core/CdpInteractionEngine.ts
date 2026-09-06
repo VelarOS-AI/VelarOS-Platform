@@ -44,6 +44,19 @@ interface BrowserViewportScreenMetrics {
 }
 
 const BrowserTargetActionEffectSampleLineLimit = 200
+const BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>> = {
+  id: 12,
+  'data-testid': 12,
+  'data-test': 12,
+  'data-qa': 12,
+  controlId: 12,
+  href: 10,
+  'aria-labelledby': 10,
+  'aria-label': 9,
+  name: 9,
+  title: 8,
+  placeholder: 8,
+}
 
 /**
  * 交互域执行体的 host 无关外部核（走 CDP driver）。
@@ -258,7 +271,8 @@ export class CdpInteractionEngine {
       }),
       true
     )
-    this.targetRefs.storeInspection(input.sessionId, inspection)
+    // 这是 action 失败后的内部探测，不会作为 observation 返回给模型。不得把它发布到
+    // ref store，否则模型仍持有的上一次 inspect refs 会被一个不可见 generation 换代。
     if (input.externalSession) {
       this.updateExternalPageStateFromInspection(input.sessionId, input.externalSession, inspection)
     }
@@ -301,42 +315,49 @@ export class CdpInteractionEngine {
   ): Nullable<BrowserElementTargetHint> {
     const candidates: Array<{
       target: BrowserElementTargetHint
-      priority: number
       index: number
     }> = []
     let index = 0
-    const addTarget = (
-      target: Nullable<BrowserElementTargetHint>,
-      priority: number
-    ): void => {
+    const addTarget = (target: Nullable<BrowserElementTargetHint>): void => {
       if (!target) return
-      candidates.push({ target, priority, index })
+      candidates.push({ target, index })
       index += 1
     }
 
-    inspection.formFields.forEach((entry) => addTarget(entry.target, options.action === 'fill' ? 5 : 1))
-    inspection.actions.forEach((entry) => addTarget(entry.target, options.action === 'click' ? 5 : 2))
-    inspection.links.forEach((entry) => addTarget(entry.target, options.action === 'click' ? 3 : 1))
+    inspection.formFields.forEach((entry) => addTarget(entry.target))
+    inspection.actions.forEach((entry) => addTarget(entry.target))
+    inspection.links.forEach((entry) => addTarget(entry.target))
 
     const ranked = candidates
-      .map((candidate) => ({
-        ...candidate,
-        score: this.scoreSelfHealingTarget(options.target, candidate.target) + candidate.priority,
-      }))
-      .filter((candidate) => candidate.score >= 8)
-      .sort((left, right) => right.score - left.score || left.index - right.index)
+      .map((candidate) => {
+        const score = this.scoreSelfHealingTarget(options.target, candidate.target)
+        return score ? { ...candidate, ...score } : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => !!candidate)
+      .sort((left, right) => right.totalScore - left.totalScore || left.index - right.index)
 
-    const best = ranked[0]?.target
-    if (!best || this.isSameBrowserTargetSelector(options.target, best)) return null
+    const best = ranked[0]
+    if (!best || this.isSameBrowserTargetSelector(options.target, best.target)) return null
 
-    return best
+    // 相同强度的身份信号命中多个不同元素时，页面类别或出现顺序都不能替 agent
+    // 猜目标。重复出现在 links/actions 的同一 selector 不算歧义。
+    const ambiguous = ranked.slice(1).some((candidate) =>
+      candidate.totalScore === best.totalScore &&
+      !this.isSameBrowserTargetSelector(best.target, candidate.target)
+    )
+    if (ambiguous) return null
+
+    return best.target
   }
 
   private scoreSelfHealingTarget(
     staleTarget: BrowserElementTargetHint,
     freshTarget: BrowserElementTargetHint
-  ): number {
-    let score = 0
+  ): Nullable<{ identityScore: number; totalScore: number }> {
+    if (!this.isSelfHealingFrameCompatible(staleTarget, freshTarget)) return null
+
+    let identityScore = 0
+    let contextScore = 0
     const staleRole = this.normalizeTargetMatchText(staleTarget.role)
     const freshRole = this.normalizeTargetMatchText(freshTarget.role)
     const staleText = this.normalizeTargetMatchText(staleTarget.text)
@@ -344,33 +365,68 @@ export class CdpInteractionEngine {
     const staleName = this.normalizeTargetMatchText(staleTarget.name)
     const freshName = this.normalizeTargetMatchText(freshTarget.name)
 
-    if (staleRole && freshRole && staleRole === freshRole) score += 3
-    if (staleText && freshText) {
-      score += staleText === freshText || freshText.includes(staleText) ? 8 : 0
-    }
-    if (staleName && freshName) {
-      score += staleName === freshName || freshName.includes(staleName) ? 6 : 0
+    if (staleRole && freshRole && staleRole !== freshRole) return null
+    if (staleRole && freshRole && staleRole === freshRole) contextScore += 2
+    if (staleText && freshText && staleText === freshText) identityScore += 8
+    if (staleName && freshName && staleName !== freshName) return null
+    if (staleName && freshName && staleName === freshName) identityScore += 9
+
+    for (const [key, weight] of Object.entries(BrowserSelfHealingStableAttributeWeights)) {
+      const value = staleTarget.attributes?.[key]
+      const staleValue = this.normalizeTargetIdentityValue(value)
+      const freshValue = this.normalizeTargetIdentityValue(freshTarget.attributes?.[key])
+      // stable attribute 一旦由旧 observation 声明，就是身份约束而不是可选加分项。
+      // 新候选缺字段和字段冲突同样拒绝，不能再靠同名文本误点另一个元素。
+      if (staleValue && staleValue !== freshValue) return null
+      if (staleValue) identityScore += weight
     }
 
-    for (const [key, value] of Object.entries(staleTarget.attributes)) {
-      const staleValue = this.normalizeTargetMatchText(value)
-      const freshValue = this.normalizeTargetMatchText(freshTarget.attributes[key])
-      if (staleValue && freshValue && staleValue === freshValue) score += 2
-    }
+    // role、动作类型或候选所在列表只描述类别，不足以证明元素身份。
+    if (identityScore < 8) return null
 
-    return score
+    return {
+      identityScore,
+      totalScore: identityScore + contextScore,
+    }
+  }
+
+  private isSelfHealingFrameCompatible(
+    staleTarget: BrowserElementTargetHint,
+    freshTarget: BrowserElementTargetHint
+  ): boolean {
+    if (!staleTarget.frame && !freshTarget.frame) return true
+    if (!staleTarget.frame || !freshTarget.frame) return false
+
+    let matched = false
+    for (const key of ['css', 'url'] as const) {
+      const staleValue = this.normalizeTargetIdentityValue(staleTarget.frame[key])
+      const freshValue = this.normalizeTargetIdentityValue(freshTarget.frame[key])
+      if (staleValue && staleValue !== freshValue) return false
+      if (staleValue) matched = true
+    }
+    for (const key of ['name', 'title'] as const) {
+      const staleValue = this.normalizeTargetMatchText(staleTarget.frame[key])
+      const freshValue = this.normalizeTargetMatchText(freshTarget.frame[key])
+      if (staleValue && staleValue !== freshValue) return false
+      if (staleValue) matched = true
+    }
+    return matched
   }
 
   private normalizeTargetMatchText(value: LooseOptional<string>): string {
     return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
   }
 
+  private normalizeTargetIdentityValue(value: LooseOptional<string>): string {
+    return String(value ?? '').trim()
+  }
+
   private isSameBrowserTargetSelector(
     staleTarget: BrowserElementTargetHint,
     freshTarget: BrowserElementTargetHint
   ): boolean {
-    const staleCss = this.normalizeTargetMatchText(staleTarget.css)
-    const freshCss = this.normalizeTargetMatchText(freshTarget.css)
+    const staleCss = this.normalizeTargetIdentityValue(staleTarget.css)
+    const freshCss = this.normalizeTargetIdentityValue(freshTarget.css)
     if (staleCss && freshCss && staleCss !== freshCss) return false
 
     const staleRef = this.targetRefs.normalizeRef(staleTarget.ref)
@@ -695,13 +751,14 @@ export class CdpInteractionEngine {
     _abortSignal?: AbortSignal
   ): Promise<BrowserDragResult> {
     _abortSignal?.throwIfAborted()
-    const steps = clampInteger(options.steps, 1, 60, 10)
+    const hydratedOptions = this.targetRefs.hydrateDrag(sessionId, options)
+    const steps = clampInteger(hydratedOptions.steps, 1, 60, 10)
     const externalSession = this.requireExternalPageSession(sessionId)
     return this.dragTargetsWithExternalDriver({
       sessionId,
       context,
       driver: externalSession.driver,
-      options,
+      options: hydratedOptions,
       steps,
       externalSession,
     })

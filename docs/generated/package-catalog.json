@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.10",
+      "version": "0.6.11",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -39,7 +39,7 @@
       "domain": "capabilities",
       "directory": "packages/browser",
       "name": "@velaros-ai/browser",
-      "version": "0.2.17",
+      "version": "0.2.18",
       "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
       "exportSubpaths": [
         "./composition",
@@ -67,7 +67,7 @@
       "domain": "capabilities",
       "directory": "packages/computer",
       "name": "@velaros-ai/computer",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
       "exportSubpaths": [
         "./contracts",
@@ -80,7 +80,7 @@
       "domain": "capabilities",
       "directory": "packages/development",
       "name": "@velaros-ai/development",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "description": "Reusable language-service runtime for the Project code-understanding tool.",
       "exportSubpaths": [
         ".",
@@ -92,7 +92,7 @@
       "domain": "capabilities",
       "directory": "packages/office",
       "name": "@velaros-ai/office",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
       "exportSubpaths": [
         ".",
@@ -108,7 +108,7 @@
       "domain": "capabilities",
       "directory": "packages/project",
       "name": "@velaros-ai/project",
-      "version": "2.0.9",
+      "version": "2.0.10",
       "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
       "exportSubpaths": [
         ".",
@@ -128,7 +128,7 @@
       "domain": "capabilities",
       "directory": "packages/system",
       "name": "@velaros-ai/system",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
       "exportSubpaths": [
         ".",
@@ -220,7 +220,7 @@
       "domain": "memory",
       "directory": "packages/memory",
       "name": "@velaros-ai/memory",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
       "exportSubpaths": [
         ".",

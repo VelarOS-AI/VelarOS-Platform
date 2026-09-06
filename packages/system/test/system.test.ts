@@ -11,6 +11,8 @@ import { executeAtomicWrite, resolveAtomicWriteContent } from '../src/atomic/Wri
 import { systemTools } from '../src/Collection'
 import { SystemToolNames } from '../src/system-tool-names'
 import {
+  analyzeCommandExecution,
+  isParallelCommandExecutionSafe,
   isSystemShellCommandReadOnly,
   shouldReapForegroundProcessGroupAfterExit,
 } from '../src/SystemCommandExecutionPolicy'
@@ -155,6 +157,44 @@ describe('System capability', () => {
     expect(isSystemShellCommandReadOnly('find . -type f -exec rm {} ;')).toBe(false)
     expect(isSystemShellCommandReadOnly('sed -i s/a/b/ file.txt')).toBe(false)
     expect(isSystemShellCommandReadOnly('sed --in-place=.bak s/a/b/ file.txt')).toBe(false)
+  })
+
+  test('finds git subcommands after global options and fails closed for unknown forms', () => {
+    expect(isSystemShellCommandReadOnly('git -C repo status')).toBe(true)
+    expect(isSystemShellCommandReadOnly('git -c core.fileMode=false log -1')).toBe(true)
+    expect(isSystemShellCommandReadOnly('git --git-dir repo/.git status')).toBe(true)
+    expect(isSystemShellCommandReadOnly('git --git-dir=repo/.git status')).toBe(true)
+    expect(isSystemShellCommandReadOnly('git -C --output=repo status')).toBe(true)
+    expect(isSystemShellCommandReadOnly('git -C repo checkout main')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git --git-dir=repo/.git clean -fd')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git branch -D obsolete')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git config --set core.fileMode false')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git diff --output=changes.patch')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git log --output history.txt')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git show --output=commit.txt HEAD')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git --future-option status')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git future-command')).toBe(false)
+    expect(isSystemShellCommandReadOnly('git -C')).toBe(false)
+    expect(isParallelCommandExecutionSafe({
+      command: 'git -C repo checkout main',
+      parallel: true,
+    })).toBe(false)
+  })
+
+  test('recognizes split and long recursive force removals as dangerous', () => {
+    for (const command of [
+      'rm -r -f ./victim',
+      'rm -f -r ./victim',
+      'rm --recursive --force ./victim',
+      'rm -r --force ./victim',
+    ]) {
+      const plan = analyzeCommandExecution(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.shouldRequestConfirmation).toBe(true)
+    }
+
+    expect(analyzeCommandExecution('rm -f ./file').isDangerous).toBe(false)
+    expect(analyzeCommandExecution('rm -r ./directory').isDangerous).toBe(false)
   })
 
   test('dangerous shell commands request approval that can never be reused', async () => {

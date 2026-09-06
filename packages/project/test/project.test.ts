@@ -49,6 +49,281 @@ describe('Project capability', () => {
     }
   })
 
+  test('continues inside a truncated long line and honors 1-based column ranges', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-project-read-continuation-'))
+    try {
+      await writeFile(join(root, 'long.txt'), 'abcdefghij')
+      await writeFile(join(root, 'lines.txt'), 'abc\ndef\nghi')
+      await writeFile(join(root, 'blank-lines.txt'), 'a\n\nb')
+      await writeFile(join(root, 'huge-range.txt'), `${'a'.repeat(70_000)}\nXYZ`)
+      await writeFile(join(root, 'tiny.txt'), 'abc')
+      await writeFile(join(root, 'unicode.txt'), '😀x')
+      const project = await createProjectKernel({
+        root,
+        corePolicy: { maxFileSizeToReadBytes: 4 },
+      })
+
+      const first = await project.read({ path: 'long.txt', maxChars: 3 })
+      expect(first.content).toBe('abc')
+      expect(first.truncated).toBe(true)
+      expect(first.hasMore).toBe(true)
+      expect(first.nextStartLine).toBeUndefined()
+      expect(first.continuation).toMatchObject({
+        path: 'long.txt',
+        range: { startLine: 1, startColumn: 4 },
+        maxChars: 3,
+        baseRevision: first.snapshot.revision,
+      })
+
+      const second = await project.read(first.continuation!)
+      expect(second.content).toBe('def')
+      expect(second.continuation?.range).toEqual({ startLine: 1, startColumn: 7 })
+
+      const unicodeFirst = await project.read({ path: 'unicode.txt', maxChars: 1 })
+      expect(unicodeFirst.content).toBe('😀')
+      expect(unicodeFirst.continuation?.range).toEqual({ startLine: 1, startColumn: 3 })
+      const unicodeSecond = await project.read(unicodeFirst.continuation!)
+      expect(unicodeSecond.content).toBe('x')
+      for (const maxBytes of [1, 2, 3]) {
+        await expect(project.read({ path: 'unicode.txt', maxBytes })).rejects.toMatchObject({
+          reason: 'INVALID_INPUT',
+        })
+      }
+
+      const pagedContents: string[] = []
+      let page = await project.read({ path: 'lines.txt', maxChars: 3 })
+      while (true) {
+        pagedContents.push(page.content ?? '')
+        expect(page.content?.length).toBeGreaterThan(0)
+        if (!page.hasMore || !page.continuation) break
+        page = await project.read(page.continuation)
+      }
+      expect(pagedContents.join('')).toBe('abc\ndef\nghi')
+
+      const blankFirst = await project.read({ path: 'blank-lines.txt', maxChars: 3 })
+      expect(blankFirst.content).toBe('a\n\n')
+      const blankSecond = await project.read(blankFirst.continuation!)
+      expect(`${blankFirst.content}${blankSecond.content}`).toBe('a\n\nb')
+
+      const hugeRangeFirst = await project.read({
+        path: 'huge-range.txt',
+        range: { startLine: 1, endLine: 2, endColumn: 2 },
+        maxChars: 50_000,
+      })
+      expect(hugeRangeFirst.content).toHaveLength(50_000)
+      expect(hugeRangeFirst.continuation?.range).toEqual({
+        startLine: 1,
+        startColumn: 50_001,
+        endLine: 2,
+        endColumn: 2,
+      })
+      const hugeRangeSecond = await project.read(hugeRangeFirst.continuation!)
+      expect(hugeRangeSecond.content).toBe(`${'a'.repeat(20_000)}\nX`)
+
+      const selected = await project.read({
+        path: 'long.txt',
+        range: { startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 },
+      })
+      expect(selected.content).toBe('def')
+      expect(selected.range).toMatchObject({ startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 })
+      await expect(project.read({
+        path: 'long.txt',
+        range: { startLine: 1, startColumn: 7, endLine: 1, endColumn: 4 },
+      })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
+      await expect(project.read({
+        path: 'long.txt',
+        range: { startLine: 2 },
+      })).rejects.toMatchObject({
+        reason: 'INVALID_INPUT',
+        details: { totalLines: 1 },
+      })
+      await expect(project.read({
+        path: 'tiny.txt',
+        range: { startLine: 2 },
+      })).rejects.toMatchObject({
+        reason: 'INVALID_INPUT',
+        details: { totalLines: 1 },
+      })
+      await expect(project.read({
+        path: 'tiny.txt',
+        range: { startLine: 1, endLine: 2, endColumn: 1 },
+      })).rejects.toMatchObject({
+        reason: 'INVALID_INPUT',
+        details: { totalLines: 1 },
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('applies strict JSON patches and reports the exact failing patch without creating a transaction', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-project-json-patch-'))
+    try {
+      const file = join(root, 'data.json')
+      const original = '{"items":["first","second"],"nested":{"keep":true}}\n'
+      await writeFile(file, original)
+      const project = await createProjectKernel({ root })
+
+      const valid = await project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'json_patch',
+            path: 'data.json',
+            patches: [
+              { op: 'replace', path: '/items/1', value: 'updated' },
+              { op: 'add', path: '/items/-', value: 'last' },
+              { op: 'remove', path: '/nested/keep' },
+            ],
+          },
+        }],
+      })
+      await project.applyEdit({ transactionId: valid.transactionId })
+      expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+        items: ['first', 'updated', 'last'],
+        nested: {},
+      })
+
+      const beforeFailure = await readFile(file, 'utf8')
+      let failure: unknown
+      try {
+        await project.prepareEdit({
+          operations: [{
+            operation: {
+              type: 'json_patch',
+              path: 'data.json',
+              patches: [
+                { op: 'add', path: '/nested/temporary', value: true },
+                { op: 'remove', path: '/items/nope' },
+              ],
+            },
+          }],
+        })
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toMatchObject({
+        reason: 'INVALID_INPUT',
+        details: { patchIndex: 1, path: '/items/nope', reason: 'invalid_array_index' },
+      })
+      expect(await readFile(file, 'utf8')).toBe(beforeFailure)
+      expect((await project.status()).transactions).toBe(1)
+
+      await expect(project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'json_patch',
+            path: 'data.json',
+            patches: [{ op: 'replace', path: '/missing/child', value: 1 }],
+          },
+        }],
+      })).rejects.toMatchObject({
+        details: { patchIndex: 0, path: '/missing/child', reason: 'parent_missing' },
+      })
+
+      await expect(project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'json_patch',
+            path: 'data.json',
+            patches: [{ op: 'replace', path: '/items/0' }],
+          } as EditOperation,
+        }],
+      })).rejects.toMatchObject({
+        details: { patchIndex: 0, path: '/items/0', reason: 'value_required' },
+      })
+      await expect(project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'json_patch',
+            path: 'data.json',
+            patches: [{ op: 'replace', path: '/items/0', value: Number.POSITIVE_INFINITY }],
+          } as EditOperation,
+        }],
+      })).rejects.toMatchObject({
+        details: { patchIndex: 0, path: '/items/0', reason: 'value_not_json' },
+      })
+
+      const nonFiniteFile = join(root, 'non-finite.json')
+      await writeFile(nonFiniteFile, '1e400\n')
+      await expect(project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'json_patch',
+            path: 'non-finite.json',
+            patches: [{ op: 'replace', path: '', value: 1 }],
+          },
+        }],
+      })).rejects.toMatchObject({
+        reason: 'VALIDATION_FAILED',
+        details: { path: 'non-finite.json', reason: 'document_not_json_value' },
+      })
+      expect(await readFile(nonFiniteFile, 'utf8')).toBe('1e400\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('separates text match count assertions from occurrence and replace-all selection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-project-match-selection-'))
+    try {
+      const file = join(root, 'matches.txt')
+      await writeFile(file, 'same same same\n')
+      const project = await createProjectKernel({ root })
+
+      const resolved = await project.resolveTarget({
+        path: 'matches.txt',
+        target: { exactSnippet: 'same' },
+        expectedMatches: 3,
+      })
+      expect(resolved.status).toBe('ambiguous')
+      if (resolved.status === 'ambiguous') expect(resolved.candidates).toHaveLength(3)
+
+      await expect(project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'replace_text',
+            path: 'matches.txt',
+            oldText: 'same',
+            newText: 'one',
+            expectedMatches: 3,
+          },
+        }],
+      })).rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET' })
+
+      const selected = await project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'replace_text',
+            path: 'matches.txt',
+            oldText: 'same',
+            newText: 'chosen',
+            expectedMatches: 3,
+            occurrence: 2,
+          },
+        }],
+      })
+      await project.applyEdit({ transactionId: selected.transactionId })
+      expect(await readFile(file, 'utf8')).toBe('same chosen same\n')
+
+      const all = await project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'replace_text',
+            path: 'matches.txt',
+            oldText: 'same',
+            newText: 'all',
+            expectedMatches: 2,
+            replaceAll: true,
+          },
+        }],
+      })
+      await project.applyEdit({ transactionId: all.transactionId })
+      expect(await readFile(file, 'utf8')).toBe('all chosen all\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('rejects paths outside the project root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-project-boundary-'))
     try {

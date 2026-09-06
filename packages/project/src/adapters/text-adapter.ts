@@ -94,8 +94,8 @@ export function createTextAdapter(): FileAdapter {
       if (exact) {
         const found = resolveLineEndingAwareTextMatch(content, exact);
         const expected = input.expectedMatches ?? 1;
-        if (found.count === expected) return { status: "resolved", target: makeTarget(input.snapshot, { startOffset: found.index, endOffset: found.index + found.matchedText.length }, input, 0.99) };
-        if (found.count > expected) {
+        if (found.count === 1 && expected === 1) return { status: "resolved", target: makeTarget(input.snapshot, { startOffset: found.index, endOffset: found.index + found.matchedText.length }, input, 0.99) };
+        if (found.count > 0) {
           const candidates: ResolvedTarget[] = [];
           let from = 0;
           while (true) {
@@ -104,7 +104,13 @@ export function createTextAdapter(): FileAdapter {
             candidates.push(makeTarget(input.snapshot, { startOffset: idx, endOffset: idx + found.matchedText.length }, input, 0.75));
             from = idx + found.matchedText.length;
           }
-          return { status: "ambiguous", candidates, reason: `预期 ${expected} 个匹配，实际找到 ${found.count} 个` };
+          return {
+            status: "ambiguous",
+            candidates,
+            reason: found.count === expected
+              ? `匹配总数断言通过，但 ${found.count} 个候选仍需明确选择`
+              : `预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
+          };
         }
         return { status: "not_found", reason: "未找到精确片段" };
       }

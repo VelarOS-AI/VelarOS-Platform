@@ -85,7 +85,7 @@ export function inferActionFromFields(
 /** 铁律⑧:系统替模型做过的调整(钳制/缺省/别名采用)统一回显形状。 */
 export interface AppliedAdjustment {
   field: string
-  action: 'clamped' | 'defaulted' | 'aliased' | 'ignored'
+  action: 'clamped' | 'defaulted' | 'aliased' | 'ignored' | 'coerced' | 'normalized'
   detail: string
 }
 

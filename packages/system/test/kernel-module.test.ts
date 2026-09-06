@@ -11,9 +11,58 @@ import {
   type SystemCapabilityService,
   SystemToolCategoryByName,
   type SystemToolContext,
+  systemTools,
 } from '../src'
 import { createSystemBundledModDefinition } from '../src/composition'
-import type { SystemCommandResult } from '../src/SystemContracts'
+import { LocalSystemKernel } from '../src/kernel/LocalSystemKernel'
+import type { SystemBackgroundTaskRecord, SystemCommandResult } from '../src/SystemContracts'
+
+function createLargeProcessKernel() {
+  const kernel = new LocalSystemKernel({ cwd: '/tmp', platform: 'darwin' })
+  const processRows = Array.from({ length: 60 }, (_, index) => {
+    const name = index === 56 ? 'TargetMarker' : 'node'
+    const command = index >= 57
+      ? `node ${'x'.repeat(900)} --TaRgEtMaRkEr=${index}`
+      : `node unrelated-${index}`
+    return `${1000 + index} 1 tester Sun Sep 6 12:00:00 2026 S 1.0 1024 ${name} ${command}`
+  }).join('\n')
+  const portRows = Array.from({ length: 60 }, (_, index) =>
+    `p${1000 + index}\ncnode\nn127.0.0.1:${4000 + index}\nTST=LISTEN`).join('\n')
+  const internals = kernel as unknown as {
+    runPlatformCommand: (spec: { file: string }) => Promise<{ stdout: string; stderr: string }>
+    backgroundTasks: Map<string, SystemBackgroundTaskRecord>
+    resolveBackgroundTaskStatus: () => 'running'
+  }
+  internals.runPlatformCommand = async (spec) => ({
+    stdout: spec.file === 'ps' ? processRows : portRows,
+    stderr: '',
+  })
+  internals.resolveBackgroundTaskStatus = () => 'running'
+  for (let index = 0; index < 60; index += 1) {
+    internals.backgroundTasks.set(`task-${index}`, {
+      id: `task-${index}`,
+      runId: `run-${index}`,
+      sessionId: null,
+      scope: 'system',
+      command: index >= 56 ? `bun ${'x'.repeat(900)} TaRgEtMaRkEr-${index}` : `bun unrelated-${index}`,
+      cwd: '/tmp',
+      pid: 1000 + index,
+      logPath: null,
+      ports: [],
+      reason: null,
+      terminateCommand: null,
+      forceTerminateCommand: null,
+      fallbackTerminateCommand: null,
+      requested: true,
+      autoStarted: false,
+      startedAt: 1,
+      updatedAt: 1,
+      status: 'running',
+      recentOutput: null,
+    })
+  }
+  return kernel
+}
 
 function captureService(
   capture: (tokenId: string, service: object) => void,
@@ -30,6 +79,31 @@ function captureService(
 }
 
 describe('System Kernel module', () => {
+  test('declares authoritative capability effects for every system tool', () => {
+    const expectedEffects = {
+      'system:read': 'read',
+      'system:write': 'write',
+      'system:edit': 'write',
+      'system:list': 'read',
+      'system:search': 'read',
+      'system:run': 'execute',
+      'system:refresh-environment': 'write',
+      'system:processes': 'read',
+      'system:list-tasks': 'read',
+      'system:terminate-task': 'execute',
+      'system:open': 'external',
+    } as const
+
+    expect(Object.keys(systemTools)).toEqual(Object.keys(expectedEffects))
+    for (const [name, effectKind] of Object.entries(expectedEffects)) {
+      const tool = systemTools[name as keyof typeof systemTools]
+      expect(tool.capabilities?.effectKind).toBe(effectKind)
+      expect(tool.readOnly).toBe(effectKind === 'read')
+      expect(tool.capabilities?.reason).toBeTruthy()
+      if (effectKind !== 'read') expect(tool.capabilities?.writeScopes?.length).toBeGreaterThan(0)
+    }
+  })
+
   test('keeps every tool in one concrete responsibility category', () => {
     expect(SystemToolCategoryByName).toEqual({
       'system:read': 'system-files',
@@ -195,6 +269,104 @@ describe('System Kernel module', () => {
     expect(String(compact.processes.items[0]?.command).length).toBeLessThan(longCommand.length)
     expect(full.processes.items[0]?.command).toBe(longCommand)
     expect(full.processes.items[0]?.commandTruncated).toBeUndefined()
+  })
+
+  test('filters background task commands before applying the per-category limit', async () => {
+    let service: SystemCapabilityService | undefined
+    let receivedLimit: number | undefined = -1
+    let receivedFilter: string | undefined
+    const task = (id: string, command: string) => ({
+      id,
+      runId: id,
+      sessionId: null,
+      scope: 'system' as const,
+      command,
+      cwd: '/tmp',
+      pid: 100,
+      logPath: null,
+      ports: [],
+      reason: null,
+      terminateCommand: null,
+      forceTerminateCommand: null,
+      fallbackTerminateCommand: null,
+      requested: true,
+      autoStarted: false,
+      startedAt: 1,
+      updatedAt: 1,
+      status: 'running' as const,
+      recentOutput: null,
+    })
+    const module = createSystemKernelModule({
+      resolveContext: (_scope, signal) =>
+        ({
+          abortSignal: signal,
+          system: {
+            listBackgroundTasks: async ({ limit, filter }: { limit?: number; filter?: string }) => {
+              receivedLimit = limit
+              receivedFilter = filter
+              return [
+                task('unrelated', 'bun run unrelated-watch'),
+                task('target', 'bun run velaros-dev-server'),
+              ].slice(0, limit)
+            },
+          },
+        }) as unknown as SystemToolContext,
+    })
+    await module.activate(captureService((_tokenId, registered) => {
+      service = registered as SystemCapabilityService
+    }))
+
+    const result = (await service?.invoke(
+      'system:processes',
+      undefined,
+      { include: ['tasks'], filter: '  VELAROS-DEV  ', limit: 1 },
+      new AbortController().signal,
+    )) as { tasks: { count: number; items: Array<{ id: string; command: string }> } }
+
+    expect(receivedLimit).toBe(50)
+    expect(receivedFilter).toBe('velaros-dev')
+    expect(result.tasks).toEqual({
+      count: 1,
+      items: [expect.objectContaining({ id: 'target', command: 'bun run velaros-dev-server' })],
+    })
+  })
+
+  test.each(['listProcesses', 'listOpenPorts', 'listBackgroundTasks'] as const)(
+    'filters the full local kernel %s collection before its result limit',
+    async (method) => {
+      const kernel = createLargeProcessKernel()
+      expect(await kernel[method]()).toHaveLength(50)
+      const allMatches = await kernel[method]({ filter: ' targetmarker ' })
+      expect(allMatches).toHaveLength(4)
+      expect(allMatches.map((item) => item.pid)).toEqual([1056, 1057, 1058, 1059])
+      const limited = await kernel[method]({ filter: ' TaRgEtMaRkEr ', limit: 2 })
+      expect(limited.map((item) => item.pid)).toEqual([1056, 1057])
+    },
+  )
+
+  test('passes process filters through the kernel before its default 50-record window', async () => {
+    const kernel = createLargeProcessKernel()
+    const result = await systemTools['system:processes'].execute({
+      filter: '  TARGETMARKER ',
+      limit: 2,
+    }, { system: kernel } as SystemToolContext) as Record<string, { count: number; items: Array<{ pid: number }> }>
+    for (const category of ['processes', 'ports', 'tasks']) {
+      expect(result[category].count).toBe(2)
+      expect(result[category].items.map((item) => item.pid)).toEqual([1056, 1057])
+    }
+  })
+
+  test('bounds each process category to 50 when a provider ignores the default limit', async () => {
+    const kernel = createLargeProcessKernel()
+    const system = {
+      listProcesses: () => kernel.listProcesses({ limit: 60 }),
+      listOpenPorts: () => kernel.listOpenPorts({ limit: 60 }),
+      listBackgroundTasks: () => kernel.listBackgroundTasks({ limit: 60 }),
+    }
+    const result = await systemTools['system:processes'].execute({}, { system } as unknown as SystemToolContext) as Record<string, { count: number }>
+    for (const category of ['processes', 'ports', 'tasks']) {
+      expect(result[category].count).toBe(50)
+    }
   })
 
   test('exposes an authoritative tail window and a session-log continuation for truncated output', async () => {

@@ -87,6 +87,7 @@ function exposeCommandOutputWindow(result: SystemCommandResult): SystemCommandRe
 const SystemOpenCapability = {
   effectKind: 'external',
   readScopes: ['system'],
+  writeScopes: ['system'],
   concurrency: 'unsafe',
   metadata: {
     systemAccess: 'control',
@@ -410,6 +411,7 @@ const bash = defineSystemTool<{
   capabilities: {
     effectKind: 'execute',
     readScopes: ['system'],
+    writeScopes: ['system'],
     filesystem: { read: 'system', write: 'system' },
     process: { execution: 'input-dependent' },
     concurrency: 'input-dependent',
@@ -495,7 +497,7 @@ const ps = defineSystemTool<{
   suitable: ['排查本机进程、端口占用、dev server 或后台 watch 任务。'],
   forbidden: ['不要用它终止进程；本工具只查询。'],
   usage: [
-    'include 默认同时返回 processes、ports、tasks；用 limit 控制每类数量。',
+    'include 默认同时返回 processes、ports、tasks；每类默认最多 50 条，用 limit 调整匹配后的数量上限。',
     '找"某服务/某 app 归属的进程或端口"优先用 filter：对进程名+完整命令行联合模糊匹配（进程名常常只是 Electron/node，服务特征在命令行里）。',
     '命令行默认有界显示；确实需要逐字完整命令时才传 includeFullCommand=true。',
   ],
@@ -511,7 +513,7 @@ const ps = defineSystemTool<{
     include: z.array(z.enum(['processes', 'ports', 'tasks'])).max(3).optional().describe(
       parameterDescription({ description: '要返回的运行态类别。' })
     ),
-    limit: z.number().int().positive().max(100).optional().describe(parameterDescription({ description: '每类最多返回数量。' })),
+    limit: z.number().int().positive().max(100).default(50).describe(parameterDescription({ description: '每类最多返回数量；默认 50，先过滤再应用上限。' })),
     pid: z.number().int().positive().optional().describe(parameterDescription({ description: '按 pid 过滤。' })),
     processName: z.string().min(1).optional().describe(parameterDescription({ description: '按进程名过滤。' })),
     port: z.number().int().positive().max(65535).optional().describe(parameterDescription({ description: '按监听端口过滤。' })),
@@ -527,10 +529,18 @@ const ps = defineSystemTool<{
     })),
   }),
   permissions: [],
+  capabilities: {
+    effectKind: 'read',
+    readScopes: ['system'],
+    filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: true,
+    concurrency: 'safe',
+    reason: 'system process, port, and managed task inspection',
+  },
   isConcurrencySafe: () => true,
   execute: async ({
     include,
-    limit,
+    limit = 50,
     pid,
     processName,
     port,
@@ -541,9 +551,10 @@ const ps = defineSystemTool<{
   }, ctx) => {
     const includeSet = new Set(include && include.length > 0 ? include : ['processes', 'ports', 'tasks'])
     const result: Record<string, unknown> = { sampledAt: new Date().toISOString() }
-    // filter 在工具层后过滤（进程名+命令行联合），存在时先取全量再截 limit，
-    // 避免 store 侧 limit 把匹配项挤出窗口。
-    const normalizedFilter = filter?.trim().toLowerCase()
+    // provider 必须在截断前按完整命令过滤；工具侧复核兼容旧 provider，并保持返回数量有界。
+    const normalizedFilter = filter?.trim().toLowerCase() || undefined
+    // 兼容过渡候选窗口：旧 provider 可能忽略 filter，避免小 limit 把其原有查询窗口缩小。
+    const providerLimit = normalizedFilter ? Math.max(limit, 50) : limit
     const matchesFilter = (candidate: { processName?: LooseOptional<string>; name?: LooseOptional<string>; command?: LooseOptional<string> }): boolean => {
       if (!normalizedFilter) return true
       const haystack = `${candidate.processName ?? candidate.name ?? ''}\0${candidate.command ?? ''}`.toLowerCase()
@@ -551,15 +562,12 @@ const ps = defineSystemTool<{
     }
     const applyFilter = <T extends { processName?: LooseOptional<string>; name?: LooseOptional<string>; command?: LooseOptional<string> }>(
       items: T[]
-    ): T[] => {
-      if (!normalizedFilter) return items
-      const filtered = items.filter(matchesFilter)
-      return limit ? filtered.slice(0, limit) : filtered
-    }
+    ): T[] => items.filter(matchesFilter).slice(0, limit)
 
     if (includeSet.has('processes')) {
       const items = await ctx.system.listProcesses({
-        limit: normalizedFilter ? undefined : limit,
+        filter: normalizedFilter,
+        limit: providerLimit,
         pid,
         name: processName,
         includeCwd,
@@ -572,7 +580,8 @@ const ps = defineSystemTool<{
 
     if (includeSet.has('ports')) {
       const items = await ctx.system.listOpenPorts({
-        limit: normalizedFilter ? undefined : limit,
+        filter: normalizedFilter,
+        limit: providerLimit,
         pid,
         processName,
         port,
@@ -585,10 +594,15 @@ const ps = defineSystemTool<{
     }
 
     if (includeSet.has('tasks')) {
-      const items = (await ctx.system.listBackgroundTasks({ limit, onlyRunning })).map((item) =>
+      const items = await ctx.system.listBackgroundTasks({
+        filter: normalizedFilter,
+        limit: providerLimit,
+        onlyRunning,
+      })
+      const finalItems = applyFilter(items).map((item) =>
         compactProcessCommand(item, includeFullCommand)
       )
-      result.tasks = { count: items.length, items }
+      result.tasks = { count: finalItems.length, items: finalItems }
     }
 
     return result

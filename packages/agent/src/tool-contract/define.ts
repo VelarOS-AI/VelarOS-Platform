@@ -1,4 +1,4 @@
-import { isObject, isPresent } from '@velaros-ai/core'
+import { isBoolean, isObject, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -21,6 +21,20 @@ import type {
   ToolContractSpec,
   ToolContractSurface,
 } from './types'
+
+interface ToolReadOnlyClassification {
+  readOnly?: boolean
+  role?: string
+  capabilities?: { effectKind?: string }
+}
+
+/** 行为 effect 是只读真值；缺席时才采用显式声明，旧工具最后回退 role。 */
+function resolveToolReadOnly(tool: ToolReadOnlyClassification): boolean {
+  const effectKind = tool.capabilities?.effectKind
+  if (effectKind) return effectKind === 'read'
+  if (isBoolean(tool.readOnly)) return tool.readOnly
+  return tool.role === 'inspect'
+}
 
 function validateToolContractExamples(
   toolName: string,
@@ -204,6 +218,8 @@ function defineToolRuntimeSpec<
     name: input.name,
     category: input.category,
     role: input.role,
+    summary: input.summary,
+    readOnly: resolveToolReadOnly(input),
     description: buildToolContractDescription(
       input.name,
       input.category,
@@ -245,4 +261,5 @@ export {
   defineToolContract,
   defineToolRuntimeSpec,
   isToolContractSpec,
+  resolveToolReadOnly,
 }

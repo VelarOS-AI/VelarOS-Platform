@@ -3,6 +3,7 @@ import { toNullable } from '@velaros-ai/core'
 import { DynamicHandlesMarker, PinnedEvidenceMarker } from '../../agent/history/contextOSMessage'
 import { defineVelaTool } from '../defineVelaTool'
 
+import { AgentContextReadCapability } from './Capabilities'
 import type { RecallContextInput } from './ContextRetrieval'
 import { inferRecallRefKind, recallContextSchema } from './ContextRetrieval'
 
@@ -39,6 +40,7 @@ const recallContext = defineVelaTool<RecallContextInput>({
   ],
   schema: recallContextSchema,
   permissions: [],
+  capabilities: AgentContextReadCapability,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
     const conversation = ctx.conversation

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
@@ -18,7 +19,11 @@ import {
 const ProbeToolName = 'probe:read'
 const ProbeSignature = 'probe:read@1'
 
-function createHarness() {
+function createHarness(options: {
+  role?: string
+  capabilities?: { effectKind: 'read' | 'write' }
+  executionError?: AppError
+} = {}) {
   const executed: Array<Record<string, unknown>> = []
   let visibleNames: string[] = []
   let visibleSignatures: Record<string, string> = {}
@@ -26,7 +31,8 @@ function createHarness() {
 
   const tool = {
     description: 'Read a probe value.',
-    role: 'inspect' as const,
+    role: options.role ?? 'inspect',
+    capabilities: options.capabilities,
     permissions: [],
     schema: {
       safeParse: (input: unknown) => ({
@@ -36,6 +42,7 @@ function createHarness() {
     },
     isConcurrencySafe: () => true,
     execute: (input: Record<string, unknown>) => {
+      if (options.executionError) throw options.executionError
       executed.push(input)
       return { echo: input.value }
     },
@@ -44,6 +51,7 @@ function createHarness() {
     name: ProbeToolName,
     description: tool.description,
     role: tool.role,
+    capabilities: tool.capabilities,
     permissions: [],
     categoryId: 'project-files' as const,
     systemEnabled: true,
@@ -139,6 +147,51 @@ function call(
 }
 
 describe('ToolContractExecutionFacade', () => {
+  test('classifies denied calls by structured code regardless of message language', async () => {
+    for (const code of ['PERMISSION', 'PERMISSION_DENIED', 'EXECUTION_DENIED']) {
+      const harness = createHarness({ executionError: new AppError(code, '当前工具调用未获授权') })
+      const { catalogRevision } = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
+      const result = await harness.facade.executeTool(
+        harness.binding,
+        call(catalogRevision, ProbeToolName, { value: 'blocked' }),
+        { readOnly: false, onProgress: () => undefined },
+      )
+      expect(result).toMatchObject({
+        status: 'denied',
+        error: '当前工具调用未获授权',
+        output: { error: 'tool_denied', code },
+      })
+      expect(harness.executed).toEqual([])
+    }
+  })
+
+  test('does not mistake permission-related prose in a runtime failure for an authorization denial', async () => {
+    const harness = createHarness({ executionError: new AppError('IO', 'Could not read permission diagnostics') })
+    const { catalogRevision } = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
+    await expect(harness.facade.executeTool(
+      harness.binding,
+      call(catalogRevision, ProbeToolName, { value: 'runtime-error' }),
+      { readOnly: false, onProgress: () => undefined },
+    )).resolves.toMatchObject({ status: 'error', output: { code: 'IO' } })
+  })
+
+  test('uses the same denial classification when the host scope rejects before tool execution', async () => {
+    for (const code of ['PERMISSION', 'PERMISSION_DENIED', 'EXECUTION_DENIED']) {
+      const harness = createHarness()
+      const binding = {
+        ...harness.binding,
+        runInSessionScope: async () => { throw new AppError(code, '宿主拒绝进入执行作用域') },
+      }
+      const { catalogRevision } = harness.facade.resolveCatalog(binding, { readOnly: false })
+      await expect(harness.facade.executeTool(
+        binding,
+        call(catalogRevision, ProbeToolName, { value: 'blocked' }),
+        { readOnly: false, onProgress: () => undefined },
+      )).resolves.toMatchObject({ status: 'denied', error: '宿主拒绝进入执行作用域' })
+      expect(harness.executed).toEqual([])
+    }
+  })
+
   test('projects a deterministic catalog with both recovery tools', () => {
     const harness = createHarness()
     const first = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
@@ -156,6 +209,27 @@ describe('ToolContractExecutionFacade', () => {
       category: 'project-files',
       readOnly: true,
     })
+  })
+
+  test('uses capability effects as the read-only truth and role only as a fallback', () => {
+    const memoryRead = createHarness({
+      role: 'memory',
+      capabilities: { effectKind: 'read' },
+    })
+    const mixedWrite = createHarness({
+      role: 'inspect',
+      capabilities: { effectKind: 'write' },
+    })
+
+    expect(
+      memoryRead.facade.resolveCatalog(memoryRead.binding, { readOnly: true }).tools.at(-1)
+    ).toMatchObject({ name: ProbeToolName, readOnly: true })
+    expect(
+      mixedWrite.facade.resolveCatalog(mixedWrite.binding, { readOnly: true }).tools.map((tool) => tool.name)
+    ).toEqual([ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName])
+    expect(
+      mixedWrite.facade.resolveCatalog(mixedWrite.binding, { readOnly: false }).tools.at(-1)
+    ).toMatchObject({ name: ProbeToolName, readOnly: false })
   })
 
   test('rejects stale and out-of-scope calls before entering the execution scope', async () => {

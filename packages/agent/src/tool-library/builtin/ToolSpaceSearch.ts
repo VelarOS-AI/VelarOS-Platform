@@ -57,6 +57,7 @@ export interface ToolSearchResultEntry {
   name: string
   categoryId: ToolCategoryId
   summary: string
+  usageSkillId: Nullable<string>
   score: number
   availability: ToolAvailability
   toolOsState: ToolOsState

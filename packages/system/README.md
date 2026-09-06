@@ -27,6 +27,9 @@ system:terminate-task
 结构化进程/端口信息或桌面打开语义。项目发现、开发环境摘要和诊断快捷工具已经从模型面删除；
 能由普通命令稳定完成的操作直接使用 `system:run`。
 
+`system:processes.filter` 会对进程、端口与后台任务的完整命令行做不区分大小写的匹配，
+再分别应用 `limit`；命令特征不会因先截断任务列表而被漏掉。
+
 ## 进程约束契约
 
 `@velaros-ai/system/execution` 提供统一的 `read-only`、`workspace-write` 与

@@ -173,6 +173,9 @@ export interface SystemProcessInfo {
 }
 
 export interface SystemProcessQueryOptions {
+  /** 对进程名与完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
+  filter?: string
+  /** 匹配结果数量上限；默认 50。 */
   limit?: number
   pid?: number
   pids?: number[]
@@ -197,6 +200,9 @@ export interface SystemOpenPortInfo {
 }
 
 export interface SystemOpenPortQueryOptions {
+  /** 对进程名与完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
+  filter?: string
+  /** 匹配结果数量上限；默认 50。 */
   limit?: number
   pid?: number
   processName?: string
@@ -279,6 +285,9 @@ export interface SystemBackgroundTaskRecord {
 }
 
 export interface SystemBackgroundTaskQueryOptions {
+  /** 对后台任务完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
+  filter?: string
+  /** 匹配结果数量上限；默认 50。 */
   limit?: number
   taskId?: string
   sessionId?: string

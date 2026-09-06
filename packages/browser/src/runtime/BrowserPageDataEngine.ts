@@ -370,10 +370,11 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     if (externalSession) return super.uploadFile(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const hydratedTarget = this.targetRefs.hydrateTarget(sessionId, options.target, 'target')
 
     const locator = (await evaluateInWebContents(
       session.webContents,
-      this.scripts.buildResolveFileInputScript(options.target),
+      this.scripts.buildResolveFileInputScript(hydratedTarget),
       true
     )) as { matched: boolean; selector: Nullable<string> }
 

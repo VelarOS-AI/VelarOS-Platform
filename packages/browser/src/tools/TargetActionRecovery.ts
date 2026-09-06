@@ -1,5 +1,6 @@
 import {
   isFiniteNumber,
+  isNull,
   isPlainObject,
   isPresent,
   isTrue,
@@ -115,38 +116,84 @@ function findClickPointFromLabels(
   labels: BrowserScreenshotElementLabel[],
   target: BrowserElementTargetHint
 ): Nullable<CoordinateClickPoint> {
-  const matched = labels.find((label) => matchesElementLabel(label, target))
+  const ranked = labels
+    .map((label, index) => {
+      const score = scoreElementLabel(label, target)
+      return isNull(score) ? null : { label, index, score }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => !!entry)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+  const matched = ranked[0]
   if (!matched) return null
 
+  // 同等身份信号命中多个截图元素时，坐标就是有歧义的；不能按 DOM 顺序点第一个。
+  if (ranked.slice(1).some((entry) => entry.score === matched.score)) return null
+
   return {
-    x: Math.round(matched.x + matched.width / 2),
-    y: Math.round(matched.y + matched.height / 2),
+    x: Math.round(matched.label.x + matched.label.width / 2),
+    y: Math.round(matched.label.y + matched.label.height / 2),
   }
 }
 
-function matchesElementLabel(
+function scoreElementLabel(
   label: BrowserScreenshotElementLabel,
   target: BrowserElementTargetHint
-): boolean {
+): Nullable<number> {
+  let identityScore = 0
+  let contextScore = 0
   const css = target.css?.trim()
-  if (css && label.selector && (label.selector === css || css.includes(label.selector))) return true
+  const labelSelector = label.selector?.trim()
+  const exactSelector = !!css && !!labelSelector && labelSelector === css
+  if (exactSelector) identityScore += 30
 
-  const testId = target.attributes?.['data-testid'] ?? target.attributes?.['data-test']
-  if (testId && label.selector?.includes(`data-testid="${testId}"`)) return true
+  const stableAttributeScore = scoreStableLabelSelector(labelSelector, target.attributes)
+  if (!exactSelector && hasStableTargetAttribute(target.attributes) && stableAttributeScore === 0)
+    return null
+  identityScore += stableAttributeScore
 
   const targetText = normalizeMatchText(target.text)
   const labelText = normalizeMatchText(label.text)
-  if (targetText && labelText && (labelText.includes(targetText) || targetText.includes(labelText))) return true
+  if (targetText && labelText && targetText === labelText) identityScore += 10
 
   const targetRole = target.role?.trim().toLowerCase()
   const labelRole = label.role?.trim().toLowerCase()
+  if (targetRole && labelRole && targetRole !== labelRole) return null
+  if (targetRole && labelRole && targetRole === labelRole) contextScore += 2
 
-  return !!(
-    targetRole &&
-    labelRole &&
-    targetRole === labelRole &&
-    (!targetText || labelText.includes(targetText))
+  // role 只描述类别，子串文本也不足以证明截图里的元素就是原目标。
+  return identityScore >= 10 ? identityScore + contextScore : null
+}
+
+function scoreStableLabelSelector(
+  selector: LooseOptional<string>,
+  attributes: LooseOptional<BrowserElementTargetHint['attributes']>
+): number {
+  if (!selector) return 0
+
+  const id = attributes?.id?.trim()
+  if (id && selector === `#${id}`) return 24
+
+  for (const key of ['data-testid', 'data-test', 'data-qa'] as const) {
+    const value = attributes?.[key]?.trim()
+    if (value && selector.includes(`[${key}="${quoteSelectorAttribute(value)}"]`)) return 22
+  }
+
+  const name = attributes?.name?.trim()
+  if (name && selector.includes(`[name="${quoteSelectorAttribute(name)}"]`)) return 18
+
+  return 0
+}
+
+function hasStableTargetAttribute(
+  attributes: LooseOptional<BrowserElementTargetHint['attributes']>
+): boolean {
+  return ['id', 'data-testid', 'data-test', 'data-qa', 'name'].some((key) =>
+    !!attributes?.[key]?.trim()
   )
+}
+
+function quoteSelectorAttribute(value: string): string {
+  return value.replace(/["\\]/gu, '\\$&')
 }
 
 async function findClickPointFromBounds(
@@ -159,8 +206,9 @@ async function findClickPointFromBounds(
   const selectorLiteral = JSON.stringify(css)
   const bounds = await ctx.browser.evaluateScript({
     script: [
-      `const el = document.querySelector(${selectorLiteral});`,
-      `if (!el) return { found: false };`,
+      `const matches = Array.from(document.querySelectorAll(${selectorLiteral}));`,
+      `if (matches.length !== 1) return { found: false, matchCount: matches.length };`,
+      `const el = matches[0];`,
       'const r = el.getBoundingClientRect();',
       'return {',
       '  found: true,',
@@ -183,7 +231,7 @@ async function findClickPointFromBounds(
 }
 
 function normalizeMatchText(value: Optional<Nullable<string>>): string {
-  return value?.trim().toLowerCase() ?? ''
+  return value?.replace(/\s+/gu, ' ').trim().toLowerCase() ?? ''
 }
 
 function readFiniteNumber(value: unknown): Nullable<number> {

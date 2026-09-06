@@ -631,13 +631,14 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const absolutePath = this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
+    const hydratedTarget = this.targetRefs.hydrateTarget(sessionId, options.target, 'target')
     if (!externalSession.driver.setFileInputFiles) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持文件上传。')
     }
     const locator = await externalSession.driver.executeJavaScript<{
       matched: boolean
       selector: Nullable<string>
-    }>(this.scripts.buildResolveFileInputScript(options.target), true)
+    }>(this.scripts.buildResolveFileInputScript(hydratedTarget), true)
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, locator, context.url)
 
     if (!locator.matched || !locator.selector)

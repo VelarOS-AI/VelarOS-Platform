@@ -13,6 +13,10 @@ import {
   type WaitBackgroundJobsInput,
   waitBackgroundJobsSchema,
 } from './BackgroundJobs'
+import {
+  AgentBackgroundJobCancelCapability,
+  AgentBackgroundJobReadCapability,
+} from './Capabilities'
 
 const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
   name: 'job:read_output',
@@ -46,6 +50,7 @@ const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
   ],
   schema: readBackgroundJobOutputSchema,
   permissions: [],
+  capabilities: AgentBackgroundJobReadCapability,
   isAvailable: (ctx) => !!ctx.readBackgroundJobOutput,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
@@ -99,6 +104,7 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
   ],
   schema: waitBackgroundJobsSchema,
   permissions: [],
+  capabilities: AgentBackgroundJobReadCapability,
   isAvailable: (ctx) => !!ctx.waitBackgroundJobs,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
@@ -143,6 +149,7 @@ const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
   ],
   schema: cancelBackgroundJobSchema,
   permissions: [],
+  capabilities: AgentBackgroundJobCancelCapability,
   isAvailable: (ctx) => !!ctx.cancelBackgroundJob,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {

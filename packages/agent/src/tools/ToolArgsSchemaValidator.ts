@@ -1,10 +1,20 @@
-import { isArray, isEmpty, isObject, isPlainObject,isPresent, isString } from '@velaros-ai/core'
+import {
+  isArray,
+  isEmpty,
+  isNumber,
+  isObject,
+  isPlainObject,
+  isPresent,
+  isString,
+} from '@velaros-ai/core'
 
 import type {
   ToolValidationHintContext,
   ToolValidationHintProvider,
   ToolValidationIssueDetail,
 } from '../capabilities'
+import type { AppliedAdjustment } from '../tool-contract/ForgivingSchema'
+
 interface ToolSchemaIssue {
   path: PropertyKey[]
   message: string
@@ -30,12 +40,18 @@ type ToolSchema<TInput> = {
 
 type ToolSchemaIssueDetail = ToolValidationIssueDetail
 
+export type ToolInputAdjustment = AppliedAdjustment
+
 type ToolArgsValidationResult<TInput> =
   | {
       success: true
       data: TInput
+      /** 真正交给工具执行、写入历史和去重账本的参数。 */
       args: Record<string, unknown>
+      /** 模型最初提交的参数快照，仅用于诊断调整，不进入工具执行。 */
+      requestedArgs: Record<string, unknown>
       normalized: boolean
+      adjustments: ToolInputAdjustment[]
     }
   | {
       success: false
@@ -46,6 +62,15 @@ type ToolArgsValidationResult<TInput> =
 const DefaultToolArgsValidationHint =
   'If the argument JSON looks incomplete (cut off mid-field), the model stream may have been truncated and retrying may help; ' +
   'otherwise correct parameters to satisfy the schema. '
+
+const MaxToolInputAdjustments = 50
+const MaxToolInputAdjustmentDepth = 32
+const MaxToolInputAdjustmentPathLength = 256
+
+interface ToolInputAdjustmentCollector {
+  adjustments: ToolInputAdjustment[]
+  truncated: boolean
+}
 
 /**
  * 工具参数 schema 校验与轻量归一化。
@@ -60,8 +85,8 @@ class ToolArgsSchemaValidator {
     schema: ToolSchema<TInput>,
     args?: Record<string, unknown>
   ): ToolArgsValidationResult<TInput> {
-    let current = args ?? {}
-    let normalized = !isPresent(args)
+    const requestedArgs = this.cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
+    let current = this.cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
     let lastResult = schema.safeParse(current)
 
     for (
@@ -74,22 +99,56 @@ class ToolArgsSchemaValidator {
         break
       }
       current = next.args
-      normalized = true
       lastResult = schema.safeParse(current)
     }
 
-    if (lastResult.success) return {
+    if (lastResult.success) {
+      const effectiveArgs = isPlainObject(lastResult.data)
+        ? this.cloneJsonLikeValue(lastResult.data) as Record<string, unknown>
+        : current
+      const adjustments = this.describeAdjustments(requestedArgs, effectiveArgs)
+      return {
         success: true,
         data: lastResult.data,
-        args: current,
-        normalized,
+        args: effectiveArgs,
+        requestedArgs,
+        normalized: !isEmpty(adjustments),
+        adjustments,
       }
+    }
 
     return {
       success: false,
       error: lastResult.error,
       issues: this.formatIssues(lastResult.error.issues),
     }
+  }
+
+  /**
+   * 比较模型输入与实际执行参数。只描述字段路径和调整类型，不复制字段值，避免诊断元数据泄密。
+   */
+  public describeAdjustments(
+    requested: Record<string, unknown>,
+    effective: Record<string, unknown>
+  ): ToolInputAdjustment[] {
+    const collector: ToolInputAdjustmentCollector = {
+      adjustments: [],
+      truncated: false,
+    }
+    this.collectAdjustments(requested, effective, '', 0, collector)
+    if (collector.truncated) {
+      const truncatedAdjustment: ToolInputAdjustment = {
+        field: '<additional>',
+        action: 'normalized',
+        detail: 'additional schema adjustments were omitted from metadata',
+      }
+      if (collector.adjustments.length >= MaxToolInputAdjustments) {
+        collector.adjustments[MaxToolInputAdjustments - 1] = truncatedAdjustment
+      } else {
+        collector.adjustments.push(truncatedAdjustment)
+      }
+    }
+    return collector.adjustments
   }
 
   public formatIssues(
@@ -158,7 +217,7 @@ class ToolArgsSchemaValidator {
     for (const key of Object.keys(target)) {
       delete target[key]
     }
-    Object.assign(target, source)
+    Object.defineProperties(target, Object.getOwnPropertyDescriptors(source))
   }
 
   private issuePathKey(path: readonly PropertyKey[]): string {
@@ -211,6 +270,114 @@ class ToolArgsSchemaValidator {
         Object.entries(value).map(([key, item]) => [key, this.cloneJsonLikeValue(item)])
       )
     return value
+  }
+
+  private jsonLikeEquals(left: unknown, right: unknown, depth: number): boolean {
+    if (Object.is(left, right)) return true
+    if (depth >= MaxToolInputAdjustmentDepth) return false
+    if (isArray(left) && isArray(right)) return left.length === right.length && left.every((item, index) =>
+        this.jsonLikeEquals(item, right[index], depth + 1)
+      )
+    if (isPlainObject(left) && isPlainObject(right)) {
+      const leftKeys = Object.keys(left)
+      const rightKeys = Object.keys(right)
+      return leftKeys.length === rightKeys.length && leftKeys.every((key) =>
+        Object.hasOwn(right, key) && this.jsonLikeEquals(left[key], right[key], depth + 1)
+      )
+    }
+    return false
+  }
+
+  private collectAdjustments(
+    requested: unknown,
+    effective: unknown,
+    path: string,
+    depth: number,
+    collector: ToolInputAdjustmentCollector
+  ): void {
+    if (collector.truncated) return
+    if (collector.adjustments.length >= MaxToolInputAdjustments) {
+      collector.truncated = true
+      return
+    }
+    if (this.jsonLikeEquals(requested, effective, depth)) return
+    if (depth >= MaxToolInputAdjustmentDepth) {
+      collector.truncated = true
+      return
+    }
+
+    if (isPlainObject(requested) && isPlainObject(effective)) {
+      const keys = new Set([...Object.keys(requested), ...Object.keys(effective)])
+      for (const key of [...keys].sort()) {
+        if (collector.adjustments.length >= MaxToolInputAdjustments) {
+          collector.truncated = true
+          return
+        }
+        const nestedPath = path ? `${path}.${key}` : key
+        const requestedHasKey = Object.hasOwn(requested, key)
+        const effectiveHasKey = Object.hasOwn(effective, key)
+        if (!requestedHasKey) {
+          collector.adjustments.push({
+            field: this.limitAdjustmentPath(nestedPath),
+            action: 'defaulted',
+            detail: 'schema supplied the omitted field',
+          })
+          continue
+        }
+        if (!effectiveHasKey) {
+          collector.adjustments.push({
+            field: this.limitAdjustmentPath(nestedPath),
+            action: 'ignored',
+            detail: 'schema removed an unsupported field',
+          })
+          continue
+        }
+        this.collectAdjustments(
+          requested[key],
+          effective[key],
+          nestedPath,
+          depth + 1,
+          collector
+        )
+      }
+      return
+    }
+
+    if (isArray(requested) && isArray(effective) && requested.length === effective.length) {
+      for (const [index, item] of requested.entries()) {
+        this.collectAdjustments(
+          item,
+          effective[index],
+          `${path}[${index}]`,
+          depth + 1,
+          collector
+        )
+        if (collector.truncated) break
+      }
+      return
+    }
+
+    const coerced = isString(requested) && !isString(effective)
+    const clamped = isNumber(requested) && isNumber(effective)
+    let action: ToolInputAdjustment['action'] = 'normalized'
+    let detail = 'schema transformed the model value before execution'
+    if (coerced) {
+      action = 'coerced'
+      detail = 'schema converted the model value to its declared type'
+    } else if (clamped) {
+      action = 'clamped'
+      detail = 'schema bounded or rounded the model value before execution'
+    }
+    collector.adjustments.push({
+      field: this.limitAdjustmentPath(path || '<root>'),
+      action,
+      detail,
+    })
+  }
+
+  private limitAdjustmentPath(path: string): string {
+    if (path.length <= MaxToolInputAdjustmentPathLength) return path
+    return `${path.slice(0, MaxToolInputAdjustmentPathLength - 3)}...`
   }
 
   private parseJsonString(value: string): { ok: true; value: unknown } | { ok: false } {

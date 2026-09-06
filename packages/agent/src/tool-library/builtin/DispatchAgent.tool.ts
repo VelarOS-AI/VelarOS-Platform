@@ -2,6 +2,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { defineVelaTool } from '../defineVelaTool'
 
+import { AgentDispatchCapability } from './Capabilities'
 import type { DispatchAgentInput } from './DispatchAgent'
 import { dispatchAgentSchema } from './DispatchAgent'
 
@@ -47,6 +48,11 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       description: 'Add tests for utils',
       prompt: 'Write node:test unit tests for every exported function in src/util.js and run them.',
     },
+    {
+      thread_id: 'subagent:existing-thread',
+      prompt: 'Re-check the failing assertion and finish the verification.',
+    },
+    { thread_id: 'subagent:running-thread', interrupt: true },
   ],
   notes: [
     '子 Agent 在独立上下文中运行；回传为 summary 文本 + 结构化 `<subagent-result>` 块（含 thread_id、status、artifacts）。',
@@ -56,6 +62,7 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
   usageSkillId: 'sub-agent-orchestration',
   schema: dispatchAgentSchema,
   permissions: [],
+  capabilities: AgentDispatchCapability,
   isAvailable: (ctx) => !!ctx.dispatchSubAgent,
   isConcurrencySafe: () => true,
   execute: async (input, ctx) => {
@@ -73,15 +80,22 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       thread_id: threadId,
       route_category: routeCategory,
       output_schema: outputSchema,
+      prompt,
       ...sameNameFields
     } = input
 
+    // schema 只为新建调用补默认，续跑保留 undefined 交给 dispatcher 从已有 session 继承。
+    // 这里的回退也保护绕过 schema 直接调用 execute 的内部宿主；中断在 dispatcher 入口最先处理，
+    // prompt 占位不会进入执行链。
+    const creatingThread = !threadId
+
     return ctx.dispatchSubAgent({
       ...sameNameFields,
+      prompt: prompt ?? '',
       agentName,
-      subagentType,
-      toolScope,
-      toolCategories,
+      subagentType: subagentType ?? (creatingThread ? 'general' : undefined),
+      toolScope: toolScope ?? (creatingThread ? 'type_default' : undefined),
+      toolCategories: toolCategories ?? (creatingThread ? [] : undefined),
       threadId,
       routeCategory,
       // output_schema 存在时开放结构化输出契约（校验 + 修复闭环复用 Workflow 既有基建）。

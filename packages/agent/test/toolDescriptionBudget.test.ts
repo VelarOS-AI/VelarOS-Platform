@@ -51,6 +51,8 @@ describe('tool description soft budget', () => {
 
     expect(tool.description.length).toBeLessThanOrEqual(ToolDescriptionBudgetChars)
     expect(isStructuredToolDescription(tool.description)).toBe(true)
+    expect(tool.summary).toBe('预算门探针工具。')
+    expect(tool.readOnly).toBe(true)
   })
 
   test('rejects an over-budget description that declares no waiver', () => {

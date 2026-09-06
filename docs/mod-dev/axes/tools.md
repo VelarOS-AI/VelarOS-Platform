@@ -27,7 +27,7 @@ z.strictObject({
 | `name` | 工具名。**这是模型看到的名字**，同时是注册表主键 |
 | `categoryId` | 归入哪个工具类别；类别本身可由 [`toolCategories`](./tool-categories.md) 轴贡献 |
 | `summary` | 简述（宿主诊断面 / 工具目录展示用） |
-| `readOnly` | 只读工具标记 |
+| `readOnly` | 只读工具标记；内置工具优先由 `capabilities.effectKind` 派生，旧工具回退 `role=inspect` |
 | `permissions` | 工具行为权限上界；运行态 `VelaTool.permissions` 必须保留 |
 | `inputSchema` | 外部 command 工具的标准 JSON Schema；根类型必须是 `object` |
 | `handler` | 外部受控载体：`{ type: 'command', entry, permissions? }`；编译期绑定省略 |
@@ -128,7 +128,8 @@ contextDistillTools · contextRetrievalTools · dispatchAgentTools · goalTools 
 （常量 `BuiltinAgentModToolCollections`；展平函数 `collectBuiltinAgentModTools()`，
 内置集合之间重名**在此即抛**，不留到 Loader 才发现。）
 
-manifest 条目由工具实体**派生**（`toToolContribution` 读 `category` / `summary` / `readOnly`），
+manifest 条目由工具实体**派生**（`toToolContribution` 读 `category` / `summary`，并按
+`capabilities.effectKind` → `role` 的顺序派生 `readOnly`），
 不另立一份清单——所以内置清单与实现**不可能漂移**。
 
 ## 预算

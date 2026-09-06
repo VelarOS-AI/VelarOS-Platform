@@ -30,6 +30,7 @@ import { type z } from 'zod'
 
 import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty, isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { expandCapabilityCategoryIds } from '../../capabilities'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
@@ -101,6 +102,37 @@ function summarizeReplacePages(
     .map(summarizeReplacePage)
 }
 
+/** 在授权和驻留变更前检查换入/换出的有效目标，包含宿主声明的类别展开。 */
+function assertDisjointReplacementTargets(
+  ctx: ToolContext,
+  pageIn: readonly string[],
+  pageOut: readonly string[],
+  cardsById: ReadonlyMap<string, ToolDiscoveryCard>
+): void {
+  const categoriesById = new Map([...new Set([...pageIn, ...pageOut])].map((id) => {
+    const card = cardsById.get(id)
+    const categories = card?.kind === 'capability'
+      ? expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
+      : card ? [card.categoryId] : []
+    return [id, new Set(categories)] as const
+  }))
+  for (const incomingId of pageIn) {
+    for (const outgoingId of pageOut) {
+      const incoming = cardsById.get(incomingId)
+      const outgoing = cardsById.get(outgoingId)
+      const categoryOverlap = incoming && outgoing
+        && (incoming.kind === 'capability' || outgoing.kind === 'capability')
+        && [...categoriesById.get(incomingId) ?? []].some((categoryId) =>
+          categoriesById.get(outgoingId)?.has(categoryId))
+      if (incomingId !== outgoingId && !categoryOverlap) continue
+      throw new AppError(
+        'VALIDATION',
+        `pageIn 与 pageOut 的目标冲突：${incomingId} / ${outgoingId}。请只保留一个方向后重试。`,
+      )
+    }
+  }
+}
+
 /** 从结构化工具描述里抽出「示例：」整段，作为换入后首调的正确形状参考。 */
 function extractToolExampleSection(description: LooseOptional<string>): Nullable<string> {
   if (!description) return null
@@ -169,6 +201,7 @@ export async function replaceToolSpacePages(
   const cardsById = new Map(cards.map((card) => [card.id, card]))
   const pageIn = [...new Set(input.pageIn)]
   const pageOut = [...new Set(input.pageOut)]
+  assertDisjointReplacementTargets(ctx, pageIn, pageOut, cardsById)
   const missingPages = [...pageIn, ...pageOut].filter((id) => !cardsById.has(id))
   const alreadyResidentTools: string[] = []
   const preparedTools: string[] = []
@@ -199,7 +232,7 @@ export async function replaceToolSpacePages(
       refreshedCapabilityResidency.push(...categories)
       continue
     }
-    // 已驻留的具体工具和已启用的插件 page-in 才是真正的 no-op。
+    // 已驻留工具仍需续租，但模型可以本轮直接调用；具体租约在下方与 preparedTools 一起刷新。
     // 注意：插件已启用时 availability 同样是 visible，必须先于下面的 plugin 分支判断，
     // 否则会把“已开启的插件”错误回报成 requiresUserAction。
     if (card.availability === 'visible') {
@@ -298,8 +331,9 @@ export async function replaceToolSpacePages(
     requiresApproval.push(pending.id)
   }
 
-  if (!isEmpty(preparedTools)) {
-    ctx.codingSession.enableToolNames(preparedTools, input.reason)
+  const leasedToolNames = [...new Set([...alreadyResidentTools, ...preparedTools])]
+  if (!isEmpty(leasedToolNames)) {
+    ctx.codingSession.enableToolNames(leasedToolNames, input.reason)
   }
 
   for (const id of pageOut) {

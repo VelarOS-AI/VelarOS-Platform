@@ -816,6 +816,11 @@ class CodingSessionTracker {
       if (normalized) {
         this.budgetOverrideToolNames.add(normalized)
         this.budgetOverrideToolNameTouchedAtTurn.set(normalized, this.currentToolLeaseTurn)
+        // 按名换入同时续租已有的类别准入，避免下一轮类别到期反过来清掉刚刷新的工具租约。
+        const categoryId = this.resolveToolCategoryForToolName(normalized)
+        if (categoryId && this.budgetOverrideToolCategories.has(categoryId)) {
+          this.budgetOverrideToolCategoryTouchedAtTurn.set(categoryId, this.currentToolLeaseTurn)
+        }
       }
     })
 

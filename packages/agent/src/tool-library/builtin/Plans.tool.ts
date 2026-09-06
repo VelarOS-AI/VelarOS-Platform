@@ -8,6 +8,7 @@ import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
 import { defineVelaTool } from '../defineVelaTool'
 
+import { AgentPlanningReadCapability, AgentPlanningWriteCapability } from './Capabilities'
 import type { PlanLifecycle, UpdatePlanInput } from './Plans'
 import {
   completePlanSteps,
@@ -24,13 +25,26 @@ const PlanArtifactId = 'active-plan'
 const PlanLifecycleValues = ['active', 'paused', 'completed', 'archived'] as const
 const PlanLifecycleSet = new Set<unknown>(PlanLifecycleValues)
 
+function findPlanArtifact(
+  artifacts: readonly ActiveContextArtifact[],
+  executionId: string
+): ActiveContextArtifact | undefined {
+  return artifacts
+    .filter(
+      (candidate) =>
+        candidate.id === PlanArtifactId &&
+        candidate.kind === 'plan' &&
+        candidate.metadata?.executionId === executionId
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+}
+
 function readPlanLifecycle(
   artifacts: readonly ActiveContextArtifact[],
-  plan: readonly ExecutionTaskPlanStep[]
+  plan: readonly ExecutionTaskPlanStep[],
+  executionId: string
 ): PlanLifecycle {
-  const artifact = artifacts
-    .filter((candidate) => candidate.id === PlanArtifactId && candidate.kind === 'plan')
-    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+  const artifact = findPlanArtifact(artifacts, executionId)
   const stored = artifact?.metadata?.planLifecycle
   if (PlanLifecycleSet.has(stored)) return stored as PlanLifecycle
   if (artifact?.status === 'archived') return 'archived'
@@ -61,6 +75,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     '首次为复杂任务传入 plan 会自主启用计划模式；先只建立计划，再按计划模式要求向用户确认后实施。',
     '维护计划最省心的方式:直接传完整 plan 列表(每步带 status:pending/in_progress/completed),这一项就能建立并同步整个计划,想改哪步就改它的 status。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题;步骤没有 id,别自造 "step-1"),host 标记 completed 并自动推进下一个 pending。',
+    'lifecycle 省略时保留已有生命周期；首次建计划会自动推导，active 计划全部步骤终态时自动 completed。',
     'lifecycle=paused 暂停计划并结束本次推进；后续用 lifecycle=active 恢复。',
     'lifecycle=completed 表示计划已执行完成；lifecycle=archived 表示用户改变目标或废弃旧方案。',
     'plan 和 complete_step 可以一起传(先按 plan 重建、再完成引用步骤);两个都不传则视为读取当前计划、不报错。',
@@ -87,7 +102,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
         .optional()
         .describe(
           parameterDescription({
-            description: '计划生命周期。',
+            description: '计划生命周期；省略则保留已有状态。',
             values: [
               'active：计划仍在执行。',
               'paused：计划已暂停，可在后续恢复。',
@@ -154,7 +169,8 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
         ),
     }),
   permissions: [],
-  isConcurrencySafe: () => true,
+  capabilities: AgentPlanningWriteCapability,
+  isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()
     const interaction = ctx.interaction
@@ -162,6 +178,16 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     // 先读取旧计划，用于判断这次是否是初始计划。
     const previousPlan = interaction.getCurrentPlan()
     const previousUserPlan = toUserPlanSteps(previousPlan)
+    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
+      status: 'all',
+      kinds: ['plan'],
+    })
+    const previousLifecycle = readPlanLifecycle(
+      artifacts,
+      previousPlan,
+      interaction.executionId
+    )
+    const hasStoredPlanArtifact = !!findPlanArtifact(artifacts, interaction.executionId)
 
     const hasPlan = !!input.plan?.length
     // 空数组视为"没有要完成的步骤"(宽容:模型重报计划时常带 complete_step: [])。
@@ -170,19 +196,14 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
       !(isArray(input.complete_step) && isEmpty(input.complete_step))
 
     // 空调用 = 无操作:回带当前计划状态,不报错(宽容:模型偶尔空传不该被判失败)。
-    if (!hasPlan && !hasComplete && !input.lifecycle && !input.explanation) {
-      const artifacts = await ctx.activeContext.listActiveContextArtifacts({
-        status: 'all',
-        kinds: ['plan'],
-      })
+    if (!hasPlan && !hasComplete && !input.lifecycle && !input.explanation)
       return {
         updated: false,
         noop: true,
-        lifecycle: readPlanLifecycle(artifacts, previousPlan),
+        lifecycle: previousLifecycle,
         plan: previousPlan,
         steps: describePlanStepRefsForModel(previousPlan),
       }
-    }
 
     // 基线列表:传了完整 plan 就用它重建,否则沿用旧计划。
     // complete_step 与 plan 可组合:先重建、再针对重建后的列表完成引用步骤。
@@ -213,7 +234,16 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     }
 
     const plan = interaction.updateCurrentPlan(updateWithPlan)
-    const lifecycle = resolvePlanLifecycle(updateWithPlan)
+    // lifecycle 省略 = 保留已有状态。首次建计划时根据步骤推导；已有 active
+    // 计划在全部步骤终态时可自动收尾为 completed。paused/archived/completed 只能由
+    // 显式 lifecycle 迁移，更新说明、步骤或 complete_step 都不会暗中恢复。
+    const inferredLifecycle = resolvePlanLifecycle(updateWithPlan)
+    const isInitialPlan = previousPlan.length === 0 && !hasStoredPlanArtifact
+    const lifecycle = input.lifecycle ?? (
+      isInitialPlan || (previousLifecycle === 'active' && inferredLifecycle === 'completed')
+        ? inferredLifecycle
+        : previousLifecycle
+    )
     await ctx.activeContext.upsertActiveContextArtifact({
       id: PlanArtifactId,
       kind: 'plan',
@@ -237,7 +267,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
 
     return {
       updated: true,
-      isInitialPlan: previousPlan.length === 0,
+      isInitialPlan,
       activeContextStatus: lifecycle,
       explanation: toNullable(input.explanation),
       plan,
@@ -265,6 +295,7 @@ const getPlan = defineVelaTool<Record<string, never>>({
   notes: ['需要 execution 上下文。'],
   schema: z.object({}),
   permissions: [],
+  capabilities: AgentPlanningReadCapability,
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => {
     const interaction = ctx.interaction
@@ -276,7 +307,7 @@ const getPlan = defineVelaTool<Record<string, never>>({
       kinds: ['plan'],
     })
     return {
-      lifecycle: readPlanLifecycle(artifacts, currentPlan),
+      lifecycle: readPlanLifecycle(artifacts, currentPlan, interaction.executionId),
       plan: currentPlan,
       // 显式可引用 ref(1-based 序号):complete_step 直接照 ref 传,别自造 id。
       steps: describePlanStepRefsForModel(currentPlan),

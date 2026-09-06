@@ -12,7 +12,12 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
-import type { ToolApprovalRiskLevel, ToolCategoryId, ToolRole } from '@velaros-ai/agent/protocol'
+import type {
+  ToolApprovalRiskLevel,
+  ToolCapabilitySchema,
+  ToolCategoryId,
+  ToolRole,
+} from '@velaros-ai/agent/protocol'
 import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 import { isBoolean } from '@velaros-ai/core'
 
@@ -107,12 +112,37 @@ function isToolAutoApproved(policy: McpAutoApprovePolicy, originalName: string):
   return policy.includes(originalName)
 }
 
+function isReadOnlyMcpTool(descriptor: McpToolDescriptor): boolean {
+  return descriptor.annotations.readOnlyHint && !descriptor.annotations.destructiveHint
+}
+
 function resolveRiskLevel(descriptor: McpToolDescriptor): ToolApprovalRiskLevel {
-  return descriptor.annotations.readOnlyHint && !descriptor.annotations.destructiveHint ? 'low' : 'high'
+  return isReadOnlyMcpTool(descriptor) ? 'low' : 'high'
 }
 
 function resolveToolRole(descriptor: McpToolDescriptor): ToolRole {
-  return descriptor.annotations.readOnlyHint ? 'inspect' : 'execute'
+  return isReadOnlyMcpTool(descriptor) ? 'inspect' : 'execute'
+}
+
+function resolveToolCapabilities(descriptor: McpToolDescriptor): ToolCapabilitySchema {
+  if (isReadOnlyMcpTool(descriptor)) return {
+    effectKind: 'read',
+    readScopes: ['mcp'],
+    concurrency: 'safe',
+    canReadArbitrarySource: true,
+    reason: 'MCP server declares this external tool read-only',
+  }
+
+  return {
+    effectKind: descriptor.annotations.destructiveHint ? 'destructive' : 'external',
+    readScopes: ['mcp'],
+    writeScopes: ['mcp'],
+    concurrency: 'unsafe',
+    canReadArbitrarySource: true,
+    reason: descriptor.annotations.idempotentHint
+      ? 'MCP server declares an idempotent external mutation'
+      : 'MCP external tool may mutate server state',
+  }
 }
 
 function buildToolDescription(serverName: string, descriptor: McpToolDescriptor): string {
@@ -129,7 +159,7 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
   const canonicalName = buildMcpToolName(serverName, originalName)
   const categoryId = input.categoryId ?? DefaultMcpToolCategoryId
   const riskLevel = resolveRiskLevel(descriptor)
-  const concurrencySafe = descriptor.annotations.readOnlyHint || descriptor.annotations.idempotentHint
+  const capabilities = resolveToolCapabilities(descriptor)
 
   const tool: VelaTool = {
     name: canonicalName,
@@ -139,7 +169,8 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
     schema: convertMcpInputSchema(descriptor.inputSchema),
     // network=中性 I/O 元数据（不作可见性门槛，见 ToolRegistry 过滤注释）。
     permissions: ['network'],
-    isConcurrencySafe: () => concurrencySafe,
+    capabilities,
+    isConcurrencySafe: () => capabilities.concurrency === 'safe',
     execute: async (rawInput: Record<string, unknown>, ctx: KernelToolContext): Promise<unknown> => {
       const args = rawInput ?? {}
       if (!isToolAutoApproved(autoApprove, originalName)) {

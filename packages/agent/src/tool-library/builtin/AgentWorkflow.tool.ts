@@ -3,6 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { defineVelaTool, type VelaTool } from '../defineVelaTool'
 
 import { agentWorkflowSchema, type RunAgentWorkflowInput } from './AgentWorkflow'
+import { AgentWorkflowCapability } from './Capabilities'
 
 interface AgentWorkflowToolCollection {
   readonly 'agent:run_workflow': VelaTool<RunAgentWorkflowInput>
@@ -70,6 +71,7 @@ const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
   usageSkillId: 'workflow-authoring',
   schema: agentWorkflowSchema,
   permissions: [],
+  capabilities: AgentWorkflowCapability,
   isAvailable: (ctx) => !!ctx.runAgentWorkflow,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {

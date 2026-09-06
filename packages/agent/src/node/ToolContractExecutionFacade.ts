@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { isEmpty, isNull, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { resolveToolReadOnly } from '../tool-contract/define'
 import { readToolSchemaDiscoveryNames, ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
 export { ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
 
@@ -26,6 +27,7 @@ import {
   type ToolExecutionPolicyContext,
   type ToolExecutionPolicyRegistry,
 } from '../tools/ExecutionPolicy'
+import { buildExecutionFailureResult } from '../tools/ExecutionPolicyFailures'
 import {
   ToolExecutor,
   type ToolExecutorEvents,
@@ -140,7 +142,7 @@ export class ToolContractExecutionFacade<
       .filter(
         (tool) => isNull(includeCategories) || includeCategories.includes(tool.categoryId),
       )
-      .filter((tool) => !readOnly || tool.role === 'inspect')
+      .filter((tool) => !readOnly || this.isReadOnlyDescriptor(tool))
       .map((tool) => binding.projectDescriptor(
         this.buildRawDescriptor(binding.toolContext, tool),
       ))
@@ -158,8 +160,13 @@ export class ToolContractExecutionFacade<
       description: schema?.description ?? tool.description,
       inputSchema: normalizeSchema(schema?.schema),
       category: tool.categoryId,
-      readOnly: tool.role === 'inspect',
+      readOnly: this.isReadOnlyDescriptor(tool),
     }
+  }
+
+  /** effectKind 是行为真值；旧工具没有 capability 元数据时才回退 role。 */
+  private isReadOnlyDescriptor(tool: RegistryToolDescriptor): boolean {
+    return resolveToolReadOnly(tool)
   }
 
   private describeSchemasResult(
@@ -222,7 +229,9 @@ export class ToolContractExecutionFacade<
       const appError = AppError.from(error)
       return {
         ...this.baseEnvelope(envelope, catalogRevision),
-        status: appError.code === 'PERMISSION' ? 'denied' : 'error',
+        status: buildExecutionFailureResult(envelope.toolName, appError).error === 'tool_denied'
+          ? 'denied'
+          : 'error',
         error: appError.message,
       }
     }
@@ -255,7 +264,7 @@ export class ToolContractExecutionFacade<
     const base = this.baseEnvelope(envelope, catalogRevision)
     if (result.error) return {
         ...base,
-        status: result.error.toLowerCase().includes('permission') ? 'denied' : 'error',
+        status: isPlainObject(result.result) && result.result.error === 'tool_denied' ? 'denied' : 'error',
         error: result.error,
         output: result.modelResult ?? result.result,
       }

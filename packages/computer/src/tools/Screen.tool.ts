@@ -15,7 +15,7 @@ const computerScreenshot = defineComputerTool<Record<string, never>>({
   examples: [{}],
   notes: [
     '返回屏幕几何，并把截图作为图片直接呈现给模型（base64 不进文本，避免上下文膨胀）。',
-    '截图为逻辑分辨率，width/height 即逻辑坐标系；图上量出的像素坐标可直接用于 computer:click。',
+    '截图为主显示器局部逻辑坐标；图上量出的像素可直接用于 computer:click，工具会结合 originX/originY 转成虚拟桌面全局坐标。',
   ],
   schema: z.object({}),
   permissions: ['screen:capture'],

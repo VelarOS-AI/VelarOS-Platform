@@ -1,6 +1,37 @@
 import { z } from 'zod'
 
+import { isPresent } from '@velaros-ai/core'
+
 const ProjectPathSchema = z.string().min(1)
+
+const TextMatchSelectionSchema = {
+  expectedMatches: z.number().int().positive().optional().describe(
+    '安全断言：文件中必须正好存在该数量的匹配；它不表示要修改多少处。'
+  ),
+  occurrence: z.number().int().positive().optional().describe(
+    '只修改第几个匹配（从 1 开始）；与 replaceAll 互斥。'
+  ),
+  replaceAll: z.boolean().optional().describe(
+    '修改全部匹配；与 occurrence 互斥。'
+  ),
+}
+
+const JsonPatchSchema = z.discriminatedUnion('op', [
+  z.strictObject({
+    op: z.literal('add'),
+    path: z.string(),
+    value: z.json(),
+  }),
+  z.strictObject({
+    op: z.literal('replace'),
+    path: z.string(),
+    value: z.json(),
+  }),
+  z.strictObject({
+    op: z.literal('remove'),
+    path: z.string(),
+  }),
+])
 
 const ProjectEditOperationSchema = z.discriminatedUnion('type', [
   z.strictObject({
@@ -8,6 +39,7 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     path: ProjectPathSchema,
     oldText: z.string().min(1),
     newText: z.string(),
+    ...TextMatchSelectionSchema,
   }),
   z.strictObject({
     type: z.literal('insert_text_at_anchor'),
@@ -15,7 +47,7 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     anchorText: z.string().min(1),
     position: z.enum(['before', 'after']),
     text: z.string().min(1),
-    expectedMatches: z.number().int().positive().optional(),
+    ...TextMatchSelectionSchema,
     skipIfAlreadyPresent: z.boolean().optional(),
   }),
   z.strictObject({
@@ -34,6 +66,7 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     type: z.literal('delete_text'),
     path: ProjectPathSchema,
     oldText: z.string().min(1),
+    ...TextMatchSelectionSchema,
   }),
   z.strictObject({
     type: z.literal('create_file'),
@@ -94,20 +127,31 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('json_patch'),
     path: ProjectPathSchema,
-    patches: z.array(z.strictObject({
-      op: z.enum(['add', 'remove', 'replace']),
-      path: z.string(),
-      value: z.unknown().optional(),
-    })).min(1),
+    patches: z.array(JsonPatchSchema).min(1),
   }),
-])
+]).superRefine((operation, context) => {
+  if (
+    'occurrence' in operation
+    && isPresent(operation.occurrence)
+    && 'replaceAll' in operation
+    && operation.replaceAll
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'occurrence 与 replaceAll 不能同时使用。',
+      path: ['replaceAll'],
+    })
+  }
+})
 
 const ProjectEditIntentSchema = z.strictObject({
   operation: ProjectEditOperationSchema,
   reason: z.string().optional(),
   constraints: z.strictObject({
     maxChangedLines: z.number().int().positive().optional(),
-    expectedMatches: z.number().int().positive().optional(),
+    expectedMatches: z.number().int().positive().optional().describe(
+      '兼容字段：断言匹配总数，不选择要修改的匹配；新调用优先放在具体文本 operation 内。'
+    ),
   }).optional(),
 })
 

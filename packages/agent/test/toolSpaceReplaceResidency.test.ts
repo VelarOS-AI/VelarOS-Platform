@@ -57,7 +57,7 @@ describe('tool space capability residency', () => {
     expect(result.alreadyResidentTools).toEqual(['project:read'])
     expect(result.activeThisTurn).toBe(true)
     expect(result.preparedTools).toEqual(preparedTools)
-    expect(enabledToolNames).toEqual(preparedTools)
+    expect(enabledToolNames).toEqual(['project:read', ...preparedTools])
     expect(result.message).toContain('project:read 已驻留，本轮即可直接调用')
     expect(result.nextTurnHint).toContain('project:read 已驻留，本轮即可直接调用')
     expect(result.nextTurnHint).not.toContain('再用 tooling:replace')
@@ -144,5 +144,64 @@ describe('tool space capability residency', () => {
     tracker.pruneExpiredToolCategoryLeases(4)
     expect(tracker.getBudgetOverrideToolCategories()).toEqual([])
     expect(tracker.getEnabledToolCategories()).toContain('project-files')
+  })
+
+  test.each([
+    { dynamicCategory: false, visible: true },
+    { dynamicCategory: true, visible: true },
+    { dynamicCategory: true, visible: false },
+  ])('renews explicit tool page-ins with dynamic category=$dynamicCategory and visible=$visible', async ({ dynamicCategory, visible }) => {
+    const tracker = new CodingSessionTracker(['project-files'], [], [], [], {
+      residentToolCategories: dynamicCategory ? [] : ['project-files'],
+      toolCategoryToolNames: { 'project-files': ['project:read'] },
+      toolNameLeaseTurns: 3,
+    })
+    const descriptor = {
+      name: 'project:read',
+      description: 'Read a project file.',
+      role: 'inspect' as const,
+      permissions: [] as const,
+      categoryId: 'project-files',
+      systemEnabled: true,
+    }
+    let approvals = 0
+    const context = {
+      abortSignal: new AbortController().signal,
+      role: { id: 'primary-agent' },
+      codingSession: tracker,
+      requestToolCategoryAccess: async () => {
+        approvals += 1
+        return { approved: true, enabledCategories: ['project-files'] }
+      },
+      getCurrentVisibleToolNames: () => visible ? ['project:read'] : [],
+      listTools: () => [descriptor],
+      listToolCategories: () => [{
+        category: { id: 'project-files', label: 'Project files', description: 'Read files.' },
+        enabled: true,
+        tools: [descriptor],
+      }],
+    }
+    tracker.pruneExpiredToolNameLeases(1)
+    tracker.pruneExpiredToolCategoryLeases(1)
+    if (dynamicCategory) tracker.enableToolCategories(['project-files'], 'read files')
+    tracker.enableToolNames(['project:read'], 'read files')
+    tracker.pruneExpiredToolNameLeases(3)
+    tracker.pruneExpiredToolCategoryLeases(3)
+
+    const result = await replaceToolSpacePages(context as never, {
+      op: 'replace',
+      pageIn: ['tool:project:read'],
+      pageOut: [],
+      reason: 'keep reading files',
+    })
+
+    expect(result.alreadyResidentTools).toEqual(visible ? ['project:read'] : [])
+    expect(approvals).toBe(0)
+    expect(tracker.pruneExpiredToolNameLeases(4)).toEqual([])
+    expect(tracker.pruneExpiredToolCategoryLeases(4)).toEqual([])
+    expect(tracker.getBudgetOverrideToolNames()).toEqual(['project:read'])
+    expect(tracker.getBudgetOverrideToolCategories()).toEqual(dynamicCategory ? ['project-files'] : [])
+    expect(tracker.pruneExpiredToolNameLeases(6)).toEqual(['project:read'])
+    expect(tracker.pruneExpiredToolCategoryLeases(6)).toEqual(dynamicCategory ? ['project-files'] : [])
   })
 })

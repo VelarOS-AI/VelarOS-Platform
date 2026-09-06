@@ -207,6 +207,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
     const output = await this.runPlatformCommand(commandSpec)
     const limit = options.limit ?? 50
+    const filter = options.filter?.trim().toLowerCase()
     const pids = new Set(options.pids ?? [])
     const currentUser = this.getCurrentUsername()
 
@@ -217,6 +218,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         startTime: row.startTime || null,
       }))
       .filter((processInfo) => {
+        if (filter && !`${processInfo.name}\0${processInfo.command}`.toLowerCase().includes(filter)) return false
         if (options.pid && processInfo.pid !== options.pid) return false
         if (pids.size > 0 && !pids.has(processInfo.pid)) return false
         if (options.name && !processInfo.name.includes(options.name)) return false
@@ -236,6 +238,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
     const output = await this.runPlatformCommand(commandSpec, { tolerateLsofEmptyResult: true })
     const limit = options.limit ?? 50
+    const filter = options.filter?.trim().toLowerCase()
     const ports = new Set(options.ports ?? [])
     const rawEntries = parseOpenPortEntries(output.stdout, this.hostPlatform)
     const processInfoByPid = await this.loadPortProcessInfo(rawEntries, !!options.includeCwd)
@@ -243,6 +246,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return rawEntries
       .map((entry) => this.toOpenPortInfo(entry, processInfoByPid))
       .filter((entry) => {
+        if (filter && !`${entry.processName ?? ''}\0${entry.command ?? ''}`.toLowerCase().includes(filter)) return false
         if (options.pid && entry.pid !== options.pid) return false
         if (options.processName && !entry.processName?.includes(options.processName)) return false
         if (options.port && entry.port !== options.port) return false
@@ -342,9 +346,11 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       updatedAt: Date.now(),
     }))
     const sessionIds = new Set(options.sessionIds ?? [])
+    const filter = options.filter?.trim().toLowerCase()
 
     return tasks
       .filter((task) => {
+        if (filter && !task.command.toLowerCase().includes(filter)) return false
         if (options.taskId && task.id !== options.taskId) return false
         if (options.sessionId && task.sessionId !== options.sessionId) return false
         if (sessionIds.size > 0 && (!task.sessionId || !sessionIds.has(task.sessionId))) return false

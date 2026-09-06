@@ -24,6 +24,7 @@ export interface ReadInput {
   /** 可选的有界行/offset 窗口；大文件调用方应优先使用 range。 */
   range?: Partial<Range>;
   maxBytes?: number;
+  /** 最大 Unicode 字符数；Agent 边界将它作为一次多文件调用的共享总预算。 */
   maxChars?: number;
   trust?: TrustLabel;
 }
@@ -42,6 +43,8 @@ export interface ReadResult {
   remainingLines?: number;
   /** 当前窗口之后仍有内容时为 true。 */
   hasMore?: boolean;
+  /** 可直接交给下一次 kernel.read 的精确续读参数；长行截断时包含 startColumn。 */
+  continuation?: ReadInput;
 }
 
 export interface FileStatInput {

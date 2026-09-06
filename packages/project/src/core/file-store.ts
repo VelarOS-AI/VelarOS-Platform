@@ -62,6 +62,8 @@ interface ByteLimitedContent {
   content: string;
   truncated: boolean;
   lineCount: number;
+  /** 从原始输入消费的 UTF-16 code units；可能包含为保持完整行而省略的末尾换行。 */
+  consumedChars: number;
 }
 
 interface LineWindowReadResult {
@@ -106,67 +108,70 @@ async function assertConfinedToRoot(realRoot: string, abs: string, inputPath: st
   );
 }
 
-/** 按 UTF-8 字节数和字符数截断，优先保留完整行，方便 agent 阅读上下文。 */
+/** 按 UTF-8 字节数和 Unicode 字符数截断，优先保留完整行，并记录精确 UTF-16 续读 offset。 */
 function limitContent(content: string, maxBytes?: number, maxChars?: number): ByteLimitedContent {
-  let current = content;
-  let truncated = false;
+  const byteBounded = !isUndefined(maxBytes);
+  const charBounded = !isUndefined(maxChars);
+  if (!byteBounded && !charBounded)
+    return {
+      content,
+      truncated: false,
+      lineCount: countTextLines(content),
+      consumedChars: content.length,
+    };
 
-  const sliceByUtf8Bytes = (line: string, max: number, enc: { encode(input?: string): Uint8Array }): string => {
-    let bytes = 0;
-    let out = "";
-    for (const char of line) {
-      const nextBytes = enc.encode(char).length;
-      if (bytes + nextBytes > max) break;
-      out += char;
-      bytes += nextBytes;
-    }
-    return out;
-  };
-
-  if (maxBytes) {
-    const enc = new TextEncoder();
-    if (enc.encode(current).length > maxBytes) {
-      let bytes = 0;
-      const keptLines: string[] = [];
-      for (const line of current.split("\n")) {
-        const lineWithBreak = `${line}\n`;
-        const lineBytes = enc.encode(lineWithBreak).length;
-        if (bytes + lineBytes > maxBytes) {
-          if (isEmpty(keptLines) && maxBytes > 0) {
-            keptLines.push(sliceByUtf8Bytes(line, maxBytes, enc));
-          }
-          break;
-        }
-        keptLines.push(line);
-        bytes += lineBytes;
-      }
-      current = keptLines.join("\n");
-      truncated = true;
-    }
+  const encoder = new TextEncoder();
+  let consumedChars = 0;
+  let consumedCharacterCount = 0;
+  let consumedBytes = 0;
+  for (const char of content) {
+    const charUnits = char.length;
+    const charBytes = encoder.encode(char).length;
+    if (charBounded && consumedCharacterCount + 1 > Math.max(0, maxChars!)) break;
+    if (byteBounded && consumedBytes + charBytes > Math.max(0, maxBytes!)) break;
+    consumedChars += charUnits;
+    consumedCharacterCount += 1;
+    consumedBytes += charBytes;
+  }
+  if (
+    consumedChars === 0
+    && !isEmpty(content)
+    && byteBounded
+    && maxBytes! > 0
+    && (!charBounded || maxChars! > 0)
+  ) {
+    throw new ProjectError(
+      "INVALID_INPUT",
+      "maxBytes 小于下一个完整 UTF-8 字符所需字节数",
+      { maxBytes },
+      "请提高 maxBytes 后重试；读取不会返回半个 UTF-8 字符。",
+    );
   }
 
-  if (maxChars && current.length > maxChars) {
-    const keptLines: string[] = [];
-    let chars = 0;
-    for (const line of current.split("\n")) {
-      const lineWithBreak = `${line}\n`;
-      if (chars + lineWithBreak.length > maxChars) {
-        if (isEmpty(keptLines) && maxChars > 0) {
-          keptLines.push(line.slice(0, maxChars));
-        }
-        break;
-      }
-      keptLines.push(line);
-      chars += lineWithBreak.length;
-    }
-    current = keptLines.join("\n");
-    truncated = true;
-  }
+  if (consumedChars >= content.length)
+    return {
+      content,
+      truncated: false,
+      lineCount: countTextLines(content),
+      consumedChars: content.length,
+    };
 
+  const exactPrefix = content.slice(0, consumedChars);
+  const lastNewline = exactPrefix.lastIndexOf("\n");
+  if (lastNewline >= 0) {
+    const completeLines = content.slice(0, lastNewline + 1);
+    return {
+      content: completeLines,
+      truncated: true,
+      lineCount: countTextLines(completeLines),
+      consumedChars: lastNewline + 1,
+    };
+  }
   return {
-    content: current,
-    truncated,
-    lineCount: current.split("\n").length,
+    content: exactPrefix,
+    truncated: true,
+    lineCount: countTextLines(exactPrefix),
+    consumedChars,
   };
 }
 
@@ -178,6 +183,134 @@ function countTextLines(content: string): number {
   if (isEmpty(content)) return 0;
   const newlineMatches = content.match(/\n/g)?.length ?? 0;
   return content.endsWith("\n") ? newlineMatches : newlineMatches + 1;
+}
+
+interface ReadCursor {
+  line: number;
+  column: number;
+}
+
+function validateReadRange(range: ReadInput["range"]): void {
+  if (!range) return;
+  const numericEntries = [
+    ["startLine", range.startLine],
+    ["endLine", range.endLine],
+    ["startColumn", range.startColumn],
+    ["endColumn", range.endColumn],
+  ] as const;
+  for (const [name, value] of numericEntries) {
+    if (!isUndefined(value) && (!Number.isInteger(value) || value < 1)) {
+      throw new ProjectError("INVALID_INPUT", `${name} 必须是从 1 开始的正整数`, { range, field: name });
+    }
+  }
+  const startLine = range.startLine ?? 1;
+  if (!isUndefined(range.endColumn) && isUndefined(range.endLine)) {
+    throw new ProjectError("INVALID_INPUT", "使用 endColumn 时必须同时提供 endLine", { range });
+  }
+  if (!isUndefined(range.endLine) && range.endLine < startLine) {
+    throw new ProjectError("INVALID_INPUT", "读取范围的 endLine 不能早于 startLine", { range });
+  }
+  if (
+    (range.endLine ?? startLine) === startLine
+    && !isUndefined(range.startColumn)
+    && !isUndefined(range.endColumn)
+    && range.endColumn < range.startColumn
+  ) {
+    throw new ProjectError("INVALID_INPUT", "同一行的 endColumn 不能早于 startColumn", { range });
+  }
+}
+
+function sliceWindowColumns(
+  content: string,
+  range: ReadInput["range"],
+  absoluteStartLine: number,
+  absoluteEndLine: number,
+): {
+  content: string;
+  startColumn: number;
+  endColumn: number;
+  hasMoreOnEndLine: boolean;
+} {
+  const lines = content.split("\n");
+  const firstLine = lines[0] ?? "";
+  const lastLine = lines.at(-1) ?? "";
+  const startColumn = range?.startColumn ?? 1;
+  const endColumn = range?.endLine === absoluteEndLine
+    ? range.endColumn ?? lastLine.length + 1
+    : lastLine.length + 1;
+  if (startColumn > firstLine.length + 1) {
+    throw new ProjectError(
+      "INVALID_INPUT",
+      `startColumn ${startColumn} 超出第 ${absoluteStartLine} 行长度`,
+      { range, lineLength: firstLine.length },
+    );
+  }
+  if (endColumn > lastLine.length + 1) {
+    throw new ProjectError(
+      "INVALID_INPUT",
+      `endColumn ${endColumn} 超出第 ${absoluteEndLine} 行长度`,
+      { range, lineLength: lastLine.length },
+    );
+  }
+  if (lines.length === 1) {
+    if (endColumn < startColumn) {
+      throw new ProjectError("INVALID_INPUT", "同一行的 endColumn 不能早于 startColumn", { range });
+    }
+    return {
+      content: firstLine.slice(startColumn - 1, endColumn - 1),
+      startColumn,
+      endColumn,
+      hasMoreOnEndLine: endColumn < firstLine.length + 1,
+    };
+  }
+  const selected = [
+    firstLine.slice(startColumn - 1),
+    ...lines.slice(1, -1),
+    lastLine.slice(0, endColumn - 1),
+  ].join("\n");
+  return {
+    content: selected,
+    startColumn,
+    endColumn,
+    hasMoreOnEndLine: endColumn < lastLine.length + 1,
+  };
+}
+
+function advanceReadCursor(start: ReadCursor, consumed: string): ReadCursor {
+  const lastNewline = consumed.lastIndexOf("\n");
+  if (lastNewline === -1) return { line: start.line, column: start.column + consumed.length };
+  const newlineCount = consumed.match(/\n/g)?.length ?? 0;
+  return {
+    line: start.line + newlineCount,
+    column: consumed.length - lastNewline,
+  };
+}
+
+function continuationInput(
+  input: ReadInput,
+  pathValue: string,
+  revision: string,
+  cursor: ReadCursor,
+  preserveRequestedEnd: boolean,
+): ReadInput {
+  const range: NonNullable<ReadInput["range"]> = {
+    startLine: cursor.line,
+    ...(cursor.column > 1 ? { startColumn: cursor.column } : {}),
+    ...(preserveRequestedEnd && !isUndefined(input.range?.endLine)
+      ? { endLine: input.range.endLine }
+      : {}),
+    ...(preserveRequestedEnd && !isUndefined(input.range?.endColumn)
+      ? { endColumn: input.range.endColumn }
+      : {}),
+  };
+  return {
+    path: pathValue,
+    baseRevision: revision,
+    range,
+    ...(!isUndefined(input.maxBytes) ? { maxBytes: input.maxBytes } : {}),
+    ...(!isUndefined(input.maxChars) ? { maxChars: Math.max(1, input.maxChars) } : {}),
+    ...(!isUndefined(input.trust) ? { trust: input.trust } : {}),
+  };
 }
 
 function concatByteChunks(chunks: readonly Uint8Array[]): Buffer {
@@ -212,13 +345,18 @@ async function readLimitedTextPrefix(
   const chunks: Buffer[] = [];
   let bytesReadTotal = 0;
   let reachedEof = false;
+  let decodedContent: Nullable<string> = "";
 
   try {
     while (true) {
       const decoded = !isEmpty(chunks) ? decodeProjectTextBuffer(concatByteChunks(chunks)) : "";
-      const remainingChars = limits.maxChars ? Math.max(1, limits.maxChars - (decoded?.length ?? 0)) : undefined;
-      const charByteBudget = remainingChars ? remainingChars * 4 : ReadPrefixChunkBytes;
-      const remainingBytes = limits.maxBytes
+      const remainingChars = !isUndefined(limits.maxChars)
+        ? Math.max(0, limits.maxChars - [...(decoded ?? "")].length)
+        : undefined;
+      const charByteBudget = !isUndefined(remainingChars)
+        ? remainingChars * 4 + 4
+        : ReadPrefixChunkBytes;
+      const remainingBytes = !isUndefined(limits.maxBytes)
         ? Math.min(limits.maxBytes - bytesReadTotal, charByteBudget)
         : charByteBudget;
       if (remainingBytes <= 0) break;
@@ -232,25 +370,56 @@ async function readLimitedTextPrefix(
       bytesReadTotal += bytesRead;
       chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
       const content = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? "";
-      if (limits.maxChars && content.length >= limits.maxChars) {
+      if (!isUndefined(limits.maxChars) && [...content].length >= limits.maxChars) {
         break;
       }
-      if (limits.maxBytes && bytesReadTotal >= limits.maxBytes) break;
+      if (!isUndefined(limits.maxBytes) && bytesReadTotal >= limits.maxBytes) break;
+    }
+
+    decodedContent = !isEmpty(chunks) ? decodeProjectTextBuffer(concatByteChunks(chunks)) : "";
+    let lookaheadBytes = 0;
+    while (
+      (isNull(decodedContent) || (isEmpty(decodedContent) && bytesReadTotal < fileSize))
+      && bytesReadTotal < fileSize
+      && lookaheadBytes < 8
+    ) {
+      const { bytesRead } = await handle.read(chunk, 0, 1, null);
+      if (bytesRead === 0) {
+        reachedEof = true;
+        break;
+      }
+      bytesReadTotal += bytesRead;
+      lookaheadBytes += bytesRead;
+      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
+      decodedContent = decodeProjectTextBuffer(concatByteChunks(chunks));
     }
   } finally {
     await handle.close();
   }
 
-  const content = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? "";
+  if (isNull(decodedContent)) {
+    throw new ProjectError(
+      "INVALID_INPUT",
+      "读取预算无法覆盖下一个完整文本字符",
+      { maxBytes: limits.maxBytes, maxChars: limits.maxChars },
+      "请提高 maxBytes 或 maxChars 后重试；读取不会返回无法解码的字符片段。",
+    );
+  }
   return {
-    content: limits.maxChars ? content.slice(0, limits.maxChars) : content,
+    content: decodedContent,
     truncated: !reachedEof && bytesReadTotal < fileSize,
   };
 }
 
 async function readTextLineWindow(
   absPath: string,
-  range: { startLine?: number; endLine?: number }
+  range: {
+    startLine?: number;
+    endLine?: number;
+    startColumn?: number;
+    endColumn?: number;
+  },
+  limits: { maxBytes?: number; maxChars?: number } = {},
 ): Promise<LineWindowReadResult> {
   const startLine = Math.max(1, Math.floor(range.startLine ?? 1));
   const requestedEndLine = Math.max(
@@ -265,6 +434,12 @@ async function readTextLineWindow(
   const chunks: Buffer[] = [];
   let currentLine = 1;
   let hasMore = false;
+  const outputLimitCandidates = [limits.maxBytes, limits.maxChars].filter(
+    (value): value is number => !isUndefined(value),
+  );
+  const outputLimit = !isEmpty(outputLimitCandidates)
+    ? Math.min(...outputLimitCandidates)
+    : undefined;
 
   const acceptLine = (line: string) => {
     if (currentLine < startLine) {
@@ -288,6 +463,17 @@ async function readTextLineWindow(
       chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
       const decoded = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? "";
       const parts = decoded.split("\n");
+      if (!isUndefined(outputLimit) && parts.length >= startLine) {
+        const lastRequestedPart = Math.min(parts.length, requestedEndLine);
+        const partialWindow = parts.slice(startLine - 1, lastRequestedPart).join("\n");
+        const requiredChars = Math.max(0, (range.startColumn ?? 1) - 1) + outputLimit + 1;
+        if (partialWindow.length >= requiredChars) {
+          lines.length = 0;
+          lines.push(...partialWindow.split("\n"));
+          hasMore = true;
+          break;
+        }
+      }
       const completeParts = decoded.endsWith("\n") ? parts : parts.slice(0, -1);
       currentLine = 1;
       lines.length = 0;
@@ -299,6 +485,24 @@ async function readTextLineWindow(
     if (!hasMore) {
       const decoded = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? "";
       const parts = decoded.split("\n");
+      if (startLine > parts.length) {
+        throw new ProjectError(
+          "INVALID_INPUT",
+          `startLine ${startLine} 超出文件总行数 ${parts.length}`,
+          { range, totalLines: parts.length },
+        );
+      }
+      if (
+        !isUndefined(range.endColumn)
+        && !isUndefined(range.endLine)
+        && range.endLine > parts.length
+      ) {
+        throw new ProjectError(
+          "INVALID_INPUT",
+          `endLine ${range.endLine} 超出文件总行数 ${parts.length}，无法应用 endColumn`,
+          { range, totalLines: parts.length },
+        );
+      }
       currentLine = 1;
       lines.length = 0;
       for (const line of parts) {
@@ -531,6 +735,13 @@ export class FileStore {
     input: ReadInput,
     options?: { skipFileFilter?: boolean }
   ): Promise<ReadResult> {
+    validateReadRange(input.range);
+    if (!isUndefined(input.maxBytes) && (!Number.isInteger(input.maxBytes) || input.maxBytes < 1)) {
+      throw new ProjectError("INVALID_INPUT", "maxBytes 必须是正整数", { maxBytes: input.maxBytes });
+    }
+    if (!isUndefined(input.maxChars) && (!Number.isInteger(input.maxChars) || input.maxChars < 0)) {
+      throw new ProjectError("INVALID_INPUT", "maxChars 必须是非负整数", { maxChars: input.maxChars });
+    }
     const snap = await this.snapshot(input.path, true, options);
     if (input.baseRevision && snap.revision !== input.baseRevision) {
       throw new ProjectError(
@@ -544,7 +755,14 @@ export class FileStore {
       );
     }
     if (!snap.exists || snap.isDirectory || snap.isBinary) return { snapshot: snap };
-    if (isUndefined(snap.content) && !input.maxBytes && !input.maxChars && !input.range) {
+    const hasRange = !!input.range && [
+      input.range.startLine,
+      input.range.endLine,
+      input.range.startColumn,
+      input.range.endColumn,
+    ].some((value) => !isUndefined(value));
+    const hasLimit = !isUndefined(input.maxBytes) || !isUndefined(input.maxChars);
+    if (isUndefined(snap.content) && !hasLimit && !hasRange) {
       throw new ProjectError(
         "NOT_SUPPORTED",
         `文件超过完整读取上限：${snap.path}`,
@@ -555,42 +773,76 @@ export class FileStore {
         "请读取有界范围，或传入 maxBytes。",
       );
     }
-    if (isUndefined(snap.content) && !input.range && (input.maxBytes || input.maxChars)) {
+    if (isUndefined(snap.content) && !hasRange && hasLimit) {
       const prefix = await readLimitedTextPrefix(snap.absPath, snap.size, {
         maxBytes: input.maxBytes,
         maxChars: input.maxChars,
       });
       const limited = limitContent(prefix.content, input.maxBytes, input.maxChars);
       const truncated = prefix.truncated || limited.truncated;
-      const linesInContent = limited.lineCount;
+      const cursor = advanceReadCursor(
+        { line: 1, column: 1 },
+        prefix.content.slice(0, limited.consumedChars),
+      );
       return {
         snapshot: snap,
         content: limited.content,
         totalLines: optionalWhen(!truncated, countTextLines(prefix.content)),
         truncated,
         hasMore: truncated,
-        nextStartLine: optionalWhen(truncated, (linesInContent + 1)),
+        nextStartLine: optionalWhen(truncated && cursor.column === 1, cursor.line),
+        continuation: optionalWhen(
+          truncated,
+          continuationInput(input, snap.path, snap.revision, cursor, true),
+        ),
       };
     }
 
-    if (isUndefined(snap.content) && (input.range?.startLine || input.range?.endLine)) {
+    if (isUndefined(snap.content) && hasRange) {
+      const range = input.range!;
       const window = await readTextLineWindow(snap.absPath, {
-        startLine: input.range.startLine,
-        endLine: input.range.endLine,
+        startLine: range.startLine,
+        endLine: range.endLine,
+        startColumn: range.startColumn,
+        endColumn: range.endColumn,
+      }, {
+        maxBytes: input.maxBytes,
+        maxChars: input.maxChars,
       });
-      const limited = limitContent(window.content, input.maxBytes, input.maxChars);
-      const endLine =
-        limited.truncated
-          ? Math.max(window.range.startLine, window.range.startLine + limited.lineCount - 1)
-          : window.range.endLine;
-      const hasMore = limited.truncated || window.hasMore;
+      const selected = sliceWindowColumns(
+        window.content,
+        range,
+        window.range.startLine,
+        window.range.endLine,
+      );
+      const limited = limitContent(selected.content, input.maxBytes, input.maxChars);
+      const startCursor = { line: window.range.startLine, column: selected.startColumn };
+      const limitedCursor = advanceReadCursor(
+        startCursor,
+        selected.content.slice(0, limited.consumedChars),
+      );
+      const cursor = limited.truncated
+        ? limitedCursor
+        : selected.hasMoreOnEndLine
+          ? { line: window.range.endLine, column: selected.endColumn }
+          : { line: window.range.endLine + 1, column: 1 };
+      const hasMore = limited.truncated || selected.hasMoreOnEndLine || window.hasMore;
       return {
         snapshot: snap,
         content: limited.content,
-        range: { ...window.range, endLine },
-        truncated: limited.truncated || hasMore,
+        range: {
+          startLine: window.range.startLine,
+          startColumn: selected.startColumn,
+          endLine: limited.truncated ? limitedCursor.line : window.range.endLine,
+          endColumn: limited.truncated ? limitedCursor.column : selected.endColumn,
+        },
+        truncated: hasMore,
         hasMore,
-        nextStartLine: optionalWhen(hasMore, (endLine + 1)),
+        nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
+        continuation: optionalWhen(
+          hasMore,
+          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
+        ),
       };
     }
 
@@ -598,40 +850,91 @@ export class FileStore {
     const allLines = rawContent.split("\n");
     const totalLines = allLines.length;
 
-    if (input.range?.startLine || input.range?.endLine) {
-      // range 读取仍受字节限制，避免超长行撑爆 agent 上下文。
-      const sliced = sliceLines(rawContent, input.range.startLine, input.range.endLine);
-      const limited = limitContent(sliced.content, input.maxBytes, input.maxChars);
-      const endLine =
-        limited.truncated
-          ? Math.max(sliced.range.startLine, sliced.range.startLine + limited.lineCount - 1)
-          : sliced.range.endLine;
-      const hasMore = endLine < totalLines;
-      const remainingLines = hasMore ? totalLines - endLine : 0;
-      const truncated = limited.truncated || hasMore;
+    if (hasRange) {
+      const range = input.range!;
+      const requestedStartLine = range.startLine ?? 1;
+      if (requestedStartLine > totalLines) {
+        throw new ProjectError(
+          "INVALID_INPUT",
+          `startLine ${requestedStartLine} 超出文件总行数 ${totalLines}`,
+          { range, totalLines },
+        );
+      }
+      if (
+        !isUndefined(range.endColumn)
+        && !isUndefined(range.endLine)
+        && range.endLine > totalLines
+      ) {
+        throw new ProjectError(
+          "INVALID_INPUT",
+          `endLine ${range.endLine} 超出文件总行数 ${totalLines}，无法应用 endColumn`,
+          { range, totalLines },
+        );
+      }
+      const sliced = sliceLines(rawContent, range.startLine, range.endLine);
+      const selected = sliceWindowColumns(
+        sliced.content,
+        range,
+        sliced.range.startLine,
+        sliced.range.endLine,
+      );
+      const limited = limitContent(selected.content, input.maxBytes, input.maxChars);
+      const startCursor = { line: sliced.range.startLine, column: selected.startColumn };
+      const limitedCursor = advanceReadCursor(
+        startCursor,
+        selected.content.slice(0, limited.consumedChars),
+      );
+      const cursor = limited.truncated
+        ? limitedCursor
+        : selected.hasMoreOnEndLine
+          ? { line: sliced.range.endLine, column: selected.endColumn }
+          : { line: sliced.range.endLine + 1, column: 1 };
+      const hasMore = limited.truncated || selected.hasMoreOnEndLine || sliced.range.endLine < totalLines;
+      const remainingLines = hasMore
+        ? Math.max(0, totalLines - cursor.line + (cursor.column > 1 ? 1 : 0))
+        : 0;
       return {
         snapshot: snap,
         content: limited.content,
-        range: { ...sliced.range, endLine },
+        range: {
+          startLine: sliced.range.startLine,
+          startColumn: selected.startColumn,
+          endLine: limited.truncated ? limitedCursor.line : sliced.range.endLine,
+          endColumn: limited.truncated ? limitedCursor.column : selected.endColumn,
+        },
         totalLines,
-        truncated,
+        truncated: hasMore,
         hasMore,
-        nextStartLine: optionalWhen(hasMore, (endLine + 1)),
+        nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
         remainingLines: optionalWhen(hasMore, remainingLines),
+        continuation: optionalWhen(
+          hasMore,
+          continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
+        ),
       };
     }
 
     const limited = limitContent(rawContent, input.maxBytes, input.maxChars);
-    const linesInContent = limited.lineCount;
-    const hasMore = limited.truncated && linesInContent < totalLines;
+    const cursor = advanceReadCursor(
+      { line: 1, column: 1 },
+      rawContent.slice(0, limited.consumedChars),
+    );
+    const hasMore = limited.truncated;
     return {
       snapshot: snap,
       content: limited.content,
       totalLines,
       truncated: limited.truncated,
       hasMore,
-      nextStartLine: optionalWhen(hasMore, (linesInContent + 1)),
-      remainingLines: optionalWhen(hasMore, (totalLines - linesInContent)),
+      nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
+      remainingLines: optionalWhen(
+        hasMore,
+        Math.max(0, totalLines - cursor.line + (cursor.column > 1 ? 1 : 0)),
+      ),
+      continuation: optionalWhen(
+        hasMore,
+        continuationInput(input, snap.path, snap.revision, cursor, true),
+      ),
     };
   }
 

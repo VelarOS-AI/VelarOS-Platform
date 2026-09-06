@@ -13,7 +13,7 @@
 // ## 关键不变量（改这些会破什么）
 //  - **`finalizeResult` 单点终结**：span 单开单闭、证据入账、结果中间件、事件发射都挂在它上面。
 //    绕过它直接 return 结果 = span 泄漏 + 证据丢账 + 前端收不到终态。
-//  - **顺序：`tool-call:before` seam → 策略/审批门 → 参数校验 → 执行**。seam 只能「拦下」或
+//  - **顺序：`tool-call:before` seam → 可用性/参数校验与去重 → 审批 → 执行**。seam 只能「拦下」或
 //    「改写入参」，改写后的入参**照样走完整策略门**；把 seam 挪到门之后 = mod 可绕过审批。
 //  - **结果按接收顺序输出**（不按完成顺序）：消息历史必须与模型看到的调用顺序一致，否则
 //    下一轮上下文里工具结果与调用错位。
@@ -37,6 +37,7 @@ import {
   isPlainObject,
   isPresent,
   isString,
+  isTrue,
   toNullable,
   toOptional,
 } from "@velaros-ai/core";
@@ -102,6 +103,14 @@ interface ToolExecutorPayloadContext {
   contextPayloadStore?: LooseOptional<ContextPayloadStore>;
 }
 
+interface ToolEffectiveAdmission {
+  state: "pending" | "waiting" | "active" | "released";
+  isConcurrencySafe?: boolean;
+  resolve?: (admitted: boolean) => void;
+  abortSignal?: AbortSignal;
+  abortListener?: () => void;
+}
+
 export interface PendingTool {
   toolCallId: string;
   toolName: string;
@@ -117,6 +126,11 @@ export interface PendingTool {
    * 收敛后置空——单开单闭、纯旁路，span 失败不冒泡进执行主路。
    */
   spanHandle?: LooseOptional<ToolSpanHandle>;
+}
+
+interface ScheduledTool extends PendingTool {
+  /** before/schema/surface normalize 后，按接收顺序授予的实际调用槽。 */
+  effectiveAdmission: ToolEffectiveAdmission;
 }
 
 export interface ToolResult {
@@ -147,7 +161,7 @@ type ToolExecutionSettlement =
  * 5. 某个工具出错时，取消其他正在执行的同轮工具
  */
 export class ToolExecutor {
-  private readonly tools: PendingTool[] = [];
+  private readonly tools: ScheduledTool[] = [];
   private readonly ctx: ToolExecutionPolicyContext;
   private readonly events: ToolExecutorEvents;
   private siblingAbort: AbortController;
@@ -251,11 +265,12 @@ export class ToolExecutor {
             canonicalToolName,
             pendingArgs,
           );
-    const pending: PendingTool = {
+    const pending: ScheduledTool = {
       toolCallId,
       toolName: canonicalToolName,
       args: pendingArgs,
       isConcurrencySafe: canonicalConcurrencySafe,
+      effectiveAdmission: { state: "pending" },
       status: "queued",
     };
     this.tools.push(pending);
@@ -273,6 +288,7 @@ export class ToolExecutor {
           this.ctx,
         ),
       }).finally(() => {
+        this.releaseEffectiveAdmission(pending);
         pending.status = "done";
         this.drainQueue();
       });
@@ -287,6 +303,7 @@ export class ToolExecutor {
         error: providerArgs.reason,
         result: providerArgs.result,
       }).finally(() => {
+        this.releaseEffectiveAdmission(pending);
         pending.status = "done";
         this.drainQueue();
       });
@@ -317,6 +334,7 @@ export class ToolExecutor {
           this.ctx,
         ),
       }).finally(() => {
+        this.releaseEffectiveAdmission(pending);
         pending.status = "done";
         this.drainQueue();
       });
@@ -397,33 +415,29 @@ export class ToolExecutor {
       const next = this.tools.find((tool) => tool.status === "queued");
       if (!next) return;
 
-      if (!this.canRun(next.isConcurrencySafe)) return;
+      if (!this.canPrepare()) return;
 
       this.execute(next);
     }
   }
 
-  private canRun(isConcurrencySafe: boolean): boolean {
+  private canPrepare(): boolean {
     const executing = this.tools.filter((t) => t.status === "executing");
-    if (isEmpty(executing)) return true;
-    return (
-      isConcurrencySafe &&
-      executing.every((t) => t.isConcurrencySafe) &&
-      executing.length < MaxConcurrentConcurrencySafeTools
-    );
+    return executing.length < MaxConcurrentConcurrencySafeTools;
   }
 
-  private execute(tool: PendingTool): void {
+  private execute(tool: ScheduledTool): void {
     tool.status = "executing";
 
     tool.promise = this.runOne(tool).finally(() => {
+      this.releaseEffectiveAdmission(tool);
       tool.status = "done";
       // 有工具完成后尝试推进队列
       this.drainQueue();
     });
   }
 
-  private async runOne(tool: PendingTool): Promise<ToolResult> {
+  private async runOne(tool: ScheduledTool): Promise<ToolResult> {
     if (this.siblingErrored && this.siblingAbort.signal.aborted) {
       const reason = `Cancelled: sibling tool "${this.siblingErrorName}" failed`;
       return this.finalizeResult(tool, {
@@ -467,7 +481,7 @@ export class ToolExecutor {
       null;
     try {
       // mod 接缝：调用前派发（策略门之前）。拦下走与其他失败同构的结构化失败结果；
-      // 入参改写只是替换 tool.args，后续策略门、参数校验、审批门一条不少。
+      // 入参改写只是替换 tool.args，后续可用性、参数校验、去重与审批一条不少。
       if (this.seams?.has("tool-call:before")) {
         const outcome = await this.seams.dispatchToolCallBefore({
           toolCallId: tool.toolCallId,
@@ -552,15 +566,65 @@ export class ToolExecutor {
       }
 
       const executionToolName = decision.prepared.toolName;
+      const effectiveArgs = decision.prepared.effectiveArgs ?? tool.args ?? {};
+      const effectiveConcurrencySafe = this.executionPolicy.resolveConcurrencySafe(
+        executionToolName,
+        effectiveArgs,
+        tool.isConcurrencySafe,
+      );
+      tool.isConcurrencySafe = effectiveConcurrencySafe;
+      const admitted = await this.acquireEffectiveAdmission(
+        tool,
+        effectiveConcurrencySafe,
+        toolAbort.signal,
+      );
+      if (!admitted) {
+        const reason = this.resolveAbortSettlementReason();
+        return await this.finalizeResult(tool, {
+          toolCallId: tool.toolCallId,
+          toolName: executionToolName,
+          args: effectiveArgs,
+          error: reason,
+          result: this.buildToolFailureResult(
+            "tool_cancelled",
+            reason,
+            executionToolName,
+          ),
+        });
+      }
+      const revalidationError = this.executionPolicy.revalidatePreparedExecution(
+        decision.prepared,
+        effectiveArgs,
+      );
+      if (revalidationError) {
+        log.warn("tool execute end", {
+          name: executionToolName,
+          id: tool.toolCallId,
+          status: "blocked",
+          reason: "effective_admission_revalidation",
+          durationMs: Date.now() - startedAt,
+        });
+        return await this.finalizeResult(tool, {
+          toolCallId: tool.toolCallId,
+          toolName: executionToolName,
+          args: effectiveArgs,
+          error: revalidationError,
+          result: this.executionPolicy.buildBlockedFailureResult(
+            executionToolName,
+            revalidationError,
+            this.ctx,
+          ),
+        });
+      }
       const writeLike = isKernelWriteLikeTool({
         toolName: executionToolName,
-        args: tool.args,
+        args: effectiveArgs,
         permissions: decision.prepared.tool.permissions,
         capabilities: decision.prepared.tool.capabilities,
       });
       const loopGuardMessage = this.loopGuard.checkRepeatedWriteLikeSuccess({
         toolName: executionToolName,
-        args: tool.args,
+        args: effectiveArgs,
         writeLike,
       });
       if (loopGuardMessage) {
@@ -574,6 +638,7 @@ export class ToolExecutor {
         return await this.finalizeResult(tool, {
           toolCallId: tool.toolCallId,
           toolName: executionToolName,
+          args: effectiveArgs,
           error: loopGuardMessage,
           result: this.buildToolFailureResult(
             "tool_loop_guard",
@@ -586,7 +651,7 @@ export class ToolExecutor {
       // 工具函数在这里被调用；输出通过 emitToolDone 通知宿主，并在外层追加进下一轮模型 history。
       activeExecutionContext = {
         toolName: executionToolName,
-        args: tool.args,
+        args: effectiveArgs,
         isConcurrencySafe: tool.isConcurrencySafe,
         toolContext: decision.prepared.toolContext,
       };
@@ -600,7 +665,7 @@ export class ToolExecutor {
       if (!result.error) {
         this.loopGuard.recordSuccess({
           toolName: executionToolName,
-          args: tool.args,
+          args: effectiveArgs,
           writeLike,
         });
       }
@@ -635,6 +700,7 @@ export class ToolExecutor {
       result = {
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
+        args: activeExecutionContext?.args ?? tool.args,
         result: failureResult,
         error: appError.message,
       };
@@ -652,6 +718,106 @@ export class ToolExecutor {
     }
 
     return this.finalizeResult(tool, result);
+  }
+
+  /**
+   * before/schema/surface normalize 完成后才进入实际调用门。门按 tool 接收顺序折叠：
+   * safe 共享最多 8 个槽，unsafe 独占；更早但尚未准备完成的调用会阻止后来者越序。
+   */
+  private acquireEffectiveAdmission(
+    tool: ScheduledTool,
+    isConcurrencySafe: boolean,
+    abortSignal: AbortSignal,
+  ): Promise<boolean> {
+    const admission = tool.effectiveAdmission;
+    admission.isConcurrencySafe = isConcurrencySafe;
+    if (abortSignal.aborted) {
+      admission.state = "released";
+      this.drainEffectiveAdmissions();
+      return Promise.resolve(false);
+    }
+
+    admission.state = "waiting";
+    return new Promise<boolean>((resolve) => {
+      const abortListener = () => {
+        if (admission.state !== "waiting") return;
+        admission.state = "released";
+        abortSignal.removeEventListener("abort", abortListener);
+        admission.resolve = undefined;
+        admission.abortSignal = undefined;
+        admission.abortListener = undefined;
+        resolve(false);
+        this.drainEffectiveAdmissions();
+      };
+      admission.resolve = resolve;
+      admission.abortSignal = abortSignal;
+      admission.abortListener = abortListener;
+      abortSignal.addEventListener("abort", abortListener, { once: true });
+      this.drainEffectiveAdmissions();
+    });
+  }
+
+  private drainEffectiveAdmissions(): void {
+    let activeCount = 0;
+    let activeExclusive = false;
+    for (const tool of this.tools) {
+      const admission = tool.effectiveAdmission;
+      if (admission.state !== "active") continue;
+      activeCount += 1;
+      if (!isTrue(admission.isConcurrencySafe)) activeExclusive = true;
+    }
+
+    for (const tool of this.tools) {
+      const admission = tool.effectiveAdmission;
+      if (admission.state === "released" || admission.state === "active") continue;
+      if (admission.state === "pending") return;
+
+      const canAdmit = activeCount === 0 || (
+        isTrue(admission.isConcurrencySafe)
+        && !activeExclusive
+        && activeCount < MaxConcurrentConcurrencySafeTools
+      );
+      if (!canAdmit) return;
+
+      admission.state = "active";
+      if (
+        isPresent(admission.abortSignal)
+        && isPresent(admission.abortListener)
+      ) {
+        admission.abortSignal.removeEventListener(
+          "abort",
+          admission.abortListener,
+        );
+      }
+      const resolve = admission.resolve;
+      admission.resolve = undefined;
+      admission.abortSignal = undefined;
+      admission.abortListener = undefined;
+      activeCount += 1;
+      if (!isTrue(admission.isConcurrencySafe)) activeExclusive = true;
+      resolve?.(true);
+      if (activeExclusive) return;
+    }
+  }
+
+  private releaseEffectiveAdmission(tool: ScheduledTool): void {
+    const admission = tool.effectiveAdmission;
+    if (admission.state === "released") return;
+    if (
+      isPresent(admission.abortSignal)
+      && isPresent(admission.abortListener)
+    ) {
+      admission.abortSignal.removeEventListener(
+        "abort",
+        admission.abortListener,
+      );
+    }
+    if (admission.state === "waiting") admission.resolve?.(false);
+    admission.state = "released";
+    admission.resolve = undefined;
+    admission.abortSignal = undefined;
+    admission.abortListener = undefined;
+    this.drainEffectiveAdmissions();
   }
 
   private emitToolProgress(toolCallId: string, chunk: string): void {
@@ -713,11 +879,12 @@ export class ToolExecutor {
   }
 
   private async executePreparedTool(
-    tool: PendingTool,
+    tool: ScheduledTool,
     prepared: ToolExecutionPrepared,
     args: LooseOptional<Record<string, unknown>>,
     toolName: string,
   ): Promise<ToolResult> {
+    const effectiveArgs = prepared.effectiveArgs ?? args ?? {};
     const output = await this.executionPolicy.executePrepared(
       prepared,
       args,
@@ -726,32 +893,41 @@ export class ToolExecutor {
     let enhanced: ToolResult = {
       toolCallId: tool.toolCallId,
       toolName,
+      args: effectiveArgs,
       result: output,
     };
-    for (const middleware of this.resultMiddlewares) {
-      const context = {
-        toolCallId: tool.toolCallId,
-        toolName,
-        args: tool.args,
-        result: enhanced.result,
-        executionContext: this.ctx,
-      };
-      if (middleware.matches && !middleware.matches(context)) continue;
-      const transformed = await middleware.transform(context);
-      if (!transformed) continue;
-      enhanced = {
-        ...enhanced,
-        result: transformed.result,
-        modelImage: transformed.modelImage ?? enhanced.modelImage,
-        effects: transformed.effects ?? enhanced.effects,
-        notices: [...(enhanced.notices ?? []), ...(transformed.notices ?? [])],
-      };
+    try {
+      for (const middleware of this.resultMiddlewares) {
+        const context = {
+          toolCallId: tool.toolCallId,
+          toolName,
+          args: effectiveArgs,
+          result: enhanced.result,
+          executionContext: this.ctx,
+        };
+        if (middleware.matches && !middleware.matches(context)) continue;
+        const transformed = await middleware.transform(context);
+        if (!transformed) continue;
+        enhanced = {
+          ...enhanced,
+          result: transformed.result,
+          modelImage: transformed.modelImage ?? enhanced.modelImage,
+          effects: transformed.effects ?? enhanced.effects,
+          notices: [...(enhanced.notices ?? []), ...(transformed.notices ?? [])],
+        };
+      }
+      return liftGenericModelImage(enhanced, enhanced.result);
+    } catch (error) {
+      throw new AppError(
+        "TOOL_RESULT_FINALIZATION_FAILED",
+        `Tool result finalization failed for "${toolName}". The operation may already have taken effect; inspect its state before retrying.`,
+        error,
+      );
     }
-    return liftGenericModelImage(enhanced, enhanced.result);
   }
 
   private async executePreparedToolWithAbortSettlement(
-    tool: PendingTool,
+    tool: ScheduledTool,
     prepared: ToolExecutionPrepared,
     args: LooseOptional<Record<string, unknown>>,
     toolName: string,
@@ -789,6 +965,7 @@ export class ToolExecutor {
           return {
             toolCallId: tool.toolCallId,
             toolName,
+            args: prepared.effectiveArgs ?? args ?? {},
             error: reason,
             result: this.buildToolFailureResult(
               "tool_cancelled",
@@ -858,7 +1035,7 @@ export class ToolExecutor {
   }
 
   private async finalizeResult(
-    tool: PendingTool,
+    tool: ScheduledTool,
     result: ToolResult,
   ): Promise<ToolResult> {
     try {
@@ -884,7 +1061,7 @@ export class ToolExecutor {
       );
       const fallback: ToolResult = {
         ...result,
-        args: tool.args,
+        args: result.args ?? tool.args,
         error: reason,
         result: failure,
         modelResult: failure,
@@ -910,16 +1087,17 @@ export class ToolExecutor {
   }
 
   private async materializeResult(
-    tool: PendingTool,
+    tool: ScheduledTool,
     result: ToolResult,
   ): Promise<ToolResult> {
+    const effectiveArgs = result.args ?? tool.args;
     // mod 接缝：结果收敛派发（物化之前）。放在物化前是为了让改写后的结果与
     // displayResult / modelResult 全链保持同源，不出现「模型看到 A、UI 看到 B」。
     if (this.seams?.has("tool-result:after")) {
       const outcome = await this.seams.dispatchToolResultAfter({
         toolCallId: result.toolCallId,
         toolName: result.toolName,
-        args: tool.args,
+        args: effectiveArgs,
         result: result.result,
         error: toNullable(result.error),
         sessionId: this.readSessionId(),
@@ -934,7 +1112,7 @@ export class ToolExecutor {
       localInstructionClaimScope: this.providerTurnReducer?.snapshot().turnId,
       toolCallId: result.toolCallId,
       toolName: result.toolName,
-      args: tool.args,
+      args: effectiveArgs,
       result: result.result,
       error: result.error,
       effects: result.effects,
@@ -969,7 +1147,7 @@ export class ToolExecutor {
 
     const finalResult: ToolResult = {
       ...result,
-      args: tool.args,
+      args: effectiveArgs,
       result: materialized.displayResult,
       modelResult: materialized.modelResult,
     };
@@ -996,7 +1174,7 @@ export class ToolExecutor {
   }
 
   /** 收敛一条 tool span（唯一终结点调用；无 handle 直接跳过，端口内部已隔离失败）。 */
-  private endToolSpan(tool: PendingTool, result: ToolResult): void {
+  private endToolSpan(tool: ScheduledTool, result: ToolResult): void {
     const handle = tool.spanHandle;
     if (!handle) return;
     tool.spanHandle = null;

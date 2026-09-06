@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { defineVelaTool } from '../defineVelaTool'
 
 import { directiveTypeSchema } from './ActiveDirectives'
+import { AgentPlanningReadCapability, AgentPlanningWriteCapability } from './Capabilities'
 import {
   assertGoalCanComplete,
   buildGoalLifecycleUpsertInput,
@@ -106,6 +107,7 @@ const getGoal = defineVelaTool<Record<string, never>>({
   notes: ['目标模式下收尾前应先确认当前目标状态。'],
   schema: z.object({}),
   permissions: [],
+  capabilities: AgentPlanningReadCapability,
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => {
     const artifacts = await ctx.activeContext.listActiveContextArtifacts({
@@ -190,6 +192,7 @@ const createGoal = defineVelaTool<{
       ),
   }),
   permissions: [],
+  capabilities: AgentPlanningWriteCapability,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()
@@ -248,7 +251,8 @@ const updateGoal = defineVelaTool<{
     '不要在用户仍要求继续推进时把目标标记 cancelled。',
   ],
   usage: [
-    '维护步骤最省心:传完整 steps 列表(每步带 status),这一项就能同步全部步骤;想改哪步就改它的 status。',
+    '维护步骤最省心:传完整 steps 列表(每步带 status),这一项就能同步全部步骤;想改哪步就改它的 status，传 [] 清空步骤。',
+    'constraints 传完整列表；传 [] 清空当前目标约束，省略则保留。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题,别自造 id);host 标记 completed 并推进下一个 pending。steps 与 complete_step 可一起传。',
     'status=complete 宣布目标完成:未收尾的 pending/in_progress 步骤会被自动标完成,不用逐个 complete_step。',
     'status=blocked 宣布目标受阻:模型确认缺少必要授权、用户输入或外部状态等真实阻碍导致无法继续推进时,可以自行调用,不需要等待多轮审计。',
@@ -259,6 +263,7 @@ const updateGoal = defineVelaTool<{
   examples: [
     { steps: [{ step: '跑验证', status: 'in_progress' }] },
     { complete_step: 1 },
+    { steps: [], constraints: [] },
     { status: 'paused' },
     { status: 'active' },
     { status: 'complete' },
@@ -289,12 +294,11 @@ const updateGoal = defineVelaTool<{
       ),
       steps: z
         .array(goalStepSchema)
-        .min(1)
         .max(12)
         .optional()
         .describe(
           parameterDescription({
-            description: '目标拆解出的完整生命周期步骤列表；不替代 plan:update 的可见 execution plan。',
+            description: '目标拆解出的完整生命周期步骤列表；传 [] 清空，省略则保留。不替代 plan:update 的可见 execution plan。',
           })
         ),
       complete_step: z
@@ -311,16 +315,16 @@ const updateGoal = defineVelaTool<{
         ),
       constraints: z
         .array(goalConstraintSchema)
-        .min(1)
         .max(20)
         .optional()
         .describe(
           parameterDescription({
-            description: '仅在当前目标边界内持续遵守的完整约束列表;跨目标长期有效的用户指令使用 active directive。',
+            description: '仅在当前目标边界内持续遵守的完整约束列表；传 [] 清空，省略则保留。跨目标长期有效的用户指令使用 active directive。',
           })
         ),
     }),
   permissions: [],
+  capabilities: AgentPlanningWriteCapability,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()
@@ -335,10 +339,10 @@ const updateGoal = defineVelaTool<{
     }
 
     const hasStatus = !!input.status
-    const hasSteps = !!input.steps?.length
+    const hasSteps = isPresent(input.steps)
     const hasComplete = isPresent(input.complete_step)
     const hasObjective = !!input.objective
-    const hasConstraints = !!input.constraints?.length
+    const hasConstraints = isPresent(input.constraints)
 
     // 空调用 = 无操作:回带当前目标状态,不报错(宽容)。
     if (!hasStatus && !hasSteps && !hasComplete && !hasObjective && !hasConstraints) {

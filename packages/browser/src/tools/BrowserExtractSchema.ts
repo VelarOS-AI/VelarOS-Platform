@@ -224,6 +224,12 @@ const browserExtractSchema = z
       })
     }
   })
+  .overwrite((input) => {
+    const exactParseResult = browserExtractExactSchema.safeParse(input)
+    // overwrite 仍会在 refinement 已失败时运行；此处不能 parse/throw，否则 safeParse 会泄漏异常。
+    // 成功时返回精确 action 分支，让执行历史与内部 dispatcher 看到同一份 stripped 参数。
+    return exactParseResult.success ? exactParseResult.data : input
+  })
 
 function parseBrowserExtractInput(input: unknown): z.output<typeof browserExtractExactSchema> {
   const parsed = browserExtractSchema.parse(input)

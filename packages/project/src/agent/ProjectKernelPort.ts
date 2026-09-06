@@ -1,5 +1,7 @@
 import { isEmpty, isNull, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
 
+import { ProjectError } from '../errors.js'
+
 /**
  * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
  * 返回契约只包含 Agent 编排读取和事务编辑时真正观察的字段。
@@ -96,6 +98,33 @@ export interface AgentProjectReadResult {
   nextStartLine?: number
   remainingLines?: number
   hasMore?: boolean
+  continuation?: AgentProjectReadContinuation
+}
+
+export interface AgentProjectReadContinuation {
+  path: string
+  range: {
+    startLine: number
+    startColumn?: number
+    endLine?: number
+    endColumn?: number
+  }
+  maxChars?: number
+  baseRevisions?: Record<string, string>
+}
+
+interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResult, 'continuation'> {
+  continuation?: {
+    path: string
+    range?: {
+      startLine?: number
+      endLine?: number
+      startColumn?: number
+      endColumn?: number
+    }
+    maxChars?: number
+    baseRevision?: string
+  }
 }
 
 export interface AgentProjectReadIssue {
@@ -143,7 +172,7 @@ export type AgentProjectResolveTargetResult =
 export interface AgentProjectKernelPort {
   listFiles(input?: any): Promise<Array<{ path: string; type: 'file' | 'directory' }>>
   stat(input: any): Promise<unknown>
-  read(input: any): Promise<AgentProjectReadResult>
+  read(input: any): Promise<AgentProjectKernelReadResult>
   search(input: any): Promise<AgentProjectSearchResult>
   listSymbols(path: string): Promise<any[]>
   resolveTarget(input: any): Promise<AgentProjectResolveTargetResult>
@@ -192,8 +221,34 @@ const MaxAgentSearchResultChars = 24_000
  */
 function projectAgentReadResult(
   filePath: string,
-  result: AgentProjectReadResult
+  result: AgentProjectKernelReadResult
 ): AgentProjectReadResult {
+  const continuationRange = result.continuation?.range
+  const continuation = continuationRange?.startLine
+    ? {
+        path: result.continuation?.path || filePath,
+        range: {
+          startLine: continuationRange.startLine,
+          ...(isUndefined(continuationRange.startColumn)
+            ? {}
+            : { startColumn: continuationRange.startColumn }),
+          ...(isUndefined(continuationRange.endLine) ? {} : { endLine: continuationRange.endLine }),
+          ...(isUndefined(continuationRange.endColumn)
+            ? {}
+            : { endColumn: continuationRange.endColumn }),
+        },
+        ...(!isUndefined(result.continuation?.maxChars) && result.continuation.maxChars > 0
+          ? { maxChars: result.continuation.maxChars }
+          : {}),
+        ...(result.continuation?.baseRevision
+          ? {
+              baseRevisions: {
+                [result.continuation.path || filePath]: result.continuation.baseRevision,
+              },
+            }
+          : {}),
+      }
+    : undefined
   return {
     snapshot: {
       path: result.snapshot.path || filePath,
@@ -209,6 +264,7 @@ function projectAgentReadResult(
     ...(isUndefined(result.nextStartLine) ? {} : { nextStartLine: result.nextStartLine }),
     ...(isUndefined(result.remainingLines) ? {} : { remainingLines: result.remainingLines }),
     ...(isUndefined(result.hasMore) ? {} : { hasMore: result.hasMore }),
+    ...(isUndefined(continuation) ? {} : { continuation }),
   }
 }
 
@@ -229,29 +285,38 @@ export async function executeAgentProjectRead(
     path,
     baseRevisions,
     allowUnbounded: _allowUnbounded,
+    maxChars,
     ...rest
   } = input
   const paths = isString(path) ? [path] : path
-  const appliedDefaultBound = !(
-    input.range?.endLine
-    || input.maxBytes
-    || input.maxChars
-    || input.allowUnbounded
-  )
-  const readInput =
-    appliedDefaultBound
-    || (input.allowUnbounded && !input.maxBytes && !input.maxChars)
-      ? { ...rest, maxChars: DefaultAgentReadMaxChars }
-      : rest
-  const files = await Promise.all(
-    paths.map(async (filePath) =>
-      projectAgentReadResult(filePath, await project.read({
-        ...readInput,
-        path: filePath,
-        baseRevision: baseRevisions?.[filePath],
-      }))
+  const appliedDefaultBound = isUndefined(input.maxBytes) && isUndefined(maxChars)
+  const totalMaxChars = appliedDefaultBound ? DefaultAgentReadMaxChars : maxChars
+  if (!isUndefined(totalMaxChars) && totalMaxChars < paths.length) {
+    throw new ProjectError(
+      'INVALID_INPUT',
+      `批量读取 ${paths.length} 个文件时 maxChars 至少为 ${paths.length}。`,
+      { maxChars: totalMaxChars, pathCount: paths.length },
+      '请提高 maxChars，或减少本次读取的文件数量。'
     )
-  )
+  }
+  let remainingChars = totalMaxChars
+  const files: AgentProjectReadResult[] = []
+  for (const [index, filePath] of paths.entries()) {
+    const remainingFiles = paths.length - index
+    const fileMaxChars = isUndefined(remainingChars)
+      ? undefined
+      : Math.floor(remainingChars / remainingFiles)
+    const result = await project.read({
+      ...rest,
+      ...(!isUndefined(fileMaxChars) ? { maxChars: fileMaxChars } : {}),
+      path: filePath,
+      baseRevision: baseRevisions?.[filePath],
+    })
+    files.push(projectAgentReadResult(filePath, result))
+    if (!isUndefined(remainingChars)) {
+      remainingChars = Math.max(0, remainingChars - [...(result.content ?? '')].length)
+    }
+  }
   const issues = files.flatMap<AgentProjectReadIssue>((file) => {
     if (!file.snapshot.exists)
       return [{

@@ -292,7 +292,7 @@ export interface BrowserElementFrameHint {
 }
 
 export interface BrowserElementTargetHint {
-  /** 来自最近一次页面 snapshot/inspection 的短引用，如 @e3。 */
+  /** 来自一次页面 snapshot/inspection 的 generation 引用，如 @e3:g2；只对原 observation 有效。 */
   ref?: LooseOptional<string>
   css: Nullable<string>
   role: Nullable<string>

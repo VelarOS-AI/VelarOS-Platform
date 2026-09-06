@@ -883,7 +883,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
   ],
   usage: [
     '传 action 选择动作类型，再传该动作需要的字段。',
-    'action=target 时传 targetAction，并优先把 inspect 返回的 @e ref 放进 targetRef；也可传完整 target。targetAction=fill/select 必须传 value。',
+    'action=target 时传 targetAction，并优先把 inspect 返回的完整 @e…:g… ref 原样放进 targetRef；也可传完整 target。targetAction=fill/select 必须传 value。',
     'action=drag 时传 sourceRef 和 targetRef（或完整 source/target）；action=navigate 可只传 url，系统会按 goto 处理。',
     '页面是异步的：动作之后用 wait_for_selector/wait_for_text/wait 等到位再读结果，别靠重试。',
   ],
@@ -892,13 +892,13 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
     {
       action: 'target',
       targetAction: 'click',
-      targetRef: '@e3',
+      targetRef: '@e3:g1',
     },
     // 填写输入框：targetAction=fill 必须带字符串 value
     {
       action: 'target',
       targetAction: 'fill',
-      targetRef: '@e4',
+      targetRef: '@e4:g1',
       value: 'user@example.com',
     },
     // 原生 select 多选：value 传字符串数组
@@ -938,8 +938,8 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
     // 把一个元素拖到另一个元素
     {
       action: 'drag',
-      sourceRef: '@e3',
-      targetRef: '@e8',
+      sourceRef: '@e3:g1',
+      targetRef: '@e8:g1',
     },
     // 操作后等待结果元素可见
     {

@@ -60,7 +60,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.10",
+      "version": "0.6.11",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",
@@ -96,7 +96,7 @@
     },
     "packages/browser": {
       "name": "@velaros-ai/browser",
-      "version": "0.2.17",
+      "version": "0.2.18",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -137,7 +137,7 @@
     },
     "packages/computer": {
       "name": "@velaros-ai/computer",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -161,7 +161,7 @@
     },
     "packages/development": {
       "name": "@velaros-ai/development",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@velaros-ai/core": "workspace:*",
@@ -220,7 +220,7 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "dependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@velaros-ai/core": "workspace:*",
@@ -262,7 +262,7 @@
     },
     "packages/office": {
       "name": "@velaros-ai/office",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "dependencies": {
         "@napi-rs/canvas": "1.0.8",
         "@velaros-ai/core": "workspace:*",
@@ -286,7 +286,7 @@
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.0.9",
+      "version": "2.0.10",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -328,7 +328,7 @@
     },
     "packages/system": {
       "name": "@velaros-ai/system",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",

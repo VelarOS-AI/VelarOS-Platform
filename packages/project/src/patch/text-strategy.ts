@@ -1,4 +1,4 @@
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, isTrue } from '@velaros-ai/core'
 
 import { ProjectError } from "../errors.js";
 import type { PreparedPatch } from "../types/edit.js";
@@ -6,6 +6,121 @@ import type { PatchStrategy, PatchStrategyInput } from "../types/patch.js";
 import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { adaptTextToContentLineEndings, countChangedLines, includesLineEndingAware, resolveLineEndingAwareTextMatch } from "../utils/text.js";
+
+interface TextMatchSelectionOperation {
+  expectedMatches?: number
+  occurrence?: number
+  replaceAll?: boolean
+}
+
+interface SelectedTextMatches {
+  indices: number[]
+  matchedText: string
+  replacementText?: string
+  totalMatches: number
+}
+
+function allMatchIndices(content: string, needle: string): number[] {
+  const indices: number[] = []
+  let from = 0
+  while (true) {
+    const index = content.indexOf(needle, from)
+    if (index === -1) return indices
+    indices.push(index)
+    from = index + Math.max(1, needle.length)
+  }
+}
+
+function selectTextMatches(
+  input: PatchStrategyInput,
+  operation: TextMatchSelectionOperation,
+  content: string,
+  needle: string,
+  replacementText: Optional<string>,
+  operationName: string,
+): SelectedTextMatches {
+  if (isPresent(operation.occurrence) && isTrue(operation.replaceAll)) {
+    throw new ProjectError(
+      "INVALID_INPUT",
+      `${operationName} 的 occurrence 与 replaceAll 不能同时使用`,
+      { occurrence: operation.occurrence, replaceAll: operation.replaceAll },
+      "请只选择一个匹配位置，或明确修改全部匹配。",
+    )
+  }
+
+  const found = resolveLineEndingAwareTextMatch(content, needle, replacementText)
+  const expected = operation.expectedMatches
+    ?? input.intent.constraints?.expectedMatches
+    ?? input.target?.expectedMatches
+  if (isPresent(expected) && found.count !== expected) {
+    throw new ProjectError(
+      found.count === 0 ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
+      `${operationName} 断言 ${expected} 个匹配，实际找到 ${found.count} 个`,
+      { expected, actual: found.count },
+      "请重新读取文件并修正 expectedMatches；它只断言总数，不选择修改位置。",
+    )
+  }
+  if (found.count === 0) {
+    throw new ProjectError(
+      "TARGET_NOT_FOUND",
+      `${operationName} 未找到匹配文本`,
+      { expected: expected ?? 1, actual: 0 },
+      "请重新读取文件并使用当前内容中的精确文本。",
+    )
+  }
+
+  const indices = allMatchIndices(content, found.matchedText)
+  if (isPresent(operation.occurrence)) {
+    if (!Number.isInteger(operation.occurrence) || operation.occurrence < 1 || operation.occurrence > indices.length) {
+      throw new ProjectError(
+        "TARGET_NOT_FOUND",
+        `${operationName} 的 occurrence=${operation.occurrence} 超出 ${indices.length} 个匹配`,
+        { occurrence: operation.occurrence, actual: indices.length },
+        "请重新读取文件并选择现有的匹配序号。",
+      )
+    }
+    return {
+      indices: [indices[operation.occurrence - 1]],
+      matchedText: found.matchedText,
+      replacementText: found.replacementText,
+      totalMatches: found.count,
+    }
+  }
+  if (isTrue(operation.replaceAll))
+    return {
+      indices,
+      matchedText: found.matchedText,
+      replacementText: found.replacementText,
+      totalMatches: found.count,
+    }
+  if (found.count !== 1) {
+    throw new ProjectError(
+      "AMBIGUOUS_TARGET",
+      `${operationName} 找到 ${found.count} 个匹配，但未指定 occurrence 或 replaceAll`,
+      { expected: expected ?? 1, actual: found.count },
+      "请用 occurrence 选择一个 1-based 匹配，或传 replaceAll=true 修改全部匹配。",
+    )
+  }
+  return {
+    indices: [indices[0]],
+    matchedText: found.matchedText,
+    replacementText: found.replacementText,
+    totalMatches: found.count,
+  }
+}
+
+function replaceSelectedMatches(
+  content: string,
+  indices: readonly number[],
+  matchedText: string,
+  replacementText: string,
+): string {
+  let next = content
+  for (const index of [...indices].reverse()) {
+    next = next.slice(0, index) + replacementText + next.slice(index + matchedText.length)
+  }
+  return next
+}
 
 function patch(path: string, baseRevision: Optional<string>, oldContent: string, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
@@ -83,19 +198,14 @@ export function textPatchStrategy(): PatchStrategy {
       if (op.type === "replace_text") {
         let replacementText = op.newText;
         if (op.oldText) {
-          const found = resolveLineEndingAwareTextMatch(content, op.oldText, op.newText);
-          const expected = input.intent.constraints?.expectedMatches ?? input.target?.expectedMatches ?? 1;
-          if (found.count !== expected) {
-            throw new ProjectError(
-              found.count === 0 ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
-              `replace_text 预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
-              { expected, actual: found.count },
-              "请使用更具体的锚点或精确片段重新解析目标。"
-            );
-          }
-          start = found.index;
-          end = found.index + found.matchedText.length;
-          replacementText = found.replacementText ?? op.newText;
+          const selected = selectTextMatches(input, op, content, op.oldText, op.newText, "replace_text");
+          start = selected.indices[0];
+          end = start + selected.matchedText.length;
+          replacementText = selected.replacementText ?? op.newText;
+          replacementText = adaptTextToContentLineEndings(
+            selected.matchedText.includes("\r\n") ? selected.matchedText : content,
+            replacementText,
+          );
           // 针对已匹配文本窗口校验 anchors.mustContain。
           const anchors = op.anchors ?? input.target?.anchors;
           if (anchors?.mustContain) {
@@ -110,6 +220,19 @@ export function textPatchStrategy(): PatchStrategy {
               }
             }
           }
+          const newContent = replaceSelectedMatches(
+            content,
+            selected.indices,
+            selected.matchedText,
+            replacementText,
+          );
+          return [patch(snap.path, snap.revision, content, newContent, "core.text-patch", {
+            op: "replace_text",
+            startOffset: start,
+            endOffset: end,
+            matchedCount: selected.totalMatches,
+            modifiedCount: selected.indices.length,
+          })];
         }
         if (!isPresent(start) || !isPresent(end)) {
           throw new ProjectError("TARGET_NOT_FOUND", "replace_text 需要已解析目标范围或 oldText");
@@ -130,27 +253,33 @@ export function textPatchStrategy(): PatchStrategy {
 
       if (op.type === "insert_text_at_anchor") {
         if (!op.anchorText) throw new ProjectError("INVALID_INPUT", "insert_text_at_anchor 需要 anchorText");
-        const found = resolveLineEndingAwareTextMatch(content, op.anchorText, op.text);
-        const expected = op.expectedMatches ?? 1;
-        if (found.count !== expected) {
-          throw new ProjectError(
-            found.count === 0 ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
-            `insert_text_at_anchor 预期 ${expected} 个锚点匹配，实际找到 ${found.count} 个`,
-            { expected, actual: found.count },
-            "请使用更具体的 anchorText，或重新读取文件后选择其它操作。"
-          );
-        }
-        const insertionText = found.replacementText ?? op.text;
+        const selected = selectTextMatches(
+          input,
+          op,
+          content,
+          op.anchorText,
+          op.text,
+          "insert_text_at_anchor",
+        );
+        const insertionText = adaptTextToContentLineEndings(
+          selected.matchedText.includes("\r\n") ? selected.matchedText : content,
+          selected.replacementText ?? op.text,
+        );
         if (op.skipIfAlreadyPresent && (includesLineEndingAware(content, op.text) || content.includes(insertionText))) return [patch(snap.path, snap.revision, content, content, "core.text-patch", { op: "insert_text_at_anchor", noop: true })];
-        const at = op.position === "before" ? found.index : found.index + found.matchedText.length;
-        const newContent = content.slice(0, at) + insertionText + content.slice(at);
+        const insertionOffsets = selected.indices.map((index) =>
+          op.position === "before" ? index : index + selected.matchedText.length
+        );
+        const newContent = replaceSelectedMatches(content, insertionOffsets, "", insertionText);
+        const at = insertionOffsets[0];
         return [
           patch(snap.path, snap.revision, content, newContent, "core.text-patch", {
             op: "insert_text_at_anchor",
-            anchorText: found.matchedText,
+            anchorText: selected.matchedText,
             position: op.position,
             startOffset: at,
             endOffset: at,
+            matchedCount: selected.totalMatches,
+            modifiedCount: selected.indices.length,
           }),
         ];
       }
@@ -169,18 +298,17 @@ export function textPatchStrategy(): PatchStrategy {
 
       if (op.type === "delete_text") {
         if (op.oldText) {
-          const found = resolveLineEndingAwareTextMatch(content, op.oldText);
-          const expected = input.intent.constraints?.expectedMatches ?? input.target?.expectedMatches ?? 1;
-          if (found.count !== expected) {
-            throw new ProjectError(
-              found.count === 0 ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
-              `delete_text 预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
-              { expected, actual: found.count },
-              "请使用更具体的锚点或精确片段重新解析目标。"
-            );
-          }
-          start = found.index;
-          end = found.index + found.matchedText.length;
+          const selected = selectTextMatches(input, op, content, op.oldText, undefined, "delete_text");
+          start = selected.indices[0];
+          end = start + selected.matchedText.length;
+          const newContent = replaceSelectedMatches(content, selected.indices, selected.matchedText, "");
+          return [patch(snap.path, snap.revision, content, newContent, "core.text-patch", {
+            op: "delete_text",
+            startOffset: start,
+            endOffset: end,
+            matchedCount: selected.totalMatches,
+            modifiedCount: selected.indices.length,
+          })];
         }
         if (!isPresent(start) || !isPresent(end)) throw new ProjectError("TARGET_NOT_FOUND", "delete_text 需要已解析目标范围或 oldText");
         const newContent = content.slice(0, start) + content.slice(end);

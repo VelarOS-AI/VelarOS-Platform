@@ -4,6 +4,8 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 
 import { defineVelaTool } from '../defineVelaTool'
 
+import { AgentUserInteractionCapability } from './Capabilities'
+
 const HandoffReasonMaxChars = 400
 
 export interface HandoffContextInput extends Record<string, unknown> {
@@ -48,6 +50,7 @@ const handoffContext = defineVelaTool<HandoffContextInput>({
   notes: ['系统不会因压力信号自动调用或自动批准该工具。'],
   schema: handoffContextSchema,
   permissions: [],
+  capabilities: AgentUserInteractionCapability,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()

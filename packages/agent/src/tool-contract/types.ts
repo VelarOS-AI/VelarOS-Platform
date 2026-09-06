@@ -69,6 +69,13 @@ export interface ToolContractRuntimeSpec<
   category: ToolCategoryId
   /** 工具角色，决定读改分离与执行策略。 */
   role: ToolContractRole
+  /** 目录与 Mod 声明使用的短说明；结构化长描述仍由 description 承载。 */
+  summary?: string
+  /**
+   * 跨宿主只读分类。defineToolRuntimeSpec 会从 capabilities.effectKind 派生；
+   * 没有 capability 元数据时采用显式值或回退 role=inspect。手工构造的外部工具可省略。
+   */
+  readOnly?: boolean
   description: string
   /** 见 ToolContractDescriptionSpec.usageSkillId：companion skill 的 id，透到工具页卡片。 */
   usageSkillId?: string

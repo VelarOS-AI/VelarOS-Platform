@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { createManualApprovalOptions, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -15,6 +15,11 @@ import { ProjectEditOperationsSchema } from '../edit-schema.js'
 import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../project-code-query.js'
 import { ProjectToolNames } from '../project-tool-names.js'
 
+import {
+  ProjectExecutionCapability,
+  ProjectReadCapability,
+  ProjectWriteCapability,
+} from './ProjectCapabilities.js'
 import { executeAgentProjectRead, executeAgentProjectSearch } from './ProjectKernelPort.js'
 import type { ProjectToolApi, ProjectToolContext, VelaTool } from './Types.js'
 
@@ -98,11 +103,39 @@ function scopeProjectListPatterns(
   })
 }
 
-const ProjectRangeSchema = z.object({
+const ProjectRangeSchema = z.strictObject({
   startLine: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
-  startColumn: z.number().int().nonnegative().optional(),
-  endColumn: z.number().int().nonnegative().optional(),
+  startColumn: z.number().int().positive().optional().describe('startLine 上从 1 开始的 UTF-16 列。'),
+  endColumn: z.number().int().positive().optional().describe('endLine 上从 1 开始的排他 UTF-16 结束列。'),
+}).superRefine((range, context) => {
+  const startLine = range.startLine ?? 1
+  if (isPresent(range.endColumn) && isUndefined(range.endLine)) {
+    context.addIssue({
+      code: 'custom',
+      message: '使用 endColumn 时必须同时提供 endLine。',
+      path: ['endColumn'],
+    })
+  }
+  if (isPresent(range.endLine) && range.endLine < startLine) {
+    context.addIssue({
+      code: 'custom',
+      message: 'endLine 不能早于 startLine。',
+      path: ['endLine'],
+    })
+  }
+  if (
+    (range.endLine ?? startLine) === startLine
+    && isPresent(range.startColumn)
+    && isPresent(range.endColumn)
+    && range.endColumn < range.startColumn
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: '同一行的 endColumn 不能早于 startColumn。',
+      path: ['endColumn'],
+    })
+  }
 }).optional()
 
 const projectRead = defineProjectTool<{
@@ -115,14 +148,30 @@ const projectRead = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '读取项目根目录内的一个或多个文本文件，并返回修订版本与分页信息。',
+  usage: [
+    'maxChars 是本次调用内所有文件共享的总字符预算；批量读取会公平分配并回收未使用额度。',
+    'hasMore=true 时直接使用对应文件返回的 continuation；长行续读会带 startColumn。',
+  ],
   examples: [{ path: ['src/contentHash.ts', 'src/cacheKey.ts'] }],
   schema: z.object({
     path: z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(20)]),
     range: ProjectRangeSchema,
-    maxChars: z.number().int().positive().max(500_000).optional(),
+    maxChars: z.number().int().positive().max(500_000).optional().describe(
+      '本次调用内所有文件共享的最大 Unicode 字符数；默认 500000。批量读取时至少等于文件数。'
+    ),
     baseRevisions: z.record(z.string(), z.string()).optional(),
+  }).superRefine((input, context) => {
+    const pathCount = isArray(input.path) ? input.path.length : 1
+    if (!isUndefined(input.maxChars) && input.maxChars < pathCount) {
+      context.addIssue({
+        code: 'custom',
+        path: ['maxChars'],
+        message: `批量读取 ${pathCount} 个文件时 maxChars 至少为 ${pathCount}，确保每个文件都能取得进展。`,
+      })
+    }
   }),
   permissions: ['fs:read'],
+  capabilities: ProjectReadCapability,
   exposure: { tier: 'common', rank: 10 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
@@ -157,6 +206,7 @@ const projectList = defineProjectTool<{
     limit: z.number().int().positive().max(2_000).optional().default(200),
   }),
   permissions: ['fs:read'],
+  capabilities: ProjectReadCapability,
   exposure: { tier: 'common', rank: 20 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
@@ -203,6 +253,7 @@ const projectSearch = defineProjectTool<{
     limit: z.number().int().positive().max(100).optional().default(30),
   }),
   permissions: ['fs:read'],
+  capabilities: ProjectReadCapability,
   exposure: { tier: 'common', rank: 30 },
   isConcurrencySafe: () => true,
   execute: async (input, context) => {
@@ -329,6 +380,7 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
     skipIfAlreadyPresent: z.boolean().optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
+  capabilities: ProjectWriteCapability,
   exposure: { tier: 'common', rank: 40 },
   isConcurrencySafe: () => false,
   execute: (input, context) =>
@@ -369,6 +421,7 @@ const projectEdit = defineProjectTool<{
     cwd: z.string().optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
+  capabilities: ProjectWriteCapability,
   exposure: { tier: 'situational', rank: 10 },
   isConcurrencySafe: () => false,
   execute: (input, context) =>
@@ -390,6 +443,7 @@ const projectRollback = defineProjectTool<{ transactionId: string }>({
   examples: [{ transactionId: 'transaction-id-from-project-edit' }],
   schema: z.object({ transactionId: z.string().min(1) }),
   permissions: ['fs:read', 'fs:write'],
+  capabilities: ProjectWriteCapability,
   exposure: { tier: 'situational', rank: 20 },
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
@@ -488,6 +542,7 @@ const projectRun = defineProjectTool<{
     parallel: z.boolean().optional(),
   }),
   permissions: ['process:exec'],
+  capabilities: ProjectExecutionCapability,
   exposure: { tier: 'common', rank: 50 },
   isConcurrencySafe: (input) => isParallelCommandExecutionSafe(input),
   execute: runProjectCommand,
@@ -518,6 +573,7 @@ const projectQueryCode = defineProjectTool<ProjectCodeQuery>({
   ],
   schema: ProjectCodeQuerySchema,
   permissions: ['fs:read'],
+  capabilities: ProjectReadCapability,
   exposure: { tier: 'common', rank: 25 },
   isConcurrencySafe: () => true,
   execute: (input, context) => context.project.queryCode(input, context),

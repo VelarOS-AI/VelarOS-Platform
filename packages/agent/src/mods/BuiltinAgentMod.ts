@@ -7,7 +7,7 @@
 //  ① manifest 由既有单源**派生**（`Object.keys(collection)` / `createBuiltInPromptSegments()` /
 //     `listExecutionModes()`），不另立一份清单，故不可能与实现漂移；
 //  ② 绑定直接引用原实体，Loader 与投影全程不复制不包装，载荷对象同一性逐项保持。
-import { isBoolean, isString, optionalWhen, toOptional } from '@velaros-ai/core'
+import { optionalWhen, toOptional } from '@velaros-ai/core'
 
 import type { ExecutionModeDescriptor } from '../execution-modes'
 import { listExecutionModes } from '../execution-modes'
@@ -24,6 +24,7 @@ import type {
   AgentModToolContribution,
 } from '../protocol'
 import { AgentModManifestSchemaVersion } from '../protocol'
+import { resolveToolReadOnly } from '../tool-contract'
 import {
   activeDirectiveTools,
   agentWorkflowTools,
@@ -77,14 +78,11 @@ function toToolContribution(
   name: string,
   tool: VelaTool<any>
 ): AgentModToolContribution {
-  const category = Reflect.get(tool, 'category')
-  const summary = Reflect.get(tool, 'summary')
-  const readOnly = Reflect.get(tool, 'readOnly')
   return {
     name,
-    categoryId: optionalWhen(isString(category), category),
-    summary: optionalWhen(isString(summary), summary),
-    readOnly: optionalWhen(isBoolean(readOnly), readOnly),
+    categoryId: optionalWhen(!!tool.category, tool.category),
+    summary: optionalWhen(!!tool.summary, tool.summary),
+    readOnly: resolveToolReadOnly(tool),
   }
 }
 

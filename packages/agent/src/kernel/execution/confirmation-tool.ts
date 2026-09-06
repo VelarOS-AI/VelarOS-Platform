@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolCapabilitySchema, ToolPermission } from '@velaros-ai/agent/protocol'
 import type { ApprovalPort, ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import {
   createManualApprovalOptions,
@@ -19,6 +19,14 @@ interface RequestConfirmationToolContext {
   abortSignal: AbortSignal
 }
 
+const UserConfirmationCapability = {
+  effectKind: 'external',
+  writeScopes: ['user-interaction'],
+  canReadArbitrarySource: false,
+  concurrency: 'unsafe',
+  reason: 'explicit user confirmation request',
+} satisfies ToolCapabilitySchema
+
 const requestConfirmationTool: ToolContractRuntimeSpec<
   { message: string },
   RequestConfirmationToolContext,
@@ -28,6 +36,7 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
   name: 'interaction:confirm',
   category: 'interaction',
   role: 'execute',
+  readOnly: false,
   description: renderToolDescription({
     description: '向用户请求一次明确确认。',
     suitable: ['执行高风险、长期运行或需要人工授权的动作前。'],
@@ -48,6 +57,7 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
     ),
   }),
   permissions: [],
+  capabilities: UserConfirmationCapability,
   isConcurrencySafe: () => false,
   execute: async ({ message }, ctx) => {
     await ctx.approval.awaitConfirmation(

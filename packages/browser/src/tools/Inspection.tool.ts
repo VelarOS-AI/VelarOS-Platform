@@ -94,7 +94,10 @@ const browserInspectPage = defineBrowserTool<{
     // 需要原始 HTML 时
     { includeHtml: true, maxTextChars: 8000 },
   ],
-  notes: ['交互元素按常见控件优先排序。'],
+  notes: [
+    '交互元素按常见控件优先排序。',
+    '返回 target.ref 时应原样用于 browser:act；每次新观察都会生成新的 generation，旧 ref 会明确失效。',
+  ],
   schema: z.object({
     maxTextChars: z
       .number()
@@ -245,12 +248,12 @@ const browserCaptureScreenshot = defineBrowserTool<{
   examples: [
     // 只截当前视口（默认）
     {},
-    // 整页 + 元素编号标注（返回 @e1 这类可直接给 browser:act 的 ref）
+    // 整页 + 元素编号标注（返回 @e1:g1 这类可直接给 browser:act 的 ref）
     { fullPage: true, annotateElements: true },
   ],
   notes: [
     '图片保存到当前网站浏览器工作区。',
-    'annotateElements=true 时 metadata.elementLegend 会返回编号元素的可读 legend；条目的 target.ref 形如 @e1，可在页面变化前直接交给 browser:act。',
+    'annotateElements=true 时 metadata.elementLegend 会返回编号元素的可读 legend；条目的 target.ref 形如 @e1:g1，需原样交给 browser:act。新一次 inspect/标注截图会生成新 generation。',
   ],
   schema: z.object({
     path: z

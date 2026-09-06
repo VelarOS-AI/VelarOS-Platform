@@ -28,6 +28,15 @@ const refreshShellEnvironment = defineSystemTool<Record<string, never>>({
   notes: ['刷新结果取决于宿主 system provider；不保证修改用户 shell 配置文件。'],
   schema: z.object({}),
   permissions: [],
+  capabilities: {
+    effectKind: 'write',
+    readScopes: ['system'],
+    writeScopes: ['system'],
+    filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: false,
+    concurrency: 'unsafe',
+    reason: 'refresh host shell environment cache',
+  },
   isConcurrencySafe: () => false,
   execute: async (_input, ctx) => {
     if (!ctx.system.canRefreshShellEnvironment()) {
@@ -79,6 +88,14 @@ const listBackgroundTasks = defineSystemTool<{
     ),
   }),
   permissions: [],
+  capabilities: {
+    effectKind: 'read',
+    readScopes: ['system'],
+    filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: false,
+    concurrency: 'safe',
+    reason: 'managed system background task inspection',
+  },
   isConcurrencySafe: () => true,
   execute: async ({ limit, onlyRunning, taskId }, ctx) => {
     // onlyRunning 可过滤掉已结束的历史任务。
@@ -131,7 +148,10 @@ const terminateBackgroundTask = defineSystemTool<{
   permissions: ['process:exec'],
   capabilities: {
     effectKind: 'execute',
+    readScopes: ['system'],
+    writeScopes: ['system'],
     filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: false,
     concurrency: 'unsafe',
     reason: 'terminate managed background task',
   },

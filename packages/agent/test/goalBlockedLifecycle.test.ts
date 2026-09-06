@@ -125,6 +125,35 @@ describe('goal blocked lifecycle', () => {
     expect(harness.readArtifact()?.metadata?.cancelledAt).toBeNumber()
   })
 
+  test('treats empty steps and constraints as explicit clearing updates', async () => {
+    const harness = createGoalToolContext()
+
+    await goalTools['goal:create'].execute(
+      {
+        objective: '收敛目标状态',
+        steps: [{ step: '完成检查', status: 'in_progress' }],
+        constraints: [{
+          title: '保持范围',
+          content: '只修改目标文件。',
+          directiveType: 'process',
+        }],
+      },
+      harness.context
+    )
+
+    expect(
+      goalTools['goal:update'].schema.safeParse({ steps: [], constraints: [] }).success
+    ).toBe(true)
+    const cleared = await goalTools['goal:update'].execute(
+      { steps: [], constraints: [] },
+      harness.context
+    )
+
+    expect(cleared.goal.steps).toEqual([])
+    expect(cleared.goal.constraints).toEqual([])
+    expect(cleared.noop).toBeUndefined()
+  })
+
   test('keeps blocked transition details in the goal tool contract instead of duplicating them in the prompt', () => {
     const segment = createTaskRuntimePromptSegments({
       goalMode: true,

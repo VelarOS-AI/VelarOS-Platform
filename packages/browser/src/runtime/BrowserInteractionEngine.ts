@@ -310,6 +310,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     if (externalSession) return super.dragTargets(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    const hydratedOptions = this.targetRefs.hydrateDrag(sessionId, options)
     const driver = this.getPageDriver(sessionId, session)
 
     if (!driver.dragCoordinates) {
@@ -317,7 +318,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     }
 
     const resolved = await driver.executeJavaScript<BrowserDragResult>(
-      this.scripts.buildDragTargetScript(options),
+      this.scripts.buildDragTargetScript(hydratedOptions),
       true
     )
     if (!resolved.matched) return {
@@ -366,7 +367,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       await this.updateVirtualPointer(session, target.x, target.y, false)
     }
 
-    if (options.waitForNavigation) {
+    if (hydratedOptions.waitForNavigation) {
       await this.pageWaiter.waitForTargetActionToSettle(session.webContents, abortSignal)
     }
 

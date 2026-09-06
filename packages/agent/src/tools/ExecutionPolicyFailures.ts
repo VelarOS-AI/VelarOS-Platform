@@ -181,8 +181,10 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
       ? 'tool_cancelled'
       : effectiveCode === 'UNAVAILABLE'
         ? 'tool_unavailable'
-      : effectiveCode === 'EXECUTION_DENIED' || effectiveCode === 'PERMISSION_DENIED'
+      : effectiveCode === 'EXECUTION_DENIED' || effectiveCode === 'PERMISSION_DENIED' || effectiveCode === 'PERMISSION'
         ? 'tool_denied'
+        : effectiveCode === 'TOOL_RESULT_FINALIZATION_FAILED'
+          ? 'tool_result_finalization_failed'
         : 'tool_execution_failed',
     error.message,
     toolName,
