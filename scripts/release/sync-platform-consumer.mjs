@@ -69,9 +69,53 @@ async function collectManifestPaths(directory) {
   return nested.flat().sort()
 }
 
-async function readManifests(consumerRoot) {
+function manifestPathsFromLockfile(consumerRoot, lockfile) {
+  if (
+    !lockfile?.workspaces ||
+    typeof lockfile.workspaces !== 'object' ||
+    Array.isArray(lockfile.workspaces)
+  ) {
+    throw new Error('bun.lock must contain a workspaces object')
+  }
+
+  const workspaceKeys = Object.keys(lockfile.workspaces)
+  if (workspaceKeys.length === 0) {
+    throw new Error('bun.lock must register at least one workspace')
+  }
+
+  const manifestPaths = workspaceKeys.map((workspaceKey) => {
+    const segments = workspaceKey === '' ? [] : workspaceKey.split('/')
+    if (
+      segments.some(
+        (segment) => !segment || segment === '.' || segment === '..'
+      ) || workspaceKey.includes('\\')
+    ) {
+      throw new Error(`bun.lock contains an invalid workspace key: ${workspaceKey}`)
+    }
+    const workspaceDirectory = path.resolve(consumerRoot, ...segments)
+    const relativeDirectory = path.relative(consumerRoot, workspaceDirectory)
+    if (
+      relativeDirectory === '..' ||
+      relativeDirectory.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeDirectory)
+    ) {
+      throw new Error(`bun.lock workspace escapes the consumer root: ${workspaceKey}`)
+    }
+    return path.join(workspaceDirectory, 'package.json')
+  })
+
+  if (new Set(manifestPaths).size !== manifestPaths.length) {
+    throw new Error('bun.lock contains duplicate workspace paths')
+  }
+  return manifestPaths.sort()
+}
+
+async function readManifests(consumerRoot, { lockfile } = {}) {
+  const manifestPaths = lockfile
+    ? manifestPathsFromLockfile(consumerRoot, lockfile)
+    : await collectManifestPaths(consumerRoot)
   return Promise.all(
-    (await collectManifestPaths(consumerRoot)).map(async (manifestPath) => {
+    manifestPaths.map(async (manifestPath) => {
       const source = await readFile(manifestPath, 'utf8')
       return {
         manifest: JSON.parse(source),
@@ -321,12 +365,16 @@ async function main() {
   const selectedByName = new Map(selected.map((item) => [item.manifest.name, item]))
 
   await assertRegistryConfiguration(arguments_.consumerRoot)
-  const originalManifests = await readManifests(arguments_.consumerRoot)
+  const lockfilePath = path.join(arguments_.consumerRoot, 'bun.lock')
+  const hasLockfile = existsSync(lockfilePath)
+  const originalLockfile = hasLockfile ? await parseLockfile(lockfilePath) : null
+  const originalManifests = await readManifests(arguments_.consumerRoot, {
+    lockfile: originalLockfile,
+  })
   const originalSnapshots = new Map(
     originalManifests.map(({ manifestPath, source }) => [manifestPath, source]),
   )
-  const lockfilePath = path.join(arguments_.consumerRoot, 'bun.lock')
-  if (existsSync(lockfilePath))
+  if (hasLockfile)
     originalSnapshots.set(lockfilePath, await readFile(lockfilePath, 'utf8'))
 
   const initial = collectRequirements(originalManifests, platformPackageNames)
@@ -370,7 +418,7 @@ async function main() {
           updatedSources.get(manifestPath),
         ]),
       )
-      if (existsSync(lockfilePath) && referencedPackages.length > 0) {
+      if (hasLockfile && referencedPackages.length > 0) {
         runLockUpdate(
           arguments_.consumerRoot,
           referencedPackages.map((item) => `${item.manifest.name}@${item.manifest.version}`),
@@ -380,7 +428,10 @@ async function main() {
       }
     }
 
-    const finalManifests = await readManifests(arguments_.consumerRoot)
+    const finalLockfile = hasLockfile ? await parseLockfile(lockfilePath) : null
+    const finalManifests = await readManifests(arguments_.consumerRoot, {
+      lockfile: finalLockfile,
+    })
     const final = collectRequirements(finalManifests, platformPackageNames)
     assertCloudSpecifications(final.requirements)
     for (const requirement of final.requirements) {
@@ -415,3 +466,5 @@ async function main() {
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) await main()
+
+export { manifestPathsFromLockfile, readManifests }

@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 
-import { desiredSpecification, replaceRequirementSource } from './sync-platform-consumer.mjs'
+import {
+  desiredSpecification,
+  manifestPathsFromLockfile,
+  readManifests,
+  replaceRequirementSource,
+} from './sync-platform-consumer.mjs'
 import { resolveTypeScriptJsoncParser, selectReleasedPackages } from './releaseTopology.mjs'
 
 test('resolves the TypeScript JSONC parser from namespace and default interop shapes', () => {
@@ -82,5 +90,67 @@ test('train-only selection rejects unknown package names', () => {
         ['missing'],
       ),
     /matches no declared release package/u,
+  )
+})
+
+test('a Bun lockfile limits consumer manifests to registered workspaces', async (t) => {
+  const consumerRoot = await mkdtemp(path.join(tmpdir(), 'velaros-consumer-workspaces-'))
+  t.after(() => rm(consumerRoot, { recursive: true, force: true }))
+  await Promise.all([
+    mkdir(path.join(consumerRoot, 'packages', 'ipc'), { recursive: true }),
+    mkdir(path.join(consumerRoot, 'scratchpad', 'agent-harness-package-patch'), {
+      recursive: true,
+    }),
+  ])
+  await Promise.all([
+    writeFile(
+      path.join(consumerRoot, 'package.json'),
+      '{"name":"desktop","dependencies":{"@velaros-ai/agent":"^0.6.10"}}\n',
+    ),
+    writeFile(
+      path.join(consumerRoot, 'packages', 'ipc', 'package.json'),
+      '{"name":"ipc","devDependencies":{"@velaros-ai/agent":"^0.6.10"}}\n',
+    ),
+    writeFile(
+      path.join(consumerRoot, 'scratchpad', 'agent-harness-package-patch', 'package.json'),
+      '{"name":"scratch-copy","dependencies":{"@velaros-ai/agent":"^0.6.8"}}\n',
+    ),
+  ])
+
+  const manifests = await readManifests(consumerRoot, {
+    lockfile: {
+      workspaces: {
+        '': { name: 'desktop' },
+        'packages/ipc': { name: 'ipc' },
+      },
+    },
+  })
+
+  assert.deepEqual(
+    manifests.map(({ workspaceKey }) => workspaceKey),
+    ['', 'packages/ipc'],
+  )
+  assert.deepEqual(
+    manifests.map(({ manifest }) => manifest.name),
+    ['desktop', 'ipc'],
+  )
+
+  const manifestsWithoutLock = await readManifests(consumerRoot)
+  assert.deepEqual(
+    manifestsWithoutLock.map(({ manifest }) => manifest.name).sort(),
+    ['desktop', 'ipc', 'scratch-copy'],
+  )
+})
+
+test('lockfile workspace keys cannot escape or alias the consumer root', () => {
+  for (const workspaceKey of ['../outside', 'packages/../outside', 'packages\\outside']) {
+    assert.throws(
+      () => manifestPathsFromLockfile('/tmp/consumer', { workspaces: { [workspaceKey]: {} } }),
+      /invalid workspace key|escapes the consumer root/u,
+    )
+  }
+  assert.throws(
+    () => manifestPathsFromLockfile('/tmp/consumer', { workspaces: {} }),
+    /at least one workspace/u,
   )
 })
