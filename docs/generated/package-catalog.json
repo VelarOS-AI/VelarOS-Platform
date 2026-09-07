@@ -92,7 +92,7 @@
       "domain": "capabilities",
       "directory": "packages/office",
       "name": "@velaros-ai/office",
-      "version": "1.1.9",
+      "version": "1.1.10",
       "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
       "exportSubpaths": [
         ".",
@@ -108,7 +108,7 @@
       "domain": "capabilities",
       "directory": "packages/project",
       "name": "@velaros-ai/project",
-      "version": "2.0.12",
+      "version": "2.0.13",
       "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
       "exportSubpaths": [
         ".",
@@ -128,7 +128,7 @@
       "domain": "capabilities",
       "directory": "packages/system",
       "name": "@velaros-ai/system",
-      "version": "1.1.9",
+      "version": "1.1.10",
       "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
       "exportSubpaths": [
         ".",
