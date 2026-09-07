@@ -93,6 +93,7 @@
     "test:memory": "bun test tests/memory/maintained/packages/memory/EmbeddingProfileIsolation.test.ts && node --test tests/memory/maintained/packages/memory/*.mjs tests/memory/maintained/packages/memory/knowledge/*.mjs",
     "probe:memory": "bun run --cwd packages/memory probe:storage-v2 && bun run --cwd packages/memory probe:authority-v2 && bun run --cwd packages/memory probe:tree-store-v2 && bun run --cwd packages/memory probe:ingest-dream-v2 && bun run --cwd packages/memory probe:meaning-curation-v2 && bun run --cwd packages/memory probe:erasure-saga-v2 && bun run --cwd packages/memory probe:evidence-replay-v2 && bun run --cwd packages/memory probe:query-runtime-v2 && bun run --cwd packages/memory probe:files && bun run --cwd packages/memory probe:vector && bun run --cwd packages/memory probe:store-capability",
     "test:ui": "bun test tests/ui",
+    "check:ui-popover-runtime": "node scripts/ui/check/popoverRuntime.mjs",
     "check:ui-component-library": "node scripts/ui/component-library/generateComponentApi.mjs && node scripts/ui/checks/componentLibraryDocsFreshness.mjs && node scripts/ui/checks/componentLibraryIndependence.mjs",
     "check:ui-package-contracts": "node scripts/ui/checks/packageContracts.mjs",
     "check:ui-form-closure": "node scripts/ui/check/uiComponentFormClosure.mjs",

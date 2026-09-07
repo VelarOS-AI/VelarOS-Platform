@@ -244,6 +244,7 @@ export function WorkspaceGitCommitControl({
   const [pendingAction, setPendingAction] = useState<Nullable<PendingAction>>(null)
   const [resolvedThemeColor, setResolvedThemeColor] = useState<Nullable<string>>(null)
   const themeAnchorRef = useRef<HTMLButtonElement>(null)
+  const branchSearchRef = useRef<HTMLInputElement>(null)
   const status = summary.status
 
   const branches = useMemo(() => {
@@ -414,7 +415,8 @@ export function WorkspaceGitCommitControl({
       <AnchoredPopover
         open={menuOpen}
         onOpenChange={handleMenuOpenChange}
-        anchorClassName={getTopBarControlMainClassName(styles.gitCompactAnchor)}
+        onOpenAutoFocus={() => branchSearchRef.current?.focus({ preventScroll: true })}
+        anchorClassName={getTopBarControlMainClassName()}
         className={getTopBarControlPanelClassName(styles.gitCompactMenu)}
         side="bottom"
         align="start"
@@ -451,7 +453,7 @@ export function WorkspaceGitCommitControl({
         <div className={styles.gitCompactMenuHeader}>
           <div className={styles.gitCompactSearchSlot}>
             <SearchField
-              autoFocus
+              ref={branchSearchRef}
               size="sm"
               value={branchSearch}
               placeholder={messages.branchSearchPlaceholder}

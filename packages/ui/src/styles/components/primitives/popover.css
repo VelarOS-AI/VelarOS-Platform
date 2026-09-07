@@ -1,6 +1,7 @@
 /* @velaros-no-tailwind */
 
 .velar-popover-content {
+  -webkit-app-region: no-drag;
   z-index: 50;
   min-width: 220px;
   border-style: solid;

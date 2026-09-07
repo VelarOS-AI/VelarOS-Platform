@@ -195,6 +195,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((event: Event) => void)"
     },
     {
+      "name": "AnchoredPopover.onOpenAutoFocus",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((event: Event) => void)"
+    },
+    {
       "name": "AnchoredPopover.viewportPadding",
       "description": "Auto-generated from TypeScript props.",
       "type": "number"
@@ -4549,6 +4554,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "PopoverContent.onInteractOutside",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((event: Event) => void)"
+    },
+    {
+      "name": "PopoverContent.onOpenAutoFocus",
       "description": "Auto-generated from TypeScript props.",
       "type": "((event: Event) => void)"
     },

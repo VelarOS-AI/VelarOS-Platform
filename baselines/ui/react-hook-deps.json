@@ -8,6 +8,5 @@
   "packages/ui/src/conversation/shell/useQueuedLiveStatusText.ts": 2,
   "packages/ui/src/lib/useIntersectionObserver.ts": 1,
   "packages/ui/src/primitives/overlays/CascadingMenu.tsx": 4,
-  "packages/ui/src/primitives/overlays/ImagePreviewDialog.tsx": 1,
-  "packages/ui/src/primitives/overlays/Popover.tsx": 1
+  "packages/ui/src/primitives/overlays/ImagePreviewDialog.tsx": 1
 }

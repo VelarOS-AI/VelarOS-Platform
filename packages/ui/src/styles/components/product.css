@@ -50,6 +50,12 @@
 .velar-topbar-control-frame-plain {
   max-width: none;
   overflow: visible;
+}
+
+.velar-topbar-control-frame-plain,
+.velar-topbar-control-frame-plain:hover,
+.velar-topbar-control-frame-plain:active,
+.velar-topbar-control-frame-plain.velar-topbar-control-frame-busy {
   background: transparent;
 }
 
@@ -124,7 +130,6 @@
 .velar-topbar-control-panel[data-slot="popover-content"],
 .velar-topbar-control-panel .velar-cascading-menu-submenu-panel {
   border-radius: var(--ui-radius-control);
-  background: var(--control-gray-bg);
 }
 
 .velar-copy-button {

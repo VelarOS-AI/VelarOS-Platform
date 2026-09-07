@@ -1,5 +1,5 @@
 /**
- * 浮层气泡（基于 Radix Popover）。
+ * 锚定浮层：负责定位、外部交互和焦点生命周期。
  *
  * 样式：`.velar-popover-layer-id` · 见 styles/components/。
  */
@@ -55,6 +55,7 @@ interface PopoverContentProps extends Omit<ComponentPropsWithoutRef<'div'>, 'sty
   align?: PopoverAlign
   onCloseAutoFocus?: (event: Event) => void
   onInteractOutside?: (event: Event) => void
+  onOpenAutoFocus?: (event: Event) => void
   side?: PopoverSide
   sideOffset?: number
   style?: CSSProperties
@@ -281,6 +282,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       className,
       onCloseAutoFocus,
       onInteractOutside,
+      onOpenAutoFocus,
       side = 'bottom',
       sideOffset = 10,
       style,
@@ -298,7 +300,18 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       top: 0,
       visibility: 'hidden',
     })
+    const [positionedContent, setPositionedContent] = useState<Nullable<HTMLElement>>(null)
     const wasOpenRef = useRef(open)
+    const interactedOutsideRef = useRef(false)
+    const openFocusRef = useRef<{
+      opened: boolean
+      handled: boolean
+      previousActiveElement: Nullable<Element>
+    }>({
+      opened: false,
+      handled: false,
+      previousActiveElement: null,
+    })
     const layerId = useId()
     const portalElement = getPopoverPortalElement(anchorElement)
     const parentPopoverLayerId = getParentPopoverLayerId(anchorElement)
@@ -319,6 +332,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
 
     const onCloseAutoFocusLatest = useLatest(onCloseAutoFocus)
     const onInteractOutsideLatest = useLatest(onInteractOutside)
+    const onOpenAutoFocusLatest = useLatest(onOpenAutoFocus)
     const onOpenChangeLatest = useLatest(onOpenChange)
 
     const updatePosition = useCallback((): void => {
@@ -336,6 +350,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
           portalElement
         )
       )
+      setPositionedContent(contentElement)
     }, [
       align,
       anchorElement,
@@ -358,6 +373,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
 
       onInteractOutsideLatest.current?.(event)
       if (!event.defaultPrevented) {
+        interactedOutsideRef.current = true
         onOpenChangeLatest.current(false)
       }
     })
@@ -365,6 +381,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     const handleEscapeKeyDown = useMemoizedFn((event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        interactedOutsideRef.current = false
         onOpenChangeLatest.current(false)
       }
     })
@@ -374,6 +391,38 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
 
       updatePosition()
     }, [open, updatePosition])
+
+    useLayoutEffect(() => {
+      const focus = openFocusRef.current
+      if (!open) {
+        focus.opened = false
+        focus.handled = false
+        focus.previousActiveElement = null
+        return
+      }
+
+      const ownerDocument = anchorElement?.ownerDocument ?? contentElement?.ownerDocument
+      if (!ownerDocument) return
+      if (!focus.opened) {
+        focus.opened = true
+        focus.previousActiveElement = ownerDocument.activeElement
+        interactedOutsideRef.current = false
+      }
+      if (focus.handled || !contentElement || positionedContent !== contentElement) return
+      if (contentElement.getClientRects().length === 0
+        || getElementWindow(contentElement).getComputedStyle(contentElement).visibility !== 'visible') return
+
+      focus.handled = true
+      const activeElement = ownerDocument.activeElement
+      if (contentElement.contains(activeElement)) return
+      if (activeElement && activeElement !== ownerDocument.body
+        && activeElement !== focus.previousActiveElement) return
+
+      // The owner chooses the focus target after positioning makes it visible.
+      // A generic popover must not infer that its first input wants autofocus.
+      const event = new Event('popover-open-auto-focus', { cancelable: true })
+      onOpenAutoFocusLatest.current?.(event)
+    }, [anchorElement, contentElement, onOpenAutoFocusLatest, open, positionedContent, style?.display, style?.visibility])
 
     useLayoutEffect(() => {
       if (!open || !anchorElement || !contentElement) return
@@ -430,13 +479,17 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       if (wasOpenRef.current && !open) {
         const event = new Event('popover-close-auto-focus', { cancelable: true })
         onCloseAutoFocusLatest.current?.(event)
-        if (!event.defaultPrevented) {
-          anchorElement?.focus({ preventScroll: true })
+        if (!event.defaultPrevented && !interactedOutsideRef.current) {
+          // AnchoredPopover anchors a layout span; getAnchorProps marks the
+          // actual control inside it with aria-expanded.
+          const trigger = anchorElement?.querySelector<HTMLElement>('[aria-expanded]')
+            ?? anchorElement
+          trigger?.focus({ preventScroll: true })
         }
       }
 
       wasOpenRef.current = open
-    }, [anchorElement, open])
+    }, [anchorElement, onCloseAutoFocusLatest, open])
 
     if (!open || !portalElement) return null
 
