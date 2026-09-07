@@ -54,6 +54,9 @@
   },
   "files": [
     "dist",
+    "native/**/*.cpp",
+    "native/build.mjs",
+    "native/**/*.exe",
     "README.md",
     "LICENSE",
     "NOTICE"
@@ -62,7 +65,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
+    "test": "bun run build && bun test test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/shell-readiness.test.ts test/git-bash-windows.test.ts test/process-host.test.ts test/process-lifecycle.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system"
   },
   "dependencies": {

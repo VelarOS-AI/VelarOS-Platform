@@ -377,7 +377,7 @@ const bash = defineSystemTool<{
 }>({
   name: SystemToolNames.run,
   role: 'execute',
-  summary: '在宿主系统默认 shell 中执行命令（Windows 为 cmd.exe，macOS/Linux 为 POSIX shell）。',
+  summary: '在宿主已检测并报告的系统 shell 中执行命令。',
   suitable: [
     '执行系统诊断、跨目录探测、工具安装后检查或本地脚本。',
     '处理没有专用 primitive 的系统文件操作，例如复制、移动、删除、归档、解压、权限检查或修改。',
@@ -385,8 +385,10 @@ const bash = defineSystemTool<{
   forbidden: ['不要执行危险写命令、长期服务或重复命令，除非已有用户意图或确认。'],
   protocol: [
     '属于当前项目的命令必须使用 project:run。',
-    '默认使用当前会话的隔离工作区作为 cwd；不要假设 /tmp、$PATH 或其他 POSIX 语法在 Windows 可用。',
-    'Windows 使用 cmd.exe 语法；命令探测用 where，环境变量用 %NAME%。macOS/Linux 使用 POSIX shell 语法。',
+    '默认使用当前会话的隔离工作区作为 cwd。',
+    '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
+    '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
+    '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
     '系统执行拒绝项目 cwd 时改用 project:run。',
     '长期服务传 background=true；危险命令会走确认流程。后台命令状态只用返回的 backgroundProcess.statusContinuation 查询，不要使用 job:*。',
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',

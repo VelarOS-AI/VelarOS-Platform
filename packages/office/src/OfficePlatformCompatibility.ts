@@ -18,9 +18,11 @@ export class OfficePlatformCompatibility {
   constructor(private readonly platform: NodeJS.Platform = process.platform) {}
 
   public quoteShellArg(value: string): string {
-    return this.platform === 'win32'
-      ? `"${value.replace(/"/g, '""')}"`
-      : `'${value.replace(/'/g, "'\\''")}'`
+    return `'${value.replace(/'/g, "'\\''")}'`
+  }
+
+  public quoteShellPath(value: string): string {
+    return this.quoteShellArg(this.platform === 'win32' ? value.replace(/\\/g, '/') : value)
   }
 }
 

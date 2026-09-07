@@ -5,10 +5,11 @@ import { z } from 'zod'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
 import { markItDownBinaryResolver, type MarkItDownLaunchSpec } from './markitdownResolver'
-import { officePlatformCompatibility } from './OfficePlatformCompatibility'
 import {
   buildProjectMutationSkippedResult,
+  describeOfficeNativeCommand,
   mkdtemp,
+  type OfficeNativeCommand,
   type OfficeToolContext,
   outputPathSchema,
   prepareOfficeOutputPath,
@@ -100,15 +101,8 @@ function buildMarkItDownCommand(input: {
   launch: MarkItDownLaunchSpec
   inputPath: string
   outputPath?: string
-}): string {
-  const args = [
-    officePlatformCompatibility.quoteShellArg(input.launch.command),
-    officePlatformCompatibility.quoteShellArg(input.inputPath),
-  ]
-  if (input.outputPath) {
-    args.push('-o', officePlatformCompatibility.quoteShellArg(input.outputPath))
-  }
-  return args.join(' ')
+}): OfficeNativeCommand {
+  return { file: input.launch.command, args: [input.inputPath, ...(input.outputPath ? ['-o', input.outputPath] : [])] }
 }
 
 function buildBundledRuntimeUnavailableResult(): {
@@ -142,15 +136,14 @@ async function runMarkItDownToStdout(input: {
   truncated: boolean
   commandResult: unknown
 }> {
+  const nativeCommand = buildMarkItDownCommand({ launch: input.launch, inputPath: input.inputPath })
   const commandResult = await input.ctx.office.system.runCommand(
-    buildMarkItDownCommand({
-      launch: input.launch,
-      inputPath: input.inputPath,
-    }),
+    describeOfficeNativeCommand(nativeCommand),
     {
       cwd: input.cwd,
       timeoutMs: 180_000,
       maxOutputChars: input.maxChars + 4_000,
+      nativeCommand,
     },
     false
   )
@@ -188,16 +181,16 @@ async function runMarkItDownToFile(input: {
   )
 
   try {
+    const nativeCommand = buildMarkItDownCommand({
+      launch: input.launch, inputPath: input.inputPath, outputPath: tempOutputPath,
+    })
     const commandResult = await input.ctx.office.system.runCommand(
-      buildMarkItDownCommand({
-        launch: input.launch,
-        inputPath: input.inputPath,
-        outputPath: tempOutputPath,
-      }),
+      describeOfficeNativeCommand(nativeCommand),
       {
         cwd: input.ctx.office.project.getRootPath(),
         timeoutMs: 180_000,
         maxOutputChars: 20_000,
+        nativeCommand,
       },
       false
     )

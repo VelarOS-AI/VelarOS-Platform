@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { lstat, readdir } from 'node:fs/promises'
 import { cpus, freemem, homedir, loadavg, platform, release, tmpdir, totalmem } from 'node:os'
@@ -7,7 +7,6 @@ import { promisify } from 'node:util'
 
 import { isEmpty, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { readSystemTextFile } from '../atomic/Filesystem.js'
 import { createSystemSearchIgnorePolicy } from '../atomic/SystemSearchIgnorePolicy.js'
@@ -15,13 +14,13 @@ import {
   shouldSkipSystemSearchEntry,
   shouldSkipSystemSearchProtectedDirectory,
 } from '../atomic/SystemSearchVisibility.js'
-import { shouldReapForegroundProcessGroupAfterExit } from '../SystemCommandExecutionPolicy.js'
 import type {
   SystemBackgroundTaskQueryOptions,
   SystemBackgroundTaskRecord,
   SystemBackgroundTaskStatus,
   SystemBackgroundTaskTerminateRequest,
   SystemBackgroundTaskTerminateResult,
+  SystemCommandOutputCapture,
   SystemCommandResult,
   SystemCommandRunQueryOptions,
   SystemCommandRunRecord,
@@ -42,8 +41,10 @@ import type {
   SystemRevealPathResult,
   SystemRunCommandOptions,
   SystemSearchMatch,
+  SystemShellDescriptor,
   SystemShellEnvironmentRefreshResult,
 } from '../SystemContracts.js'
+import { createSystemOutputDecoder } from '../SystemOutputDecoder.js'
 import {
   type CommandSpec,
   SystemPlatformCompatibility,
@@ -52,6 +53,8 @@ import {
   buildSystemProcessConfinementSpawnSpec,
   type SystemProcessConfinementProvider,
 } from '../SystemProcessConfinement.js'
+import { buildSystemOwnedProcessSpec, type SystemProcessOwnership } from '../SystemProcessHost.js'
+import { type ManagedSystemProcess,manageSystemProcess, waitForSystemProcessSpawn } from '../SystemProcessLifecycle.js'
 import {
   type ByteStats,
   parseCpuUsagePercent,
@@ -61,13 +64,13 @@ import {
   parseSwapStats,
   type RawPortEntry,
 } from '../SystemProcessParsers.js'
+import { buildSystemNativeCommandSpec, describeSystemNativeCommand, resolveSystemCommand, resolveSystemShellReady } from '../SystemShell.js'
 import type { SystemToolSystemApi } from '../Types.js'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_CHARS = 50_000
 const DEFAULT_SEARCH_LIMIT = 60
 const DEFAULT_SEARCH_MAX_DEPTH = 6
-const FORCE_KILL_DELAY_MS = 1_000
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024
 const MAX_PLATFORM_COMMAND_BUFFER = 8 * 1024 * 1024
 const log = Log.tag('LocalSystemKernel')
@@ -96,6 +99,7 @@ export function createLocalSystemKernel(options: LocalSystemKernelOptions): Loca
 
 export class LocalSystemKernel implements SystemToolSystemApi {
   private readonly backgroundTasks = new Map<string, SystemBackgroundTaskRecord>()
+  private readonly backgroundExecutions = new Map<string, ManagedSystemProcess>()
   private readonly homeDir: string
   private readonly hostPlatform: NodeJS.Platform
   private readonly platformTools: SystemPlatformCompatibility
@@ -118,12 +122,10 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   }
 
   public async inspectEnvironment(commands: string[] = []): Promise<SystemEnvironmentInspection> {
-    const pathEntries = this.platformTools.getPathEntries(process.env)
+    const shell = await this.resolveShell()
+    const pathEntries = this.platformTools.getPathEntries(shell.env)
     const commandAvailability = await Promise.all(
-      commands.map(async (name) => ({
-        name,
-        ...(await this.resolveCommandAvailability(name)),
-      }))
+      commands.map((name) => resolveSystemCommand(name, shell))
     )
 
     return {
@@ -134,8 +136,10 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         homeDir: homedir(),
       },
       shell: {
-        path: this.getShellPath(),
-        variableCount: Object.keys(process.env).length,
+        path: shell.shellPath,
+        kind: shell.kind, name: shell.name, readiness: shell.readiness,
+        version: shell.version, recommendation: shell.recommendation,
+        variableCount: Object.keys(shell.env).length,
         pathEntries,
       },
       commands: commandAvailability,
@@ -360,9 +364,9 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       .slice(0, options.limit ?? 50)
   }
 
-  public terminateBackgroundTask(
+  public async terminateBackgroundTask(
     request: SystemBackgroundTaskTerminateRequest
-  ): SystemBackgroundTaskTerminateResult {
+  ): Promise<SystemBackgroundTaskTerminateResult> {
     const taskId = request.taskId.trim()
     if (!taskId) {
       throw new AppError('VALIDATION', '后台任务 id 不能为空。')
@@ -388,8 +392,10 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
     if (statusBefore === 'running') {
       try {
-        this.killProcessTree(task.pid, signal)
-        terminated = true
+        const owned = this.backgroundExecutions.get(taskId)
+        if (!owned || owned.child.pid !== task.pid) throw new AppError('PERMISSION', '无法确认后台进程的受管身份。')
+        terminated = await owned.stop(signal)
+        if (!terminated && !owned.exited) throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
       } catch (error) {
         if (this.platformTools.isProcessMissingError(error)) {
           message = '后台进程已经退出。'
@@ -423,9 +429,11 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   }
 
   public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {
+    const shell = await this.resolveShell()
     return {
-      shell: this.getShellPath(),
-      variableCount: Object.keys(process.env).length,
+      shell: shell.shellPath,
+      runtime: this.describeShell(shell),
+      variableCount: Object.keys(shell.env).length,
       refreshedAt: Date.now(),
     }
   }
@@ -467,78 +475,70 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   }
 
   public async runCommand(
-    command: string,
+    commandInput: string,
     options: SystemRunCommandOptions = {},
     _allowDangerous = false,
     abortSignal?: AbortSignal
   ): Promise<SystemCommandResult> {
+    abortSignal?.throwIfAborted()
+    const command = options.nativeCommand ? describeSystemNativeCommand(options.nativeCommand) : commandInput
     const cwd = this.resolvePath(options.cwd ?? this.workingDirectory ?? this.homeDir)
     const startedAt = Date.now()
+    const confined = await this.buildCommandSpawnSpec(command, options.nativeCommand)
+    abortSignal?.throwIfAborted()
     if (options.background) {
-      const confined = this.buildCommandSpawnSpec(command)
-      const child = spawn(confined.spec.file, confined.spec.args, {
-        cwd,
-        detached: this.platformTools.shouldUseDetachedProcessGroup(),
-        stdio: 'ignore',
-        env: process.env,
-      })
-      child.unref()
       const taskId = randomUUID()
-      const backgroundProcess = {
-        taskId,
-        sessionId: toNullable(options.sessionId),
-        pid: child.pid ?? 0,
-        logPath: null,
-        ports: [],
-        reason: null,
-        terminateCommand: child.pid ? this.buildTerminateCommand(child.pid) : null,
-        forceTerminateCommand: child.pid ? this.buildTerminateCommand(child.pid, true) : null,
-        fallbackTerminateCommand: null,
-        requested: true,
-        autoStarted: false,
-      }
-      this.backgroundTasks.set(taskId, {
-        id: taskId,
-        runId: taskId,
-        sessionId: toNullable(options.sessionId),
-        scope: 'system',
-        command,
-        cwd,
-        pid: child.pid ?? 0,
-        logPath: null,
-        ports: [],
-        reason: null,
-        terminateCommand: backgroundProcess.terminateCommand,
-        forceTerminateCommand: backgroundProcess.forceTerminateCommand,
-        fallbackTerminateCommand: null,
-        requested: true,
-        autoStarted: false,
-        startedAt,
-        updatedAt: startedAt,
-        status: 'running',
-        recentOutput: null,
+      const child = spawn(confined.spec.file, confined.spec.args, {
+        cwd, detached: this.platformTools.shouldUseDetachedProcessGroup(),
+        stdio: ['ignore', 'pipe', 'pipe'], env: confined.env, windowsHide: true,
+        windowsVerbatimArguments: confined.spec.windowsVerbatimArguments,
       })
-
+      const owned = manageSystemProcess(child, { platform: this.hostPlatform, abortSignal })
+      let recentOutput = ''
+      const decoders = { stdout: createSystemOutputDecoder(), stderr: createSystemOutputDecoder() }
+      const append = (text: string): void => {
+        recentOutput = this.appendOutput(recentOutput, text, 4_000)
+        const task = this.backgroundTasks.get(taskId)
+        if (task) this.backgroundTasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
+      }
+      for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
+      try { await waitForSystemProcessSpawn(child); abortSignal?.throwIfAborted() } catch (error) {
+        await owned.stop('SIGKILL')
+        throw error
+      }
+      const pid = child.pid!
+      const backgroundProcess = {
+        taskId, sessionId: toNullable(options.sessionId), pid, logPath: null, ports: [],
+        reason: null, terminateCommand: this.platformTools.getTerminateCommand(pid, false, confined.shell),
+        forceTerminateCommand: this.platformTools.getTerminateCommand(pid, true, confined.shell), fallbackTerminateCommand: null,
+        requested: true, autoStarted: false,
+      }
+      const task: SystemBackgroundTaskRecord = {
+        id: taskId, runId: taskId, sessionId: toNullable(options.sessionId), scope: 'system', command,
+        cwd, pid, logPath: null, ports: [], reason: null,
+        terminateCommand: backgroundProcess.terminateCommand,
+        forceTerminateCommand: backgroundProcess.forceTerminateCommand, fallbackTerminateCommand: null,
+        requested: true, autoStarted: false, startedAt, updatedAt: startedAt,
+        status: 'running', recentOutput: null,
+      }
+      this.backgroundTasks.set(taskId, task)
+      this.backgroundExecutions.set(taskId, owned)
+      void owned.completion.then((result) => {
+        for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
+        this.backgroundTasks.set(taskId, { ...task, status: result.cleanupIncomplete ? 'unknown' : 'exited',
+          recentOutput, exitCode: result.exitCode, signal: result.signal,
+          cleanupIncomplete: result.cleanupIncomplete, finishedAt: Date.now(), updatedAt: Date.now() })
+      }).catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
       return this.buildCommandResult(command, cwd, startedAt, {
-        exitCode: null,
-        signal: null,
-        stdout: '',
-        stderr: '',
-        timedOut: false,
-        aborted: false,
-        backgroundProcess,
-        confinement: confined.evidence,
+        exitCode: null, signal: null, stdout: '', stderr: '', timedOut: false, aborted: false,
+        backgroundProcess, confinement: confined.evidence, ownership: confined.ownership, shell: confined.shell,
       })
     }
-
-    const confined = this.buildCommandSpawnSpec(command)
     const result = await this.runShellCapture(command, confined.spec, confined.evidence, cwd, {
-      timeoutMs: options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
-      maxOutputChars: options.maxOutputChars ?? DEFAULT_OUTPUT_CHARS,
-      abortSignal,
+      env: confined.env, timeoutMs: options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
+      maxOutputChars: options.maxOutputChars ?? DEFAULT_OUTPUT_CHARS, abortSignal,
     })
-
-    return this.buildCommandResult(command, cwd, startedAt, result)
+    return this.buildCommandResult(command, cwd, startedAt, { ...result, ownership: confined.ownership, shell: confined.shell })
   }
 
   public canRefreshShellEnvironment(): boolean {
@@ -707,10 +707,16 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       timedOut: boolean
       aborted: boolean
       backgroundProcess?: SystemCommandResult['backgroundProcess']
+      cleanupIncomplete?: boolean
+      truncated?: boolean
+      capture?: SystemCommandOutputCapture
+      shell?: SystemShellDescriptor
+      ownership?: SystemProcessOwnership
       confinement: SystemProcessConfinementEvidence
     }
   ): SystemCommandResult {
-    const success = result.exitCode === 0 && !result.timedOut && !result.aborted
+    const success = (result.exitCode === 0 || (!!result.backgroundProcess && result.exitCode === null))
+      && !result.timedOut && !result.aborted && !result.cleanupIncomplete
     return {
       command,
       cwd,
@@ -721,7 +727,11 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       durationMs: Date.now() - startedAt,
       timedOut: result.timedOut,
       aborted: result.aborted,
-      truncated: false,
+      cleanupIncomplete: result.cleanupIncomplete,
+      ownership: result.ownership,
+      truncated: result.truncated ?? false,
+      capture: result.capture,
+      shell: result.shell,
       success,
       confinement: result.confinement,
       backgroundProcess: result.backgroundProcess,
@@ -740,32 +750,18 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     }
   }
 
-  /**
-   * 跑一条 shell 命令并抓取输出。
-   *
-   * 导览（§5.3b ③并发时序 / ②生命周期）——这里同时有四个可能"先到"的事件：
-   * 子进程 close、超时、外部 abort、spawn error。约束如下，改动前逐条确认还成立：
-   * - **`settled` 是唯一的终态闸**：四条路径都必须先看它。少一处检查就会出现
-   *   "已 resolve 又 reject"（Node 会静默忽略，症状是超时后拿到一个空结果却没有 timedOut 标记）。
-   * - **`terminating` 单独一个闸**：超时与 abort 可能相继触发，两次进入升级流程会排两个
-   *   SIGKILL 定时器。
-   * - **升级顺序固定 SIGTERM → 等 `FORCE_KILL_DELAY_MS` → SIGKILL**，且 SIGKILL 定时器
-   *   `unref`：进程已经退出时它不能吊住 Node 事件循环。
-   * - **abort 监听必须在每条终态路径上摘掉**，否则一个长会话的 AbortSignal 会累积监听器。
-   *
-   * 输出**在累积时就按 `maxOutputChars` 截断**（`appendOutput`），不是最后再切——长跑命令的
-   * stdout 可以是无上限的，先攒后切等于把内存交给被调用方决定。
-   */
+  /** Capture bounded output while the shared lifecycle owns cancellation and pipe-drain deadlines. */
   private runShellCapture(
     command: string,
     spawnSpec: CommandSpec,
     confinement: SystemProcessConfinementEvidence,
     cwd: string,
     options: {
+      env: NodeJS.ProcessEnv
       timeoutMs?: number
       maxOutputChars?: number
       abortSignal?: AbortSignal
-    } = {}
+    }
   ): Promise<{
     exitCode: Nullable<number>
     signal: Nullable<string>
@@ -773,115 +769,60 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     stderr: string
     timedOut: boolean
     aborted: boolean
+    cleanupIncomplete: boolean
+    truncated: boolean
+    capture: SystemCommandOutputCapture
     confinement: SystemProcessConfinementEvidence
   }> {
-    return new Promise((resolvePromise, rejectPromise) => {
-      const child = spawn(spawnSpec.file, spawnSpec.args, {
-        cwd,
-        detached: this.platformTools.shouldUseDetachedProcessGroup(),
-        env: process.env,
-      })
-      const maxOutputChars = options.maxOutputChars ?? DEFAULT_OUTPUT_CHARS
-      let stdout = ''
-      let stderr = ''
-      let timedOut = false
-      let aborted = false
-      let settled = false
-      const timers = new TimerScope({ name: 'LocalSystemKernel.runShellCapture' })
-      let timeout: Nullable<TimerLease> = null
-      let terminating = false
-
-      const finish = (result: {
-        exitCode: Nullable<number>
-        signal: Nullable<string>
-        stdout: string
-        stderr: string
-      }) => {
-        if (settled) return
-        settled = true
-        timeout?.cancel()
-        timers.cancelAll()
-        options.abortSignal?.removeEventListener('abort', abort)
-        resolvePromise({
-          ...result,
-          timedOut,
-          aborted,
-          confinement,
-        })
+    options.abortSignal?.throwIfAborted()
+    const child = spawn(spawnSpec.file, spawnSpec.args, {
+      cwd, detached: this.platformTools.shouldUseDetachedProcessGroup(), env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+      windowsVerbatimArguments: spawnSpec.windowsVerbatimArguments,
+    })
+    const owned = manageSystemProcess(child, { platform: this.hostPlatform,
+      timeoutMs: options.timeoutMs, abortSignal: options.abortSignal })
+    const maxChars = options.maxOutputChars ?? DEFAULT_OUTPUT_CHARS
+    const decoders = { stdout: createSystemOutputDecoder(), stderr: createSystemOutputDecoder() }
+    const output = { stdout: '', stderr: '' }
+    let truncated = false
+    let totalBytes = 0
+    const append = (stream: 'stdout' | 'stderr', text: string): void => {
+      totalBytes += Buffer.byteLength(text)
+      if (output[stream].length + text.length > maxChars) truncated = true
+      output[stream] = this.appendOutput(output[stream], text, maxChars)
+    }
+    for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))
+    return owned.completion.then((result) => {
+      for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())
+      if (result.spawnError) throw result.spawnError
+      const storedBytes = Buffer.byteLength(output.stdout) + Buffer.byteLength(output.stderr)
+      const capture: SystemCommandOutputCapture = {
+        status: result.cleanupIncomplete ? 'failed' : truncated ? 'truncated' : 'complete',
+        encoding: 'utf-8', totalBytes, storedBytes, omittedBytes: Math.max(0, totalBytes - storedBytes),
+        decodeErrors: decoders.stdout.decodeErrors + decoders.stderr.decodeErrors,
+        ...(result.cleanupIncomplete ? { error: 'Process output drain did not complete before its deadline' } : {}),
       }
-
-      const abort = () => {
-        if (settled) return
-        aborted = true
-        terminateWithEscalation('SIGTERM')
-      }
-      const terminateWithEscalation = (signal: NodeJS.Signals) => {
-        if (terminating) return
-        terminating = true
-        this.tryKillProcessTree(child.pid, signal)
-        timers.after(
-          FORCE_KILL_DELAY_MS,
-          () => {
-            if (!settled) this.tryKillProcessTree(child.pid, 'SIGKILL')
-          },
-          { label: 'LocalSystemKernel.runShellCapture.force-kill', unref: true }
-        )
-      }
-      timeout = options.timeoutMs
-        ? timers.after(options.timeoutMs, () => {
-            if (settled) return
-            timedOut = true
-            terminateWithEscalation('SIGTERM')
-          })
-        : null
-
-      if (options.abortSignal?.aborted) {
-        abort()
-      } else {
-        options.abortSignal?.addEventListener('abort', abort, { once: true })
-      }
-      child.stdout?.on('data', (chunk) => {
-        stdout = this.appendOutput(stdout, String(chunk), maxOutputChars)
-      })
-      child.stderr?.on('data', (chunk) => {
-        stderr = this.appendOutput(stderr, String(chunk), maxOutputChars)
-      })
-      child.on('error', (error) => {
-        if (settled) return
-        settled = true
-        timeout?.cancel()
-        timers.cancelAll()
-        options.abortSignal?.removeEventListener('abort', abort)
-        rejectPromise(error)
-      })
-      child.on('close', (exitCode, signal) => {
-        this.reapForegroundProcessGroupAfterExit(child.pid, command)
-        finish({ exitCode, signal, stdout, stderr })
-      })
+      return { ...result, ...output, confinement, truncated, capture }
     })
   }
 
-  private buildCommandSpawnSpec(command: string) {
-    return buildSystemProcessConfinementSpawnSpec(
-      {
-        spec: this.platformTools.getShellCommandSpec(command, {
-          env: process.env,
-          shellPath: this.getShellPath(),
-        }),
-        policy: {
-          mode: this.processConfinement.mode,
-          workspaceRoot: this.processConfinement.workspaceRoot ?? this.workingDirectory,
-          writeRoots: this.processConfinement.writeRoots,
-          network: this.processConfinement.network,
-        },
-      },
-      {
-        platform: this.hostPlatform,
-        env: process.env,
-        provider: this.processConfinement.provider,
-        tempDir: tmpdir(),
-      }
-    )
+  private async buildCommandSpawnSpec(command: string, nativeCommand?: { file: string; args: string[]; env?: Record<string, string> }) {
+    const shell = await this.resolveShell()
+    const commandSpec = nativeCommand ? buildSystemNativeCommandSpec(nativeCommand, shell)
+      : { ...this.platformTools.getShellCommandSpec(command, shell), env: shell.env }
+    const confined = buildSystemProcessConfinementSpawnSpec({ spec: commandSpec,
+      policy: { mode: this.processConfinement.mode,
+        workspaceRoot: this.processConfinement.workspaceRoot ?? this.workingDirectory,
+        writeRoots: this.processConfinement.writeRoots, network: this.processConfinement.network } },
+      { platform: this.hostPlatform, env: commandSpec.env, provider: this.processConfinement.provider, tempDir: tmpdir() })
+    const owned = buildSystemOwnedProcessSpec(confined.spec, { platform: this.hostPlatform, env: commandSpec.env })
+    return { ...confined, ...owned, env: commandSpec.env, shell: this.describeShell(shell) }
+  }
+
+  private describeShell(shell: SystemShellDescriptor): SystemShellDescriptor {
+    return { kind: shell.kind, name: shell.name, shellPath: shell.shellPath, args: shell.args,
+      readiness: shell.readiness, version: shell.version, recommendation: shell.recommendation }
   }
 
   private async runPlatformCommand(
@@ -892,6 +833,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       return await execFileAsync(commandSpec.file, commandSpec.args, {
         env: process.env,
         maxBuffer: MAX_PLATFORM_COMMAND_BUFFER,
+        timeout: 2_000, killSignal: 'SIGKILL', windowsHide: true,
       })
     } catch (error) {
       // lsof 在"没有任何匹配"时以 exit 1 且空 stderr 结束——这不是失败，是空结果集。
@@ -926,81 +868,9 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return this.platformTools.getTerminateCommand(pid, force)
   }
 
-  /**
-   * 终止整棵进程树。
-   *
-   * 判据（§5.3b ⑥非显然妥协）——**杀单个 pid 不够**：命令是通过 shell 起的，真正干活的是它的子进程；
-   * 只杀 shell 会留下孤儿（真机症状：终止后端口仍被占）。所以优先用平台的树终止命令
-   * （Windows `taskkill /T`），POSIX 上退回"给进程组发信号"（`getProcessKillPid` 返回负 pid）。
-   *
-   * **失败回退的判据**：进程组信号失败且 `killPid !== pid` 时才退回杀单进程——说明进程组不存在
-   * （detached 没生效），此时杀单进程仍比什么都不做好；若两者本就是同一个 pid，
-   * 说明这就是单进程失败，必须把错误抛出去，不能重试同一件事然后假装成功。
-   */
-  private killProcessTree(pid: number, signal: NodeJS.Signals): void {
-    if (!pid) return
-
-    const treeKillSpec = this.platformTools.getProcessTreeKillCommandSpec(pid, signal)
-    if (treeKillSpec) {
-      execFileSync(treeKillSpec.file, treeKillSpec.args, { stdio: 'ignore' })
-      return
-    }
-
-    const killPid = this.platformTools.getProcessKillPid(pid)
-    try {
-      process.kill(killPid, signal)
-      return
-    } catch (groupError) {
-      if (killPid === pid) throw groupError
-    }
-
-    process.kill(pid, signal)
-  }
-
-  private tryKillProcessTree(pid: LooseOptional<number>, signal: NodeJS.Signals): void {
-    if (!pid) return
-
-    try {
-      this.killProcessTree(pid, signal)
-    } catch (error) {
-      log.warn('failed to terminate command process tree', {
-        pid,
-        signal,
-        error,
-      })
-    }
-  }
-
-  private tryReapProcessTree(pid: LooseOptional<number>, signal: NodeJS.Signals): void {
-    if (!pid) return
-
-    try {
-      this.killProcessTree(pid, signal)
-    } catch (error) {
-      if (this.platformTools.isProcessMissingError(error)) return
-
-      log.warn('failed to reap command process tree', {
-        pid,
-        signal,
-        error,
-      })
-    }
-  }
-
-  private reapForegroundProcessGroupAfterExit(pid: LooseOptional<number>, command: string): void {
-    if (!pid) return
-    if (!this.platformTools.shouldUseDetachedProcessGroup()) return
-    if (!shouldReapForegroundProcessGroupAfterExit(command)) return
-
-    this.tryReapProcessTree(pid, 'SIGTERM')
-    const timers = new TimerScope({ name: 'LocalSystemKernel.reapForegroundProcessGroupAfterExit' })
-    timers.after(FORCE_KILL_DELAY_MS, () => {
-      this.tryReapProcessTree(pid, 'SIGKILL')
-      timers.dispose()
-    }, {
-      label: 'force-kill',
-      unref: true,
-    })
+  /** Release every background child owned by this kernel instance. */
+  public async dispose(): Promise<void> {
+    await Promise.allSettled([...this.backgroundExecutions.values()].filter((entry) => !entry.exited).map((entry) => entry.stop('SIGKILL')))
   }
 
   private platformOpenCommand(targetPath: string): { command: string; args: string[] } {
@@ -1011,22 +881,9 @@ export class LocalSystemKernel implements SystemToolSystemApi {
   private async resolveCommandAvailability(
     name: string
   ): Promise<{ available: boolean; path: Nullable<string> }> {
-    const probeCommand = this.hostPlatform === 'win32'
-      ? `where ${this.platformTools.quoteShellArg(name)}`
-      : `command -v ${this.platformTools.quoteShellArg(name)}`
-    // 探测命令失败即"命令不存在"，由下面的 exitCode 判定表达，不需要额外的容忍开关。
-    const confined = this.buildCommandSpawnSpec(probeCommand)
-    const result = await this.runShellCapture(
-      probeCommand,
-      confined.spec,
-      confined.evidence,
-      homedir()
-    )
-    const commandPath = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] : null
-    return {
-      available: Boolean(commandPath),
-      path: commandPath || null,
-    }
+    const shell = await this.resolveShell()
+    const command = await resolveSystemCommand(name, shell)
+    return { available: command.available, path: command.path }
   }
 
   private createContentMatcher(
@@ -1125,11 +982,15 @@ export class LocalSystemKernel implements SystemToolSystemApi {
 
   private appendOutput(previous: string, next: string, maxChars: number): string {
     const combined = previous + next
-    return combined.length <= maxChars ? combined : combined.slice(0, maxChars)
+    if (combined.length <= maxChars) return combined
+    let start = combined.length - maxChars
+    if (combined.charCodeAt(start) >= 0xdc00 && combined.charCodeAt(start) <= 0xdfff &&
+      combined.charCodeAt(start - 1) >= 0xd800 && combined.charCodeAt(start - 1) <= 0xdbff) start++
+    return combined.slice(start)
   }
 
-  private getShellPath(): string {
-    return this.platformTools.getPreferredShellPath(process.env)
+  private resolveShell() {
+    return resolveSystemShellReady({ platform: this.hostPlatform, env: process.env })
   }
 
   private metricLevel(
@@ -1144,27 +1005,11 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return 'normal'
   }
 
-  private isProcessAlive(pid: number): boolean {
-    try {
-      process.kill(pid, 0)
-      return true
-    } catch (error) {
-      if (this.platformTools.isProcessMissingError(error)) return false
-      if (this.isProcessPermissionError(error)) return true
-      log.debug('检查进程状态失败，按已退出处理', {
-        pid,
-        error: AppError.getMessage(error),
-      })
-      return false
-    }
-  }
-
   private resolveBackgroundTaskStatus(task: SystemBackgroundTaskRecord): SystemBackgroundTaskStatus {
-    return this.isProcessAlive(task.pid) ? 'running' : 'exited'
+    const owned = this.backgroundExecutions.get(task.id)
+    if (!owned) return task.finishedAt ? 'exited' : 'unknown'
+    return owned.result?.cleanupIncomplete ? 'unknown' : owned.exited ? 'exited' : 'running'
   }
 
-  private isProcessPermissionError(error: unknown): boolean {
-    return isPlainObject(error) && error.code === 'EPERM'
-  }
 
 }

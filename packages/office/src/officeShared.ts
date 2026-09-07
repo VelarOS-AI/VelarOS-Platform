@@ -82,9 +82,20 @@ export interface OfficeSystemApi {
       cwd?: string
       timeoutMs?: number
       maxOutputChars?: number
+      nativeCommand?: OfficeNativeCommand
     },
     allowDangerous?: boolean
   ) => Promise<OfficeSystemCommandResult>
+}
+
+export interface OfficeNativeCommand {
+  file: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+export function describeOfficeNativeCommand(command: OfficeNativeCommand): string {
+  return [command.file, ...command.args].map((value) => JSON.stringify(value)).join(' ')
 }
 
 /** Office 工具唯一消费的宿主能力；Project 与 System 只以窄端口组合进来。 */
@@ -437,7 +448,7 @@ export async function copyOfficeOutput(
 
 // ─── System command helpers ────────────────────────────────────────────────────
 export function commandExecutable(command: OfficeEnvironmentCommandAvailability): string {
-  return command.path ? officePlatformCompatibility.quoteShellArg(command.path) : command.name
+  return command.path ? officePlatformCompatibility.quoteShellPath(command.path) : command.name
 }
 
 /** 按顺序查找第一个可用系统命令。 */
@@ -541,17 +552,18 @@ export async function findGeneratedOfficeFile(
 /** 运行 Office 相关外部系统命令。 */
 export async function runOfficeSystemCommand(
   ctx: OfficeToolContext,
-  command: string,
+  command: string | OfficeNativeCommand,
   cwd: string,
   timeoutMs = 120_000
 ): Promise<OfficeSystemCommandResult> {
   // Office 转换/编译通常输出较多，因此放宽 maxOutputChars。
   return ctx.office.system.runCommand(
-    command,
+    typeof command === 'string' ? command : describeOfficeNativeCommand(command),
     {
       cwd,
       timeoutMs,
       maxOutputChars: 20_000,
+      ...(typeof command === 'string' ? {} : { nativeCommand: command }),
     },
     false
   )
@@ -594,7 +606,7 @@ export function buildMacLibreOfficeFontConfig(input: {
  */
 export async function runLibreOfficeSystemCommand(
   ctx: OfficeToolContext,
-  command: string,
+  command: string | OfficeNativeCommand,
   cwd: string,
   timeoutMs = 120_000
 ): Promise<OfficeSystemCommandResult> {
@@ -607,10 +619,9 @@ export async function runLibreOfficeSystemCommand(
     homeDir: homedir(),
     cacheDir,
   }), 'utf8')
-  const configuredCommand = [
-    `FONTCONFIG_FILE=${officePlatformCompatibility.quoteShellArg(configPath)}`,
-    command,
-  ].join(' ')
+  const configuredCommand = typeof command === 'string' ? [
+    `FONTCONFIG_FILE=${officePlatformCompatibility.quoteShellArg(configPath)}`, command,
+  ].join(' ') : { ...command, env: { ...command.env, FONTCONFIG_FILE: configPath } }
   try {
     return await runOfficeSystemCommand(ctx, configuredCommand, cwd, timeoutMs)
   } finally {
@@ -653,15 +664,10 @@ export async function normalizeWordInputToDocx(input: {
   }
 
   const tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-docx-normalize-'))
-  const command = [
-    commandExecutable(input.libreOffice),
-    '--headless',
-    '--convert-to',
-    'docx',
-    '--outdir',
-    officePlatformCompatibility.quoteShellArg(tempDir),
-    officePlatformCompatibility.quoteShellArg(input.inputPath),
-  ].join(' ')
+  const command: OfficeNativeCommand = {
+    file: input.libreOffice.path || input.libreOffice.name,
+    args: ['--headless', '--convert-to', 'docx', '--outdir', tempDir, input.inputPath],
+  }
   const commandResult = await runLibreOfficeSystemCommand(
     input.ctx,
     command,

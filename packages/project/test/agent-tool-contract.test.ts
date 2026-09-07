@@ -74,6 +74,7 @@ describe('Project model-facing tool contract', () => {
       "path: ['src/contentHash.ts', 'src/cacheKey.ts']"
     )
     expect(projectTools[ProjectToolNames.run].description).toContain("command: 'bun test'")
+    expect(projectTools[ProjectToolNames.run].description).toContain('Git Bash/POSIX')
   })
 
   test('keeps long-form file writes on a shallow dedicated contract', () => {

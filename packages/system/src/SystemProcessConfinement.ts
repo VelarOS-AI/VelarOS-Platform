@@ -168,11 +168,12 @@ function assertProviderResult(
       actualMode: result.evidence.mode,
     })
   }
-  if (policy.mode !== 'danger-full-access' && result.evidence.enforcement === 'none') {
-    throw new AppError('INVARIANT', '进程约束提供方不得把受约束请求降级为裸进程。', undefined, {
+  if (policy.mode !== 'danger-full-access' && result.evidence.enforcement !== 'full') {
+    throw new AppError('INVARIANT', '当前请求需要完整进程约束，提供方返回的隔离能力不足。', undefined, {
       source: 'system-process-confinement',
       mode: policy.mode,
       backend: result.evidence.backend,
+      enforcement: result.evidence.enforcement,
     })
   }
   return result
@@ -200,7 +201,7 @@ export function buildSystemProcessConfinementSpawnSpec(
     workspaceRoot: assertAbsoluteRoot(request.policy.workspaceRoot, 'workspaceRoot'),
   }
   if (policy.mode === 'danger-full-access') return {
-    spec: { file: request.spec.file, args: [...request.spec.args] },
+      spec: { ...request.spec, args: [...request.spec.args] },
     evidence: {
       mode: policy.mode,
       enforcement: 'none',

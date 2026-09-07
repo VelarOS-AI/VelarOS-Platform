@@ -30,6 +30,32 @@ system:terminate-task
 `system:processes.filter` 会对进程、端口与后台任务的完整命令行做不区分大小写的匹配，
 再分别应用 `limit`；命令特征不会因先截断任务列表而被漏掉。
 
+## Windows 命令运行环境
+
+Windows 按 **Git Bash → PowerShell 7 → Windows PowerShell → CMD** 的顺序选择可用环境。
+推荐安装 [Git for Windows](https://git-scm.com/download/win)，以获得 Bash 和 Unix 命令工具。
+Git 发现覆盖系统安装、当前用户安装及 PATH；`VELAROS_GIT_BASH` 可以指定自定义 Git 安装的
+`bin\bash.exe` 或 `usr\bin\bash.exe`。全部候选不可用时返回 `SYSTEM_SHELL_UNAVAILABLE`。
+
+Node 宿主从 `@velaros-ai/system/execution` 调用异步 `resolveSystemShellReady()`。自检带短超时，
+验证启动、版本和 UTF-8；只有自检阶段可以尝试下一候选。返回的 `kind/name/shellPath/args`、
+`readiness/version/recommendation` 可以向界面和模型报告，`env` 仅用于宿主进程执行。
+在生成命令前报告实际 shell，使用该描述符调用 `getShellCommandSpec(command, shell)` 并将
+`shell.env` 传给子进程。用户命令执行一次，失败后按原始退出码和输出诊断。
+
+Git Bash 使用 `--noprofile --norc -c`，PATH 优先使用 Git 工具；PowerShell 使用无 profile 的
+非交互会话，显式设置 UTF-8 并传回原生命令退出码；CMD 会初始化 UTF-8 代码页。
+Windows 子进程同时设置 Python UTF-8。第三方程序仍需遵循自身的输出编码配置。
+
+`resolveSystemCommand(name, shell)` 使用实际 shell 的查找规则并报告 native/script/batch/builtin。
+宿主已知的工具调用通过 `nativeCommand: { file, args, env? }` 传递，授权与日志展示由该结构生成。
+原生 argv 直接传给进程，避免 MSYS 把路径形状的普通参数转换；批处理入口使用明确的 CMD 适配，
+包括 npm `.cmd` shim 的双层转义。该字段只供宿主组合能力使用，不出现在模型工具 schema 中。
+
+`refreshWindowsEnvironment()` 异步重读用户/系统环境，保留启动器额外 PATH 和应用覆盖项，返回
+revision 并清空此前 Shell 选择。宿主重新自检后向已打开的工作区发布新的运行环境描述符。
+`SystemPlatformCompatibility` 与描述符类型保持可用于浏览器，文件发现和自检属于 Node 执行层。
+
 ## 进程约束契约
 
 `@velaros-ai/system/execution` 提供统一的 `read-only`、`workspace-write` 与

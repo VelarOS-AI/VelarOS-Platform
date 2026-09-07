@@ -79,6 +79,76 @@ function captureService(
 }
 
 describe('System Kernel module', () => {
+  test('preserves UTF-8 characters split across pipe chunks and the child exit code', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const text = '中文🙂'
+    const result = await kernel.runCommand('fixture', { nativeCommand: { file: process.execPath, args: ['-e', `
+      const bytes = Buffer.from(${JSON.stringify(text)});
+      let offset = 0;
+      const timer = setInterval(() => {
+        const byte = bytes.subarray(offset, ++offset);
+        process.stdout.write(byte);
+        process.stderr.write(byte);
+        if (offset === bytes.length) {
+          clearInterval(timer);
+          process.exitCode = 7;
+        }
+      }, 10);
+    `] }, timeoutMs: 3_000 })
+
+    expect(result.stdout).toBe(text)
+    expect(result.stderr).toBe(text)
+    expect(result.exitCode).toBe(7)
+    expect(result.success).toBe(false)
+    expect(result.timedOut).toBe(false)
+    expect(result.capture?.decodeErrors).toBe(0)
+    expect(result.shell).toBeDefined()
+    expect(result.shell).not.toHaveProperty('env')
+  })
+
+  test('gives noninteractive commands stdin EOF without waiting for the command timeout', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const result = await kernel.runCommand('fixture', { nativeCommand: { file: process.execPath, args: ['-e', `
+      process.stdin.on('end', () => process.stdout.write('stdin-ended'));
+      process.stdin.resume();
+    `] }, timeoutMs: 2_000 })
+
+    expect(result.stdout).toBe('stdin-ended')
+    expect(result.exitCode).toBe(0)
+    expect(result.success).toBe(true)
+    expect(result.timedOut).toBe(false)
+  })
+
+  test('does not spawn a command cancelled during asynchronous preparation', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const controller = new AbortController()
+    const internals = kernel as unknown as { buildCommandSpawnSpec: () => Promise<unknown> }
+    internals.buildCommandSpawnSpec = async () => {
+      controller.abort()
+      return { spec: { file: 'must-not-run', args: [] }, env: {}, evidence: {}, ownership: {} }
+    }
+    await expect(kernel.runCommand('unused', {}, false, controller.signal)).rejects.toThrow()
+  })
+
+  test('rejects background spawn failures and records a real background exit code', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    await expect(kernel.runCommand('unused', {
+      nativeCommand: { file: process.execPath, args: ['-e', 'process.exit(7)'] },
+      cwd: '/velaros-test-directory-that-does-not-exist', background: true,
+    })).rejects.toThrow()
+    const started = await kernel.runCommand('unused', {
+      nativeCommand: { file: process.execPath, args: ['-e', 'process.exit(7)'] }, background: true,
+    })
+    const executions = (kernel as unknown as {
+      backgroundExecutions: Map<string, { completion: Promise<unknown> }>
+    }).backgroundExecutions
+    await executions.get(started.backgroundProcess!.taskId)!.completion
+    const [task] = await kernel.listBackgroundTasks({ taskId: started.backgroundProcess!.taskId })
+    expect(task!.status).toBe('exited')
+    expect(task!.exitCode).toBe(7)
+    await kernel.dispose()
+  })
+
   test('declares authoritative capability effects for every system tool', () => {
     const expectedEffects = {
       'system:read': 'read',
@@ -145,6 +215,7 @@ describe('System Kernel module', () => {
     expect(service?.getOperationMetadata('system:list-tasks')).toBeUndefined()
     expect(service?.tools['system:edit']?.description).toContain('保留已有文件的权限位')
     expect(service?.tools['system:run']?.description).toContain('复制、移动、删除、归档、解压')
+    expect(service?.tools['system:run']?.description).toContain('Git Bash/POSIX')
     expect(module.manifest.permissions).not.toContain('*')
   })
 

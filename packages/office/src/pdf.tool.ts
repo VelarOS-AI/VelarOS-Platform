@@ -19,13 +19,11 @@ import { degrees, PDFDocument, StandardFonts } from 'pdf-lib'
 import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { officePlatformCompatibility } from './OfficePlatformCompatibility'
 import {
   basename,
   buildMissingSystemToolResult,
   buildProjectMutationSkippedResult,
   cleanupNormalizedWordInput,
-  commandExecutable,
   copyOfficeOutput,
   createBrowserOnlineAlternative,
   createCommandFailureResult,
@@ -134,15 +132,10 @@ const convertWordToPdf = defineOfficeTool<ConvertWordToPdfInput>({
       const tempDir = await mkdtemp(join(tmpdir(), 'velaros-office-word-pdf-'))
       try {
         const normalizedInputPath = normalizedWord.input.path
-        const command = [
-          commandExecutable(libreOffice),
-          '--headless',
-          '--convert-to',
-          'pdf',
-          '--outdir',
-          officePlatformCompatibility.quoteShellArg(tempDir),
-          officePlatformCompatibility.quoteShellArg(normalizedInputPath),
-        ].join(' ')
+        const command = {
+          file: libreOffice.path || libreOffice.name,
+          args: ['--headless', '--convert-to', 'pdf', '--outdir', tempDir, normalizedInputPath],
+        }
         const commandResult = await runLibreOfficeSystemCommand(
           ctx,
           command,

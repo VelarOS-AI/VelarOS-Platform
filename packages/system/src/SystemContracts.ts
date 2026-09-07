@@ -1,4 +1,20 @@
 export type SystemCommandScope = 'system' | 'project'
+export type SystemShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
+export interface SystemShellRecommendation {
+  code: 'INSTALL_GIT_BASH'
+  message: string
+  url: string
+}
+/** Browser-safe snapshot of the actual command language selected before generation. */
+export interface SystemShellDescriptor {
+  kind: SystemShellKind
+  name: string
+  shellPath: string
+  args: string[]
+  readiness: 'detected' | 'ready'
+  version: Nullable<string>
+  recommendation: Nullable<SystemShellRecommendation>
+}
 export type SystemCommandRunStatus = 'running' | 'passed' | 'failed' | 'timed-out'
 export type SystemOpenPortProtocol = 'tcp'
 export type SystemMetricLevel = 'normal' | 'warn' | 'high' | 'unknown'
@@ -91,6 +107,8 @@ export interface SystemRunCommandOptions {
   background?: boolean
   maxOutputChars?: number
   sessionId?: string
+  /** Host-generated executable invocation; never exposed in model tool schemas. */
+  nativeCommand?: { file: string; args: string[]; env?: Record<string, string> }
 }
 
 export interface SystemBackgroundProcessInfo {
@@ -137,6 +155,17 @@ export interface SystemCommandOutputContinuation {
   args: { query: string; kind: 'terminal' }
 }
 
+/** 命令输出采集事实；字节数按解码后的 UTF-8 文本计算。 */
+export interface SystemCommandOutputCapture {
+  status: 'complete' | 'truncated' | 'failed'
+  encoding: 'utf-8'
+  totalBytes: number
+  storedBytes: number
+  omittedBytes: number
+  decodeErrors: number
+  error?: string
+}
+
 export interface SystemCommandResult {
   command: string
   cwd: string
@@ -149,6 +178,10 @@ export interface SystemCommandResult {
   timedOut: boolean
   aborted: boolean
   truncated: boolean
+  capture?: SystemCommandOutputCapture
+  shell?: SystemShellDescriptor
+  cleanupIncomplete?: boolean
+  ownership?: { backend: 'windows-job' | 'process-tree'; parentDeathCleanup: boolean; reason: string }
   outputWindow?: SystemCommandOutputWindow
   outputContinuation?: SystemCommandOutputContinuation
   success: boolean
@@ -232,6 +265,11 @@ export interface SystemMetricsSnapshot {
 }
 
 export interface SystemCommandRunRecord {
+  capture?: SystemCommandOutputCapture
+  aborted?: boolean
+  cleanupIncomplete?: boolean
+  ownership?: SystemCommandResult['ownership']
+  confinement?: SystemProcessConfinementEvidence
   id: string
   sessionId: Nullable<string>
   scope: SystemCommandScope
@@ -263,6 +301,10 @@ export interface SystemCommandRunQueryOptions {
 }
 
 export interface SystemBackgroundTaskRecord {
+  exitCode?: Nullable<number>
+  signal?: Nullable<string>
+  finishedAt?: number
+  cleanupIncomplete?: boolean
   id: string
   runId: string
   sessionId: Nullable<string>
@@ -316,17 +358,30 @@ export interface SystemShellEnvironmentRefreshResult {
   shell: string
   variableCount: number
   refreshedAt: number
+  runtime?: SystemShellDescriptor
+  revision?: string
 }
 
 export interface SystemEnvironmentCommandAvailability {
   name: string
   available: boolean
   path: Nullable<string>
+  kind?: 'native' | 'script' | 'batch' | 'builtin' | null
 }
 
 export interface SystemEnvironmentInspection {
   os: { platform: SystemRuntimePlatform; arch: string; release: string; homeDir: string }
-  shell: { path: string; variableCount: number; pathEntries: string[] }
+  shell: {
+    path: string
+    variableCount: number
+    pathEntries: string[]
+    kind?: SystemShellKind
+    name?: string
+    readiness?: SystemShellDescriptor['readiness']
+    version?: Nullable<string>
+    recommendation?: Nullable<SystemShellRecommendation>
+    revision?: string
+  }
   commands: SystemEnvironmentCommandAvailability[]
 }
 

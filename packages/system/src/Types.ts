@@ -52,7 +52,7 @@ export interface SystemToolSystemApi {
   /** 终止当前会话可控制的后台任务。 */
   terminateBackgroundTask: (
     request: Omit<SystemBackgroundTaskTerminateRequest, 'sessionId'>
-  ) => SystemBackgroundTaskTerminateResult
+  ) => SystemBackgroundTaskTerminateResult | Promise<SystemBackgroundTaskTerminateResult>
   /** 刷新 shell 环境变量缓存。 */
   refreshShellEnvironment: () => Promise<SystemShellEnvironmentRefreshResult>
   /** 用系统默认方式打开路径。 */

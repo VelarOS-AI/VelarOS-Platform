@@ -1,5 +1,7 @@
 import { isEmpty, isPlainObject, toNullable } from '@velaros-ai/core'
 
+import type { SystemShellKind } from './SystemContracts'
+
 export type RuntimePlatform = NodeJS.Platform
 
 export interface SystemPlatformCompatibilityOptions {
@@ -9,6 +11,7 @@ export interface SystemPlatformCompatibilityOptions {
 
 export interface ShellCommandSpecOptions extends SystemPlatformCompatibilityOptions {
   shellPath?: string
+  kind?: SystemShellKind
 }
 
 export interface DefaultAppDataPathOptions extends SystemPlatformCompatibilityOptions {
@@ -18,6 +21,7 @@ export interface DefaultAppDataPathOptions extends SystemPlatformCompatibilityOp
 export interface CommandSpec {
   file: string
   args: string[]
+  windowsVerbatimArguments?: boolean
 }
 
 export interface EditorCommandDefinition {
@@ -38,6 +42,21 @@ export type DirectorySymlinkType = 'dir' | 'junction'
 const UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 const DefaultWindowsExecutableExtensions = ['.EXE', '.CMD', '.BAT', '.COM']
 const TrustedWindowsCommandShell = 'C:\\Windows\\System32\\cmd.exe'
+
+export class SystemShellUnavailableError extends Error {
+  public readonly code = 'SYSTEM_SHELL_UNAVAILABLE'
+  constructor(detail = '') {
+    super(`No working command shell is available. ${detail} Install Git for Windows from https://git-scm.com/download/win and refresh the command environment.`)
+    this.name = 'SystemShellUnavailableError'
+  }
+}
+
+export function getSystemShellKind(shellPath: string): SystemShellKind {
+  if (/(?:^|[\\/])pwsh(?:\.exe)?$/i.test(shellPath)) return 'pwsh'
+  if (/(?:^|[\\/])powershell(?:\.exe)?$/i.test(shellPath)) return 'powershell'
+  if (/(?:^|[\\/])cmd(?:\.exe)?$/i.test(shellPath)) return 'cmd'
+  return /(?:^|[\\/])bash\.exe$/i.test(shellPath) ? 'git-bash' : 'posix'
+}
 
 function isPathTextSeparator(character: LooseOptional<string>): boolean {
   return character === '/' || character === '\\'
@@ -179,26 +198,36 @@ export class SystemPlatformCompatibility {
   }
 
   public getShellCommandSpec(command: string, options: ShellCommandSpecOptions = {}): CommandSpec {
-    if (this.isWindows())
-      return {
-        file: this.getWindowsCommandShell(),
-        args: ['/d', '/s', '/c', command],
-      }
-
-    return {
-      file: options.shellPath || this.getPreferredPosixShellPath(options.env),
-      args: ['-lc', command],
+    const file = options.shellPath || this.getPreferredShellPath(options.env)
+    const kind = options.kind ?? getSystemShellKind(file)
+    if (kind === 'pwsh' || kind === 'powershell') return {
+      file,
+      args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        `[Console]::InputEncoding = [Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ` +
+        `$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0; & { ${command}\n }; ` +
+        `if (-not $?) { if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; exit 1 }; exit $LASTEXITCODE`],
     }
+    if (kind === 'cmd') return {
+      file,
+      // CMD parses the /c string itself; CRT escaping would corrupt its embedded quotes.
+      args: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & ${command}"`],
+      windowsVerbatimArguments: true,
+    }
+    return { file, args: kind === 'git-bash' ? ['--noprofile', '--norc', '-c', command] : ['-lc', command] }
   }
 
   public getPreferredShellPath(env: NodeJS.ProcessEnv = this.env): string {
-    return this.isWindows()
-      ? this.getWindowsCommandShell()
-      : this.getPreferredPosixShellPath(env)
+    if (!this.isWindows()) return this.getPreferredPosixShellPath(env)
+    return Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_SHELL_PATH')?.[1]
+      || Object.entries(env).find(([key]) => key.toUpperCase() === 'VELAROS_GIT_BASH')?.[1]
+      || this.getWindowsCommandShell()
   }
 
-  public getInteractiveShellArgs(): string[] {
-    return this.isWindows() ? [] : ['-l']
+  public getInteractiveShellArgs(options: ShellCommandSpecOptions = {}): string[] {
+    const kind = options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+    if (kind === 'git-bash') return ['--noprofile', '--norc', '-i']
+    if (kind === 'pwsh' || kind === 'powershell') return ['-NoLogo', '-NoProfile']
+    return kind === 'cmd' ? ['/d', '/v:off'] : ['-l']
   }
 
   public getLoginShellCandidates(env: NodeJS.ProcessEnv = this.env): string[] {
@@ -307,8 +336,14 @@ export class SystemPlatformCompatibility {
     return root ? this.joinPathText(root, appName) : appName
   }
 
-  public quoteShellArg(value: string): string {
-    return this.isWindows() ? `"${value.replace(/"/g, '""')}"` : this.quotePosixSingle(value)
+  public quoteShellArg(value: string, options: ShellCommandSpecOptions = {}): string {
+    const kind = options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+    if (kind === 'pwsh' || kind === 'powershell') return `'${value.replace(/'/g, "''")}'`
+    if (kind === 'cmd') {
+      if (/[\r\n\0%]/.test(value)) throw new Error('This argument requires native file + argv execution in CMD.')
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return this.quotePosixSingle(value)
   }
 
   public getDefaultInspectableCommands(): string[] {
@@ -346,8 +381,11 @@ export class SystemPlatformCompatibility {
     return `nohup ${quotedShell} -lc ${quotedCommand} >> ${quotedLogPath} 2>&1 & printf "${options.pidMarker}%s\\n" "$!"`
   }
 
-  public getTerminateCommand(pid: number, force = false): Nullable<string> {
-    if (this.isWindows()) return `taskkill /PID ${pid} /T${force ? ' /F' : ''}`
+  public getTerminateCommand(pid: number, force = false, options: ShellCommandSpecOptions = {}): Nullable<string> {
+    if (this.isWindows()) {
+      const kind = options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+      return `${kind === 'git-bash' ? 'MSYS_NO_PATHCONV=1 ' : ''}taskkill.exe /PID ${pid} /T${force ? ' /F' : ''}`
+    }
     return force ? `kill -KILL ${pid}` : `kill -TERM ${pid}`
   }
 
@@ -456,7 +494,8 @@ export class SystemPlatformCompatibility {
   private getWindowsPowerShellCommandSpec(command: string): CommandSpec {
     return {
       file: 'powershell.exe',
-      args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      args: ['-NoProfile', '-NonInteractive', '-Command',
+        `[Console]::OutputEncoding = $OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`],
     }
   }
 

@@ -339,6 +339,17 @@ export interface ProjectBackgroundProcessInfo {
   autoStarted: boolean
 }
 
+/** 项目宿主报告的输出采集事实，不依赖具体系统执行器。 */
+export interface ProjectCommandOutputCapture {
+  status: 'complete' | 'truncated' | 'failed'
+  encoding: 'utf-8'
+  totalBytes: number
+  storedBytes: number
+  omittedBytes: number
+  decodeErrors: number
+  error?: string
+}
+
 export interface ProjectCommandResult {
   command: string
   cwd: string
@@ -351,6 +362,9 @@ export interface ProjectCommandResult {
   timedOut: boolean
   aborted: boolean
   truncated: boolean
+  capture?: ProjectCommandOutputCapture
+  cleanupIncomplete?: boolean
+  ownership?: { backend: 'windows-job' | 'process-tree'; parentDeathCleanup: boolean; reason: string }
   success: boolean
   backgroundProcess?: LooseOptional<ProjectBackgroundProcessInfo>
   verification: ProjectVerificationSummary

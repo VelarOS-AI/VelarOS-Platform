@@ -26,10 +26,10 @@ import type {
   OfficeSystemCommandResult,
 } from './OfficeContracts'
 import {
-  commandExecutable,
   dirname,
   extname,
   findAvailableCommand,
+  type OfficeNativeCommand,
   type OfficeToolContext,
   outputPathSchema,
   requireFromOfficeModule,
@@ -624,55 +624,51 @@ export function buildLatexCompileCommands(input: {
   sourceFileName: string
   tempDir: string
   runs?: number
-}): string[] {
-  const executable = commandExecutable(input.compiler)
-  const quotedSource = `'${input.sourceFileName}'`
-  const quotedTempDir = `'${input.tempDir}'`
+}): OfficeNativeCommand[] {
+  const file = input.compiler.path || input.compiler.name
+  const source = input.sourceFileName
+  const output = input.tempDir
 
   switch (input.compiler.name) {
     case 'tectonic':
       return [
-        [
-          executable,
+        { file, args: [
           '--keep-logs',
           '--keep-intermediates',
           '--outdir',
-          quotedTempDir,
-          quotedSource,
-        ].join(' '),
+          output,
+          source,
+        ] },
       ]
     case 'latexmk':
       return [
-        [
-          executable,
+        { file, args: [
           '-pdf',
           '-interaction=nonstopmode',
           '-halt-on-error',
-          `-outdir=${quotedTempDir}`,
-          quotedSource,
-        ].join(' '),
+          `-outdir=${output}`,
+          source,
+        ] },
       ]
     case 'xelatex':
     case 'pdflatex': {
       const runCount = input.runs ?? 2
-      const command = [
-        executable,
+      const command: OfficeNativeCommand = { file, args: [
         '-interaction=nonstopmode',
         '-halt-on-error',
-        `-output-directory=${quotedTempDir}`,
-        quotedSource,
-      ].join(' ')
+        `-output-directory=${output}`,
+        source,
+      ] }
       return Array.from({ length: runCount }, () => command)
     }
     default:
       return [
-        [
-          executable,
+        { file, args: [
           '-interaction=nonstopmode',
           '-halt-on-error',
-          `-output-directory=${quotedTempDir}`,
-          quotedSource,
-        ].join(' '),
+          `-output-directory=${output}`,
+          source,
+        ] },
       ]
   }
 }
@@ -680,7 +676,7 @@ export function buildLatexCompileCommands(input: {
 // 顺序执行 LaTeX 命令，遇到失败即停止，方便把失败点返回给调用方。
 export async function runLatexCompileCommands(input: {
   ctx: OfficeToolContext
-  commands: string[]
+  commands: OfficeNativeCommand[]
   cwd: string
 }): Promise<OfficeSystemCommandResult[]> {
   const results: OfficeSystemCommandResult[] = []

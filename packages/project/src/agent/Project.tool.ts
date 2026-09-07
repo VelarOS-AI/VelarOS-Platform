@@ -532,6 +532,10 @@ const projectRun = defineProjectTool<{
   category: 'project-execution',
   role: 'execute',
   summary: '在项目边界内运行可取消、可审计且支持后台任务的命令。',
+  protocol: [
+    '生成命令前读取宿主报告的实际 shell.kind/name。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
+    'Git Bash/POSIX 使用 command -v、$NAME；PowerShell 使用 Get-Command、$env:NAME；CMD 使用 where、%NAME%。刷新环境后按当前 shell 重新生成命令；失败先诊断退出码和输出，避免重复执行副作用。',
+  ],
   examples: [{ command: 'bun test' }],
   schema: z.object({
     command: z.string().min(1),
