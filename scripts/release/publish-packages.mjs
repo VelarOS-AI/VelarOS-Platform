@@ -52,6 +52,7 @@ import {
   selectReleasedPackages,
 } from './releaseTopology.mjs'
 import { safePackPackage } from './safe-package-pack.mjs'
+import { normalizeTarEntryPaths } from './tar-entry-paths.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(process.argv.slice(2))
@@ -243,7 +244,9 @@ for (const item of selected) {
     // 的空包无法撤回重发。形态照 scripts/ui/checks/packageContracts.mjs 已验证的 tar -tzf 做法,
     // 从 ui 一个包推广到全部发布包。只断言 dist(声明在 files 里的其它目录未必存在——
     // 例如 workspace 的 files 列了 examples 但磁盘上没有,那是 npm 的合法 no-op,断言它会假红)。
-    const tarballEntries = runForOutput('tar', ['-tzf', tarballPath], root).split('\n')
+    const tarballEntries = normalizeTarEntryPaths(
+      runForOutput('tar', ['-tzf', tarballPath], root),
+    )
     if (!tarballEntries.includes('package/package.json')) {
       throw new Error(`${item.manifest.name} tarball is missing package/package.json`)
     }
