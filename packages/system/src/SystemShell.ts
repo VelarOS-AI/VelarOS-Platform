@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
+import { isArray, isObject, isString, toNullable, toOptional } from '@velaros-ai/core'
+
 import type {
   SystemEnvironmentCommandAvailability,
   SystemShellDescriptor, SystemShellKind, SystemShellRecommendation,
@@ -48,7 +50,7 @@ function isRegularFile(path: string): boolean {
   try {
     return statSync(path).isFile()
   } catch {
-    // Missing or unreadable candidates are unavailable to this execution host.
+    // arch-guard:silent-catch-ok 缺失或不可读的候选文件在当前执行宿主中按不可用处理。
     return false
   }
 }
@@ -90,8 +92,8 @@ function gitRootForBash(shellPath: string, isFile: (path: string) => boolean): L
   const parent = win32.dirname(binDir)
   const roots = win32.basename(parent).toLowerCase() === 'usr'
     ? [parent, win32.dirname(parent)] : [parent]
-  // A Git for Windows installation has both its launcher and its MSYS runtime.
-  // This rejects Windows' WSL bash.exe and unrelated standalone Bash installs.
+  // Git for Windows 安装必须同时包含启动器和 MSYS 运行时。
+  // 该约束会排除 Windows 的 WSL bash.exe 以及无关的独立 Bash 安装。
   if (!isFile(shellPath)) return undefined
   return roots.find((root) => isFile(win32.join(root, 'git-bash.exe')) &&
     isFile(win32.join(root, 'usr', 'bin', 'msys-2.0.dll')) &&
@@ -117,7 +119,7 @@ function gitBashCandidates(env: NodeJS.ProcessEnv, isFile: (path: string) => boo
     if (!isAbsoluteWindowsPath(entry)) continue
     candidates.push(win32.join(entry, 'bash.exe'))
     if (isFile(win32.join(entry, 'git.exe'))) {
-      // Git may enter PATH through cmd, bin, mingw64/bin, or mingw32/bin.
+      // Git 可能通过 cmd、bin、mingw64/bin 或 mingw32/bin 进入 PATH。
       candidates.push(
         win32.join(entry, '..', 'bin', 'bash.exe'),
         win32.join(entry, '..', '..', 'bin', 'bash.exe')
@@ -186,7 +188,7 @@ function describeShell(shellPath: string, env: NodeJS.ProcessEnv, isFile: (path:
     shellEnv.PYTHONUTF8 = '1'
     shellEnv.PYTHONIOENCODING = 'utf-8'
   }
-  // Windows environment keys are case-insensitive; publish one spelling for each managed key.
+  // Windows 环境变量名不区分大小写；每个受管变量只输出一种拼写。
   for (const key of Object.keys(shellEnv)) {
     if (['VELAROS_SHELL_KIND', 'VELAROS_SHELL_PATH', 'VELAROS_SHELL_READINESS', 'VELAROS_SHELL_VERSION']
       .includes(key.toUpperCase())) delete shellEnv[key]
@@ -277,10 +279,13 @@ export async function resolveSystemShellReady(options: ResolveSystemShellOptions
   for (const shell of detectSystemShells(options)) {
     let health: SystemShellProbeResult
     try { health = await (options.probe ?? probeSystemShell)(shell, options.timeoutMs ?? 2_500) }
-    catch (error) { health = { ready: false, reason: error instanceof Error ? error.message : 'Shell startup failed.' } }
+    catch (error) {
+      // arch-guard:silent-catch-ok 启动异常会转成结构化的 Shell 健康状态并参与候选回退。
+      health = { ready: false, reason: error instanceof Error ? error.message : 'Shell startup failed.' }
+    }
     if (!health.ready) { failures.push(`${shell.name}: ${health.reason || 'unavailable'}`); continue }
     return {
-      ...shell, readiness: 'ready', version: health.version ?? null,
+      ...shell, readiness: 'ready', version: toNullable(health.version),
       env: { ...shell.env, VELAROS_SHELL_READINESS: 'ready', VELAROS_SHELL_VERSION: health.version ?? '' },
     }
   }
@@ -293,6 +298,7 @@ export async function resolveSystemCommand(name: string, shell: ResolvedSystemSh
   if (shell.kind === 'cmd' && cmdBuiltins.has(name.trim().toLowerCase())) return { name, available: true, path: name.trim(), kind: 'builtin' }
   const platform = new SystemPlatformCompatibility()
   const quoted = platform.quoteShellArg(name.replace(/\\/g, shell.kind === 'git-bash' ? '/' : '\\'), shell)
+  // @arch-guard:suspend code-style/require-chinese-comments 理由：下方字符串是发送给各 Shell 的命令，不是说明文案。
   const command = shell.kind === 'cmd' ? `where ${quoted}`
     : shell.kind === 'pwsh' || shell.kind === 'powershell'
       ? `$c = Get-Command -Name ${quoted} -ErrorAction SilentlyContinue; if ($null -eq $c) { exit 1 }; if ($c.Path) { Write-Output $c.Path } else { Write-Output $c.Name }`
@@ -388,13 +394,13 @@ export async function refreshWindowsEnvironment(
     if (captured.exitCode === 0) {
       try {
         const source = JSON.parse(captured.stdout) as { machine: Record<string, string>; user: Record<string, string> }
-        if (!source.machine || !source.user || typeof source.machine !== 'object' || typeof source.user !== 'object'
-          || Array.isArray(source.machine) || Array.isArray(source.user)) throw new Error('Invalid Windows environment snapshot.')
+        if (!source.machine || !source.user || !isObject(source.machine) || !isObject(source.user)
+          || isArray(source.machine) || isArray(source.user)) throw new Error('Invalid Windows environment snapshot.')
         const merged = { ...source.machine, ...source.user }
         const machinePath = readWindowsEnv(source.machine, 'PATH') ?? ''
         const userPath = readWindowsEnv(source.user, 'PATH') ?? ''
         for (const [key, value] of Object.entries(merged)) {
-          if (typeof value !== 'string' || key.toUpperCase().startsWith('VELAROS_')
+          if (!isString(value) || key.toUpperCase().startsWith('VELAROS_')
             || ['TEMP', 'TMP', 'SYSTEMROOT', 'SYSTEMDRIVE', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA'].includes(key.toUpperCase())) continue
           for (const previous of Object.keys(result)) if (previous.toUpperCase() === key.toUpperCase()) delete result[previous]
           result[key] = value
@@ -406,7 +412,7 @@ export async function refreshWindowsEnvironment(
         ].filter(Boolean).join(';').split(';')).join(';')
         for (const key of Object.keys(result)) {
           let value = result[key]
-          for (let pass = 0; typeof value === 'string' && pass < 8; pass++) {
+          for (let pass = 0; isString(value) && pass < 8; pass++) {
             const expanded = value.replace(/%([^%]+)%/g, (match, name: string) =>
               name.toUpperCase() === key.toUpperCase() ? match : readWindowsEnv(result, name) ?? match)
             if (expanded === value) break
@@ -415,9 +421,12 @@ export async function refreshWindowsEnvironment(
           result[key] = value
         }
         refreshed = true
-      } catch (error) { reason = error instanceof Error ? error.message : 'Invalid Windows environment snapshot.' }
+      } catch (error) {
+        // arch-guard:silent-catch-ok 解析异常会写入结构化 reason 返回给调用方。
+        reason = error instanceof Error ? error.message : 'Invalid Windows environment snapshot.'
+      }
     } else reason = captured.timedOut ? 'Windows environment refresh timed out.' : captured.stderr || 'Windows environment refresh is unavailable.'
   }
   const revision = createHash('sha256').update(JSON.stringify(Object.entries(result).sort())).digest('hex').slice(0, 16)
-  return { env: result, revision, refreshed, ...(reason ? { reason } : {}) }
+  return { env: result, revision, refreshed, reason: toOptional(reason) }
 }

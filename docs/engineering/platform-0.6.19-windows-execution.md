@@ -18,5 +18,5 @@ Platform 0.6.19 publishes the Windows execution and shell lifecycle work complet
   contracts.
 - Office uses the shared shell boundary for quoted document conversion commands on Windows.
 
-The local release path validates the complete package topology and publishes only these three
-changed packages from the immutable `v0.6.19` source tag.
+The release path validates the complete package topology and publishes these three changed
+packages from their immutable package-version tags.

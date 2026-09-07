@@ -2,12 +2,15 @@ import { type ChildProcess,execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { win32 } from 'node:path'
 
+import { isPresent } from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 export interface SystemProcessCompletion {
-  exitCode: number | null
-  signal: string | null
+  exitCode: Nullable<number>
+  signal: Nullable<string>
   timedOut: boolean
   aborted: boolean
-  spawnError: Error | null
+  spawnError: Nullable<Error>
   cleanupIncomplete: boolean
 }
 
@@ -25,7 +28,7 @@ export interface ManagedSystemProcess {
   identity: string
   child: ChildProcess
   completion: Promise<SystemProcessCompletion>
-  result: SystemProcessCompletion | null
+  result: Nullable<SystemProcessCompletion>
   exited: boolean
   stop: (signal?: NodeJS.Signals) => Promise<boolean>
 }
@@ -35,11 +38,13 @@ const MAX_COMPLETED_PROCESSES = 512
 
 function execBounded(file: string, args: string[], timeoutMs = 2_000): Promise<string> {
   return new Promise((resolve, reject) => {
+    const timers = new TimerScope({ name: 'SystemProcessLifecycle.execBounded' })
     let settled = false
-    const finish = (error: Error | null, stdout = ''): void => {
+    const finish = (error: Nullable<Error>, stdout = ''): void => {
       if (settled) return
       settled = true
-      clearTimeout(deadline)
+      deadline.cancel()
+      timers.dispose()
       if (error) reject(error)
       else resolve(stdout)
     }
@@ -47,13 +52,13 @@ function execBounded(file: string, args: string[], timeoutMs = 2_000): Promise<s
       encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL', windowsHide: true,
       maxBuffer: 32 * 1024,
     }, (error, stdout) => finish(error, stdout))
-    const deadline = setTimeout(() => {
+    const deadline = timers.after(timeoutMs + 100, () => {
       child.kill('SIGKILL')
       child.stdout?.destroy()
       child.stderr?.destroy()
       child.unref()
       finish(new Error('Process control operation exceeded its deadline'))
-    }, timeoutMs + 100)
+    })
   })
 }
 
@@ -71,17 +76,18 @@ export async function terminateSystemProcessTree(
       await execBounded(win32.join(systemRoot, 'System32', 'taskkill.exe'),
         ['/PID', String(pid), '/T', ...(signal === 'SIGKILL' ? ['/F'] : [])], options.timeoutMs)
     } else {
-      // Managed POSIX children are launched in their own process group.
+      // 受管 POSIX 子进程会在独立的进程组中启动。
       process.kill(-pid, signal)
     }
     return true
   } catch {
+    // arch-guard:silent-catch-ok 终止操作是 best-effort；调用方只需要布尔结果决定后续清理状态。
     return false
   }
 }
 
 /** A missing identity is unknown, never permission to signal the current occupant of a PID. */
-export async function captureSystemProcessIdentity(pid: number, platform = process.platform): Promise<string | null> {
+export async function captureSystemProcessIdentity(pid: number, platform = process.platform): Promise<Nullable<string>> {
   const owned = ownedProcesses.get(pid)
   if (owned) return owned.identity
   if (!Number.isInteger(pid) || pid <= 0) return null
@@ -93,6 +99,7 @@ export async function captureSystemProcessIdentity(pid: number, platform = proce
       : await execBounded('/bin/ps', ['-p', String(pid), '-o', 'lstart='])
     return output.trim() || null
   } catch {
+    // arch-guard:silent-catch-ok 身份探测失败按未知处理，调用方不会据此向可能复用的 PID 发信号。
     return null
   }
 }
@@ -102,7 +109,7 @@ export function getManagedSystemProcess(pid: number): ManagedSystemProcess | und
 }
 
 export async function resolveSystemProcessStatus(
-  pid: number, expectedIdentity: string | null, platform = process.platform
+  pid: number, expectedIdentity: Nullable<string>, platform = process.platform
 ): Promise<'running' | 'exited' | 'unknown'> {
   if (!expectedIdentity) return 'unknown'
   const owned = ownedProcesses.get(pid)
@@ -129,12 +136,11 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
   let aborted = false
   let stopping = false
   let finished = false
-  let exitCode: number | null = null
-  let signal: string | null = null
-  const timers = new Set<ReturnType<typeof setTimeout>>()
+  let exitCode: Nullable<number> = null
+  let signal: Nullable<string> = null
+  const timers = new TimerScope({ name: 'SystemProcessLifecycle.manageSystemProcess' })
   const later = (callback: () => void, delay: number): void => {
-    const timer = setTimeout(() => { timers.delete(timer); callback() }, delay)
-    timers.add(timer)
+    timers.after(delay, callback)
   }
   const platform = options.platform ?? process.platform
   const owned: ManagedSystemProcess = {
@@ -142,12 +148,17 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
     stop: async (requestedSignal = 'SIGTERM') => {
       if (owned.exited) return !owned.result?.cleanupIncomplete
       if (finished) {
-        await new Promise<void>((resolve) => {
-          const deadline = setTimeout(resolve, options.terminationDeadlineMs ?? 5_000)
-          Promise.resolve().then(() => options.terminate?.(requestedSignal)
-            ?? terminateSystemProcessTree(child.pid ?? 0, requestedSignal, { platform }))
-            .catch(() => false).finally(() => { clearTimeout(deadline); resolve() })
-        })
+        const stopTimers = new TimerScope({ name: 'SystemProcessLifecycle.stopFinished' })
+        try {
+          await new Promise<void>((resolve) => {
+            const deadline = stopTimers.after(options.terminationDeadlineMs ?? 5_000, resolve)
+            Promise.resolve().then(() => options.terminate?.(requestedSignal)
+              ?? terminateSystemProcessTree(child.pid ?? 0, requestedSignal, { platform }))
+              .catch(() => false).finally(() => { deadline.cancel(); resolve() })
+          })
+        } finally {
+          stopTimers.dispose()
+        }
         return owned.exited
       }
       requestStop(requestedSignal)
@@ -155,11 +166,10 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
       return !result.cleanupIncomplete && owned.exited
     },
   }
-  const finish = (spawnError: Error | null = null, cleanupIncomplete = false): void => {
+  const finish = (spawnError: Nullable<Error> = null, cleanupIncomplete = false): void => {
     if (finished) return
     finished = true
-    for (const timer of timers) clearTimeout(timer)
-    timers.clear()
+    timers.dispose()
     options.abortSignal?.removeEventListener('abort', onAbort)
     child.stdin?.destroy()
     if (cleanupIncomplete) {
@@ -184,7 +194,7 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
     try {
       await (options.terminate?.(requestedSignal) ?? terminateSystemProcessTree(child.pid ?? 0, requestedSignal, { platform }))
     } catch {
-      // Completion reports cleanupIncomplete when the bounded cleanup cannot be confirmed.
+      // arch-guard:silent-catch-ok 完成凭据会通过 cleanupIncomplete 明确报告无法确认的清理结果。
     }
   }
   const requestStop = (requestedSignal: NodeJS.Signals = 'SIGTERM'): void => {
@@ -201,9 +211,9 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
     owned.exited = true
     exitCode = code
     signal = exitSignal
-    // The root may exit before its descendants; the process group remains ours while they live.
+    // 根进程可能先于后代退出；只要后代仍存活，该进程组就仍由这里负责。
     if (platform !== 'win32' && child.pid) void terminateSystemProcessTree(child.pid, 'SIGKILL', { platform })
-    // A descendant can keep inherited pipe handles open after the direct child exits.
+    // 后代进程可能在直接子进程退出后继续持有继承的管道句柄。
     later(() => finish(null, true), options.drainTimeoutMs ?? 1_000)
   })
   child.once('close', (code, exitSignal) => {
@@ -213,7 +223,7 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
     finish()
   })
   child.on('error', (error) => { owned.exited = true; finish(error) })
-  if (options.timeoutMs !== undefined) later(() => { timedOut = true; requestStop() }, options.timeoutMs)
+  if (isPresent(options.timeoutMs)) later(() => { timedOut = true; requestStop() }, options.timeoutMs)
   if (options.abortSignal?.aborted) onAbort()
   else options.abortSignal?.addEventListener('abort', onAbort, { once: true })
   return owned
@@ -221,10 +231,11 @@ export function manageSystemProcess(child: ChildProcess, options: SystemProcessL
 
 export function waitForSystemProcessSpawn(child: ChildProcess, timeoutMs = 2_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const cleanup = (): void => { clearTimeout(timer); child.removeListener('spawn', onSpawn); child.removeListener('error', onError) }
+    const timers = new TimerScope({ name: 'SystemProcessLifecycle.waitForSpawn' })
+    const cleanup = (): void => { timers.dispose(); child.removeListener('spawn', onSpawn); child.removeListener('error', onError) }
     const onSpawn = (): void => { cleanup(); resolve() }
     const onError = (error: Error): void => { cleanup(); reject(error) }
-    const timer = setTimeout(() => { cleanup(); reject(new Error('Process spawn acknowledgement timed out')) }, timeoutMs)
+    timers.after(timeoutMs, () => { cleanup(); reject(new Error('Process spawn acknowledgement timed out')) })
     child.once('spawn', onSpawn)
     child.once('error', onError)
   })

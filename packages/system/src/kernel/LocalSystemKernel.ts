@@ -5,7 +5,7 @@ import { cpus, freemem, homedir, loadavg, platform, release, tmpdir, totalmem } 
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
-import { isEmpty, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNull, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { readSystemTextFile } from '../atomic/Filesystem.js'
@@ -715,7 +715,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       confinement: SystemProcessConfinementEvidence
     }
   ): SystemCommandResult {
-    const success = (result.exitCode === 0 || (!!result.backgroundProcess && result.exitCode === null))
+    const success = (result.exitCode === 0 || (!!result.backgroundProcess && isNull(result.exitCode)))
       && !result.timedOut && !result.aborted && !result.cleanupIncomplete
     return {
       command,
@@ -729,7 +729,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       aborted: result.aborted,
       cleanupIncomplete: result.cleanupIncomplete,
       ownership: result.ownership,
-      truncated: result.truncated ?? false,
+      truncated: !!result.truncated,
       capture: result.capture,
       shell: result.shell,
       success,

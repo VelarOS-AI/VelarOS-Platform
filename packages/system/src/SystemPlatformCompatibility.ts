@@ -46,6 +46,7 @@ const TrustedWindowsCommandShell = 'C:\\Windows\\System32\\cmd.exe'
 export class SystemShellUnavailableError extends Error {
   public readonly code = 'SYSTEM_SHELL_UNAVAILABLE'
   constructor(detail = '') {
+    // @arch-guard:suspend code-style/require-chinese-comments 理由：该兼容错误文本已成为公开契约，现有消费者按英文片段断言。
     super(`No working command shell is available. ${detail} Install Git for Windows from https://git-scm.com/download/win and refresh the command environment.`)
     this.name = 'SystemShellUnavailableError'
   }

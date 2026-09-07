@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { toNullable } from '@velaros-ai/core'
+
 import type { CommandSpec } from './SystemPlatformCompatibility'
 
 export interface SystemProcessHostOptions {
@@ -19,7 +21,7 @@ export interface SystemProcessOwnership {
   reason: string
 }
 
-export function getSystemProcessHostPath(options: SystemProcessHostOptions = {}): string | null {
+export function getSystemProcessHostPath(options: SystemProcessHostOptions = {}): Nullable<string> {
   if ((options.platform ?? process.platform) !== 'win32') return null
   const configured = options.hostPath ?? options.env?.VELAROS_PROCESS_HOST ?? process.env.VELAROS_PROCESS_HOST
   const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
@@ -29,7 +31,7 @@ export function getSystemProcessHostPath(options: SystemProcessHostOptions = {})
     import.meta.url ? fileURLToPath(new URL(`../native/win32-${process.arch}/velaros-process-host.exe`, import.meta.url)) : undefined,
   ]
   const probe = options.isFile ?? existsSync
-  return candidates.find((candidate): candidate is string => !!candidate && isAbsolute(candidate) && probe(candidate)) ?? null
+  return toNullable(candidates.find((candidate): candidate is string => !!candidate && isAbsolute(candidate) && probe(candidate)))
 }
 
 export function buildSystemOwnedProcessSpec(

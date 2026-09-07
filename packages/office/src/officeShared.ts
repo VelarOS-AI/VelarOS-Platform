@@ -21,7 +21,7 @@ import {
   type ToolContractRuntimeSpec,
 } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isPlainObject } from '@velaros-ai/core'
+import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -558,12 +558,12 @@ export async function runOfficeSystemCommand(
 ): Promise<OfficeSystemCommandResult> {
   // Office 转换/编译通常输出较多，因此放宽 maxOutputChars。
   return ctx.office.system.runCommand(
-    typeof command === 'string' ? command : describeOfficeNativeCommand(command),
+    isString(command) ? command : describeOfficeNativeCommand(command),
     {
       cwd,
       timeoutMs,
       maxOutputChars: 20_000,
-      ...(typeof command === 'string' ? {} : { nativeCommand: command }),
+      ...(isString(command) ? {} : { nativeCommand: command }),
     },
     false
   )
@@ -619,7 +619,7 @@ export async function runLibreOfficeSystemCommand(
     homeDir: homedir(),
     cacheDir,
   }), 'utf8')
-  const configuredCommand = typeof command === 'string' ? [
+  const configuredCommand = isString(command) ? [
     `FONTCONFIG_FILE=${officePlatformCompatibility.quoteShellArg(configPath)}`, command,
   ].join(' ') : { ...command, env: { ...command.env, FONTCONFIG_FILE: configPath } }
   try {

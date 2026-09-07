@@ -301,8 +301,8 @@ export interface SystemCommandRunQueryOptions {
 }
 
 export interface SystemBackgroundTaskRecord {
-  exitCode?: Nullable<number>
-  signal?: Nullable<string>
+  exitCode?: LooseOptional<number>
+  signal?: LooseOptional<string>
   finishedAt?: number
   cleanupIncomplete?: boolean
   id: string
@@ -366,7 +366,7 @@ export interface SystemEnvironmentCommandAvailability {
   name: string
   available: boolean
   path: Nullable<string>
-  kind?: 'native' | 'script' | 'batch' | 'builtin' | null
+  kind?: LooseOptional<'native' | 'script' | 'batch' | 'builtin'>
 }
 
 export interface SystemEnvironmentInspection {
@@ -378,8 +378,8 @@ export interface SystemEnvironmentInspection {
     kind?: SystemShellKind
     name?: string
     readiness?: SystemShellDescriptor['readiness']
-    version?: Nullable<string>
-    recommendation?: Nullable<SystemShellRecommendation>
+    version?: LooseOptional<string>
+    recommendation?: LooseOptional<SystemShellRecommendation>
     revision?: string
   }
   commands: SystemEnvironmentCommandAvailability[]
