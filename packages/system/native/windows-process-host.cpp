@@ -100,6 +100,10 @@ int wmain(int argc, wchar_t** argv) {
   startup.StartupInfo.hStdOutput = output.value;
   startup.StartupInfo.hStdError = error.value;
   startup.lpAttributeList = attributes;
+  // CMD encodes redirected output with the inherited console code page. Keep the host console on
+  // UTF-8 so a child-side `chcp 65001` probe and subsequent command output stay byte-for-byte UTF-8.
+  SetConsoleCP(CP_UTF8);
+  SetConsoleOutputCP(CP_UTF8);
   // lpApplicationName does not search PATH. Resolve native tool names before creating them.
   const DWORD executableLength = SearchPathW(nullptr, argv[executableIndex], L".exe", 0, nullptr, nullptr);
   if (!executableLength) return failure("resolve executable");
@@ -113,7 +117,7 @@ int wmain(int argc, wchar_t** argv) {
   }
   PROCESS_INFORMATION information{};
   if (!CreateProcessW(executable.data(), command.data(), nullptr, nullptr, TRUE,
-                      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE,
+                      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
                       nullptr, nullptr, &startup.StartupInfo, &information))
     return failure("create child");
   Handle child(information.hProcess), thread(information.hThread);
