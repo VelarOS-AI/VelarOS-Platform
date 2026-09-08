@@ -1632,6 +1632,70 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "RefObject<Nullable<ChatTranscriptNavigationHandle>>"
     }
   ],
+  ChatScrollNavigatorVisibilityToggle: [
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.hidden",
+      "description": "true 时整组楼层导航不渲染、不占位。",
+      "type": "boolean",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.label",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.iconSize",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "defaultValue": "15"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.onHiddenChange",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(hidden: boolean) => void",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.title",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>",
+      "defaultValue": "label"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.variant",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "\"link\" | \"default\" | \"destructive\" | \"destructiveOutline\" | \"destructiveGhost\" | \"outline\" | \"secondary\" | \"ghost\" | null",
+      "defaultValue": "'ghost'"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.size",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "IconButtonSize",
+      "defaultValue": "'icon-sm'"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.hoverBackground",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean | null"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.active",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.asChild",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean"
+    },
+    {
+      "name": "ChatScrollNavigatorVisibilityToggle.shape",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "IconButtonShape"
+    }
+  ],
   ChatSurfaceComposer: [
     {
       "name": "ChatSurfaceComposer.control",

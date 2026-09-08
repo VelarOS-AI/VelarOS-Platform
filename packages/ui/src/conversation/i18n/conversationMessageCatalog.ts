@@ -1,3 +1,5 @@
+import { isPresent, isString } from '#internal/runtime'
+
 /** Shared canonical zh-CN catalog consumed by the conversation package and every host. */
 export const conversationZhCNMessages = {
   browser: {
@@ -991,9 +993,9 @@ export function mergeConversationMessages<
   for (const [key, overrideValue] of Object.entries(overrides)) {
     const baseValue = base[key]
     merged[key] =
-      typeof baseValue !== 'string' &&
-      typeof overrideValue !== 'string' &&
-      baseValue !== undefined
+      !isString(baseValue) &&
+      !isString(overrideValue) &&
+      isPresent(baseValue)
         ? mergeConversationMessages(baseValue, overrideValue)
         : overrideValue
   }
@@ -1009,7 +1011,7 @@ function collectConversationMessageKeys(
 
   for (const [key, value] of Object.entries(catalog)) {
     const path = prefix.length > 0 ? `${prefix}.${key}` : key
-    if (typeof value === 'string') {
+    if (isString(value)) {
       keys.push(path as CanonicalConversationMessageKey)
       continue
     }

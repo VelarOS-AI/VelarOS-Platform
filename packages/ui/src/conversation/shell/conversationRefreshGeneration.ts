@@ -16,7 +16,7 @@ interface ResolveConversationRefreshGenerationInput {
  * 正常增量渲染，但不会每帧卸载滚动容器；终态或切换会话后再一次性接受最新结构键。
  */
 export function resolveConversationRefreshGeneration(
-  current: ConversationRefreshGeneration | null,
+  current: Nullable<ConversationRefreshGeneration>,
   input: ResolveConversationRefreshGenerationInput
 ): ConversationRefreshGeneration {
   if (

@@ -647,7 +647,7 @@ export function ChatConversationPane({
       <div
         key={stableConversationRefreshKey}
         className={styles.conversationBody}
-        data-scroll-navigator-hidden={scrollNavigatorHidden ? 'true' : 'false'}
+        data-scroll-navigator-hidden={!!scrollNavigatorHidden}
       >
         <ScrollArea
           ref={scrollRef}
