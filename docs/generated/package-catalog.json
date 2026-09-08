@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.15",
+      "version": "0.6.16",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -39,7 +39,7 @@
       "domain": "capabilities",
       "directory": "packages/browser",
       "name": "@velaros-ai/browser",
-      "version": "0.2.19",
+      "version": "0.2.20",
       "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
       "exportSubpaths": [
         "./composition",
@@ -55,7 +55,7 @@
       "domain": "capabilities",
       "directory": "packages/cli",
       "name": "@velaros-ai/cli",
-      "version": "0.2.16",
+      "version": "0.2.17",
       "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
       "exportSubpaths": [
         ".",
@@ -67,7 +67,7 @@
       "domain": "capabilities",
       "directory": "packages/computer",
       "name": "@velaros-ai/computer",
-      "version": "0.2.15",
+      "version": "0.2.16",
       "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
       "exportSubpaths": [
         "./contracts",
@@ -80,7 +80,7 @@
       "domain": "capabilities",
       "directory": "packages/development",
       "name": "@velaros-ai/development",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "description": "Reusable language-service runtime for the Project code-understanding tool.",
       "exportSubpaths": [
         ".",
@@ -92,7 +92,7 @@
       "domain": "capabilities",
       "directory": "packages/office",
       "name": "@velaros-ai/office",
-      "version": "1.1.10",
+      "version": "1.1.11",
       "description": "Composable Office document, spreadsheet, presentation, and PDF semantics for VelarOS hosts.",
       "exportSubpaths": [
         ".",
@@ -108,7 +108,7 @@
       "domain": "capabilities",
       "directory": "packages/project",
       "name": "@velaros-ai/project",
-      "version": "2.0.14",
+      "version": "2.0.15",
       "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
       "exportSubpaths": [
         ".",
@@ -128,7 +128,7 @@
       "domain": "capabilities",
       "directory": "packages/system",
       "name": "@velaros-ai/system",
-      "version": "1.1.13",
+      "version": "1.1.14",
       "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
       "exportSubpaths": [
         ".",
@@ -147,7 +147,7 @@
       "domain": "core",
       "directory": "packages/core",
       "name": "@velaros-ai/core",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
       "exportSubpaths": [
         ".",
@@ -163,7 +163,7 @@
       "domain": "evaluation",
       "directory": "packages/agent-lab",
       "name": "@velaros-ai/agent-lab",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
       "exportSubpaths": [
         ".",
@@ -183,7 +183,7 @@
       "domain": "html-artifacts",
       "directory": "packages/html-artifacts",
       "name": "@velaros-ai/html-artifacts",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "description": "A framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime.",
       "exportSubpaths": [
         ".",
@@ -198,7 +198,7 @@
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "description": "VelarOS library-first microkernel: contracts, in-process runtime, thin client, and optional serve deployment.",
       "exportSubpaths": [
         ".",
@@ -220,7 +220,7 @@
       "domain": "memory",
       "directory": "packages/memory",
       "name": "@velaros-ai/memory",
-      "version": "0.4.5",
+      "version": "0.4.6",
       "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
       "exportSubpaths": [
         ".",
@@ -238,7 +238,7 @@
       "domain": "model",
       "directory": "packages/model",
       "name": "@velaros-ai/model",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "description": "Model provider adapters, provider script integration, and runtime model resolution for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",
@@ -257,7 +257,7 @@
       "domain": "surface",
       "directory": "packages/surface-protocol",
       "name": "@velaros-ai/surface-protocol",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Host-neutral wire contracts for provider-owned VelarOS Agent Surfaces.",
       "exportSubpaths": [
         "."
@@ -268,7 +268,7 @@
       "domain": "ui",
       "directory": "packages/ui",
       "name": "@velaros-ai/ui",
-      "version": "0.2.33",
+      "version": "0.2.34",
       "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
       "exportSubpaths": [
         ".",

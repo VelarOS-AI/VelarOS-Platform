@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/kernel",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "velaros": {
     "platform": "0.6"
   },
