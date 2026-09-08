@@ -3,8 +3,8 @@
 //
 // 从哪读起:发布集合与顺序不在本文件里判——那是 releaseTopology.mjs(唯一事实来源)的活。
 // 本文件只负责三件事,顺序不可换:
-//   ① **身份**:把这批 tarball 绑死到精确 HEAD 与干净工作树。CI 核对 GitHub tag 上下文；
-//      显式 --local-tag 核对官方 origin 的实际远端 tag，并在发布器内运行完整质量门；
+//   ① **身份**:把这批 tarball 绑死到精确 HEAD 与干净工作树。显式 --local-tag 核对
+//      官方 origin 的实际远端 tag，并在发布器内运行完整质量门；
 //   ② **打包并验明**:每个包 pack 出**恰好一个** tarball,记下 size + sha256,并断言构建产物真的进了包;
 //   ③ **发布那一份已验明的 tarball**(而不是让 registry 重新从工作树打包)。
 //
@@ -24,12 +24,12 @@
 // published。把范围写明,比让人从十几行日志里猜哪一行是真的要诚实。
 // 被排除的包逐个列进日志(不许静默收窄);名字写错直接红并列出可选值,不做模糊匹配。
 //
-// dry-run 的边界:--dry-run 放行「干净工作树 / GITHUB_SHA / tag ref / NODE_AUTH_TOKEN」四条
+// dry-run 的边界:--dry-run 放行「干净工作树 / 本地与远端 tag 身份 / NODE_AUTH_TOKEN」三条
 // **发布期**前置(七份旧脚本里干净工作树是无条件的,导致本地 dry-run 在有改动时永远跑不起来,
-// 而 dry-run 的用处恰恰是改完发布链之后先验一遍)。这四条在真发布路径上一条不减。
+// 而 dry-run 的用处恰恰是改完发布链之后先验一遍)。这三条在真发布路径上一条不减。
 //
 // 谁核验它:kernel / agent 两域的 check:*-arch「防线:发布身份」按字面标记核对本文件与
-// verify-release-ref.mjs、release-packages.yml 三者(rule=release-artifact-identity)。
+// verify-release-ref.mjs，并独立核对 release-packages.yml 只能是本机发布策略哨兵。
 // 被核验的标记 = git rev-parse / git status --porcelain --untracked-files=all / 安全打包入口 /
 // artifact 里的 sourceSha·fileName·sizeBytes·sha256 / publish 的第一参数是 tarballPath。
 // 改这些写法要同时改门,别加豁免。
@@ -121,23 +121,21 @@ const { rootManifest, platformGeneration, ordered } = await collectReleasePackag
 const workspaceVersions = new Map(
   ordered.map((item) => [item.manifest.name, item.manifest.version]),
 )
-// tag 是发布身份，来自 CI 上下文或显式 --local-tag；--only 只能手动收窄范围。
+// tag 是发布身份，真实发布只接受显式 --local-tag；--only 只能手动收窄范围。
 // 单包 tag 已经把「发哪个包、发哪个版本」钉死,再让 --only 覆盖它等于让开关推翻身份。
-const requestedTag = localTag ?? process.env.GITHUB_REF_NAME
+const requestedTag = localTag ?? `v${rootManifest.version}`
 const tagSelection = resolveReleaseSelection(rootManifest, ordered, requestedTag)
-if (localTag && tagSelection.kind === 'unknown') {
-  throw new Error(`Unknown local release tag ${localTag}: ${tagSelection.reason}`)
+if (tagSelection.kind === 'unknown') {
+  throw new Error(`Unknown local release tag ${requestedTag}: ${tagSelection.reason}`)
 }
 const selected = selectReleasedPackages(
   rootManifest,
   ordered,
-  // 本地 dry-run 没有 GitHub ref，沿用完整火车作为模拟身份；真发布仍在下方 taggedRelease
-  // 硬门要求精确 tag，不能借这个回退绕过发布身份。
-  tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : requestedTag,
+  // dry-run 沿用当前根版本的完整火车作为模拟身份；真实发布必须显式给出 --local-tag。
+  requestedTag,
   onlySelectors,
 ).packages
-const releaseTag = tagSelection.kind === 'unknown' ? `v${rootManifest.version}` : tagSelection.tag
-const expectedRef = `refs/tags/${releaseTag}`
+const releaseTag = tagSelection.tag
 
 // —— ① 身份 ——
 const sourceSha = runForOutput('git', ['rev-parse', 'HEAD'], root)
@@ -151,24 +149,7 @@ const assertLocalIdentity = () => assertLocalReleaseIdentity({
   expectedSourceSha: sourceSha,
   runForOutput,
 })
-if (localTag) assertLocalIdentity()
-else {
-  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== sourceSha) {
-    throw new Error(
-      `GITHUB_SHA ${process.env.GITHUB_SHA} does not match checked out source ${sourceSha}`,
-    )
-  }
-  if (!dryRun && !process.env.GITHUB_SHA) {
-    throw new Error('GITHUB_SHA must identify the exact source commit for publishing')
-  }
-  const taggedRelease =
-    process.env.GITHUB_REF_TYPE === 'tag'
-    && process.env.GITHUB_REF_NAME === releaseTag
-    && process.env.GITHUB_REF === expectedRef
-  if (!dryRun && !taggedRelease) {
-    throw new Error(`Publishing requires the exact release tag ${expectedRef}`)
-  }
-}
+if (!dryRun) assertLocalIdentity()
 const workingTreeStatus = runForOutput(
   'git',
   ['status', '--porcelain', '--untracked-files=all'],
@@ -185,7 +166,7 @@ if (!dryRun && skipBuild) {
 }
 
 console.info(`${dryRun ? 'dry-run' : 'release'} ${releaseTag} from ${sourceSha}`)
-if (localTag) console.info('release mode: explicit local tag; full quality gates run before publication')
+if (!dryRun) console.info('release mode: explicit local tag; full quality gates run before publication')
 console.info(`registry: ${ReleaseRegistry}`)
 console.info(`platform generation: ${platformGeneration}`)
 console.info(`validated ${ordered.length} declared packages; publishing ${selected.length}`)
@@ -209,7 +190,7 @@ if (workingTreeStatus && dryRun) {
 if (skipBuild) {
   console.warn('! --skip-build: packing whatever dist/ is already on disk, not a fresh build')
 }
-if (localTag) {
+if (!dryRun) {
   runLocalReleaseChecks({
     root,
     packageManager: rootManifest.packageManager,
@@ -225,7 +206,7 @@ if (localTag) {
 if (!skipBuild) {
   run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
 }
-if (localTag) assertLocalIdentity()
+if (!dryRun) assertLocalIdentity()
 
 for (const item of selected) {
   const packDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-release-pack-'))
@@ -299,7 +280,7 @@ for (const item of selected) {
       if (createHash('sha256').update(await readFile(tarballPath)).digest('hex') !== artifact.sha256) {
         throw new Error(`${item.manifest.name} tarball changed after validation`)
       }
-      if (localTag) assertLocalIdentity()
+      if (!dryRun) assertLocalIdentity()
     }
     run('bun', publishArgs, root)
   } finally {

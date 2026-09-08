@@ -1,163 +1,19 @@
-name: Release Document Renderer
+name: Release Document Renderer (local only)
 
-# The renderer is an independent command capability pack. macOS is built, signed, notarized, and
-# staged on the release Mac; Windows and Linux are built natively here. Nothing in this workflow
-# installs or registers renderer code in VelarOS Terminal.
+# Document Renderer capability packs are built, signed where applicable,
+# staged, attested, and finalized on the selected native release host. This
+# workflow is intentionally inert and must never own release credentials or
+# dispatch hosted builds.
 
 on:
   workflow_dispatch:
-    inputs:
-      channel:
-        description: Candidate channel
-        type: choice
-        options:
-          - stable
-          - canary
-        default: stable
-      dry_run:
-        description: Build and validate without writing the public release repository
-        type: boolean
-        default: false
-      confirm_upload:
-        description: Explicitly confirm writes to the public release repository
-        type: boolean
-        default: false
-      replace_existing:
-        description: Replace a damaged Renderer candidate under the same version
-        type: boolean
-        default: false
 
-permissions:
-  contents: read
-  packages: read
-
-env:
-  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions: {}
 
 jobs:
-  release-gate:
+  local-release-only:
+    name: Disabled - use bun run release:document-renderer
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: release-candidates
-    outputs:
-      renderer_needed: ${{ steps.plan.outputs.renderer_needed }}
     steps:
-      - name: Require explicit upload confirmation
-        if: ${{ !inputs.dry_run && !inputs.confirm_upload }}
-        run: |
-          echo "::error::Set confirm_upload=true for a real upload, or dry_run=true for build-only validation."
-          exit 1
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Verify independent Renderer boundary
-        run: |
-          node scripts/build/buildPackageTopology.mjs --for @velaros-ai/document-renderer
-          bun run --cwd packages/document-renderer typecheck
-          bun run --cwd packages/document-renderer test
-          bunx tsc --noEmit -p products/document-renderer/tsconfig.json
-          node --test scripts/document-renderer/*.test.mjs
-
-      - name: Plan immutable Renderer candidate
-        id: plan
-        env:
-          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
-          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
-        run: |
-          args=(plan --channel "${{ inputs.channel }}")
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then args+=(--dry-run); fi
-          node scripts/document-renderer/release-candidate.mjs "${args[@]}"
-
-  release-windows:
-    needs: release-gate
-    if: ${{ needs.release-gate.outputs.renderer_needed == 'true' }}
-    runs-on: windows-latest
-    timeout-minutes: 90
-    environment: release-candidates
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Build Windows Renderer capability pack
-        run: node scripts/document-renderer/build-product.mjs
-      - name: Stage Windows Renderer capability pack
-        if: ${{ !inputs.dry_run }}
-        shell: bash
-        env:
-          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
-          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
-        run: |
-          args=(stage --channel "${{ inputs.channel }}" --platform win32-x64 --artifact-manifest release/document-renderer/document-renderer-artifact-win32-x64.json)
-          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
-          node scripts/document-renderer/release-candidate.mjs "${args[@]}"
-
-  release-linux:
-    needs: release-gate
-    if: ${{ needs.release-gate.outputs.renderer_needed == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    environment: release-candidates
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Build Linux Renderer capability pack
-        run: node scripts/document-renderer/build-product.mjs
-      - name: Stage Linux Renderer capability pack
-        if: ${{ !inputs.dry_run }}
-        env:
-          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
-          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
-        run: |
-          args=(stage --channel "${{ inputs.channel }}" --platform linux-x64 --artifact-manifest release/document-renderer/document-renderer-artifact-linux-x64.json)
-          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
-          node scripts/document-renderer/release-candidate.mjs "${args[@]}"
-
-  finalize-renderer:
-    needs:
-      - release-gate
-      - release-windows
-      - release-linux
-    if: >-
-      ${{ always() && !inputs.dry_run && inputs.confirm_upload &&
-          needs.release-gate.result == 'success' &&
-          needs.release-gate.outputs.renderer_needed == 'true' &&
-          needs.release-windows.result == 'success' &&
-          needs.release-linux.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: release-candidates
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Finalize three-platform Renderer candidate
-        env:
-          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
-          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
-        run: |
-          args=(finalize --channel "${{ inputs.channel }}")
-          if [[ "${{ inputs.replace_existing }}" == "true" ]]; then args+=(--replace-existing); fi
-          node scripts/document-renderer/release-candidate.mjs "${args[@]}"
+      - run: exit 1

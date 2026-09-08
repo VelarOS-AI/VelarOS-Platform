@@ -1,51 +1,53 @@
 #!/usr/bin/env node
-// 发布身份预检:在跑质量门与真发布之前,先把「这次发布是什么」钉死。
+// 本机发布身份预检：在质量门与真发布之前，把「从哪个官方 tag 发布什么」钉死。
 //
-// 挡什么:发布 16 个包到 GitHub Packages 不可逆(同一版本号不能重发成别的内容)。所以在花掉
-// build + check 的时间之前,先在这里失败掉三类问题:
-//   ① 发布内容——collectReleasePackages 核对发布集合与 velaros.domainPackages、以及各包
-//      manifest 版本与 bun.lock 是否一致(见 releaseTopology.mjs 的不变量 ①②);
-//   ② 源码身份——GITHUB_SHA 必须是 40 位完整 commit;
-//   ③ 触发身份——只认 push / workflow_dispatch,且 ref 必须是精确的 refs/tags/v<仓根火车版本号>。
-// ① 先跑不是因为它更重要,而是 expectedTag 要从同一次仓根 manifest 读取里取(那次读顺带就把
-// 发布集合校验完了);三条都是硬门,任何一条不成立都在 build 之前就退出。
-//
-// 谁核验它:kernel / agent 两域的 check:*-arch「防线:发布身份」按字面标记核对本文件与
-// publish-packages.mjs、release-packages.yml 三者(rule=release-artifact-identity)。
-// 下面 expectedTag / eventName / refType / ref / refName 五处判据是被逐条核验的标记,改写法要同时改门。
+// 挡什么：发布到 GitHub Packages 不可逆（同一版本号不能重发成别的内容）。因此预检同时
+// 核验发布集合、manifest 与 bun.lock 版本、平台代、官方 origin、干净工作树，以及本地和
+// 远端 tag 对象/peeled commit 都精确指向当前 HEAD。它只接受显式 --local-tag，不读取任何
+// 托管运行器身份变量，也不会安装、构建或发布。
 
+import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
+import {
+  assertLocalReleaseIdentity,
+  parseReleaseArguments,
+} from './local-release-identity.mjs'
 import { collectReleasePackages, resolveReleaseSelection } from './releaseTopology.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../..')
+const { dryRun, skipBuild, localTag, onlySelectors } = parseReleaseArguments(
+  process.argv.slice(2),
+)
+if (dryRun || skipBuild || onlySelectors.length > 0) {
+  throw new Error('release:verify accepts exactly one local tag and no publication selectors')
+}
+
+const runForOutput = (command, args, cwd) => {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8' })
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(' ')} failed with exit code ${result.status}: ${result.stderr.trim()}`,
+    )
+  }
+  return result.stdout.trim()
+}
+
 const { rootManifest, platformGeneration, ordered } = await collectReleasePackages(repoRoot)
-const eventName = process.env.GITHUB_EVENT_NAME
-const ref = process.env.GITHUB_REF
-const refType = process.env.GITHUB_REF_TYPE
-const refName = process.env.GITHUB_REF_NAME
-const sourceSha = process.env.GITHUB_SHA
-const selection = resolveReleaseSelection(rootManifest, ordered, refName)
-
-if (!sourceSha || !/^[a-f0-9]{40}$/u.test(sourceSha)) {
-  throw new Error('GITHUB_SHA must identify the exact 40-character source commit')
+const selection = resolveReleaseSelection(rootManifest, ordered, localTag)
+if (selection.kind === 'unknown') {
+  throw new Error(`Unknown local release tag ${localTag}: ${selection.reason}`)
 }
+const identity = assertLocalReleaseIdentity({
+  root: repoRoot,
+  tag: localTag,
+  repository: rootManifest.repository,
+  runForOutput,
+})
 
-// ref 与 refName 必须互相印证:两者都来自环境变量,只信其中一个等于把身份判据交给
-// 单一可伪造输入。tag 形态本身由 resolveReleaseSelection 判(整列 v<火车号> 或 <包>@<版本>)。
-if (
-  !['push', 'workflow_dispatch'].includes(eventName)
-  || refType !== 'tag'
-  || ref !== `refs/tags/${refName}`
-  || selection.kind === 'unknown'
-) {
-  throw new Error(
-    `Package releases require a tag naming what ships (${selection.reason ?? 'ref is not a tag'}); received ${eventName ?? 'unknown'} ${ref ?? 'unknown'}`,
-  )
-}
-
-console.info(`✓ release source: ${sourceSha}`)
-console.info(`✓ release ref: ${ref}`)
+console.info(`✓ release source: ${identity.sourceSha}`)
+console.info(`✓ release tag: ${identity.tag}`)
+console.info(`✓ release repository: ${identity.repository}`)
 console.info(`✓ platform generation: ${platformGeneration}`)
 console.info(
   `✓ release contents: ${selection.kind} — ${selection.packages.length} of ${ordered.length} declared packages`,

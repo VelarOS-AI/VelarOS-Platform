@@ -25,6 +25,9 @@ export function parseReleaseArguments(argv) {
   if (options.localTag && options.dryRun) {
     throw new Error('--local-tag is a real publication mode; use --dry-run separately')
   }
+  if (!options.dryRun && !options.localTag) {
+    throw new Error('A real publication requires --local-tag <tag> from a maintained local checkout')
+  }
   if (!options.dryRun && options.skipBuild) {
     throw new Error('--skip-build is a dry-run shortcut; a real publish must pack freshly built output')
   }
@@ -89,7 +92,7 @@ export function assertLocalReleaseIdentity({ root, tag, repository, expectedSour
   return { sourceSha, tag, repository: repositoryIdentity }
 }
 
-/** Local publication owns the same complete quality command used by the Actions workflow. */
+/** Local publication owns the repository's complete maintained quality command. */
 export function runLocalReleaseChecks({ root, packageManager, assertIdentity, run, runForOutput }) {
   const expectedBunVersion = /^bun@(.+)$/u.exec(packageManager ?? '')?.[1]
   if (!expectedBunVersion || runForOutput('bun', ['--version'], root) !== expectedBunVersion) {

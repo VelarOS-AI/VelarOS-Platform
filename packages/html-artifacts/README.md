@@ -22,9 +22,9 @@
 
 `@velaros-ai/html-artifacts` 是托管在 GitHub Packages 上的**公开包(public package)**。
 GitHub 的 npm registry 目前安装公开包**仍然需要认证**:
-本地用至少带 `read:packages` 权限的 personal access token(classic),
-CI 用已获仓库授权的 `GITHUB_TOKEN`。把 `@velaros-ai` scope 映射到
-`https://npm.pkg.github.com`,提供 token 后:
+在本机或其他受控消费环境中，使用至少带 `read:packages` 权限的 personal access token
+(classic)，通过进程环境或凭据管理器注入。把 `@velaros-ai` scope 映射到
+`https://npm.pkg.github.com`，提供 token 后:
 
 ```bash
 npm install @velaros-ai/html-artifacts

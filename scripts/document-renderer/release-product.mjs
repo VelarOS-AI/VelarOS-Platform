@@ -6,9 +6,15 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { releaseAttestationKey } from './release-candidate.mjs'
+
 const execFileAsync = promisify(execFile)
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const releaseEnvironment = 'release-candidates'
+const releasePlatforms = new Map([
+  ['darwin-arm64', { buildArguments: ['--notarize'] }],
+  ['win32-x64', { buildArguments: [] }],
+  ['linux-x64', { buildArguments: [] }],
+])
 
 function parseArguments(argv) {
   const options = {
@@ -16,10 +22,29 @@ function parseArguments(argv) {
     dryRun: false,
     checkOnly: false,
     replaceExisting: false,
+    platform: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
     if (argument === '--dry-run') options.dryRun = true
+    else if (
+      argument === '--local-macos' ||
+      argument === '--local-windows' ||
+      argument === '--local-linux'
+    ) {
+      const platform =
+        argument === '--local-macos'
+          ? 'darwin-arm64'
+          : argument === '--local-windows'
+            ? 'win32-x64'
+            : 'linux-x64'
+      if (options.platform && options.platform !== platform) {
+        throw new Error(
+          'Document Renderer release can select only one local native platform',
+        )
+      }
+      options.platform = platform
+    }
     else if (argument === '--check-only') options.checkOnly = true
     else if (argument === '--replace-existing') options.replaceExisting = true
     else if (argument === '--channel') {
@@ -31,6 +56,21 @@ function parseArguments(argv) {
     } else throw new Error(`Unknown Document Renderer release argument: ${argument}`)
   }
   return options
+}
+
+function releasePlatform(
+  requestedPlatform,
+  host = { platform: process.platform, arch: process.arch },
+) {
+  const hostPlatform = `${host.platform}-${host.arch}`
+  const platform = requestedPlatform ?? hostPlatform
+  if (!releasePlatforms.has(platform)) {
+    throw new Error(
+      'Document Renderer local release requires darwin-arm64, win32-x64, '
+        + `or linux-x64; received ${platform}`,
+    )
+  }
+  return platform
 }
 
 async function command(executable, arguments_, options = {}) {
@@ -71,10 +111,15 @@ async function inheritedCommand(executable, arguments_, options = {}) {
   })
 }
 
-async function preflight({ requirePublishConfig = true } = {}) {
-  if (process.platform !== 'darwin' || process.arch !== 'arm64') {
+async function preflight({
+  requirePublishConfig = true,
+  platform: requestedPlatform,
+} = {}) {
+  const platform = releasePlatform(requestedPlatform)
+  const hostPlatform = `${process.platform}-${process.arch}`
+  if (hostPlatform !== platform) {
     throw new Error(
-      `Document Renderer macOS release requires darwin-arm64; received ${process.platform}-${process.arch}`,
+      `Document Renderer ${platform} release requires a native ${platform} host; received ${hostPlatform}`,
     )
   }
   const status = await command('git', [
@@ -97,7 +142,7 @@ async function preflight({ requirePublishConfig = true } = {}) {
     : await command('git', ['rev-parse', '@{upstream}'])
   if (sourceCommit !== upstreamCommit) {
     throw new Error(
-      'Current Document Renderer source commit must be pushed before remote native builds',
+      'Current Document Renderer source commit must be pushed before local publication',
     )
   }
   const sourceRepository = await command('gh', [
@@ -108,26 +153,47 @@ async function preflight({ requirePublishConfig = true } = {}) {
     '--jq',
     '.nameWithOwner',
   ])
+  if (sourceRepository !== 'VelarOS-AI/VelarOS-Platform') {
+    throw new Error(
+      'Document Renderer releases require the official VelarOS-AI/VelarOS-Platform source repository',
+    )
+  }
+  const originUrl = await command('git', ['remote', 'get-url', 'origin'])
+  if (
+    ![
+      'https://github.com/VelarOS-AI/VelarOS-Platform.git',
+      'https://github.com/VelarOS-AI/VelarOS-Platform',
+      'git@github.com:VelarOS-AI/VelarOS-Platform.git',
+    ].includes(originUrl)
+  ) {
+    throw new Error(
+      'Document Renderer release origin must point to the official source repository',
+    )
+  }
   await command('gh', ['auth', 'status'])
-  await command('xcrun', [
-    'notarytool',
-    'history',
-    '--keychain-profile',
-    process.env.APPLE_KEYCHAIN_PROFILE?.trim() || 'velaros-notary',
-    '--output-format',
-    'json',
-  ])
+  if (platform === 'darwin-arm64') {
+    await command('xcrun', [
+      'notarytool',
+      'history',
+      '--keychain-profile',
+      process.env.APPLE_KEYCHAIN_PROFILE?.trim() || 'velaros-notary',
+      '--output-format',
+      'json',
+    ])
+  }
 
   let targetRepository = ''
   let releaseToken = ''
   if (requirePublishConfig) {
-    targetRepository = await command('gh', [
-      'variable',
-      'get',
-      'VELAROS_RELEASE_REPOSITORY',
-      '--repo',
-      sourceRepository,
-    ])
+    targetRepository =
+      process.env.VELAROS_RELEASE_REPOSITORY?.trim() ||
+      (await command('gh', [
+        'variable',
+        'get',
+        'VELAROS_RELEASE_REPOSITORY',
+        '--repo',
+        sourceRepository,
+      ]))
     const visibility = await command('gh', [
       'repo',
       'view',
@@ -139,23 +205,6 @@ async function preflight({ requirePublishConfig = true } = {}) {
     ])
     if (visibility !== 'PUBLIC')
       throw new Error(`${targetRepository} must remain public`)
-    const secrets = JSON.parse(
-      await command('gh', [
-        'secret',
-        'list',
-        '--env',
-        releaseEnvironment,
-        '--repo',
-        sourceRepository,
-        '--json',
-        'name',
-      ]),
-    )
-    if (!secrets.some(({ name }) => name === 'VELAROS_RELEASE_REPO_TOKEN')) {
-      throw new Error(
-        `${releaseEnvironment} is missing VELAROS_RELEASE_REPO_TOKEN`,
-      )
-    }
     releaseToken =
       process.env.VELAROS_RELEASE_REPO_TOKEN?.trim() ||
       (await command('gh', ['auth', 'token']))
@@ -172,6 +221,7 @@ async function preflight({ requirePublishConfig = true } = {}) {
     sourceRepository,
     targetRepository,
     releaseToken,
+    platform,
     version: rendererManifest.version,
   }
 }
@@ -182,10 +232,15 @@ async function sha256(path) {
     .digest('hex')
 }
 
-async function reusableMacArtifact(context) {
+async function reusableArtifact(context, platform) {
+  if (!releasePlatforms.has(platform)) {
+    throw new Error(
+      `Unsupported Document Renderer local release platform: ${platform}`,
+    )
+  }
   const manifestPath = resolve(
     repoRoot,
-    'release/document-renderer/document-renderer-artifact-darwin-arm64.json',
+    `release/document-renderer/document-renderer-artifact-${platform}.json`,
   )
   try {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
@@ -193,11 +248,12 @@ async function reusableMacArtifact(context) {
     const reusable =
       manifest.product === 'document-renderer' &&
       manifest.version === context.version &&
-      manifest.platform === 'darwin-arm64' &&
+      manifest.platform === platform &&
       manifest.sourceCommit === context.sourceCommit &&
       manifest.sourceDirty === false &&
-      manifest.trust?.signature === 'developer-id' &&
-      manifest.trust?.notarized === true &&
+      (platform !== 'darwin-arm64' ||
+        (manifest.trust?.signature === 'developer-id' &&
+          manifest.trust?.notarized === true)) &&
       manifest.sizeBytes === (await stat(artifactPath)).size &&
       manifest.sha256 === (await sha256(artifactPath))
     return reusable ? { manifestPath, artifactPath } : null
@@ -206,13 +262,61 @@ async function reusableMacArtifact(context) {
   }
 }
 
-async function run(options) {
-  const context = await preflight({ requirePublishConfig: !options.dryRun })
+async function reusableMacArtifact(context) {
+  return reusableArtifact(context, 'darwin-arm64')
+}
+
+async function assertSourceUnchanged(context) {
+  const commit = await command('git', ['rev-parse', 'HEAD'])
+  const status = await command('git', [
+    'status',
+    '--porcelain=v1',
+    '--untracked-files=all',
+  ])
+  const remote = await command('git', [
+    'ls-remote',
+    'origin',
+    `refs/heads/${context.branch}`,
+  ])
+  if (
+    commit !== context.sourceCommit ||
+    status ||
+    remote.split(/\s+/u)[0] !== commit
+  ) {
+    throw new Error(
+      'Document Renderer release source changed or no longer matches the pushed branch',
+    )
+  }
+}
+
+async function run(options, dependencies = {}) {
+  const runCommand = dependencies.command ?? command
+  const inheritCommand = dependencies.inheritedCommand ?? inheritedCommand
+  const readArtifact =
+    dependencies.reusableArtifact ??
+    dependencies.reusableMacArtifact ??
+    reusableArtifact
+  const checkSource =
+    dependencies.assertSourceUnchanged ?? assertSourceUnchanged
+  const platform = releasePlatform(options.platform)
+  const context = await (dependencies.preflight ?? preflight)({
+    requirePublishConfig: !options.dryRun,
+    platform,
+  })
   console.info(
     `Document Renderer release source ${context.sourceRepository}@${context.sourceCommit.slice(0, 12)} (v${context.version})`,
   )
+  if (!options.dryRun) releaseAttestationKey({ required: true })
   if (options.checkOnly) return context
 
+  if (options.dryRun) {
+    console.info(
+      `would release ${platform} locally; no build, signing, notarization, upload, or finalization`,
+    )
+    return { ...context, dryRun: true }
+  }
+
+  const scopeArguments = ['--platforms', platform]
   const releaseEnvironmentVariables = {
     VELAROS_SOURCE_REPOSITORY: context.sourceRepository,
     VELAROS_SOURCE_COMMIT: context.sourceCommit,
@@ -224,9 +328,9 @@ async function run(options) {
     'plan',
     '--channel',
     options.channel,
-    ...(options.dryRun ? ['--dry-run'] : []),
+    ...scopeArguments,
   ]
-  const planOutput = await command('node', planArguments, {
+  const planOutput = await runCommand('node', planArguments, {
     env: releaseEnvironmentVariables,
   })
   if (!planOutput.includes('renderer_needed=true')) {
@@ -236,60 +340,59 @@ async function run(options) {
     return { ...context, needed: false }
   }
 
-  let macArtifact = await reusableMacArtifact(context)
-  if (!macArtifact) {
-    await inheritedCommand('node', [
+  await inheritCommand('bun', ['install', '--frozen-lockfile'])
+  await inheritCommand('bun', ['run', 'check'])
+  await checkSource(context)
+
+  let artifact = await readArtifact(context, platform)
+  if (!artifact) {
+    await inheritCommand('node', [
       'scripts/document-renderer/build-product.mjs',
-      options.dryRun ? '--adhoc' : '--notarize',
+      ...releasePlatforms.get(platform).buildArguments,
     ])
-    macArtifact = await reusableMacArtifact(context)
-    if (!macArtifact)
+    artifact = await readArtifact(context, platform)
+    if (!artifact)
       throw new Error(
-        'macOS Document Renderer artifact identity did not match the release source',
+        `${platform} Document Renderer artifact identity did not match the release source`,
       )
   } else {
-    console.info(`reuse signed/notarized ${macArtifact.artifactPath}`)
+    console.info(`reuse verified ${artifact.artifactPath}`)
   }
 
-  if (!options.dryRun) {
-    await inheritedCommand(
-      'node',
-      [
-        'scripts/document-renderer/release-candidate.mjs',
-        'stage',
-        '--channel',
-        options.channel,
-        '--platform',
-        'darwin-arm64',
-        '--artifact-manifest',
-        macArtifact.manifestPath,
-        ...(options.replaceExisting ? ['--replace-existing'] : []),
-      ],
-      { env: releaseEnvironmentVariables },
-    )
-  }
-
-  await inheritedCommand('gh', [
-    'workflow',
-    'run',
-    'release-document-renderer.yml',
-    '--repo',
-    context.sourceRepository,
-    '--ref',
-    context.branch,
-    '-f',
-    `channel=${options.channel}`,
-    '-f',
-    `dry_run=${options.dryRun ? 'true' : 'false'}`,
-    '-f',
-    `confirm_upload=${options.dryRun ? 'false' : 'true'}`,
-    '-f',
-    `replace_existing=${options.replaceExisting ? 'true' : 'false'}`,
-  ])
-  console.info(
-    `Track Document Renderer: gh run list --repo ${context.sourceRepository} --workflow release-document-renderer.yml`,
+  await checkSource(context)
+  await inheritCommand(
+    'node',
+    [
+      'scripts/document-renderer/release-candidate.mjs',
+      'stage',
+      '--channel',
+      options.channel,
+      ...scopeArguments,
+      '--platform',
+      platform,
+      '--artifact-manifest',
+      artifact.manifestPath,
+      ...(options.replaceExisting ? ['--replace-existing'] : []),
+    ],
+    { env: releaseEnvironmentVariables },
   )
-  return { ...context, needed: true, macArtifact }
+  await checkSource(context)
+  await inheritCommand(
+    'node',
+    [
+      'scripts/document-renderer/release-candidate.mjs',
+      'finalize',
+      '--channel',
+      options.channel,
+      ...scopeArguments,
+      ...(options.replaceExisting ? ['--replace-existing'] : []),
+    ],
+    { env: releaseEnvironmentVariables },
+  )
+  console.info(
+    `Document Renderer ${context.version} ${platform} candidate finalized locally`,
+  )
+  return { ...context, needed: true, artifact, platforms: [platform] }
 }
 
 if (
@@ -302,4 +405,11 @@ if (
   })
 }
 
-export { parseArguments, preflight, reusableMacArtifact, run }
+export {
+  parseArguments,
+  preflight,
+  releasePlatform,
+  reusableArtifact,
+  reusableMacArtifact,
+  run,
+}

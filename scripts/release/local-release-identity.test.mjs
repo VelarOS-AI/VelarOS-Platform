@@ -54,10 +54,7 @@ function identityFixture(overrides = {}) {
   return { state, calls, verify }
 }
 
-test('release arguments require explicit local intent and preserve dry-run/CI selectors', () => {
-  assert.deepEqual(parseReleaseArguments([]), {
-    dryRun: false, skipBuild: false, localTag: undefined, onlySelectors: [],
-  })
+test('release arguments require explicit local intent and preserve dry-run selectors', () => {
   assert.deepEqual(parseReleaseArguments(['--local-tag', tag, '--only', 'agent, model', '--only', 'memory']), {
     dryRun: false, skipBuild: false, localTag: tag, onlySelectors: ['agent', 'model', 'memory'],
   })
@@ -67,6 +64,7 @@ test('release arguments require explicit local intent and preserve dry-run/CI se
 })
 
 for (const args of [
+  [],
   ['--local-tag'], ['--local-tag', ''], ['--local-tag', '  '], ['--local-tag', '--only', 'agent'],
   ['--local-tag', tag, '--local-tag', tag], ['--local-tag', ` ${tag}`],
   [`--local-tag=${tag}`], ['--local-tags', tag], ['--unknown'], [tag],

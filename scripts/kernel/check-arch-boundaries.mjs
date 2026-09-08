@@ -411,31 +411,87 @@ function scanReleaseIdentityBoundary() {
     {
       file: '.github/workflows/release-packages.yml',
       markers: [
-        "if: github.ref_type == 'tag'",
-        'node scripts/release/verify-release-ref.mjs',
-        'node scripts/release/publish-packages.mjs',
+        'name: Release packages (local only)',
+        'workflow_dispatch:',
+        'permissions: {}',
+        'if: ${{ false }}',
+        'bun run release:local',
+      ],
+      forbiddenMarkers: [
+        'push:',
+        'actions/checkout',
+        'scripts/release/publish-packages.mjs',
+        'secrets.',
+        'packages: write',
+      ],
+    },
+    {
+      file: '.github/workflows/release-document-renderer.yml',
+      markers: [
+        'name: Release Document Renderer (local only)',
+        'workflow_dispatch:',
+        'permissions: {}',
+        'if: ${{ false }}',
+        'bun run release:document-renderer',
+      ],
+      forbiddenMarkers: [
+        'actions/checkout',
+        'release-candidate.mjs',
+        'build-product.mjs',
+        'secrets.',
+      ],
+    },
+    {
+      file: '.github/workflows/ci.yml',
+      markers: [
+        'name: CI (local only)',
+        'workflow_dispatch:',
+        'permissions: {}',
+        'if: ${{ false }}',
+        'bun run check',
+      ],
+      forbiddenMarkers: [
+        'pull_request:',
+        'push:',
+        'actions/checkout',
+        'setup-bun',
+      ],
+    },
+    {
+      file: '.github/workflows/codeql.yml',
+      markers: [
+        'name: CodeQL (local only)',
+        'workflow_dispatch:',
+        'permissions: {}',
+        'if: ${{ false }}',
+        'local `bun run check` gate',
+      ],
+      forbiddenMarkers: [
+        'pull_request:',
+        'push:',
+        'schedule:',
+        'github/codeql-action',
+        'security-events:',
       ],
     },
     {
       file: 'scripts/release/verify-release-ref.mjs',
       markers: [
-        // tag 方案 2026-08-02 从「只认 v<火车号>」扩成「整列 v<火车号> 或 单包 <名>@<版本>」,
-        // 判据随之从字面比对搬进 resolveReleaseSelection(单源)。核验的语义没减:仍要求
-        // 事件合法、ref 是 tag、ref 与 refName 互相印证、且 tag 能解析出确定的发布范围。
-        'resolveReleaseSelection(rootManifest, ordered, refName)',
-        "!['push', 'workflow_dispatch'].includes(eventName)",
-        "refType !== 'tag'",
-        'ref !== `refs/tags/${refName}`',
+        'parseReleaseArguments(',
+        'assertLocalReleaseIdentity({',
+        'resolveReleaseSelection(rootManifest, ordered, localTag)',
+        'tag: localTag',
         "selection.kind === 'unknown'",
       ],
+      forbiddenMarkers: ['process.env.GITHUB_', 'workflow_dispatch', 'eventName'],
     },
     {
       file: 'scripts/release/publish-packages.mjs',
       markers: [
         "runForOutput('git', ['rev-parse', 'HEAD'], root)",
         "['status', '--porcelain', '--untracked-files=all']",
-        // The publisher must verify that the runtime ref is the selected tag.
-        'process.env.GITHUB_REF === expectedRef',
+        'const requestedTag = localTag ?? `v${rootManifest.version}`',
+        'if (!dryRun) assertLocalIdentity()',
         'safePackPackage({',
         'destination: packDirectory,',
         'packageDirectory: item.directory,',
@@ -445,6 +501,34 @@ function scanReleaseIdentityBoundary() {
         "sha256: createHash('sha256')",
         "'publish',\n      tarballPath,",
       ],
+      forbiddenMarkers: ['process.env.GITHUB_', 'expectedRef'],
+    },
+    {
+      file: 'package.json',
+      markers: [
+        '"release:verify": "node scripts/release/verify-release-ref.mjs --local-tag"',
+        '"release:local": "node scripts/release/publish-packages.mjs --local-tag"',
+      ],
+      forbiddenMarkers: ['GITHUB_EVENT_NAME', 'GITHUB_REF_NAME', 'GITHUB_SHA'],
+    },
+    {
+      file: 'scripts/document-renderer/release-candidate.mjs',
+      markers: [
+        'process.env.VELAROS_SOURCE_REPOSITORY',
+        'process.env.VELAROS_SOURCE_COMMIT',
+        'console.info(line.trim())',
+      ],
+      forbiddenMarkers: ['process.env.GITHUB_'],
+    },
+    {
+      file: 'products/document-renderer/README.md',
+      markers: ['matching native release host', 'local release Windows host', 'local release Linux host'],
+      forbiddenMarkers: ['built natively in GitHub Actions'],
+    },
+    {
+      file: 'packages/html-artifacts/README.md',
+      markers: ['personal access token', '进程环境或凭据管理器注入'],
+      forbiddenMarkers: ['GITHUB_TOKEN'],
     },
   ]
 
@@ -460,11 +544,14 @@ function scanReleaseIdentityBoundary() {
     }
     const source = readFileSync(contractPath, 'utf8').replaceAll('\r\n', '\n')
     const missing = contract.markers.filter((marker) => !source.includes(marker))
-    if (missing.length === 0) continue
+    const forbidden = (contract.forbiddenMarkers ?? []).filter((marker) =>
+      source.includes(marker),
+    )
+    if (missing.length === 0 && forbidden.length === 0) continue
     violations.push({
       rule: 'release-artifact-identity',
       fingerprint: `release-artifact-identity::${contract.file}`,
-      message: `${contract.file}: 发布链缺失精确 source/ref/tag/tarball 身份门,缺失=${missing.join(', ')}。`,
+      message: `${contract.file}: 本地发布策略门不完整，缺失=${missing.join(', ') || '无'}，禁用标记=${forbidden.join(', ') || '无'}。`,
     })
   }
   return violations

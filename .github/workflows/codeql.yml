@@ -1,45 +1,17 @@
-name: CodeQL
+name: CodeQL (local only)
+
+# Hosted CodeQL is disabled. Security and quality validation use the maintained
+# local `bun run check` gate. This workflow is an inert policy sentinel.
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: '23 3 * * 2'
+  workflow_dispatch:
 
-permissions:
-  actions: read
-  contents: read
-  security-events: write
-
-concurrency:
-  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
-  analyze:
-    name: Analyze JavaScript and TypeScript
+  local-analysis-only:
+    name: Disabled - run the local quality and security gates
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
-        with:
-          languages: javascript-typescript
-      - name: Analyze
-        id: analyze
-        uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
-        with:
-          upload: always
-      - name: Preserve CodeQL results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: codeql-javascript-typescript-sarif
-          path: ${{ steps.analyze.outputs.sarif-output }}
-          if-no-files-found: error
-          retention-days: 14
+      - run: exit 1

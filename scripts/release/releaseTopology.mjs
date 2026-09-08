@@ -274,7 +274,7 @@ export function resolveReleaseSelection(rootManifest, ordered, refName) {
 }
 
 /**
- * 在 tag 已经确定发布身份之后，再应用 workflow_dispatch 的 --only 收窄。
+ * 在 tag 已经确定发布身份之后，再应用本机发布命令的 --only 收窄。
  * 发布器和消费仓更新器必须共用这一处，否则会出现「发了 A、却去升级 B」的分叉。
  */
 export function selectReleasedPackages(rootManifest, ordered, refName, selectors = []) {

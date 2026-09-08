@@ -20,6 +20,13 @@ The root [README](../README.md) contains the human-readable package inventory, s
 merge-gate commands. The [generated package catalog](generated/package-catalog.json) is the deterministic
 machine-readable projection of the root manifest and package manifests.
 
+## Local validation and release
+
+| Document | Purpose |
+| --- | --- |
+| [Local release and validation](engineering/local-package-release.md) | Run the full local gate, publish Platform packages, or build, sign, attest, finalize, and upload one native Document Renderer platform |
+| [Consumer repository updates](engineering/platform-consumer-updates.md) | Align a consumer with published Platform packages and verify its frozen dependency graph |
+
 ## Mod development
 
 | Document | Purpose |
