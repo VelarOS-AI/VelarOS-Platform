@@ -372,6 +372,40 @@ function artifactTrust(target, options) {
     : { signature: 'unsigned', notarized: false }
 }
 
+function assertRendererDescription(text, expectedVersion) {
+  let response
+  try {
+    response = JSON.parse(text)
+  } catch {
+    throw new Error('Packaged Document Renderer describe output must be JSON')
+  }
+  const result = response?.status === 'success' ? response.result : null
+  if (
+    result?.product !== 'velar-document-renderer'
+    || result?.version !== expectedVersion
+    || result?.protocolVersion !== 1
+  ) {
+    throw new Error(
+      `Packaged Document Renderer describe identity does not match version ${expectedVersion}`,
+    )
+  }
+  return result
+}
+
+async function verifyStagedRuntime(staged, version) {
+  const { stdout } = await run(
+    staged.runtimePath,
+    [join(staged.packRoot, 'app', 'renderer.js'), 'describe'],
+    {
+      env: {
+        VELAROS_DOCUMENT_RENDERER_RESOURCES_ROOT: staged.packRoot,
+        NAPI_RS_NATIVE_LIBRARY_PATH: staged.canvasPath,
+      },
+    },
+  )
+  return assertRendererDescription(stdout, version)
+}
+
 async function build(options = {}) {
   const target = currentTarget(options.host)
   const version = await readVersion()
@@ -381,6 +415,7 @@ async function build(options = {}) {
   await mkdir(targetRoot, { recursive: true })
   const buildOutput = await buildApplication(join(targetRoot, 'compiled'))
   const staged = await stagePack(targetRoot, target, buildOutput, version, bunVersion)
+  await verifyStagedRuntime(staged, version)
   if (target === 'darwin-arm64') {
     await signMacFiles(staged.runtimePath, staged.canvasPath, options)
   }
@@ -425,6 +460,7 @@ if (
 }
 
 export {
+  assertRendererDescription,
   artifactTrust,
   build,
   capabilityPackManifest,

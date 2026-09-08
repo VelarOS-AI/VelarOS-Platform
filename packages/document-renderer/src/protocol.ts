@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const DocumentRendererProtocolVersion = 1 as const
-export const DocumentRendererVersion = '0.1.1'
+export const DocumentRendererVersion = '0.1.5'
 
 const CommonRenderRequestSchema = z.object({
   protocolVersion: z.literal(DocumentRendererProtocolVersion),

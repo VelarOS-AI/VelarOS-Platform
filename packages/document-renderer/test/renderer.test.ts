@@ -18,6 +18,9 @@ describe('independent document renderer capability pack', () => {
   })
 
   test('describes a standalone command protocol', async () => {
+    const packageManifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { version: string }
     const response = await executeRendererRequest({
       protocolVersion: ProtocolVersion,
       requestId: 'describe-1',
@@ -27,6 +30,7 @@ describe('independent document renderer capability pack', () => {
       status: 'success',
       result: {
         product: 'velar-document-renderer',
+        version: packageManifest.version,
         transport: 'one-json-request-per-process',
       },
     })

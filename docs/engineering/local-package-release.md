@@ -61,7 +61,7 @@ bun run release:document-renderer:linux --channel stable --check-only
 bun run release:document-renderer:linux --channel stable
 ```
 
-`bun run release:document-renderer --channel stable` 是当前原生主机的等价入口。真实路径依次核验官方 origin、干净工作树和已推送 HEAD，执行冻结安装与完整 `bun run check`，在当前系统构建能力包；macOS 同时做 Developer ID 签名和公证。随后它在 `document-renderer-v<version>` published prerelease 下上传能力包和单平台 staged receipt，生成并上传带 Ed25519 attestation 的 `catalog-document-renderer-v<version>-<channel>.json`，最后上传 `candidate-document-renderer-<channel>.json` 作为完成标记。完成标记始终是最后一次远端写入。
+`bun run release:document-renderer --channel stable` 是当前原生主机的等价入口。真实路径依次核验官方 origin、干净工作树和已推送 HEAD，执行冻结安装与完整 `bun run check`，在当前系统构建能力包；构建器会实际运行 staged runtime 的 `describe`，并要求其中的 product、protocol 与 version 精确匹配本次 package manifest，macOS 同时做 Developer ID 签名和公证。随后它在 `document-renderer-v<version>` published prerelease 下上传能力包和单平台 staged receipt，生成并上传带 Ed25519 attestation 的 `catalog-document-renderer-v<version>-<channel>.json`，最后上传 `candidate-document-renderer-<channel>.json` 作为完成标记。完成标记始终是最后一次远端写入。
 
 本地产物位于 `release/document-renderer/`，本地 catalog 与完成清单位于 `dist-document-renderer/release/`。传输中断后重复运行同一命令会按源码身份、大小与 SHA-256 复用相同字节；不同字节默认拒绝覆盖，`--replace-existing` 只用于修复已确认损坏的同版本候选。`--dry-run` 只做前置核验，不构建、签名、公证、上传或 finalize。
 

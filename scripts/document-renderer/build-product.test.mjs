@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  assertRendererDescription,
   artifactTrust,
   capabilityPackManifest,
   currentTarget,
@@ -10,6 +11,24 @@ import {
   parseArguments,
   resolveMacCodesignIdentity,
 } from './build-product.mjs'
+
+test('packaged runtime describe must match the release package version', () => {
+  const response = JSON.stringify({
+    protocolVersion: 1,
+    requestId: 'describe',
+    status: 'success',
+    result: {
+      protocolVersion: 1,
+      product: 'velar-document-renderer',
+      version: '0.2.0',
+    },
+  })
+  assert.equal(assertRendererDescription(response, '0.2.0').version, '0.2.0')
+  assert.throws(
+    () => assertRendererDescription(response, '0.2.1'),
+    /describe identity does not match version 0\.2\.1/u,
+  )
+})
 
 test('Document Renderer packaging only accepts native release targets', () => {
   assert.equal(currentTarget({ platform: 'darwin', arch: 'arm64' }), 'darwin-arm64')
