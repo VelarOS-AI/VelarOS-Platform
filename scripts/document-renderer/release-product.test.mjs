@@ -180,7 +180,10 @@ test('all GitHub Actions routes remain inert local-only policy sentinels', async
     },
   ]
   for (const workflow of workflows) {
-    const source = await readFile(new URL(workflow.path, import.meta.url), 'utf8')
+    const source = (await readFile(new URL(workflow.path, import.meta.url), 'utf8')).replaceAll(
+      '\r\n',
+      '\n',
+    )
     const jobsMarker = '\njobs:\n'
     const jobsIndex = source.indexOf(jobsMarker)
     assert.notEqual(jobsIndex, -1)
