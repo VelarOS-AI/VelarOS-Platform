@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test'
 import { resolve } from 'node:path'
+
+import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../../project/src/agent/Project.tool'
 import type { ProjectToolContext } from '../../project/src/agent/Types'
