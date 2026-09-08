@@ -145,7 +145,10 @@ describe('SystemPlatformCompatibility', () => {
     expect(windows.getTerminateCommand(42, true, { kind: 'git-bash' })).toBe('MSYS_NO_PATHCONV=1 taskkill.exe /PID 42 /T /F')
     expect(windows.getTerminateCommand(42, true, { kind: 'powershell' })).toBe('taskkill.exe /PID 42 /T /F')
     expect(windows.getFallbackTerminateCommand('bun run dev')).toBeNull()
-    expect(windows.getProcessListCommandSpec()?.file).toBe('powershell.exe')
+    const windowsProcessList = windows.getProcessListCommandSpec()
+    expect(windowsProcessList?.file).toBe('powershell.exe')
+    expect(windowsProcessList?.args.join(' ')).toContain('Get-Process -IncludeUserName')
+    expect(windowsProcessList?.args.join(' ')).not.toContain('.GetOwner()')
     expect(windows.getOpenPortInspectionCommandSpec()?.file).toBe('powershell.exe')
 
   expect(linux.getProcessKillPid(42)).toBe(-42)

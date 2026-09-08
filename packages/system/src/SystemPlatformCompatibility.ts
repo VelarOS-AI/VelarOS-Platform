@@ -415,7 +415,7 @@ export class SystemPlatformCompatibility {
   public getProcessListCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
-        "$cpuByPid = @{}; Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object { if ($_.IDProcess -gt 0) { $cpuByPid[[int]$_.IDProcess] = [double]$_.PercentProcessorTime } }; Get-CimInstance Win32_Process | ForEach-Object { $owner = $_.GetOwner(); $user = if ($owner -and $owner.User) { if ($owner.Domain) { \"$($owner.Domain)\\$($owner.User)\" } else { $owner.User } } else { '' }; $start = if ($_.CreationDate) { [System.Management.ManagementDateTimeConverter]::ToDateTime($_.CreationDate).ToString('o') } else { '' }; $command = if ($_.CommandLine) { ($_.CommandLine -replace \"[`r`n]+\", ' ').Trim() } else { $_.Name }; $state = if ($_.ExecutionState) { [string]$_.ExecutionState } else { 'Running' }; $cpu = if ($cpuByPid.ContainsKey([int]$_.ProcessId)) { $cpuByPid[[int]$_.ProcessId] } else { 0 }; $workingSetKb = [int64](($_.WorkingSetSize) / 1024); Write-Output (\"{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}\" -f $_.ProcessId, $_.ParentProcessId, $user, $start, $state, $cpu, $workingSetKb, $_.Name, $command) }"
+        "$cpuByPid = @{}; Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object { if ($_.IDProcess -gt 0) { $cpuByPid[[int]$_.IDProcess] = [double]$_.PercentProcessorTime } }; $userByPid = @{}; try { Get-Process -IncludeUserName -ErrorAction SilentlyContinue | ForEach-Object { if ($_.UserName) { $userByPid[[int]$_.Id] = $_.UserName } } } catch {}; Get-CimInstance Win32_Process | ForEach-Object { $pidValue = [int]$_.ProcessId; $user = if ($userByPid.ContainsKey($pidValue)) { $userByPid[$pidValue] } else { '' }; $start = if ($_.CreationDate -is [datetime]) { $_.CreationDate.ToString('o') } elseif ($_.CreationDate) { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$_.CreationDate).ToString('o') } else { '' }; $command = if ($_.CommandLine) { ($_.CommandLine -replace \"[`r`n]+\", ' ').Trim() } else { $_.Name }; $state = if ($_.ExecutionState) { [string]$_.ExecutionState } else { 'Running' }; $cpu = if ($cpuByPid.ContainsKey($pidValue)) { $cpuByPid[$pidValue] } else { 0 }; $workingSetKb = [int64](($_.WorkingSetSize) / 1024); Write-Output (\"{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}\" -f $pidValue, $_.ParentProcessId, $user, $start, $state, $cpu, $workingSetKb, $_.Name, $command) }"
       )
     return {
       file: 'ps',
@@ -427,7 +427,7 @@ export class SystemPlatformCompatibility {
     if (!Number.isInteger(pid) || pid <= 0) return null
     if (this.isWindows())
       return this.getWindowsPowerShellCommandSpec(
-        `$process = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($process -and $process.CreationDate) { [System.Management.ManagementDateTimeConverter]::ToDateTime($process.CreationDate).ToString('o') }`
+        `$process = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($process -and $process.CreationDate) { if ($process.CreationDate -is [datetime]) { $process.CreationDate.ToString('o') } else { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$process.CreationDate).ToString('o') } }`
       )
     return { file: 'ps', args: ['-p', String(pid), '-o', 'lstart='] }
   }
