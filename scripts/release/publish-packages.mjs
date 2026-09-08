@@ -81,8 +81,10 @@ const expectedPackedWorkspaceSpecification = (specification, version) => {
 }
 
 const assertRegistryManifest = (item, tarballPath, workspaceVersions) => {
+  const tarballDirectory = path.dirname(tarballPath)
+  const tarballName = path.basename(tarballPath)
   const packedManifest = JSON.parse(
-    runForOutput('tar', ['-xOf', tarballPath, 'package/package.json'], root),
+    runForOutput('tar', ['-xOf', tarballName, 'package/package.json'], tarballDirectory),
   )
   if (packedManifest.name !== item.manifest.name || packedManifest.version !== item.manifest.version) {
     throw new Error(
@@ -245,7 +247,7 @@ for (const item of selected) {
     // 从 ui 一个包推广到全部发布包。只断言 dist(声明在 files 里的其它目录未必存在——
     // 例如 workspace 的 files 列了 examples 但磁盘上没有,那是 npm 的合法 no-op,断言它会假红)。
     const tarballEntries = normalizeTarEntryPaths(
-      runForOutput('tar', ['-tzf', tarballPath], root),
+      runForOutput('tar', ['-tzf', tarballs[0]], packDirectory),
     )
     if (!tarballEntries.includes('package/package.json')) {
       throw new Error(`${item.manifest.name} tarball is missing package/package.json`)

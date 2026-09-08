@@ -1,4 +1,4 @@
-# Platform 0.6.29 Windows local release compatibility
+# Platform 0.6.30 Windows local release compatibility
 
 `@velaros-ai/system@1.1.14` includes the Windows process compatibility work first released in
 1.1.12: it builds the process-owner map once with
