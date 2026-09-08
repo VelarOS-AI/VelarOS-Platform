@@ -257,7 +257,7 @@ function ComposerActiveChipsBarInner({
               onRemove={optionalWhenLazy(onDismissTurnContextDelta, () => () => {
                 for (const delta of group.deltas) onDismissTurnContextDelta!(delta.id)
               })}
-              removeAriaLabel={group.label}
+              removeAriaLabel={`${t('chat.contextIgnoreOnce')}: ${group.label}`}
             />
           )),
         ]

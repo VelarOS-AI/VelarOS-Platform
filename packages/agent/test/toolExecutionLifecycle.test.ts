@@ -98,6 +98,186 @@ async function call(executor: ToolExecutor, id: string): Promise<ToolResult> {
 }
 
 describe('tool execution lifecycle', () => {
+  test('cancellation keeps a completed mutation receipt and prevents queued mutations', async () => {
+    const entered = deferred()
+    const release = deferred()
+    let successRecords = 0
+    let executions = 0
+    const h = harness(async () => {
+      executions++
+      entered.resolve()
+      await release.promise
+      return { changed: true, revision: 2 }
+    }, { onRecordToolCallResult: () => { successRecords++ } })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('cancel-during-operation', 'probe:write', { path: 'first' }, false)
+    executor.enqueue('queued-mutation', 'probe:write', { path: 'second' }, false)
+    const history: any[] = []
+    const running = new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    await entered.promise
+    h.abort.abort('user stopped this run')
+    release.resolve()
+    const results = await running
+    expect(results[0]?.result).toEqual({ changed: true, revision: 2 })
+    expect(results[0]?.error).toBeUndefined()
+    expect(results[1]?.result).toMatchObject({ error: 'tool_cancelled' })
+    expect(executions).toBe(1)
+    expect(successRecords).toBe(1)
+    expect(h.abort.signal.aborted).toBe(true)
+    expect(h.emitted).toContainEqual(expect.objectContaining({ toolCallId: 'cancel-during-operation', result: { changed: true, revision: 2 } }))
+    expect(history[0].content[0].output.type).toBe('text')
+    expect(JSON.parse(history[0].content[0].output.value)).toEqual({ changed: true, revision: 2 })
+    expect(history[0].content[1].output.type).toBe('error-text')
+  })
+
+  test.each(['success', 'failure'] as const)('cancelling hung result middleware preserves one receipt despite late %s', async (lateOutcome) => {
+    const entered = deferred()
+    const release = deferred()
+    const lateFinished = deferred()
+    let executions = 0
+    let successRecords = 0
+    let subsequentMiddlewareCalls = 0
+    const h = harness(() => {
+      executions++
+      return { changed: true, revision: 2 }
+    }, { onRecordToolCallResult: () => { successRecords++ } })
+    h.context.capabilityPorts = {
+      extensions: [{
+        descriptor: {
+          id: 'test.hung-result', version: '1.0.0',
+          toolNames: ['probe:write'], categoryIds: [], operationIds: [],
+        },
+        resultMiddlewares: [
+          {
+            id: 'hung-result', priority: 10,
+            transform: async () => {
+              entered.resolve()
+              await release.promise
+              lateFinished.resolve()
+              if (lateOutcome === 'failure') throw new Error('late middleware failure')
+              return { result: { changed: false, revision: 99 } }
+            },
+          },
+          {
+            id: 'subsequent-result', priority: 20,
+            transform: ({ result }) => { subsequentMiddlewareCalls++; return { result } },
+          },
+        ],
+      }],
+    }
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('completed-operation', 'probe:write', { path: 'first' }, false)
+    executor.enqueue('queued-mutation', 'probe:write', { path: 'second' }, false)
+    const history: any[] = []
+    const running = new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    await entered.promise
+    h.abort.abort('user stopped during result middleware')
+    const results = await running
+    expect(results[0]?.result).toEqual({ changed: true, revision: 2 })
+    expect(results[0]?.error).toBeUndefined()
+    expect(results[1]?.result).toMatchObject({ error: 'tool_cancelled' })
+    expect(executions).toBe(1)
+    expect(successRecords).toBe(1)
+    expect(subsequentMiddlewareCalls).toBe(0)
+    expect(h.emitted).toHaveLength(2)
+    expect(h.emitted.find((item) => (item as { toolCallId: string }).toolCallId === 'completed-operation')).toMatchObject({ result: { changed: true, revision: 2 } })
+    expect(history[0].content.map((item: any) => item.toolCallId)).toEqual(['completed-operation', 'queued-mutation'])
+    expect(JSON.parse(history[0].content[0].output.value)).toEqual({ changed: true, revision: 2 })
+    const settledState = JSON.stringify({ results, history, emitted: h.emitted })
+    release.resolve()
+    await lateFinished.promise
+    await Bun.sleep(0)
+    expect(JSON.stringify({ results: await executor.collectAll(), history, emitted: h.emitted })).toBe(settledState)
+    expect(subsequentMiddlewareCalls).toBe(0)
+    expect(executions).toBe(1)
+    expect(executor.getTerminalError()).toBeNull()
+  })
+
+  test('an operation still pending after cancellation keeps its existing cancelled settlement', async () => {
+    const entered = deferred()
+    const release = deferred()
+    let middlewareCalls = 0
+    const h = harness(async () => {
+      entered.resolve()
+      await release.promise
+      return { changed: true }
+    })
+    h.context.capabilityPorts = {
+      resultMiddlewares: [{
+        id: 'late-operation-result',
+        transform: ({ result }) => { middlewareCalls++; return { result } },
+      }],
+    }
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    const running = call(executor, 'pending-operation')
+    await entered.promise
+    h.abort.abort('user stopped before operation returned')
+    const result = await running
+    expect(result.result).toMatchObject({ error: 'tool_cancelled' })
+    const settled = JSON.stringify({ result, emitted: h.emitted })
+    release.resolve()
+    await Bun.sleep(0)
+    expect(middlewareCalls).toBe(0)
+    expect(JSON.stringify({ result: (await executor.collectAll())[0], emitted: h.emitted })).toBe(settled)
+  })
+
+  test('different arguments with the same failure message are separate exploration attempts', async () => {
+    const h = harness(() => { throw new AppError('NOT_FOUND', 'No matching entry') })
+    const loopGuard = new KernelToolLoopGuard()
+    for (const path of ['src/a.ts', 'src/b.ts', 'src/c.ts']) {
+      const executor = new ToolExecutor(h.context, h.events, h.policy, { loopGuard })
+      executor.enqueue(path, 'probe:read', { path }, true)
+      const [result] = await executor.collectAll()
+      expect(result?.result).not.toMatchObject({ error: 'tool_loop_guard' })
+    }
+  })
+
+  test('failure batches compare effective normalized arguments regardless of key order', async () => {
+    const h = harness(() => { throw new AppError('NOT_FOUND', 'No matching entry') }, {
+      schema: z.object({ path: z.string(), limit: clampedInt(1, 50) }),
+    })
+    const loopGuard = new KernelToolLoopGuard()
+    const inputs = [
+      { path: 'src/a.ts', limit: 1_000 },
+      { limit: 100, path: 'src/a.ts' },
+      { path: 'src/a.ts', limit: 50 },
+    ]
+    for (const [index, args] of inputs.entries()) {
+      const executor = new ToolExecutor(h.context, h.events, h.policy, { loopGuard })
+      executor.enqueue(`retry-${index}`, 'probe:read', args, true)
+      const [result] = await executor.collectAll()
+      expect(result?.args).toEqual({ path: 'src/a.ts', limit: 50 })
+      if (index === 2) expect(result?.result).toMatchObject({ error: 'tool_loop_guard' })
+      else expect(result?.result).not.toMatchObject({ error: 'tool_loop_guard' })
+    }
+  })
+
+  test('union argument failures reach model history with actionable fields before execution', async () => {
+    let executions = 0
+    const h = harness(() => { executions++; return { changed: true } }, {
+      schema: z.union([
+        z.object({ action: z.literal('read'), path: z.string() }),
+        z.object({ action: z.literal('write'), path: z.string(), text: z.string() }),
+      ]),
+    })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('invalid-union', 'probe:write', { action: 'read', path: 3 }, false)
+    const history: any[] = []
+    await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+
+    expect(executions).toBe(0)
+    expect(history[0].content[0].output.type).toBe('error-text')
+    expect(JSON.parse(history[0].content[0].output.value)).toMatchObject({
+      error: 'schema_validation_failed',
+      details: {
+        schemaIssues: expect.arrayContaining([{
+          path: 'path',
+          message: expect.stringContaining('Union option 1:'),
+        }]),
+      },
+    })
+  })
+
   test('executes, records, and reports the effective schema-normalized arguments', async () => {
     let executedInput: unknown
     const h = harness(
@@ -459,7 +639,7 @@ describe('tool execution lifecycle', () => {
     const h = harness(async () => {
       attempts++
       await failFirst.promise
-      throw new AppError('EXECUTION_DENIED', 'test sibling failure')
+      throw new AppError('EXECUTION_ABORTED', 'test sibling failure')
     })
     const seams = new AgentModSeamDispatcher()
     seams.beginRegistration()
@@ -484,7 +664,25 @@ describe('tool execution lifecycle', () => {
     const results = await executor.collectAll()
     expect(attempts).toBe(1)
     expect(results[1]?.result).toMatchObject({ error: 'tool_cancelled' })
-    expect(executor.getTerminalError()?.code).toBe('EXECUTION_DENIED')
+    expect(executor.getTerminalError()?.code).toBe('EXECUTION_ABORTED')
+  })
+
+  test('declining an operation returns the reason and lets a queued operation finish', async () => {
+    let attempts = 0
+    const h = harness(() => {
+      attempts++
+      if (attempts === 1) throw new AppError('EXECUTION_DENIED', 'use the backup instead')
+      return { written: 'backup' }
+    })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('declined', 'probe:write', { path: 'original' }, false)
+    executor.enqueue('alternative', 'probe:write', { path: 'backup' }, false)
+    const results = await executor.collectAll()
+    expect(results[0]?.result).toMatchObject({ error: 'tool_denied' })
+    expect(JSON.stringify(results[0]?.result)).toContain('use the backup instead')
+    expect(results[1]?.result).toEqual({ written: 'backup' })
+    expect(attempts).toBe(2)
+    expect(executor.getTerminalError()).toBeNull()
   })
 
   test('cancellation during asynchronous approval preparation prevents execution', async () => {
@@ -498,7 +696,7 @@ describe('tool execution lifecycle', () => {
     expect(executor.getTerminalError()?.code).toBe('EXECUTION_ABORTED')
   })
 
-  test.each(['matches', 'transform'] as const)('a result middleware %s failure stops writes after the operation took effect', async (failureStage) => {
+  test.each(['matches', 'transform'] as const)('a result middleware %s failure preserves the completed operation and stops writes', async (failureStage) => {
     let writes = 0
     const h = harness(() => { writes++; return { ok: true } })
     h.context.capabilityPorts = {
@@ -524,11 +722,39 @@ describe('tool execution lifecycle', () => {
     const results = await executor.collectAll()
 
     expect(writes).toBe(1)
-    expect(results[0]?.result).toMatchObject({ error: 'tool_result_finalization_failed' })
-    expect(results[0]?.error).toContain('may already have taken effect')
+    expect(results[0]?.result).toEqual({ ok: true })
+    expect(results[0]?.error).toBeUndefined()
     expect(results[1]?.result).toMatchObject({ error: 'tool_cancelled' })
     expect(executor.getTerminalError()?.code).toBe('TOOL_RESULT_FINALIZATION_FAILED')
+    expect(executor.getTerminalError()?.message).toContain('may already have taken effect')
     expect(h.emitted).toHaveLength(2)
+    expect(h.emitted.find((item) => (item as { toolCallId: string }).toolCallId === 'first')).toMatchObject({ result: { ok: true } })
+    const history: any[] = []
+    await expect(new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)).rejects.toMatchObject({ code: 'TOOL_RESULT_FINALIZATION_FAILED' })
+    expect(history[0].content.map((item: any) => item.toolCallId)).toEqual(['first', 'second'])
+    expect(history[0].content[0].output.type).toBe('text')
+    expect(JSON.parse(history[0].content[0].output.value)).toEqual({ ok: true })
+    expect(h.emitted).toHaveLength(2)
+  })
+
+  test('successful result middleware publishes its transformed result once to events and history', async () => {
+    const h = harness(() => ({ changed: true, revision: 2 }))
+    h.context.capabilityPorts = {
+      resultMiddlewares: [{
+        id: 'result-summary',
+        transform: ({ result }) => ({ result: { operation: result, summary: 'Saved revision 2' } }),
+      }],
+    }
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('transformed-operation', 'probe:write', {}, false)
+    const history: any[] = []
+    const results = await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    const expected = { operation: { changed: true, revision: 2 }, summary: 'Saved revision 2' }
+    expect(results[0]?.result).toEqual(expected)
+    expect(JSON.parse(history[0].content[0].output.value)).toEqual(expected)
+    expect(h.emitted).toHaveLength(1)
+    expect(h.emitted[0]).toMatchObject({ toolCallId: 'transformed-operation', result: expected })
+    expect(executor.getTerminalError()).toBeNull()
   })
 
   test('keeps ordered model content contributed by capability result middleware', async () => {

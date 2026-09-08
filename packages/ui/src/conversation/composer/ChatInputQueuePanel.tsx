@@ -3,6 +3,7 @@ import {
   ArrowUpIcon,
   DotsSixVerticalIcon,
   PencilSimpleIcon,
+  PlayIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
@@ -24,26 +25,36 @@ import styles from './ChatInput.module.css'
 import { isBlank, isEmpty,toNullable } from '#internal/runtime'
 
 export interface ChatInputQueuePanelProps {
+  errorMessage?: LooseOptional<string>
+  isPaused?: boolean
+  onResume?: () => void | Promise<void>
   queuedDrafts: ChatInputQueuedDraft[]
+  drainingId?: LooseOptional<string>
   isQueueDraining: boolean
   isStreaming: boolean
   onQueuedDraftMove?: (id: string, direction: 'up' | 'down') => void
   onQueuedDraftRemove?: (id: string) => void
   onQueuedDraftGuide?: (id: string) => void | Promise<void>
   onQueuedDraftReturnToInput?: (id: string) => void
+  onQueuedDraftRunNow?: (id: string) => void | Promise<void>
 }
 
 const cx = StyleUtils.bindCx(styles)
 const QueuedDraftDragMimeType = 'application/x-velaros-queued-draft'
 
 export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
+  errorMessage,
+  isPaused = false,
+  onResume,
   queuedDrafts,
   isQueueDraining,
+  drainingId,
   isStreaming,
   onQueuedDraftMove,
   onQueuedDraftRemove,
   onQueuedDraftGuide,
   onQueuedDraftReturnToInput,
+  onQueuedDraftRunNow,
 }: ChatInputQueuePanelProps): Nullable<ReactElement> {
   const { t } = useConversationI18n()
   const [draggedQueuedDraftId, setDraggedQueuedDraftId] = useState<Nullable<string>>(null)
@@ -54,6 +65,7 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
     !!onQueuedDraftMove ||
     !!onQueuedDraftRemove ||
     !!onQueuedDraftGuide ||
+    !!onQueuedDraftRunNow ||
     !!onQueuedDraftReturnToInput
 
   function clearQueuedDraftDragState(): void {
@@ -114,10 +126,27 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
 
   return (
     <div className={styles.queuePanel}>
+      {errorMessage && <Paragraph spacing="none" role="alert">{errorMessage}</Paragraph>}
+      {isPaused && (
+        <div className={styles.queueItem} role="status">
+          <Paragraph spacing="none" className={styles.queueText}>{t('chat.queuedInputsPaused')}</Paragraph>
+          {onResume && (
+            <IconButton
+              size="icon-sm"
+              label={t('chat.resumeQueuedInputs')}
+              title={t('chat.resumeQueuedInputs')}
+              disabled={isQueueDraining || isStreaming}
+              onClick={() => { void onResume() }}
+            >
+              <PlayIcon size={14} />
+            </IconButton>
+          )}
+        </div>
+      )}
       <div className={styles.queueList}>
         {queuedDrafts.map((item, index) => {
           const isFirst = index === 0
-          const isItemDraining = isQueueDraining && isFirst
+          const isItemDraining = isQueueDraining && (drainingId ? item.id === drainingId : isFirst)
           const displayText = formatQueuedDraftText(item)
           const isItemDragging = draggedQueuedDraftId === item.id
           const dropPlacement =
@@ -157,8 +186,8 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
                   className={styles.queueDragHandle}
                   title={t('chat.composerQueueDragToMove')}
                   aria-label={t('chat.composerQueueDragToMove')}
-                  draggable={!isItemDraining && queuedDrafts.length > 1}
-                  disabled={isItemDraining || queuedDrafts.length < 2}
+                  draggable={!isQueueDraining && queuedDrafts.length > 1}
+                  disabled={isQueueDraining || queuedDrafts.length < 2}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = 'move'
                     event.dataTransfer.setData(QueuedDraftDragMimeType, item.id)
@@ -179,13 +208,24 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
 
               {hasQueuedDraftActions && (
                 <div className={styles.queueActions}>
+                  {onQueuedDraftRunNow && !isStreaming && (
+                    <IconButton
+                      size="icon-sm"
+                      label={t('chat.runQueuedInput')}
+                      title={t('chat.runQueuedInput')}
+                      disabled={isQueueDraining}
+                      onClick={() => { void onQueuedDraftRunNow(item.id) }}
+                    >
+                      <PlayIcon size={13} />
+                    </IconButton>
+                  )}
                   {onQueuedDraftGuide && isStreaming && (
                     <IconButton
                       size="icon-sm"
                       className={styles.queueSendButton}
                       title={t('chat.composerQueueGuideNow')}
                       label={t('chat.composerQueueGuideNow')}
-                      disabled={isItemDraining}
+                      disabled={isQueueDraining}
                       onClick={() => {
                         void onQueuedDraftGuide(item.id)
                       }}
@@ -199,7 +239,7 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
                       className={styles.queueActionButton}
                       title={t('chat.composerQueueEdit')}
                       label={t('chat.composerQueueEdit')}
-                      disabled={isItemDraining}
+                      disabled={isQueueDraining}
                       onClick={() => onQueuedDraftReturnToInput(item.id)}
                     >
                       <PencilSimpleIcon size={13} />
@@ -211,7 +251,7 @@ export const ChatInputQueuePanel = memo(function ChatInputQueuePanel({
                       className={cx('queueActionButton', 'queueActionDanger')}
                       title={t('chat.composerQueueRemove')}
                       label={t('chat.composerQueueRemove')}
-                      disabled={isItemDraining}
+                      disabled={isQueueDraining}
                       onClick={() => onQueuedDraftRemove(item.id)}
                     >
                       <TrashIcon size={13} />

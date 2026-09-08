@@ -417,7 +417,8 @@ export function WorkspaceGitCommitControl({
         onOpenChange={handleMenuOpenChange}
         onOpenAutoFocus={() => branchSearchRef.current?.focus({ preventScroll: true })}
         anchorClassName={getTopBarControlMainClassName()}
-        className={getTopBarControlPanelClassName(styles.gitCompactMenu)}
+        className={getTopBarControlPanelClassName()}
+        data-topbar-panel="picker"
         side="bottom"
         align="start"
         sideOffset={6}

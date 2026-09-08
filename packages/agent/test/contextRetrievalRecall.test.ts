@@ -141,7 +141,7 @@ describe('S3 · 超大 user 正文的端到端召回', () => {
         payloadStore,
         model: 'gpt-test',
         systemPrompt: 'system',
-        contextWindow: 200_000,
+        contextWindow: 50_000,
       },
       compiler
     )
@@ -524,5 +524,22 @@ describe('S3 · 索引新鲜度与缓存', () => {
     service.invalidateSession(SessionId)
     await service.searchConversationHistory({ sessionId: SessionId, query: 'c' })
     assert.equal(loadFreshCount(), 2)
+  })
+})
+
+describe('approved handoff evidence copies', () => {
+  test('an original payload alias resolves only through a local copied blob', async () => {
+    const originalRef = 'ctx-payload:source:abcdef'
+    const localRef = 'ctx-payload:target:123456'
+    const payloadStore = createPayloadStore({ toolResults: {
+      [localRef]: { serializedResult: 'complete evidence copied for this task', displayResult: 'evidence',
+        payloadRef: localRef, handoff: { sourceSessionId: 'source', sourceRef: originalRef } },
+    } })
+    const local = createService({ payloadStore })
+    const result = await local.retrieveContextPayload({ sessionId: SessionId, handleId: originalRef, maxChars: 1000 })
+    assert.equal(result.found, true)
+    assert.ok(JSON.stringify(result).includes('complete evidence copied for this task'))
+    const unrelated = createService({ payloadStore: createPayloadStore() })
+    assert.equal((await unrelated.retrieveContextPayload({ sessionId: 'unrelated', handleId: originalRef })).found, false)
   })
 })

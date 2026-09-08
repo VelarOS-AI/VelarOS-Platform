@@ -651,16 +651,9 @@ class SoloStreamLoop<
         allowedTools,
         activeContextWindow,
         toolSchemaChars,
-        turnToolRegistry
+        turnToolRegistry,
+        roleRuntime.modelRequestOptions
       )
-      // 送核前的用量估算：只用来喂 MMU 校准闭环（下面 recordActualUsage）。历史本身**一律不改写**
-      // ——降级判决整条住驻留账本，编译期投影唯一执行。
-      const predictedInputTokens = this.contextUsage.estimateUsage(
-        roleRuntime.model,
-        systemPrompt,
-        args.history,
-        contextUsageOptions
-      ).estimatedTokens
       this.log.info('prompt build end', {
         turn,
         promptSegments: promptSegments.length,
@@ -834,7 +827,7 @@ class SoloStreamLoop<
         // MMU 反馈：用供应方真实输入 token 校准本模型的估算系数。
         this.contextUsage.recordActualUsage(
           roleRuntime.model,
-          predictedInputTokens,
+          turnResult.predictedInputTokens,
           toNullable(turnResult.inputTokens)
         )
         if (turnResult.interruptedByRuntimeInput) {
@@ -912,7 +905,7 @@ class SoloStreamLoop<
           runAutomaticVerification,
           runtimeInput: args.runtimeInput,
           consumeGuidance: args.consumeGuidance,
-          // 放在 finishing gate 内部的 takeOrSeal/goal commit 之前：等待可被 execution
+          // 放在 finishing gate 内部的 takeOrSeal 之前：等待可被 execution
           // abort 或新 runtime input 唤醒，每次只等一个后台终态。
           settlePendingBackgroundJobs: () =>
             runSoloBackgroundCompletionGate({
@@ -931,14 +924,6 @@ class SoloStreamLoop<
           // 纪律，属于提示词层工作流，不能通过运行时拦截强制执行。
           goalMode: isTrue(args.config.goalMode),
           inspectGoalState: () => goalLifecycle.inspect(),
-          completeGoalOnSuccessfulFinish: isTrue(args.config.goalMode)
-            ? async () => {
-                const completed = await goalLifecycle.recordSuccessfulCompletion()
-                if (!completed && !(await goalLifecycle.inspect()).terminal) {
-                  throw new AppError('INVARIANT', '目标状态在最终提交前发生变化，无法完成本次执行。')
-                }
-              }
-            : undefined,
           recordGoalCompletionAttempt: () => goalLifecycle.recordCompletionAttempt(),
           finishingGateBlockTracker,
           log: this.log,

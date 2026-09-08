@@ -70,10 +70,17 @@ describe('Project model-facing tool contract', () => {
       })
     ).toThrow('example does not satisfy schema')
 
-    expect(projectTools[ProjectToolNames.read].description).toContain(
-      "path: ['src/contentHash.ts', 'src/cacheKey.ts']"
-    )
-    expect(projectTools[ProjectToolNames.run].description).toContain("command: 'bun test'")
+    for (const [name, expected] of [
+      [ProjectToolNames.read, { path: ['src/contentHash.ts', 'src/cacheKey.ts'] }],
+      [ProjectToolNames.run, { command: 'bun test' }],
+    ] as const) {
+      const tool = projectTools[name]
+      const serializedExample = tool.description.match(/调用参数示例：(.+)。/u)?.[1]
+      expect(serializedExample).toBeDefined()
+      const example: unknown = JSON.parse(serializedExample ?? 'null')
+      expect(example).toMatchObject(expected)
+      expect(tool.schema.safeParse(example).success).toBe(true)
+    }
     expect(projectTools[ProjectToolNames.run].description).toContain('Git Bash/POSIX')
   })
 
@@ -83,19 +90,19 @@ describe('Project model-facing tool contract', () => {
     const serialized = JSON.stringify(writeSchema)
 
     expect(serialized.length).toBeLessThanOrEqual(800)
-    expect(writeTool.schema.safeParse({
-      path: 'reports/review.md',
-      content: '# Review\n\nPassed.',
-      mode: 'create',
-    }).success).toBe(true)
+    expect(
+      writeTool.schema.safeParse({
+        path: 'reports/review.md',
+        content: '# Review\n\nPassed.',
+        mode: 'create',
+      }).success
+    ).toBe(true)
     expect(writeTool.description).toContain('project:edit')
     expect(projectTools[ProjectToolNames.edit].description).toContain('project:write')
   })
 
   test('accepts list globs relative to the requested directory without breaking root-relative globs', () => {
-    expect(scopeProjectListPatterns('scripts/build', ['*.mjs'])).toEqual([
-      'scripts/build/*.mjs',
-    ])
+    expect(scopeProjectListPatterns('scripts/build', ['*.mjs'])).toEqual(['scripts/build/*.mjs'])
     expect(
       scopeProjectListPatterns('scripts/build', ['scripts/build/linkedWorkspacePackages.mjs'])
     ).toEqual(['scripts/build/linkedWorkspacePackages.mjs'])
@@ -132,19 +139,21 @@ describe('Project model-facing tool contract', () => {
       path: 'src/example.ts',
     })
 
-    expect(result.files).toEqual([{
-      snapshot: {
-        path: 'src/example.ts',
-        exists: true,
-        isDirectory: false,
-        isBinary: false,
-        revision: 'revision-1',
+    expect(result.files).toEqual([
+      {
+        snapshot: {
+          path: 'src/example.ts',
+          exists: true,
+          isDirectory: false,
+          isBinary: false,
+          revision: 'revision-1',
+        },
+        content: 'export const example = true\n',
+        totalLines: 2,
+        truncated: false,
+        hasMore: false,
       },
-      content: 'export const example = true\n',
-      totalLines: 2,
-      truncated: false,
-      hasMore: false,
-    }])
+    ])
     expect(JSON.stringify(result.files)).not.toContain('/private/workspace/src/example.ts')
     expect(JSON.stringify(result.files)).not.toContain('private-content-hash')
     expect(JSON.stringify(result.files).match(/export const example = true/g)).toHaveLength(1)
@@ -361,32 +370,37 @@ describe('Project model-facing tool contract', () => {
       { type: 'remove_import', path: 'a.ts', module: 'node:path', name: 'join' },
       { type: 'json_patch', path: 'a.json', patches: [{ op: 'remove', path: '/old' }] },
     ]
-    const retiredTypes = [
-      'insert_text',
-      'insert_before_symbol',
-      'insert_after_symbol',
-      'custom',
-    ]
+    const retiredTypes = ['insert_text', 'insert_before_symbol', 'insert_after_symbol', 'custom']
 
-    expect(executableSamples.every((operation) => ProjectEditOperationSchema.safeParse(operation).success)).toBe(true)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'json_patch',
-      path: 'a.json',
-      patches: [{ op: 'replace', path: '/value' }],
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'json_patch',
-      path: 'a.json',
-      patches: [{ op: 'remove', path: '/value', value: 1 }],
-    }).success).toBe(false)
-    expect(ProjectEditOperationSchema.safeParse({
-      type: 'replace_text',
-      path: 'a.ts',
-      oldText: 'a',
-      newText: 'b',
-      occurrence: 1,
-      replaceAll: true,
-    }).success).toBe(false)
+    expect(
+      executableSamples.every(
+        (operation) => ProjectEditOperationSchema.safeParse(operation).success
+      )
+    ).toBe(true)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'json_patch',
+        path: 'a.json',
+        patches: [{ op: 'replace', path: '/value' }],
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'json_patch',
+        path: 'a.json',
+        patches: [{ op: 'remove', path: '/value', value: 1 }],
+      }).success
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({
+        type: 'replace_text',
+        path: 'a.ts',
+        oldText: 'a',
+        newText: 'b',
+        occurrence: 1,
+        replaceAll: true,
+      }).success
+    ).toBe(false)
     expect(
       retiredTypes.every(
         (type) => !ProjectEditOperationSchema.safeParse({ type, path: 'a.ts', text: 'x' }).success

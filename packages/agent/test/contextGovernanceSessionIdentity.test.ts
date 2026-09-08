@@ -5,7 +5,7 @@
  * 账本活到下一轮、活在正确的会话名下、报告用同一把尺子记账：
  *  ① 传输装饰（prompt-cache 断点）不得让账本每个用户轮整本重建；
  *  ② registry 满员时淘汰的必须是最久没用的那个，不是刚建的那个；
- *  ③ 手动 epoch 与自动 epoch 同量纲（窗口 + 字符/token 密度），报告自带量纲与代数；
+ *  ③ 内部溢出恢复 与自动 epoch 同量纲（窗口 + 字符/token 密度），报告自带量纲与代数；
  *  ④ 子 agent 与父会话不共用账本；
  *  ⑤ 账本重建后陈旧的 `context:distill` 不得被再消费一次；
  *  ⑥ 转交信号只看当前代账本的报告。
@@ -151,7 +151,7 @@ void describe('S1 · registry 容量淘汰（V7）', () => {
   })
 })
 
-void describe('S1 · 手动 epoch 的量纲与记账（V9 / U11）', () => {
+void describe('S1 · 内部溢出恢复的量纲与记账（V9 / U11）', () => {
   void test('registry.requestEpoch 不给量纲时回落最近一次编译的窗口与密度', async () => {
     const registry = new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
     const compiler = new ProviderRequestCompiler(registry)
@@ -162,7 +162,7 @@ void describe('S1 · 手动 epoch 的量纲与记账（V9 / U11）', () => {
         phase: 'stream',
         model: 'gpt-test',
         systemPrompt: 'system',
-        // 32K 窗口：手动 epoch 若丢掉窗口口径，会退化成 `estimateContextUsage` 的默认 128K 窗口。
+        // 32K 窗口：内部溢出恢复 若丢掉窗口口径，会退化成 `estimateContextUsage` 的默认 128K 窗口。
         contextWindow: 32_000,
         skipUserTextPersistence: true,
       },
@@ -171,13 +171,13 @@ void describe('S1 · 手动 epoch 的量纲与记账（V9 / U11）', () => {
     const compiledCharsPerToken = compiled.governanceEpoch?.charsPerToken
 
     const manual = registry.requestEpoch('dimension-1')
-    // 量纲统一批改判：G 不再是 min(窗口, cap)，而是送核门余量的折扣值。这条断言要钉的仍然是
-    // 「手动 epoch 用的是**最近一次编译**的那把尺子」，所以直接与编译期报告对齐。
+    // 恢复继续使用最近一次编译记录的输入容量、固定开销与量纲。这里核对的是
+    // 「内部溢出恢复 用的是**最近一次编译**的那把尺子」，所以直接与编译期报告对齐。
     assert.equal(manual?.budgetTokens, compiled.governanceEpoch?.budgetTokens)
     assert.equal(manual?.window?.contextWindow, 32_000)
     assert.ok((manual?.budgetTokens ?? 0) < 32_000)
     assert.equal(manual?.charsPerToken, compiledCharsPerToken)
-    assert.equal(manual?.source, 'host-request')
+    assert.equal(manual?.source, 'overflow-recovery')
   })
 
   void test('显式传进来的量纲优先于回落值', () => {
@@ -186,9 +186,9 @@ void describe('S1 · 手动 epoch 的量纲与记账（V9 / U11）', () => {
     session.governTurn({ at: 1_000, modelWindowTokens: 32_000, charsPerToken: 2 })
 
     const manual = session.requestEpoch({ at: 2_000, modelWindowTokens: 8_000, charsPerToken: 1.5 })
-    // 8_000 → usable 8_000（无预算调优）→ 门红线 6_400 → 零固定开销 → G = floor(6_400 × 0.9)。
+    // 无预算调优与固定开销时，完整可用输入容量为 8_000。
     assert.equal(manual?.window?.contextWindow, 8_000)
-    assert.equal(manual?.budgetTokens, 5_760)
+    assert.equal(manual?.budgetTokens, 8_000)
     assert.equal(manual?.charsPerToken, 1.5)
   })
 
@@ -248,130 +248,17 @@ void describe('S1 · 重建后的陈旧 epoch 请求与转交信号（U19 / U34 
 
   const distillPair = distillPairOf('call-distill')
 
-  void test('回滚和恢复近期分支只重放历史，独立调用仍触发一次阶段请求', () => {
+  void test('恢复旧历史、切换分支和增加旧治理调用均不会触发当前自动压缩', () => {
     const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
-    const first = [userMessage('first phase'), ...distillPairOf('distill-a')]
+    const first = [userMessage('first phase'), ...distillPair]
     const second = [...first, userMessage('second phase'), ...distillPairOf('distill-b')]
-
-    for (const [index, messages] of [first, second].entries()) {
-      session.syncHistory({ messages, at: index + 1 })
-      assert.equal(session.governTurn({ at: index + 1 })?.trigger, 'model-request')
+    for (const [index, messages] of [first, second, first, second].entries()) {
+      session.syncHistory({ messages: structuredClone(messages), at: index + 1 })
+      const report = session.governTurn({ at: index + 1, capacityExceeded: false })
+      assert.equal(report?.trigger, null)
+      assert.equal(report?.applied, false)
     }
-
-    for (const [index, messages] of [first, second, first].entries()) {
-      session.syncHistory({ messages: structuredClone(messages), at: index + 3 })
-      assert.equal(session.governTurn({ at: index + 3 })?.trigger, null)
-    }
-
-    session.syncHistory({
-      messages: [...first, userMessage('new branch'), ...distillPairOf('distill-c')],
-      at: 6,
-    })
-    assert.equal(session.governTurn({ at: 6 })?.trigger, 'model-request')
-    assert.equal(session.governTurn({ at: 7 })?.trigger, null)
-  })
-
-  void test('当前历史中的旧请求即使超出近期窗口，回滚重建也不会再次消费', () => {
-    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
-    const first = [userMessage('first phase'), ...distillPairOf('distill-0')]
-    const messages = [...first]
-    for (let index = 1; index <= 128; index += 1) {
-      messages.push(userMessage(`phase ${index}`), ...distillPairOf(`distill-${index}`))
-    }
-    session.syncHistory({ messages, at: 1 })
-    assert.equal(session.governTurn({ at: 1 })?.trigger, 'model-request')
-
-    session.syncHistory({ messages: structuredClone(first), at: 2 })
-    assert.equal(session.governTurn({ at: 2 })?.trigger, null)
-  })
-
-  void test('同时离开当前历史和有限近期窗口的请求再次导入时按新观察处理', () => {
-    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
-    for (let index = 0; index <= 128; index += 1) {
-      session.syncHistory({
-        messages: [userMessage(`branch ${index}`), ...distillPairOf(`distill-${index}`)],
-        at: index,
-      })
-      assert.equal(session.governTurn({ at: index })?.trigger, 'model-request')
-    }
-
-    session.syncHistory({
-      messages: [userMessage('branch 0'), ...distillPairOf('distill-0')],
-      at: 129,
-    })
-    assert.equal(session.governTurn({ at: 129 })?.trigger, 'model-request')
-    assert.equal(session.governTurn({ at: 130 })?.trigger, null)
-  })
-
-  void test('同步回滚会撤销已移出历史且尚未消费的阶段请求', () => {
-    const session = new ContextGovernanceSession(resolveContextGovernanceConfig(), null, null)
-    session.syncHistory({ messages: [userMessage('task'), ...distillPair], at: 1 })
-    session.syncHistory({ messages: [userMessage('task')], at: 2 })
-    assert.equal(session.governTurn({ at: 2 })?.trigger, null)
-  })
-
-  void test('账本重建后，历史里那条旧的 context:distill 不再被消费一次', () => {
-    const config = resolveContextGovernanceConfig({
-      tailProtectTurns: 0,
-      minEpochSavingPercent: 1,
-      epochTargetPercent: 1,
-    })
-    const session = new ContextGovernanceSession(config, null, null)
-    session.syncHistory({
-      messages: [...buildPressureHistory(3, 2_000), ...distillPair],
-      at: 1_000,
-    })
-    assert.equal(session.governTurn({ at: 1_000, modelWindowTokens: 200_000 })?.trigger, 'model-request')
-
-    // 历史前缀分叉（回滚 / 编辑 / 结构自愈）→ 整本重建，那条旧请求原样回到账本里。
-    session.syncHistory({
-      messages: [userMessage('换了个开头'), ...buildPressureHistory(2, 2_000), ...distillPair],
-      at: 2_000,
-    })
-    const afterRebuild = session.governTurn({ at: 2_000, modelWindowTokens: 200_000 })
-    assert.equal(afterRebuild?.trigger, null)
-    assert.equal(afterRebuild?.skipReason, 'below-trigger')
-  })
-
-  void test('同一次 sync 里既重建又带来新请求：新的 context:distill 仍被消费（v3 · R3）', () => {
-    // U19 的旧修法是"重建后把消费游标对齐当前账本尾"，而对齐发生在新尾巴已经 append 之后 ——
-    // 于是**同一次 syncHistory 里刚到达的新请求**也被一并标成已消费：模型"这一阶段我消化完了"
-    // 的声明被永久吞掉（记录 id 已写进游标，下一轮也不会再触发），只剩水位路径兜底。
-    // 触发条件毫不刁钻：上游 sanitize / 结构自愈改写了更早的消息 → 判 rebuilt，而这一轮模型
-    // 恰好调了 context:distill。改记 toolCallId 之后，"旧请求重摄入"与"新请求"在结构上就分开了。
-    const config = resolveContextGovernanceConfig({
-      tailProtectTurns: 0,
-      minEpochSavingPercent: 1,
-      epochTargetPercent: 1,
-    })
-    const session = new ContextGovernanceSession(config, null, null)
-    session.syncHistory({ messages: buildPressureHistory(3, 2_000), at: 1_000 })
-    assert.equal(session.governTurn({ at: 1_000, modelWindowTokens: 200_000 })?.trigger, null)
-
-    // 前缀分叉（重建）+ 尾部带一条**全新**的 context:distill。
-    session.syncHistory({
-      messages: [
-        userMessage('上游把开头改写了'),
-        ...buildPressureHistory(2, 2_000),
-        ...distillPairOf('call-distill-fresh'),
-      ],
-      at: 2_000,
-    })
-    const afterRebuild = session.governTurn({ at: 2_000, modelWindowTokens: 200_000 })
-    assert.equal(afterRebuild?.trigger, 'model-request')
-    assert.equal(afterRebuild?.source, 'model-tool')
-
-    // 消费仍然只此一次：下一轮不带新请求就不再强开。
-    session.syncHistory({
-      messages: [
-        userMessage('上游把开头改写了'),
-        ...buildPressureHistory(2, 2_000),
-        ...distillPairOf('call-distill-fresh'),
-        userMessage('继续'),
-      ],
-      at: 3_000,
-    })
-    assert.equal(session.governTurn({ at: 3_000, modelWindowTokens: 200_000 })?.trigger, null)
+    assert.equal(session.generation, 1)
   })
 
   void test('转交信号只看当前代账本的报告：重建后不再拿上一代的低收益布防', () => {

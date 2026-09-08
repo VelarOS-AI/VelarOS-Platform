@@ -33,6 +33,10 @@ export interface ContextPayloadStore {
     sessionId: string,
     hash: string
   ): Promise<Nullable<ContextUserTextRecord>>
+  findUserTextsByHash?(
+    sessionId: string,
+    hashes: readonly string[]
+  ): Promise<Map<string, ContextUserTextRecord>>
   putUserText?(record: ContextUserTextRecord): Promise<ContextUserTextRecord>
   putUserTextMany?(records: readonly ContextUserTextRecord[]): Promise<ContextUserTextRecord[]>
 }
@@ -126,6 +130,18 @@ export class InMemoryContextPayloadStore implements ContextPayloadStore {
       createdAt: record.createdAt,
     })
     return record
+  }
+
+  public async findUserTextsByHash(
+    sessionId: string,
+    hashes: readonly string[]
+  ): Promise<Map<string, ContextUserTextRecord>> {
+    const records = new Map<string, ContextUserTextRecord>()
+    for (const hash of new Set(hashes)) {
+      const record = await this.findUserTextByHash(sessionId, hash)
+      if (record) records.set(hash, record)
+    }
+    return records
   }
 
   public async putUserTextMany(

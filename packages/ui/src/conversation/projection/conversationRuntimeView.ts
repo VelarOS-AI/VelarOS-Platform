@@ -33,6 +33,7 @@ export interface ConversationRuntimeView extends ChatStatusRuntime {
   stickyDockItems?: ConversationCardItem[]
   awaitingConfirmationUserActionCards: UserActionCard[]
   awaitingConfirmationExecutionId: Nullable<string>
+  awaitingConfirmationId?: LooseOptional<string>
   /** 等待确认的结构化信封；缺席时确认卡按 `awaitingConfirmationMessage` 散文渲染。 */
   awaitingConfirmationDetail: Nullable<ConfirmationRequestDetail>
   lastRunFinishedAt: Nullable<number>

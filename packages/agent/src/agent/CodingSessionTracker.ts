@@ -3,8 +3,10 @@ import type {
   CapabilityScopeId,
   ChatPromptFeatureId,
   RunProfileSelectionId,
+  TaskApprovalRecord,
   ThinkingDepth,
   ToolCategoryId,
+  ToolConfirmationDecisionOptions,
   ToolLayerTelemetryMetrics,
   ToolSurfaceProfileId,
   TurnPlanningTelemetryPayload,
@@ -45,6 +47,7 @@ import {
   DefaultToolSurfaceProfileId,
 } from './RuntimeProfiles'
 import { SessionTelemetryCounters } from './SessionTelemetryCounters'
+import { TaskApprovalState } from './TaskApprovalState'
 
 type CodingSessionToolCategoryToolNames = Partial<Record<ToolCategoryId, readonly string[]>>
 
@@ -56,6 +59,7 @@ interface CodingSessionToolContext {
 }
 
 interface CodingSessionTrackerOptions {
+  taskApprovals?: TaskApprovalState
   toolCategoryToolNames?: CodingSessionToolCategoryToolNames
   promptFeaturePolicy?: RuntimePromptFeaturePolicy
   thinkingDepth?: ThinkingDepth
@@ -168,7 +172,7 @@ class CodingSessionTracker {
   private readonly residentToolCategories: ReadonlySet<ToolCategoryId>
   private readonly enabledPromptFeatures: Set<ChatPromptFeatureId>
   private readonly sessionApprovedToolCategories = new Set<ToolCategoryId>()
-  private readonly confirmedRiskScopes = new Set<string>()
+  private approvalState = new TaskApprovalState()
   private readonly toolCategoryToolNames: CodingSessionToolCategoryToolNames
   private readonly inspectionTools: Set<string>
   private readonly verificationTools: Set<string>
@@ -219,6 +223,7 @@ class CodingSessionTracker {
     this.verificationHelper = new CodingSessionVerificationHelper(options.validationInterpreters)
     this.residentToolCategories = new Set(options.residentToolCategories ?? [])
     this.thinkingDepth = options.thinkingDepth ?? 'balanced'
+    this.approvalState = options.taskApprovals ?? this.approvalState
     this.promptFeaturePolicy = options.promptFeaturePolicy ?? defaultRuntimePromptFeaturePolicy
     this.activeToolSurfaceProfile = resolveToolSurfaceProfileId(
       options.toolSurfaceProfile,
@@ -309,20 +314,12 @@ class CodingSessionTracker {
   }
 
   /**
-   * 为子 Agent 派生一个隔离的会话追踪器。
-   *
-   * 复制「配置类」状态（启用/激活的工具类别、prompt 特性、运行策略、profile、
-   * 以及当前会话审批的只读快照），但**重置所有易变运行态**：editVersion、
-   * modifiedPaths、工具调用去重指纹、验证熔断计数、提醒版本、boundToolContext 等。
-   *
-   * 这样并发子 Agent 之间、以及子与父之间互不串味——单个子 Agent 的编辑/验证/
-   * 去重/审批状态不会污染兄弟或父。持久副作用仍由共享的注入能力服务与
-   * WriteLeaseCoordinator 协调，不在此隔离。
-   *
-   * 子 Agent 对自身追踪器的审批变更不会回灌父的审批集合。
+   * 为子 Agent 派生隔离的编辑、验证、提醒和工具启用状态。
+   * 授权账本是同一任务的事实，主子共享；批准、拒绝与收回均立即对双方生效。
+   * 持久副作用由注入能力服务和 WriteLeaseCoordinator 协调。
    */
   public forkForSubAgent(): CodingSessionTracker {
-    return new CodingSessionTracker(
+    const child = new CodingSessionTracker(
       [...this.enabledToolCategories],
       [...this.enabledPromptFeatures],
       [...this.sessionApprovedToolCategories],
@@ -343,6 +340,8 @@ class CodingSessionTracker {
         normalizeResourceId: this.normalizeResourceId,
       }
     )
+    child.useTaskApprovalStateFrom(this)
+    return child
   }
 
   private readonly recentFileChanges: Array<{
@@ -1129,17 +1128,40 @@ class CodingSessionTracker {
     const normalizedScope = scope.trim()
     if (!normalizedScope) return this.getConfirmedRiskScopes()
 
-    this.confirmedRiskScopes.add(normalizedScope)
+    this.recordTaskApproval(normalizedScope, true, {
+      operation: { key: normalizedScope, label: _reason ?? normalizedScope },
+    })
     return this.getConfirmedRiskScopes()
   }
 
   public hasConfirmedRiskScope(scope: string): boolean {
     const normalizedScope = scope.trim()
-    return !!normalizedScope && this.confirmedRiskScopes.has(normalizedScope)
+    return !!normalizedScope && this.approvalState.has(normalizedScope)
   }
 
   public getConfirmedRiskScopes(): string[] {
-    return [...this.confirmedRiskScopes]
+    return this.approvalState.scopes()
+  }
+
+  /** 新一轮和子 Agent 保留同一授权归属；编辑、工具启用与提醒状态仍独立。 */
+  public useTaskApprovalStateFrom(source: CodingSessionTracker): void {
+    this.approvalState = source.approvalState
+  }
+
+  public getTaskApprovalRecords(): TaskApprovalRecord[] {
+    return this.approvalState.list()
+  }
+
+  public recordTaskApproval(key: string, approved: boolean, options: ToolConfirmationDecisionOptions, message?: LooseOptional<string>): void {
+    this.approvalState.record(key, approved, options, message)
+  }
+
+  public getTaskApprovalDenial(key: string): Nullable<string> {
+    return this.approvalState.denial(key)
+  }
+
+  public revokeTaskApproval(id: string): boolean {
+    return this.approvalState.revoke(id)
   }
 
   public getToolLayerTelemetryMetrics(turnsPerCompletedTask?: number): ToolLayerTelemetryMetrics {
@@ -1193,15 +1215,19 @@ class CodingSessionTracker {
   ): ToolCategoryId[] {
     if (!this.isToolCategoryAllowed(category)) return this.getSessionApprovedToolCategories()
     this.sessionApprovedToolCategories.add(category)
+    if (!this.hasConfirmedRiskScope(`tool-category:${category}`)) {
+      this.grantConfirmedRiskScope(`tool-category:${category}`, _reason)
+    }
     return this.getSessionApprovedToolCategories()
   }
 
   public hasSessionToolCategoryApproval(category: ToolCategoryId): boolean {
-    return this.sessionApprovedToolCategories.has(category)
+    const status = this.approvalState.status(`tool-category:${category}`)
+    return status ? status === 'approved' : this.sessionApprovedToolCategories.has(category)
   }
 
   public getSessionApprovedToolCategories(): ToolCategoryId[] {
-    return [...this.sessionApprovedToolCategories]
+    return [...this.sessionApprovedToolCategories].filter((category) => this.hasSessionToolCategoryApproval(category))
   }
 
   /**

@@ -42,6 +42,7 @@ import { ToolExecutor, type ToolExecutorEvents } from '../tools'
 import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import { normalizeModelRequestError } from './model/ModelRequestError'
+import { createLinkedAbortScope } from './model/RequestAbortScope'
 import {
   assertProviderRequestSnapshotReconstructable,
   compileProviderSendRequest,
@@ -56,6 +57,7 @@ import {
   type AgentTurnHistoryHelper,
   createInternalFollowUpMessage,
 } from './history'
+import { resolveModelContextUsageOptions } from './LoopContextUsage'
 import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
 import {
   type AgentModelRequestPort,
@@ -65,7 +67,13 @@ import {
   mergeSessionPromptCacheProviderOptions,
 } from './model'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
-import { AgentConnectionRetryHelper, AiSdkMaxRetries, MaxConnectionRetryAttempts } from './retry'
+import {
+  AgentConnectionRetryHelper,
+  AiSdkMaxRetries,
+  isContextOverflowError,
+  markContextOverflowReplayUnsafe,
+  MaxConnectionRetryAttempts,
+} from './retry'
 import type { AgentModelRetryPolicy } from './RunLifecycle'
 import {
   buildOutputTruncationContinuationPrompt,
@@ -181,6 +189,8 @@ export interface QueryTurnResult {
   text: string
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>
+  /** 与 inputTokens 同一次成功请求的编译后估算，含治理投影和实际工具面。 */
+  predictedInputTokens?: LooseOptional<number>
   /**
    * 供应方回合收敛后的执行观测富化（#37 阶段 C 片 2，对齐 StreamTurnResult）：输出 token / 成本 /
    * 结束原因 / 请求指纹。交由 QueryLoop 挂到子 Agent 本确定 turn 的 model span。缺席用 null。
@@ -353,6 +363,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         ? this.streamConsumerHelper
         : new StreamConsumer(toolRegistry)
     const startedAt = Date.now()
+    const requestAbortScope = createLinkedAbortScope(args.toolContext.abortSignal)
     let didLogTurnEnd = false
     let providerTurnReducer: ProviderTurnEventReducer | undefined
     this.log.info('model query turn start', {
@@ -361,6 +372,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     })
 
     try {
+      requestAbortScope.signal.throwIfAborted()
       // 注意力路由内置常开，历史里随时可能出现 recall 句柄，context:recall 必须恒定可用。
       const providerToolNamePlan = this.turnRequestHelper.resolveProviderToolNamePlan(
         args.history,
@@ -423,7 +435,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           activeTask: contextWorkingSetInputs.activeTask,
           pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
           contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,
-          contextUsageOptions: args.contextUsageOptions,
+          contextUsageOptions: resolveModelContextUsageOptions(args.contextUsageOptions, args.modelRequestOptions),
           buildToolPayloadRefs: (providerMessages) =>
             this.turnRequestHelper.buildToolPayloadRefs(
               args.toolContext,
@@ -511,7 +523,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
               args.modelRequestOptions,
               args.toolContext.sessionId
             ) as AgentModelStreamInput<ToolSet>['providerOptions'],
-            abortSignal: args.toolContext.abortSignal,
+            abortSignal: requestAbortScope.signal,
             maxRetries: AiSdkMaxRetries,
             includeRawChunks: true,
             onError: ({ error }) => {
@@ -550,7 +562,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         stream.fullStream,
         turnState,
         {
-          abortSignal: args.toolContext.abortSignal,
+          abortSignal: requestAbortScope.signal,
           executor,
           events: this.createStreamConsumerEvents(args),
           idleStallTimeoutMs: toOptional(args.idleStallTimeoutMs),
@@ -601,6 +613,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         hasToolUse: turnState.hasToolUse,
         text: turnState.accumulatedText,
         inputTokens: toNullable(turnState.inputTokens),
+        predictedInputTokens: compiledRequest.estimate.estimatedTokens,
         // 观测富化（#37 阶段 C 片 2）：与 StreamTurnResult 同款，StreamConsumer 从 stream
         // diagnostics + 请求指纹写入 turnState，此处原样回传。
         outputTokens: toNullable(turnState.outputTokens),
@@ -610,6 +623,13 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         providerRequestSnapshot: compiledRequest.providerRequest,
       }
     } catch (error) {
+      requestAbortScope.abort(error)
+      if (isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {
+        markContextOverflowReplayUnsafe(error, {
+          hasVisibleOutput: turnState.hasVisibleOutput,
+          hasToolUse: turnState.hasToolUse,
+        })
+      }
       if (!didLogTurnEnd) {
         this.log.info('model query turn end', {
           turn: toNullable(args.turn),
@@ -619,6 +639,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       }
       this.emitProviderTurnSnapshot(args, providerTurnReducer, { requirePendingTools: true })
       throw error
+    } finally {
+      requestAbortScope.dispose()
     }
   }
 

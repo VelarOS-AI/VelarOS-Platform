@@ -1,12 +1,21 @@
 import { type ModelMessage,simulateReadableStream } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import { z } from 'zod'
 
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { executeLoopTurnWithContextOverflowRecovery } from '../src/agent/AgentLoop'
 import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
+import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
 import { ContextBuilder } from '../src/agent/ContextBuilder'
+import { resolveContextDegradeAction } from '../src/agent/ContextDegradeLadder'
+import { AgentTurnHistoryHelper } from '../src/agent/history'
+import { AgentLoopContextUsageManager } from '../src/agent/LoopContextUsage'
 import { PrimaryAgentProfile } from '../src/agent/PrimaryAgentProfile'
+import { QueryTurn } from '../src/agent/QueryTurn'
+import { isContextOverflowReplayUnsafe } from '../src/agent/retry'
 import { RunContext } from '../src/agent/run-context/RunContext'
 import {
   type AgentExecutionStackToolContext,
@@ -21,6 +30,7 @@ import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
 import { createBuiltInPromptRegistry } from '../src/prompts'
 import type { AgentEvent, AgentModelInputModality } from '../src/protocol'
 import type { SubAgentTypeDescriptor } from '../src/sub-agent'
+import { parseSubAgentToolResult } from '../src/sub-agent'
 import { TeamModelRouter, WriteLeaseCoordinator } from '../src/team'
 import { defaultRuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
 
@@ -239,65 +249,7 @@ describe('default Agent execution stack', () => {
 
   test('createRunner binds the real dispatcher before dispatch reaches QueryLoop', async () => {
     const model = createModel()
-    const descriptor: SubAgentTypeDescriptor = {
-      id: 'probe',
-      workerType: 'probe',
-      roleId: resolution.id,
-      routeCategory: 'probe',
-      workerPhase: 'probe',
-      toolCategories: [],
-      toolNames: [],
-      resourceLeaseScope: null,
-      readonlyDefault: true,
-      promptAppend: null,
-    }
-    const dispatcher = new SubAgentDispatcher(
-      new TeamModelRouter({
-        resolve: () => ({
-          runtimeOverride: { provider: model.provider, providerId: 'probe', model: 'probe' },
-          trace: null,
-        }),
-      }),
-      new WriteLeaseCoordinator(),
-      { systemConfig, chatConfig },
-      new SubAgentGuidanceRelayRegistry(),
-      {
-        defaultTypeId: 'probe',
-        getDescriptor: () => descriptor,
-        listDescriptors: () => [descriptor],
-      }
-    )
-    const stack = createAgentExecutionStack({
-      model: model.port,
-      toolRegistry,
-      query: { roleEngine: { resolve: () => resolution }, getToolNamesForCategories: () => [] },
-    })
-    stack.createRunner({
-      contextHelper: { buildToolContext: () => createContext('runner') },
-      primaryAgentProfile,
-      subAgentDispatcher: dispatcher,
-      configService: { systemConfig, chatConfig },
-      codingSessionPolicy: { toolCategoryToolNames: {} },
-      surfaceProfileProvider: {
-        resolve: () => ({
-          id: 'probe',
-          toolPolicy: {
-            baseCategories: [],
-            includePromptFeatureCategories: false,
-            restoreApprovedCategories: false,
-          },
-          allowSubAgents: true,
-        }),
-        deriveRunPolicy: () => ({
-          activeSpace: 'default',
-          initialToolCategories: [],
-          initialActiveToolCategories: [],
-          initialPromptFeatures: [],
-          restoredApprovedCategories: [],
-          allowSubAgents: true,
-        }),
-      },
-    })
+    const { dispatcher } = createRunnerHarness(model)
     const result = await dispatcher.dispatch({
       input: { prompt: 'say done', mode: 'sync' },
       parentCtx: { ...createContext('parent'), execution: null },
@@ -470,3 +422,440 @@ for (const scenario of ['reasoning', 'malformed-tool'] as const) {
     expect(events.filter((event) => event.type === 'text-delta' || event.type === 'reasoning-delta')).toHaveLength(1)
   })
 }
+
+function createRunnerHarness(fixture: ReturnType<typeof createModel>) {
+  const relay = new SubAgentGuidanceRelayRegistry()
+  const descriptor: SubAgentTypeDescriptor = {
+    id: 'probe', workerType: 'probe', roleId: resolution.id, routeCategory: 'probe',
+    workerPhase: 'probe', toolCategories: [], toolNames: [], resourceLeaseScope: null,
+    readonlyDefault: true, promptAppend: null,
+  }
+  const dispatcher = new SubAgentDispatcher(
+    new TeamModelRouter({
+      resolve: () => ({
+        runtimeOverride: { provider: fixture.provider, providerId: 'probe', model: 'probe' },
+        trace: null,
+      }),
+    }),
+    new WriteLeaseCoordinator(),
+    { systemConfig, chatConfig },
+    relay,
+    { defaultTypeId: 'probe', getDescriptor: () => descriptor, listDescriptors: () => [descriptor] }
+  )
+  const stack = createAgentExecutionStack({
+    model: fixture.port, toolRegistry,
+    query: { roleEngine: { resolve: () => resolution }, getToolNamesForCategories: () => [] },
+  })
+  const runner = stack.createRunner({
+    contextHelper: { buildToolContext: () => createContext('runner') },
+    primaryAgentProfile, subAgentDispatcher: dispatcher, configService: { systemConfig, chatConfig },
+    codingSessionPolicy: { toolCategoryToolNames: {} },
+    surfaceProfileProvider: {
+      resolve: () => ({
+        id: 'probe',
+        toolPolicy: {
+          baseCategories: [], includePromptFeatureCategories: false, restoreApprovedCategories: false,
+        },
+        allowSubAgents: true,
+      }),
+      deriveRunPolicy: () => ({
+        activeSpace: 'default', initialToolCategories: [], initialActiveToolCategories: [],
+        initialPromptFeatures: [], restoredApprovedCategories: [], allowSubAgents: true,
+      }),
+    },
+  })
+  return { dispatcher, relay, runner, stack }
+}
+
+test('Query idle timeout aborts the actual provider request and leaves its parent usable', async () => {
+  const fixture = createModel()
+  let providerSignal: AbortSignal | undefined
+  fixture.model.doStream = async ({ abortSignal }) => {
+    providerSignal = abortSignal
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] })
+          controller.enqueue({ type: 'text-start', id: 'text' })
+          controller.enqueue({ type: 'text-delta', id: 'text', delta: 'partial output' })
+          abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true })
+        },
+      }),
+    }
+  }
+  const controller = new AbortController()
+  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  try {
+    await expect(query.executeQueryTurn({
+      provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
+      history: [{ role: 'user', content: 'work' }], toolContext: createContext('query-idle', controller),
+      allowedTools: [], idleStallTimeoutMs: 20,
+      modelRetry: { allowPartialContinuation: false, onFailure: () => null },
+    })).rejects.toMatchObject({ code: 'MODEL_STREAM_STALLED' })
+    expect(providerSignal).toBeDefined()
+    expect(providerSignal?.aborted).toBe(true)
+    expect(controller.signal.aborted).toBe(false)
+  } finally {
+    controller.abort()
+  }
+})
+
+test('Query overflow after visible output never replays that output through the recovery ladder', async () => {
+  const fixture = createModel()
+  let requests = 0
+  fixture.model.doStream = async () => {
+    requests += 1
+    return {
+      stream: simulateReadableStream({
+        initialDelayInMs: null, chunkDelayInMs: null,
+        chunks: [
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text' },
+          { type: 'text-delta', id: 'text', delta: 'already visible' },
+          { type: 'error', error: new AppError('MODEL_CONTEXT_OVERFLOW', 'maximum context length exceeded') },
+        ],
+      }),
+    }
+  }
+  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  const context = createContext('query-overflow')
+  const textDeltas: string[] = []
+  let recoveryActions = 0
+  let failure: unknown
+  try {
+    await executeLoopTurnWithContextOverflowRecovery({
+      turn: 1, abortSignal: context.abortSignal,
+      executeTurn: () => query.executeQueryTurn({
+        provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
+        history: [{ role: 'user', content: 'work' }], toolContext: context,
+        allowedTools: [], streamTextDeltas: true,
+        events: { emitRuntime: () => undefined, emitTextDelta: (text) => textDeltas.push(text) },
+      }),
+      resolveAction: (attempt) => resolveContextDegradeAction('query', attempt),
+      applyAction: async () => { recoveryActions += 1; return true },
+      surrenderLogMessage: 'overflow test exhausted', log: { error: () => undefined },
+    })
+  } catch (error) {
+    failure = error
+  }
+  expect(failure).toMatchObject({ code: 'MODEL_CONTEXT_OVERFLOW' })
+  expect(isContextOverflowReplayUnsafe(failure)).toBe(true)
+  expect(requests).toBe(1)
+  expect(recoveryActions).toBe(0)
+  expect(textDeltas).toEqual(['already visible'])
+})
+
+for (const scenario of ['recovers', 'exhausts', 'preserves-write'] as const) {
+  test(`provider overflow automatically reclaims before a bounded Query retry: ${scenario}`, async () => {
+    const fixture = createModel()
+    const successfulStream = fixture.model.doStream.bind(fixture.model)
+    const requestChars: number[] = []
+    const estimates: number[] = []
+    const outputReserves: number[] = []
+    let writes = 0
+    fixture.model.doStream = async (input) => {
+      requestChars.push(JSON.stringify(input.prompt).length)
+      expect(input.maxOutputTokens).toBe(48_000)
+      if (scenario === 'preserves-write' && requestChars.length === 1) return { stream: simulateReadableStream({
+          initialDelayInMs: null, chunkDelayInMs: null,
+          chunks: [
+            { type: 'stream-start', warnings: [] },
+            { type: 'tool-call', toolCallId: 'write-once', toolName: 'write_file', input: JSON.stringify({ path: '/repo/output.txt', text: 'done' }) },
+            { type: 'finish', finishReason: { unified: 'tool-calls', raw: 'tool-calls' }, usage: { inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 3, text: 3, reasoning: 0 } } },
+          ],
+        }) }
+      if (requestChars.length === (scenario === 'preserves-write' ? 2 : 1) || scenario === 'exhausts') {
+        throw new AppError('MODEL_CONTEXT_OVERFLOW', 'maximum context length exceeded')
+      }
+      return successfulStream(input)
+    }
+    const writeTool = {
+        permissions: ['project:write'],
+        schema: z.object({ path: z.string(), text: z.string() }),
+        execute: () => { writes++; return { changed: true, revision: 2 } },
+    }
+    const registry: typeof toolRegistry = {
+      ...toolRegistry,
+      names: ['read_file', 'write_file', 'context:recall'],
+      get: (name) => name === 'write_file' ? writeTool as never : null,
+      listAvailable: (_context, names) => (names ?? []).map((name) => ({ name, description: 'probe' })),
+      toAiTools: () => ({
+        read_file: { description: 'read', inputSchema: z.object({ path: z.string() }) },
+        write_file: { description: 'write', inputSchema: z.object({ path: z.string(), text: z.string() }) },
+        context__recall: { description: 'recall', inputSchema: z.object({ ref: z.string() }) },
+      }),
+    }
+    const governance = new ContextGovernanceSessionRegistry({
+      classifier: { isRefetchable: (input) => input.toolName === 'read_file' ? true : undefined },
+      config: { dashboard: false, tailProtectTurns: 1, minEpochSavingPercent: 1, cap: 128_000 },
+    })
+    const history: ModelMessage[] = []
+    for (let index = 0; index < 6; index++) {
+      history.push(
+        { role: 'user', content: `Read /repo/src/file-${index}.ts` },
+        { role: 'assistant', content: [{ type: 'tool-call', toolCallId: `read-${index}`, toolName: 'read_file', input: { path: `/repo/src/file-${index}.ts` } }] },
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: `read-${index}`, toolName: 'read_file', output: { type: 'text', value: 'existing receipt body '.repeat(200) } }] },
+      )
+    }
+    const sessionId = `automatic-overflow-${scenario}`
+    const context = {
+      ...createContext(sessionId),
+      getCurrentVisibleToolTransportNames: () => ({ read_file: 'read_file', write_file: 'write_file', 'context:recall': 'context__recall' }),
+    }
+    const query = new QueryTurn(registry, new AgentTurnHistoryHelper(), governance)
+    let actions = 0
+    const executeTurn = () => query.executeQueryTurn({
+        provider: fixture.provider, model: 'probe', systemPrompt: 'probe', history,
+        toolContext: context, allowedTools: registry.names, contextWindow: 128_000,
+        modelRequestOptions: { requestPolicy: { maxOutputTokens: 48_000 } },
+        contextUsageOptions: { reservedOutputTokens: 1_000 },
+        events: { emitRuntime: (event) => {
+          if (event.kind !== 'context-usage-estimate') return
+          estimates.push(event.estimatedTokens)
+          outputReserves.push(event.reservedOutputTokens)
+        } },
+      })
+    if (scenario === 'preserves-write') {
+      context.codingSession.hasSessionToolCategoryApproval = () => true
+      expect((await executeTurn()).hasToolUse).toBe(true)
+      expect(writes).toBe(1)
+      expect(JSON.parse(JSON.stringify(history.at(-1)))).toMatchObject({ role: 'tool', content: [expect.objectContaining({ output: { type: 'text', value: JSON.stringify({ changed: true, revision: 2 }) } })] })
+    }
+    const originalHistory = JSON.stringify(history)
+    const originalCount = history.length
+    const run = executeLoopTurnWithContextOverflowRecovery({
+      turn: 1,
+      abortSignal: context.abortSignal,
+      executeTurn,
+      resolveAction: (attempt) => resolveContextDegradeAction('query', attempt),
+      applyAction: async () => {
+        actions++
+        return !!governance.requestEpoch(sessionId, { source: 'overflow-recovery' })?.applied
+      },
+      surrenderLogMessage: 'overflow recovery exhausted',
+      log: { error: () => undefined },
+    })
+    if (scenario !== 'exhausts') {
+      const result = await run
+      expect(result.text).toBe('model complete')
+      expect(result.predictedInputTokens).toBe(estimates.at(-1))
+    }
+    else await expect(run).rejects.toMatchObject({ code: 'MODEL_CONTEXT_OVERFLOW' })
+    expect(actions).toBe(1)
+    expect(requestChars).toHaveLength(scenario === 'preserves-write' ? 3 : 2)
+    expect(requestChars.at(-1)).toBeLessThan(requestChars.at(-2)!)
+    expect(estimates.at(-1)).toBeLessThan(estimates.at(-2)!)
+    expect(outputReserves).toEqual(requestChars.map(() => 48_000))
+    expect(writes).toBe(scenario === 'preserves-write' ? 1 : 0)
+    expect(JSON.stringify(history.slice(0, originalCount))).toBe(originalHistory)
+    expect(governance.epochReports(sessionId)).toContainEqual(expect.objectContaining({ source: 'overflow-recovery', applied: true }))
+  })
+}
+
+test.each(['solo', 'query'] as const)('%s reserves actual model output policy and calibrates the same compiled request', async (surface) => {
+  const fixture = createModel()
+  const resolveRuntime = fixture.port.resolveRoleRuntime
+  fixture.port.resolveRoleRuntime = async (...args) => ({
+    ...await resolveRuntime(...args),
+    modelRequestOptions: { requestPolicy: { maxOutputTokens: 48_000 } },
+  })
+  const compiledEstimates: number[] = []
+  let observedReserve = 0
+  let requestedOutput = 0
+  const successfulStream = fixture.model.doStream.bind(fixture.model)
+  fixture.model.doStream = async (input) => {
+    requestedOutput = input.maxOutputTokens ?? 0
+    return successfulStream(input)
+  }
+  const records = spyOn(AgentLoopContextUsageManager.prototype, 'recordActualUsage')
+  const budgets = spyOn(AgentLoopContextUsageManager.prototype, 'buildContextUsageOptions')
+  const events = new ExecutionEventBus({
+    agent: (event) => {
+      if (event.type !== 'runtime' || event.payload.kind !== 'context-usage-estimate') return
+      compiledEstimates.push(event.payload.estimatedTokens)
+      observedReserve = event.payload.reservedOutputTokens
+    },
+  })
+  try {
+    const stack = createAgentExecutionStack({ model: fixture.port, toolRegistry,
+      query: { roleEngine: { resolve: () => resolution }, getToolNamesForCategories: () => [] },
+    })
+    const abortController = new AbortController()
+    const lifecycle = { onTurnSettled: ({ turn, history }: { turn: number; history: ModelMessage[] }) => {
+      if (turn === 1) { history.push({ role: 'user', content: 'one more turn' }); return 'continue' as const }
+      return 'stop' as const
+    } }
+    if (surface === 'solo') {
+      const outcome = await stack.executeSolo({
+        history: [{ role: 'user', content: 'say done' }],
+        config: {}, chatConfig, systemConfig, abortController,
+        toolContext: createContext('compiled-calibration', abortController), resolution, events, lifecycle,
+      })
+      expect(outcome.status).toBe('completed')
+    } else {
+      expect(await stack.executeQuery({
+        task: 'say done', opts: { events },
+        parentCtx: createContext('compiled-calibration', abortController),
+        chatConfig, systemConfig, collectCapabilityContext: async () => null, lifecycle,
+      })).toBe('model complete')
+    }
+    expect(requestedOutput).toBe(48_000)
+    expect(observedReserve).toBe(requestedOutput)
+    expect(compiledEstimates).toHaveLength(2)
+    expect(records.mock.calls).toEqual(compiledEstimates.map((estimate) => ['probe', estimate, 10]))
+    expect(budgets.mock.results[0]?.value.calibrationFactor).toBe(1)
+    expect(budgets.mock.results[1]?.value.calibrationFactor).toBeLessThan(1)
+  } finally {
+    records.mockRestore()
+    budgets.mockRestore()
+  }
+})
+
+for (const mode of ['failure', 'cancellation'] as const) {
+  test(`runner preserves a worker's existing mutations after ${mode}`, async () => {
+    const fixture = createModel()
+    const controller = new AbortController()
+    const parent = createContext(`query-snapshot-${mode}`, controller)
+    const parentTracker = parent.codingSession as CodingSessionTracker
+    let childTracker: CodingSessionTracker | undefined
+    const fork = parentTracker.forkForSubAgent.bind(parentTracker)
+    parentTracker.forkForSubAgent = () => {
+      childTracker = fork()
+      return childTracker
+    }
+    fixture.model.doStream = async () => {
+      childTracker!.notifyExternalFilesystemTouches(['edited-before-failure.ts'])
+      if (mode === 'cancellation') controller.abort('cancel after write')
+      throw new AppError('VALIDATION', 'provider stopped after the resource changed')
+    }
+    const { runner } = createRunnerHarness(fixture)
+    await expect(runner.query('work', parent)).rejects.toBeDefined()
+    expect(childTracker).not.toBe(parentTracker)
+    expect(parentTracker.getSnapshot()).toMatchObject({
+      modifiedPaths: ['edited-before-failure.ts'], hasCapabilityMutations: true,
+      needsChangeInspection: true, needsVerificationCommand: true,
+    })
+  })
+}
+
+for (const source of ['worker', 'parent'] as const) {
+  test(`in-flight ${source} cancellation remains aborted through the real dispatcher and QueryLoop`, async () => {
+    const fixture = createModel()
+    let markStarted: () => void = () => undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    fixture.model.doStream = async ({ abortSignal }) => ({
+      stream: new ReadableStream({
+        start(controller) {
+          abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true })
+          markStarted()
+        },
+      }),
+    })
+    const { dispatcher, relay } = createRunnerHarness(fixture)
+    const controller = new AbortController()
+    const parent = createContext(`cancel-${source}`, controller)
+    const execution = dispatcher.dispatch({
+      input: { prompt: 'work', mode: 'sync' }, parentCtx: parent,
+      events: new ExecutionEventBus(), config: {},
+    })
+    // Attach both branches immediately: parent cancellation must reject to the caller.
+    const settled = execution.then((result) => ({ result, error: null }), (error: unknown) => ({ result: null, error }))
+    try {
+      await started
+      const worker = relay.listActiveWorkers(parent.sessionId!)[0]
+      expect(worker).toBeDefined()
+      if (source === 'worker') {
+        expect(dispatcher.abortWorker(parent.sessionId!, worker!.threadId, 'user cancelled worker')).toBe(true)
+      } else {
+        controller.abort(new Error('user cancelled parent'))
+      }
+      const outcome = await settled
+      if (source === 'worker') {
+        expect(outcome.error).toBeNull()
+        expect(parseSubAgentToolResult(outcome.result!)).toMatchObject({ status: 'aborted' })
+      } else {
+        expect(outcome.error).toMatchObject({ code: 'EXECUTION_ABORTED' })
+      }
+      expect(relay.listActiveWorkers(parent.sessionId!)).toEqual([])
+    } finally {
+      controller.abort()
+      await settled
+      dispatcher.clearExecution(parent.sessionId!)
+    }
+  })
+}
+
+test('a standalone Query worker signal cancels its provider and normalizes the terminal error', async () => {
+  const fixture = createModel()
+  let providerSignal: AbortSignal | undefined
+  let markStarted: () => void = () => undefined
+  const started = new Promise<void>((resolve) => { markStarted = resolve })
+  fixture.model.doStream = async ({ abortSignal }) => {
+    providerSignal = abortSignal
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true })
+          markStarted()
+        },
+      }),
+    }
+  }
+  const stack = createAgentExecutionStack({
+    model: fixture.port, toolRegistry,
+    query: { roleEngine: { resolve: () => resolution }, getToolNamesForCategories: () => [] },
+  })
+  const worker = new AbortController()
+  const parent = new AbortController()
+  const execution = stack.executeQuery({
+    task: 'work', opts: { workerAbortSignal: worker.signal }, parentCtx: createContext('standalone-cancel', parent),
+    chatConfig, systemConfig, collectCapabilityContext: async () => null,
+  })
+  await started
+  const watchdog = setTimeout(() => parent.abort('worker signal did not stop its provider'), 500)
+  try {
+    worker.abort('worker cancelled independently')
+    await expect(execution).rejects.toMatchObject({ code: 'EXECUTION_ABORTED' })
+    expect(providerSignal?.aborted).toBe(true)
+    expect(parent.signal.aborted).toBe(false)
+  } finally {
+    clearTimeout(watchdog)
+    parent.abort()
+  }
+})
+
+test('a Query retry owns a fresh signal after cancelling the stalled attempt', async () => {
+  const fixture = createModel()
+  const complete = fixture.model.doStream
+  const requestSignals: Array<AbortSignal | undefined> = []
+  fixture.model.doStream = async (options) => {
+    requestSignals.push(options.abortSignal)
+    if (requestSignals.length > 1) {
+      expect(requestSignals[0]?.aborted).toBe(true)
+      expect(options.abortSignal?.aborted).toBe(false)
+      return complete.call(fixture.model, options)
+    }
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          options.abortSignal?.addEventListener('abort', () => controller.error(options.abortSignal?.reason), { once: true })
+        },
+      }),
+    }
+  }
+  const parent = new AbortController()
+  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  try {
+    const result = await query.executeQueryTurn({
+      provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
+      history: [{ role: 'user', content: 'work' }], toolContext: createContext('query-idle-retry', parent),
+      allowedTools: [], idleStallTimeoutMs: 20,
+      modelRetry: { allowPartialContinuation: false, onFailure: ({ attempt }) => attempt === 1 ? { delayMs: 0 } : null },
+    })
+    expect(result.text).toBe('model complete')
+    expect(requestSignals).toHaveLength(2)
+    expect(parent.signal.aborted).toBe(false)
+  } finally {
+    parent.abort()
+  }
+})

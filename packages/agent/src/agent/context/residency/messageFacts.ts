@@ -12,7 +12,9 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isRecord, isString, Log, toNullable } from '@velaros-ai/core'
 
+import { estimateContextValueChars } from '../contextUsage'
 import { readVerbatimString } from '../providerRequest/messageScan'
+import { readUserMessageText } from '../userMessageText'
 
 const log = Log.tag('ContextResidencyMessageFacts')
 
@@ -39,6 +41,7 @@ const PathPattern = /(?:^|["'\s(])((?:\/|\.{1,2}\/|[A-Za-z]:\\)[^\s"'<>)\]}]+)/
 
 /** 消息正文的保真文本投影（结构化内容退化为稳定 JSON 文本）。 */
 export function readMessageText(message: ModelMessage): string {
+  if (message.role === 'user') return readUserMessageText(message) ?? ''
   return readContentText(message.content)
 }
 
@@ -51,6 +54,16 @@ export function estimateMessageChars(message: ModelMessage): number {
   } catch (error) {
     log.warn('消息字符估算序列化失败，回落到文本投影长度', { error: String(error) })
     return readMessageText(message).length
+  }
+}
+
+/** 附件字节仅作原始元数据；治理字符规模复用发送计量中的附件摘要。 */
+export function estimateMessageBudgetChars(message: ModelMessage): number {
+  try {
+    return estimateContextValueChars(message.content)
+  } catch (error) {
+    log.warn('消息治理字符估算失败，回落到原始字符规模', { error: String(error) })
+    return estimateMessageChars(message)
   }
 }
 

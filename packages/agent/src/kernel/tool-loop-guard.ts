@@ -11,6 +11,8 @@ export interface KernelToolLoopGuardInput {
 
 export interface KernelToolFailureBatchEntry {
   toolName: string
+  /** 使用实际执行参数，区分相同错误下对不同目标的探索。 */
+  args?: Record<string, unknown>
   error: string
 }
 
@@ -35,6 +37,7 @@ function buildFailureBatchKey(batch: readonly KernelToolFailureBatchEntry[]): st
   return stableStringify(
     batch.map((entry) => ({
       toolName: entry.toolName,
+      args: entry.args ?? {},
       error: entry.error,
     }))
   )

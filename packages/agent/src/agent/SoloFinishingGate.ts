@@ -39,11 +39,10 @@ interface RunSoloFinishingGateInput<
   }): Promise<AutoVerificationGateResult>
   runtimeInput?: AgentRuntimeInputPort
   consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
-  /** 在 runtime input takeOrSeal 与 goal 成功提交之前，处理后台任务通知或停泊 wait-any。 */
+  /** 在 runtime input takeOrSeal 之前，处理后台任务通知或停泊 wait-any。 */
   settlePendingBackgroundJobs?: () => Promise<SoloBackgroundCompletionGateResult>
   goalMode?: boolean
   inspectGoalState?: () => Promise<SoloGoalFinishingState>
-  completeGoalOnSuccessfulFinish?: () => Promise<void>
   recordGoalCompletionAttempt?: (state: SoloGoalFinishingState) => Promise<void>
   finishingGateBlockTracker?: SoloFinishingGateBlockTracker
   log: Pick<ScopedLog, 'debug' | 'info' | 'warn'>
@@ -86,8 +85,6 @@ interface SoloGoalFinishingState {
   exists: boolean
   terminal: boolean
   status: SoloGoalFinishingStatus
-  /** Read-only readiness for the control plane's final goal commit. */
-  canComplete?: boolean
   objective?: LooseOptional<string>
   blockedAuditTurns?: LooseOptional<number>
 }
@@ -216,8 +213,7 @@ async function runSoloFinishingGate<
   }
 
   // 顺序不可后移：consumeSoloRuntimeGuidance(before-complete) 会原子 takeOrSeal，
-  // goalMode 也会在下方提交 successful completion。后台停泊必须先于两者，
-  // 否则等待期间的用户 steer 无法唤醒，或 goal 在子 Agent 结果审阅前被提前标完成。
+  // 后台停泊必须先于最终输入封口，否则等待期间的用户 steer 无法唤醒。
   const backgroundGate = await input.settlePendingBackgroundJobs?.()
   if (backgroundGate && backgroundGate.status !== 'ready') {
     if (backgroundGate.status === 'interrupted' && input.abortSignal.aborted) {
@@ -245,7 +241,6 @@ async function runSoloFinishingGate<
   // `docs/design-principles.md` §7 第 1 类）：未收束的计划步骤是**工作流编排纪律**，
   // 不是不可逆伤害也不是已证明的空转，只许走提示词与技能文书。旧门连拦三轮会把
   // 会话判成 error，模型即使已经答完也被锁死在收尾环上。
-  let shouldCompleteGoal = false
   if (input.goalMode && input.inspectGoalState) {
     const guidance = await consumeSoloRuntimeGuidance({
       turn: input.turn,
@@ -261,11 +256,7 @@ async function runSoloFinishingGate<
       return resolveBlockedFinishingGateResult(input, 'user-guidance')
     }
     const goalState = await input.inspectGoalState()
-    shouldCompleteGoal =
-      !goalState.terminal &&
-      !!goalState.canComplete &&
-      !!input.completeGoalOnSuccessfulFinish
-    if (!goalState.terminal && !shouldCompleteGoal) {
+    if (!goalState.terminal) {
       await input.recordGoalCompletionAttempt?.(goalState)
       input.history.push(createInternalFollowUpMessage(buildGoalStatusRequiredReminder(goalState)))
       input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
@@ -278,7 +269,7 @@ async function runSoloFinishingGate<
   }
 
   // 所有可能续轮的检查均先于最终输入边界执行。
-  // 异步目标检查期间接收的输入也优先于目标提交。
+  // 异步目标检查期间接收的输入也必须在执行结束前消费。
   const finalGuidance = await consumeSoloRuntimeGuidance({
     turn: input.turn,
     phase: 'before-complete',
@@ -296,13 +287,6 @@ async function runSoloFinishingGate<
     input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
     return { status: 'aborted' }
   }
-  if (shouldCompleteGoal) await input.completeGoalOnSuccessfulFinish?.()
-  if (input.abortSignal.aborted) {
-    input.emitAbort()
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
-    return { status: 'aborted' }
-  }
-
   input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
   input.log.debug('agent done', { turns: input.turn })
   return { status: 'completed' }

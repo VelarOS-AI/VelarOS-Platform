@@ -20,6 +20,7 @@ interface ToolSchemaIssue {
   message: string
   expected?: unknown
   code?: unknown
+  errors?: ToolSchemaIssue[][]
 }
 
 type ToolSchemaResult<TInput> =
@@ -152,12 +153,42 @@ class ToolArgsSchemaValidator {
   }
 
   public formatIssues(
-    issues: Array<{ path: PropertyKey[]; message: string }>
+    issues: ToolSchemaIssue[]
   ): ToolSchemaIssueDetail[] {
-    return issues.slice(0, 3).map((issue) => ({
-      path: this.issuePathKey(issue.path),
-      message: issue.message,
-    }))
+    const formatted: ToolSchemaIssueDetail[] = []
+    const seen = new Set<string>()
+    let visited = 0
+    const append = (
+      nestedIssues: ToolSchemaIssue[],
+      parentPath: PropertyKey[] = [],
+      alternatives: number[] = []
+    ): void => {
+      for (const issue of nestedIssues) {
+        if (formatted.length >= 3 || visited >= 50) return
+        visited += 1
+        const path = [...parentPath, ...issue.path]
+        if (issue.code === 'invalid_union' && issue.errors?.length && alternatives.length < 8) {
+          // Zod 的 union 分支路径相对外层 issue；分支条件必须保留，避免提示模型同时满足互斥选项。
+          for (const [index, branch] of issue.errors.entries()) {
+            if (formatted.length >= 3 || visited >= 50) return
+            append(branch, path, [...alternatives, index + 1])
+          }
+          continue
+        }
+        const field = this.issuePathKey(path)
+        const key = JSON.stringify([field, issue.message])
+        if (seen.has(key)) continue
+        seen.add(key)
+        formatted.push({
+          path: field,
+          message: !isEmpty(alternatives)
+            ? `Union option ${alternatives.join('.')}: ${issue.message}`
+            : issue.message,
+        })
+      }
+    }
+    append(issues)
+    return formatted
   }
 
   public describeValidationHint(

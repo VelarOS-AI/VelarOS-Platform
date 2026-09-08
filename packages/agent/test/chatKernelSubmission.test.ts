@@ -50,6 +50,81 @@ function createBridge(
 }
 
 describe('kernel chat submission receipts', () => {
+  test('confirms the host receipt before execution, including input-free continuations', async () => {
+    for (const payload of [request('with-input'), { sessionId: 'session', messages: [] }]) {
+      const order: string[] = []
+      const bridge = createBridge(async () => { order.push('run') })
+      const receipt = bridge.submit(null, payload, () => { order.push('accepted') })
+      await receipt.completed
+      assert.deepEqual(order, ['accepted', 'run'])
+    }
+  })
+
+  test('failed admission leaves the host receipt unconsumed', async () => {
+    const memory = new InMemoryKernelSessionInputStore()
+    memory.admit = async () => { throw new Error('admission failed') }
+    let consumed = false
+    const bridge = createBridge(async () => assert.fail('unadmitted input ran'), memory)
+    const receipt = bridge.submit(null, request('rejected-context'), () => { consumed = true })
+    await assert.rejects(receipt.accepted, /admission failed/u)
+    await assert.rejects(receipt.completed, /admission failed/u)
+    assert.equal(consumed, false)
+  })
+
+  test('cancellation during admission does not consume a late host receipt', async () => {
+    const memory = new InMemoryKernelSessionInputStore()
+    const admit = memory.admit.bind(memory)
+    const pending = gate()
+    memory.admit = async (input) => {
+      await pending.promise
+      return admit(input)
+    }
+    let consumed = false
+    const bridge = createBridge(async () => assert.fail('cancelled input ran'), memory)
+    const receipt = bridge.submit(null, request('cancelled-context'), () => { consumed = true })
+    await bridge.cancel('session')
+    pending.resolve()
+    await assert.rejects(receipt.accepted, /cancelled/u)
+    await assert.rejects(receipt.completed, /cancelled/u)
+    await Promise.resolve()
+    assert.equal(consumed, false)
+  })
+
+  test('host receipt failure prevents execution and rejects both promises', async () => {
+    for (const payload of [request('with-input'), { sessionId: 'session', messages: [] }]) {
+      const bridge = createBridge(async () => assert.fail('unconfirmed input ran'))
+      const receipt = bridge.submit(null, payload, () => { throw new Error('receipt failed') })
+      await assert.rejects(receipt.accepted, /receipt failed/u)
+      await assert.rejects(receipt.completed, /receipt failed/u)
+    }
+  })
+
+  test('out-of-order admission can be cancelled without waiting for the blocked first input', async () => {
+    const memory = new InMemoryKernelSessionInputStore()
+    const admit = memory.admit.bind(memory)
+    const releaseFirst = gate()
+    memory.admit = async (input) => {
+      if (input.id === 'blocked-first') await releaseFirst.promise
+      return admit(input)
+    }
+    let consumed = 0
+    const bridge = createBridge(async () => assert.fail('cancelled input ran'), memory)
+    const first = bridge.submit(null, request('blocked-first'), () => { consumed += 1 })
+    const second = bridge.submit(null, request('admitted-second'), () => { consumed += 1 })
+    await second.accepted
+    try {
+      await bridge.cancel('session')
+      await assert.rejects(first.accepted, /cancelled/u)
+      await assert.rejects(first.completed, /cancelled/u)
+      await assert.rejects(second.completed, /cancelled/u)
+      assert.equal(consumed, 1)
+    } finally {
+      releaseFirst.resolve()
+    }
+    await Promise.resolve()
+    assert.equal(consumed, 1)
+  })
+
   test('accepts before completion and keeps per-input completion across coalesced wakes and guidance', async () => {
     const firstRun = gate()
     const secondRun = gate()
@@ -143,6 +218,27 @@ describe('kernel chat submission receipts', () => {
     await first.completed
     await assert.rejects(queued.completed, /cancelled/u)
     assert.deepEqual(runs, ['active'])
+  })
+
+  test('cancellation waits for real execution cleanup and returns pending input identities', async () => {
+    const entered = gate()
+    const cleanup = gate()
+    let requested = false
+    const bridge = createBridge(async () => { entered.resolve(); await cleanup.promise }, undefined, () => { requested = true; return true })
+    const first = bridge.submit(null, request('active'))
+    await entered.promise
+    const pending = bridge.submit(null, request('retained'))
+    await pending.accepted
+    let settled = false
+    const cancelling = bridge.cancel('session').then((receipt) => { settled = true; return receipt })
+    for (let i = 0; i < 5; i += 1) await Promise.resolve()
+    assert.equal(requested, true)
+    assert.equal(settled, false)
+    cleanup.resolve()
+    const receipt = await cancelling
+    await first.completed
+    await assert.rejects(pending.completed, /cancelled/u)
+    assert.deepEqual(receipt.retainedInputIds, ['retained'])
   })
 
   test('rejects both receipts on failed admission without executing the request', async () => {

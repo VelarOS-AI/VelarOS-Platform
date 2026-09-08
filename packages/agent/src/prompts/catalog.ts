@@ -3,12 +3,12 @@
 // **Tier0 只有两段**——身份 / 品牌语气。两段都走 `createCorePromptSegment`：
 // 不读 facts、不带谓词，渲染结果在构造期即固定，稳定前缀因此在同一会话内逐字不变。
 // 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
-import { isEmpty, isTrue } from '@velaros-ai/core'
+import { isArray, isEmpty, isTrue } from '@velaros-ai/core'
 
 import { type AppRuntimeFacts, readAppRuntimeFacts } from '../agent/AppRuntimeFacts'
 
 import { createCorePromptSegment, PromptSegmentPriority } from './segments/shared'
-import type { PromptSegmentDefinition } from './registry'
+import type { PromptRenderContext, PromptSegmentDefinition } from './registry'
 import { PromptRegistry } from './registry'
 
 export interface BuiltInPromptOptions {
@@ -82,6 +82,13 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
   ].join('\n')
 }
 
+function formatReadableSkillInstruction(context: PromptRenderContext, skillId: string): string {
+  const readableSkillIds = context.facts?.readableSkillIds
+  return isArray(readableSkillIds) && readableSkillIds.includes(skillId)
+    ? `使用前先读取 skill:${skillId}。`
+    : ''
+}
+
 /** 创建内置基础 prompt 段。 */
 function createBuiltInPromptSegments(
   options: BuiltInPromptOptions = {}
@@ -125,11 +132,12 @@ function createBuiltInPromptSegments(
       retention: 'protected',
       priority: PromptSegmentPriority.capabilityProtocol,
       when: (context) => isTrue(context.facts?.shouldInjectVisualWidgetPrompt),
-      render: () =>
+      render: (context) =>
         [
           '普通说明和简短回答使用 Markdown。',
-          '复杂说明展示、复杂图表、数据驱动状态、多状态或多步骤交互、Canvas/WebGL，以及供用户探索或进一步讲解的内容使用 Widget，并先读取 skill:widget-visual-output。',
-        ].join('\n'),
+          '复杂说明展示、复杂图表、数据驱动状态、多状态或多步骤交互、Canvas/WebGL，以及供用户探索或进一步讲解的内容使用 Widget。',
+          formatReadableSkillInstruction(context, 'widget-visual-output'),
+        ].filter(Boolean).join('\n'),
     },
     {
       id: 'runtime.html-artifact-protocol',
@@ -139,11 +147,12 @@ function createBuiltInPromptSegments(
       retention: 'protected',
       priority: PromptSegmentPriority.capabilityProtocol + 5,
       when: (context) => isTrue(context.facts?.shouldInjectHtmlArtifactPrompt),
-      render: () =>
+      render: (context) =>
         [
-          '简单 HTML 页面、卡片、落地页、静态内容、轻交互和即时视觉效果使用 HTML Live Preview，并先读取 skill:html-artifact-output。',
+          '简单 HTML 页面、卡片、落地页、静态内容、轻交互和即时视觉效果使用 HTML Live Preview。',
+          formatReadableSkillInstruction(context, 'html-artifact-output'),
           '实时预览直接输出 <artifact>/<patch> 流式协议；artifact:produce 仅用于导出可下载资源。',
-        ].join('\n'),
+        ].filter(Boolean).join('\n'),
     },
     {
       id: 'runtime.visual-rendering-routing',

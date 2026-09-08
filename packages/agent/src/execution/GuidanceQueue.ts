@@ -30,6 +30,7 @@ type ExecutionGuidanceClearResult =
 
 interface ExecutionGuidanceLane {
   messages: ModelMessage[]
+  receipts: Array<{ inputId?: string; sourceSessionId?: string; onConsumed?: () => void }>
   inputAcceptedListeners: Set<() => void>
   sealed: boolean
 }
@@ -39,7 +40,8 @@ class ExecutionGuidanceQueue {
 
   public enqueue(
     executionId: string,
-    message: ModelMessage
+    message: ModelMessage,
+    receipt: { inputId?: string; sourceSessionId?: string; onConsumed?: () => void } = {}
   ): ExecutionGuidanceEnqueueResult {
     if (!hasUserVisibleGuidance(message))
       return { status: 'invalid', reason: 'empty-or-non-user-message' }
@@ -48,6 +50,7 @@ class ExecutionGuidanceQueue {
     if (!lane || lane.sealed) return { status: 'closed', reason: 'execution-settled' }
 
     lane.messages.push(message)
+    lane.receipts.push(receipt)
     for (const listener of [...lane.inputAcceptedListeners]) listener()
     return { status: 'accepted' }
   }
@@ -56,13 +59,15 @@ class ExecutionGuidanceQueue {
     const lane = this.lanesByExecutionId.get(executionId)
     if (!lane || isEmpty(lane.messages)) return null
 
-    return toNullable(lane.messages.shift())
+    const message = toNullable(lane.messages.shift())
+    lane.receipts.shift()?.onConsumed?.()
+    return message
   }
 
   public consumeOrSeal(executionId: string): AgentRuntimeInputResult {
     const lane = this.lanesByExecutionId.get(executionId)
     if (!lane) return { status: 'sealed' }
-    const message = lane.messages.shift()
+    const message = this.consume(executionId)
     if (message) return { status: 'input', message }
 
     lane.sealed = true
@@ -103,6 +108,19 @@ class ExecutionGuidanceQueue {
     return { status: 'cleared' }
   }
 
+  /** 收尾后把未消费输入的身份交回宿主持久消息表，正文已有宿主副本。 */
+  public takeRetainedInputIds(sourceSessionId: string): string[] {
+    const ids: string[] = []
+    for (const [executionId, lane] of this.lanesByExecutionId) {
+      if (!lane.sealed || !lane.receipts.some((entry) => entry.sourceSessionId === sourceSessionId)) continue
+      for (const entry of lane.receipts) {
+        if (entry.sourceSessionId === sourceSessionId && entry.inputId) ids.push(entry.inputId)
+      }
+      this.lanesByExecutionId.delete(executionId)
+    }
+    return ids
+  }
+
   private onInputAccepted(executionId: string, listener: () => void): () => void {
     const lane = this.lanesByExecutionId.get(executionId)
     if (!lane) return () => undefined
@@ -122,6 +140,7 @@ class ExecutionGuidanceQueue {
 
     const lane: ExecutionGuidanceLane = {
       messages: [],
+      receipts: [],
       inputAcceptedListeners: new Set(),
       sealed: false,
     }

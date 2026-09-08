@@ -31,6 +31,8 @@ export interface ExecutionInputRequest {
 }
 
 export interface ExecutionConfirmationRequest {
+  /** 当前卡的身份；回复必须携带，不能用 execution/session 身份替代。 */
+  confirmationId?: string
   message: string
   askedAt: number
   userActionCards?: UserActionCard[]
@@ -45,6 +47,7 @@ export interface ExecutionProvideInputRequest {
 
 export interface ExecutionResolveConfirmationRequest {
   sessionId: string
+  confirmationId?: string
   approved: boolean
   rejectionMessage?: LooseOptional<string>
   userActionCardResults?: LooseOptional<UserActionCardResult[]>
@@ -61,6 +64,7 @@ export type ExecutionPendingInteractionSnapshot =
   | {
       kind: 'confirmation'
       executionId: string
+      confirmationId?: string
       message: string
       userActionCards?: LooseOptional<UserActionCard[]>
     }

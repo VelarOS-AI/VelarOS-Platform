@@ -234,11 +234,13 @@ class ExecutionRecords {
     executionId: string,
     message: string,
     userActionCards?: UserActionCard[],
-    detail?: ConfirmationRequestDetail
+    detail?: ConfirmationRequestDetail,
+    confirmationId?: string
   ): ExecutionRecord {
     return this.patchExecution(executionId, (current) => ({
       ...current,
       awaitingConfirmation: {
+        confirmationId,
         message,
         askedAt: Date.now(),
         userActionCards,

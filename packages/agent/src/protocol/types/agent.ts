@@ -415,7 +415,10 @@ export interface ToolExecutionPlanUpdate {
  * 新增 kind 的规矩：**生产者与渲染分支同一批改**。只加类型不加生产者 = 死枝；
  * 只加生产者不加分支 = 自动回落散文（安全，但结构信息白丢）。
  */
-export type ConfirmationRequestDetail =
+export type ConfirmationRequestDetail = {
+  authorization?: { label: string; target?: string; requester?: string; scope: 'call' | 'task-operation' }
+} & (
+  | { kind: 'operation-authorization' }
   | {
       /** 会话级工具类别授权：批准后本会话同类工具不再重复询问。 */
       kind: 'tool-category-authorization'
@@ -428,6 +431,8 @@ export type ConfirmationRequestDetail =
       kind: 'mcp-tool-call'
       serverName: string
       toolName: string
+      argumentsPreview?: string
+      approvalScope?: 'call' | 'session-tool' | 'task-operation'
     }
   | {
       /** 模型自动读取一份非内置技能的正文。 */
@@ -436,8 +441,13 @@ export type ConfirmationRequestDetail =
       label: string
       description?: LooseOptional<string>
     }
+)
 
 export interface ToolConfirmationDecisionOptions {
+  /** 同一操作的稳定身份；跨工具入口应使用相同 key，不能包含展示用的截断参数。 */
+  operation?: { key: string; label: string; target?: string }
+  /** 发起审批的 Agent；授权归属仍是当前任务。 */
+  requester?: { agentId: string; label?: string }
   /** 需要用户亲自点击确认；不能被会话风险确认自动批准短路。 */
   requireManualApproval?: boolean
   /** 本次确认的风险等级；未声明时按高风险处理。 */
@@ -460,6 +470,19 @@ export interface ApprovalDecision {
   message: Nullable<string>
   /** 是否由策略自动放行（standard-open 低风险等），未经用户交互。 */
   autoApproved?: boolean
+  /** 当前任务已拒绝过同一操作，本次未再次展示确认卡。 */
+  previouslyDenied?: boolean
+}
+
+/** 当前任务审批事实；内部操作 key 不投影给界面。 */
+export interface TaskApprovalRecord {
+  id: string
+  label: string
+  target?: string
+  requester?: { agentId: string; label?: string }
+  status: 'approved' | 'denied' | 'revoked'
+  reason?: string
+  decidedAt: number
 }
 
 export interface ToolExecutionApi {

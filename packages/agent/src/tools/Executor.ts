@@ -11,8 +11,9 @@
 //  4. `finalizeResult`：**唯一终结点**——所有成功/失败/中止路径都必须经它收敛。
 //
 // ## 关键不变量（改这些会破什么）
-//  - **`finalizeResult` 单点终结**：span 单开单闭、证据入账、结果中间件、事件发射都挂在它上面。
+//  - **`finalizeResult` 单点终结**：结果物化、span 收束、证据入账、事件发射都经它完成。
 //    绕过它直接 return 结果 = span 泄漏 + 证据丢账 + 前端收不到终态。
+//  - **扩展后处理保真**：执行完成后，中间件取消或失败保留原始回执；后处理失败另行终止执行链。
 //  - **顺序：`tool-call:before` seam → 可用性/参数校验与去重 → 审批 → 执行**。seam 只能「拦下」或
 //    「改写入参」，改写后的入参**照样走完整策略门**；把 seam 挪到门之后 = mod 可绕过审批。
 //  - **结果按接收顺序输出**（不按完成顺序）：消息历史必须与模型看到的调用顺序一致，否则
@@ -57,6 +58,7 @@ import {
   ContextPayloadKernelToolOutputStore,
   type ExecutionSpanStatus,
   isKernelWriteLikeTool,
+  type KernelToolFailureBatchEntry,
   KernelToolLoopGuard,
   type KernelToolOutputStore,
   KernelToolResultMaterializer,
@@ -885,6 +887,8 @@ export class ToolExecutor {
     prepared: ToolExecutionPrepared,
     args: LooseOptional<Record<string, unknown>>,
     toolName: string,
+    abortSignal: AbortSignal,
+    onOperationCompleted: (result: ToolResult) => void,
   ): Promise<ToolResult> {
     const effectiveArgs = prepared.effectiveArgs ?? args ?? {};
     const output = await this.executionPolicy.executePrepared(
@@ -892,14 +896,18 @@ export class ToolExecutor {
       args,
       toolName,
     );
-    let enhanced: ToolResult = {
+    const completedOperationResult: ToolResult = {
       toolCallId: tool.toolCallId,
       toolName,
       args: effectiveArgs,
       result: output,
     };
+    // 扩展中间件只负责后处理；取消等待不能抹掉执行器已经返回的真实回执。
+    onOperationCompleted(completedOperationResult);
+    let enhanced = completedOperationResult;
     try {
       for (const middleware of this.resultMiddlewares) {
+        if (abortSignal.aborted) break;
         const context = {
           toolCallId: tool.toolCallId,
           toolName,
@@ -908,7 +916,10 @@ export class ToolExecutor {
           executionContext: this.ctx,
         };
         if (middleware.matches && !middleware.matches(context)) continue;
+        if (abortSignal.aborted) break;
         const transformed = await middleware.transform(context);
+        // 迟到的扩展结果不再覆盖本次回执，也不能启动后续中间件。
+        if (abortSignal.aborted) break;
         if (!transformed) continue;
         const middlewareModelContent = [...(transformed.modelContent ?? [])];
         if (
@@ -937,12 +948,34 @@ export class ToolExecutor {
           notices: [...(enhanced.notices ?? []), ...(transformed.notices ?? [])],
         };
       }
-      return liftGenericModelContent(enhanced, enhanced.result);
+      const result = abortSignal.aborted ? completedOperationResult : enhanced;
+      return liftGenericModelContent(result, result.result);
     } catch (error) {
-      throw new AppError(
+      if (abortSignal.aborted)
+        return liftGenericModelContent(
+          completedOperationResult,
+          completedOperationResult.result,
+        );
+      const finalizationError = new AppError(
         "TOOL_RESULT_FINALIZATION_FAILED",
         `Tool result finalization failed for "${toolName}". The operation may already have taken effect; inspect its state before retrying.`,
         error,
+      );
+      this.applyExecutionFailureSideEffects({
+        toolName,
+        args: effectiveArgs,
+        isConcurrencySafe: tool.isConcurrencySafe,
+        toolContext: prepared.toolContext,
+        error: finalizationError,
+      });
+      log.error("tool result middleware failed", {
+        toolCallId: tool.toolCallId,
+        toolName,
+        error: AppError.getMessage(error),
+      });
+      return liftGenericModelContent(
+        completedOperationResult,
+        completedOperationResult.result,
       );
     }
   }
@@ -954,11 +987,14 @@ export class ToolExecutor {
     toolName: string,
     abortSignal: AbortSignal,
   ): Promise<ToolResult> {
+    const operation: { result: Nullable<ToolResult> } = { result: null };
     const execution = this.executePreparedTool(
       tool,
       prepared,
       args,
       toolName,
+      abortSignal,
+      (result) => { operation.result = result; },
     ).then(
       (result): ToolExecutionSettlement => ({ status: "completed", result }),
       (error): ToolExecutionSettlement => ({ status: "failed", error }),
@@ -976,6 +1012,11 @@ export class ToolExecutor {
         case "failed":
           throw settlement.error;
         case "aborted": {
+          if (operation.result)
+            return liftGenericModelContent(
+              operation.result,
+              operation.result.result,
+            );
           const reason = this.resolveAbortSettlementReason();
           log.warn("tool ignored abort; settling as cancelled", {
             name: toolName,
@@ -1367,14 +1408,15 @@ export class ToolExecutor {
 
   private toLoopGuardFailureBatch(
     results: readonly ToolResult[],
-  ): Array<{ toolName: string; error: string }> {
+  ): KernelToolFailureBatchEntry[] {
     if (isEmpty(results)) return [];
 
-    const failures: Array<{ toolName: string; error: string }> = [];
+    const failures: KernelToolFailureBatchEntry[] = [];
     for (const result of results) {
       if (!result.error || this.isLoopGuardBlockedResult(result)) return [];
       failures.push({
         toolName: result.toolName,
+        args: result.args,
         error: result.error,
       });
     }

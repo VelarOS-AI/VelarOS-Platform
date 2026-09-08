@@ -1,6 +1,10 @@
 import { isArray, isString } from '@velaros-ai/core'
 
-import { ToolCatalogDiscoveryToolName, type ToolCatalogEntry,ToolSchemaDiscoveryToolName } from '../protocol'
+import {
+  ToolCatalogDiscoveryToolName,
+  type ToolCatalogEntry,
+  ToolSchemaDiscoveryToolName,
+} from '../protocol'
 
 /** 两条自恢复工具随每份目录常驻，避免模型在 schema 漂移后失去恢复路径。 */
 export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Object.freeze([
@@ -17,7 +21,8 @@ export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Obj
   },
   {
     name: ToolSchemaDiscoveryToolName,
-    description: '按工具名读取当前版本的真实参数结构；调用不熟悉的工具前先使用它。',
+    description:
+      '按目录中的精确工具名读取当前参数结构；参数结构缺失或目录版本变化时使用。当前请求已提供完整结构时直接调用目标工具。',
     category: 'agent-control',
     readOnly: true,
     inputSchema: {
@@ -43,7 +48,7 @@ export function readToolSchemaDiscoveryNames(input: Record<string, unknown>): st
       input.names
         .filter((value): value is string => isString(value))
         .map((value) => value.trim())
-        .filter(Boolean),
+        .filter(Boolean)
     ),
   ].slice(0, 12)
 }

@@ -146,6 +146,9 @@ function assertNonBlank(value: string, label: string): string {
 
 class KernelBackgroundJobManager {
   private readonly jobs = new Map<string, KernelBackgroundJob>()
+  /** 子任务创建时保留祖先身份；祖先终态淘汰不改变正在运行子代的所有权。 */
+  private readonly lineageKeysByJob = new Map<string, ReadonlySet<string>>()
+  private readonly executionSettlements = new Map<string, { job: KernelBackgroundJob; promise: Promise<void> }>()
   private readonly outputByJob = new Map<string, string>()
   private readonly outputBaseOffsetByJob = new Map<string, number>()
   private readonly outputReadOffsetByJob = new Map<string, number>()
@@ -202,6 +205,16 @@ class KernelBackgroundJobManager {
       lastVisibleOutputAt: startedAt,
       stalledWarningQueued: false,
     }
+    const lineageKeys = new Set<string>([id, sessionId])
+    if (parentSessionId) lineageKeys.add(parentSessionId)
+    for (const candidate of [
+      ...this.jobs.values(),
+      ...[...this.executionSettlements.values()].map((entry) => entry.job),
+    ]) {
+      if (candidate.id !== parentSessionId && candidate.sessionId !== parentSessionId && candidate.id !== sessionId) continue
+      for (const key of this.lineageKeysByJob.get(candidate.id) ?? [candidate.id, candidate.sessionId]) lineageKeys.add(key)
+    }
+    this.lineageKeysByJob.set(id, lineageKeys)
     this.jobs.set(id, job)
     if (input.onCancel) {
       this.cancelHandlerByJob.set(id, input.onCancel)
@@ -423,6 +436,35 @@ class KernelBackgroundJobManager {
       this.pruneTerminalJobs()
     }
     return cancelledCount
+  }
+
+  /** 生命周期终态可能先于工具清理；取消回执等待实际 worker Promise 收束。 */
+  public trackExecution(jobId: string, execution: Promise<unknown>): void {
+    const job = this.jobs.get(jobId)
+    if (!job) throw new AppError('NOT_FOUND', `Unknown background job: ${jobId}`)
+    const settled = execution.then(() => undefined, () => undefined)
+    const entry = { job: cloneJob(job), promise: settled }
+    this.executionSettlements.set(jobId, entry)
+    void settled.then(() => {
+      if (this.executionSettlements.get(jobId) === entry) {
+        this.executionSettlements.delete(jobId)
+        if (!this.jobs.has(jobId)) this.lineageKeysByJob.delete(jobId)
+      }
+    })
+  }
+
+  public async awaitSessionSettled(sessionId: string): Promise<void> {
+    while (true) {
+      const jobs = this.collectLineageClosure(
+        sessionId, () => true, [...this.executionSettlements.values()].map((entry) => entry.job)
+      ).jobs
+      const pending = jobs.flatMap((job) => {
+        const execution = this.executionSettlements.get(job.id)
+        return execution ? [execution.promise] : []
+      })
+      if (isEmpty(pending)) return
+      await Promise.all(pending)
+    }
   }
 
   public cancelForSession(sessionId: string, id: string): Nullable<KernelBackgroundJob> {
@@ -729,6 +771,7 @@ class KernelBackgroundJobManager {
       }
     }
     this.jobs.delete(id)
+    if (!this.executionSettlements.has(id)) this.lineageKeysByJob.delete(id)
     this.outputByJob.delete(id)
     this.outputBaseOffsetByJob.delete(id)
     this.outputReadOffsetByJob.delete(id)
@@ -857,21 +900,23 @@ class KernelBackgroundJobManager {
    */
   private collectLineageClosure(
     seedSessionId: string,
-    accept: (job: KernelBackgroundJob) => boolean
+    accept: (job: KernelBackgroundJob) => boolean,
+    candidates: Iterable<KernelBackgroundJob> = this.jobs.values()
   ): { jobs: KernelBackgroundJob[]; sessionKeys: Set<string> } {
+    const candidateJobs = [...candidates]
     const sessionKeys = new Set([seedSessionId])
     const visited = new Set<string>()
     const jobs: KernelBackgroundJob[] = []
 
     for (;;) {
-      const batch = [...this.jobs.values()].filter(
-        (job) => !visited.has(job.id) && accept(job) && this.matchesCancelLineage(job, sessionKeys)
+      const batch = candidateJobs.filter(
+        (job) => !visited.has(job.id) && this.matchesCancelLineage(job, sessionKeys)
       )
       if (isEmpty(batch)) return { jobs, sessionKeys }
 
       for (const job of batch) {
         visited.add(job.id)
-        jobs.push(job)
+        if (accept(job)) jobs.push(job)
         sessionKeys.add(job.id)
         sessionKeys.add(job.sessionId)
       }
@@ -879,6 +924,9 @@ class KernelBackgroundJobManager {
   }
 
   private matchesCancelLineage(job: KernelBackgroundJob, pending: ReadonlySet<string>): boolean {
+    for (const key of this.lineageKeysByJob.get(job.id) ?? []) {
+      if (pending.has(key)) return true
+    }
     if (pending.has(job.id)) return true
     if (pending.has(job.sessionId)) return true
     return isPresent(job.parentSessionId) && pending.has(job.parentSessionId)

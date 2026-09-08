@@ -80,6 +80,24 @@ void describe('KernelBackgroundJobManager wait-any completion boundary', () => {
     assert.deepEqual(all.map((snapshot) => snapshot.id), ['job-a', 'job-b'])
   })
 
+  void test('cancel settlement waits for worker cleanup after terminal ledger state and preserves output', async () => {
+    const manager = new KernelBackgroundJobManager()
+    startJob(manager, 'cleanup')
+    let release!: () => void
+    const worker = new Promise<void>((resolve) => { release = resolve })
+    manager.trackExecution('cleanup', worker)
+    manager.appendOutput('cleanup', 'retained output')
+    manager.cancelSession('session-1')
+    let settled = false
+    const wait = manager.awaitSessionSettled('session-1').then(() => { settled = true })
+    await Promise.resolve()
+    assert.equal(settled, false)
+    release()
+    await wait
+    assert.equal(settled, true)
+    assert.equal(manager.snapshotOutputForSession('session-1', 'cleanup')?.output, 'retained output')
+  })
+
   void test('registers before onWaiting and cannot lose a terminal transition in that window', async () => {
     const manager = new KernelBackgroundJobManager()
     startJob(manager, 'job-race')

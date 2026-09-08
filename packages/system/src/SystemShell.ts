@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
-import { isArray, isObject, isString, toNullable, toOptional } from '@velaros-ai/core'
+import { isPlainObject, isString, Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
   SystemEnvironmentCommandAvailability,
@@ -45,12 +45,14 @@ const gitRecommendation: SystemShellRecommendation = {
   message: '推荐安装 Git for Windows，以获得 Git Bash 和一致的 Unix 命令工具。',
   url: 'https://git-scm.com/download/win',
 }
+const log = Log.tag('SystemShell')
 
 function isRegularFile(path: string): boolean {
   try {
     return statSync(path).isFile()
-  } catch {
-    // arch-guard:silent-catch-ok 缺失或不可读的候选文件在当前执行宿主中按不可用处理。
+  } catch (error) {
+    // 路径缺失或暂不可读时跳过该候选，继续检查其他可用 Shell。
+    log.debug('shell candidate unavailable', { path, error })
     return false
   }
 }
@@ -92,8 +94,8 @@ function gitRootForBash(shellPath: string, isFile: (path: string) => boolean): L
   const parent = win32.dirname(binDir)
   const roots = win32.basename(parent).toLowerCase() === 'usr'
     ? [parent, win32.dirname(parent)] : [parent]
-  // Git for Windows 安装必须同时包含启动器和 MSYS 运行时。
-  // 该约束会排除 Windows 的 WSL bash.exe 以及无关的独立 Bash 安装。
+  // Git for Windows 安装目录应同时包含启动器与 MSYS 运行时。
+  // 由此排除 Windows 的 WSL bash.exe 和无关的独立 Bash 安装。
   if (!isFile(shellPath)) return undefined
   return roots.find((root) => isFile(win32.join(root, 'git-bash.exe')) &&
     isFile(win32.join(root, 'usr', 'bin', 'msys-2.0.dll')) &&
@@ -119,7 +121,7 @@ function gitBashCandidates(env: NodeJS.ProcessEnv, isFile: (path: string) => boo
     if (!isAbsoluteWindowsPath(entry)) continue
     candidates.push(win32.join(entry, 'bash.exe'))
     if (isFile(win32.join(entry, 'git.exe'))) {
-      // Git 可能通过 cmd、bin、mingw64/bin 或 mingw32/bin 进入 PATH。
+      // Git 可以通过 cmd、bin、mingw64/bin 或 mingw32/bin 目录加入 PATH。
       candidates.push(
         win32.join(entry, '..', 'bin', 'bash.exe'),
         win32.join(entry, '..', '..', 'bin', 'bash.exe')
@@ -188,7 +190,7 @@ function describeShell(shellPath: string, env: NodeJS.ProcessEnv, isFile: (path:
     shellEnv.PYTHONUTF8 = '1'
     shellEnv.PYTHONIOENCODING = 'utf-8'
   }
-  // Windows 环境变量名不区分大小写；每个受管变量只输出一种拼写。
+  // Windows 环境变量键不区分大小写，每个受管键只发布一种拼写。
   for (const key of Object.keys(shellEnv)) {
     if (['VELAROS_SHELL_KIND', 'VELAROS_SHELL_PATH', 'VELAROS_SHELL_READINESS', 'VELAROS_SHELL_VERSION']
       .includes(key.toUpperCase())) delete shellEnv[key]
@@ -280,7 +282,7 @@ export async function resolveSystemShellReady(options: ResolveSystemShellOptions
     let health: SystemShellProbeResult
     try { health = await (options.probe ?? probeSystemShell)(shell, options.timeoutMs ?? 2_500) }
     catch (error) {
-      // arch-guard:silent-catch-ok 启动异常会转成结构化的 Shell 健康状态并参与候选回退。
+      log.debug('shell readiness probe failed', { shell: shell.shellPath, error })
       health = { ready: false, reason: error instanceof Error ? error.message : 'Shell startup failed.' }
     }
     if (!health.ready) { failures.push(`${shell.name}: ${health.reason || 'unavailable'}`); continue }
@@ -394,8 +396,7 @@ export async function refreshWindowsEnvironment(
     if (captured.exitCode === 0) {
       try {
         const source = JSON.parse(captured.stdout) as { machine: Record<string, string>; user: Record<string, string> }
-        if (!source.machine || !source.user || !isObject(source.machine) || !isObject(source.user)
-          || isArray(source.machine) || isArray(source.user)) throw new Error('Invalid Windows environment snapshot.')
+        if (!isPlainObject(source.machine) || !isPlainObject(source.user)) throw new Error('Invalid Windows environment snapshot.')
         const merged = { ...source.machine, ...source.user }
         const machinePath = readWindowsEnv(source.machine, 'PATH') ?? ''
         const userPath = readWindowsEnv(source.user, 'PATH') ?? ''
@@ -422,11 +423,11 @@ export async function refreshWindowsEnvironment(
         }
         refreshed = true
       } catch (error) {
-        // arch-guard:silent-catch-ok 解析异常会写入结构化 reason 返回给调用方。
+        log.warn('windows environment refresh failed', { error })
         reason = error instanceof Error ? error.message : 'Invalid Windows environment snapshot.'
       }
     } else reason = captured.timedOut ? 'Windows environment refresh timed out.' : captured.stderr || 'Windows environment refresh is unavailable.'
   }
   const revision = createHash('sha256').update(JSON.stringify(Object.entries(result).sort())).digest('hex').slice(0, 16)
-  return { env: result, revision, refreshed, reason: toOptional(reason) }
+  return { env: result, revision, refreshed, reason: toOptional(optionalWhen(!!reason, reason)) }
 }

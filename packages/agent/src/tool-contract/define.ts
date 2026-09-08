@@ -4,6 +4,7 @@ import { AppError } from '@velaros-ai/core/error'
 import {
   DefaultToolContractExampleRegistry,
   renderToolExampleInputs,
+  serializeToolExampleInput,
   type ToolContractExampleRegistry,
 } from './examples'
 import { assertCanonicalToolId } from './identity'
@@ -48,7 +49,8 @@ function validateToolContractExamples(
   examples: ReadonlyArray<Record<string, unknown>>
 ): void {
   for (const example of examples) {
-    const parsed = schema.safeParse(example)
+    // 校验模型将发送的形状，避免 Date、undefined 等内存值在序列化后变成不合法示例。
+    const parsed = schema.safeParse(JSON.parse(serializeToolExampleInput(example)))
     if (parsed.success) {
       continue
     }
@@ -166,10 +168,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
  * 与主契约同一条流水线（校验示例 → 摘描述规格 → 生成描述），故不在此重写第二套规则；
  * surface 缺席时原样透传，让 `defineToolRuntimeSpec` 的 `surfaces` 保持「未声明」而非空对象。
  */
-function buildToolRuntimeSurfaces<
-  TInput extends Record<string, unknown>,
-  TContext,
->(
+function buildToolRuntimeSurfaces<TInput extends Record<string, unknown>, TContext>(
   input: Pick<DefineToolRuntimeSpecInput<TInput, TContext>, 'name' | 'category' | 'surfaces'>,
   examples: ToolContractExampleRegistry
 ): Record<string, ToolContractSurface<any, TInput, TContext> | undefined> | undefined {
@@ -211,8 +210,10 @@ function defineToolRuntimeSpec<
   const descriptionSpec = pickToolDescriptionSpec(input)
   validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
 
-  const surfaces = buildToolRuntimeSurfaces<TInput, TContext>(input, examples) as
-    ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission>['surfaces']
+  const surfaces = buildToolRuntimeSurfaces<TInput, TContext>(
+    input,
+    examples
+  ) as ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission>['surfaces']
 
   return {
     name: input.name,

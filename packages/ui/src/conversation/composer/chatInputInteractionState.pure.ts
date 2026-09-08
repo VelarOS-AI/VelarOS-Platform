@@ -3,6 +3,7 @@ export type ChatInputSendButtonTone = 'active' | 'disabled' | 'submitting'
 export type ChatInputPrimaryActionKind = 'send' | 'sending' | 'stop'
 
 export interface ChatInputInteractionStateInput {
+  canSendDuringRun?: boolean
   disabled: boolean
   fileCount: number
   hideSubmit: boolean
@@ -21,6 +22,7 @@ export interface ChatInputInteractionState {
 }
 
 export interface ChatInputPrimaryActionStateInput {
+  canSendDuringRun?: boolean
   disabled: boolean
   fileCount: number
   hideSubmit: boolean
@@ -62,6 +64,7 @@ function hasDraftContent(
 }
 
 export function resolveChatInputInteractionState({
+  canSendDuringRun = false,
   disabled,
   fileCount,
   hideSubmit,
@@ -74,7 +77,7 @@ export function resolveChatInputInteractionState({
   const canSend =
     !hideSubmit &&
     !disabled &&
-    !isStreaming &&
+    (!isStreaming || canSendDuringRun) &&
     !isSubmitting &&
     hasDraftContent(value, fileCount, virtualPasteReferenceCount, auxiliaryContentCount)
 
@@ -86,6 +89,7 @@ export function resolveChatInputInteractionState({
 }
 
 export function resolveChatInputPrimaryActionState({
+  canSendDuringRun = false,
   disabled,
   fileCount,
   hideSubmit,
@@ -101,7 +105,7 @@ export function resolveChatInputPrimaryActionState({
   const canSend =
     showButton &&
     !disabled &&
-    !isRunActive &&
+    (!isRunActive || canSendDuringRun) &&
     !isSubmitting &&
     hasDraftContent(value, fileCount, virtualPasteReferenceCount, auxiliaryContentCount)
 
@@ -114,7 +118,7 @@ export function resolveChatInputPrimaryActionState({
       pending: false,
     }
 
-  if (isRunActive && isStopAvailable)
+  if (isRunActive && isStopAvailable && (!canSend || isStopPending))
     return {
       kind: 'stop',
       showButton: true,
@@ -123,7 +127,7 @@ export function resolveChatInputPrimaryActionState({
       pending: isStopPending,
     }
 
-  if (isSubmitting || isRunActive)
+  if (isSubmitting || (isRunActive && !canSend))
     return {
       kind: 'sending',
       showButton: true,

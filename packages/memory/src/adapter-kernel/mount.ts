@@ -49,6 +49,7 @@ export interface MemoryAdapterConfigPort {
   isExecutionCaptureEnabled: () => boolean
   /** 单条会话的采集豁免；缺席 = 不豁免（与四个类别开关并列求合取）。 */
   isSessionCaptureAllowed?: (sessionId: string) => boolean
+  isSessionRecallAllowed?: (sessionId: string) => boolean
 }
 
 /** Host composition supplies product context→Memory scope mapping. */
@@ -126,6 +127,7 @@ export class MemoryAdapterRuntime {
     this.turnRecall = new MemoryTurnRecallCoordinator({
       recall: (query, options) => this.store.recall(query, options),
       isEnabled: config.isEnabled,
+      isSessionRecallAllowed: config.isSessionRecallAllowed,
       isAutomaticDeepRecallEnabled: config.isAutomaticDeepRecallEnabled,
       resolveScope: hostContext.resolveScope,
       turnContextScopes: hostContext.turnContextScopes,

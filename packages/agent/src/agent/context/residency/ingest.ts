@@ -9,13 +9,12 @@
  * `velarosInternal.kind === 'follow-up'`）不单独计一轮——否则一次用户会话里的内部续跑会把尾保护
  * 窗口挤空。
  */
-import { createHash } from 'node:crypto'
-
 import type { ModelMessage } from 'ai'
 
 import { toNullable } from '@velaros-ai/core'
 
 import { isInternalFollowUpMessage } from '../../history/internalMessages'
+import { hashUserMessageText } from '../userMessageText'
 
 import type { ContextAdmissionInput } from './admission'
 import type { ContextRecordKind } from './ContextRecord'
@@ -86,7 +85,7 @@ export function planHistoryIngest(
     const toolCallId = firstResult ? firstResult.toolCallId : null
     const userTextPayloadRef =
       message.role === 'user'
-        ? userTextPayloadRefs?.[createHash('sha256').update(readMessageText(message)).digest('hex')]
+        ? userTextPayloadRefs?.[hashUserMessageText(readMessageText(message))]
         : undefined
 
     inputs.push({

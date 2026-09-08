@@ -53,8 +53,10 @@ export const PinnedFloorResidency: ContextResidency = 'EXCERPT'
 export type ContextResidencyVector = ReadonlyMap<string, ContextResidency>
 
 export interface ContextRecordBytes {
-  /** 全文字符数（token 估算的输入）。 */
+  /** 原始全文字符数，保留用于保真元数据。 */
   full: number
+  /** 归一化附件后的治理字符数；旧记录缺省时从原消息重算。 */
+  budget?: number
   /** 摘录素材的字符数；无摘录时等于 0。**不是** EXCERPT 投影的实际占用（信封与转义另计）。 */
   excerpt: number
 }
@@ -90,6 +92,8 @@ export interface ContextRecordToolPart {
 }
 
 export interface ContextRecord {
+  /** 运行时将单条超长摘录推迟到完整请求超容量时，原文始终保留。 */
+  readonly deferredSizeAdmission?: boolean
   /** 稳定 id（`ctx-r000001` 形态），跨会话重放不变。 */
   readonly id: string
   /** 单调序号：账本序的唯一权威（不靠 id 字典序）。 */

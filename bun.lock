@@ -60,7 +60,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.14",
+      "version": "0.6.15",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",
@@ -82,7 +82,7 @@
     },
     "packages/agent-lab": {
       "name": "@velaros-ai/agent-lab",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "velaros-agent-lab": "./dist/cli.js",
       },
@@ -220,7 +220,7 @@
     },
     "packages/memory": {
       "name": "@velaros-ai/memory",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "dependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@velaros-ai/core": "workspace:*",
@@ -244,7 +244,7 @@
     },
     "packages/model": {
       "name": "@velaros-ai/model",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.71",
         "@ai-sdk/google": "^3.0.64",
@@ -286,7 +286,7 @@
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.0.13",
+      "version": "2.0.14",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -328,7 +328,7 @@
     },
     "packages/system": {
       "name": "@velaros-ai/system",
-      "version": "1.1.12",
+      "version": "1.1.13",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -344,7 +344,7 @@
     },
     "packages/ui": {
       "name": "@velaros-ai/ui",
-      "version": "0.2.32",
+      "version": "0.2.33",
       "dependencies": {
         "@phosphor-icons/react": "^2.1.10",
         "@radix-ui/react-dialog": "^1.1.15",

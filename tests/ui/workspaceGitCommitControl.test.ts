@@ -41,12 +41,12 @@ void describe('WorkspaceGitCommitControl ownership', () => {
     assert.match(control, /<Dialog[\s\S]*createDialogTitle/)
     assert.match(control, /useState\(true\)/)
     assert.match(control, /checked=\{checkoutCreatedBranch\}/)
-    assert.match(styles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
-    assert.match(styles, /\.gitCompactFooter[\s\S]*padding:\s*2\.5px 3px 3px/)
+    assert.match(styles, /\.gitCompactMenuHeader[\s\S]*padding:\s*var\(--topbar-panel-padding\)/)
+    assert.match(styles, /\.gitCompactFooter[\s\S]*padding:\s*var\(--topbar-panel-padding\)/)
     assert.match(styles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
     assert.match(
       styles,
-      /\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*11px/
+      /\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*var\(--topbar-panel-font-size\)/
     )
     assert.match(styles, /\.gitCompactBranchRow\[data-current='true'\][\s\S]*workspace-git-theme-color/)
     assert.match(styles, /\.gitCompactBranchRow:hover \.gitCompactBranchHoverActions[\s\S]*opacity:\s*1/)
@@ -58,10 +58,6 @@ void describe('WorkspaceGitCommitControl ownership', () => {
     const owners = [
       { selector: '.gitCompactControl', properties: ['min-width', '-webkit-app-region'] },
       { selector: '.gitCompactButton', properties: ['max-width'] },
-      {
-        selector: ".gitCompactMenu[data-slot='popover-content']",
-        properties: ['width', 'min-width', 'max-width', 'overflow'],
-      },
     ]
 
     for (const owner of owners) {
@@ -73,6 +69,7 @@ void describe('WorkspaceGitCommitControl ownership', () => {
     }
 
     assert.doesNotMatch(styles, /\.gitCompactButton(?::|\[)/)
+    assert.doesNotMatch(styles, /\.gitCompactMenu\b/)
     assert.doesNotMatch(styles, /\.gitCompactAnchor\b/)
     assert.doesNotMatch(styles, /--git-compact-menu-bg|--control-gray-bg/)
 
@@ -92,9 +89,16 @@ void describe('WorkspaceGitCommitControl ownership', () => {
 
     assert.match(popover, /\.velar-popover-content\s*\{[^}]*-webkit-app-region:\s*no-drag/)
     const productRules = readStyleRules(product)
-    const panel = productRules.find(({ selector }) => selector.includes('.velar-topbar-control-panel'))
-    assert.ok(panel)
-    assert.ok(panel.properties.every((property) => !/^(?:background|border-color|box-shadow|padding)/.test(property)))
+    const panels = productRules.filter(({ selector }) => selector.includes('.velar-topbar-control-panel'))
+    assert.ok(panels.length > 0)
+    for (const panel of panels) {
+      assert.ok(panel.properties.every((property) => !/^(?:background|border-color|box-shadow)/.test(property)))
+    }
+    const picker = panels.find(({ selector }) => selector === '.velar-topbar-control-panel[data-topbar-panel="picker"][data-slot="popover-content"]')
+    assert.ok(picker)
+    for (const property of ['width', 'min-width', 'max-width', 'padding']) {
+      assert.ok(picker.properties.includes(property), `topbar panel owns shared ${property}`)
+    }
 
     for (const state of [':hover', ':active', '.velar-topbar-control-frame-busy']) {
       const rule = productRules.find(({ selector }) =>

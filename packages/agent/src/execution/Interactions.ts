@@ -23,12 +23,11 @@ interface ConfirmationDecision {
 }
 
 interface PendingConfirmationResolver {
+  confirmationId: string
   /** 用户做出确认选择后唤醒 awaitConfirmationDecision。 */
   resolve: (decision: ConfirmationDecision) => void
   /** 执行失败/中断时拒绝等待中的 Promise。 */
   reject: (error: unknown) => void
-  /** 拒绝确认是否直接终止执行。 */
-  rejectTerminatesExecution: boolean
 }
 
 type PendingInputResolvers = Map<string, PendingInputResolver>
@@ -78,20 +77,20 @@ class ExecutionInteractions {
     }
   }
 
-  /** 等待用户确认；拒绝会终止执行。 */
+  /** 等待用户确认；拒绝仅以工具错误取消当前操作。 */
   public async awaitConfirmation(
     executionId: string,
     message: string,
     abortSignal?: AbortSignal,
     options?: ToolConfirmationDecisionOptions
   ): Promise<void> {
-    await this.awaitConfirmationDecision(executionId, message, abortSignal, {
-      ...options,
-      rejectTerminatesExecution: true,
-    })
+    const decision = await this.awaitConfirmationDecision(executionId, message, abortSignal, options)
+    if (!decision.approved) throw new AppError(
+      'EXECUTION_DENIED', buildConfirmationDenialMessage(decision.message)
+    )
   }
 
-  /** 等待用户确认，并可配置拒绝是否终止执行。 */
+  /** 等待用户确认；拒绝返回原因，任务继续。 */
   public async awaitConfirmationDecision(
     executionId: string,
     message: string,
@@ -99,6 +98,7 @@ class ExecutionInteractions {
     options: ToolConfirmationDecisionOptions & { rejectTerminatesExecution?: boolean } = {}
   ): Promise<ConfirmationDecision> {
     this.assertNoPendingInteraction(executionId, 'confirmation')
+    const confirmationId = `confirmation:${randomUUID()}`
     // 切换 execution/task 状态，并把等待确认事件发给 UI。
     const execution = this.records.transition(executionId, 'awaiting_confirmation')
     this.records.setTaskStatus(execution.id, execution.currentTaskId, 'awaiting_confirmation')
@@ -106,7 +106,8 @@ class ExecutionInteractions {
       executionId,
       message,
       options.userActionCards,
-      options.detail
+      options.detail,
+      confirmationId
     )
     this.emitExecutionDebug(executionId)
     this.emitExecutionState(
@@ -115,7 +116,8 @@ class ExecutionInteractions {
         executionId,
         message,
         options.userActionCards,
-        options.detail
+        options.detail,
+        confirmationId
       )
     )
 
@@ -141,6 +143,7 @@ class ExecutionInteractions {
       abortSignal?.addEventListener('abort', onAbort, { once: true })
       // resolver 放入 map，后续 resolveConfirmation 通过 executionId 找回。
       this.pendingConfirmationResolvers.set(executionId, {
+        confirmationId,
         resolve: (decision) => {
           abortSignal?.removeEventListener('abort', onAbort)
           resolve(decision)
@@ -149,7 +152,6 @@ class ExecutionInteractions {
           abortSignal?.removeEventListener('abort', onAbort)
           reject(error)
         },
-        rejectTerminatesExecution: options.rejectTerminatesExecution ?? true,
       })
     })
   }
@@ -206,60 +208,23 @@ class ExecutionInteractions {
   public resolveConfirmation(
     executionId: string,
     approved: boolean,
-    rejectionMessage?: LooseOptional<string>
+    rejectionMessage?: LooseOptional<string>,
+    confirmationId?: string
   ): ExecutionRecord {
     const execution = this.records.getExecution(executionId)
     const resolver = this.pendingConfirmationResolvers.get(executionId)
     const normalizedResponseMessage = rejectionMessage?.trim() || null
-    const denialMessage = buildConfirmationDenialMessage(normalizedResponseMessage)
 
-    if (resolver) {
-      this.pendingConfirmationResolvers.delete(executionId)
-      if (approved) {
-        resolver.resolve({ approved: true, message: normalizedResponseMessage })
-      } else if (resolver.rejectTerminatesExecution) {
-        // 普通确认拒绝会让 awaitConfirmation 抛 EXECUTION_DENIED。
-        //
-        // **理由必须随错误一起走**：终止型确认（权限闸 / 危险命令闸 / interaction:confirm）
-        // 没有卡结果这条结构化通路，`message` 是用户那句话到达模型的**唯一**载体——
-        // 工具面把 EXECUTION_DENIED 映成 `tool_denied` 时读的正是 `error.message`。
-        // 丢掉它，"别在生产库上跑，改成 dry-run" 这种正是模型该收到的下一步指令就永远
-        // 到不了模型，而 headless 回执还照报 `rejectionMessageSent:true`。
-        resolver.reject(
-          new AppError('EXECUTION_DENIED', denialMessage, undefined, {
-            executionId,
-            rejectionMessage: normalizedResponseMessage,
-          })
-        )
-      } else {
-        // decision 模式把拒绝作为结构化结果返回，执行继续。
-        resolver.resolve({ approved: false, message: normalizedResponseMessage })
-      }
+    // 迟到或重复的确认不能复活已停止的 execution。
+    if (!resolver) return execution
+    // 缺身份的旧回复同样不能猜测当前卡；宿主先刷新挂起卡再由用户重新提交。
+    if (confirmationId !== resolver.confirmationId) {
+      throw new AppError('VALIDATION', '确认卡片已过期，请刷新当前确认请求后重试。')
     }
+    this.pendingConfirmationResolvers.delete(executionId)
+    resolver.resolve({ approved, message: normalizedResponseMessage })
 
-    if (!approved) {
-      if (resolver && !resolver.rejectTerminatesExecution) {
-        // 非终止型拒绝恢复 running，让模型拿到“跳过/拒绝”结果继续决策。
-        const runningExecution = this.records.transition(executionId, 'running')
-        this.records.setTaskStatus(execution.id, runningExecution.currentTaskId, 'running')
-        const updatedExecution = this.records.clearAwaitingConfirmation(executionId)
-        this.emitExecutionDebug(executionId)
-        return updatedExecution
-      }
-
-      // 终止型拒绝会把 execution/task 标记为 failed；失败原因带上用户那句话，
-      // 否则事后翻执行账只能看到一句无差别的"用户拒绝了"，分不出他到底要求了什么。
-      const failedExecution = this.records.transition(executionId, 'failed')
-      this.records.failTask(failedExecution.id, failedExecution.currentTaskId, denialMessage)
-
-      this.records.clearAwaitingConfirmation(executionId)
-      this.records.clearAwaitingInput(executionId)
-      const updatedExecution = this.records.setExecutionError(executionId, denialMessage)
-      this.emitExecutionDebug(executionId)
-      return updatedExecution
-    }
-
-    // 同意后恢复 running，并清理 awaitingConfirmation。
+    // 批准或拒绝均恢复 running；停止只走取消通道。
     const runningExecution = this.records.transition(executionId, 'running')
     this.records.setTaskStatus(execution.id, runningExecution.currentTaskId, 'running')
     const updatedExecution = this.records.clearAwaitingConfirmation(executionId)
@@ -310,3 +275,4 @@ class ExecutionInteractions {
 
 export { ExecutionInteractions }
 export type { PendingConfirmationResolvers, PendingInputResolvers }
+import { randomUUID } from 'node:crypto'

@@ -15,6 +15,7 @@
 import { isEmpty, isNotNull, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { hasExcerptRenderMaterial } from './admission'
 import { anchorDensityPerKiloChar } from './anchors'
 import type { ContextRecord, ContextResidency } from './ContextRecord'
 import { estimateResidencyTokens } from './ContextRecord'
@@ -76,15 +77,16 @@ export interface GovernanceEpochDistillReport {
 /**
  * 谁请求了这次 epoch。
  *
- * `trigger` 只分"水位 / 有人请求"两态，而"有人"是模型、宿主还是缺页阶梯，对离线重放与扫参是三件
- * 不同的事（B4 要能把手动 epoch 从水位样本里剔出去，见审计 V9：两类报告混进同一个 reports[]）。
+ * 当前运行时区分容量预判与供应方溢出恢复；旧来源值保留用于解析已有报告和低层回放。
  */
 export type GovernanceEpochSource =
   /** 占用越过 `epochTriggerPercent`。 */
   | 'watermark'
-  /** 模型调用 `context:distill` 声明阶段边界。 */
+  /** 完整请求超过可用输入容量。 */
+  | 'capacity'
+  /** 历史兼容来源：已有模型治理请求报告。 */
   | 'model-tool'
-  /** 宿主手动请求（`compact_session` 一类）。 */
+  /** 历史兼容来源：已有宿主请求报告。 */
   | 'host-request'
   /** 缺页降级阶梯的 `govern-epoch` 级。 */
   | 'overflow-recovery'
@@ -95,8 +97,8 @@ export interface GovernanceEpochReport {
   /** 是否真正应用了迁移。 */
   applied: boolean
   skipReason: Nullable<GovernanceEpochSkipReason>
-  /** 触发来源：水位 / 模型请求。 */
-  trigger: Nullable<'watermark' | 'model-request'>
+  /** 当前容量触发或内部强制恢复；watermark/model-request 字面量兼容已有报告。 */
+  trigger: Nullable<'watermark' | 'capacity' | 'model-request'>
   /**
    * 请求来源（比 `trigger` 细一格）。未触发的轮次也照记——"谁问了但没开"同样是重放输入。
    */
@@ -147,8 +149,10 @@ export interface RunGovernanceEpochInput {
   epoch: number
   /** 时刻（迁移事件的 `at`）。epoch 自身不取时钟。 */
   at: number
-  /** 模型是否调用了 `context:distill` 声明阶段边界。 */
+  /** 兼容原参数名；内部溢出恢复用它绕过容量预判，低层回放也可显式提供。 */
   modelRequested?: LooseOptional<boolean>
+  /** 完整请求容量结论优先于低层历史水位；缺席时维持回放接口的原参数语义。 */
+  capacityExceeded?: LooseOptional<boolean>
   /** 请求来源（记账用；缺省按 `modelRequested` 推断）。 */
   source?: LooseOptional<GovernanceEpochSource>
   /** 消息字符/token 的本轮实测密度；缺省保持历史上的 4 字符/token。 */
@@ -167,6 +171,7 @@ type EpochCandidateTier =
   | 'stale-refetchable'
   | 'payload-backed'
   | 'low-density'
+  | 'oversize-excerpt'
 
 interface EpochCandidate {
   record: ContextRecord
@@ -198,10 +203,10 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   // 未触发时**产物不落地**：它们已经付过钱，可以再等一个边界；为了一份不着急的摘要炸掉整条
   // KV 缓存，正是 P4 要消灭的那种"随手重建"。调用方靠 {@link shouldOpenGovernanceEpoch} 提前
   // 问同一个问题来决定要不要把待落地产物交出来 —— 交出来又不落地就是把它们丢了。
-  if (before <= triggerTokens && !modelRequested)
+  if (!(modelRequested || (input.capacityExceeded ?? before > triggerTokens)))
     return buildReport(input, budgetTokens, before, before, null, 'below-trigger', emptyInstruments)
 
-  const trigger = modelRequested ? 'model-request' : 'watermark'
+  const trigger = modelRequested ? 'model-request' : input.capacityExceeded ? 'capacity' : 'watermark'
 
   // ① I2 产物落地（B2）：先落地已付费的摘要，I0 随后只需处理剩下的压力。
   const byInstrument = { evict: 0, skeleton: 0, distill: 0 }
@@ -210,7 +215,8 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   byInstrument.skeleton += distillOutcome.appliedByInstrument.skeleton
   byInstrument.evict += distillOutcome.archivedSummaries
 
-  const collected = collectCandidates(ledger, config, budgetTokens, input.charsPerToken)
+  const collected = collectCandidates(ledger, config, budgetTokens, input.charsPerToken,
+    !!input.capacityExceeded || input.source === 'overflow-recovery')
   const candidates = collected.candidates
   if (isEmpty(candidates)) {
     const after = measureProjectedTokens(
@@ -238,7 +244,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
     input.charsPerToken ?? 4
   )
   const minSavingTokens = (config.minEpochSavingPercent / 100) * before
-  if (reclaimableTokens < minSavingTokens) {
+  if (reclaimableTokens < minSavingTokens && !input.capacityExceeded && input.source !== 'overflow-recovery') {
     const after = measureProjectedTokens(
       ledger,
       config,
@@ -271,20 +277,17 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   const skeletonMembers: EpochCandidate[] = []
   let projectedChars = collected.measurement.projectedChars
   for (const candidate of candidates) {
-    // 达标即停 —— 但**模型请求的 epoch 例外**：模型调 `context:distill` 就是在说"这批结果我已经
-    // 消化完了"，那些被取代/陈旧的快照该当场折掉，不该因为"现在还没胀到目标线"而留着。
-    // 例外只覆盖免费且可召回的前两档（superseded / stale）；低锚密度那档仍只在真有压力时才动。
-    // 达标后对低密度候选是 **continue 而不是 break**：候选按分排序，一条被反复召回（faultCount
-    // 高）的 superseded 记录会排到低密度候选之后，break 会把它连同后面全部免费档一起跳过（审计 U20）。
+    // 容量治理达标即停。供应方已报告溢出时，本地估算可能偏低，仍允许回收陈旧的可重取内容；
+    // 低密度叙述只有存在真实预算压力才降级，不因恢复请求继续扩大损失。
     if (estimateResidencyTokens(projectedChars, input.charsPerToken ?? 4) <= targetTokens) {
       if (!modelRequested) break
       if (candidate.tier === 'low-density') continue
     }
 
-    const target = resolveEvictionTarget(candidate.record)
+    const target = candidate.tier === 'oversize-excerpt' ? 'EXCERPT' : resolveEvictionTarget(candidate.record)
     // 骨架关掉时（A0-truncation 臂）叙事仍走普通逐出：那一臂的定义就是"直接砍"，
     // 给它补一道"没骨架就不砍"的保护等于把基线臂改造成另一臂。
-    if (config.instruments.skeleton && isSkeletonMember(candidate.record)) {
+    if (candidate.tier !== 'oversize-excerpt' && config.instruments.skeleton && isSkeletonMember(candidate.record)) {
       // 每个骨架成员都必须在摘要里留下精确召回指针；满批后留给下一 epoch，不能把未列出的成员
       // 一并迁成 SUMMARIZED。
       if (skeletonMembers.length >= MaxContextSummaryMembers) continue
@@ -499,9 +502,12 @@ export function shouldOpenGovernanceEpoch(input: {
   config: ContextGovernanceConfig
   budgetTokens: number
   modelRequested?: LooseOptional<boolean>
+  /** 完整请求容量结论优先于低层历史水位；缺席时维持回放接口的原参数语义。 */
+  capacityExceeded?: LooseOptional<boolean>
   charsPerToken?: LooseOptional<number>
 }): boolean {
   if (input.modelRequested) return true
+  if (isPresent(input.capacityExceeded)) return input.capacityExceeded
 
   const budgetTokens = Math.max(1, Math.floor(input.budgetTokens))
   const projected = measureProjectedTokens(
@@ -556,7 +562,8 @@ function collectCandidates(
   ledger: ContextResidencyLedger,
   config: ContextGovernanceConfig,
   budgetTokens: number,
-  charsPerToken?: LooseOptional<number>
+  charsPerToken?: LooseOptional<number>,
+  allowOversizeExcerpts = false
 ): { candidates: EpochCandidate[]; measurement: ContextProjectionMeasurement } {
   const records = ledger.list()
   const residencyVector = ledger.residencyVector()
@@ -588,7 +595,7 @@ function collectCandidates(
       hasCompletePayloadBacking(record) &&
       (latestTurn - record.turn >= config.eviction.payloadBackedTurnDistance ||
         latestSeq - record.seq >= config.eviction.payloadBackedRecordDistance)
-    const density = anchorDensityPerKiloChar(record.anchors.length, record.bytes.full)
+    const density = anchorDensityPerKiloChar(record.anchors.length, record.bytes.budget ?? residentChars(record, 'INLINE'))
     // 低锚密度只说明叙事适合做骨架，不能证明未知工具输出可以无副作用重取。工具结果只有明确
     // superseded/refetchable，或每个 part 都已有内容寻址 payload 时才进入冷驻留候选。
     const lowDensity =
@@ -610,6 +617,7 @@ function collectCandidates(
       residentChars(record, residency) - residentChars(record, resolveEvictionTarget(record))
     )
 
+    if (reclaimableChars <= 0) continue
     candidates.push({
       record,
       residency,
@@ -618,6 +626,21 @@ function collectCandidates(
       score: tierScore + faultPenalty + Math.round(density),
       reclaimableChars,
     })
+  }
+
+  // 超容量时才启用单条超长摘录，排在旧轨迹回收之后；附件、完整原文和精确引用保持可达。
+  // 这是原单条准入摘录的延期执行，不将当前用户指令或尾部工具结果直接逐出。
+  if (allowOversizeExcerpts) {
+    const selectedIds = new Set(candidates.map((candidate) => candidate.record.id))
+    for (const record of records) {
+      if (!record.deferredSizeAdmission || selectedIds.has(record.id)) continue
+      const residency = residencyVector.get(record.id) ?? record.admittedResidency
+      if (residency !== 'INLINE' || !hasExcerptRenderMaterial(record)) continue
+      const reclaimableChars = residentChars(record, 'INLINE') - residentChars(record, 'EXCERPT')
+      if (reclaimableChars <= 0) continue
+      candidates.push({ record, residency, tier: 'oversize-excerpt', superseded: false,
+        score: 1_000_000, reclaimableChars })
+    }
   }
 
   // 同分按账本序（老的先降）—— 排序确定，离线重放才可复现。
@@ -678,7 +701,7 @@ function buildReport(
   budgetTokens: number,
   beforeTokens: number,
   afterTokens: number,
-  trigger: Nullable<'watermark' | 'model-request'>,
+  trigger: Nullable<'watermark' | 'capacity' | 'model-request'>,
   skipReason: Nullable<GovernanceEpochSkipReason>,
   byInstrument: Record<'evict' | 'skeleton' | 'distill', number>,
   distillOutcome: AppliedDistillOutcome = {

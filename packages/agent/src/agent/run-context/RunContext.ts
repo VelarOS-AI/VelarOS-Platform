@@ -265,13 +265,9 @@ class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
       runProfile,
       contextPhase,
     })
-    let builder = identity ? this.contextBuilder.withIdentity(identity) : this.contextBuilder
-    for (const segment of roleSegments) {
-      builder = builder.registerPromptSegment(segment)
-    }
-    for (const segment of runtimeState.segments) {
-      builder = builder.registerPromptSegment(segment)
-    }
+    // 角色与运行时贡献只属于当前一轮；共享宿主注册表只保留配置时安装的段和 provider。
+    const builder = (identity ? this.contextBuilder.withIdentity(identity) : this.contextBuilder)
+      .withPromptSegments([...roleSegments, ...runtimeState.segments])
 
     // build 会应用用户的 segmentOverrides，并返回追踪信息。
     const built = await builder.buildAsync(

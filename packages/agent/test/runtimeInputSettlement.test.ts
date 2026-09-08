@@ -111,6 +111,27 @@ void describe('runtime input settlement', () => {
     assert.deepEqual(queue.clear(executionId), { status: 'cleared' })
   })
 
+  void test('adoption receipts fire on consumption and cancellation retains only unconsumed identities', async () => {
+    const queue = new ExecutionGuidanceQueue()
+    const port = queue.port('execution')
+    const adopted: string[] = []
+    for (const inputId of ['first', 'second']) {
+      queue.enqueue('execution', userMessage(inputId), { inputId, sourceSessionId: 'session', onConsumed: () => { adopted.push(inputId) } })
+    }
+    assert.deepEqual(adopted, [])
+    assert.deepEqual(queue.takeRetainedInputIds('session'), [])
+    const history: ModelMessage[] = []
+    await consumeSoloRuntimeGuidance({ turn: 1, phase: 'turn-start', history, runtimeInput: port, log: { info() {}, warn() {} } })
+    assert.deepEqual(history, [userMessage('first')])
+    assert.deepEqual(adopted, ['first'])
+    queue.finalize('execution')
+    queue.clear('execution')
+    assert.deepEqual(queue.takeRetainedInputIds('unrelated'), [])
+    assert.deepEqual(queue.takeRetainedInputIds('session'), ['second'])
+    assert.deepEqual(queue.takeRetainedInputIds('session'), [])
+    assert.deepEqual(adopted, ['first'])
+  })
+
   void test('rejects invalid input without opening an accepted lane', () => {
     const queue = new ExecutionGuidanceQueue()
     const executionId = 'execution:invalid'

@@ -40,6 +40,8 @@ export interface KernelInputReceipt {
 
 export interface KernelCancelResult {
   aborted: boolean
+  /** 已接收但尚未执行的用户消息；宿主按这些身份保留为暂停输入。 */
+  retainedInputIds?: string[]
 }
 
 export interface KernelControllerAnswerInput extends KernelControllerTarget {
@@ -49,6 +51,7 @@ export interface KernelControllerAnswerInput extends KernelControllerTarget {
 // 审批载荷对内核控制器是不透明的：默认 unknown，宿主适配器用类型参数声明正式类型，
 // 从而消除派发点的强转。
 export interface KernelControllerApprovalInput<TApproval = unknown> extends KernelControllerTarget {
+  confirmationId?: string
   approved: boolean
   rejectionMessage?: LooseOptional<string>
   approvalPayload?: LooseOptional<TApproval>

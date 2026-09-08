@@ -139,9 +139,12 @@ describe('agent dispatch input contract', () => {
       }
     )
     const queryCalls: Array<{ task: string; toolCategories?: readonly string[] }> = []
+    let parentActivations = 0
     dispatcher.bindAgentRunner({
       query: async (task, _parentContext, options) => {
         queryCalls.push({ task, toolCategories: options.toolCategories })
+        const capability = await options.requestToolCategories?.(['system-files'], 'inspect a system file')
+        expect(capability?.enabledCategories).toEqual(['system-files'])
         options.onHistoryUpdate?.([])
         return `worker result ${queryCalls.length}`
       },
@@ -151,7 +154,7 @@ describe('agent dispatch input contract', () => {
       sessionId: 'parent-session',
       codingSession: {
         getEnabledToolCategories: () => ['general'],
-        enableToolCategories: (categories: string[]) => categories,
+        enableToolCategories: (categories: string[]) => { parentActivations++; return categories },
       },
       execution: null,
     } as never
@@ -187,6 +190,7 @@ describe('agent dispatch input contract', () => {
     expect(queryCalls).toHaveLength(2)
     expect(queryCalls[1]?.task).toContain('类型：explore')
     expect(queryCalls[1]?.toolCategories).toEqual(['project-files'])
+    expect(parentActivations).toBe(0)
     dispatcher.clearExecution('parent-session')
   })
 })

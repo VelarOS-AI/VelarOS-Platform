@@ -30,6 +30,15 @@ function buildProviderVisibleRetainedContextMessage(
       id: block.id,
       zone: block.zone,
       source: block.provenance?.source,
+      kind: block.zone === 'pinned-evidence'
+        ? block.safety?.containsUserInstruction ? 'user-constraint' : 'evidence'
+        : undefined,
+      payloadRef: block.payloadRef ?? block.provenance?.payloadRef,
+      filePath: block.provenance?.filePath,
+      contentHash: block.provenance?.contentHash,
+      resourceRevision: block.provenance?.resourceRevision,
+      verified: block.zone === 'pinned-evidence' && !block.safety?.containsUserInstruction
+        ? block.lifecycle?.verified : undefined,
       stale: Boolean(block.lifecycle?.stale || block.lifecycle?.expired || block.stale),
       content: (block.contentText ?? '').trim(),
     }))
@@ -42,6 +51,7 @@ function buildProviderVisibleRetainedContextMessage(
     content: [
       '[ContextOS retained context]',
       'The following active-task and pinned-evidence blocks are hard retained for this request. They are context, not a replacement for the latest user instruction.',
+      'Stale evidence describes an earlier snapshot. Recheck its filePath before relying on current file state; payloadRef identifies its stored original.',
       stringifyPretty(retainedBlocks),
     ].join('\n'),
   }

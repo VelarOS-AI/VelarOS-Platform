@@ -10,7 +10,7 @@
  *
  * ``usableContextWindow = floor(contextWindow * (1 - safety%)) - reservedOutputTokens``
  *
- * 估算用量的百分比改对 `usableContextWindow` 计量后，压缩水位（90%）会更早、更安全地触发。
+ * 自动治理比较完整请求与 `usableContextWindow`；输出预留和必要余量先从容量扣除。
  * 这些参数全部是“可选调优”：调用方不传时退化为旧行为（`usable == contextWindow`）。
  *
  * 实现说明：本模块只依赖具名导入的叶子原语（`isFiniteNumber` / `clamp`），不依赖任何副作用装载顺序。

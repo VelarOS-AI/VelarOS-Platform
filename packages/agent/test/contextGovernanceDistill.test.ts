@@ -125,12 +125,12 @@ void describe('I2 蒸馏 · 规划判据 (§4B / RQ3)', () => {
   void test('档位 off 时从不规划；没有注入蒸馏器时记 no-distiller，不静默假装蒸过', () => {
     const off = createSession(distillConfig({ instruments: { distill: 'off' } }), null)
     off.syncHistory({ messages: buildNarrativeHistory(8, 1_200), at: 1_000 })
-    assert.equal(off.governTurn({ at: 1_000, modelWindowTokens: BudgetTokens })?.distill.skipReason, 'off')
+    assert.equal(off.requestEpoch({ at: 1_000, modelWindowTokens: BudgetTokens, source: 'overflow-recovery' })?.distill.skipReason, 'off')
 
     const noDistiller = createSession(distillConfig(), null)
     noDistiller.syncHistory({ messages: buildNarrativeHistory(8, 1_200), at: 1_000 })
     assert.equal(
-      noDistiller.governTurn({ at: 1_000, modelWindowTokens: BudgetTokens })?.distill.skipReason,
+      noDistiller.requestEpoch({ at: 1_000, modelWindowTokens: BudgetTokens, source: 'overflow-recovery' })?.distill.skipReason,
       'no-distiller'
     )
   })

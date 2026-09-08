@@ -669,7 +669,7 @@ class ContextRetrievalPayloadReader {
       }
 
     for (const [storageKey, payload] of Object.entries(snapshot.toolResults)) {
-      if (payload.payloadRef !== handleId) {
+      if (payload.payloadRef !== handleId && payload.handoff?.sourceRef !== handleId && !payload.handoff?.sourceRefs?.includes(handleId)) {
         continue
       }
 

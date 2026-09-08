@@ -495,6 +495,9 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
         return {
           running: coordinatorRunning(status),
           awaitingConfirmation: status.hasPendingConfirmation === true,
+          confirmationId: isRecord(status.pendingConfirmation)
+            ? nullableString(status.pendingConfirmation.confirmationId)
+            : null,
           awaitingInput: status.hasPendingInput === true,
           revision: executionRevision(status, value.transcript),
           usage: budgetUsage(
@@ -560,10 +563,13 @@ export function createVelarHooksDriver(options: VelarHooksDriverOptions) {
           },
         };
       },
-      resolveConfirmation: async (session, approved, rejectionMessage) => {
+      resolveConfirmation: async (session, approved, rejectionMessage, confirmationId) => {
+        if (!confirmationId)
+          throw new Error("Velar hooks approval snapshot has no confirmationId; refresh the pending card before replying.");
         const response = await client.command({
           kind: "resolve_confirmation",
           sessionId: session.externalId ?? session.id,
+          confirmationId,
           approved,
           rejectionMessage,
         });

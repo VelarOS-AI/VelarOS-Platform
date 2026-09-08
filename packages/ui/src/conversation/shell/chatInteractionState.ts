@@ -10,6 +10,7 @@ export type ChatSessionInteractionState =
   | 'idle'
   | 'streaming'
   | 'running'
+  | 'stopping'
   | 'awaiting-confirmation'
   | 'awaiting-input'
 
@@ -17,6 +18,7 @@ export function resolveChatInteractionState(
   isStreaming: boolean,
   status: ChatRunStatus
 ): ChatSessionInteractionState {
+  if (status === 'stopping') return 'stopping'
   if (status === 'awaiting-confirmation' || status === 'awaiting-input') return status
   if (isStreaming) return 'streaming'
   if (status === 'running') return 'running'
@@ -25,5 +27,5 @@ export function resolveChatInteractionState(
 
 /** run 是否在推进（流式或运行中）；等待交互不算推进（阻塞态由用户解锁）。 */
 export function isChatInteractionRunActive(state: ChatSessionInteractionState): boolean {
-  return state === 'streaming' || state === 'running'
+  return state === 'streaming' || state === 'running' || state === 'stopping'
 }

@@ -521,7 +521,8 @@ class SubAgentDispatcher {
         if (status === 'awaiting_confirmation') {
           this.emitDangerousConfirmationWorkerCard({ ...statusBase, summary })
         }
-      }
+      },
+      { agentId: threadId, label: agentName }
     )
 
     if (isResume) {
@@ -574,7 +575,7 @@ class SubAgentDispatcher {
 
     if (dispatchMode === 'async') {
       this.sessionStore.setStatus(threadId, 'running')
-      void this.runWorker({
+      const worker = this.runWorker({
         request: dispatchRequest,
         autonomousParentCtx,
         typeConfig,
@@ -593,8 +594,12 @@ class SubAgentDispatcher {
         retryState,
         backgroundJobId,
         progressDigest,
-        // arch-guard:silent-catch-ok async 派发 fire-and-forget：runWorker 内部已捕获并记录全部失败（emitWorkerStatus / failSubAgentBackgroundJob），此处仅防未处理拒绝。
-      }).catch(() => undefined)
+      })
+      if (backgroundJobId) this.backgroundJobManager?.trackExecution(backgroundJobId, worker)
+      // worker 已将失败写入任务账本；这里记录独立 promise 的收尾，取消路径另等它结束。
+      void worker.catch((error) => {
+        this.log.debug('子 Agent 后台执行已收尾', { threadId, error: AppError.from(error) })
+      })
       return formatSubAgentTaskResultForParent(
         buildSubAgentTaskResult({
           threadId,
@@ -606,7 +611,7 @@ class SubAgentDispatcher {
 
     // sync：阻塞等 runWorker 返回子 Agent 的最终结果并内联返回给父 Agent。
     // 传入 backgroundJobId（非 null），让运行进度照常流入侧边栏 job。
-    return this.runWorker({
+    const worker = this.runWorker({
       request: dispatchRequest,
       autonomousParentCtx,
       typeConfig,
@@ -626,6 +631,8 @@ class SubAgentDispatcher {
       backgroundJobId,
       progressDigest,
     })
+    if (backgroundJobId) this.backgroundJobManager?.trackExecution(backgroundJobId, worker)
+    return worker
   }
 
   private async runWorker(args: {
@@ -709,6 +716,8 @@ class SubAgentDispatcher {
         },
       }
       const workerOutput = await this.runWithOptionalWriteLease(plan)
+      args.request.parentCtx.abortSignal.throwIfAborted()
+      relayHandle.abortSignal.throwIfAborted()
 
       const rawText = workerOutput.text
       const decorated =
@@ -743,7 +752,14 @@ class SubAgentDispatcher {
       return formatSubAgentTaskResultForParent(taskResult, args.statusBase.agentName)
     } catch (error) {
       const appError = AppError.from(error)
-      if (appError.code === 'EXECUTION_ABORTED') {
+      if (
+        appError.code === 'EXECUTION_ABORTED' ||
+        args.request.parentCtx.abortSignal.aborted ||
+        relayHandle?.abortSignal.aborted
+      ) {
+        const abortError = appError.code === 'EXECUTION_ABORTED'
+          ? appError
+          : new AppError('EXECUTION_ABORTED', '子智能体已中断。', error)
         const taskResult = buildSubAgentTaskResult({
           threadId: args.threadId,
           text: '子智能体已中断。',
@@ -760,7 +776,7 @@ class SubAgentDispatcher {
           result: taskResult,
         })
         if (args.request.parentCtx.abortSignal.aborted || !relayHandle?.abortSignal.aborted) {
-          throw appError
+          throw abortError
         }
         return formatSubAgentTaskResultForParent(taskResult, args.statusBase.agentName)
       }
@@ -1555,38 +1571,17 @@ class SubAgentDispatcher {
           : `子智能体不开放这些工具分类：${blockedCategories.join(', ')}。请主智能体自行使用，或改派不依赖这些能力的子任务。`,
       }
 
-    const enabledSetBefore = new Set(enabledBefore)
-    const missingCategories = requestedCategories.filter(
-      (categoryId) => !enabledSetBefore.has(categoryId)
-    )
-
-    if (!isEmpty(missingCategories)) {
-      request.parentCtx.codingSession.enableToolCategories(missingCategories, reason)
-    }
-
-    const enabledAfter = request.parentCtx.codingSession.getEnabledToolCategories()
-    const enabledSetAfter = new Set(enabledAfter)
-    const skippedCategories = [
-      ...blockedCategories,
-      ...requestedCategories.filter((categoryId) => !enabledSetAfter.has(categoryId)),
-    ]
-    const approvedCategories = requestedCategories.filter((categoryId) =>
-      enabledSetAfter.has(categoryId)
-    )
-
+    // 能力请求只决定子 Agent 的可用面；LoopRuntime 在子 tracker 上完成启用。
+    // 工具执行时仍走同一个任务审批端口。
     return {
-      enabled: !isEmpty(approvedCategories),
-      approved: !isEmpty(approvedCategories),
+      enabled: true,
+      approved: true,
       autoApproved: true,
       reason,
       requestedCategories: expandedRequest,
-      enabledCategories: enabledAfter,
-      skippedCategories,
-      message: isEmpty(skippedCategories)
-        ? '主智能体已批准并开放这些工具分类；请在下一轮使用对应工具。'
-        : !isEmpty(blockedCategories)
-          ? `主智能体已处理请求，但子智能体永不开放这些工具分类：${blockedCategories.join(', ')}。其他未开放分类：${skippedCategories.filter((categoryId) => !blockedCategories.includes(categoryId)).join(', ') || '无'}。`
-          : `主智能体只开放了部分工具分类，未开放：${skippedCategories.join(', ')}。`,
+      enabledCategories: requestedCategories,
+      skippedCategories: blockedCategories,
+      message: '这些工具分类可供当前子 Agent 使用；操作授权仍按任务策略判断。',
     }
   }
 
@@ -1597,28 +1592,29 @@ class SubAgentDispatcher {
   }
 
   /**
-   * 构造子智能体运行用的工具上下文：默认放行运行期确认请求，只把危险命令冒泡到父线程。
+   * 构造子智能体运行用的工具上下文：所有确认使用父任务策略，并把等待状态投影到子任务。
    */
   private buildAutonomousParentCtx(
     parentCtx: SubAgentToolContext,
-    onDangerousConfirmation?: DangerousConfirmationStatusSink
+    onDangerousConfirmation?: DangerousConfirmationStatusSink,
+    requester?: { agentId: string; label?: string }
   ): SubAgentToolContext {
     const execution = parentCtx.execution
     if (!execution) return parentCtx
+    const shared = this.buildAutonomousExecution(execution, onDangerousConfirmation, requester)
     return {
       ...parentCtx,
-      execution: this.buildAutonomousExecution(execution, onDangerousConfirmation),
+      execution: shared,
+      approval: shared,
     }
   }
 
   private buildAutonomousExecution(
     execution: NonNullable<SubAgentToolContext['execution']>,
-    onDangerousConfirmation?: DangerousConfirmationStatusSink
+    onDangerousConfirmation?: DangerousConfirmationStatusSink,
+    requester?: { agentId: string; label?: string }
   ): NonNullable<SubAgentToolContext['execution']> {
-    // 子 Agent 无人值守放行策略上移到 ApprovalPort 策略层（宪章 §4 Ring 1）：默认全放行 +
-    // 超高风险升级父线程。升级 riskScope 集合、终止/非终止审批语义、破坏性命令硬门化语义都住在
-    // createUnattendedSubAgentApprovalPort（core tool-contract/approval.ts）单源，与危险命令门同居；
-    // 派发器只负责把升级挂起/返回投影成 worker 线程状态卡（保留原确认卡 UI，只换触发源）。
+    // 审批与旧 execution 门统一委托父任务，工具能力启用不参与此判定。
     const approvalPort = createUnattendedSubAgentApprovalPort(execution, {
       onEscalationPending: (message) =>
         onDangerousConfirmation?.(
@@ -1630,8 +1626,10 @@ class SubAgentDispatcher {
     })
     return {
       ...execution,
-      awaitConfirmation: approvalPort.awaitConfirmation,
-      awaitConfirmationDecision: approvalPort.awaitConfirmationDecision,
+      awaitConfirmation: (message, signal, options) =>
+        approvalPort.awaitConfirmation(message, signal, { ...options, requester }),
+      awaitConfirmationDecision: (message, signal, options) =>
+        approvalPort.awaitConfirmationDecision(message, signal, { ...options, requester }),
     }
   }
 

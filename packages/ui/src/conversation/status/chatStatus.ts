@@ -3,6 +3,7 @@ import {
   type ConversationTranslator,
   conversationTranslatorRuntime,
 } from '../i18n/conversationTranslator'
+import type { ConversationVerificationSummary } from '../projection/conversationRunMarkerView'
 
 import type { AppLocale, TeamExecutionPhase } from '#contracts'
 import { isBlank, isEmpty, isPresent, optionalWhenLazy, truncate } from '#internal/runtime'
@@ -13,6 +14,7 @@ export type ChatStatusTone = 'idle' | 'running' | 'success' | 'warning' | 'error
 export type ChatRunStatus =
   | 'idle'
   | 'running'
+  | 'stopping'
   | 'completed'
   | 'aborted'
   | 'failed'
@@ -25,6 +27,7 @@ export type ChatRunStatus =
  */
 export interface ChatStatusRuntime {
   status: ChatRunStatus
+  verification?: ConversationVerificationSummary
   teamPhase: Nullable<TeamExecutionPhase>
   activeTurn: Nullable<number>
   completedTurns: number
@@ -68,6 +71,7 @@ type ConversationTranslate = ConversationTranslator['translate']
 const STATUS_LABEL_KEYS: Record<ChatRunStatus, ConversationMessageKey> = {
   idle: 'status.idle',
   running: 'status.running',
+  stopping: 'status.stopping',
   completed: 'status.completed',
   aborted: 'status.aborted',
   failed: 'status.failed',
@@ -78,6 +82,7 @@ const STATUS_LABEL_KEYS: Record<ChatRunStatus, ConversationMessageKey> = {
 const STATUS_TONES: Record<ChatRunStatus, ChatStatusTone> = {
   idle: 'idle',
   running: 'running',
+  stopping: 'running',
   completed: 'success',
   aborted: 'warning',
   failed: 'error',
@@ -146,6 +151,10 @@ function getChatStatusDetail(
   locale: AppLocale,
   conversationTranslate: ConversationTranslate
 ): string | undefined {
+  if (runtime.status === 'stopping') return conversationTranslate(locale, 'status.stoppingDescription')
+  if (runtime.status === 'completed' && runtime.verification)
+    return conversationTranslate(locale, `status.verification.${runtime.verification.status}`)
+  if (runtime.status === 'running' && runtime.lastError) return runtime.lastError
   if (runtime.status === 'running' && isPresent(runtime.connectionRetryAttempt))
     return getReconnectingLabel(runtime, locale, conversationTranslate)
 

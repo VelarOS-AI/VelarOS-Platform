@@ -11,6 +11,8 @@ interface ProviderScriptContextWindowInput {
   providerId: ChatProviderId
   runtimeModel: string
   metadata?: LooseOptional<ProviderScriptRuntimeMetadata>
+  /** 当前鉴权作用域目录声明的窗口；低于具体运行时 metadata，高于静态兜底。 */
+  catalogContextWindow?: number
 }
 
 interface ConcreteProviderModelConfig {
@@ -35,16 +37,26 @@ function readConcreteProviderModelConfig(
   }
 }
 
+/** 仅提取运行时明确声明的窗口，不把静态查表或默认估计升级为 metadata。 */
+export function resolveProviderScriptMetadataContextWindow(
+  metadata?: LooseOptional<ProviderScriptRuntimeMetadata>
+): number | undefined {
+  return readConcreteProviderModelConfig(metadata?.config)?.contextWindow
+    ?? toPositiveInteger(metadata?.contextWindow)
+    ?? undefined
+}
+
 /**
- * Provider script 若保留了实际 provider/model 配置，则先尊重服务端显式窗口，
- * 否则由 Desktop 模型目录解析真实模型；未知模型继续使用脚本自己的安全回退。
+ * 显式运行时窗口优先于当前鉴权作用域目录；缺失时再按具体 provider/model 静态查表。
  */
 export function resolveProviderScriptContextWindow(
   input: ProviderScriptContextWindowInput
 ): number | undefined {
-  const concreteConfig = readConcreteProviderModelConfig(input.metadata?.config)
-  if (concreteConfig?.contextWindow) return concreteConfig.contextWindow
+  const explicitWindow = resolveProviderScriptMetadataContextWindow(input.metadata)
+  if (explicitWindow) return explicitWindow
+  if (input.catalogContextWindow) return input.catalogContextWindow
 
+  const concreteConfig = readConcreteProviderModelConfig(input.metadata?.config)
   if (concreteConfig) {
     const resolved = resolveProviderModelContextWindow(
       concreteConfig.provider,
@@ -52,8 +64,6 @@ export function resolveProviderScriptContextWindow(
     )
     if (resolved) return resolved
   }
-
-  if (input.metadata?.contextWindow) return input.metadata.contextWindow
 
   return toOptional(
     resolveProviderModelContextWindow(input.providerId, input.runtimeModel)

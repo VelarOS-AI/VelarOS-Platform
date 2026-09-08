@@ -36,6 +36,8 @@ import type {
  * 适配层会覆盖调用方传入的 sessionId。
  */
 export interface SystemToolSystemApi {
+  /** 解析本次命令实际使用的目录，审批和执行共用同一值。 */
+  resolveCommandCwd?: (cwd?: string) => string
   /** 在系统范围搜索文件。 */
   globalSearch: (
     options: SystemGlobalSearchOptions,

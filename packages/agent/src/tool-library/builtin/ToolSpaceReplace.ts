@@ -109,25 +109,33 @@ function assertDisjointReplacementTargets(
   pageOut: readonly string[],
   cardsById: ReadonlyMap<string, ToolDiscoveryCard>
 ): void {
-  const categoriesById = new Map([...new Set([...pageIn, ...pageOut])].map((id) => {
-    const card = cardsById.get(id)
-    const categories = card?.kind === 'capability'
-      ? expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
-      : card ? [card.categoryId] : []
-    return [id, new Set(categories)] as const
-  }))
+  const categoriesById = new Map(
+    [...new Set([...pageIn, ...pageOut])].map((id) => {
+      const card = cardsById.get(id)
+      const categories =
+        card?.kind === 'capability'
+          ? expandCapabilityCategoryIds(ctx.capabilityPorts, [card.categoryId])
+          : card
+            ? [card.categoryId]
+            : []
+      return [id, new Set(categories)] as const
+    })
+  )
   for (const incomingId of pageIn) {
     for (const outgoingId of pageOut) {
       const incoming = cardsById.get(incomingId)
       const outgoing = cardsById.get(outgoingId)
-      const categoryOverlap = incoming && outgoing
-        && (incoming.kind === 'capability' || outgoing.kind === 'capability')
-        && [...categoriesById.get(incomingId) ?? []].some((categoryId) =>
-          categoriesById.get(outgoingId)?.has(categoryId))
+      const categoryOverlap =
+        incoming &&
+        outgoing &&
+        (incoming.kind === 'capability' || outgoing.kind === 'capability') &&
+        [...(categoriesById.get(incomingId) ?? [])].some((categoryId) =>
+          categoriesById.get(outgoingId)?.has(categoryId)
+        )
       if (incomingId !== outgoingId && !categoryOverlap) continue
       throw new AppError(
         'VALIDATION',
-        `pageIn 与 pageOut 的目标冲突：${incomingId} / ${outgoingId}。请只保留一个方向后重试。`,
+        `pageIn 与 pageOut 的目标冲突：${incomingId} / ${outgoingId}。请只保留一个方向后重试。`
       )
     }
   }
@@ -178,15 +186,23 @@ function buildReplaceNextTurnHint(input: {
     : `工具 ${input.alreadyResidentTools.join('、')} 已驻留，本轮即可直接调用。`
   const hints = residentHint ? [residentHint] : []
   if (!isEmpty(input.preparedTools))
-    hints.push(`工具 ${input.preparedTools.join('、')} 已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。`)
+    hints.push(
+      `工具 ${input.preparedTools.join('、')} 已换入；下一轮 AI SDK tools 会暴露对应真实 schema。preparedToolExamples 给出了正确调用示例，请照其字段名与结构调用，不要凭摘要猜参数。`
+    )
   else if (!isEmpty(input.enabledCapabilities))
-    hints.push('能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。')
+    hints.push(
+      '能力类别已启用，但类别换入不保证该类别下每个具体工具都能穿过动态 schema 预算。若任务目标是某个具体动作，请下一轮先 tooling:map(op:"find", query:"任务目标短语")，再 tooling:replace(pageIn:["tool:<精确工具名>"])；不要凭类别摘要猜工具参数。'
+    )
   else if (!isEmpty(input.requiresApprovalDetails) || !isEmpty(input.requiresUserActionDetails))
-    hints.push('请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。')
+    hints.push(
+      '请根据 requiresApprovalDetails / requiresUserActionDetails 的 reasons 处理授权、插件或用户动作。'
+    )
   else if (!isEmpty(input.skippedPageDetails))
     hints.push('请查看 skippedPageDetails 的 reasons，并改用可见工具、换入推荐页或重新查询工具页。')
   else if (isEmpty(hints))
-    hints.push('没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。')
+    hints.push(
+      '没有新的工具页被换入；请回到 tooling:map(op:"find") 或 tooling:map(op:"page") 重新确认目标页，再用 tooling:replace 换入。'
+    )
 
   return hints.join('\n')
 }
@@ -308,6 +324,8 @@ export async function replaceToolSpacePages(
   if (!isEmpty(categoriesToEnable)) {
     if (ctx.requestToolCategoryAccess) {
       const result = await ctx.requestToolCategoryAccess(categoriesToEnable, input.reason)
+      // 授权等待期间停止的调用不能继续改变工具驻留；已有授权回执由授权 owner 保留。
+      ctx.abortSignal.throwIfAborted()
       enabledCapabilities.push(...result.enabledCategories)
       if (!result.approved) {
         requiresApproval.push(...pageIn.filter((id) => id.startsWith('capability:')))
@@ -412,9 +430,8 @@ export async function replaceToolSpacePages(
       requiresUserActionDetails,
       skippedPageDetails,
     }),
-    message:
-      !isEmpty(alreadyResidentTools)
-        ? `工具 ${alreadyResidentTools.join('、')} 已驻留，本轮即可直接调用。`
-        : 'ContextOS 工具页替换已处理。',
+    message: !isEmpty(alreadyResidentTools)
+      ? `工具 ${alreadyResidentTools.join('、')} 已驻留，本轮即可直接调用。`
+      : 'ContextOS 工具页替换已处理。',
   }
 }

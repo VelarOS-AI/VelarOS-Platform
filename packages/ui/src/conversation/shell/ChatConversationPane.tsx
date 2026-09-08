@@ -103,7 +103,7 @@ export interface ChatConversationPaneProps {
   onResolveConfirmation?: (
     approved: boolean,
     rejectionMessage?: LooseOptional<string>,
-    options?: { userActionCardResults?: UserActionCardResult[] }
+    options?: { confirmationId?: string; userActionCardResults?: UserActionCardResult[] }
   ) => void
   onSubmitInput?: (answer: string) => void | Promise<void>
   onContinueGoal?: (input: string) => unknown | Promise<unknown>
@@ -717,10 +717,11 @@ export function ChatConversationPane({
             )}
             {shouldRenderAwaitingConfirmationCard && (
               <ChatConfirmationCard
+                key={runtime.awaitingConfirmationId}
                 message={runtime.awaitingConfirmationMessage}
                 detail={runtime.awaitingConfirmationDetail}
-                onApprove={() => onResolveConfirmation(true)}
-                onReject={(rejectionMessage) => onResolveConfirmation(false, rejectionMessage)}
+                onApprove={() => onResolveConfirmation(true, undefined, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
+                onReject={(rejectionMessage) => onResolveConfirmation(false, rejectionMessage, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
               />
             )}
             {isStreaming &&

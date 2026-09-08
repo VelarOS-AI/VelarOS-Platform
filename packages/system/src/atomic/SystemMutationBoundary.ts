@@ -1,6 +1,8 @@
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
+import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
+
 import type { ToolContext } from '../Types.js'
 
 /**
@@ -134,6 +136,14 @@ export async function confirmSensitiveSystemMutation(
   await ctx.approval.awaitConfirmation(
     `即将${verb}系统敏感路径：\n${resolvedPath}\n\n该路径位于系统目录或主目录的配置/凭证区（如 ~/.ssh、shell 启动文件、/etc 等），可能影响登录、凭证或系统行为。确认继续？`,
     ctx.abortSignal,
-    { approvalRisk: 'high', riskScope: 'system-mutation:sensitive-path' }
+    {
+      approvalRisk: 'high',
+      riskScope: 'system-mutation:sensitive-path',
+      operation: {
+        key: createApprovalOperationKey('file-mutation', { path: resolvedPath }),
+        label: '修改系统敏感文件',
+        target: resolvedPath,
+      },
+    }
   )
 }

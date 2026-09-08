@@ -107,16 +107,30 @@ interface McpPendingAuthorization {
   readonly transport: McpRemoteTransport
 }
 
+interface McpPendingConnection {
+  controller: AbortController
+  client: Nullable<Client>
+  transport: Nullable<Transport>
+  promise: Promise<void>
+}
+
 /** 单个 MCP 服务器的 host 无关协议连接。 */
 export class McpClientConnection {
   private client: Nullable<Client> = null
   private transport: Nullable<Transport> = null
   private pendingAuthorization: Nullable<McpPendingAuthorization> = null
+  private connecting: Nullable<McpPendingConnection> = null
+  private closing: Nullable<Promise<void>> = null
 
   constructor(
     private readonly serverName: string,
     private readonly spec: McpConnectionSpec,
-    private readonly options: { connectTimeoutMs?: number; callTimeoutMs?: number } = {}
+    private readonly options: {
+      connectTimeoutMs?: number
+      callTimeoutMs?: number
+      /** 已建立的连接意外关闭时通知宿主，供其撤回工具目录。 */
+      onClose?: () => void
+    } = {}
   ) {}
 
   public get isConnected(): boolean {
@@ -129,7 +143,9 @@ export class McpClientConnection {
 
   /** 建立连接并 initialize；auto 仅在非鉴权错误时从 HTTP 回退 SSE。 */
   public async connect(): Promise<void> {
+    if (this.closing) await this.closing
     if (this.client) return
+    if (this.connecting) return this.connecting.promise
     if (this.pendingAuthorization) {
       const provider = this.spec.authProvider as McpAuthorizationProvider | undefined
       throw new McpAuthorizationRequiredError(
@@ -137,21 +153,47 @@ export class McpClientConnection {
       )
     }
 
+    const pending: McpPendingConnection = {
+      controller: new AbortController(),
+      client: null,
+      transport: null,
+      promise: Promise.resolve(),
+    }
+    this.connecting = pending
+    pending.promise = this.connectPending(pending).finally(() => {
+      if (this.connecting === pending) this.connecting = null
+    })
+    return pending.promise
+  }
+
+  private async connectPending(pending: McpPendingConnection): Promise<void> {
     const transportKinds = this.spec.transport === 'auto'
       ? ['http', 'sse'] as const
       : [this.spec.transport ?? 'stdio'] as const
     const errors: string[] = []
     for (const transportKind of transportKinds) {
+      pending.controller.signal.throwIfAborted()
       const transport = this.createTransport(transportKind)
       const client = new Client(this.spec.client ?? { name: 'velaros-mcp-host', version: '1.0.0' })
+      pending.client = client
+      pending.transport = transport
+      client.onclose = () => this.handleConnectionClosed(client)
       try {
         await client.connect(transport, {
           timeout: this.options.connectTimeoutMs ?? McpConnectTimeoutMs,
+          signal: pending.controller.signal,
         })
+        pending.controller.signal.throwIfAborted()
+        if (!client.transport) throw new AppError('UNAVAILABLE', 'MCP connection closed during startup.')
         this.client = client
         this.transport = transport
         return
       } catch (error) {
+        if (pending.controller.signal.aborted) {
+          await this.closeClientQuietly(client)
+          await this.closeTransportQuietly(transport)
+          pending.controller.signal.throwIfAborted()
+        }
         if (error instanceof UnauthorizedError) {
           const provider = this.spec.authProvider as McpAuthorizationProvider | undefined
           if (transportKind !== 'stdio' && provider) {
@@ -199,22 +241,30 @@ export class McpClientConnection {
 
   /** 列出该 server 暴露的工具（已解析为受控 McpToolDescriptor）。 */
   public async listTools(): Promise<McpToolDescriptor[]> {
-    const response = await this.requireClient().listTools()
-    const rawTools = isArray(response.tools) ? response.tools : []
+    const client = this.requireClient()
     const descriptors: McpToolDescriptor[] = []
-    for (const raw of rawTools) {
-      const descriptor = this.parseToolDescriptor(raw)
-      if (descriptor) descriptors.push(descriptor)
-    }
+    const seenCursors = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const response = await client.listTools(cursor === undefined ? undefined : { cursor })
+      const rawTools = isArray(response.tools) ? response.tools : []
+      for (const raw of rawTools) {
+        const descriptor = this.parseToolDescriptor(raw)
+        if (descriptor) descriptors.push(descriptor)
+      }
+      cursor = this.advanceListCursor(response.nextCursor, seenCursors)
+    } while (cursor !== undefined)
     return descriptors
   }
 
   /** 枚举资源，完整跟随 MCP cursor 分页。 */
   public async listResources(): Promise<McpResourceDescriptor[]> {
+    const client = this.requireClient()
     const resources: McpResourceDescriptor[] = []
+    const seenCursors = new Set<string>()
     let cursor: string | undefined
     do {
-      const response = await this.requireClient().listResources(cursor ? { cursor } : undefined)
+      const response = await client.listResources(cursor === undefined ? undefined : { cursor })
       for (const resource of response.resources) {
         resources.push({
           uri: resource.uri,
@@ -223,9 +273,18 @@ export class McpClientConnection {
           mimeType: toNullable(resource.mimeType),
         })
       }
-      cursor = response.nextCursor
-    } while (cursor)
+      cursor = this.advanceListCursor(response.nextCursor, seenCursors)
+    } while (cursor !== undefined)
     return resources
+  }
+
+  private advanceListCursor(cursor: string | undefined, seen: Set<string>): string | undefined {
+    if (cursor === undefined) return undefined
+    if (seen.has(cursor)) {
+      throw new AppError('EXECUTION', `Repeated MCP pagination cursor from server ${this.serverName}.`)
+    }
+    seen.add(cursor)
+    return cursor
   }
 
   /** 读取一个资源并把 text/blob 联合收敛成稳定、可序列化形状。 */
@@ -280,15 +339,47 @@ export class McpClientConnection {
 
   /** 关闭连接；失败静默（释放优先）。 */
   public async close(): Promise<void> {
+    if (this.closing) return this.closing
+    const pendingConnection = this.connecting
     const client = this.client
     const transport = this.transport
     const pendingAuthorization = this.pendingAuthorization
     this.client = null
     this.transport = null
     this.pendingAuthorization = null
+    pendingConnection?.controller.abort(new AppError('ABORTED', 'MCP connection closed.'))
+    const closing = this.closeOwnedConnections(client, transport, pendingAuthorization, pendingConnection)
+    this.closing = closing
+    try {
+      await closing
+    } finally {
+      if (this.closing === closing) this.closing = null
+    }
+  }
+
+  private async closeOwnedConnections(
+    client: Nullable<Client>,
+    transport: Nullable<Transport>,
+    authorization: Nullable<McpPendingAuthorization>,
+    pending: Nullable<McpPendingConnection>
+  ): Promise<void> {
     if (client) await this.closeClientQuietly(client)
     else if (transport) await this.closeTransportQuietly(transport)
-    if (pendingAuthorization) await this.closeClientQuietly(pendingAuthorization.client)
+    if (authorization) await this.closeClientQuietly(authorization.client)
+    if (pending?.client && pending.client !== client) await this.closeClientQuietly(pending.client)
+    if (pending?.transport && pending.transport !== transport) await this.closeTransportQuietly(pending.transport)
+    if (pending) await Promise.allSettled([pending.promise])
+  }
+
+  private handleConnectionClosed(client: Client): void {
+    if (this.client !== client) return
+    this.client = null
+    this.transport = null
+    try {
+      this.options.onClose?.()
+    } catch (error) {
+      log.warn('mcp close observer failed', { server: this.serverName, error })
+    }
   }
 
   private createTransport(transport: Exclude<McpTransportKind, 'auto'>): Transport {

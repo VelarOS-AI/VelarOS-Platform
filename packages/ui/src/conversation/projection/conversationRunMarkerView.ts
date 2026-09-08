@@ -19,7 +19,14 @@ export type ConversationRunMarkerStatus =
 
 export type ConversationRunMarkerTurnKind = 'turn' | 'totalTurns'
 
+export interface ConversationVerificationSummary {
+  status: 'not-run' | 'stale' | 'passed' | 'failed' | 'timed-out' | 'aborted' | 'unknown'
+  command?: string
+  issues?: string[]
+}
+
 export interface ConversationRunMarkerView {
+  verification?: ConversationVerificationSummary
   status: ConversationRunMarkerStatus
   detail: Nullable<string>
   turnCount: Nullable<number>
@@ -38,6 +45,7 @@ export interface ConversationMessageRunMarker extends ConversationRunMarkerView 
   /** 此消息所属执行的最终耗时；随消息标记持久化，避免从会话级最新执行时间反推。 */
   durationMs?: number
   goalMode?: boolean
+  goalStatus?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
   workspaceCheckpointDiff?: {
     capturedAt: number
     changes: ProjectCheckpointFileDiff[]

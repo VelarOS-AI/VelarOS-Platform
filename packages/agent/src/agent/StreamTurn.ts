@@ -27,6 +27,7 @@ import type { ToolExecutionPolicyRegistry } from '../tools'
 import { compareStableStrings } from './context/residency/determinism'
 import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
 import { normalizeModelRequestError } from './model/ModelRequestError'
+import { createLinkedAbortScope } from './model/RequestAbortScope'
 import {
   assertProviderRequestSnapshotReconstructable,
   compileProviderSendRequest,
@@ -42,6 +43,7 @@ import {
   type AssistantContentPart,
   createInternalFollowUpMessage,
 } from './history'
+import { resolveModelContextUsageOptions } from './LoopContextUsage'
 import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
 import {
   type AgentModelRequestPort,
@@ -78,37 +80,6 @@ const DynamicPromptLayerMarker = '[system prompt · dynamic layer (current turn)
 const MaxStreamContinuationRecoveryAttempts = 1
 const MaxOutputTruncationRecoveryAttempts = 2
 const MaxReasoningOnlyVisibleAnswerRecoveryAttempts = 2
-
-interface LinkedAbortScope {
-  signal: AbortSignal
-  abort(reason?: unknown): void
-  dispose(): void
-}
-
-function createLinkedAbortScope(...parentSignals: AbortSignal[]): LinkedAbortScope {
-  const controller = new AbortController()
-  const abort = (reason?: unknown): void => {
-    if (!controller.signal.aborted) controller.abort(reason)
-  }
-  const disposers: Array<() => void> = []
-
-  for (const parentSignal of parentSignals) {
-    const forwardParentAbort = (): void => abort(parentSignal.reason)
-    if (parentSignal.aborted) forwardParentAbort()
-    else {
-      parentSignal.addEventListener('abort', forwardParentAbort, { once: true })
-      disposers.push(() => parentSignal.removeEventListener('abort', forwardParentAbort))
-    }
-  }
-
-  return {
-    signal: controller.signal,
-    abort,
-    dispose: () => {
-      for (const dispose of disposers) dispose()
-    },
-  }
-}
 
 interface SystemPromptDelivery {
   system?: string
@@ -257,6 +228,8 @@ export interface StreamTurnResult {
   interruptedByRuntimeInput?: boolean
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>
+  /** 与 inputTokens 同一次成功请求的编译后估算，含治理投影和实际工具面。 */
+  predictedInputTokens?: LooseOptional<number>
   /**
    * 供应方回合收敛后的执行观测富化（#37 阶段 C 片 1）：输出 token / 成本 / 结束原因 / 请求指纹。
    * 与 inputTokens 走同一回传通道，交由 SoloLoop 挂到本确定 turn 的 model span（D5）。缺席用 null。
@@ -317,6 +290,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     let didLogTurnEnd = false
     let providerTurnReducer: LooseOptional<ProviderTurnEventReducer> = null
     let providerRequestSnapshot: LooseOptional<ProviderRequestSnapshot> = null
+    let predictedInputTokens: LooseOptional<number> = null
     let streamContinuationRecoveries = 0
     let reasoningOnlyVisibleAnswerRecoveries = 0
     const turnAbortScope = createLinkedAbortScope(
@@ -426,7 +400,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                     activeTask: contextWorkingSetInputs.activeTask,
                     pinnedEvidence: contextWorkingSetInputs.pinnedEvidence,
                     contextWindow: args.contextWindow ?? args.contextUsageOptions?.contextWindow,
-                    contextUsageOptions: args.contextUsageOptions,
+                    contextUsageOptions: resolveModelContextUsageOptions(args.contextUsageOptions, args.modelRequestOptions),
                     buildToolPayloadRefs: (providerMessages) =>
                       this.turnRequestHelper.buildToolPayloadRefs(
                         args.toolContext,
@@ -450,6 +424,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
                 assertProviderRequestSnapshotReconstructable(compiledRequest.providerRequest)
                 providerRequestSnapshot = compiledRequest.providerRequest
+                predictedInputTokens = compiledRequest.estimate.estimatedTokens
                 providerTurnReducer = this.createProviderTurnReducer(args)
                 providerTurnReducer.apply({ type: 'turn-started' })
                 providerTurnReducer.apply({
@@ -706,6 +681,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         hasVisibleText: !isBlank(turnState.accumulatedText),
         interruptedByRuntimeInput,
         inputTokens: toNullable(turnState.inputTokens),
+        predictedInputTokens,
         outputTokens: toNullable(turnState.outputTokens),
         costUsd: toNullable(turnState.costUsd),
         finishReason: toNullable(turnState.finishReason),

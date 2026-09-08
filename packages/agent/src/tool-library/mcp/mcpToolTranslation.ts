@@ -21,9 +21,11 @@ import type {
 import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 import { isBoolean } from '@velaros-ai/core'
 
+import { createApprovalOperationKey } from '../../tool-contract/task-approval'
 import type { VelaTool } from '../defineVelaTool'
 import type { KernelToolContext } from '../KernelToolContext'
 
+import { describeMcpApprovalArguments } from './mcpApprovalArguments'
 import { translateMcpCallResult } from './mcpCallResult'
 import type { McpClientConnection, McpToolDescriptor } from './McpClientConnection'
 
@@ -173,15 +175,34 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
     isConcurrencySafe: () => capabilities.concurrency === 'safe',
     execute: async (rawInput: Record<string, unknown>, ctx: KernelToolContext): Promise<unknown> => {
       const args = rawInput ?? {}
+      const destructive = descriptor.annotations.destructiveHint
       if (!isToolAutoApproved(autoApprove, originalName)) {
+        const argumentsPreview = describeMcpApprovalArguments(args)
+        const approvalScope = destructive ? 'call' : 'task-operation'
+        const approvalMessage = [
+          `AI 请求调用外部 MCP 工具「${originalName}」（服务器 ${serverName}）。`,
+          `参数：${argumentsPreview}`,
+          destructive
+            ? '本次为破坏性操作；批准仅适用于本次调用。是否允许？'
+            : '批准后，当前任务可使用相同参数继续调用该工具。是否允许？',
+        ].join('\n')
         const decision = await ctx.approval.awaitConfirmationDecision(
-          `AI 请求调用外部 MCP 工具「${originalName}」（服务器 ${serverName}）。是否允许？`,
+          approvalMessage,
           ctx.abortSignal,
           {
             approvalRisk: riskLevel,
             riskScope: `mcp:${serverName}:${originalName}`,
-            rememberRiskScope: true,
-            detail: { kind: 'mcp-tool-call', serverName, toolName: originalName },
+            operation: {
+              key: createApprovalOperationKey(`mcp:${serverName}:${originalName}`, args),
+              label: `${serverName} / ${originalName}`,
+              target: argumentsPreview,
+            },
+            rememberRiskScope: !destructive,
+            ...(destructive ? { requireManualApproval: true } : {}),
+            detail: {
+              kind: 'mcp-tool-call', serverName, toolName: originalName,
+              argumentsPreview, approvalScope,
+            },
           }
         )
         if (!decision.approved) return {

@@ -31,6 +31,7 @@ import {
 import type { ContextGovernanceConfig } from './governanceConfig'
 import { DefaultContextGovernanceConfig } from './governanceConfig'
 import {
+  estimateMessageBudgetChars,
   estimateMessageChars,
   extractResourceLocator,
   readMessageText,
@@ -81,6 +82,8 @@ export interface ContextRecordClassifier {
 
 export interface ContextAdmissionInput {
   kind: ContextRecordKind
+  /** 运行时先保留新消息全文，只有完整请求超容量后才应用已准备的摘录。 */
+  deferOversizeExcerpt?: boolean
   message: ModelMessage
   /** 记录创建时刻，由调用方给（准入是纯函数，不取时钟）。 */
   createdAt: number
@@ -136,6 +139,7 @@ export function admitContextRecord(
   const priorRecords = options.priorRecords ?? []
   const text = readMessageText(input.message)
   const chars = estimateMessageChars(input.message)
+  const budgetChars = estimateMessageBudgetChars(input.message)
   const results = readToolResultFacts(input.message)
   const identity = resolveToolIdentity(input, results)
   const failureEvidence = results.some((result) => result.isError) || hasFailureSignal(text)
@@ -158,7 +162,12 @@ export function admitContextRecord(
     input.kind === 'user' && !priorRecords.some((prior) => prior.kind === 'user')
   const pinned = resolvePinned(classification, input, options.classifier, openingUserRecord)
   const warmLeaseTurns = resolveWarmLeaseTurns(classification, input, options.classifier)
-  const oversize = resolveOversizeKind(input.kind, chars, config)
+  // 用户正文安全阀只治理文字；附件仍按完整消息计入 bytes.full 与发送预算。
+  const oversize = resolveOversizeKind(
+    input.kind,
+    input.kind === 'user' ? text.length : budgetChars,
+    config
+  )
   const id = createContextRecordId(options.seq)
   const excerptMaxChars =
     oversize === 'user-text' ? config.admission.userInlineMaxChars : config.admission.excerptMaxChars
@@ -191,7 +200,7 @@ export function admitContextRecord(
   // {@link hasExcerptRenderMaterial}）：素材建不出来就老老实实记 INLINE —— 发出去的字节一个不
   // 变（本来就是全文），变的只是账本不再自相矛盾，治理器也不会以为这条还能靠"变薄"省下什么。
   const admittedResidency: ContextResidency =
-    oversize && hasExcerptRenderMaterial({ kind: input.kind, excerpt, toolParts })
+    !input.deferOversizeExcerpt && oversize && hasExcerptRenderMaterial({ kind: input.kind, excerpt, toolParts })
       ? 'EXCERPT'
       : 'INLINE'
 
@@ -206,7 +215,8 @@ export function admitContextRecord(
     warmLeaseTurns,
     failureEvidence,
     admittedResidency,
-    bytes: { full: chars, excerpt: excerpt ? excerpt.text.length : 0 },
+    deferredSizeAdmission: !!input.deferOversizeExcerpt && !!oversize,
+    bytes: { full: chars, budget: budgetChars, excerpt: excerpt ? excerpt.text.length : 0 },
     anchors: extractContextAnchors(text),
     message: input.message,
     excerpt,

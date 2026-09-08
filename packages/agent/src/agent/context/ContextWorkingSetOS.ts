@@ -347,7 +347,7 @@ function buildPinnedEvidenceBlock(
       payloadRef: toOptional(evidence.payloadRef),
       stale,
       provenance: {
-        source: kind === 'user-constraint' ? 'user-constraint' : 'pinned-evidence',
+        source: evidence.source?.trim() || (kind === 'user-constraint' ? 'user-constraint' : 'pinned-evidence'),
         payloadRef: toOptional(evidence.payloadRef),
         filePath: toOptional(evidence.filePath),
         contentHash: toOptional(evidence.contentHash),
@@ -369,6 +369,16 @@ function buildPinnedEvidenceBlock(
 }
 
 export class ContextWorkingSetOS {
+  /** 任务和固定证据只依赖当前有效输入；治理预留与最终分类复用这些块。 */
+  public classifyRetainedContext(
+    input: Pick<ClassifyContextWorkingSetInput, 'activeTask' | 'pinnedEvidence' | 'resourceState'>
+  ): ContextWorkingSetBlock[] {
+    return [
+      ...(input.activeTask ? [buildActiveTaskBlock(input.activeTask)] : []),
+      ...(input.pinnedEvidence ?? []).map((evidence) => buildPinnedEvidenceBlock(evidence, input.resourceState)),
+    ]
+  }
+
   public classify(input: ClassifyContextWorkingSetInput): ClassifiedContextWorkingSet {
     const blocks: ContextWorkingSetBlock[] = [
       createBlock('system', 'kernel', input.systemPrompt, 'keep', {
@@ -377,11 +387,7 @@ export class ContextWorkingSetOS {
       }),
     ]
 
-    if (input.activeTask) blocks.push(buildActiveTaskBlock(input.activeTask))
-
-    for (const evidence of input.pinnedEvidence ?? []) {
-      blocks.push(buildPinnedEvidenceBlock(evidence, input.resourceState))
-    }
+    blocks.push(...this.classifyRetainedContext(input))
 
     input.messages.forEach((message, index) => {
       const messageBlock = buildMessageBlock(message, index)

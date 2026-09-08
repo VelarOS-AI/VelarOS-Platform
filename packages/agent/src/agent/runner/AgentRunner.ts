@@ -14,6 +14,7 @@ import {
   resolveCapabilityValidationInterpreters,
 } from '../../capabilities'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
+import { findCurrentGoalArtifact, toGoalSnapshot } from '../../tool-library/builtin/Goals'
 import { CodingSessionTracker } from '../CodingSessionTracker'
 import { resolveAgentContextPhase } from '../ContextPhase'
 import {
@@ -22,10 +23,12 @@ import {
 } from '../ExecutionLimits'
 import type { PrimaryAgentProfile } from '../PrimaryAgentProfile'
 import type { QueryLoop } from '../QueryLoop'
+import { buildRunVerificationSummary } from '../RunCompletion'
 import type { AgentExecutionConfig } from '../RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from '../RuntimeInputPort'
 import type { SoloAwaitPendingBackgroundJobs } from '../SoloBackgroundCompletionGate'
 import type { SoloStreamLoop } from '../SoloLoop'
+import { TaskApprovalState } from '../TaskApprovalState'
 
 import type {
   AgentRunnerComponents,
@@ -70,7 +73,8 @@ const passthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {
 }
 
 class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
-  private readonly sessionApprovalRegistry = new Map<string, Set<ToolCategoryId>>()
+  private readonly sessionApprovalRegistry = new Map<string, TaskApprovalState>()
+  private readonly taskApprovalListeners = new Set<(sessionId: string) => void>()
   private readonly sessionPageInRegistry = new Map<
     string,
     { toolNames: Set<string>; categories: Set<ToolCategoryId> }
@@ -161,14 +165,14 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
       sessionId,
       runtimeConfig.sessionLineage
     )
-    const previousApprovedCategories = this.sessionApprovalRegistry.get(approvalRegistryKey)
+    const previousApprovals = this.sessionApprovalRegistry.get(sessionId)
     const previousPageIn = this.sessionPageInRegistry.get(approvalRegistryKey)
     const surfaceRunPolicy = this.surfaceProfileProvider.deriveRunPolicy({
       profile: surfaceProfile,
       declaredScope: runtimeConfig.scope,
       promptFeatures: requestedPromptFeatures,
-      previousApprovedCategories: previousApprovedCategories
-        ? [...previousApprovedCategories]
+      previousApprovedCategories: previousApprovals
+        ? previousApprovals.getApprovedToolCategories()
         : [],
     })
     const residentCategoryIds = Object.values(
@@ -176,12 +180,18 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     )
       .filter((category) => category.toolOs.defaultState === 'resident')
       .map((category) => category.id)
+    const taskApprovals = previousApprovals ?? new TaskApprovalState()
+    if (!previousApprovals) taskApprovals.subscribe(() => {
+      this.taskApprovalListeners.forEach((listener) => listener(sessionId))
+    })
+    this.sessionApprovalRegistry.set(sessionId, taskApprovals)
     const codingSession = new CodingSessionTracker(
       surfaceRunPolicy.initialToolCategories,
       surfaceRunPolicy.initialPromptFeatures,
       surfaceRunPolicy.restoredApprovedCategories,
       undefined,
       {
+        taskApprovals,
         allowedToolCategories: surfaceRunPolicy.allowedToolCategories,
         thinkingDepth,
         toolSurfaceProfile: loopConfig.toolSurfaceProfile,
@@ -349,7 +359,13 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
         awaitPendingBackgroundJobs: loopConfig.awaitPendingBackgroundJobs,
       })
       if (loopResult.status === 'completed') {
-        events.emitRuntime(ChatRuntimeEvents.done())
+        const goal = findCurrentGoalArtifact(await toolContext.activeContext.listActiveContextArtifacts({
+          status: 'all', kinds: ['requirement'],
+        }))
+        events.emitRuntime(ChatRuntimeEvents.done(undefined, {
+          verification: buildRunVerificationSummary(codingSession.getSnapshot()),
+          goalStatus: goal ? toGoalSnapshot(goal).status : undefined,
+        }))
       } else if (loopResult.status === 'error') {
         throw new AppError('RUNTIME', 'Agent execution was blocked.')
       }
@@ -380,12 +396,25 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     } else {
       this.sessionPageInRegistry.delete(approvalRegistryKey)
     }
-    const approved = codingSession.getSessionApprovedToolCategories()
-    if (!isEmpty(approved)) {
-      this.sessionApprovalRegistry.set(approvalRegistryKey, new Set(approved))
-    } else {
-      this.sessionApprovalRegistry.delete(approvalRegistryKey)
-    }
+  }
+
+  public getTaskApprovalRecords(sessionId: string) {
+    return this.sessionApprovalRegistry.get(sessionId)?.list() ?? []
+  }
+
+  public revokeTaskApproval(sessionId: string, id: string): boolean {
+    return !!this.sessionApprovalRegistry.get(sessionId)?.revoke(id)
+  }
+
+  public subscribeTaskApprovals(listener: (sessionId: string) => void): () => void {
+    this.taskApprovalListeners.add(listener)
+    return () => { this.taskApprovalListeners.delete(listener) }
+  }
+
+  public clearTaskApprovals(sessionId: string): void {
+    const approvals = this.sessionApprovalRegistry.get(sessionId)
+    this.sessionApprovalRegistry.delete(sessionId)
+    approvals?.dispose()
   }
 
   private resolveAgentSurfaceProfile(config: AgentExecutionConfig): AgentSurfaceProfile {
@@ -410,26 +439,29 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
       ...parentCtx,
       codingSession: parentCtx.codingSession.forkForSubAgent?.() ?? parentCtx.codingSession,
     }
-    const result = await this.queryLoop.execute({
-      task,
-      opts: {
-        ...opts,
-        consumeRelayedGuidance: opts.consumeRelayedGuidance,
-      },
-      parentCtx: subAgentParentCtx,
-      chatConfig: this.configService.chatConfig,
-      systemConfig,
-      collectCapabilityContext: (messages) =>
-        collectCapabilityContext(this.capabilityPorts, messages, {
-          developerContext: subAgentParentCtx.developerContext,
-          sessionLineage: subAgentParentCtx.sessionLineage,
-          thinkingDepth: opts.runtimeOverride?.thinkingDepth ?? systemConfig.thinkingDepth,
-        }),
-    })
-    if (subAgentParentCtx.codingSession !== parentCtx.codingSession) {
-      parentCtx.codingSession.mergeSnapshot?.(subAgentParentCtx.codingSession.getSnapshot())
+    try {
+      return await this.queryLoop.execute({
+        task,
+        opts: {
+          ...opts,
+          consumeRelayedGuidance: opts.consumeRelayedGuidance,
+        },
+        parentCtx: subAgentParentCtx,
+        chatConfig: this.configService.chatConfig,
+        systemConfig,
+        collectCapabilityContext: (messages) =>
+          collectCapabilityContext(this.capabilityPorts, messages, {
+            developerContext: subAgentParentCtx.developerContext,
+            sessionLineage: subAgentParentCtx.sessionLineage,
+            thinkingDepth: opts.runtimeOverride?.thinkingDepth ?? systemConfig.thinkingDepth,
+          }),
+      })
+    } finally {
+      // A failed or cancelled worker can already have changed shared resources.
+      if (subAgentParentCtx.codingSession !== parentCtx.codingSession) {
+        parentCtx.codingSession.mergeSnapshot?.(subAgentParentCtx.codingSession.getSnapshot())
+      }
     }
-    return result
   }
 }
 

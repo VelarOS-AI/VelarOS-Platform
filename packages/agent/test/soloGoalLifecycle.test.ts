@@ -47,7 +47,7 @@ function createActiveContextHarness() {
 }
 
 describe('SoloGoalLifecycle explicit goal control plane', () => {
-  test('creates the explicit goal before work and completes it without model bookkeeping turns', async () => {
+  test('creates the explicit goal and completes it only through an explicit completion call', async () => {
     const harness = createActiveContextHarness()
     const lifecycle = new SoloGoalLifecycle(harness.activeContext)
 
@@ -72,6 +72,22 @@ describe('SoloGoalLifecycle explicit goal control plane', () => {
     expect(harness.readWrites()).toBe(1)
   })
 
+  for (const status of ['pending', 'in_progress', 'failed'] as const) {
+    test(`explicit completion preserves ${status} steps and rejects unresolved work`, async () => {
+      const harness = createActiveContextHarness()
+      const lifecycle = new SoloGoalLifecycle(harness.activeContext)
+      await lifecycle.ensureExplicitGoal('真实完成每个交付项')
+      await harness.activeContext.upsertActiveContextArtifact(buildGoalStateUpsertInput({
+        artifact: harness.readArtifact()!, steps: [{ step: '交付文件', status }],
+      }))
+      const before = harness.readWrites()
+      await expect(lifecycle.recordSuccessfulCompletion()).rejects.toThrow('unresolved goal steps')
+      expect(harness.readWrites()).toBe(before)
+      expect(harness.readArtifact()?.metadata?.steps).toEqual([{ step: '交付文件', status }])
+      expect((await lifecycle.inspect()).status).toBe('active')
+    })
+  }
+
   test('failed goal steps keep the actual finishing lane open without writing completion', async () => {
     const harness = createActiveContextHarness()
     const lifecycle = new SoloGoalLifecycle(harness.activeContext)
@@ -82,7 +98,6 @@ describe('SoloGoalLifecycle explicit goal control plane', () => {
       steps: [{ step: '验证功能', status: 'failed' }],
     }))
     const writesBeforeInspection = harness.readWrites()
-    expect((await lifecycle.inspect()).canComplete).toBe(false)
     expect(harness.readWrites()).toBe(writesBeforeInspection)
 
     const queue = new ExecutionGuidanceQueue()
@@ -96,7 +111,6 @@ describe('SoloGoalLifecycle explicit goal control plane', () => {
       runAutomaticVerification: async () => ({}) as never,
       runtimeInput,
       inspectGoalState: () => lifecycle.inspect(),
-      completeGoalOnSuccessfulFinish: () => lifecycle.recordSuccessfulCompletion().then(() => undefined),
       recordGoalCompletionAttempt: () => lifecycle.recordCompletionAttempt(),
       log: { info: () => undefined, warn: () => undefined, debug: () => undefined },
     })

@@ -1,5 +1,5 @@
-import { isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../protocol/types/agent'
 
@@ -34,12 +34,12 @@ export function createManualApprovalOptions(
  * {@link ApprovalDecision}），不引入平行的第二套风险模型。
  *
  * 两种征询形态对齐现有 execution 确认机制：{@link ApprovalPort.awaitConfirmation}
- * 是终止型（被拒即抛错），{@link ApprovalPort.awaitConfirmationDecision} 是非终止型
+ * 被拒会抛出仅取消当前操作的错误，{@link ApprovalPort.awaitConfirmationDecision} 是非终止型
  * （被拒返回结构化决策）。二者都只表达「审批」，不承载计划/任务/用户输入等交互会话能力。
  */
 export interface ApprovalPort {
   /**
-   * 请求一次工具执行审批；被拒或无审批通道时**抛出**（终止型确认）。
+   * 请求一次工具执行审批；被拒或无审批通道时**抛出**，由工具执行器记录跳过，任务继续。
    *
    * @param message 面向用户的确认文案。
    * @param abortSignal 取消信号；征询被中止时应视为拒绝。
@@ -74,28 +74,26 @@ export interface UnattendedApprovalEscalationHooks {
 }
 
 /**
- * 无人值守子 Agent 审批策略端口（宪章 §4 策略层 Ring 1）。
- *
- * 表达「默认全放行 + 超高风险升级父线程」——与 standard-open 低风险自动放行是同一家策略：
- * - **非升级风险**：低风险自动放行。终止型 {@link ApprovalPort.awaitConfirmation} 直接 resolve
- *   （= 批准，**不抛错**，终止型审批语义原样保全，不静默蒸发）；非终止型
- *   {@link ApprovalPort.awaitConfirmationDecision} 返回 `{approved:true, autoApproved:true}`。
- * - **升级风险**（由宿主 policy 判定）：冒泡到有人值守的父线程
- *   （`delegate`，通常是父 execution 审批通道）裁决——终止型父拒绝即抛错、语义原样透传；
- *   非终止型透传父决策。破坏性命令硬门化在此表达，语义一字不减。
+ * 子 Agent 的确认使用父任务同一策略；默认每项请求均委托父端口。
+ * 生命周期钩子仅在委托仍等待时投影子任务状态。宿主显式提供 shouldEscalate 时保留其策略。
  */
 export function createUnattendedSubAgentApprovalPort(
   delegate: ApprovalPort,
   hooks?: UnattendedApprovalEscalationHooks,
-  shouldEscalate: (options?: ToolConfirmationDecisionOptions) => boolean = (options) =>
-    isTrue(options?.requireManualApproval) || options?.approvalRisk === 'high'
+  shouldEscalate: (options?: ToolConfirmationDecisionOptions) => boolean = () => true
 ): ApprovalPort {
   const withEscalation = async <T>(message: string, run: () => Promise<T>): Promise<T> => {
-    hooks?.onEscalationPending?.(message)
+    let announced = false
+    const timers = new TimerScope({ name: 'SubAgentApproval.escalation' })
+    timers.after(0, () => {
+      announced = true
+      hooks?.onEscalationPending?.(message)
+    })
     try {
       return await run()
     } finally {
-      hooks?.onEscalationResolved?.()
+      timers.dispose()
+      if (announced) hooks?.onEscalationResolved?.()
     }
   }
   return {

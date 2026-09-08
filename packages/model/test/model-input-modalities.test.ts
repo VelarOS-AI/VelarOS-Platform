@@ -127,6 +127,7 @@ describe('model input modalities', () => {
   test('lets a generic OpenAI-compatible gateway attempt media for unknown models', async () => {
     const composition = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
+      providerCatalog: { fetch: async () => Response.json({ data: [] }) },
     })
     const runtime = await composition.agentModelResolver.resolve(
       {

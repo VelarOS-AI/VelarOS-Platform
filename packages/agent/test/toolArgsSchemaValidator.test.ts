@@ -5,6 +5,58 @@ import { clampedInt } from '../src/tool-contract'
 import { ToolArgsSchemaValidator } from '../src/tools/ToolArgsSchemaValidator'
 
 describe('ToolArgsSchemaValidator effective arguments', () => {
+  test('union failures expose concrete nested field issues instead of only Invalid input', () => {
+    const validator = new ToolArgsSchemaValidator()
+    const schema = z.union([
+      z.object({ action: z.literal('read'), path: z.string() }),
+      z.object({ action: z.literal('write'), path: z.string(), text: z.string() }),
+    ])
+    const result = validator.validateWithNormalization(schema, { action: 'read', path: 3 })
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.issues).toContainEqual({ path: 'path', message: expect.stringContaining('string') })
+    expect(result.issues).toHaveLength(3)
+    expect(result.issues.every((issue) => issue.message.startsWith('Union option '))).toBe(true)
+    expect(result.error.issues[0]?.code).toBe('invalid_union')
+  })
+
+  test('nested union alternatives preserve outer field paths and do not coerce across branches', () => {
+    const validator = new ToolArgsSchemaValidator()
+    const schema = z.object({
+      request: z.union([
+        z.object({ action: z.literal('read'), limit: z.number() }),
+        z.object({ action: z.literal('write'), text: z.string() }),
+      ]),
+    })
+    const args = { request: { action: 'read', limit: '5' } }
+    const result = validator.validateWithNormalization(schema, args)
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.issues).toContainEqual({
+      path: 'request.limit',
+      message: expect.stringContaining('Union option 1:'),
+    })
+    expect(result.issues).toContainEqual({
+      path: 'request.action',
+      message: expect.stringContaining('Union option 2:'),
+    })
+    expect(args.request.limit).toBe('5')
+  })
+
+  test('bounds feedback for deeply nested external union schemas', () => {
+    const validator = new ToolArgsSchemaValidator()
+    let schema: z.ZodType = z.string()
+    for (let depth = 0; depth < 12; depth++) schema = z.union([schema, z.literal('alternative')])
+    const result = validator.validateWithNormalization(z.object({ value: schema }), { value: 3 })
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.issues.length).toBeGreaterThan(0)
+    expect(result.issues.length).toBeLessThanOrEqual(3)
+    expect(result.issues.every((issue) => issue.path === 'value')).toBe(true)
+  })
+
   test('keeps prototype-like JSON keys as ordinary own properties when replacing input', () => {
     const validator = new ToolArgsSchemaValidator()
     const target = { removed: true } as Record<string, unknown>

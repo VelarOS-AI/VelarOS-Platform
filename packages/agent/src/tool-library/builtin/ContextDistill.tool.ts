@@ -7,7 +7,7 @@ import { defineVelaTool } from '../defineVelaTool'
 
 import { AgentContextSignalCapability } from './Capabilities'
 
-// 手动蒸馏受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
+// 兼容事实便签受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
 // 10 × 400 的契约大致相当，同时允许长阶段为每个已完成工作项保留独立可寻址的事实。
 const DistilledFactMaxChars = 240
 const DistilledFactMaxCount = 20
@@ -48,22 +48,20 @@ const distillContextSchema = z.object({
 })
 
 /**
- * 蒸馏与召回共同组成上下文治理原语。模型调用它表示当前阶段已经完成，治理器会在下一轮边界
- * 执行逐出与骨架化；信号直接从账本读取，不另设侧信道，因而能够离线重放。
- * 蒸馏便签会作为摘要记录保留，供中断后恢复现场。
+ * 兼容已发布的事实便签工具。默认工具面由目标、证据与召回工具维护；旧宿主显式注册此导出时，
+ * 仅在工具结果中保留事实与进度，不再请求压缩。容量治理统一由运行时自动决定。
  */
 const distillContext = defineVelaTool<DistillContextInput>({
   name: 'context:distill',
   role: 'control',
   category: 'context',
-  summary: '声明当前阶段已完成：记录蒸馏后的关键事实与进度便签，并请求对已消化的旧上下文做一次压缩。',
+  summary: '记录已确认的关键事实与进度便签。',
   outputInline: true,
   suitable: [
-    '一批读取/搜索/命令输出完成使命、结论可用几条事实概括时；典型时机是探索完动手前、大改完验证前。',
-    'context-dashboard 显示占用偏高、而当前阶段刚好告一段落时——阶段边界压缩比撑到溢出再压好得多。',
+    '旧宿主使用此事实便签接口，需要记录已确认结论和当前进度时。',
   ],
-  forbidden: ['不要蒸馏马上要逐字引用的结果；压缩后需 context:recall 才能取回原文。'],
-  usage: ['facts 传增量事实（代码事实带 file:line），note 传一句话进度便签；下一个轮边界会据此跑一次上下文压缩。'],
+  forbidden: ['不要将尚未验证的推测记录为事实。'],
+  usage: ['facts 传增量事实（代码事实带 file:line），note 传一句话进度便签。'],
   examples: [
     {
       facts: ['治理 epoch 状态机在 GovernanceEpoch.ts，按 I0 逐出 → I1 骨架顺序执行'],
@@ -78,20 +76,20 @@ const distillContext = defineVelaTool<DistillContextInput>({
   execute: async (input, ctx) => {
     ctx.abortSignal.throwIfAborted()
 
-    // 机制由历史消息承载：这条结果本身就是**信号**——治理器在下一个轮边界按 toolName 认它，
-    // 把它当作一次 epoch 请求。handler 零副作用是刻意的（见文件头"为什么 handler 仍然零副作用"）。
+    // 保留旧结果的事实字段供历史记录与召回读取；兼容调用不能绕过自动容量治理。
     return {
       distilled: true,
-      epochRequested: true,
-      compactionStatus: 'queued_for_next_turn_boundary',
+      epochRequested: false,
+      compactionStatus: 'automatic',
       facts: input.facts,
       note: toNullable(input.note),
       effect:
-        '压缩请求已排队，尚未在本次工具回包中完成；下一个轮边界会尝试把陈旧/重复的旧结果降级为可召回墓碑，并把叙事段合成规则骨架。之后以 context-dashboard 的 epoch/summarized/evicted 变化判断是否实际生效。原文可用 context:recall(ref=toolCallId, refKind:"tool-payload") 取回。',
+        '事实与进度便签已记录在本次工具结果中。系统按实际容量自动整理上下文；原文可按需使用 context:recall 取回。',
     }
   },
 })
 
+/** @deprecated 供旧宿主保留事实便签兼容；压缩由运行时自动管理。 */
 const contextDistillTools = {
   'context:distill': distillContext,
 }

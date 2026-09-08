@@ -6,6 +6,7 @@ import {
 } from './ModelAdapterRegistry'
 import { ModelProviderCollection } from './ModelProviderCollection'
 import { NodeLocalModelEnvironment } from './NodeLocalModelEnvironment'
+import { ProviderModelCatalogService, type ProviderModelCatalogServiceOptions } from './ProviderModelCatalogService'
 import {
   ProviderScriptRegistry,
   type ProviderScriptRegistryOptions,
@@ -16,6 +17,7 @@ export interface CreateModelRuntimeCompositionOptions {
   readonly environment?: Readonly<Record<string, string | undefined>>
   readonly providerScripts?: ProviderScriptRegistryOptions
   readonly velarCloudRuntime?: VelarCloudModelRuntime
+  readonly providerCatalog?: Omit<ProviderModelCatalogServiceOptions, 'providerCollection' | 'providerScriptRegistry'>
 }
 
 /**
@@ -32,6 +34,7 @@ export interface ModelRuntimeComposition {
   readonly modelAdapterRegistry: ModelAdapterRegistry
   readonly agentModelResolver: AgentModelResolver
   readonly agentModelRuntime: AgentModelRuntime
+  readonly providerModelCatalogService?: ProviderModelCatalogService
 }
 
 /**
@@ -48,6 +51,7 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeComposition {
   public readonly modelAdapterRegistry: ModelAdapterRegistry
   public readonly agentModelResolver: AgentModelResolver
   public readonly agentModelRuntime: AgentModelRuntime
+  public readonly providerModelCatalogService: ProviderModelCatalogService
 
   constructor(options: CreateModelRuntimeCompositionOptions = {}) {
     this.localModelEnvironment = new NodeLocalModelEnvironment(options.environment)
@@ -64,11 +68,17 @@ export class DefaultModelRuntimeComposition implements ModelRuntimeComposition {
       this.velarCloudRuntime,
       this.localModelEnvironment
     )
+    this.providerModelCatalogService = new ProviderModelCatalogService({
+      ...options.providerCatalog,
+      providerCollection: this.providerCollection,
+      providerScriptRegistry: this.providerScriptRegistry,
+    })
     this.agentModelResolver = new AgentModelResolver(
       this.modelAdapterRegistry,
       this.providerScriptRegistry,
       this.providerCollection,
-      this.localModelEnvironment
+      this.localModelEnvironment,
+      this.providerModelCatalogService
     )
     this.agentModelRuntime = new AgentModelRuntime(
       this.modelAdapterRegistry,

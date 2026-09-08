@@ -37,13 +37,12 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   // 工具地图就是模型当下要读的内容：禁止 page-out 成 payload 引用，否则模型还得
   // context:recall 召回，白白多花轮次（见 debug：tooling:map→卸载→recall）。
   outputInline: true,
-  summary:
-    'ContextOS 工具发现入口：有具体任务时用 op=find+query 精确找工具；只有全局审计才按分类展开地图。',
+  summary: '查找当前任务需要的工具及可用状态；已在当前工具列表中提供完整参数的工具可直接调用。',
   suitable: [
     '需要按任务短语搜索工具页，或分页读取工具页状态。',
     '需要查看系统所有工具/能力的状态清单和完整工具名索引。',
     '需要知道某一类能力如何激活，而不是逐个猜工具。',
-    '工具找不到或被拦截后，需要先建立全局工具地图。',
+    '工具找不到或被拦截后，按工具名或任务短语查询原因与下一步。',
   ],
   forbidden: [
     '不要用它执行目标工具；它只返回工具地图和激活路径。',
@@ -87,9 +86,7 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
   // 同 tooling:map：技能正文是模型当下要读的内容，禁止 page-out。
   outputInline: true,
   summary: '读取当前角色可见的技能正文（skill:<id>）；技能索引见任务提示词。',
-  suitable: [
-    '任务确实需要某个技能的规范/步骤时，按 id 读取其正文再据以执行。',
-  ],
+  suitable: ['任务确实需要某个技能的规范/步骤时，按 id 读取其正文再据以执行。'],
   forbidden: [
     '不读工具能力：需要某个工具时用 tooling:map 发现、tooling:replace 换入，让真实工具 schema 在下一轮暴露；不要用 tooling:read 读工具页。',
     '不要猜技能正文或不存在的 id；读取前只把索引当目录。',
@@ -115,7 +112,7 @@ const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSch
   name: 'tooling:replace',
   role: 'control',
   category: 'agent-control',
-  summary: '换入/换出工具页，或按 capability 一类激活能力；影响后续 AI SDK tools 暴露。',
+  summary: '将发现的工具换入后续回合，或换出暂时不用的工具；返回实际处理结果与下一步。',
   suitable: [
     '需要一类激活 capability:*。',
     '需要把 loadable 工具换入可见工具空间供连续调用。',
@@ -127,14 +124,14 @@ const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSch
     '能力前置条件缺失时会返回 requiresUserActionDetails；按依赖与 nextActions 处理，不要猜测能力自有资源。',
     'requiresUserActionDetails / requiresApprovalDetails 会说明阻塞原因和下一步。',
   ],
-  usage: ['传 pageIn/pageOut 和 reason。'],
+  usage: [
+    '从 tooling:map 结果复制精确页 id，传 pageIn/pageOut 和 reason；例子中的页也须以当前目录为准。',
+  ],
   examples: [
-    { pageIn: ['capability:documents'], reason: '需要使用文档能力' },
-    { pageIn: ['tool:document_read'], reason: '需要连续读取文档' },
+    { pageIn: ['tool:context:recall'], reason: '需要召回历史工具输出' },
+    { pageOut: ['tool:context:recall'], reason: '本阶段召回已完成' },
   ],
-  notes: [
-    'replace 只调整工具页驻留/能力状态；实际工具调用发生在下一轮真实工具 schema 暴露之后。',
-  ],
+  notes: ['replace 只调整工具页驻留/能力状态；实际工具调用发生在下一轮真实工具 schema 暴露之后。'],
   schema: toolSpaceReplaceMethodSchema,
   permissions: [],
   capabilities: ToolingWriteCapability,

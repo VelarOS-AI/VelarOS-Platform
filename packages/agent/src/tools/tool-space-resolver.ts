@@ -185,7 +185,6 @@ function searchHintsForTool(input: {
     ...(input.tool.permissions ?? []),
     parts?.description,
     ...(parts?.suitable ?? []),
-    ...(parts?.forbidden ?? []),
     ...(parts?.protocol ?? []),
     ...(parts?.usage ?? []),
     ...(parts?.examples ?? []),
@@ -218,8 +217,8 @@ function riskForTool(tool: ToolDescriptor): ToolSpacePageRisk {
   if (permissions.some((permission) => permission.includes(':exec'))) return 'execute'
   if (permissions.some((permission) => permission.endsWith(':write'))) return 'write'
   if (
-    permissions.some((permission) =>
-      !permission.endsWith(':read') && !permission.endsWith(':write')
+    permissions.some(
+      (permission) => !permission.endsWith(':read') && !permission.endsWith(':write')
     )
   )
     return 'external'
@@ -452,7 +451,8 @@ function createToolPage(input: {
       reasons,
     }),
     reasons,
-    description: normalizeDescription(input.tool.description),
+    // 保留完整描述的分节与示例结构；摘要字段单独归一化。
+    description: input.tool.description.trim(),
     usageSkillId: input.tool.usageSkillId,
   }
 }
@@ -607,57 +607,56 @@ function schemaPolicyFromCapabilityPage(page: ToolCapabilityPage): ToolSpaceSche
 }
 
 function buildToolSpacePagesFromCapabilities(pages: ToolCapabilityPage[]): ToolSpacePage[] {
-  return pages
-    .map((page) => {
-      const descriptor = page.descriptor
-      const descriptionParts = parseStructuredToolDescription(descriptor.description)
-      const runtimeAvailable = page.availability !== 'unavailable'
-      const categoryEnabled = page.resident || page.availability === 'loadable'
-      return {
-        id: page.id,
-        kind: 'tool',
-        name: page.name,
+  return pages.map((page) => {
+    const descriptor = page.descriptor
+    const descriptionParts = parseStructuredToolDescription(descriptor.description)
+    const runtimeAvailable = page.availability !== 'unavailable'
+    const categoryEnabled = page.resident || page.availability === 'loadable'
+    return {
+      id: page.id,
+      kind: 'tool',
+      name: page.name,
+      categoryId: page.categoryId,
+      summary: normalizeDescription(descriptionParts?.description ?? descriptor.description),
+      suitable: descriptionParts?.suitable ?? [],
+      forbidden: descriptionParts?.forbidden ?? [],
+      aliases: aliasesForTool(descriptor),
+      searchHints: searchHintsForTool({
+        tool: descriptor,
         categoryId: page.categoryId,
-        summary: normalizeDescription(descriptionParts?.description ?? descriptor.description),
-        suitable: descriptionParts?.suitable ?? [],
-        forbidden: descriptionParts?.forbidden ?? [],
-        aliases: aliasesForTool(descriptor),
-        searchHints: searchHintsForTool({
-          tool: descriptor,
-          categoryId: page.categoryId,
-          descriptionParts,
-        }),
-        permissions: page.permissions,
-        risk: riskForTool(descriptor),
-        availability: page.availability,
-        toolOsState: toolOsStateForDiscoveryAvailability(page.availability),
-        schemaState: page.schemaState,
-        schemaPolicy: schemaPolicyFromCapabilityPage(page),
+        descriptionParts,
+      }),
+      permissions: page.permissions,
+      risk: riskForTool(descriptor),
+      availability: page.availability,
+      toolOsState: toolOsStateForDiscoveryAvailability(page.availability),
+      schemaState: page.schemaState,
+      schemaPolicy: schemaPolicyFromCapabilityPage(page),
+      nextAction: page.nextAction,
+      resident: page.resident,
+      access: buildToolAccessDecision({
+        targetId: page.id,
+        kind: 'tool',
+        toolName: page.name,
+        categoryId: page.categoryId,
+        finalState: page.availability,
         nextAction: page.nextAction,
-        resident: page.resident,
-        access: buildToolAccessDecision({
-          targetId: page.id,
-          kind: 'tool',
-          toolName: page.name,
-          categoryId: page.categoryId,
-          finalState: page.availability,
-          nextAction: page.nextAction,
-          categoryAllowed: true,
-          categoryEnabled,
-          categoryAccessAllowed: page.availability !== 'requires_user_action',
-          categoryUnavailableReason: null,
-          systemEnabled: true,
-          pluginBacked: false,
-          visible: page.resident,
-          runtimeAvailable,
-          requiresApproval: page.availability === 'requires_approval',
-          reasons: page.reasons,
-        }),
+        categoryAllowed: true,
+        categoryEnabled,
+        categoryAccessAllowed: page.availability !== 'requires_user_action',
+        categoryUnavailableReason: null,
+        systemEnabled: true,
+        pluginBacked: false,
+        visible: page.resident,
+        runtimeAvailable,
+        requiresApproval: page.availability === 'requires_approval',
         reasons: page.reasons,
-        description: descriptor.description,
-        usageSkillId: descriptor.usageSkillId,
-      }
-    })
+      }),
+      reasons: page.reasons,
+      description: descriptor.description,
+      usageSkillId: descriptor.usageSkillId,
+    }
+  })
 }
 
 function buildToolSpacePages(ctx: ToolSpaceResolverContext): ToolSpacePage[] {

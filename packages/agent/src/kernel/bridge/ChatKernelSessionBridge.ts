@@ -110,7 +110,7 @@ interface KernelChatExecutionCoordinator<TRenderTarget> {
 interface KernelChatExecutionService {
   abortSourceSession(sourceSessionId: string): boolean
   provideGuidanceForSourceSession(
-    request: { sessionId: string; message: ModelMessage },
+    request: { sessionId: string; message: ModelMessage; inputId?: string },
     authorization?: { assertCurrent(): void }
   ): Promise<void>
   provideInputForSourceSession(request: ExecutionProvideInputRequest): void
@@ -124,6 +124,8 @@ interface KernelChatExecutionService {
     kind: ExecutionPendingInteractionKind
   ): Nullable<ExecutionPendingInteractionSnapshot>
   isRunningForSourceSession(sessionId: string): boolean
+  takeRetainedGuidanceInputIdsForSourceSession?(sessionId: string): string[]
+  awaitSourceSessionSettled?(sessionId: string): Promise<void>
 }
 
 interface PendingKernelChatRun<TRenderTarget> {
@@ -132,6 +134,8 @@ interface PendingKernelChatRun<TRenderTarget> {
   admission: KernelChatSubmissionDeferred
   completion: KernelChatSubmissionDeferred
   cancelled: boolean
+  started?: boolean
+  onAccepted?: () => void
 }
 
 /** 每条输入自己的准入与执行收尾；合并 wake 不合并这些回执。 */
@@ -184,6 +188,8 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   private readonly backgroundJobManager: KernelBackgroundJobManager
   private readonly pendingRuns = new Map<string, Array<PendingKernelChatRun<TRenderTarget>>>()
   private readonly activeRuns = new Map<string, PendingKernelChatRun<TRenderTarget>>()
+  private readonly stoppedSessions = new Set<string>()
+  private readonly runningExecutions = new Map<string, Set<Promise<void>>>()
   private nextInputId = 1
 
   constructor(private readonly options: ChatKernelSessionBridgeOptions<TRenderTarget>) {
@@ -203,8 +209,13 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     await this.submit(renderTarget, payload).accepted
   }
 
-  public submit(renderTarget: TRenderTarget, payload: ChatSendRequest): KernelChatSubmission {
+  public submit(
+    renderTarget: TRenderTarget,
+    payload: ChatSendRequest,
+    onAccepted?: () => void
+  ): KernelChatSubmission {
     const scopeId = payload.sessionId
+    this.stoppedSessions.delete(scopeId)
     const input = this.buildSendInput(payload, scopeId)
     const run: PendingKernelChatRun<TRenderTarget> = {
       renderTarget,
@@ -212,10 +223,16 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       admission: createSubmissionDeferred(),
       completion: createSubmissionDeferred(),
       cancelled: false,
+      onAccepted,
     }
     if (!isPresent(input)) {
-      run.admission.resolve()
-      void this.runExecutionCoordinator(run)
+      try {
+        this.acceptRun(run)
+        void this.runExecutionCoordinator(run)
+      } catch (error) {
+        run.admission.reject(error)
+        run.completion.reject(error)
+      }
     } else {
       this.enqueue(scopeId, run)
       void this.admitRun(scopeId, input, run)
@@ -226,6 +243,13 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
   }
 
+  /** 宿主接收回执先于运行唤醒生效，失败或已取消的输入不消费宿主上下文。 */
+  private acceptRun(run: PendingKernelChatRun<TRenderTarget>): void {
+    if (run.cancelled) throw new AppError('EXECUTION_ABORTED', 'Chat admission was cancelled')
+    run.onAccepted?.()
+    run.admission.resolve()
+  }
+
   private async admitRun(
     sessionId: string,
     input: KernelControllerSendInput,
@@ -233,7 +257,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   ): Promise<void> {
     try {
       await this.controller.send(input)
-      run.admission.resolve()
+      this.acceptRun(run)
     } catch (error) {
       this.removePending(sessionId, run)
       run.admission.reject(error)
@@ -270,6 +294,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       await this.options.executionService.provideGuidanceForSourceSession({
         sessionId: payload.sessionId,
         message,
+        inputId: input.id,
       })
       return
     }
@@ -284,7 +309,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       })
       authorization.assertCurrent()
       await this.options.executionService.provideGuidanceForSourceSession(
-        { sessionId: payload.sessionId, message },
+        { sessionId: payload.sessionId, message, inputId: input.id },
         authorization
       )
       authorization.assertCurrent()
@@ -307,6 +332,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   public async approve(payload: ExecutionResolveConfirmationRequest): Promise<void> {
     await this.controller.approve({
       sessionId: payload.sessionId,
+      confirmationId: payload.confirmationId,
       approved: payload.approved,
       rejectionMessage: payload.rejectionMessage,
       approvalPayload: payload.userActionCardResults,
@@ -366,6 +392,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
       approve: async (input) => {
         this.options.executionService.resolveConfirmationForSourceSession({
           sessionId: input.sessionId,
+          confirmationId: input.confirmationId,
           approved: input.approved,
           rejectionMessage: input.rejectionMessage,
           userActionCardResults: input.approvalPayload,
@@ -392,21 +419,37 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
         })
       },
       cancel: async (target) => {
+        this.stoppedSessions.add(target.sessionId)
+        const activeExecutions = [...(this.runningExecutions.get(target.sessionId) ?? [])]
         this.runCoordinator.interrupt(target.sessionId)
-        this.clearPending(target.sessionId)
+        const retainedInputIds = this.clearPending(target.sessionId)
         const active = this.activeRuns.get(target.sessionId)
-        if (active) active.cancelled = true
+        if (active) {
+          if (!active.started) {
+            const inputId = this.findLatestUserMessage(active.payload.messages)?.messageId
+            if (inputId) retainedInputIds.push(inputId)
+          }
+          active.cancelled = true
+          // 后来的输入可能先获准并唤醒 drain，此时 active 仍在等待自己的准入。
+          // 立即结清等待，取消不应依赖已取消的存储请求何时返回。
+          active.admission.reject(new AppError('EXECUTION_ABORTED', 'Chat admission was cancelled'))
+        }
         this.backgroundJobManager.cancelSession(target.sessionId)
         const aborted = this.options.executionService.abortSourceSession(target.sessionId)
         try {
           await this.inputStore.cancel(target.sessionId)
         } finally {
           await this.runCoordinator.awaitIdle(target.sessionId)
-          await this.inputStore.dropSession(target.sessionId)
-          this.backgroundJobManager.dropSession(target.sessionId)
+          await Promise.allSettled(activeExecutions)
+          await this.options.executionService.awaitSourceSessionSettled?.(target.sessionId)
+          await this.backgroundJobManager.awaitSessionSettled(target.sessionId)
+          retainedInputIds.push(...(
+            this.options.executionService.takeRetainedGuidanceInputIdsForSourceSession?.(target.sessionId) ?? []
+          ))
         }
         return {
           aborted,
+          retainedInputIds: [...new Set(retainedInputIds)],
         }
       },
     })
@@ -470,14 +513,18 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     return run
   }
 
-  private clearPending(sessionId: string): void {
+  private clearPending(sessionId: string): string[] {
+    const retainedInputIds: string[] = []
     for (const run of this.pendingRuns.get(sessionId) ?? []) {
+      const inputId = this.findLatestUserMessage(run.payload.messages)?.messageId
+      if (inputId) retainedInputIds.push(inputId)
       run.cancelled = true
       const error = new AppError('EXECUTION_ABORTED', 'Queued chat execution was cancelled')
       run.admission.reject(error)
       run.completion.reject(error)
     }
     this.pendingRuns.delete(sessionId)
+    return retainedInputIds
   }
 
   private removePending(sessionId: string, run: PendingKernelChatRun<TRenderTarget>): void {
@@ -518,19 +565,29 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
         }
       }
     } finally {
-      await this.inputStore.dropSession(sessionId)
+      if (!this.stoppedSessions.has(sessionId)) await this.inputStore.dropSession(sessionId)
       this.backgroundJobManager.pruneTerminalJobs()
     }
   }
 
   private async runExecutionCoordinator(run: PendingKernelChatRun<TRenderTarget>): Promise<void> {
+    let execution: Promise<void> | undefined
+    const sessionId = run.payload.sessionId
     try {
-      const options = this.buildExecutionRunOptions(run.payload.sessionId)
-      await this.options.executionCoordinator.run(run.renderTarget, run.payload, options)
+      run.started = true
+      const options = this.buildExecutionRunOptions(sessionId)
+      execution = this.options.executionCoordinator.run(run.renderTarget, run.payload, options)
+      const running = this.runningExecutions.get(sessionId) ?? new Set<Promise<void>>()
+      running.add(execution)
+      this.runningExecutions.set(sessionId, running)
+      await execution
       run.completion.resolve()
     } catch (error) {
       run.completion.reject(error)
       this.log.error('聊天执行异步失败', AppError.from(error))
+    } finally {
+      if (execution) this.runningExecutions.get(sessionId)?.delete(execution)
+      if (this.runningExecutions.get(sessionId)?.size === 0) this.runningExecutions.delete(sessionId)
     }
   }
 

@@ -7,7 +7,6 @@ import type {
 
 import {
   assertGoalCanComplete,
-  buildGoalStateUpsertInput,
   buildGoalTerminalUpsertInput,
   buildGoalUpsertInput,
   findCurrentGoalArtifact,
@@ -56,7 +55,6 @@ function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGo
       status === 'removed',
     status:
       status === 'paused' || status === 'cancelled' || status === 'removed' ? 'blocked' : status,
-    canComplete: status === 'active' && !snapshot.steps.some((step) => step.status === 'failed'),
     objective: goal.content,
     blockedAuditTurns: readSoloGoalBlockedAuditTurns(goal),
   }
@@ -107,29 +105,15 @@ class SoloGoalLifecycle {
   }
 
   /**
-   * 模型正常收尾且其它验证门均已通过时，由控制面收束显式目标。
-   * pending/in_progress 步骤随成功收尾一并完成；failed 步骤仍阻止自动终结，留给模型真实处理。
+   * 显式提交目标完成。每个步骤必须已有独立的完成或跳过记录；回复收尾不调用此方法。
    */
   public async recordSuccessfulCompletion(): Promise<boolean> {
     const goal = await this.fetchCurrentGoal()
     if (!goal || readSoloGoalStatus(goal) !== 'active') return false
 
-    const snapshot = toGoalSnapshot(goal)
-    const steps = snapshot.steps.map((step) =>
-      step.status === 'pending' || step.status === 'in_progress'
-        ? { ...step, status: 'completed' as const }
-        : step
-    )
-    if (steps.some((step) => step.status === 'failed')) return false
-
-    const stateArtifact = steps.some((step, index) => step.status !== snapshot.steps[index]?.status)
-      ? await this.activeContext.upsertActiveContextArtifact(
-          buildGoalStateUpsertInput({ artifact: goal, steps })
-        )
-      : goal
-    assertGoalCanComplete(toGoalSnapshot(stateArtifact))
+    assertGoalCanComplete(toGoalSnapshot(goal))
     await this.activeContext.upsertActiveContextArtifact(
-      buildGoalTerminalUpsertInput({ artifact: stateArtifact, status: 'complete', now: Date.now() })
+      buildGoalTerminalUpsertInput({ artifact: goal, status: 'complete', now: Date.now() })
     )
     this.cachedGoal = null
     return true

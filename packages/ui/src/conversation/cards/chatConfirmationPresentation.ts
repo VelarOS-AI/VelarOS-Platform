@@ -63,12 +63,21 @@ export function buildConfirmationPresentation({
 
   if (!detail) return proseFallback()
 
+  const authorizationFacts = detail.authorization ? [
+    detail.authorization.target ? t('taskApproval.target', { target: detail.authorization.target }) : null,
+    t('taskApproval.requester', { requester: detail.authorization.requester ?? t('taskApproval.mainAgent') }),
+    t(detail.authorization.scope === 'call' ? 'confirmation.mcpToolCallScope' : 'taskApproval.operationScope'),
+    t('taskApproval.denialContinues'),
+  ].filter((fact): fact is string => !!fact) : []
   switch (detail.kind) {
+    case 'operation-authorization':
+      return { title: detail.authorization?.label ?? genericTitle,
+        description: proseDescription(message, genericDescription), facts: authorizationFacts }
     case 'tool-category-authorization':
       return {
         title: t('confirmation.toolCategoryTitle'),
         description: t('confirmation.toolCategoryDescription', { category: detail.categoryLabel }),
-        facts: [t('confirmation.toolCategoryTool', { tool: detail.toolName })],
+        facts: [t('confirmation.toolCategoryTool', { tool: detail.toolName }), ...authorizationFacts],
       }
     case 'mcp-tool-call':
       return {
@@ -77,13 +86,26 @@ export function buildConfirmationPresentation({
           server: detail.serverName,
           tool: detail.toolName,
         }),
-        facts: [],
+        facts: [
+          ...authorizationFacts,
+          detail.argumentsPreview
+            ? t('confirmation.mcpToolArguments', { arguments: detail.argumentsPreview })
+            : null,
+          detail.approvalScope
+            ? t(detail.approvalScope === 'call'
+                ? 'confirmation.mcpToolCallScope'
+                : detail.approvalScope === 'task-operation'
+                  ? 'taskApproval.operationScope'
+                  : 'confirmation.mcpToolSessionScope')
+            : null,
+        ].filter((fact): fact is string => !!fact),
       }
     case 'skill-load':
       return {
         title: t('confirmation.skillLoadTitle'),
         description: t('confirmation.skillLoadDescription', { label: detail.label }),
         facts: [
+          ...authorizationFacts,
           detail.description?.trim() || null,
           t('confirmation.skillLoadId', { id: detail.skillId }),
         ].filter((fact): fact is string => !!fact),

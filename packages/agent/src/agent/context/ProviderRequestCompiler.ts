@@ -21,7 +21,7 @@ import {
   estimateContextUsage,
   type EstimateContextUsageOptions,
 } from '@velaros-ai/agent'
-import { isArray, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -39,13 +39,13 @@ import {
   createProviderRequestScratch,
   resolveSharedToolReferenceScan,
 } from './providerRequest/pipeline'
-import { resolveToolSchemaReserve, runBudgetStage } from './providerRequest/stages/budgetStage'
+import { estimateProviderRequestUsage, resolveToolSchemaReserve, runBudgetStage } from './providerRequest/stages/budgetStage'
 import { applyHistoryStructureRepair } from './providerRequest/stages/historySanitizeStage'
 import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
 } from './providerRequest/stages/retainedContextStage'
-import { estimateMessageChars } from './residency/messageFacts'
+import { estimateMessageBudgetChars } from './residency/messageFacts'
 import type { ContextLedgerEntry } from './ContextLedger'
 import {
   type ContextActiveTaskInput,
@@ -73,6 +73,7 @@ import {
   type GovernanceEpochReport,
   type GovernanceWindowDerivation,
   projectContextLedger,
+  resolveGovernanceWindow,
   resolveProjectionBudget,
 } from './residency'
 
@@ -185,6 +186,12 @@ export interface ProviderHistoryRewriteSignal {
   details: unknown
 }
 
+interface ProviderMessageProjection {
+  projection: ReturnType<typeof projectContextLedger>
+  projectedMessages: ModelMessage[]
+  providerMessages: ModelMessage[]
+}
+
 export class ProviderRequestCompiler {
   private readonly workingSetOS = new ContextWorkingSetOS()
 
@@ -225,19 +232,15 @@ export class ProviderRequestCompiler {
     // 当普通记录摄入，前缀比对每次都会在第 0 条分叉 → 整本账本重建 → 驻留态、faultCount、epoch
     // 号全部清零。它本来就该走投影的 `stablePrefix` 通道（设计 §3 的三段布局）。
     const { stablePrefix, body } = partitionStablePrefix(sanitizedMessages)
-    const governance = this.runGovernance(input, body, stablePrefix, at)
-    const projection = projectContextLedger({
-      records: governance.session.ledger.list(),
-      residency: governance.session.ledger.residencyVector(),
-      budget: resolveProjectionBudget(
-        governance.session.config,
-        governance.window.windowTokens,
-        governance.ruler.charsPerToken
-      ),
-      stablePrefix,
-    })
-    // 传输装饰贴在投影**之后**（见文件头）：账本摄入的是未装饰历史，装饰只作用于发出去的这一份。
-    const projectedMessages = applySendTransportDecorations(projection.messages, input)
+    // 保留上下文只依赖本轮任务与证据，不依赖历史驻留态；先构造同一份消息，再计量和发送。
+    const retainedBlocks = this.workingSetOS.classifyRetainedContext(input)
+    const retained = withProviderVisibleRetainedContext([], retainedBlocks)
+    const governance = this.runGovernance(input, body, stablePrefix, retained.messages, at)
+    const { projectedMessages, projection, providerMessages } = governance.report?.applied
+      ? this.projectProviderMessages(
+          input, governance.session, governance.window, stablePrefix, retained.messages, governance.ruler.charsPerToken
+        )
+      : governance.preview
 
     // 工作集分类：为保留上下文（③）与预算（⑥）提供 blocks 单源。
     const classified = this.workingSetOS.classify({
@@ -245,23 +248,11 @@ export class ProviderRequestCompiler {
       messages: projectedMessages,
       toolSchemaChars: input.toolSchemaChars,
       retrievalHandles: input.retrievalHandles,
-      activeTask: input.activeTask,
-      pinnedEvidence: input.pinnedEvidence,
-      resourceState: input.resourceState,
     })
+    // 顺序延续 kernel → 保留区 → 消息/工具区；已计量的证据不再序列化和分类第二次。
+    classified.blocks.splice(1, 0, ...retainedBlocks)
 
-    // stage ③ + 活动尾：保留上下文、dashboard、宿主 tailBlocks 一律排在账本投影之后。
-    const retained = withProviderVisibleRetainedContext(projectedMessages, classified.blocks)
-    const tailBlocks = this.buildTailBlocks(input, governance, projection.stats)
-    const canonicalProviderMessages = applyHistoryStructureRepair(
-      isEmpty(tailBlocks) ? retained.messages : [...retained.messages, ...tailBlocks],
-      { log: false }
-    )
     const toolNameAliases = input.toolNameAliases ?? {}
-    const providerMessages = rewriteProviderToolNames(
-      canonicalProviderMessages,
-      toolNameAliases
-    )
     const providerSystem = rewriteCanonicalToolReferences(input.systemPrompt, toolNameAliases)
     const providerInput = { ...input, systemPrompt: providerSystem }
     const historyRewriteFingerprint = buildProviderHistoryRewriteFingerprint([
@@ -296,6 +287,7 @@ export class ProviderRequestCompiler {
       providerMessages,
       classifiedBlocks: classified.blocks,
       window: governance.window,
+      estimate: governance.report?.applied ? undefined : governance.previewEstimate,
     })
 
     return {
@@ -324,12 +316,15 @@ export class ProviderRequestCompiler {
     input: CompileProviderRequestInput,
     messages: ModelMessage[],
     stablePrefix: readonly ModelMessage[],
+    retainedMessages: readonly ModelMessage[],
     at: number
   ): {
     session: ContextGovernanceSession
     report: Nullable<GovernanceEpochReport>
     window: GovernanceWindowDerivation
     ruler: ContextGovernanceRuler
+    preview: ProviderMessageProjection
+    previewEstimate: ContextUsageEstimate
   } {
     const session = this.governanceSessions.resolve(
       input.governanceSessionId?.trim() ||
@@ -339,8 +334,9 @@ export class ProviderRequestCompiler {
     if (!session) throw new AppError('INVARIANT', '治理会话解析失败：sessionId 归一后仍为空')
 
     // 量纲先量：摄入期的准入事件也要用这把尺子记账，晚一步就又是两个数。
-    const ruler = measureGovernanceRuler(input, messages, stablePrefix)
+    const ruler = measureGovernanceRuler(input, messages, stablePrefix, retainedMessages)
     const sync = session.syncHistory({
+      deferOversizeExcerpt: true,
       messages,
       at,
       payloadRefsByToolCallId: input.toolPayloadRefsByToolCallId,
@@ -354,7 +350,21 @@ export class ProviderRequestCompiler {
       })
     }
 
+    const windowInput = {
+      modelWindowTokens: input.contextWindow ?? input.contextUsageOptions?.contextWindow,
+      reservedOutputTokens: input.reservedOutputTokens ?? input.contextUsageOptions?.reservedOutputTokens,
+      safetyMarginPercent: input.safetyMarginPercent ?? input.contextUsageOptions?.safetyMarginPercent,
+      fixedOverheadTokens: ruler.fixedOverheadTokens,
+    }
+    const preview = this.projectProviderMessages(
+      input, session, resolveGovernanceWindow(session.config, windowInput), stablePrefix, retainedMessages, ruler.charsPerToken
+    )
+    const previewEstimate = estimateProviderRequestUsage({
+      ...input,
+      systemPrompt: rewriteCanonicalToolReferences(input.systemPrompt, input.toolNameAliases ?? {}),
+    }, preview.providerMessages)
     const report = session.governTurn({
+      capacityExceeded: previewEstimate.estimatedTokens > previewEstimate.usableContextWindow,
       at,
       modelWindowTokens: input.contextWindow ?? input.contextUsageOptions?.contextWindow,
       reservedOutputTokens:
@@ -366,7 +376,34 @@ export class ProviderRequestCompiler {
     })
     // G 只有一个来源：治理会话刚解析出来的那一份。编译器抄一份 min(窗口, cap) 的旧写法已删
     // （ledger-core 优化第 3 条：抄本必漂——投影按抄本裁、epoch 按原本判，两边差一格就是幽灵）。
-    return { session, report, window: session.governanceWindow(), ruler }
+    return { session, report, window: session.governanceWindow(), ruler, preview, previewEstimate }
+  }
+
+  /** 治理前容量预判与治理后发送复用同一条投影/活动尾/工具别名路径。 */
+  private projectProviderMessages(
+    input: CompileProviderRequestInput,
+    session: ContextGovernanceSession,
+    window: GovernanceWindowDerivation,
+    stablePrefix: readonly ModelMessage[],
+    retainedMessages: readonly ModelMessage[],
+    charsPerToken: number
+  ): ProviderMessageProjection {
+    const projection = projectContextLedger({
+      records: session.ledger.list(),
+      residency: session.ledger.residencyVector(),
+      budget: resolveProjectionBudget(session.config, window.windowTokens, charsPerToken),
+      stablePrefix,
+    })
+    const projectedMessages = applySendTransportDecorations(projection.messages, input)
+    const tailBlocks = this.buildTailBlocks(input, { session, window }, projection.stats)
+    const canonicalMessages = applyHistoryStructureRepair(
+      [...projectedMessages, ...retainedMessages, ...tailBlocks], { log: false }
+    )
+    return {
+      projectedMessages,
+      projection,
+      providerMessages: rewriteProviderToolNames(canonicalMessages, input.toolNameAliases ?? {}),
+    }
   }
 
   private buildTailBlocks(
@@ -383,7 +420,7 @@ export class ProviderRequestCompiler {
     const ledger = governance.session.ledger
     const lastEpochAttempt = governance.session
       .epochReports()
-      .findLast((report) => report.ledgerGeneration === governance.session.generation)
+      .findLast((report) => report.trigger !== null && report.ledgerGeneration === governance.session.generation)
     const dashboard = buildContextDashboardMessage({
       epoch: governance.session.epoch,
       stats: ledger.stats(),
@@ -414,11 +451,11 @@ function applySendTransportDecorations(
   return markLatestUserMessagePromptCacheBreakpoint(messages)
 }
 
-/** 本轮治理量纲：一次 tokenize 出两个数（密度 + 账本正文之外的固定开销）。 */
+/** 本轮治理量纲：历史密度 + 账本正文之外的固定开销。 */
 interface ContextGovernanceRuler {
   /** 字符/token 密度（账本正文字符 → token 的换算尺）。 */
   charsPerToken: number
-  /** 系统提示词 + 工具清单/schema + 稳定前缀 + 活动尾折成的 token 数。 */
+  /** 系统提示词 + 工具清单/schema + 稳定前缀 + 活动尾 + 保留上下文折成的 token 数。 */
   fixedOverheadTokens: number
 }
 
@@ -427,42 +464,42 @@ const MinHistoryCharsPerToken = 0.25
 const MaxHistoryCharsPerToken = 8
 
 /**
- * 本轮治理量纲的**唯一一次实测**：一次实测，两处消费（密度 + 固定开销）。
+ * 本轮治理量纲：历史密度与硬保留上下文各自实测，再合入同一份固定开销。
  *
  * 密度：驻留账本以正文字符记账，而字符与 token 的比值随语言、结构化载荷、分词器大幅变化。
  * 固定按 4 折算会把中文与结构化数据密集的长会话低估数倍，治理 epoch 于是在模型已被旧轨迹
  * 淹没之后仍不触发。这里复用出核预算的同一把分词尺与校准系数把它量出来。
  *
- * 固定开销：送核门算的是「系统提示词 + 工具清单 + 稳定前缀 + 活动尾 + 账本正文」，账本只管
- * 最后一项；治理窗口不把前四项扣掉，看到的占用就结构性地小于门看到的（审计 #4）。
+ * 固定开销：送核门还计算系统提示词、工具清单、稳定前缀、活动尾和保留上下文；账本只管
+ * 历史正文。治理窗口必须先扣除这些已知开销，才能先于发送门触发回收。
  */
 function measureGovernanceRuler(
   input: CompileProviderRequestInput,
   messages: readonly ModelMessage[],
-  stablePrefix: readonly ModelMessage[]
+  stablePrefix: readonly ModelMessage[],
+  retainedMessages: readonly ModelMessage[]
 ): ContextGovernanceRuler {
   const estimateOptions = input.contextUsageOptions ?? {}
   const bodyChars = sumMessageChars(messages)
-  // 开销按同一把密度尺折算，口径因此闭合：账本 + 开销 == 全量字符 ÷ 密度，账面不自相矛盾。
-  // 治理**之后**才产出的两块（`context-dashboard` 与保留上下文）刻意留在开销之外——
-  // 它们在这一刻还不存在，连同两把尺子的残差一起由 `GovernanceHeadroomRatio` 的折扣兜。
-  const overheadChars =
-    input.systemPrompt.length +
-    sumMessageChars(stablePrefix) +
-    sumMessageChars(input.tailBlocks ?? []) +
-    estimateExtraContextChars(estimateOptions.extraContext)
-  // 工具 schema 走 token 直给，且与送核门共用 `resolveToolSchemaReserve` 这一处回落公式：
-  // 一边认 `extraEstimatedTokens`、一边按字符折，就是同一个病换个地方再犯一次。
-  const schemaTokens = resolveToolSchemaReserve(input).extraEstimatedTokens
+  const reserve = resolveToolSchemaReserve(input)
   const charsPerToken =
     bodyChars > 0
       ? resolveMeasuredCharsPerToken(input, messages, bodyChars, estimateOptions)
       : DefaultResidencyCharsPerToken
 
-  return {
-    charsPerToken,
-    fixedOverheadTokens: Math.ceil(overheadChars / charsPerToken) + schemaTokens,
-  }
+  const fixed = estimateContextUsage(
+    input.model,
+    rewriteCanonicalToolReferences(input.systemPrompt, input.toolNameAliases ?? {}),
+    [...stablePrefix, ...(input.tailBlocks ?? []), ...retainedMessages],
+    {
+      extraContext: estimateOptions.extraContext,
+      extraEstimatedChars: reserve.extraEstimatedChars,
+      extraEstimatedTokens: reserve.extraEstimatedTokens,
+      calibrationFactor: input.calibrationFactor ?? estimateOptions.calibrationFactor,
+    }
+  )
+  return { charsPerToken, fixedOverheadTokens: fixed.estimatedTokens }
+
 }
 
 function resolveMeasuredCharsPerToken(
@@ -484,19 +521,7 @@ function resolveMeasuredCharsPerToken(
 }
 
 function sumMessageChars(messages: readonly ModelMessage[]): number {
-  return messages.reduce((total, message) => total + estimateMessageChars(message), 0)
-}
-
-/** `extraContext`（工具清单等）也进送核门的序列化载荷，所以它属于固定开销。 */
-function estimateExtraContextChars(extraContext: unknown): number {
-  if (!isPresent(extraContext)) return 0
-
-  try {
-    return JSON.stringify(extraContext)?.length ?? 0
-  } catch {
-    // arch-guard:silent-catch-ok 开销估算不许因为一个不可序列化的宿主对象把整条编译打死。
-    return 0
-  }
+  return messages.reduce((total, message) => total + estimateMessageBudgetChars(message), 0)
 }
 
 function rewriteProviderToolNames(

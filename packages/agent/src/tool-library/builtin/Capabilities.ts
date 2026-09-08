@@ -19,14 +19,14 @@ export const AgentContextWriteCapability = {
   reason: 'agent session context update',
 } satisfies ToolCapabilitySchema
 
-/** context:distill 记录可并发合并的治理信号，实际压缩发生在下一轮边界。 */
+/** 兼容事实便签写入；记录保存在会话工具结果中，可并发合并。 */
 export const AgentContextSignalCapability = {
   effectKind: 'write',
   readScopes: ['agent-session-context'],
   writeScopes: ['agent-session-context'],
   canReadArbitrarySource: false,
   concurrency: 'safe',
-  reason: 'agent context governance signal',
+  reason: 'agent session facts record',
 } satisfies ToolCapabilitySchema
 
 /** 当前 session 的 goal / plan 状态读取。 */

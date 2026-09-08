@@ -2,8 +2,8 @@
  * 第一环第六阶段：预算钳制。
  *
  * 本阶段先估算上下文用量，再合并注意力与去重账目，由 `ContextWorkingSetBudgetGovernor` 分配各区
- * 预算并标注，最后解析压力类型与发送门。发送门关闭时，`compileWithReclaim` 会驱动第四阶段的
- * 回收阶梯继续压缩。压缩水位公式仍由 `core/contextUsage` 单独维护，本阶段不修改其语义。
+ * 预算并标注，最后解析压力类型与发送门。完整请求超过可用输入容量时才由编译器治理，
+ * 最后发送门复核治理结果；字符数仅用于载荷诊断。
  */
 import type { ModelMessage } from 'ai'
 
@@ -92,10 +92,10 @@ export function resolvePressureKind(
   const residualTokenPercent =
     (Math.max(0, estimate.estimatedTokens - toolSchemaTokens) / usableContextWindow) * 100
   const toolSchemaPressure =
-    toolSchemaChars > 0 && toolSchemaTokenPercent >= ContextUsageCompactionPercent
+    toolSchemaChars > 0 && toolSchemaTokenPercent > ContextUsageCompactionPercent
   const tokenPressure =
-    residualTokenPercent >= ContextUsageCompactionPercent ||
-    (!toolSchemaPressure && estimate.tokenPercent >= ContextUsageCompactionPercent)
+    residualTokenPercent > ContextUsageCompactionPercent ||
+    (!toolSchemaPressure && estimate.estimatedTokens > estimate.usableContextWindow)
   const pressureCount = [tokenPressure, toolSchemaPressure].filter(Boolean).length
 
   if (pressureCount === 0) return 'none'
@@ -133,11 +133,13 @@ export function runBudgetStage(params: {
   input: CompileProviderRequestInput
   providerMessages: ModelMessage[]
   classifiedBlocks: readonly ContextWorkingSetBlock[]
+  /** 治理未改写请求时，复用同一份完整预览的估算。 */
+  estimate?: ContextUsageEstimate
   /**
    * 本轮治理窗口推导（送核门口径的单源）。
    *
    * 传进来不是为了让门去看治理的脸色——门的判据一克没变，仍是「实测 token 对 usable 窗口的
-   * 百分比 < 80」。它在这里只做一件事：**校对**。治理窗口就是从 `usableContextWindow` 推出来的，
+   * 估算 token 不超过可用输入容量」。它在这里只做一件事：**校对**。治理窗口就是从 `usableContextWindow` 推出来的，
    * 若门这一次算出来的 usable 与治理那一次不同，说明两条路又拿到了不同的预算入参——
    * 那正是量纲统一批要根除的病，宁可当场喊出来也不要静默跑成两把尺子。
    */
@@ -148,22 +150,7 @@ export function runBudgetStage(params: {
   decision: ProviderRequestCompileDecision
 } {
   const toolSchemaChars = sumPositive(Object.values(params.input.toolSchemaChars ?? {}))
-  const estimateOptions = params.input.contextUsageOptions ?? {}
-  const reserve = resolveToolSchemaReserve(params.input)
-  const estimate = estimateContextUsage(
-    params.input.model,
-    params.input.systemPrompt,
-    params.providerMessages,
-    {
-      ...estimateOptions,
-      contextWindow: params.input.contextWindow ?? estimateOptions.contextWindow,
-      extraEstimatedChars: reserve.extraEstimatedChars,
-      extraEstimatedTokens: reserve.extraEstimatedTokens,
-      reservedOutputTokens: params.input.reservedOutputTokens ?? estimateOptions.reservedOutputTokens,
-      safetyMarginPercent: params.input.safetyMarginPercent ?? estimateOptions.safetyMarginPercent,
-      calibrationFactor: params.input.calibrationFactor ?? estimateOptions.calibrationFactor,
-    }
-  )
+  const estimate = params.estimate ?? estimateProviderRequestUsage(params.input, params.providerMessages)
   assertSendGateSharesGovernanceWindow(estimate, params.window)
   // B1 起账目一律 inline：块正文已是**账本投影后**的最终形态，降级发生在治理 epoch 里、
   // 由迁移事件记账，不再由本 stage 二次标注（v1 的注意力账目与去重账目已随本批下线）。
@@ -185,7 +172,7 @@ export function runBudgetStage(params: {
   })
   const annotatedLedger = ContextWorkingSetBudgetGovernor.annotateLedger(ledger, budgetAllocation)
   const pressureKind = resolvePressureKind(estimate, toolSchemaChars)
-  const okToSend = estimate.percent < ContextUsageCompactionPercent
+  const okToSend = estimate.estimatedTokens <= estimate.usableContextWindow
 
   return {
     estimate,
@@ -199,4 +186,27 @@ export function runBudgetStage(params: {
       zoneDiagnostics: buildZoneDiagnostics(budgetAllocation),
     },
   }
+}
+
+/** 治理前容量检查与最终发送门共用完整请求计量，不把字符诊断刻度当作模型容量。 */
+export function estimateProviderRequestUsage(
+  input: CompileProviderRequestInput,
+  providerMessages: ModelMessage[]
+): ContextUsageEstimate {
+  const estimateOptions = input.contextUsageOptions ?? {}
+  const reserve = resolveToolSchemaReserve(input)
+  return estimateContextUsage(
+    input.model,
+    input.systemPrompt,
+    providerMessages,
+    {
+      ...estimateOptions,
+      contextWindow: input.contextWindow ?? estimateOptions.contextWindow,
+      extraEstimatedChars: reserve.extraEstimatedChars,
+      extraEstimatedTokens: reserve.extraEstimatedTokens,
+      reservedOutputTokens: input.reservedOutputTokens ?? estimateOptions.reservedOutputTokens,
+      safetyMarginPercent: input.safetyMarginPercent ?? estimateOptions.safetyMarginPercent,
+      calibrationFactor: input.calibrationFactor ?? estimateOptions.calibrationFactor,
+    }
+  )
 }

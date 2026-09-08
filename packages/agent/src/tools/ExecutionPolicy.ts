@@ -51,6 +51,7 @@ import {
   resolveToolAliases,
   resolveToolValidationHintProviders,
 } from '../capabilities'
+import { type ApprovalPort,createApprovalOperationKey } from '../tool-contract'
 
 import { decideToolCategoryAccess } from './access-policy'
 import {
@@ -127,6 +128,7 @@ interface ToolExecutionPolicyCodingSession {
 }
 
 interface ToolExecutionPolicyExecution {
+  awaitConfirmation?: ApprovalPort['awaitConfirmation']
   awaitConfirmationDecision(
     message: string,
     abortSignal: AbortSignal,
@@ -154,6 +156,7 @@ interface ToolExecutionPolicyContext {
   resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => LooseOptional<string>
   getCurrentVisibleToolRegistrationSignature?: (toolName: string) => LooseOptional<string>
   execution: LooseOptional<ToolExecutionPolicyExecution>
+  approval?: ApprovalPort
   emitProgress?: (chunk: string) => void
   updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
 }
@@ -623,7 +626,36 @@ class ToolExecutionPolicy {
       return approvalSkipped
     }
 
-    const output = await prepared.tool.execute(parseResult.data, prepared.toolContext)
+    const context = prepared.toolContext
+    let operation: ToolConfirmationDecisionOptions['operation']
+    const scopedOptions = (options?: ToolConfirmationDecisionOptions): ToolConfirmationDecisionOptions => {
+      if (!options?.operation) operation ??= {
+        key: createApprovalOperationKey(`tool:${toolName}`, parseResult.args),
+        label: toolName,
+      }
+      return {
+        ...options,
+        operation: options?.operation ?? operation,
+        requester: options?.requester ?? { agentId: context.role.id },
+      }
+    }
+    const executionContext: ToolExecutionPolicyContext = Object.create(context, {
+      ...(context.approval ? { approval: { value: {
+        awaitConfirmation: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+          context.approval!.awaitConfirmation(message, signal, scopedOptions(options)),
+        awaitConfirmationDecision: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+          context.approval!.awaitConfirmationDecision(message, signal, scopedOptions(options)),
+      } } } : {}),
+      ...(context.execution ? { execution: { value: {
+        ...context.execution,
+        ...(context.execution.awaitConfirmation ? { awaitConfirmation:
+          (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+            context.execution!.awaitConfirmation!(message, signal, scopedOptions(options)) } : {}),
+        awaitConfirmationDecision: (message: string, signal: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+          context.execution!.awaitConfirmationDecision(message, signal, scopedOptions(options)),
+      } } } : {}),
+    })
+    const output = await prepared.tool.execute(parseResult.data, executionContext)
     this.recordSuccess({
       toolName,
       args: parseResult.args,
@@ -657,7 +689,7 @@ class ToolExecutionPolicy {
    * 决定是否取消其他正在运行的 sibling 工具。
    *
    * 规则：
-   * - EXECUTION_ABORTED / EXECUTION_DENIED 等终止类错误 → 无条件 abort，不管并发安全性。
+   * - EXECUTION_ABORTED 等终止类错误 → 无条件 abort，不管并发安全性。
    * - 普通 VALIDATION / NOT_FOUND / 工具逻辑错误 → 只报错给模型，不取消其他不相关文件的编辑。
    *   （之前的逻辑是 !isConcurrencySafe 就 abort，导致一个文件找不到目标就杀掉整批编辑。）
    */
@@ -669,7 +701,6 @@ class ToolExecutionPolicy {
   /** 这些错误表示执行应整体终止，而不是只作为普通工具错误交给模型修复。 */
   public isTerminalExecutionError(error: AppError): boolean {
     return error.code === 'EXECUTION_ABORTED'
-      || error.code === 'EXECUTION_DENIED'
       || error.code === 'TOOL_RESULT_FINALIZATION_FAILED'
   }
 
@@ -830,7 +861,12 @@ class ToolExecutionPolicy {
       input.toolContext.abortSignal,
       {
         riskScope: `tool-category:${categoryId}`,
-        rememberRiskScope: false,
+        rememberRiskScope: true,
+        operation: {
+          key: `tool-category:${categoryId}`,
+          label: categoryLabel,
+          target: categoryLabel,
+        },
         // 结构化信封与下面那段散文同一批产出：渲染层按 kind 画结构卡，散文只做兜底
         // （旧会话存档 / 不认识该 kind 的消费方）。改文案不会再让结构卡静默退化。
         detail: {

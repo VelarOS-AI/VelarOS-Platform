@@ -50,19 +50,13 @@
   animation: workspace-git-compact-spin 0.85s linear infinite;
 }
 
-.gitCompactMenu[data-slot='popover-content'] {
-  width: min(264px, calc(100vw - 16px));
-  min-width: min(264px, calc(100vw - 16px));
-  max-width: min(264px, calc(100vw - 16px));
-  overflow: hidden;
-}
-
 .gitCompactMenuHeader {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 6px;
-  height: 37px;
-  padding: 3.5px 4px;
+  gap: var(--topbar-panel-icon-gap);
+  height: calc(var(--topbar-panel-row-height) + 2 * var(--topbar-panel-padding));
+  padding: var(--topbar-panel-padding);
 }
 
 .gitCompactSearchSlot {
@@ -72,15 +66,15 @@
 }
 
 .gitCompactSearchSlot :global(.velar-search-field-input) {
-  font-size: 11px;
+  font-size: var(--topbar-panel-font-size);
   font-weight: 500;
 }
 
 .gitCompactFetchButton {
   display: flex;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
+  flex: 0 0 var(--topbar-panel-row-height);
+  width: var(--topbar-panel-row-height);
+  height: var(--topbar-panel-row-height);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -112,19 +106,20 @@
 
 .gitCompactFooter {
   display: flex;
-  padding: 2.5px 3px 3px;
+  flex-shrink: 0;
+  padding: var(--topbar-panel-padding);
   border-top: 1px solid var(--border, var(--workbench-border));
 }
 
 .gitCompactFooter > button {
   width: 100%;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--topbar-panel-icon-gap);
   min-width: 0;
-  height: 28px;
-  padding-inline: 8px;
+  height: var(--topbar-panel-row-height);
+  padding-inline: var(--topbar-panel-item-padding);
   color: var(--workbench-text, var(--foreground));
-  font-size: 11px;
+  font-size: var(--topbar-panel-font-size);
   font-weight: 500;
 }
 
@@ -228,9 +223,9 @@
 
 .gitCompactBranchList {
   min-height: 64px;
-  max-height: min(232px, calc(100vh - 224px));
+  max-height: var(--topbar-panel-list-max-height);
   overflow-y: auto;
-  padding: 2px 0;
+  padding: var(--topbar-panel-gap) 0;
 }
 
 .gitCompactBranchGroup {
@@ -239,16 +234,16 @@
 }
 
 .gitCompactBranchGroup + .gitCompactBranchGroup {
-  margin-top: 2px;
+  margin-top: var(--topbar-panel-gap);
 }
 
 .gitCompactBranchSectionHeader {
   display: flex;
-  height: 28px;
+  height: var(--topbar-panel-section-height);
   align-items: center;
-  padding: 0 5px;
+  padding: 0 var(--topbar-panel-item-padding);
   color: var(--workbench-text, var(--foreground));
-  font-size: 11px;
+  font-size: var(--topbar-panel-font-size);
   font-weight: 600;
 }
 
@@ -260,17 +255,17 @@
 
 .gitCompactBranchTreeHeader {
   display: flex;
-  width: calc(100% - 4px);
-  height: 28px;
+  width: calc(100% - 2 * var(--topbar-panel-gap));
+  height: var(--topbar-panel-row-height);
   align-items: center;
-  gap: 6px;
-  margin-inline: 2px;
+  gap: var(--topbar-panel-icon-gap);
+  margin-inline: var(--topbar-panel-gap);
   border: 0;
   border-radius: 6px;
   color: var(--workbench-text, var(--foreground));
   background: transparent;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--topbar-panel-font-size);
   font-weight: 500;
   text-align: left;
 }
@@ -306,11 +301,11 @@
 .gitCompactBranchRow {
   position: relative;
   display: flex;
-  width: calc(100% - 4px);
+  width: calc(100% - 2 * var(--topbar-panel-gap));
   min-width: 0;
-  height: 28px;
+  height: var(--topbar-panel-row-height);
   align-items: stretch;
-  margin-inline: 2px;
+  margin-inline: var(--topbar-panel-gap);
   border-radius: var(--workbench-radius, var(--ui-radius-control, 6px));
   color: var(--workbench-text, var(--foreground));
   background: transparent;
@@ -335,14 +330,14 @@
   min-width: 0;
   height: 100%;
   align-items: center;
-  gap: 6px;
-  padding-right: 7px;
+  gap: var(--topbar-panel-icon-gap);
+  padding-right: var(--topbar-panel-item-padding);
   border: 0;
   border-radius: inherit;
   color: inherit;
   background: transparent;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--topbar-panel-font-size);
   text-align: left;
 }
 

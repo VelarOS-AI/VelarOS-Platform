@@ -130,7 +130,13 @@ export interface ChatInputAttachmentsControl {
 }
 
 export interface ChatInputQueueControl {
+  errorMessage?: LooseOptional<string>
+  canEnqueue?: boolean
+  canGuideCurrentTask?: boolean
+  isPaused?: boolean
+  onResume?: () => void | Promise<void>
   queuedDrafts?: ChatInputQueuedDraft[]
+  drainingId?: LooseOptional<string>
   isQueueDraining?: boolean
   onQueuedDraftMove?: (id: string, direction: 'up' | 'down') => void
   onQueuedDraftRemove?: (id: string) => void
@@ -350,11 +356,18 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   const { files, onFilesChange, onOpenFile } = control.attachments
   const {
     queuedDrafts = EmptyQueuedDrafts,
+    canEnqueue = false,
+    canGuideCurrentTask = false,
+    isPaused: isQueuePaused = false,
+    errorMessage: queueErrorMessage,
+    onResume: onQueueResume,
     isQueueDraining = false,
+    drainingId,
     onQueuedDraftMove,
     onQueuedDraftRemove,
     onQueuedDraftGuide,
     onQueuedDraftReturnToInput,
+    onQueuedDraftRunNow,
   } = control.queue ?? {}
   const executionControl = control.execution
   const goalMode = !!executionControl?.goalMode
@@ -518,6 +531,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
     timers,
   })
   const interactionState = resolveChatInputInteractionState({
+    canSendDuringRun: canEnqueue,
     disabled,
     fileCount: files.length,
     hideSubmit,
@@ -806,6 +820,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
       : null
   const visibleLimitMessage = draftLimitError ?? inputLimitHelp
   const primaryActionState = resolveChatInputPrimaryActionState({
+    canSendDuringRun: canEnqueue,
     disabled,
     fileCount: files.length,
     hideSubmit,
@@ -860,28 +875,35 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   }
 
   const handleStopRequest = useCallback((): void => {
-    if (!onStop || primaryActionState.kind !== 'stop' || primaryActionState.disabled) return
+    if (!onStop || !canStop || isStopPending) return
 
     setIsStopPending(true)
-    timers.after(1200, () => setIsStopPending(false), {
-      label: 'chatInput.stopPendingFallback',
-    })
 
     try {
       const result = onStop()
       if (result) {
-        void Promise.resolve(result).catch(() => {
-          setIsStopPending(false)
-        })
+        void Promise.resolve(result).then(
+          () => setIsStopPending(false),
+          () => setIsStopPending(false)
+        )
       }
     } catch (error) {
       setIsStopPending(false)
       throw error
     }
-  }, [onStop, primaryActionState.disabled, primaryActionState.kind, timers])
+  }, [canStop, isStopPending, onStop])
 
   const handleSendClick = useCallback((): void => {
     void requestSend()
+  }, [requestSend])
+
+  const handleEnqueueClick = useCallback((): void => {
+    void requestSend({
+      value: valueRef.current,
+      files: filesRef.current,
+      virtualPasteReferences: [...virtualPasteReferencesRef.current],
+      delivery: 'after-current',
+    })
   }, [requestSend])
 
   const toolbarRightChrome = useMemo(
@@ -913,6 +935,12 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
   )
   const toolbarRightPrimaryAction = useMemo(
     () => ({
+      deferredAction: canEnqueue && canGuideCurrentTask && primaryActionState.kind === 'send'
+        ? { title: t('chat.sendAfterCurrent'), disabled: primaryActionState.disabled, onClick: handleEnqueueClick }
+        : undefined,
+      secondaryStop: isStreaming && canStop && primaryActionState.kind !== 'stop'
+        ? { title: t('chat.stopStreaming'), disabled: isStopPending, pending: isStopPending }
+        : undefined,
       showButton: primaryActionState.showButton,
       kind: primaryActionState.kind,
       title:
@@ -920,7 +948,7 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
           ? t('chat.stopStreaming')
           : primaryActionState.kind === 'sending'
             ? t('chat.sendingMessage')
-            : sendButtonTitle,
+            : canEnqueue ? t(canGuideCurrentTask ? 'chat.guideCurrentTask' : 'chat.sendAfterCurrent') : sendButtonTitle,
       disabled: primaryActionState.disabled,
       pending: primaryActionState.pending,
       buttonClassName:
@@ -937,6 +965,12 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
       }),
     }),
     [
+      canEnqueue,
+      canGuideCurrentTask,
+      isStreaming,
+      canStop,
+      isStopPending,
+      handleEnqueueClick,
       handleSendClick,
       handleStopRequest,
       interactionState.sendButtonTone,
@@ -1108,12 +1142,17 @@ export function ChatInput({ control, density = 'default' }: ChatInputProps): Rea
 
       <ChatInputQueuePanel
         queuedDrafts={queuedDrafts}
+        errorMessage={queueErrorMessage}
+        isPaused={isQueuePaused}
+        onResume={onQueueResume}
         isQueueDraining={isQueueDraining}
+        drainingId={drainingId}
         isStreaming={isStreaming}
         onQueuedDraftMove={onQueuedDraftMove}
         onQueuedDraftRemove={onQueuedDraftRemove}
         onQueuedDraftGuide={onQueuedDraftGuide}
         onQueuedDraftReturnToInput={onQueuedDraftReturnToInput}
+        onQueuedDraftRunNow={onQueuedDraftRunNow}
       />
 
       <ComposerSlashSkillMenu menu={slashSkillMenu} header={t('chat.composerSlashSkillHeader')} />

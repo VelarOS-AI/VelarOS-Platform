@@ -1765,6 +1765,14 @@
   box-shadow: 0 0 0 3px rgba(var(--status-blue-rgb), 0.12);
 }
 
+.statusMarkerWithVerification {
+  width: auto;
+  gap: 0.25rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
 .statusSuccess {
   color: var(--status-green);
 }

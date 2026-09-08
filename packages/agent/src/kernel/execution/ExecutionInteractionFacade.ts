@@ -57,9 +57,10 @@ class ExecutionInteractionFacade {
   public resolveConfirmation(
     executionId: string,
     approved: boolean,
-    rejectionMessage?: LooseOptional<string>
+    rejectionMessage?: LooseOptional<string>,
+    confirmationId?: string
   ): ExecutionRecord {
-    return this.interactions.resolveConfirmation(executionId, approved, rejectionMessage)
+    return this.interactions.resolveConfirmation(executionId, approved, rejectionMessage, confirmationId)
   }
 
   public provideInput(executionId: string, answer: string): ExecutionRecord {
@@ -121,6 +122,7 @@ class ExecutionInteractionFacade {
       return {
         kind: 'confirmation',
         executionId: execution.id,
+        confirmationId: request.confirmationId,
         message: request.message,
         userActionCards: request.userActionCards,
       }
@@ -173,7 +175,7 @@ class ExecutionInteractionFacade {
         })
       : request.rejectionMessage
 
-    return this.resolveConfirmation(execution.id, request.approved, message)
+    return this.resolveConfirmation(execution.id, request.approved, message, request.confirmationId)
   }
 
   /** 按 sourceSessionId 查找处于指定 status 的 execution（优先 active guard）。 */

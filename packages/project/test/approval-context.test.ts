@@ -50,7 +50,7 @@ describe('project approval context', () => {
     expect(analyzeCommandExecution('rm -r ./directory').isDangerous).toBe(false)
   })
 
-  test('dangerous project commands request approval that can never be reused', async () => {
+  test('dangerous project approval identifies the precise command and working directory', async () => {
     let seen: Record<string, unknown> | undefined
     const result = (await projectTools['project:run'].execute(
       { command: 'rm -rf ./dist' },
@@ -67,15 +67,14 @@ describe('project approval context', () => {
           },
         },
         system: { canStartBackgroundCommands: () => true },
+        project: { getRootPath: () => '/workspace' },
       } as never,
     )) as { approved: boolean }
 
-    // 与 system:run 同一条判决：破坏性命令不进 riskScope 记忆，每次都要用户亲自点头。
-    expect(seen).toEqual({
+    expect(seen).toMatchObject({
       approvalRisk: 'high',
       riskScope: 'project-command:dangerous',
-      requireManualApproval: true,
-      rememberRiskScope: false,
+      operation: { label: 'rm -rf ./dist', target: '/workspace' },
     })
     expect(result.approved).toBe(false)
   })

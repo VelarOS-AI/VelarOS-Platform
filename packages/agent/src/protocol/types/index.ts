@@ -243,7 +243,7 @@ export interface ChatMessage {
   /** 用户原始 serialized payload 已移到隐藏的宿主资源文件中 */
   serializedStoredExternally?: boolean
   /** 用户在运行中补充给下一轮的引导消息状态。 */
-  guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent'
+  guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent' | 'accepted' | 'applied' | 'paused'
   /** 毫秒时间戳，由客户端本地生成 */
   timestamp: number
 }
@@ -957,6 +957,9 @@ export interface ChatGetGoalLifecycleResponse {
 }
 
 export interface ChatSessionToolResultPayload {
+  /** A local copy retained for an explicitly approved task handoff; never grants access to another session. */
+  handoff?: { sourceSessionId: string; sourceRef: string; sourceRefs?: string[] }
+
   serializedResult: string
   displayResult: unknown
   toolCallId?: string
@@ -1376,6 +1379,7 @@ export interface ChatHookBridgePingEvent {
  * 则恢复流(tool-result+后续回答)会被当迟到输入丢弃、不落 state store。
  */
 export interface ChatHookResolveConfirmationEvent {
+  confirmationId?: string
   sessionId: string
 }
 

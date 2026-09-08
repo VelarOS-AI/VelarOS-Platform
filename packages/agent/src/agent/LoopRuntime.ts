@@ -290,6 +290,7 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
     categories: ToolCategoryId[],
     reason: string
   ): Promise<SubAgentToolCategoryRequestResult> => {
+    childCtx.abortSignal.throwIfAborted()
     const expandedCategories = [
       ...new Set(
         categories.filter((categoryId) => !!categoryId)
@@ -333,15 +334,19 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
     const decision = await args.requestToolCategories(requestedCategories, reason, {
       childRoleId: args.roleResolution.id,
     })
+    // QueryLoop 在创建后安装 worker 的最终 signal；提交工具面前读取当前子上下文。
+    childCtx.abortSignal.throwIfAborted()
     if (!decision.approved) return decision
 
-    const approvedCategories = requestedCategories.filter(
+    const permittedCategories = requestedCategories.filter(
       (categoryId) => !decision.skippedCategories.includes(categoryId)
     )
+    args.parentCtx.codingSession.enableToolCategories(permittedCategories, reason)
+    const approvedCategories = permittedCategories.filter((categoryId) =>
+      args.parentCtx.codingSession.hasToolCategoryAccess(categoryId))
     if (!isEmpty(approvedCategories)) {
       approvedCategories.forEach((categoryId) => allowedCategorySet.add(categoryId))
       expandAllowedToolsForCategories(approvedCategories)
-      args.parentCtx.codingSession.enableToolCategories(approvedCategories, reason)
     }
 
     return {
@@ -349,11 +354,12 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
       enabled: !isEmpty(approvedCategories),
       requestedCategories: expandedCategories,
       enabledCategories: args.parentCtx.codingSession.getEnabledToolCategories(),
-      skippedCategories: [...blockedCategories, ...decision.skippedCategories],
+      skippedCategories: [...new Set([...blockedCategories, ...decision.skippedCategories,
+        ...permittedCategories.filter((categoryId) => !approvedCategories.includes(categoryId))])],
     }
   }
 
-  return {
+  const childCtx: TContext = {
     ...args.parentCtx,
     system: createSubAgentSystemBoundary(args.parentCtx),
     log: args.log,
@@ -364,13 +370,13 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
       nextAllowedRoles: [...args.roleResolution.nextAllowedRoles],
     },
     listTools: (scope = 'enabled') => {
-      const visible = args.parentCtx.listTools(scope)
+      const visible = args.parentCtx.listTools(scope === 'enabled' ? 'all' : scope)
       return visible.filter((tool) =>
         scope === 'enabled' ? allowedToolSet.has(tool.name) : roleToolSet.has(tool.name)
       )
     },
     listToolCategories: (scope = 'enabled') => {
-      const visible = args.parentCtx.listToolCategories(scope)
+      const visible = args.parentCtx.listToolCategories(scope === 'enabled' ? 'all' : scope)
       return visible
         .map((category) => {
           const tools = category.tools.filter((tool) =>
@@ -410,6 +416,7 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
       throw new AppError('VALIDATION', 'Sub-agent cannot spawn further agents')
     },
   }
+  return childCtx
 }
 
 /** Solo loop 每轮根据 profile 和当前启用类别计算模型实际可见工具。 */

@@ -266,6 +266,13 @@ class ContextBuilder {
     return this
   }
 
+  /** 派生本轮贡献段的独立注册表；下一轮未提供的段不会残留在宿主 builder 中。 */
+  public withPromptSegments(segments: readonly PromptSegmentDefinition[]): ContextBuilder {
+    const clone = this.clone()
+    for (const segment of segments) clone.registry.register(segment)
+    return clone
+  }
+
   /** 注册一个 prompt provider，它可以一次提供多个段。 */
   public registerPromptProvider(provider: PromptSegmentProvider): this {
     this.registry.registerProvider(provider)

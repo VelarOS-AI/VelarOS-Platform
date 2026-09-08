@@ -143,7 +143,7 @@ function serializeOutput(output: unknown): string {
   if (isString(output)) return output
 
   try {
-    return JSON.stringify(output)
+    return JSON.stringify(output) ?? 'null'
   } catch (error) {
     return JSON.stringify({
       error: 'tool_output_serialization_failed',
@@ -162,10 +162,11 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
   }
 
   public project(input: ProjectKernelToolOutputInput): ProjectKernelToolOutputResult {
-    const serialized = serializeOutput(input.output)
+    const output = toNullable(input.output)
+    const serialized = serializeOutput(output)
     if (serialized.length <= this.projectionChars)
       return {
-        output: input.output,
+        output,
         stored: null,
       }
 
@@ -176,7 +177,7 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
       sessionId: resolveGovernanceSessionKey(input.sessionId),
       toolCallId: input.toolCallId,
       toolName: input.toolName,
-      output: input.output,
+      output,
       serialized,
       chars: serialized.length,
       createdAt: Date.now(),
@@ -232,10 +233,11 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
   public async project(
     input: ProjectKernelToolOutputInput
   ): Promise<ProjectKernelToolOutputResult> {
-    const serialized = serializeOutput(input.output)
+    const output = toNullable(input.output)
+    const serialized = serializeOutput(output)
     if (serialized.length <= this.projectionChars)
       return {
-        output: input.output,
+        output,
         stored: null,
       }
 
@@ -247,7 +249,7 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       serializedResult: serialized,
     })
     const stored = this.toStoredOutput({
-      input,
+      input: { ...input, output },
       sessionId,
       serialized,
       record: canonical.record,

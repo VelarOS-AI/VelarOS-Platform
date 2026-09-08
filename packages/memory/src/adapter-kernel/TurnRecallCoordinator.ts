@@ -47,6 +47,7 @@ export interface MemoryTurnRecallDeps {
   recall: MemoryStoreBackend['recall']
   /** 自动记忆总开关；关闭后不采集也不注入召回。 */
   isEnabled?: () => boolean
+  isSessionRecallAllowed?: (sessionId: string) => boolean
   isAutomaticDeepRecallEnabled?: () => boolean
   resolveScope: MemoryHostScopeResolver
   turnContextScopes: readonly string[]
@@ -63,6 +64,7 @@ export interface MemoryTurnRecallInput {
 /** 供外部引擎 prompt 前缀消费的只读召回结果；空数组表示关闭、跳过、失败或超时。 */
 export interface MemoryTurnRecallResult {
   summaries: string[]
+  sources?: Array<{ sourceId: string; label: string }>
 }
 
 /**
@@ -104,7 +106,7 @@ export class MemoryTurnRecallCoordinator {
   /** 发送接受后调用；同步返回，召回在后台完成。 */
   public notifyUserMessage(input: MemoryTurnRecallInput): void {
     // 自动记忆关闭时既不采集也不注入，与 EvidenceBridge.canCapture 语义一致。
-    if (!(this.deps.isEnabled?.() ?? true)) return
+    if (!this.isRecallAllowed(input.sessionId)) return
     const query = input.query.trim().slice(0, RecallQueryMaxChars)
     if (query.length < RecallMinQueryChars) return
     // 上一轮召回还在跑（模型选择最长 4s）说明用户在快速连发，跳过本轮避免堆积。
@@ -165,7 +167,7 @@ export class MemoryTurnRecallCoordinator {
     input: MemoryTurnRecallInput,
     timeoutMs = AwaitableRecallTimeoutMs
   ): Promise<MemoryTurnRecallResult> {
-    if (!(this.deps.isEnabled?.() ?? true)) return { summaries: [] }
+    if (!this.isRecallAllowed(input.sessionId)) return { summaries: [] }
     const query = input.query.trim().slice(0, RecallQueryMaxChars)
     if (query.length < RecallMinQueryChars || this.isRecallInFlight(input.sessionId))
       return { summaries: [] }
@@ -174,8 +176,9 @@ export class MemoryTurnRecallCoordinator {
     const releaseLatch = this.acquireInFlightLatch(input.sessionId)
     let expired = false
     const timers = new TimerScope({ name: 'MemoryTurnRecallCoordinator.awaitableRecall' })
-    const recallTask = this.recall(input, query, false, () => expired)
-      .then((summaries) => ({ summaries }))
+    const sources: Array<{ sourceId: string; label: string }> = []
+    const recallTask = this.recall(input, query, false, () => expired, sources)
+      .then((summaries) => isEmpty(summaries) ? { summaries } : { summaries, sources })
       .catch((error) => {
         log.debug('awaitable turn memory recall failed; skipping injection', {
           sessionId: input.sessionId,
@@ -208,9 +211,14 @@ export class MemoryTurnRecallCoordinator {
       rendererVisible: false,
       peekCached: (input) => ({
         ...this.ledgers.peek(input.sessionId, input),
+        ...(!this.isRecallAllowed(input.sessionId) ? { deltas: [] } : {}),
         anchors: [],
       }),
     }
+  }
+
+  private isRecallAllowed(sessionId: string): boolean {
+    return (this.deps.isEnabled?.() ?? true) && (this.deps.isSessionRecallAllowed?.(sessionId) ?? true)
   }
 
   public clearSession(sessionId: string): void {
@@ -222,7 +230,8 @@ export class MemoryTurnRecallCoordinator {
     input: MemoryTurnRecallInput,
     query: string,
     appendToLedger: boolean,
-    isExpired: () => boolean = () => false
+    isExpired: () => boolean = () => false,
+    selectedSources?: Array<{ sourceId: string; label: string }>
   ): Promise<string[]> {
     const scope = this.deps.resolveScope({
       sessionId: input.sessionId,
@@ -251,7 +260,7 @@ export class MemoryTurnRecallCoordinator {
         deep: true,
       })
     }
-    if (isExpired()) return []
+    if (isExpired() || !this.isRecallAllowed(input.sessionId)) return []
 
     const injectedIds = this.injectedIdsFor(input.sessionId)
     const excludedSourceTypes = new Set<string>(AutomaticRecallExcludedSourceTypes)
@@ -269,6 +278,7 @@ export class MemoryTurnRecallCoordinator {
       injectedIds.add(memory.id)
       const summaryText = this.formatSummary(memory)
       summaries.push(summaryText)
+      selectedSources?.push({ sourceId: 'memory.recall', label: `记忆：${this.truncate(memory.title, 16)}` })
       if (appendToLedger) {
         this.ledgers.append(input.sessionId, {
           label: `记忆：${this.truncate(memory.title, 16)}`,

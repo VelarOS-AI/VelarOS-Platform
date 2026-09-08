@@ -200,7 +200,7 @@ describe('System capability', () => {
     expect(analyzeCommandExecution('rm -r ./directory').isDangerous).toBe(false)
   })
 
-  test('dangerous shell commands request approval that can never be reused', async () => {
+  test('dangerous shell approval identifies the precise command and working directory', async () => {
     const seen: Array<Record<string, unknown> | undefined> = []
     const context = {
       abortSignal: new AbortController().signal,
@@ -220,13 +220,10 @@ describe('System capability', () => {
     } as never
 
     await systemTools[SystemToolNames.run].execute({ command: 'rm -rf /tmp/velaros-fixture' }, context)
-    // 破坏性命令：必须是「每次亲自裁决」，绝不能进 riskScope 记忆——否则批准过一条
-    // rm -rf 就等于预授权了本会话此后所有 rm -rf / sudo / dd。
-    expect(seen[0]).toEqual({
+    expect(seen[0]).toMatchObject({
       approvalRisk: 'high',
       riskScope: 'system-command:dangerous',
-      requireManualApproval: true,
-      rememberRiskScope: false,
+      operation: { label: 'rm -rf /tmp/velaros-fixture' },
     })
 
     await systemTools[SystemToolNames.run].execute({ command: 'npm run dev' }, context)

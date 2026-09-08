@@ -107,13 +107,13 @@ describe('usageSkillId companion skill pointer', () => {
   test('appends the pointer as the last line without breaking the grammar', () => {
     const tool = defineProbeTool({ usageSkillId: 'probe-authoring' })
 
-    expect(tool.description.endsWith('\n- 深度用法先读 skill:probe-authoring')).toBe(true)
+    expect(tool.description.endsWith('\n- 深度用法：当前技能目录可读取 skill:probe-authoring 时先读该技能。')).toBe(true)
     expect(isStructuredToolDescription(tool.description)).toBe(true)
     expect(tool.usageSkillId).toBe('probe-authoring')
   })
 
   test('leaves the description untouched when no companion skill is declared', () => {
-    expect(defineProbeTool().description).not.toContain('深度用法先读')
+    expect(defineProbeTool().description).not.toContain('深度用法：')
     expect(defineProbeTool().usageSkillId).toBeUndefined()
   })
 

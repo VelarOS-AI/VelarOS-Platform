@@ -1,7 +1,9 @@
+import { resolve } from 'node:path'
+
 import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { createManualApprovalOptions, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { createApprovalOperationKey, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import { isArray, isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -467,6 +469,7 @@ async function runProjectCommand(
   context.abortSignal.throwIfAborted()
   const plan = analyzeCommandExecution(input.command)
   const background = input.background ?? plan.shouldStartInBackground
+  const commandCwd = resolve(context.project.getRootPath(), input.cwd ?? '.')
   if (background && !context.system.canStartBackgroundCommands())
     throw new AppError('PERMISSION', '当前运行时不允许启动后台项目进程。')
 
@@ -479,12 +482,15 @@ async function runProjectCommand(
         background
       ),
       context.abortSignal,
-      // 与 system:run 同一条判决：破坏性命令按 riskScope 记忆 = 首次批准后整会话静默放行同类，
-      // 用户点头的是 `rm -rf ./dist`，之后跑的可能是 `rm -rf ~`。不可逆伤害每次都要亲自裁决。
-      createManualApprovalOptions({
+      {
         approvalRisk: 'high',
         riskScope: 'project-command:dangerous',
-      })
+        operation: {
+          key: createApprovalOperationKey('shell-command', { command: input.command.trim(), cwd: commandCwd, background }),
+          label: input.command,
+          target: commandCwd,
+        },
+      }
     )
     if (!decision.approved) return {
       approved: false,

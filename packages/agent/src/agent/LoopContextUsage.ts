@@ -25,11 +25,22 @@ import {
   type EstimateContextUsageOptions,
 } from '@velaros-ai/agent'
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { isNumber } from '@velaros-ai/core'
+import { isFiniteNumber, isNumber } from '@velaros-ai/core'
 
+import type { AgentModelRequestOptions } from './model/ModelContracts'
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
 
 const DefaultAgentContextWindow = 128_000
+
+/** 本轮显式输出上限与实际请求策略同源，覆盖按窗口比例推导的缺省预留。 */
+function resolveModelContextUsageOptions(
+  options: EstimateContextUsageOptions = {},
+  modelRequestOptions?: LooseOptional<AgentModelRequestOptions>
+): EstimateContextUsageOptions {
+  const maxOutputTokens = modelRequestOptions?.requestPolicy?.maxOutputTokens
+  if (!isFiniteNumber(maxOutputTokens) || maxOutputTokens < 0) return options
+  return { ...options, reservedOutputTokens: maxOutputTokens }
+}
 
 interface AgentLoopToolDescriptor {
   name: string
@@ -56,8 +67,8 @@ class AgentLoopContextUsageManager<TToolContext> {
   constructor(private readonly toolRegistry: AgentLoopToolRegistry<TToolContext>) {}
 
   /**
-   * 本轮发送前的用量估算（纯函数，不改写历史）。
-   * 返回值喂 `recordActualUsage` 完成 MMU 反馈闭环。
+   * 指定消息集的用量估算（纯函数，不改写历史）。
+   * 运行校准采用同一次 provider 请求编译后的估算，与真实 usage 对账。
    */
   public estimateUsage(
     model: string,
@@ -71,10 +82,10 @@ class AgentLoopContextUsageManager<TToolContext> {
   /** 用供应方真实输入 token 更新该模型的校准系数（MMU 反馈闭环）。 */
   public recordActualUsage(
     model: string,
-    predictedInputTokens: number,
+    predictedInputTokens: LooseOptional<number>,
     actualInputTokens: Nullable<number>
   ): void {
-    if (!isNumber(actualInputTokens)) return
+    if (!isNumber(predictedInputTokens) || !isNumber(actualInputTokens)) return
 
     this.calibrator.record(model, predictedInputTokens, actualInputTokens)
   }
@@ -85,7 +96,8 @@ class AgentLoopContextUsageManager<TToolContext> {
     allowedTools: string[],
     contextWindow?: number,
     toolSchemaChars?: Readonly<Record<string, number>>,
-    turnToolRegistry: AgentLoopToolRegistry<TToolContext> = this.toolRegistry
+    turnToolRegistry: AgentLoopToolRegistry<TToolContext> = this.toolRegistry,
+    modelRequestOptions?: LooseOptional<AgentModelRequestOptions>
   ): EstimateContextUsageOptions {
     const tools = turnToolRegistry.listAvailable(toolContext, allowedTools).map((tool) => ({
       name: tool.name,
@@ -104,7 +116,7 @@ class AgentLoopContextUsageManager<TToolContext> {
       : DefaultAgentContextWindow
     const reservedOutputTokens = resolveReservedOutputTokens(effectiveWindow)
 
-    return {
+    return resolveModelContextUsageOptions({
       contextWindow,
       extraContext: {
         tools,
@@ -114,7 +126,7 @@ class AgentLoopContextUsageManager<TToolContext> {
       reservedOutputTokens,
       safetyMarginPercent: DefaultContextSafetyMarginPercent,
       calibrationFactor: this.calibrator.getFactor(model),
-    }
+    }, modelRequestOptions)
   }
 
   private sumToolSchemaChars(
@@ -133,5 +145,5 @@ class AgentLoopContextUsageManager<TToolContext> {
   }
 }
 
-export { AgentLoopContextUsageManager }
+export { AgentLoopContextUsageManager, resolveModelContextUsageOptions }
 export type { AgentLoopToolDescriptor, AgentLoopToolRegistry }

@@ -540,15 +540,14 @@ void describe('context residency ledger · governance config (§7)', () => {
   /**
    * 量纲统一批改判（原断言：G === min(模型窗口, cap)）。
    *
-   * G 现在从**送核门余量**导出，cap 只剩上限角色：超大窗口下 cap 仍然咬合（1M → 200K），
-   * 常规窗口下咬合的是门余量（128K → 门红线 102_400 的九折 = 92_160）。
+   * G 由真实可用输入容量减固定开销得到，与大窗口及输出预留保持一致。
    */
-  void test('governance window is derived from the send gate, capped by cap', () => {
+  void test('governance window uses the complete available input capacity', () => {
     const config = resolveContextGovernanceConfig()
-    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 1_000_000 }), 200_000)
-    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 128_000 }), 92_160)
+    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 1_000_000 }), 1_000_000)
+    assert.equal(resolveGovernanceWindowTokens(config, { modelWindowTokens: 128_000 }), 128_000)
     // 窗口缺席 = `estimateContextUsage` 的默认 128K，与门用同一条兜底，不再退化成 cap。
-    assert.equal(resolveGovernanceWindowTokens(config, {}), 92_160)
+    assert.equal(resolveGovernanceWindowTokens(config, {}), 128_000)
     // 输出预留 + 安全余量一进来，两把尺子一起缩：G 必须跟着门的 usable 走。
     assert.equal(
       resolveGovernanceWindowTokens(config, {
@@ -556,8 +555,8 @@ void describe('context residency ledger · governance config (§7)', () => {
         reservedOutputTokens: 16_000,
         safetyMarginPercent: 4,
       }),
-      // usable = floor(128_000 × 0.96) − 16_000 = 106_880 → 门红线 85_504 → 九折 76_953。
-      76_953
+      // usable = floor(128_000 × 0.96) − 16_000 = 106_880。
+      106_880
     )
   })
 })

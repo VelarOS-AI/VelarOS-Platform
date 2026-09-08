@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { isBlank, toNullable } from '@velaros-ai/core'
+import { isBlank, isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -49,11 +49,21 @@ type KnowledgeSyncOutcome = 'upserted' | 'reindexed' | 'reindex-blocked' | 'skip
 export class KnowledgeIngestion {
   /** 工作区最近同步时间，用 TTL 避免每次搜索都全量扫描文档。 */
   private readonly lastSyncByWorkspace = new Map<string, number>()
+  private readonly workspaceSyncs = new Map<string, Promise<KnowledgeWorkspaceSyncResult>>()
 
   constructor(
-    private readonly repository: KnowledgeRepo,
-    private readonly workspaceStore: KnowledgeWorkspace,
-    private readonly mutationService: KnowledgeMutation
+    private readonly repository: Pick<
+      KnowledgeRepo,
+      'listKnowledgeByWorkspaceRoot' | 'listFileIndexByWorkspaceRoot' | 'upsertFileIndex'
+    >,
+    private readonly workspaceStore: Pick<
+      KnowledgeWorkspace,
+      'listDocumentFiles' | 'prepareDocument' | 'listCodeCandidates' | 'inspectIndexedFile'
+    >,
+    private readonly mutationService: Pick<
+      KnowledgeMutation,
+      'getCurrentIndexRuntime' | 'upsertKnowledge' | 'deleteKnowledge'
+    >
   ) {}
 
   /**
@@ -93,7 +103,22 @@ export class KnowledgeIngestion {
   }
 
   /** 扫描并同步 markdown/text/json/config 等文档类知识。 */
-  public async syncWorkspace(
+  public syncWorkspace(
+    workspaceRoot: string,
+    options: KnowledgeWorkspaceSyncOptions = {}
+  ): Promise<KnowledgeWorkspaceSyncResult> {
+    const existing = this.workspaceSyncs.get(workspaceRoot)
+    if (existing) return existing
+    const pending = this.syncWorkspaceNow(workspaceRoot, options)
+    this.workspaceSyncs.set(workspaceRoot, pending)
+    const finish = (): void => {
+      this.workspaceSyncs.delete(workspaceRoot)
+    }
+    void pending.then(finish, finish)
+    return pending
+  }
+
+  private async syncWorkspaceNow(
     workspaceRoot: string,
     options: KnowledgeWorkspaceSyncOptions = {}
   ): Promise<KnowledgeWorkspaceSyncResult> {
@@ -101,6 +126,8 @@ export class KnowledgeIngestion {
       throw new AppError('VALIDATION', '同步知识文档时必须提供 workspaceRoot')
     }
 
+    // 强制同步一旦失败也应允许立即重试，不能继续沿用前次成功的短期缓存。
+    this.lastSyncByWorkspace.delete(workspaceRoot)
     const startedAt = Date.now()
     log.info('knowledge workspace sync start', {
       forced: !!options.force,
@@ -126,6 +153,7 @@ export class KnowledgeIngestion {
     let reindexed = 0
     let reindexBlocked = 0
     let skipped = 0
+    const failures: unknown[] = []
 
     for (const file of scannedFiles) {
       // 通过 path 对齐文件系统、知识文档和文件快照。
@@ -153,11 +181,20 @@ export class KnowledgeIngestion {
         }
         skipped += 1
       } catch (error) {
+        failures.push(error)
         skipped += 1
         log.warn('knowledge document sync failed', {
           code: AppError.from(error).code,
         })
       }
+    }
+
+    if (!isEmpty(failures)) {
+      throw new AppError(
+        'UNAVAILABLE',
+        '知识工作区同步不完整，已有索引继续保留，请稍后重试。',
+        failures[0]
+      )
     }
 
     let removed = 0
@@ -167,13 +204,14 @@ export class KnowledgeIngestion {
       }
 
       try {
-        // 扫描不到的旧文档说明已删除或不再可见，知识库也同步清理。
+        // 完整扫描与读取成功后，才能清理确认已删除或不再可索引的旧文档。
         await this.mutationService.deleteKnowledge(existing.id)
         removed += 1
       } catch (error) {
         log.warn('knowledge document delete failed', {
           code: AppError.from(error).code,
         })
+        throw error
       }
     }
 

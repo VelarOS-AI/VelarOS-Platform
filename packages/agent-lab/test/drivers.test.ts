@@ -10,6 +10,40 @@ import { EmptyBudgetUsage, UnlimitedBudget } from "../src/protocol/index.js";
 
 import { FullCapabilities, journey, observation, trial } from "./fixtures.js";
 
+test.each(["observed-card-A", null])("velar hooks replies only with the observed confirmation identity: %p", async (confirmationId) => {
+  const replies: Array<{ readonly confirmationId?: string }> = [];
+  let reads = 0;
+  const client = {
+    command: async (input: { readonly kind?: string; readonly confirmationId?: string }) => {
+      if (input.kind === "get_runtime_status") {
+        reads++;
+        return { ok: true, data: { hasPendingConfirmation: true, pendingConfirmation: { confirmationId } } };
+      }
+      if (input.kind === "resolve_confirmation") {
+        replies.push(input);
+        // 宿主已切到 B 时拒绝旧 A，driver 不能为同次回复重新查询并改投 B。
+        return { ok: false, error: "confirmation changed to B" };
+      }
+      return { ok: true, data: {} };
+    },
+  } as unknown as VelarHooksClient;
+  const driver = createVelarHooksDriver({
+    id: "hooks", client, polling: { pollMs: 1 },
+    identity: { executorId: "executor-a", adapterVersion: "1", cliVersion: null,
+      provider: null, model: null, modelRevision: null, contextWindow: null,
+      reasoningProfile: null, configuration: {} },
+  });
+  const session = await driver.openSession({ trial: trial(), journey: journey(), workspaceRoot: null });
+  reads = 0;
+  await expect(driver.waitSettled(session, {
+    budget: { ...UnlimitedBudget, wallClockMs: 1_000 },
+    signal: new AbortController().signal,
+    onSample: async () => ({ kind: "continue" }),
+  })).rejects.toThrow(confirmationId ? "confirmation changed to B" : "no confirmationId");
+  expect(reads).toBe(1);
+  expect(replies.map((reply) => reply.confirmationId)).toEqual(confirmationId ? [confirmationId] : []);
+});
+
 test("polling driver requires executor-native progress and stable idle", async () => {
   const states: NativeExecutionState[] = [
     {

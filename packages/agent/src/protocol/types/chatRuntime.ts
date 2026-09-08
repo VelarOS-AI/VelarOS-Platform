@@ -119,8 +119,8 @@ export interface StreamContextUsageLedgerEntry {
 /**
  * 上下文治理（v2 驻留账本）逐轮状态：main 进程的治理器是唯一权威，本块是它推给渲染层的**只读**投影。
  *
- * 渲染层因此不需要（也不允许）自己判断"该压了吗/该转交了吗"——v1 把 80% 水位监视放在 React
- * effect 里的那条路已随治理回内核一并下线。转交卡的布防信号就是这里的 `handoffArmed`。
+ * 运行时按完整请求的可用容量自动治理；渲染层展示结果。`handoffArmed` 提供诊断依据，
+ * 实际交接由显式工具请求并经用户批准。
  */
 export interface StreamContextGovernanceState {
   /** 已应用过的治理 epoch 代数（= 缓存被重建过几次）。 */
@@ -141,9 +141,8 @@ export interface StreamContextGovernanceState {
   /**
    * I2 蒸馏的逐轮分账。
    *
-   * **水位触发的 epoch 不经任何 hook**：`compact_session` 只能透出手动请求的那一次，而手动
-   * 那次恰恰是实验里最少见的一类。逐轮流事件是自动 epoch 的唯一出口，所以 RQ3 的因变量必须
-   * 在这里也有一份。未跑 epoch 的轮次全为零值/`null`——零不是"没数据"，是"这轮什么都没落地"。
+   * 自动治理的结果通过逐轮流事件输出，覆盖容量回收和提供商超限恢复。
+   * 本轮没有应用治理时分账为零值或 `null`，累计报告保留各次治理的来源与收益。
    */
   distill: StreamContextDistillState
 }
@@ -219,6 +218,20 @@ export interface StreamRetryingTurnPayload {
 export interface StreamDonePayload {
   kind: 'done'
   message?: string
+  verification?: StreamVerificationSummary
+  goalStatus?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
+}
+
+export interface StreamVerificationSummary {
+  status: 'not-run' | 'stale' | 'passed' | 'failed' | 'timed-out' | 'aborted' | 'unknown'
+  command?: string
+  issues?: string[]
+}
+
+/** 运行中输入已从接收队列进入本轮历史，身份沿用用户消息。 */
+export interface StreamInputAppliedPayload {
+  kind: 'input-applied'
+  inputId: string
 }
 
 export interface StreamAbortedPayload {
@@ -236,6 +249,7 @@ export interface StreamErrorPayload {
 }
 
 export interface StreamAwaitingConfirmationPayload {
+  confirmationId?: string
   kind: 'awaiting-confirmation'
   executionId: string
   /** 兜底散文：模型自由撰写的确认文案，或结构化 detail 的降级表述。 */
@@ -252,6 +266,7 @@ export interface StreamAwaitingInputPayload {
 }
 
 export type ChatRuntimeEvent =
+  | StreamInputAppliedPayload
   | StreamPhasePayload
   | StreamUsageTelemetryPayload
   | StreamContextUsageEstimatePayload
@@ -292,6 +307,7 @@ export type StreamFailureRuntimeStateKind = (typeof STREAM_FAILURE_RUNTIME_STATE
 
 /** 契约测试与 bridge exhaustive switch 用的完整 kind 列表。 */
 export const ALL_STREAM_RUNTIME_STATE_KINDS = [
+  'input-applied',
   'phase',
   'usage-telemetry',
   'context-usage-estimate',
@@ -307,6 +323,9 @@ export const ALL_STREAM_RUNTIME_STATE_KINDS = [
 ] as const satisfies readonly StreamStateKind[]
 
 export const ChatRuntimeEvents = {
+  inputApplied(inputId: string): StreamInputAppliedPayload {
+    return { kind: 'input-applied', inputId }
+  },
   phase(teamPhase: TeamExecutionPhase): StreamPhasePayload {
     return {
       kind: 'phase',
@@ -380,9 +399,10 @@ export const ChatRuntimeEvents = {
     }
   },
 
-  done(message?: string): StreamDonePayload {
+  done(message?: string, outcome: Pick<StreamDonePayload, 'verification' | 'goalStatus'> = {}): StreamDonePayload {
     return {
       kind: 'done',
+      ...outcome,
       message,
     }
   },
@@ -409,10 +429,12 @@ export const ChatRuntimeEvents = {
     executionId: string,
     confirmationMessage: string,
     userActionCards?: UserActionCard[],
-    confirmationDetail?: ConfirmationRequestDetail
+    confirmationDetail?: ConfirmationRequestDetail,
+    confirmationId?: string
   ): StreamAwaitingConfirmationPayload {
     return {
       kind: 'awaiting-confirmation',
+      confirmationId,
       executionId,
       confirmationMessage,
       userActionCards,

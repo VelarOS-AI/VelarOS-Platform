@@ -103,6 +103,12 @@ function UserMessageBubbleInner({
       ? t('chat.awaitingUserDecision')
       : guidanceStatus === 'pending'
         ? t('chat.guidingConversation')
+        : guidanceStatus === 'accepted'
+          ? t('chat.guidanceAccepted')
+        : guidanceStatus === 'applied'
+          ? t('chat.guidanceApplied')
+        : guidanceStatus === 'paused'
+          ? t('chat.guidancePaused')
         : guidanceStatus === 'sent'
           ? t('chat.guidedConversation')
           : null
@@ -122,7 +128,7 @@ function UserMessageBubbleInner({
     !!guidanceLabel && (
       <SignpostIcon
         size={11}
-        weight={guidanceStatus === 'sent' ? 'fill' : 'regular'}
+        weight={guidanceStatus === 'applied' ? 'fill' : 'regular'}
         className={styles.guidedInputLabelIcon}
       />
     )

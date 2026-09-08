@@ -173,3 +173,58 @@ describe('MemoryTurnRecallCoordinator in-flight latch watchdog (审计 U38)', ()
     setSystemTime()
   })
 })
+
+describe('independent task memory use policy', () => {
+  test('a session recall pause gates both entry points without changing another session', async () => {
+    let calls = 0
+    const coordinator = new MemoryTurnRecallCoordinator({
+      recall: async () => { calls += 1; return [RecallItem] },
+      isSessionRecallAllowed: (id) => id !== 'paused',
+      resolveScope: () => ({ scopeType: 'workspace', scopeId: 'workspace-1' as never }),
+      turnContextScopes: ['project'],
+    })
+    coordinator.notifyUserMessage({ sessionId: 'paused', query: 'use prior memory' })
+    expect(await coordinator.recallUserMessage({ sessionId: 'paused', query: 'use prior memory' })).toEqual({ summaries: [] })
+    expect(calls).toBe(0)
+    expect((await coordinator.recallUserMessage({ sessionId: 'other', query: 'use prior memory' })).summaries).toHaveLength(1)
+  })
+
+  test('turning memory use off while retrieval is pending prevents late injection and does not consume the memory', async () => {
+    let enabled = true
+    let finish: (items: MemoryRecallItem[]) => void = () => undefined
+    let first = true
+    const coordinator = new MemoryTurnRecallCoordinator({
+      recall: async () => {
+        if (!first) return [RecallItem]
+        first = false
+        return new Promise((resolve) => { finish = resolve })
+      },
+      isSessionRecallAllowed: () => enabled,
+      resolveScope: () => ({ scopeType: 'workspace', scopeId: 'workspace-1' as never }),
+      turnContextScopes: ['project'],
+    })
+    const pending = coordinator.recallUserMessage({ sessionId: 's', query: 'use prior memory' })
+    enabled = false
+    finish([RecallItem])
+    expect(await pending).toEqual({ summaries: [] })
+    enabled = true
+    expect((await coordinator.recallUserMessage({ sessionId: 's', query: 'use prior memory' })).summaries).toHaveLength(1)
+  })
+
+  test('a pause also hides already queued recall from a later model turn', async () => {
+    let enabled = true
+    const coordinator = new MemoryTurnRecallCoordinator({
+      recall: async () => [RecallItem],
+      isSessionRecallAllowed: () => enabled,
+      resolveScope: () => ({ scopeType: 'workspace', scopeId: 'workspace-1' as never }),
+      turnContextScopes: ['project'],
+    })
+    coordinator.notifyUserMessage({ sessionId: 's', query: 'use prior memory' })
+    await Promise.resolve()
+    await Promise.resolve()
+    const source = coordinator.createTurnContextSource()
+    expect(source.peekCached({ sessionId: 's', afterSeq: 0, generation: null }).deltas).toHaveLength(1)
+    enabled = false
+    expect(source.peekCached({ sessionId: 's', afterSeq: 0, generation: null }).deltas).toHaveLength(0)
+  })
+})

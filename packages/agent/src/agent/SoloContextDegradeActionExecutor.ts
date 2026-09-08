@@ -53,8 +53,8 @@ function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolCo
 ): boolean {
   switch (action.kind) {
     case 'govern-epoch': {
-      // 缺页 = 请求治理器强开一次 epoch。语义与模型调 context:distill / 宿主 compact_session 一致：
-      // 绕过水位触发线，但反空转、尾保护、达标即停一条不减——压不下去时返回 false 交给下一级。
+      // 供应方确认超限后自动请求治理 epoch；无需模型调用或用户手动操作。
+      // 绕过本地水位触发线，保留反空转和尾保护；没有实际回收时返回 false 交给下一级。
       // 键必须与编译面注册时用的那一个逐字相同：编译面对空会话 id 回落 `unknown-session`，
       // 这里原样传空串就查不到账本，这一级对无身份会话恒失效。
       const report = ctx.governanceSessions.requestEpoch(

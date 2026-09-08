@@ -31,7 +31,7 @@ import {
   estimateResidencyTokens,
 } from './ContextRecord'
 import { stableFingerprint } from './determinism'
-import { estimateMessageChars } from './messageFacts'
+import { estimateMessageBudgetChars } from './messageFacts'
 
 export interface ContextProjectionBudget {
   /** 尾保护轮数：最近若干轮的记录治理器永不选中（投影落在活动尾）。 */
@@ -233,8 +233,8 @@ export function resolveEffectiveResidency(
 /**
  * 当前驻留态下这条记录在 prompt 里**真正**占的字符数（投影与预算共用的单源）。
  *
- * 口径是"渲染即量"：直接量 {@link renderRecord} 产出的那条消息，与 `bytes.full` 同一把尺子
- * （`estimateMessageChars`）。过去这里是三条估算——EXCERPT 按摘录原文长度记（不含信封与二次
+ * 口径是"渲染即量"：直接量 {@link renderRecord} 产出的那条消息，与 `bytes.budget` 同一把尺子
+ * （`estimateMessageBudgetChars`）。过去这里是三条估算——EXCERPT 按摘录原文长度记（不含信封与二次
  * 转义）、冷驻留一律按 ~70 字符的墓碑常量记，而 tool-call 的冷驻留其实**逐字保留全部 input
  * 参数**。实测记账比真实小 2.7~4.3 倍（审计 V3/V11/U1/U5/U17/U26），于是"达标即停"在真实占用
  * 远高于目标线时提前收手、savingPercent 与 dashboard 一起骗人、handoff 该布防时不布防。
@@ -242,15 +242,15 @@ export function resolveEffectiveResidency(
  * 缓存按记录对象身份 memo：记录一旦入账永不改写（P1），所以同一条记录同一驻留态的渲染长度恒定。
  */
 export function residentChars(record: ContextRecord, residency: ContextResidency): number {
-  // INLINE 走准入期算好的 bytes.full：与这里的量法同源，且避免对全文再序列化一次。
-  if (residency === 'INLINE') return record.bytes.full
+  // INLINE 使用归一化附件后的字符量；原文长度独立保留在 bytes.full。
+  if (residency === 'INLINE') return record.bytes.budget ?? (record.message ? estimateMessageBudgetChars(record.message) : record.bytes.full)
 
   const cached = renderedCharsByRecord.get(record)
   const hit = cached?.get(residency)
   if (isFiniteNumber(hit)) return hit
 
   const rendered = renderRecord(record, residency)
-  const chars = rendered.kind === 'hidden' ? 0 : estimateMessageChars(rendered.message)
+  const chars = rendered.kind === 'hidden' ? 0 : estimateMessageBudgetChars(rendered.message)
   if (cached) cached.set(residency, chars)
   else renderedCharsByRecord.set(record, new Map([[residency, chars]]))
 
@@ -408,10 +408,12 @@ function rewriteUserTextParts(message: ModelMessage, value: string): ModelMessag
   if (!isArray(message.content)) return message
 
   let replaced = false
-  const content = (message.content as unknown[]).map((part) => {
-    if (replaced || !isRecord(part) || part.type !== 'text') return part
+  const content = (message.content as unknown[]).flatMap((part) => {
+    if (!isRecord(part) || part.type !== 'text') return [part]
+    // 摘录已经覆盖全部 text parts，只在第一处放一次，其余附件保持原顺序与内容。
+    if (replaced) return []
     replaced = true
-    return { ...part, text: value }
+    return [{ ...part, text: value }]
   })
 
   return replaced ? ({ ...message, content } as ModelMessage) : message

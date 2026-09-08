@@ -18,7 +18,6 @@ import {
   isNumber,
   isPositiveNumber,
   isPresent,
-  isTrue,
   toNullable,
 } from '#internal/runtime'
 
@@ -248,7 +247,7 @@ export function useChatConversationTranscriptModel({
     if (!latestCompletedAssistantMessageId) return nextMap
 
     const runMarker = messageRunMarkerMap.get(latestCompletedAssistantMessageId)
-    if (runMarker?.status !== 'completed' || !isTrue(runMarker.goalMode)) return nextMap
+    if (runMarker?.status !== 'completed' || runMarker.goalStatus !== 'complete') return nextMap
 
     const runWindow = resolveGoalCompletionRunWindow({
       runMarker,

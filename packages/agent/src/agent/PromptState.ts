@@ -42,6 +42,7 @@ import {
 import { defaultRuntimePromptFeaturePolicy, type RuntimePromptFeaturePolicy } from '../tools'
 
 import { CompactionSummaryMarker } from './history/contextOSMessage'
+import { isInternalFollowUpMessage } from './history/internalMessages'
 
 interface PromptStateRoleResolution {
   id: AgentRoleId
@@ -131,10 +132,13 @@ function readPromptMessageText(message: ModelMessage): string {
 }
 
 function readLatestUserTurnText(messages: ModelMessage[]): Nullable<string> {
-  const latest = messages.at(-1)
-  if (!latest || latest.role !== 'user') return null
-  const text = readPromptMessageText(latest).trim()
-  return text || null
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'user' || isInternalFollowUpMessage(message)) continue
+    const text = readPromptMessageText(message).trim()
+    return text || null
+  }
+  return null
 }
 
 function shouldInjectHtmlArtifactPromptForTurn({
@@ -260,6 +264,9 @@ class PromptStateBuilder {
         workflowType: runtimeSnapshot.workflowType,
         activeCapabilityScope: runtimeSnapshot.activeCapabilityScope,
         selectedPromptFeatures: enabledPromptFeatures,
+        readableSkillIds: enabledToolNames.has('tooling:read')
+          ? runtimeSnapshot.availableSkills.map((skill) => skill.id)
+          : [],
         hasSelectedPromptFeatures: !isEmpty(describedPromptFeatures),
         shouldInjectHtmlArtifactPrompt: shouldInjectHtmlArtifactPromptForTurn({
           selectedPromptFeatureSet,

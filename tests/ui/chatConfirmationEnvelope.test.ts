@@ -102,6 +102,39 @@ void describe('chat confirmation envelope', () => {
     assert.equal(presentation.description, '未来某个宿主发来的确认')
   })
 
+  void test('shows the exact MCP argument preview and the scope of approval', () => {
+    for (const approvalScope of ['call', 'session-tool'] as const) {
+      const presentation = buildConfirmationPresentation({
+        message: 'fallback prose must not hide the structured arguments',
+        detail: {
+          kind: 'mcp-tool-call', serverName: 'records', toolName: 'delete',
+          argumentsPreview: '{"target":"record-A","token":"[redacted]"}', approvalScope,
+        },
+        t: translate,
+      })
+      assert.deepEqual(presentation.facts, [
+        'confirmation.mcpToolArguments(arguments={"target":"record-A","token":"[redacted]"})',
+        approvalScope === 'call' ? 'confirmation.mcpToolCallScope' : 'confirmation.mcpToolSessionScope',
+      ])
+    }
+  })
+
+  void test('task scope, requester and rejection behavior are displayed from authorization metadata', () => {
+    const presentation = buildConfirmationPresentation({
+      message: 'Apply the update?', t: translate,
+      detail: { kind: 'operation-authorization', authorization: {
+        label: 'Update deployment', target: 'staging', requester: 'Worker A', scope: 'task-operation',
+      } },
+    })
+    assert.equal(presentation.title, 'Update deployment')
+    assert.deepEqual(presentation.facts, [
+      'taskApproval.target(target=staging)',
+      'taskApproval.requester(requester=Worker A)',
+      'taskApproval.operationScope',
+      'taskApproval.denialContinues',
+    ])
+  })
+
   void test('the retired Chinese-literal prose parsers stay deleted', () => {
     const source = readFileSync(
       new URL('../../packages/ui/src/conversation/cards/ChatConfirmationCard.tsx', import.meta.url),

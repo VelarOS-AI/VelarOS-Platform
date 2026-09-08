@@ -96,6 +96,7 @@ export class ChatStreamProtocol {
       case 'error':
         return [{ type: 'error', payload: toSerializedError(payload) }, { type: 'end' }]
       case 'phase':
+      case 'input-applied':
       case 'usage-telemetry':
       case 'context-usage-estimate':
       case 'turn-start':

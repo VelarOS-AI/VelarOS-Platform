@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isFiniteNumber, isNumber, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isBoolean, isFiniteNumber, isNumber, isObject, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { mapDefined } from '@velaros-ai/core/utils/mapDefined'
 import { clamp } from '@velaros-ai/core/utils/number'
 
@@ -6,6 +6,9 @@ import { resolveUsableContextWindow } from './contextBudget'
 import { countTokensTiktoken, resolveTokenizerEngine } from './tokenizer'
 
 export interface ContextUsageEstimate {
+  /** 本地仅估算文本；图片、音频、文档的供应方专用计量不在此口径内。 */
+  mediaTokenCoverage?: 'none' | 'unknown'
+  mediaPartCount?: number
   estimatedTokens: number
   estimatedChars: number
   contextWindow: number
@@ -45,16 +48,17 @@ export interface EstimateContextUsageOptions {
   calibrationFactor?: LooseOptional<number>
 }
 
-// 高水位:指示器 warning 色调与 pipeline 高水位阶段的阈值。手动压缩功能已移除
-// (2026-07-18 用户裁决:压缩由内部看门自治),不存在"手动压缩门槛"这一概念。
-export const ContextUsageHighWatermarkPercent = 50
-export const ContextUsageSemanticPreSummaryPercent = 75
-export const ContextUsageCompactionPercent = 80
+/** 界面提醒线，只表达接近容量，不触发压缩。 */
+export const ContextUsageHighWatermarkPercent = 90
+/** @deprecated 兼容旧消费者；自动治理只在完整请求超过可用输入容量时触发。 */
+export const ContextUsageSemanticPreSummaryPercent = 100
+/** 可用输入容量百分比；恰好装满仍可发送，超出才治理。 */
+export const ContextUsageCompactionPercent = 100
+/** 历史载荷诊断刻度，不能作为发送或压缩门限。 */
 export const ContextUsagePayloadCompactionChars = 400_000
 
-const ContextUsagePayloadWindowChars = Math.ceil(
-  ContextUsagePayloadCompactionChars / (ContextUsageCompactionPercent / 100),
-)
+// 保持旧诊断图的字符刻度稳定；模型容量判决只使用 token 和 usableContextWindow。
+const ContextUsagePayloadWindowChars = 500_000
 
 const ObjectBoundaryTokenCost = 2
 const ArrayBoundaryTokenCost = 2
@@ -132,6 +136,30 @@ function sanitizeContextValue(value: unknown): unknown {
 
       return [key, sanitizeContextValue(entry)]
     })
+  )
+}
+
+/** 发送计量与驻留治理共用附件归一化后的字符口径，原始载荷保持完整。 */
+export function estimateContextValueChars(value: unknown): number {
+  const normalized = sanitizeContextValue(value)
+  return isString(normalized) ? normalized.length : (JSON.stringify(normalized)?.length ?? 0)
+}
+
+/** 统计参与本轮的媒体片段，供界面标记附件用量尚不可精确计量。 */
+export function countContextMediaParts(value: unknown, seen = new Set<object>()): number {
+  if (!isObject(value) || seen.has(value)) return 0
+  seen.add(value)
+  if (isArray(value)) return value.reduce<number>((sum, item) => sum + countContextMediaParts(item, seen), 0)
+  if (!isPlainObject(value)) return 0
+  if (
+    (value.type === 'image' && isPresent(value.image))
+    || (['file', 'image-data', 'file-data', 'media'].includes(String(value.type)) && isPresent(value.data))
+  ) return 1
+  return Object.entries(value).reduce(
+    (sum, [key, item]) => sum + (key === 'imageAttachments' && isArray(item)
+      ? item.length
+      : countContextMediaParts(item, seen)),
+    0,
   )
 }
 
@@ -411,6 +439,7 @@ export function estimateContextUsage(
   history: unknown,
   options: EstimateContextUsageOptions = {}
 ): ContextUsageEstimate {
+  const mediaPartCount = countContextMediaParts(history) + countContextMediaParts(options.extraContext)
   const sanitizedHistory = sanitizeContextValue(history)
   const sanitizedExtraContext = mapDefined(options.extraContext, sanitizeContextValue)
   const contextPayload =
@@ -464,6 +493,8 @@ export function estimateContextUsage(
   const percent = tokenPercent
 
   return {
+    mediaTokenCoverage: mediaPartCount > 0 ? 'unknown' : 'none',
+    mediaPartCount,
     estimatedTokens,
     estimatedChars,
     contextWindow,

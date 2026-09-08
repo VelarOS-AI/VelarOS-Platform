@@ -1,6 +1,7 @@
 import React, { memo } from 'react'
 import {
   ArrowUpIcon,
+  ListPlusIcon,
   MicrophoneIcon,
   MicrophoneSlashIcon,
   SpinnerGapIcon,
@@ -30,6 +31,8 @@ export interface ComposerToolbarRightVoiceProps {
 }
 
 export interface ComposerToolbarRightPrimaryActionProps {
+  deferredAction?: { title: string; disabled: boolean; onClick: () => void }
+  secondaryStop?: { title: string; disabled: boolean; pending: boolean }
   showButton: boolean
   kind: ChatInputPrimaryActionKind
   title: string
@@ -61,6 +64,8 @@ function ComposerToolbarRightInner({
     onToggleVoiceInput,
   },
   primaryAction: {
+    deferredAction,
+    secondaryStop,
     showButton,
     kind,
     title,
@@ -95,6 +100,31 @@ function ComposerToolbarRightInner({
         </IconButton>
       )}
       {submitSlot}
+      {!submitSlot && secondaryStop && (
+        <IconButton
+          label={secondaryStop.title}
+          title={secondaryStop.title}
+          size="icon-sm"
+          onClick={onStop}
+          disabled={secondaryStop.disabled || !onStop}
+          className={styles.stopButton}
+        >
+          {secondaryStop.pending
+            ? <SpinnerGapIcon size={16} className={styles.spinIcon} />
+            : <span className={styles.stopButtonIcon} aria-hidden />}
+        </IconButton>
+      )}
+      {!submitSlot && deferredAction && (
+        <IconButton
+          label={deferredAction.title}
+          title={deferredAction.title}
+          size="icon-sm"
+          onClick={deferredAction.onClick}
+          disabled={deferredAction.disabled}
+        >
+          <ListPlusIcon size={16} />
+        </IconButton>
+      )}
       {!submitSlot && showButton && (
         <IconButton
           variant="ghost"

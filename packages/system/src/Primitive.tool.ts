@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import {
-  createManualApprovalOptions,
+  createApprovalOperationKey,
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
 import {
@@ -423,6 +423,7 @@ const bash = defineSystemTool<{
   execute: async ({ command, cwd, timeoutMs, background, maxOutputChars }, ctx) => {
     ctx.abortSignal.throwIfAborted()
     const plan = analyzeCommandExecution(command)
+    const commandCwd = ctx.system.resolveCommandCwd?.(cwd) ?? cwd
     // 显式 background 永远优先；只有省略时才由命令形态推断（等价于原先的
     // `background || ((background ?? true) && …)`，但把"显式 false 必须压过推断"这条判据写在形状里）。
     const shouldRunInBackground = background ?? plan.shouldStartInBackground
@@ -440,23 +441,23 @@ const bash = defineSystemTool<{
           shouldRunInBackground
         ),
         ctx.abortSignal,
-        // 破坏性命令**每一条都要用户亲自点头**：riskScope 是按类记忆的，共用
-        // `system-command:dangerous` 意味着批准过 `rm -rf ./node_modules` 就等于预先批准了
-        // 本会话此后所有 `rm -rf` / `sudo` / `dd if=`。不可逆伤害不接受"同类已授权"这种推断，
-        // 因此走 createManualApprovalOptions（requireManualApproval + 不记忆）。
-        // 长驻服务这类"体验型"确认仍是低风险、可按类记忆，语义不变。
         plan.isDangerous
-          ? createManualApprovalOptions({
+          ? {
               approvalRisk: 'high',
               riskScope: 'system-command:dangerous',
-            })
+              operation: {
+                key: createApprovalOperationKey('shell-command', { command: command.trim(), cwd: commandCwd, background: shouldRunInBackground }),
+                label: command,
+                target: commandCwd,
+              },
+            }
           : { approvalRisk: 'low' }
       )
     }
 
     const result = await ctx.system.runCommand(
       command,
-      { cwd, timeoutMs, background: shouldRunInBackground, maxOutputChars },
+      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, maxOutputChars },
       plan.isDangerous,
       ctx.abortSignal
     )

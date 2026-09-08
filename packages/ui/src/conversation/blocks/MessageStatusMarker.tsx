@@ -80,7 +80,8 @@ function getRunMarkerMeta(
 function MessageStatusMarkerInner({ marker }: { marker: ConversationRunMarkerView }): ReactElement {
   const { t } = useConversationI18n()
   const meta = getRunMarkerMeta(marker, t)
-  const tooltip = meta.turnLabel ? `${meta.label}\n${meta.turnLabel}` : meta.label
+  const verificationLabel = marker.verification ? t(`status.verification.${marker.verification.status}`) : null
+  const tooltip = [meta.label, meta.turnLabel, verificationLabel, marker.verification?.command].filter(Boolean).join('\n')
 
   return (
     <BubbleTooltip
@@ -102,8 +103,9 @@ function MessageStatusMarkerInner({ marker }: { marker: ConversationRunMarkerVie
         </div>
       }
     >
-      <span className={cx('statusMarker', meta.toneClass)} aria-label={tooltip}>
+      <span className={cx('statusMarker', meta.toneClass, !!verificationLabel && 'statusMarkerWithVerification')} aria-label={tooltip}>
         {meta.icon}
+        {verificationLabel && <span>{verificationLabel}</span>}
       </span>
     </BubbleTooltip>
   )

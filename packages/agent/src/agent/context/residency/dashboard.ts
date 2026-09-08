@@ -2,7 +2,7 @@
  * 上下文仪表盘为模型提供在环自我感知，对应设计 §5.1。
  *
  * 每轮活动尾追加一块固定格式的账目，包含治理周期编号、预算占用、五种驻留态计数、前三大持仓和
- * 待处理数量。模型据此判断上下文压力，并在阶段完成时调用 `context:distill` 请求一次治理周期。
+ * 待处理数量。运行时在完整请求超过可用输入容量时自动治理，模型通过引用召回所需原文。
  *
  * 仪表盘每轮都会变化，因此只能放在活动尾，不能进入稳定系统提示前缀，否则会击穿下游缓存。
  * 它使用用户角色，是因为部分提供方只允许系统消息连续出现在开头；尾块沿用保留上下文的形态，
@@ -75,7 +75,7 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
   const epochAttempt = renderLastEpochAttempt(input.lastEpochAttempt)
   if (epochAttempt) lines.push(epochAttempt)
   lines.push(
-    'Non-inline records stay retrievable via context:recall; call context:distill when a phase is done to request one compaction epoch.'
+    'Context is managed automatically when the complete request exceeds available input capacity. Non-inline records stay retrievable via context:recall.'
   )
 
   return lines.join('\n')
@@ -89,7 +89,7 @@ function renderLastEpochAttempt(
   const skip = attempt.skipReason ?? 'none'
   return [
     'compaction:',
-    'request=consumed',
+    'mode=automatic',
     `source=${attempt.source}`,
     `applied=${attempt.applied ? 'yes' : 'no'}`,
     `skip=${skip}`,

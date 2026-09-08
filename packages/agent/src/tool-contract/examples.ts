@@ -1,29 +1,17 @@
-import { isArray, isBoolean, isEmpty, isNull, isNumber, isRecord, isString } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { NonEmptyToolContractList } from './types'
 
 function serializeToolExampleInput(value: unknown): string {
-  if (isString(value)) {
-    const escaped = value
-      .replace(/\\/g, '\\\\')
-      .replace(/\r/g, '\\r')
-      .replace(/\n/g, '\\n')
-      .replace(/\t/g, '\\t')
-      .replace(/'/g, "\\'")
-
-    return `'${escaped}'`
+  try {
+    // 模型示例与真实 JSON 调用共用编码规则：正确转义键和值，缺省字段保持省略。
+    const serialized = JSON.stringify(value)
+    if (isString(serialized)) return serialized
+  } catch (cause) {
+    throw new AppError('VALIDATION', 'Tool example must be JSON-serializable.', cause)
   }
-  if (isNumber(value) || isBoolean(value)) return String(value)
-  if (isNull(value)) return 'null'
-  if (isArray(value)) return `[${value.map(serializeToolExampleInput).join(', ')}]`
-  if (isRecord(value)) {
-    const entries = Object.entries(value).map(([key, nested]) => {
-      const renderedKey = /^[A-Za-z_$][\w$]*$/.test(key) ? key : `'${key}'`
-      return `${renderedKey}: ${serializeToolExampleInput(nested)}`
-    })
-    return isEmpty(entries) ? '{}' : `{ ${entries.join(', ')} }`
-  }
-  return 'null'
+  throw new AppError('VALIDATION', 'Tool example must have a JSON wire representation.')
 }
 
 function renderToolExampleInputs(

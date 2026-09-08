@@ -32,6 +32,7 @@ import {
   isString,
 } from '@velaros-ai/core'
 
+import { parseStructuredToolDescription } from '../../tool-contract'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 import { readToolInputSchema } from './ToolReadDetails'
@@ -97,6 +98,21 @@ function scoreField(value: string, terms: readonly string[], weight: number): nu
   return matchedTermsForField(value, terms).length * weight
 }
 
+/** 禁止项描述的是能力边界，仍保留在工具页中，但不能作为可执行能力的推荐依据。 */
+function positiveDescriptionText(description: string): string {
+  const parts = parseStructuredToolDescription(description)
+  return parts
+    ? [
+        parts.description,
+        ...parts.suitable,
+        ...parts.protocol,
+        ...parts.usage,
+        ...parts.examples,
+        ...parts.notes,
+      ].join(' ')
+    : description
+}
+
 export function scoreCard(
   card: ToolDiscoveryCard,
   terms: readonly string[],
@@ -107,7 +123,6 @@ export function scoreCard(
   const aliasText = card.aliases.join(' ')
   const searchHintText = card.searchHints.join(' ')
   const suitableText = card.suitable.join(' ')
-  const forbiddenText = card.forbidden.join(' ')
   return (
     scoreField(card.id, terms, 24) +
     scoreField(card.name, terms, 32) +
@@ -115,9 +130,8 @@ export function scoreCard(
     scoreField(aliasText, terms, 20) +
     scoreField(searchHintText, terms, 14) +
     scoreField(card.summary, terms, 10) +
-    scoreField(card.description ?? '', terms, 8) +
+    scoreField(positiveDescriptionText(card.description ?? ''), terms, 8) +
     scoreField(suitableText, terms, 6) +
-    scoreField(forbiddenText, terms, 2) +
     scoreField(context.schemaTextById.get(card.id) ?? '', terms, 18) +
     scoreField(context.activationTextById.get(card.id) ?? '', terms, 8) +
     scoreField(context.reverseActivationTextByName.get(card.name) ?? '', terms, 18)
@@ -149,9 +163,8 @@ export function buildMatchSignals(
     buildMatchSignal('aliases', card.aliases.join(' '), terms),
     buildMatchSignal('search_hints', card.searchHints.join(' '), terms),
     buildMatchSignal('summary', card.summary, terms),
-    buildMatchSignal('description', card.description ?? '', terms),
+    buildMatchSignal('description', positiveDescriptionText(card.description ?? ''), terms),
     buildMatchSignal('suitable', card.suitable.join(' '), terms),
-    buildMatchSignal('forbidden', card.forbidden.join(' '), terms),
     buildMatchSignal('schema', context.schemaTextById.get(card.id) ?? '', terms),
     buildMatchSignal('activation', context.activationTextById.get(card.id) ?? '', terms),
     buildMatchSignal(
@@ -193,7 +206,7 @@ function schemaSearchText(
   resolvedSchema: Nullable<{ profileId: string; description: string; schema: unknown }>
 ): string {
   if (!resolvedSchema) return ''
-  const pieces = [resolvedSchema.profileId, resolvedSchema.description]
+  const pieces = [resolvedSchema.profileId, positiveDescriptionText(resolvedSchema.description)]
   collectSchemaSearchText(resolvedSchema.schema, pieces)
   return pieces.join(' ')
 }

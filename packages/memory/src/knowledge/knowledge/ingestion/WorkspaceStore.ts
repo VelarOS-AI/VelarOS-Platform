@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
+import type { Dirent, Stats } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve } from 'node:path'
 
 import { clamp, compact, first, isBlank, isEmpty, isFalse, last, toNullable, truncate, unique } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   KnowledgeCodeIntelligenceApi,
@@ -114,6 +116,18 @@ interface KnowledgeIndexedFileInspection {
   indexable: boolean
 }
 
+interface KnowledgeDocumentFileSystem {
+  listDirectory: (path: string) => Promise<Dirent[]>
+  read: (path: string) => Promise<Buffer>
+  inspect: (path: string) => Promise<Stats>
+}
+
+const DocumentFileSystem: KnowledgeDocumentFileSystem = {
+  listDirectory: (path) => readdir(path, { withFileTypes: true }),
+  read: (path) => readFile(path),
+  inspect: (path) => stat(path),
+}
+
 /**
  * 知识工作区存储。
  *
@@ -123,7 +137,8 @@ interface KnowledgeIndexedFileInspection {
 class KnowledgeWorkspace {
   constructor(
     private readonly codeIntelligence?: KnowledgeCodeIntelligenceApi,
-    private readonly indexingPolicy?: KnowledgeIndexingPolicy
+    private readonly indexingPolicy?: KnowledgeIndexingPolicy,
+    private readonly documentFileSystem: KnowledgeDocumentFileSystem = DocumentFileSystem
   ) {}
 
   /** 扫描普通文档文件。 */
@@ -139,9 +154,9 @@ class KnowledgeWorkspace {
   public async prepareDocument(
     file: KnowledgeWorkspaceFileEntry
   ): Promise<Nullable<KnowledgeWorkspacePreparedDocument>> {
-    const contentBuffer = await readFile(file.absolutePath).catch(() => null)
-    if (!contentBuffer || !isLikelyTextFile(contentBuffer)) {
-      // 二进制或读取失败文件跳过，避免乱码进入索引。
+    const contentBuffer = await this.documentFileSystem.read(file.absolutePath)
+    if (!isLikelyTextFile(contentBuffer)) {
+      // 已成功读取的二进制文件不参与文本索引；读取失败必须交给同步方保留旧索引。
       return null
     }
 
@@ -333,7 +348,14 @@ class KnowledgeWorkspace {
       }
     }
 
-    const fileStats = await stat(absolutePath).catch(() => null)
+    const fileStats = await this.documentFileSystem.inspect(absolutePath).catch(async (error: unknown) => {
+      const code = error instanceof Error && 'code' in error ? error.code : undefined
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error
+      // 根目录暂不可达不能证明其中每个文件已删除。
+      const rootStats = await this.documentFileSystem.inspect(resolve(workspaceRoot))
+      if (!rootStats.isDirectory()) throw new AppError('UNAVAILABLE', '知识工作区目录暂不可用。')
+      return null
+    })
     if (!fileStats?.isFile()) return {
         exists: false,
         indexable: false,
@@ -361,8 +383,8 @@ class KnowledgeWorkspace {
   ): Promise<void> {
     if (depth > MAX_SCAN_DEPTH) return
 
-    const entries = await readdir(currentPath, { withFileTypes: true }).catch(() => null)
-    if (!entries) return
+    // 必须完整取得目录视图；部分扫描结果没有删除已有知识的权限。
+    const entries = await this.documentFileSystem.listDirectory(currentPath)
 
     const sortedEntries = [...entries].sort((left, right) =>
       left.name.localeCompare(right.name, 'en')
@@ -387,8 +409,8 @@ class KnowledgeWorkspace {
         continue
       }
 
-      const fileStats = await stat(entryPath).catch(() => null)
-      if (!fileStats?.isFile() || fileStats.size <= 0 || fileStats.size > MAX_DOCUMENT_BYTES) {
+      const fileStats = await this.documentFileSystem.inspect(entryPath)
+      if (!fileStats.isFile() || fileStats.size <= 0 || fileStats.size > MAX_DOCUMENT_BYTES) {
         // 空文件和过大文件都不入库。
         continue
       }

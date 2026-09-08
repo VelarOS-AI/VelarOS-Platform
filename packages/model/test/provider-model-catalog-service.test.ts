@@ -98,7 +98,7 @@ describe('ProviderModelCatalogService', () => {
     const service = createService(async (input) => {
       capturedUrl = String(input)
       return Response.json({
-        models: [{ name: 'models/gemini-next', displayName: 'Gemini Next' }],
+        models: [{ name: 'models/gemini-next', displayName: 'Gemini Next', inputTokenLimit: 65536 }],
       })
     })
 
@@ -113,6 +113,7 @@ describe('ProviderModelCatalogService', () => {
     expect(url.searchParams.get('key')).toBe('google-secret')
     expect(url.searchParams.get('pageSize')).toBe('1000')
     expect(catalog.models.map((model) => model.id)).toEqual(['gemini-next'])
+    expect(catalog.models[0]?.contextWindow).toBe(65536)
   })
 
   test('does not contact credential-required providers before a key is configured', async () => {

@@ -1,9 +1,7 @@
-import { createHash } from 'node:crypto'
-
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isString } from '@velaros-ai/core'
-import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type { UserTextPayloadReference } from '../history/sanitize'
 
@@ -12,33 +10,15 @@ import {
   type ContextUserTextRecord,
   createContextUserTextRef,
 } from './ContextPayloadStore'
+import { hashUserMessageText, readUserMessageText } from './userMessageText'
 
 export type { UserTextPayloadReference }
 
-/**
- * 单条 user 正文超过该字符数就把全文落进 PayloadStore，请求里只留摘录 + payloadRef。
- *
- * 48K 是 v1 `MaxUserMessageInlineChars` 安全阀的现值，逐字沿用；治理 v2 的准入层用同一数值
- * 做 EXCERPT 判据（`residency/governanceConfig` 的 `admission.userInlineMaxChars`）。两处是
- * 同一语义的两个消费者：这里决定"存不存盘"，那里决定"投影里放多少"。
- */
+/** 超过该字符数时为用户全文建立持久化引用；发送驻留形态由完整请求的容量治理决定。 */
 export const OversizedUserTextSafetyValveChars = 48_000
 
 export interface PersistUserTextPayloadsResult {
   references: UserTextPayloadReference[]
-}
-
-function readUserTextContent(message: ModelMessage): Nullable<string> {
-  if (message.role !== 'user') return null
-  const content = message.content
-  if (isString(content)) return content
-  if (!isArray(content)) return null
-
-  const textParts = content
-    .filter((part) => isRecord(part) && part.type === 'text' && isString(part.text))
-    .map((part) => (part as { text: string }).text)
-  if (isEmpty(textParts)) return null
-  return textParts.join('\n')
 }
 
 function buildUserTextMessageKey(sessionId: string, messageIndex: number, hash: string): string {
@@ -53,72 +33,104 @@ export class UserTextPayloadPlanner {
     messages: readonly ModelMessage[]
     thresholdChars: number
   }): Promise<PersistUserTextPayloadsResult> {
-    const references: UserTextPayloadReference[] = []
-    const pending: ContextUserTextRecord[] = []
+    const candidates: Array<{ messageIndex: number; hash: string; text: string }> = []
 
     for (let messageIndex = 0; messageIndex < input.messages.length; messageIndex += 1) {
       const message = input.messages[messageIndex]
       if (!message) continue
 
-      const text = readUserTextContent(message)
+      const text = readUserMessageText(message)
       if (!text || text.length <= input.thresholdChars) continue
 
-      const hash = createHash('sha256').update(text).digest('hex')
-      const existing =
-        (await this.payloadStore.findUserTextByHash?.(input.sessionId, hash)) ??
-        (await this.payloadStore.findByHash(input.sessionId, hash))
-      if (existing) {
-        references.push({
-          messageIndex,
-          payloadRef: existing.payloadRef,
-          hash,
-          originalChars: text.length,
-        })
-        continue
-      }
+      candidates.push({ messageIndex, text, hash: hashUserMessageText(text) })
+    }
+    if (isEmpty(candidates)) return { references: [] }
 
-      const payloadRef = createContextUserTextRef(input.sessionId, hash)
-      const record: ContextUserTextRecord = {
+    const hashes = [...new Set(candidates.map((candidate) => candidate.hash))]
+    const referencesByHash = await this.findExistingReferences(input.sessionId, hashes)
+    const pendingByHash = new Map<string, ContextUserTextRecord>()
+    for (const { messageIndex, hash, text } of candidates) {
+      if (referencesByHash.has(hash) || pendingByHash.has(hash)) continue
+      pendingByHash.set(hash, {
         sessionId: input.sessionId,
         hash,
-        payloadRef,
+        payloadRef: createContextUserTextRef(input.sessionId, hash),
         messageKey: buildUserTextMessageKey(input.sessionId, messageIndex, hash),
         text,
         chars: text.length,
         createdAt: Date.now(),
-      }
-      pending.push(record)
-      references.push({
-        messageIndex,
-        payloadRef,
-        hash,
-        originalChars: text.length,
       })
     }
 
+    const pending = [...pendingByHash.values()]
     if (!isEmpty(pending)) {
       if (this.payloadStore.putUserTextMany) {
-        await this.payloadStore.putUserTextMany(pending)
+        const stored = await this.payloadStore.putUserTextMany(pending)
+        for (const record of stored) referencesByHash.set(record.hash, record.payloadRef)
       } else if (this.payloadStore.putUserText) {
         for (const record of pending) {
-          await this.payloadStore.putUserText(record)
+          const stored = await this.payloadStore.putUserText(record)
+          referencesByHash.set(stored.hash, stored.payloadRef)
         }
       } else {
-        for (const record of pending) {
-          await this.payloadStore.put({
-            sessionId: record.sessionId,
-            hash: record.hash,
-            payloadRef: record.payloadRef,
-            toolCallId: record.messageKey,
-            toolName: '__context_user_text__',
-            serializedResult: record.text,
-            chars: record.chars,
-            createdAt: record.createdAt,
-          })
+        const payloads = pending.map((record) => ({
+          sessionId: record.sessionId,
+          hash: record.hash,
+          payloadRef: record.payloadRef,
+          toolCallId: record.messageKey,
+          toolName: '__context_user_text__',
+          serializedResult: record.text,
+          chars: record.chars,
+          createdAt: record.createdAt,
+        }))
+        if (this.payloadStore.putMany) {
+          const stored = await this.payloadStore.putMany(payloads)
+          for (const record of stored) referencesByHash.set(record.hash, record.payloadRef)
+        } else {
+          for (const record of payloads) {
+            const stored = await this.payloadStore.put(record)
+            referencesByHash.set(stored.hash, stored.payloadRef)
+          }
         }
       }
     }
 
+    const references = candidates.map(({ messageIndex, hash, text }) => {
+      const payloadRef = referencesByHash.get(hash)
+      if (!payloadRef)
+        throw new AppError('INVARIANT', 'User text persistence missed a payload reference')
+      return { messageIndex, hash, payloadRef, originalChars: text.length }
+    })
     return { references }
+  }
+
+  /** 批次按内容身份查重；宿主无需为历史里的每条长文各加载一遍全会话。 */
+  private async findExistingReferences(
+    sessionId: string,
+    hashes: readonly string[]
+  ): Promise<Map<string, string>> {
+    const references = new Map<string, string>()
+    if (this.payloadStore.findUserTextsByHash) {
+      const found = await this.payloadStore.findUserTextsByHash(sessionId, hashes)
+      for (const [hash, record] of found) references.set(hash, record.payloadRef)
+    } else if (this.payloadStore.findUserTextByHash) {
+      for (const hash of hashes) {
+        const record = await this.payloadStore.findUserTextByHash(sessionId, hash)
+        if (record) references.set(hash, record.payloadRef)
+      }
+    }
+
+    const missing = hashes.filter((hash) => !references.has(hash))
+    if (isEmpty(missing)) return references
+    if (this.payloadStore.findManyByHash) {
+      const found = await this.payloadStore.findManyByHash(sessionId, missing)
+      for (const [hash, record] of found) references.set(hash, record.payloadRef)
+    } else {
+      for (const hash of missing) {
+        const record = await this.payloadStore.findByHash(sessionId, hash)
+        if (record) references.set(hash, record.payloadRef)
+      }
+    }
+    return references
   }
 }

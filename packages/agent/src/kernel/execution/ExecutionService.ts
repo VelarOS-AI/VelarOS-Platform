@@ -25,7 +25,8 @@ import type {
   ToolConfirmationDecisionOptions,
   ToolExecutionPlanUpdate,
 } from '@velaros-ai/agent/protocol'
-import { isBlank,isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import { isBlank, isEmpty, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -119,6 +120,10 @@ class ExecutionService {
   private readonly taskFacade: ExecutionTaskFacade
   /** 托管执行 lifecycle 模板，负责启动/收尾编排。 */
   private readonly managedRunner: ManagedExecutionRunner
+  private readonly managedRunsBySourceSession = new Map<string, Set<Promise<ExecutionRecord>>>()
+  /** 关闭准入立即生效，实际清理回执覆盖启动钩子、运行和结束钩子。 */
+  private closing = false
+  private shutdown: Nullable<Promise<void>> = null
   /** 准入断言端口；托管执行启动前校验已授权。 */
   private readonly authGate: AuthGatePort
   /** 可选 mod seam 派发器；缺省 null → 会话生命周期钩子全链 no-op。 */
@@ -148,7 +153,7 @@ class ExecutionService {
       this.stateMachine,
       executionResource,
       this.routingCoordinator,
-      options.idFactory,
+      options.idFactory
     )
     // interactions 在等待用户操作时会设置 execution.awaiting*，并在 resolve 时刷新 debug。
     this.interactions = new ExecutionInteractions(
@@ -212,6 +217,28 @@ class ExecutionService {
    * 绑定 stream listener、状态收尾、异常转换和清理 listener。
    */
   public async runManagedExecution(params: RunManagedExecutionParams): Promise<ExecutionRecord> {
+    this.assertAcceptingExecutions()
+    const run = this.runManagedExecutionLifecycle(params)
+    const running =
+      this.managedRunsBySourceSession.get(params.sourceSessionId) ??
+      new Set<Promise<ExecutionRecord>>()
+    running.add(run)
+    this.managedRunsBySourceSession.set(params.sourceSessionId, running)
+    try {
+      return await run
+    } finally {
+      running.delete(run)
+      if (running.size === 0) this.managedRunsBySourceSession.delete(params.sourceSessionId)
+    }
+  }
+
+  public async awaitSourceSessionSettled(sessionId: string): Promise<void> {
+    await Promise.allSettled([...(this.managedRunsBySourceSession.get(sessionId) ?? [])])
+  }
+
+  private async runManagedExecutionLifecycle(
+    params: RunManagedExecutionParams
+  ): Promise<ExecutionRecord> {
     this.authGate.assertAuthenticated()
     if (!this.seams) return this.managedRunner.run(params)
 
@@ -223,6 +250,8 @@ class ExecutionService {
     })
     let record: Nullable<ExecutionRecord> = null
     try {
+      this.assertAcceptingExecutions()
+      this.authGate.assertAuthenticated()
       record = await this.managedRunner.run(params)
       return record
     } finally {
@@ -233,6 +262,10 @@ class ExecutionService {
         status: toNullable(record?.status),
       })
     }
+  }
+
+  private assertAcceptingExecutions(): void {
+    if (this.closing) throw new AppError('EXECUTION_ABORTED', '执行服务正在关闭。')
   }
 
   /** 标记执行失败，并同步失败原因到当前任务和等待中的交互。 */
@@ -292,9 +325,15 @@ class ExecutionService {
   public resolveConfirmation(
     executionId: string,
     approved: boolean,
-    rejectionMessage?: LooseOptional<string>
+    rejectionMessage?: LooseOptional<string>,
+    confirmationId?: string
   ): ExecutionRecord {
-    return this.interactionFacade.resolveConfirmation(executionId, approved, rejectionMessage)
+    return this.interactionFacade.resolveConfirmation(
+      executionId,
+      approved,
+      rejectionMessage,
+      confirmationId
+    )
   }
 
   /** renderer 对指定 execution 的文本输入响应。 */
@@ -308,10 +347,14 @@ class ExecutionService {
   }
 
   /** renderer 只知道 sessionId 时，向当前活跃 execution enqueue 一条 user guidance。 */
-  public async provideGuidanceForSourceSession(request: {
-    sessionId: string
-    message: ModelMessage
-  }, authorization?: { assertCurrent(): void }): Promise<void> {
+  public async provideGuidanceForSourceSession(
+    request: {
+      sessionId: string
+      message: ModelMessage
+      inputId?: string
+    },
+    authorization?: { assertCurrent(): void }
+  ): Promise<void> {
     authorization?.assertCurrent()
     const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
@@ -326,7 +369,14 @@ class ExecutionService {
 
     // 在辅助模型工作前接收原始输入，使它及时抢占主轮。
     authorization?.assertCurrent()
-    const enqueued = this.guidanceQueue.enqueue(executionId, request.message)
+    const enqueued = this.guidanceQueue.enqueue(executionId, request.message, {
+      inputId: request.inputId,
+      sourceSessionId: request.sessionId,
+      onConsumed: request.inputId
+        ? () =>
+            this.emitExecutionState(executionId, ChatRuntimeEvents.inputApplied(request.inputId!))
+        : undefined,
+    })
     this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
 
     this.log.info('main-agent guidance enqueued', {
@@ -361,7 +411,8 @@ class ExecutionService {
       if (
         this.sourceSessionGuard.getActiveExecutionId(sessionId) !== executionId ||
         this.isTerminalStatus(this.getExecution(executionId).status)
-      ) return
+      )
+        return
 
       for (const relay of planned.relays) {
         this.guidanceRelayRegistry.enqueueRelay(executionId, relay.threadId, relay.message)
@@ -453,6 +504,10 @@ class ExecutionService {
     return this.guidanceQueue.consume(executionId)
   }
 
+  public takeRetainedGuidanceInputIdsForSourceSession(sessionId: string): string[] {
+    return this.guidanceQueue.takeRetainedInputIds(sessionId)
+  }
+
   private assertGuidanceEnqueued(
     result: ReturnType<ExecutionGuidanceQueue['enqueue']>,
     invalidMessage: string
@@ -473,34 +528,24 @@ class ExecutionService {
 
   public hasPendingInteractionForSourceSession(
     sessionId: string,
-    kind: 'confirmation' | 'input',
+    kind: 'confirmation' | 'input'
   ): boolean {
-    return this.interactionFacade.hasPendingInteractionForSourceSession(
-      sessionId,
-      kind
-    )
+    return this.interactionFacade.hasPendingInteractionForSourceSession(sessionId, kind)
   }
 
-  public isRunningForSourceSession(
-    sessionId: string,
-  ): boolean {
+  public isRunningForSourceSession(sessionId: string): boolean {
     return this.interactionFacade.isRunningForSourceSession(sessionId)
   }
 
   public getPendingInteractionForSourceSession(
     sessionId: string,
-    kind: 'confirmation' | 'input',
+    kind: 'confirmation' | 'input'
   ): ReturnType<ExecutionInteractionFacade['getPendingInteractionForSourceSession']> {
-    return this.interactionFacade.getPendingInteractionForSourceSession(
-      sessionId,
-      kind
-    )
+    return this.interactionFacade.getPendingInteractionForSourceSession(sessionId, kind)
   }
 
   /** 用户点击停止时按 source session 中断当前活跃执行。 */
-  public abortSourceSession(
-    sourceSessionId: string,
-  ): boolean {
+  public abortSourceSession(sourceSessionId: string): boolean {
     const sourceScopeId = sourceSessionId
     const executionId = this.sourceSessionGuard.abort(sourceScopeId, '用户停止了运行。')
     if (!executionId) return false
@@ -513,7 +558,10 @@ class ExecutionService {
   }
 
   /** 宿主安全模块使用：中断同一 source session 下所有资源上下文的活跃执行。 */
-  public abortSourceSessionAllContexts(sourceSessionId: string, reason = '用户停止了运行。'): boolean {
+  public abortSourceSessionAllContexts(
+    sourceSessionId: string,
+    reason = '用户停止了运行。'
+  ): boolean {
     const executionIds = this.sourceSessionGuard.abortAllForSourceSession(sourceSessionId, reason)
     if (isEmpty(executionIds)) return false
 
@@ -528,7 +576,10 @@ class ExecutionService {
   public abortAllActive(reason = '系统停止了运行。'): readonly string[] {
     const executionIds = this.sourceSessionGuard.abortAll(reason)
     if (!isEmpty(executionIds)) {
-      this.log.info('all active executions abort requested', { executionIds, reason })
+      this.log.info('all active executions abort requested', {
+        executionIds,
+        reason,
+      })
     }
     return executionIds
   }
@@ -581,9 +632,10 @@ class ExecutionService {
   }
 
   /** 供外部 supervisor 调试：读取某个 source session 最近一次真实送入模型的 turn context。 */
-  public getLatestTurnContextForSourceSession(
-    sourceSessionId: string
-  ): Nullable<{ execution: ExecutionRecord; turnContext: StreamTurnContextPayload }> {
+  public getLatestTurnContextForSourceSession(sourceSessionId: string): Nullable<{
+    execution: ExecutionRecord
+    turnContext: StreamTurnContextPayload
+  }> {
     return this.agentEventFacade.getLatestTurnContextForSourceSession(sourceSessionId)
   }
 
@@ -602,14 +654,17 @@ class ExecutionService {
     return status === 'aborted' || status === 'completed' || status === 'failed'
   }
 
-  /**
-   * 应用退出前 flush 节流写入。
-   *
-   * ExecutionStore 已切到 250ms 节流写盘；如果不在退出前 flush，最后一批
-   * appendEvent / updateTask 调用产生的变更可能还停留在定时器队列里就被丢弃。
-   */
-  public async disposeAsync(): Promise<void> {
-    await this.store.disposeAsync()
+  /** 停止准入并取消执行，等待所有执行收尾后持久化最终记录。 */
+  public disposeAsync(): Promise<void> {
+    this.closing = true
+    this.shutdown ??= Promise.resolve().then(async () => {
+      this.abortAllActive('执行服务正在关闭。')
+      await Promise.allSettled(
+        [...this.managedRunsBySourceSession.values()].flatMap((runs) => [...runs])
+      )
+      await this.store.disposeAsync()
+    })
+    return this.shutdown
   }
 }
 

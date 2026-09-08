@@ -106,4 +106,5 @@ export interface SubAgentToolContext {
   resourceId?: LooseOptional<string>
   codingSession: SubAgentCodingSession
   execution: Nullable<ToolExecutionApi>
+  approval?: Pick<ToolExecutionApi, 'awaitConfirmation' | 'awaitConfirmationDecision'>
 }

@@ -313,6 +313,9 @@ class QueryLoop<
   /** 执行一次子 Agent 委派任务。 */
   public async execute(args: ExecuteQueryLoopArgs<TContext, TEvents, TSignals>): Promise<string> {
     const toolLoopGuard = new KernelToolLoopGuard()
+    const abortSignal = args.opts.workerAbortSignal
+      ? AbortSignal.any([args.parentCtx.abortSignal, args.opts.workerAbortSignal])
+      : args.parentCtx.abortSignal
     const startedAt = Date.now()
     const compiledStructuredOutput = args.opts.structuredOutputContract
       ? compileSubAgentOutputSchema(args.opts.structuredOutputContract.schema)
@@ -357,9 +360,7 @@ class QueryLoop<
       : await this.runtimeHelper.resolveRoleRuntime(
           args.chatConfig.modelSelection,
           args.systemConfig.modelRuntimeContext,
-          args.opts.workerAbortSignal
-            ? AbortSignal.any([args.parentCtx.abortSignal, args.opts.workerAbortSignal])
-            : args.parentCtx.abortSignal
+          abortSignal
         )
     const delegationPolicy = resolveCapabilityDelegationPolicy(args.parentCtx.capabilityPorts)
     const { allowedTools, allowedCategories } = resolveSubAgentToolScope({
@@ -404,6 +405,7 @@ class QueryLoop<
       blockedToolNames: delegationPolicy.blockedToolNames,
       blockedCategoryIds: delegationPolicy.blockedCategoryIds,
     })
+    childCtx.abortSignal = abortSignal
     childCtx.setSupportedModelInputModalities(roleRuntime.supportedInputModalities)
     // 子 Agent 同样下发输入侧可用窗口，让其编辑工具按自身模型窗口做编辑预算（缺省回退保守默认）。
     childCtx.codingSession.setUsableContextWindowTokens?.(
@@ -489,12 +491,16 @@ class QueryLoop<
       })
     )
 
-    const isAborted = (): boolean =>
-      args.parentCtx.abortSignal.aborted || !!args.opts.workerAbortSignal?.aborted
+    const isAborted = (): boolean => abortSignal.aborted
+    const assertRunning = (): void => {
+      if (isAborted()) {
+        throw new AppError('EXECUTION_ABORTED', '子 Agent 运行被终止。', abortSignal.reason)
+      }
+    }
 
     const runTurn = async (turn: number): Promise<LoopTurnVerdict<string>> => {
       await args.lifecycle?.beforeTurn?.({ turn, history, toolContext: childCtx, abortSignal: childCtx.abortSignal })
-      childCtx.abortSignal.throwIfAborted()
+      assertRunning()
       const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)
       const turnToolContext = captureAgentTurnCapabilityContext(childCtx)
       const supportedInputModalities = new Set(roleRuntime.supportedInputModalities)
@@ -557,16 +563,9 @@ class QueryLoop<
         allowedToolsForTurn,
         roleRuntime.contextWindow,
         toolSchemaChars,
-        turnToolRegistry
+        turnToolRegistry,
+        roleRuntime.modelRequestOptions
       )
-      // 送核前的用量估算：只喂 MMU 校准闭环（下面 recordActualUsage）。子 Agent 的历史同样**不在
-      // loop 层改写**——清洗与降级各归其位（结构自愈在编译前，降级在驻留账本的 epoch）。
-      const predictedInputTokens = this.contextUsage.estimateUsage(
-        roleRuntime.model,
-        systemPrompt,
-        history,
-        contextUsageOptions
-      ).estimatedTokens
 
       // 观测（护栏 4，机制单源在 AgentLoop）：本轮 = 子 Agent 的 turn span（run 的子）；provider 请求 =
       // model span（turn 的子，usage 收敛在此）。turn scope 兼作 tool span 开启器注入本轮 QueryTurn 的
@@ -587,7 +586,7 @@ class QueryLoop<
         try {
           result = await executeLoopTurnWithContextOverflowRecovery({
             turn,
-            abortSignal: args.parentCtx.abortSignal,
+            abortSignal,
             executeTurn: () =>
               this.turnHelper.executeQueryTurn({
                 provider: roleRuntime.provider,
@@ -679,7 +678,7 @@ class QueryLoop<
           // 护栏 4：本轮 provider 回合失败就近收敛 turn/model span；run span 随即收敛后冒泡。
           endLoopTurnSpansError(spans, appError)
           runScope?.end({
-            status: args.parentCtx.abortSignal.aborted ? 'aborted' : 'error',
+            status: isAborted() ? 'aborted' : 'error',
           })
           throw error
         }
@@ -696,7 +695,7 @@ class QueryLoop<
       // MMU 反馈：用供应方真实输入 token 校准本模型的估算系数。
       this.contextUsage.recordActualUsage(
         roleRuntime.model,
-        predictedInputTokens,
+        result.predictedInputTokens,
         toNullable(result.inputTokens)
       )
 
@@ -712,7 +711,7 @@ class QueryLoop<
       }
 
       const disposition = await args.lifecycle?.onTurnSettled?.({ turn, history, toolContext: childCtx, abortSignal: childCtx.abortSignal, result })
-      childCtx.abortSignal.throwIfAborted()
+      assertRunning()
       if (disposition === 'stop') {
         args.opts.onHistoryUpdate?.(history)
         reportUsage()
@@ -845,6 +844,10 @@ class QueryLoop<
     }
     try {
       return await runAgentLoop(surface)
+    } catch (error) {
+      runScope?.end({ status: isAborted() ? 'aborted' : 'error' })
+      assertRunning()
+      throw error
     } finally {
       // 子 agent 的账本随派发结束即弃：这条消息序列不会再被编译，留着只占 registry 的名额
       // （每次派发一个键，长跑会话会把 128 个格子迅速填满，把真正长寿的父会话挤出去）。

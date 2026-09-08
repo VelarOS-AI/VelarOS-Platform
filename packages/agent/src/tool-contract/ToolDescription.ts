@@ -154,7 +154,7 @@ function assertToolDescriptionWithinBudget(
 
 /** 声明了 companion skill 时追加到描述末尾的指路行（`注意` 分节的最后一条）。 */
 function renderUsageSkillNote(usageSkillId: string): string {
-  return `深度用法先读 skill:${usageSkillId}`
+  return `深度用法：当前技能目录可读取 skill:${usageSkillId} 时先读该技能。`
 }
 
 function normalizeDescriptionText(value: string): string {

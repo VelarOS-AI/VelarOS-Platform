@@ -157,12 +157,7 @@ export interface ContextHandoffConfig {
 }
 
 export interface ContextGovernanceConfig {
-  /**
-   * 治理窗口 **上限**：`G = min(cap, 送核门余量)`（推导见 `governanceWindow.ts`）。
-   *
-   * 语义从 v3 的「min(模型窗口, cap)」收窄成纯上限：分母改由送核门余量定，cap 只负责
-   * 把超大窗口（1M）下的 G 锁回可治理的量级。
-   */
+  /** 兼容旧配置的窗口上限字段；当前自动治理不以它缩小真实可用输入容量。 */
   cap: number
   /** 尾保护轮数：最近若干轮对话恒以全文投影。 */
   tailProtectTurns: number
@@ -179,11 +174,11 @@ export interface ContextGovernanceConfig {
    * 0 = 尾保护关闭（与 `tailProtectTurns: 0` 同义）。
    */
   tailProtectMaxRecords: number
-  /** epoch 触发水位（占 G 的百分比）。 */
+  /** 底层回放的触发参数；运行时自动治理以完整请求是否超过可用输入容量为准。 */
   epochTriggerPercent: number
-  /** epoch 目标水位（占 G 的百分比）。 */
+  /** 已发生容量超限后回收的目标水位；不决定何时自动开始治理。 */
   epochTargetPercent: number
-  /** 反空转：预计节省低于该百分比则跳过本次 epoch。 */
+  /** 旧低层回放的收益比例门；真实容量超限与供应方恢复只要求正净收益。 */
   minEpochSavingPercent: number
   admission: ContextAdmissionConfig
   instruments: ContextInstrumentConfig
@@ -203,8 +198,8 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   cap: 200_000,
   tailProtectTurns: 2,
   tailProtectMaxRecords: 16,
-  epochTriggerPercent: 70,
-  epochTargetPercent: 40,
+  epochTriggerPercent: 100,
+  epochTargetPercent: 90,
   minEpochSavingPercent: 10,
   admission: { inlineMaxChars: 24_000, userInlineMaxChars: 48_000, excerptMaxChars: 24_000 },
   // B2 起默认 'aux'（设计 §7 的终态默认）：宿主没注入蒸馏器时它自动退化为纯机械

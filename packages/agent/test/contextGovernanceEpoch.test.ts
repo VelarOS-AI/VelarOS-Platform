@@ -604,7 +604,7 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
     assert.equal(session.ledger.list().length, 2)
   })
 
-  void test('context:distill 只触发一次 epoch，同一条调用不重复触发', () => {
+  void test('旧历史中的模型治理调用只作为消息回放，不触发自动治理', () => {
     const config = resolveContextGovernanceConfig({
       tailProtectTurns: 0,
       minEpochSavingPercent: 1,
@@ -619,7 +619,7 @@ void describe('governance session · 摄入 / 请求 / fault / 转交', () => {
     session.syncHistory({ messages: history, at: 1_000 })
 
     const first = session.governTurn({ at: 1_000, modelWindowTokens: 200_000 })
-    assert.equal(first?.trigger, 'model-request')
+    assert.equal(first?.trigger, null)
 
     const second = session.governTurn({ at: 2_000, modelWindowTokens: 200_000 })
     assert.equal(second?.trigger, null)
@@ -832,7 +832,7 @@ void describe('编译器切换 · 行为对齐', () => {
     assert.equal(registry.peek('align-2')!.ledger.list().length, next.length)
   })
 
-  void test('治理水位使用 tokenizer 与 MMU 校准后的消息密度', () => {
+  void test('容量超限治理使用 tokenizer 与 MMU 校准后的消息密度', () => {
     const registry = new ContextGovernanceSessionRegistry({
       classifier: RefetchableReadClassifier,
       config: {
@@ -849,11 +849,11 @@ void describe('编译器切换 · 行为对齐', () => {
       systemPrompt: 'system',
       sessionId: 'calibrated-density-1',
       messages: buildPressureHistory(6, 3_000),
-      contextWindow: 1_000_000,
+      contextWindow: 10_000,
       calibrationFactor: 3,
     })
 
-    assert.equal(compiled.governanceEpoch?.trigger, 'watermark')
+    assert.equal(compiled.governanceEpoch?.trigger, 'capacity')
     assert.equal(compiled.governanceEpoch?.applied, true)
     assert.ok((compiled.governanceEpoch?.beforeTokens ?? 0) > 7_000)
     assert.ok(

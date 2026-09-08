@@ -13,7 +13,7 @@ import {
   filterEmbeddingModelCandidates,
   resolveDefaultEmbeddingModelForProvider,
 } from './EmbeddingModelSelection'
-import { resolveModelContextWindow } from './ModelCatalog'
+import { resolveProviderModelContextWindow } from './ModelCatalog'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
@@ -23,7 +23,9 @@ import type {
 } from './ModelContracts'
 import type { ModelProviderCollection, ModelProviderPreset } from './ModelProviderCollection'
 import type { ModelProviderValidationKind } from './ProviderManifest'
+import { ProviderModelCatalogCache } from './ProviderModelCatalogCache'
 import type { ProviderScriptRegistryPort } from './ProviderScriptRegistryPort'
+import { toPositiveInteger } from './ProviderScriptRegistryPort'
 
 interface ProviderModelListRequest {
   readonly url: string
@@ -68,7 +70,10 @@ export class ProviderModelCatalogService {
   private readonly providerScriptRegistry?: ProviderScriptRegistryPort
   private readonly fetch: typeof globalThis.fetch
   private readonly timeoutMs: number
-  private readonly attribution: ProviderModelCatalogAttribution
+  private attribution: ProviderModelCatalogAttribution
+  private readonly snapshots = new ProviderModelCatalogCache()
+  private readonly scriptVersions = new WeakMap<object, number>()
+  private nextScriptVersion = 1
 
   public constructor(options: ProviderModelCatalogServiceOptions) {
     this.providerCollection = options.providerCollection
@@ -79,6 +84,71 @@ export class ProviderModelCatalogService {
   }
 
   public async listProviderModels(
+    request: ListProviderModelsRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalog> {
+    return this.loadCatalogSnapshot(request, true, signal)
+  }
+
+  /** 运行时与设置页复用同一份鉴权作用域目录，首次读取和过期后查询均可取消。 */
+  public async resolveModelCapabilities(
+    request: ListProviderModelsRequest & { model: string },
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalogEntry | undefined> {
+    const catalog = await this.loadCatalogSnapshot(request, false, signal)
+    return catalog.models.find((entry) => entry.id === request.model)
+  }
+
+  /** 宿主更新目录来源后显式失效；进行中的旧请求不能重新写入当前快照。 */
+  public invalidateProviderModels(request?: ListProviderModelsRequest): void {
+    this.snapshots.invalidate(request ? this.createSnapshotKey(request) : undefined)
+  }
+
+  /** 共享目录实例由宿主设置请求归属信息，不改变模型或鉴权作用域。 */
+  public setAttribution(attribution: ProviderModelCatalogAttribution): void {
+    this.attribution = { ...attribution }
+  }
+
+  private createSnapshotKey(request: ListProviderModelsRequest): string {
+    const script = this.providerScriptRegistry?.getProviderScript(request.provider)
+    if (script && !this.scriptVersions.has(script)) {
+      this.scriptVersions.set(script, this.nextScriptVersion++)
+    }
+    // 密钥参与精确隔离；私有缓存既不序列化也不输出这个键，避免弱 hash 碰撞串用能力。
+    return JSON.stringify([
+      request.provider,
+      this.providerCollection.resolveBaseURL(request),
+      this.providerCollection.resolveApiKey(request),
+      request.adapter ?? null,
+      request.purpose ?? 'chat',
+      request.defaultModel ?? '',
+      script ? this.scriptVersions.get(script) : 0,
+    ])
+  }
+
+  private loadCatalogSnapshot(
+    request: ListProviderModelsRequest,
+    refresh: boolean,
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalog> {
+    return this.snapshots.load(this.createSnapshotKey(request), async (operationSignal) => {
+      const timers = new TimerScope({ name: 'ProviderModelCatalogSnapshot' })
+      try {
+        return await timers.withTimeout(
+          this.timeoutMs,
+          (timeoutSignal) => this.fetchProviderModels(request, timeoutSignal),
+          { signal: operationSignal, unref: true }
+        )
+      } catch (error) {
+        operationSignal.throwIfAborted()
+        return this.createEmptyRemoteCatalog(request.provider, Date.now(), AppError.getMessage(error))
+      } finally {
+        timers.dispose()
+      }
+    }, { refresh, signal })
+  }
+
+  private async fetchProviderModels(
     request: ListProviderModelsRequest,
     signal?: AbortSignal
   ): Promise<ProviderModelCatalog> {
@@ -197,7 +267,10 @@ export class ProviderModelCatalogService {
     signal?: AbortSignal
   ): Promise<ProviderModelCatalogEntry[]> {
     const listRequest = this.createProviderModelListRequest(request, baseURL, validationKind)
-    const response = await this.fetchWithTimeout(listRequest, signal)
+    const headers = new Headers()
+    for (const [name, value] of listRequest.headers) headers.append(name, value)
+    // 外层目录请求拥有完整期限，响应头与正文读取共用同一取消信号。
+    const response = await this.fetch(listRequest.url, { method: 'GET', headers, signal })
     if (!response.ok) {
       const responseText = (await response.text()).trim()
       throw new AppError(
@@ -211,41 +284,6 @@ export class ProviderModelCatalogService {
       validationKind,
       await response.json()
     )
-  }
-
-  private async fetchWithTimeout(
-    request: ProviderModelListRequest,
-    signal?: AbortSignal
-  ): Promise<Response> {
-    const timers = new TimerScope({ name: 'ProviderModelCatalogService' })
-    const controller = new AbortController()
-    const forwardAbort = (): void => controller.abort(signal?.reason)
-    signal?.addEventListener('abort', forwardAbort, { once: true })
-    if (signal?.aborted) forwardAbort()
-    const timeout = timers.after(
-      this.timeoutMs,
-      () => controller.abort(new Error('Provider model catalog request timed out.')),
-      { unref: true }
-    )
-
-    try {
-      const headers = new Headers()
-      for (const [name, value] of request.headers) headers.append(name, value)
-      return await this.fetch(request.url, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      })
-    } catch (error) {
-      if (controller.signal.aborted && !signal?.aborted) {
-        throw new AppError('TIMEOUT', '模型列表请求超时')
-      }
-      throw error
-    } finally {
-      timeout.cancel()
-      signal?.removeEventListener('abort', forwardAbort)
-      timers.dispose()
-    }
   }
 
   private createProviderModelListRequest(
@@ -343,6 +381,7 @@ export class ProviderModelCatalogService {
               {
                 id,
                 label: optionalWhen(isString, item.displayName),
+                contextWindow: toPositiveInteger(item.inputTokenLimit) ?? undefined,
               },
             ]
           })
@@ -359,6 +398,7 @@ export class ProviderModelCatalogService {
           return [
             {
               id: item.id,
+              contextWindow: toPositiveInteger(item.context_length ?? item.context_window) ?? undefined,
               ...(isString(item.display_name)
                 ? { label: item.display_name }
                 : isString(item.displayName)
@@ -390,7 +430,7 @@ export class ProviderModelCatalogService {
       models.push({
         id,
         label: value.label?.trim() || presetModel?.label || id,
-        contextWindow: value.contextWindow ?? resolveModelContextWindow(id),
+        contextWindow: value.contextWindow ?? presetModel?.contextWindow ?? resolveProviderModelContextWindow(provider, id) ?? undefined,
         ...(value.inputModalities?.length
           ? { inputModalities: value.inputModalities }
           : presetModel?.inputModalities?.length

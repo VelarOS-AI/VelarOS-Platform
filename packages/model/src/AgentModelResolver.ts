@@ -9,7 +9,6 @@ import {
   isOpenRouterCompatibleProvider,
   OpenRouterAutoModelId,
   OpenRouterFreeModelId,
-  resolveModelContextWindow,
 } from './ModelCatalog'
 import type {
   AgentProviderAdapterConfig,
@@ -23,7 +22,11 @@ import type {
   ThinkingDepth,
 } from './ModelContracts'
 import type { ModelProviderCollection } from './ModelProviderCollection'
-import { resolveProviderScriptContextWindow } from './ProviderScriptContextWindow'
+import type { ProviderModelCatalogService } from './ProviderModelCatalogService'
+import {
+  resolveProviderScriptContextWindow,
+  resolveProviderScriptMetadataContextWindow,
+} from './ProviderScriptContextWindow'
 import {
   type ProviderScriptRegistryPort,
   type ProviderScriptRuntimeMetadata,
@@ -84,7 +87,8 @@ class AgentModelResolver {
     private readonly modelAdapterRegistry: ModelAdapterRegistryPort,
     private readonly providerScriptRegistry: ProviderScriptRegistryPort,
     private readonly providers: ModelProviderCollection,
-    private readonly localModelEnvironment = new LocalModelEnvironment()
+    private readonly localModelEnvironment = new LocalModelEnvironment(),
+    private readonly modelCatalog?: Pick<ProviderModelCatalogService, 'resolveModelCapabilities'>
   ) {}
 
   public async resolve(
@@ -207,6 +211,19 @@ class AgentModelResolver {
       ?? providerScriptMetadata?.model
       ?? resolvedModel.model
     const externalModel = providerScriptMetadata?.model ?? resolvedModel.model
+    // 已有完整的具体模型能力时直接执行，避免仅为静态兜底再等待目录服务。
+    const needsModelDiscovery = !providerScriptMetadata?.inputModalities
+      || !resolveProviderScriptMetadataContextWindow(providerScriptMetadata)
+    const discoveredModel = needsModelDiscovery ? await this.modelCatalog?.resolveModelCapabilities({
+      provider: input.providerId,
+      apiKey: input.apiKey,
+      baseURL: input.baseURL,
+      adapter: input.adapter,
+      defaultModel: resolvedModel.model,
+      model: runtimeModel,
+      purpose: 'chat',
+    }, input.signal) : undefined
+    input.signal?.throwIfAborted()
     const catalogInputModalities = this.providers
       .requireCatalog(input.providerId)
       .models.find((candidate) => candidate.id === resolvedModel.model)?.inputModalities
@@ -214,6 +231,7 @@ class AgentModelResolver {
       providerId: input.providerId,
       runtimeModel,
       metadata: providerScriptMetadata,
+      catalogContextWindow: discoveredModel?.contextWindow,
     })
     const contextWindow =
       input.providerId === OllamaProviderId
@@ -261,6 +279,7 @@ class AgentModelResolver {
       contextWindow,
       supportedInputModalities:
         providerScriptMetadata?.inputModalities ??
+        discoveredModel?.inputModalities ??
         catalogInputModalities ??
         UnknownModelInputModalities,
       modelRequestOptions,
@@ -383,7 +402,6 @@ class AgentModelResolver {
       return {
         model: input.model,
         providerModel: input.model,
-        contextWindow: resolveModelContextWindow(input.model),
         fallbackReason,
       }
     }

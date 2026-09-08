@@ -19,6 +19,8 @@ import type {
 export interface NativeExecutionState {
   readonly running: boolean;
   readonly awaitingConfirmation: boolean;
+  /** 当前采样实际观察到的审批身份；不能在发送回复时重查代填。 */
+  readonly confirmationId?: string | null;
   readonly awaitingInput: boolean;
   /** Executor-native monotonic completion fence, such as a message id or process generation. */
   readonly revision: string | null;
@@ -49,6 +51,7 @@ export interface PollingDriverAdapter {
     session: SessionHandle,
     approved: boolean,
     rejectionMessage: string | null,
+    confirmationId?: string | null,
   ): Promise<void>;
   abort(session: SessionHandle, reason: string): Promise<void>;
   closeSession(session: SessionHandle): Promise<void>;
@@ -124,6 +127,7 @@ export function createPollingDriver(
           session,
           approved,
           approved ? null : "Evaluation policy rejected this operation",
+          state.confirmationId,
         );
         stablePolls = 0;
         try {

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ApprovalProvider } from '../types/policy.js'
@@ -40,6 +41,11 @@ function installProjectApprovalProvider(kernel: {
         {
           approvalRisk: request.risk === 'high' ? 'high' : 'low',
           riskScope: `project:${request.risk}:${request.action}`,
+          operation: {
+            key: createApprovalOperationKey('project-operation', { action: request.action, paths: [...(request.paths ?? [])].sort() }),
+            label: request.action,
+            target: request.paths?.join(', '),
+          },
         }
       )
       return decision.approved

@@ -126,6 +126,31 @@
   transform: none;
 }
 
+.velar-topbar-control-panel[data-topbar-panel="picker"] {
+  /* Shared picker geometry; project and Git content only own their internal layout. */
+  --topbar-panel-row-height: 30px;
+  --topbar-panel-detail-row-height: 38px;
+  --topbar-panel-section-height: 24px;
+  --topbar-panel-list-max-height: min(256px, 50vh);
+  --topbar-panel-padding: 4px;
+  --topbar-panel-item-padding: 6px;
+  --topbar-panel-gap: 2px;
+  --topbar-panel-icon-gap: 6px;
+  --topbar-panel-font-size: 11px;
+  --topbar-panel-detail-font-size: 9.5px;
+}
+
+.velar-topbar-control-panel[data-topbar-panel="picker"][data-slot="popover-content"] {
+  display: flex;
+  width: min(304px, calc(100vw - 16px));
+  min-width: min(304px, calc(100vw - 16px));
+  max-width: min(304px, calc(100vw - 16px));
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--topbar-panel-padding);
+}
+
 .velar-topbar-control-panel,
 .velar-topbar-control-panel[data-slot="popover-content"],
 .velar-topbar-control-panel .velar-cascading-menu-submenu-panel {

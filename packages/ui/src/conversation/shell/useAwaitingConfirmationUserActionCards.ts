@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ConversationRuntimeView } from '../projection'
 
 import type { UserActionCard as UserActionCardType, UserActionCardResult } from '#contracts'
-import { isEmpty } from '#internal/runtime'
+import { isEmpty, toOptional } from '#internal/runtime'
 
 const EmptyUserActionCards: UserActionCardType[] = []
 const EmptyUserActionCardIds: string[] = []
@@ -11,13 +11,13 @@ const EmptyUserActionCardIds: string[] = []
 interface UseAwaitingConfirmationUserActionCardsOptions {
   runtime: Pick<
     ConversationRuntimeView,
-    'awaitingConfirmationUserActionCards' | 'awaitingConfirmationExecutionId'
+    'awaitingConfirmationUserActionCards' | 'awaitingConfirmationExecutionId' | 'awaitingConfirmationId'
   >
   isAwaitingConfirmation: boolean
   onResolveConfirmation?: (
     approved: boolean,
     rejectionMessage?: LooseOptional<string>,
-    options?: { userActionCardResults?: UserActionCardResult[] }
+    options?: { confirmationId?: string; userActionCardResults?: UserActionCardResult[] }
   ) => void
 }
 
@@ -55,7 +55,7 @@ export function useAwaitingConfirmationUserActionCards({
 
   useEffect(() => {
     setUserActionCardResults({})
-  }, [runtime.awaitingConfirmationExecutionId, activeUserActionCardKey])
+  }, [runtime.awaitingConfirmationExecutionId, runtime.awaitingConfirmationId, activeUserActionCardKey])
 
   const resolveUserActionCard = useCallback(
     (result: UserActionCardResult): void => {
@@ -89,13 +89,13 @@ export function useAwaitingConfirmationUserActionCards({
           // 「一坨 JSON」当成用户的理由读（proposal:review 的 feedback 就这么被写进过方案制品）。
           // 卡片阶段的理由住在**每张卡自己的** `result.message` 里，整体理由本来就不存在，
           // 所以这里正确的取值是缺席。
-          onResolveConfirmation(approved, undefined, { userActionCardResults: results })
+          onResolveConfirmation(approved, undefined, { confirmationId: toOptional(runtime.awaitingConfirmationId), userActionCardResults: results })
         }
 
         return next
       })
     },
-    [activeUserActionCardIds, onResolveConfirmation]
+    [activeUserActionCardIds, onResolveConfirmation, runtime.awaitingConfirmationId]
   )
 
   return {

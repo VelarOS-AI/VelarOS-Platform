@@ -43,6 +43,7 @@ function buildRuntimeToolCapabilityMap(
     "输出依赖文件、页面或外部状态时，先读取当前真值；复杂任务按发现、有限读取、执行、验证推进。",
     "存在数据依赖的工具调用必须分轮：先等待读取或运行结果，再据真实返回写入或提交；只并行互不依赖的调用。",
     "遇到 truncated、has_more、next_cursor 或低置信结果时继续补齐所需证据。",
+    "系统在完整请求超出模型可用容量时自动整理上下文。",
   ];
   if (hasRuntimeTool(snapshot, "tooling:map")) {
     lines.push(
@@ -52,12 +53,9 @@ function buildRuntimeToolCapabilityMap(
   if (hasAnyRuntimeTool(snapshot, ["context:recall"])) {
     lines.push("需要恢复已裁剪证据时调用 context:recall。");
   }
-  if (hasAnyRuntimeTool(snapshot, ["context:distill"])) {
-    lines.push("长任务阶段转折点可调用 context:distill 保存关键事实和进度。");
-  }
   if (hasAnyRuntimeTool(snapshot, ["context:handoff"])) {
     lines.push(
-      "安全压缩后仍无法继续时，调用 context:handoff 请求用户批准交接。",
+      "系统自动整理后当前会话仍无法继续时，调用 context:handoff 请求用户批准交接。",
     );
   }
   return lines.join("\n");

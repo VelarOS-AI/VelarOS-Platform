@@ -400,7 +400,10 @@ export interface ConversationCardResolution {
  * 确认请求的结构化信封（镜像 agent 协议 `ConfirmationRequestDetail`）。
  * 渲染层按 `kind` 分发；缺席或未知 kind 一律回落到确认信封里的散文 `message`。
  */
-export type ConfirmationRequestDetail =
+export type ConfirmationRequestDetail = {
+  authorization?: { label: string; target?: string; requester?: string; scope: 'call' | 'task-operation' }
+} & (
+  | { kind: 'operation-authorization' }
   | {
       kind: 'tool-category-authorization'
       categoryId: string
@@ -411,6 +414,8 @@ export type ConfirmationRequestDetail =
       kind: 'mcp-tool-call'
       serverName: string
       toolName: string
+      argumentsPreview?: string
+      approvalScope?: 'call' | 'session-tool' | 'task-operation'
     }
   | {
       kind: 'skill-load'
@@ -418,6 +423,7 @@ export type ConfirmationRequestDetail =
       label: string
       description?: LooseOptional<string>
     }
+)
 
 export interface UserActionCard {
   id: string
@@ -635,7 +641,7 @@ export interface ChatMessage {
     }>
   }
   serializedStoredInWorkspace?: boolean
-  guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent'
+  guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent' | 'accepted' | 'applied' | 'paused'
   /**
    * 非空 = 这条 `role: 'user'` 的消息由**同组的另一条会话**写入，不是用户本人。
    *

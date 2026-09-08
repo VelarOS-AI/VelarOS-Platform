@@ -3,7 +3,9 @@ import type {
   CapabilityScopeId,
   ChatPromptFeatureId,
   RunProfileSelectionId,
+  TaskApprovalRecord,
   ToolCategoryId,
+  ToolConfirmationDecisionOptions,
   ToolSurfaceProfileId,
 } from '@velaros-ai/agent/protocol'
 
@@ -35,6 +37,11 @@ export interface ToolCodingSessionApi {
   hasConfirmedRiskScope?: (scope: string) => boolean
   /** 列出本会话已批准的风险 scope。 */
   getConfirmedRiskScopes?: () => string[]
+  /** 当前任务的审批事实；主子 Agent 共享同一份状态。 */
+  getTaskApprovalRecords?: () => TaskApprovalRecord[]
+  recordTaskApproval?: (key: string, approved: boolean, options: ToolConfirmationDecisionOptions, message?: LooseOptional<string>) => void
+  getTaskApprovalDenial?: (key: string) => Nullable<string>
+  revokeTaskApproval?: (id: string) => boolean
   /** 运行时提醒调度器（声明式 producer）；调用方应配合 finalizeReminderConsumeResult 同步 tracker 标记。 */
   getReminderScheduler: () => RuntimeReminderScheduler
   /** 组装一次 producer 评估所需的输入。 */

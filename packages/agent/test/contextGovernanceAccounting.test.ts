@@ -337,7 +337,7 @@ void describe('S2 · 并行工具结果 per-part 投影（V5 / V12）', () => {
     assert.deepEqual(refs, ['c1', 'c2', 'c3'])
   })
 
-  void test('dashboard 区分仍在排队与已消费但无需压缩的模型请求', () => {
+  void test('dashboard 报告自动容量治理结果并保留原文召回指引', () => {
     const ledger = new ContextResidencyLedger()
     ledger.append({
       kind: 'user',
@@ -354,7 +354,7 @@ void describe('S2 · 并行工具结果 per-part 投影（V5 / V12）', () => {
       projectedTokens: 3,
       budgetTokens: 200_000,
       lastEpochAttempt: {
-        source: 'model-tool',
+        source: 'capacity',
         applied: false,
         skipReason: 'no-candidates',
         migrationCount: 0,
@@ -364,7 +364,7 @@ void describe('S2 · 并行工具结果 per-part 投影（V5 / V12）', () => {
 
     assert.match(
       dashboard,
-      /compaction: request=consumed source=model-tool applied=no skip=no-candidates migrations=0/u
+      /compaction: mode=automatic source=capacity applied=no skip=no-candidates migrations=0/u
     )
   })
 

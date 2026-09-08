@@ -48,13 +48,12 @@ import type { ContextMigrationEventSink } from './migrationLog'
 import { measureLedgerProjection } from './projection'
 import { ContextResidencyLedger } from './ResidencyLedger'
 
-/** 模型声明阶段边界的工具名（语义升格为"请求开一次 epoch"，见设计 §5.2）。 */
+/** @deprecated 兼容旧历史工具身份；当前运行时不将其作为治理入口。 */
 export const ContextEpochRequestToolName = 'context:distill'
 
 /** 每会话保留的 epoch 报告条数（转交信号只看最近若干次，无限留等于内存泄漏）。 */
 const MaxRetainedEpochReports = 32
 const DefaultMaxTrackedSessions = 128
-const MaxRecentEpochRequestIds = 128
 
 /** 转交信号（设计 §4）：连续 2 次 epoch 节省率不足且 post-epoch 占用仍高 → 建议开新会话。 */
 export interface ContextHandoffSignal {
@@ -90,6 +89,8 @@ function cachedStableFingerprint(message: ModelMessage): string {
 }
 
 export interface ContextGovernanceSyncInput {
+  /** 新摄入消息先全文驻留；不提升已压缩的旧记录。 */
+  deferOversizeExcerpt?: boolean
   messages: readonly ModelMessage[]
   at: number
   /**
@@ -143,26 +144,18 @@ export class ContextGovernanceSession {
    */
   private ledgerGeneration = 0
   private readonly reports: GovernanceEpochReport[] = []
-  /** 本轮新摄入的阶段请求；同一边界的多个请求合并为一次 epoch。 */
-  private pendingEpochRequestToolCallId: Nullable<string> = null
-  /**
-   * 最近观察到的请求身份，补足分支切换后当前账本缺席的那一段。
-   * 回滚只读此窗口，不刷新顺序；当前账本中的历史身份另由摄入差分识别。
-   * 请求同时离开当前历史与此有限窗口后，再次导入会按新观察处理。
-   */
-  private readonly recentEpochRequestToolCallIds = new Set<string>()
   private readonly distillRunner: ContextDistillRunner
   public updatedAt = 0
   /**
    * 最近一次编译期治理用的量纲（送核门窗口口径 + 字符/token 密度）。
    *
-   * 手动 epoch（宿主 `compact_session`、缺页降级阶梯）拿不到编译期算出来的密度，也未必拿得到
-   * 模型窗口与固定开销；缺席时回落写死的 4 字符/token + cap，会让同一本账本的手动报告与自动
-   * 报告不同量纲——中文/JSON 密集会话实测密度约 1.5-2，占用因此被低估 2-3 倍，手动 epoch 当场
+   * 供应方溢出的内部恢复拿不到编译期算出来的密度，也未必拿得到
+   * 模型窗口与固定开销；缺席时回落写死的 4 字符/token + cap，会让同一本账本的恢复报告与容量治理
+   * 报告不同量纲——中文/JSON 密集会话实测密度约 1.5-2，占用因此被低估 2-3 倍，恢复当场
    * 空转，而这两类报告又混在同一个 `reports[]` 里喂 handoff 判据（审计 V9 / U11）。
    * 记住最近一次编译的量纲当回落，比让调用方各自去凑要可靠。
    *
-   * 窗口侧记的是**推导入参**而不是算好的 G：手动路径可以只补一个自己知道的字段（比如模型窗口），
+   * 窗口侧记的是**推导入参**而不是算好的 G：内部恢复路径可以只补一个自己知道的字段（比如模型窗口），
    * 其余仍走上一次编译的实测值，最终仍由 `resolveGovernanceWindow` 这一个口算出 G。
    */
   private lastCompiledCharsPerToken: Nullable<number> = null
@@ -211,7 +204,6 @@ export class ContextGovernanceSession {
     const rebuilt = sharedPrefix < this.ingestedFingerprints.length
     const from = rebuilt ? 0 : sharedPrefix
     const tail = messages.slice(from)
-    this.syncModelEpochRequests(tail, rebuilt)
     if (rebuilt) this.resetLedger()
 
     if (!isEmpty(tail)) {
@@ -222,7 +214,7 @@ export class ContextGovernanceSession {
         payloadRefsByToolCallId: input.payloadRefsByToolCallId,
         userTextPayloadRefsByHash: input.userTextPayloadRefsByHash,
       })
-      for (const admission of plan.inputs) this.ledgerRef.append(admission)
+      for (const admission of plan.inputs) this.ledgerRef.append({ ...admission, deferOversizeExcerpt: input.deferOversizeExcerpt })
       this.nextTurn = plan.nextTurn
       this.turnBoundarySeen = plan.turnBoundarySeen
     }
@@ -263,9 +255,11 @@ export class ContextGovernanceSession {
     input: GovernanceWindowInput & {
       at: number
       charsPerToken?: LooseOptional<number>
+      /** 编译器按完整请求实测的容量结论；false 时即使旧配置水位较低也不回收。 */
+      capacityExceeded?: LooseOptional<boolean>
     }
   ): Nullable<GovernanceEpochReport> {
-    // 编译期是唯一算得出真实量纲的地方，记下来给手动 epoch 当回落。
+    // 编译期是唯一算得出真实量纲的地方，记下来给溢出恢复当回落。
     this.applyMeasuredCharsPerToken(input.charsPerToken)
     this.lastCompiledWindowInput = {
       modelWindowTokens: input.modelWindowTokens,
@@ -274,19 +268,18 @@ export class ContextGovernanceSession {
       fixedOverheadTokens: input.fixedOverheadTokens,
     }
 
-    const modelRequested = this.consumeModelEpochRequest()
-    return this.runEpoch(input, modelRequested, modelRequested ? 'model-tool' : 'watermark')
+    // 历史里的模型治理请求不再构成主动入口；自动治理只认本轮完整输入容量。
+    const window = resolveGovernanceWindow(this.config, input)
+    const capacityExceeded = input.capacityExceeded ?? (
+      this.projectedTokens(window.windowTokens, input.charsPerToken) > window.windowTokens
+    )
+    return this.runEpoch({ ...input, capacityExceeded }, false, 'capacity')
   }
 
   /**
-   * 手动开一次 epoch（宿主的 `compact_session` 落点）。
-   *
-   * 语义与模型调 `context:distill` 完全一致——**请求开一次 epoch**，绕过水位触发线，但反空转、
-   * 尾保护、达标即停等器械纪律一条不减。手动不等于强拆：压不下去的出路仍是转交，不是压尾。
-   *
-   * 量纲缺席时回落**最近一次编译**的窗口口径与密度，而不是回落写死的 cap 与 4 字符/token：
-   * 手动路径与自动路径必须在同一把尺子上，否则两类报告混进同一个 `reports[]` 会把 handoff
-   * 判据带偏。固定开销同理——手动 epoch 不知道本轮工具清单有多大，用上一次编译实测的就是了。
+   * 内部强制治理入口，供供应方 context overflow 后的自动恢复使用。
+   * 请求复用最近一次编译的窗口、输出预留、固定开销和密度；仍保留原文、配对结构与净收益约束。
+   * 方法名和来源参数兼容旧宿主 API，不会从模型消息中自动触发。
    */
   public requestEpoch(
     input: GovernanceWindowInput & {
@@ -306,7 +299,7 @@ export class ContextGovernanceSession {
         charsPerToken: input.charsPerToken ?? this.lastCompiledCharsPerToken,
       },
       true,
-      input.source ?? 'host-request'
+      input.source ?? 'overflow-recovery'
     )
   }
 
@@ -314,6 +307,7 @@ export class ContextGovernanceSession {
     input: GovernanceWindowInput & {
       at: number
       charsPerToken?: LooseOptional<number>
+      capacityExceeded?: LooseOptional<boolean>
     },
     modelRequested: boolean,
     source: GovernanceEpochSource
@@ -334,6 +328,7 @@ export class ContextGovernanceSession {
       config: this.config,
       budgetTokens,
       modelRequested,
+      capacityExceeded: input.capacityExceeded,
       charsPerToken: input.charsPerToken,
     })
     const raw = runGovernanceEpoch({
@@ -344,6 +339,7 @@ export class ContextGovernanceSession {
       epoch,
       at: input.at,
       modelRequested,
+      capacityExceeded: input.capacityExceeded,
       source,
       charsPerToken: input.charsPerToken,
       pendingDistills: willOpen ? this.distillRunner.takePending(this.ledgerGeneration) : [],
@@ -473,42 +469,6 @@ export class ContextGovernanceSession {
       recentSavingPercents,
       lastEpochAfterPercent,
       reason: armed ? 'low-saving-streak' : null,
-    }
-  }
-
-  /** 消费摄入差分确认的新请求；继续编译同一段历史不会再次触发。 */
-  private consumeModelEpochRequest(): boolean {
-    if (isNull(this.pendingEpochRequestToolCallId)) return false
-    this.pendingEpochRequestToolCallId = null
-    return true
-  }
-
-  /**
-   * 在重建前对照现有账本，只有新出现的 toolCallId 才产生阶段事件。
-   * 扫描旧账本仅发生在尾部包含阶段请求时；普通增量摄入保持原有成本。
-   */
-  private syncModelEpochRequests(messages: readonly ModelMessage[], rebuilt: boolean): void {
-    const requestIds = readEpochRequestToolCallIds(messages)
-    if (rebuilt && !requestIds.includes(this.pendingEpochRequestToolCallId ?? '')) {
-      this.pendingEpochRequestToolCallId = null
-    }
-    if (isEmpty(requestIds)) return
-
-    const previousRequestIds = new Set(
-      readEpochRequestToolCallIds(
-        this.ledgerRef.list().map((record) => record.message).filter(isNotNull)
-      )
-    )
-    for (const requestId of requestIds) {
-      if (previousRequestIds.has(requestId) || this.recentEpochRequestToolCallIds.has(requestId))
-        continue
-
-      this.pendingEpochRequestToolCallId = requestId
-      this.recentEpochRequestToolCallIds.add(requestId)
-      if (this.recentEpochRequestToolCallIds.size > MaxRecentEpochRequestIds) {
-        const oldest = this.recentEpochRequestToolCallIds.values().next().value
-        if (oldest) this.recentEpochRequestToolCallIds.delete(oldest)
-      }
     }
   }
 
@@ -676,7 +636,7 @@ export class ContextGovernanceSessionRegistry {
   }
 
   /**
-   * 手动开一次 epoch（宿主 hook 的落点）。用 `peek` 而不是 `resolve`：从没编译过的会话没有账本，
+   * 自动溢出恢复的强制治理入口。用 `peek` 而不是 `resolve`：从没编译过的会话没有账本，
    * 为了"压一下"凭空建一本空账本只会产出一份没有信息的报告。
    */
   public requestEpoch(
@@ -727,18 +687,6 @@ export class ContextGovernanceSessionRegistry {
   }
 }
 
-function readEpochRequestToolCallIds(messages: readonly ModelMessage[]): string[] {
-  return messages.flatMap((message) => {
-    if (message.role !== 'tool') return []
-    return message.content.flatMap((part) =>
-      part.type === 'tool-result' && part.toolName === ContextEpochRequestToolName
-        ? [part.toolCallId]
-        : []
-    )
-  })
-}
-
-/** 两串指纹的公共前缀长度。 */
 function resolveSharedPrefixLength(left: readonly string[], right: readonly string[]): number {
   const limit = Math.min(left.length, right.length)
   let index = 0
