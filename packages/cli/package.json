@@ -47,7 +47,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && chmod +x dist/bin.js && node ../../scripts/build/normalize-package-declarations.mjs",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/mark-executable.mjs dist/bin.js && node ../../scripts/build/normalize-package-declarations.mjs",
     "test": "bun run build && bun test test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/cli"
   },
