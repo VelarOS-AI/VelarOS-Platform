@@ -41,6 +41,10 @@ import { ChatScrollNavigator } from './ChatScrollNavigator'
 import { ChatTranscript, type ChatTranscriptNavigationHandle } from './ChatTranscript'
 import { resolveActiveTranscriptAssistantMessageId } from './chatTranscriptDerivedIndexes'
 import { useConversationActionPort } from './conversationActionPort'
+import {
+  type ConversationRefreshGeneration,
+  resolveConversationRefreshGeneration,
+} from './conversationRefreshGeneration'
 import { useAwaitingConfirmationUserActionCards } from './useAwaitingConfirmationUserActionCards'
 import { useChatConversationScroll } from './useChatConversationScroll'
 import { useChatConversationTranscriptModel } from './useChatConversationTranscriptModel'
@@ -207,6 +211,23 @@ export function ChatConversationPane({
   // 单一交互状态：等待交互优先于流式标记（isStreaming 残留不再被当作运行中）。
   const interactionState = resolveChatInteractionState(isStreaming, runtime.status)
   const isRunActive = isChatInteractionRunActive(interactionState)
+  const conversationRefreshGenerationRef =
+    useRef<Nullable<ConversationRefreshGeneration>>(null)
+  const conversationRefreshGeneration = resolveConversationRefreshGeneration(
+    conversationRefreshGenerationRef.current,
+    {
+      sessionId,
+      key: conversationRefreshKey,
+      isRunActive,
+    }
+  )
+  // generation 是跨 commit 的事实。render 可能被 StrictMode 重放或被并发调度丢弃；
+  // 只有真正提交到屏幕的 generation 才能成为下一帧冻结依据，否则一次 speculative
+  // terminal render 就可能污染 ref，让随后仍活跃的 run 错误 remount 消息树。
+  useLayoutEffect(() => {
+    conversationRefreshGenerationRef.current = conversationRefreshGeneration
+  }, [conversationRefreshGeneration])
+  const stableConversationRefreshKey = conversationRefreshGeneration.key
   const [goalLifecycleArtifact, setGoalLifecycleArtifact] =
     useState<Nullable<ActiveContextArtifact>>(null)
   const [goalLifecycleBusy, setGoalLifecycleBusy] = useState(false)
@@ -391,7 +412,7 @@ export function ChatConversationPane({
   })
   const { loadMoreSentinelRef } = useChatConversationScroll({
     sessionId,
-    conversationRefreshKey,
+    conversationRefreshKey: stableConversationRefreshKey,
     hasOlderMessages,
     isLoadingOlderMessages,
     onLoadOlderMessages,
@@ -623,7 +644,11 @@ export function ChatConversationPane({
       data-tour-id="chat-conversation"
       style={{ '--chat-input-dock-height': `${inputDockHeight}px` } as CSSProperties}
     >
-      <div key={conversationRefreshKey} className={styles.conversationBody}>
+      <div
+        key={stableConversationRefreshKey}
+        className={styles.conversationBody}
+        data-scroll-navigator-hidden={scrollNavigatorHidden ? 'true' : 'false'}
+      >
         <ScrollArea
           ref={scrollRef}
           className={styles.messageList}

@@ -247,6 +247,16 @@ const defaultConversationRenderSlots: ConversationRenderSlots = {
   renderMessageBoundary: ({ children }) => <>{children}</>,
 }
 
+/**
+ * Builds a complete slot surface from the package defaults plus a host's narrow overrides.
+ * Replacement slots remain absent unless a host explicitly supplies them.
+ */
+export function createConversationRenderSlots(
+  overrides: Partial<ConversationRenderSlots> = {},
+): ConversationRenderSlots {
+  return { ...defaultConversationRenderSlots, ...overrides }
+}
+
 const ConversationRenderSlotsContext = createContext<ConversationRenderSlots>(
   defaultConversationRenderSlots
 )

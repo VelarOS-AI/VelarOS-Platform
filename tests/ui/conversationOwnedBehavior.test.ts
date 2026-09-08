@@ -287,6 +287,7 @@ void describe('Platform-owned conversation composer behavior', () => {
       /\.expandableCodeBlock\[data-collapsed='false'\] \[data-streamdown='code-block-body'\] \{\s*max-height: none !important;\s*overflow-y: hidden !important;/u
     )
     assert.match(source, /baseMarkdownComponents\.table\s*=\s*MarkdownTableWithExpandableViewport/u)
+    assert.equal(source.match(/const collapsed = hasOverflow && !expanded/gu)?.length, 2)
     assert.equal(source.match(/onClick=\{\(\) => setExpanded\(true\)\}/gu)?.length, 2)
     assert.match(collapseSlotStyles, /position: absolute;/u)
     assert.match(collapseSlotStyles, /bottom: 8px;/u)
@@ -294,6 +295,82 @@ void describe('Platform-owned conversation composer behavior', () => {
     assert.match(collapseButtonStyles, /border: 0;/u)
     assert.match(collapseButtonStyles, /background: transparent;/u)
     assert.match(collapseButtonStyles, /animation: expandable-block-control-drift 2\.8s/u)
+  })
+
+  void test('keeps conversation rows, bubbles, cards, and detail tooltips within their surface', () => {
+    const bubbleStyles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const paneStyles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/shell/ChatConversationPane.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const productStyles = readFileSync(
+      new URL('../../packages/ui/src/styles/components/product.css', import.meta.url),
+      'utf8'
+    )
+
+    assert.match(bubbleStyles, /\.root\s*\{\s*@apply flex w-full min-w-0 max-w-full;/u)
+    assert.match(bubbleStyles, /\.userRow\s*\{\s*@apply relative flex min-w-0/u)
+    assert.match(
+      bubbleStyles,
+      /\.userBubbleInner\s*\{[\s\S]*?max-w-full[\s\S]*?overflow-wrap: anywhere;[\s\S]*?word-break: break-word;/u
+    )
+    assert.match(paneStyles, /\.messageSequence\s*\{\s*@apply flex min-w-0 max-w-full/u)
+    assert.match(
+      paneStyles,
+      /\.messageListInnerSide\s*\{[\s\S]*?@apply max-w-none gap-3 px-4/u
+    )
+    assert.match(
+      paneStyles,
+      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInnerSide\s*\{\s*padding-inline-end: 5\.25rem;/u
+    )
+    assert.match(
+      productStyles,
+      /\.velar-compact-tool-row-detail-tooltip\s*\{[\s\S]*?--radix-tooltip-trigger-width/u
+    )
+    assert.match(
+      productStyles,
+      /\.velar-tool-disclosure-card\s*\{[\s\S]*?min-width: 0;[\s\S]*?max-width: 100%;/u
+    )
+  })
+
+  void test('keeps consecutive short user messages and their actions separate in narrow panes', () => {
+    const styles = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const narrowLayout =
+      styles.match(
+        /@container chat-conversation-body \(max-width: 520px\) \{(?<body>[\s\S]*?)\n\}\n\n@media/u
+      )?.groups?.body ?? ''
+
+    assert.match(
+      narrowLayout,
+      /\.userRow\s*\{[\s\S]*?display: grid;[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/u
+    )
+    assert.match(
+      narrowLayout,
+      /\.userBubble\s*\{[\s\S]*?grid-column: 1 \/ -1;[\s\S]*?grid-row: 1;/u
+    )
+    assert.match(
+      narrowLayout,
+      /\.userLeftMeta\s*\{[\s\S]*?grid-column: 1;[\s\S]*?grid-row: 2;/u
+    )
+    assert.match(
+      narrowLayout,
+      /\.userMessageTimestamp\s*\{[\s\S]*?position: static;[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 2;/u
+    )
   })
 
   void test('shows the context distill progress note with a fact fallback', () => {
@@ -493,6 +570,36 @@ void describe('Platform-owned chat scroll navigator structure', () => {
     assert.equal(source.includes('{navState.visible && ('), false)
   })
 
+  void test('owns the controlled header visibility toggle and freezes body remounts while active', () => {
+    const toggle = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/shell/ChatScrollNavigatorVisibilityToggle.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const pane = readFileSync(
+      new URL('../../packages/ui/src/conversation/shell/ChatConversationPane.tsx', import.meta.url),
+      'utf8'
+    )
+
+    assert.match(toggle, /hidden:\s*boolean/u)
+    assert.match(toggle, /onHiddenChange:\s*\(hidden:\s*boolean\)\s*=>\s*void/u)
+    assert.match(toggle, /aria-pressed=\{!hidden\}/u)
+    assert.match(toggle, /onClick=\{\(\) => onHiddenChange\(!hidden\)\}/u)
+    assert.match(pane, /resolveConversationRefreshGeneration/u)
+    assert.match(pane, /key=\{stableConversationRefreshKey\}/u)
+    assert.doesNotMatch(pane, /key=\{conversationRefreshKey\}/u)
+    assert.match(
+      pane,
+      /useLayoutEffect\(\(\) => \{\s*conversationRefreshGenerationRef\.current = conversationRefreshGeneration\s*\}, \[conversationRefreshGeneration\]\)/u
+    )
+    assert.doesNotMatch(
+      pane,
+      /\n\s*conversationRefreshGenerationRef\.current = conversationRefreshGeneration\s*\n\s*const stableConversationRefreshKey/u
+    )
+  })
+
   void test('suspends bottom following before every upward navigator action', () => {
     const source = readFileSync(
       new URL('../../packages/ui/src/conversation/shell/ChatScrollNavigator.tsx', import.meta.url),
@@ -525,6 +632,35 @@ void describe('Platform-owned chat scroll navigator structure', () => {
     )
     assert.equal(stylesheet.includes('@container chat-conversation-body'), false)
     assert.equal(stylesheet.includes('--scroll-navigator-collapsed-opacity'), false)
+  })
+
+  void test('forwards trackpad movement over navigator buttons and honors reduced motion', () => {
+    const source = readFileSync(
+      new URL('../../packages/ui/src/conversation/shell/ChatScrollNavigator.tsx', import.meta.url),
+      'utf8'
+    )
+    const stylesheet = readFileSync(
+      new URL(
+        '../../packages/ui/src/conversation/shell/ChatScrollNavigator.module.css',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    const wheelHandlerStart = source.indexOf('const forwardWheelToTranscript')
+    const wheelHandlerEnd = source.indexOf('\n  if (hidden || !navState.visible)', wheelHandlerStart)
+    const wheelHandler = source.slice(wheelHandlerStart, wheelHandlerEnd)
+    assert.ok(wheelHandlerStart >= 0)
+    assert.ok(wheelHandlerEnd > wheelHandlerStart)
+    assert.match(source, /onWheel=\{forwardWheelToTranscript\}/u)
+    assert.match(wheelHandler, /scrollEl\.scrollBy\(\{ top: event\.deltaY, behavior: 'auto' \}\)/u)
+    assert.match(wheelHandler, /event\.deltaY < 0[\s\S]*AutoScrollSuspendEventName/u)
+    assert.match(wheelHandler, /event\.stopPropagation\(\)/u)
+    assert.doesNotMatch(wheelHandler, /event\.preventDefault\(\)/u)
+    assert.match(
+      stylesheet,
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none;/u
+    )
   })
 })
 

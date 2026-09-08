@@ -21,23 +21,32 @@
 }
 
 .messageList {
-  @apply flex-1 overflow-y-auto overflow-x-hidden;
+  @apply min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden;
   background: var(--background);
   scrollbar-gutter: stable both-edges;
 }
 
 .messageListInner {
-  @apply mx-auto flex w-full max-w-[48rem] flex-col gap-5 px-4 pb-44 pt-6;
+  @apply mx-auto flex w-full min-w-0 max-w-[48rem] flex-col gap-5 px-4 pb-44 pt-6;
   padding-bottom: max(11rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
 }
 
 .messageListInnerSide {
-  @apply max-w-none gap-3 px-3 pb-36 pt-4;
+  /* Match the markdown shadow gutter so its negative inline margin ends at the
+     pane edge instead of creating a horizontal overflow range. */
+  @apply max-w-none gap-3 px-4 pb-36 pt-4;
   padding-bottom: max(9rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
 }
 
+/* The side navigator is an overlay so it must not trigger transcript remounts
+   as it appears during streaming. Reserve its lane up front while enabled;
+   hiding it from the host header gives the lane back to the transcript. */
+.conversationBody[data-scroll-navigator-hidden='false'] .messageListInnerSide {
+  padding-inline-end: 5.25rem;
+}
+
 .messageSequence {
-  @apply flex flex-col gap-2;
+  @apply flex min-w-0 max-w-full w-full flex-col gap-2;
 }
 
 .loadMoreSentinel {
@@ -46,7 +55,7 @@
 }
 
 .streamSlot {
-  @apply flex min-w-0 flex-col;
+  @apply flex w-full min-w-0 max-w-full flex-col;
 }
 
 .inlineConversationCard {

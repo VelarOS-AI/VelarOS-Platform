@@ -1,14 +1,28 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
+import { createChatScrollNavigatorVisibilityStore } from '../../packages/ui/src/conversation/react-hooks/chatScrollNavigatorVisibility'
 import {
+  resolveAutoScrollWheelDecision,
   resolveTranscriptWindowFollowEndAfterScroll,
   shouldAutoScrollAfterContentResize,
   shouldCommitScheduledAutoScroll,
   shouldStartImmediateAutoScroll,
 } from '../../packages/ui/src/conversation/react-hooks/scrollBehavior'
+import { resolveConversationRefreshGeneration } from '../../packages/ui/src/conversation/shell/conversationRefreshGeneration'
 
 void describe('chat auto-scroll ownership', () => {
+  void test('keeps native wheel scrolling available in the default unlocked follow mode', () => {
+    assert.deepEqual(resolveAutoScrollWheelDecision(false, -120), {
+      shouldPreventDefault: false,
+      shouldSuspendAutoScroll: true,
+    })
+    assert.deepEqual(resolveAutoScrollWheelDecision(false, 120), {
+      shouldPreventDefault: false,
+      shouldSuspendAutoScroll: false,
+    })
+  })
+
   void test('does not reclaim the viewport after the user leaves the bottom', () => {
     const movement = {
       pinned: true,
@@ -83,5 +97,93 @@ void describe('chat auto-scroll ownership', () => {
       }),
       true
     )
+  })
+})
+
+void describe('chat scroll navigator visibility', () => {
+  void test('keeps a host-owned visibility snapshot stable across pane subscribers', () => {
+    const store = createChatScrollNavigatorVisibilityStore()
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+
+    assert.equal(store.getSnapshot(), false)
+    store.toggle()
+    assert.equal(store.getSnapshot(), true)
+    assert.equal(notifications, 1)
+    store.setHidden(true)
+    assert.equal(notifications, 1)
+    store.setHidden(false)
+    assert.equal(store.getSnapshot(), false)
+    assert.equal(notifications, 2)
+
+    unsubscribe()
+    store.toggle()
+    assert.equal(notifications, 2)
+  })
+})
+
+void describe('conversation refresh generation', () => {
+  void test('freezes high-frequency host refresh keys during a run and accepts them at settlement', () => {
+    let generation = resolveConversationRefreshGeneration(null, {
+      sessionId: 'session-a',
+      key: 1,
+      isRunActive: false,
+    })
+    const mountedGeneration = generation
+
+    generation = resolveConversationRefreshGeneration(generation, {
+      sessionId: 'session-a',
+      key: 2,
+      isRunActive: true,
+    })
+    assert.equal(generation, mountedGeneration)
+    generation = resolveConversationRefreshGeneration(generation, {
+      sessionId: 'session-a',
+      key: 300,
+      isRunActive: true,
+    })
+    assert.equal(generation.key, 1)
+
+    generation = resolveConversationRefreshGeneration(generation, {
+      sessionId: 'session-a',
+      key: 300,
+      isRunActive: false,
+    })
+    assert.equal(generation.key, 300)
+
+    generation = resolveConversationRefreshGeneration(generation, {
+      sessionId: 'session-b',
+      key: 1,
+      isRunActive: true,
+    })
+    assert.equal(generation.sessionId, 'session-b')
+    assert.equal(generation.key, 1)
+  })
+
+  void test('ignores a discarded speculative generation when an active run renders again', () => {
+    const committed = resolveConversationRefreshGeneration(null, {
+      sessionId: 'session-a',
+      key: 1,
+      isRunActive: false,
+    })
+
+    // StrictMode / concurrent rendering may evaluate this terminal frame without committing it.
+    const discarded = resolveConversationRefreshGeneration(committed, {
+      sessionId: 'session-a',
+      key: 200,
+      isRunActive: false,
+    })
+    assert.equal(discarded.key, 200)
+
+    // The next render must still derive from the last committed generation, not the discarded one.
+    const active = resolveConversationRefreshGeneration(committed, {
+      sessionId: 'session-a',
+      key: 201,
+      isRunActive: true,
+    })
+    assert.equal(active, committed)
+    assert.equal(active.key, 1)
   })
 })

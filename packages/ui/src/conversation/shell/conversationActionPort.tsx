@@ -35,6 +35,14 @@ export interface ConversationActionPort {
   }) => void
 }
 
+/** Host-neutral no-op port for products that intentionally do not expose goal or handoff actions. */
+export const emptyConversationActionPort: ConversationActionPort = Object.freeze({
+  getGoalLifecycle: async () => ({ ok: true, goal: null }),
+  updateGoalLifecycle: async () => ({ ok: true, goal: null }),
+  provideExecutionGuidance: async () => undefined,
+  resolveHandoffSuggestion: () => undefined,
+})
+
 const ConversationActionPortContext = createContext<Nullable<ConversationActionPort>>(null)
 
 export function ConversationActionPortProvider({

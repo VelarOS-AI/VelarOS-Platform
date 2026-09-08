@@ -1,10 +1,9 @@
-name: CodeQL (local only)
+name: "[DISABLED] CodeQL (local only)"
 
 # Hosted CodeQL is disabled. Security and quality validation use the maintained
 # local `bun run check` gate. This workflow is an inert policy sentinel.
 
-on:
-  workflow_dispatch:
+on: []
 
 permissions: {}
 

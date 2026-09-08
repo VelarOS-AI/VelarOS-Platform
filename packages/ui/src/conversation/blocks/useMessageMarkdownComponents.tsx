@@ -320,7 +320,7 @@ function ExpandableCodeBlockFrame({ children }: { children: ReactElement }): Rea
   const { t } = useConversationI18n()
   const { containerRef, expanded, hasOverflow, setExpanded } =
     useExpandableConversationViewport('[data-streamdown="code-block-body"]')
-  const collapsed = !expanded
+  const collapsed = hasOverflow && !expanded
 
   return (
     <div ref={containerRef} className={styles.expandableCodeBlock} data-collapsed={collapsed}>
@@ -454,7 +454,7 @@ function MarkdownTableWithExpandableViewport({
   const { t } = useConversationI18n()
   const { containerRef, expanded, hasOverflow, setExpanded } =
     useExpandableConversationViewport('[data-conversation-table-viewport]')
-  const collapsed = !expanded
+  const collapsed = hasOverflow && !expanded
 
   return (
     <div ref={containerRef} data-collapsed={collapsed} data-streamdown="table-wrapper">

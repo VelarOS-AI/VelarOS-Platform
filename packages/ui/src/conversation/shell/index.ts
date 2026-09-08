@@ -8,6 +8,10 @@
 export type { ChatConversationPaneProps } from './ChatConversationPane'
 export { ChatConversationPane } from './ChatConversationPane'
 export { ChatScrollNavigator } from './ChatScrollNavigator'
+export {
+  ChatScrollNavigatorVisibilityToggle,
+  type ChatScrollNavigatorVisibilityToggleProps,
+} from './ChatScrollNavigatorVisibilityToggle'
 export type { ChatTranscriptNavigationHandle, ChatTranscriptProps } from './ChatTranscript'
 export { ChatTranscript } from './ChatTranscript'
 export type {
@@ -16,6 +20,7 @@ export type {
 } from './conversationActionPort'
 export {
   ConversationActionPortProvider,
+  emptyConversationActionPort,
   useConversationActionPort,
 } from './conversationActionPort'
 export { useQueuedLiveStatusText } from './useQueuedLiveStatusText'

@@ -29,6 +29,20 @@ export interface ConversationBlockHooks {
   useAutoTranslateThinkingEnabled: () => boolean
 }
 
+const emptyMessageActionView: MessageActionView = Object.freeze({
+  actionItems: [],
+  actionRows: [],
+  formatPathForDisplay: (path: string) => path,
+  hasActionItems: false,
+  openPathInLight: () => Promise.resolve(),
+})
+
+/** Host-neutral hooks for products without message actions or thinking translation settings. */
+export const emptyConversationBlockHooks: ConversationBlockHooks = Object.freeze({
+  useMessageActionView: () => emptyMessageActionView,
+  useAutoTranslateThinkingEnabled: () => false,
+})
+
 const ConversationBlockHooksContext = createContext<Nullable<ConversationBlockHooks>>(null)
 
 export function ConversationBlockHooksProvider({

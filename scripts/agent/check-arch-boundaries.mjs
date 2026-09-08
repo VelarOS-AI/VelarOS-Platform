@@ -556,12 +556,43 @@ function scanConcreteSemanticInjectionBoundary() {
 // and tarball publication markers. This redundancy is intentional defense in depth.
 function scanReleaseIdentityBoundary() {
   const violations = []
+  const expectedWorkflowFiles = [
+    'ci.yml',
+    'codeql.yml',
+    'release-document-renderer.yml',
+    'release-packages.yml',
+  ]
+  const actualWorkflowFiles = readdirSync(resolve(RepoRoot, '.github/workflows'), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
+    .map((entry) => entry.name)
+    .sort()
+  if (JSON.stringify(actualWorkflowFiles) !== JSON.stringify(expectedWorkflowFiles)) {
+    violations.push({
+      rule: 'release-artifact-identity',
+      fingerprint: `release-artifact-identity::workflow-allowlist::${actualWorkflowFiles.join(',')}`,
+      message: `.github/workflows: 只允许本机策略哨兵 ${expectedWorkflowFiles.join(', ')}；实际为 ${actualWorkflowFiles.join(', ') || '空'}。`,
+    })
+  }
+  for (const workflowFile of expectedWorkflowFiles) {
+    const workflowPath = resolve(RepoRoot, '.github/workflows', workflowFile)
+    if (!existsSync(workflowPath)) continue
+    const source = readFileSync(workflowPath, 'utf8').replaceAll('\r\n', '\n')
+    const triggerDeclarations = source.match(/^on:.*$/gmu) ?? []
+    if (triggerDeclarations.length === 1 && triggerDeclarations[0] === 'on: []') continue
+    violations.push({
+      rule: 'release-artifact-identity',
+      fingerprint: `release-artifact-identity::workflow-trigger::${workflowFile}`,
+      message: `.github/workflows/${workflowFile}: 必须且只能声明无触发入口的 on: []。`,
+    })
+  }
   const contracts = [
     {
       file: '.github/workflows/release-packages.yml',
       markers: [
-        'name: Release packages (local only)',
-        'workflow_dispatch:',
+        'name: "[DISABLED] Release packages (local only)"',
+        'on: []',
         'permissions: {}',
         'if: ${{ false }}',
         'bun run release:local',
@@ -572,13 +603,14 @@ function scanReleaseIdentityBoundary() {
         'scripts/release/publish-packages.mjs',
         'secrets.',
         'packages: write',
+        'workflow_dispatch:',
       ],
     },
     {
       file: '.github/workflows/release-document-renderer.yml',
       markers: [
-        'name: Release Document Renderer (local only)',
-        'workflow_dispatch:',
+        'name: "[DISABLED] Release Document Renderer (local only)"',
+        'on: []',
         'permissions: {}',
         'if: ${{ false }}',
         'bun run release:document-renderer',
@@ -588,13 +620,14 @@ function scanReleaseIdentityBoundary() {
         'release-candidate.mjs',
         'build-product.mjs',
         'secrets.',
+        'workflow_dispatch:',
       ],
     },
     {
       file: '.github/workflows/ci.yml',
       markers: [
-        'name: CI (local only)',
-        'workflow_dispatch:',
+        'name: "[DISABLED] CI (local only)"',
+        'on: []',
         'permissions: {}',
         'if: ${{ false }}',
         'bun run check',
@@ -604,13 +637,14 @@ function scanReleaseIdentityBoundary() {
         'push:',
         'actions/checkout',
         'setup-bun',
+        'workflow_dispatch:',
       ],
     },
     {
       file: '.github/workflows/codeql.yml',
       markers: [
-        'name: CodeQL (local only)',
-        'workflow_dispatch:',
+        'name: "[DISABLED] CodeQL (local only)"',
+        'on: []',
         'permissions: {}',
         'if: ${{ false }}',
         'local `bun run check` gate',
@@ -621,7 +655,13 @@ function scanReleaseIdentityBoundary() {
         'schedule:',
         'github/codeql-action',
         'security-events:',
+        'workflow_dispatch:',
       ],
+    },
+    {
+      file: '.github/dependabot.yml',
+      markers: ['updates: []'],
+      forbiddenMarkers: ['package-ecosystem: github-actions'],
     },
     {
       file: 'scripts/release/verify-release-ref.mjs',

@@ -839,6 +839,8 @@
   display: flex;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   align-items: center;
   gap: var(--ui-space-2);
   padding-inline: var(--ui-space-3);
@@ -852,8 +854,10 @@
 
 /* 行内 detail 溢出时的全文气泡（BubbleTooltip portal 到 body，免疫祖先 overflow 剪裁）。 */
 .velar-compact-tool-row-detail-tooltip {
-  max-width: min(560px, 92vw);
+  box-sizing: border-box;
+  max-width: min(560px, var(--radix-tooltip-trigger-width, 92vw), 92vw);
   overflow-wrap: anywhere;
+  word-break: break-word;
   text-align: left;
   white-space: normal;
 }
@@ -1275,6 +1279,9 @@
 .velar-tool-disclosure-card {
   margin-block: 0;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   overflow: hidden;
   --disclosure-summary-padding-x: 12px;
   --disclosure-summary-padding-y: 12px;
@@ -1380,8 +1387,11 @@
 .velar-tool-disclosure-card-subtitle {
   margin-top: var(--ui-space-2);
   min-width: 0;
+  max-width: 100%;
   font-size: 12px;
   color: var(--foreground-secondary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ─── Chat interaction notice (business) ─────────────────────────────────── */

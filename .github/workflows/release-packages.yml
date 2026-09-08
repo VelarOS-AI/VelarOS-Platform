@@ -1,12 +1,11 @@
-name: Release packages (local only)
+name: "[DISABLED] Release packages (local only)"
 
 # Official Platform packages are published from a clean native checkout with
 # `bun run release:local <tag> [--only ...]`. This workflow is intentionally
 # inert: keeping the sentinel visible prevents an accidental return to hosted
 # release jobs, credentials, or GitHub Actions billing.
 
-on:
-  workflow_dispatch:
+on: []
 
 permissions: {}
 

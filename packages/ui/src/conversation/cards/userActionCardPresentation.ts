@@ -1,3 +1,5 @@
+import type { ConversationMessageKey } from '../i18n'
+
 import type {
   UserActionCard,
   UserActionCardAction,
@@ -15,8 +17,11 @@ import type {
  * 住投影层 `../projection`。
  */
 
-/** 渲染件用的翻译签名（与 conversation-ui i18n seam `t` 同形，接受任意 key 字符串）。 */
-export type CardTranslate = (key: string, params?: Record<string, string | number>) => string
+/** 渲染件用的翻译签名，与 conversation-ui 的 typed key seam 同形。 */
+export type CardTranslate = (
+  key: ConversationMessageKey,
+  params?: Record<string, string | number>
+) => string
 
 export type ActionCardTone = 'neutral' | 'info' | 'success' | 'warning' | 'error'
 

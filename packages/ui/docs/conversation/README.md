@@ -10,11 +10,11 @@
 
 底座(`CardKit` / `ActionCard` / 全部原语)留在 `@velaros-ai/ui`,本切片**消费**它们。
 
-**它是聊天渲染件的唯一长期归属**:宿主(Desktop)只保留会话层权威(store / IPC / 发送)
+**它是聊天渲染件的唯一长期归属**:宿主(Desktop / Workbench)只保留会话层权威(store / IPC / 发送)
 与「store → props 投影 + 端口 / 插槽实现」的胶水。同一套件也能被任意第三方应用直接用——
 第三方只需要实现自己的会话存储、模型流与端口,**不需要引入 Kernel,也不需要实现任何 VelarOS 接口**。
 
-## 三条不可动摇的设计判决
+## 四条不可动摇的设计判决
 
 ### 1. 屏显节奏的唯一权威是 `ChatStreamPacer`
 
@@ -55,6 +55,29 @@ Slot 面是 §12.9 意义上的**封闭有限具名集合**,不是任意扩展�
   `configureConversationTranslator()` / `conversationTranslate()` /
   `conversationLookupMessage()` 的全局单例**仅为旧应用兼容**,新代码别用
   ——「最后一次全局配置覆盖掉其他界面」是它们的固有故障模式。
+
+### 4. Desktop 与 Workbench 的聊天行为只在这里实现一次
+
+两端共享 `ChatConversationPane` / `ChatTranscript` / `MessageBubble` /
+`ChatSurfaceComposer` / `ChatScrollNavigator`，滚动跟随、导航显隐状态与开关也由本切片提供。
+宿主不得复制这些状态机或用流式 revision 重挂消息树；新宿主通过 props、Port、Provider 与
+Render Slot 组合接入。
+
+共享行为的回归清单：
+
+- 消息、附件、工具卡、长路径和 tooltip 都不能突破会话容器；窄侧栏里的时间、复制/回退操作
+  与下一条消息必须参与正常布局，不能相互覆盖。
+- 默认只在仍贴底时随新增内容滚动，不默认开启强制跟随。用户滚轮、触控板或触摸上滑后立刻
+  暂停贴底；流式增量不得重挂滚动容器，指针位于浮动导航上时滚轮仍交给正文。
+- 楼层导航显隐使用 `createChatScrollNavigatorVisibilityStore` /
+  `ChatScrollNavigatorVisibilityToggle`；按钮、图标和无障碍状态不在产品仓各写一份。
+- 代码块和表格只在真实溢出高度阈值时显示展开控制，短内容直接完整显示。
+- 拖拽的 pointer 生命周期、光标与文本选择恢复使用共享 `usePointerResize`；具体侧栏上下限、
+  持久化键和布局 CSS 仍由宿主决定。
+
+有意保留在宿主的边界：标题与会话菜单、项目/当前文件、模型运行时与 IPC、终止执行、窗口与
+弹出行为、IDE 分栏、更新下载状态。终止执行必须由宿主在有界时间内产出终态；更新进度属于
+宿主底部状态栏，二者不能反向渗入会话渲染包。
 
 ## 公共入口
 

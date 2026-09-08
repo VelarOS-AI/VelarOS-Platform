@@ -1,10 +1,9 @@
-name: CI (local only)
+name: "[DISABLED] CI (local only)"
 
 # Platform validation is run from the maintained local checkout with
 # `bun run check`. This workflow is an intentionally inert policy sentinel.
 
-on:
-  workflow_dispatch:
+on: []
 
 permissions: {}
 

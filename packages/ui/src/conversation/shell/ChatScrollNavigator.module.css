@@ -83,3 +83,11 @@
     right: 16px;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .rail,
+  .followLayer {
+    transition: none;
+  }
+}

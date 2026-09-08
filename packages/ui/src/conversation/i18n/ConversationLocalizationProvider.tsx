@@ -6,6 +6,10 @@ import {
   useMemo,
 } from 'react'
 
+import type {
+  CanonicalConversationMessageKey,
+  DynamicConversationMessageKey,
+} from './conversationMessageCatalog'
 import { ConversationTranslatorRuntime } from './conversationTranslator'
 import { ConversationTranslatorProvider } from './ConversationTranslatorProvider'
 
@@ -14,11 +18,13 @@ import type { AppLocale } from '#contracts'
 /**
  * 会话渲染门面的窄本地化契约（镜像 @velaros-ai/workbench 的 WorkbenchLocalizationProvider 先例）。
  *
- * conversation-ui 不直依 desktop 的 `@/i18n`（那里挂着上百条 message key 与偏好设置耦合）——
- * 包只声明「locale + t(key) + setLocale」三成员的注入面，key 类型收为 `string`（消费方在注入点
- * 用桥接 cast 对齐自己的 MessageKey 目录）。desktop 在 I18nProvider 处注入其现有 `useI18n()` 实现。
+ * conversation-ui 不直依 desktop 的 `@/i18n`（那里挂着产品文案与偏好设置耦合）——
+ * 包只声明「locale + t(key) + setLocale」三成员的注入面，并由共享目录导出的闭集约束 key。
+ * desktop / workbench 在装配点把各自 deep-merge 后的目录注入即可。
  */
-export type ConversationMessageKey = string
+export type ConversationMessageKey =
+  | CanonicalConversationMessageKey
+  | DynamicConversationMessageKey
 
 export interface ConversationTranslateParams {
   [key: string]: string | number

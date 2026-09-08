@@ -9,5 +9,6 @@ export type {
 } from './conversationRenderSlots'
 export {
   ConversationRenderSlotsProvider,
+  createConversationRenderSlots,
   useConversationRenderSlots,
 } from './conversationRenderSlots'

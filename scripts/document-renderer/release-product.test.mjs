@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -163,27 +163,45 @@ test('local publication requires attestation before running quality or upload', 
 test('all GitHub Actions routes remain inert local-only policy sentinels', async () => {
   const workflows = [
     {
+      file: 'ci.yml',
+      name: 'CI (local only)',
       path: '../../.github/workflows/ci.yml',
       forbidden: /actions\/checkout|pull_request:|push:/u,
     },
     {
+      file: 'codeql.yml',
+      name: 'CodeQL (local only)',
       path: '../../.github/workflows/codeql.yml',
       forbidden: /github\/codeql-action|security-events:|schedule:/u,
     },
     {
+      file: 'release-packages.yml',
+      name: 'Release packages (local only)',
       path: '../../.github/workflows/release-packages.yml',
       forbidden: /publish-packages\.mjs|actions\/checkout|secrets\./u,
     },
     {
+      file: 'release-document-renderer.yml',
+      name: 'Release Document Renderer (local only)',
       path: '../../.github/workflows/release-document-renderer.yml',
       forbidden: /release-candidate\.mjs|build-product\.mjs|actions\/checkout|secrets\./u,
     },
   ]
+  const workflowDirectory = new URL('../../.github/workflows/', import.meta.url)
+  const actualWorkflowFiles = (await readdir(workflowDirectory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
+    .map((entry) => entry.name)
+    .sort()
+  assert.deepEqual(actualWorkflowFiles, workflows.map((workflow) => workflow.file).sort())
+
   for (const workflow of workflows) {
     const source = (await readFile(new URL(workflow.path, import.meta.url), 'utf8')).replaceAll(
       '\r\n',
       '\n',
     )
+    assert.equal(source.split('\n')[0], `name: "[DISABLED] ${workflow.name}"`)
+    assert.deepEqual(source.match(/^on:.*$/gmu), ['on: []'])
+    assert.doesNotMatch(source, /workflow_dispatch:/u)
     const jobsMarker = '\njobs:\n'
     const jobsIndex = source.indexOf(jobsMarker)
     assert.notEqual(jobsIndex, -1)
@@ -199,6 +217,13 @@ test('all GitHub Actions routes remain inert local-only policy sentinels', async
     assert.doesNotMatch(jobsSource, /^\s+uses:/mu)
     assert.doesNotMatch(source, workflow.forbidden)
   }
+
+  const dependabotSource = await readFile(
+    new URL('../../.github/dependabot.yml', import.meta.url),
+    'utf8',
+  )
+  assert.match(dependabotSource, /^updates: \[\]$/mu)
+  assert.doesNotMatch(dependabotSource, /package-ecosystem:\s*github-actions/u)
 })
 
 function attestationEnvironment(t, configured = true) {

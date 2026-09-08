@@ -194,13 +194,13 @@
 }
 
 .batchEditCard.batchEditCard {
-  width: min(920px, 100%);
+  width: 100%;
   max-width: 100%;
   min-width: 0;
 }
 
 .singleFileChangeList {
-  width: min(920px, 100%);
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;

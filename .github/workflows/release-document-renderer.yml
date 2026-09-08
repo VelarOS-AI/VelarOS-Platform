@@ -1,12 +1,11 @@
-name: Release Document Renderer (local only)
+name: "[DISABLED] Release Document Renderer (local only)"
 
 # Document Renderer capability packs are built, signed where applicable,
 # staged, attested, and finalized on the selected native release host. This
 # workflow is intentionally inert and must never own release credentials or
 # dispatch hosted builds.
 
-on:
-  workflow_dispatch:
+on: []
 
 permissions: {}
 

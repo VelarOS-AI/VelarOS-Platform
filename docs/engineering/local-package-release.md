@@ -1,6 +1,6 @@
 # 本机发布与验证
 
-Platform 的包、Document Renderer 原生能力包、质量门和安全检查都只从维护者的本机 checkout 执行。`.github/workflows/ci.yml`、`codeql.yml`、`release-packages.yml` 与 `release-document-renderer.yml` 仅是零权限、静态跳过的策略哨兵，不承载构建、凭据或发布，也不产生 GitHub Actions 用量。
+Platform 的包、Document Renderer 原生能力包、质量门和安全检查都只从维护者的本机 checkout 执行。`.github/workflows/ci.yml`、`codeql.yml`、`release-packages.yml` 与 `release-document-renderer.yml` 是名称带 `[DISABLED]`、`on: []`、零权限且静态跳过的策略哨兵，不承载构建、凭据或发布，也不产生 GitHub Actions 用量。质量门对 `.github/workflows` 中的 YAML 文件执行精确 allowlist，新增托管 workflow 会直接失败；Dependabot 的 `github-actions` 更新入口也保持关闭。
 
 ## 准备发布源
 

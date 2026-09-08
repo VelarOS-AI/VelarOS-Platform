@@ -1,4 +1,12 @@
-import { memo, type ReactElement, type RefObject, useCallback, useEffect, useState } from 'react'
+import {
+  memo,
+  type ReactElement,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useState,
+  type WheelEvent as ReactWheelEvent,
+} from 'react'
 import {
   ArrowLineDownIcon,
   ArrowLineUpIcon,
@@ -239,10 +247,26 @@ function ChatScrollNavigatorInner({
     [scrollRef, transcriptNavigationRef]
   )
 
+  const forwardWheelToTranscript = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>): void => {
+      const scrollEl = scrollRef.current
+      if (!scrollEl || followLocked || !Number.isFinite(event.deltaY) || event.deltaY === 0) return
+
+      // Navigator 是滚动面的绝对定位兄弟节点。指针落在按钮上时浏览器找不到可滚动祖先，
+      // 因此把 wheel/trackpad 位移显式交还 transcript；向上意图先暂停流式贴底。
+      if (event.deltaY < 0) {
+        scrollEl.dispatchEvent(new Event(AutoScrollSuspendEventName, { bubbles: true }))
+      }
+      event.stopPropagation()
+      scrollEl.scrollBy({ top: event.deltaY, behavior: 'auto' })
+    },
+    [followLocked, scrollRef]
+  )
+
   if (hidden || !navState.visible) return null
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} onWheel={forwardWheelToTranscript}>
       <div className={styles.rail}>
         <IconButton
           label={t('chat.scrollToTop')}
