@@ -244,16 +244,18 @@ export class McpClientConnection {
     const client = this.requireClient()
     const descriptors: McpToolDescriptor[] = []
     const seenCursors = new Set<string>()
-    let cursor: string | undefined
+    let cursor: Nullable<string> = null
     do {
-      const response = await client.listTools(cursor === undefined ? undefined : { cursor })
+      const response = isPresent(cursor)
+        ? await client.listTools({ cursor })
+        : await client.listTools()
       const rawTools = isArray(response.tools) ? response.tools : []
       for (const raw of rawTools) {
         const descriptor = this.parseToolDescriptor(raw)
         if (descriptor) descriptors.push(descriptor)
       }
       cursor = this.advanceListCursor(response.nextCursor, seenCursors)
-    } while (cursor !== undefined)
+    } while (isPresent(cursor))
     return descriptors
   }
 
@@ -262,9 +264,11 @@ export class McpClientConnection {
     const client = this.requireClient()
     const resources: McpResourceDescriptor[] = []
     const seenCursors = new Set<string>()
-    let cursor: string | undefined
+    let cursor: Nullable<string> = null
     do {
-      const response = await client.listResources(cursor === undefined ? undefined : { cursor })
+      const response = isPresent(cursor)
+        ? await client.listResources({ cursor })
+        : await client.listResources()
       for (const resource of response.resources) {
         resources.push({
           uri: resource.uri,
@@ -274,12 +278,15 @@ export class McpClientConnection {
         })
       }
       cursor = this.advanceListCursor(response.nextCursor, seenCursors)
-    } while (cursor !== undefined)
+    } while (isPresent(cursor))
     return resources
   }
 
-  private advanceListCursor(cursor: string | undefined, seen: Set<string>): string | undefined {
-    if (cursor === undefined) return undefined
+  private advanceListCursor(
+    cursor: LooseOptional<string>,
+    seen: Set<string>
+  ): Nullable<string> {
+    if (!isPresent(cursor)) return null
     if (seen.has(cursor)) {
       throw new AppError('EXECUTION', `Repeated MCP pagination cursor from server ${this.serverName}.`)
     }

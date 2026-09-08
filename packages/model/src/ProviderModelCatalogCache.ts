@@ -1,3 +1,5 @@
+import { isUndefined } from '@velaros-ai/core'
+
 import type { ProviderModelCatalog } from './ModelContracts'
 
 interface CatalogEntry {
@@ -47,7 +49,7 @@ export class ProviderModelCatalogCache {
       // 保持有界；已交给调用者的请求仍由各自等待者负责取消和回收。
       if (this.#entries.size > 128) {
         const oldest = this.#entries.keys().next().value
-        if (oldest !== undefined) this.#entries.delete(oldest)
+        if (!isUndefined(oldest)) this.#entries.delete(oldest)
       }
     }
     if (entry.catalog) return structuredClone(entry.catalog)
@@ -55,7 +57,7 @@ export class ProviderModelCatalogCache {
   }
 
   public invalidate(key?: string): void {
-    if (key === undefined) this.#entries.clear()
+    if (isUndefined(key)) this.#entries.clear()
     else this.#entries.delete(key)
   }
 

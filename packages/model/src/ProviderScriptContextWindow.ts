@@ -41,9 +41,10 @@ function readConcreteProviderModelConfig(
 export function resolveProviderScriptMetadataContextWindow(
   metadata?: LooseOptional<ProviderScriptRuntimeMetadata>
 ): number | undefined {
-  return readConcreteProviderModelConfig(metadata?.config)?.contextWindow
+  return toOptional(
+    readConcreteProviderModelConfig(metadata?.config)?.contextWindow
     ?? toPositiveInteger(metadata?.contextWindow)
-    ?? undefined
+  )
 }
 
 /**

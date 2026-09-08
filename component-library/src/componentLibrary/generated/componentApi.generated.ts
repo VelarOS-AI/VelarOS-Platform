@@ -1256,7 +1256,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     {
       "name": "ChatConversationPane.onResolveConfirmation",
       "description": "Auto-generated from TypeScript props.",
-      "type": "((approved: boolean, rejectionMessage?: LooseOptional<string>, options?: { userActionCardResults?: UserActionCardResult[]; }) => void)"
+      "type": "((approved: boolean, rejectionMessage?: LooseOptional<string>, options?: { confirmationId?: string; userActionCardResults?: UserActionCardResult[]; }) => void)"
     },
     {
       "name": "ChatConversationPane.onSubmitInput",
@@ -1492,10 +1492,31 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
   ],
   ChatInputQueuePanel: [
     {
+      "name": "ChatInputQueuePanel.errorMessage",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
+    },
+    {
+      "name": "ChatInputQueuePanel.isPaused",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "ChatInputQueuePanel.onResume",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "(() => void | Promise<void>)"
+    },
+    {
       "name": "ChatInputQueuePanel.queuedDrafts",
       "description": "Auto-generated from TypeScript props.",
       "type": "ChatInputQueuedDraft[]",
       "recommended": "Required"
+    },
+    {
+      "name": "ChatInputQueuePanel.drainingId",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "LooseOptional<string>"
     },
     {
       "name": "ChatInputQueuePanel.isQueueDraining",
@@ -1528,6 +1549,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "ChatInputQueuePanel.onQueuedDraftReturnToInput",
       "description": "Auto-generated from TypeScript props.",
       "type": "((id: string) => void)"
+    },
+    {
+      "name": "ChatInputQueuePanel.onQueuedDraftRunNow",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "((id: string) => void | Promise<void>)"
     }
   ],
   ChatInteractionNotice: [
@@ -2869,6 +2895,16 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     }
   ],
   ComposerToolbarRightPrimaryAction: [
+    {
+      "name": "ComposerToolbarRightPrimaryAction.deferredAction",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "{ title: string; disabled: boolean; onClick: () => void; }"
+    },
+    {
+      "name": "ComposerToolbarRightPrimaryAction.secondaryStop",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "{ title: string; disabled: boolean; pending: boolean; }"
+    },
     {
       "name": "ComposerToolbarRightPrimaryAction.showButton",
       "description": "Auto-generated from TypeScript props.",

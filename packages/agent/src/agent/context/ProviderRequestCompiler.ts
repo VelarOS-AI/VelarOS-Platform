@@ -21,7 +21,7 @@ import {
   estimateContextUsage,
   type EstimateContextUsageOptions,
 } from '@velaros-ai/agent'
-import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -420,7 +420,9 @@ export class ProviderRequestCompiler {
     const ledger = governance.session.ledger
     const lastEpochAttempt = governance.session
       .epochReports()
-      .findLast((report) => report.trigger !== null && report.ledgerGeneration === governance.session.generation)
+      .findLast((report) =>
+        isNotNull(report.trigger) && report.ledgerGeneration === governance.session.generation
+      )
     const dashboard = buildContextDashboardMessage({
       epoch: governance.session.epoch,
       stats: ledger.stats(),

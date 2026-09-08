@@ -5,6 +5,8 @@ import {
   isPlainObject,
   isString,
   optionalWhen,
+  toNullable,
+  toOptional,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -119,7 +121,7 @@ export class ProviderModelCatalogService {
       request.provider,
       this.providerCollection.resolveBaseURL(request),
       this.providerCollection.resolveApiKey(request),
-      request.adapter ?? null,
+      toNullable(request.adapter),
       request.purpose ?? 'chat',
       request.defaultModel ?? '',
       script ? this.scriptVersions.get(script) : 0,
@@ -381,7 +383,7 @@ export class ProviderModelCatalogService {
               {
                 id,
                 label: optionalWhen(isString, item.displayName),
-                contextWindow: toPositiveInteger(item.inputTokenLimit) ?? undefined,
+                contextWindow: toOptional(toPositiveInteger(item.inputTokenLimit)),
               },
             ]
           })
@@ -398,7 +400,9 @@ export class ProviderModelCatalogService {
           return [
             {
               id: item.id,
-              contextWindow: toPositiveInteger(item.context_length ?? item.context_window) ?? undefined,
+              contextWindow: toOptional(
+                toPositiveInteger(item.context_length ?? item.context_window)
+              ),
               ...(isString(item.display_name)
                 ? { label: item.display_name }
                 : isString(item.displayName)
@@ -430,7 +434,11 @@ export class ProviderModelCatalogService {
       models.push({
         id,
         label: value.label?.trim() || presetModel?.label || id,
-        contextWindow: value.contextWindow ?? presetModel?.contextWindow ?? resolveProviderModelContextWindow(provider, id) ?? undefined,
+        contextWindow: toOptional(
+          value.contextWindow
+          ?? presetModel?.contextWindow
+          ?? resolveProviderModelContextWindow(provider, id)
+        ),
         ...(value.inputModalities?.length
           ? { inputModalities: value.inputModalities }
           : presetModel?.inputModalities?.length
