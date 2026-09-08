@@ -406,9 +406,7 @@ export class SystemPlatformCompatibility {
 
   public getOpenPortInspectionCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
-      return this.getWindowsPowerShellCommandSpec(
-        'Get-NetTCPConnection -State Listen | ForEach-Object { $processName = \'\'; try { $process = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; if ($process) { $processName = $process.ProcessName } } catch {}; Write-Output ("{0}`t{1}`t{2}`t{3}`t{4}" -f $_.OwningProcess, $processName, $_.LocalAddress, $_.LocalPort, $_.State) }'
-      )
+      return { file: 'netstat.exe', args: ['-ano', '-p', 'tcp'] }
     return { file: 'lsof', args: ['-nP', '-iTCP', '-sTCP:LISTEN', '-FpcnT'] }
   }
 

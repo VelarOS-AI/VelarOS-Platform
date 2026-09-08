@@ -135,12 +135,23 @@ function parseWindowsOpenPortEntries(stdout: string): RawPortEntry[] {
   return stdout.split(/\r?\n/).map((line): Nullable<RawPortEntry> => {
     const parts = line.trimEnd().split('\t')
     const port = positiveInteger(parts[3] ?? '')
-    return parts.length >= 5 && isNotNull(port) ? {
+    if (parts.length >= 5 && isNotNull(port)) return {
       pid: positiveInteger(parts[0] ?? ''),
       processName: parts[1]?.trim() || null,
       address: parts[2]?.trim() || '',
       port,
       state: parts[4]?.trim() || null,
+    }
+
+    const netstat = /^\s*TCP\s+(\S+)\s+\S+\s+LISTENING\s+(\d+)\s*$/iu.exec(line)
+    if (!netstat) return null
+    const address = parseAddressAndPort(netstat[1]!)
+    return address ? {
+      pid: positiveInteger(netstat[2]!),
+      processName: null,
+      address: address.address,
+      port: address.port,
+      state: 'LISTENING',
     } : null
   }).filter((entry): entry is RawPortEntry => isNotNull(entry))
 }

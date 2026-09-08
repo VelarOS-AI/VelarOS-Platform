@@ -3,9 +3,22 @@ import { win32 } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { SystemPlatformCompatibility,SystemShellUnavailableError } from '../src/SystemPlatformCompatibility'
+import { parseOpenPortEntries } from '../src/SystemProcessParsers'
 import { resolveSystemShell } from '../src/SystemShell'
 
 describe('SystemPlatformCompatibility', () => {
+  test('parses the native Windows netstat listener format', () => {
+    expect(parseOpenPortEntries([
+      '  Proto  Local Address          Foreign Address        State           PID',
+      '  TCP    0.0.0.0:3306           0.0.0.0:0              LISTENING       6928',
+      '  TCP    [::]:135               [::]:0                 LISTENING       1892',
+      '  TCP    127.0.0.1:5000         127.0.0.1:5001         ESTABLISHED     42',
+    ].join('\r\n'), 'win32')).toEqual([
+      { pid: 6928, processName: null, address: '0.0.0.0', port: 3306, state: 'LISTENING' },
+      { pid: 1892, processName: null, address: '::', port: 135, state: 'LISTENING' },
+    ])
+  })
+
   test('owns portable path primitives for product hosts', () => {
     const windows = new SystemPlatformCompatibility({ platform: 'win32' })
 
@@ -149,7 +162,10 @@ describe('SystemPlatformCompatibility', () => {
     expect(windowsProcessList?.file).toBe('powershell.exe')
     expect(windowsProcessList?.args.join(' ')).toContain('Get-Process -IncludeUserName')
     expect(windowsProcessList?.args.join(' ')).not.toContain('.GetOwner()')
-    expect(windows.getOpenPortInspectionCommandSpec()?.file).toBe('powershell.exe')
+    expect(windows.getOpenPortInspectionCommandSpec()).toEqual({
+      file: 'netstat.exe',
+      args: ['-ano', '-p', 'tcp'],
+    })
 
   expect(linux.getProcessKillPid(42)).toBe(-42)
   expect(linux.isProcessMissingError({ code: 'ESRCH' })).toBe(true)
