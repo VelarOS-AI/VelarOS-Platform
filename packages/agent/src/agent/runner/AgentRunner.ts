@@ -326,12 +326,12 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
                 remainingMs,
                 () =>
                   abortForDeadline(this.executionLimits.goalExecutionWallClockTimeoutMs),
-                { label: 'execution-goal-wall-clock-deadline', unref: true }
+                { label: 'execution-goal-wall-clock-deadline' }
               )
             })
             .catch(() => abortForDeadline(executionWallClockDeadlineMs))
         },
-        { label: 'execution-wall-clock-deadline', unref: true }
+        { label: 'execution-wall-clock-deadline' }
       )
       const loopResult = await this.primaryAgentStreamLoop.execute({
         history,

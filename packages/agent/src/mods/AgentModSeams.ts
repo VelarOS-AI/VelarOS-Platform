@@ -394,7 +394,10 @@ class AgentModSeamDispatcher {
     try {
       const timedOut = Symbol('hook-timeout')
       const timeout = new Promise<typeof timedOut>((resolve) => {
-        timers.after(entry.timeoutMs, () => resolve(timedOut), { unref: true })
+        // This timer is part of the awaited race, so it must remain referenced.
+        // Bun can otherwise leave the race pending forever when the hook itself
+        // never settles and no other referenced event-loop work remains.
+        timers.after(entry.timeoutMs, () => resolve(timedOut))
       })
       const outcome = await Promise.race([
         Promise.resolve(entry.handler(event, this.createContext(entry, controller.signal))),

@@ -1063,7 +1063,6 @@ export class ToolExecutor {
           () => resolve({ status: "aborted" }),
           {
             label: "ToolExecutor.abortSettlement.grace",
-            unref: true,
           },
         );
       };

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { resolve } from 'node:path'
 
 import { projectTools } from '../../project/src/agent/Project.tool'
 import type { ProjectToolContext } from '../../project/src/agent/Types'
@@ -9,6 +10,7 @@ import type { ApprovalPort } from '../src/tool-contract/approval'
 import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
 
 function tools(approved: boolean) {
+  const workspaceRoot = resolve('/workspace')
   const tracker = new CodingSessionTracker()
   let cards = 0
   let runs = 0
@@ -21,7 +23,7 @@ function tools(approved: boolean) {
   })
   const run = async (command: string) => {
     runs++
-    return { command, cwd: '/workspace', stdout: '', stderr: '', exitCode: 0, signal: null,
+    return { command, cwd: workspaceRoot, stdout: '', stderr: '', exitCode: 0, signal: null,
       durationMs: 0, timedOut: false, aborted: false, truncated: false, success: true,
       verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] } }
   }
@@ -29,7 +31,7 @@ function tools(approved: boolean) {
   const system: SystemToolContext = {
     abortSignal: new AbortController().signal, approval,
     system: {
-      resolveCommandCwd: (cwd) => cwd ?? '/workspace',
+      resolveCommandCwd: (cwd) => resolve(workspaceRoot, cwd ?? '.'),
       canStartBackgroundCommands: () => true, runCommand: run,
       globalSearch: unused, listProcesses: unused, listOpenPorts: unused,
       listBackgroundTasks: unused, terminateBackgroundTask: unused,
@@ -40,9 +42,9 @@ function tools(approved: boolean) {
   const project: ProjectToolContext = {
     abortSignal: system.abortSignal, approval, system: system.system,
     project: {
-      getRootPath: () => '/workspace', runCommand: run,
+      getRootPath: () => workspaceRoot, runCommand: run,
       runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),
-      prepareMutation: async () => ({ approved: true, rootPath: '/workspace', switched: false,
+      prepareMutation: async () => ({ approved: true, rootPath: workspaceRoot, switched: false,
         alreadyAuthorized: true, rejectionMessage: null, message: 'allowed' }),
       kernel: unused, queryCode: unused,
     },

@@ -53,7 +53,6 @@ async function readNextStreamPartWithIdleTimeout<TPart = TextStreamPart<ToolSet>
       }, {
         label: options.source,
         signal: options.abortSignal,
-        unref: true,
       })
     }))
   }

@@ -303,7 +303,7 @@ class KernelBackgroundJobManager {
       }
       this.waiters.add(check)
       if (isPresent(timeoutMs)) {
-        timer = this.timers.after(timeoutMs, done, { label: 'waitForSession', unref: true })
+        timer = this.timers.after(timeoutMs, done, { label: 'waitForSession' })
       }
       check()
     })
@@ -362,7 +362,6 @@ class KernelBackgroundJobManager {
       if (isPresent(timeoutMs)) {
         timer = this.timers.after(timeoutMs, () => done(null), {
           label: 'waitForNextTerminalForSession',
-          unref: true,
         })
       }
 
