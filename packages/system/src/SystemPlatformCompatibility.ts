@@ -412,9 +412,7 @@ export class SystemPlatformCompatibility {
 
   public getProcessListCommandSpec(): Nullable<CommandSpec> {
     if (this.isWindows())
-      return this.getWindowsPowerShellCommandSpec(
-        "$cpuByPid = @{}; Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object { if ($_.IDProcess -gt 0) { $cpuByPid[[int]$_.IDProcess] = [double]$_.PercentProcessorTime } }; $userByPid = @{}; try { Get-Process -IncludeUserName -ErrorAction SilentlyContinue | ForEach-Object { if ($_.UserName) { $userByPid[[int]$_.Id] = $_.UserName } } } catch {}; Get-CimInstance Win32_Process | ForEach-Object { $pidValue = [int]$_.ProcessId; $user = if ($userByPid.ContainsKey($pidValue)) { $userByPid[$pidValue] } else { '' }; $start = if ($_.CreationDate -is [datetime]) { $_.CreationDate.ToString('o') } elseif ($_.CreationDate) { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$_.CreationDate).ToString('o') } else { '' }; $command = if ($_.CommandLine) { ($_.CommandLine -replace \"[`r`n]+\", ' ').Trim() } else { $_.Name }; $state = if ($_.ExecutionState) { [string]$_.ExecutionState } else { 'Running' }; $cpu = if ($cpuByPid.ContainsKey($pidValue)) { $cpuByPid[$pidValue] } else { 0 }; $workingSetKb = [int64](($_.WorkingSetSize) / 1024); Write-Output (\"{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}\" -f $pidValue, $_.ParentProcessId, $user, $start, $state, $cpu, $workingSetKb, $_.Name, $command) }"
-      )
+      return { file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] }
     return {
       file: 'ps',
       args: ['-axo', 'pid=,ppid=,user=,lstart=,stat=,%cpu=,rss=,ucomm=,command='],

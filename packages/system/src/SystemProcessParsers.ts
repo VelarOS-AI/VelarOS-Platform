@@ -91,6 +91,17 @@ function parseProcessLine(line: string, platform: NodeJS.Platform): Nullable<Par
   const trimmed = line.trimEnd()
   if (!trimmed) return null
   if (platform === 'win32') {
+    const tasklist = parseWindowsTasklistFields(trimmed)
+    if (tasklist) {
+      const [name, pidText, , , memoryText] = tasklist
+      const pid = positiveInteger(pidText ?? '')
+      const memoryKb = Number((memoryText ?? '').replace(/\D/gu, ''))
+      if (isNull(pid) || !Number.isFinite(memoryKb)) return null
+      return {
+        pid, ppid: 0, user: '', startTime: '', status: 'Running', cpuPercent: 0,
+        memoryBytes: memoryKb * 1024, name: name || String(pid), command: name || String(pid),
+      }
+    }
     const parts = trimmed.split('\t')
     const pid = positiveInteger(parts[0] ?? '')
     const ppid = positiveInteger(parts[1] ?? '')
@@ -154,6 +165,15 @@ function parseWindowsOpenPortEntries(stdout: string): RawPortEntry[] {
       state: 'LISTENING',
     } : null
   }).filter((entry): entry is RawPortEntry => isNotNull(entry))
+}
+
+function parseWindowsTasklistFields(line: string): Nullable<string[]> {
+  if (!line.startsWith('"')) return null
+  const fields: string[] = []
+  const pattern = /"((?:[^"]|"")*)"(?:,|$)/gu
+  let match: Nullable<RegExpExecArray>
+  while ((match = pattern.exec(line))) fields.push((match[1] ?? '').replace(/""/gu, '"'))
+  return fields.length === 5 ? fields : null
 }
 
 function parseAddressAndPort(value: string): Nullable<{ address: string; port: number }> {

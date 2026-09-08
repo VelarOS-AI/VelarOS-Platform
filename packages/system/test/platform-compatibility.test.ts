@@ -3,7 +3,7 @@ import { win32 } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { SystemPlatformCompatibility,SystemShellUnavailableError } from '../src/SystemPlatformCompatibility'
-import { parseOpenPortEntries } from '../src/SystemProcessParsers'
+import { parseOpenPortEntries, parseProcessRows } from '../src/SystemProcessParsers'
 import { resolveSystemShell } from '../src/SystemShell'
 
 describe('SystemPlatformCompatibility', () => {
@@ -16,6 +16,16 @@ describe('SystemPlatformCompatibility', () => {
     ].join('\r\n'), 'win32')).toEqual([
       { pid: 6928, processName: null, address: '0.0.0.0', port: 3306, state: 'LISTENING' },
       { pid: 1892, processName: null, address: '::', port: 135, state: 'LISTENING' },
+    ])
+  })
+
+  test('parses the native Windows tasklist process format', () => {
+    expect(parseProcessRows([
+      '"System","4","Services","0","1,024 K"',
+      '"worker, helper.exe","2048","Console","1","12,345 K"',
+    ].join('\r\n'), 'win32')).toEqual([
+      expect.objectContaining({ pid: 4, ppid: 0, name: 'System', memoryBytes: 1024 * 1024 }),
+      expect.objectContaining({ pid: 2048, ppid: 0, name: 'worker, helper.exe', memoryBytes: 12_345 * 1024 }),
     ])
   })
 
@@ -159,9 +169,7 @@ describe('SystemPlatformCompatibility', () => {
     expect(windows.getTerminateCommand(42, true, { kind: 'powershell' })).toBe('taskkill.exe /PID 42 /T /F')
     expect(windows.getFallbackTerminateCommand('bun run dev')).toBeNull()
     const windowsProcessList = windows.getProcessListCommandSpec()
-    expect(windowsProcessList?.file).toBe('powershell.exe')
-    expect(windowsProcessList?.args.join(' ')).toContain('Get-Process -IncludeUserName')
-    expect(windowsProcessList?.args.join(' ')).not.toContain('.GetOwner()')
+    expect(windowsProcessList).toEqual({ file: 'tasklist.exe', args: ['/FO', 'CSV', '/NH'] })
     expect(windows.getOpenPortInspectionCommandSpec()).toEqual({
       file: 'netstat.exe',
       args: ['-ano', '-p', 'tcp'],
