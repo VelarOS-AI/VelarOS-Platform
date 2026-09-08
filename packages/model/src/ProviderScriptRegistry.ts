@@ -394,7 +394,6 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
           {
             signal,
             timeoutMessage: `Provider script runtime metadata timed out after ${this.runtimeMetadataTimeoutMs}ms.`,
-            unref: true,
           }
         )
       )

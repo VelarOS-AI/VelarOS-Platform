@@ -139,7 +139,7 @@ export class ProviderModelCatalogService {
         return await timers.withTimeout(
           this.timeoutMs,
           (timeoutSignal) => this.fetchProviderModels(request, timeoutSignal),
-          { signal: operationSignal, unref: true }
+          { signal: operationSignal }
         )
       } catch (error) {
         operationSignal.throwIfAborted()

@@ -65,8 +65,7 @@ export async function runModelConnectionProbe<T>(
   if (signal?.aborted) forwardAbort()
   const timeout = timers.after(
     timeoutMs,
-    () => controller.abort(new Error('Connection check timed out.')),
-    { unref: true }
+    () => controller.abort(new Error('Connection check timed out.'))
   )
   try {
     return await operation(controller.signal)

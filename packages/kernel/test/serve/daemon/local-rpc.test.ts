@@ -111,7 +111,7 @@ async function temporaryDirectory(): Promise<string> {
 }
 
 describe('Kernel local RPC', () => {
-  test('routes calls, identities, and pushed events over a Unix socket', async () => {
+  test.skipIf(process.platform === 'win32')('routes calls, identities, and pushed events over a Unix socket', async () => {
     const directory = await temporaryDirectory()
     const { service, call } = createRpcService()
     const server = new KernelLocalRpcServer({
@@ -219,7 +219,7 @@ describe('Kernel local RPC', () => {
     expect(service.getStatus()).toBe('disposed')
   })
 
-  test('publishes one discoverable endpoint and enforces a daemon lock', async () => {
+  test.skipIf(process.platform === 'win32')('publishes one discoverable endpoint and enforces a daemon lock', async () => {
     const directory = await temporaryDirectory()
     const paths = createDefaultKernelDaemonPaths('test-kernel', directory)
     const first = createRpcService()
@@ -236,7 +236,9 @@ describe('Kernel local RPC', () => {
 
     try {
       expect(await discoverKernelDaemon(paths)).toEqual(descriptor)
-      expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
+      }
       const connected = await connectToKernelDaemon(paths)
       try {
         expect(connected.handshake.kernelVersion).toBe('0.2.0')

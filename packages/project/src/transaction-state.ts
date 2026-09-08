@@ -310,11 +310,16 @@ export class FileProjectTransactionStateStore {
       closeSync(descriptor)
       descriptor = undefined
       renameSync(temporaryPath, this.path)
-      const directoryDescriptor = openSync(directory, constants.O_RDONLY)
-      try {
-        fsyncSync(directoryDescriptor)
-      } finally {
-        closeSync(directoryDescriptor)
+      // Windows does not support opening and fsyncing directory handles through
+      // Node. The file itself is flushed above; POSIX hosts additionally flush
+      // the parent directory so the rename is durable across a crash.
+      if (process.platform !== 'win32') {
+        const directoryDescriptor = openSync(directory, constants.O_RDONLY)
+        try {
+          fsyncSync(directoryDescriptor)
+        } finally {
+          closeSync(directoryDescriptor)
+        }
       }
     } catch (error) {
       if (!isUndefined(descriptor)) closeSync(descriptor)

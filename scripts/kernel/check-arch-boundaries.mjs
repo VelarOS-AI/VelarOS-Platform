@@ -21,7 +21,7 @@
 // 有意的基线变化:VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成基线,
 // 并在提交信息里说明差异。
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -336,7 +336,7 @@ function scanProtocolSingleSource() {
   // 协议 zod schema 只能定义在唯一实现处;别处重新定义 wire schema 即为复制协议。
   const wireSchemaDefinition = /export\s+const\s+\w*(?:Handshake|CapabilityCall|ModuleDescriptor|ScopeRef|ResourceRef|CapabilityToken)\w*Schema\s*=/
   for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
-    if (file.startsWith(`${protocolHome}/`)) continue
+    if (file.startsWith(`${protocolHome}${sep}`)) continue
     const relativeFile = normalizeSeparators(relative(RepoRoot, file))
     const lines = stripCodeComments(readFileSync(file, 'utf8')).split('\n')
     lines.forEach((line, index) => {
@@ -458,7 +458,7 @@ function scanReleaseIdentityBoundary() {
       })
       continue
     }
-    const source = readFileSync(contractPath, 'utf8')
+    const source = readFileSync(contractPath, 'utf8').replaceAll('\r\n', '\n')
     const missing = contract.markers.filter((marker) => !source.includes(marker))
     if (missing.length === 0) continue
     violations.push({

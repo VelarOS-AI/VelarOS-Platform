@@ -99,10 +99,12 @@ async function verifyPackage(packageDirectory) {
     }
     const files = capture(
       "tar",
-      ["-tzf", path.join(temporary, tarballs[0])],
-      packageDirectory,
-    );
-    if (files.split("\n").includes("package/dist/velaros-globals.d.ts")) {
+      ["-tzf", tarballs[0]],
+      temporary,
+    )
+      .split(/\r?\n/u)
+      .map((file) => file.replaceAll("\\", "/"));
+    if (files.includes("package/dist/velaros-globals.d.ts")) {
       throw new Error(
         `${manifest.name} tarball leaks dist/velaros-globals.d.ts`,
       );
@@ -115,7 +117,7 @@ async function verifyPackage(packageDirectory) {
       "package/THIRD_PARTY_NOTICES.md",
       "package/third-party-licenses/tailwindcss-MIT.txt",
     ]) {
-      if (!files.split("\n").includes(requiredFile)) {
+      if (!files.includes(requiredFile)) {
         throw new Error(`${manifest.name} tarball is missing ${requiredFile}`);
       }
     }
@@ -165,9 +167,11 @@ async function verifyExternalConsumer() {
         "",
       ].join("\n"),
     );
+    const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
     capture(
-      "npm",
+      process.platform === "win32" ? process.execPath : "npm",
       [
+        ...(process.platform === "win32" ? [npmCli] : []),
         "install",
         "--ignore-scripts",
         "--no-audit",

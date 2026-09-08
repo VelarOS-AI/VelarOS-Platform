@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -70,7 +70,7 @@ void describe('浏览器站点工作区的历史根回退', () => {
       recursive: true,
       limit: 50,
     })
-    const names = entries.map((entry) => entry.path.split('/').at(-1)).sort()
+    const names = entries.map((entry) => basename(entry.path)).sort()
 
     assert.deepEqual(names, ['a.json', 'b.json', 'shared.json'])
     // 同名条目必须指向主根那一份：历史根只补缺，不覆盖。

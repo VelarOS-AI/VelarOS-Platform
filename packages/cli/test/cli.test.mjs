@@ -209,9 +209,13 @@ test('published velaros bin target is executable through package metadata', () =
   assert.equal(manifest.bin?.velaros, './dist/bin.js')
 
   const declaredBinPath = fileURLToPath(new URL(manifest.bin.velaros, packageRoot))
-  assert.notEqual(statSync(declaredBinPath).mode & 0o111, 0)
+  if (process.platform !== 'win32') {
+    assert.notEqual(statSync(declaredBinPath).mode & 0o111, 0)
+  }
 
-  const result = spawnSync(declaredBinPath, ['help'], { encoding: 'utf8' })
+  const result = process.platform === 'win32'
+    ? spawnSync(process.execPath, [declaredBinPath, 'help'], { encoding: 'utf8' })
+    : spawnSync(declaredBinPath, ['help'], { encoding: 'utf8' })
 
   assert.equal(result.status, 0)
   assert.match(result.stdout, /VelarOS CLI/)

@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../src/agent/Project.tool.js'
@@ -51,6 +53,7 @@ describe('project approval context', () => {
   })
 
   test('dangerous project approval identifies the precise command and working directory', async () => {
+    const workspaceRoot = resolve('/workspace')
     let seen: Record<string, unknown> | undefined
     const result = (await projectTools['project:run'].execute(
       { command: 'rm -rf ./dist' },
@@ -67,14 +70,14 @@ describe('project approval context', () => {
           },
         },
         system: { canStartBackgroundCommands: () => true },
-        project: { getRootPath: () => '/workspace' },
+        project: { getRootPath: () => workspaceRoot },
       } as never,
     )) as { approved: boolean }
 
     expect(seen).toMatchObject({
       approvalRisk: 'high',
       riskScope: 'project-command:dangerous',
-      operation: { label: 'rm -rf ./dist', target: '/workspace' },
+      operation: { label: 'rm -rf ./dist', target: workspaceRoot },
     })
     expect(result.approved).toBe(false)
   })

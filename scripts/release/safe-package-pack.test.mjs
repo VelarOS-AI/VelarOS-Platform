@@ -41,8 +41,20 @@ async function createFixture(t, manifest = { name: 'leaf-package', version: '1.0
 async function installFakeBun(t, fixtureRoot, mode = 'capture') {
   const binDirectory = path.join(fixtureRoot, 'bin')
   await mkdir(binDirectory)
-  await writeFile(path.join(binDirectory, 'bun'), fakeBunSource)
-  await chmod(path.join(binDirectory, 'bun'), 0o755)
+  if (process.platform === 'win32') {
+    const runnerPath = path.join(binDirectory, 'fake-bun.cjs')
+    await writeFile(runnerPath, `
+const { writeFileSync } = require('node:fs')
+writeFileSync(process.env.SAFE_PACK_CAPTURE_FILE, JSON.stringify({
+  argv: process.argv.slice(2),
+  cwd: process.cwd(),
+}))
+`)
+    return { binDirectory, bunArguments: [runnerPath], bunCommand: process.execPath }
+  } else {
+    await writeFile(path.join(binDirectory, 'bun'), fakeBunSource)
+    await chmod(path.join(binDirectory, 'bun'), 0o755)
+  }
 
   const previousPath = process.env.PATH
   const previousMode = process.env.SAFE_PACK_FAKE_MODE
@@ -54,7 +66,7 @@ async function installFakeBun(t, fixtureRoot, mode = 'capture') {
     if (previousMode === undefined) delete process.env.SAFE_PACK_FAKE_MODE
     else process.env.SAFE_PACK_FAKE_MODE = previousMode
   })
-  return binDirectory
+  return { binDirectory, bunArguments: [], bunCommand: 'bun' }
 }
 
 function setTestEnvironment(t, name, value) {
@@ -120,7 +132,7 @@ async function startHangingPackRunner(
   t,
   { destination, fixtureRoot, packageDirectory, pidFile, ipc = false },
 ) {
-  const binDirectory = await installFakeBun(t, fixtureRoot, 'hang')
+  const { binDirectory } = await installFakeBun(t, fixtureRoot, 'hang')
   registerProcessGroupCleanup(t, pidFile)
   const moduleUrl = pathToFileURL(path.join(import.meta.dirname, 'safe-package-pack.mjs')).href
   const runnerSource = `
@@ -208,11 +220,11 @@ test('requires a publishable package identity', async (t) => {
 
 test('spawns Bun in the leaf package with only destination option arguments', async (t) => {
   const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  await installFakeBun(t, fixtureRoot)
+  const fakeBun = await installFakeBun(t, fixtureRoot)
   const captureFile = path.join(fixtureRoot, 'capture.json')
   setTestEnvironment(t, 'SAFE_PACK_CAPTURE_FILE', captureFile)
 
-  const result = await safePackPackage({ packageDirectory, destination })
+  const result = await safePackPackage({ packageDirectory, destination, ...fakeBun })
   const invocation = JSON.parse(await readFile(captureFile, 'utf8'))
 
   assert.equal(result.code, 0)
@@ -230,12 +242,12 @@ test('spawns Bun in the leaf package with only destination option arguments', as
 
 test('supports a safe explicit tgz filename without a package positional argument', async (t) => {
   const { destination, fixtureRoot, packageDirectory } = await createFixture(t)
-  await installFakeBun(t, fixtureRoot)
+  const fakeBun = await installFakeBun(t, fixtureRoot)
   const captureFile = path.join(fixtureRoot, 'filename-capture.json')
   const filename = path.join(destination, 'leaf-package.tgz')
   setTestEnvironment(t, 'SAFE_PACK_CAPTURE_FILE', captureFile)
 
-  await safePackPackage({ packageDirectory, filename })
+  await safePackPackage({ packageDirectory, filename, ...fakeBun })
   const invocation = JSON.parse(await readFile(captureFile, 'utf8'))
 
   assert.deepEqual(invocation.argv, [

@@ -45,7 +45,8 @@ describe('Kernel update lock', () => {
         pid: process.pid,
         acquiredAt: 1700000000000,
       })
-      expect((await stat(path)).mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32')
+        expect((await stat(path)).mode & 0o777).toBe(0o600)
     } finally {
       await lock.release()
     }

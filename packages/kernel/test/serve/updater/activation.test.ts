@@ -94,7 +94,8 @@ describe('Kernel activation pointer', () => {
       previousVersion: '1.0.0',
     })
     expect(await updater.getActiveVersion()).toBe('1.1.0')
-    expect((await stat(join(root, 'current.json'))).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32')
+      expect((await stat(join(root, 'current.json'))).mode & 0o777).toBe(0o600)
     expect((await readdir(root)).filter((entry) => entry.includes('.tmp')))
       .toEqual([])
     expect((await readdir(join(root, 'backups'))).length).toBe(1)

@@ -65,7 +65,7 @@ describe('System capability', () => {
     expect(mac.spec.file).toBe('/sandbox-exec')
     expect(mac.profile).toBe(buildSystemSeatbeltProfile(policy))
     expect(mac.profile).toContain('(deny network*)')
-    expect(mac.profile).toContain(`(subpath "${process.cwd()}")`)
+    expect(mac.profile).toContain(`(subpath ${JSON.stringify(process.cwd())})`)
     expect(linux.evidence.backend).toBe('bubblewrap')
     expect(linux.spec.args).toContain('--unshare-net')
     expect(linux.spec.args).toContain(process.cwd())

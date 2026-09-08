@@ -64,7 +64,7 @@ const devtoolsStubPlugin = {
   name: 'velaros-devtools-node-stubs',
   setup(build) {
     build.onResolve({ filter: /^\.\/HostRuntime\.js$/ }, ({ importer }) => {
-      if (importer.endsWith('/front_end/core/platform/platform.ts')) {
+      if (importer.replaceAll('\\', '/').endsWith('/front_end/core/platform/platform.ts')) {
         return {
           path: 'velaros:devtools-node-host-runtime',
           namespace: 'velaros-stub',
@@ -73,7 +73,7 @@ const devtoolsStubPlugin = {
       return undefined
     })
     build.onResolve({ filter: /^\.\/locales\.js$/ }, ({ importer }) => {
-      if (importer.endsWith('/front_end/core/i18n/i18nImpl.ts')) {
+      if (importer.replaceAll('\\', '/').endsWith('/front_end/core/i18n/i18nImpl.ts')) {
         return { path: 'velaros:devtools-locales', namespace: 'velaros-stub' }
       }
       return undefined
@@ -83,7 +83,7 @@ const devtoolsStubPlugin = {
       namespace: 'velaros-stub',
     }))
     build.onLoad(
-      { filter: /\/front_end\/core\/root\/Runtime\.ts$/ },
+      { filter: /[\\/]front_end[\\/]core[\\/]root[\\/]Runtime\.ts$/ },
       async ({ path }) => {
         const source = await readFile(path, 'utf8')
         if (!source.includes(upstreamLegacyModuleLoader)) {

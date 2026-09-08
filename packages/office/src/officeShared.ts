@@ -8,7 +8,7 @@
 import { copyFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, posix, resolve, sep } from 'node:path'
 
 import { z } from 'zod'
 
@@ -586,7 +586,7 @@ export function buildMacLibreOfficeFontConfig(input: {
     '/System/Library/Fonts',
     '/System/Library/Fonts/Supplemental',
     '/Library/Fonts',
-    join(input.homeDir, 'Library', 'Fonts'),
+    posix.join(input.homeDir, 'Library', 'Fonts'),
   ]
   return [
     '<?xml version="1.0"?>',

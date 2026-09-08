@@ -7,7 +7,7 @@ import {
   readdirSync,
   statSync,
 } from 'node:fs'
-import { dirname, relative, resolve } from 'node:path'
+import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
@@ -133,7 +133,7 @@ export function collectProductBoundaryViolations(
 
     for (const file of walkFiles(sliceRoot)) {
       if (!SourceFilePattern.test(file)) continue
-      if (excluded.some((entry) => file.startsWith(`${entry}/`))) continue
+      if (excluded.some((entry) => file.startsWith(`${entry}${sep}`))) continue
       const source = readFileSync(file, 'utf8')
       for (const toolName of ProductToolNames) {
         if (!source.includes(toolName)) continue
@@ -159,12 +159,12 @@ export function collectProductBoundaryViolations(
         }
         if (!specifier.startsWith('.')) continue
         const reached = resolve(dirname(file), specifier)
-        if (rule.mustStayInSlice && !reached.startsWith(`${sliceRoot}/`)) {
+        if (rule.mustStayInSlice && !reached.startsWith(`${sliceRoot}${sep}`)) {
           violations.push(
             `${relative(repoRoot, file)}：相对 import ${specifier} 逃出 ${rule.sourceRoot}/ 切片；${rule.message}`,
           )
         }
-        if (forbiddenReach.some((entry) => reached.startsWith(`${entry}/`))) {
+        if (forbiddenReach.some((entry) => reached.startsWith(`${entry}${sep}`))) {
           violations.push(
             `${relative(repoRoot, file)}：相对 import ${specifier} 触达禁止切片；${rule.message}`,
           )

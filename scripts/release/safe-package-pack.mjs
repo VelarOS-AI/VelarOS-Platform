@@ -497,6 +497,8 @@ export async function safePackPackage({
   packageDirectory,
   destination,
   filename,
+  bunCommand = 'bun',
+  bunArguments = [],
   timeoutMs = 120_000,
   stdio = 'pipe',
 } = {}) {
@@ -513,6 +515,7 @@ export async function safePackPackage({
 
   return await runGuardedCommand({
     args: [
+      ...bunArguments,
       'pm',
       'pack',
       outputTarget.option,
@@ -520,7 +523,7 @@ export async function safePackPackage({
       '--ignore-scripts',
       '--quiet',
     ],
-    command: 'bun',
+    command: bunCommand,
     cwd: resolvedPackageDirectory,
     operation: `Bun package pack for ${resolvedPackageDirectory}`,
     stdio,

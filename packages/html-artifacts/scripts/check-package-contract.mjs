@@ -53,8 +53,7 @@ for (const [publicPath, declaration] of Object.entries(manifest.exports ?? {})) 
 
 const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'velaros-html-consumer-'))
 try {
-  capture(
-    'npm',
+  captureNpm(
     ['pack', '--json', '--ignore-scripts', '--pack-destination', temporaryDirectory],
     repositoryRoot
   )
@@ -103,8 +102,7 @@ try {
     })
   )
 
-  capture(
-    'npm',
+  captureNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', tarball],
     temporaryDirectory
   )
@@ -146,6 +144,12 @@ function readExportTargets(declaration) {
   if (typeof declaration === 'string') return [declaration]
   if (!declaration || typeof declaration !== 'object') return []
   return Object.values(declaration).filter((value) => typeof value === 'string')
+}
+
+function captureNpm(args, cwd) {
+  if (process.platform !== 'win32') return capture('npm', args, cwd)
+  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  return capture(process.execPath, [npmCli, ...args], cwd)
 }
 
 function capture(command, args, cwd) {

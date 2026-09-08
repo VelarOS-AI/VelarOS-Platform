@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { extname, join, relative, resolve } from "node:path";
+import { extname, join, relative, resolve, sep } from "node:path";
 
 const PackageRoot = resolve(import.meta.dirname, "..");
 const SourceRoot = join(PackageRoot, "src");
@@ -23,6 +23,10 @@ const ExpectedExports = [
   "./statistics",
   "./workload",
 ];
+
+function packageRelative(path) {
+  return relative(PackageRoot, path).split(sep).join('/');
+}
 
 async function files(root) {
   const entries = await readdir(root, { withFileTypes: true });
@@ -68,7 +72,7 @@ const sourceFiles = (await files(SourceRoot)).filter((path) =>
 );
 for (const path of sourceFiles) {
   const source = await readFile(path, "utf8");
-  const name = relative(PackageRoot, path);
+  const name = packageRelative(path);
   if (/\b(?:electron|@electron)\b/.test(source))
     fail(`${name} imports or names Electron`);
   if (/tools\/agent-lab|agent-lab\/runs/.test(source)) {
@@ -81,7 +85,7 @@ for (const root of PureRoots) {
     (item) => extname(item) === ".ts",
   )) {
     const source = await readFile(path, "utf8");
-    const name = relative(PackageRoot, path);
+    const name = packageRelative(path);
     if (/from\s+['"]node:|import\s*\(['"]node:/.test(source)) {
       fail(
         `${name} is a pure measurement module and cannot import Node runtime APIs`,
@@ -110,7 +114,7 @@ const requiredFiles = [
   "test/fixtures/legacy-equivalence.tsv",
 ];
 const present = new Set(
-  (await files(PackageRoot)).map((path) => relative(PackageRoot, path)),
+  (await files(PackageRoot)).map(packageRelative),
 );
 for (const path of requiredFiles) {
   if (!present.has(path)) fail(`required product surface is missing: ${path}`);
@@ -119,7 +123,7 @@ for (const path of requiredFiles) {
 const legacySnapshot = await readFile(
   join(PackageRoot, "test/fixtures/legacy-equivalence.tsv"),
   "utf8",
-);
+).then((source) => source.replaceAll('\r\n', '\n'));
 const legacyRows = legacySnapshot.trim().split("\n");
 if (
   legacyRows[0] !== "schema\tagent-lab/legacy-equivalence-snapshot@1" ||

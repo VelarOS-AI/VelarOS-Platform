@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, extname, relative, resolve } from "node:path";
+import { dirname, extname, relative, resolve, sep } from "node:path";
 
 import ts from "typescript";
 
@@ -491,7 +491,7 @@ for (const expected of CapabilityPackages) {
     }
     if (
       ElectronImport.test(source) &&
-      !electronAllowedRoots.some((root) => path.startsWith(`${root}/`))
+      !electronAllowedRoots.some((root) => path.startsWith(`${root}${sep}`))
     ) {
       fail(
         `${expected.name}: only ${expected.electronRoots.map((slice) => `src/${slice}`).join(" / ") || "(none)"} may import Electron (${relative(packageRoot, path)})`,

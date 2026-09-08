@@ -18,6 +18,7 @@
 //     登记过的这一条,否则新加的 warn 规则会被 lint 的 --quiet 静默吞掉。
 import { readFileSync, writeFileSync } from 'node:fs'
 import { relative, resolve, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import tsParser from '@typescript-eslint/parser'
 import { ESLint } from 'eslint'
@@ -77,7 +78,7 @@ async function collectViolations() {
 
 /** 静态核对共享配置:根 flat config 数组里所有 warn 级规则都必须在登记表内。 */
 async function collectUnregisteredWarnRules() {
-  const configModule = await import(resolve(RepoRoot, 'eslint.config.mjs'))
+  const configModule = await import(pathToFileURL(resolve(RepoRoot, 'eslint.config.mjs')).href)
   const flatConfig = configModule.default
   const offenders = new Set()
 

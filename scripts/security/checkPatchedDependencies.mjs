@@ -41,7 +41,7 @@ function assertVendoredPptxGenJs() {
     'Vendored PptxGenJS patched runtime changed; review the upstream and local security diffs',
   )
   assert(
-    sha256(types) === '0726d015dbcb55ccfa75546cb2fd43fe13a0dfeb783d08572f1c62f59193bbe5',
+    sha256(types) === 'af809be35683161be19ef8e415afc469b4f94b661bd8bb2255d1276166eb7023',
     'Vendored PptxGenJS upstream type declarations changed; review the public API diff',
   )
 }
