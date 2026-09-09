@@ -150,6 +150,10 @@ export default [
       '**/dist/**',
       '**/out/**',
       '**/demo-dist/**',
+      // 产品打包产物：已在 .gitignore 里，但 lint 此前照扫不误。里面躺着 pdf.js 的 worker，
+      // 它自带引用第三方插件规则的 eslint 指令注释，于是本机只要构建过一次 document-renderer，
+      // `bun run check` 就会以 73 条「规则未找到」失败——连带把发布也挡下。
+      'dist-document-renderer/**',
       'scripts/**',
       'eslint/**',
       'docs/**',
