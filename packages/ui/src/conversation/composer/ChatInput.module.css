@@ -479,6 +479,21 @@
   display: none;
 }
 
+/*
+ * 收起态的芯片是**图标按钮**，不是「没有文字的芯片」。
+ *
+ * 展开态那套 `5px / 8px` 的不对称内边距和 gap 是给文字留的；标签一藏，剩下的图标就被推得偏左、
+ * 右边空一截，两颗并排时第二颗还会被 `overflow: hidden` 切掉半个。收起后把宽度钉成与高度相等、
+ * 内边距归零、内容居中，它才真的是个方按钮。
+ */
+.executionModeBar[data-chips-collapsed='true']:not([data-chips-measuring='true'])
+  .composerActiveChip {
+  width: calc(var(--ui-control-height-xs) - var(--ui-space-control-y-sm));
+  gap: 0;
+  padding-inline: 0;
+  justify-content: center;
+}
+
 .composerModeToggle {
   @apply inline-flex shrink-0 items-center font-medium;
   gap: 4px;
