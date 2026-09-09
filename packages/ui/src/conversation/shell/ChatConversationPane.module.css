@@ -38,10 +38,16 @@
   padding-bottom: max(9rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
 }
 
-/* The side navigator is an overlay so it must not trigger transcript remounts
-   as it appears during streaming. Reserve its lane up front while enabled;
-   hiding it from the host header gives the lane back to the transcript. */
-.conversationBody[data-scroll-navigator-hidden='false'] .messageListInnerSide {
+/**
+ * 滚动导航是浮层，因此不能在出现时触发转录重挂：它的槽位一律**提前**留好，而不是等它出现再
+ * 让内容让位。
+ *
+ * 但只有主聊天页留得起。主页有 48rem 的阅读栏，导航条落在栏外的留白里，5.25rem 不花任何代价；
+ * 侧边形态没有那条留白，同一条规则会把本就窄的面板再切掉 84px——工具卡与正文右侧空出一整条，
+ * 这正是「内容没铺满」的来源。侧边形态因此让导航条直接覆盖在内容上（它自带半透明背板与模糊），
+ * 嫌挡还可以用标题栏的显隐开关整条收起。两种形态下槽位都与导航条的出现无关，重挂顾虑不变。
+ */
+.conversationBody[data-scroll-navigator-hidden='false'] .messageListInner:not(.messageListInnerSide) {
   padding-inline-end: 5.25rem;
 }
 

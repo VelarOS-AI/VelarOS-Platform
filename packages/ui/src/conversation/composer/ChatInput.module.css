@@ -444,9 +444,39 @@
   padding-top: var(--ui-space-control-y-sm);
 }
 
+/**
+ * 执行模式芯片条：**恒定单行**。
+ *
+ * 宽度不够时的降级顺序是「先丢标签、再截断」，而不是换行——工具条一旦变成两层，模型选择器、
+ * 语音与发送按钮会被整体顶走，侧边形态下尤其明显。收起判据在 useComposerToolbarChipCollapse，
+ * 结果以 `data-chips-collapsed` 落在工具条左组上。
+ */
 .executionModeBar {
-  min-width: 0;
   padding: 0;
+  overflow: hidden;
+  /*
+   * `flex: 1 1 0` 不是为了让它变宽，是为了让它的宽度**与内容无关**——恒等于工具条左组的剩余
+   * 空间。收起判据要拿「自然内容宽 vs 可用宽」比，可用宽一旦随内容变化，这条判断就会自激：
+   * 收起后变窄 → 还是装不下 → 永不还原。详见 useComposerToolbarChipCollapse 的注释。
+   */
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.executionModeBar .composerActiveChip {
+  flex: 0 0 auto;
+  max-width: none;
+  white-space: nowrap;
+}
+
+.executionModeBar .activePluginLabel {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.executionModeBar[data-chips-collapsed='true']:not([data-chips-measuring='true'])
+  .activePluginLabel {
+  display: none;
 }
 
 .composerModeToggle {

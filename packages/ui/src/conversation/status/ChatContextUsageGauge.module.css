@@ -1,0 +1,176 @@
+@reference "../styles/tailwind-reference.css";
+
+.root {
+  --usage-progress: 0%;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 4px 9px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  appearance: none;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card) 98%, transparent),
+      color-mix(in srgb, var(--background-panel) 95%, transparent)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--card) 72%, transparent),
+    0 8px 20px color-mix(in srgb, var(--foreground) 5%, transparent);
+  color: var(--foreground-secondary);
+  cursor: default;
+  font: inherit;
+  outline: none;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease;
+}
+
+.root:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--card) 78%, transparent),
+    0 12px 26px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.root:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(var(--status-blue-rgb), 0.12),
+    0 12px 26px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.iconOnly {
+  width: var(--ui-icon-button-sm);
+  height: var(--ui-icon-button-sm);
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  border-color: transparent;
+  border-radius: var(--ui-radius-round);
+  background: transparent;
+  box-shadow: none;
+}
+
+.iconOnly:hover {
+  background: var(--background-muted);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.iconOnly:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--status-blue-rgb), 0.12);
+}
+
+.iconOrb {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.iconRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background:
+    conic-gradient(
+      currentColor 0 var(--usage-progress),
+      color-mix(in srgb, var(--foreground) 8%, transparent) var(--usage-progress) 100%
+    );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, var(--input));
+}
+
+.iconCore {
+  position: absolute;
+  inset: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  color: currentColor;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--card) 86%, transparent),
+    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.percent {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--foreground);
+}
+
+.toneSafe {
+  color: var(--status-green);
+}
+
+.toneWarning {
+  color: var(--status-amber);
+  border-color: color-mix(in srgb, var(--status-amber) 16%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card) 96%, var(--status-amber-soft)),
+      color-mix(in srgb, var(--background-panel) 94%, var(--status-amber-soft))
+    );
+}
+
+.toneDanger {
+  color: var(--status-red);
+  border-color: color-mix(in srgb, var(--status-red) 16%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card) 96%, var(--status-red-soft)),
+      color-mix(in srgb, var(--background-panel) 94%, var(--status-red-soft))
+    );
+}
+
+.toneSafe .percent,
+.toneWarning .percent,
+.toneDanger .percent {
+  color: color-mix(in srgb, currentColor 84%, var(--foreground));
+}
+
+.tooltipBubble {
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--ui-radius-panel);
+  background: color-mix(in srgb, var(--card) 98%, transparent);
+  border-color: var(--input);
+  box-shadow: 0 20px 48px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.tooltipArrow {
+  fill: color-mix(in srgb, var(--card) 98%, transparent);
+  filter: drop-shadow(-1px 0 0 var(--input));
+}
+
+.tooltipContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.tooltipTitle {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--foreground-secondary);
+}
+
+.tooltipMeta {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--foreground-tertiary);
+}

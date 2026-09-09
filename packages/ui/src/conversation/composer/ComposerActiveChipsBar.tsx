@@ -13,6 +13,7 @@ import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 
 import type { ConversationMessageKey as MessageKey } from '../i18n'
 
+import { useComposerToolbarChipCollapse } from './hooks/useComposerToolbarChipCollapse'
 import { groupTurnContextChips } from './utils/turnContextChipGroups.utils'
 import type {
   ChatInputMentionableOption,
@@ -145,6 +146,9 @@ function ComposerActiveChipsBarInner({
   updatePromptFeatureGroup,
   updateSelectedSkill,
 }: ComposerActiveChipsBarProps): Nullable<ReactElement> {
+  const isPersistent = placement === 'persistent'
+  // 常驻档才需要单行收起：add-menu 上方那条活动芯片区是可以换行的多行区，不参与本机制。
+  const { barRef, collapsed: chipsCollapsed } = useComposerToolbarChipCollapse()
   const lockedPromptFeatureSet = useMemo(
     () => new Set<ChatPromptFeatureId>(lockedPromptFeatures),
     [lockedPromptFeatures]
@@ -338,9 +342,15 @@ function ComposerActiveChipsBarInner({
 
   return (
     <Inline
-      className={placement === 'persistent' ? styles.executionModeBar : styles.activePluginBar}
+      ref={isPersistent ? barRef : undefined}
+      className={isPersistent ? styles.executionModeBar : styles.activePluginBar}
       gap="sm"
-      wrap="wrap"
+      // 执行模式芯片恒定单行：宽度不够时由 useComposerToolbarChipCollapse 把标签塌成图标，
+      // 而不是换行——工具条一变两层，模型选择器和发送键就被整体顶走。
+      // 这里必须走 `wrap` prop 而不是在模块 CSS 里写 `flex-wrap: nowrap`：Inline 的
+      // `velar-inline-wrap-wrap` 是同优先级的全局类，谁赢取决于样式表加载顺序。
+      wrap={isPersistent ? 'nowrap' : 'wrap'}
+      data-chips-collapsed={isPersistent ? chipsCollapsed : undefined}
     >
       {leading}
       {chipNodes}

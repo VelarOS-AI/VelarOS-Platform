@@ -33,9 +33,15 @@ const productStyles = readFileSync(
 
 void describe("shared conversation content width", () => {
   void test("reserves the navigator lane at the content-column boundary", () => {
+    // 只有主聊天页留导航槽位：它有 48rem 阅读栏外的留白可用。侧边形态一旦也留，
+    // 窄面板会被再切掉 84px，正文与工具卡右侧空出一整条——导航条在那里改为覆盖式。
     assert.match(
       paneStyles,
-      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInnerSide\s*\{\s*padding-inline-end: 5\.25rem;/u,
+      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInner:not\(\.messageListInnerSide\)\s*\{\s*padding-inline-end: 5\.25rem;/u,
+    );
+    assert.doesNotMatch(
+      paneStyles,
+      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInnerSide\s*\{/u,
     );
     assert.match(
       paneStyles,

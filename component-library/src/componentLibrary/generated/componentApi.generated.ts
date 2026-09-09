@@ -1165,6 +1165,44 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "recommended": "Required"
     }
   ],
+  ChatContextUsageGauge: [
+    {
+      "name": "ChatContextUsageGauge.variant",
+      "description": "`icon` 只留圆环，`badge` 额外显示百分比文字。",
+      "type": "ChatContextUsageGaugeVariant",
+      "defaultValue": "'badge'"
+    },
+    {
+      "name": "ChatContextUsageGauge.tone",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "ChatContextUsageTone",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatContextUsageGauge.ringPercent",
+      "description": "环的弧长百分比（0–100）。\n\n`null` = 拿不到可信弧长（例如媒体 token 未知），环画空但控件仍在——把「算不准」画成\n「占用为零」是两回事，后者会让人以为还有满格余量。",
+      "type": "Nullable<number>",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatContextUsageGauge.label",
+      "description": "徽标上的百分比文字；`icon` 档不渲染，但仍进 aria。",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatContextUsageGauge.ariaLabel",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "string",
+      "recommended": "Required"
+    },
+    {
+      "name": "ChatContextUsageGauge.tooltip",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "{ title: string; meta: string; }",
+      "recommended": "Required"
+    }
+  ],
   ChatConversationPane: [
     {
       "name": "ChatConversationPane.browserScreenshotDisplayMode",

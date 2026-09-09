@@ -328,9 +328,10 @@ void describe('Platform-owned conversation composer behavior', () => {
       paneStyles,
       /\.messageListInnerSide\s*\{[\s\S]*?@apply max-w-none gap-3 px-4/u
     )
+    // 侧边形态不留导航槽位（覆盖式），槽位只属于主聊天页的阅读栏留白。
     assert.match(
       paneStyles,
-      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInnerSide\s*\{\s*padding-inline-end: 5\.25rem;/u
+      /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInner:not\(\.messageListInnerSide\)\s*\{\s*padding-inline-end: 5\.25rem;/u
     )
     assert.match(
       productStyles,
