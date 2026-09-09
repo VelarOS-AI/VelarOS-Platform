@@ -451,7 +451,12 @@ assertPublicComponentsAreDocumented(components, checker, program)
 const output = buildOutput(components)
 
 mkdirSync(dirname(OUTPUT_PATH), { recursive: true })
-writeFileSync(OUTPUT_PATH, output)
+const existingOutput = existsSync(OUTPUT_PATH)
+  ? readFileSync(OUTPUT_PATH, 'utf8').replace(/\r\n?/gu, '\n')
+  : null
+if (existingOutput !== output) {
+  writeFileSync(OUTPUT_PATH, output)
+}
 
 console.log(
   `Generated ${components.length} component API entries at ${relative(ROOT_DIR, OUTPUT_PATH)}`
