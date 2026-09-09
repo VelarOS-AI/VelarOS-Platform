@@ -1168,8 +1168,16 @@
 }
 
 .composerTierSlider {
-  --tier-track: rgba(var(--primary-rgb), 0.12);
-  --tier-fill: var(--primary);
+  /*
+   * 走 `--control-checked` 而不是 `--primary`。
+   *
+   * 两者在本包的默认主题里是同一个值，所以独立使用时行为不变；区别在语义：`--primary` 是
+   * 「主要前景」，宿主完全可能把它映射成正文色（Workbench 就是这么用的，文件名靠它取色），
+   * 那样滑块会跟着变成近黑。滑块表达的是「选中到哪一档」，与复选框、开关同族，
+   * 该跟宿主的强调色走。
+   */
+  --tier-track: color-mix(in oklab, var(--control-checked) 12%, transparent);
+  --tier-fill: var(--control-checked);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -1214,7 +1222,7 @@
 }
 
 .composerTierSliderInput:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--control-checked) 18%, transparent);
 }
 
 .composerTierSliderTicks {
