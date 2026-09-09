@@ -148,7 +148,7 @@ function ComposerActiveChipsBarInner({
 }: ComposerActiveChipsBarProps): Nullable<ReactElement> {
   const isPersistent = placement === 'persistent'
   // 常驻档才需要单行收起：add-menu 上方那条活动芯片区是可以换行的多行区，不参与本机制。
-  const { barRef, collapsed: chipsCollapsed } = useComposerToolbarChipCollapse()
+  const { attachBar, collapsed: chipsCollapsed } = useComposerToolbarChipCollapse()
   const lockedPromptFeatureSet = useMemo(
     () => new Set<ChatPromptFeatureId>(lockedPromptFeatures),
     [lockedPromptFeatures]
@@ -342,7 +342,7 @@ function ComposerActiveChipsBarInner({
 
   return (
     <Inline
-      ref={isPersistent ? barRef : undefined}
+      ref={isPersistent ? attachBar : undefined}
       className={isPersistent ? styles.executionModeBar : styles.activePluginBar}
       gap="sm"
       // 执行模式芯片恒定单行：宽度不够时由 useComposerToolbarChipCollapse 把标签塌成图标，

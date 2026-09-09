@@ -1,4 +1,4 @@
-import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
+import { type RefCallback, useCallback, useState } from 'react'
 
 /**
  * 芯片条放不下时，把标签整体塌成**只剩图标**。
@@ -17,19 +17,19 @@ import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
  * （CSS 据此临时让标签回来），读完立刻摘掉；`scrollWidth` 是强制重排的读，所以这一读必定读到
  * 展开态。
  *
- * ## 两个观察者各管一件事
- * 收起与否同时取决于**可用宽度**和**芯片内容**：ResizeObserver 盯前者，MutationObserver 盯后者
- * （增删芯片、切语言）。收起只改 CSS 可见性、不动 DOM，因此回调不会自激。
+ * ## 为什么是 callback ref 而不是 useLayoutEffect
+ * 芯片条**没有活动芯片时整个返回 null**。挂在对象 ref + 空依赖 effect 上时，组件首次挂载那一刻
+ * 根本没有 DOM，effect 读到 null 就放弃了，而它此后再也不会重跑——用户后来打开计划模式、芯片
+ * 出现，观察者一个都没装上，于是标签只会被 `overflow: hidden` 切掉一半而永远不塌成图标。
+ * callback ref 精确跟随元素的挂载与卸载，天然没有这个时序洞。
  */
 export function useComposerToolbarChipCollapse(): {
-  barRef: RefObject<Nullable<HTMLDivElement>>
+  attachBar: RefCallback<HTMLDivElement>
   collapsed: boolean
 } {
-  const barRef = useRef<Nullable<HTMLDivElement>>(null)
   const [collapsed, setCollapsed] = useState(false)
 
-  useLayoutEffect(() => {
-    const bar = barRef.current
+  const attachBar = useCallback<RefCallback<HTMLDivElement>>((bar) => {
     if (!bar) return undefined
 
     const sync = (): void => {
@@ -37,7 +37,7 @@ export function useComposerToolbarChipCollapse(): {
     }
     sync()
 
-    // 非浏览器宿主（SSR / 裁剪版 jsdom）缺这两个观察者时静默降级：首帧那次 sync 已经给出正确
+    // 非浏览器宿主（SSR / 裁剪版 jsdom）缺这两个观察者时静默降级：挂载那次 sync 已经给出正确
     // 结果，缺的只是后续跟随。
     const observers: Array<{ disconnect: () => void }> = []
     const ResizeObserverCtor = globalThis.ResizeObserver
@@ -59,7 +59,7 @@ export function useComposerToolbarChipCollapse(): {
     }
   }, [])
 
-  return { barRef, collapsed }
+  return { attachBar, collapsed }
 }
 
 /** 在强制展开态下判断芯片条是否已经装不下；导出仅供测试直读这条判据。 */
