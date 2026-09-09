@@ -349,7 +349,7 @@ void describe('Platform-owned conversation composer behavior', () => {
         import.meta.url
       ),
       'utf8'
-    )
+    ).replace(/\r\n?/gu, '\n')
     const narrowLayout =
       styles.match(
         /@container chat-conversation-body \(max-width: 520px\) \{(?<body>[\s\S]*?)\n\}\n\n@media/u
