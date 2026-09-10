@@ -65,6 +65,111 @@ export function buildFileDiffSummary(beforeContent: string, afterContent: string
   }
 }
 
+const UNIFIED_PATCH_HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u
+
+/** hunk 头里行数为 0 时，起始行号指的是插入 / 删除点的**前一行**。 */
+function readHunkStart(start: string, count: LooseOptional<string>): number {
+  return count === '0' ? Number(start) + 1 : Number(start)
+}
+
+/**
+ * 由单个文件的 git 统一 diff 补丁构造差异摘要（与 `buildFileDiffSummary` 同一种行模型）。
+ *
+ * 行号取自 hunk 头；hunk 之间补丁没带的未改动区间折成一行「隐藏 N 行」，与按全文比出来的摘要
+ * 同样呈现。二进制文件没有补丁，只给计数和一行说明；补丁缺席（过大被省略）时计数用调用方给的
+ * numstat——所以两个计数都是必填。
+ */
+export function buildFileDiffSummaryFromUnifiedPatch(
+  patch: string,
+  options: {
+    additions: number
+    deletions: number
+    binary: boolean
+    /** 二进制文件那一行说明的文案，宿主按自己的语言传。 */
+    binaryLabel?: string
+  }
+): FileDiffSummary {
+  if (options.binary)
+    return {
+      added: options.additions,
+      removed: options.deletions,
+      rows: [
+        {
+          kind: 'context',
+          oldLineNumber: null,
+          newLineNumber: null,
+          text: options.binaryLabel ?? 'Binary file changed',
+        },
+      ],
+    }
+
+  const rows: FileDiffRow[] = []
+  let added = 0
+  let removed = 0
+  let insideHunk = false
+  let oldLineNumber = 0
+  let newLineNumber = 0
+  const lines = patch.split(/\r?\n/u)
+  // 补丁以换行结尾时 split 多出的最后一段空串不是一行。
+  if (lines.at(-1) === '') lines.pop()
+
+  for (const line of lines) {
+    const hunkMatch = UNIFIED_PATCH_HUNK_HEADER.exec(line)
+    if (hunkMatch) {
+      const oldStart = readHunkStart(hunkMatch[1], hunkMatch[2])
+      if (insideHunk && oldStart > oldLineNumber)
+        rows.push({
+          kind: 'collapsed',
+          oldLineNumber: null,
+          newLineNumber: null,
+          text: '',
+          hiddenCount: oldStart - oldLineNumber,
+        })
+      insideHunk = true
+      oldLineNumber = oldStart
+      newLineNumber = readHunkStart(hunkMatch[3], hunkMatch[4])
+      continue
+    }
+    // 第一个 hunk 之前是 diff / index / --- / +++ 文件头；`\` 行标注「文件末尾没有换行」。
+    if (!insideHunk || line.startsWith('\\')) continue
+
+    if (line.startsWith('+')) {
+      added += 1
+      rows.push({
+        kind: 'add',
+        oldLineNumber: null,
+        newLineNumber: newLineNumber++,
+        text: line.slice(1),
+      })
+      continue
+    }
+
+    if (line.startsWith('-')) {
+      removed += 1
+      rows.push({
+        kind: 'remove',
+        oldLineNumber: oldLineNumber++,
+        newLineNumber: null,
+        text: line.slice(1),
+      })
+      continue
+    }
+
+    rows.push({
+      kind: 'context',
+      oldLineNumber: oldLineNumber++,
+      newLineNumber: newLineNumber++,
+      text: line.startsWith(' ') ? line.slice(1) : line,
+    })
+  }
+
+  return {
+    added: added || options.additions,
+    removed: removed || options.deletions,
+    rows,
+  }
+}
+
 function normalizeLines(content: string): string[] {
   if (!content) return []
 
