@@ -4,7 +4,10 @@ import { describe, test } from 'node:test'
 import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { useMessageMarkdownComponents } from '../../packages/ui/src/conversation/blocks/useMessageMarkdownComponents'
+import {
+  MessageMarkdownRuntimeProvider,
+  useMessageMarkdownComponents,
+} from '../../packages/ui/src/conversation/blocks/useMessageMarkdownComponents'
 import {
   isMessageMarkdownFileReference,
   normalizeMessageMarkdownFileReference,
@@ -12,21 +15,29 @@ import {
 } from '../../packages/ui/src/conversation/markdown/messageMarkdownLinks.utils'
 
 function MarkdownLinkProbe({ href }: { href: string }): ReactElement {
-  const components = useMessageMarkdownComponents(undefined, async () => {})
+  const { components, runtime } = useMessageMarkdownComponents(undefined, async () => {})
   const Anchor = components.a
 
   assert.ok(Anchor)
 
-  return createElement(Anchor, { href }, href)
+  return createElement(
+    MessageMarkdownRuntimeProvider,
+    { runtime },
+    createElement(Anchor, { href }, href)
+  )
 }
 
 function InlineCodeProbe({ value }: { value: string }): ReactElement {
-  const components = useMessageMarkdownComponents(undefined, async () => {})
+  const { components, runtime } = useMessageMarkdownComponents(undefined, async () => {})
   const InlineCode = components.inlineCode
 
   assert.ok(InlineCode)
 
-  return createElement(InlineCode, {}, value)
+  return createElement(
+    MessageMarkdownRuntimeProvider,
+    { runtime },
+    createElement(InlineCode, {}, value)
+  )
 }
 
 void describe('会话 Markdown 文件路径链接', () => {

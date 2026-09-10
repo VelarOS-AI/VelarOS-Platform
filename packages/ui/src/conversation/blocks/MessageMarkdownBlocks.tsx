@@ -42,7 +42,11 @@ import {
   getThinkingTranslationButtonKind,
   shouldAutoTranslateThinkingBlock,
 } from './thinkingTranslation'
-import { useMessageMarkdownComponents } from './useMessageMarkdownComponents'
+import {
+  type MessageMarkdownRuntime,
+  MessageMarkdownRuntimeProvider,
+  useMessageMarkdownComponents,
+} from './useMessageMarkdownComponents'
 
 import styles from './MessageBubble.module.css'
 
@@ -523,28 +527,32 @@ function MessageStreamdownInner({
   isStreaming,
   animationKey,
   components,
+  runtime,
 }: {
   text: string
   isStreaming: boolean
   animationKey?: string
   components: StreamdownComponents
+  runtime: MessageMarkdownRuntime
 }): ReactElement {
   return (
-    <StreamingTextAnimationKeyContext.Provider value={toNullable(animationKey)}>
-      <Streamdown
-        mode={resolveStreamdownMarkdownMode({ isStreaming })}
-        isAnimating={isStreaming && !!animationKey}
-        animated={false}
-        BlockComponent={animationKey ? PersistentStreamingTextBlock : undefined}
-        plugins={STREAMDOWN_MARKDOWN_PLUGINS}
-        linkSafety={STREAMDOWN_MARKDOWN_LINK_SAFETY}
-        controls={STREAMDOWN_MARKDOWN_CONTROLS}
-        className={MESSAGE_STREAMDOWN_CLASS_NAME}
-        components={components}
-      >
-        {text}
-      </Streamdown>
-    </StreamingTextAnimationKeyContext.Provider>
+    <MessageMarkdownRuntimeProvider runtime={runtime}>
+      <StreamingTextAnimationKeyContext.Provider value={toNullable(animationKey)}>
+        <Streamdown
+          mode={resolveStreamdownMarkdownMode({ isStreaming })}
+          isAnimating={isStreaming && !!animationKey}
+          animated={false}
+          BlockComponent={animationKey ? PersistentStreamingTextBlock : undefined}
+          plugins={STREAMDOWN_MARKDOWN_PLUGINS}
+          linkSafety={STREAMDOWN_MARKDOWN_LINK_SAFETY}
+          controls={STREAMDOWN_MARKDOWN_CONTROLS}
+          className={MESSAGE_STREAMDOWN_CLASS_NAME}
+          components={components}
+        >
+          {text}
+        </Streamdown>
+      </StreamingTextAnimationKeyContext.Provider>
+    </MessageMarkdownRuntimeProvider>
   )
 }
 
@@ -570,7 +578,7 @@ function MessageMarkdownBlockInner({
     () => (tailMarker ? <MessageStatusMarker marker={tailMarker} /> : null),
     [tailMarker]
   )
-  const components = useMessageMarkdownComponents(
+  const { components, runtime } = useMessageMarkdownComponents(
     onOpenBrowserLink,
     onOpenProjectPath,
     t('browser.openExternal'),
@@ -590,13 +598,19 @@ function MessageMarkdownBlockInner({
   return (
     <div
       ref={markdownContentRef}
+      data-message-markdown-root
       className={cx(
         'markdownContent',
         !!tailMarker && 'markdownContentWithTailMarker',
         block.tone === 'error' && 'markdownError'
       )}
     >
-      <MessageStreamdown text={streamdownText} isStreaming={false} components={components} />
+      <MessageStreamdown
+        text={streamdownText}
+        isStreaming={false}
+        components={components}
+        runtime={runtime}
+      />
       {!!tailMarkerNode && (
         <span className={styles.markdownTailMarkerFallbackSlot}>{tailMarkerNode}</span>
       )}
@@ -634,11 +648,11 @@ function StreamingTextBlockInner({
     () => (visibleTailMarker ? <MessageStatusMarker marker={visibleTailMarker} /> : null),
     [visibleTailMarker]
   )
-  const components = useMessageMarkdownComponents(
+  const { components, runtime } = useMessageMarkdownComponents(
     onOpenBrowserLink,
     onOpenProjectPath,
     t('browser.openExternal'),
-    { isStreaming: animateText, tailNode: tailMarkerNode }
+    { isStreaming: animateText, tailNode: tailMarkerNode, expansionScope: animationKey }
   )
 
   useLayoutEffect(() => {
@@ -655,6 +669,7 @@ function StreamingTextBlockInner({
     <div className={styles.streamingMarkdownStack}>
       <div
         ref={markdownContentRef}
+        data-message-markdown-root
         className={cx(
           'markdownContent',
           'streamingMarkdownChunk',
@@ -666,6 +681,7 @@ function StreamingTextBlockInner({
           isStreaming={animateText}
           animationKey={animateText ? animationKey : undefined}
           components={components}
+          runtime={runtime}
         />
         {!!tailMarkerNode && (
           <span className={styles.markdownTailMarkerFallbackSlot}>{tailMarkerNode}</span>

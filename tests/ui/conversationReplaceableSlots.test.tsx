@@ -6,7 +6,10 @@ import { type ComponentType, createElement, type ReactElement, type ReactNode } 
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { MessageContentBlock } from '../../packages/ui/src/conversation/blocks/MessageContentBlock'
-import { useMessageMarkdownComponents } from '../../packages/ui/src/conversation/blocks/useMessageMarkdownComponents'
+import {
+  MessageMarkdownRuntimeProvider,
+  useMessageMarkdownComponents,
+} from '../../packages/ui/src/conversation/blocks/useMessageMarkdownComponents'
 import type { TextBlock } from '../../packages/ui/src/conversation/contracts'
 import {
   type ConversationI18nContextValue,
@@ -130,18 +133,22 @@ function CodeFenceProbe({
   languageClassName?: string
   isStreaming?: boolean
 }): ReactElement {
-  const components = useMessageMarkdownComponents(undefined, undefined, 'open', {
+  const { components, runtime } = useMessageMarkdownComponents(undefined, undefined, 'open', {
     isStreaming,
   })
   const Pre = components.pre as ComponentType<{ children: ReactNode }>
 
   return createElement(
-    Pre,
-    null,
+    MessageMarkdownRuntimeProvider,
+    { runtime },
     createElement(
-      'code',
-      languageClassName ? { className: languageClassName } : null,
-      'const answer = 42'
+      Pre,
+      null,
+      createElement(
+        'code',
+        languageClassName ? { className: languageClassName } : null,
+        'const answer = 42'
+      )
     )
   )
 }

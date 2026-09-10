@@ -224,7 +224,7 @@ void describe('Platform-owned conversation composer behavior', () => {
     assert.match(tableHeaderStyles, /word-break: normal;/u)
   })
 
-  void test('keeps conversation tables at a 400px scroll viewport until fully expanded', () => {
+  void test('keeps conversation tables at a 400px clipped preview until fully expanded', () => {
     const styles = readFileSync(
       new URL(
         '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
@@ -242,14 +242,15 @@ void describe('Platform-owned conversation composer behavior', () => {
       )?.groups?.body ?? ''
 
     assert.match(collapsedTableViewportStyles, /max-height: 400px !important;/u)
-    assert.match(collapsedTableViewportStyles, /overflow-y: auto !important;/u)
-    assert.match(collapsedTableViewportStyles, /overscroll-behavior: contain;/u)
+    // 折叠态是裁切预览：不做内嵌纵向滚动、不截断滚动链，鼠标经过时页面照常滚动。
+    assert.match(collapsedTableViewportStyles, /overflow-y: hidden !important;/u)
+    assert.doesNotMatch(collapsedTableViewportStyles, /overscroll-behavior/u)
     assert.match(expandedTableViewportStyles, /max-height: none !important;/u)
     assert.match(expandedTableViewportStyles, /overflow-y: hidden !important;/u)
     assert.doesNotMatch(styles, /table-wrapper'\] > :global\(div:not\(\.flex\)\)/u)
   })
 
-  void test('keeps code at a 400px scroll viewport and expands the whole block in one click', () => {
+  void test('keeps code at a 400px clipped preview and expands the whole block in one click', () => {
     const styles = readFileSync(
       new URL(
         '../../packages/ui/src/conversation/blocks/MessageBubble.module.css',
@@ -281,12 +282,13 @@ void describe('Platform-owned conversation composer behavior', () => {
 
     assert.match(codeBodyStyles, /overflow-x: auto;/u)
     assert.match(collapsedCodeStyles, /max-height: 400px !important;/u)
-    assert.match(collapsedCodeStyles, /overflow-y: auto !important;/u)
+    assert.match(collapsedCodeStyles, /overflow-y: hidden !important;/u)
+    assert.doesNotMatch(collapsedCodeStyles, /overscroll-behavior/u)
     assert.match(
       styles,
       /\.expandableCodeBlock\[data-collapsed='false'\] \[data-streamdown='code-block-body'\] \{\s*max-height: none !important;\s*overflow-y: hidden !important;/u
     )
-    assert.match(source, /baseMarkdownComponents\.table\s*=\s*MarkdownTableWithExpandableViewport/u)
+    assert.match(source, /table: MarkdownTableWithExpandableViewport/u)
     assert.equal(source.match(/const collapsed = hasOverflow && !expanded/gu)?.length, 2)
     assert.equal(source.match(/onClick=\{\(\) => setExpanded\(true\)\}/gu)?.length, 2)
     assert.match(collapseSlotStyles, /position: absolute;/u)

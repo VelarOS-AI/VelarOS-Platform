@@ -1,8 +1,11 @@
 import React, {
+  createContext,
   lazy,
   type ReactElement,
+  type ReactNode,
   Suspense,
   useCallback,
+  useContext,
   useId,
   useLayoutEffect,
   useMemo,
@@ -16,6 +19,7 @@ import {
   CodeIcon,
   EyeIcon,
 } from '@phosphor-icons/react'
+import { useMemoizedFn } from 'ahooks'
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -39,7 +43,7 @@ import styles from './MessageBubble.module.css'
 
 import type { HtmlArtifactBlock as HtmlArtifactContentBlock } from '#contracts'
 import { isArray } from '#internal/runtime'
-import { isEmpty, isString, trimmedStringOrEmpty } from '#internal/runtime'
+import { isEmpty, isPresent, isString, toNullable, trimmedStringOrEmpty } from '#internal/runtime'
 
 const CodeLanguageClassPattern = /(?:^|\s)language-([^\s]+)/u
 const DefaultCodeBlockLanguage = 'text'
@@ -103,27 +107,128 @@ function MarkdownExternalOpenButton({ label, url }: { label: string; url: string
   )
 }
 
-function useExpandableConversationViewport(viewportSelector: string): {
+/**
+ * markdown 覆盖件读取的**会变的值**：流式标志、宿主回调、外链按钮文案、尾部状态标记。
+ *
+ * 覆盖件（`pre` / `inlineCode` / `a` / 尾标候选）必须是**模块级常量组件**，经这个 context 取值，
+ * 不能在 hook 里按这些值现造：Streamdown 拿组件引用当元素类型，引用一变 React 就把整棵子树卸载
+ * 重建。宿主注入的 `openPathInLight` 依赖流式中每段都会换新的 message 对象，于是过去每来一段文字，
+ * 所有代码块都被重建一次——用户点的「展开」下一帧就被冲掉、溢出判定反复重测、滚动锚点跟着丢失。
+ *
+ * 回调以「稳定调用壳 + 最新实现」传入：渲染期只看**有没有**（决定渲染成链接还是纯文本），
+ * 点击时才调用当下最新的宿主实现，所以宿主回调换引用不会让任何消费者重渲染。
+ *
+ * `expansionScope`：这段 markdown 所属消息块的稳定键；可展开视口据此记住用户的手动展开。
+ */
+export interface MessageMarkdownRuntime {
+  isStreaming: boolean
+  externalOpenLabel: string
+  tailNode: Nullable<ReactElement>
+  openBrowserLink: Nullable<(url: string) => void | Promise<void>>
+  openProjectPath: Nullable<(path: string) => unknown>
+  expansionScope: Nullable<string>
+}
+
+const DefaultExternalOpenLabel = 'Open in external browser'
+
+const MessageMarkdownRuntimeContext = createContext<MessageMarkdownRuntime>({
+  isStreaming: false,
+  externalOpenLabel: DefaultExternalOpenLabel,
+  tailNode: null,
+  openBrowserLink: null,
+  openProjectPath: null,
+  expansionScope: null,
+})
+
+type ExpandableViewportKind = 'code' | 'table'
+
+/**
+ * 用户手动展开过的视口，键 = 消息块作用域 + 视口类型 + 同类视口在这段 markdown 里的文档序。
+ *
+ * 展开是用户意图，不能跟着组件实例走：流式结束时 Streamdown 从分块渲染切到静态渲染、切走会话再
+ * 切回来，都会整棵重建——实例级 state 一丢，刚点开的长代码块又弹回折叠。溢出高度**不**进这里，
+ * 永远以当下 DOM 实测为准。
+ */
+const ExpandedViewportKeys = new Set<string>()
+const MaxExpandedViewportKeys = 500
+
+function rememberViewportExpansion(key: string, expanded: boolean): void {
+  if (!expanded) {
+    ExpandedViewportKeys.delete(key)
+    return
+  }
+  ExpandedViewportKeys.delete(key)
+  ExpandedViewportKeys.add(key)
+  if (ExpandedViewportKeys.size <= MaxExpandedViewportKeys) return
+  const oldest = ExpandedViewportKeys.values().next().value
+  if (isPresent(oldest)) ExpandedViewportKeys.delete(oldest)
+}
+
+function useExpandableConversationViewport(
+  viewportSelector: string,
+  kind: ExpandableViewportKind
+): {
   containerRef: React.RefObject<Nullable<HTMLDivElement>>
   expanded: boolean
   hasOverflow: boolean
-  setExpanded: React.Dispatch<React.SetStateAction<boolean>>
+  setExpanded: (expanded: boolean) => void
 } {
   const timers = useTimerScope('useExpandableConversationViewport')
+  const { expansionScope } = useContext(MessageMarkdownRuntimeContext)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [expanded, setExpanded] = useState(false)
+  const expansionKeyRef = useRef<Nullable<string>>(null)
+  const [expanded, setExpandedState] = useState(false)
   const [hasOverflow, setHasOverflow] = useState(false)
 
   useLayoutEffect(() => {
     const container = containerRef.current
-    const viewport = container?.querySelector<HTMLElement>(viewportSelector)
-    if (!container || !viewport) return
+    const root = container?.closest('[data-message-markdown-root]')
+    if (!container || !root || !expansionScope) {
+      expansionKeyRef.current = null
+      return
+    }
 
+    const ordinal = Array.from(
+      root.querySelectorAll(`[data-expandable-viewport="${kind}"]`)
+    ).indexOf(container)
+    const key = ordinal < 0 ? null : `${expansionScope}:${kind}:${ordinal}`
+    expansionKeyRef.current = key
+    if (key && ExpandedViewportKeys.has(key)) setExpandedState(true)
+  }, [expansionScope, kind])
+
+  const setExpanded = useCallback((next: boolean): void => {
+    setExpandedState(next)
+    if (expansionKeyRef.current) rememberViewportExpansion(expansionKeyRef.current, next)
+  }, [])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    // 视口元素**每次测量都重新取**：代码块正文先以纯文本占位渲染，高亮模块加载完后 Suspense 会把
+    // `code-block-body` 整个换成新节点。只在挂载时抓一次元素，观察者就一直盯着脱离文档的旧节点，
+    // 判定冻结在旧值上——短代码块也会一直顶着「展开」箭头。
+    let viewport: Nullable<HTMLElement> = null
+    const resizeObserver = new ResizeObserver(() => measure())
+    const bindViewport = (): Nullable<HTMLElement> => {
+      const current = container.querySelector<HTMLElement>(viewportSelector)
+      if (current === viewport) return viewport
+
+      resizeObserver.disconnect()
+      viewport = current
+      if (viewport) {
+        resizeObserver.observe(viewport)
+        if (viewport.firstElementChild) resizeObserver.observe(viewport.firstElementChild)
+      }
+      return viewport
+    }
     const measure = (): void => {
+      const current = bindViewport()
       setHasOverflow(
-        viewport.scrollHeight >
-          ConversationExpandableViewportHeightPx +
-            ConversationExpandableViewportOverflowTolerancePx
+        !!current &&
+          current.scrollHeight >
+            ConversationExpandableViewportHeightPx +
+              ConversationExpandableViewportOverflowTolerancePx
       )
     }
 
@@ -131,15 +236,13 @@ function useExpandableConversationViewport(viewportSelector: string): {
     const animationFrameLease = timers.nextFrame(measure, {
       label: 'conversation.expandable-viewport.measure',
     })
-    const resizeObserver = new ResizeObserver(measure)
-    resizeObserver.observe(viewport)
-    if (viewport.firstElementChild) resizeObserver.observe(viewport.firstElementChild)
     const intersectionObserver = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) measure()
     })
     intersectionObserver.observe(container)
+    // 观察整个容器子树而不是旧视口：正文节点被替换、内容增删都会触发重测。
     const mutationObserver = new MutationObserver(measure)
-    mutationObserver.observe(viewport, {
+    mutationObserver.observe(container, {
       characterData: true,
       childList: true,
       subtree: true,
@@ -318,12 +421,19 @@ function RenderableDiagramCodeBlockFrame({
 
 function ExpandableCodeBlockFrame({ children }: { children: ReactElement }): ReactElement {
   const { t } = useConversationI18n()
-  const { containerRef, expanded, hasOverflow, setExpanded } =
-    useExpandableConversationViewport('[data-streamdown="code-block-body"]')
+  const { containerRef, expanded, hasOverflow, setExpanded } = useExpandableConversationViewport(
+    '[data-streamdown="code-block-body"]',
+    'code'
+  )
   const collapsed = hasOverflow && !expanded
 
   return (
-    <div ref={containerRef} className={styles.expandableCodeBlock} data-collapsed={collapsed}>
+    <div
+      ref={containerRef}
+      className={styles.expandableCodeBlock}
+      data-collapsed={collapsed}
+      data-expandable-viewport="code"
+    >
       {children}
       {collapsed && (
         <button
@@ -452,12 +562,19 @@ function MarkdownTableWithExpandableViewport({
   node?: unknown
 }): ReactElement {
   const { t } = useConversationI18n()
-  const { containerRef, expanded, hasOverflow, setExpanded } =
-    useExpandableConversationViewport('[data-conversation-table-viewport]')
+  const { containerRef, expanded, hasOverflow, setExpanded } = useExpandableConversationViewport(
+    '[data-conversation-table-viewport]',
+    'table'
+  )
   const collapsed = hasOverflow && !expanded
 
   return (
-    <div ref={containerRef} data-collapsed={collapsed} data-streamdown="table-wrapper">
+    <div
+      ref={containerRef}
+      data-collapsed={collapsed}
+      data-expandable-viewport="table"
+      data-streamdown="table-wrapper"
+    >
       <div data-conversation-table-viewport>
         <table data-streamdown="table">
           {children}
@@ -495,175 +612,220 @@ function MarkdownTableWithExpandableViewport({
   )
 }
 
-function useBaseMarkdownComponents({
-  isStreaming = false,
-  onOpenBrowserLink,
-  onOpenProjectPath,
-  externalOpenLabel = 'Open in external browser',
-}: {
-  isStreaming?: boolean
-  onOpenBrowserLink?: (url: string) => void | Promise<void>
-  onOpenProjectPath?: (path: string) => unknown
-  externalOpenLabel?: string
-}): StreamdownComponents {
-  return useMemo(() => {
-    const baseMarkdownComponents: StreamdownComponents = {}
-    baseMarkdownComponents.pre = ((props: React.ComponentPropsWithoutRef<'pre'>) => (
-      <MarkdownPreWithExpandableCode {...props} isStreaming={isStreaming} />
-    )) as StreamdownComponents['pre']
-    baseMarkdownComponents.inlineCode = (({
-      children,
-      className,
-      ...props
-    }: React.ComponentPropsWithoutRef<'code'>): ReactElement => {
-      const language = readCodeLanguage(className)
-      const filePath = !language
-        ? normalizeMessageMarkdownFileReference(readCodeText(children))
-        : null
-      const renderInlineCode = (content: React.ReactNode): ReactElement => (
-        <code className={className} {...props}>
-          {content}
-        </code>
-      )
+function MarkdownPre(props: React.ComponentPropsWithoutRef<'pre'>): ReactElement {
+  const { isStreaming } = useContext(MessageMarkdownRuntimeContext)
+  return <MarkdownPreWithExpandableCode {...props} isStreaming={isStreaming} />
+}
 
-      if (!filePath || !onOpenProjectPath) return renderInlineCode(children)
+function MarkdownInlineCode({
+  children,
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<'code'>): ReactElement {
+  const { openProjectPath } = useContext(MessageMarkdownRuntimeContext)
+  const language = readCodeLanguage(className)
+  const filePath = !language ? normalizeMessageMarkdownFileReference(readCodeText(children)) : null
+  const renderInlineCode = (content: React.ReactNode): ReactElement => (
+    <code className={className} {...props}>
+      {content}
+    </code>
+  )
 
-      return renderInlineCode(
+  if (!filePath || !openProjectPath) return renderInlineCode(children)
+
+  return renderInlineCode(
+    <Link
+      href={filePath}
+      className={styles.markdownFileLink}
+      data-streamdown="link"
+      data-tour-id="chat-result-link"
+      onClick={(event) => {
+        if (!isPrimaryPointerClick(event)) return
+
+        event.preventDefault()
+        void openProjectPath(filePath)
+      }}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function MarkdownLink({
+  href,
+  onClick,
+  rel,
+  target,
+  ...props
+}: React.ComponentPropsWithoutRef<'a'>): ReactElement {
+  const { openBrowserLink, openProjectPath, externalOpenLabel } = useContext(
+    MessageMarkdownRuntimeContext
+  )
+  const link = isString(href) ? href : ''
+  const linkTarget = resolveMessageMarkdownHrefTarget(link)
+  const shouldOpenInBrowser = linkTarget.kind === 'web' && !!openBrowserLink
+  const shouldOpenExternally = linkTarget.kind === 'external-protocol'
+
+  if (linkTarget.kind === 'project-file' && openProjectPath)
+    return (
+      <Link
+        href={href}
+        className={styles.markdownFileLink}
+        data-streamdown="link"
+        data-tour-id="chat-result-link"
+        {...props}
+        onClick={(event) => {
+          onClick?.(event)
+          if (event.defaultPrevented || !isPrimaryPointerClick(event)) return
+
+          event.preventDefault()
+          void openProjectPath(linkTarget.path)
+        }}
+      />
+    )
+
+  if (linkTarget.kind === 'text') return <span>{props.children}</span>
+
+  if (linkTarget.kind === 'web')
+    return (
+      <span className={styles.markdownWebLinkGroup}>
         <Link
-          href={filePath}
-          className={styles.markdownFileLink}
-          data-streamdown="link"
+          href={href}
+          className={styles.markdownWebLink}
           data-tour-id="chat-result-link"
+          {...props}
+          rel={rel}
+          target={target}
           onClick={(event) => {
-            if (!isPrimaryPointerClick(event)) return
+            onClick?.(event)
+            if (event.defaultPrevented || !shouldOpenInBrowser || !isPrimaryPointerClick(event))
+              return
 
             event.preventDefault()
-            void onOpenProjectPath(filePath)
+            void openBrowserLink?.(linkTarget.url)
           }}
-        >
-          {children}
-        </Link>
-      )
-    }) as StreamdownComponents['inlineCode']
-    baseMarkdownComponents.table =
-      MarkdownTableWithExpandableViewport as StreamdownComponents['table']
+        />
+        <MarkdownExternalOpenButton label={externalOpenLabel} url={linkTarget.url} />
+      </span>
+    )
 
-    if (onOpenBrowserLink || onOpenProjectPath) {
-      baseMarkdownComponents.a = (({
-        href,
-        onClick,
-        rel,
-        target,
-        ...props
-      }: React.ComponentPropsWithoutRef<'a'>): ReactElement => {
-        const link = isString(href) ? href : ''
-        const linkTarget = resolveMessageMarkdownHrefTarget(link)
-        const shouldOpenInBrowser = linkTarget.kind === 'web' && !!onOpenBrowserLink
-        const shouldOpenExternally = linkTarget.kind === 'external-protocol'
+  return (
+    <Link
+      href={href}
+      className={styles.markdownWebLink}
+      data-tour-id="chat-result-link"
+      external={shouldOpenExternally}
+      {...props}
+      {...(shouldOpenExternally ? {} : { rel, target })}
+      onClick={(event) => {
+        onClick?.(event)
+        if (event.defaultPrevented || !shouldOpenInBrowser || !isPrimaryPointerClick(event)) return
 
-        if (linkTarget.kind === 'project-file' && onOpenProjectPath)
-          return (
-            <Link
-              href={href}
-              className={styles.markdownFileLink}
-              data-streamdown="link"
-              data-tour-id="chat-result-link"
-              {...props}
-              onClick={(event) => {
-                onClick?.(event)
-                if (event.defaultPrevented || !isPrimaryPointerClick(event)) return
+        event.preventDefault()
+        void openBrowserLink?.(link)
+      }}
+    />
+  )
+}
 
-                event.preventDefault()
-                void onOpenProjectPath(linkTarget.path)
-              }}
-            />
-          )
+function createTailMarkerCandidate(tag: (typeof TailMarkerCandidateTags)[number]) {
+  function TailMarkerCandidate({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
+    const { tailNode } = useContext(MessageMarkdownRuntimeContext)
+    return React.createElement(
+      tag,
+      props,
+      children,
+      <span className={styles.markdownTailMarkerSlot}>{tailNode}</span>
+    )
+  }
+  TailMarkerCandidate.displayName = `MarkdownTailMarkerCandidate(${tag})`
+  return TailMarkerCandidate
+}
 
-        if (linkTarget.kind === 'text') return <span>{props.children}</span>
+const TailMarkerCandidateComponents = Object.fromEntries(
+  TailMarkerCandidateTags.map((tag) => [tag, createTailMarkerCandidate(tag)])
+) as StreamdownComponents
 
-        if (linkTarget.kind === 'web')
-          return (
-            <span className={styles.markdownWebLinkGroup}>
-              <Link
-                href={href}
-                className={styles.markdownWebLink}
-                data-tour-id="chat-result-link"
-                {...props}
-                rel={rel}
-                target={target}
-                onClick={(event) => {
-                  onClick?.(event)
-                  if (
-                    event.defaultPrevented ||
-                    !shouldOpenInBrowser ||
-                    !isPrimaryPointerClick(event)
-                  )
-                    return
+const BaseMarkdownComponents: StreamdownComponents = {
+  pre: MarkdownPre as StreamdownComponents['pre'],
+  inlineCode: MarkdownInlineCode as StreamdownComponents['inlineCode'],
+  table: MarkdownTableWithExpandableViewport as StreamdownComponents['table'],
+}
 
-                  event.preventDefault()
-                  void onOpenBrowserLink?.(linkTarget.url)
-                }}
-              />
-              <MarkdownExternalOpenButton label={externalOpenLabel} url={linkTarget.url} />
-            </span>
-          )
+// 没有宿主打开能力时不覆盖 `a`，沿用 Streamdown 自带的链接（含 linkSafety 确认）。
+const LinkAwareMarkdownComponents: StreamdownComponents = {
+  ...BaseMarkdownComponents,
+  a: MarkdownLink as StreamdownComponents['a'],
+}
 
-        return (
-          <Link
-            href={href}
-            className={styles.markdownWebLink}
-            data-tour-id="chat-result-link"
-            external={shouldOpenExternally}
-            {...props}
-            {...(shouldOpenExternally ? {} : { rel, target })}
-            onClick={(event) => {
-              onClick?.(event)
-              if (event.defaultPrevented || !shouldOpenInBrowser || !isPrimaryPointerClick(event))
-                return
+/** 四张常量表，按「有无链接处理 × 有无尾标」选一张：身份只在这两个布尔翻转时变化。 */
+const MarkdownComponentTables = {
+  base: BaseMarkdownComponents,
+  linkAware: LinkAwareMarkdownComponents,
+  baseWithTail: { ...BaseMarkdownComponents, ...TailMarkerCandidateComponents },
+  linkAwareWithTail: { ...LinkAwareMarkdownComponents, ...TailMarkerCandidateComponents },
+} satisfies Record<string, StreamdownComponents>
 
-              event.preventDefault()
-              void onOpenBrowserLink?.(link)
-            }}
-          />
-        )
-      }) as StreamdownComponents['a']
-    }
-
-    return baseMarkdownComponents
-  }, [externalOpenLabel, isStreaming, onOpenBrowserLink, onOpenProjectPath])
+export function MessageMarkdownRuntimeProvider({
+  runtime,
+  children,
+}: {
+  runtime: MessageMarkdownRuntime
+  children: ReactNode
+}): ReactElement {
+  return (
+    <MessageMarkdownRuntimeContext.Provider value={runtime}>
+      {children}
+    </MessageMarkdownRuntimeContext.Provider>
+  )
 }
 
 export function useMessageMarkdownComponents(
   onOpenBrowserLink?: (url: string) => void | Promise<void>,
   onOpenProjectPath?: (path: string) => unknown,
-  externalOpenLabel = 'Open in external browser',
-  options?: { isStreaming?: boolean; tailNode?: LooseOptional<ReactElement> }
-): StreamdownComponents {
-  const baseMarkdownComponents = useBaseMarkdownComponents({
-    isStreaming: !!options?.isStreaming,
-    onOpenBrowserLink,
-    onOpenProjectPath,
-    externalOpenLabel,
-  })
-  const tailNode = options?.tailNode
+  externalOpenLabel = DefaultExternalOpenLabel,
+  options?: {
+    isStreaming?: boolean
+    tailNode?: LooseOptional<ReactElement>
+    expansionScope?: LooseOptional<string>
+  }
+): { components: StreamdownComponents; runtime: MessageMarkdownRuntime } {
+  const isStreaming = !!options?.isStreaming
+  const tailNode = toNullable(options?.tailNode)
+  const expansionScope = toNullable(options?.expansionScope)
+  const hasBrowserLink = !!onOpenBrowserLink
+  const hasProjectPath = !!onOpenProjectPath
+  const openBrowserLink = useMemoizedFn((url: string) => onOpenBrowserLink?.(url))
+  const openProjectPath = useMemoizedFn((path: string) => onOpenProjectPath?.(path))
 
-  return useMemo(() => {
-    if (!tailNode) return baseMarkdownComponents
+  const runtime = useMemo<MessageMarkdownRuntime>(
+    () => ({
+      isStreaming,
+      externalOpenLabel,
+      tailNode,
+      openBrowserLink: hasBrowserLink ? openBrowserLink : null,
+      openProjectPath: hasProjectPath ? openProjectPath : null,
+      expansionScope,
+    }),
+    [
+      expansionScope,
+      externalOpenLabel,
+      hasBrowserLink,
+      hasProjectPath,
+      isStreaming,
+      openBrowserLink,
+      openProjectPath,
+      tailNode,
+    ]
+  )
+  const linkAware = hasBrowserLink || hasProjectPath
+  const components = tailNode
+    ? linkAware
+      ? MarkdownComponentTables.linkAwareWithTail
+      : MarkdownComponentTables.baseWithTail
+    : linkAware
+      ? MarkdownComponentTables.linkAware
+      : MarkdownComponentTables.base
 
-    const tailMarkerCandidates: Record<string, unknown> = {}
-    for (const tag of TailMarkerCandidateTags) {
-      tailMarkerCandidates[tag] = ({ children, ...props }: React.HTMLAttributes<HTMLElement>) =>
-        React.createElement(
-          tag,
-          props,
-          children,
-          <span className={styles.markdownTailMarkerSlot}>{tailNode}</span>
-        )
-    }
-
-    return {
-      ...baseMarkdownComponents,
-      ...tailMarkerCandidates,
-    } as StreamdownComponents
-  }, [baseMarkdownComponents, tailNode])
+  return { components, runtime }
 }

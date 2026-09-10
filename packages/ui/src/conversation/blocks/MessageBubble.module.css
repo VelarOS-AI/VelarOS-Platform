@@ -1360,10 +1360,13 @@
     color: var(--shiki-dark, var(--sdm-c, var(--foreground))) !important;
   }
 
+  /*
+   * 折叠态是「预览 + 展开入口」：纵向裁切，不做内嵌滚动。内嵌纵向滚动再加 overscroll contain，
+   * 鼠标经过代码块时滚轮会被它吃掉、页面滚不动；想看全文点展开。横向长行仍可在块内滚动。
+   */
   & .expandableCodeBlock[data-collapsed='true'] [data-streamdown='code-block-body'] {
     max-height: 400px !important;
-    overflow-y: auto !important;
-    overscroll-behavior: contain;
+    overflow-y: hidden !important;
     transition: max-height 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
@@ -1517,11 +1520,11 @@
     scrollbar-width: thin;
   }
 
+  /* 与代码块折叠态同理：纵向裁切，不截断页面滚动链。 */
   & [data-streamdown='table-wrapper'][data-collapsed='true']
     > [data-conversation-table-viewport] {
     max-height: 400px !important;
-    overflow-y: auto !important;
-    overscroll-behavior: contain;
+    overflow-y: hidden !important;
   }
 
   & [data-streamdown='table-wrapper'][data-collapsed='false']
