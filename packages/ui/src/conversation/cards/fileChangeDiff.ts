@@ -1,4 +1,4 @@
-import { isEmpty } from '#internal/runtime'
+import { isEmpty, isPresent } from '#internal/runtime'
 export interface FileDiffRow {
   kind: 'context' | 'add' | 'remove' | 'collapsed'
   oldLineNumber: Nullable<number>
@@ -72,6 +72,11 @@ function readHunkStart(start: string, count: LooseOptional<string>): number {
   return count === '0' ? Number(start) + 1 : Number(start)
 }
 
+/** hunk 头省略行数（`@@ -3 +3 @@`）表示 1 行。 */
+function readHunkLineCount(count: LooseOptional<string>): number {
+  return isPresent(count) ? Number(count) : 1
+}
+
 /**
  * 由单个文件的 git 统一 diff 补丁构造差异摘要（与 `buildFileDiffSummary` 同一种行模型）。
  *
@@ -106,9 +111,14 @@ export function buildFileDiffSummaryFromUnifiedPatch(
   const rows: FileDiffRow[] = []
   let added = 0
   let removed = 0
-  let insideHunk = false
   let oldLineNumber = 0
   let newLineNumber = 0
+  // hunk 体按头里的行数读完为止：读完之后到下一个 hunk 头之间都是文件头，不按行首字符去猜。
+  let remainingOldLines = 0
+  let remainingNewLines = 0
+  // 同一段补丁里的后一个 hunk 才折叠中间的区间；git 把「文件 ↔ 符号链接」拆成删除 + 新建
+  // 两段输出，第二段从头编号。
+  let continuesSection = false
   const lines = patch.split(/\r?\n/u)
   // 补丁以换行结尾时 split 多出的最后一段空串不是一行。
   if (isEmpty(lines[lines.length - 1])) lines.pop()
@@ -117,7 +127,7 @@ export function buildFileDiffSummaryFromUnifiedPatch(
     const hunkMatch = UNIFIED_PATCH_HUNK_HEADER.exec(line)
     if (hunkMatch) {
       const oldStart = readHunkStart(hunkMatch[1], hunkMatch[2])
-      if (insideHunk && oldStart > oldLineNumber)
+      if (continuesSection && oldStart > oldLineNumber)
         rows.push({
           kind: 'collapsed',
           oldLineNumber: null,
@@ -125,16 +135,25 @@ export function buildFileDiffSummaryFromUnifiedPatch(
           text: '',
           hiddenCount: oldStart - oldLineNumber,
         })
-      insideHunk = true
+      continuesSection = true
       oldLineNumber = oldStart
       newLineNumber = readHunkStart(hunkMatch[3], hunkMatch[4])
+      remainingOldLines = readHunkLineCount(hunkMatch[2])
+      remainingNewLines = readHunkLineCount(hunkMatch[4])
       continue
     }
-    // 第一个 hunk 之前是 diff / index / --- / +++ 文件头；`\` 行标注「文件末尾没有换行」。
-    if (!insideHunk || line.startsWith('\\')) continue
+
+    // `\` 行标注上一行「文件末尾没有换行」，可以出现在 hunk 中间，不占行数。
+    if (line.startsWith('\\')) continue
+
+    if (remainingOldLines <= 0 && remainingNewLines <= 0) {
+      if (line.startsWith('diff ')) continuesSection = false
+      continue
+    }
 
     if (line.startsWith('+')) {
       added += 1
+      remainingNewLines -= 1
       rows.push({
         kind: 'add',
         oldLineNumber: null,
@@ -146,6 +165,7 @@ export function buildFileDiffSummaryFromUnifiedPatch(
 
     if (line.startsWith('-')) {
       removed += 1
+      remainingOldLines -= 1
       rows.push({
         kind: 'remove',
         oldLineNumber: oldLineNumber++,
@@ -155,6 +175,8 @@ export function buildFileDiffSummaryFromUnifiedPatch(
       continue
     }
 
+    remainingOldLines -= 1
+    remainingNewLines -= 1
     rows.push({
       kind: 'context',
       oldLineNumber: oldLineNumber++,

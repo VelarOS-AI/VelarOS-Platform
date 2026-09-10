@@ -77,6 +77,51 @@ void describe('file change summary from a unified patch', () => {
     )
   })
 
+  void test('reads hunks by their line counts, across a marker in mid-hunk and a type change split in two', () => {
+    const summary = buildFileDiffSummaryFromUnifiedPatch(
+      [
+        'diff --git a/link b/link',
+        'deleted file mode 100644',
+        '--- a/link',
+        '+++ /dev/null',
+        '@@ -1 +0,0 @@',
+        '-old target',
+        '\\ No newline at end of file',
+        'diff --git a/link b/link',
+        'new file mode 120000',
+        '--- /dev/null',
+        '+++ b/link',
+        '@@ -0,0 +1 @@',
+        '+new target',
+        '\\ No newline at end of file',
+      ].join('\n'),
+      { additions: 1, deletions: 1, binary: false }
+    )
+
+    // 第二段的文件头不能被读成改动行，也不在两段之间折出「隐藏」行。
+    assert.deepEqual(
+      summary.rows.map((row) => [row.kind, row.oldLineNumber, row.newLineNumber, row.text]),
+      [
+        ['remove', 1, null, 'old target'],
+        ['add', null, 1, 'new target'],
+      ]
+    )
+
+    const midHunkMarker = buildFileDiffSummaryFromUnifiedPatch(
+      ['@@ -1,2 +1,3 @@', ' keep', '-last', '\\ No newline at end of file', '+last', '+more'].join('\n'),
+      { additions: 2, deletions: 1, binary: false }
+    )
+    assert.deepEqual(
+      midHunkMarker.rows.map((row) => [row.kind, row.oldLineNumber, row.newLineNumber]),
+      [
+        ['context', 1, 1],
+        ['remove', 2, null],
+        ['add', null, 2],
+        ['add', null, 3],
+      ]
+    )
+  })
+
   void test('falls back to the numstat counts when the patch was left out or the file is binary', () => {
     const omitted = buildFileDiffSummaryFromUnifiedPatch('', {
       additions: 1200,
