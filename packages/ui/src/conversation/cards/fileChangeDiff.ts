@@ -111,7 +111,7 @@ export function buildFileDiffSummaryFromUnifiedPatch(
   let newLineNumber = 0
   const lines = patch.split(/\r?\n/u)
   // 补丁以换行结尾时 split 多出的最后一段空串不是一行。
-  if (isEmpty(lines.at(-1))) lines.pop()
+  if (isEmpty(lines[lines.length - 1])) lines.pop()
 
   for (const line of lines) {
     const hunkMatch = UNIFIED_PATCH_HUNK_HEADER.exec(line)
