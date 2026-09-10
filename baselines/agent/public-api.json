@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.17",
+  "acceptedPackageVersion": "0.6.18",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -958,7 +958,7 @@
         "SubAgentDispatchInput\ttype\t32e5e9ad381fafc7b7e20cf89a69f2f1789a77dd79adc51a2dffcb7882bac02c",
         "SubAgentDispatchLimitsSnapshot\ttype\t8e0f0e5f7ec14ff6b8cc18bcda0d398b072ae28fb82e437383924f956c3c37b0",
         "SubAgentDispatchRequest\ttype\taf3feb0a9b84d0d1c01bea7904a5d90a89d4d661492c561ed518ab791ee872d4",
-        "SubAgentDispatcher\ttype,value\t8ae0ff945a885e3d157bac4c49043a995eed569f8ec1ed1c013fa603b5d81a21",
+        "SubAgentDispatcher\ttype,value\t9f53d9ca3cc7b8d1874560d09e790ff01c942e5fd5ee92110f7452f7be4960a0",
         "SubAgentGuidanceRelayRegistry\ttype,value\t55c1ea6b71927a598b5d134f6f5867b8307048caa73fe65eda8c692456f4ab8d",
         "SubAgentGuidanceRelayWorkerHandle\ttype\t29bddf11915dc26e88fe6b1a1be9c1eeb6f312885f94644f2fb31f17ccd45b0b",
         "SubAgentGuidanceRelayWorkerSnapshot\ttype\t95592969938dfe48e3403c0bec5c520eb2d1896d3b1fc67023ee2c1d66b1b008",
@@ -977,8 +977,9 @@
         "SubAgentTypeProvider\ttype\t8a6703a994f9e2554bc95bd6a5c4f142673a08208821d772b63b3b4491b60276",
         "TeamModelRouteRequest\ttype\t09a3b54dccf73352531fabe46a1406521074bc1f7c2bb1dd1f9074043db19a20",
         "TeamModelRouteResult\ttype\t58e69736162502e9adbc8deaca49124a8f41ad51b12c71cff7f6d465093c414e",
-        "TeamModelRouter\ttype,value\t87c0945b322300431d58cb960fa4f3505ecabf092f7f5ed9eb7826d57f137d63",
-        "TeamModelRoutingPort\ttype\ta13002270e2fa9e71539b364530814d184eed2669c1286c05b77c76977327c31",
+        "TeamModelRouter\ttype,value\t1e17b0892c4446743b62c00c69cc126d9d1a3c5f07226648e2a11f4276156844",
+        "TeamModelRoutingPort\ttype\t38c1d1331d2ce3e29471a337d5709e29ffd0cd1818cc7898c7da0a947a95f521",
+        "TeamSelectableModel\ttype\ta8ca2ae4a633918c8fb52a67989c7aa9f9133880e871f8d53a6b3c9d6dbb453f",
         "TerminalRuntimeExecutionAction\ttype\tb507d46b6a35e1f551bc18e4eaeb0a5912d87fb1a4a8827c627a0eb30a7ff115",
         "TickLoopRemindersArgs\ttype\ta56a82a5f24830bfd8f0f0bf97977ea3ba0769fef2f11c40ffb81d2c5ed6537d",
         "TokenizerEngine\ttype\ta0992b4b30f5091a756c0c0769eea5946d97ea74367babf633d4e4223f8b8d7f",
