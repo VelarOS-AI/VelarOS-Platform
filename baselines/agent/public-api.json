@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.16",
+  "acceptedPackageVersion": "0.6.17",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -149,7 +149,7 @@
         "AgentSkillProvider\ttype\td306670d23781680a010dee7d30efe24135679f6f41e2135fbb956a4cb9bce1b",
         "AgentSkillRepository\ttype,value\te89b3e253b1a8f097bd7f06c9c9ffd132f966334cbc01df725f01adce3877a5f",
         "AgentSoloModeStreamLoop\ttype,value\tf252d096d84b56188f47ac9f9fecf46668b53a9281168daf9e01de32c79f581f",
-        "AgentStreamConsumerHelper\ttype,value\ta0622a0e06b863713f01d9f5c0c95cabfb25917e1f9ecfa3479c51a10aeaef28",
+        "AgentStreamConsumerHelper\ttype,value\tf2a2ef6be980fb1bf153b29e2fe439e43e36df6ee5dfafc7b434ca0c312a0764",
         "AgentStreamDiagnosticHelper\ttype,value\t42f0537e4f3b7eb36fae6086bb4353c5992256aab3062e3426c0f1fc83ecec89",
         "AgentStreamDiagnosticRecorder\ttype,value\t94b7bff3aaf794f514ae0a0bf338f696fc7e7c471065cf262c07afcc483100e8",
         "AgentStreamTurnHelper\ttype,value\t9b6dc8e8163e0ef36b3acd5295249d0913923b46532e79065b857d2364d6ee28",
@@ -932,7 +932,7 @@
         "SpanLedgerReadResult\ttype\t3670d33fa4611a48d5990f797ad61496046555d46000c01ea6b987c22d6da66f",
         "SpanLedgerWarn\ttype\t26cf5ca4139becda579f563fa97e73a8cc35b1d818c17ba2c4af608d28ec4520",
         "StartKernelBackgroundJobInput\ttype\t884e0a21c8c1f65defc05eaf49d885ef96c107bdf89482790a6e27547f35a995",
-        "StreamConsumer\ttype,value\ta0622a0e06b863713f01d9f5c0c95cabfb25917e1f9ecfa3479c51a10aeaef28",
+        "StreamConsumer\ttype,value\tf2a2ef6be980fb1bf153b29e2fe439e43e36df6ee5dfafc7b434ca0c312a0764",
         "StreamConsumerEvents\ttype\te79f67df197236d27eafa6c4d8251f0907cb8e124362a136ab3c02738b6381be",
         "StreamConsumerToolExecutor\ttype\tddc11ae3d2972a8930890c7735e5b6cf8966eed98644b75b855f71a2a5936616",
         "StreamConsumerTurnState\ttype\t31ea6ec4f84f936ef15b31a71aefb8b80c768f6c0d7c35126d1eb490bee89b29",

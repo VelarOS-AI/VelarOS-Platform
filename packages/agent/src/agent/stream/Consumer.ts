@@ -82,7 +82,7 @@ import {
 } from "./tool-input";
 import type { StreamDiagnostics } from "./types";
 
-const StreamIdleReconnectNoticeDelayMs = 15_000;
+const StreamIdleThinkingNoticeDelayMs = 15_000;
 
 /** 内联 `<think>` 标签抽出来的思考增量共用同一个 reasoning stream id（相邻续写并成一块）。 */
 const InlineReasoningTagStreamId = "inline-think";
@@ -149,6 +149,10 @@ interface ConsumeAssistantStreamArgs {
   abortSignal: AbortSignal;
   executor: StreamConsumerToolExecutor;
   events: StreamConsumerEvents;
+  /**
+   * 模型流静默多久后把状态拉回「思考中」（毫秒）。字段名沿用历史叫法以保持公开 API 兼容；
+   * 静默期早已不再上报重连。
+   */
   idleReconnectDelayMs?: number;
   idleStallTimeoutMs?: number;
   model: string;
@@ -201,7 +205,7 @@ interface RejectedStreamToolCall {
   diagnostic: ReturnType<typeof diagnoseRejectedProviderToolInput>;
 }
 
-interface StreamIdleReconnectNotifier {
+interface StreamIdleThinkingNotifier {
   dispose(): void;
   markChunkReceived(): void;
 }
@@ -238,7 +242,7 @@ class StreamConsumer {
   ): Promise<AssistantContentPart[]> {
     const assistantContent: AssistantContentPart[] = [];
     const diagnostics = this.streamDiagnosticHelper.createStreamDiagnostics();
-    const idleReconnectNotifier = this.createIdleReconnectNotifier(
+    const idleThinkingNotifier = this.createIdleThinkingNotifier(
       args,
       turnState,
     );
@@ -481,7 +485,7 @@ class StreamConsumer {
 
         shouldReturnStreamIterator = true;
         const chunk = next.value;
-        idleReconnectNotifier.markChunkReceived();
+        idleThinkingNotifier.markChunkReceived();
         if (args.abortSignal.aborted) {
           break;
         }
@@ -638,7 +642,7 @@ class StreamConsumer {
       captureInterruptedPartial();
       throw error;
     } finally {
-      idleReconnectNotifier.dispose();
+      idleThinkingNotifier.dispose();
       if (shouldReturnStreamIterator) {
         await returnStreamIteratorQuietly(streamIterator, "stream-consumer");
       }
@@ -969,20 +973,28 @@ class StreamConsumer {
     return diagnostic;
   }
 
-  private createIdleReconnectNotifier(
+  /**
+   * 模型流静默看门狗：连续 `delayMs` 没收到任何分片时记一条诊断日志，并把状态拉回「思考中」。
+   *
+   * 静默 ≠ 断线：推理模型思考时本来就会十几秒甚至更久不出字。过去这里每 15 秒发一次
+   * `reconnecting`，界面便显示「连接中断，正在重连」——明明什么都没断、也没有重连在发生，
+   * 误导用户去查网络。「重连中」只属于真正发生重试的路径（`AgentConnectionRetryHelper`、
+   * `retryingTurn`）；这里只负责让静默期的状态停在「思考中」。
+   */
+  private createIdleThinkingNotifier(
     args: ConsumeAssistantStreamArgs,
     turnState: StreamConsumerTurnState,
-  ): StreamIdleReconnectNotifier {
+  ): StreamIdleThinkingNotifier {
     const delayMs =
-      args.idleReconnectDelayMs ?? StreamIdleReconnectNoticeDelayMs;
+      args.idleReconnectDelayMs ?? StreamIdleThinkingNoticeDelayMs;
     if (!args.events.emitRuntime || delayMs <= 0)
       return {
         dispose: () => undefined,
         markChunkReceived: () => undefined,
       };
 
-    const timers = new TimerScope({ name: "StreamConsumer.idleReconnect" });
-    let attempt = 0;
+    const timers = new TimerScope({ name: "StreamConsumer.idleThinking" });
+    let idleTicks = 0;
     let idleNoticeActive = false;
     let lease: Nullable<ReturnType<TimerScope["after"]>> = null;
 
@@ -999,18 +1011,20 @@ class StreamConsumer {
         () => {
           if (args.abortSignal.aborted || timers.isDisposed) return;
 
-          attempt += 1;
-          idleNoticeActive = true;
+          idleTicks += 1;
           this.log.warn("model stream idle while waiting for provider chunks", {
             turn: turnState.turn,
-            attempt,
+            idleTicks,
             delayMs,
           });
-          args.events.emitRuntime?.(ChatRuntimeEvents.reconnecting(attempt));
+          // 一段静默只拉一次状态；之后每个周期只记日志，不重复刷事件。
+          if (!idleNoticeActive)
+            args.events.emitRuntime?.(ChatRuntimeEvents.phase("executing"));
+          idleNoticeActive = true;
           schedule();
         },
         {
-          label: "stream-idle-reconnect",
+          label: "stream-idle-thinking",
           signal: args.abortSignal,
           unref: true,
         },
@@ -1022,12 +1036,8 @@ class StreamConsumer {
     return {
       dispose: () => timers.dispose(),
       markChunkReceived: () => {
-        const shouldClearNotice = idleNoticeActive;
         idleNoticeActive = false;
         schedule();
-        if (shouldClearNotice) {
-          args.events.emitRuntime?.(ChatRuntimeEvents.phase("executing"));
-        }
       },
     };
   }
