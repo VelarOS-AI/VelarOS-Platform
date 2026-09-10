@@ -45,15 +45,18 @@ import type {
   SubAgentTaskResult,
   SubAgentUsage,
   TeamModelRouteCategory,
+  TeamModelSelectionTrace,
   ThinkingDepth,
   ToolCategoryId,
   UserActionCard,
 } from '@velaros-ai/agent/protocol'
 import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/agent/tool-contract'
 import {
+  isArray,
   isBoolean,
   isEmpty,
   isFunction,
+  isPresent,
   Log,
   optionalWhen,
   toNullable,
@@ -220,7 +223,19 @@ interface SubAgentWorkerExecutionOutput {
   text: string
   structuredOutput?: unknown
   usage?: SubAgentUsage
+  modelTrace?: TeamModelSelectionTrace
 }
+
+/** 子 Agent 模型的决定结果：沿用主模型，或采用主 Agent 指定的同厂商模型。 */
+interface SubAgentModelChoice {
+  model: Nullable<string>
+  reason: 'inherited-main-model' | 'requested-model' | 'requested-model-unavailable'
+  requestedModel?: LooseOptional<string>
+  selectableModelIds?: LooseOptional<readonly string[]>
+}
+
+/** 回报给主 Agent 的同厂商可选模型上限：自定义/聚合厂商的目录可能很长，结果里只放前若干个。 */
+const MaxReportedSelectableModels = 24
 
 type DangerousConfirmationStatusSink = (
   status: Extract<ExecutionTaskStatus, 'awaiting_confirmation' | 'running'>,
@@ -230,6 +245,16 @@ type DangerousConfirmationStatusSink = (
 const SubAgentTransientRetryMaxAttempts = 2
 const DefaultMaxConcurrentSubAgents = 4
 const DefaultMaxSubAgentsPerExecution = 32
+
+/** 主 Agent 指定的模型不在同厂商可选列表里时，给结果正文补一句：本次沿用了什么、可以选什么。 */
+function formatModelFallbackNote(trace: LooseOptional<TeamModelSelectionTrace>): Nullable<string> {
+  if (trace?.reason !== 'requested-model-unavailable') return null
+  const requested = trace.metadata?.requestedModel
+  const selectable = trace.metadata?.selectableModels
+  const options =
+    isArray(selectable) && !isEmpty(selectable) ? `可选：${selectable.join('、')}。` : ''
+  return `（指定的模型「${String(requested)}」不在当前厂商的可选列表中，本次沿用主模型「${trace.model}」。${options}）`
+}
 
 function normalizeResumeIdentityString(value: LooseOptional<string>): string {
   return value?.trim() ?? ''
@@ -720,14 +745,18 @@ class SubAgentDispatcher {
       relayHandle.abortSignal.throwIfAborted()
 
       const rawText = workerOutput.text
-      const decorated =
-        args.progress.kind === 'soft-nudge' ? `${rawText}\n\n${args.progress.note}` : rawText
+      const notes = [
+        args.progress.kind === 'soft-nudge' ? args.progress.note : null,
+        formatModelFallbackNote(workerOutput.modelTrace),
+      ].filter(isPresent)
+      const decorated = isEmpty(notes) ? rawText : [rawText, ...notes].join('\n\n')
       const taskResult = buildSubAgentTaskResult({
         threadId: args.threadId,
         text: decorated,
         status: 'completed',
         structuredOutput: workerOutput.structuredOutput,
         usage: workerOutput.usage,
+        modelTrace: workerOutput.modelTrace,
       })
       this.sessionStore.appendRunResult(args.threadId, taskResult)
       this.sessionStore.setStatus(args.threadId, 'completed')
@@ -1327,11 +1356,9 @@ class SubAgentDispatcher {
     const { typeConfig } = type
     const { threadId, title } = identity
     const systemConfig = this.configService.systemConfig
-    const chatConfig = {
-      ...this.configService.chatConfig,
-      modelSelection:
-        request.config.modelSelection ?? this.configService.chatConfig.modelSelection,
-    }
+    // 主模型的模型选择（产品自有形状，含 provider/model）——子 Agent 默认就用它。
+    const modelSelection =
+      request.config.modelSelection ?? this.configService.chatConfig.modelSelection
     const resourceId = toNullable(request.parentCtx.resourceId)
     const instruction = buildSubAgentDispatchInstruction(
       request.input,
@@ -1341,19 +1368,35 @@ class SubAgentDispatcher {
       prompt.priorFindingsBriefing,
       type.readonlyMode
     )
+    const routeCategory = this.resolveRouteCategory(request, typeConfig)
+    // 路由端口收的是模型选择本身，不是整份 chatConfig：传整份时两端端口都在根上找不到 provider，
+    // 子 Agent 一律报「模型 selection.provider 必须显式提供」。
+    const inheritedRoute = this.modelRouter.resolve(
+      typeConfig.workerType,
+      routeCategory,
+      modelSelection,
+      systemConfig
+    )
+    const modelChoice = await this.resolveModelChoice(
+      modelSelection,
+      control.resolvedModelOverride ?? request.input.model
+    )
     const route = this.applyEffortOverride(
-      this.applyModelOverride(
-        this.modelRouter.resolve(
-          typeConfig.workerType,
-          this.resolveRouteCategory(request, typeConfig),
-          chatConfig,
-          systemConfig
-        ),
-        control.resolvedModelOverride ?? request.input.model
-      ),
+      this.applyModelOverride(inheritedRoute, modelChoice.model),
       control.resolvedEffortOverride ?? request.input.effort
     )
     const resolvedModel = route.runtimeOverride.model
+    const modelTrace: TeamModelSelectionTrace = {
+      category: routeCategory,
+      providerId: route.runtimeOverride.providerId,
+      model: resolvedModel,
+      reason: modelChoice.reason,
+      timestamp: Date.now(),
+      metadata: {
+        requestedModel: toOptional(modelChoice.requestedModel),
+        selectableModels: toOptional(modelChoice.selectableModelIds),
+      },
+    }
     this.sessionStore.updateSession(threadId, {
       request: {
         model: resolvedModel,
@@ -1389,6 +1432,48 @@ class SubAgentDispatcher {
       text: rawText.trim() || '子智能体已完成，但没有返回文本。',
       structuredOutput,
       usage,
+      modelTrace,
+    }
+  }
+
+  /**
+   * 子 Agent 用哪个模型：省略 = 沿用主模型；主 Agent 指定时，必须是主模型所在厂商下宿主已配置的模型。
+   *
+   * 指定值不在可选列表里时**不拒绝派发**，沿用主模型并把可选列表回报给主 Agent（宽容原则：钳制不拒绝）；
+   * 宿主不提供目录（自定义厂商接受任意 id）时按原样透传。按 id 精确匹配，也认大小写不同的 id 或展示名。
+   */
+  private async resolveModelChoice(
+    modelSelection: unknown,
+    requestedModel: LooseOptional<string>
+  ): Promise<SubAgentModelChoice> {
+    const requested = requestedModel?.trim()
+    const selectable = await this.modelRouter.listSelectableModels(modelSelection)
+    const selectableModelIds = selectable
+      ?.map((model) => model.id)
+      .slice(0, MaxReportedSelectableModels)
+    if (!requested)
+      return {
+        model: null,
+        reason: 'inherited-main-model',
+        selectableModelIds: toOptional(selectableModelIds),
+      }
+    if (!selectable)
+      return { model: requested, reason: 'requested-model', requestedModel: requested }
+
+    const normalized = requested.toLowerCase()
+    const match =
+      selectable.find((model) => model.id === requested) ??
+      selectable.find(
+        (model) =>
+          model.id.toLowerCase() === normalized || model.label?.trim().toLowerCase() === normalized
+      )
+    if (match) return { model: match.id, reason: 'requested-model', requestedModel: requested }
+
+    return {
+      model: null,
+      reason: 'requested-model-unavailable',
+      requestedModel: requested,
+      selectableModelIds: selectableModelIds ?? [],
     }
   }
 

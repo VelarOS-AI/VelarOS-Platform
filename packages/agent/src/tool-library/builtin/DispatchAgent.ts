@@ -118,7 +118,8 @@ const dispatchAgentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '可选：覆盖子 Agent 使用的模型 id。',
+        description:
+          '可选：为子 Agent 指定模型 id。省略则继承主模型（默认）。只能选主模型所在厂商下已配置的模型——简单机械的子任务可以指定同厂商更快更省的模型；指定值不在可选列表里时沿用主模型，并在结果 model_trace 里列出可选模型。',
       })
     ),
   effort: z
