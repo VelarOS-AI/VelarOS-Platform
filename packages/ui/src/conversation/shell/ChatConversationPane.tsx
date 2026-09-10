@@ -376,6 +376,7 @@ export function ChatConversationPane({
   const {
     messageRunMarkerMap,
     latestAssistantMessageId,
+    hasTurnInputAfterLatestAssistant,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
@@ -456,7 +457,10 @@ export function ChatConversationPane({
     () => [goalLifecycleDockItemId, activeDockPlanItemId].filter(isPresent),
     [activeDockPlanItemId, goalLifecycleDockItemId]
   )
-  const inlineNoticeMessageId = activeAssistantMessageId ?? latestAssistantMessageId
+  // 新一轮已发出、助手还没开口时不回落到上一轮的助手消息：那条消息在新输入上方，
+  // 提示应由下方的独立提示气泡承载，出现在新输入之后。
+  const inlineNoticeMessageId =
+    activeAssistantMessageId ?? (hasTurnInputAfterLatestAssistant ? null : latestAssistantMessageId)
   const conversationCards = useMemo(
     () => runtime.conversationCards ?? runtime.stickyDockItems ?? [],
     [runtime.conversationCards, runtime.stickyDockItems]

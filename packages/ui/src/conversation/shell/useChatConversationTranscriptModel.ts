@@ -168,6 +168,7 @@ interface UseChatConversationTranscriptModelOptions {
 export interface UseChatConversationTranscriptModelReturn {
   messageRunMarkerMap: Map<string, ConversationMessageRunMarker>
   latestAssistantMessageId: Nullable<string>
+  hasTurnInputAfterLatestAssistant: boolean
   latestCompletedAssistantMessageId: Nullable<string>
   runtimeCostContextMap: Map<string, ConversationTurnContextView[]>
   planUpdateIndexByToolCallId: Map<string, number>
@@ -199,6 +200,7 @@ export function useChatConversationTranscriptModel({
   }, [messageRunMarkers])
   const {
     latestAssistantMessage,
+    hasTurnInputAfterLatestAssistant,
     latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId,
     planUpdateIndexByToolCallId,
@@ -310,6 +312,7 @@ export function useChatConversationTranscriptModel({
   return {
     messageRunMarkerMap,
     latestAssistantMessageId: toNullable(latestAssistantMessage?.id),
+    hasTurnInputAfterLatestAssistant,
     latestCompletedAssistantMessageId,
     runtimeCostContextMap,
     planUpdateIndexByToolCallId,

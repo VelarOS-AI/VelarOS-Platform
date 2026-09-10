@@ -114,6 +114,38 @@ void describe('会话消息语义', () => {
     assert.equal(derived.latestAssistantMessage?.id, secondAssistant.id)
   })
 
+  void test('新一轮已发出而助手还没开口时，运行提示不能挂回上一轮的助手消息', () => {
+    const previousTurn = message('turn-1', 'user', 'turn-input')
+    const previousAssistant = message('assistant-1', 'assistant')
+    const nextTurn = message('turn-2', 'user', 'turn-input')
+    const derive = (messages: Array<ReturnType<typeof message>>) =>
+      buildChatTranscriptDerivedIndexes({
+        messages,
+        messageRunMarkerMap: new Map(),
+        shouldRenderAwaitingInputCard: false,
+      })
+
+    const pending = derive([previousTurn, previousAssistant, nextTurn])
+    assert.equal(pending.latestAssistantMessage?.id, previousAssistant.id)
+    assert.equal(pending.hasTurnInputAfterLatestAssistant, true)
+
+    const answered = derive([
+      previousTurn,
+      previousAssistant,
+      nextTurn,
+      message('assistant-2', 'assistant'),
+    ])
+    assert.equal(answered.hasTurnInputAfterLatestAssistant, false)
+
+    // 引导消息属于同一轮，不开启新一轮：提示仍跟着当前助手消息。
+    const guided = derive([
+      previousTurn,
+      previousAssistant,
+      message('guidance', 'user', 'run-guidance'),
+    ])
+    assert.equal(guided.hasTurnInputAfterLatestAssistant, false)
+  })
+
   void test('引导开始后不会把上一条已完成 assistant 重新标记为流式', () => {
     assert.equal(
       resolveActiveTranscriptAssistantMessageId({

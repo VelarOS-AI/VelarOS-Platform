@@ -13,6 +13,11 @@ export interface ChatTranscriptDerivedIndexesInput {
 
 export interface ChatTranscriptDerivedIndexes {
   latestAssistantMessage: Nullable<ChatMessage>
+  /**
+   * 最近一条助手消息之后是否已经出现新的用户输入（新一轮已发出、助手还没开口）。
+   * 此时任何运行/结果提示都属于新的一轮，不能再挂到上一轮的助手消息上——那条消息在新输入的上方。
+   */
+  hasTurnInputAfterLatestAssistant: boolean
   latestCompletedAssistantMessage: Nullable<ChatMessage>
   latestCompletedAssistantMessageId: Nullable<string>
   planUpdateIndexByToolCallId: Map<string, number>
@@ -52,6 +57,7 @@ export function buildChatTranscriptDerivedIndexes({
   let latestCompletedAssistantMessage: Nullable<ChatMessage> = null
   let activeAwaitingInputMessageId: Nullable<string> = null
   let latestUserMessage: Nullable<ChatMessage> = null
+  let hasTurnInputAfterLatestAssistant = false
   let planUpdateIndex = 0
 
   for (const message of messages) {
@@ -64,12 +70,14 @@ export function buildChatTranscriptDerivedIndexes({
 
     if (isConversationTurnInputMessage(message)) {
       latestUserMessage = message
+      hasTurnInputAfterLatestAssistant = true
       continue
     }
 
     if (message.role === 'user') continue
 
     latestAssistantMessage = message
+    hasTurnInputAfterLatestAssistant = false
 
     if (latestUserMessage) {
       assistantQuestionMap.set(message.id, latestUserMessage)
@@ -93,6 +101,7 @@ export function buildChatTranscriptDerivedIndexes({
 
   return {
     latestAssistantMessage,
+    hasTurnInputAfterLatestAssistant,
     latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId: toNullable(latestCompletedAssistantMessage?.id),
     planUpdateIndexByToolCallId,
