@@ -144,6 +144,24 @@ void describe('会话消息语义', () => {
       message('guidance', 'user', 'run-guidance'),
     ])
     assert.equal(guided.hasTurnInputAfterLatestAssistant, false)
+
+    // 不写运行 marker 的宿主（Workbench）：上一轮回复不能被当成本轮的流式消息。
+    assert.equal(
+      resolveActiveTranscriptAssistantMessageId({
+        isRunActive: true,
+        latestAssistantMessageId: previousAssistant.id,
+        hasTurnInputAfterLatestAssistant: pending.hasTurnInputAfterLatestAssistant,
+      }),
+      null
+    )
+    assert.equal(
+      resolveActiveTranscriptAssistantMessageId({
+        isRunActive: true,
+        latestAssistantMessageId: previousAssistant.id,
+        hasTurnInputAfterLatestAssistant: guided.hasTurnInputAfterLatestAssistant,
+      }),
+      previousAssistant.id
+    )
   })
 
   void test('引导开始后不会把上一条已完成 assistant 重新标记为流式', () => {

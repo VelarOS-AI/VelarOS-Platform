@@ -30,15 +30,20 @@ export function resolveActiveTranscriptAssistantMessageId({
   streamingAssistantMessageId,
   latestAssistantMessageId,
   latestAssistantRunMarker,
+  hasTurnInputAfterLatestAssistant = false,
 }: {
   isRunActive: boolean
   streamingAssistantMessageId?: LooseOptional<string>
   latestAssistantMessageId?: LooseOptional<string>
   latestAssistantRunMarker?: LooseOptional<Pick<ConversationMessageRunMarker, 'status'>>
+  hasTurnInputAfterLatestAssistant?: boolean
 }): Nullable<string> {
   if (!isRunActive) return null
   if (streamingAssistantMessageId) return streamingAssistantMessageId
   if (!latestAssistantMessageId || latestAssistantRunMarker?.status === 'completed') return null
+  // 其后已有新一轮输入：它属于上一轮。不写运行 marker 的宿主（Workbench）靠这一条，
+  // 否则新一轮开口前它会被当成流式消息重渲染，运行提示也挂到新输入上方。
+  if (hasTurnInputAfterLatestAssistant) return null
 
   return latestAssistantMessageId
 }

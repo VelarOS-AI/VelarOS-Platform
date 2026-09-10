@@ -400,6 +400,7 @@ export function ChatConversationPane({
     latestAssistantRunMarker: latestAssistantMessageId
       ? messageRunMarkerMap.get(latestAssistantMessageId)
       : null,
+    hasTurnInputAfterLatestAssistant,
   })
   const transcriptNavigationRef = useRef<Nullable<ChatTranscriptNavigationHandle>>(null)
   const { windowMessages, isWindowAtLoadedTop } = useChatTranscriptWindow({
