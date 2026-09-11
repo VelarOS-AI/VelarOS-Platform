@@ -29,6 +29,7 @@ import {
   ToolActivityDisclosure,
   ToolCallGroup,
 } from './MessageToolActivity'
+import { StreamFadeViewContext, useStreamFadeViewState } from './streamTextFade'
 
 import styles from './MessageBubble.module.css'
 
@@ -175,6 +176,21 @@ function collectToolCallBlocksFromMessageRenderSegment(
   collectToolCallBlocksFromToolRenderSegment(segment.segment, blocks)
 }
 
+/** 消息里已有的正文与思考字数（淡入判断「刚诞生的回答」用，只在挂载时算一次）。 */
+function measureStreamedTextLength(segments: readonly MessageRenderSegment[]): number {
+  let length = 0
+  const add = (segment: ToolRenderSegment): void => {
+    if (segment.kind !== 'block') return
+    const { block } = segment
+    if (block.type === 'text' || block.type === 'thinking') length += block.text.length
+  }
+  for (const segment of segments) {
+    if (segment.kind === 'activity-group') segment.segments.forEach(add)
+    else add(segment.segment)
+  }
+  return length
+}
+
 function AssistantMessageSegmentsInner({
   messageRenderSegments,
   isStreaming,
@@ -237,6 +253,10 @@ function AssistantMessageSegmentsInner({
   })
   const shouldRevealStreamingText =
     isStreaming || recentlyStreamingMessageIdRef.current === messageId
+  const fadeView = useStreamFadeViewState({
+    streaming: isStreaming,
+    readTextLength: () => measureStreamedTextLength(messageRenderSegments),
+  })
 
   useEffect(() => {
     if (isStreaming) {
@@ -670,7 +690,11 @@ function AssistantMessageSegmentsInner({
     return renderedSegments
   }
 
-  return <div className={styles.assistantSegments}>{renderAssistantSegments()}</div>
+  return (
+    <StreamFadeViewContext.Provider value={fadeView}>
+      <div className={styles.assistantSegments}>{renderAssistantSegments()}</div>
+    </StreamFadeViewContext.Provider>
+  )
 }
 
 export const AssistantMessageSegments = memo(AssistantMessageSegmentsInner)

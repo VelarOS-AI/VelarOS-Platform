@@ -51,6 +51,7 @@ import {
   StreamFadeMarkdownTextTagName,
   type StreamFadeRenderScope,
   StreamFadeRenderScopeContext,
+  StreamFadeViewContext,
   StreamTextFadeDurationMs,
   velarStreamFadeTextPlugin,
 } from './streamTextFade'
@@ -86,6 +87,7 @@ const StreamFadeMarkdownComponents = { [StreamFadeMarkdownTextTagName]: StreamFa
 function PersistentStreamingTextBlockInner(props: StreamdownBlockProps): ReactElement {
   const animationKey = useContext(StreamingTextAnimationKeyContext)
   const { isAnimating } = useContext(StreamdownContext)
+  const fadeView = useContext(StreamFadeViewContext)
   const ledgerKey = isAnimating && animationKey ? `${animationKey}:streamdown:${props.index}` : null
   const fading = isPresent(ledgerKey)
   const committedRef = useRef(false)
@@ -98,11 +100,12 @@ function PersistentStreamingTextBlockInner(props: StreamdownBlockProps): ReactEl
               now: readStreamFadeClock(),
               sourceLength: props.content.length,
               mounted: committedRef.current,
+              viewLive: fadeView?.live,
             }),
             report: { textLength: 0 },
           }
         : null,
-    [ledgerKey, props.content]
+    [fadeView, ledgerKey, props.content]
   )
   const rehypePlugins = useMemo(
     () =>
@@ -152,6 +155,7 @@ function useThinkingTextFadeChunks({
   blockKey: string
   textLength: number
 }): readonly StreamFadeChunk[] {
+  const fadeView = useContext(StreamFadeViewContext)
   const committedRef = useRef(false)
   const ledger = useMemo(
     () =>
@@ -162,11 +166,12 @@ function useThinkingTextFadeChunks({
               now: readStreamFadeClock(),
               sourceLength: textLength,
               mounted: committedRef.current,
+              viewLive: fadeView?.live,
             }),
             textLength
           )
         : null,
-    [blockKey, isStreaming, textLength]
+    [blockKey, fadeView, isStreaming, textLength]
   )
 
   useLayoutEffect(() => {

@@ -16,6 +16,7 @@ import {
   type StreamFadeRenderScope,
   StreamFadeRenderScopeContext,
   StreamTextFadeDurationMs,
+  useStreamFadeViewState,
   velarStreamFadeTextPlugin,
 } from '../../packages/ui/src/conversation/blocks/streamTextFade'
 import { getStreamingThinkingDisplayWindow } from '../../packages/ui/src/conversation/blocks/thinkingTranslation'
@@ -71,6 +72,25 @@ void describe('stream text fade plan', () => {
       { text: 'x'.repeat(10), start: 20, bornAt: 200 },
       { text: 'x'.repeat(30), start: 30, bornAt: null },
     ])
+  })
+
+  void test('a block first seen while its message view is mounting shows as is', () => {
+    // 切回会话时整条消息重新挂载：离开期间新起的短段落不从头淡入。
+    assert.deepEqual(
+      planStreamFade({ ledger: undefined, now: 5, sourceLength: 12, mounted: false, viewLive: false }),
+      []
+    )
+
+    const views: boolean[] = []
+    function Probe({ streaming, textLength }: { streaming: boolean; textLength: number }) {
+      views.push(useStreamFadeViewState({ streaming, readTextLength: () => textLength }).live)
+      return null
+    }
+    renderToStaticMarkup(createElement(Probe, { streaming: true, textLength: 6 }))
+    renderToStaticMarkup(createElement(Probe, { streaming: true, textLength: 900 }))
+    renderToStaticMarkup(createElement(Probe, { streaming: false, textLength: 0 }))
+    // 刚诞生的回答挂载时就在屏上；已经写了很多的（切回来的）与已结束的，挂载那一帧都不算。
+    assert.deepEqual(views, [true, false, false])
   })
 
   void test('settling closes the open batch at the rendered length and drops empty ones', () => {

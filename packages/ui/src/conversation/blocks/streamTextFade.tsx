@@ -28,9 +28,9 @@ import {
  *    用 Web Animations 的绝对 `startTime` 表达，组件重挂载、React 把元素复用给别的批次、StrictMode
  *    双调用都只会把进度对回同一时刻，不会从 0 重播。只动 opacity，不做 blur / transform / 逐字 span。
  *  - 账本按块记在模块级 LRU 里，只在提交后（layout effect）写入，被丢弃的渲染不污染它。
- *  - 第一次见到的块：短（刚开始的新段落）就从头淡入；长（首次打开已在跑的长消息）整段当作已显示。
- *    重挂载（切回会话）的第一帧只把还没淡完的批次接着淡完，离开期间到达的字直接显示；之后新增的
- *    字才淡入——从构造上杜绝整段/整屏重播。
+ *  - 第一次见到的块：消息视图已在屏上时，短的（刚开始的新段落）从头淡入；长的（首次打开已在跑的
+ *    长消息）整段当作已显示。重挂载（切回会话）的第一帧只把还没淡完的批次接着淡完，离开期间到达的
+ *    字、新起的段落都直接显示；之后新增的字才淡入——从构造上杜绝整段/整屏重播。
  *  - 系统开了「减少动态效果」就不淡入。
  */
 
@@ -80,6 +80,7 @@ export function planStreamFade({
   now,
   sourceLength,
   mounted,
+  viewLive = true,
 }: {
   ledger: Optional<StreamFadeLedger>
   now: number
@@ -87,9 +88,11 @@ export function planStreamFade({
   sourceLength: number
   /** 这个视图已经提交过这个块（不是挂载后的第一帧）。 */
   mounted: boolean
+  /** 所在消息视图已经在屏上（见 {@link StreamFadeViewContext}）；否则第一次见到的块一律当已显示。 */
+  viewLive?: boolean
 }): readonly StreamFadeChunk[] {
   if (!ledger)
-    return sourceLength <= StreamTextFadeNewBlockMaxChars
+    return viewLive && sourceLength <= StreamTextFadeNewBlockMaxChars
       ? [{ start: 0, end: Number.POSITIVE_INFINITY, bornAt: now }]
       : NoStreamFadeChunks
 
@@ -135,6 +138,40 @@ export function splitStreamFadeText(
   if (cursor < textEnd || isEmpty(pieces))
     pieces.push({ text: text.slice(cursor - textStart), start: cursor, bornAt: null })
   return pieces
+}
+
+/** 刚诞生的回答挂载时最多已有这么多字（起搏器一两帧的量）；再多就是切回来重新挂载的。 */
+const StreamFadeLiveBornMaxChars = 24
+
+/**
+ * 消息视图是否已经在屏上。切回会话时整条消息重新挂载，这一帧里第一次见到的块都是离开期间写出来的，
+ * 不从头淡入；视图提交过之后新出现的块（新段落、新思考块）才从头淡入。刚诞生的回答挂载时本来就在屏上。
+ */
+export interface StreamFadeViewState {
+  live: boolean
+}
+
+export const StreamFadeViewContext = createContext<Nullable<StreamFadeViewState>>(null)
+
+/** 每条消息一份，引用稳定；子块在渲染期读 `live`，消息首次提交后置真（layout effect 自下而上，子块先提交）。 */
+export function useStreamFadeViewState({
+  streaming,
+  readTextLength,
+}: {
+  streaming: boolean
+  /** 只在挂载时读一次：消息此刻已有的正文与思考字数。 */
+  readTextLength: () => number
+}): StreamFadeViewState {
+  const stateRef = useRef<Nullable<StreamFadeViewState>>(null)
+  if (!stateRef.current)
+    stateRef.current = { live: streaming && readTextLength() <= StreamFadeLiveBornMaxChars }
+  const state = stateRef.current
+
+  useLayoutEffect(() => {
+    state.live = true
+  }, [state])
+
+  return state
 }
 
 export interface StreamFadeLedgerStore {
