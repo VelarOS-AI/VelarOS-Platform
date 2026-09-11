@@ -1640,9 +1640,7 @@
   margin-top: 0.85rem;
 }
 
-.streamingMarkdownChunk :global([data-velar-stream-fade]) {
-  animation: streaming-text-tail-in 120ms ease-out both;
-}
+/* 流式文字的淡入由 streamTextFade（Web Animations，按上屏时刻对齐进度）驱动，这里不写 CSS 动画。 */
 
 @media (prefers-reduced-motion: reduce) {
   .inlineNoticeRunning,
@@ -1650,8 +1648,6 @@
   .inlineNoticeRunning .inlineNoticeText,
   .runningStatusDot,
   .assistantMemorySpinIcon,
-  .thinkingPlainTextStreamingChar,
-  .streamingMarkdownChunk :global([data-velar-stream-fade]),
   .expandableCodeBlockButton,
   .expandableCodeBlockCollapseButton,
   .expandableCodeBlock[data-collapsed='true'] [data-streamdown='code-block-body'] {
@@ -1705,16 +1701,6 @@
   }
 
   38% {
-    opacity: 1;
-  }
-}
-
-@keyframes streaming-text-tail-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
     opacity: 1;
   }
 }
@@ -1924,23 +1910,9 @@
   line-height: 18px;
 }
 
-.thinkingPlainTextStreamingChar {
-  animation: thinking-text-char-in 120ms ease-out both;
-}
-
 .thinkingTranslateRow {
   @apply flex min-w-0 flex-wrap items-center gap-2;
   padding-top: 2px;
-}
-
-@keyframes thinking-text-char-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
 }
 
 .thinkingTranslateButton {

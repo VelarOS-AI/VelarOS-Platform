@@ -167,6 +167,54 @@ void describe('chat stream pacer batching and settling', () => {
   })
 })
 
+void describe('chat stream pacer typing speed', () => {
+  void test('a big answer speeds up and slows back down frame by frame, without jumps', () => {
+    const { pacer, frames, log } = createHostPacer()
+    pacer.enqueueText('s', 1, 'x'.repeat(2_000))
+
+    const perFrame: number[] = []
+    let typed = 0
+    while (pacer.hasPendingOutput('s') && perFrame.length < 2_000) {
+      frames.step()
+      const now = joinedText(log).length
+      perFrame.push(now - typed)
+      typed = now
+    }
+
+    assert.equal(typed, 2_000)
+    assert.ok(perFrame[0] <= 2, `starts at the usual pace (${perFrame[0]})`)
+    assert.ok(Math.max(...perFrame) >= 8, 'speeds up while the backlog is large')
+    for (let frame = 1; frame < perFrame.length; frame += 1)
+      assert.ok(Math.abs(perFrame[frame] - perFrame[frame - 1]) <= 2, `frame ${frame}: ${perFrame.join(',')}`)
+    assert.ok(perFrame.slice(-10).every((count) => count <= 3), 'the last words come at the usual pace')
+  })
+
+  void test('tool events between answers do not bank a burst of text', () => {
+    const { pacer, frames, log } = createHostPacer()
+    pacer.enqueueText('s', 1, 'intro')
+    for (let n = 0; n < 30; n += 1)
+      pacer.enqueueLiveEvent('s', 2 + n, { type: 'tool', id: `t${n}`, step: 'start' })
+    pacer.enqueueText('s', 40, 'y'.repeat(200))
+    frames.runAll()
+
+    const lastTool = log.findLastIndex((entry) => entry.startsWith('live:{"type":"tool"'))
+    const firstTextAfterTools = log.slice(lastTool).find((entry) => entry.startsWith('text:'))
+    assert.ok(firstTextAfterTools)
+    assert.ok(firstTextAfterTools.length - 'text:'.length <= 3, firstTextAfterTools)
+  })
+
+  void test('never splits an emoji between two frames', () => {
+    const { pacer, frames, log } = createHostPacer()
+    pacer.enqueueText('s', 1, '😀'.repeat(20))
+    frames.runAll()
+
+    const chunks = log.filter((entry) => entry.startsWith('text:')).map((entry) => entry.slice(5))
+    assert.ok(chunks.length > 1)
+    assert.ok(chunks.every((chunk) => chunk.length % 2 === 0), chunks.join('|'))
+    assert.equal(chunks.join(''), '😀'.repeat(20))
+  })
+})
+
 void describe('chat stream pacer default classification', () => {
   void test('conversation stream events keep their pacing classes', () => {
     const classify = (event: unknown): ChatStreamPacerEventClass['kind'] =>

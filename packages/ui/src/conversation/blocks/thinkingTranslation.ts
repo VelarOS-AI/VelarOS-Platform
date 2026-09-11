@@ -84,6 +84,45 @@ export function getThinkingBlockDisplayText(block: ThinkingBlock, locale: AppLoc
   return isThinkingTranslationVisible(block, locale) ? block.translatedText ?? block.text : block.text
 }
 
+export interface StreamingThinkingDisplayWindow {
+  /** 窗口里的思考原文（整段原文的一个后缀）。 */
+  text: string
+  /** 窗口在整段原文里的起点。 */
+  start: number
+  /** 前面还有被截掉的部分。 */
+  truncated: boolean
+}
+
+/** 流式思考只显示末尾一段：最多 `maxChars` 个字、`maxLines` 行，窗口永远是原文的后缀。 */
+export function getStreamingThinkingDisplayWindow(
+  text: string,
+  options: {
+    streaming: boolean
+    maxChars?: number
+    maxLines?: number
+  }
+): StreamingThinkingDisplayWindow {
+  if (!options.streaming) return { text, start: 0, truncated: false }
+
+  const maxChars = options.maxChars ?? StreamingThinkingTailChars
+  const maxLines = options.maxLines ?? StreamingThinkingTailLines
+  let start = maxChars > 0 && text.length > maxChars ? text.length - maxChars : 0
+
+  if (maxLines > 0) {
+    let newlines = 0
+    for (let index = text.length - 1; index >= start; index -= 1) {
+      if (text[index] !== '\n') continue
+      newlines += 1
+      if (newlines === maxLines) {
+        start = index + 1
+        break
+      }
+    }
+  }
+
+  return { text: text.slice(start), start, truncated: start > 0 }
+}
+
 export function getStreamingThinkingDisplayText(
   text: string,
   options: {
@@ -92,27 +131,8 @@ export function getStreamingThinkingDisplayText(
     maxLines?: number
   }
 ): string {
-  if (!options.streaming) return text
-
-  let nextText = text
-  let truncated = false
-  const maxChars = options.maxChars ?? StreamingThinkingTailChars
-  const maxLines = options.maxLines ?? StreamingThinkingTailLines
-
-  if (maxChars > 0 && nextText.length > maxChars) {
-    nextText = nextText.slice(-maxChars)
-    truncated = true
-  }
-
-  if (maxLines > 0) {
-    const lines = nextText.split(/\r?\n/u)
-    if (lines.length > maxLines) {
-      nextText = lines.slice(-maxLines).join('\n')
-      truncated = true
-    }
-  }
-
-  return truncated ? `...\n${nextText}` : nextText
+  const window = getStreamingThinkingDisplayWindow(text, options)
+  return window.truncated ? `...\n${window.text}` : window.text
 }
 
 export function getThinkingTranslationButtonKind(

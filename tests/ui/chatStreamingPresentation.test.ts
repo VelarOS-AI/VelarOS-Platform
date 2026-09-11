@@ -10,12 +10,12 @@ import {
   shouldRenderProcessedActivityDisclosure,
 } from '../../packages/ui/src/conversation/blocks/AssistantMessageSegments'
 import type { MessageRenderSegment } from '../../packages/ui/src/conversation/blocks/messageBubbleRenderModel'
-import {
-  resolveIncrementalStreamFadeText,
-  resolveStreamingTextFadeBaseline,
-  shouldRenderThinkingAsFlat,
-} from '../../packages/ui/src/conversation/blocks/MessageMarkdownBlocks'
+import { shouldRenderThinkingAsFlat } from '../../packages/ui/src/conversation/blocks/MessageMarkdownBlocks'
 import { shouldInitiallyExpandToolActivityDisclosure } from '../../packages/ui/src/conversation/blocks/MessageToolActivity'
+import {
+  planStreamFade,
+  splitStreamFadeText,
+} from '../../packages/ui/src/conversation/blocks/streamTextFade'
 import {
   getToolActivityMotionRevision,
   resolveToolActivityMotionKind,
@@ -247,32 +247,27 @@ void describe('live chat activity presentation', () => {
     )
   })
 
-  void test('fades only the newly appended text tail as one batch', () => {
-    assert.equal(resolveStreamingTextFadeBaseline(), Number.MAX_SAFE_INTEGER)
-    assert.equal(resolveStreamingTextFadeBaseline(42), 42)
+  void test('fades only the newly appended text tail, never replaying what is already on screen', () => {
+    // 已上屏 5 个字、它们的批次早已淡完：只有新接上的尾巴淡入。
+    const plan = planStreamFade({
+      ledger: { length: 5, chunks: [] },
+      now: 1_000,
+      sourceLength: 11,
+      mounted: true,
+    })
+    assert.deepEqual(splitStreamFadeText('hello world', 0, plan), [
+      { text: 'hello', start: 0, bornAt: null },
+      { text: ' world', start: 5, bornAt: 1_000 },
+    ])
+    // 没有新字时什么都不淡。
+    const idle = planStreamFade({ ledger: { length: 11, chunks: [] }, now: 1_000, sourceLength: 11, mounted: true })
+    assert.deepEqual(splitStreamFadeText('hello world', 0, idle), [
+      { text: 'hello world', start: 0, bornAt: null },
+    ])
+    // 首次见到的长块（切回、首次打开）整段当作已显示。
     assert.deepEqual(
-      resolveIncrementalStreamFadeText({
-        previousTextLength: 5,
-        text: 'hello world',
-        textStart: 0,
-      }),
-      { unchangedText: 'hello', newText: ' world' }
-    )
-    assert.deepEqual(
-      resolveIncrementalStreamFadeText({
-        previousTextLength: 11,
-        text: 'hello world',
-        textStart: 0,
-      }),
-      { unchangedText: 'hello world', newText: '' }
-    )
-    assert.deepEqual(
-      resolveIncrementalStreamFadeText({
-        previousTextLength: 0,
-        text: '新的中文尾部',
-        textStart: 0,
-      }),
-      { unchangedText: '', newText: '新的中文尾部' }
+      planStreamFade({ ledger: undefined, now: 1_000, sourceLength: 400, mounted: false }),
+      []
     )
   })
 })

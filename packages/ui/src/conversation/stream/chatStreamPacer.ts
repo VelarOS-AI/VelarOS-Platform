@@ -9,12 +9,19 @@
  *    并发抢渲染所造成的卡顿与闪现；代价是思考与正文按到达
  *    顺序串行逐帧吐（模型通常先想后写，因此基本是先把思考打完再打正文）。
  *  - 队首块若仍是最后一个块（还在持续接收），就保持直播逐帧吐。
- *  - 文本按真实经过时间累计字符额度；积压只温和提高每秒速率，不能放大单帧吐字量。
- *    长帧恢复时也有严格单帧上限，不会为了“追赶”突然冒出一整段。
+ *  - 文本按真实经过时间累计字符额度；吐字速度是带惯性的量（见 `streamPaceBudget`）：积压多了
+ *    平滑加速、积压消化时平滑减速，最后几句回到平时的节奏。单帧有硬上限，长帧恢复时不会
+ *    为了“追赶”突然冒出一整段。
  *  - **正常结束时平滑收尾**：先挂起为 `pendingTerminal`，等队列积压逐帧吐完后才完成，避免正文
  *    一次性闪现；错误、中止和等待等其他终止或交互事件仍会立即排空应用。
  */
-import { resolveStreamPaceBudget, type StreamPaceTuning } from './streamPaceBudget'
+import {
+  createStreamPaceMotion,
+  DefaultStreamPaceTuning,
+  resolveStreamPaceBudget,
+  type StreamPaceMotion,
+  type StreamPaceTuning,
+} from './streamPaceBudget'
 
 import type { ChatStreamEvent } from '#contracts'
 import { isEmpty, isPresent, isRecord, isString } from '#internal/runtime'
@@ -149,6 +156,8 @@ interface PacerSessionState<TEvent> {
   lastFrameTimeMs: Nullable<number>
   /** 不足一个字符的额度跨帧结转；上限由 tuning.maxCharsPerFrame 约束。 */
   charCredit: number
+  /** 吐字速度的状态（速度 + 变化率）；空闲时回到基础速度。 */
+  motion: StreamPaceMotion
 }
 
 /** 干净收尾事件（end / done）——平滑吐完积压后再 finalize，而非立即强排空。 */
@@ -209,12 +218,22 @@ function blockIsDrained(block: PacerBlock<unknown>): boolean {
   return block.kind === 'event' ? isEmpty(block.events) : isEmpty(block.pendingChars)
 }
 
+/** 本帧从这段文字头上切多少个 UTF-16 单元：不把代理对（emoji 等）拆在两帧里，免得闪一帧乱码。 */
+function resolveEmitLength(text: string, maxChars: number): number {
+  const length = Math.min(text.length, Math.max(1, maxChars))
+  const lastCode = text.charCodeAt(length - 1)
+  const splitsSurrogatePair = lastCode >= 0xd800 && lastCode <= 0xdbff && length < text.length
+  return splitsSurrogatePair ? length + 1 : length
+}
+
 export class ChatStreamPacer<TEvent = ChatStreamEvent> {
   private readonly sessions = new Map<string, PacerSessionState<TEvent>>()
   private readonly classify: (event: TEvent) => ChatStreamPacerEventClass
+  private readonly tuning: StreamPaceTuning
 
   constructor(private readonly options: ChatStreamPacerOptions<TEvent>) {
     this.classify = options.classifyEvent ?? classifyDefaultStreamEvent
+    this.tuning = options.tuning ?? DefaultStreamPaceTuning
   }
 
   /** live 正文增量入块。 */
@@ -429,7 +448,7 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
     block: PacerTextBlock | PacerReasoningBlock,
     maxChars: number
   ): number {
-    const emit = block.pendingChars.slice(0, Math.max(1, maxChars))
+    const emit = block.pendingChars.slice(0, resolveEmitLength(block.pendingChars, maxChars))
     if (!emit) return 0
     block.pendingChars = block.pendingChars.slice(emit.length)
 
@@ -506,27 +525,18 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
       return
     }
 
-    const backlogChars = state.blocks.reduce((sum, block) => sum + blockPendingCharCount(block), 0)
-    const backlogEvents = state.blocks.reduce(
-      (sum, block) => sum + (block.kind === 'event' ? block.events.length : 0),
-      0
-    )
     const elapsedMs = isPresent(state.lastFrameTimeMs)
       ? Math.max(0, frameTimeMs - state.lastFrameTimeMs)
       : undefined
     state.lastFrameTimeMs = frameTimeMs
-    const budget = resolveStreamPaceBudget({ backlogChars, backlogEvents }, this.options.tuning, {
-      elapsedMs,
-      carriedCharCredit: state.charCredit,
-    })
-    state.charCredit = budget.availableCharCredit
 
     const front = state.blocks[0]
     front.started = true
     if (front.kind === 'event') {
+      // 结构事件帧不吐字，也不攒吐字额度：否则一串工具事件之后正文会一帧冒出一大截。
       const eventBudget = front.batched
         ? Math.min(front.events.length, MaxBatchedEventsPerFrame)
-        : budget.eventBudget
+        : Math.max(1, Math.floor(this.tuning.baseEvents))
       let applied = 0
       while (applied < eventBudget && !isEmpty(front.events)) {
         const event = front.events.shift()
@@ -535,9 +545,24 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
           applied += 1
         }
       }
-    } else if (budget.charBudget > 0) {
-      const emittedChars = this.emitBlockChunk(sessionId, front, budget.charBudget)
-      state.charCredit = Math.max(0, state.charCredit - emittedChars)
+    } else {
+      const backlogChars = state.blocks.reduce(
+        (sum, block) => sum + blockPendingCharCount(block),
+        0
+      )
+      const backlogEvents = state.blocks.reduce(
+        (sum, block) => sum + (block.kind === 'event' ? block.events.length : 0),
+        0
+      )
+      const budget = resolveStreamPaceBudget({ backlogChars, backlogEvents }, this.tuning, {
+        elapsedMs,
+        carriedCharCredit: state.charCredit,
+        motion: state.motion,
+      })
+      state.motion = budget.motion
+      const emittedChars =
+        budget.charBudget > 0 ? this.emitBlockChunk(sessionId, front, budget.charBudget) : 0
+      state.charCredit = Math.max(0, budget.availableCharCredit - emittedChars)
     }
 
     // 队首已收尾且吐空则出队。
@@ -560,8 +585,10 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
     }
 
     // 仍有一个直播中的空队首块时保留 state（供后续增量并入），但不空转排帧。
+    // 积压吐空即空闲：下一段正文从基础速度重新起步。
     state.lastFrameTimeMs = null
     state.charCredit = 0
+    state.motion = createStreamPaceMotion(this.tuning)
     if (isEmpty(state.blocks)) this.sessions.delete(sessionId)
   }
 
@@ -575,6 +602,7 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
         reasoningRawText: new Map(),
         lastFrameTimeMs: null,
         charCredit: 0,
+        motion: createStreamPaceMotion(this.tuning),
       }
       this.sessions.set(sessionId, state)
     }

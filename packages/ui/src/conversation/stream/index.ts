@@ -14,6 +14,13 @@ export type {
   ResolveStreamPaceBudgetOptions,
   StreamPaceBacklog,
   StreamPaceBudget,
+  StreamPaceMotion,
   StreamPaceTuning,
 } from './streamPaceBudget'
-export { DefaultStreamPaceTuning, resolveStreamPaceBudget } from './streamPaceBudget'
+export {
+  advanceStreamPaceMotion,
+  createStreamPaceMotion,
+  DefaultStreamPaceTuning,
+  resolveStreamPaceBudget,
+  resolveStreamPaceTargetRate,
+} from './streamPaceBudget'

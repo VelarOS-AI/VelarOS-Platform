@@ -35,12 +35,27 @@ import {
 import { prepareStreamdownMarkdownText } from '../markdown/streamdownMarkdownSource.utils'
 import { AutoScrollSuspendEventName } from '../react-hooks/scrollBehavior'
 import { useDisclosurePresence } from '../react-hooks/useDisclosurePresence'
+import { useTimerScope } from '../react-hooks/useTimerScope'
 
 import { useConversationBlockHooks } from './conversationBlockHooks'
 import type { ConversationMessageRunMarker } from './messageBubbleRenderModel'
 import { MessageStatusMarker } from './MessageStatusMarker'
 import {
-  getStreamingThinkingDisplayText,
+  createStreamFadeLedgerStore,
+  planStreamFade,
+  readStreamFadeClock,
+  renderStreamFadeText,
+  settleStreamFade,
+  type StreamFadeChunk,
+  StreamFadeMarkdownText,
+  StreamFadeMarkdownTextTagName,
+  type StreamFadeRenderScope,
+  StreamFadeRenderScopeContext,
+  StreamTextFadeDurationMs,
+  velarStreamFadeTextPlugin,
+} from './streamTextFade'
+import {
+  getStreamingThinkingDisplayWindow,
   getThinkingBlockDisplayText,
   getThinkingTranslationButtonKind,
   shouldAutoTranslateThinkingBlock,
@@ -54,269 +69,135 @@ import {
 import styles from './MessageBubble.module.css'
 
 import type { TextBlock, ThinkingBlock as ThinkingContentBlock } from '#contracts'
-import { isBlank, isObject, isPresent, isString, toNullable } from '#internal/runtime'
+import { isBlank, isPresent, toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 const MESSAGE_STREAMDOWN_CLASS_NAME = 'space-y-0'
-const MaxThinkingAnimatedTextKeys = 500
-const ThinkingAnimatedTextLengthByKey = new Map<string, number>()
-const MaxStreamingTextAnimationKeys = 1_000
-const StreamingTextAnimatedLengthByKey = new Map<string, number>()
 const StreamingTextAnimationKeyContext = createContext<Nullable<string>>(null)
-const StreamFadeExcludedTagNames = new Set(['code', 'pre', 'svg', 'math', 'annotation'])
-
-interface StreamFadeNode {
-  type?: string
-  value?: string
-  tagName?: string
-  properties?: Record<string, unknown>
-  children?: StreamFadeNode[]
-}
-
-interface StreamFadePluginState {
-  previousTextLength: number
-  renderedTextLength: number
-}
-
-function countDisplayCharacters(text: string): number {
-  return Array.from(text).length
-}
-
-function rememberThinkingAnimatedTextLength(blockKey: string, textLength: number): void {
-  const previousLength = ThinkingAnimatedTextLengthByKey.get(blockKey)
-  if (isPresent(previousLength)) {
-    if (textLength > previousLength) {
-      ThinkingAnimatedTextLengthByKey.set(blockKey, textLength)
-    }
-    return
-  }
-
-  if (ThinkingAnimatedTextLengthByKey.size >= MaxThinkingAnimatedTextKeys) {
-    const oldestKey = ThinkingAnimatedTextLengthByKey.keys().next().value
-    if (isString(oldestKey)) {
-      ThinkingAnimatedTextLengthByKey.delete(oldestKey)
-    }
-  }
-  ThinkingAnimatedTextLengthByKey.set(blockKey, textLength)
-}
-
-function rememberStreamingTextAnimatedLength(blockKey: string, textLength: number): void {
-  const previousLength = StreamingTextAnimatedLengthByKey.get(blockKey)
-  if (isPresent(previousLength)) {
-    StreamingTextAnimatedLengthByKey.delete(blockKey)
-    StreamingTextAnimatedLengthByKey.set(blockKey, Math.max(previousLength, textLength))
-    return
-  }
-
-  if (StreamingTextAnimatedLengthByKey.size >= MaxStreamingTextAnimationKeys) {
-    const oldestKey = StreamingTextAnimatedLengthByKey.keys().next().value
-    if (isString(oldestKey)) StreamingTextAnimatedLengthByKey.delete(oldestKey)
-  }
-  StreamingTextAnimatedLengthByKey.set(blockKey, textLength)
-}
-
-function isStreamFadeNode(value: unknown): value is StreamFadeNode {
-  return isObject(value)
-}
-
-function createStreamFadeTextNode(value: string): StreamFadeNode {
-  return { type: 'text', value }
-}
-
-function createStreamFadeAnimatedNode(value: string): StreamFadeNode {
-  return {
-    type: 'element',
-    tagName: 'span',
-    properties: { 'data-velar-stream-fade': true },
-    children: [createStreamFadeTextNode(value)],
-  }
-}
-
-export function resolveIncrementalStreamFadeText({
-  previousTextLength,
-  text,
-  textStart,
-}: {
-  previousTextLength: number
-  text: string
-  textStart: number
-}): { newText: string; unchangedText: string } {
-  const textEnd = textStart + text.length
-  if (isBlank(text) || textEnd <= previousTextLength) return { newText: '', unchangedText: text }
-
-  const unchangedLength = Math.max(0, Math.min(text.length, previousTextLength - textStart))
-  const unchangedText = text.slice(0, unchangedLength)
-  const newText = text.slice(unchangedLength)
-  if (isBlank(newText)) return { newText: '', unchangedText: text }
-
-  return { newText, unchangedText }
-}
-
-export function resolveStreamingTextFadeBaseline(rememberedTextLength?: number): number {
-  // 首次观察可能是刚创建的文本块，也可能是切回后已积累很长的运行中消息。统一把现有内容当基线，
-  // 等下一次增量再淡入，才能从构造上杜绝整段/整屏重播。
-  return rememberedTextLength ?? Number.MAX_SAFE_INTEGER
-}
-
-function animateNewStreamFadeText(
-  node: StreamFadeNode,
-  state: StreamFadePluginState,
-  cursor: { textLength: number }
-): StreamFadeNode[] {
-  const value = node.value ?? ''
-  const textStart = cursor.textLength
-  const textEnd = textStart + value.length
-  cursor.textLength = textEnd
-  const { newText, unchangedText } = resolveIncrementalStreamFadeText({
-    previousTextLength: state.previousTextLength,
-    text: value,
-    textStart,
-  })
-  if (!newText) return [node]
-
-  return [
-    ...(unchangedText ? [createStreamFadeTextNode(unchangedText)] : []),
-    createStreamFadeAnimatedNode(newText),
-  ]
-}
-
-function applyStreamFadeToNode(
-  node: StreamFadeNode,
-  state: StreamFadePluginState,
-  cursor: { textLength: number },
-  excluded = false
-): void {
-  const nextExcluded =
-    excluded || (node.type === 'element' && StreamFadeExcludedTagNames.has(node.tagName ?? ''))
-  if (nextExcluded || !node.children) return
-
-  for (let index = 0; index < node.children.length; index += 1) {
-    const child = node.children[index]
-    if (!child) continue
-
-    if (child.type === 'text') {
-      const replacements = animateNewStreamFadeText(child, state, cursor)
-      node.children.splice(index, 1, ...replacements)
-      index += replacements.length - 1
-      continue
-    }
-
-    applyStreamFadeToNode(child, state, cursor)
-  }
-}
-
-function createIncrementalStreamFadePlugin(state: StreamFadePluginState) {
-  return function incrementalStreamFadePlugin() {
-    return (tree: unknown): void => {
-      if (!isStreamFadeNode(tree)) return
-
-      const cursor = { textLength: 0 }
-      applyStreamFadeToNode(tree, state, cursor)
-      state.renderedTextLength = cursor.textLength
-    }
-  }
-}
+const StreamingTextFadeLedgers = createStreamFadeLedgerStore(1_000)
+const ThinkingTextFadeLedgers = createStreamFadeLedgerStore(500)
+const StreamFadeMarkdownComponents = { [StreamFadeMarkdownTextTagName]: StreamFadeMarkdownText }
 
 /**
- * Streamdown 会在 streaming 模式里重解析最后一个 Markdown block。这里为每个解析块维护持久长度，
- * 只把这次真正新增的尾部包成一个 span；旧节点、会话重挂载和完成态重组都不会重新淡入。
+ * 流式正文的解析块：Streamdown 在 streaming 模式里只重解析最后一个块。每个块按内容算一次淡入
+ * 计划（见 `streamTextFade`），经 context 交给插件标好的文本节点去切分；块内容没变就沿用上一份
+ * 计划，Streamdown 的块 memo 与文字组件都不重渲染——已经写完的段落不会每帧跟着重画。
  */
 function PersistentStreamingTextBlock(props: StreamdownBlockProps): ReactElement {
   const animationKey = useContext(StreamingTextAnimationKeyContext)
   const { isAnimating } = useContext(StreamdownContext)
-  const persistentBlockKey = animationKey ? `${animationKey}:streamdown:${props.index}` : null
-  const pluginStateRef = useRef<StreamFadePluginState>({
-    previousTextLength: 0,
-    renderedTextLength: 0,
-  })
-  const committedBlockKeyRef = useRef<Nullable<string>>(null)
-  const incrementalFadePlugin = useMemo(
-    () => createIncrementalStreamFadePlugin(pluginStateRef.current),
-    []
+  const ledgerKey = isAnimating && animationKey ? `${animationKey}:streamdown:${props.index}` : null
+  const fading = isPresent(ledgerKey)
+  const committedRef = useRef(false)
+  const scope = useMemo<Nullable<StreamFadeRenderScope>>(
+    () =>
+      ledgerKey
+        ? {
+            chunks: planStreamFade({
+              ledger: StreamingTextFadeLedgers.get(ledgerKey),
+              now: readStreamFadeClock(),
+              sourceLength: props.content.length,
+              mounted: committedRef.current,
+            }),
+            report: { textLength: 0 },
+          }
+        : null,
+    [ledgerKey, props.content]
   )
-  const shouldAnimate = isAnimating && isPresent(persistentBlockKey)
-  const hasCommittedCurrentBlock = committedBlockKeyRef.current === persistentBlockKey
-  const pluginState = pluginStateRef.current
-  pluginState.previousTextLength = shouldAnimate
-    ? resolveStreamingTextFadeBaseline(
-        hasCommittedCurrentBlock
-          ? StreamingTextAnimatedLengthByKey.get(persistentBlockKey)
-          : undefined
-      )
-    : Number.MAX_SAFE_INTEGER
-  pluginState.renderedTextLength = 0
   const rehypePlugins = useMemo(
     () =>
-      shouldAnimate ? [...(props.rehypePlugins ?? []), incrementalFadePlugin] : props.rehypePlugins,
-    [incrementalFadePlugin, props.rehypePlugins, shouldAnimate]
+      fading ? [...(props.rehypePlugins ?? []), velarStreamFadeTextPlugin] : props.rehypePlugins,
+    [fading, props.rehypePlugins]
+  )
+  const components = useMemo(
+    () =>
+      fading
+        ? ({ ...props.components, ...StreamFadeMarkdownComponents } as StreamdownComponents)
+        : props.components,
+    [fading, props.components]
   )
 
   useLayoutEffect(() => {
-    if (!shouldAnimate || !persistentBlockKey) return
-
-    rememberStreamingTextAnimatedLength(persistentBlockKey, pluginState.renderedTextLength)
-    committedBlockKeyRef.current = persistentBlockKey
-  }, [persistentBlockKey, pluginState, props.content, shouldAnimate])
-
-  return <StreamdownBlock {...props} animatePlugin={null} rehypePlugins={rehypePlugins} />
-}
-
-function renderStreamingThinkingText(
-  text: string,
-  animatedTextStartIndex: number
-): React.ReactNode {
-  const characters = Array.from(text)
-  const normalizedStartIndex = Math.max(0, Math.min(animatedTextStartIndex, characters.length))
-  if (normalizedStartIndex >= characters.length) return text
+    if (!ledgerKey || !scope) return
+    StreamingTextFadeLedgers.set(ledgerKey, settleStreamFade(scope.chunks, scope.report.textLength))
+    committedRef.current = true
+  }, [ledgerKey, scope])
 
   return (
-    <>
-      {characters.slice(0, normalizedStartIndex).join('')}
-      <span
-        key={`${normalizedStartIndex}:${characters.length}`}
-        className={styles.thinkingPlainTextStreamingChar}
-      >
-        {characters.slice(normalizedStartIndex).join('')}
-      </span>
-    </>
+    <StreamFadeRenderScopeContext.Provider value={scope}>
+      <StreamdownBlock
+        {...props}
+        animatePlugin={null}
+        components={components}
+        rehypePlugins={rehypePlugins}
+      />
+    </StreamFadeRenderScopeContext.Provider>
   )
 }
 
 /**
- * 思考块新增字符的进场动画起点：只对「本组件观察到之后新追加」的字符做淡入。
- *
- * 屏显节奏的唯一权威是状态层的 ChatStreamPacer（思考/正文/工具单 FIFO 按到达顺序逐帧吐），
- * 组件不再维护落后于状态的影子揭示文本——这里只算 CSS 进场动画从哪个字符开始。
- * 首次观察（含切会话/重挂载时已积累的长文）一律视为已揭示，避免整段文字齐刷刷补动画；
- * module 级 Map 记住每个块已动画过的长度，重挂载 / StrictMode 双调用不重放。
+ * 流式思考的淡入批次。思考只显示末尾一段窗口，窗口会随新字往后滑，所以偏移按整段思考原文计，
+ * 渲染时再换算到窗口里；账本同样只在提交后写入。
  */
-function useStreamingThinkingAnimationStartIndex({
+function useThinkingTextFadeChunks({
   isStreaming,
   blockKey,
-  text,
+  textLength,
 }: {
   isStreaming: boolean
   blockKey: string
-  text: string
-}): number {
-  const committedBlockKeyRef = useRef<Nullable<string>>(null)
-  const textLength = useMemo(() => countDisplayCharacters(text), [text])
-  const animatedTextStartIndex = useMemo(() => {
-    if (!isStreaming) return textLength
-    if (committedBlockKeyRef.current !== blockKey) return textLength
-
-    const rememberedLength = ThinkingAnimatedTextLengthByKey.get(blockKey)
-    return isPresent(rememberedLength) ? Math.min(rememberedLength, textLength) : textLength
-  }, [blockKey, isStreaming, textLength])
+  textLength: number
+}): readonly StreamFadeChunk[] {
+  const committedRef = useRef(false)
+  const ledger = useMemo(
+    () =>
+      isStreaming
+        ? settleStreamFade(
+            planStreamFade({
+              ledger: ThinkingTextFadeLedgers.get(blockKey),
+              now: readStreamFadeClock(),
+              sourceLength: textLength,
+              mounted: committedRef.current,
+            }),
+            textLength
+          )
+        : null,
+    [blockKey, isStreaming, textLength]
+  )
 
   useLayoutEffect(() => {
-    if (!isStreaming) return
+    if (!ledger) return
+    ThinkingTextFadeLedgers.set(blockKey, ledger)
+    committedRef.current = true
+  }, [blockKey, ledger])
 
-    rememberThinkingAnimatedTextLength(blockKey, textLength)
-    committedBlockKeyRef.current = blockKey
-  }, [blockKey, isStreaming, textLength])
+  return ledger?.chunks ?? []
+}
 
-  return animatedTextStartIndex
+/**
+ * 流式结束后再留一个淡入时长才切到静态渲染：最后一批字还在淡入，立刻换渲染器会把它们一下子
+ * 顶成不透明。状态在渲染期同步推导，切换那一帧不会先闪一次静态渲染。
+ */
+function useStreamFadeTail(streaming: boolean): boolean {
+  const [previousStreaming, setPreviousStreaming] = useState(streaming)
+  const [tailing, setTailing] = useState(false)
+  const timers = useTimerScope('StreamingTextBlock.fadeTail')
+  if (previousStreaming !== streaming) {
+    setPreviousStreaming(streaming)
+    setTailing(!streaming)
+  }
+
+  useEffect(() => {
+    if (!tailing) return
+    const lease = timers.after(StreamTextFadeDurationMs, () => setTailing(false), {
+      label: 'chat.streamingText.fadeTail',
+    })
+    return () => {
+      lease.cancel()
+    }
+  }, [tailing, timers])
+
+  return streaming || tailing
 }
 
 function ThinkingBlockInner({
@@ -348,14 +229,14 @@ function ThinkingBlockInner({
   const wasStreamingRef = useRef(isStreaming)
   const { mounted: isMounted, visible: isVisible } = useDisclosurePresence(expanded)
   const fullDisplayText = getThinkingBlockDisplayText(block, locale)
-  const displayText = getStreamingThinkingDisplayText(fullDisplayText, {
+  const displayWindow = getStreamingThinkingDisplayWindow(fullDisplayText, {
     streaming: isStreaming,
   })
   const blockKey = `${messageId}:${blockIndex ?? 'thinking'}:${block.streamId ?? 'stream'}`
-  const animatedTextStartIndex = useStreamingThinkingAnimationStartIndex({
+  const fadeChunks = useThinkingTextFadeChunks({
     isStreaming,
     blockKey,
-    text: displayText,
+    textLength: fullDisplayText.length,
   })
   const buttonKind = getThinkingTranslationButtonKind(block, locale)
   const canTranslate =
@@ -423,7 +304,7 @@ function ThinkingBlockInner({
     messageId,
   ])
 
-  if (isBlank(displayText)) return null
+  if (isBlank(fullDisplayText)) return null
 
   const label = t('chat.thinkingProcess')
   const translateButtonLabel =
@@ -436,9 +317,10 @@ function ThinkingBlockInner({
   const thinkingContent = (
     <>
       <pre className={styles.thinkingPlainText}>
+        {displayWindow.truncated ? '...\n' : null}
         {isStreaming
-          ? renderStreamingThinkingText(displayText, animatedTextStartIndex)
-          : displayText}
+          ? renderStreamFadeText(displayWindow.text, displayWindow.start, fadeChunks)
+          : displayWindow.text}
       </pre>
       {canTranslate && (
         <div className={styles.thinkingTranslateRow}>
@@ -665,9 +547,11 @@ function StreamingTextBlockInner({
 }): Nullable<ReactElement> {
   const { t } = useConversationI18n()
   const markdownContentRef = useRef<HTMLDivElement>(null)
-  // 直接渲染状态层文本:打字节奏由 ChatStreamPacer 单点起搏,组件不再叠加第二层揭示动画。
+  // 直接渲染状态层文本:打字节奏由 ChatStreamPacer 单点起搏,这里只给刚上屏的字加淡入。
   const streamdownText = useMemo(() => prepareStreamdownMarkdownText(block.text), [block.text])
-  const visibleTailMarker = isMessageStreaming ? null : tailMarker
+  const fadeActive = useStreamFadeTail(animateText)
+  // 收尾标记等最后一批字淡完、切到静态渲染之后再出现：它挂在渲染器生成的槽位里，换渲染器会换掉槽位。
+  const visibleTailMarker = isMessageStreaming || fadeActive ? null : tailMarker
   const tailMarkerNode = useMemo(
     () => (visibleTailMarker ? <MessageStatusMarker marker={visibleTailMarker} /> : null),
     [visibleTailMarker]
@@ -699,8 +583,8 @@ function StreamingTextBlockInner({
       >
         <MessageStreamdown
           text={streamdownText}
-          isStreaming={animateText}
-          animationKey={animateText ? animationKey : undefined}
+          isStreaming={fadeActive}
+          animationKey={fadeActive ? animationKey : undefined}
           components={components}
           runtime={runtime}
         />
