@@ -33,6 +33,7 @@ import {
 } from '@velaros-ai/core'
 
 import { ProjectError } from "../errors.js";
+import { validateReadBounds } from "../read-bounds.js";
 import type { FileListEntry, FileStatInput, FileStatResult,ObserveInput, ReadInput, ReadResult } from "../types/io.js";
 import type { CorePolicy } from "../types/policy.js";
 import type { CommandProvider, FileFilterProvider } from "../types/provider.js";
@@ -190,36 +191,6 @@ function countTextLines(content: string): number {
 interface ReadCursor {
   line: number;
   column: number;
-}
-
-function validateReadRange(filePath: string, range: ReadInput["range"]): void {
-  if (!range) return;
-  const numericEntries = [
-    ["startLine", range.startLine],
-    ["endLine", range.endLine],
-    ["startColumn", range.startColumn],
-    ["endColumn", range.endColumn],
-  ] as const;
-  for (const [name, value] of numericEntries) {
-    if (!isUndefined(value) && (!Number.isInteger(value) || value < 1)) {
-      throw new ProjectError("INVALID_INPUT", `${filePath}：${name} 必须是从 1 开始的正整数`, { path: filePath, range, field: name });
-    }
-  }
-  const startLine = range.startLine ?? 1;
-  if (!isUndefined(range.endColumn) && isUndefined(range.endLine)) {
-    throw new ProjectError("INVALID_INPUT", `${filePath}：使用 endColumn 时必须同时提供 endLine`, { path: filePath, range });
-  }
-  if (!isUndefined(range.endLine) && range.endLine < startLine) {
-    throw new ProjectError("INVALID_INPUT", `${filePath}：读取范围的 endLine 不能早于 startLine`, { path: filePath, range });
-  }
-  if (
-    (range.endLine ?? startLine) === startLine
-    && !isUndefined(range.startColumn)
-    && !isUndefined(range.endColumn)
-    && range.endColumn < range.startColumn
-  ) {
-    throw new ProjectError("INVALID_INPUT", `${filePath}：同一行的 endColumn 不能早于 startColumn`, { path: filePath, range });
-  }
 }
 
 /**
@@ -747,13 +718,7 @@ export class FileStore {
     input: ReadInput,
     options?: { skipFileFilter?: boolean }
   ): Promise<ReadResult> {
-    validateReadRange(input.path, input.range);
-    if (!isUndefined(input.maxBytes) && (!Number.isInteger(input.maxBytes) || input.maxBytes < 1)) {
-      throw new ProjectError("INVALID_INPUT", "maxBytes 必须是正整数", { maxBytes: input.maxBytes });
-    }
-    if (!isUndefined(input.maxChars) && (!Number.isInteger(input.maxChars) || input.maxChars < 0)) {
-      throw new ProjectError("INVALID_INPUT", "maxChars 必须是非负整数", { maxChars: input.maxChars });
-    }
+    validateReadBounds(input);
     const snap = await this.snapshot(input.path, true, options);
     if (input.baseRevision && snap.revision !== input.baseRevision) {
       throw new ProjectError(

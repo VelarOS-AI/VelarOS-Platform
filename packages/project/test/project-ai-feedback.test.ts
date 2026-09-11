@@ -136,11 +136,34 @@ describe('project:read range clamping', () => {
       code: 'BASE_REVISION_MISMATCH',
       message: expect.stringContaining('a.txt'),
     }])
+    expect(batch.nextAction).toContain('只重读这些路径')
 
     await expect(executeAgentProjectRead(project, {
       path: 'a.txt',
       baseRevisions: { 'a.txt': 'stale-revision' },
     }, { rootPath: root })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+  })
+
+  test('rejects a file-independent range error once for the whole batch', async () => {
+    await writeFile(join(root, 'big.txt'), numberedLines(30))
+    await writeFile(join(root, 'short.txt'), numberedLines(3))
+    const project = await createProjectKernel({ root })
+
+    const error = await executeAgentProjectRead(project, {
+      path: ['big.txt', 'short.txt'],
+      range: { startLine: 10, endLine: 2 },
+    }, { rootPath: root }).catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ reason: 'INVALID_INPUT', message: '读取范围的 endLine 不能早于 startLine' })
+
+    // 与具体文件相关的列越界仍逐文件隔离：只有第 1 行不够长的文件记为 issue。
+    await writeFile(join(root, 'wide.txt'), 'a much longer first line\nsecond')
+    const columns = await executeAgentProjectRead(project, {
+      path: ['wide.txt', 'short.txt'],
+      range: { startLine: 1, startColumn: 12 },
+    }, { rootPath: root })
+    expect(columns.files.map((file) => file.snapshot.path)).toEqual(['wide.txt'])
+    expect(columns.issues).toEqual([expect.objectContaining({ path: 'short.txt', reason: 'failed', code: 'INVALID_INPUT' })])
+    expect(columns.nextAction).toBeDefined()
   })
 
   test('keeps the remaining column errors but names the file', async () => {
@@ -255,6 +278,96 @@ describe('text anchor miss diagnostics', () => {
     })
   })
 
+  test('locates a single-line oldText whose only difference is backslash escaping', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'render.ts',
+      oldText: '  const pattern = /\\\\{([^}]*)\\\\}/g',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({
+      candidateLine: 2,
+      causes: ['backslash_escape'],
+      firstMismatch: { oldTextLine: 1, fileLine: 2, actual: '  const pattern = /\\{([^}]*)\\}/g' },
+    })
+    expect(error.message).toContain('反斜杠')
+  })
+
+  test('locates oldText when every line carries an escaping difference', async () => {
+    await writeFile(join(root, 'escapes.ts'), 'const a = "\\n"\nconst b = "\\t"\n')
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'escapes.ts',
+      oldText: 'const a = "\\\\n"\nconst b = "\\\\t"',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({ candidateLine: 1, causes: ['backslash_escape'], firstMismatch: { oldTextLine: 1 } })
+  })
+
+  test('locates a single-line typo through the nearest similar line', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'render.ts',
+      oldText: '  return template.replace(pattren, (_, key) => lookup(key))',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({
+      candidateLine: 3,
+      causes: ['content'],
+      firstMismatch: { oldTextLine: 1, fileLine: 3, actual: '  return template.replace(pattern, (_, key) => lookup(key))' },
+    })
+    expect(error.message).not.toContain('任何非空行都不在文件中')
+  })
+
+  test('skips tolerated whitespace and line-ending differences when naming the first mismatch', async () => {
+    await writeFile(join(root, 'ws.ts'), 'function a() {  \n  const x = 1\n  const y = "\\n"\n}\n')
+    const trailing = await prepareFailure({
+      type: 'replace_text',
+      path: 'ws.ts',
+      oldText: 'function a() {\n  const x = 1\n  const y = "\\\\n"\n}',
+      newText: 'x',
+    })
+    expect(trailing.details).toMatchObject({
+      candidateLine: 1,
+      matchedLines: 2,
+      causes: ['backslash_escape'],
+      tolerated: ['trailing_whitespace'],
+      firstMismatch: { oldTextLine: 3, fileLine: 3 },
+    })
+    expect(trailing.message).toContain('无需修正')
+
+    await writeFile(join(root, 'lf.txt'), 'const alpha = 1\nconst beta = 2\nconst gamma = 3\n')
+    const crlf = await prepareFailure({
+      type: 'replace_text',
+      path: 'lf.txt',
+      oldText: 'const alpha = 1\r\nconst beta = 2\r\nconst gamm = 3',
+      newText: 'x',
+    })
+    expect(crlf.details).toMatchObject({
+      causes: ['content'],
+      tolerated: ['line_ending'],
+      firstMismatch: { oldTextLine: 3, fileLine: 3, expected: 'const gamm = 3', actual: 'const gamma = 3' },
+    })
+  })
+
+  test('lets rare anchor lines win over very common ones when picking the candidate', async () => {
+    const blocks = Array.from({ length: 300 }, (_, index) => `function f${index}() {\n  return null;\n}`).join('\n')
+    await writeFile(join(root, 'many.ts'), `${blocks}\nfunction target() {\n  return null;\n}\nfunction next() {\n  const re = /\\d+/\n}\n`)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'many.ts',
+      oldText: '  return null;\n}\nfunction next() {\n  const re = /\\\\d+/',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({
+      candidateLine: 902,
+      causes: ['backslash_escape'],
+      firstMismatch: { oldTextLine: 4, fileLine: 905 },
+    })
+  })
+
   test('explains text that appears nowhere in the file', async () => {
     await writeFile(join(root, 'render.ts'), source)
     const error = await prepareFailure({
@@ -331,6 +444,33 @@ describe('whitespace-tolerant text matching', () => {
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('第 1 行')
     await project.applyEdit({ transactionId: transaction.transactionId })
     expect(await readFile(join(root, 'unix.txt'), 'utf8')).toBe('uno\ndos\nthree\n')
+  })
+
+  test('only tolerates stripped whitespace that really sits at the end of a line', async () => {
+    const cases = [
+      { file: 'notes.md', content: 'config: const xyz = 1\n', operation: { type: 'replace_text', oldText: 'const x ', newText: 'const y ' } },
+      { file: 'notes.md', content: 'price 100\n', operation: { type: 'insert_text_at_anchor', anchorText: 'price 1 ', position: 'after', text: 'X' } },
+      { file: 'call.txt', content: 'call(foo,bar)\n', operation: { type: 'delete_text', oldText: 'foo, ' } },
+      { file: 'a.json', content: '{"key":"value"}\n', operation: { type: 'replace_text', oldText: '"key": ', newText: '"k": ' } },
+      { file: 'p.py', content: 'def f():\n    print("hello")\n', operation: { type: 'replace_text', oldText: 'def f():\n    print("hello ', newText: 'def f():\n    print("hi ' } },
+    ] as const
+    for (const { file, content, operation } of cases) {
+      await writeFile(join(root, file), content)
+      const error = await prepareFailure({ ...operation, path: file } as EditOperation)
+      expect(error.reason).toBe('TARGET_NOT_FOUND')
+      expect(error.details.whitespaceTolerantMatches).toBeUndefined()
+      expect(await readFile(join(root, file), 'utf8')).toBe(content)
+    }
+
+    // 同样的单行 oldText 落在真正的行尾时仍可宽容应用。
+    await writeFile(join(root, 'price.txt'), 'price 1\nnext\n')
+    const project = await createProjectKernel({ root })
+    const transaction = await project.prepareEdit({
+      operations: [{ operation: { type: 'insert_text_at_anchor', path: 'price.txt', anchorText: 'price 1 ', position: 'after', text: 'X' } }],
+    })
+    expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白')
+    await project.applyEdit({ transactionId: transaction.transactionId })
+    expect(await readFile(join(root, 'price.txt'), 'utf8')).toBe('price 1X\nnext\n')
   })
 
   test('refuses a tolerant match that is not unique and lists where it would land', async () => {

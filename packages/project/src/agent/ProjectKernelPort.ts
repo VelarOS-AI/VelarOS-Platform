@@ -1,6 +1,7 @@
 import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
+import { validateReadBounds } from '../read-bounds.js'
 
 /**
  * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
@@ -315,6 +316,8 @@ export async function executeAgentProjectRead(
     ...rest
   } = input
   const paths = isString(path) ? [path] : path
+  // 与文件无关的参数错误属于整次调用：先整体校验，别让下面的逐文件隔离把它拆成 N 条相同的 issue。
+  validateReadBounds({ range: input.range, maxBytes: input.maxBytes, maxChars })
   const appliedDefaultBound = isUndefined(input.maxBytes) && isUndefined(maxChars)
   const totalMaxChars = appliedDefaultBound ? DefaultAgentReadMaxChars : maxChars
   if (!isUndefined(totalMaxChars) && totalMaxChars < paths.length) {
@@ -363,6 +366,7 @@ export async function executeAgentProjectRead(
     (issue) => issue.reason === 'directory' || issue.reason === 'not_found'
   )
   const needsBinaryCapability = issues.some((issue) => issue.reason === 'binary')
+  const hasFailedFiles = issues.some((issue) => issue.reason === 'failed')
   const rootPath = options.rootPath ?? (await project.status()).root
   return {
     rootPath,
@@ -375,7 +379,9 @@ export async function executeAgentProjectRead(
         }
       : needsBinaryCapability
         ? { nextAction: '请改用能处理该二进制格式的专用能力，不要继续调用 project:read。' }
-        : {}),
+        : hasFailedFiles
+          ? { nextAction: '部分文件读取失败，原因见 issues；按各条 message 修正后只重读这些路径，已返回的文件不必重读。' }
+          : {}),
     ...(appliedDefaultBound
       ? { appliedDefaultBound: { maxChars: DefaultAgentReadMaxChars } }
       : {}),
