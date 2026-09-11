@@ -411,20 +411,14 @@ function looksLikeBinaryPayload(value: string): boolean {
   return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
-// 只锚定开头,不要求整串以 "…]" 收尾——占位串的 preview 正文固定被截到 160 字符,
-// 真实产生的占位串几乎不可能恰好在 preview 内容里再收出一个完整的 "…]" 收尾;
-// 反而模型会把占位串的头部原样抄进真实参数、后面接真实代码（无收尾），若用 $ 锚
-// 定尾巴，这类真机样本永远匹配不上，等于没修（2026-09 三层嵌套真机取证复核）。
+// 只锚定开头：嵌套时内层 preview 被截到 160 字符，模型也会把占位头抄进真实参数后接真实内容，
+// 两种情况都不以 "…]" 收尾，按整串匹配会漏掉它们，重放时又被再包一层。
 const HistoryPreviewPlaceholderHeaderPattern =
   /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(; preview: )?/;
 
-// 真实占位串的体积上限：头部（约 100 字符，含字段名与位数）+ 160 字符 preview + "…]"，
-// 留足余量。只匹配到一层头部却超过这个长度，说明后面跟着的不是占位串自身的 preview
-// 收尾，而是模型仿写头部后接的一大段真实内容（2026-09 复核 #118 最常见形态：模型只抄
-// 了一层头部就转去写真实代码）。这种情况不能原样放行（会绕过体积上限）,但也不能简单
-// 丢弃剥离结果——要把头部之后的真实内容当作"这次工具实际收到的正文"重新压成单层占位串
-// （见 collapseHistoryPreviewPlaceholder 末尾统一的重建分支）,否则会回落到
-// summarizeToolInputString 把整串（含头部文本）当新内容再包一层，产生嵌套。
+// 单层占位串的体积上限：头部约 100 字符 + 160 字符 preview + "…]"，留有余量。只剥出一层却超过它，
+// 说明头部后面跟的是真实内容而不是 preview：原样放行会绕过体积上限，交给常规压缩又会嵌套，
+// 因此按剥离后的正文重建单层占位串。
 const TrustedSinglePlaceholderMaxLength = 400;
 
 interface ParsedHistoryPreviewPlaceholderHeader {
@@ -457,18 +451,10 @@ function stripPlaceholderTrailer(rest: string): string {
 const MaxHistoryPreviewUnwrapDepth = 8;
 
 /**
- * 历史参数一旦被压成占位串，重放时不应再被当作原始大字符串重新包一层——
- * 真机已复现三层嵌套（Workbench 持久化会话取证）。识别只锚定开头前缀（见上方注释），
- * 反复剥离头部直到剩余文本不再以占位头开头。
- *
- * 只剥到一层且总长在信任范围内：原样放行（幂等，本来就是一次历史重放，未被篡改）。
- * 其余情况——剥出两层及以上，或只剥到一层但总长超出信任范围（模型仿写了一层头部、
- * 后面接了真实内容，且没有用 "…]" 收尾，见 #118 复核）——一律用剥离后剩下的正文
- * （remainder，即头部之后"真正的内容"）重新生成一个全新的单层占位串：声明长度用
- * value.length（这次工具调用实际收到的总长度，而不是内层头部宣称的历史长度——
- * 工具收到的就是这一整串，含它前面被抄进来的占位头），预览取 remainder 的前 160
- * 字符。保证输出恒定单层、有界，不随嵌套深度或伪造头部长度增长。
- * 不是占位串则返回 null，交给调用方走常规压缩判断。
+ * 已压成占位串的历史参数在重放时保持单层：反复剥离开头的占位头，直到剩余文本不再以占位头开头。
+ * 只有一层且体积可信时原样返回（重放幂等）；剥出多层、或一层却超出可信体积时，用剥离后的正文
+ * 重建单层占位串——声明长度取本次实际收到的 value.length，预览取正文前 160 字符，输出有界且
+ * 不随嵌套深度增长。不是占位串时返回 null，交给调用方走常规压缩。
  */
 function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
   const first = parseHistoryPreviewPlaceholderHeader(value);
@@ -489,21 +475,20 @@ function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
   if (layers === 1 && value.length <= TrustedSinglePlaceholderMaxLength)
     return value;
 
-  const previewText = remainder.slice(0, 160).replaceAll(/\s+/g, " ").trim();
-  return previewText
-    ? `[history preview omitted ${value.length} chars from ${first.field}; tool received the full value; preview: ${previewText}…]`
-    : `[history preview omitted ${value.length} chars from ${first.field}; tool received the full value]`;
+  return historyPreviewPlaceholder(value.length, first.field, remainder);
+}
+
+/** 占位串的唯一格式：`summarizeToolInputString` 生成与 `collapseHistoryPreviewPlaceholder` 重建共用。 */
+function historyPreviewPlaceholder(length: number, field: string, previewSource: string): string {
+  const preview = previewSource.slice(0, 160).replaceAll(/\s+/g, " ").trim();
+  return preview
+    ? `[history preview omitted ${length} chars from ${field}; tool received the full value; preview: ${preview}…]`
+    : `[history preview omitted ${length} chars from ${field}; tool received the full value]`;
 }
 
 function summarizeToolInputString(value: string, key?: string): string {
   const field = key ? `"${key}"` : "string";
-  if (key && ToolInputKeysWithoutPreview.has(key)) return `[history preview omitted ${value.length} chars from ${field}; tool received the full value]`;
-
-  const preview = value.slice(0, 160).replaceAll(/\s+/g, " ").trim();
-
-  return preview
-    ? `[history preview omitted ${value.length} chars from ${field}; tool received the full value; preview: ${preview}…]`
-    : `[history preview omitted ${value.length} chars from ${field}; tool received the full value]`;
+  return historyPreviewPlaceholder(value.length, field, key && ToolInputKeysWithoutPreview.has(key) ? "" : value);
 }
 
 function buildTruncatedToolResult(
