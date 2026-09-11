@@ -6,7 +6,10 @@ import type { FileSnapshot, ProjectSnapshot } from "./snapshot.js";
 export interface ObserveInput {
   include?: string[];
   exclude?: string[];
-  /** 默认在工作区根目录为 true；当 path 显式指向子树时为 false。 */
+  /**
+   * 默认 true：从根目录到起点逐级继承 .gitignore 过滤被忽略的条目。缺省时若 path 显式指向的
+   * 目录本身被忽略，则照常列出其内容；显式传 true 时被忽略的起点返回空，传 false 不做过滤。
+   */
   excludeGitignored?: boolean;
   maxFiles?: number;
   /** 相对工作区根目录的起始路径（默认根目录）。 */

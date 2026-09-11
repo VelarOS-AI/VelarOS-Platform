@@ -1,8 +1,9 @@
-import { isEmpty, isPresent, isTrue } from '@velaros-ai/core'
+import { isEmpty, isPresent, isString, isTrue, optionalWhen } from '@velaros-ai/core'
 
 import { ProjectError } from "../errors.js";
-import type { PreparedPatch } from "../types/edit.js";
+import type { CreateFileOperation, PreparedPatch } from "../types/edit.js";
 import type { PatchStrategy, PatchStrategyInput } from "../types/patch.js";
+import type { FileSnapshot } from "../types/snapshot.js";
 import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { adaptTextToContentLineEndings, countChangedLines, includesLineEndingAware, offsetToLine, resolveLineEndingAwareTextMatch } from "../utils/text.js";
@@ -179,6 +180,30 @@ function replaceSelectedMatches(
   return next
 }
 
+/**
+ * `create_file` 的目标以事务暂存视图判定：本事务前面删掉的算不存在，前面刚创建的算已存在。
+ * 覆盖既有文件时补丁带上原文与 revision——rollback 据此写回原文而不是删除文件，apply 前原文
+ * 被外部改动则按 base revision 冲突拒绝。取不到原文（二进制/超限）时 oldContent 留空，
+ * 由 rollback 预检整体拒绝，绝不把原文件截成空。
+ */
+function createFilePatch(op: CreateFileOperation, snapshot: Optional<FileSnapshot>): PreparedPatch {
+  const replaced = optionalWhen(isTrue(snapshot?.exists), snapshot);
+  if (isPresent(replaced) && !isTrue(op.overwrite)) {
+    throw new ProjectError(
+      "CONFLICT_WITH_EXTERNAL_EDIT",
+      `目标文件已存在，create_file 未开启 overwrite，拒绝覆盖：${op.path}`,
+      { path: op.path, actual: replaced.revision },
+      "整文件替换请改用 overwrite（project:write 的 mode=overwrite，或 create_file 的 overwrite=true）；只改局部内容请用 replace_text 等编辑操作；否则换一个不存在的路径。",
+    );
+  }
+  const prepared = patch(op.path, snapshot?.revision, replaced?.content ?? "", op.content, "core.text-patch", {
+    op: "create_file",
+    overwrite: isTrue(op.overwrite),
+    replacesExisting: isPresent(replaced),
+  });
+  return isPresent(replaced) && !isString(replaced.content) ? { ...prepared, oldContent: undefined } : prepared;
+}
+
 function patch(path: string, baseRevision: Optional<string>, oldContent: string, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
   const changedLines = countChangedLines(diff);
@@ -215,7 +240,7 @@ export function textPatchStrategy(): PatchStrategy {
     },
     prepare(input: PatchStrategyInput): PreparedPatch[] {
       const op: any = input.intent.operation;
-      if (op.type === "create_file") return [patch(op.path, undefined, "", op.content, "core.text-patch", { op: "create_file", overwrite: !!op.overwrite })];
+      if (op.type === "create_file") return [createFilePatch(op, input.snapshot)];
       if (op.type === "delete_file") {
         const snap = input.snapshot;
         if (!snap?.exists) throw new ProjectError("TARGET_NOT_FOUND", `无法删除不存在的文件：${op.path}`);

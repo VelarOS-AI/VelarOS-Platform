@@ -601,6 +601,7 @@ const projectQueryCode = defineProjectTool<ProjectCodeQuery>({
   notes: [
     'CodeGraph 是同一工具的可选增强后端，不会改变工具身份。',
     '关系类 action 的 nodeId 必须来自前序查询结果，不要猜测。',
+    'language_diagnostics 的 path 可以是文件或目录；结果带 degraded 或 note 字段时诊断不完整，空诊断不代表通过。',
   ],
   schema: ProjectCodeQuerySchema,
   permissions: ['fs:read'],

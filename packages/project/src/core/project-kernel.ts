@@ -33,8 +33,10 @@
 //  - **多文件写入原子化有两档**：宿主提供 `transactionStatePath` 时，写盘前先提交可恢复计划，
 //    进程中断后由下一次 owner 启动恢复；不能完整捕获旧正文的事务在写前拒绝。无 durable state
 //    的嵌入式调用仍靠 `captureApplyRestoreState` + 逆序还原，并保留旧的二进制/超限告警边界。
-//  - **`rollback` 有前置全量预检**：任何非 create 补丁缺 `oldContent` 就整体拒绝。少了这一步，
-//    `patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
+//  - **`rollback` 有前置全量预检**：除写入前不存在的新建补丁外，任何补丁缺 `oldContent` 就整体
+//    拒绝。少了这一步，`patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
+//  - **回滚删文件只针对写入前不存在的路径**（`createsMissingFile`）：`create_file` 覆盖既有文件时
+//    补丁记下原文与 base revision，回滚写回原文；把它当新建删掉会永久丢失原文。
 //  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
 //    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
 //
@@ -1197,7 +1199,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const states: ProjectTransactionFileState[] = [];
     for (const patchValue of patches) {
       if (patchValue.path !== pathValue) continue;
-      const deletes = kind === "apply" ? this.isDeletePatch(patchValue) : this.isCreatePatch(patchValue);
+      const deletes = kind === "apply" ? this.isDeletePatch(patchValue) : this.createsMissingFile(patchValue);
       states.push(deletes
         ? { exists: false }
         : {
@@ -1350,9 +1352,18 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return op === "delete_file" || op === "rename_file_delete";
   }
 
+  /** 新建类补丁整文件写入，不依赖该路径此前的内容。 */
   private isCreatePatch(patchValue: PreparedPatch): boolean {
     const op = patchValue.metadata?.op;
     return op === "create_file" || op === "rename_file_create";
+  }
+
+  /**
+   * 补丁写入前该路径不存在，撤销它就是删除文件。覆盖既有文件的 `create_file` 同样整文件写入，
+   * 但它的 `oldContent` 是原文——回滚写回原文；把它当新建处理会删掉原文件，永久丢失原文。
+   */
+  private createsMissingFile(patchValue: PreparedPatch): boolean {
+    return this.isCreatePatch(patchValue) && !isTrue(patchValue.metadata?.replacesExisting);
   }
 
   /** 补丁写下之后该路径的暂存内容；`null` 表示本事务已删除该文件。 */
@@ -2191,10 +2202,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           );
         }
       }
-      // 预检：非新建补丁必须带可还原的旧正文。否则用 "" 写盘会把文件截断为空（静默丢数据），
-      // 宁可整体失败也不半改。
+      // 预检：除写入前不存在的新建补丁外，都必须带可还原的旧正文（含覆盖既有文件的 create_file）。
+      // 否则用 "" 写盘会把文件截断为空（静默丢数据），宁可整体失败也不半改。
       for (const patch of reversed) {
-        if (!this.isCreatePatch(patch) && !isString(patch.oldContent)) {
+        if (!this.createsMissingFile(patch) && !isString(patch.oldContent)) {
           throw new ProjectError(
             "PATCH_APPLY_ERROR",
             `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,
@@ -2210,7 +2221,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const rolledBackRevisions: Record<string, string> = {};
       try {
         for (const patch of reversed) {
-          if (this.isCreatePatch(patch)) {
+          if (this.createsMissingFile(patch)) {
             await this.store.remove(patch.path, { skipFileFilter: true });
             rolledBackRevisions[patch.path] = "deleted";
           } else {

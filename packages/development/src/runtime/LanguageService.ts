@@ -242,7 +242,7 @@ export interface SourceFileSelection {
   extensions?: string[]
   maxDepth?: number
   maxFiles?: number
-  /** 缺省沿用内核规则：根目录跳过 .gitignore 忽略的文件，显式子目录不跳过。 */
+  /** 缺省沿用内核规则：跳过 .gitignore 忽略的文件（逐级继承根目录规则）；显式指向的目录本身被忽略时不跳过。 */
   excludeGitignored?: boolean
 }
 

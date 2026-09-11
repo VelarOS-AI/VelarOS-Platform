@@ -85,6 +85,19 @@ export async function readGitignoreRules(rootAbs: string, dirRel: string): Promi
   }
 }
 
+/**
+ * 根目录到 `dirRel` 父目录逐级累积的规则（不含 `dirRel` 自己的 .gitignore）。从子目录开始遍历
+ * 时先带上它们，`dirRel` 及其后代的判定才与从根目录一路遍历下来一致。
+ */
+export async function readAncestorGitignoreRules(rootAbs: string, dirRel: string): Promise<GitignoreRule[]> {
+  const segments = normalizeRel(dirRel).split("/").filter((segment) => segment && segment !== ".");
+  const rules: GitignoreRule[] = [];
+  for (let depth = 0; depth < segments.length; depth += 1) {
+    rules.push(...(await readGitignoreRules(rootAbs, segments.slice(0, depth).join("/"))));
+  }
+  return rules;
+}
+
 export function isGitignored(pathRel: string, rules: readonly GitignoreRule[]): boolean {
   const normalizedPath = normalizeRel(pathRel).replace(/\/$/, "");
   let ignored = false;

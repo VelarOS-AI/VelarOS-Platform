@@ -19,7 +19,7 @@
 //    能逃逸。修它要 `openat` + `O_NOFOLLOW` 逐级打开（Node 无跨平台原语），代价远高于收益：
 //    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
 import { createHash } from "node:crypto";
-import type { BigIntStats } from "node:fs";
+import type { BigIntStats, Dirent } from "node:fs";
 import { mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
@@ -27,6 +27,7 @@ import {
   isEmpty,
   isNull,
   isPresent,
+  isTrue,
   isUndefined,
   optionalWhen,
   toOptional,
@@ -38,7 +39,7 @@ import type { FileListEntry, FileStatInput, FileStatResult,ObserveInput, ReadInp
 import type { CorePolicy } from "../types/policy.js";
 import type { CommandProvider, FileFilterProvider } from "../types/provider.js";
 import type { FileSnapshot, ProjectSnapshot } from "../types/snapshot.js";
-import { type GitignoreRule,isGitignored, readGitignoreRules } from "../utils/gitignore.js";
+import { type GitignoreRule, isGitignored, readAncestorGitignoreRules, readGitignoreRules } from "../utils/gitignore.js";
 import { matchesAny } from "../utils/glob.js";
 import { metadataFingerprint, metadataRevisionFor, revisionFor,sha256 } from "../utils/hash.js";
 import { isInsideRoot,normalizeRel,toAbs, toRel } from "../utils/path.js";
@@ -76,6 +77,28 @@ interface LineWindowReadResult {
 }
 
 type FileStoreAction = "read" | "write" | "search" | "observe";
+
+/** listFiles 发现阶段通过全部过滤的条目；children 只在该目录被深入时填充。 */
+interface ListingNode {
+  readonly entry: FileListEntry;
+  readonly included: boolean;
+  readonly children: ListingNode[];
+}
+
+/** 待读取的目录：读到的条目挂到 children 下；rules 是从根目录累积到它父目录的 gitignore 规则。 */
+interface ListingDirectory {
+  readonly abs: string;
+  readonly rel: string;
+  readonly children: ListingNode[];
+  readonly rules: readonly GitignoreRule[];
+}
+
+/** 一个目录读到的条目，连同判定它们所用的规则（根目录到该目录逐级累积）。 */
+interface ListedDirectory {
+  readonly directory: ListingDirectory;
+  readonly rules: readonly GitignoreRule[];
+  readonly entries: ReadonlyArray<{ entry: Dirent; abs: string; rel: string }>;
+}
 
 /**
  * 把路径解析到「最近一个真实存在的祖先」的 realpath，再把尚不存在的尾巴拼回去。
@@ -1038,7 +1061,13 @@ export class FileStore {
     await rename(fromAccess.abs, toAccess.abs);
   }
 
-  /** 列出工作区内符合过滤条件的文件和目录。 */
+  /**
+   * 列出工作区内符合过滤条件的文件和目录。
+   *
+   * gitignore 过滤默认开启，并从根目录到起点逐级继承各级 .gitignore：从子目录开始列举与从根目录
+   * 遍历到这里，对同一路径给出同一判定。缺省时若显式起点本身就被忽略，是调用方点名要看这个目录，
+   * 照常列出其内容而不再过滤；显式传 `excludeGitignored: true` 时被忽略的起点返回空。
+   */
   public async listFiles(input: ObserveInput = {}): Promise<FileListEntry[]> {
     const out: FileListEntry[] = [];
     const max = input.maxFiles ?? 5000;
@@ -1048,26 +1077,29 @@ export class FileStore {
     const exclude = normalizeFilterList(input.exclude);
     const startPathInput = input.path?.trim();
     const hasExplicitStartPath = !!startPathInput && startPathInput !== ".";
-    const excludeGitignored = input.excludeGitignored ?? !hasExplicitStartPath;
     const startAccess = startPathInput
       ? await this.authorize(startPathInput, "observe", "列出", { skipFileFilter: true })
       : { abs: this.root, rel: "." };
     const startDir = startAccess.abs;
+    const startRel = startAccess.rel || ".";
     let gitCheckIgnoreUnavailable = false;
 
     const gitCheckIgnoredPaths = async (paths: string[]): Promise<Nullable<Set<string>>> => {
       const candidates = [...new Set(paths.map((item) => normalizeRel(item)).filter(Boolean))];
-      if (!excludeGitignored || gitCheckIgnoreUnavailable || isEmpty(candidates)) return null;
+      if (gitCheckIgnoreUnavailable || isEmpty(candidates)) return null;
 
       try {
-        // 优先使用 git 自己的 ignore 引擎，它比本地解析更能覆盖边界情况。
+        // 优先使用 git 自己的 ignore 引擎，它比本地解析更能覆盖边界情况。-z 只有和 --stdin
+        // 共用才生效：路径以 NUL 分隔经 stdin 传入，也不受命令行长度限制。
         const result = await this.command.run({
           command: "git",
-          args: ["check-ignore", "--no-index", "-z", "--", ...candidates],
+          args: ["check-ignore", "--no-index", "--stdin", "-z"],
           cwd: this.root,
+          stdin: candidates.join("\0"),
           timeoutMs: 10_000,
         });
 
+        // 退出码 1 表示没有任何路径被忽略，不是失败。
         if (result.exitCode === 1) return new Set();
         if (result.exitCode !== 0) {
           gitCheckIgnoreUnavailable = true;
@@ -1087,86 +1119,98 @@ export class FileStore {
       }
     };
 
-    const ignoredPaths = async (
-      paths: string[],
-      rules: readonly GitignoreRule[]
+    // 一批路径只起一次 git check-ignore；git 不可用时按每条路径所在目录累积的本地规则判定。
+    const ignoredAmong = async (
+      candidates: ReadonlyArray<{ rel: string; rules: readonly GitignoreRule[] }>
     ): Promise<Set<string>> => {
-      if (!excludeGitignored || isEmpty(paths)) return new Set();
-      const gitIgnored = await gitCheckIgnoredPaths(paths);
-      if (gitIgnored) return gitIgnored;
-      return new Set(paths.filter((item) => isGitignored(item, rules)));
+      const gitIgnored = await gitCheckIgnoredPaths(candidates.map(({ rel }) => rel));
+      return gitIgnored ?? new Set(candidates.filter(({ rel, rules }) => isGitignored(rel, rules)).map(({ rel }) => rel));
     };
 
-    const rootGitignoreRules = excludeGitignored
-      ? await readGitignoreRules(this.root, "")
+    const requestsGitignoreExclusion = input.excludeGitignored ?? true;
+    const ancestorGitignoreRules = requestsGitignoreExclusion
+      ? await readAncestorGitignoreRules(this.root, startRel)
       : [];
-    const startRel = startAccess.rel;
-    if (
-      startRel !== "." &&
-      (await ignoredPaths([startRel], rootGitignoreRules)).has(startRel)
-    ) return out;
+    const startIgnored = requestsGitignoreExclusion
+      && startRel !== "."
+      && (await ignoredAmong([{ rel: startRel, rules: ancestorGitignoreRules }])).has(startRel);
+    if (startIgnored && isTrue(input.excludeGitignored)) return out;
+    const excludeGitignored = requestsGitignoreExclusion && !startIgnored;
 
-    const visit = async (
-      dirAbs: string,
-      depth: number,
-      inheritedGitignoreRules: readonly GitignoreRule[]
-    ) => {
-      // 目录遍历同时受 maxFiles 和 maxDepth 约束，保持发现过程可预测。
-      if (out.length >= max) return;
-      if (depth > maxDepth) return;
-      const dirRel = normalizeRel(path.relative(this.root, dirAbs)) || ".";
-      const gitignoreRules = excludeGitignored
-        ? [
-            ...inheritedGitignoreRules,
-            ...(dirRel === "." ? rootGitignoreRules : await readGitignoreRules(this.root, dirRel)),
-          ]
-        : [];
-      let entries: any[] = [];
-      try {
-        entries = await readdir(dirAbs, { withFileTypes: true });
-      } catch {
-        // arch-guard:silent-catch-ok 目录读取失败时跳过该子树，保持 listFiles best-effort。
-        return;
-      }
-      const relPaths = entries.map((entry) =>
-        normalizeRel(path.relative(this.root, path.join(dirAbs, entry.name)))
-      );
-      const gitIgnored = await ignoredPaths(relPaths, gitignoreRules);
-      for (const entry of entries) {
-        if (out.length >= max) break;
-        const abs = path.join(dirAbs, entry.name);
-        const rel = normalizeRel(path.relative(this.root, abs));
-        if (gitIgnored.has(rel)) continue;
-        if (!isEmpty(exclude) && matchesAny(rel, exclude)) continue;
-        const included = isEmpty(include) || matchesAny(rel, include);
-        const action = entry.isDirectory() ? "observe" : "search";
-        let outputRel = rel;
-        if (entry.isSymbolicLink()) {
-          const access = await this.authorize(
-            rel,
-            action,
-            entry.isDirectory() ? "遍历" : "搜索",
-            { skipFileFilter: hasExplicitStartPath }
-          ).catch(() => null);
-          if (!access) continue;
-          outputRel = access.rel;
-        } else if (!(await this.allowed(rel, action, { skipFileFilter: hasExplicitStartPath }))) {
+    // 发现：按层读取目录，每层全部条目的忽略判定合成一次 git 调用——逐目录各起一个 git 进程会让
+    // 递归列举慢一个数量级。被忽略、被排除或不可见的目录不再深入；已发现的可输出条目够 maxFiles
+    // 后不再读下一层，工作量随请求的输出规模收敛。
+    const topLevel: ListingNode[] = [];
+    let level: ListingDirectory[] = [{ abs: startDir, rel: startRel, children: topLevel, rules: ancestorGitignoreRules }];
+    let discovered = 0;
+    for (let depth = 1; depth <= maxDepth && !isEmpty(level) && discovered < max; depth += 1) {
+      const listed: ListedDirectory[] = [];
+      for (const directory of level) {
+        let entries: Dirent[];
+        try {
+          entries = await readdir(directory.abs, { withFileTypes: true });
+        } catch {
+          // arch-guard:silent-catch-ok 目录读取失败时跳过该子树，保持 listFiles best-effort。
           continue;
         }
-        if (entry.isDirectory()) {
-          if (included) {
-            out.push({ path: outputRel, type: "directory" });
+        const rules = excludeGitignored
+          ? [...directory.rules, ...(await readGitignoreRules(this.root, directory.rel))]
+          : [];
+        listed.push({
+          directory,
+          rules,
+          entries: entries.map((entry) => {
+            const abs = path.join(directory.abs, entry.name);
+            return { entry, abs, rel: normalizeRel(path.relative(this.root, abs)) };
+          }),
+        });
+      }
+      const ignored = excludeGitignored
+        ? await ignoredAmong(listed.flatMap(({ rules, entries }) => entries.map(({ rel }) => ({ rel, rules }))))
+        : new Set<string>();
+      const nextLevel: ListingDirectory[] = [];
+      for (const { directory, rules, entries } of listed) {
+        for (const { entry, abs, rel } of entries) {
+          if (ignored.has(rel)) continue;
+          if (!isEmpty(exclude) && matchesAny(rel, exclude)) continue;
+          const action = entry.isDirectory() ? "observe" : "search";
+          let outputRel = rel;
+          if (entry.isSymbolicLink()) {
+            const access = await this.authorize(
+              rel,
+              action,
+              entry.isDirectory() ? "遍历" : "搜索",
+              { skipFileFilter: hasExplicitStartPath }
+            ).catch(() => null);
+            if (!access) continue;
+            outputRel = access.rel;
+          } else if (!(await this.allowed(rel, action, { skipFileFilter: hasExplicitStartPath }))) {
+            continue;
           }
-          if (recursive && depth < maxDepth) {
-            await visit(abs, depth + 1, gitignoreRules);
+          const node: ListingNode = {
+            entry: { path: outputRel, type: entry.isDirectory() ? "directory" : "file" },
+            included: isEmpty(include) || matchesAny(rel, include),
+            children: [],
+          };
+          directory.children.push(node);
+          if (node.included) discovered += 1;
+          if (entry.isDirectory() && recursive && depth < maxDepth) {
+            nextLevel.push({ abs, rel, children: node.children, rules });
           }
-        } else {
-          if (!included) continue;
-          out.push({ path: outputRel, type: "file" });
         }
       }
+      level = nextLevel;
+    }
+
+    // 输出：按深度优先顺序（目录后紧跟其内容）收集命中 include 的条目，满 maxFiles 即止。
+    const emit = (nodes: readonly ListingNode[]): void => {
+      for (const node of nodes) {
+        if (out.length >= max) return;
+        if (node.included) out.push(node.entry);
+        emit(node.children);
+      }
     };
-    await visit(startDir, 1, []);
+    emit(topLevel);
     return out;
   }
 
