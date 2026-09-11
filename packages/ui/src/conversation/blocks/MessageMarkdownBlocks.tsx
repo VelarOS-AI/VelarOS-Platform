@@ -83,7 +83,7 @@ const StreamFadeMarkdownComponents = { [StreamFadeMarkdownTextTagName]: StreamFa
  * 计划（见 `streamTextFade`），经 context 交给插件标好的文本节点去切分；块内容没变就沿用上一份
  * 计划，Streamdown 的块 memo 与文字组件都不重渲染——已经写完的段落不会每帧跟着重画。
  */
-function PersistentStreamingTextBlock(props: StreamdownBlockProps): ReactElement {
+function PersistentStreamingTextBlockInner(props: StreamdownBlockProps): ReactElement {
   const animationKey = useContext(StreamingTextAnimationKeyContext)
   const { isAnimating } = useContext(StreamdownContext)
   const ledgerKey = isAnimating && animationKey ? `${animationKey}:streamdown:${props.index}` : null
@@ -134,6 +134,10 @@ function PersistentStreamingTextBlock(props: StreamdownBlockProps): ReactElement
     </StreamFadeRenderScopeContext.Provider>
   )
 }
+
+// Streamdown 每次渲染都会把全部块组件重跑一遍；块的入参（内容、插件、组件表）没变就整块跳过。
+const PersistentStreamingTextBlock = memo(PersistentStreamingTextBlockInner)
+PersistentStreamingTextBlock.displayName = 'PersistentStreamingTextBlock'
 
 /**
  * 流式思考的淡入批次。思考只显示末尾一段窗口，窗口会随新字往后滑，所以偏移按整段思考原文计，

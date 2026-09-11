@@ -3,6 +3,7 @@ import { describe, test } from 'node:test'
 
 import { createChatScrollNavigatorVisibilityStore } from '../../packages/ui/src/conversation/react-hooks/chatScrollNavigatorVisibility'
 import {
+  resolveAutoScrollPinnedAfterScroll,
   resolveAutoScrollWheelDecision,
   resolveTranscriptWindowFollowEndAfterScroll,
   shouldAutoScrollAfterContentResize,
@@ -66,6 +67,51 @@ void describe('chat auto-scroll ownership', () => {
         movementTolerancePx: 48,
       }),
       true
+    )
+  })
+
+  void test('treats a shrink that clamps the view to the new bottom as still following', () => {
+    // 发送多行提问后输入框清空、底部留白收回 40px：scrollTop 被夹到新底部，不是用户上滑。
+    assert.equal(
+      resolveAutoScrollPinnedAfterScroll({
+        previousPinned: true,
+        previousScrollTop: 14_910,
+        currentScrollTop: 14_870,
+        isNearBottom: true,
+        isAtBottom: true,
+      }),
+      true
+    )
+    assert.equal(
+      resolveTranscriptWindowFollowEndAfterScroll({
+        currentFollowEnd: true,
+        previousScrollTop: 14_910,
+        currentScrollTop: 14_870,
+        isAtBottom: true,
+      }),
+      true
+    )
+    // 真的往上滚、离开了底部：照旧解除跟随，哪怕还在 near-bottom 区内。
+    assert.equal(
+      resolveAutoScrollPinnedAfterScroll({
+        previousPinned: true,
+        previousScrollTop: 1_600,
+        currentScrollTop: 1_590,
+        isNearBottom: true,
+        isAtBottom: false,
+      }),
+      false
+    )
+    // 已经解除跟随时，夹底也不会把用户拽回跟随。
+    assert.equal(
+      resolveAutoScrollPinnedAfterScroll({
+        previousPinned: false,
+        previousScrollTop: 1_600,
+        currentScrollTop: 1_560,
+        isNearBottom: true,
+        isAtBottom: true,
+      }),
+      false
     )
   })
 

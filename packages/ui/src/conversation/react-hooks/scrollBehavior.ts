@@ -159,7 +159,8 @@ export function resolveTranscriptWindowFollowEndAfterScroll({
   movementTolerancePx = 1,
 }: TranscriptWindowFollowEndAfterScrollInput): boolean {
   const tolerance = Math.max(0, movementTolerancePx)
-  if (currentScrollTop < previousScrollTop - tolerance) return false
+  // 上移后仍贴着底部是内容变短时的夹底（见 resolveAutoScrollPinnedAfterScroll），不是用户上滑。
+  if (currentScrollTop < previousScrollTop - tolerance) return currentFollowEnd && isAtBottom
 
   return !currentFollowEnd && currentScrollTop > previousScrollTop + tolerance && isAtBottom
     ? true
@@ -177,7 +178,10 @@ export function resolveAutoScrollPinnedAfterScroll({
   const isScrollingUp = currentScrollTop < previousScrollTop - upwardScrollTolerancePx
 
   // 用户上滑：立即解除跟随，哪怕只在 near-bottom 区内小幅上滑。
-  if (isScrollingUp) return false
+  // 例外是夹底：内容变短（发送后输入框清空、底部留白收回，卡片收起）时浏览器把 scrollTop 夹到新的
+  // 底部，看起来也是「上移」，但仍贴着底部——这不是用户在滚，照旧跟随。用户的滚轮、拖滚动条在
+  // scroll 事件之前就经暂停事件解除了跟随，不靠这里判断。
+  if (isScrollingUp) return previousPinned && !!isAtBottom
 
   // 本来就在跟随、且没有上滑：继续跟随（流式贴底的程序滚动也走这条）。
   if (previousPinned) return true

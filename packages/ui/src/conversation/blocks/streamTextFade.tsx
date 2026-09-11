@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  memo,
   type ReactElement,
   type ReactNode,
   useContext,
@@ -180,7 +181,7 @@ const StreamFadeTiming: KeyframeAnimationOptions = {
 }
 
 /** 一批正在淡入的字。进度只由 `bornAt` 决定，见文件头。 */
-export function StreamFadeText({
+function StreamFadeTextInner({
   bornAt,
   children,
 }: {
@@ -215,6 +216,10 @@ export function StreamFadeText({
     </span>
   )
 }
+
+/** 正在长的段落每帧都会重渲染它的文字节点；批次本身没变（同一段字、同一个上屏时刻）就不重渲染。 */
+export const StreamFadeText = memo(StreamFadeTextInner)
+StreamFadeText.displayName = 'StreamFadeText'
 
 /** 按批次渲染一段文字：没有落进批次的部分原样输出，淡入段以批次起点为 key，身份稳定。 */
 export function renderStreamFadeText(
