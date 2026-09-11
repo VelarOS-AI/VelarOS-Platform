@@ -8,7 +8,8 @@
 //  1. `prepareTransaction` → 意图 → 补丁，**不碰磁盘**；规模/受保护文件门在这里；
 //  2. `buildTransactionContentOverlay` → 把已暂存补丁重放成"内存中的未来文件内容"，供
 //     validator / fixer 在写盘前看到暂存态；
-//  3. `applyEdit` → 取写锁 → 每个路径的首个补丁校验 base revision（不匹配则试 rebase）→ 写盘；
+//  3. `applyEdit` → 取写锁 → 每个路径的首个补丁校验 base revision（不匹配则试 rebase，rebase
+//     后在锁内复核校验）→ 写盘；
 //  4. `rollback` → 逆序还原；`discardTransaction` → 丢弃未应用事务。
 //
 // ## 事务状态机（`StoredTransaction.status`）
@@ -21,7 +22,8 @@
 //  - **同一路径的补丁首尾相接**：事务内对同一文件的后一个补丁以前一个补丁的 `newContent`
 //    为 `oldContent`（`chainPatch` 是唯一衔接规则，prepare / 暂存重放 / apply 共用），所以
 //    校验看到的、写盘写下的、diff 描述的是同一份最终内容。若让每个补丁各自基于原文生成，
-//    顺序整文件写入会让最后一个补丁覆盖前面的改动——静默丢改动。
+//    顺序整文件写入会让最后一个补丁覆盖前面的改动——静默丢改动。「同一路径」按规范化后的
+//    根相对路径判定（`canonicalPath`），`./x`、绝对路径与 `x` 是同一个 key。
 //  - **写锁覆盖 `tx.changedFiles` 全集，且 apply/rollback 全程持锁**：锁按路径粒度、公平排队
 //    （见 lock-manager）。锁只在**进程内**有效——它防的是同一内核的并发事务互相踩，不防外部
 //    编辑器；外部编辑靠 base revision 检查兜。
@@ -91,6 +93,7 @@ import type { ProjectValidator,ValidateInput, ValidationResult } from "../types/
 import { combineDiffs, unifiedDiff } from "../utils/diff.js";
 import { matchesAny } from "../utils/glob.js";
 import { id } from "../utils/id.js";
+import { toAbs, toRel } from "../utils/path.js";
 import { countChangedLines } from "../utils/text.js";
 
 import { DEFAULT_CORE_POLICY } from "./defaults.js";
@@ -122,6 +125,18 @@ function resolveEvidenceTargetRange(
 function operationPath(operation: EditOperation): string | undefined {
   if (operation.type === "rename_file") return operation.from;
   return "path" in operation ? operation.path : undefined;
+}
+
+/**
+ * 同一路径上的后继补丁以前一补丁的产出为 `oldContent`，策略写进 metadata 的
+ * `startOffset`/`endOffset` 因而是中间态坐标，与事务前原文对不上。跨事务的区间冲突检测
+ * （batch）按原文坐标比较，留着它们会把真实重叠判成不相交；去掉后该补丁退回「同文件即冲突」
+ * 的保守判定。
+ */
+function withoutStagedOffsets(patchValue: PreparedPatch): PreparedPatch {
+  if (!isPresent(patchValue.metadata)) return patchValue;
+  const { startOffset: _startOffset, endOffset: _endOffset, ...metadata } = patchValue.metadata;
+  return { ...patchValue, metadata };
 }
 
 function symbolIdentityKey(symbol: ProjectSymbol): string {
@@ -250,17 +265,28 @@ function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
   };
 }
 
-function validationFailed(transactionId: string, validation: ValidationResult): ProjectError {
+/**
+ * `rebasedFiles` 出现表示失败发生在 apply 锁内的复核：准备事务后这些文件被外部修改，rebase 后
+ * 的内容没通过校验。此时要改的不是编辑操作本身，而是先读最新内容。
+ */
+function validationFailed(
+  transactionId: string,
+  validation: ValidationResult,
+  context: { rebasedFiles?: string[] } = {},
+): ProjectError {
   const envelope = diagnosticsEnvelope(validation.diagnostics);
   return new ProjectError(
     "VALIDATION_FAILED",
     `事务校验失败，未写入磁盘：${envelope.headline}`,
     {
       transactionId,
+      ...context,
       ...envelope.details,
       failedChecks: [...new Set(validation.checks.filter((check) => !check.ok).map((check) => check.id))],
     },
-    "请根据 diagnostics 修正编辑操作，然后重新准备事务。",
+    isPresent(context.rebasedFiles)
+      ? "准备事务后 rebasedFiles 被外部修改，rebase 后的内容未通过校验；请重新读取这些文件，基于最新内容重新准备事务。"
+      : "请根据 diagnostics 修正编辑操作，然后重新准备事务。",
   );
 }
 
@@ -1171,10 +1197,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const states: ProjectTransactionFileState[] = [];
     for (const patchValue of patches) {
       if (patchValue.path !== pathValue) continue;
-      const op = patchValue.metadata?.op;
-      const deletes = kind === "apply"
-        ? op === "delete_file" || op === "rename_file_delete"
-        : op === "create_file" || op === "rename_file_create";
+      const deletes = kind === "apply" ? this.isDeletePatch(patchValue) : this.isCreatePatch(patchValue);
       states.push(deletes
         ? { exists: false }
         : {
@@ -1350,7 +1373,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     if (this.isCreatePatch(patchValue)) return patchValue;
     if (!isString(staged)) return null;
     if (patchValue.oldContent === staged) return patchValue;
-    return this.tryRebasePatch(patchValue, await this.snapshotWithContent(patchValue.path, staged));
+    const rebased = await this.tryRebasePatch(patchValue, await this.snapshotWithContent(patchValue.path, staged));
+    return isNull(rebased) ? null : withoutStagedOffsets(rebased);
   }
 
   /**
@@ -1450,6 +1474,26 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return { contentByPath, diagnostics };
   }
 
+  /**
+   * 事务内衔接补丁、按路径分组预检、加锁都以路径字符串为 key，所以路径进事务前统一规范成
+   * FileStore 快照用的根相对形式：`./x`、绝对路径与 `x` 若各成一组，同一文件的补丁不衔接，
+   * 顺序整文件写入会让后写覆盖先写。越出根目录的路径在这里按原拼写显式拒绝。
+   */
+  private canonicalPath(pathValue: string): string {
+    return toRel(this.root, toAbs(this.root, pathValue));
+  }
+
+  /** 编辑原语里的文件路径（`path` / `from` / `to`）换成规范形式；`json_patch` 内层的 JSON Pointer 不是文件路径。 */
+  private withCanonicalPaths(intent: EditIntent): EditIntent {
+    const { operation } = intent;
+    if (operation.type === "rename_file") return {
+      ...intent,
+      operation: { ...operation, from: this.canonicalPath(operation.from), to: this.canonicalPath(operation.to) },
+    };
+    if (!("path" in operation) || !isString(operation.path)) return intent;
+    return { ...intent, operation: { ...operation, path: this.canonicalPath(operation.path) } };
+  }
+
   private async prepareTransaction(
     input: PrepareEditInput,
     options: {
@@ -1465,11 +1509,14 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     // 按操作顺序暂存每个路径的最新内容：后续操作基于它生成补丁，使同一路径的补丁首尾相接；
     // amendment 从已暂存事务的重放结果起步，锚点才能命中前面补丁产生的内容。
     const stagedByPath = new Map<string, StagedFileContent>(options.contentOverlay ?? []);
+    const baseRevisions = new Map(
+      Object.entries(processed.baseRevisions ?? {}).map(([pathValue, revision]) => [this.canonicalPath(pathValue), revision]),
+    );
 
-    for (const intent of processed.operations) {
+    for (const intent of processed.operations.map((operationIntent) => this.withCanonicalPaths(operationIntent))) {
       const target = this.getTarget(intent.targetId);
       let snapshot: FileSnapshot | undefined;
-      const pathForOp = target?.path ?? operationPath(intent.operation);
+      const pathForOp = isPresent(target) ? this.canonicalPath(target.path) : operationPath(intent.operation);
       let renameTargetSnapshot: FileSnapshot | undefined;
       if (pathForOp) {
         // revision 前置校验只在首次触碰时做：暂存内容是本事务自己的产物，不对应任何磁盘 revision。
@@ -1486,7 +1533,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         if (target && this.policy.requireBaseRevision && snapshot.revision !== target.baseRevision) {
           throw revisionMismatch(`${target.path} 的目标 revision 已变化`, { expected: target.baseRevision, actual: snapshot.revision });
         }
-        const requestedBaseRevision = processed.baseRevisions?.[pathForOp] ?? processed.baseRevision;
+        const requestedBaseRevision = baseRevisions.get(pathForOp) ?? processed.baseRevision;
         if (!target && this.policy.requireBaseRevision && !isStaged && requestedBaseRevision && snapshot.revision !== requestedBaseRevision) {
           throw revisionMismatch(`${pathForOp} 的文件 revision 已变化`, {
             path: pathForOp,
@@ -1505,7 +1552,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
               "请选择一个不存在的目标路径，或先单独处理现有目标文件。",
             );
           }
-          const requestedTargetRevision = processed.baseRevisions?.[intent.operation.to];
+          const requestedTargetRevision = baseRevisions.get(intent.operation.to);
           if (!renameTargetIsStaged && requestedTargetRevision && renameTargetSnapshot.revision !== requestedTargetRevision) {
             throw revisionMismatch(`${intent.operation.to} 的目标 revision 已变化`, {
               path: intent.operation.to,
@@ -1540,10 +1587,12 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
             : patchValue
         );
       }
+      const chainedPatches: PreparedPatch[] = [];
       for (const patchValue of intentPatches) {
+        chainedPatches.push(stagedByPath.has(patchValue.path) ? withoutStagedOffsets(patchValue) : patchValue);
         stagedByPath.set(patchValue.path, this.stagedContentAfter(patchValue));
       }
-      patches.push(...this.withIntentMetadata(intentPatches, intent));
+      patches.push(...this.withIntentMetadata(chainedPatches, intent));
     }
 
     const preparedPatches =
@@ -1610,12 +1659,9 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     changedFiles: readonly string[],
     changedLines: number,
   ): RiskLevel {
-    const destructive = patches.some((patchValue) => {
-      const op = patchValue.metadata?.op;
-      return op === "delete_file"
-        || op === "rename_file_delete"
-        || (op === "create_file" && isTrue(patchValue.metadata?.overwrite));
-    });
+    const destructive = patches.some((patchValue) =>
+      this.isDeletePatch(patchValue)
+      || (patchValue.metadata?.op === "create_file" && isTrue(patchValue.metadata?.overwrite)));
     if (destructive) return "high";
 
     const createsFile = patches.some((patchValue) => patchValue.metadata?.op === "create_file");
@@ -1925,8 +1971,15 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           }
           stagedByPath.set(patch.path, this.stagedContentAfter(patch));
         }
-        // rebase 改变了将写下的内容：摘要随之刷新，apply 结果与 change feed 描述的就是实际写盘。
-        if (rebasedFiles.size > 0) this.refreshTransactionSummary(tx);
+        // rebase 改变了将写下的内容：摘要随之刷新，apply 结果与 change feed 描述的就是实际写盘；
+        // 前面的校验看的是 rebase 前的内容，所以锁内对 rebase 后的补丁链再校验一次，不通过就不写盘。
+        if (rebasedFiles.size > 0) {
+          this.refreshTransactionSummary(tx);
+          const revalidation = await this.runValidators({ transactionId: tx.transactionId });
+          if (!revalidation.ok) {
+            throw validationFailed(tx.transactionId, revalidation, { rebasedFiles: [...rebasedFiles] });
+          }
+        }
 
         // 写盘前先为每个受影响路径捕获原始状态，供失败回滚使用。
         // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
@@ -1940,12 +1993,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
       try {
         for (const patch of tx.patches) {
-          const op = patch.metadata?.op;
-          if (op === "delete_file" || op === "rename_file_delete") {
+          if (this.isDeletePatch(patch)) {
             await this.store.remove(patch.path, { skipFileFilter: true });
             newRevisions[patch.path] = "deleted";
           } else {
-            if (op === "create_file" || op === "rename_file_create") {
+            if (this.isCreatePatch(patch)) {
               const beforeWrite = await this.store.snapshot(patch.path, false, {
                 skipFileFilter: true,
               });
@@ -2017,6 +2069,38 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
     }
     await this.decide("validate", input.paths, input);
+    const result = await this.runValidators(input);
+    const transaction = input.transactionId
+      ? this.transactions.get(input.transactionId)
+      : undefined;
+    const previousStatus = transaction?.status;
+    const preservesTerminalStatus = previousStatus === "applied" || previousStatus === "rolled_back";
+    if (transaction && result.ok && !preservesTerminalStatus) transaction.status = "validated";
+    if (transaction) {
+      try {
+        const lifecycle = result.ok
+          ? previousStatus === "applied"
+            ? "applied"
+            : previousStatus === "rolled_back"
+              ? "rolled_back"
+              : "validated"
+          : "validation_failed";
+        this.publishTransactionChange(transaction, lifecycle);
+      } catch (error) {
+        if (previousStatus) transaction.status = previousStatus;
+        throw error;
+      }
+    }
+    await this.hooks.emit("AfterValidate", this, result);
+    this.journal.record({ actor: "validator", action: "validate", transactionId: input.transactionId, outputSummary: result.ok ? "ok" : `${result.diagnostics.length} diagnostic(s)` });
+    return result;
+  }
+
+  /**
+   * 在事务暂存态（无事务时为当前工作区）上跑 validator 与 adapter 校验。只产出结果，不改事务
+   * 状态、不发布生命周期——apply 在锁内复核 rebase 后的补丁链时也用它。
+   */
+  private async runValidators(input: ValidateInput): Promise<ValidationResult> {
     const overlay = await this.buildTransactionContentOverlay(input.transactionId);
     // validator 优先读取事务暂存内容，再回退到当前工作区文件。
     const ctx = {
@@ -2026,7 +2110,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       providers: this.providers,
       readFile: this.createOverlayFileReader(overlay.contentByPath),
     };
-    let result = await this.validators.validate(input, ctx);
+    const result = await this.validators.validate(input, ctx);
     if (!isEmpty(overlay.diagnostics)) {
       result.diagnostics.push(...overlay.diagnostics);
       result.checks.push({
@@ -2052,31 +2136,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         }
       }
     }
-    result = { ...result, ok: result.diagnostics.every((d) => d.severity !== "error") };
-    const transaction = input.transactionId
-      ? this.transactions.get(input.transactionId)
-      : undefined;
-    const previousStatus = transaction?.status;
-    const preservesTerminalStatus = previousStatus === "applied" || previousStatus === "rolled_back";
-    if (transaction && result.ok && !preservesTerminalStatus) transaction.status = "validated";
-    if (transaction) {
-      try {
-        const lifecycle = result.ok
-          ? previousStatus === "applied"
-            ? "applied"
-            : previousStatus === "rolled_back"
-              ? "rolled_back"
-              : "validated"
-          : "validation_failed";
-        this.publishTransactionChange(transaction, lifecycle);
-      } catch (error) {
-        if (previousStatus) transaction.status = previousStatus;
-        throw error;
-      }
-    }
-    await this.hooks.emit("AfterValidate", this, result);
-    this.journal.record({ actor: "validator", action: "validate", transactionId: input.transactionId, outputSummary: result.ok ? "ok" : `${result.diagnostics.length} diagnostic(s)` });
-    return result;
+    return { ...result, ok: result.diagnostics.every((d) => d.severity !== "error") };
   }
 
   /** 回滚已应用事务，并撤销为新建文件设置的 git 跟踪标记。 */
@@ -2134,13 +2194,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       // 预检：非新建补丁必须带可还原的旧正文。否则用 "" 写盘会把文件截断为空（静默丢数据），
       // 宁可整体失败也不半改。
       for (const patch of reversed) {
-        const op = patch.metadata?.op;
-        const isCreate = op === "create_file" || op === "rename_file_create";
-        if (!isCreate && !isString(patch.oldContent)) {
+        if (!this.isCreatePatch(patch) && !isString(patch.oldContent)) {
           throw new ProjectError(
             "PATCH_APPLY_ERROR",
             `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,
-            { path: patch.path, op },
+            { path: patch.path, op: patch.metadata?.op },
           );
         }
       }
@@ -2152,8 +2210,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const rolledBackRevisions: Record<string, string> = {};
       try {
         for (const patch of reversed) {
-          const op = patch.metadata?.op;
-          if (op === "create_file" || op === "rename_file_create") {
+          if (this.isCreatePatch(patch)) {
             await this.store.remove(patch.path, { skipFileFilter: true });
             rolledBackRevisions[patch.path] = "deleted";
           } else {

@@ -303,6 +303,123 @@ for (const variant of kernelVariants) {
       })
     })
 
+    test('treats ./, absolute and bare spellings of a path as one file', async () => {
+      await withRoot({ 'greek.txt': Greek }, async (root) => {
+        const project = await variant.create(root)
+        const transaction = await project.prepareEdit({
+          operations: [
+            { operation: { type: 'create_file', path: './n.txt', content: 'created\n' } },
+            { operation: { type: 'append_text', path: 'n.txt', text: 'appended\n' } },
+            { operation: { type: 'create_file', path: join(root, 'm.txt'), content: 'created\n' } },
+            { operation: { type: 'append_text', path: 'm.txt', text: 'appended\n' } },
+            replace('greek.txt', 'alpha', 'ALPHA'),
+            replace(join(root, 'greek.txt'), 'gamma', 'GAMMA'),
+            replace('./greek.txt', 'beta', 'BETA'),
+          ],
+        })
+
+        expect(transaction.changedFiles).toEqual(['n.txt', 'm.txt', 'greek.txt'])
+        expect(transaction.diff).toBe([
+          unifiedDiff('n.txt', '', 'created\nappended\n'),
+          unifiedDiff('m.txt', '', 'created\nappended\n'),
+          unifiedDiff('greek.txt', Greek, 'ALPHA\nBETA\nGAMMA\n'),
+        ].join('\n'))
+
+        const applied = await project.applyEdit({ transactionId: transaction.transactionId })
+        expect(applied.rebasedFiles).toBeUndefined()
+        expect(await readFile(join(root, 'n.txt'), 'utf8')).toBe('created\nappended\n')
+        expect(await readFile(join(root, 'm.txt'), 'utf8')).toBe('created\nappended\n')
+        expect(await readFile(join(root, 'greek.txt'), 'utf8')).toBe('ALPHA\nBETA\nGAMMA\n')
+
+        await project.rollback({ transactionId: transaction.transactionId })
+        await expect(readFile(join(root, 'n.txt'), 'utf8')).rejects.toThrow()
+        await expect(readFile(join(root, 'm.txt'), 'utf8')).rejects.toThrow()
+        expect(await readFile(join(root, 'greek.txt'), 'utf8')).toBe(Greek)
+      })
+    })
+
+    test('chains a json_patch spelled ./ onto an earlier text edit of the same file', async () => {
+      await withRoot({ 'cfg.json': '{\n  "a": 1,\n  "b": 2\n}\n' }, async (root) => {
+        const project = await variant.create(root)
+        const transaction = await project.prepareEdit({
+          operations: [
+            replace('cfg.json', '"a": 1', '"a": 10'),
+            { operation: { type: 'json_patch', path: './cfg.json', patches: [{ op: 'replace', path: '/b', value: 20 }] } },
+          ],
+        })
+
+        expect(transaction.changedFiles).toEqual(['cfg.json'])
+        await project.applyEdit({ transactionId: transaction.transactionId })
+        expect(JSON.parse(await readFile(join(root, 'cfg.json'), 'utf8'))).toEqual({ a: 10, b: 20 })
+      })
+    })
+
+    test('keeps the rename-target guard when the target is spelled differently', async () => {
+      await withRoot({ 'a.txt': 'A\n' }, async (root) => {
+        const project = await variant.create(root)
+        await expect(project.prepareEdit({
+          operations: [
+            { operation: { type: 'create_file', path: 'b.txt', content: 'B\n' } },
+            { operation: { type: 'rename_file', from: 'a.txt', to: './b.txt' } },
+          ],
+        })).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { path: 'b.txt' } })
+        await expect(readFile(join(root, 'b.txt'), 'utf8')).rejects.toThrow()
+      })
+    })
+
+    test('enforces baseRevisions keyed by another spelling of the path', async () => {
+      await withRoot({ 'greek.txt': Greek }, async (root) => {
+        const project = await variant.create(root)
+        await expect(project.prepareEdit({
+          operations: [replace('greek.txt', 'alpha', 'ALPHA')],
+          baseRevisions: { './greek.txt': 'stale-revision' },
+        })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { path: 'greek.txt' } })
+      })
+    })
+
+    test('validators see the rebased content that apply writes', async () => {
+      await withRoot({ 'greek.txt': Greek }, async (root) => {
+        const seen = new Map<string, string | undefined>()
+        const project = await variant.create(root, [capturingValidator(seen)])
+        const transaction = await project.prepareEdit({
+          operations: [replace('greek.txt', 'alpha', 'ALPHA'), replace('greek.txt', 'gamma', 'GAMMA')],
+        })
+        await writeFile(join(root, 'greek.txt'), 'alpha\nexternal\ngamma\n')
+
+        const applied = await project.applyEdit({ transactionId: transaction.transactionId })
+        expect(applied.rebasedFiles).toEqual(['greek.txt'])
+        const written = await readFile(join(root, 'greek.txt'), 'utf8')
+        expect(written).toBe('ALPHA\nexternal\nGAMMA\n')
+        expect(seen.get('greek.txt')).toBe(written)
+      })
+    })
+
+    test('refuses to write rebased content that fails validation', async () => {
+      const original = 'export const a = 1\nexport const b = 2\n'
+      await withRoot({ 'mod.ts': original }, async (root) => {
+        const project = await variant.create(root)
+        const transaction = await project.prepareEdit({
+          operations: [replace('mod.ts', 'export const b = 2', 'export const b = 3')],
+        })
+        const external = 'export const a = (\nexport const b = 2\n'
+        await writeFile(join(root, 'mod.ts'), external)
+
+        let failure: any
+        try {
+          await project.applyEdit({ transactionId: transaction.transactionId })
+        } catch (error) {
+          failure = error
+        }
+
+        expect(failure?.reason).toBe('VALIDATION_FAILED')
+        expect(failure.details.rebasedFiles).toEqual(['mod.ts'])
+        expect(failure.details.diagnosticCount).toBeGreaterThan(0)
+        expect(await readFile(join(root, 'mod.ts'), 'utf8')).toBe(external)
+        expect(project.getTransaction(transaction.transactionId)?.patches[0]?.oldContent).toBe(original)
+        expect((await project.status()).locks).toHaveLength(0)
+      })
+    })
+
     test('chains structural symbol edits on the same TypeScript file', async () => {
       const source = [
         'export function first(): number {',
@@ -366,6 +483,61 @@ describe('same-file transaction guards', () => {
         reason: 'INVALID_INPUT',
         details: { path: 'greek.txt', targetId: resolved.target.targetId },
       })
+    })
+  })
+})
+
+describe('batch conflicts with composed transactions', () => {
+  function prepareTask(id: string, operations: EditIntent[]) {
+    return { id, op: { kind: 'prepare' as const, input: { operations } } }
+  }
+
+  test('does not expose intermediate offsets that would hide a cross-transaction overlap', async () => {
+    await withRoot({ 'greek.txt': Greek }, async (root) => {
+      const project = await createProjectKernel({ root })
+      const result = await project.runBatch({
+        mode: 'prepare-then-apply',
+        conflictCheck: true,
+        tasks: [
+          prepareTask('a', [replace('greek.txt', 'gamma', 'gamma-from-A')]),
+          prepareTask('b', [
+            {
+              operation: {
+                type: 'insert_text_at_anchor',
+                path: 'greek.txt',
+                anchorText: 'alpha\n',
+                position: 'after',
+                text: `${'x'.repeat(100)}\n`,
+              },
+            },
+            replace('greek.txt', 'gamma', 'GAMMA-from-B'),
+          ]),
+        ],
+      })
+
+      expect(result.ok).toBe(false)
+      expect(result.conflicts).toContainEqual(expect.objectContaining({ taskA: 'a', taskB: 'b', file: 'greek.txt' }))
+      const composed = result.preparedTransactions?.find((tx) => tx.patches.length === 2)
+      expect(composed?.patches[0]?.metadata?.startOffset).toBe(6)
+      expect(composed?.patches[1]?.metadata).not.toHaveProperty('startOffset')
+      expect(await readFile(join(root, 'greek.txt'), 'utf8')).toBe(Greek)
+    })
+  })
+
+  test('still tells disjoint single-operation transactions apart', async () => {
+    await withRoot({ 'greek.txt': Greek }, async (root) => {
+      const project = await createProjectKernel({ root })
+      const result = await project.runBatch({
+        mode: 'prepare-then-apply',
+        conflictCheck: true,
+        tasks: [
+          prepareTask('a', [replace('greek.txt', 'alpha', 'ALPHA')]),
+          prepareTask('b', [replace('greek.txt', 'gamma', 'GAMMA')]),
+        ],
+      })
+
+      expect(result.conflicts).toBeUndefined()
+      expect(result.ok).toBe(true)
     })
   })
 })
