@@ -92,6 +92,43 @@ describe('history preview placeholder idempotency', () => {
     expect(result.notes).toContain('history preview omitted 1000 chars from "notes"')
   })
 
+  test('collapses a single copied header followed by real content (no closing "…]") to exactly one layer', () => {
+    // 评审 major：最常见的入口形态——模型只抄了一层占位头（连 "preview: " 都原样抄了）,
+    // 后面直接接真实代码,总长远超单层信任上限,且整串不以 "…]" 收尾。旧实现在 layers===1
+    // 时只要超过 TrustedSinglePlaceholderMaxLength 就返回 null,回落到 summarizeToolInputString
+    // 把"头部+真实代码"整体当新内容再包一层,产生两层嵌套——这正是 #118 嵌套链的第一步。
+    const fakeHeader =
+      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
+    const realCode = `test('serializes duplicate apply commands for the same transaction', async () => { ${'x'.repeat(4200)} })`
+    const hybrid = `${fakeHeader}${realCode}`
+
+    const result = compactToolInputForModel({ text: hybrid })
+    const collapsed = result.text as string
+
+    expect(collapsed.match(/history preview omitted/g)).toHaveLength(1)
+    expect(collapsed).toContain(realCode.slice(0, 100))
+
+    const replayed = compactToolInputForModel({ text: collapsed })
+    expect(replayed.text).toBe(collapsed)
+  })
+
+  test('collapsed placeholder declares the length tool actually received, not the innermost claimed length', () => {
+    // 评审 minor #2：嵌套只可能来自模型照抄,工具实际收到的是整串 value（含前面的占位头
+    // 文本）。收敛后的占位串若仍报内层宣称的历史长度,既报错了长度,也把"实参开头是占位
+    // 垃圾"这一事实从模型眼前抹掉。声明长度必须等于这次工具真实收到的 value.length。
+    const fakeHeader =
+      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
+    const realCode = "test('serializes duplicate apply commands', async () => {})"
+    const hybrid = `${fakeHeader}${fakeHeader}${realCode}`
+
+    const result = compactToolInputForModel({ text: hybrid })
+    const collapsed = result.text as string
+    const declaredLength = Number(collapsed.match(/history preview omitted (\d+) chars/)?.[1])
+
+    expect(declaredLength).toBe(hybrid.length)
+    expect(declaredLength).not.toBe(4033)
+  })
+
   test('a no-preview leaf placeholder stays untouched when replayed', () => {
     // widget_code 用的是无 preview 分支：[history preview omitted N chars from "widget_code"; tool received the full value]
     const placeholder =

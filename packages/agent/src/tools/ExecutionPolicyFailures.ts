@@ -76,7 +76,11 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
 // cause 链上任意独立包（Project 等）都可能带回几十上百条 diagnostics 或超长字符串；
 // 这里的数值是专为失败 details 选的——比 toolResultSerialization.ts 的模型工具结果档
 // （maxArrayItems 400）严格得多，因为失败 details 会被直接持久化为工具结果的一部分，
-// 裁掉的条目在当前边界内不可召回；只做体积/深度兜底，不追求语义完整。
+// 裁掉的条目在当前边界内不可召回（截断发生在持久化之前，没有留存可续读的原始数据）；
+// 只做体积/深度兜底，不追求语义完整。标记键特意不用 __truncatedItems——那是
+// ContextRetrieval 工具（见 tool-library/builtin/ContextRetrieval.tool.ts）约定的
+// 续读协议标记，模型看到它会尝试用 context:recall + jsonPath + nextOffset 续读；
+// 这里没有 jsonPath/nextOffset，续读只会白费一个回合，必须用不同的键名避免模型误判。
 const MaxDetailsArrayItems = 10
 const MaxDetailsObjectKeys = 50
 const MaxDetailsStringLength = 2_000
@@ -109,7 +113,7 @@ function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>)
       .map((item) => boundDetailsValue(item, depth + 1, seen))
     if (value.length > MaxDetailsArrayItems) {
       items.push({
-        __truncatedItems: value.length - MaxDetailsArrayItems,
+        __omittedItems: value.length - MaxDetailsArrayItems,
         originalLength: value.length,
       })
     }
@@ -276,14 +280,18 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   // 独立领域包可能用 reason 承载稳定机器码。AppError.from 会保留 cause，但不会把领域 reason
   // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
   const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code
-  const details: Record<string, unknown> = { ...(nestedDetails ?? {}) }
+  // 先对领域 details 单独做有界投影，reason/code 之后再追加——顶层键数截断（
+  // MaxDetailsObjectKeys）只应该丢领域自己的字段，不能连着一起把 reason/code 也挤
+  // 出前 50 个键（评审 minor：领域 details 顶层键不少于 49 个时会先丢 reason/code，
+  // 而 details.reason 往往是唯一还能看到领域原因的地方）。
+  const boundedNestedDetails = nestedDetails ? boundToolFailureDetails(nestedDetails) : {}
+  const boundedDetails: Record<string, unknown> = { ...boundedNestedDetails }
   if (nestedReason) {
-    details.reason = nestedReason
+    boundedDetails.reason = nestedReason
   }
   if (effectiveCode) {
-    details.code = effectiveCode
+    boundedDetails.code = effectiveCode
   }
-  const boundedDetails = boundToolFailureDetails(details)
 
   return buildToolFailureResult(
     effectiveCode === 'EXECUTION_ABORTED'

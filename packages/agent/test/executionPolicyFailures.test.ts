@@ -95,10 +95,27 @@ describe('tool execution failure projection', () => {
     expect(boundedDiagnostics).toHaveLength(11)
     expect(boundedDiagnostics[0]).toMatchObject({ path: 'src/file-0.ts' })
     expect(boundedDiagnostics[10]).toMatchObject({
-      __truncatedItems: 33,
+      __omittedItems: 33,
       originalLength: 43,
     })
     expect(result.details).toMatchObject({ checks: ['a', 'b'] })
+  })
+
+  test('array-truncation marker does not reuse the context:recall __truncatedItems protocol key', () => {
+    // 评审 minor：details 里的裁剪在持久化前就已发生，没有留存可续读的原始数据；
+    // 若沿用 ContextRetrieval 工具的 __truncatedItems 协议标记，模型会尝试用
+    // context:recall + jsonPath + nextOffset 续读，白费一个回合。必须是不同的键名。
+    const diagnostics = Array.from({ length: 20 }, (_, index) => ({ rule: `rule-${index}` }))
+    const domainError = Object.assign(new Error('校验失败'), {
+      reason: 'VALIDATION_FAILED',
+      details: { diagnostics },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    const bounded = (result.details?.diagnostics as unknown[]) ?? []
+    expect(bounded[10]).not.toHaveProperty('__truncatedItems')
+    expect(bounded[10]).toMatchObject({ __omittedItems: 10, originalLength: 20 })
   })
 
   test('truncates an oversized domain string field in details', () => {
@@ -187,7 +204,7 @@ describe('tool execution failure projection', () => {
     expect(result.code).toBe('VALIDATION_FAILED')
     const diagnostics = (result.details?.diagnostics as unknown[]) ?? []
     expect(diagnostics).toHaveLength(11)
-    expect(diagnostics[10]).toMatchObject({ __truncatedItems: 5, originalLength: 15 })
+    expect(diagnostics[10]).toMatchObject({ __omittedItems: 5, originalLength: 15 })
     expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
   })
 
@@ -225,7 +242,7 @@ describe('tool execution failure projection', () => {
     expect(result.code).toBe('VALIDATION_FAILED')
     const diagnostics = (result.details?.diagnostics as unknown[]) ?? []
     expect(diagnostics).toHaveLength(11)
-    expect(diagnostics[10]).toMatchObject({ __truncatedItems: 5, originalLength: 15 })
+    expect(diagnostics[10]).toMatchObject({ __omittedItems: 5, originalLength: 15 })
     expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
   })
 
@@ -257,5 +274,23 @@ describe('tool execution failure projection', () => {
     expect(boundedRevisions.__truncatedKeys).toBe(450)
     expect(boundedRevisions.__originalKeyCount).toBe(500)
     expect(() => JSON.stringify(result)).not.toThrow()
+  })
+
+  test('keeps reason and code even when the domain details already has 49+ top-level keys', () => {
+    // 评审 minor：buildExecutionFailureResult 曾经先把 reason/code 追加到领域 details
+    // 末尾,再统一按 50 个键截断——领域 details 顶层键 >= 49 时 reason 先被挤掉、
+    // >= 50 时 code 也保不住。error.code 是 UNKNOWN、领域 reason 就是唯一还能看到的
+    // 失败原因载体时,这会让模型完全看不出真正失败原因。
+    const wideDetails: Record<string, string> = {}
+    for (let i = 0; i < 60; i++) wideDetails[`src/file-${i}.ts`] = `rev_${i}`
+    const domainError = Object.assign(new Error('校验失败：字段过多'), {
+      reason: 'VALIDATION_FAILED',
+      details: wideDetails,
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    expect(result.details?.reason).toBe('VALIDATION_FAILED')
+    expect(result.details?.code).toBe('VALIDATION_FAILED')
   })
 })

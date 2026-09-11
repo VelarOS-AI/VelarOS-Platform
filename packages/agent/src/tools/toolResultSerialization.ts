@@ -419,8 +419,12 @@ const HistoryPreviewPlaceholderHeaderPattern =
   /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(; preview: )?/;
 
 // 真实占位串的体积上限：头部（约 100 字符，含字段名与位数）+ 160 字符 preview + "…]"，
-// 留足余量。超过这个长度却只匹配到一层头部，说明不是我们自己生成的占位串（可能是
-// 模型仿写头部后接了一大段真实内容），不能当占位串原样放行,否则会绕过体积上限。
+// 留足余量。只匹配到一层头部却超过这个长度，说明后面跟着的不是占位串自身的 preview
+// 收尾，而是模型仿写头部后接的一大段真实内容（2026-09 复核 #118 最常见形态：模型只抄
+// 了一层头部就转去写真实代码）。这种情况不能原样放行（会绕过体积上限）,但也不能简单
+// 丢弃剥离结果——要把头部之后的真实内容当作"这次工具实际收到的正文"重新压成单层占位串
+// （见 collapseHistoryPreviewPlaceholder 末尾统一的重建分支）,否则会回落到
+// summarizeToolInputString 把整串（含头部文本）当新内容再包一层，产生嵌套。
 const TrustedSinglePlaceholderMaxLength = 400;
 
 interface ParsedHistoryPreviewPlaceholderHeader {
@@ -455,34 +459,40 @@ const MaxHistoryPreviewUnwrapDepth = 8;
 /**
  * 历史参数一旦被压成占位串，重放时不应再被当作原始大字符串重新包一层——
  * 真机已复现三层嵌套（Workbench 持久化会话取证）。识别只锚定开头前缀（见上方注释），
- * 反复剥离头部直到剩余文本不再以占位头开头；只剥到一层则原样放行（幂等，且拒绝
- * 信任超长的伪单层数据——收窄到 TrustedSinglePlaceholderMaxLength 以内才放行）；
- * 剥出多层则用最内层（最贴近真实原文）宣称的长度重建一个全新的单层占位串，
- * 保证输出恒定有界，不随嵌套深度增长。不是占位串则返回 null，交给调用方走常规压缩判断。
+ * 反复剥离头部直到剩余文本不再以占位头开头。
+ *
+ * 只剥到一层且总长在信任范围内：原样放行（幂等，本来就是一次历史重放，未被篡改）。
+ * 其余情况——剥出两层及以上，或只剥到一层但总长超出信任范围（模型仿写了一层头部、
+ * 后面接了真实内容，且没有用 "…]" 收尾，见 #118 复核）——一律用剥离后剩下的正文
+ * （remainder，即头部之后"真正的内容"）重新生成一个全新的单层占位串：声明长度用
+ * value.length（这次工具调用实际收到的总长度，而不是内层头部宣称的历史长度——
+ * 工具收到的就是这一整串，含它前面被抄进来的占位头），预览取 remainder 的前 160
+ * 字符。保证输出恒定单层、有界，不随嵌套深度或伪造头部长度增长。
+ * 不是占位串则返回 null，交给调用方走常规压缩判断。
  */
 function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
   const first = parseHistoryPreviewPlaceholderHeader(value);
   if (!first) return null;
 
   let layers = 1;
-  let innermost = first;
-  let remainder = first.hasPreview ? stripPlaceholderTrailer(first.rest) : "";
+  let remainder = first.hasPreview
+    ? stripPlaceholderTrailer(first.rest)
+    : first.rest;
 
   for (let depth = 0; depth < MaxHistoryPreviewUnwrapDepth; depth++) {
     const next = parseHistoryPreviewPlaceholderHeader(remainder);
     if (!next) break;
     layers += 1;
-    innermost = next;
-    remainder = next.hasPreview ? stripPlaceholderTrailer(next.rest) : "";
+    remainder = next.hasPreview ? stripPlaceholderTrailer(next.rest) : next.rest;
   }
 
-  if (layers === 1)
-    return value.length <= TrustedSinglePlaceholderMaxLength ? value : null;
+  if (layers === 1 && value.length <= TrustedSinglePlaceholderMaxLength)
+    return value;
 
   const previewText = remainder.slice(0, 160).replaceAll(/\s+/g, " ").trim();
   return previewText
-    ? `[history preview omitted ${innermost.length} chars from ${first.field}; tool received the full value; preview: ${previewText}…]`
-    : `[history preview omitted ${innermost.length} chars from ${first.field}; tool received the full value]`;
+    ? `[history preview omitted ${value.length} chars from ${first.field}; tool received the full value; preview: ${previewText}…]`
+    : `[history preview omitted ${value.length} chars from ${first.field}; tool received the full value]`;
 }
 
 function summarizeToolInputString(value: string, key?: string): string {
