@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -72,6 +72,11 @@ const forbiddenText = [
   { label: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/g },
   { label: 'Slack token', pattern: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g },
 ]
+// 文本文件里的原始 C0 控制字符（U+0000–U+001F）只放行制表、换行、回车。原始 NUL 会让 git 把整个
+// 文件当成二进制，diff、blame 与代码审查随之失效；其余控制字符同样只会是误写进来的字节。确需这类
+// 字符时在源码里写转义序列（`\x1b`、`\0`），JSON 规范本身也禁止字符串里出现原始控制字符——所以这条
+// 规则不设白名单。判定按码位比较，本脚本自身不必出现任何控制字符或其转义。
+const allowedControlCharacterCodes = new Set([0x09, 0x0a, 0x0d])
 const failures = []
 
 function fail(message) {
@@ -82,7 +87,7 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'))
 }
 
-function walk(directory) {
+function walk(directory, root = repositoryRoot) {
   const files = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const entryPath = join(directory, entry.name)
@@ -90,13 +95,26 @@ function walk(directory) {
       entry.isDirectory()
       && (
         ignoredDirectoryNames.has(entry.name)
-        || (directory === repositoryRoot && ignoredRootDirectories.has(entry.name))
+        || (directory === root && ignoredRootDirectories.has(entry.name))
       )
     ) continue
-    if (entry.isDirectory()) files.push(...walk(entryPath))
+    if (entry.isDirectory()) files.push(...walk(entryPath, root))
     else if (entry.isFile()) files.push(entryPath)
   }
   return files
+}
+
+function lineAt(content, index) {
+  return content.slice(0, index).split('\n').length
+}
+
+/** 文本里第一个不被放行的原始 C0 控制字符：返回位置与码位，没有则返回 undefined。 */
+export function findRawControlCharacter(content) {
+  for (let index = 0; index < content.length; index += 1) {
+    const code = content.charCodeAt(index)
+    if (code < 0x20 && !allowedControlCharacterCodes.has(code)) return { index, code }
+  }
+  return undefined
 }
 
 function isTextFile(filePath) {
@@ -273,19 +291,32 @@ function checkRuntimeDependencyOwnership() {
   }
 }
 
-function checkTextHygiene() {
-  for (const filePath of walk(repositoryRoot).filter(isTextFile)) {
+/** 扫描 root 下的文本文件，返回禁用文本与原始控制字符的违规描述；测试用临时目录作 root。 */
+export function collectTextHygieneFailures(root = repositoryRoot) {
+  const hygieneFailures = []
+  for (const filePath of walk(root, root).filter(isTextFile)) {
     const content = readFileSync(filePath, 'utf8')
-    const displayPath = relative(repositoryRoot, filePath)
+    const displayPath = relative(root, filePath)
     for (const { label, pattern } of forbiddenText) {
       pattern.lastIndex = 0
       const match = pattern.exec(content)
       if (!match) continue
       if (/^gh[pousr]_x+$/i.test(match[0])) continue
-      const line = content.slice(0, match.index).split('\n').length
-      fail(`${displayPath}:${line}: ${label}`)
+      hygieneFailures.push(`${displayPath}:${lineAt(content, match.index)}: ${label}`)
+    }
+    const controlCharacter = findRawControlCharacter(content)
+    if (controlCharacter) {
+      const codePoint = controlCharacter.code.toString(16).toUpperCase().padStart(4, '0')
+      hygieneFailures.push(
+        `${displayPath}:${lineAt(content, controlCharacter.index)}: raw control character U+${codePoint} (only tab, LF and CR are allowed)`,
+      )
     }
   }
+  return hygieneFailures
+}
+
+function checkTextHygiene() {
+  for (const failure of collectTextHygieneFailures()) fail(failure)
 }
 
 function resolveMarkdownTarget(markdownPath, rawTarget) {
@@ -311,16 +342,23 @@ function checkMarkdownLinks() {
   }
 }
 
-checkRootFiles()
-checkPackageMetadata()
-checkRuntimeDependencyOwnership()
-checkTextHygiene()
-checkMarkdownLinks()
+function run() {
+  checkRootFiles()
+  checkPackageMetadata()
+  checkRuntimeDependencyOwnership()
+  checkTextHygiene()
+  checkMarkdownLinks()
 
-if (failures.length) {
-  console.error(`Public-readiness check failed with ${failures.length} issue(s):`)
-  for (const failure of failures) console.error(`  - ${failure}`)
-  process.exitCode = 1
-} else {
-  console.log('Public-readiness check passed.')
+  if (failures.length) {
+    console.error(`Public-readiness check failed with ${failures.length} issue(s):`)
+    for (const failure of failures) console.error(`  - ${failure}`)
+    process.exitCode = 1
+  } else {
+    console.log('Public-readiness check passed.')
+  }
 }
+
+// 只在直接执行时跑门；测试 import 本模块时只取导出的判定函数。两侧都取 realpath：经软链路径执行时
+// import.meta.url 已被解析成真实路径，只比 resolve 的结果会让门什么都不跑就以 0 退出。
+const invokedPath = process.argv[1] ? realpathSync(resolve(process.argv[1])) : undefined
+if (invokedPath === realpathSync(fileURLToPath(import.meta.url))) run()
