@@ -80,3 +80,4 @@ export { createProjectCodeQuery, executeProjectCodeLanguageQuery }
 export type { ProjectCodeIndexApi, ProjectCodeIndexQuery }
 export * from './ExternalLanguageService'
 export type { LanguageReadPort, LanguageToolContext } from './LanguageService'
+export { configureTypeScriptLibraryDirectory } from './TypeScriptProjectHost'

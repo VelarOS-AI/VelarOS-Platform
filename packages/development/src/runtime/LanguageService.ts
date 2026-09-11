@@ -123,7 +123,31 @@ export interface LanguageDiagnosticsResult {
   diagnostics: LanguageDiagnosticRecord[]
   diagnosticCount: number
   scannedFiles: number
+  fileListTruncated?: boolean
   truncated?: boolean
+  /** 诊断能力降级的原因（例如类型检查不可用）；存在时结果不完整，空列表不代表代码没有问题。 */
+  degraded?: string
+  /** 没有扫描到文件、文件数被截断等调用方必须知道的说明。 */
+  note?: string
+}
+
+const DiagnosticSeverityRank: Record<LanguageDiagnosticRecord['severity'], number> = {
+  error: 0,
+  warning: 1,
+  info: 2,
+}
+
+/** 错误排在警告与提示之前：结果按 limit 截断时，大量提示不会把真错误挤出返回窗口。 */
+export function compareDiagnostics(
+  left: LanguageDiagnosticRecord,
+  right: LanguageDiagnosticRecord
+): number {
+  return (
+    DiagnosticSeverityRank[left.severity] - DiagnosticSeverityRank[right.severity] ||
+    left.path.localeCompare(right.path) ||
+    left.line - right.line ||
+    left.column - right.column
+  )
 }
 
 export interface FindSymbolsInput extends LanguageQueryInput {

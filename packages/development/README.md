@@ -17,6 +17,22 @@ The language-operation path scopes directories through that injected port direct
 does not load the Project Agent tool barrel. Project wire/query guards remain on the portable
 `@velaros-ai/project/contracts` entry.
 
+`language_diagnostics` 的 `path` 可以是文件或目录。目录按 `extensions` / `maxDepth` 选出
+JavaScript/TypeScript 源文件逐个诊断，单次最多 200 个文件；超出时 `truncated: true` 并在
+`note` 里说明。没有扫描到任何文件时 `note` 会写明原因，空结果不会伪装成「全部通过」；
+结果按错误、警告、提示的顺序排列后再按 `limit` 截断。
+
+TypeScript 类型诊断依赖标准库声明（`lib.*.d.ts`）。宿主按以下顺序定位：
+
+1. `typescript` 包自身所在目录（开发环境与未剔除 `.d.ts` 的安装）；
+2. 宿主调用 `configureTypeScriptLibraryDirectory(absoluteDir)` 显式声明的目录；
+3. Electron 约定目录 `<process.resourcesPath>/typescript/lib`。
+
+Electron 打包默认剔除 `node_modules` 里的 `.d.ts`，宿主应把
+`node_modules/typescript/lib/lib*.d.ts` 作为 extraResources 放到 `typescript/lib`，即可在不改代码
+的情况下命中第 3 条。三处都找不到时，诊断结果带 `degraded` 说明并只返回语法诊断，不会把
+`Cannot find name 'Record'` 这类由标准库缺席导致的伪错误当作真结果返回。
+
 `ExternalLanguageService` 负责外部 language server 的进程生命周期、JSON-RPC framing、
 超时/取消、诊断与导航结果的有界归一。宿主保留二进制与资源发现、启用策略、进程环境和状态展示，
 不会由 Development 静默下载或启动任意可执行文件。

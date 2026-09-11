@@ -1,4 +1,4 @@
-import { isFunction } from '@velaros-ai/core'
+import { isEmpty, isFunction, isNonBlankString, optionalWhen, unique } from '@velaros-ai/core'
 
 import {
   analyzeImpactWithService,
@@ -8,6 +8,7 @@ import {
   summarizeServices,
 } from './LanguageNavigation'
 import {
+  compareDiagnostics,
   type FindImportersInput,
   type FindImportsInput,
   type FindReferencesInput,
@@ -179,6 +180,14 @@ async function analyzeSymbolImpact(
   })
 }
 
+/** 多个语言服务的降级原因/说明合并成一段；全部缺席时字段省略。 */
+function joinDiagnosticReasons(
+  reasons: ReadonlyArray<LooseOptional<string>>
+): LooseOptional<string> {
+  const present = unique(reasons.filter(isNonBlankString))
+  return optionalWhen(!isEmpty(present), present.join('\n'))
+}
+
 async function languageDiagnostics(
   input: LanguageDiagnosticsInput & {
     language?: string
@@ -196,7 +205,14 @@ async function languageDiagnostics(
       supportedServices.map((service) => service.getDiagnostics!(ctx, input))
     )
     const diagnostics: LanguageDiagnosticRecord[] = results.flatMap((result) => result.diagnostics)
-    diagnostics.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line)
+    diagnostics.sort(compareDiagnostics)
+    const scope = input.extensions
+      ? `${input.path}（extensions: ${input.extensions.join('/')}）`
+      : input.path
+    const noServiceNote = optionalWhen(
+      isEmpty(supportedServices),
+      `没有语言服务能诊断 ${scope}，未做诊断。这不代表代码没有错误。`
+    )
 
     return {
       services: summarizeServices(supportedServices),
@@ -205,6 +221,8 @@ async function languageDiagnostics(
       diagnosticCount: results.reduce((sum, result) => sum + result.diagnosticCount, 0),
       scannedFiles: results.reduce((sum, result) => sum + result.scannedFiles, 0),
       truncated: diagnostics.length > (input.limit ?? DefaultLimit) || mergeTruncated(results),
+      degraded: joinDiagnosticReasons(results.map((result) => result.degraded)),
+      note: joinDiagnosticReasons([noServiceNote, ...results.map((result) => result.note)]),
     }
   })
 }

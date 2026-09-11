@@ -4,7 +4,8 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import * as ts from 'typescript'
 
-import { isEmpty, isPlainObject, isPresent } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isPlainObject, isPresent, isTrue } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 /**
  * TypeScript 项目宿主 —— `project:query-code` 内置基线背后的 `ts.LanguageService` 池。
@@ -36,6 +37,15 @@ import { isEmpty, isPlainObject, isPresent } from '@velaros-ai/core'
  *
  * 源文件指纹使用 `size + mtimeNs`。未变化时保留增量缓存；任何项目源码变化都会重建对应
  * project service，避免一次编辑后依赖文件仍停留在旧快照。
+ *
+ * ## 标准库（`lib.*.d.ts`）按候选目录定位，找不到时显式降级
+ * `ts.getDefaultLibFilePath` 只认 `typescript` 包自身所在目录。Electron 打包会剔除 `node_modules`
+ * 里的 `.d.ts`，于是那里只剩 `typescript.js`：标准库静默缺席，每个 `Record`/`Set`/`string.trim`
+ * 都被报成类型错误，诊断整体失真。候选目录依次是：`typescript` 包自身目录 →
+ * {@link configureTypeScriptLibraryDirectory} 声明的目录 → Electron 约定目录
+ * `<process.resourcesPath>/typescript/lib`（宿主以 extraResources 携带 `lib*.d.ts`）。
+ * 全部缺席时 {@link acquireTypeScriptLanguageService} 报告 `standardLibraryAvailable: false`，
+ * 由调用方放弃依赖类型检查的结果，而不是把伪错误当真结论返回。
  */
 const TypeScriptExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.cts', '.mts', '.cjs', '.mjs'])
 const JavaScriptExtensions = new Set(['.js', '.jsx', '.cjs', '.mjs'])
@@ -79,11 +89,14 @@ interface PooledTypeScriptProject {
   liveFiles: Map<string, string>
   fileVersions: Map<string, number>
   overlayPaths: Set<string>
+  /** 本项目编译选项对应的默认标准库文件；`null` 表示所有候选目录都没有标准库。 */
+  defaultLibFilePath: Nullable<string>
   service: ts.LanguageService
 }
 
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
+let configuredLibraryDirectory: Nullable<string> = null
 
 function extensionWithDot(path: string): string {
   const index = path.lastIndexOf('.')
@@ -501,6 +514,27 @@ function setPooledFile(project: PooledTypeScriptProject, fileName: string, conte
   project.fileVersions.set(fileName, (project.fileVersions.get(fileName) ?? 0) + 1)
 }
 
+function electronResourcesLibraryDirectory(): Nullable<string> {
+  // `process.resourcesPath` 只在 Electron 进程里存在，Node/Bun 下读到 undefined。
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  return isNonBlankString(resourcesPath) ? resolve(resourcesPath, 'typescript', 'lib') : null
+}
+
+function resolveDefaultLibFilePath(options: ts.CompilerOptions): Nullable<string> {
+  const libFileName = ts.getDefaultLibFileName(options)
+  const libraryDirectories = [
+    dirname(ts.getDefaultLibFilePath(options)),
+    configuredLibraryDirectory,
+    electronResourcesLibraryDirectory(),
+  ]
+  for (const directory of libraryDirectories) {
+    if (!isPresent(directory)) continue
+    const libFilePath = resolve(directory, libFileName)
+    if (existsSync(libFilePath)) return libFilePath
+  }
+  return null
+}
+
 function createLanguageServiceHost(
   project: Omit<PooledTypeScriptProject, 'service'>
 ): ts.LanguageServiceHost {
@@ -514,7 +548,10 @@ function createLanguageServiceHost(
       return !isPresent(content) ? undefined : ts.ScriptSnapshot.fromString(content)
     },
     getCurrentDirectory: () => project.projectDirectory,
-    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+    // TS 从该文件所在目录解析 `compilerOptions.lib` 与 `/// <reference lib>`。标准库缺席时仍须
+    // 返回一个路径，程序照常构建但没有标准库；调用方凭 `standardLibraryAvailable` 识别这种状态。
+    getDefaultLibFileName: (options) =>
+      project.defaultLibFilePath ?? ts.getDefaultLibFilePath(options),
     fileExists: (fileName) => project.liveFiles.has(fileName) || ts.sys.fileExists(fileName),
     readFile: (fileName) => project.liveFiles.get(fileName) ?? ts.sys.readFile(fileName),
     readDirectory: ts.sys.readDirectory,
@@ -525,6 +562,22 @@ function createLanguageServiceHost(
     getNewLine: () => ts.sys.newLine,
     getProjectReferences: () => project.projectReferences,
   }
+}
+
+/**
+ * 声明宿主携带的 TypeScript 标准库目录（内含 `lib.*.d.ts`），传 `null` 撤销声明。
+ *
+ * 只在 `typescript` 包自身目录找不到标准库时生效。Electron 宿主若按约定把
+ * `node_modules/typescript/lib/lib*.d.ts` 作为 extraResources 放到
+ * `<process.resourcesPath>/typescript/lib`，无需调用本函数。已池化的语言服务绑定了旧的
+ * 标准库位置，所以声明变化后整池重建。
+ */
+export function configureTypeScriptLibraryDirectory(directory: Nullable<string>): void {
+  if (isPresent(directory) && !isAbsolute(directory)) {
+    throw new AppError('VALIDATION', `TypeScript 标准库目录必须是绝对路径：${directory}`)
+  }
+  configuredLibraryDirectory = directory
+  clearTypeScriptProjectCache()
 }
 
 export function clearTypeScriptProjectCache(projectRoot?: string): void {
@@ -560,6 +613,8 @@ export function acquireTypeScriptLanguageService(
   files: Map<string, string>
   compilerOptions: ts.CompilerOptions
   config: TypeScriptProjectConfig
+  /** 为 `false` 时语义诊断会把标准库全局名报成缺失，调用方只能信任语法层结果。 */
+  standardLibraryAvailable: boolean
 } {
   const cacheEntry = getOrCreateProjectCache(projectRoot, requestAbsolutePath, priorityPaths)
   const poolKey = cacheEntry.cacheKey
@@ -582,6 +637,7 @@ export function acquireTypeScriptLanguageService(
       liveFiles,
       fileVersions,
       overlayPaths: new Set(),
+      defaultLibFilePath: resolveDefaultLibFilePath(cacheEntry.config.compilerOptions),
     }
     project = {
       ...draft,
@@ -619,6 +675,8 @@ export function acquireTypeScriptLanguageService(
     files: project.liveFiles,
     compilerOptions: project.compilerOptions,
     config: cacheEntry.config,
+    standardLibraryAvailable:
+      isPresent(project.defaultLibFilePath) || isTrue(project.compilerOptions.noLib),
   }
 }
 

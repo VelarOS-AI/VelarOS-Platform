@@ -1,8 +1,18 @@
+import { statSync } from 'node:fs'
 import nodePath from 'node:path'
 
 import * as ts from 'typescript'
 
-import { isFalse, isNumber, isPresent, isTrue, numberOrNull, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isFalse,
+  isNumber,
+  isPresent,
+  isTrue,
+  numberOrNull,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { optionalWhenLazy } from '@velaros-ai/core/utils/optionalWhen'
 
@@ -31,8 +41,11 @@ import type {
 import {
   collectSourceFiles,
   compactStatement,
+  compareDiagnostics,
   DefaultNavigationLimit,
+  DefaultNavigationMaxDepth,
   lineAt,
+  normalizeExtensionsWithDefault,
   normalizeSourcePath as normalizePath,
   readSourceFile,
   scanImporters,
@@ -129,7 +142,8 @@ function isInsideRoot(rootPath: string, absolutePath: string): boolean {
   return !!relative && !relative.startsWith('..') && !nodePath.isAbsolute(relative)
 }
 
-function resolveProjectFile(
+/** 解析项目内的文件或目录；项目根本身合法，相对路径以 `.` 表示。 */
+function resolveProjectPath(
   rootPath: string,
   inputPath: string
 ): {
@@ -137,12 +151,12 @@ function resolveProjectFile(
   relativePath: string
 } {
   const absolutePath = nodePath.resolve(rootPath, inputPath)
-  if (!isInsideRoot(rootPath, absolutePath)) {
+  if (absolutePath !== nodePath.resolve(rootPath) && !isInsideRoot(rootPath, absolutePath)) {
     throw new AppError('VALIDATION', `path is outside project: ${inputPath}`)
   }
   return {
     absolutePath,
-    relativePath: normalizePath(nodePath.relative(rootPath, absolutePath)),
+    relativePath: normalizePath(nodePath.relative(rootPath, absolutePath)) || '.',
   }
 }
 
@@ -735,6 +749,50 @@ async function collectReferences(
   })
 }
 
+// 目录诊断逐文件做完整类型检查；上限让一次调用停留在数秒量级，超出部分由截断说明引导缩小范围。
+const MaxDiagnosticFiles = 200
+const MissingStandardLibraryReason =
+  '未找到 TypeScript 标准库声明（lib.*.d.ts），类型诊断不可用，只返回了语法诊断。' +
+  '这是运行环境缺少标准库，不代表代码存在类型错误。'
+
+function emptyDiagnostics(note: string): LanguageDiagnosticsResult {
+  return { diagnostics: [], diagnosticCount: 0, scannedFiles: 0, truncated: false, note }
+}
+
+async function selectDiagnosticFiles(
+  ctx: LanguageToolContext,
+  rootPath: string,
+  input: LanguageDiagnosticsInput
+): Promise<{ files: string[]; truncated: boolean; emptyNote: string }> {
+  const target = resolveProjectPath(rootPath, input.path)
+  const stats = statSync(target.absolutePath, { throwIfNoEntry: false })
+  if (!stats) throw new AppError('NOT_FOUND', `诊断路径不存在：${target.relativePath}`)
+
+  if (!stats.isDirectory()) {
+    const isSource = TypeScriptExtensions.has(nodePath.extname(target.absolutePath).toLowerCase())
+    return {
+      files: isSource ? [target.relativePath] : [],
+      truncated: false,
+      emptyNote: `${target.relativePath} 不是 JavaScript/TypeScript 源文件，未做诊断。`,
+    }
+  }
+
+  const extensions = normalizeExtensionsWithDefault(input.extensions, DefaultJsTsExtensions)
+  const maxDepth = input.maxDepth ?? DefaultNavigationMaxDepth
+  const selection = await collectJsTsFiles(ctx, {
+    path: target.relativePath,
+    extensions,
+    maxDepth,
+    maxFiles: MaxDiagnosticFiles,
+  })
+  return {
+    ...selection,
+    emptyNote:
+      `未找到可诊断的源文件：${target.relativePath} 下 ${maxDepth} 层以内没有扩展名为 ` +
+      `${extensions.join('/')} 的文件。这不代表代码没有错误。`,
+  }
+}
+
 async function collectDiagnostics(
   ctx: LanguageToolContext,
   input: LanguageDiagnosticsInput
@@ -742,35 +800,62 @@ async function collectDiagnostics(
   ctx.abortSignal.throwIfAborted()
   const limit = input.limit ?? DefaultLimit
   const rootPath = ctx.project.getRootPath()
-  const target = resolveProjectFile(rootPath, input.path)
+  const selection = await selectDiagnosticFiles(ctx, rootPath, input)
+  if (isEmpty(selection.files)) return emptyDiagnostics(selection.emptyNote)
 
-  if (!TypeScriptExtensions.has(nodePath.extname(target.absolutePath).toLowerCase()))
-    return { diagnostics: [], diagnosticCount: 0, scannedFiles: 0, truncated: false }
+  const diagnostics: LanguageDiagnosticRecord[] = []
+  let acquired: Nullable<ReturnType<typeof acquireTypeScriptLanguageService>> = null
+  let standardLibraryAvailable = true
+  let scannedFiles = 0
+  for (const file of selection.files) {
+    ctx.abortSignal.throwIfAborted()
+    const absolutePath = nodePath.resolve(rootPath, file)
+    // 同一程序已收录的文件直接复用该服务；只有落在当前程序之外的文件才重新解析 tsconfig。
+    if (!acquired?.files.has(absolutePath)) {
+      const content = safeReadTypeScriptProjectFile(absolutePath)
+      if (!isPresent(content)) continue
+      acquired = acquireTypeScriptLanguageService(
+        rootPath,
+        absolutePath,
+        [absolutePath],
+        new Map([[absolutePath, content]])
+      )
+    }
 
-  const content = safeReadTypeScriptProjectFile(target.absolutePath)
-  if (!isPresent(content))
-    return { diagnostics: [], diagnosticCount: 0, scannedFiles: 0, truncated: false }
+    const { service, files } = acquired
+    // 标准库缺席时语义层与建议层会把 Record/Set 等全局名全部报成缺失，只保留语法层结果。
+    const fileDiagnostics = acquired.standardLibraryAvailable
+      ? [
+          ...service.getSyntacticDiagnostics(absolutePath),
+          ...service.getSemanticDiagnostics(absolutePath),
+          ...service.getSuggestionDiagnostics(absolutePath),
+        ]
+      : service.getSyntacticDiagnostics(absolutePath)
+    standardLibraryAvailable &&= acquired.standardLibraryAvailable
+    scannedFiles += 1
+    for (const diagnostic of fileDiagnostics) {
+      const record = mapTypeScriptDiagnostic(rootPath, files, diagnostic)
+      if (isPresent(record)) diagnostics.push(record)
+    }
+  }
+  diagnostics.sort(compareDiagnostics)
 
-  const { service, files } = acquireTypeScriptLanguageService(
-    rootPath,
-    target.absolutePath,
-    [target.absolutePath],
-    new Map([[target.absolutePath, content]])
-  )
-  const diagnostics = [
-    ...service.getSyntacticDiagnostics(target.absolutePath),
-    ...service.getSemanticDiagnostics(target.absolutePath),
-    ...service.getSuggestionDiagnostics(target.absolutePath),
-  ]
-    .map((diagnostic) => mapTypeScriptDiagnostic(rootPath, files, diagnostic))
-    .filter((diagnostic): diagnostic is LanguageDiagnosticRecord => isPresent(diagnostic))
-    .sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line)
-
+  const note =
+    scannedFiles === 0
+      ? `选中的 ${selection.files.length} 个源文件都不可读，未做诊断。这不代表代码没有错误。`
+      : optionalWhen(
+          selection.truncated,
+          `源文件超过 ${MaxDiagnosticFiles} 个，只诊断了按路径排序的前 ${MaxDiagnosticFiles} 个；` +
+            '缩小 path 可覆盖其余文件。'
+        )
   return {
     diagnostics: diagnostics.slice(0, limit),
     diagnosticCount: diagnostics.length,
-    scannedFiles: 1,
+    scannedFiles,
+    fileListTruncated: selection.truncated,
     truncated: diagnostics.length > limit,
+    degraded: optionalWhen(!standardLibraryAvailable, MissingStandardLibraryReason),
+    note,
   }
 }
 
