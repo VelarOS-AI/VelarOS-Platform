@@ -4,7 +4,14 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import * as ts from 'typescript'
 
-import { isEmpty, isNonBlankString, isPlainObject, isPresent, isTrue } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNonBlankString,
+  isPlainObject,
+  isPresent,
+  isTrue,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 /**
@@ -179,9 +186,12 @@ function readPackageModuleType(packageJsonPath?: string): Nullable<'module' | 'c
   }
 }
 
+type ParseTypeScriptConfig = (configPath: string) => Nullable<ts.ParsedCommandLine>
+
 function findTypeScriptConfigPath(
   projectRoot: string,
-  requestAbsolutePath: string
+  requestAbsolutePath: string,
+  parseConfig: ParseTypeScriptConfig = parseTypeScriptConfigFile
 ): Nullable<string> {
   const isJavaScript = JavaScriptExtensions.has(extensionWithDot(requestAbsolutePath))
   const configNames = isJavaScript
@@ -196,7 +206,11 @@ function findTypeScriptConfigPath(
       if (!existsSync(configPath)) continue
 
       nearestConfigPath ??= configPath
-      const owningConfigPath = findOwningReferencedConfigPath(configPath, requestAbsolutePath)
+      const owningConfigPath = findOwningReferencedConfigPath(
+        configPath,
+        requestAbsolutePath,
+        parseConfig
+      )
       if (owningConfigPath) return owningConfigPath
     }
 
@@ -227,12 +241,13 @@ function parseTypeScriptConfigFile(configPath: string): Nullable<ts.ParsedComman
 function findOwningReferencedConfigPath(
   configPath: string,
   requestAbsolutePath: string,
+  parseConfig: ParseTypeScriptConfig,
   visited = new Set<string>()
 ): Nullable<string> {
   if (visited.has(configPath)) return null
   visited.add(configPath)
 
-  const parsed = parseTypeScriptConfigFile(configPath)
+  const parsed = parseConfig(configPath)
   if (!parsed) return null
 
   for (const reference of parsed.projectReferences ?? []) {
@@ -240,12 +255,18 @@ function findOwningReferencedConfigPath(
     const owningConfigPath = findOwningReferencedConfigPath(
       referencedConfigPath,
       requestAbsolutePath,
+      parseConfig,
       visited
     )
     if (owningConfigPath) return owningConfigPath
   }
 
   return parsed.fileNames.includes(requestAbsolutePath) ? configPath : null
+}
+
+function isExplicitCommonJsPath(path: string): boolean {
+  const extension = extensionWithDot(path)
+  return extension === '.cjs' || extension === '.cts'
 }
 
 function parseTypeScriptProjectConfig(
@@ -256,8 +277,7 @@ function parseTypeScriptProjectConfig(
   const configPath = discoveredConfigPath
   const packageJsonPaths = collectPackageJsonPaths(projectRoot, requestAbsolutePath)
   const packageModuleType = readPackageModuleType(packageJsonPaths[0])
-  const requestExtension = extensionWithDot(requestAbsolutePath)
-  const isExplicitCommonJs = requestExtension === '.cjs' || requestExtension === '.cts'
+  const isExplicitCommonJs = isExplicitCommonJsPath(requestAbsolutePath)
   const projectDirectory = configPath
     ? dirname(configPath)
     : packageJsonPaths[0]
@@ -602,6 +622,41 @@ export function clearTypeScriptProjectCache(projectRoot?: string): void {
   }
 }
 
+/**
+ * 把一批文件按各自所属的 TypeScript 项目分组，组内任一文件发起 acquire 都得到同一份配置与编译选项。
+ *
+ * 归属判定与 acquire 同用 {@link findTypeScriptConfigPath}，所以整组诊断与逐个单独诊断同源，
+ * 不会借用恰好先把文件拉进来的外层程序。编译选项里随请求文件变化的只有两处——JS 请求强制
+ * `allowJs`、`.cjs/.cts` 推断改用 Node16——它们与普通 TS 文件分开成组，否则同一配置的服务会在
+ * 组间交替时反复重建。一次分组内每个配置只解析一次：无 include 的根配置会展开整个仓库。
+ */
+export function groupFilesByTypeScriptProject(
+  projectRoot: string,
+  absolutePaths: readonly string[]
+): string[][] {
+  const parsedConfigs = new Map<string, Nullable<ts.ParsedCommandLine>>()
+  const parseConfig: ParseTypeScriptConfig = (configPath) => {
+    if (!parsedConfigs.has(configPath)) {
+      parsedConfigs.set(configPath, parseTypeScriptConfigFile(configPath))
+    }
+    return toNullable(parsedConfigs.get(configPath))
+  }
+
+  const groups = new Map<string, string[]>()
+  for (const absolutePath of absolutePaths) {
+    const configPath = findTypeScriptConfigPath(projectRoot, absolutePath, parseConfig)
+    const projectKey = [
+      configPath ?? `inferred:${findNearestPackageJsonPath(projectRoot, absolutePath) ?? ''}`,
+      JavaScriptExtensions.has(extensionWithDot(absolutePath)),
+      isExplicitCommonJsPath(absolutePath),
+    ].join('\0')
+    const group = groups.get(projectKey)
+    if (group) group.push(absolutePath)
+    else groups.set(projectKey, [absolutePath])
+  }
+  return [...groups.values()]
+}
+
 export function acquireTypeScriptLanguageService(
   projectRoot: string,
   requestAbsolutePath: string,
@@ -615,6 +670,11 @@ export function acquireTypeScriptLanguageService(
   config: TypeScriptProjectConfig
   /** 为 `false` 时语义诊断会把标准库全局名报成缺失，调用方只能信任语法层结果。 */
   standardLibraryAvailable: boolean
+  /**
+   * 该服务是否仍是池中的活服务。跨 `await` 持有结果的调用方在继续使用前必须检查：
+   * 期间并发的 acquire 可能因指纹变化 dispose 了它，而被 dispose 的服务一调用就崩。
+   */
+  isCurrent(): boolean
 } {
   const cacheEntry = getOrCreateProjectCache(projectRoot, requestAbsolutePath, priorityPaths)
   const poolKey = cacheEntry.cacheKey
@@ -670,6 +730,7 @@ export function acquireTypeScriptLanguageService(
 
   project.overlayPaths = nextOverlayPaths
 
+  const acquiredProject = project
   return {
     service: project.service,
     files: project.liveFiles,
@@ -677,6 +738,7 @@ export function acquireTypeScriptLanguageService(
     config: cacheEntry.config,
     standardLibraryAvailable:
       isPresent(project.defaultLibFilePath) || isTrue(project.compilerOptions.noLib),
+    isCurrent: () => pooledProjects.get(poolKey) === acquiredProject,
   }
 }
 

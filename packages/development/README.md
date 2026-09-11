@@ -18,8 +18,10 @@ does not load the Project Agent tool barrel. Project wire/query guards remain on
 `@velaros-ai/project/contracts` entry.
 
 `language_diagnostics` 的 `path` 可以是文件或目录。目录按 `extensions` / `maxDepth` 选出
-JavaScript/TypeScript 源文件逐个诊断，单次最多 200 个文件；超出时 `truncated: true` 并在
-`note` 里说明。没有扫描到任何文件时 `note` 会写明原因，空结果不会伪装成「全部通过」；
+JavaScript/TypeScript 源文件（跳过 `.gitignore` 忽略的文件），单次最多 200 个源文件、耗时预算
+20 秒；任一闸触发时 `truncated: true` 并在 `note` 里说明。选中的文件按各自所属的 tsconfig
+分组，每组只构建一次程序，诊断结果与逐个文件单独诊断一致；文件之间让出事件循环，中止信号
+在两个文件之间生效。没有扫描到任何文件时 `note` 会写明原因，空结果不会伪装成「全部通过」；
 结果按错误、警告、提示的顺序排列后再按 `limit` 截断。
 
 TypeScript 类型诊断依赖标准库声明（`lib.*.d.ts`）。宿主按以下顺序定位：

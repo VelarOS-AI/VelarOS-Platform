@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import * as ts from 'typescript'
 
 import { typescriptPlugin } from '@velaros-ai/project/changes'
@@ -13,7 +13,13 @@ import {
   executeProjectCodeLanguageQuery,
   type LanguageToolContext,
 } from '../src'
-import { clearTypeScriptProjectCache } from '../src/runtime/TypeScriptProjectHost'
+import {
+  clearTypeScriptProjectCache,
+  groupFilesByTypeScriptProject,
+} from '../src/runtime/TypeScriptProjectHost'
+
+// 用例跑的是真实类型检查与数百个文件的夹具，机器繁忙时会超过默认的 5 秒。
+setDefaultTimeout(30_000)
 
 interface DiagnosticsPayload {
   diagnostics: Array<{ path: string; severity: string; message: string; code?: number }>
@@ -34,20 +40,24 @@ const bundledLibraryDirectory = dirname(ts.getDefaultLibFilePath({}))
 const originalExecutingFilePath = ts.sys.getExecutingFilePath
 const electronProcess = process as NodeJS.Process & { resourcesPath?: string }
 let root = ''
+let workspace = ''
 let scratch = ''
 
 type KernelAssembly = 'core' | 'typescript-plugin'
 
-async function createContext(assembly: KernelAssembly): Promise<LanguageToolContext> {
+async function createContext(
+  assembly: KernelAssembly,
+  projectRoot = root
+): Promise<LanguageToolContext> {
   // Workbench 只装 corePlugin，Desktop 额外装 TS 插件；两种装配都必须能列出目录源文件。
   const kernel = await createProjectKernel({
-    root,
+    root: projectRoot,
     plugins: assembly === 'typescript-plugin' ? [typescriptPlugin()] : [],
   })
   return {
     abortSignal: new AbortController().signal,
     project: {
-      getRootPath: () => root,
+      getRootPath: () => projectRoot,
       runInDirectory: async (_path, action) => action(),
       kernel: async () => ({
         listFiles: kernel.listFiles.bind(kernel),
@@ -58,15 +68,58 @@ async function createContext(assembly: KernelAssembly): Promise<LanguageToolCont
   }
 }
 
-async function diagnose(
-  input: { path: string; extensions?: string[]; limit?: number },
-  assembly: KernelAssembly = 'core'
+async function diagnoseWith(
+  context: LanguageToolContext,
+  input: { path: string; extensions?: string[]; limit?: number }
 ): Promise<DiagnosticsPayload> {
-  const context = await createContext(assembly)
   return (await executeProjectCodeLanguageQuery(
     { action: 'language_diagnostics', ...input },
     context
   )) as unknown as DiagnosticsPayload
+}
+
+async function diagnose(
+  input: { path: string; extensions?: string[]; limit?: number },
+  assembly: KernelAssembly = 'core',
+  projectRoot = root
+): Promise<DiagnosticsPayload> {
+  return diagnoseWith(await createContext(assembly, projectRoot), input)
+}
+
+/** 内核列完文件后执行 onListed：把动作排进事件循环，恰好落在目录诊断的第一个文件之前。 */
+async function createWorkspaceContextWithListHook(
+  onListed: () => void,
+  abortSignal = new AbortController().signal
+): Promise<LanguageToolContext> {
+  const base = await createContext('core', workspace)
+  const kernel = await base.project.kernel()
+  return {
+    abortSignal,
+    project: {
+      ...base.project,
+      kernel: async () => ({
+        ...kernel,
+        listFiles: async (input) => {
+          const entries = await kernel.listFiles(input)
+          onListed()
+          return entries
+        },
+      }),
+    },
+  }
+}
+
+function errorCodes(result: DiagnosticsPayload): Array<[string, LooseOptional<number>]> {
+  return result.diagnostics
+    .filter((diagnostic) => diagnostic.severity === 'error')
+    .map((diagnostic) => [diagnostic.path, diagnostic.code])
+}
+
+async function writeFiles(baseDirectory: string, files: Record<string, string>): Promise<void> {
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(baseDirectory, path)), { recursive: true })
+    await writeFile(join(baseDirectory, path), content)
+  }
 }
 
 function expectNoStandardLibraryNoise(result: DiagnosticsPayload): void {
@@ -99,6 +152,30 @@ beforeAll(async () => {
   await writeFile(join(root, 'src', 'clean.ts'), 'export const answer = 42\n')
   await writeFile(join(root, 'src', 'nested', 'deep.ts'), 'export const deep: string = 1\n')
   await writeFile(join(root, 'docs', 'README.md'), '# fixture\n')
+
+  // 多配置工作区：根配置把 pkg/src 也拉进自己的程序（非 strict），pkg 自己的配置是 strict；
+  // pkg/tests 不属于任何配置的 include，按最近的 pkg 配置诊断。
+  workspace = await realpath(await mkdtemp(join(tmpdir(), 'velaros-language-diagnostics-ws-')))
+  const baseOptions = { target: 'ES2022', lib: ['ES2022'], module: 'ESNext' }
+  await writeFiles(workspace, {
+    'package.json': JSON.stringify({ name: 'workspace', type: 'module' }),
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: baseOptions,
+      include: ['app.ts', 'pkg/src'],
+    }),
+    'app.ts': 'export const app = 1\n',
+    'pkg/tsconfig.json': JSON.stringify({
+      compilerOptions: { ...baseOptions, strict: true },
+      include: ['src'],
+    }),
+    'pkg/src/b.ts': 'export function f(x) { return x }\n',
+    'pkg/tests/t0.ts': TypedSource,
+    'pkg/tests/t1.ts': "import { f } from '../src/b'\nexport const same = f(1)\n",
+    'pkg/tests/t2.ts': 'export const size = new Set<string>().size\n',
+    'pkg/tests/helper.js': 'export const helper = () => 1\n',
+    'pkg/.gitignore': 'dist/\n',
+    'pkg/dist/index.d.ts': 'export declare const built: MissingBuildType\n',
+  })
 })
 
 afterEach(() => {
@@ -109,7 +186,9 @@ afterEach(() => {
 
 afterAll(async () => {
   clearTypeScriptProjectCache()
-  await Promise.all([root, scratch].map((path) => rm(path, { recursive: true, force: true })))
+  await Promise.all(
+    [root, workspace, scratch].map((path) => rm(path, { recursive: true, force: true }))
+  )
 })
 
 describe('language_diagnostics 标准库定位', () => {
@@ -208,7 +287,7 @@ describe('language_diagnostics 目录扫描', () => {
 
     const filtered = await diagnose({ path: 'src', extensions: ['tsx'] })
     expect(filtered.scannedFiles).toBe(0)
-    expect(filtered.note).toContain('没有扩展名为 tsx 的文件')
+    expect(filtered.note).toContain('没有扩展名为 tsx')
 
     const unsupported = await diagnose({ path: 'src', extensions: ['vue'] })
     expect(unsupported.scannedFiles).toBe(0)
@@ -223,32 +302,156 @@ describe('language_diagnostics 目录扫描', () => {
     await expect(diagnose({ path: 'src/missing' })).rejects.toThrow('诊断路径不存在')
   })
 
-  test('超过文件上限时截断并说明，错误排在提示之前', async () => {
-    const bulk = join(root, 'src', 'bulk')
-    await mkdir(bulk, { recursive: true })
+  test('目录与非源文件不挤占文件名额，深处的真错误照样报出', async () => {
+    const nested = join(root, 'src', 'modules')
     try {
-      await Promise.all(
-        Array.from({ length: 205 }, (_, index) =>
-          writeFile(
-            join(bulk, `file-${String(index).padStart(3, '0')}.ts`),
-            // 其余文件各带一条「声明未使用」提示：按路径排序它们都在错误之前，验证严重度优先。
-            index === 150
+      // 150 个子目录各带 index.ts 与 README.md：目录 + 文件条目远超 200，源文件只有 150 个。
+      for (let index = 0; index < 150; index += 1) {
+        const directory = join(nested, `m${String(index).padStart(3, '0')}`)
+        await mkdir(directory, { recursive: true })
+        await writeFile(join(directory, 'README.md'), '# module\n')
+        await writeFile(
+          join(directory, 'index.ts'),
+          index === 149 ? 'export const x: number = "bad"\n' : `export const v${index} = ${index}\n`
+        )
+      }
+
+      const result = await diagnose({ path: 'src/modules' })
+
+      expect(result.scannedFiles).toBe(150)
+      expect(result.truncated).toBe(false)
+      expect(result.note).toBeUndefined()
+      expect(errorCodes(result)).toEqual([['src/modules/m149/index.ts', 2322]])
+    } finally {
+      await rm(nested, { recursive: true, force: true })
+    }
+  })
+
+  test('源文件超过上限时截断并说明，错误排在提示之前', async () => {
+    const bulk = join(root, 'src', 'bulk')
+    try {
+      // 41 个子目录 × 5 个文件 = 205 个源文件，外加每个目录一份非源文件。每个目录的 file4 带真错误，
+      // 其余文件各带一条「声明未使用」提示：按路径排序提示在前，验证结果按严重度优先。
+      for (let group = 0; group < 41; group += 1) {
+        const directory = join(bulk, `g${String(group).padStart(2, '0')}`)
+        await mkdir(directory, { recursive: true })
+        await writeFile(join(directory, 'notes.txt'), 'not source\n')
+        for (let index = 0; index < 5; index += 1) {
+          await writeFile(
+            join(directory, `file${index}.ts`),
+            index === 4
               ? 'export const wrong: boolean = 0\n'
               : `export function f${index}(): void {\n  const unused = ${index}\n}\n`
           )
-        )
-      )
+        }
+      }
 
       const result = await diagnose({ path: 'src/bulk', limit: 5 })
 
       expect(result.scannedFiles).toBe(200)
       expect(result.truncated).toBe(true)
-      expect(result.note).toContain('只诊断了')
+      expect(result.note).toContain('源文件超过 200 个')
+      expect(result.note).toContain('缩小 path')
       expect(result.diagnosticCount).toBeGreaterThan(5)
-      expect(result.diagnostics[0]).toMatchObject({ path: 'src/bulk/file-150.ts', code: 2322 })
-      expect(result.diagnostics[1]).toMatchObject({ severity: 'info' })
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+        2322, 2322, 2322, 2322, 2322,
+      ])
     } finally {
       await rm(bulk, { recursive: true, force: true })
     }
   })
+
+  test('跳过 .gitignore 忽略的构建产物', async () => {
+    const result = await diagnose({ path: 'pkg' }, 'core', workspace)
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.path)).not.toContain(
+      'pkg/dist/index.d.ts'
+    )
+    expect(result.scannedFiles).toBe(5)
+  })
+})
+
+describe('language_diagnostics 多配置与并发', () => {
+  test('文件按所属配置诊断，单文件与目录模式结果一致', async () => {
+    for (const path of ['pkg/src/b.ts', 'pkg', '.']) {
+      const result = await diagnose({ path }, 'core', workspace)
+      expect([path, errorCodes(result)]).toEqual([
+        path,
+        expect.arrayContaining([['pkg/src/b.ts', 7006]]),
+      ])
+    }
+  })
+
+  test('同一配置的文件合为一组，JS 与 TS 分组', () => {
+    const paths = [
+      'app.ts',
+      'pkg/src/b.ts',
+      'pkg/tests/t0.ts',
+      'pkg/tests/helper.js',
+      'pkg/tests/t1.ts',
+    ]
+    const groups = groupFilesByTypeScriptProject(
+      workspace,
+      paths.map((path) => join(workspace, path))
+    )
+
+    expect(groups.map((group) => group.map((path) => path.slice(workspace.length + 1)))).toEqual([
+      ['app.ts'],
+      ['pkg/src/b.ts', 'pkg/tests/t0.ts', 'pkg/tests/t1.ts'],
+      ['pkg/tests/helper.js'],
+    ])
+  })
+
+  test('配置之外的文件在所属配置下整组诊断', async () => {
+    const result = await diagnose({ path: 'pkg/tests' }, 'core', workspace)
+
+    expect(result.scannedFiles).toBe(4)
+    expect(result.degraded).toBeUndefined()
+    expect(errorCodes(result)).toEqual([['pkg/tests/t0.ts', 2322]])
+    expectNoStandardLibraryNoise(result)
+  })
+
+  test('文件之间让出事件循环，中止信号在扫描中途生效', async () => {
+    const controller = new AbortController()
+    // 同步跑完整个目录的实现只会在返回结果之后才执行这个宏任务。
+    const context = await createWorkspaceContextWithListHook(
+      () => setImmediate(() => controller.abort()),
+      controller.signal
+    )
+
+    await expect(diagnoseWith(context, { path: 'pkg' })).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+  })
+
+  // 在目录诊断的第一个文件之前插入一次单文件查询：b.ts 与本组同池，会把本组不在磁盘快照里的
+  // overlay 回收掉；helper.js 强制 allowJs、改变配置指纹，会 dispose 本组持有的服务。
+  const interferences: Array<[string, string, Array<[string, number]>]> = [
+    ['回收本组 overlay', 'pkg/src/b.ts', [['pkg/src/b.ts', 7006]]],
+    ['dispose 本组服务', 'pkg/tests/helper.js', []],
+  ]
+  for (const [interference, path, expectedErrors] of interferences) {
+    test(`让出期间并发查询${interference}后，目录诊断仍然完整`, async () => {
+      // 先由只拥有 src 的请求建池：tests 文件只作为 overlay 进入程序，而不在磁盘快照里。
+      clearTypeScriptProjectCache()
+      await diagnose({ path: 'pkg/src/b.ts' }, 'core', workspace)
+      const concurrentContext = await createContext('core', workspace)
+      let concurrent: Nullable<Promise<DiagnosticsPayload>> = null
+      const context = await createWorkspaceContextWithListHook(() =>
+        setImmediate(() => {
+          concurrent = diagnoseWith(concurrentContext, { path })
+        })
+      )
+
+      // 只选 TS 文件让整个目录成为一组，干扰恰好落在本组 acquire 之后、第一个文件诊断之前。
+      const tests = await diagnoseWith(context, { path: 'pkg/tests', extensions: ['ts'] })
+
+      expect(tests.scannedFiles).toBe(3)
+      expect(errorCodes(tests)).toEqual([['pkg/tests/t0.ts', 2322]])
+      expectNoStandardLibraryNoise(tests)
+      const interfering = await concurrent!
+      expect(interfering.scannedFiles).toBe(1)
+      expect(errorCodes(interfering)).toEqual(expectedErrors)
+    })
+  }
 })

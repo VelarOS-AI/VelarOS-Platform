@@ -35,7 +35,7 @@
     "lint": "eslint . --quiet",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/development.test.ts",
+    "test": "bun run build && bun test test/development.test.ts test/language-diagnostics.test.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/development"
   },

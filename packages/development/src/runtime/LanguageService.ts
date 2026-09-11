@@ -242,6 +242,8 @@ export interface SourceFileSelection {
   extensions?: string[]
   maxDepth?: number
   maxFiles?: number
+  /** 缺省沿用内核规则：根目录跳过 .gitignore 忽略的文件，显式子目录不跳过。 */
+  excludeGitignored?: boolean
 }
 
 export function normalizeSourcePath(input: string): string {
@@ -296,11 +298,15 @@ export async function collectSourceFiles(
     return { files: [selectedPath], truncated: false }
 
   const maxFiles = input.maxFiles ?? 2500
+  // 内核按入列条数截断遍历；只让候选源文件入列，条数上限才等于源文件上限，
+  // 目录与无关文件不会挤占名额，内核截断也能如实反映为 truncated。
   const entries = await kernel.listFiles({
     path: selectedPath ?? '.',
     recursive: true,
     maxDepth: input.maxDepth ?? DefaultNavigationMaxDepth,
     maxFiles: maxFiles + 1,
+    include: extensions.map((extension) => `**/*.${caseInsensitiveGlob(extension)}`),
+    excludeGitignored: input.excludeGitignored,
   })
   ctx.abortSignal.throwIfAborted()
   const files = entries
@@ -308,7 +314,12 @@ export async function collectSourceFiles(
     .map((entry) => entry.path)
     .sort()
 
-  return { files: files.slice(0, maxFiles), truncated: files.length > maxFiles }
+  return { files: files.slice(0, maxFiles), truncated: entries.length > maxFiles }
+}
+
+/** include 规则区分大小写而扩展名匹配不区分，逐字母展开成字符类让两者一致。 */
+function caseInsensitiveGlob(text: string): string {
+  return text.replace(/[a-z]/g, (letter) => `[${letter}${letter.toUpperCase()}]`)
 }
 
 export async function readSourceFile(

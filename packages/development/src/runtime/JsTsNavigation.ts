@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
 import nodePath from 'node:path'
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 
 import * as ts from 'typescript'
 
@@ -54,6 +55,7 @@ import {
 } from './LanguageService'
 import {
   acquireTypeScriptLanguageService,
+  groupFilesByTypeScriptProject,
   safeReadFile as safeReadTypeScriptProjectFile,
   TypeScriptExtensions,
 } from './TypeScriptProjectHost'
@@ -749,8 +751,10 @@ async function collectReferences(
   })
 }
 
-// 目录诊断逐文件做完整类型检查；上限让一次调用停留在数秒量级，超出部分由截断说明引导缩小范围。
+// 目录诊断的两道闸：文件数上限与耗时预算。同属一个程序的文件共用一次程序构建，常规目录远在
+// 预算之内；预算兜住超大程序或慢盘，超出时带说明返回已完成的部分，由调用方缩小 path 续查。
 const MaxDiagnosticFiles = 200
+const DiagnosticTimeBudgetMs = 20_000
 const MissingStandardLibraryReason =
   '未找到 TypeScript 标准库声明（lib.*.d.ts），类型诊断不可用，只返回了语法诊断。' +
   '这是运行环境缺少标准库，不代表代码存在类型错误。'
@@ -784,12 +788,14 @@ async function selectDiagnosticFiles(
     extensions,
     maxDepth,
     maxFiles: MaxDiagnosticFiles,
+    // 构建产物（dist/*.js、*.d.ts）通常被 .gitignore 忽略；诊断它们只会挤占名额、制造噪音。
+    excludeGitignored: true,
   })
   return {
     ...selection,
     emptyNote:
       `未找到可诊断的源文件：${target.relativePath} 下 ${maxDepth} 层以内没有扩展名为 ` +
-      `${extensions.join('/')} 的文件。这不代表代码没有错误。`,
+      `${extensions.join('/')} 且未被 .gitignore 忽略的文件。这不代表代码没有错误。`,
   }
 }
 
@@ -803,59 +809,79 @@ async function collectDiagnostics(
   const selection = await selectDiagnosticFiles(ctx, rootPath, input)
   if (isEmpty(selection.files)) return emptyDiagnostics(selection.emptyNote)
 
+  const deadline = Date.now() + DiagnosticTimeBudgetMs
   const diagnostics: LanguageDiagnosticRecord[] = []
-  let acquired: Nullable<ReturnType<typeof acquireTypeScriptLanguageService>> = null
   let standardLibraryAvailable = true
   let scannedFiles = 0
-  for (const file of selection.files) {
-    ctx.abortSignal.throwIfAborted()
-    const absolutePath = nodePath.resolve(rootPath, file)
-    // 同一程序已收录的文件直接复用该服务；只有落在当前程序之外的文件才重新解析 tsconfig。
-    if (!acquired?.files.has(absolutePath)) {
+  let unreadableFiles = 0
+  let outOfTime = false
+  const absolutePaths = selection.files.map((file) => nodePath.resolve(rootPath, file))
+  for (const group of groupFilesByTypeScriptProject(rootPath, absolutePaths)) {
+    const contents = new Map<string, string>()
+    for (const absolutePath of group) {
       const content = safeReadTypeScriptProjectFile(absolutePath)
-      if (!isPresent(content)) continue
-      acquired = acquireTypeScriptLanguageService(
-        rootPath,
-        absolutePath,
-        [absolutePath],
-        new Map([[absolutePath, content]])
-      )
+      if (isPresent(content)) contents.set(absolutePath, content)
+      else unreadableFiles += 1
     }
+    const [requestPath] = contents.keys()
+    if (!isPresent(requestPath)) continue
 
-    const { service, files } = acquired
-    // 标准库缺席时语义层与建议层会把 Record/Set 等全局名全部报成缺失，只保留语法层结果。
-    const fileDiagnostics = acquired.standardLibraryAvailable
-      ? [
-          ...service.getSyntacticDiagnostics(absolutePath),
-          ...service.getSemanticDiagnostics(absolutePath),
-          ...service.getSuggestionDiagnostics(absolutePath),
-        ]
-      : service.getSyntacticDiagnostics(absolutePath)
-    standardLibraryAvailable &&= acquired.standardLibraryAvailable
-    scannedFiles += 1
-    for (const diagnostic of fileDiagnostics) {
-      const record = mapTypeScriptDiagnostic(rootPath, files, diagnostic)
-      if (isPresent(record)) diagnostics.push(record)
+    // 整组文件作为根文件与 overlay 交给一次 acquire：程序只构建一次，
+    // 不在任何配置 include 里的文件（如测试目录）也按所属配置诊断。
+    const acquireGroup = (): ReturnType<typeof acquireTypeScriptLanguageService> =>
+      acquireTypeScriptLanguageService(rootPath, requestPath, [...contents.keys()], contents)
+    let acquired = acquireGroup()
+    for (const absolutePath of contents.keys()) {
+      // 文件之间让出事件循环：宿主主进程保持响应，中止信号也能在两个文件之间生效。
+      await yieldToEventLoop()
+      ctx.abortSignal.throwIfAborted()
+      outOfTime = Date.now() > deadline
+      if (outOfTime) break
+      // 让出期间并发的查询可能 dispose 了该服务或回收了本组 overlay，失效就按原组重新 acquire。
+      if (!acquired.isCurrent() || !acquired.files.has(absolutePath)) acquired = acquireGroup()
+
+      const { service, files } = acquired
+      // 标准库缺席时语义层与建议层会把 Record/Set 等全局名全部报成缺失，只保留语法层结果。
+      const fileDiagnostics = acquired.standardLibraryAvailable
+        ? [
+            ...service.getSyntacticDiagnostics(absolutePath),
+            ...service.getSemanticDiagnostics(absolutePath),
+            ...service.getSuggestionDiagnostics(absolutePath),
+          ]
+        : service.getSyntacticDiagnostics(absolutePath)
+      standardLibraryAvailable &&= acquired.standardLibraryAvailable
+      scannedFiles += 1
+      for (const diagnostic of fileDiagnostics) {
+        const record = mapTypeScriptDiagnostic(rootPath, files, diagnostic)
+        if (isPresent(record)) diagnostics.push(record)
+      }
     }
+    if (outOfTime) break
   }
   diagnostics.sort(compareDiagnostics)
 
-  const note =
-    scannedFiles === 0
-      ? `选中的 ${selection.files.length} 个源文件都不可读，未做诊断。这不代表代码没有错误。`
-      : optionalWhen(
-          selection.truncated,
-          `源文件超过 ${MaxDiagnosticFiles} 个，只诊断了按路径排序的前 ${MaxDiagnosticFiles} 个；` +
-            '缩小 path 可覆盖其余文件。'
-        )
+  const notes = [
+    optionalWhen(
+      selection.truncated,
+      `源文件超过 ${MaxDiagnosticFiles} 个，只选取了目录遍历先遇到的 ${MaxDiagnosticFiles} 个。`
+    ),
+    optionalWhen(
+      outOfTime,
+      `诊断耗时超过 ${DiagnosticTimeBudgetMs / 1000} 秒，选中的 ${selection.files.length} ` +
+        `个文件只诊断了 ${scannedFiles} 个。`
+    ),
+    optionalWhen(unreadableFiles > 0, `${unreadableFiles} 个源文件不可读，未做诊断。`),
+    optionalWhen(scannedFiles === 0, '没有任何文件完成诊断，这不代表代码没有错误。'),
+    optionalWhen(selection.truncated || outOfTime, '其余文件未诊断，缩小 path 可覆盖它们。'),
+  ].filter(isPresent)
   return {
     diagnostics: diagnostics.slice(0, limit),
     diagnosticCount: diagnostics.length,
     scannedFiles,
-    fileListTruncated: selection.truncated,
+    fileListTruncated: selection.truncated || outOfTime,
     truncated: diagnostics.length > limit,
     degraded: optionalWhen(!standardLibraryAvailable, MissingStandardLibraryReason),
-    note,
+    note: optionalWhen(!isEmpty(notes), notes.join('')),
   }
 }
 
