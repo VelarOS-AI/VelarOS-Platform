@@ -61,7 +61,8 @@ const MismatchNormalizers: ReadonlyArray<readonly [TextMismatchCause, (line: str
   ['line_ending', (line) => line.replace(/\r$/, '')],
   ['trailing_whitespace', (line) => line.replace(/[ \t]+$/, '')],
   ['indentation', (line) => line.replace(/^[ \t]+/, '')],
-  ['backslash_escape', (line) => line.replace(/\\+/g, '\\')],
+  // 整个去掉反斜杠：既覆盖转义写多（`\\{` 对 `\{`），也覆盖整个漏写（`/{` 对 `/\{`）。
+  ['backslash_escape', (line) => line.replaceAll('\\', '')],
   ['quote_style', (line) => line.replace(/[“”‘’'"`]/g, '"')],
 ]
 const TolerantSteps = MismatchNormalizers.slice(0, 2)

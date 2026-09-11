@@ -295,6 +295,22 @@ describe('text anchor miss diagnostics', () => {
     expect(error.message).toContain('反斜杠')
   })
 
+  test('names a backslash the oldText dropped entirely', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'render.ts',
+      oldText: '  const pattern = /{([^}]*)\\}/g',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({
+      candidateLine: 2,
+      causes: ['backslash_escape'],
+      firstMismatch: { oldTextLine: 1, fileLine: 2, actual: '  const pattern = /\\{([^}]*)\\}/g' },
+    })
+    expect(error.message).toContain('反斜杠')
+  })
+
   test('locates oldText when every line carries an escaping difference', async () => {
     await writeFile(join(root, 'escapes.ts'), 'const a = "\\n"\nconst b = "\\t"\n')
     const error = await prepareFailure({
