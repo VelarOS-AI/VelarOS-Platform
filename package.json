@@ -1,6 +1,6 @@
 {
   "name": "velaros-platform",
-  "version": "0.6.46",
+  "version": "0.6.47",
   "private": true,
   "description": "The shared Kernel and reusable platform packages for the VelarOS personal AI operating system ecosystem.",
   "license": "Apache-2.0",
