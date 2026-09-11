@@ -20,6 +20,7 @@ export interface SourceSplice {
 interface NamedSpec {
   imported: string
   local: string
+  typeOnly: boolean
   text: string
 }
 
@@ -34,6 +35,15 @@ type ImportBinding =
   | { kind: 'named'; clause: ts.ImportClause; element: ts.ImportSpecifier }
 
 const NamedSpecPattern = /^(type\s+)?([\w$]+|"[^"]*"|'[^']*')(?:\s+as\s+([\w$]+))?$/
+
+/** 只作用于下一行的指令注释：它压制的就是紧随其后的那条语句。 */
+const NextLineDirectivePattern = /^\/(?:\/|\*)+\s*(?:@ts-ignore|@ts-expect-error|eslint-disable-next-line|prettier-ignore)\b/
+
+/** 只在文件开头注释里生效的 pragma：三斜线指令、@ts-nocheck / @ts-check、@jsx 系列、@flow、整文件 eslint-disable。 */
+const FilePragmaPattern = /^\/\/\/\s*<|@(?:ts-nocheck|ts-check|jsx\w*|flow)\b|eslint-disable(?![-\w])/
+
+/** 注释之后紧跟一个空行：它与后面的代码分离，属于文件头而不是首条语句的文档。 */
+const DetachedCommentPattern = /^[\t ]*\r?\n[\t ]*\r?\n/
 
 /**
  * 规划 add_import。返回 null 表示目标状态已满足（去重命中），调用方应产出 noop 补丁而不是空结果——
@@ -55,6 +65,7 @@ export function planAddImport(path: string, content: string, operation: AddImpor
   const style = importStyle(imports)
   const named = [...new Set(operation.named ?? [])].map(parseNamedSpec)
   const sameModule = imports.filter((declaration) => moduleOf(declaration) === module)
+  const clauses = sameModule.map((declaration) => declaration.importClause).filter(isPresent)
 
   if (isTrue(operation.sideEffectOnly)) {
     // type-only import 会被编译擦除，不能代替副作用 import。
@@ -63,28 +74,54 @@ export function planAddImport(path: string, content: string, operation: AddImpor
   }
   if (isPresent(operation.namespaceImport)) {
     const alias = operation.namespaceImport
-    if (dedupe && sameModule.some((declaration) => namespaceNameOf(declaration) === alias)) return null
-    return insertStatement(sourceFile, imports, renderImport(module, { namespaceImport: alias }, style))
+    const holder = dedupe ? preferValueClause(clauses.filter((clause) => namespaceNameOf(clause) === alias)) : undefined
+    if (!holder) return insertStatement(sourceFile, imports, renderImport(module, { namespaceImport: alias }, style))
+    return holder.isTypeOnly ? combineSplices(content, promoteClause(sourceFile, holder, [])) : null
   }
   if (!isPresent(operation.defaultImport) && isEmpty(named)) {
     throw new ProjectError('INVALID_INPUT', 'add_import 的 module 形式需要 sideEffectOnly、named、defaultImport 或 namespaceImport 之一')
   }
   if (!dedupe) return insertStatement(sourceFile, imports, renderImport(module, { defaultImport: operation.defaultImport, named }, style))
 
-  const defaultImport = sameModule.some((declaration) => declaration.importClause?.name?.text === operation.defaultImport)
-    ? undefined
-    : operation.defaultImport
-  const present = new Set(sameModule.flatMap(namedKeysOf))
-  const missing = named.filter((spec) => !present.has(namedKey(spec.imported, spec.local)))
-  if (!isPresent(defaultImport) && isEmpty(missing)) return null
+  // 去重只认值绑定：type-only 绑定会被编译擦除，满足不了值 import。已有同名 type-only 绑定时就地升级为值绑定，
+  // 另加一条同名 import 会与它重复声明同一个本地名。
+  const splices: SourceSplice[] = []
+  const defaultHolder = preferValueClause(
+    clauses.filter((clause) => isPresent(clause.name) && clause.name.text === operation.defaultImport)
+  )
+  if (defaultHolder?.isTypeOnly) splices.push(...promoteClause(sourceFile, defaultHolder, []))
+  const defaultImport = defaultHolder ? undefined : operation.defaultImport
 
-  // 同模块已有可吸收的 import 时就地合并（优先已有 `{ … }` 的那条），否则追加一条只含缺失绑定的新语句。
-  const hosts = sameModule
-    .map((declaration) => declaration.importClause)
-    .filter((clause): clause is ts.ImportClause => isPresent(clause) && canAbsorb(clause, isPresent(defaultImport)))
-  const host = hosts.find((clause) => isPresent(clause.namedBindings)) ?? hosts[0]
-  if (host) return mergeIntoClause(sourceFile, host, defaultImport, missing)
-  return insertStatement(sourceFile, imports, renderImport(module, { defaultImport, named: missing }, style))
+  const missing: NamedSpec[] = []
+  const promoted = new Map<ts.ImportClause, ts.ImportSpecifier[]>()
+  for (const spec of named) {
+    const key = namedKey(spec.imported, spec.local)
+    const holders = clauses.flatMap((clause) =>
+      namedElementsOf(clause).filter((element) => elementKey(element) === key).map((element) => ({ clause, element }))
+    )
+    const [holder] = holders
+    if (!holder) {
+      missing.push(spec)
+      continue
+    }
+    // 请求本身就是 `type X`，或已有值绑定：目标状态已满足。
+    if (spec.typeOnly || holders.some((candidate) => !isTypeOnlyElement(candidate.clause, candidate.element))) continue
+    if (holder.element.isTypeOnly) splices.push(dropTypeModifier(sourceFile, holder.element))
+    else promoted.set(holder.clause, [...(promoted.get(holder.clause) ?? []), holder.element])
+  }
+  for (const [clause, elements] of promoted) splices.push(...promoteClause(sourceFile, clause, elements))
+
+  if (isPresent(defaultImport) || !isEmpty(missing)) {
+    // 同模块已有可吸收的 import 时就地合并（优先已有 `{ … }` 的那条），否则追加一条只含缺失绑定的新语句。
+    const hosts = clauses.filter((clause) => canAbsorb(clause, isPresent(defaultImport)))
+    const host = hosts.find((clause) => isPresent(clause.namedBindings)) ?? hosts[0]
+    splices.push(
+      ...(host
+        ? mergeIntoClause(sourceFile, host, defaultImport, missing)
+        : [insertStatement(sourceFile, imports, renderImport(module, { defaultImport, named: missing }, style))])
+    )
+  }
+  return isEmpty(splices) ? null : combineSplices(content, splices)
 }
 
 /**
@@ -171,7 +208,7 @@ function importIdentity(declaration: ts.ImportDeclaration): string {
     moduleOf(declaration),
     !!clause?.isTypeOnly,
     clause?.name?.text ?? '',
-    namespaceNameOf(declaration) ?? '',
+    (clause && namespaceNameOf(clause)) ?? '',
     named,
     declaration.attributes?.getText().replace(/\s+/g, '') ?? '',
   ])
@@ -182,7 +219,7 @@ function parseNamedSpec(text: string): NamedSpec {
   const match = NamedSpecPattern.exec(normalized)
   if (!match) throw new ProjectError('INVALID_INPUT', `不是合法的 import 绑定：${text}`)
   const imported = match[2].replace(/^["']|["']$/g, '')
-  return { imported, local: match[3] ?? imported, text: normalized }
+  return { imported, local: match[3] ?? imported, typeOnly: isPresent(match[1]), text: normalized }
 }
 
 function namedKey(imported: string, local: string): string {
@@ -193,14 +230,43 @@ function elementKey(element: ts.ImportSpecifier): string {
   return namedKey((element.propertyName ?? element.name).text, element.name.text)
 }
 
-function namedKeysOf(declaration: ts.ImportDeclaration): string[] {
-  const bindings = declaration.importClause?.namedBindings
-  return bindings && ts.isNamedImports(bindings) ? bindings.elements.map(elementKey) : []
+function namedElementsOf(clause: ts.ImportClause): readonly ts.ImportSpecifier[] {
+  const bindings = clause.namedBindings
+  return bindings && ts.isNamedImports(bindings) ? bindings.elements : []
 }
 
-function namespaceNameOf(declaration: ts.ImportDeclaration): Optional<string> {
-  const bindings = declaration.importClause?.namedBindings
+function namespaceNameOf(clause: ts.ImportClause): Optional<string> {
+  const bindings = clause.namedBindings
   return bindings && ts.isNamespaceImport(bindings) ? bindings.name.text : undefined
+}
+
+/** 同一绑定出现在多条 clause 里时，已有的值绑定优先——它已满足请求，不必再升级另一条 type-only。 */
+function preferValueClause(clauses: ts.ImportClause[]): Optional<ts.ImportClause> {
+  return clauses.find((clause) => !clause.isTypeOnly) ?? clauses[0]
+}
+
+function isTypeOnlyElement(clause: ts.ImportClause, element: ts.ImportSpecifier): boolean {
+  return clause.isTypeOnly || element.isTypeOnly
+}
+
+/** 行内 `type a` 升级为值绑定：只删 `type ` 修饰。 */
+function dropTypeModifier(sourceFile: ts.SourceFile, element: ts.ImportSpecifier): SourceSplice {
+  return { start: element.getStart(sourceFile), end: (element.propertyName ?? element.name).getStart(sourceFile), text: '' }
+}
+
+/**
+ * 把 `import type …` 升级为值 import：删掉语句级 `type`（clause 文本就从它开始），其余没被请求的 named 绑定
+ * 改写成行内 `type x`，它们仍保持仅类型，不会因为这次升级变成运行时 import。
+ */
+function promoteClause(sourceFile: ts.SourceFile, clause: ts.ImportClause, requested: readonly ts.ImportSpecifier[]): SourceSplice[] {
+  const [keyword, firstBinding] = clause.getChildren(sourceFile)
+  const splices = [{ start: keyword.getStart(sourceFile), end: firstBinding.getStart(sourceFile), text: '' }]
+  for (const element of namedElementsOf(clause)) {
+    if (requested.includes(element)) continue
+    const at = element.getStart(sourceFile)
+    splices.push({ start: at, end: at, text: 'type ' })
+  }
+  return splices
 }
 
 /** 能就地吸收新绑定的 clause：非 type-only、非 namespace 形式；要补 default 时自身还不能已有 default。 */
@@ -215,7 +281,7 @@ function mergeIntoClause(
   clause: ts.ImportClause,
   defaultImport: Optional<string>,
   missing: NamedSpec[]
-): SourceSplice {
+): SourceSplice[] {
   const splices: SourceSplice[] = []
   // 能补 default 的 clause 自身没有 default，起点就是 `{`。
   if (isPresent(defaultImport)) {
@@ -226,26 +292,26 @@ function mergeIntoClause(
     const bindings = clause.namedBindings
     // 没有 `{ … }` 的 clause 只剩 default 一项，在它后面接上新的 named 列表。
     splices.push(
-      bindings && ts.isNamedImports(bindings)
+      ...(bindings && ts.isNamedImports(bindings)
         ? insertIntoNamedImports(sourceFile, bindings, missing)
-        : { start: clause.end, end: clause.end, text: `, { ${missing.map((spec) => spec.text).join(', ')} }` }
+        : [{ start: clause.end, end: clause.end, text: `, { ${missing.map((spec) => spec.text).join(', ')} }` }])
     )
   }
-  return combineSplices(sourceFile.text, splices)
+  return splices
 }
 
 /**
  * 往 `{ … }` 里追加绑定。`}` 独占一行的多行 import 按最后一项的缩进逐行插在 `}` 之前，尾逗号风格跟随原列表，
  * 最后一项的行尾注释仍留在它自己身后；其余情况在最后一项后单行追加。
  */
-function insertIntoNamedImports(sourceFile: ts.SourceFile, named: ts.NamedImports, missing: NamedSpec[]): SourceSplice {
+function insertIntoNamedImports(sourceFile: ts.SourceFile, named: ts.NamedImports, missing: NamedSpec[]): SourceSplice[] {
   const texts = missing.map((spec) => spec.text)
   const last = named.elements.at(-1)
-  if (!last) return { start: named.getStart(sourceFile), end: named.end, text: `{ ${texts.join(', ')} }` }
+  if (!last) return [{ start: named.getStart(sourceFile), end: named.end, text: `{ ${texts.join(', ')} }` }]
   const content = sourceFile.text
   const closeBrace = named.end - 1
   const closeLineStart = lineStartOf(content, closeBrace)
-  if (!/^[\t ]*$/.test(content.slice(closeLineStart, closeBrace))) return { start: last.end, end: last.end, text: `, ${texts.join(', ')}` }
+  if (!/^[\t ]*$/.test(content.slice(closeLineStart, closeBrace))) return [{ start: last.end, end: last.end, text: `, ${texts.join(', ')}` }]
 
   const lastStart = last.getStart(sourceFile)
   const leading = content.slice(lineStartOf(content, lastStart), lastStart)
@@ -255,16 +321,16 @@ function insertIntoNamedImports(sourceFile: ts.SourceFile, named: ts.NamedImport
   const lines = texts.map((text, index) => `${indent}${text}${trailingComma || index < texts.length - 1 ? ',' : ''}${eol}`)
   const splices = [{ start: closeLineStart, end: closeLineStart, text: lines.join('') }]
   if (!trailingComma) splices.push({ start: last.end, end: last.end, text: ',' })
-  return combineSplices(content, splices)
+  return splices
 }
 
 function lineStartOf(content: string, position: number): number {
   return content.lastIndexOf('\n', position - 1) + 1
 }
 
-/** 把同一语句内互不重叠的多处改动合成一次拼接。 */
+/** 把 import 区里互不重叠的多处改动合成一次拼接；同一起点的纯插入排在删除之前。 */
 function combineSplices(content: string, splices: SourceSplice[]): SourceSplice {
-  const ordered = [...splices].sort((a, b) => a.start - b.start)
+  const ordered = [...splices].sort((a, b) => a.start - b.start || a.end - b.end)
   let text = ''
   let cursor = ordered[0].start
   for (const splice of ordered) {
@@ -307,29 +373,50 @@ function removeBinding(sourceFile: ts.SourceFile, declaration: ts.ImportDeclarat
   return removeStatement(sourceFile, declaration)
 }
 
-/** 删整条声明，连同同行的尾随注释、行尾空白与一个换行，不留空行也不留孤儿注释。 */
+/**
+ * 删整条声明，连同同行的尾随注释、行尾空白与一个换行，不留空行也不留孤儿注释。紧贴在它上方的下一行指令注释
+ * （@ts-ignore、eslint-disable-next-line 等）一并删除——留下来它就改去压制下一条语句。
+ */
 function removeStatement(sourceFile: ts.SourceFile, declaration: ts.ImportDeclaration): SourceSplice {
   const content = sourceFile.text
   let end = ts.getTrailingCommentRanges(content, declaration.end)?.at(-1)?.end ?? declaration.end
   while (content[end] === ' ' || content[end] === '\t') end += 1
   if (content.startsWith('\r\n', end)) end += 2
   else if (content[end] === '\n') end += 1
-  return { start: declaration.getStart(sourceFile), end, text: '' }
+
+  let start = declaration.getStart(sourceFile)
+  // 自下而上逐条吞并：每条指令与已吞部分之间只能隔一个换行，隔着空行或普通注释就停。
+  for (const comment of [...(ts.getLeadingCommentRanges(content, declaration.pos) ?? [])].reverse()) {
+    const adjacent = /^[\t ]*\r?\n[\t ]*$/.test(content.slice(comment.end, start))
+    if (!adjacent || !NextLineDirectivePattern.test(content.slice(comment.pos, comment.end))) break
+    start = comment.pos
+  }
+  return { start, end, text: '' }
 }
 
-/** 新语句插在最后一个 import 所在行之后；没有 import 时插在 shebang 与指令序言（'use strict' 等）之后。 */
+/** 新语句插在最后一个 import 所在行之后；没有 import 时插在文件头之后。 */
 function insertStatement(sourceFile: ts.SourceFile, imports: ts.ImportDeclaration[], statement: string): SourceSplice {
   const content = sourceFile.text
   const eol = eolOf(content)
-  const anchor = imports.at(-1)?.end ?? prologueEnd(sourceFile)
+  const anchor = imports.at(-1)?.end ?? headerEnd(sourceFile)
   if (!isPresent(anchor)) return { start: 0, end: 0, text: `${statement}${eol}` }
   const lineBreak = content.indexOf('\n', anchor)
   const at = lineBreak === -1 ? content.length : content[lineBreak - 1] === '\r' ? lineBreak - 1 : lineBreak
   return { start: at, end: at, text: `${eol}${statement}` }
 }
 
-function prologueEnd(sourceFile: ts.SourceFile): Optional<number> {
-  let anchor = sourceFile.text.startsWith('#!') ? 0 : undefined
+/**
+ * 文件头的末尾：shebang、文件级 pragma 注释与指令序言（'use strict' 等）都得留在 import 之前——pragma 只在
+ * 文件开头的注释里生效，被 import 挤到后面就静默失效。与后续代码隔着空行的注释（许可证头等）也算文件头；
+ * 紧贴首条语句的普通注释是它的文档，留给它。
+ */
+function headerEnd(sourceFile: ts.SourceFile): Optional<number> {
+  const content = sourceFile.text
+  let anchor = content.startsWith('#!') ? 0 : undefined
+  for (const comment of ts.getLeadingCommentRanges(content, 0) ?? []) {
+    const text = content.slice(comment.pos, comment.end)
+    if (FilePragmaPattern.test(text) || DetachedCommentPattern.test(content.slice(comment.end))) anchor = comment.end
+  }
   for (const statement of sourceFile.statements) {
     if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break
     anchor = statement.end

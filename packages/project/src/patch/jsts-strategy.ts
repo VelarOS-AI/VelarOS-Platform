@@ -36,8 +36,9 @@ const HandledOperations = new Set<string>([
 const MaxListedCandidates = 8;
 
 interface LocatedSymbol {
-  start: number;
-  end: number;
+  range: OffsetRange;
+  /** insert_* 的锚点：多声明语句里的绑定取整条语句，插入永远落在语句边界上，不会切进声明列表中间。 */
+  anchor: OffsetRange;
   body?: OffsetRange;
 }
 
@@ -93,24 +94,30 @@ function isSymbolOperation(operation: EditOperation): operation is SymbolOperati
 function symbolSplice(located: LocatedSymbol, operation: SymbolOperation): SourceSplice {
   switch (operation.type) {
     case "replace_symbol": {
-      if (operation.mode !== "body") return { start: located.start, end: located.end, text: operation.replacement };
-      if (!located.body) throw new ProjectError("TARGET_NOT_FOUND", "replace_symbol mode=body 需要函数或方法 body；该目标没有可替换的 body，请改用 mode=whole");
+      if (operation.mode !== "body") return { start: located.range.startOffset, end: located.range.endOffset, text: operation.replacement };
+      if (!located.body) {
+        throw new ProjectError(
+          "TARGET_NOT_FOUND",
+          "replace_symbol mode=body 需要可替换的 body（函数/方法的块体或箭头表达式体，类、interface、enum、namespace 的花括号体）；该目标没有，请改用 mode=whole",
+        );
+      }
       return { start: located.body.startOffset, end: located.body.endOffset, text: operation.replacement };
     }
     case "insert_around_symbol": {
-      const at = operation.position === "before" ? located.start : located.end;
+      const at = operation.position === "before" ? located.anchor.startOffset : located.anchor.endOffset;
       return { start: at, end: at, text: operation.text };
     }
     case "insert_before_symbol":
-      return { start: located.start, end: located.start, text: operation.text };
+      return { start: located.anchor.startOffset, end: located.anchor.startOffset, text: operation.text };
     case "insert_after_symbol":
-      return { start: located.end, end: located.end, text: operation.text };
+      return { start: located.anchor.endOffset, end: located.anchor.endOffset, text: operation.text };
   }
 }
 
 /**
- * 定位符号操作的区间。已解析 target 带偏移时以它为准，并对齐到同一 AST 符号以取得 body；
- * 否则按 operation.symbol 在 AST 中唯一匹配。范围永远来自 AST，不做括号计数式推断。
+ * 定位符号操作的区间。已解析 target 带偏移时以它为准，并对齐到同一 AST 符号以取得 body 与插入锚点；
+ * 否则按 operation.symbol 在 AST 中唯一匹配。范围永远来自 AST，不做括号计数式推断——非 JS/TS 目标
+ * 因此没有 body，mode=body 显式失败而不是猜一个区间。
  */
 function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, operation: SymbolOperation): LocatedSymbol {
   const content = snapshot.content ?? "";
@@ -119,7 +126,9 @@ function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, operati
     const aligned = isJsTsPath(snapshot.path)
       ? parseJsTs(snapshot.path, content).symbols.find((symbol) => symbol.range.startOffset === range.startOffset && symbol.range.endOffset === range.endOffset)
       : undefined;
-    return { start: range.startOffset, end: range.endOffset, body: aligned?.bodyRange };
+    if (aligned) return locatedFrom(aligned);
+    const offsets = { startOffset: range.startOffset, endOffset: range.endOffset };
+    return { range: offsets, anchor: offsets };
   }
 
   // 只带行号的 target（如代码智能定位）没有偏移，退回用它的符号描述在 AST 里重新定位。
@@ -134,15 +143,19 @@ function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, operati
       "AMBIGUOUS_TARGET",
       `${operation.type} 找到 ${matches.length} 个名为 ${label} 的符号：${matches.slice(0, MaxListedCandidates).map(describeSymbol).join("；")}`,
       { candidates: matches.map(describeSymbol) },
-      "请补充 symbol.kind 或 symbol.container，使其只匹配一个符号。",
+      "请补充 symbol.kind（成对访问器可写 getter / setter）或 symbol.container，使其只匹配一个符号。",
     );
   }
-  const [symbol] = matches;
-  return { start: symbol.range.startOffset, end: symbol.range.endOffset, body: symbol.bodyRange };
+  return locatedFrom(matches[0]);
+}
+
+function locatedFrom(symbol: JsTsSymbol): LocatedSymbol {
+  return { range: symbol.range, anchor: symbol.statementRange ?? symbol.range, body: symbol.bodyRange };
 }
 
 function describeSymbol(symbol: JsTsSymbol): string {
-  return `${symbol.kind} ${symbol.container ? `${symbol.container}.` : ""}${symbol.name}（第 ${symbol.range.startLine} 行）`;
+  const accessor = symbol.metadata.accessor ? `${symbol.metadata.accessor}，` : "";
+  return `${symbol.kind} ${symbol.container ? `${symbol.container}.` : ""}${symbol.name}（${accessor}第 ${symbol.range.startLine} 行）`;
 }
 
 function applySplice(content: string, splice: SourceSplice): string {
