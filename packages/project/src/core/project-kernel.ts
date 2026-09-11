@@ -254,7 +254,7 @@ function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
   const unique = [
     ...new Map(
       diagnostics.map((diagnostic) => [
-        [diagnostic.severity, diagnostic.path, diagnostic.line, diagnostic.column, diagnostic.message].join(" "),
+        JSON.stringify([diagnostic.severity, diagnostic.path, diagnostic.line, diagnostic.column, diagnostic.message]),
         diagnostic,
       ]),
     ).values(),
