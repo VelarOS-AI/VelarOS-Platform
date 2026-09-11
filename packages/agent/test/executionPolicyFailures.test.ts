@@ -77,4 +77,117 @@ describe('tool execution failure projection', () => {
       result.nextActions?.filter((action) => action.startsWith('先归因本次工具问题'))
     ).toHaveLength(1)
   })
+
+  test('bounds an oversized domain diagnostics array while keeping the original count', () => {
+    const diagnostics = Array.from({ length: 43 }, (_, index) => ({
+      path: `src/file-${index}.ts`,
+      message: `诊断条目 ${index}`,
+    }))
+    const domainError = Object.assign(new Error('校验失败：存在多条诊断'), {
+      reason: 'VALIDATION_FAILED',
+      details: { diagnostics, checks: ['a', 'b'] },
+      suggestedNextAction: '逐条修复 diagnostics 后重试。',
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    const boundedDiagnostics = (result.details?.diagnostics as unknown[]) ?? []
+    expect(boundedDiagnostics).toHaveLength(11)
+    expect(boundedDiagnostics[0]).toMatchObject({ path: 'src/file-0.ts' })
+    expect(boundedDiagnostics[10]).toMatchObject({
+      __truncatedItems: 33,
+      originalLength: 43,
+    })
+    expect(result.details).toMatchObject({ checks: ['a', 'b'] })
+  })
+
+  test('truncates an oversized domain string field in details', () => {
+    const longMessage = 'x'.repeat(5_000)
+    const domainError = Object.assign(new Error('冲突'), {
+      reason: 'CONFLICT_WITH_EXTERNAL_EDIT',
+      details: { path: 'src/a.ts', excerpt: longMessage },
+    })
+
+    const result = buildExecutionFailureResult('project:rollback', AppError.from(domainError))
+
+    const excerpt = result.details?.excerpt as string
+    expect(excerpt.length).toBeLessThan(longMessage.length)
+    expect(excerpt.endsWith('…')).toBe(true)
+  })
+
+  test('bounds deeply nested details without throwing', () => {
+    let nested: Record<string, unknown> = { leaf: 'bottom' }
+    for (let i = 0; i < 10; i++) nested = { child: nested }
+    const domainError = Object.assign(new Error('深层结构'), {
+      reason: 'VALIDATION_FAILED',
+      details: nested,
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    expect(() => JSON.stringify(result)).not.toThrow()
+    expect(JSON.stringify(result)).toContain('depth limit')
+  })
+
+  test('safely handles a BigInt value nested in domain details', () => {
+    // BigInt 是 JSON.stringify 会直接抛错的基础类型，用它验证有界投影确实让结果可安全序列化。
+    const domainError = Object.assign(new Error('携带 BigInt 字段'), {
+      reason: 'VALIDATION_FAILED',
+      details: { path: 'src/a.ts', size: 9_007_199_254_740_993n },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    expect(() => JSON.stringify(result)).not.toThrow()
+    expect(result.details?.size).toBe('9007199254740993n')
+  })
+
+  test('safely handles a circular reference nested in domain details', () => {
+    const circular: Record<string, unknown> = { path: 'src/a.ts' }
+    circular.self = circular
+    const domainError = Object.assign(new Error('携带循环引用字段'), {
+      reason: 'VALIDATION_FAILED',
+      details: { wrapper: circular },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    expect(() => JSON.stringify(result)).not.toThrow()
+    expect(result.details?.wrapper).toMatchObject({ self: '[circular reference omitted]' })
+  })
+
+  test('preserves diagnostics from the kernel-module projectCapabilityError shape (AppError with a ProjectError cause and context.projectError)', () => {
+    // 复刻 packages/project/src/kernel-module.ts 里 projectCapabilityError 的构造方式：
+    // AppError.code 已被提升为领域 reason，cause 是原始 ProjectError，
+    // context.projectError 是它的序列化镜像。
+    class FakeProjectError extends Error {
+      reason = 'VALIDATION_FAILED'
+      details = {
+        diagnostics: Array.from({ length: 15 }, (_, index) => ({ rule: `rule-${index}` })),
+      }
+      suggestedNextAction = '按 diagnostics 逐条修复。'
+      constructor() {
+        super('校验失败')
+        this.name = 'ProjectError'
+      }
+    }
+    const domainError = new FakeProjectError()
+    const appError = new AppError(domainError.reason, domainError.message, domainError, {
+      projectError: {
+        name: domainError.name,
+        reason: domainError.reason,
+        message: domainError.message,
+        details: domainError.details,
+        suggestedNextAction: domainError.suggestedNextAction,
+      },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', appError)
+
+    expect(result.code).toBe('VALIDATION_FAILED')
+    const diagnostics = (result.details?.diagnostics as unknown[]) ?? []
+    expect(diagnostics).toHaveLength(11)
+    expect(diagnostics[10]).toMatchObject({ __truncatedItems: 5, originalLength: 15 })
+    expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
+  })
 })

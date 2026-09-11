@@ -71,6 +71,17 @@ function collectRevisionPaths(result: Nullable<Record<string, unknown>>): string
   return newRevisions ? Object.keys(newRevisions).filter((path) => isNonBlankString(path)) : []
 }
 
+function collectOperationPaths(args: Nullable<Record<string, unknown>>): string[] {
+  if (!isArray(args?.operations)) return []
+
+  // project:edit 的参数形态是 { operations: [{ operation: { type, path | from/to, … }, reason }] }；
+  // 失败时结果里没有 changedFiles，卡片只能从参数里的每条 operation 兜底取路径。
+  return args.operations.flatMap((entry) => {
+    const operation = isPlainObject(entry) ? asRecord(entry.operation) : null
+    return operation ? collectStringArray([operation.path, operation.from, operation.to]) : []
+  })
+}
+
 function getTransactionId(
   result: Nullable<Record<string, unknown>>,
   args: Nullable<Record<string, unknown>>
@@ -146,6 +157,7 @@ export function collectProjectApplyPaths(
     // 系统 write/edit 在执行前只有 args.path；执行结果也可能来自旧会话或流式快照，
     // 因此参数路径是显示层必要的兜底，不能只认工作区事务字段。
     ...collectStringArray([args?.path, args?.fromPath, args?.toPath]),
+    ...collectOperationPaths(args),
   ])
 }
 

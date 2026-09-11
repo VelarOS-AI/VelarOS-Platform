@@ -1,4 +1,4 @@
-import { isArray, isEmpty,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
+import { isArray, isBigInt, isEmpty,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
@@ -71,6 +71,67 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
     current = record.cause
   }
   return null
+}
+
+// cause 链上任意独立包（Project 等）都可能带回几十上百条 diagnostics 或超长字符串；
+// 这里的数值对齐通用工具结果压缩档的量级（见 toolResultSerialization.ts），
+// 只做体积/深度兜底，不追求语义完整。
+const MaxDetailsArrayItems = 10
+const MaxDetailsStringLength = 2_000
+const MaxDetailsDepth = 6
+
+function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  if (isString(value))
+    return value.length > MaxDetailsStringLength
+      ? `${value.slice(0, MaxDetailsStringLength)}…`
+      : value
+
+  // BigInt 是 JSON.stringify 会直接抛错的少数几种基础类型，其余基础类型（number/boolean/
+  // function/symbol/undefined）JSON.stringify 只会静默丢弃，不需要在这里特殊处理。
+  if (isBigInt(value)) return `${value.toString()}n`
+
+  if (!isObject(value)) return value
+
+  if (seen.has(value)) return '[circular reference omitted]'
+
+  if (depth >= MaxDetailsDepth)
+    return isArray(value)
+      ? `[array omitted at depth limit: ${value.length} items]`
+      : '[object omitted at depth limit]'
+
+  seen.add(value)
+
+  if (isArray(value)) {
+    const items = value
+      .slice(0, MaxDetailsArrayItems)
+      .map((item) => boundDetailsValue(item, depth + 1, seen))
+    if (value.length > MaxDetailsArrayItems) {
+      items.push({
+        __truncatedItems: value.length - MaxDetailsArrayItems,
+        originalLength: value.length,
+      })
+    }
+    seen.delete(value)
+    return items
+  }
+
+  if (!isPlainObject(value)) {
+    seen.delete(value)
+    return `[omitted unsupported object: ${value.constructor?.name ?? 'unknown'}]`
+  }
+
+  const record: Record<string, unknown> = {}
+  for (const [key, nestedValue] of Object.entries(value)) {
+    record[key] = boundDetailsValue(nestedValue, depth + 1, seen)
+  }
+  seen.delete(value)
+  return record
+}
+
+/** 失败结果里的领域 details 有界投影：语义（reason/code/nextActions）不变，只裁体积。 */
+function boundToolFailureDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const bounded = boundDetailsValue(details, 0, new WeakSet())
+  return isPlainObject(bounded) ? bounded : details
 }
 
 function shouldAnnotateRuntimeToolIssue(result: ToolFailureResult): boolean {
@@ -189,6 +250,7 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   if (effectiveCode) {
     details.code = effectiveCode
   }
+  const boundedDetails = boundToolFailureDetails(details)
 
   return buildToolFailureResult(
     effectiveCode === 'EXECUTION_ABORTED'
@@ -204,7 +266,7 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
     toolName,
     {
       code: effectiveCode,
-      details: optionalWhen(!isEmpty(Object.keys(details)), details),
+      details: optionalWhen(!isEmpty(Object.keys(boundedDetails)), boundedDetails),
       nextActions: nestedSuggestedNextAction ? [nestedSuggestedNextAction] : undefined,
     }
   )

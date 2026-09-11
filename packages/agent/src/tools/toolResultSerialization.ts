@@ -411,6 +411,49 @@ function looksLikeBinaryPayload(value: string): boolean {
   return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
+const HistoryPreviewPlaceholderPattern =
+  /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(?:; preview: ([\s\S]*)…)?\]$/;
+
+/**
+ * 沿 preview 字段一路剥掉嵌套占位串，直到剩下不再匹配占位串格式的真实文本
+ * （或剩下一个「无 preview」的叶子占位串，此时它本身就是终点）。
+ */
+function unwrapHistoryPreviewPlaceholder(value: string): string {
+  const match = value.match(HistoryPreviewPlaceholderPattern);
+  if (!match) return value;
+
+  const previewBody = match[3];
+  return isPresent(previewBody)
+    ? unwrapHistoryPreviewPlaceholder(previewBody)
+    : value;
+}
+
+/**
+ * 历史参数一旦被压成占位串，重放时不应再被当作原始大字符串重新包一层——
+ * 真机已复现三层嵌套（Workbench 持久化会话，见 velar-tool-ux-speed-roadmap 相关取证）。
+ * 单层占位串原样返回（幂等）；探测到已嵌套（旧数据）则剥到最内层真实预览，收敛回单层。
+ * 不是占位串则返回 null，交给调用方走常规压缩判断。
+ */
+function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
+  const match = value.match(HistoryPreviewPlaceholderPattern);
+  if (!match) return null;
+
+  const [, lengthText, field, previewBody] = match;
+  if (!isPresent(previewBody)) return value;
+
+  const innermost = unwrapHistoryPreviewPlaceholder(previewBody);
+  if (innermost === previewBody) return value;
+
+  const collapsedPreview = innermost
+    .slice(0, 160)
+    .replaceAll(/\s+/g, " ")
+    .trim();
+
+  return collapsedPreview
+    ? `[history preview omitted ${lengthText} chars from ${field}; tool received the full value; preview: ${collapsedPreview}…]`
+    : `[history preview omitted ${lengthText} chars from ${field}; tool received the full value]`;
+}
+
 function summarizeToolInputString(value: string, key?: string): string {
   const field = key ? `"${key}"` : "string";
   if (key && ToolInputKeysWithoutPreview.has(key)) return `[history preview omitted ${value.length} chars from ${field}; tool received the full value]`;
@@ -475,6 +518,9 @@ function compactToolInputValue(
   seen: WeakSet<object> = new WeakSet(),
 ): unknown {
   if (isString(value)) {
+    const collapsedPlaceholder = collapseHistoryPreviewPlaceholder(value);
+    if (isPresent(collapsedPlaceholder)) return collapsedPlaceholder;
+
     if (
       parentKey === "widget_code" &&
       value.length <= WidgetCodeModelReplayMaxLength
