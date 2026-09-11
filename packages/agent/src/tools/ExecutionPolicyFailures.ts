@@ -1,4 +1,4 @@
-import { isArray, isBigInt, isEmpty,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
+import { isArray, isBigInt, isEmpty, isFunction,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
@@ -74,9 +74,11 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
 }
 
 // cause 链上任意独立包（Project 等）都可能带回几十上百条 diagnostics 或超长字符串；
-// 这里的数值对齐通用工具结果压缩档的量级（见 toolResultSerialization.ts），
-// 只做体积/深度兜底，不追求语义完整。
+// 这里的数值是专为失败 details 选的——比 toolResultSerialization.ts 的模型工具结果档
+// （maxArrayItems 400）严格得多，因为失败 details 会被直接持久化为工具结果的一部分，
+// 裁掉的条目在当前边界内不可召回；只做体积/深度兜底，不追求语义完整。
 const MaxDetailsArrayItems = 10
+const MaxDetailsObjectKeys = 50
 const MaxDetailsStringLength = 2_000
 const MaxDetailsDepth = 6
 
@@ -115,14 +117,36 @@ function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>)
     return items
   }
 
+  // isPlainObject 把「非 null、非数组的 object」全部算作可用 Object.entries 遍历的记录，
+  // Date/URL 这类没有自有可枚举属性、只靠 toJSON 表达状态的对象也会命中这条判断——按记录
+  // 遍历会静默得到 {}，等于把值丢了。这里优先用其 toJSON（与 JSON.stringify 语义对齐）。
+  const toJson = isFunction((value as { toJSON?: unknown }).toJSON)
+    ? (value as { toJSON: () => unknown }).toJSON
+    : null
+  if (toJson) {
+    seen.delete(value)
+    try {
+      return boundDetailsValue(toJson.call(value), depth, seen)
+    } catch {
+      // arch-guard:silent-catch-ok 领域对象的 toJSON 实现本身可能抛错；退化为不支持对象标记，
+      // 不能让失败结果的构建被域对象内部问题打断。
+      return `[omitted unsupported object: ${value.constructor?.name ?? 'unknown'}]`
+    }
+  }
+
   if (!isPlainObject(value)) {
     seen.delete(value)
     return `[omitted unsupported object: ${value.constructor?.name ?? 'unknown'}]`
   }
 
+  const entries = Object.entries(value)
   const record: Record<string, unknown> = {}
-  for (const [key, nestedValue] of Object.entries(value)) {
+  for (const [key, nestedValue] of entries.slice(0, MaxDetailsObjectKeys)) {
     record[key] = boundDetailsValue(nestedValue, depth + 1, seen)
+  }
+  if (entries.length > MaxDetailsObjectKeys) {
+    record.__truncatedKeys = entries.length - MaxDetailsObjectKeys
+    record.__originalKeyCount = entries.length
   }
   seen.delete(value)
   return record
@@ -237,9 +261,18 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   const embeddedFailure = readEmbeddedToolFailure(error.context.toolFailure)
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)
 
-  const nestedReason = extractNestedErrorReason(error)
-  const nestedDetails = extractNestedErrorDetails(error)
-  const nestedSuggestedNextAction = extractNestedSuggestedNextAction(error)
+  // 跨 Kernel/IPC 边界一趟 AppError.toJSON → fromJSON 往返会丢掉 cause（context 不丢），
+  // 这时 cause 链上什么都读不到；镜像进 context 的领域错误对象（例如
+  // packages/project/src/kernel-module.ts 的 projectCapabilityError 写入的
+  // context.projectError）就是这种情况下唯一还在的诊断来源，作回退读取。
+  const projectErrorMirror = error.context.projectError
+  const nestedReason =
+    extractNestedErrorReason(error) ?? extractNestedErrorReason(projectErrorMirror)
+  const nestedDetails =
+    extractNestedErrorDetails(error) ?? extractNestedErrorDetails(projectErrorMirror)
+  const nestedSuggestedNextAction =
+    extractNestedSuggestedNextAction(error) ??
+    extractNestedSuggestedNextAction(projectErrorMirror)
   // 独立领域包可能用 reason 承载稳定机器码。AppError.from 会保留 cause，但不会把领域 reason
   // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
   const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code

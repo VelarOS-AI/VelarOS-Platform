@@ -190,4 +190,72 @@ describe('tool execution failure projection', () => {
     expect(diagnostics[10]).toMatchObject({ __truncatedItems: 5, originalLength: 15 })
     expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
   })
+
+  test('recovers diagnostics from context.projectError after an AppError JSON round trip drops cause (cross-Kernel boundary)', () => {
+    // AppError.toJSON 不携带 cause，fromJSON 重建的错误 cause 恒为 undefined——这正是
+    // 一次跨 Kernel/IPC 边界（例如通过消息通道转发）之后的真实形态。上一条用例只覆盖了
+    // 进程内 cause 链完好的情况，从未真正触发过 context.projectError 回退路径。
+    class FakeProjectError extends Error {
+      reason = 'VALIDATION_FAILED'
+      details = {
+        diagnostics: Array.from({ length: 15 }, (_, index) => ({ rule: `rule-${index}` })),
+      }
+      suggestedNextAction = '按 diagnostics 逐条修复。'
+      constructor() {
+        super('校验失败')
+        this.name = 'ProjectError'
+      }
+    }
+    const domainError = new FakeProjectError()
+    const appError = new AppError(domainError.reason, domainError.message, domainError, {
+      projectError: {
+        name: domainError.name,
+        reason: domainError.reason,
+        message: domainError.message,
+        details: domainError.details,
+        suggestedNextAction: domainError.suggestedNextAction,
+      },
+    })
+
+    const crossed = AppError.fromJSON(JSON.parse(JSON.stringify(appError.toJSON())))
+    expect(crossed.cause).toBeUndefined()
+
+    const result = buildExecutionFailureResult('project:edit', crossed)
+
+    expect(result.code).toBe('VALIDATION_FAILED')
+    const diagnostics = (result.details?.diagnostics as unknown[]) ?? []
+    expect(diagnostics).toHaveLength(11)
+    expect(diagnostics[10]).toMatchObject({ __truncatedItems: 5, originalLength: 15 })
+    expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
+  })
+
+  test('projects a Date value in domain details through its toJSON instead of silently losing it as {}', () => {
+    // isPlainObject 把 Date 当普通记录按自有可枚举属性遍历——Date 没有可枚举属性，
+    // 不特殊处理就会静默变成 {}。
+    const domainError = Object.assign(new Error('携带 Date 字段'), {
+      reason: 'VALIDATION_FAILED',
+      details: { occurredAt: new Date('2026-01-01T00:00:00.000Z') },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    expect(result.details?.occurredAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  test('bounds a domain details object with an unbounded number of keys', () => {
+    const newRevisions: Record<string, string> = {}
+    for (let i = 0; i < 500; i++) newRevisions[`src/file-${i}.ts`] = `rev_${i}`
+    const domainError = Object.assign(new Error('多文件修订'), {
+      reason: 'VALIDATION_FAILED',
+      details: { newRevisions },
+    })
+
+    const result = buildExecutionFailureResult('project:edit', AppError.from(domainError))
+
+    const boundedRevisions = result.details?.newRevisions as Record<string, unknown>
+    expect(Object.keys(boundedRevisions)).toHaveLength(52)
+    expect(boundedRevisions.__truncatedKeys).toBe(450)
+    expect(boundedRevisions.__originalKeyCount).toBe(500)
+    expect(() => JSON.stringify(result)).not.toThrow()
+  })
 })

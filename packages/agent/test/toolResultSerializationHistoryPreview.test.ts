@@ -2,6 +2,18 @@ import { describe, expect, test } from 'bun:test'
 
 import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
+/**
+ * 独立复刻 summarizeToolInputString 的截断规则（160 字符预览 + 折叠空白），不复用被测代码，
+ * 用来拼出「真实产生」而非手写全量正文的嵌套占位串——被测函数每一层都会把 preview 截到
+ * 160 字符，手写未截断的完整正文当 fixture 测不出真机会遇到的信息丢失场景。
+ */
+function rawHistoryPreviewWrap(text: string, field = 'content'): string {
+  const preview = text.slice(0, 160).replaceAll(/\s+/g, ' ').trim()
+  return preview
+    ? `[history preview omitted ${text.length} chars from "${field}"; tool received the full value; preview: ${preview}…]`
+    : `[history preview omitted ${text.length} chars from "${field}"; tool received the full value]`
+}
+
 describe('history preview placeholder idempotency', () => {
   test('does not re-wrap a value that is already a single-layer placeholder', () => {
     const longText = 'x'.repeat(4033)
@@ -18,18 +30,60 @@ describe('history preview placeholder idempotency', () => {
     expect((secondPass.newContent as string).match(/history preview omitted/g)).toHaveLength(1)
   })
 
-  test('collapses an already-nested placeholder (legacy persisted data) back to a single layer', () => {
-    const innerText = "test('does something real', () => { expect(1).toBe(1) })"
-    const layer1 = `[history preview omitted 4033 chars from "text"; tool received the full value; preview: ${innerText}…]`
-    const layer2 = `[history preview omitted 4033 chars from "text"; tool received the full value; preview: ${layer1}…]`
-    const layer3 = `[history preview omitted 4033 chars from "text"; tool received the full value; preview: ${layer2}…]`
+  test('collapses a realistically-truncated nested chain (each layer real 160-char preview) to a single layer', () => {
+    // 真实重复包装链：每一层的 preview 都被截到 160 字符（不是手写的完整正文），这正是
+    // 真机三层嵌套里内层信息已经丢失一部分的情形——旧实现要求整串以 "…]" 收尾且每层
+    // 都是完整占位串才能剥离，对这种真实截断链完全不生效（见评审复核）。
+    const real = 'X'.repeat(5200)
+    const layer1 = rawHistoryPreviewWrap(real)
+    const layer2 = rawHistoryPreviewWrap(layer1)
+    const layer3 = rawHistoryPreviewWrap(layer2)
 
-    const result = compactToolInputForModel({ text: layer3 })
+    const result = compactToolInputForModel({ content: layer3 })
+    const collapsed = result.content as string
+
+    // 每层预览只留 160 字符，第三层已经把最内层（真实 5200 字符正文）的头部截得
+    // 不完整，无法再解析出一条完整头部——这是嵌套发生之前就已经丢失的信息，不是本
+    // 函数能逆向补全的。可验证、也应当保证的是：不再继续增长（原始链条是 3 层，输出
+    // 至多保留 2 层残留头部）、且长度恒定有界，不随嵌套深度线性膨胀。
+    const headerOccurrences = collapsed.match(/history preview omitted/g)?.length ?? 0
+    expect(headerOccurrences).toBeLessThanOrEqual(2)
+    expect(collapsed.length).toBeLessThan(300)
+
+    // 二次重放幂等：对已收敛的单层占位串再跑一遍必须原样不动，不能继续变化。
+    const replayed = compactToolInputForModel({ content: collapsed })
+    expect(replayed.content).toBe(collapsed)
+  })
+
+  test('collapses the real #118-shaped sample (model-mimicked headers with no closing "…]", followed by real code)', () => {
+    // 复刻真机取证 errors.txt #118：模型把两层占位头原样抄进真实参数开头,后面紧跟真实
+    // 代码,整串既不以 "…]" 收尾,内层头部也是不完整的（旧实现的锚定正则连第一层都匹配不上）。
+    const realCode =
+      "test('serializes duplicate apply commands for the same transaction', async () => { /* … */ })"
+    const fakeHeader =
+      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
+    const hybrid = `${fakeHeader}${fakeHeader}${realCode}`
+
+    const result = compactToolInputForModel({ text: hybrid })
     const collapsed = result.text as string
 
+    // 两层仿写头部被剥离,模型最终看到的是真实代码本身的预览,而不是嵌套头部的乱码。
     expect(collapsed.match(/history preview omitted/g)).toHaveLength(1)
-    expect(collapsed).toContain('4033 chars from "text"')
-    expect(collapsed).toContain(innerText)
+    expect(collapsed).toContain(realCode.slice(0, 100))
+
+    const replayed = compactToolInputForModel({ text: collapsed })
+    expect(replayed.text).toBe(collapsed)
+  })
+
+  test('does not trust an oversized value that merely starts with the placeholder header as already-compacted', () => {
+    // 边界防绕过（评审 minor #2）：只要开头匹配占位头就原样放行,会让 preview 正文无限大,
+    // 绕过所有体积上限。总长明显超出真实占位串的结构上限时必须当作普通大字符串重新压缩。
+    const spoofed = `[history preview omitted 5 chars from "content"; tool received the full value; preview: ${'Z'.repeat(9_000)}…]`
+
+    const result = compactToolInputForModel({ content: spoofed })
+    const compacted = result.content as string
+
+    expect(compacted.length).toBeLessThan(400)
   })
 
   test('a genuine long string unrelated to the placeholder format is still wrapped normally', () => {

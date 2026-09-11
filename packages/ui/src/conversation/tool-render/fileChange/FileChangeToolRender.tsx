@@ -148,14 +148,20 @@ export function collectProjectApplyPaths(
   result: Nullable<Record<string, unknown>>,
   args: Nullable<Record<string, unknown>>
 ): string[] {
-  return uniqueStrings([
+  const resultPaths = uniqueStrings([
     ...collectStringArray([result?.path, result?.fromPath, result?.toPath]),
     ...collectStringArray(result?.changedFiles),
     ...collectRevisionPaths(result),
     ...collectPatchPaths(result),
     ...collectAdvisoryPaths(result),
-    // 系统 write/edit 在执行前只有 args.path；执行结果也可能来自旧会话或流式快照，
-    // 因此参数路径是显示层必要的兜底，不能只认工作区事务字段。
+  ])
+
+  // project:edit 的参数路径未经规范化（模型可能写 './x'、绝对路径等），与结果侧规范化后
+  // 的路径按字面值去重会并存出现两次；只在结果侧完全没有路径时（失败、预检前、旧会话）
+  // 才用参数兜底，成功场景一律信任结果侧。
+  if (!isEmpty(resultPaths)) return resultPaths
+
+  return uniqueStrings([
     ...collectStringArray([args?.path, args?.fromPath, args?.toPath]),
     ...collectOperationPaths(args),
   ])

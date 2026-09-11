@@ -411,47 +411,78 @@ function looksLikeBinaryPayload(value: string): boolean {
   return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
-const HistoryPreviewPlaceholderPattern =
-  /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(?:; preview: ([\s\S]*)…)?\]$/;
+// 只锚定开头,不要求整串以 "…]" 收尾——占位串的 preview 正文固定被截到 160 字符,
+// 真实产生的占位串几乎不可能恰好在 preview 内容里再收出一个完整的 "…]" 收尾;
+// 反而模型会把占位串的头部原样抄进真实参数、后面接真实代码（无收尾），若用 $ 锚
+// 定尾巴，这类真机样本永远匹配不上，等于没修（2026-09 三层嵌套真机取证复核）。
+const HistoryPreviewPlaceholderHeaderPattern =
+  /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(; preview: )?/;
 
-/**
- * 沿 preview 字段一路剥掉嵌套占位串，直到剩下不再匹配占位串格式的真实文本
- * （或剩下一个「无 preview」的叶子占位串，此时它本身就是终点）。
- */
-function unwrapHistoryPreviewPlaceholder(value: string): string {
-  const match = value.match(HistoryPreviewPlaceholderPattern);
-  if (!match) return value;
+// 真实占位串的体积上限：头部（约 100 字符，含字段名与位数）+ 160 字符 preview + "…]"，
+// 留足余量。超过这个长度却只匹配到一层头部，说明不是我们自己生成的占位串（可能是
+// 模型仿写头部后接了一大段真实内容），不能当占位串原样放行,否则会绕过体积上限。
+const TrustedSinglePlaceholderMaxLength = 400;
 
-  const previewBody = match[3];
-  return isPresent(previewBody)
-    ? unwrapHistoryPreviewPlaceholder(previewBody)
-    : value;
+interface ParsedHistoryPreviewPlaceholderHeader {
+  length: string;
+  field: string;
+  hasPreview: boolean;
+  rest: string;
 }
+
+function parseHistoryPreviewPlaceholderHeader(
+  value: string,
+): Nullable<ParsedHistoryPreviewPlaceholderHeader> {
+  const match = value.match(HistoryPreviewPlaceholderHeaderPattern);
+  if (!match) return null;
+
+  return {
+    length: match[1],
+    field: match[2],
+    hasPreview: isPresent(match[3]),
+    rest: value.slice(match[0].length),
+  };
+}
+
+// preview 正文固定以 "…]" 收尾（见 summarizeToolInputString）；不闭合说明这段文本本身
+// 已经不是完整占位串（模型仿写头部时常见），原样保留，不强行拼出并不存在的收尾。
+function stripPlaceholderTrailer(rest: string): string {
+  return rest.endsWith("…]") ? rest.slice(0, -2) : rest;
+}
+
+const MaxHistoryPreviewUnwrapDepth = 8;
 
 /**
  * 历史参数一旦被压成占位串，重放时不应再被当作原始大字符串重新包一层——
- * 真机已复现三层嵌套（Workbench 持久化会话，见 velar-tool-ux-speed-roadmap 相关取证）。
- * 单层占位串原样返回（幂等）；探测到已嵌套（旧数据）则剥到最内层真实预览，收敛回单层。
- * 不是占位串则返回 null，交给调用方走常规压缩判断。
+ * 真机已复现三层嵌套（Workbench 持久化会话取证）。识别只锚定开头前缀（见上方注释），
+ * 反复剥离头部直到剩余文本不再以占位头开头；只剥到一层则原样放行（幂等，且拒绝
+ * 信任超长的伪单层数据——收窄到 TrustedSinglePlaceholderMaxLength 以内才放行）；
+ * 剥出多层则用最内层（最贴近真实原文）宣称的长度重建一个全新的单层占位串，
+ * 保证输出恒定有界，不随嵌套深度增长。不是占位串则返回 null，交给调用方走常规压缩判断。
  */
 function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
-  const match = value.match(HistoryPreviewPlaceholderPattern);
-  if (!match) return null;
+  const first = parseHistoryPreviewPlaceholderHeader(value);
+  if (!first) return null;
 
-  const [, lengthText, field, previewBody] = match;
-  if (!isPresent(previewBody)) return value;
+  let layers = 1;
+  let innermost = first;
+  let remainder = first.hasPreview ? stripPlaceholderTrailer(first.rest) : "";
 
-  const innermost = unwrapHistoryPreviewPlaceholder(previewBody);
-  if (innermost === previewBody) return value;
+  for (let depth = 0; depth < MaxHistoryPreviewUnwrapDepth; depth++) {
+    const next = parseHistoryPreviewPlaceholderHeader(remainder);
+    if (!next) break;
+    layers += 1;
+    innermost = next;
+    remainder = next.hasPreview ? stripPlaceholderTrailer(next.rest) : "";
+  }
 
-  const collapsedPreview = innermost
-    .slice(0, 160)
-    .replaceAll(/\s+/g, " ")
-    .trim();
+  if (layers === 1)
+    return value.length <= TrustedSinglePlaceholderMaxLength ? value : null;
 
-  return collapsedPreview
-    ? `[history preview omitted ${lengthText} chars from ${field}; tool received the full value; preview: ${collapsedPreview}…]`
-    : `[history preview omitted ${lengthText} chars from ${field}; tool received the full value]`;
+  const previewText = remainder.slice(0, 160).replaceAll(/\s+/g, " ").trim();
+  return previewText
+    ? `[history preview omitted ${innermost.length} chars from ${first.field}; tool received the full value; preview: ${previewText}…]`
+    : `[history preview omitted ${innermost.length} chars from ${first.field}; tool received the full value]`;
 }
 
 function summarizeToolInputString(value: string, key?: string): string {
