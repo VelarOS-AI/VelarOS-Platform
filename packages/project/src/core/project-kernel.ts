@@ -20,7 +20,8 @@
 //
 // ## 关键不变量（改这些会破什么）
 //  - **同一路径的补丁首尾相接**：事务内对同一文件的后一个补丁以前一个补丁的 `newContent`
-//    为 `oldContent`（`chainPatch` 是唯一衔接规则，prepare / 暂存重放 / apply 共用），所以
+//    为 `oldContent`（prepare 在暂存快照上生成补丁，天然首尾相接；暂存重放与 apply 预检用
+//    `chainPatch` 这唯一一条规则核对或重新推导），所以
 //    校验看到的、写盘写下的、diff 描述的是同一份最终内容。若让每个补丁各自基于原文生成，
 //    顺序整文件写入会让最后一个补丁覆盖前面的改动——静默丢改动。「同一路径」按规范化后的
 //    根相对路径判定（`canonicalPath`），`./x`、绝对路径与 `x` 是同一个 key。
@@ -248,21 +249,31 @@ function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
 } {
   const rank = (diagnostic: Diagnostic): number =>
     (diagnostic.severity === "error" ? 0 : 2) + (isPresent(diagnostic.line) ? 0 : 1);
+  // 同一语法错误会被核心 adapter、TS 插件 adapter 与 validator 各报一次（只有 source 不同），
+  // 按位置与消息去重后再计数，免得一个错误报成「共 3 条」并挤占前 N 条名额。
+  const unique = [
+    ...new Map(
+      diagnostics.map((diagnostic) => [
+        [diagnostic.severity, diagnostic.path, diagnostic.line, diagnostic.column, diagnostic.message].join(" "),
+        diagnostic,
+      ]),
+    ).values(),
+  ];
   // Array.prototype.sort 稳定：同档诊断保持 validator 产出顺序。
-  const ordered = [...diagnostics].sort((left, right) => rank(left) - rank(right));
+  const ordered = unique.sort((left, right) => rank(left) - rank(right));
   const [first] = ordered;
   const location = [first.path, first.line, optionalWhen(isPresent(first.line), first.column)]
     .filter(isPresent)
     .join(":");
   const firstLine = truncateText(first.message.split("\n")[0].trim(), MaxHeadlineChars);
   return {
-    headline: `${isEmpty(location) ? "" : `${location} `}${firstLine}（共 ${diagnostics.length} 条）`,
+    headline: `${isEmpty(location) ? "" : `${location} `}${firstLine}（共 ${ordered.length} 条）`,
     details: {
       diagnostics: ordered.slice(0, MaxReportedDiagnostics).map((diagnostic) => ({
         ...diagnostic,
         message: truncateText(diagnostic.message, MaxDiagnosticMessageChars),
       })),
-      diagnosticCount: diagnostics.length,
+      diagnosticCount: ordered.length,
     },
   };
 }
@@ -1532,6 +1543,16 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       if (pathForOp) {
         // revision 前置校验只在首次触碰时做：暂存内容是本事务自己的产物，不对应任何磁盘 revision。
         const isStaged = stagedByPath.has(pathForOp);
+        // 本事务已删掉的文件只能重新 create_file；其它操作放行的话，prepare 给出的 diff 会描述一份
+        // 衔接规则永远写不下去的内容，直到 apply 才以校验失败收场。
+        if (isNull(stagedByPath.get(pathForOp)) && intent.operation.type !== "create_file") {
+          throw new ProjectError(
+            "TARGET_NOT_FOUND",
+            `${pathForOp} 已被本事务前面的操作删除，不能再执行 ${intent.operation.type}`,
+            { path: pathForOp, operation: intent.operation.type },
+            "如需重建该文件请用 create_file；否则去掉这条操作，或拆成单独事务。",
+          );
+        }
         if (target && isStaged) {
           throw new ProjectError(
             "INVALID_INPUT",

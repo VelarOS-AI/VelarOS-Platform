@@ -485,6 +485,31 @@ describe('same-file transaction guards', () => {
       })
     })
   })
+
+  test('rejects editing a file the transaction already deleted, but allows recreating it', async () => {
+    await withRoot({ 'greek.txt': Greek }, async (root) => {
+      const project = await createProjectKernel({ root })
+      await expect(project.prepareEdit({
+        operations: [
+          { operation: { type: 'delete_file', path: 'greek.txt' } },
+          { operation: { type: 'append_text', path: './greek.txt', text: 'more\n' } },
+        ],
+      })).rejects.toMatchObject({
+        reason: 'TARGET_NOT_FOUND',
+        details: { path: 'greek.txt', operation: 'append_text' },
+      })
+
+      const recreated = await project.prepareEdit({
+        operations: [
+          { operation: { type: 'delete_file', path: 'greek.txt' } },
+          { operation: { type: 'create_file', path: 'greek.txt', content: 'fresh\n' } },
+        ],
+      })
+      expect(recreated.changedFiles).toEqual(['greek.txt'])
+      expect(recreated.diff).toContain('+fresh')
+      expect((await project.validate({ transactionId: recreated.transactionId })).ok).toBe(true)
+    })
+  })
 })
 
 describe('batch conflicts with composed transactions', () => {
@@ -571,12 +596,34 @@ describe('validation failure envelope', () => {
           severity: 'error',
           path: 'b.ts',
           line: 8,
-          source: 'jsts.typescript-parser',
+          column: 19,
         })
         expect(await readFile(join(root, 'b.ts'), 'utf8')).toBe(numberedSource)
       })
     })
   }
+
+  test('counts a syntax error once even when several validators report it', async () => {
+    await withRoot({ 'b.ts': numberedSource }, async (root) => {
+      const project = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
+      const transaction = await project.prepareEdit({
+        operations: [replace('b.ts', 'export const v8 = 8', 'export const v8 = ;')],
+      })
+
+      let failure: any
+      try {
+        await project.applyEdit({ transactionId: transaction.transactionId })
+      } catch (error) {
+        failure = error
+      }
+
+      const positions = failure.details.diagnostics.map((diagnostic: Diagnostic) =>
+        [diagnostic.path, diagnostic.line, diagnostic.column, diagnostic.message].join('|'))
+      expect(new Set(positions).size).toBe(positions.length)
+      expect(failure.details.diagnosticCount).toBe(positions.length)
+      expect(failure.message).toEndWith(`（共 ${positions.length} 条）`)
+    })
+  })
 
   test('keeps only the leading diagnostics and truncates oversized messages', async () => {
     const diagnostics: Diagnostic[] = [
