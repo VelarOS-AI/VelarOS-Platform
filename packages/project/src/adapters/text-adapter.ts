@@ -5,6 +5,7 @@ import type { FileSnapshot } from "../types/snapshot.js";
 import type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from "../types/target.js";
 import { id } from "../utils/id.js";
 import { includesLineEndingAware, lineToOffset, rangeFromOffsets, resolveLineEndingAwareTextMatch } from "../utils/text.js";
+import { diagnoseTextMatchMiss, summarizeTextMatchMiss, textMatchMissNextAction } from "../utils/text-match-feedback.js";
 
 /** 用原始 offset 构造绑定 revision 的目标，同时保留文本锚点供后续复核。 */
 function makeTarget(snapshot: FileSnapshot, range: { startOffset: number; endOffset: number }, input: ResolveTargetInput, confidence: number, adapterId = "core.text"): ResolvedTarget {
@@ -112,7 +113,12 @@ export function createTextAdapter(): FileAdapter {
               : `预期 ${expected} 个匹配，实际找到 ${found.count} 个`,
           };
         }
-        return { status: "not_found", reason: "未找到精确片段" };
+        const diagnosis = diagnoseTextMatchMiss(content, exact);
+        return {
+          status: "not_found",
+          reason: `未找到精确片段。${summarizeTextMatchMiss(diagnosis)}`,
+          suggestions: [textMatchMissNextAction(diagnosis)],
+        };
       }
       const anchors = input.target?.anchors;
       if (anchors?.before || anchors?.after || (!!anchors?.mustContain && !isEmpty(anchors.mustContain))) {

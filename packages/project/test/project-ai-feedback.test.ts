@@ -1,0 +1,510 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+
+import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
+
+import { createTextAdapter } from '../src/adapters/text-adapter'
+import { projectTools } from '../src/agent/Project.tool'
+import {
+  type AgentProjectKernelPort,
+  executeAgentProjectRead,
+  executeAgentProjectSearch,
+} from '../src/agent/ProjectKernelPort'
+import type { ProjectToolContext } from '../src/agent/Types'
+import { ProjectEditOperationSchema } from '../src/edit-schema'
+import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/index'
+import { ProjectToolNames } from '../src/project-tool-names'
+
+let root = ''
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'velaros-project-ai-feedback-'))
+})
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
+
+function numberedLines(count: number): string {
+  return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join('\n')
+}
+
+async function prepareFailure(operation: EditOperation): Promise<any> {
+  const project = await createProjectKernel({ root })
+  try {
+    await project.prepareEdit({ operations: [{ operation }] })
+  } catch (error) {
+    return error
+  }
+  throw new Error('prepareEdit 应当失败')
+}
+
+function toolContext(): ProjectToolContext {
+  return {
+    abortSignal: new AbortController().signal,
+    project: {
+      getRootPath: () => root,
+      runInDirectory: async (_path, action) => action(),
+      kernel: async () => createProjectKernel({ root }),
+      runWithApproval: async (action) => action(),
+      prepareMutation: async () => ({
+        approved: true,
+        rootPath: root,
+        switched: false,
+        alreadyAuthorized: true,
+        rejectionMessage: null,
+        message: 'approved',
+        authorizationScope: 'project',
+      }),
+      runCommand: async () => ({}) as never,
+      queryCode: async () => ({}),
+    },
+    system: { canStartBackgroundCommands: () => false },
+    approval: defaultDenyApprovalPort,
+  }
+}
+
+describe('project:read range clamping', () => {
+  test('a batch range beyond one short file keeps every other file and explains the short one', async () => {
+    await writeFile(join(root, 'long.txt'), numberedLines(200))
+    await writeFile(join(root, 'short.txt'), numberedLines(3))
+    const project = await createProjectKernel({ root })
+
+    const result = await executeAgentProjectRead(project, {
+      path: ['long.txt', 'short.txt'],
+      range: { startLine: 150, endLine: 400 },
+      maxChars: 280_000,
+    }, { rootPath: root })
+
+    expect(result.issues).toBeUndefined()
+    expect(result.files[0]?.content?.split('\n')[0]).toBe('line 150')
+    expect(result.files[0]?.content?.split('\n').at(-1)).toBe('line 200')
+    expect(result.files[1]).toMatchObject({
+      snapshot: { path: 'short.txt', exists: true },
+      content: '',
+      totalLines: 3,
+      hasMore: false,
+    })
+    expect(result.files[1]?.note).toContain('文件共 3 行')
+    expect(result.files[1]?.note).toContain('起始行 150')
+  })
+
+  test('a single out-of-range read returns a note instead of failing on both read paths', async () => {
+    await writeFile(join(root, 'small.txt'), 'abc')
+    await writeFile(join(root, 'streamed.txt'), 'abcdefghij\nsecond')
+    const project = await createProjectKernel({ root, corePolicy: { maxFileSizeToReadBytes: 8 } })
+
+    for (const [path, totalLines] of [['small.txt', 1], ['streamed.txt', 2]] as const) {
+      const read = await project.read({ path, range: { startLine: 9 } })
+      expect(read).toMatchObject({ content: '', totalLines, truncated: false, hasMore: false })
+      expect(read.note).toContain(`文件共 ${totalLines} 行`)
+    }
+  })
+
+  test('clamps an endLine beyond the file and drops the endColumn it can no longer anchor', async () => {
+    await writeFile(join(root, 'small.txt'), 'abc\ndef')
+    await writeFile(join(root, 'streamed.txt'), 'abcdefghij\nsecond')
+    const project = await createProjectKernel({ root, corePolicy: { maxFileSizeToReadBytes: 8 } })
+
+    const small = await project.read({ path: 'small.txt', range: { startLine: 1, endLine: 5, endColumn: 2 } })
+    expect(small.content).toBe('abc\ndef')
+    expect(small.note).toContain('忽略 endColumn')
+    const streamed = await project.read({ path: 'streamed.txt', range: { startLine: 2, endLine: 5, endColumn: 2 } })
+    expect(streamed.content).toBe('second')
+    expect(streamed.note).toContain('忽略 endColumn')
+    const plain = await project.read({ path: 'small.txt', range: { startLine: 1, endLine: 5 } })
+    expect(plain.content).toBe('abc\ndef')
+    expect(plain.note).toBeUndefined()
+  })
+
+  test('isolates per-file failures in a batch as path-bearing issues, but still throws for one file', async () => {
+    await writeFile(join(root, 'a.txt'), 'alpha\n')
+    await writeFile(join(root, 'b.txt'), 'beta\n')
+    const project = await createProjectKernel({ root })
+
+    const batch = await executeAgentProjectRead(project, {
+      path: ['a.txt', 'b.txt'],
+      baseRevisions: { 'a.txt': 'stale-revision' },
+    }, { rootPath: root })
+    expect(batch.files.map((file) => file.snapshot.path)).toEqual(['b.txt'])
+    expect(batch.issues).toEqual([{
+      path: 'a.txt',
+      reason: 'failed',
+      code: 'BASE_REVISION_MISMATCH',
+      message: expect.stringContaining('a.txt'),
+    }])
+
+    await expect(executeAgentProjectRead(project, {
+      path: 'a.txt',
+      baseRevisions: { 'a.txt': 'stale-revision' },
+    }, { rootPath: root })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+  })
+
+  test('keeps the remaining column errors but names the file', async () => {
+    await writeFile(join(root, 'cols.txt'), 'abc')
+    const project = await createProjectKernel({ root })
+    await expect(project.read({ path: 'cols.txt', range: { startLine: 1, startColumn: 9 } })).rejects.toMatchObject({
+      reason: 'INVALID_INPUT',
+      message: expect.stringContaining('cols.txt'),
+      details: { path: 'cols.txt', lineLength: 3 },
+    })
+  })
+
+  test('describes per-file clamping in the read tool contract', () => {
+    const description = projectTools[ProjectToolNames.read].description
+    expect(description).toContain('range 对每个文件逐个应用')
+    expect(description).toContain('note')
+  })
+})
+
+describe('text anchor miss diagnostics', () => {
+  const source = [
+    'export function render(template: string) {',
+    '  const pattern = /\\{([^}]*)\\}/g',
+    '  return template.replace(pattern, (_, key) => lookup(key))',
+    '}',
+    '',
+    'function lookup(key: string) {',
+    '  const content = input.snapshot.content ?? "";',
+    "  return key.split('\\n')",
+    '}',
+    '',
+    'function other(key: string) {',
+    '  const content = input.snapshot.content ?? "";',
+    '  return key',
+    '}',
+    '',
+  ].join('\n')
+
+  test('pinpoints a backslash escape difference with the diverging line', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'render.ts',
+      oldText: 'export function render(template: string) {\n  const pattern = /\\\\{([^}]*)\\\\}/g\n  return template',
+      newText: 'x',
+      expectedMatches: 1,
+    })
+
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details).toMatchObject({
+      expected: 1,
+      actual: 0,
+      candidateLine: 1,
+      matchedLines: 1,
+      causes: ['backslash_escape'],
+      firstMismatch: {
+        oldTextLine: 2,
+        fileLine: 2,
+        expected: '  const pattern = /\\\\{([^}]*)\\\\}/g',
+        actual: '  const pattern = /\\{([^}]*)\\}/g',
+      },
+    })
+    expect(error.details.hint).toContain('oldText 该行 4 个，文件 2 个')
+    // 宿主可能只把 message 转给模型，定位线索必须也在消息里。
+    expect(error.message).toContain('文件第 2 行')
+    expect(error.message).toContain('反斜杠')
+    expect(error.suggestedNextAction).toContain('第 1–5 行')
+  })
+
+  test('reports an indentation difference without applying an indentation-insensitive match', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'render.ts',
+      oldText: 'function lookup(key: string) {\n    const content = input.snapshot.content ?? "";',
+      newText: 'x',
+    })
+
+    expect(error.details).toMatchObject({
+      candidateLine: 6,
+      causes: ['indentation'],
+      firstMismatch: { oldTextLine: 2, fileLine: 7 },
+    })
+    expect(error.details.hint).toContain('oldText：4 个空格，文件：2 个空格')
+    expect(await readFile(join(root, 'render.ts'), 'utf8')).toBe(source)
+  })
+
+  test('keeps indentation strict for whitespace-significant files', async () => {
+    const yaml = 'root:\n  child:\n    value: 1\n'
+    await writeFile(join(root, 'config.yaml'), yaml)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'config.yaml',
+      oldText: 'child:\n  value: 1',
+      newText: 'child:\n  value: 2',
+    })
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details.causes).toEqual(['indentation'])
+  })
+
+  test('does not blame CRLF when the file is CRLF and the real difference is content', async () => {
+    await writeFile(join(root, 'win.txt'), 'first\r\nsecond value\r\nthird\r\n')
+    const error = await prepareFailure({
+      type: 'delete_text',
+      path: 'win.txt',
+      oldText: 'first\nsecond valve\nthird',
+    })
+    expect(error.details).toMatchObject({
+      candidateLine: 1,
+      causes: ['content'],
+      firstMismatch: { oldTextLine: 2, fileLine: 2, expected: 'second valve', actual: 'second value' },
+    })
+  })
+
+  test('explains text that appears nowhere in the file', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const error = await prepareFailure({
+      type: 'insert_text_at_anchor',
+      path: 'render.ts',
+      anchorText: 'completely absent\nnothing like this',
+      position: 'after',
+      text: 'x',
+    })
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details).toMatchObject({ causes: ['absent'], oldTextLines: 2 })
+    expect(error.details.candidateLine).toBeUndefined()
+    expect(error.message).toContain('任何非空行都不在文件中')
+  })
+
+  test('reports the end of file when oldText runs past it', async () => {
+    await writeFile(join(root, 'short.txt'), 'alpha\nbeta')
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'short.txt',
+      oldText: 'alpha\nbeta\ngamma',
+      newText: 'x',
+    })
+    expect(error.details).toMatchObject({
+      causes: ['end_of_file'],
+      firstMismatch: { oldTextLine: 3, fileLine: 3, actual: null },
+    })
+  })
+
+  test('surfaces the same diagnosis when an exact snippet target cannot be resolved', async () => {
+    await writeFile(join(root, 'render.ts'), source)
+    const project = await createProjectKernel({ root })
+    const snapshot = (await project.read({ path: 'render.ts' })).snapshot
+    const resolved = createTextAdapter().resolveTarget!({
+      path: 'render.ts',
+      target: { exactSnippet: 'function lookup(key: string) {\n    const content' },
+      snapshot,
+    })
+    expect(resolved).toMatchObject({
+      status: 'not_found',
+      reason: expect.stringContaining('缩进不同'),
+      suggestions: [expect.stringContaining('第 4–10 行')],
+    })
+  })
+})
+
+describe('whitespace-tolerant text matching', () => {
+  test('applies a unique match that differs only in trailing whitespace and says so', async () => {
+    await writeFile(join(root, 'note.ts'), 'const a = 1   \nconst b = 2\n')
+    const result = await projectTools[ProjectToolNames.edit].execute({
+      operations: [{
+        operation: {
+          type: 'replace_text',
+          path: 'note.ts',
+          oldText: 'const a = 1\nconst b = 2',
+          newText: 'const a = 10\nconst b = 20',
+          expectedMatches: 1,
+        },
+      }],
+    }, toolContext())
+
+    expect(await readFile(join(root, 'note.ts'), 'utf8')).toBe('const a = 10\nconst b = 20\n')
+    expect(result.notes).toEqual([expect.stringContaining('行尾空白或换行符')])
+  })
+
+  test('matches CRLF oldText against an LF file and keeps the file on LF', async () => {
+    await writeFile(join(root, 'unix.txt'), 'one\ntwo\nthree\n')
+    const project = await createProjectKernel({ root })
+    const transaction = await project.prepareEdit({
+      operations: [{
+        operation: { type: 'replace_text', path: 'unix.txt', oldText: 'one\r\ntwo', newText: 'uno\r\ndos' },
+      }],
+    })
+    expect(transaction.patches[0]?.metadata?.matchNote).toContain('第 1 行')
+    await project.applyEdit({ transactionId: transaction.transactionId })
+    expect(await readFile(join(root, 'unix.txt'), 'utf8')).toBe('uno\ndos\nthree\n')
+  })
+
+  test('refuses a tolerant match that is not unique and lists where it would land', async () => {
+    const content = 'value = 1  \nnext\nvalue = 1\t\nnext\n'
+    await writeFile(join(root, 'dup.txt'), content)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'dup.txt',
+      oldText: 'value = 1 \nnext',
+      newText: 'x',
+    })
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details.whitespaceTolerantMatches.map((match: { line: number }) => match.line)).toEqual([1, 3])
+    expect(error.message).toContain('未自动应用')
+    expect(await readFile(join(root, 'dup.txt'), 'utf8')).toBe(content)
+  })
+
+  test('does not apply a tolerant match that contradicts the count assertion', async () => {
+    await writeFile(join(root, 'one.txt'), 'alpha  \nbeta\n')
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'one.txt',
+      oldText: 'alpha\nbeta',
+      newText: 'x',
+      expectedMatches: 2,
+    })
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details.whitespaceTolerantMatches).toHaveLength(1)
+  })
+})
+
+describe('text feedback with the TypeScript plugin installed', () => {
+  test('keeps diagnostics, tolerant matching, and read clamping on the Desktop assembly', async () => {
+    await writeFile(join(root, 'mod.ts'), 'export function run() {\n  return "a\\\\b"  \n}\n')
+    const project = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
+
+    const miss = await project.prepareEdit({
+      operations: [{ operation: { type: 'replace_text', path: 'mod.ts', oldText: 'export function run() {\n  return "a\\b"', newText: 'x' } }],
+    }).catch((error: unknown) => error)
+    expect(miss).toMatchObject({ reason: 'TARGET_NOT_FOUND', details: { causes: ['backslash_escape'], candidateLine: 1 } })
+
+    const transaction = await project.prepareEdit({
+      operations: [{ operation: { type: 'replace_text', path: 'mod.ts', oldText: '  return "a\\\\b"\n}', newText: '  return "ok"\n}' } }],
+    })
+    expect(transaction.patches[0]?.metadata?.matchNote).toContain('第 2 行')
+    await project.applyEdit({ transactionId: transaction.transactionId })
+    expect(await readFile(join(root, 'mod.ts'), 'utf8')).toBe('export function run() {\n  return "ok"\n}\n')
+
+    const read = await executeAgentProjectRead(project, {
+      path: ['mod.ts'],
+      range: { startLine: 50 },
+    }, { rootPath: root })
+    expect(read.files[0]).toMatchObject({ content: '', totalLines: 4, note: expect.stringContaining('起始行 50') })
+  })
+})
+
+describe('ambiguous text anchors', () => {
+  const source = [
+    'function first() {',
+    '  const content = read()',
+    '}',
+    'function second() {',
+    '  const content = read()',
+    '}',
+    '',
+  ].join('\n')
+
+  test('lists every match line when the count assertion disagrees with occurrence', async () => {
+    await writeFile(join(root, 'twice.ts'), source)
+    const error = await prepareFailure({
+      type: 'insert_text_at_anchor',
+      path: 'twice.ts',
+      anchorText: '  const content = read()',
+      position: 'before',
+      text: '  // note\n',
+      expectedMatches: 1,
+      occurrence: 1,
+    })
+
+    expect(error.reason).toBe('AMBIGUOUS_TARGET')
+    expect(error.details.matches).toEqual([
+      { occurrence: 1, line: 2, within: 'function first() {' },
+      { occurrence: 2, line: 5, within: 'function second() {' },
+    ])
+    expect(error.message).toContain('第 2、5 行')
+    expect(error.suggestedNextAction).toContain('expectedMatches 改为 2')
+    expect(error.suggestedNextAction).toContain('occurrence')
+  })
+
+  test('lists match lines when no occurrence or replaceAll selects one', async () => {
+    await writeFile(join(root, 'twice.ts'), source)
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'twice.ts',
+      oldText: 'const content = read()',
+      newText: 'const content = load()',
+    })
+    expect(error.reason).toBe('AMBIGUOUS_TARGET')
+    expect(error.message).toContain('第 2、5 行')
+    expect(error.suggestedNextAction).toContain('occurrence（1–2')
+  })
+
+  test('lists match lines when occurrence is out of range and still edits the chosen one', async () => {
+    await writeFile(join(root, 'twice.ts'), source)
+    const error = await prepareFailure({
+      type: 'delete_text',
+      path: 'twice.ts',
+      oldText: '  const content = read()\n',
+      occurrence: 3,
+    })
+    expect(error.reason).toBe('TARGET_NOT_FOUND')
+    expect(error.details.matches.map((match: { line: number }) => match.line)).toEqual([2, 5])
+
+    const project = await createProjectKernel({ root })
+    const transaction = await project.prepareEdit({
+      operations: [{
+        operation: {
+          type: 'replace_text',
+          path: 'twice.ts',
+          oldText: 'const content = read()',
+          newText: 'const content = load()',
+          expectedMatches: 2,
+          occurrence: 2,
+        },
+      }],
+    })
+    await project.applyEdit({ transactionId: transaction.transactionId })
+    expect(await readFile(join(root, 'twice.ts'), 'utf8')).toBe(source.replace(/read\(\)(?![\s\S]*read\(\))/, 'load()'))
+  })
+
+  test('spells out how expectedMatches, occurrence, and replaceAll combine', () => {
+    const replaceText = ProjectEditOperationSchema.options.find(
+      (option) => option.shape.type.value === 'replace_text'
+    )
+    const shape = replaceText?.shape as Record<string, { description?: string }>
+    expect(shape.expectedMatches.description).toContain('总数')
+    expect(shape.expectedMatches.description).toContain('不选择修改位置')
+    expect(shape.occurrence.description).toContain('第 N 个')
+    expect(shape.replaceAll.description).toContain('恰好只有 1 处')
+  })
+})
+
+describe('literal search hints', () => {
+  function emptySearchPort(): AgentProjectKernelPort {
+    return {
+      search: async ({ query }: { query: string }) => ({ query, hits: [] }),
+    } as unknown as AgentProjectKernelPort
+  }
+
+  test('flags | in a literal query that found nothing', async () => {
+    const result = await executeAgentProjectSearch(emptySearchPort(), { query: 'alpha|beta', regex: false })
+    expect(result.hits).toEqual([])
+    expect(result.nextAction).toContain('query 含 |')
+    expect(result.nextAction).toContain('regex: true')
+  })
+
+  test('flags regex escapes in a literal query', async () => {
+    const result = await executeAgentProjectSearch(emptySearchPort(), { query: 'render\\(', regex: false })
+    expect(result.nextAction).toContain('\\(')
+  })
+
+  test('stays silent for regex searches and plain literal misses', async () => {
+    expect((await executeAgentProjectSearch(emptySearchPort(), { query: 'a|b', regex: true })).nextAction).toBeUndefined()
+    expect((await executeAgentProjectSearch(emptySearchPort(), { query: 'plainWord' })).nextAction).toBeUndefined()
+  })
+
+  test('hints on a real literal miss and finds the alternatives once regex is on', async () => {
+    await writeFile(join(root, 'code.ts'), 'const alpha = 1\nconst beta = 2\n')
+    const project = await createProjectKernel({ root })
+    const literal = await executeAgentProjectSearch(project, { query: 'alpha|beta' })
+    expect(literal.hits).toEqual([])
+    expect(literal.nextAction).toContain('query 含 |')
+    const regex = await executeAgentProjectSearch(project, { query: 'alpha|beta', regex: true })
+    expect(regex.hits.length).toBe(2)
+    expect(regex.nextAction).toBeUndefined()
+  })
+})

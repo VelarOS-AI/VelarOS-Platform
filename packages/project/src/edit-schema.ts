@@ -4,15 +4,17 @@ import { isEmpty, isPresent, isTrue } from '@velaros-ai/core'
 
 const ProjectPathSchema = z.string().min(1)
 
+// 三个字段正交：expectedMatches 只断言总数，occurrence / replaceAll 才决定改哪里；
+// 描述要让模型一眼看出组合规则，避免把 expectedMatches=1 当成「只改第一处」。
 const TextMatchSelectionSchema = {
   expectedMatches: z.number().int().positive().optional().describe(
-    '安全断言：文件中必须正好存在该数量的匹配；它不表示要修改多少处。'
+    '总数断言：文件中该文本的匹配总数必须恰好等于此值，否则失败；它不选择修改位置。可与 occurrence 或 replaceAll 同用。'
   ),
   occurrence: z.number().int().positive().optional().describe(
-    '只修改第几个匹配（从 1 开始）；与 replaceAll 互斥。'
+    '按文件中出现顺序只修改第 N 个匹配（从 1 开始）；与 replaceAll 互斥。若同时给 expectedMatches，须等于实际总数而不是 1。'
   ),
   replaceAll: z.boolean().optional().describe(
-    '修改全部匹配；与 occurrence 互斥。'
+    '修改全部匹配；与 occurrence 互斥。occurrence 与 replaceAll 都不传时，文件中必须恰好只有 1 处匹配。'
   ),
 }
 

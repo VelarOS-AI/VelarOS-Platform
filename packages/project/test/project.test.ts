@@ -130,27 +130,18 @@ describe('Project capability', () => {
         path: 'long.txt',
         range: { startLine: 1, startColumn: 7, endLine: 1, endColumn: 4 },
       })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
-      await expect(project.read({
+      expect(await project.read({
         path: 'long.txt',
         range: { startLine: 2 },
-      })).rejects.toMatchObject({
-        reason: 'INVALID_INPUT',
-        details: { totalLines: 1 },
-      })
-      await expect(project.read({
+      })).toMatchObject({ content: '', totalLines: 1, hasMore: false, note: expect.stringContaining('起始行 2') })
+      expect(await project.read({
         path: 'tiny.txt',
         range: { startLine: 2 },
-      })).rejects.toMatchObject({
-        reason: 'INVALID_INPUT',
-        details: { totalLines: 1 },
-      })
-      await expect(project.read({
+      })).toMatchObject({ content: '', totalLines: 1, hasMore: false, note: expect.stringContaining('起始行 2') })
+      expect(await project.read({
         path: 'tiny.txt',
         range: { startLine: 1, endLine: 2, endColumn: 1 },
-      })).rejects.toMatchObject({
-        reason: 'INVALID_INPUT',
-        details: { totalLines: 1 },
-      })
+      })).toMatchObject({ content: 'abc', totalLines: 1, note: expect.stringContaining('忽略 endColumn') })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

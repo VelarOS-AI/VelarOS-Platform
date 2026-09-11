@@ -45,6 +45,8 @@ export interface ReadResult {
   hasMore?: boolean;
   /** 可直接交给下一次 kernel.read 的精确续读参数；长行截断时包含 startColumn。 */
   continuation?: ReadInput;
+  /** 请求范围被钳制或整体越界时的说明：读取照常成功，由调用方决定是否换一个范围。 */
+  note?: string;
 }
 
 export interface FileStatInput {

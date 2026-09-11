@@ -1,11 +1,19 @@
-import { isPresent, isTrue } from '@velaros-ai/core'
+import { isEmpty, isPresent, isTrue } from '@velaros-ai/core'
 
 import { ProjectError } from "../errors.js";
 import type { PreparedPatch } from "../types/edit.js";
 import type { PatchStrategy, PatchStrategyInput } from "../types/patch.js";
 import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
-import { adaptTextToContentLineEndings, countChangedLines, includesLineEndingAware, resolveLineEndingAwareTextMatch } from "../utils/text.js";
+import { adaptTextToContentLineEndings, countChangedLines, includesLineEndingAware, offsetToLine, resolveLineEndingAwareTextMatch } from "../utils/text.js";
+import {
+  describeMatchLines,
+  diagnoseTextMatchMiss,
+  findLineWhitespaceTolerantMatches,
+  locateTextMatches,
+  summarizeTextMatchMiss,
+  textMatchMissNextAction,
+} from "../utils/text-match-feedback.js";
 
 interface TextMatchSelectionOperation {
   expectedMatches?: number
@@ -18,6 +26,8 @@ interface SelectedTextMatches {
   matchedText: string
   replacementText?: string
   totalMatches: number
+  /** 发生行尾空白宽容匹配时写入补丁 metadata，由 Agent 边界回显给模型。 */
+  matchNote?: string
 }
 
 function allMatchIndices(content: string, needle: string): number[] {
@@ -29,6 +39,51 @@ function allMatchIndices(content: string, needle: string): number[] {
     indices.push(index)
     from = index + Math.max(1, needle.length)
   }
+}
+
+/**
+ * 精确匹配为 0 时的唯一出路：忽略行尾空白与换行符后全文唯一、且与断言/occurrence 相容才宽容应用；
+ * 否则抛出带最佳候选与首个分歧行的定位线索，让模型只修正出错的那一行。
+ */
+function selectMissingTextMatch(
+  content: string,
+  needle: string,
+  replacementText: Optional<string>,
+  operationName: string,
+  expected: Optional<number>,
+  occurrence: Optional<number>,
+): SelectedTextMatches {
+  const tolerant = findLineWhitespaceTolerantMatches(content, needle, 2)
+  if (tolerant.length === 1 && (expected ?? 1) === 1 && (occurrence ?? 1) === 1) {
+    const [match] = tolerant
+    return {
+      indices: [match.index],
+      matchedText: match.text,
+      // 换行符差异被宽容时，新文本也跟随文件：LF 区域不写入 CRLF（LF→CRLF 由调用方统一适配）。
+      replacementText: match.text.includes("\r\n") ? replacementText : replacementText?.replace(/\r\n/g, "\n"),
+      totalMatches: 1,
+      matchNote: `${operationName} 的文本与文件第 ${offsetToLine(content, match.index)} 行起的内容仅在行尾空白或换行符（CRLF/LF）上不同；忽略这些差异后全文唯一，已按该位置修改。`,
+    }
+  }
+  const diagnosis = diagnoseTextMatchMiss(content, needle)
+  const tolerantLocations = locateTextMatches(content, tolerant.map((match) => match.index))
+  const tolerantClue = isEmpty(tolerant)
+    ? ""
+    : `忽略行尾空白与换行符差异后可在${describeMatchLines(tolerantLocations, tolerant.length)}命中，但不唯一或与断言/occurrence 不符，未自动应用。`
+  const headline = isPresent(expected)
+    ? `${operationName} 断言 ${expected} 个匹配，实际找到 0 个`
+    : `${operationName} 未找到匹配文本`
+  throw new ProjectError(
+    "TARGET_NOT_FOUND",
+    `${headline}。${summarizeTextMatchMiss(diagnosis)}${tolerantClue}`,
+    {
+      expected: expected ?? 1,
+      actual: 0,
+      ...diagnosis,
+      ...(isEmpty(tolerant) ? {} : { whitespaceTolerantMatches: tolerantLocations }),
+    },
+    textMatchMissNextAction(diagnosis),
+  )
 }
 
 function selectTextMatches(
@@ -52,31 +107,32 @@ function selectTextMatches(
   const expected = operation.expectedMatches
     ?? input.intent.constraints?.expectedMatches
     ?? input.target?.expectedMatches
-  if (isPresent(expected) && found.count !== expected) {
-    throw new ProjectError(
-      found.count === 0 ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
-      `${operationName} 断言 ${expected} 个匹配，实际找到 ${found.count} 个`,
-      { expected, actual: found.count },
-      "请重新读取文件并修正 expectedMatches；它只断言总数，不选择修改位置。",
-    )
-  }
-  if (found.count === 0) {
-    throw new ProjectError(
-      "TARGET_NOT_FOUND",
-      `${operationName} 未找到匹配文本`,
-      { expected: expected ?? 1, actual: 0 },
-      "请重新读取文件并使用当前内容中的精确文本。",
-    )
-  }
+  if (found.count === 0)
+    return selectMissingTextMatch(content, needle, replacementText, operationName, expected, operation.occurrence)
 
   const indices = allMatchIndices(content, found.matchedText)
+  // 行号定位只在失败分支计算：成功路径不为诊断多扫一遍文件。
+  const ambiguity = () => {
+    const matches = locateTextMatches(content, indices)
+    return { matches, lines: describeMatchLines(matches, indices.length) }
+  }
+  if (isPresent(expected) && found.count !== expected) {
+    const { matches, lines } = ambiguity()
+    throw new ProjectError(
+      "AMBIGUOUS_TARGET",
+      `${operationName} 断言 ${expected} 个匹配，实际找到 ${found.count} 个（${lines}）`,
+      { expected, actual: found.count, matches },
+      `expectedMatches 只断言文件中的匹配总数，不选择位置。只改其中一处：把 expectedMatches 改为 ${found.count}（或省略）并用 occurrence（1–${found.count}，按上述行号顺序）选择；全部修改：replaceAll=true；也可加长文本使其唯一。`,
+    )
+  }
   if (isPresent(operation.occurrence)) {
     if (!Number.isInteger(operation.occurrence) || operation.occurrence < 1 || operation.occurrence > indices.length) {
+      const { matches, lines } = ambiguity()
       throw new ProjectError(
         "TARGET_NOT_FOUND",
-        `${operationName} 的 occurrence=${operation.occurrence} 超出 ${indices.length} 个匹配`,
-        { occurrence: operation.occurrence, actual: indices.length },
-        "请重新读取文件并选择现有的匹配序号。",
+        `${operationName} 的 occurrence=${operation.occurrence} 超出 ${indices.length} 个匹配（${lines}）`,
+        { occurrence: operation.occurrence, actual: indices.length, matches },
+        `occurrence 按文件中出现顺序从 1 计数，请在 1–${indices.length} 之间选择。`,
       )
     }
     return {
@@ -94,11 +150,12 @@ function selectTextMatches(
       totalMatches: found.count,
     }
   if (found.count !== 1) {
+    const { matches, lines } = ambiguity()
     throw new ProjectError(
       "AMBIGUOUS_TARGET",
-      `${operationName} 找到 ${found.count} 个匹配，但未指定 occurrence 或 replaceAll`,
-      { expected: expected ?? 1, actual: found.count },
-      "请用 occurrence 选择一个 1-based 匹配，或传 replaceAll=true 修改全部匹配。",
+      `${operationName} 找到 ${found.count} 个匹配（${lines}），但未指定 occurrence 或 replaceAll`,
+      { expected: expected ?? 1, actual: found.count, matches },
+      `请用 occurrence（1–${found.count}，按上述行号顺序）选择一个匹配，或传 replaceAll=true 修改全部匹配。`,
     )
   }
   return {
@@ -232,6 +289,7 @@ export function textPatchStrategy(): PatchStrategy {
             endOffset: end,
             matchedCount: selected.totalMatches,
             modifiedCount: selected.indices.length,
+            matchNote: selected.matchNote,
           })];
         }
         if (!isPresent(start) || !isPresent(end)) {
@@ -280,6 +338,7 @@ export function textPatchStrategy(): PatchStrategy {
             endOffset: at,
             matchedCount: selected.totalMatches,
             modifiedCount: selected.indices.length,
+            matchNote: selected.matchNote,
           }),
         ];
       }
@@ -308,6 +367,7 @@ export function textPatchStrategy(): PatchStrategy {
             endOffset: end,
             matchedCount: selected.totalMatches,
             modifiedCount: selected.indices.length,
+            matchNote: selected.matchNote,
           })];
         }
         if (!isPresent(start) || !isPresent(end)) throw new ProjectError("TARGET_NOT_FOUND", "delete_text 需要已解析目标范围或 oldText");

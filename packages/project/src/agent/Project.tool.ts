@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { createApprovalOperationKey, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
-import { isArray, isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -153,6 +153,8 @@ const projectRead = defineProjectTool<{
   usage: [
     'maxChars 是本次调用内所有文件共享的总字符预算；批量读取会公平分配并回收未使用额度。',
     'hasMore=true 时直接使用对应文件返回的 continuation；长行续读会带 startColumn。',
+    'range 对每个文件逐个应用：endLine 超出时读到该文件末尾；startLine 超出某文件总行数时该文件返回空 content、totalLines 与 note，不影响其它文件。',
+    '批量读取中单个文件读取失败会记入 issues（带 path、code 与原因），其它文件照常返回。',
   ],
   examples: [{ path: ['src/contentHash.ts', 'src/cacheKey.ts'] }],
   schema: z.object({
@@ -244,6 +246,7 @@ const projectSearch = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '在项目文件正文中执行有界文本或正则搜索。',
+  usage: ['regex=false（默认）时 query 按字面匹配，| 不表示「或」；多选一或模式匹配请设 regex=true。'],
   examples: [{ query: 'contentHash', path: 'src' }],
   schema: z.object({
     query: z.string().min(1),
@@ -347,6 +350,7 @@ async function applyProjectEditTransaction(
       })
       try {
         const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
+        const notes = transaction.patches.map((patch) => patch.metadata?.matchNote).filter(isString)
         return {
           changed: !isEmpty(applied.changedFiles),
           transactionId: transaction.transactionId,
@@ -355,6 +359,7 @@ async function applyProjectEditTransaction(
           diff: transaction.diff,
           changedLines: transaction.changedLines,
           risk: transaction.risk,
+          ...(isEmpty(notes) ? {} : { notes }),
         }
       } catch (error) {
         kernel.discardTransaction(transaction.transactionId)
@@ -418,6 +423,10 @@ const projectEdit = defineProjectTool<{
   suitable: ['需要精确替换、锚点插入、符号/导入/JSON 修改，或多个操作必须原子提交。'],
   forbidden: ['不要用它承载单文件报告或整段长文本；创建、覆盖、追加或前置完整内容使用 project:write。'],
   usage: ['每个 operations 项包含 operation；先读取目标修订，再提交最小结构化修改。'],
+  notes: [
+    '文本匹配失败时，错误会给出最接近的候选行、首个分歧行与原因（缩进、行尾空白、反斜杠、引号）；按提示只修正分歧行，不必整段重读。',
+    '仅行尾空白或换行符不同且全文唯一时会宽容应用，并在结果 notes 中说明。',
+  ],
   examples: [{
     operations: [{
       operation: {

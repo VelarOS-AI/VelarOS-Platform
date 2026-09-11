@@ -1,4 +1,4 @@
-import { isEmpty, isNull, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 
@@ -27,6 +27,8 @@ export interface AgentProjectPreparedPatch {
   path: string
   diff: string
   changedLines: number
+  /** 策略写入的补丁说明；Agent 边界只读取其中给模型看的 matchNote。 */
+  metadata?: Readonly<Record<string, unknown>>
 }
 
 export interface AgentProjectPreparedTransaction {
@@ -99,6 +101,8 @@ export interface AgentProjectReadResult {
   remainingLines?: number
   hasMore?: boolean
   continuation?: AgentProjectReadContinuation
+  /** 范围被钳制或起始行越界时的说明；此时读取仍算成功。 */
+  note?: string
 }
 
 export interface AgentProjectReadContinuation {
@@ -129,8 +133,10 @@ interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResult, 'con
 
 export interface AgentProjectReadIssue {
   path: string
-  reason: 'directory' | 'not_found' | 'binary'
+  reason: 'directory' | 'not_found' | 'binary' | 'failed'
   message: string
+  /** reason=failed 时的 Project 错误码。 */
+  code?: string
 }
 
 export interface AgentProjectSearchResult {
@@ -265,7 +271,27 @@ function projectAgentReadResult(
     ...(isUndefined(result.remainingLines) ? {} : { remainingLines: result.remainingLines }),
     ...(isUndefined(result.hasMore) ? {} : { hasMore: result.hasMore }),
     ...(isUndefined(continuation) ? {} : { continuation }),
+    ...(isUndefined(result.note) ? {} : { note: result.note }),
   }
+}
+
+function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectReadIssue> {
+  if (!file.snapshot.exists) return {
+    path: file.snapshot.path,
+    reason: 'not_found',
+    message: '路径不存在，未读取任何内容。',
+  }
+  if (file.snapshot.isDirectory) return {
+    path: file.snapshot.path,
+    reason: 'directory',
+    message: '该路径是目录；project:read 不会枚举目录内容。',
+  }
+  if (file.snapshot.isBinary) return {
+    path: file.snapshot.path,
+    reason: 'binary',
+    message: '该路径是二进制文件；project:read 只读取文本。',
+  }
+  return undefined
 }
 
 /** Project-owned Agent adapter for multi-file aggregation over the injected read port. */
@@ -301,43 +327,38 @@ export async function executeAgentProjectRead(
   }
   let remainingChars = totalMaxChars
   const files: AgentProjectReadResult[] = []
+  const issues: AgentProjectReadIssue[] = []
   for (const [index, filePath] of paths.entries()) {
     const remainingFiles = paths.length - index
     const fileMaxChars = isUndefined(remainingChars)
       ? undefined
       : Math.floor(remainingChars / remainingFiles)
+    // 批量读取是 N 次独立读取：单个文件的领域错误记为带路径的 issue，不连累其它文件；
+    // 单文件调用仍直接抛出，让失败保持为工具失败。
     const result = await project.read({
       ...rest,
       ...(!isUndefined(fileMaxChars) ? { maxChars: fileMaxChars } : {}),
       path: filePath,
       baseRevision: baseRevisions?.[filePath],
+    }).catch((error: unknown) => {
+      if (paths.length === 1 || !isAgentProjectError(error)) throw error
+      issues.push({
+        path: filePath,
+        reason: 'failed',
+        code: error.reason,
+        message: [error.message, error.suggestedNextAction].filter(isString).join(' '),
+      })
+      return undefined
     })
-    files.push(projectAgentReadResult(filePath, result))
+    if (isUndefined(result)) continue
+    const file = projectAgentReadResult(filePath, result)
+    files.push(file)
+    const issue = unreadableIssue(file)
+    if (isPresent(issue)) issues.push(issue)
     if (!isUndefined(remainingChars)) {
       remainingChars = Math.max(0, remainingChars - [...(result.content ?? '')].length)
     }
   }
-  const issues = files.flatMap<AgentProjectReadIssue>((file) => {
-    if (!file.snapshot.exists)
-      return [{
-        path: file.snapshot.path,
-        reason: 'not_found',
-        message: '路径不存在，未读取任何内容。',
-      }]
-    if (file.snapshot.isDirectory)
-      return [{
-        path: file.snapshot.path,
-        reason: 'directory',
-        message: '该路径是目录；project:read 不会枚举目录内容。',
-      }]
-    if (file.snapshot.isBinary)
-      return [{
-        path: file.snapshot.path,
-        reason: 'binary',
-        message: '该路径是二进制文件；project:read 只读取文本。',
-      }]
-    return []
-  })
   const needsPathDiscovery = issues.some(
     (issue) => issue.reason === 'directory' || issue.reason === 'not_found'
   )
@@ -387,6 +408,19 @@ function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHi
 }
 
 /**
+ * 字面量搜索 0 命中时，query 里的正则语法往往说明模型本想做正则/多选一搜索；
+ * 「没搜到」会被误读成「代码里没有」，所以显式点破 regex=false 的字面语义。
+ */
+function literalQueryRegexHint(query: string): Optional<string> {
+  if (query.includes('|'))
+    return 'query 含 |，但 regex=false 按字面匹配（| 不表示「或」）；如需多选一请设 regex: true 后重试。'
+  const token = /\\[bBdDsSwW(){}[\].+*?^$]|\.[*+]/.exec(query)?.[0]
+  if (isPresent(token))
+    return `query 含正则语法 ${token}，但 regex=false 按字面匹配；如需正则匹配请设 regex: true 后重试。`
+  return undefined
+}
+
+/**
  * Project Kernel 搜索结果含 revision/score/backend/adapter/trust 等诊断元数据。
  * Agent 搜索边界只投影定位所需的 path/range/snippet，并同时受条数和序列化字符双重约束；
  * 命中很多时让模型缩小 query/path，而不是把整批内部结果塞进后续每一轮上下文。
@@ -421,6 +455,7 @@ export async function executeAgentProjectSearch(
     serializedChars += hitChars
   }
 
+  const literalHint = isEmpty(hits) && !isTrue(input.regex) ? literalQueryRegexHint(input.query) : undefined
   return {
     query: result.query,
     hits,
@@ -428,6 +463,7 @@ export async function executeAgentProjectSearch(
       truncated: true,
       nextAction: '结果已达到 Agent 搜索输出上限；请收窄 query、path 或 include 后继续，不要改搜父目录。',
     } : {}),
+    ...(isUndefined(literalHint) ? {} : { nextAction: literalHint }),
     ...(isUndefined(result.toolRequirements) ? {} : {
       toolRequirements: result.toolRequirements.map((requirement) => ({
         kind: requirement.kind,

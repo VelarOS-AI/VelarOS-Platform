@@ -70,6 +70,8 @@ interface LineWindowReadResult {
   content: string;
   range: { startLine: number; endLine: number };
   hasMore: boolean;
+  /** 只有读到文件末尾时才确定的总行数，计数口径与内存路径一致（按 \n 切分）。 */
+  totalLines?: number;
 }
 
 type FileStoreAction = "read" | "write" | "search" | "observe";
@@ -190,7 +192,7 @@ interface ReadCursor {
   column: number;
 }
 
-function validateReadRange(range: ReadInput["range"]): void {
+function validateReadRange(filePath: string, range: ReadInput["range"]): void {
   if (!range) return;
   const numericEntries = [
     ["startLine", range.startLine],
@@ -200,15 +202,15 @@ function validateReadRange(range: ReadInput["range"]): void {
   ] as const;
   for (const [name, value] of numericEntries) {
     if (!isUndefined(value) && (!Number.isInteger(value) || value < 1)) {
-      throw new ProjectError("INVALID_INPUT", `${name} 必须是从 1 开始的正整数`, { range, field: name });
+      throw new ProjectError("INVALID_INPUT", `${filePath}：${name} 必须是从 1 开始的正整数`, { path: filePath, range, field: name });
     }
   }
   const startLine = range.startLine ?? 1;
   if (!isUndefined(range.endColumn) && isUndefined(range.endLine)) {
-    throw new ProjectError("INVALID_INPUT", "使用 endColumn 时必须同时提供 endLine", { range });
+    throw new ProjectError("INVALID_INPUT", `${filePath}：使用 endColumn 时必须同时提供 endLine`, { path: filePath, range });
   }
   if (!isUndefined(range.endLine) && range.endLine < startLine) {
-    throw new ProjectError("INVALID_INPUT", "读取范围的 endLine 不能早于 startLine", { range });
+    throw new ProjectError("INVALID_INPUT", `${filePath}：读取范围的 endLine 不能早于 startLine`, { path: filePath, range });
   }
   if (
     (range.endLine ?? startLine) === startLine
@@ -216,11 +218,36 @@ function validateReadRange(range: ReadInput["range"]): void {
     && !isUndefined(range.endColumn)
     && range.endColumn < range.startColumn
   ) {
-    throw new ProjectError("INVALID_INPUT", "同一行的 endColumn 不能早于 startColumn", { range });
+    throw new ProjectError("INVALID_INPUT", `${filePath}：同一行的 endColumn 不能早于 startColumn`, { path: filePath, range });
   }
 }
 
+/**
+ * 起始行越界不是调用错误：同一个 range 常被套用到一批长短不一的文件上，短文件越界时返回
+ * 空内容与总行数并说明原因，批量里的其它文件照常推进。
+ */
+function readPastEnd(snapshot: FileSnapshot, startLine: number, totalLines: number): ReadResult {
+  return {
+    snapshot,
+    content: "",
+    totalLines,
+    truncated: false,
+    hasMore: false,
+    note: `文件共 ${totalLines} 行，请求的起始行 ${startLine} 超出范围，未返回内容；如需文件末尾，请把 startLine 设为不大于 ${totalLines} 的值。`,
+  };
+}
+
+/**
+ * endLine 超出总行数时已按文件末尾钳制；此时 endColumn 失去参照行，只能忽略并说明。
+ * 流式窗口没读到文件末尾时总行数未知，但那也说明 endLine 没有越界。
+ */
+function endColumnClampNote(range: NonNullable<ReadInput["range"]>, totalLines: Optional<number>): Optional<string> {
+  if (isUndefined(totalLines) || isUndefined(range.endColumn) || isUndefined(range.endLine) || range.endLine <= totalLines) return undefined;
+  return `endLine ${range.endLine} 超出文件总行数 ${totalLines}，已读到文件末尾并忽略 endColumn。`;
+}
+
 function sliceWindowColumns(
+  filePath: string,
   content: string,
   range: ReadInput["range"],
   absoluteStartLine: number,
@@ -241,20 +268,20 @@ function sliceWindowColumns(
   if (startColumn > firstLine.length + 1) {
     throw new ProjectError(
       "INVALID_INPUT",
-      `startColumn ${startColumn} 超出第 ${absoluteStartLine} 行长度`,
-      { range, lineLength: firstLine.length },
+      `${filePath}：startColumn ${startColumn} 超出第 ${absoluteStartLine} 行长度 ${firstLine.length}`,
+      { path: filePath, range, lineLength: firstLine.length },
     );
   }
   if (endColumn > lastLine.length + 1) {
     throw new ProjectError(
       "INVALID_INPUT",
-      `endColumn ${endColumn} 超出第 ${absoluteEndLine} 行长度`,
-      { range, lineLength: lastLine.length },
+      `${filePath}：endColumn ${endColumn} 超出第 ${absoluteEndLine} 行长度 ${lastLine.length}`,
+      { path: filePath, range, lineLength: lastLine.length },
     );
   }
   if (lines.length === 1) {
     if (endColumn < startColumn) {
-      throw new ProjectError("INVALID_INPUT", "同一行的 endColumn 不能早于 startColumn", { range });
+      throw new ProjectError("INVALID_INPUT", `${filePath}：同一行的 endColumn 不能早于 startColumn`, { path: filePath, range });
     }
     return {
       content: firstLine.slice(startColumn - 1, endColumn - 1),
@@ -434,6 +461,7 @@ async function readTextLineWindow(
   const chunks: Buffer[] = [];
   let currentLine = 1;
   let hasMore = false;
+  let totalLines: Optional<number>;
   const outputLimitCandidates = [limits.maxBytes, limits.maxChars].filter(
     (value): value is number => !isUndefined(value),
   );
@@ -485,24 +513,7 @@ async function readTextLineWindow(
     if (!hasMore) {
       const decoded = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? "";
       const parts = decoded.split("\n");
-      if (startLine > parts.length) {
-        throw new ProjectError(
-          "INVALID_INPUT",
-          `startLine ${startLine} 超出文件总行数 ${parts.length}`,
-          { range, totalLines: parts.length },
-        );
-      }
-      if (
-        !isUndefined(range.endColumn)
-        && !isUndefined(range.endLine)
-        && range.endLine > parts.length
-      ) {
-        throw new ProjectError(
-          "INVALID_INPUT",
-          `endLine ${range.endLine} 超出文件总行数 ${parts.length}，无法应用 endColumn`,
-          { range, totalLines: parts.length },
-        );
-      }
+      totalLines = parts.length;
       currentLine = 1;
       lines.length = 0;
       for (const line of parts) {
@@ -520,6 +531,7 @@ async function readTextLineWindow(
       endLine: Math.max(startLine, startLine + lines.length - 1),
     },
     hasMore,
+    totalLines,
   };
 }
 
@@ -735,7 +747,7 @@ export class FileStore {
     input: ReadInput,
     options?: { skipFileFilter?: boolean }
   ): Promise<ReadResult> {
-    validateReadRange(input.range);
+    validateReadRange(input.path, input.range);
     if (!isUndefined(input.maxBytes) && (!Number.isInteger(input.maxBytes) || input.maxBytes < 1)) {
       throw new ProjectError("INVALID_INPUT", "maxBytes 必须是正整数", { maxBytes: input.maxBytes });
     }
@@ -809,7 +821,11 @@ export class FileStore {
         maxBytes: input.maxBytes,
         maxChars: input.maxChars,
       });
+      const requestedStartLine = range.startLine ?? 1;
+      if (isPresent(window.totalLines) && requestedStartLine > window.totalLines)
+        return readPastEnd(snap, requestedStartLine, window.totalLines);
       const selected = sliceWindowColumns(
+        snap.path,
         window.content,
         range,
         window.range.startLine,
@@ -843,6 +859,7 @@ export class FileStore {
           hasMore,
           continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
         ),
+        note: endColumnClampNote(range, window.totalLines),
       };
     }
 
@@ -853,26 +870,10 @@ export class FileStore {
     if (hasRange) {
       const range = input.range!;
       const requestedStartLine = range.startLine ?? 1;
-      if (requestedStartLine > totalLines) {
-        throw new ProjectError(
-          "INVALID_INPUT",
-          `startLine ${requestedStartLine} 超出文件总行数 ${totalLines}`,
-          { range, totalLines },
-        );
-      }
-      if (
-        !isUndefined(range.endColumn)
-        && !isUndefined(range.endLine)
-        && range.endLine > totalLines
-      ) {
-        throw new ProjectError(
-          "INVALID_INPUT",
-          `endLine ${range.endLine} 超出文件总行数 ${totalLines}，无法应用 endColumn`,
-          { range, totalLines },
-        );
-      }
+      if (requestedStartLine > totalLines) return readPastEnd(snap, requestedStartLine, totalLines);
       const sliced = sliceLines(rawContent, range.startLine, range.endLine);
       const selected = sliceWindowColumns(
+        snap.path,
         sliced.content,
         range,
         sliced.range.startLine,
@@ -911,6 +912,7 @@ export class FileStore {
           hasMore,
           continuationInput(input, snap.path, snap.revision, cursor, limited.truncated),
         ),
+        note: endColumnClampNote(range, totalLines),
       };
     }
 
