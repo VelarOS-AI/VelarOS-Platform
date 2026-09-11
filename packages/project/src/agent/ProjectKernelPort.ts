@@ -49,6 +49,7 @@ export interface AgentProjectApplyResult {
   newRevisions: Record<string, string>
   rebasedFiles?: string[]
   gitTrackedFiles?: string[]
+  gitUntrackedFiles?: string[]
 }
 
 export interface AgentProjectValidationResult {

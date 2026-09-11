@@ -341,6 +341,23 @@ const DefaultImplicitSearchExcludeGlobs = ["node_modules/**", ".git/**", "dist/*
 // 全部事务（含已准备未应用的）总量兜底；正常 prepare→apply 不受影响。
 const MaxRetainedTransactions = 1000;
 
+/**
+ * 判定 intent-to-add 的 `git diff --cached` 探针：只列路径、按 NUL 分隔（路径原样输出，不受
+ * core.quotePath 转义）；`--relative` 让输出与 pathspec 一样相对 cwd——内核根可能是仓库子目录；
+ * `--no-renames` 防止改名配对只打印新路径、把旧路径藏掉。
+ */
+const IntentToAddProbeArgs = ["diff", "--cached", "--name-only", "-z", "--relative", "--no-renames"] as const;
+
+/** `git … -z` 的路径输出：每条以 NUL 结尾，切开后去掉末尾空段。 */
+function splitNulTerminatedPaths(output: string): string[] {
+  return output.split("\0").filter(Boolean);
+}
+
+/** 事务 metadata 里记下的 git 索引路径清单；它随事务状态持久化，读回时只认字符串项。 */
+function metadataPaths(value: unknown): string[] {
+  return isArray(value) ? value.filter(isString) : [];
+}
+
 /** applyEdit 失败回滚所需的单个路径原始状态。 */
 interface ApplyRestoreState {
   existedBefore: boolean;
@@ -629,6 +646,15 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     });
   }
 
+  /**
+   * 对内核给出的具体文件路径跑 git 子命令。`--literal-pathspecs` 让路径只按字面匹配：否则名为
+   * `[s]taged.txt` 的文件会被当成 glob，连带命中用户真实暂存的 `staged.txt`，`git rm --cached`
+   * 就把它一起移出索引。
+   */
+  private async runGitOnPaths(args: readonly string[], paths: readonly string[]) {
+    return this.runGit(["--literal-pathspecs", ...args, "--", ...paths]);
+  }
+
   private async isInsideGitWorkTree(): Promise<boolean> {
     // 工作区根目录的 git 仓库归属在会话内是恒定的；缓存结果避免每次 apply/rollback 都新起 git 子进程。
     if (isPresent(this.gitWorkTreeCache)) return this.gitWorkTreeCache;
@@ -641,7 +667,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const files = [...new Set(paths)].filter(Boolean);
     if (isEmpty(files) || !(await this.isInsideGitWorkTree())) return [];
     // intent-to-add 让新建文件进入 git diff 视野，但不会暂存文件内容。
-    const result = await this.runGit(["add", "--intent-to-add", "--", ...files]);
+    const result = await this.runGitOnPaths(["add", "--intent-to-add"], files);
     if (result.exitCode === 0) return files;
     this.providers.logger?.warn?.("project.git.trackCreatedFiles.failed", {
       files,
@@ -653,13 +679,61 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   private async untrackCreatedFilesFromGit(paths: string[]): Promise<string[]> {
     const files = [...new Set(paths)].filter(Boolean);
     if (isEmpty(files) || !(await this.isInsideGitWorkTree())) return [];
-    const result = await this.runGit(["rm", "--cached", "--ignore-unmatch", "--", ...files]);
+    const result = await this.runGitOnPaths(["rm", "--cached", "--ignore-unmatch"], files);
     if (result.exitCode === 0) return files;
     this.providers.logger?.warn?.("project.git.untrackCreatedFiles.failed", {
       files,
       stderr: result.stderr,
     });
     return [];
+  }
+
+  /**
+   * 被删路径在索引里若只剩 intent-to-add 条目，就把条目撤掉，否则 `git status` 会留下一条删除残留。
+   * 带真实内容的索引项（用户 `git add` 过的、已提交的）一律不动：索引照旧，删除留在工作区等用户处理。
+   */
+  private async untrackDeletedIntentToAddFromGit(paths: string[]): Promise<string[]> {
+    const files = [...new Set(paths)].filter(Boolean);
+    if (isEmpty(files) || !(await this.isInsideGitWorkTree())) return [];
+    const intentToAddFiles = await this.listIntentToAddFiles(files);
+    if (isEmpty(intentToAddFiles)) return [];
+    const result = await this.runGitOnPaths(["rm", "--cached", "--ignore-unmatch"], intentToAddFiles);
+    if (result.exitCode === 0) return intentToAddFiles;
+    this.providers.logger?.warn?.("project.git.untrackDeletedIntentToAdd.failed", {
+      files: intentToAddFiles,
+      stderr: result.stderr,
+    });
+    return [];
+  }
+
+  /**
+   * 从 files 里挑出索引中是 intent-to-add（`git add -N`）的条目。
+   *
+   * 判据：diff-options 文档规定 `--ita-invisible-in-index` 把 intent-to-add 条目当作索引里不存在，
+   * `--ita-visible-in-index` 把它当作空文件；两个开关只改变这一类条目的呈现，所以同一组路径在两种
+   * 视图下 `diff --cached` 结果的差集恰好是 intent-to-add 条目。真实暂存的新文件（含空文件）两种
+   * 视图都显示为新增；已提交且未改动的文件两种视图都不显示——只看「在索引里、但 `diff --cached` 不
+   * 显示」会把后者误判成 intent-to-add，撤掉它等于替用户暂存了一次删除。
+   *
+   * 两个开关都显式给出、不赌默认值：文档写默认可见，porcelain `git diff` 实测默认不可见（git 2.54）。
+   * 开关被文档标注为实验性；将来若被移除，git 以未知参数失败，这里只记告警、返回空——失败方向永远
+   * 是留下残留，而不是误动真实暂存。
+   */
+  private async listIntentToAddFiles(files: readonly string[]): Promise<string[]> {
+    const [visible, invisible] = await Promise.all([
+      this.runGitOnPaths([...IntentToAddProbeArgs, "--ita-visible-in-index"], files),
+      this.runGitOnPaths([...IntentToAddProbeArgs, "--ita-invisible-in-index"], files),
+    ]);
+    if (visible.exitCode !== 0 || invisible.exitCode !== 0) {
+      this.providers.logger?.warn?.("project.git.listIntentToAdd.failed", {
+        files,
+        stderr: [visible.stderr, invisible.stderr].filter(Boolean).join("\n"),
+      });
+      return [];
+    }
+    const shownWhenVisible = new Set(splitNulTerminatedPaths(visible.stdout));
+    const shownWhenInvisible = new Set(splitNulTerminatedPaths(invisible.stdout));
+    return files.filter((file) => shownWhenVisible.has(file) && !shownWhenInvisible.has(file));
   }
 
   private defaultExcludeGitignoredForRoot(root?: string): boolean | undefined {
@@ -2067,14 +2141,18 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         throw stateError;
       }
 
-      // Git intent-to-add 是已提交文件事务的附带可见性，不进入崩溃恢复提交点。
-      const gitTrackedFiles = await this.trackCreatedFilesInGit(createdFiles);
-      if (gitTrackedFiles.length > 0) {
-        tx.metadata = {
-          ...(tx.metadata ?? {}),
-          gitTrackedFiles,
-        };
-      }
+      // Git intent-to-add 是已提交文件事务的附带可见性，不进入崩溃恢复提交点。按路径的最终状态处理：
+      // 仍在的新建文件挂上 intent-to-add（同一事务里建了又删的不挂——git add 遇到不存在的路径会整批
+      // 失败）；最终被删的路径撤掉残留的 intent-to-add 条目（rename_file 的旧路径同样走这里）。
+      const gitTrackedFiles = await this.trackCreatedFilesInGit(
+        createdFiles.filter((pathValue) => newRevisions[pathValue] !== "deleted"),
+      );
+      const gitUntrackedFiles = await this.untrackDeletedIntentToAddFromGit(
+        tx.changedFiles.filter((pathValue) => newRevisions[pathValue] === "deleted"),
+      );
+      if (gitTrackedFiles.length > 0) tx.metadata = { ...(tx.metadata ?? {}), gitTrackedFiles };
+      // rollback 恢复这些文件时据此把 intent-to-add 挂回去。
+      if (gitUntrackedFiles.length > 0) tx.metadata = { ...(tx.metadata ?? {}), gitUntrackedFiles };
       this.retainTerminalTransaction(tx.transactionId);
       this.persistCommittedTransactionState(tx.transactionId, "git metadata or terminal retention");
       const result: ApplyResult = {
@@ -2085,6 +2163,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         newRevisions,
         rebasedFiles: optionalWhen(rebasedFiles.size, ([...rebasedFiles])),
         gitTrackedFiles: optionalWhen((gitTrackedFiles.length > 0), gitTrackedFiles),
+        gitUntrackedFiles: optionalWhen((gitUntrackedFiles.length > 0), gitUntrackedFiles),
       };
       await this.hooks.emit("AfterApplyEdit", this, result);
       this.journal.record({ actor: "system", action: "apply_edit", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(","), risk: tx.risk });
@@ -2171,7 +2250,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return { ...result, ok: result.diagnostics.every((d) => d.severity !== "error") };
   }
 
-  /** 回滚已应用事务，并撤销为新建文件设置的 git 跟踪标记。 */
+  /** 回滚已应用事务，并把 apply 对 git intent-to-add 标记的增删一并撤回。 */
   public async rollback(input: RollbackInput): Promise<RollbackResult> {
     return this.runTransactionCommand(input.transactionId, () => this.rollbackSerialized(input));
   }
@@ -2275,10 +2354,9 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         throw stateError;
       }
 
-      const gitTrackedFiles = isArray(tx.metadata?.gitTrackedFiles)
-        ? tx.metadata.gitTrackedFiles.filter(isString)
-        : [];
-      const gitUntrackedFiles = await this.untrackCreatedFilesFromGit(gitTrackedFiles);
+      const gitUntrackedFiles = await this.untrackCreatedFilesFromGit(metadataPaths(tx.metadata?.gitTrackedFiles));
+      // apply 为被删路径撤掉的 intent-to-add 随文件恢复挂回去，git 视野回到 apply 之前。
+      const gitTrackedFiles = await this.trackCreatedFilesInGit(metadataPaths(tx.metadata?.gitUntrackedFiles));
       this.retainTerminalTransaction(tx.transactionId);
       this.persistCommittedTransactionState(tx.transactionId, "git metadata or terminal retention");
       const result: RollbackResult = {
@@ -2286,6 +2364,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         transactionId: tx.transactionId,
         changedFiles: tx.changedFiles,
         gitUntrackedFiles: optionalWhen((gitUntrackedFiles.length > 0), gitUntrackedFiles),
+        gitTrackedFiles: optionalWhen((gitTrackedFiles.length > 0), gitTrackedFiles),
       };
       await this.hooks.emit("AfterRollback", this, result);
       this.journal.record({ actor: "system", action: "rollback", transactionId: tx.transactionId, outputSummary: tx.changedFiles.join(",") });

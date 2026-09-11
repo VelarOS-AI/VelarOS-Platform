@@ -265,7 +265,10 @@ export interface ApplyResult {
   /** 写入后的 revision；被删除路径使用 "deleted"。 */
   newRevisions: Record<string, string>;
   rebasedFiles?: string[];
+  /** 新建后挂上 git intent-to-add 的路径。 */
   gitTrackedFiles?: string[];
+  /** 删除后撤掉残留 intent-to-add 索引项的路径；带真实暂存内容的索引项不会出现在这里，也不会被改动。 */
+  gitUntrackedFiles?: string[];
 }
 
 export interface RollbackInput {
@@ -276,5 +279,8 @@ export interface RollbackResult {
   status: "rolled_back";
   transactionId: string;
   changedFiles: string[];
+  /** 回滚删掉新建文件后撤掉的 git 索引项。 */
   gitUntrackedFiles?: string[];
+  /** 回滚恢复的文件里，apply 删除时撤掉过 intent-to-add、现已挂回的路径。 */
+  gitTrackedFiles?: string[];
 }
