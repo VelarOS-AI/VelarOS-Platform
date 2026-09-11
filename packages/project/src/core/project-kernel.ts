@@ -91,6 +91,7 @@ import { id } from "../utils/id.js";
 import { DEFAULT_CORE_POLICY } from "./defaults.js";
 import { FileStore } from "./file-store.js";
 import { LockManager } from "./lock-manager.js";
+import { TransactionCoordinator } from "./transaction-coordinator.js";
 
 function resolveEvidenceTargetRange(
   storedTarget?: ResolvedTarget,
@@ -273,6 +274,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   readonly validators = new ValidatorRegistry();
   readonly fixers = new FixerRegistry();
   readonly locks = new LockManager();
+  readonly transactionCoordinator = new TransactionCoordinator();
   readonly store: FileStore;
   private readonly changeFeedWriter: ProjectChangeFeedWriter;
   private readonly transactionState?: FileProjectTransactionStateStore;
@@ -1367,6 +1369,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const target = this.getTarget(intent.targetId);
       let snapshot: FileSnapshot | undefined;
       const pathForOp = target?.path ?? operationPath(intent.operation);
+      let renameTargetSnapshot: FileSnapshot | undefined;
       if (pathForOp) {
         const hasOverlay = !!options.contentOverlay?.has(pathForOp);
         const stagedContent = optionalWhen(hasOverlay, (options.contentOverlay?.get(pathForOp)));
@@ -1378,8 +1381,35 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         if (target && this.policy.requireBaseRevision && !hasOverlay && snapshot.revision !== target.baseRevision) {
           throw revisionMismatch(`${target.path} 的目标 revision 已变化`, { expected: target.baseRevision, actual: snapshot.revision });
         }
-        if (!target && this.policy.requireBaseRevision && !hasOverlay && processed.baseRevision && snapshot.exists && snapshot.revision !== processed.baseRevision) {
-          throw revisionMismatch(`${pathForOp} 的文件 revision 已变化`, { expected: processed.baseRevision, actual: snapshot.revision });
+        const requestedBaseRevision = processed.baseRevisions?.[pathForOp] ?? processed.baseRevision;
+        if (!target && this.policy.requireBaseRevision && !hasOverlay && requestedBaseRevision && snapshot.revision !== requestedBaseRevision) {
+          throw revisionMismatch(`${pathForOp} 的文件 revision 已变化`, {
+            path: pathForOp,
+            expected: requestedBaseRevision,
+            actual: snapshot.exists ? snapshot.revision : "deleted",
+          });
+        }
+        if (intent.operation.type === "rename_file") {
+          renameTargetSnapshot = await this.enrichSnapshot(
+            await this.store.snapshot(intent.operation.to, true),
+          );
+          if (renameTargetSnapshot.exists) {
+            throw new ProjectError(
+              "CONFLICT_WITH_EXTERNAL_EDIT",
+              `重命名目标已存在，拒绝覆盖：${intent.operation.to}`,
+              { path: intent.operation.to, actual: renameTargetSnapshot.revision },
+              "请选择一个不存在的目标路径，或先单独处理现有目标文件。",
+            );
+          }
+          const requestedTargetRevision = processed.baseRevisions?.[intent.operation.to];
+          if (requestedTargetRevision && renameTargetSnapshot.revision !== requestedTargetRevision) {
+            throw revisionMismatch(`${intent.operation.to} 的目标 revision 已变化`, {
+              path: intent.operation.to,
+              expected: requestedTargetRevision,
+              actual: "deleted",
+            });
+          }
+          baseSnapshots.push(renameTargetSnapshot);
         }
         baseSnapshots.push(snapshot);
       }
@@ -1393,11 +1423,20 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           if (adapterPrepared?.length) break;
         }
       }
-      if (adapterPrepared?.length) patches.push(...this.withIntentMetadata(adapterPrepared, intent));
+      let intentPatches: PreparedPatch[];
+      if (adapterPrepared?.length) intentPatches = adapterPrepared;
       else {
         const strategy = this.patchStrategies.select({ intent, target, snapshot, policy: this.policy });
-        patches.push(...this.withIntentMetadata(await strategy.prepare({ intent, target, snapshot, policy: this.policy }), intent));
+        intentPatches = await strategy.prepare({ intent, target, snapshot, policy: this.policy });
       }
+      if (renameTargetSnapshot) {
+        intentPatches = intentPatches.map((patchValue) =>
+          patchValue.metadata?.op === "rename_file_create"
+            ? { ...patchValue, baseRevision: renameTargetSnapshot.revision }
+            : patchValue
+        );
+      }
+      patches.push(...this.withIntentMetadata(intentPatches, intent));
     }
 
     const preparedPatches =
@@ -1503,12 +1542,27 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return tx;
   }
 
+  private async runTransactionCommand<T>(
+    transactionId: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    return this.transactionCoordinator.run(transactionId, action);
+  }
+
   /**
    * 丢弃一个尚未应用的已暂存事务，把它从内存事务表移除。
    * 用于 dryRun 预览：预览只想看 diff，不该留下可被 commit 或污染 `diff()` 合并的暂存事务。
    * 已应用的事务不能用本方法（应走 rollback）。
    */
   public discardTransaction(transactionId: string): { discarded: boolean } {
+    if (this.transactionCoordinator.isBusy(transactionId)) {
+      throw new ProjectError(
+        "INVALID_INPUT",
+        `事务正在执行，不能丢弃：${transactionId}`,
+        { transactionId },
+        "请等待当前事务操作完成后，再根据最新事务状态决定是否丢弃。",
+      );
+    }
     const tx = this.transactions.get(transactionId);
     if (!tx) return { discarded: false };
     if (tx.appliedAt || tx.status === "applied") {
@@ -1520,6 +1574,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 在尚未应用的事务上追加编辑操作并刷新事务摘要。 */
   public async amendEdit(input: AmendEditInput): Promise<PreparedTransaction> {
+    return this.runTransactionCommand(input.transactionId, () => this.amendEditSerialized(input));
+  }
+
+  private async amendEditSerialized(input: AmendEditInput): Promise<PreparedTransaction> {
     await this.hooks.emit("BeforePrepareEdit", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
@@ -1675,6 +1733,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 应用已准备好的事务，并记录新旧 revision。 */
   public async applyEdit(input: ApplyEditInput): Promise<ApplyResult> {
+    return this.runTransactionCommand(input.transactionId, () => this.applyEditSerialized(input));
+  }
+
+  private async applyEditSerialized(input: ApplyEditInput): Promise<ApplyResult> {
     await this.hooks.emit("BeforeApplyEdit", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
@@ -1711,7 +1773,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           if (!patch.baseRevision) continue;
           const current = await this.store.snapshot(patch.path, true, { skipFileFilter: true });
           oldRevisions[patch.path] = current.revision;
-          if (!current.exists || current.revision === patch.baseRevision) continue;
+          if (current.revision === patch.baseRevision) continue;
           const canReplayRolledBackPatch =
             isRestoringRolledBackTransaction &&
             isString(patch.oldContent) &&
@@ -1879,6 +1941,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 回滚已应用事务，并撤销为新建文件设置的 git 跟踪标记。 */
   public async rollback(input: RollbackInput): Promise<RollbackResult> {
+    return this.runTransactionCommand(input.transactionId, () => this.rollbackSerialized(input));
+  }
+
+  private async rollbackSerialized(input: RollbackInput): Promise<RollbackResult> {
     await this.hooks.emit("BeforeRollback", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
@@ -1888,6 +1954,43 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const lock = await this.locks.lock(tx.changedFiles, `rollback:${tx.transactionId}`);
     try {
       const reversed = [...tx.patches].reverse();
+      const appliedRevisions = this.transactionProjections.get(tx.transactionId)?.revisions
+        ?? this.changeFeed.get(tx.transactionId)?.revisions
+        ?? [];
+      for (const pathValue of tx.changedFiles) {
+        const expectedRevision = appliedRevisions.find((revision) => revision.path === pathValue)?.after;
+        if (!expectedRevision) {
+          throw new ProjectError(
+            "CONFLICT_WITH_EXTERNAL_EDIT",
+            `无法安全回滚事务 ${tx.transactionId}：缺少 apply 后 revision（${pathValue}）`,
+            { transactionId: tx.transactionId, path: pathValue },
+            "请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。",
+          );
+        }
+        const current = await this.store.snapshot(pathValue, true, { skipFileFilter: true });
+        const finalPatch = [...tx.patches].reverse().find((patchValue) => patchValue.path === pathValue);
+        const expectedContent = finalPatch && !this.isDeletePatch(finalPatch)
+          ? finalPatch.newContent
+          : undefined;
+        const matchesAppliedState = expectedRevision === "deleted"
+          ? !current.exists
+          : current.exists
+            && (current.revision === expectedRevision
+              || (isString(expectedContent) && current.content === expectedContent));
+        if (!matchesAppliedState) {
+          throw new ProjectError(
+            "CONFLICT_WITH_EXTERNAL_EDIT",
+            `事务应用后文件已被外部修改，拒绝回滚：${pathValue}`,
+            {
+              transactionId: tx.transactionId,
+              path: pathValue,
+              expectedRevision,
+              actualRevision: current.exists ? current.revision : "deleted",
+            },
+            "请重新读取冲突文件并人工合并；不要重试会覆盖当前内容的回滚。",
+          );
+        }
+      }
       // 预检：非新建补丁必须带可还原的旧正文。否则用 "" 写盘会把文件截断为空（静默丢数据），
       // 宁可整体失败也不半改。
       for (const patch of reversed) {

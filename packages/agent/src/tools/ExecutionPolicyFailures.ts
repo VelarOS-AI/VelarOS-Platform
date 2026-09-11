@@ -1,4 +1,4 @@
-import { isArray, isEmpty,isNonBlankString, isObject, isString, optionalWhen } from '@velaros-ai/core'
+import { isArray, isEmpty,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
@@ -6,6 +6,7 @@ import type { ToolSpaceRecoveryGuide } from './tool-space-recovery'
 
 interface ErrorCauseRecord {
   reason?: unknown
+  details?: unknown
   suggestedNextAction?: unknown
   cause?: unknown
 }
@@ -43,6 +44,18 @@ function extractNestedErrorReason(error: unknown): LooseOptional<string> {
     seen.add(current)
     const record = current as ErrorCauseRecord
     if (isNonBlankString(record.reason)) return record.reason.trim()
+    current = record.cause
+  }
+  return null
+}
+
+function extractNestedErrorDetails(error: unknown): LooseOptional<Record<string, unknown>> {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && isObject(current) && !seen.has(current)) {
+    seen.add(current)
+    const record = current as ErrorCauseRecord
+    if (isPlainObject(record.details)) return record.details
     current = record.cause
   }
   return null
@@ -164,11 +177,12 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)
 
   const nestedReason = extractNestedErrorReason(error)
+  const nestedDetails = extractNestedErrorDetails(error)
   const nestedSuggestedNextAction = extractNestedSuggestedNextAction(error)
   // 独立领域包可能用 reason 承载稳定机器码。AppError.from 会保留 cause，但不会把领域 reason
   // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
   const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code
-  const details: Record<string, unknown> = {}
+  const details: Record<string, unknown> = { ...(nestedDetails ?? {}) }
   if (nestedReason) {
     details.reason = nestedReason
   }
@@ -199,6 +213,7 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
 export {
   buildExecutionFailureResult,
   buildToolFailureResult,
+  extractNestedErrorDetails,
   extractNestedErrorReason,
 }
 export type { RuntimeToolIssue, ToolFailureBuildOptions, ToolFailureResult }

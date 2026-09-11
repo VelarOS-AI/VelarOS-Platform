@@ -30,6 +30,33 @@ describe('tool execution failure projection', () => {
     ])
   })
 
+  test('preserves independent domain details through an AppError cause', () => {
+    const domainError = Object.assign(new Error('事务应用后文件已被外部修改'), {
+      reason: 'CONFLICT_WITH_EXTERNAL_EDIT',
+      details: {
+        path: 'src/a.ts',
+        expectedRevision: 'rev_expected',
+        actualRevision: 'rev_actual',
+      },
+      suggestedNextAction: '请重新读取冲突文件并人工合并。',
+    })
+
+    const result = buildExecutionFailureResult('project:rollback', AppError.from(domainError))
+
+    expect(result).toMatchObject({
+      error: 'tool_execution_failed',
+      code: 'CONFLICT_WITH_EXTERNAL_EDIT',
+      details: {
+        reason: 'CONFLICT_WITH_EXTERNAL_EDIT',
+        code: 'CONFLICT_WITH_EXTERNAL_EDIT',
+        path: 'src/a.ts',
+        expectedRevision: 'rev_expected',
+        actualRevision: 'rev_actual',
+      },
+    })
+    expect(result.nextActions).toEqual(['请重新读取冲突文件并人工合并。'])
+  })
+
   test('preserves runtime diagnosis when an embedded failure crosses the AppError boundary', () => {
     const embedded = buildToolFailureResult(
       'schema_validation_failed',

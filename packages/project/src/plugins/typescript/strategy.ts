@@ -1,6 +1,7 @@
 import { isEmpty,isPresent } from "@velaros-ai/core";
 
 import { ProjectError } from "../../errors.js";
+import { removeNamedImportBinding } from "../../patch/import-mutation.js";
 import type { PreparedPatch } from "../../types/edit.js";
 import type { PatchStrategy, PatchStrategyInput } from "../../types/patch.js";
 import { unifiedDiff } from "../../utils/diff.js";
@@ -163,28 +164,32 @@ function removeImport(input: PatchStrategyInput): PreparedPatch[] {
   if (!input.snapshot || input.snapshot.isBinary) throw new ProjectError("NOT_SUPPORTED", "remove_import 需要 JS/TS 文本 snapshot");
   const op: any = input.intent.operation;
   const content = input.snapshot.content ?? "";
+  if (op.importStatement) {
+    const statement = String(op.importStatement).trim();
+    const normalized = statement.endsWith(";") ? statement : `${statement};`;
+    const start = content.indexOf(normalized);
+    if (start < 0) throw new ProjectError("TARGET_NOT_FOUND", "未找到 import 语句");
+    let end = start + normalized.length;
+    if (content[end] === "\n") end++;
+    return [patch(input.snapshot.path, input.snapshot.revision, content, content.slice(0, start) + content.slice(end), { op: "remove_import", importStatement: normalized })];
+  }
+  const moduleSpecifier = op.moduleSpecifier ?? op.module;
   const parsed = parseTs(input.snapshot.path, content);
-  const imports = parsed.symbols.filter((s) => s.kind === "import" && (!op.module || s.name === op.module));
-  if (isEmpty(imports)) throw new ProjectError("TARGET_NOT_FOUND", `未找到 import：${op.module ?? op.name ?? "<any>"}`);
-  if (imports.length > 1 && !op.module) throw new ProjectError("AMBIGUOUS_TARGET", `remove_import 找到 ${imports.length} 个 import；请指定 module`);
+  const imports = parsed.symbols.filter((s) => s.kind === "import" && (!moduleSpecifier || s.name === moduleSpecifier));
+  if (isEmpty(imports)) throw new ProjectError("TARGET_NOT_FOUND", `未找到 import：${moduleSpecifier ?? op.name ?? "<any>"}`);
+  if (imports.length > 1) throw new ProjectError("AMBIGUOUS_TARGET", `remove_import 找到 ${imports.length} 个 import；请用 importStatement 指定完整语句`);
   const target = imports[0];
   const start = target.range.startOffset ?? 0;
-  let end = target.range.endOffset ?? 0;
-  if (content[end] === "\n") end++;
-  // 如果传入 name，优先只从 named import 列表里移除它。
+  const statementEnd = target.range.endOffset ?? 0;
+  let removalEnd = statementEnd;
+  if (content[removalEnd] === "\n") removalEnd++;
+  // 带 name 时只删该 binding；最后一个 named binding 被删且没有 default 时才整条删除。
   if (op.name) {
-    const stmt = content.slice(start, end);
-    const braceMatch = stmt.match(/\{([^}]*)\}/);
-    if (!braceMatch) throw new ProjectError("TARGET_NOT_FOUND", `未找到 named import：${op.name}`);
-    const current = braceMatch[1].split(",").map((s: string) => s.trim()).filter(Boolean);
-    const next = current.filter((name: string) => name !== op.name);
-    if (next.length === current.length) throw new ProjectError("TARGET_NOT_FOUND", `未找到 named import：${op.name}`);
-    if (!isEmpty(next)) {
-      const newStmt = stmt.replace(/\{[^}]*\}/, `{ ${next.join(", ")} }`);
-      return [patch(input.snapshot.path, input.snapshot.revision, content, content.slice(0, start) + newStmt + content.slice(end), { op: "remove_import", name: op.name })];
-    }
+    const removal = removeNamedImportBinding(content.slice(start, statementEnd), op.name);
+    if (removal.status === "not_found") throw new ProjectError("TARGET_NOT_FOUND", `未找到 named import：${op.name}`);
+    if (removal.status === "updated") return [patch(input.snapshot.path, input.snapshot.revision, content, content.slice(0, start) + removal.statement + content.slice(statementEnd), { op: "remove_import", module: moduleSpecifier, name: op.name })];
   }
-  return [patch(input.snapshot.path, input.snapshot.revision, content, content.slice(0, start) + content.slice(end), { op: "remove_import", module: op.module })];
+  return [patch(input.snapshot.path, input.snapshot.revision, content, content.slice(0, start) + content.slice(removalEnd), { op: "remove_import", module: moduleSpecifier, name: op.name })];
 }
 
 const TypeScriptPatchHandlers: Record<string, (input: PatchStrategyInput) => PreparedPatch[]> = {

@@ -8,6 +8,8 @@ import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { countChangedLines } from "../utils/text.js";
 
+import { removeNamedImportBinding } from "./import-mutation.js";
+
 function makePatch(path: string, baseRevision: LooseOptional<string>, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
   const diff = unifiedDiff(path, oldContent, newContent);
   const changedLines = countChangedLines(diff);
@@ -133,8 +135,8 @@ export function jsTsPatchStrategy(): PatchStrategy {
           const stmt = normalizeImport(op.importStatement);
           start = content.indexOf(stmt);
           end = start >= 0 ? start + stmt.length : -1;
-        } else if (op.moduleSpecifier || op.module) {
-          // op.module 是 op.moduleSpecifier 的别名。
+        } else if ((op.moduleSpecifier || op.module) && !op.name) {
+          // op.module 是 op.moduleSpecifier 的别名；带 name 时只删除对应 binding。
           const specifier = op.moduleSpecifier ?? op.module;
           const re = new RegExp(`^.*from\\s+["']${String(specifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'];?\\s*$`, "m");
           const match = re.exec(content);
@@ -143,15 +145,19 @@ export function jsTsPatchStrategy(): PatchStrategy {
             end = match.index + match[0].length;
           }
         } else if (op.name) {
-          // 从任意 import 行里移除指定 named import。
-          const re = new RegExp(`^(import\\s+.*?)\\b${String(op.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b,?\\s*(.*from.*)$`, "m");
+          const specifier = op.moduleSpecifier ?? op.module;
+          const escapedSpecifier = String(specifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const re = new RegExp(`^.*from\\s+["']${escapedSpecifier}["'];?\\s*$`, "m");
           const match = re.exec(content);
           if (match) {
             start = match.index;
             end = match.index + match[0].length;
-            const cleaned = (match[1] + match[2]).replace(/,\s*}/, " }").replace(/{\s*}/, "{}");
-            if (start >= 0) {
-              const newContent = content.slice(0, start) + cleaned.trimEnd() + content.slice(end);
+            const removal = removeNamedImportBinding(match[0], op.name);
+            if (removal.status === "not_found") {
+              throw new ProjectError("TARGET_NOT_FOUND", `未找到 named import：${op.name}`);
+            }
+            if (removal.status === "updated") {
+              const newContent = content.slice(0, start) + removal.statement + content.slice(end);
               return [makePatch(snap.path, snap.revision, content, newContent, { op: "remove_import", startOffset: start, endOffset: end })];
             }
           }

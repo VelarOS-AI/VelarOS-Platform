@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { isPresent } from '@velaros-ai/core'
+import { isEmpty, isPresent, isTrue } from '@velaros-ai/core'
 
 const ProjectPathSchema = z.string().min(1)
 
@@ -115,6 +115,45 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     namespaceImport: z.string().min(1).optional(),
     sideEffectOnly: z.boolean().optional(),
     dedupe: z.boolean().optional(),
+  }).superRefine((operation, context) => {
+    const hasBindings = isPresent(operation.defaultImport)
+      || isPresent(operation.namespaceImport)
+      || isPresent(operation.named)
+    if (!isPresent(operation.importStatement) && !isPresent(operation.module)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'add_import 需要 importStatement 或 module。',
+        path: ['importStatement'],
+      })
+    }
+    if (isPresent(operation.importStatement) && (isPresent(operation.module) || hasBindings || isTrue(operation.sideEffectOnly))) {
+      context.addIssue({
+        code: 'custom',
+        message: 'importStatement 不能与 module、绑定字段或 sideEffectOnly 同时使用。',
+        path: ['importStatement'],
+      })
+    }
+    if (isPresent(operation.module) && !isTrue(operation.sideEffectOnly) && !hasBindings) {
+      context.addIssue({
+        code: 'custom',
+        message: 'module 形式需要 sideEffectOnly=true，或至少一个 named、defaultImport、namespaceImport binding。',
+        path: ['module'],
+      })
+    }
+    if (isTrue(operation.sideEffectOnly) && hasBindings) {
+      context.addIssue({
+        code: 'custom',
+        message: 'sideEffectOnly 不能与 named、defaultImport 或 namespaceImport 同时使用。',
+        path: ['sideEffectOnly'],
+      })
+    }
+    if (isPresent(operation.namespaceImport) && (isPresent(operation.named) || isPresent(operation.defaultImport))) {
+      context.addIssue({
+        code: 'custom',
+        message: 'namespaceImport 不能与 named 或 defaultImport 同时使用。',
+        path: ['namespaceImport'],
+      })
+    }
   }),
   z.strictObject({
     type: z.literal('remove_import'),
@@ -123,6 +162,41 @@ const ProjectEditOperationSchema = z.discriminatedUnion('type', [
     moduleSpecifier: z.string().min(1).optional(),
     module: z.string().min(1).optional(),
     name: z.string().min(1).optional(),
+  }).superRefine((operation, context) => {
+    const selectors = [
+      operation.importStatement,
+      operation.moduleSpecifier,
+      operation.module,
+      operation.name,
+    ].filter(isPresent)
+    if (isEmpty(selectors)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'remove_import 至少需要 importStatement、moduleSpecifier、module 或 name 之一。',
+        path: ['importStatement'],
+      })
+    }
+    if (isPresent(operation.name) && !isPresent(operation.moduleSpecifier) && !isPresent(operation.module)) {
+      context.addIssue({
+        code: 'custom',
+        message: '按 name 删除 binding 时必须同时指定 moduleSpecifier 或 module。',
+        path: ['name'],
+      })
+    }
+    if (isPresent(operation.moduleSpecifier) && isPresent(operation.module)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'moduleSpecifier 与兼容别名 module 不能同时使用。',
+        path: ['moduleSpecifier'],
+      })
+    }
+    if (isPresent(operation.importStatement) && selectors.length > 1) {
+      context.addIssue({
+        code: 'custom',
+        message: 'importStatement 是完整语句选择器，不能与其他 remove_import 选择器同时使用。',
+        path: ['importStatement'],
+      })
+    }
   }),
   z.strictObject({
     type: z.literal('json_patch'),

@@ -16,6 +16,7 @@ import {
 import { projectTools } from './agent/Project.tool.js'
 import type { ProjectToolContext, VelaTool } from './agent/Types.js'
 import { PROJECT_PACKAGE_VERSION } from './core/defaults.js'
+import { ProjectError, toErrorObject } from './errors.js'
 
 export type ProjectToolContextResolver = (
   scope: LooseOptional<ScopeRef>,
@@ -33,8 +34,19 @@ export interface ProjectCapabilityService extends KernelCallableCapabilityServic
 export const ProjectCapability =
   createCapabilityToken<ProjectCapabilityService>('velaros.project')
 
+function projectCapabilityError(error: ProjectError): AppError {
+  return new AppError(error.reason, error.message, error, {
+    projectError: toErrorObject(error),
+  })
+}
+
 function invalidProjectInput(detail: string): AppError {
-  return new AppError('VALIDATION', `Project capability input is invalid: ${detail}`)
+  return projectCapabilityError(new ProjectError(
+    'INVALID_INPUT',
+    `Project capability input is invalid: ${detail}`,
+    { detail },
+    '请根据工具 schema 修正参数后重试。',
+  ))
 }
 
 function parseProjectToolInput(
@@ -77,7 +89,12 @@ function createProjectOperations(
           )
         }
         signal.throwIfAborted()
-        return tool.execute(parseProjectToolInput(tool, input), resolvedContext)
+        try {
+          return await tool.execute(parseProjectToolInput(tool, input), resolvedContext)
+        } catch (error) {
+          if (error instanceof ProjectError) throw projectCapabilityError(error)
+          throw error
+        }
       },
     }
   }

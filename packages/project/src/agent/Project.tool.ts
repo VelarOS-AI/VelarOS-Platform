@@ -273,6 +273,7 @@ type ProjectWriteInput = {
   mode: z.infer<typeof ProjectWriteModeSchema>
   cwd?: string
   skipIfAlreadyPresent?: boolean
+  baseRevision?: string
 }
 
 function projectWriteOperation(input: ProjectWriteInput): z.input<typeof ProjectEditOperationsSchema>[number] {
@@ -321,6 +322,7 @@ async function applyProjectEditTransaction(
     cwd?: string
     operationLabel: string
     targetPath?: string
+    baseRevisions?: Record<string, string>
   },
   context: ProjectToolContext
 ) {
@@ -339,7 +341,10 @@ async function applyProjectEditTransaction(
   return context.project.runInDirectory(authorization.rootPath, async () =>
     context.project.runWithApproval(async () => {
       const kernel = await context.project.kernel()
-      const transaction = await kernel.prepareEdit({ operations: input.operations })
+      const transaction = await kernel.prepareEdit({
+        operations: input.operations,
+        baseRevisions: input.baseRevisions,
+      })
       try {
         const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
         return {
@@ -380,6 +385,7 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
     mode: ProjectWriteModeSchema,
     cwd: z.string().min(1).optional(),
     skipIfAlreadyPresent: z.boolean().optional(),
+    baseRevision: z.string().min(1).optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
@@ -392,6 +398,9 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
         cwd: input.cwd,
         operationLabel: `${input.mode} 项目文件`,
         targetPath: input.path,
+        baseRevisions: input.baseRevision
+          ? { [input.path]: input.baseRevision }
+          : undefined,
       },
       context
     ),
@@ -400,6 +409,7 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
 const projectEdit = defineProjectTool<{
   operations: z.input<typeof ProjectEditOperationsSchema>
   cwd?: string
+  baseRevisions?: Record<string, string>
 }>({
   name: ProjectToolNames.edit,
   category: 'project-changes',
@@ -418,9 +428,10 @@ const projectEdit = defineProjectTool<{
       },
     }],
   }],
-  schema: z.object({
+  schema: z.strictObject({
     operations: ProjectEditOperationsSchema.min(1).max(20),
-    cwd: z.string().optional(),
+    cwd: z.string().min(1).optional(),
+    baseRevisions: z.record(z.string().min(1), z.string().min(1)).optional(),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
@@ -432,6 +443,7 @@ const projectEdit = defineProjectTool<{
         operations: input.operations,
         cwd: input.cwd,
         operationLabel: '结构化修改项目文件',
+        baseRevisions: input.baseRevisions,
       },
       context
     ),

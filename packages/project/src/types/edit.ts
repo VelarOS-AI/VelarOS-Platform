@@ -209,8 +209,10 @@ export interface PrepareEditInput {
   /** 将编辑与新读取上下文绑定起来的 evidence pack。 */
   evidenceId?: string;
   operations: EditIntent[];
-  /** 没有 resolved target 自带 base revision 时使用的 revision 防护。 */
+  /** 没有 resolved target 自带 base revision 时使用的兼容 revision 防护。 */
   baseRevision?: string;
+  /** 按项目相对路径绑定调用方读取到的 revision；优先于兼容的 baseRevision。 */
+  baseRevisions?: Record<string, string>;
   dryRun?: boolean;
   metadata?: Record<string, any>;
 }
