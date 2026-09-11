@@ -50,8 +50,9 @@ import { AppError } from '@velaros-ai/core/error'
  * 里的 `.d.ts`，于是那里只剩 `typescript.js`：标准库静默缺席，每个 `Record`/`Set`/`string.trim`
  * 都被报成类型错误，诊断整体失真。候选目录依次是：`typescript` 包自身目录 →
  * {@link configureTypeScriptLibraryDirectory} 声明的目录 → Electron 约定目录
- * `<process.resourcesPath>/typescript/lib`（宿主以 extraResources 携带 `lib*.d.ts`）。
- * 全部缺席时 {@link acquireTypeScriptLanguageService} 报告 `standardLibraryAvailable: false`，
+ * `<process.resourcesPath>/typescript/lib`（宿主以 extraResources 携带 `lib*.d.ts`）。目录必须
+ * 含编译选项所需标准库的完整引用闭包才算命中。没有目录命中时
+ * {@link acquireTypeScriptLanguageService} 报告 `standardLibraryAvailable: false`，
  * 由调用方放弃依赖类型检查的结果，而不是把伪错误当真结论返回。
  */
 const TypeScriptExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.cts', '.mts', '.cjs', '.mjs'])
@@ -96,7 +97,7 @@ interface PooledTypeScriptProject {
   liveFiles: Map<string, string>
   fileVersions: Map<string, number>
   overlayPaths: Set<string>
-  /** 本项目编译选项对应的默认标准库文件；`null` 表示所有候选目录都没有标准库。 */
+  /** 本项目编译选项对应的默认标准库文件；`null` 表示没有候选目录能提供完整的标准库。 */
   defaultLibFilePath: Nullable<string>
   service: ts.LanguageService
 }
@@ -540,19 +541,42 @@ function electronResourcesLibraryDirectory(): Nullable<string> {
   return isNonBlankString(resourcesPath) ? resolve(resourcesPath, 'typescript', 'lib') : null
 }
 
+/**
+ * 选出第一个能提供完整标准库的候选目录，返回其中的默认库文件路径。
+ *
+ * 程序实际加载的是 `compilerOptions.lib` 列出的文件（未设置时为默认库），再加上它们经
+ * `/// <reference lib>` 传递引用的文件，全部从同一目录解析。只查默认库文件在不在不够：
+ * 目录里有 `lib.es2022.full.d.ts` 却缺它引用的 `lib.es2015.collection.d.ts` 时，`Set`
+ * 照样被报成缺失。所以逐目录校验整个引用闭包，缺任何一个文件就换下一个目录。
+ */
 function resolveDefaultLibFilePath(options: ts.CompilerOptions): Nullable<string> {
-  const libFileName = ts.getDefaultLibFileName(options)
+  const defaultLibFileName = ts.getDefaultLibFileName(options)
+  const requiredLibFileNames = isTrue(options.noLib) ? [] : (options.lib ?? [defaultLibFileName])
   const libraryDirectories = [
     dirname(ts.getDefaultLibFilePath(options)),
     configuredLibraryDirectory,
     electronResourcesLibraryDirectory(),
   ]
-  for (const directory of libraryDirectories) {
-    if (!isPresent(directory)) continue
-    const libFilePath = resolve(directory, libFileName)
-    if (existsSync(libFilePath)) return libFilePath
+  const libraryDirectory = libraryDirectories.find(
+    (directory) => isPresent(directory) && hasCompleteLibraryClosure(directory, requiredLibFileNames)
+  )
+  return isPresent(libraryDirectory) ? resolve(libraryDirectory, defaultLibFileName) : null
+}
+
+function hasCompleteLibraryClosure(directory: string, rootLibFileNames: readonly string[]): boolean {
+  const pending = [...rootLibFileNames]
+  const visited = new Set<string>()
+  for (let libFileName = pending.pop(); isPresent(libFileName); libFileName = pending.pop()) {
+    if (visited.has(libFileName)) continue
+    visited.add(libFileName)
+    const content = safeReadFile(resolve(directory, libFileName))
+    if (!isPresent(content)) return false
+    // 标准库内部引用一律用规范名（`es2015.collection`），与文件名 `lib.<名>.d.ts` 一一对应。
+    for (const reference of ts.preProcessFile(content, false, false).libReferenceDirectives) {
+      pending.push(`lib.${reference.fileName.toLowerCase()}.d.ts`)
+    }
   }
-  return null
+  return true
 }
 
 function createLanguageServiceHost(
@@ -736,10 +760,9 @@ export function acquireTypeScriptLanguageService(
     files: project.liveFiles,
     compilerOptions: project.compilerOptions,
     config: cacheEntry.config,
-    standardLibraryAvailable:
-      isPresent(project.defaultLibFilePath) || isTrue(project.compilerOptions.noLib),
+    standardLibraryAvailable: isPresent(project.defaultLibFilePath),
     isCurrent: () => pooledProjects.get(poolKey) === acquiredProject,
   }
 }
 
-export { extensionWithDot, safeReadFile, TypeScriptExtensions }
+export { extensionWithDot, safeReadFile, SkippedDirectoryNames, TypeScriptExtensions }

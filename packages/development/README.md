@@ -18,7 +18,9 @@ does not load the Project Agent tool barrel. Project wire/query guards remain on
 `@velaros-ai/project/contracts` entry.
 
 `language_diagnostics` 的 `path` 可以是文件或目录。目录按 `extensions` / `maxDepth` 选出
-JavaScript/TypeScript 源文件（跳过 `.gitignore` 忽略的文件），单次最多 200 个源文件、耗时预算
+JavaScript/TypeScript 源文件：`extensions` 里的非 JS/TS 扩展名（`vue`、`json` 等）被忽略并在 `note`
+里说明；遍历跳过 `.gitignore` 忽略的文件，以及 `node_modules`、`dist`、`build`、`out`、`coverage`
+等依赖与构建目录（`path` 显式指向这类目录内部时照常诊断）。单次最多 200 个源文件、耗时预算
 20 秒；任一闸触发时 `truncated: true` 并在 `note` 里说明。选中的文件按各自所属的 tsconfig
 分组，每组只构建一次程序，诊断结果与逐个文件单独诊断一致；文件之间让出事件循环，中止信号
 在两个文件之间生效。没有扫描到任何文件时 `note` 会写明原因，空结果不会伪装成「全部通过」；
@@ -30,9 +32,12 @@ TypeScript 类型诊断依赖标准库声明（`lib.*.d.ts`）。宿主按以下
 2. 宿主调用 `configureTypeScriptLibraryDirectory(absoluteDir)` 显式声明的目录；
 3. Electron 约定目录 `<process.resourcesPath>/typescript/lib`。
 
+目录必须含编译选项实际加载的标准库（`compilerOptions.lib`，未设置时为默认库）及其经
+`/// <reference lib>` 传递引用的全部文件才算命中，残缺的目录会被跳过。
+
 Electron 打包默认剔除 `node_modules` 里的 `.d.ts`，宿主应把
 `node_modules/typescript/lib/lib*.d.ts` 作为 extraResources 放到 `typescript/lib`，即可在不改代码
-的情况下命中第 3 条。三处都找不到时，诊断结果带 `degraded` 说明并只返回语法诊断，不会把
+的情况下命中第 3 条。三处都没有完整标准库时，诊断结果带 `degraded` 说明并只返回语法诊断，不会把
 `Cannot find name 'Record'` 这类由标准库缺席导致的伪错误当作真结果返回。
 
 `ExternalLanguageService` 负责外部 language server 的进程生命周期、JSON-RPC framing、

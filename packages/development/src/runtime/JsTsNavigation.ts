@@ -57,6 +57,7 @@ import {
   acquireTypeScriptLanguageService,
   groupFilesByTypeScriptProject,
   safeReadFile as safeReadTypeScriptProjectFile,
+  SkippedDirectoryNames,
   TypeScriptExtensions,
 } from './TypeScriptProjectHost'
 
@@ -758,6 +759,21 @@ const DiagnosticTimeBudgetMs = 20_000
 const MissingStandardLibraryReason =
   '未找到 TypeScript 标准库声明（lib.*.d.ts），类型诊断不可用，只返回了语法诊断。' +
   '这是运行环境缺少标准库，不代表代码存在类型错误。'
+const NoJsTsExtensionNote =
+  `extensions 里没有 JavaScript/TypeScript 扩展名（${DefaultJsTsExtensions.join('/')}），` +
+  '未做诊断。这不代表代码没有错误。'
+// 依赖与构建目录在遍历中直接剪枝，与 TypeScriptProjectHost 枚举磁盘源码的规则一致；
+// 没有 .gitignore 的项目里 node_modules 否则会按目录序先占满文件名额。
+const SkippedDirectoryGlobs = [...SkippedDirectoryNames].map((name) => `**/${name}`)
+
+interface DiagnosticFileSelection {
+  files: string[]
+  truncated: boolean
+  /** 一个文件都没选中时的原因；非空选择不使用。 */
+  emptyNote: string
+  /** 调用方传入但本服务不诊断的扩展名说明，无论是否选中文件都随结果返回。 */
+  extensionNote?: string
+}
 
 function emptyDiagnostics(note: string): LanguageDiagnosticsResult {
   return { diagnostics: [], diagnosticCount: 0, scannedFiles: 0, truncated: false, note }
@@ -767,7 +783,7 @@ async function selectDiagnosticFiles(
   ctx: LanguageToolContext,
   rootPath: string,
   input: LanguageDiagnosticsInput
-): Promise<{ files: string[]; truncated: boolean; emptyNote: string }> {
+): Promise<DiagnosticFileSelection> {
   const target = resolveProjectPath(rootPath, input.path)
   const stats = statSync(target.absolutePath, { throwIfNoEntry: false })
   if (!stats) throw new AppError('NOT_FOUND', `诊断路径不存在：${target.relativePath}`)
@@ -781,7 +797,21 @@ async function selectDiagnosticFiles(
     }
   }
 
-  const extensions = normalizeExtensionsWithDefault(input.extensions, DefaultJsTsExtensions)
+  // 只有 JS/TS 扩展名的文件能进入 TS 程序；其它扩展名（vue、json…）的文件交给语言服务会直接
+  // 抛错，所以选文件前就收窄到 JS/TS 子集，被剔除的扩展名在结果里说明。
+  const requestedExtensions = normalizeExtensionsWithDefault(
+    input.extensions,
+    DefaultJsTsExtensions
+  )
+  const isJsTsExtension = (extension: string): boolean => TypeScriptExtensions.has(`.${extension}`)
+  const extensions = requestedExtensions.filter(isJsTsExtension)
+  const ignoredExtensions = requestedExtensions.filter((extension) => !isJsTsExtension(extension))
+  const extensionNote = optionalWhen(
+    !isEmpty(ignoredExtensions),
+    `JavaScript/TypeScript 诊断不处理扩展名 ${ignoredExtensions.join('/')}，这些文件未做诊断。`
+  )
+  if (isEmpty(extensions)) return { files: [], truncated: false, emptyNote: NoJsTsExtensionNote }
+
   const maxDepth = input.maxDepth ?? DefaultNavigationMaxDepth
   const selection = await collectJsTsFiles(ctx, {
     path: target.relativePath,
@@ -790,12 +820,15 @@ async function selectDiagnosticFiles(
     maxFiles: MaxDiagnosticFiles,
     // 构建产物（dist/*.js、*.d.ts）通常被 .gitignore 忽略；诊断它们只会挤占名额、制造噪音。
     excludeGitignored: true,
+    exclude: SkippedDirectoryGlobs,
   })
   return {
     ...selection,
+    extensionNote,
     emptyNote:
-      `未找到可诊断的源文件：${target.relativePath} 下 ${maxDepth} 层以内没有扩展名为 ` +
-      `${extensions.join('/')} 且未被 .gitignore 忽略的文件。这不代表代码没有错误。`,
+      `${extensionNote ?? ''}未找到可诊断的源文件：${target.relativePath} 下 ${maxDepth} 层以内` +
+      `没有扩展名为 ${extensions.join('/')} 的文件（已跳过 .gitignore 忽略的文件与 ` +
+      `${[...SkippedDirectoryNames].join('/')} 目录）。这不代表代码没有错误。`,
   }
 }
 
@@ -861,6 +894,7 @@ async function collectDiagnostics(
   diagnostics.sort(compareDiagnostics)
 
   const notes = [
+    selection.extensionNote,
     optionalWhen(
       selection.truncated,
       `源文件超过 ${MaxDiagnosticFiles} 个，只选取了目录遍历先遇到的 ${MaxDiagnosticFiles} 个。`

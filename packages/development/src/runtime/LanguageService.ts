@@ -244,6 +244,8 @@ export interface SourceFileSelection {
   maxFiles?: number
   /** 缺省沿用内核规则：跳过 .gitignore 忽略的文件（逐级继承根目录规则）；显式指向的目录本身被忽略时不跳过。 */
   excludeGitignored?: boolean
+  /** 遍历中遇到即剪枝的相对路径 glob；起始目录本身不受约束。 */
+  exclude?: readonly string[]
 }
 
 export function normalizeSourcePath(input: string): string {
@@ -307,6 +309,7 @@ export async function collectSourceFiles(
     maxFiles: maxFiles + 1,
     include: extensions.map((extension) => `**/*.${caseInsensitiveGlob(extension)}`),
     excludeGitignored: input.excludeGitignored,
+    exclude: input.exclude,
   })
   ctx.abortSignal.throwIfAborted()
   const files = entries

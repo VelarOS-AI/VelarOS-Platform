@@ -68,9 +68,16 @@ async function createContext(
   }
 }
 
+interface DiagnosticsInput {
+  path: string
+  extensions?: string[]
+  limit?: number
+  language?: string
+}
+
 async function diagnoseWith(
   context: LanguageToolContext,
-  input: { path: string; extensions?: string[]; limit?: number }
+  input: DiagnosticsInput
 ): Promise<DiagnosticsPayload> {
   return (await executeProjectCodeLanguageQuery(
     { action: 'language_diagnostics', ...input },
@@ -79,7 +86,7 @@ async function diagnoseWith(
 }
 
 async function diagnose(
-  input: { path: string; extensions?: string[]; limit?: number },
+  input: DiagnosticsInput,
   assembly: KernelAssembly = 'core',
   projectRoot = root
 ): Promise<DiagnosticsPayload> {
@@ -180,7 +187,8 @@ beforeAll(async () => {
 
 afterEach(() => {
   ts.sys.getExecutingFilePath = originalExecutingFilePath
-  delete electronProcess.resourcesPath
+  // Electron 的类型把 resourcesPath 声明为只读必选，delete 运算符过不了类型检查。
+  Reflect.deleteProperty(process, 'resourcesPath')
   configureTypeScriptLibraryDirectory(null)
 })
 
@@ -250,6 +258,23 @@ describe('language_diagnostics 标准库定位', () => {
     }
   })
 
+  test('候选目录缺少标准库引用闭包中的文件时不算命中', async () => {
+    // 夹具 tsconfig 的 lib 是 ES2022：目录里有默认库与 lib.es2022.d.ts，却缺它们经
+    // `/// <reference lib>` 引用的 es2021/es2015.collection 等文件，Record/Set 照样会缺席。
+    const partialLibraryDirectory = join(scratch, 'partial-lib')
+    await mkdir(partialLibraryDirectory, { recursive: true })
+    for (const fileName of ['lib.es2022.full.d.ts', 'lib.es2022.d.ts']) {
+      await symlink(join(bundledLibraryDirectory, fileName), join(partialLibraryDirectory, fileName))
+    }
+    simulatePackagedTypeScript()
+    configureTypeScriptLibraryDirectory(partialLibraryDirectory)
+
+    const result = await diagnose({ path: 'src/typed.ts' })
+
+    expect(result.degraded).toContain('未找到 TypeScript 标准库声明')
+    expect(result.diagnostics).toEqual([])
+  })
+
   test('宿主声明的标准库目录必须是绝对路径', () => {
     expect(() => configureTypeScriptLibraryDirectory('typescript/lib')).toThrow('绝对路径')
   })
@@ -296,6 +321,60 @@ describe('language_diagnostics 目录扫描', () => {
     const markdown = await diagnose({ path: 'docs/README.md' })
     expect(markdown.scannedFiles).toBe(0)
     expect(markdown.note).toBeString()
+  })
+
+  test('extensions 混入非 JS/TS 扩展名时只诊断 JS/TS 文件，并说明被忽略的扩展名', async () => {
+    await writeFiles(root, {
+      'src/comp.vue': '<template><div /></template>\n',
+      'src/data.json': '{ "answer": 42 }\n',
+    })
+    try {
+      for (const extension of ['vue', 'json']) {
+        const result = await diagnose({ path: 'src', extensions: ['ts', extension] })
+        expect(result.scannedFiles).toBe(3)
+        expect(errorCodes(result)).toEqual([
+          ['src/nested/deep.ts', 2322],
+          ['src/typed.ts', 2322],
+        ])
+        expect(result.note).toContain(`不处理扩展名 ${extension}`)
+      }
+
+      // 显式指定 jsts 服务时，extensions 里一个 JS/TS 扩展名都没有也要说明，而不是退回全部扩展名。
+      const onlyVue = await diagnose({ path: 'src', extensions: ['vue'], language: 'jsts' })
+      expect(onlyVue.scannedFiles).toBe(0)
+      expect(onlyVue.note).toContain('extensions 里没有 JavaScript/TypeScript 扩展名')
+    } finally {
+      await rm(join(root, 'src', 'comp.vue'), { force: true })
+      await rm(join(root, 'src', 'data.json'), { force: true })
+    }
+  })
+
+  test('没有 .gitignore 时也跳过依赖与构建目录，显式指向其中时照常诊断', async () => {
+    // 夹具根目录不在 git 仓库里、也没有 .gitignore：只能靠目录名剪枝挡住依赖与构建产物。
+    await writeFiles(root, {
+      'app/src/a.ts': "export const a: number = 'a'\n",
+      'app/node_modules/dep/index.js': 'export const = 1\n',
+      'app/dist/bundle.js': 'export const = 1\n',
+    })
+    try {
+      const app = await diagnose({ path: 'app' })
+      expect(app.scannedFiles).toBe(1)
+      expect(app.note).toBeUndefined()
+      expect(errorCodes(app)).toEqual([['app/src/a.ts', 2322]])
+
+      const dependency = await diagnose({ path: 'app/node_modules/dep' })
+      expect(dependency.scannedFiles).toBe(1)
+      expect(dependency.diagnostics.map((diagnostic) => diagnostic.path)).toContain(
+        'app/node_modules/dep/index.js'
+      )
+
+      // 只剩剪枝目录里的 JS 文件时，0 文件说明要点明跳过了哪些目录。
+      const pruned = await diagnose({ path: 'app', extensions: ['js'] })
+      expect(pruned.scannedFiles).toBe(0)
+      expect(pruned.note).toContain('node_modules')
+    } finally {
+      await rm(join(root, 'app'), { recursive: true, force: true })
+    }
   })
 
   test('不存在的路径显式失败', async () => {
