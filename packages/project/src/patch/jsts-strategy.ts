@@ -1,213 +1,167 @@
-import { isEmpty, isFalse, isPresent, toOptional } from '@velaros-ai/core'
+import { isEmpty, isPresent } from '@velaros-ai/core'
 
-import { findJsTsSymbols } from "../adapters/jsts-adapter.js";
+import { isJsTsPath, type JsTsSymbol, parseJsTs, selectJsTsSymbols } from "../adapters/jsts-ast.js";
 import { ProjectError } from "../errors.js";
-import type { PreparedPatch } from "../types/edit.js";
+import type { OffsetRange } from "../types/common.js";
+import type { EditOperation, PreparedPatch } from "../types/edit.js";
 import type { PatchStrategy, PatchStrategyInput } from "../types/patch.js";
+import type { FileSnapshot } from "../types/snapshot.js";
 import { unifiedDiff } from "../utils/diff.js";
 import { id } from "../utils/id.js";
 import { countChangedLines } from "../utils/text.js";
 
-import { removeNamedImportBinding } from "./import-mutation.js";
+import { planAddImport, planRemoveImport, type SourceSplice } from "./import-mutation.js";
 
-function makePatch(path: string, baseRevision: LooseOptional<string>, oldContent: string, newContent: string, metadata?: Record<string, any>): PreparedPatch {
-  const diff = unifiedDiff(path, oldContent, newContent);
-  const changedLines = countChangedLines(diff);
-  return {
-    patchId: id("patch"),
-    strategyId: "jsts.patch",
-    path,
-    baseRevision: toOptional(baseRevision),
-    oldContent,
-    newContent,
-    diff,
-    changedLines,
-    risk: "low", // 规模不代表风险,统一 low(真正危险在操作层判定)
-    metadata,
-  };
+type SymbolOperation = Extract<
+  EditOperation,
+  { type: "replace_symbol" | "insert_around_symbol" | "insert_before_symbol" | "insert_after_symbol" }
+>;
+
+/** 同一实现以不同身份注册：核心策略与 TypeScript 插件策略只差 id 与优先级。 */
+export interface JsTsPatchStrategyIdentity {
+  id: string;
+  priority: number;
 }
 
-function importInsertOffset(content: string): number {
-  const lines = content.split("\n");
-  let offset = 0;
-  let lastImportEnd = 0;
-  let sawImport = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const lineEnd = offset + line.length + 1;
-    if (trimmed.startsWith("#!") || trimmed === "'use strict';" || trimmed === '"use strict";' || isEmpty(trimmed)) {
-      offset = lineEnd;
-      continue;
-    }
-    if (/^import\s/.test(trimmed)) {
-      sawImport = true;
-      lastImportEnd = lineEnd;
-      offset = lineEnd;
-      continue;
-    }
-    break;
-  }
-  return sawImport ? lastImportEnd : offset;
-}
+const HandledOperations = new Set<string>([
+  "replace_symbol",
+  "insert_around_symbol",
+  "insert_before_symbol",
+  "insert_after_symbol",
+  "add_import",
+  "remove_import",
+]);
 
-function normalizeImport(statement: string): string {
-  const trimmed = statement.trim();
-  return trimmed.endsWith(";") ? trimmed : `${trimmed};`;
-}
+/** 符号歧义时在错误里列出的候选上限，足够模型补 kind/container，又不把整份大纲塞进错误。 */
+const MaxListedCandidates = 8;
 
-function resolveSymbolRange(
-  content: string,
-  input: PatchStrategyInput,
-  operation: {
-    type: string;
-    symbol?: { kind?: string; name: string; container?: string };
-  },
-): { start: number; end: number } {
-  const targetRange = input.target?.range;
-  if (isPresent(targetRange?.startOffset) && isPresent(targetRange.endOffset)) return { start: targetRange.startOffset, end: targetRange.endOffset };
-
-  const symbol = operation.symbol;
-  if (!symbol) {
-    throw new ProjectError("TARGET_NOT_FOUND", `${operation.type} 需要 targetId 或 operation.symbol`);
-  }
-  const matches = findJsTsSymbols(content).filter((candidate) => {
-    if (candidate.name !== symbol.name) return false;
-    if (symbol.kind && symbol.kind !== "any" && candidate.kind !== symbol.kind) return false;
-    return !symbol.container || candidate.container === symbol.container;
-  });
-  if (matches.length !== 1) {
-    throw new ProjectError(
-      isEmpty(matches) ? "TARGET_NOT_FOUND" : "AMBIGUOUS_TARGET",
-      `${operation.type} 预期 1 个 symbol，实际找到 ${matches.length} 个`,
-    );
-  }
-  return {
-    start: matches[0].range.startOffset ?? 0,
-    end: matches[0].range.endOffset ?? 0,
-  };
+interface LocatedSymbol {
+  start: number;
+  end: number;
+  body?: OffsetRange;
 }
 
 export function jsTsPatchStrategy(): PatchStrategy {
+  return createJsTsPatchStrategy({ id: "jsts.patch", priority: 90 });
+}
+
+export function createJsTsPatchStrategy(identity: JsTsPatchStrategyIdentity): PatchStrategy {
   return {
-    id: "jsts.patch",
-    priority: 90,
+    id: identity.id,
+    priority: identity.priority,
     canHandle(input: PatchStrategyInput) {
-      return ["replace_symbol", "insert_around_symbol", "insert_before_symbol", "insert_after_symbol", "add_import", "remove_import"].includes(input.intent.operation.type);
+      return HandledOperations.has(input.intent.operation.type);
     },
     prepare(input: PatchStrategyInput): PreparedPatch[] {
-      const op: any = input.intent.operation;
-      const snap = input.snapshot;
-      if (!snap || snap.isBinary || !isPresent(snap.content)) throw new ProjectError("NOT_SUPPORTED", "JS/TS patch 需要文本 snapshot");
-      const content = snap.content;
+      const snapshot = input.snapshot;
+      if (!snapshot || snapshot.isBinary || !isPresent(snapshot.content)) throw new ProjectError("NOT_SUPPORTED", "JS/TS patch 需要文本 snapshot");
+      const content = snapshot.content;
+      const operation = input.intent.operation;
+      const targetId = input.intent.targetId;
 
-      if (op.type === "add_import") {
-        let rawImport: string | undefined;
-        if (op.importStatement) {
-          rawImport = op.importStatement;
-        } else if (op.module) {
-          if (op.sideEffectOnly) {
-            rawImport = `import "${op.module}"`;
-          } else if (op.namespaceImport) {
-            rawImport = `import * as ${op.namespaceImport} from "${op.module}"`;
-          } else {
-            const hasNamedImports = !!op.named && !op.named.isEmpty;
-            const defaultPart = op.defaultImport ? `${op.defaultImport}${hasNamedImports ? ", " : ""}` : "";
-            const namedPart = hasNamedImports ? `{ ${op.named.join(", ")} } ` : "";
-            rawImport = `import ${defaultPart}${namedPart}from "${op.module}"`;
-          }
-        }
-        if (!rawImport) throw new ProjectError("INVALID_INPUT", "add_import 需要 importStatement 或 module");
-        const stmt = normalizeImport(rawImport);
-        // 去重命中：返回显式 noop 补丁（与 TS 策略一致），而不是空数组——
-        // 空数组会让该操作从事务里凭空消失，易被误读为成功执行。
-        if (!isFalse(op.dedupe) && content.includes(stmt)) return [makePatch(snap.path, snap.revision, content, content, { op: "add_import", noop: true })];
-        const at = importInsertOffset(content);
-        const prefix = at > 0 && !content.slice(0, at).endsWith("\n") ? "\n" : "";
-        const suffix = content.slice(at).startsWith("\n") || at === content.length ? "" : "\n";
-        const newContent = `${content.slice(0, at) + prefix + stmt  }\n${  suffix  }${content.slice(at)}`;
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "add_import", startOffset: at, endOffset: at })];
+      if (operation.type === "add_import" || operation.type === "remove_import") {
+        if (!isJsTsPath(snapshot.path)) throw new ProjectError("NOT_SUPPORTED", `${operation.type} 只支持 JS/TS 文件：${snapshot.path}`);
+        const splice = operation.type === "add_import"
+          ? planAddImport(snapshot.path, content, operation)
+          : planRemoveImport(snapshot.path, content, operation);
+        // 去重命中也产出显式 noop 补丁，而不是空数组——空数组会让该操作从事务里凭空消失。
+        if (!splice) return [makePatch(identity.id, snapshot, content, { op: operation.type, noop: true })];
+        return [makePatch(identity.id, snapshot, applySplice(content, splice), { op: operation.type, startOffset: splice.start, endOffset: splice.end })];
       }
+      if (!isSymbolOperation(operation)) throw new ProjectError("NOT_SUPPORTED", `不支持的 JS/TS 操作：${operation.type}`);
 
-      if (op.type === "remove_import") {
-        let start = -1;
-        let end = -1;
-        if (op.importStatement) {
-          const stmt = normalizeImport(op.importStatement);
-          start = content.indexOf(stmt);
-          end = start >= 0 ? start + stmt.length : -1;
-        } else if ((op.moduleSpecifier || op.module) && !op.name) {
-          // op.module 是 op.moduleSpecifier 的别名；带 name 时只删除对应 binding。
-          const specifier = op.moduleSpecifier ?? op.module;
-          const re = new RegExp(`^.*from\\s+["']${String(specifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'];?\\s*$`, "m");
-          const match = re.exec(content);
-          if (match) {
-            start = match.index;
-            end = match.index + match[0].length;
-          }
-        } else if (op.name) {
-          const specifier = op.moduleSpecifier ?? op.module;
-          const escapedSpecifier = String(specifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const re = new RegExp(`^.*from\\s+["']${escapedSpecifier}["'];?\\s*$`, "m");
-          const match = re.exec(content);
-          if (match) {
-            start = match.index;
-            end = match.index + match[0].length;
-            const removal = removeNamedImportBinding(match[0], op.name);
-            if (removal.status === "not_found") {
-              throw new ProjectError("TARGET_NOT_FOUND", `未找到 named import：${op.name}`);
-            }
-            if (removal.status === "updated") {
-              const newContent = content.slice(0, start) + removal.statement + content.slice(end);
-              return [makePatch(snap.path, snap.revision, content, newContent, { op: "remove_import", startOffset: start, endOffset: end })];
-            }
-          }
-        }
-        if (start < 0 || end < 0) throw new ProjectError("TARGET_NOT_FOUND", "未找到 import 语句");
-        if (content[end] === "\n") end++;
-        const newContent = content.slice(0, start) + content.slice(end);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "remove_import", startOffset: start, endOffset: end })];
-      }
-
-      const { start, end } = resolveSymbolRange(content, input, op);
-
-      if (op.type === "replace_symbol") {
-        let replaceStart = start;
-        let replaceEnd = end;
-        if (op.mode === "body") {
-          // 优先用已解析目标携带的 AST body 区间（含花括号）。核心 jsts 策略不引入 TS 编译器，
-          // 无元数据时退回朴素花括号匹配；但若无法可靠定位 body，必须显式报错——
-          // 绝不静默把「只改 body」退化成替换整个声明（旧兜底会悄悄改坏代码）。
-          const metaBody = input.target?.metadata?.bodyRange as { startOffset?: number; endOffset?: number } | undefined;
-          if (isPresent(metaBody?.startOffset) && isPresent(metaBody?.endOffset) && metaBody.endOffset >= metaBody.startOffset + 2) {
-            replaceStart = metaBody.startOffset + 1;
-            replaceEnd = metaBody.endOffset - 1;
-          } else {
-            const bodyOpen = content.indexOf("{", start);
-            const bodyClose = bodyOpen !== -1 && bodyOpen < end ? content.lastIndexOf("}", end - 1) : -1;
-            if (bodyOpen === -1 || bodyOpen >= end || bodyClose <= bodyOpen) {
-              throw new ProjectError("TARGET_NOT_FOUND", "replace_symbol mode=body 需要可解析的函数或方法 body 范围");
-            }
-            replaceStart = bodyOpen + 1;
-            replaceEnd = bodyClose;
-          }
-        }
-        const newContent = content.slice(0, replaceStart) + op.replacement + content.slice(replaceEnd);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "replace_symbol", mode: op.mode ?? "whole", targetId: input.intent.targetId, startOffset: replaceStart, endOffset: replaceEnd })];
-      }
-      if (op.type === "insert_before_symbol") {
-        const newContent = content.slice(0, start) + op.text + content.slice(start);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_before_symbol", targetId: input.intent.targetId, startOffset: start, endOffset: start })];
-      }
-      if (op.type === "insert_after_symbol") {
-        const newContent = content.slice(0, end) + op.text + content.slice(end);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_after_symbol", targetId: input.intent.targetId, startOffset: end, endOffset: end })];
-      }
-      if (op.type === "insert_around_symbol") {
-        const at = op.position === "before" ? start : end;
-        const newContent = content.slice(0, at) + op.text + content.slice(at);
-        return [makePatch(snap.path, snap.revision, content, newContent, { op: "insert_around_symbol", targetId: input.intent.targetId, startOffset: at, endOffset: at })];
-      }
-      throw new ProjectError("NOT_SUPPORTED", `不支持的 JS/TS 操作：${op.type}`);
+      const located = locateSymbol(input, snapshot, operation);
+      const splice = symbolSplice(located, operation);
+      return [makePatch(identity.id, snapshot, applySplice(content, splice), {
+        op: operation.type,
+        mode: operation.type === "replace_symbol" ? operation.mode ?? "whole" : undefined,
+        targetId,
+        startOffset: splice.start,
+        endOffset: splice.end,
+      })];
     },
+  };
+}
+
+function isSymbolOperation(operation: EditOperation): operation is SymbolOperation {
+  return operation.type === "replace_symbol"
+    || operation.type === "insert_around_symbol"
+    || operation.type === "insert_before_symbol"
+    || operation.type === "insert_after_symbol";
+}
+
+function symbolSplice(located: LocatedSymbol, operation: SymbolOperation): SourceSplice {
+  switch (operation.type) {
+    case "replace_symbol": {
+      if (operation.mode !== "body") return { start: located.start, end: located.end, text: operation.replacement };
+      if (!located.body) throw new ProjectError("TARGET_NOT_FOUND", "replace_symbol mode=body 需要函数或方法 body；该目标没有可替换的 body，请改用 mode=whole");
+      return { start: located.body.startOffset, end: located.body.endOffset, text: operation.replacement };
+    }
+    case "insert_around_symbol": {
+      const at = operation.position === "before" ? located.start : located.end;
+      return { start: at, end: at, text: operation.text };
+    }
+    case "insert_before_symbol":
+      return { start: located.start, end: located.start, text: operation.text };
+    case "insert_after_symbol":
+      return { start: located.end, end: located.end, text: operation.text };
+  }
+}
+
+/**
+ * 定位符号操作的区间。已解析 target 带偏移时以它为准，并对齐到同一 AST 符号以取得 body；
+ * 否则按 operation.symbol 在 AST 中唯一匹配。范围永远来自 AST，不做括号计数式推断。
+ */
+function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, operation: SymbolOperation): LocatedSymbol {
+  const content = snapshot.content ?? "";
+  const range = input.target?.range;
+  if (isPresent(range?.startOffset) && isPresent(range.endOffset)) {
+    const aligned = isJsTsPath(snapshot.path)
+      ? parseJsTs(snapshot.path, content).symbols.find((symbol) => symbol.range.startOffset === range.startOffset && symbol.range.endOffset === range.endOffset)
+      : undefined;
+    return { start: range.startOffset, end: range.endOffset, body: aligned?.bodyRange };
+  }
+
+  // 只带行号的 target（如代码智能定位）没有偏移，退回用它的符号描述在 AST 里重新定位。
+  const query = operation.symbol ?? input.target?.symbol;
+  if (!query) throw new ProjectError("TARGET_NOT_FOUND", `${operation.type} 需要 targetId 或 operation.symbol`);
+  if (!isJsTsPath(snapshot.path)) throw new ProjectError("NOT_SUPPORTED", `${operation.type} 按 symbol 定位只支持 JS/TS 文件：${snapshot.path}`);
+  const matches = selectJsTsSymbols(parseJsTs(snapshot.path, content).symbols, query);
+  const label = `${query.container ? `${query.container}.` : ""}${query.name}`;
+  if (isEmpty(matches)) throw new ProjectError("TARGET_NOT_FOUND", `${operation.type} 未找到符号：${label}`);
+  if (matches.length > 1) {
+    throw new ProjectError(
+      "AMBIGUOUS_TARGET",
+      `${operation.type} 找到 ${matches.length} 个名为 ${label} 的符号：${matches.slice(0, MaxListedCandidates).map(describeSymbol).join("；")}`,
+      { candidates: matches.map(describeSymbol) },
+      "请补充 symbol.kind 或 symbol.container，使其只匹配一个符号。",
+    );
+  }
+  const [symbol] = matches;
+  return { start: symbol.range.startOffset, end: symbol.range.endOffset, body: symbol.bodyRange };
+}
+
+function describeSymbol(symbol: JsTsSymbol): string {
+  return `${symbol.kind} ${symbol.container ? `${symbol.container}.` : ""}${symbol.name}（第 ${symbol.range.startLine} 行）`;
+}
+
+function applySplice(content: string, splice: SourceSplice): string {
+  return content.slice(0, splice.start) + splice.text + content.slice(splice.end);
+}
+
+function makePatch(strategyId: string, snapshot: FileSnapshot, newContent: string, metadata: Record<string, unknown>): PreparedPatch {
+  const oldContent = snapshot.content ?? "";
+  const diff = unifiedDiff(snapshot.path, oldContent, newContent);
+  return {
+    patchId: id("patch"),
+    strategyId,
+    path: snapshot.path,
+    baseRevision: snapshot.revision,
+    oldContent,
+    newContent,
+    diff,
+    changedLines: countChangedLines(diff),
+    risk: "low", // 规模不代表风险,统一 low(真正危险在操作层判定)
+    metadata,
   };
 }

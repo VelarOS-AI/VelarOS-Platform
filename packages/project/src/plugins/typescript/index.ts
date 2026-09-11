@@ -5,8 +5,8 @@ import { typescriptAdapterFactory } from "./adapter.js";
 import { typescriptPatchStrategy } from "./strategy.js";
 import { typescriptSyntaxValidator } from "./validators.js";
 
+export { findJsTsSymbols as findTsSymbols, parseJsTs as parseTs } from "../../adapters/jsts-ast.js";
 export { typescriptAdapterFactory } from "./adapter.js";
-export { findTsSymbols,parseTs } from "./ast.js";
 export { typescriptPatchStrategy } from "./strategy.js";
 export { typescriptSyntaxValidator } from "./validators.js";
 

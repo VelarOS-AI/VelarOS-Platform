@@ -7,7 +7,9 @@ import { id } from "../utils/id.js";
 import { ext } from "../utils/path.js";
 import { rangeFromOffsets } from "../utils/text.js";
 
-const CODE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".rb", ".swift", ".kt"]);
+// JS/TS 由 jsts adapter 的 AST 符号独占：这里的正则 + 括号计数范围一旦参与 JS/TS 的解析，
+// 就会以低优先级候选的身份把错误范围混进 resolveTarget 与 listSymbols。
+const CODE_EXTENSIONS = new Set([".py", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".rb", ".swift", ".kt"]);
 
 function findCodeSymbols(content: string): SymbolInfo[] {
   const symbols: SymbolInfo[] = [];
