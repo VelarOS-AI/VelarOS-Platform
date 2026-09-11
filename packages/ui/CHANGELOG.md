@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 长时间运行中上滑阅读时，运行结束或工具调用的自动收起不再把视口拽到底部或别处：完成态「已处理」、
+  思考块和动作卡的自动折叠只在读者跟随底部时发生，未跟随时保持展开。
+- 读者未跟随时视口里的内容变矮，会话滚动在绘制前用末尾占位撑住原位置，不再被浏览器夹到新的底部。
+
+### Added
+
+- `scrollBehavior` 新增夹底守卫与自动收起扣留的纯策略（`resolveScrollClampGuard`、
+  `resolveAutoCollapseHold`、`ScrollClampGuardCssVariable`）。
+
 ## [0.2.35] — 2026-09-08
 
 ### Added

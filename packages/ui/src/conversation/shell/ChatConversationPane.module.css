@@ -38,6 +38,16 @@
   padding-bottom: max(9rem, calc(var(--chat-input-dock-height, 0px) + 0.75rem));
 }
 
+/*
+ * 夹底守卫占位：高度由 useScrollToBottom 写在滚动容器上（ScrollClampGuardCssVariable），
+ * 读者解除跟随后内容变矮时撑住他停留的位置，平时为 0。它自己不能成为原生滚动锚点，也不接收指针。
+ */
+.scrollClampGuard {
+  height: var(--velar-scroll-clamp-guard, 0px);
+  overflow-anchor: none;
+  pointer-events: none;
+}
+
 /**
  * 滚动导航是浮层，因此不能在出现时触发转录重挂：它的槽位一律**提前**留好，而不是等它出现再
  * 让内容让位。

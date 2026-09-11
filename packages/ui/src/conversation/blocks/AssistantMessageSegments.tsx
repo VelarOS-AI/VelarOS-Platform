@@ -10,6 +10,7 @@ import React, {
 } from 'react'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
+import { useConversationAutoCollapseHold } from '../react-hooks/conversationScrollFollow'
 import type { ToolRenderSegment } from '../tool-render/toolCallRenderGrouping'
 
 import {
@@ -325,6 +326,9 @@ function AssistantMessageSegmentsInner({
     : visibleMessageRenderSegments.length
   const shouldAutoCollapseProcessedActivity =
     !isStreaming && recentlyStreamingMessageIdRef.current === messageId
+  // 流式结束那一刻读者不在底部：完成态会把这条消息整段重排进「已处理」并重挂子节点，重挂出来的
+  // 折叠项、思考块一律按展开挂载，不做自动收起，读者正在看的内容就不会被抽走。跟随时照旧收起。
+  const holdExpandedForReader = useConversationAutoCollapseHold(!isStreaming)
   const segmentSuffixStates = useMemo(
     () => buildMessageSegmentSuffixStates(visibleMessageRenderSegments),
     [visibleMessageRenderSegments]
@@ -398,6 +402,7 @@ function AssistantMessageSegmentsInner({
         animateLiveToolActivity={animateLiveToolActivity}
         isStreaming={isStreaming}
         autoCollapseThinking={options.autoCollapseThinking}
+        thinkingDefaultExpanded={holdExpandedForReader}
         animateStreamingText={shouldRevealStreamingText && segment.key === streamingTextSegmentKey}
         sessionId={sessionId}
         messageId={messageId}
@@ -451,6 +456,7 @@ function AssistantMessageSegmentsInner({
         key={segment.key}
         blocks={segment.blocks}
         autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
+        defaultExpanded={holdExpandedForReader}
       >
         {() => renderActivityGroupChildren()}
       </ToolActivityDisclosure>
@@ -500,6 +506,7 @@ function AssistantMessageSegmentsInner({
             key={`processed-activity:${key ?? renderedSegments.length}`}
             blocks={blocks}
             autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
+            defaultExpanded={holdExpandedForReader}
             label={getProcessedActivityDisclosureLabel(
               blocks,
               locale,
@@ -626,6 +633,7 @@ function AssistantMessageSegmentsInner({
             key={`processed-activity:${firstProcessedKey}`}
             blocks={processedActivityBlocks}
             autoCollapseAfterPaint={shouldAutoCollapseProcessedActivity}
+            defaultExpanded={holdExpandedForReader}
             label={getProcessedActivityDisclosureLabel(
               processedActivityBlocks,
               locale,

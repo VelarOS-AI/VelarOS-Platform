@@ -60,6 +60,7 @@ type MessageContentBlockRenderContext = {
   isStreaming: boolean;
   animateLiveToolActivity: boolean;
   autoCollapseThinking: boolean;
+  thinkingDefaultExpanded: boolean;
   sessionId: string;
   messageId: string;
   runMarker: LooseOptional<ConversationMessageRunMarker>;
@@ -92,6 +93,8 @@ interface MessageContentBlockProps {
   animateLiveToolActivity?: boolean;
   isStreaming: boolean;
   autoCollapseThinking?: boolean;
+  /** 思考块挂载时展开（完成态重挂、读者不在底部时保持他刚才看到的形态）。 */
+  thinkingDefaultExpanded?: boolean;
   animateStreamingText: boolean;
   sessionId: string;
   messageId: string;
@@ -140,6 +143,7 @@ const STRUCTURED_BLOCK_RENDERERS = {
         block={block as Extract<ContentBlock, { type: "thinking" }>}
         isStreaming={ctx.isStreaming}
         autoCollapse={ctx.autoCollapseThinking}
+        defaultExpanded={ctx.thinkingDefaultExpanded}
         messageId={ctx.messageId}
         blockIndex={ctx.blockIndex}
         onTranslateThinkingBlock={ctx.onTranslateThinkingBlock}
@@ -353,6 +357,7 @@ function MessageContentBlockInner({
   animateLiveToolActivity = false,
   isStreaming,
   autoCollapseThinking = false,
+  thinkingDefaultExpanded = false,
   animateStreamingText,
   sessionId,
   messageId,
@@ -395,6 +400,7 @@ function MessageContentBlockInner({
       isStreaming,
       animateLiveToolActivity,
       autoCollapseThinking,
+      thinkingDefaultExpanded,
       sessionId,
       messageId,
       runMarker,
@@ -474,6 +480,7 @@ function areThinkingBlockPropsEqual(
   return (
     prev.isStreaming === next.isStreaming &&
     !!prev.autoCollapseThinking === !!next.autoCollapseThinking &&
+    !!prev.thinkingDefaultExpanded === !!next.thinkingDefaultExpanded &&
     prev.messageId === next.messageId &&
     prev.blockIndex === next.blockIndex &&
     prev.onTranslateThinkingBlock === next.onTranslateThinkingBlock

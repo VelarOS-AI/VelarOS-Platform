@@ -38,6 +38,7 @@ import type {
   UserActionEntry,
   UserActionResolution,
 } from '../projection'
+import { useConversationAutoCollapseHold } from '../react-hooks/conversationScrollFollow'
 
 import {
   fieldHtmlId,
@@ -388,12 +389,14 @@ export function UserActionCard({
   const formSubmitEntry = isFormCard
     ? viewModel.actionEntries.find((entry) => entry.action.kind === 'submit_form')
     : undefined
+  // 计时到点的自动折叠也是界面自己的变化：读者已上滑解除跟随时不收，免得他正看的卡片突然缩成一行。
+  const holdExpandedForReader = useConversationAutoCollapseHold(viewModel.autoCollapsed)
 
   if (viewModel.isHidden) return null
 
   // 自动折叠：纯展示的防堆积收口。按钮并没有失效，只是收起来了——所以整行本身就是展开入口，
   // 而不是一块"已超时"的墓碑。旧实现在这一刻把卡永久禁用并写盘，那是不可逆的能力剥夺。
-  if (viewModel.autoCollapsed)
+  if (viewModel.autoCollapsed && !holdExpandedForReader)
     return (
       <div className={styles.collapsedFrame}>
         <button

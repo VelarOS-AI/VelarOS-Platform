@@ -15,6 +15,7 @@ import { StyleUtils } from "@velaros-ai/ui";
 import { CopyButton } from "@velaros-ai/ui/product/buttons/CopyButton";
 
 import { useConversationI18n, useConversationTranslatorRuntime } from "../i18n";
+import { useConversationScrollFollow } from "../react-hooks/conversationScrollFollow";
 import { AutoScrollSuspendEventName } from "../react-hooks/scrollBehavior";
 import { useDisclosurePresence } from "../react-hooks/useDisclosurePresence";
 import { useTimerScope } from "../react-hooks/useTimerScope";
@@ -137,6 +138,7 @@ export function ToolActivityDisclosure({
   const [contentLoadPending, setContentLoadPending] = useState(false);
   const mountedRef = useRef(true);
   const timers = useTimerScope("ToolActivityDisclosure");
+  const scrollFollow = useConversationScrollFollow();
   const { mounted: isMounted, visible: isVisible } =
     useDisclosurePresence(expanded);
   const lazyChildren = isFunction(children)
@@ -173,6 +175,9 @@ export function ToolActivityDisclosure({
         collapseFrame = timers.nextFrame(
           () => {
             collapseFrame = undefined;
+            // 读者已上滑解除跟随：他可能正读着这组内容，收起会把视口里的节点整段抽走。
+            // 保持展开，收不收由他自己点。
+            if (!scrollFollow.isFollowingBottom()) return;
             setExpanded(false);
           },
           { label: "collapse processed tool activity" },
@@ -185,7 +190,7 @@ export function ToolActivityDisclosure({
       paintedExpandedFrame.cancel();
       collapseFrame?.cancel();
     };
-  }, [shouldAutoCollapseAfterPaint, timers]);
+  }, [scrollFollow, shouldAutoCollapseAfterPaint, timers]);
 
   useEffect(() => {
     if (contentRequested && contentIsLazy) {

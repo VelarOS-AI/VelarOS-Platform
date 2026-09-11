@@ -4446,6 +4446,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "boolean"
     },
     {
+      "name": "MessageContentBlock.thinkingDefaultExpanded",
+      "description": "思考块挂载时展开（完成态重挂、读者不在底部时保持他刚才看到的形态）。",
+      "type": "boolean"
+    },
+    {
       "name": "MessageContentBlock.animateStreamingText",
       "description": "Auto-generated from TypeScript props.",
       "type": "boolean",

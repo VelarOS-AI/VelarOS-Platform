@@ -33,6 +33,7 @@ import {
   STREAMDOWN_MARKDOWN_PLUGINS,
 } from '../markdown/streamdownMarkdown.config'
 import { prepareStreamdownMarkdownText } from '../markdown/streamdownMarkdownSource.utils'
+import { useConversationScrollFollow } from '../react-hooks/conversationScrollFollow'
 import { AutoScrollSuspendEventName } from '../react-hooks/scrollBehavior'
 import { useDisclosurePresence } from '../react-hooks/useDisclosurePresence'
 import { useTimerScope } from '../react-hooks/useTimerScope'
@@ -213,6 +214,7 @@ function ThinkingBlockInner({
   block,
   isStreaming = false,
   autoCollapse = false,
+  defaultExpanded = false,
   messageId,
   blockIndex,
   onTranslateThinkingBlock,
@@ -220,6 +222,8 @@ function ThinkingBlockInner({
   block: ThinkingContentBlock
   isStreaming?: boolean
   autoCollapse?: boolean
+  /** 挂载时展开：流式刚结束、读者不在底部时，完成态重挂的思考块保持他刚才看到的展开形态。 */
+  defaultExpanded?: boolean
   messageId: string
   blockIndex?: number
   onTranslateThinkingBlock?: (request: {
@@ -231,7 +235,10 @@ function ThinkingBlockInner({
   const { t, locale } = useConversationI18n()
   const { useAutoTranslateThinkingEnabled } = useConversationBlockHooks()
   const autoTranslateThinking = useAutoTranslateThinkingEnabled()
-  const [expanded, setExpanded] = useState(() => isStreaming && !autoCollapse)
+  const scrollFollow = useConversationScrollFollow()
+  const [expanded, setExpanded] = useState(
+    () => (isStreaming && !autoCollapse) || defaultExpanded
+  )
   const [isTranslating, setIsTranslating] = useState(false)
   const [translateError, setTranslateError] = useState<Nullable<string>>(null)
   const autoTranslateRequestKeyRef = useRef<Nullable<string>>(null)
@@ -251,17 +258,18 @@ function ThinkingBlockInner({
   const canTranslate =
     !isStreaming && !!onTranslateThinkingBlock && isPresent(blockIndex) && buttonKind !== 'hidden'
 
+  // 两处自动收起都只在读者跟随底部时发生：读者已上滑解除跟随时，他可能正读着这段思考。
   useEffect(() => {
-    if (autoCollapse) {
+    if (autoCollapse && scrollFollow.isFollowingBottom()) {
       setExpanded(false)
     }
-  }, [autoCollapse])
+  }, [autoCollapse, scrollFollow])
 
   useEffect(() => {
     const wasStreaming = wasStreamingRef.current
     wasStreamingRef.current = isStreaming
-    if (wasStreaming && !isStreaming) setExpanded(false)
-  }, [isStreaming])
+    if (wasStreaming && !isStreaming && scrollFollow.isFollowingBottom()) setExpanded(false)
+  }, [isStreaming, scrollFollow])
 
   useEffect(() => {
     if (buttonKind !== 'translate') {

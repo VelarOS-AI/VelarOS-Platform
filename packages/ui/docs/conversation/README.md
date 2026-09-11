@@ -69,6 +69,14 @@ Render Slot 组合接入。
   与下一条消息必须参与正常布局，不能相互覆盖。
 - 默认只在仍贴底时随新增内容滚动，不默认开启强制跟随。用户滚轮、触控板或触摸上滑后立刻
   暂停贴底；流式增量不得重挂滚动容器，指针位于浮动导航上时滚轮仍交给正文。
+- 读者上滑解除跟随后，界面自己的变化不得挪动他正在看的内容：
+  - 完成态「已处理」、思考块、动作卡计时折叠等自动收起只在读者跟随底部时发生；读者不在底部时
+    保持展开，由他手动收起。跟随状态由 `useScrollToBottom` 按它返回的 `scrollRef` 登记，
+    `ChatConversationPane` 用同一个 ref 下发给消息组件，宿主不必多传参数；没有 Provider 时按跟随处理。
+  - 视口里的内容变矮、浏览器要把 scrollTop 夹到新底部时，`useScrollToBottom` 在 ResizeObserver 回调
+    （绘制前）把占位高度写到滚动容器的 `ScrollClampGuardCssVariable` 上并放回原位；滚动内容的最后一个
+    元素必须是消费该变量的 aria-hidden 占位（`ChatConversationPane` 已内置）。读者上滑或内容重新长高时
+    占位缩小，回到底部、发送新消息、开启持续跟随或切换会话时清零。
 - 楼层导航显隐使用 `createChatScrollNavigatorVisibilityStore` /
   `ChatScrollNavigatorVisibilityToggle`；按钮、图标和无障碍状态不在产品仓各写一份。
 - 代码块和表格只在真实溢出高度阈值时显示展开控制，短内容直接完整显示。

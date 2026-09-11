@@ -29,6 +29,7 @@ import type {
   ConversationWorkerThread,
 } from '../projection'
 import type { ConversationRewindPlan } from '../projection'
+import { ConversationScrollFollowProvider } from '../react-hooks/conversationScrollFollow'
 import {
   type BrowserScreenshotDisplayMode,
   useConversationRenderSlots,
@@ -653,84 +654,57 @@ export function ChatConversationPane({
     },
     [renderWorkerThreadPanel, workerThreadPlacement]
   )
+  // 跟随状态按 scrollRef 从宿主的 useScrollToBottom 取：两端宿主不用多传参数，消息组件的
+  // 自动收起就只在读者跟随底部时发生。
   return (
-    <section
-      className={cx('chatPane', variant === 'side' && 'chatPaneSide')}
-      data-tour-id="chat-conversation"
-      style={{ '--chat-input-dock-height': `${inputDockHeight}px` } as CSSProperties}
-    >
-      <div
-        key={stableConversationRefreshKey}
-        className={styles.conversationBody}
-        data-scroll-navigator-hidden={!!scrollNavigatorHidden}
+    <ConversationScrollFollowProvider scrollRef={scrollRef}>
+      <section
+        className={cx('chatPane', variant === 'side' && 'chatPaneSide')}
+        data-tour-id="chat-conversation"
+        style={{ '--chat-input-dock-height': `${inputDockHeight}px` } as CSSProperties}
       >
-        <ScrollArea
-          ref={scrollRef}
-          className={styles.messageList}
-          data-tour-id="chat-output"
-          aria-label={t('chat.messagesRegionAriaLabel')}
+        <div
+          key={stableConversationRefreshKey}
+          className={styles.conversationBody}
+          data-scroll-navigator-hidden={!!scrollNavigatorHidden}
         >
-          <Stack
-            className={cx('messageListInner', variant === 'side' && 'messageListInnerSide')}
-            gap="lg"
+          <ScrollArea
+            ref={scrollRef}
+            className={styles.messageList}
+            data-tour-id="chat-output"
+            aria-label={t('chat.messagesRegionAriaLabel')}
           >
-            {/* 向上翻页哨兵：窗口已在已加载顶端时，满屏前即触发从磁盘加载更旧消息 */}
-            {hasOlderMessages && isWindowAtLoadedTop && (
-              <div ref={loadMoreSentinelRef} className={styles.loadMoreSentinel}>
-                {isLoadingOlderMessages ? '...' : null}
-              </div>
-            )}
-            <SessionStickyDock
-              variant={variant}
-              items={stickyDockItems}
-              barLabel={t('sessionStickyDock.barLabel')}
-              autoRevealKey={goalLifecycleRevealKey ?? activeDockPlanRevealKey}
-              autoCollapseKey={goalLifecycleCollapseKey}
-              spotlightItemIds={activeDockStatusSpotlightItemIds}
-            />
-            {!isEmpty(workerThreadPlacement.beforeTranscript)
-              ? renderWorkerThreadPanel(workerThreadPlacement.beforeTranscript)
-              : null}
-            <ChatTranscript
-              messages={windowMessages}
-              browserScreenshotDisplayMode={browserScreenshotDisplayMode}
-              sessionId={sessionId}
-              className={styles.messageSequence}
-              pricingCatalog={pricingCatalog}
-              getQuestionMessage={getTranscriptQuestionMessage}
-              getIsStreaming={getTranscriptIsStreaming}
-              getRunMarker={getTranscriptRunMarker}
-              getInlineNotice={getTranscriptInlineNotice}
-              inlineNoticeRuntimeSource={inlineNoticeRuntimeSource}
-              showToolDetails
-              planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              activeProjectRoot={activeProjectRoot}
-              projectRoots={projectRoots}
-              canShowFileChangeSummary={supportsProjectFiles}
-              billingModel={billingModel}
-              getRuntimeCostContexts={getTranscriptRuntimeCostContexts}
-              getGoalCompletionSummary={getTranscriptGoalCompletionSummary}
-              renderAfterMessage={renderWorkerThreadsAfterMessage}
-              renderAfterToolCall={renderWorkerThreadsAfterToolCall}
-              onOpenBrowserLink={onOpenBrowserLink}
-              onOpenFileChange={onOpenFileChange}
-              onOpenProjectPath={onOpenProjectPath}
-              onReviewFileChanges={onReviewFileChanges}
-              activeUserActionCardIds={transcriptActiveUserActionCardIds}
-              onResolveUserActionCard={resolveUserActionCard}
-              onRewindToMessage={onRewindToMessage}
-              onTranslateThinkingBlock={onTranslateThinkingBlock}
-              canRewindToMessage={canRewindToMessage}
-              getRewindPlan={getRewindPlan}
-            />
-            {inlineConversationCards}
-            {!!streamSlot && <div className={styles.streamSlot}>{streamSlot}</div>}
-            {!inlineNoticeMessageId && inlineNotice && (
-              <MessageBubble
-                message={RuntimeInlineNoticeMessage}
-                sessionId={sessionId}
+            <Stack
+              className={cx('messageListInner', variant === 'side' && 'messageListInnerSide')}
+              gap="lg"
+            >
+              {/* 向上翻页哨兵：窗口已在已加载顶端时，满屏前即触发从磁盘加载更旧消息 */}
+              {hasOlderMessages && isWindowAtLoadedTop && (
+                <div ref={loadMoreSentinelRef} className={styles.loadMoreSentinel}>
+                  {isLoadingOlderMessages ? '...' : null}
+                </div>
+              )}
+              <SessionStickyDock
+                variant={variant}
+                items={stickyDockItems}
+                barLabel={t('sessionStickyDock.barLabel')}
+                autoRevealKey={goalLifecycleRevealKey ?? activeDockPlanRevealKey}
+                autoCollapseKey={goalLifecycleCollapseKey}
+                spotlightItemIds={activeDockStatusSpotlightItemIds}
+              />
+              {!isEmpty(workerThreadPlacement.beforeTranscript)
+                ? renderWorkerThreadPanel(workerThreadPlacement.beforeTranscript)
+                : null}
+              <ChatTranscript
+                messages={windowMessages}
                 browserScreenshotDisplayMode={browserScreenshotDisplayMode}
-                inlineNotice={inlineNotice}
+                sessionId={sessionId}
+                className={styles.messageSequence}
+                pricingCatalog={pricingCatalog}
+                getQuestionMessage={getTranscriptQuestionMessage}
+                getIsStreaming={getTranscriptIsStreaming}
+                getRunMarker={getTranscriptRunMarker}
+                getInlineNotice={getTranscriptInlineNotice}
                 inlineNoticeRuntimeSource={inlineNoticeRuntimeSource}
                 showToolDetails
                 planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
@@ -738,63 +712,97 @@ export function ChatConversationPane({
                 projectRoots={projectRoots}
                 canShowFileChangeSummary={supportsProjectFiles}
                 billingModel={billingModel}
-                pricingCatalog={pricingCatalog}
-                runtimeCostContexts={EmptyRuntimeCostContexts}
+                getRuntimeCostContexts={getTranscriptRuntimeCostContexts}
+                getGoalCompletionSummary={getTranscriptGoalCompletionSummary}
+                renderAfterMessage={renderWorkerThreadsAfterMessage}
+                renderAfterToolCall={renderWorkerThreadsAfterToolCall}
                 onOpenBrowserLink={onOpenBrowserLink}
                 onOpenFileChange={onOpenFileChange}
                 onOpenProjectPath={onOpenProjectPath}
                 onReviewFileChanges={onReviewFileChanges}
                 activeUserActionCardIds={transcriptActiveUserActionCardIds}
                 onResolveUserActionCard={resolveUserActionCard}
+                onRewindToMessage={onRewindToMessage}
                 onTranslateThinkingBlock={onTranslateThinkingBlock}
+                canRewindToMessage={canRewindToMessage}
+                getRewindPlan={getRewindPlan}
               />
-            )}
-            {shouldRenderAwaitingInputCard && (
-              <ChatAwaitingInputCard
-                question={runtime.awaitingInputQuestion}
-                onSubmit={onSubmitInput}
-              />
-            )}
-            {shouldRenderAwaitingConfirmationCard && (
-              <ChatConfirmationCard
-                key={runtime.awaitingConfirmationId}
-                message={runtime.awaitingConfirmationMessage}
-                detail={runtime.awaitingConfirmationDetail}
-                onApprove={() => onResolveConfirmation(true, undefined, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
-                onReject={(rejectionMessage) => onResolveConfirmation(false, rejectionMessage, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
-              />
-            )}
-            {isStreaming &&
-              (!showThinkingProcess || !hasStreamingThinkingBlock) &&
-              !inlineNotice && (
-                <div className={styles.thinkingRow}>
-                  <div className={styles.thinkingText}>
-                    <span className={styles.thinkingDot} />
-                    <Paragraph spacing="none">{visibleRuntimeSummary ?? runningLabel}</Paragraph>
-                  </div>
-                </div>
+              {inlineConversationCards}
+              {!!streamSlot && <div className={styles.streamSlot}>{streamSlot}</div>}
+              {!inlineNoticeMessageId && inlineNotice && (
+                <MessageBubble
+                  message={RuntimeInlineNoticeMessage}
+                  sessionId={sessionId}
+                  browserScreenshotDisplayMode={browserScreenshotDisplayMode}
+                  inlineNotice={inlineNotice}
+                  inlineNoticeRuntimeSource={inlineNoticeRuntimeSource}
+                  showToolDetails
+                  planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
+                  activeProjectRoot={activeProjectRoot}
+                  projectRoots={projectRoots}
+                  canShowFileChangeSummary={supportsProjectFiles}
+                  billingModel={billingModel}
+                  pricingCatalog={pricingCatalog}
+                  runtimeCostContexts={EmptyRuntimeCostContexts}
+                  onOpenBrowserLink={onOpenBrowserLink}
+                  onOpenFileChange={onOpenFileChange}
+                  onOpenProjectPath={onOpenProjectPath}
+                  onReviewFileChanges={onReviewFileChanges}
+                  activeUserActionCardIds={transcriptActiveUserActionCardIds}
+                  onResolveUserActionCard={resolveUserActionCard}
+                  onTranslateThinkingBlock={onTranslateThinkingBlock}
+                />
               )}
-          </Stack>
-        </ScrollArea>
+              {shouldRenderAwaitingInputCard && (
+                <ChatAwaitingInputCard
+                  question={runtime.awaitingInputQuestion}
+                  onSubmit={onSubmitInput}
+                />
+              )}
+              {shouldRenderAwaitingConfirmationCard && (
+                <ChatConfirmationCard
+                  key={runtime.awaitingConfirmationId}
+                  message={runtime.awaitingConfirmationMessage}
+                  detail={runtime.awaitingConfirmationDetail}
+                  onApprove={() => onResolveConfirmation(true, undefined, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
+                  onReject={(rejectionMessage) => onResolveConfirmation(false, rejectionMessage, { confirmationId: toOptional(runtime.awaitingConfirmationId) })}
+                />
+              )}
+              {isStreaming &&
+                (!showThinkingProcess || !hasStreamingThinkingBlock) &&
+                !inlineNotice && (
+                  <div className={styles.thinkingRow}>
+                    <div className={styles.thinkingText}>
+                      <span className={styles.thinkingDot} />
+                      <Paragraph spacing="none">{visibleRuntimeSummary ?? runningLabel}</Paragraph>
+                    </div>
+                  </div>
+                )}
+            </Stack>
+            {/* 夹底守卫占位：必须是滚动内容的最后一个元素，且在被 ResizeObserver 观测的内容栈之外，
+                改高度不会再触发一轮尺寸回调。平时高度为 0。 */}
+            <div aria-hidden="true" className={styles.scrollClampGuard} />
+          </ScrollArea>
 
-        <ChatScrollNavigator
-          hidden={scrollNavigatorHidden}
-          followLocked={followLocked}
-          onFollowLockedChange={onFollowLockedChange}
-          scrollRef={scrollRef}
-          transcriptNavigationRef={transcriptNavigationRef}
-        />
-      </div>
-
-      <section
-        ref={inputDockRef}
-        className={styles.inputDock}
-        aria-label={t('chat.composerRegionAriaLabel')}
-      >
-        <div className={cx('inputDockInner', variant === 'side' && 'inputDockInnerSide')}>
-          <div className={styles.inputDockSurface}>{composer}</div>
+          <ChatScrollNavigator
+            hidden={scrollNavigatorHidden}
+            followLocked={followLocked}
+            onFollowLockedChange={onFollowLockedChange}
+            scrollRef={scrollRef}
+            transcriptNavigationRef={transcriptNavigationRef}
+          />
         </div>
+
+        <section
+          ref={inputDockRef}
+          className={styles.inputDock}
+          aria-label={t('chat.composerRegionAriaLabel')}
+        >
+          <div className={cx('inputDockInner', variant === 'side' && 'inputDockInnerSide')}>
+            <div className={styles.inputDockSurface}>{composer}</div>
+          </div>
+        </section>
       </section>
-    </section>
+    </ConversationScrollFollowProvider>
   )
 }
