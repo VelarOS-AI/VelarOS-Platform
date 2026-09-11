@@ -92,7 +92,12 @@ function alignedEqual(expected: string, actual: Optional<string>, index: number,
   return actual === expected
 }
 
-/** 在给定口径下比较对齐的两行。 */
+/**
+ * 在给定口径下比较对齐的两行。口径去掉的末尾空白有两种读法：落在文件行尾时是行尾空白，按口径
+ * 忽略；后面还跟着文件内容时（oldText 停在 `const x = ` 这类行中间）它就是正文，只能逐字比较。
+ * 只有末行（含单行）可能停在行中间，其余各行必然到达文件行尾。两种读法都保证口径只会放宽
+ * 不会收紧：原文逐字一致的行在任何口径下都一致，差异归因因此总能找到必要的那一级。
+ */
 function equalUnder(
   steps: typeof MismatchNormalizers,
   expected: string,
@@ -102,8 +107,11 @@ function equalUnder(
 ): boolean {
   if (!isPresent(actual)) return false
   const normalized = normalizeWith(steps, expected)
-  const endAnchored = trailingBlankLength(normalized) < trailingBlankLength(expected)
-  return alignedEqual(normalized, normalizeWith(steps, actual), index, count, endAnchored)
+  const stripped = trailingBlankLength(normalized) < trailingBlankLength(expected)
+  if (alignedEqual(normalized, normalizeWith(steps, actual), index, count, stripped)) return true
+  if (!stripped || index !== count - 1) return false
+  const bodySteps = steps.filter(([cause]) => cause !== 'line_ending' && cause !== 'trailing_whitespace')
+  return alignedEqual(normalizeWith(bodySteps, expected), normalizeWith(bodySteps, actual), index, count)
 }
 
 interface CandidateStart {
@@ -211,6 +219,10 @@ function bestCandidateStart(fileLines: readonly string[], needleLines: readonly 
   return best?.start
 }
 
+/**
+ * 调用方只传原文不一致的行。首个让两行相等的放宽层级里，最后加入的那一级必然必要：去掉它
+ * 就退回上一层级（或原文比较），而那里两行不相等，所以返回值不会为空。
+ */
 function mismatchCauses(expected: string, actual: string, index: number, count: number): TextMismatchCause[] {
   for (let depth = 1; depth <= MismatchNormalizers.length; depth += 1) {
     const steps = MismatchNormalizers.slice(0, depth)
@@ -354,7 +366,8 @@ export function textMatchMissNextAction(diagnosis: TextMatchMissDiagnosis): stri
 
 /**
  * 行尾空白与换行符（CRLF/LF）差异是纯排版噪声：忽略它们后在全文唯一命中的位置可以安全替换。
- * 口径与 equalUnder(TolerantSteps) 一致：末行被去掉的空白必须落在文件行尾才算行尾空白。
+ * 口径与 equalUnder(TolerantSteps) 一致：末行末尾的空白要么落在文件行尾、按行尾空白忽略，
+ * 要么后面还有内容、按原文逐字匹配，绝不让 'const x ' 命中 'const xyz'。
  * 缩进不在宽容范围内——YAML、Python 等语言里缩进就是语义。
  */
 export function findLineWhitespaceTolerantMatches(
@@ -363,12 +376,14 @@ export function findLineWhitespaceTolerantMatches(
   limit: number,
 ): Array<{ index: number; text: string }> {
   if (isBlank(needle)) return []
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const lines = needle.split('\n')
   const lastLine = lines[lines.length - 1]
-  const lineEnd = trimLineEnd(lastLine) === lastLine ? '' : '[ \\t]*(?=\\r?\\n|$)'
-  const pattern = lines
-    .map((line) => trimLineEnd(line).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('[ \\t]*\\r?\\n') + lineEnd
+  const lastBody = trimLineEnd(lastLine)
+  const lastTail = lastBody === lastLine
+    ? ''
+    : `(?:[ \\t]*(?=\\r?\\n|$)|${escape(lastLine.slice(lastBody.length))})`
+  const pattern = lines.map((line) => escape(trimLineEnd(line))).join('[ \\t]*\\r?\\n') + lastTail
   const matches: Array<{ index: number; text: string }> = []
   for (const match of content.matchAll(new RegExp(pattern, 'g'))) {
     matches.push({ index: match.index, text: match[0] })

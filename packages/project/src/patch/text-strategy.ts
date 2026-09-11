@@ -60,8 +60,8 @@ function selectMissingTextMatch(
     return {
       indices: [match.index],
       matchedText: match.text,
-      // 换行符差异被宽容时，新文本也跟随文件：LF 区域不写入 CRLF（LF→CRLF 由调用方统一适配）。
-      replacementText: match.text.includes("\r\n") ? replacementText : replacementText?.replace(/\r\n/g, "\n"),
+      // 换行符差异被宽容时 newText 的换行符不可信：先统一成 LF，再由调用方按被替换区域适配。
+      replacementText: replacementText?.replace(/\r\n/g, "\n"),
       totalMatches: 1,
       matchNote: `${operationName} 的文本与文件第 ${offsetToLine(content, match.index)} 行起的内容仅在行尾空白或换行符（CRLF/LF）上不同；忽略这些差异后全文唯一，已按该位置修改。`,
     }
@@ -165,6 +165,14 @@ function selectTextMatches(
     replacementText: found.replacementText,
     totalMatches: found.count,
   }
+}
+
+/**
+ * 新文本的换行符跟随被替换的区域，区域不跨行时才跟随整个文件：混用换行符的文件里，
+ * LF 区域不会被写入 CRLF，CRLF 区域也不会混入 LF。
+ */
+function lineEndingReference(content: string, matchedText: string): string {
+  return matchedText.includes("\n") ? matchedText : content
 }
 
 function replaceSelectedMatches(
@@ -284,10 +292,7 @@ export function textPatchStrategy(): PatchStrategy {
           start = selected.indices[0];
           end = start + selected.matchedText.length;
           replacementText = selected.replacementText ?? op.newText;
-          replacementText = adaptTextToContentLineEndings(
-            selected.matchedText.includes("\r\n") ? selected.matchedText : content,
-            replacementText,
-          );
+          replacementText = adaptTextToContentLineEndings(lineEndingReference(content, selected.matchedText), replacementText);
           // 针对已匹配文本窗口校验 anchors.mustContain。
           const anchors = op.anchors ?? input.target?.anchors;
           if (anchors?.mustContain) {
@@ -321,7 +326,7 @@ export function textPatchStrategy(): PatchStrategy {
           throw new ProjectError("TARGET_NOT_FOUND", "replace_text 需要已解析目标范围或 oldText");
         }
         const replacedText = content.slice(start, end);
-        replacementText = adaptTextToContentLineEndings(replacedText.includes("\r\n") ? replacedText : content, replacementText);
+        replacementText = adaptTextToContentLineEndings(lineEndingReference(content, replacedText), replacementText);
         const newContent = content.slice(0, start) + replacementText + content.slice(end);
         return [patch(snap.path, snap.revision, content, newContent, "core.text-patch", { op: "replace_text", startOffset: start, endOffset: end })];
       }
@@ -345,7 +350,7 @@ export function textPatchStrategy(): PatchStrategy {
           "insert_text_at_anchor",
         );
         const insertionText = adaptTextToContentLineEndings(
-          selected.matchedText.includes("\r\n") ? selected.matchedText : content,
+          lineEndingReference(content, selected.matchedText),
           selected.replacementText ?? op.text,
         );
         if (op.skipIfAlreadyPresent && (includesLineEndingAware(content, op.text) || content.includes(insertionText))) return [patch(snap.path, snap.revision, content, content, "core.text-patch", { op: "insert_text_at_anchor", noop: true })];

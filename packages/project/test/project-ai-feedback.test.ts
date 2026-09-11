@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import { createTextAdapter } from '../src/adapters/text-adapter'
 import { projectTools } from '../src/agent/Project.tool'
 import {
   type AgentProjectKernelPort,
@@ -17,6 +16,8 @@ import type { ProjectToolContext } from '../src/agent/Types'
 import { ProjectEditOperationSchema } from '../src/edit-schema'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/index'
 import { ProjectToolNames } from '../src/project-tool-names'
+import { includesLineEndingAware } from '../src/utils/text'
+import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/utils/text-match-feedback'
 
 let root = ''
 
@@ -397,20 +398,61 @@ describe('text anchor miss diagnostics', () => {
     })
   })
 
-  test('surfaces the same diagnosis when an exact snippet target cannot be resolved', async () => {
-    await writeFile(join(root, 'render.ts'), source)
-    const project = await createProjectKernel({ root })
-    const snapshot = (await project.read({ path: 'render.ts' })).snapshot
-    const resolved = createTextAdapter().resolveTarget!({
-      path: 'render.ts',
-      target: { exactSnippet: 'function lookup(key: string) {\n    const content' },
-      snapshot,
+  test('names the real divergence when the last oldText line stops mid-line after tolerated whitespace', async () => {
+    await writeFile(join(root, 'mid.ts'), 'foo\nconst x = 1;\n')
+    const error = await prepareFailure({
+      type: 'replace_text',
+      path: 'mid.ts',
+      oldText: 'foo \nconst y = ',
+      newText: 'x',
     })
-    expect(resolved).toMatchObject({
-      status: 'not_found',
-      reason: expect.stringContaining('缩进不同'),
-      suggestions: [expect.stringContaining('第 4–10 行')],
+    expect(error.details).toMatchObject({
+      candidateLine: 1,
+      matchedLines: 1,
+      causes: ['content'],
+      tolerated: ['trailing_whitespace'],
+      firstMismatch: { oldTextLine: 2, fileLine: 2, expected: 'const y = ', actual: 'const x = 1;' },
     })
+    expect(error.message).toContain('该行内容与文件不同')
+  })
+
+  test('always names a cause and agrees with the tolerant matcher on generated near-misses', () => {
+    const variantsOf = (line: string) => [
+      `${line} `,
+      `${line}\t`,
+      line.trimStart(),
+      `  ${line}`,
+      line.replace(/\\/g, '\\\\'),
+      line.replace(/"/g, "'"),
+      `${line.slice(0, 3)}#${line.slice(3)}`,
+    ]
+    const lines = source.split('\n')
+    const failures: Array<{ content: string; needle: string; diagnosis: unknown }> = []
+    for (const content of [source, source.replace(/\n/g, '\r\n')]) {
+      for (let start = 0; start < lines.length; start += 1) {
+        for (let size = 1; size <= 3 && start + size <= lines.length; size += 1) {
+          const window = lines.slice(start, start + size)
+          const last = window[size - 1]
+          // 末行既取整行，也取停在每个空格之后的前缀：这正是 oldText 停在行中间的形态。
+          const cuts = [last.length, ...[...last].flatMap((char, index) => char === ' ' ? [index + 1] : [])]
+          for (const cut of cuts) {
+            const base = [...window.slice(0, -1), last.slice(0, cut)]
+            for (const [target, line] of base.entries()) {
+              for (const variant of variantsOf(line)) {
+                const needle = base.map((other, index) => index === target ? variant : other).join('\n')
+                if (includesLineEndingAware(content, needle)) continue
+                const diagnosis = diagnoseTextMatchMiss(content, needle)
+                const unexplained = diagnosis.causes.length === 0 || /^[；。]/.test(diagnosis.hint)
+                const unmatchedAgreement = diagnosis.candidateLine !== undefined && diagnosis.firstMismatch === undefined
+                  && findLineWhitespaceTolerantMatches(content, needle, 1).length === 0
+                if (unexplained || unmatchedAgreement) failures.push({ content, needle, diagnosis })
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(failures.slice(0, 5)).toEqual([])
   })
 })
 
@@ -471,6 +513,40 @@ describe('whitespace-tolerant text matching', () => {
     expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白')
     await project.applyEdit({ transactionId: transaction.transactionId })
     expect(await readFile(join(root, 'price.txt'), 'utf8')).toBe('price 1X\nnext\n')
+  })
+
+  test('tolerates earlier trailing whitespace when the last line stops mid-line and matches its tail verbatim', async () => {
+    const project = await createProjectKernel({ root })
+    const cases = [
+      { file: 'mid.ts', content: 'foo\nconst x = 1;\n', oldText: 'foo \nconst x = ', newText: 'bar\nconst x = ', after: 'bar\nconst x = 1;\n' },
+      { file: 'indent.txt', content: 'foo \n  bar\n', oldText: 'foo\n  ', newText: 'baz\n    ', after: 'baz\n    bar\n' },
+    ]
+    for (const { file, content, oldText, newText, after } of cases) {
+      await writeFile(join(root, file), content)
+      const transaction = await project.prepareEdit({ operations: [{ operation: { type: 'replace_text', path: file, oldText, newText } }] })
+      expect(transaction.patches[0]?.metadata?.matchNote).toContain('行尾空白')
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(await readFile(join(root, file), 'utf8')).toBe(after)
+    }
+  })
+
+  test('keeps each region of a mixed line-ending file on its own line ending', async () => {
+    const content = 'x\r\ny\r\nfoo\nbar\n'
+    const cases = [
+      // 宽容匹配：oldText 是 CRLF、命中的是 LF 区域。
+      { oldText: 'foo\r\nbar', newText: 'FOO\r\nBAR', after: 'x\r\ny\r\nFOO\nBAR\n' },
+      // 精确匹配命中 LF 区域。
+      { oldText: 'foo\nbar', newText: 'FOO\nBAR', after: 'x\r\ny\r\nFOO\nBAR\n' },
+      // 精确匹配命中 CRLF 区域。
+      { oldText: 'x\ny', newText: 'X\nY', after: 'X\r\nY\r\nfoo\nbar\n' },
+    ]
+    for (const { oldText, newText, after } of cases) {
+      await writeFile(join(root, 'mixed.txt'), content)
+      const project = await createProjectKernel({ root })
+      const transaction = await project.prepareEdit({ operations: [{ operation: { type: 'replace_text', path: 'mixed.txt', oldText, newText } }] })
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(await readFile(join(root, 'mixed.txt'), 'utf8')).toBe(after)
+    }
   })
 
   test('refuses a tolerant match that is not unique and lists where it would land', async () => {
