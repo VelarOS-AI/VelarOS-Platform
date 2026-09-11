@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.18",
+  "acceptedPackageVersion": "0.6.19",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
