@@ -9,6 +9,7 @@ import {
   classifyChatStreamStateKind,
   type FrameTimerPort,
 } from '../../packages/ui/src/conversation/stream/chatStreamPacer'
+import { DefaultStreamPaceTuning } from '../../packages/ui/src/conversation/stream/streamPaceBudget'
 
 /** 宿主自己的事件形状（如直接消费执行事件的 Workbench）。 */
 type HostEvent =
@@ -212,6 +213,58 @@ void describe('chat stream pacer typing speed', () => {
     assert.ok(chunks.length > 1)
     assert.ok(chunks.every((chunk) => chunk.length % 2 === 0), chunks.join('|'))
     assert.equal(chunks.join(''), '😀'.repeat(20))
+  })
+})
+
+/** 会话流事件 + 按约定只认累计快照的宿主去重；逐帧吐出的思考切片直接拼进同一块。 */
+function createReasoningPacer() {
+  const frames = createFrames()
+  const slices: string[] = []
+  let thinking = ''
+  const applyReasoning = (_session: string, event: ChatStreamEvent): void => {
+    if (event.type !== 'reasoning') return
+    slices.push(event.payload.text)
+    thinking += event.payload.text
+  }
+  const pacer = new ChatStreamPacer({
+    timers: frames.timers,
+    tuning: { ...DefaultStreamPaceTuning, maxCharsPerFrame: 1 },
+    applyTextChunk: () => undefined,
+    applyDeferredLiveEvent: applyReasoning,
+    applyImmediateLiveEvent: applyReasoning,
+    applyCachedEvent: applyReasoning,
+    appendImmediateText: () => undefined,
+    isSessionStreaming: () => true,
+    getReasoningAppendText: (previous, incoming) =>
+      previous && incoming.startsWith(previous) ? incoming.slice(previous.length) : incoming,
+  })
+  const reasoning = (sequence: number, text: string): void =>
+    pacer.enqueueLiveEvent('s', sequence, { type: 'reasoning', payload: { id: '0', text } })
+  return { frames, slices, reasoning, thinking: () => thinking }
+}
+
+void describe('chat stream pacer reasoning', () => {
+  void test('re-slices thinking one character per frame without dropping repeated characters', () => {
+    const { frames, slices, reasoning, thinking } = createReasoningPacer()
+    for (const [index, text] of ['wel', 'l"', '12', '00'].entries()) {
+      reasoning(index + 1, text)
+      frames.step()
+      frames.step()
+    }
+    frames.runAll()
+
+    assert.ok(slices.every((slice) => slice.length === 1), slices.join('|'))
+    assert.equal(thinking(), 'well"1200')
+  })
+
+  void test('hands the host everything registered for that id, so a re-sent snapshot adds nothing', () => {
+    const { frames, reasoning, thinking } = createReasoningPacer()
+    reasoning(1, 'Let me')
+    reasoning(2, 'Let me think')
+    reasoning(3, ' now')
+    frames.runAll()
+
+    assert.equal(thinking(), 'Let me think now')
   })
 })
 

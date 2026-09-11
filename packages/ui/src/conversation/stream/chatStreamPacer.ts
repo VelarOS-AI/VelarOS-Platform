@@ -150,7 +150,7 @@ interface PacerSessionState<TEvent> {
   frame: Nullable<FrameLeasePort>
   /** 平滑收尾：挂起的终止事件（done/end）；积压逐帧吐完后才应用（finalize），避免一次性闪现。 */
   pendingTerminals: TEvent[]
-  /** reasoning 不进 FIFO、立即应用；这里按 id 记录已登记原文用于增量去重。 */
+  /** 按 id 记录已登记的思考原文，供宿主识别累计快照、只取增量。 */
   reasoningRawText: Map<string, string>
   /** 上一帧时间；空闲时重置，防止把后台停顿累计成下一次突发额度。 */
   lastFrameTimeMs: Nullable<number>
@@ -194,7 +194,9 @@ export interface ChatStreamPacerOptions<TEvent> {
   /**
    * 思考增量去重：给定同 id 已登记原文与本次到达原文，返回需追加的增量文本。
    * 由宿主注入（desktop 侧对应 state 层 `getReasoningAppendText`），使起搏器保持纯净、
-   * 不反依 desktop 状态半壁。
+   * 不反依 desktop 状态半壁。只应识别累计快照（到达原文以已登记原文开头时取差量），
+   * 其余原样返回；不能按尾部重叠裁剪——增量本来就可能以已登记原文的结尾字符开头
+   * （`wel` + `l`），裁掉就吞字。逐帧吐出的切片已是增量，宿主落块时直接拼接。
    */
   getReasoningAppendText: (previousRawText: string, incomingRawText: string) => string
 }
@@ -290,7 +292,7 @@ export class ChatStreamPacer<TEvent = ChatStreamEvent> {
     const state = this.getSessionState(sessionId)
 
     if (eventClass.kind === 'reasoning') {
-      // 思考也进 FIFO，与正文/工具按到达顺序串行逐帧吐字：先按 id 去重只取增量，
+      // 思考也进 FIFO，与正文/工具按到达顺序串行逐帧吐字：先按 id 交宿主识别累计快照、只取增量，
       // 再并入队列（同 id 续接到末尾的思考块），消除"思考每 token 立即全量 apply"
       // 与被起搏的正文并发抢渲染导致的卡顿/闪现。
       const previousRaw = state.reasoningRawText.get(eventClass.id) ?? ''

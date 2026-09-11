@@ -87,6 +87,9 @@ const StreamIdleThinkingNoticeDelayMs = 15_000;
 /** 内联 `<think>` 标签抽出来的思考增量共用同一个 reasoning stream id（相邻续写并成一块）。 */
 const InlineReasoningTagStreamId = "inline-think";
 
+/** 从 raw 分片兜底抽出的思考增量共用的 reasoning stream id（取值沿用历史）。 */
+const RawReasoningStreamId = "deepseek-reasoning";
+
 interface StreamConsumerTurnState {
   /**
    * 面向界面的轮次计数轴；主 Agent 是确定 turn（number），子 Agent（QueryTurn 装配）没有 UI 轮次轴，
@@ -221,7 +224,8 @@ interface StreamIdleThinkingNotifier {
  * 设计要点：
  * - 通过 AgentStreamDiagnosticHelper 同步记录每个 chunk 的诊断信息，
  *   一旦遇到非标准的 raw chunk（如 Anthropic content_block_delta），会尝试用
- *   AgentRawStreamTextExtractor 把视觉文本/reasoning 抢救出来作为兜底。
+ *   AgentRawStreamTextExtractor 把视觉文本/reasoning 抢救出来作为兜底——只在 SDK
+ *   整条流都没给出对应文本（非空 text-delta / reasoning-delta）时才用，不与之叠加。
  * - 对 abortSignal 全程响应：循环开头检查，避免在已取消的情况下继续推 UI 事件。
  * - tool-call 不在这里同步执行，仅注册到 ToolExecutor；执行/取消由外层 ToolExecutor 统一调度，
  *   保证“并发安全工具并发执行 / 非并发安全工具串行” 的策略一致。
@@ -280,6 +284,19 @@ class StreamConsumer {
     };
     const flushReasoningTail = (): void => {
       appendReasoningDelta(reasoningToolReferenceCanonicalizer.flush());
+    };
+    // 思考每条流只认一个来源：SDK 给出了结构化思考文本（非空 reasoning-delta）就只用它，raw 分片里
+    // 抽出的同一份思考一律丢弃；整条流都没有结构化思考文本时（如 `.chat()` 不认 `reasoning_content`，
+    // 或网关把整段思考塞进 content_block_start / output_item.done）才用 raw 兜底——与正文只看非空
+    // text-delta 的 raw 兜底对称。SDK 对同一个 SSE 分片先发 raw 再发解析出的部分，所以 raw 抽出的思考
+    // 先压着，等到下一个非 reasoning 分片再补发；其间来了带文本的 reasoning-delta 就作废。
+    let hasStructuredReasoning = false;
+    let pendingRawReasoning = "";
+    const flushPendingRawReasoning = (): void => {
+      if (!pendingRawReasoning) return;
+      const text = pendingRawReasoning;
+      pendingRawReasoning = "";
+      emitReasoningDelta(RawReasoningStreamId, text);
     };
     // 把可见正文里内联的 `<think>...</think>` 抽成 reasoning；没有标签时是纯透传。
     const inlineReasoningTagState = createInlineReasoningTagSplitState();
@@ -423,6 +440,7 @@ class StreamConsumer {
       if (didCaptureInterruptedPartial) return;
       didCaptureInterruptedPartial = true;
 
+      flushPendingRawReasoning();
       flushReasoningTail();
       flushPendingRawTextFallback();
       flushToolReferenceTail();
@@ -497,16 +515,29 @@ class StreamConsumer {
           part,
         );
 
+        if (
+          part.type === "reasoning-start" ||
+          part.type === "reasoning-delta" ||
+          part.type === "reasoning-end"
+        ) {
+          // 起止标记和空增量（如签名）不带思考文本，不定来源，也不补发压着的 raw 思考。
+          if (part.type !== "reasoning-delta" || !part.text) continue;
+
+          // SDK 给出了思考文本：从此只认结构化来源，同一分片 raw 里抽出、还压着的那份作废。
+          hasStructuredReasoning = true;
+          pendingRawReasoning = "";
+          emitReasoningDelta(part.id, part.text);
+          continue;
+        }
+
+        // 其余分片前先补发上一个 raw 分片压着的兜底思考，保持思考与后续输出的先后。
+        flushPendingRawReasoning();
+
         if (part.type === "text-delta") {
           // 普通文本增量走 ExecutionEventBus.emitTextDelta，最终由宿主 stream bridge 发送到渲染端。
           flushReasoningTail();
           hasTextOutput = !!part.text || hasTextOutput;
           emitAssistantTextDelta(part.text);
-          continue;
-        }
-
-        if (part.type === "reasoning-delta") {
-          emitReasoningDelta(part.id, part.text);
           continue;
         }
 
@@ -528,10 +559,8 @@ class StreamConsumer {
             this.streamDiagnosticHelper.extractReasoningDeltaFromRawChunk(
               part.rawValue,
             );
-          if (reasoningText) {
-            diagnostics.rawReasoningChars += reasoningText.length;
-            emitReasoningDelta("deepseek-reasoning", reasoningText);
-          }
+          diagnostics.rawReasoningChars += reasoningText.length;
+          if (!hasStructuredReasoning) pendingRawReasoning += reasoningText;
           const visibleText =
             this.streamDiagnosticHelper.extractVisibleTextFromRawChunk(
               part.rawValue,
@@ -703,6 +732,7 @@ class StreamConsumer {
       );
     }
 
+    flushPendingRawReasoning();
     flushReasoningTail();
     flushPendingRawTextFallback();
     // 承接的尾巴始终没凑成泄漏标记 → 是正常正文，补发；已抑制则内部丢弃。
