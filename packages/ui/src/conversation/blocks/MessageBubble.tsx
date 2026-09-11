@@ -2,7 +2,7 @@ import { memo, type ReactElement, type ReactNode } from 'react'
 
 import type { FileChangeSummaryListEntry } from '../cards/FileChangeSummaryList'
 import type { ConversationRewindPlan, ConversationTurnContextView } from '../projection'
-import type { BrowserScreenshotDisplayMode } from '../render-slots'
+import { type BrowserScreenshotDisplayMode, useConversationRenderSlots } from '../render-slots'
 import type {
   ChatInlineNoticeMeta,
   ChatInlineNoticeRuntimeSource,
@@ -164,7 +164,19 @@ function areToolSlotRenderPropsEqual(
   return prev.renderAfterToolCall === next.renderAfterToolCall
 }
 
+/**
+ * 消息级渲染兜底经 renderMessageBoundary slot 注入宿主 RenderErrorBoundary（自愈耦合留宿主）。
+ * 边界放在 memo 之内：气泡没变时连边界一起跳过，不随每个 token 为每条消息重跑一遍。
+ */
 function MessageBubbleInner(props: MessageBubbleProps): Nullable<ReactElement> {
+  const slots = useConversationRenderSlots()
+  return slots.renderMessageBoundary({
+    message: props.message,
+    children: renderMessageBubbleContent(props),
+  })
+}
+
+function renderMessageBubbleContent(props: MessageBubbleProps): ReactElement {
   if (isSystemNoticeMessage(props.message)) return <SystemNoticeMessageRow message={props.message} />
 
   return props.message.role === 'user' ? (

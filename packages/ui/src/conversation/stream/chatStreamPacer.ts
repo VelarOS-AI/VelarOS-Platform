@@ -17,7 +17,7 @@
 import { resolveStreamPaceBudget, type StreamPaceTuning } from './streamPaceBudget'
 
 import type { ChatStreamEvent } from '#contracts'
-import { isEmpty, isPresent } from '#internal/runtime'
+import { isEmpty, isPresent, isRecord, isString } from '#internal/runtime'
 
 export interface FrameLeasePort {
   cancel(): boolean
@@ -38,6 +38,35 @@ const ImmediateStreamStateKinds = new Set([
   'retrying-turn',
 ])
 
+/**
+ * 起搏器对一个事件的处置。宿主各自的事件形状经 `classifyEvent` 归到这几类，
+ * 屏显节奏就是同一套：
+ *  - `terminal`：干净收尾，等积压逐帧吐完再应用；
+ *  - `immediate`：终止/交互类，先排空积压再立即应用；
+ *  - `reasoning`：思考增量，与正文同一条队列逐帧吐字；
+ *  - `tool`：同一工具调用的事件并成一块，逐帧应用；
+ *  - `structural`：其它结构事件各自成块；带 `batchKey` 的相邻同键事件并成一块、同一帧里一起应用
+ *    （子 Agent 线程这类只更新旁路视图的高频事件：逐帧只放一个会越积越多，还挡住后面的主流程）。
+ */
+export type ChatStreamPacerEventClass =
+  | { kind: 'terminal' }
+  | { kind: 'immediate' }
+  | { kind: 'reasoning'; id: string; text: string }
+  | { kind: 'tool'; toolCallId: string }
+  | { kind: 'structural'; batchKey?: string }
+
+/** 批量块单帧最多应用的事件数：积压再大也不在一帧里做无上限的工作。 */
+const MaxBatchedEventsPerFrame = 200
+
+/**
+ * 运行状态种类的起搏归类：`done` 平滑收尾；中止、错误、等待输入/确认、整轮重试立即排空；
+ * 其余（阶段、轮次、重连…）按到达顺序成块。宿主事件形状不同，归类都查这一张表。
+ */
+export function classifyChatStreamStateKind(kind: string): 'terminal' | 'immediate' | 'structural' {
+  if (kind === 'done') return 'terminal'
+  return ImmediateStreamStateKinds.has(kind) ? 'immediate' : 'structural'
+}
+
 /** 需要绕过起搏、立即排空并应用的终止/交互类事件。 */
 export function shouldApplyStreamEventImmediately(event: ChatStreamEvent): boolean {
   switch (event.type) {
@@ -47,12 +76,33 @@ export function shouldApplyStreamEventImmediately(event: ChatStreamEvent): boole
     case 'debug':
       return event.payload.kind === 'turn-context'
     case 'state':
-      return ImmediateStreamStateKinds.has(event.payload.kind)
+      return classifyChatStreamStateKind(event.payload.kind) === 'immediate'
     case 'notice':
       return event.kind === 'user-action-card'
     default:
       return false
   }
+}
+
+/**
+ * 宿主没给分类器时，事件就是会话流事件：按 {@link classifyChatStreamEvent} 归类；形状对不上的
+ * 当普通结构事件按序排，而不是冒险按错的字段读。
+ */
+function classifyDefaultStreamEvent(event: unknown): ChatStreamPacerEventClass {
+  return isRecord(event) && isString(event.type)
+    ? classifyChatStreamEvent(event as ChatStreamEvent)
+    : { kind: 'structural' }
+}
+
+/** 会话流事件（`ChatStreamEvent`）的默认起搏归类。 */
+export function classifyChatStreamEvent(event: ChatStreamEvent): ChatStreamPacerEventClass {
+  if (isSmoothDrainTerminalEvent(event)) return { kind: 'terminal' }
+  if (shouldApplyStreamEventImmediately(event)) return { kind: 'immediate' }
+  if (event.type === 'reasoning')
+    return { kind: 'reasoning', id: event.payload.id, text: event.payload.text }
+  if (isToolEvent(event)) return { kind: 'tool', toolCallId: event.payload.toolCallId }
+  if (event.type === 'worker-thread') return { kind: 'structural', batchKey: 'worker-thread' }
+  return { kind: 'structural' }
 }
 
 interface PacerTextBlock {
@@ -76,18 +126,19 @@ interface PacerReasoningBlock {
   pendingChars: string
 }
 
-interface PacerEventBlock<TEvent extends ChatStreamEvent> {
+interface PacerEventBlock<TEvent> {
   kind: 'event'
   key: string
   seq: number
   started?: boolean
   events: TEvent[]
+  /** 批量块：同一帧里把块内事件一起应用（见 `ChatStreamPacerEventClass` 的 `batchKey`）。 */
+  batched?: boolean
 }
 
-type PacerBlock<TEvent extends ChatStreamEvent> =
-  PacerTextBlock | PacerReasoningBlock | PacerEventBlock<TEvent>
+type PacerBlock<TEvent> = PacerTextBlock | PacerReasoningBlock | PacerEventBlock<TEvent>
 
-interface PacerSessionState<TEvent extends ChatStreamEvent> {
+interface PacerSessionState<TEvent> {
   blocks: Array<PacerBlock<TEvent>>
   frame: Nullable<FrameLeasePort>
   /** 平滑收尾：挂起的终止事件（done/end）；积压逐帧吐完后才应用（finalize），避免一次性闪现。 */
@@ -102,12 +153,27 @@ interface PacerSessionState<TEvent extends ChatStreamEvent> {
 
 /** 干净收尾事件（end / done）——平滑吐完积压后再 finalize，而非立即强排空。 */
 function isSmoothDrainTerminalEvent(event: ChatStreamEvent): boolean {
-  return event.type === 'end' || (event.type === 'state' && event.payload.kind === 'done')
+  return (
+    event.type === 'end' ||
+    (event.type === 'state' && classifyChatStreamStateKind(event.payload.kind) === 'terminal')
+  )
 }
 
-export interface ChatStreamPacerOptions<TEvent extends ChatStreamEvent> {
+export interface ChatStreamPacerOptions<TEvent> {
   timers: FrameTimerPort
   tuning?: StreamPaceTuning
+  /**
+   * 宿主事件的起搏归类；缺省按会话流事件（`ChatStreamEvent`）归类。事件形状不同的宿主
+   * （如直接消费执行事件的 Workbench）用它接入同一套节奏。
+   */
+  classifyEvent?: (event: TEvent) => ChatStreamPacerEventClass
+  /** 逐帧吐出的一段思考还原成宿主事件；缺省为会话流的 `reasoning` 事件。 */
+  createReasoningEvent?: (id: string, text: string) => TEvent
+  /**
+   * 起搏暂停（如窗口在后台、动画帧不走）：新到的正文与事件不再排帧，先按序排空积压
+   * 与挂起的收尾，再立即应用——一轮照常收尾，回到前台后恢复逐帧吐字。
+   */
+  isPacingSuspended?: () => boolean
   /** 把一段正文增量应用到 session（htmlArtifact 感知）。 */
   applyTextChunk: (sessionId: string, text: string) => void
   applyDeferredLiveEvent: (sessionId: string, event: TEvent) => void
@@ -135,22 +201,30 @@ function isToolEvent(
   )
 }
 
-function blockPendingCharCount(block: PacerBlock<ChatStreamEvent>): number {
+function blockPendingCharCount(block: PacerBlock<unknown>): number {
   return block.kind === 'event' ? 0 : block.pendingChars.length
 }
 
-function blockIsDrained(block: PacerBlock<ChatStreamEvent>): boolean {
+function blockIsDrained(block: PacerBlock<unknown>): boolean {
   return block.kind === 'event' ? isEmpty(block.events) : isEmpty(block.pendingChars)
 }
 
-export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
+export class ChatStreamPacer<TEvent = ChatStreamEvent> {
   private readonly sessions = new Map<string, PacerSessionState<TEvent>>()
+  private readonly classify: (event: TEvent) => ChatStreamPacerEventClass
 
-  constructor(private readonly options: ChatStreamPacerOptions<TEvent>) {}
+  constructor(private readonly options: ChatStreamPacerOptions<TEvent>) {
+    this.classify = options.classifyEvent ?? classifyDefaultStreamEvent
+  }
 
   /** live 正文增量入块。 */
   public enqueueText(sessionId: string, sequence: number, text: string): void {
     if (!text) return
+    if (this.options.isPacingSuspended?.()) {
+      this.drain(sessionId)
+      this.options.appendImmediateText(sessionId, text)
+      return
+    }
 
     const state = this.getSessionState(sessionId)
     const last = state.blocks.at(-1)
@@ -169,9 +243,19 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
 
   /** live 结构事件入块（终止类平滑收尾 / 立即应用）。 */
   public enqueueLiveEvent(sessionId: string, sequence: number, event: TEvent): void {
+    const eventClass = this.classify(event)
+
+    if (this.options.isPacingSuspended?.()) {
+      this.drain(sessionId)
+      if (eventClass.kind === 'terminal' || eventClass.kind === 'immediate')
+        this.options.applyImmediateLiveEvent(sessionId, event)
+      else this.options.applyDeferredLiveEvent(sessionId, event)
+      return
+    }
+
     // 干净收尾（end/done）：挂起，等队列里积压的 tool/text 逐帧吐完再 finalize，
     // 而非立即强排空导致正文一次性闪现。
-    if (isSmoothDrainTerminalEvent(event)) {
+    if (eventClass.kind === 'terminal') {
       const state = this.getSessionState(sessionId)
       state.pendingTerminals.push(event)
       this.scheduleSession(sessionId, state)
@@ -179,23 +263,23 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     }
 
     // error / aborted / awaiting-* / notice / turn-context 仍需立即处理。
-    if (shouldApplyStreamEventImmediately(event)) {
+    if (eventClass.kind === 'immediate') {
       this.applyImmediateEvent(sessionId, event)
       return
     }
 
     const state = this.getSessionState(sessionId)
 
-    if (event.type === 'reasoning') {
+    if (eventClass.kind === 'reasoning') {
       // 思考也进 FIFO，与正文/工具按到达顺序串行逐帧吐字：先按 id 去重只取增量，
       // 再并入队列（同 id 续接到末尾的思考块），消除"思考每 token 立即全量 apply"
       // 与被起搏的正文并发抢渲染导致的卡顿/闪现。
-      const previousRaw = state.reasoningRawText.get(event.payload.id) ?? ''
-      const appendText = this.options.getReasoningAppendText(previousRaw, event.payload.text)
+      const previousRaw = state.reasoningRawText.get(eventClass.id) ?? ''
+      const appendText = this.options.getReasoningAppendText(previousRaw, eventClass.text)
       if (!appendText) return
 
-      state.reasoningRawText.set(event.payload.id, previousRaw + appendText)
-      const reasoningKey = `reasoning:${event.payload.id}`
+      state.reasoningRawText.set(eventClass.id, previousRaw + appendText)
+      const reasoningKey = `reasoning:${eventClass.id}`
       const last = state.blocks.at(-1)
       if (last?.kind === 'reasoning' && last.key === reasoningKey) {
         last.pendingChars += appendText
@@ -204,7 +288,7 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
           kind: 'reasoning',
           key: reasoningKey,
           seq: sequence,
-          reasoningId: event.payload.id,
+          reasoningId: eventClass.id,
           pendingChars: appendText,
         })
       }
@@ -212,8 +296,8 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
       return
     }
 
-    if (isToolEvent(event)) {
-      const toolKey = `tool:${event.payload.toolCallId}`
+    if (eventClass.kind === 'tool') {
+      const toolKey = `tool:${eventClass.toolCallId}`
       const last = state.blocks.at(-1)
       if (last?.kind === 'event' && last.key === toolKey) {
         last.events.push(event)
@@ -229,7 +313,26 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
       return
     }
 
-    // 其它结构事件（worker-thread / notice / debug / 非终止 state）各自成块。
+    // 带 batchKey 的相邻同键事件（worker-thread）并进同一块，同一帧里一起应用。
+    if (eventClass.batchKey) {
+      const batchKey = `batch:${eventClass.batchKey}`
+      const last = state.blocks.at(-1)
+      if (last?.kind === 'event' && last.key === batchKey) {
+        last.events.push(event)
+      } else {
+        this.insertBlock(state, {
+          kind: 'event',
+          key: batchKey,
+          seq: sequence,
+          events: [event],
+          batched: true,
+        })
+      }
+      this.scheduleSession(sessionId, state)
+      return
+    }
+
+    // 其它结构事件（notice / debug / 非终止 state）各自成块。
     this.insertBlock(state, {
       kind: 'event',
       key: `event:${sequence}`,
@@ -276,7 +379,10 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     this.options.appendImmediateText(sessionId, text)
   }
 
-  /** 立即按序排空全部块并应用（中断 / 持久化收尾用）。 */
+  /**
+   * 立即按序排空全部块并应用（中断 / 持久化收尾用）。挂起的干净收尾事件**不**在这里应用：
+   * 宿主自己决定何时投影它们；要连收尾一起落地用 {@link drain}。
+   */
   public flushImmediate(sessionId: string): void {
     const state = this.sessions.get(sessionId)
     if (!state) return
@@ -284,6 +390,25 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     state.frame?.cancel()
     state.frame = null
     this.flushAllBlocks(sessionId, state)
+    this.sessions.delete(sessionId)
+  }
+
+  /** 这个会话还有没吐完的正文/事件或挂起的收尾——宿主收尾前据此等起搏器平滑吐完。 */
+  public hasPendingOutput(sessionId: string): boolean {
+    const state = this.sessions.get(sessionId)
+    if (!state) return false
+    return !isEmpty(state.pendingTerminals) || state.blocks.some((block) => !blockIsDrained(block))
+  }
+
+  /** 立即按序排空积压，并应用已挂起的干净收尾事件（起搏暂停、窗口转入后台时用）。 */
+  public drain(sessionId: string): void {
+    const state = this.sessions.get(sessionId)
+    if (!state) return
+
+    state.frame?.cancel()
+    state.frame = null
+    this.flushAllBlocks(sessionId, state)
+    this.applyPendingTerminals(sessionId, state)
     this.sessions.delete(sessionId)
   }
 
@@ -311,13 +436,17 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     if (block.kind === 'text') {
       this.options.applyTextChunk(sessionId, emit)
     } else {
-      this.options.applyDeferredLiveEvent(sessionId, {
-        type: 'reasoning',
-        payload: { id: block.reasoningId, text: emit },
-      } as TEvent)
+      this.options.applyDeferredLiveEvent(sessionId, this.reasoningEvent(block.reasoningId, emit))
     }
 
     return emit.length
+  }
+
+  private reasoningEvent(id: string, text: string): TEvent {
+    return (
+      this.options.createReasoningEvent?.(id, text) ??
+      ({ type: 'reasoning', payload: { id, text } } as TEvent)
+    )
   }
 
   private flushAllBlocks(sessionId: string, state: PacerSessionState<TEvent>): void {
@@ -332,10 +461,7 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
 
       if (block.kind === 'reasoning') {
         if (block.pendingChars) {
-          const event = {
-            type: 'reasoning',
-            payload: { id: block.reasoningId, text: block.pendingChars },
-          } as TEvent
+          const event = this.reasoningEvent(block.reasoningId, block.pendingChars)
           if (streaming) this.options.applyDeferredLiveEvent(sessionId, event)
           else this.options.applyCachedEvent(sessionId, event)
         }
@@ -398,8 +524,11 @@ export class ChatStreamPacer<TEvent extends ChatStreamEvent = ChatStreamEvent> {
     const front = state.blocks[0]
     front.started = true
     if (front.kind === 'event') {
+      const eventBudget = front.batched
+        ? Math.min(front.events.length, MaxBatchedEventsPerFrame)
+        : budget.eventBudget
       let applied = 0
-      while (applied < budget.eventBudget && !isEmpty(front.events)) {
+      while (applied < eventBudget && !isEmpty(front.events)) {
         const event = front.events.shift()
         if (event) {
           this.options.applyDeferredLiveEvent(sessionId, event)

@@ -23,11 +23,17 @@ export {
   emptyConversationActionPort,
   useConversationActionPort,
 } from './conversationActionPort'
+export type {
+  ConversationScrollPositionStore,
+  ConversationScrollPositionStoreOptions,
+} from './conversationScrollPositionStore'
+export { createConversationScrollPositionStore } from './conversationScrollPositionStore'
 export { useQueuedLiveStatusText } from './useQueuedLiveStatusText'
 export type { WorkerThreadTranscriptPlacement } from './workerThreadTimeline.pure'
 export {
   findWorkerThreadReplacementForDispatchPlaceholder,
   groupWorkerThreadsByTranscriptAnchor,
+  isSameWorkerThreadPlacement,
   listWorkerThreadsForTranscriptStage,
   listWorkerThreadsFromTranscriptPlacement,
 } from './workerThreadTimeline.pure'

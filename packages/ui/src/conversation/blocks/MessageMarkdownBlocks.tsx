@@ -2,6 +2,8 @@ import React, {
   createContext,
   memo,
   type ReactElement,
+  type ReactPortal,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -10,6 +12,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { CaretRightIcon, GlobeHemisphereWestIcon } from '@phosphor-icons/react'
 import {
   Block as StreamdownBlock,
@@ -559,6 +562,31 @@ function MessageStreamdownInner({
 const MessageStreamdown = memo(MessageStreamdownInner)
 MessageStreamdown.displayName = 'MessageStreamdown'
 
+/**
+ * 状态标记只渲染一份：块级元素末尾都留了空槽，布局阶段挑出真正位于尾部的槽（行内或兜底），
+ * 把标记 portal 进去。以前每个段落各渲染一份、再用 CSS 只露一个——长回答里几十棵 Tooltip 树，
+ * 标记对象一换引用就全部重画。
+ */
+function useMarkdownTailMarkerPortal(
+  containerRef: RefObject<Nullable<HTMLDivElement>>,
+  tailMarkerNode: Nullable<ReactElement>,
+  markdownText: string
+): Nullable<ReactPortal> {
+  const [activeSlot, setActiveSlot] = useState<Nullable<HTMLElement>>(null)
+  const hasTailMarker = !!tailMarkerNode
+
+  useLayoutEffect(() => {
+    const slot = activateMarkdownTailMarker({
+      container: containerRef.current,
+      inlineSlotSelector: `.${styles.markdownTailMarkerSlot}`,
+      fallbackSlotSelector: `.${styles.markdownTailMarkerFallbackSlot}`,
+    })
+    setActiveSlot(hasTailMarker ? slot : null)
+  }, [containerRef, hasTailMarker, markdownText])
+
+  return tailMarkerNode && activeSlot ? createPortal(tailMarkerNode, activeSlot) : null
+}
+
 function MessageMarkdownBlockInner({
   block,
   tailMarker,
@@ -582,16 +610,13 @@ function MessageMarkdownBlockInner({
     onOpenBrowserLink,
     onOpenProjectPath,
     t('browser.openExternal'),
-    { isStreaming: false, tailNode: tailMarkerNode }
+    { isStreaming: false, withTailMarkerSlots: !!tailMarkerNode }
   )
-
-  useLayoutEffect(() => {
-    activateMarkdownTailMarker({
-      container: markdownContentRef.current,
-      inlineSlotSelector: `.${styles.markdownTailMarkerSlot}`,
-      fallbackSlotSelector: `.${styles.markdownTailMarkerFallbackSlot}`,
-    })
-  }, [streamdownText, tailMarker])
+  const tailMarkerPortal = useMarkdownTailMarkerPortal(
+    markdownContentRef,
+    tailMarkerNode,
+    streamdownText
+  )
 
   if (isBlank(block.text)) return null
 
@@ -611,9 +636,8 @@ function MessageMarkdownBlockInner({
         components={components}
         runtime={runtime}
       />
-      {!!tailMarkerNode && (
-        <span className={styles.markdownTailMarkerFallbackSlot}>{tailMarkerNode}</span>
-      )}
+      {!!tailMarkerNode && <span className={styles.markdownTailMarkerFallbackSlot} />}
+      {tailMarkerPortal}
     </div>
   )
 }
@@ -652,16 +676,13 @@ function StreamingTextBlockInner({
     onOpenBrowserLink,
     onOpenProjectPath,
     t('browser.openExternal'),
-    { isStreaming: animateText, tailNode: tailMarkerNode, expansionScope: animationKey }
+    { isStreaming: animateText, withTailMarkerSlots: !!tailMarkerNode, expansionScope: animationKey }
   )
-
-  useLayoutEffect(() => {
-    activateMarkdownTailMarker({
-      container: markdownContentRef.current,
-      inlineSlotSelector: `.${styles.markdownTailMarkerSlot}`,
-      fallbackSlotSelector: `.${styles.markdownTailMarkerFallbackSlot}`,
-    })
-  }, [streamdownText, visibleTailMarker])
+  const tailMarkerPortal = useMarkdownTailMarkerPortal(
+    markdownContentRef,
+    tailMarkerNode,
+    streamdownText
+  )
 
   if (isBlank(block.text)) return null
 
@@ -683,9 +704,8 @@ function StreamingTextBlockInner({
           components={components}
           runtime={runtime}
         />
-        {!!tailMarkerNode && (
-          <span className={styles.markdownTailMarkerFallbackSlot}>{tailMarkerNode}</span>
-        )}
+        {!!tailMarkerNode && <span className={styles.markdownTailMarkerFallbackSlot} />}
+        {tailMarkerPortal}
       </div>
     </div>
   )

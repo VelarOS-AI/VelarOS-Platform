@@ -704,7 +704,7 @@ void describe('Platform-owned Markdown tail marker placement', () => {
     const inlineSlot = new FakeElement({ parentElement: finalBlock })
     const fallbackSlot = new FakeElement({ previousElementSibling: markdownRoot })
 
-    activateMarkdownTailMarker({
+    const activeSlot = activateMarkdownTailMarker({
       container: createMarkdownContainer([inlineSlot], fallbackSlot),
       inlineSlotSelector: '.inline',
       fallbackSlotSelector: '.fallback',
@@ -712,6 +712,8 @@ void describe('Platform-owned Markdown tail marker placement', () => {
 
     assert.equal(inlineSlot.dataset.activeTailMarker, 'true')
     assert.equal(fallbackSlot.dataset.activeTailMarker, undefined)
+    // 选中的槽交回调用方：唯一一份状态标记 portal 进这里。
+    assert.equal(activeSlot, inlineSlot)
   })
 
   void test('uses the fallback after a terminal non-paragraph block', () => {
@@ -759,12 +761,24 @@ void describe('Platform-owned Markdown tail marker placement', () => {
     const markdownRoot = new FakeElement()
     const fallbackSlot = new FakeElement({ previousElementSibling: markdownRoot })
 
-    activateMarkdownTailMarker({
+    const activeSlot = activateMarkdownTailMarker({
       container: createMarkdownContainer([], fallbackSlot),
       inlineSlotSelector: '.inline',
       fallbackSlotSelector: '.fallback',
     })
 
     assert.equal(fallbackSlot.dataset.activeTailMarker, 'true')
+    assert.equal(activeSlot, fallbackSlot)
+  })
+
+  void test('reports no slot when the block renders no marker', () => {
+    assert.equal(
+      activateMarkdownTailMarker({
+        container: { querySelectorAll: () => [] } as unknown as HTMLElement,
+        inlineSlotSelector: '.inline',
+        fallbackSlotSelector: '.fallback',
+      }),
+      null
+    )
   })
 })

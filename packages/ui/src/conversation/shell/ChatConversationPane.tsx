@@ -50,7 +50,11 @@ import { useChatConversationScroll } from './useChatConversationScroll'
 import { useChatConversationTranscriptModel } from './useChatConversationTranscriptModel'
 import { useChatTranscriptWindow } from './useChatTranscriptWindow'
 import { useQueuedLiveStatusText } from './useQueuedLiveStatusText'
-import { groupWorkerThreadsByTranscriptAnchor } from './workerThreadTimeline.pure'
+import {
+  groupWorkerThreadsByTranscriptAnchor,
+  isSameWorkerThreadPlacement,
+  type WorkerThreadTranscriptPlacement,
+} from './workerThreadTimeline.pure'
 
 import styles from './ChatConversationPane.module.css'
 
@@ -612,10 +616,16 @@ export function ChatConversationPane({
     (message: ChatMessage) => toNullable(goalCompletionSummaryByMessageId.get(message.id)),
     [goalCompletionSummaryByMessageId]
   )
-  const workerThreadPlacement = useMemo(
-    () => groupWorkerThreadsByTranscriptAnchor(visibleMessages, workerThreads),
-    [visibleMessages, workerThreads]
-  )
+  // 消息数组随每个 token 换新，线程落位多半没变：逐项相同就沿用上一份，
+  // 让 renderAfterToolCall 引用不变，带派发卡的消息气泡不随正文重画。
+  const previousWorkerThreadPlacementRef = useRef<Nullable<WorkerThreadTranscriptPlacement>>(null)
+  const workerThreadPlacement = useMemo(() => {
+    const next = groupWorkerThreadsByTranscriptAnchor(visibleMessages, workerThreads)
+    const previous = previousWorkerThreadPlacementRef.current
+    const placement = previous && isSameWorkerThreadPlacement(previous, next) ? previous : next
+    previousWorkerThreadPlacementRef.current = placement
+    return placement
+  }, [visibleMessages, workerThreads])
   const renderWorkerThreadPanel = useCallback(
     (threads: ConversationWorkerThread[]) =>
       slots.workerThreadPanel({

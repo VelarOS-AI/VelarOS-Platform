@@ -1,9 +1,15 @@
 export type {
+  ChatStreamPacerEventClass,
   ChatStreamPacerOptions,
   FrameLeasePort,
   FrameTimerPort,
 } from './chatStreamPacer'
-export { ChatStreamPacer, shouldApplyStreamEventImmediately } from './chatStreamPacer'
+export {
+  ChatStreamPacer,
+  classifyChatStreamEvent,
+  classifyChatStreamStateKind,
+  shouldApplyStreamEventImmediately,
+} from './chatStreamPacer'
 export type {
   ResolveStreamPaceBudgetOptions,
   StreamPaceBacklog,

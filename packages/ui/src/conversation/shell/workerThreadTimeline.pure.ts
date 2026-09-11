@@ -18,6 +18,11 @@ interface WorkerThreadMessageAnchor extends WorkerThreadTimestampAnchor {
 interface WorkerThreadDispatchAnchor extends WorkerThreadTimestampAnchor {
   toolCallId: string
   threadIds: ReadonlySet<string>
+  /**
+   * 派发参数里的任务说明。运行中的调用还没有结果，拿不到线程 id；派发器在线程事件里原样带着
+   * 这段说明（线程的 `input`），靠它把线程认回自己的那次调用。
+   */
+  prompt: Nullable<string>
 }
 
 interface PendingDispatchPlaceholder {
@@ -54,12 +59,13 @@ function readFiniteTimestamp(value: unknown): Nullable<number> {
   return isFiniteNumber(value) ? value : null
 }
 
-function readThreadId(value: unknown): Nullable<string> {
+/** 去掉首尾空白后的非空文本：线程 id 与任务说明都按这个口径比（派发 schema 会 trim 任务说明）。 */
+function readNonBlankText(value: unknown): Nullable<string> {
   if (!isString(value)) return null
 
-  const threadId = value.trim()
+  const text = value.trim()
 
-  return isEmpty(threadId) ? null : threadId
+  return isEmpty(text) ? null : text
 }
 
 function truncateDispatchTitle(value: string): string {
@@ -67,12 +73,18 @@ function truncateDispatchTitle(value: string): string {
 }
 
 function readDispatchArg(args: Record<string, unknown>, key: string): Nullable<string> {
-  return readThreadId(args[key])
+  return readNonBlankText(args[key])
 }
 
 function readDispatchMode(value: unknown): Nullable<ConversationWorkerThread['mode']> {
   return value === 'async' || value === 'sync' ? value : null
 }
+
+/**
+ * 乐观占位按工具块缓存：流式输出时同一条消息里别的块在变，派发块对象本身不变；占位也就沿用
+ * 同一个对象，整份落位才能与上一份判等（见 {@link isSameWorkerThreadPlacement}）。
+ */
+const PendingDispatchThreads = new WeakMap<ToolCallBlock, ConversationWorkerThread>()
 
 function createPendingWorkerThreadFromDispatchToolCall(
   message: ChatMessage,
@@ -80,6 +92,14 @@ function createPendingWorkerThreadFromDispatchToolCall(
 ): Nullable<ConversationWorkerThread> {
   if (block.toolName !== 'agent:dispatch' || !block.isRunning) return null
 
+  const cached = PendingDispatchThreads.get(block)
+  if (cached) return cached
+  const thread = buildPendingWorkerThread(message, block)
+  PendingDispatchThreads.set(block, thread)
+  return thread
+}
+
+function buildPendingWorkerThread(message: ChatMessage, block: ToolCallBlock): ConversationWorkerThread {
   const args = isRecord(block.args) ? block.args : {}
   const prompt = readDispatchArg(args, 'prompt')
   const description = readDispatchArg(args, 'description')
@@ -147,10 +167,10 @@ function collectThreadIdsFromString(value: string, threadIds: Set<string>): void
 
 function collectThreadIdsFromRecord(value: Record<string, unknown>, threadIds: Set<string>): void {
   const directThreadId =
-    readThreadId(value.thread_id) ??
-    readThreadId(value.threadId) ??
-    readThreadId(value.worker_thread_id) ??
-    readThreadId(value.workerThreadId)
+    readNonBlankText(value.thread_id) ??
+    readNonBlankText(value.threadId) ??
+    readNonBlankText(value.worker_thread_id) ??
+    readNonBlankText(value.workerThreadId)
   if (directThreadId) {
     threadIds.add(directThreadId)
   }
@@ -166,7 +186,7 @@ function collectThreadIdsFromRecord(value: Record<string, unknown>, threadIds: S
     if (!isArray(directListValue)) continue
 
     directListValue.forEach((item) => {
-      const threadId = readThreadId(item)
+      const threadId = readNonBlankText(item)
 
       if (threadId) threadIds.add(threadId)
     })
@@ -305,6 +325,7 @@ function createWorkerThreadTranscriptAnchorIndex(
         timestamp,
         order: dispatchOrder,
         threadIds: getDispatchAgentThreadIds(block),
+        prompt: readDispatchArg(isRecord(block.args) ? block.args : {}, 'prompt'),
       })
 
       const pendingThread = createPendingWorkerThreadFromDispatchToolCall(message, block)
@@ -343,15 +364,55 @@ function createWorkerThreadTranscriptAnchorIndex(
   }
 }
 
-function findWorkerThreadAnchorToolCallId(
+/** 同一线程被续跑多次时，参数或结果都写着它的 id；任务说明相同的那次调用才是这次激活的来处。 */
+function preferSamePromptAnchors(
+  anchors: readonly WorkerThreadDispatchAnchor[],
+  prompt: Nullable<string>
+): readonly WorkerThreadDispatchAnchor[] {
+  const samePrompt = prompt ? anchors.filter((anchor) => anchor.prompt === prompt) : []
+
+  return isEmpty(samePrompt) ? anchors : samePrompt
+}
+
+/**
+ * 线程挂到哪次 `agent:dispatch` 调用下面：先认身份，时间只作兜底。
+ *
+ * 1. 调用的参数或结果里写明了这个线程 id（续跑的、已完成的调用）。
+ * 2. 还没有结果的调用拿不到线程 id，按任务说明认领；一次调用只被认领一次（记进 `claimedToolCallIds`）。
+ * 3. 两样都认不出（旧记录、不是派发出来的线程）才找时间上最近的调用；这样落上去的不算认领。
+ *
+ * 不能只看时间：工具块的开始时间与线程的开始时间出自两处时钟（Workbench 前者是渲染进程收到
+ * tool-start 的时刻，后者是主进程发出 pending 的时刻），线程常比自己那次调用"早"几毫秒，最近邻
+ * 就落到上一次调用上；同一轮并行派发时各调用也都早于各自的线程。落错之后，自己那次调用下面只剩
+ * 乐观占位卡，同一个子 Agent 就出现两张卡。
+ */
+function resolveWorkerThreadAnchorToolCallId(
   anchorIndex: WorkerThreadTranscriptAnchorIndex,
-  thread: ConversationWorkerThread
+  thread: ConversationWorkerThread,
+  claimedToolCallIds: Set<string>
 ): Nullable<string> {
-  const exactAnchor = findNearestTranscriptAnchor(
-    anchorIndex.dispatchAnchorsByThreadId.get(thread.threadId) ?? [],
+  const prompt = readNonBlankText(thread.input)
+  const explicitAnchor = findNearestTranscriptAnchor(
+    preferSamePromptAnchors(anchorIndex.dispatchAnchorsByThreadId.get(thread.threadId) ?? [], prompt),
     thread.startedAt
   )
-  if (exactAnchor) return exactAnchor.toolCallId
+  if (explicitAnchor) return explicitAnchor.toolCallId
+
+  const promptAnchor = prompt
+    ? findNearestTranscriptAnchor(
+        anchorIndex.dispatchAnchors.filter(
+          (anchor) =>
+            anchor.prompt === prompt &&
+            anchor.threadIds.size === 0 &&
+            !claimedToolCallIds.has(anchor.toolCallId)
+        ),
+        thread.startedAt
+      )
+    : null
+  if (promptAnchor) {
+    claimedToolCallIds.add(promptAnchor.toolCallId)
+    return promptAnchor.toolCallId
+  }
 
   return toNullable(findNearestTranscriptAnchor(anchorIndex.dispatchAnchors, thread.startedAt)?.toolCallId)
 }
@@ -382,9 +443,10 @@ export function groupWorkerThreadsByTranscriptAnchor(
   const afterMessageId = new Map<string, ConversationWorkerThread[]>()
   const afterToolCallId = new Map<string, ConversationWorkerThread[]>()
   const anchorIndex = createWorkerThreadTranscriptAnchorIndex(messages)
+  const claimedToolCallIds = new Set<string>()
 
   sortWorkerThreadsByStartTime(threads).forEach((thread) => {
-    const anchorToolCallId = findWorkerThreadAnchorToolCallId(anchorIndex, thread)
+    const anchorToolCallId = resolveWorkerThreadAnchorToolCallId(anchorIndex, thread, claimedToolCallIds)
 
     if (anchorToolCallId) {
       const anchoredThreads = afterToolCallId.get(anchorToolCallId)
@@ -418,6 +480,41 @@ export function groupWorkerThreadsByTranscriptAnchor(
   appendPendingDispatchAgentPlaceholders(anchorIndex.pendingDispatchPlaceholders, afterToolCallId)
 
   return { beforeTranscript, afterMessageId, afterToolCallId }
+}
+
+/**
+ * 两份落位逐项同一：同样的锚点下是同一批线程对象。流式输出时消息数组每个 token 都换新，线程与
+ * 派发块却没变——调用方据此沿用上一份落位，`renderAfterToolCall` 的引用不变，带派发卡的消息气泡
+ * 就不必随正文重画。
+ */
+export function isSameWorkerThreadPlacement(
+  left: WorkerThreadTranscriptPlacement,
+  right: WorkerThreadTranscriptPlacement
+): boolean {
+  return (
+    isSameThreadList(left.beforeTranscript, right.beforeTranscript) &&
+    isSameThreadMap(left.afterMessageId, right.afterMessageId) &&
+    isSameThreadMap(left.afterToolCallId, right.afterToolCallId)
+  )
+}
+
+function isSameThreadList(
+  left: readonly ConversationWorkerThread[],
+  right: readonly ConversationWorkerThread[]
+): boolean {
+  return left.length === right.length && left.every((thread, index) => thread === right[index])
+}
+
+function isSameThreadMap(
+  left: ReadonlyMap<string, readonly ConversationWorkerThread[]>,
+  right: ReadonlyMap<string, readonly ConversationWorkerThread[]>
+): boolean {
+  if (left.size !== right.size) return false
+  for (const [key, threads] of left) {
+    const other = right.get(key)
+    if (!other || !isSameThreadList(threads, other)) return false
+  }
+  return true
 }
 
 export function listWorkerThreadsFromTranscriptPlacement(

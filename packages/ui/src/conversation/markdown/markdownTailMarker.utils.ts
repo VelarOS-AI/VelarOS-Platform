@@ -22,13 +22,14 @@ function isAtMarkdownTail(markdownRoot: Element, slot: Element): boolean {
 /**
  * 只有状态标记确实位于 Markdown 渲染树尾部时才保留行内位置。
  * 表格、代码块、图片、分隔线等非行内结尾统一使用 Streamdown 后方的兜底槽，
- * 避免状态标记错误地停留在更早的段落上。
+ * 避免状态标记错误地停留在更早的段落上。返回被激活的槽（没有兜底槽时为 null），
+ * 调用方把唯一一份状态标记放进去。
  */
 export function activateMarkdownTailMarker({
   container,
   inlineSlotSelector,
   fallbackSlotSelector,
-}: ActivateMarkdownTailMarkerOptions): void {
+}: ActivateMarkdownTailMarkerOptions): Nullable<HTMLElement> {
   const inlineSlots = Array.from(
     container?.querySelectorAll<HTMLElement>(inlineSlotSelector) ?? []
   )
@@ -41,7 +42,7 @@ export function activateMarkdownTailMarker({
   }
 
   const fallbackSlot = fallbackSlots.at(-1)
-  if (!fallbackSlot) return
+  if (!fallbackSlot) return null
 
   const markdownRoot = fallbackSlot.previousElementSibling
   const lastInlineSlot = inlineSlots.at(-1)
@@ -51,4 +52,5 @@ export function activateMarkdownTailMarker({
       : fallbackSlot
 
   activeSlot.dataset.activeTailMarker = 'true'
+  return activeSlot
 }

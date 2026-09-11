@@ -123,7 +123,6 @@ function MarkdownExternalOpenButton({ label, url }: { label: string; url: string
 export interface MessageMarkdownRuntime {
   isStreaming: boolean
   externalOpenLabel: string
-  tailNode: Nullable<ReactElement>
   openBrowserLink: Nullable<(url: string) => void | Promise<void>>
   openProjectPath: Nullable<(path: string) => unknown>
   expansionScope: Nullable<string>
@@ -134,7 +133,6 @@ const DefaultExternalOpenLabel = 'Open in external browser'
 const MessageMarkdownRuntimeContext = createContext<MessageMarkdownRuntime>({
   isStreaming: false,
   externalOpenLabel: DefaultExternalOpenLabel,
-  tailNode: null,
   openBrowserLink: null,
   openProjectPath: null,
   expansionScope: null,
@@ -728,14 +726,17 @@ function MarkdownLink({
   )
 }
 
+/**
+ * 尾标候选：块级元素末尾留一个空槽。状态标记只有一份，由所在文本块在布局阶段挑出真正位于
+ * 尾部的槽再 portal 进去——候选本身不读标记，标记怎么变都不会让段落重渲染。
+ */
 function createTailMarkerCandidate(tag: (typeof TailMarkerCandidateTags)[number]) {
   function TailMarkerCandidate({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
-    const { tailNode } = useContext(MessageMarkdownRuntimeContext)
     return React.createElement(
       tag,
       props,
       children,
-      <span className={styles.markdownTailMarkerSlot}>{tailNode}</span>
+      <span className={styles.markdownTailMarkerSlot} />
     )
   }
   TailMarkerCandidate.displayName = `MarkdownTailMarkerCandidate(${tag})`
@@ -786,12 +787,13 @@ export function useMessageMarkdownComponents(
   externalOpenLabel = DefaultExternalOpenLabel,
   options?: {
     isStreaming?: boolean
-    tailNode?: LooseOptional<ReactElement>
+    /** 块级元素末尾留尾标槽（这段 markdown 带状态标记时）。 */
+    withTailMarkerSlots?: boolean
     expansionScope?: LooseOptional<string>
   }
 ): { components: StreamdownComponents; runtime: MessageMarkdownRuntime } {
   const isStreaming = !!options?.isStreaming
-  const tailNode = toNullable(options?.tailNode)
+  const withTailMarkerSlots = !!options?.withTailMarkerSlots
   const expansionScope = toNullable(options?.expansionScope)
   const hasBrowserLink = !!onOpenBrowserLink
   const hasProjectPath = !!onOpenProjectPath
@@ -802,7 +804,6 @@ export function useMessageMarkdownComponents(
     () => ({
       isStreaming,
       externalOpenLabel,
-      tailNode,
       openBrowserLink: hasBrowserLink ? openBrowserLink : null,
       openProjectPath: hasProjectPath ? openProjectPath : null,
       expansionScope,
@@ -815,11 +816,10 @@ export function useMessageMarkdownComponents(
       isStreaming,
       openBrowserLink,
       openProjectPath,
-      tailNode,
     ]
   )
   const linkAware = hasBrowserLink || hasProjectPath
-  const components = tailNode
+  const components = withTailMarkerSlots
     ? linkAware
       ? MarkdownComponentTables.linkAwareWithTail
       : MarkdownComponentTables.baseWithTail

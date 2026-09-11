@@ -1,4 +1,5 @@
 import { Fragment, memo, type ReactElement, type ReactNode, useLayoutEffect, useMemo } from 'react'
+import { useMemoizedFn } from 'ahooks'
 
 import { MessageBubble } from '../blocks/MessageBubble'
 import { type GoalCompletionActivitySummary } from '../blocks/messageBubbleRenderModel'
@@ -9,10 +10,7 @@ import type {
 } from '../projection'
 import type { ConversationRewindPlan } from '../projection'
 import { type SectionMetric } from '../react-hooks/scrollBehavior'
-import {
-  type BrowserScreenshotDisplayMode,
-  useConversationRenderSlots,
-} from '../render-slots'
+import type { BrowserScreenshotDisplayMode } from '../render-slots'
 import type {
   ChatInlineNoticeMeta,
   ChatInlineNoticeRuntimeSource,
@@ -34,6 +32,18 @@ import type {
 import { isEmpty, toNullable } from '#internal/runtime'
 
 const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
+
+/**
+ * 宿主回调固定成稳定引用再交给消息气泡。气泡按引用判等，宿主每次渲染新建一个回调（内联箭头、
+ * 组件里的普通函数）就会让整段对话随每个 token 重画；这里只保留「传没传」的变化（没传时气泡
+ * 不画对应入口），调用时总是转给宿主最新的那一个。
+ */
+function useStableHostCallback<Args extends unknown[], Result>(
+  callback?: (...args: Args) => Result
+): Optional<(...args: Args) => Result> {
+  const stable = useMemoizedFn((...args: Args): Result => callback!(...args))
+  return callback ? stable : undefined
+}
 
 function markFirstChatTranscriptCommit(): void {
   const performance = globalThis.performance
@@ -145,18 +155,25 @@ function ChatTranscriptInner({
   renderBeforeMessage,
   renderAfterMessage,
   renderAfterToolCall,
-  onOpenBrowserLink,
-  onOpenFileChange,
-  onOpenProjectPath,
-  onReviewFileChanges,
+  onOpenBrowserLink: onOpenBrowserLinkProp,
+  onOpenFileChange: onOpenFileChangeProp,
+  onOpenProjectPath: onOpenProjectPathProp,
+  onReviewFileChanges: onReviewFileChangesProp,
   activeUserActionCardIds,
-  onResolveUserActionCard,
-  onRewindToMessage,
-  onTranslateThinkingBlock,
+  onResolveUserActionCard: onResolveUserActionCardProp,
+  onRewindToMessage: onRewindToMessageProp,
+  onTranslateThinkingBlock: onTranslateThinkingBlockProp,
   canRewindToMessage,
-  getRewindPlan,
+  getRewindPlan: getRewindPlanProp,
 }: ChatTranscriptProps): ReactElement {
-  const slots = useConversationRenderSlots()
+  const onOpenBrowserLink = useStableHostCallback(onOpenBrowserLinkProp)
+  const onOpenFileChange = useStableHostCallback(onOpenFileChangeProp)
+  const onOpenProjectPath = useStableHostCallback(onOpenProjectPathProp)
+  const onReviewFileChanges = useStableHostCallback(onReviewFileChangesProp)
+  const onResolveUserActionCard = useStableHostCallback(onResolveUserActionCardProp)
+  const onRewindToMessage = useStableHostCallback(onRewindToMessageProp)
+  const onTranslateThinkingBlock = useStableHostCallback(onTranslateThinkingBlockProp)
+  const getRewindPlan = useStableHostCallback(getRewindPlanProp)
   const messagePresentations = useMemo(
     () =>
       buildChatTranscriptMessagePresentations(messages, {
@@ -254,49 +271,44 @@ function ChatTranscriptInner({
         data-chat-message={message.id}
         data-chat-run-activity-layout={options.groupedActivityLayout}
       >
-        {/* 消息级渲染兜底经 renderMessageBoundary slot 注入宿主 RenderErrorBoundary（自愈耦合留宿主）。 */}
-        {slots.renderMessageBoundary({
-          message,
-          children: (
-            <MessageBubble
-              message={message}
-              browserScreenshotDisplayMode={browserScreenshotDisplayMode}
-              sessionId={sessionId}
-              questionMessage={toNullable(getQuestionMessage?.(message))}
-              isStreaming={forceActivityFlat || groupedRunIsStreaming}
-              runMarker={forceActivityFlat ? null : groupedRunMarker}
-              implicitlyCompletedRun={
-                !forceActivityFlat && !!options.presentation?.implicitlyCompletedRun
-              }
-              inlineNotice={inlineNotice}
-              inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
-              showToolDetails={showToolDetails}
-              planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
-              activeProjectRoot={activeProjectRoot}
-              projectRoots={projectRoots}
-              canShowFileChangeSummary={forceActivityFlat ? false : canShowFileChangeSummary}
-              billingModel={billingModel}
-              pricingCatalog={pricingCatalog}
-              runtimeCostContexts={getRuntimeCostContexts?.(message) ?? EmptyRuntimeCostContexts}
-              goalCompletionSummary={
-                forceActivityFlat ? null : toNullable(getGoalCompletionSummary?.(message))
-              }
-              activityLeadingElement={activityLeadingElement}
-              activityTrailingElement={activityTrailingElement}
-              renderAfterToolCall={renderAfterToolCall}
-              onOpenBrowserLink={onOpenBrowserLink}
-              onOpenFileChange={onOpenFileChange}
-              onOpenProjectPath={onOpenProjectPath}
-              onReviewFileChanges={onReviewFileChanges}
-              activeUserActionCardIds={activeUserActionCardIds}
-              onResolveUserActionCard={onResolveUserActionCard}
-              onRewindToMessage={onRewindToMessage}
-              onTranslateThinkingBlock={onTranslateThinkingBlock}
-              canRewindToMessage={canRewindToMessage}
-              getRewindPlan={getRewindPlan}
-            />
-          ),
-        })}
+        {/* 消息级渲染兜底（宿主 RenderErrorBoundary）在 MessageBubble 里面、memo 之内：气泡不变时连边界一起跳过。 */}
+        <MessageBubble
+          message={message}
+          browserScreenshotDisplayMode={browserScreenshotDisplayMode}
+          sessionId={sessionId}
+          questionMessage={toNullable(getQuestionMessage?.(message))}
+          isStreaming={forceActivityFlat || groupedRunIsStreaming}
+          runMarker={forceActivityFlat ? null : groupedRunMarker}
+          implicitlyCompletedRun={
+            !forceActivityFlat && !!options.presentation?.implicitlyCompletedRun
+          }
+          inlineNotice={inlineNotice}
+          inlineNoticeRuntimeSource={inlineNotice ? inlineNoticeRuntimeSource : null}
+          showToolDetails={showToolDetails}
+          planUpdateIndexByToolCallId={planUpdateIndexByToolCallId}
+          activeProjectRoot={activeProjectRoot}
+          projectRoots={projectRoots}
+          canShowFileChangeSummary={forceActivityFlat ? false : canShowFileChangeSummary}
+          billingModel={billingModel}
+          pricingCatalog={pricingCatalog}
+          runtimeCostContexts={getRuntimeCostContexts?.(message) ?? EmptyRuntimeCostContexts}
+          goalCompletionSummary={
+            forceActivityFlat ? null : toNullable(getGoalCompletionSummary?.(message))
+          }
+          activityLeadingElement={activityLeadingElement}
+          activityTrailingElement={activityTrailingElement}
+          renderAfterToolCall={renderAfterToolCall}
+          onOpenBrowserLink={onOpenBrowserLink}
+          onOpenFileChange={onOpenFileChange}
+          onOpenProjectPath={onOpenProjectPath}
+          onReviewFileChanges={onReviewFileChanges}
+          activeUserActionCardIds={activeUserActionCardIds}
+          onResolveUserActionCard={onResolveUserActionCard}
+          onRewindToMessage={onRewindToMessage}
+          onTranslateThinkingBlock={onTranslateThinkingBlock}
+          canRewindToMessage={canRewindToMessage}
+          getRewindPlan={getRewindPlan}
+        />
       </div>
     )
   }
