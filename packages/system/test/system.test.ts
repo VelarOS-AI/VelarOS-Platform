@@ -271,6 +271,8 @@ describe('System capability', () => {
     expect(seen[0]).toMatchObject({
       approvalRisk: 'high',
       riskScope: 'system-command:dangerous',
+      requireManualApproval: true,
+      rememberRiskScope: false,
       operation: { label: 'rm -rf /tmp/velaros-fixture' },
     })
 

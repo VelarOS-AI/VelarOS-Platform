@@ -3,7 +3,11 @@ import { resolve } from 'node:path'
 import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { createApprovalOperationKey, defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import {
+  createApprovalOperationKey,
+  createManualApprovalOptions,
+  defineToolRuntimeSpec,
+} from '@velaros-ai/agent/tool-contract'
 import { isArray, isEmpty, isPresent, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -503,7 +507,9 @@ async function runProjectCommand(
         background
       ),
       context.abortSignal,
-      {
+      // 危险命令每次都要用户亲自点头：审批端口会用操作键覆盖 riskScope，宿主靠 `:dangerous`
+      // 后缀认出的硬门随之失效，「完全访问」会静默放行、标准档批准一次就记住整条命令。
+      createManualApprovalOptions({
         approvalRisk: 'high',
         riskScope: 'project-command:dangerous',
         operation: {
@@ -511,7 +517,7 @@ async function runProjectCommand(
           label: input.command,
           target: commandCwd,
         },
-      }
+      })
     )
     if (!decision.approved) return {
       approved: false,

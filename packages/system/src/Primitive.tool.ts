@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import {
   createApprovalOperationKey,
+  createManualApprovalOptions,
   renderParameterDescription as parameterDescription,
 } from '@velaros-ai/agent/tool-contract'
 import {
@@ -441,8 +442,10 @@ const bash = defineSystemTool<{
           shouldRunInBackground
         ),
         ctx.abortSignal,
+        // 危险命令必须每次由用户亲自裁决，理由同 project 的命令工具：审批端口覆盖 riskScope 后
+        // `:dangerous` 后缀不再可见，只有 requireManualApproval 能让宿主在任何档位都弹卡。
         plan.isDangerous
-          ? {
+          ? createManualApprovalOptions({
               approvalRisk: 'high',
               riskScope: 'system-command:dangerous',
               operation: {
@@ -450,7 +453,7 @@ const bash = defineSystemTool<{
                 label: command,
                 target: commandCwd,
               },
-            }
+            })
           : { approvalRisk: 'low' }
       )
     }
