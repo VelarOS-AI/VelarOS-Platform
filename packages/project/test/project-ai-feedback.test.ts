@@ -489,6 +489,9 @@ describe('whitespace-tolerant text matching', () => {
 
     expect(await readFile(join(root, 'note.ts'), 'utf8')).toBe('const a = 10\nconst b = 20\n')
     expect(result.notes).toEqual([expect.stringContaining('行尾空白或换行符')])
+    // 与内核 ApplyResult 同名：Agent 的读结果过期判断、界面「已编辑」统计与宿主改动摘要都读 newRevisions。
+    expect(result.newRevisions).toEqual({ 'note.ts': expect.any(String) })
+    expect(result).not.toHaveProperty('revisions')
   })
 
   test('matches CRLF oldText against an LF file and keeps the file on LF', async () => {

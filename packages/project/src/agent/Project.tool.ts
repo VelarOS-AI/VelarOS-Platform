@@ -359,7 +359,9 @@ async function applyProjectEditTransaction(
           changed: !isEmpty(applied.changedFiles),
           transactionId: transaction.transactionId,
           changedFiles: applied.changedFiles,
-          revisions: applied.newRevisions,
+          // 字段名与内核 ApplyResult 一致：Agent 的读结果过期判断、「已编辑」统计和宿主的改动摘要都按
+          // newRevisions 读；以前这里叫 revisions，这几处全都读空。
+          newRevisions: applied.newRevisions,
           diff: transaction.diff,
           changedLines: transaction.changedLines,
           risk: transaction.risk,
