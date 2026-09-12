@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.21",
+  "acceptedPackageVersion": "0.6.22",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -2149,9 +2149,10 @@
         "ChatLoadSessionPayloadRequest\ttype\tcfa3aadf10946f134ef793777228bb27dc6af9297d82c148625f780e8e7398cb",
         "ChatLoadWorkerThreadDetailRequest\ttype\tb51865b01eddee81c82a1be060059e10cebaf83cc9449383953b3c651015dfc7",
         "ChatLoadWorkerThreadDetailResponse\ttype\ta9631c0c7386bd231f9f34bf551af1c63c44e28863b4c1d687e1fc2de6964ed0",
-        "ChatMessage\ttype\t98487e57b53d41cc79a36ffd490beb96c3ebe02e531239e66a47d8eb83244e6e",
+        "ChatMessage\ttype\t5f9c954b1dae39bdb3fa1856d4648cf3c78f4bd81134c469a5f61e1452d47960",
         "ChatMessageConversationKind\ttype\t5bfded2aabe926df671fa586020a13a4680dbcc304f07a538ad114dd3d5c9d99",
         "ChatMessagePaging\ttype\t9b042f5a212c3b8a97a99c3fc9f001397235670bad4c3fce19339b54f05a7ead",
+        "ChatMessageSystemNoticeKind\ttype\t5b1aa64ddf3f89a4e4dcf31e5988b1304ae1451f64569f82c0bf771f52a841de",
         "ChatMessageTurnContext\ttype\t9b039c5e1c024c24497fb306f456dfe601e7a29dfe8381b8f080722950f3c349",
         "ChatPersistSessionPayloadsRequest\ttype\td3bddacbd2216cfd04dfe7a77395cd01a0a8740bef2cc5c0f35dac2c455ea434",
         "ChatPromptFeatureId\ttype\t15bfc7df70c51d7b87b28d669b0cff494767d3243d6d040bf23a43ed6be4f510",
