@@ -4,6 +4,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react'
 import { CompactToolRow } from '@velaros-ai/ui/product/layout/CompactToolRow'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
+import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { toolLeadingPhosphorIconForTool } from '../toolLeadingPhosphorIcon'
 
@@ -171,8 +172,8 @@ function buildTargetLabel(
   paths: string[],
   fallback: string,
   formatPathForDisplay?: (path: string) => string
-): { label: string; title: string } {
-  if (isEmpty(paths)) return { label: fallback, title: fallback }
+): { label: string; title: string; paths: string[] } {
+  if (isEmpty(paths)) return { label: fallback, title: fallback, paths: [] }
 
   const displayPaths = paths.map((path) =>
     formatPathForDisplay ? formatPathForDisplay(path) : path
@@ -182,6 +183,7 @@ function buildTargetLabel(
   return {
     label,
     title: displayPaths.join('\n'),
+    paths: displayPaths,
   }
 }
 
@@ -224,6 +226,14 @@ const ProjectApplyEditRow = memo(
           statusLabel,
           transactionId ? `tx: ${transactionId}` : null,
         ])}
+        hoverContent={
+          <ToolCallHoverDetails
+            blocks={[block]}
+            formatPathForDisplay={formatPathForDisplay}
+            detail={target.paths}
+            summary={joinSummaryParts([statusText, transactionId ? `tx: ${transactionId}` : null])}
+          />
+        }
       />
     )
   }

@@ -40,6 +40,8 @@ const ToolPresentationByName: Readonly<Record<string, ToolPresentationMetadata>>
   'project:read': metadata('read-local', ['direct-file-read']),
   'project:search': metadata('search', ['search']),
   'project:list': metadata('list-files', ['search']),
+  // project:write 与 project:edit 走同一条可回滚事务、返回同形结果，展示与「已编辑」统计按编辑处理。
+  'project:write': metadata('file-change', ['file-change'], true),
   'project:edit': metadata('file-change', ['file-change'], true),
   'project:rollback': metadata('edit-rollback', ['file-change'], true),
   'project:run': metadata('command', ['command'], true),

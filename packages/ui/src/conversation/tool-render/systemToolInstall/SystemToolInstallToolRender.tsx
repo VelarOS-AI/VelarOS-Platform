@@ -10,6 +10,7 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import type { ConversationMessageKey } from '../../i18n'
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
+import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { formatUnknownPayload, truncateLocalizedCommandOutput } from '../toolDisplay'
 
@@ -185,6 +186,13 @@ const SystemToolInstallToolRender = memo(
           detail={compactLine}
           detailTitle={compactLine}
           count={getToolStatusLabel(block, locale, translatorRuntime)}
+          hoverContent={
+            <ToolCallHoverDetails
+              blocks={[block]}
+              detail={[label, installCommand || command]}
+              summary={status.summary}
+            />
+          }
         />
       )
 

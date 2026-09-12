@@ -6,6 +6,7 @@
 import React, { memo, useEffect, useRef, useState } from 'react'
 
 import { cn } from '@velaros-ai/ui/lib/cn'
+import { HoverCard } from '@velaros-ai/ui/primitives/overlays/HoverCard'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
 export interface CompactToolRowProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -18,6 +19,12 @@ export interface CompactToolRowProps extends React.HTMLAttributes<HTMLDivElement
   action?: React.ReactNode
   actionLayout?: 'inline' | 'overlay'
   tone?: 'neutral' | 'running' | 'success' | 'warning' | 'error'
+  /**
+   * 悬停或键盘聚焦行时弹出的可悬停详情（HoverCard）。提供后行可聚焦、不论 detail 是否截断都能弹出，
+   * 取代「仅截断时出现」的全文气泡，并丢弃行与计数上的原生 title，免得两层提示叠在一起。
+   * 同一行应始终提供或始终不提供：两种气泡的包裹层不同，中途切换会重挂整行。
+   */
+  hoverContent?: React.ReactNode
 }
 
 const toneClassMap: Record<NonNullable<CompactToolRowProps['tone']>, string> = {
@@ -112,59 +119,84 @@ export const CompactToolRow = memo(
     action,
     actionLayout = 'inline',
     tone = 'neutral',
+    hoverContent,
     className,
+    title,
     ...props
   }: CompactToolRowProps): React.ReactElement => {
     const detailRef = useRef<HTMLSpanElement>(null)
     const fullDetail = detailTitle?.trim()
-    const detailOverflowing = useDetailOverflow(detailRef, detail, fullDetail)
+    const hasHoverContent = !!hoverContent
+    // 有详情气泡时不再需要截断全文气泡，也就不必给每一行挂尺寸观察器去量是否溢出。
+    const detailOverflowing = useDetailOverflow(
+      detailRef,
+      detail,
+      hasHoverContent ? undefined : fullDetail
+    )
     const bubbleDisabled = !detailOverflowing || !fullDetail
 
-    // 气泡走 portal 到 body 的 Tooltip：行内绝对定位气泡会被祖先 overflow(工具组行/折叠容器)剪裁而弹不出来。
+    const row = (
+      <div
+        className={cn('velar-compact-tool-row', toneClassMap[tone], className)}
+        data-overflowing={detailOverflowing || undefined}
+        tabIndex={hasHoverContent ? 0 : undefined}
+        {...props}
+        title={hasHoverContent ? undefined : title}
+      >
+        <span className="velar-compact-tool-row-icon" aria-hidden="true">
+          {icon}
+        </span>
+        <span className="velar-compact-tool-row-label">{label}</span>
+        {detail ? (
+          <span
+            ref={detailRef}
+            className="velar-compact-tool-row-detail"
+            aria-label={fullDetail}
+          >
+            {detail}
+          </span>
+        ) : (
+          <span ref={detailRef} className="velar-compact-tool-row-detail" aria-hidden="true" />
+        )}
+        {!!count && (
+          <span
+            className="velar-compact-tool-row-count"
+            title={hasHoverContent ? undefined : countTitle}
+          >
+            {count}
+          </span>
+        )}
+        {!!action && (
+          <span
+            className={cn(
+              'velar-compact-tool-row-action-slot',
+              actionLayout === 'overlay' && 'velar-compact-tool-row-action-slot-overlay'
+            )}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {action}
+          </span>
+        )}
+      </div>
+    )
+
+    // 两种气泡都 portal 到 body：行内绝对定位气泡会被祖先 overflow(工具组行/折叠容器)剪裁而弹不出来。
+    // 详情气泡与行等宽，行宽随分隔条、窗口变化时一起变。
+    if (hasHoverContent)
+      return (
+        <HoverCard content={hoverContent} widthStrategy="anchor">
+          {row}
+        </HoverCard>
+      )
+
     return (
       <BubbleTooltip
         content={fullDetail}
         disabled={bubbleDisabled}
         contentClassName="velar-compact-tool-row-detail-tooltip"
       >
-        <div
-          className={cn('velar-compact-tool-row', toneClassMap[tone], className)}
-          data-overflowing={detailOverflowing || undefined}
-          {...props}
-        >
-          <span className="velar-compact-tool-row-icon" aria-hidden="true">
-            {icon}
-          </span>
-          <span className="velar-compact-tool-row-label">{label}</span>
-          {detail ? (
-            <span
-              ref={detailRef}
-              className="velar-compact-tool-row-detail"
-              aria-label={fullDetail}
-            >
-              {detail}
-            </span>
-          ) : (
-            <span ref={detailRef} className="velar-compact-tool-row-detail" aria-hidden="true" />
-          )}
-          {!!count && (
-            <span className="velar-compact-tool-row-count" title={countTitle}>
-              {count}
-            </span>
-          )}
-          {!!action && (
-            <span
-              className={cn(
-                'velar-compact-tool-row-action-slot',
-                actionLayout === 'overlay' && 'velar-compact-tool-row-action-slot-overlay'
-              )}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              {action}
-            </span>
-          )}
-        </div>
+        {row}
       </BubbleTooltip>
     )
   }

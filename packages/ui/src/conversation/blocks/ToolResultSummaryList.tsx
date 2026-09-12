@@ -54,6 +54,8 @@ export interface ToolResultSummaryItem {
   tone?: ToolResultSummaryTone
   action?: ReactNode
   actionLayout?: 'inline' | 'overlay'
+  /** 悬停行时的可悬停详情；提供后行上的 title / statusTitle 原生提示不再挂出。 */
+  hoverContent?: ReactNode
 }
 
 export interface ToolResultSummaryListProps {
@@ -169,6 +171,7 @@ function ToolResultSummaryListImpl({
               countTitle={item.statusTitle}
               action={item.action}
               actionLayout={item.actionLayout}
+              hoverContent={item.hoverContent}
             />
           )}
         />

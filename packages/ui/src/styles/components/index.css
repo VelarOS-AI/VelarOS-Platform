@@ -33,6 +33,7 @@
 @import './primitives/paragraph.css';
 @import './primitives/picker.css';
 @import './primitives/popover.css';
+@import './primitives/hover-card.css';
 @import './primitives/progress.css';
 @import './primitives/radio-group.css';
 @import './primitives/radio.css';

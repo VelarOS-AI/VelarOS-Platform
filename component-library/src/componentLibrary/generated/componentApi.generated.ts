@@ -1842,6 +1842,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "type": "((message: ChatMessage) => ConversationTurnContextView[])"
     },
     {
+      "name": "ChatTranscript.getRunCostEstimate",
+      "description": "一次执行的约价（主 Agent 全部模型调用 + 子 Agent 运行），挂在承载运行标记的助手消息上；\n不传或返回 null 时回答末尾不显示金额。",
+      "type": "((message: ChatMessage) => Nullable<RunCostEstimate>)"
+    },
+    {
       "name": "ChatTranscript.getGoalCompletionSummary",
       "description": "Auto-generated from TypeScript props.",
       "type": "((message: ChatMessage) => Nullable<GoalCompletionActivitySummary>)"
@@ -2142,6 +2147,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Auto-generated from TypeScript props.",
       "type": "\"neutral\" | \"success\" | \"warning\" | \"error\" | \"running\"",
       "defaultValue": "'neutral'"
+    },
+    {
+      "name": "CompactToolRow.hoverContent",
+      "description": "悬停或键盘聚焦行时弹出的可悬停详情（HoverCard）。提供后行可聚焦、不论 detail 是否截断都能弹出，\n取代「仅截断时出现」的全文气泡，并丢弃行与计数上的原生 title，免得两层提示叠在一起。\n同一行应始终提供或始终不提供：两种气泡的包裹层不同，中途切换会重挂整行。",
+      "type": "React.ReactNode"
     }
   ],
   ComposerActiveChip: [
@@ -3739,6 +3749,55 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "defaultValue": "'start'"
     }
   ],
+  HoverCard: [
+    {
+      "name": "HoverCard.content",
+      "description": "气泡内容；为空时触发元素照常渲染但不弹出。",
+      "type": "ReactNode"
+    },
+    {
+      "name": "HoverCard.disabled",
+      "description": "触发器保持挂载但不弹出——按条件启用时避免包裹层增减导致子树重挂载。",
+      "type": "boolean",
+      "defaultValue": "false"
+    },
+    {
+      "name": "HoverCard.openDelayMs",
+      "description": "指针停留多久才弹出；指针只是扫过触发元素时不打扰。",
+      "type": "number",
+      "defaultValue": "DefaultOpenDelayMs"
+    },
+    {
+      "name": "HoverCard.closeDelayMs",
+      "description": "指针离开触发元素与气泡后多久关闭；留出从触发元素移进气泡的时间。",
+      "type": "number",
+      "defaultValue": "DefaultCloseDelayMs"
+    },
+    {
+      "name": "HoverCard.side",
+      "description": "首选弹出方向；该侧放不下而另一侧更宽裕时自动翻到另一侧。",
+      "type": "HoverCardSide",
+      "defaultValue": "'top'"
+    },
+    {
+      "name": "HoverCard.align",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "HoverCardAlign",
+      "defaultValue": "'start'"
+    },
+    {
+      "name": "HoverCard.sideOffset",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "number",
+      "defaultValue": "DefaultSideOffset"
+    },
+    {
+      "name": "HoverCard.widthStrategy",
+      "description": "气泡宽度：`content` 按内容自适应（有上限）；`anchor` 与触发元素等宽，触发元素变宽变窄\n（拖分隔条、窗口缩放）时跟着同步。",
+      "type": "HoverCardWidthStrategy",
+      "defaultValue": "'content'"
+    }
+  ],
   HoverRevealRow: [
     {
       "name": "HoverRevealRow.disabled",
@@ -4345,6 +4404,11 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "name": "MessageBubble.runtimeCostContexts",
       "description": "Auto-generated from TypeScript props.",
       "type": "ConversationTurnContextView[]"
+    },
+    {
+      "name": "MessageBubble.runCostEstimate",
+      "description": "这次执行的约价（主 Agent 全部模型调用 + 子 Agent 运行）；缺席时回答末尾不显示金额。",
+      "type": "LooseOptional<RunCostEstimate>"
     },
     {
       "name": "MessageBubble.goalCompletionSummary",
@@ -5671,6 +5735,29 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
       "description": "Optional application-owned registry. Defaults to the bundled shared registry.",
       "type": "ToolRendererRegistry",
       "defaultValue": "ToolRenderRegistry"
+    }
+  ],
+  ToolCallHoverDetails: [
+    {
+      "name": "ToolCallHoverDetails.blocks",
+      "description": "单次调用传一个；归并行（×N）按调用顺序传入全部成员。",
+      "type": "readonly ToolCallBlock[]",
+      "recommended": "Required"
+    },
+    {
+      "name": "ToolCallHoverDetails.formatPathForDisplay",
+      "description": "Auto-generated from TypeScript props.",
+      "type": "PathDisplayFormatter"
+    },
+    {
+      "name": "ToolCallHoverDetails.detail",
+      "description": "单次调用时渲染器已算好的完整描述：字符串作为一段展示（命令可以带换行），数组一项一行；\n缺省按参数推导。与操作对象、摘要或错误重复的内容会被略去。",
+      "type": "string | readonly string[]"
+    },
+    {
+      "name": "ToolCallHoverDetails.summary",
+      "description": "单次调用时渲染器已算好的结果或状态摘要；缺省按结果计数推导。",
+      "type": "string"
     }
   ],
   ToolDisclosureCard: [

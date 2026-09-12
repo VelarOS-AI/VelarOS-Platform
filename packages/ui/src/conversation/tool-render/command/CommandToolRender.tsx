@@ -11,6 +11,7 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
 import { useChatToolRenderCapabilities } from '../chatToolRenderCapabilitiesContext'
+import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { truncateLocalizedCommandOutput } from '../toolDisplay'
 
@@ -29,7 +30,7 @@ import styles from './CommandToolRender.module.css'
 import type { ProjectCommandResult,ToolCallBlock } from '#contracts'
 import { AppError } from '#internal/result'
 import { Result } from '#internal/result'
-import { isBoolean, isNonBlankString, isNumber, isPresent, isString, optionalWhen,toNullable } from '#internal/runtime'
+import { isBoolean, isNonBlankString, isNumber, isPresent, isString, optionalWhen,toNullable, toOptional } from '#internal/runtime'
 import { isRecord } from '#internal/unknownJsonRecord'
 
 const cx = StyleUtils.bindCx(styles)
@@ -83,8 +84,17 @@ const CommandToolRender = memo(
       toNullable(result?.backgroundProcess),
       translatorRuntime
     )
-    const summary = block.error ?? summarizeOutput(result, locale, translatorRuntime)
+    const outputSummary = summarizeOutput(result, locale, translatorRuntime)
+    const summary = block.error ?? outputSummary
     const statusLabel = getToolStatusLabel(block, locale, translatorRuntime)
+    // 悬停详情里失败的命令要说清退出码；成功、超时、后台启动沿用输出摘要。
+    const failedExit =
+      result && !result.success && !result.timedOut && !result.backgroundProcess && isNumber(result.exitCode)
+        ? { exitCode: result.exitCode, duration: result.durationMs }
+        : null
+    const hoverSummary = failedExit
+      ? t('commandTool.exitCodeDuration', failedExit)
+      : toOptional(outputSummary)
     const stdout = result?.stdout
       ? truncateLocalizedCommandOutput(result.stdout, locale, undefined, translatorRuntime)
       : ''
@@ -95,6 +105,12 @@ const CommandToolRender = memo(
     const backgroundTaskId = toNullable(backgroundProcess?.taskId)
     const displayCommand = command && formatPathForDisplay ? formatPathForDisplay(command) : command
     const displayCwd = cwd && formatPathForDisplay ? formatPathForDisplay(cwd) : cwd
+    // 只有模型显式指定了 cwd 才在悬停详情里点名目录；缺省就是项目根，不必重复。
+    const explicitCwd = args.cwd && formatPathForDisplay ? formatPathForDisplay(args.cwd) : args.cwd
+    const hoverDetail = [
+      displayCommand,
+      explicitCwd ? `${t('commandTool.metaDirectory')} ${explicitCwd}` : null,
+    ].filter((line): line is string => isNonBlankString(line))
     const displayBackgroundProcess =
       backgroundProcess && formatPathForDisplay
         ? {
@@ -192,6 +208,14 @@ const CommandToolRender = memo(
           detail={compactLine}
           detailTitle={compactLine}
           count={statusLabel}
+          hoverContent={
+            <ToolCallHoverDetails
+              blocks={[block]}
+              formatPathForDisplay={formatPathForDisplay}
+              detail={hoverDetail}
+              summary={hoverSummary}
+            />
+          }
           actionLayout="overlay"
           action={
             optionalWhen(command, ((

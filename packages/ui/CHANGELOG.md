@@ -16,9 +16,17 @@
 - 读者未跟随时视口里的内容变矮，会话滚动在绘制前用末尾占位撑住原位置，不再被浏览器夹到新的底部。
 - 同一轮里先建目标再更新计划时，目标卡不再缺席顶部固定坞：本轮 goal:create / goal:update 一落定就重读目标，
   不再等整轮结束。
+- 批量 `project:read` 的工具行显示首个文件并计数其余；`project:search` / `project:query-code` 行内先说查询词或符号，
+  搜索范围放进悬停详情（`getToolSearchScopeItems`）；`project:write` 按文件改动渲染并计入「已编辑」。
 
 ### Added
 
+- `HoverCard`（`@velaros-ai/ui/primitives/overlays/HoverCard`）：可悬停详情气泡。停留片刻弹出，指针移进气泡时保持打开，
+  文字可选且选中后不会在复制前消失；键盘聚焦触发元素同样弹出，从不抢焦点；Escape / 外部点击关闭，随触发元素滚动；
+  `widthStrategy="anchor"` 时与触发元素等宽并随其宽度变化同步。气泡不描边，靠表面色与四周投影区分。
+- 工具行悬停详情：`CompactToolRow.hoverContent` 与 `ToolResultSummaryItem.hoverContent`（提供后行可聚焦，行与计数上的
+  原生 title 不再挂出，气泡与行等宽）；`getToolOperations` 推导一次调用实际执行的操作与对象，`ToolCallHoverDetails`
+  渲染详情。内置工具行与归并行（×N）都已接上，归并行按调用顺序逐次列出。未接详情的工具行，溢出全文气泡同样与行等宽、不描边。
 - `ChatMessage.systemNoticeKind`（`rewind` | `goal-continuation`）：系统通知行按类别选图标，目标自动续跑的留痕显示靶心。
 - `scrollBehavior` 新增夹底守卫与自动收起扣留的纯策略（`resolveScrollClampGuard`、
   `resolveAutoCollapseHold`、`ScrollClampGuardCssVariable`）。

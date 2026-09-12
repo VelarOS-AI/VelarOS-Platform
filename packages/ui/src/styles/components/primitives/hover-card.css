@@ -1,0 +1,59 @@
+/* @velaros-no-tailwind */
+
+/*
+ * 可悬停详情气泡（HoverCard）：叠加在 .velar-popover-content 的定位与层级之上，收紧尺寸、允许选字，
+ * 超出可用高度时在气泡内部滚动。不描边，靠浮层表面色、圆角与投影和下层内容分开（暗色主题下由
+ * --popover 的表面亮度分层）。--velar-hover-card-available-height 由组件按所选一侧的剩余空间写入。
+ */
+.velar-popover-content.velar-hover-card {
+  --velar-hover-card-max-height: 360px;
+  /* 去掉描边后四周要有一圈柔和投影把边缘托出来（白底上尤其需要）；主题可整体覆盖这个变量。 */
+  --velar-hover-card-shadow: 0 2px 12px color-mix(in srgb, var(--color-black) 9%, transparent),
+    var(--ui-shadow-overlay);
+
+  box-sizing: border-box;
+  min-width: min(240px, calc(100vw - 16px));
+  max-width: min(520px, calc(100vw - 16px));
+  max-height: min(
+    var(--velar-hover-card-max-height),
+    var(--velar-hover-card-available-height, calc(100vh - 16px))
+  );
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border: 0;
+  border-radius: var(--ui-radius-panel);
+  box-shadow: var(--velar-hover-card-shadow);
+  cursor: auto;
+  font-size: var(--ui-font-body);
+  line-height: var(--ui-line-compact);
+  user-select: text;
+  -webkit-user-select: text;
+  animation: velar-hover-card-in 120ms ease-out;
+}
+
+/*
+ * 与触发元素等宽（widthStrategy="anchor"）：Popover 按触发元素的实际宽度实时写入 width；
+ * 首帧先用打开时量到的宽度（--velar-hover-card-anchor-width），选边量高度时就是最终宽度。
+ */
+.velar-popover-content.velar-hover-card[data-width-strategy='anchor'] {
+  width: var(--velar-hover-card-anchor-width, auto);
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+}
+
+@keyframes velar-hover-card-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velar-popover-content.velar-hover-card {
+    animation: none;
+  }
+}

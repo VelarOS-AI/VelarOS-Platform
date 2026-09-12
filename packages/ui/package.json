@@ -269,6 +269,10 @@
       "types": "./dist/primitives/overlays/Dialog.d.ts",
       "import": "./dist/primitives/overlays/Dialog.js"
     },
+    "./primitives/overlays/HoverCard": {
+      "types": "./dist/primitives/overlays/HoverCard.d.ts",
+      "import": "./dist/primitives/overlays/HoverCard.js"
+    },
     "./primitives/overlays/ImagePreviewDialog": {
       "types": "./dist/primitives/overlays/ImagePreviewDialog.d.ts",
       "import": "./dist/primitives/overlays/ImagePreviewDialog.js"

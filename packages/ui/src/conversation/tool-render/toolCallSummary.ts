@@ -219,21 +219,59 @@ function formatToolReadSkillNames(
   return skillNames.join(separator)
 }
 
+/**
+ * 以查询词 / 符号为主语的工具：path 只是搜索范围。行内先说「查什么」，范围交给悬停详情
+ * （`getToolSearchScopeItems`）；没有查询词的 action（如 language_diagnostics）仍回落到 path。
+ */
+const QueryFirstToolNames = new Set(['project:search', 'project:query-code'])
+
+function readQueryFirstSubject(
+  toolName: string,
+  args: Nullable<Record<string, any>>
+): Nullable<string> {
+  if (!QueryFirstToolNames.has(toolName)) return null
+
+  const subject = readString(args, 'symbol') ?? readString(args, 'query')
+  return subject ? normalizeInline(subject) : null
+}
+
+/** `path` 既可能是单个路径，也可能是批量数组（project:read 一次读多个文件）。 */
+function readPathArgList(args: Nullable<Record<string, any>>): string[] {
+  const singlePath = readString(args, 'path')
+  return singlePath ? [singlePath] : readStringArray(args, 'path')
+}
+
+function formatPathListPreview(
+  paths: string[],
+  formatter?: LooseOptional<PathDisplayFormatter>
+): Nullable<string> {
+  const [firstPath] = paths
+  if (!firstPath) return null
+
+  const preview = formatPath(firstPath, formatter)
+  return paths.length > 1 ? `${preview} +${paths.length - 1}` : preview
+}
+
 function getPrimaryArgPreview(
+  toolName: string,
   args: Nullable<Record<string, any>>,
   pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
-  const pathPreview = [
-    readString(args, 'path'),
-    readString(args, 'targetPath'),
-    readString(args, 'rootPath'),
-    readString(args, 'fromPath'),
-    readString(args, 'toPath'),
-  ]
-    .filter((value): value is string => !!value && !isBlank(value))
-    .map((value) => formatPath(value, pathFormatter))[0]
+  const querySubject = readQueryFirstSubject(toolName, args)
+  if (querySubject) return querySubject
+
+  const pathPreview =
+    formatPathListPreview(readPathArgList(args), pathFormatter) ??
+    [
+      readString(args, 'targetPath'),
+      readString(args, 'rootPath'),
+      readString(args, 'fromPath'),
+      readString(args, 'toPath'),
+    ]
+      .filter((value): value is string => !!value && !isBlank(value))
+      .map((value) => formatPath(value, pathFormatter))[0]
 
   if (pathPreview) return pathPreview
 
@@ -252,7 +290,7 @@ function getPrimaryArgPreview(
   if (textPreview) return normalizeInline(textPreview)
 
   const paths = readStringArray(args, 'paths')
-  if (paths.length) return formatPath(paths[0], pathFormatter)
+  if (!isEmpty(paths)) return formatPath(paths[0], pathFormatter)
 
   const categoriesPreview = formatCategories(readStringArray(args, 'categories'), locale, runtime)
   if (categoriesPreview) return categoriesPreview
@@ -307,7 +345,11 @@ export function getToolDetailItems(
   getToolReadSkillNames(block.toolName, args).forEach(pushDetail)
   if (!isEmpty(details)) return details
 
+  pushDetail(readQueryFirstSubject(block.toolName, args))
+  if (!isEmpty(details)) return details
+
   readStringArray(args, 'paths').forEach((path) => pushDetail(formatPath(path, cwdFormatter)))
+  readStringArray(args, 'path').forEach((path) => pushDetail(formatPath(path, cwdFormatter)))
   pathValues.forEach((path) => pushDetail(path ? formatPath(path, cwdFormatter) : null))
   readStringArray(args, 'categories').forEach((category) =>
     pushDetail(formatCategory(category, locale, runtime))
@@ -321,6 +363,23 @@ export function getToolDetailItems(
   textValues.forEach((text) => pushDetail(text ? normalizeInline(text) : null))
 
   return details
+}
+
+/**
+ * 查询类工具（project:search / project:query-code）的搜索范围路径。`getToolDetailItems` 对它们只给
+ * 「查什么」，范围由悬停详情另起一行补上；没有查询词时范围本身就是主语，已在 detail 里，这里返回空。
+ */
+export function getToolSearchScopeItems(
+  block: Pick<ToolCallBlock, 'toolName' | 'args'>,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>
+): string[] {
+  const args = asRecord(block.args)
+  if (!readQueryFirstSubject(block.toolName, args)) return []
+
+  const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(args, 'cwd'))
+  return readPathArgList(args)
+    .map((path) => formatPath(path, cwdFormatter))
+    .filter((path, index, paths) => paths.indexOf(path) === index)
 }
 
 function buildResultSummary(
@@ -474,7 +533,7 @@ export function getToolActivitySummary(
   const displayName = block.toolName
   const preview =
     formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
-    getPrimaryArgPreview(args, cwdFormatter, locale, runtime)
+    getPrimaryArgPreview(block.toolName, args, cwdFormatter, locale, runtime)
   const action = preview ? `${displayName} · ${preview}` : displayName
 
   return block.isRunning
@@ -493,7 +552,7 @@ export function getToolDetailSummary(
   return (
     getContextDistillPreview(block.toolName, args) ??
     formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
-    getPrimaryArgPreview(args, cwdFormatter, locale, runtime)
+    getPrimaryArgPreview(block.toolName, args, cwdFormatter, locale, runtime)
   )
 }
 

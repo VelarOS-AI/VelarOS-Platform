@@ -62,6 +62,7 @@ export * from "./primitives/layout/Tabs";
 export * from "./primitives/overlays/AnchoredPopover";
 export * from "./primitives/overlays/CascadingMenu";
 export * from "./primitives/overlays/Dialog";
+export * from "./primitives/overlays/HoverCard";
 export * from "./primitives/overlays/ImagePreviewDialog";
 export * from "./primitives/overlays/Popover";
 export * from "./primitives/overlays/SettingsPanelDialog";

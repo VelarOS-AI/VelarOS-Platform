@@ -30,6 +30,7 @@ import {
   getMergedToolDetails,
 } from "../tool-render/messageBubbleToolModel";
 import { getToolActivityGroupSummary } from "../tool-render/toolActivitySummary";
+import { ToolCallHoverDetails } from "../tool-render/ToolCallHoverDetails";
 import {
   type MergedToolCallGroup,
   mergeToolCallGroups,
@@ -389,18 +390,8 @@ function MergedToolCallRowInner({
     locale,
     translatorRuntime,
   );
-  const detailsText = details.join(detailSeparator);
-  let title = "";
-  const appendTitlePart = (value: string): void => {
-    if (isBlank(value)) return;
-
-    title = title ? `${title} ${value}` : value;
-  };
 
   if (!detailText) detailText = fallbackDetail ?? "";
-  appendTitlePart(displayName);
-  appendTitlePart(detailsText);
-  appendTitlePart(`×${count}`);
   const planUpdateIndex = planUpdateIndexByToolCallId?.get(
     group.representative.toolCallId,
   );
@@ -427,7 +418,6 @@ function MergedToolCallRowInner({
             id: group.representative.toolCallId,
             kind: inferToolLeadingKind(group.toolName),
             tone: resolveMergedToolGroupTone(group.blocks),
-            title,
             label: displayName,
             detail: optionalWhenLazy(detailText, () => (
               <>
@@ -440,7 +430,13 @@ function MergedToolCallRowInner({
             detailTitle:
               details.join(detailSeparator) || fallbackDetail || undefined,
             statusLabel: statusLabel ?? `×${count}`,
-            statusTitle: statusLabel ?? `×${count}`,
+            // 逐次调用各自执行了什么，都在悬停详情里按调用顺序列出。
+            hoverContent: (
+              <ToolCallHoverDetails
+                blocks={group.blocks}
+                formatPathForDisplay={formatPathForDisplay}
+              />
+            ),
             actionLayout: optionalWhenLazy(commandCopyValue, () => "overlay"),
             action: optionalWhen(
               commandCopyValue,

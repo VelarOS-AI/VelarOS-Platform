@@ -852,14 +852,25 @@
   background: rgba(15, 23, 42, 0.04);
 }
 
-/* 行内 detail 溢出时的全文气泡（BubbleTooltip portal 到 body，免疫祖先 overflow 剪裁）。 */
-.velar-compact-tool-row-detail-tooltip {
+/*
+ * 没接悬停详情的行在 detail 溢出时的全文气泡（BubbleTooltip portal 到 body，免疫祖先 overflow 剪裁）。
+ * 与工具行的详情气泡同一外观：和行等宽、不描边；只作用于工具行，其它 BubbleTooltip 不受影响。
+ */
+.velar-tooltip-content.velar-compact-tool-row-detail-tooltip {
   box-sizing: border-box;
-  max-width: min(560px, var(--radix-tooltip-trigger-width, 92vw), 92vw);
+  width: var(--radix-tooltip-trigger-width, auto);
+  max-width: min(var(--radix-tooltip-trigger-width, 92vw), 92vw);
+  border-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
   text-align: left;
   white-space: normal;
+}
+
+/* 带悬停详情的行可键盘聚焦；焦点环画在行内侧，免被工具组行的 overflow 剪掉。行本身不描边。 */
+.velar-compact-tool-row:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 .velar-compact-tool-row-neutral {
