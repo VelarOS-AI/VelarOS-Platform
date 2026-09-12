@@ -325,10 +325,14 @@ describe('删除与重命名按原样重建文件', () => {
       expect(applyPlan?.restore).toMatchObject([{ path: 'legacy.txt', exists: true, encoding: 'utf16le' }])
 
       // 磁盘上文件已删、事务状态仍停在 apply 的待恢复计划：下一次 owner 启动必须把文件原样还回来。
+      // apply 落定前持久化的是 apply 之前的状态，那时还没有 appliedAt。
       const store = new FileProjectTransactionStateStore({ path: statePath, root })
       const snapshot = store.snapshot()
       store.commit({
-        transactions: snapshot.transactions.map((transaction) => ({ ...transaction, status: applyPlan!.previousStatus })),
+        transactions: snapshot.transactions.map(({ appliedAt: _appliedAt, ...transaction }) => ({
+          ...transaction,
+          status: applyPlan!.previousStatus,
+        })),
         projections: snapshot.projections,
         pending: applyPlan,
       })
