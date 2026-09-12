@@ -4,10 +4,12 @@ import { describe, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
+  ProcessedActivityAutoCollapseWindowMs,
   shouldAnimateLiveToolActivity,
   shouldGroupProcessedActivityDisclosure,
   shouldRenderActivityGroupDisclosure,
   shouldRenderProcessedActivityDisclosure,
+  shouldRequestProcessedActivityAutoCollapse,
 } from '../../packages/ui/src/conversation/blocks/AssistantMessageSegments'
 import type { MessageRenderSegment } from '../../packages/ui/src/conversation/blocks/messageBubbleRenderModel'
 import { shouldRenderThinkingAsFlat } from '../../packages/ui/src/conversation/blocks/MessageMarkdownBlocks'
@@ -53,6 +55,36 @@ function activitySegment(block: ToolCallBlock): MessageRenderSegment {
 }
 
 void describe('live chat activity presentation', () => {
+  void test('a message that just finished streaming asks once to auto-collapse its processed activity', () => {
+    const streaming = { messageId: 'assistant-1', isStreaming: true }
+    const finished = { messageId: 'assistant-1', isStreaming: false }
+    assert.equal(shouldRequestProcessedActivityAutoCollapse(streaming, finished), true)
+    // 一直没流式过（历史消息、重挂载）、重新开始流式、换成另一条消息：都不发起。
+    assert.equal(shouldRequestProcessedActivityAutoCollapse(finished, finished), false)
+    assert.equal(shouldRequestProcessedActivityAutoCollapse(finished, streaming), false)
+    assert.equal(
+      shouldRequestProcessedActivityAutoCollapse(streaming, { messageId: 'assistant-2', isStreaming: false }),
+      false
+    )
+  })
+
+  void test('the collapse request outlives the re-renders that follow a completion', () => {
+    const source = readFileSync(
+      fileURLToPath(
+        new URL('../../packages/ui/src/conversation/blocks/AssistantMessageSegments.tsx', import.meta.url)
+      ),
+      'utf8'
+    )
+    // 请求锁存在状态里，按保留时长撤下；不再由渲染期读一次 ref 决定（下一次重渲染就会把它翻回去）。
+    assert.match(source, /const shouldAutoCollapseProcessedActivity = !isStreaming && autoCollapseRequested/u)
+    assert.doesNotMatch(source, /!isStreaming && recentlyStreamingMessageIdRef\.current === messageId\s*\n\s*\/\/ 流式结束/u)
+    assert.match(
+      source,
+      /timers\.after\(\s*ProcessedActivityAutoCollapseWindowMs,\s*\(\) => setAutoCollapseRequested\(false\)/u
+    )
+    assert.ok(ProcessedActivityAutoCollapseWindowMs >= 500)
+  })
+
   void test('keeps the completion-collapse request live after the disclosure has mounted', () => {
     assert.equal(
       shouldInitiallyExpandToolActivityDisclosure({

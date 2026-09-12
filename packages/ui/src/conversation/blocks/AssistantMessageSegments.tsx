@@ -11,6 +11,7 @@ import React, {
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
 import { useConversationAutoCollapseHold } from '../react-hooks/conversationScrollFollow'
+import { useTimerScope } from '../react-hooks/useTimerScope'
 import type { ToolRenderSegment } from '../tool-render/toolCallRenderGrouping'
 
 import {
@@ -54,6 +55,22 @@ const EmptyMessageSegmentSuffixState: MessageSegmentSuffixState = {
   hasStartedTextAfter: false,
   hasStartedThinkingAfter: false,
   hasStartedToolActivityAfter: false,
+}
+
+/** 完成态自动收起请求的保留时长：盖过完成后紧跟的那几次重渲染，又不至于让之后重挂的折叠项再被收一次。 */
+export const ProcessedActivityAutoCollapseWindowMs = 1_000
+
+interface MessageStreamingState {
+  messageId: string
+  isStreaming: boolean
+}
+
+/** 流式状态变化时是否发起完成态自动收起：同一条消息从流式转为结束才发起；换了消息、开始流式都撤掉。 */
+export function shouldRequestProcessedActivityAutoCollapse(
+  previous: MessageStreamingState,
+  next: MessageStreamingState
+): boolean {
+  return previous.messageId === next.messageId && previous.isStreaming && !next.isStreaming
 }
 
 function messageSegmentStartsText(segment: MessageRenderSegment): boolean {
@@ -246,6 +263,30 @@ function AssistantMessageSegmentsInner({
   const { locale } = useConversationI18n()
   const translatorRuntime = useConversationTranslatorRuntime()
   const recentlyStreamingMessageIdRef = useRef<Nullable<string>>(null)
+  const timers = useTimerScope('AssistantMessageSegments')
+  // 这条消息刚结束流式：完成态「已处理」和思考块的自动收起请求锁存一小段时间再撤。
+  // 不能在渲染期读一次 ref 就算：完成那一刻紧跟着好几次重渲染（运行状态、用量、「本轮改动」卡、
+  // 目标续跑开下一轮……），只要一次在收起动作（绘制后两帧）执行前把请求翻回 false，收起就被撤销，
+  // 「已处理」一直展开着。
+  const [autoCollapseTracking, setAutoCollapseTracking] = useState({ messageId, isStreaming })
+  const [autoCollapseRequested, setAutoCollapseRequested] = useState(false)
+  if (autoCollapseTracking.messageId !== messageId || autoCollapseTracking.isStreaming !== isStreaming) {
+    setAutoCollapseTracking({ messageId, isStreaming })
+    setAutoCollapseRequested(
+      shouldRequestProcessedActivityAutoCollapse(autoCollapseTracking, { messageId, isStreaming })
+    )
+  }
+  useEffect(() => {
+    if (!autoCollapseRequested) return
+    const lease = timers.after(
+      ProcessedActivityAutoCollapseWindowMs,
+      () => setAutoCollapseRequested(false),
+      { label: 'chat.processedActivity.autoCollapseWindow' }
+    )
+    return () => {
+      lease.cancel()
+    }
+  }, [autoCollapseRequested, timers])
   const [toolMotionArmedMessageId, setToolMotionArmedMessageId] = useState<Nullable<string>>(null)
   const animateLiveToolActivity = shouldAnimateLiveToolActivity({
     armedMessageId: toolMotionArmedMessageId,
@@ -324,8 +365,7 @@ function AssistantMessageSegmentsInner({
   const processedActivityBoundaryIndex = hasFinalSummaryText
     ? processedActivitySummaryBoundaryIndex
     : visibleMessageRenderSegments.length
-  const shouldAutoCollapseProcessedActivity =
-    !isStreaming && recentlyStreamingMessageIdRef.current === messageId
+  const shouldAutoCollapseProcessedActivity = !isStreaming && autoCollapseRequested
   // 流式结束那一刻读者不在底部：完成态会把这条消息整段重排进「已处理」并重挂子节点，重挂出来的
   // 折叠项、思考块一律按展开挂载，不做自动收起，读者正在看的内容就不会被抽走。跟随时照旧收起。
   const holdExpandedForReader = useConversationAutoCollapseHold(!isStreaming)
