@@ -55,6 +55,8 @@ export interface GoalCompletionActivitySummary {
   durationMs: Nullable<number>
   totalTokens: Nullable<number>
   costUsd: Nullable<number>
+  /** 有调用没回报用量或查不到价格：`costUsd` 只是下限，展示时加「≥」。 */
+  costIsLowerBound?: boolean
 }
 
 export interface ProcessedActivityDisclosureLabelOptions {
@@ -535,9 +537,10 @@ function formatGoalCompletionActivityLabel(
   }
 
   if (isFiniteNumber(summary.costUsd)) {
+    const cost = formatMessageCostEstimate(locale, Math.max(0, summary.costUsd))
     details.push(
       conversationTranslate(locale, 'chat.goalCompletedCost', {
-        cost: formatMessageCostEstimate(locale, Math.max(0, summary.costUsd)),
+        cost: summary.costIsLowerBound ? `≥${cost}` : cost,
       })
     )
   }

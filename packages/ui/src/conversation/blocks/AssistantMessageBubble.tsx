@@ -4,7 +4,6 @@ import { StyleUtils } from '@velaros-ai/ui'
 
 import type { FileChangeSummaryListEntry } from '../cards/FileChangeSummaryList'
 import { useConversationI18n } from '../i18n'
-import type { ConversationTurnContextView } from '../projection'
 import {
   type BrowserScreenshotDisplayMode,
   useConversationRenderSlots,
@@ -34,7 +33,6 @@ import { MessageActionList } from './MessageActionList'
 import {
   buildMessageRenderSegments,
   type ConversationMessageRunMarker,
-  extractMessageText,
   getLastTextSegmentKey,
   getStreamingTextSegmentKey,
   getVisibleMessageBlocks,
@@ -42,7 +40,7 @@ import {
   hasVisibleSegmentContent,
   shouldShowAssistantGeneratedArtifacts,
 } from './messageBubbleRenderModel'
-import { estimateAssistantMessageCost } from './messageCostEstimate'
+import type { RunCostEstimate } from './messageCostEstimate'
 import {
   hasVisibleToolModelImages,
   ToolModelImageGroup,
@@ -52,18 +50,15 @@ import styles from './MessageBubble.module.css'
 
 import type {
   ChatMessage,
-  ChatProviderId,
   ContentBlock,
-  ModelPricingCatalog,
   ProjectRootEntry,
   ToolCallBlock as ToolCallBlockType,
   UserActionCardResult,
 } from '#contracts'
-import { isEmpty } from '#internal/runtime'
+import { isEmpty, toNullable } from '#internal/runtime'
 
 const cx = StyleUtils.bindCx(styles)
 const EmptyProjectRoots: ProjectRootEntry[] = []
-const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 
 function createPlanAwareToolActivityExclusionPredicate(
   latestMessagePlanToolCallId: Nullable<string>
@@ -95,9 +90,7 @@ export function AssistantMessageBubble({
   activeProjectRoot = null,
   projectRoots = EmptyProjectRoots,
   canShowFileChangeSummary = true,
-  billingModel = null,
-  pricingCatalog = null,
-  runtimeCostContexts = EmptyRuntimeCostContexts,
+  runCostEstimate = null,
   goalCompletionSummary = null,
   activityLeadingElement = null,
   activityTrailingElement = null,
@@ -124,12 +117,8 @@ export function AssistantMessageBubble({
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
-  billingModel?: LooseOptional<{
-    provider: ChatProviderId
-    model: string
-  }>
-  pricingCatalog?: LooseOptional<ModelPricingCatalog>
-  runtimeCostContexts?: ConversationTurnContextView[]
+  /** 这次执行的约价；只由会话壳按执行用量账算好传入，气泡不再拿可见问答文字自己估。 */
+  runCostEstimate?: LooseOptional<RunCostEstimate>
   goalCompletionSummary?: LooseOptional<GoalCompletionActivitySummary>
   activityLeadingElement?: LooseOptional<ReactElement>
   activityTrailingElement?: LooseOptional<ReactElement>
@@ -149,7 +138,6 @@ export function AssistantMessageBubble({
   const { t, locale } = useConversationI18n()
   const showThinkingProcess = useChatThinkingVisibility()
   const { useMessageActionView } = useConversationBlockHooks()
-  const copyText = useMemo(() => extractMessageText(message), [message])
   const blockIndexByRef = useMemo(() => {
     const nextBlockIndexByRef = new Map<ContentBlock, number>()
 
@@ -163,31 +151,6 @@ export function AssistantMessageBubble({
   const getBlockIndex = useCallback(
     (block: ContentBlock) => blockIndexByRef.get(block),
     [blockIndexByRef]
-  )
-  const questionText = useMemo(
-    () => (questionMessage ? extractMessageText(questionMessage) : ''),
-    [questionMessage]
-  )
-  const answerCostEstimate = useMemo(
-    () =>
-      billingModel
-        ? estimateAssistantMessageCost({
-            provider: billingModel.provider,
-            model: billingModel.model,
-            pricingCatalog,
-            question: questionText,
-            answer: copyText,
-            turnContexts: runtimeCostContexts,
-          })
-        : null,
-    [
-      billingModel?.model,
-      billingModel?.provider,
-      copyText,
-      pricingCatalog,
-      questionText,
-      runtimeCostContexts,
-    ]
   )
   const {
     actionRows,
@@ -373,7 +336,7 @@ export function AssistantMessageBubble({
         {showGeneratedArtifacts && (
           <AssistantMessageFooter
             message={message}
-            answerCostEstimate={answerCostEstimate}
+            runCostEstimate={toNullable(runCostEstimate)}
             copyLabel={t('chat.copyAnswer')}
             copiedLabel={t('chat.codeBlockCopied')}
             locale={locale}

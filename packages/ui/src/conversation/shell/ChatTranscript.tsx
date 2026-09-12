@@ -3,6 +3,7 @@ import { useMemoizedFn } from 'ahooks'
 
 import { MessageBubble } from '../blocks/MessageBubble'
 import { type GoalCompletionActivitySummary } from '../blocks/messageBubbleRenderModel'
+import type { RunCostEstimate } from '../blocks/messageCostEstimate'
 import type { FileChangeSummaryListEntry } from '../cards/FileChangeSummaryList'
 import type {
   ConversationMessageRunMarker,
@@ -30,8 +31,6 @@ import type {
   UserActionCardResult,
 } from '#contracts'
 import { isEmpty, toNullable } from '#internal/runtime'
-
-const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 
 /**
  * 宿主回调固定成稳定引用再交给消息气泡。气泡按引用判等，宿主每次渲染新建一个回调（内联箭头、
@@ -94,6 +93,7 @@ export interface ChatTranscriptProps {
   sessionId: string
   className?: string
   itemClassName?: string
+  /** @deprecated 约价改由 `getRunCostEstimate` 提供（按执行用量账计价）；保留只为已发布宿主。 */
   pricingCatalog?: LooseOptional<ModelPricingCatalog>
   getQuestionMessage?: (message: ChatMessage) => Nullable<ChatMessage>
   getIsStreaming?: (message: ChatMessage) => boolean
@@ -105,11 +105,18 @@ export interface ChatTranscriptProps {
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
+  /** @deprecated 约价改由 `getRunCostEstimate` 提供（按执行用量账计价）；保留只为已发布宿主。 */
   billingModel?: LooseOptional<{
     provider: ChatProviderId
     model: string
   }>
+  /** @deprecated 约价不再按回合上下文反推运行时模型；保留只为已发布宿主。 */
   getRuntimeCostContexts?: (message: ChatMessage) => ConversationTurnContextView[]
+  /**
+   * 一次执行的约价（主 Agent 全部模型调用 + 子 Agent 运行），挂在承载运行标记的助手消息上；
+   * 不传或返回 null 时回答末尾不显示金额。
+   */
+  getRunCostEstimate?: (message: ChatMessage) => Nullable<RunCostEstimate>
   getGoalCompletionSummary?: (message: ChatMessage) => Nullable<GoalCompletionActivitySummary>
   renderActivityLeadingElement?: (message: ChatMessage) => Nullable<ReactElement>
   renderBeforeMessage?: (message: ChatMessage) => Nullable<ReactNode>
@@ -137,7 +144,6 @@ function ChatTranscriptInner({
   sessionId,
   className,
   itemClassName,
-  pricingCatalog = null,
   getQuestionMessage,
   getIsStreaming,
   getRunMarker,
@@ -148,8 +154,7 @@ function ChatTranscriptInner({
   activeProjectRoot,
   projectRoots,
   canShowFileChangeSummary = true,
-  billingModel,
-  getRuntimeCostContexts,
+  getRunCostEstimate,
   getGoalCompletionSummary,
   renderActivityLeadingElement,
   renderBeforeMessage,
@@ -245,6 +250,15 @@ function ChatTranscriptInner({
       (marker, activityMessage) => toNullable(getRunMarker?.(activityMessage)) ?? marker,
       null
     )
+    // 约价跟运行标记走：同一轮被引导切开时，标记与约价都在承载整轮的那条消息上。
+    const groupedRunCostEstimate = [
+      ...activityLeadingMessages,
+      message,
+      ...activityTrailingMessages,
+    ].reduce<Nullable<RunCostEstimate>>(
+      (estimate, activityMessage) => toNullable(getRunCostEstimate?.(activityMessage)) ?? estimate,
+      null
+    )
     const forceGroupedActivityFlat = shouldForceGroupedActivityFlat(
       !isEmpty(activityLeadingMessages) || !isEmpty(activityTrailingMessages)
     )
@@ -289,9 +303,7 @@ function ChatTranscriptInner({
           activeProjectRoot={activeProjectRoot}
           projectRoots={projectRoots}
           canShowFileChangeSummary={forceActivityFlat ? false : canShowFileChangeSummary}
-          billingModel={billingModel}
-          pricingCatalog={pricingCatalog}
-          runtimeCostContexts={getRuntimeCostContexts?.(message) ?? EmptyRuntimeCostContexts}
+          runCostEstimate={forceActivityFlat ? null : groupedRunCostEstimate}
           goalCompletionSummary={
             forceActivityFlat ? null : toNullable(getGoalCompletionSummary?.(message))
           }

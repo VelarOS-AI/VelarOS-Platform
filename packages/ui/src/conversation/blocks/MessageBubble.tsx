@@ -15,6 +15,7 @@ import {
   type ConversationMessageRunMarker,
   type GoalCompletionActivitySummary,
 } from './messageBubbleRenderModel'
+import type { RunCostEstimate } from './messageCostEstimate'
 import { SystemNoticeMessageRow } from './SystemNoticeMessageRow'
 import { UserMessageBubble } from './UserMessageBubble'
 
@@ -44,12 +45,17 @@ interface MessageBubbleProps {
   activeProjectRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
   canShowFileChangeSummary?: boolean
+  /** @deprecated 约价改由 `runCostEstimate` 提供（按执行用量账计价）；保留只为已发布宿主。 */
   billingModel?: LooseOptional<{
     provider: ChatProviderId
     model: string
   }>
+  /** @deprecated 同 `billingModel`。 */
   pricingCatalog?: LooseOptional<ModelPricingCatalog>
+  /** @deprecated 同 `billingModel`。 */
   runtimeCostContexts?: ConversationTurnContextView[]
+  /** 这次执行的约价（主 Agent 全部模型调用 + 子 Agent 运行）；缺席时回答末尾不显示金额。 */
+  runCostEstimate?: LooseOptional<RunCostEstimate>
   goalCompletionSummary?: LooseOptional<GoalCompletionActivitySummary>
   activityLeadingElement?: LooseOptional<ReactElement>
   activityTrailingElement?: LooseOptional<ReactElement>
@@ -202,9 +208,7 @@ function renderMessageBubbleContent(props: MessageBubbleProps): ReactElement {
       activeProjectRoot={props.activeProjectRoot}
       projectRoots={props.projectRoots}
       canShowFileChangeSummary={props.canShowFileChangeSummary}
-      billingModel={props.billingModel}
-      pricingCatalog={props.pricingCatalog}
-      runtimeCostContexts={props.runtimeCostContexts}
+      runCostEstimate={props.runCostEstimate}
       goalCompletionSummary={props.goalCompletionSummary}
       activityLeadingElement={props.activityLeadingElement}
       activityTrailingElement={props.activityTrailingElement}
@@ -237,10 +241,7 @@ function areMessageBubblePropsEqual(
     prev.activeProjectRoot === next.activeProjectRoot &&
     prev.projectRoots === next.projectRoots &&
     prev.canShowFileChangeSummary === next.canShowFileChangeSummary &&
-    prev.billingModel?.provider === next.billingModel?.provider &&
-    prev.billingModel?.model === next.billingModel?.model &&
-    prev.pricingCatalog === next.pricingCatalog &&
-    prev.runtimeCostContexts === next.runtimeCostContexts &&
+    prev.runCostEstimate === next.runCostEstimate &&
     prev.goalCompletionSummary === next.goalCompletionSummary &&
     prev.activityLeadingElement === next.activityLeadingElement &&
     prev.activityTrailingElement === next.activityTrailingElement &&

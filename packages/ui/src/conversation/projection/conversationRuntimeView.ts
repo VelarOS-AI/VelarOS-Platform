@@ -37,5 +37,9 @@ export interface ConversationRuntimeView extends ChatStatusRuntime {
   /** 等待确认的结构化信封；缺席时确认卡按 `awaitingConfirmationMessage` 散文渲染。 */
   awaitingConfirmationDetail: Nullable<ConfirmationRequestDetail>
   lastRunFinishedAt: Nullable<number>
+  /**
+   * 主 Agent 每次模型调用的 `usage-telemetry`（按到达顺序）。运行标记上没有用量账时，回答末尾的约价
+   * 按执行时间窗从这里归属；宿主丢掉它（给空数组）约价就只能显示未知。
+   */
   usageTelemetry: StreamUsageTelemetryPayload[]
 }

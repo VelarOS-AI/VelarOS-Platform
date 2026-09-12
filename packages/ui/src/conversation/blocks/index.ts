@@ -25,6 +25,12 @@ export * from './messageBubbleRenderModel'
 export * from './messageCostEstimate'
 export * from './MessageStatusMarker'
 export * from './MessageToolActivity'
+export {
+  addConversationRunSubAgentUsage,
+  addConversationRunTranscriptSubAgentUsage,
+  addConversationRunUsageTelemetry,
+  createConversationRunUsage,
+} from './runUsage'
 export * from './SystemToolInstallSuggestionCard'
 export * from './thinkingTranslation'
 export * from './ToolModelImageGroup'

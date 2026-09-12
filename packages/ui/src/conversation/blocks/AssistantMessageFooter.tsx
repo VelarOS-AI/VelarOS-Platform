@@ -6,7 +6,7 @@ import {
   MessageTimestamp,
 } from './MessageBubbleActions'
 import { buildMessageClipboardContent } from './messageClipboard'
-import type { MessageCostEstimate as MessageCostEstimateValue } from './messageCostEstimate'
+import type { RunCostEstimate } from './messageCostEstimate'
 
 import styles from './MessageBubble.module.css'
 
@@ -15,13 +15,13 @@ import { isBlank, isEmpty } from '#internal/runtime'
 
 function AssistantMessageFooterInner({
   message,
-  answerCostEstimate,
+  runCostEstimate,
   copyLabel,
   copiedLabel,
   locale,
 }: {
   message: ChatMessage
-  answerCostEstimate: Nullable<MessageCostEstimateValue>
+  runCostEstimate: Nullable<RunCostEstimate>
   copyLabel: string
   copiedLabel: string
   locale: AppLocale
@@ -33,7 +33,7 @@ function AssistantMessageFooterInner({
     <div className={styles.assistantCopyFooter}>
       <MessageCopyButton content={clipboardContent} label={copyLabel} copiedLabel={copiedLabel} />
       <div className={styles.assistantMessageMeta}>
-        <MessageCostEstimate estimate={answerCostEstimate} locale={locale} />
+        <MessageCostEstimate estimate={runCostEstimate} locale={locale} />
         <MessageTimestamp timestamp={message.timestamp} locale={locale} />
       </div>
     </div>

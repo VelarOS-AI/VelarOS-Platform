@@ -29,10 +29,10 @@ import {
   writeMessageClipboardContent,
 } from './messageClipboard'
 import {
-  formatMessageCostEstimate,
-  type MessageCostEstimate as MessageCostEstimateValue,
+  describeRunCostEstimate,
+  formatRunCostEstimateLabel,
+  type RunCostEstimate,
 } from './messageCostEstimate'
-import { formatExactNumber } from './numberFormat'
 
 import styles from './MessageBubble.module.css'
 
@@ -313,21 +313,22 @@ export function MessageTimestamp({
   )
 }
 
+/** 回答末尾的约价：整次执行（主 Agent 全部模型调用 + 子 Agent 运行）按供应方回报的用量计价。 */
 export function MessageCostEstimate({
   estimate,
   locale,
 }: {
-  estimate: Nullable<MessageCostEstimateValue>
+  estimate: Nullable<RunCostEstimate>
   locale: AppLocale
 }): Nullable<ReactElement> {
   if (!estimate) return null
 
-  const label = formatMessageCostEstimate(locale, estimate.usd)
-  const title = `${formatExactNumber(locale, estimate.inputTokens)} input tokens · ${formatExactNumber(locale, estimate.outputTokens)} output tokens`
-
   return (
-    <span className={styles.messageCostEstimate} title={title}>
-      {label}
+    <span
+      className={styles.messageCostEstimate}
+      title={describeRunCostEstimate(locale, estimate)}
+    >
+      {formatRunCostEstimateLabel(locale, estimate)}
     </span>
   )
 }

@@ -1,6 +1,5 @@
 {
   "packages/ui/src/conversation/artifacts/HtmlArtifactBlock.tsx": 1,
-  "packages/ui/src/conversation/blocks/AssistantMessageBubble.tsx": 1,
   "packages/ui/src/conversation/cards/FileChangeSummaryList.tsx": 1,
   "packages/ui/src/conversation/cards/UserActionCard.tsx": 1,
   "packages/ui/src/conversation/html-preview/HtmlPreviewFrame.tsx": 1,

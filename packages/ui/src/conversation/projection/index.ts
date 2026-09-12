@@ -21,6 +21,13 @@ export type {
   ConversationRuntimeView,
   ConversationStickyDockItem,
 } from './conversationRuntimeView'
+export type {
+  ConversationRunUsage,
+  ConversationRunUsageBucket,
+  ConversationRunUsageOrigin,
+  ConversationRunUsagePricing,
+  ConversationSubAgentRunUsage,
+} from './conversationRunUsage'
 export type { ConversationView } from './conversationView'
 export type { ConversationWorkerThread } from './conversationWorkerThread'
 export type {

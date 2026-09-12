@@ -1,3 +1,5 @@
+import type { ConversationRunUsage } from './conversationRunUsage'
+
 import type {
   ProjectCheckpointDiffFailure,
   ProjectCheckpointFileDiff,
@@ -52,6 +54,12 @@ export interface ConversationMessageRunMarker extends ConversationRunMarkerView 
     failedRoots: ProjectCheckpointDiffFailure[]
     error: Nullable<string>
   }
+  /**
+   * 这次执行的供应方用量账（宿主在执行期间用 `addConversationRunUsageTelemetry` /
+   * `addConversationRunSubAgentUsage` 累加，随标记持久化）。缺席时约价从会话的
+   * `runtime.usageTelemetry` 按执行时间窗与这次执行消息里的子 Agent 结果推出来。
+   */
+  usage?: LooseOptional<ConversationRunUsage>
   timestamp: number
 }
 

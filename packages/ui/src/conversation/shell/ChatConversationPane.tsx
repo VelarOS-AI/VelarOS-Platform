@@ -23,11 +23,7 @@ import { ChatAwaitingInputCard } from '../cards/ChatAwaitingInputCard'
 import { ChatConfirmationCard } from '../cards/ChatConfirmationCard'
 import type { FileChangeSummaryListEntry } from '../cards/FileChangeSummaryList'
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
-import type {
-  ConversationTurnContextView,
-  ConversationView,
-  ConversationWorkerThread,
-} from '../projection'
+import type { ConversationView, ConversationWorkerThread } from '../projection'
 import type { ConversationRewindPlan } from '../projection'
 import { ConversationScrollFollowProvider } from '../react-hooks/conversationScrollFollow'
 import {
@@ -74,7 +70,6 @@ import { isEmpty, isPresent, Log, optionalWhenLazy, toNullable, toOptional } fro
 const cx = StyleUtils.bindCx(styles)
 const log = Log.tag('chat-conversation-pane')
 const EmptyQueuedMessages: ChatMessage[] = []
-const EmptyRuntimeCostContexts: ConversationTurnContextView[] = []
 const EmptyWorkerThreads: ConversationWorkerThread[] = []
 const EmptyProjectRoots: ProjectRootEntry[] = []
 const RuntimeInlineNoticeMessage = {
@@ -176,7 +171,6 @@ export function ChatConversationPane({
     messages,
     queuedMessages = EmptyQueuedMessages,
     messageRunMarkers,
-    turnContexts = EmptyRuntimeCostContexts,
     workerThreads = EmptyWorkerThreads,
     runtime,
     isStreaming,
@@ -372,7 +366,7 @@ export function ChatConversationPane({
     messageRunMarkerMap,
     latestAssistantMessageId,
     hasTurnInputAfterLatestAssistant,
-    runtimeCostContextMap,
+    runCostEstimateByMessageId,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
@@ -381,7 +375,6 @@ export function ChatConversationPane({
     messages,
     queuedMessages,
     messageRunMarkers,
-    turnContexts,
     runtime,
     billingModel,
     pricingCatalog,
@@ -599,9 +592,9 @@ export function ChatConversationPane({
     (message: ChatMessage) => (message.id === inlineNoticeMessageId ? inlineNotice : null),
     [inlineNotice, inlineNoticeMessageId]
   )
-  const getTranscriptRuntimeCostContexts = useCallback(
-    (message: ChatMessage) => runtimeCostContextMap.get(message.id) ?? EmptyRuntimeCostContexts,
-    [runtimeCostContextMap]
+  const getTranscriptRunCostEstimate = useCallback(
+    (message: ChatMessage) => toNullable(runCostEstimateByMessageId.get(message.id)),
+    [runCostEstimateByMessageId]
   )
   const getTranscriptGoalCompletionSummary = useCallback(
     (message: ChatMessage) => toNullable(goalCompletionSummaryByMessageId.get(message.id)),
@@ -690,7 +683,6 @@ export function ChatConversationPane({
                 browserScreenshotDisplayMode={browserScreenshotDisplayMode}
                 sessionId={sessionId}
                 className={styles.messageSequence}
-                pricingCatalog={pricingCatalog}
                 getQuestionMessage={getTranscriptQuestionMessage}
                 getIsStreaming={getTranscriptIsStreaming}
                 getRunMarker={getTranscriptRunMarker}
@@ -701,8 +693,7 @@ export function ChatConversationPane({
                 activeProjectRoot={activeProjectRoot}
                 projectRoots={projectRoots}
                 canShowFileChangeSummary={supportsProjectFiles}
-                billingModel={billingModel}
-                getRuntimeCostContexts={getTranscriptRuntimeCostContexts}
+                getRunCostEstimate={getTranscriptRunCostEstimate}
                 getGoalCompletionSummary={getTranscriptGoalCompletionSummary}
                 renderAfterMessage={renderWorkerThreadsAfterMessage}
                 renderAfterToolCall={renderWorkerThreadsAfterToolCall}
@@ -731,9 +722,6 @@ export function ChatConversationPane({
                   activeProjectRoot={activeProjectRoot}
                   projectRoots={projectRoots}
                   canShowFileChangeSummary={supportsProjectFiles}
-                  billingModel={billingModel}
-                  pricingCatalog={pricingCatalog}
-                  runtimeCostContexts={EmptyRuntimeCostContexts}
                   onOpenBrowserLink={onOpenBrowserLink}
                   onOpenFileChange={onOpenFileChange}
                   onOpenProjectPath={onOpenProjectPath}

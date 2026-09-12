@@ -34,6 +34,10 @@ export interface ConversationView {
   messages: ChatMessage[]
   queuedMessages?: ChatMessage[]
   messageRunMarkers: ConversationMessageRunMarker[]
+  /**
+   * @deprecated 约价改由执行用量账计价（`usage-telemetry` 带着每次调用的真实模型），会话壳不再
+   * 读回合上下文；保留字段只为已发布宿主。
+   */
   turnContexts?: ConversationTurnContextView[]
   workerThreads?: ConversationWorkerThread[]
   runtime: ConversationRuntimeView
@@ -45,6 +49,10 @@ export interface ConversationView {
   activeProjectRoot?: LooseOptional<string>
   workspaceSourceRoot?: LooseOptional<string>
   projectRoots?: ProjectRootEntry[]
+  /**
+   * 会话的计费模型与公开价格目录：回答末尾的约价按 `runtime.usageTelemetry`（主 Agent 每次模型调用）、
+   * 运行标记上的 `usage` 与执行消息里的子 Agent 结果计价。为 null 时不估价（外部引擎自管计费）。
+   */
   billingModel?: LooseOptional<{
     provider: ChatProviderId
     model: string

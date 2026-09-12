@@ -1,25 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 
 import type { GoalCompletionActivitySummary } from '../blocks/messageBubbleRenderModel'
-import { estimateSessionCost } from '../blocks/messageCostEstimate'
-import type {
-  ConversationMessageRunMarker,
-  ConversationRuntimeView,
-  ConversationTurnContextView,
-} from '../projection'
+import type { RunCostEstimate } from '../blocks/messageCostEstimate'
+import type { ConversationMessageRunMarker, ConversationRuntimeView } from '../projection'
 
 import { buildChatTranscriptDerivedIndexes } from './chatTranscriptDerivedIndexes'
+import { buildRunCostEstimates, reuseStableRunCostEstimates } from './runCostEstimates'
 
 import type { ChatMessage, ChatProviderId, ModelPricingCatalog } from '#contracts'
-import {
-  isEmpty,
-  isFiniteNumber,
-  isNull,
-  isNumber,
-  isPositiveNumber,
-  isPresent,
-  toNullable,
-} from '#internal/runtime'
+import { isFiniteNumber, isNull, isPresent, toNullable } from '#internal/runtime'
 
 type RuntimeUsageTelemetry = ConversationRuntimeView['usageTelemetry']
 type RuntimeUsageTelemetryEntry = RuntimeUsageTelemetry[number]
@@ -114,48 +103,13 @@ function sumUsageTelemetryTotalTokens(entries: RuntimeUsageTelemetry): Nullable<
   return hasTokenUsage ? total : null
 }
 
-function sumUsageTelemetryReportedCostUsd(entries: RuntimeUsageTelemetry): Nullable<number> {
-  let total = 0
-  let hasReportedCost = false
-
-  entries.forEach((entry) => {
-    if (!isFiniteNumber(entry.costUsd)) return
-
-    total += Math.max(0, entry.costUsd)
-    hasReportedCost = true
-  })
-
-  return hasReportedCost ? total : null
-}
-
-function getRuntimeCostContextsForTurn(
-  turnContexts: ConversationTurnContextView[],
-  maxTurn: Nullable<number>
-): ConversationTurnContextView[] {
-  if (!isPresent(maxTurn)) return turnContexts
-
-  for (let index = 0; index < turnContexts.length; index += 1) {
-    const context = turnContexts[index]
-    if (context && context.turn > maxTurn)
-      return turnContexts.filter((item) => item.turn <= maxTurn)
-  }
-
-  return turnContexts
-}
-
 interface UseChatConversationTranscriptModelOptions {
   messages: ChatMessage[]
   queuedMessages: ChatMessage[]
   messageRunMarkers: ConversationMessageRunMarker[]
-  turnContexts: ConversationTurnContextView[]
   runtime: Pick<
     ConversationRuntimeView,
-    | 'awaitingInputQuestion'
-    | 'completedTurns'
-    | 'activeTurn'
-    | 'lastRunStartedAt'
-    | 'lastRunFinishedAt'
-    | 'usageTelemetry'
+    'awaitingInputQuestion' | 'lastRunStartedAt' | 'lastRunFinishedAt' | 'usageTelemetry'
   >
   billingModel: LooseOptional<{
     provider: ChatProviderId
@@ -170,7 +124,8 @@ export interface UseChatConversationTranscriptModelReturn {
   latestAssistantMessageId: Nullable<string>
   hasTurnInputAfterLatestAssistant: boolean
   latestCompletedAssistantMessageId: Nullable<string>
-  runtimeCostContextMap: Map<string, ConversationTurnContextView[]>
+  /** 每次执行的约价，键是承载运行标记的助手消息 id（见 {@link buildRunCostEstimates}）。 */
+  runCostEstimateByMessageId: ReadonlyMap<string, RunCostEstimate>
   planUpdateIndexByToolCallId: Map<string, number>
   assistantQuestionMap: Map<string, ChatMessage>
   goalCompletionSummaryByMessageId: Map<string, GoalCompletionActivitySummary>
@@ -183,7 +138,6 @@ export function useChatConversationTranscriptModel({
   messages,
   queuedMessages,
   messageRunMarkers,
-  turnContexts,
   runtime,
   billingModel,
   pricingCatalog,
@@ -201,7 +155,6 @@ export function useChatConversationTranscriptModel({
   const {
     latestAssistantMessage,
     hasTurnInputAfterLatestAssistant,
-    latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
@@ -216,34 +169,21 @@ export function useChatConversationTranscriptModel({
       }),
     [messageRunMarkerMap, messages, runtime.awaitingInputQuestion, shouldRenderAwaitingInputCard]
   )
-  const runtimeCostContextMap = useMemo(() => {
-    const nextMap = new Map<string, ConversationTurnContextView[]>()
-
-    if (!latestAssistantMessage || isEmpty(turnContexts)) return nextMap
-
-    const marker = messageRunMarkerMap.get(latestAssistantMessage.id)
-    const maxTurn =
-      isNumber(marker?.turnCount) && Number.isFinite(marker.turnCount)
-        ? marker.turnCount
-        : isPositiveNumber(runtime.completedTurns)
-          ? runtime.completedTurns
-          : isPositiveNumber(runtime.activeTurn)
-            ? runtime.activeTurn
-            : null
-    const latestRunContexts = getRuntimeCostContextsForTurn(turnContexts, maxTurn)
-
-    if (!isEmpty(latestRunContexts)) {
-      nextMap.set(latestAssistantMessage.id, latestRunContexts)
-    }
-
-    return nextMap
-  }, [
-    latestAssistantMessage,
-    messageRunMarkerMap,
-    runtime.activeTurn,
-    runtime.completedTurns,
-    turnContexts,
-  ])
+  const previousRunCostEstimatesRef = useRef<Nullable<ReadonlyMap<string, RunCostEstimate>>>(null)
+  const runCostEstimateByMessageId = useMemo(() => {
+    const estimates = reuseStableRunCostEstimates(
+      previousRunCostEstimatesRef.current,
+      buildRunCostEstimates({
+        messages,
+        messageRunMarkerMap,
+        usageTelemetry: runtime.usageTelemetry,
+        billingModel,
+        pricingCatalog,
+      })
+    )
+    previousRunCostEstimatesRef.current = estimates
+    return estimates
+  }, [billingModel, messageRunMarkerMap, messages, pricingCatalog, runtime.usageTelemetry])
   const goalCompletionSummaryByMessageId = useMemo(() => {
     const nextMap = new Map<string, GoalCompletionActivitySummary>()
     if (!latestCompletedAssistantMessageId) return nextMap
@@ -257,29 +197,15 @@ export function useChatConversationTranscriptModel({
       lastRunFinishedAt: runtime.lastRunFinishedAt,
     })
     const { durationMs, finishedAt, startedAt } = runWindow
-    const runUsageTelemetry = filterUsageTelemetryByRunWindow(
-      runtime.usageTelemetry,
-      startedAt,
-      finishedAt
-    )
-    const assistantMessage = latestCompletedAssistantMessage
-    const questionMessage = assistantQuestionMap.get(latestCompletedAssistantMessageId)
-    const costEstimate = billingModel
-      ? estimateSessionCost({
-          provider: billingModel.provider,
-          model: billingModel.model,
-          pricingCatalog,
-          messages: [questionMessage, assistantMessage].filter(isPresent),
-          turnContexts: runtimeCostContextMap.get(latestCompletedAssistantMessageId) ?? [],
-          usageTelemetry: runUsageTelemetry,
-        })
-      : null
-    const totalTokens =
-      sumUsageTelemetryTotalTokens(runUsageTelemetry) ??
-      (costEstimate ? costEstimate.inputTokens + costEstimate.outputTokens : null)
-    const costUsd = costEstimate?.hasUnpricedUsage
-      ? null
-      : (costEstimate?.usd ?? sumUsageTelemetryReportedCostUsd(runUsageTelemetry))
+    // 成本与 token 与回答末尾的约价同源：整次执行（全部轮次 + 子 Agent）。约价未知时只报遥测
+    // 里的 token 数，不再用可见问答文字凑一个金额。
+    const runCost = runCostEstimateByMessageId.get(latestCompletedAssistantMessageId)
+    const totalTokens = runCost
+      ? runCost.inputTokens + runCost.outputTokens
+      : sumUsageTelemetryTotalTokens(
+          filterUsageTelemetryByRunWindow(runtime.usageTelemetry, startedAt, finishedAt)
+        )
+    const costUsd = toNullable(runCost?.usd)
 
     if (!isPresent(durationMs) && !isPresent(totalTokens) && !isPresent(costUsd)) return nextMap
 
@@ -287,19 +213,16 @@ export function useChatConversationTranscriptModel({
       durationMs,
       totalTokens,
       costUsd,
+      costIsLowerBound: runCost?.coverage === 'partial',
     })
     return nextMap
   }, [
-    assistantQuestionMap,
-    billingModel,
-    latestCompletedAssistantMessage,
     latestCompletedAssistantMessageId,
     messageRunMarkerMap,
-    pricingCatalog,
+    runCostEstimateByMessageId,
     runtime.lastRunFinishedAt,
     runtime.lastRunStartedAt,
     runtime.usageTelemetry,
-    runtimeCostContextMap,
   ])
   const visibleMessages = useMemo(() => {
     const baseMessages = activeAwaitingInputMessageId
@@ -314,7 +237,7 @@ export function useChatConversationTranscriptModel({
     latestAssistantMessageId: toNullable(latestAssistantMessage?.id),
     hasTurnInputAfterLatestAssistant,
     latestCompletedAssistantMessageId,
-    runtimeCostContextMap,
+    runCostEstimateByMessageId,
     planUpdateIndexByToolCallId,
     assistantQuestionMap,
     goalCompletionSummaryByMessageId,
