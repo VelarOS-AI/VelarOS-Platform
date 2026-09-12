@@ -95,6 +95,37 @@ const ForbiddenInternalDependencies = [
     targets: ['core/project-kernel'],
     label: 'transaction-state must depend on transaction domain types, not ProjectKernel',
   },
+  {
+    source: (sourcePath) => sourcePath === 'core/transaction-repository.ts',
+    targets: ['core/project-kernel'],
+    label: 'transaction repository must not depend on ProjectKernel',
+  },
+  {
+    source: (sourcePath) => sourcePath === 'core/transaction-projection-repository.ts',
+    targets: ['core/project-kernel'],
+    label: 'transaction projection repository must not depend on ProjectKernel',
+  },
+  {
+    source: (sourcePath) => sourcePath === 'core/transaction-overlay.ts',
+    targets: ['core/', 'registry/', 'transaction-state'],
+    label: 'transaction overlay must depend only on domain types and injected callbacks',
+  },
+  {
+    source: (sourcePath) => sourcePath === 'core/transaction-validation.ts',
+    targets: [
+      'core/defaults',
+      'core/file-store',
+      'core/lock-manager',
+      'core/project-kernel',
+      'core/transaction-coordinator',
+      'core/transaction-projection-repository',
+      'core/transaction-repository',
+      'core/transaction-state-machine',
+      'registry/',
+      'transaction-state',
+    ],
+    label: 'transaction validation must use domain types, TransactionOverlay views, and injected callbacks',
+  },
 ]
 
 if (manifest.name !== '@velaros-ai/project') {
