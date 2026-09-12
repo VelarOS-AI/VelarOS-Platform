@@ -9,7 +9,7 @@ import { isEmpty, isString, isTrue } from '@velaros-ai/core'
  *   `readOnlyCommands` 里，出现任何重定向/反引号/子 shell/后台符（`><`、`` ` ``、`$()`、`&`）
  *   或换行就**整条判非只读**——不做逐段拆解，因为 shell 的组合语法足够刁钻，
  *   "解析对了大部分"在安全判定里等于错。`git` 单独再查一次子命令白名单（`git push` 不是只读）。
- * - `isDangerous` 决定**是否强制确认**。这里是黑名单（`rm -rf`、`mkfs`、`dd if=`、`shutdown`、
+ * - `isDangerous` 决定**是否强制确认**。这里是黑名单（递归删除 `rm -r`、`mkfs`、`dd if=`、`shutdown`、
  *   `sudo`…），漏判的后果是少弹一次确认框，不是自动放行——真正的授权门在宿主的 ApprovalPort。
  * - `shouldStartInBackground` 是**体验判定**不是安全判定（识别 dev server 之类长驻进程），
  *   误判只会让命令跑在前台或后台，别把它和上面两条混为一谈。
@@ -70,19 +70,36 @@ const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = 
   sed: [/^-[^-]*i/u, /^--in-place(?:=.*)?$/u],
 }
 
+/** 递归删除的危险理由：点明删的是整个文件夹，用户确认时知道自己在批准什么。 */
+const RecursiveRemoveReason = '该命令会递归删除整个文件夹及其中全部内容，删除后无法撤销。'
+const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
+const PrivilegedMutationReason = '该命令会以提升权限批量修改系统资源。'
+
 /**
- * Windows（cmd.exe / PowerShell）下与上面两条 POSIX 黑名单对应的破坏性命令形态。
+ * Windows（cmd.exe / PowerShell）的递归删除形态，与 POSIX 的 `rm -r` 同一条线：删整个目录才危险，
+ * 删单个文件（哪怕带 `-Force`、`/f`、`/q`）不拦。
  *
- * 命令名和参数在 Windows 侧都不区分大小写（`DEL /F` 等价于 `del /f`），但 POSIX 那两条
- * 正则不能因此改成不区分大小写——`RM -RF` 根本不是真实存在的 POSIX 命令，改了会让既有
- * 判定的语义悄悄漂移，因此这里单独开一组、各自带 `/i`。单杠参数要求前面紧跟空白
- * （而非 `--force` 里的第二个 `-`），避免跟 `del dist --force`（如 del-cli 清理脚本）、
- * `npm run format` 这类常见跨平台命令误撞。
+ * - PowerShell `Remove-Item -Recurse` 及别名 ri/del/erase/rd/rmdir；参数名可按唯一前缀缩写，
+ *   `-r`、`-rec` 都是 `-Recurse`，也可写成 `-Recurse:$true`。`rm` 不在这里：它由
+ *   `hasRecursiveRemove` 按词法判定（同时认 POSIX 与 PowerShell 写法，并保留 `git rm` 例外）。
+ * - cmd.exe `rd /s`、`rmdir /s`、`del /s`：开关前面须是空白、命令名或上一个开关
+ *   （`rd /s /q`、`rmdir/s/q`），路径里的 `docs/s.md` 不算开关。
+ *
+ * 命令名和参数在 Windows 侧都不区分大小写（`RD /S` 等价于 `rd /s`），所以这里各自带 `/i`。
+ */
+const windowsRecursiveRemovePatterns: readonly RegExp[] = [
+  // 命令名前不能是 `-`：`git branch --del -r` 里的 `--del` 不是删除命令。
+  /(?<![-\w])(?:del|erase|rd|rmdir|ri|remove-item)\b[^&|;\r\n]*\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?=[\s:]|$)/i,
+  /(?<![-\w])(?:del|erase|rd|rmdir)\b[^&|;\r\n]*(?:\s|(?<=\b(?:del|erase|rd|rmdir)|\/[a-z]))\/s\b/i,
+]
+
+/**
+ * Windows 下其余破坏性命令形态。单杠参数要求前面紧跟空白（而非 `--force` 里的第二个 `-`），
+ * 避免跟 `del dist --force`（如 del-cli 清理脚本）、`npm run format` 这类常见跨平台命令误撞。
  */
 const windowsDestructivePatterns: readonly RegExp[] = [
-  // del/erase/rd/rmdir 是 cmd.exe 原生命令；PowerShell 里 rm/ri/remove-item 同样是
-  // Remove-Item 的别名，强制/递归参数或目标落在注册表根路径都视同破坏性删除。
-  /\b(?:del|erase|rd|rmdir|ri|rm|remove-item)\b[^&|;\r\n]*(?:\s-(?:recurse|force)\b|\/[fsq]\b|\b(?:hklm|hkcu|hkcr|hku|hkcc|hkey_[a-z_]+)\b)/i,
+  // 删除命令的目标落在注册表根路径（PowerShell 的 HKLM: 等驱动器）视同破坏性删除。
+  /\b(?:del|erase|rd|rmdir|ri|rm|remove-item)\b[^&|;\r\n]*\b(?:hklm|hkcu|hkcr|hku|hkcc|hkey_[a-z_]+)\b/i,
   /\bformat\s+[a-z]:/i,
   /\bdiskpart\b|\bvssadmin\s+delete\b|\bbcdedit\b|\bbootrec\b/i,
   /\breg\s+delete\b|\bremove-itemproperty\b/i,
@@ -136,28 +153,79 @@ function hasMutatingGitArguments(args: readonly string[]): boolean {
   return args.some((argument) => argument === '--output' || argument.startsWith('--output='))
 }
 
-function hasDangerousRecursiveForceRemove(command: string): boolean {
+/** 长参数按 GNU getopt 的唯一前缀规则匹配：`--rec` 即 `--recursive`，至少要写到 `--` 后一个字母。 */
+function matchesLongOption(argument: string, option: string): boolean {
+  return argument.length >= 3 && option.startsWith(argument)
+}
+
+/**
+ * 读出 `rm` 之后的删除参数。单杠参数分两种写法：只由 POSIX rm 短选项字母（d f i r v）组成的是
+ * 选项簇（`-rf`、`-R`），逐字母判定；其余是 PowerShell 参数名（`-Recurse`、`-Force`、`-Verbose`），
+ * 按参数名前缀判定——否则 `-Force` 里的 r 会被误当成递归。
+ */
+function readRemoveFlags(args: readonly string[]): { recursive: boolean, force: boolean } {
+  let recursive = false
+  let force = false
+  for (const argument of args) {
+    if (argument === '--') break
+    const normalized = argument.toLowerCase()
+    if (normalized.startsWith('--')) {
+      recursive ||= matchesLongOption(normalized, '--recursive')
+      force ||= matchesLongOption(normalized, '--force')
+    } else if (/^-[dfirv]+$/.test(normalized)) {
+      recursive ||= normalized.includes('r')
+      force ||= normalized.includes('f')
+    } else if (normalized.length > 1 && normalized.startsWith('-')) {
+      // `-Recurse:$true` 这类带值写法只看冒号前的参数名；`-f` 在 PowerShell 里有歧义，至少写到 `-fo`。
+      const parameter = normalized.split(':')[0] ?? normalized
+      recursive ||= parameter.length > 1 && '-recurse'.startsWith(parameter)
+      force ||= parameter.length > 2 && '-force'.startsWith(parameter)
+    }
+  }
+  return { recursive, force }
+}
+
+/** 段内 `git` 子命令所在的词位；不是 git 命令或找不到子命令时为 -1。 */
+function findGitSubcommandTokenIndex(tokens: readonly string[]): number {
+  const executableIndex = tokens.findIndex((token) => !/^[A-Za-z_]\w*=/.test(token))
+  if (executableIndex < 0 || tokens[executableIndex]?.split('/').at(-1)?.toLowerCase() !== 'git') return -1
+  const subcommandIndex = findGitSubcommandIndex(tokens.slice(executableIndex + 1))
+  return subcommandIndex < 0 ? -1 : executableIndex + 1 + subcommandIndex
+}
+
+/**
+ * 递归删除（`rm -r` / `-R` / `--recursive` / PowerShell `rm -Recurse`，不论是否带 `-f`）会整棵删掉
+ * 目录，既不进回收站也不在项目事务里，恢复不了——所以一律判危险。非递归的 `rm file` 只删单个文件，
+ * 不拦。`rm` 出现在段内任意位置都算（`sudo rm -r`、`xargs rm -r`、`find … -exec rm -r`）。
+ *
+ * `git rm` 例外：它只删已跟踪且与索引一致的文件（有未提交修改时 git 自己拒绝），内容能从 git
+ * 取回；只有叠加 `-f` 强制删掉未提交修改时才判危险。
+ */
+function hasRecursiveRemove(command: string): boolean {
   return command.split(/&&|\|\||[;|\r\n]/).some((segment) => {
     const tokens = tokenize(segment.trim())
+    const gitSubcommandIndex = findGitSubcommandTokenIndex(tokens)
     return tokens.some((token, index) => {
       if (token.split('/').at(-1)?.toLowerCase() !== 'rm') return false
-      let recursive = false
-      let force = false
-      for (const argument of tokens.slice(index + 1)) {
-        if (argument === '--') break
-        const normalizedArgument = argument.toLowerCase()
-        if (normalizedArgument === '--recursive') recursive = true
-        if (normalizedArgument === '--force') force = true
-        if (argument.startsWith('-') && !argument.startsWith('--')) {
-          const shortOptions = normalizedArgument.slice(1)
-          recursive ||= shortOptions.includes('r')
-          force ||= shortOptions.includes('f')
-        }
-        if (recursive && force) return true
-      }
-      return false
+      const flags = readRemoveFlags(tokens.slice(index + 1))
+      return index === gitSubcommandIndex ? flags.recursive && flags.force : flags.recursive
     })
   })
+}
+
+/** 命令的危险理由；不危险为 null。递归删除单列理由，其余破坏性与提权命令沿用通用文案。 */
+function describeDangerousCommand(command: string): Nullable<string> {
+  if (hasRecursiveRemove(command) || windowsRecursiveRemovePatterns.some((pattern) => pattern.test(command)))
+    return RecursiveRemoveReason
+  if (
+    /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
+    || windowsDestructivePatterns.some((pattern) => pattern.test(command))
+  ) return DestructiveCommandReason
+  if (
+    /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(command)
+    || windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(command))
+  ) return PrivilegedMutationReason
+  return null
 }
 
 function extractPorts(command: string): number[] {
@@ -203,15 +271,7 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
     dangerousReason: null,
     ports: [],
   }
-  const dangerousReason =
-    hasDangerousRecursiveForceRemove(trimmed)
-      || /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(trimmed)
-      || windowsDestructivePatterns.some((pattern) => pattern.test(trimmed))
-      ? '该命令可能删除数据、破坏文件系统或终止关键进程。'
-      : /\bsudo\b|\bchmod\s+-R\b|\bchown\s+-R\b/i.test(trimmed)
-          || windowsPrivilegedMutationPatterns.some((pattern) => pattern.test(trimmed))
-        ? '该命令会以提升权限批量修改系统资源。'
-        : null
+  const dangerousReason = describeDangerousCommand(trimmed)
   const reason =
     /(?:^|\s)(?:dev|serve|server|watch|start)(?:\s|$)|\b(?:vite|webpack-dev-server|next\s+dev)\b|(^|[^&])&\s*$/i.test(trimmed)
       ? '该命令看起来会启动长期驻留的服务或监听进程。'
