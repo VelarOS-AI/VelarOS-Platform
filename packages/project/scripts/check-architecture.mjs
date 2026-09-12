@@ -11,6 +11,7 @@ import {
   relative,
   resolve,
 } from 'node:path'
+
 import * as ts from 'typescript'
 
 const RepoRoot = resolve(import.meta.dirname, '..')
