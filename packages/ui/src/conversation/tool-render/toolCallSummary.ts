@@ -347,13 +347,20 @@ function isFiniteTimestamp(value: any): value is number {
   return isFiniteNumber(value) && value >= 0
 }
 
+/**
+ * 单个工具自己的耗时。工具结果带着耗时就用它；否则从执行器记下的执行开始时刻（元数据
+ * `executionStartedAt`）算到结束——宿主的 startedAt 是调用到达的时刻，同一批里排在有副作用工具
+ * 后面等待的时间会被算进来，显示成像是几个工具的累计。
+ */
 export function getToolDurationMs(
-  block: Pick<ToolCallBlock, 'startedAt' | 'finishedAt' | 'result'>
+  block: Pick<ToolCallBlock, 'startedAt' | 'finishedAt' | 'result' | 'metadata'>
 ): Nullable<number> {
   const resultDurationMs = readDurationFromResult(block.result)
   if (isPresent(resultDurationMs)) return resultDurationMs
 
-  if (isFiniteTimestamp(block.startedAt) && isFiniteTimestamp(block.finishedAt)) return Math.max(0, block.finishedAt - block.startedAt)
+  const executionStartedAt = readNumber(asRecord(block.metadata), 'executionStartedAt')
+  const startedAt = isFiniteTimestamp(executionStartedAt) ? executionStartedAt : block.startedAt
+  if (isFiniteTimestamp(startedAt) && isFiniteTimestamp(block.finishedAt)) return Math.max(0, block.finishedAt - startedAt)
 
   return null
 }
@@ -389,7 +396,7 @@ export function formatToolDurationMs(
 }
 
 export function getToolStatusLabel(
-  block: Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result'>,
+  block: Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result' | 'metadata'>,
   locale: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
@@ -401,19 +408,43 @@ export function getToolStatusLabel(
     : null
 }
 
+/**
+ * 一组工具实际占用的时间：各自执行区间的并集。并发执行的工具区间互相重叠，直接相加会把同一段时间
+ * 算好几遍；串行的区间首尾相接，并集就是各自耗时之和。定位不出区间（没有结束时刻）的按耗时相加。
+ */
+function getToolGroupDurationMs(
+  blocks: Array<Pick<ToolCallBlock, 'startedAt' | 'finishedAt' | 'result' | 'metadata'>>
+): number {
+  const intervals: Array<{ start: number; end: number }> = []
+  let unplacedDurationMs = 0
+  for (const block of blocks) {
+    const durationMs = getToolDurationMs(block)
+    if (!isPresent(durationMs)) continue
+    if (isFiniteTimestamp(block.finishedAt)) intervals.push({ start: block.finishedAt - durationMs, end: block.finishedAt })
+    else unplacedDurationMs += durationMs
+  }
+
+  intervals.sort((left, right) => left.start - right.start)
+  let coveredDurationMs = 0
+  let coveredUntil = Number.NEGATIVE_INFINITY
+  for (const interval of intervals) {
+    const start = Math.max(interval.start, coveredUntil)
+    if (interval.end > start) coveredDurationMs += interval.end - start
+    coveredUntil = Math.max(coveredUntil, interval.end)
+  }
+
+  return coveredDurationMs + unplacedDurationMs
+}
+
 export function getToolGroupStatusLabel(
-  blocks: Array<Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result'>>,
+  blocks: Array<Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result' | 'metadata'>>,
   locale: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
   if (blocks.some((block) => block.isRunning))
     return runtime.translate(locale, 'toolSummary.running')
 
-  const durations = blocks
-    .map((block) => getToolDurationMs(block))
-    .filter((duration): duration is number => isPresent(duration))
-
-  const totalDurationMs = durations.reduce((total, duration) => total + duration, 0)
+  const totalDurationMs = getToolGroupDurationMs(blocks)
 
   return shouldShowToolDurationMs(totalDurationMs)
     ? formatToolDurationMs(totalDurationMs, locale, runtime)
@@ -421,7 +452,7 @@ export function getToolGroupStatusLabel(
 }
 
 export function getMergedToolGroupStatusLabel(
-  blocks: Array<Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result'>>,
+  blocks: Array<Pick<ToolCallBlock, 'isRunning' | 'startedAt' | 'finishedAt' | 'result' | 'metadata'>>,
   locale: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {

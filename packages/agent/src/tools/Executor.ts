@@ -163,7 +163,17 @@ export interface PendingTool {
 interface ScheduledTool extends PendingTool {
   /** before/schema/surface normalize 后，按接收顺序授予的实际调用槽。 */
   effectiveAdmission: ToolEffectiveAdmission;
+  /** 拿到调用槽、真正开始执行的时刻；同一批里排队等其他工具的时间不算在这个工具头上。 */
+  executionStartedAt?: number;
+  /** 最近一次转发给宿主的工具元数据：宿主可能整份替换元数据，补发执行开始时刻时连同它一起发。 */
+  lastMetadata?: Record<string, unknown>;
 }
+
+/**
+ * 工具块元数据里的执行开始时刻（毫秒时间戳）。宿主按到达时刻记的 startedAt 包含排队等待，
+ * 界面算单个工具耗时时优先用它。
+ */
+const ToolExecutionStartedAtMetadataKey = "executionStartedAt";
 
 export interface ToolResult {
   toolCallId: string;
@@ -611,6 +621,10 @@ export class ToolExecutor {
         effectiveConcurrencySafe,
         toolAbort.signal,
       );
+      if (admitted) {
+        tool.executionStartedAt = Date.now();
+        this.emitToolMetadata(tool.toolCallId, { metadata: tool.lastMetadata ?? {} });
+      }
       if (!admitted) {
         const reason = this.resolveAbortSettlementReason();
         return await this.finalizeResult(tool, {
@@ -861,7 +875,22 @@ export class ToolExecutor {
     toolCallId: string,
     payload: { title?: string; metadata?: Record<string, unknown> },
   ): void {
-    emitToolMetadataEvent(this.events, toolCallId, payload);
+    const tool = this.tools.find((candidate) => candidate.toolCallId === toolCallId);
+    if (tool && payload.metadata) tool.lastMetadata = payload.metadata;
+    const executionStartedAt = tool?.executionStartedAt;
+    emitToolMetadataEvent(
+      this.events,
+      toolCallId,
+      isPresent(executionStartedAt) && payload.metadata
+        ? {
+            ...payload,
+            metadata: {
+              ...payload.metadata,
+              [ToolExecutionStartedAtMetadataKey]: executionStartedAt,
+            },
+          }
+        : payload,
+    );
   }
 
   private buildExecutionAppError(

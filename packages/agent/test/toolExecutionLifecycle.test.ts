@@ -591,6 +591,58 @@ describe('tool execution lifecycle', () => {
     expect(maxActive).toBe(8)
   })
 
+  test('stamps when a call actually starts, so waiting behind an earlier write is not its duration', async () => {
+    const writeEntered = deferred()
+    const releaseWrite = deferred()
+    let writeFinishedAt = 0
+    const h = harness(
+      async (_context, input) => {
+        if ((input as { id: string }).id !== 'write') return { ok: true }
+        writeEntered.resolve()
+        await releaseWrite.promise
+        writeFinishedAt = Date.now()
+        return { changed: true }
+      },
+      { isConcurrencySafe: (input) => input.id !== 'write' }
+    )
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('queued-write', 'probe:write', { id: 'write' }, false)
+    executor.enqueue('queued-read', 'probe:write', { id: 'read' }, true)
+    await writeEntered.promise
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    releaseWrite.resolve()
+    await executor.collectAll()
+
+    const startedAt = (toolCallId: string) => (h.metadata as Array<{ toolCallId: string; metadata?: Record<string, unknown> }>)
+      .filter((event) => event.toolCallId === toolCallId)
+      .map((event) => event.metadata?.executionStartedAt)
+    expect(startedAt('queued-write')).toEqual([expect.any(Number)])
+    const [readStartedAt] = startedAt('queued-read')
+    expect(readStartedAt).toBeGreaterThanOrEqual(writeFinishedAt)
+  })
+
+  test('the start stamp keeps metadata reported before the call started and rides on later updates', async () => {
+    const h = harness(
+      (context) => {
+        context.updateMetadata?.({ metadata: { phase: 'writing' } })
+        return { ok: true }
+      },
+      { schema: z.object({ mode: z.enum(['brief', 'full']).default('brief') }) }
+    )
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('stamped', 'probe:write', {}, false)
+    await executor.collectAll()
+
+    const events = (h.metadata as Array<{ toolCallId: string; metadata?: Record<string, unknown> }>)
+      .filter((event) => event.toolCallId === 'stamped')
+    // 宿主可能整份替换元数据：执行开始时补发的这份要带上之前的参数调整说明。
+    expect(events.map((event) => event.metadata)).toEqual([
+      expect.objectContaining({ inputAdjusted: true }),
+      expect.objectContaining({ inputAdjusted: true, executionStartedAt: expect.any(Number) }),
+      { phase: 'writing', executionStartedAt: events[1]?.metadata?.executionStartedAt },
+    ])
+  })
+
   test('rechecks effective dedupe state after an earlier exclusive write succeeds', async () => {
     let recorded = false
     let writes = 0
