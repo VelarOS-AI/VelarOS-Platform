@@ -231,10 +231,12 @@ const PlanToolRender = memo(
     sessionId?: string
     planUpdateIndex?: number
   }): React.ReactElement => {
+    const { t } = useConversationI18n()
     const steps = getPlanToolBlockSteps(block)
     const explanation = getPlanToolBlockExplanation(block)
     const tone = getToolTone(block, steps)
-    const displayName = block.toolName
+    // 专门的计划卡：标题用本地化的「计划」，不显示 plan:update 这类工具名。
+    const displayName = t('planTool.title')
     const hasError = !!block.error
     const currentStep = hasError ? null : getCurrentPlanStep(steps)
     const inlineDetail = hasError ? null : getPlanInlineDetail(currentStep, explanation)

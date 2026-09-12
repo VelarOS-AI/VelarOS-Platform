@@ -22,7 +22,7 @@ function leafKeys(value: Readonly<Record<string, unknown>>, prefix = ''): string
 
 void describe('shared conversation composition', () => {
   void test('publishes one exhaustive, locale-parity message manifest', () => {
-    assert.equal(canonicalConversationMessageKeys.length, 419)
+    assert.equal(canonicalConversationMessageKeys.length, 420)
     assert.deepEqual(
       leafKeys(conversationEnUSMessages).sort(),
       canonicalConversationMessageKeys,

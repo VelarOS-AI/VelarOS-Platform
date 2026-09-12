@@ -307,6 +307,9 @@ export const conversationZhCNMessages = {
     toolProgress: '进度',
     toolResult: '结果',
   },
+  planTool: {
+    title: '计划',
+  },
   sessionStickyDock: {
     barLabel: '会话提醒',
     dismissAria: '关闭此条提醒',
@@ -784,6 +787,9 @@ export const conversationEnUSMessages = {
     toolMetadata: 'Metadata',
     toolProgress: 'Progress',
     toolResult: 'Result',
+  },
+  planTool: {
+    title: 'Plan',
   },
   sessionStickyDock: {
     barLabel: 'Session notices',
