@@ -220,6 +220,15 @@ function revertibleContent(snapshot: FileSnapshot): Optional<string> {
   return optionalWhen(isString(snapshot.content), snapshot.content);
 }
 
+/**
+ * 删除或重命名后，回滚（或重命名的新路径）要在空路径上把文件重建出来的原文。除了读不到正文的
+ * 二进制/超限文件，符号链接也重建不出来：快照正文来自链接目标，写回只会得到一个普通文件、链接没了。
+ * 返回 undefined 时删除补丁的 oldContent 缺席（不可恢复、高风险），重命名直接拒绝。
+ */
+function rebuildableContent(snapshot: FileSnapshot): Optional<string> {
+  return isTrue(snapshot.isSymbolicLink) ? undefined : revertibleContent(snapshot);
+}
+
 /** 删除与重命名只针对文件：目录不能按文本补丁删除或搬运，交给命令执行并走命令危险判定。 */
 function assertFileTarget(snapshot: FileSnapshot, operationName: string): void {
   if (snapshot.isDirectory) {
@@ -273,26 +282,27 @@ export function textPatchStrategy(): PatchStrategy {
         const snap = input.snapshot;
         if (!snap?.exists) throw new ProjectError("TARGET_NOT_FOUND", `无法删除不存在的文件：${op.path}`);
         assertFileTarget(snap, "delete_file");
-        return [patch(op.path, snap.revision, revertibleContent(snap), "", "core.text-patch", { op: "delete_file" })];
+        return [patch(op.path, snap.revision, rebuildableContent(snap), "", "core.text-patch", { op: "delete_file", textEncoding: snap.textEncoding })];
       }
       if (op.type === "rename_file") {
         const snap = input.snapshot;
         if (!snap?.exists) throw new ProjectError("TARGET_NOT_FOUND", `无法重命名不存在的文件：${op.from}`);
         assertFileTarget(snap, "rename_file");
-        // 重命名按「新路径写入原文 + 删除旧路径」两个补丁完成，正文必须完整取到；
-        // 二进制或超限文件取不到正文，照做会在新路径写下空文件并删掉原文件。
-        const content = revertibleContent(snap);
+        // 重命名按「新路径写入原文 + 删除旧路径」两个补丁完成，正文必须能在新路径上原样重建；
+        // 二进制或超限文件取不到正文，照做会在新路径写下空文件并删掉原文件；符号链接会变成普通文件。
+        const content = rebuildableContent(snap);
         if (!isString(content)) {
           throw new ProjectError(
             "NOT_SUPPORTED",
-            `text patch 不能重命名二进制或超出读取上限的文件（${snap.path}）。`,
-            { path: snap.path, to: op.to },
+            `text patch 只能重命名能完整读取的普通文本文件，${snap.path} 是二进制、超出读取上限的文件或符号链接。`,
+            { path: snap.path, to: op.to, isSymbolicLink: isTrue(snap.isSymbolicLink) },
             "请用项目命令移动该文件（例如 git mv 或 mv）。",
           );
         }
+        // 两侧都记下原编码：新路径按它写出，回滚在原路径上按它重建。
         return [
-          patch(op.from, snap.revision, content, "", "core.text-patch", { op: "rename_file_delete", to: op.to }),
-          patch(op.to, undefined, "", content, "core.text-patch", { op: "rename_file_create", from: op.from }),
+          patch(op.from, snap.revision, content, "", "core.text-patch", { op: "rename_file_delete", to: op.to, textEncoding: snap.textEncoding }),
+          patch(op.to, undefined, "", content, "core.text-patch", { op: "rename_file_create", from: op.from, textEncoding: snap.textEncoding }),
         ];
       }
 
@@ -312,6 +322,16 @@ export function textPatchStrategy(): PatchStrategy {
           `text patch 不能编辑二进制文件（${snap.path}）。`,
           { path: snap.path },
           "请对二进制资源使用非文本工作流。"
+        );
+      }
+      // 既有文件却没有正文，只能是超出读取上限：把原文当空串算补丁，apply 会把整份文件截成只剩新文本，
+      // `oldContent: ""` 还会让回滚写出空文件。编辑必须建立在读到的原文上，读不到就拒绝。
+      if (snap.exists && !isString(snap.content)) {
+        throw new ProjectError(
+          "NOT_SUPPORTED",
+          `text patch 不能编辑超出读取上限的文件（${snap.path}，${snap.size} 字节）。`,
+          { path: snap.path, size: snap.size, maxFileSizeToReadBytes: input.policy.maxFileSizeToReadBytes },
+          "请用项目命令处理这个大文件（例如 sed 或重定向追加），或先把它拆成较小的文件。",
         );
       }
       const content = snap.content ?? "";

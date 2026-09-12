@@ -20,7 +20,7 @@
 //    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
 import { createHash } from "node:crypto";
 import type { BigIntStats, Dirent } from "node:fs";
-import { mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
 import {
@@ -48,6 +48,7 @@ import {
   detectProjectTextEncoding,
   encodeProjectTextBuffer,
   isProbablyBinary,
+  type ProjectTextEncoding,
   sliceLines,
 } from "../utils/text.js";
 
@@ -345,15 +346,19 @@ function concatByteChunks(chunks: readonly Uint8Array[]): Buffer {
   return Buffer.from(combined);
 }
 
-async function encodeTextForOverwrite(absPath: string, content: string): Promise<Buffer> {
+/**
+ * 写入的编码：已存在的文本文件沿用它自己的编码；路径上还没有文件时用调用方给的 `fallback`
+ * （删除后回滚、重命名重建文件时是原文件的编码），都没有才用 UTF-8。
+ */
+async function encodeTextForOverwrite(absPath: string, content: string, fallback: Optional<ProjectTextEncoding>): Promise<Buffer> {
   try {
     const existing = await readFile(absPath);
     const existingEncoding = detectProjectTextEncoding(existing);
     if (existingEncoding) return encodeProjectTextBuffer(content, existingEncoding);
   } catch {
-    // arch-guard:silent-catch-ok 新文件或瞬时不可读文件按默认 UTF-8 写入。
+    // arch-guard:silent-catch-ok 新文件或瞬时不可读文件按 fallback 或默认 UTF-8 写入。
   }
-  return encodeProjectTextBuffer(content);
+  return encodeProjectTextBuffer(content, fallback);
 }
 
 async function readLimitedTextPrefix(
@@ -678,12 +683,14 @@ export class FileStore {
       };
     }
     let content: string | undefined;
+    let textEncoding: Nullable<ProjectTextEncoding> = null;
     let binary: boolean;
     // contentHash 仅在 content 模式下参与计算；metadata 模式整文件读取/哈希都被跳过。
     let contentHash = "";
     if (includeContent && size <= this.policy.maxFileSizeToReadBytes) {
       const data = await readFile(abs);
-      binary = isProbablyBinary(data);
+      textEncoding = detectProjectTextEncoding(data);
+      binary = isNull(textEncoding);
       if (!metadataMode) {
         contentHash = sha256(data);
       }
@@ -714,6 +721,13 @@ export class FileStore {
     };
     if (isPresent(content)) {
       base.content = content;
+    }
+    if (isPresent(textEncoding) && textEncoding !== "utf8") {
+      base.textEncoding = textEncoding;
+    }
+    // stat 跟随链接取到的是目标文件；删除/重命名作用于链接本身，需要知道路径是不是链接。
+    if ((await lstat(abs)).isSymbolicLink()) {
+      base.isSymbolicLink = true;
     }
     return base;
   }
@@ -1032,15 +1046,18 @@ export class FileStore {
     };
   }
 
-  /** 写入文本文件，并返回写入后的 snapshot。 */
+  /**
+   * 写入文本文件，并返回写入后的 snapshot。既有文本文件沿用自己的编码；`encoding` 只在路径上还没有
+   * 文件时生效，供删除后回滚、重命名重建文件时沿用原文件的编码。
+   */
   public async write(
     pathInput: string,
     content: string,
-    options?: { skipFileFilter?: boolean }
+    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding }
   ): Promise<FileSnapshot> {
     const { abs, rel } = await this.authorize(pathInput, "write", "写入", options);
     await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, await encodeTextForOverwrite(abs, content));
+    await writeFile(abs, await encodeTextForOverwrite(abs, content, options?.encoding));
     return this.snapshot(rel, true, { skipFileFilter: true });
   }
 

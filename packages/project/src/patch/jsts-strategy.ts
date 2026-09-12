@@ -66,14 +66,14 @@ export function createJsTsPatchStrategy(identity: JsTsPatchStrategyIdentity): Pa
           ? planAddImport(snapshot.path, content, operation)
           : planRemoveImport(snapshot.path, content, operation);
         // 去重命中也产出显式 noop 补丁，而不是空数组——空数组会让该操作从事务里凭空消失。
-        if (!splice) return [makePatch(identity.id, snapshot, content, { op: operation.type, noop: true })];
-        return [makePatch(identity.id, snapshot, applySplice(content, splice), { op: operation.type, startOffset: splice.start, endOffset: splice.end })];
+        if (!splice) return [makePatch(identity.id, snapshot, content, content, { op: operation.type, noop: true })];
+        return [makePatch(identity.id, snapshot, content, applySplice(content, splice), { op: operation.type, startOffset: splice.start, endOffset: splice.end })];
       }
       if (!isSymbolOperation(operation)) throw new ProjectError("NOT_SUPPORTED", `不支持的 JS/TS 操作：${operation.type}`);
 
-      const located = locateSymbol(input, snapshot, operation);
+      const located = locateSymbol(input, snapshot, content, operation);
       const splice = symbolSplice(located, operation);
-      return [makePatch(identity.id, snapshot, applySplice(content, splice), {
+      return [makePatch(identity.id, snapshot, content, applySplice(content, splice), {
         op: operation.type,
         mode: operation.type === "replace_symbol" ? operation.mode ?? "whole" : undefined,
         targetId,
@@ -119,8 +119,7 @@ function symbolSplice(located: LocatedSymbol, operation: SymbolOperation): Sourc
  * 否则按 operation.symbol 在 AST 中唯一匹配。范围永远来自 AST，不做括号计数式推断——非 JS/TS 目标
  * 因此没有 body，mode=body 显式失败而不是猜一个区间。
  */
-function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, operation: SymbolOperation): LocatedSymbol {
-  const content = snapshot.content ?? "";
+function locateSymbol(input: PatchStrategyInput, snapshot: FileSnapshot, content: string, operation: SymbolOperation): LocatedSymbol {
   const range = input.target?.range;
   if (isPresent(range?.startOffset) && isPresent(range.endOffset)) {
     const aligned = isJsTsPath(snapshot.path)
@@ -162,8 +161,8 @@ function applySplice(content: string, splice: SourceSplice): string {
   return content.slice(0, splice.start) + splice.text + content.slice(splice.end);
 }
 
-function makePatch(strategyId: string, snapshot: FileSnapshot, newContent: string, metadata: Record<string, unknown>): PreparedPatch {
-  const oldContent = snapshot.content ?? "";
+/** `oldContent` 是 prepare 入口已确认读到的原文（没有正文的快照在入口就被拒绝），回滚据此写回。 */
+function makePatch(strategyId: string, snapshot: FileSnapshot, oldContent: string, newContent: string, metadata: Record<string, unknown>): PreparedPatch {
   const diff = unifiedDiff(snapshot.path, oldContent, newContent);
   return {
     patchId: id("patch"),

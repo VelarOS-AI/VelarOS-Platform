@@ -1,6 +1,6 @@
 import * as iconv from "iconv-lite";
 
-import { isEmpty, isPresent } from '@velaros-ai/core'
+import { isEmpty, isPresent, isString } from '@velaros-ai/core'
 
 import type { Range } from "../types/common.js";
 
@@ -12,6 +12,15 @@ export type ProjectTextEncoding =
   | "utf16le-nobom"
   | "utf16be-nobom"
   | "gb18030";
+
+const ProjectTextEncodings: ReadonlySet<string> = new Set<ProjectTextEncoding>([
+  "utf8", "utf8-bom", "utf16le", "utf16be", "utf16le-nobom", "utf16be-nobom", "gb18030",
+]);
+
+/** 持久化或补丁 metadata 里读回的编码名是否是本包认识的文本编码。 */
+export function isProjectTextEncoding(value: unknown): value is ProjectTextEncoding {
+  return isString(value) && ProjectTextEncodings.has(value);
+}
 
 const UTF8_BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
 const UTF16LE_BOM = new Uint8Array([0xFF, 0xFE]);

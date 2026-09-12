@@ -36,13 +36,15 @@
 //    的嵌入式调用仍靠 `captureApplyRestoreState` + 逆序还原，并保留旧的二进制/超限告警边界。
 //  - **「能否恢复」只有一条判据 `canRevertToOriginal`**：写入前不存在的新建补丁（撤销 = 删除），
 //    或补丁捕获到了原文 `oldContent`（撤销 = 写回原文）。回滚前置预检、风险分级、Desktop
-//    PreviewCache 的按路径回退共用这一口径，改一处必须三处同改。
+//    PreviewCache 的按路径回退共用这一口径，改一处必须三处同改。它成立的前提是「字符串
+//    `oldContent` 一定是真原文」：读不到正文的文件上的局部编辑由 `assertEditsReadOriginal` 在
+//    prepare 拒绝，删除/重命名写回时沿用原文件的文本编码（`textEncoding`）。
 //  - **`rollback` 有前置全量预检**：任何补丁不满足 `canRevertToOriginal` 就整体拒绝。少了这一步，
 //    `patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
 //  - **回滚删文件只针对写入前不存在的路径**（`createsMissingFile`）：`create_file` 覆盖既有文件时
 //    补丁记下原文与 base revision，回滚写回原文；把它当新建删掉会永久丢失原文。
 //  - **风险按能否恢复划线，不按操作名**：能完整回滚的覆盖、删除、重命名都是日常写入，只按新建/规模
-//    分 low/medium；只有回滚恢复不了原文的补丁（二进制或超限文件的覆盖/删除）才是 high。
+//    分 low/medium；只有回滚恢复不了原文的补丁（二进制、超限文件的覆盖/删除，删除符号链接）才是 high。
 //    把可恢复写入重新划成 high，会让宿主按路径逐个文件打断用户审批。
 //  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
 //    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
@@ -105,7 +107,7 @@ import { combineDiffs, unifiedDiff } from "../utils/diff.js";
 import { matchesAny } from "../utils/glob.js";
 import { id } from "../utils/id.js";
 import { toAbs, toRel } from "../utils/path.js";
-import { countChangedLines } from "../utils/text.js";
+import { countChangedLines, isProjectTextEncoding, type ProjectTextEncoding } from "../utils/text.js";
 
 export type { StoredTransaction } from "../types/transaction.js";
 
@@ -364,6 +366,8 @@ function metadataPaths(value: unknown): string[] {
 interface ApplyRestoreState {
   existedBefore: boolean;
   oldContent?: string;
+  /** 原文件的文本编码；还原时文件若已被删掉，按它重建而不是写成 UTF-8。 */
+  encoding?: ProjectTextEncoding;
   restorable: boolean;
 }
 
@@ -1272,6 +1276,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         existedBefore: before.exists && !before.isDirectory,
         // 仅文本文件可按字符串还原；二进制/超限文件无法捕获正文，回滚时尽力而为。
         oldContent: optionalWhen(isString(before.content), before.content),
+        encoding: before.textEncoding,
         restorable: isString(before.content) || !before.exists || before.isDirectory,
       });
     }
@@ -1325,7 +1330,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       plan.push({
         path: pathValue,
         exists: restore.existedBefore,
-        ...(restore.existedBefore ? { content: restore.oldContent! } : {}),
+        ...(restore.existedBefore ? { content: restore.oldContent!, encoding: restore.encoding } : {}),
         ownedStates,
       });
     }
@@ -1369,7 +1374,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         );
       }
       if (restore.exists) {
-        await this.store.write(restore.path, restore.content!, { skipFileFilter: true });
+        await this.store.write(restore.path, restore.content!, { skipFileFilter: true, encoding: restore.encoding });
       } else {
         await this.store.remove(restore.path, { skipFileFilter: true });
       }
@@ -1412,7 +1417,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       try {
         if (restore.existedBefore) {
           if (isString(restore.oldContent)) {
-            await this.store.write(file, restore.oldContent, { skipFileFilter: true });
+            await this.store.write(file, restore.oldContent, { skipFileFilter: true, encoding: restore.encoding });
           } else {
             // 无法捕获旧正文（二进制/超限文件），只能记录而非静默放过。
             this.providers.logger?.warn?.("project.apply.restore.skippedBinaryOrOversize", {
@@ -1457,13 +1462,43 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   /**
    * 补丁写下后能否被 rollback 完整撤销：写入前不存在的新建补丁撤销即删除，永远可恢复；其余补丁
    * （编辑、覆盖、删除、重命名的删除侧）撤销要写回 `oldContent`，只有补丁捕获到原文才可恢复。
-   * 取不到原文的只有二进制或超出读取上限的文件——策略把这类补丁的 `oldContent` 留空。
+   * 取不到原文的是二进制、超出读取上限的文件与符号链接本身：整文件覆盖和删除这类文件时策略把
+   * `oldContent` 留空；在它们上面做局部编辑则在 prepare 就被拒绝（`assertEditsReadOriginal`），
+   * 所以字符串 `oldContent` 一定是真原文。
    *
    * 回滚前置预检、`resolveTransactionRisk` 与 Desktop PreviewCache 的 `canRevertToOriginal`
    * 是同一条判据：预检据此拒绝会把文件截空的回滚，风险分级据此只把恢复不了的写入交给人审。
    */
   private canRevertToOriginal(patchValue: PreparedPatch): boolean {
     return this.createsMissingFile(patchValue) || isString(patchValue.oldContent);
+  }
+
+  /**
+   * `canRevertToOriginal` 把「补丁带着字符串 `oldContent`」当作「捕获到了真原文」，这条前提在内核边界
+   * 统一兜住，不指望每个策略、adapter、插件都自觉：快照里没有正文（二进制或超出读取上限）的既有文件，
+   * 编辑补丁（非新建、非删除）只能凭空假设原文，apply 会把文件截成只剩新文本，`oldContent: ""` 又让
+   * 回滚判为可恢复、写出空文件。整文件覆盖与删除不依赖原文，照常放行，由风险分级按不可恢复处理。
+   */
+  private assertEditsReadOriginal(patches: readonly PreparedPatch[], snapshot: FileSnapshot): void {
+    if (!snapshot.exists || snapshot.isDirectory || isString(snapshot.content)) return;
+    const blind = patches.find((patchValue) =>
+      patchValue.path === snapshot.path && !this.isCreatePatch(patchValue) && !this.isDeletePatch(patchValue));
+    if (!blind) return;
+    throw new ProjectError(
+      "NOT_SUPPORTED",
+      `无法读取 ${snapshot.path} 的完整正文（二进制或超出读取上限），不能在它上面做局部编辑。`,
+      { path: snapshot.path, op: blind.metadata?.op, strategyId: blind.strategyId },
+      "整文件替换请用 overwrite；其余修改请用项目命令处理该文件。",
+    );
+  }
+
+  /**
+   * 补丁在空路径上重建文件时沿用的原编码（删除/重命名补丁从原文件快照记下）；缺席按 UTF-8。
+   * 路径上已有文本文件时写入始终沿用该文件自己的编码，这个值不起作用。
+   */
+  private patchTextEncoding(patchValue: PreparedPatch): Optional<ProjectTextEncoding> {
+    const encoding = patchValue.metadata?.textEncoding;
+    return isProjectTextEncoding(encoding) ? encoding : undefined;
   }
 
   /** 补丁写下之后该路径的暂存内容；`null` 表示本事务已删除该文件。 */
@@ -1701,6 +1736,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         const strategy = this.patchStrategies.select({ intent, target, snapshot, policy: this.policy });
         intentPatches = await strategy.prepare({ intent, target, snapshot, policy: this.policy });
       }
+      if (snapshot) this.assertEditsReadOriginal(intentPatches, snapshot);
       if (renameTargetSnapshot) {
         intentPatches = intentPatches.map((patchValue) =>
           patchValue.metadata?.op === "rename_file_create"
@@ -2130,6 +2166,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
             }
             const snap = await this.store.write(patch.path, patch.newContent ?? "", {
               skipFileFilter: true,
+              encoding: this.patchTextEncoding(patch),
             });
             newRevisions[patch.path] = snap.revision;
           }
@@ -2349,7 +2386,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
             await this.store.remove(patch.path, { skipFileFilter: true });
             rolledBackRevisions[patch.path] = "deleted";
           } else {
-            const snapshot = await this.store.write(patch.path, patch.oldContent ?? "", { skipFileFilter: true });
+            const snapshot = await this.store.write(patch.path, patch.oldContent ?? "", {
+              skipFileFilter: true,
+              encoding: this.patchTextEncoding(patch),
+            });
             rolledBackRevisions[patch.path] = snapshot.revision;
           }
           writtenOrder.push(patch.path);
@@ -2518,6 +2558,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         policy: this.policy,
       });
       if (prepared.length !== 1 || prepared[0].path !== patchValue.path) return null;
+      this.assertEditsReadOriginal(prepared, currentSnapshot);
       return {
         ...prepared[0],
         patchId: patchValue.patchId,

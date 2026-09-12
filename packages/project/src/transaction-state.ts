@@ -26,6 +26,7 @@ import {
 } from '@velaros-ai/core'
 
 import type { StoredTransaction } from './types/transaction.js'
+import { isProjectTextEncoding, type ProjectTextEncoding } from './utils/text.js'
 import type { ProjectChangeRecordInput } from './change-feed.js'
 import { ProjectError } from './errors.js'
 
@@ -47,6 +48,8 @@ export interface ProjectTransactionFileState {
 
 export interface ProjectTransactionRestoreEntry extends ProjectTransactionFileState {
   readonly path: string
+  /** 原文件的文本编码（非无 BOM UTF-8 时记下）；恢复时文件已被删掉就按它重建。 */
+  readonly encoding?: ProjectTextEncoding
   readonly ownedStates: readonly ProjectTransactionFileState[]
 }
 
@@ -184,6 +187,8 @@ function assertPending(value: unknown): asserts value is ProjectTransactionPendi
   const restorePaths = new Set<string>()
   for (const entry of value.restore) {
     assertFileState(entry, 'pending restore entry')
+    const encoding = (entry as { encoding?: unknown }).encoding
+    if (!isUndefined(encoding) && !isProjectTextEncoding(encoding)) fail('pending restore encoding')
     const pathValue = (entry as { path?: unknown }).path
     boundedString(pathValue, MaximumPathBytes, 'pending restore path')
     if (restorePaths.has(pathValue)) fail('duplicate pending restore path')
