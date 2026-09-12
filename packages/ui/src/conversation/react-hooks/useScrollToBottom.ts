@@ -24,6 +24,7 @@ import {
   ScrollClampGuardCssVariable,
   shouldAutoScrollAfterContentResize,
   shouldCommitScheduledAutoScroll,
+  shouldKeepPendingScrollRestoreAfterScroll,
   shouldStartImmediateAutoScroll,
 } from './scrollBehavior'
 import { useTimerScope } from './useTimerScope'
@@ -252,6 +253,8 @@ export function useScrollToBottom<T extends HTMLElement>(
     if (!element) return
 
     cancelPendingScroll()
+    // 读者要自己滚：还没追到的恢复位置作废，否则下一次内容变化又把他放回那里（常常就是底部）。
+    pendingRestoreScrollTopRef.current = null
     shouldStickToBottomRef.current = false
     lastScrollTopRef.current = element.scrollTop
     persistScrollTop(element, element.scrollTop)
@@ -290,9 +293,19 @@ export function useScrollToBottom<T extends HTMLElement>(
     }
 
     if (isPresent(pendingRestoreScrollTopRef.current)) {
-      shouldStickToBottomRef.current = false
-      lastScrollTopRef.current = element.scrollTop
-      return
+      if (
+        shouldKeepPendingScrollRestoreAfterScroll({
+          previousScrollTop: lastScrollTopRef.current,
+          currentScrollTop: element.scrollTop,
+          upwardScrollTolerancePx: UpwardScrollTolerancePx,
+        })
+      ) {
+        shouldStickToBottomRef.current = false
+        lastScrollTopRef.current = element.scrollTop
+        return
+      }
+      // 键盘、滚动条等没有先发暂停事件的上滑：同样由读者接管，按普通滚动继续判定。
+      pendingRestoreScrollTopRef.current = null
     }
 
     const currentScrollTop = element.scrollTop
@@ -348,6 +361,8 @@ export function useScrollToBottom<T extends HTMLElement>(
     const restoreKeyChanged = !Object.is(lastRestoreKeyRef.current, restoreKey)
     lastResetKeyRef.current = resetKey
     lastRestoreKeyRef.current = restoreKey
+    // 换会话或发出新消息：之前没追到的恢复位置作废（换会话时下面会按新会话重新读取）。
+    if (resetKeyChanged) pendingRestoreScrollTopRef.current = null
     shouldStickToBottomRef.current = resolveAutoScrollPinnedAfterReset({
       currentPinned: shouldStickToBottomRef.current,
       resetKeyChanged,

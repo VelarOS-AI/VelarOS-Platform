@@ -23,9 +23,11 @@ import {
   type AutoCollapseHoldState,
   resolveAutoCollapseHold,
   resolveAutoScrollPinnedAfterScroll,
+  resolveRestoredScrollTop,
   resolveScrollClampGuard,
   ScrollClampGuardCssVariable,
   ScrollClampGuardSlackPx,
+  shouldKeepPendingScrollRestoreAfterScroll,
 } from '../../packages/ui/src/conversation/react-hooks/scrollBehavior'
 
 const ViewportHeight = 900
@@ -381,5 +383,41 @@ void describe('reader-stable auto-collapse wiring', () => {
       'the spacer must consume the CSS variable useScrollToBottom writes'
     )
     assert.match(stylesheet, /\.scrollClampGuard \{[^}]*overflow-anchor: none;/u)
+  })
+})
+
+void describe('pending scroll restore yields to the reader', () => {
+  void test('a stale saved position is only chased until the reader scrolls up', () => {
+    // 真机取证：会话记下的位置是 120140，重开后历史已折叠，内容最深只到 18000。
+    const restore = resolveRestoredScrollTop({ scrollTop: 120_140, maxScrollTop: 18_000 })
+    assert.deepEqual(restore, { nextScrollTop: 18_000, pendingScrollTop: 120_140, shouldPersist: false })
+
+    // 追恢复位置只会把视口往下放：内容长高后放到新底部，不算读者动作。
+    assert.equal(
+      shouldKeepPendingScrollRestoreAfterScroll({ previousScrollTop: 18_000, currentScrollTop: 18_400 }),
+      true
+    )
+    assert.equal(
+      shouldKeepPendingScrollRestoreAfterScroll({ previousScrollTop: 18_000, currentScrollTop: 18_000 }),
+      true
+    )
+    // 读者往上滚：放弃陈旧的位置，下一段流式内容不再把他拽回底部。
+    assert.equal(
+      shouldKeepPendingScrollRestoreAfterScroll({ previousScrollTop: 18_000, currentScrollTop: 17_200 }),
+      false
+    )
+  })
+
+  void test('the hook drops the pending restore on reader intent, reader scroll-up and a new message', () => {
+    const hook = readSource('packages/ui/src/conversation/react-hooks/useScrollToBottom.ts')
+    assert.match(
+      hook,
+      /const suspendAutoScroll = useCallback\(\(\): void => \{[\s\S]*?pendingRestoreScrollTopRef\.current = null[\s\S]*?\}, \[/u
+    )
+    assert.match(
+      hook,
+      /shouldKeepPendingScrollRestoreAfterScroll\(\{[\s\S]*?\}\)\s*\) \{[\s\S]*?return\s*\}[\s\S]*?pendingRestoreScrollTopRef\.current = null/u
+    )
+    assert.match(hook, /if \(resetKeyChanged\) pendingRestoreScrollTopRef\.current = null/u)
   })
 })

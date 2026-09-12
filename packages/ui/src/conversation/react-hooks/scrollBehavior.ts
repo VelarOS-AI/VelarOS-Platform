@@ -264,6 +264,26 @@ export function resolveRestoredScrollTop({
   }
 }
 
+export interface PendingScrollRestoreAfterScrollInput {
+  previousScrollTop: number
+  currentScrollTop: number
+  upwardScrollTolerancePx?: number
+}
+
+/**
+ * 待恢复位置（切回会话时内容还没长到上次的位置）只在读者不插手时才追：这次滚动若是读者往上滚，
+ * 就放弃它。追的过程中每次内容变化都把视口放到 min(待恢复位置, 当前底部)——陈旧的位置（例如一次
+ * 展开的长运行留下的 12 万 px，重开后历史已折叠）会让读者一上滑就被下一段流式内容拽回底部，直到
+ * 内容长过它为止。恢复本身只会把视口往下放，往上的移动一定来自读者。
+ */
+export function shouldKeepPendingScrollRestoreAfterScroll({
+  previousScrollTop,
+  currentScrollTop,
+  upwardScrollTolerancePx = 1,
+}: PendingScrollRestoreAfterScrollInput): boolean {
+  return currentScrollTop >= previousScrollTop - Math.max(0, upwardScrollTolerancePx)
+}
+
 export interface AutoCollapseHoldState {
   collapseRequested: boolean
   /** true = 这次收起请求被扣下，保持展开。 */
