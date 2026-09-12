@@ -225,6 +225,9 @@ export type ChatMessageConversationKind =
   | 'system-notice'
   | 'assistant-output'
 
+/** 系统通知是哪一类宿主留痕：会话回溯，或目标仍在进行中时宿主替用户接着开的一轮。 */
+export type ChatMessageSystemNoticeKind = 'rewind' | 'goal-continuation'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -244,6 +247,8 @@ export interface ChatMessage {
   serializedStoredExternally?: boolean
   /** 用户在运行中补充给下一轮的引导消息状态。 */
   guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent' | 'accepted' | 'applied' | 'paused'
+  /** `conversationKind: 'system-notice'` 的类别，只决定界面上的图标；缺省是会话回溯。 */
+  systemNoticeKind?: ChatMessageSystemNoticeKind
   /** 毫秒时间戳，由客户端本地生成 */
   timestamp: number
 }
