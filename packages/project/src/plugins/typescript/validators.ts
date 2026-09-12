@@ -1,19 +1,32 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import { isJsTsPath, jsTsSyntaxDiagnostics } from "../../adapters/jsts-ast.js";
-import type { ProjectValidator,ValidateInput, ValidationResult } from "../../types/validation.js";
+import type {
+  ProjectValidator,
+  ValidateInput,
+  ValidationResult,
+} from "../../types/validation.js";
 
 export function typescriptSyntaxValidator(): ProjectValidator {
   return {
     id: "velaros.typescript.syntax-validator",
+    checkIds: ["typescript.syntax", "parse", "syntax"],
     canValidate(input: ValidateInput) {
-      return !input.checks || input.checks.includes("typescript.syntax") || input.checks.includes("parse") || input.checks.includes("syntax");
+      return !input.checks || isEmpty(input.checks) || input.checks.some((check) =>
+        check === "velaros.typescript.syntax-validator"
+        || check === "typescript.syntax"
+        || check === "parse"
+        || check === "syntax"
+      );
     },
-    async validate(input: ValidateInput, ctx: any): Promise<ValidationResult> {
-      const paths: string[] = input.paths ?? (input.transactionId ? ctx.getTransaction?.(input.transactionId)?.changedFiles ?? [] : []);
+    async validate(input: ValidateInput, context): Promise<ValidationResult> {
+      const paths = input.paths
+        ?? (input.transactionId
+          ? context.getTransaction(input.transactionId)?.changedFiles ?? []
+          : []);
       const result: ValidationResult = { ok: true, diagnostics: [], checks: [] };
       for (const path of paths.filter(isJsTsPath)) {
-        const content = await ctx.readFile(path);
+        const content = await context.readFile(path);
         const diagnostics = jsTsSyntaxDiagnostics(path, content ?? "", "typescript.syntax");
         result.diagnostics.push(...diagnostics);
         result.checks.push({ id: `typescript.syntax:${path}`, ok: isEmpty(diagnostics), diagnostics });

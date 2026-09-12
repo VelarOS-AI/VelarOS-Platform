@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
+import { DEFAULT_CORE_POLICY } from '../src/core/defaults'
 import { TransactionValidation } from '../src/core/transaction-validation'
 import type { FileAdapter } from '../src/types/adapter'
 import type { Diagnostic } from '../src/types/common'
-import type { CorePolicy } from '../src/types/policy'
-import type { ProjectProviders } from '../src/types/provider'
+import type { CommandProvider, ProjectProviders } from '../src/types/provider'
 import type { FileSnapshot } from '../src/types/snapshot'
 import type { StoredTransaction } from '../src/types/transaction'
 import type { ValidationResult } from '../src/types/validation'
@@ -50,8 +50,18 @@ function validationResult(options: {
   }
 }
 
-const policy = {} as CorePolicy
-const providers = {} as ProjectProviders
+const policy = {
+  ...DEFAULT_CORE_POLICY,
+  approval: { ...DEFAULT_CORE_POLICY.approval },
+  generatedFiles: [...DEFAULT_CORE_POLICY.generatedFiles],
+  protectedFiles: [...DEFAULT_CORE_POLICY.protectedFiles],
+  readDeny: [...DEFAULT_CORE_POLICY.readDeny],
+  writeDeny: [...DEFAULT_CORE_POLICY.writeDeny],
+}
+const command: CommandProvider = {
+  run: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+}
+const providers: ProjectProviders & { command: CommandProvider } = { command }
 
 describe('TransactionValidation', () => {
   test('validates transaction changed files against staged snapshots and exposes the overlay reader', async () => {
@@ -85,9 +95,24 @@ describe('TransactionValidation', () => {
       createReader: (contentByPath) => async (path) => contentByPath.get(path) ?? undefined,
       validateRegistered: async (_input, context) => {
         expect(context.root).toBe('/workspace')
-        expect(context.policy).toBe(policy)
-        expect(context.providers).toBe(providers)
-        expect(context.getTransaction(tx.transactionId)).toBe(tx)
+        expect(context.policy).toEqual(policy)
+        expect(context.policy).not.toBe(policy)
+        expect(context.providers).not.toBe(providers)
+        expect(context.providers).toEqual({ command: expect.any(Object) })
+        expect(Object.isFrozen(context)).toBe(true)
+        expect(Object.isFrozen(context.policy)).toBe(true)
+        expect(Object.isFrozen(context.policy.approval)).toBe(true)
+        expect(Object.isFrozen(context.policy.protectedFiles)).toBe(true)
+        expect(Object.isFrozen(context.providers)).toBe(true)
+        const transactionView = context.getTransaction(tx.transactionId)
+        expect(transactionView).toEqual({
+          transactionId: tx.transactionId,
+          changedFiles: tx.changedFiles,
+          changedLines: tx.changedLines,
+        })
+        expect(transactionView).not.toBe(tx)
+        expect(Object.isFrozen(transactionView)).toBe(true)
+        expect(Object.isFrozen(transactionView?.changedFiles)).toBe(true)
         registeredRead = await context.readFile('staged.ts')
         return validationResult({ checks: [{ id: 'registered', ok: true }] })
       },
@@ -116,6 +141,78 @@ describe('TransactionValidation', () => {
         { id: 'adapter', ok: true },
       ],
     })
+  })
+
+  test('exposes frozen policy, provider, and transaction views without mutating dependencies', async () => {
+    const localPolicy = {
+      ...policy,
+      approval: { ...policy.approval },
+      generatedFiles: [...policy.generatedFiles],
+      protectedFiles: ['protected.ts'],
+      readDeny: [...policy.readDeny],
+      writeDeny: [...policy.writeDeny],
+    }
+    const commandWithState = {
+      calls: 0,
+      run() {
+        this.calls += 1
+        return { exitCode: 0, stdout: '', stderr: '' }
+      },
+    }
+    const codeIntelligence = {
+      available: true,
+      isProjectEnabled() {
+        return this.available
+      },
+      listSymbols: async () => [],
+      getDefinition: async () => [],
+    }
+    const localProviders = {
+      command: commandWithState,
+      codeIntelligence,
+    }
+    const originalRun = commandWithState.run
+    const tx = transaction(['protected.ts'])
+    const validation = new TransactionValidation({
+      root: '/workspace',
+      policy: localPolicy,
+      providers: localProviders,
+      getTransaction: () => tx,
+      buildOverlay: async () => ({ contentByPath: new Map(), diagnostics: [] }),
+      createReader: () => async () => undefined,
+      validateRegistered: async (_input, context) => {
+        const transactionView = context.getTransaction(tx.transactionId)!
+        expect(Reflect.set(context, 'root', '/other')).toBe(false)
+        expect(Reflect.set(context.policy, 'maxChangedLinesPerTransaction', 0)).toBe(false)
+        expect(Reflect.set(context.policy.protectedFiles, '0', 'changed.ts')).toBe(false)
+        expect(Reflect.set(context.providers, 'command', {})).toBe(false)
+        expect(context.providers.codeIntelligence?.available).toBe(true)
+        expect(context.providers.codeIntelligence?.isProjectEnabled('/workspace')).toBe(true)
+        expect(Reflect.set(context.providers.codeIntelligence!, 'available', false)).toBe(false)
+        await context.providers.command.run({ command: 'probe' })
+        expect(Reflect.set(context.providers.command, 'run', async () => ({
+          exitCode: 1,
+          stdout: '',
+          stderr: 'mutated',
+        }))).toBe(false)
+        expect(Reflect.set(transactionView, 'changedLines', 999)).toBe(false)
+        expect(Reflect.set(transactionView.changedFiles, '0', 'changed.ts')).toBe(false)
+        return validationResult()
+      },
+      createAdapters: async () => [],
+      snapshotStaged: async (path, content) => snapshot(path, content),
+      snapshotWorkspace: async (path) => snapshot(path, 'workspace'),
+    })
+
+    await validation.run({ transactionId: tx.transactionId })
+
+    expect(localPolicy.maxChangedLinesPerTransaction).toBe(policy.maxChangedLinesPerTransaction)
+    expect(localPolicy.protectedFiles).toEqual(['protected.ts'])
+    expect(commandWithState.run).toBe(originalRun)
+    expect(commandWithState.calls).toBe(1)
+    expect(codeIntelligence.available).toBe(true)
+    expect(tx.changedFiles).toEqual(['protected.ts'])
+    expect(tx.changedLines).toBe(0)
   })
 
   test('skips deleted paths and reads explicit untouched paths from the workspace', async () => {

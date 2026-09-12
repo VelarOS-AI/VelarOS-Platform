@@ -1,13 +1,12 @@
 import { isArray,isEmpty, isPlainObject, isString } from "@velaros-ai/core";
 
 import type { FixInput, FixResult, ProjectFixContext, ProjectFixer } from "../types/fix.js";
-import type { CommandProvider, ProjectProviders } from "../types/provider.js";
-import type { ProjectValidator,ValidateInput, ValidationResult } from "../types/validation.js";
-
-export interface CommandValidationContext {
-  root: string;
-  providers: ProjectProviders & { command: CommandProvider };
-}
+import type {
+  ProjectValidationContext,
+  ProjectValidator,
+  ValidateInput,
+  ValidationResult,
+} from "../types/validation.js";
 
 export interface CommandValidatorOptions {
   id: string;
@@ -19,11 +18,11 @@ export interface CommandValidatorOptions {
   when?: (input: ValidateInput) => boolean;
 }
 
-async function runCommand(options: CommandValidatorOptions, ctx: CommandValidationContext) {
-  return ctx.providers.command.run({
+async function runCommand(options: CommandValidatorOptions, context: ProjectValidationContext) {
+  return context.providers.command.run({
     command: options.command,
     args: options.args ?? [],
-    cwd: options.cwd ?? ctx.root,
+    cwd: options.cwd ?? context.root,
     timeoutMs: options.timeoutMs,
   });
 }
@@ -70,9 +69,8 @@ export function commandValidator(options: CommandValidatorOptions): ProjectValid
       const paths = input.paths ?? [];
       return paths.some((p) => options.fileExtensions!.some((ext) => p.endsWith(ext)));
     },
-    async validate(input: ValidateInput, ctxRaw: any): Promise<ValidationResult> {
-      const ctx = ctxRaw as CommandValidationContext;
-      const result = await runCommand(options, ctx);
+    async validate(input: ValidateInput, context): Promise<ValidationResult> {
+      const result = await runCommand(options, context);
       const ok = result.exitCode === 0;
       const message = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
       const diagnostic = ok ? [] : [{ severity: "error" as const, message: message || `${options.command} 执行失败，退出码 ${result.exitCode}`, source: options.id }];

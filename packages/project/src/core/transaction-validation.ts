@@ -1,29 +1,84 @@
-import { isEmpty, isNull, isString, optionalWhen } from "@velaros-ai/core";
+import { isEmpty, isFunction, isNull, isString, optionalWhen } from "@velaros-ai/core";
 
 import type { FileAdapter } from "../types/adapter.js";
 import type { CorePolicy } from "../types/policy.js";
-import type { ProjectProviders } from "../types/provider.js";
+import type { CommandProvider, ProjectProviders } from "../types/provider.js";
 import type { FileSnapshot } from "../types/snapshot.js";
 import type { StoredTransaction } from "../types/transaction.js";
-import type { ValidateInput, ValidationResult } from "../types/validation.js";
+import type {
+  ProjectValidationContext,
+  ProjectValidationPolicy,
+  ProjectValidationProviders,
+  ProjectValidationTransaction,
+  ValidateInput,
+  ValidationResult,
+} from "../types/validation.js";
 
 import type {
   StagedFileContent,
   TransactionContentOverlay,
 } from "./transaction-overlay.js";
 
-export interface TransactionValidatorContext {
-  readonly root: string;
-  readonly policy: CorePolicy;
-  readonly providers: ProjectProviders;
-  readonly getTransaction: (transactionId: string) => StoredTransaction | undefined;
-  readonly readFile: (path: string) => Promise<string | undefined>;
+function validationPolicyView(policy: CorePolicy): ProjectValidationPolicy {
+  return Object.freeze({
+    ...policy,
+    approval: Object.freeze({ ...policy.approval }),
+    generatedFiles: Object.freeze([...policy.generatedFiles]),
+    protectedFiles: Object.freeze([...policy.protectedFiles]),
+    readDeny: Object.freeze([...policy.readDeny]),
+    writeDeny: Object.freeze([...policy.writeDeny]),
+  });
+}
+
+function readonlyProvider<Provider extends object>(
+  provider?: Provider,
+): Readonly<Provider> | undefined {
+  if (!provider) return undefined;
+  const target = Object.freeze({});
+  return new Proxy(target, {
+    defineProperty: () => false,
+    deleteProperty: () => false,
+    get: (_target, property) => {
+      const value = Reflect.get(provider, property, provider);
+      return isFunction(value) ? value.bind(provider) : value;
+    },
+    has: (_target, property) => Reflect.has(provider, property),
+    set: () => false,
+  }) as Readonly<Provider>;
+}
+
+function validationProvidersView(
+  providers: ProjectProviders & { command: CommandProvider },
+): ProjectValidationProviders {
+  return Object.freeze({
+    approval: readonlyProvider(providers.approval),
+    codeIntelligence: readonlyProvider(providers.codeIntelligence),
+    command: readonlyProvider(providers.command)!,
+    context: readonlyProvider(providers.context),
+    fileFilter: readonlyProvider(providers.fileFilter),
+    logger: readonlyProvider(providers.logger),
+    policy: readonlyProvider(providers.policy),
+    sandbox: readonlyProvider(providers.sandbox),
+    secretRedaction: readonlyProvider(providers.secretRedaction),
+    telemetry: readonlyProvider(providers.telemetry),
+  });
+}
+
+function validationTransactionView(
+  transaction?: StoredTransaction,
+): ProjectValidationTransaction | undefined {
+  if (!transaction) return undefined;
+  return Object.freeze({
+    transactionId: transaction.transactionId,
+    changedFiles: Object.freeze([...transaction.changedFiles]),
+    changedLines: transaction.changedLines,
+  });
 }
 
 export interface TransactionValidationDependencies {
   readonly root: string;
   readonly policy: CorePolicy;
-  readonly providers: ProjectProviders;
+  readonly providers: ProjectProviders & { command: CommandProvider };
   readonly getTransaction: (transactionId: string) => StoredTransaction | undefined;
   readonly buildOverlay: (transactionId?: string) => Promise<TransactionContentOverlay>;
   readonly createReader: (
@@ -31,7 +86,7 @@ export interface TransactionValidationDependencies {
   ) => (path: string) => Promise<string | undefined>;
   readonly validateRegistered: (
     input: ValidateInput,
-    context: TransactionValidatorContext,
+    context: ProjectValidationContext,
   ) => Promise<ValidationResult>;
   readonly createAdapters: (snapshot: FileSnapshot) => Promise<readonly FileAdapter[]>;
   readonly snapshotStaged: (path: string, content: string) => Promise<FileSnapshot>;
@@ -49,13 +104,14 @@ export class TransactionValidation {
 
   public async run(input: ValidateInput): Promise<ValidationResult> {
     const overlay = await this.dependencies.buildOverlay(input.transactionId);
-    const context: TransactionValidatorContext = {
+    const context: ProjectValidationContext = Object.freeze({
       root: this.dependencies.root,
-      policy: this.dependencies.policy,
-      providers: this.dependencies.providers,
-      getTransaction: this.dependencies.getTransaction,
+      policy: validationPolicyView(this.dependencies.policy),
+      providers: validationProvidersView(this.dependencies.providers),
+      getTransaction: (transactionId: string) =>
+        validationTransactionView(this.dependencies.getTransaction(transactionId)),
       readFile: this.dependencies.createReader(overlay.contentByPath),
-    };
+    });
     const result = await this.dependencies.validateRegistered(input, context);
 
     if (!isEmpty(overlay.diagnostics)) {

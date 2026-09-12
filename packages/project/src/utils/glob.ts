@@ -47,7 +47,7 @@ export function globToRegExp(pattern: string): RegExp {
  *
  * 升级到 picomatch 后，第 3 类规则支持否定、字符类、分组和扩展通配等更丰富语法。
  */
-export function matchesAny(path: string, patterns: string[] = []): boolean {
+export function matchesAny(path: string, patterns: readonly string[] = []): boolean {
   const target = normalizeRel(path);
   return patterns.some((pattern) => {
     const normalized = normalizeRel(pattern);
