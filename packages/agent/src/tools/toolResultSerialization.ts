@@ -16,6 +16,11 @@ import { toOptional } from "@velaros-ai/core/utils/nullish";
 import { optionalWhenLazy } from "@velaros-ai/core/utils/optionalWhen";
 import { readFirstString } from "@velaros-ai/core/utils/unknownJsonRecord";
 
+import {
+  historyPreviewPlaceholder,
+  HistoryPreviewPlaceholderHeaderPattern,
+} from "./historyPreviewPlaceholder";
+
 interface ToolResultCompactionLimits {
   maxSerializedLength: number;
   maxStringLength: number;
@@ -411,11 +416,6 @@ function looksLikeBinaryPayload(value: string): boolean {
   return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
-// 只锚定开头：嵌套时内层 preview 被截到 160 字符，模型也会把占位头抄进真实参数后接真实内容，
-// 两种情况都不以 "…]" 收尾，按整串匹配会漏掉它们，重放时又被再包一层。
-const HistoryPreviewPlaceholderHeaderPattern =
-  /^\[history preview omitted (\d+) chars from ("[^"]*"|string); tool received the full value(; preview: )?/;
-
 // 单层占位串的体积上限：头部约 100 字符 + 160 字符 preview + "…]"，留有余量。只剥出一层却超过它，
 // 说明头部后面跟的是真实内容而不是 preview：原样放行会绕过体积上限，交给常规压缩又会嵌套，
 // 因此按剥离后的正文重建单层占位串。
@@ -476,14 +476,6 @@ function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
     return value;
 
   return historyPreviewPlaceholder(value.length, first.field, remainder);
-}
-
-/** 占位串的唯一格式：`summarizeToolInputString` 生成与 `collapseHistoryPreviewPlaceholder` 重建共用。 */
-function historyPreviewPlaceholder(length: number, field: string, previewSource: string): string {
-  const preview = previewSource.slice(0, 160).replaceAll(/\s+/g, " ").trim();
-  return preview
-    ? `[history preview omitted ${length} chars from ${field}; tool received the full value; preview: ${preview}…]`
-    : `[history preview omitted ${length} chars from ${field}; tool received the full value]`;
 }
 
 function summarizeToolInputString(value: string, key?: string): string {

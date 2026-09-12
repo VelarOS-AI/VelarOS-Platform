@@ -278,6 +278,42 @@ describe('tool execution lifecycle', () => {
     })
   })
 
+  test('rejects arguments copied from a history preview placeholder before execution', async () => {
+    let executions = 0
+    const h = harness(() => { executions++; return { changed: true } })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    const placeholder =
+      '[history preview omitted 2252 chars from "newText"; tool received the full value; preview: import { AsyncLocalStorage } from \'node:async_hooks\'…]'
+    executor.enqueue('placeholder-args', 'probe:write', {
+      path: 'src/a.ts',
+      edits: [{ oldText: 'a', newText: placeholder }],
+    }, false)
+    const history: any[] = []
+    await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+
+    expect(executions).toBe(0)
+    const failure = JSON.parse(history[0].content[0].output.value)
+    expect(failure).toMatchObject({
+      error: 'history_placeholder_argument',
+      details: { placeholderPaths: ['edits[0].newText'] },
+    })
+    // 这是调用方问题：不能挂上「先按系统 bug 归因再停下」的指引，否则模型会把任务停住等人排查。
+    expect(failure.runtimeToolIssue).toBeUndefined()
+  })
+
+  test('source text that merely quotes the placeholder format still executes', async () => {
+    let executions = 0
+    const h = harness(() => { executions++; return { changed: true } })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('quoted-placeholder', 'probe:write', {
+      newText: "expect(text).toBe('[history preview omitted 12 chars from \"text\"; tool received the full value]')",
+    }, false)
+
+    await executor.collectAll()
+
+    expect(executions).toBe(1)
+  })
+
   test('executes, records, and reports the effective schema-normalized arguments', async () => {
     let executedInput: unknown
     const h = harness(

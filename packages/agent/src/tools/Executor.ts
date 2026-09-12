@@ -79,12 +79,41 @@ import {
   buildToolFailureResult as buildStructuredToolFailureResult,
   type ToolFailureBuildOptions,
 } from "./ExecutionPolicyFailures";
+import { findHistoryPreviewPlaceholderArgumentPaths } from "./historyPreviewPlaceholder";
 import { liftGenericModelContent } from "./modelImageLift";
 
 const log = logRuntime.tag("ToolExecutor");
 const ToolAbortSettlementGraceMs = 250;
 const ToolCancelledByUserReason = "Cancelled by user";
 const MaxConcurrentConcurrencySafeTools = 8;
+
+// 照抄历史占位串是调用方的问题，不是工具故障：不走 schema_validation_failed（那条会让模型先按
+// 「系统 bug」归因并停下任务），而是直接说明原因与续做方式；执行前拒绝，占位串不会写进任何文件。
+function buildHistoryPlaceholderArgsFailure(
+  toolName: string,
+  placeholderPaths: string[],
+): { ok: false; reason: string; result: ToolFailureResult } {
+  const shownPaths = placeholderPaths.slice(0, 10);
+  const reason = `参数 ${shownPaths.join("、")} 是对话历史里的省略占位串（"[history preview omitted …]"），不是真实内容，工具未执行。历史中的旧调用只保留了参数预览，原文不在上下文里。`;
+  return {
+    ok: false,
+    reason,
+    result: buildStructuredToolFailureResult(
+      "history_placeholder_argument",
+      reason,
+      toolName,
+      {
+        code: "VALIDATION",
+        details: { placeholderPaths: shownPaths },
+        nextActions: [
+          "这是调用参数的问题，工具本身正常：完整写出这些参数的真实内容后重新调用，不要照抄历史里的 \"[history preview omitted …]\" 占位串。",
+          "需要旧内容时先重新读取目标文件或片段，以读到的原文为准构造参数。",
+          "内容太长时拆成多次小范围编辑，每次只写需要改动的片段。",
+        ],
+      },
+    ),
+  };
+}
 
 interface ToolExecutorEvents {
   emitRuntime(event: ChatRuntimeEvent): void;
@@ -1349,8 +1378,13 @@ export class ToolExecutor {
     | { ok: true; args: Record<string, unknown> }
     | { ok: false; reason: string; result: ToolFailureResult } {
     if (!isPresent(args)) return { ok: true, args: {} };
-    if (isPlainObject(args))
-      return { ok: true, args: args as Record<string, unknown> };
+    if (isPlainObject(args)) {
+      const record = args as Record<string, unknown>;
+      const placeholderPaths = findHistoryPreviewPlaceholderArgumentPaths(record);
+      return isEmpty(placeholderPaths)
+        ? { ok: true, args: record }
+        : buildHistoryPlaceholderArgsFailure(toolName, placeholderPaths);
+    }
 
     const receivedType = this.describeProviderToolArgsType(args);
     const reason = `Tool arguments for "${toolName}" must be a JSON object; received ${receivedType}.`;

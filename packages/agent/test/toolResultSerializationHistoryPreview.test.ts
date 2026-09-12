@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { findHistoryPreviewPlaceholderArgumentPaths } from '../src/tools/historyPreviewPlaceholder'
 import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
 /**
@@ -135,5 +136,32 @@ describe('history preview placeholder idempotency', () => {
       '[history preview omitted 9000 chars from "widget_code"; tool received the full value]'
     const result = compactToolInputForModel({ widget_code: placeholder })
     expect(result.widget_code).toBe(placeholder)
+  })
+})
+
+describe('history preview placeholder copied into tool arguments', () => {
+  test('finds placeholder-leading strings at any nesting depth', () => {
+    const placeholder = rawHistoryPreviewWrap('x'.repeat(900), 'newText')
+
+    expect(
+      findHistoryPreviewPlaceholderArgumentPaths({
+        path: 'src/a.ts',
+        newText: `\n  ${placeholder}`,
+        edits: [
+          { oldText: 'a', newText: placeholder },
+          { oldText: 'b', newText: 'real content' },
+        ],
+        command: '[history preview omitted 12 chars from string; tool received the full value]',
+      })
+    ).toEqual(['newText', 'edits[0].newText', 'command'])
+  })
+
+  test('ignores text that only quotes the placeholder format', () => {
+    expect(
+      findHistoryPreviewPlaceholderArgumentPaths({
+        newText: `const expected = '${rawHistoryPreviewWrap('y'.repeat(300))}'`,
+        content: `# 历史占位串\n${rawHistoryPreviewWrap('z'.repeat(300))}`,
+      })
+    ).toEqual([])
   })
 })
