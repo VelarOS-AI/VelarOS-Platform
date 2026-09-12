@@ -2,6 +2,23 @@ import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, toOptional }
 
 import { ProjectError } from '../errors.js'
 import { validateReadBounds } from '../read-bounds.js'
+import type { ProjectSymbol } from '../types/adapter.js'
+import type {
+  ApplyEditInput,
+  PrepareEditInput,
+  RollbackInput,
+  RollbackResult,
+} from '../types/edit.js'
+import type { FixInput } from '../types/fix.js'
+import type {
+  FileStatInput,
+  FileStatResult,
+  ObserveInput,
+  ReadInput,
+  SearchInput,
+} from '../types/io.js'
+import type { ResolveTargetInput } from '../types/target.js'
+import type { ValidateInput } from '../types/validation.js'
 
 /**
  * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
@@ -178,22 +195,22 @@ export type AgentProjectResolveTargetResult =
     }
 
 export interface AgentProjectKernelPort {
-  listFiles(input?: any): Promise<Array<{ path: string; type: 'file' | 'directory' }>>
-  stat(input: any): Promise<unknown>
-  read(input: any): Promise<AgentProjectKernelReadResult>
-  search(input: any): Promise<AgentProjectSearchResult>
-  listSymbols(path: string): Promise<any[]>
-  resolveTarget(input: any): Promise<AgentProjectResolveTargetResult>
-  prepareEdit(input: any): Promise<AgentProjectPreparedTransaction>
+  listFiles(input?: ObserveInput): Promise<Array<{ path: string; type: 'file' | 'directory' }>>
+  stat(input: FileStatInput): Promise<FileStatResult>
+  read(input: ReadInput): Promise<AgentProjectKernelReadResult>
+  search(input: SearchInput): Promise<AgentProjectSearchResult>
+  listSymbols(path: string): Promise<ProjectSymbol[]>
+  resolveTarget(input: ResolveTargetInput): Promise<AgentProjectResolveTargetResult>
+  prepareEdit(input: PrepareEditInput): Promise<AgentProjectPreparedTransaction>
   discardTransaction(transactionId: string): { discarded: boolean }
   getTransaction(
     transactionId: string
   ): AgentProjectPreparedTransaction | undefined
-  fixTransaction(input: any): Promise<AgentProjectFixResult>
-  applyEdit(input: any): Promise<AgentProjectApplyResult>
-  validate(input: any): Promise<AgentProjectValidationResult>
-  rollback(input: any): Promise<unknown>
-  diff(input?: any): Promise<AgentProjectDiffResult>
+  fixTransaction(input: FixInput): Promise<AgentProjectFixResult>
+  applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
+  validate(input: ValidateInput): Promise<AgentProjectValidationResult>
+  rollback(input: RollbackInput): Promise<RollbackResult>
+  diff(input?: { transactionId?: string }): Promise<AgentProjectDiffResult>
   status(): Promise<{ root: string; validators: string[] }>
 }
 

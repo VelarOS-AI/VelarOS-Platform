@@ -92,6 +92,7 @@ import type { CorePolicy, PolicyDecisionInput } from "../types/policy.js";
 import type { CommandProvider, ProjectProviders } from "../types/provider.js";
 import type { FileSnapshot,ProjectSnapshot } from "../types/snapshot.js";
 import type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from "../types/target.js";
+import type { StoredTransaction } from "../types/transaction.js";
 import type { ProjectValidator,ValidateInput, ValidationResult } from "../types/validation.js";
 import { combineDiffs, unifiedDiff } from "../utils/diff.js";
 import { matchesAny } from "../utils/glob.js";
@@ -99,10 +100,13 @@ import { id } from "../utils/id.js";
 import { toAbs, toRel } from "../utils/path.js";
 import { countChangedLines } from "../utils/text.js";
 
+export type { StoredTransaction } from "../types/transaction.js";
+
 import { DEFAULT_CORE_POLICY } from "./defaults.js";
 import { FileStore } from "./file-store.js";
 import { LockManager } from "./lock-manager.js";
 import { TransactionCoordinator } from "./transaction-coordinator.js";
+import { TransactionStateMachine } from "./transaction-state-machine.js";
 
 function resolveEvidenceTargetRange(
   storedTarget?: ResolvedTarget,
@@ -323,15 +327,6 @@ const QueueRebaseFriendlyOperations = new Set<string>([
 
 type StagedFileContent = Nullable<string>;
 
-/**
- * 内核内存表里事务的真实形状：比 `PreparedTransaction` 多出三个终态与 `appliedAt`。
- * `PreparedTransaction.status` 被钉成字面量 `"prepared"`，只描述「刚 prepare 完」那一瞬，
- * 不足以表达生命周期；对外 API 暂未跟进（见 `getTransaction` 的欠账说明），本类型是内部真相。
- */
-export type StoredTransaction = Omit<PreparedTransaction, "status"> & {
-  status: PreparedTransaction["status"] | "applied" | "validated" | "rolled_back";
-  appliedAt?: number;
-};
 
 // 内存治理上限：长会话内核常驻时，避免 target/evidence/已结束事务无界增长。
 const MaxRetainedTargets = 500;
@@ -391,6 +386,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   readonly fixers = new FixerRegistry();
   readonly locks = new LockManager();
   readonly transactionCoordinator = new TransactionCoordinator();
+  readonly transactionStateMachine = new TransactionStateMachine();
   readonly store: FileStore;
   private readonly changeFeedWriter: ProjectChangeFeedWriter;
   private readonly transactionState?: FileProjectTransactionStateStore;
@@ -430,7 +426,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const durable = this.transactionState.snapshot();
       for (const transaction of durable.transactions) {
         this.transactions.set(transaction.transactionId, transaction);
-        if (transaction.status === "applied" || transaction.status === "rolled_back") {
+        if (this.transactionStateMachine.isTerminal(transaction.status)) {
           this.terminalTransactionOrder.push(transaction.transactionId);
         }
       }
@@ -1371,7 +1367,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         await this.store.remove(restore.path, { skipFileFilter: true });
       }
     }
-    tx.status = pending.previousStatus;
+    tx.status = this.transactionStateMachine.restore(pending.previousStatus);
     this.persistTransactionState();
   }
 
@@ -1843,9 +1839,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     }
     const tx = this.transactions.get(transactionId);
     if (!tx) return { discarded: false };
-    if (tx.appliedAt || tx.status === "applied") {
-      throw new ProjectError("INVALID_INPUT", `只能丢弃尚未应用的事务：${transactionId}`);
-    }
+    this.transactionStateMachine.assertDiscardable(tx);
     this.publishTransactionChange(tx, "discarded", [], undefined, true);
     return { discarded: true };
   }
@@ -1859,9 +1853,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     await this.hooks.emit("BeforePrepareEdit", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
-    if (tx.appliedAt || tx.status === "applied" || tx.status === "rolled_back") {
-      throw new ProjectError("INVALID_INPUT", `只能修补尚未应用的事务：${input.transactionId}`);
-    }
+    const amendedStatus = this.transactionStateMachine.amend(tx);
     // 同一个 Map value 的两种视图：`tx` 带终态字段用于上面的守卫，`preparedTx` 是收窄后的对外形状。
     const preparedTx = this.getTransaction(input.transactionId)!;
     await this.decide("amend_edit", tx.changedFiles, input, tx.risk);
@@ -1905,7 +1897,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         amendedAt: Date.now(),
         amendmentCount: Number(preparedTx.metadata?.amendmentCount ?? 0) + 1,
       };
-      preparedTx.status = "prepared";
+      preparedTx.status = amendedStatus;
       this.refreshTransactionSummary(preparedTx);
       this.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines);
       this.publishTransactionChange(tx, "amended", input.operations);
@@ -1920,6 +1912,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 在事务暂存内容上运行修复器，并把修复转成事务修订。 */
   public async fixTransaction(input: FixInput): Promise<FixResult> {
+    return this.runTransactionCommand(input.transactionId, () => this.fixTransactionSerialized(input));
+  }
+
+  /** 已位于 transactionId 队列内的修复实现；最终 amendment 复用私有串行入口。 */
+  private async fixTransactionSerialized(input: FixInput): Promise<FixResult> {
     const tx = this.getTransaction(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
     await this.decide("amend_edit", tx.changedFiles, input, tx.risk);
@@ -1998,7 +1995,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     });
 
     if (!isEmpty(operations)) {
-      await this.amendEdit({
+      await this.amendEditSerialized({
         transactionId: input.transactionId,
         operations,
         metadata: {
@@ -2022,11 +2019,12 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
     const isRestoringRolledBackTransaction = tx.status === "rolled_back";
-    if (!isRestoringRolledBackTransaction && (tx.appliedAt || tx.status === "applied")) {
-      throw new ProjectError("INVALID_INPUT", `事务已经应用：${input.transactionId}`);
-    }
-    const validation = await this.validate({ transactionId: tx.transactionId });
+    this.transactionStateMachine.assertApplicable(tx);
+    const validation = await this.validateSerialized({ transactionId: tx.transactionId });
     if (!validation.ok) throw validationFailed(tx.transactionId, validation);
+    // validate 会把可变事务推进到 validated；execution token 必须从校验后的稳定状态开始，
+    // 这样 apply 后续失败时仍恢复到现有语义下的 validated，而不是调用前的 prepared。
+    const execution = this.transactionStateMachine.beginApply(tx);
     const authorizedChangedFiles = await this.authorizePaths(tx.changedFiles, "write", "写入");
     await this.decide("apply_edit", toOptional(authorizedChangedFiles), input, tx.risk);
     const lock = await this.locks.lock(tx.changedFiles, tx.transactionId);
@@ -2122,9 +2120,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
         throw writeError;
       }
-      const previousStatus = pending?.previousStatus ?? tx.status;
       const previousAppliedAt = tx.appliedAt;
-      tx.status = "applied";
+      tx.status = this.transactionStateMachine.commit(execution);
       tx.appliedAt = Date.now();
       const appliedRevisions = tx.changedFiles.map((pathValue) => ({
         path: pathValue,
@@ -2134,7 +2131,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       try {
         this.publishTransactionChange(tx, "applied", [], appliedRevisions);
       } catch (stateError) {
-        tx.status = previousStatus;
+        tx.status = this.transactionStateMachine.abort(execution);
         tx.appliedAt = previousAppliedAt;
         if (pending) await this.restoreDurableOperation(pending);
         else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
@@ -2175,6 +2172,13 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   /** 校验当前文件或事务暂存内容，并合并适配器诊断。 */
   public async validate(input: ValidateInput): Promise<ValidationResult> {
+    return input.transactionId
+      ? this.runTransactionCommand(input.transactionId, () => this.validateSerialized(input))
+      : this.validateSerialized(input);
+  }
+
+  /** 已位于 transactionId 队列内的校验实现；apply 复用此入口，避免嵌套排队。 */
+  private async validateSerialized(input: ValidateInput): Promise<ValidationResult> {
     await this.hooks.emit("BeforeValidate", this, input);
     if (input.transactionId && !this.transactions.has(input.transactionId)) {
       throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
@@ -2185,8 +2189,9 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       ? this.transactions.get(input.transactionId)
       : undefined;
     const previousStatus = transaction?.status;
-    const preservesTerminalStatus = previousStatus === "applied" || previousStatus === "rolled_back";
-    if (transaction && result.ok && !preservesTerminalStatus) transaction.status = "validated";
+    if (transaction && result.ok) {
+      transaction.status = this.transactionStateMachine.validationSucceeded(transaction);
+    }
     if (transaction) {
       try {
         const lifecycle = result.ok
@@ -2198,7 +2203,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           : "validation_failed";
         this.publishTransactionChange(transaction, lifecycle);
       } catch (error) {
-        if (previousStatus) transaction.status = previousStatus;
+        if (previousStatus) transaction.status = this.transactionStateMachine.restore(previousStatus);
         throw error;
       }
     }
@@ -2259,9 +2264,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     await this.hooks.emit("BeforeRollback", this, input);
     const tx = this.transactions.get(input.transactionId);
     if (!tx) throw new ProjectError("INVALID_INPUT", `未知事务：${input.transactionId}`);
-    if (!tx.appliedAt || tx.status !== "applied") {
-      throw new ProjectError("INVALID_INPUT", `只能回滚已应用的事务：${input.transactionId}`);
-    }
+    const execution = this.transactionStateMachine.beginRollback(tx);
     const lock = await this.locks.lock(tx.changedFiles, `rollback:${tx.transactionId}`);
     try {
       const reversed = [...tx.patches].reverse();
@@ -2338,8 +2341,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const beforeRollback = this.transactionProjections.get(tx.transactionId)?.revisions
         ?? this.changeFeed.get(tx.transactionId)?.revisions
         ?? [];
-      const previousStatus = pending?.previousStatus ?? tx.status;
-      tx.status = "rolled_back";
+      tx.status = this.transactionStateMachine.commit(execution);
       const rollbackRevisions = tx.changedFiles.map((pathValue) => ({
         path: pathValue,
         before: beforeRollback.find((revision) => revision.path === pathValue)?.after,
@@ -2348,7 +2350,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       try {
         this.publishTransactionChange(tx, "rolled_back", [], rollbackRevisions);
       } catch (stateError) {
-        tx.status = previousStatus;
+        tx.status = this.transactionStateMachine.abort(execution);
         if (pending) await this.restoreDurableOperation(pending);
         else await this.restoreAppliedFiles(writtenOrder, restoreByPath, tx.transactionId);
         throw stateError;

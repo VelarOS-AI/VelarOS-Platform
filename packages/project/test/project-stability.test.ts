@@ -184,6 +184,55 @@ describe('Project stability contracts', () => {
     }).success).toBe(true)
   })
 
+  test('keeps validate, amend, apply, rollback, and re-apply lifecycle states consistent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-project-lifecycle-'))
+    try {
+      const file = join(root, 'note.txt')
+      await writeFile(file, 'before\n')
+      const project = await createProjectKernel({ root })
+      const transaction = await project.prepareEdit({
+        operations: [{
+          operation: {
+            type: 'replace_text',
+            path: 'note.txt',
+            oldText: 'before',
+            newText: 'after',
+          },
+        }],
+      })
+
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('prepared')
+      expect((await project.validate({ transactionId: transaction.transactionId })).ok).toBe(true)
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('validated')
+
+      await project.amendEdit({
+        transactionId: transaction.transactionId,
+        operations: [{
+          operation: {
+            type: 'append_text',
+            path: 'note.txt',
+            text: 'amended\n',
+          },
+        }],
+      })
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('prepared')
+
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('applied')
+      expect(await readFile(file, 'utf8')).toBe('after\namended\n')
+
+      await project.rollback({ transactionId: transaction.transactionId })
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('rolled_back')
+      expect(await readFile(file, 'utf8')).toBe('before\n')
+
+      await project.applyEdit({ transactionId: transaction.transactionId })
+      expect(project.getTransaction(transaction.transactionId)?.status).toBe('applied')
+      expect(await readFile(file, 'utf8')).toBe('after\namended\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('projects a stable Project error envelope through the Kernel capability', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-project-kernel-error-'))
     try {

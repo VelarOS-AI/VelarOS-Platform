@@ -25,7 +25,7 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
-import type { StoredTransaction } from './core/project-kernel.js'
+import type { StoredTransaction } from './types/transaction.js'
 import type { ProjectChangeRecordInput } from './change-feed.js'
 import { ProjectError } from './errors.js'
 
@@ -137,6 +137,9 @@ function assertStoredTransaction(value: unknown): asserts value is StoredTransac
   if (!isUndefined(value.appliedAt) && !isFiniteNumber(value.appliedAt)) {
     fail('transaction appliedAt')
   }
+  const hasAppliedAt = !isUndefined(value.appliedAt)
+  const expectsAppliedAt = value.status === 'applied' || value.status === 'rolled_back'
+  if (hasAppliedAt !== expectsAppliedAt) fail('transaction status/appliedAt mismatch')
   if (!isArray(value.baseSnapshots) || value.baseSnapshots.length > MaximumChangedFilesPerTransaction) {
     fail('transaction base snapshots')
   }

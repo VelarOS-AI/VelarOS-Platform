@@ -6,10 +6,12 @@ import {
   statSync,
 } from 'node:fs'
 import {
+  dirname,
   extname,
   relative,
   resolve,
 } from 'node:path'
+import * as ts from 'typescript'
 
 const RepoRoot = resolve(import.meta.dirname, '..')
 const WorkspaceRoot = resolve(RepoRoot, '../..')
@@ -31,6 +33,68 @@ const manifest = JSON.parse(readFileSync(ManifestPath, 'utf8'))
 const rootManifest = JSON.parse(readFileSync(resolve(WorkspaceRoot, 'package.json'), 'utf8'))
 const failures = []
 const fail = (message) => failures.push(message)
+
+const TransactionObjectNames = new Set(['tx', 'transaction', 'preparedTx'])
+
+function hasUnmanagedTransactionStatusAssignment(source, path) {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const stateMachineResults = new Set()
+  const collectStateMachineResults = (node) => {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.initializer?.getText(sourceFile).includes('transactionStateMachine.')
+    ) {
+      stateMachineResults.add(node.name.text)
+    }
+    ts.forEachChild(node, collectStateMachineResults)
+  }
+  collectStateMachineResults(sourceFile)
+
+  let unmanaged = false
+  const visit = (node) => {
+    if (
+      ts.isBinaryExpression(node)
+      && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && ts.isPropertyAccessExpression(node.left)
+      && node.left.name.text === 'status'
+      && ts.isIdentifier(node.left.expression)
+      && TransactionObjectNames.has(node.left.expression.text)
+    ) {
+      const right = node.right.getText(sourceFile)
+      if (!right.includes('transactionStateMachine.') && !stateMachineResults.has(right)) {
+        unmanaged = true
+        return
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return unmanaged
+}
+
+const ForbiddenInternalDependencies = [
+  {
+    source: (sourcePath) => sourcePath.startsWith('types/'),
+    targets: ['core/', 'agent/', 'composition/', 'infrastructure/'],
+    label: 'types must not depend on core, Agent, composition, or infrastructure',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('core/'),
+    targets: ['agent/'],
+    label: 'core must not depend on Agent adapters',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('agent/'),
+    targets: ['core/project-kernel'],
+    label: 'Agent adapters must not depend on the ProjectKernel implementation',
+  },
+  {
+    source: (sourcePath) => sourcePath === 'transaction-state.ts',
+    targets: ['core/project-kernel'],
+    label: 'transaction-state must depend on transaction domain types, not ProjectKernel',
+  },
+]
 
 if (manifest.name !== '@velaros-ai/project') {
   fail(`package name must be @velaros-ai/project, got ${manifest.name}`)
@@ -91,6 +155,24 @@ for (const path of walk(SourceRoot)) {
       fail(`concrete Core type import in ${relative(RepoRoot, path)}`)
     }
   }
+  const sourcePath = relative(SourceRoot, path).replaceAll('\\', '/')
+  if (sourcePath === 'core/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
+    fail('ProjectKernel transaction status changes must go through TransactionStateMachine')
+  }
+  const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles
+    .map((reference) => reference.fileName)
+  for (const rule of ForbiddenInternalDependencies) {
+    if (!rule.source(sourcePath)) continue
+    for (const specifier of importedSpecifiers) {
+      if (!specifier.startsWith('.')) continue
+      const targetPath = relative(SourceRoot, resolve(SourceRoot, dirname(sourcePath), specifier))
+        .replaceAll('\\', '/')
+        .replace(/\.js$/, '')
+      if (rule.targets.some((target) => targetPath.startsWith(target))) {
+        fail(`${rule.label} in ${sourcePath}: ${specifier}`)
+      }
+    }
+  }
 }
 
 if (failures.length > 0) {
@@ -101,6 +183,8 @@ if (failures.length > 0) {
 
 console.info('✓ one standalone @velaros-ai/project package')
 console.info('✓ Project-owned Agent adapter contracts and host/capability boundaries')
+console.info('✓ Project internal type, core, Agent, and transaction-state dependency directions')
+console.info('✓ ProjectKernel transaction lifecycle changes go through TransactionStateMachine')
 
 function walk(directory) {
   if (!existsSync(directory)) return []

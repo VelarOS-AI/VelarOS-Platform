@@ -92,7 +92,7 @@ function runInProjectDirectory<T>(
 function scopeProjectListPatterns(
   path: LooseOptional<string>,
   patterns: LooseOptional<readonly string[]>
-): LooseOptional<string[]> {
+): Optional<string[]> {
   if (!patterns) return undefined
   const base = path?.trim().replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '')
   if (!base || base === '.' || base.startsWith('/') || /^[a-zA-Z]:\//.test(base))
