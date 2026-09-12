@@ -7,9 +7,11 @@ import type {
   SubAgentWindDownReason,
   TeamModelSelectionTrace,
 } from '@velaros-ai/agent/protocol'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, toOptional } from '@velaros-ai/core'
 
 import type { CodingSessionSnapshot } from '../reminders/types'
+
+import type { SubAgentThreadRetention } from './SubAgentSessionStore'
 
 interface BuildSubAgentTaskResultInput {
   threadId: string
@@ -21,6 +23,8 @@ interface BuildSubAgentTaskResultInput {
   toolDigest?: SubAgentToolDigestEntry[]
   structuredOutput?: unknown
   usage?: SubAgentUsage
+  /** 线程能否续跑；给出时落成结果里的 resumable / retained_until，缺省表示本结果不作判断。 */
+  retention?: SubAgentThreadRetention
 }
 
 function buildArtifactsFromSnapshot(
@@ -48,6 +52,12 @@ function buildArtifactsFromSnapshot(
   return artifacts
 }
 
+/** 只有可续跑的线程才有保留期限；不可续跑或关闭了跨执行保留时不出这一格。 */
+function resolveRetainedUntil(retention: Optional<SubAgentThreadRetention>): Optional<number> {
+  if (!retention?.resumable) return undefined
+  return toOptional(retention.retainedUntil)
+}
+
 function buildSubAgentTaskResult(input: BuildSubAgentTaskResultInput): SubAgentTaskResult {
   const summary = input.text.trim() || '子智能体已完成，但没有返回文本。'
   return {
@@ -60,6 +70,8 @@ function buildSubAgentTaskResult(input: BuildSubAgentTaskResultInput): SubAgentT
     tool_digest: input.toolDigest,
     model_trace: input.modelTrace,
     wind_down_reason: input.windDownReason,
+    resumable: input.retention?.resumable,
+    retained_until: resolveRetainedUntil(input.retention),
   }
 }
 

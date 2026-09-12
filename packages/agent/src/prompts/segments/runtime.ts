@@ -110,6 +110,8 @@ function createRuntimePromptSegments(
       when: () => hasRuntimeTool(snapshot, "agent:dispatch"),
       text: [
         "把可独立并行或本身需要多步的有界子任务交给子 Agent；主 Agent 直接完成其余工作。",
+        "优先复用已派的子 Agent：同一工作线上的追问、补做、纠偏、修复后的复验，用 thread_id 续跑它（它保留着读过的上下文，不必从头再读），复验就续跑原来的验证者。",
+        "只有需要独立上下文时才新派：独立复核或第二意见（不要让产出者复核自己的产出）、原线程已跑偏或上下文过大、换了作用域或是无关的新任务。线程只保留有限时间，过期续跑会明确报错，再新派一个自包含的。",
         "主 Agent 统一负责综合、验证和收口。",
         ...renderCustomSubAgentLines(snapshot),
       ].join("\n"),

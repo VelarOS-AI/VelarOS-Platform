@@ -261,6 +261,36 @@ describe('default Agent execution stack', () => {
     expect(model.model.doStreamCalls).toHaveLength(1)
     dispatcher.clearExecution('parent')
   })
+
+  test('a worker resumed in a later execution continues its history with only the follow-up', async () => {
+    const model = createModel()
+    const { dispatcher } = createRunnerHarness(model)
+    const dispatchIn = (executionId: string, input: { prompt: string; threadId?: string }) =>
+      dispatcher.dispatch({
+        input: { ...input, mode: 'sync' },
+        parentCtx: { ...createContext('resume-parent'), execution: null },
+        events: new ExecutionEventBus(),
+        config: {},
+        executionId,
+      })
+
+    const first = parseSubAgentToolResult(await dispatchIn('run-1', { prompt: 'say done' }))
+    expect(first).toMatchObject({ status: 'completed', resumable: true })
+    dispatcher.clearExecution('run-1')
+
+    const resumed = parseSubAgentToolResult(
+      await dispatchIn('run-2', { threadId: first!.thread_id, prompt: 'now say done again' })
+    )
+    expect(resumed).toMatchObject({ status: 'completed', thread_id: first!.thread_id })
+    expect(model.model.doStreamCalls).toHaveLength(2)
+    // 第二次请求带着第一次的完整历史；委派外壳只出现一次（首条消息），追加指令原样接在后面。
+    const resumedPrompt = JSON.stringify(model.model.doStreamCalls[1]!.prompt)
+    expect(resumedPrompt.split('这是一项由上游角色委派的固定子任务').length - 1).toBe(1)
+    expect(resumedPrompt).toContain('model complete')
+    expect(resumedPrompt).toContain('now say done again')
+    expect(resumedPrompt).toContain('自上次运行后文件可能已变化，修改前先重新读取')
+    dispatcher.clearExecution('run-2')
+  })
 })
 
 test('host settlement is awaited, can continue with input, then stop without another request', async () => {

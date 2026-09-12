@@ -68,7 +68,8 @@ const dispatchAgentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '新建或续跑时交给子 Agent 的完整任务说明，应自洽且可独立执行；中断时省略。',
+        description:
+          '新建时交给子 Agent 的完整任务说明，须自洽、可独立执行；续跑时只写追加的新任务（子 Agent 保留着之前的上下文）；中断时省略。',
       })
     ),
   description: z
@@ -90,7 +91,8 @@ const dispatchAgentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '可选：复用已有子 Agent 线程 id 以续跑或中断。',
+        description:
+          '可选：已派子 Agent 的线程 id（取自之前结果里的 thread_id）。同一工作线上的追问、补做、纠偏、修复后复验优先带它续跑——子 Agent 保留着之前读过的上下文，不必从头再读；要独立复核或换了作用域时不带它、新派一个。配合 interrupt=true 则中断该线程。线程只在本会话内保留有限时间（默认空闲 30 分钟），过期后续跑会明确报错，届时不带 thread_id 新派一个自包含的。',
       })
     ),
   mode: z

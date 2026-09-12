@@ -31,10 +31,21 @@
 //    `markFailure` 会污染 provider 健康度（用户按一次停止，模型被判定为「不可用」）。
 //
 // ## ③ 续跑（resume）的身份校验为什么这么严
-// `validateResumeIdentity` 逐项比对 execution / parent session / 类型 / 自定义 agent id / readonly /
-// tool_scope / 工具分类集合 / model / route_category。判据：续跑 = **复用一段既有对话历史**，任何一项
-// 不一致都意味着这段历史是在另一套前提下产生的，接着跑会让模型带着错误前提工作——那类错误既不报错也
-// 不好查。失败方向选「拒绝并要求新派」。
+// `validateResumeIdentity` 逐项比对 parent session / 资源（resourceId）/ 类型 / 自定义 agent id /
+// readonly / tool_scope / 工具分类集合 / model / route_category。判据：续跑 = **复用一段既有对话历史**，
+// 任何一项不一致都意味着这段历史是在另一套前提下产生的，接着跑会让模型带着错误前提工作——那类错误
+// 既不报错也不好查。失败方向选「拒绝并要求新派」。**不比对 execution**：线程本来就要跨执行续跑
+// （见 ④），同一父会话的下一轮换一个 executionId 是常态。
+//
+// ## ④ 线程跨执行保留：续跑省的是重读成本
+// 子 Agent 读过的上下文就在它的线程历史里。`clearExecution` 因此只**回收执行作用域的状态**（计数、
+// 信号量、进展账本、relay），线程交给 `SubAgentSessionStore` 脱离执行、按父会话有限保留（上限见
+// AgentExecutionLimits.subAgentRetained*）；续跑时把线程重新挂到当前执行上，中断 / relay / 收尾照常。
+//  - failed / aborted 的线程**也能续跑**：历史只在轮次边界回写，留下的部分是自洽的；续跑指令会告诉
+//    子 Agent 上次异常结束、先核对现状。
+//  - 带 thread_id 却查无此线程（过期、被挤出、从未存在）**明确失败**，绝不静默新建 worker——续跑的
+//    prompt 通常只写追加任务，拿它从零起一个空白 worker 只会让模型在不自洽的指令上瞎猜。
+//  - 历史为空或超出体积上限的线程不可续跑，结果里 `resumable=false`，父 Agent 据此改为新派。
 import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
@@ -89,6 +100,7 @@ import {
   resolveReadonlyMode,
   resolveSubAgentTypeConfig,
   SubAgentSessionStore,
+  type SubAgentThreadRetention,
   type SubAgentTypeProvider,
 } from '../../sub-agent'
 import {
@@ -108,13 +120,20 @@ import {
   type SubAgentToolCategoryRequestResult,
   type SubAgentToolContext,
 } from './host-ports'
-import { buildSubAgentDispatchInstruction } from './instruction'
+import {
+  buildSubAgentDispatchInstruction,
+  buildSubAgentResumeBriefing,
+  buildSubAgentResumeInstruction,
+  type SubAgentResumeBriefing,
+} from './instruction'
 import {
   formatSubAgentBackgroundArtifact,
   formatSubAgentFailureRedispatchGuidance,
   formatSubAgentHighRiskConfirmationStatus,
   formatSubAgentStartedMessage,
   formatSubAgentTaskResultForParent,
+  formatSubAgentThreadUnavailableMessage,
+  formatSubAgentThreadUnresumableMessage,
   resolveSubAgentAgentName,
 } from './result-format'
 import { SubAgentProgressDigestRecorder } from './SubAgentProgressDigest'
@@ -125,6 +144,11 @@ interface SubAgentDispatchRequest {
   parentCtx: SubAgentToolContext
   events: ExecutionEventBus
   config: AgentExecutionConfig
+  /**
+   * 本次顶层执行的 id；缺省取 `config.execution.executionId`，再缺省回退父会话 id。
+   * 给没有 ToolExecutionApi 的宿主按轮区分执行用——执行结束时把同一个值交给 `clearExecution`。
+   */
+  executionId?: LooseOptional<string>
 }
 
 /** 派发身份分片：一次子 Agent 运行的稳定标识。 */
@@ -144,6 +168,8 @@ interface DispatchTypeScope {
 interface DispatchPromptScope {
   toolCategories: ToolCategoryId[]
   priorFindingsBriefing: Nullable<string>
+  /** 续跑时上一次运行的结局；新派为 null（此时拼完整委派指令，续跑只拼追加任务）。 */
+  resumeBriefing: Nullable<SubAgentResumeBriefing>
 }
 
 /** 派发控制分片：运行编排所需的事件面 / 重试 / 中继 / 模型覆盖 / effort 覆盖。 */
@@ -246,6 +272,12 @@ const SubAgentTransientRetryMaxAttempts = 2
 const DefaultMaxConcurrentSubAgents = 4
 const DefaultMaxSubAgentsPerExecution = 32
 
+/** 派发前就被拦下（没有建线程、或线程已不在）的结果：明确告诉父 Agent 这个 thread_id 续不了。 */
+const UnavailableThreadRetention: SubAgentThreadRetention = Object.freeze({
+  resumable: false,
+  reason: 'not-found',
+})
+
 /** 主 Agent 指定的模型不在同厂商可选列表里时，给结果正文补一句：本次沿用了什么、可以选什么。 */
 function formatModelFallbackNote(trace: LooseOptional<TeamModelSelectionTrace>): Nullable<string> {
   if (trace?.reason !== 'requested-model-unavailable') return null
@@ -298,7 +330,8 @@ class SubAgentDispatcher {
   private readonly dispatchCountByExecution = new Map<string, number>()
   /** 派发进展账本：无进展熔断（A）+ 跨派发发现复用（B），按执行隔离。 */
   private readonly progressLedger = new SubAgentProgressLedger()
-  private readonly sessionStore = new SubAgentSessionStore()
+  /** 子 Agent 线程：执行期挂在执行上，执行结束后按父会话有限保留供续跑（见文件头 ④）。 */
+  private readonly sessionStore: SubAgentSessionStore
   private readonly connectionRetryHelper = new AgentConnectionRetryHelper()
   private readonly cancelledAsyncThreads = new Set<string>()
   private readonly log = Log.tag('SubAgentDispatcher')
@@ -317,6 +350,7 @@ class SubAgentDispatcher {
     executionLimitOverrides: AgentExecutionLimitOverrides = {}
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
+    this.sessionStore = new SubAgentSessionStore({ limits: this.executionLimits })
   }
 
   public bindAgentRunner(agentRunner: SubAgentQueryRunner): void {
@@ -384,11 +418,13 @@ class SubAgentDispatcher {
 
   public async dispatch(request: SubAgentDispatchRequest): Promise<string> {
     const executionKey = resolveSubAgentExecutionKey({
-      executionId: request.config.execution?.executionId,
+      executionId: request.executionId ?? request.config.execution?.executionId,
       sessionId: request.parentCtx.sessionId,
     })
     const dispatchMode = request.input.mode ?? 'sync'
     const requestedThreadId = request.input.threadId?.trim()
+    // 先清掉过期 / 超额的保留线程，下面的查找才能如实回答「这条线程还在不在」。
+    this.sessionStore.prune()
 
     if (requestedThreadId && request.input.interrupt)
       return this.handleInterruptDispatch(request, executionKey, requestedThreadId)
@@ -396,7 +432,18 @@ class SubAgentDispatcher {
     const existingSession = requestedThreadId
       ? this.sessionStore.getSession(requestedThreadId)
       : null
+    // 带了 thread_id 却查无此线程：明确失败，绝不静默新建 worker（理由见文件头 ④）。
+    if (requestedThreadId && !existingSession) return formatSubAgentTaskResultForParent(
+        buildSubAgentTaskResult({
+          threadId: requestedThreadId,
+          text: formatSubAgentThreadUnavailableMessage(requestedThreadId),
+          status: 'failed',
+          retention: UnavailableThreadRetention,
+        })
+      )
     const isResume = !!existingSession
+    // 上一次运行的结局必须在状态被改成 running 之前读出来。
+    const resumeBriefing = isResume ? buildSubAgentResumeBriefing(existingSession!) : null
 
     const dispatchRequest = isResume
       ? this.buildResumeDispatchRequest(request, existingSession!)
@@ -415,6 +462,7 @@ class SubAgentDispatcher {
           threadId: requestedThreadId ?? `subagent:${randomUUID()}`,
           text: this.formatUnknownSubagentTypeMessage(requestedType),
           status: 'failed',
+          retention: UnavailableThreadRetention,
         })
       )
 
@@ -434,7 +482,6 @@ class SubAgentDispatcher {
     if (isResume && requestedThreadId) {
       const resumeIdentityError = this.validateResumeIdentity(
         dispatchRequest,
-        executionKey,
         requestedThreadId,
         existingSession!,
         typeConfig,
@@ -457,6 +504,17 @@ class SubAgentDispatcher {
         existingSession!
       )
       if (resumeEarly) return resumeEarly
+
+      // 运行中的线程上面已经转成 relay；到这里的线程都已收尾，再确认它真有可续的上下文。
+      const retention = this.sessionStore.describeRetention(requestedThreadId)
+      if (!retention.resumable) return formatSubAgentTaskResultForParent(
+          buildSubAgentTaskResult({
+            threadId: requestedThreadId,
+            text: formatSubAgentThreadUnresumableMessage(requestedThreadId, retention.reason),
+            status: 'failed',
+            retention,
+          })
+        )
     }
 
     const title =
@@ -476,18 +534,20 @@ class SubAgentDispatcher {
       progressEvaluation = this.progressLedger.evaluate(executionKey, signature)
       if (progressEvaluation.kind === 'hard-stop') return formatSubAgentTaskResultForParent(
           buildSubAgentTaskResult({
-            threadId: requestedThreadId ?? `subagent:${randomUUID()}`,
+            threadId: `subagent:${randomUUID()}`,
             text: `已跳过本次子智能体派发：${progressEvaluation.note}`,
             status: 'failed',
+            retention: UnavailableThreadRetention,
           })
         )
 
       const used = this.dispatchCountByExecution.get(executionKey) ?? 0
       if (used >= DefaultMaxSubAgentsPerExecution) return formatSubAgentTaskResultForParent(
           buildSubAgentTaskResult({
-            threadId: requestedThreadId ?? `subagent:${randomUUID()}`,
+            threadId: `subagent:${randomUUID()}`,
             text: `本次执行已达到子智能体派发上限（${DefaultMaxSubAgentsPerExecution}）。请直接完成剩余工作或合并任务。`,
             status: 'failed',
+            retention: UnavailableThreadRetention,
           })
         )
       this.dispatchCountByExecution.set(executionKey, used + 1)
@@ -551,6 +611,8 @@ class SubAgentDispatcher {
     )
 
     if (isResume) {
+      // 续跑的线程挂到本次执行上：中断、relay 与本次执行收尾时的脱离都按新执行生效。
+      this.sessionStore.attachToExecution(threadId, executionKey)
       this.sessionStore.updateSession(threadId, {
         status: 'running',
         request: {
@@ -558,6 +620,7 @@ class SubAgentDispatcher {
           description: dispatchRequest.input.description,
           mode: dispatchMode,
           readonly: readonlyMode,
+          effort: resolvedEffort,
         },
       })
     } else {
@@ -565,6 +628,7 @@ class SubAgentDispatcher {
         threadId,
         executionId: executionKey,
         parentSessionId: dispatchRequest.parentCtx.sessionId,
+        resourceId: dispatchRequest.parentCtx.resourceId,
         subagentType: typeConfig.subagentType,
         prompt: dispatchRequest.input.prompt,
         description: dispatchRequest.input.description,
@@ -575,14 +639,20 @@ class SubAgentDispatcher {
         model: resolvedModel,
         routeCategory: this.resolveRouteCategory(dispatchRequest, typeConfig),
         agentName,
-        request: { custom_agent_id: toNullable(typeConfig.customAgentId) },
+        request: {
+          custom_agent_id: toNullable(typeConfig.customAgentId),
+          effort: resolvedEffort,
+        },
       })
     }
 
     if (!isResume) {
       this.progressLedger.recordDispatch(executionKey, signature)
     }
-    const priorFindingsBriefing = this.progressLedger.buildPriorFindingsBriefing(executionKey)
+    // 「已知上下文」前缀只给新派的 worker：续跑的 worker 历史里已有它自己的发现。
+    const priorFindingsBriefing = isResume
+      ? null
+      : this.progressLedger.buildPriorFindingsBriefing(executionKey)
 
     // sync 与 async 都创建后台 job 供侧边栏看进度流；区别只在父 Agent 是否阻塞等结果：
     // - async：fire-and-forget，立即返回可等待 job（父继续，稍后 job:wait 收束）。
@@ -612,7 +682,7 @@ class SubAgentDispatcher {
         statusBase,
         progress: progressEvaluation,
         dispatchMode,
-        isResume,
+        resumeBriefing,
         readonlyMode,
         resolvedModel,
         resolvedEffort,
@@ -648,7 +718,7 @@ class SubAgentDispatcher {
       statusBase,
       progress: progressEvaluation,
       dispatchMode,
-      isResume,
+      resumeBriefing,
       readonlyMode,
       resolvedModel,
       resolvedEffort,
@@ -672,7 +742,8 @@ class SubAgentDispatcher {
     statusBase: Omit<WorkerStatusArgs, 'status' | 'summary' | 'error' | 'result'>
     progress: ReturnType<SubAgentProgressLedger['evaluate']> | { kind: 'continue' }
     dispatchMode: 'sync' | 'async'
-    isResume: boolean
+    /** 续跑时上一次运行的结局；新派为 null。 */
+    resumeBriefing: Nullable<SubAgentResumeBriefing>
     readonlyMode: boolean
     resolvedModel: Nullable<string>
     resolvedEffort: Nullable<ThinkingDepth>
@@ -723,6 +794,7 @@ class SubAgentDispatcher {
         prompt: {
           toolCategories: args.initialToolCategories,
           priorFindingsBriefing: args.priorFindingsBriefing,
+          resumeBriefing: args.resumeBriefing,
         },
         control: {
           workerEvents: args.workerEvents,
@@ -757,11 +829,12 @@ class SubAgentDispatcher {
         structuredOutput: workerOutput.structuredOutput,
         usage: workerOutput.usage,
         modelTrace: workerOutput.modelTrace,
+        retention: this.sessionStore.describeRetention(args.threadId),
       })
       this.sessionStore.appendRunResult(args.threadId, taskResult)
       this.sessionStore.setStatus(args.threadId, 'completed')
 
-      if (!args.isResume) {
+      if (!args.resumeBriefing) {
         this.progressLedger.recordFinding(executionKey, {
           type: this.resolveTypeKey(args.typeConfig),
           title: args.title,
@@ -794,6 +867,7 @@ class SubAgentDispatcher {
           text: '子智能体已中断。',
           status: 'aborted',
           windDownReason: 'user_interrupt',
+          retention: this.sessionStore.describeRetention(args.threadId),
         })
         this.sessionStore.appendRunResult(args.threadId, taskResult)
         this.sessionStore.setStatus(args.threadId, 'aborted')
@@ -811,10 +885,12 @@ class SubAgentDispatcher {
       }
 
       const message = this.formatWorkerFailureMessage(appError)
+      const retention = this.sessionStore.describeRetention(args.threadId)
       const taskResult = buildSubAgentTaskResult({
         threadId: args.threadId,
-        text: `${message}\n\n${formatSubAgentFailureRedispatchGuidance(args.threadId)}`,
+        text: `${message}\n\n${formatSubAgentFailureRedispatchGuidance(args.threadId, retention.resumable)}`,
         status: 'failed',
+        retention,
       })
       this.sessionStore.appendRunResult(args.threadId, taskResult)
       this.sessionStore.setStatus(args.threadId, 'failed')
@@ -929,6 +1005,7 @@ class SubAgentDispatcher {
       text: '子智能体已中断。',
       status: 'aborted',
       windDownReason: 'user_interrupt',
+      retention: this.sessionStore.describeRetention(threadId),
     })
     try {
       this.backgroundJobManager.appendTerminalArtifact(
@@ -955,17 +1032,20 @@ class SubAgentDispatcher {
     threadId: string
   ): string {
     const aborted = this.abortWorker(executionKey, threadId, 'Sub-agent interrupted via agent:dispatch')
-    const session = this.sessionStore.getSession(threadId)
+    // 别的父会话的线程对本会话等同于不存在。
+    const owned =
+      this.sessionStore.getSession(threadId)?.parent_session_id === request.parentCtx.sessionId
     const summary = aborted
       ? '已发送中断信号给正在运行的子智能体。'
-      : session
-        ? '该子智能体线程当前不在运行中。'
-        : '未找到该子智能体线程。'
+      : owned
+        ? '该子智能体线程当前不在运行中，无需中断。'
+        : `未找到子智能体线程 ${threadId}（可能已过期释放，或从未创建），没有需要中断的运行。`
 
     const taskResult = buildSubAgentTaskResult({
       threadId,
       text: summary,
       status: aborted ? 'aborted' : 'failed',
+      retention: owned ? this.sessionStore.describeRetention(threadId) : UnavailableThreadRetention,
     })
     if (aborted) {
       this.sessionStore.appendRunResult(threadId, taskResult)
@@ -998,6 +1078,7 @@ class SubAgentDispatcher {
           ? request.input.readonly
           : storedReadonly,
         model: request.input.model ?? toOptional(storedRequest.model),
+        effort: request.input.effort ?? toOptional(storedRequest.effort),
         routeCategory: request.input.routeCategory ?? toOptional(storedRequest.route_category),
       },
     }
@@ -1005,7 +1086,6 @@ class SubAgentDispatcher {
 
   private validateResumeIdentity(
     request: SubAgentDispatchRequest,
-    executionKey: string,
     threadId: string,
     session: NonNullable<ReturnType<SubAgentSessionStore['getSession']>>,
     typeConfig: ResolvedSubAgentTypeConfig,
@@ -1015,12 +1095,14 @@ class SubAgentDispatcher {
     const reject = (reason: string): string =>
       `不能续跑子智能体 ${threadId}：${reason}。请新派发一个子 Agent。`
 
-    if (session.execution_id !== executionKey) return reject(
-        `threadId 属于 execution "${session.execution_id}"，当前 execution 是 "${executionKey}"`
-      )
-
     if (session.parent_session_id !== request.parentCtx.sessionId) return reject(
         `threadId 属于 parent session "${session.parent_session_id}"，当前 parent session 是 "${request.parentCtx.sessionId}"`
+      )
+
+    const storedResource = normalizeResumeIdentityString(session.resource_id)
+    const currentResource = normalizeResumeIdentityString(request.parentCtx.resourceId)
+    if (storedResource !== currentResource) return reject(
+        `threadId 是在资源 "${storedResource || '（无）'}" 上派发的，当前资源是 "${currentResource || '（无）'}"`
       )
 
     if (session.subagent_type !== typeConfig.subagentType) return reject(
@@ -1031,10 +1113,6 @@ class SubAgentDispatcher {
     const currentCustomAgentId = toNullable(typeConfig.customAgentId)
     if (storedCustomAgentId !== currentCustomAgentId) return reject(
         `threadId 属于自定义 agent "${storedCustomAgentId ?? '（无）'}"，当前请求是 "${currentCustomAgentId ?? '（无）'}"`
-      )
-
-    if (session.status === 'failed' || session.status === 'aborted') return reject(
-        `threadId 已处于 ${session.status} 状态，不能复用不完整的子智能体上下文`
       )
 
     const storedRequest = session.request
@@ -1333,7 +1411,21 @@ class SubAgentDispatcher {
     ].join('：')
   }
 
-  /** 顶层执行结束后释放计数与信号量，避免无界增长。 */
+  /**
+   * 父会话被删除时由宿主调用：中断该会话仍在运行的子 Agent，并丢掉它的全部线程（含保留期内的）。
+   * 执行作用域的计数、信号量与账本不在这里回收，它们仍随各自执行的 `clearExecution` 走。
+   */
+  public releaseParentSession(parentSessionId: string): void {
+    for (const thread of this.sessionStore.releaseParentSession(parentSessionId)) {
+      if (thread.executionId)
+        this.abortWorker(thread.executionId, thread.threadId, 'Parent session released')
+    }
+  }
+
+  /**
+   * 顶层执行结束：中断仍在运行的 worker，回收本次执行的计数、信号量与进展账本，避免无界增长。
+   * 子 Agent 线程**不删**——脱离执行转入保留期，供同一父会话的后续执行带 thread_id 续跑（见文件头 ④）。
+   */
   public clearExecution(executionKey: string): void {
     this.guidanceRelayRegistry.abortAll(executionKey, 'Execution cleared')
     this.dispatchCountByExecution.delete(executionKey)
@@ -1360,14 +1452,17 @@ class SubAgentDispatcher {
     const modelSelection =
       request.config.modelSelection ?? this.configService.chatConfig.modelSelection
     const resourceId = toNullable(request.parentCtx.resourceId)
-    const instruction = buildSubAgentDispatchInstruction(
-      request.input,
-      typeConfig,
-      title,
-      prompt.toolCategories,
-      prompt.priorFindingsBriefing,
-      type.readonlyMode
-    )
+    // 续跑只拼追加任务：首次派发的委派外壳与上下文都在线程历史里（QueryLoop 把它原样接在历史后）。
+    const instruction = prompt.resumeBriefing
+      ? buildSubAgentResumeInstruction(request.input, prompt.resumeBriefing)
+      : buildSubAgentDispatchInstruction(
+          request.input,
+          typeConfig,
+          title,
+          prompt.toolCategories,
+          prompt.priorFindingsBriefing,
+          type.readonlyMode
+        )
     const routeCategory = this.resolveRouteCategory(request, typeConfig)
     // 路由端口收的是模型选择本身，不是整份 chatConfig：传整份时两端端口都在根上找不到 provider，
     // 子 Agent 一律报「模型 selection.provider 必须显式提供」。

@@ -125,7 +125,10 @@ interface QueryLoopSubAgentOptions<TEvents extends QueryTurnEvents> extends SubA
   softDeadlineAt?: number
   /** 主 Agent relay 的运行中引导；每条消息只在子 Agent 某一轮 turn 开始时消费一次。 */
   consumeRelayedGuidance?: () => Nullable<string> | Promise<Nullable<string>>
-  /** 续跑：注入已有对话历史，跳过从零构造的首条 user 消息。 */
+  /**
+   * 续跑：注入已有对话历史，跳过从零构造的首条 user 消息。此时 `task` 是派发器拼好的追加指令，
+   * 原样作为一条内部跟进消息接在历史后，不再套委派合约外壳（外壳已在历史的首条消息里）。
+   */
   initialHistory?: ModelMessage[]
   /** 每轮结束后回写 history，供 session store 持久化。 */
   onHistoryUpdate?: (history: ModelMessage[]) => void
@@ -325,15 +328,12 @@ class QueryLoop<
       opts: args.opts,
       parentRoleId: args.parentCtx.role.id,
     })
-    const delegatedInstruction = buildSubAgentInstruction(delegation)
     const initialHistory = args.opts.initialHistory ?? []
-    const hasInitialHistory = !isEmpty(initialHistory)
-    const history: ModelMessage[] = hasInitialHistory
-      ? [...initialHistory]
-      : [{ role: 'user', content: delegatedInstruction }]
-    if (hasInitialHistory) {
-      history.push(createInternalFollowUpMessage(delegatedInstruction))
-    }
+    // 续跑时历史首条已是委派指令，再套一遍外壳只会把目标角色 / 授权分类 / 旧任务重复一遍白占上下文，
+    // 所以追加指令原样接上；新派才把任务包进委派合约。
+    const history: ModelMessage[] = isEmpty(initialHistory)
+      ? [{ role: 'user', content: buildSubAgentInstruction(delegation) }]
+      : [...initialHistory, createInternalFollowUpMessage(args.task)]
     // 子 Agent 锁定目标角色，角色决定默认工具、prompt 和下一步委派方向。
     const roleResolution = this.roleEngine.resolve({
       lockedRoleId: delegation.targetRoleId,
@@ -849,8 +849,10 @@ class QueryLoop<
       assertRunning()
       throw error
     } finally {
-      // 子 agent 的账本随派发结束即弃：这条消息序列不会再被编译，留着只占 registry 的名额
-      // （每次派发一个键，长跑会话会把 128 个格子迅速填满，把真正长寿的父会话挤出去）。
+      // 子 agent 的账本随本次运行结束即弃。这条消息序列之后**可能**再被编译：派发器按 threadId 续跑
+      // 时用的是同一个键（contextEpochScope = threadId），届时账本从保留下来的历史重新摄入一遍——这笔
+      // 重建成本可以接受。反过来把账本留到续跑保留期结束，就要长期占着 registry 的名额（每条线程一个
+      // 键，长跑会话会把 128 个格子迅速填满，把真正长寿的父会话挤出去）。
       this.governanceSessions.invalidateSession(governanceSessionId)
     }
   }

@@ -138,15 +138,29 @@ describe('agent dispatch input contract', () => {
         listDescriptors: () => descriptors,
       }
     )
-    const queryCalls: Array<{ task: string; toolCategories?: readonly string[] }> = []
+    const queryCalls: Array<{
+      task: string
+      toolCategories?: readonly string[]
+      initialHistoryLength: number
+    }> = []
     let parentActivations = 0
     dispatcher.bindAgentRunner({
       query: async (task, _parentContext, options) => {
-        queryCalls.push({ task, toolCategories: options.toolCategories })
+        const initialHistory = options.initialHistory ?? []
+        queryCalls.push({
+          task,
+          toolCategories: options.toolCategories,
+          initialHistoryLength: initialHistory.length,
+        })
         const capability = await options.requestToolCategories?.(['system-files'], 'inspect a system file')
         expect(capability?.enabledCategories).toEqual(['system-files'])
-        options.onHistoryUpdate?.([])
-        return `worker result ${queryCalls.length}`
+        const text = `worker result ${queryCalls.length}`
+        options.onHistoryUpdate?.([
+          ...initialHistory,
+          { role: 'user', content: task },
+          { role: 'assistant', content: text },
+        ])
+        return text
       },
     })
     const parentContext = {
@@ -188,7 +202,10 @@ describe('agent dispatch input contract', () => {
     expect(resumed).toContain('worker result 2')
     expect(resumed).not.toContain('不能续跑子智能体')
     expect(queryCalls).toHaveLength(2)
-    expect(queryCalls[1]?.task).toContain('类型：explore')
+    // 续跑沿用原线程的类型与工具面，指令只带追加任务；首次派发的「类型：explore」外壳留在历史里。
+    expect(queryCalls[1]?.initialHistoryLength).toBe(2)
+    expect(queryCalls[1]?.task).toContain('Continue the inspection.')
+    expect(queryCalls[1]?.task).not.toContain('类型：explore')
     expect(queryCalls[1]?.toolCategories).toEqual(['project-files'])
     expect(parentActivations).toBe(0)
     dispatcher.clearExecution('parent-session')

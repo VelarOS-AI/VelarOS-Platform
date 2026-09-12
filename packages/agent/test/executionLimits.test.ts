@@ -17,6 +17,10 @@ void describe('agent execution limits', () => {
       subAgentSoftDeadlineMs: 4 * 60 * 60_000,
       subAgentMaxTurns: null,
       modelStreamIdleTimeoutMs: 5 * 60_000,
+      subAgentRetainedThreadsPerSession: 8,
+      subAgentRetainedThreadsTotal: 64,
+      subAgentRetainedThreadIdleTtlMs: 30 * 60_000,
+      subAgentRetainedHistoryMaxChars: 600_000,
     })
     assert.equal(DefaultAgentExecutionLimits.primaryMaxTurns, null)
     assert.equal(DefaultAgentExecutionLimits.subAgentMaxTurns, null)
@@ -31,6 +35,10 @@ void describe('agent execution limits', () => {
         subAgentSoftDeadlineMs: 30_000,
         subAgentMaxTurns: 8,
         modelStreamIdleTimeoutMs: 15_000,
+        subAgentRetainedThreadsPerSession: 2,
+        subAgentRetainedThreadsTotal: 4,
+        subAgentRetainedThreadIdleTtlMs: 60_000,
+        subAgentRetainedHistoryMaxChars: 10_000,
       }),
       {
         standardExecutionWallClockTimeoutMs: 60_000,
@@ -39,7 +47,37 @@ void describe('agent execution limits', () => {
         subAgentSoftDeadlineMs: 30_000,
         subAgentMaxTurns: 8,
         modelStreamIdleTimeoutMs: 15_000,
+        subAgentRetainedThreadsPerSession: 2,
+        subAgentRetainedThreadsTotal: 4,
+        subAgentRetainedThreadIdleTtlMs: 60_000,
+        subAgentRetainedHistoryMaxChars: 10_000,
       }
+    )
+  })
+
+  void test('lets a host turn sub-agent thread retention off but rejects nonsense retention limits', () => {
+    // 计数 0 = 执行结束即丢（旧行为）；负数、非整数与零 TTL / 零体积上限都没有意义。
+    const disabled = resolveAgentExecutionLimits({
+      subAgentRetainedThreadsPerSession: 0,
+      subAgentRetainedThreadsTotal: 0,
+    })
+    assert.equal(disabled.subAgentRetainedThreadsPerSession, 0)
+    assert.equal(disabled.subAgentRetainedThreadsTotal, 0)
+    assert.throws(
+      () => resolveAgentExecutionLimits({ subAgentRetainedThreadsPerSession: -1 }),
+      /subAgentRetainedThreadsPerSession/u
+    )
+    assert.throws(
+      () => resolveAgentExecutionLimits({ subAgentRetainedThreadsTotal: 1.5 }),
+      /subAgentRetainedThreadsTotal/u
+    )
+    assert.throws(
+      () => resolveAgentExecutionLimits({ subAgentRetainedThreadIdleTtlMs: 0 }),
+      /subAgentRetainedThreadIdleTtlMs/u
+    )
+    assert.throws(
+      () => resolveAgentExecutionLimits({ subAgentRetainedHistoryMaxChars: 0 }),
+      /subAgentRetainedHistoryMaxChars/u
     )
   })
 

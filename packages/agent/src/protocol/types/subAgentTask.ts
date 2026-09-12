@@ -53,6 +53,8 @@ export interface SubAgentTaskRequest {
   mode?: LooseOptional<SubAgentTaskMode>
   readonly?: LooseOptional<boolean>
   model?: LooseOptional<string>
+  /** 本线程生效的 reasoning effort；续跑省略 effort 时沿用它。 */
+  effort?: LooseOptional<ThinkingDepth>
   route_category?: LooseOptional<TeamModelRouteCategory>
   attachments?: LooseOptional<string[]>
   interrupt?: LooseOptional<boolean>
@@ -140,12 +142,19 @@ export interface SubAgentTaskResult {
   model_trace?: LooseOptional<TeamModelSelectionTrace>
   wind_down_reason?: LooseOptional<SubAgentWindDownReason>
   full_digest_ref?: LooseOptional<string>
+  /** 父 Agent 能否带 thread_id 续跑这条线程（它保留着之前的上下文）；缺省表示本结果不作判断。 */
+  resumable?: LooseOptional<boolean>
+  /** 可续跑线程的保留期限估计（epoch 毫秒）；线程过多时可能被更早淘汰，过期后续跑会明确报错。 */
+  retained_until?: LooseOptional<number>
 }
 
 export interface SubAgentSessionRecord {
   thread_id: string
+  /** 线程当前挂靠（或最后挂靠）的顶层执行；续跑会把线程重新挂到发起续跑的执行上。 */
   execution_id: string
   parent_session_id: string
+  /** 派发时父上下文的资源标识（resourceId）；续跑须在同一资源上。 */
+  resource_id?: LooseOptional<string>
   subagent_type: SubAgentTypeId
   status: SubAgentSessionStatus
   created_at: number

@@ -15,7 +15,14 @@ export {
   formatSubAgentToolResult,
   parseSubAgentToolResult,
 } from './SubAgentResultBuilder'
-export type { CreateSubAgentSessionInput } from './SubAgentSessionStore'
+export type {
+  CreateSubAgentSessionInput,
+  SubAgentReleasedThread,
+  SubAgentSessionStoreOptions,
+  SubAgentThreadRetention,
+  SubAgentThreadRetentionLimits,
+  SubAgentThreadUnresumableReason,
+} from './SubAgentSessionStore'
 export { SubAgentSessionStore } from './SubAgentSessionStore'
 export type {
   ResolvedSubAgentTypeConfig,
