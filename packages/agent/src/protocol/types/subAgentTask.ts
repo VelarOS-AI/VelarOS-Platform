@@ -127,6 +127,11 @@ export interface SubAgentUsage {
   outputTokens?: number
   totalTokens?: number
   costUsd?: number
+  /** 已含在 outputTokens 里的推理 token。 */
+  reasoningTokens?: number
+  /** 已含在 inputTokens 里、命中 / 写入供应方缓存的部分；界面按缓存单价单独计价。 */
+  cacheReadInputTokens?: number
+  cacheWriteInputTokens?: number
 }
 
 export interface SubAgentTaskResult {

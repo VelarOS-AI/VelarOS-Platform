@@ -236,6 +236,10 @@ export interface StreamTurnResult {
    */
   outputTokens?: LooseOptional<number>
   costUsd?: LooseOptional<number>
+  /** 推理 token（含在 outputTokens 里）与输入中命中 / 写入缓存的 token；子 Agent 用量据此分项计价。 */
+  reasoningTokens?: LooseOptional<number>
+  cacheReadInputTokens?: LooseOptional<number>
+  cacheWriteInputTokens?: LooseOptional<number>
   finishReason?: LooseOptional<string>
   requestFingerprint?: LooseOptional<string>
   providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
@@ -684,6 +688,9 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         predictedInputTokens,
         outputTokens: toNullable(turnState.outputTokens),
         costUsd: toNullable(turnState.costUsd),
+        reasoningTokens: toNullable(turnState.reasoningTokens),
+        cacheReadInputTokens: toNullable(turnState.cacheReadInputTokens),
+        cacheWriteInputTokens: toNullable(turnState.cacheWriteInputTokens),
         finishReason: toNullable(turnState.finishReason),
         requestFingerprint: toNullable(turnState.requestFingerprint),
         providerRequestSnapshot: toOptional(providerRequestSnapshot),

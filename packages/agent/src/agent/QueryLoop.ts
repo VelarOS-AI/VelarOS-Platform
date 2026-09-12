@@ -463,6 +463,9 @@ class QueryLoop<
     let usageInputTokens: Nullable<number> = null
     let usageOutputTokens: Nullable<number> = null
     let usageCostUsd: Nullable<number> = null
+    let usageReasoningTokens: Nullable<number> = null
+    let usageCacheReadInputTokens: Nullable<number> = null
+    let usageCacheWriteInputTokens: Nullable<number> = null
     const reportUsage = (): void => {
       if (isNull(usageInputTokens) && isNull(usageOutputTokens) && isNull(usageCostUsd)) return
       const totalTokens =
@@ -474,6 +477,9 @@ class QueryLoop<
         outputTokens: toOptional(usageOutputTokens),
         totalTokens: toOptional(totalTokens),
         costUsd: toOptional(usageCostUsd),
+        reasoningTokens: toOptional(usageReasoningTokens),
+        cacheReadInputTokens: toOptional(usageCacheReadInputTokens),
+        cacheWriteInputTokens: toOptional(usageCacheWriteInputTokens),
       })
     }
 
@@ -708,6 +714,15 @@ class QueryLoop<
       }
       if (isPresent(result.costUsd)) {
         usageCostUsd = (usageCostUsd ?? 0) + result.costUsd
+      }
+      if (isPresent(result.reasoningTokens)) {
+        usageReasoningTokens = (usageReasoningTokens ?? 0) + result.reasoningTokens
+      }
+      if (isPresent(result.cacheReadInputTokens)) {
+        usageCacheReadInputTokens = (usageCacheReadInputTokens ?? 0) + result.cacheReadInputTokens
+      }
+      if (isPresent(result.cacheWriteInputTokens)) {
+        usageCacheWriteInputTokens = (usageCacheWriteInputTokens ?? 0) + result.cacheWriteInputTokens
       }
 
       const disposition = await args.lifecycle?.onTurnSettled?.({ turn, history, toolContext: childCtx, abortSignal: childCtx.abortSignal, result })

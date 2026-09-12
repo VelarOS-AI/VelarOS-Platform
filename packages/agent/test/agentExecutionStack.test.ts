@@ -93,11 +93,13 @@ function createContext(sessionId: string, abortController = new AbortController(
   }
 }
 
-function createModel(onStream: () => void = () => {}) {
-  const usage = {
+function createModel(
+  onStream: () => void = () => {},
+  usage = {
     inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
     outputTokens: { total: 3, text: 3, reasoning: 0 },
   }
+) {
   const model = new MockLanguageModelV3({
     provider: 'probe',
     modelId: 'probe',
@@ -260,6 +262,29 @@ describe('default Agent execution stack', () => {
     expect(result).not.toContain('failed')
     expect(model.model.doStreamCalls).toHaveLength(1)
     dispatcher.clearExecution('parent')
+  })
+
+  test('a worker reports cached and reasoning tokens so its cost can be priced per kind', async () => {
+    const model = createModel(() => {}, {
+      inputTokens: { total: 100, noCache: 30, cacheRead: 60, cacheWrite: 10 },
+      outputTokens: { total: 20, text: 15, reasoning: 5 },
+    })
+    const { dispatcher } = createRunnerHarness(model)
+    const result = parseSubAgentToolResult(await dispatcher.dispatch({
+      input: { prompt: 'say done', mode: 'sync' },
+      parentCtx: { ...createContext('usage-parent'), execution: null },
+      events: new ExecutionEventBus(),
+      config: {},
+      executionId: 'usage-run',
+    }))
+    expect(result?.usage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 20,
+      reasoningTokens: 5,
+      cacheReadInputTokens: 60,
+      cacheWriteInputTokens: 10,
+    })
+    dispatcher.clearExecution('usage-run')
   })
 
   test('a worker resumed in a later execution continues its history with only the follow-up', async () => {

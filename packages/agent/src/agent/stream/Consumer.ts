@@ -112,6 +112,10 @@ interface StreamConsumerTurnState {
    */
   outputTokens?: LooseOptional<number>;
   costUsd?: LooseOptional<number>;
+  /** 推理 token（已含在 outputTokens 里）与输入里命中 / 写入缓存的部分：计价时按各自单价拆开算。 */
+  reasoningTokens?: LooseOptional<number>;
+  cacheReadInputTokens?: LooseOptional<number>;
+  cacheWriteInputTokens?: LooseOptional<number>;
   finishReason?: LooseOptional<string>;
   requestFingerprint?: LooseOptional<string>;
 }
@@ -944,6 +948,9 @@ class StreamConsumer {
     // 观测富化：outputTokens / costUsd 与 inputTokens 同源同回传通道（#37 阶段 C 片 1）。
     turnState.outputTokens = diagnostics.outputTokens;
     turnState.costUsd = diagnostics.costUsd;
+    turnState.reasoningTokens = diagnostics.reasoningTokens;
+    turnState.cacheReadInputTokens = toNullable(diagnostics.cacheReadInputTokens);
+    turnState.cacheWriteInputTokens = toNullable(diagnostics.cacheWriteInputTokens);
     const usage: ProviderTurnUsage = {};
     if (isPresent(diagnostics.inputTokens)) {
       usage.inputTokens = diagnostics.inputTokens;
