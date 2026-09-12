@@ -46,6 +46,7 @@ import {
   type ConversationRefreshGeneration,
   resolveConversationRefreshGeneration,
 } from './conversationRefreshGeneration'
+import { getGoalLifecycleRefreshKey, getLatestCurrentTurnToolBlock } from './currentTurnToolBlocks'
 import { useAwaitingConfirmationUserActionCards } from './useAwaitingConfirmationUserActionCards'
 import { useChatConversationScroll } from './useChatConversationScroll'
 import { useChatConversationTranscriptModel } from './useChatConversationTranscriptModel'
@@ -67,7 +68,6 @@ import type {
   UserActionCard as UserActionCardType,
   UserActionCardResult,
 } from '#contracts'
-import { isConversationTurnInputMessage } from '#contracts'
 import { buildGoalDockViewModel } from '#internal/goalLifecycle'
 import { isEmpty, isPresent, Log, optionalWhenLazy, toNullable, toOptional } from '#internal/runtime'
 
@@ -134,25 +134,6 @@ export interface ChatConversationPaneProps {
   onDismissStickyDockItem?: (itemId: string) => void
   onFollowLockedChange: (locked: boolean) => void
   onResolvePreflightUserActionCard?: (result: UserActionCardResult) => void
-}
-
-function getLatestPlanToolBlock(messages: ChatMessage[]): Nullable<ToolCallBlockType> {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = messages[messageIndex]
-
-    if (isConversationTurnInputMessage(message)) return null
-    if (message.role !== 'assistant') {
-      continue
-    }
-
-    for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = message.blocks[blockIndex]
-
-      if (block.type === 'tool-call' && block.toolName === 'plan:update') return block
-    }
-  }
-
-  return null
 }
 
 export function ChatConversationPane({
@@ -298,6 +279,8 @@ export function ChatConversationPane({
     }
   }, [actionPort, sessionId])
 
+  const goalLifecycleRefreshKey = useMemo(() => getGoalLifecycleRefreshKey(messages), [messages])
+
   useEffect(() => {
     let active = true
     void actionPort
@@ -316,7 +299,14 @@ export function ChatConversationPane({
     return () => {
       active = false
     }
-  }, [actionPort, sessionId, messages.length, runtime.lastRunFinishedAt, runtime.status])
+  }, [
+    actionPort,
+    sessionId,
+    messages.length,
+    runtime.lastRunFinishedAt,
+    runtime.status,
+    goalLifecycleRefreshKey,
+  ])
 
   const goalDockModel = useMemo(
     () => (goalLifecycleArtifact ? buildGoalDockViewModel(goalLifecycleArtifact) : null),
@@ -426,7 +416,7 @@ export function ChatConversationPane({
     enableOlderMessageSentinel: isWindowAtLoadedTop,
   })
   const activeDockPlanBlock = useMemo(() => {
-    const latestPlanBlock = getLatestPlanToolBlock(messages)
+    const latestPlanBlock = getLatestCurrentTurnToolBlock(messages, (toolName) => toolName === 'plan:update')
 
     return latestPlanBlock && !isPlanToolBlockComplete(latestPlanBlock) ? latestPlanBlock : null
   }, [messages])
