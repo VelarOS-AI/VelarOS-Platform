@@ -33,8 +33,13 @@ describe('project approval context', () => {
     })).toBe(false)
   })
 
-  test('recognizes split and long recursive force removals as dangerous', () => {
+  // 删整个文件夹恢复不了，不论带不带 -f 都要确认；删单个文件是日常操作，不打扰用户。
+  test('treats every recursive removal as dangerous and explains it deletes a whole folder', () => {
     for (const command of [
+      'rm -r ./directory',
+      'rm -R ./directory',
+      'rm --recursive ./directory',
+      'rm --rec ./directory',
       'rm -r -f ./victim',
       'rm -f -r ./victim',
       'rm --recursive --force ./victim',
@@ -42,14 +47,57 @@ describe('project approval context', () => {
       'RM -RF /',
       '/bin/RM -Rf /',
       'RM --RECURSIVE --FORCE /',
+      'sudo rm -r /tmp/cache',
+      'ls | xargs rm -r',
+      'git rm -rf ./directory',
+      'rm ./directory -Recurse',
     ]) {
       const plan = analyzeCommandExecution(command)
       expect(plan.isDangerous).toBe(true)
       expect(plan.shouldRequestConfirmation).toBe(true)
+      expect(plan.dangerousReason).toContain('递归删除整个文件夹')
     }
 
-    expect(analyzeCommandExecution('rm -f ./file').isDangerous).toBe(false)
-    expect(analyzeCommandExecution('rm -r ./directory').isDangerous).toBe(false)
+    for (const command of [
+      'rm ./file',
+      'rm -f ./file',
+      'rm -v src/f.ts',
+      'rm docs/s.md',
+      'rm ./file -Force',
+      'git rm -r --cached ./directory',
+      'git rm -r ./directory',
+    ]) {
+      expect(analyzeCommandExecution(command).isDangerous).toBe(false)
+    }
+  })
+
+  test('treats Windows recursive removal forms as dangerous but single-file deletes as routine', () => {
+    for (const command of [
+      'Remove-Item -Recurse -Force build',
+      'Remove-Item build -Recurse',
+      'Remove-Item build -Recurse:$true',
+      'ri build -r',
+      'rd /s /q build',
+      'RMDIR /S build',
+      'rmdir/s/q build',
+      'del /s /q *.tmp',
+    ]) {
+      const plan = analyzeCommandExecution(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.dangerousReason).toContain('递归删除整个文件夹')
+    }
+
+    for (const command of [
+      'Remove-Item .\\notes.txt',
+      'Remove-Item .\\notes.txt -Force',
+      'del /f /q notes.txt',
+      'del docs/s.md',
+      'rd build',
+      'git branch --del -r origin/obsolete',
+    ]) {
+      expect(analyzeCommandExecution(command).isDangerous).toBe(false)
+    }
+    expect(analyzeCommandExecution('Remove-Item HKLM:\\Software\\Demo').isDangerous).toBe(true)
   })
 
   test('dangerous project approval identifies the precise command and working directory', async () => {
