@@ -44,8 +44,12 @@ function shouldScanFile(filePath) {
 }
 
 async function collectExecutableSources(directory) {
+  const entries = await readdir(directory, { withFileTypes: true })
+  // 嵌套的 git 检出（其他会话放在仓库目录里的 worktree、子仓库）不是本仓源码，由它自己的门禁负责。
+  if (directory !== repositoryRoot && entries.some((entry) => entry.name === '.git')) return []
+
   const files = []
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+  for (const entry of entries) {
     const entryPath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
       if (ignoredDirectories.has(entry.name)) continue
