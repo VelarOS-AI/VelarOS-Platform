@@ -192,9 +192,8 @@ function validationContextViolations(source, path, sourcePath) {
 
 function registeredValidatorContextViolations() {
   const configFile = ts.readConfigFile(TsconfigPath, ts.sys.readFile)
-  if (configFile.error) {
+  if (configFile.error)
     return [`cannot read Project tsconfig: ${ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n')}`]
-  }
   const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, RepoRoot)
   const program = ts.createProgram(parsed.fileNames, parsed.options)
   const checker = program.getTypeChecker()
