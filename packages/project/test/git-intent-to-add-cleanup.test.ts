@@ -60,14 +60,13 @@ interface RecordingKernel {
   gitCalls: string[][]
 }
 
-// 删除是高风险事务，需要宿主审批；测试宿主一律批准，并记下每次 git 调用。
+// 删除、重命名文本文件都能完整回滚，不需要宿主审批，所以不装审批通道；只记下每次 git 调用。
 async function kernelAt(root: string): Promise<RecordingKernel> {
   const gitCalls: string[][] = []
   const node = createNodeCommandProvider()
   const project = await createProjectKernel({
     root,
     providers: {
-      approval: { approve: () => true },
       command: {
         async run(input): Promise<CommandRunResult> {
           if (input.command === 'git') gitCalls.push([...(input.args ?? [])])

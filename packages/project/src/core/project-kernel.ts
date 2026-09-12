@@ -34,12 +34,19 @@
 //  - **多文件写入原子化有两档**：宿主提供 `transactionStatePath` 时，写盘前先提交可恢复计划，
 //    进程中断后由下一次 owner 启动恢复；不能完整捕获旧正文的事务在写前拒绝。无 durable state
 //    的嵌入式调用仍靠 `captureApplyRestoreState` + 逆序还原，并保留旧的二进制/超限告警边界。
-//  - **`rollback` 有前置全量预检**：除写入前不存在的新建补丁外，任何补丁缺 `oldContent` 就整体
-//    拒绝。少了这一步，`patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
+//  - **「能否恢复」只有一条判据 `canRevertToOriginal`**：写入前不存在的新建补丁（撤销 = 删除），
+//    或补丁捕获到了原文 `oldContent`（撤销 = 写回原文）。回滚前置预检、风险分级、Desktop
+//    PreviewCache 的按路径回退共用这一口径，改一处必须三处同改。
+//  - **`rollback` 有前置全量预检**：任何补丁不满足 `canRevertToOriginal` 就整体拒绝。少了这一步，
+//    `patch.oldContent ?? ""` 会把文件截断成空——静默丢数据是这里最坏的失败模式。
 //  - **回滚删文件只针对写入前不存在的路径**（`createsMissingFile`）：`create_file` 覆盖既有文件时
 //    补丁记下原文与 base revision，回滚写回原文；把它当新建删掉会永久丢失原文。
+//  - **风险按能否恢复划线，不按操作名**：能完整回滚的覆盖、删除、重命名都是日常写入，只按新建/规模
+//    分 low/medium；只有回滚恢复不了原文的补丁（二进制或超限文件的覆盖/删除）才是 high。
+//    把可恢复写入重新划成 high，会让宿主按路径逐个文件打断用户审批。
 //  - **`decide` 是唯一策略/审批门**：provider 可直接拒，也可要求审批；高风险补丁按
 //    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
+//    `rollback` 本身不走高风险审批：它有外部修改保护，且回滚后可以重做，属于可恢复操作。
 //
 // ## 内存治理（为什么有一堆 Max* 常量）
 // 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限按插入顺序
@@ -1447,6 +1454,18 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return this.isCreatePatch(patchValue) && !isTrue(patchValue.metadata?.replacesExisting);
   }
 
+  /**
+   * 补丁写下后能否被 rollback 完整撤销：写入前不存在的新建补丁撤销即删除，永远可恢复；其余补丁
+   * （编辑、覆盖、删除、重命名的删除侧）撤销要写回 `oldContent`，只有补丁捕获到原文才可恢复。
+   * 取不到原文的只有二进制或超出读取上限的文件——策略把这类补丁的 `oldContent` 留空。
+   *
+   * 回滚前置预检、`resolveTransactionRisk` 与 Desktop PreviewCache 的 `canRevertToOriginal`
+   * 是同一条判据：预检据此拒绝会把文件截空的回滚，风险分级据此只把恢复不了的写入交给人审。
+   */
+  private canRevertToOriginal(patchValue: PreparedPatch): boolean {
+    return this.createsMissingFile(patchValue) || isString(patchValue.oldContent);
+  }
+
   /** 补丁写下之后该路径的暂存内容；`null` 表示本事务已删除该文件。 */
   private stagedContentAfter(patchValue: PreparedPatch): StagedFileContent {
     return this.isDeletePatch(patchValue) ? null : patchValue.newContent ?? "";
@@ -1756,15 +1775,17 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     };
   }
 
+  /**
+   * 事务风险按「能否恢复」划线：只要有一个补丁回滚后恢复不了原文（`canRevertToOriginal` 为假）
+   * 就是 high，交给 `decide` 请人审。能完整回滚的覆盖、删除、重命名是日常写入，与普通编辑一样只按
+   * 新建与规模分 medium/low——宿主按路径记忆审批，把它们划成 high 会让每个不同文件都打断一次用户。
+   */
   private resolveTransactionRisk(
     patches: readonly PreparedPatch[],
     changedFiles: readonly string[],
     changedLines: number,
   ): RiskLevel {
-    const destructive = patches.some((patchValue) =>
-      this.isDeletePatch(patchValue)
-      || (patchValue.metadata?.op === "create_file" && isTrue(patchValue.metadata?.overwrite)));
-    if (destructive) return "high";
+    if (patches.some((patchValue) => !this.canRevertToOriginal(patchValue))) return "high";
 
     const createsFile = patches.some((patchValue) => patchValue.metadata?.op === "create_file");
     const broadChange = changedFiles.length > this.policy.maxChangedFilesPerTransaction / 2
@@ -2305,10 +2326,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           );
         }
       }
-      // 预检：除写入前不存在的新建补丁外，都必须带可还原的旧正文（含覆盖既有文件的 create_file）。
-      // 否则用 "" 写盘会把文件截断为空（静默丢数据），宁可整体失败也不半改。
+      // 预检：每个补丁都必须可撤销（`canRevertToOriginal`：写入前不存在的新建，或带可还原的旧正文，
+      // 含覆盖既有文件的 create_file）。否则用 "" 写盘会把文件截断为空（静默丢数据），宁可整体失败也不半改。
       for (const patch of reversed) {
-        if (!this.createsMissingFile(patch) && !isString(patch.oldContent)) {
+        if (!this.canRevertToOriginal(patch)) {
           throw new ProjectError(
             "PATCH_APPLY_ERROR",
             `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,

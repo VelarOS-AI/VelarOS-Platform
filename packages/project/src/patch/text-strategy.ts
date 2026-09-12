@@ -204,16 +204,36 @@ function createFilePatch(op: CreateFileOperation, snapshot: Optional<FileSnapsho
       "整文件替换请改用 overwrite（project:write 的 mode=overwrite，或 create_file 的 overwrite=true）；只改局部内容请用 replace_text 等编辑操作；否则换一个不存在的路径。",
     );
   }
-  const prepared = patch(op.path, snapshot?.revision, replaced?.content ?? "", op.content, "core.text-patch", {
+  return patch(op.path, snapshot?.revision, isPresent(replaced) ? revertibleContent(replaced) : "", op.content, "core.text-patch", {
     op: "create_file",
     overwrite: isTrue(op.overwrite),
     replacesExisting: isPresent(replaced),
   });
-  return isPresent(replaced) && !isString(replaced.content) ? { ...prepared, oldContent: undefined } : prepared;
 }
 
-function patch(path: string, baseRevision: Optional<string>, oldContent: string, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
-  const diff = unifiedDiff(path, oldContent, newContent);
+/**
+ * 既有文件可供回滚写回的原文。二进制或超出读取上限的文件在快照里没有正文，返回 undefined——
+ * 补丁的 oldContent 因此缺席，内核把它判为回滚无法恢复（高风险、回滚预检拒绝），
+ * 而不是记成空串让回滚把文件截空。
+ */
+function revertibleContent(snapshot: FileSnapshot): Optional<string> {
+  return optionalWhen(isString(snapshot.content), snapshot.content);
+}
+
+/** 删除与重命名只针对文件：目录不能按文本补丁删除或搬运，交给命令执行并走命令危险判定。 */
+function assertFileTarget(snapshot: FileSnapshot, operationName: string): void {
+  if (snapshot.isDirectory) {
+    throw new ProjectError(
+      "NOT_SUPPORTED",
+      `${operationName} 只能作用于文件，${snapshot.path} 是目录。`,
+      { path: snapshot.path, operation: operationName },
+      "移动目录请用项目命令 git mv 或 mv；删除整个目录请用 rm -r，它会作为危险命令请求用户确认。",
+    );
+  }
+}
+
+function patch(path: string, baseRevision: Optional<string>, oldContent: Optional<string>, newContent: string, strategyId: string, metadata?: Record<string, any>): PreparedPatch {
+  const diff = unifiedDiff(path, oldContent ?? "", newContent);
   const changedLines = countChangedLines(diff);
   return {
     patchId: id("patch"),
@@ -252,14 +272,27 @@ export function textPatchStrategy(): PatchStrategy {
       if (op.type === "delete_file") {
         const snap = input.snapshot;
         if (!snap?.exists) throw new ProjectError("TARGET_NOT_FOUND", `无法删除不存在的文件：${op.path}`);
-        return [patch(op.path, snap.revision, snap.content ?? "", "", "core.text-patch", { op: "delete_file" })];
+        assertFileTarget(snap, "delete_file");
+        return [patch(op.path, snap.revision, revertibleContent(snap), "", "core.text-patch", { op: "delete_file" })];
       }
       if (op.type === "rename_file") {
         const snap = input.snapshot;
         if (!snap?.exists) throw new ProjectError("TARGET_NOT_FOUND", `无法重命名不存在的文件：${op.from}`);
+        assertFileTarget(snap, "rename_file");
+        // 重命名按「新路径写入原文 + 删除旧路径」两个补丁完成，正文必须完整取到；
+        // 二进制或超限文件取不到正文，照做会在新路径写下空文件并删掉原文件。
+        const content = revertibleContent(snap);
+        if (!isString(content)) {
+          throw new ProjectError(
+            "NOT_SUPPORTED",
+            `text patch 不能重命名二进制或超出读取上限的文件（${snap.path}）。`,
+            { path: snap.path, to: op.to },
+            "请用项目命令移动该文件（例如 git mv 或 mv）。",
+          );
+        }
         return [
-          patch(op.from, snap.revision, snap.content ?? "", "", "core.text-patch", { op: "rename_file_delete", to: op.to }),
-          patch(op.to, undefined, "", snap.content ?? "", "core.text-patch", { op: "rename_file_create", from: op.from }),
+          patch(op.from, snap.revision, content, "", "core.text-patch", { op: "rename_file_delete", to: op.to }),
+          patch(op.to, undefined, "", content, "core.text-patch", { op: "rename_file_create", from: op.from }),
         ];
       }
 

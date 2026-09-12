@@ -223,6 +223,10 @@ export interface PreparedPatch {
   path: string;
   /** 准备补丁时基于的 revision；存在时 apply 阶段会再次检查。 */
   baseRevision?: string;
+  /**
+   * 补丁写入前该路径的原文，rollback 据此写回。覆盖或删除既有文件却缺席，表示取不到原文
+   * （二进制或超出读取上限的文件）：回滚无法恢复，事务因此是高风险。
+   */
   oldContent?: string;
   newContent?: string;
   diff: string;

@@ -29,6 +29,7 @@ export interface CorePolicy {
   protectedFiles: string[];
   generatedFiles: string[];
   approval: {
+    /** 高风险事务（回滚无法恢复原文的写入）是否必须经宿主审批；可完整回滚的写入不在此列。 */
     requireForHighRiskPatch: boolean;
   };
 }

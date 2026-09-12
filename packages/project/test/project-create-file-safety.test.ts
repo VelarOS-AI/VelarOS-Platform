@@ -8,7 +8,7 @@ import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import { projectTools } from '../src/agent/Project.tool'
 import type { ProjectToolContext } from '../src/agent/Types'
-import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/index'
+import { createProjectKernel, type EditIntent } from '../src/index'
 import { ProjectToolNames } from '../src/project-tool-names'
 import { FileProjectTransactionStateStore } from '../src/transaction-state'
 
@@ -24,11 +24,6 @@ async function withRoot(files: Record<string, string>, run: (root: string) => Pr
   }
 }
 
-// 覆盖既有文件与删除文件是高风险事务，需要宿主审批；测试宿主一律批准。
-function approvingKernel(root: string, transactionStatePath?: string): Promise<ProjectKernel> {
-  return createProjectKernel({ root, transactionStatePath, providers: { approval: { approve: () => true } } })
-}
-
 function createFile(path: string, content: string, overwrite?: boolean): EditIntent {
   return { operation: { type: 'create_file', path, content, ...(overwrite ? { overwrite } : {}) } }
 }
@@ -37,6 +32,7 @@ async function exists(path: string): Promise<boolean> {
   return readFile(path).then(() => true, () => false)
 }
 
+// 覆盖、删除文本文件都能完整回滚，不是高风险事务：这里的内核都不装审批通道，一旦误判成高风险就会被拒。
 describe('create_file 不静默覆盖、回滚不丢原文', () => {
   test('未开启 overwrite 时拒绝覆盖既有文件，且不写盘', async () => {
     await withRoot({ 'keep.txt': Precious }, async (root) => {
@@ -53,10 +49,10 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
 
   test('overwrite 覆盖既有文件记下原文，回滚写回原文而不是删除', async () => {
     await withRoot({ 'keep.txt': Precious }, async (root) => {
-      const project = await approvingKernel(root)
+      const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({ operations: [createFile('keep.txt', 'new\n', true)] })
 
-      expect(transaction.risk).toBe('high')
+      expect(transaction.risk).toBe('medium')
       expect(transaction.patches[0]).toMatchObject({ oldContent: Precious, metadata: { replacesExisting: true } })
       await project.applyEdit({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe('new\n')
@@ -83,7 +79,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
 
   test('同事务先删除再创建同一路径视为新建，回滚恢复原文件', async () => {
     await withRoot({ 'keep.txt': Precious }, async (root) => {
-      const project = await approvingKernel(root)
+      const project = await createProjectKernel({ root })
       const transaction = await project.prepareEdit({
         operations: [{ operation: { type: 'delete_file', path: 'keep.txt' } }, createFile('keep.txt', 'reborn\n')],
       })
@@ -99,7 +95,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
 
   test('同事务刚创建的文件视为已存在：可继续追加，再次 create 需 overwrite', async () => {
     await withRoot({}, async (root) => {
-      const project = await approvingKernel(root)
+      const project = await createProjectKernel({ root })
       await expect(project.prepareEdit({
         operations: [createFile('notes.md', '# A\n'), createFile('notes.md', '# B\n')],
       })).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { path: 'notes.md' } })
@@ -122,7 +118,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
 
   test('apply 前目标存在性或原文被外部改变时按 revision 冲突拒绝，不覆盖外部内容', async () => {
     await withRoot({ 'keep.txt': Precious }, async (root) => {
-      const project = await approvingKernel(root)
+      const project = await createProjectKernel({ root })
       const creating = await project.prepareEdit({ operations: [createFile('late.txt', 'mine\n')] })
       const overwriting = await project.prepareEdit({ operations: [createFile('keep.txt', 'mine\n', true)] })
       await writeFile(join(root, 'late.txt'), 'external\n')
@@ -153,7 +149,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       return originalCommit.call(this, input)
     }
     try {
-      const project = await approvingKernel(root, statePath)
+      const project = await createProjectKernel({ root, transactionStatePath: statePath })
       const transaction = await project.prepareEdit({ operations: [createFile('keep.txt', 'new\n', true)] })
       await project.applyEdit({ transactionId: transaction.transactionId })
       await project.rollback({ transactionId: transaction.transactionId })
@@ -164,7 +160,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
 
       // 模拟回滚已写回原文、但状态尚未提交就中断：下次 owner 启动把文件恢复到回滚前，而不是判成外部冲突。
       new FileProjectTransactionStateStore({ path: statePath, root }).commit(rollbackCommit!)
-      const reopened = await approvingKernel(root, statePath)
+      const reopened = await createProjectKernel({ root, transactionStatePath: statePath })
       expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe('new\n')
 
       await reopened.rollback({ transactionId: transaction.transactionId })
