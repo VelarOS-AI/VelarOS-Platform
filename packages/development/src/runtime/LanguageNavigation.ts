@@ -1,4 +1,5 @@
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import { jsTsLanguageService } from './JsTsNavigation'
 import {
@@ -40,6 +41,43 @@ export function serviceMatchesExtensions(
   return service.extensions.some((extension) => requested.has(normalizeExtension(extension)))
 }
 
+/** 服务名称里的语言词：`JavaScript / TypeScript` → javascript、typescript。 */
+function languageLabelWords(label: string): string[] {
+  return label.toLowerCase().split(/[^a-z0-9+#]+/).filter(Boolean)
+}
+
+/**
+ * 把调用方给的 language 解析成已注册的语言服务。模型很少知道内部 id（jsts），常写 typescript、ts、py；
+ * 因此服务 id、名称里的语言词、扩展名简写都认，大小写不敏感。认不出时返回空数组。
+ */
+export function resolveLanguageServices(language: string): LanguageNavigationService[] {
+  const requested = language.trim().toLowerCase()
+  const services = languageServiceRegistry.listServices()
+  const byId = services.filter((service) => service.id.toLowerCase() === requested)
+  if (!isEmpty(byId)) return byId
+
+  const extension = normalizeExtension(requested)
+  return services.filter(
+    (service) =>
+      service.extensions.map(normalizeExtension).includes(extension) ||
+      languageLabelWords(service.label).includes(requested)
+  )
+}
+
+/** language 认不出时直接失败并列出可用值；静默选中零个服务只会得到一份看似「无结果」的空答复。 */
+export function assertKnownLanguage(language: LooseOptional<string>): void {
+  if (!isNonBlankString(language) || !isEmpty(resolveLanguageServices(language))) return
+
+  const available = languageServiceRegistry
+    .listServices()
+    .map((service) => `${service.id}（${service.label}）`)
+    .join('、')
+  throw new AppError(
+    'VALIDATION',
+    `language "${language}" 没有对应的语言服务，可用：${available}。省略 language 时按 path 的扩展名自动选择。`
+  )
+}
+
 export function selectLanguageServices(input: {
   language?: string
   path?: string
@@ -47,10 +85,7 @@ export function selectLanguageServices(input: {
   extensions?: string[]
 }): LanguageNavigationService[] {
   const services = languageServiceRegistry.listServices()
-  if (input.language) {
-    const service = languageServiceRegistry.getService(input.language)
-    return service ? [service] : []
-  }
+  if (isNonBlankString(input.language)) return resolveLanguageServices(input.language)
 
   const concretePath = input.targetPath ?? input.path
   const extension = concretePath ? pathExtension(concretePath) : ''

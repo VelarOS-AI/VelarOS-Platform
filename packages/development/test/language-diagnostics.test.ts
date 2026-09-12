@@ -13,6 +13,7 @@ import {
   executeProjectCodeLanguageQuery,
   type LanguageToolContext,
 } from '../src'
+import { resolveLanguageServices } from '../src/runtime/LanguageNavigation'
 import {
   clearTypeScriptProjectCache,
   groupFilesByTypeScriptProject,
@@ -447,6 +448,29 @@ describe('language_diagnostics 目录扫描', () => {
       'pkg/dist/index.d.ts'
     )
     expect(result.scannedFiles).toBe(5)
+  })
+})
+
+describe('language 参数', () => {
+  test('服务 id、语言名与扩展名简写都选中同一个语言服务', () => {
+    for (const language of ['jsts', 'JSTS', 'typescript', 'TypeScript', 'javascript', 'ts', 'tsx', '.mjs'])
+      expect(resolveLanguageServices(language).map((service) => service.id)).toEqual(['jsts'])
+    for (const language of ['python', 'Python', 'py'])
+      expect(resolveLanguageServices(language).map((service) => service.id)).toEqual(['python'])
+    expect(resolveLanguageServices('cobol')).toEqual([])
+  })
+
+  test('language 写成 typescript 时照常诊断，而不是返回零文件', async () => {
+    const result = await diagnose({ path: 'src', language: 'typescript' })
+
+    expect(result.scannedFiles).toBeGreaterThan(0)
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(2322)
+  })
+
+  test('认不出的 language 直接失败并列出可用值', async () => {
+    await expect(diagnose({ path: 'src', language: 'cobol' })).rejects.toThrow(
+      'language "cobol" 没有对应的语言服务，可用：jsts（JavaScript / TypeScript）、python（Python）'
+    )
   })
 })
 

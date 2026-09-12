@@ -8,6 +8,7 @@ import {
 } from '@velaros-ai/project/contracts'
 
 import { executeDevelopmentOperation, withCodeQuerySource } from './DevelopmentResult'
+import { assertKnownLanguage } from './LanguageNavigation'
 import { developmentLanguageOperations } from './LanguageOperations'
 import type { LanguageToolContext } from './LanguageService'
 
@@ -21,6 +22,7 @@ async function executeProjectCodeLanguageQuery(
   context: LanguageToolContext
 ): Promise<unknown> {
   context.abortSignal.throwIfAborted()
+  assertKnownLanguage(input.language)
   switch (input.action) {
     case 'find_symbols': {
       const { action: _action, ...args } = input
