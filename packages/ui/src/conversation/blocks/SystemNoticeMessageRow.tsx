@@ -1,5 +1,5 @@
 import { memo, type ReactElement, useState } from 'react'
-import { CaretDownIcon, ClockCounterClockwiseIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, ClockCounterClockwiseIcon, TargetIcon } from '@phosphor-icons/react'
 
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
@@ -13,7 +13,7 @@ import { isBlank, isEmpty } from '#internal/runtime'
 /**
  * 系统通知行（`conversationKind: 'system-notice'`）。
  *
- * 这类消息既不是用户说的、也不是模型说的：它是宿主对会话本身做过的事（当前只有回溯）的留痕。
+ * 这类消息既不是用户说的、也不是模型说的：它是宿主对会话本身做过的事（回溯、目标自动续跑）的留痕。
  * 渲染成一条居中的细线通知而不是气泡——它不参与对话，只是一个时间轴上的记号。
  *
  * 第一个文本块是给人看的一行摘要，其余块是给模型看的完整说明（默认折叠）。两者是**同一份文本**
@@ -38,7 +38,11 @@ function SystemNoticeMessageRowInner({ message }: { message: ChatMessage }): Nul
       data-conversation-kind="system-notice"
     >
       <div className={styles.systemNoticeHeader}>
-        <ClockCounterClockwiseIcon size={12} className={styles.systemNoticeIcon} />
+        {message.systemNoticeKind === 'goal-continuation' ? (
+          <TargetIcon size={12} className={styles.systemNoticeIcon} />
+        ) : (
+          <ClockCounterClockwiseIcon size={12} className={styles.systemNoticeIcon} />
+        )}
         <Text className={styles.systemNoticeSummary}>{summary}</Text>
         {!!details.length && (
           <button

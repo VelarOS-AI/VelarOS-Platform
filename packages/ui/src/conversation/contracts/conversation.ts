@@ -641,6 +641,11 @@ export interface ChatMessage {
     }>
   }
   serializedStoredInWorkspace?: boolean
+  /**
+   * 系统通知（`conversationKind: 'system-notice'`）是哪一类宿主留痕，只决定通知行的图标；缺省是会话回溯。
+   * `goal-continuation` = 目标还在进行中，宿主替用户接着开了一轮。
+   */
+  systemNoticeKind?: 'rewind' | 'goal-continuation'
   guidanceStatus?: 'awaiting-decision' | 'pending' | 'sent' | 'accepted' | 'applied' | 'paused'
   /**
    * 非空 = 这条 `role: 'user'` 的消息由**同组的另一条会话**写入，不是用户本人。

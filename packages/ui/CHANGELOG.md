@@ -19,6 +19,7 @@
 
 ### Added
 
+- `ChatMessage.systemNoticeKind`（`rewind` | `goal-continuation`）：系统通知行按类别选图标，目标自动续跑的留痕显示靶心。
 - `scrollBehavior` 新增夹底守卫与自动收起扣留的纯策略（`resolveScrollClampGuard`、
   `resolveAutoCollapseHold`、`ScrollClampGuardCssVariable`）。
 
