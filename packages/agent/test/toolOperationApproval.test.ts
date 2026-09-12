@@ -64,16 +64,13 @@ describe('shared tool operation identity', () => {
     expect(h.runs()).toBe(0)
   })
 
-  test('the same approved command is reused across tools, with a new decision for another target', async () => {
+  test('an approved dangerous command is asked again, even from another tool', async () => {
     const h = tools(true)
     await systemPrimitiveTools['system:run'].execute({ command: 'rm -rf ./dist' }, h.system)
     await projectTools['project:run'].execute({ command: 'rm -rf ./dist' }, h.project)
-    expect(h.cards()).toBe(1)
-    await projectTools['project:run'].execute({ command: 'rm -rf ./other' }, h.project)
     expect(h.cards()).toBe(2)
-    expect(h.runs()).toBe(3)
-    h.tracker.revokeTaskApproval(h.tracker.getTaskApprovalRecords()[0]!.id)
-    await projectTools['project:run'].execute({ command: 'rm -rf ./dist' }, h.project)
-    expect(h.cards()).toBe(3)
+    expect(h.runs()).toBe(2)
+    // 危险命令是人工审批：批准不进任务记忆，每次都由用户点头；拒绝仍跨工具共享（见上一条）。
+    expect(h.tracker.getTaskApprovalRecords()).toEqual([])
   })
 })
