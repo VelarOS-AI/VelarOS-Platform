@@ -43,6 +43,12 @@ const gitGlobalOptionsWithInlineValue = [
 const RecursiveRemoveReason = '该命令会递归删除整个文件夹及其中全部内容，删除后无法撤销。'
 /** cmd.exe `del /q`：安静模式只在目标是文件夹或通配符时才起作用，那时会不提示地删掉其中全部文件。 */
 const QuietBulkDeleteReason = '该命令以安静模式删除，目标是文件夹或通配符时会不经确认删掉其中全部文件，删除后无法撤销。'
+/** `find … -delete`：在整棵目录树里批量删除匹配到的文件。 */
+const TreeDeleteReason = '该命令会在整个目录树里批量删除匹配到的文件，删除后无法撤销。'
+/** 用 Git 里的版本覆盖工作区：未提交的改动从没进过 Git，覆盖后找不回来。 */
+const GitDiscardReason = '该命令会用 Git 里的版本覆盖工作区，未提交的改动会永久丢失。'
+const GitCleanReason = '该命令会删除未被 Git 跟踪的文件，它们从未提交过，删除后无法恢复。'
+const GitStashDropReason = '该命令会永久丢弃 Git stash 里暂存的改动。'
 const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
 const PrivilegedMutationReason = '该命令会以提升权限批量修改系统资源。'
 
@@ -289,15 +295,65 @@ function readInlineScript(invocation: ShellInvocation): Nullable<string> {
   return null
 }
 
+/** 选项在 `--` 之前出现：长选项（含 `--x=value`）或合写的短选项簇（`-fdx` 同时带 f、d、x）。区分大小写。 */
+function hasGitOption(args: readonly string[], short: Nullable<string>, long: string): boolean {
+  const options = args.includes('--') ? args.slice(0, args.indexOf('--')) : args
+  return options.some((argument) =>
+    argument === long
+    || argument.startsWith(`${long}=`)
+    || (isString(short) && /^-[A-Za-z]+$/.test(argument) && argument.includes(short)))
+}
+
+/**
+ * Git 子命令的危险理由，与项目写入同一条线——能不能恢复。切分支、合并、变基、撤提交、普通推送都能从
+ * reflog 找回，不拦；下面这些丢的是从没进过 Git 的内容（工作区改动、未跟踪文件）或只存一份的 stash：
+ *
+ * - `reset --hard` / `--merge` 把工作区改写成目标提交（`--keep` 遇到会丢的本地改动时 Git 自己中止，不拦）；
+ * - `restore` 默认写工作区，只有纯 `--staged`（不带 `--worktree`）才只动索引；
+ * - `checkout` 带路径（`-- <路径>`、`.`、`./…`）或 `-f`、`switch -f` / `--discard-changes` 覆盖本地改动；
+ * - `clean` 删未跟踪文件，`-n` / `--dry-run` 只列清单；
+ * - `stash drop` / `clear` 扔掉 stash；
+ * - `rm` 只删已跟踪且与索引一致的文件（有未提交修改时 Git 自己拒绝），内容能从 Git 取回；只有递归叠加
+ *   `-f` 强制删掉未提交修改时才判危险，`--cached` 只动索引。
+ */
+function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nullable<string> {
+  switch (subcommand) {
+    case 'rm': {
+      if (hasGitOption(args, null, '--cached')) return null
+      const flags = readRemoveFlags(args)
+      return flags.recursive && flags.force ? RecursiveRemoveReason : null
+    }
+    case 'reset':
+      return hasGitOption(args, null, '--hard') || hasGitOption(args, null, '--merge') ? GitDiscardReason : null
+    case 'restore':
+      return hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree') ? null : GitDiscardReason
+    case 'checkout': {
+      const separator = args.indexOf('--')
+      const namesPath = (separator >= 0 && separator < args.length - 1)
+        || args.some((argument) => argument === '.' || argument.startsWith('./'))
+      return namesPath || hasGitOption(args, 'f', '--force') ? GitDiscardReason : null
+    }
+    case 'switch':
+      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--discard-changes') ? GitDiscardReason : null
+    case 'clean':
+      return hasGitOption(args, 'n', '--dry-run') ? null : GitCleanReason
+    case 'stash': {
+      const action = args.find((argument) => !argument.startsWith('-'))
+      return action === 'drop' || action === 'clear' ? GitStashDropReason : null
+    }
+    default:
+      return null
+  }
+}
+
 /**
  * 一次调用的危险理由；不危险为 null。
  *
  * - 递归删除（`rm -r` / `-R` / `--recursive` / `rm -Recurse`，不论是否带 `-f`；PowerShell
  *   `Remove-Item`/`ri`/`del`/`rd` 的 `-Recurse`；cmd.exe `rd`/`rmdir`/`del` 的 `/s`）整棵删掉目录，
  *   既不进回收站也不在项目事务里，恢复不了。非递归的 `rm file` 只删单个文件，不拦。
- * - cmd.exe `del /q`：见 `QuietBulkDeleteReason`。
- * - `git rm` 例外：它只删已跟踪且与索引一致的文件（有未提交修改时 git 自己拒绝），内容能从 git
- *   取回；只有递归叠加 `-f` 强制删掉未提交修改时才判危险。
+ * - cmd.exe `del /q`：见 `QuietBulkDeleteReason`；`find … -delete` 在整棵目录树里批量删除。
+ * - Git 调用按子命令判定，见 `gitSubcommandDanger`。
  * - `find … -exec`、`sh -c`、`eval` 等把另一条命令当参数执行的，递归判定被执行的那条。
  */
 function invocationDanger(invocation: ShellInvocation): Nullable<string> {
@@ -311,11 +367,10 @@ function invocationDanger(invocation: ShellInvocation): Nullable<string> {
   }
   if (name === 'git') {
     const subcommandIndex = findGitSubcommandIndex(args)
-    if (subcommandIndex < 0 || args[subcommandIndex] !== 'rm') return null
-    const flags = readRemoveFlags(args.slice(subcommandIndex + 1))
-    return flags.recursive && flags.force ? RecursiveRemoveReason : null
+    return subcommandIndex < 0 ? null : gitSubcommandDanger(args[subcommandIndex] ?? '', args.slice(subcommandIndex + 1))
   }
   if (name === 'find') {
+    if (args.includes('-delete')) return TreeDeleteReason
     for (const [index, argument] of args.entries()) {
       if (!/^-(?:exec|execdir|ok|okdir)$/.test(argument)) continue
       const executed = readInvocation(args.slice(index + 1))

@@ -31,6 +31,12 @@ const DangerousCommands = [
   'cmd /c "rd /s /q build"',
   'del /q build',
   'Remove-Item HKLM:\\Software\\Demo',
+  'git reset --hard',
+  'git checkout -- src/app.ts',
+  'git restore src/app.ts',
+  'git clean -fdx',
+  'git stash drop',
+  'find . -name "*.log" -delete',
   'mkfs.ext4 /dev/sda',
   'sudo rm ./file',
 ]
@@ -48,6 +54,10 @@ const RoutineCommands = [
   'del docs/a/s.md',
   'rd build',
   'git branch --del -r origin/obsolete',
+  'git reset --soft HEAD~1',
+  'git restore --staged src/app.ts',
+  'git checkout main',
+  'git clean -n',
 ]
 
 describe('command danger parity between system and project spaces', () => {

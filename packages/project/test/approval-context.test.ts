@@ -129,6 +129,53 @@ describe('project approval context', () => {
     expect(analyzeCommandExecution('Remove-Item HKLM:\\Software\\Demo').isDangerous).toBe(true)
   })
 
+  // 与项目写入同一条线——能不能恢复：丢掉从没进过 Git 的工作区改动、未跟踪文件或 stash 的要先问；
+  // 切分支、合并、只动索引的形态都能找回，照常执行。
+  test('treats Git calls that discard uncommitted work as dangerous', () => {
+    for (const [command, reason] of [
+      ['git reset --hard', '未提交的改动会永久丢失'],
+      ['git -C repo reset --hard HEAD~1', '未提交的改动会永久丢失'],
+      ['git reset --merge ORIG_HEAD', '未提交的改动会永久丢失'],
+      ['git checkout -- src/app.ts', '未提交的改动会永久丢失'],
+      ['git checkout HEAD -- .', '未提交的改动会永久丢失'],
+      ['git checkout .', '未提交的改动会永久丢失'],
+      ['git checkout -f main', '未提交的改动会永久丢失'],
+      ['git switch --discard-changes main', '未提交的改动会永久丢失'],
+      ['git restore src/app.ts', '未提交的改动会永久丢失'],
+      ['git restore --staged --worktree src/app.ts', '未提交的改动会永久丢失'],
+      ['git clean -fdx', '未被 Git 跟踪的文件'],
+      ['cd repo && git clean -f', '未被 Git 跟踪的文件'],
+      ['git stash drop', 'stash'],
+      ['git stash clear', 'stash'],
+      ['find . -name "*.log" -delete', '整个目录树'],
+    ] as const) {
+      const plan = analyzeCommandExecution(command)
+      expect({ command, isDangerous: plan.isDangerous }).toEqual({ command, isDangerous: true })
+      expect(plan.dangerousReason).toContain(reason)
+    }
+
+    for (const command of [
+      'git reset',
+      'git reset --soft HEAD~1',
+      'git reset -q HEAD -- src/app.ts',
+      'git reset --keep HEAD~1',
+      'git restore --staged src/app.ts',
+      'git checkout main',
+      'git checkout -b feature/x',
+      'git switch main',
+      'git clean -n',
+      'git clean --dry-run -d',
+      'git stash',
+      'git stash pop',
+      'git merge main',
+      'git rebase main',
+      'git rm -rf --cached build',
+      'find . -name "*.log"',
+    ]) {
+      expect({ command, isDangerous: analyzeCommandExecution(command).isDangerous }).toEqual({ command, isDangerous: false })
+    }
+  })
+
   // cmd.exe 的 /q 只在目标是文件夹或通配符时才起作用（删单个文件本来就不提示），字面上又分不出
   // 目录名与文件名，所以 del/erase 带 /q 一律先问。
   test('treats quiet cmd deletes as bulk deletes that need confirmation', () => {
