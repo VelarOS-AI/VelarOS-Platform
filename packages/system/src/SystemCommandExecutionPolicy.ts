@@ -1,4 +1,4 @@
-import { isEmpty, isString, isTrue } from '@velaros-ai/core'
+import { isEmpty, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
 /**
  * shell 命令的**执行前分类**：只读？要确认？该丢后台？
@@ -72,30 +72,14 @@ const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = 
 
 /** 递归删除的危险理由：点明删的是整个文件夹，用户确认时知道自己在批准什么。 */
 const RecursiveRemoveReason = '该命令会递归删除整个文件夹及其中全部内容，删除后无法撤销。'
+/** cmd.exe `del /q`：安静模式只在目标是文件夹或通配符时才起作用，那时会不提示地删掉其中全部文件。 */
+const QuietBulkDeleteReason = '该命令以安静模式删除，目标是文件夹或通配符时会不经确认删掉其中全部文件，删除后无法撤销。'
 const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
 const PrivilegedMutationReason = '该命令会以提升权限批量修改系统资源。'
 
 /**
- * Windows（cmd.exe / PowerShell）的递归删除形态，与 POSIX 的 `rm -r` 同一条线：删整个目录才危险，
- * 删单个文件（哪怕带 `-Force`、`/f`、`/q`）不拦。
- *
- * - PowerShell `Remove-Item -Recurse` 及别名 ri/del/erase/rd/rmdir；参数名可按唯一前缀缩写，
- *   `-r`、`-rec` 都是 `-Recurse`，也可写成 `-Recurse:$true`。`rm` 不在这里：它由
- *   `hasRecursiveRemove` 按词法判定（同时认 POSIX 与 PowerShell 写法，并保留 `git rm` 例外）。
- * - cmd.exe `rd /s`、`rmdir /s`、`del /s`：开关前面须是空白、命令名或上一个开关
- *   （`rd /s /q`、`rmdir/s/q`），路径里的 `docs/s.md` 不算开关。
- *
- * 命令名和参数在 Windows 侧都不区分大小写（`RD /S` 等价于 `rd /s`），所以这里各自带 `/i`。
- */
-const windowsRecursiveRemovePatterns: readonly RegExp[] = [
-  // 命令名前不能是 `-`：`git branch --del -r` 里的 `--del` 不是删除命令。
-  /(?<![-\w])(?:del|erase|rd|rmdir|ri|remove-item)\b[^&|;\r\n]*\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?=[\s:]|$)/i,
-  /(?<![-\w])(?:del|erase|rd|rmdir)\b[^&|;\r\n]*(?:\s|(?<=\b(?:del|erase|rd|rmdir)|\/[a-z]))\/s\b/i,
-]
-
-/**
- * Windows 下其余破坏性命令形态。单杠参数要求前面紧跟空白（而非 `--force` 里的第二个 `-`），
- * 避免跟 `del dist --force`（如 del-cli 清理脚本）、`npm run format` 这类常见跨平台命令误撞。
+ * Windows 下其余破坏性命令形态（删除类命令由 `describeInvocationDanger` 按词法判定）。单杠参数要求
+ * 前面紧跟空白（而非 `--force` 里的第二个 `-`），避免跟 `npm run format` 这类常见跨平台命令误撞。
  */
 const windowsDestructivePatterns: readonly RegExp[] = [
   // 删除命令的目标落在注册表根路径（PowerShell 的 HKLM: 等驱动器）视同破坏性删除。
@@ -153,70 +137,242 @@ function hasMutatingGitArguments(args: readonly string[]): boolean {
   return args.some((argument) => argument === '--output' || argument.startsWith('--output='))
 }
 
+/**
+ * 命令段分隔：控制操作符（`&&` `||` `;` `|` `&` 换行）与子 shell、命令替换、代码块的边界
+ * （`(` `)` `$(` 反引号 `{` `}`）。每段开头都是一个新的命令位置，`(rm -r dir)`、`$(rm -r dir)`、
+ * `find … -exec rm -r {} \;`、PowerShell `ForEach-Object { Remove-Item $_ -Recurse }` 里的删除命令都落在
+ * 段首。切分不理会引号：危险判定宁可因为引号里碰巧写着删除命令多问一次，也不能漏掉真会执行的写法。
+ */
+const CommandSegmentSeparator = /&&|\|\||[;|&()`{}\r\n]/
+
+/** 出现在命令词之前、不改变「执行的是哪条命令」的 shell 保留字。 */
+const ShellReservedWords = new Set(['!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until'])
+
+/**
+ * 把后面的词当作一条新命令执行的前缀命令，值是它们「取值写在下一个词里」的选项：
+ * `sudo -u root rm -r dir`、`xargs -n 1 rm -r`、`nice -n 5 rm -r dir` 里的 rm 都在命令位置上。
+ * `timeout` 另有一个位置参数（时长）。表外的长选项取值写法（`--user root`）会让判定停在取值上，
+ * 前缀命令用到它们的机会很少，按漏判接受。
+ */
+const CommandPrefixes: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['builtin', new Set<string>()],
+  ['busybox', new Set<string>()],
+  ['caffeinate', new Set(['-t', '-w'])],
+  ['command', new Set<string>()],
+  ['doas', new Set(['-u', '-C'])],
+  ['env', new Set(['-u', '-C', '--unset', '--chdir'])],
+  ['exec', new Set(['-a'])],
+  ['ionice', new Set(['-c', '-n', '-p'])],
+  ['nice', new Set(['-n'])],
+  ['nohup', new Set<string>()],
+  ['setsid', new Set<string>()],
+  ['stdbuf', new Set(['-i', '-o', '-e'])],
+  ['sudo', new Set(['-u', '-g', '-C', '-D', '-h', '-p', '-r', '-t', '-T', '-U', '--user', '--group', '--chdir'])],
+  ['time', new Set(['-f', '-o'])],
+  ['timeout', new Set(['-s', '-k', '--signal', '--kill-after'])],
+  ['xargs', new Set(['-a', '-d', '-E', '-I', '-L', '-n', '-P', '-s', '--arg-file', '--delimiter', '--max-args', '--max-procs'])],
+])
+
+/** 用 `-c <命令文本>` 执行一段脚本的 POSIX shell。 */
+const PosixShells = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'fish'])
+
+/** 既是 cmd.exe 内置删除命令、又是 PowerShell Remove-Item 别名的名字：`/s` 与 `-Recurse` 两种写法都认。 */
+const CmdRemoveCommands = new Set(['del', 'erase', 'rd', 'rmdir'])
+
+/**
+ * GNU coreutils、BSD/macOS 与 busybox `rm` 全部短选项字母（d f i I P R r v W x）的并集。只由它们组成的
+ * 单杠参数是 POSIX 选项簇（`-rf`、`-Rx`、`-rP`），逐字母判定；其余单杠参数按 PowerShell 参数名判定
+ * （PowerShell 里 `rm` 是 Remove-Item 的别名，`-Force` 里的 r 不代表递归）。这是封闭集合：簇里混进其他
+ * 字母时 rm 以 illegal option 退出、一个文件都不删，按 PowerShell 读法放行不会漏掉真正的删除。
+ * 字母按大小写不敏感匹配：`RM -RF /` 这种大写写法按意图同样判危险。
+ */
+const PosixRemoveOptionCluster = /^-[dfiprvwx]+$/i
+
+/** cmd.exe 开关串：`/s`、`/S`、`/s/q`、`/a:h`。`/tmp/s` 这类路径每段不止一个字母，不是开关。 */
+const CmdSwitchToken = /^(?:\/[a-z](?::[a-z-]*)?)+$/i
+
+/** 命令位置上的一次调用：规范化后的命令名与它在本段内的实参。 */
+interface ShellInvocation {
+  name: string
+  args: string[]
+}
+
+/**
+ * 命令词的规范名：去掉路径前缀（`/bin/rm`、`C:\tools\rm.exe`，也去掉绕过别名的 `\rm` 的反斜杠）与
+ * Windows 的 `.exe`，统一小写——macOS 默认文件系统大小写不敏感，`RM` 同样执行 /bin/rm；Windows 命令
+ * 本就不分大小写。
+ */
+function commandName(token: string): string {
+  return (token.split(/[/\\]/).at(-1) ?? token).toLowerCase().replace(/\.exe$/, '')
+}
+
+/** 跳过前缀命令自己的选项（连同取值）与 `timeout` 的时长，返回被它执行的命令词所在位置。 */
+function skipPrefixArguments(name: string, tokens: readonly string[], start: number): number {
+  const optionsWithValue = CommandPrefixes.get(name) ?? new Set<string>()
+  let index = start
+  while (index < tokens.length) {
+    const token = tokens[index] ?? ''
+    if (token === '--') return index + 1
+    if (token.length < 2 || !token.startsWith('-')) break
+    index += optionsWithValue.has(token) ? 2 : 1
+  }
+  return name === 'timeout' ? index + 1 : index
+}
+
+/**
+ * 读出段内命令位置上的调用：跳过环境变量赋值、shell 保留字与前缀命令，剩下的第一个词才是真正执行的
+ * 命令——`pnpm rm -r lodash` 里的 rm 是 pnpm 的子命令，不是删除命令。cmd.exe 允许开关紧贴命令名
+ * （`rmdir/s/q build`），拆成命令名加开关。
+ */
+function readInvocation(tokens: readonly string[]): Nullable<ShellInvocation> {
+  let index = 0
+  while (index < tokens.length) {
+    const token = tokens[index] ?? ''
+    if (/^[A-Za-z_]\w*=/.test(token) || ShellReservedWords.has(token)) {
+      index += 1
+      continue
+    }
+    const glued = /^(del|erase|rd|rmdir)((?:\/[^/]*)+)$/i.exec(token)
+    if (glued) {
+      const switches = (glued[2] ?? '').split('/').filter(Boolean).map((part) => `/${part}`)
+      return { name: (glued[1] ?? '').toLowerCase(), args: [...switches, ...tokens.slice(index + 1)] }
+    }
+    const name = commandName(token)
+    if (!CommandPrefixes.has(name)) return { name, args: tokens.slice(index + 1) }
+    index = skipPrefixArguments(name, tokens, index + 1)
+  }
+  return null
+}
+
 /** 长参数按 GNU getopt 的唯一前缀规则匹配：`--rec` 即 `--recursive`，至少要写到 `--` 后一个字母。 */
 function matchesLongOption(argument: string, option: string): boolean {
   return argument.length >= 3 && option.startsWith(argument)
 }
 
 /**
- * 读出 `rm` 之后的删除参数。单杠参数分两种写法：只由 POSIX rm 短选项字母（d f i r v）组成的是
- * 选项簇（`-rf`、`-R`），逐字母判定；其余是 PowerShell 参数名（`-Recurse`、`-Force`、`-Verbose`），
- * 按参数名前缀判定——否则 `-Force` 里的 r 会被误当成递归。
+ * PowerShell 参数名能否表示 `parameter`：参数名大小写不敏感、可按唯一前缀缩写（`-r`、`-rec` 都是
+ * `-Recurse`），也可写成 `-Recurse:$true`；`-Recurse:$false` 是显式关闭。
  */
+function matchesPowerShellParameter(argument: string, parameter: string, minimumLength: number): boolean {
+  const [name = '', value] = argument.toLowerCase().split(':', 2)
+  return value !== '$false' && name.length >= minimumLength && parameter.startsWith(name)
+}
+
+/** 实参里有没有 PowerShell 的 `-Recurse`（含缩写与 `:$true` 写法）。 */
+function hasPowerShellRecurse(args: readonly string[]): boolean {
+  return args.some((argument) => matchesPowerShellParameter(argument, '-recurse', 2))
+}
+
+/** `rm` 的删除参数：POSIX 选项簇、GNU 长选项与 PowerShell 参数名三种写法都认，`--` 之后是路径。 */
 function readRemoveFlags(args: readonly string[]): { recursive: boolean, force: boolean } {
   let recursive = false
   let force = false
   for (const argument of args) {
     if (argument === '--') break
-    const normalized = argument.toLowerCase()
-    if (normalized.startsWith('--')) {
+    if (argument.startsWith('--')) {
+      const normalized = argument.toLowerCase()
       recursive ||= matchesLongOption(normalized, '--recursive')
       force ||= matchesLongOption(normalized, '--force')
-    } else if (/^-[dfirv]+$/.test(normalized)) {
-      recursive ||= normalized.includes('r')
-      force ||= normalized.includes('f')
-    } else if (normalized.length > 1 && normalized.startsWith('-')) {
-      // `-Recurse:$true` 这类带值写法只看冒号前的参数名；`-f` 在 PowerShell 里有歧义，至少写到 `-fo`。
-      const parameter = normalized.split(':')[0] ?? normalized
-      recursive ||= parameter.length > 1 && '-recurse'.startsWith(parameter)
-      force ||= parameter.length > 2 && '-force'.startsWith(parameter)
+    } else if (PosixRemoveOptionCluster.test(argument)) {
+      recursive ||= /[Rr]/.test(argument)
+      force ||= /f/i.test(argument)
+    } else if (argument.length > 1 && argument.startsWith('-')) {
+      // `-f` 在 PowerShell 里有歧义（-Filter / -Force），至少写到 `-fo` 才是 -Force。
+      recursive ||= matchesPowerShellParameter(argument, '-recurse', 2)
+      force ||= matchesPowerShellParameter(argument, '-force', 3)
     }
   }
   return { recursive, force }
 }
 
-/** 段内 `git` 子命令所在的词位；不是 git 命令或找不到子命令时为 -1。 */
-function findGitSubcommandTokenIndex(tokens: readonly string[]): number {
-  const executableIndex = tokens.findIndex((token) => !/^[A-Za-z_]\w*=/.test(token))
-  if (executableIndex < 0 || tokens[executableIndex]?.split('/').at(-1)?.toLowerCase() !== 'git') return -1
-  const subcommandIndex = findGitSubcommandIndex(tokens.slice(executableIndex + 1))
-  return subcommandIndex < 0 ? -1 : executableIndex + 1 + subcommandIndex
+/** 实参里的 cmd.exe 开关字母（小写）：`/s /q`、`/s/q` 都拆成 s 与 q。 */
+function readCmdSwitches(args: readonly string[]): Set<string> {
+  const switches = new Set<string>()
+  for (const argument of args) {
+    if (!CmdSwitchToken.test(argument)) continue
+    for (const part of argument.split('/')) {
+      if (part) switches.add(part.charAt(0).toLowerCase())
+    }
+  }
+  return switches
 }
 
 /**
- * 递归删除（`rm -r` / `-R` / `--recursive` / PowerShell `rm -Recurse`，不论是否带 `-f`）会整棵删掉
- * 目录，既不进回收站也不在项目事务里，恢复不了——所以一律判危险。非递归的 `rm file` 只删单个文件，
- * 不拦。`rm` 出现在段内任意位置都算（`sudo rm -r`、`xargs rm -r`、`find … -exec rm -r`）。
- *
- * `git rm` 例外：它只删已跟踪且与索引一致的文件（有未提交修改时 git 自己拒绝），内容能从 git
- * 取回；只有叠加 `-f` 强制删掉未提交修改时才判危险。
+ * 解释器以参数形式执行的那段命令文本：`bash -c '…'`、`eval …`、`powershell -Command …`、`cmd /c …`。
+ * 这段文本整体重新判定，`sh -c 'rm -rf dir'` 与直接写 `rm -rf dir` 同样危险。不是这种调用返回 null。
  */
-function hasRecursiveRemove(command: string): boolean {
-  return command.split(/&&|\|\||[;|\r\n]/).some((segment) => {
-    const tokens = tokenize(segment.trim())
-    const gitSubcommandIndex = findGitSubcommandTokenIndex(tokens)
-    return tokens.some((token, index) => {
-      if (token.split('/').at(-1)?.toLowerCase() !== 'rm') return false
-      const flags = readRemoveFlags(tokens.slice(index + 1))
-      return index === gitSubcommandIndex ? flags.recursive && flags.force : flags.recursive
-    })
-  })
+function readInlineScript(invocation: ShellInvocation): Nullable<string> {
+  const { name, args } = invocation
+  if (name === 'eval') return args.join(' ')
+  if (PosixShells.has(name)) {
+    const flagIndex = args.findIndex((argument) =>
+      /^-[A-Za-z]*c[A-Za-z]*$/.test(argument) || argument === '--command')
+    return flagIndex < 0 ? null : toNullable(args.slice(flagIndex + 1).find((argument) => !argument.startsWith('-')))
+  }
+  if (name === 'powershell' || name === 'pwsh') {
+    const flagIndex = args.findIndex((argument) => matchesPowerShellParameter(argument, '-command', 2))
+    return flagIndex < 0 ? null : args.slice(flagIndex + 1).join(' ')
+  }
+  if (name === 'cmd') {
+    const flagIndex = args.findIndex((argument) => /^\/[ck]$/i.test(argument))
+    return flagIndex < 0 ? null : args.slice(flagIndex + 1).join(' ')
+  }
+  return null
 }
 
-/** 命令的危险理由；不危险为 null。递归删除单列理由，其余破坏性与提权命令沿用通用文案。 */
+/**
+ * 一次调用的危险理由；不危险为 null。
+ *
+ * - 递归删除（`rm -r` / `-R` / `--recursive` / `rm -Recurse`，不论是否带 `-f`；PowerShell
+ *   `Remove-Item`/`ri`/`del`/`rd` 的 `-Recurse`；cmd.exe `rd`/`rmdir`/`del` 的 `/s`）整棵删掉目录，
+ *   既不进回收站也不在项目事务里，恢复不了。非递归的 `rm file` 只删单个文件，不拦。
+ * - cmd.exe `del /q`：见 `QuietBulkDeleteReason`。
+ * - `git rm` 例外：它只删已跟踪且与索引一致的文件（有未提交修改时 git 自己拒绝），内容能从 git
+ *   取回；只有递归叠加 `-f` 强制删掉未提交修改时才判危险。
+ * - `find … -exec`、`sh -c`、`eval` 等把另一条命令当参数执行的，递归判定被执行的那条。
+ */
+function invocationDanger(invocation: ShellInvocation): Nullable<string> {
+  const { name, args } = invocation
+  if (name === 'rm') return readRemoveFlags(args).recursive ? RecursiveRemoveReason : null
+  if (name === 'remove-item' || name === 'ri') return hasPowerShellRecurse(args) ? RecursiveRemoveReason : null
+  if (CmdRemoveCommands.has(name)) {
+    const switches = readCmdSwitches(args)
+    if (switches.has('s') || hasPowerShellRecurse(args)) return RecursiveRemoveReason
+    return (name === 'del' || name === 'erase') && switches.has('q') ? QuietBulkDeleteReason : null
+  }
+  if (name === 'git') {
+    const subcommandIndex = findGitSubcommandIndex(args)
+    if (subcommandIndex < 0 || args[subcommandIndex] !== 'rm') return null
+    const flags = readRemoveFlags(args.slice(subcommandIndex + 1))
+    return flags.recursive && flags.force ? RecursiveRemoveReason : null
+  }
+  if (name === 'find') {
+    for (const [index, argument] of args.entries()) {
+      if (!/^-(?:exec|execdir|ok|okdir)$/.test(argument)) continue
+      const executed = readInvocation(args.slice(index + 1))
+      const reason = executed ? invocationDanger(executed) : null
+      if (reason) return reason
+    }
+    return null
+  }
+  const script = readInlineScript(invocation)
+  return isNull(script) ? null : describeInvocationDanger(script)
+}
+
+/** 逐段读出命令位置上的调用并判定；第一个危险调用的理由就是整条命令的理由。 */
+function describeInvocationDanger(command: string): Nullable<string> {
+  for (const segment of command.split(CommandSegmentSeparator)) {
+    const invocation = readInvocation(tokenize(segment.trim()))
+    const reason = invocation ? invocationDanger(invocation) : null
+    if (reason) return reason
+  }
+  return null
+}
+
+/** 命令的危险理由；不危险为 null。删除类调用按词法逐条判定，其余破坏性与提权命令沿用通用文案。 */
 function describeDangerousCommand(command: string): Nullable<string> {
-  if (hasRecursiveRemove(command) || windowsRecursiveRemovePatterns.some((pattern) => pattern.test(command)))
-    return RecursiveRemoveReason
+  const invocationReason = describeInvocationDanger(command)
+  if (invocationReason) return invocationReason
   if (
     /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
     || windowsDestructivePatterns.some((pattern) => pattern.test(command))

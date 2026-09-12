@@ -238,7 +238,7 @@ describe('System capability', () => {
     for (const command of [
       'Remove-Item .\\notes.txt',
       'Remove-Item .\\notes.txt -Force',
-      'del /f /q notes.txt',
+      'del /f notes.txt',
       'del docs/s.md',
       'rd build',
       'git branch --del -r origin/obsolete',

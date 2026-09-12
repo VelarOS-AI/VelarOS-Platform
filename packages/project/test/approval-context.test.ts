@@ -51,6 +51,23 @@ describe('project approval context', () => {
       'ls | xargs rm -r',
       'git rm -rf ./directory',
       'rm ./directory -Recurse',
+      // BSD/macOS rm 的 -x、-P、-W 也能和 -r 写进同一簇。
+      'rm -rfx ./directory',
+      'rm -Rx ./directory',
+      'rm -rP ./directory',
+      'rm -xr ./directory',
+      'rm -rW ./directory',
+      // 包在子 shell、命令替换、解释器与前缀命令里的递归删除照样执行。
+      "sh -c 'rm -rf ./directory'",
+      'bash -lc "cd build && rm -r out"',
+      '(rm -r ./directory)',
+      'echo $(rm -r ./directory)',
+      '\\rm -r ./directory',
+      'rm.exe -r ./directory',
+      'timeout 10 rm -r ./directory',
+      'env CI=1 rm -r ./directory',
+      'eval "rm -r ./directory"',
+      'find . -name node_modules -exec rm -rf {} +',
     ]) {
       const plan = analyzeCommandExecution(command)
       expect(plan.isDangerous).toBe(true)
@@ -66,6 +83,14 @@ describe('project approval context', () => {
       'rm ./file -Force',
       'git rm -r --cached ./directory',
       'git rm -r ./directory',
+      // 只有命令位置上的 rm 才是删除命令：包管理器、容器的 rm 子命令与文本里的 rm 都不算。
+      'pnpm rm -r lodash',
+      'docker rm -f web',
+      'echo rm -r ./directory',
+      'grep -r "rm -rf" .',
+      'rm -Recurse:$false ./directory',
+      // 簇里混进 rm 不认识的字母时 rm 以 illegal option 退出，一个文件都不删。
+      'rm -rfz ./directory',
     ]) {
       expect(analyzeCommandExecution(command).isDangerous).toBe(false)
     }
@@ -81,6 +106,9 @@ describe('project approval context', () => {
       'RMDIR /S build',
       'rmdir/s/q build',
       'del /s /q *.tmp',
+      'cmd /c "rd /s /q build"',
+      'powershell -NoProfile -Command "Remove-Item build -Recurse"',
+      'Get-ChildItem build | ForEach-Object { Remove-Item $_ -Recurse }',
     ]) {
       const plan = analyzeCommandExecution(command)
       expect(plan.isDangerous).toBe(true)
@@ -90,14 +118,26 @@ describe('project approval context', () => {
     for (const command of [
       'Remove-Item .\\notes.txt',
       'Remove-Item .\\notes.txt -Force',
-      'del /f /q notes.txt',
+      'del /f notes.txt',
       'del docs/s.md',
+      'del docs/a/s.md',
       'rd build',
       'git branch --del -r origin/obsolete',
     ]) {
       expect(analyzeCommandExecution(command).isDangerous).toBe(false)
     }
     expect(analyzeCommandExecution('Remove-Item HKLM:\\Software\\Demo').isDangerous).toBe(true)
+  })
+
+  // cmd.exe 的 /q 只在目标是文件夹或通配符时才起作用（删单个文件本来就不提示），字面上又分不出
+  // 目录名与文件名，所以 del/erase 带 /q 一律先问。
+  test('treats quiet cmd deletes as bulk deletes that need confirmation', () => {
+    for (const command of ['del /q build', 'del /f /q notes.txt', 'erase /Q *.*', 'del/q build']) {
+      const plan = analyzeCommandExecution(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.dangerousReason).toContain('安静模式')
+    }
+    expect(analyzeCommandExecution('rd /q build').isDangerous).toBe(false)
   })
 
   test('dangerous project approval identifies the precise command and working directory', async () => {
