@@ -4,8 +4,8 @@ import type { FileSnapshot, ProjectSnapshot } from "./snapshot.js";
 
 /** observe 和 list-files 共用的路径发现选项。 */
 export interface ObserveInput {
-  include?: string[];
-  exclude?: string[];
+  include?: readonly string[];
+  exclude?: readonly string[];
   /**
    * 默认 true：从根目录到起点逐级继承 .gitignore 过滤被忽略的条目。缺省时若 path 显式指向的
    * 目录本身被忽略，则照常列出其内容；显式传 true 时被忽略的起点返回空，传 false 不做过滤。
