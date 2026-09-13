@@ -977,14 +977,14 @@
 }
 
 .velar-compact-tool-row:hover .velar-compact-tool-row-action-slot,
-.velar-compact-tool-row:focus-within .velar-compact-tool-row-action-slot {
+.velar-compact-tool-row:is(:focus-visible, :has(:focus-visible)) .velar-compact-tool-row-action-slot {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
 }
 
 .velar-compact-tool-row:hover .velar-compact-tool-row-action-slot-overlay,
-.velar-compact-tool-row:focus-within
+.velar-compact-tool-row:is(:focus-visible, :has(:focus-visible))
   .velar-compact-tool-row-action-slot-overlay {
   transform: translate(0, -50%);
 }
@@ -993,7 +993,7 @@
   .velar-compact-tool-row-count,
 .velar-compact-tool-row:has(
     .velar-compact-tool-row-action-slot-overlay
-  ):focus-within
+  ):is(:focus-visible, :has(:focus-visible))
   .velar-compact-tool-row-count {
   opacity: 0;
 }
@@ -1842,13 +1842,13 @@
 }
 
 .velar-task-list-row:hover,
-.velar-task-list-row:focus-within {
+.velar-task-list-row:is(:focus-visible, :has(:focus-visible)) {
   background: var(--shell-sidebar-hover-bg, var(--surface-subtle));
 }
 
 .velar-task-list-row-active,
 .velar-task-list-row-active:hover,
-.velar-task-list-row-active:focus-within {
+.velar-task-list-row-active:is(:focus-visible, :has(:focus-visible)) {
   background: var(--shell-sidebar-active-bg, var(--background-muted));
 }
 
@@ -1921,14 +1921,14 @@
 }
 
 .velar-task-list-row:hover .velar-task-list-row-actions,
-.velar-task-list-row:focus-within .velar-task-list-row-actions,
+.velar-task-list-row:is(:focus-visible, :has(:focus-visible)) .velar-task-list-row-actions,
 .velar-task-list-row-actions-fixed {
   opacity: 1;
   pointer-events: auto;
 }
 
 .velar-task-list-row:hover .velar-task-list-row-trailing,
-.velar-task-list-row:focus-within .velar-task-list-row-trailing {
+.velar-task-list-row:is(:focus-visible, :has(:focus-visible)) .velar-task-list-row-trailing {
   opacity: 0;
 }
 

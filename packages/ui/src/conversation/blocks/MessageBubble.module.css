@@ -38,7 +38,7 @@
   z-index: 1;
 
   .userRow:hover &,
-  .userRow:focus-within & {
+  .userRow:is(:focus-visible, :has(:focus-visible)) & {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
@@ -686,7 +686,7 @@
   pointer-events: none;
 
   .assistantRow:hover &,
-  .assistantRow:focus-within & {
+  .assistantRow:is(:focus-visible, :has(:focus-visible)) & {
     opacity: 1;
     pointer-events: auto;
   }
@@ -722,7 +722,7 @@
   transform: translateY(-2px);
 
   .userRow:hover &,
-  .userRow:focus-within & {
+  .userRow:is(:focus-visible, :has(:focus-visible)) & {
     opacity: 1;
     transform: translateY(0);
   }
@@ -2042,7 +2042,7 @@
   }
 
   .userRow:hover .userMessageTimestamp,
-  .userRow:focus-within .userMessageTimestamp {
+  .userRow:is(:focus-visible, :has(:focus-visible)) .userMessageTimestamp {
     transform: none;
   }
 }

@@ -70,6 +70,11 @@
   color: var(--foreground);
 }
 
+/* 投影被上面清掉了：键盘聚焦时把焦点环还回来。 */
+.actionIconButton.actionIconButton:focus-visible {
+  box-shadow: var(--ui-shadow-focus-ring);
+}
+
 .feedbackCard {
   display: inline-flex;
   align-items: center;

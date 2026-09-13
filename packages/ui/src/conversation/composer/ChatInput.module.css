@@ -549,8 +549,12 @@
 .composerModelRunSelectorButton:is(:hover, :focus-visible, [data-open='true']) {
   background: var(--background-muted);
   border-color: transparent;
-  box-shadow: none;
   transform: none;
+}
+
+/* 悬停与展开不要投影；键盘聚焦时留着按钮原语的焦点环。 */
+.composerModelRunSelectorButton:is(:hover, [data-open='true']):not(:focus-visible) {
+  box-shadow: none;
 }
 
 .composerModelRunSelectorModelLabel,
@@ -705,16 +709,16 @@
 }
 
 .activePluginChip[data-removable='true']:hover .activePluginIconDefault,
-.activePluginChip[data-removable='true']:focus-within .activePluginIconDefault,
+.activePluginChip[data-removable='true']:is(:focus-visible, :has(:focus-visible)) .activePluginIconDefault,
 .executionModeChip:hover .activePluginIconDefault,
-.executionModeChip:focus-within .activePluginIconDefault {
+.executionModeChip:is(:focus-visible, :has(:focus-visible)) .activePluginIconDefault {
   opacity: 0;
 }
 
 .activePluginChip[data-removable='true']:hover .activePluginIconRemove,
-.activePluginChip[data-removable='true']:focus-within .activePluginIconRemove,
+.activePluginChip[data-removable='true']:is(:focus-visible, :has(:focus-visible)) .activePluginIconRemove,
 .executionModeChip:hover .activePluginIconRemove,
-.executionModeChip:focus-within .activePluginIconRemove {
+.executionModeChip:is(:focus-visible, :has(:focus-visible)) .activePluginIconRemove {
   opacity: 1;
 }
 
@@ -914,8 +918,15 @@
 .toolbarRight :global(.velar-button-size-icon-sm:hover:not(:disabled)) {
   background: var(--background-muted);
   border-color: transparent;
-  box-shadow: none;
   transform: none;
+}
+
+/* 第一条把投影清掉了：键盘聚焦时把焦点环还回来，否则用 Tab 走到这些按钮上看不出停在哪。 */
+.toolbarLeft :global(.velar-button-size-icon:focus-visible),
+.toolbarLeft :global(.velar-button-size-icon-sm:focus-visible),
+.toolbarRight :global(.velar-button-size-icon:focus-visible),
+.toolbarRight :global(.velar-button-size-icon-sm:focus-visible) {
+  box-shadow: var(--ui-shadow-focus-ring);
 }
 
 .attachButton,

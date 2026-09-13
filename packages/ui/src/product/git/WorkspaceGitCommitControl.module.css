@@ -312,7 +312,7 @@
 }
 
 .gitCompactBranchRow:hover,
-.gitCompactBranchRow:focus-within {
+.gitCompactBranchRow:is(:focus-visible, :has(:focus-visible)) {
   background: var(--control-gray-hover-bg, var(--workbench-hover, var(--accent)));
 }
 
@@ -378,7 +378,7 @@
 }
 
 .gitCompactBranchRow:hover .gitCompactBranchSelect > span,
-.gitCompactBranchRow:focus-within .gitCompactBranchSelect > span {
+.gitCompactBranchRow:is(:focus-visible, :has(:focus-visible)) .gitCompactBranchSelect > span {
   padding-right: 86px;
 }
 
@@ -409,7 +409,7 @@
 }
 
 .gitCompactBranchRow:hover .gitCompactBranchHoverActions,
-.gitCompactBranchRow:focus-within .gitCompactBranchHoverActions {
+.gitCompactBranchRow:is(:focus-visible, :has(:focus-visible)) .gitCompactBranchHoverActions {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);

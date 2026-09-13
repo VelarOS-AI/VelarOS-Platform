@@ -163,6 +163,8 @@
   --ui-shadow-overlay: var(--shadow-md);
   --ui-shadow-popover: var(--shadow-sm);
   --ui-shadow-inset-focus: inset 0 0 0 1px var(--ring);
+  /* 按钮的键盘焦点环；组件为了去掉投影把 box-shadow 清掉时，`:focus-visible` 要把它还回来。 */
+  --ui-shadow-focus-ring: 0 0 0 4px rgba(var(--primary-rgb), 0.14);
 
   --scrollbar-thumb: rgba(15, 15, 15, 0.18);
   --scrollbar-thumb-hover: rgba(15, 15, 15, 0.32);

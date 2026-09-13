@@ -57,7 +57,7 @@
 }
 
 .shell:hover .actionButton,
-.shell:focus-within .actionButton {
+.shell:is(:focus-visible, :has(:focus-visible)) .actionButton {
   opacity: 1;
 }
 
@@ -97,7 +97,7 @@
 }
 
 .chromelessRoot:hover .floatingActions,
-.chromelessRoot:focus-within .floatingActions {
+.chromelessRoot:is(:focus-visible, :has(:focus-visible)) .floatingActions {
   opacity: 1;
 }
 

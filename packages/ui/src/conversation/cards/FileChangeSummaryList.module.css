@@ -153,8 +153,12 @@
   transition: opacity 140ms ease;
 }
 
+/*
+ * 键盘走到行里（`:focus-visible`）才跟着显示；鼠标点过的按钮会一直留着焦点，用 `:focus-within` 的话
+ * 点完移开它也不消失。
+ */
 .fileButton:hover .fileActions,
-.fileButton:focus-within .fileActions {
+.fileButton:has(:focus-visible) .fileActions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -171,6 +175,13 @@
 .fileActionButton.fileActionButton:hover {
   transform: none;
   color: var(--foreground);
+}
+
+/* 上面几个按钮都把投影清掉了：键盘聚焦时把焦点环还回来。 */
+.toggleAllButton.toggleAllButton:focus-visible,
+.reviewButton.reviewButton:focus-visible,
+.fileActionButton.fileActionButton:focus-visible {
+  box-shadow: var(--ui-shadow-focus-ring);
 }
 
 .filePath {

@@ -140,7 +140,7 @@
 }
 
 .root:hover .actionButton,
-.root:focus-within .actionButton {
+.root:is(:focus-visible, :has(:focus-visible)) .actionButton {
   opacity: 1;
 }
 

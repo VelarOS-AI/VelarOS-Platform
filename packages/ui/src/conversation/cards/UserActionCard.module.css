@@ -235,7 +235,7 @@
 }
 
 .card:hover :global(.velar-action-card-description),
-.card:focus-within :global(.velar-action-card-description) {
+.card:is(:focus-visible, :has(:focus-visible)) :global(.velar-action-card-description) {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -343,6 +343,11 @@
   color: color-mix(in srgb, var(--status-green) 82%, var(--foreground));
   background: transparent !important;
   transform: none;
+}
+
+/* 投影被上面清掉了：键盘聚焦时照卡片文字按钮的样子留着焦点环。 */
+.preflightActionButton:global(.velar-action-card-action-button:focus-visible) {
+  box-shadow: var(--ui-shadow-focus-ring) !important;
 }
 
 .preflightActionButtonReject:global(.velar-action-card-action-button) {
