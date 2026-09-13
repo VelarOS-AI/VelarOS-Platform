@@ -5,13 +5,13 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 import { AgentTurnHistoryHelper } from '../src/agent/history'
 import { KernelToolLoopGuard } from '../src/kernel/tool-loop-guard'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
 import { clampedInt } from '../src/tool-contract'
 import { ToolExecutionPolicy, type ToolExecutionPolicyContext } from '../src/tools/ExecutionPolicy'
 import { ToolExecutor, type ToolExecutorEvents, type ToolResult } from '../src/tools/Executor'
+import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void
