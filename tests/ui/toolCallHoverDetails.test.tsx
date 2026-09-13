@@ -10,7 +10,15 @@ import {
   ConversationLocalizationProvider,
   conversationZhCNMessages,
 } from '../../packages/ui/src/conversation/i18n'
-import { ToolCallHoverDetails } from '../../packages/ui/src/conversation/tool-render/ToolCallHoverDetails'
+import { ConversationTranslatorRuntime } from '../../packages/ui/src/conversation/i18n/conversationTranslator'
+import {
+  describeToolCallHover,
+  doesToolCallHoverAddToRow,
+  resolveToolCallHoverContent,
+  type ToolCallHover,
+  ToolCallHoverDetails,
+  type ToolCallHoverDetailsProps,
+} from '../../packages/ui/src/conversation/tool-render/ToolCallHoverDetails'
 
 function lookupMessage(key: string): string {
   let node: unknown = conversationZhCNMessages
@@ -27,6 +35,20 @@ const i18n: ConversationI18nContextValue = {
     lookupMessage(key).replaceAll(/\{(\w+)\}/gu, (placeholder, name: string) =>
       String(params?.[name] ?? placeholder)
     ),
+}
+
+const runtime = new ConversationTranslatorRuntime({
+  translate: (_locale, key, params) => i18n.t(key, params),
+  lookupMessage: (_locale, key) => {
+    const message = lookupMessage(key)
+    return message === key ? null : message
+  },
+})
+
+function describeHover(props: ToolCallHoverDetailsProps): ToolCallHover {
+  const hover = describeToolCallHover(props, 'zh-CN', runtime)
+  assert.ok(hover)
+  return hover
 }
 
 function render(node: ReactElement): string {
@@ -178,5 +200,111 @@ void describe('ToolCallHoverDetails', () => {
 
   void test('renders nothing without a call', () => {
     assert.equal(render(<ToolCallHoverDetails blocks={[]} />), '')
+  })
+})
+
+void describe('when the bubble adds nothing to the row', () => {
+  void test('a call that only has its name and duration opens no bubble', () => {
+    const block = toolCall('plan-1', 'plan:update', {}, { result: { updated: false, noop: true, plan: [] } })
+    const hover = describeHover({ blocks: [block] })
+
+    assert.equal(hover.kind, 'single')
+    assert.equal(doesToolCallHoverAddToRow(hover, { label: 'plan:update', status: '2秒' }), false)
+    assert.equal(
+      resolveToolCallHoverContent({ blocks: [block] }, { label: 'plan:update', status: '2秒' }, 'zh-CN', runtime),
+      undefined
+    )
+  })
+
+  void test('a bubble that only repeats the row text opens no bubble, even when the row cut it short', () => {
+    const read = toolCall('read-1', 'project:read', { path: 'src/a.ts' })
+    assert.equal(
+      doesToolCallHoverAddToRow(describeHover({ blocks: [read] }), { label: 'project:read', detail: 'src/a.ts', status: '2秒' }),
+      false
+    )
+    // 行上只剩截短的对象（带省略号）时，比对去掉省略号；是不是真被 CSS 截断由行自己量、自己弹全文。
+    const job = toolCall('job-1', 'job:cancel', { job_id: 'subagent:abc:background:123' })
+    assert.equal(
+      doesToolCallHoverAddToRow(describeHover({ blocks: [job] }), {
+        label: 'job:cancel',
+        detail: 'subagent:abc:background:123',
+      }),
+      false
+    )
+  })
+
+  void test('an operation, a result or an error that the row does not show opens the bubble', () => {
+    const edit = toolCall('edit-1', 'project:edit', {
+      operations: [{ operation: { type: 'replace_text', path: 'src/a.ts', oldText: 'a', newText: 'b' } }],
+    })
+    assert.equal(doesToolCallHoverAddToRow(describeHover({ blocks: [edit] }), { detail: 'src/a.ts' }), true)
+
+    const search = toolCall('search-1', 'project:search', { query: 'contentHash' }, { result: { count: 12 } })
+    const searchHover = describeHover({ blocks: [search] })
+    assert.equal(doesToolCallHoverAddToRow(searchHover, { detail: 'contentHash' }), true)
+    assert.equal(doesToolCallHoverAddToRow(searchHover, { detail: 'contentHash · 找到 12 项结果' }), false)
+
+    const failed = toolCall('read-2', 'project:read', { path: 'src/a.ts' }, { error: 'ENOENT: no such file' })
+    const failedHover = describeHover({ blocks: [failed] })
+    assert.equal(doesToolCallHoverAddToRow(failedHover, { detail: 'src/a.ts' }), true)
+    assert.equal(doesToolCallHoverAddToRow(failedHover, { detail: 'src/a.ts · ENOENT: no such file' }), false)
+  })
+
+  void test('matches identifiers on word boundaries, so a chip hidden inside the tool name still counts', () => {
+    const recall = toolCall('recall-1', 'context:recall', { query: 'BASE_REVISION_MISMATCH', kind: 'all' })
+    const hover = describeHover({ blocks: [recall] })
+
+    // `all` 不能算作出现在 `context:recall` 里。
+    assert.equal(
+      doesToolCallHoverAddToRow(hover, { label: 'context:recall', detail: 'BASE_REVISION_MISMATCH' }),
+      true
+    )
+    assert.equal(
+      doesToolCallHoverAddToRow(hover, { label: 'context:recall', detail: 'all · BASE_REVISION_MISMATCH' }),
+      false
+    )
+  })
+
+  void test('a repeated operation or operations past the list cap always add something', () => {
+    const repeated = toolCall('edit-2', 'project:edit', {
+      operations: Array.from({ length: 2 }, () => ({
+        operation: { type: 'replace_text', path: 'src/a.ts', oldText: 'a', newText: 'b' },
+      })),
+    })
+    assert.equal(
+      doesToolCallHoverAddToRow(describeHover({ blocks: [repeated] }), { detail: 'replace_text src/a.ts' }),
+      true
+    )
+  })
+
+  void test('a merged row adds nothing only when every call target is already on the row', () => {
+    const blocks = [
+      toolCall('read-a', 'project:read', { path: 'src/a.ts' }),
+      toolCall('read-b', 'project:read', { path: 'src/b.ts' }, { finishedAt: 9_000 }),
+    ]
+    const hover = describeHover({ blocks })
+
+    assert.equal(hover.kind, 'merged')
+    // 各次调用的耗时不同也不算：只多出耗时不值得弹气泡。
+    assert.equal(doesToolCallHoverAddToRow(hover, { label: 'project:read', detail: 'src/a.ts、src/b.ts' }), false)
+    assert.equal(doesToolCallHoverAddToRow(hover, { label: 'project:read', detail: 'src/a.ts…' }), true)
+
+    const failing = describeHover({
+      blocks: [...blocks, toolCall('read-c', 'project:read', { path: 'src/a.ts' }, { error: 'EACCES' })],
+    })
+    assert.equal(doesToolCallHoverAddToRow(failing, { label: 'project:read', detail: 'src/a.ts、src/b.ts' }), true)
+  })
+
+  void test('returns the bubble content when it adds something', () => {
+    const block = toolCall('search-2', 'project:search', { query: 'contentHash', path: 'packages/project/src' })
+    const content = resolveToolCallHoverContent(
+      { blocks: [block] },
+      { label: 'project:search', detail: 'contentHash', status: '2秒' },
+      'zh-CN',
+      runtime
+    )
+
+    assert.ok(content)
+    assert.match(render(content), />packages\/project\/src</)
   })
 })

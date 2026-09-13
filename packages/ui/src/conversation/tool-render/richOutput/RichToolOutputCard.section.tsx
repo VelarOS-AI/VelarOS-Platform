@@ -4,7 +4,7 @@ import { CompactToolRow } from '@velaros-ai/ui/product/layout/CompactToolRow'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
 import { useIntersectionObserver } from '../../react-hooks/useIntersectionObserver'
-import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
+import { resolveToolCallHoverContent } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 
 import type { RichCardCollapsibleTone } from './RichCardCollapsibleShell.section'
@@ -78,9 +78,14 @@ export function RichToolOutputCard({
         detail={subtitle}
         detailTitle={subtitle}
         count={statusLabel ?? badge}
-        hoverContent={optionalWhenLazy(toolBlock, () => (
-          <ToolCallHoverDetails blocks={[toolBlock!]} detail={subtitle} summary={toOptional(badge)} />
-        ))}
+        hoverContent={optionalWhenLazy(toolBlock, () =>
+          resolveToolCallHoverContent(
+            { blocks: [toolBlock!], detail: subtitle, summary: toOptional(badge) },
+            { label: title, detail: subtitle, status: statusLabel ?? badge },
+            locale,
+            translatorRuntime
+          )
+        )}
       />
     )
 
