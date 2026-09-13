@@ -27,10 +27,14 @@ import { createPortal } from 'react-dom'
 import { useEventListener, useLatest, useMemoizedFn } from 'ahooks'
 
 import { cn } from '../../lib/cn'
-import { isFunction, isPresent, optionalWhen, toNullable, toOptional } from '../../lib/runtime'
-type PopoverSide = 'top' | 'right' | 'bottom' | 'left'
-type PopoverAlign = 'start' | 'center' | 'end'
-type PopoverWidthStrategy = 'content' | 'anchor' | 'adaptive'
+import { isFunction, isPresent, toNullable, toOptional } from '../../lib/runtime'
+
+import {
+  type PopoverAlign,
+  type PopoverSide,
+  type PopoverWidthStrategy,
+  resolvePopoverPosition,
+} from './popoverPosition'
 
 interface PopoverContextValue {
   anchorElement: Nullable<HTMLElement>
@@ -95,12 +99,6 @@ function composeRefs<T>(...refs: Array<LooseOptional<Ref<T>>>): (node: Nullable<
   }
 }
 
-function clamp(value: number, min: number, max: number): number {
-  if (max < min) return min
-
-  return Math.min(Math.max(value, min), max)
-}
-
 function getElementWindow(element: Nullable<HTMLElement>): Window {
   return element?.ownerDocument.defaultView ?? window
 }
@@ -155,6 +153,10 @@ function isNestedPopoverLayerTarget(
   return targetPopoverLayer?.dataset.velarPopoverParentLayerId === currentLayerId
 }
 
+/** 触发元素中心在浮层内的坐标，写成 CSS 变量交给浮层外观（画指向触发元素的箭头）。 */
+const AnchorCenterXVariable = '--velar-popover-anchor-center-x'
+const AnchorCenterYVariable = '--velar-popover-anchor-center-y'
+
 function getPosition(
   anchorElement: HTMLElement,
   contentElement: HTMLElement,
@@ -166,58 +168,27 @@ function getPosition(
   portalElement: HTMLElement
 ): CSSProperties {
   const ownerWindow = getElementWindow(anchorElement)
-  const anchorRect = anchorElement.getBoundingClientRect()
   const contentRect = contentElement.getBoundingClientRect()
   const isBodyPortal = portalElement === ownerWindow.document.body
-  const portalRect = optionalWhen(!isBodyPortal, portalElement.getBoundingClientRect())
-  const originLeft = isPresent(portalRect) ? portalRect.left : 0
-  const originTop = isPresent(portalRect) ? portalRect.top : 0
-  const maxAvailableWidth = ownerWindow.innerWidth - viewportPadding * 2
-  const contentWidth =
-    widthStrategy === 'anchor'
-      ? anchorRect.width
-      : widthStrategy === 'adaptive'
-        ? clamp(contentRect.width, anchorRect.width, maxAvailableWidth)
-        : contentRect.width
-  const contentHeight = contentRect.height
-  let top = anchorRect.bottom + sideOffset
-  let left = anchorRect.left
-
-  if (side === 'top') {
-    top = anchorRect.top - contentHeight - sideOffset
-  } else if (side === 'left') {
-    top = anchorRect.top
-    left = anchorRect.left - contentWidth - sideOffset
-  } else if (side === 'right') {
-    top = anchorRect.top
-    left = anchorRect.right + sideOffset
-  }
-
-  if (side === 'top' || side === 'bottom') {
-    if (align === 'center') {
-      left = anchorRect.left + (anchorRect.width - contentWidth) / 2
-    } else if (align === 'end') {
-      left = anchorRect.right - contentWidth
-    }
-  } else if (align === 'center') {
-    top = anchorRect.top + (anchorRect.height - contentHeight) / 2
-  } else if (align === 'end') {
-    top = anchorRect.bottom - contentHeight
-  }
+  const { anchorCenterX, anchorCenterY, ...position } = resolvePopoverPosition({
+    anchorRect: anchorElement.getBoundingClientRect(),
+    contentWidth: contentRect.width,
+    contentHeight: contentRect.height,
+    viewportWidth: ownerWindow.innerWidth,
+    viewportHeight: ownerWindow.innerHeight,
+    portalOrigin: isBodyPortal ? null : portalElement.getBoundingClientRect(),
+    widthStrategy,
+    side,
+    align,
+    sideOffset,
+    viewportPadding,
+  })
 
   return {
-    left:
-      clamp(left, viewportPadding, ownerWindow.innerWidth - contentWidth - viewportPadding) -
-      originLeft,
-    maxWidth: optionalWhen((widthStrategy === 'adaptive'), maxAvailableWidth),
-    minWidth:
-      optionalWhen((widthStrategy === 'anchor' || widthStrategy === 'adaptive'), anchorRect.width),
-    position: isBodyPortal ? 'fixed' : 'absolute',
-    top:
-      clamp(top, viewportPadding, ownerWindow.innerHeight - contentHeight - viewportPadding) -
-      originTop,
-    width: optionalWhen((widthStrategy === 'anchor'), anchorRect.width),
-  }
+    ...position,
+    [AnchorCenterXVariable]: `${anchorCenterX}px`,
+    [AnchorCenterYVariable]: `${anchorCenterY}px`,
+  } as CSSProperties
 }
 
 export function Popover({ children, onOpenChange, open }: PopoverProps): ReactElement {

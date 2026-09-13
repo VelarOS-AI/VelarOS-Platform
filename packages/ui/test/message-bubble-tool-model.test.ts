@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import { getMergedToolDetails } from '../src/conversation/tool-render/messageBubbleToolModel'
+import { getToolDetailItems } from '../src/conversation/tool-render/toolCallSummary'
 
 function planBlock(objective: string) {
   return {
@@ -13,9 +14,14 @@ function planBlock(objective: string) {
   }
 }
 
+test('previews a merged plan update as its progress and the step in progress', () => {
+  expect(getMergedToolDetails([planBlock('write to system workspace')])).toEqual(['0/1 · Write output'])
+})
+
 test('matches system workspace phrases only at ASCII word boundaries', () => {
-  expect(getMergedToolDetails([planBlock('write to system workspace')])).toEqual(['Write output'])
-  expect(getMergedToolDetails([planBlock('write to nonsystem workspacey')])).toEqual([
-    'Write output · write to nonsystem workspacey',
+  // 步骤目标只在悬停详情的步骤行里出现；只是「写到 system 工作区」的落点说明不展示。
+  expect(getToolDetailItems(planBlock('write to system workspace'))).toEqual(['1. [running] Write output'])
+  expect(getToolDetailItems(planBlock('write to nonsystem workspacey'))).toEqual([
+    '1. [running] Write output · write to nonsystem workspacey',
   ])
 })

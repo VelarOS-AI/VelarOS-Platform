@@ -11,7 +11,7 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
 import { useChatToolRenderCapabilities } from '../chatToolRenderCapabilitiesContext'
-import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
+import { resolveToolCallHoverContent } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { truncateLocalizedCommandOutput } from '../toolDisplay'
 
@@ -208,14 +208,12 @@ const CommandToolRender = memo(
           detail={compactLine}
           detailTitle={compactLine}
           count={statusLabel}
-          hoverContent={
-            <ToolCallHoverDetails
-              blocks={[block]}
-              formatPathForDisplay={formatPathForDisplay}
-              detail={hoverDetail}
-              summary={hoverSummary}
-            />
-          }
+          hoverContent={resolveToolCallHoverContent(
+            { blocks: [block], formatPathForDisplay, detail: hoverDetail, summary: hoverSummary },
+            { label: block.toolName, detail: compactLine, status: statusLabel },
+            locale,
+            translatorRuntime
+          )}
           actionLayout="overlay"
           action={
             optionalWhen(command, ((

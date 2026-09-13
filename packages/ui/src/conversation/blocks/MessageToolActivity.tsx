@@ -30,7 +30,7 @@ import {
   getMergedToolDetails,
 } from "../tool-render/messageBubbleToolModel";
 import { getToolActivityGroupSummary } from "../tool-render/toolActivitySummary";
-import { ToolCallHoverDetails } from "../tool-render/ToolCallHoverDetails";
+import { resolveToolCallHoverContent } from "../tool-render/ToolCallHoverDetails";
 import {
   type MergedToolCallGroup,
   mergeToolCallGroups,
@@ -430,12 +430,16 @@ function MergedToolCallRowInner({
             detailTitle:
               details.join(detailSeparator) || fallbackDetail || undefined,
             statusLabel: statusLabel ?? `×${count}`,
-            // 逐次调用各自执行了什么，都在悬停详情里按调用顺序列出。
-            hoverContent: (
-              <ToolCallHoverDetails
-                blocks={group.blocks}
-                formatPathForDisplay={formatPathForDisplay}
-              />
+            // 逐次调用各自执行了什么，都在悬停详情里按调用顺序列出；行上已经全看得到就不挂气泡。
+            hoverContent: resolveToolCallHoverContent(
+              { blocks: group.blocks, formatPathForDisplay },
+              {
+                label: displayName,
+                detail: hasMoreDetails ? `${detailText}…` : detailText,
+                status: statusLabel ?? `×${count}`,
+              },
+              locale,
+              translatorRuntime,
             ),
             actionLayout: optionalWhenLazy(commandCopyValue, () => "overlay"),
             action: optionalWhen(

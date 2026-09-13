@@ -9,7 +9,7 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../i18n'
 
-import { ToolCallHoverDetails } from './ToolCallHoverDetails'
+import { resolveToolCallHoverContent } from './ToolCallHoverDetails'
 import { getToolDescription, getToolDetailSummary, getToolResultSummary, getToolStatusLabel, normalizeInline } from './toolCallSummary'
 import { DEFAULT_TOOL_JSON_PREVIEW_MAX_CHARS, formatUnknownPayload, truncateForDisplay } from './toolDisplay'
 import { toolLeadingPhosphorIconForTool } from './toolLeadingPhosphorIcon'
@@ -108,9 +108,12 @@ export const DefaultToolRender = memo(
           detail={compactDescription}
           detailTitle={compactDescription}
           count={statusLabel}
-          hoverContent={
-            <ToolCallHoverDetails blocks={[block]} formatPathForDisplay={formatPathForDisplay} />
-          }
+          hoverContent={resolveToolCallHoverContent(
+            { blocks: [block], formatPathForDisplay },
+            { label: displayName, detail: compactDescription, status: statusLabel },
+            locale,
+            translatorRuntime
+          )}
         />
       )
 

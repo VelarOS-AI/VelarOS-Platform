@@ -10,7 +10,7 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import type { ConversationMessageKey } from '../../i18n'
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
-import { ToolCallHoverDetails } from '../ToolCallHoverDetails'
+import { resolveToolCallHoverContent } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { formatUnknownPayload, truncateLocalizedCommandOutput } from '../toolDisplay'
 
@@ -177,24 +177,26 @@ const SystemToolInstallToolRender = memo(
       status.summary,
     ])
 
-    if (compact)
+    if (compact) {
+      const compactLabel = t('systemToolInstall.compactLabel')
+      const statusLabel = getToolStatusLabel(block, locale, translatorRuntime)
       return (
         <CompactToolRow
           tone={status.tone}
           icon={<WrenchIcon size={12} />}
-          label={t('systemToolInstall.compactLabel')}
+          label={compactLabel}
           detail={compactLine}
           detailTitle={compactLine}
-          count={getToolStatusLabel(block, locale, translatorRuntime)}
-          hoverContent={
-            <ToolCallHoverDetails
-              blocks={[block]}
-              detail={[label, installCommand || command]}
-              summary={status.summary}
-            />
-          }
+          count={statusLabel}
+          hoverContent={resolveToolCallHoverContent(
+            { blocks: [block], detail: [label, installCommand || command], summary: status.summary },
+            { label: compactLabel, detail: compactLine, status: statusLabel },
+            locale,
+            translatorRuntime
+          )}
         />
       )
+    }
 
     return (
       <ToolDisclosureCard

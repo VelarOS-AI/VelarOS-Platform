@@ -7,7 +7,6 @@ import React, { memo, useEffect, useRef, useState } from 'react'
 
 import { cn } from '@velaros-ai/ui/lib/cn'
 import { HoverCard } from '@velaros-ai/ui/primitives/overlays/HoverCard'
-import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
 export interface CompactToolRowProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.ReactNode
@@ -21,8 +20,8 @@ export interface CompactToolRowProps extends React.HTMLAttributes<HTMLDivElement
   tone?: 'neutral' | 'running' | 'success' | 'warning' | 'error'
   /**
    * 悬停或键盘聚焦行时弹出的可悬停详情（HoverCard）。提供后行可聚焦、不论 detail 是否截断都能弹出，
-   * 取代「仅截断时出现」的全文气泡，并丢弃行与计数上的原生 title，免得两层提示叠在一起。
-   * 同一行应始终提供或始终不提供：两种气泡的包裹层不同，中途切换会重挂整行。
+   * 并丢弃行与计数上的原生 title，免得两层提示叠在一起。不提供时同一个气泡只在 detail 被截断时弹出全文；
+   * 详情与行上文字完全重复时就别提供，行上看得全便不必弹。两种内容共用一个包裹层，中途切换不会重挂整行。
    */
   hoverContent?: React.ReactNode
 }
@@ -133,7 +132,12 @@ export const CompactToolRow = memo(
       detail,
       hasHoverContent ? undefined : fullDetail
     )
-    const bubbleDisabled = !detailOverflowing || !fullDetail
+    // 没有详情时退回「detail 被截断才弹全文」：气泡内容就是完整的 detail，行上看得全就不弹。
+    const bubbleContent = hasHoverContent
+      ? hoverContent
+      : detailOverflowing && !!fullDetail && (
+          <span className="velar-compact-tool-row-detail-full">{fullDetail}</span>
+        )
 
     const row = (
       <div
@@ -181,23 +185,13 @@ export const CompactToolRow = memo(
       </div>
     )
 
-    // 两种气泡都 portal 到 body：行内绝对定位气泡会被祖先 overflow(工具组行/折叠容器)剪裁而弹不出来。
-    // 详情气泡与行等宽，行宽随分隔条、窗口变化时一起变。
-    if (hasHoverContent)
-      return (
-        <HoverCard content={hoverContent} widthStrategy="anchor">
-          {row}
-        </HoverCard>
-      )
-
+    // 气泡 portal 到 body：行内绝对定位气泡会被祖先 overflow(工具组行/折叠容器)剪裁而弹不出来。
+    // 详情与截断全文共用同一个 HoverCard：与行等宽、带指向行的箭头，行宽随分隔条、窗口变化时一起变；
+    // 包裹层始终是它，详情有无切换时只换内容，不重挂整行。
     return (
-      <BubbleTooltip
-        content={fullDetail}
-        disabled={bubbleDisabled}
-        contentClassName="velar-compact-tool-row-detail-tooltip"
-      >
+      <HoverCard content={bubbleContent} widthStrategy="anchor">
         {row}
-      </BubbleTooltip>
+      </HoverCard>
     )
   }
 )

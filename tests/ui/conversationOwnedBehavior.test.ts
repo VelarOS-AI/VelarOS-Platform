@@ -335,9 +335,10 @@ void describe('Platform-owned conversation composer behavior', () => {
       paneStyles,
       /\.conversationBody\[data-scroll-navigator-hidden='false'\] \.messageListInner:not\(\.messageListInnerSide\)\s*\{\s*padding-inline-end: 5\.25rem;/u
     )
+    // 工具行的截断全文与详情共用与行等宽的 HoverCard，全文在气泡里任意处折行。
     assert.match(
       productStyles,
-      /\.velar-compact-tool-row-detail-tooltip\s*\{[\s\S]*?--radix-tooltip-trigger-width/u
+      /\.velar-compact-tool-row-detail-full\s*\{[\s\S]*?overflow-wrap: anywhere;/u
     )
     assert.match(
       productStyles,
