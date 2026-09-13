@@ -22,6 +22,11 @@
   气泡翻到行下方时箭头跟着翻；气泡外层不再裁剪，超高时由内容层滚动。没接详情、只在 detail 被截断时才弹的全文气泡
   也改用同一个 HoverCard（与行等宽、不描边、带箭头、可以追进去选字）。
 - 悬停气泡只会重复行上已有的内容（同样的工具名和耗时，没有多出的操作、对象、命令、参数或结果）时不再弹出。
+- 计划、目标、方案、指令、子 Agent、后台任务、上下文召回、提问与动作卡、浏览器、工作台、Office、桌面控制、系统进程、
+  定时任务、协作与媒体生成等工具行在工具名后写出作用对象（如 `plan:update 1/3 · 实现修复`、
+  `goal:update complete · 修复保存失败`、`browser:act target.click · button 登录`），悬停详情给出比行更完整的内容
+  （计划与目标的每一步、目标全文、子 Agent 的提示词、页面地址等）；外部引擎映射来的 `file_path` / `pattern` 参数
+  也能读出对象。归并的计划更新行逐次显示「进度 · 当前步骤」。
 
 ### Added
 
@@ -33,6 +38,7 @@
   渲染详情。内置工具行与归并行（×N）都已接上，归并行按调用顺序逐次列出。未接详情的工具行，溢出全文气泡同样与行等宽、不描边。
 - `describeToolCallHover` / `doesToolCallHoverAddToRow` / `resolveToolCallHoverContent`：先把悬停详情推导成纯数据，
   再判断它比行多不多出信息，多不出就不给行挂气泡。
+- `getToolMergedDetailItems`：归并行（×N）逐次调用在行内点名的对象，与该工具单独成行时的摘要一致。
 - `PopoverContent` 把触发元素中心在浮层内的坐标写成 `--velar-popover-anchor-center-x/y`，供浮层画指向触发元素的箭头。
 - `ChatMessage.systemNoticeKind`（`rewind` | `goal-continuation`）：系统通知行按类别选图标，目标自动续跑的留痕显示靶心。
 - `scrollBehavior` 新增夹底守卫与自动收起扣留的纯策略（`resolveScrollClampGuard`、

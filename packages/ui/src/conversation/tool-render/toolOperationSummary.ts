@@ -9,6 +9,7 @@
  */
 import type { ToolCallBlock } from '#contracts'
 import {
+  isBoolean,
   isEmpty,
   isFiniteNumber,
   isNonBlankString,
@@ -37,6 +38,8 @@ type RecordValue = Record<string, unknown>
 
 interface OperationReadContext {
   args: RecordValue
+  /** 结果是对象时才有：个别操作的对象只有执行后才知道（比如按序号完成的是哪一步）。 */
+  result: Nullable<RecordValue>
   formatPath: (path: string) => string
 }
 
@@ -389,16 +392,70 @@ function readSystemProcessesOperations(context: OperationReadContext): ToolOpera
   )
 }
 
+/** 按序号完成的步骤：结果回带了被完成的步骤就写它的标题，否则按参数里的步骤列表解析序号，再不行原样写。 */
+function describeCompletedGoalStep(context: OperationReadContext, stepRef: unknown): Nullable<string> {
+  const completedTitle = readString(asRecord(context.result?.completedStep), 'step')
+  if (completedTitle) return completedTitle
+  if (!isFiniteNumber(stepRef)) return readStringScalar(stepRef)
+
+  return readString(readRecordsArray(context.args, 'steps')[stepRef - 1], 'step') ?? String(stepRef)
+}
+
 function readGoalUpdateOperations(context: OperationReadContext): ToolOperationSummary[] {
   const operations: ToolOperationSummary[] = []
   const status = readOperationId(context.args.status)
-  if (status) operations.push(createOperation(status, toTargetText(readString(context.args, 'objective'))))
+  if (status) {
+    // 只改状态时参数里没有目标内容，点名的是结果里的目标。
+    const objective =
+      readString(context.args, 'objective') ?? readString(asRecord(context.result?.goal), 'objective')
+    operations.push(createOperation(status, toTargetText(objective)))
+  }
 
-  const completeStep = context.args.complete_step
-  const stepRef = isFiniteNumber(completeStep) ? String(completeStep) : readStringScalar(completeStep)
+  const stepRef = describeCompletedGoalStep(context, context.args.complete_step)
   if (stepRef) operations.push(createOperation('complete_step', toTargetText(stepRef)))
 
   return operations
+}
+
+/** 定时任务的修改：每个改动的字段一行，字段名作标签、新值作对象。 */
+const ScheduleUpdateFields = [
+  'name',
+  'enabled',
+  'rrule',
+  'timezone',
+  'prompt',
+  'space',
+  'workspaceRoot',
+  'browserUrl',
+  'provider',
+  'model',
+  'reasoningLevel',
+] as const
+
+function readScheduleUpdateOperations(context: OperationReadContext): ToolOperationSummary[] {
+  return ScheduleUpdateFields.flatMap((field) => {
+    const value = context.args[field]
+    if (isBoolean(value)) return [createOperation(field, String(value))]
+
+    const text = readStringScalar(value)
+    return text ? [createOperation(field, toTargetText(text))] : []
+  })
+}
+
+/** 召回：按引用取回时标签是引用的种类，按查询检索时是检索范围。 */
+function readContextRecallOperation(context: OperationReadContext): ToolOperationSummary[] {
+  const { args } = context
+  const id = readOperationId(args.refKind) ?? readOperationId(args.kind)
+  if (!id) return []
+
+  const target = readString(args, 'query') ?? joinTargetParts([readString(args, 'ref'), readString(args, 'jsonPath')])
+  return [createOperation(id, toTargetText(target))]
+}
+
+/** 长期指令：标签是指令类型（禁令、偏好、流程……），对象是指令标题。 */
+function readDirectiveUpsertOperation(context: OperationReadContext): ToolOperationSummary[] {
+  const type = readOperationId(context.args.directiveType)
+  return type ? [createOperation(type, toTargetText(readString(context.args, 'title')))] : []
 }
 
 function readWorkflowOperations(context: OperationReadContext): ToolOperationSummary[] {
@@ -447,6 +504,9 @@ const ToolOperationReaders: Readonly<Record<string, ToolOperationReader>> = {
   'system:open': readSystemOpenOperation,
   'system:processes': readSystemProcessesOperations,
   'goal:update': readGoalUpdateOperations,
+  'schedule:update': readScheduleUpdateOperations,
+  'context:recall': readContextRecallOperation,
+  'directive:upsert': readDirectiveUpsertOperation,
   'agent:run_workflow': readWorkflowOperations,
   'agent:dispatch': readDispatchOperation,
   'memory:search': readMemorySearchOperation,
@@ -458,7 +518,7 @@ const ToolOperationReaders: Readonly<Record<string, ToolOperationReader>> = {
  * 参数缺失或推不出任何操作时返回空数组，调用方回落到普通的参数摘要。
  */
 export function getToolOperations(
-  block: Pick<ToolCallBlock, 'toolName' | 'args'>,
+  block: Pick<ToolCallBlock, 'toolName' | 'args'> & Partial<Pick<ToolCallBlock, 'result'>>,
   formatPathForDisplay?: (path: string) => string
 ): ToolOperationSummary[] {
   const args = asRecord(block.args)
@@ -466,6 +526,7 @@ export function getToolOperations(
 
   const context: OperationReadContext = {
     args,
+    result: asRecord(block.result),
     formatPath: (path) => (formatPathForDisplay ? formatPathForDisplay(path) : path),
   }
   const reader = ToolOperationReaders[block.toolName.trim().toLowerCase()] ?? readGenericOperations

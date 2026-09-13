@@ -4,6 +4,7 @@ import {
 } from '../i18n/conversationTranslator'
 
 import { getToolCategoryLabel, getToolDescriptionText } from './toolPresentation'
+import { getToolTargetSummary } from './toolTargetSummary'
 
 import type { AppLocale, ToolCallBlock, ToolCategoryId } from '#contracts'
 import { platformCompatibility } from '#internal/platform'
@@ -222,8 +223,9 @@ function formatToolReadSkillNames(
 /**
  * 以查询词 / 符号为主语的工具：path 只是搜索范围。行内先说「查什么」，范围交给悬停详情
  * （`getToolSearchScopeItems`）；没有查询词的 action（如 language_diagnostics）仍回落到 path。
+ * system:search 的查询词叫 `pattern`；外部引擎的 Grep 映射成 project:search 时也只带 `pattern`。
  */
-const QueryFirstToolNames = new Set(['project:search', 'project:query-code'])
+const QueryFirstToolNames = new Set(['project:search', 'project:query-code', 'system:search'])
 
 function readQueryFirstSubject(
   toolName: string,
@@ -231,14 +233,27 @@ function readQueryFirstSubject(
 ): Nullable<string> {
   if (!QueryFirstToolNames.has(toolName)) return null
 
-  const subject = readString(args, 'symbol') ?? readString(args, 'query')
+  const subject = readString(args, 'symbol') ?? readString(args, 'query') ?? readString(args, 'pattern')
   return subject ? normalizeInline(subject) : null
 }
 
-/** `path` 既可能是单个路径，也可能是批量数组（project:read 一次读多个文件）。 */
+/**
+ * `path` 既可能是单个路径，也可能是批量数组（project:read 一次读多个文件）。外部引擎的 Read / Write
+ * 映射成 project:read / project:edit 时路径在 `file_path` 里。
+ */
 function readPathArgList(args: Nullable<Record<string, any>>): string[] {
-  const singlePath = readString(args, 'path')
+  const singlePath = readString(args, 'path') ?? readString(args, 'file_path')
   return singlePath ? [singlePath] : readStringArray(args, 'path')
+}
+
+type ToolSummaryBlock = Pick<ToolCallBlock, 'toolName' | 'args'> & Partial<Pick<ToolCallBlock, 'result'>>
+
+/** 按工具登记的作用对象摘要（见 toolTargetSummary）；路径按调用的 cwd 解析后交给宿主格式化。 */
+function readToolTargetSummary(
+  block: ToolSummaryBlock,
+  cwdFormatter: Nullable<PathDisplayFormatter>
+): ReturnType<typeof getToolTargetSummary> {
+  return getToolTargetSummary(block, (path) => formatPath(path, cwdFormatter))
 }
 
 function formatPathListPreview(
@@ -306,7 +321,7 @@ function getPrimaryArgPreview(
 }
 
 export function getToolDetailItems(
-  block: Pick<ToolCallBlock, 'toolName' | 'args'>,
+  block: ToolSummaryBlock,
   pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
@@ -316,7 +331,7 @@ export function getToolDetailItems(
   const cwdFormatter = wrapFormatterWithCwd(pathFormatter, cwd)
   const details: string[] = []
   const pathValues = [
-    readString(args, 'path'),
+    readString(args, 'path') ?? readString(args, 'file_path'),
     readString(args, 'targetPath'),
     readString(args, 'rootPath'),
     readString(args, 'fromPath'),
@@ -337,6 +352,13 @@ export function getToolDetailItems(
     if (!detail || isBlank(detail) || details.includes(detail)) return
 
     details.push(detail)
+  }
+
+  // 登记了读取器的工具：详情给读取器的补充行（比行内完整），没有补充行时就是行内那句话。
+  const targetSummary = readToolTargetSummary(block, cwdFormatter)
+  if (targetSummary) {
+    ;(targetSummary.details ?? [targetSummary.target ?? '']).forEach(pushDetail)
+    return details
   }
 
   pushDetail(getContextDistillPreview(block.toolName, args))
@@ -370,7 +392,7 @@ export function getToolDetailItems(
  * 「查什么」，范围由悬停详情另起一行补上；没有查询词时范围本身就是主语，已在 detail 里，这里返回空。
  */
 export function getToolSearchScopeItems(
-  block: Pick<ToolCallBlock, 'toolName' | 'args'>,
+  block: ToolSummaryBlock,
   pathFormatter?: LooseOptional<PathDisplayFormatter>
 ): string[] {
   const args = asRecord(block.args)
@@ -523,17 +545,13 @@ export function getMergedToolGroupStatusLabel(
 }
 
 export function getToolActivitySummary(
-  block: Pick<ToolCallBlock, 'toolName' | 'args' | 'isRunning'>,
+  block: ToolSummaryBlock & Pick<ToolCallBlock, 'isRunning'>,
   locale: AppLocale,
   pathFormatter?: LooseOptional<PathDisplayFormatter>,
   runtime: ConversationTranslator = conversationTranslatorRuntime
 ): Nullable<string> {
-  const args = asRecord(block.args)
-  const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(args, 'cwd'))
   const displayName = block.toolName
-  const preview =
-    formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
-    getPrimaryArgPreview(block.toolName, args, cwdFormatter, locale, runtime)
+  const preview = getToolDetailSummary(block, pathFormatter, locale, runtime)
   const action = preview ? `${displayName} · ${preview}` : displayName
 
   return block.isRunning
@@ -541,8 +559,12 @@ export function getToolActivitySummary(
     : action
 }
 
+/**
+ * 紧凑行在工具名之后的那句话：这次调用作用在什么上。先看按工具登记的摘要（计划、目标、浏览器检查……），
+ * 再看上下文蒸馏的便签、读取的 skill，最后是通用的路径、命令、查询词。
+ */
 export function getToolDetailSummary(
-  block: Pick<ToolCallBlock, 'toolName' | 'args'>,
+  block: ToolSummaryBlock,
   pathFormatter?: LooseOptional<PathDisplayFormatter>,
   locale?: AppLocale,
   runtime: ConversationTranslator = conversationTranslatorRuntime
@@ -550,10 +572,26 @@ export function getToolDetailSummary(
   const args = asRecord(block.args)
   const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(args, 'cwd'))
   return (
+    toNullable(readToolTargetSummary(block, cwdFormatter)?.target) ??
     getContextDistillPreview(block.toolName, args) ??
     formatToolReadSkillNames(block.toolName, args, locale, runtime) ??
     getPrimaryArgPreview(block.toolName, args, cwdFormatter, locale, runtime)
   )
+}
+
+/**
+ * 归并行（×N）逐次调用在行内点名的对象：登记了读取器的工具用它的那句话（与单独成行时一致），
+ * 其余工具沿用全部详情项（一次批量读的每个文件都点名）。
+ */
+export function getToolMergedDetailItems(
+  block: ToolSummaryBlock,
+  pathFormatter?: LooseOptional<PathDisplayFormatter>,
+  locale?: AppLocale,
+  runtime: ConversationTranslator = conversationTranslatorRuntime
+): string[] {
+  const cwdFormatter = wrapFormatterWithCwd(pathFormatter, readString(asRecord(block.args), 'cwd'))
+  const target = readToolTargetSummary(block, cwdFormatter)?.target
+  return target ? [target] : getToolDetailItems(block, pathFormatter, locale, runtime)
 }
 
 export function getToolResultSummary(

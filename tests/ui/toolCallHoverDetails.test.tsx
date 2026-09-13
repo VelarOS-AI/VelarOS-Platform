@@ -307,4 +307,24 @@ void describe('when the bubble adds nothing to the row', () => {
     assert.ok(content)
     assert.match(render(content), />packages\/project\/src</)
   })
+
+  void test('a plan update row keeps its bubble for the steps the row does not list', () => {
+    const block = toolCall('plan-2', 'plan:update', {
+      plan: [
+        { step: '实现', status: 'completed' },
+        { step: '验证', status: 'in_progress' },
+      ],
+    })
+    const content = resolveToolCallHoverContent(
+      { blocks: [block] },
+      { label: 'plan:update', detail: '1/2 · 验证', status: '2秒' },
+      'zh-CN',
+      runtime
+    )
+
+    assert.ok(content)
+    const markup = render(content)
+    assert.match(markup, />1\. \[completed\] 实现</)
+    assert.match(markup, />2\. \[in_progress\] 验证</)
+  })
 })
