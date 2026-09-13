@@ -3,10 +3,10 @@ import { jsonAdapterFactory } from "../adapters/json-adapter.js";
 import { jsTsAdapterFactory } from "../adapters/jsts-adapter.js";
 import { markdownAdapterFactory } from "../adapters/markdown-adapter.js";
 import { textAdapterFactory } from "../adapters/text-adapter.js";
-import { PROJECT_PACKAGE_VERSION } from "../core/defaults.js";
-import { jsonPatchStrategy } from "../patch/json-strategy.js";
-import { jsTsPatchStrategy } from "../patch/jsts-strategy.js";
-import { textPatchStrategy } from "../patch/text-strategy.js";
+import { jsonPatchStrategy } from "../edits/strategies/json-strategy.js";
+import { jsTsPatchStrategy } from "../edits/strategies/jsts-strategy.js";
+import { textPatchStrategy } from "../edits/strategies/text-strategy.js";
+import { PROJECT_PACKAGE_VERSION } from "../runtime/defaults.js";
 import type { ProjectPlugin } from "../types/plugin.js";
 import { postconditionValidator,scopeValidator } from "../validation/builtin.js";
 

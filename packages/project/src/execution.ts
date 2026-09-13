@@ -1,4 +1,4 @@
-export * from './command-execution-policy.js'
+export * from './execution/command-policy.js'
 export type {
   ProjectBackgroundProcessInfo,
   ProjectCommandResult,

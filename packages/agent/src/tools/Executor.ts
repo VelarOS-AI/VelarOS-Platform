@@ -87,8 +87,7 @@ const ToolAbortSettlementGraceMs = 250;
 const ToolCancelledByUserReason = "Cancelled by user";
 const MaxConcurrentConcurrencySafeTools = 8;
 
-// 照抄历史占位串是调用方的问题，不是工具故障：不走 schema_validation_failed（那条会让模型先按
-// 「系统 bug」归因并停下任务），而是直接说明原因与续做方式；执行前拒绝，占位串不会写进任何文件。
+// 历史压缩后的预览不能作为源码重放：说明缺失内容与恢复路径，在执行前拒绝。
 function buildHistoryPlaceholderArgsFailure(
   toolName: string,
   placeholderPaths: string[],
@@ -106,7 +105,7 @@ function buildHistoryPlaceholderArgsFailure(
         code: "VALIDATION",
         details: { placeholderPaths: shownPaths },
         nextActions: [
-          "这是调用参数的问题，工具本身正常：完整写出这些参数的真实内容后重新调用，不要照抄历史里的 \"[history preview omitted …]\" 占位串。",
+          "这些参数来自压缩后的历史预览，缺少可执行的完整内容；恢复真实内容后重新调用。",
           "需要旧内容时先重新读取目标文件或片段，以读到的原文为准构造参数。",
           "内容太长时拆成多次小范围编辑，每次只写需要改动的片段。",
         ],

@@ -3,12 +3,12 @@ import { resolve } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../src/agent/Project.tool.js'
+import { installProjectApprovalProvider } from '../src/composition/approval.js'
 import {
   analyzeCommandExecution,
   isParallelCommandExecutionSafe,
   isShellCommandReadOnly,
-} from '../src/command-execution-policy.js'
-import { installProjectApprovalProvider } from '../src/composition/approval.js'
+} from '../src/execution/command-policy.js'
 
 describe('project approval context', () => {
   test('finds git subcommands after global options and fails closed for unknown forms', () => {

@@ -297,8 +297,9 @@ describe('tool execution lifecycle', () => {
       error: 'history_placeholder_argument',
       details: { placeholderPaths: ['edits[0].newText'] },
     })
-    // 这是调用方问题：不能挂上「先按系统 bug 归因再停下」的指引，否则模型会把任务停住等人排查。
+    // 提供可执行的恢复路径，避免把参数恢复升级为必须停工的运行时故障。
     expect(failure.runtimeToolIssue).toBeUndefined()
+    expect(failure.nextActions.join(' ')).toContain('恢复真实内容')
   })
 
   test('source text that merely quotes the placeholder format still executes', async () => {

@@ -4,6 +4,7 @@ import type { FileSnapshot } from "./snapshot.js";
 /** project 内核可转换为补丁的所有编辑原语联合类型。 */
 export type EditOperation =
   | ReplaceTextOperation
+  | ReplaceLinesOperation
   | InsertTextOperation
   | InsertTextAtAnchorOperation
   | AppendTextOperation
@@ -20,6 +21,17 @@ export type EditOperation =
   | RemoveImportOperation
   | JsonPatchOperation
   | CustomEditOperation;
+
+/** 行号绑定到已读取的磁盘 revision；新正文按行传递，不需要复述旧文本。 */
+export interface ReplaceLinesOperation {
+  type: "replace_lines";
+  path: string;
+  baseRevision: string;
+  startLine: number;
+  endLine: number;
+  /** 每项是一行，不含 CR/LF；空数组删除所选行。 */
+  newLines: string[];
+}
 
 export interface ReplaceTextOperation {
   type: "replace_text";

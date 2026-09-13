@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { analyzeCommandExecution as analyzeProjectCommand } from '../../project/src/command-execution-policy'
+import { analyzeCommandExecution as analyzeProjectCommand } from '../../project/src/execution'
 import { analyzeCommandExecution as analyzeSystemCommand } from '../src/SystemCommandExecutionPolicy'
 
 // system 与 project 两个空间各有一份命令危险判定（两包互不依赖），同一条命令在两边必须得到同一结论，

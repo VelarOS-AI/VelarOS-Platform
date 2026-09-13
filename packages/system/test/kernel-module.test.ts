@@ -102,6 +102,11 @@ describe('System Kernel module', () => {
     expect(result.success).toBe(false)
     expect(result.timedOut).toBe(false)
     expect(result.capture?.decodeErrors).toBe(0)
+    expect(result.verification).toEqual({
+      kind: 'unknown',
+      status: 'failed',
+      issues: [`stdout:\n${text}`, `stderr:\n${text}`],
+    })
     expect(result.shell).toBeDefined()
     expect(result.shell).not.toHaveProperty('env')
   })
@@ -117,6 +122,117 @@ describe('System Kernel module', () => {
     expect(result.exitCode).toBe(0)
     expect(result.success).toBe(true)
     expect(result.timedOut).toBe(false)
+    expect(result.verification).toEqual({ kind: 'unknown', status: 'passed', issues: [] })
+  })
+
+  test('does not report stdout or stderr from a successful command as verification issues', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const result = await kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', "process.stdout.write('build complete'); process.stderr.write('warning banner')"],
+      },
+      timeoutMs: 3_000,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.verification).toEqual({ kind: 'unknown', status: 'passed', issues: [] })
+  })
+
+  test.each([
+    ['stdout', 'TypeScript error TS2322: number is not assignable to string'],
+    ['stderr', 'fatal: stderr-only failure'],
+  ] as const)('summarizes a failed command whose error is written only to %s', async (stream, message) => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const result = await kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', `process.${stream}.write(${JSON.stringify(message)}); process.exitCode = 2`],
+      },
+      timeoutMs: 3_000,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.verification.status).toBe('failed')
+    expect(result.verification.issues).toEqual([`${stream}:\n${message}`])
+  })
+
+  test('keeps stdout and stderr separately identifiable when both streams report a failure', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const result = await kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', `
+          process.stderr.write('compiler startup banner');
+          process.stdout.write('src/index.ts(4,2): error TS2322');
+          process.exitCode = 2;
+        `],
+      },
+      timeoutMs: 3_000,
+    })
+
+    expect(result.verification.issues).toEqual([
+      'stdout:\nsrc/index.ts(4,2): error TS2322',
+      'stderr:\ncompiler startup banner',
+    ])
+  })
+
+  test('summarizes output emitted before a timeout or cancellation without reporting success', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const timedOut = await kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', "process.stdout.write('timeout location'); setInterval(() => {}, 1_000)"],
+      },
+      timeoutMs: 1_000,
+    })
+    const controller = new AbortController()
+    const cancelledPromise = kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', "process.stderr.write('cancel location'); setInterval(() => {}, 1_000)"],
+      },
+      timeoutMs: 3_000,
+    }, false, controller.signal)
+    setTimeout(() => controller.abort(), 1_000)
+    const cancelled = await cancelledPromise
+
+    expect(timedOut.success).toBe(false)
+    expect(timedOut.verification).toEqual({
+      kind: 'unknown', status: 'timed-out', issues: ['stdout:\ntimeout location'],
+    })
+    expect(cancelled.success).toBe(false)
+    expect(cancelled.verification).toEqual({
+      kind: 'unknown', status: 'aborted', issues: ['stderr:\ncancel location'],
+    })
+  })
+
+  test('bounds long failure summaries to the output tail without splitting Unicode characters', async () => {
+    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
+    const marker = 'src/末尾.ts(9,1): error 🙂'
+    // The 1,000-character issue limit (including "stdout:\n") would start on the low
+    // surrogate of this emoji unless the tail boundary advances past the whole pair.
+    const output = `start-xxxx🙂${'y'.repeat(991 - marker.length)}${marker}`
+    const result = await kernel.runCommand('fixture', {
+      nativeCommand: {
+        file: process.execPath,
+        args: ['-e', `
+          process.stdout.write(${JSON.stringify(output)});
+          process.stderr.write('z'.repeat(2_000) + 'stderr-tail');
+          process.exitCode = 1;
+        `],
+      },
+      timeoutMs: 3_000,
+    })
+
+    const [stdoutIssue, stderrIssue] = result.verification.issues
+    expect(stdoutIssue).toBe(`stdout:\n${'y'.repeat(991 - marker.length)}${marker}`)
+    expect(stdoutIssue!.length).toBe(999)
+    expect(stdoutIssue).not.toContain('start-xxxx')
+    expect(stdoutIssue).not.toContain('\ufffd')
+    expect(Buffer.from(stdoutIssue!, 'utf8').toString('utf8')).toBe(stdoutIssue)
+    expect(stderrIssue).toEndWith('stderr-tail')
+    expect(stderrIssue!.length).toBe(1_000)
   })
 
   test('does not spawn a command cancelled during asynchronous preparation', async () => {

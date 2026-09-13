@@ -14,7 +14,7 @@ import {
 import {
   FileProjectTransactionStateStore,
   type ProjectTransactionPendingOperation,
-} from '../src/transaction-state'
+} from '../src/persistence/transaction-state'
 import type { Diagnostic } from '../src/types/common'
 import { unifiedDiff } from '../src/utils/diff'
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { TransactionRepository } from '../src/core/transaction-repository'
+import { TransactionRepository } from '../src/transactions/transaction-repository'
 import type {
   ProjectTransactionStatus,
   StoredTransaction,

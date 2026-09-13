@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/core/project-kernel'
+import { createProjectKernel } from '../src/runtime/project-kernel'
 
 describe('ProjectKernel transaction repository integration', () => {
   test('restores transaction and projection order when durable discard commit fails', async () => {

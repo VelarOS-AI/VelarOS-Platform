@@ -9,8 +9,8 @@ import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { projectTools } from '../src/agent/Project.tool'
 import type { ProjectToolContext } from '../src/agent/Types'
 import { createProjectKernel, type EditIntent } from '../src/index'
+import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
 import { ProjectToolNames } from '../src/project-tool-names'
-import { FileProjectTransactionStateStore } from '../src/transaction-state'
 
 const Precious = 'precious\n'
 

@@ -13,7 +13,7 @@ import {
   executeAgentProjectRead,
   executeAgentProjectSearch,
 } from '../src/agent/ProjectKernelPort'
-import { ProjectEditOperationSchema } from '../src/edit-schema'
+import { ProjectEditOperationSchema } from '../src/edits/schema'
 import { ProjectToolNames } from '../src/project-tool-names'
 
 const ModelToolSchemaCharacterBudget = 40_000
@@ -67,7 +67,7 @@ describe('Project model-facing tool contract', () => {
         schema: z.object({ path: z.string().min(1) }),
         permissions: ['fs:read'],
         execute: async () => null,
-      })
+      }),
     ).toThrow('example does not satisfy schema')
 
     for (const [name, expected] of [
@@ -95,7 +95,7 @@ describe('Project model-facing tool contract', () => {
         path: 'reports/review.md',
         content: '# Review\n\nPassed.',
         mode: 'create',
-      }).success
+      }).success,
     ).toBe(true)
     expect(writeTool.description).toContain('project:edit')
     expect(projectTools[ProjectToolNames.edit].description).toContain('project:write')
@@ -104,7 +104,7 @@ describe('Project model-facing tool contract', () => {
   test('accepts list globs relative to the requested directory without breaking root-relative globs', () => {
     expect(scopeProjectListPatterns('scripts/build', ['*.mjs'])).toEqual(['scripts/build/*.mjs'])
     expect(
-      scopeProjectListPatterns('scripts/build', ['scripts/build/linkedWorkspacePackages.mjs'])
+      scopeProjectListPatterns('scripts/build', ['scripts/build/linkedWorkspacePackages.mjs']),
     ).toEqual(['scripts/build/linkedWorkspacePackages.mjs'])
     expect(scopeProjectListPatterns('.', ['scripts/**/*.mjs'])).toEqual(['scripts/**/*.mjs'])
   })
@@ -201,7 +201,7 @@ describe('Project model-facing tool contract', () => {
       baseRevisions: { 'first.txt': 'revision-first.txt' },
     })
     expect(
-      projectTools[ProjectToolNames.read].schema.safeParse(result.files[0]?.continuation).success
+      projectTools[ProjectToolNames.read].schema.safeParse(result.files[0]?.continuation).success,
     ).toBe(true)
     expect(result.files[1]?.continuation?.path).toBe('second.txt')
   })
@@ -220,13 +220,13 @@ describe('Project model-facing tool contract', () => {
       projectTools[ProjectToolNames.read].schema.safeParse({
         path: ['first.txt', 'second.txt'],
         maxChars: 1,
-      }).success
+      }).success,
     ).toBe(false)
     await expect(
       executeAgentProjectRead(project, {
         path: ['first.txt', 'second.txt'],
         maxChars: 1,
-      })
+      }),
     ).rejects.toMatchObject({
       reason: 'INVALID_INPUT',
       details: { maxChars: 1, pathCount: 2 },
@@ -294,7 +294,7 @@ describe('Project model-facing tool contract', () => {
       },
     ])
     expect(result.nextAction).toBe(
-      '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。'
+      '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。',
     )
   })
 
@@ -336,6 +336,22 @@ describe('Project model-facing tool contract', () => {
     expect(serialized).not.toContain('untrusted')
   })
 
+  test('model deletion uses empty replacement while SDK compatibility remains available', () => {
+    const schema = projectTools[ProjectToolNames.edit].schema
+    expect(
+      schema.safeParse({
+        edits: [{ type: 'replace_text', path: 'a.ts', oldText: 'a', newText: '' }],
+      }).success,
+    ).toBe(true)
+    expect(
+      schema.safeParse({ edits: [{ type: 'delete_text', path: 'a.ts', oldText: 'a' }] }).success,
+    ).toBe(false)
+    expect(
+      ProjectEditOperationSchema.safeParse({ type: 'delete_text', path: 'a.ts', oldText: 'a' })
+        .success,
+    ).toBe(true)
+  })
+
   test('exposes only executable edit operations', () => {
     const executableSamples = [
       { type: 'replace_text', path: 'a.ts', oldText: 'a', newText: 'b' },
@@ -374,22 +390,22 @@ describe('Project model-facing tool contract', () => {
 
     expect(
       executableSamples.every(
-        (operation) => ProjectEditOperationSchema.safeParse(operation).success
-      )
+        (operation) => ProjectEditOperationSchema.safeParse(operation).success,
+      ),
     ).toBe(true)
     expect(
       ProjectEditOperationSchema.safeParse({
         type: 'json_patch',
         path: 'a.json',
         patches: [{ op: 'replace', path: '/value' }],
-      }).success
+      }).success,
     ).toBe(false)
     expect(
       ProjectEditOperationSchema.safeParse({
         type: 'json_patch',
         path: 'a.json',
         patches: [{ op: 'remove', path: '/value', value: 1 }],
-      }).success
+      }).success,
     ).toBe(false)
     expect(
       ProjectEditOperationSchema.safeParse({
@@ -399,12 +415,12 @@ describe('Project model-facing tool contract', () => {
         newText: 'b',
         occurrence: 1,
         replaceAll: true,
-      }).success
+      }).success,
     ).toBe(false)
     expect(
       retiredTypes.every(
-        (type) => !ProjectEditOperationSchema.safeParse({ type, path: 'a.ts', text: 'x' }).success
-      )
+        (type) => !ProjectEditOperationSchema.safeParse({ type, path: 'a.ts', text: 'x' }).success,
+      ),
     ).toBe(true)
   })
 })

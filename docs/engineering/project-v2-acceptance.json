@@ -1,0 +1,477 @@
+{
+  "date": "2026-09-13",
+  "platformBase": "ac0f0f0",
+  "workbenchBase": "64ea8cd",
+  "host": "macOS arm64 Workbench candidate",
+  "deterministic": [
+    {
+      "tool": "project:list",
+      "ms": 40,
+      "status": "passed"
+    },
+    {
+      "tool": "project:read",
+      "ms": 17,
+      "status": "passed"
+    },
+    {
+      "tool": "project:search",
+      "ms": 80,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "find_symbols",
+      "ms": 20,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "list_exports",
+      "ms": 11,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "find_imports",
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "find_importers",
+      "ms": 61,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "find_references",
+      "ms": 4,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "language_diagnostics",
+      "ms": 4304,
+      "status": "passed"
+    },
+    {
+      "tool": "project:query-code",
+      "action": "analyze_symbol_impact",
+      "ms": 21,
+      "status": "passed"
+    },
+    {
+      "tool": "project:run",
+      "ms": 120,
+      "status": "passed"
+    },
+    {
+      "tool": "project:write",
+      "ms": 132,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 52,
+      "status": "passed"
+    },
+    {
+      "tool": "project:write",
+      "ms": 63,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 12,
+      "status": "passed"
+    },
+    {
+      "tool": "project:write",
+      "ms": 21,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 6,
+      "status": "passed"
+    },
+    {
+      "tool": "project:write",
+      "ms": 10,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 7,
+      "status": "passed"
+    },
+    {
+      "tool": "project:run",
+      "ms": 82,
+      "status": "passed"
+    },
+    {
+      "tool": "project:read",
+      "ms": 4,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "replace_lines"
+      ],
+      "ms": 64,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 5,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "replace_text"
+      ],
+      "ms": 8,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 12,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "insert_text_at_anchor"
+      ],
+      "ms": 75,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "append_text"
+      ],
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "prepend_text"
+      ],
+      "ms": 4,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 2,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "replace_text"
+      ],
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 2,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "create_file"
+      ],
+      "ms": 17,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 14,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "delete_file"
+      ],
+      "ms": 13,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 2,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "rename_file"
+      ],
+      "ms": 29,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 17,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "replace_symbol"
+      ],
+      "ms": 22,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "insert_around_symbol"
+      ],
+      "ms": 7,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 5,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "add_import"
+      ],
+      "ms": 5,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 3,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "remove_import"
+      ],
+      "ms": 5,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 1,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "json_patch"
+      ],
+      "ms": 5,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 1,
+      "status": "passed"
+    },
+    {
+      "tool": "project:edit",
+      "operations": [
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text",
+        "prepend_text"
+      ],
+      "ms": 411,
+      "status": "passed"
+    },
+    {
+      "tool": "project:rollback",
+      "ms": 249,
+      "status": "passed"
+    }
+  ],
+  "naturalAgentTask": {
+    "session": "workbench-workbench-mtzadktx-1",
+    "tools": {
+      "plan:update": 3,
+      "project:list": 2,
+      "project:search": 7,
+      "project:read": 10,
+      "project:edit": 4,
+      "project:run": 15,
+      "project:query-code": 3,
+      "agent:dispatch": 2
+    },
+    "edits": [
+      {
+        "id": "call_fJZTcua3GiCyh32ZOfa7vrHO",
+        "inputChars": 7643,
+        "operations": [
+          "replace_text",
+          "insert_text_at_anchor",
+          "replace_text",
+          "replace_text",
+          "replace_text",
+          "delete_text",
+          "replace_text",
+          "replace_text"
+        ],
+        "error": false,
+        "result": "{'changed': True, 'transactionId': 'tx_115d50a5e7a3435d', 'changedFiles': ['packages/system/src/kernel/LocalSystemKernel.ts', 'packages/system/test/kernel-modul"
+      },
+      {
+        "id": "call_92O4ARsb1qrQhyxc7xyrhtS6",
+        "inputChars": 2179,
+        "operations": [
+          "replace_text"
+        ],
+        "error": false,
+        "result": "{'changed': True, 'transactionId': 'tx_aba98f1bed594cfe', 'changedFiles': ['packages/system/test/kernel-module.test.ts'], 'newRevisions': {'packages/system/test"
+      },
+      {
+        "id": "call_kCFm6bv18AJY4uCH9cRAGRW7",
+        "inputChars": 806,
+        "operations": [
+          "replace_text"
+        ],
+        "error": false,
+        "result": "{'changed': True, 'transactionId': 'tx_b5af3859bd7b41c9', 'changedFiles': ['packages/system/test/kernel-module.test.ts'], 'newRevisions': {'packages/system/test"
+      },
+      {
+        "id": "call_E8khNl6PnAAR79t7Oo8gkyJo",
+        "inputChars": 2201,
+        "operations": [
+          "insert_text_at_anchor",
+          "replace_text",
+          "replace_text"
+        ],
+        "error": false,
+        "result": "{'changed': True, 'transactionId': 'tx_19349aea31424a66', 'changedFiles': ['packages/system/test/kernel-module.test.ts'], 'newRevisions': {'packages/system/test"
+      }
+    ]
+  },
+  "naturalWorkbenchTask": {
+    "session": "workbench-workbench-mtzbhqm5-1",
+    "tools": {
+      "project:read": 8,
+      "project:list": 1,
+      "project:search": 12,
+      "agent:dispatch": 4,
+      "project:run": 15,
+      "project:edit": 4
+    },
+    "edits": [
+      {
+        "id": "call_mSqnytWokTOEJiKRJXHOhfXi",
+        "inputChars": 4593,
+        "operations": [
+          "replace_text",
+          "replace_text",
+          "replace_text",
+          "replace_text"
+        ],
+        "changed": true
+      },
+      {
+        "id": "call_Oo7v2gxxGczNNVbDen69mqDj",
+        "inputChars": 435,
+        "operations": [
+          "replace_text"
+        ],
+        "changed": true
+      },
+      {
+        "id": "call_HJmzhoLLhgKzlUYIF5Bn3nzS",
+        "inputChars": 934,
+        "operations": [
+          "insert_text_at_anchor",
+          "replace_text"
+        ],
+        "changed": true
+      },
+      {
+        "id": "call_T7UHD6HpsEliRB8aiA0OSsmW",
+        "inputChars": 2142,
+        "operations": [
+          "replace_text",
+          "replace_text",
+          "replace_text",
+          "replace_text",
+          "replace_text"
+        ],
+        "changed": true
+      }
+    ]
+  }
+}

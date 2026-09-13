@@ -41,6 +41,51 @@ CodeGraph 是可选增强资源，不拥有第二个工具身份，也不会决�
 `occurrence` 选择一处，或传 `replaceAll: true` 明确修改全部。JSON Patch 的 `add` 与
 `replace` 必须携带 JSON `value`；路径按 JSON Pointer 解析，且不会自动创建缺失的父节点。
 
+已读取明确行号时，可用 `replace_lines` 避免复述旧源码及其反斜杠：
+
+```json
+{
+  "edits": [{
+    "type": "replace_lines",
+    "path": "src/index.ts",
+    "baseRevision": "从 project:read 的 snapshot.revision 原样复制",
+    "startLine": 12,
+    "endLine": 14,
+    "newLines": ["const ready = true", "run(ready)"]
+  }]
+}
+```
+
+模型入口使用扁平 `edits` 数组；SDK `prepareEdit` 保持 `operations: [{ operation }]`，
+用于插件意图、约束和审计。一次模型调用可包含 1–1000 个操作。
+模型用 `replace_text` 的空 `newText` 删除片段；SDK 继续兼容 `delete_text`。
+单文件追加/前置使用 `project:write`，多文件原子追加/前置仍可在 `edits` 中组合。
+范围从 1 开始且包含两端，每项是一行（保留缩进，不含 CR/LF），空数组删除所选行。
+工具沿用目标区域换行符和末尾换行状态；范围越界或 revision 过期会拒绝。
+同文件连续的 `replace_lines` 使用同一读取版本的原始行号，工具按原快照解析不重叠范围并一次拼接
+结果，不要求模型手算前序操作引起的位移。随后仍可接文本、符号操作及其他文件编辑。
+
+默认事务预算为 100 个文件、每文件净变更 20,000 行、每事务净变更 50,000 行；宿主可通过
+`corePolicy` 收紧或扩大。准备失败返回操作序号、阶段和读取恢复参数，任何准备失败都不写盘。
+revision 默认使用内容指纹，能够检测同大小、保留 mtime 的外部修改。
+文本写入通过同目录临时文件、同步与原子替换提交，保留文件 mode 和文本编码。
+不完整 Unicode 会在准备阶段拒绝，文本里的字面反斜杠保持原义。
+
+## 内部职责
+
+| 目录 | 职责 |
+| --- | --- |
+| `types` | 公共领域类型与文件访问端口 |
+| `runtime` | Kernel 组装、策略、生命周期与事务提交协调 |
+| `files` | 有界读取、发现、搜索、Git 索引及原子文件 IO |
+| `edits` | 模型 schema、定位反馈、纯补丁策略 |
+| `transactions` | 规划、暂存视图、验证、状态机、锁与恢复 |
+| `persistence` | 事务日志、change feed 与审计存储 |
+| `execution` | 命令行为策略 |
+| `agent` | 模型协议与宿主端口适配 |
+
+公共导出路径保持稳定。架构门禁禁止文件、编辑、事务服务反向依赖 Kernel 组装和 Agent。
+
 ## 可恢复事务与 Desktop 边界
 
 需要跨进程重启继续 apply/rollback 的宿主，应把状态和 ChangeFeed 放在宿主私有目录，

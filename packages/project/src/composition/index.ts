@@ -1,5 +1,5 @@
 import { projectTools } from '../agent/Project.tool.js'
-import { createProjectKernel, type CreateProjectKernelOptions, type ProjectKernel } from '../core/project-kernel.js'
+import { createProjectKernel, type CreateProjectKernelOptions, type ProjectKernel } from '../runtime/project-kernel.js'
 
 export * from './approval.js'
 export * from './mod.js'

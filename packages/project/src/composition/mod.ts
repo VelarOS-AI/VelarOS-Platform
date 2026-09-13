@@ -7,8 +7,8 @@ import {
   projectFileTools,
   projectTools,
 } from '../agent/Project.tool.js'
-import { PROJECT_PACKAGE_VERSION } from '../core/defaults.js'
 import { ProjectToolNames } from '../project-tool-names.js'
+import { PROJECT_PACKAGE_VERSION } from '../runtime/defaults.js'
 
 const ProjectModId = 'velaros.project' as const
 const ProjectSpaceId = 'project' as const

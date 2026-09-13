@@ -1,7 +1,7 @@
 import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
-import { validateReadBounds } from '../read-bounds.js'
+import { validateReadBounds } from '../files/read-bounds.js'
 import type { ProjectSymbol } from '../types/adapter.js'
 import type {
   ApplyEditInput,

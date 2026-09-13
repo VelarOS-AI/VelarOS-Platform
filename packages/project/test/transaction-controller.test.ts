@@ -8,13 +8,13 @@ import {
   FileProjectChangeFeed,
   MemoryProjectChangeFeed,
   type ProjectChangeFeedWriter,
-} from '../src/change-feed'
-import { createProjectKernel } from '../src/core/project-kernel'
+} from '../src/persistence/change-feed'
+import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
+import { createProjectKernel } from '../src/runtime/project-kernel'
 import {
   createProjectTransactionController,
   type ProjectTransactionController,
 } from '../src/transaction-controller'
-import { FileProjectTransactionStateStore } from '../src/transaction-state'
 
 interface DurableHarness {
   readonly controller: ProjectTransactionController

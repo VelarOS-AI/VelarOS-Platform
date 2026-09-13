@@ -20,6 +20,7 @@ import {
   historyPreviewPlaceholder,
   HistoryPreviewPlaceholderHeaderPattern,
 } from "./historyPreviewPlaceholder";
+import { fitProjectReadsForModel } from './projectReadSerialization';
 
 interface ToolResultCompactionLimits {
   maxSerializedLength: number;
@@ -698,6 +699,7 @@ function calcReadFileContentBudget(maxSerializedLength: number): number {
 function fixReadFileMetadata(result: unknown, contentBudget: number): unknown {
   if (!isPlainObject(result)) return result;
   const r = result;
+  if (isPlainObject(r["snapshot"])) return result;
   const content = r["content"];
   const totalLines = r["totalLines"];
   if (!isString(content) || !isNumber(totalLines)) return result;
@@ -810,7 +812,7 @@ export function serializeToolResultForModel(
   const limits = buildModelLimitsWithHints(hints, result);
   const contentBudget = calcReadFileContentBudget(limits.maxSerializedLength);
   const preprocessed = fixReadFilesMetadata(
-    fixReadFileMetadata(result, contentBudget),
+    fixReadFileMetadata(fitProjectReadsForModel(result, limits.maxSerializedLength - 512), contentBudget),
     contentBudget,
   );
   return compactToolResult(preprocessed, limits).serialized;

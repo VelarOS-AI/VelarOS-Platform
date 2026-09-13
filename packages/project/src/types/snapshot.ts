@@ -1,4 +1,4 @@
-import type { ProjectTextEncoding } from "../utils/text.js";
+import type { ProjectTextEncoding } from "./text.js";
 
 /** 单个路径的时间点视图，包含乐观并发控制使用的 revision 数据。 */
 export interface FileSnapshot {

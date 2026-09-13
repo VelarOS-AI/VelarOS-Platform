@@ -6,7 +6,7 @@ import {
   stagedContentAfter,
   TransactionOverlay,
   withoutStagedOffsets,
-} from '../src/core/transaction-overlay'
+} from '../src/transactions/transaction-overlay'
 import type { PreparedPatch } from '../src/types/edit'
 
 function patch(

@@ -1,4 +1,4 @@
-export * from './path-containment.js'
+export * from './files/path-containment.js'
 export {
   ProjectDiscoverySkippedDirectoryNames,
   ProjectExcludedDirectoryNames,
@@ -7,6 +7,6 @@ export {
   shouldRestrictProjectModelPathSegment,
   shouldSkipProjectDirectory,
   shouldSkipProjectDiscoveryDirectory,
-} from './project-visibility.js'
+} from './files/visibility.js'
 export type * from './types/io.js'
 export type * from './types/snapshot.js'

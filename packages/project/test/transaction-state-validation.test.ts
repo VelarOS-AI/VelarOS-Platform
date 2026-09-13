@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { FileProjectTransactionStateStore } from '../src/transaction-state'
+import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
 import type { ProjectTransactionStatus } from '../src/types/transaction'
 
 interface TransactionFixture {

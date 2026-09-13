@@ -11,13 +11,13 @@ import {
 import { isArray, isEmpty, isPresent, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { type ProjectEditOperationsSchema, type ProjectModelEditInput,ProjectModelEditSchema } from '../edits/schema.js'
 import {
   analyzeCommandExecution,
   buildBackgroundCommandConfirmationMessage,
   isParallelCommandExecutionSafe,
   isShellCommandReadOnly,
-} from '../command-execution-policy.js'
-import { ProjectEditOperationsSchema } from '../edit-schema.js'
+} from '../execution/command-policy.js'
 import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../project-code-query.js'
 import { ProjectToolNames } from '../project-tool-names.js'
 
@@ -417,37 +417,28 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
     ),
 })
 
-const projectEdit = defineProjectTool<{
-  operations: z.input<typeof ProjectEditOperationsSchema>
-  cwd?: string
-  baseRevisions?: Record<string, string>
-}>({
+const projectEdit = defineProjectTool<ProjectModelEditInput>({
   name: ProjectToolNames.edit,
   category: 'project-changes',
   role: 'edit',
   summary: '以一个可回滚事务执行精确文本、符号、导入、JSON 或多文件结构化修改。',
   suitable: ['需要精确替换、锚点插入、符号/导入/JSON 修改，或多个操作必须原子提交。'],
   forbidden: ['不要用它承载单文件报告或整段长文本；创建、覆盖、追加或前置完整内容使用 project:write。'],
-  usage: ['每个 operations 项包含 operation；先读取目标修订，再提交最小结构化修改。'],
+  usage: ['edits 是扁平操作数组，每项直接写 type、path 和修改内容；先读后改。删除片段用 replace_text 并将 newText 设为空字符串。单文件追加/前置用 project:write；多文件一起修改可在本事务组合。'],
   notes: [
+    '已读到明确行号、旧源码含大量转义或锚点重复时，优先 replace_lines：传 snapshot.revision、startLine/endLine 和 newLines（每项一行），不传 oldText。一次事务同文件先做此操作，后续可用文本或符号操作。',
     '文本匹配失败时，错误会给出最接近的候选行、首个分歧行与原因（缩进、行尾空白、反斜杠、引号）；按提示只修正分歧行，不必整段重读。',
     '仅行尾空白或换行符不同且全文唯一时会宽容应用，并在结果 notes 中说明。',
   ],
   examples: [{
-    operations: [{
-      operation: {
+    edits: [{
         type: 'replace_text',
         path: 'src/index.ts',
         oldText: 'const ready = false',
         newText: 'const ready = true',
-      },
     }],
   }],
-  schema: z.strictObject({
-    operations: ProjectEditOperationsSchema.min(1).max(20),
-    cwd: z.string().min(1).optional(),
-    baseRevisions: z.record(z.string().min(1), z.string().min(1)).optional(),
-  }),
+  schema: ProjectModelEditSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
   exposure: { tier: 'situational', rank: 10 },
@@ -455,7 +446,7 @@ const projectEdit = defineProjectTool<{
   execute: (input, context) =>
     applyProjectEditTransaction(
       {
-        operations: input.operations,
+        operations: input.edits.map((operation) => ({ operation })),
         cwd: input.cwd,
         operationLabel: '结构化修改项目文件',
         baseRevisions: input.baseRevisions,

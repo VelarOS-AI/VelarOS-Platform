@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { TransactionCoordinator } from '../src/core/transaction-coordinator'
 import { ProjectError } from '../src/errors'
+import { TransactionCoordinator } from '../src/transactions/transaction-coordinator'
 
 describe('TransactionCoordinator', () => {
   test('serializes commands for one transaction and releases the queue after failure', async () => {

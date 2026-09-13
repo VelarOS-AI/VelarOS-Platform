@@ -245,53 +245,73 @@ function registeredValidatorContextViolations() {
 
 const ForbiddenInternalDependencies = [
   {
-    source: (sourcePath) => sourcePath.startsWith('types/'),
-    targets: ['core/', 'agent/', 'composition/', 'infrastructure/'],
-    label: 'types must not depend on core, Agent, composition, or infrastructure',
+    source: (sourcePath) => /^(files|transactions|edits|persistence)\//.test(sourcePath),
+    targets: ['runtime/', 'composition/'],
+    label: 'services must use domain ports instead of runtime composition',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('core/'),
+    source: (sourcePath) => sourcePath.startsWith('files/'),
+    targets: ['transactions/', 'edits/'],
+    label: 'file access must not depend on transaction or edit implementation',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('transactions/'),
+    targets: ['files/'],
+    label: 'transactions must use injected file access ports',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('edits/'),
+    targets: ['files/', 'transactions/', 'persistence/'],
+    label: 'edit strategies must produce patches without persistence',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('types/'),
+    targets: ['runtime/', 'files/', 'transactions/', 'edits/', 'agent/', 'composition/', 'infrastructure/'],
+    label: 'domain types must not depend on runtime, files, transactions, edits, Agent, or composition',
+  },
+  {
+    source: (sourcePath) => /^(runtime|files|transactions|edits|persistence)\//.test(sourcePath),
     targets: ['agent/'],
-    label: 'core must not depend on Agent adapters',
+    label: 'Project implementation must not depend on Agent adapters',
   },
   {
     source: (sourcePath) => sourcePath.startsWith('agent/'),
-    targets: ['core/project-kernel'],
+    targets: ['runtime/project-kernel'],
     label: 'Agent adapters must not depend on the ProjectKernel implementation',
   },
   {
-    source: (sourcePath) => sourcePath === 'transaction-state.ts',
-    targets: ['core/project-kernel'],
-    label: 'transaction-state must depend on transaction domain types, not ProjectKernel',
+    source: (sourcePath) => sourcePath === 'persistence/transaction-state.ts',
+    targets: ['runtime/project-kernel'],
+    label: 'persistence/transaction-state must depend on transaction domain types, not ProjectKernel',
   },
   {
-    source: (sourcePath) => sourcePath === 'core/transaction-repository.ts',
-    targets: ['core/project-kernel'],
+    source: (sourcePath) => sourcePath === 'transactions/transaction-repository.ts',
+    targets: ['runtime/project-kernel'],
     label: 'transaction repository must not depend on ProjectKernel',
   },
   {
-    source: (sourcePath) => sourcePath === 'core/transaction-projection-repository.ts',
-    targets: ['core/project-kernel'],
+    source: (sourcePath) => sourcePath === 'transactions/transaction-projection-repository.ts',
+    targets: ['runtime/project-kernel'],
     label: 'transaction projection repository must not depend on ProjectKernel',
   },
   {
-    source: (sourcePath) => sourcePath === 'core/transaction-overlay.ts',
-    targets: ['core/', 'registry/', 'transaction-state'],
+    source: (sourcePath) => sourcePath === 'transactions/transaction-overlay.ts',
+    targets: ['runtime/', 'files/', 'registry/', 'persistence/transaction-state'],
     label: 'transaction overlay must depend only on domain types and injected callbacks',
   },
   {
-    source: (sourcePath) => sourcePath === 'core/transaction-validation.ts',
+    source: (sourcePath) => sourcePath === 'transactions/transaction-validation.ts',
     targets: [
-      'core/defaults',
-      'core/file-store',
-      'core/lock-manager',
-      'core/project-kernel',
-      'core/transaction-coordinator',
-      'core/transaction-projection-repository',
-      'core/transaction-repository',
-      'core/transaction-state-machine',
+      'runtime/defaults',
+      'files/file-store',
+      'transactions/lock-manager',
+      'runtime/project-kernel',
+      'transactions/transaction-coordinator',
+      'transactions/transaction-projection-repository',
+      'transactions/transaction-repository',
+      'transactions/transaction-state-machine',
       'registry/',
-      'transaction-state',
+      'persistence/transaction-state',
     ],
     label: 'transaction validation must use domain types, TransactionOverlay views, and injected callbacks',
   },
@@ -304,7 +324,7 @@ if (manifest.name !== '@velaros-ai/project') {
 // module manifest 与全部内置插件的 version 字段，与 package.json 漂移时，宿主看到的是一个
 // 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
 // 1.2.5），红成常态的门等于没有门。
-const versionConstantSource = readFileSync(resolve(SourceRoot, 'core/defaults.ts'), 'utf8')
+const versionConstantSource = readFileSync(resolve(SourceRoot, 'runtime/defaults.ts'), 'utf8')
 const versionConstant = /PROJECT_PACKAGE_VERSION\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
 if (versionConstant !== manifest.version) {
   fail(
@@ -360,7 +380,7 @@ for (const path of walk(SourceRoot)) {
   for (const violation of validationContextViolations(source, path, sourcePath)) {
     fail(`${violation} in ${sourcePath}`)
   }
-  if (sourcePath === 'core/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
+  if (sourcePath === 'runtime/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
     fail('ProjectKernel transaction status changes must go through TransactionStateMachine')
   }
   const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles
@@ -389,7 +409,7 @@ if (failures.length > 0) {
 
 console.info('✓ one standalone @velaros-ai/project package')
 console.info('✓ Project-owned Agent adapter contracts and host/capability boundaries')
-console.info('✓ Project internal type, core, Agent, and transaction-state dependency directions')
+console.info('✓ Project domain, runtime, Agent, and persistence dependency directions')
 console.info('✓ ProjectKernel transaction lifecycle changes go through TransactionStateMachine')
 console.info('✓ Project validators share one typed validation context contract')
 

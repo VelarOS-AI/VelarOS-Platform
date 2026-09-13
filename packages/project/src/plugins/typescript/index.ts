@@ -1,4 +1,4 @@
-import { PROJECT_PACKAGE_VERSION } from "../../core/defaults.js";
+import { PROJECT_PACKAGE_VERSION } from "../../runtime/defaults.js";
 import type { ProjectPlugin } from "../../types/plugin.js";
 
 import { typescriptAdapterFactory } from "./adapter.js";

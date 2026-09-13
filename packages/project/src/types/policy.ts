@@ -10,9 +10,9 @@ export interface CorePolicy {
   maxSearchFileSizeBytes: number;
   /**
    * 版本号与内容指纹的计算方式（进程级固定，构造后不可中途切换，否则两套版本号互不可比）：
-   * - "metadata"（默认，轻量快速）：版本号仅取「路径＋纳秒级修改时间＋字节数」，快照不再为计算哈希而整文件读取或扫描；
+   * - "metadata"（可选，轻量快速）：版本号仅取「路径＋纳秒级修改时间＋字节数」，快照不再为计算哈希而整文件读取或扫描；
    *   代价是「字节数相同且修改时间相同」的外部改动可能被静默漏检（详见升级文档）。
-   * - "content"（精确稳重）：读取全文做内容哈希，能识别任意内容变化，但每次快照都要读取并哈希。
+   * - "content"（默认，内容指纹）：读取全文做内容哈希，能识别任意内容变化，但每次快照都要读取并哈希。
    */
   revisionStrategy: "metadata" | "content";
   /** 为 true 且设置了 `ProjectProviders.command` 时，adapter 扫描前优先尝试 ripgrep（失败会回退）。 */

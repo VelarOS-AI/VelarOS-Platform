@@ -15,7 +15,7 @@ import {
 
 import { projectTools } from './agent/Project.tool.js'
 import type { ProjectToolContext, VelaTool } from './agent/Types.js'
-import { PROJECT_PACKAGE_VERSION } from './core/defaults.js'
+import { PROJECT_PACKAGE_VERSION } from './runtime/defaults.js'
 import { ProjectError, toErrorObject } from './errors.js'
 
 export type ProjectToolContextResolver = (

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
+import { ProjectError } from '../src/errors'
 import {
   type ProjectTransactionCommand,
   ProjectTransactionCommandTable,
   TransactionStateMachine,
-} from '../src/core/transaction-state-machine'
-import { ProjectError } from '../src/errors'
+} from '../src/transactions/transaction-state-machine'
 import type {
   ProjectTransactionStatus,
   StoredTransaction,

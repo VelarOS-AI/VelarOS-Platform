@@ -1,13 +1,13 @@
 import { isString } from '@velaros-ai/core'
 
-import type { ProjectKernel } from './core/project-kernel.js'
-import type { ApplyResult, RollbackResult } from './types/edit.js'
 import type {
   ProjectChangeFeed,
   ProjectChangeListener,
   ProjectChangeListOptions,
   ProjectChangeRecord,
-} from './change-feed.js'
+} from './persistence/change-feed.js'
+import type { ProjectKernel } from './runtime/project-kernel.js'
+import type { ApplyResult, RollbackResult } from './types/edit.js'
 import { ProjectError } from './errors.js'
 
 const MaximumTransactionIdBytes = 512

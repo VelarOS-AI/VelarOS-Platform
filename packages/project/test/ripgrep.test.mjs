@@ -8,9 +8,9 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
+import { parseRipgrepJsonLines, searchWithRipgrep } from '../dist/files/ripgrep.js'
 import { DEFAULT_CORE_POLICY } from '../dist/index.js'
 import { createNodeCommandProvider } from '../dist/providers/index.js'
-import { parseRipgrepJsonLines, searchWithRipgrep } from '../dist/search/ripgrep.js'
 
 test('parseRipgrepJsonLines extracts path, line, columns from rg --json match line', () => {
   const line = JSON.stringify({

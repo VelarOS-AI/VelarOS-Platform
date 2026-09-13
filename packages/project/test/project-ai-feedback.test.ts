@@ -13,11 +13,11 @@ import {
   executeAgentProjectSearch,
 } from '../src/agent/ProjectKernelPort'
 import type { ProjectToolContext } from '../src/agent/Types'
-import { ProjectEditOperationSchema } from '../src/edit-schema'
+import { ProjectEditOperationSchema } from '../src/edits/schema'
+import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/edits/text-match-feedback'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/index'
 import { ProjectToolNames } from '../src/project-tool-names'
 import { includesLineEndingAware } from '../src/utils/text'
-import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/utils/text-match-feedback'
 
 let root = ''
 
@@ -67,6 +67,22 @@ function toolContext(): ProjectToolContext {
     approval: defaultDenyApprovalPort,
   }
 }
+
+describe('project:edit read-to-line-edit flow', () => {
+  test('uses a real read revision through the model-facing edit boundary', async () => {
+    await writeFile(join(root, 'source.ts'), 'const a = 1\nconst b = 2\n')
+    const context = toolContext()
+    const read = await executeAgentProjectRead(await context.project.kernel(), { path: 'source.ts' }, { rootPath: root })
+    const tool = projectTools['project:edit']
+    const input = tool.schema.parse({ edits: [{
+      type: 'replace_lines', path: 'source.ts', baseRevision: read.files[0].snapshot.revision,
+      startLine: 2, endLine: 2, newLines: ['const b = 3'],
+    }] })
+    const result = await tool.execute(input, context)
+    expect(result).toMatchObject({ changed: true, changedFiles: ['source.ts'] })
+    expect(await readFile(join(root, 'source.ts'), 'utf8')).toBe('const a = 1\nconst b = 3\n')
+  })
+})
 
 describe('project:read range clamping', () => {
   test('a batch range beyond one short file keeps every other file and explains the short one', async () => {
@@ -476,14 +492,12 @@ describe('whitespace-tolerant text matching', () => {
   test('applies a unique match that differs only in trailing whitespace and says so', async () => {
     await writeFile(join(root, 'note.ts'), 'const a = 1   \nconst b = 2\n')
     const result = await projectTools[ProjectToolNames.edit].execute({
-      operations: [{
-        operation: {
+      edits: [{
           type: 'replace_text',
           path: 'note.ts',
           oldText: 'const a = 1\nconst b = 2',
           newText: 'const a = 10\nconst b = 20',
           expectedMatches: 1,
-        },
       }],
     }, toolContext())
 

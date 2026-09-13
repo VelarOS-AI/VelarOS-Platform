@@ -69,6 +69,7 @@ import type { SystemToolSystemApi } from '../Types.js'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_CHARS = 50_000
+const MAX_VERIFICATION_ISSUE_CHARS = 1_000
 const DEFAULT_SEARCH_LIMIT = 60
 const DEFAULT_SEARCH_MAX_DEPTH = 6
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024
@@ -95,6 +96,31 @@ export interface LocalSystemKernelOptions {
 
 export function createLocalSystemKernel(options: LocalSystemKernelOptions): LocalSystemKernel {
   return new LocalSystemKernel(options)
+}
+
+function takeUnicodeSafeTail(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  let start = value.length - maxChars
+  const startsInsideSurrogatePair =
+    value.charCodeAt(start) >= 0xdc00 &&
+    value.charCodeAt(start) <= 0xdfff &&
+    value.charCodeAt(start - 1) >= 0xd800 &&
+    value.charCodeAt(start - 1) <= 0xdbff
+  if (startsInsideSurrogatePair) start += 1
+  return value.slice(start)
+}
+
+function appendBoundedOutput(previous: string, next: string, maxChars: number): string {
+  return takeUnicodeSafeTail(previous + next, maxChars)
+}
+
+function summarizeFailureOutput(stdout: string, stderr: string): string[] {
+  return (['stdout', 'stderr'] as const).flatMap((stream) => {
+    const output = (stream === 'stdout' ? stdout : stderr).trim()
+    if (!output) return []
+    const prefix = `${stream}:\n`
+    return [`${prefix}${takeUnicodeSafeTail(output, MAX_VERIFICATION_ISSUE_CHARS - prefix.length)}`]
+  })
 }
 
 export class LocalSystemKernel implements SystemToolSystemApi {
@@ -497,7 +523,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
       let recentOutput = ''
       const decoders = { stdout: createSystemOutputDecoder(), stderr: createSystemOutputDecoder() }
       const append = (text: string): void => {
-        recentOutput = this.appendOutput(recentOutput, text, 4_000)
+        recentOutput = appendBoundedOutput(recentOutput, text, 4_000)
         const task = this.backgroundTasks.get(taskId)
         if (task) this.backgroundTasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
       }
@@ -744,7 +770,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
             : success
               ? 'passed'
               : 'failed',
-        issues: success || !result.stderr.trim() ? [] : [result.stderr.trim().slice(0, 1000)],
+        issues: success ? [] : summarizeFailureOutput(result.stdout, result.stderr),
       },
       systemToolSuggestion: null,
     }
@@ -790,7 +816,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     const append = (stream: 'stdout' | 'stderr', text: string): void => {
       totalBytes += Buffer.byteLength(text)
       if (output[stream].length + text.length > maxChars) truncated = true
-      output[stream] = this.appendOutput(output[stream], text, maxChars)
+      output[stream] = appendBoundedOutput(output[stream], text, maxChars)
     }
     for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(stream, decoders[stream].write(chunk)))
     return owned.completion.then((result) => {
@@ -978,15 +1004,6 @@ export class LocalSystemKernel implements SystemToolSystemApi {
     return isAbsolute(normalizedPath)
       ? resolve(normalizedPath)
       : resolve(this.workingDirectory ?? this.homeDir, normalizedPath)
-  }
-
-  private appendOutput(previous: string, next: string, maxChars: number): string {
-    const combined = previous + next
-    if (combined.length <= maxChars) return combined
-    let start = combined.length - maxChars
-    if (combined.charCodeAt(start) >= 0xdc00 && combined.charCodeAt(start) <= 0xdfff &&
-      combined.charCodeAt(start - 1) >= 0xd800 && combined.charCodeAt(start - 1) <= 0xdbff) start++
-    return combined.slice(start)
   }
 
   private resolveShell() {

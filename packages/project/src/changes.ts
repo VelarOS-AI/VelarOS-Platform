@@ -1,9 +1,11 @@
-export * from './change-feed.js'
 export {
   ProjectEditIntentSchema,
   ProjectEditOperationSchema,
   ProjectEditOperationsSchema,
-} from './edit-schema.js'
+  type ProjectModelEditInput,
+  ProjectModelEditSchema,
+} from './edits/schema.js'
+export * from './persistence/change-feed.js'
 export { typescriptPlugin } from './plugins/typescript/index.js'
 export type * from './types/edit.js'
 export type * from './types/hook.js'

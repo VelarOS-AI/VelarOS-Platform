@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { DEFAULT_CORE_POLICY } from '../src/core/defaults'
 import { typescriptSyntaxValidator } from '../src/plugins/typescript/validators'
 import { ValidatorRegistry } from '../src/registry/validator-registry'
+import { DEFAULT_CORE_POLICY } from '../src/runtime/defaults'
 import type { CommandRunInput, ProjectProviders } from '../src/types/provider'
 import type {
   ProjectValidationContext,

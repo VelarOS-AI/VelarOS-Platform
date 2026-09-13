@@ -1,0 +1,20 @@
+[
+  {
+    "name": "agent",
+    "version": "0.6.23",
+    "sha256": "790cb9392e45c62c1dec3be240e794ce616b4213ce8eb17579fbc583f4dc33a5",
+    "archive": "agent-0.6.23-790cb9392e45.tgz"
+  },
+  {
+    "name": "system",
+    "version": "1.1.17",
+    "sha256": "81383cd265b868f8a4d45fa2cd08f66c91cc2a81bbd44326807412f15a778be0",
+    "archive": "system-1.1.17-81383cd265b8.tgz"
+  },
+  {
+    "name": "project",
+    "version": "2.0.20",
+    "sha256": "99db93f8350e7e2f70c33cc35db6eb2e665fdbdcbd02e959880d29c4ebd6e839",
+    "archive": "project-2.0.20-99db93f8350e.tgz"
+  }
+]
