@@ -1,3 +1,5 @@
+import { isNumber } from '@velaros-ai/core'
+
 import type { PreparedPatch } from '../types/edit.js'
 import type { FileAttributes } from '../types/snapshot.js'
 import { isProjectTextEncoding } from '../utils/text.js'
@@ -8,7 +10,7 @@ export function patchFileAttributes(patch: PreparedPatch): FileAttributes {
   const encoding = patch.metadata?.textEncoding
   return {
     mode:
-      typeof mode === 'number' && Number.isInteger(mode) && mode >= 0 && mode <= 0o777
+      isNumber(mode) && Number.isInteger(mode) && mode >= 0 && mode <= 0o777
         ? mode
         : undefined,
     textEncoding: isProjectTextEncoding(encoding) ? encoding : undefined,

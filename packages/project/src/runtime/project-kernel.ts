@@ -898,7 +898,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           }
           // chmod 不改变正文 revision；重建路径使用写盘前的权限，重命名目标继承源路径。
           const from = patch.metadata?.from
-          if (patch.metadata?.op === 'rename_file_create' && typeof from === 'string') {
+          if (patch.metadata?.op === 'rename_file_create' && isString(from)) {
             attributes = attributesByPath.get(from) ?? patchFileAttributes(patch)
           }
           const contentRebased = patch !== tx.patches[patchIndex]

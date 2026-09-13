@@ -19,6 +19,7 @@ import {
   isArray,
   isBoolean,
   isFiniteNumber,
+  isNumber,
   isRecord,
   isString,
   isUndefined,
@@ -125,7 +126,7 @@ function assertPatch(value: unknown): void {
 }
 
 function assertOptionalFileMode(value: unknown): void {
-  if (!isUndefined(value) && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0o777)) fail('file mode')
+  if (!isUndefined(value) && (!isNumber(value) || !Number.isInteger(value) || value < 0 || value > 0o777)) fail('file mode')
 }
 
 function assertFileSnapshot(value: unknown): void {

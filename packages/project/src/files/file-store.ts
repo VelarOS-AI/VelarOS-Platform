@@ -22,7 +22,7 @@ import type { BigIntStats } from 'node:fs'
 import { lstat, mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
-import { isNull, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 import type { ProjectFileAccess } from '../types/file-access.js'
@@ -180,7 +180,7 @@ export class FileStore implements ProjectFileAccess {
     try {
       st = await stat(abs, { bigint: true })
     } catch (error) {
-      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+      const code = isObject(error) && 'code' in error ? error.code : undefined
       if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error
       const ident = this.identity(rel, 0, '0', 0, sha256('missing'))
       return {

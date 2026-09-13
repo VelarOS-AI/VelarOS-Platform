@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto'
 import { lstat, open, readFile, realpath, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
+import { isObject, isPresent } from '@velaros-ai/core'
+
 import { ProjectError } from '../errors.js'
 import type { ProjectTextEncoding } from '../types/text.js'
 import { detectProjectTextEncoding, encodeProjectTextBuffer } from '../utils/text.js'
 
 function isMissing(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+  return isObject(error) && 'code' in error && error.code === 'ENOENT'
 }
 
 /** 调用方先执行根目录/权限校验；在同目录写完整临时文件再 rename，保留软链接及文件 mode。 */
@@ -17,7 +19,7 @@ export async function atomicWriteProjectText(
   fallback?: ProjectTextEncoding,
   fallbackMode?: number,
 ): Promise<void> {
-  if (fallbackMode !== undefined && (!Number.isInteger(fallbackMode) || fallbackMode < 0 || fallbackMode > 0o777)) {
+  if (isPresent(fallbackMode) && (!Number.isInteger(fallbackMode) || fallbackMode < 0 || fallbackMode > 0o777)) {
     throw new ProjectError('INVALID_INPUT', '文件权限必须是 0 到 0777 的普通权限位。', { path })
   }
   const entry = await lstat(path).catch((error: unknown) => {
@@ -42,7 +44,7 @@ export async function atomicWriteProjectText(
   const handle = await open(temporary, 'wx', mode ?? 0o666)
   try {
     // 已捕获的权限必须精确恢复；新文件的默认权限仍由 umask 收紧。
-    if (mode !== undefined) await handle.chmod(mode)
+    if (isPresent(mode)) await handle.chmod(mode)
     await handle.writeFile(encoded)
     await handle.sync()
     await handle.close()

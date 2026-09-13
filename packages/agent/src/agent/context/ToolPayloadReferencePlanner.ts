@@ -44,12 +44,13 @@ function readTextToolResult(part: unknown): Nullable<{
   }
 }
 
-function existingPayloadRef(serializedResult: string): string | null {
+function existingPayloadRef(serializedResult: string): Nullable<string> {
   if (!serializedResult.includes('ctx-payload:')) return null
   try {
     const envelope = normalizeLegacyFoldStub(JSON.parse(serializedResult) as unknown)
     return envelope?.ref.startsWith('ctx-payload:') ? envelope.ref : null
   } catch {
+    // arch-guard:silent-catch-ok 普通工具正文碰巧含 ctx-payload: 字样但不是引用包装，按原文归档。
     return null
   }
 }

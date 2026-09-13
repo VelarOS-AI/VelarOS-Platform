@@ -1,4 +1,4 @@
-import { isArray, isEmpty } from '@velaros-ai/core'
+import { isArray, isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
 export interface PaginatedJsonPathSelection {
   offset: number
@@ -39,7 +39,7 @@ export function paginateSerializedText(
   // 越界不回退到 0：回第一页正是"原地打转"的成因，宁可给空窗口 + 明确告警。
   const offset = Math.min(requested, totalChars)
   let end = Math.min(totalChars, offset + budget)
-  // Avoid splitting a UTF-16 surrogate pair or a CRLF across pages.
+  // 分页边界不拆开 UTF-16 代理对或 CRLF。
   if (end < totalChars && end > offset) {
     const previous = text.charCodeAt(end - 1)
     const next = text.charCodeAt(end)
@@ -110,11 +110,11 @@ export function paginateJsonPathSelection(
     totalItems,
     nextOffset: index < totalItems ? index : null,
     serialized: `[\n${parts.join(',\n')}\n]`,
-    ...(oversizedItemIndex === undefined ? {} : { oversizedItemIndex }),
+    oversizedItemIndex,
   }
 }
 
-/** One presentation contract for array pages and lossless text/object windows. */
+/** 数组分页与无损正文/对象窗口共用的一套呈现约定。 */
 export function paginateJsonPathValue(
   value: unknown,
   jsonPath: string,
@@ -123,14 +123,13 @@ export function paginateJsonPathValue(
 ): { body: string; summary: string; metadata: Record<string, unknown> } {
   const array = paginateJsonPathSelection(value, offset, maxChars)
   if (array) {
-    const oversizedItem =
-      array.oversizedItemIndex === undefined
-        ? null
-        : {
-            index: array.oversizedItemIndex,
-            jsonPath: `${jsonPath}[${array.oversizedItemIndex}]`,
-            offset: 0,
-          }
+    const oversizedItem = isUndefined(array.oversizedItemIndex)
+      ? undefined
+      : {
+          index: array.oversizedItemIndex,
+          jsonPath: `${jsonPath}[${array.oversizedItemIndex}]`,
+          offset: 0,
+        }
     return {
       body: array.serialized,
       summary:
@@ -144,11 +143,11 @@ export function paginateJsonPathValue(
         returnedItems: array.returnedItems,
         totalItems: array.totalItems,
         nextOffset: array.nextOffset,
-        ...(oversizedItem ? { oversizedItem } : {}),
+        oversizedItem,
       },
     }
   }
-  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 1)
+  const text = isString(value) ? value : JSON.stringify(value, null, 1)
   const window = paginateSerializedText(text, offset, maxChars)
   return {
     body: window.text,
@@ -156,7 +155,7 @@ export function paginateJsonPathValue(
     metadata: {
       offset: window.offset,
       offsetUnit: 'utf16-code-unit',
-      contentFormat: typeof value === 'string' ? 'text' : 'json',
+      contentFormat: isString(value) ? 'text' : 'json',
       returnedChars: window.returnedChars,
       totalChars: window.totalChars,
       nextOffset: window.nextOffset,

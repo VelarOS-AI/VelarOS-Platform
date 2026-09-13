@@ -493,7 +493,7 @@ class ContextRetrievalPayloadReader {
       try {
         ref = normalizeLegacyFoldStub(JSON.parse(text) as unknown)?.ref
       } catch {
-        // Ordinary tool text may contain an incomplete JSON example; it remains original content.
+        // arch-guard:silent-catch-ok 普通工具正文可能含不完整的 JSON 示例，仍按原始内容返回。
         return resolved
       }
       if (!ref?.startsWith('ctx-payload:')) return resolved

@@ -1,3 +1,5 @@
+import { isArray, isString } from '@velaros-ai/core'
+
 import { ProjectError } from '../../errors.js'
 import type { ReplaceLinesOperation } from '../../types/edit.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
@@ -25,7 +27,7 @@ function lineChange(
     !snapshot.exists ||
     snapshot.isDirectory ||
     snapshot.isBinary ||
-    typeof snapshot.content !== 'string'
+    !isString(snapshot.content)
   ) {
     throw new ProjectError(
       'NOT_SUPPORTED',
@@ -50,8 +52,8 @@ function lineChange(
     )
   }
   if (
-    !Array.isArray(newLines) ||
-    newLines.some((line) => typeof line !== 'string' || /[\r\n]/.test(line))
+    !isArray(newLines) ||
+    newLines.some((line) => !isString(line) || /[\r\n]/.test(line))
   ) {
     throw new ProjectError(
       'INVALID_INPUT',

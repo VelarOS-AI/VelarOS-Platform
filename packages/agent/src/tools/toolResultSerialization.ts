@@ -6,6 +6,7 @@ import {
   isPlainObject,
   isPresent,
   isString,
+  isTrue,
   isUndefined,
   numberOrNull,
 } from "@velaros-ai/core";
@@ -587,7 +588,7 @@ function compactToolInputValue(
       const previousMarker = value.at(-1);
       const previousOmitted =
         isPlainObject(previousMarker) &&
-        typeof previousMarker.__historyPreviewOmittedItems === "number"
+        isNumber(previousMarker.__historyPreviewOmittedItems)
           ? Math.max(0, previousMarker.__historyPreviewOmittedItems - 1)
           : 0;
       state.shortened = true;
@@ -843,11 +844,11 @@ export function compactToolInputForModel(
   input: Record<string, unknown>,
   toolCallId?: string,
 ): Record<string, unknown> {
-  if (input.__historyInputPreview === true && typeof input.preview === 'string') return {
+  if (isTrue(input.__historyInputPreview) && isString(input.preview)) return {
       __historyInputPreview: true,
       __toolReceivedFullInput: true,
       note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",
-      ...(toolCallId || typeof input.__historyInputRef === 'string' ? {
+      ...(toolCallId || isString(input.__historyInputRef) ? {
         __historyInputRef: toolCallId ? `input:${toolCallId}` : input.__historyInputRef,
         __historyInputRecall: 'Use context:recall with this ref and jsonPath to recover original arguments.',
       } : {}),

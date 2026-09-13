@@ -1,4 +1,4 @@
-import { isNull, isPresent, isString, isUndefined } from '@velaros-ai/core'
+import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOptional } from '@velaros-ai/core'
 
 import { replaceSnapshotLineRanges } from '../edits/strategies/line-edit.js'
 import { createTextPatch } from '../edits/strategies/prepared-patch.js'
@@ -322,7 +322,7 @@ export class TransactionPlanner {
           )
         }
         for (const patch of intentPatches) {
-          if (typeof patch.newContent === 'string') assertWellFormedProjectText(patch.newContent)
+          if (isString(patch.newContent)) assertWellFormedProjectText(patch.newContent)
         }
         if (renameTargetSnapshot) {
           intentPatches = intentPatches.map((patchValue) =>
@@ -344,9 +344,9 @@ export class TransactionPlanner {
         if (!(error instanceof ProjectError)) throw error
         const path = operationPath(intent.operation)
         const details: Record<string, unknown> = error.details ?? {}
-        const line = typeof details.candidateLine === 'number' ? details.candidateLine : undefined
+        const line = toOptional(numberOrNull(details.candidateLine))
         const failedIndex =
-          operationIndex + (typeof details.rangeIndex === 'number' ? details.rangeIndex : 0)
+          operationIndex + (isNumber(details.rangeIndex) ? details.rangeIndex : 0)
         throw new ProjectError(
           error.reason,
           `第 ${failedIndex + 1} 个编辑操作失败：${error.message}`,

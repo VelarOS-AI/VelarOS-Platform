@@ -73,7 +73,7 @@ function collectRevisionPaths(result: Nullable<Record<string, unknown>>): string
 }
 
 function collectOperationPaths(args: Nullable<Record<string, unknown>>): string[] {
-  // Project 2.0 model calls use flat edits; older saved conversations contain wrapped operations.
+  // Project 2.0 的模型调用使用平铺的 edits；旧会话里保存的是包在 operations 里的操作。
   const edits = isArray(args?.edits)
     ? args.edits
     : isArray(args?.operations)

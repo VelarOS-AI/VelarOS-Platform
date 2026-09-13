@@ -1,13 +1,12 @@
-/** Keep pageable Project reads truthful after the model's JSON budget is applied. */
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
+import { isArray, isNumber, isPlainObject, isString } from '@velaros-ai/core'
+
+// 模型 JSON 预算收紧后，Project 分页读取的范围与续读信息仍须真实。
 
 /** 行号只属于模型视图；原始结果与 recall 正文保持逐字节语义。 */
 function numberProjectRead(value: Record<string, unknown>): Record<string, unknown> {
   const content = value.content as string
-  const range = record(value.range) ? value.range : {}
-  const startLine = typeof range.startLine === 'number' ? range.startLine : 1
+  const range = isPlainObject(value.range) ? value.range : {}
+  const startLine = isNumber(range.startLine) ? range.startLine : 1
   return {
     ...value,
     content: content
@@ -22,11 +21,11 @@ function numberProjectRead(value: Record<string, unknown>): Record<string, unkno
 
 function shortenProjectRead(value: unknown, maximum: number): unknown {
   if (
-    !record(value) ||
-    typeof value.content !== 'string' ||
-    !record(value.snapshot) ||
-    typeof value.snapshot.path !== 'string' ||
-    typeof value.snapshot.revision !== 'string'
+    !isPlainObject(value) ||
+    !isString(value.content) ||
+    !isPlainObject(value.snapshot) ||
+    !isString(value.snapshot.path) ||
+    !isString(value.snapshot.revision)
   )
     return value
   // 历史回放可以重复收敛预算；先还原原文，避免重复编号或把编号计入续读列。
@@ -37,14 +36,14 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
   if (JSON.stringify(numbered).length <= maximum) return numbered
 
   const snapshot = value.snapshot
-  const range = record(value.range) ? value.range : {}
-  const startLine = typeof range.startLine === 'number' ? range.startLine : 1
-  const startColumn = typeof range.startColumn === 'number' ? range.startColumn : 1
-  const existingContinuation = record(value.continuation) ? value.continuation : {}
-  const existingRange = record(existingContinuation.range) ? existingContinuation.range : {}
+  const range = isPlainObject(value.range) ? value.range : {}
+  const startLine = isNumber(range.startLine) ? range.startLine : 1
+  const startColumn = isNumber(range.startColumn) ? range.startColumn : 1
+  const existingContinuation = isPlainObject(value.continuation) ? value.continuation : {}
+  const existingRange = isPlainObject(existingContinuation.range) ? existingContinuation.range : {}
   const candidate = (requestedLength: number) => {
     let length = requestedLength
-    // Never split an astral character or a CRLF pair.
+    // 不拆开代理对字符或 CRLF。
     const last = content.charCodeAt(length - 1)
     if (
       (last >= 0xd800 && last <= 0xdbff) ||
@@ -65,7 +64,7 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
         startColumn,
         endLine,
         endColumn,
-        ...(typeof range.startOffset === 'number'
+        ...(isNumber(range.startOffset)
           ? { endOffset: range.startOffset + prefix.length }
           : {}),
       },
@@ -84,7 +83,7 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
   }
   let low = 0
   let high = content.length
-  // JSON escaping can multiply the size; measure serialized candidates, not raw characters.
+  // JSON 转义会放大体积，按序列化后的候选结果测量，而不是原始字符数。
   while (low < high) {
     const middle = Math.ceil((low + high) / 2)
     if (JSON.stringify(candidate(middle)).length <= maximum) low = middle
@@ -94,7 +93,7 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
 }
 
 export function fitProjectReadsForModel(result: unknown, maximum: number): unknown {
-  if (!record(result) || !Array.isArray(result.files)) return shortenProjectRead(result, maximum)
+  if (!isPlainObject(result) || !isArray(result.files)) return shortenProjectRead(result, maximum)
   const overhead = JSON.stringify({ ...result, files: [] }).length + result.files.length * 2
   const perFile = Math.max(512, Math.floor((maximum - overhead) / Math.max(1, result.files.length)))
   return { ...result, files: result.files.map((file) => shortenProjectRead(file, perFile)) }
