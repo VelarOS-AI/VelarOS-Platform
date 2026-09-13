@@ -61,6 +61,8 @@ export function SettingsPanelDialog({
 }: SettingsPanelDialogProps): ReactElement {
   const hasDescription = !!description
   const localization = useUiLocalization()
+  // 没有描述时必须显式传 aria-describedby={undefined}，Radix 才不再关联描述；有描述时不传这个键，沿用它生成的 id。
+  const describedByProps = hasDescription ? {} : { 'aria-describedby': undefined }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,7 +72,7 @@ export function SettingsPanelDialog({
           className="velar-dialog-overlay"
         />
         <DialogPrimitive.Content
-          {...(hasDescription ? {} : { 'aria-describedby': undefined })}
+          {...describedByProps}
           data-slot="settings-panel-dialog"
           className={cn(
             'velar-settings-panel-dialog-shell',

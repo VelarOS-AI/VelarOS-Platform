@@ -396,21 +396,15 @@ export class ProviderModelCatalogService {
           const inputModalities =
             architecture && isArray(architecture.input_modalities)
               ? architecture.input_modalities.filter(this.isModelInputModality)
-              : null
+              : []
           return [
             {
               id: item.id,
               contextWindow: toOptional(
                 toPositiveInteger(item.context_length ?? item.context_window)
               ),
-              ...(isString(item.display_name)
-                ? { label: item.display_name }
-                : isString(item.displayName)
-                  ? { label: item.displayName }
-                  : isString(item.name)
-                    ? { label: item.name }
-                    : {}),
-              ...(inputModalities?.length ? { inputModalities } : {}),
+              label: [item.display_name, item.displayName, item.name].find(isString),
+              inputModalities: optionalWhen(!isEmpty(inputModalities), inputModalities),
             },
           ]
         })
@@ -439,11 +433,9 @@ export class ProviderModelCatalogService {
           ?? presetModel?.contextWindow
           ?? resolveProviderModelContextWindow(provider, id)
         ),
-        ...(value.inputModalities?.length
-          ? { inputModalities: value.inputModalities }
-          : presetModel?.inputModalities?.length
-            ? { inputModalities: presetModel.inputModalities }
-            : {}),
+        inputModalities: [value.inputModalities, presetModel?.inputModalities].find(
+          (modalities) => !isEmpty(modalities ?? [])
+        ),
       })
     }
 

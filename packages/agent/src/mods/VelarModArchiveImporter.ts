@@ -283,11 +283,10 @@ export class VelarModArchiveImporter {
         await writeFile(destination, entry.bytes)
       }
       if (rescanned.report.trust.kind === 'user-imported') {
+        const agent = rescanned.manifest.agent
         const stamped = {
           ...rescanned.manifest,
-          ...(isPlainObject(rescanned.manifest.agent)
-            ? { agent: { ...rescanned.manifest.agent, trust: 'local-dev' } }
-            : {}),
+          agent: isPlainObject(agent) ? { ...agent, trust: 'local-dev' } : agent,
         }
         await writeFile(
           join(stagingDirectory, VelarosModManifestFileName),

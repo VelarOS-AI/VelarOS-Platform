@@ -639,22 +639,30 @@ class ToolExecutionPolicy {
         requester: options?.requester ?? { agentId: context.role.id },
       }
     }
-    const executionContext: ToolExecutionPolicyContext = Object.create(context, {
-      ...(context.approval ? { approval: { value: {
-        awaitConfirmation: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
-          context.approval!.awaitConfirmation(message, signal, scopedOptions(options)),
-        awaitConfirmationDecision: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
-          context.approval!.awaitConfirmationDecision(message, signal, scopedOptions(options)),
-      } } } : {}),
-      ...(context.execution ? { execution: { value: {
+    // 属性描述符里不能出现 undefined：上下文没有的审批/执行端口就不定义，继续沿原型读到缺席。
+    const executionContext: ToolExecutionPolicyContext = Object.create(context)
+    if (context.approval) {
+      Object.defineProperty(executionContext, 'approval', {
+        value: {
+          awaitConfirmation: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+            context.approval!.awaitConfirmation(message, signal, scopedOptions(options)),
+          awaitConfirmationDecision: (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+            context.approval!.awaitConfirmationDecision(message, signal, scopedOptions(options)),
+        },
+      })
+    }
+    if (context.execution) {
+      const execution = {
         ...context.execution,
-        ...(context.execution.awaitConfirmation ? { awaitConfirmation:
-          (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
-            context.execution!.awaitConfirmation!(message, signal, scopedOptions(options)) } : {}),
         awaitConfirmationDecision: (message: string, signal: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
           context.execution!.awaitConfirmationDecision(message, signal, scopedOptions(options)),
-      } } } : {}),
-    })
+      }
+      if (context.execution.awaitConfirmation) {
+        execution.awaitConfirmation = (message: string, signal?: AbortSignal, options?: ToolConfirmationDecisionOptions) =>
+          context.execution!.awaitConfirmation!(message, signal, scopedOptions(options))
+      }
+      Object.defineProperty(executionContext, 'execution', { value: execution })
+    }
     const output = await prepared.tool.execute(parseResult.data, executionContext)
     this.recordSuccess({
       toolName,

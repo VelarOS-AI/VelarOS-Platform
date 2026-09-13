@@ -88,14 +88,13 @@ export function serializeAgentSurfaceContextSnapshot(
     )
     if (!content) return []
     remainingCharacters -= content.length
-    return [{
+    const serialized: { id: string; label: string; content: string; source?: string } = {
       id,
       label,
       content,
-      ...(entry.source?.trim()
-        ? { source: truncate(entry.source, MaxEntrySourceCharacters) }
-        : {}),
-    }]
+    }
+    if (entry.source?.trim()) serialized.source = truncate(entry.source, MaxEntrySourceCharacters)
+    return [serialized]
   })
   if (isEmpty(entries)) return undefined
 

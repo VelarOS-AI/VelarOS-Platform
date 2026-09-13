@@ -228,23 +228,27 @@ const searchKnowledge = defineKnowledgeTool<{
       if (autoSync && autoSync.upserted + autoSync.reindexed > 0) results = await search()
     }
 
-    return {
+    const summary: {
+      query: string
+      workspaceRoot: string
+      count: number
+      indexIssues: ReturnType<typeof summarizeKnowledgeIndexIssues>
+      autoSync?: { scanned: number; indexed: number; note: string }
+    } = {
       query,
       workspaceRoot: effectiveWorkspaceRoot,
       count: results.length,
       indexIssues: summarizeKnowledgeIndexIssues(results),
-      // 只在真的补过索引时出现：常态零命中不该多带一个恒 null 的字段。
-      ...(autoSync
-        ? {
-            autoSync: {
-              scanned: autoSync.scanned,
-              indexed: autoSync.upserted + autoSync.reindexed,
-              note: '本次零命中，已自动为该工作区补建/更新索引后重搜。',
-            },
-          }
-        : {}),
-      results,
     }
+    // 只在真的补过索引时出现：常态结果里没有这个键（`in` 判定为假），不带一个恒 null 的字段。
+    if (autoSync) {
+      summary.autoSync = {
+        scanned: autoSync.scanned,
+        indexed: autoSync.upserted + autoSync.reindexed,
+        note: '本次零命中，已自动为该工作区补建/更新索引后重搜。',
+      }
+    }
+    return { ...summary, results }
   },
 })
 

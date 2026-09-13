@@ -64,9 +64,7 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
         startColumn,
         endLine,
         endColumn,
-        ...(isNumber(range.startOffset)
-          ? { endOffset: range.startOffset + prefix.length }
-          : {}),
+        endOffset: isNumber(range.startOffset) ? range.startOffset + prefix.length : range.endOffset,
       },
       truncated: true,
       hasMore: true,

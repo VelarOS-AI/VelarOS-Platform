@@ -1,13 +1,17 @@
 import {
   isBoolean,
-isEmpty,
+  isEmpty,
   isFiniteNumber,
   isNonBlankString,
   isNotNull,
   isObject,
-isPlainObject,  isPresent,
+  isPlainObject,
+  isPresent,
   isString,
-  isTrue, toNullable } from '@velaros-ai/core'
+  isTrue,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -297,7 +301,7 @@ export class BrowserCdpNetworkController {
         method: record.method,
         url: record.url,
         headers: { ...record.headers },
-        ...(isNotNull(record.postData) ? { postData: record.postData } : {}),
+        postData: toOptional(record.postData),
         resourceType: record.resourceType,
         timestamp: record.timestamp,
         wallTime: record.wallTime,

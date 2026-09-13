@@ -4,7 +4,7 @@ import type { ModelMessage } from 'ai'
 import {
   isArray,
   isBlank,
-  isNull,
+  isNotNull,
   isPlainObject,
   isPresent,
   isString,
@@ -143,21 +143,27 @@ export function parseAgentCapabilityExecuteEnvelopeV1(
     scopeMetadata = parsedScopeMetadata
   }
 
-  const correlationId = Object.hasOwn(source, 'correlationId')
-    ? requireBoundedIdentifier(source.correlationId)
-    : null
+  // 线协议里缺席的可选字段不写键：解析结果要能原样再过一遍严格解析，也不能带出 undefined 键。
+  const parsedSource: { productId: string; sessionId: string; correlationId?: string } = {
+    productId: requireBoundedIdentifier(source.productId, 128),
+    sessionId: requireBoundedIdentifier(source.sessionId),
+  }
+  if (Object.hasOwn(source, 'correlationId')) {
+    parsedSource.correlationId = requireBoundedIdentifier(source.correlationId)
+  }
+  const parsedExecution: {
+    id: string
+    source: AgentCapabilityExecutionSource
+    scopeMetadata?: Readonly<Record<string, unknown>>
+  } = {
+    id: requireBoundedIdentifier(execution.id),
+    source: parsedSource,
+  }
+  if (isNotNull(scopeMetadata)) parsedExecution.scopeMetadata = scopeMetadata
 
   return {
     protocolVersion: AgentCapabilityProtocolVersion,
-    execution: {
-      id: requireBoundedIdentifier(execution.id),
-      source: {
-        productId: requireBoundedIdentifier(source.productId, 128),
-        sessionId: requireBoundedIdentifier(source.sessionId),
-        ...(isNull(correlationId) ? {} : { correlationId }),
-      },
-      ...(isNull(scopeMetadata) ? {} : { scopeMetadata }),
-    },
+    execution: parsedExecution,
     messages: envelope.messages as ModelMessage[],
     config,
   }

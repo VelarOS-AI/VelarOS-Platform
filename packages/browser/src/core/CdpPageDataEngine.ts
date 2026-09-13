@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -235,12 +235,11 @@ export class CdpPageDataEngine {
 
     const value = String(cookie.value ?? '')
     const details = this.buildExternalCookieDetails(cookie)
-    const detailKeys = Object.keys(details)
     return {
       name,
       value: value.length > maxValueChars ? value.slice(0, maxValueChars) : value,
       valueTruncated: value.length > maxValueChars,
-      ...(!isEmpty(detailKeys) ? { details } : {}),
+      details: optionalWhen(!isEmpty(Object.keys(details)), details),
     }
   }
 

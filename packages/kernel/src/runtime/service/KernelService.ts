@@ -8,6 +8,7 @@ import {
   isUndefined,
   Log,
   toNullable,
+  toOptional,
 } from '@velaros-ai/core'
 
 import {
@@ -512,7 +513,7 @@ function toModuleHealth(
     generation: snapshot.generation,
     status: snapshot.status,
     health: snapshot.health,
-    ...(isUndefined(snapshot.error) ? {} : { error: snapshot.error }),
+    error: snapshot.error,
   }
 }
 
@@ -523,6 +524,6 @@ function toSdkScope(
   return {
     id: scope.id,
     ownerModuleId: scope.ownerModuleId,
-    ...(isNull(scope.kind) ? {} : { kind: scope.kind }),
+    kind: toOptional(scope.kind),
   }
 }

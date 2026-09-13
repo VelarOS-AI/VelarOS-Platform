@@ -90,7 +90,7 @@ function selectMissingTextMatch(
       expected: expected ?? 1,
       actual: 0,
       ...diagnosis,
-      ...(isEmpty(tolerant) ? {} : { whitespaceTolerantMatches: tolerantLocations }),
+      whitespaceTolerantMatches: optionalWhen(!isEmpty(tolerant), tolerantLocations),
     },
     textMatchMissNextAction(diagnosis),
   )

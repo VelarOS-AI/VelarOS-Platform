@@ -1,4 +1,5 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { optionalWhen } from '@velaros-ai/core'
 
 import { BrowserModId, BrowserSpaceId } from '../core/BrowserModIdentity'
 import { browserTools } from '../tools/Collection'
@@ -208,7 +209,7 @@ const BrowserAgentModManifest = Object.freeze({
       name,
       categoryId: resolveBrowserToolCategoryId(name),
       availableInSpaces: [BrowserSpaceId, ...BrowserGuestSpaceIds],
-      ...(BrowserResidentToolNames.has(name) ? { residentInSpaces: [BrowserSpaceId] } : {}),
+      residentInSpaces: optionalWhen(BrowserResidentToolNames.has(name), [BrowserSpaceId]),
     })),
     /*
      * 只声明**真被消费**的那几格：身份策略、绑定能力、职责类别。

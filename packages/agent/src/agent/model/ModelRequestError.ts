@@ -1,5 +1,4 @@
 import {
-  isNull,
   isPlainObject,
   isString,
   numberOrNull,
@@ -82,8 +81,7 @@ export function normalizeModelRequestError(error: unknown): AppError {
   return new AppError(providerCode ?? fallback.code, message, error, {
     ...fallback.context,
     providerCode: toOptional(providerCode),
-    ...(isNull(providerFailure.statusCode)
-      ? {}
-      : { statusCode: providerFailure.statusCode }),
+    // 供应商没给状态码时沿用原错误里的状态码。
+    statusCode: providerFailure.statusCode ?? fallback.context.statusCode,
   })
 }

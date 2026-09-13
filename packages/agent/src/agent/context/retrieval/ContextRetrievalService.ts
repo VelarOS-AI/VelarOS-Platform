@@ -25,6 +25,7 @@ import {
   isNotNull,
   isPositiveNumber,
   numberOrNull,
+  optionalWhen,
   toNullable,
 } from "@velaros-ai/core";
 
@@ -357,9 +358,9 @@ class ChatContextRetrievalService {
       ]
         .filter((item): item is string => Boolean(item))
         .join(" "),
-      ...(fallbackSearch?.items?.length
-        ? { metadata: { fallbackSearch: fallbackSearch.items } }
-        : {}),
+      metadata: optionalWhen(fallbackSearch?.items?.length, {
+        fallbackSearch: fallbackSearch?.items,
+      }),
     };
   }
 

@@ -653,16 +653,17 @@ class StreamConsumer {
           );
         }
         turnState.hasVisibleOutput = true;
-        pendingToolCalls.push({
+        const pendingToolCall: PendingStreamToolCall = {
           toolCallId,
           toolName,
           providerToolName: toolNameResolution.providerToolName,
           requestAdvertised: toolNameResolution.requestAdvertised,
           input,
-          ...(streamedInput
-            ? { streamedInput: { inputText: streamedInput.inputText } }
-            : {}),
-        });
+        };
+        if (streamedInput) {
+          pendingToolCall.streamedInput = { inputText: streamedInput.inputText };
+        }
+        pendingToolCalls.push(pendingToolCall);
         args.providerTurnReducer?.apply({
           type: "tool-started",
           toolCallId,

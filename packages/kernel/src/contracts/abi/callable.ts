@@ -70,7 +70,7 @@ function normalizeMetadata(
 
   return Object.freeze({
     permissions: Object.freeze(permissions),
-    ...(isUndefined(metadata.reason) ? {} : { reason: metadata.reason }),
+    reason: metadata.reason,
   })
 }
 

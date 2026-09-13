@@ -176,8 +176,8 @@ export function registerSystemModPacks(
       kind: 'system',
       version: pack.version,
       specifier: pack.specifier,
-      ...(isUndefined(pack.exportName) ? {} : { exportName: pack.exportName }),
-      ...(isUndefined(pack.module) ? {} : { module: pack.module }),
+      exportName: pack.exportName,
+      module: pack.module,
       enabled: pack.enabled ?? store.get(pack.id)?.enabled ?? true,
       provides: [...pack.provides],
     })

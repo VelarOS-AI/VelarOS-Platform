@@ -1,4 +1,15 @@
-import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isNull,
+  isPositiveNumber,
+  isPresent,
+  isString,
+  isTrue,
+  isUndefined,
+  mapDefined,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 import { validateReadBounds } from '../files/read-bounds.js'
@@ -248,32 +259,6 @@ function projectAgentReadResult(
   filePath: string,
   result: AgentProjectKernelReadResult
 ): AgentProjectReadResult {
-  const continuationRange = result.continuation?.range
-  const continuation = continuationRange?.startLine
-    ? {
-        path: result.continuation?.path || filePath,
-        range: {
-          startLine: continuationRange.startLine,
-          ...(isUndefined(continuationRange.startColumn)
-            ? {}
-            : { startColumn: continuationRange.startColumn }),
-          ...(isUndefined(continuationRange.endLine) ? {} : { endLine: continuationRange.endLine }),
-          ...(isUndefined(continuationRange.endColumn)
-            ? {}
-            : { endColumn: continuationRange.endColumn }),
-        },
-        ...(!isUndefined(result.continuation?.maxChars) && result.continuation.maxChars > 0
-          ? { maxChars: result.continuation.maxChars }
-          : {}),
-        ...(result.continuation?.baseRevision
-          ? {
-              baseRevisions: {
-                [result.continuation.path || filePath]: result.continuation.baseRevision,
-              },
-            }
-          : {}),
-      }
-    : undefined
   return {
     snapshot: {
       path: result.snapshot.path || filePath,
@@ -282,16 +267,38 @@ function projectAgentReadResult(
       isBinary: result.snapshot.isBinary,
       revision: toOptional(result.snapshot.revision),
     },
-    ...(isUndefined(result.content) ? {} : { content: result.content }),
-    ...(isUndefined(result.range) ? {} : { range: result.range }),
-    ...(isUndefined(result.totalLines) ? {} : { totalLines: result.totalLines }),
-    ...(isUndefined(result.truncated) ? {} : { truncated: result.truncated }),
-    ...(isUndefined(result.nextStartLine) ? {} : { nextStartLine: result.nextStartLine }),
-    ...(isUndefined(result.remainingLines) ? {} : { remainingLines: result.remainingLines }),
-    ...(isUndefined(result.hasMore) ? {} : { hasMore: result.hasMore }),
-    ...(isUndefined(continuation) ? {} : { continuation }),
-    ...(isUndefined(result.note) ? {} : { note: result.note }),
+    content: result.content,
+    range: result.range,
+    totalLines: result.totalLines,
+    truncated: result.truncated,
+    nextStartLine: result.nextStartLine,
+    remainingLines: result.remainingLines,
+    hasMore: result.hasMore,
+    continuation: projectAgentReadContinuation(filePath, result.continuation),
+    note: result.note,
   }
+}
+
+/** 续读位置：内核没给起始行时没有可续读的位置。 */
+function projectAgentReadContinuation(
+  filePath: string,
+  continuation: AgentProjectKernelReadResult['continuation']
+): Optional<AgentProjectReadContinuation> {
+  const range = continuation?.range
+  if (!continuation || !range?.startLine) return undefined
+  const path = continuation.path || filePath
+  const projected: AgentProjectReadContinuation = {
+    path,
+    range: {
+      startLine: range.startLine,
+      startColumn: range.startColumn,
+      endLine: range.endLine,
+      endColumn: range.endColumn,
+    },
+    maxChars: optionalWhen(isPositiveNumber, continuation.maxChars),
+  }
+  if (continuation.baseRevision) projected.baseRevisions = { [path]: continuation.baseRevision }
+  return projected
 }
 
 function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectReadIssue> {
@@ -358,7 +365,7 @@ export async function executeAgentProjectRead(
     // 单文件调用仍直接抛出，让失败保持为工具失败。
     const result = await project.read({
       ...rest,
-      ...(!isUndefined(fileMaxChars) ? { maxChars: fileMaxChars } : {}),
+      maxChars: fileMaxChars,
       path: filePath,
       baseRevision: baseRevisions?.[filePath],
     }).catch((error: unknown) => {
@@ -380,30 +387,26 @@ export async function executeAgentProjectRead(
       remainingChars = Math.max(0, remainingChars - [...(result.content ?? '')].length)
     }
   }
-  const needsPathDiscovery = issues.some(
-    (issue) => issue.reason === 'directory' || issue.reason === 'not_found'
-  )
-  const needsBinaryCapability = issues.some((issue) => issue.reason === 'binary')
-  const hasFailedFiles = issues.some((issue) => issue.reason === 'failed')
   const rootPath = options.rootPath ?? (await project.status()).root
   return {
     rootPath,
     count: files.length,
     files,
-    ...(isEmpty(issues) ? {} : { issues }),
-    ...(needsPathDiscovery
-      ? {
-          nextAction: '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。',
-        }
-      : needsBinaryCapability
-        ? { nextAction: '请改用能处理该二进制格式的专用能力，不要继续调用 project:read。' }
-        : hasFailedFiles
-          ? { nextAction: '部分文件读取失败，原因见 issues；按各条 message 修正后只重读这些路径，已返回的文件不必重读。' }
-          : {}),
-    ...(appliedDefaultBound
-      ? { appliedDefaultBound: { maxChars: DefaultAgentReadMaxChars } }
-      : {}),
+    issues: optionalWhen(!isEmpty(issues), issues),
+    nextAction: readIssuesNextAction(issues),
+    appliedDefaultBound: optionalWhen(appliedDefaultBound, { maxChars: DefaultAgentReadMaxChars }),
   }
+}
+
+/** 按读取问题给模型下一步；全部读到时没有建议。 */
+function readIssuesNextAction(issues: readonly AgentProjectReadIssue[]): Optional<string> {
+  if (issues.some((issue) => issue.reason === 'directory' || issue.reason === 'not_found'))
+    return '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。'
+  if (issues.some((issue) => issue.reason === 'binary'))
+    return '请改用能处理该二进制格式的专用能力，不要继续调用 project:read。'
+  if (issues.some((issue) => issue.reason === 'failed'))
+    return '部分文件读取失败，原因见 issues；按各条 message 修正后只重读这些路径，已返回的文件不必重读。'
+  return undefined
 }
 
 export interface AgentProjectSearchRequest {
@@ -419,15 +422,13 @@ export interface AgentProjectSearchRequest {
 function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHit {
   return {
     path: hit.path,
-    ...(isUndefined(hit.range) ? {} : {
-      range: {
-        startLine: hit.range.startLine,
-        ...(isUndefined(hit.range.startColumn) ? {} : { startColumn: hit.range.startColumn }),
-        endLine: hit.range.endLine,
-        ...(isUndefined(hit.range.endColumn) ? {} : { endColumn: hit.range.endColumn }),
-      },
-    }),
-    ...(isUndefined(hit.snippet) ? {} : { snippet: hit.snippet }),
+    range: mapDefined(hit.range, (range) => ({
+      startLine: range.startLine,
+      startColumn: range.startColumn,
+      endLine: range.endLine,
+      endColumn: range.endColumn,
+    })),
+    snippet: hit.snippet,
   }
 }
 
@@ -483,18 +484,18 @@ export async function executeAgentProjectSearch(
   return {
     query: result.query,
     hits,
-    ...(responseTruncated ? {
-      truncated: true,
-      nextAction: '结果已达到 Agent 搜索输出上限；请收窄 query、path 或 include 后继续，不要改搜父目录。',
-    } : {}),
-    ...(isUndefined(literalHint) ? {} : { nextAction: literalHint }),
-    ...(isUndefined(result.toolRequirements) ? {} : {
-      toolRequirements: result.toolRequirements.map((requirement) => ({
-        kind: requirement.kind,
-        command: requirement.command,
-        ...(isUndefined(requirement.reason) ? {} : { reason: requirement.reason }),
-      })),
-    }),
+    truncated: optionalWhen(responseTruncated, true),
+    nextAction:
+      literalHint ??
+      optionalWhen(
+        responseTruncated,
+        '结果已达到 Agent 搜索输出上限；请收窄 query、path 或 include 后继续，不要改搜父目录。'
+      ),
+    toolRequirements: result.toolRequirements?.map((requirement) => ({
+      kind: requirement.kind,
+      command: requirement.command,
+      reason: requirement.reason,
+    })),
   }
 }
 

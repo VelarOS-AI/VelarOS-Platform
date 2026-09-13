@@ -268,10 +268,13 @@ async function probeSystemShell(shell: ResolvedSystemShell, timeoutMs: number): 
   const spec = new SystemPlatformCompatibility().getShellCommandSpec(command, shell)
   const result = await captureProbe(spec, shell.env, timeoutMs)
   const ready = result.exitCode === 0 && result.stdout.includes(marker) && !result.timedOut
+  if (ready) return {
+    ready,
+    version: result.stdout.split(/\r?\n/).find((line) => !!line.trim() && !line.includes(marker))?.trim(),
+  }
   return {
     ready,
-    ...(ready ? { version: result.stdout.split(/\r?\n/).find((line) => !!line.trim() && !line.includes(marker))?.trim() } : {}),
-    ...(!ready ? { reason: result.timedOut ? 'Shell readiness probe timed out.' : result.stderr || 'Shell UTF-8 readiness probe failed.' } : {}),
+    reason: result.timedOut ? 'Shell readiness probe timed out.' : result.stderr || 'Shell UTF-8 readiness probe failed.',
   }
 }
 

@@ -209,11 +209,14 @@ export class MemoryTurnRecallCoordinator {
       id: 'memory.recall',
       scopes: this.deps.turnContextScopes,
       rendererVisible: false,
-      peekCached: (input) => ({
-        ...this.ledgers.peek(input.sessionId, input),
-        ...(!this.isRecallAllowed(input.sessionId) ? { deltas: [] } : {}),
-        anchors: [],
-      }),
+      peekCached: (input) => {
+        const cached = this.ledgers.peek(input.sessionId, input)
+        return {
+          ...cached,
+          deltas: this.isRecallAllowed(input.sessionId) ? cached.deltas : [],
+          anchors: [],
+        }
+      },
     }
   }
 

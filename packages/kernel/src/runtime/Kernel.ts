@@ -83,15 +83,9 @@ export class Kernel {
     this.failureMode = options.lifecycleFailureMode ?? 'throw'
     this.host = new KernelModuleHost({
       apiVersion: options.apiVersion ?? KernelModuleApiVersion,
-      ...(isUndefined(options.permissionBroker)
-        ? {}
-        : { permissionBroker: options.permissionBroker }),
-      ...(isUndefined(options.stateBackend)
-        ? {}
-        : { stateBackend: options.stateBackend }),
-      ...(isUndefined(options.isolationAdapters)
-        ? {}
-        : { isolationAdapters: options.isolationAdapters }),
+      permissionBroker: options.permissionBroker,
+      stateBackend: options.stateBackend,
+      isolationAdapters: options.isolationAdapters,
     })
     this.capabilityInvoker = new KernelCapabilityInvoker(this.host)
   }

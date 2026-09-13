@@ -1,4 +1,5 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { optionalWhen } from '@velaros-ai/core'
 
 import { systemTools } from '../Collection'
 import { SystemToolCategoryByName, SystemToolNames } from '../system-tool-names'
@@ -67,7 +68,7 @@ const SystemAgentModManifest = Object.freeze({
       name,
       categoryId: SystemToolCategoryByName[name],
       availableInSpaces: [SystemSpaceId],
-      ...(SystemResidentToolNames.has(name) ? { residentInSpaces: [SystemSpaceId] } : {}),
+      residentInSpaces: optionalWhen(SystemResidentToolNames.has(name), [SystemSpaceId]),
     })),
     // 只声明**真被消费**的那几格（身份策略 / 绑定能力 / 职责类别）。空间的文案、图标、
     // 顺序与 surface 分档权威在产品壳的枚举表，manifest 里再写一份没有读者。

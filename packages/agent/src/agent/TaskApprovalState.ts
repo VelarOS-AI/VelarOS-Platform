@@ -1,4 +1,4 @@
-import { Log } from '@velaros-ai/core'
+import { Log, mapDefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { TaskApprovalRecord, ToolCategoryId, ToolConfirmationDecisionOptions } from '../protocol'
@@ -41,7 +41,7 @@ export class TaskApprovalState {
   public list(): TaskApprovalRecord[] {
     return [...this.records.values()].map((record) => ({
       ...record,
-      ...(record.requester ? { requester: { ...record.requester } } : {}),
+      requester: mapDefined(record.requester, (requester) => ({ ...requester })),
     }))
   }
 

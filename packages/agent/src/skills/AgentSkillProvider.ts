@@ -5,7 +5,7 @@ import type {
   CapabilityScopeId,
   ChatPromptFeatureId,
 } from '@velaros-ai/agent/protocol'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, optionalWhen } from '@velaros-ai/core'
 
 /**
  * 技能类型——行为知识三层模型里 Tier2 的两个子类，决定注入方式：
@@ -72,6 +72,12 @@ interface AgentSkillProvider {
   getVersion?(): string
 }
 
+/** 非空时复制一份；空数组与缺席都不写入技能定义。 */
+function copyNonEmpty<T>(values: Optional<readonly T[]>): Optional<T[]> {
+  if (!values?.length) return undefined
+  return [...values]
+}
+
 function createSkillDefinition(args: {
   id: string
   label: string
@@ -104,11 +110,11 @@ function createSkillDefinition(args: {
     roleIds: args.roleIds,
     priority: args.priority ?? 100,
     userVisible: args.userVisible ?? true,
-    ...(args.argumentHint?.trim() ? { argumentHint: args.argumentHint.trim() } : {}),
-    ...(args.baseDir?.trim() ? { baseDir: args.baseDir.trim() } : {}),
-    ...(args.resourcePaths?.length ? { resourcePaths: [...args.resourcePaths] } : {}),
-    ...(args.sourceResourceId?.trim() ? { sourceResourceId: args.sourceResourceId.trim() } : {}),
-    ...(args.allowedTools?.length ? { allowedTools: [...args.allowedTools] } : {}),
+    argumentHint: optionalWhen(isNonBlankString, args.argumentHint?.trim()),
+    baseDir: optionalWhen(isNonBlankString, args.baseDir?.trim()),
+    resourcePaths: copyNonEmpty(args.resourcePaths),
+    sourceResourceId: optionalWhen(isNonBlankString, args.sourceResourceId?.trim()),
+    allowedTools: copyNonEmpty(args.allowedTools),
     enabled: args.enabled ?? true,
     markdown: args.markdown.trim(),
     skillKind: args.skillKind ?? 'capability',

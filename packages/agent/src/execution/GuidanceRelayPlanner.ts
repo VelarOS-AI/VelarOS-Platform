@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 import { z } from 'zod'
 
-import { isArray, isBlank, isEmpty, isObject, isString, optionalWhenLazy, truncate } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty, isNonBlankString, isObject, isString, optionalWhen, optionalWhenLazy, truncate } from '@velaros-ai/core'
 
 import type { SubAgentGuidanceRelayWorkerSnapshot } from './SubAgentGuidanceRelayRegistry'
 
@@ -189,8 +189,8 @@ function normalizeMainAgentGuidance(
   return {
     mode: mainAgent.mode,
     dependsOnThreadIds,
-    ...(message && !isBlank(message) ? { message } : {}),
-    ...(reason && !isBlank(reason) ? { reason } : {}),
+    message: optionalWhen(isNonBlankString, message),
+    reason: optionalWhen(isNonBlankString, reason),
   }
 }
 

@@ -4,7 +4,7 @@ import type {
   StreamAssistantGeneratedFilePayload,
   StreamAssistantSourcePayload,
 } from '@velaros-ai/agent/protocol'
-import { Log } from '@velaros-ai/core'
+import { isNonBlankString, Log, optionalWhen } from '@velaros-ai/core'
 
 const MaxGeneratedFileBytes = 20 * 1024 * 1024
 const generatedArtifactsLog = Log.tag('GeneratedArtifacts')
@@ -44,7 +44,7 @@ export function readSourcePayload(
       id: part.id || crypto.randomUUID(),
       sourceType: 'url',
       url: url.toString(),
-      ...(part.title?.trim() ? { title: part.title.trim() } : {}),
+      title: optionalWhen(isNonBlankString, part.title?.trim()),
     }
   } catch (error) {
     generatedArtifactsLog.caught('忽略模型返回的无效来源地址', error)

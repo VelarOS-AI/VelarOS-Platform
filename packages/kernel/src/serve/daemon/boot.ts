@@ -1,4 +1,3 @@
-import { isEmpty } from '@velaros-ai/core'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
 import type { KernelDaemonPaths } from '@velaros-ai/kernel/client/contracts'
 import {
@@ -114,7 +113,7 @@ export async function bootKernelDaemon(
   const host = new KernelModuleHost({
     apiVersion: options.apiVersion ?? KernelModuleApiVersion,
     permissionBroker: toOptional(options.permissionBroker),
-    ...(!isEmpty(isolationAdapters) ? { isolationAdapters } : {}),
+    isolationAdapters,
   })
   if (modules.length > 0) {
     host.registerModules(modules)

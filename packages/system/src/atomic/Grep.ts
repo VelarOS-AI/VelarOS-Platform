@@ -1,6 +1,6 @@
 import { realpath, stat } from 'node:fs/promises'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../Types.js'
@@ -134,7 +134,7 @@ export async function executeAtomicGrep(
       pattern: input.pattern,
       count: matches.length,
       truncated: matches.length >= input.limit || perFileOverflow,
-      ...(perFileOverflow ? { perFileTruncatedPaths: [rootPath] } : {}),
+      perFileTruncatedPaths: optionalWhen(perFileOverflow, [rootPath]),
       matches,
     }
   }
@@ -182,7 +182,7 @@ export async function executeAtomicGrep(
     pattern: input.pattern,
     count: matches.length,
     truncated: matches.length >= input.limit || search.truncated || perFileOverflow,
-    ...(perFileOverflow ? { perFileTruncatedPaths: perFileTruncatedPaths.slice(0, 10) } : {}),
+    perFileTruncatedPaths: optionalWhen(perFileOverflow, perFileTruncatedPaths.slice(0, 10)),
     matches,
   }
 }

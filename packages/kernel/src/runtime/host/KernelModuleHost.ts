@@ -515,7 +515,8 @@ export class KernelModuleHost {
       ...request,
       moduleId: handle.ownerModuleId,
       generation: handle.generation,
-      ...(attribution ? { callerModuleId: attribution.callerModuleId } : {}),
+      // 调用方只由宿主认定：没有 attribution 时显式清空，request 里即便夹带了也不会透传。
+      callerModuleId: attribution?.callerModuleId,
     })
   }
 
@@ -750,7 +751,7 @@ export class KernelModuleHost {
       status: record.status,
       health: record.health,
       generation: record.generation,
-      ...(isUndefined(record.error) ? {} : { error: record.error }),
+      error: record.error,
     })
   }
 

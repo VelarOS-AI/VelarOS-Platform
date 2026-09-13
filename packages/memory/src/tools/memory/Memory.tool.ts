@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, isNumber, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNumber, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryReadCapability, MemoryWriteCapability } from '../../Capabilities'
@@ -91,9 +91,10 @@ function compactRecall(item: MemoryRecallItem): Record<string, unknown> {
     retrievalReason: item.retrievalReason,
     sources: item.evidenceIds,
     // 树路径只有树档有；文件档如实返回空数组，投影成缺席而不是一串空节点。
-    ...(!isEmpty(item.path)
-      ? { path: item.path.map((node) => ({ type: node.nodeType, title: node.title })) }
-      : {}),
+    path: optionalWhen(
+      !isEmpty(item.path),
+      item.path.map((node) => ({ type: node.nodeType, title: node.title }))
+    ),
   }
 }
 
@@ -219,7 +220,14 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
     // 对模型只说这一件能兑现的事，treeVersion 这类某一档的 schema 只在该档在跑时才回。
     const consolidating = backend.verbs.includes('dream')
     const treeVersion = consolidating ? (await ctx.memory.getDiagnostics()).treeVersion : undefined
-    return {
+    const written: {
+      accepted: true
+      inserted: boolean
+      memoryId: string
+      availability: 'consolidating' | 'immediate'
+      message: string
+      treeVersion?: number
+    } = {
       accepted: true,
       inserted: result.inserted,
       memoryId: result.evidence.id,
@@ -227,11 +235,10 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
       message: consolidating
         ? '已记下；由后台整理管线择时纳入长期结论。'
         : '已记下，现在就能被召回。',
-      // 条件展开而不是 `optionalWhen`：后者在不满足时回 undefined，键**仍然在**，于是
-      // 「没有整理管线的后端不回 treeVersion」这句契约在 `in` 判定下是假的。
-      // @arch-guard:suspend code-style/forbid-single-property-conditional-spread 理由：契约测试断言不支持档「'treeVersion' in result === false」（键完全缺席），optionalWhen 会留下 undefined 键。
-      ...(isNumber(treeVersion) ? { treeVersion } : {}),
     }
+    // 「没有整理管线的后端不回 treeVersion」是契约（`in` 判定为假），所以只在有版本号时写这个键。
+    if (isNumber(treeVersion)) written.treeVersion = treeVersion
+    return written
   },
 })
 

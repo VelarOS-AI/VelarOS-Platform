@@ -5,7 +5,7 @@ import { cpus, freemem, homedir, loadavg, platform, release, tmpdir, totalmem } 
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
-import { isEmpty, isNull, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNull, isPlainObject, isPresent, isString, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { readSystemTextFile } from '../atomic/Filesystem.js'
@@ -827,7 +827,7 @@ export class LocalSystemKernel implements SystemToolSystemApi {
         status: result.cleanupIncomplete ? 'failed' : truncated ? 'truncated' : 'complete',
         encoding: 'utf-8', totalBytes, storedBytes, omittedBytes: Math.max(0, totalBytes - storedBytes),
         decodeErrors: decoders.stdout.decodeErrors + decoders.stderr.decodeErrors,
-        ...(result.cleanupIncomplete ? { error: 'Process output drain did not complete before its deadline' } : {}),
+        error: optionalWhen(result.cleanupIncomplete, 'Process output drain did not complete before its deadline'),
       }
       return { ...result, ...output, confinement, truncated, capture }
     })

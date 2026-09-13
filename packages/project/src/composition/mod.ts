@@ -1,4 +1,5 @@
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { optionalWhen } from '@velaros-ai/core'
 
 import {
   projectChangeTools,
@@ -89,7 +90,7 @@ const ProjectAgentModManifest = Object.freeze({
       name,
       categoryId: projectCategoryForTool(name),
       availableInSpaces: [ProjectSpaceId],
-      ...(ProjectResidentToolNames.has(name) ? { residentInSpaces: [ProjectSpaceId] } : {}),
+      residentInSpaces: optionalWhen(ProjectResidentToolNames.has(name), [ProjectSpaceId]),
     })),
     // 只声明**真被消费**的那几格（身份策略 / 绑定能力 / 职责类别）。空间的文案、图标、
     // 顺序与 surface 分档权威在产品壳的枚举表，manifest 里再写一份没有读者，只会让人

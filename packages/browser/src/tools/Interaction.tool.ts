@@ -1045,9 +1045,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
           source: normalizeBrowserTargetHint(parsed.source),
           target: normalizeBrowserTargetHint(parsed.target),
           steps: parsed.steps,
-          ...(!isPresent(parsed.waitForNavigation)
-            ? {}
-            : { waitForNavigation: parsed.waitForNavigation }),
+          waitForNavigation: toOptional(parsed.waitForNavigation),
         })
       case 'wait_for_selector':
         return browserWaitForSelector.execute(

@@ -31,14 +31,17 @@ import { dirname, join } from 'node:path'
 import {
   isArray,
   isBoolean,
-isEmpty,
+  isEmpty,
   isFiniteNumber,
   isNonBlankString,
   isNotNull,
   isObject,
   isPresent,
   isString,
-  isTrue, toNullable, } from '@velaros-ai/core'
+  isTrue,
+  optionalWhen,
+  toNullable,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
@@ -1055,7 +1058,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
     await this.options.transport.send('Browser.grantPermissions', {
       permissions: normalizedPermissions,
-      ...(origin?.trim() ? { origin: origin.trim() } : {}),
+      origin: optionalWhen(isNonBlankString, origin?.trim()),
     })
   }
 

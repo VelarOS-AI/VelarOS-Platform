@@ -76,21 +76,18 @@ function captureAgentTurnCapabilityContext<
         ...(categoriesByScope.get(scope) ?? []),
       ],
     },
-    ...(capabilityPages
-      ? {
-          listCapabilityPages: {
-            value: () => [...capabilityPages],
-          },
-        }
-      : {}),
-    ...(context.describeToolInputSchema
-      ? {
-          describeToolInputSchema: {
-            value: (toolName: string) => toNullable(inputSchemas.get(toolName)),
-          },
-        }
-      : {}),
   })
+  // 描述符表里不能出现 undefined：宿主没提供的能力就不定义，读到的仍是原型上的缺席。
+  if (capabilityPages) {
+    Object.defineProperty(snapshot, 'listCapabilityPages', {
+      value: () => [...capabilityPages],
+    })
+  }
+  if (context.describeToolInputSchema) {
+    Object.defineProperty(snapshot, 'describeToolInputSchema', {
+      value: (toolName: string) => toNullable(inputSchemas.get(toolName)),
+    })
+  }
   return snapshot
 }
 

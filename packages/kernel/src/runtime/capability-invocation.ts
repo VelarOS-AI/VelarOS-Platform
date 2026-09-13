@@ -129,7 +129,7 @@ export class KernelCapabilityInvoker {
     try {
       reason = resolveKernelCapabilityOperationReason(metadata, {
         operation: call.operation,
-        ...(isUndefined(call.scope) ? {} : { scope: call.scope }),
+        scope: call.scope,
         input: call.input,
       })
     } catch (error) {
@@ -148,13 +148,9 @@ export class KernelCapabilityInvoker {
           reason: call.permissionContext?.reason
             ?? reason
             ?? `Invoke "${call.operation}" on capability "${call.capabilityId}".`,
-          ...(isUndefined(call.permissionContext?.resource)
-            ? {}
-            : { resource: call.permissionContext.resource }),
-          ...(isUndefined(call.permissionContext?.details)
-            ? {}
-            : { details: call.permissionContext.details }),
-          ...(isUndefined(call.scope) ? {} : { scope: call.scope }),
+          resource: call.permissionContext?.resource,
+          details: call.permissionContext?.details,
+          scope: call.scope,
         })
       } catch (error) {
         throw new KernelCapabilityPermissionCheckError(

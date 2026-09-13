@@ -48,6 +48,15 @@ interface TransactionPlannerDependencies {
  * 取出编辑原语作用的文件路径。`rename_file` 用 `from`/`to` 而非 `path`；符号类与 `custom`
  * 原语本身不带路径，靠 `targetId` 反查——所以这里返回缺席是正常路径，不是错误。
  */
+/** 编辑失败后的回读建议：知道出错行时只读附近几行。 */
+function recoveryRead(path: string, line: Optional<number>) {
+  if (!line) return { tool: 'project:read', input: { path, maxChars: 12000 } }
+  return {
+    tool: 'project:read',
+    input: { path, range: { startLine: Math.max(1, line - 3), endLine: line + 6 }, maxChars: 12000 },
+  }
+}
+
 function operationPath(operation: EditOperation): string | undefined {
   if (operation.type === 'rename_file') return operation.from
   return 'path' in operation ? operation.path : undefined
@@ -358,20 +367,7 @@ export class TransactionPlanner {
             operationPath: path,
             stage: 'prepare',
             written: false,
-            ...(path
-              ? {
-                  recovery: {
-                    tool: 'project:read',
-                    input: {
-                      path,
-                      ...(line
-                        ? { range: { startLine: Math.max(1, line - 3), endLine: line + 6 } }
-                        : {}),
-                      maxChars: 12000,
-                    },
-                  },
-                }
-              : {}),
+            recovery: path ? recoveryRead(path, line) : details.recovery,
           },
           error.suggestedNextAction,
         )

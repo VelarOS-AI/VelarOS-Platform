@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isEmpty, isNumber, isObject, isPlainObject, isPresent, isString } from './runtime'
+import { isArray, isBoolean, isEmpty, isNumber, isObject, isPlainObject, isPresent, isString, optionalWhen } from './runtime'
 
 import type { ErrorCode, Result as ResultValue, SerializedError } from '#contracts'
 
@@ -45,7 +45,7 @@ export class AppError extends Error {
     return {
       code: this.code,
       message: this.message,
-      ...(!isEmpty(Object.keys(this.context)) ? { context: this.context } : {}),
+      context: optionalWhen(!isEmpty(Object.keys(this.context)), this.context),
     }
   }
 

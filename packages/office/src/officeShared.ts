@@ -557,14 +557,11 @@ export async function runOfficeSystemCommand(
   timeoutMs = 120_000
 ): Promise<OfficeSystemCommandResult> {
   // Office 转换/编译通常输出较多，因此放宽 maxOutputChars。
+  const options = { cwd, timeoutMs, maxOutputChars: 20_000 }
+  if (isString(command)) return ctx.office.system.runCommand(command, options, false)
   return ctx.office.system.runCommand(
-    isString(command) ? command : describeOfficeNativeCommand(command),
-    {
-      cwd,
-      timeoutMs,
-      maxOutputChars: 20_000,
-      ...(isString(command) ? {} : { nativeCommand: command }),
-    },
+    describeOfficeNativeCommand(command),
+    { ...options, nativeCommand: command },
     false
   )
 }

@@ -3,7 +3,7 @@
 //
 // 刻意不认识连接:终态从哪条 socket 出去是 Server 的判断(断线期间产生的结果要留在缓存里等重连
 // 来取),runner 只负责执行、计时、去重与审计。
-import { isNotNull, isUndefined, Log, toNullable } from '@velaros-ai/core'
+import { isNotNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   RemoteNodeCancel,
@@ -328,7 +328,7 @@ export class RemoteNodeCallRunner {
       operation: call.operation,
       status,
       durationMs: this.options.now() - call.startedAt,
-      ...(status === 'success' ? { output } : {}),
+      output: optionalWhen(status === 'success', output),
       error,
     })
     this.options.deliver(call.clientId, result)

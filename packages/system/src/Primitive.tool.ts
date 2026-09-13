@@ -72,16 +72,15 @@ function exposeCommandOutputWindow(result: SystemCommandResult): SystemCommandRe
       complete: !result.truncated && !result.backgroundProcess,
       endPreserved: true,
     },
-    ...(continuationQuery && (result.truncated || result.backgroundProcess)
-      ? {
-          outputContinuation: {
+    outputContinuation:
+      continuationQuery && (result.truncated || result.backgroundProcess)
+        ? {
             kind: 'session-terminal-log' as const,
             query: continuationQuery,
             tool: 'context:recall' as const,
             args: { query: continuationQuery, kind: 'terminal' as const },
-          },
-        }
-      : {}),
+          }
+        : result.outputContinuation,
   }
 }
 
@@ -473,14 +472,9 @@ const bash = defineSystemTool<{
         ports: plan.ports,
         reason: plan.reason,
         autoStarted: plan.shouldStartInBackground && !background,
-        ...(result.backgroundProcess.taskId
-          ? {
-              statusContinuation: {
-                tool: SystemToolNames.listTasks,
-                args: { taskId: result.backgroundProcess.taskId },
-              },
-            }
-          : {}),
+        statusContinuation: result.backgroundProcess.taskId
+          ? { tool: SystemToolNames.listTasks, args: { taskId: result.backgroundProcess.taskId } }
+          : result.backgroundProcess.statusContinuation,
       },
     }
   },

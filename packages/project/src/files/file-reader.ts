@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 
-import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNull, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 import type { ReadInput, ReadResult } from '../types/io.js'
@@ -231,23 +231,18 @@ export function continuationInput(
   cursor: ReadCursor,
   preserveRequestedEnd: boolean,
 ): ReadInput {
-  const range: NonNullable<ReadInput['range']> = {
-    startLine: cursor.line,
-    ...(cursor.column > 1 ? { startColumn: cursor.column } : {}),
-    ...(preserveRequestedEnd && !isUndefined(input.range?.endLine)
-      ? { endLine: input.range.endLine }
-      : {}),
-    ...(preserveRequestedEnd && !isUndefined(input.range?.endColumn)
-      ? { endColumn: input.range.endColumn }
-      : {}),
-  }
   return {
     path: pathValue,
     baseRevision: revision,
-    range,
-    ...(!isUndefined(input.maxBytes) ? { maxBytes: input.maxBytes } : {}),
-    ...(!isUndefined(input.maxChars) ? { maxChars: Math.max(1, input.maxChars) } : {}),
-    ...(!isUndefined(input.trust) ? { trust: input.trust } : {}),
+    range: {
+      startLine: cursor.line,
+      startColumn: optionalWhen(cursor.column > 1, cursor.column),
+      endLine: optionalWhen(preserveRequestedEnd, input.range?.endLine),
+      endColumn: optionalWhen(preserveRequestedEnd, input.range?.endColumn),
+    },
+    maxBytes: input.maxBytes,
+    maxChars: mapDefined(input.maxChars, (maxChars) => Math.max(1, maxChars)),
+    trust: input.trust,
   }
 }
 

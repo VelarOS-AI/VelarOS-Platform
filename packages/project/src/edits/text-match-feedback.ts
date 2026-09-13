@@ -7,7 +7,7 @@
 //
 // 宽容匹配与分歧定位共用同一口径（忽略行尾空白与 \r，且被忽略的空白必须真的位于行尾）：
 // 系统会自动放过的差异不能被报告成「第一处分歧」，否则模型会去修一行根本不用修的内容。
-import { isBlank, isEmpty, isPresent, toNullable, truncate, unique } from '@velaros-ai/core'
+import { isBlank, isEmpty, isPresent, optionalWhen, toNullable, truncate, unique } from '@velaros-ai/core'
 
 import { offsetToLine } from '../utils/text.js'
 
@@ -399,7 +399,7 @@ export function diagnoseTextMatchMiss(content: string, needle: string): TextMatc
       actual: isPresent(actual) ? excerptAround(actual, indent(actual) + focus) : null,
     },
     causes,
-    ...(isEmpty(tolerated) ? {} : { tolerated }),
+    tolerated: optionalWhen(!isEmpty(tolerated), tolerated),
     hint: `${causes.map((cause) => causePhrase(cause, expected, actual)).join('；')}。`,
   }
 }

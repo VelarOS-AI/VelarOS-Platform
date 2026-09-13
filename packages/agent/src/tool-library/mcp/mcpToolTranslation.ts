@@ -19,7 +19,7 @@ import type {
   ToolRole,
 } from '@velaros-ai/agent/protocol'
 import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
-import { isBoolean } from '@velaros-ai/core'
+import { isBoolean, optionalWhen } from '@velaros-ai/core'
 
 import { createApprovalOperationKey } from '../../tool-contract/task-approval'
 import type { VelaTool } from '../defineVelaTool'
@@ -198,7 +198,7 @@ export function translateMcpTool(input: TranslateMcpToolInput): TranslatedMcpToo
               target: argumentsPreview,
             },
             rememberRiskScope: !destructive,
-            ...(destructive ? { requireManualApproval: true } : {}),
+            requireManualApproval: optionalWhen(destructive, true),
             detail: {
               kind: 'mcp-tool-call', serverName, toolName: originalName,
               argumentsPreview, approvalScope,

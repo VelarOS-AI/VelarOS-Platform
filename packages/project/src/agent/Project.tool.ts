@@ -8,7 +8,7 @@ import {
   createManualApprovalOptions,
   defineToolRuntimeSpec,
 } from '@velaros-ai/agent/tool-contract'
-import { isArray, isEmpty, isPresent, isString, isUndefined } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, isString, isUndefined, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { type ProjectEditOperationsSchema, type ProjectModelEditInput,ProjectModelEditSchema } from '../edits/schema.js'
@@ -366,7 +366,7 @@ async function applyProjectEditTransaction(
           diff: transaction.diff,
           changedLines: transaction.changedLines,
           risk: transaction.risk,
-          ...(isEmpty(notes) ? {} : { notes }),
+          notes: optionalWhen(!isEmpty(notes), notes),
         }
       } catch (error) {
         kernel.discardTransaction(transaction.transactionId)

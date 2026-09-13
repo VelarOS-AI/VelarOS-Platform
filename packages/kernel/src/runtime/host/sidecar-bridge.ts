@@ -15,6 +15,7 @@ import {
   isTrue,
   isUndefined,
   Log,
+  optionalWhen,
   toNullable,
 } from '@velaros-ai/core'
 
@@ -129,9 +130,7 @@ export class HostBridgeClient {
       permissions: permissions.filter(
         (item): item is string => isString(item),
       ),
-      ...(isString((Reflect.get(result, 'reason')))
-        ? { reason: Reflect.get(result, 'reason') as string }
-        : {}),
+      reason: optionalWhen(isString, Reflect.get(result, 'reason')),
     }
   }
 
