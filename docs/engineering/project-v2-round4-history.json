@@ -1,6 +1,6 @@
 {
   "sessionId": "workbench-workbench-mtzgr501-1",
-  "source": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/.velaros/data/workbench-app/chat-history-backups/97654cd42674462318d03e555fdcaacd.json",
+  "source": "<projects>/VelarOS-Workbench-project-v2-test/.velaros/data/workbench-app/chat-history-backups/97654cd42674462318d03e555fdcaacd.json",
   "uniqueToolCalls": 7,
   "tools": {
     "plan:update": 1,

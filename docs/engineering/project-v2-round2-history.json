@@ -1,6 +1,6 @@
 {
   "sessionId": "workbench-workbench-mtzddtw8-1",
-  "source": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/.velaros/data/workbench-app/chat-history-backups/cc4294d7762fd5fb8ff6cd84e7eb1a64.json",
+  "source": "<projects>/VelarOS-Workbench-project-v2-test/.velaros/data/workbench-app/chat-history-backups/cc4294d7762fd5fb8ff6cd84e7eb1a64.json",
   "tasks": [
     {
       "tools": {
@@ -87,7 +87,7 @@
         {
           "tool": "project:run",
           "code": "SCOPE_VIOLATION",
-          "message": "工作目录超出当前项目：/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform-project-v2-round2-test"
+          "message": "工作目录超出当前项目：<projects>/VelarOS-Platform-project-v2-round2-test"
         }
       ],
       "commandNonzeroExits": [

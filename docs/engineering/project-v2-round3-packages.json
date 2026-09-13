@@ -3,12 +3,12 @@
     "name": "agent",
     "version": "0.6.24",
     "sha256": "a2002f577431426e83034838a064dc479a947f010e8efdae0cdd9df875811910",
-    "archive": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/project-v2-round3-artifacts/agent-0.6.24-a2002f577431.tgz"
+    "archive": "<projects>/VelarOS-Workbench-project-v2-test/project-v2-round3-artifacts/agent-0.6.24-a2002f577431.tgz"
   },
   {
     "name": "ui",
     "version": "0.2.52",
     "sha256": "162c2ec2d335835752757c51a927ef9f1227bccddb4499e4549139e0db037b12",
-    "archive": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/project-v2-round3-artifacts/ui-0.2.52-162c2ec2d335.tgz"
+    "archive": "<projects>/VelarOS-Workbench-project-v2-test/project-v2-round3-artifacts/ui-0.2.52-162c2ec2d335.tgz"
   }
 ]

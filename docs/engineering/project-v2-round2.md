@@ -55,7 +55,7 @@ Workbench 候选宿主在独立的 `VelarOS-Workbench-project-v2-round2-test` �
 ```sh
 bun --preload ./VelarOS-Workbench-project-v2-test/scripts/test/setRepositoryCwd.mjs \
   ./VelarOS-Workbench-project-v2-test/scripts/test/verifyProjectTools.ts \
-  /Users/mac/Desktop/VelarOS/projects/VelarOS-Platform-project-v2-round2-test
+  <projects>/VelarOS-Platform-project-v2-round2-test
 ```
 
 本机原始日志保存在 `/tmp/project-round2-final-check.log`、`/tmp/agent-round2-tests.log`、`/tmp/workbench-round2-candidate-tests.log`、`/tmp/workbench-round2-final-acceptance.log`。候选包、启动信息、截图与新旧布局验收结果保存在 Workbench 候选目录的 `project-v2-round2-artifacts/`。
