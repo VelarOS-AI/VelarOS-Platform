@@ -2150,7 +2150,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "CompactToolRow.hoverContent",
-      "description": "悬停或键盘聚焦行时弹出的可悬停详情（HoverCard）。提供后行可聚焦、不论 detail 是否截断都能弹出，\n取代「仅截断时出现」的全文气泡，并丢弃行与计数上的原生 title，免得两层提示叠在一起。\n同一行应始终提供或始终不提供：两种气泡的包裹层不同，中途切换会重挂整行。",
+      "description": "悬停或键盘聚焦行时弹出的可悬停详情（HoverCard）。提供后行可聚焦、不论 detail 是否截断都能弹出，\n并丢弃行与计数上的原生 title，免得两层提示叠在一起。不提供时同一个气泡只在 detail 被截断时弹出全文；\n详情与行上文字完全重复时就别提供，行上看得全便不必弹。两种内容共用一个包裹层，中途切换不会重挂整行。",
       "type": "React.ReactNode"
     }
   ],
@@ -3787,7 +3787,7 @@ export const generatedComponentApiRows: Record<string, ComponentLibraryApiRow[]>
     },
     {
       "name": "HoverCard.sideOffset",
-      "description": "Auto-generated from TypeScript props.",
+      "description": "触发元素到箭头尖端的距离（像素）；气泡边缘再往外让出箭头的高度。",
       "type": "number",
       "defaultValue": "DefaultSideOffset"
     },

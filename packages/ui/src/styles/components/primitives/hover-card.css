@@ -1,9 +1,12 @@
 /* @velaros-no-tailwind */
 
 /*
- * 可悬停详情气泡（HoverCard）：叠加在 .velar-popover-content 的定位与层级之上，收紧尺寸、允许选字，
- * 超出可用高度时在气泡内部滚动。不描边，靠浮层表面色、圆角与投影和下层内容分开（暗色主题下由
- * --popover 的表面亮度分层）。--velar-hover-card-available-height 由组件按所选一侧的剩余空间写入。
+ * 可悬停详情气泡（HoverCard）：叠加在 .velar-popover-content 的定位与层级之上，收紧尺寸、允许选字。
+ * 不描边，靠浮层表面色、圆角与投影和下层内容分开（暗色主题下由 --popover 的表面亮度分层）。
+ *
+ * 结构：外层是定位与外观（底色、圆角、投影），不裁剪；里面的 .velar-hover-card-body 负责超高时滚动，
+ * --velar-hover-card-available-height 由组件按所选一侧的剩余空间写入；.velar-hover-card-arrow 是朝向
+ * 触发元素的小箭头，画在外层之外，所以外层不能 overflow 裁剪。
  */
 .velar-popover-content.velar-hover-card {
   --velar-hover-card-max-height: 360px;
@@ -14,13 +17,8 @@
   box-sizing: border-box;
   min-width: min(240px, calc(100vw - 16px));
   max-width: min(520px, calc(100vw - 16px));
-  max-height: min(
-    var(--velar-hover-card-max-height),
-    var(--velar-hover-card-available-height, calc(100vh - 16px))
-  );
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: var(--ui-space-2) var(--ui-space-3);
+  overflow: visible;
+  padding: 0;
   border: 0;
   border-radius: var(--ui-radius-panel);
   box-shadow: var(--velar-hover-card-shadow);
@@ -30,6 +28,52 @@
   user-select: text;
   -webkit-user-select: text;
   animation: velar-hover-card-in 120ms ease-out;
+}
+
+.velar-hover-card-body {
+  box-sizing: border-box;
+  max-height: min(
+    var(--velar-hover-card-max-height),
+    var(--velar-hover-card-available-height, calc(100vh - 16px))
+  );
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border-radius: inherit;
+}
+
+/*
+ * 指向触发元素的箭头：填气泡自己的底色（background-color 继承外层），没有描边，边缘靠气泡四周的投影托出。
+ * 横向对准触发元素的中心（Popover 写入 --velar-popover-anchor-center-x），离圆角至少留出半个箭头宽。
+ * 箭头比露出来的部分多 1px 压进气泡里，同色重叠，避免小数坐标下两块之间透出一条细缝。
+ */
+.velar-hover-card-arrow {
+  --velar-hover-card-arrow-inset: calc(
+    var(--ui-radius-panel) + var(--velar-hover-card-arrow-width) / 2
+  );
+
+  position: absolute;
+  left: clamp(
+    var(--velar-hover-card-arrow-inset),
+    var(--velar-popover-anchor-center-x, 50%),
+    calc(100% - var(--velar-hover-card-arrow-inset))
+  );
+  width: var(--velar-hover-card-arrow-width);
+  height: calc(var(--velar-hover-card-arrow-height) + 1px);
+  margin-left: calc(var(--velar-hover-card-arrow-width) / -2);
+  background-color: inherit;
+}
+
+/* 气泡在触发元素上方：箭头挂在底边、尖端朝下。 */
+.velar-hover-card[data-side='top'] > .velar-hover-card-arrow {
+  top: calc(100% - 1px);
+  clip-path: polygon(0 0, 100% 0, 100% 1px, 50% 100%, 0 1px);
+}
+
+/* 翻到触发元素下方：箭头挂在顶边、尖端朝上。 */
+.velar-hover-card[data-side='bottom'] > .velar-hover-card-arrow {
+  bottom: calc(100% - 1px);
+  clip-path: polygon(50% 0, 100% calc(100% - 1px), 100% 100%, 0 100%, 0 calc(100% - 1px));
 }
 
 /*

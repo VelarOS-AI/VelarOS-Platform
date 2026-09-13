@@ -1,5 +1,6 @@
 /**
- * HoverCard 的开关状态机与选边计算：只认交互事件和计时器，不碰 DOM 与 React，时序可以脱离浏览器验证。
+ * HoverCard 的开关状态机与几何（选边、箭头让位）：只认交互事件和计时器，不碰 DOM 与 React，
+ * 时序与几何都可以脱离浏览器验证。
  *
  * 开：指针停在触发元素上、指针在气泡里、键盘聚焦触发元素、在气泡里按住拖选、选区落在气泡里——
  * 任一成立就该开着；全部结束才关。开和关都走延时：扫过不打扰，从触发元素移进气泡有缓冲。
@@ -45,6 +46,20 @@ interface HoverCardEngagement {
 
 const ViewportPadding = 8
 const MinAvailableHeight = 96
+
+/**
+ * 气泡指向触发元素的箭头（像素）：画在气泡朝向触发元素的一边之外，填气泡自己的底色。
+ * 样式层按组件写入的 CSS 变量取这组尺寸，改这里即可，不必两处同步。
+ */
+export const HoverCardArrowSize = { width: 12, height: 6 } as const
+
+/**
+ * 触发元素到气泡边缘的距离：`sideOffset` 量到箭头尖端，气泡本身再往外让出箭头的高度——
+ * 箭头落在两者之间的空隙里，不会压到触发元素上。选边与定位都按这个距离算。
+ */
+export function resolveHoverCardEdgeOffset(sideOffset: number): number {
+  return sideOffset + HoverCardArrowSize.height
+}
 
 function createEngagement(): HoverCardEngagement {
   return {
@@ -152,7 +167,14 @@ export class HoverCardController {
 
   public setInactive(inactive: boolean): void {
     this.inactive = inactive
-    if (inactive) this.forceClose()
+    if (inactive) {
+      this.forceClose()
+      return
+    }
+
+    // 内容晚到（量出行文字被截断、工具结果回来）时指针可能早已停在触发元素上，按眼下的交互补判一次，
+    // 不必等指针离开再进来。
+    this.reconcile()
   }
 
   /** 卸载时撤掉未到期的计时并让出「当前气泡」的位置；控制器本身仍可复用（StrictMode 会先卸再装）。 */

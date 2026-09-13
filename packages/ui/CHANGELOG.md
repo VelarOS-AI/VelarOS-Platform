@@ -18,6 +18,9 @@
   不再等整轮结束。
 - 批量 `project:read` 的工具行显示首个文件并计数其余；`project:search` / `project:query-code` 行内先说查询词或符号，
   搜索范围放进悬停详情（`getToolSearchScopeItems`）；`project:write` 按文件改动渲染并计入「已编辑」。
+- 工具行的悬停气泡找回指向行的小箭头（改用 HoverCard 后丢了）：箭头填气泡自己的底色、不描边，对准行的中间，
+  气泡翻到行下方时箭头跟着翻；气泡外层不再裁剪，超高时由内容层滚动。没接详情、只在 detail 被截断时才弹的全文气泡
+  也改用同一个 HoverCard（与行等宽、不描边、带箭头、可以追进去选字）。
 
 ### Added
 
@@ -27,6 +30,7 @@
 - 工具行悬停详情：`CompactToolRow.hoverContent` 与 `ToolResultSummaryItem.hoverContent`（提供后行可聚焦，行与计数上的
   原生 title 不再挂出，气泡与行等宽）；`getToolOperations` 推导一次调用实际执行的操作与对象，`ToolCallHoverDetails`
   渲染详情。内置工具行与归并行（×N）都已接上，归并行按调用顺序逐次列出。未接详情的工具行，溢出全文气泡同样与行等宽、不描边。
+- `PopoverContent` 把触发元素中心在浮层内的坐标写成 `--velar-popover-anchor-center-x/y`，供浮层画指向触发元素的箭头。
 - `ChatMessage.systemNoticeKind`（`rewind` | `goal-continuation`）：系统通知行按类别选图标，目标自动续跑的留痕显示靶心。
 - `scrollBehavior` 新增夹底守卫与自动收起扣留的纯策略（`resolveScrollClampGuard`、
   `resolveAutoCollapseHold`、`ScrollClampGuardCssVariable`）。

@@ -6,6 +6,9 @@
  * 与 BubbleTooltip 的分工：BubbleTooltip 是一句话提示，指针离开触发元素即关；HoverCard 承载需要
  * 细看、复制的多行内容，所以要能「追进去」，选中文字后也不会在复制前消失。
  *
+ * 气泡朝向触发元素的一边带一个填气泡底色的小箭头，指着触发元素；翻到另一侧时箭头跟着翻。
+ * 箭头画在气泡之外，所以滚动交给气泡里的内容层，外层不裁剪。
+ *
  * 样式：`.velar-hover-card` · 见 styles/components/。
  */
 import {
@@ -41,9 +44,11 @@ import {
 import { TimerScope } from '../../lib/timerScope'
 
 import {
+  HoverCardArrowSize,
   HoverCardController,
   type HoverCardPlacement,
   type HoverCardSide,
+  resolveHoverCardEdgeOffset,
   resolveHoverCardPlacement,
 } from './hoverCardController'
 
@@ -65,6 +70,7 @@ export interface HoverCardProps {
   /** 首选弹出方向；该侧放不下而另一侧更宽裕时自动翻到另一侧。 */
   side?: HoverCardSide
   align?: HoverCardAlign
+  /** 触发元素到箭头尖端的距离（像素）；气泡边缘再往外让出箭头的高度。 */
   sideOffset?: number
   /**
    * 气泡宽度：`content` 按内容自适应（有上限）；`anchor` 与触发元素等宽，触发元素变宽变窄
@@ -86,9 +92,12 @@ interface HoverCardTriggerBindings {
 
 const DefaultOpenDelayMs = 300
 const DefaultCloseDelayMs = 200
-const DefaultSideOffset = 6
+// 触发元素到箭头尖端的距离；气泡边缘再往外让出箭头的高度（见 resolveHoverCardEdgeOffset）。
+const DefaultSideOffset = 2
 const AvailableHeightVariable = '--velar-hover-card-available-height'
 const AnchorWidthVariable = '--velar-hover-card-anchor-width'
+const ArrowWidthVariable = '--velar-hover-card-arrow-width'
+const ArrowHeightVariable = '--velar-hover-card-arrow-height'
 
 function hasRenderableContent(content: ReactNode): boolean {
   if (!isPresent(content) || isBoolean(content)) return false
@@ -96,16 +105,19 @@ function hasRenderableContent(content: ReactNode): boolean {
   return !isString(content) || !isEmpty(content)
 }
 
-/** 所选一侧的可用高度与首帧的触发元素宽度，都以 CSS 变量交给样式层。 */
+/** 箭头尺寸、所选一侧的可用高度与首帧的触发元素宽度，都以 CSS 变量交给样式层。 */
 function toSurfaceStyle(
   placement: Nullable<HoverCardPlacement>,
   anchorWidth: Nullable<number>
-): Optional<CSSProperties> {
-  const variables: Record<string, string> = {}
+): CSSProperties {
+  const variables: Record<string, string> = {
+    [ArrowWidthVariable]: `${HoverCardArrowSize.width}px`,
+    [ArrowHeightVariable]: `${HoverCardArrowSize.height}px`,
+  }
   if (placement) variables[AvailableHeightVariable] = `${placement.availableHeight}px`
   if (isPresent(anchorWidth)) variables[AnchorWidthVariable] = `${anchorWidth}px`
 
-  return isEmpty(Object.keys(variables)) ? undefined : (variables as CSSProperties)
+  return variables as CSSProperties
 }
 
 function assignRef<T>(ref: LooseOptional<Ref<T>>, value: Nullable<T>): void {
@@ -226,6 +238,8 @@ export function HoverCard({
     [controller]
   )
 
+  const edgeOffset = resolveHoverCardEdgeOffset(sideOffset)
+
   // 首帧量出气泡的自然高度再选边：子组件 PopoverContent 的布局 effect 先跑，这里在绘制前改方向，不闪。
   useLayoutEffect(() => {
     if (!open) return
@@ -241,11 +255,11 @@ export function HoverCard({
         anchorTop: anchorRect.top,
         anchorBottom: anchorRect.bottom,
         cardHeight: card.getBoundingClientRect().height,
-        sideOffset,
+        sideOffset: edgeOffset,
         viewportHeight: trigger.ownerDocument.defaultView?.innerHeight ?? 0,
       })
     )
-  }, [open, side, sideOffset])
+  }, [open, side, edgeOffset])
 
   const childRef = optionalWhenLazy(isValidElement<HoverCardTriggerBindings>(children), () =>
     (children.props as HoverCardTriggerBindings).ref
@@ -303,7 +317,7 @@ export function HoverCard({
           placement={placement}
           side={side}
           align={align}
-          sideOffset={sideOffset}
+          sideOffset={edgeOffset}
           widthStrategy={widthStrategy}
           anchorWidth={widthStrategy === 'anchor' ? anchorWidth : null}
         >
@@ -349,15 +363,19 @@ function HoverCardSurface({
     target: () => getOwnerDocument().defaultView ?? window,
   })
 
+  const resolvedSide = placement?.side ?? side
+
   return (
     <PopoverContent
       ref={contentRef}
       id={contentId}
       role="tooltip"
       className="velar-hover-card"
+      data-side={resolvedSide}
       data-width-strategy={widthStrategy}
-      side={placement?.side ?? side}
+      side={resolvedSide}
       align={align}
+      // 量到气泡边缘的距离：箭头占住触发元素与气泡之间的空隙。
       sideOffset={sideOffset}
       // Popover 的 anchor 宽度策略跟随触发元素的实际宽度（尺寸观察 + 窗口缩放）实时写入 width。
       widthStrategy={widthStrategy}
@@ -373,7 +391,9 @@ function HoverCardSurface({
         if (event.pointerType !== 'touch') controller.pointerLeaveCard()
       }}
     >
-      {children}
+      {/* 内容层负责滚动；箭头是它的兄弟节点，画在气泡外侧，不会被滚动容器裁掉。 */}
+      <div className="velar-hover-card-body">{children}</div>
+      <span className="velar-hover-card-arrow" aria-hidden="true" />
     </PopoverContent>
   )
 }
