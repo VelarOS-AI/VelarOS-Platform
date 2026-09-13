@@ -147,7 +147,7 @@ export const conversationZhCNMessages = {
     rewindDialogKeepFilesHint: '只回退对话，保留这 {files} 个文件的当前内容。',
     rewindDialogNoSnapshot: '检测到 {files} 个文件已更改，但没有可用快照；只能回退对话。',
     rewindDialogRestoreFiles: '同时回退文件',
-    rewindDialogRestoreFilesHint: '同时将 {roots} 个项目根恢复到该时点。',
+    rewindDialogRestoreFilesHint: '同时撤回这几轮里 AI 对文件的改动，你自己的改动会保留。',
     rewindDialogTitle: '回到这轮对话之前？',
     rewindErrorFallback: '回退对话状态时发生错误，请稍后重试。',
     rewindErrorTitle: '回退失败',
@@ -623,7 +623,7 @@ export const conversationEnUSMessages = {
     rewindDialogNoSnapshot:
       '{files} files changed, but no restorable snapshot is available. Only the conversation can be rewound.',
     rewindDialogRestoreFiles: 'Also roll back files',
-    rewindDialogRestoreFilesHint: 'Also restore {roots} project roots to that point.',
+    rewindDialogRestoreFilesHint: "Also undo the AI's file changes from these turns. Your own edits are kept.",
     rewindDialogTitle: 'Rewind to before this turn?',
     rewindErrorFallback: 'Something went wrong while rewinding the conversation state.',
     rewindErrorTitle: 'Failed to rewind',

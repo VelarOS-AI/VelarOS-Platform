@@ -12,7 +12,7 @@ export type ConversationRewindFilePlan =
   | { kind: 'nothing-to-restore' }
   /** 改过文件，但拿不到该时点的快照（项目不是 git 仓库 / 快照已被淘汰）——只能如实说不能回。 */
   | { kind: 'no-snapshot'; changedFileCount: number }
-  /** 可以回退：把 `rootCount` 个项目根整体还原到该时点。 */
+  /** 可以回退：撤回这几轮里 Agent 对 `rootCount` 个项目根的文件改动（AI 之外的改动由宿主保留）。 */
   | { kind: 'restorable'; changedFileCount: number; rootCount: number }
 
 /**
