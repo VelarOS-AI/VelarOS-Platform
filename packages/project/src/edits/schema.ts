@@ -305,7 +305,7 @@ const ProjectEditOperationsSchema = z.array(ProjectEditIntentSchema)
 /** 模型只提交扁平操作；内部事务意图包装由 Agent 适配层负责。 */
 const ProjectModelEditSchema = z.strictObject({
   edits: z.array(ProjectModelEditOperationSchema).min(1).max(1000),
-  cwd: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional().describe('当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'),
   baseRevisions: z.record(z.string().min(1), z.string().min(1)).optional(),
 })
 type ProjectModelEditInput = z.input<typeof ProjectModelEditSchema>

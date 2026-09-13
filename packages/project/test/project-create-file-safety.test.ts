@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -155,7 +155,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       await project.rollback({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe(Precious)
       expect(rollbackCommit?.pending?.restore).toEqual([
-        { path: 'keep.txt', exists: true, content: 'new\n', ownedStates: [{ exists: true, content: Precious }] },
+        { path: 'keep.txt', exists: true, content: 'new\n', encoding: undefined, mode: (await stat(join(root, 'keep.txt'))).mode & 0o777, ownedStates: [{ exists: true, content: Precious }] },
       ])
 
       // 模拟回滚已写回原文、但状态尚未提交就中断：下次 owner 启动把文件恢复到回滚前，而不是判成外部冲突。

@@ -19,6 +19,7 @@ export interface ApplyRestoreState {
   oldContent?: string
   /** 原文件的文本编码；还原时文件若已被删掉，按它重建而不是写成 UTF-8。 */
   encoding?: ProjectTextEncoding
+  mode?: number
   restorable: boolean
 }
 
@@ -73,7 +74,7 @@ export function durableRestorePlan(
       path: pathValue,
       exists: restore.existedBefore,
       ...(restore.existedBefore
-        ? { content: restore.oldContent!, encoding: restore.encoding }
+        ? { content: restore.oldContent!, encoding: restore.encoding, mode: restore.mode }
         : {}),
       ownedStates,
     })
@@ -92,4 +93,19 @@ export function fileStateMatches(
     !snapshot.isBinary &&
     snapshot.content === state.content
   )
+}
+
+/** 恢复写入会生成新的 revision；仅刷新已验证恢复成功的路径首个补丁。 */
+export function refreshRecoveredBaseRevisions(
+  transaction: StoredTransaction,
+  recovered: ReadonlyMap<string, FileSnapshot>,
+): void {
+  const seen = new Set<string>()
+  transaction.patches = transaction.patches.map((patch) => {
+    const snapshot = recovered.get(patch.path)
+    if (!snapshot || seen.has(patch.path)) return patch
+    seen.add(patch.path)
+    return { ...patch, baseRevision: snapshot.revision }
+  })
+  transaction.baseSnapshots = transaction.baseSnapshots.map((snapshot) => recovered.get(snapshot.path) ?? snapshot)
 }

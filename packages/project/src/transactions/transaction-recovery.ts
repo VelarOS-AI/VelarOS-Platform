@@ -3,9 +3,15 @@ import { isString, optionalWhen } from '@velaros-ai/core'
 import { ProjectError } from '../errors.js'
 import { type ProjectTransactionPendingOperation } from '../persistence/transaction-state.js'
 import type { ProjectFileAccess } from '../types/file-access.js'
+import type { FileSnapshot } from '../types/snapshot.js'
 import type { StoredTransaction } from '../types/transaction.js'
 
-import { type ApplyRestoreState, durableRestorePlan, fileStateMatches } from './recovery-plan.js'
+import {
+  type ApplyRestoreState,
+  durableRestorePlan,
+  fileStateMatches,
+  refreshRecoveredBaseRevisions,
+} from './recovery-plan.js'
 interface TransactionRecoveryDependencies {
   readonly store: Pick<ProjectFileAccess, 'snapshot' | 'write' | 'remove'>
 }
@@ -25,6 +31,7 @@ export class TransactionRecovery {
         // 仅文本文件可按字符串还原；二进制/超限文件无法捕获正文，回滚时尽力而为。
         oldContent: optionalWhen(isString(before.content), before.content),
         encoding: before.textEncoding,
+        mode: before.mode,
         restorable: isString(before.content) || !before.exists || before.isDirectory,
       })
     }
@@ -44,15 +51,22 @@ export class TransactionRecovery {
       previousStatus: transaction.status,
       kind,
       restore: durableRestorePlan(attempted, kind, restoreByPath),
-    })
+    }, transaction)
   }
-  public async restore(pending: ProjectTransactionPendingOperation): Promise<void> {
+  public async restore(
+    pending: ProjectTransactionPendingOperation,
+    transaction?: StoredTransaction,
+  ): Promise<void> {
+    const recovered = new Map<string, FileSnapshot>()
     const writes: Array<ProjectTransactionPendingOperation['restore'][number]> = []
     for (const restore of [...pending.restore].reverse()) {
       const current = await this.dependencies.store.snapshot(restore.path, true, {
         skipFileFilter: true,
       })
-      if (fileStateMatches(current, restore)) continue
+      if (fileStateMatches(current, restore)) {
+        recovered.set(restore.path, current)
+        continue
+      }
       if (!restore.ownedStates.some((state) => fileStateMatches(current, state))) {
         throw new ProjectError(
           'TRANSACTION_RECOVERY_CONFLICT',
@@ -71,13 +85,20 @@ export class TransactionRecovery {
     // 先检查全部路径，避免发现后面的外部冲突时，前面的文件已经被恢复。
     for (const restore of writes) {
       if (restore.exists) {
-        await this.dependencies.store.write(restore.path, restore.content!, {
+        const snapshot = await this.dependencies.store.write(restore.path, restore.content!, {
           skipFileFilter: true,
           encoding: restore.encoding,
+          mode: restore.mode,
         })
+        recovered.set(restore.path, snapshot)
       } else {
         await this.dependencies.store.remove(restore.path, { skipFileFilter: true })
+        const snapshot = await this.dependencies.store.snapshot(restore.path, true, {
+          skipFileFilter: true,
+        })
+        recovered.set(restore.path, snapshot)
       }
     }
+    if (transaction && pending.kind === 'apply') refreshRecoveredBaseRevisions(transaction, recovered)
   }
 }

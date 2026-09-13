@@ -15,7 +15,11 @@ export async function atomicWriteProjectText(
   path: string,
   content: string,
   fallback?: ProjectTextEncoding,
+  fallbackMode?: number,
 ): Promise<void> {
+  if (fallbackMode !== undefined && (!Number.isInteger(fallbackMode) || fallbackMode < 0 || fallbackMode > 0o777)) {
+    throw new ProjectError('INVALID_INPUT', '文件权限必须是 0 到 0777 的普通权限位。', { path })
+  }
   const entry = await lstat(path).catch((error: unknown) => {
     if (isMissing(error)) return undefined
     throw error
@@ -34,9 +38,11 @@ export async function atomicWriteProjectText(
   // 编码失败必须发生在创建临时文件之前；编码异常不能降级为 UTF-8。
   const encoded = encodeProjectTextBuffer(content, encoding)
   const temporary = join(dirname(target), `.velaros-write-${randomUUID()}.tmp`)
-  const handle = await open(temporary, 'wx', existing ? existing.mode & 0o777 : 0o666)
+  const mode = existing ? existing.mode & 0o777 : fallbackMode
+  const handle = await open(temporary, 'wx', mode ?? 0o666)
   try {
-    if (existing) await handle.chmod(existing.mode & 0o777)
+    // 已捕获的权限必须精确恢复；新文件的默认权限仍由 umask 收紧。
+    if (mode !== undefined) await handle.chmod(mode)
     await handle.writeFile(encoded)
     await handle.sync()
     await handle.close()

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "agent",
+    "version": "0.6.23",
+    "sha256": "a0d187f157c315ddbf2c49b2ffc18a0b45895cc0c503d07bc3c6caa237139d3c",
+    "archive": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/project-v2-round2-artifacts/agent-0.6.23-a0d187f157c3.tgz"
+  },
+  {
+    "name": "project",
+    "version": "2.0.20",
+    "sha256": "9e98bb99474fc07942dce2d486233f45a2c9603d377ecb53adc441d51efd3960",
+    "archive": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/project-v2-round2-artifacts/project-2.0.20-9e98bb99474f.tgz"
+  }
+]

@@ -17,7 +17,7 @@ import type { ProjectFileAccess } from '../types/file-access.js'
 import type { PatchStrategy } from '../types/patch.js'
 import type { PatchStrategyInput } from '../types/patch.js'
 import type { CorePolicy } from '../types/policy.js'
-import type { FileSnapshot } from '../types/snapshot.js'
+import type { FileAttributes, FileSnapshot } from '../types/snapshot.js'
 import type { ResolvedTarget } from '../types/target.js'
 import { combineDiffs, unifiedDiff } from '../utils/diff.js'
 import { matchesAny } from '../utils/glob.js'
@@ -25,6 +25,7 @@ import { id } from '../utils/id.js'
 import { toAbs, toRel } from '../utils/path.js'
 import { assertWellFormedProjectText, countChangedLines } from '../utils/text.js'
 
+import { patchFileAttributes, withPatchFileAttributes } from './patch-attributes.js'
 import { assertEditsReadOriginal, canRevertToOriginal } from './patch-ownership.js'
 import { revisionMismatch } from './transaction-errors.js'
 import {
@@ -75,9 +76,11 @@ export class TransactionPlanner {
   private async transactionSnapshot(
     pathValue: string,
     stagedByPath: ReadonlyMap<string, StagedFileContent>,
+    attributesByPath: ReadonlyMap<string, FileAttributes>,
   ): Promise<FileSnapshot> {
     const staged = stagedByPath.get(pathValue)
-    if (isString(staged)) return this.snapshotWithContent(pathValue, staged)
+    if (isString(staged))
+      return this.snapshotWithContent(pathValue, staged, attributesByPath.get(pathValue))
     if (isUndefined(staged))
       return this.dependencies.enrichSnapshot(
         await this.dependencies.store.snapshot(pathValue, true),
@@ -97,10 +100,15 @@ export class TransactionPlanner {
     }
   }
 
-  public async snapshotWithContent(pathValue: string, content: string): Promise<FileSnapshot> {
+  public async snapshotWithContent(
+    pathValue: string,
+    content: string,
+    attributes?: FileAttributes,
+  ): Promise<FileSnapshot> {
     const snapshot = await this.dependencies.store.snapshot(pathValue, true)
     return this.dependencies.enrichSnapshot({
       ...snapshot,
+      ...attributes,
       exists: true,
       isDirectory: false,
       isBinary: false,
@@ -140,6 +148,7 @@ export class TransactionPlanner {
     input: PrepareEditInput,
     options: {
       contentOverlay?: Map<string, StagedFileContent>
+      attributeOverlay?: Map<string, FileAttributes>
       forcePatchBaseRevision?: 'none'
       store?: boolean
     } = {},
@@ -151,6 +160,7 @@ export class TransactionPlanner {
     // 按操作顺序暂存每个路径的最新内容：后续操作基于它生成补丁，使同一路径的补丁首尾相接；
     // amendment 从已暂存事务的重放结果起步，锚点才能命中前面补丁产生的内容。
     const stagedByPath = new Map<string, StagedFileContent>(options.contentOverlay ?? [])
+    const attributesByPath = new Map<string, FileAttributes>(options.attributeOverlay ?? [])
     const baseRevisions = new Map(
       Object.entries(processed.baseRevisions ?? {}).map(([pathValue, revision]) => [
         this.canonicalPath(pathValue),
@@ -208,7 +218,7 @@ export class TransactionPlanner {
               '同一文件的后续操作请改用 path 加 oldText / anchorText / symbol 定位，或拆成单独事务。',
             )
           }
-          snapshot = await this.transactionSnapshot(pathForOp, stagedByPath)
+          snapshot = await this.transactionSnapshot(pathForOp, stagedByPath, attributesByPath)
           if (
             target &&
             this.dependencies.policy.requireBaseRevision &&
@@ -235,7 +245,7 @@ export class TransactionPlanner {
           }
           if (intent.operation.type === 'rename_file') {
             const renameTargetIsStaged = stagedByPath.has(intent.operation.to)
-            renameTargetSnapshot = await this.transactionSnapshot(intent.operation.to, stagedByPath)
+            renameTargetSnapshot = await this.transactionSnapshot(intent.operation.to, stagedByPath, attributesByPath)
             if (renameTargetSnapshot.exists) {
               throw new ProjectError(
                 'CONFLICT_WITH_EXTERNAL_EDIT',
@@ -303,7 +313,14 @@ export class TransactionPlanner {
             policy: this.dependencies.policy,
           })
         }
-        if (snapshot) assertEditsReadOriginal(intentPatches, snapshot)
+        if (snapshot) {
+          assertEditsReadOriginal(intentPatches, snapshot)
+          intentPatches = intentPatches.map((patch) =>
+            patch.path === snapshot.path || patch.metadata?.op === 'rename_file_create'
+              ? withPatchFileAttributes(patch, snapshot)
+              : patch,
+          )
+        }
         for (const patch of intentPatches) {
           if (typeof patch.newContent === 'string') assertWellFormedProjectText(patch.newContent)
         }
@@ -320,6 +337,7 @@ export class TransactionPlanner {
             stagedByPath.has(patchValue.path) ? withoutStagedOffsets(patchValue) : patchValue,
           )
           stagedByPath.set(patchValue.path, stagedContentAfter(patchValue))
+          attributesByPath.set(patchValue.path, patchFileAttributes(patchValue))
         }
         patches.push(...this.withIntentMetadata(chainedPatches, intent))
       } catch (error) {

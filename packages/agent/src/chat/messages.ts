@@ -177,7 +177,7 @@ class ChatMessages {
         type: 'tool-call',
         toolCallId: toolCall.toolCallId,
         toolName: toolCall.toolName,
-        input: compactToolInputForModel(toolCall.args),
+        input: compactToolInputForModel(toolCall.args, toolCall.toolCallId),
       })
     }
 

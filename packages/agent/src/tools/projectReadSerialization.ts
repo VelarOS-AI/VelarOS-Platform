@@ -3,13 +3,40 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** 行号只属于模型视图；原始结果与 recall 正文保持逐字节语义。 */
+function numberProjectRead(value: Record<string, unknown>): Record<string, unknown> {
+  const content = value.content as string
+  const range = record(value.range) ? value.range : {}
+  const startLine = typeof range.startLine === 'number' ? range.startLine : 1
+  return {
+    ...value,
+    content: content
+      ? content
+          .split('\n')
+          .map((line, index) => `${startLine + index}|${line}`)
+          .join('\n')
+      : '',
+    contentFormat: 'line-numbered',
+  }
+}
+
 function shortenProjectRead(value: unknown, maximum: number): unknown {
-  if (!record(value) || typeof value.content !== 'string' || !record(value.snapshot)
-    || typeof value.snapshot.path !== 'string' || typeof value.snapshot.revision !== 'string') return value
-  if (JSON.stringify(value).length <= maximum) return value
+  if (
+    !record(value) ||
+    typeof value.content !== 'string' ||
+    !record(value.snapshot) ||
+    typeof value.snapshot.path !== 'string' ||
+    typeof value.snapshot.revision !== 'string'
+  )
+    return value
+  // 历史回放可以重复收敛预算；先还原原文，避免重复编号或把编号计入续读列。
+  const content =
+    value.contentFormat === 'line-numbered' ? value.content.replace(/^\d+\|/gm, '') : value.content
+  const rawValue = { ...value, content }
+  const numbered = numberProjectRead(rawValue)
+  if (JSON.stringify(numbered).length <= maximum) return numbered
 
   const snapshot = value.snapshot
-  const content = value.content
   const range = record(value.range) ? value.range : {}
   const startLine = typeof range.startLine === 'number' ? range.startLine : 1
   const startColumn = typeof range.startColumn === 'number' ? range.startColumn : 1
@@ -19,17 +46,28 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
     let length = requestedLength
     // Never split an astral character or a CRLF pair.
     const last = content.charCodeAt(length - 1)
-    if ((last >= 0xD800 && last <= 0xDBFF) || (content[length - 1] === '\r' && content[length] === '\n')) length--
+    if (
+      (last >= 0xd800 && last <= 0xdbff) ||
+      (content[length - 1] === '\r' && content[length] === '\n')
+    )
+      length--
     const prefix = content.slice(0, Math.max(0, length))
     const lines = prefix.split('\n')
     const endLine = startLine + lines.length - 1
-    const endColumn = lines.length === 1 ? startColumn + prefix.length : lines[lines.length - 1].length + 1
-    return {
-      ...value,
+    const endColumn =
+      lines.length === 1 ? startColumn + prefix.length : lines[lines.length - 1].length + 1
+    return numberProjectRead({
+      ...rawValue,
       content: prefix,
       range: {
-        ...range, startLine, startColumn, endLine, endColumn,
-        ...(typeof range.startOffset === 'number' ? { endOffset: range.startOffset + prefix.length } : {}),
+        ...range,
+        startLine,
+        startColumn,
+        endLine,
+        endColumn,
+        ...(typeof range.startOffset === 'number'
+          ? { endOffset: range.startOffset + prefix.length }
+          : {}),
       },
       truncated: true,
       hasMore: true,
@@ -42,7 +80,7 @@ function shortenProjectRead(value: unknown, maximum: number): unknown {
         range: { ...existingRange, startLine: endLine, startColumn: endColumn },
         baseRevisions: { [snapshot.path as string]: snapshot.revision },
       },
-    }
+    })
   }
   let low = 0
   let high = content.length

@@ -250,6 +250,7 @@ export class FileStore implements ProjectFileAccess {
       isBinary: binary,
       size,
       encoding: binary ? 'binary' : 'utf8',
+      mode: Number(st.mode) & 0o777,
       sha256: ident.sha256,
       revision: ident.revision,
       mtimeMs,
@@ -596,11 +597,11 @@ export class FileStore implements ProjectFileAccess {
   public async write(
     pathInput: string,
     content: string,
-    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding },
+    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding; mode?: number },
   ): Promise<FileSnapshot> {
     const { abs, rel } = await this.authorize(pathInput, 'write', '写入', options)
     await mkdir(path.dirname(abs), { recursive: true })
-    await atomicWriteProjectText(abs, content, options?.encoding)
+    await atomicWriteProjectText(abs, content, options?.encoding, options?.mode)
     return this.snapshot(rel, true, { skipFileFilter: true })
   }
 

@@ -155,6 +155,7 @@ const projectRead = defineProjectTool<{
   role: 'inspect',
   summary: '读取项目根目录内的一个或多个文本文件，并返回修订版本与分页信息。',
   usage: [
+    'contentFormat=line-numbered 时，content 每行的 N| 前缀是行号标注，不属于源码；replace_lines 直接使用这些行号，replace_text 的 oldText 不包含标注。',
     'maxChars 是本次调用内所有文件共享的总字符预算；批量读取会公平分配并回收未使用额度。',
     'hasMore=true 时直接使用对应文件返回的 continuation；长行续读会带 startColumn。',
     'range 对每个文件逐个应用：endLine 超出时读到该文件末尾；startLine 超出某文件总行数时该文件返回空 content、totalLines 与 note，不影响其它文件。',
@@ -394,7 +395,7 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
     path: z.string().min(1),
     content: z.string(),
     mode: ProjectWriteModeSchema,
-    cwd: z.string().min(1).optional(),
+    cwd: z.string().min(1).optional().describe('当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'),
     skipIfAlreadyPresent: z.boolean().optional(),
     baseRevision: z.string().min(1).optional(),
   }),
@@ -565,7 +566,7 @@ const projectRun = defineProjectTool<{
   examples: [{ command: 'bun test' }],
   schema: z.object({
     command: z.string().min(1),
-    cwd: z.string().optional(),
+    cwd: z.string().optional().describe('当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'),
     timeoutMs: z.number().int().positive().max(600_000).optional(),
     background: z.boolean().optional(),
     maxOutputChars: z.number().int().positive().max(50_000).optional(),

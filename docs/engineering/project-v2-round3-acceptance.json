@@ -1,0 +1,371 @@
+[
+  {
+    "tool": "project:list",
+    "ms": 44,
+    "status": "passed"
+  },
+  {
+    "tool": "project:read",
+    "ms": 15,
+    "status": "passed"
+  },
+  {
+    "tool": "project:search",
+    "ms": 36,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "find_symbols",
+    "ms": 18,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "list_exports",
+    "ms": 9,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "find_imports",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "find_importers",
+    "ms": 35,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "find_references",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "language_diagnostics",
+    "ms": 1995,
+    "status": "passed"
+  },
+  {
+    "tool": "project:query-code",
+    "action": "analyze_symbol_impact",
+    "ms": 26,
+    "status": "passed"
+  },
+  {
+    "tool": "project:run",
+    "ms": 58,
+    "status": "passed"
+  },
+  {
+    "tool": "project:write",
+    "ms": 50,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 14,
+    "status": "passed"
+  },
+  {
+    "tool": "project:write",
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:write",
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:write",
+    "ms": 4,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:run",
+    "ms": 32,
+    "status": "passed"
+  },
+  {
+    "tool": "project:read",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "replace_lines"
+    ],
+    "ms": 7,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "replace_text"
+    ],
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "insert_text_at_anchor"
+    ],
+    "ms": 4,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "append_text"
+    ],
+    "ms": 2,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "prepend_text"
+    ],
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "replace_text"
+    ],
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "create_file"
+    ],
+    "ms": 11,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 8,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "delete_file"
+    ],
+    "ms": 10,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "rename_file"
+    ],
+    "ms": 19,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 8,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "replace_symbol"
+    ],
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "insert_around_symbol"
+    ],
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "add_import"
+    ],
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "remove_import"
+    ],
+    "ms": 3,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "json_patch"
+    ],
+    "ms": 5,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 1,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "rename_file"
+    ],
+    "ms": 42,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 21,
+    "status": "passed"
+  },
+  {
+    "tool": "project:edit",
+    "operations": [
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text",
+      "prepend_text"
+    ],
+    "ms": 166,
+    "status": "passed"
+  },
+  {
+    "tool": "project:rollback",
+    "ms": 45,
+    "status": "passed"
+  }
+]

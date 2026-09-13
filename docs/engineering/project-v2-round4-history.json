@@ -1,0 +1,35 @@
+{
+  "sessionId": "workbench-workbench-mtzgr501-1",
+  "source": "/Users/mac/Desktop/VelarOS/projects/VelarOS-Workbench-project-v2-test/.velaros/data/workbench-app/chat-history-backups/97654cd42674462318d03e555fdcaacd.json",
+  "uniqueToolCalls": 7,
+  "tools": {
+    "plan:update": 1,
+    "project:query-code": 2,
+    "project:read": 2,
+    "project:search": 2
+  },
+  "modelRun": {
+    "provider": "velar-dev",
+    "model": "gpt-5.6-sol",
+    "status": "blocked",
+    "statusCode": 403,
+    "message": "模型积分余额不足。",
+    "realModelEditCalls": 0
+  },
+  "restart": {
+    "recordsVerified": 8,
+    "allContentHashesUnchanged": true,
+    "aliasRecovery": {
+      "toolCallId": "call_02NJX3aM7hQSPjCZVHEBs5k2",
+      "originalRef": "ctx-payload:workbench-workbench-mtzgr501-1:725dd17ea019a4f70079734c89b7f38586e83374c0fe9f06b57988b13a89ec92",
+      "found": true,
+      "exactJsonPathMatch": true
+    }
+  },
+  "automatedLifecycle": {
+    "failedInputPersisted": true,
+    "newStackRecallExact": true,
+    "releaseRemovesTargetOnly": true
+  },
+  "knownOldWrapperRecords": 1
+}

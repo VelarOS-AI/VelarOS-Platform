@@ -51,6 +51,7 @@ export interface ProjectTransactionRestoreEntry extends ProjectTransactionFileSt
   readonly path: string
   /** 原文件的文本编码（非无 BOM UTF-8 时记下）；恢复时文件已被删掉就按它重建。 */
   readonly encoding?: ProjectTextEncoding
+  readonly mode?: number
   readonly ownedStates: readonly ProjectTransactionFileState[]
 }
 
@@ -120,6 +121,11 @@ function assertPatch(value: unknown): void {
     fail('patch changed lines')
   if (!isRisk(value.risk)) fail('patch risk')
   if (!isUndefined(value.metadata) && !isRecord(value.metadata)) fail('patch metadata')
+  if (isRecord(value.metadata)) assertOptionalFileMode(value.metadata.fileMode)
+}
+
+function assertOptionalFileMode(value: unknown): void {
+  if (!isUndefined(value) && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0o777)) fail('file mode')
 }
 
 function assertFileSnapshot(value: unknown): void {
@@ -130,6 +136,7 @@ function assertFileSnapshot(value: unknown): void {
     fail('base snapshot flags')
   }
   optionalBoundedString(value.content, MaximumContentBytes, 'base snapshot content')
+  assertOptionalFileMode(value.mode)
 }
 
 function assertStoredTransaction(value: unknown): asserts value is StoredTransaction {
@@ -225,6 +232,7 @@ function assertPending(value: unknown): asserts value is ProjectTransactionPendi
   const restorePaths = new Set<string>()
   for (const entry of value.restore) {
     assertFileState(entry, 'pending restore entry')
+    assertOptionalFileMode((entry as { mode?: unknown }).mode)
     const encoding = (entry as { encoding?: unknown }).encoding
     if (!isUndefined(encoding) && !isProjectTextEncoding(encoding)) fail('pending restore encoding')
     const pathValue = (entry as { path?: unknown }).path

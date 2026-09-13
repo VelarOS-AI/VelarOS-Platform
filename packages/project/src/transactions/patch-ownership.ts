@@ -3,7 +3,6 @@ import { isString, isTrue } from '@velaros-ai/core'
 import { ProjectError } from '../errors.js'
 import type { PreparedPatch } from '../types/edit.js'
 import type { FileSnapshot } from '../types/snapshot.js'
-import { isProjectTextEncoding, type ProjectTextEncoding } from '../utils/text.js'
 
 import { isCreatePatch, isDeletePatch } from './transaction-overlay.js'
 
@@ -51,13 +50,4 @@ export function assertEditsReadOriginal(
     { path: snapshot.path, op: blind.metadata?.op, strategyId: blind.strategyId },
     '整文件替换请用 overwrite；其余修改请用项目命令处理该文件。',
   )
-}
-
-/**
- * 补丁在空路径上重建文件时沿用的原编码（删除/重命名补丁从原文件快照记下）；缺席按 UTF-8。
- * 路径上已有文本文件时写入始终沿用该文件自己的编码，这个值不起作用。
- */
-export function patchTextEncoding(patchValue: PreparedPatch): Optional<ProjectTextEncoding> {
-  const encoding = patchValue.metadata?.textEncoding
-  return isProjectTextEncoding(encoding) ? encoding : undefined
 }

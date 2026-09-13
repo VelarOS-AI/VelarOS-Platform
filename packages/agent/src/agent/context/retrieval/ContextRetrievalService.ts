@@ -259,6 +259,7 @@ class ChatContextRetrievalService {
     // 直接展开（句柄无效时 payloadReader 自然返回 found=false）。
     // `ctx-user-payload:` = 超大 user 正文的全保真句柄，与工具 payload 同表落盘，同一条路展开。
     if (
+      handleId.startsWith("input:") ||
       handleId.startsWith("tool:") ||
       handleId.startsWith("ctx-payload:") ||
       handleId.startsWith("ctx-user-payload:")

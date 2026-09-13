@@ -73,12 +73,14 @@ function collectRevisionPaths(result: Nullable<Record<string, unknown>>): string
 }
 
 function collectOperationPaths(args: Nullable<Record<string, unknown>>): string[] {
-  if (!isArray(args?.operations)) return []
-
-  // project:edit 的参数形态是 { operations: [{ operation: { type, path | from/to, … }, reason }] }；
-  // 失败时结果里没有 changedFiles，卡片只能从参数里的每条 operation 兜底取路径。
-  return args.operations.flatMap((entry) => {
-    const operation = isPlainObject(entry) ? asRecord(entry.operation) : null
+  // Project 2.0 model calls use flat edits; older saved conversations contain wrapped operations.
+  const edits = isArray(args?.edits)
+    ? args.edits
+    : isArray(args?.operations)
+      ? args.operations.map((entry) => isPlainObject(entry) ? entry.operation : null)
+      : []
+  return edits.flatMap((entry) => {
+    const operation = asRecord(entry)
     return operation ? collectStringArray([operation.path, operation.from, operation.to]) : []
   })
 }

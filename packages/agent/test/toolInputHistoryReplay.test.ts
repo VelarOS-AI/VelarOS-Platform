@@ -38,3 +38,11 @@ describe("tool input provider-history replay", () => {
     assert.match(String(compacted.content), /tool received the full value/u);
   });
 });
+
+
+test('repeated history compaction preserves the omitted operation count and original-input ref', () => {
+  const args = { edits: Array.from({ length: 300 }, (_, index) => ({ index })) }
+  const first = compactToolInputForModel(args, 'many-operations')
+  assert.equal((first.edits as Array<Record<string, unknown>>).at(-1)?.__historyPreviewOmittedItems, 200)
+  assert.deepEqual(compactToolInputForModel(first, 'many-operations'), first)
+})

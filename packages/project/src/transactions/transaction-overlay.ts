@@ -4,11 +4,15 @@ import { toOptional } from '@velaros-ai/core/utils/nullish'
 
 import type { Diagnostic } from '../types/common.js'
 import type { PreparedPatch } from '../types/edit.js'
+import type { FileAttributes } from '../types/snapshot.js'
+
+import { patchFileAttributes } from './patch-attributes.js'
 
 export type StagedFileContent = Nullable<string>
 
 export interface TransactionContentOverlay {
   readonly contentByPath: Map<string, StagedFileContent>
+  readonly attributesByPath: Map<string, FileAttributes>
   readonly diagnostics: Diagnostic[]
 }
 
@@ -77,6 +81,7 @@ export class TransactionOverlay {
   public async build(patches: readonly PreparedPatch[] = []): Promise<TransactionContentOverlay> {
     const contentByPath = new Map<string, StagedFileContent>()
     const diagnostics: Diagnostic[] = []
+    const attributesByPath = new Map<string, FileAttributes>()
 
     for (const patch of patches) {
       let chained: Nullable<PreparedPatch>
@@ -105,9 +110,10 @@ export class TransactionOverlay {
         continue
       }
       contentByPath.set(patch.path, stagedContentAfter(chained))
+      attributesByPath.set(patch.path, patchFileAttributes(chained))
     }
 
-    return { contentByPath, diagnostics }
+    return { contentByPath, attributesByPath, diagnostics }
   }
 
   /** overlay 优先读取；null 表示事务已删除文件，必须读成 undefined 而不是回退磁盘。 */

@@ -46,7 +46,7 @@ export const recallContextSchema = z
       .describe(
         parameterDescription({
           description: '要精确取回的上下文引用。',
-          notes: ['可传 evidence id、tool call id、ctx-payload:* 或动态上下文 handle。'],
+          notes: ['可传 evidence id、tool call id、ctx-payload:*、input:<toolCallId>（原始参数）或动态上下文 handle。'],
         })
       ),
     refKind: z
@@ -72,7 +72,7 @@ export const recallContextSchema = z
       .describe(
         parameterDescription({
           description: '精确 ref 读取工具 payload 时，只取回该 JSON path 子树。',
-          notes: ['用于读取工具结果截断节点上的 jsonPath。'],
+          notes: ['用于读取截断节点；原始编辑参数可用 $.edits[0].newText。'],
         })
       ),
     offset: z
@@ -145,7 +145,7 @@ export function inferRecallRefKind(
   if (ref.startsWith('ctx-payload:') || ref.startsWith('ctx-user-payload:')) return 'payload-ref'
   // tool:*/message:* 都是 retrieveContextPayload 原生认识的 handle 前缀,直接走 handle 通道;
   // 若推断成 tool-payload 会经 readToolPayload 再包一层 tool: 前缀,变成 tool:tool:* 而 miss。
-  if (ref.startsWith('tool:') || ref.startsWith('message:')) return 'context-handle'
+  if (ref.startsWith('tool:') || ref.startsWith('input:') || ref.startsWith('message:')) return 'context-handle'
   // 驻留账本记录 id(ctx-r000123):折叠信封与超大 user 正文安全阀发的就是这个形态,
   // 走 handle 通道由检索面经治理账本取回全文。
   if (/^ctx-r\d+$/u.test(ref)) return 'context-handle'

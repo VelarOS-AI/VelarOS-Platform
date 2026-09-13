@@ -1,0 +1,26 @@
+[
+  {
+    "host": "VelarOS-Workbench",
+    "package": "agent",
+    "checkedFiles": 1691,
+    "mismatchedFiles": []
+  },
+  {
+    "host": "VelarOS-Workbench-project-v2-test",
+    "package": "agent",
+    "checkedFiles": 1691,
+    "mismatchedFiles": []
+  },
+  {
+    "host": "VelarOS-Workbench",
+    "package": "ui",
+    "checkedFiles": 1481,
+    "mismatchedFiles": []
+  },
+  {
+    "host": "VelarOS-Workbench-project-v2-test",
+    "package": "ui",
+    "checkedFiles": 1481,
+    "mismatchedFiles": []
+  }
+]

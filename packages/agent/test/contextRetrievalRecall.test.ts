@@ -543,3 +543,88 @@ describe('approved handoff evidence copies', () => {
     assert.equal((await unrelated.retrieveContextPayload({ sessionId: 'unrelated', handleId: originalRef })).found, false)
   })
 })
+
+
+describe('original tool inputs and JSON subtree continuation', () => {
+  test.each(['string', 'object'] as const)('reassembles a long %s subtree without losing characters', async (kind) => {
+    const source = ('中🙂\r\n\\"code"\t').repeat(9000)
+    const value = kind === 'string' ? source : { source, tail: '最后' }
+    const expected = kind === 'string' ? source : JSON.stringify(value, null, 1)
+    const service = createService({ payloadStore: createPayloadStore({ toolResults: {
+      'input:call-edit': { toolCallId: 'input:call-edit', serializedResult: JSON.stringify({ edits: [{ newText: value }] }), displayResult: null },
+    } }) })
+    let offset = 0
+    let rebuilt = ''
+    let pages = 0
+    do {
+      const page = await service.retrieveContextPayload({ sessionId: SessionId, handleId: 'input:call-edit', jsonPath: '$.edits[0].newText', offset, maxChars: 1001 })
+      assert.equal(page.found, true)
+      assert.equal(page.repeated, false)
+      const text = page.content!.split('serializedResultAtPath:\n')[1]!
+      assert.ok(text.length > 0)
+      assert.equal(text.isWellFormed(), true)
+      assert.ok(!text.endsWith('\r'))
+      rebuilt += text
+      pages++
+      const next = page.metadata?.nextOffset as number | null
+      if (next === null) break
+      assert.ok(next > offset)
+      offset = next
+      assert.ok(pages < 500)
+    } while (pages < 500)
+    assert.equal(rebuilt, expected)
+    assert.ok(pages > 20)
+  })
+
+  test('an oversized array item has an explicit complete-subtree route and valid JSON', async () => {
+    const value = [{ newText: '大'.repeat(9000) }, { newText: 'small' }]
+    const service = createService({ payloadStore: createPayloadStore({ toolResults: {
+      call: { serializedResult: JSON.stringify({ edits: value }), displayResult: null },
+    } }) })
+    const page = await service.retrieveContextPayload({ sessionId: SessionId, handleId: 'tool:call', jsonPath: '$.edits', maxChars: 1000 })
+    assert.deepEqual(JSON.parse(page.content!.split('serializedResultAtPath:\n')[1]!), [])
+    assert.deepEqual(page.metadata?.oversizedItem, { index: 0, jsonPath: '$.edits[0]', offset: 0 })
+    assert.equal(page.metadata?.returnedItems, 0)
+    assert.equal(page.metadata?.nextOffset, 1)
+    const tail = await service.retrieveContextPayload({ sessionId: SessionId, handleId: 'tool:call', jsonPath: '$.edits', offset: 1, maxChars: 1000 })
+    assert.deepEqual(JSON.parse(tail.content!.split('serializedResultAtPath:\n')[1]!), [value[1]])
+  })
+
+  test('input handles infer the existing recall route', () => {
+    assert.equal(inferRecallRefKind('input:call-edit'), 'context-handle')
+  })
+})
+
+
+describe('legacy archived reference envelopes', () => {
+  test('call-id recall follows an old wrapper to the original before applying jsonPath', async () => {
+    const originalRef = 'ctx-payload:session-s3:original'
+    const text = '旧原文😀\\路径\r\n尾部'
+    const payloadStore = createPayloadStore({ toolResults: {
+      oldCall: { serializedResult: JSON.stringify({ __contextRef: 'tool-output', ref: originalRef }), displayResult: null },
+      [originalRef]: { serializedResult: JSON.stringify({ text }), displayResult: null, payloadRef: originalRef },
+    } })
+    const result = await createService({ payloadStore }).retrieveContextPayload({
+      sessionId: SessionId, handleId: 'tool:oldCall', jsonPath: '$.text', maxChars: 1000,
+    })
+    assert.equal(result.found, true)
+    assert.equal(result.content?.split('serializedResultAtPath:\n')[1], text)
+    assert.equal(result.metadata?.payloadRef, originalRef)
+  })
+
+  test('cyclic archived wrappers fail promptly instead of recursing forever', async () => {
+    const ref = 'ctx-payload:session-s3:cycle'
+    const payloadStore = createPayloadStore({ toolResults: {
+      [ref]: { serializedResult: JSON.stringify({ __contextRef: 'tool-output', ref }), displayResult: null, payloadRef: ref },
+    } })
+    await assert.rejects(createService({ payloadStore }).retrieveContextPayload({ sessionId: SessionId, handleId: ref }), /cycle/u)
+  })
+
+  test('a missing original is not reported as a successful recall of its wrapper', async () => {
+    const payloadStore = createPayloadStore({ toolResults: {
+      oldCall: { serializedResult: JSON.stringify({ __contextRef: 'tool-output', ref: 'ctx-payload:session-s3:missing' }), displayResult: null },
+    } })
+    const result = await createService({ payloadStore }).retrieveContextPayload({ sessionId: SessionId, handleId: 'tool:oldCall' })
+    assert.equal(result.found, false)
+  })
+})

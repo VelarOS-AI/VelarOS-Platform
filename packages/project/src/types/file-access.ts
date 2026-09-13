@@ -30,7 +30,7 @@ export interface ProjectFileAccess {
   write(
     path: string,
     content: string,
-    options?: FileAccessOptions & { encoding?: ProjectTextEncoding },
+    options?: FileAccessOptions & { encoding?: ProjectTextEncoding; mode?: number },
   ): Promise<FileSnapshot>
   remove(path: string, options?: FileAccessOptions): Promise<void>
 }

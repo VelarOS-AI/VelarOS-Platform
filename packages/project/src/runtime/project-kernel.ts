@@ -93,6 +93,7 @@ import { FixerRegistry } from '../registry/fixer-registry.js'
 import { PatchStrategyRegistry } from '../registry/patch-registry.js'
 import { PluginRegistry, type RegistrySink } from '../registry/plugin-registry.js'
 import { ValidatorRegistry } from '../registry/validator-registry.js'
+import { patchFileAttributes, withPatchFileAttributes } from '../transactions/patch-attributes.js'
 import { diagnosticsEnvelope } from '../transactions/transaction-errors.js'
 import { TransactionPlanner } from '../transactions/transaction-planner.js'
 import type { FileAdapterFactory, ProjectSymbol } from '../types/adapter.js'
@@ -125,7 +126,7 @@ import type { PatchStrategy } from '../types/patch.js'
 import type { PipelineStage } from '../types/pipeline.js'
 import type { ProjectPlugin } from '../types/plugin.js'
 import type { CorePolicy, PolicyDecisionInput } from '../types/policy.js'
-import type { FileSnapshot, ProjectSnapshot } from '../types/snapshot.js'
+import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
 import type { StoredTransaction } from '../types/transaction.js'
 import type { ProjectValidator, ValidateInput, ValidationResult } from '../types/validation.js'
@@ -140,7 +141,6 @@ import { LockManager } from '../transactions/lock-manager.js'
 import {
   canRevertToOriginal,
   createsMissingFile,
-  patchTextEncoding,
 } from '../transactions/patch-ownership.js'
 import { type ApplyRestoreState, durableRestorePlan } from '../transactions/recovery-plan.js'
 import { TransactionCoordinator } from '../transactions/transaction-coordinator.js'
@@ -537,7 +537,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       throw new ProjectError('TRANSACTION_RECOVERY_CONFLICT', '恢复操作引用了不存在的事务', {
         transactionId: pending.transactionId,
       })
-    await this.transactionRecovery.restore(pending)
+    await this.transactionRecovery.restore(pending, tx)
     tx.status = this.transactionStateMachine.restore(pending.previousStatus)
     this.persistTransactionState()
   }
@@ -574,6 +574,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     input: PrepareEditInput,
     options: {
       contentOverlay?: Map<string, StagedFileContent>
+      attributeOverlay?: Map<string, FileAttributes>
       forcePatchBaseRevision?: 'none'
       store?: boolean
     } = {},
@@ -671,6 +672,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       },
       {
         contentOverlay: overlay.contentByPath,
+        attributeOverlay: overlay.attributesByPath,
         store: false,
       },
     )
@@ -852,8 +854,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         // owned state 就是后面实际可能写入磁盘的内容。只有每个路径的首个补丁对照磁盘；后继补丁
         // 经 `chainPatch` 衔接到前一补丁的产出，首个补丁被 rebase 时随之在 rebase 结果上重新推导。
         const stagedByPath = new Map<string, StagedFileContent>()
+        const attributesByPath = new Map<string, FileAttributes>()
         for (let patchIndex = 0; patchIndex < tx.patches.length; patchIndex += 1) {
           let patch = tx.patches[patchIndex]
+          let attributes = attributesByPath.get(patch.path)
           const staged = stagedByPath.get(patch.path)
           if (!isUndefined(staged)) {
             const chained = await this.transactionOverlay.chainPatch(patch, staged)
@@ -872,6 +876,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           } else if (patch.baseRevision) {
             const current = await this.store.snapshot(patch.path, true, { skipFileFilter: true })
             oldRevisions[patch.path] = current.revision
+            attributes = { mode: current.mode, textEncoding: current.textEncoding }
             const canReplayRolledBackPatch =
               isRestoringRolledBackTransaction &&
               isString(patch.oldContent) &&
@@ -891,10 +896,18 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
               patch = rebased
             }
           }
-          if (patch !== tx.patches[patchIndex]) {
-            tx.patches[patchIndex] = patch
-            rebasedFiles.add(patch.path)
+          // chmod 不改变正文 revision；重建路径使用写盘前的权限，重命名目标继承源路径。
+          const from = patch.metadata?.from
+          if (patch.metadata?.op === 'rename_file_create' && typeof from === 'string') {
+            attributes = attributesByPath.get(from) ?? patchFileAttributes(patch)
           }
+          const contentRebased = patch !== tx.patches[patchIndex]
+          if (attributes) {
+            patch = withPatchFileAttributes(patch, attributes)
+          }
+          attributesByPath.set(patch.path, patchFileAttributes(patch))
+          tx.patches[patchIndex] = patch
+          if (contentRebased) rebasedFiles.add(patch.path)
           stagedByPath.set(patch.path, stagedContentAfter(patch))
         }
         // rebase 改变了将写下的内容：摘要随之刷新，apply 结果与 change feed 描述的就是实际写盘；
@@ -934,7 +947,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
             }
             const snap = await this.store.write(patch.path, patch.newContent ?? '', {
               skipFileFilter: true,
-              encoding: patchTextEncoding(patch),
+              encoding: patchFileAttributes(patch).textEncoding,
+              mode: patchFileAttributes(patch).mode,
             })
             newRevisions[patch.path] = snap.revision
           }
@@ -1151,7 +1165,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           } else {
             const snapshot = await this.store.write(patch.path, patch.oldContent ?? '', {
               skipFileFilter: true,
-              encoding: patchTextEncoding(patch),
+              encoding: patchFileAttributes(patch).textEncoding,
+              mode: patchFileAttributes(patch).mode,
             })
             rolledBackRevisions[patch.path] = snapshot.revision
           }

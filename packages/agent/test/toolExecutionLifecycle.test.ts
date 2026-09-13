@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
+import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 import { AgentTurnHistoryHelper } from '../src/agent/history'
 import { KernelToolLoopGuard } from '../src/kernel/tool-loop-guard'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
@@ -980,4 +982,45 @@ test('model call identity and inherited host ports survive a frozen Query contex
   const executor = new ToolExecutor(child, h.events, h.policy)
   expect((await call(executor, 'provider-original-call')).result).toEqual({ ok: true })
   expect(observed).toBe('provider-original-call')
+})
+
+
+describe('large input recovery before execution', () => {
+  test('stores full arguments before a failing edit and leaves short calls alone', async () => {
+    const store = new InMemoryContextPayloadStore()
+    const args = { edits: Array.from({ length: 300 }, (_, i) => ({ path: `file-${i}.ts`, newText: ('中文🙂\r\nconst path = "C:\\src";\n').repeat(100) })) }
+    let observed = false
+    const h = harness(async (_ctx, received) => {
+      const records = await store.listForSession('input-session')
+      expect(records).toHaveLength(1)
+      expect(JSON.parse(records[0]!.serializedResult)).toEqual(args)
+      expect(received).toEqual(args)
+      observed = true
+      throw new Error('edit rejected before mutation')
+    })
+    Object.assign(h.context, { sessionId: 'input-session', contextPayloadStore: store })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('large-edit', 'probe:write', args, false)
+    const [result] = await executor.collectAll()
+    expect(observed).toBe(true)
+    expect(result?.error).toContain('edit rejected')
+    const preview = compactToolInputForModel(args, 'large-edit')
+    expect(preview.__historyInputRef).toBe('input:large-edit')
+    expect(compactToolInputForModel(preview, 'large-edit')).toEqual(preview)
+    expect(compactToolInputForModel({ path: 'one.ts' }, 'short')).toEqual({ path: 'one.ts' })
+    expect(args.edits).toHaveLength(300)
+  })
+
+  test('a failed input save prevents side effects', async () => {
+    const store = new InMemoryContextPayloadStore()
+    store.put = async () => { throw new Error('input storage unavailable') }
+    let executions = 0
+    const h = harness(() => { executions++; return { changed: true } })
+    Object.assign(h.context, { sessionId: 'input-session', contextPayloadStore: store })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('large-edit', 'probe:write', { newText: 'a'.repeat(5000) }, false)
+    const [result] = await executor.collectAll()
+    expect(executions).toBe(0)
+    expect(result?.error).toContain('input storage unavailable')
+  })
 })

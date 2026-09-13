@@ -971,7 +971,7 @@ function pruneToolResultBinaryContentForProvider(
 
 function sanitizeToolCallPart(part: ToolCallPart): { part: ToolCallPart; changed: boolean } {
   const input = readToolInputRecord(part.input)
-  const compactedInput = compactToolInputForModel(input)
+  const compactedInput = compactToolInputForModel(input, part.toolCallId)
   const changed = !hasSameProviderPayload(part.input, compactedInput)
 
   return {

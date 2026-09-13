@@ -10,8 +10,11 @@ import type {
 import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { normalizeLegacyFoldStub } from '../contextRefEnvelope'
+
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'
+import { paginateJsonPathValue, paginateSerializedText } from './Pagination'
 import { type ContextRetrievalReferenceReader } from './ReferenceReader'
 import { contextRetrievalReferences } from './References'
 import type {
@@ -202,106 +205,6 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
   return { found: true, value: current }
 }
 
-export interface PaginatedJsonPathSelection {
-  offset: number
-  returnedItems: number
-  totalItems: number
-  nextOffset: Nullable<number>
-  serialized: string
-}
-
-/** 非 jsonPath 路径的字符级窗口（正文分页的唯一形态）。 */
-interface PaginatedTextWindow {
-  offset: number
-  totalChars: number
-  returnedChars: number
-  nextOffset: Nullable<number>
-  text: string
-  /** offset 已越过正文末尾：模型多半在原地打转，必须显式告知而不是静默回第一页。 */
-  beyondEnd: boolean
-}
-
-/**
- * 正文按 offset 开窗（**字符**语义）。
- *
- * jsonPath 命中数组时按条目分页（{@link paginateJsonPathSelection}），其余一切情况——包括
- * 一整段 30 万字的 serializedResult——过去完全忽略 offset，每次都回同一段开头（审计 U31）：
- * 模型照着 `nextOffset` 提示加 offset 重试，拿到逐字相同的内容直到熔断。这里给它真实的顺序读。
- */
-function paginateSerializedText(
-  text: string,
-  offsetInput: LooseOptional<number>,
-  maxChars: number
-): PaginatedTextWindow {
-  const totalChars = text.length
-  const requested = Math.max(0, Math.round(offsetInput ?? 0))
-  const budget = Math.max(1, maxChars)
-  const beyondEnd = requested > 0 && requested >= totalChars
-  // 越界不回退到 0：回第一页正是"原地打转"的成因，宁可给空窗口 + 明确告警。
-  const offset = Math.min(requested, totalChars)
-  const window = text.slice(offset, offset + budget)
-  const end = offset + window.length
-
-  return {
-    offset,
-    totalChars,
-    returnedChars: window.length,
-    nextOffset: end < totalChars ? end : null,
-    text: window,
-    beyondEnd,
-  }
-}
-
-/**
- * jsonPath 命中数组时按 maxChars 预算从 offset 开始装填条目，供模型分页续读
- * （配合工具结果里 `__truncatedItems` 标记的 `nextOffset`）。非数组返回 null 走原路径。
- * 单条目超预算时退化为该条目的字符截断,保证永远有推进,分页不会卡死。
- */
-export function paginateJsonPathSelection(
-  value: unknown,
-  offsetInput: LooseOptional<number>,
-  maxChars: number
-): Nullable<PaginatedJsonPathSelection> {
-  if (!isArray(value)) return null
-
-  const totalItems = value.length
-  const offset = Math.min(Math.max(0, Math.round(offsetInput ?? 0)), totalItems)
-  const budget = Math.max(1_000, maxChars)
-  const parts: string[] = []
-  let used = 2 // '[' + ']'
-  let index = offset
-
-  while (index < totalItems) {
-    let serializedItem: string
-    try {
-      serializedItem = JSON.stringify(value[index], undefined, 1) ?? 'null'
-    } catch {
-      // arch-guard:silent-catch-ok 单条不可序列化不该中断整页装填；占位符本身就是给模型的说明。
-      serializedItem = '"[unserializable item]"'
-    }
-
-    if (!isEmpty(parts) && used + serializedItem.length + 2 > budget) break
-
-    if (isEmpty(parts) && serializedItem.length + 2 > budget) {
-      parts.push(`${serializedItem.slice(0, budget - 6)}...`)
-      index += 1
-      break
-    }
-
-    parts.push(serializedItem)
-    used += serializedItem.length + 2
-    index += 1
-  }
-
-  return {
-    offset,
-    returnedItems: index - offset,
-    totalItems,
-    nextOffset: index < totalItems ? index : null,
-    serialized: `[\n${parts.join(',\n')}\n]`,
-  }
-}
-
 /**
  * 按 **`handle`** 从隐藏的宿主资源区解析并展开 `payload` 正文。
  *
@@ -388,7 +291,7 @@ class ContextRetrievalPayloadReader {
     repeated: boolean
     retrievalCount: number
   }): Promise<ChatContextRetrievedPayload> {
-    const resolved = await this.resolveToolPayload(input.sessionId, input.handleId)
+    const resolved = await this.resolveToolPayload(input.sessionId, input.handleId.startsWith('input:') ? `tool:${input.handleId}` : input.handleId)
 
     if (!resolved) {
       // 死胡同会逼模型幻觉 id 空转:列出当前可召回的 tool-payload,让它自纠。
@@ -422,22 +325,15 @@ class ContextRetrievalPayloadReader {
     const jsonSelection = jsonPath ? selectJsonPath(payload.serializedResult, jsonPath) : null
 
     if (jsonPath && jsonSelection?.found) {
-      const paged = paginateJsonPathSelection(jsonSelection.value, input.offset, input.maxChars)
-
+      const page = paginateJsonPathValue(jsonSelection.value, jsonPath, input.offset, input.maxChars)
       const content = [
         toolCallId ? `toolCallId: ${toolCallId}` : null,
         payload.toolName ? `toolName: ${payload.toolName}` : null,
         payloadRef ? `payloadRef: ${payloadRef}` : null,
         `jsonPath: ${jsonPath}`,
-        paged
-          ? `items: ${paged.returnedItems}/${paged.totalItems} (offset ${paged.offset}${
-              isPresent(paged.nextOffset) ? `, 续读传 offset=${paged.nextOffset}` : ', 已到末尾'
-            })`
-          : null,
+        page.summary,
         'serializedResultAtPath:',
-        paged
-          ? paged.serialized
-          : chatSearchText.stringifyPayload(jsonSelection.value, input.maxChars),
+        page.body,
       ]
         .filter((item): item is string => Boolean(item))
         .join('\n')
@@ -461,14 +357,7 @@ class ContextRetrievalPayloadReader {
           retrievalScopeId: input.retrievalScopeId,
           jsonPath,
           jsonPathFound: true,
-          ...(paged
-            ? {
-                offset: paged.offset,
-                returnedItems: paged.returnedItems,
-                totalItems: paged.totalItems,
-                nextOffset: paged.nextOffset,
-              }
-            : {}),
+          ...page.metadata,
         },
       }
     }
@@ -588,6 +477,32 @@ class ContextRetrievalPayloadReader {
    * 3. 其它前缀 → null
    */
   private async resolveToolPayload(
+    sessionId: string,
+    handleId: string
+  ): Promise<Nullable<ResolvedToolPayload>> {
+    const visited = new Set<string>()
+    let current = handleId
+    for (let depth = 0; depth < 8; depth += 1) {
+      if (visited.has(current)) throw new AppError('VALIDATION', 'Context payload reference cycle detected.')
+      visited.add(current)
+      const resolved = await this.resolveSingleToolPayload(sessionId, current)
+      if (!resolved) return null
+      const text = resolved.payload.serializedResult
+      if (!text.includes('ctx-payload:')) return resolved
+      let ref: string | undefined
+      try {
+        ref = normalizeLegacyFoldStub(JSON.parse(text) as unknown)?.ref
+      } catch {
+        // Ordinary tool text may contain an incomplete JSON example; it remains original content.
+        return resolved
+      }
+      if (!ref?.startsWith('ctx-payload:')) return resolved
+      current = ref
+    }
+    throw new AppError('VALIDATION', 'Context payload reference chain requires more than 8 lookups.')
+  }
+
+  private async resolveSingleToolPayload(
     sessionId: string,
     handleId: string
   ): Promise<Nullable<ResolvedToolPayload>> {
@@ -840,6 +755,6 @@ class ContextRetrievalPayloadReader {
 
 export {
   ContextRetrievalPayloadReader,
-  type PaginatedTextWindow,
-  paginateSerializedText,
 }
+
+export { type PaginatedJsonPathSelection,type PaginatedTextWindow, paginateJsonPathSelection, paginateSerializedText } from './Pagination'

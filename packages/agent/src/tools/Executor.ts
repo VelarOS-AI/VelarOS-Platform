@@ -81,6 +81,7 @@ import {
 } from "./ExecutionPolicyFailures";
 import { findHistoryPreviewPlaceholderArgumentPaths } from "./historyPreviewPlaceholder";
 import { liftGenericModelContent } from "./modelImageLift";
+import { persistToolInputForRecall } from "./toolInputRecall";
 
 const log = logRuntime.tag("ToolExecutor");
 const ToolAbortSettlementGraceMs = 250;
@@ -107,7 +108,7 @@ function buildHistoryPlaceholderArgsFailure(
         nextActions: [
           "这些参数来自压缩后的历史预览，缺少可执行的完整内容；恢复真实内容后重新调用。",
           "需要旧内容时先重新读取目标文件或片段，以读到的原文为准构造参数。",
-          "内容太长时拆成多次小范围编辑，每次只写需要改动的片段。",
+          "历史调用带有 __historyInputRef 时，用 context:recall 的 ref 与 jsonPath 找回原始参数；按返回的 nextOffset 续读。",
         ],
       },
     ),
@@ -522,6 +523,12 @@ export class ToolExecutor {
     let activeExecutionContext: LooseOptional<ActiveToolExecutionContext> =
       null;
     try {
+      const inputStore = (this.ctx as ToolExecutorPayloadContext).contextPayloadStore;
+      const inputSessionId = this.readSessionId();
+      if (inputStore && inputSessionId) await persistToolInputForRecall({
+        store: inputStore, sessionId: inputSessionId,
+        toolCallId: tool.toolCallId, toolName: tool.toolName, args: tool.args,
+      });
       // mod 接缝：调用前派发（策略门之前）。拦下走与其他失败同构的结构化失败结果；
       // 入参改写只是替换 tool.args，后续可用性、参数校验、去重与审批一条不少。
       if (this.seams?.has("tool-call:before")) {

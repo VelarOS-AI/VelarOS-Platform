@@ -164,7 +164,7 @@ class TurnHistory {
         type: 'tool-call',
         toolCallId: part.toolCallId,
         toolName: part.toolName,
-        input: compactToolInputForModel(part.input),
+        input: compactToolInputForModel(part.input, part.toolCallId),
       })
     })
 

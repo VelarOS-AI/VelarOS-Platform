@@ -1,0 +1,21 @@
+{
+  "baseline": {
+    "oversizedItem": {
+      "validJson": false,
+      "returnedItems": 1,
+      "nextOffset": 1
+    },
+    "unicodePageWellFormed": false,
+    "inputRef": null
+  },
+  "candidate": {
+    "oversizedItem": {
+      "validJson": true,
+      "returnedItems": 0,
+      "nextOffset": 1,
+      "oversizedItemIndex": 0
+    },
+    "unicodePageWellFormed": true,
+    "inputRef": "input:edit-1"
+  }
+}

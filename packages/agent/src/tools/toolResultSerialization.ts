@@ -535,10 +535,14 @@ function compactToolInputValue(
   value: unknown,
   parentKey?: string,
   seen: WeakSet<object> = new WeakSet(),
+  state = { shortened: false },
 ): unknown {
   if (isString(value)) {
     const collapsedPlaceholder = collapseHistoryPreviewPlaceholder(value);
-    if (isPresent(collapsedPlaceholder)) return collapsedPlaceholder;
+    if (isPresent(collapsedPlaceholder)) {
+      state.shortened = true;
+      return collapsedPlaceholder;
+    }
 
     if (
       parentKey === "widget_code" &&
@@ -555,8 +559,10 @@ function compactToolInputValue(
       value.length > ModelToolInputLimits.maxStringLength ||
       isLikelyLargeToolField ||
       looksLikeBinaryPayload(value)
-    )
+    ) {
+      state.shortened = true;
       return summarizeToolInputString(value, parentKey);
+    }
 
     return value;
   }
@@ -575,12 +581,19 @@ function compactToolInputValue(
   if (isArray(value)) {
     const items = value
       .slice(0, ModelToolInputLimits.maxArrayItems)
-      .map((item) => compactToolInputValue(item, undefined, seen));
+      .map((item) => compactToolInputValue(item, undefined, seen, state));
 
     if (value.length > ModelToolInputLimits.maxArrayItems) {
+      const previousMarker = value.at(-1);
+      const previousOmitted =
+        isPlainObject(previousMarker) &&
+        typeof previousMarker.__historyPreviewOmittedItems === "number"
+          ? Math.max(0, previousMarker.__historyPreviewOmittedItems - 1)
+          : 0;
+      state.shortened = true;
       items.push({
         __historyPreviewOmittedItems:
-          value.length - ModelToolInputLimits.maxArrayItems,
+          value.length - ModelToolInputLimits.maxArrayItems + previousOmitted,
         __toolReceivedFullInput: true,
         note: "History preview only; do not repeat the tool call because of this marker.",
       });
@@ -598,7 +611,7 @@ function compactToolInputValue(
 
   const record: Record<string, unknown> = {};
   for (const [key, nestedValue] of Object.entries(value)) {
-    record[key] = compactToolInputValue(nestedValue, key, seen);
+    record[key] = compactToolInputValue(nestedValue, key, seen, state);
   }
   seen.delete(value);
   return record;
@@ -828,15 +841,39 @@ export function serializeToolResultForRecall(result: unknown): string {
 
 export function compactToolInputForModel(
   input: Record<string, unknown>,
+  toolCallId?: string,
 ): Record<string, unknown> {
-  const compacted = compactToolInputValue(input);
+  if (input.__historyInputPreview === true && typeof input.preview === 'string') return {
+      __historyInputPreview: true,
+      __toolReceivedFullInput: true,
+      note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",
+      ...(toolCallId || typeof input.__historyInputRef === 'string' ? {
+        __historyInputRef: toolCallId ? `input:${toolCallId}` : input.__historyInputRef,
+        __historyInputRecall: 'Use context:recall with this ref and jsonPath to recover original arguments.',
+      } : {}),
+      preview: input.preview.slice(0, ModelToolInputLimits.maxSerializedLength),
+    };
+  const state = { shortened: false };
+  const compacted = compactToolInputValue(input, undefined, new WeakSet(), state);
   const record = isPlainObject(compacted) ? compacted : { input: compacted };
   const serialized = stringifyToolResult(record);
 
+  const reference =
+    toolCallId &&
+    (state.shortened ||
+      serialized.length > ModelToolInputLimits.maxSerializedLength ||
+      record.__historyInputRef)
+      ? {
+          __historyInputRef: `input:${toolCallId}`,
+          __historyInputRecall:
+            "Use context:recall with this ref and jsonPath to recover original arguments.",
+        }
+      : {};
   if (serialized.length <= ModelToolInputLimits.maxSerializedLength)
-    return record;
+    return { ...record, ...reference };
 
   return {
+    ...reference,
     __historyInputPreview: true,
     __toolReceivedFullInput: true,
     note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",

@@ -1,0 +1,20 @@
+[
+  {
+    "host": "VelarOS-Workbench",
+    "version": "0.6.25",
+    "filesCompared": 1691,
+    "mismatches": []
+  },
+  {
+    "host": "VelarOS-Workbench-project-v2-test",
+    "version": "0.6.25",
+    "filesCompared": 1691,
+    "mismatches": []
+  },
+  {
+    "host": "VelarOS-Workbench-project-v2-round4-test",
+    "version": "0.6.25",
+    "filesCompared": 1691,
+    "mismatches": []
+  }
+]

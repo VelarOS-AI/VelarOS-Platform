@@ -1,8 +1,9 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray,isRecord, isString } from '@velaros-ai/core'
+import { isArray, isRecord, isString } from '@velaros-ai/core'
 
 import type { ContextPayloadStore } from './ContextPayloadStore'
+import { normalizeLegacyFoldStub } from './contextRefEnvelope'
 import { ToolResultCanonicalizer } from './ToolResultCanonicalizer'
 
 export interface BuildToolPayloadRefsForProviderMessagesInput {
@@ -43,14 +44,31 @@ function readTextToolResult(part: unknown): Nullable<{
   }
 }
 
+function existingPayloadRef(serializedResult: string): string | null {
+  if (!serializedResult.includes('ctx-payload:')) return null
+  try {
+    const envelope = normalizeLegacyFoldStub(JSON.parse(serializedResult) as unknown)
+    return envelope?.ref.startsWith('ctx-payload:') ? envelope.ref : null
+  } catch {
+    return null
+  }
+}
+
 export async function buildToolPayloadRefsForProviderMessages(
-  input: BuildToolPayloadRefsForProviderMessagesInput
+  input: BuildToolPayloadRefsForProviderMessagesInput,
 ): Promise<Record<string, string>> {
   const sessionId = input.sessionId.trim()
   if (!sessionId) return {}
 
   const canonicalizer = new ToolResultCanonicalizer(input.store)
   const refs: Record<string, string> = {}
+  const payloadRefsByToolCallId = new Map<string, Set<string>>()
+  const registerRef = (occurrenceKey: string, toolCallId: string, payloadRef: string) => {
+    refs[occurrenceKey] = payloadRef
+    const payloadRefs = payloadRefsByToolCallId.get(toolCallId) ?? new Set<string>()
+    payloadRefs.add(payloadRef)
+    payloadRefsByToolCallId.set(toolCallId, payloadRefs)
+  }
   const toolResults: Array<{
     occurrenceKey: string
     sessionId: string
@@ -67,8 +85,15 @@ export async function buildToolPayloadRefsForProviderMessages(
       if (!result) return
       if (input.isOutputInlineToolName?.(result.toolName)) return
 
+      const occurrenceKey = buildToolPayloadRefOccurrenceKey(messageIndex, partIndex)
+      const existingRef = existingPayloadRef(result.serializedResult)
+      if (existingRef) {
+        // A previous provider projection already points at the original; never page its wrapper.
+        registerRef(occurrenceKey, result.toolCallId, existingRef)
+        return
+      }
       toolResults.push({
-        occurrenceKey: buildToolPayloadRefOccurrenceKey(messageIndex, partIndex),
+        occurrenceKey,
         sessionId,
         toolCallId: result.toolCallId,
         toolName: result.toolName,
@@ -78,16 +103,12 @@ export async function buildToolPayloadRefsForProviderMessages(
   })
 
   const canonicalResults = await canonicalizer.canonicalizeMany(toolResults)
-  const payloadRefsByToolCallId = new Map<string, Set<string>>()
 
   canonicalResults.forEach((canonical, index) => {
     const inputToolResult = toolResults[index]
     if (!inputToolResult) return
 
-    refs[inputToolResult.occurrenceKey] = canonical.payloadRef
-    const payloadRefs = payloadRefsByToolCallId.get(inputToolResult.toolCallId) ?? new Set<string>()
-    payloadRefs.add(canonical.payloadRef)
-    payloadRefsByToolCallId.set(inputToolResult.toolCallId, payloadRefs)
+    registerRef(inputToolResult.occurrenceKey, inputToolResult.toolCallId, canonical.payloadRef)
   })
 
   for (const [toolCallId, payloadRefs] of payloadRefsByToolCallId) {

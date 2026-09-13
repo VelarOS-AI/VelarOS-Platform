@@ -67,3 +67,17 @@ void describe('collectProjectApplyPaths falling back to project:edit operation p
     assert.deepEqual(collectProjectApplyPaths(null, null), [])
   })
 })
+
+
+void test('failed Project 2.0 edits show their paths, including rename targets', () => {
+  const args = { edits: [
+    { type: 'replace_text', path: 'src/a.ts' },
+    { type: 'replace_lines', path: 'src/a.ts' },
+    { type: 'rename_file', from: 'src/old.ts', to: 'src/new.ts' },
+    null,
+  ] }
+  assert.deepEqual(collectProjectApplyPaths({ code: 'AMBIGUOUS_TARGET' }, args), [
+    'src/a.ts', 'src/old.ts', 'src/new.ts',
+  ])
+  assert.deepEqual(collectProjectApplyPaths({ changedFiles: ['src/a.ts'] }, args), ['src/a.ts'])
+})

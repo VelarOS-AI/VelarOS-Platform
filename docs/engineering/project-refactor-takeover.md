@@ -122,3 +122,15 @@ bun scripts/test/verifyProjectTools.ts /absolute/path/to/clean-platform-worktree
 
 单文件 rename 的原子性不表示跨文件修改对外部读取进程瞬时可见；多文件一致性依靠预检、
 日志与恢复。Windows 专属进程测试在 macOS 条件跳过，本次没有 Windows 真机执行证据。
+
+## 第二轮后续验收
+
+2026-09-13 的文件属性、恢复重试、模型行号视图与真实 Workbench 续作记录见 [Project 2.0 第二轮](project-v2-round2.md)。
+
+### 第三轮：失败输入恢复与真实执行验证
+
+见 [Project 2.0 第三轮验收](./project-v2-round3.md)：原始参数召回、JSONPath 续读、Unicode/数组分页、Desktop 输入副本生命周期、失败编辑路径显示，以及 Workbench 真实任务和类型检查闭环。
+
+### 第四轮：跨重启召回与重复引用修复
+
+见 [Project 2.0 第四轮验收](./project-v2-round4.md)：Workbench 持久化、会话索引、Agent 引用复用及旧包装读取、并发与超大记录测试。额度恢复后完成两次真实续作和跨重启原始输入恢复；当前剩余正式发布、消费者锁文件及提交收口。
