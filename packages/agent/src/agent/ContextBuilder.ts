@@ -120,9 +120,8 @@ function buildStructuredSystemPrompt(args: {
   stableParts: PromptContribution[]
   dynamicParts: PromptContribution[]
 }): { systemPrompt: string; stableCutoff: number } {
-  // Prompt governance metadata belongs to `BuiltContext.segments`, not to the model. The model
-  // receives only descriptive sections; stable and current blocks are independently valid XML so
-  // provider delivery can move the current block behind history without splitting an XML document.
+  // 提示词治理元数据属于 `BuiltContext.segments`，不交给模型；模型只收到描述性段落。
+  // stable 与 current 两块各自是完整的 XML，供应商投递时把 current 块挪到历史之后也不会拆坏文档。
   const stablePrefix = formatPromptBlock({
     name: 'instructions',
     parts: args.stableParts,

@@ -50,8 +50,7 @@ function unavailableMessage(availability: ComputerAvailability): string {
     case 'dependencies-missing':
     case 'spawn-failed':
     default:
-      // Runtime not provisioned. Computer Use is an install-to-use plugin; do
-      // NOT let the model pip/shell-install onto the host — route to the install.
+      // 运行时未就绪。Computer Use 是装了才能用的插件：不要让模型用 pip 或 shell 往宿主上装，引导去安装插件。
       return (
         `桌面控制运行时尚未安装（${availability.reason}）${suffix}。` +
         `Computer Use 是「需安装才能使用」的插件，其 Python sidecar 与依赖随插件产物一起分发（自带 venv）——` +

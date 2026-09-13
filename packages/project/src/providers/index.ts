@@ -89,9 +89,8 @@ export function createNodeCommandProvider(): CommandProvider {
           stderr,
           error: result.failed ? result : undefined,
         });
-        // On localized Windows installations, cmd.exe reports a missing program
-        // as exit 1 with translated text instead of ENOENT/127. Resolve PATH
-        // directly so adapter fallback does not depend on the OS language.
+        // 本地化的 Windows 上，cmd.exe 找不到程序时报的是退出码 1 加翻译后的文字，而不是 ENOENT/127。
+        // 这里直接查 PATH，让适配器回退不依赖系统语言。
         if (
           !toolRequirements &&
           process.platform === "win32" &&

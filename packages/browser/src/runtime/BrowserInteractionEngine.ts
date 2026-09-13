@@ -669,7 +669,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       this.log.debug('聚焦浏览器 WebContents 失败', {
         error: AppError.from(error).message,
       })
-      // Embedded webview focus is best-effort.
+      // 内嵌 webview 的聚焦只是尽力而为。
     }
   }
 

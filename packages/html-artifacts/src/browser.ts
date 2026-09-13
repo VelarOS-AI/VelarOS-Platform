@@ -236,8 +236,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     this.bridgeMessages = this.createBridgeMessages()
     this.iframe.style.height = `${this.initialHeight}px`
     this.iframe.addEventListener('load', this.handleLoad, { once: true })
-    // Assigning a new shell removes scripts, styles, timers, observers, and listeners while
-    // retaining the iframe identity expected by the host application.
+    // 换一份新外壳会清掉脚本、样式、计时器、观察器和监听器，同时保留宿主应用依赖的 iframe 身份。
     this.iframe.srcdoc = this.createShellDocument()
   }
 

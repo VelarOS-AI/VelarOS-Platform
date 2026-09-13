@@ -22,7 +22,7 @@ export async function persistToolInputForRecall(input: {
     return
   if (compactToolInputForModel(input.args, input.toolCallId).__historyInputRef !== ref) return
   const serializedResult = JSON.stringify(input.args)
-  // Include the call identity: identical inputs from separate calls need separate lookup handles.
+  // 带上调用身份：不同调用的相同输入也要各自有独立的查找句柄。
   const hash = sha256(`${ref}\n${serializedResult}`)
   await input.store.put({
     sessionId: input.sessionId,

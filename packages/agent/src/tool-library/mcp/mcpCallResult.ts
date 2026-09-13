@@ -39,8 +39,8 @@ function mediaPart(
 }
 
 /**
- * Parse MCP content once into a compact display/result string and ordered provider content blocks.
- * Valid binary bytes only enter modelContent; they are never copied into the ordinary result.
+ * 把 MCP content 一次解析成紧凑的展示/结果字符串和有序的供应商内容块。
+ * 合法的二进制字节只进入 modelContent，从不复制进普通结果。
  */
 function parseContent(content: readonly unknown[]): ParsedMcpContent {
   const textParts: string[] = []
@@ -112,8 +112,7 @@ function parseContent(content: readonly unknown[]): ParsedMcpContent {
       continue
     }
 
-    // Preserve the old tolerant boundary behavior for non-standard servers that still attach text
-    // to a custom content type.
+    // 非标准服务器仍可能把文本挂在自定义 content 类型上，这里保留原来宽松的边界处理。
     const text = readString(record, 'text')
     if (text) {
       textParts.push(text)

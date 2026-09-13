@@ -363,7 +363,7 @@ function stringifySerializationError(payload: Record<string, unknown>): string {
     const serialized = JSON.stringify(payload);
     if (isString(serialized) && !isEmpty(serialized)) return serialized;
   } catch {
-    // arch-guard:silent-catch-ok The fallback below is static JSON.
+    // arch-guard:silent-catch-ok 下面的回退是静态 JSON。
   }
   return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"Tool result serialization failed and the structured fallback could not be serialized."}';
 }
@@ -690,7 +690,7 @@ export function deserializeSerializedToolResult(serialized: string): unknown {
   try {
     return JSON.parse(serialized);
   } catch {
-    // arch-guard:silent-catch-ok Plain strings are valid serialized tool results.
+    // arch-guard:silent-catch-ok 纯字符串本身就是合法的序列化工具结果。
     return serialized;
   }
 }

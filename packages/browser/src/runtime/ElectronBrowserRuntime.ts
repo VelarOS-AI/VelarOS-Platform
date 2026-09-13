@@ -1712,8 +1712,8 @@ class ElectronBrowserRuntime {
       return session
     }
 
-    // Page-driven navigations update session.url before React re-presents the same webview.
-    // In that case, avoid a second loadURL that can interrupt the site's own redirect chain.
+    // 页面自己发起的导航会在 React 重新呈现同一个 webview 之前更新 session.url；
+    // 这种情况下不要再 loadURL 一次，否则会打断站点自己的重定向链。
     if (
       currentUrl &&
       this.getKnownSessionUrl(session) === url &&
@@ -1894,7 +1894,7 @@ class ElectronBrowserRuntime {
       this.log.debug('恢复浏览器导航历史失败，回退到加载页面', {
         error: AppError.from(error).message,
       })
-      // History restore is a convenience; normal loading below remains the fallback.
+      // 恢复历史只是便利功能，失败时仍走下面的正常加载。
       return false
     }
   }

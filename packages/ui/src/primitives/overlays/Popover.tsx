@@ -286,10 +286,9 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     const layerId = useId()
     const portalElement = getPopoverPortalElement(anchorElement)
     const parentPopoverLayerId = getParentPopoverLayerId(anchorElement)
-    // Portals escape their anchor's DOM subtree, so any scoped theme tokens set on
-    // an ancestor (e.g. a themed workbench region) are lost. Carry the nearest
-    // `data-velar-theme-scope` onto the portalled content so app-level CSS can
-    // re-apply the matching token set. App-agnostic: the attribute value is opaque.
+    // Portal 会脱离锚点的 DOM 子树，祖先上设的局部主题变量（比如带主题的工作台区域）随之丢失。
+    // 把最近的 `data-velar-theme-scope` 带到浮层内容上，应用层 CSS 就能重新套上对应的变量；
+    // 组件不关心具体应用，属性值原样透传。
     const themeScope =
       toOptional(
         anchorElement
@@ -389,8 +388,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       if (activeElement && activeElement !== ownerDocument.body
         && activeElement !== focus.previousActiveElement) return
 
-      // The owner chooses the focus target after positioning makes it visible.
-      // A generic popover must not infer that its first input wants autofocus.
+      // 定位完成、浮层可见之后由使用方决定聚焦目标；通用浮层不能自行认定第一个输入框需要自动聚焦。
       const event = new Event('popover-open-auto-focus', { cancelable: true })
       onOpenAutoFocusLatest.current?.(event)
     }, [anchorElement, contentElement, onOpenAutoFocusLatest, open, positionedContent, style?.display, style?.visibility])
@@ -451,8 +449,7 @@ export const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
         const event = new Event('popover-close-auto-focus', { cancelable: true })
         onCloseAutoFocusLatest.current?.(event)
         if (!event.defaultPrevented && !interactedOutsideRef.current) {
-          // AnchoredPopover anchors a layout span; getAnchorProps marks the
-          // actual control inside it with aria-expanded.
+          // AnchoredPopover 锚在一个布局用的 span 上，getAnchorProps 会给里面真正的控件标上 aria-expanded。
           const trigger = anchorElement?.querySelector<HTMLElement>('[aria-expanded]')
             ?? anchorElement
           trigger?.focus({ preventScroll: true })

@@ -1619,7 +1619,7 @@ class BrowserSessionManager {
             url: entry.url,
             error: AppError.from(error).message,
           })
-          // Keep Electron's URL if it is valid for the webview but outside our normalizer.
+          // Electron 给的 URL 对 webview 有效、只是超出我们的规范化范围时，照原样保留。
         }
 
         if (index === activeIndex) {
@@ -1682,7 +1682,7 @@ class BrowserSessionManager {
       this.log.debug('清理浏览器 WebContents 失败', {
         error: AppError.from(error).message,
       })
-      // The embedded webview may already be tearing down with its React owner.
+      // 内嵌 webview 可能正随它的 React 宿主一起卸载。
     }
   }
 

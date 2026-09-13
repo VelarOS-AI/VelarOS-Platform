@@ -36,7 +36,7 @@ const computerScreenshot = defineComputerTool<Record<string, never>>({
   },
 })
 
-/** Report the primary display's logical geometry. */
+/** 报告主显示器的逻辑尺寸。 */
 const computerScreenSize = defineComputerTool<Record<string, never>>({
   name: 'computer:screen_size',
   role: 'inspect',

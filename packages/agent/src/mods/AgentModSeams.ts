@@ -394,9 +394,8 @@ class AgentModSeamDispatcher {
     try {
       const timedOut = Symbol('hook-timeout')
       const timeout = new Promise<typeof timedOut>((resolve) => {
-        // This timer is part of the awaited race, so it must remain referenced.
-        // Bun can otherwise leave the race pending forever when the hook itself
-        // never settles and no other referenced event-loop work remains.
+        // 这个计时器是被 await 的 race 的一部分，必须保持引用：否则钩子本身永不结束、
+        // 事件循环里又没有别的引用中的任务时，Bun 可能让这场 race 永远挂起。
         timers.after(entry.timeoutMs, () => resolve(timedOut))
       })
       const outcome = await Promise.race([

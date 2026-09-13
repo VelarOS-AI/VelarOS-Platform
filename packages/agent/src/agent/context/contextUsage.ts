@@ -474,7 +474,7 @@ export function estimateContextUsage(
       )
     }
   } catch {
-    // arch-guard:silent-catch-ok Token estimation falls back to a deterministic char heuristic.
+    // arch-guard:silent-catch-ok 估算 token 失败时退回按字符数的确定性估算。
     estimatedTokens = Math.ceil(estimatedChars / 4)
   }
 

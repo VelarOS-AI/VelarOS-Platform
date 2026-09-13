@@ -512,7 +512,7 @@ class BrowserPageWaiter {
         eventName,
         error,
       });
-      // The native WebContents may already be gone; cleanup must remain best-effort.
+      // 原生 WebContents 可能已经销毁，清理只能尽力而为。
     }
   }
 

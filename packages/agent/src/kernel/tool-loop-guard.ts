@@ -77,8 +77,7 @@ class KernelToolLoopGuard {
   }
 
   public recordSuccess(input: KernelToolLoopGuardInput): void {
-    // A successful inspection or a different mutation gives the agent a new
-    // state to act on. Keep only the current write streak, bounded for long runs.
+    // 一次成功的检查或一次不同的写入都让 Agent 面对新的状态：只保留当前这一串连续写入，长运行下也有上限。
     if (!input.writeLike) {
       this.lastWriteSuccess = null
       return

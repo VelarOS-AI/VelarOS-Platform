@@ -490,7 +490,7 @@ class QueryLoop<
       this.spanScopeFactory?.beginRun({
         runId: randomUUID(),
         sessionId: resolveGovernanceSessionKey(args.parentCtx.sessionId),
-        // Child runs currently inherit the parent session but not the renderer message envelope.
+        // 子运行目前继承父会话，但不继承渲染层的消息信封。
         rootInputId: null,
         agentName: delegation.identity?.trim() || roleResolution.id,
         dispatchSource: args.parentCtx.role.id,

@@ -264,7 +264,7 @@ class BrowserWorkspaceArtifactManager {
       if (AppError.from(error).code !== 'NOT_FOUND') {
         log.debug('浏览器工作区清单损坏，准备重新生成', { error })
       }
-      // Ignore invalid or missing manifest and let ensureManifest regenerate it.
+      // 清单缺失或无效时忽略，交给 ensureManifest 重新生成。
     }
 
     return null

@@ -1176,8 +1176,7 @@ export class ToolExecutor {
         toolName: result.toolName,
         error: AppError.getMessage(error),
       });
-      // A publisher may throw after committing the result. Keep that result and
-      // let the history owner terminate the run through getTerminalError().
+      // 发布方可能在提交结果之后才抛错：保留已提交的结果，由历史的所有者通过 getTerminalError() 终止运行。
       if (tool.result) return tool.result;
 
       const failure = this.buildToolFailureResult(

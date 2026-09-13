@@ -457,7 +457,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
           }),
       })
     } finally {
-      // A failed or cancelled worker can already have changed shared resources.
+      // 失败或被取消的子 Agent 可能已经改动过共享资源。
       if (subAgentParentCtx.codingSession !== parentCtx.codingSession) {
         parentCtx.codingSession.mergeSnapshot?.(subAgentParentCtx.codingSession.getSnapshot())
       }

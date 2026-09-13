@@ -377,9 +377,8 @@ export class FileProjectTransactionStateStore {
       closeSync(descriptor)
       descriptor = undefined
       renameSync(temporaryPath, this.path)
-      // Windows does not support opening and fsyncing directory handles through
-      // Node. The file itself is flushed above; POSIX hosts additionally flush
-      // the parent directory so the rename is durable across a crash.
+      // Windows 上 Node 不能打开目录句柄做 fsync。文件本身在上面已经落盘；
+      // POSIX 宿主再刷一次父目录，让 rename 在崩溃后也不会丢。
       if (process.platform !== 'win32') {
         const directoryDescriptor = openSync(directory, constants.O_RDONLY)
         try {
@@ -393,7 +392,7 @@ export class FileProjectTransactionStateStore {
       try {
         unlinkSync(temporaryPath)
       } catch {
-        // arch-guard:silent-catch-ok failed atomic writes may leave only an unreferenced temp file.
+        // arch-guard:silent-catch-ok 原子写失败最多留下一个没人引用的临时文件。
       }
       throw error
     }

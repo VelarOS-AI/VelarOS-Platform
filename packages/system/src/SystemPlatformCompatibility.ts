@@ -210,7 +210,7 @@ export class SystemPlatformCompatibility {
     }
     if (kind === 'cmd') return {
       file,
-      // CMD parses the /c string itself; CRT escaping would corrupt its embedded quotes.
+      // /c 后面的字符串由 CMD 自己解析，按 CRT 规则转义会弄坏里面的引号。
       args: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & ${command}"`],
       windowsVerbatimArguments: true,
     }

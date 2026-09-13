@@ -235,7 +235,7 @@ export function manageSystemProcess(
     }
     owned.result = result
     complete(result)
-    // Retain bounded completion receipts for background status and PID identity checks.
+    // 保留有上限的结束回执，供后台任务状态查询和 PID 身份核对使用。
     let completed = 0
     for (const entry of ownedProcesses.values()) if (entry.result && entry.exited) completed++
     if (completed > MAX_COMPLETED_PROCESSES) {

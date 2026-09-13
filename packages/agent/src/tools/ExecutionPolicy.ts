@@ -611,7 +611,7 @@ class ToolExecutionPolicy {
       toolName,
       toolContext: prepared.toolContext,
     })
-    // Approval is asynchronous; cancellation during that wait must prevent the side effect.
+    // 审批是异步的：等待期间被取消就不能再产生副作用。
     if (prepared.toolContext.abortSignal.aborted) {
       throw new AppError('EXECUTION_ABORTED', 'Tool execution cancelled before start')
     }
@@ -919,7 +919,7 @@ class ToolExecutionPolicy {
     emitProgress?: (chunk: string) => void,
     updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
   ): ToolExecutionPolicyContext {
-    // Query contexts inherit host ports from a frozen parent. Preserve that prototype chain.
+    // 查询上下文从冻结的父上下文继承宿主端口，要保留这条原型链。
     return Object.create(baseContext, {
       toolCallId: { value: toolCallId, enumerable: true },
       abortSignal: { value: abortSignal, enumerable: true },

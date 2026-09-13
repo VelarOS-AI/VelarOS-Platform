@@ -89,7 +89,7 @@ export async function buildToolPayloadRefsForProviderMessages(
       const occurrenceKey = buildToolPayloadRefOccurrenceKey(messageIndex, partIndex)
       const existingRef = existingPayloadRef(result.serializedResult)
       if (existingRef) {
-        // A previous provider projection already points at the original; never page its wrapper.
+        // 之前的供应商投影已经指向原文：直接复用这个地址，不再给引用包装另存一份。
         registerRef(occurrenceKey, result.toolCallId, existingRef)
         return
       }
