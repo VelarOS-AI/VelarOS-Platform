@@ -72,7 +72,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
   ],
   forbidden: ['不要为简单单步任务创建计划；用户明确要求不用计划时不得自主启用。'],
   usage: [
-    '首次为复杂任务传入 plan 会自主启用计划模式；先只建立计划，再按计划模式要求向用户确认后实施。',
+    '创建或更新计划后，继续推进用户已授权的任务。用户明确选择计划模式或要求先出方案再确认时，按该要求等待确认。',
     '维护计划最省心的方式:直接传完整 plan 列表(每步带 status:pending/in_progress/completed),这一项就能建立并同步整个计划,想改哪步就改它的 status。',
     '完成某步的简写:传 complete_step(1-based 序号或精确标题;步骤没有 id,别自造 "step-1"),host 标记 completed 并自动推进下一个 pending。',
     'lifecycle 省略时保留已有生命周期；首次建计划会自动推导，active 计划全部步骤终态时自动 completed。',
@@ -89,7 +89,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
     { lifecycle: 'completed' },
   ],
   notes: [
-    '返回里的 steps 字段给出每步 ref(序号)+标题+状态,下次引用照它传。首次自主建计划不要与实施工具同批；进入实施后，进度更新可与对应执行工具同批发出。',
+    '返回里的 steps 字段给出每步 ref(序号)+标题+状态，下次引用照它传。建立计划、更新进度可以与用户已授权的执行工具同批发出。',
   ],
   schema: z
     .object({
@@ -220,13 +220,9 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
         steps: describePlanStepRefsForModel(previousPlan),
       }
 
-    ctx.codingSession.enablePromptFeatures(
-      ['plan'],
-      previousPlan.length === 0
-        ? 'model autonomously created a complex-task plan'
-        : 'model maintained an execution plan'
-    )
-
+    // 执行模式表示用户选择的工作方式。维护内部计划只更新任务进度，
+    // 若同时启用旧计划开关，下一轮会错误报告用户要求计划模式，
+    // 导致已经授权的工作被再次要求确认。
     const updateWithPlan = {
       explanation: input.explanation,
       lifecycle: input.lifecycle,

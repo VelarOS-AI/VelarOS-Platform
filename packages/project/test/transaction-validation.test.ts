@@ -435,3 +435,21 @@ describe('TransactionValidation', () => {
     ])
   })
 })
+
+test('adapter and registered validator failures remain failures without error diagnostics', async () => {
+  for (const source of ['adapter', 'registered', 'nested-check']) {
+    const validation = new TransactionValidation({
+      root: '/workspace', policy, providers,
+      getTransaction: () => undefined,
+      buildOverlay: async () => ({ contentByPath: new Map(), diagnostics: [] }),
+      createReader: () => async () => 'source',
+      validateRegistered: async () => ({ ok: source !== 'registered', diagnostics: [], checks: [] }),
+      createAdapters: async () => [{ id: 'test', kind: 'code', capabilities: ['validate'], validate: async () => ({
+        ok: source !== 'adapter', diagnostics: [], checks: source === 'nested-check' ? [{ id: 'failed', ok: false }] : [],
+      }) }],
+      snapshotStaged: async (path, content) => snapshot(path, content),
+      snapshotWorkspace: async (path) => snapshot(path, 'source'),
+    })
+    expect((await validation.run({ paths: ['a.ts'] })).ok).toBe(false)
+  }
+})

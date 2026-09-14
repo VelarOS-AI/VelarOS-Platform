@@ -23,19 +23,16 @@ describe("tool input provider-history replay", () => {
     const compacted = compactToolInputForModel({
       blocks: Array.from({ length: 101 }, (_, index) => ({ index })),
     });
-    const blocks = compacted.blocks as Array<Record<string, unknown>>;
-    const marker = blocks.at(-1);
-
-    assert.equal(marker?.__historyPreviewOmittedItems, 1);
-    assert.equal(marker?.__toolReceivedFullInput, true);
-    assert.equal("__truncatedItems" in (marker ?? {}), false);
+    assert.equal(compacted.blocks, undefined);
+    assert.deepEqual(compacted.__historyInputOmissions, [{ path: ['blocks'], jsonPath: '$.blocks', items: 101 }]);
+    assert.equal(compacted.__toolReceivedFullInput, true);
   });
 
   test("labels long string compaction as history-only", () => {
     const compacted = compactToolInputForModel({ content: "x".repeat(1_000) });
 
-    assert.match(String(compacted.content), /history preview omitted/u);
-    assert.match(String(compacted.content), /tool received the full value/u);
+    assert.equal(compacted.content, undefined);
+    assert.deepEqual(compacted.__historyInputOmissions, [{ path: ['content'], jsonPath: '$.content', chars: 1_000 }]);
   });
 });
 
@@ -43,6 +40,7 @@ describe("tool input provider-history replay", () => {
 test('repeated history compaction preserves the omitted operation count and original-input ref', () => {
   const args = { edits: Array.from({ length: 300 }, (_, index) => ({ index })) }
   const first = compactToolInputForModel(args, 'many-operations')
-  assert.equal((first.edits as Array<Record<string, unknown>>).at(-1)?.__historyPreviewOmittedItems, 200)
+  assert.equal(first.edits, undefined)
+  assert.deepEqual(first.__historyInputOmissions, [{ path: ['edits'], jsonPath: '$.edits', items: 300, ref: 'input:many-operations' }])
   assert.deepEqual(compactToolInputForModel(first, 'many-operations'), first)
 })

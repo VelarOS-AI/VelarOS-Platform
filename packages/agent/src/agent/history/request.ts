@@ -1,5 +1,7 @@
 import type { ModelMessage } from 'ai'
 
+import type { ContextPayloadStore } from '../context/ContextPayloadStore'
+
 import { mapInternalFollowUpsForProvider } from './internalMessages'
 import { repairHistoryStructureForProvider } from './repair'
 import {
@@ -14,6 +16,7 @@ interface AgentHistoryToolContext {
   /** Opaque execution-session state carried through generic history preparation. */
   codingSession: unknown
   sessionId?: string
+  contextPayloadStore?: ContextPayloadStore
   /** canonical tool id → provider transport name for the current request. */
   getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>
 }

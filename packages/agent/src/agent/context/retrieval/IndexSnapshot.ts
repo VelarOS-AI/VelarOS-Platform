@@ -8,7 +8,7 @@ import type {
 import { isPresent } from '@velaros-ai/core'
 
 /** 索引 snapshot schema 版本；与 {@link ContextRetrievalIndexBuilder} 产出一致。 */
-const ChatContextRetrievalIndexVersion = 1
+const ChatContextRetrievalIndexVersion = 2
 
 /**
  * 索引中一条可搜索消息的扁平条目（由 IndexBuilder 预计算 searchableText）。

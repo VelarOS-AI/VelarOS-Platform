@@ -1,0 +1,922 @@
+{
+  "version": 2,
+  "newInternalOperations": [
+    {
+      "operation": "replace_content",
+      "owner": "editing planner",
+      "exposure": "internal",
+      "purpose": "Apply compiled source changes with exact expected-content validation.",
+      "example": { "type": "replace_content", "path": "src/service.ts", "expectedContent": "old", "content": "new", "mode": "edit" }
+    }
+  ],
+  "rows": [
+    {
+      "group": "tool",
+      "operation": "project:read",
+      "disposition": "upgrade",
+      "destination": {
+        "kind": "tool",
+        "name": "project:read",
+        "input": {
+          "path": "src/service.ts",
+          "range": [
+            1,
+            10
+          ]
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:list",
+      "disposition": "retain",
+      "destination": {
+        "kind": "tool",
+        "name": "project:list",
+        "input": {
+          "path": "src",
+          "recursive": true,
+          "limit": 10
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:search",
+      "disposition": "upgrade",
+      "destination": {
+        "kind": "tool",
+        "name": "project:search",
+        "input": {
+          "query": "Service",
+          "path": "src"
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:query-code",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "query": "Service"
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:write",
+      "disposition": "split",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "create",
+              "path": "src/new.ts",
+              "text": "export {}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:edit",
+      "disposition": "rebuild",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": 1,
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:rollback",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:change",
+        "input": {
+          "action": "undo",
+          "changeRef": "change:example"
+        }
+      }
+    },
+    {
+      "group": "tool",
+      "operation": "project:run",
+      "disposition": "simplify",
+      "destination": {
+        "kind": "tool",
+        "name": "project:run",
+        "input": {
+          "command": "bun test"
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "replace_selection",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": 1,
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "replace_lines",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": [
+                    1,
+                    2
+                  ],
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "replace_text",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": 1,
+                  "match": "old()",
+                  "text": "next()"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "insert_text_at_anchor",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "range": 1,
+                  "match": "export",
+                  "side": "before",
+                  "text": "/* note */ "
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "append_text",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "at": "end",
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "prepend_text",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "at": "start",
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "create_file",
+      "disposition": "move",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "create",
+              "path": "src/new.ts",
+              "text": "export {}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "delete_file",
+      "disposition": "move",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "delete",
+              "fileRef": "view:example"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "rename_file",
+      "disposition": "move",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "move",
+              "fileRef": "view:example",
+              "to": "src/moved.ts"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "replace_symbol",
+      "disposition": "compose",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "insert_around_symbol",
+      "disposition": "compose",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "add_import",
+      "disposition": "compose",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "range": 1,
+                  "side": "before",
+                  "text": "import { value } from \"./value\""
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "remove_import",
+      "disposition": "compose",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": 1,
+                  "text": ""
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "edit",
+      "operation": "json_patch",
+      "disposition": "compose",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "replace",
+                  "range": 2,
+                  "match": "\"enabled\": false",
+                  "text": "\"enabled\": true"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "write",
+      "operation": "create",
+      "disposition": "move",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "create",
+              "path": "src/new.ts",
+              "text": "export {}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "write",
+      "operation": "overwrite",
+      "disposition": "move",
+      "destination": {
+        "kind": "tool",
+        "name": "project:file",
+        "input": {
+          "actions": [
+            {
+              "op": "overwrite",
+              "fileRef": "view:example",
+              "text": "export {}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "write",
+      "operation": "append",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "at": "end",
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "write",
+      "operation": "prepend",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:edit",
+        "input": {
+          "files": [
+            {
+              "fileRef": "view:example",
+              "edits": [
+                {
+                  "op": "insert",
+                  "at": "start",
+                  "text": "export {}"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "search_symbols",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "query": "Service"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "build_context",
+      "disposition": "host",
+      "destination": {
+        "kind": "sdk",
+        "name": "build_context",
+        "input": {
+          "action": "build_context",
+          "task": "Refactor service",
+          "maxNodes": 20
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "explore",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "relations",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          },
+          "kind": "related"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "trace",
+      "disposition": "extension",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code-analysis",
+        "input": {
+          "action": "trace",
+          "from": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          },
+          "to": {
+            "path": "src/other.ts",
+            "symbol": "Other"
+          }
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "read_node",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "callers",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "relations",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          },
+          "kind": "calls",
+          "direction": "incoming"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "callees",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "relations",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          },
+          "kind": "calls",
+          "direction": "outgoing"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "impact",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "impact",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "type_hierarchy",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "relations",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          },
+          "kind": "types"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "file_dependencies",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "dependencies",
+          "direction": "outgoing",
+          "path": "src/service.ts"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_cycles",
+      "disposition": "extension",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code-analysis",
+        "input": {
+          "action": "cycles"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_dead_code",
+      "disposition": "extension",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code-analysis",
+        "input": {
+          "action": "deadcode"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "routing_manifest",
+      "disposition": "extension",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code-analysis",
+        "input": {
+          "action": "routing"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "build_index",
+      "disposition": "host",
+      "destination": {
+        "kind": "sdk",
+        "name": "build_index",
+        "input": {
+          "action": "build_index",
+          "force": true
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "index_status",
+      "disposition": "host",
+      "destination": {
+        "kind": "sdk",
+        "name": "index_status",
+        "input": {
+          "action": "index_status"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_symbols",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "path": "src"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "list_exports",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "symbols",
+          "exportedOnly": true,
+          "includeReExports": true,
+          "path": "src"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_imports",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "dependencies",
+          "direction": "outgoing",
+          "path": "src",
+          "includeExternal": true
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_importers",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "dependencies",
+          "direction": "incoming",
+          "path": "src/service.ts",
+          "includeReExports": true
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "find_references",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "references",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "language_diagnostics",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "diagnostics",
+          "path": "src"
+        }
+      }
+    },
+    {
+      "group": "query",
+      "operation": "analyze_symbol_impact",
+      "disposition": "merge",
+      "destination": {
+        "kind": "tool",
+        "name": "project:code",
+        "input": {
+          "action": "impact",
+          "target": {
+            "path": "src/service.ts",
+            "symbol": "Service"
+          }
+        }
+      }
+    },
+    {
+      "group": "sdk",
+      "operation": "insert_text",
+      "disposition": "retain-sdk",
+      "destination": {
+        "kind": "sdk",
+        "name": "insert_text",
+        "input": {
+          "type": "insert_text",
+          "path": "src/service.ts",
+          "position": "after",
+          "text": " value"
+        }
+      }
+    },
+    {
+      "group": "sdk",
+      "operation": "delete_text",
+      "disposition": "retain-sdk",
+      "destination": {
+        "kind": "sdk",
+        "name": "delete_text",
+        "input": {
+          "type": "delete_text",
+          "path": "src/service.ts",
+          "oldText": "old"
+        }
+      }
+    },
+    {
+      "group": "sdk",
+      "operation": "insert_before_symbol",
+      "disposition": "retain-sdk",
+      "destination": {
+        "kind": "sdk",
+        "name": "insert_before_symbol",
+        "input": {
+          "type": "insert_before_symbol",
+          "symbol": {
+            "name": "Service"
+          },
+          "text": "// note\n"
+        }
+      }
+    },
+    {
+      "group": "sdk",
+      "operation": "insert_after_symbol",
+      "disposition": "retain-sdk",
+      "destination": {
+        "kind": "sdk",
+        "name": "insert_after_symbol",
+        "input": {
+          "type": "insert_after_symbol",
+          "symbol": {
+            "name": "Service"
+          },
+          "text": "\n// note"
+        }
+      }
+    },
+    {
+      "group": "sdk",
+      "operation": "custom",
+      "disposition": "retain-sdk",
+      "destination": {
+        "kind": "sdk",
+        "name": "custom",
+        "input": {
+          "type": "custom",
+          "adapterId": "extension",
+          "payload": {
+            "value": 1
+          }
+        }
+      }
+    }
+  ]
+}

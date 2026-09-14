@@ -51,8 +51,9 @@ import {
   resolveToolAliases,
   resolveToolValidationHintProviders,
 } from '../capabilities'
-import { type ApprovalPort,createApprovalOperationKey } from '../tool-contract'
+import { type ApprovalPort,createApprovalOperationKey, type ToolInputReuseContract } from '../tool-contract'
 
+import { supportsToolInputReuse } from './recovery/ToolInputReuse'
 import { decideToolCategoryAccess } from './access-policy'
 import {
   buildExecutionFailureResult,
@@ -73,7 +74,7 @@ interface ToolExecutionPolicySurface<TSurfaceInput = any, TBaseInput = any> {
   normalize?: (input: TSurfaceInput, context: any) => TBaseInput
 }
 
-interface ToolExecutionPolicyTool<TInput = any> {
+interface ToolExecutionPolicyTool<TInput = any> extends ToolInputReuseContract<any> {
   schema: ToolSchema<TInput>
   surfaces?: Partial<Record<ToolSurfaceProfileId, ToolExecutionPolicySurface<any, TInput>>>
   permissions?: readonly ToolPermission[]
@@ -595,7 +596,7 @@ class ToolExecutionPolicy {
             toolName,
             {
               code: 'VALIDATION',
-              details: { schemaIssues: issueDetails },
+              details: { schemaIssues: issueDetails, executionOutcome: 'not-applied' },
               nextActions: toolArgsSchemaValidator.buildValidationNextActions(
                 toolName,
                 issueDetails,
@@ -701,6 +702,20 @@ class ToolExecutionPolicy {
    * - 普通 VALIDATION / NOT_FOUND / 工具逻辑错误 → 只报错给模型，不取消其他不相关文件的编辑。
    *   （之前的逻辑是 !isConcurrencySafe 就 abort，导致一个文件找不到目标就杀掉整批编辑。）
    */
+  public supportsInputReuse(toolName: string): boolean {
+    const tool = this.toolRegistry.get(this.resolveCanonicalToolName(toolName))
+    return !!tool && supportsToolInputReuse(tool.schema)
+  }
+
+  public inputReuseContract(toolName: string): ToolInputReuseContract<any> {
+    const tool = this.toolRegistry.get(this.resolveCanonicalToolName(toolName))
+    return {
+      inputContractVersion: tool?.inputContractVersion,
+      inputReuseSourceTools: tool?.inputReuseSourceTools,
+      migrateReusedInput: tool?.migrateReusedInput,
+    }
+  }
+
   public shouldAbortSiblings(input: ToolExecutionFailureInput): boolean {
     // terminal 错误：整个 session 应停止；普通编辑/校验错误不再级联取消兄弟工具。
     return this.isTerminalExecutionError(input.error)

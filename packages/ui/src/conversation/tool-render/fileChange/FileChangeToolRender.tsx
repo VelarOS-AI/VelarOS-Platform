@@ -4,6 +4,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react'
 import { CompactToolRow } from '@velaros-ai/ui/product/layout/CompactToolRow'
 
 import { useConversationI18n, useConversationTranslatorRuntime } from '../../i18n'
+import { ProjectSourceDisclosure } from '../projectSource/ProjectSourceWindows'
 import { resolveToolCallHoverContent } from '../ToolCallHoverDetails'
 import { getToolStatusLabel } from '../toolCallSummary'
 import { toolLeadingPhosphorIconForTool } from '../toolLeadingPhosphorIcon'
@@ -251,7 +252,10 @@ const FileChangeToolRender = memo(
     // 所有写盘的 Project 编辑工具都渲染成
     // 紧凑的「工具调用」行：工具名 + 变更文件 + 状态。不再逐工具单独渲染差异卡——每条改动的 +/-
     // 差异统一由消息末尾那张汇总卡展示（见 MessageFileChangeSummary），避免中途一堆 +0-0 小卡。
-    <ProjectApplyEditRow {...props} />
+    <>
+      <ProjectApplyEditRow {...props} />
+      {!props.compact && <ProjectSourceDisclosure value={props.block.result} />}
+    </>
   )
 )
 

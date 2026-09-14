@@ -219,8 +219,8 @@ class ToolArgsSchemaValidator {
       issueDetails,
     }
     const actions = [
-      `不要根据工具名或相似工具猜字段；visible 工具按本轮真实 schema 重建 args。`,
-      `删除当前 schema.properties 未声明的字段，再按 required/properties 重建 args。`,
+      `按本轮真实 schema 中当前操作对应的分支修正所指出字段；不要根据工具名或相似工具猜参数。`,
+      `失败回执带 inputReuse 时用 reuse + changes 修正字段并保留其余有效参数；没有复用入口时再构造完整调用。`,
       `如果目标工具未暴露真实 schema，请通过宿主提供的能力发现接口加载 ${pageId} 后再调用。`,
     ]
 

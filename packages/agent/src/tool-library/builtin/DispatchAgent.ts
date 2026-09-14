@@ -38,7 +38,7 @@ const dispatchAgentSchema = z.object({
     .describe(
       parameterDescription({
         description:
-          '子 Agent 类型 id。新建时省略则为 general；续跑时省略则继承原线程类型。只使用运行时 SubAgentTypeProvider 已公开的类型。',
+          '子 Agent 类型 id，选择本轮提示中的 subagent_type 目录。新建时省略使用目录标明的宿主默认类型；续跑时省略继承原线程类型。',
       })
     ),
   tool_scope: z
@@ -57,7 +57,7 @@ const dispatchAgentSchema = z.object({
     .describe(
       parameterDescription({
         description:
-          'tool_scope=custom 时指定子 Agent 可用的工具分类。续跑时省略则继承原线程分类。为方便查询和申请，系统会始终保留 general 分类。',
+          'tool_scope=custom 时填写当前可委派的工具分类；最终能力受宿主授权和只读边界约束。续跑时省略继承原线程分类。',
       })
     ),
   prompt: z
@@ -214,7 +214,6 @@ const dispatchAgentSchema = z.object({
     ? value
     : {
       ...value,
-      subagent_type: value.subagent_type ?? 'general',
       tool_scope: value.tool_scope ?? 'type_default',
       tool_categories: value.tool_categories ?? [],
     }

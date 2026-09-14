@@ -250,6 +250,9 @@ class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
       // 计划/建议读取走非空交互会话端口：无 execution 的宿主降级为空计划，不再 `execution!` 撞 null。
       execution: toolContext.interaction,
       canDispatchSubAgents: !!toolContext.dispatchSubAgent,
+      getSubAgentDispatchCatalog: toolContext.getSubAgentDispatchCatalog
+        ? () => toolContext.getSubAgentDispatchCatalog!()
+        : undefined,
     }
     // runtimeState 包含运行时事实、动态提示词片段和开发环境摘要。
     // contextPhase 缺省时透传 undefined，runtimeState.build 内部默认回落 'operational'（与常规入口原行为一致）。

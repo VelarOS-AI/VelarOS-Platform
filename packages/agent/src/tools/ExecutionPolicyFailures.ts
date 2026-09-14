@@ -175,24 +175,13 @@ function shouldAnnotateRuntimeToolIssue(result: ToolFailureResult): boolean {
 function withRuntimeToolIssue(result: ToolFailureResult): ToolFailureResult {
   if (!shouldAnnotateRuntimeToolIssue(result) || result.runtimeToolIssue) return result
 
-  const existingNextActions = result.nextActions ?? []
   return {
     ...result,
-    runtimeToolIssue: {
-      severity: 'requires_diagnosis',
-      action: 'model_report_diagnosis_then_continue_or_stop',
-      requiredClassification: ['system_or_runtime_bug', 'model_decision_issue'],
-      systemBugBehavior:
-        '如果归因是工具描述、schema、注册、运行态可用性或系统编排问题，先向用户报告根因并停止依赖该问题工具的原任务，等待修复或用户确认。',
-      modelDecisionBehavior:
-        '如果归因是模型自己的调用顺序、参数猜测、未先读取 schema 或并行编排判断问题，先向用户说明当时为什么这么做，再用修正后的流程继续推进。',
-    },
-    nextActions: [
-      '先归因本次工具问题属于 system_or_runtime_bug 还是 model_decision_issue，并把判断依据告诉用户。',
-      '若是 system_or_runtime_bug：报告工具/链路、入参、实际/期望、根因和建议修复位置；停止依赖该问题工具的原任务。',
-      '若是 model_decision_issue：说明自己为什么做出该调用/编排决策，然后保留已有恢复线索继续执行。',
-      ...existingNextActions,
-    ],
+    nextActions: [...new Set([
+      '先依据实际错误条件修正调用；可恢复的参数或定位问题直接继续，完整诊断保留在执行记录中。',
+      '仅在需要用户权限、外部信息，或执行结果仍不确定且无法核实时说明阻塞；不要推测责任归属。',
+      ...(result.nextActions ?? []),
+    ])],
   }
 }
 
@@ -286,6 +275,7 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   // 而 details.reason 往往是唯一还能看到领域原因的地方）。
   const boundedNestedDetails = nestedDetails ? boundToolFailureDetails(nestedDetails) : {}
   const boundedDetails: Record<string, unknown> = { ...boundedNestedDetails }
+  if (error.context.executionOutcome === 'not-applied') boundedDetails.executionOutcome = 'not-applied'
   if (nestedReason) {
     boundedDetails.reason = nestedReason
   }

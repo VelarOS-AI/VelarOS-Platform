@@ -1,4 +1,4 @@
-import { isEmpty, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
 export interface CommandExecutionPlan {
   isReadOnly: boolean
@@ -477,7 +477,7 @@ export function isParallelCommandExecutionSafe(input: {
   background?: unknown
   parallel?: unknown
 }): boolean {
-  if (!isTrue(input.parallel) || isTrue(input.background) || !isString(input.command)) return false
+  if (isFalse(input.parallel) || isTrue(input.background) || !isString(input.command)) return false
   const plan = analyzeCommandExecution(input.command)
   return plan.isReadOnly
     && !plan.shouldRequestConfirmation

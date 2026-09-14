@@ -1,3 +1,6 @@
+export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource } from '../agent/context/resources/contracts'
+export { fileContextFor } from '../agent/context/resources/FileContextCoordinator'
+export { resolveToolInputReuse,type ToolInputReuseOptions,ToolInputReuseSchema, withToolInputReuse } from '../tools/recovery/ToolInputReuse'
 export * from './approval'
 export * from './concepts'
 export * from './define'

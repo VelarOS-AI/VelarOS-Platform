@@ -13,8 +13,9 @@ import {
   executeAgentProjectRead,
   executeAgentProjectSearch,
 } from '../src/agent/ProjectKernelPort'
+import { legacyProjectTools } from '../src/compatibility/agent-tools'
 import { ProjectEditOperationSchema } from '../src/edits/schema'
-import { ProjectToolNames } from '../src/project-tool-names'
+import { LegacyProjectToolNames, ProjectToolNames } from '../src/project-tool-names'
 
 const ModelToolSchemaCharacterBudget = 40_000
 
@@ -24,10 +25,10 @@ describe('Project model-facing tool contract', () => {
       'project:read': 'read',
       'project:list': 'read',
       'project:search': 'read',
-      'project:query-code': 'read',
-      'project:write': 'write',
+      'project:code': 'read',
+      'project:file': 'write',
       'project:edit': 'write',
-      'project:rollback': 'write',
+      'project:change': 'write',
       'project:run': 'execute',
     } as const
 
@@ -71,7 +72,7 @@ describe('Project model-facing tool contract', () => {
     ).toThrow('example does not satisfy schema')
 
     for (const [name, expected] of [
-      [ProjectToolNames.read, { path: ['src/contentHash.ts', 'src/cacheKey.ts'] }],
+      [ProjectToolNames.read, { files: [{ path: 'src/service.ts', range: [42, 60] }, { path: 'src/types.ts', range: 20 }] }],
       [ProjectToolNames.run, { command: 'bun test' }],
     ] as const) {
       const tool = projectTools[name]
@@ -84,12 +85,19 @@ describe('Project model-facing tool contract', () => {
     expect(projectTools[ProjectToolNames.run].description).toContain('Git Bash/POSIX')
   })
 
-  test('keeps long-form file writes on a shallow dedicated contract', () => {
-    const writeTool = projectTools[ProjectToolNames.write]
+  test('preserves the version 1 shallow write contract for saved calls', () => {
+    const writeTool = legacyProjectTools[LegacyProjectToolNames.write]
     const writeSchema = schemaToInputSchema(writeTool.schema)
     const serialized = JSON.stringify(writeSchema)
 
-    expect(serialized.length).toBeLessThanOrEqual(800)
+    const nativeProperties = { ...writeSchema.properties }
+    delete nativeProperties.reuse
+    delete nativeProperties.changes
+    // Preserve the original shallow write budget, with a separately bounded shared retry contract.
+    const nativeSize = JSON.stringify({ ...writeSchema, properties: nativeProperties }).length
+    expect(nativeSize).toBeLessThanOrEqual(800)
+    expect(serialized.length - nativeSize).toBeLessThanOrEqual(750)
+    expect(writeTool.schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['mode'], value: 'create' }] }).success).toBe(true)
     expect(
       writeTool.schema.safeParse({
         path: 'reports/review.md',
@@ -98,7 +106,7 @@ describe('Project model-facing tool contract', () => {
       }).success,
     ).toBe(true)
     expect(writeTool.description).toContain('project:edit')
-    expect(projectTools[ProjectToolNames.edit].description).toContain('project:write')
+    expect(legacyProjectTools[LegacyProjectToolNames.edit].description).toContain('project:write')
   })
 
   test('accepts list globs relative to the requested directory without breaking root-relative globs', () => {
@@ -201,7 +209,7 @@ describe('Project model-facing tool contract', () => {
       baseRevisions: { 'first.txt': 'revision-first.txt' },
     })
     expect(
-      projectTools[ProjectToolNames.read].schema.safeParse(result.files[0]?.continuation).success,
+      legacyProjectTools[LegacyProjectToolNames.read].schema.safeParse(result.files[0]?.continuation).success,
     ).toBe(true)
     expect(result.files[1]?.continuation?.path).toBe('second.txt')
   })
@@ -327,10 +335,11 @@ describe('Project model-facing tool contract', () => {
     expect(serialized.length).toBeLessThanOrEqual(25_000)
     expect(result.hits[0]).toEqual({
       path: 'src/example-0.ts',
+      revision: 'revision-0',
       range: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 20 },
       snippet: 'export const example0 = true',
     })
-    expect(serialized).not.toContain('revision-0')
+    expect(serialized).toContain('revision-0')
     expect(serialized).not.toContain('private-adapter')
     expect(serialized).not.toContain('ripgrep')
     expect(serialized).not.toContain('untrusted')
@@ -340,7 +349,7 @@ describe('Project model-facing tool contract', () => {
     const schema = projectTools[ProjectToolNames.edit].schema
     expect(
       schema.safeParse({
-        edits: [{ type: 'replace_text', path: 'a.ts', oldText: 'a', newText: '' }],
+        files: [{ fileRef: 'view:a', edits: [{ op: 'replace', match: 'a', text: '' }] }],
       }).success,
     ).toBe(true)
     expect(

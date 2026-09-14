@@ -22,17 +22,22 @@ import {
   isNumber,
   isRecord,
   isString,
+  isTrue,
   isUndefined,
   toOptional,
 } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
+import type { TransactionBytePlan } from '../transactions/byte-plan.js'
+import { createsMissingFile } from '../transactions/patch-ownership.js'
+import { isDeletePatch } from '../transactions/transaction-overlay.js'
 import type { StoredTransaction } from '../types/transaction.js'
+import { decodeProjectTextBuffer } from '../utils/text.js'
 import { isProjectTextEncoding, type ProjectTextEncoding } from '../utils/text.js'
 
 import type { ProjectChangeRecordInput } from './change-feed.js'
 
-const StateFormatVersion = 1
+const StateFormatVersion = 2
 const MaximumStateBytes = 256 * 1024 * 1024
 const MaximumTransactions = 1000
 const MaximumPatchesPerTransaction = 10_000
@@ -46,6 +51,7 @@ export type ProjectTransactionOperationKind = 'apply' | 'rollback'
 export interface ProjectTransactionFileState {
   readonly exists: boolean
   readonly content?: string
+  readonly bytes?: string
 }
 
 export interface ProjectTransactionRestoreEntry extends ProjectTransactionFileState {
@@ -64,12 +70,13 @@ export interface ProjectTransactionPendingOperation {
 }
 
 export interface ProjectTransactionStateSnapshot {
-  readonly formatVersion: 1
+  readonly formatVersion: 1 | 2
   readonly revision: number
   readonly root: string
   readonly transactions: readonly StoredTransaction[]
   readonly projections: readonly ProjectChangeRecordInput[]
   readonly pending?: ProjectTransactionPendingOperation
+  readonly bytePlans?: readonly TransactionBytePlan[]
 }
 
 export interface FileProjectTransactionStateStoreOptions {
@@ -217,8 +224,42 @@ function assertFileState(
 ): asserts value is ProjectTransactionFileState {
   if (!isRecord(value) || !isBoolean(value.exists)) fail(label)
   optionalBoundedString(value.content, MaximumContentBytes, label)
+  assertStoredBytes(value.bytes, value.content)
   if (value.exists && !isString(value.content)) fail(label)
-  if (!value.exists && !isUndefined(value.content)) fail(label)
+  if (!value.exists && (!isUndefined(value.content) || !isUndefined(value.bytes))) fail(label)
+}
+
+function assertStoredBytes(value: unknown, content: unknown): void {
+  if (isUndefined(value)) return
+  boundedString(value, Math.ceil(MaximumContentBytes / 3) * 4, 'raw bytes size')
+  const bytes = Buffer.from(value, 'base64')
+  if (bytes.toString('base64') !== value || decodeProjectTextBuffer(bytes) !== content) fail('raw bytes do not match text')
+}
+
+function assertBytePlans(value: unknown, transactions: ReadonlyMap<string, StoredTransaction>): void {
+  if (isUndefined(value)) return
+  if (!isArray(value) || value.length > MaximumTransactions) fail('byte plans')
+  const seen = new Set<string>()
+  for (const plan of value) {
+    if (!isRecord(plan) || !isString(plan.transactionId) || seen.has(plan.transactionId)) fail('byte plan identity')
+    seen.add(plan.transactionId)
+    const transaction = transactions.get(plan.transactionId)
+    if (!transaction || !isArray(plan.patches) || plan.patches.length !== transaction.patches.length) fail('byte plan transaction')
+    const previous = new Map<string, string | undefined>()
+    for (const [index, entry] of plan.patches.entries()) {
+      const patch = transaction.patches[index]!
+      if (!isRecord(entry) || entry.patchId !== patch.patchId || entry.path !== patch.path) fail('byte plan patch')
+      const unavailable = isTrue(entry.beforeUnavailable)
+      if (!isUndefined(entry.beforeUnavailable) && !unavailable) fail('byte plan unavailable marker')
+      if (unavailable && (createsMissingFile(patch) || isString(patch.oldContent) || !isUndefined(entry.before))) fail('byte plan unavailable original')
+      if (!unavailable && createsMissingFile(patch) === !isUndefined(entry.before)) fail('byte plan before presence')
+      if (isDeletePatch(patch) === !isUndefined(entry.after)) fail('byte plan after presence')
+      if (previous.has(patch.path) && (unavailable || previous.get(patch.path) !== entry.before)) fail('byte plan chain')
+      previous.set(patch.path, entry.after as string | undefined)
+      assertStoredBytes(entry.before, patch.oldContent ?? '')
+      assertStoredBytes(entry.after, patch.newContent ?? '')
+    }
+  }
 }
 
 function assertPending(value: unknown): asserts value is ProjectTransactionPendingOperation {
@@ -257,7 +298,8 @@ function assertSnapshot(
   root: string,
 ): asserts value is ProjectTransactionStateSnapshot {
   if (!isRecord(value)) fail('root object')
-  if (value.formatVersion !== StateFormatVersion) fail('format version')
+  if (value.formatVersion !== 1 && value.formatVersion !== StateFormatVersion) fail('format version')
+  if (value.formatVersion === 1 && !isUndefined(value.bytePlans)) fail('byte plans require state version 2')
   if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) fail('revision')
   if (value.root !== root) fail('project root mismatch')
   if (!isArray(value.transactions) || value.transactions.length > MaximumTransactions)
@@ -268,6 +310,7 @@ function assertSnapshot(
     if (transactionsById.has(transaction.transactionId)) fail('duplicate transaction id')
     transactionsById.set(transaction.transactionId, transaction)
   }
+  assertBytePlans(value.bytePlans, transactionsById)
   if (!isArray(value.projections) || value.projections.length > MaximumTransactions)
     fail('projections')
   const projectionIds = new Set<string>()
@@ -343,6 +386,7 @@ export class FileProjectTransactionStateStore {
     readonly transactions: readonly StoredTransaction[]
     readonly projections: readonly ProjectChangeRecordInput[]
     readonly pending?: ProjectTransactionPendingOperation
+    readonly bytePlans?: readonly TransactionBytePlan[]
   }): ProjectTransactionStateSnapshot {
     const next: ProjectTransactionStateSnapshot = {
       formatVersion: StateFormatVersion,
@@ -351,6 +395,7 @@ export class FileProjectTransactionStateStore {
       transactions: input.transactions,
       projections: input.projections,
       pending: toOptional(input.pending),
+      bytePlans: input.bytePlans,
     }
     const source = JSON.stringify(next)
     if (new TextEncoder().encode(source).byteLength > MaximumStateBytes)

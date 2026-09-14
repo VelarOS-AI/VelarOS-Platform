@@ -39,6 +39,7 @@ import {
   type RuntimePromptSnapshot,
   type RuntimePromptToolCategorySummary,
 } from '../prompts'
+import type { SubAgentDispatchCatalog } from '../sub-agent'
 import { defaultRuntimePromptFeaturePolicy, type RuntimePromptFeaturePolicy } from '../tools'
 
 import { CompactionSummaryMarker } from './history/contextOSMessage'
@@ -79,6 +80,7 @@ interface PromptStateToolContext {
   execution: PromptStateExecutionApi
   listToolCategories(scope: ToolAvailabilityScope): ToolCategoryOverview[]
   canDispatchSubAgents?: boolean
+  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
 }
 
 interface BuildRuntimePromptStateArgs {
@@ -249,6 +251,9 @@ class PromptStateBuilder {
           ? []
           : (toolContext.skills?.listRoleSkills() ?? roleResolution.skillDescriptors ?? []),
       customSubAgents: contextPhase === 'bootstrap' ? [] : this.safeListCustomSubAgents(),
+      subAgentDispatchCatalog: enabledToolNames.has('agent:dispatch') || enabledToolNames.has('agent:run_workflow')
+        ? toolContext.getSubAgentDispatchCatalog?.()
+        : undefined,
       executionPlanPreview,
       currentExecutionAdvice: currentExecutionAdvice
         ? `${currentExecutionAdvice.mode} / ${currentExecutionAdvice.title}`

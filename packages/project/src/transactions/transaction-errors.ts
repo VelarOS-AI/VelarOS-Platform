@@ -1,4 +1,4 @@
-import { isEmpty, isPresent, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isPlainObject, isPresent, optionalWhen } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 import type { Diagnostic } from '../types/common.js'
@@ -82,7 +82,17 @@ export function validationFailed(
   validation: ValidationResult,
   context: { rebasedFiles?: string[] } = {},
 ): ProjectError {
-  const envelope = diagnosticsEnvelope(validation.diagnostics)
+  const failedChecks = [...new Set(validation.checks.filter((check) => !check.ok).map((check) => check.id))]
+  const envelope = diagnosticsEnvelope(!isEmpty(validation.diagnostics) ? validation.diagnostics : [{
+    severity: 'error', message: !isEmpty(failedChecks) ? `检查未通过：${failedChecks.join('、')}` : '校验器返回未通过，未提供诊断详情。',
+  }])
+  const windows: Array<Record<string, unknown>> = []
+  const diagnostics = envelope.details.diagnostics.map((diagnostic) => {
+    if (!isPlainObject(diagnostic.data) || !isPlainObject(diagnostic.data.sourceContext)) return diagnostic
+    const { sourceContext, excerpt: _excerpt, ...data } = diagnostic.data
+    windows.push({ path: diagnostic.path, line: diagnostic.line, column: diagnostic.column, ...sourceContext })
+    return { ...diagnostic, data: { ...data, coordinateSpace: 'candidate' } }
+  })
   return new ProjectError(
     'VALIDATION_FAILED',
     `事务校验失败，未写入磁盘：${envelope.headline}`,
@@ -90,12 +100,19 @@ export function validationFailed(
       transactionId,
       ...context,
       ...envelope.details,
-      failedChecks: [
-        ...new Set(validation.checks.filter((check) => !check.ok).map((check) => check.id)),
-      ],
+      diagnostics,
+      executionOutcome: 'not-applied',
+      failedChecks,
+      recovery: optionalWhen(!isEmpty(windows), {
+        kind: 'project-edit-validation',
+        coordinateSpace: 'candidate',
+        applied: false,
+        windows,
+        note: 'windows 是尚未写入的候选源码预览，行号属于候选内容。检查错误附近和替换边界；修改 range 时仍使用输入 fileRef 对应的原文坐标，match/text 填源码。',
+      }),
     },
     isPresent(context.rebasedFiles)
       ? '准备事务后 rebasedFiles 被外部修改，rebase 后的内容未通过校验；请重新读取这些文件，基于最新内容重新准备事务。'
-      : '请根据 diagnostics 修正编辑操作，然后重新准备事务。',
+      : `${!isEmpty(windows) ? '根据 diagnostics 与 recovery.windows 修正编辑；候选行号不能直接作为原文 range。' : '根据 diagnostics 修正编辑。'}回执带 inputReuse 时，用 reuse + changes 只修改错误字段，保留其余正文。`,
   )
 }

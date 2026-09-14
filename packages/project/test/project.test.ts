@@ -14,10 +14,10 @@ describe('Project capability', () => {
       'project:read',
       'project:list',
       'project:search',
-      'project:query-code',
-      'project:write',
+      'project:file',
       'project:edit',
-      'project:rollback',
+      'project:code',
+      'project:change',
       'project:run',
     ])
   })

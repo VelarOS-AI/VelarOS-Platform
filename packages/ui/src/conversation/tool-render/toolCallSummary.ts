@@ -9,7 +9,7 @@ import { getToolTargetSummary } from './toolTargetSummary'
 import type { AppLocale, ToolCallBlock, ToolCategoryId } from '#contracts'
 import { platformCompatibility } from '#internal/platform'
 import { isBlank, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isPresent, toNullable } from '#internal/runtime'
-import { asRecord, readNumber, readString, readStringArray } from '#internal/unknownJsonRecord'
+import { asRecord, readNumber, readRecordsArray, readString, readStringArray } from '#internal/unknownJsonRecord'
 
 type PathDisplayFormatter = (path: string) => string
 
@@ -225,7 +225,7 @@ function formatToolReadSkillNames(
  * （`getToolSearchScopeItems`）；没有查询词的 action（如 language_diagnostics）仍回落到 path。
  * system:search 的查询词叫 `pattern`；外部引擎的 Grep 映射成 project:search 时也只带 `pattern`。
  */
-const QueryFirstToolNames = new Set(['project:search', 'project:query-code', 'system:search'])
+const QueryFirstToolNames = new Set(['project:search', 'project:code', 'project:code-analysis', 'project:query-code', 'system:search'])
 
 function readQueryFirstSubject(
   toolName: string,
@@ -243,7 +243,9 @@ function readQueryFirstSubject(
  */
 function readPathArgList(args: Nullable<Record<string, any>>): string[] {
   const singlePath = readString(args, 'path') ?? readString(args, 'file_path')
-  return singlePath ? [singlePath] : readStringArray(args, 'path')
+  if (singlePath) return [singlePath]
+  const batch = readRecordsArray(args, 'files').map((file) => readString(file, 'path')).filter((path): path is string => !!path)
+  return !isEmpty(batch) ? batch : readStringArray(args, 'path')
 }
 
 type ToolSummaryBlock = Pick<ToolCallBlock, 'toolName' | 'args'> & Partial<Pick<ToolCallBlock, 'result'>>

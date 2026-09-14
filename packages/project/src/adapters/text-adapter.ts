@@ -1,4 +1,4 @@
-import { isEmpty, isString,isTrue, optionalWhen } from "@velaros-ai/core";
+import { isEmpty, isString, isTrue } from "@velaros-ai/core";
 
 import type { AdapterSearchHit,FileAdapter, FileAdapterFactory } from "../types/adapter.js";
 import type { FileSnapshot } from "../types/snapshot.js";
@@ -38,6 +38,29 @@ function makeTarget(snapshot: FileSnapshot, range: { startOffset: number; endOff
   };
 }
 
+/** RegExp.exec 的空命中需要显式推进，边界始终落在完整 code point 之间。 */
+function nextCodePointOffset(content: string, offset: number): number {
+  const codePoint = content.codePointAt(offset);
+  return offset + ((codePoint ?? 0) > 0xffff ? 2 : 1);
+}
+
+/** 依次将整串小写化后的偏移还原到原文；无需为整个大文件分配逐字符索引。 */
+function createLowercaseOffsetMapper(content: string): (offset: number, endBoundary: boolean) => number {
+  let sourceOffset = 0;
+  let foldedOffset = 0;
+  return (offset, endBoundary) => {
+    while (sourceOffset < content.length && foldedOffset < offset) {
+      const sourceEnd = nextCodePointOffset(content, sourceOffset);
+      const foldedEnd = foldedOffset + content.slice(sourceOffset, sourceEnd).toLowerCase().length;
+      // 大小写展开中的局部命中也必须引用整个原字符，不能生成半个字符的区间。
+      if (offset < foldedEnd) return endBoundary ? sourceEnd : sourceOffset;
+      sourceOffset = sourceEnd;
+      foldedOffset = foldedEnd;
+    }
+    return sourceOffset;
+  };
+}
+
 /** 通用纯文本 adapter，负责基础搜索、锚点解析和轻量校验。 */
 export function createTextAdapter(): FileAdapter {
   return {
@@ -49,41 +72,41 @@ export function createTextAdapter(): FileAdapter {
       const content = input.snapshot.content ?? "";
       if (!content) return [];
       const hits: AdapterSearchHit[] = [];
+      const limit = input.maxResults ?? 20;
+      if (limit <= 0) return hits;
       const caseInsensitive = !isTrue(input.caseSensitive);
-      const regex = optionalWhen(input.regex, (new RegExp(input.query, caseInsensitive ? "gi" : "g")));
-      if (regex) {
-        // 正则搜索模拟 ripgrep 风格输出，但作为回退路径留在进程内执行。
-        let match: Nullable<RegExpExecArray>;
-        while ((match = regex.exec(content)) && hits.length < (input.maxResults ?? 20)) {
-          const start = match.index;
-          const end = start + match[0].length;
-          hits.push({
-            path: input.snapshot.path,
-            score: 1,
-            kind: "text",
-            range: rangeFromOffsets(content, start, end),
-            snippet: content.slice(Math.max(0, start - 120), Math.min(content.length, end + 120)),
-            adapterId: "core.text",
-          });
-        }
-        return hits;
-      }
-      let from = 0;
-      const q = input.query;
-      const haystack = caseInsensitive ? content.toLowerCase() : content;
-      const needle = caseInsensitive ? q.toLowerCase() : q;
-      while (hits.length < (input.maxResults ?? 20)) {
-        const index = haystack.indexOf(needle, from);
-        if (index === -1) break;
+      const addHit = (start: number, end: number): void => {
         hits.push({
           path: input.snapshot.path,
           score: 1,
           kind: "text",
-          range: rangeFromOffsets(content, index, index + needle.length),
-          snippet: content.slice(Math.max(0, index - 120), Math.min(content.length, index + needle.length + 120)),
+          range: rangeFromOffsets(content, start, end),
+          snippet: content.slice(Math.max(0, start - 120), Math.min(content.length, end + 120)),
           adapterId: "core.text",
         });
-        from = index + Math.max(1, needle.length);
+      };
+      if (input.regex || isEmpty(input.query)) {
+        // 保持既有 JS 正则语法；仅显式正则（或空字面查询）创建 RegExp。
+        const regex = new RegExp(input.query, caseInsensitive ? "gi" : "g");
+        let match: Nullable<RegExpExecArray>;
+        while (hits.length < limit && (match = regex.exec(content))) {
+          addHit(match.index, match.index + match[0].length);
+          if (isEmpty(match[0])) regex.lastIndex = nextCodePointOffset(content, regex.lastIndex);
+        }
+        return hits;
+      }
+      const haystack = caseInsensitive ? content.toLowerCase() : content;
+      const needle = caseInsensitive ? input.query.toLowerCase() : input.query;
+      // 整串转换保留 Greek final sigma 等上下文规则；展开时再按顺序映射回原文。
+      const mapOffset = haystack.length === content.length
+        ? (offset: number): number => offset
+        : createLowercaseOffsetMapper(content);
+      let from = 0;
+      while (hits.length < limit) {
+        const index = haystack.indexOf(needle, from);
+        if (index === -1) break;
+        addHit(mapOffset(index, false), mapOffset(index + needle.length, true));
+        from = index + needle.length;
       }
       return hits;
     },

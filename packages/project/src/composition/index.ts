@@ -2,6 +2,7 @@ import { projectTools } from '../agent/Project.tool.js'
 import { createProjectKernel, type CreateProjectKernelOptions, type ProjectKernel } from '../runtime/project-kernel.js'
 
 export * from './approval.js'
+export * from './code-analysis.js'
 export * from './mod.js'
 
 type CreateProjectSpaceOptions = CreateProjectKernelOptions

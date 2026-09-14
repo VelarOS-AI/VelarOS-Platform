@@ -87,6 +87,8 @@ export interface ProjectValidator {
   readonly checkIds?: readonly string[];
   /** 快速过滤器，让 registry 跳过与本次请求无关的 validator。 */
   canValidate(input: ValidateInput): boolean;
+  /** 由校验器声明完整依赖指纹；必须覆盖源码、配置和环境。缺省或返回 undefined 时每次执行。 */
+  cacheKey?(input: ValidateInput, context: ProjectValidationContext): Promise<string | undefined> | string | undefined;
   validate(
     input: ValidateInput,
     context: ProjectValidationContext,

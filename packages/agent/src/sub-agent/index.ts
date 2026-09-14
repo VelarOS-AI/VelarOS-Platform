@@ -26,6 +26,7 @@ export type {
 export { SubAgentSessionStore } from './SubAgentSessionStore'
 export type {
   ResolvedSubAgentTypeConfig,
+  SubAgentDispatchCatalog,
   SubAgentTypeDescriptor,
   SubAgentTypeProvider,
 } from './SubAgentTypeRegistry'

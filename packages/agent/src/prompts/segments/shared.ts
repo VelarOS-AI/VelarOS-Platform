@@ -15,6 +15,7 @@ import type {
 } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
+import type { SubAgentDispatchCatalog } from '../../sub-agent'
 import type {
   PromptSegmentDefinition,
   PromptSegmentRetention,
@@ -67,6 +68,7 @@ export interface RuntimePromptSnapshot {
   autoPromptFeatureLabels: string[]
   availableSkills: AgentSkillDescriptor[]
   customSubAgents: RuntimePromptCustomSubAgent[]
+  subAgentDispatchCatalog?: SubAgentDispatchCatalog
   executionPlanPreview: Nullable<string>
   currentExecutionAdvice: Nullable<string>
   recentToolFailures: string[]

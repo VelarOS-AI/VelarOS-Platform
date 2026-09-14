@@ -42,6 +42,7 @@ interface ProjectQueryDependencies {
     ProjectFileAccess,
     'snapshot' | 'read' | 'stat' | 'listFiles' | 'observe' | 'authorize'
   >
+  readonly searchTextKind?: (path: string) => Promise<'native' | 'decoded' | 'excluded'>
   readonly journal: Pick<AuditJournal, 'record'>
   readonly decide: (
     action: PolicyDecisionInput['action'],
@@ -163,7 +164,7 @@ export class ProjectQueries {
         content: result.content,
         trust: input.trust,
       })
-      result = { ...result, content: redacted.content }
+      result = { ...result, content: redacted.content, redacted: redacted.redacted }
     }
     await this.dependencies.emit('AfterRead', result)
     this.dependencies.journal.record({
@@ -197,6 +198,7 @@ export class ProjectQueries {
 
     if (allowRg) {
       try {
+        const textKinds = await this.classifySearchFiles(authorizedProcessed)
         const rgResult = await searchWithRipgrep({
           rootAbs: this.dependencies.root,
           subdirRel: authorizedProcessed.root,
@@ -209,6 +211,7 @@ export class ProjectQueries {
             processed.excludeGitignored ??
             this.defaultExcludeGitignoredForRoot(authorizedProcessed.root),
           maxResults,
+          filterPath: optionalWhen(!!this.dependencies.searchTextKind, (path: string) => textKinds.get(path) === 'native'),
           command: this.dependencies.providers.command,
           policy: this.dependencies.policy,
         })
@@ -221,6 +224,8 @@ export class ProjectQueries {
           // 同一文件可能有多条命中：按路径缓存 revision，避免对同一文件重复整文件读取 + 哈希。
           const revisionByPath = new Map<string, string>()
           for (const hit of rgResult.hits) {
+            const kind = textKinds.get(hit.path)
+            if (this.dependencies.searchTextKind && kind !== 'native') continue
             if (matchesAny(hit.path, this.dependencies.policy.readDeny)) continue
             try {
               let revision = revisionByPath.get(hit.path)
@@ -250,9 +255,15 @@ export class ProjectQueries {
             }
             if (enriched.length >= maxResults) break
           }
+          const decodedPaths = [...textKinds].filter(([, kind]) => kind === 'decoded').map(([path]) => path)
+          if (!isEmpty(decodedPaths) && enriched.length < maxResults) {
+            const decoded = await this.searchViaAdapters(authorizedProcessed, maxResults - enriched.length, decodedPaths)
+            enriched.push(...decoded.hits)
+          }
           enriched.sort((a, b) => b.score - a.score)
           truncated =
             !!rgResult.timedOut ||
+            !!rgResult.truncated ||
             rgResult.hits.length >= maxResults ||
             enriched.length >= maxResults
           hits = enriched.slice(0, maxResults)
@@ -302,22 +313,44 @@ export class ProjectQueries {
     return result
   }
 
-  /** 回退搜索：通过 adapter 扫描文件，每个文件限制命中数，再做全局合并。 */
-  private async searchViaAdapters(
-    processed: SearchInput,
-    maxResults: number,
-  ): Promise<{ hits: SearchHit[]; scannedFiles: number; truncated: boolean }> {
-    // adapter 搜索更慢，但能在没有 ripgrep 或 ripgrep 失败时保持功能可用。
+  /** 快速后端只负责其可精确解释的文本；遗留编码在统一解码后交给同一搜索适配器。 */
+  private async classifySearchFiles(input: SearchInput): Promise<Map<string, 'native' | 'decoded' | 'excluded'>> {
+    const kinds = new Map<string, 'native' | 'decoded' | 'excluded'>()
+    if (!this.dependencies.searchTextKind) return kinds
+    for (const path of await this.searchFilePaths(input)) {
+      const classified = await this.classifySearchFile(path)
+      kinds.set(path, classified.kind)
+      if (classified.error) this.dependencies.journal.record({ actor: 'system', action: 'search', path, outputSummary: '格式检测失败，已跳过不可读取文件。' })
+    }
+    return kinds
+  }
+
+  private async classifySearchFile(path: string): Promise<{ kind: 'native' | 'decoded' | 'excluded'; error?: unknown }> {
+    try { return { kind: await this.dependencies.searchTextKind!(path) } }
+    catch (error) { return { kind: 'excluded', error } }
+  }
+
+  private async searchFilePaths(processed: SearchInput): Promise<string[]> {
     const entries = await this.dependencies.store.listFiles({
       path: processed.root,
       include: processed.include,
       exclude: this.resolveSearchExcludeGlobs(processed),
-      excludeGitignored:
-        processed.excludeGitignored ?? this.defaultExcludeGitignoredForRoot(processed.root),
+      excludeGitignored: processed.excludeGitignored ?? this.defaultExcludeGitignoredForRoot(processed.root),
       recursive: true,
-      maxDepth: 20,
+      // 搜索必须遍历完整候选集；公开 list 的展示页长不能静默裁掉旧编码文件。
+      maxFiles: Number.MAX_SAFE_INTEGER,
+      maxDepth: Number.MAX_SAFE_INTEGER,
     })
-    const files = entries.filter((e) => e.type === 'file').map((e) => e.path)
+    return entries.filter((entry) => entry.type === 'file').map((entry) => entry.path)
+  }
+
+  /** 回退搜索：通过 adapter 扫描文件，每个文件限制命中数，再做全局合并。 */
+  private async searchViaAdapters(
+    processed: SearchInput,
+    maxResults: number,
+    selectedFiles?: string[],
+  ): Promise<{ hits: SearchHit[]; scannedFiles: number; truncated: boolean }> {
+    const files = selectedFiles ?? await this.searchFilePaths(processed)
     const perFileCap = Math.min(120, Math.max(maxResults * 2, 24))
     const hits: SearchHit[] = []
     let scannedFiles = 0

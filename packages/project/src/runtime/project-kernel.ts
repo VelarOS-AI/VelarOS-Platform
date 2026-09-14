@@ -142,7 +142,7 @@ import {
   canRevertToOriginal,
   createsMissingFile,
 } from '../transactions/patch-ownership.js'
-import { type ApplyRestoreState, durableRestorePlan } from '../transactions/recovery-plan.js'
+import { type ApplyRestoreState } from '../transactions/recovery-plan.js'
 import { TransactionCoordinator } from '../transactions/transaction-coordinator.js'
 import { revisionMismatch, validationFailed } from '../transactions/transaction-errors.js'
 import {
@@ -237,6 +237,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     this.gitIndex = new ProjectGitIndex({ root: this.root, providers: this.providers })
     this.transactionRecovery = new TransactionRecovery({ store: this.store })
     this.queries = new ProjectQueries({
+      searchTextKind: (path) => this.store.searchTextKind(path),
       root: this.root,
       policy: this.policy,
       providers: this.providers,
@@ -285,6 +286,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         root: this.root,
       })
       const durable = this.transactionState.snapshot()
+      this.transactionRecovery.hydrateBytePlans(durable.bytePlans ?? [])
       this.transactionRepository.hydrate(durable.transactions, (transaction) =>
         this.transactionStateMachine.isTerminal(transaction.status),
       )
@@ -304,6 +306,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   private deleteEvictedTransactionProjections(transactionIds: readonly string[]): void {
     for (const transactionId of transactionIds) {
       this.transactionProjectionRepository.delete(transactionId)
+      this.transactionRecovery.deleteBytePlan(transactionId)
     }
   }
 
@@ -320,6 +323,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   private persistTransactionState(pending?: ProjectTransactionPendingOperation): void {
     this.transactionState?.commit({
       transactions: this.transactionStateValues(),
+      bytePlans: this.transactionRecovery.persistedBytePlans(this.transactionStateValues()),
       projections: this.transactionProjectionValues(),
       pending,
     })
@@ -387,9 +391,13 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
   ): void {
     const projection = this.transactionChangeProjection(tx, lifecycle, newIntents, revisions)
     const transactionSnapshot = this.transactionRepository.snapshot()
+    const bytesSnapshot = this.transactionRecovery.captureBytePlans()
     const projectionSnapshot = this.transactionProjectionRepository.snapshot()
     this.transactionProjectionRepository.set(projection)
-    if (removeTransaction) this.transactionRepository.delete(tx.transactionId)
+    if (removeTransaction) {
+      this.transactionRepository.delete(tx.transactionId)
+      this.transactionRecovery.deleteBytePlan(tx.transactionId)
+    }
     this.transactionProjectionRepository.cap((transactionId) =>
       this.transactionRepository.has(transactionId),
     )
@@ -397,6 +405,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       this.persistTransactionState()
     } catch (error) {
       this.transactionRepository.restore(transactionSnapshot)
+      this.transactionRecovery.restoreBytePlans(bytesSnapshot)
       this.transactionProjectionRepository.restore(projectionSnapshot)
       throw error
     }
@@ -552,7 +561,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       kind,
       transactionId: tx.transactionId,
       previousStatus: tx.status,
-      restore: durableRestorePlan(tx, kind, restoreByPath),
+      restore: this.transactionRecovery.durableRestorePlan(tx, kind, restoreByPath),
     }
     this.persistTransactionState(pending)
     return pending
@@ -593,12 +602,14 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     await this.hooks.emit('BeforePrepareEdit', this, input)
     await this.decide('prepare_edit', undefined, input)
     const transactionsBeforePrepare = this.transactionRepository.snapshot()
+    const bytesBeforePrepare = this.transactionRecovery.captureBytePlans()
     const projectionsBeforePrepare = this.transactionProjectionRepository.snapshot()
     const tx = await this.prepareTransaction(input)
     try {
       this.publishTransactionChange(tx, 'prepared', input.operations)
     } catch (error) {
       this.transactionRepository.restore(transactionsBeforePrepare)
+      this.transactionRecovery.restoreBytePlans(bytesBeforePrepare)
       this.transactionProjectionRepository.restore(projectionsBeforePrepare)
       throw error
     }
@@ -651,8 +662,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const tx = this.transactionRepository.get(input.transactionId)
     if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
     const amendedStatus = this.transactionStateMachine.amend(tx)
-    // 同一个 Map value 的两种视图：`tx` 带终态字段用于上面的守卫，`preparedTx` 是收窄后的对外形状。
-    const preparedTx = this.getTransaction(input.transactionId)!
+    // 修订会更新已存储的生命周期；返回快照记录此次修订后的准备状态。
+    const preparedTx = tx
     await this.decide('amend_edit', tx.changedFiles, input, tx.risk)
     const overlay = await this.buildTransactionContentOverlay(input.transactionId)
     if (!isEmpty(overlay.diagnostics)) {
@@ -678,6 +689,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     )
 
     const transactionBeforeAmend = cloneStoredTransaction(tx)
+    const bytesBeforeAmend = this.transactionRecovery.captureBytePlans()
     try {
       preparedTx.patches.push(
         ...amendment.patches.map((patchValue) => ({
@@ -698,9 +710,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       preparedTx.status = amendedStatus
       this.refreshTransactionSummary(preparedTx)
       this.planner.assertScopeWithinPolicy(preparedTx.changedFiles, preparedTx.changedLines)
+      this.transactionRecovery.deleteBytePlan(tx.transactionId)
       this.publishTransactionChange(tx, 'amended', input.operations)
     } catch (error) {
       this.transactionRepository.set(input.transactionId, transactionBeforeAmend)
+      this.transactionRecovery.restoreBytePlans(bytesBeforeAmend)
       throw error
     }
     await this.hooks.emit('AfterPrepareEdit', this, preparedTx)
@@ -711,7 +725,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       outputSummary: `${input.operations.length} amendment operation(s)`,
       risk: preparedTx.risk,
     })
-    return preparedTx
+    return { ...preparedTx, status: amendedStatus }
   }
 
   /** 在事务暂存内容上运行修复器，并把修复转成事务修订。 */
@@ -846,6 +860,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       const rebasedFiles = new Set<string>()
       const createdFiles: string[] = []
       const transactionBeforePreflight = cloneStoredTransaction(tx)
+      const bytesBeforePreflight = this.transactionRecovery.captureBytePlans()
       let restoreByPath: Map<string, ApplyRestoreState>
       let pending: ProjectTransactionPendingOperation | undefined
 
@@ -925,9 +940,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         // 写盘前先为每个受影响路径捕获原始状态，供失败回滚使用。
         // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
         restoreByPath = await this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
+        this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
         pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
       } catch (error) {
         this.transactionRepository.set(tx.transactionId, transactionBeforePreflight)
+        this.transactionRecovery.restoreBytePlans(bytesBeforePreflight)
         throw error
       }
       const writtenOrder: string[] = []
@@ -936,7 +953,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         for (const patch of tx.patches) {
           if (!writtenOrder.includes(patch.path)) writtenOrder.push(patch.path)
           if (isDeletePatch(patch)) {
-            await this.store.remove(patch.path, { skipFileFilter: true })
+            await this.transactionRecovery.removePatch(tx, patch, 'apply')
             newRevisions[patch.path] = 'deleted'
           } else {
             if (isCreatePatch(patch)) {
@@ -945,11 +962,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
               })
               if (!beforeWrite.exists) createdFiles.push(patch.path)
             }
-            const snap = await this.store.write(patch.path, patch.newContent ?? '', {
-              skipFileFilter: true,
-              encoding: patchFileAttributes(patch).textEncoding,
-              mode: patchFileAttributes(patch).mode,
-            })
+            const snap = await this.transactionRecovery.writePatch(tx, patch, 'apply')
             newRevisions[patch.path] = snap.revision
           }
         }
@@ -1118,6 +1131,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
           .find((patchValue) => patchValue.path === pathValue)
         const expectedContent =
           finalPatch && !isDeletePatch(finalPatch) ? finalPatch.newContent : undefined
+        if (finalPatch) await this.transactionRecovery.assertPatchBytes(tx, finalPatch, 'rollback')
         const matchesAppliedState =
           expectedRevision === 'deleted'
             ? !current.exists
@@ -1160,14 +1174,10 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
         for (const patch of reversed) {
           if (!writtenOrder.includes(patch.path)) writtenOrder.push(patch.path)
           if (createsMissingFile(patch)) {
-            await this.store.remove(patch.path, { skipFileFilter: true })
+            await this.transactionRecovery.removePatch(tx, patch, 'rollback')
             rolledBackRevisions[patch.path] = 'deleted'
           } else {
-            const snapshot = await this.store.write(patch.path, patch.oldContent ?? '', {
-              skipFileFilter: true,
-              encoding: patchFileAttributes(patch).textEncoding,
-              mode: patchFileAttributes(patch).mode,
-            })
+            const snapshot = await this.transactionRecovery.writePatch(tx, patch, 'rollback')
             rolledBackRevisions[patch.path] = snapshot.revision
           }
         }
@@ -1271,21 +1281,9 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return this.journal.list()
   }
 
-  /**
-   * 读取指定事务的当前内存状态。
-   *
-   * **这是 StoredTransaction → PreparedTransaction 的唯一 cast 点**（§1.4 白名单③：闭集字面量
-   * 收窄）。内存表存的是 `StoredTransaction`，它把 `status` 从字面量 `"prepared"` 放宽成含
-   * `applied` / `validated` / `rolled_back` 的联合；其余字段形状完全一致。所有消费者（内置
-   * validator、typescript validator、工具中间件的 preflight）只读 `patches` / `changedFiles`，
-   * 没有一个读 `status`，所以这个宽窄差目前不产生错判。
-   *
-   * **欠账**：`PreparedTransaction.status` 是字面量类型这件事本身是错的——它让公开返回值在
-   * 类型上宣称 `"prepared"` 而运行时可能是终态。修法是把 status 放宽进类型（跨仓 API 形状变更，
-   * 见 Q3a 报告的待协调清单），**不是**在调用点再补一次 cast。
-   */
-  public getTransaction(idValue: string): PreparedTransaction | undefined {
-    return this.transactionRepository.get(idValue) as PreparedTransaction | undefined
+  /** 读取实际稳定生命周期，包括已验证、已应用和已回滚的事务。 */
+  public getTransaction(idValue: string): StoredTransaction | undefined {
+    return this.transactionRepository.get(idValue)
   }
 
   /** 执行批处理任务，并复用同一个 project 实例；记录工作池指标供 status/telemetry 观测。 */
@@ -1321,6 +1319,16 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 
   public async stat(input: FileStatInput): Promise<FileStatResult> {
     return this.queries.stat(input)
+  }
+
+  /** 对已经提交的历史正文执行当前读取授权和脱敏，不重读可能已变化的磁盘内容。 */
+  public async prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }> {
+    const paths = await this.authorizePaths([input.path], 'read', '读取文件快照')
+    const path = paths?.[0] ?? input.path
+    await this.decide('read', [path], { path, source: 'file-context' })
+    return this.providers.secretRedaction
+      ? this.providers.secretRedaction.redact({ path, content: input.content, trust: { source: 'project', trust: 'untrusted' } })
+      : { content: input.content, redacted: false }
   }
 
   public async read(input: ReadInput): Promise<ReadResult> {

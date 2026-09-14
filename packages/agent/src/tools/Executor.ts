@@ -40,6 +40,7 @@ import {
   isPresent,
   isString,
   isTrue,
+  optionalWhen,
   toNullable,
   toOptional,
 } from "@velaros-ai/core";
@@ -69,6 +70,7 @@ import {
 } from "../kernel";
 import type { AgentModSeamDispatcher } from "../mods/AgentModSeams";
 
+import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, type ToolInputReuseContext } from './recovery/ToolInputReuse';
 import type {
   ToolExecutionPolicy,
   ToolExecutionPolicyContext,
@@ -163,6 +165,10 @@ export interface PendingTool {
 interface ScheduledTool extends PendingTool {
   /** before/schema/surface normalize 后，按接收顺序授予的实际调用槽。 */
   effectiveAdmission: ToolEffectiveAdmission;
+  attemptSaved?: boolean;
+  requestedInputChars?: number;
+  inputReused?: boolean;
+  operationStarted?: boolean;
   /** 拿到调用槽、真正开始执行的时刻；同一批里排队等其他工具的时间不算在这个工具头上。 */
   executionStartedAt?: number;
   /** 最近一次转发给宿主的工具元数据：宿主可能整份替换元数据，补发执行开始时刻时连同它一起发。 */
@@ -523,6 +529,19 @@ export class ToolExecutor {
     let activeExecutionContext: LooseOptional<ActiveToolExecutionContext> =
       null;
     try {
+      tool.requestedInputChars = JSON.stringify(tool.args).length;
+      tool.inputReused = Object.hasOwn(tool.args, 'reuse');
+      const inputReuseContract = this.executionPolicy.inputReuseContract(tool.toolName);
+      if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.args = await resolveToolInputReuse(
+        this.ctx as ToolInputReuseContext, tool.toolName, tool.args, tool.toolCallId,
+        {
+          inputContractVersion: inputReuseContract.inputContractVersion,
+          inputReuseSourceTools: inputReuseContract.inputReuseSourceTools,
+          migrateReusedInput: inputReuseContract.migrateReusedInput
+            ? (request) => inputReuseContract.migrateReusedInput!(request, this.ctx)
+            : undefined,
+        },
+      );
       const inputStore = (this.ctx as ToolExecutorPayloadContext).contextPayloadStore;
       const inputSessionId = this.readSessionId();
       if (inputStore && inputSessionId) await persistToolInputForRecall({
@@ -562,6 +581,10 @@ export class ToolExecutor {
           });
         }
       }
+
+      // 参数留在框架内，失败后模型只需提供变更字段。归档不可用不改变普通工具执行语义。
+      try { if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.attemptSaved = await saveToolAttemptInput(this.ctx as ToolInputReuseContext, tool.toolCallId, tool.toolName, tool.args, inputReuseContract.inputContractVersion); }
+      catch (error) { log.warn("tool input reuse unavailable", { error: AppError.getMessage(error) }); }
 
       log.info("tool execute start", {
         name: tool.toolName,
@@ -708,6 +731,7 @@ export class ToolExecutor {
         isConcurrencySafe: tool.isConcurrencySafe,
         toolContext: decision.prepared.toolContext,
       };
+      tool.operationStarted = true;
       result = await this.executePreparedToolWithAbortSettlement(
         tool,
         decision.prepared,
@@ -1215,6 +1239,24 @@ export class ToolExecutor {
     result: ToolResult,
   ): Promise<ToolResult> {
     const effectiveArgs = result.args ?? tool.args;
+    const progressAdvice = this.loopGuard.recordOutcome({ toolName: result.toolName, args: effectiveArgs, error: result.error, result: result.result });
+    if (progressAdvice && isPlainObject(result.result)) result.result = { ...result.result, progressAdvice };
+    if (tool.attemptSaved) {
+      const failure = optionalWhen(isPlainObject, result.result);
+      const details = isPlainObject(failure?.details) ? failure.details : undefined;
+      const outcome = !result.error ? 'completed' : !tool.operationStarted || details?.executionOutcome === 'not-applied' ? 'not-applied' : 'unknown';
+      try {
+        const metrics = { requestedChars: tool.requestedInputChars ?? JSON.stringify(effectiveArgs).length, effectiveChars: JSON.stringify(effectiveArgs).length, reused: !!tool.inputReused };
+        await saveToolAttemptOutcome(this.ctx as ToolInputReuseContext, tool.toolCallId, outcome, metrics);
+        this.emitToolMetadata(tool.toolCallId, { metadata: { ...(tool.lastMetadata ?? {}), inputReuseMetrics: metrics } });
+        if (result.error && failure) {
+          const receipt: Record<string, unknown> = { ...failure, executionOutcome: outcome };
+          if (outcome === 'not-applied') receipt.inputReuse = { reuse: `attempt:${tool.toolCallId}`,
+            note: 'Retry the same tool with reuse and changes only. Each change uses op set/remove and the actual saved field path as an array; set also requires the corrected value. Unchanged fields are restored and revalidated.' };
+          result.result = receipt;
+        }
+      } catch (error) { log.warn("tool attempt receipt unavailable", { error: AppError.getMessage(error) }); }
+    }
     // mod 接缝：结果收敛派发（物化之前）。放在物化前是为了让改写后的结果与
     // displayResult / modelResult 全链保持同源，不出现「模型看到 A、UI 看到 B」。
     if (this.seams?.has("tool-result:after")) {
@@ -1414,6 +1456,17 @@ export class ToolExecutor {
     if (!isPresent(args)) return { ok: true, args: {} };
     if (isPlainObject(args)) {
       const record = args as Record<string, unknown>;
+      if (["__historyInputOmissions", "__historyInputPreview", "__historyInputRef", "__historyInputRecall", "__toolReceivedFullInput"].some((key) => Object.hasOwn(record, key))) {
+        const reason = "历史参数视图省略了原始字段，不能作为完整工具输入执行；工具未执行。";
+        return {
+          ok: false, reason,
+          result: this.buildToolFailureResult("history_input_preview_argument", reason, toolName, {
+            code: "VALIDATION",
+            details: { inputRef: optionalWhen(isString, record.__historyInputRef) },
+            nextActions: ["用 context:recall 的 ref 与 jsonPath 召回省略字段的完整原文，再构造符合当前 schema 的完整参数；历史视图元数据不属于执行参数。"],
+          }),
+        };
+      }
       const placeholderPaths = findHistoryPreviewPlaceholderArgumentPaths(record);
       return isEmpty(placeholderPaths)
         ? { ok: true, args: record }
@@ -1469,8 +1522,8 @@ export class ToolExecutor {
       reason,
       target.toolName,
     );
-    target.result = guardedResult;
-    target.modelResult = guardedResult;
+    target.result = isPlainObject(target.result) ? { ...target.result, progressAdvice: message } : guardedResult;
+    target.modelResult = target.result;
   }
 
   private toLoopGuardFailureBatch(

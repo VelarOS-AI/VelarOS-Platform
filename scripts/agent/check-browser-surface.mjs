@@ -10,6 +10,7 @@ const BrowserEntries = {
   chat: resolve(RepositoryRoot, 'packages/agent/src/chat/index.ts'),
   'chat-stream': resolve(RepositoryRoot, 'packages/agent/src/chat/stream/index.ts'),
   protocol: resolve(RepositoryRoot, 'packages/agent/src/protocol/index.ts'),
+  'tool-contract': resolve(RepositoryRoot, 'packages/agent/src/tool-contract/index.ts'),
 }
 const NodeBuiltinSpecifiers = new Set(
   builtinModules.flatMap((specifier) => {

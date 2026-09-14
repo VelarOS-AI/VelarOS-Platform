@@ -24,6 +24,8 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
 
+import type { FileContextCarrier } from './context/resources/contracts'
+import { forkFileContext } from './context/resources/FileContextCoordinator'
 import type { AgentRoleResolution } from './RoleTypes'
 
 interface SubAgentOptionsLike {
@@ -411,11 +413,14 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
       // 子 Agent 的 surface 边界由父上下文实际暴露结果决定。
     },
     dispatchSubAgent: undefined,
+    getSubAgentDispatchCatalog: undefined,
+    runAgentWorkflow: undefined,
     requestToolCategoryAccess,
     query: async () => {
       throw new AppError('VALIDATION', 'Sub-agent cannot spawn further agents')
     },
   }
+  forkFileContext(args.parentCtx as FileContextCarrier, childCtx as FileContextCarrier)
   return childCtx
 }
 

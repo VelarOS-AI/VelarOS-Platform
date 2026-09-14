@@ -1,3 +1,5 @@
+import { isPrivateFileContextRecord } from '../resources/PrivateFileRecords'
+
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'
 import {
@@ -78,6 +80,7 @@ class ContextRetrievalIndexBuilder {
         }
       }),
       toolPayloads: Object.entries(payloads.toolResults)
+        .filter(([, payload]) => !isPrivateFileContextRecord(payload.toolName))
         .map(([storageKey, payload]) => {
           const payloadRef = payload.payloadRef ?? (storageKey.startsWith('ctx-payload:')
             ? storageKey

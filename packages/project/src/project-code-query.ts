@@ -9,10 +9,10 @@ const languageQueryFields = {
 }
 
 /**
- * Project 代码理解工具的稳定 action 契约。
+ * Project SDK 与旧模型代码查询的兼容 action 契约。
  *
  * 语言服务 action 由内置运行时直接执行；索引/图谱 action 在 CodeGraph 资源可用时由其增强。
- * 两组 action 共用一个 `project:query-code` 工具，Agent 不感知宿主选择的后端。
+ * 当前模型工具由 project-code-contracts.ts 提供，适配层把新请求映射到此合同。
  */
 const ProjectCodeQuerySchema = z.discriminatedUnion('action', [
   z.object({

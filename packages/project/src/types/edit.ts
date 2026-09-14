@@ -1,8 +1,10 @@
 import type { JsonValue, RiskLevel } from "./common.js";
 import type { FileSnapshot } from "./snapshot.js";
+import type { ProjectTextEncoding } from "./text.js";
 
 /** project 内核可转换为补丁的所有编辑原语联合类型。 */
 export type EditOperation =
+  | ReplaceContentOperation
   | ReplaceTextOperation
   | ReplaceLinesOperation
   | InsertTextOperation
@@ -21,6 +23,18 @@ export type EditOperation =
   | RemoveImportOperation
   | JsonPatchOperation
   | CustomEditOperation;
+
+/** Internal planner output. Source equality is checked again while preparing the transaction. */
+export interface ReplaceContentOperation {
+  type: 'replace_content';
+  path: string;
+  expectedContent: string;
+  content: string;
+  /** Explicit file overwrite is distinct from a compiled local edit for audit and approval. */
+  mode?: 'edit' | 'overwrite' | 'guard' | 'recode';
+  /** mode=recode 时的目标磁盘编码；正文之外的字节表示由事务字节计划按它重建。 */
+  targetEncoding?: ProjectTextEncoding;
+}
 
 /** 行号绑定到已读取的磁盘 revision；新正文按行传递，不需要复述旧文本。 */
 export interface ReplaceLinesOperation {

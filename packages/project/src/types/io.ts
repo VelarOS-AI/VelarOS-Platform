@@ -1,6 +1,7 @@
 import type { Range, TrustLabel } from "./common.js";
 import type { CommandToolRequirement } from "./provider.js";
 import type { FileSnapshot, ProjectSnapshot } from "./snapshot.js";
+import type { ProjectTextEncoding } from "./text.js";
 
 /** observe 和 list-files 共用的路径发现选项。 */
 export interface ObserveInput {
@@ -33,6 +34,7 @@ export interface ReadInput {
 }
 
 export interface ReadResult {
+  redacted?: boolean;
   snapshot: FileSnapshot;
   content?: string;
   range?: Range;
@@ -66,6 +68,8 @@ export interface FileStatResult {
   lineCount: Nullable<number>;
   isBinary: boolean;
   readableText: boolean;
+  /** 可读文本文件在磁盘上的实际编码；无 BOM 的 UTF-8 报告为 utf8，二进制或缺失时不出现。 */
+  textEncoding?: ProjectTextEncoding;
   mtimeMs: Nullable<number>;
   revision: Nullable<string>;
   /** 文本文件推荐的安全首次读取窗口。 */

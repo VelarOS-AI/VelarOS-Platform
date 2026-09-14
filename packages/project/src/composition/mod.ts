@@ -44,15 +44,14 @@ const ProjectToolCategories = Object.freeze({
 /**
  * 项目空间的常驻工具：读—找—改—跑这条主回路，写码会话每轮都在用。
  *
- * `project:rollback` 是事故通道（真出事了再从 `tooling:map` 按名换入），不占每轮 schema。
+ * 语义查询和混合变更通过 tooling:map 发现并按需加载。
  */
 const ProjectResidentToolNames = new Set<string>([
   ProjectToolNames.read,
   ProjectToolNames.list,
   ProjectToolNames.search,
-  ProjectToolNames.queryCode,
   ProjectToolNames.edit,
-  ProjectToolNames.write,
+  ProjectToolNames.file,
   ProjectToolNames.run,
 ])
 

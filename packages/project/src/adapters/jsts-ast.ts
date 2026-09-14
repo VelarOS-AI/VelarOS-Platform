@@ -145,7 +145,7 @@ export function findJsTsSymbols(content: string, path: string, query: JsTsSymbol
 /** 语法诊断：每条都带 1 起的行列、TS 诊断码与出错行摘录，调用方不必再回读文件才能定位。 */
 export function jsTsSyntaxDiagnostics(path: string, content: string, source: string): Diagnostic[] {
   const { sourceFile, diagnostics } = parseJsTs(path, content)
-  return diagnostics.map((diagnostic) => {
+  return diagnostics.map((diagnostic, index) => {
     const { line, character } = sourceFile.getLineAndCharacterOfPosition(diagnostic.start)
     const text = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
     return {
@@ -155,9 +155,22 @@ export function jsTsSyntaxDiagnostics(path: string, content: string, source: str
       line: line + 1,
       column: character + 1,
       source,
-      data: { code: diagnostic.code, excerpt: lineExcerpt(sourceFile, line, character) },
+      data: {
+        code: diagnostic.code,
+        excerpt: lineExcerpt(sourceFile, line, character),
+        sourceContext: index < 10 ? syntaxSourceContext(sourceFile, line, character) : undefined,
+      },
     }
   })
+}
+
+/** 从实际解析内容提取有界预览；行号标签不混入可编辑正文。 */
+function syntaxSourceContext(sourceFile: ts.SourceFile, line: number, character: number) {
+  const lines: Array<[number, string]> = []
+  const lastLine = Math.min(sourceFile.getLineStarts().length - 1, line + 2)
+  for (let current = Math.max(0, line - 2); current <= lastLine; current++)
+    lines.push([current + 1, lineExcerpt(sourceFile, current, current === line ? character : 0)])
+  return { lines, preview: true }
 }
 
 function lineExcerpt(sourceFile: ts.SourceFile, line: number, character: number): string {
@@ -165,8 +178,10 @@ function lineExcerpt(sourceFile: ts.SourceFile, line: number, character: number)
   const text = sourceFile.text.slice(lineStart, sourceFile.getLineEndOfPosition(lineStart)).trimEnd()
   if (text.length <= MaxExcerptLength) return text
   // 超长行（压缩代码、长字符串）以错误列为中心截窗，两端用省略号标出被截断。
-  const from = Math.max(0, Math.min(character - MaxExcerptLength / 2, text.length - MaxExcerptLength))
-  const to = from + MaxExcerptLength
+  let from = Math.max(0, Math.min(character - MaxExcerptLength / 2, text.length - MaxExcerptLength))
+  let to = from + MaxExcerptLength
+  if (from > 0 && /[\uDC00-\uDFFF]/u.test(text[from])) from -= 1
+  if (to < text.length && /[\uDC00-\uDFFF]/u.test(text[to])) to -= 1
   return `${from > 0 ? '…' : ''}${text.slice(from, to)}${to < text.length ? '…' : ''}`
 }
 

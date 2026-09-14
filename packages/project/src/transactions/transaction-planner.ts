@@ -501,7 +501,11 @@ export class TransactionPlanner {
       ...patchValue,
       metadata: {
         ...(patchValue.metadata ?? {}),
-        intentOperation: intent.operation,
+        // 编译后的编辑固定于原版本。补丁已存储修改前后的完整源码，
+        // 此处仅保留审计元数据，避免在每份持久化回执中重复正文。
+        ...(intent.operation.type === 'replace_content'
+          ? { intentOperationType: intent.operation.type }
+          : { intentOperation: intent.operation }),
         intentConstraints: intent.constraints,
         intentReason: intent.reason,
         intentTargetId: intent.targetId,

@@ -1,127 +1,76 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  serializeToolResultForModel,
-  serializeToolResultForRecall,
-} from '../src/tools/toolResultSerialization'
+import { fitProjectReadsForModel } from '../src/tools/projectReadSerialization'
+import { serializeToolResultForModel, serializeToolResultForRecall } from '../src/tools/toolResultSerialization'
 
-function rawContent(file: { content: string; contentFormat: string }): string {
-  expect(file.contentFormat).toBe('line-numbered')
-  return file.content.replace(/^\d+\|/gm, '')
-}
+const source = `source:${  'a'.repeat(64)}`
+const window = (lines: Array<[number, string]>) => ({
+  kind: 'project-source-window', path: 'source.ts', revision: 'r1', viewSource: source, lines,
+})
 
-describe('Project read model pagination', () => {
-  test('resumes at the actual column when JSON escaping consumes the budget', () => {
-    const content = '\\"🙂'.repeat(20000)
-    const raw = {
-      snapshot: { path: 'escaped.txt', revision: 'r1' },
-      content,
-      range: { startLine: 80, endLine: 80, startColumn: 7, endColumn: 7 + content.length },
-      totalLines: 100,
-      truncated: false,
-      hasMore: false,
-    }
-    const serialized = serializeToolResultForModel(raw)
-    const result = JSON.parse(serialized)
-    expect(serialized.length).toBeLessThanOrEqual(32000)
-    expect(rawContent(result).length).toBeGreaterThan(0)
-    expect(content.startsWith(rawContent(result))).toBe(true)
-    expect(result.content.isWellFormed()).toBe(true)
-    expect(result.hasMore).toBe(true)
-    expect(result.range.endLine).toBe(80)
-    expect(result.range.endColumn).toBe(7 + rawContent(result).length)
-    expect(result.continuation).toMatchObject({
-      path: 'escaped.txt',
-      range: { startLine: 80, startColumn: 7 + rawContent(result).length },
-      baseRevisions: { 'escaped.txt': 'r1' },
-    })
-    expect(result.nextStartLine).toBeUndefined()
+describe('Project source model presentation', () => {
+  test('raw strings remain separate from line metadata and recall preserves physical source', () => {
+    const raw = { snapshot: { path: 'script.ts', revision: 'r1' }, content: '123|literal\r\nconst value = "\\n🙂"\r\n', range: { startLine: 256, endLine: 258 } }
+    const view = JSON.parse(serializeToolResultForModel(raw))
+    expect(view.lines).toEqual([[256, '123|literal'], [257, 'const value = "\\n🙂"'], [258, '']])
+    expect(view.content).toBeUndefined()
+    expect(view.contentFormat).toBeUndefined()
+    expect(JSON.parse(serializeToolResultForRecall(raw)).content).toBe(raw.content)
+    expect(JSON.parse(serializeToolResultForModel(view))).toEqual(view)
   })
 
-  test('preserves accurate continuation for unknown total lines and batch reads', () => {
-    const content = '中文🙂\\n literal\r\n'.repeat(10000)
-    const files = ['a.txt', 'b.txt', 'c.txt'].map((path) => ({
-      snapshot: { path, revision: 'r1' },
-      content,
-      range: { startLine: 120, endLine: 10120 },
-      truncated: true,
-      continuation: { path, range: { startLine: 10120 }, baseRevisions: { [path]: 'r1' } },
-    }))
+  test('long escaped line becomes a well formed fragment with the exact next column', () => {
+    const text = '\\"🙂'.repeat(20_000)
+    const serialized = serializeToolResultForModel(window([[80, text]]))
+    const result = JSON.parse(serialized)
+    expect(serialized.length).toBeLessThanOrEqual(32_000)
+    expect(result.lines).toEqual([])
+    expect(result.fragments).toHaveLength(1)
+    const fragment = result.fragments[0]
+    expect(fragment.text.length).toBeGreaterThan(0)
+    expect(fragment.text.isWellFormed()).toBe(true)
+    expect(text.startsWith(fragment.text)).toBe(true)
+    expect(fragment.columns).toEqual([1, fragment.text.length + 1])
+    expect(result.continuation.range).toMatchObject({ startLine: 80, startColumn: fragment.columns[1] })
+    expect(result.hasMore).toBe(true)
+  })
+
+  test('whole line pages never silently clip large arrays or 2000 character strings', () => {
+    const lines: Array<[number, string]> = Array.from({ length: 1000 }, (_, i) => [i + 1, 'abc'])
+    const result = JSON.parse(serializeToolResultForModel(window(lines)))
+    expect(result.lines).toHaveLength(1000)
+    expect(result.lines).toEqual(lines)
+    const long = 'x'.repeat(6000)
+    expect(JSON.parse(serializeToolResultForModel(window([[1, long]]))).lines).toEqual([[1, long]])
+  })
+
+  test('final JSON escaping shares one budget across multiple source windows', () => {
+    const files = ['a', 'b', 'c'].map((path) => ({ ...window(Array.from({ length: 3000 }, (_, i) => [i + 120, '中文🙂\\n literal'] as [number, string])), path }))
     const serialized = serializeToolResultForModel({ files })
     const result = JSON.parse(serialized)
-    expect(serialized.length).toBeLessThanOrEqual(32000)
+    expect(serialized.length).toBeLessThanOrEqual(32_000)
     expect(result.files).toHaveLength(3)
     for (const file of result.files) {
-      expect(rawContent(file).length).toBeGreaterThan(0)
-      expect(content.startsWith(rawContent(file))).toBe(true)
-      const lines = rawContent(file).split('\n')
-      expect(file.continuation.range.startLine).toBe(120 + lines.length - 1)
-      expect(file.continuation.range.startColumn).toBe(lines.at(-1).length + 1)
-      expect(file.range.endLine).toBe(file.continuation.range.startLine)
-      expect(file.content.endsWith('\r')).toBe(false)
+      expect(file.lines.length).toBeGreaterThan(0)
+      expect(file.fragments ?? []).toEqual([])
+      expect(file.continuation.range).toMatchObject({ startLine: file.lines.at(-1)[0] + 1, startColumn: 1 })
     }
   })
 
-  test('round trips a large read through repeated model pages without losing or duplicating text', () => {
-    const original = `"\\\t\r\n${'🙂'.repeat(19000)}\n中文\n`.repeat(2)
-    let remaining = original
-    let actual = ''
-    let startLine = 11
-    let startColumn = 1
-    let pages = 0
-    while (remaining && pages++ < 20) {
-      const result = JSON.parse(
-        serializeToolResultForModel({
-          snapshot: { path: 'large.txt', revision: 'r' },
-          content: remaining,
-          range: { startLine, startColumn, endLine: 999 },
-          totalLines: 999,
-          hasMore: false,
-        }),
-      )
-      expect(rawContent(result).length).toBeGreaterThan(0)
-      actual += rawContent(result)
-      remaining = remaining.slice(rawContent(result).length)
-      if (remaining) {
-        startLine = result.continuation.range.startLine
-        startColumn = result.continuation.range.startColumn
-      }
-    }
-    expect(actual).toBe(original)
-    expect(pages).toBeGreaterThan(1)
+  test('repeat compaction preserves original numeric prefixes and updates continuation', () => {
+    const raw = window(Array.from({ length: 10_000 }, (_, i) => [i + 500, '123|source text🙂']))
+    const large = JSON.parse(serializeToolResultForModel(raw, { maxChars: 50_000 }))
+    const small = JSON.parse(serializeToolResultForModel(large))
+    expect(small.lines[0]).toEqual([500, '123|source text🙂'])
+    expect(small.lines.length).toBeLessThan(large.lines.length)
+    expect(small.continuation.range.startLine).toBe(small.lines.at(-1)[0] + 1)
   })
-})
 
-test('shows exact line numbers without changing raw results or recall payloads', () => {
-  const raw = {
-    snapshot: { path: 'script.ts', revision: 'r1' },
-    content: 'const read = await load()\r\nassert(read)\r\nfor (const item of read) {\r\n',
-    range: { startLine: 256, startColumn: 1, endLine: 259, endColumn: 1 },
-  }
-  const before = structuredClone(raw)
-  const view = JSON.parse(serializeToolResultForModel(raw))
-  expect(view.content).toBe(
-    '256|const read = await load()\r\n257|assert(read)\r\n258|for (const item of read) {\r\n259|',
-  )
-  expect(raw).toEqual(before)
-  expect(JSON.parse(serializeToolResultForRecall(raw)).content).toBe(raw.content)
-  expect(JSON.parse(serializeToolResultForModel(view))).toEqual(view)
-})
-
-test('recompacts numbered history under a smaller budget without consuming source characters', () => {
-  const raw = {
-    snapshot: { path: 'numbers.txt', revision: 'r1' },
-    content: '123|source text🙂\n'.repeat(10000),
-    range: { startLine: 500, startColumn: 1 },
-  }
-  const large = JSON.parse(serializeToolResultForModel(raw, { maxChars: 50000 }))
-  const small = JSON.parse(serializeToolResultForModel(large))
-  expect(raw.content.startsWith(rawContent(small))).toBe(true)
-  expect(small.content.startsWith('500|123|source text🙂')).toBe(true)
-  expect(rawContent(small).length).toBeLessThan(rawContent(large).length)
-  const lines = rawContent(small).split('\n')
-  expect(small.continuation.range).toMatchObject({
-    startLine: 500 + lines.length - 1,
-    startColumn: lines.at(-1)!.length + 1,
+  test('fragment continuation starts at the original noninitial column', () => {
+    const raw = { ...window([]), fragments: [{ line: 42, columns: [51, 2051], text: '🙂'.repeat(1000) }] }
+    const result = fitProjectReadsForModel(raw, 1000) as any
+    expect(result.fragments[0].columns[0]).toBe(51)
+    expect(result.continuation.range.startColumn).toBe(51 + result.fragments[0].text.length)
+    expect(result.fragments[0].text.isWellFormed()).toBe(true)
   })
 })

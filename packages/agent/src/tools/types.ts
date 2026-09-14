@@ -13,6 +13,7 @@ import type {
 } from '@velaros-ai/agent/protocol'
 
 import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { ToolInputReuseContract } from '../tool-contract/types'
 
 interface ToolRegistryCodingSession {
   isToolCategoryAllowed: (categoryId: ToolCategoryId) => boolean
@@ -42,7 +43,7 @@ interface ToolRegistryContext {
   getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
 }
 
-interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContext> {
+interface RegistryTool<TContext extends ToolRegistryContext = ToolRegistryContext> extends ToolInputReuseContract<TContext> {
   description: string
   /** companion skill id；描述末尾已带指路行，这里让工具页卡片也能结构化透出。 */
   usageSkillId?: string

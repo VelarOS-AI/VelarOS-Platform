@@ -222,7 +222,7 @@ function createFilePatch(op: CreateFileOperation, snapshot: Optional<FileSnapsho
       'CONFLICT_WITH_EXTERNAL_EDIT',
       `目标文件已存在，create_file 未开启 overwrite，拒绝覆盖：${op.path}`,
       { path: op.path, actual: replaced.revision },
-      '整文件替换请改用 overwrite（project:write 的 mode=overwrite，或 create_file 的 overwrite=true）；只改局部内容请用 replace_text 等编辑操作；否则换一个不存在的路径。',
+      '先读取现有文件；整文件替换需明确选择 overwrite 覆盖操作，局部修改需选择文本编辑操作。创建新文件请使用尚不存在的路径。',
     )
   }
   return patch(

@@ -688,7 +688,7 @@ describe('durable write-ahead plan for composed files', () => {
       const applyPlan = pendingPlans.find((plan) => plan.kind === 'apply')
       const applyEntry = applyPlan?.restore.find((entry) => entry.path === 'greek.txt')
       expect(applyEntry?.content).toBe(Greek)
-      expect(applyEntry?.ownedStates.at(-1)).toEqual({ exists: true, content: final })
+      expect(applyEntry?.ownedStates.at(-1)).toEqual({ exists: true, content: final, bytes: Buffer.from(final).toString('base64') })
 
       await project.rollback({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'greek.txt'), 'utf8')).toBe(Greek)
@@ -696,13 +696,14 @@ describe('durable write-ahead plan for composed files', () => {
         .find((plan) => plan.kind === 'rollback')
         ?.restore.find((entry) => entry.path === 'greek.txt')
       expect(rollbackEntry?.content).toBe(final)
-      expect(rollbackEntry?.ownedStates.at(-1)).toEqual({ exists: true, content: Greek })
+      expect(rollbackEntry?.ownedStates.at(-1)).toEqual({ exists: true, content: Greek, bytes: Buffer.from(Greek).toString('base64') })
 
       // 模拟 re-apply 写到一半中断：磁盘停在第一个补丁的产出，下一次 owner 启动必须还原。
       const store = new FileProjectTransactionStateStore({ path: statePath, root })
       const snapshot = store.snapshot()
       store.commit({
         transactions: snapshot.transactions,
+        bytePlans: snapshot.bytePlans,
         projections: snapshot.projections,
         pending: { ...applyPlan!, previousStatus: 'rolled_back' },
       })

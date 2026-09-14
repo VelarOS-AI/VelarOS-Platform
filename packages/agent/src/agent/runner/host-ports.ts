@@ -19,6 +19,7 @@ import type { SubAgentDispatchLimitsSnapshot } from '../../kernel/dispatch/concu
 import type { SubAgentDispatchInput } from '../../kernel/dispatch/host-ports'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import type { CodingSessionSnapshot, RuntimeReminderProducer } from '../../reminders'
+import type { SubAgentDispatchCatalog } from '../../sub-agent'
 import type { RuntimePromptFeaturePolicy } from '../../tools'
 import type {
   CodingSessionToolCategoryToolNames,
@@ -64,6 +65,7 @@ export interface RunnerToolRegistry {
 }
 
 export interface RunnerSubAgentDispatcher<TToolContext extends RunnerToolContext> {
+  describeDispatchCatalog?(): SubAgentDispatchCatalog
   dispatch(request: {
     input: SubAgentDispatchInput
     parentCtx: TToolContext
@@ -152,6 +154,7 @@ export interface RunnerBuildToolContextArgs {
   events?: ExecutionEventBus
   query(task: string, opts?: RunnerSubAgentOptions): Promise<string>
   dispatchSubAgent?(input: SubAgentDispatchInput): Promise<string>
+  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
   runAgentWorkflow?(input: AgentWorkflowDefinition): Promise<AgentWorkflowRunResult>
   readBackgroundJobOutput?: RunnerReadBackgroundJobOutput
   waitBackgroundJobs?: RunnerWaitBackgroundJobs

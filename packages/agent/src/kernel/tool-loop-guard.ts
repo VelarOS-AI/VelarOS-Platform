@@ -2,6 +2,7 @@ import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
+import { ExecutionProgress } from '../tools/recovery/ExecutionProgress'
 
 export interface KernelToolLoopGuardInput {
   toolName: string
@@ -62,6 +63,9 @@ function isKernelWriteLikeTool(input: {
 }
 
 class KernelToolLoopGuard {
+  private readonly progress = new ExecutionProgress()
+  public recordOutcome(input: Parameters<ExecutionProgress['record']>[0]): string | undefined { return this.progress.record(input) }
+
   private lastWriteSuccess: Nullable<{ key: string; count: number }> = null
   private lastFailureBatchKey: Nullable<string> = null
   private lastFailureBatchCount = 0

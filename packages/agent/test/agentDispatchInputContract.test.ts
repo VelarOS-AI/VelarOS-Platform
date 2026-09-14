@@ -10,7 +10,7 @@ import { dispatchAgentSchema } from '../src/tool-library/builtin/DispatchAgent'
 import { dispatchAgentTools } from '../src/tool-library/builtin/DispatchAgent.tool'
 
 describe('agent dispatch input contract', () => {
-  test('adds identity defaults only when creating a worker', async () => {
+  test('leaves the type default to its host and adds scope defaults only for a new worker', async () => {
     const forwarded: unknown[] = []
     const context = {
       dispatchSubAgent: async (input: unknown) => {
@@ -24,7 +24,6 @@ describe('agent dispatch input contract', () => {
       prompt: 'Inspect the target module.',
     })
     expect(created).toMatchObject({
-      subagent_type: 'general',
       tool_scope: 'type_default',
       tool_categories: [],
     })
@@ -32,10 +31,11 @@ describe('agent dispatch input contract', () => {
     expect(forwarded[0]).toMatchObject({
       agentName: 'Scout',
       prompt: 'Inspect the target module.',
-      subagentType: 'general',
       toolScope: 'type_default',
       toolCategories: [],
     })
+    expect(created.subagent_type).toBeUndefined()
+    expect((forwarded[0] as { subagentType?: string }).subagentType).toBeUndefined()
 
     const resumed = dispatchAgentSchema.parse({
       thread_id: 'subagent:explore-thread',
@@ -133,7 +133,7 @@ describe('agent dispatch input contract', () => {
       },
       new SubAgentGuidanceRelayRegistry(),
       {
-        defaultTypeId: 'general',
+        defaultTypeId: 'explore',
         getDescriptor: (id) => descriptors.find((descriptor) => descriptor.id === id) ?? null,
         listDescriptors: () => descriptors,
       }
@@ -174,18 +174,19 @@ describe('agent dispatch input contract', () => {
     } as never
     const config = {} as never
 
-    const first = await dispatcher.dispatch({
-      input: {
-        agentName: 'Scout',
-        subagentType: 'explore',
-        toolScope: 'custom',
-        toolCategories: ['project-files'],
+    expect(dispatcher.describeDispatchCatalog().defaultTypeId).toBe('explore')
+    const first = await dispatchAgentTools['agent:dispatch'].execute(
+      dispatchAgentSchema.parse({
+        agent_name: 'Scout',
+        tool_scope: 'custom',
+        tool_categories: ['project-files'],
         prompt: 'Inspect the project.',
-      },
-      parentCtx: parentContext,
-      events: new ExecutionEventBus(),
-      config,
-    })
+      }),
+      { dispatchSubAgent: (input) => dispatcher.dispatch({
+        input, parentCtx: parentContext, events: new ExecutionEventBus(), config,
+      }) } as never
+    )
+    expect(queryCalls[0]?.task).toContain('类型：explore')
     const threadId = parseSubAgentToolResult(first)?.thread_id
     expect(threadId).toStartWith('subagent:')
 

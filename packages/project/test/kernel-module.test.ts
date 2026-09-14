@@ -10,6 +10,7 @@ import type {
   KernelModuleActivateContext,
 } from '@velaros-ai/kernel/contracts/abi'
 
+import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
 import type { ProjectToolContext } from '../src/agent/Types'
 import {
   createProjectKernel,
@@ -75,24 +76,24 @@ describe('Project Kernel module', () => {
       'project:read',
       'project:list',
       'project:search',
-      'project:query-code',
-      'project:write',
+      'project:file',
       'project:edit',
-      'project:rollback',
+      'project:code',
+      'project:change',
       'project:run',
     ])
     expect(service?.getOperationMetadata('project:read')?.permissions)
       .toEqual(['fs:read'])
     expect(service?.getOperationMetadata('project:edit')?.permissions)
       .toEqual(['fs:read', 'fs:write'])
-    expect(service?.getOperationMetadata('project:write')?.permissions)
+    expect(service?.getOperationMetadata('project:file')?.permissions)
       .toEqual(['fs:read', 'fs:write'])
     await expect(service?.invoke(
-      'project:query-code',
+      'project:code',
       undefined,
-      { action: 'find_symbols', query: 'UserService' },
+      { action: 'symbols', query: 'UserService' },
       new AbortController().signal,
-    )).resolves.toEqual({ action: 'find_symbols', source: 'built-in-test' })
+    )).resolves.toMatchObject({ action: 'symbols', source: 'built-in-test' })
     await expect(service?.invoke(
       'project:list',
       undefined,
@@ -101,11 +102,12 @@ describe('Project Kernel module', () => {
     )).rejects.toThrow('Project capability input is invalid')
   })
 
-  test('executes shallow long-form writes through the governed Project transaction boundary', async () => {
+  test('creates and edits through the governed Project capability boundary', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-project-write-tool-'))
     try {
       const kernel = await createProjectKernel({ root })
       const context = projectContext(new AbortController().signal)
+      context.codingSession = {}
       context.project.getRootPath = () => root
       context.project.kernel = async () => kernel
       context.project.prepareMutation = async () => ({
@@ -124,26 +126,17 @@ describe('Project Kernel module', () => {
         service = registered as ProjectCapabilityService
       }))
 
-      await service?.invoke('project:write', undefined, {
-        path: 'reports/review.md',
-        content: '# Review\n\nPassed.\n',
-        mode: 'create',
+      await service?.invoke('project:file', undefined, {
+        actions: [{ op: 'create', path: 'reports/review.md', text: '# Review\n\nPassed.\n' }],
       }, new AbortController().signal)
-      await service?.invoke('project:write', undefined, {
-        path: 'reports/review.md',
-        content: '\nVELAR-WRITE-MARKER\n',
-        mode: 'append',
-        skipIfAlreadyPresent: true,
-      }, new AbortController().signal)
-      await service?.invoke('project:write', undefined, {
-        path: 'reports/review.md',
-        content: '\nVELAR-WRITE-MARKER\n',
-        mode: 'append',
-        skipIfAlreadyPresent: true,
+      const observed = await service?.invoke('project:read', undefined, { path: 'reports/review.md' }, new AbortController().signal)
+      const presented: any = await finalizeProjectModelResult(context, observed)
+      await service?.invoke('project:edit', undefined, {
+        files: [{ fileRef: presented.files[0].fileRef, edits: [{ op: 'insert', at: 'end', text: 'VELAR-WRITE-MARKER' }] }],
       }, new AbortController().signal)
 
       expect(await readFile(join(root, 'reports/review.md'), 'utf8')).toBe(
-        '# Review\n\nPassed.\n\nVELAR-WRITE-MARKER\n'
+        '# Review\n\nPassed.\nVELAR-WRITE-MARKER\n'
       )
     } finally {
       await rm(root, { recursive: true, force: true })

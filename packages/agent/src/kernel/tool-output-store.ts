@@ -15,6 +15,10 @@
 //    UTF-16 代理对劈开——劈开会产生非法字符串，某些 provider 直接拒收整条请求。
 //  - **`keepOutputInline` 工具跳过整条通道**（见 `tool-materialization`）：有些工具的输出本身就是给
 //    模型逐字读的（如结构化契约返回），句柄化会让它永远读不到真内容。
+//  - **含源码窗口的结果不能头尾裁剪**：一次批量 `project:read` 序列化后超过阈值时，头尾拼接会把
+//    中间几个文件连同 JSON 结构一起切掉，模型既看不到源码也拿不到续读引用（真机 2026-09-13 取证：
+//    六文件读取 27.9K 字符被裁成 24K 残片，模型只能重读）。这类结果按整行分页收进预算，结构保持完整，
+//    每个窗口自带 `continuation`；完整输出照常归档，仍可召回。
 //  - 两种实现只在「全文存哪」上分叉：InMemory 走 toolCallId 的 tool-payload 通道，ContextPayload 走
 //    payloadRef。**refKind 必须显式传**——outputId 形如 `session:tool-output:1` 会被前缀推断误判。
 import { isFiniteNumber, isString, toNullable, toOptional } from '@velaros-ai/core'
@@ -27,6 +31,8 @@ import type {
 import { buildContextRefEnvelope, type ContextRefEnvelope } from '../agent/context/contextRefEnvelope'
 import { resolveGovernanceSessionKey } from '../agent/context/residency/sessionKey'
 import { ToolResultCanonicalizer } from '../agent/context/ToolResultCanonicalizer'
+import { fitProjectReadsForModel, hasProjectSourceWindows } from '../tools/projectReadSerialization'
+import { ModelToolResultMaxSerializedLength } from '../tools/toolResultSerialization'
 
 // B3:kernel 页出桩统一为 ContextRefEnvelope(唯一持久化桩;旧 __kernelRef 归档由
 // isFoldStubText/normalizeLegacyFoldStub 永久只读兼容)。outputId/hash 归 meta。
@@ -139,6 +145,25 @@ function projectSerializedPreview(serialized: string, projectionChars: number): 
   )}${ProjectionTruncationMarker}${sliceTailOnCharacterBoundary(serialized, tailChars)}`
 }
 
+/**
+ * 源码窗口结果按整行分页收进预算，输出仍是完整结构；完整输出由调用方照常归档，模型沿窗口自带的
+ * continuation 续读。窗口很多时每个窗口的固定元数据（路径、版本、引用、续读）可能让页出预算装不下，
+ * 此时退到模型档序列化预算：结构化结果在那一档仍会按行裁剪，比头尾拼接的残片有用得多。两档都装不下
+ * 才走普通句柄化。
+ */
+function fitSourceWindowsWithinProjection(
+  output: unknown,
+  projectionChars: number
+): Nullable<{ output: unknown; serialized: string }> {
+  if (!hasProjectSourceWindows(output)) return null
+  for (const budget of [projectionChars, Math.max(projectionChars, ModelToolResultMaxSerializedLength)]) {
+    const fitted = fitProjectReadsForModel(output, budget)
+    const serialized = serializeOutput(fitted)
+    if (serialized.length <= budget) return { output: fitted, serialized }
+  }
+  return null
+}
+
 function serializeOutput(output: unknown): string {
   if (isString(output)) return output
 
@@ -183,6 +208,9 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
       createdAt: Date.now(),
     }
     this.outputs.set(outputId, stored)
+
+    const fitted = fitSourceWindowsWithinProjection(output, this.projectionChars)
+    if (fitted) return { output: fitted.output, stored }
 
     // InMemory 店无 payload 落盘:retrieval 走 toolCallId 的 tool-payload 通道
     // (显式 refKind——outputId 形如 session:tool-output:1 会被前缀推断误判,只进 meta)。
@@ -255,6 +283,9 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       record: canonical.record,
       sameAsToolCallId: canonical.visible.sameAsToolCallId,
     })
+
+    const fitted = fitSourceWindowsWithinProjection(output, this.projectionChars)
+    if (fitted) return { output: fitted.output, stored }
 
     const payloadRef = stored.payloadRef ?? stored.outputId
     const preview = projectSerializedPreview(serialized, this.projectionChars)

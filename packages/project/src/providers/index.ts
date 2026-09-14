@@ -112,11 +112,12 @@ export function createNodeCommandProvider(): CommandProvider {
           stderr,
           durationMs: Date.now() - startedAt,
           timedOut,
+          truncated: isTrue(result.isMaxBuffer),
           toolRequirements,
         };
       } catch (error) {
         // arch-guard:silent-catch-ok spawn 失败会被转成 CommandRunResult，由调用方根据 exitCode 处理。
-        const errorRecord = error as { stdout?: unknown; stderr?: unknown; timedOut?: unknown };
+        const errorRecord = error as { stdout?: unknown; stderr?: unknown; timedOut?: unknown; isMaxBuffer?: unknown };
         const timedOut = isTrue(errorRecord.timedOut);
         const stderr = isString(errorRecord.stderr)
           ? errorRecord.stderr
@@ -128,6 +129,7 @@ export function createNodeCommandProvider(): CommandProvider {
           stderr,
           durationMs: Date.now() - startedAt,
           timedOut,
+          truncated: isTrue(errorRecord.isMaxBuffer),
           toolRequirements,
         };
       }

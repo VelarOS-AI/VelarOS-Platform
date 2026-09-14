@@ -6,7 +6,6 @@ import {
   isPlainObject,
   isPresent,
   isString,
-  isTrue,
   isUndefined,
   numberOrNull,
 } from "@velaros-ai/core";
@@ -17,11 +16,8 @@ import { toOptional } from "@velaros-ai/core/utils/nullish";
 import { optionalWhenLazy } from "@velaros-ai/core/utils/optionalWhen";
 import { readFirstString } from "@velaros-ai/core/utils/unknownJsonRecord";
 
-import {
-  historyPreviewPlaceholder,
-  HistoryPreviewPlaceholderHeaderPattern,
-} from "./historyPreviewPlaceholder";
-import { fitProjectReadsForModel } from './projectReadSerialization';
+import { fitProjectReadsForModel, hasProjectSourceWindows } from './projectReadSerialization';
+import { projectToolInputForHistory } from './toolInputHistoryProjection';
 
 interface ToolResultCompactionLimits {
   maxSerializedLength: number;
@@ -29,12 +25,6 @@ interface ToolResultCompactionLimits {
   maxDepth: number;
   maxArrayItems: number;
   preserveLargeContent: boolean;
-}
-
-interface ToolInputCompactionLimits {
-  maxSerializedLength: number;
-  maxStringLength: number;
-  maxArrayItems: number;
 }
 
 // 2026-07 真机取证（Downloads 整理会话 9 轮空转）后校准：8_000/50 会把一次 137 条目录列表
@@ -81,34 +71,6 @@ const DisplayToolResultLimits: ToolResultCompactionLimits = {
   maxArrayItems: 20,
   preserveLargeContent: true,
 };
-
-const ModelToolInputLimits: ToolInputCompactionLimits = {
-  maxSerializedLength: 12_000,
-  maxStringLength: 900,
-  // 结构化文档工具经常包含超过 12 个短块；若在 provider 历史中截断数组，模型会误判执行失败，
-  // 进而重复追加页面。
-  maxArrayItems: 100,
-};
-
-const LargeToolInputFieldThreshold = 240;
-const WidgetCodeModelReplayMaxLength = 8_000;
-
-const LargeToolInputKeys = new Set([
-  "content",
-  "data",
-  "image",
-  "base64",
-  "latexSource",
-  "widget_code",
-  "html",
-  "svg",
-  "source",
-  "newContent",
-  "replacement",
-  "replace",
-]);
-
-const ToolInputKeysWithoutPreview = new Set(["widget_code"]);
 
 function isToolSpaceProtocolResult(result: unknown): boolean {
   if (!isPlainObject(result)) return false;
@@ -412,79 +374,6 @@ function stringifyToolResult(value: unknown): string {
   }
 }
 
-function looksLikeBinaryPayload(value: string): boolean {
-  if (value.startsWith("data:")) return true;
-
-  return value.length > 2_000 && /^[A-Za-z0-9+/=\s]+$/.test(value);
-}
-
-// 单层占位串的体积上限：头部约 100 字符 + 160 字符 preview + "…]"，留有余量。只剥出一层却超过它，
-// 说明头部后面跟的是真实内容而不是 preview：原样放行会绕过体积上限，交给常规压缩又会嵌套，
-// 因此按剥离后的正文重建单层占位串。
-const TrustedSinglePlaceholderMaxLength = 400;
-
-interface ParsedHistoryPreviewPlaceholderHeader {
-  length: string;
-  field: string;
-  hasPreview: boolean;
-  rest: string;
-}
-
-function parseHistoryPreviewPlaceholderHeader(
-  value: string,
-): Nullable<ParsedHistoryPreviewPlaceholderHeader> {
-  const match = value.match(HistoryPreviewPlaceholderHeaderPattern);
-  if (!match) return null;
-
-  return {
-    length: match[1],
-    field: match[2],
-    hasPreview: isPresent(match[3]),
-    rest: value.slice(match[0].length),
-  };
-}
-
-// preview 正文固定以 "…]" 收尾（见 summarizeToolInputString）；不闭合说明这段文本本身
-// 已经不是完整占位串（模型仿写头部时常见），原样保留，不强行拼出并不存在的收尾。
-function stripPlaceholderTrailer(rest: string): string {
-  return rest.endsWith("…]") ? rest.slice(0, -2) : rest;
-}
-
-const MaxHistoryPreviewUnwrapDepth = 8;
-
-/**
- * 已压成占位串的历史参数在重放时保持单层：反复剥离开头的占位头，直到剩余文本不再以占位头开头。
- * 只有一层且体积可信时原样返回（重放幂等）；剥出多层、或一层却超出可信体积时，用剥离后的正文
- * 重建单层占位串——声明长度取本次实际收到的 value.length，预览取正文前 160 字符，输出有界且
- * 不随嵌套深度增长。不是占位串时返回 null，交给调用方走常规压缩。
- */
-function collapseHistoryPreviewPlaceholder(value: string): Nullable<string> {
-  const first = parseHistoryPreviewPlaceholderHeader(value);
-  if (!first) return null;
-
-  let layers = 1;
-  let remainder = first.hasPreview
-    ? stripPlaceholderTrailer(first.rest)
-    : first.rest;
-
-  for (let depth = 0; depth < MaxHistoryPreviewUnwrapDepth; depth++) {
-    const next = parseHistoryPreviewPlaceholderHeader(remainder);
-    if (!next) break;
-    layers += 1;
-    remainder = next.hasPreview ? stripPlaceholderTrailer(next.rest) : next.rest;
-  }
-
-  if (layers === 1 && value.length <= TrustedSinglePlaceholderMaxLength)
-    return value;
-
-  return historyPreviewPlaceholder(value.length, first.field, remainder);
-}
-
-function summarizeToolInputString(value: string, key?: string): string {
-  const field = key ? `"${key}"` : "string";
-  return historyPreviewPlaceholder(value.length, field, key && ToolInputKeysWithoutPreview.has(key) ? "" : value);
-}
-
 function buildTruncatedToolResult(
   serialized: string,
   maxSerializedLength: number,
@@ -530,92 +419,6 @@ function buildTruncatedToolResult(
     compacted: { __truncated: true },
     serialized: '{"__truncated":true}',
   };
-}
-
-function compactToolInputValue(
-  value: unknown,
-  parentKey?: string,
-  seen: WeakSet<object> = new WeakSet(),
-  state = { shortened: false },
-): unknown {
-  if (isString(value)) {
-    const collapsedPlaceholder = collapseHistoryPreviewPlaceholder(value);
-    if (isPresent(collapsedPlaceholder)) {
-      state.shortened = true;
-      return collapsedPlaceholder;
-    }
-
-    if (
-      parentKey === "widget_code" &&
-      value.length <= WidgetCodeModelReplayMaxLength
-    )
-      return value;
-
-    const isLikelyLargeToolField =
-      !!parentKey &&
-      LargeToolInputKeys.has(parentKey) &&
-      value.length > LargeToolInputFieldThreshold;
-
-    if (
-      value.length > ModelToolInputLimits.maxStringLength ||
-      isLikelyLargeToolField ||
-      looksLikeBinaryPayload(value)
-    ) {
-      state.shortened = true;
-      return summarizeToolInputString(value, parentKey);
-    }
-
-    return value;
-  }
-
-  if (!isPresent(value) || !isObject(value)) return value;
-
-  if (value instanceof ArrayBuffer)
-    return `[omitted binary ArrayBuffer: ${value.byteLength} bytes]`;
-
-  if (ArrayBuffer.isView(value))
-    return `[omitted binary ${value.constructor.name}: ${value.byteLength} bytes]`;
-
-  if (seen.has(value)) return "[Circular reference omitted]";
-  seen.add(value);
-
-  if (isArray(value)) {
-    const items = value
-      .slice(0, ModelToolInputLimits.maxArrayItems)
-      .map((item) => compactToolInputValue(item, undefined, seen, state));
-
-    if (value.length > ModelToolInputLimits.maxArrayItems) {
-      const previousMarker = value.at(-1);
-      const previousOmitted =
-        isPlainObject(previousMarker) &&
-        isNumber(previousMarker.__historyPreviewOmittedItems)
-          ? Math.max(0, previousMarker.__historyPreviewOmittedItems - 1)
-          : 0;
-      state.shortened = true;
-      items.push({
-        __historyPreviewOmittedItems:
-          value.length - ModelToolInputLimits.maxArrayItems + previousOmitted,
-        __toolReceivedFullInput: true,
-        note: "History preview only; do not repeat the tool call because of this marker.",
-      });
-    }
-
-    seen.delete(value);
-    return items;
-  }
-
-  if (!isPlainObject(value)) {
-    const constructorName = value.constructor?.name ?? "unknown";
-    seen.delete(value);
-    return `[omitted unsupported object: ${constructorName}]`;
-  }
-
-  const record: Record<string, unknown> = {};
-  for (const [key, nestedValue] of Object.entries(value)) {
-    record[key] = compactToolInputValue(nestedValue, key, seen, state);
-  }
-  seen.delete(value);
-  return record;
 }
 
 function compactToolResult(
@@ -829,6 +632,12 @@ export function serializeToolResultForModel(
     fixReadFileMetadata(fitProjectReadsForModel(result, limits.maxSerializedLength - 512), contentBudget),
     contentBudget,
   );
+  // 源码行记录已经共享准确预算；通用字符串和数组裁剪可能
+  // 改变原文，或在删去行记录后留下不对应的续读位置。
+  if (hasProjectSourceWindows(preprocessed)) {
+    const serialized = JSON.stringify(preprocessed);
+    if (serialized.length <= limits.maxSerializedLength) return serialized;
+  }
   return compactToolResult(preprocessed, limits).serialized;
 }
 
@@ -844,42 +653,7 @@ export function compactToolInputForModel(
   input: Record<string, unknown>,
   toolCallId?: string,
 ): Record<string, unknown> {
-  if (isTrue(input.__historyInputPreview) && isString(input.preview)) return {
-      __historyInputPreview: true,
-      __toolReceivedFullInput: true,
-      note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",
-      ...(toolCallId || isString(input.__historyInputRef) ? {
-        __historyInputRef: toolCallId ? `input:${toolCallId}` : input.__historyInputRef,
-        __historyInputRecall: 'Use context:recall with this ref and jsonPath to recover original arguments.',
-      } : {}),
-      preview: input.preview.slice(0, ModelToolInputLimits.maxSerializedLength),
-    };
-  const state = { shortened: false };
-  const compacted = compactToolInputValue(input, undefined, new WeakSet(), state);
-  const record = isPlainObject(compacted) ? compacted : { input: compacted };
-  const serialized = stringifyToolResult(record);
-
-  const reference =
-    toolCallId &&
-    (state.shortened ||
-      serialized.length > ModelToolInputLimits.maxSerializedLength ||
-      record.__historyInputRef)
-      ? {
-          __historyInputRef: `input:${toolCallId}`,
-          __historyInputRecall:
-            "Use context:recall with this ref and jsonPath to recover original arguments.",
-        }
-      : {};
-  if (serialized.length <= ModelToolInputLimits.maxSerializedLength)
-    return { ...record, ...reference };
-
-  return {
-    ...reference,
-    __historyInputPreview: true,
-    __toolReceivedFullInput: true,
-    note: "The tool received the full input. This provider-history preview is shortened; do not repeat solely because of this marker.",
-    preview: serialized.slice(0, ModelToolInputLimits.maxSerializedLength),
-  };
+  return projectToolInputForHistory(input, toolCallId);
 }
 
 export function compactToolResultForDisplay(result: unknown): unknown {

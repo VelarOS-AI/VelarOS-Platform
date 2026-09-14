@@ -4,6 +4,7 @@ import commandRegistration from './registrations/command.tool-render'
 import fileChangeRegistration from './registrations/file-change.tool-render'
 import goalRegistration from './registrations/goal.tool-render'
 import planRegistration from './registrations/plan.tool-render'
+import projectSourceRegistration from './registrations/project-source.tool-render'
 import richOutputRegistrations from './registrations/rich-output.tool-render'
 import systemToolInstallRegistration from './registrations/system-tool-install.tool-render'
 import widgetRegistration from './registrations/widget.tool-render'
@@ -39,6 +40,7 @@ const bundledToolRenderRegistrations: Array<ToolRenderRegistration | ToolRenderR
   goalRegistration,
   planRegistration,
   richOutputRegistrations,
+  projectSourceRegistration,
   systemToolInstallRegistration,
   widgetRegistration,
 ]

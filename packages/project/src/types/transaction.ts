@@ -1,6 +1,6 @@
 import type { PreparedTransaction } from "./edit.js";
 
-/** Project 内部持久化与运行时共享的稳定事务生命周期状态。 */
+/** Project 持久化、运行时与公开查询共享的稳定事务生命周期状态。 */
 export type ProjectTransactionStatus =
   | PreparedTransaction["status"]
   | "validated"
@@ -16,8 +16,8 @@ export type ProjectTransactionLifecycleStatus =
   | ProjectTransactionExecutionStatus;
 
 /**
- * 内核内存表和持久化事务状态共享的真实事务形状。
- * `PreparedTransaction.status` 只描述刚完成 prepare 的公开结果，内部稳定生命周期由本类型表达。
+ * getTransaction、内核内存表和持久化事务状态共享的真实事务形状。
+ * `PreparedTransaction.status` 只描述刚完成 prepare 的结果，后续稳定生命周期由本类型表达。
  */
 export type StoredTransaction = Omit<PreparedTransaction, "status"> & {
   status: ProjectTransactionStatus;

@@ -16,6 +16,7 @@ export async function persistToolInputForRecall(input: {
   const ref = `input:${input.toolCallId}`
   if (
     input.args.__historyInputRef ||
+    input.args.__historyInputOmissions ||
     input.args.__historyInputPreview ||
     findHistoryPreviewPlaceholderArgumentPaths(input.args).length > 0
   )

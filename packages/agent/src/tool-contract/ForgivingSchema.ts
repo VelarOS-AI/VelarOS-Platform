@@ -4,15 +4,16 @@ import { isArray, isBlank, isEmpty, isPlainObject, isPresent, isString } from '@
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
 /**
- * 宽容 schema 原语(战役一沉淀的铁律代码化;新工具优先用这套词汇,别手写硬拒)。
+ * 可选的宽容 schema 原语；工具必须先明确哪些调整保持用户意图。
  *
- * 铁律速查:
+ * 使用边界:
  *  ① 引用集合参数 miss 时结果要回带有效项清单+可引用句柄(结果侧,见 buildValidItemsHint)
- *  ② 互斥参数→按优先序都收(preferFirst);空输入→no-op 不报错(emptyIsNoop)
- *  ③ 数量参数(limit/maxChars/maxDepth)一律钳制不拒绝(clampedInt)
- *  ④ 模型面 schema 用 .strip() 别 .strict()(判别功能性除外)
- *  ⑤ 条件必填→给安全默认(withDefaultNote)
- *  ⑥ 缺 action 从 action 专属字段推断(inferActionFromFields)
+ *  ② preferFirst 只用于已声明优先级且语义等价的输入；操作/目标歧义必须明确纠正。
+ *     emptyIsNoop 仅用于已声明空输入无效果的操作，不能替代缺失参数校验。
+ *  ③ clampedInt 适用于可安全收紧的显示/资源预算；源码坐标和精确数量不能静默钳制。
+ *  ④ 无关附加元数据可 strip；决定操作、目标和正文的合同应 strict，避免忽略显式意图。
+ *  ⑤ withDefaultNote 仅用于已声明的安全默认；写入正文、目标引用和确认选择不补默认。
+ *  ⑥ inferActionFromFields 仅从足以唯一证明操作的专属字段推断。
  *  ⑦ 自动过滤器/scaffold 不得静默否决显式意图
  *  ⑧ 系统替模型做的调整要回显(buildAppliedAdjustments)——钳了值/给了默认要让模型知道
  *
@@ -21,7 +22,7 @@ import { clampRounded } from '@velaros-ai/core/utils/number'
  * (真实事故,见 velar-agent-ux-unify 档案)。
  */
 
-/** 铁律③:整数数量参数钳制。超界收敛到边界并可经 buildAppliedAdjustments 回显,永不硬拒。 */
+/** 对允许收紧的资源/显示预算钳制并取整；调整应通过 buildAppliedAdjustments 回显。 */
 export function clampedInt(min: number, max: number): z.ZodType<number, number> {
   return z.number().transform((value) => clampRounded(value, min, max))
 }
@@ -39,8 +40,7 @@ export function withDefaultNote<T extends z.ZodType>(
 }
 
 /**
- * 铁律②(互斥参数):按优先序取第一个出现的值。模型同时传 sourceId 和 url 不是错误,
- * 是"都给了以防万一"——收下优先者,别抛 VALIDATION。
+ * 对明确声明优先级的等价输入选取首项，并返回被忽略项；不能用来猜测冲突的目标或操作。
  */
 export function preferFirst<T>(
   input: Record<string, unknown>,

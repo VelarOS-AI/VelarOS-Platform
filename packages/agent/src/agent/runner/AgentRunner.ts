@@ -16,6 +16,7 @@ import {
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../tool-library/builtin/Goals'
 import { CodingSessionTracker } from '../CodingSessionTracker'
+import { forkFileContext } from '../context/resources/FileContextCoordinator'
 import { resolveAgentContextPhase } from '../ContextPhase'
 import {
   type AgentExecutionLimits,
@@ -261,6 +262,9 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
             config: dispatchConfig,
           })
         ),
+        getSubAgentDispatchCatalog: surfaceRunPolicy.allowSubAgents && this.subAgentDispatcher.describeDispatchCatalog
+          ? () => this.subAgentDispatcher.describeDispatchCatalog!()
+          : undefined,
         runAgentWorkflow: optionalWhen(surfaceRunPolicy.allowSubAgents, async (input) =>
           this.workflowCoordinator.run({
             input,
@@ -439,6 +443,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
       ...parentCtx,
       codingSession: parentCtx.codingSession.forkForSubAgent?.() ?? parentCtx.codingSession,
     }
+    forkFileContext(parentCtx, subAgentParentCtx)
     try {
       return await this.queryLoop.execute({
         task,

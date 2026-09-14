@@ -3,6 +3,7 @@ import type {
 } from '@velaros-ai/agent/protocol'
 import type {
   ApprovalPort,
+  FileContextCarrier,
   ToolContractRuntimeSpec,
   ToolContractSurface,
 } from '@velaros-ai/agent/tool-contract'
@@ -35,13 +36,15 @@ export interface ProjectToolApi {
   ) => Promise<ProjectCommandResult>
   /** Project 内置代码理解入口；宿主可用 CodeGraph 覆盖同一 action 面的增强查询。 */
   queryCode: (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown>
+  /** Optional graph analysis backend; ordinary code queries remain available independently. */
+  codeAnalysisAvailable?: () => boolean
 }
 
 export interface ProjectToolSystemApi {
   canStartBackgroundCommands: () => boolean
 }
 
-export interface ProjectToolContext {
+export interface ProjectToolContext extends FileContextCarrier {
   abortSignal: AbortSignal
   project: ProjectToolApi
   system: ProjectToolSystemApi

@@ -15,7 +15,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 /**
- * TypeScript 项目宿主 —— `project:query-code` 内置基线背后的 `ts.LanguageService` 池。
+ * TypeScript 项目宿主 —— `project:code` 内置基线背后的 `ts.LanguageService` 池。
  *
  * ## 为什么要池化（而不是每次调用建一个 program）
  * `ts.createLanguageService` 本身很便宜，贵的是它第一次 `getSemanticDiagnostics` 时把整个程序

@@ -57,12 +57,34 @@ export type ToolContractExecute<
   TResult = unknown,
 > = (input: TInput, ctx: TContext) => Promise<TResult>
 
+/** Runtime-only provenance from a settled saved attempt; never accepted from model input. */
+export interface ToolInputReuseMigrationRequest {
+  input: Record<string, unknown>
+  sourceContractVersion: number
+  targetContractVersion: number
+  sourceToolName: string
+  sourceCallId: string
+  toolCallId?: string
+}
+
+export interface ToolInputReuseContract<TContext = unknown> {
+  /** Omitted versions are the original input contract, version 1. */
+  inputContractVersion?: number
+  /** Trusted compatibility sources for renamed or split tools. */
+  inputReuseSourceTools?: readonly string[]
+  /** Runs only for verified, unapplied saved input whose tool or contract changed. */
+  migrateReusedInput?: (
+    request: ToolInputReuseMigrationRequest,
+    context: TContext
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>
+}
+
 export interface ToolContractRuntimeSpec<
   TInput extends Record<string, unknown> = Record<string, unknown>,
   TContext = unknown,
   TResult = unknown,
   TPermission extends string = ToolPermission,
-> {
+> extends ToolInputReuseContract<TContext> {
   /** 模型可调用的唯一规范工具名。 */
   name: string
   /** 工具所属能力分类。 */
@@ -125,7 +147,7 @@ export interface DefineToolRuntimeSpecInput<
   TContext = unknown,
   TResult = unknown,
   TPermission extends string = ToolPermission,
-> extends ToolContractDescriptionSpec {
+> extends ToolContractDescriptionSpec, ToolInputReuseContract<TContext> {
   name: string
   category: ToolCategoryId
   schema: z.ZodType<TInput>
@@ -149,7 +171,7 @@ export interface DefineToolRuntimeSpecInput<
 export interface DefineToolContractInput<
   TInput extends Record<string, unknown> = Record<string, unknown>,
   TContext = unknown,
-> extends ToolContractDescriptionSpec {
+> extends ToolContractDescriptionSpec, ToolInputReuseContract<TContext> {
   name: string
   category: ToolCategoryId
   schema: z.ZodType<TInput>

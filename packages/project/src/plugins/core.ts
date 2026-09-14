@@ -3,6 +3,7 @@ import { jsonAdapterFactory } from "../adapters/json-adapter.js";
 import { jsTsAdapterFactory } from "../adapters/jsts-adapter.js";
 import { markdownAdapterFactory } from "../adapters/markdown-adapter.js";
 import { textAdapterFactory } from "../adapters/text-adapter.js";
+import { preparedContentStrategy } from "../editing/planner/prepared-content-strategy.js";
 import { jsonPatchStrategy } from "../edits/strategies/json-strategy.js";
 import { jsTsPatchStrategy } from "../edits/strategies/jsts-strategy.js";
 import { textPatchStrategy } from "../edits/strategies/text-strategy.js";
@@ -23,6 +24,7 @@ export function corePlugin(): ProjectPlugin {
       ctx.registerPatchStrategy(jsonPatchStrategy());
       ctx.registerPatchStrategy(jsTsPatchStrategy());
       ctx.registerPatchStrategy(textPatchStrategy());
+      ctx.registerPatchStrategy(preparedContentStrategy());
       ctx.registerValidator(scopeValidator());
       ctx.registerValidator(postconditionValidator());
     },

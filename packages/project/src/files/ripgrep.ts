@@ -1,4 +1,4 @@
-import { isFalse, isNumber, isTrue } from '@velaros-ai/core'
+import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/core'
 
 import type { SearchHit } from '../types/io.js'
 import type { CorePolicy } from '../types/policy.js'
@@ -16,6 +16,8 @@ export interface RipgrepSearchContext {
   exclude?: string[]
   excludeGitignored?: boolean
   maxResults: number
+  /** 已授权且可由 rg 精确解释的路径；在命中数上限之前过滤。 */
+  filterPath?: (path: string) => boolean
   command: CommandProvider
   policy: CorePolicy
 }
@@ -35,6 +37,7 @@ interface RgMessage {
 interface RipgrepSearchResult {
   hits: Nullable<SearchHit[]>
   timedOut?: boolean
+  truncated?: boolean
   diagnostics?: string[]
   toolRequirements?: CommandToolRequirement[]
 }
@@ -67,7 +70,7 @@ function buildRipgrepTimeoutDiagnostic(timeoutMs: number): string {
 }
 
 /** 暴露给测试使用（`dist/search/ripgrep.js`）。 */
-export function parseRipgrepJsonLines(stdout: string, maxResults: number): SearchHit[] {
+export function parseRipgrepJsonLines(stdout: string, maxResults: number, filterPath?: (path: string) => boolean): SearchHit[] {
   const hits: SearchHit[] = []
   for (const line of stdout.split(/\r?\n/)) {
     if (!line.trim() || hits.length >= maxResults) break
@@ -83,6 +86,8 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number): Searc
     const lineText = msg.data.lines?.text
     const lineNumber = msg.data.line_number
     if (!pathText || !isNumber(lineNumber)) continue
+    const path = pathText.replace(/\\/g, '/').replace(/^\.\//, '')
+    if (filterPath && !filterPath(path)) continue
 
     const subs = msg.data.submatches ?? []
     let startCol = 1
@@ -90,13 +95,15 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number): Searc
     if (subs.length > 0 && isNumber(subs[0].start)) {
       const start = subs[0].start ?? 0
       const end = subs[0].end ?? start
-      startCol = start + 1
-      endCol = Math.max(startCol, end + 1)
+      // rg 给出 UTF-8 字节位置；Project 的列坐标统一为解码后的 UTF-16 code units。
+      const bytes = Buffer.from(lineText ?? '', 'utf8')
+      startCol = bytes.subarray(0, start).toString('utf8').length + 1
+      endCol = Math.max(startCol, bytes.subarray(0, end).toString('utf8').length + 1)
     }
 
-    const snippet = (lineText ?? '').replace(/\n$/, '').slice(0, 400)
+    const snippet = (lineText ?? '').replace(/\r?\n$/, '').slice(0, 400)
     hits.push({
-      path: pathText.replace(/\\/g, '/'),
+      path,
       revision: '',
       score: 2,
       kind: 'text',
@@ -120,7 +127,7 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number): Searc
  */
 export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<RipgrepSearchResult> {
   const maxResults = Math.min(Math.max(1, ctx.maxResults), 500)
-  const args: string[] = ['--json', '--max-columns', '400', '--threads', '4', '--hidden']
+  const args: string[] = ['--json', '--max-columns', '400', '--threads', '4', '--hidden', '--max-filesize', String(ctx.policy.maxSearchFileSizeBytes)]
   if (isFalse(ctx.excludeGitignored)) args.push('--no-ignore')
 
   for (const g of normalizeGlobList(ctx.include ?? [])) {
@@ -161,21 +168,26 @@ export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<Ripg
       }
 
     const timedOut = isTrue(result.timedOut)
-    if (result.exitCode !== 0 && result.exitCode !== 1 && !timedOut)
+    const truncated = isTrue(result.truncated)
+    if (result.exitCode !== 0 && result.exitCode !== 1 && !timedOut && !truncated)
       return {
         hits: null,
         toolRequirements: result.toolRequirements,
       }
 
-    const hits = parseRipgrepJsonLines(result.stdout, maxResults)
+    const hits = parseRipgrepJsonLines(result.stdout, maxResults, (path) =>
+      !matchesAny(path, ctx.policy.readDeny) && (!ctx.filterPath || ctx.filterPath(path)))
     const deny = ctx.policy.readDeny
     const filtered = hits.filter((h) => !matchesAny(h.path, deny))
+    const diagnostics = [
+      ...(timedOut ? [buildRipgrepTimeoutDiagnostic(ctx.policy.ripgrepTimeoutMs)] : []),
+      ...(truncated ? ['ripgrep 输出达到宿主缓冲上限，当前结果可能不完整；请缩小搜索范围或增加命中条件后继续检索。'] : []),
+    ]
     return {
       hits: filtered.length <= maxResults ? filtered : filtered.slice(0, maxResults),
       timedOut,
-      diagnostics: timedOut
-        ? [buildRipgrepTimeoutDiagnostic(ctx.policy.ripgrepTimeoutMs)]
-        : undefined,
+      truncated,
+      diagnostics: optionalWhen(!isEmpty(diagnostics), diagnostics),
       toolRequirements: result.toolRequirements,
     }
   } catch {

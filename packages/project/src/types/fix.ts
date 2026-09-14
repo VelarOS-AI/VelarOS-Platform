@@ -1,6 +1,6 @@
 import type { Diagnostic } from "./common.js";
-import type { PreparedTransaction } from "./edit.js";
 import type { CommandProvider, CommandToolRequirement, ProjectProviders } from "./provider.js";
+import type { StoredTransaction } from "./transaction.js";
 
 /** 在应用 prepared transaction 前请求自动修复。 */
 export interface FixInput {
@@ -30,7 +30,7 @@ export interface FixResult {
 
 export interface ProjectFixContext {
   root: string;
-  getTransaction(id: string): PreparedTransaction | undefined;
+  getTransaction(id: string): StoredTransaction | undefined;
   /** 优先读取事务暂存内容，再回退到工作区文件。 */
   readFile(path: string): Promise<string | undefined>;
   providers: ProjectProviders & { command: CommandProvider };

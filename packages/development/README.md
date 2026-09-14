@@ -1,13 +1,12 @@
 # `@velaros-ai/development`
 
-Development 是 Project 代码理解工具复用的语言服务运行时库，不再拥有独立 Mod、工具身份或
-Project 空间声明。模型看到的 canonical 工具由 `@velaros-ai/project` 直接提供：
-`project:query-code`。
+Development 是 Project 代码理解工具复用的语言服务运行时库。模型看到的 canonical 工具由
+`@velaros-ai/project` 提供：`project:code`，按需图分析使用 `project:code-analysis`。
 
 `@velaros-ai/development/runtime` 拥有 JavaScript、TypeScript 与 Python 的即时语言分析、
 TypeScript Language Service 缓存和统一 action 路由。`createProjectCodeQuery()` 始终保留内置
-语言服务 action；宿主可以注入 `ProjectCodeIndexApi`，在 CodeGraph 安装并启用后为同一个工具
-覆盖图谱、依赖、调用链和索引 action。CodeGraph 缺失不会隐藏基础工具。
+语言服务 action；宿主可以注入 `ProjectCodeIndexApi`，为 Project 的语义查询及按需图分析提供
+后端。模型入口的六类查询由 Project 合同编排，索引生命周期由宿主管理。
 
 `executeProjectCodeLanguageQuery()` accepts `LanguageToolContext`: an abort signal, scoped
 working-directory access, and `listFiles` / `read` / `listSymbols` source ports. A language-only
@@ -44,5 +43,5 @@ Electron 打包默认剔除 `node_modules` 里的 `.d.ts`，宿主应把
 超时/取消、诊断与导航结果的有界归一。宿主保留二进制与资源发现、启用策略、进程环境和状态展示，
 不会由 Development 静默下载或启动任意可执行文件。
 
-工具 schema、`project:query-code` 身份、类别和 Mod Loader 声明都归 `@velaros-ai/project`；
+工具 schema、`project:code` 身份、类别和 Mod Loader 声明都归 `@velaros-ai/project`；
 本包只提供可复用实现，不参与 Mod 装载。

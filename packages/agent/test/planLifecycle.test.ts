@@ -3,13 +3,19 @@ import { describe, expect, test } from 'bun:test'
 import type {
   ActiveContextArtifact,
   ActiveContextUpsertInput,
+  ChatPromptFeatureId,
+  ExecutionModeId,
   ExecutionTaskPlanStep,
   ToolExecutionPlanUpdate,
 } from '@velaros-ai/agent/protocol'
 
+import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
+import { PromptStateBuilder } from '../src/agent/PromptState'
+import type { RuntimePromptSnapshot } from '../src/prompts'
 import { plansTools } from '../src/tool-library/builtin/Plans.tool'
 
-function createPlanToolContext() {
+function createPlanToolContext(features: ChatPromptFeatureId[] = []) {
+  const codingSession = new CodingSessionTracker([], features)
   let artifact: ActiveContextArtifact | null = null
   let plan: ExecutionTaskPlanStep[] = []
   let now = 1_000
@@ -68,8 +74,24 @@ function createPlanToolContext() {
       abortSignal: new AbortController().signal,
       activeContext,
       interaction,
-      codingSession: { enablePromptFeatures: () => undefined },
+      codingSession,
     } as never,
+    codingSession,
+    readNextPrompt: async (executionModes: ExecutionModeId[] = []) => {
+      let snapshot: RuntimePromptSnapshot | undefined
+      const state = await new PromptStateBuilder().build({
+        toolContext: {
+          locale: 'zh-CN', codingSession, execution: interaction, listToolCategories: () => [],
+          capabilityPorts: { promptContributors: [{
+            id: 'plan-mode-probe', getSegments: (value) => { snapshot = value as RuntimePromptSnapshot; return [] },
+          }] },
+        },
+        roleResolution: { id: 'assistant', label: 'Assistant', workflowType: 'chat', allowedTools: ['plan:update'] },
+        messages: [{ role: 'user', content: 'Implement this change and test it.' }],
+        preparedToolCategories: { enabled: [], all: [] }, executionModes,
+      })
+      return { snapshot: snapshot!, state }
+    },
     beginExecution: (executionId: string) => {
       interaction.executionId = executionId
       plan = []
@@ -206,5 +228,39 @@ describe('plan lifecycle tools', () => {
     expect(created.activeContextStatus).toBe('active')
     expect(harness.readArtifact()?.metadata?.executionId).toBe('next-execution')
     expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('active')
+  })
+})
+
+
+describe('internal plan maintenance respects user execution mode', () => {
+  test('an authorized multi-step task keeps execution mode through plan creation, progress and completion', async () => {
+    const harness = createPlanToolContext(['office'])
+    expect((await harness.readNextPrompt()).snapshot.userRequestedPlan).toBe(false)
+    await plansTools['plan:update'].execute({ plan: [
+      { step: 'Implement the change', status: 'in_progress' },
+      { step: 'Run verification', status: 'pending' },
+    ] }, harness.context)
+    const created = await harness.readNextPrompt()
+    expect(created.state.facts.hasExecutionPlan).toBe(true)
+    expect(created.snapshot.executionPlanPreview).toContain('Implement the change')
+    expect(created.snapshot.userRequestedPlan).toBe(false)
+    const progress = await plansTools['plan:update'].execute({ complete_step: 1 }, harness.context)
+    expect(progress.steps[1]?.status).toBe('running')
+    expect((await harness.readNextPrompt()).snapshot.userRequestedPlan).toBe(false)
+    await plansTools['plan:update'].execute({ complete_step: 2 }, harness.context)
+    expect(harness.readArtifact()?.status).toBe('completed')
+    expect((await harness.readNextPrompt()).snapshot.userRequestedPlan).toBe(false)
+    expect(harness.codingSession.getEnabledPromptFeatures()).toEqual(['office'])
+  })
+
+  test.each(['execution-modes', 'legacy-feature'] as const)('keeps explicit user plan mode via %s', async (selection) => {
+    const harness = createPlanToolContext(selection === 'legacy-feature' ? ['plan'] : [])
+    const modes: ExecutionModeId[] = selection === 'execution-modes' ? ['plan'] : []
+    expect((await harness.readNextPrompt(modes)).snapshot.userRequestedPlan).toBe(true)
+    await plansTools['plan:update'].execute({ plan: [{ step: 'Review the proposed solution', status: 'pending' }] }, harness.context)
+    expect((await harness.readNextPrompt(modes)).snapshot.userRequestedPlan).toBe(true)
+    await plansTools['plan:update'].execute({ explanation: 'Waiting for the requested review', lifecycle: 'paused' }, harness.context)
+    expect((await harness.readNextPrompt(modes)).snapshot.userRequestedPlan).toBe(true)
+    expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('paused')
   })
 })

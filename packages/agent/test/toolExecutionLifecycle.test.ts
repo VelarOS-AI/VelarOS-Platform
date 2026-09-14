@@ -8,9 +8,10 @@ import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayload
 import { AgentTurnHistoryHelper } from '../src/agent/history'
 import { KernelToolLoopGuard } from '../src/kernel/tool-loop-guard'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
-import { clampedInt } from '../src/tool-contract'
+import { clampedInt, type ToolInputReuseContract } from '../src/tool-contract'
 import { ToolExecutionPolicy, type ToolExecutionPolicyContext } from '../src/tools/ExecutionPolicy'
 import { ToolExecutor, type ToolExecutorEvents, type ToolResult } from '../src/tools/Executor'
+import { saveToolAttemptInput, saveToolAttemptOutcome, withToolInputReuse } from '../src/tools/recovery/ToolInputReuse'
 import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -22,6 +23,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 function harness(
   run: (context: ToolExecutionPolicyContext, input?: unknown) => unknown = () => ({ ok: true }),
   options: {
+    reuseContract?: ToolInputReuseContract<ToolExecutionPolicyContext>
     schema?: { safeParse(input: unknown): unknown }
     surface?: {
       schema: { safeParse(input: unknown): unknown }
@@ -38,6 +40,7 @@ function harness(
   const emitted: unknown[] = []
   const metadata: unknown[] = []
   const tool = {
+    ...options.reuseContract,
     permissions: ['project:write'],
     schema: options.schema ?? { safeParse: (input: unknown) => ({ success: true, data: input }) },
     surfaces: options.surface ? { guided: options.surface } : undefined,
@@ -249,7 +252,7 @@ describe('tool execution lifecycle', () => {
       executor.enqueue(`retry-${index}`, 'probe:read', args, true)
       const [result] = await executor.collectAll()
       expect(result?.args).toEqual({ path: 'src/a.ts', limit: 50 })
-      if (index === 2) expect(result?.result).toMatchObject({ error: 'tool_loop_guard' })
+      if (index === 2) expect(result?.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('3 times') })
       else expect(result?.result).not.toMatchObject({ error: 'tool_loop_guard' })
     }
   })
@@ -315,6 +318,21 @@ describe('tool execution lifecycle', () => {
     await executor.collectAll()
 
     expect(executions).toBe(1)
+  })
+
+  test('rejects copied omission envelopes before schema defaults can become destructive input', async () => {
+    let executions = 0
+    const h = harness(() => { executions++; return { changed: true } }, {
+      schema: z.object({ content: z.string().default('') }),
+    })
+    const executor = new ToolExecutor(h.context, h.events, h.policy)
+    executor.enqueue('copied-omissions', 'probe:write', compactToolInputForModel({ content: 'x'.repeat(1000) }, 'original-write'), false)
+    const [failure] = await executor.collectAll()
+    expect(executions).toBe(0)
+    expect(failure?.result).toMatchObject({
+      error: 'history_input_preview_argument', details: { inputRef: 'input:original-write' },
+      nextActions: [expect.stringContaining('context:recall')],
+    })
   })
 
   test('executes, records, and reports the effective schema-normalized arguments', async () => {
@@ -963,7 +981,7 @@ describe('tool execution lifecycle', () => {
     for (let turn = 1; turn <= 3; turn++) {
       const executor = new ToolExecutor(h.context, h.events, h.policy, { loopGuard })
       const result = await call(executor, `turn-${turn}`)
-      if (turn === 3) expect(result.result).toMatchObject({ error: 'tool_loop_guard' })
+      if (turn === 3) expect(result.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('3 times') })
       else expect(result.result).not.toMatchObject({ error: 'tool_loop_guard' })
       await executor.collectAll()
     }
@@ -1023,4 +1041,110 @@ describe('large input recovery before execution', () => {
     expect(executions).toBe(0)
     expect(result?.error).toContain('input storage unavailable')
   })
+})
+
+
+test('failed large input retries by field amendment through current schema and permissions', async () => {
+  const calls: unknown[] = []
+  const schema = z.strictObject({ content: z.string(), line: z.number().int().positive() })
+  const h = harness((_ctx, input) => { calls.push(input); return { changed: true } }, { schema: withToolInputReuse(schema) })
+  Object.assign(h.context, { sessionId: 'reuse-executor', contextPayloadStore: new InMemoryContextPayloadStore() })
+  const first = new ToolExecutor(h.context, h.events, h.policy)
+  const content = '中文🙂\\path\r\n'.repeat(5000)
+  first.enqueue('bad', 'probe:write', { content, line: -1 }, false)
+  const failure = (await first.collectAll())[0]!
+  expect(calls).toHaveLength(0)
+  const recovery = (failure.result as { inputReuse: { reuse: string; note: string; example?: unknown } }).inputReuse
+  expect(recovery.reuse).toBe('attempt:bad')
+  expect(recovery.note).toContain('actual saved field path')
+  expect(recovery.example).toBeUndefined()
+  const second = new ToolExecutor(h.context, h.events, h.policy)
+  second.enqueue('fixed', 'probe:write', { reuse: 'attempt:bad', changes: [{ op: 'set', path: ['line'], value: 1 }] }, false)
+  expect((await second.collectAll())[0]!.error).toBeUndefined()
+  expect(calls).toEqual([{ content, line: 1 }])
+  const third = new ToolExecutor(h.context, h.events, h.policy)
+  third.enqueue('duplicate', 'probe:write', { reuse: 'attempt:fixed', changes: [{ op: 'set', path: ['line'], value: 2 }] }, false)
+  expect((await third.collectAll())[0]!.error).toBeDefined()
+  expect(calls).toHaveLength(1)
+})
+
+test('Executor migrates trusted failed input before the current schema and persists the current contract', async () => {
+  const store = new InMemoryContextPayloadStore()
+  const sourceContext = { sessionId: 'migration', resourceId: 'resource:one', contextPayloadStore: store }
+  const body = '正文🙂\\path\r\n'.repeat(10_000)
+  await saveToolAttemptInput(sourceContext, 'old-call', 'probe:write', { oldField: body })
+  await saveToolAttemptOutcome(sourceContext, 'old-call', 'not-applied')
+  let migrations = 0
+  let writes = 0
+  const h = harness((_ctx, input) => {
+    writes++
+    expect(input).toEqual({ field: body })
+    throw new AppError('VALIDATION', 'Independent execution check', undefined, { executionOutcome: 'not-applied' })
+  }, {
+    schema: withToolInputReuse(z.strictObject({ field: z.string() })),
+    reuseContract: {
+      inputContractVersion: 2,
+      migrateReusedInput: (request, toolContext) => {
+        migrations++
+        expect(toolContext).toBe(h.context)
+        expect(request.sourceContractVersion).toBe(1)
+        return { field: request.input.oldField }
+      },
+    },
+  })
+  Object.assign(h.context, sourceContext)
+  const executor = new ToolExecutor(h.context, h.events, h.policy)
+  executor.enqueue('migrated-call', 'probe:write', {
+    reuse: 'attempt:old-call', changes: [{ op: 'set', path: ['hint'], value: 'fixed' }],
+  }, false)
+  const first = (await executor.collectAll()).at(-1)!
+  expect(first.error).toContain('Independent execution check')
+  expect(first.result).toMatchObject({ inputReuse: { reuse: 'attempt:migrated-call' } })
+  expect(writes).toBe(1)
+  const next = new ToolExecutor(h.context, h.events, h.policy)
+  next.enqueue('native-retry', 'probe:write', {
+    reuse: 'attempt:migrated-call', changes: [{ op: 'set', path: ['field'], value: body }],
+  }, false)
+  await next.collectAll()
+  expect(migrations).toBe(1)
+  expect(writes).toBe(2)
+  const fresh = new ToolExecutor(h.context, h.events, h.policy)
+  fresh.enqueue('fresh-old-input', 'probe:write', { oldField: body }, false)
+  expect((await fresh.collectAll()).at(-1)?.error).toContain('arguments validation failed')
+  expect(migrations).toBe(1)
+  expect(writes).toBe(2)
+})
+
+test('Executor migration failures retain actionable errors and leave the original attempt retryable', async () => {
+  const sourceContext = { sessionId: 'migration-error', resourceId: 'resource:one', contextPayloadStore: new InMemoryContextPayloadStore() }
+  await saveToolAttemptInput(sourceContext, 'old-call', 'probe:write', { body: 'unchanged content' })
+  await saveToolAttemptOutcome(sourceContext, 'old-call', 'not-applied')
+  let writes = 0
+  const h = harness(() => { writes++; return { ok: true } }, {
+    schema: withToolInputReuse(z.strictObject({ field: z.string() })),
+    reuseContract: {
+      inputContractVersion: 2,
+      migrateReusedInput: ({ input, sourceCallId }) => {
+        if (!input.fileRef) throw new AppError('VALIDATION', 'Read the file and supply fileRef', { details: {
+          migration: { reuse: `attempt:${sourceCallId}`, field: ['fileRef'] },
+        } })
+        return { field: input.body }
+      },
+    },
+  })
+  Object.assign(h.context, sourceContext)
+  const failed = new ToolExecutor(h.context, h.events, h.policy)
+  failed.enqueue('needs-reference', 'probe:write', {
+    reuse: 'attempt:old-call', changes: [{ op: 'set', path: ['hint'], value: true }],
+  }, false)
+  const result = (await failed.collectAll()).at(-1)!
+  expect(result.error).toContain('supply fileRef')
+  expect(result.result).toMatchObject({ details: { migration: { reuse: 'attempt:old-call', field: ['fileRef'] } } })
+  expect(writes).toBe(0)
+  const fixed = new ToolExecutor(h.context, h.events, h.policy)
+  fixed.enqueue('fixed-reference', 'probe:write', {
+    reuse: 'attempt:old-call', changes: [{ op: 'set', path: ['fileRef'], value: 'view:visible' }],
+  }, false)
+  expect((await fixed.collectAll()).at(-1)?.result).toEqual({ ok: true })
+  expect(writes).toBe(1)
 })

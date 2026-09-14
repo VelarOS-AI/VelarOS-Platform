@@ -99,6 +99,7 @@ import {
   type ResolvedSubAgentTypeConfig,
   resolveReadonlyMode,
   resolveSubAgentTypeConfig,
+  type SubAgentDispatchCatalog,
   SubAgentSessionStore,
   type SubAgentThreadRetention,
   type SubAgentTypeProvider,
@@ -1200,19 +1201,38 @@ class SubAgentDispatcher {
     return typeConfig.customAgentId ?? typeConfig.subagentType
   }
 
+  /** 类型目录与执行解析读取同一供应方；自定义 id 与内置 id 冲突时遵从执行侧内置优先。 */
+  public describeDispatchCatalog(): SubAgentDispatchCatalog {
+    const types = new Map<string, SubAgentDispatchCatalog['types'][number]>()
+    for (const item of this.subAgentTypeProvider.listDescriptors()) {
+      const descriptor = this.subAgentTypeProvider.getDescriptor(item.id)
+      if (!descriptor) continue
+      types.set(descriptor.id, {
+        id: descriptor.id,
+        description: descriptor.description,
+        readonlyDefault: descriptor.readonlyDefault,
+      })
+    }
+    for (const item of this.customAgentRegistry?.listDescriptors() ?? []) {
+      if (types.has(item.id)) continue
+      const definition = this.customAgentRegistry?.get(item.id)
+      if (!definition || !this.subAgentTypeProvider.getDescriptor(definition.base)) continue
+      const resolved = resolveCustomSubAgentTypeConfig(this.subAgentTypeProvider, definition)
+      types.set(item.id, {
+        id: item.id,
+        description: definition.description,
+        readonlyDefault: resolved.readonlyDefault,
+      })
+    }
+    return { defaultTypeId: this.subAgentTypeProvider.defaultTypeId, types: [...types.values()] }
+  }
+
   private formatUnknownSubagentTypeMessage(requestedType: string): string {
-    const customIds = (this.customAgentRegistry?.listDescriptors() ?? []).map(
-      (descriptor) => descriptor.id
-    )
+    const catalog = this.describeDispatchCatalog()
     return [
       `未知的 subagent_type："${requestedType}"。`,
-      `已注入类型：${this.subAgentTypeProvider
-        .listDescriptors()
-        .map((descriptor) => descriptor.id)
-        .join(', ')}。`,
-      isEmpty(customIds)
-        ? '当前没有已安装的自定义子智能体。'
-        : `已安装的自定义子智能体：${customIds.join(', ')}。`,
+      `当前可用类型：${catalog.types.map(({ id }) => id).join(', ')}。`,
+      `新建时省略 subagent_type 使用宿主默认类型 ${catalog.defaultTypeId}。`,
       '请改用上述类型之一，或直接自行完成该任务。',
     ].join('\n')
   }

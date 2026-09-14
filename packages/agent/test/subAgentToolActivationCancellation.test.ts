@@ -43,8 +43,13 @@ function fixture() {
     },
     query: async () => '',
   }
+  const delegatedParent = Object.assign(parent, {
+    dispatchSubAgent: async () => 'parent dispatch',
+    runAgentWorkflow: async () => 'parent workflow',
+    getSubAgentDispatchCatalog: () => ({ defaultTypeId: 'parent-type', types: [] }),
+  })
   const child = createSubAgentContext({
-    parentCtx: parent,
+    parentCtx: delegatedParent,
     log: {},
     roleResolution: role,
     allowedTools: [],
@@ -71,6 +76,13 @@ function fixture() {
 }
 
 describe('sub-agent tool activation ownership', () => {
+  test('a child inherits no dispatch, workflow or parent type catalog ports', () => {
+    const h = fixture()
+    expect(h.child.dispatchSubAgent).toBeUndefined()
+    expect(h.child.runAgentWorkflow).toBeUndefined()
+    expect(h.child.getSubAgentDispatchCatalog).toBeUndefined()
+    h.release()
+  })
   test('a stopped worker cannot commit a late decision while its parent remains active', async () => {
     const h = fixture()
     const pending = h.request()

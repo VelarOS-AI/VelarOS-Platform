@@ -182,6 +182,7 @@ describe('ProjectValidationContext', () => {
       expect(reads).toEqual(['valid.ts'])
       expect(result.checks).toEqual([{
         id: 'velaros.typescript.syntax-validator',
+        metadata: { evidenceKey: expect.any(String), reused: false },
         ok: true,
         diagnostics: [],
       }])

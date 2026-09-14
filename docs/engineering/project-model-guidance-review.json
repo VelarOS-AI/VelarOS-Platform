@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "toolNames": [
+    "project:change",
+    "project:code",
+    "project:edit",
+    "project:file",
+    "project:list",
+    "project:read",
+    "project:run",
+    "project:search"
+  ],
+  "matrixCases": 192,
+  "sources": [
+    {
+      "entry": "Project 工具注册与 schema",
+      "sources": [
+        "packages/project/src/agent/Project.tool.ts",
+        "packages/project/src/agent/tools",
+        "packages/project/src/agent/contracts",
+        "packages/project/src/project-code-contracts.ts"
+      ]
+    },
+    {
+      "entry": "RunContext → PromptState → 内置段组装",
+      "sources": [
+        "packages/agent/src/agent/run-context/RunContext.ts",
+        "packages/agent/src/agent/PromptState.ts",
+        "packages/agent/src/prompts/catalog.ts",
+        "packages/agent/src/prompts/segments/runtime.ts",
+        "packages/agent/src/prompts/segments/task.ts"
+      ]
+    },
+    {
+      "entry": "能力发现、换入、计划与主动召回",
+      "sources": [
+        "packages/agent/src/tool-library/builtin/Categories.tool.ts",
+        "packages/agent/src/tool-library/builtin/ContextRetrieval.ts",
+        "packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts",
+        "packages/agent/src/tool-library/builtin/Plans.tool.ts"
+      ]
+    },
+    {
+      "entry": "参数失败恢复与当前源码指导",
+      "sources": [
+        "packages/agent/src/tools/ToolArgsSchemaValidator.ts",
+        "packages/agent/src/tools/recovery/ToolInputReuse.ts",
+        "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
+        "packages/agent/src/agent/context/resources/FileContextProjection.ts",
+        "packages/project/src/transactions/transaction-errors.ts"
+      ]
+    },
+    {
+      "entry": "模型回执与最终读取引用",
+      "sources": [
+        "packages/agent/src/tools/Executor.ts",
+        "packages/agent/src/tools/toolInputHistoryProjection.ts",
+        "packages/project/src/agent/presentation/source-window.ts",
+        "packages/project/src/agent/ProjectKernelPort.ts"
+      ]
+    },
+    {
+      "entry": "用户可读示例与实现说明",
+      "sources": [
+        "packages/project/README.md",
+        "docs/engineering/project-tool-surface-redesign-proposal.md",
+        "docs/engineering/project-tool-surface-implementation.md",
+        "docs/engineering/project-text-protocol.md"
+      ]
+    }
+  ],
+  "fingerprints": {
+    "project": "ca61c1e702369f5c3cc14f5b47c84627b42a6fc9e14cf46f5a220366690ccc81",
+    "agent": "bddec5a430a4625b25e9388ccb004c79e97bff878d5bd576ee0e48bf025643ed",
+    "documents": "eed95fe6ab82a8b820e0456889b8f6850dae67058c3c63df1de496ffd2392b19"
+  },
+  "sourceArtifacts": [
+    {
+      "path": "docs/engineering/project-text-protocol.md",
+      "fingerprint": "d2561ba5cb540113fbdd1950269a88061a4757c516318e9ef070fd0aa6c607c1"
+    },
+    {
+      "path": "docs/engineering/project-tool-surface-implementation.md",
+      "fingerprint": "71ac687bad6459f619a33e0781e404e22d87f592baac69e2fd9fe0be6e3de0a7"
+    },
+    {
+      "path": "docs/engineering/project-tool-surface-redesign-proposal.md",
+      "fingerprint": "3adf0c538aeb8ea18e13f0a942239f6ade2e3bc79e92dcdd9ff193e9239caf60"
+    },
+    {
+      "path": "packages/agent/src/agent/PromptState.ts",
+      "fingerprint": "bf07e4c30be03ce4a9c38ae7ab37e65b58ffc0d82a380b73acdc0448ff288ed5"
+    },
+    {
+      "path": "packages/agent/src/agent/context/resources/FileContextProjection.ts",
+      "fingerprint": "7d72476f33aa6397394fc3e32892ea36f8a3aaac5774e496fb5d456ff2e74687"
+    },
+    {
+      "path": "packages/agent/src/agent/run-context/RunContext.ts",
+      "fingerprint": "90ffb746dfc3aa797e63b2345db580dddec7d5a26dd3ca09e3e80e39212e7b39"
+    },
+    {
+      "path": "packages/agent/src/prompts/catalog.ts",
+      "fingerprint": "21a6fbbfff74c7d8dd5abd9fe43a254dbaf0b7afac8e661f4f2af4ef66e7444e"
+    },
+    {
+      "path": "packages/agent/src/prompts/segments/runtime.ts",
+      "fingerprint": "dd9df869fc111945185ff173c3b102efaa6152cebf588b1132171eb598329db0"
+    },
+    {
+      "path": "packages/agent/src/prompts/segments/task.ts",
+      "fingerprint": "0b5f4bf3b6dd2bd10d8165dd667d889c1bae00ce572d6e51b98153e6605a69d2"
+    },
+    {
+      "path": "packages/agent/src/tool-library/builtin/Categories.tool.ts",
+      "fingerprint": "98a8e252e707f527ebe0f9aee8fc03d985ed5853c54fe670bc42e8319e15f2f1"
+    },
+    {
+      "path": "packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts",
+      "fingerprint": "8dbf046607ec6655333c90901cf6aa8cb6172e555116db66e8f3ac1742fc05f1"
+    },
+    {
+      "path": "packages/agent/src/tool-library/builtin/ContextRetrieval.ts",
+      "fingerprint": "cb29c858a00c8980891690effd9441ec8e86659ae0ea73d0beb9b837397c47fa"
+    },
+    {
+      "path": "packages/agent/src/tool-library/builtin/Plans.tool.ts",
+      "fingerprint": "4ea737a6d512bf0708c10e03c66966754edb8e46258048417b7955951f057ccc"
+    },
+    {
+      "path": "packages/agent/src/tools/Executor.ts",
+      "fingerprint": "d254fda132e9314ffcba8dc6050ff76de21517a270f7af145f387a4f99402d28"
+    },
+    {
+      "path": "packages/agent/src/tools/ToolArgsSchemaValidator.ts",
+      "fingerprint": "cb00f3fb1d3d4d6dd4f0d3f0facf64997c5944d987b902d8beecb8e1e69dc074"
+    },
+    {
+      "path": "packages/agent/src/tools/recovery/ToolInputReuse.ts",
+      "fingerprint": "2976e725780046ac5f453551263a14b78a410442189b0827f259b3154eb46147"
+    },
+    {
+      "path": "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
+      "fingerprint": "d6bc87ab0f193da88c4b2c8f7252171754e075defb2223c1118c3feb23adbd6a"
+    },
+    {
+      "path": "packages/agent/src/tools/toolInputHistoryProjection.ts",
+      "fingerprint": "6f02d4eaa1be160a1dc9ba4b305524d7d70865c97c8797775a051776f8ee52b8"
+    },
+    {
+      "path": "packages/project/README.md",
+      "fingerprint": "3eb943426ec75c0c0fd0f168afac480f8b2b98a74fb510a09e35f1df3a54adb8"
+    },
+    {
+      "path": "packages/project/src/agent/Project.tool.ts",
+      "fingerprint": "a40ca020a0e65ba2a06b8da83072870ccace6578ffc716f69ec286515d5a570f"
+    },
+    {
+      "path": "packages/project/src/agent/ProjectKernelPort.ts",
+      "fingerprint": "c7c0931f591f94e68df13b4f068d83cd5dd214879f03bac55abbf0251b1375cb"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/change.ts",
+      "fingerprint": "afa93ce4c60bca33b5cba512940786fb9c56d02de1915a1cf9663d8414f1c612"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/edit.ts",
+      "fingerprint": "9b301c9332581bd17065d95997716d094575f3390eed844e78b7ac6c5791204b"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/file.ts",
+      "fingerprint": "92f0e8a2b2c51e24f258b7ffdb3501ba61419b4ab43b61f7ed2cd435955c0145"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/list.ts",
+      "fingerprint": "caafd58c8020bc60f61e44e7d2bc68da904b5873e6a40a1418cc110eb7fffc53"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/range.ts",
+      "fingerprint": "157ce8bd53796e1c79d6f6a1d81e9ea090b09b40ad9031f8379c5036d3fa5fa7"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/read.ts",
+      "fingerprint": "8d074241e83e05b4531015ebe9f2421c973d9c121194ed1230174601dec2b572"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/reference.ts",
+      "fingerprint": "9bc453ee98caa870164d82fd3f1b257dcd408cc175e7731ee16b52b3b6239fa4"
+    },
+    {
+      "path": "packages/project/src/agent/contracts/search.ts",
+      "fingerprint": "8612656199ec40d5064c93b1f6286f7785e853d36c5eb926ec92ac230f178eb3"
+    },
+    {
+      "path": "packages/project/src/agent/presentation/source-window.ts",
+      "fingerprint": "e446f999dae146e1116d7906faa97bbe831dbfccc17342495b0df184ec11ebc4"
+    },
+    {
+      "path": "packages/project/src/agent/tools/change.ts",
+      "fingerprint": "b7294b6eddbfd0adaa3819a45b2c46b51330018ac393cac19292cbe9231228fb"
+    },
+    {
+      "path": "packages/project/src/agent/tools/code-analysis.ts",
+      "fingerprint": "90946b52e25984e9f51f0b3727dcf9d5a62b81fcb46a41c8fe03b01a8c5895f4"
+    },
+    {
+      "path": "packages/project/src/agent/tools/code.ts",
+      "fingerprint": "4db2c469e88c8e33aa6abfd5cb1ad15ae80491599c696cbdfa09eb19bb5965fc"
+    },
+    {
+      "path": "packages/project/src/agent/tools/edit-recovery.ts",
+      "fingerprint": "78b5fa3a5c5448fae9e2efa46b40f41c3e7839403bcbe05aca6d88a74aef7de3"
+    },
+    {
+      "path": "packages/project/src/agent/tools/edit.ts",
+      "fingerprint": "5baf6b0ce053c5a5d6a0c4b888a48822c463852410fda283d37901a1b4f5adac"
+    },
+    {
+      "path": "packages/project/src/agent/tools/file.ts",
+      "fingerprint": "1b956c8c307c128c6014d640c6293900f4b14d0bfafb73f9ae4a118455cfde7f"
+    },
+    {
+      "path": "packages/project/src/agent/tools/list.ts",
+      "fingerprint": "ee5b1fe5a2390b6f1f19179f9b2ca9270402b7960ca1023735f71ffe998465f3"
+    },
+    {
+      "path": "packages/project/src/agent/tools/planner-resolver.ts",
+      "fingerprint": "91a46b81c86173f45b4b889a4b72be607e836b588be7956a70ed1971463156da"
+    },
+    {
+      "path": "packages/project/src/agent/tools/read.ts",
+      "fingerprint": "5075e4b98d0ac98860fd833fcf667114250f6496211421b539d73e2677fa48ee"
+    },
+    {
+      "path": "packages/project/src/agent/tools/receipts.ts",
+      "fingerprint": "23ad7c040bdf1067a59538771fcd05397dcc1f4ab2cba3cbe08070c71e9edd1a"
+    },
+    {
+      "path": "packages/project/src/agent/tools/run.ts",
+      "fingerprint": "43794cc8f2698c76d63d2e4019a28d363a25c60e50c2225b517e2da1f2089606"
+    },
+    {
+      "path": "packages/project/src/agent/tools/search.ts",
+      "fingerprint": "b4ba7bac3bab82ee9262660c964ee5ffe8a90342eacf495775e7290d55baac13"
+    },
+    {
+      "path": "packages/project/src/agent/tools/shared.ts",
+      "fingerprint": "aed83b0b35f74c7149e6319d0301b8bd2a02f6b40b7c3323a88d00f25a7a8fd4"
+    },
+    {
+      "path": "packages/project/src/agent/tools/transaction-result.ts",
+      "fingerprint": "6a94293e44c5946de6a82cd2f86a6b57e56948a2e1cde36e8d447d419aed3fe8"
+    },
+    {
+      "path": "packages/project/src/agent/tools/transaction.ts",
+      "fingerprint": "d1685ba58b960469a16113268d9feddce773a4b54991c1d41aaf986c4a05122f"
+    },
+    {
+      "path": "packages/project/src/project-code-contracts.ts",
+      "fingerprint": "722938390dfde3f97e3954adcf0350801747cc8e8609ecbb8afd22be2f566915"
+    },
+    {
+      "path": "packages/project/src/transactions/transaction-errors.ts",
+      "fingerprint": "8ac8b5a7fdab15c55b4ca8948470f858447b2dac61be651d5df6d78a57b52027"
+    }
+  ]
+}

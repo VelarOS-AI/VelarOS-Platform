@@ -57,7 +57,7 @@ describe('tool execution failure projection', () => {
     expect(result.nextActions).toEqual(['请重新读取冲突文件并人工合并。'])
   })
 
-  test('preserves runtime diagnosis when an embedded failure crosses the AppError boundary', () => {
+  test('preserves actionable recovery without adding blame or duplicate steps across error boundaries', () => {
     const embedded = buildToolFailureResult(
       'schema_validation_failed',
       '参数结构不符合 browser:evaluate_script 的 schema',
@@ -74,7 +74,7 @@ describe('tool execution failure projection', () => {
     expect(result.runtimeToolIssue).toEqual(embedded.runtimeToolIssue)
     expect(result.nextActions).toEqual(embedded.nextActions)
     expect(
-      result.nextActions?.filter((action) => action.startsWith('先归因本次工具问题'))
+      result.nextActions?.filter((action) => action.startsWith('先依据实际错误条件'))
     ).toHaveLength(1)
   })
 

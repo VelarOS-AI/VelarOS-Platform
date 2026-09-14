@@ -245,13 +245,13 @@ function registeredValidatorContextViolations() {
 
 const ForbiddenInternalDependencies = [
   {
-    source: (sourcePath) => /^(files|transactions|edits|persistence)\//.test(sourcePath),
+    source: (sourcePath) => /^(files|transactions|edits|editing|file-operations|context|compatibility|persistence)\//.test(sourcePath),
     targets: ['runtime/', 'composition/'],
     label: 'services must use domain ports instead of runtime composition',
   },
   {
     source: (sourcePath) => sourcePath.startsWith('files/'),
-    targets: ['transactions/', 'edits/'],
+    targets: ['transactions/', 'edits/', 'editing/', 'file-operations/', 'context/', 'compatibility/'],
     label: 'file access must not depend on transaction or edit implementation',
   },
   {
@@ -265,13 +265,28 @@ const ForbiddenInternalDependencies = [
     label: 'edit strategies must produce patches without persistence',
   },
   {
+    source: (sourcePath) => /^(editing|file-operations)\//.test(sourcePath),
+    targets: ['files/', 'transactions/', 'persistence/', 'context/', 'agent/', 'compatibility/'],
+    label: 'pure edit and file planners must use resolved source and injected ports',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('context/'),
+    targets: ['files/', 'transactions/', 'persistence/', 'agent/tools/', 'agent/presentation/', 'compatibility/'],
+    label: 'file context references must use capability ports without tool execution or storage implementation',
+  },
+  {
+    source: (sourcePath) => sourcePath.startsWith('compatibility/'),
+    targets: ['files/', 'transactions/', 'persistence/'],
+    label: 'compatibility adapters must preserve the governed public transaction boundary',
+  },
+  {
     source: (sourcePath) => sourcePath.startsWith('types/'),
-    targets: ['runtime/', 'files/', 'transactions/', 'edits/', 'agent/', 'composition/', 'infrastructure/'],
+    targets: ['runtime/', 'files/', 'transactions/', 'edits/', 'editing/', 'file-operations/', 'context/', 'compatibility/', 'agent/', 'composition/', 'infrastructure/'],
     label: 'domain types must not depend on runtime, files, transactions, edits, Agent, or composition',
   },
   {
-    source: (sourcePath) => /^(runtime|files|transactions|edits|persistence)\//.test(sourcePath),
-    targets: ['agent/'],
+    source: (sourcePath) => /^(runtime|files|transactions|edits|editing|file-operations|persistence)\//.test(sourcePath),
+    targets: ['agent/', 'compatibility/'],
     label: 'Project implementation must not depend on Agent adapters',
   },
   {
@@ -385,6 +400,13 @@ for (const path of walk(SourceRoot)) {
   }
   const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles
     .map((reference) => reference.fileName)
+  if (/^(editing|file-operations)\//.test(sourcePath)) {
+    for (const specifier of importedSpecifiers) {
+      if (/^(?:node:)?(?:fs(?:\/promises)?|child_process|worker_threads)$/.test(specifier)) {
+        fail(`pure planner must not perform filesystem or process IO in ${sourcePath}: ${specifier}`)
+      }
+    }
+  }
   for (const rule of ForbiddenInternalDependencies) {
     if (!rule.source(sourcePath)) continue
     for (const specifier of importedSpecifiers) {

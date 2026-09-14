@@ -29,6 +29,7 @@ import type {
   SearchInput,
 } from '../types/io.js'
 import type { ResolveTargetInput } from '../types/target.js'
+import type { ProjectTransactionStatus } from '../types/transaction.js'
 import type { ValidateInput } from '../types/validation.js'
 
 /**
@@ -53,7 +54,11 @@ export interface AgentProjectDiagnostic {
 }
 
 export interface AgentProjectPreparedPatch {
+  /** 提交快照归档使用内核实际补丁内容，避免写入后重读时外部变更吞掉中间版本。 */
+  oldContent?: string
+  newContent?: string
   path: string
+  baseRevision?: string
   diff: string
   changedLines: number
   /** 策略写入的补丁说明；Agent 边界只读取其中给模型看的 matchNote。 */
@@ -62,12 +67,20 @@ export interface AgentProjectPreparedPatch {
 
 export interface AgentProjectPreparedTransaction {
   transactionId: string
+  status: 'prepared'
   patches: AgentProjectPreparedPatch[]
   changedFiles: string[]
   diff: string
   changedLines: number
   risk: 'low' | 'medium' | 'high'
   createdAt: number
+  /** 计划元数据原样保存在事务上，例如编码转换的 recode 回执。 */
+  metadata?: Record<string, unknown>
+}
+
+export interface AgentProjectStoredTransaction extends Omit<AgentProjectPreparedTransaction, 'status'> {
+  status: ProjectTransactionStatus
+  appliedAt?: number
 }
 
 export interface AgentProjectApplyResult {
@@ -115,6 +128,7 @@ export interface AgentProjectFileSnapshot {
 }
 
 export interface AgentProjectReadResult {
+  redacted?: boolean
   snapshot: AgentProjectFileSnapshot
   content?: string
   range?: {
@@ -179,6 +193,7 @@ export interface AgentProjectSearchResult {
 
 export interface AgentProjectSearchHit {
   path: string
+  revision?: string
   range?: {
     startLine: number
     startColumn?: number
@@ -206,6 +221,7 @@ export type AgentProjectResolveTargetResult =
     }
 
 export interface AgentProjectKernelPort {
+  prepareContextSnapshot?(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
   listFiles(input?: ObserveInput): Promise<Array<{ path: string; type: 'file' | 'directory' }>>
   stat(input: FileStatInput): Promise<FileStatResult>
   read(input: ReadInput): Promise<AgentProjectKernelReadResult>
@@ -216,7 +232,7 @@ export interface AgentProjectKernelPort {
   discardTransaction(transactionId: string): { discarded: boolean }
   getTransaction(
     transactionId: string
-  ): AgentProjectPreparedTransaction | undefined
+  ): AgentProjectStoredTransaction | undefined
   fixTransaction(input: FixInput): Promise<AgentProjectFixResult>
   applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
   validate(input: ValidateInput): Promise<AgentProjectValidationResult>
@@ -255,7 +271,7 @@ const MaxAgentSearchResultChars = 24_000
  * Agent 边界必须显式投影，避免结构类型允许的额外字段在运行时穿透，并防止正文
  * 同时出现在 snapshot.content 与顶层 content 中占用两份模型上下文。
  */
-function projectAgentReadResult(
+export function projectAgentReadResult(
   filePath: string,
   result: AgentProjectKernelReadResult
 ): AgentProjectReadResult {
@@ -268,6 +284,7 @@ function projectAgentReadResult(
       revision: toOptional(result.snapshot.revision),
     },
     content: result.content,
+    redacted: result.redacted,
     range: result.range,
     totalLines: result.totalLines,
     truncated: result.truncated,
@@ -422,6 +439,7 @@ export interface AgentProjectSearchRequest {
 function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHit {
   return {
     path: hit.path,
+    revision: hit.revision,
     range: mapDefined(hit.range, (range) => ({
       startLine: range.startLine,
       startColumn: range.startColumn,

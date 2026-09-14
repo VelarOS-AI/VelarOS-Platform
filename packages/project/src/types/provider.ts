@@ -112,6 +112,8 @@ export interface CommandRunResult {
   stderr: string;
   durationMs?: number;
   timedOut?: boolean;
+  /** 任一输出流达到宿主缓冲上限，当前输出和搜索结果可能不完整。 */
+  truncated?: boolean;
   toolRequirements?: CommandToolRequirement[];
 }
 

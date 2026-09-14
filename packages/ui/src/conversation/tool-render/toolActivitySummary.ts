@@ -120,7 +120,7 @@ function collectExploredPaths(block: ToolCallBlock, target: Set<string>): void {
     if (batch.length) {
       batch.forEach((file) => {
         const snap = asRecord(file.snapshot)
-        addPath(target, readString(snap, 'path'))
+        addPath(target, readString(file, 'path') ?? readString(snap, 'path'))
       })
       return
     }

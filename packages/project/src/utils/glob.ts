@@ -1,21 +1,11 @@
 import picomatch from "picomatch";
 
+import { createMatcherCache, MatcherCacheCapacity } from "./matcher-cache.js";
 import { normalizeRel } from "./path.js";
 
-/**
- * 复用编译过的 picomatch 匹配器；project 内对同一份 pattern 会被反复用在 include/exclude/deny 列表里。
- */
-const matcherCache = new Map<string, (input: string) => boolean>();
-
-function getMatcher(pattern: string): (input: string) => boolean {
-  const cached = matcherCache.get(pattern);
-  if (cached) return cached;
-
-  // picomatch 的返回值类型上非空，编译失败它自己抛；此处不再补一层不可达的防御分支。
-  const matcher = picomatch(pattern, { dot: true, nocase: false });
-  matcherCache.set(pattern, matcher);
-  return matcher;
-}
+const getMatcher = createMatcherCache(MatcherCacheCapacity, (pattern) =>
+  picomatch(pattern, { dot: true, nocase: false }),
+);
 
 function hasGlobMagic(pattern: string): boolean {
   return /[*?[\]{}!()]/.test(pattern);

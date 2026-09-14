@@ -51,27 +51,25 @@ export function isProbablyBinary(data: Buffer | Uint8Array): boolean {
   return !detectProjectTextEncoding(data)
 }
 
+/** 一次确定物理编码后解码；不会把半个 UTF-8 字符重新解释成另一种编码。 */
 export function decodeProjectTextBuffer(data: Buffer | Uint8Array): Nullable<string> {
-  const buffer = Buffer.from(data)
-  const encoding = detectProjectTextEncoding(buffer)
-  if (!encoding) return null
+  const encoding = detectProjectTextEncoding(data)
+  return encoding ? createProjectTextDecoder(encoding).decode(data) : null
+}
 
-  switch (encoding) {
-    case 'utf8-bom':
-      return buffer.subarray(UTF8_BOM.length).toString('utf-8')
-    case 'utf16le':
-      return buffer.subarray(UTF16LE_BOM.length).toString('utf16le')
-    case 'utf16be':
-      return decodeUtf16Be(buffer.subarray(UTF16BE_BOM.length))
-    case 'utf16le-nobom':
-      return buffer.subarray(0, buffer.length - (buffer.length % 2)).toString('utf16le')
-    case 'utf16be-nobom':
-      return decodeUtf16Be(buffer)
-    case 'gb18030':
-      return decodeGb18030(buffer)
-    case 'utf8':
-      return buffer.toString('utf-8')
-  }
+export function createProjectTextDecoder(encoding: ProjectTextEncoding): TextDecoder {
+  const label = encoding.startsWith('utf16le')
+    ? 'utf-16le'
+    : encoding.startsWith('utf16be')
+      ? 'utf-16be'
+      : encoding === 'gb18030' ? 'gb18030' : 'utf-8'
+  return new TextDecoder(label, { fatal: true })
+}
+
+/** 模型提供的正文使用统一逻辑换行；字面转义、孤立 CR 和正文中的 BOM 字符保持原样。 */
+export function normalizeProjectInputText(content: string): string {
+  assertWellFormedProjectText(content)
+  return content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
 }
 
 export function encodeProjectTextBuffer(
@@ -97,30 +95,70 @@ export function encodeProjectTextBuffer(
   }
 }
 
+/** 探测失败是候选结果，错误显式返回给调用方淘汰该编码。 */
+function validateTextChunk(
+  decoder: TextDecoder,
+  bytes: Uint8Array,
+  stream: boolean,
+): Nullable<{ error: unknown }> {
+  try {
+    decoder.decode(bytes, { stream })
+    return null
+  } catch (error) {
+    return { error }
+  }
+}
+
+/** 流式候选验证只保存有限文件头；到 EOF 才提交编码判定。 */
+export class ProjectTextEncodingProbe {
+  private readonly decoders = new Map<string, TextDecoder>(
+    ['utf-8', 'utf-16le', 'utf-16be', 'gb18030'].map((label) =>
+      [label, new TextDecoder(label, { fatal: true })]),
+  )
+  private readonly head = new Uint8Array(8192)
+  private headLength = 0
+  private hasNul = false
+
+  public push(bytes: Uint8Array): void {
+    const take = Math.min(bytes.length, this.head.length - this.headLength)
+    this.head.set(bytes.subarray(0, take), this.headLength)
+    this.headLength += take
+    this.hasNul ||= bytes.includes(0)
+    for (const [label, decoder] of this.decoders) {
+      if (validateTextChunk(decoder, bytes, true)) this.decoders.delete(label)
+    }
+  }
+
+  public finish(partial = false): Nullable<ProjectTextEncoding> {
+    if (!partial) {
+      for (const [label, decoder] of this.decoders) {
+        if (validateTextChunk(decoder, new Uint8Array(), false)) this.decoders.delete(label)
+      }
+    }
+    const head = Buffer.from(this.head.subarray(0, this.headLength))
+    if (startsWithBytes(head, UTF8_BOM))
+      return this.decoders.has('utf-8') ? 'utf8-bom' : null
+    if (startsWithBytes(head, UTF16LE_BOM))
+      return this.decoders.has('utf-16le') ? 'utf16le' : null
+    if (startsWithBytes(head, UTF16BE_BOM))
+      return this.decoders.has('utf-16be') ? 'utf16be' : null
+    const utf16 = detectUtf16NoBom(head)
+    if (utf16)
+      return this.decoders.has(utf16 === 'utf16le-nobom' ? 'utf-16le' : 'utf-16be') ? utf16 : null
+    if (this.hasNul) return null
+    if (this.decoders.has('utf-8')) return 'utf8'
+    if (this.decoders.has('gb18030')) return 'gb18030'
+    return null
+  }
+}
+
 export function detectProjectTextEncoding(
   data: Buffer | Uint8Array,
+  partial = false,
 ): Nullable<ProjectTextEncoding> {
-  const buffer = Buffer.from(data)
-  if (startsWithBytes(buffer, UTF8_BOM))
-    return canDecodeStrictly(buffer.subarray(3), 'utf-8') ? 'utf8-bom' : null
-  if (startsWithBytes(buffer, UTF16LE_BOM))
-    return canDecodeStrictly(buffer.subarray(2), 'utf-16le') ? 'utf16le' : null
-  if (startsWithBytes(buffer, UTF16BE_BOM))
-    return canDecodeStrictly(buffer.subarray(2), 'utf-16be') ? 'utf16be' : null
-
-  const utf16NoBom = detectUtf16NoBom(buffer)
-  if (utf16NoBom)
-    return canDecodeStrictly(buffer, utf16NoBom === 'utf16le-nobom' ? 'utf-16le' : 'utf-16be')
-      ? utf16NoBom
-      : null
-
-  const len = Math.min(buffer.length, 8000)
-  for (let i = 0; i < len; i++) {
-    if (buffer[i] === 0) return null
-  }
-  if (canDecodeStrictly(buffer, 'utf-8')) return 'utf8'
-  if (canDecodeStrictly(buffer, 'gb18030')) return 'gb18030'
-  return null
+  const probe = new ProjectTextEncodingProbe()
+  probe.push(data)
+  return probe.finish(partial)
 }
 
 function startsWithBytes(buffer: Uint8Array, prefix: Uint8Array): boolean {
@@ -141,7 +179,18 @@ function prefixBytes(prefix: Uint8Array, payload: Buffer): Buffer {
 function detectUtf16NoBom(buffer: Buffer): Nullable<ProjectTextEncoding> {
   let checkLength = Math.min(buffer.length, 8192)
   checkLength -= checkLength % 2
-  if (checkLength < 16) return null
+  if (checkLength < 2) return null
+  if (checkLength < 16) {
+    // 极短无 BOM 文本只接受可验证的 ASCII 与交错 NUL，纯非 ASCII 不凭长度猜字节序。
+    const asciiUnit = (unit: number) => unit === 9 || unit === 10 || unit === 13 || (unit >= 32 && unit <= 126)
+    let little = true
+    let big = true
+    for (let index = 0; index < checkLength; index += 2) {
+      little &&= buffer[index + 1] === 0 && asciiUnit(buffer[index])
+      big &&= buffer[index] === 0 && asciiUnit(buffer[index + 1])
+    }
+    return little ? 'utf16le-nobom' : big ? 'utf16be-nobom' : null
+  }
 
   let evenNul = 0
   let oddNul = 0
@@ -160,16 +209,6 @@ function detectUtf16NoBom(buffer: Buffer): Nullable<ProjectTextEncoding> {
   return null
 }
 
-function decodeUtf16Be(buffer: Buffer): string {
-  const alignedLength = buffer.length - (buffer.length % 2)
-  const swapped = new Uint8Array(alignedLength)
-  for (let index = 0; index < alignedLength; index += 2) {
-    swapped[index] = buffer[index + 1] ?? 0
-    swapped[index + 1] = buffer[index] ?? 0
-  }
-  return Buffer.from(swapped).toString('utf16le')
-}
-
 function encodeUtf16Be(content: string): Buffer {
   const le = Buffer.from(content, 'utf16le')
   const swapped = new Uint8Array(le.length)
@@ -178,19 +217,6 @@ function encodeUtf16Be(content: string): Buffer {
     swapped[index + 1] = le[index] ?? 0
   }
   return Buffer.from(swapped)
-}
-
-function canDecodeStrictly(
-  buffer: Buffer,
-  encoding: 'utf-8' | 'gb18030' | 'utf-16le' | 'utf-16be',
-): boolean {
-  try {
-    new TextDecoder(encoding, { fatal: true }).decode(buffer)
-    return true
-  } catch {
-    // arch-guard:silent-catch-ok 编码探测只关心是否能严格解码。
-    return false
-  }
 }
 
 function decodeGb18030(buffer: Buffer): string {
@@ -318,5 +344,5 @@ function shouldTryCrlfMatch(content: string, needle: string): boolean {
 }
 
 function toCrlfText(value: string): string {
-  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n')
+  return value.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')
 }

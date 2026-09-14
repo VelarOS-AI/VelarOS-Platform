@@ -30,6 +30,7 @@ import type {
   SubAgentToolCategoryRequestResult,
 } from '../kernel/dispatch/host-ports'
 import type { ExecutionEventBus } from '../kernel/execution/ExecutionEventBus'
+import type { SubAgentDispatchCatalog } from '../sub-agent'
 import type { SubAgentRuntimeOverride } from '../team/model-router'
 import type { ToolCapabilityPage } from '../tools/capability-types'
 
@@ -147,6 +148,7 @@ export interface KernelToolContext {
   ) => void
   query: (task: string, opts?: SubAgentOptions) => Promise<string>
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
+  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
   runAgentWorkflow?: (input: AgentWorkflowDefinition) => Promise<AgentWorkflowRunResult>
   readBackgroundJobOutput?: (
     input: ReadToolBackgroundJobOutputInput

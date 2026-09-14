@@ -34,10 +34,8 @@ const workflowAgentCallSchema: z.ZodType<AgentWorkflowAgentCall> = z.object({
   agent_name: z.string().trim().min(2).max(40).regex(/^[A-Za-z][A-Za-z -]*$/).optional(),
   prompt: z.string().trim().min(20).max(12_000),
   description: z.string().trim().min(1).max(240).optional(),
-  subagent_type: withDefaultNote(
-    z.string().trim().min(1).max(64),
-    'general',
-    '缺省为 general。也可使用内置类型或已安装自定义 agent id。'
+  subagent_type: z.string().trim().min(1).max(64).optional().describe(
+    '选择本轮 subagent_type 目录中的精确 id；省略使用目录标明的宿主默认类型。'
   ),
   tool_scope: withDefaultNote(
     z.enum(['type_default', 'inherit', 'custom']),

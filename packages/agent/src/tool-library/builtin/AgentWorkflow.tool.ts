@@ -26,6 +26,7 @@ const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
   ],
   usage: [
     'steps 按数组顺序执行；归约类 step 的 source.step_id 只能引用更早的 step。',
+    'subagent_type 从本轮目录选精确 id；省略使用宿主默认类型。',
     'operation 六选一：parallel / pipeline / repeat 派 Agent，filter / dedupe / majority_vote 是纯归约。',
     '每个 Agent call 必须提供 output_schema；最终只接受符合 schema 的 JSON，修复失败会作为该节点失败。',
     '多数票缺 quorum、平票或未达 threshold 时返回 inconclusive，不会默认判通过。',
@@ -43,7 +44,6 @@ const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
           calls: ['Atlas', 'Beacon'].map((agent_name, index) => ({
             id: `review-${index + 1}`,
             agent_name,
-            subagent_type: 'review',
             prompt: 'Independently inspect the current project change. Return a verdict; do not modify files.',
             readonly: true,
             output_schema: {

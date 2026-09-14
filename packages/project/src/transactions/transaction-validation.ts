@@ -28,7 +28,7 @@ function validationPolicyView(policy: CorePolicy): ProjectValidationPolicy {
 }
 
 function readonlyProvider<Provider extends object>(
-  provider?: Provider,
+  provider?: Provider
 ): Readonly<Provider> | undefined {
   if (!provider) return undefined
   const target = Object.freeze({})
@@ -45,7 +45,7 @@ function readonlyProvider<Provider extends object>(
 }
 
 function validationProvidersView(
-  providers: ProjectProviders & { command: CommandProvider },
+  providers: ProjectProviders & { command: CommandProvider }
 ): ProjectValidationProviders {
   return Object.freeze({
     approval: readonlyProvider(providers.approval),
@@ -62,7 +62,7 @@ function validationProvidersView(
 }
 
 function validationTransactionView(
-  transaction?: StoredTransaction,
+  transaction?: StoredTransaction
 ): ProjectValidationTransaction | undefined {
   if (!transaction) return undefined
   return Object.freeze({
@@ -79,11 +79,11 @@ export interface TransactionValidationDependencies {
   readonly getTransaction: (transactionId: string) => StoredTransaction | undefined
   readonly buildOverlay: (transactionId?: string) => Promise<TransactionContentOverlay>
   readonly createReader: (
-    contentByPath: ReadonlyMap<string, StagedFileContent>,
+    contentByPath: ReadonlyMap<string, StagedFileContent>
   ) => (path: string) => Promise<string | undefined>
   readonly validateRegistered: (
     input: ValidateInput,
-    context: ProjectValidationContext,
+    context: ProjectValidationContext
   ) => Promise<ValidationResult>
   readonly createAdapters: (snapshot: FileSnapshot) => Promise<readonly FileAdapter[]>
   readonly snapshotStaged: (path: string, content: string) => Promise<FileSnapshot>
@@ -110,6 +110,7 @@ export class TransactionValidation {
       readFile: this.dependencies.createReader(overlay.contentByPath),
     })
     const result = await this.dependencies.validateRegistered(input, context)
+    let allPassed = result.ok
 
     if (!isEmpty(overlay.diagnostics)) {
       result.diagnostics.push(...overlay.diagnostics)
@@ -139,6 +140,7 @@ export class TransactionValidation {
           transactionId: input.transactionId,
           changedContent: stagedContent,
         })
+        allPassed = allPassed && adapterResult.ok
         result.diagnostics.push(...adapterResult.diagnostics)
         result.checks.push(...adapterResult.checks)
       }
@@ -146,7 +148,10 @@ export class TransactionValidation {
 
     return {
       ...result,
-      ok: result.diagnostics.every((diagnostic) => diagnostic.severity !== 'error'),
+      ok:
+        allPassed &&
+        result.checks.every((check) => check.ok) &&
+        result.diagnostics.every((diagnostic) => diagnostic.severity !== 'error'),
     }
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { selectJsonPath } from '../src/agent/context/retrieval/PayloadReader'
 import { findHistoryPreviewPlaceholderArgumentPaths } from '../src/tools/historyPreviewPlaceholder'
 import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
@@ -15,127 +16,75 @@ function rawHistoryPreviewWrap(text: string, field = 'content'): string {
     : `[history preview omitted ${text.length} chars from "${field}"; tool received the full value]`
 }
 
-describe('history preview placeholder idempotency', () => {
-  test('does not re-wrap a value that is already a single-layer placeholder', () => {
-    const longText = 'x'.repeat(4033)
-    const firstPass = compactToolInputForModel({ newContent: longText })
-    const placeholder = firstPass.newContent as string
-    expect(placeholder.startsWith('[history preview omitted 4033 chars from "newContent"')).toBe(
-      true
-    )
-
-    // 模拟下一轮重放：占位串本身作为“历史参数”再次进入压缩管线，且它已超过
-    // newContent 的大字段阈值（240），若不做幂等识别就会被当成原始大字符串再包一层。
-    const secondPass = compactToolInputForModel({ newContent: placeholder })
-    expect(secondPass.newContent).toBe(placeholder)
-    expect((secondPass.newContent as string).match(/history preview omitted/g)).toHaveLength(1)
+describe('history input omission metadata', () => {
+  test('removes long source fields and supplies an exact recall path without fabricated text', () => {
+    const text = '中文🙂\\path\r\n'.repeat(1000)
+    const input = { actions: [{ op: 'create', path: 'src/a.ts', text }] }
+    const shown = compactToolInputForModel(input, 'create-source')
+    expect(shown.actions).toEqual([{ op: 'create', path: 'src/a.ts' }])
+    expect(shown.__historyInputOmissions).toEqual([{
+      path: ['actions', 0, 'text'], jsonPath: '$.actions[0].text', chars: text.length, ref: 'input:create-source',
+    }])
+    expect(JSON.stringify(shown)).not.toContain('history preview omitted')
+    expect(input.actions[0]!.text).toBe(text)
+    expect(compactToolInputForModel(shown, 'create-source')).toEqual(shown)
   })
 
-  test('collapses a realistically-truncated nested chain (each layer real 160-char preview) to a single layer', () => {
-    // 真实重复包装链：每一层的 preview 都被截到 160 字符（不是手写的完整正文），这正是
-    // 真机三层嵌套里内层信息已经丢失一部分的情形——旧实现要求整串以 "…]" 收尾且每层
-    // 都是完整占位串才能剥离，对这种真实截断链完全不生效（见评审复核）。
-    const real = 'X'.repeat(5200)
-    const layer1 = rawHistoryPreviewWrap(real)
-    const layer2 = rawHistoryPreviewWrap(layer1)
-    const layer3 = rawHistoryPreviewWrap(layer2)
-
-    const result = compactToolInputForModel({ content: layer3 })
-    const collapsed = result.content as string
-
-    // 每层预览只留 160 字符，第三层已经把最内层（真实 5200 字符正文）的头部截得
-    // 不完整，无法再解析出一条完整头部——这是嵌套发生之前就已经丢失的信息，不是本
-    // 函数能逆向补全的。可验证、也应当保证的是：不再继续增长（原始链条是 3 层，输出
-    // 至多保留 2 层残留头部）、且长度恒定有界，不随嵌套深度线性膨胀。
-    const headerOccurrences = collapsed.match(/history preview omitted/g)?.length ?? 0
-    expect(headerOccurrences).toBeLessThanOrEqual(2)
-    expect(collapsed.length).toBeLessThan(300)
-
-    // 二次重放幂等：对已收敛的单层占位串再跑一遍必须原样不动，不能继续变化。
-    const replayed = compactToolInputForModel({ content: collapsed })
-    expect(replayed.content).toBe(collapsed)
+  test('ordinary source stays unchanged, including quoted examples of the old placeholder format', () => {
+    const input = { text: 'const text = "[history preview omitted 10 chars from string; tool received the full value]"' }
+    expect(compactToolInputForModel(input)).toEqual(input)
   })
 
-  test('collapses the real #118-shaped sample (model-mimicked headers with no closing "…]", followed by real code)', () => {
-    // 复刻真机取证 errors.txt #118：模型把两层占位头原样抄进真实参数开头,后面紧跟真实
-    // 代码,整串既不以 "…]" 收尾,内层头部也是不完整的（旧实现的锚定正则连第一层都匹配不上）。
-    const realCode =
-      "test('serializes duplicate apply commands for the same transaction', async () => { /* … */ })"
-    const fakeHeader =
-      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
-    const hybrid = `${fakeHeader}${fakeHeader}${realCode}`
-
-    const result = compactToolInputForModel({ text: hybrid })
-    const collapsed = result.text as string
-
-    // 两层仿写头部被剥离,模型最终看到的是真实代码本身的预览,而不是嵌套头部的乱码。
-    expect(collapsed.match(/history preview omitted/g)).toHaveLength(1)
-    expect(collapsed).toContain(realCode.slice(0, 100))
-
-    const replayed = compactToolInputForModel({ text: collapsed })
-    expect(replayed.text).toBe(collapsed)
+  test.each(['one layer', 'nested layers', 'copied header plus code', 'no preview'] as const)('old %s source placeholders become separate omissions', (shape) => {
+    const once = rawHistoryPreviewWrap('x'.repeat(4000), 'text')
+    const value = shape === 'nested layers' ? rawHistoryPreviewWrap(rawHistoryPreviewWrap(once))
+      : shape === 'copied header plus code' ? `[history preview omitted 4033 chars from "text"; tool received the full value; preview: ${  'realCode'.repeat(1000)}`
+        : shape === 'no preview' ? '[history preview omitted 9000 chars from "widget_code"; tool received the full value]'
+          : once
+    const shown = compactToolInputForModel({ text: value }, 'old-input')
+    expect(Object.hasOwn(shown, 'text')).toBe(false)
+    expect(shown.__historyInputOmissions).toEqual([{ path: ['text'], jsonPath: '$.text', ref: 'input:old-input' }])
+    expect(compactToolInputForModel(shown, 'old-input')).toEqual(shown)
   })
 
-  test('does not trust an oversized value that merely starts with the placeholder header as already-compacted', () => {
-    // 边界防绕过（评审 minor #2）：只要开头匹配占位头就原样放行,会让 preview 正文无限大,
-    // 绕过所有体积上限。总长明显超出真实占位串的结构上限时必须当作普通大字符串重新压缩。
-    const spoofed = `[history preview omitted 5 chars from "content"; tool received the full value; preview: ${'Z'.repeat(9_000)}…]`
-
-    const result = compactToolInputForModel({ content: spoofed })
-    const compacted = result.content as string
-
-    expect(compacted.length).toBeLessThan(400)
+  test('omits long primitive arrays as a unit without inserting holes or shifting indices', () => {
+    const shown = compactToolInputForModel({ paths: ['a', 'b'.repeat(1000), 'c'] }, 'array-input')
+    expect(Object.hasOwn(shown, 'paths')).toBe(false)
+    expect(shown.__historyInputOmissions).toEqual([{ path: ['paths'], jsonPath: '$.paths', items: 3, ref: 'input:array-input' }])
   })
 
-  test('a genuine long string unrelated to the placeholder format is still wrapped normally', () => {
-    const longText = 'y'.repeat(1000)
-    const result = compactToolInputForModel({ notes: longText })
-    expect(result.notes).toContain('history preview omitted 1000 chars from "notes"')
+  test('omission recall paths retrieve exact source under quoted bracket, escape and Unicode keys', () => {
+    for (const key of ['a]b', 'x[0].y', 'quote"and\\slash', '中文🙂\n']) {
+      const original = { nested: { [key]: 'original source'.repeat(100) } }
+      const shown = compactToolInputForModel(original, 'complex-keys')
+      const omission = (shown.__historyInputOmissions as Array<{ jsonPath: string }>)[0]!
+      expect(selectJsonPath(JSON.stringify(original), omission.jsonPath)).toEqual({ found: true, value: original.nested[key] })
+    }
   })
 
-  test('collapses a single copied header followed by real content (no closing "…]") to exactly one layer', () => {
-    // 评审 major：最常见的入口形态——模型只抄了一层占位头（连 "preview: " 都原样抄了）,
-    // 后面直接接真实代码,总长远超单层信任上限,且整串不以 "…]" 收尾。旧实现在 layers===1
-    // 时只要超过 TrustedSinglePlaceholderMaxLength 就返回 null,回落到 summarizeToolInputString
-    // 把"头部+真实代码"整体当新内容再包一层,产生两层嵌套——这正是 #118 嵌套链的第一步。
-    const fakeHeader =
-      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
-    const realCode = `test('serializes duplicate apply commands for the same transaction', async () => { ${'x'.repeat(4200)} })`
-    const hybrid = `${fakeHeader}${realCode}`
-
-    const result = compactToolInputForModel({ text: hybrid })
-    const collapsed = result.text as string
-
-    expect(collapsed.match(/history preview omitted/g)).toHaveLength(1)
-    expect(collapsed).toContain(realCode.slice(0, 100))
-
-    const replayed = compactToolInputForModel({ text: collapsed })
-    expect(replayed.text).toBe(collapsed)
+  test('non-JSON values and sparse arrays are omitted without fabricated nulls or serialization errors', () => {
+    const shown = compactToolInputForModel({ absent: undefined, big: 1n, items: ['a', undefined, 'b'], sparse: Array(3), invalid: NaN }, 'non-json')
+    expect(shown.items).toBeUndefined()
+    expect(shown.sparse).toBeUndefined()
+    expect(shown.big).toBeUndefined()
+    expect(JSON.stringify(shown)).not.toContain('null')
+    expect((shown.__historyInputOmissions as unknown[]).length).toBe(5)
   })
 
-  test('collapsed placeholder declares the length tool actually received, not the innermost claimed length', () => {
-    // 评审 minor #2：嵌套只可能来自模型照抄,工具实际收到的是整串 value（含前面的占位头
-    // 文本）。收敛后的占位串若仍报内层宣称的历史长度,既报错了长度,也把"实参开头是占位
-    // 垃圾"这一事实从模型眼前抹掉。声明长度必须等于这次工具真实收到的 value.length。
-    const fakeHeader =
-      '[history preview omitted 4033 chars from "text"; tool received the full value; preview: '
-    const realCode = "test('serializes duplicate apply commands', async () => {})"
-    const hybrid = `${fakeHeader}${fakeHeader}${realCode}`
-
-    const result = compactToolInputForModel({ text: hybrid })
-    const collapsed = result.text as string
-    const declaredLength = Number(collapsed.match(/history preview omitted (\d+) chars/)?.[1])
-
-    expect(declaredLength).toBe(hybrid.length)
-    expect(declaredLength).not.toBe(4033)
+  test('whole-input budget fallback contains a recall receipt and no clipped input string', () => {
+    const fields = Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`field${index}`, 'data'.repeat(200)]))
+    const shown = compactToolInputForModel(fields, 'whole-input')
+    expect(shown.__historyInputPreview).toBe(true)
+    expect(shown.__historyInputOmissions).toEqual([{ path: [], jsonPath: '$', ref: 'input:whole-input' }])
+    expect(shown.preview).toBeUndefined()
+    expect(JSON.stringify(shown).length).toBeLessThan(1000)
+    expect(compactToolInputForModel(shown, 'whole-input')).toEqual(shown)
   })
 
-  test('a no-preview leaf placeholder stays untouched when replayed', () => {
-    // widget_code 用的是无 preview 分支：[history preview omitted N chars from "widget_code"; tool received the full value]
-    const placeholder =
-      '[history preview omitted 9000 chars from "widget_code"; tool received the full value]'
-    const result = compactToolInputForModel({ widget_code: placeholder })
-    expect(result.widget_code).toBe(placeholder)
+  test('keeps the existing widget replay budget while omitting larger source through metadata', () => {
+    const source = ' '.repeat(7000)
+    expect(compactToolInputForModel({ widget_code: source })).toEqual({ widget_code: source })
+    expect(compactToolInputForModel({ widget_code: source.repeat(2) }).widget_code).toBeUndefined()
   })
 })
 

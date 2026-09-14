@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 
-import { isEmpty, isNull, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
 
 import { ProjectError } from '../errors.js'
 import type { ReadInput, ReadResult } from '../types/io.js'
 import type { FileSnapshot } from '../types/snapshot.js'
-import { decodeProjectTextBuffer, isProbablyBinary } from '../utils/text.js'
+import { detectProjectTextEncoding, type ProjectTextEncoding,ProjectTextEncodingProbe } from '../utils/text.js'
+
+import { readProjectTextChunks } from './text-stream.js'
 
 export const ReadPrefixChunkBytes = 64 * 1024
 
@@ -29,7 +31,7 @@ export interface LineWindowReadResult {
   totalLines?: number
 }
 
-/** 按 UTF-8 字节数和 Unicode 字符数截断，优先保留完整行，并记录精确 UTF-16 续读 offset。 */
+/** 按逻辑 UTF-8 字节数和 Unicode 字符数截断；CRLF 计一个换行，续读仍保存原始 UTF-16 offset。 */
 export function limitContent(
   content: string,
   maxBytes?: number,
@@ -49,14 +51,17 @@ export function limitContent(
   let consumedChars = 0
   let consumedCharacterCount = 0
   let consumedBytes = 0
-  for (const char of content) {
-    const charUnits = char.length
+  for (let offset = 0; offset < content.length;) {
+    const crlf = content[offset] === '\r' && content[offset + 1] === '\n'
+    const char = crlf ? '\n' : String.fromCodePoint(content.codePointAt(offset)!)
+    const charUnits = crlf ? 2 : char.length
     const charBytes = encoder.encode(char).length
     if (charBounded && consumedCharacterCount + 1 > Math.max(0, maxChars!)) break
     if (byteBounded && consumedBytes + charBytes > Math.max(0, maxBytes!)) break
     consumedChars += charUnits
     consumedCharacterCount += 1
     consumedBytes += charBytes
+    offset += charUnits
   }
   if (
     consumedChars === 0 &&
@@ -152,6 +157,18 @@ export function endColumnClampNote(
   return `endLine ${range.endLine} 超出文件总行数 ${totalLines}，已读到文件末尾并忽略 endColumn。`
 }
 
+/** 列使用 UTF-16 坐标，但窗口边界必须落在完整 Unicode 字符之间。 */
+function assertCharacterBoundary(text: string, offset: number, path: string, line: number): void {
+  if (offset <= 0 || offset >= text.length) return
+  const before = text.charCodeAt(offset - 1)
+  const after = text.charCodeAt(offset)
+  if (before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff) {
+    throw new ProjectError('INVALID_INPUT', `${path}：第 ${line} 行列边界截断了 Unicode 字符。`,
+      { path, line, column: offset + 1, characterColumns: [offset, offset + 2] },
+      '请把列边界放在完整字符的前后，或按完整行读取。')
+  }
+}
+
 export function sliceWindowColumns(
   filePath: string,
   content: string,
@@ -186,6 +203,8 @@ export function sliceWindowColumns(
       { path: filePath, range, lineLength: lastLine.length },
     )
   }
+  assertCharacterBoundary(firstLine, startColumn - 1, filePath, absoluteStartLine)
+  assertCharacterBoundary(lastLine, endColumn - 1, filePath, absoluteEndLine)
   if (lines.length === 1) {
     if (endColumn < startColumn) {
       throw new ProjectError(
@@ -246,185 +265,73 @@ export function continuationInput(
   }
 }
 
-export function concatByteChunks(chunks: readonly Uint8Array[]): Buffer {
-  const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0)
-  const combined = new Uint8Array(totalLength)
-  let offset = 0
-  for (const chunk of chunks) {
-    combined.set(chunk, offset)
-    offset += chunk.length
-  }
-  return Buffer.from(combined)
-}
-
+/** 读取完整解码字符，最终预算由 limitContent 在统一 UTF-8/Unicode 视图上裁切。 */
 export async function readLimitedTextPrefix(
   absPath: string,
   fileSize: number,
   limits: { maxBytes?: number; maxChars?: number },
+  encoding?: ProjectTextEncoding,
 ): Promise<{ content: string; truncated: boolean }> {
-  const handle = await open(absPath, 'r')
-  const chunk = new Uint8Array(ReadPrefixChunkBytes)
-  const chunks: Buffer[] = []
-  let bytesReadTotal = 0
-  let reachedEof = false
-  let decodedContent: Nullable<string> = ''
-
-  try {
-    while (true) {
-      const decoded = !isEmpty(chunks) ? decodeProjectTextBuffer(concatByteChunks(chunks)) : ''
-      const remainingChars = !isUndefined(limits.maxChars)
-        ? Math.max(0, limits.maxChars - [...(decoded ?? '')].length)
-        : undefined
-      const charByteBudget = !isUndefined(remainingChars)
-        ? remainingChars * 4 + 4
-        : ReadPrefixChunkBytes
-      const remainingBytes = !isUndefined(limits.maxBytes)
-        ? Math.min(limits.maxBytes - bytesReadTotal, charByteBudget)
-        : charByteBudget
-      if (remainingBytes <= 0) break
-      const readSize = Math.min(chunk.length, remainingBytes)
-      const { bytesRead } = await handle.read(chunk, 0, readSize, null)
-      if (bytesRead === 0) {
-        reachedEof = true
-        break
-      }
-
-      bytesReadTotal += bytesRead
-      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)))
-      const content = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? ''
-      if (!isUndefined(limits.maxChars) && [...content].length >= limits.maxChars) {
-        break
-      }
-      if (!isUndefined(limits.maxBytes) && bytesReadTotal >= limits.maxBytes) break
-    }
-
-    decodedContent = !isEmpty(chunks) ? decodeProjectTextBuffer(concatByteChunks(chunks)) : ''
-    let lookaheadBytes = 0
-    while (
-      (isNull(decodedContent) || (isEmpty(decodedContent) && bytesReadTotal < fileSize)) &&
-      bytesReadTotal < fileSize &&
-      lookaheadBytes < 8
-    ) {
-      const { bytesRead } = await handle.read(chunk, 0, 1, null)
-      if (bytesRead === 0) {
-        reachedEof = true
-        break
-      }
-      bytesReadTotal += bytesRead
-      lookaheadBytes += bytesRead
-      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)))
-      decodedContent = decodeProjectTextBuffer(concatByteChunks(chunks))
-    }
-  } finally {
-    await handle.close()
+  const parts: string[] = []
+  let characters = 0
+  let bytes = 0
+  for await (const part of readProjectTextChunks(absPath, encoding)) {
+    parts.push(part.content)
+    if (!isUndefined(limits.maxChars)) characters += [...part.content.replace(/\r\n/g, '\n')].length
+    if (!isUndefined(limits.maxBytes)) bytes += new TextEncoder().encode(part.content.replace(/\r\n/g, '\n')).length
+    if ((!isUndefined(limits.maxChars) && characters > limits.maxChars) ||
+        (!isUndefined(limits.maxBytes) && bytes > limits.maxBytes)) return { content: parts.join(''), truncated: part.byteOffset < fileSize }
   }
-
-  if (isNull(decodedContent)) {
-    throw new ProjectError(
-      'INVALID_INPUT',
-      '读取预算无法覆盖下一个完整文本字符',
-      { maxBytes: limits.maxBytes, maxChars: limits.maxChars },
-      '请提高 maxBytes 或 maxChars 后重试；读取不会返回无法解码的字符片段。',
-    )
-  }
-  return {
-    content: decodedContent,
-    truncated: !reachedEof && bytesReadTotal < fileSize,
-  }
+  return { content: parts.join(''), truncated: false }
 }
 
+/** 跳过窗口前的文本并增量收集目标行，内存与输出窗口而非文件前缀长度相关。 */
 export async function readTextLineWindow(
   absPath: string,
-  range: {
-    startLine?: number
-    endLine?: number
-    startColumn?: number
-    endColumn?: number
-  },
+  range: { startLine?: number; endLine?: number; startColumn?: number; endColumn?: number },
   limits: { maxBytes?: number; maxChars?: number } = {},
+  encoding?: ProjectTextEncoding,
 ): Promise<LineWindowReadResult> {
   const startLine = Math.max(1, Math.floor(range.startLine ?? 1))
-  const requestedEndLine = Math.max(
-    startLine,
-    Number.isFinite(range.endLine)
-      ? Math.floor(range.endLine ?? startLine)
-      : Number.MAX_SAFE_INTEGER,
-  )
-  const handle = await open(absPath, 'r')
-  const chunk = new Uint8Array(ReadPrefixChunkBytes)
-  const lines: string[] = []
-  const chunks: Buffer[] = []
+  const requestedEndLine = Math.max(startLine, range.endLine ?? Number.MAX_SAFE_INTEGER)
+  const outputLimits = [limits.maxBytes, isUndefined(limits.maxChars) ? undefined : limits.maxChars * 2]
+    .filter((value): value is number => !isUndefined(value))
+  const outputLimit = isEmpty(outputLimits) ? Number.MAX_SAFE_INTEGER
+    : Math.max(0, (range.startColumn ?? 1) - 1) + Math.min(...outputLimits) + 4
+  const pieces: string[] = []
   let currentLine = 1
+  let currentColumn = 1
+  let outputLength = 0
   let hasMore = false
   let totalLines: Optional<number>
-  const outputLimitCandidates = [limits.maxBytes, limits.maxChars].filter(
-    (value): value is number => !isUndefined(value),
-  )
-  const outputLimit = !isEmpty(outputLimitCandidates)
-    ? Math.min(...outputLimitCandidates)
-    : undefined
-
-  const acceptLine = (line: string) => {
-    if (currentLine < startLine) {
-      currentLine++
-      return false
+  outer: for await (const part of readProjectTextChunks(absPath, encoding)) {
+    let from = 0
+    while (from < part.content.length) {
+      const newline = part.content.indexOf('\n', from)
+      const end = newline < 0 ? part.content.length : newline
+      if (currentLine >= startLine) {
+        const text = part.content.slice(from, end)
+        pieces.push(text)
+        outputLength += text.length
+        // 显式末列仍需读到能验证的位置，不能把预算截断的行当作真实文件末尾。
+        const endColumnKnown = range.endLine !== currentLine || isUndefined(range.endColumn) ||
+          currentColumn + text.length >= range.endColumn || newline >= 0
+        if (outputLength >= outputLimit && endColumnKnown) { hasMore = true; break outer }
+      }
+      currentColumn += end - from
+      if (newline < 0) break
+      if (currentLine >= requestedEndLine) { hasMore = true; break outer }
+      if (currentLine >= startLine) { pieces.push('\n'); outputLength += 1 }
+      currentLine += 1
+      currentColumn = 1
+      from = newline + 1
     }
-    if (currentLine <= requestedEndLine) {
-      lines.push(line)
-      currentLine++
-      return false
-    }
-    hasMore = true
-    return true
   }
-
-  try {
-    while (!hasMore) {
-      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null)
-      if (bytesRead === 0) break
-
-      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)))
-      const decoded = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? ''
-      const parts = decoded.split('\n')
-      if (!isUndefined(outputLimit) && parts.length >= startLine) {
-        const lastRequestedPart = Math.min(parts.length, requestedEndLine)
-        const partialWindow = parts.slice(startLine - 1, lastRequestedPart).join('\n')
-        const requiredChars = Math.max(0, (range.startColumn ?? 1) - 1) + outputLimit + 1
-        if (partialWindow.length >= requiredChars) {
-          lines.length = 0
-          lines.push(...partialWindow.split('\n'))
-          hasMore = true
-          break
-        }
-      }
-      const completeParts = decoded.endsWith('\n') ? parts : parts.slice(0, -1)
-      currentLine = 1
-      lines.length = 0
-      for (const line of completeParts) {
-        if (acceptLine(line)) break
-      }
-    }
-
-    if (!hasMore) {
-      const decoded = decodeProjectTextBuffer(concatByteChunks(chunks)) ?? ''
-      const parts = decoded.split('\n')
-      totalLines = parts.length
-      currentLine = 1
-      lines.length = 0
-      for (const line of parts) {
-        if (acceptLine(line)) break
-      }
-    }
-  } finally {
-    await handle.close()
-  }
-
+  if (!hasMore) totalLines = currentLine
+  const content = pieces.join('')
   return {
-    content: lines.join('\n'),
-    range: {
-      startLine,
-      endLine: Math.max(startLine, startLine + lines.length - 1),
-    },
+    content,
+    range: { startLine, endLine: startLine + (content.match(/\n/g)?.length ?? 0) },
     hasMore,
     totalLines,
   }
@@ -432,11 +339,11 @@ export async function readTextLineWindow(
 
 export async function hashFileAndDetectBinary(
   absPath: string,
-): Promise<{ hash: string; binary: boolean }> {
+): Promise<{ hash: string; binary: boolean; textEncoding: Nullable<ProjectTextEncoding> }> {
   const handle = await open(absPath, 'r')
   const hash = createHash('sha256')
   const chunk = new Uint8Array(ReadPrefixChunkBytes)
-  let binarySample: Uint8Array | undefined
+  const probe = new ProjectTextEncodingProbe()
 
   try {
     while (true) {
@@ -444,18 +351,14 @@ export async function hashFileAndDetectBinary(
       if (bytesRead === 0) break
       const view = chunk.subarray(0, bytesRead)
       hash.update(view)
-      if (!binarySample) {
-        binarySample = view.slice(0, BinaryDetectionSampleBytes)
-      }
+      probe.push(view)
     }
   } finally {
     await handle.close()
   }
 
-  return {
-    hash: hash.digest('hex'),
-    binary: isProbablyBinary(binarySample ?? new Uint8Array()),
-  }
+  const textEncoding = probe.finish()
+  return { hash: hash.digest('hex'), binary: !textEncoding, textEncoding }
 }
 
 /** metadata 模式下只读文件头部样本判定是否二进制，避免为算哈希整文件读取。 */
@@ -464,7 +367,7 @@ export async function detectBinaryByPrefix(absPath: string): Promise<boolean> {
   try {
     const chunk = new Uint8Array(BinaryDetectionSampleBytes)
     const { bytesRead } = await handle.read(chunk, 0, chunk.length, null)
-    return isProbablyBinary(chunk.subarray(0, bytesRead))
+    return !detectProjectTextEncoding(chunk.subarray(0, bytesRead), bytesRead < Number((await handle.stat()).size))
   } finally {
     await handle.close()
   }

@@ -11,6 +11,7 @@ import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, 
 import { AppError } from '@velaros-ai/core/error'
 
 import { normalizeLegacyFoldStub } from '../contextRefEnvelope'
+import { isPrivateFileContextRecord } from '../resources/PrivateFileRecords'
 
 import { chatSearchMessages } from './search/Messages'
 import { chatSearchText } from './search/Text'
@@ -112,7 +113,16 @@ function readJsonPathQuotedKey(raw: string): Nullable<string> {
 }
 
 function readJsonPathBracket(path: string, start: number): Nullable<{ segment: JsonPathSegment; next: number }> {
-  const end = path.indexOf(']', start)
+  let end = -1
+  let quoted = false
+  let escaped = false
+  for (let index = start + 1; index < path.length; index++) {
+    const char = path[index]
+    if (escaped) { escaped = false; continue }
+    if (quoted && char === '\\') { escaped = true; continue }
+    if (char === '"') { quoted = !quoted; continue }
+    if (!quoted && char === ']') { end = index; break }
+  }
   if (end < 0) return null
 
   const raw = path.slice(start + 1, end).trim()
@@ -487,6 +497,8 @@ class ContextRetrievalPayloadReader {
       visited.add(current)
       const resolved = await this.resolveSingleToolPayload(sessionId, current)
       if (!resolved) return null
+      if (isPrivateFileContextRecord(resolved.payload.toolName))
+        throw new AppError('VALIDATION', 'Use context:recall with path and revision for historical files; internal file records are not generic payloads.')
       const text = resolved.payload.serializedResult
       if (!text.includes('ctx-payload:')) return resolved
       let ref: string | undefined
@@ -629,6 +641,7 @@ class ContextRetrievalPayloadReader {
       const seen = new Set<string>()
       const entries: Array<{ ref: string; toolName: Nullable<string>; chars: number }> = []
       for (const [storageKey, payload] of Object.entries(snapshot.toolResults)) {
+        if (isPrivateFileContextRecord(payload.toolName)) continue
         // 优先给 toolCallId(模型手里的 handle 多是 call_*),回退 payloadRef。
         const ref = payload.toolCallId?.trim() || payload.payloadRef?.trim() || storageKey
         if (seen.has(ref)) continue

@@ -25,7 +25,7 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
     '新派时 prompt 必须自洽：子 Agent 看不到你的会话历史，目标/已知事实/范围边界/成功标准/输出长度都要写进去；续跑只写追加的任务。',
     '同一轮可多次调用 agent:dispatch 实现并行；系统会自动限制并发数。',
     'mode=sync（默认）阻塞到完成并内联返回结果——不要再调 job:wait，也不要因为没立刻拿到就重派；mode=async 立即返回可等待 job，之后用 job:read_output/job:wait 收束。',
-    'subagent_type 来自运行时公开的类型表；tool_scope 用 type_default、inherit 或 custom（custom 时填 tool_categories）。',
+    'subagent_type 选择本轮提示目录中的精确 id；新建省略使用宿主默认类型，续跑省略继承原线程。tool_scope 用 type_default、inherit 或 custom（custom 时填 tool_categories）。',
     '优先复用：同一工作线上的追问、补做、纠偏、修复后复验，用 thread_id 续跑已派的子 Agent（它保留着读过的上下文，不必重读）；复验就续跑原验证者。',
     '需要独立上下文才新派：独立复核/第二意见（不让产出者复核自己的产出）、原线程跑偏或上下文过大、换了作用域或无关新任务。',
     '请人复核时必给 readonly=true；需要机器可读结果时给 output_schema，结果落在 structured_output。',
@@ -35,19 +35,19 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
     // 同步只读探索（默认 mode:sync，返回后再继续）
     {
       agent_name: 'Scout',
-      subagent_type: 'explore',
+      readonly: true,
       tool_scope: 'type_default',
       description: 'Scan auth module',
       prompt: 'Read src/auth and summarize login flow, key files, and risks.',
     },
     // 异步后台任务：mode:async，父 Agent 先继续，之后用 job:wait/job:read_output 收束
     {
-      agent_name: 'Builder',
-      subagent_type: 'general',
+      agent_name: 'Reviewer',
+      readonly: true,
       tool_scope: 'type_default',
       mode: 'async',
-      description: 'Add tests for utils',
-      prompt: 'Write node:test unit tests for every exported function in src/util.js and run them.',
+      description: 'Review utility coverage',
+      prompt: 'Read src/util.js and its tests. Report missing edge cases with exact file locations.',
     },
     // 修复后复验：续跑原来的验证者，它还记得失败现场
     {
@@ -95,7 +95,7 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
       ...sameNameFields,
       prompt: prompt ?? '',
       agentName,
-      subagentType: subagentType ?? (creatingThread ? 'general' : undefined),
+      subagentType,
       toolScope: toolScope ?? (creatingThread ? 'type_default' : undefined),
       toolCategories: toolCategories ?? (creatingThread ? [] : undefined),
       threadId,

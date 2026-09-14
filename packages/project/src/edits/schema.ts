@@ -57,7 +57,7 @@ const ProjectModelEditOperationSchemas = [
         .string()
         .min(1)
         .describe(
-          '必填：project:read 返回的 snapshot.revision；行号绑定该版本。同文件连续的 replace_lines 使用同一版本的原始行号，范围须不重叠。',
+          '必填：当前文件视图的 revision 或 project:read 返回的 snapshot.revision；行号绑定该版本。同文件连续的 replace_lines 使用同一版本的原始行号，范围须不重叠。',
         ),
       startLine: z.number().int().positive().describe('替换起始行，1-based，含本行。'),
       endLine: z.number().int().positive().describe('替换结束行，含本行，不能超出文件。'),
@@ -271,6 +271,14 @@ const ProjectEditOperationSchema = z
   .discriminatedUnion('type', [
     ...ProjectModelEditOperationSchemas,
     z.strictObject({
+      type: z.literal('replace_content'),
+      path: ProjectPathSchema,
+      expectedContent: z.string(),
+      content: z.string(),
+      mode: z.enum(['edit', 'overwrite', 'guard', 'recode']).optional(),
+      targetEncoding: z.enum(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']).optional(),
+    }),
+    z.strictObject({
       type: z.literal('delete_text'),
       path: ProjectPathSchema,
       oldText: z.string().min(1),
@@ -279,7 +287,11 @@ const ProjectEditOperationSchema = z
   ])
   .superRefine(validateMatchSelection)
 const ProjectModelEditOperationSchema = z
-  .discriminatedUnion('type', ProjectModelEditOperationSchemas)
+  .discriminatedUnion('type', [...ProjectModelEditOperationSchemas, z.strictObject({
+    type: z.literal('replace_selection'),
+    selectionRef: z.string().min(1).describe('project:read 返回的 editTarget；自动包含路径、版本和行范围。'),
+    newLines: z.array(z.string().refine((line) => !line.includes('\n') && !line.includes('\r'), '每项只能包含一行源码')),
+  })])
   .superRefine(validateMatchSelection)
 
 const ProjectEditIntentSchema = z.strictObject({

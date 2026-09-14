@@ -31,6 +31,7 @@ import type { CorePolicy } from './policy.js'
 import type { CommandProvider, ProjectProviders } from './provider.js'
 import type { ProjectSnapshot } from './snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from './target.js'
+import type { StoredTransaction } from './transaction.js'
 import type { ValidateInput, ValidationResult } from './validation.js'
 
 /** 创建工作区内核的配置；每个内核都锚定在一个根目录下。 */
@@ -49,6 +50,7 @@ export interface CreateProjectKernelOptions {
 
 /** Project Agent 与 Kernel capability 共用的项目内核接口。 */
 export interface ProjectKernel {
+  prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
   readonly root: string
   readonly policy: CorePolicy
   readonly providers: ProjectRuntimeProviders
@@ -73,7 +75,7 @@ export interface ProjectKernel {
   rollback(input: RollbackInput): Promise<RollbackResult>
   diff(input?: { transactionId?: string }): Promise<DiffResult>
   /** 读取内存中已暂存/已应用事务；apply 前预检与 amend 路径使用。 */
-  getTransaction(transactionId: string): PreparedTransaction | undefined
+  getTransaction(transactionId: string): StoredTransaction | undefined
   status(): Promise<ProjectStatus>
   getJournal(): AuditEvent[]
   runBatch(input: BatchInput): Promise<BatchResult>

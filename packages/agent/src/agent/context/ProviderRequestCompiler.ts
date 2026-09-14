@@ -218,6 +218,31 @@ export class ProviderRequestCompiler {
     return this.compileInternal(input)
   }
 
+  /** Seal a final source-reference projection without rerunning governance or altering its displayed bytes. */
+  public finalizeProjectedMessages(
+    input: CompileProviderRequestInput,
+    compiled: CompiledProviderRequest,
+    messages: ModelMessage[]
+  ): CompiledProviderRequest {
+    const providerInput = { ...input, systemPrompt: compiled.system }
+    assertValidModelHistory(messages, { phase: 'compile', turn: null })
+    const scratch = createProviderRequestScratch()
+    const requestFingerprint = buildProviderRequestFingerprint(providerInput, messages, resolveSharedToolReferenceScan(scratch, messages))
+    assertProviderRequestInvariants(providerInput, requestFingerprint, 'compile')
+    const classified = this.workingSetOS.classify({
+      systemPrompt: compiled.system, messages,
+      toolSchemaChars: input.toolSchemaChars, retrievalHandles: input.retrievalHandles,
+    })
+    const budget = runBudgetStage({ input: providerInput, providerMessages: messages, classifiedBlocks: classified.blocks })
+    return {
+      ...compiled, ...budget, messages, requestFingerprint,
+      providerRequest: buildProviderRequestSnapshot({
+        model: input.model, system: compiled.system, messages,
+        tools: input.providerTools, toolChoice: input.providerToolChoice, requestFingerprint,
+      }),
+    }
+  }
+
   private compileInternal(input: CompileProviderRequestInput): CompiledProviderRequest {
     const scratch = createProviderRequestScratch()
     const at = Date.now()

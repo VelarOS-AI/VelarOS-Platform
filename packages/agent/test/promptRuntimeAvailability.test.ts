@@ -140,6 +140,16 @@ function createPromptHarness() {
 }
 
 describe('runtime prompt follows current skill and task availability', () => {
+  test('actual RunContext and PromptState assembly injects current continuation and parameter recovery guidance', async () => {
+    const built = await createPromptHarness().build([{ role: 'user', content: '修改项目源码并验证。' }])
+    const guide = built.promptSegments.find((segment) => segment.id === 'runtime.tool-capability-map')
+    assert.ok(guide)
+    assert.match(built.systemPrompt, /continuation、cursor 或 nextOffset/u)
+    assert.match(built.systemPrompt, /只补需要更正的字段/u)
+    assert.match(built.systemPrompt, /历史省略标注不能当作源码或完整参数重放/u)
+    assert.doesNotMatch(built.systemPrompt, /edits.{0,12}occurrence|42\|源码|project:query-code|project:write|project:rollback/u)
+  })
+
   test('disabled bundled skills do not become mandatory reading prerequisites', async () => {
     const harness = createPromptHarness()
     harness.setSkillsEnabled(false)

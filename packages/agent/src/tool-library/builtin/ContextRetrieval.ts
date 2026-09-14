@@ -14,6 +14,8 @@ function clampMaxChars(value: number): number {
 
 export const recallContextSchema = z
   .object({
+    path: z.string().min(1).optional().describe('项目文件历史快照：只传 path 列出已归档版本，配合 revision 读取旧版本。'),
+    revision: z.string().min(1).optional().describe('与 path 配合，取回该文件已保存的版本；不改变当前文件。'),
     query: z
       .string()
       .min(1)
@@ -50,7 +52,7 @@ export const recallContextSchema = z
         })
       ),
     refKind: z
-      .enum(['evidence', 'tool-payload', 'payload-ref', 'context-handle'])
+      .enum(['evidence', 'tool-payload', 'payload-ref', 'context-handle', 'file-snapshot'])
       .optional()
       .describe(
         parameterDescription({
@@ -72,7 +74,7 @@ export const recallContextSchema = z
       .describe(
         parameterDescription({
           description: '精确 ref 读取工具 payload 时，只取回该 JSON path 子树。',
-          notes: ['用于读取截断节点；原始编辑参数可用 $.edits[0].newText。'],
+          notes: ['从 __historyInputOmissions 或工具回执复制实际 jsonPath；不要根据旧操作名猜参数路径。'],
         })
       ),
     offset: z
@@ -123,7 +125,11 @@ export const recallContextSchema = z
   .superRefine((input, refinementContext) => {
     // 宽容:传 ref 即可——refKind 按前缀自动判别、reason 缺省兜底(真机实证:两个必填
     // 都是模型高频踩的仪式,对只读取回无功能作用,硬拒只烧一轮重试)。
-    if (input.ref) return
+    if (input.revision && !input.path && !input.ref) {
+      refinementContext.addIssue({ code: 'custom', path: ['path'], message: '按版本召回文件需要 path 或快照 ref。' })
+      return
+    }
+    if (input.ref || input.path) return
 
     if (!input.query?.trim()) {
       refinementContext.addIssue({

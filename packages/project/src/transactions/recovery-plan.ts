@@ -10,6 +10,8 @@ import type { FileSnapshot } from '../types/snapshot.js'
 import type { StoredTransaction } from '../types/transaction.js'
 import { type ProjectTextEncoding } from '../utils/text.js'
 
+import type { TransactionBytePlan } from './byte-plan.js'
+import { bytePatchFor } from './byte-plan.js'
 import { createsMissingFile } from './patch-ownership.js'
 import { isDeletePatch } from './transaction-overlay.js'
 
@@ -17,6 +19,7 @@ import { isDeletePatch } from './transaction-overlay.js'
 export interface ApplyRestoreState {
   existedBefore: boolean
   oldContent?: string
+  bytes?: string
   /** 原文件的文本编码；还原时文件若已被删掉，按它重建而不是写成 UTF-8。 */
   encoding?: ProjectTextEncoding
   mode?: number
@@ -27,6 +30,7 @@ export function transactionOwnedStates(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
   pathValue: string,
+  bytePlan?: TransactionBytePlan,
 ): ProjectTransactionFileState[] {
   const patches = kind === 'apply' ? tx.patches : [...tx.patches].reverse()
   const states: ProjectTransactionFileState[] = []
@@ -38,6 +42,7 @@ export function transactionOwnedStates(
         ? { exists: false }
         : {
             exists: true,
+            bytes: kind === 'apply' ? bytePatchFor(bytePlan, patchValue)?.after : bytePatchFor(bytePlan, patchValue)?.before,
             content:
               kind === 'apply' ? (patchValue.newContent ?? '') : (patchValue.oldContent ?? ''),
           },
@@ -50,6 +55,7 @@ export function durableRestorePlan(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
   restoreByPath: Map<string, ApplyRestoreState>,
+  bytePlan?: TransactionBytePlan,
 ): ProjectTransactionRestoreEntry[] {
   const plan: ProjectTransactionRestoreEntry[] = []
   for (const pathValue of tx.changedFiles) {
@@ -62,7 +68,7 @@ export function durableRestorePlan(
         '请把二进制或超限文件拆出该事务；可恢复事务只写入能够完整捕获旧正文的文件。',
       )
     }
-    const ownedStates = transactionOwnedStates(tx, kind, pathValue)
+    const ownedStates = transactionOwnedStates(tx, kind, pathValue, bytePlan)
     if (isEmpty(ownedStates)) {
       throw new ProjectError(
         'PATCH_APPLY_ERROR',
@@ -74,7 +80,7 @@ export function durableRestorePlan(
       path: pathValue,
       exists: restore.existedBefore,
       ...(restore.existedBefore
-        ? { content: restore.oldContent!, encoding: restore.encoding, mode: restore.mode }
+        ? { content: restore.oldContent!, bytes: restore.bytes, encoding: restore.encoding, mode: restore.mode }
         : {}),
       ownedStates,
     })

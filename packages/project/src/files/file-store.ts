@@ -47,7 +47,7 @@ import {
   sliceLines,
 } from '../utils/text.js'
 
-import { atomicWriteProjectText } from './atomic-writer.js'
+import { atomicWriteProjectBytes, atomicWriteProjectText, type ProjectExpectedBytes } from './atomic-writer.js'
 import { listProjectFiles } from './file-listing.js'
 import {
   advanceReadCursor,
@@ -63,13 +63,17 @@ import {
   readTextLineWindow,
   sliceWindowColumns,
 } from './file-reader.js'
+import { readBoundedProjectBytes } from './private-byte-io.js'
 import { validateReadBounds } from './read-bounds.js'
+import { readProjectTextFile } from './text-stream.js'
 
 const RevisionMismatchSuggestedNextAction =
   '请重新读取受影响文件，并使用最新 snapshot.revision 重试。'
 
 const StatRecommendedMaxLines = 120
 const StatMaxLineCountBytes = 1024 * 1024
+const MaxCachedSearchTextKinds = 4096
+const SearchTextKindIdleMs = 60_000
 
 type FileStoreAction = 'read' | 'write' | 'search' | 'observe'
 
@@ -118,6 +122,9 @@ export class FileStore implements ProjectFileAccess {
   private command: CommandProvider
   private policy: CorePolicy
   private realRoot?: Promise<string>
+  private readonly searchTextKinds = new Map<string, { token: string; kind: 'native' | 'decoded' | 'excluded'; lastUsedAt: number }>()
+  private searchTextKindNextSweep = 0
+  private readonly snapshotEncodings = new WeakMap<FileSnapshot, ProjectTextEncoding>()
 
   constructor(
     root: string,
@@ -239,6 +246,7 @@ export class FileStore implements ProjectFileAccess {
     } else {
       const metadata = await hashFileAndDetectBinary(abs)
       binary = metadata.binary
+      textEncoding = metadata.textEncoding
       contentHash = metadata.hash
     }
     const ident = this.identity(rel, mtimeMs, mtimeToken, size, contentHash)
@@ -259,8 +267,9 @@ export class FileStore implements ProjectFileAccess {
     if (isPresent(content)) {
       base.content = content
     }
-    if (isPresent(textEncoding) && textEncoding !== 'utf8') {
-      base.textEncoding = textEncoding
+    if (isPresent(textEncoding)) {
+      this.snapshotEncodings.set(base, textEncoding)
+      if (textEncoding !== 'utf8') base.textEncoding = textEncoding
     }
     // stat 跟随链接取到的是目标文件；删除/重命名作用于链接本身，需要知道路径是不是链接。
     if ((await lstat(abs)).isSymbolicLink()) {
@@ -328,7 +337,7 @@ export class FileStore implements ProjectFileAccess {
       const prefix = await readLimitedTextPrefix(snap.absPath, snap.size, {
         maxBytes: input.maxBytes,
         maxChars: input.maxChars,
-      })
+      }, this.snapshotEncodings.get(snap))
       const limited = limitContent(prefix.content, input.maxBytes, input.maxChars)
       const truncated = prefix.truncated || limited.truncated
       const cursor = advanceReadCursor(
@@ -363,6 +372,7 @@ export class FileStore implements ProjectFileAccess {
           maxBytes: input.maxBytes,
           maxChars: input.maxChars,
         },
+        this.snapshotEncodings.get(snap),
       )
       const requestedStartLine = range.startLine ?? 1
       if (isPresent(window.totalLines) && requestedStartLine > window.totalLines)
@@ -406,7 +416,7 @@ export class FileStore implements ProjectFileAccess {
       }
     }
 
-    const rawContent = snap.content ?? (await readFile(snap.absPath, 'utf8'))
+    const rawContent = snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
     const allLines = rawContent.split('\n')
     const totalLines = allLines.length
 
@@ -482,6 +492,31 @@ export class FileStore implements ProjectFileAccess {
         continuationInput(input, snap.path, snap.revision, cursor, true),
       ),
     }
+  }
+
+  /** 搜索只缓存物理格式分类；纳秒 mtime/ctime 与文件身份变化都会重新严格探测。 */
+  public async searchTextKind(pathInput: string): Promise<'native' | 'decoded' | 'excluded'> {
+    const { abs, rel } = await this.authorize(pathInput, 'search', '搜索')
+    const metadata = await stat(abs, { bigint: true })
+    if (!metadata.isFile() || metadata.size > this.policy.maxSearchFileSizeBytes) return 'excluded'
+    const token = [metadata.dev, metadata.ino, metadata.size, metadata.mtimeNs, metadata.ctimeNs].join(':')
+    const cached = this.searchTextKinds.get(rel)
+    const now = Date.now()
+    if (cached) cached.lastUsedAt = now
+    if (cached?.token === token) return cached.kind
+    const encoding = detectProjectTextEncoding(await readFile(abs))
+    const kind = !encoding ? 'excluded' : encoding === 'utf8' || encoding === 'utf8-bom' ? 'native' : 'decoded'
+    if (now >= this.searchTextKindNextSweep) {
+      // 只回收近期不再参与查询的条目，容量外扫描不会把仍活跃的整批条目逐项顶出。
+      for (const [path, entry] of this.searchTextKinds) {
+        if (now - entry.lastUsedAt >= SearchTextKindIdleMs) this.searchTextKinds.delete(path)
+      }
+      this.searchTextKindNextSweep = now + SearchTextKindIdleMs
+    }
+    if (cached || this.searchTextKinds.size < MaxCachedSearchTextKinds) {
+      this.searchTextKinds.set(rel, { token, kind, lastUsedAt: now })
+    }
+    return kind
   }
 
   /** 返回轻量文件状态和建议的安全读取窗口。 */
@@ -563,7 +598,7 @@ export class FileStore implements ProjectFileAccess {
     let lineCount: Nullable<number> = null
     if (sizeBytes <= StatMaxLineCountBytes) {
       // 优先复用 snapshot 已读到的正文；仅当宿主把读取上限调得比行数上限更小时才回退到再读一次。
-      const text = snap.content ?? (await readFile(snap.absPath, 'utf8'))
+      const text = snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
       lineCount = countTextLines(text)
     } else {
       warnings.push('文件较大；stat 阶段未计算行数。')
@@ -583,6 +618,7 @@ export class FileStore implements ProjectFileAccess {
       lineCount,
       isBinary: false,
       readableText: true,
+      textEncoding: this.snapshotEncodings.get(snap) ?? 'utf8',
       mtimeMs,
       revision: snap.revision,
       recommendedRead: endLine > 0 ? { path: snap.path, range: { startLine: 1, endLine } } : null,
@@ -597,17 +633,29 @@ export class FileStore implements ProjectFileAccess {
   public async write(
     pathInput: string,
     content: string,
-    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding; mode?: number },
+    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ProjectExpectedBytes },
   ): Promise<FileSnapshot> {
     const { abs, rel } = await this.authorize(pathInput, 'write', '写入', options)
     await mkdir(path.dirname(abs), { recursive: true })
-    await atomicWriteProjectText(abs, content, options?.encoding, options?.mode)
+    if (options?.transactionBytes) await atomicWriteProjectBytes(abs, options.transactionBytes, options.mode, options.expectedBytes)
+    else await atomicWriteProjectText(abs, content, options?.encoding, options?.mode)
     return this.snapshot(rel, true, { skipFileFilter: true })
   }
 
+  /** 私有事务捕获；根目录与 deny 规则始终执行。 */
+  public async readTransactionBytes(pathInput: string, maximumBytes = this.policy.maxFileSizeToReadBytes): Promise<Buffer | undefined> {
+    const { abs } = await this.authorize(pathInput, 'read', '读取事务原字节', { skipFileFilter: true })
+    return readBoundedProjectBytes(abs, maximumBytes)
+  }
+
   /** 删除工作区内的单个文件。 */
-  public async remove(pathInput: string, options?: { skipFileFilter?: boolean }): Promise<void> {
+  public async remove(pathInput: string, options?: { skipFileFilter?: boolean; expectedBytes?: ProjectExpectedBytes }): Promise<void> {
     const { abs } = await this.authorize(pathInput, 'write', '删除', options)
+    if (options?.expectedBytes) {
+      const expected = options.expectedBytes
+      const current = await this.readTransactionBytes(pathInput, expected.bytes?.length ?? 0)
+      if (expected.exists !== !isUndefined(current) || (expected.exists && (!expected.bytes || !current || current.length !== expected.bytes.length || !current.every((byte, index) => byte === expected.bytes![index])))) throw new ProjectError('CONFLICT_WITH_EXTERNAL_EDIT', '删除前检测到外部字节修改。', { path: pathInput })
+    }
     await rm(abs, { force: true, recursive: false })
   }
 
