@@ -10,6 +10,8 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **工具集合挂进内核的那段逻辑收进 `@velaros-ai/agent/tool-contract`，office 的报错跟着变成中文（09-16 01:10）。** `parseToolWireInput`、`createToolCallableOperations` 取代 system、office 各自的一份（project 那份在它整理完后换）：先严格解析入参、再向宿主解析上下文（坏入参不会触发宿主解析）、核可用、核取消、执行，工具抛的错可交给 `mapError` 翻译。影响：office 经内核调用时的报错从英文（`Office capability input is invalid` 等）变成「办公能力的入参不合法：…」这类中文；system 的文字不变。agent 升 0.6.31，公开 API 基线按只增不减重绑（基线在这之前就已落后 6 个声明，一并绑上）。
+
 - **新包 `@velaros-ai/shell-command`：命令判定从 system 抽出来，新开「能力公共件」一域（09-16 00:50，ADR 0008）。** 只读、危险、长驻判定，并发判定，确认文案，危险命令的审批请求（操作身份跨工具一致）都在这一个包里；system 已改用它，project 在实现层整理完之后迁过来。影响：`@velaros-ai/system` 不再导出 `systemCommandPolicy`、`SystemCommandPolicyApi`、`SystemCommandExecutionPlan`；Desktop、Workbench、Termel 的命令判定改从新包取（对照表在 ADR 0008）。模型看到的没有变化（system 的判定原样搬过去）。**要你拍板的两件事留着没动**：project:run 要不要像 system:run 一样对长驻命令（`npm run dev` 这类）弹低风险确认；危险命令被拒时 system 抛错、project 返回结构化拒绝，要不要统一。
 - **仓库里两个测试的假路径改成 `/Users/example`（09-16 00:50）。** `check:public-readiness` 把 `/Users/someone`、`/Users/mac` 这类路径当开发者本机路径拦下（system 修复代理新加的用例和一个 UI 渲染测试），只改测试数据。
 

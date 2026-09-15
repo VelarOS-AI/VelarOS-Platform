@@ -127,7 +127,7 @@ describe('office tools kernel module', () => {
           unexpected: true,
         },
         new AbortController().signal,
-      )).rejects.toThrow('Office capability input is invalid')
+      )).rejects.toThrow('办公能力的入参不合法')
       expect(resolverCalls).toBe(1)
     } finally {
       await rm(root, { recursive: true, force: true })

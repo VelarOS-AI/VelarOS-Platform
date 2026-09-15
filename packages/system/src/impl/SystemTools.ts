@@ -10,7 +10,7 @@
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
-import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
+import { createToolCallableOperations, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
@@ -23,7 +23,7 @@ import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
 import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
 import type { SystemSandboxInput } from '../types/sandbox.js'
-import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.js'
+import { defineSystemTool } from '../utils/tool.js'
 
 import { systemExecutionOperations } from './SystemExecutionOperations.js'
 import { systemFileOperations } from './SystemFileOperations.js'
@@ -465,7 +465,7 @@ export function createSystemKernelModule(
     },
     activate(context) {
       const callable = createKernelCallableCapability(
-        createSystemCallableOperations(systemTools, options.resolveContext),
+        createToolCallableOperations(systemTools, options.resolveContext, { label: '系统' }),
       )
       const service: SystemCapabilityService = Object.freeze({
         ...callable,

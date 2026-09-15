@@ -2,6 +2,7 @@ export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileCon
 export { fileContextFor } from '../agent/context/resources/FileContextCoordinator'
 export { resolveToolInputReuse,type ToolInputReuseOptions,ToolInputReuseSchema, withToolInputReuse } from '../tools/recovery/ToolInputReuse'
 export * from './approval'
+export * from './callable-operations'
 export * from './concepts'
 export * from './define'
 export * from './discovery'
