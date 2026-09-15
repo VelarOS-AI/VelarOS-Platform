@@ -5,8 +5,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { RehearsalSandboxTuning } from '../src/utils/tuning'
 import { rehearsalSandboxRules, SandboxApplyOperationKind, type SandboxDiff } from '../src/exports/index'
+import { RehearsalSandboxTuning } from '../src/utils/tuning'
 
 function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {
   return { sandboxId: 's1', source: '/repo', created: [], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp1', ...overrides }

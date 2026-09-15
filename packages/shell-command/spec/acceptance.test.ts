@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { ShellCommandOperationKind, shellCommandApproval, shellCommandPolicy } from '../src/exports/index'
+import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy } from '../src/exports/index'
 
 describe('只读与危险判定', () => {
   test('INV-1 白名单命令一旦带写盘参数，整条掉出只读', () => {
