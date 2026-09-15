@@ -246,12 +246,12 @@ function registeredValidatorContextViolations() {
 const ForbiddenInternalDependencies = [
   {
     source: (sourcePath) => /^(impl\/(files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
-    targets: ['impl/kernel/', 'impl/composition/'],
+    targets: ['impl/kernel/', 'impl/operations/', 'impl/ProjectTools'],
     label: 'services must use domain ports instead of runtime composition',
   },
   {
     source: (sourcePath) => /^(impl|utils)\/files\//.test(sourcePath),
-    targets: ['impl/transactions/', 'utils/transactions/', 'impl/strategies/', 'utils/editing/', 'utils/agent/', 'impl/tools/'],
+    targets: ['impl/transactions/', 'utils/transactions/', 'impl/strategies/', 'utils/editing/', 'utils/agent/', 'impl/operations/'],
     label: 'file access must not depend on transaction or edit implementation',
   },
   {
@@ -276,11 +276,11 @@ const ForbiddenInternalDependencies = [
   },
   {
     source: (sourcePath) => /^(impl\/(kernel|files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
-    targets: ['impl/tools/', 'utils/agent/', 'impl/ProjectTools'],
+    targets: ['impl/operations/', 'utils/agent/', 'impl/ProjectTools'],
     label: 'Project implementation must not depend on Agent adapters',
   },
   {
-    source: (sourcePath) => /^(impl\/tools|utils\/agent)\//.test(sourcePath),
+    source: (sourcePath) => /^(impl\/operations|utils\/agent)\//.test(sourcePath),
     targets: ['impl/kernel/LocalProjectKernel'],
     label: 'Agent adapters must not depend on the ProjectKernel implementation',
   },

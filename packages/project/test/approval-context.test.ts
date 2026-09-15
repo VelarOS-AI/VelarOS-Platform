@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { installProjectApprovalProvider } from '../src/impl/composition/approval.js'
+import { projectApprovalBridge } from '../src/impl/operations/ProjectApprovalBridge.js'
 import { projectTools } from '../src/impl/ProjectTools.js'
 import {
   analyzeCommandExecution,
@@ -205,7 +205,6 @@ describe('project approval context', () => {
             return { approved: false, message: 'nope', autoApproved: false }
           },
         },
-        system: { canStartBackgroundCommands: () => true },
         project: { getRootPath: () => workspaceRoot },
       } as never,
     )) as { approved: boolean }
@@ -234,7 +233,7 @@ describe('project approval context', () => {
       }
     } = { providers: {} }
 
-    installProjectApprovalProvider(kernel)
+    projectApprovalBridge.install(kernel)
 
     expect(
       await kernel.providers.approval?.approve({

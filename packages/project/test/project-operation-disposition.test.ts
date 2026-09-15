@@ -8,7 +8,9 @@ import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
 import disposition from '../../../docs/engineering/project-tool-operation-disposition.json'
 import { projectTools } from '../src/impl/ProjectTools'
-import { ProjectCodeAnalysisSchema } from '../src/utils/schemas/code'
+import { createProjectCodeAnalysisTools } from '../src/impl/ProjectTools'
+
+const ProjectCodeAnalysisSchema = createProjectCodeAnalysisTools(() => true)['project:code-analysis']!.schema
 import { ProjectCodeQuerySchema } from '../src/utils/schemas/code-query'
 import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
 

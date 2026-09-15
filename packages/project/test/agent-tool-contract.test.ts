@@ -5,13 +5,11 @@ import { isCanonicalToolId, schemaToInputSchema } from '@velaros-ai/agent/tool-c
 
 import { ProjectToolNames } from '../src/contract/constants'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
-import {
-  defineProjectTool,
-  projectTools,
-  scopeProjectListPatterns,
-} from '../src/impl/ProjectTools'
+import { projectTools } from '../src/impl/ProjectTools'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
+import { scopeProjectListPatterns } from '../src/utils/agent/project-files'
 import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+import { defineProjectTool } from '../src/utils/tool'
 
 import { LegacyProjectToolNames } from './support/legacy-tools'
 import { legacyProjectTools } from './support/legacy-tools'

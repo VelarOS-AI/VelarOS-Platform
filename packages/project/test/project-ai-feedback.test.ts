@@ -61,7 +61,6 @@ function toolContext(): ProjectToolContext {
       runCommand: async () => ({}) as never,
       queryCode: async () => ({}),
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: defaultDenyApprovalPort,
   }
 }

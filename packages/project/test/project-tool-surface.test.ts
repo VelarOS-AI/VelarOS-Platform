@@ -37,11 +37,12 @@ async function fixture(options: { approved?: boolean; readDeny?: string[]; provi
       prepareMutation: async () => ({ approved: options.approved !== false, rootPath: root, rejectionMessage: 'fixture rejected' }),
       queryCode: async () => ({}),
       runCommand: async (command, commandOptions, _allowDangerous, signal) => {
+        // 能不能起后台进程由宿主在执行时决定；这个假宿主不支持后台。
+        if (commandOptions?.background) throw new Error('这个宿主不允许启动后台项目进程。')
         const result = await execute('/bin/sh', ['-c', command], { cwd: root, signal, timeout: commandOptions?.timeoutMs ?? 5000 })
         return { stdout: result.stdout.slice(0, commandOptions?.maxOutputChars), stderr: result.stderr, exitCode: 0, shell: { kind: 'posix', name: 'sh' } } as never
       },
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: { awaitConfirmationDecision: async () => ({ approved: options.approved !== false }) } as never,
   }
   registerProjectFileContext(ctx)

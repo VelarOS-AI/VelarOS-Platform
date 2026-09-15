@@ -3,8 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { canonicalizeProviderInputSchema, createToolSchemaBundle, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
 import { projectTools } from '../src/impl/ProjectTools'
-import { projectCode } from '../src/impl/tools/code'
-import { ProjectCodeSchema } from '../src/utils/schemas/code'
+import { projectTools } from '../src/impl/ProjectTools'
+
+const projectCode = projectTools['project:code']!
 
 const validDependencies = [
   { direction: 'incoming', path: 'src/cache.ts' },
@@ -37,7 +38,7 @@ describe('dependency direction contract', () => {
   test('preserves valid selectors, scope and flags without rewriting the caller intent', () => {
     for (const fields of validDependencies) {
       const input = { action: 'dependencies', ...fields }
-      expect(ProjectCodeSchema.parse(input)).toEqual(input)
+      expect(projectCode.schema.parse(input)).toEqual(input)
       expect(projectCode.schema.parse(input)).toEqual(input)
     }
   })
@@ -45,7 +46,7 @@ describe('dependency direction contract', () => {
   test('rejects wrong-direction flags, missing selectors and unknown fields without discarding them', () => {
     for (const fields of invalidDependencies) {
       const input = { action: 'dependencies', ...fields }
-      expect(ProjectCodeSchema.safeParse(input).success).toBe(false)
+      expect(projectCode.schema.safeParse(input).success).toBe(false)
       expect(projectCode.schema.safeParse(input).success).toBe(false)
     }
   })
@@ -77,7 +78,6 @@ describe('dependency direction contract', () => {
   })
 
   test('keeps inspection on its direct schema and write tools on their retry envelope', () => {
-    expect(projectCode.schema).toBe(ProjectCodeSchema)
     const retry = { reuse: 'attempt:failed', changes: [{ op: 'set', path: ['fileRef'], value: 'file:new' }] }
     expect(projectCode.schema.safeParse(retry).success).toBe(false)
     for (const name of ['project:edit', 'project:file', 'project:change'])

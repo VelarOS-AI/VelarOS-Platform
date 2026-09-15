@@ -9,9 +9,12 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
+import { projectCodeOperations } from '../src/impl/operations/ProjectCodeOperations'
 import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
-import { executeProjectCode, executeProjectCodeAnalysis, executeProjectCodeIndex } from '../src/impl/tools/code-query'
-import { ProjectCodeAnalysisSchema, ProjectCodeSchema } from '../src/utils/schemas/code'
+import { createProjectCodeAnalysisTools, projectTools } from '../src/impl/ProjectTools'
+
+const ProjectCodeSchema = projectTools['project:code']!.schema
+const ProjectCodeAnalysisSchema = createProjectCodeAnalysisTools(() => true)['project:code-analysis']!.schema
 import type { ProjectCodeQuery } from '../src/utils/schemas/code-query'
 
 let root: string
@@ -38,10 +41,9 @@ async function fixture(handler: (input: ProjectCodeQuery) => unknown = () => ({}
       runCommand: async () => ({}) as never,
       queryCode: async (input) => { calls.push(input); return handler(input) },
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: {} as never,
   }
-  return { context, calls, run: (input: unknown) => executeProjectCode(ProjectCodeSchema.parse(input), context) }
+  return { context, calls, run: (input: unknown) => projectCodeOperations.code(ProjectCodeSchema.parse(input), context) }
 }
 
 const target = { path: 'service.ts', symbol: 'Service' }
@@ -155,11 +157,11 @@ describe('six-action semantic query surface', () => {
     const { context, calls } = await fixture(() => ({ candidates: [{ name: 'possibleUnused' }] }))
     for (const action of ['trace', 'cycles', 'deadcode', 'routing', 'build_index', 'index_status', 'build_context'])
       expect(ProjectCodeSchema.safeParse({ action }).success).toBe(false)
-    await executeProjectCodeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'deadcode', limit: 4 }), context)
-    await executeProjectCodeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'cycles', maxFiles: 40 }), context)
-    await executeProjectCodeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'routing', framework: 'velar' }), context)
-    await executeProjectCodeIndex({ action: 'build_index', force: false }, context)
-    await executeProjectCodeIndex({ action: 'index_status' }, context)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'deadcode', limit: 4 }), context)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'cycles', maxFiles: 40 }), context)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'routing', framework: 'velar' }), context)
+    await projectCodeOperations.codeIndex({ action: 'build_index', force: false }, context)
+    await projectCodeOperations.codeIndex({ action: 'index_status' }, context)
     expect(calls).toEqual([{ action: 'find_dead_code', limit: 4 }, { action: 'find_cycles', maxFiles: 40 }, { action: 'routing_manifest', framework: 'velar' }, { action: 'build_index', force: false }, { action: 'index_status' }])
   })
 })

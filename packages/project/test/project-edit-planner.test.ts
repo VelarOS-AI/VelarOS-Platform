@@ -6,15 +6,15 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
 import { FileStore } from '../src/impl/files/FileStore'
+import { ProjectChangeSchema, ProjectEditSchema, ProjectFileSchema, projectTools } from '../src/impl/ProjectTools'
 import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from '../src/types/editing'
 import { normalizeProjectLineRange } from '../src/utils/editing/line-range'
 import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'
 import { compileProjectChange, compileProjectEdit, compileProjectFile, planProjectFileEdits } from '../src/utils/editing/planner-index'
-import { ProjectChangeSchema } from '../src/utils/schemas/change'
-import { ProjectEditSchema } from '../src/utils/schemas/edit'
 import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
-import { ProjectFileSchema } from '../src/utils/schemas/file'
-import { ProjectLineRangeSchema } from '../src/utils/schemas/range'
+
+/** 行范围写法只在 read 的 range 字段上单独校验。 */
+const ProjectLineRangeSchema = { safeParse: (range: unknown) => projectTools['project:read']!.schema.safeParse({ path: 'x', range }) }
 
 function view(content: string, coverage = completeProjectCoverage(content)): ProjectEditView {
   return { path: 'sample.txt', revision: 'version-a', content, coverage }

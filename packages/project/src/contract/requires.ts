@@ -289,14 +289,9 @@ export interface ProjectSandboxPort {
   discardSandbox: (sandboxId: string) => Promise<ProjectSandboxDiscardResult>
 }
 
-export interface ProjectToolSystemApi {
-  canStartBackgroundCommands: () => boolean
-}
-
 export interface ProjectToolContext extends FileContextCarrier {
   abortSignal: AbortSignal
   project: ProjectToolApi
-  system: ProjectToolSystemApi
   approval: ApprovalPort
 }
 

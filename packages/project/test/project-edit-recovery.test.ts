@@ -54,8 +54,7 @@ test('real tool returns a new bounded reference for confirmation and never appli
         runInDirectory: async (_path, run) => run(), runWithApproval: async (run) => run(),
         prepareMutation: async () => ({ approved: true, rootPath: root }),
         queryCode: async () => ({}), runCommand: async () => ({}) as never,
-      },
-      system: { canStartBackgroundCommands: () => false }, approval: {} as never,
+      }, approval: {} as never,
     }
     const read = await finalizeProjectModelResult(ctx,
       await projectTools['project:read'].execute({ path: 'a.txt' }, ctx)) as any

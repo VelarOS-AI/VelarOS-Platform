@@ -1,7 +1,9 @@
 import { isString, isTrue } from '@velaros-ai/core'
 
+import type { ProjectAuthorizationDecision } from '../../contract/requires.js'
 import type { PathEffect } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
+import { ProjectError } from '../errors.js'
 
 
 function deletes(patch: AgentProjectPreparedPatch): boolean {
@@ -32,4 +34,10 @@ export function projectTransactionHasChanges(patches: readonly AgentProjectPrepa
       (first.metadata?.textEncoding ?? 'utf8') !== (last.metadata?.textEncoding ?? 'utf8') ||
       last.metadata?.mode === 'recode'
   })
+}
+
+/** 宿主或用户拒绝写入：一个文件都没写，按拒绝失败回执；用户改主意后模型可用 inputReuse 原样重提。 */
+export function projectMutationDenied(authorization: ProjectAuthorizationDecision): ProjectError {
+  return new ProjectError('PERMISSION_DENIED', authorization.rejectionMessage ?? authorization.message, { executionOutcome: 'not-applied' },
+    '没有写入任何文件。除非用户明确改变主意，不要自行重试；用户同意后用回执的 inputReuse 原样重提。')
 }

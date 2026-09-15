@@ -7,17 +7,15 @@ import { z } from 'zod'
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
 
 import type { ProjectToolCollection } from '../../src/contract/provides.js'
-import { ProjectReadCapability, ProjectWriteCapability } from '../../src/impl/tools/capabilities'
-import { runWithProjectExecutionGate } from '../../src/impl/tools/execution-gate'
-import { projectList } from '../../src/impl/tools/list'
-import { projectRun } from '../../src/impl/tools/run'
-import { defineProjectTool } from '../../src/impl/tools/shared'
-import { applyProjectEditTransaction } from '../../src/impl/tools/transaction'
+import { projectChangeOperations } from '../../src/impl/operations/ProjectChangeOperations'
+import { projectExecutionGate } from '../../src/impl/operations/ProjectExecutionGate'
+import { projectTools } from '../../src/impl/ProjectTools'
 import { resolveProjectEditTarget, saveProjectEditTarget } from '../../src/utils/agent/edit-target'
 import { registerProjectFileContext, snapshotFromRead } from '../../src/utils/agent/file-context'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../src/utils/agent/kernel-port'
 import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../../src/utils/schemas/code-query'
 import { type ProjectEditOperationsSchema, type ProjectModelEditInput, ProjectModelEditSchema } from '../../src/utils/schemas/edit-intent'
+import { defineProjectTool } from '../../src/utils/tool'
 /** 第 1 版工具名；只在测试里用。 */
 export const LegacyProjectToolNames = Object.freeze({
   read: 'project:read',
@@ -31,6 +29,20 @@ export const LegacyProjectToolNames = Object.freeze({
 } as const)
 
 const ProjectToolNames = LegacyProjectToolNames
+
+/** 第 1 版工具用的读、写能力声明（与生产工具文件里的相同）。 */
+const ProjectReadCapability = {
+  effectKind: 'read', readScopes: ['project'], filesystem: { read: 'project', write: 'none' },
+  canReadArbitrarySource: false, concurrency: 'safe', metadata: { canMutateProject: false }, reason: 'active project read',
+} as const
+const ProjectWriteCapability = {
+  effectKind: 'write', readScopes: ['project'], writeScopes: ['project'], filesystem: { read: 'project', write: 'project' },
+  canReadArbitrarySource: false, concurrency: 'unsafe', metadata: { canMutateProject: true }, reason: 'governed active project mutation',
+} as const
+
+/** 借生产的改动执行类开事务提交（它的私有方法，只在测试驱动器里这样调）。 */
+const applyProjectEditTransaction = (input: Record<string, unknown>, context: Parameters<typeof projectChangeOperations.edit>[1]) =>
+  (projectChangeOperations as unknown as { applyTransaction: (input: Record<string, unknown>, context: unknown) => Promise<any> }).applyTransaction(input, context)
 
 const ProjectRangeSchema = z
   .strictObject({
@@ -370,7 +382,7 @@ const projectRollback = defineProjectTool<{ transactionId: string }>({
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
     return context.project.runWithApproval(() =>
-      runWithProjectExecutionGate(
+      projectExecutionGate.run(
         context.project.getRootPath(),
         true,
         context.abortSignal,
@@ -426,12 +438,12 @@ const projectQueryCode = defineProjectTool<ProjectCodeQuery>({
 
 export const legacyProjectTools: ProjectToolCollection = Object.freeze({
   [ProjectToolNames.read]: projectRead,
-  [ProjectToolNames.list]: projectList,
+  [ProjectToolNames.list]: projectTools['project:list']!,
   [ProjectToolNames.search]: projectSearch,
   [ProjectToolNames.queryCode]: projectQueryCode,
   [ProjectToolNames.write]: projectWrite,
   [ProjectToolNames.edit]: projectEdit,
   [ProjectToolNames.rollback]: projectRollback,
-  [ProjectToolNames.run]: projectRun,
+  [ProjectToolNames.run]: projectTools['project:run']!,
 })
 export { ProjectWriteModeSchema as LegacyProjectWriteModeSchema }

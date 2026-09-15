@@ -45,7 +45,7 @@ const PortableContracts = [
     contractsFile: "src/exports/contracts.ts",
     modules: new Set([
       "../utils/schemas/code-query.js",
-      "../utils/schemas/code.js",
+      "../types/tools.js",
       "../types/project.js",
       "../impl/kernel/root-source.js",
       "../contract/constants.js",

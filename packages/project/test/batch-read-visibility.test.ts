@@ -55,7 +55,6 @@ async function fixture() {
       queryCode: async () => ({}),
       runCommand: async () => ({}) as never,
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: {} as never,
   }
   registerProjectFileContext(context)

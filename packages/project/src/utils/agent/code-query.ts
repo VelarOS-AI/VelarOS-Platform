@@ -1,3 +1,7 @@
+/**
+ * 代码查询的主体：把 project:code 与 project:code-analysis 的动作翻译成宿主的代码查询（语言服务、图后端），把符号换成可复用的 symbolRef，结果装进带来源与覆盖范围的信封。
+ */
+
 import { relative, resolve } from 'node:path'
 
 import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
@@ -5,12 +9,13 @@ import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNu
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
-import { resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from '../../utils/agent/symbol-references.js'
-import { ProjectError } from '../../utils/errors.js'
-import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../utils/schemas/code.js'
-import type { ProjectCodeQuery } from '../../utils/schemas/code-query.js'
+import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../types/tools.js'
+import { ProjectError } from '../errors.js'
+import type { ProjectCodeQuery } from '../schemas/code-query.js'
 
-import { executeProjectRead } from './read.js'
+import { readProjectSource } from './project-files.js'
+import { resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from './symbol-references.js'
+
 
 function record(value: unknown): RecordValue {
   return isPlainObject(value) ? value as RecordValue : { result: value }
@@ -54,7 +59,7 @@ function scope(input: { language?: string; cwd?: string; limit?: number; extensi
   return { language: input.language, cwd: input.cwd, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
 }
 
-/** The discovery catalogue is small; extension schemas are loaded only by a host that provides them. */
+/** 代码能力目录：关系查询后端没启用时随降级回执一起给出，告诉模型哪些动作在哪个工具、哪些依赖宿主。 */
 export const ProjectCodeCapabilityCatalogue = Object.freeze({
   tool: 'project:code',
   discovery: 'tooling:map',
@@ -142,7 +147,7 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
     const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
     const symbol = await locate(target, context)
     const detail = symbol as ProjectSymbol & { bodyRange?: ProjectSymbol['range']; statementRange?: ProjectSymbol['range'] }
-    const source = await executeProjectRead({ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine], maxChars: 20_000 }, context)
+    const source = await readProjectSource({ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine], maxChars: 20_000 }, context)
     if (source.files.some((file) => file.revision !== before.snapshot.revision))
       throw new ProjectError('BASE_REVISION_MISMATCH', '符号解析期间文件发生变化，声明范围与源码不属于同一版本。', { path: target.path }, '重新查询该符号详情。')
     return envelope(input, { source: symbol.adapterId, symbols: await symbolRows([{ ...symbol, line: symbol.range.startLine }], context) }, {
@@ -211,7 +216,8 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
   }
 }
 
-export async function executeProjectCode(input: ProjectCodeInput, context: ProjectToolContext): Promise<RecordValue> {
+/** 代码查询：symbols、references、dependencies、relations、impact、diagnostics；cwd 先换算成项目内的绝对路径再查。结果统一装进带来源与覆盖范围的信封。 */
+export async function queryProjectCode(input: ProjectCodeInput, context: ProjectToolContext): Promise<RecordValue> {
   context.abortSignal.throwIfAborted()
   if (input.cwd) return context.project.runInDirectory(input.cwd, () => {
     const directory = resolve(context.project.getRootPath(), input.cwd!)
@@ -224,7 +230,7 @@ export async function executeProjectCode(input: ProjectCodeInput, context: Proje
     }
     if ('target' in input && input.target && 'path' in input.target)
       Object.assign(scoped, { target: { ...input.target, path: resolve(directory, input.target.path) } })
-    return executeProjectCode(scoped, context)
+    return queryProjectCode(scoped, context)
   })
   switch (input.action) {
     case 'symbols': return symbols(input, context)
@@ -263,8 +269,8 @@ export async function executeProjectCode(input: ProjectCodeInput, context: Proje
   }
 }
 
-/** Hosts may expose this with a situational capability, independently of the six-action tool. */
-export async function executeProjectCodeAnalysis(input: ProjectCodeAnalysisInput, context: ProjectToolContext) {
+/** 代码图分析：trace、cycles、deadcode、routing，交给宿主的图后端，结果装进同样的信封。 */
+export async function analyzeProjectCode(input: ProjectCodeAnalysisInput, context: ProjectToolContext) {
   let request: ProjectCodeQuery
   switch (input.action) {
     case 'trace': {
@@ -280,8 +286,8 @@ export async function executeProjectCodeAnalysis(input: ProjectCodeAnalysisInput
   return envelope(input, await query(request, context))
 }
 
-/** Index lifecycle is a host API; it is never reachable through a read-only model schema. */
-export async function executeProjectCodeIndex(
+/** 代码索引的生命周期（重建、查状态）：宿主接口，模型的只读工具碰不到它。 */
+export async function indexProjectCode(
   input: { action: 'build_index'; force?: boolean } | { action: 'index_status' }, context: ProjectToolContext,
 ) {
   return query(input.action === 'build_index' ? { ...input, force: input.force ?? true } : input, context)

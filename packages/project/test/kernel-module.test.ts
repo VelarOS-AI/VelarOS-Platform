@@ -55,7 +55,6 @@ function projectContext(signal: AbortSignal): ProjectToolContext {
       runCommand: async () => ({}) as never,
       queryCode: async (input) => ({ action: input.action, source: 'built-in-test' }),
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: defaultDenyApprovalPort,
   }
 }
@@ -100,7 +99,7 @@ describe('Project Kernel module', () => {
       undefined,
       { unexpected: true },
       new AbortController().signal,
-    )).rejects.toThrow('Project capability input is invalid')
+    )).rejects.toThrow('项目能力的入参不合法')
   })
 
   test('creates and edits through the governed Project capability boundary', async () => {

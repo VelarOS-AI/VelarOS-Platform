@@ -4,10 +4,11 @@ import type { ProjectToolContext } from '../../contract/requires'
 import type { PrepareEditInput } from '../../types/edit'
 import type { ProjectEditInput } from '../../types/editing'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
-import { loadProjectFileView, saveProjectFileSource } from '../../utils/agent/file-refs'
-import { projectSourceLines } from '../../utils/agent/source-window'
-import { suggestProjectEditLocations } from '../../utils/editing/stale-location'
-import { ProjectError } from '../../utils/errors'
+import { suggestProjectEditLocations } from '../editing/stale-location'
+import { ProjectError } from '../errors'
+
+import { loadProjectFileView, saveProjectFileSource } from './file-refs'
+import { projectSourceLines } from './source-window'
 
 /**
  * 失败回执的 details 在 Agent 边界每个数组最多保留 10 项。候选与窗口行超过就会被截断：

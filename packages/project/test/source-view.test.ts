@@ -10,11 +10,12 @@ import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 import { fitProjectReadsForModel } from '../../agent/src/tools/projectReadSerialization'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
-import { executeProjectRead } from '../src/impl/tools/read'
-import { executeProjectSearch } from '../src/impl/tools/search'
+import { projectTools } from '../src/impl/ProjectTools'
 import { resolveProjectFileRef, saveProjectFileSource } from '../src/utils/agent/file-refs'
+import { readProjectSource as executeProjectRead, searchProjectSource as executeProjectSearch } from '../src/utils/agent/project-files'
 import { finalizeProjectModelResult, projectSourceLines } from '../src/utils/agent/source-window'
-import { ProjectReadInputSchema } from '../src/utils/schemas/read'
+
+const ProjectReadInputSchema = projectTools['project:read']!.schema
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-source-view-')) })
@@ -30,8 +31,7 @@ async function fixture() {
       runInDirectory: async (_path, fn) => fn(), runWithApproval: async (fn) => fn(),
       prepareMutation: async () => ({ approved: true, rootPath: root }),
       queryCode: async () => ({}), runCommand: async () => ({}) as never,
-    },
-    system: { canStartBackgroundCommands: () => false }, approval: {} as never,
+    }, approval: {} as never,
   }
   const read = async (input: Parameters<typeof executeProjectRead>[0], budget = 30_000) => {
     const raw = await executeProjectRead(input, context)

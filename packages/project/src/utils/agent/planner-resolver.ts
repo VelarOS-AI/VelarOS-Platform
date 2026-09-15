@@ -2,8 +2,9 @@ import { isString } from '@velaros-ai/core'
 
 import type { ProjectToolContext } from '../../contract/requires'
 import type { ProjectPlannerResolver } from '../../types/editing'
-import { resolveProjectFileRef } from '../../utils/agent/file-refs'
-import { ProjectError } from '../../utils/errors'
+import { ProjectError } from '../errors'
+
+import { resolveProjectFileRef } from './file-refs'
 
 export function projectPlannerResolver(context: ProjectToolContext): ProjectPlannerResolver {
   return {

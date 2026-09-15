@@ -194,7 +194,6 @@ describe('project:write 工具层', () => {
         runCommand: async () => ({}) as never,
         queryCode: async () => ({}),
       },
-      system: { canStartBackgroundCommands: () => false },
       approval: defaultDenyApprovalPort,
     }
   }

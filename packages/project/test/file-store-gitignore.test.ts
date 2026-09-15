@@ -123,7 +123,6 @@ test('project:list 显式子目录不列出被根 .gitignore 忽略的构建产�
       getRootPath: () => root,
       kernel: async () => createProjectKernel({ root }),
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: defaultDenyApprovalPort,
   } as unknown as ProjectToolContext
   const result = await projectTools[ProjectToolNames.list].execute({ path: 'pkg', recursive: true }, context) as {

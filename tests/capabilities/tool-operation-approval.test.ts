@@ -48,7 +48,7 @@ function tools(approved: boolean) {
     },
   }
   const project: ProjectToolContext = {
-    abortSignal: system.abortSignal, approval, system: { canStartBackgroundCommands: () => true },
+    abortSignal: system.abortSignal, approval,
     project: {
       getRootPath: () => workspaceRoot, runCommand: run,
       runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),

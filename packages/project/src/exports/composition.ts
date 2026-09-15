@@ -1,26 +1,6 @@
-import type { ProjectSpace } from '../contract/provides.js'
-import { createProjectKernel, type CreateProjectKernelOptions } from '../impl/kernel/LocalProjectKernel.js'
-import { projectTools } from '../impl/ProjectTools.js'
-
-export * from '../impl/composition/approval.js'
-export * from '../impl/composition/code-analysis.js'
-export * from '../impl/composition/mod.js'
-
-type CreateProjectSpaceOptions = CreateProjectKernelOptions
-
-async function createProjectSpace(
-  options: CreateProjectSpaceOptions
-): Promise<ProjectSpace> {
-  const kernel = await createProjectKernel(options)
-  return Object.freeze({
-    id: 'project',
-    kernel,
-    tools: projectTools,
-  })
-}
-
-export { createProjectSpace }
-export type { CreateProjectSpaceOptions }
-export type { ProjectSpace } from '../contract/provides.js'
-export type { ProjectBundledModDefinition } from '../contract/provides.js'
+/** 组合：项目空间（内核加工具）、内置 mod 定义、可选的代码图分析扩展、审批桥。 */
+export { ProjectModId, ProjectSpaceId } from '../contract/constants.js'
+export type { ProjectBundledModDefinition, ProjectSpace } from '../contract/provides.js'
+export { projectApprovalBridge } from '../impl/operations/ProjectApprovalBridge.js'
+export { createProjectBundledModDefinition, createProjectCodeAnalysisContribution, createProjectSpace } from '../impl/ProjectTools.js'
 export type { ProjectApprovalContext } from '../types/agent.js'

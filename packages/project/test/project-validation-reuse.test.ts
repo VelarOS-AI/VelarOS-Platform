@@ -58,7 +58,6 @@ async function fixture(plugins: ProjectPlugin[] = []) {
       queryCode: async () => ({}),
       runCommand: async () => ({}) as never,
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: {} as never,
   }
   const tools = Object.fromEntries(Object.entries(projectTools).map(([name, tool]) => [name, {

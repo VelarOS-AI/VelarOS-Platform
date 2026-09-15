@@ -3,18 +3,14 @@ export type {
   ProjectAuthorizationDecision,
   ProjectToolApi,
   ProjectToolContext,
-  ProjectToolSystemApi,
 } from '../contract/requires'
 export type { AgentProjectKernelPort } from '../contract/requires.js'
-export * from '../impl/ProjectTools'
-export { createProjectCodeAnalysisTools, projectCodeAnalysisTools } from '../impl/tools/code-analysis'
-export { executeProjectCode, executeProjectCodeAnalysis, executeProjectCodeIndex } from '../impl/tools/code-query'
-export { executeProjectRead } from '../impl/tools/read'
+export { projectCodeOperations } from '../impl/operations/ProjectCodeOperations.js'
+export { createProjectCodeAnalysisTools, projectChangeTools, projectCodeTools, projectExecutionTools, projectFileTools, projectTools } from '../impl/ProjectTools.js'
 export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectDiagnostic, AgentProjectDiffResult, AgentProjectErrorLike,AgentProjectFileSnapshot, AgentProjectFixResult, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadContinuation, AgentProjectReadIssue, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectResolveTargetResult, AgentProjectSearchHit, AgentProjectSearchRequest, AgentProjectSearchResult, AgentProjectStoredTransaction, AgentProjectValidationResult } from '../types/agent-port.js'
 export { registerProjectFileContext } from '../utils/agent/file-context'
 export * from '../utils/agent/kernel-port'
 export { finalizeProjectModelResult } from '../utils/agent/source-window'
-export { ProjectCodeSchema } from '../utils/schemas/code'
 export type {
   ProjectCodeIndexQuery,
   ProjectCodeLanguageQuery,

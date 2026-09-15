@@ -86,6 +86,7 @@ interface SubAgentContextBase {
   getSupportedModelInputModalities(): readonly AgentModelInputModality[]
   setSupportedModelInputModalities(modalities: readonly AgentModelInputModality[]): void
   system?: unknown
+  project?: unknown
   getCurrentVisibleToolSurfaceProfile?(toolName: string): unknown
   setCurrentVisibleToolSurfaceProfiles?(profiles: Record<string, unknown>): void
   codingSession: {
@@ -135,35 +136,24 @@ interface ResolveSoloLoopToolsArgs {
   enabledToolNames: Iterable<string>
 }
 
-/** 子代理拿到的宿主端口里和后台命令有关的两种形状：旧式能力开关，以及 runCommand 本身。 */
-type BackgroundCommandSystemBoundary = {
-  canStartBackgroundCommands: () => boolean
+/** 宿主端口里能跑命令的那一部分：system 与 project 的 runCommand 都把 background 放在第二个参数里。 */
+type CommandRunningPort = {
   runCommand: (command: string, options?: { background?: boolean }, ...rest: unknown[]) => Promise<unknown>
 }
 
-/** 子代理不能留下后台进程：能力开关一律答否；runCommand 收到 background 直接拒绝，其余原样转给父上下文的端口。 */
-function createSubAgentSystemBoundary<TContext extends SubAgentContextBase>(
-  parentCtx: TContext
-): TContext['system'] {
-  const system = parentCtx.system
-  if (!system || !isObject(system)) return system
+/** 子代理不能留下后台进程：宿主端口（system 或 project）的 runCommand 收到 background 直接拒绝，其余原样转给父上下文的端口。 */
+function withoutBackgroundCommands<TPort>(port: TPort): TPort {
+  if (!port || !isObject(port)) return port
+  const runCommand = (port as Partial<CommandRunningPort>).runCommand
+  if (!isFunction(runCommand)) return port
 
-  const backgroundBoundary = system as Partial<BackgroundCommandSystemBoundary>
-  const hasSwitch = isFunction(backgroundBoundary.canStartBackgroundCommands)
-  const runCommand = backgroundBoundary.runCommand
-  if (!hasSwitch && !isFunction(runCommand)) return system
-
-  const boundedSystem = Object.create(Object.getPrototypeOf(system)) as Record<string, unknown>
-  Object.assign(boundedSystem, system)
-  if (hasSwitch) boundedSystem.canStartBackgroundCommands = () => false
-  if (isFunction(runCommand)) {
-    boundedSystem.runCommand = (command: string, options?: { background?: boolean }, ...rest: unknown[]) => {
-      if (options?.background) throw new AppError('PERMISSION', '子代理不能启动后台命令；改成前台运行，或交给父代理。')
-      return runCommand.call(system, command, options, ...rest)
-    }
+  const bounded = Object.create(Object.getPrototypeOf(port)) as Record<string, unknown>
+  Object.assign(bounded, port)
+  bounded.runCommand = (command: string, options?: { background?: boolean }, ...rest: unknown[]) => {
+    if (options?.background) throw new AppError('PERMISSION', '子代理不能启动后台命令；改成前台运行，或交给父代理。')
+    return runCommand.call(port, command, options, ...rest)
   }
-
-  return boundedSystem
+  return bounded as TPort
 }
 
 /** 无显式合约时，从 query 参数构造最小委派合约。 */
@@ -374,7 +364,8 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
 
   const childCtx: TContext = {
     ...args.parentCtx,
-    system: createSubAgentSystemBoundary(args.parentCtx),
+    system: withoutBackgroundCommands(args.parentCtx.system),
+    project: withoutBackgroundCommands(args.parentCtx.project),
     log: args.log,
     role: {
       id: args.roleResolution.id,

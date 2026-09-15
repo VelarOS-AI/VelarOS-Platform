@@ -54,7 +54,6 @@ function projectContext(root: string, signal: AbortSignal): ProjectToolContext {
       runCommand: async () => ({}) as never,
       queryCode: async () => ({}),
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: defaultDenyApprovalPort,
   }
 }

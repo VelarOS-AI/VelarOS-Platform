@@ -5,10 +5,10 @@ import { describe, expect, test } from 'bun:test'
 import { DefaultToolContractExampleRegistry, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
 import { ToolArgsSchemaValidator } from '../../agent/src/tools/ToolArgsSchemaValidator'
-import { projectTools } from '../src/impl/ProjectTools'
-import { ProjectChangeSchema } from '../src/utils/schemas/change'
-import { ProjectEditSchema } from '../src/utils/schemas/edit'
-import { ProjectReadInputSchema } from '../src/utils/schemas/read'
+import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
+import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
+
+const ProjectReadInputSchema = projectTools['project:read']!.schema
 
 describe('model-facing Project examples and normalization', () => {
   test('readonly search never mandates discovery tools absent from its role surface', () => {

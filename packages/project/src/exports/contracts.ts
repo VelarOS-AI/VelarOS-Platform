@@ -3,8 +3,7 @@ export type { ProjectToolName } from '../contract/constants.js'
 export { ProjectToolNames } from '../contract/constants.js'
 export { isProjectRootSource, ProjectRootSource } from '../impl/kernel/root-source.js'
 export type * from '../types/project.js'
-export type { ProjectCodeAnalysisInput, ProjectCodeInput } from '../utils/schemas/code.js'
-export { ProjectCodeAnalysisSchema, ProjectCodeSchema } from '../utils/schemas/code.js'
+export type { ProjectCodeAnalysisInput, ProjectCodeInput } from '../types/tools.js'
 export type {
   ProjectCodeIndexQuery,
   ProjectCodeLanguageAction,

@@ -9,8 +9,8 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
 import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
-import { projectPlannerResolver } from '../src/impl/tools/planner-resolver'
-import { executeProjectRead } from '../src/impl/tools/read'
+import { projectPlannerResolver } from '../src/utils/agent/planner-resolver'
+import { readProjectSource as executeProjectRead } from '../src/utils/agent/project-files'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 import { compileProjectEdit } from '../src/utils/editing/planner-index'
 import { encodeProjectTextBuffer } from '../src/utils/text'
@@ -31,8 +31,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
           runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),
           prepareMutation: async () => ({ approved: true, rootPath: root }),
           queryCode: async () => ({}), runCommand: async () => ({}) as never,
-        },
-        system: { canStartBackgroundCommands: () => false }, approval: {} as never,
+        }, approval: {} as never,
       }
       const visible = async () => await finalizeProjectModelResult(context, await executeProjectRead({ path: 'source.ts' }, context)) as {
         files: Array<{ fileRef: string; lines: Array<[number, string]> }>

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
 
-import { runWithProjectExecutionGate } from '../src/impl/tools/execution-gate'
+import { ProjectExecutionGate } from '../src/impl/operations/ProjectExecutionGate'
+
+const gate = new ProjectExecutionGate()
 const signal = () => new AbortController().signal
 function deferred() {
   let done!: () => void
@@ -14,17 +16,17 @@ test('foreground build completion precedes a dependent read across agent calls, 
   const build = deferred()
   const started = deferred()
   const order: string[] = []
-  const writing = runWithProjectExecutionGate('/repo', true, signal(), async () => {
+  const writing = gate.run('/repo', true, signal(), async () => {
     order.push('build')
     started.done()
     await build.promise
     order.push('built')
   })
   await started.promise
-  const reading = runWithProjectExecutionGate('/repo', false, signal(), () => {
+  const reading = gate.run('/repo', false, signal(), () => {
     order.push('test')
   })
-  await runWithProjectExecutionGate('/other', true, signal(), () => {
+  await gate.run('/other', true, signal(), () => {
     order.push('other')
   })
   expect(order).toEqual(['build', 'other'])
@@ -36,24 +38,24 @@ test('foreground build completion precedes a dependent read across agent calls, 
 test('readers overlap, a queued writer is fair, and cancelled waiters never run', async () => {
   const release = deferred()
   const order: string[] = []
-  const one = runWithProjectExecutionGate('/fair', false, signal(), async () => {
+  const one = gate.run('/fair', false, signal(), async () => {
     order.push('read1')
     await release.promise
   })
-  const two = runWithProjectExecutionGate('/fair', false, signal(), () => {
+  const two = gate.run('/fair', false, signal(), () => {
     order.push('read2')
   })
   await two
   expect(order).toEqual(['read1', 'read2'])
-  const writer = runWithProjectExecutionGate('/fair', true, signal(), () => {
+  const writer = gate.run('/fair', true, signal(), () => {
     order.push('write')
   })
   const abort = new AbortController()
-  const cancelled = runWithProjectExecutionGate('/fair', false, abort.signal, () => {
+  const cancelled = gate.run('/fair', false, abort.signal, () => {
     throw new Error('must not run')
   }).catch(() => 'cancelled')
   abort.abort()
-  const after = runWithProjectExecutionGate('/fair', false, signal(), () => {
+  const after = gate.run('/fair', false, signal(), () => {
     order.push('after')
   })
   release.done()

@@ -44,7 +44,6 @@ async function fixture(options: Parameters<typeof createProjectKernel>[0] = { ro
       queryCode: async () => ({}),
       runCommand: async () => ({}) as never,
     },
-    system: { canStartBackgroundCommands: () => false },
     approval: {} as never,
   }
   registerProjectFileContext(ctx)

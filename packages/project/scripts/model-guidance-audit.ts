@@ -36,11 +36,11 @@ export function registeredGuidanceTools(tools: ReadonlyArray<Omit<GuidanceTool, 
 }
 
 export const GuidanceSources = [
-  { entry: 'Project 工具注册与 schema', sources: ['packages/project/src/impl/ProjectTools.ts', 'packages/project/src/impl/tools', 'packages/project/src/utils/schemas'] },
+  { entry: 'Project 工具注册与 schema', sources: ['packages/project/src/impl/ProjectTools.ts', 'packages/project/src/impl/operations', 'packages/project/src/utils/tool.ts', 'packages/project/src/utils/schemas'] },
   { entry: 'RunContext → PromptState → 内置段组装', sources: ['packages/agent/src/agent/run-context/RunContext.ts', 'packages/agent/src/agent/PromptState.ts', 'packages/agent/src/prompts/catalog.ts', 'packages/agent/src/prompts/segments/runtime.ts', 'packages/agent/src/prompts/segments/task.ts'] },
   { entry: '能力发现、换入、计划与主动召回', sources: ['packages/agent/src/tool-library/builtin/Categories.tool.ts', 'packages/agent/src/tool-library/builtin/ContextRetrieval.ts', 'packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts', 'packages/agent/src/tool-library/builtin/Plans.tool.ts'] },
   { entry: '参数失败恢复与当前源码指导', sources: ['packages/agent/src/tools/ToolArgsSchemaValidator.ts', 'packages/agent/src/tools/recovery/ToolInputReuse.ts', 'packages/agent/src/tools/recovery/TransientRecoveryProjection.ts', 'packages/agent/src/agent/context/resources/FileContextProjection.ts', 'packages/project/src/utils/transactions/transaction-errors.ts'] },
-  { entry: '模型回执与最终读取引用', sources: ['packages/agent/src/tools/Executor.ts', 'packages/agent/src/tools/toolInputHistoryProjection.ts', 'packages/project/src/utils/agent/source-window.ts', 'packages/project/src/utils/agent/kernel-port.ts'] },
+  { entry: '模型回执与最终读取引用', sources: ['packages/agent/src/tools/Executor.ts', 'packages/agent/src/tools/toolInputHistoryProjection.ts', 'packages/project/src/utils/agent'] },
   { entry: '用户可读示例与实现说明', sources: ['packages/project/README.md', 'docs/engineering/project-tool-surface-redesign-proposal.md', 'docs/engineering/project-tool-surface-implementation.md', 'docs/engineering/project-text-protocol.md'] },
 ]
 

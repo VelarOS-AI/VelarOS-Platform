@@ -5,8 +5,8 @@ import { isString } from '@velaros-ai/core'
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { CodeSymbolTarget } from '../../types/agent.js'
+import type { ProjectCodeTarget } from '../../types/tools.js'
 import { ProjectError } from '../errors.js'
-import type { ProjectCodeTarget } from '../schemas/code.js'
 
 const ToolName = '__project_code_symbol__'
 

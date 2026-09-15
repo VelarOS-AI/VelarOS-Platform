@@ -43,7 +43,6 @@ function contextFor(options: { port?: ProjectSandboxPort; approved?: boolean; co
     abortSignal: new AbortController().signal,
     toolCallId: 'sandbox-1',
     project,
-    system: { canStartBackgroundCommands: () => false },
     approval: { awaitConfirmationDecision: async () => ({ approved: options.confirmed !== false, message: 'user said no' }) },
   } as unknown as ProjectToolContext
 }
