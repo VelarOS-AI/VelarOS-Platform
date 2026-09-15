@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { TaskApprovalState } from '../src/agent/TaskApprovalState'
-import { ExecutionInteractions } from '../src/execution/Interactions'
-import { ExecutionRecords } from '../src/execution/Records'
-import { ExecutionRoutingCoordinator } from '../src/execution/routing'
-import { ExecutionStateMachine } from '../src/execution/state-machine'
-import { ExecutionStore } from '../src/execution/Store'
-import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../src/protocol/types/agent'
-import { type ApprovalPort, createUnattendedSubAgentApprovalPort } from '../src/tool-contract/approval'
-import { createApprovalOperationKey, createTaskApprovalPort } from '../src/tool-contract/task-approval'
+import { ExecutionInteractions } from '../src/impl/records/ExecutionInteractions'
+import { ExecutionRecords } from '../src/impl/records/ExecutionRecords'
+import { ExecutionStore } from '../src/impl/records/ExecutionStore'
+import { ExecutionRoutingCoordinator } from '../src/impl/records/ExecWorkflowRoute'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { TaskApprovalState } from '../src/impl/session/TaskApprovalState'
+import { type ApprovalPort, createUnattendedSubAgentApprovalPort } from '../src/impl/tools/DefaultDenyApprovalPort'
+import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../src/types/agent'
+import { ExecutionStateMachine } from '../src/utils/records/state-machine'
+import { createApprovalOperationKey, createTaskApprovalPort } from '../src/utils/toolkit/task-approval'
 
 function harness(decide: (options?: ToolConfirmationDecisionOptions) => ApprovalDecision | Promise<ApprovalDecision>) {
   const tracker = new CodingSessionTracker()

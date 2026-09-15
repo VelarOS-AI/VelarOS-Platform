@@ -4,16 +4,16 @@ import { readFile } from 'node:fs/promises'
 import { jsonSchema, type ModelMessage, tool, type ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { decodeProviderRequestAuditValue } from '../src/agent/context/providerRequest/serialization'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { assertProviderRequestSnapshotReconstructable } from '../src/agent/context/ProviderRequestSnapshot'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { ProviderTurnRequestHelper } from '../src/agent/ProviderTurnRequestHelper'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import {
   parsePromptAuditText,
   serializePromptAuditLine,
-} from '../src/kernel/observability/prompt-audit'
-import { ToolExecutionPolicy } from '../src/tools/ExecutionPolicy'
+} from '../src/impl/ledgers/PromptAuditLedger'
+import { ProviderTurnRequestHelper } from '../src/impl/loop/ProviderTurnRequestHelper'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
+import { assertProviderRequestSnapshotReconstructable } from '../src/utils/context/provider-request-snapshot'
+import { decodeProviderRequestAuditValue } from '../src/utils/context/serialization'
 
 const fixtureUrl = new URL('./fixtures/provider-request-basic.json', import.meta.url)
 

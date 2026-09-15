@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   applyRunProfileToolExposure,
-} from '../src/agent/RunProfile'
+} from '../src/utils/runner/run-profile'
 import {
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
-} from '../src/agent/RuntimeProfiles'
+} from '../src/utils/runner/runtime-profiles'
 
 describe('tool exposure cognitive budget', () => {
   test('keeps every runtime profile bounded independently from model context size', () => {

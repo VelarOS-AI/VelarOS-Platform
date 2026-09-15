@@ -1,19 +1,19 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import {
-  assertModelInputCompatibility,
-  collectRequiredModelInputModalities,
-} from '../src/agent/model/ModelInputCompatibility'
-import { filterToolCategoriesForModelInputs } from '../src/agent/SoloRunPlanPreparer'
-import type { AgentModelInputModality, ToolDescriptor } from '../src/protocol/types/tool'
-import { ToolCapabilityRegistry } from '../src/tools/capability-registry'
+import { ToolCapabilityRegistry } from '../src/impl/tools/ToolCapabilityRegistry'
+import { ToolRegistry } from '../src/impl/tools/ToolRegistry'
 import type {
   RegisteredToolMap,
   ToolCapabilityRegistryContext,
-} from '../src/tools/capability-types'
-import { ToolRegistry } from '../src/tools/registry'
-import type { RegistryTool } from '../src/tools/types'
+} from '../src/types/capability-types'
+import type { AgentModelInputModality, ToolDescriptor } from '../src/types/tool'
+import type { RegistryTool } from '../src/types/tools'
+import { filterToolCategoriesForModelInputs } from '../src/utils/loop/solo-run-plan-preparer'
+import {
+  assertModelInputCompatibility,
+  collectRequiredModelInputModalities,
+} from '../src/utils/model/model-input-compatibility'
 
 describe('model input compatibility', () => {
   const imageHistory = [

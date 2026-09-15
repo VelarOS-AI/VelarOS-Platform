@@ -12,26 +12,26 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import {
-  configureAppRuntimeFacts,
-  readAppRuntimeFacts,
-} from '../src/agent/AppRuntimeFacts'
-import { ContextBuilder } from '../src/agent/ContextBuilder'
+import { PromptRegistry } from '../src/impl/guidance/PromptRegistry'
+import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import {
   type BuildRuntimePromptStateArgs,
   PromptStateBuilder,
   shouldInjectHtmlArtifactPromptForTurn,
-} from '../src/agent/PromptState'
-import { projectAgentModPromptSegments } from '../src/mods/AgentModProjection'
-import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
-import { createBuiltInPromptRegistry, createBuiltInPromptSegments } from '../src/prompts/catalog'
-import { PromptRegistry } from '../src/prompts/registry'
+} from '../src/impl/runner/PromptStateBuilder'
+import type { RuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
+import { createBuiltInPromptRegistry, createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
 import {
   createSelectedSkillPromptSegment,
   createTextPromptSegment,
   PromptSegmentPriority,
-} from '../src/prompts/segments/shared'
-import type { RuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
+} from '../src/utils/guidance/shared'
+import { projectAgentModPromptSegments } from '../src/utils/mods/agent-mod-projection'
+import {
+  configureAppRuntimeFacts,
+  readAppRuntimeFacts,
+} from '../src/utils/runner/app-runtime-facts'
 
 /** Tier0 的全集。改这张表 = 改稳定前缀的内容，必须是有意的。 */
 const CoreTierSegmentIds = [

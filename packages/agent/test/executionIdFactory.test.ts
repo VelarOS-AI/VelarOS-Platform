@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   type ExecutionClock,
   MonotonicExecutionIdFactory,
-} from '../src/execution/ExecutionIdFactory'
+} from '../src/impl/records/MonotonicExecutionIdFactory'
 
 class FixedClock implements ExecutionClock {
   public constructor(private readonly timestamp: number) {}

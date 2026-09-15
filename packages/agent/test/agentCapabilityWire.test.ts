@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { AgentCapabilityEventPublisher } from '../src/kernel/AgentCapabilityEventPublisher'
+import { AgentCapabilityEventPublisher } from '../src/impl/execution/AgentCapabilityEventPublisher'
 import {
   AgentCapabilityExecutionEventType,
   createAgentCapabilityExecutionEventEnvelopeV1,
   parseAgentCapabilityExecuteEnvelopeV1,
-} from '../src/protocol/agent-capability'
+} from '../src/utils/wire/agent-capability'
 
 function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   return {

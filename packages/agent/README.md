@@ -52,7 +52,7 @@ Agent 消息帧的进程(RPC 前脸、日志分析、外部桥接)不该被迫�
 `ContextEvidenceLedger` 记住哪些工具结果构成证据。**上下文压不下去不是靠一刀截断**,而是这条阶梯。
 
 **工具**。`ToolRegistry` 持有目录快照,`ToolExecutor` 是**唯一执行路径**(权限、schema 校验、
-结果归一都在这一条路上)。`src/tool-library/` 是 host 无关的通用工具集合——`agent:dispatch`、
+结果归一都在这一条路上)。`src/impl/builtin/`(辅助函数在 `src/utils/builtin/`)是 host 无关的通用工具集合——`agent:dispatch`、
 上下文召回与蒸馏、目标 / 计划、后台任务、工作流等**机制类**工具住这里;浏览器点击、文件编辑那种
 **领域类**工具住各自能力包。
 
@@ -71,7 +71,7 @@ Agent 消息帧的进程(RPC 前脸、日志分析、外部桥接)不该被迫�
 **端口缺席 = 行为缺席**,运行时不给任何领域默认值,也不解释上面任何一个 id。
 
 **执行账本与可观测性**。`ExecutionService` 管一次执行的生命周期并防同 scope 并发冲突;
-`src/kernel/observability/` 把回合拆成 span 树落盘(`run` / `turn` / `model` / `tool` /
+`src/impl/ledgers/` 的 span 账本把回合拆成 span 树落盘(`run` / `turn` / `model` / `tool` /
 `capability` / `policy` 六类),消费方是宿主的 span 账本。
 
 **最终请求可重建**。请求编译器在 provider 边界生成 `ProviderRequestSnapshot`，保存模型实际
@@ -93,7 +93,7 @@ expanded 的预算及自动选择阈值，用于解释运行行为，不提供�
 安全暂存事务；签名根、权限目录和面向用户的错误文案仍由宿主注入或投影。
 **贡献轴是封闭集合**,由官方演进,mod 只能挂接不能发明。落地细节见
 [`docs/agent/agent-mod-trunk.md`](../../docs/agent/agent-mod-trunk.md)。
-`src/kernel-module.ts` 是**第一级**边界:它把 Agent 运行时当作不透明的注入物交给 Kernel,
+`src/impl/assembly/AgentKernelModule.ts` 是**第一级**边界:它把 Agent 运行时当作不透明的注入物交给 Kernel,
 自己从不解析领域 manifest。
 
 **MCP 与产品 Session 公共层**。`McpClientConnection` 统一 stdio、Streamable HTTP、SSE、

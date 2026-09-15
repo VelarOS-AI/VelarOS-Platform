@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
 
-import { renderToolDescription } from '../src/tool-contract/ToolDescription'
-import { searchToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
-import { replaceToolSpacePages } from '../src/tool-library/builtin/ToolSpaceReplace'
+import { searchToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
+import { replaceToolSpacePages } from '../src/utils/builtin/tool-space-replace'
+import { renderToolDescription } from '../src/utils/toolkit/tool-description'
 
 function discoveryFixture() {
   const description = renderToolDescription({

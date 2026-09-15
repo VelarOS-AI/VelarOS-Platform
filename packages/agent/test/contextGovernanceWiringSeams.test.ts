@@ -10,14 +10,14 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import { TurnContextSessionLedgers } from '../src/impl/records/TurnContextLedger'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
+import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
 import {
   ContextDedupeVetoTarget,
   type ContextRecordClassifier,
-} from '../src/agent/context/residency/admission'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { InMemoryContextMigrationEventSink } from '../src/agent/context/residency/migrationLog'
-import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
-import { TurnContextSessionLedgers } from '../src/agent/run-context/TurnContextLedger'
+} from '../src/utils/residency/admission'
 
 function toolCallMessage(toolCallId: string, toolName: string, input: unknown): ModelMessage {
   return {

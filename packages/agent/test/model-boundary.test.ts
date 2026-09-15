@@ -13,13 +13,13 @@ import {
   test,
 } from 'bun:test'
 
-import { applyModelRequestPolicy } from '../src/agent/model/AgentModelRequest'
+import { applyModelRequestPolicy } from '../src/impl/loop/AiSdkAgentModelRequestPort'
+import { ModelRuntime } from '../src/impl/runner/ModelRuntime'
 import {
   markLatestUserMessagePromptCacheBreakpoint,
   mergeSessionPromptCacheProviderOptions,
   resolveSessionPromptCacheKey,
-} from '../src/agent/model/PromptCache'
-import { ModelRuntime } from '../src/agent/runner/ModelRuntime'
+} from '../src/utils/model/prompt-cache'
 
 const PackageRoot = resolve(import.meta.dir, '..')
 

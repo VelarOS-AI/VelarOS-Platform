@@ -5,8 +5,8 @@ import { describe, test } from 'bun:test'
 import {
   filterBackgroundJobOutput,
   formatBackgroundJobOutput,
-} from '../src/tool-library/builtin/BackgroundJobs'
-import type { ToolBackgroundJobOutputSnapshot } from '../src/tool-library/KernelToolContext'
+} from '../src/impl/builtin/BackgroundJobOperations'
+import type { ToolBackgroundJobOutputSnapshot } from '../src/types/kernel-tool-context'
 
 function snapshot(
   overrides: Partial<ToolBackgroundJobOutputSnapshot> = {}

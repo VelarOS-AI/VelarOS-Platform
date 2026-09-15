@@ -30,7 +30,7 @@ z.strictObject({
 
 ## 运行态绑定（可选）
 
-绑定值类型是 `AgentSkillDefinition`（`packages/agent/src/skills/AgentSkillProvider.ts`），
+绑定值类型是 `AgentSkillDefinition`（`packages/agent/src/utils/guidance/agent-skill-provider.ts`），
 它 `extends AgentSkillDescriptor` 并带 `markdown: string` 正文，以及
 `baseDir?` / `resourcePaths?`（目录式技能的捆绑资源）/ `enabled` / `skillKind` /
 `autoInjectPromptFeatures?` 等字段。

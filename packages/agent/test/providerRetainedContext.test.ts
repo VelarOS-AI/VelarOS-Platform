@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { test } from 'bun:test'
 
-import { createContextPayloadRef } from '../src/agent/context/ContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { ChatContextRetrievalService } from '../src/agent/context/retrieval/ContextRetrievalService'
-import type { ChatSessionToolResultPayload } from '../src/protocol/types'
+import { createContextPayloadRef } from '../src/impl/context/InMemoryContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
+import type { ChatSessionToolResultPayload } from '../src/types/protocol'
 
 /** 可回收的旧文件读取，保留最近用户轮，避免把固定证据超限误当不可恢复压力。 */
 function createHistory(): ModelMessage[] {

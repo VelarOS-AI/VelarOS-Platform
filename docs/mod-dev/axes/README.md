@@ -5,7 +5,7 @@
 
 ## 九根 agent 轴（住 `agent.contributes`）
 
-闭集常量 `AgentModContributionAxisNames`（`packages/agent/src/protocol/mods.ts`），
+闭集常量 `AgentModContributionAxisNames`（`packages/agent/src/utils/wire/mods.ts`），
 **顺序即声明顺序**：
 
 | 轴 | 主键 | 运行态绑定 | Platform 投影 | 文档 |
@@ -69,7 +69,7 @@ DataOnlyAxes        = { 'spaces', 'turnContextSources' } // 带绑定 → mod.bi
 
 ## 消费面投影
 
-装配链不直接遍历注册表，读 `AgentModProjection.ts` 的纯函数投影（同一快照恒得同一结果，
+装配链不直接遍历注册表，读 `agent-mod-projection.ts` 的纯函数投影（同一快照恒得同一结果，
 且**保持载荷对象同一性**：装载不复制、不包装、不改写运行态载荷）：
 
 | 投影 | 返回 |

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingToolCallDeduper } from '../src/coding/tool-dedupe'
+import { CodingToolCallDeduper } from '../src/impl/session/CodingToolCallDeduper'
 
 describe('tooling:replace exact-call dedupe', () => {
   test('does not infer residency from an enabled capability', () => {

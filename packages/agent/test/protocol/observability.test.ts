@@ -5,7 +5,7 @@ import {
   emptyExecutionSpanMetrics,
   ExecutionSpanCategorySchema,
   ExecutionSpanSchema,
-} from '../../src/protocol/observability'
+} from '../../src/utils/wire/observability'
 
 const capabilitySpan = {
   spanId: 'span-1',

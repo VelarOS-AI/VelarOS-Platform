@@ -1,6 +1,6 @@
 # @velaros-ai/agent/protocol
 
-> `@velaros-ai/agent` 的一个导入切片(`packages/agent/src/protocol`)。包总览见
+> `@velaros-ai/agent` 的一个导入切片(入口 `packages/agent/src/exports/protocol.ts`,内容在 `src/utils/wire/` 与 `src/types/`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么

@@ -12,24 +12,24 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
-import { renderContextDashboardText } from '../src/agent/context/residency/dashboard'
+import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
+import type { ContextRecordClassifier } from '../src/utils/residency/admission'
+import { renderContextDashboardText } from '../src/utils/residency/dashboard'
 import {
   DefaultContextGovernanceConfig,
   resolveContextGovernanceConfig,
-} from '../src/agent/context/residency/governanceConfig'
+} from '../src/utils/residency/governance-config'
 import {
   resolveProjectionBudget,
   runGovernanceEpoch,
-} from '../src/agent/context/residency/GovernanceEpoch'
-import { ingestHistoryIntoLedger, planHistoryIngest } from '../src/agent/context/residency/ingest'
-import { estimateMessageChars } from '../src/agent/context/residency/messageFacts'
+} from '../src/utils/residency/governance-epoch'
+import { ingestHistoryIntoLedger, planHistoryIngest } from '../src/utils/residency/ingest'
+import { estimateMessageChars } from '../src/utils/residency/message-facts'
 import {
   measureLedgerProjection,
   projectContextLedger,
-} from '../src/agent/context/residency/projection'
-import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
-import { buildContextSkeleton } from '../src/agent/context/residency/skeleton'
+} from '../src/utils/residency/projection'
+import { buildContextSkeleton } from '../src/utils/residency/skeleton'
 
 const RefetchableReadClassifier: ContextRecordClassifier = {
   isRefetchable: (input) => (input.toolName === 'read_file' ? true : undefined),

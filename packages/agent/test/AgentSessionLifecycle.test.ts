@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  createAgentSessionArchiveEnvelope,
-  parseAgentSessionArchiveEnvelope,
-} from '../src/session/archive'
-import {
   AgentSessionLeaseConflictError,
   isTerminalAgentBackgroundState,
   normalizeAgentSessionListLimit,
   resolveAgentSessionLeaseClaim,
-} from '../src/session/lifecycle'
+} from '../src/impl/errors/AgentSessionLeaseConflictError'
+import {
+  createAgentSessionArchiveEnvelope,
+  parseAgentSessionArchiveEnvelope,
+} from '../src/utils/product-session/archive'
 
 describe('Agent Session application lifecycle', () => {
   test('keeps a live lease owner and allows dead-owner recovery', () => {

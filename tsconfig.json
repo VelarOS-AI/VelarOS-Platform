@@ -13,10 +13,10 @@
         "./packages/agent-lab/src/*"
       ],
       "@velaros-ai/agent": [
-        "./packages/agent/src/index.ts"
+        "./packages/agent/src/exports/index.ts"
       ],
       "@velaros-ai/agent/*": [
-        "./packages/agent/src/*"
+        "./packages/agent/src/exports/*"
       ],
       "@velaros-ai/browser/composition": [
         "./packages/browser/src/composition/index.ts"

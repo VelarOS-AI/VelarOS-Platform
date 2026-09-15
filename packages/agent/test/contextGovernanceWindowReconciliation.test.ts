@@ -4,12 +4,12 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { test } from 'bun:test'
 
-import { estimateContextUsage, resolveContextUsageWindow } from '../src/agent/context/contextUsage'
-import type { CompileProviderRequestInput } from '../src/agent/context/ProviderRequestCompiler'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { resolveContextGovernanceConfig } from '../src/agent/context/residency/governanceConfig'
-import { resolveGovernanceWindow } from '../src/agent/context/residency/governanceWindow'
+import type { CompileProviderRequestInput } from '../src/impl/context/ProviderRequestCompiler'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { estimateContextUsage, resolveContextUsageWindow } from '../src/utils/context/context-usage'
+import { resolveContextGovernanceConfig } from '../src/utils/residency/governance-config'
+import { resolveGovernanceWindow } from '../src/utils/residency/governance-window'
 
 function createHistory(turns = 8, resultRepeats = 200): ModelMessage[] {
   const messages: ModelMessage[] = []

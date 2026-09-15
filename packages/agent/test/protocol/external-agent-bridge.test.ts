@@ -8,7 +8,7 @@ import {
   ExternalAgentBridgeMessageType,
   ExternalAgentBridgeProtocolDescriptor,
   ExternalAgentBridgeProtocolVersion,
-} from '../../src/protocol/external-agent-bridge'
+} from '../../src/utils/wire/external-agent-bridge'
 
 describe('External Agent Bridge wire protocol', () => {
   test('accepts the versioned pair and command envelopes', () => {

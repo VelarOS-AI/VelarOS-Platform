@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ToolRegistryHelper } from '../src/tools/registry'
+import { ToolRegistryHelper } from '../src/impl/tools/ToolRegistry'
 
 const helper = new ToolRegistryHelper({
   normalize: (features) => [...features],

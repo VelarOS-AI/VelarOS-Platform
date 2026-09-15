@@ -12,15 +12,15 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { resolveAgentContextPhase } from '../src/agent/ContextPhase'
-import { resolveChatSendRequestOptions } from '../src/chat/resolveChatSendRequest'
-import { resolveStoredChatSessionFields } from '../src/chat/resolveStoredChatSession'
+import { resolveChatSendRequestOptions } from '../src/utils/chat/resolve-chat-send-request'
+import { resolveStoredChatSessionFields } from '../src/utils/chat/resolve-stored-chat-session'
+import { resolveAgentContextPhase } from '../src/utils/loop/context-phase'
 import {
   isExecutionModeActive,
   normalizeExecutionModes,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
-} from '../src/execution-modes/ExecutionModeRegistry'
+} from '../src/utils/runner/execution-mode-registry'
 
 void describe('模式轴归一', () => {
   void test('未知 id 静默丢弃、去重、按注册表声明序排', () => {

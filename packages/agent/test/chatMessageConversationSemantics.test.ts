@@ -4,7 +4,7 @@ import {
   isConversationTurnInputMessage,
   isRunGuidanceMessage,
   resolveChatMessageConversationKind,
-} from '../src/protocol/types'
+} from '../src/types/protocol'
 
 describe('chat message conversation semantics', () => {
   it('keeps guidance and interaction replies inside the current run', () => {

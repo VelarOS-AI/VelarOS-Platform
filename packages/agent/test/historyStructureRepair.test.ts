@@ -11,8 +11,8 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { repairHistoryStructureForProvider } from '../src/agent/history/repair'
-import { assertValidModelHistory, validateModelHistory } from '../src/agent/history/validate'
+import { repairHistoryStructureForProvider } from '../src/utils/history/repair'
+import { assertValidModelHistory, validateModelHistory } from '../src/utils/history/validate'
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }

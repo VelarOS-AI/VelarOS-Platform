@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
-import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { parseSubAgentToolResult } from '../src/sub-agent/SubAgentResultBuilder'
-import type { SubAgentTypeDescriptor } from '../src/sub-agent/SubAgentTypeRegistry'
-import { TeamModelRouter, type TeamSelectableModel } from '../src/team/model-router'
-import { WriteLeaseCoordinator } from '../src/team/WriteLease'
+import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
+import { TeamModelRouter, type TeamSelectableModel } from '../src/impl/delegation/TeamModelRouter'
+import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
+import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
 
 const MainModelSelection = { provider: 'velar-dev', model: 'velar-dev/gpt-5.6-sol' }
 const SelectableModels: TeamSelectableModel[] = [

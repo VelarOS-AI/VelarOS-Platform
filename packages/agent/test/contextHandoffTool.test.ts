@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { contextHandoffTools } from '../src/tool-library/builtin/ContextHandoff.tool'
+import { contextHandoffTools } from '../src/impl/builtin/ContextHandoff.tool'
 
 describe('context:handoff', () => {
   test('only requests the host card when the model explicitly executes the tool', async () => {

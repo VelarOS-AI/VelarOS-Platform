@@ -4,7 +4,7 @@
 
 ## Schema
 
-`AgentModToolContributionSchema`（`packages/agent/src/protocol/mods.ts`）：
+`AgentModToolContributionSchema`（`packages/agent/src/utils/wire/mods.ts`）：
 
 ```ts
 z.strictObject({
@@ -69,7 +69,7 @@ const bindings: AgentModBindings = {
 
 `VelaTool` 是 `ToolContractRuntimeSpec<TInput, TCtx, any, ToolPermission>` 的别名，
 默认上下文是 host 无关的核心面 `KernelToolContext`
-（`packages/agent/src/tool-library/defineVelaTool.ts`）。
+（`packages/agent/src/utils/builtin/define-agent-tool.ts`）。
 工具参数用宽容原语拼——铁律见 [conventions.md](../conventions.md#二工具参数的宽容铁律)。
 
 ### 外部 command binding

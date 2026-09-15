@@ -52,7 +52,7 @@ const bindings: AgentModBindings = {
 }
 ```
 
-`PromptSegmentDefinition`（`packages/agent/src/prompts/registry.ts`）：
+`PromptSegmentDefinition`（`packages/agent/src/impl/guidance/PromptRegistry.ts`）：
 
 ```ts
 interface PromptSegmentDefinition {

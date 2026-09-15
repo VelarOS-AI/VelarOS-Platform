@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { describe, test } from "bun:test";
 
-import { compactToolInputForModel } from "../src/tools/toolResultSerialization";
+import { compactToolInputForModel } from "../src/utils/tools/tool-result-serialization";
 
 describe("tool input provider-history replay", () => {
   test("keeps ordinary structured document blocks intact", () => {

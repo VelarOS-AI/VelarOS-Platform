@@ -14,7 +14,7 @@
         只解析窄 KernelModuleDescriptor { id, version, apiVersion, provides, requires, permissions, isolation }
         管 pack 的安装/启停/发现，永不解析领域贡献轴
 
-第二级  Agent 领域 Loader（packages/agent/src/mods/）
+第二级  Agent 领域 Loader（packages/agent/src/impl/mods/）
         解析 AgentModManifest，把贡献分发进九个注册面 + 拦截 seam
 ```
 
@@ -26,14 +26,14 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 
 | 文件 | 职责 |
 | --- | --- |
-| `packages/agent/src/protocol/mods.ts`（子路径 `@velaros-ai/agent/protocol/mods`） | manifest 数据契约：zod schema、贡献轴闭集、seam 闭集、semver 判定、`parseAgentModManifest` |
-| `packages/agent/src/mods/AgentModRegistry.ts` | 九轴贡献注册面 + generation 快照 + 两阶段 + stale-reject |
-| `packages/agent/src/mods/AgentModSeams.ts` | 拦截 seam 注册面与派发器（异常隔离、权限不可旁路） |
-| `packages/agent/src/mods/AgentModLoader.ts` | discover→validate→resolve→activate→deactivate 生命周期 |
-| `packages/agent/src/mods/AgentModProjection.ts` | 快照 → 各领域消费面的纯函数投影 |
-| `packages/agent/src/mods/BuiltinAgentMod.ts` | 随包官方内置轴 = 第一个 bundled mod（自食狗粮） |
-| `packages/agent/src/mods/AgentModHostAssembly.ts` | 宿主组装入口：Kernel pack 清单 → Loader |
-| `packages/agent/src/mods/index.ts` | 唯一门面（再经 `src/index.ts` 出包） |
+| `packages/agent/src/utils/wire/mods.ts`（子路径 `@velaros-ai/agent/protocol/mods`） | manifest 数据契约：zod schema、贡献轴闭集、seam 闭集、semver 判定、`parseAgentModManifest` |
+| `packages/agent/src/impl/mods/AgentModRegistry.ts` | 九轴贡献注册面 + generation 快照 + 两阶段 + stale-reject |
+| `packages/agent/src/impl/mods/AgentModSeamDispatcher.ts` | 拦截 seam 注册面与派发器（异常隔离、权限不可旁路） |
+| `packages/agent/src/impl/mods/AgentModLoader.ts` | discover→validate→resolve→activate→deactivate 生命周期 |
+| `packages/agent/src/utils/mods/agent-mod-projection.ts` | 快照 → 各领域消费面的纯函数投影 |
+| `packages/agent/src/impl/builtin/BuiltinAgentMod.ts` | 随包官方内置轴 = 第一个 bundled mod（自食狗粮） |
+| `packages/agent/src/impl/assembly/AgentModHostAssembler.ts` | 宿主组装入口：Kernel pack 清单 → Loader |
+| `packages/agent/src/exports/mods.ts` | 唯一门面（再经 `src/exports/index.ts` 出包） |
 
 探针：`packages/agent/test/protocol/mods.test.ts`、`packages/agent/test/mods.test.ts`（构造级，bun 直驱）、
 `packages/agent/test/modSeamToolChain.test.ts`（装配面到工具缝的端到端回归门，见「派发点 ≠ 接线」）。
@@ -121,10 +121,10 @@ context / outcome / 排序 / 诊断协议，只在运行容器与信任级上分
 
 | seam | 调用点 | 语义 |
 | --- | --- | --- |
-| `tool-call:before` | `src/tools/Executor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
-| `tool-result:after` | `src/tools/Executor.ts` `finalizeResult()`（物化之前） | 可改写 result/error；放在物化前保证模型面与 UI 面同源 |
-| `turn-context:assemble` | `src/agent/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
-| `session:start` / `session:end` | `src/kernel/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 finally，异常路径也发 |
+| `tool-call:before` | `src/impl/tools/ToolExecutor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
+| `tool-result:after` | `src/impl/tools/ToolExecutor.ts` `finalizeResult()`（物化之前） | 可改写 result/error；放在物化前保证模型面与 UI 面同源 |
+| `turn-context:assemble` | `src/impl/runner/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
+| `session:start` / `session:end` | `src/impl/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 finally，异常路径也发 |
 
 四个调用点全部走 `seams?.has(kind)` 快路径——未注入或零钩子时行为逐字节不变。
 

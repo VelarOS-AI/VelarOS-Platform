@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { distillContextSchema } from '../src/tool-library/builtin/ContextDistill.tool'
+import { distillContextSchema } from '../src/impl/builtin/ContextDistill.tool'
 
 describe('context:distill input budget', () => {
   test('accepts a long phase represented by twenty concise facts', () => {

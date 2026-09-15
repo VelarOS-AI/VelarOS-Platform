@@ -3,18 +3,18 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { extractContextAnchors } from '../src/agent/context/residency/anchors'
-import { stableStringify } from '../src/agent/context/residency/determinism'
+import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
+import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
+import { extractContextAnchors } from '../src/utils/residency/anchors'
+import { stableStringify } from '../src/utils/residency/determinism'
 import {
   DefaultContextGovernanceConfig,
   resolveContextGovernanceConfig,
   resolveContextGovernancePreset,
-} from '../src/agent/context/residency/governanceConfig'
-import { resolveGovernanceWindowTokens } from '../src/agent/context/residency/governanceWindow'
-import { ingestHistoryIntoLedger, planHistoryIngest } from '../src/agent/context/residency/ingest'
-import { InMemoryContextMigrationEventSink } from '../src/agent/context/residency/migrationLog'
-import { projectContextLedger } from '../src/agent/context/residency/projection'
-import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
+} from '../src/utils/residency/governance-config'
+import { resolveGovernanceWindowTokens } from '../src/utils/residency/governance-window'
+import { ingestHistoryIntoLedger, planHistoryIngest } from '../src/utils/residency/ingest'
+import { projectContextLedger } from '../src/utils/residency/projection'
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }

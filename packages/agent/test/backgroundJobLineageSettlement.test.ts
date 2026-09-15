@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { KernelBackgroundJobManager } from '../src/kernel/background-jobs'
+import { KernelBackgroundJobManager } from '../src/impl/records/KernelBackgroundJobManager'
 
 function gate() {
   let resolve!: () => void

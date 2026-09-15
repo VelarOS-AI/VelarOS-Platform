@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
-import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'
-import { SoloGoalLifecycle } from '../src/agent/SoloGoalLifecycle'
-import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
-import { buildGoalStateUpsertInput } from '../src/tool-library/builtin/Goals'
+import { SoloGoalLifecycle } from '../src/impl/loop/SoloGoalLifecycle'
+import { ExecutionGuidanceQueue } from '../src/impl/records/ExecutionGuidanceQueue'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
+import { buildGoalStateUpsertInput } from '../src/utils/builtin/goals'
+import { runSoloFinishingGate } from '../src/utils/loop/solo-finishing-gate'
 
 function createActiveContextHarness() {
   let artifact: ActiveContextArtifact | null = null

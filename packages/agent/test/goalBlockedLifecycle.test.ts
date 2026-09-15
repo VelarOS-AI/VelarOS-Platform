@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createTaskRuntimePromptSegments } from '../src/prompts/segments/task'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
-import { goalTools } from '../src/tool-library/builtin/Goals.tool'
+import { goalTools } from '../src/impl/builtin/Goals.tool'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
+import { createTaskRuntimePromptSegments } from '../src/utils/guidance/task'
 
 function createGoalToolContext() {
   let artifact: ActiveContextArtifact | null = null

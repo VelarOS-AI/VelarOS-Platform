@@ -29,7 +29,7 @@ z.strictObject({
 ## 运行态绑定（可选）
 
 绑定值类型 `SubAgentTypeDescriptor`
-（`packages/agent/src/sub-agent/SubAgentTypeRegistry.ts`）——比 manifest 声明宽得多：
+（`packages/agent/src/utils/delegation/sub-agent-type-registry.ts`）——比 manifest 声明宽得多：
 
 ```ts
 interface SubAgentTypeDescriptor {

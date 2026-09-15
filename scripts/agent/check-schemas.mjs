@@ -20,7 +20,8 @@ const WorkflowRuntimePath = join(
   'packages',
   'agent',
   'src',
-  'workflow',
+  'impl',
+  'runner',
   'AgentWorkflowRuntime.ts'
 )
 

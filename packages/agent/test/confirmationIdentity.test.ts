@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { ExecutionInteractions } from '../src/execution/Interactions'
-import { ExecutionRecords } from '../src/execution/Records'
-import { ExecutionRoutingCoordinator } from '../src/execution/routing'
-import { SourceSessionGuard } from '../src/execution/SessionGuard'
-import { ExecutionStateMachine } from '../src/execution/state-machine'
-import { ExecutionStore } from '../src/execution/Store'
-import { ChatKernelSessionBridge } from '../src/kernel/bridge/ChatKernelSessionBridge'
-import { ExecutionInteractionFacade } from '../src/kernel/execution/ExecutionInteractionFacade'
-import { createUnattendedSubAgentApprovalPort } from '../src/tool-contract/approval'
-import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
+import { ChatKernelSessionBridge } from '../src/impl/assembly/ChatKernelSessionBridge'
+import { ExecutionInteractionFacade } from '../src/impl/execution/ExecutionInteractionFacade'
+import { ExecutionInteractions } from '../src/impl/records/ExecutionInteractions'
+import { ExecutionRecords } from '../src/impl/records/ExecutionRecords'
+import { ExecutionStore } from '../src/impl/records/ExecutionStore'
+import { ExecutionRoutingCoordinator } from '../src/impl/records/ExecWorkflowRoute'
+import { SourceSessionGuard } from '../src/impl/records/SourceSessionGuard'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { createUnattendedSubAgentApprovalPort } from '../src/impl/tools/DefaultDenyApprovalPort'
+import { ExecutionStateMachine } from '../src/utils/records/state-machine'
+import { createTaskApprovalPort } from '../src/utils/toolkit/task-approval'
 
 function harness() {
   const store = new ExecutionStore()

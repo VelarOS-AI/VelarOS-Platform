@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 
 import { AppError } from "@velaros-ai/core/error";
 
-import { ProviderTurnRequestHelper } from "../src/agent/ProviderTurnRequestHelper";
-import { StreamConsumer } from "../src/agent/stream/Consumer";
+import { ProviderTurnRequestHelper } from "../src/impl/loop/ProviderTurnRequestHelper";
+import { StreamConsumer } from "../src/impl/loop/StreamConsumer";
 
 function providerToolStream(
   toolName: string,

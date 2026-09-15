@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { fitProjectReadsForModel } from '../src/tools/projectReadSerialization'
-import { serializeToolResultForModel, serializeToolResultForRecall } from '../src/tools/toolResultSerialization'
+import { fitProjectReadsForModel } from '../src/utils/tools/project-read-serialization'
+import { serializeToolResultForModel, serializeToolResultForRecall } from '../src/utils/tools/tool-result-serialization'
 
 const source = `source:${  'a'.repeat(64)}`
 const window = (lines: Array<[number, string]>) => ({

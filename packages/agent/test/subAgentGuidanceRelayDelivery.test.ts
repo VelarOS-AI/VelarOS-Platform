@@ -5,17 +5,17 @@ import { describe, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { ExecutionService } from '../src/impl/execution/ExecutionService'
+import type { ManagedExecutionController } from '../src/impl/execution/ManagedExecutionRunner'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { ExecutionStore } from '../src/impl/records/ExecutionStore'
+import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import type { ExecutionGuidanceRelayPlan } from '../src/types/execution-host-ports'
 import {
   parseGuidanceRelayPlan,
   resolveMainAgentGuidanceDelivery,
   resolveMainAgentGuidanceMessage,
-} from '../src/execution/GuidanceRelayPlanner'
-import { ExecutionStore } from '../src/execution/Store'
-import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { ExecutionService } from '../src/kernel/execution/ExecutionService'
-import type { ExecutionGuidanceRelayPlan } from '../src/kernel/execution/host-ports'
-import type { ManagedExecutionController } from '../src/kernel/execution/ManagedExecutionRunner'
+} from '../src/utils/records/guidance-relay'
 
 const originalMessage: ModelMessage = { role: 'user', content: '顺便把 README 也更新一下' }
 

@@ -24,37 +24,37 @@
     {
       "entry": "RunContext → PromptState → 内置段组装",
       "sources": [
-        "packages/agent/src/agent/run-context/RunContext.ts",
-        "packages/agent/src/agent/PromptState.ts",
-        "packages/agent/src/prompts/catalog.ts",
-        "packages/agent/src/prompts/segments/runtime.ts",
-        "packages/agent/src/prompts/segments/task.ts"
+        "packages/agent/src/impl/runner/RunContext.ts",
+        "packages/agent/src/impl/runner/PromptStateBuilder.ts",
+        "packages/agent/src/utils/guidance/catalog.ts",
+        "packages/agent/src/utils/guidance/runtime.ts",
+        "packages/agent/src/utils/guidance/task.ts"
       ]
     },
     {
       "entry": "能力发现、换入、计划与主动召回",
       "sources": [
-        "packages/agent/src/tool-library/builtin/Categories.tool.ts",
-        "packages/agent/src/tool-library/builtin/ContextRetrieval.ts",
-        "packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts",
-        "packages/agent/src/tool-library/builtin/Plans.tool.ts"
+        "packages/agent/src/impl/builtin/Categories.tool.ts",
+        "packages/agent/src/utils/builtin/context-retrieval.ts",
+        "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
+        "packages/agent/src/impl/builtin/Plans.tool.ts"
       ]
     },
     {
       "entry": "参数失败恢复与当前源码指导",
       "sources": [
-        "packages/agent/src/tools/ToolArgsSchemaValidator.ts",
-        "packages/agent/src/tools/recovery/ToolInputReuse.ts",
-        "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
-        "packages/agent/src/agent/context/resources/FileContextProjection.ts",
+        "packages/agent/src/utils/tools/tool-args-schema-validator.ts",
+        "packages/agent/src/impl/tools/ToolInputReuseStore.ts",
+        "packages/agent/src/utils/tools/transient-recovery-projection.ts",
+        "packages/agent/src/utils/context/file-context-projection.ts",
         "packages/project/src/utils/transactions/transaction-errors.ts"
       ]
     },
     {
       "entry": "模型回执与最终读取引用",
       "sources": [
-        "packages/agent/src/tools/Executor.ts",
-        "packages/agent/src/tools/toolInputHistoryProjection.ts",
+        "packages/agent/src/impl/tools/ToolExecutor.ts",
+        "packages/agent/src/utils/tools/tool-input-history-projection.ts",
         "packages/project/src/utils/agent"
       ]
     },
@@ -87,64 +87,64 @@
       "fingerprint": "3adf0c538aeb8ea18e13f0a942239f6ade2e3bc79e92dcdd9ff193e9239caf60"
     },
     {
-      "path": "packages/agent/src/agent/PromptState.ts",
-      "fingerprint": "b11ef9bdfe2c3fa171ed5b7f059fa9f0d053a8c3ff182c9bcdc8db602597645b"
+      "path": "packages/agent/src/impl/builtin/Categories.tool.ts",
+      "fingerprint": "d0ea02f30278dc6d60a972dd5edf0d42eb2f5762d0df92ccfc39c641d0207f2d"
     },
     {
-      "path": "packages/agent/src/agent/context/resources/FileContextProjection.ts",
-      "fingerprint": "abcfca272cb8bf93c29cf2d2ddfb8d3677ec935b59d1d8d62c7304f56f5217ea"
+      "path": "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
+      "fingerprint": "770584d1bda0663cd3e114e563328e0c2de2e84f4c6af8504f2aa80b3e7ae9f5"
     },
     {
-      "path": "packages/agent/src/agent/run-context/RunContext.ts",
-      "fingerprint": "5f8a17b7913bd368f4513bb01171049cba13852d1bd1e1aecbf3e267faebd5f2"
+      "path": "packages/agent/src/impl/builtin/Plans.tool.ts",
+      "fingerprint": "1185e4047d67c5910de28066d3cca718412821f5703e52552aeedd96969cba57"
     },
     {
-      "path": "packages/agent/src/prompts/catalog.ts",
-      "fingerprint": "21a6fbbfff74c7d8dd5abd9fe43a254dbaf0b7afac8e661f4f2af4ef66e7444e"
+      "path": "packages/agent/src/impl/runner/PromptStateBuilder.ts",
+      "fingerprint": "7185b67120a3039231cbea941e32518fff96b8885e5dce6d2fdbf239f4f87d52"
     },
     {
-      "path": "packages/agent/src/prompts/segments/runtime.ts",
-      "fingerprint": "dd9df869fc111945185ff173c3b102efaa6152cebf588b1132171eb598329db0"
+      "path": "packages/agent/src/impl/runner/RunContext.ts",
+      "fingerprint": "48c2b030326567695ccf154340de2d29d2b2c864a0a23e45ca96c3f50c8d6ea7"
     },
     {
-      "path": "packages/agent/src/prompts/segments/task.ts",
-      "fingerprint": "0b5f4bf3b6dd2bd10d8165dd667d889c1bae00ce572d6e51b98153e6605a69d2"
+      "path": "packages/agent/src/impl/tools/ToolExecutor.ts",
+      "fingerprint": "91dbad89438db93bf3d2883699708a5d6024cffad0433f3f5aa01a3cd816aa61"
     },
     {
-      "path": "packages/agent/src/tool-library/builtin/Categories.tool.ts",
-      "fingerprint": "f244e9172d11cbec40b01dcde424845198e63621df2d0f750ba482dabecb479d"
+      "path": "packages/agent/src/impl/tools/ToolInputReuseStore.ts",
+      "fingerprint": "81072e6180b1787b1a0450a79fb1df1a669932b3b405aeb97fb11f0cebd6e1d6"
     },
     {
-      "path": "packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts",
-      "fingerprint": "e4aa698896ea93e38dc11523327742352cc20dfaddd4056d42e036b2f30df5fa"
+      "path": "packages/agent/src/utils/builtin/context-retrieval.ts",
+      "fingerprint": "ab171c6d0f62ac37843826c9b06f9badb065b5f8a9ef9a90321fc3a1a7df4794"
     },
     {
-      "path": "packages/agent/src/tool-library/builtin/ContextRetrieval.ts",
-      "fingerprint": "0625efe8f24b0242191e9be5bf2d8cc15eb5c3e596c4477d09e24778dc306278"
+      "path": "packages/agent/src/utils/context/file-context-projection.ts",
+      "fingerprint": "cc41e8a3492f209ddd9263e7452ef29fd5498751dfa292190dd2659cee272896"
     },
     {
-      "path": "packages/agent/src/tool-library/builtin/Plans.tool.ts",
-      "fingerprint": "6105f0d274695dc714fd52b5503aa1b0a207502c820277f343923c3a27e965d6"
+      "path": "packages/agent/src/utils/guidance/catalog.ts",
+      "fingerprint": "3876b36477a2e306d57ada49c1b431029afa1285818214315fbf639a04db1a16"
     },
     {
-      "path": "packages/agent/src/tools/Executor.ts",
-      "fingerprint": "673a16e64527c84d72e12f8d227728b5930b473b5323479e1207cc8a660fad6c"
+      "path": "packages/agent/src/utils/guidance/runtime.ts",
+      "fingerprint": "8c7cb74d8f0eab294752d52c556492f8519b17f7448fe2ac61175ecf67074c6c"
     },
     {
-      "path": "packages/agent/src/tools/ToolArgsSchemaValidator.ts",
-      "fingerprint": "1dcfeeb4e59ea38f45821b4bea53636966a10670e7bce5b4c459a18f77d15aa3"
+      "path": "packages/agent/src/utils/guidance/task.ts",
+      "fingerprint": "ad63166d08b05ecd0e80e09b11178f83b712605ff73d6f1fbf5b8af6b7cffc2e"
     },
     {
-      "path": "packages/agent/src/tools/recovery/ToolInputReuse.ts",
-      "fingerprint": "1d2dc837e285e6c3782c4e6019178b707e94a46a6a4ef1167eb3380a2c89dedb"
+      "path": "packages/agent/src/utils/tools/tool-args-schema-validator.ts",
+      "fingerprint": "31d54090f40bed0f585b8fc0f58ab4d25d61f33a50caed26200aa791de5bbe83"
     },
     {
-      "path": "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
-      "fingerprint": "85f19e7bbe5f7f6885f877204fdbadf75a43e96edf62522dc3a033aeca29d9a4"
+      "path": "packages/agent/src/utils/tools/tool-input-history-projection.ts",
+      "fingerprint": "9482c91e2a5f402b82251f9b013e170f9b051dd0b6875da2f361697a8b408257"
     },
     {
-      "path": "packages/agent/src/tools/toolInputHistoryProjection.ts",
-      "fingerprint": "6f02d4eaa1be160a1dc9ba4b305524d7d70865c97c8797775a051776f8ee52b8"
+      "path": "packages/agent/src/utils/tools/transient-recovery-projection.ts",
+      "fingerprint": "ee7105ae7baa53351e870f71a9c633d50d977a0906cf3d6fb303240abcfb70cf"
     },
     {
       "path": "packages/project/README.md",

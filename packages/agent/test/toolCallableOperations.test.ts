@@ -4,7 +4,7 @@ import { z } from 'zod'
 import {
   createToolCallableOperations,
   parseToolWireInput,
-} from '../src/tool-contract/callable-operations'
+} from '../src/utils/toolkit/callable-operations'
 
 type Context = { abortSignal: AbortSignal; available: boolean }
 

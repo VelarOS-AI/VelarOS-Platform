@@ -1,9 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 
-import { ExecutionStore } from '../src/execution/Store'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { ExecutionService } from '../src/kernel/execution/ExecutionService'
-import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
+import { ExecutionService } from '../src/impl/execution/ExecutionService'
+import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { ExecutionStore } from '../src/impl/records/ExecutionStore'
 
 function deferred() {
   let resolve!: () => void

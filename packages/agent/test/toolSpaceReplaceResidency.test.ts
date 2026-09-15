@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { replaceToolSpacePages } from '../src/tool-library/builtin/ToolSpaceReplace'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { replaceToolSpacePages } from '../src/utils/builtin/tool-space-replace'
 
 describe('tool space capability residency', () => {
   test.each([

@@ -4,7 +4,7 @@ import {
   type TurnContextAppendBus,
   TurnContextLedger,
   TurnContextSessionLedgers,
-} from '../src/agent/run-context/TurnContextLedger'
+} from '../src/impl/records/TurnContextLedger'
 
 /**
  * 状态型 source 的「后来者取代」语义。

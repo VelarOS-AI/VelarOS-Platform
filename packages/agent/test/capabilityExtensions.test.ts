@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SessionToolAllocator } from '../src/agent/control-plane/SessionToolAllocator'
+import { SessionToolAllocator } from '../src/impl/tools/SessionToolAllocator'
 import {
   type AgentRuntimeCapabilityPorts,
   decideCapabilityScopeCategory,
@@ -10,8 +10,8 @@ import {
   resolveToolAllocationMetadata,
   resolveToolResultMiddlewares,
   resolveToolValidationHintProviders,
-} from '../src/capabilities/CapabilityExtensions'
-import { ToolArgsSchemaValidator } from '../src/tools/ToolArgsSchemaValidator'
+} from '../src/utils/capabilities'
+import { ToolArgsSchemaValidator } from '../src/utils/tools/tool-args-schema-validator'
 
 describe('Agent Runtime capability injection', () => {
   const ports: AgentRuntimeCapabilityPorts = {

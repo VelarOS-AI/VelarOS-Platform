@@ -5,7 +5,7 @@ import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 
 import JSZip from 'jszip'
 
-import { parseAgentModManifest } from '../../packages/agent/src/protocol/mods.ts'
+import { parseAgentModManifest } from '../../packages/agent/src/utils/wire/mods.ts'
 import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,

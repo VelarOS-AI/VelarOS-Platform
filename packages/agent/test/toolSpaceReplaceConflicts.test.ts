@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { replaceToolSpacePages } from '../src/tool-library/builtin/ToolSpaceReplace'
-import { toolSpaceReplaceMethodSchema } from '../src/tool-library/builtin/ToolSpaceSchemas'
+import { replaceToolSpacePages } from '../src/utils/builtin/tool-space-replace'
+import { toolSpaceReplaceMethodSchema } from '../src/utils/builtin/tool-space-schemas'
 
 function createHarness() {
   const calls: string[] = []

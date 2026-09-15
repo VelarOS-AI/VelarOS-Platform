@@ -1,20 +1,20 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import type { FileContextSnapshot } from '../src/agent/context/resources/contracts'
+import { contextRetrievalTools } from '../src/impl/builtin/ContextRetrieval.tool'
 import {
   FileContextCoordinator,
   fileContextFor,
   forkFileContext,
-} from '../src/agent/context/resources/FileContextCoordinator'
-import { projectFileContext } from '../src/agent/context/resources/FileContextProjection'
-import { sliceFileSnapshot } from '../src/agent/context/resources/FileSnapshotArchive'
-import { contextRetrievalTools } from '../src/tool-library/builtin/ContextRetrieval.tool'
-import { fitProjectReadsForModel } from '../src/tools/projectReadSerialization'
+} from '../src/impl/context/FileContextCoordinator'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import type { FileContextSnapshot } from '../src/types/resource-contracts'
+import { projectFileContext } from '../src/utils/context/file-context-projection'
+import { sliceFileSnapshot } from '../src/utils/context/file-snapshot-archive'
+import { fitProjectReadsForModel } from '../src/utils/tools/project-read-serialization'
 
 const workspaceId = '/repo'
 function snapshot(revision: string, content: string, path = 'a.ts'): FileContextSnapshot {

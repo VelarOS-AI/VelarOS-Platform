@@ -2,15 +2,15 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import type { ToolDescriptor } from '../src/types/tool'
 import {
   applyRunProfileToolExposure,
-} from '../src/agent/RunProfile'
+} from '../src/utils/runner/run-profile'
 import {
   describeRunProfiles,
   resolveRunProfilePolicyForRuntime,
   RunProfileDefinitions,
-} from '../src/agent/RuntimeProfiles'
-import type { ToolDescriptor } from '../src/protocol/types/tool'
+} from '../src/utils/runner/runtime-profiles'
 
 /** 子 Agent 模型窗口未知时 QueryLoop 用的保守回退，与 `SubAgentFallbackContextWindow` 同值。 */
 const SubAgentFallbackContextWindow = 128_000

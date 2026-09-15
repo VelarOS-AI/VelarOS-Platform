@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { schemaToInputSchema } from '../src/tool-contract/schema-bundle'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import {
   resolveToolInputReuse,
   saveToolAttemptInput,
   saveToolAttemptOutcome,
   ToolInputReuseError,
   withToolInputReuse,
-} from '../src/tools/recovery/ToolInputReuse'
+} from '../src/impl/tools/ToolInputReuseStore'
+import { schemaToInputSchema } from '../src/utils/toolkit/schema-bundle'
 
 const toolName = 'project:edit'
 function context(store = new InMemoryContextPayloadStore(), root = '/repo') {

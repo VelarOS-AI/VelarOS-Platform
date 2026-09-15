@@ -7,7 +7,7 @@ import JSZip from 'jszip'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { VelarModArchiveImporter } from '../src/mods/VelarModArchiveImporter'
+import { VelarModArchiveImporter } from '../src/impl/mods/VelarModArchiveImporter'
 
 const roots: string[] = []
 

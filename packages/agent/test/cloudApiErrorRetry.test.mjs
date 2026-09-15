@@ -12,7 +12,7 @@ import { test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-const retryModulePath = new URL('../dist/agent/retry.js', import.meta.url)
+const retryModulePath = new URL('../dist/impl/loop/RetryPolicy.js', import.meta.url)
 
 function cloudApiError(statusCode, code, message) {
   return new APICallError({

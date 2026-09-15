@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import type { TextStreamPart, ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { createAgentRuntimeInputInterruptScope } from '../src/agent/RuntimeInputPort'
-import { StreamConsumer } from '../src/agent/stream/Consumer'
-import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
+import { StreamConsumer } from '../src/impl/loop/StreamConsumer'
+import { ExecutionGuidanceQueue } from '../src/impl/records/ExecutionGuidanceQueue'
+import { createAgentRuntimeInputInterruptScope } from '../src/utils/runner/runtime-input-port'
 
 void describe('runtime input stream preemption', () => {
   void test('accepted guidance stops a provider stream before a late tool call is dispatched', async () => {

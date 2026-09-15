@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { projectExecutionSpanDebug } from '../src/kernel/observability/execution-span-debug'
-import { ExecutionSpanRecorder } from '../src/kernel/observability/ExecutionSpanRecorder'
-import type { ExecutionSpan } from '../src/protocol/observability'
+import { ExecutionSpanRecorder } from '../src/impl/ledgers/OpenExecutionSpan'
+import { projectExecutionSpanDebug } from '../src/utils/ledgers/execution-span-debug'
+import type { ExecutionSpan } from '../src/utils/wire/observability'
 
 describe('capability observability', () => {
   test('records and projects opaque capability observations without product semantics', () => {

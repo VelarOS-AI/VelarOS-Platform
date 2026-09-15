@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { LoopWindDownGuard } from '../src/impl/loop/LoopWindDownGuard'
 import {
   DefaultAgentExecutionLimits,
   resolveAgentExecutionLimits,
-} from '../src/agent/ExecutionLimits'
-import { LoopWindDownGuard } from '../src/agent/LoopSurface'
+} from '../src/utils/loop/execution-limits'
 
 void describe('agent execution limits', () => {
   void test('defaults to long-running wall clocks and unlimited turns', () => {

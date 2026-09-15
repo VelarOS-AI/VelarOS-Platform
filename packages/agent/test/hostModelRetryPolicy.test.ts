@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { RetryPolicy } from '../src/agent/retry'
+import { RetryPolicy } from '../src/impl/loop/RetryPolicy'
 
 test('host retry decisions use one retry loop and may recover provider failures', async () => {
   const attempts: number[] = []

@@ -6,7 +6,7 @@ import { describe, test } from 'bun:test'
 import {
   sanitizeModelHistory,
   sanitizeModelHistoryForProvider,
-} from '../src/agent/history/sanitize'
+} from '../src/utils/history/sanitize'
 
 describe('historical binary replay markers', () => {
   test('the marker distinguishes original image visibility from later replay omission', () => {

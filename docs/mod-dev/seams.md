@@ -7,7 +7,7 @@
 manifest 侧的声明形状见 [axes/hooks.md](./axes/hooks.md)。
 本页写机制、闭集与接线现状。
 
-实现：`packages/agent/src/mods/AgentModSeams.ts`；闭集契约：`@velaros-ai/agent/protocol/mods`。
+实现：`packages/agent/src/impl/mods/AgentModSeamDispatcher.ts`；闭集契约：`@velaros-ai/agent/protocol/mods`。
 
 ---
 
@@ -57,16 +57,16 @@ compaction:before      skill:select           diagnostic:publish
 
 ### 已真接线的四个派发点（覆盖 5 个 event）
 
-**这张表在代码里有对应物**：`WiredSeamKindsByDispatcher`（`packages/agent/src/mods/AgentModSeams.ts`）
+**这张表在代码里有对应物**：`WiredSeamKindsByDispatcher`（`packages/agent/src/impl/mods/AgentModSeamDispatcher.ts`）
 按派发方法名登记它读取的 kind，对「类上所有 `dispatch*` 方法」保持类型层穷举——新增一个派发方法
 却忘了登记就编译红。`WiredSeamKinds` 由它派生，是「今天哪些钩子真会被调用」的唯一事实面。
 
 | event | 调用点 | 语义 |
 | --- | --- | --- |
-| `tool-call:before` | `packages/agent/src/tools/Executor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
-| `tool-result:after` | `packages/agent/src/tools/Executor.ts` `finalizeResult()`（物化之前） | 可改写 result / error；放在物化前保证模型面与 UI 面同源 |
-| `turn-context:assemble` | `packages/agent/src/agent/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
-| `session:start` / `session:end` | `packages/agent/src/kernel/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 `finally`，异常路径也发 |
+| `tool-call:before` | `packages/agent/src/impl/tools/ToolExecutor.ts` `runOne()`（策略门之前） | 可拦下（结构化失败结果 `tool_blocked`）或改写入参 |
+| `tool-result:after` | `packages/agent/src/impl/tools/ToolExecutor.ts` `finalizeResult()`（物化之前） | 可改写 result / error；放在物化前保证模型面与 UI 面同源 |
+| `turn-context:assemble` | `packages/agent/src/impl/runner/ContextBuilder.ts` `buildAsync()`（段排序后、预算裁剪前） | 异步宿主入口；可追加 dynamic 段，追加段同样计入 prompt 预算 |
+| `session:start` / `session:end` | `packages/agent/src/impl/execution/ExecutionService.ts` `runManagedExecution()` | 纯通知；`end` 在 `finally`，异常路径也发 |
 
 四个调用点全部走 `seams?.has(kind)` 快路径。
 
@@ -158,9 +158,9 @@ interface AgentModSessionLifecycleEvent {
 
 | 装配点 | 落点 | 透传形态 |
 | --- | --- | --- |
-| `SoloStreamLoop`（主面） | `packages/agent/src/agent/SoloLoop.ts` | 构造参 `seams: LooseOptional<AgentModSeamDispatcher> = null`；每轮 `ToolExecutor` 与缺页重放重建的那个都带上 |
-| `QueryLoop`（子面） | `packages/agent/src/agent/QueryLoop.ts` | 同形构造参 → 逐轮进 `ExecuteQueryTurnArgs.seams` |
-| `QueryTurn` | `packages/agent/src/agent/QueryTurn.ts` | 从 `args.seams` 传入 `ToolExecutor` options |
+| `SoloStreamLoop`（主面） | `packages/agent/src/impl/loop/SoloStreamLoop.ts` | 构造参 `seams: LooseOptional<AgentModSeamDispatcher> = null`；每轮 `ToolExecutor` 与缺页重放重建的那个都带上 |
+| `QueryLoop`（子面） | `packages/agent/src/impl/loop/QueryLoop.ts` | 同形构造参 → 逐轮进 `ExecuteQueryTurnArgs.seams` |
+| `QueryTurn` | `packages/agent/src/impl/loop/QueryTurn.ts` | 从 `args.seams` 传入 `ToolExecutor` options |
 
 **子面与主面共用同一派发器**——否则钩子的「拦下 / 改写」会在委派边界上出现盲区。
 

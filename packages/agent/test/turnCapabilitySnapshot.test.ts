@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import {
-  captureAgentTurnCapabilityContext,
-  captureAgentTurnCapabilitySnapshot,
-} from '../src/agent/TurnCapabilitySnapshot'
-import {
   ToolExecutionPolicy,
   type ToolExecutionPolicyRegistry,
-} from '../src/tools/ExecutionPolicy'
+} from '../src/impl/tools/ToolExecutionPolicy'
+import {
+  captureAgentTurnCapabilityContext,
+  captureAgentTurnCapabilitySnapshot,
+} from '../src/utils/loop/turn-capability-snapshot'
 
 void describe('agent turn capability snapshot', () => {
   void test('captures the registry once and freezes query descriptor projections', () => {

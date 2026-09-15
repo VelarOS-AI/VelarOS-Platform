@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { selectJsonPath } from '../src/agent/context/retrieval/PayloadReader'
-import { findHistoryPreviewPlaceholderArgumentPaths } from '../src/tools/historyPreviewPlaceholder'
-import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
+import { selectJsonPath } from '../src/impl/retrieval/ContextRetrievalPayloadReader'
+import { findHistoryPreviewPlaceholderArgumentPaths } from '../src/utils/tools/history-preview-placeholder'
+import { compactToolInputForModel } from '../src/utils/tools/tool-result-serialization'
 
 /**
  * 独立复刻 summarizeToolInputString 的截断规则（160 字符预览 + 折叠空白），不复用被测代码，

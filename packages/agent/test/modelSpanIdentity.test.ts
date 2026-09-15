@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
+import type {
+  ModelSpanOutcome,
+  RunSpanScope,
+  TurnSpanScope,
+} from '../src/impl/ledgers/LedgerExecutionSpanScopeFactory'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
   endLoopTurnSpansOk,
   restartLoopTurnModelSpanAfterRetry,
-} from '../src/agent/AgentLoop'
-import type {
-  ModelSpanOutcome,
-  RunSpanScope,
-  TurnSpanScope,
-} from '../src/kernel/observability/execution-span-scope'
+} from '../src/utils/loop/agent-loop'
 
 describe('model span identity', () => {
   test('keeps the selected tier on the turn and records the concrete provider model on the request', () => {

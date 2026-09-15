@@ -19,7 +19,9 @@ import { describe, test } from 'bun:test'
 import {
   ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
-} from '../src/agent/context/residency/ContextGovernanceSession'
+} from '../src/impl/residency/ContextGovernanceSession'
+import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
+import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
 import {
   type ContextDistiller,
   type ContextDistillInput,
@@ -28,15 +30,13 @@ import {
   planContextDistillation,
   resolveDistillGate,
   validateDistilledBody,
-} from '../src/agent/context/residency/distill'
+} from '../src/utils/residency/distill'
 import {
   type ContextGovernanceConfigInput,
   resolveContextGovernanceConfig,
-} from '../src/agent/context/residency/governanceConfig'
-import { ingestHistoryIntoLedger } from '../src/agent/context/residency/ingest'
-import { InMemoryContextMigrationEventSink } from '../src/agent/context/residency/migrationLog'
-import { measureLedgerProjection } from '../src/agent/context/residency/projection'
-import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
+} from '../src/utils/residency/governance-config'
+import { ingestHistoryIntoLedger } from '../src/utils/residency/ingest'
+import { measureLedgerProjection } from '../src/utils/residency/projection'
 
 /**
  * 治理窗口刻意开小（20K）。

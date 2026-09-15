@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import {
   mapToolDiscoveryCards,
   pageToolDiscoveryCards,
-} from '../src/tool-library/builtin/ToolSpaceQueries'
-import { toolSpacePageSchema } from '../src/tool-library/builtin/ToolSpaceSchemas'
+} from '../src/utils/builtin/tool-space-queries'
+import { toolSpacePageSchema } from '../src/utils/builtin/tool-space-schemas'
 
 function createToolSpaceContext() {
   const categorySpecs = [

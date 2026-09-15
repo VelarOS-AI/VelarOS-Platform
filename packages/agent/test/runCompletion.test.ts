@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { buildRunVerificationSummary } from '../src/agent/RunCompletion'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { buildRunVerificationSummary } from '../src/utils/loop/run-completion'
 
 describe('execution completion verification facts', () => {
   test('an ordinary reply does not invent a verification result', () => {

@@ -7,8 +7,8 @@ import {
   KernelBackgroundJobManager,
   type KernelBackgroundJobOutputStore,
   type KernelBackgroundJobStoredOutput,
-} from '../src/kernel/background-jobs'
-import { formatSubAgentBackgroundArtifact } from '../src/kernel/dispatch/result-format'
+} from '../src/impl/records/KernelBackgroundJobManager'
+import { formatSubAgentBackgroundArtifact } from '../src/utils/delegation/result-format'
 
 class ReadFailingOutputStore implements KernelBackgroundJobOutputStore {
   private readonly delegate = new InMemoryKernelBackgroundJobOutputStore()

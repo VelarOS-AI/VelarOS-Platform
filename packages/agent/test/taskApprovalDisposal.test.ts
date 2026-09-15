@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { PrimaryAgentProfile } from '../src/agent/PrimaryAgentProfile'
-import { createAgentExecutionStack } from '../src/agent/runner/AgentExecutionStack'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import type { ApprovalDecision } from '../src/protocol/types/agent'
-import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
+import { createAgentExecutionStack } from '../src/impl/assembly/AgentExecutionStack'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import type { ApprovalDecision } from '../src/types/agent'
+import { createTaskApprovalPort } from '../src/utils/toolkit/task-approval'
 
 function createRunnerHarness() {
   const trackers: CodingSessionTracker[] = []

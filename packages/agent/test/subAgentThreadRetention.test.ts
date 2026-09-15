@@ -9,25 +9,25 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentExecutionLimitOverrides } from '../src/agent/ExecutionLimits'
-import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
-import type { SubAgentDispatchInput, SubAgentQueryOptions } from '../src/kernel/dispatch/host-ports'
-import { formatSubAgentFailureRedispatchGuidance } from '../src/kernel/dispatch/result-format'
-import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { createRuntimePromptSegments } from '../src/prompts/segments/runtime'
-import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
-import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/protocol/types/subAgentTask'
-import { parseSubAgentToolResult } from '../src/sub-agent/SubAgentResultBuilder'
+import { dispatchAgentTools } from '../src/impl/builtin/DispatchAgent.tool'
+import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import {
   SubAgentSessionStore,
   type SubAgentThreadRetentionLimits,
-} from '../src/sub-agent/SubAgentSessionStore'
-import type { SubAgentTypeDescriptor } from '../src/sub-agent/SubAgentTypeRegistry'
-import { TeamModelRouter } from '../src/team/model-router'
-import { WriteLeaseCoordinator } from '../src/team/WriteLease'
-import { dispatchAgentSchema } from '../src/tool-library/builtin/DispatchAgent'
-import { dispatchAgentTools } from '../src/tool-library/builtin/DispatchAgent.tool'
+} from '../src/impl/delegation/SubAgentSessionStore'
+import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
+import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import type { SubAgentDispatchInput, SubAgentQueryOptions } from '../src/types/dispatch-host-ports'
+import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/types/sub-agent-task'
+import { dispatchAgentSchema } from '../src/utils/builtin/dispatch-schemas'
+import { formatSubAgentFailureRedispatchGuidance } from '../src/utils/delegation/result-format'
+import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
+import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
+import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'
+import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
+import type { AgentExecutionLimitOverrides } from '../src/utils/loop/execution-limits'
 
 interface WorkerCall {
   task: string

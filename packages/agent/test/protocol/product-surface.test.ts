@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   mergeAgentSurfaceSkillSelection,
   serializeAgentSurfaceContextSnapshot,
-} from '../../src/protocol/product-surface'
+} from '../../src/utils/wire/product-surface'
 
 describe('Agent product surface protocol', () => {
   test('merges explicit and product-default Skills without changing first-seen order', () => {

@@ -7,12 +7,12 @@
 // 已移除的方案模式也不得通过执行模式注册表复活。
 import { describe, expect, test } from 'bun:test'
 
-import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'
-import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
+import { ExecutionGuidanceQueue } from '../src/impl/records/ExecutionGuidanceQueue'
+import { runSoloFinishingGate } from '../src/utils/loop/solo-finishing-gate'
 import {
   listExecutionModes,
   resolveExecutionModeForPromptFeature,
-} from '../src/execution-modes/ExecutionModeRegistry'
+} from '../src/utils/runner/execution-mode-registry'
 
 function createFinishingGateHarness(options: {
   unresolvedPlanSteps?: boolean

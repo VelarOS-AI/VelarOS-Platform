@@ -5,7 +5,7 @@ import { AppError } from '@velaros-ai/core/error'
 import {
   buildExecutionFailureResult,
   buildToolFailureResult,
-} from '../src/tools/ExecutionPolicyFailures'
+} from '../src/utils/tools/execution-policy-failures'
 
 describe('tool execution failure projection', () => {
   test('promotes an independent domain reason when the generic wrapper is UNKNOWN', () => {

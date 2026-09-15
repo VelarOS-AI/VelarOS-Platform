@@ -5,7 +5,7 @@ import { describe, test } from 'bun:test'
 import {
   compileSubAgentOutputSchema,
   parseSubAgentStructuredOutput,
-} from '../src/sub-agent/StructuredOutput.js'
+} from '../src/utils/delegation/structured-output.js'
 
 const compiled = compileSubAgentOutputSchema({
   type: 'object',

@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { defineToolRuntimeSpec } from '../src/tool-contract/define'
-import { ToolContractExampleRegistry } from '../src/tool-contract/examples'
+import { ToolContractExampleRegistry } from '../src/impl/tools/ToolContractExampleRegistry'
+import type { DefineToolRuntimeSpecInput } from '../src/types/tool-contract'
+import { mapToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
+import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
 import {
   isStructuredToolDescription,
   ToolDescriptionBudgetChars,
-} from '../src/tool-contract/ToolDescription'
-import type { DefineToolRuntimeSpecInput } from '../src/tool-contract/types'
-import { mapToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
+} from '../src/utils/toolkit/tool-description'
 
 /**
  * 造一个描述长度可控的工具契约。

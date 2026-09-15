@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  ActiveContextArchiveFilter,
-  ActiveContextArtifact,
-  ActiveContextListOptions,
-  ActiveContextUpsertInput,
-} from '../src/protocol/types'
 import {
   type ActiveDirectiveContext,
   ActiveDirectiveLimits,
@@ -13,7 +7,13 @@ import {
   createDirectiveArtifactId,
   listActiveDirectives,
   upsertActiveDirective,
-} from '../src/tool-library/builtin/ActiveDirectives'
+} from '../src/impl/builtin/DirectiveOperations'
+import type {
+  ActiveContextArchiveFilter,
+  ActiveContextArtifact,
+  ActiveContextListOptions,
+  ActiveContextUpsertInput,
+} from '../src/types/protocol'
 
 function createHarness(seed: ActiveContextArtifact[] = []) {
   let now = 1_000

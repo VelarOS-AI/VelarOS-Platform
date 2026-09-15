@@ -11,26 +11,26 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { buildKernelPrefixShape } from '../src/impl/loop/KernelPrefixShapeTracker'
+import { buildSystemPromptDelivery } from '../src/impl/loop/StreamTurn'
 import {
   ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
-} from '../src/agent/context/residency/ContextGovernanceSession'
-import { isContextDashboardText } from '../src/agent/context/residency/dashboard'
-import { stableStringify } from '../src/agent/context/residency/determinism'
+} from '../src/impl/residency/ContextGovernanceSession'
+import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
+import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
+import type { ContextRecordClassifier } from '../src/utils/residency/admission'
+import { isContextDashboardText } from '../src/utils/residency/dashboard'
+import { stableStringify } from '../src/utils/residency/determinism'
 import {
   DefaultContextGovernanceConfig,
   resolveContextGovernanceConfig,
-} from '../src/agent/context/residency/governanceConfig'
-import { runGovernanceEpoch } from '../src/agent/context/residency/GovernanceEpoch'
-import { ingestHistoryIntoLedger } from '../src/agent/context/residency/ingest'
-import { InMemoryContextMigrationEventSink } from '../src/agent/context/residency/migrationLog'
-import { projectContextLedger } from '../src/agent/context/residency/projection'
-import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
-import { buildContextSkeleton } from '../src/agent/context/residency/skeleton'
-import { buildSystemPromptDelivery } from '../src/agent/StreamTurn'
-import { buildKernelPrefixShape } from '../src/kernel/prefix-shape'
+} from '../src/utils/residency/governance-config'
+import { runGovernanceEpoch } from '../src/utils/residency/governance-epoch'
+import { ingestHistoryIntoLedger } from '../src/utils/residency/ingest'
+import { projectContextLedger } from '../src/utils/residency/projection'
+import { buildContextSkeleton } from '../src/utils/residency/skeleton'
 
 const RefetchableReadClassifier: ContextRecordClassifier = {
   isRefetchable: (input) =>

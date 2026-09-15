@@ -1,28 +1,28 @@
 import { describe, expect, test } from 'bun:test'
 
-import { listExecutionModes } from '../src/execution-modes/ExecutionModeRegistry'
-import { assembleAgentMods } from '../src/mods/AgentModHostAssembly'
-import { type AgentModHostProfile, AgentModLoader } from '../src/mods/AgentModLoader'
+import { assembleAgentMods } from '../src/impl/assembly/AgentModHostAssembler'
+import {
+  BuiltinAgentModId,
+  collectBuiltinAgentModTools,
+  createBuiltinAgentModPackage,
+} from '../src/impl/builtin/BuiltinAgentMod'
+import { type AgentModHostProfile, AgentModLoader } from '../src/impl/mods/AgentModLoader'
+import { AgentModRegistry, AgentModStaleSnapshotError } from '../src/impl/mods/AgentModRegistry'
+import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import { createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
 import {
   composeAgentModSpaces,
   projectAgentModExecutionModes,
   projectAgentModPromptSegments,
   projectAgentModTools,
-} from '../src/mods/AgentModProjection'
-import { AgentModRegistry, AgentModStaleSnapshotError } from '../src/mods/AgentModRegistry'
-import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
-import {
-  BuiltinAgentModId,
-  collectBuiltinAgentModTools,
-  createBuiltinAgentModPackage,
-} from '../src/mods/BuiltinAgentMod'
-import { createBuiltInPromptSegments } from '../src/prompts/catalog'
+} from '../src/utils/mods/agent-mod-projection'
+import { listExecutionModes } from '../src/utils/runner/execution-mode-registry'
 import {
   type AgentModContributionAxisName,
   type AgentModManifest,
   AgentModManifestSchemaVersion,
   parseAgentModManifest,
-} from '../src/protocol/mods'
+} from '../src/utils/wire/mods'
 
 const AllAxes: readonly AgentModContributionAxisName[] = [
   'tools',

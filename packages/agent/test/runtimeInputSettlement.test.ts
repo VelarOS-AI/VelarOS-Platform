@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { createAgentRuntimeInputInterruptScope } from '../src/agent/RuntimeInputPort'
-import { consumeSoloRuntimeGuidance } from '../src/agent/SoloRuntimeGuidance'
-import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
+import { ExecutionGuidanceQueue } from '../src/impl/records/ExecutionGuidanceQueue'
+import { consumeSoloRuntimeGuidance } from '../src/utils/loop/solo-runtime-guidance'
+import { createAgentRuntimeInputInterruptScope } from '../src/utils/runner/runtime-input-port'
 
 function userMessage(content: string): ModelMessage {
   return { role: 'user', content }

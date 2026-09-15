@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createSubAgentContext, type SubAgentContextBase } from '../src/agent/LoopRuntime'
+import { createSubAgentContext, type SubAgentContextBase } from '../src/utils/loop/loop-runtime'
 
 function fixture() {
   const parentAbort = new AbortController()

@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  isExternalAgentBridgeExtensionOrigin,
-} from '../src/bridge/ExternalAgentBridgeLoopbackServer'
-import {
   ExternalAgentBridgeCommandQueue,
   ExternalAgentBridgeEventWindow,
   ExternalAgentBridgePairingThrottle,
   externalAgentBridgeTokensEqual,
-} from '../src/bridge/ExternalAgentBridgeState'
+} from '../src/impl/connectors/ExternalAgentBridgeCommandQueue'
+import {
+  isExternalAgentBridgeExtensionOrigin,
+} from '../src/impl/connectors/ExternalAgentBridgeLoopbackServer'
 
 describe('External Agent Bridge shared state', () => {
   test('bounds command replay and validates acknowledgements', () => {

@@ -11,7 +11,7 @@ MCP、宿主自动化 API 和 mod 都能扩展产品能力，但它们的方向�
 
 ## MCP
 
-`@velaros-ai/agent` 的 `tool-library/mcp` 提供 host-neutral 的 MCP 连接和翻译能力，包括：
+`@velaros-ai/agent` 的 `./mcp` 入口提供 host-neutral 的 MCP 连接和翻译能力，包括：
 
 - `McpClientConnection` 与超时策略；
 - `translateMcpTool`、`buildMcpToolName` 和输入 schema 转换；

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { AgentTurnHistoryHelper, compileProviderSendRequest, ContextGovernanceSessionRegistry, InMemoryContextPayloadStore, ProviderRequestCompiler } from '@velaros-ai/agent'
 import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 
-import { fitProjectReadsForModel } from '../../agent/src/tools/projectReadSerialization'
+import { fitProjectReadsForModel } from '../../agent/src/utils/tools/project-read-serialization'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
 import { projectTools } from '../src/impl/ProjectTools'

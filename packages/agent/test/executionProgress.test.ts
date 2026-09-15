@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { ExecutionProgress } from '../src/tools/recovery/ExecutionProgress'
+import { ExecutionProgress } from '../src/impl/tools/ExecutionProgress'
 
 test('changing unrelated parameters or reading another file does not clear an unresolved obstacle', () => {
   const progress = new ExecutionProgress()

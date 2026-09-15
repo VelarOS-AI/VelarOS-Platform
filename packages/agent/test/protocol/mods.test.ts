@@ -7,7 +7,7 @@ import {
   listAgentModDeclaredAxes,
   parseAgentModManifest,
   satisfiesSemverRange,
-} from '../../src/protocol/mods'
+} from '../../src/utils/wire/mods'
 
 function baseManifest(overrides: Record<string, unknown> = {}) {
   return {

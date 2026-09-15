@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { searchToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
+import { searchToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
 import {
   parseToolSpaceQueryMethodInput,
   toolSpaceQueryMethodSchema,
   ToolSpaceQueryPageLimitMax,
-} from '../src/tool-library/builtin/ToolSpaceSchemas'
+} from '../src/utils/builtin/tool-space-schemas'
 
 describe('tool space find projection', () => {
   test('keeps the provider-facing and op-specific page limits aligned', () => {

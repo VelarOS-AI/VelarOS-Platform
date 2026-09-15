@@ -14,26 +14,26 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { ChatContextRetrievalService } from '../src/agent/context/retrieval/ContextRetrievalService'
-import type {
-  ChatContextRetrievalIndexSaveOptions,
-  ChatContextRetrievalIndexSnapshot,
-  ChatContextRetrievalIndexStore,
-} from '../src/agent/context/retrieval/IndexSnapshot'
-import type {
-  RetrievalPayloadStorePort,
-  RetrievalStateStorePort,
-} from '../src/agent/context/retrieval/sessionStorePorts'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
 import type {
   ChatContextRetrievalIndexSourceFingerprint,
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
-} from '../src/protocol/types'
-import { inferRecallRefKind } from '../src/tool-library/builtin/ContextRetrieval'
+} from '../src/types/protocol'
+import type {
+  RetrievalPayloadStorePort,
+  RetrievalStateStorePort,
+} from '../src/types/retrieval-session-store-ports'
+import { inferRecallRefKind } from '../src/utils/builtin/context-retrieval'
+import type {
+  ChatContextRetrievalIndexSaveOptions,
+  ChatContextRetrievalIndexSnapshot,
+  ChatContextRetrievalIndexStore,
+} from '../src/utils/retrieval/index-snapshot'
 
 const SessionId = 'session-s3'
 

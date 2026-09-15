@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createSkillDefinition } from '../src/skills/AgentSkillProvider'
-import { SkillFileStore } from '../src/skills/SkillFileStore'
+import { SkillFileStore } from '../src/impl/guidance/SkillFileStore'
+import { createSkillDefinition } from '../src/utils/guidance/agent-skill-provider'
 
 describe('Skill 必填空间声明', () => {
   test('文件 Skill 缺失或给空 spaces 时不进入技能库', () => {

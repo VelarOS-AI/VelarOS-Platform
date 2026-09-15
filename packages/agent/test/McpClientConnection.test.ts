@@ -9,7 +9,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { afterEach, describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { McpClientConnection } from '../src/tool-library/mcp/McpClientConnection'
+import { McpClientConnection } from '../src/impl/connectors/McpClientConnection'
 
 const servers: Server[] = []
 const fixtureDirectories: string[] = []

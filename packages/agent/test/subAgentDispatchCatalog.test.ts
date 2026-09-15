@@ -1,22 +1,22 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { ContextBuilder } from '../src/agent/ContextBuilder'
-import { PrimaryAgentProfile } from '../src/agent/PrimaryAgentProfile'
-import type { RunContextToolContext } from '../src/agent/run-context/host-ports'
-import { RunContext } from '../src/agent/run-context/RunContext'
-import type { CustomSubAgentRegistry } from '../src/kernel/dispatch/host-ports'
-import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
-import { createBuiltInPromptRegistry } from '../src/prompts/catalog'
-import type { ExecutionModeId } from '../src/protocol/types/agent'
-import type { CustomSubAgentDefinition } from '../src/protocol/types/subAgentTask'
-import type { ToolCategoryOverview } from '../src/protocol/types/tool'
+import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
+import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
+import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
+import { RunContext } from '../src/impl/runner/RunContext'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { defaultRuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
+import type { ExecutionModeId } from '../src/types/agent'
+import type { CustomSubAgentRegistry } from '../src/types/dispatch-host-ports'
+import type { RunContextToolContext } from '../src/types/run-context-host-ports'
+import type { CustomSubAgentDefinition } from '../src/types/sub-agent-task'
+import type { ToolCategoryOverview } from '../src/types/tool'
+import { agentWorkflowSchema } from '../src/utils/builtin/workflow-schemas'
 import type {
   SubAgentTypeDescriptor,
   SubAgentTypeProvider,
-} from '../src/sub-agent/SubAgentTypeRegistry'
-import { agentWorkflowSchema } from '../src/tool-library/builtin/AgentWorkflow'
-import { defaultRuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
+} from '../src/utils/delegation/sub-agent-type-registry'
+import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 
 function descriptor(id: string, readonlyDefault = true): SubAgentTypeDescriptor {
   return {

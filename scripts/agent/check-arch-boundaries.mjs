@@ -13,7 +13,7 @@
 //     provider request 与执行策略必须消费同一份 turnToolRegistry。
 //  ⑤ 领域语义与观测语义必须由 capability 注入。
 //  ⑥ 发布必须绑定精确 source/ref/tag 和同一已验明 tarball。
-//  ⑦ 治理账本键单源:'unknown-session' 字面量只许出现在 residency/sessionKey.ts,
+//  ⑦ 治理账本键单源:'unknown-session' 字面量只许出现在 utils/residency/session-key.ts,
 //     其余一律走 resolveGovernanceSessionKey()/UnknownGovernanceSessionId(注册键=查询键)。
 //
 // 有意的基线变化:VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成基线,
@@ -259,7 +259,7 @@ function scanMinimalKernelDependencyDirection() {
 // `resolveGovernanceSessionKey` / `UnknownGovernanceSessionId` 之后,把"只许一处写字面量"钉成
 // 机械规则,这条不变量才真的机械成立,而不是靠下一个人记得。
 const GovernanceSessionKeySingleSourceFile =
-  'packages/agent/src/agent/context/residency/sessionKey.ts'
+  'packages/agent/src/utils/residency/session-key.ts'
 const UnknownGovernanceSessionLiteralPattern = /['"`]unknown-session['"`]/
 
 function scanGovernanceSessionKeySingleSource() {
@@ -289,7 +289,7 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
   const violations = []
   const contracts = [
     {
-      file: 'packages/agent/src/agent/SoloLoop.ts',
+      file: 'packages/agent/src/impl/loop/SoloStreamLoop.ts',
       orderedMarkers: [
         'const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)',
         'const resolvedRoleRuntime = await this.runtimeHelper.resolveRoleRuntime(',
@@ -300,12 +300,12 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
       ],
     },
     {
-      file: 'packages/agent/src/agent/SoloRunPlanPreparer.ts',
+      file: 'packages/agent/src/utils/loop/solo-run-plan-preparer.ts',
       orderedMarkers: [],
       requiredMarkers: ['capabilityRevision: input.toolRegistry.getCapabilityRevision?.()'],
     },
     {
-      file: 'packages/agent/src/agent/QueryLoop.ts',
+      file: 'packages/agent/src/impl/loop/QueryLoop.ts',
       orderedMarkers: [
         'const turnToolRegistry = captureAgentTurnCapabilitySnapshot(this.toolRegistry)',
         'const { systemPrompt } = await this.runContextHelper.buildSystemPrompt({',
@@ -316,7 +316,7 @@ function scanAgentTurnCapabilitySnapshotBoundary() {
       ],
     },
     {
-      file: 'packages/agent/src/tools/ExecutionPolicy.ts',
+      file: 'packages/agent/src/impl/tools/ToolExecutionPolicy.ts',
       orderedMarkers: [],
       requiredMarkers: ['this.toolRegistry.getCurrentRegistrationSignature'],
     },
@@ -375,8 +375,8 @@ function scanConcreteSemanticInjectionBoundary() {
   }
 
   const neutralPolicyFiles = [
-    'packages/agent/src/agent/control-plane/SessionToolAllocator.ts',
-    'packages/agent/src/tools/ToolArgsSchemaValidator.ts',
+    'packages/agent/src/impl/tools/SessionToolAllocator.ts',
+    'packages/agent/src/utils/tools/tool-args-schema-validator.ts',
   ]
   const concreteLiteralPattern =
     /['"`][^'"`\n]*(?:browser|workspace|workbench|memory|knowledge|office|computer|model)[_-][a-z0-9_-]+[^'"`\n]*['"`]/iu
@@ -462,46 +462,46 @@ function scanConcreteSemanticInjectionBoundary() {
 
   const requiredInjectionMarkers = [
     {
-      file: 'packages/agent/src/tools/Executor.ts',
+      file: 'packages/agent/src/impl/tools/ToolExecutor.ts',
       markers: ['resolveToolResultMiddlewares(this.ctx.capabilityPorts)'],
     },
     {
-      file: 'packages/agent/src/tools/ExecutionPolicy.ts',
+      file: 'packages/agent/src/impl/tools/ToolExecutionPolicy.ts',
       markers: ['resolveToolValidationHintProviders(', 'capabilityPorts?: AgentRuntimeCapabilityPorts'],
     },
     {
-      file: 'packages/agent/src/agent/control-plane/SessionToolAllocator.ts',
+      file: 'packages/agent/src/impl/tools/SessionToolAllocator.ts',
       markers: ['resolveToolAllocationMetadata(options.capabilityPorts)'],
     },
     {
-      file: 'packages/agent/src/agent/PromptState.ts',
+      file: 'packages/agent/src/impl/runner/PromptStateBuilder.ts',
       markers: ['resolveCapabilityPromptSegments(toolContext.capabilityPorts, runtimeSnapshot)'],
     },
     {
-      file: 'packages/agent/src/team/model-router.ts',
+      file: 'packages/agent/src/impl/delegation/TeamModelRouter.ts',
       markers: ['constructor(private readonly routing: TeamModelRoutingPort)'],
     },
     {
-      file: 'packages/agent/src/agent/runner/AgentRunner.ts',
+      file: 'packages/agent/src/impl/runner/AgentRunner.ts',
       markers: ['surfaceProfileProvider: AgentSurfaceProfileProvider'],
     },
     {
-      file: 'packages/agent/src/agent/QueryLoop.ts',
+      file: 'packages/agent/src/impl/loop/QueryLoop.ts',
       markers: ['resolveCapabilityDelegationPolicy(args.parentCtx.capabilityPorts)'],
     },
     {
-      file: 'packages/agent/src/kernel/dispatch/SubAgentDispatcher.ts',
+      file: 'packages/agent/src/impl/delegation/SubAgentDispatcher.ts',
       markers: ['resolveCapabilityDelegationPolicy(this.capabilityPorts)'],
     },
     {
-      file: 'packages/agent/src/protocol/external-agent-bridge.ts',
+      file: 'packages/agent/src/utils/wire/external-agent-bridge.ts',
       markers: [
         'ExternalAgentBridgeProtocolDescriptor',
         'transportVersion: ExternalAgentBridgeProtocolVersion',
       ],
     },
     {
-      file: 'packages/agent/src/protocol/observability.ts',
+      file: 'packages/agent/src/utils/wire/observability.ts',
       markers: [
         'CapabilitySpanSchema',
         "category: z.literal('capability')",
@@ -510,7 +510,7 @@ function scanConcreteSemanticInjectionBoundary() {
       ],
     },
     {
-      file: 'packages/agent/src/kernel/observability/execution-span-scope.ts',
+      file: 'packages/agent/src/impl/ledgers/LedgerExecutionSpanScopeFactory.ts',
       markers: ['recordCapabilitySpan(', 'ExecutionCapabilitySpanRecorder'],
     },
   ]
@@ -530,10 +530,10 @@ function scanConcreteSemanticInjectionBoundary() {
 
   // 观测域原来经 kernel/observability/index.ts 门面转出；门面删掉后由包根入口逐个名字直接转发，查根入口防止再把退役名字转出去。
   const neutralObservabilityFiles = [
-    'packages/agent/src/protocol/observability.ts',
-    'packages/agent/src/kernel/observability/execution-span-debug.ts',
-    'packages/agent/src/kernel/observability/execution-span-scope.ts',
-    'packages/agent/src/index.ts',
+    'packages/agent/src/utils/wire/observability.ts',
+    'packages/agent/src/utils/ledgers/execution-span-debug.ts',
+    'packages/agent/src/impl/ledgers/LedgerExecutionSpanScopeFactory.ts',
+    'packages/agent/src/exports/index.ts',
   ]
   const retiredConcreteObservationPattern =
     /\b(?:MemorySpan(?:Schema)?|ExecutionSpanDebugMemory|recordMemorySpan|recordAttentionOutcomeMirror|ExecutionSpanOutcomeMirror)\b|category:\s*z\.literal\(['"]memory['"]\)|category\s*===\s*['"]memory['"]/u

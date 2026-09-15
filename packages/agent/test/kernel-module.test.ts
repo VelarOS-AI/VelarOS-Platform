@@ -12,7 +12,7 @@ import {
   type AgentCapabilityRuntime,
   type AgentCapabilityService,
   createAgentKernelModule,
-} from '../src/kernel-module'
+} from '../src/impl/assembly/AgentKernelModule'
 
 function createCaptureContext(
   signal: AbortSignal,

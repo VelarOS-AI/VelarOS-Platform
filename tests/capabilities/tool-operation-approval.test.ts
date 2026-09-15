@@ -7,11 +7,11 @@ import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../../packages/agent/src/agent/CodingSessionTracker'
-import type { ApprovalPort } from '../../packages/agent/src/tool-contract/approval'
-import { createTaskApprovalPort } from '../../packages/agent/src/tool-contract/task-approval'
-import { projectTools } from '../../packages/project/src/impl/ProjectTools'
+import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
+import type { ApprovalPort } from '../../packages/agent/src/impl/tools/DefaultDenyApprovalPort'
+import { createTaskApprovalPort } from '../../packages/agent/src/utils/toolkit/task-approval'
 import type { ProjectToolContext } from '../../packages/project/src/contract/requires'
+import { projectTools } from '../../packages/project/src/impl/ProjectTools'
 import type { SystemToolContext } from '../../packages/system/src/exports/index'
 import { systemTools } from '../../packages/system/src/exports/index'
 

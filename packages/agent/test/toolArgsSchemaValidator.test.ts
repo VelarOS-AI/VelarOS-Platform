@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { clampedInt } from '../src/tool-contract/ForgivingSchema'
-import { ToolArgsSchemaValidator } from '../src/tools/ToolArgsSchemaValidator'
+import { clampedInt } from '../src/utils/toolkit/forgiving-schema'
+import { ToolArgsSchemaValidator } from '../src/utils/tools/tool-args-schema-validator'
 
 describe('ToolArgsSchemaValidator effective arguments', () => {
   test('union failures report only the branch selected by the supplied discriminator', () => {

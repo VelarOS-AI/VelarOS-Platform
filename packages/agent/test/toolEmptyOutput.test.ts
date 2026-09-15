@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
 
-import type { ContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
+import type { ContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import {
   ContextPayloadKernelToolOutputStore,
   InMemoryKernelToolOutputStore,
-} from '../src/kernel/tool-output-store'
-import { ToolExecutionPolicy, type ToolExecutionPolicyContext } from '../src/tools/ExecutionPolicy'
-import { ToolExecutor } from '../src/tools/Executor'
+} from '../src/impl/tools/InMemoryKernelToolOutputStore'
+import { ToolExecutionPolicy, type ToolExecutionPolicyContext } from '../src/impl/tools/ToolExecutionPolicy'
+import { ToolExecutor } from '../src/impl/tools/ToolExecutor'
 
 test('empty successful outputs stay paired and do not cancel following writes', async () => {
   for (const outputStore of [

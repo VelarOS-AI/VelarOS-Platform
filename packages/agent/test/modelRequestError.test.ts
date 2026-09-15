@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { normalizeModelRequestError } from '../src/agent/model/ModelRequestError'
+import { normalizeModelRequestError } from '../src/utils/model/model-request-error'
 
 describe('model request error normalization', () => {
   test('surfaces quota exhaustion without leaking provider response or request data', () => {

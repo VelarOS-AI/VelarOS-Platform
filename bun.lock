@@ -63,7 +63,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.32",
+      "version": "0.6.33",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",

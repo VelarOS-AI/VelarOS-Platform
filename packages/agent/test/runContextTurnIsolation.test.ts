@@ -2,16 +2,16 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { ContextBuilder } from '../src/agent/ContextBuilder'
-import { PrimaryAgentProfile } from '../src/agent/PrimaryAgentProfile'
-import type { RunContextToolContext } from '../src/agent/run-context/host-ports'
-import { RunContext } from '../src/agent/run-context/RunContext'
-import type { AgentSystemRuntimeConfig } from '../src/agent/RuntimeConfiguration'
-import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
-import { createBuiltInPromptRegistry } from '../src/prompts/catalog'
-import { createTextPromptSegment } from '../src/prompts/segments/shared'
-import { defaultRuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
+import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
+import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
+import { RunContext } from '../src/impl/runner/RunContext'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
+import { defaultRuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
+import type { RunContextToolContext } from '../src/types/run-context-host-ports'
+import type { AgentSystemRuntimeConfig } from '../src/types/runtime-configuration'
+import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
+import { createTextPromptSegment } from '../src/utils/guidance/shared'
 
 const systemConfig: AgentSystemRuntimeConfig = {
   thinkingDepth: 'balanced', disabledToolNames: [],

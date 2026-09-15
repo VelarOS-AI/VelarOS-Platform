@@ -6,12 +6,12 @@ import { describe, test } from 'bun:test'
 import {
   type ContextPayloadStore,
   InMemoryContextPayloadStore,
-} from '../src/agent/context/ContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { hashUserMessageText } from '../src/agent/context/userMessageText'
-import { UserTextPayloadPlanner } from '../src/agent/context/UserTextPayloadPlanner'
+} from '../src/impl/context/InMemoryContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
+import { UserTextPayloadPlanner } from '../src/impl/context/UserTextPayloadPlanner'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { hashUserMessageText } from '../src/utils/context/user-message-text'
 
 const SessionId = 'user-text-regressions'
 const InlineChars = 48_000

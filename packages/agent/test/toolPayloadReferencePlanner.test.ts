@@ -1,11 +1,11 @@
 import type { ModelMessage } from 'ai'
 import { expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import {
   buildToolPayloadRefOccurrenceKey,
   buildToolPayloadRefsForProviderMessages,
-} from '../src/agent/context/ToolPayloadReferencePlanner'
+} from '../src/impl/context/ToolPayloadReferencePlanner'
 
 function message(value: string, toolCallId = 'read-1'): ModelMessage {
   return {

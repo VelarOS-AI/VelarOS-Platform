@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import { PromptStateBuilder } from '../src/agent/PromptState'
-import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
+import { plansTools } from '../src/impl/builtin/Plans.tool'
+import { PromptStateBuilder } from '../src/impl/runner/PromptStateBuilder'
+import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import type {
   ChatPromptFeatureId,
   ExecutionModeId,
   ToolExecutionPlanUpdate,
-} from '../src/protocol/types/agent'
-import type { ExecutionTaskPlanStep } from '../src/protocol/types/execution'
-import { plansTools } from '../src/tool-library/builtin/Plans.tool'
+} from '../src/types/agent'
+import type { ExecutionTaskPlanStep } from '../src/types/execution'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
+import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
 
 function createPlanToolContext(features: ChatPromptFeatureId[] = []) {
   const codingSession = new CodingSessionTracker([], features)

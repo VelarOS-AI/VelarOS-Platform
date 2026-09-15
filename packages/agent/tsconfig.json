@@ -5,8 +5,8 @@
     "moduleResolution": "Bundler",
     "baseUrl": ".",
     "paths": {
-      "@velaros-ai/agent": ["./src/index.ts"],
-      "@velaros-ai/agent/*": ["./src/*"]
+      "@velaros-ai/agent": ["./src/exports/index.ts"],
+      "@velaros-ai/agent/*": ["./src/exports/*"]
     },
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "strict": true,

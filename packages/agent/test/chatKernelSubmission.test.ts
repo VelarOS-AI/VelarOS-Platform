@@ -5,12 +5,12 @@ import { describe, test } from 'bun:test'
 import {
   ChatKernelSessionBridge,
   type KernelChatExecutionService,
-} from '../src/kernel/bridge/ChatKernelSessionBridge'
+} from '../src/impl/assembly/ChatKernelSessionBridge'
 import {
   InMemoryKernelSessionInputStore,
   type KernelSessionInputStore,
-} from '../src/kernel/session-lane'
-import type { ChatSendRequest } from '../src/protocol/types'
+} from '../src/impl/execution/KernelSessionRunCoordinator'
+import type { ChatSendRequest } from '../src/types/protocol'
 
 function gate(): { promise: Promise<void>; resolve(): void } {
   let resolve!: () => void

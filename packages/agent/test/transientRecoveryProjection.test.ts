@@ -1,13 +1,13 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { readReusableAttemptInput, saveToolAttemptInput, saveToolAttemptOutcome } from '../src/tools/recovery/ToolInputReuse'
-import { projectTransientRecoveryHistory, restoreReusableInputsForNextDecision } from '../src/tools/recovery/TransientRecoveryProjection'
-import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { readReusableAttemptInput, saveToolAttemptInput, saveToolAttemptOutcome } from '../src/impl/tools/ToolInputReuseStore'
+import { compactToolInputForModel } from '../src/utils/tools/tool-result-serialization'
+import { projectTransientRecoveryHistory, restoreReusableInputsForNextDecision } from '../src/utils/tools/transient-recovery-projection'
 
 const decision: ModelMessage = {
   role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'edit-1', toolName: 'project:edit', input: {} }],

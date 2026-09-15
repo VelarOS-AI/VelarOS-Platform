@@ -1,4 +1,4 @@
-import '../../agent/src/index'
+import '../../agent/src/exports/index'
 
 import { createHash } from 'node:crypto'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
@@ -6,18 +6,18 @@ import { resolve } from 'node:path'
 
 import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
 
-import { configureAppRuntimeFacts, readAppRuntimeFacts } from '../../agent/src/agent/AppRuntimeFacts'
-import { projectFileContext } from '../../agent/src/agent/context/resources/FileContextProjection'
-import { createBuiltInPromptSegments } from '../../agent/src/prompts/catalog'
-import { PromptRegistry } from '../../agent/src/prompts/registry'
-import { createRuntimePromptSegments } from '../../agent/src/prompts/segments/runtime'
-import type { RuntimePromptSnapshot } from '../../agent/src/prompts/segments/shared'
-import { DefaultToolContractExampleRegistry as SourceToolExamples } from '../../agent/src/tool-contract/examples'
-import { schemaToInputSchema } from '../../agent/src/tool-contract/schema-bundle'
-import { categoriesTools } from '../../agent/src/tool-library/builtin/Categories.tool'
-import { contextRetrievalTools } from '../../agent/src/tool-library/builtin/ContextRetrieval.tool'
-import { plansTools } from '../../agent/src/tool-library/builtin/Plans.tool'
-import { ToolArgsSchemaValidator } from '../../agent/src/tools/ToolArgsSchemaValidator'
+import { categoriesTools } from '../../agent/src/impl/builtin/Categories.tool'
+import { contextRetrievalTools } from '../../agent/src/impl/builtin/ContextRetrieval.tool'
+import { plansTools } from '../../agent/src/impl/builtin/Plans.tool'
+import { PromptRegistry } from '../../agent/src/impl/guidance/PromptRegistry'
+import { DefaultToolContractExampleRegistry as SourceToolExamples } from '../../agent/src/impl/tools/ToolContractExampleRegistry'
+import { projectFileContext } from '../../agent/src/utils/context/file-context-projection'
+import { createBuiltInPromptSegments } from '../../agent/src/utils/guidance/catalog'
+import { createRuntimePromptSegments } from '../../agent/src/utils/guidance/runtime'
+import type { RuntimePromptSnapshot } from '../../agent/src/utils/guidance/shared'
+import { configureAppRuntimeFacts, readAppRuntimeFacts } from '../../agent/src/utils/runner/app-runtime-facts'
+import { schemaToInputSchema } from '../../agent/src/utils/toolkit/schema-bundle'
+import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { projectTools } from '../src/impl/ProjectTools'
 
 const root = resolve(import.meta.dir, '../../..')
@@ -37,10 +37,10 @@ export function registeredGuidanceTools(tools: ReadonlyArray<Omit<GuidanceTool, 
 
 export const GuidanceSources = [
   { entry: 'Project 工具注册与 schema', sources: ['packages/project/src/impl/ProjectTools.ts', 'packages/project/src/impl/operations', 'packages/project/src/utils/tool.ts'] },
-  { entry: 'RunContext → PromptState → 内置段组装', sources: ['packages/agent/src/agent/run-context/RunContext.ts', 'packages/agent/src/agent/PromptState.ts', 'packages/agent/src/prompts/catalog.ts', 'packages/agent/src/prompts/segments/runtime.ts', 'packages/agent/src/prompts/segments/task.ts'] },
-  { entry: '能力发现、换入、计划与主动召回', sources: ['packages/agent/src/tool-library/builtin/Categories.tool.ts', 'packages/agent/src/tool-library/builtin/ContextRetrieval.ts', 'packages/agent/src/tool-library/builtin/ContextRetrieval.tool.ts', 'packages/agent/src/tool-library/builtin/Plans.tool.ts'] },
-  { entry: '参数失败恢复与当前源码指导', sources: ['packages/agent/src/tools/ToolArgsSchemaValidator.ts', 'packages/agent/src/tools/recovery/ToolInputReuse.ts', 'packages/agent/src/tools/recovery/TransientRecoveryProjection.ts', 'packages/agent/src/agent/context/resources/FileContextProjection.ts', 'packages/project/src/utils/transactions/transaction-errors.ts'] },
-  { entry: '模型回执与最终读取引用', sources: ['packages/agent/src/tools/Executor.ts', 'packages/agent/src/tools/toolInputHistoryProjection.ts', 'packages/project/src/utils/agent'] },
+  { entry: 'RunContext → PromptState → 内置段组装', sources: ['packages/agent/src/impl/runner/RunContext.ts', 'packages/agent/src/impl/runner/PromptStateBuilder.ts', 'packages/agent/src/utils/guidance/catalog.ts', 'packages/agent/src/utils/guidance/runtime.ts', 'packages/agent/src/utils/guidance/task.ts'] },
+  { entry: '能力发现、换入、计划与主动召回', sources: ['packages/agent/src/impl/builtin/Categories.tool.ts', 'packages/agent/src/utils/builtin/context-retrieval.ts', 'packages/agent/src/impl/builtin/ContextRetrieval.tool.ts', 'packages/agent/src/impl/builtin/Plans.tool.ts'] },
+  { entry: '参数失败恢复与当前源码指导', sources: ['packages/agent/src/utils/tools/tool-args-schema-validator.ts', 'packages/agent/src/impl/tools/ToolInputReuseStore.ts', 'packages/agent/src/utils/tools/transient-recovery-projection.ts', 'packages/agent/src/utils/context/file-context-projection.ts', 'packages/project/src/utils/transactions/transaction-errors.ts'] },
+  { entry: '模型回执与最终读取引用', sources: ['packages/agent/src/impl/tools/ToolExecutor.ts', 'packages/agent/src/utils/tools/tool-input-history-projection.ts', 'packages/project/src/utils/agent'] },
   { entry: '用户可读示例与实现说明', sources: ['packages/project/README.md', 'docs/engineering/project-tool-surface-redesign-proposal.md', 'docs/engineering/project-tool-surface-implementation.md', 'docs/engineering/project-text-protocol.md'] },
 ]
 

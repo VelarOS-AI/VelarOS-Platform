@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { DefaultToolContractExampleRegistry, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
-import { ToolArgsSchemaValidator } from '../../agent/src/tools/ToolArgsSchemaValidator'
+import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 

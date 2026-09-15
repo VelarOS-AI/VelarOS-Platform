@@ -1,10 +1,10 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { AgentTurnHistoryHelper } from '../src/agent/history/turn'
-import { ChatStreamProtocol } from '../src/chat/stream/ChatStreamProtocol'
-import { translateMcpCallResult } from '../src/tool-library/mcp/mcpCallResult'
-import { liftGenericModelContent } from '../src/tools/modelImageLift'
+import { ChatStreamProtocol } from '../src/impl/chat/ChatStreamProtocol'
+import { translateMcpCallResult } from '../src/utils/connectors/mcp-call-result'
+import { AgentTurnHistoryHelper } from '../src/utils/history/turn'
+import { liftGenericModelContent } from '../src/utils/tools/model-image-lift'
 
 describe('MCP call result media', () => {
   test('preserves ordered text, images, audio, and embedded resource media outside the text result', () => {

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { ManagedExecutionRunner } from '../src/kernel/execution/ManagedExecutionRunner'
-import { ChatRuntimeEvents } from '../src/protocol/types/chatRuntime'
-import type { ExecutionRecord } from '../src/protocol/types/execution'
+import { ManagedExecutionRunner } from '../src/impl/execution/ManagedExecutionRunner'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { ChatRuntimeEvents } from '../src/types/chat-runtime'
+import type { ExecutionRecord } from '../src/types/execution'
 
 function executionRecord(): ExecutionRecord {
   return {

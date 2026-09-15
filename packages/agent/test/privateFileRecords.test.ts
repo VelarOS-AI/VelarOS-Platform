@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
-import { ContextRetrievalIndexBuilder } from '../src/agent/context/retrieval/IndexBuilder'
-import { contextRetrievalTools } from '../src/tool-library/builtin/ContextRetrieval.tool'
+import { contextRetrievalTools } from '../src/impl/builtin/ContextRetrieval.tool'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
+import { ContextRetrievalIndexBuilder } from '../src/impl/retrieval/ContextRetrievalIndexBuilder'
 
 test('generic recall cannot expose guessed internal source payloads', async () => {
   const store = new InMemoryContextPayloadStore()

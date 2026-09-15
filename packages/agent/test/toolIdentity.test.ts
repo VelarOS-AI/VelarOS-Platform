@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import {
-  assertCanonicalToolId,
-  isCanonicalToolId,
-} from '../src/tool-contract/identity'
-import {
   completeToolTransportNameAliases,
   createProviderToolReferenceCanonicalizer,
   createToolTransportNamePlan,
@@ -12,7 +8,11 @@ import {
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
   rewriteProviderToolReferences,
-} from '../src/tools/ToolIdentity'
+} from '../src/impl/tools/ProviderToolReferenceCanonicalizer'
+import {
+  assertCanonicalToolId,
+  isCanonicalToolId,
+} from '../src/utils/toolkit/identity'
 
 describe('canonical tool identity', () => {
   it('accepts namespace:tool ids and rejects provider aliases as canonical ids', () => {

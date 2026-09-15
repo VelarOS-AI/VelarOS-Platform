@@ -49,7 +49,7 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
 信封与 `module` schema 的唯一事实源在
 `packages/kernel/src/contracts/protocol/mod-manifest.ts`：`VelarosModEnvelopeSchema`
 （`z.strictObject`，发明第四节即拒载）、`VelarosModModuleSectionSchema` 与文件名常量。
-Agent 只拥有 `packages/agent/src/protocol/mods.ts` 里的 `AgentModManifestSchema`。
+Agent 只拥有 `packages/agent/src/utils/wire/mods.ts` 里的 `AgentModManifestSchema`。
 
 > **旧格式已 clean break**：`velaros.agent.mod.json` 与常量 `AgentModPackManifestFileName`
 > 已物理删除，不留文件名兼容。
@@ -61,7 +61,7 @@ Agent 只拥有 `packages/agent/src/protocol/mods.ts` 里的 `AgentModManifestSc
         只解析 module 节（窄 KernelModuleDescriptor），管模块生命周期与 isolation
         永不解析任何领域贡献轴
 
-第二级  Agent 领域 Loader          packages/agent/src/mods/
+第二级  Agent 领域 Loader          packages/agent/src/impl/mods/
         解析 agent 节，把贡献分发进九个注册面 + Hook 派发器
 
 壳级    产品壳自己的注册表          解析 ui 节；不穿过 Kernel、不穿过 Agent 主干
@@ -71,7 +71,7 @@ pack 的**发现 / 校验 / 装载 / 启停**只有一个宿主入口。统一�
 `velaros.mod.json`，再按 section 路由到 Kernel、Agent 与产品壳；各领域 Loader 只是入口内部的
 owner，不是另一条安装或信任通道。
 
-Agent owner 的接缝（`AgentModHostAssembly.ts`）读取每个启用 pack 的同一份信封：存在
+Agent owner 的接缝（`AgentModHostAssembler.ts`）读取每个启用 pack 的同一份信封：存在
 `agent` 节才交给 `AgentModLoader`。`module.provides` 从此只声明真实 callable capability，
 不能再兼任“这是 Agent pack”的路由标记。
 
@@ -95,7 +95,7 @@ Agent owner 的接缝（`AgentModHostAssembly.ts`）读取每个启用 pack 的�
 
 ## 四、信任级（trust）
 
-`AgentModTrustLevels`（`packages/agent/src/protocol/mods.ts`）：
+`AgentModTrustLevels`（`packages/agent/src/utils/wire/mods.ts`）：
 
 | 值                   | 含义                  | 能力边界                                                 |
 | -------------------- | --------------------- | -------------------------------------------------------- |
@@ -149,14 +149,14 @@ Platform 的安全缺省只允许 `bundled-official`；宿主没有显式放行�
 
 ## 七、去哪找源码
 
-| 东西                                                                                  | 落点                                                                              |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| manifest 数据契约（zod / 轴闭集 / seam 闭集 / semver 判定 / `parseAgentModManifest`） | `packages/agent/src/protocol/mods.ts`（子路径 `@velaros-ai/agent/protocol/mods`） |
-| 九轴注册面 + generation 快照 + 两阶段 + stale-reject                                  | `packages/agent/src/mods/AgentModRegistry.ts`                                     |
-| 拦截 seam 注册面与派发器                                                              | `packages/agent/src/mods/AgentModSeams.ts`                                        |
-| discover→validate→resolve→activate→deactivate                                         | `packages/agent/src/mods/AgentModLoader.ts`                                       |
-| 快照 → 各领域消费面的纯函数投影                                                       | `packages/agent/src/mods/AgentModProjection.ts`                                   |
-| 随包官方内置轴（第一个 bundled mod，自食狗粮）                                        | `packages/agent/src/mods/BuiltinAgentMod.ts`                                      |
-| 宿主组装入口                                                                          | `packages/agent/src/mods/AgentModHostAssembly.ts`                                 |
-| 唯一门面                                                                              | `packages/agent/src/mods/index.ts`                                                |
-| 本仓落地形态与残余清单                                                                | [`docs/agent/agent-mod-trunk.md`](../agent/agent-mod-trunk.md)                    |
+| 东西                                                                                  | 落点                                                                                |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| manifest 数据契约（zod / 轴闭集 / seam 闭集 / semver 判定 / `parseAgentModManifest`） | `packages/agent/src/utils/wire/mods.ts`（子路径 `@velaros-ai/agent/protocol/mods`） |
+| 九轴注册面 + generation 快照 + 两阶段 + stale-reject                                  | `packages/agent/src/impl/mods/AgentModRegistry.ts`                                  |
+| 拦截 seam 注册面与派发器                                                              | `packages/agent/src/impl/mods/AgentModSeamDispatcher.ts`                            |
+| discover→validate→resolve→activate→deactivate                                         | `packages/agent/src/impl/mods/AgentModLoader.ts`                                    |
+| 快照 → 各领域消费面的纯函数投影                                                       | `packages/agent/src/utils/mods/agent-mod-projection.ts`                             |
+| 随包官方内置轴（第一个 bundled mod，自食狗粮）                                        | `packages/agent/src/impl/builtin/BuiltinAgentMod.ts`                                |
+| 宿主组装入口                                                                          | `packages/agent/src/impl/assembly/AgentModHostAssembler.ts`                         |
+| 唯一门面                                                                              | `packages/agent/src/exports/mods.ts`                                                |
+| 本仓落地形态与残余清单                                                                | [`docs/agent/agent-mod-trunk.md`](../agent/agent-mod-trunk.md)                      |

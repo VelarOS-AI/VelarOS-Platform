@@ -15,13 +15,13 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
+import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
+import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
 import {
   ContextGovernanceSession,
   ContextGovernanceSessionRegistry,
-} from '../src/agent/context/residency/ContextGovernanceSession'
-import { resolveContextGovernanceConfig } from '../src/agent/context/residency/governanceConfig'
+} from '../src/impl/residency/ContextGovernanceSession'
+import { resolveContextGovernanceConfig } from '../src/utils/residency/governance-config'
 
 function userMessage(text: string): ModelMessage {
   return { role: 'user', content: text }

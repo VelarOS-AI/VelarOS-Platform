@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   advanceSoloProcessUpdateCadence,
   createSoloProcessUpdateCadenceState,
-} from '../src/agent/SoloProcessUpdateCadence'
+} from '../src/utils/loop/solo-process-update-cadence'
 
 void describe('solo process update cadence', () => {
   void test('reminds only after a meaningful batch of silent tool turns', () => {

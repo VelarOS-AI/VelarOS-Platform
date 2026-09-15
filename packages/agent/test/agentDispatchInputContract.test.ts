@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
-import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
-import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { parseSubAgentToolResult } from '../src/sub-agent/SubAgentResultBuilder'
-import type { SubAgentTypeDescriptor } from '../src/sub-agent/SubAgentTypeRegistry'
-import { TeamModelRouter } from '../src/team/model-router'
-import { WriteLeaseCoordinator } from '../src/team/WriteLease'
-import { dispatchAgentSchema } from '../src/tool-library/builtin/DispatchAgent'
-import { dispatchAgentTools } from '../src/tool-library/builtin/DispatchAgent.tool'
+import { dispatchAgentTools } from '../src/impl/builtin/DispatchAgent.tool'
+import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
+import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
+import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
+import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import { dispatchAgentSchema } from '../src/utils/builtin/dispatch-schemas'
+import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
+import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
 
 describe('agent dispatch input contract', () => {
   test('leaves the type default to its host and adds scope defaults only for a new worker', async () => {

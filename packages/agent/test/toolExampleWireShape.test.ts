@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { defineToolRuntimeSpec } from '../src/tool-contract/define'
 import {
   serializeToolExampleInput,
   ToolContractExampleRegistry,
-} from '../src/tool-contract/examples'
+} from '../src/impl/tools/ToolContractExampleRegistry'
+import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
 
 function tool(schema: z.ZodType<any>, example: Record<string, unknown>) {
   return defineToolRuntimeSpec(

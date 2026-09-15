@@ -29,7 +29,7 @@ z.strictObject({
 ## 运行态绑定（可选）
 
 绑定值类型 `ExecutionModeDescriptor`
-（`packages/agent/src/execution-modes/ExecutionModeDescriptor.ts`），比 manifest 声明宽：
+（`packages/agent/src/types/execution-mode-descriptor.ts`），比 manifest 声明宽：
 
 ```ts
 interface ExecutionModeDescriptor {
