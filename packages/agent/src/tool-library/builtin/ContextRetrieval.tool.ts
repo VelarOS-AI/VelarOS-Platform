@@ -1,6 +1,6 @@
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
-import { fileContextFor } from '../../agent/context/resources'
+import { fileContextFor } from '../../agent/context/resources/FileContextCoordinator'
 import { FileSnapshotToolName } from '../../agent/context/resources/FileSnapshotArchive'
 import { DynamicHandlesMarker, PinnedEvidenceMarker } from '../../agent/history/contextOSMessage'
 import { defineVelaTool } from '../defineVelaTool'

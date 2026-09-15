@@ -1,15 +1,15 @@
 import type { ModelMessage } from 'ai'
 
+import { isEmpty, isTrue } from '@velaros-ai/core'
+
+import { resolveExecutionModes } from '../execution-modes/ExecutionModeRegistry'
 import type {
   AgentContextPhase,
   AgentContextPhaseReason,
   AgentSurfaceId,
   ChatPromptFeatureId,
   ExecutionModeId,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty, isTrue } from '@velaros-ai/core'
-
-import { resolveExecutionModes } from '../execution-modes'
+} from '../protocol/types/agent'
 
 interface AgentContextPhaseDecision {
   phase: AgentContextPhase

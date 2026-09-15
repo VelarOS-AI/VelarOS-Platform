@@ -20,7 +20,7 @@ import {
   VelarosModManifestFileName,
 } from '@velaros-ai/kernel/contracts/protocol'
 
-import { parseAgentModManifest } from '../protocol'
+import { parseAgentModManifest } from '../protocol/mods'
 
 const VelarModArchiveExtension = '.velarmod'
 const VelarModSignatureFileName = 'velaros.mod.sig.json'

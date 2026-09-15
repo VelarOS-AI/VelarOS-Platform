@@ -1,7 +1,8 @@
 import { Log, mapDefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { TaskApprovalRecord, ToolCategoryId, ToolConfirmationDecisionOptions } from '../protocol'
+import type { TaskApprovalRecord, ToolConfirmationDecisionOptions } from '../protocol/types/agent'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
 /** 任务内唯一的授权账本。运行器仅保留此对象，不保留工具、编辑或模型上下文。 */
 export class TaskApprovalState {

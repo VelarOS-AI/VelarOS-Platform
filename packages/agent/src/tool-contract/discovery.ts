@@ -4,7 +4,7 @@ import {
   ToolCatalogDiscoveryToolName,
   type ToolCatalogEntry,
   ToolSchemaDiscoveryToolName,
-} from '../protocol'
+} from '../protocol/lease'
 
 /** 两条自恢复工具随每份目录常驻，避免模型在 schema 漂移后失去恢复路径。 */
 export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Object.freeze([

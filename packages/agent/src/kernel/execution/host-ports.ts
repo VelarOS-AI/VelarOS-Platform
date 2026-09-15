@@ -4,8 +4,11 @@
 // 准入断言、执行记录落盘路径、资源作用域解析、协作信号、协作者账本、子 Agent 引导 relay 规划器
 // 全部由产品宿主在装配处提供具体实现。这样桌面、headless、BYOK 和 Web 等宿主
 // 可注入各自实现，而不会把某个产品的服务拖进内核执行链路。
-import type { GuidanceRelayPlan, SubAgentGuidanceRelayWorkerSnapshot } from '../../execution'
-import type { ExecutionResourceProvider } from '../../execution'
+import type { GuidanceRelayPlan } from '../../execution/GuidanceRelayPlanner'
+import type { ExecutionResourceProvider } from '../../execution/Records'
+import type {
+  SubAgentGuidanceRelayWorkerSnapshot,
+} from '../../execution/SubAgentGuidanceRelayRegistry'
 
 /**
  * 准入断言端口。

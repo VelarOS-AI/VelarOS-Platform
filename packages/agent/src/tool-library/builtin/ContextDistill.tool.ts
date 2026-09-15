@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { toNullable } from '@velaros-ai/core'
 
+import {
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
 import { defineVelaTool } from '../defineVelaTool'
 
 import { AgentContextSignalCapability } from './Capabilities'

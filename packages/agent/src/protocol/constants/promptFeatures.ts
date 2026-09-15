@@ -1,6 +1,6 @@
 import { isBlank } from '@velaros-ai/core/utils/string'
 
-import type { ChatPromptFeatureId } from '../types'
+import type { ChatPromptFeatureId } from '../types/agent'
 
 /**
  * 内核只把 prompt-feature id 当作不透明的宿主能力 id。

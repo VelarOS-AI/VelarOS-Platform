@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import type { ExecutionTaskPlanStep, ToolExecutionPlanItemStatus } from '@velaros-ai/agent/protocol'
+import type { ToolExecutionPlanItemStatus } from '../../protocol/types/agent'
+import type { ExecutionTaskPlanStep } from '../../protocol/types/execution'
 
 import type { StepEngineOptions } from './StepRefs'
 import { completeSteps } from './StepRefs'

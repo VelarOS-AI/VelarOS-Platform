@@ -1,58 +1,72 @@
 import type { LanguageModel, ModelMessage, TextStreamPart, ToolChoice, ToolSet } from 'ai'
 
-import type { EstimateContextUsageOptions } from '@velaros-ai/agent'
-import type {
-  AppLocale,
-  ChatRuntimeEvent,
-  StreamAssistantRawPayload,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isBlank, isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   buildKernelContextEpoch,
-  buildKernelPrefixShape,
-  emitCompletedProviderTurnSnapshot,
   type KernelContextEpochGuardLike,
+  recordKernelContextEpochDiagnostic,
+} from '../kernel/context-epoch'
+import {
+  buildKernelPrefixShape,
   KernelPrefixShapeTracker,
+  recordKernelPrefixShapeDiagnostic,
+} from '../kernel/prefix-shape'
+import {
+  emitCompletedProviderTurnSnapshot,
   ProviderTurnEventReducer,
   type ProviderTurnSnapshot,
-  recordKernelContextEpochDiagnostic,
-  recordKernelPrefixShapeDiagnostic,
-} from '../kernel'
-import type { ToolExecutionPolicyRegistry } from '../tools'
+} from '../kernel/provider-events'
+import type { StreamAssistantRawPayload } from '../protocol/types/agent'
+import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../protocol/types/chatRuntime'
+import type { AppLocale } from '../protocol/types/system'
+import type { AgentModelInputModality } from '../protocol/types/tool'
+import type { ToolExecutionPolicyRegistry } from '../tools/ExecutionPolicy'
 
-import { compareStableStrings } from './context/residency/determinism'
-import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
-import { normalizeModelRequestError } from './model/ModelRequestError'
-import { createLinkedAbortScope } from './model/RequestAbortScope'
+import type { ContextPayloadStore } from './context/ContextPayloadStore'
+import type { EstimateContextUsageOptions } from './context/contextUsage'
+import { ProviderRequestCompiler } from './context/ProviderRequestCompiler'
 import {
   assertProviderRequestSnapshotReconstructable,
-  compileProviderSendRequest,
-  type ContextGovernanceSessionRegistry,
-  type ContextPayloadStore,
-  ProviderRequestCompiler,
   type ProviderRequestSnapshot,
-  resolveGovernanceSessionKey,
-} from './context'
-import {
-  type AgentHistoryToolContext,
-  type AgentTurnHistoryHelper,
-  type AssistantContentPart,
-  createInternalFollowUpMessage,
-} from './history'
-import { resolveModelContextUsageOptions } from './LoopContextUsage'
-import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
+} from './context/ProviderRequestSnapshot'
+import { compileProviderSendRequest } from './context/ProviderSendRequest'
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { compareStableStrings } from './context/residency/determinism'
+import { resolveGovernanceSessionKey } from './context/residency/sessionKey'
+import { createInternalFollowUpMessage } from './history/internalMessages'
+import type { AgentHistoryToolContext } from './history/request'
+import type { AgentTurnHistoryHelper, AssistantContentPart } from './history/turn'
 import {
   type AgentModelRequestPort,
   type AgentModelStreamInput,
   AiSdkAgentModelRequestPort,
   applyModelRequestPolicy,
+} from './model/AgentModelRequest'
+import type { AgentModelRequestOptions } from './model/ModelContracts'
+import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
+import { normalizeModelRequestError } from './model/ModelRequestError'
+import {
   createPromptCacheSystemMessage,
   mergeSessionPromptCacheProviderOptions,
-} from './model'
+} from './model/PromptCache'
+import { createLinkedAbortScope } from './model/RequestAbortScope'
+import {
+  type ConsumeAssistantStreamArgs,
+  type InterruptedStreamPartial,
+  StreamConsumer,
+  type StreamConsumerEvents,
+  type StreamConsumerToolExecutor,
+  type StreamConsumerTurnState,
+} from './stream/Consumer'
+import { isReasoningOnlyEmptyResponseError } from './stream/EmptyStreamRecovery'
+import {
+  buildOutputTruncationContinuationPrompt,
+  isOutputTruncationError,
+} from './stream/OutputTruncationRecovery'
+import { resolveModelContextUsageOptions } from './LoopContextUsage'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
 import {
   type AgentConnectionRetryHelper,
@@ -62,17 +76,6 @@ import {
   MaxConnectionRetryAttempts,
 } from './retry'
 import type { AgentModelRetryPolicy } from './RunLifecycle'
-import {
-  buildOutputTruncationContinuationPrompt,
-  type ConsumeAssistantStreamArgs,
-  type InterruptedStreamPartial,
-  isOutputTruncationError,
-  isReasoningOnlyEmptyResponseError,
-  StreamConsumer,
-  type StreamConsumerEvents,
-  type StreamConsumerToolExecutor,
-  type StreamConsumerTurnState,
-} from './stream'
 
 const PromptCacheMinStableSystemChars = 2000
 /** 系统提示词 dynamic 层尾块的固定标签（逐轮同形，只有正文变）。 */

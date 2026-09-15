@@ -1,14 +1,14 @@
 import type { ModelMessage } from 'ai'
 
+import { isArray, isObject,isPresent, isString, toNullable } from '@velaros-ai/core'
+
 import type {
   PromptSegmentTrace,
   SkippedPromptSegmentTrace,
   StreamTurnContextPayload,
-} from '@velaros-ai/agent/protocol'
-import { isArray, isObject,isPresent, isString, toNullable } from '@velaros-ai/core'
-
-import { isToolCategoryAvailable } from '../../tools'
-import { isInternalFollowUpMessage } from '../history'
+} from '../../protocol/types/agent'
+import { isToolCategoryAvailable } from '../../tools/access-policy'
+import { isInternalFollowUpMessage } from '../history/internalMessages'
 import type { AgentRoleResolution } from '../RoleTypes'
 
 import type { RunContextToolContext } from './host-ports'

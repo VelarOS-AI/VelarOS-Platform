@@ -1,4 +1,4 @@
-import type { ToolSpacePage } from '../../tools'
+import type { ToolSpacePage } from '../../tools/tool-space-resolver'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 interface ResolvedToolInputSchema {

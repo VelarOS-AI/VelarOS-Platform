@@ -1,4 +1,4 @@
-import type { AgentSkillRepository } from '../skills'
+import type { AgentSkillRepository } from '../skills/AgentSkillRepository'
 
 import { AgentRolePolicy } from './RolePolicy'
 import {

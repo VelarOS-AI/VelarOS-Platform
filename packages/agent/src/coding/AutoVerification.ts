@@ -1,18 +1,12 @@
-import type {
-  StreamToolCallPayload,
-  StreamToolResultPayload,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-
-import type {
-  CapabilityValidationRunResult,
-} from '../capabilities'
+import type { CapabilityValidationRunResult } from '../capabilities/CapabilityValidation'
+import type { StreamToolCallPayload, StreamToolResultPayload } from '../protocol/types'
+import type { ToolCategoryId } from '../protocol/types/tool'
+import type { RuntimeReminderConsumeResult } from '../reminders/scheduler'
 import type {
   CodingSessionSnapshot,
   ReminderCapabilityResolver,
-  RuntimeReminderConsumeResult,
   RuntimeReminderInput,
-} from '../reminders'
+} from '../reminders/types'
 
 import { hasVerificationRelevantModifiedPaths } from './paths'
 

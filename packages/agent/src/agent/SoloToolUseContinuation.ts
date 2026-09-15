@@ -1,10 +1,10 @@
 import type { ModelMessage } from 'ai'
 
-import type { StreamTurnEndPayload } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import { createInternalFollowUpMessage } from './history'
+import { ChatRuntimeEvents,type StreamTurnEndPayload } from '../protocol/types/chatRuntime'
+
+import { createInternalFollowUpMessage } from './history/internalMessages'
 import {
   markToolSpaceBootstrapDiscoverySatisfied,
   type ToolSpaceBootstrapState,

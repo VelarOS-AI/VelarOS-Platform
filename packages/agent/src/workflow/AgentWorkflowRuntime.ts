@@ -48,20 +48,6 @@
 // 注意占位也会进 `outputs`：下游 filter / dedupe / majority_vote 读到的数组里含 skipped 条目，
 // 需要时按 `status` 自行滤除。
 
-import type {
-  AgentWorkflowAgentCall,
-  AgentWorkflowAgentResult,
-  AgentWorkflowDedupeStep,
-  AgentWorkflowDefinition,
-  AgentWorkflowMajorityVoteStep,
-  AgentWorkflowPredicate,
-  AgentWorkflowRepeatConvergence,
-  AgentWorkflowRunResult,
-  AgentWorkflowStep,
-  AgentWorkflowStepResult,
-  AgentWorkflowValuePath,
-  AgentWorkflowValueRef,
-} from '@velaros-ai/agent/protocol'
 import {
   isArray,
   isEmpty,
@@ -77,6 +63,20 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { SubAgentDispatchLimitsSnapshot } from '../kernel/dispatch/concurrency'
+import type {
+  AgentWorkflowAgentCall,
+  AgentWorkflowAgentResult,
+  AgentWorkflowDedupeStep,
+  AgentWorkflowDefinition,
+  AgentWorkflowMajorityVoteStep,
+  AgentWorkflowPredicate,
+  AgentWorkflowRepeatConvergence,
+  AgentWorkflowRunResult,
+  AgentWorkflowStep,
+  AgentWorkflowStepResult,
+  AgentWorkflowValuePath,
+  AgentWorkflowValueRef,
+} from '../protocol/types/agentWorkflow'
 
 const MaxWorkflowAgents = 8
 const MaxWorkflowRounds = 6

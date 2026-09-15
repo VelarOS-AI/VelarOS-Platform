@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { AppError } from "@velaros-ai/core/error";
 
 import { ProviderTurnRequestHelper } from "../src/agent/ProviderTurnRequestHelper";
-import { StreamConsumer } from "../src/agent/stream";
+import { StreamConsumer } from "../src/agent/stream/Consumer";
 
 function providerToolStream(
   toolName: string,

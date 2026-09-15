@@ -4,7 +4,7 @@ import type { TextStreamPart, ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
 import { createAgentRuntimeInputInterruptScope } from '../src/agent/RuntimeInputPort'
-import { StreamConsumer } from '../src/agent/stream'
+import { StreamConsumer } from '../src/agent/stream/Consumer'
 import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
 
 void describe('runtime input stream preemption', () => {

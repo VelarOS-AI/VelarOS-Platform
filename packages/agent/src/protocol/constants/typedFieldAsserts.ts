@@ -2,9 +2,10 @@ import { isArray, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { isBlank } from '@velaros-ai/core/utils/string'
 
-import type { RunProfileId, RunProfileSelectionId, ToolSurfaceProfileId } from '../types'
 import type { ChatPromptFeatureId } from '../types/agent'
+import type { RunProfileId, RunProfileSelectionId } from '../types/runProfile'
 import type { ReasoningLevel, ThinkingDepth } from '../types/team'
+import type { ToolSurfaceProfileId } from '../types/tool'
 
 interface TypedEnumAsserts<T extends string> {
   values: readonly T[]

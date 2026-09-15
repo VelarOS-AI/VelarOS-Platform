@@ -10,9 +10,9 @@ import { dirname } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ExecutionSpan } from '../../protocol'
+import type { ExecutionSpan } from '../../protocol/observability'
 import { truncateJsonlToLineCount } from '../jsonl-file'
-import { SerialWriteQueue } from '../session-store'
+import { SerialWriteQueue } from '../session-store/write-queue'
 
 import { readSpanLedgerFile, serializeSpanLine } from './execution-ledger-file'
 

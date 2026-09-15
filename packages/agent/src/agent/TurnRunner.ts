@@ -2,16 +2,17 @@ import type { ModelMessage, TextStreamPart, ToolSet } from 'ai'
 
 import { type AppError } from '@velaros-ai/core/error'
 
-import { KernelContextEpochGuard } from '../kernel'
+import { KernelContextEpochGuard } from '../kernel/context-epoch'
 
-import type { ContextGovernanceSessionRegistry } from './context'
-import { sanitizeHistoryForProvider } from './history'
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { sanitizeHistoryForProvider } from './history/request'
 import {
   AgentTurnHistoryHelper,
   type AgentTurnToolExecutor,
   type AgentTurnToolResult,
   type AssistantContentPart,
-} from './history'
+} from './history/turn'
+import type { StreamConsumerTurnState } from './stream/Consumer'
 import {
   type ExecuteQueryTurnArgs,
   QueryTurn,
@@ -20,7 +21,6 @@ import {
   type QueryTurnToolRegistry,
 } from './QueryTurn'
 import { AgentConnectionRetryHelper } from './retry'
-import type { StreamConsumerTurnState } from './stream'
 import {
   type ExecuteStreamTurnArgs,
   StreamTurn,

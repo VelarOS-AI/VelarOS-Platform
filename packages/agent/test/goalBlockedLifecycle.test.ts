@@ -1,11 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  ActiveContextArtifact,
-  ActiveContextUpsertInput,
-} from '@velaros-ai/agent/protocol'
-
 import { createTaskRuntimePromptSegments } from '../src/prompts/segments/task'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
 import { goalTools } from '../src/tool-library/builtin/Goals.tool'
 
 function createGoalToolContext() {

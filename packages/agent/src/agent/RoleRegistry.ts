@@ -1,9 +1,6 @@
-import type {
-  AgentRoleId,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
+import type { AgentRoleId } from '../protocol/types/system'
+import type { CapabilityScopeId, ToolCategoryId } from '../protocol/types/tool'
 
 import type { AgentRoleDefinition } from './RoleTypes'
 

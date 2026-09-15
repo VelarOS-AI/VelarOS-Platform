@@ -1,7 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isEmpty, isTrue, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -12,8 +10,11 @@ import {
   resolveCapabilityCategoryDefinitions,
   resolveCapabilityContextCollectors,
   resolveCapabilityValidationInterpreters,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityExtensions'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
+import type { ChatPromptFeatureId } from '../../protocol/types/agent'
+import { ChatRuntimeEvents } from '../../protocol/types/chatRuntime'
+import type { ToolCategoryId } from '../../protocol/types/tool'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../tool-library/builtin/Goals'
 import { CodingSessionTracker } from '../CodingSessionTracker'
 import { forkFileContext } from '../context/resources/FileContextCoordinator'

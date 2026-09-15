@@ -1,17 +1,20 @@
 import { z } from 'zod'
 
+import { isEmpty } from '@velaros-ai/core'
+
 import type {
   AgentWorkflowAgentCall,
   AgentWorkflowDefinition,
   AgentWorkflowStep,
-} from '@velaros-ai/agent/protocol'
+} from '../../protocol/types/agentWorkflow'
 import {
   clampedInt,
   inferActionFromFields,
   withDefaultNote,
-} from '@velaros-ai/agent/tool-contract'
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
+} from '../../tool-contract/ForgivingSchema'
+import {
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
 
 const workflowPathSegmentSchema = z.union([
   z.string().trim().min(1).max(80),

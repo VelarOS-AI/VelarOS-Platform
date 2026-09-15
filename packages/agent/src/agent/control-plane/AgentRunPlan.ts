@@ -1,17 +1,12 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  ControlPlaneLedgerEntry,
-  ControlPlaneLedgerSource,
-  RunProfileId,
-  RunProfileSelectionId,
-  ToolCategoryId,
-  ToolDescriptor,
-} from '@velaros-ai/agent/protocol'
-
-import type { ContextWorkingSetBudgetAllocation, ProviderRequestPressureKind } from '../context'
+import type { ControlPlaneLedgerEntry, ControlPlaneLedgerSource } from '../../protocol/types/agent'
+import type { RunProfileId, RunProfileSelectionId } from '../../protocol/types/runProfile'
+import type { ToolCategoryId, ToolDescriptor } from '../../protocol/types/tool'
+import type { ContextWorkingSetBudgetAllocation } from '../context/ContextWorkingSetBudgetGovernor'
+import type { ProviderRequestPressureKind } from '../context/ProviderRequestCompiler'
 import type { ContextDegradeAction } from '../ContextDegradeLadder'
-import type { AgentModelRequestOptions } from '../model'
+import type { AgentModelRequestOptions } from '../model/ModelContracts'
 import type { ToolSpaceBootstrapState } from '../ToolSpaceBootstrapPlanner'
 
 export type AgentIntentDomain = string

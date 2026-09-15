@@ -22,12 +22,12 @@
 
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isEmpty,isNotUndefined } from '@velaros-ai/core'
 
 import {
-  ToolDiscoveryAvailabilityValues,
-} from '../../tools'
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
+import { ToolDiscoveryAvailabilityValues } from '../../tools/discovery-availability'
 
 export const ToolDiscoveryKindValues = ['tool', 'capability', 'plugin'] as const
 const ToolFindQueryAllowedCharacters =

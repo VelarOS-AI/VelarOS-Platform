@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SubAgentGuidanceRelayRegistry } from '../src/execution'
+import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
 import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
 import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import type { SubAgentTypeDescriptor } from '../src/sub-agent'
-import { parseSubAgentToolResult } from '../src/sub-agent'
-import { TeamModelRouter, WriteLeaseCoordinator } from '../src/team'
+import { parseSubAgentToolResult } from '../src/sub-agent/SubAgentResultBuilder'
+import type { SubAgentTypeDescriptor } from '../src/sub-agent/SubAgentTypeRegistry'
+import { TeamModelRouter } from '../src/team/model-router'
+import { WriteLeaseCoordinator } from '../src/team/WriteLease'
 import { dispatchAgentSchema } from '../src/tool-library/builtin/DispatchAgent'
 import { dispatchAgentTools } from '../src/tool-library/builtin/DispatchAgent.tool'
 

@@ -1,9 +1,8 @@
 import type { ModelMessage } from 'ai'
 
-import type { ExecutionRecord } from '@velaros-ai/agent/protocol'
-
 import type { AgentExecutionConfig } from '../../agent/RuntimeConfiguration'
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
+import type { ExecutionRecord } from '../../protocol/types/execution'
 
 import type { ExecutionEventBus } from './ExecutionEventBus'
 import type { ExecutionService } from './ExecutionService'

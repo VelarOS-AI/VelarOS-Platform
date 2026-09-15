@@ -1,7 +1,7 @@
-import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
+import type { ToolCapabilitySchema } from '../protocol/types/tool'
 import { ExecutionProgress } from '../tools/recovery/ExecutionProgress'
 
 export interface KernelToolLoopGuardInput {

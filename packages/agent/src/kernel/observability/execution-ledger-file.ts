@@ -6,9 +6,9 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
-import { type ExecutionSpan, ExecutionSpanSchema } from '../../protocol'
+import { type ExecutionSpan, ExecutionSpanSchema } from '../../protocol/observability'
 import { JSONL_LINE_SEPARATOR, parseJsonlWithTailTolerance } from '../jsonl-file'
-import { canonicalJsonStringify } from '../session-store'
+import { canonicalJsonStringify } from '../session-store/ledger-file'
 
 /** 账本行分隔符：始终以 `\n` 结尾写入，便于崩溃时区分「完整行」与「半截尾行」。 */
 export const SPAN_LEDGER_LINE_SEPARATOR = JSONL_LINE_SEPARATOR

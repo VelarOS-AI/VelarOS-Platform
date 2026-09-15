@@ -1,12 +1,11 @@
+import type { AgentTurnRouteIdentity, StreamTurnContextPayload } from '../protocol/types/agent'
 import type {
-  AgentRoleId,
-  AgentTurnRouteIdentity,
   ExecutionTaskExecutionAdvice,
   ExecutionTaskPlanStep,
   ExecutionTaskRecommendedAction,
   ExecutionTaskRecord,
-  StreamTurnContextPayload,
-} from '@velaros-ai/agent/protocol'
+} from '../protocol/types/execution'
+import type { AgentRoleId } from '../protocol/types/system'
 
 import { ExecPlanState } from './plan-state'
 import type { ResolvedTaskRoute } from './routing-types'

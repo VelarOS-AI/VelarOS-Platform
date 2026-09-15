@@ -1,37 +1,40 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentDelegationContract,
-  AgentDeveloperContext,
-  AgentModelInputModality,
-  AgentRoleId,
-  AgentSkillDescriptor,
-  AgentSurfaceId,
-  AgentWorkflowDefinition,
-  AgentWorkflowRunResult,
-  AppLocale,
-  SessionLineageContext,
-  SubAgentStructuredOutputContract,
-  SubAgentUsage,
-  ToolAvailabilityScope,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolExecutionApi,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-import type { ApprovalPort, InteractionPort } from '@velaros-ai/agent/tool-contract'
 import type { Logger } from '@velaros-ai/core/logger'
 
 import type { ContextPayloadStore } from '../agent/context/ContextPayloadStore'
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../capabilities/CapabilityExtensions'
 import type {
   SubAgentDispatchInput,
   SubAgentToolCategoryRequestResult,
 } from '../kernel/dispatch/host-ports'
 import type { ExecutionEventBus } from '../kernel/execution/ExecutionEventBus'
-import type { SubAgentDispatchCatalog } from '../sub-agent'
+import type {
+  AgentDeveloperContext,
+  AgentSurfaceId,
+  ToolExecutionApi,
+} from '../protocol/types/agent'
+import type {
+  AgentWorkflowDefinition,
+  AgentWorkflowRunResult,
+  SubAgentStructuredOutputContract,
+} from '../protocol/types/agentWorkflow'
+import type { AgentSkillDescriptor } from '../protocol/types/skill'
+import type { SessionLineageContext } from '../protocol/types/storage'
+import type { SubAgentUsage } from '../protocol/types/subAgentTask'
+import type { AgentDelegationContract, AgentRoleId, AppLocale } from '../protocol/types/system'
+import type {
+  AgentModelInputModality,
+  ToolAvailabilityScope,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolDescriptor,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
+import type { SubAgentDispatchCatalog } from '../sub-agent/SubAgentTypeRegistry'
 import type { SubAgentRuntimeOverride } from '../team/model-router'
+import type { ApprovalPort } from '../tool-contract/approval'
+import type { InteractionPort } from '../tool-contract/interaction'
 import type { ToolCapabilityPage } from '../tools/capability-types'
 
 import type { ToolActiveContextApi } from './context/ActiveContextTypes'

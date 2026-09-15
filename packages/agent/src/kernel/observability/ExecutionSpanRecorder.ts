@@ -16,7 +16,7 @@ import {
   type ExecutionSpanMetrics,
   ExecutionSpanSchema,
   type ExecutionSpanStatus,
-} from '../../protocol'
+} from '../../protocol/observability'
 
 /** 引擎负责分配、开 span 时不得携带的字段。 */
 type EngineAssignedSpanField = 'spanId' | 'startedAt' | 'endedAt' | 'status' | 'metrics'

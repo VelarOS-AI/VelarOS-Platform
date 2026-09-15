@@ -11,7 +11,6 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { buildSystemPromptDelivery } from '../src/agent'
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
 import type { ContextRecordClassifier } from '../src/agent/context/residency/admission'
 import {
@@ -30,6 +29,7 @@ import { InMemoryContextMigrationEventSink } from '../src/agent/context/residenc
 import { projectContextLedger } from '../src/agent/context/residency/projection'
 import { ContextResidencyLedger } from '../src/agent/context/residency/ResidencyLedger'
 import { buildContextSkeleton } from '../src/agent/context/residency/skeleton'
+import { buildSystemPromptDelivery } from '../src/agent/StreamTurn'
 import { buildKernelPrefixShape } from '../src/kernel/prefix-shape'
 
 const RefetchableReadClassifier: ContextRecordClassifier = {

@@ -1,13 +1,12 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import type { AgentModelInputModality, ToolDescriptor } from '@velaros-ai/agent/protocol'
-
 import {
   assertModelInputCompatibility,
   collectRequiredModelInputModalities,
 } from '../src/agent/model/ModelInputCompatibility'
 import { filterToolCategoriesForModelInputs } from '../src/agent/SoloRunPlanPreparer'
+import type { AgentModelInputModality, ToolDescriptor } from '../src/protocol/types/tool'
 import { ToolCapabilityRegistry } from '../src/tools/capability-registry'
 import type {
   RegisteredToolMap,

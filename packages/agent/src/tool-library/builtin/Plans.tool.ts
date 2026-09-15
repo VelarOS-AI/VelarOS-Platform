@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
-import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '@velaros-ai/agent/protocol'
-import {
-  renderParameterDescription as parameterDescription,
-} from '@velaros-ai/agent/tool-contract'
 import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
+import type { ActiveContextArtifact } from '../../protocol/types'
+import type { ExecutionTaskPlanStep } from '../../protocol/types/execution'
+import {
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
 import { defineVelaTool } from '../defineVelaTool'
 
 import { AgentPlanningReadCapability, AgentPlanningWriteCapability } from './Capabilities'

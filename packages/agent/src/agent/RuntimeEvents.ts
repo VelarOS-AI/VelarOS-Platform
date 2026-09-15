@@ -1,8 +1,8 @@
-import type { ChatRuntimeEvent } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import { readFirstString } from '@velaros-ai/core/utils/unknownJsonRecord'
+
+import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../protocol/types/chatRuntime'
 
 interface AgentRuntimeEventBus {
   emitRuntime(event: ChatRuntimeEvent): void

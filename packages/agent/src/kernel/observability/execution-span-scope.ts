@@ -17,7 +17,7 @@ import type {
   ExecutionSpanStatus,
   ModelSpan,
   ToolSpan,
-} from '../../protocol'
+} from '../../protocol/observability'
 
 import { ExecutionSpanLedger, type SpanLedgerWarn } from './ExecutionSpanLedger'
 import { ExecutionSpanRecorder } from './ExecutionSpanRecorder'

@@ -19,7 +19,7 @@ import type {
   ExecutionSpanStatus,
   ModelSpan,
   ToolSpan,
-} from '../../protocol'
+} from '../../protocol/observability'
 
 import { buildExecutionSpanTree } from './execution-span-tree'
 import type { PromptAuditRecord } from './prompt-audit'

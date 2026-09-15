@@ -1,15 +1,5 @@
 import type { TextStreamPart, ToolSet } from "ai";
 
-import type {
-  AppLocale,
-  ChatRuntimeEvent,
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantSourcePayload,
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-} from "@velaros-ai/agent/protocol";
-import { ChatRuntimeEvents } from "@velaros-ai/agent/protocol";
 import {
   isEmpty,
   isNotNull,
@@ -23,21 +13,31 @@ import { AppError } from "@velaros-ai/core/error";
 import { logRuntime } from "@velaros-ai/core/logger";
 import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
+import {
+  type KernelContextEpoch,
+  type KernelContextEpochClaim,
+  type KernelContextEpochGuardLike,
+  recordKernelContextEpochDiagnostic,
+} from "../../kernel/context-epoch";
 import type {
-  KernelContextEpoch,
-  KernelContextEpochClaim,
-  KernelContextEpochGuardLike,
   ProviderTurnEventReducer,
   ProviderTurnSnapshot,
   ProviderTurnUsage,
-} from "../../kernel";
-import { recordKernelContextEpochDiagnostic } from "../../kernel";
-import {
-  createProviderToolReferenceCanonicalizer,
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyRegistry,
-} from "../../tools";
-import type { AssistantContentPart } from "../history";
+} from "../../kernel/provider-events";
+import type {
+  StreamReasoningPayload,
+  StreamToolCallPayload,
+  StreamToolMetadataPayload,
+} from "../../protocol/types";
+import type {
+  StreamAssistantGeneratedFilePayload,
+  StreamAssistantSourcePayload,
+} from "../../protocol/types/agent";
+import { type ChatRuntimeEvent, ChatRuntimeEvents } from "../../protocol/types/chatRuntime";
+import type { AppLocale } from "../../protocol/types/system";
+import { ToolExecutionPolicy, type ToolExecutionPolicyRegistry } from "../../tools/ExecutionPolicy";
+import { createProviderToolReferenceCanonicalizer } from "../../tools/ToolIdentity";
+import type { AssistantContentPart } from "../history/turn";
 import { normalizeModelRequestError } from "../model/ModelRequestError";
 
 import { AgentStreamDiagnosticHelper } from "./diagnostics";

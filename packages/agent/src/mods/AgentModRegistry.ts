@@ -7,27 +7,27 @@
 //     （`isStale` / `assertFresh`），不做「静默用旧值」。
 //
 // 明确不做：全局 registry 即时修改、加载顺序覆盖、giant context 注入。
-import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isTrue,toNullable } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../execution-modes'
-import type { PromptSegmentDefinition } from '../prompts'
-import type {
-  AgentModContributionAxisName,
-  AgentModExecutionModeContribution,
-  AgentModHookContribution,
-  AgentModPromptSegmentContribution,
-  AgentModSkillContribution,
-  AgentModSpaceContribution,
-  AgentModSubAgentTypeContribution,
-  AgentModToolCategoryContribution,
-  AgentModToolContribution,
-  AgentModTurnContextSourceContribution,
-} from '../protocol'
-import { AgentModContributionAxisNames } from '../protocol'
-import type { AgentSkillDefinition } from '../skills'
-import type { SubAgentTypeDescriptor } from '../sub-agent'
-import type { VelaTool } from '../tool-library'
+import type { ExecutionModeDescriptor } from '../execution-modes/ExecutionModeDescriptor'
+import type { PromptSegmentDefinition } from '../prompts/registry'
+import {
+  type AgentModContributionAxisName,
+  AgentModContributionAxisNames,
+  type AgentModExecutionModeContribution,
+  type AgentModHookContribution,
+  type AgentModPromptSegmentContribution,
+  type AgentModSkillContribution,
+  type AgentModSpaceContribution,
+  type AgentModSubAgentTypeContribution,
+  type AgentModToolCategoryContribution,
+  type AgentModToolContribution,
+  type AgentModTurnContextSourceContribution,
+} from '../protocol/mods'
+import type { ToolCategoryDefinition } from '../protocol/types/tool'
+import type { AgentSkillDefinition } from '../skills/AgentSkillProvider'
+import type { SubAgentTypeDescriptor } from '../sub-agent/SubAgentTypeRegistry'
+import type { VelaTool } from '../tool-library/defineVelaTool'
 
 import type { AgentModSeamHandler } from './AgentModSeams'
 

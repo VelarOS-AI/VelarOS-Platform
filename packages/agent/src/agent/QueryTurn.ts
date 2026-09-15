@@ -1,71 +1,85 @@
 import type { LanguageModel, ModelMessage, ToolSet } from 'ai'
 
-import type { EstimateContextUsageOptions } from '@velaros-ai/agent'
-import type {
-  AgentEvent,
-  AppLocale,
-  ChatRuntimeEvent,
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantSourcePayload,
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-  StreamToolProgressPayload,
-  StreamToolResultPayload,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
   buildKernelContextEpoch,
-  buildKernelPrefixShape,
-  emitCompletedProviderTurnSnapshot,
   type KernelContextEpochGuardLike,
+  recordKernelContextEpochDiagnostic,
+} from '../kernel/context-epoch'
+import type { ToolSpanOpener } from '../kernel/observability/execution-span-scope'
+import {
+  buildKernelPrefixShape,
   KernelPrefixShapeTracker,
-  KernelToolLoopGuard,
+  recordKernelPrefixShapeDiagnostic,
+} from '../kernel/prefix-shape'
+import {
+  emitCompletedProviderTurnSnapshot,
   ProviderTurnEventReducer,
   type ProviderTurnSnapshot,
-  recordKernelContextEpochDiagnostic,
-  recordKernelPrefixShapeDiagnostic,
-  type ToolSpanOpener,
-} from '../kernel'
+} from '../kernel/provider-events'
+import { KernelToolLoopGuard } from '../kernel/tool-loop-guard'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
+import type {
+  StreamReasoningPayload,
+  StreamToolCallPayload,
+  StreamToolMetadataPayload,
+  StreamToolProgressPayload,
+  StreamToolResultPayload,
+} from '../protocol/types'
+import type {
+  AgentEvent,
+  StreamAssistantGeneratedFilePayload,
+  StreamAssistantSourcePayload,
+} from '../protocol/types/agent'
+import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../protocol/types/chatRuntime'
+import type { AppLocale } from '../protocol/types/system'
+import type { AgentModelInputModality } from '../protocol/types/tool'
 import {
   ToolExecutionPolicy,
   type ToolExecutionPolicyContext,
   type ToolExecutionPolicyRegistry,
-} from '../tools'
-import { ToolExecutor, type ToolExecutorEvents } from '../tools'
+} from '../tools/ExecutionPolicy'
+import { ToolExecutor, type ToolExecutorEvents } from '../tools/Executor'
 
-import { compareStableStrings } from './context/residency/determinism'
-import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
-import { normalizeModelRequestError } from './model/ModelRequestError'
-import { createLinkedAbortScope } from './model/RequestAbortScope'
+import type { ContextPayloadStore } from './context/ContextPayloadStore'
+import type { EstimateContextUsageOptions } from './context/contextUsage'
+import { ProviderRequestCompiler } from './context/ProviderRequestCompiler'
 import {
   assertProviderRequestSnapshotReconstructable,
-  compileProviderSendRequest,
-  type ContextGovernanceSessionRegistry,
-  type ContextPayloadStore,
-  ProviderRequestCompiler,
   type ProviderRequestSnapshot,
-  resolveGovernanceSessionKey,
-} from './context'
-import {
-  type AgentHistoryToolContext,
-  type AgentTurnHistoryHelper,
-  createInternalFollowUpMessage,
-} from './history'
-import { resolveModelContextUsageOptions } from './LoopContextUsage'
-import type { AgentModelInputModality, AgentModelRequestOptions } from './model'
+} from './context/ProviderRequestSnapshot'
+import { compileProviderSendRequest } from './context/ProviderSendRequest'
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { compareStableStrings } from './context/residency/determinism'
+import { resolveGovernanceSessionKey } from './context/residency/sessionKey'
+import { createInternalFollowUpMessage } from './history/internalMessages'
+import type { AgentHistoryToolContext } from './history/request'
+import type { AgentTurnHistoryHelper } from './history/turn'
 import {
   type AgentModelRequestPort,
   type AgentModelStreamInput,
   AiSdkAgentModelRequestPort,
   applyModelRequestPolicy,
-  mergeSessionPromptCacheProviderOptions,
-} from './model'
+} from './model/AgentModelRequest'
+import type { AgentModelRequestOptions } from './model/ModelContracts'
+import { assertModelInputCompatibility } from './model/ModelInputCompatibility'
+import { normalizeModelRequestError } from './model/ModelRequestError'
+import { mergeSessionPromptCacheProviderOptions } from './model/PromptCache'
+import { createLinkedAbortScope } from './model/RequestAbortScope'
+import {
+  type InterruptedStreamPartial,
+  StreamConsumer,
+  type StreamConsumerEvents,
+  type StreamConsumerTurnState,
+} from './stream/Consumer'
+import {
+  buildOutputTruncationContinuationPrompt,
+  isOutputTruncationError,
+} from './stream/OutputTruncationRecovery'
+import { resolveModelContextUsageOptions } from './LoopContextUsage'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
 import {
   AgentConnectionRetryHelper,
@@ -75,14 +89,6 @@ import {
   MaxConnectionRetryAttempts,
 } from './retry'
 import type { AgentModelRetryPolicy } from './RunLifecycle'
-import {
-  buildOutputTruncationContinuationPrompt,
-  type InterruptedStreamPartial,
-  isOutputTruncationError,
-  StreamConsumer,
-  type StreamConsumerEvents,
-  type StreamConsumerTurnState,
-} from './stream'
 
 type QueryTurnProvider = (modelId: string, options?: AgentModelRequestOptions) => LanguageModel
 

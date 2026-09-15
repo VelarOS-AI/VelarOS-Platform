@@ -5,8 +5,9 @@
  * 传输名是一次请求的编译产物，不得写回注册表、权限策略或持久历史。
  */
 
-import { assertCanonicalToolId, isCanonicalToolId } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
+
+import { assertCanonicalToolId, isCanonicalToolId } from '../tool-contract/identity'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
 

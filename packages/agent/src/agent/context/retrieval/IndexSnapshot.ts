@@ -1,11 +1,12 @@
+import { isPresent } from '@velaros-ai/core'
+
 import type {
-  ChatContextEvidenceRecord,
   ChatContextRetrievalIndexDiagnostics,
   ChatContextRetrievalIndexSourceFingerprint,
   ChatMessage,
   SerializedMessage,
-} from '@velaros-ai/agent/protocol'
-import { isPresent } from '@velaros-ai/core'
+} from '../../../protocol/types'
+import type { ChatContextEvidenceRecord } from '../../../protocol/types/chatRuntime'
 
 /** 索引 snapshot schema 版本；与 {@link ContextRetrievalIndexBuilder} 产出一致。 */
 const ChatContextRetrievalIndexVersion = 2

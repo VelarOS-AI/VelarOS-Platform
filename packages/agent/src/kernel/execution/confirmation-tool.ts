@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-import type { ToolCapabilitySchema, ToolPermission } from '@velaros-ai/agent/protocol'
-import type { ApprovalPort, ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import type { ToolCapabilitySchema, ToolPermission } from '../../protocol/types/tool'
+import { type ApprovalPort, createManualApprovalOptions } from '../../tool-contract/approval'
 import {
-  createManualApprovalOptions,
   renderParameterDescription as parameterDescription,
   renderToolDescription,
-} from '@velaros-ai/agent/tool-contract'
+} from '../../tool-contract/ToolDescription'
+import type { ToolContractRuntimeSpec } from '../../tool-contract/types'
 
 /**
  * interaction:confirm 的最小执行上下文：只需审批通道与取消信号。

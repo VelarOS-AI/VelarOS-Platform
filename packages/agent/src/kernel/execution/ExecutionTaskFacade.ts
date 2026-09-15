@@ -1,11 +1,11 @@
+import type { ExecutionRecords } from '../../execution/Records'
+import type { ExecutionRoutingCoordinator } from '../../execution/routing'
+import type { ToolExecutionPlanUpdate } from '../../protocol/types/agent'
 import type {
   ExecutionTaskExecutionAdvice,
   ExecutionTaskPlanStep,
   ExecutionTaskRecord,
-  ToolExecutionPlanUpdate,
-} from '@velaros-ai/agent/protocol'
-
-import type { ExecutionRecords, ExecutionRoutingCoordinator } from '../../execution'
+} from '../../protocol/types/execution'
 
 /** 围绕 execution 聚合任务、计划更新与执行建议。 */
 class ExecutionTaskFacade {

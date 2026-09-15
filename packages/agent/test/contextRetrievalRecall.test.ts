@@ -32,7 +32,7 @@ import type {
   ChatContextRetrievalIndexSourceFingerprint,
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
-} from '../src/protocol'
+} from '../src/protocol/types'
 import { inferRecallRefKind } from '../src/tool-library/builtin/ContextRetrieval'
 
 const SessionId = 'session-s3'

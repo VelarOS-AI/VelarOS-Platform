@@ -1,7 +1,8 @@
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
-import type { ExecutionSpanScopeFactory } from '../../kernel/observability'
+import type { ExecutionSpanScopeFactory } from '../../kernel/observability/execution-span-scope'
 import type { AgentModSeamDispatcher } from '../../mods/AgentModSeams'
-import { createBuiltInPromptRegistry, type PromptRegistry } from '../../prompts'
+import { createBuiltInPromptRegistry } from '../../prompts/catalog'
+import type { PromptRegistry } from '../../prompts/registry'
 import {
   defaultRuntimePromptFeaturePolicy,
   type RuntimePromptFeaturePolicy,

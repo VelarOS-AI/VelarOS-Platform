@@ -8,11 +8,8 @@ import { resolveToolReadOnly } from '../tool-contract/define'
 import { readToolSchemaDiscoveryNames, ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
 export { ToolContractDiscoveryDescriptors } from '../tool-contract/discovery'
 
-import type { ToolDescriptor as RegistryToolDescriptor } from '../protocol'
+import type { DescribeToolSchemaResponse, HostProjection } from '../protocol/execution'
 import {
-  AgentProtocolVersion,
-  type DescribeToolSchemaResponse,
-  type HostProjection,
   type LeaseDenialReason,
   type LeaseDeniedResponse,
   ToolCatalogDiscoveryToolName,
@@ -21,7 +18,9 @@ import {
   ToolSchemaDiscoveryToolName,
   type VelarToolCallEnvelope,
   type VelarToolResultEnvelope,
-} from '../protocol'
+} from '../protocol/lease'
+import type { ToolDescriptor as RegistryToolDescriptor } from '../protocol/types/tool'
+import { AgentProtocolVersion } from '../protocol/version'
 import {
   ToolExecutionPolicy,
   type ToolExecutionPolicyContext,

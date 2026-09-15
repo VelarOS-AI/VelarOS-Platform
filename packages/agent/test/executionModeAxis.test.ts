@@ -20,7 +20,7 @@ import {
   normalizeExecutionModes,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
-} from '../src/execution-modes'
+} from '../src/execution-modes/ExecutionModeRegistry'
 
 void describe('模式轴归一', () => {
   void test('未知 id 静默丢弃、去重、按注册表声明序排', () => {

@@ -1,4 +1,4 @@
-import type { ChatStreamEvent } from '@velaros-ai/agent/protocol'
+import type { ChatStreamEvent } from '../../protocol/types'
 
 import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
 import type {

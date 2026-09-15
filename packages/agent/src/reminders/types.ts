@@ -1,9 +1,6 @@
-import type {
-  ThinkingDepth,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-
-import type { CapabilityValidationStatus } from '../capabilities'
+import type { CapabilityValidationStatus } from '../capabilities/CapabilityValidation'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type { ToolCategoryId } from '../protocol/types/tool'
 export interface CapabilityValidationFailure {
   command: string
   status: 'failed' | 'timed-out'

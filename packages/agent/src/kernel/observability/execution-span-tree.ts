@@ -6,7 +6,7 @@
 // 而非丢弃，让消费面拿到尽力而为的部分树而非崩溃。
 import { isNotNull, isNull } from '@velaros-ai/core'
 
-import type { ExecutionSpan } from '../../protocol'
+import type { ExecutionSpan } from '../../protocol/observability'
 
 /** 树节点：一条 span + 其子 span id（按 startedAt 升序，tie-break spanId）。 */
 export interface ExecutionSpanTreeNode {

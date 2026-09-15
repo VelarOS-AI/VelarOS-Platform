@@ -8,7 +8,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { AgentModSeamDispatcher, SoloStreamLoop } from '../src'
+import { SoloStreamLoop } from '../src/agent/SoloLoop'
+import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
 
 const ProbeToolName = 'probe_echo'
 const ProbeSessionId = 'session-probe'

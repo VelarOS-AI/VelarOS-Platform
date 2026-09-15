@@ -1,4 +1,4 @@
-import type { AgentModelInputModality } from '@velaros-ai/agent/protocol'
+import type { AgentModelInputModality } from '../protocol/types/tool'
 
 interface ToolModelInputRequirements {
   requiredModelInputModalities?: readonly AgentModelInputModality[]

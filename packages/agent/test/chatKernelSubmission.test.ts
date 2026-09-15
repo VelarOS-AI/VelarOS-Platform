@@ -10,7 +10,7 @@ import {
   InMemoryKernelSessionInputStore,
   type KernelSessionInputStore,
 } from '../src/kernel/session-lane'
-import type { ChatSendRequest } from '../src/protocol'
+import type { ChatSendRequest } from '../src/protocol/types'
 
 function gate(): { promise: Promise<void>; resolve(): void } {
   let resolve!: () => void

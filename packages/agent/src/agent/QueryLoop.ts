@@ -2,16 +2,6 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import { resolveContextWindowBudget } from '@velaros-ai/agent'
-import type {
-  AgentModelInputModality,
-  RunProfileSelectionId,
-  SubAgentStructuredOutputContract,
-  SubAgentUsage,
-  ThinkingDepth,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import {
   isBlank,
   isEmpty,
@@ -23,10 +13,17 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { resolveCapabilityDelegationPolicy } from '../capabilities'
-import { type AutoVerificationToolContext, tickLoopReminders } from '../coding'
-import { type ExecutionSpanScopeFactory, KernelToolLoopGuard } from '../kernel'
+import { resolveCapabilityDelegationPolicy } from '../capabilities/CapabilityExtensions'
+import { type AutoVerificationToolContext, tickLoopReminders } from '../coding/AutoVerification'
+import type { ExecutionSpanScopeFactory } from '../kernel/observability/execution-span-scope'
+import { KernelToolLoopGuard } from '../kernel/tool-loop-guard'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
+import type { SubAgentStructuredOutputContract } from '../protocol/types/agentWorkflow'
+import { ChatRuntimeEvents } from '../protocol/types/chatRuntime'
+import type { RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { SubAgentUsage } from '../protocol/types/subAgentTask'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type { AgentModelInputModality, ToolCategoryId } from '../protocol/types/tool'
 import {
   buildStructuredOutputRepairPrompt,
   compileSubAgentOutputSchema,
@@ -34,6 +31,13 @@ import {
 } from '../sub-agent/StructuredOutput'
 import { DefaultModelInputModalities } from '../tools/model-input-policy'
 
+import { resolveContextWindowBudget } from './context/contextBudget'
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { resolveGovernanceSessionKey } from './context/residency/sessionKey'
+import { createInternalFollowUpMessage } from './history/internalMessages'
+import type { AgentHistoryToolContext } from './history/request'
+import type { AgentModelProvider, AgentModelRequestOptions } from './model/ModelContracts'
+import { isReasoningOnlyEmptyResponseError } from './stream/EmptyStreamRecovery'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -42,17 +46,12 @@ import {
   restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
 } from './AgentLoop'
-import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
 import { resolveContextDegradeAction } from './ContextDegradeLadder'
 import {
   type AgentExecutionLimitOverrides,
   type AgentExecutionLimits,
   resolveAgentExecutionLimits,
 } from './ExecutionLimits'
-import {
-  type AgentHistoryToolContext,
-  createInternalFollowUpMessage,
-} from './history'
 import {
   AgentLoopContextUsageManager,
   type AgentLoopToolRegistry,
@@ -73,10 +72,6 @@ import {
   LoopWindDownGuard,
 } from './LoopSurface'
 import type {
-  AgentModelProvider,
-  AgentModelRequestOptions,
-} from './model'
-import type {
   ExecuteQueryTurnArgs,
   QueryTurnEvents,
   QueryTurnProvider,
@@ -86,12 +81,12 @@ import type {
 } from './QueryTurn'
 import type { AgentRoleResolution, ResolveAgentRoleOptions } from './RoleTypes'
 import type { AgentModelRetryPolicy,AgentRunLifecycle } from './RunLifecycle'
-import { applyRunProfileToolExposure, resolveRunProfilePolicyForRuntime } from './RunProfile'
+import { applyRunProfileToolExposure } from './RunProfile'
 import type {
   AgentChatRuntimeConfig,
   AgentSystemRuntimeConfig,
 } from './RuntimeConfiguration'
-import { isReasoningOnlyEmptyResponseError } from './stream'
+import { resolveRunProfilePolicyForRuntime } from './RuntimeProfiles'
 import {
   type AgentTurnCapabilitySnapshotSource,
   captureAgentTurnCapabilityContext,

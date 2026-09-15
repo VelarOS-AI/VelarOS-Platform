@@ -1,15 +1,12 @@
-import type {
-  AgentRoleId,
-  CapabilityScopeId,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
   decideCapabilityScopeCategory,
   resolveCapabilityScopeId,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
+import type { AgentRoleId } from '../protocol/types/system'
+import type { CapabilityScopeId, ToolCategoryId } from '../protocol/types/tool'
 
 
 type ToolCategoryUnavailableReason = string

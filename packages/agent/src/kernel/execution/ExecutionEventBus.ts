@@ -1,20 +1,22 @@
+import { toNullable } from '@velaros-ai/core'
+
 import type {
-  AgentEvent,
-  ChatRuntimeEvent,
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantRawPayload,
-  StreamAssistantSourcePayload,
   StreamExecutionGraphPayload,
   StreamReasoningPayload,
-  StreamStatePayload,
   StreamToolCallPayload,
   StreamToolMetadataPayload,
   StreamToolProgressPayload,
   StreamToolResultPayload,
+} from '../../protocol/types'
+import type {
+  AgentEvent,
+  StreamAssistantGeneratedFilePayload,
+  StreamAssistantRawPayload,
+  StreamAssistantSourcePayload,
   StreamTurnContextPayload,
   StreamWorkerThreadPayload,
-} from '@velaros-ai/agent/protocol'
-import { toNullable } from '@velaros-ai/core'
+} from '../../protocol/types/agent'
+import type { ChatRuntimeEvent, StreamStatePayload } from '../../protocol/types/chatRuntime'
 
 interface ExecutionEventBusHandlers {
   /** Agent 文本、工具、runtime、turn context 等流式事件。 */

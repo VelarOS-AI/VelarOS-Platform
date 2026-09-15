@@ -1,7 +1,17 @@
 import {
+  isEmpty,
+  isFiniteNumber,
+  isNotNull,
+  isPositiveNumber,
+  numberOrNull,
+  optionalWhen,
+  toNullable,
+} from "@velaros-ai/core";
+
+import {
   normalizeSessionLineageId,
   normalizeSessionLineageIdList,
-} from "@velaros-ai/agent";
+} from "../../../chat/sessionLineage";
 import type {
   ChatContextReadEvidenceRequest,
   ChatContextReadEvidenceResult,
@@ -17,18 +27,8 @@ import type {
   ChatContextSearchTerminalOutputItem,
   ChatContextSearchTerminalOutputRequest,
   ChatContextSearchTerminalOutputResult,
-  SessionLineageContext,
-} from "@velaros-ai/agent/protocol";
-import {
-  isEmpty,
-  isFiniteNumber,
-  isNotNull,
-  isPositiveNumber,
-  numberOrNull,
-  optionalWhen,
-  toNullable,
-} from "@velaros-ai/core";
-
+} from "../../../protocol/types";
+import type { SessionLineageContext } from "../../../protocol/types/storage";
 import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
 import type { ContextRecord } from "../residency/ContextRecord";
 import { compareStableStrings } from "../residency/determinism";
@@ -52,10 +52,9 @@ import {
   contextRetrievalFingerprintIsComparable,
   contextRetrievalFingerprintsEqual,
 } from "./IndexSnapshot";
+import { paginateJsonPathSelection, paginateSerializedText } from "./Pagination";
 import {
   ContextRetrievalPayloadReader,
-  paginateJsonPathSelection,
-  paginateSerializedText,
   selectJsonPath,
 } from "./PayloadReader";
 import {

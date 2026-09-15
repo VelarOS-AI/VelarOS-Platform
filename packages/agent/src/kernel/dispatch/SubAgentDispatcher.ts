@@ -50,18 +50,6 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentEvent,
-  ExecutionTaskStatus,
-  SubAgentTaskResult,
-  SubAgentUsage,
-  TeamModelRouteCategory,
-  TeamModelSelectionTrace,
-  ThinkingDepth,
-  ToolCategoryId,
-  UserActionCard,
-} from '@velaros-ai/agent/protocol'
-import { createUnattendedSubAgentApprovalPort } from '@velaros-ai/agent/tool-contract'
 import {
   isArray,
   isBoolean,
@@ -88,27 +76,36 @@ import type {
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityDelegationPolicy,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityExtensions'
+import type {
+  SubAgentGuidanceRelayRegistry,
+  SubAgentGuidanceRelayWorkerHandle,
+} from '../../execution/SubAgentGuidanceRelayRegistry'
+import type { AgentEvent } from '../../protocol/types/agent'
+import type { ExecutionTaskStatus } from '../../protocol/types/execution'
+import type { SubAgentTaskResult, SubAgentUsage } from '../../protocol/types/subAgentTask'
+import type {
+  TeamModelRouteCategory,
+  TeamModelSelectionTrace,
+  ThinkingDepth,
+} from '../../protocol/types/team'
+import type { ToolCategoryId, UserActionCard } from '../../protocol/types/tool'
+import { resolveReadonlyMode } from '../../sub-agent/SubAgentReadonlyPolicy'
+import { buildSubAgentTaskResult } from '../../sub-agent/SubAgentResultBuilder'
 import {
-  type SubAgentGuidanceRelayRegistry,
-  type SubAgentGuidanceRelayWorkerHandle,
-} from '../../execution'
-import {
-  buildSubAgentTaskResult,
-  resolveCustomSubAgentTypeConfig,
-  type ResolvedSubAgentTypeConfig,
-  resolveReadonlyMode,
-  resolveSubAgentTypeConfig,
-  type SubAgentDispatchCatalog,
   SubAgentSessionStore,
   type SubAgentThreadRetention,
-  type SubAgentTypeProvider,
-} from '../../sub-agent'
+} from '../../sub-agent/SubAgentSessionStore'
 import {
-  type TeamModelRouter,
-  type TeamModelRouteResult,
-  type WriteLeaseCoordinator,
-} from '../../team'
+  resolveCustomSubAgentTypeConfig,
+  type ResolvedSubAgentTypeConfig,
+  resolveSubAgentTypeConfig,
+  type SubAgentDispatchCatalog,
+  type SubAgentTypeProvider,
+} from '../../sub-agent/SubAgentTypeRegistry'
+import type { TeamModelRouter, TeamModelRouteResult } from '../../team/model-router'
+import type { WriteLeaseCoordinator } from '../../team/WriteLease'
+import { createUnattendedSubAgentApprovalPort } from '../../tool-contract/approval'
 import type { KernelBackgroundJobManager } from '../background-jobs'
 import type { ExecutionEventBus } from '../execution/ExecutionEventBus'
 

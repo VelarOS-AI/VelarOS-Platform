@@ -21,7 +21,6 @@
 //  - `collectSchemaSearchText` 的 depth 6 / 240 条上限是防爆保护：深层嵌套 schema 全展开会让
 //    单张页的索引文本盖过所有其他页的信号。
 
-import type { ToolCategoryId, ToolOsState } from '@velaros-ai/agent/protocol'
 import {
   isArray,
   isBoolean,
@@ -32,7 +31,8 @@ import {
   isString,
 } from '@velaros-ai/core'
 
-import { parseStructuredToolDescription } from '../../tool-contract'
+import type { ToolCategoryId, ToolOsState } from '../../protocol/types/tool'
+import { parseStructuredToolDescription } from '../../tool-contract/ToolDescription'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 import { readToolInputSchema } from './ToolReadDetails'

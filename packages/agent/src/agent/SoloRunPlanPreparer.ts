@@ -1,49 +1,52 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentContextPhase,
-  AgentModelInputModality,
-  AgentSurfaceId,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  ExecutionModeId,
-  RunProfileId,
-  RunProfileRuntimePolicy,
-  RunProfileSelectionId,
-  ThinkingDepth,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolSurfaceProfileId,
-  TurnPlanningTelemetryPayload,
-} from '@velaros-ai/agent/protocol'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import {
   type AgentRuntimeCapabilityPorts,
   resolveToolAllocationMetadata,
-} from '../capabilities'
-import { isExecutionModeActive, resolveExecutionModes } from '../execution-modes'
+} from '../capabilities/CapabilityExtensions'
+import {
+  isExecutionModeActive,
+  resolveExecutionModes,
+} from '../execution-modes/ExecutionModeRegistry'
+import type {
+  AgentContextPhase,
+  AgentSurfaceId,
+  ChatPromptFeatureId,
+  ExecutionModeId,
+  RunProfileRuntimePolicy,
+  TurnPlanningTelemetryPayload,
+} from '../protocol/types/agent'
+import type { RunProfileId, RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type {
+  AgentModelInputModality,
+  CapabilityScopeId,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolDescriptor,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
 
 import { compareStableStrings } from './context/residency/determinism'
-import {
-  type AgentRunPlan,
-  agentRunPlanComposer,
-  type BuildAgentRunPlanInput,
-  type SessionToolAllocatorPlan,
-  type ToolAllocatorRequest,
-} from './control-plane'
-import { createInternalFollowUpMessage } from './history'
+import type { AgentRunPlan } from './control-plane/AgentRunPlan'
+import { agentRunPlanComposer, type BuildAgentRunPlanInput } from './control-plane/AgentRunPlanner'
+import type {
+  SessionToolAllocatorPlan,
+  ToolAllocatorRequest,
+} from './control-plane/SessionToolAllocator'
+import { createInternalFollowUpMessage } from './history/internalMessages'
+import type { AgentModelRequestOptions } from './model/ModelContracts'
 import { extractLatestUserTextFromMessages, isLowSignalIntentText } from './IntentSignals'
 import { resolveSoloLoopTools } from './LoopRuntime'
-import type { AgentModelRequestOptions } from './model'
 import type { PromptStatePreparedToolCategories } from './PromptState'
 import {
   resolveRunProfilePolicyForRuntime,
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
-} from './RunProfile'
+} from './RuntimeProfiles'
 import type { ToolSpaceBootstrapState } from './ToolSpaceBootstrapPlanner'
 
 interface SoloRunPlanToolCategory<TTool extends ToolDescriptor = ToolDescriptor> {

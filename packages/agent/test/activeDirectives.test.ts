@@ -5,8 +5,7 @@ import type {
   ActiveContextArtifact,
   ActiveContextListOptions,
   ActiveContextUpsertInput,
-} from '@velaros-ai/agent/protocol'
-
+} from '../src/protocol/types'
 import {
   type ActiveDirectiveContext,
   ActiveDirectiveLimits,

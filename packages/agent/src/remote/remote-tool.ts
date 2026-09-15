@@ -1,10 +1,9 @@
-import { convertMcpInputSchema } from '@velaros-ai/agent'
-import type {
-  ApprovalPort,
-  ToolContractRuntimeSpec,
-} from '@velaros-ai/agent/tool-contract'
 import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
 import { RemoteNodeClientError } from '@velaros-ai/kernel/remote/client'
+
+import type { ApprovalPort } from '../tool-contract/approval'
+import type { ToolContractRuntimeSpec } from '../tool-contract/types'
+import { convertMcpInputSchema } from '../tool-library/mcp/mcpToolTranslation'
 
 /**
  * 本包用到的最小工具上下文。

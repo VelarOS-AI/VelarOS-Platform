@@ -1,8 +1,9 @@
+import type { AgentRuntimeCapabilityPorts } from '../capabilities/CapabilityExtensions'
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
+import type { AgentRoleId } from '../protocol/types/system'
 import type {
   AgentModelInputModality,
-  AgentRoleId,
   CapabilityScopeId,
-  ChatPromptFeatureId,
   ToolCapabilitySchema,
   ToolCategoryId,
   ToolExposurePolicy,
@@ -10,9 +11,7 @@ import type {
   ToolProviderKind,
   ToolRole,
   ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+} from '../protocol/types/tool'
 import type { ToolInputReuseContract } from '../tool-contract/types'
 
 interface ToolRegistryCodingSession {

@@ -1,4 +1,10 @@
-export * from './archive'
+export type { AgentSessionArchiveEnvelope, AgentSessionArchiveEvent } from './archive'
+export {
+  createAgentSessionArchiveEnvelope,
+  parseAgentSessionArchiveEnvelope,
+  VelarosAgentSessionArchiveFormat,
+  VelarosAgentSessionArchiveSchemaVersion,
+} from './archive'
 export type {
   AgentBackgroundAgent,
   AgentBackgroundAgentControlPort,
@@ -14,18 +20,32 @@ export type {
   AgentSessionResourceReference,
   CreateAgentSessionMetadataInput,
 } from './contracts'
-export {
-  AgentBackgroundAgentStateSchema,
-  AgentSessionLifecycleStatusSchema,
-} from './contracts'
+export { AgentBackgroundAgentStateSchema, AgentSessionLifecycleStatusSchema } from './contracts'
 export type { AgentSessionApplicationEvent, AgentSessionEventPort } from './event-port'
-export * from './goals'
+export type { AgentGoal, AgentGoalStatus } from './goals'
+export { AgentGoalService } from './goals'
 export {
   AgentSessionLeaseConflictError,
   isTerminalAgentBackgroundState,
   normalizeAgentSessionListLimit,
   resolveAgentSessionLeaseClaim,
 } from './lifecycle'
-export * from './permissions'
-export * from './plans'
-export * from './questions'
+export type {
+  AgentPermissionAction,
+  AgentPermissionReply,
+  AgentPermissionRequest,
+  AgentPermissionRisk,
+  AgentPermissionRule,
+  RequestAgentPermissionInput,
+} from './permissions'
+export {
+  agentPermissionWildcardMatch,
+  evaluateAgentPermissionRules,
+  findLastMatchingAgentPermissionRule,
+  normalizeAgentPermissionPatterns,
+  normalizeAgentPermissionRequest,
+} from './permissions'
+export type { AgentPlan, AgentPlanStatus, AgentPlanStep, AgentPlanStepStatus } from './plans'
+export { AgentPlanService } from './plans'
+export type { AgentQuestionRequest, AskAgentQuestionInput } from './questions'
+export { AgentQuestionService } from './questions'

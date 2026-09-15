@@ -14,6 +14,10 @@
 // 清理不用计时器：派发器每次派发前调 `prune`，执行收尾的 `clearExecution` 也顺手清一次。
 import type { ModelMessage } from 'ai'
 
+import { isEmpty, isNotNull, isNull, sum, toNullable, toOptional } from '@velaros-ai/core'
+
+import { estimateMessageChars } from '../agent/context/residency/messageFacts'
+import { type AgentExecutionLimits, resolveAgentExecutionLimits } from '../agent/ExecutionLimits'
 import type {
   SubAgentSessionRecord,
   SubAgentSessionStatus,
@@ -21,13 +25,9 @@ import type {
   SubAgentTaskRequest,
   SubAgentTaskResult,
   SubAgentTypeId,
-  TeamModelRouteCategory,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty, isNotNull, isNull, sum, toNullable, toOptional } from '@velaros-ai/core'
-
-import { estimateMessageChars } from '../agent/context/residency/messageFacts'
-import { type AgentExecutionLimits, resolveAgentExecutionLimits } from '../agent/ExecutionLimits'
+} from '../protocol/types/subAgentTask'
+import type { TeamModelRouteCategory } from '../protocol/types/team'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
 interface CreateSubAgentSessionInput {
   threadId: string

@@ -2,9 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { ExecutionTaskPlanStep } from '@velaros-ai/agent/protocol'
-
 import { hasRunningOwnSelfStep } from '../src/execution/task-ledger'
+import type { ExecutionTaskPlanStep } from '../src/protocol/types/execution'
 
 function step(id: string, status: ExecutionTaskPlanStep['status']): ExecutionTaskPlanStep {
   return {

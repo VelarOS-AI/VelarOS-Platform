@@ -1,17 +1,20 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  ConfirmationRequestDetail,
-  ExecutionRecord,
-  ExecutionTaskPlanStep,
-  ExecutionTaskRecord,
-  StreamTurnContextPayload,
-  ToolExecutionPlanUpdate,
-  UserActionCard,
-} from '@velaros-ai/agent/protocol'
 import { isArray, isBlank, isEmpty,isObject, isPresent, isString, toNullable, truncate } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
+
+import type {
+  ConfirmationRequestDetail,
+  StreamTurnContextPayload,
+  ToolExecutionPlanUpdate,
+} from '../protocol/types/agent'
+import type {
+  ExecutionRecord,
+  ExecutionTaskPlanStep,
+  ExecutionTaskRecord,
+} from '../protocol/types/execution'
+import type { UserActionCard } from '../protocol/types/tool'
 
 import {
   type ExecutionIdFactory,

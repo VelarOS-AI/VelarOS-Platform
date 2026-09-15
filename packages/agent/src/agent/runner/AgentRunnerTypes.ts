@@ -1,4 +1,4 @@
-import type { AgentRuntimeCapabilityPorts } from '../../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../../capabilities/CapabilityExtensions'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import type { AgentExecutionLimitOverrides } from '../ExecutionLimits'
 import type { PrimaryAgentProfile } from '../PrimaryAgentProfile'

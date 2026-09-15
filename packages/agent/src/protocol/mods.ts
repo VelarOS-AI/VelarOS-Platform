@@ -10,7 +10,6 @@
 // 首尾空白），语义层零宽容。
 import { z } from 'zod'
 
-import { isCanonicalToolId } from '@velaros-ai/agent/tool-contract'
 import {
   isArray,
   isBlank,
@@ -21,6 +20,8 @@ import {
   isUndefined,
 } from '@velaros-ai/core'
 import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts/protocol'
+
+import { isCanonicalToolId } from '../tool-contract/identity'
 
 // ─── semver：manifest 兼容轴的最小判定器（单源，Loader 复用） ──────────────────
 

@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises'
 
 import { isArray, isRecord } from '@velaros-ai/core'
 
-import { type SessionEntry, SessionEntrySchema } from '../../protocol'
+import { type SessionEntry, SessionEntrySchema } from '../../protocol/session'
 import {
   JSONL_LINE_SEPARATOR,
   parseJsonlWithTailTolerance,

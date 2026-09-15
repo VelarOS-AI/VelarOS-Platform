@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-
+import type { ActiveDirectiveType } from '../../protocol/types'
+import {
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
 import { defineVelaTool } from '../defineVelaTool'
 
 import {
   ActiveDirectiveLimits,
-  type ActiveDirectiveType,
   archiveActiveDirectives,
   directiveTypeSchema,
   listActiveDirectives as listActiveDirectiveArtifacts,

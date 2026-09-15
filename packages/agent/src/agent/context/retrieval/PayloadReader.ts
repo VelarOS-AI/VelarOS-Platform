@@ -1,15 +1,15 @@
 
+import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
 import type {
-  ChatContextEvidenceRecord,
   ChatContextRetrievedPayload,
   ChatMessage,
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
   SerializedMessage,
-} from '@velaros-ai/agent/protocol'
-import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
+} from '../../../protocol/types'
+import type { ChatContextEvidenceRecord } from '../../../protocol/types/chatRuntime'
 import { normalizeLegacyFoldStub } from '../contextRefEnvelope'
 import { isPrivateFileContextRecord } from '../resources/PrivateFileRecords'
 

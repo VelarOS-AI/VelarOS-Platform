@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { clampedInt } from '../src/tool-contract'
+import { clampedInt } from '../src/tool-contract/ForgivingSchema'
 import { ToolArgsSchemaValidator } from '../src/tools/ToolArgsSchemaValidator'
 
 describe('ToolArgsSchemaValidator effective arguments', () => {

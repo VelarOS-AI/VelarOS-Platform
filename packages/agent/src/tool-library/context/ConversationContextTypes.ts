@@ -8,7 +8,7 @@ import type {
   ChatContextSearchConversationHistoryResult,
   ChatContextSearchTerminalOutputRequest,
   ChatContextSearchTerminalOutputResult,
-} from '@velaros-ai/agent/protocol'
+} from '../../protocol/types'
 
 export interface ToolConversationHandoffRequest {
   reason: string

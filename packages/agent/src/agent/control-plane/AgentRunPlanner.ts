@@ -1,9 +1,9 @@
 import type { ModelMessage } from 'ai'
 
-import type { RunProfileSelectionId } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentRuntimeCapabilityPorts } from '../../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../../capabilities/CapabilityExtensions'
+import type { RunProfileSelectionId } from '../../protocol/types/runProfile'
 import {
   detectAgentIntentSignals,
   extractLatestUserTextFromMessages,

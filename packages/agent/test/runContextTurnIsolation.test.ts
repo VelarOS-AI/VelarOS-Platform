@@ -9,7 +9,8 @@ import type { RunContextToolContext } from '../src/agent/run-context/host-ports'
 import { RunContext } from '../src/agent/run-context/RunContext'
 import type { AgentSystemRuntimeConfig } from '../src/agent/RuntimeConfiguration'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
-import { createBuiltInPromptRegistry, createTextPromptSegment } from '../src/prompts'
+import { createBuiltInPromptRegistry } from '../src/prompts/catalog'
+import { createTextPromptSegment } from '../src/prompts/segments/shared'
 import { defaultRuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
 
 const systemConfig: AgentSystemRuntimeConfig = {

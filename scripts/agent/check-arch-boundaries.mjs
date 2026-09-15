@@ -528,11 +528,12 @@ function scanConcreteSemanticInjectionBoundary() {
     })
   }
 
+  // 观测域原来经 kernel/observability/index.ts 门面转出；门面删掉后由包根入口逐个名字直接转发，查根入口防止再把退役名字转出去。
   const neutralObservabilityFiles = [
     'packages/agent/src/protocol/observability.ts',
     'packages/agent/src/kernel/observability/execution-span-debug.ts',
     'packages/agent/src/kernel/observability/execution-span-scope.ts',
-    'packages/agent/src/kernel/observability/index.ts',
+    'packages/agent/src/index.ts',
   ]
   const retiredConcreteObservationPattern =
     /\b(?:MemorySpan(?:Schema)?|ExecutionSpanDebugMemory|recordMemorySpan|recordAttentionOutcomeMirror|ExecutionSpanOutcomeMirror)\b|category:\s*z\.literal\(['"]memory['"]\)|category\s*===\s*['"]memory['"]/u

@@ -1,17 +1,18 @@
 import { type z } from 'zod'
 
-import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
-
+import type { ToolCapabilitySchema } from '../../protocol/types/tool'
 import { defineVelaTool } from '../defineVelaTool'
 
 import {
-  parseToolSpaceQueryMethodInput,
   runToolSpace,
+} from './Categories'
+import {
+  parseToolSpaceQueryMethodInput,
   toolSpaceQueryMethodSchema,
   toolSpaceReadMethodSchema,
   toolSpaceReplaceMethodSchema,
   toolSpaceSchema,
-} from './Categories'
+} from './ToolSpaceSchemas'
 
 const ToolingReadCapability = {
   effectKind: 'read',

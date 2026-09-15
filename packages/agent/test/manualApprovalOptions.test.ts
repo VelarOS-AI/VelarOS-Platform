@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createManualApprovalOptions } from '../src/tool-contract'
+import { createManualApprovalOptions } from '../src/tool-contract/approval'
 
 describe('manual approval contract', () => {
   test('pins explicit user interaction and disables decision reuse', () => {

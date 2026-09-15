@@ -24,16 +24,6 @@
 // 派发点与 seam 闭集见 `../mods/AgentModSeams.ts` 与 docs/agent-mod-trunk.md；
 // 策略门与审批语义见 `./ExecutionPolicy.ts`。
 import {
-  type AgentEvent,
-  type ChatRuntimeEvent,
-  type StreamToolCallPayload,
-  type StreamToolMetadataPayload,
-  type StreamToolProgressPayload,
-  type StreamToolResultEffects,
-  type StreamToolResultPayload,
-  type ToolResultModelContentPart,
-} from "@velaros-ai/agent/protocol";
-import {
   isArray,
   isEmpty,
   isPlainObject,
@@ -53,33 +43,48 @@ import {
   resolveToolResultMiddlewares,
   type ToolResultMiddleware,
   type ToolResultModelImage,
-} from "../capabilities";
+} from "../capabilities/CapabilityExtensions";
+import type { ToolSpanHandle, ToolSpanOpener } from "../kernel/observability/execution-span-scope";
 import {
   completeProviderTurnSnapshot,
-  ContextPayloadKernelToolOutputStore,
-  type ExecutionSpanStatus,
+  type ProviderTurnEventReducer,
+  type ProviderTurnSnapshot,
+} from "../kernel/provider-events";
+import {
   isKernelWriteLikeTool,
   type KernelToolFailureBatchEntry,
   KernelToolLoopGuard,
+} from "../kernel/tool-loop-guard";
+import { KernelToolResultMaterializer } from "../kernel/tool-materialization";
+import {
+  ContextPayloadKernelToolOutputStore,
   type KernelToolOutputStore,
-  KernelToolResultMaterializer,
-  type ProviderTurnEventReducer,
-  type ProviderTurnSnapshot,
-  type ToolSpanHandle,
-  type ToolSpanOpener,
-} from "../kernel";
+} from "../kernel/tool-output-store";
 import type { AgentModSeamDispatcher } from "../mods/AgentModSeams";
+import type { ExecutionSpanStatus } from "../protocol/observability";
+import type {
+  StreamToolCallPayload,
+  StreamToolMetadataPayload,
+  StreamToolProgressPayload,
+  StreamToolResultPayload,
+} from "../protocol/types";
+import type {
+  AgentEvent,
+  StreamToolResultEffects,
+  ToolResultModelContentPart,
+} from "../protocol/types/agent";
+import type { ChatRuntimeEvent } from "../protocol/types/chatRuntime";
 
 import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, type ToolInputReuseContext, ToolInputReuseError, ToolInputReuseNote } from './recovery/ToolInputReuse';
 import type {
   ToolExecutionPolicy,
   ToolExecutionPolicyContext,
   ToolExecutionPrepared,
-  ToolFailureResult,
 } from "./ExecutionPolicy";
 import {
   buildToolFailureResult as buildStructuredToolFailureResult,
   type ToolFailureBuildOptions,
+  type ToolFailureResult,
 } from "./ExecutionPolicyFailures";
 import { findHistoryPreviewPlaceholderArgumentPaths } from "./historyPreviewPlaceholder";
 import { liftGenericModelContent } from "./modelImageLift";

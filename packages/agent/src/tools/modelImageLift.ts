@@ -1,6 +1,7 @@
-import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
 import { isArray, isBlank, isEmpty, isString, toOptional } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+
+import type { ToolResultModelContentPart } from '../protocol/types/agent'
 
 import type { ToolResult } from './Executor'
 

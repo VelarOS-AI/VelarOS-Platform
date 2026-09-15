@@ -1,11 +1,6 @@
 import type { ModelMessage, ToolSet } from "ai";
 import { asSchema } from "ai";
 
-import type {
-  ChatRuntimeEvent,
-  StreamContextGovernanceState,
-} from "@velaros-ai/agent/protocol";
-import { ChatRuntimeEvents } from "@velaros-ai/agent/protocol";
 import {
   isEmpty,
   isFunction,
@@ -17,18 +12,23 @@ import {
 import { AppError } from "@velaros-ai/core/error";
 import type { ScopedLog } from "@velaros-ai/core/logger";
 
+import {
+  type ChatRuntimeEvent,
+  ChatRuntimeEvents,
+  type StreamContextGovernanceState,
+} from "../protocol/types/chatRuntime";
 import { completeToolTransportNameAliases } from "../tools/ToolIdentity";
 
+import type { ContextPayloadStore } from "./context/ContextPayloadStore";
+import type {
+  ContextActiveTaskInput,
+  ContextPinnedEvidenceInput,
+} from "./context/ContextWorkingSetOS";
+import { collectProviderRequestHistoryToolNames } from "./context/providerRequest/messageScan";
+import type { CompiledProviderRequest } from "./context/ProviderRequestCompiler";
+import type { ProviderToolDefinitionSnapshotInput } from "./context/ProviderRequestSnapshot";
 import { compareStableStrings } from "./context/residency/determinism";
-import {
-  buildToolPayloadRefsForProviderMessages,
-  collectProviderRequestHistoryToolNames,
-  type CompiledProviderRequest,
-  type ContextActiveTaskInput,
-  type ContextPayloadStore,
-  type ContextPinnedEvidenceInput,
-  type ProviderToolDefinitionSnapshotInput,
-} from "./context";
+import { buildToolPayloadRefsForProviderMessages } from "./context/ToolPayloadReferencePlanner";
 
 /**
  * Stream 与 Query 两条 turn 链路在"把一个 turn 组装成 provider 请求"上的公共逻辑。

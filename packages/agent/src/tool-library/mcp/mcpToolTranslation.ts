@@ -12,15 +12,11 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
-import type {
-  ToolApprovalRiskLevel,
-  ToolCapabilitySchema,
-  ToolCategoryId,
-  ToolRole,
-} from '@velaros-ai/agent/protocol'
-import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 import { isBoolean, optionalWhen } from '@velaros-ai/core'
 
+import type { ToolApprovalRiskLevel } from '../../protocol/types/system'
+import type { ToolCapabilitySchema, ToolCategoryId, ToolRole } from '../../protocol/types/tool'
+import { schemaToInputSchema } from '../../tool-contract/schema-bundle'
 import { createApprovalOperationKey } from '../../tool-contract/task-approval'
 import type { VelaTool } from '../defineVelaTool'
 import type { KernelToolContext } from '../KernelToolContext'

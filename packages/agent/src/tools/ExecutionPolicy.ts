@@ -17,21 +17,6 @@
 //    否则模型只会原样重试。
 //  - **自动批准必须留痕**（`CapabilityAutoApprovalNotice`）：无痕迹的自动批准等于没有审批。
 //  - **本门不认识 mod**：mod 贡献在装载期已被宿主收窄，到这里与内置工具同权。
-import type {
-  AgentModelInputModality,
-  AgentRoleId,
-  CapabilityAutoApprovalNotice,
-  CapabilityScopeId,
-  RunProfileSelectionId,
-  ToolAvailabilityScope,
-  ToolCapabilityEffectKind,
-  ToolCapabilitySchema,
-  ToolCategoryId,
-  ToolConfirmationDecisionOptions,
-  ToolPermission,
-  ToolRole,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
 import {
   isEmpty,
   isPlainObject,
@@ -50,8 +35,25 @@ import {
   resolveCapabilityCategoryDefinitions,
   resolveToolAliases,
   resolveToolValidationHintProviders,
-} from '../capabilities'
-import { type ApprovalPort,createApprovalOperationKey, type ToolInputReuseContract } from '../tool-contract'
+} from '../capabilities/CapabilityExtensions'
+import type { ToolConfirmationDecisionOptions } from '../protocol/types/agent'
+import type { RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { AgentRoleId } from '../protocol/types/system'
+import type {
+  AgentModelInputModality,
+  CapabilityAutoApprovalNotice,
+  CapabilityScopeId,
+  ToolAvailabilityScope,
+  ToolCapabilityEffectKind,
+  ToolCapabilitySchema,
+  ToolCategoryId,
+  ToolPermission,
+  ToolRole,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
+import type { ApprovalPort } from '../tool-contract/approval'
+import { createApprovalOperationKey } from '../tool-contract/task-approval'
+import type { ToolInputReuseContract } from '../tool-contract/types'
 
 import { supportsToolInputReuse } from './recovery/ToolInputReuse'
 import { decideToolCategoryAccess } from './access-policy'

@@ -1,12 +1,13 @@
 import type { ModelMessage } from 'ai'
 
+import { isEmpty, isFalse, toNullable } from '@velaros-ai/core'
+
+import type { ToolResultModelContentPart } from '../../protocol/types/agent'
 import {
   compactToolInputForModel,
   extractSerializationHintsFromToolInput,
   serializeToolResultForModel,
-} from '@velaros-ai/agent'
-import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
-import { isEmpty, isFalse, toNullable } from '@velaros-ai/core'
+} from '../../tools/toolResultSerialization'
 
 interface AgentTurnToolResult {
   toolCallId: string

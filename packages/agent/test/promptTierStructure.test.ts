@@ -24,15 +24,14 @@ import {
 } from '../src/agent/PromptState'
 import { projectAgentModPromptSegments } from '../src/mods/AgentModProjection'
 import { AgentModSeamDispatcher } from '../src/mods/AgentModSeams'
+import { createBuiltInPromptRegistry, createBuiltInPromptSegments } from '../src/prompts/catalog'
+import { PromptRegistry } from '../src/prompts/registry'
 import {
-  createBuiltInPromptRegistry,
-  createBuiltInPromptSegments,
   createSelectedSkillPromptSegment,
   createTextPromptSegment,
-  PromptRegistry,
   PromptSegmentPriority,
-} from '../src/prompts'
-import type { RuntimePromptFeaturePolicy } from '../src/tools'
+} from '../src/prompts/segments/shared'
+import type { RuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
 
 /** Tier0 的全集。改这张表 = 改稳定前缀的内容，必须是有意的。 */
 const CoreTierSegmentIds = [

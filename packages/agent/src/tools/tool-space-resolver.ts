@@ -16,26 +16,26 @@
 //  - **常驻集不为空**：核心工具必须常驻，否则进入空间的第一轮只能靠工具发现，表现为
 //    「转好几轮才开始干活」。
 //  - **隔离按类别不按名字**：类别是唯一隔离单位；逐名例外会随工具增加而腐坏。
-import type {
-  AgentRoleId,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  ToolAvailabilityScope,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolOsState,
-} from '@velaros-ai/agent/protocol'
-import {
-  parseStructuredToolDescription,
-  type StructuredToolDescriptionParts,
-} from '@velaros-ai/agent/tool-contract'
 import { isEmpty, isFunction, isPresent, isString, truncate } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityCategoryDefinitions,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
+import type { AgentRoleId } from '../protocol/types/system'
+import type {
+  CapabilityScopeId,
+  ToolAvailabilityScope,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolDescriptor,
+  ToolOsState,
+} from '../protocol/types/tool'
+import {
+  parseStructuredToolDescription,
+  type StructuredToolDescriptionParts,
+} from '../tool-contract/ToolDescription'
 
 import { buildToolAccessDecision, type ToolAccessDecision } from './access-decision'
 import {

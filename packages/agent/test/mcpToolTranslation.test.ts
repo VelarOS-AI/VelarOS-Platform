@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { isKernelWriteLikeTool } from '../src/kernel/tool-loop-guard'
-import type { ToolConfirmationDecisionOptions } from '../src/protocol'
+import type { ToolConfirmationDecisionOptions } from '../src/protocol/types/agent'
 import { isCanonicalToolId } from '../src/tool-contract/identity'
 import type { KernelToolContext } from '../src/tool-library/KernelToolContext'
 import { describeMcpApprovalArguments } from '../src/tool-library/mcp/mcpApprovalArguments'

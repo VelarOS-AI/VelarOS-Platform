@@ -26,14 +26,12 @@
 
 import { type z } from 'zod'
 
-import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '@velaros-ai/agent/protocol'
 import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../../agent/context/residency/determinism'
-import {
-  PluginBackedToolCategoryIds,
-  ToolDiscoveryAvailabilityValues,
-} from '../../tools'
+import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '../../protocol/types/tool'
+import { ToolDiscoveryAvailabilityValues } from '../../tools/discovery-availability'
+import { PluginBackedToolCategoryIds } from '../../tools/tool-space-resolver'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 import { splitSearchTerms } from './ToolSearchTerms'

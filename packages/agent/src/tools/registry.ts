@@ -1,17 +1,17 @@
-import type {
-  ToolAvailabilityScope,
-  ToolCategoryDefinition,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-} from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityCategoryDefinitions,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
+import type {
+  ToolAvailabilityScope,
+  ToolCategoryDefinition,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolDescriptor,
+} from '../protocol/types/tool'
 
 import { isToolCategoryAvailable } from './access-policy'
 import { isToolCompatibleWithModelInputs } from './model-input-policy'

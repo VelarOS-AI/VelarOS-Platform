@@ -1,12 +1,12 @@
+import { isNumber, toNullable } from '@velaros-ai/core'
+
 import type {
-  RunProfileId,
   StreamTurnContextPayload,
-  ToolCategoryId,
   ToolLayerTelemetryMetrics,
   ToolSchemaTelemetryPayload,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-import { isNumber, toNullable } from '@velaros-ai/core'
+} from '../protocol/types/agent'
+import type { RunProfileId } from '../protocol/types/runProfile'
+import type { ToolCategoryId, ToolSurfaceProfileId } from '../protocol/types/tool'
 
 interface SoloToolSchemaTelemetryContext {
   codingSession: {

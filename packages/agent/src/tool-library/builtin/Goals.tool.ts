@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import {
+  renderParameterDescription as parameterDescription,
+} from '../../tool-contract/ToolDescription'
 import { defineVelaTool } from '../defineVelaTool'
 
 import { directiveTypeSchema } from './ActiveDirectives'

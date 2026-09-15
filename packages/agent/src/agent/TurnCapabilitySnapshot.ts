@@ -1,5 +1,6 @@
-import type { ToolAvailabilityScope } from '@velaros-ai/agent/protocol'
 import { isObject, isString,toNullable } from '@velaros-ai/core'
+
+import type { ToolAvailabilityScope } from '../protocol/types/tool'
 
 /**
  * 单个 Agent turn 开始时捕获的只读注册表视图。

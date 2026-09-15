@@ -1,8 +1,9 @@
+import { isFiniteNumber } from '@velaros-ai/core'
+
 import type {
   ChatContextRetrievalQueryKind,
   ChatContextRetrievalQueryTraceEntry,
-} from '@velaros-ai/agent/protocol'
-import { isFiniteNumber } from '@velaros-ai/core'
+} from '../../../protocol/types'
 
 import { chatSearchRanking } from './search/Ranking'
 import { ContextRetrievalBoundedCounter } from './BoundedRecentMap'

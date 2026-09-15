@@ -19,18 +19,17 @@ import type {
   AgentModSeamDispatcher,
   AgentModTurnContextAppendage,
 } from '../mods/AgentModSeams'
-import {
-  createBuiltInPromptRegistry,
-  createIdentityPromptSegment,
-  type PromptBudgetOptions,
-  type PromptCompositionResult,
-  type PromptContribution,
-  type PromptRegistry,
-  type PromptRenderContext,
-  type PromptSegmentDefinition,
-  type PromptSegmentProvider,
-  type PromptSegmentStability,
-} from '../prompts'
+import { createBuiltInPromptRegistry, createIdentityPromptSegment } from '../prompts/catalog'
+import type {
+  PromptBudgetOptions,
+  PromptCompositionResult,
+  PromptContribution,
+  PromptRegistry,
+  PromptRenderContext,
+  PromptSegmentDefinition,
+  PromptSegmentProvider,
+  PromptSegmentStability,
+} from '../prompts/registry'
 
 import type { AgentChatRuntimeConfig } from './RuntimeConfiguration'
 

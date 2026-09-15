@@ -1,26 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentContextPhase,
-  AgentDeveloperContext,
-  AgentRoleId,
-  AgentSkillDescriptor,
-  AgentSurfaceId,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  ExecutionModeId,
-  ExecutionTaskPlanStep,
-  ExecutionTaskPlanStepStatus,
-  RunProfileId,
-  RunProfileSelectionId,
-  ThinkingDepth,
-  ToolAvailabilityScope,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolSurfaceProfileId,
-  WorkflowType,
-} from '@velaros-ai/agent/protocol'
-import { isRunProfileId } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -28,19 +7,45 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import {
   type AgentRuntimeCapabilityPorts,
   resolveCapabilityPromptSegments,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
 import {
   isExecutionModeActive,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
-} from '../execution-modes'
+} from '../execution-modes/ExecutionModeRegistry'
+import { createRuntimePromptSegments } from '../prompts/segments/runtime'
+import type {
+  RuntimePromptSnapshot,
+  RuntimePromptToolCategorySummary,
+} from '../prompts/segments/shared'
+import { isRunProfileId } from '../protocol/constants/typedFieldAsserts'
+import type {
+  AgentContextPhase,
+  AgentDeveloperContext,
+  AgentSurfaceId,
+  ChatPromptFeatureId,
+  ExecutionModeId,
+} from '../protocol/types/agent'
+import type {
+  ExecutionTaskPlanStep,
+  ExecutionTaskPlanStepStatus,
+} from '../protocol/types/execution'
+import type { RunProfileId, RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { AgentSkillDescriptor } from '../protocol/types/skill'
+import type { AgentRoleId, WorkflowType } from '../protocol/types/system'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type {
+  CapabilityScopeId,
+  ToolAvailabilityScope,
+  ToolCategoryOverview,
+  ToolDescriptor,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
+import type { SubAgentDispatchCatalog } from '../sub-agent/SubAgentTypeRegistry'
 import {
-  createRuntimePromptSegments,
-  type RuntimePromptSnapshot,
-  type RuntimePromptToolCategorySummary,
-} from '../prompts'
-import type { SubAgentDispatchCatalog } from '../sub-agent'
-import { defaultRuntimePromptFeaturePolicy, type RuntimePromptFeaturePolicy } from '../tools'
+  defaultRuntimePromptFeaturePolicy,
+  type RuntimePromptFeaturePolicy,
+} from '../tools/prompt-feature-policy'
 
 import { CompactionSummaryMarker } from './history/contextOSMessage'
 import { isInternalFollowUpMessage } from './history/internalMessages'

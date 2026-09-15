@@ -1,14 +1,13 @@
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
+import type { AgentSkillDescriptor } from '../protocol/types/skill'
 import type {
   AgentDelegationContract,
   AgentRoleExpectedOutputKind,
   AgentRoleId,
   AgentRoleProfileConfig,
-  AgentSkillDescriptor,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  ToolCategoryId,
   WorkflowType,
-} from '@velaros-ai/agent/protocol'
+} from '../protocol/types/system'
+import type { CapabilityScopeId, ToolCategoryId } from '../protocol/types/tool'
 
 /** 角色合约：来自共享配置的 profile，加上后端运行所需 workflow 信息。 */
 interface AgentRoleContract extends AgentRoleProfileConfig {

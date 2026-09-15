@@ -1,11 +1,9 @@
-import type {
-  AgentRoleId,
-  AgentSkillDescriptor,
-  AgentSkillSourceKind,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-} from '@velaros-ai/agent/protocol'
 import { isEmpty, isNonBlankString, optionalWhen } from '@velaros-ai/core'
+
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
+import type { AgentSkillDescriptor, AgentSkillSourceKind } from '../protocol/types/skill'
+import type { AgentRoleId } from '../protocol/types/system'
+import type { CapabilityScopeId } from '../protocol/types/tool'
 
 /**
  * 技能类型——行为知识三层模型里 Tier2 的两个子类，决定注入方式：

@@ -1,15 +1,5 @@
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 
-import type {
-  ExecutionEventRecord,
-  ExecutionPlanView,
-  ExecutionRecord,
-  ExecutionTaskExecutionAdvice,
-  ExecutionTaskPlanStepStatus,
-  ExecutionTaskRecord,
-  StreamExecutionGraphPayload,
-  StreamStatePayload,
-} from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPlainObject,isPresent, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -17,6 +7,16 @@ import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { compareStableStrings } from '../agent/context/residency/determinism'
+import type { StreamExecutionGraphPayload } from '../protocol/types'
+import type { StreamStatePayload } from '../protocol/types/chatRuntime'
+import type {
+  ExecutionEventRecord,
+  ExecutionPlanView,
+  ExecutionRecord,
+  ExecutionTaskExecutionAdvice,
+  ExecutionTaskPlanStepStatus,
+  ExecutionTaskRecord,
+} from '../protocol/types/execution'
 
 type ExecutionStateListener = (payload: StreamStatePayload) => void
 type ExecutionDebugListener = (payload: StreamExecutionGraphPayload) => void

@@ -7,9 +7,14 @@ import type { RunContextToolContext } from '../src/agent/run-context/host-ports'
 import { RunContext } from '../src/agent/run-context/RunContext'
 import type { CustomSubAgentRegistry } from '../src/kernel/dispatch/host-ports'
 import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
-import { createBuiltInPromptRegistry } from '../src/prompts'
-import type { CustomSubAgentDefinition, ExecutionModeId, ToolCategoryOverview } from '../src/protocol'
-import type { SubAgentTypeDescriptor, SubAgentTypeProvider } from '../src/sub-agent'
+import { createBuiltInPromptRegistry } from '../src/prompts/catalog'
+import type { ExecutionModeId } from '../src/protocol/types/agent'
+import type { CustomSubAgentDefinition } from '../src/protocol/types/subAgentTask'
+import type { ToolCategoryOverview } from '../src/protocol/types/tool'
+import type {
+  SubAgentTypeDescriptor,
+  SubAgentTypeProvider,
+} from '../src/sub-agent/SubAgentTypeRegistry'
 import { agentWorkflowSchema } from '../src/tool-library/builtin/AgentWorkflow'
 import { defaultRuntimePromptFeaturePolicy } from '../src/tools/prompt-feature-policy'
 

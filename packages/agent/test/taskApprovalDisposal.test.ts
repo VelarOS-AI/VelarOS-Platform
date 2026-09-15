@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test'
 
 import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
 import { PrimaryAgentProfile } from '../src/agent/PrimaryAgentProfile'
-import { createAgentExecutionStack } from '../src/agent/runner'
+import { createAgentExecutionStack } from '../src/agent/runner/AgentExecutionStack'
 import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import type { ApprovalDecision } from '../src/protocol'
+import type { ApprovalDecision } from '../src/protocol/types/agent'
 import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
 
 function createRunnerHarness() {

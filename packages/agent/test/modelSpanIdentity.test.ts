@@ -10,7 +10,7 @@ import type {
   ModelSpanOutcome,
   RunSpanScope,
   TurnSpanScope,
-} from '../src/kernel/observability'
+} from '../src/kernel/observability/execution-span-scope'
 
 describe('model span identity', () => {
   test('keeps the selected tier on the turn and records the concrete provider model on the request', () => {

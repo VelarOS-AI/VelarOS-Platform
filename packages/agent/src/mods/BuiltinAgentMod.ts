@@ -9,34 +9,28 @@
 //  ② 绑定直接引用原实体，Loader 与投影全程不复制不包装，载荷对象同一性逐项保持。
 import { optionalWhen, toOptional } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../execution-modes'
-import { listExecutionModes } from '../execution-modes'
-import type { PromptSegmentDefinition } from '../prompts'
+import type { ExecutionModeDescriptor } from '../execution-modes/ExecutionModeDescriptor'
+import { listExecutionModes } from '../execution-modes/ExecutionModeRegistry'
+import { type BuiltInPromptOptions, createBuiltInPromptSegments } from '../prompts/catalog'
+import { type PromptSegmentDefinition, resolvePromptSegmentStability } from '../prompts/registry'
 import {
-  type BuiltInPromptOptions,
-  createBuiltInPromptSegments,
-  resolvePromptSegmentStability,
-} from '../prompts'
-import type {
-  AgentModExecutionModeContribution,
-  AgentModManifest,
-  AgentModPromptSegmentContribution,
-  AgentModToolContribution,
-} from '../protocol'
-import { AgentModManifestSchemaVersion } from '../protocol'
-import { resolveToolReadOnly } from '../tool-contract'
-import {
-  activeDirectiveTools,
-  agentWorkflowTools,
-  backgroundJobTools,
-  categoriesTools,
-  contextHandoffTools,
-  contextRetrievalTools,
-  dispatchAgentTools,
-  goalTools,
-  plansTools,
-  type VelaTool,
-} from '../tool-library'
+  type AgentModExecutionModeContribution,
+  type AgentModManifest,
+  AgentModManifestSchemaVersion,
+  type AgentModPromptSegmentContribution,
+  type AgentModToolContribution,
+} from '../protocol/mods'
+import { resolveToolReadOnly } from '../tool-contract/define'
+import { activeDirectiveTools } from '../tool-library/builtin/ActiveDirectives.tool'
+import { agentWorkflowTools } from '../tool-library/builtin/AgentWorkflow.tool'
+import { backgroundJobTools } from '../tool-library/builtin/BackgroundJobs.tool'
+import { categoriesTools } from '../tool-library/builtin/Categories.tool'
+import { contextHandoffTools } from '../tool-library/builtin/ContextHandoff.tool'
+import { contextRetrievalTools } from '../tool-library/builtin/ContextRetrieval.tool'
+import { dispatchAgentTools } from '../tool-library/builtin/DispatchAgent.tool'
+import { goalTools } from '../tool-library/builtin/Goals.tool'
+import { plansTools } from '../tool-library/builtin/Plans.tool'
+import type { VelaTool } from '../tool-library/defineVelaTool'
 
 import type { AgentModBindings, AgentModPackage } from './AgentModLoader'
 

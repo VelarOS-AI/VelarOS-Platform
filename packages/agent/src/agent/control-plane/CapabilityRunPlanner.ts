@@ -1,9 +1,3 @@
-import type {
-  CapabilityScopeId,
-  RunProfileId,
-  ToolCategoryId,
-  ToolDescriptor,
-} from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
 import {
@@ -11,7 +5,9 @@ import {
   expandCapabilityCategoryIds,
   resolveCapabilityScopePolicy,
   resolveCapabilityScopeResidency,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityExtensions'
+import type { RunProfileId } from '../../protocol/types/runProfile'
+import type { CapabilityScopeId, ToolCategoryId, ToolDescriptor } from '../../protocol/types/tool'
 import { resolveSoloLoopTools } from '../LoopRuntime'
 import { applyRunProfileToolExposure } from '../RunProfile'
 import {

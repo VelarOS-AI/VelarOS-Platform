@@ -1,7 +1,8 @@
-import type { AgentRoleId } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
 
-import type { AgentRoleDefinition, ResolveAgentRoleOptions, WorkflowType } from './RoleTypes'
+import type { AgentRoleId, WorkflowType } from '../protocol/types/system'
+
+import type { AgentRoleDefinition, ResolveAgentRoleOptions } from './RoleTypes'
 
 interface RoutedAgentRoleResult {
   /** 选中的角色定义。 */

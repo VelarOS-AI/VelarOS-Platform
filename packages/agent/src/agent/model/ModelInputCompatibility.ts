@@ -1,9 +1,9 @@
 import type { ModelMessage } from 'ai'
 
-import type { AgentModelInputModality } from '@velaros-ai/agent/protocol'
 import { isArray, isEmpty, isRecord, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { AgentModelInputModality } from '../../protocol/types/tool'
 import { DefaultModelInputModalities } from '../../tools/model-input-policy'
 
 function mediaTypeModality(value: unknown): AgentModelInputModality | undefined {

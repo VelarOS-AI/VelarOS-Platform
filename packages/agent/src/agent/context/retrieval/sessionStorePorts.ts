@@ -2,7 +2,7 @@ import type {
   ChatMessage,
   ChatSessionPayloadSnapshot,
   ChatSessionToolResultPayload,
-} from '@velaros-ai/agent/protocol'
+} from '../../../protocol/types'
 
 /**
  * 检索单元消费的**会话存储窄端口**（宪章 §12.2「SessionStorePort 子接口」）。

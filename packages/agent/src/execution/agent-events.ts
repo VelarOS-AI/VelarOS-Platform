@@ -1,6 +1,9 @@
-import { compactToolResultForDisplay } from '@velaros-ai/agent'
-import type { AgentEvent, ExecutionEventSeverity, StreamStatePayload } from '@velaros-ai/agent/protocol'
 import { isArray, isBlank, isObject, isString, toNullable, toOptional, truncate } from '@velaros-ai/core'
+
+import type { AgentEvent } from '../protocol/types/agent'
+import type { StreamStatePayload } from '../protocol/types/chatRuntime'
+import type { ExecutionEventSeverity } from '../protocol/types/execution'
+import { compactToolResultForDisplay } from '../tools/toolResultSerialization'
 
 import type { ExecutionAgentEventLedgerStore } from './store-types'
 

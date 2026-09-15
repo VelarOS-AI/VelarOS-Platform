@@ -1,4 +1,4 @@
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
 interface ToolSpaceRecoveryGuide {
   query: string

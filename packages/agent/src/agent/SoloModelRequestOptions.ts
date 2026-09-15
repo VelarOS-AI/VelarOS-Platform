@@ -1,6 +1,6 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 
-import type { AgentModelRequestOptions } from './model'
+import type { AgentModelRequestOptions } from './model/ModelContracts'
 import type { AgentExecutionConfig } from './RuntimeConfiguration'
 
 /**

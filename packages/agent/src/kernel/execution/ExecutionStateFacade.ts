@@ -1,7 +1,7 @@
-import type { ExecutionRecord, StreamStatePayload } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
-
-import type { ExecutionInteractions, ExecutionRecords } from '../../execution'
+import type { ExecutionInteractions } from '../../execution/Interactions'
+import type { ExecutionRecords } from '../../execution/Records'
+import { ChatRuntimeEvents,type StreamStatePayload } from '../../protocol/types/chatRuntime'
+import type { ExecutionRecord } from '../../protocol/types/execution'
 
 interface ExecutionAbortOptions {
   emitStreamState?: boolean

@@ -9,7 +9,10 @@ import { describe, expect, test } from 'bun:test'
 
 import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'
 import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
-import { listExecutionModes, resolveExecutionModeForPromptFeature } from '../src/execution-modes'
+import {
+  listExecutionModes,
+  resolveExecutionModeForPromptFeature,
+} from '../src/execution-modes/ExecutionModeRegistry'
 
 function createFinishingGateHarness(options: {
   unresolvedPlanSteps?: boolean

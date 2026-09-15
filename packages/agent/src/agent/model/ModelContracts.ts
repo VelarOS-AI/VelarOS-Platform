@@ -1,9 +1,7 @@
 import type { LanguageModel } from 'ai'
 
-import type {
-  AgentModelInputModality,
-  RunProfileRuntimePolicy,
-} from '@velaros-ai/agent/protocol'
+import type { RunProfileRuntimePolicy } from '../../protocol/types/agent'
+import type { AgentModelInputModality } from '../../protocol/types/tool'
 
 export interface AgentModelRequestPolicy {
   temperature?: number

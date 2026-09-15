@@ -1,6 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentSurfaceId } from './types'
+import type { AgentSurfaceId } from './types/agent'
 
 const MaxContextEntries = 24
 const MaxRevisionCharacters = 128

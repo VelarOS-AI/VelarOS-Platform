@@ -1,13 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  ActiveContextArtifact,
-  ActiveContextUpsertInput,
-} from '@velaros-ai/agent/protocol'
-
 import { runSoloFinishingGate } from '../src/agent/SoloFinishingGate'
 import { SoloGoalLifecycle } from '../src/agent/SoloGoalLifecycle'
 import { ExecutionGuidanceQueue } from '../src/execution/GuidanceQueue'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
 import { buildGoalStateUpsertInput } from '../src/tool-library/builtin/Goals'
 
 function createActiveContextHarness() {

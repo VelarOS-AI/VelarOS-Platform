@@ -1,10 +1,10 @@
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
-import type { SerializedMessage } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNonBlankString, isNumber, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { buildInternalFollowUpContent } from '../agent/history/internalMessages'
+import type { SerializedMessage } from '../protocol/types'
 import { compactToolInputForModel } from '../tools/toolResultSerialization'
 
 /**

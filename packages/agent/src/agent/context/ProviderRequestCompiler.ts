@@ -16,11 +16,6 @@
  */
 import type { ModelMessage } from 'ai'
 
-import {
-  type ContextUsageEstimate,
-  estimateContextUsage,
-  type EstimateContextUsageOptions,
-} from '@velaros-ai/agent'
 import { isArray, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
@@ -28,7 +23,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import type { ProviderRequestFingerprint } from '../../kernel/provider-events'
 import { rewriteCanonicalToolReferences } from '../../tools/ToolIdentity'
 import { assertValidModelHistory } from '../history/validate'
-import { markLatestUserMessagePromptCacheBreakpoint } from '../model'
+import { markLatestUserMessagePromptCacheBreakpoint } from '../model/PromptCache'
 
 import {
   assertProviderRequestInvariants,
@@ -45,8 +40,26 @@ import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
 } from './providerRequest/stages/retainedContextStage'
+import {
+  type ContextGovernanceSession,
+  ContextGovernanceSessionRegistry,
+  type ContextHandoffSignal,
+} from './residency/ContextGovernanceSession'
+import { DefaultResidencyCharsPerToken } from './residency/ContextRecord'
+import { buildContextDashboardMessage } from './residency/dashboard'
+import { type GovernanceEpochReport, resolveProjectionBudget } from './residency/GovernanceEpoch'
+import {
+  type GovernanceWindowDerivation,
+  resolveGovernanceWindow,
+} from './residency/governanceWindow'
 import { estimateMessageBudgetChars } from './residency/messageFacts'
+import { type ContextProjectionStats, projectContextLedger } from './residency/projection'
 import type { ContextLedgerEntry } from './ContextLedger'
+import {
+  type ContextUsageEstimate,
+  estimateContextUsage,
+  type EstimateContextUsageOptions,
+} from './contextUsage'
 import {
   type ContextActiveTaskInput,
   type ContextPinnedEvidenceInput,
@@ -63,19 +76,6 @@ import {
   type ProviderRequestSnapshot,
   type ProviderToolDefinitionSnapshotInput,
 } from './ProviderRequestSnapshot'
-import {
-  buildContextDashboardMessage,
-  type ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-  type ContextHandoffSignal,
-  type ContextProjectionStats,
-  DefaultResidencyCharsPerToken,
-  type GovernanceEpochReport,
-  type GovernanceWindowDerivation,
-  projectContextLedger,
-  resolveGovernanceWindow,
-  resolveProjectionBudget,
-} from './residency'
 
 export {
   collectProviderRequestHistoryToolNames,

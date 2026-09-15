@@ -1,6 +1,6 @@
 import { hasVerificationRelevantModifiedPaths } from '../coding/paths'
-import type { StreamVerificationSummary } from '../protocol'
-import type { CodingSessionSnapshot } from '../reminders'
+import type { StreamVerificationSummary } from '../protocol/types/chatRuntime'
+import type { CodingSessionSnapshot } from '../reminders/types'
 
 /** 展示已有验证事实；没有实际验证结果时不从正常返回推导通过。 */
 export function buildRunVerificationSummary(snapshot: CodingSessionSnapshot): StreamVerificationSummary | undefined {

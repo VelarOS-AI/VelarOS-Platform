@@ -1,4 +1,4 @@
-import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
+import type { ToolCapabilitySchema } from '../../protocol/types/tool'
 
 /** Agent 自有 session 上下文读取，不触碰宿主文件或外部资源。 */
 export const AgentContextReadCapability = {

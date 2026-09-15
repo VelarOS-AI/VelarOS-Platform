@@ -20,7 +20,7 @@ import {
   VelarosModManifestFileName,
 } from '@velaros-ai/kernel/contracts/protocol'
 
-import type { AgentModDiagnostic } from '../protocol'
+import type { AgentModDiagnostic } from '../protocol/mods'
 
 import type {
   AgentModBindings,

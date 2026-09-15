@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { createBuiltinAgentModPackage } from '../src/mods/BuiltinAgentMod'
-import { createRuntimePromptSegments, type RuntimePromptSnapshot } from '../src/prompts'
+import { createRuntimePromptSegments } from '../src/prompts/segments/runtime'
+import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
 import { contextDistillTools } from '../src/tool-library/builtin/ContextDistill.tool'
 import { contextHandoffTools } from '../src/tool-library/builtin/ContextHandoff.tool'
 import type { KernelToolContext } from '../src/tool-library/KernelToolContext'

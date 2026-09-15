@@ -7,11 +7,6 @@
  */
 import type { ModelMessage } from 'ai'
 
-import {
-  ContextUsageCompactionPercent,
-  type ContextUsageEstimate,
-  estimateContextUsage,
-} from '@velaros-ai/agent'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import {
@@ -19,6 +14,11 @@ import {
   type ContextWorkingSetBlock,
   estimateBlockTokens,
 } from '../../ContextLedger'
+import {
+  ContextUsageCompactionPercent,
+  type ContextUsageEstimate,
+  estimateContextUsage,
+} from '../../contextUsage'
 import {
   type ContextWorkingSetBudgetAllocation,
   ContextWorkingSetBudgetGovernor,

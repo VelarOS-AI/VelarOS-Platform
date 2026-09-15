@@ -1,6 +1,6 @@
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
-import { capabilityRunPlanner } from './control-plane'
+import { capabilityRunPlanner } from './control-plane/CapabilityRunPlanner'
 
 interface SoloLoopToolCategory<TTool extends { name: string } = { name: string }> {
   category: { id: ToolCategoryId }

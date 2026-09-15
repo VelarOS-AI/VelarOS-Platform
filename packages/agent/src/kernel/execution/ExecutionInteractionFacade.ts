@@ -1,20 +1,18 @@
+import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
+import type { ExecutionInteractions } from '../../execution/Interactions'
+import type { ExecutionRecords } from '../../execution/Records'
+import type { SourceSessionGuard } from '../../execution/SessionGuard'
+import type { ExecutionStore } from '../../execution/Store'
+import type { ToolConfirmationDecisionOptions } from '../../protocol/types/agent'
 import type {
   ExecutionPendingInteractionKind,
   ExecutionPendingInteractionSnapshot,
   ExecutionProvideInputRequest,
   ExecutionRecord,
   ExecutionResolveConfirmationRequest,
-  ToolConfirmationDecisionOptions,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
-import type {
-  ExecutionInteractions,
-  ExecutionRecords,
-  ExecutionStore,
-  SourceSessionGuard,
-} from '../../execution'
+} from '../../protocol/types/execution'
 
 /** 聚合用户确认、追问输入与 sourceSession 级 IPC 解析。 */
 class ExecutionInteractionFacade {

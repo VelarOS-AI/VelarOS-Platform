@@ -1,10 +1,8 @@
-import type {
-  ExecutionRecord,
-  StreamStatePayload,
-  ToolConfirmationDecisionOptions,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { AppError } from '@velaros-ai/core/error'
+
+import type { ToolConfirmationDecisionOptions } from '../protocol/types/agent'
+import { ChatRuntimeEvents,type StreamStatePayload } from '../protocol/types/chatRuntime'
+import type { ExecutionRecord } from '../protocol/types/execution'
 
 import { type ExecutionRecords } from './Records'
 

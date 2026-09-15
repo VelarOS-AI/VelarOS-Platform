@@ -1,17 +1,17 @@
-import type { RunProfileId } from '@velaros-ai/agent/protocol'
 import { isEmpty,isFiniteNumber } from '@velaros-ai/core'
 
+import type { RunProfileId } from '../../protocol/types/runProfile'
+import { estimateBlockTokens } from '../context/ContextLedger'
 import {
   ContextWorkingSetBudgetGovernor,
   type ContextWorkingSetBudgetLedgerEntry,
-  estimateBlockTokens,
-  type ProviderRequestPressureKind,
-} from '../context'
+} from '../context/ContextWorkingSetBudgetGovernor'
+import type { ProviderRequestPressureKind } from '../context/ProviderRequestCompiler'
 import {
   contextDegradeStaircaseLength,
   resolveContextDegradeAction,
 } from '../ContextDegradeLadder'
-import { RunProfileDefinitions } from '../RunProfile'
+import { RunProfileDefinitions } from '../RuntimeProfiles'
 
 import type { ContextRunPlan, PromptRunPlan, RecoveryRunPlan, ToolPageFault } from './AgentRunPlan'
 

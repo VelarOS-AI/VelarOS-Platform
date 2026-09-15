@@ -14,35 +14,33 @@
 //    否则 mod 记的账与实际执行数对不上。
 import type { ModelMessage } from 'ai'
 
+import { isBlank, isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
+import type { ExecutionIdFactory } from '../../execution/ExecutionIdFactory'
+import { ExecutionGuidanceQueue } from '../../execution/GuidanceQueue'
+import { extractGuidanceUserText } from '../../execution/GuidanceRelayPlanner'
+import { ExecutionInteractions } from '../../execution/Interactions'
+import { ExecutionRecords } from '../../execution/Records'
+import { type ExecutionRouteProvider, ExecutionRoutingCoordinator } from '../../execution/routing'
+import { SourceSessionGuard } from '../../execution/SessionGuard'
+import { ExecutionStateMachine } from '../../execution/state-machine'
+import { ExecutionStore } from '../../execution/Store'
+import { SubAgentGuidanceRelayRegistry } from '../../execution/SubAgentGuidanceRelayRegistry'
+import type { AgentModSeamDispatcher } from '../../mods/AgentModSeams'
+import type {
+  StreamTurnContextPayload,
+  ToolConfirmationDecisionOptions,
+  ToolExecutionPlanUpdate,
+} from '../../protocol/types/agent'
+import { ChatRuntimeEvents,type StreamStatePayload } from '../../protocol/types/chatRuntime'
 import type {
   ExecutionProvideInputRequest,
   ExecutionRecord,
   ExecutionResolveConfirmationRequest,
   ExecutionTaskExecutionAdvice,
   ExecutionTaskRecord,
-  StreamStatePayload,
-  StreamTurnContextPayload,
-  ToolConfirmationDecisionOptions,
-  ToolExecutionPlanUpdate,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
-import { isBlank, isEmpty, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
-import {
-  ExecutionGuidanceQueue,
-  type ExecutionIdFactory,
-  ExecutionInteractions,
-  ExecutionRecords,
-  type ExecutionRouteProvider,
-  ExecutionRoutingCoordinator,
-  ExecutionStateMachine,
-  ExecutionStore,
-  extractGuidanceUserText,
-  SourceSessionGuard,
-  SubAgentGuidanceRelayRegistry,
-} from '../../execution'
-import type { AgentModSeamDispatcher } from '../../mods/AgentModSeams'
+} from '../../protocol/types/execution'
 
 import { ExecutionAgentEventFacade } from './ExecutionAgentEventFacade'
 import { ExecutionInteractionFacade } from './ExecutionInteractionFacade'

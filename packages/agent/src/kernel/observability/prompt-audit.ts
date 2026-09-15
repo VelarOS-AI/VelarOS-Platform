@@ -28,7 +28,8 @@ import {
   parseJsonlWithTailTolerance,
   truncateJsonlToLineCount,
 } from '../jsonl-file'
-import { canonicalJsonStringify, SerialWriteQueue } from '../session-store'
+import { canonicalJsonStringify } from '../session-store/ledger-file'
+import { SerialWriteQueue } from '../session-store/write-queue'
 
 import type { SpanLedgerWarn } from './ExecutionSpanLedger'
 

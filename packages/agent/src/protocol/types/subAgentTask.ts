@@ -1,4 +1,4 @@
-import type { RunProfileId } from './agent'
+import type { RunProfileId } from './runProfile'
 import type { TeamModelRouteCategory, TeamModelSelectionTrace, ThinkingDepth } from './team'
 import type { ToolCategoryId } from './tool'
 

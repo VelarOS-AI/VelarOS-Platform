@@ -1,13 +1,13 @@
 // 域：子 Agent 派发的**出站指令拼装**（纯函数，把派发输入 + 类型配置拼成子 Agent 任务指令）。
+import { last, toNullable, truncate } from '@velaros-ai/core'
+
+import type { SubAgentStructuredOutputContract } from '../../protocol/types/agentWorkflow'
 import type {
   SubAgentSessionRecord,
   SubAgentSessionStatus,
-  SubAgentStructuredOutputContract,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-import { last, toNullable, truncate } from '@velaros-ai/core'
-
-import type { ResolvedSubAgentTypeConfig } from '../../sub-agent'
+} from '../../protocol/types/subAgentTask'
+import type { ToolCategoryId } from '../../protocol/types/tool'
+import type { ResolvedSubAgentTypeConfig } from '../../sub-agent/SubAgentTypeRegistry'
 
 import type { SubAgentDispatchInput } from './host-ports'
 

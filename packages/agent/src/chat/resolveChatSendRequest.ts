@@ -4,7 +4,7 @@ import {
   isExecutionModeActive,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
-} from '../execution-modes'
+} from '../execution-modes/ExecutionModeRegistry'
 import {
   assertChatPromptFeatureIds,
   isThinkingDepth,
@@ -12,12 +12,12 @@ import {
   resolveRunProfileSelectionId,
 } from '../protocol/constants/typedFieldAsserts'
 import type {
-  CapabilityScopeId,
   ChatSendRequest,
-  ExecutionModeId,
-  RunProfileSelectionId,
 } from '../protocol/types'
+import type { ExecutionModeId } from '../protocol/types/agent'
+import type { RunProfileSelectionId } from '../protocol/types/runProfile'
 import type { ReasoningLevel, ThinkingDepth } from '../protocol/types/team'
+import type { CapabilityScopeId } from '../protocol/types/tool'
 
 const DefaultRunProfileSelectionId: RunProfileSelectionId = 'auto'
 

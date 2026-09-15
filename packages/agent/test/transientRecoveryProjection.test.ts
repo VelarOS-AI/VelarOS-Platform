@@ -5,9 +5,9 @@ import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayload
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
 import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
-import { compactToolInputForModel } from '../src/tools'
 import { readReusableAttemptInput, saveToolAttemptInput, saveToolAttemptOutcome } from '../src/tools/recovery/ToolInputReuse'
 import { projectTransientRecoveryHistory, restoreReusableInputsForNextDecision } from '../src/tools/recovery/TransientRecoveryProjection'
+import { compactToolInputForModel } from '../src/tools/toolResultSerialization'
 
 const decision: ModelMessage = {
   role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'edit-1', toolName: 'project:edit', input: {} }],

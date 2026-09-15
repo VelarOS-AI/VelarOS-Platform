@@ -1,11 +1,9 @@
 import { isEmpty,isTrue } from '@velaros-ai/core'
 
-import type {
-  CapabilityValidationInterpreter,
-  CapabilityValidationStatus,
-} from '../capabilities'
+import type { CapabilityValidationInterpreter } from '../capabilities/CapabilityExtensions'
+import type { CapabilityValidationStatus } from '../capabilities/CapabilityValidation'
 // 失败形状单源住 reminders/types（coding → reminders 是既有依赖方向，反过来会成环）。
-import type { CapabilityValidationFailure } from '../reminders'
+import type { CapabilityValidationFailure } from '../reminders/types'
 
 interface CapabilityValidationCollectionResult {
   latestVerificationStatus: CapabilityValidationStatus
@@ -72,5 +70,5 @@ class CodingSessionVerificationHelper {
 }
 
 export type { CapabilityValidationCollectionResult }
-export type { CapabilityValidationFailure } from '../reminders'
+export type { CapabilityValidationFailure } from '../reminders/types'
 export { CodingSessionVerificationHelper }

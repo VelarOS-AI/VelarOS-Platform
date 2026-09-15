@@ -1,11 +1,11 @@
-import type { ToolCategoryId, ToolDescriptor } from '@velaros-ai/agent/protocol'
 import { isEmpty } from '@velaros-ai/core'
 
 import {
   type AgentRuntimeCapabilityPorts,
   resolveToolAllocationMetadata,
   type ToolAllocationMetadata,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityExtensions'
+import type { ToolCategoryId, ToolDescriptor } from '../../protocol/types/tool'
 
 type ToolAllocatorOperation = string
 interface ToolAllocatorRequest {

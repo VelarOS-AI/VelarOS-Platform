@@ -1,5 +1,6 @@
-import type { ToolDescriptor } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
+
+import type { ToolDescriptor } from '../protocol/types/tool'
 
 import { decideToolCategoryAccess, type ToolCategoryUnavailableReason } from './access-policy'
 import type {

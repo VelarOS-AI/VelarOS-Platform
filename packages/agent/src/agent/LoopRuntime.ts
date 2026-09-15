@@ -1,15 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentDelegationContract,
-  AgentModelInputModality,
-  AgentRoleExpectedOutputKind,
-  AgentRoleId,
-  ToolAvailabilityScope,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-} from '@velaros-ai/agent/protocol'
 import {
   isArray,
   isEmpty,
@@ -22,7 +12,19 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../capabilities/CapabilityExtensions'
+import type {
+  AgentDelegationContract,
+  AgentRoleExpectedOutputKind,
+  AgentRoleId,
+} from '../protocol/types/system'
+import type {
+  AgentModelInputModality,
+  ToolAvailabilityScope,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolDescriptor,
+} from '../protocol/types/tool'
 
 import type { FileContextCarrier } from './context/resources/contracts'
 import { forkFileContext } from './context/resources/FileContextCoordinator'

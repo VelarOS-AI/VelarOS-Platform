@@ -12,7 +12,7 @@ import type {
   ToolValidationHintContext,
   ToolValidationHintProvider,
   ToolValidationIssueDetail,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
 import type { AppliedAdjustment } from '../tool-contract/ForgivingSchema'
 
 interface ToolSchemaIssue {

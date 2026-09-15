@@ -7,25 +7,22 @@ import {
   projectTransientRecoveryHistory,
   restoreReusableInputsForNextDecision,
 } from '../../tools/recovery/TransientRecoveryProjection'
-import {
-  type AgentHistoryToolContext,
-  sanitizeHistoryForProvider,
-  type SanitizeModelHistoryOptions,
-} from '../history'
+import { type AgentHistoryToolContext, sanitizeHistoryForProvider } from '../history/request'
+import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../history/sanitize'
 
 import { estimateProviderRequestUsage } from './providerRequest/stages/budgetStage'
+import { fileContextFor } from './resources/FileContextCoordinator'
+import { projectFileContext } from './resources/FileContextProjection'
 import type { ContextPayloadStore } from './ContextPayloadStore'
 import type {
   CompiledProviderRequest,
   CompileProviderRequestInput,
   ProviderRequestCompiler,
 } from './ProviderRequestCompiler'
-import { fileContextFor, projectFileContext } from './resources'
 import { buildToolPayloadRefsForProviderMessages } from './ToolPayloadReferencePlanner'
 import {
   OversizedUserTextSafetyValveChars,
   UserTextPayloadPlanner,
-  type UserTextPayloadReference,
 } from './UserTextPayloadPlanner'
 
 export interface CompileProviderSendRequestInput

@@ -1,10 +1,8 @@
-import type { AgentModelInputModality, ThinkingDepth } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
 
-import type {
-  AgentModelProvider,
-  AgentModelRequestOptions,
-} from '../agent/model'
+import type { AgentModelProvider, AgentModelRequestOptions } from '../agent/model/ModelContracts'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type { AgentModelInputModality } from '../protocol/types/tool'
 
 export interface SubAgentRuntimeOverride {
   provider: AgentModelProvider

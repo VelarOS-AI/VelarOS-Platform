@@ -16,24 +16,6 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import type {
-  ActiveContextArtifact,
-  ActiveContextArtifactKind,
-  ActiveContextArtifactStatus,
-  ActiveContextUpsertInput,
-  AgentContextPhase,
-  AgentModelInputModality,
-  PromptSegmentTrace,
-  RunProfileId,
-  RunProfileRuntimePolicy,
-  SkippedPromptSegmentTrace,
-  StreamTurnContextPayload,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolLayerTelemetryMetrics,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isNull, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime, type ScopedLog } from '@velaros-ai/core/logger'
@@ -43,17 +25,49 @@ import {
   type AutoVerificationToolContext,
   runAutomaticVerification,
   tickLoopReminders,
-} from '../coding'
-import { type ExecutionSpanScopeFactory, KernelToolLoopGuard } from '../kernel'
+} from '../coding/AutoVerification'
+import type { ExecutionSpanScopeFactory } from '../kernel/observability/execution-span-scope'
+import { KernelToolLoopGuard } from '../kernel/tool-loop-guard'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeams'
+import type {
+  ActiveContextArtifact,
+  ActiveContextArtifactKind,
+  ActiveContextArtifactStatus,
+  ActiveContextUpsertInput,
+} from '../protocol/types'
+import type {
+  AgentContextPhase,
+  PromptSegmentTrace,
+  RunProfileRuntimePolicy,
+  SkippedPromptSegmentTrace,
+  StreamTurnContextPayload,
+  ToolLayerTelemetryMetrics,
+} from '../protocol/types/agent'
+import { ChatRuntimeEvents } from '../protocol/types/chatRuntime'
+import type { RunProfileId } from '../protocol/types/runProfile'
+import type {
+  AgentModelInputModality,
+  ToolCategoryId,
+  ToolCategoryOverview,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
 import {
   ToolExecutionPolicy,
   type ToolExecutionPolicyContext,
   type ToolExecutionPolicyRegistry,
-  ToolExecutor,
-  type ToolExecutorEvents,
-} from '../tools'
+} from '../tools/ExecutionPolicy'
+import { ToolExecutor, type ToolExecutorEvents } from '../tools/Executor'
 
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { resolveGovernanceSessionKey } from './context/residency/sessionKey'
+import { recoveryRunPlanner } from './control-plane/RuntimeRunPlanner'
+import {
+  SessionToolAllocator,
+  type ToolAllocatorRequest,
+} from './control-plane/SessionToolAllocator'
+import { createInternalFollowUpMessage } from './history/internalMessages'
+import type { AgentTurnToolExecutor, AgentTurnToolResult } from './history/turn'
+import type { AgentModelRequestOptions } from './model/ModelContracts'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -62,16 +76,12 @@ import {
   restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
 } from './AgentLoop'
-import { type ContextGovernanceSessionRegistry, resolveGovernanceSessionKey } from './context'
 import { resolveAgentContextPhase } from './ContextPhase'
-import { recoveryRunPlanner, SessionToolAllocator, type ToolAllocatorRequest } from './control-plane'
 import {
   type AgentExecutionLimitOverrides,
   type AgentExecutionLimits,
   resolveAgentExecutionLimits,
 } from './ExecutionLimits'
-import type { AgentTurnToolExecutor, AgentTurnToolResult } from './history'
-import { createInternalFollowUpMessage } from './history'
 import { extractLatestUserTextFromMessages } from './IntentSignals'
 import {
   AgentLoopContextUsageManager,
@@ -84,7 +94,6 @@ import {
   type LoopTurnVerdict,
   LoopWindDownGuard,
 } from './LoopSurface'
-import type { AgentModelRequestOptions } from './model'
 import type { PromptStatePreparedToolCategories } from './PromptState'
 import type { AgentRoleResolution } from './RoleTypes'
 import type { AgentModelRetryPolicy,AgentRunLifecycle } from './RunLifecycle'

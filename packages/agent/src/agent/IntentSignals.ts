@@ -1,7 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import { stripTurnContextBlocks } from '@velaros-ai/agent'
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isArray, isObject, isString } from '@velaros-ai/core'
 
 import {
@@ -9,7 +7,10 @@ import {
   type CapabilityIntentClassifierContext,
   type CapabilityIntentSignal,
   resolveCapabilityIntentClassifiers,
-} from '../capabilities'
+} from '../capabilities/CapabilityExtensions'
+import type { ToolCategoryId } from '../protocol/types/tool'
+
+import { stripTurnContextBlocks } from './run-context/TurnContextFormat'
 
 const GreetingOnlyPattern =
   /^(你好|您好|嗨|哈喽|hello|hi|hey|早上好|晚上好|下午好)[!！。.\s]*$/i

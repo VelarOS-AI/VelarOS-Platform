@@ -3,7 +3,7 @@ import type {
   ToolCategoryId,
   ToolDescriptor,
   ToolPermission,
-} from '@velaros-ai/agent/protocol'
+} from '../protocol/types/tool'
 
 import type {
   ToolDiscoveryAvailability,

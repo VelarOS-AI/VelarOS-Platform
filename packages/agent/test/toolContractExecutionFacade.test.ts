@@ -10,11 +10,11 @@ import {
   type ToolContractExecutionRegistry,
 } from '../src/node/ToolContractExecutionFacade'
 import {
-  AgentProtocolVersion,
   ToolCatalogDiscoveryToolName,
   ToolSchemaDiscoveryToolName,
   type VelarToolCallEnvelope,
-} from '../src/protocol'
+} from '../src/protocol/lease'
+import { AgentProtocolVersion } from '../src/protocol/version'
 
 const ProbeToolName = 'probe:read'
 const ProbeSignature = 'probe:read@1'

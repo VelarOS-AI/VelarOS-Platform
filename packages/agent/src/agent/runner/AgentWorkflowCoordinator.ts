@@ -1,14 +1,13 @@
 import { randomUUID } from 'node:crypto'
 
+import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
 import type {
   AgentWorkflowAgentResult,
   AgentWorkflowDefinition,
   AgentWorkflowRunResult,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-
-import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
-import { parseSubAgentToolResult } from '../../sub-agent'
+} from '../../protocol/types/agentWorkflow'
+import type { ToolCategoryId } from '../../protocol/types/tool'
+import { parseSubAgentToolResult } from '../../sub-agent/SubAgentResultBuilder'
 import {
   type AgentWorkflowDispatchContext,
   AgentWorkflowRuntime,

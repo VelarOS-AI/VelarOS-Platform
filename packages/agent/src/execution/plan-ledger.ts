@@ -1,12 +1,12 @@
+import { isEmpty } from '@velaros-ai/core'
+
+import type { ToolExecutionPlanItemStatus, ToolExecutionPlanUpdate } from '../protocol/types/agent'
 import type {
-  AgentRoleId,
   ExecutionTaskPlanStep,
   ExecutionTaskPlanStepStatus,
   ExecutionTaskRecord,
-  ToolExecutionPlanItemStatus,
-  ToolExecutionPlanUpdate,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty } from '@velaros-ai/core'
+} from '../protocol/types/execution'
+import type { AgentRoleId } from '../protocol/types/system'
 
 import {
   type ExecutionIdFactory,

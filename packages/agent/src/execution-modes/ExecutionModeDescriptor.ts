@@ -7,7 +7,7 @@
 // **执行模式不带工具面投影**：
 // 「先方案后实施」这类工作流编排纪律只许走提示词与技能文书，禁运行时拦截。旧的
 // `toolProjection`（只读执行边界 + 执行门白名单）随方案模式一并处决，模式不再是工具门的输入。
-import type { ChatPromptFeatureId, ExecutionModeId } from '@velaros-ai/agent/protocol'
+import type { ChatPromptFeatureId, ExecutionModeId } from '../protocol/types/agent'
 
 export type { ExecutionModeId }
 

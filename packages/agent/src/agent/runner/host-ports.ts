@@ -1,26 +1,27 @@
-import type {
-  AgentDeveloperContext,
-  AgentSurfaceId,
-  AgentWorkflowDefinition,
-  AgentWorkflowRunResult,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  SessionLineageContext,
-  ToolCategoryId,
-  ToolExecutionApi,
-} from '@velaros-ai/agent/protocol'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type {
   AgentRuntimeCapabilityPorts,
   CapabilityValidationInterpreter,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityExtensions'
 import type { SubAgentDispatchLimitsSnapshot } from '../../kernel/dispatch/concurrency'
 import type { SubAgentDispatchInput } from '../../kernel/dispatch/host-ports'
 import type { ExecutionEventBus } from '../../kernel/execution/ExecutionEventBus'
-import type { CodingSessionSnapshot, RuntimeReminderProducer } from '../../reminders'
-import type { SubAgentDispatchCatalog } from '../../sub-agent'
-import type { RuntimePromptFeaturePolicy } from '../../tools'
+import type {
+  AgentDeveloperContext,
+  AgentSurfaceId,
+  ChatPromptFeatureId,
+  ToolExecutionApi,
+} from '../../protocol/types/agent'
+import type {
+  AgentWorkflowDefinition,
+  AgentWorkflowRunResult,
+} from '../../protocol/types/agentWorkflow'
+import type { SessionLineageContext } from '../../protocol/types/storage'
+import type { CapabilityScopeId, ToolCategoryId } from '../../protocol/types/tool'
+import type { CodingSessionSnapshot, RuntimeReminderProducer } from '../../reminders/types'
+import type { SubAgentDispatchCatalog } from '../../sub-agent/SubAgentTypeRegistry'
+import type { RuntimePromptFeaturePolicy } from '../../tools/prompt-feature-policy'
 import type {
   CodingSessionToolCategoryToolNames,
   CodingSessionToolContext,
@@ -29,7 +30,7 @@ import type {
   AgentModelProvider,
   AgentModelResolverPort,
   ResolvedAgentModelRuntime,
-} from '../model'
+} from '../model/ModelContracts'
 import type { PrimaryAgentProfile } from '../PrimaryAgentProfile'
 import type { QueryLoopSubAgentOptions, QueryLoopToolContext } from '../QueryLoop'
 import type {

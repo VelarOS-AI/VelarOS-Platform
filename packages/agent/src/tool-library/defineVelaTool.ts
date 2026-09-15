@@ -2,13 +2,13 @@
 // 默认上下文收窄到 host-neutral 核心面；装配进产品宿主完整 ToolContext 时通过 TContext 逆变
 // 兼容更宽的宿主上下文。
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import {
-  defineToolRuntimeSpec,
-  type DefineToolRuntimeSpecInput,
-  type ToolContractRuntimeSpec,
-  type ToolContractSurface,
-} from '@velaros-ai/agent/tool-contract'
+import type { ToolPermission } from '../protocol/types/tool'
+import { defineToolRuntimeSpec } from '../tool-contract/define'
+import type {
+  DefineToolRuntimeSpecInput,
+  ToolContractRuntimeSpec,
+  ToolContractSurface,
+} from '../tool-contract/types'
 
 import type { KernelToolContext } from './KernelToolContext'
 

@@ -1,11 +1,12 @@
+import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@velaros-ai/core'
+
+import type { RunProfileId } from '../protocol/types/runProfile'
 import type {
-  RunProfileId,
   ToolDescriptor,
   ToolExposurePolicy,
   ToolExposureProfilePolicy,
   ToolExposureTier,
-} from '@velaros-ai/agent/protocol'
-import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@velaros-ai/core'
+} from '../protocol/types/tool'
 
 import { compareStableStrings } from './context/residency/determinism'
 import {

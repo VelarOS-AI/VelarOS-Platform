@@ -1,11 +1,9 @@
-import type { AgentEvent, ExecutionRecord, StreamTurnContextPayload } from '@velaros-ai/agent/protocol'
-
-import { chatStreamProtocol } from '../../chat/stream'
-import {
-  ExecutionAgentEventLedger,
-  type ExecutionRecords,
-  type ExecutionStore,
-} from '../../execution'
+import { chatStreamProtocol } from '../../chat/stream/ChatStreamProtocol'
+import { ExecutionAgentEventLedger } from '../../execution/agent-events'
+import type { ExecutionRecords } from '../../execution/Records'
+import type { ExecutionStore } from '../../execution/Store'
+import type { AgentEvent, StreamTurnContextPayload } from '../../protocol/types/agent'
+import type { ExecutionRecord } from '../../protocol/types/execution'
 
 import type { ExecutionAbortOptions } from './ExecutionStateFacade'
 

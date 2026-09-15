@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
+import { defineToolRuntimeSpec } from '../src/tool-contract/define'
+import { ToolContractExampleRegistry } from '../src/tool-contract/examples'
 import {
-  defineToolRuntimeSpec,
-  type DefineToolRuntimeSpecInput,
   isStructuredToolDescription,
-  ToolContractExampleRegistry,
   ToolDescriptionBudgetChars,
-} from '../src/tool-contract'
+} from '../src/tool-contract/ToolDescription'
+import type { DefineToolRuntimeSpecInput } from '../src/tool-contract/types'
 import { mapToolDiscoveryCards } from '../src/tool-library/builtin/ToolSpaceQueries'
 
 /**

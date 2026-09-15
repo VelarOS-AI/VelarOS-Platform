@@ -4,11 +4,11 @@
 // 或 `{ toolResult }`。翻译规则：普通结果与模型可见多媒体内容分离；结构化内容优先返回对象；
 // isError → 抛 AppError（让标准 ToolExecutor 失败路径把它记成工具错误结果，回到模型）。
 
-import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
 import { isArray, isBoolean, isPresent, isRecord } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import type { ToolResultModelContentPart } from '../../protocol/types/agent'
 import { withToolResultModelContent } from '../../tools/modelImageLift'
 
 import type { McpRawCallResult } from './McpClientConnection'

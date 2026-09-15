@@ -1,13 +1,13 @@
+import { AppError } from '@velaros-ai/core/error'
+
+import type { CustomSubAgentDefinition, SubAgentTypeId } from '../protocol/types/subAgentTask'
+import type { AgentRoleId } from '../protocol/types/system'
 import type {
-  AgentRoleId,
-  CustomSubAgentDefinition,
-  SubAgentTypeId,
   TeamExecutionPhase,
   TeamModelRouteCategory,
   TeamWorkerType,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
-import { AppError } from '@velaros-ai/core/error'
+} from '../protocol/types/team'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
 /** Product-owned declaration of one delegatable agent shape. */
 interface SubAgentTypeDescriptor {

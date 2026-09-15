@@ -1,14 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { AgentSessionApplicationEvent, AgentSessionEventPort } from '../src/session/event-port'
+import { AgentGoalService } from '../src/session/goals'
 import {
-  AgentGoalService,
-  AgentPlanService,
-  AgentQuestionService,
-  type AgentSessionApplicationEvent,
-  type AgentSessionEventPort,
   evaluateAgentPermissionRules,
   normalizeAgentPermissionRequest,
-} from '../src/session'
+} from '../src/session/permissions'
+import { AgentPlanService } from '../src/session/plans'
+import { AgentQuestionService } from '../src/session/questions'
 
 class MemoryEventPort implements AgentSessionEventPort {
   readonly events = new Map<string, AgentSessionApplicationEvent[]>()

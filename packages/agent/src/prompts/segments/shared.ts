@@ -1,21 +1,21 @@
+import { isEmpty } from '@velaros-ai/core'
+
 import type {
   AgentContextPhase,
   AgentDeveloperContext,
-  AgentRoleId,
-  AgentSkillDescriptor,
   AgentSurfaceId,
-  AppLocale,
-  CapabilityScopeId,
   ChatPromptFeatureId,
-  RunProfileId,
-  ThinkingDepth,
+} from '../../protocol/types/agent'
+import type { RunProfileId } from '../../protocol/types/runProfile'
+import type { AgentSkillDescriptor } from '../../protocol/types/skill'
+import type { AgentRoleId, AppLocale, WorkflowType } from '../../protocol/types/system'
+import type { ThinkingDepth } from '../../protocol/types/team'
+import type {
+  CapabilityScopeId,
   ToolOsState,
   ToolSurfaceProfileId,
-  WorkflowType,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty } from '@velaros-ai/core'
-
-import type { SubAgentDispatchCatalog } from '../../sub-agent'
+} from '../../protocol/types/tool'
+import type { SubAgentDispatchCatalog } from '../../sub-agent/SubAgentTypeRegistry'
 import type {
   PromptSegmentDefinition,
   PromptSegmentRetention,

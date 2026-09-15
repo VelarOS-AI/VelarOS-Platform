@@ -28,18 +28,17 @@
 
 import type { ModelMessage } from 'ai'
 
-import type {
-  ChatSendRequest,
-  ExecutionPendingInteractionKind,
-  ExecutionPendingInteractionSnapshot,
-  ExecutionProvideGuidanceRequest,
-  ExecutionProvideInputRequest,
-  ExecutionResolveConfirmationRequest,
-  UserActionCardResult,
-} from '@velaros-ai/agent/protocol'
 import { isArray, isBlank, isEmpty, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ChatSendRequest, ExecutionProvideGuidanceRequest } from '../../protocol/types'
+import type {
+  ExecutionPendingInteractionKind,
+  ExecutionPendingInteractionSnapshot,
+  ExecutionProvideInputRequest,
+  ExecutionResolveConfirmationRequest,
+} from '../../protocol/types/execution'
+import type { UserActionCardResult } from '../../protocol/types/tool'
 import type {
   KernelBackgroundJobManager,
   KernelBackgroundJobOutputSnapshot,

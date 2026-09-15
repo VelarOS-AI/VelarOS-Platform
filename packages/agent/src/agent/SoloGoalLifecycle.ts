@@ -3,8 +3,7 @@ import type {
   ActiveContextArtifactKind,
   ActiveContextArtifactStatus,
   ActiveContextUpsertInput,
-} from '@velaros-ai/agent/protocol'
-
+} from '../protocol/types'
 import {
   assertGoalCanComplete,
   buildGoalTerminalUpsertInput,

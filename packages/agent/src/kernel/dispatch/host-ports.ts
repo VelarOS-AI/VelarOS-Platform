@@ -1,22 +1,20 @@
 import type { ModelMessage } from 'ai'
 
 import type {
-  AgentRoleId,
-  CustomSubAgentDefinition,
-  CustomSubAgentDescriptor,
-  SubAgentStructuredOutputContract,
-  SubAgentUsage,
-  TeamModelRouteCategory,
-  ThinkingDepth,
-  ToolCategoryId,
-  ToolExecutionApi,
-} from '@velaros-ai/agent/protocol'
-
-import type {
   AgentChatRuntimeConfig,
   AgentSystemRuntimeConfig,
 } from '../../agent/RuntimeConfiguration'
-import type { SubAgentRuntimeOverride } from '../../team'
+import type { ToolExecutionApi } from '../../protocol/types/agent'
+import type { SubAgentStructuredOutputContract } from '../../protocol/types/agentWorkflow'
+import type {
+  CustomSubAgentDefinition,
+  CustomSubAgentDescriptor,
+  SubAgentUsage,
+} from '../../protocol/types/subAgentTask'
+import type { AgentRoleId } from '../../protocol/types/system'
+import type { TeamModelRouteCategory, ThinkingDepth } from '../../protocol/types/team'
+import type { ToolCategoryId } from '../../protocol/types/tool'
+import type { SubAgentRuntimeOverride } from '../../team/model-router'
 import type { ExecutionEventBus } from '../execution/ExecutionEventBus'
 
 export interface SubAgentConfigPort {

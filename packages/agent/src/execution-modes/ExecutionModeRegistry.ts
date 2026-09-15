@@ -16,8 +16,9 @@
 // 拆轴后：`executionModes: ExecutionModeId[]` 是权威源，`promptFeatures` 只留能力。
 // 旧形态不做破坏性迁移——{@link resolveExecutionModes} 在读取侧折算，因此存量会话与旧宿主
 // 请求路径（定时任务、无人值守、外部引擎）一个都不用改就继续成立。
-import type { ChatPromptFeatureId, ExecutionModeId } from '@velaros-ai/agent/protocol'
 import { isNotNull, isString, isTrue, toNullable } from '@velaros-ai/core'
+
+import type { ChatPromptFeatureId, ExecutionModeId } from '../protocol/types/agent'
 
 import type { ExecutionModeDescriptor } from './ExecutionModeDescriptor'
 

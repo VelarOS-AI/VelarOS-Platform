@@ -1,9 +1,5 @@
-import type {
-  ExecutionRecord,
-  ExecutionTaskRecord,
-  ToolExecutionApi,
-  ToolExecutionPlanUpdate,
-} from '@velaros-ai/agent/protocol'
+import type { ToolExecutionApi, ToolExecutionPlanUpdate } from '../../protocol/types/agent'
+import type { ExecutionRecord, ExecutionTaskRecord } from '../../protocol/types/execution'
 
 interface ToolExecutionApiHost {
   awaitConfirmation: (

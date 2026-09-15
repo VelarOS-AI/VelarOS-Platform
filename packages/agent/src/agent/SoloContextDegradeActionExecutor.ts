@@ -1,12 +1,13 @@
-import type { ToolDescriptor } from '@velaros-ai/agent/protocol'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
+import type { ToolDescriptor } from '../protocol/types/tool'
+
 import {
-  type ContextGovernanceSessionRegistry,
   type ContextWorkingSetBudgetAllocation,
   ContextWorkingSetBudgetGovernor,
-  resolveGovernanceSessionKey,
-} from './context'
+} from './context/ContextWorkingSetBudgetGovernor'
+import type { ContextGovernanceSessionRegistry } from './context/residency/ContextGovernanceSession'
+import { resolveGovernanceSessionKey } from './context/residency/sessionKey'
 import type { ContextDegradeAction } from './ContextDegradeLadder'
 import { applyRunProfileToolExposure } from './RunProfile'
 

@@ -9,14 +9,15 @@
  */
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
+import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
+import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+
 import {
   compactToolInputForModel,
   deserializeSerializedToolResult,
   ModelToolResultMaxSerializedLength,
   serializeToolResultForModel,
-} from '@velaros-ai/agent'
-import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
-import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+} from '../../tools/toolResultSerialization'
 
 /**
  * 超大 user 正文的全保真层引用（`UserTextPayloadPlanner` 落盘后回填给清洗层，

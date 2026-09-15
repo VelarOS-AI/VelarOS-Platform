@@ -7,7 +7,7 @@ import { ExecutionRecords } from '../src/execution/Records'
 import { ExecutionRoutingCoordinator } from '../src/execution/routing'
 import { ExecutionStateMachine } from '../src/execution/state-machine'
 import { ExecutionStore } from '../src/execution/Store'
-import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../src/protocol'
+import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../src/protocol/types/agent'
 import { type ApprovalPort, createUnattendedSubAgentApprovalPort } from '../src/tool-contract/approval'
 import { createApprovalOperationKey, createTaskApprovalPort } from '../src/tool-contract/task-approval'
 

@@ -1,3 +1,5 @@
+import { isEmpty, toOptional } from '@velaros-ai/core'
+
 import type {
   SubAgentTaskArtifacts,
   SubAgentTaskResult,
@@ -5,10 +7,8 @@ import type {
   SubAgentToolDigestEntry,
   SubAgentUsage,
   SubAgentWindDownReason,
-  TeamModelSelectionTrace,
-} from '@velaros-ai/agent/protocol'
-import { isEmpty, toOptional } from '@velaros-ai/core'
-
+} from '../protocol/types/subAgentTask'
+import type { TeamModelSelectionTrace } from '../protocol/types/team'
 import type { CodingSessionSnapshot } from '../reminders/types'
 
 import type { SubAgentThreadRetention } from './SubAgentSessionStore'

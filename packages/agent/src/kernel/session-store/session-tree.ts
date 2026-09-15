@@ -4,7 +4,7 @@
 // CompactionEntry 边界拼出发给 provider 的上下文序列。纯函数、无 IO——供引擎 handle 与 harness 共用。
 import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
 
-import type { CompactionEntry, SessionEntry } from '../../protocol'
+import type { CompactionEntry, SessionEntry } from '../../protocol/session'
 
 /**
  * entry 分类（宪章 §6 entry 类型学的**语义单源**，P1-5）。三类派生出全仓所有「entry 该不该进某序列」的判定：

@@ -1,15 +1,12 @@
-import type {
-  RunProfileDefinition,
-  RunProfileId,
-  RunProfileRuntimePolicy,
-  RunProfileSelectionId,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
+import { isNotUndefined, isNumber } from '@velaros-ai/core'
+
 import {
   assertRunProfileId,
   parseOptionalRunProfileSelectionId,
-} from '@velaros-ai/agent/protocol'
-import { isNotUndefined, isNumber } from '@velaros-ai/core'
+} from '../protocol/constants/typedFieldAsserts'
+import type { RunProfileDefinition, RunProfileRuntimePolicy } from '../protocol/types/agent'
+import type { RunProfileId, RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { ToolSurfaceProfileId } from '../protocol/types/tool'
 
 const AutoRunProfileSelectionId: RunProfileSelectionId = 'auto'
 const DefaultRunProfileSelectionId: RunProfileSelectionId = AutoRunProfileSelectionId

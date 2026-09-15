@@ -13,7 +13,7 @@ import { dirname } from 'node:path'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { type SessionEntry, SessionEntrySchema } from '../../protocol'
+import { type SessionEntry, SessionEntrySchema } from '../../protocol/session'
 
 import { readLedgerFile, serializeLedgerLine, truncateLedgerToEntryCount } from './ledger-file'
 import type { SessionEntryDraft, SessionLedgerLocator, SessionLedgerWarn, SessionStoreDeps } from './ports'

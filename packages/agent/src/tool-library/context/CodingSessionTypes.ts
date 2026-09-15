@@ -1,25 +1,25 @@
-import type {
-  CapabilityAutoApprovalNotice,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  RunProfileSelectionId,
-  TaskApprovalRecord,
-  ToolCategoryId,
-  ToolConfirmationDecisionOptions,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-
-import type { ToolAllocatorRequest } from '../../agent/control-plane'
+import type { ToolAllocatorRequest } from '../../agent/control-plane/SessionToolAllocator'
 import type {
   CapabilityValidationRunResult,
   CapabilityValidationStatus,
-} from '../../capabilities'
+} from '../../capabilities/CapabilityValidation'
 import type {
-  CodingSessionSnapshot,
+  ChatPromptFeatureId,
+  TaskApprovalRecord,
+  ToolConfirmationDecisionOptions,
+} from '../../protocol/types/agent'
+import type { RunProfileSelectionId } from '../../protocol/types/runProfile'
+import type {
+  CapabilityAutoApprovalNotice,
+  CapabilityScopeId,
+  ToolCategoryId,
+  ToolSurfaceProfileId,
+} from '../../protocol/types/tool'
+import type {
   RuntimeReminderConsumeResult,
-  RuntimeReminderInput,
   RuntimeReminderScheduler,
-} from '../../reminders'
+} from '../../reminders/scheduler'
+import type { CodingSessionSnapshot, RuntimeReminderInput } from '../../reminders/types'
 
 /** Agent 执行期间的代码会话跟踪 API。 */
 export interface ToolCodingSessionApi {

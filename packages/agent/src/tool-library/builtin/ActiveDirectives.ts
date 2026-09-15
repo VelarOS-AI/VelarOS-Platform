@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { isArray, isEmpty, isPlainObject, isString, isTrue } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
 import type {
   ActiveContextArchiveFilter,
   ActiveContextArtifact,
@@ -12,9 +15,7 @@ import type {
   ActiveDirectiveArchiveInput,
   ActiveDirectiveType,
   ActiveDirectiveUpsertInput,
-} from '@velaros-ai/agent/protocol'
-import { isArray, isEmpty, isPlainObject, isString, isTrue } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+} from '../../protocol/types'
 
 const directiveTypeSchema = z.enum(['prohibition', 'preference', 'process', 'requirement', 'other'])
 

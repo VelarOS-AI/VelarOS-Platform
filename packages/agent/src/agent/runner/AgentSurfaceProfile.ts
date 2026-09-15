@@ -1,10 +1,9 @@
 import type {
   AgentDeveloperContext,
   AgentSurfaceId,
-  CapabilityScopeId,
   ChatPromptFeatureId,
-  ToolCategoryId,
-} from '@velaros-ai/agent/protocol'
+} from '../../protocol/types/agent'
+import type { CapabilityScopeId, ToolCategoryId } from '../../protocol/types/tool'
 
 interface AgentSurfaceToolPolicy {
   baseCategories: readonly ToolCategoryId[]

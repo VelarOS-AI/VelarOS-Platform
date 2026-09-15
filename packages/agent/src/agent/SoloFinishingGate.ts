@@ -1,16 +1,15 @@
 import type { ModelMessage } from 'ai'
 
-import type { StreamTurnEndPayload } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isFunction, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { AutoVerificationGateResult } from '../coding'
-import { evaluateKernelFinalReadiness } from '../kernel'
-import type { CodingSessionSnapshot } from '../reminders'
+import type { AutoVerificationGateResult } from '../coding/AutoVerification'
+import { evaluateKernelFinalReadiness } from '../kernel/final-readiness'
+import { ChatRuntimeEvents,type StreamTurnEndPayload } from '../protocol/types/chatRuntime'
+import type { CodingSessionSnapshot } from '../reminders/types'
 
-import { createInternalFollowUpMessage } from './history'
+import { createInternalFollowUpMessage } from './history/internalMessages'
 import type { AgentRuntimeInputPort } from './RuntimeInputPort'
 import type { SoloBackgroundCompletionGateResult } from './SoloBackgroundCompletionGate'
 import { consumeSoloRuntimeGuidance } from './SoloRuntimeGuidance'

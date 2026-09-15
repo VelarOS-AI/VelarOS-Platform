@@ -8,7 +8,6 @@
 //  - 宿主声明它支持哪些贡献轴（`supportedAxes`）；
 //  - mod 的某轴在本宿主无落点 → 该轴缺席、mod 仍以 `partial` 态激活，缺席轴进诊断；
 //  - `requiredAxes` 命中不支持的轴 → 直接拒载，不做残废激活。
-import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import {
   isArray,
   isBlank,
@@ -19,24 +18,23 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../execution-modes'
-import type { PromptSegmentDefinition } from '../prompts'
-import type {
-  AgentModContributionAxisName,
-  AgentModDiagnostic,
-  AgentModManifest,
-  AgentModTrustLevel,
-} from '../protocol'
+import type { ExecutionModeDescriptor } from '../execution-modes/ExecutionModeDescriptor'
+import type { PromptSegmentDefinition } from '../prompts/registry'
 import {
+  type AgentModContributionAxisName,
   AgentModContributionAxisNames,
+  type AgentModDiagnostic,
+  type AgentModManifest,
+  type AgentModTrustLevel,
   listAgentModDeclaredAxes,
   parseAgentModManifest,
   readAgentModContributionKey,
   satisfiesSemverRange,
-} from '../protocol'
-import type { AgentSkillDefinition } from '../skills'
-import type { SubAgentTypeDescriptor } from '../sub-agent'
-import type { VelaTool } from '../tool-library'
+} from '../protocol/mods'
+import type { ToolCategoryDefinition } from '../protocol/types/tool'
+import type { AgentSkillDefinition } from '../skills/AgentSkillProvider'
+import type { SubAgentTypeDescriptor } from '../sub-agent/SubAgentTypeRegistry'
+import type { VelaTool } from '../tool-library/defineVelaTool'
 
 import type { AgentModAxisRecord, AgentModRegistrySnapshot } from './AgentModRegistry'
 import { AgentModRegistry } from './AgentModRegistry'

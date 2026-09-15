@@ -1,20 +1,19 @@
 import type { ModelMessage } from 'ai'
 
+import type { PromptSegmentDefinition } from '../../prompts/registry'
+import {
+  createSelectedSkillPromptSegment,
+  createSkillPromptSegment,
+} from '../../prompts/segments/shared'
 import type {
   AgentContextPhase,
   ChatPromptFeatureId,
   ExecutionModeId,
   PromptSegmentTrace,
-  RunProfileId,
   SkippedPromptSegmentTrace,
-} from '@velaros-ai/agent/protocol'
-
-import {
-  createSelectedSkillPromptSegment,
-  createSkillPromptSegment,
-  type PromptSegmentDefinition,
-} from '../../prompts'
-import type { RuntimePromptFeaturePolicy } from '../../tools'
+} from '../../protocol/types/agent'
+import type { RunProfileId } from '../../protocol/types/runProfile'
+import type { RuntimePromptFeaturePolicy } from '../../tools/prompt-feature-policy'
 import type { ContextBuilder } from '../ContextBuilder'
 import {
   PromptStateBuilder,

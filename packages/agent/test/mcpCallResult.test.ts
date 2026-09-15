@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { AgentTurnHistoryHelper } from '../src/agent/history'
+import { AgentTurnHistoryHelper } from '../src/agent/history/turn'
 import { ChatStreamProtocol } from '../src/chat/stream/ChatStreamProtocol'
 import { translateMcpCallResult } from '../src/tool-library/mcp/mcpCallResult'
 import { liftGenericModelContent } from '../src/tools/modelImageLift'

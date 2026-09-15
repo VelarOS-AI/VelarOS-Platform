@@ -5,9 +5,10 @@ import {
   isExecutionModeActive,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
-} from '../execution-modes'
+} from '../execution-modes/ExecutionModeRegistry'
 import { normalizePromptFeatures } from '../protocol/constants/promptFeatures'
-import type { ChatPromptFeatureId, StoredChatSession } from '../protocol/types'
+import type { StoredChatSession } from '../protocol/types'
+import type { ChatPromptFeatureId } from '../protocol/types/agent'
 
 /** 磁盘布尔开关：缺席按 false，存在但非布尔一律抛 VALIDATION（坏数据不静默当 false）。 */
 function resolveStoredBoolean(value: unknown, field: string): boolean {

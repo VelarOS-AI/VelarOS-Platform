@@ -1,14 +1,15 @@
-import type {
-  AgentEvent,
-  CapabilityScopeId,
-  StreamToolResultEffects,
-  ToolCategoryDefinition,
-  ToolCategoryId,
-  ToolResultModelContentPart,
-} from '@velaros-ai/agent/protocol'
-
 import { compareStableStrings } from '../agent/context/residency/determinism'
 import type { PromptSegmentDefinition } from '../prompts/registry'
+import type {
+  AgentEvent,
+  StreamToolResultEffects,
+  ToolResultModelContentPart,
+} from '../protocol/types/agent'
+import type {
+  CapabilityScopeId,
+  ToolCategoryDefinition,
+  ToolCategoryId,
+} from '../protocol/types/tool'
 
 /**
  * Host-neutral description of a capability that can be composed into Agent Runtime.

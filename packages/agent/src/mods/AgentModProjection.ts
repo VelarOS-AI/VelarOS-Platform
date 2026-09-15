@@ -3,15 +3,18 @@
 // 装配链只读快照投影，不直接遍历注册表（保证「每回合固定 generation」的消费纪律）。
 // 投影是纯函数：同一快照恒得同一结果，且**保持载荷对象同一性**——装载不复制、不包装、
 // 不改写运行态载荷，这是「官方内置经同一 Loader 装载后行为零变化」的结构性保证。
-import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isNotNull } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../execution-modes'
-import type { PromptSegmentDefinition } from '../prompts'
-import type { AgentModSpaceContribution, AgentModTurnContextSourceContribution } from '../protocol'
-import type { AgentSkillDefinition } from '../skills'
-import type { SubAgentTypeDescriptor } from '../sub-agent'
-import type { VelaTool } from '../tool-library'
+import type { ExecutionModeDescriptor } from '../execution-modes/ExecutionModeDescriptor'
+import type { PromptSegmentDefinition } from '../prompts/registry'
+import type {
+  AgentModSpaceContribution,
+  AgentModTurnContextSourceContribution,
+} from '../protocol/mods'
+import type { ToolCategoryDefinition } from '../protocol/types/tool'
+import type { AgentSkillDefinition } from '../skills/AgentSkillProvider'
+import type { SubAgentTypeDescriptor } from '../sub-agent/SubAgentTypeRegistry'
+import type { VelaTool } from '../tool-library/defineVelaTool'
 
 import type { AgentModRegistrySnapshot } from './AgentModRegistry'
 

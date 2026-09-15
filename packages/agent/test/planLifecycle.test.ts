@@ -1,17 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  ActiveContextArtifact,
-  ActiveContextUpsertInput,
-  ChatPromptFeatureId,
-  ExecutionModeId,
-  ExecutionTaskPlanStep,
-  ToolExecutionPlanUpdate,
-} from '@velaros-ai/agent/protocol'
-
 import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
 import { PromptStateBuilder } from '../src/agent/PromptState'
-import type { RuntimePromptSnapshot } from '../src/prompts'
+import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/protocol/types'
+import type {
+  ChatPromptFeatureId,
+  ExecutionModeId,
+  ToolExecutionPlanUpdate,
+} from '../src/protocol/types/agent'
+import type { ExecutionTaskPlanStep } from '../src/protocol/types/execution'
 import { plansTools } from '../src/tool-library/builtin/Plans.tool'
 
 function createPlanToolContext(features: ChatPromptFeatureId[] = []) {

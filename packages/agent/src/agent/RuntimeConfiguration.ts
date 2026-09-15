@@ -1,19 +1,19 @@
 import type {
   AgentDeveloperContext,
   AgentSurfaceId,
-  AppLocale,
-  CapabilityScopeId,
   ChatPromptFeatureId,
   ExecutionModeId,
+  ToolExecutionApi,
+} from '../protocol/types/agent'
+import type { RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { SessionLineageContext } from '../protocol/types/storage'
+import type {
+  AppLocale,
   PermissionConfirmationMode,
   PromptSegmentOverride,
-  ReasoningLevel,
-  RunProfileSelectionId,
-  SessionLineageContext,
-  ThinkingDepth,
-  ToolExecutionApi,
-  ToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
+} from '../protocol/types/system'
+import type { ReasoningLevel, ThinkingDepth } from '../protocol/types/team'
+import type { CapabilityScopeId, ToolSurfaceProfileId } from '../protocol/types/tool'
 
 import type { ContextGovernanceConfigInput } from './context/residency/governanceConfig'
 

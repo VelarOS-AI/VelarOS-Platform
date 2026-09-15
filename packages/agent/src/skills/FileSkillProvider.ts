@@ -1,4 +1,4 @@
-import type { AgentRoleId } from '@velaros-ai/agent/protocol'
+import type { AgentRoleId } from '../protocol/types/system'
 
 import {
   type AgentSkillDefinition,

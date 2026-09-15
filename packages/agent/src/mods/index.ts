@@ -71,10 +71,7 @@ export {
   WiredHookEvents,
   WiredSeamKinds,
 } from './AgentModSeams'
-export type {
-  BuiltinAgentModOptions,
-  BuiltinAgentModPackage,
-} from './BuiltinAgentMod'
+export type { BuiltinAgentModOptions, BuiltinAgentModPackage } from './BuiltinAgentMod'
 export {
   BuiltinAgentModId,
   BuiltinAgentModToolCollections,

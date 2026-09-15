@@ -28,11 +28,12 @@
 
 import { type z } from 'zod'
 
-import type { ChatPromptFeatureId, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { expandCapabilityCategoryIds } from '../../capabilities'
+import { expandCapabilityCategoryIds } from '../../capabilities/CapabilityExtensions'
+import type { ChatPromptFeatureId } from '../../protocol/types/agent'
+import type { ToolCategoryId } from '../../protocol/types/tool'
 import type { KernelToolContext as ToolContext } from '../KernelToolContext'
 
 import {

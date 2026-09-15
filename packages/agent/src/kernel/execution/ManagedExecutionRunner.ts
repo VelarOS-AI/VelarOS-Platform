@@ -1,18 +1,16 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  AgentEvent,
-  ExecutionRecord,
-  StreamStatePayload,
-  ToolExecutionApi,
-} from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
 import { isBlank, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { Logger } from '@velaros-ai/core/logger'
 
 import type { AgentRuntimeInputPort } from '../../agent/RuntimeInputPort'
-import type { ExecutionRecords, ExecutionStore, SourceSessionGuard } from '../../execution'
+import type { ExecutionRecords } from '../../execution/Records'
+import type { SourceSessionGuard } from '../../execution/SessionGuard'
+import type { ExecutionStore } from '../../execution/Store'
+import type { AgentEvent, ToolExecutionApi } from '../../protocol/types/agent'
+import { ChatRuntimeEvents,type StreamStatePayload } from '../../protocol/types/chatRuntime'
+import type { ExecutionRecord } from '../../protocol/types/execution'
 
 import type { ExecutionEventBus } from './ExecutionEventBus'
 import type { ExecutionAbortOptions } from './ExecutionStateFacade'

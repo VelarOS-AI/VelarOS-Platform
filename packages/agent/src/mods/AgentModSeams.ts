@@ -20,7 +20,7 @@ import type {
   AgentModHookExecutionMode,
   AgentModHookMatcher,
   AgentModSeamKind,
-} from '../protocol'
+} from '../protocol/mods'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
 

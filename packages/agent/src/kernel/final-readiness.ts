@@ -4,7 +4,7 @@ import {
   hasVerificationRelevantModifiedPaths,
   isVerificationRelevantPath,
 } from '../coding/paths'
-import type { CodingSessionSnapshot } from '../reminders'
+import type { CodingSessionSnapshot } from '../reminders/types'
 
 export type KernelFinalReadinessReason = 'missing-verification' | 'failed-verification'
 export type KernelFinalReadinessAuditResult = 'allowed' | 'blocked' | 'errored'

@@ -1,6 +1,7 @@
-import { extractSessionSearchTerms } from "@velaros-ai/agent";
-import type { ChatContextRetrievalScoreStats } from "@velaros-ai/agent/protocol";
 import { isEmpty, isPresent } from "@velaros-ai/core";
+
+import { extractSessionSearchTerms } from "../../../../chat/sessionSearchText";
+import type { ChatContextRetrievalScoreStats } from "../../../../protocol/types";
 
 import { chatSearchText } from "./Text";
 

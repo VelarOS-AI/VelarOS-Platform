@@ -5,13 +5,13 @@ import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayload
 import { ProviderRequestCompiler } from '../src/agent/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/agent/context/ProviderSendRequest'
 import { ContextGovernanceSessionRegistry } from '../src/agent/context/residency/ContextGovernanceSession'
+import type { FileContextSnapshot } from '../src/agent/context/resources/contracts'
 import {
   FileContextCoordinator,
   fileContextFor,
-  type FileContextSnapshot,
-  projectFileContext,
-} from '../src/agent/context/resources'
-import { forkFileContext } from '../src/agent/context/resources/FileContextCoordinator'
+  forkFileContext,
+} from '../src/agent/context/resources/FileContextCoordinator'
+import { projectFileContext } from '../src/agent/context/resources/FileContextProjection'
 import { sliceFileSnapshot } from '../src/agent/context/resources/FileSnapshotArchive'
 import { contextRetrievalTools } from '../src/tool-library/builtin/ContextRetrieval.tool'
 import { fitProjectReadsForModel } from '../src/tools/projectReadSerialization'

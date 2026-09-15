@@ -2,11 +2,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { ExecutionRecord } from '@velaros-ai/agent/protocol'
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
-
 import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
 import { ManagedExecutionRunner } from '../src/kernel/execution/ManagedExecutionRunner'
+import { ChatRuntimeEvents } from '../src/protocol/types/chatRuntime'
+import type { ExecutionRecord } from '../src/protocol/types/execution'
 
 function executionRecord(): ExecutionRecord {
   return {

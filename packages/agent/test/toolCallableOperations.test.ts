@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { createToolCallableOperations, parseToolWireInput } from '../src/tool-contract'
+import {
+  createToolCallableOperations,
+  parseToolWireInput,
+} from '../src/tool-contract/callable-operations'
 
 type Context = { abortSignal: AbortSignal; available: boolean }
 

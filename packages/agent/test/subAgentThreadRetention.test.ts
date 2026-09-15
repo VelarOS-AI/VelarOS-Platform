@@ -10,20 +10,22 @@ import { describe, expect, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentExecutionLimitOverrides } from '../src/agent/ExecutionLimits'
-import { SubAgentGuidanceRelayRegistry } from '../src/execution'
+import { SubAgentGuidanceRelayRegistry } from '../src/execution/SubAgentGuidanceRelayRegistry'
 import type { SubAgentDispatchInput, SubAgentQueryOptions } from '../src/kernel/dispatch/host-ports'
 import { formatSubAgentFailureRedispatchGuidance } from '../src/kernel/dispatch/result-format'
 import { SubAgentDispatcher } from '../src/kernel/dispatch/SubAgentDispatcher'
 import { ExecutionEventBus } from '../src/kernel/execution/ExecutionEventBus'
-import { createRuntimePromptSegments, type RuntimePromptSnapshot } from '../src/prompts'
-import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/protocol'
+import { createRuntimePromptSegments } from '../src/prompts/segments/runtime'
+import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
+import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/protocol/types/subAgentTask'
+import { parseSubAgentToolResult } from '../src/sub-agent/SubAgentResultBuilder'
 import {
-  parseSubAgentToolResult,
   SubAgentSessionStore,
   type SubAgentThreadRetentionLimits,
-  type SubAgentTypeDescriptor,
-} from '../src/sub-agent'
-import { TeamModelRouter, WriteLeaseCoordinator } from '../src/team'
+} from '../src/sub-agent/SubAgentSessionStore'
+import type { SubAgentTypeDescriptor } from '../src/sub-agent/SubAgentTypeRegistry'
+import { TeamModelRouter } from '../src/team/model-router'
+import { WriteLeaseCoordinator } from '../src/team/WriteLease'
 import { dispatchAgentSchema } from '../src/tool-library/builtin/DispatchAgent'
 import { dispatchAgentTools } from '../src/tool-library/builtin/DispatchAgent.tool'
 

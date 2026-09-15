@@ -3,7 +3,7 @@
 // 引擎不直读 app 路径：账本文件位置一律经注入的 `SessionLedgerLocator` 解析（宪章 §1「数据根单写者」
 // 是 host 部署不变量，账本层只认端口）。id / createdAt / 告警回落全部可注入，property 电池借此驱动
 // 确定性时钟与序号工厂。
-import type { SessionEntry } from '../../protocol'
+import type { SessionEntry } from '../../protocol/session'
 
 /** 引擎负责分配、追加输入不得携带的基字段。 */
 type EngineAssignedField = 'id' | 'parentId' | 'createdAt'

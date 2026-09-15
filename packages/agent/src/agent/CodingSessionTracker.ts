@@ -1,47 +1,50 @@
-import type {
-  CapabilityAutoApprovalNotice,
-  CapabilityScopeId,
-  ChatPromptFeatureId,
-  RunProfileSelectionId,
-  TaskApprovalRecord,
-  ThinkingDepth,
-  ToolCategoryId,
-  ToolConfirmationDecisionOptions,
-  ToolLayerTelemetryMetrics,
-  ToolSurfaceProfileId,
-  TurnPlanningTelemetryPayload,
-} from '@velaros-ai/agent/protocol'
+import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
+
 import {
   assertRunProfileSelectionId,
   assertToolSurfaceProfileId,
   resolveRunProfileSelectionId,
   resolveToolSurfaceProfileId,
-} from '@velaros-ai/agent/protocol'
-import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
+} from '../protocol/constants/typedFieldAsserts'
+import type {
+  ChatPromptFeatureId,
+  TaskApprovalRecord,
+  ToolConfirmationDecisionOptions,
+  ToolLayerTelemetryMetrics,
+  TurnPlanningTelemetryPayload,
+} from '../protocol/types/agent'
+import type { RunProfileSelectionId } from '../protocol/types/runProfile'
+import type { ThinkingDepth } from '../protocol/types/team'
+import type {
+  CapabilityAutoApprovalNotice,
+  CapabilityScopeId,
+  ToolCategoryId,
+  ToolSurfaceProfileId,
+} from '../protocol/types/tool'
 
 const DefaultEnabledPromptFeatures: readonly ChatPromptFeatureId[] = []
+import type { CapabilityValidationInterpreter } from '../capabilities/CapabilityExtensions'
 import type {
-  CapabilityValidationInterpreter,
   CapabilityValidationRunResult,
   CapabilityValidationStatus,
-} from '../capabilities'
-import {
-  CodingSessionEditResultHelper,
-  CodingSessionVerificationHelper,
-  CodingToolCallDeduper,
-} from '../coding'
+} from '../capabilities/CapabilityValidation'
+import { CodingSessionEditResultHelper } from '../coding/edit-results'
+import { CodingToolCallDeduper } from '../coding/tool-dedupe'
+import { CodingSessionVerificationHelper } from '../coding/verification'
+import { type RuntimeReminderConsumeResult, RuntimeReminderScheduler } from '../reminders/scheduler'
 import type {
+  CapabilityValidationFailure,
   CodingSessionSnapshot,
   ReminderCapabilityResolver,
-  RuntimeReminderConsumeResult,
   RuntimeReminderInput,
   RuntimeReminderProducer,
-} from '../reminders'
-import { RuntimeReminderScheduler } from '../reminders'
-import type { CapabilityValidationFailure } from '../reminders/types'
-import { defaultRuntimePromptFeaturePolicy, type RuntimePromptFeaturePolicy } from '../tools'
+} from '../reminders/types'
+import {
+  defaultRuntimePromptFeaturePolicy,
+  type RuntimePromptFeaturePolicy,
+} from '../tools/prompt-feature-policy'
 
-import type { ToolAllocatorRequest } from './control-plane'
+import type { ToolAllocatorRequest } from './control-plane/SessionToolAllocator'
 import {
   DefaultRunProfileSelectionId,
   DefaultToolSurfaceProfileId,

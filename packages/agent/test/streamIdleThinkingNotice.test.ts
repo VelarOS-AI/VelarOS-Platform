@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import type { TextStreamPart, ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { StreamConsumer } from '../src/agent/stream'
+import { StreamConsumer } from '../src/agent/stream/Consumer'
 
 void describe('stream idle notice', () => {
   void test('a silent provider stream reports thinking, never a reconnect', async () => {

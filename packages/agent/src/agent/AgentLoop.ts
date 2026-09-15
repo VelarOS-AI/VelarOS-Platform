@@ -11,13 +11,17 @@
 //  - **中止只在轮首生效**：轮内中止会留下半成品工具结果 → 历史结构出现孤儿片段 →
 //    下一轮 provider 校验拒收整条会话（曾导致会话永久锁死，见 history-orphan 自愈判决）。
 //  - **surface 不得持有回合状态**：状态归引擎，壳只做 IO 与投影；壳存状态 = 两份真相。
-import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '@velaros-ai/agent/protocol'
 import { toNullable } from '@velaros-ai/core'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { ModelSpanHandle, RunSpanScope, TurnSpanScope } from '../kernel'
+import type {
+  ModelSpanHandle,
+  RunSpanScope,
+  TurnSpanScope,
+} from '../kernel/observability/execution-span-scope'
+import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '../protocol/types/agent'
 
-import type { ProviderRequestSnapshot } from './context'
+import type { ProviderRequestSnapshot } from './context/ProviderRequestSnapshot'
 import type { ContextDegradeAction } from './ContextDegradeLadder'
 import type { AgentLoopSurface } from './LoopSurface'
 import { isContextOverflowError, isContextOverflowReplayUnsafe } from './retry'

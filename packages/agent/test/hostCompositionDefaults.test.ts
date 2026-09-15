@@ -6,14 +6,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import {
-  ContextBuilder,
-  createBuiltInPromptRegistry,
-  createRuntimePromptSegments,
-  type RuntimePromptSnapshot,
-  SkillFileStore,
-  SkillMarketClient,
-} from '../src'
+import { ContextBuilder } from '../src/agent/ContextBuilder'
+import { createBuiltInPromptRegistry } from '../src/prompts/catalog'
+import { createRuntimePromptSegments } from '../src/prompts/segments/runtime'
+import type { RuntimePromptSnapshot } from '../src/prompts/segments/shared'
+import { SkillFileStore } from '../src/skills/SkillFileStore'
+import { SkillMarketClient } from '../src/skills/SkillMarketClient'
 
 describe('host-owned Agent identity', () => {
   test('uses a product-neutral identity when the host does not provide one', () => {

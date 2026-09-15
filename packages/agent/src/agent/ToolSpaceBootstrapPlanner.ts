@@ -1,9 +1,9 @@
 import type { ModelMessage } from 'ai'
 
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { isEmpty, isNumber, optionalWhen,toNullable, truncate } from '@velaros-ai/core'
 
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../capabilities/CapabilityExtensions'
+import type { ToolCategoryId } from '../protocol/types/tool'
 
 import {
   type AgentIntentSignalDomain,

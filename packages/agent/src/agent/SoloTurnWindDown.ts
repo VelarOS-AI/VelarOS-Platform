@@ -2,7 +2,7 @@ import type { ModelMessage } from 'ai'
 
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import { createInternalFollowUpMessage } from './history'
+import { createInternalFollowUpMessage } from './history/internalMessages'
 
 /**
  * 主面轮次上限收尾的**注入动作**（文案 + 日志）。触发判定与 margin 记账是护栏 1 机制，
