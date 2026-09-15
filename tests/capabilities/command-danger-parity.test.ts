@@ -5,7 +5,8 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/exports/execution'
+// 直接取判定所在的文件：project 的入口正在重排，判定本身一直在这里。
+import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/utils/command-policy'
 import { systemCommandPolicy } from '../../packages/system/src/exports/index'
 
 const DangerousCommands = [
