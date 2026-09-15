@@ -81,6 +81,7 @@ describe('Project Kernel module', () => {
       'project:code',
       'project:change',
       'project:run',
+      'project:sandbox',
     ])
     expect(service?.getOperationMetadata('project:read')?.permissions)
       .toEqual(['fs:read'])

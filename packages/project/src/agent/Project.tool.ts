@@ -5,6 +5,7 @@ import { projectFile } from './tools/file'
 import { projectList } from './tools/list'
 import { projectRead } from './tools/read'
 import { projectRun } from './tools/run'
+import { projectSandbox } from './tools/sandbox'
 import { projectSearch } from './tools/search'
 import type { ProjectToolCollection } from './tools/shared'
 
@@ -20,7 +21,7 @@ export const projectChangeTools: ProjectToolCollection = Object.freeze({
   [projectEdit.name]: projectEdit,
   [projectChange.name]: projectChange,
 })
-export const projectExecutionTools: ProjectToolCollection = Object.freeze({ [projectRun.name]: projectRun })
+export const projectExecutionTools: ProjectToolCollection = Object.freeze({ [projectRun.name]: projectRun, [projectSandbox.name]: projectSandbox })
 export const projectCodeTools: ProjectToolCollection = Object.freeze({ [projectCode.name]: projectCode })
 
 /** Version 2 model contract. Domain SDK and persisted version 1 tools have explicit adapters. */

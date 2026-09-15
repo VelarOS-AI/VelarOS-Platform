@@ -19,8 +19,8 @@ describe('model-facing Project examples and normalization', () => {
     expect(description).not.toMatch(/tooling:(?:map|replace)/u)
   })
 
-  test('all eight tool examples survive wire encoding and satisfy their actual schema', () => {
-    expect(Object.keys(projectTools)).toHaveLength(8)
+  test('all nine tool examples survive wire encoding and satisfy their actual schema', () => {
+    expect(Object.keys(projectTools)).toHaveLength(9)
     for (const tool of Object.values(projectTools)) {
       const inputSchema = schemaToInputSchema(tool.schema)
       expect(inputSchema.type === 'object' || Array.isArray(inputSchema.oneOf)).toBe(true)

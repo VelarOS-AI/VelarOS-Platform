@@ -8,6 +8,7 @@
     "project:list",
     "project:read",
     "project:run",
+    "project:sandbox",
     "project:search"
   ],
   "matrixCases": 192,
@@ -70,9 +71,9 @@
     }
   ],
   "fingerprints": {
-    "project": "937d4ddc085f6689af4b3e7a6cc32fb147b0ef935e7ff3ce6cfa827ae9fbb777",
+    "project": "92adaaf24bf4a698b9ca1622a28d66e873c26efebec13dd29f12f9867544b169",
     "agent": "8dfec8a29d419d74238eb513b9340ded15032935308153d988c6e9aa9b9da74d",
-    "documents": "eed95fe6ab82a8b820e0456889b8f6850dae67058c3c63df1de496ffd2392b19"
+    "documents": "03b2e430c1151262636eb6a5d8e7689c19bfa5a7e04372dfe75a7233a79763f4"
   },
   "sourceArtifacts": [
     {
@@ -149,11 +150,11 @@
     },
     {
       "path": "packages/project/README.md",
-      "fingerprint": "3eb943426ec75c0c0fd0f168afac480f8b2b98a74fb510a09e35f1df3a54adb8"
+      "fingerprint": "d18d840c28eaa69d13dfc53583ad78d61e842bf01ad2a675b0fa8aceedd0d54a"
     },
     {
       "path": "packages/project/src/agent/Project.tool.ts",
-      "fingerprint": "a40ca020a0e65ba2a06b8da83072870ccace6578ffc716f69ec286515d5a570f"
+      "fingerprint": "15ae48d2e1f216a3ff2cf4fe0de2759c271e28aeba506dd99fb2631ed2a09e1e"
     },
     {
       "path": "packages/project/src/agent/ProjectKernelPort.ts",
@@ -238,6 +239,10 @@
     {
       "path": "packages/project/src/agent/tools/run.ts",
       "fingerprint": "43794cc8f2698c76d63d2e4019a28d363a25c60e50c2225b517e2da1f2089606"
+    },
+    {
+      "path": "packages/project/src/agent/tools/sandbox.ts",
+      "fingerprint": "efa1da9ed8dd95a9186b4e65afec5dfc24c41b5f937542930b7336fd434d27af"
     },
     {
       "path": "packages/project/src/agent/tools/search.ts",

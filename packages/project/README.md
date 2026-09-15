@@ -23,10 +23,13 @@ project:run
 # 按需加载
 project:code
 project:change
+project:sandbox
 ```
 
 Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成诸如
 `project__read` 的传输名；权限、历史和工具结果始终保存 canonical id。
+
+复杂迁移、批量改写、删目录的脚本先走演练沙箱 `project:sandbox`：`create` 把项目镜像到临时区，`run` 在镜像里跑命令（进程约束钉在镜像内，写到项目会直接失败），`diff` 看变了什么，`apply` 经用户确认后落回项目（项目文件变过整批不落），`discard` 丢弃；宿主没接沙箱端口时这个工具不出现。见 ADR 0006。
 
 普通命令使用 `project:run`；代码查询使用 `project:code` 的六类 action：
 `symbols/references/dependencies/relations/impact/diagnostics`。结果携带来源、覆盖与降级信息。

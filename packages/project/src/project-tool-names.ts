@@ -8,6 +8,7 @@ export const ProjectToolNames = Object.freeze({
   code: 'project:code',
   change: 'project:change',
   run: 'project:run',
+  sandbox: 'project:sandbox',
 } as const)
 
 /** Explicit version 1 compatibility; these names do not enter current model discovery. */

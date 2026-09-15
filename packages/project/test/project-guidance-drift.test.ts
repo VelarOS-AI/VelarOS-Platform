@@ -16,7 +16,7 @@ test('static tool guidance cannot restore a discovery requirement missing from r
 
 test('release gate binds current registered schemas, descriptions, examples and assembled prompt families to their explicit review', async () => {
   const actual = await collectGuidanceReview()
-  expect(actual.toolNames).toHaveLength(8)
+  expect(actual.toolNames).toHaveLength(9)
   expect(actual.matrixCases).toBe(192)
   const reviewed = JSON.parse(await readFile(ProjectGuidanceReviewPath, 'utf8'))
   expect(() => assertGuidanceReviewed(actual, reviewed)).not.toThrow()

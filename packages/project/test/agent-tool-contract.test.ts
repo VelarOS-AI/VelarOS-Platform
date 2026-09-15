@@ -30,6 +30,7 @@ describe('Project model-facing tool contract', () => {
       'project:edit': 'write',
       'project:change': 'write',
       'project:run': 'execute',
+      'project:sandbox': 'execute',
     } as const
 
     for (const [name, effectKind] of Object.entries(expectedEffects)) {
