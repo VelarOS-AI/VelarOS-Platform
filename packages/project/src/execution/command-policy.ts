@@ -49,6 +49,12 @@ const TreeDeleteReason = '该命令会在整个目录树里批量删除匹配到
 const GitDiscardReason = '该命令会用 Git 里的版本覆盖工作区，未提交的改动会永久丢失。'
 const GitCleanReason = '该命令会删除未被 Git 跟踪的文件，它们从未提交过，删除后无法恢复。'
 const GitStashDropReason = '该命令会永久丢弃 Git stash 里暂存的改动。'
+const GitForcePushReason = '该命令会强制覆盖远端分支的历史，别人已经拉取或推送的提交会被丢弃。'
+
+const GitForceBranchDeleteReason = '该命令会强制删除分支，分支上没合并的提交会丢失。'
+
+const RemoteScriptReason = '该命令把网上下载的脚本不经检查直接交给 shell 执行。'
+
 const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
 const PrivilegedMutationReason = '该命令会以提升权限批量修改系统资源。'
 
@@ -64,6 +70,20 @@ const windowsDestructivePatterns: readonly RegExp[] = [
   /\breg\s+delete\b|\bremove-itemproperty\b/i,
   /\bcipher\b[^&|;\r\n]*\/w\b|\bsdelete(?:64)?\b/i,
   /\brestart-computer\b|\bstop-computer\b/i,
+]
+
+/** 把网上下载的内容直接管道给 shell：curl/wget 接 sh、bash、zsh，或 PowerShell 的 iwr/irm 接 iex。 */
+const remoteScriptPatterns: readonly RegExp[] = [
+  /\b(?:curl|wget)\b[^|&;\r\n]*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:ba|z|da|k|fi)?sh\b/i,
+  /\b(?:iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|&;\r\n]*\|\s*(?:iex|invoke-expression)\b/i,
+]
+
+/** 藏在脚本或别的程序里的递归删除：Python 的 shutil.rmtree、Node 的 rimraf、CMD 的 rd/rmdir/del /s。整个文件夹连同里面的仓库一起没掉，和 rm -rf 一样危险。 */
+const scriptedRecursiveRemovePatterns: readonly RegExp[] = [
+  /\brmtree\s*\(/i,
+  /\brimraf\b/i,
+  /\b(?:rd|rmdir)\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
+  /\bdel\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
 ]
 
 const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
@@ -341,6 +361,10 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
       const action = args.find((argument) => !argument.startsWith('-'))
       return action === 'drop' || action === 'clear' ? GitStashDropReason : null
     }
+    case 'push':
+      return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--force-with-lease') || hasGitOption(args, null, '--force-if-includes') ? GitForcePushReason : null
+    case 'branch':
+      return hasGitOption(args, 'D', null) || (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force')) ? GitForceBranchDeleteReason : null
     default:
       return null
   }
@@ -397,6 +421,8 @@ function describeInvocationDanger(command: string): Nullable<string> {
 function describeDangerousCommand(command: string): Nullable<string> {
   const invocationReason = describeInvocationDanger(command)
   if (invocationReason) return invocationReason
+  if (remoteScriptPatterns.some((pattern) => pattern.test(command))) return RemoteScriptReason
+  if (scriptedRecursiveRemovePatterns.some((pattern) => pattern.test(command))) return RecursiveRemoveReason
   if (
     /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
     || windowsDestructivePatterns.some((pattern) => pattern.test(command))

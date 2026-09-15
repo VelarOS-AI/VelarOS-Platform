@@ -73,6 +73,8 @@
 
 删掉的四个工具都是只读或已有更宽的等价路径，没有放宽任何权限。写敏感路径的用户确认仍在 `write`、`edit` 里；危险命令的确认仍在 `run` 的执行前分类里。
 
+危险命令名单在 system 与 project 两份判定里同步补了四类，语料一起加：`git push --force`（含 `--force-with-lease`）、`git branch -D`、把网上下载的脚本直接管道给 shell（`curl … | sh`、`iwr … | iex`），以及藏在脚本里的递归删除（`shutil.rmtree(`、`rimraf`、CMD 的 `rd /s`、`del /s`）。递归删除的确认消息里加了一句：目标是项目或仓库目录时未推送的提交会一起没掉。判定仍是形态匹配，真正的防线是宿主的审批档位和进程约束。
+
 ## Compatibility and migration
 
 破坏性改动，与 0003 一起随下一版 Platform 发出。产品壳迁移：
