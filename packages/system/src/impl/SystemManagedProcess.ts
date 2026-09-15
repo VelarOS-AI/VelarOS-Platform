@@ -1,5 +1,5 @@
 /**
- * 单个受管子进程：`SystemManagedProcess`。接口见 `contract/commands.ts` 的 `ManagedSystemProcess`。
+ * 单个受管子进程：`SystemManagedProcess`。接口 `ManagedSystemProcess`、登记表回调 `SystemManagedProcessHooks` 与收尾策略 `SystemManagedProcessLifecycleOptions` 都在本文件的类上方。
  * 由 `SystemProcessManager.manage` 创建；从启动、退出、管道排空到有界终止都由它收尾，登记表通过 hooks 知道它的 pid 和收尾时刻。
  */
 
@@ -10,8 +10,52 @@ import { isNumber } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { SystemProcessCompletion } from '../contract/commands.js'
-import type { ManagedSystemProcess, SystemManagedProcessHooks, SystemProcessLifecycleOptions } from '../interface/internal.js'
 import { terminateSystemProcessTree } from '../utils/process.js'
+
+/** 一个受管子进程，由 `SystemProcessManagerApi.manage` 返回。 */
+export interface ManagedSystemProcess {
+  /** 受管身份，形如 `managed:<uuid>`；后台任务靠它确认进程还是不是自己启动的那个。 */
+  identity: string
+  /** 被管理的子进程本身。 */
+  child: ChildProcess
+  /** 进程彻底收尾时兑现，只兑现一次：退出且管道排空，或者期限到了放弃等待。 */
+  completion: Promise<SystemProcessCompletion>
+  /** 收尾结果；还没收尾时是 null。 */
+  result: Nullable<SystemProcessCompletion>
+  /** 直接子进程是否已经退出。后代可能还占着管道，这时 result 仍可能是 null。 */
+  exited: boolean
+  /**
+   * 请求终止并等结果：先发给定信号（默认 SIGTERM），宽限期后补 SIGKILL。
+   * 返回 true 表示确认已退出且收尾完整；已经退出的进程直接按收尾结果回答。
+   */
+  stop: (signal?: NodeJS.Signals) => Promise<boolean>
+}
+
+/** 受管进程向登记表回报的两个时刻，由登记表在创建受管进程时给。 */
+export interface SystemManagedProcessHooks {
+  /** 子进程有了 pid（创建时或 spawn 事件时）就回报一次，登记表据此按 pid 登记。 */
+  track: (managed: ManagedSystemProcess) => void
+  /** 进程收尾后回报，登记表据此清理过多的结束回执。 */
+  onFinished: () => void
+}
+
+/** 接管子进程时的收尾策略。 */
+export interface SystemManagedProcessLifecycleOptions {
+  /** 按哪个平台终止进程树；缺省是当前进程的平台。 */
+  platform?: NodeJS.Platform
+  /** 超时毫秒数，到了就开始终止；不给就不限时。 */
+  timeoutMs?: number
+  /** 取消信号，触发后开始终止。 */
+  abortSignal?: AbortSignal
+  /** 直接子进程退出后，等后代放开管道的最长毫秒数，默认 1000。 */
+  drainTimeoutMs?: number
+  /** 发出终止信号后，补发 SIGKILL 之前的宽限毫秒数，默认 500。 */
+  terminateGraceMs?: number
+  /** 从开始终止到放弃等待、按 cleanupIncomplete 收尾的最长毫秒数，默认 5000。 */
+  terminationDeadlineMs?: number
+  /** 自定义终止方式；不给就按平台终止整棵进程树。 */
+  terminate?: (signal: NodeJS.Signals) => Promise<boolean>
+}
 
 export class SystemManagedProcess implements ManagedSystemProcess {
   public readonly identity = `managed:${randomUUID()}`
@@ -28,7 +72,7 @@ export class SystemManagedProcess implements ManagedSystemProcess {
   private signal: Nullable<string> = null
   private readonly timers = new TimerScope({ name: 'ManagedSystemProcess' })
   private readonly platform: NodeJS.Platform
-  private readonly options: SystemProcessLifecycleOptions
+  private readonly options: SystemManagedProcessLifecycleOptions
   private readonly hooks: SystemManagedProcessHooks
   private readonly onAbort = (): void => {
     this.aborted = true
@@ -37,7 +81,7 @@ export class SystemManagedProcess implements ManagedSystemProcess {
 
   constructor(
     child: ChildProcess,
-    options: SystemProcessLifecycleOptions,
+    options: SystemManagedProcessLifecycleOptions,
     hooks: SystemManagedProcessHooks
   ) {
     this.child = child

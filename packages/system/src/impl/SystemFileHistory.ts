@@ -1,12 +1,11 @@
 /**
- * 文件版本历史：`SystemFileHistory`。接口见 `interface/internal.ts` 的 `SystemFileHistoryApi`。
+ * 文件版本历史：`SystemFileHistory`。接口 `SystemFileHistoryApi` 在本文件的类上方。
  * 只在内存里，随进程消失；持久化的本地历史是宿主的事。
  */
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type { SystemFileSnapshot } from '../contract/files.js'
-import type { SystemFileHistoryApi } from '../interface/internal.js'
 import { fileVersionOf } from '../utils/text-file.js'
 
 /** 每个文件最多留几份。 */
@@ -15,6 +14,18 @@ const MaxSnapshotsPerFile = 10
 const MaxSnapshotBytes = 2 * 1024 * 1024
 /** 全部历史加起来的上限，超了从最早的删起。 */
 const MaxHistoryBytes = 64 * 1024 * 1024
+
+/**
+ * 文件版本历史：每次改动前把原内容留一份，供召回旧状态和回滚。只在内存里，每个文件留最近 10 份，单份不超过 2 MB，总量不超过 64 MB，超了从最早的删起。
+ *
+ * 实现是 `SystemFileHistory`，文件操作持有一份。
+ */
+export interface SystemFileHistoryApi {
+  /** 留下一个文件此刻的原始字节，返回它的版本号（内容哈希）；同样的内容再留一次不重复占地方。太大留不下时返回 null。 */
+  remember(path: string, buffer: Buffer): Nullable<string>
+  /** 取某个文件留下的某个版本；没留过或已经被挤掉时返回 null。 */
+  recall(path: string, version: string): Nullable<SystemFileSnapshot>
+}
 
 export class SystemFileHistory implements SystemFileHistoryApi {
   private readonly snapshotsByPath = new Map<string, SystemFileSnapshot[]>()

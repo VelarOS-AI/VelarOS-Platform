@@ -41,8 +41,11 @@ export interface SystemToolContext {
  * 端口里只有工具真会调的方法，门禁按工具文件核对；宿主自己的界面要的搜索、进程、端口、终止任务在本地内核的接口上。
  */
 export interface SystemToolSystemApi {
-  /** 解析本次命令实际使用的工作目录，审批和执行共用同一个值；不提供时由 runCommand 自己解析。 */
-  resolveCommandCwd?: (cwd?: string) => string
+  /**
+   * 把用户给的路径解析成绝对路径：`~` 与 `~/…` 展开到宿主的家目录，相对路径相对宿主的默认工作目录；不给路径就返回默认工作目录。
+   * 文件工具的路径和 system:run 的 cwd 都经它解析，审批看到的目标和实际操作的目标因此一致。
+   */
+  resolvePath: (path?: string) => string
   /** 查询以后台方式启动的命令任务，可按任务 id、会话、过滤词、只看运行中筛选。 */
   listBackgroundTasks: (
     options?: SystemBackgroundTaskQueryOptions
@@ -50,7 +53,7 @@ export interface SystemToolSystemApi {
   /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述和变量个数。 */
   refreshShellEnvironment: () => Promise<SystemShellEnvironmentRefreshResult>
   /**
-   * 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果。
+   * 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；宿主不能或不允许跑后台任务时，就在这里以 PERMISSION 拒绝，不另设能力开关。
    *
    * `options.interactive` 为真（一定和 background 一起来）时，任务要能接受用户输入：宿主有 PTY 就用 PTY，
    * 没有就让 stdin 保持打开的管道；启动成功后在回执的 `backgroundProcess.console` 里给出这个控制台，
@@ -62,10 +65,6 @@ export interface SystemToolSystemApi {
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
   ) => Promise<SystemCommandResult>
-  /** 当前宿主是否支持刷新 shell 环境。 */
-  canRefreshShellEnvironment: () => boolean
-  /** 当前宿主是否支持启动后台命令。 */
-  canStartBackgroundCommands: () => boolean
 }
 
 // ── 挂进内核 ────────────────────────────────────────────────────

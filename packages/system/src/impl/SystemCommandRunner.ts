@@ -1,5 +1,5 @@
 /**
- * 命令执行器：`SystemCommandRunner`。接口见 `contract/commands.ts`。
+ * 命令执行器：`SystemCommandRunner`。接口 `SystemCommandRunnerApi` 与它的构造参数 `SystemCommandRunnerOptions` 就在本文件的类上方。
  * 本地内核创建并持有它；一条命令从选 shell、加约束、起受管子进程，到前台采集或后台登记，都在这里。
  * 交互式任务的控制台也归它：stdin 留一根打开的管道，输出另存一份带位置的缓冲，用户的输入、中断经这里递给进程。
  */
@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CommandSpec } from '../contract/platform.js'
+import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../contract/commands.js'
 import type {
   SystemBackgroundProcessInfo,
   SystemBackgroundTaskQueryOptions,
@@ -28,18 +28,20 @@ import type {
   SystemConsoleOutputRequest,
   SystemConsoleSessionInfo,
   SystemProcessConfinementEvidence,
-  SystemProcessOwnership,
   SystemRunCommandOptions,
-  SystemShellDescriptor,
 } from '../contract/system.js'
-import type { ManagedSystemProcess, SystemCommandRunnerApi, SystemCommandRunnerOptions } from '../interface/internal.js'
+import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
+import type { SystemProcessConfinementProvider } from '../interface/requires.js'
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
 
+import type { ManagedSystemProcess } from './SystemManagedProcess.js'
 import { SystemOutputDecoder } from './SystemOutputDecoder.js'
+import type { SystemProcessManagerApi } from './SystemProcessManager.js'
+import type { SystemShellResolverApi } from './SystemShellResolver.js'
 
 const DefaultCommandTimeoutMs = 120_000
 const DefaultOutputChars = 50_000
@@ -53,25 +55,67 @@ const ConsoleOutputBufferChars = 100_000
 const ConsoleStartedNote = '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
 const log = Log.tag('SystemCommandRunner')
 
-/** 准备好的一条命令：可以直接 spawn 的规格和环境，外加约束、归属、shell 三份证据。 */
-type PreparedSystemCommand = {
-  spec: CommandSpec
-  env: NodeJS.ProcessEnv
-  evidence: SystemProcessConfinementEvidence
-  ownership: SystemProcessOwnership
-  shell: SystemShellDescriptor
+/**
+ * 命令执行器：把一条命令变成受管子进程跑起来。前台等它结束并采集输出；后台登记成后台任务，之后可查、可停。
+ *
+ * 实现是 `SystemCommandRunner`，由本地内核创建并持有。它启动过的后台进程归它管，内核释放时一并停掉。
+ */
+export interface SystemCommandRunnerApi {
+  /**
+   * 跑一条命令，返回完整结果。
+   *
+   * 链路：选 shell（给了 nativeCommand 就按原生 argv 执行）→ 加进程约束 → Windows 上包进原生进程宿主 → 启动受管子进程。
+   * 前台：有界采集 stdout 与 stderr，超时或取消后在期限内收敛，失败时把输出末尾摘进 verification。
+   * 后台（options.background）：进程拉起后登记成后台任务就返回，结果里带任务 id 和终止命令。
+   * 交互式（options.interactive，必须和 background 一起）：stdin 留一根保持打开的管道，输出另外存进控制台缓冲区，
+   * 结果的 `backgroundProcess.console` 给出这个控制台；本机没有 PTY，channel 一律是 `pipe`，真正的 PTY 由宿主自己的端口实现提供。
+   * 命令自己失败（非零退出、超时、取消）不抛错，如实写进结果；找不到能用的 shell、约束后端缺失、进程拉不起来才抛错。
+   * @param command 命令文本；给了 options.nativeCommand 时只用来展示
+   * @param cwd 已经解析好的绝对工作目录
+   */
+  run(command: string, cwd: string, options: SystemRunCommandOptions, abortSignal?: AbortSignal): Promise<SystemCommandResult>
+  /** 列出后台任务：可按任务 id、会话、命令过滤词、只看运行中来筛，最多 limit 条（默认 50）；状态按受管进程此刻的情况给出。 */
+  listTasks(options?: SystemBackgroundTaskQueryOptions): SystemBackgroundTaskRecord[]
+  /**
+   * 终止一个后台任务，返回终止前后的状态。
+   *
+   * 先核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号（force 时直接 SIGKILL）并等它在期限内退出。
+   * 进程已经不在了不算失败，结果里如实说明；核对不过或期限内没退出时抛错。
+   */
+  terminateTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
+  /**
+   * 往交互式任务的控制台写一段输入，缺省补一个换行。
+   * 先核对任务存在、属于请求里的会话；进程已经退出、这条任务不是交互式的、stdin 已经关掉时不抛错，结果里 `accepted` 为 false。
+   */
+  writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
+  /** 读控制台从 cursor 起的增量输出；缓冲区只留最近一段，挤掉的字符数如实给出。任务不存在或不属于该会话时抛错。 */
+  readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk>
+  /** 给控制台发中断（POSIX 向进程组发 SIGINT，Windows 退回按进程树终止）；进程已经退出时不抛错，`accepted` 为 false。 */
+  interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult>
+  /** 停掉这个执行器启动过、还没退出的全部后台进程。 */
+  dispose(): Promise<void>
 }
 
-/** 一个交互式任务的控制台输出缓冲：只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符。 */
-type ConsoleOutputBuffer = {
-  buffer: string
-  produced: number
+/** 命令执行器的构造参数，由本地内核给。 */
+export interface SystemCommandRunnerOptions {
+  /** 命令跑在哪个平台上。 */
+  platform: NodeJS.Platform
+  /** 按这个平台算 shell 参数、终止命令、要不要独立进程组。 */
+  platformTools: SystemPlatformCompatibilityApi
+  /** 进程约束策略：模式、工作区根、额外写根、是否断网。 */
+  confinement: SystemProcessConfinementPolicy
+  /** 宿主注入的约束后端；没有内置后端的平台（Windows）靠它，缺了就在受约束模式下失败。 */
+  confinementProvider?: SystemProcessConfinementProvider
+  /** 选 shell 用。 */
+  shells: SystemShellResolverApi
+  /** 登记和管理子进程用。 */
+  processes: SystemProcessManagerApi
 }
 
 export class SystemCommandRunner implements SystemCommandRunnerApi {
   private readonly tasks = new Map<string, SystemBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedSystemProcess>()
-  private readonly consoles = new Map<string, ConsoleOutputBuffer>()
+  private readonly consoles = new Map<string, SystemConsoleOutputBuffer>()
   private readonly options: SystemCommandRunnerOptions
 
   constructor(options: SystemCommandRunnerOptions) {

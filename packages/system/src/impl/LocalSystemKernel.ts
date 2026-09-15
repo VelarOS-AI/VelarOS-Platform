@@ -1,5 +1,5 @@
 /**
- * 本地内核：`LocalSystemKernel`，宿主端口 `ctx.system` 在本机上的实现。接口见 `contract/host.ts` 的 `LocalSystemKernelApi`。
+ * 本地内核：`LocalSystemKernel`，宿主端口 `ctx.system` 在本机上的实现。接口见 `interface/provides.ts` 的 `LocalSystemKernelApi`。
  * 它只做转接：命令、后台任务与交互式任务的控制台交给命令执行器，搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
  */
 
@@ -16,8 +16,6 @@ import type {
   SystemBackgroundTaskTerminateRequest,
   SystemBackgroundTaskTerminateResult,
   SystemCommandResult,
-  SystemCommandRunQueryOptions,
-  SystemCommandRunRecord,
   SystemConsoleControlResult,
   SystemConsoleInputRequest,
   SystemConsoleInterruptRequest,
@@ -34,8 +32,6 @@ import type {
   SystemRunCommandOptions,
   SystemShellEnvironmentRefreshResult,
 } from '../contract/system.js'
-import type { SystemCommandRunnerApi, SystemShellResolverApi } from '../interface/internal.js'
-import type { SystemGlobalSearchApi } from '../interface/internal.js'
 import type { LocalSystemKernelApi } from '../interface/provides.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { LocalSystemKernelOptions } from '../interface/requires.js'
@@ -53,10 +49,13 @@ import {
   selectSystemProcesses,
 } from '../utils/system-info.js'
 
+import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
 import { SystemCommandRunner } from './SystemCommandRunner.js'
+import type { SystemGlobalSearchApi } from './SystemGlobalSearch.js'
 import { SystemGlobalSearch } from './SystemGlobalSearch.js'
 import { SystemPlatformCompatibility } from './SystemPlatformCompatibility.js'
 import { systemProcessManager } from './SystemProcessManager.js'
+import type { SystemShellResolverApi } from './SystemShellResolver.js'
 import { systemShellResolver } from './SystemShellResolver.js'
 
 const log = Log.tag('LocalSystemKernel')
@@ -195,10 +194,6 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return selectOpenPorts(entries, new Map(owners.map((processInfo) => [processInfo.pid, processInfo])), options)
   }
 
-  public listCommandRuns(_options: SystemCommandRunQueryOptions = {}): SystemCommandRunRecord[] {
-    return []
-  }
-
   public async listBackgroundTasks(options: SystemBackgroundTaskQueryOptions = {}): Promise<SystemBackgroundTaskRecord[]> {
     return this.commands.listTasks(options)
   }
@@ -235,29 +230,17 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     _allowDangerous = false,
     abortSignal?: AbortSignal
   ): Promise<SystemCommandResult> {
-    return this.commands.run(command, this.resolvePath(options.cwd ?? this.workingDirectory), options, abortSignal)
+    return this.commands.run(command, this.resolvePath(options.cwd), options, abortSignal)
   }
 
-  public resolveCommandCwd(cwd?: string): string {
-    return this.resolvePath(cwd ?? this.workingDirectory)
-  }
-
-  public canRefreshShellEnvironment(): boolean {
-    return true
-  }
-
-  public canStartBackgroundCommands(): boolean {
-    return true
+  public resolvePath(path?: string): string {
+    const given = path ?? this.workingDirectory
+    const expanded = given === '~' ? this.homeDir : /^~[\\/]/.test(given) ? join(this.homeDir, given.slice(2)) : given
+    return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
   }
 
   public dispose(): Promise<void> {
     return this.commands.dispose()
-  }
-
-  /** 把路径变成绝对路径：`~` 展开到家目录，相对路径相对构造时给的 cwd。 */
-  private resolvePath(path: string): string {
-    const normalizedPath = path.startsWith('~') ? join(this.homeDir, path.slice(1)) : path
-    return isAbsolute(normalizedPath) ? resolve(normalizedPath) : resolve(this.workingDirectory, normalizedPath)
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */

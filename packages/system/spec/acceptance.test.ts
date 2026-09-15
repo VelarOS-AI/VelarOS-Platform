@@ -140,7 +140,7 @@ describe('命令安全门', () => {
         },
       },
       system: {
-        canStartBackgroundCommands: () => true,
+        resolvePath: (path?: string) => path ?? process.cwd(),
         runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0, truncated: false }),
       },
     } as never
@@ -336,7 +336,7 @@ describe('命令输出', () => {
           abortSignal: signal,
           system: {
             runCommand: async () => commandResult,
-            canStartBackgroundCommands: () => true,
+            resolvePath: (path?: string) => path ?? process.cwd(),
           },
           approval: { awaitConfirmation: async () => undefined },
         }) as unknown as SystemToolContext,
@@ -400,7 +400,7 @@ describe('命令输出', () => {
           abortSignal: signal,
           system: {
             runCommand: async () => commandResult,
-            canStartBackgroundCommands: () => true,
+            resolvePath: (path?: string) => path ?? process.cwd(),
           },
           approval: { awaitConfirmation: async () => undefined },
         }) as unknown as SystemToolContext,

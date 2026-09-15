@@ -1,5 +1,5 @@
 /**
- * 搜索可见性：`GitIgnoreSystemSearchPolicy` 按从仓库根到条目所在目录的各级 .gitignore 判断要不要跳过。接口见 `interface/internal.ts` 的 `SystemSearchIgnorePolicy`。
+ * 搜索可见性：`GitIgnoreSystemSearchPolicy` 按从仓库根到条目所在目录的各级 .gitignore 判断要不要跳过。接口 `SystemSearchIgnorePolicy` 在本文件的类上方。
  * 全局搜索每次遍历按搜索根新建一个；不在仓库里、搜索根本身被忽略、或 unrestricted 时什么都不跳过。
  */
 
@@ -9,7 +9,6 @@ import { dirname, resolve } from 'node:path'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { GitIgnoreRule, SystemSearchIgnorePolicyOptions } from '../contract/files.js'
-import type { SystemSearchIgnorePolicy } from '../interface/internal.js'
 import {
   findSystemSearchRepoRoot,
   isInsidePath,
@@ -17,6 +16,16 @@ import {
   readGitIgnoreRulesBetween,
   toPortableRelativePath,
 } from '../utils/search.js'
+
+/**
+ * 搜索可见性：遍历时某个条目要不要跳过。实现是 `GitIgnoreSystemSearchPolicy`，全局搜索每次遍历按搜索根新建一个。
+ *
+ * 在 git 仓库里按从仓库根到条目所在目录的各级 .gitignore 判断；不在仓库里、搜索根本身就被忽略、或者 unrestricted 时，什么都不跳过。
+ */
+export interface SystemSearchIgnorePolicy {
+  /** 这个条目是否被忽略、应该跳过；搜索根本身永远不跳过。 */
+  shouldSkip(candidatePath: string, isDirectory: boolean): Promise<boolean>
+}
 
 export class GitIgnoreSystemSearchPolicy implements SystemSearchIgnorePolicy {
   private readonly rulesByDirectoryPath = new Map<string, Promise<GitIgnoreRule[]>>()

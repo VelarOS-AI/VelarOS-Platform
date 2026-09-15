@@ -4,7 +4,7 @@
 
 import { isEmpty, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-import type { SystemCommandExecutionPlan } from '../contract/commands.js'
+import type { ShellInvocation, SystemCommandExecutionPlan } from '../contract/commands.js'
 
 const readOnlyCommands = new Set([
   'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',
@@ -210,12 +210,6 @@ const PosixRemoveOptionCluster = /^-[dfiprvwx]+$/i
 
 /** cmd.exe 开关串：`/s`、`/S`、`/s/q`、`/a:h`。`/tmp/s` 这类路径每段不止一个字母，不是开关。 */
 const CmdSwitchToken = /^(?:\/[a-z](?::[a-z-]*)?)+$/i
-
-/** 命令位置上的一次调用：规范化后的命令名与它在本段内的实参。 */
-interface ShellInvocation {
-  name: string
-  args: string[]
-}
 
 /** 取命令词的规范名：去掉路径前缀与 `.exe` 后缀，统一小写。 */
 function commandName(token: string): string {
@@ -525,11 +519,6 @@ export function isParallelCommandExecutionSafe(input: {
   return plan.isReadOnly && !plan.shouldRequestConfirmation && !plan.shouldStartInBackground
 }
 
-/** 判断前台命令退出后是否还要清理它的进程组：命令里有真正转入后台的 `&`，且没有用 nohup、setsid、disown 脱离。 */
-export function shouldReapForegroundProcessGroupAfterExit(command: string): boolean {
-  return /(^|[^&])&(?!&)\s*(?:$|[;|\r\n])/.test(command)
-    && !/\b(?:nohup|setsid|disown)\b/i.test(command)
-}
 
 /** 生成危险命令或长驻命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
 export function buildBackgroundCommandConfirmationMessage(

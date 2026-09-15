@@ -135,10 +135,13 @@ interface ResolveSoloLoopToolsArgs {
   enabledToolNames: Iterable<string>
 }
 
+/** 子代理拿到的宿主端口里和后台命令有关的两种形状：旧式能力开关，以及 runCommand 本身。 */
 type BackgroundCommandSystemBoundary = {
   canStartBackgroundCommands: () => boolean
+  runCommand: (command: string, options?: { background?: boolean }, ...rest: unknown[]) => Promise<unknown>
 }
 
+/** 子代理不能留下后台进程：能力开关一律答否；runCommand 收到 background 直接拒绝，其余原样转给父上下文的端口。 */
 function createSubAgentSystemBoundary<TContext extends SubAgentContextBase>(
   parentCtx: TContext
 ): TContext['system'] {
@@ -146,11 +149,19 @@ function createSubAgentSystemBoundary<TContext extends SubAgentContextBase>(
   if (!system || !isObject(system)) return system
 
   const backgroundBoundary = system as Partial<BackgroundCommandSystemBoundary>
-  if (!isFunction(backgroundBoundary.canStartBackgroundCommands)) return system
+  const hasSwitch = isFunction(backgroundBoundary.canStartBackgroundCommands)
+  const runCommand = backgroundBoundary.runCommand
+  if (!hasSwitch && !isFunction(runCommand)) return system
 
   const boundedSystem = Object.create(Object.getPrototypeOf(system)) as Record<string, unknown>
   Object.assign(boundedSystem, system)
-  boundedSystem.canStartBackgroundCommands = () => false
+  if (hasSwitch) boundedSystem.canStartBackgroundCommands = () => false
+  if (isFunction(runCommand)) {
+    boundedSystem.runCommand = (command: string, options?: { background?: boolean }, ...rest: unknown[]) => {
+      if (options?.background) throw new AppError('PERMISSION', '子代理不能启动后台命令；改成前台运行，或交给父代理。')
+      return runCommand.call(system, command, options, ...rest)
+    }
+  }
 
   return boundedSystem
 }

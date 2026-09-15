@@ -1,5 +1,5 @@
 /**
- * 全局搜索：`SystemGlobalSearch`，宿主端口 `globalSearch` 的本地实现。接口见 `contract/files.ts` 的 `SystemGlobalSearchApi`。
+ * 全局搜索：`SystemGlobalSearch`，宿主端口 `globalSearch` 的本地实现。接口 `SystemGlobalSearchApi` 在本文件的类上方。
  * 本地内核持有一个；遍历时跳过哪些条目由 `GitIgnoreSystemSearchPolicy.ts` 判定。
  */
 
@@ -14,7 +14,6 @@ import type {
   SystemGlobalSearchResult,
   SystemSearchMatch,
 } from '../contract/system.js'
-import type { SystemGlobalSearchApi } from '../interface/internal.js'
 import {
   buildLineMatcher,
   matchesSearchPath,
@@ -30,6 +29,22 @@ const DefaultSearchLimit = 60
 const DefaultSearchMaxDepth = 6
 /** 内容搜索跳过大于这个字节数的文件。 */
 const MaxSearchFileBytes = 1024 * 1024
+
+/**
+ * 全局搜索：在一棵目录树里按路径名或按文件内容找东西，是本地内核 `globalSearch` 的实现，给宿主自己的界面用。
+ *
+ * 实现是 `SystemGlobalSearch`，由本地内核持有。遍历按名字排序、不跟随符号链接；
+ * 跳过隐藏项、依赖和构建目录、gitignore 忽略的条目、macOS 受隐私保护的目录，includeHidden 和 unrestricted 可以放开。
+ */
+export interface SystemGlobalSearchApi {
+  /**
+   * 在 rootPath 下搜索。
+   * mode 为 paths（默认）时按相对路径匹配（contains、exact 或 fuzzy），可按扩展名和条目类型过滤；
+   * mode 为 content 时逐行搜文件内容（字面或正则），跳过大于 1MB 或读不出文本的文件，每个文件最多 maxResultsPerFile 条（默认 5）。
+   * 找够 limit 条（默认 60）就停并标 truncated，最深 maxDepth 层（默认 6）。根目录不存在时报 NOT_FOUND。
+   */
+  search(rootPath: string, options: SystemGlobalSearchOptions, abortSignal?: AbortSignal): Promise<SystemGlobalSearchResult>
+}
 
 export class SystemGlobalSearch implements SystemGlobalSearchApi {
   private readonly platform: NodeJS.Platform

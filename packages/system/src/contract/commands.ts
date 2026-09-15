@@ -4,7 +4,7 @@
  */
 
 import type { CommandSpec } from './platform.js'
-import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemShellDescriptor } from './system.js'
+import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
 
 // ── 执行前分类 ──────────────────────────────────────────────────
 
@@ -87,4 +87,27 @@ export interface RefreshedWindowsEnvironment {
   revision: string
   refreshed: boolean
   reason?: string
+}
+
+// ── 命令执行器与命令分类内部的数据 ──────────────────────────────
+
+/** 准备好的一条命令：可以直接 spawn 的规格和环境，外加约束、归属、shell 三份证据。 */
+export interface PreparedSystemCommand {
+  spec: CommandSpec
+  env: NodeJS.ProcessEnv
+  evidence: SystemProcessConfinementEvidence
+  ownership: SystemProcessOwnership
+  shell: SystemShellDescriptor
+}
+
+/** 一个交互式任务的控制台输出缓冲：只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符。 */
+export interface SystemConsoleOutputBuffer {
+  buffer: string
+  produced: number
+}
+
+/** 命令位置上的一次调用：规范化后的命令名与它在本段内的实参。 */
+export interface ShellInvocation {
+  name: string
+  args: string[]
 }

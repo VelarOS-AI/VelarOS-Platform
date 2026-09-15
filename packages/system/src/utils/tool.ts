@@ -4,26 +4,15 @@
 
 import { z } from 'zod'
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
 import { defineToolRuntimeSpec, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 import { isFalse, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
 
-import type { SystemToolName } from '../contract/system.js'
 import { SystemToolCategoryByName } from '../contract/system.js'
+import type { DefineSystemToolInput } from '../interface/internal.js'
 import type { VelaTool } from '../interface/provides.js'
 import type { SystemToolContext, SystemToolContextResolver } from '../interface/requires.js'
-
-type DefineSystemToolInput<TInput extends Record<string, unknown>> = Omit<
-  DefineToolRuntimeSpecInput<TInput, SystemToolContext, unknown, ToolPermission>,
-  'category'
-> & {
-  name: SystemToolName
-  /** 失败后入参可复用：失败回执带 inputReuse，下一次用 reuse + changes 只改出问题的字段。执行器在 execute 之前把复用请求还原成完整入参。 */
-  inputReuse?: boolean
-}
 
 /** 定义一个系统工具：类别按工具名自动查表填上，保证一个工具只属于一个类别；声明了 inputReuse 的工具，示例按原 schema 校验后再套上复用信封。 */
 export function defineSystemTool<TInput extends Record<string, unknown>>(

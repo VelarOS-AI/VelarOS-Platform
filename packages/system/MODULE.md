@@ -62,7 +62,7 @@
 | `system:view` | files 每项一张图：整张作为模型可见的内容块交给模型，和用户上传一样 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。PDF 与其他文档归别的 mod |
 | `system:edit` | files 每项一个文件，一批全成或全不成：同一文件只能出现一次 → 每个文件先过审批（系统敏感路径、凭证文件，符号链接解开后判定），被拒就整批不写 → 再把每一处在原文上定下来、什么都不写（带 version 的先核对；不是合法文本的字节拒改；各处只在 read 读到的 range 里找，越界的 range 按过期报，多处匹配给锚点），定不下来就整批失败，回执 details.problems 列出第几个文件第几处出了什么问题、入参可复用 → 写之前再核一次文件没变 → 按顺序写：改动前把原内容留成一个版本，newText 整个写入，edits 从后往前一起套用并交回每处的新样子，restore 回滚到留下的版本 |
 | `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
-| `system:refresh-environment` | 宿主允许刷新才继续 → 宿主重载 PATH 与环境变量 |
+| `system:refresh-environment` | 宿主重载 PATH 与环境变量 |
 | `system:list-tasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
 
 六个工具按两个类别分组、作为内置 mod 挂进产品、作为能力服务挂进内核，也在 `SystemTools.ts` 的末尾；挂进内核后每次调用先严格解析入参，再向宿主解析上下文。
@@ -124,7 +124,8 @@
 
 ```text
 src/
-  interface/    接口：provides 是产品面，requires 是注入面，internal 是包内部类的接口；每个方法都有中文说明
+  interface/    接口：provides 是产品面，requires 是注入面，internal 是不属于某个类的内部接口（utils 函数的选项、工具定义的入参）；每个方法都有中文说明
+                包内部类的接口不在这里：写在类文件里、紧挨在类的上方
   contract/     数据：字段、类型、常量表，不含任何函数和方法
   impl/         扁平：SystemTools.ts 放六个工具，其余一个类一个文件，文件名就是类名
   utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明
@@ -137,7 +138,7 @@ src/
 
 **文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。六个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 
-**类与接口。** 每个类实现 `interface/` 里的一个接口。类的公开方法只能是接口里的方法；私有方法只放用得到实例状态、没法提出去的公共逻辑，用不到的一律进 utils。整个进程只需要一份的类，文件末尾给出那一份，对外的那几份按公开接口标注类型。继承 `Error` 的错误类没有方法，不写接口，也不出包，外面按错误码判断。
+**类与接口。** 每个类实现一个接口：公开接口在 `interface/provides.ts`，包内部类的接口写在类文件里、紧挨在类的上方，一起导出。类的公开方法只能是接口里的方法；私有方法只放用得到实例状态、没法提出去的公共逻辑，用不到的一律进 utils。整个进程只需要一份的类，文件末尾给出那一份，对外的那几份按公开接口标注类型。继承 `Error` 的错误类没有方法，不写接口，也不出包，外面按错误码判断。
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
@@ -146,15 +147,15 @@ src/
 | `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（provides） | 执行前给命令分类的唯一出口 |
 | `SystemPlatformCompatibility.ts` | `SystemPlatformCompatibilityApi`（provides） | 跨平台兼容层 |
 | `VelarOSSharedResources.ts` | `VelarOSSharedResourcesApi`（provides） | 产品家族共享资源目录 |
-| `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（internal） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
-| `SystemShellResolver.ts` | `SystemShellResolverApi`（internal） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
-| `SystemProcessManager.ts` | `SystemProcessManagerApi`（internal） | 受管子进程登记表 |
-| `SystemManagedProcess.ts` | `ManagedSystemProcess`（internal） | 单个受管子进程的超时、取消、有界终止与收尾 |
-| `SystemOutputDecoder.ts` | `SystemOutputDecoderApi`（internal） | 子进程输出的 UTF-8 解码 |
-| `SystemFileOperations.ts` | `SystemFileOperationsApi`（internal） | 读文本、看图片、写三个文件操作，位置按字符算 |
-| `SystemFileHistory.ts` | `SystemFileHistoryApi`（internal） | 改动前留下的文件版本，供召回与回滚；只在内存里 |
-| `SystemGlobalSearch.ts` | `SystemGlobalSearchApi`（internal） | 全局搜索：按路径或按内容遍历目录树，给宿主界面用 |
-| `GitIgnoreSystemSearchPolicy.ts` | `SystemSearchIgnorePolicy`（internal） | 遍历时按各级 .gitignore 判断跳过哪些条目 |
+| `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
+| `SystemShellResolver.ts` | `SystemShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
+| `SystemProcessManager.ts` | `SystemProcessManagerApi`（同文件） | 受管子进程登记表 |
+| `SystemManagedProcess.ts` | `ManagedSystemProcess`（同文件） | 单个受管子进程的超时、取消、有界终止与收尾 |
+| `SystemOutputDecoder.ts` | `SystemOutputDecoderApi`（同文件） | 子进程输出的 UTF-8 解码 |
+| `SystemFileOperations.ts` | `SystemFileOperationsApi`（同文件） | 读文本、看图片、写三个文件操作，位置按字符算 |
+| `SystemFileHistory.ts` | `SystemFileHistoryApi`（同文件） | 改动前留下的文件版本，供召回与回滚；只在内存里 |
+| `SystemGlobalSearch.ts` | `SystemGlobalSearchApi`（同文件） | 全局搜索：按路径或按内容遍历目录树，给宿主界面用 |
+| `GitIgnoreSystemSearchPolicy.ts` | `SystemSearchIgnorePolicy`（同文件） | 遍历时按各级 .gitignore 判断跳过哪些条目 |
 | `SystemShellUnavailableError.ts` | 错误类，不写接口 | 找不到能用的 shell |
 
 实现分四层，上层可以调下层，下层不调上层：工具（`SystemTools.ts`）→ 宿主（`LocalSystemKernel.ts`）→ 能力（命令、策略、进程、shell、文件操作、文件版本、搜索）→ 平台（兼容层、它的错误、共享资源目录）。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。utils 在最底下，谁都可以用，它只引 utils、契约与接口。

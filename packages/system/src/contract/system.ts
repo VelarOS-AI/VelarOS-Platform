@@ -57,9 +57,6 @@ export type { SystemToolCategoryId, SystemToolName }
  * - `nativeCommand` 只供宿主组合能力使用，绝不出现在模型工具 schema 里（INV-15）。
  */
 
-/** 一条运行记录的状态。 */
-export type SystemCommandRunStatus = 'running' | 'passed' | 'failed' | 'timed-out'
-
 /** 已批准命令在操作系统进程层实际采用的文件副作用边界。 */
 export type SystemProcessConfinementMode =
   | 'read-only'
@@ -213,42 +210,6 @@ export interface SystemCommandResult {
   confinement?: SystemProcessConfinementEvidence
   backgroundProcess?: SystemBackgroundProcessInfo
   verification: SystemVerificationSummary
-}
-
-/** 历史运行记录：与 `SystemCommandResult` 相比只保留预览，不保留完整输出。 */
-export interface SystemCommandRunRecord {
-  capture?: SystemCommandOutputCapture
-  aborted?: boolean
-  cleanupIncomplete?: boolean
-  ownership?: SystemProcessOwnership
-  confinement?: SystemProcessConfinementEvidence
-  id: string
-  sessionId: Nullable<string>
-  command: string
-  cwd: string
-  startedAt: number
-  finishedAt: Nullable<number>
-  durationMs: Nullable<number>
-  exitCode: Nullable<number>
-  signal: Nullable<string>
-  timedOut: boolean
-  success: boolean
-  background: boolean
-  pid: Nullable<number>
-  logPath: Nullable<string>
-  stdoutPreview: string
-  stderrPreview: string
-  truncated: boolean
-  status: SystemCommandRunStatus
-  verification: SystemVerificationSummary
-}
-
-/** 查询历史运行记录的过滤条件。 */
-export interface SystemCommandRunQueryOptions {
-  limit?: number
-  sessionId?: string
-  onlyFailed?: boolean
-  background?: boolean
 }
 
 // ── 进程、端口与资源快照 ────────────────────────────────────────

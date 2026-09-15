@@ -1,15 +1,14 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { systemTools } from '../src/impl/SystemTools.js'
 import type { SystemToolContext } from '../src/interface/requires.js'
-import { shouldReapForegroundProcessGroupAfterExit } from '../src/utils/command-policy.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
 import { isCredentialPath } from '../src/utils/file-safety.js'
 
@@ -20,7 +19,7 @@ const approvingContext: SystemToolContext = {
     requestApproval: async () => ({ approved: true }),
     awaitConfirmation: async () => undefined,
   },
-  system: {} as never,
+  system: { resolvePath: (path = process.cwd()) => (path === '~' ? homedir() : path.startsWith('~/') ? join(homedir(), path.slice(2)) : resolve(path)) } as never,
 } as SystemToolContext
 
 /** 结果里取一项，是失败条目就抛出来，让断言直接看到原因。 */
@@ -132,16 +131,6 @@ describe('System capability', () => {
     }
   )
 
-  test('only reaps commands that launch a real shell background job', () => {
-    expect(shouldReapForegroundProcessGroupAfterExit('printf one && printf two')).toBe(false)
-    expect(shouldReapForegroundProcessGroupAfterExit('false || printf fallback')).toBe(false)
-    expect(shouldReapForegroundProcessGroupAfterExit('printf value | wc -c')).toBe(false)
-    expect(shouldReapForegroundProcessGroupAfterExit('server &')).toBe(true)
-    expect(shouldReapForegroundProcessGroupAfterExit('server &; printf ready')).toBe(true)
-    expect(shouldReapForegroundProcessGroupAfterExit('server &\nprintf ready')).toBe(true)
-    expect(shouldReapForegroundProcessGroupAfterExit('nohup server &')).toBe(false)
-  })
-
   test('reads text by character ranges and continues from range.end without splitting a surrogate pair', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-'))
     const path = join(root, 'notes.txt')
@@ -242,7 +231,7 @@ describe('System capability', () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-base-'))
     try {
       await writeFile(join(root, 'note.txt'), 'here')
-      const hosted: SystemToolContext = { ...approvingContext, system: { resolveCommandCwd: () => root } as never } as SystemToolContext
+      const hosted: SystemToolContext = { ...approvingContext, system: { resolvePath: (path = root) => resolve(root, path) } as never } as SystemToolContext
       expect(entryOf(await systemFileOperations.read({ files: [{ path: 'note.txt' }] }, hosted))).toMatchObject({ path: join(root, 'note.txt'), content: 'here' })
 
       // 凭证文件：批准就读，拒绝只算这个文件失败。

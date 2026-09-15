@@ -14,7 +14,7 @@ import type { BackgroundShellLaunchOptions, CommandSpec, DefaultAppDataPathOptio
 import type { SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../contract/system.js'
 import type { SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest } from '../contract/system.js'
 import type { SystemModId, SystemShellKind, SystemToolCategoryId, SystemToolName } from '../contract/system.js'
-import type { SystemCommandRunQueryOptions, SystemCommandRunRecord, SystemEnvironmentInspection, SystemMetricsSnapshot } from '../contract/system.js'
+import type { SystemEnvironmentInspection, SystemMetricsSnapshot } from '../contract/system.js'
 
 import type { SystemToolContext, SystemToolSystemApi } from './requires.js'
 
@@ -69,7 +69,7 @@ export interface SystemCapabilityService extends KernelCallableCapabilityService
  *
  * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，
  * 进程、端口、指标跑平台命令读出来。相对路径都相对构造时给的 cwd，`~` 展开到家目录。
- * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十一个方法：环境检查、指标、运行记录、释放，
+ * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十个方法：环境检查、指标、释放，
  * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
  * 这些方法都没有工具在调（模型改用 `system:run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
@@ -78,8 +78,6 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi {
   inspectEnvironment(commands?: string[]): Promise<SystemEnvironmentInspection>
   /** 系统指标快照：CPU、内存、交换区、系统盘、负载各自的用量和告警级别，外加占用最高的 5 个进程；读不到的项为 null。 */
   getSystemMetrics(): Promise<SystemMetricsSnapshot>
-  /** 命令执行记录。本地内核不留记录，总是返回空列表；留给会记录的宿主去实现。 */
-  listCommandRuns(options?: SystemCommandRunQueryOptions): SystemCommandRunRecord[]
   /** 释放：停掉这个内核启动过、还没退出的全部后台进程。 */
   dispose(): Promise<void>
   /** 在一棵目录树里按路径名或文件内容搜索，跳过隐藏项、依赖目录、gitignore 忽略项和受保护目录，最多 limit 条。 */

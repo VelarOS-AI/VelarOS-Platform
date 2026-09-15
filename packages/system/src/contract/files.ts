@@ -234,3 +234,26 @@ export interface GitIgnoreRule {
   anchored: boolean
   segments: string[]
 }
+
+// ── 安全判定与写入计划的内部数据 ────────────────────────────────
+
+/** 判断敏感路径、凭证文件时的环境：平台、家目录、临时目录、环境变量，缺省取当前进程的。临时目录不触发敏感路径审批；Windows 与 macOS 的路径按大小写不敏感比较。 */
+export interface SensitiveSystemMutationPathOptions {
+  platform?: NodeJS.Platform
+  homeDir?: string
+  tempDir?: string
+  env?: NodeJS.ProcessEnv
+}
+
+/** 一处已经定下来的目标：edit 是 edits 里第几处，range 是改动前原文里的位置。 */
+export interface SystemEditTarget {
+  edit: number
+  range: SystemTextRange
+  newText: string
+}
+
+/** 一个文件定下来的写入计划：回滚、整个写入、或改几处；baseVersion 是计划时文件的版本（不存在为 null），写之前再核一次。第一段只做计划，第二段照计划写。 */
+export type SystemEditPlan =
+  | { kind: 'restore'; index: number; path: string; exists: boolean; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string> }
+  | { kind: 'write'; index: number; path: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string; baseVersion: Nullable<string> }
+  | { kind: 'edits'; index: number; path: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string> }

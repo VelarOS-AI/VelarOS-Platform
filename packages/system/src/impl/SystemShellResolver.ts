@@ -1,5 +1,5 @@
 /**
- * shell 选择与自检：`SystemShellResolver` 与整个进程唯一的 `systemShellResolver`。接口见 `contract/commands.ts`。
+ * shell 选择与自检：`SystemShellResolver` 与整个进程唯一的 `systemShellResolver`。接口 `SystemShellResolverApi` 在本文件的类上方。
  * 不出包；只查文件、不跑进程的部分在 `utils/shell.ts`。
  */
 
@@ -12,11 +12,12 @@ import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
 import type { RefreshedWindowsEnvironment, ResolvedSystemShell, SystemShellProbeResult } from '../contract/commands.js'
 import type { CommandSpec } from '../contract/platform.js'
 import type { SystemEnvironmentCommandAvailability } from '../contract/system.js'
-import type { ResolveSystemShellOptions, SystemProcessManagerApi, SystemShellResolverApi } from '../interface/internal.js'
+import type { ResolveSystemShellOptions } from '../interface/internal.js'
 import { buildShellCommandSpec, quoteShellArgument } from '../utils/platform.js'
 import { buildSystemOwnedProcessSpec } from '../utils/process.js'
 import { detectSystemShells, readWindowsEnv, uniquePaths } from '../utils/shell.js'
 
+import type { SystemProcessManagerApi } from './SystemProcessManager.js'
 import { systemProcessManager } from './SystemProcessManager.js'
 import { SystemShellUnavailableError } from './SystemShellUnavailableError.js'
 
@@ -24,6 +25,29 @@ const log = Log.tag('SystemShell')
 
 /** CMD 的内建命令：它们不是文件，`where` 找不到，要直接认。 */
 const CmdBuiltins = new Set('assoc break call cd chdir cls color copy date del dir echo endlocal erase exit for ftype goto if md mkdir mklink move path pause popd prompt pushd rd rem ren rename rmdir set setlocal shift start time title type ver verify vol'.split(' '))
+
+/**
+ * shell 选择与自检：在本机找能用的 shell、试跑确认它真能工作、按它的查找规则判断命令在不在、在 Windows 上刷新环境变量。
+ *
+ * 实现是 `SystemShellResolver`，整个进程只有一份（`systemShellResolver`），不出包。
+ * Windows 上按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序找；其他平台用 SHELL。
+ */
+export interface SystemShellResolverApi {
+  /** 只查文件、不试跑，同步返回第一个候选 shell，给界面展示用。一个都找不到时抛 SystemShellUnavailableError。 */
+  resolve(options?: ResolveSystemShellOptions): ResolvedSystemShell
+  /**
+   * 执行命令前用这个：按候选顺序逐个试跑一小段 UTF-8 输出，返回第一个真能工作的 shell，环境变量里标上 ready 和版本。
+   * 只有这个自检会换下一个候选；用户的命令只执行一次，不会因为失败换 shell 重跑。全部失败时抛 SystemShellUnavailableError，附上每个候选的原因。
+   */
+  resolveReady(options?: ResolveSystemShellOptions): Promise<ResolvedSystemShell>
+  /** 按这个 shell 自己的查找规则判断一个命令在不在、在哪、是什么（内建命令、批处理、原生程序或脚本）。 */
+  resolveCommand(name: string, shell: ResolvedSystemShell): Promise<SystemEnvironmentCommandAvailability>
+  /**
+   * Windows 上重新读取用户和系统环境变量（用户装完软件不用重启应用），合并 PATH 并展开 %VAR%，返回新环境和它的指纹 revision。
+   * 其他平台原样返回；读取失败时 refreshed 为 false 并给出原因。返回的环境里去掉了本包自己写的 VELAROS_SHELL_* 标记。
+   */
+  refreshWindowsEnvironment(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): Promise<RefreshedWindowsEnvironment>
+}
 
 class SystemShellResolver implements SystemShellResolverApi {
   private readonly processes: SystemProcessManagerApi

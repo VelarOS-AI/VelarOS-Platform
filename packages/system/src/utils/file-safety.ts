@@ -9,18 +9,8 @@ import * as path from 'node:path'
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
+import type { SensitiveSystemMutationPathOptions } from '../contract/files.js'
 import type { SystemToolContext } from '../interface/requires.js'
-
-/**
- * 系统写入的敏感路径边界。
- * 临时目录不触发敏感路径审批；Windows 路径按大小写不敏感规则比较。
- */
-interface SensitiveSystemMutationPathOptions {
-  platform?: NodeJS.Platform
-  homeDir?: string
-  tempDir?: string
-  env?: NodeJS.ProcessEnv
-}
 
 /** 按平台取 posix 或 win32 的路径工具。 */
 function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {

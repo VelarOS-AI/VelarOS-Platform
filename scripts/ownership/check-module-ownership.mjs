@@ -6,11 +6,11 @@
 //   2. contract：扁平；只放数据（接口字段、类型、常量表），不许出现函数类型、方法签名、类和函数；只用 type import，只引契约。
 //      可移植数据文件不 import 任何东西、不用 Node 专属类型。
 //   3. interface：只有登记的几个文件；只放类型声明，只用 type import，只引 interface 与 contract；
-//      每个接口、类型别名和它们的每个成员都有中文说明。provides 是产品面、requires 是注入面、internal 是包内部类的接口。
-//   4. impl：扁平，一个类一个文件、文件名即类名（工具文件不放类）；不导出独立定义的类型（带 typeof 的除外）；
-//      每个类 implements interface 里的一个接口（继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
+//      每个接口、类型别名和它们的每个成员都有中文说明。provides 是产品面、requires 是注入面、internal 是不属于某个类的内部接口。
+//   4. impl：扁平，一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
+//      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：公开的在 interface 里、内部的写在类上方（继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
 //      私有方法必须用到实例状态；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
-//   5. utils：扁平；只放函数和常量，不放类、不导出类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、contract 与 interface。
+//   5. utils：扁平；只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、contract 与 interface。
 //   6. 对外入口由接口控制：入口文件只有转发语句；导出的类型只能来自 provides、requires 与 contract；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
@@ -337,11 +337,33 @@ for (const module of GovernedModules) {
       ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause && ts.isNamedExports(statement.exportClause)
         ? statement.exportClause.elements.map((element) => element.name.text)
         : []))
+    // 类的接口和类放在同一个文件里：实现文件只许声明并导出本文件的类实现的接口，以及以类名或接口主名开头的配套接口（构造参数、回调、收尾策略），
+    // 每个都要有中文说明。其余类型一律不许写在这里：数据放进 contract/，不属于某个类的内部接口放进 interface/ 的内部接口文件。
+    const ownClass = classes[0]
+    const ownNames = new Set(ownClass?.name ? [ownClass.name.text] : [])
+    for (const clause of ownClass?.heritageClauses ?? []) {
+      if (clause.token !== ts.SyntaxKind.ImplementsKeyword) continue
+      for (const type of clause.types) {
+        const name = type.expression.getText(sourceFile)
+        ownNames.add(name)
+        ownNames.add(name.replace(/Api$/u, ''))
+      }
+    }
     for (const statement of sourceFile.statements) {
       if (!(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement))) continue
-      if (!isExported(statement) && !tailExported.has(statement.name.text)) continue
       if (/\btypeof\b/u.test(statement.getText(sourceFile))) continue
-      fail(`${label}: 实现文件 ${shortPath(file)} 导出了类型 ${statement.name.text}；数据放进 ${module.contract}/，带行为的接口放进 ${module.interface}/`)
+      const name = statement.name.text
+      if (!ts.isInterfaceDeclaration(statement) || ![...ownNames].some((own) => name === own || name.startsWith(own))) {
+        fail(`${label}: 实现文件 ${shortPath(file)} 里声明了类型 ${name}；数据放进 ${module.contract}/，不属于某个类的内部接口放进 ${module.interface}/，类自己的接口要以类名开头并写在类上方`)
+        continue
+      }
+      if (!isExported(statement) && !tailExported.has(name)) fail(`${label}: 实现文件 ${shortPath(file)} 的接口 ${name} 没有导出；类的接口写在类上方，给别处用`)
+      if (!ChinesePattern.test(jsDocText(statement, sourceFile))) fail(`${label}: 实现文件 ${shortPath(file)} 的接口 ${name} 缺中文说明；每个接口都要写清楚它负责什么`)
+      for (const member of membersDeep(statement.members)) {
+        if (!ChinesePattern.test(jsDocText(member, sourceFile))) {
+          fail(`${label}: 实现文件 ${shortPath(file)} 的 ${name}.${member.name?.getText(sourceFile) ?? '(签名)'} 缺中文说明；接口的每个成员都要写清楚做什么`)
+        }
+      }
     }
   }
   const layerOf = (file) => {
@@ -407,15 +429,19 @@ for (const module of GovernedModules) {
       classCount += 1
       const implementsClause = heritage.find((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
       if (!implementsClause) {
-        fail(`${label}: ${shortPath(file)} 的类 ${className} 没有 implements 接口；每个类在 ${module.interface}/ 里有一个接口，写清它的每个方法`)
+        fail(`${label}: ${shortPath(file)} 的类 ${className} 没有 implements 接口；每个类有一个接口：公开的在 ${module.interface}/，内部的写在类上方，写清它的每个方法`)
         continue
       }
       const interfaceMembers = new Set()
       for (const typeNode of implementsClause.types) {
         const type = checker.getTypeAtLocation(typeNode)
         const declarations = type.getSymbol()?.declarations ?? []
-        if (!declarations.some((declaration) => inside(declaration.getSourceFile().fileName, interfaceRoot))) {
-          fail(`${label}: ${shortPath(file)} 的类 ${className} 实现的 ${typeNode.getText(sourceFile)} 不在 ${module.interface}/ 里`)
+        const declaredHere = (declaration) => {
+          const declaredIn = declaration.getSourceFile().fileName
+          return inside(declaredIn, implRoot) && basename(declaredIn) === basename(file)
+        }
+        if (!declarations.some((declaration) => declaredHere(declaration) || inside(declaration.getSourceFile().fileName, interfaceRoot))) {
+          fail(`${label}: ${shortPath(file)} 的类 ${className} 实现的 ${typeNode.getText(sourceFile)} 既不在本文件的类上方，也不在 ${module.interface}/ 里`)
           continue
         }
         for (const property of checker.getPropertiesOfType(type)) interfaceMembers.add(property.name)
@@ -467,8 +493,8 @@ for (const module of GovernedModules) {
         fail(`${label}: ${shortPath(file)} 里有类 ${statement.name?.text ?? ''}；utils 只放函数和常量，类放进 ${module.impl}/ 并写接口`)
       } else if (ts.isEnumDeclaration(statement)) {
         fail(`${label}: ${shortPath(file)} 里有枚举 ${statement.name.text}；常量表放进 ${module.contract}/`)
-      } else if ((ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) && isExported(statement)) {
-        fail(`${label}: ${shortPath(file)} 导出了类型 ${statement.name.text}；数据放进 ${module.contract}/，带行为的接口放进 ${module.interface}/，utils 只留本文件自用的类型`)
+      } else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
+        fail(`${label}: ${shortPath(file)} 里声明了类型 ${statement.name.text}；数据放进 ${module.contract}/，带回调的选项放进 ${module.interface}/ 的内部接口文件，utils 只放函数和常量`)
       } else if (ts.isFunctionDeclaration(statement) && statement.name) {
         functionNames.add(statement.name.text)
         if (ChinesePattern.test(jsDocText(statement, sourceFile))) documentedFunctions.add(statement.name.text)

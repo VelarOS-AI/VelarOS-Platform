@@ -11,7 +11,6 @@ import { z } from 'zod'
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { createApprovalOperationKey, createManualApprovalOptions, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 
@@ -237,15 +236,10 @@ const runTool = defineSystemTool<{
 
     // 执行前分类
     const plan = systemCommandPolicy.analyze(command)
-    const commandCwd = ctx.system.resolveCommandCwd?.(cwd) ?? cwd
+    const commandCwd = ctx.system.resolvePath(cwd)
 
     // 前台还是后台。交互式命令一定跑在后台：它要一直开着等用户在控制台里输入
     const shouldRunInBackground = !!interactive || (background ?? plan.shouldStartInBackground)
-    if (shouldRunInBackground && !ctx.system.canStartBackgroundCommands()) {
-      throw new AppError('PERMISSION', interactive
-        ? '当前宿主未允许模型启动交互式命令。'
-        : '当前未允许模型启动长期运行的命令。')
-    }
 
     // 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
     //    只有 requireManualApproval 能让宿主在任何档位都弹卡。
@@ -331,11 +325,6 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
   },
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => {
-    // 部分宿主环境不允许主动刷新登录 shell，需要显式阻止。
-    if (!ctx.system.canRefreshShellEnvironment()) {
-      throw new AppError('PERMISSION', '当前未允许模型主动刷新 shell 环境。')
-    }
-
     // 由 system provider 重新加载 PATH 和 shell 环境变量。传了参数不报错，只提醒一句。
     const refreshed = await ctx.system.refreshShellEnvironment()
     return isEmpty(Object.keys(input)) ? refreshed : { ...refreshed, note: '这个工具不需要参数，传来的内容已忽略。' }
