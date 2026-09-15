@@ -1,3 +1,7 @@
+/**
+ * 当前文件视图：把项目登记成 agent 文件上下文的来源（按当前授权重读、核对归档快照），从读取结果生成视图快照，编辑后按补丁链迁移模型看过的范围。
+ */
+
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import {
@@ -9,12 +13,10 @@ import { isEmpty, isUndefined } from '@velaros-ai/core'
 
 import type { DiffHunk,ProjectFileContextCarrier } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch, AgentProjectReadResult } from '../../types/agent-port.js'
+import { ProjectTuning } from '../tuning.js'
 
 import { projectAgentReadResult } from './kernel-port'
 import { finalizeProjectModelResult, presentProjectRead } from './source-window.js'
-
-/** 大文件当前视图最多读取的范围段数。 */
-const MaxFocusRanges = 8
 
 /** 读取端口仍经过 Project 授权；宿主在发送模型首轮前登记，以支持重启后的视图恢复。 */
 export function registerProjectFileContext(context: ProjectFileContextCarrier): ReturnType<typeof fileContextFor> {
@@ -25,13 +27,13 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
     context.abortSignal?.throwIfAborted()
     const kernel = await context.project.kernel()
     if (resolve((await kernel.status()).root) !== root)
-      throw new Error('File context project changed; register the current workspace before reading')
+      throw new Error('文件上下文登记的项目已经换了；读取之前请先登记当前工作区。')
     return kernel
   }
   const normalizePath = (path: string) => {
     const normalized = relative(root, resolve(root, path))
     if (normalized === '..' || normalized.startsWith('../') || isAbsolute(normalized))
-      throw new Error('File context path is outside project')
+      throw new Error('文件上下文的路径不在项目之内。')
     return normalized.replaceAll('\\', '/')
   }
   coordinator.registerSource({
@@ -42,13 +44,13 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
       context.abortSignal?.throwIfAborted()
       const kernel = await currentKernel()
       if (!kernel.prepareContextSnapshot)
-        throw new Error('Historical snapshot authorization is unavailable')
+        throw new Error('历史快照的授权检查不可用。')
       const visible = await kernel.prepareContextSnapshot({
         path: normalizePath(snapshot.path),
         content: snapshot.content,
       })
       if (visible.content !== snapshot.content)
-        throw new Error('Historical snapshot is restricted by current redaction policy')
+        throw new Error('历史快照受当前脱敏策略限制。')
     },
     read: async (path, ranges, scopeId) => {
       context.abortSignal?.throwIfAborted()
@@ -68,9 +70,9 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
             complete: true,
           },
         ]
-      if (!stat.readableText || !stat.revision) throw new Error('Current file is not readable text')
+      if (!stat.readableText || !stat.revision) throw new Error('当前文件不是可读的文本。')
       const selected =
-        stat.sizeBytes <= 32_000 ? [undefined] : ranges.length ? ranges.slice(0, MaxFocusRanges) : [undefined]
+        stat.sizeBytes <= ProjectTuning.fileContext.wholeFileBytes ? [undefined] : ranges.length ? ranges.slice(0, ProjectTuning.fileContext.focusRanges) : [undefined]
       const snapshots: FileContextSnapshot[] = []
       for (const range of selected) {
         context.abortSignal?.throwIfAborted()
@@ -78,7 +80,7 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
           path: normalized,
           baseRevision: stat.revision,
           range,
-          maxChars: Math.floor(64_000 / selected.length),
+          maxChars: Math.floor(ProjectTuning.fileContext.viewChars / selected.length),
         })
         const snapshot = snapshotFromRead(root, result)
         if (snapshot) {
@@ -89,13 +91,14 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
           } })
         }
       }
-      if (isEmpty(snapshots)) throw new Error('Current source snapshot is unavailable')
+      if (isEmpty(snapshots)) throw new Error('当前源码快照不可用。')
       return snapshots
     },
   })
   return coordinator
 }
 
+/** 把一次读取结果变成文件视图的快照：不是文本或没有 revision 时不给；complete 表示从第一行第一列起、没截断、读到了末行。 */
 export function snapshotFromRead(
   workspaceId: string,
   result: Pick<
@@ -125,6 +128,7 @@ export function snapshotFromRead(
   }
 }
 
+/** 从 unified diff 里取出每段改动的旧起始行、旧行数、新起始行、新行数；省略的行数按 1 算。 */
 function diffHunks(diff: string): DiffHunk[] {
   return [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
     oldStart: Number(match[1]), oldLines: Number(match[2] ?? 1),
@@ -152,6 +156,7 @@ function migrateLine(line: number, hunks: readonly DiffHunk[], edge: 'start' | '
   return Math.max(1, line + shift)
 }
 
+/** 按一个补丁的改动段把旧范围迁到新内容：首行按起点边界迁，末行按终点边界迁，结果至少一行。 */
 function migrateRange(range: FileContextRange, hunks: readonly DiffHunk[]): FileContextRange {
   const startLine = migrateLine(range.startLine, hunks, 'start')
   return { startLine, endLine: Math.max(startLine, migrateLine(range.endLine, hunks, 'end')) }
@@ -165,16 +170,16 @@ function mergeFocusRanges(changed: readonly FileContextRange[], seen: readonly F
     if (last && range.startLine <= last.endLine + 1) last.endLine = Math.max(last.endLine, range.endLine)
     else merged.push({ ...range })
   }
-  if (merged.length <= MaxFocusRanges) return merged
+  if (merged.length <= ProjectTuning.fileContext.focusRanges) return merged
   const nearChange = (range: FileContextRange) =>
     changed.some((item) => item.startLine <= range.endLine && range.startLine <= item.endLine)
   return [...merged.filter(nearChange), ...merged.filter((range) => !nearChange(range))]
-    .slice(0, MaxFocusRanges)
+    .slice(0, ProjectTuning.fileContext.focusRanges)
     .sort((a, b) => a.startLine - b.startLine)
 }
 
 /**
- * 编辑后当前视图要看的范围：本次 diff 每段前后 5 行，加上此前已读范围沿补丁链迁移后的位置，大文件编辑后
+ * 编辑后当前视图要看的范围：本次 diff 每段前后几行（ProjectTuning.fileContext.changeContextLines），加上此前已读范围沿补丁链迁移后的位置，大文件编辑后
  * 模型读过的上下文仍然可见、可编辑。行号全部由最终补丁推导（含 rebase），不采用模型提交时的原始坐标；
  * 补丁链里每段 diff 相对前一补丁的产出，前面的范围逐段迁移。
  */
@@ -192,8 +197,8 @@ export function changedFileContextRanges(
       changed = changed.map((range) => migrateRange(range, hunks))
       seen = seen.map((range) => migrateRange(range, hunks))
       for (const hunk of hunks) {
-        const startLine = Math.max(1, hunk.newStart - 5)
-        changed.push({ startLine, endLine: Math.max(startLine, hunk.newStart + hunk.newLines + 5) })
+        const startLine = Math.max(1, hunk.newStart - ProjectTuning.fileContext.changeContextLines)
+        changed.push({ startLine, endLine: Math.max(startLine, hunk.newStart + hunk.newLines + ProjectTuning.fileContext.changeContextLines) })
       }
     }
     ranges[path] = mergeFocusRanges(changed, seen)

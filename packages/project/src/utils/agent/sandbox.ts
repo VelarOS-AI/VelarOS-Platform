@@ -9,6 +9,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectSandboxPort, ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSandboxDiff } from '../../types/project.js'
+import { ProjectTuning } from '../tuning.js'
 
 /** 宿主没接沙箱端口时这个工具不可用，也不出现在工具面上。 */
 export function requireSandboxPort(context: ProjectToolContext): ProjectSandboxPort {
@@ -36,7 +37,8 @@ export function selectSandboxChanges(changes: ProjectSandboxDiff, paths: LooseOp
 
 /** 生成落回项目前给用户看的确认文案：三列的条数和前几条路径。 */
 export function sandboxApplyConfirmationMessage(source: string, selection: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] }): string {
-  const preview = (list: readonly string[]): string => list.slice(0, 20).join('、') + (list.length > 20 ? ` 等 ${list.length} 个` : '')
+  const shown = ProjectTuning.sandbox.confirmationPreviewItems
+  const preview = (list: readonly string[]): string => list.slice(0, shown).join('、') + (list.length > shown ? ` 等 ${list.length} 个` : '')
   const lines = [`即将把演练沙箱里的改动落回项目 ${source}：新增 ${selection.created.length} 个、覆盖 ${selection.modified.length} 个、删除 ${selection.deleted.length} 个文件。`]
   if (!isEmpty(selection.deleted)) lines.push(`删除：${preview(selection.deleted)}`)
   if (!isEmpty(selection.modified)) lines.push(`覆盖：${preview(selection.modified)}`)

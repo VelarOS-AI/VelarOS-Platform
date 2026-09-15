@@ -3,9 +3,11 @@ import { isString } from '@velaros-ai/core'
 import type { ProjectToolContext } from '../../contract/requires'
 import type { ProjectPlannerResolver } from '../../types/editing'
 import { ProjectError } from '../errors'
+import { ProjectTuning } from '../tuning.js'
 
 import { resolveProjectFileRef } from './file-refs'
 
+/** 给编辑计划编译器的读取端口：按 fileRef 取已显示的视图（正文变了按过期拒绝）、看一个路径的当前版本、为编码转换读整份正文与磁盘编码。 */
 export function projectPlannerResolver(context: ProjectToolContext): ProjectPlannerResolver {
   return {
     resolveFileRef: (ref) => resolveProjectFileRef(context, ref),
@@ -26,7 +28,7 @@ export function projectPlannerResolver(context: ProjectToolContext): ProjectPlan
     readText: async (path) => {
       context.abortSignal.throwIfAborted()
       const kernel = await context.project.kernel()
-      const result = await kernel.read({ path, maxChars: 16_000_000 })
+      const result = await kernel.read({ path, maxChars: ProjectTuning.agent.fullReadChars })
       if (!result.snapshot.exists)
         throw new ProjectError('TARGET_NOT_FOUND', '文件不存在。', { path })
       if (result.snapshot.isDirectory || result.snapshot.isBinary)

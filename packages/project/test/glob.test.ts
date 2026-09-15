@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { matchesAny } from '../src/utils/glob'
-import {
-  createMatcherCache,
-  MatcherCacheCapacity,
-} from '../src/utils/matcher-cache'
+import { createMatcherCache } from '../src/utils/matcher-cache'
+import { ProjectTuning } from '../src/utils/tuning'
 
 describe('glob matcher cache', () => {
   test('reuses compiled matchers and evicts the least recently used entry at capacity', () => {
@@ -46,10 +44,10 @@ describe('glob matcher cache', () => {
   })
 
   test('production capacity retains hot entries across repeated overflow', () => {
-    const getMatcher = createMatcherCache(MatcherCacheCapacity, (pattern) => (input) => input === pattern)
+    const getMatcher = createMatcherCache(ProjectTuning.glob.matcherCacheEntries, (pattern) => (input) => input === pattern)
     const hot = getMatcher('hot')
     const cold = getMatcher('cold')
-    for (let index = 0; index < MatcherCacheCapacity * 4; index++) {
+    for (let index = 0; index < ProjectTuning.glob.matcherCacheEntries * 4; index++) {
       getMatcher(`pattern-${index}`)
       expect(getMatcher('hot')).toBe(hot)
     }

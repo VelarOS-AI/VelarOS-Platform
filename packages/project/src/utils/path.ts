@@ -10,6 +10,7 @@ import * as path from "node:path";
 
 import { ProjectError } from "./errors.js";
 
+/** 把路径里的反斜杠换成 /，去掉开头的 ./。 */
 export function normalizeRel(input: string): string {
   return input.replace(/\\/g, "/").replace(/^\.\//, "");
 }
@@ -24,6 +25,7 @@ export function isInsideRoot(rootAbs: string, abs: string): boolean {
   return abs.startsWith(boundary);
 }
 
+/** 把相对 root 的路径（或绝对路径）解析成绝对路径；越出 root 就抛 PERMISSION_DENIED。这是根内约束的词法那一层。 */
 export function toAbs(root: string, relOrAbs: string): string {
   const abs = path.resolve(root, relOrAbs);
   const rootAbs = path.resolve(root);
@@ -33,16 +35,19 @@ export function toAbs(root: string, relOrAbs: string): string {
   return abs;
 }
 
+/** 把路径换成相对 root 的写法，分隔符统一成 /。不检查是否越出 root。 */
 export function toRel(root: string, absOrRel: string): string {
   const rootAbs = path.resolve(root);
   const abs = path.resolve(root, absOrRel);
   return normalizeRel(path.relative(rootAbs, abs));
 }
 
+/** 取小写的扩展名（带点，如 .ts）；没有扩展名时是空串。 */
 export function ext(input: string): string {
   return path.extname(input).toLowerCase();
 }
 
+/** 取路径的父目录。 */
 export function dirname(input: string): string {
   return path.dirname(input);
 }

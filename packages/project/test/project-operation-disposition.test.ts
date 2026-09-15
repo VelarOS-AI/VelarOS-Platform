@@ -11,7 +11,7 @@ import { projectTools } from '../src/impl/ProjectTools'
 import { createProjectCodeAnalysisTools } from '../src/impl/ProjectTools'
 
 const ProjectCodeAnalysisSchema = createProjectCodeAnalysisTools(() => true)['project:code-analysis']!.schema
-import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectModelEditSchema } from '../src/utils/edit-intent'
 
 import { ProjectCodeQuerySchema } from './support/code-query-schema'
 import { LegacyProjectToolNames } from './support/legacy-tools'

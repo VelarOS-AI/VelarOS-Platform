@@ -42,6 +42,7 @@ export function unifiedDiff(path: string, oldContent = "", newContent = ""): str
   return lines.join("\n");
 }
 
+/** 把几段 unified diff 用换行连起来，空的跳过。 */
 export function combineDiffs(diffs: string[]): string {
   return diffs.filter(Boolean).join("\n");
 }

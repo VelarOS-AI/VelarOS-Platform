@@ -1,3 +1,7 @@
+/**
+ * 代码符号引用（symbol:）：project:code 查到符号时签发，后续查询凭它还原 {path, symbol, container} 目标，调用方用不着后端的节点 id。
+ */
+
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
@@ -10,10 +14,12 @@ import { ProjectError } from '../errors.js'
 
 const ToolName = '__project_code_symbol__'
 
+/** 两个路径（相对 root 或绝对）是不是同一个文件。 */
 export function sameCodePath(root: string, left: string, right: string): boolean {
   return resolve(root, left) === resolve(root, right)
 }
 
+/** 为一个符号目标签发 symbol: 引用，记录存在会话的上下文载荷里；宿主没给会话号或载荷存储时返回 undefined。 */
 export async function saveCodeSymbolReference(
   target: CodeSymbolTarget,
   context: ProjectToolContext,
@@ -34,6 +40,7 @@ export async function saveCodeSymbolReference(
   return `symbol:${hash}`
 }
 
+/** 把代码查询的目标还原成 {path, symbol, container}：本来就是这个形状的原样返回；symbolRef 找不到、不属于当前项目或记录坏了时抛错。 */
 export async function resolveCodeSymbolReference(
   input: ProjectCodeTarget,
   context: ProjectToolContext,

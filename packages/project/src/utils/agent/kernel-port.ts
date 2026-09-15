@@ -1,3 +1,8 @@
+/**
+ * 内核端口在 Agent 边界上的投影：批量读取按共用预算逐文件读，把内核的读取与搜索结果裁成模型要看的字段，把错误整理成 JSON 安全的对象。
+ * 参数结构与校验留在项目领域内；返回的只有 Agent 编排读取和事务编辑时真正观察的字段。
+ */
+
 import {
   isEmpty,
   isNull,
@@ -11,20 +16,12 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
+import { ProjectFileLimits } from '../../contract/constants.js'
 import type { AgentProjectKernelPort } from '../../contract/requires.js'
 import type { AgentProjectErrorLike,AgentProjectKernelReadResult, AgentProjectReadContinuation, AgentProjectReadIssue, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchRequest, AgentProjectSearchResult } from '../../types/agent-port.js'
 import { ProjectError } from '../errors.js'
 import { validateReadBounds } from '../files/read-bounds.js'
-
-/**
- * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
- * 返回契约只包含 Agent 编排读取和事务编辑时真正观察的字段。
- */
-
-const DefaultAgentReadMaxChars = 500_000
-const DefaultAgentSearchLimit = 30
-const MaxAgentSearchLimit = 100
-const MaxAgentSearchResultChars = 24_000
+import { ProjectTuning } from '../tuning.js'
 
 /**
  * Project Kernel 的 FileSnapshot 还包含正文、绝对路径、内容哈希和适配器元数据。
@@ -78,6 +75,7 @@ function projectAgentReadContinuation(
   return projected
 }
 
+/** 读到的不是可读文本（不存在、是目录、是二进制）时给一条带原因的 issue；读到了正文返回 undefined。 */
 function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectReadIssue> {
   if (!file.snapshot.exists) return {
     path: file.snapshot.path,
@@ -97,7 +95,10 @@ function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectRea
   return undefined
 }
 
-/** Project-owned Agent adapter for multi-file aggregation over the injected read port. */
+/**
+ * 批量读取：一个或多个路径逐个经内核端口读，maxChars 是全部文件共用的字符预算，按剩余文件平均分；两个上限都没给时按 ProjectFileLimits.readChars 封顶并在结果里说明。
+ * 单个文件的领域错误只记成带路径的 issue、不连累其他文件；只读一个文件时照常抛出。
+ */
 export async function executeAgentProjectRead(
   project: AgentProjectKernelPort,
   input: AgentProjectReadRequest,
@@ -121,7 +122,7 @@ export async function executeAgentProjectRead(
   // 与文件无关的参数错误属于整次调用：先整体校验，别让下面的逐文件隔离把它拆成 N 条相同的 issue。
   validateReadBounds({ range: input.range, maxBytes: input.maxBytes, maxChars })
   const appliedDefaultBound = isUndefined(input.maxBytes) && isUndefined(maxChars)
-  const totalMaxChars = appliedDefaultBound ? DefaultAgentReadMaxChars : maxChars
+  const totalMaxChars = appliedDefaultBound ? ProjectFileLimits.readChars : maxChars
   if (!isUndefined(totalMaxChars) && totalMaxChars < paths.length) {
     throw new ProjectError(
       'INVALID_INPUT',
@@ -171,7 +172,7 @@ export async function executeAgentProjectRead(
     files,
     issues: optionalWhen(!isEmpty(issues), issues),
     nextAction: readIssuesNextAction(issues),
-    appliedDefaultBound: optionalWhen(appliedDefaultBound, { maxChars: DefaultAgentReadMaxChars }),
+    appliedDefaultBound: optionalWhen(appliedDefaultBound, { maxChars: ProjectFileLimits.readChars }),
   }
 }
 
@@ -186,6 +187,7 @@ function readIssuesNextAction(issues: readonly AgentProjectReadIssue[]): Optiona
   return undefined
 }
 
+/** 把一处内核搜索命中裁成定位要用的路径、版本、范围和片段，丢掉得分、后端这些诊断字段。 */
 function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHit {
   return {
     path: hit.path,
@@ -222,8 +224,8 @@ export async function executeAgentProjectSearch(
   project: AgentProjectKernelPort,
   input: AgentProjectSearchRequest
 ): Promise<AgentProjectSearchResult> {
-  const requestedLimit = input.limit ?? DefaultAgentSearchLimit
-  const effectiveLimit = Math.min(MaxAgentSearchLimit, Math.max(1, requestedLimit))
+  const requestedLimit = input.limit ?? ProjectTuning.search.defaultHits
+  const effectiveLimit = Math.min(ProjectFileLimits.searchHits, Math.max(1, requestedLimit))
   const result = await project.search({
     query: input.query,
     root: input.path,
@@ -240,7 +242,7 @@ export async function executeAgentProjectSearch(
   for (const richHit of result.hits.slice(0, effectiveLimit)) {
     const hit = projectAgentSearchHit(richHit)
     const hitChars = JSON.stringify(hit).length + (!isEmpty(hits) ? 1 : 0)
-    if (serializedChars + hitChars > MaxAgentSearchResultChars) {
+    if (serializedChars + hitChars > ProjectTuning.search.hitsBudgetChars) {
       responseTruncated = true
       break
     }
@@ -267,6 +269,7 @@ export async function executeAgentProjectSearch(
   }
 }
 
+/** 判断一个错误是不是带 reason 的项目领域错误；给了 reason 时还要求码相同。 */
 export function isAgentProjectError(
   error: unknown,
   reason?: string
@@ -280,7 +283,7 @@ export function isAgentProjectError(
   return isUndefined(reason) || candidate.reason === reason
 }
 
-/** JSON-safe error projection exported by the Project Agent adapter. */
+/** 把任意抛出的值整理成 JSON 安全的错误对象：项目领域错误带上 reason、details 与 suggestedNextAction，其余只留名字和文字。 */
 export function toAgentProjectErrorObject(
   error: unknown
 ): Record<string, unknown> {

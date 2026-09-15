@@ -8,7 +8,7 @@ import type { AgentProjectKernelPort } from '../src/contract/requires.js'
 import { projectTools } from '../src/impl/ProjectTools'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
 import { scopeProjectListPatterns } from '../src/utils/agent/project-files'
-import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectEditOperationSchema } from '../src/utils/edit-intent'
 import { defineProjectTool } from '../src/utils/tool'
 
 import { LegacyProjectToolNames } from './support/legacy-tools'

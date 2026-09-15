@@ -5,20 +5,65 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
-  /** project:read。 */
+  /** project:read 读源码（utils/agent/project-files.ts）的字符预算。 */
   read: Object.freeze({
-    /** 没给 maxChars 时一次调用所有文件共用的字符预算。 */
+    /** 没给 maxChars 时一次调用所有文件共用的字符预算；上限是 ProjectFileLimits.readChars。 */
     defaultMaxChars: 24_000,
   }),
-  /** project:search。 */
+  /** project:search 搜源码（utils/agent/project-files.ts、kernel-port.ts）：缺省命中条数，以及命中列表与源码窗口交给模型的总量。 */
   search: Object.freeze({
     /** 命中合成的源码窗口总共最多多少字符（按呈现给模型的 JSON 算，含路径、版本、引用这些固定元数据）；装不下的命中只留定位。 */
     windowBudgetChars: 12_000,
+    /** 没给 limit 时最多返回几处命中；上限是 ProjectFileLimits.searchHits。 */
+    defaultHits: 30,
+    /** 命中列表（只含路径、版本、范围、片段）按 JSON 算最多多少字符；装不下的命中截掉并标 truncated，让模型收窄条件。 */
+    hitsBudgetChars: 24_000,
   }),
-  /** project:list。 */
+  /** project:list 列文件（utils/agent/project-files.ts）的扫描上限。 */
   list: Object.freeze({
     /** 一次最多扫描多少个条目；超过就提示收窄 path 或 include。 */
     maxEntries: 100_000,
+  }),
+  /** Agent 适配层（utils/agent）：要整份正文时的读取预算，编辑版本过期时的恢复回执。 */
+  agent: Object.freeze({
+    /** 要整份正文时（签发可编辑视图、编辑恢复找新位置、编码转换）向内核读取的字符预算；读不全就不签发编辑引用、不给恢复候选、拒绝转换。 */
+    fullReadChars: 16_000_000,
+    /** 编辑版本过期时，恢复回执里候选位置与确认窗口行数的上限，超过就不给候选；不能超过 agent 包给失败回执 details 每个数组留的项数（现为 10），否则会被截断。 */
+    recoveryItems: 10,
+    /** 恢复回执里确认窗口的行记录按 JSON 算最多多少字符；装不下就只给候选行号，让模型先 read。 */
+    recoveryWindowChars: 10_000,
+  }),
+  /** 当前文件视图（utils/agent/file-context.ts）：会话里「当前项目文件」刷新时读多少、编辑后看哪几段。 */
+  fileContext: Object.freeze({
+    /** 不超过这么多字节的文件整份放进视图；更大的只读模型看过的几段。 */
+    wholeFileBytes: 32_000,
+    /** 刷新一个文件的视图时，所有段共用的字符预算。 */
+    viewChars: 64_000,
+    /** 大文件的视图最多读几段；超过时先留和本次改动相交的段。 */
+    focusRanges: 8,
+    /** 编辑后视图在每段改动前后各多带几行。 */
+    changeContextLines: 5,
+  }),
+  /** 代码查询（utils/agent/code-query.ts）：project:code 与 project:code-analysis 的缺省条数和回执体量。 */
+  codeQuery: Object.freeze({
+    /** 没给 limit 时一次查询返回几条（关系、死代码候选同样按它）；上限见 ProjectCodeLimits。 */
+    defaultResults: 30,
+    /** 按符号名到代码图谱找节点时最多取几个候选；符号搜索回退到代码图谱时也不超过它。 */
+    graphCandidates: 50,
+    /** 关系查询结果里 output、relationshipMap 这类整段文字最多留多少字符，超出截断并标 truncated。 */
+    relationTextChars: 20_000,
+    /** symbols 带 target 查详情时附带的声明源码最多多少字符。 */
+    symbolSourceChars: 20_000,
+  }),
+  /** 演练沙箱的落回确认（utils/agent/sandbox.ts）。 */
+  sandbox: Object.freeze({
+    /** 落回确认文案里新增、覆盖、删除每一列最多列出多少条路径。 */
+    confirmationPreviewItems: 20,
+  }),
+  /** glob 匹配（utils/glob.ts）。 */
+  glob: Object.freeze({
+    /** 编译好的 glob 匹配器最多缓存多少个，超过从最久没用的淘汰；pattern 来自模型与用户，缓存不能无界增长。 */
+    matcherCacheEntries: 256,
   }),
   /** 事务：编辑失败的回读建议、校验失败回执、保留原字节的差异计算、校验结果复用。 */
   transactions: Object.freeze({

@@ -11,7 +11,7 @@ import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from
 import { normalizeProjectLineRange } from '../src/utils/editing/line-range'
 import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'
 import { compileProjectChange, compileProjectEdit, compileProjectFile, planProjectFileEdits } from '../src/utils/editing/planner-index'
-import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectModelEditSchema } from '../src/utils/edit-intent'
 
 /** 行范围写法只在 read 的 range 字段上单独校验。 */
 const ProjectLineRangeSchema = { safeParse: (range: unknown) => projectTools['project:read']!.schema.safeParse({ path: 'x', range }) }

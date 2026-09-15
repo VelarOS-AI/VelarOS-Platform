@@ -11,7 +11,7 @@ import type { AgentProjectKernelPort } from '../src/contract/requires.js'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/exports/index'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
 import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/utils/editing/text-match-feedback'
-import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectEditOperationSchema } from '../src/utils/edit-intent'
 import { includesLineEndingAware } from '../src/utils/text'
 
 import { LegacyProjectToolNames as ProjectToolNames } from './support/legacy-tools'

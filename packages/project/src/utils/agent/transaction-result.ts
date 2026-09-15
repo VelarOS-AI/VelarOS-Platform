@@ -1,3 +1,7 @@
+/**
+ * 事务结果的判定：一次提交到底有没有改动，宿主或用户拒绝写入时的失败回执。
+ */
+
 import { isString, isTrue } from '@velaros-ai/core'
 
 import type { PathEffect } from '../../types/agent.js'
@@ -5,12 +9,12 @@ import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
 import type { ProjectAuthorizationDecision } from '../../types/project.js'
 import { ProjectError } from '../errors.js'
 
-
+/** 这个补丁是不是删掉文件（删除，或重命名留下的旧路径）。 */
 function deletes(patch: AgentProjectPreparedPatch): boolean {
   return patch.metadata?.op === 'delete_file' || patch.metadata?.op === 'rename_file_delete'
 }
 
-/** Compare final file state, not intermediate patches or diff text (an empty file still has existence). */
+/** 事务有没有真改动：按每个文件的最终状态比，不看中间补丁和差量文字（空文件也算存在）；存在与否、正文、权限、编码有一样变了就算改动，编码转换一律算。 */
 export function projectTransactionHasChanges(patches: readonly AgentProjectPreparedPatch[]): boolean {
   const paths = new Map<string, PathEffect>()
   for (const patch of patches) {

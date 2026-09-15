@@ -10,21 +10,24 @@ import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
 import type { ProjectCodeQuery } from '../../types/project.js'
-import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../types/tools.js'
+import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeScope, ProjectCodeTarget } from '../../types/tools.js'
 import { ProjectError } from '../errors.js'
+import { ProjectTuning } from '../tuning.js'
 
 import { readProjectSource } from './project-files.js'
 import { resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from './symbol-references.js'
 
-
+/** 把宿主返回的值当成普通对象用：本来就是普通对象原样返回，否则包成 { result }。 */
 function record(value: unknown): RecordValue {
   return isPlainObject(value) ? value as RecordValue : { result: value }
 }
 
+/** 取数组里的普通对象条目；不是数组时返回空数组。 */
 function rows(value: unknown): RecordValue[] {
   return isArray(value) ? value.filter((entry) => isPlainObject(entry)) : []
 }
 
+/** 取代码图谱结果里的条目（results、symbols 或 nodes）；编译器后端给的 0 起算位置换成 1 起算的 line、column。 */
 function graphRows(result: RecordValue): RecordValue[] {
   return rows(result.results ?? result.symbols ?? result.nodes).map((item) => {
     const start = record(record(item.range).start)
@@ -34,6 +37,7 @@ function graphRows(result: RecordValue): RecordValue[] {
   })
 }
 
+/** 给关系结果封顶：callers、callees、nodes 各留前 limit 条，边只留两端都还在的，output、relationshipMap 这类整段文字截短；截过就标 truncated。 */
 function boundRelations(result: RecordValue, limit: number): RecordValue {
   const bounded = { ...result }
   let truncated = isTrue(result.truncated)
@@ -48,14 +52,15 @@ function boundRelations(result: RecordValue, limit: number): RecordValue {
     bounded.relations = rows(bounded.relations).filter((edge) => ids.has(edge.from) && ids.has(edge.to))
   }
   for (const key of ['output', 'relationshipMap']) {
-    if (!isString(bounded[key]) || bounded[key].length <= 20_000) continue
-    bounded[key] = bounded[key].slice(0, 20_000)
+    if (!isString(bounded[key]) || bounded[key].length <= ProjectTuning.codeQuery.relationTextChars) continue
+    bounded[key] = bounded[key].slice(0, ProjectTuning.codeQuery.relationTextChars)
     truncated = true
   }
   return { ...bounded, truncated }
 }
 
-function scope(input: { language?: string; cwd?: string; limit?: number; extensions?: string[]; maxDepth?: number }) {
+/** 从 project:code 的入参里取出交给语言服务的公共范围：语言、工作目录、条数上限、扩展名与目录深度。 */
+function scope(input: ProjectCodeScope): ProjectCodeScope {
   return { language: input.language, cwd: input.cwd, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
 }
 
@@ -68,11 +73,13 @@ export const ProjectCodeCapabilityCatalogue = Object.freeze({
   host: { index: ['build_index', 'index_status'], taskContext: 'build_context' },
 })
 
+/** 这个错误是不是「后端没启用」：code 为 UNAVAILABLE 或 reason 为 NOT_SUPPORTED；是的话调用方降级说明，不当成查询失败。 */
 function unavailable(error: unknown): boolean {
   const value = error as { code?: string; reason?: string }
   return value?.code === 'UNAVAILABLE' || value?.reason === 'NOT_SUPPORTED'
 }
 
+/** 把宿主结果装进回执信封：标出动作、来源后端、覆盖范围（路径、语言、扫描文件数、是否截断、条数上限、版本）和降级说明，extra 覆盖在最后。 */
 function envelope(input: { action: string; path?: string; language?: string; limit?: number }, raw: unknown, extra: RecordValue = {}) {
   const result = record(raw)
   const degradation = [result.degraded, result.note].filter((value): value is string => isString(value) && value.length > 0)
@@ -85,7 +92,7 @@ function envelope(input: { action: string; path?: string; language?: string; lim
       language: input.language,
       scannedFiles: result.scannedFiles,
       truncated: isTrue(result.truncated),
-      limit: input.limit ?? 30,
+      limit: input.limit ?? ProjectTuning.codeQuery.defaultResults,
       version: result.revision ? 'backend-reported' : 'unversioned-locations',
       revisions: result.revision ? [{ revision: result.revision, scope: result.source ?? 'host' }] : [],
       ...record(result.coverage ?? {}),
@@ -95,11 +102,13 @@ function envelope(input: { action: string; path?: string; language?: string; lim
   }
 }
 
+/** 把一条代码查询交给宿主的 queryCode，先核对这次调用没被取消；结果按普通对象返回。 */
 async function query(input: ProjectCodeQuery, context: ProjectToolContext) {
   context.abortSignal.throwIfAborted()
   return record(await context.project.queryCode(input, context))
 }
 
+/** 给每个带路径和名字的符号签发 symbolRef，并附上 {path, symbol, container} 形式的 target；后端的节点 id 收进引用，不直接交给模型。 */
 async function symbolRows(values: RecordValue[], context: ProjectToolContext) {
   return Promise.all(values.map(async (value) => {
     const { id, nodeId, ...item } = value
@@ -114,6 +123,7 @@ async function symbolRows(values: RecordValue[], context: ProjectToolContext) {
   }))
 }
 
+/** 候选里恰好一个就用它；多个报 AMBIGUOUS_TARGET，一个没有报 TARGET_NOT_FOUND。 */
 function choose<T>(candidates: T[], target: CodeSymbolTarget): T {
   if (candidates.length === 1) return candidates[0]!
   throw new ProjectError(!isEmpty(candidates) ? 'AMBIGUOUS_TARGET' : 'TARGET_NOT_FOUND',
@@ -121,6 +131,7 @@ function choose<T>(candidates: T[], target: CodeSymbolTarget): T {
     { target, candidates }, '查询 symbols 后使用具体 symbolRef；必要时指定 container。')
 }
 
+/** 在目标文件的符号表里找到目标符号的声明（按名字、容器，有行号时优先同一行的那个）；找不到或不唯一时抛错。 */
 async function locate(target: CodeSymbolTarget, context: ProjectToolContext): Promise<ProjectSymbol> {
   const kernel = await context.project.kernel()
   const symbols = (await kernel.listSymbols(target.path)).filter((item) =>
@@ -130,9 +141,10 @@ async function locate(target: CodeSymbolTarget, context: ProjectToolContext): Pr
   return choose(atLine.length === 1 ? atLine : symbols, target)
 }
 
+/** 把目标符号换成代码图谱里的节点：按名字搜候选，再按路径、容器、行号收窄到唯一一个；找不到或不唯一时抛错。 */
 async function graphTarget(input: ProjectCodeTarget, context: ProjectToolContext): Promise<CodeSymbolTarget & { nodeId: string }> {
   const target = await resolveCodeSymbolReference(input, context)
-  const result = await query({ action: 'search_symbols', query: target.symbol, limit: 50 }, context)
+  const result = await query({ action: 'search_symbols', query: target.symbol, limit: ProjectTuning.codeQuery.graphCandidates }, context)
   const matches = graphRows(result).filter((item) =>
     item.name === target.symbol && isString(item.path) && sameCodePath(context.project.getRootPath(), item.path, target.path) &&
     (!target.container || item.container === target.container) && isString(((item.id ?? item.nodeId))))
@@ -141,13 +153,17 @@ async function graphTarget(input: ProjectCodeTarget, context: ProjectToolContext
   return { ...target, nodeId: String(node.id ?? node.nodeId) }
 }
 
+/**
+ * symbols 动作：带 target 时给这个符号的声明、body 范围和当前源码（中途文件变了就报版本冲突）；否则按 query、path、种类查符号或导出，
+ * 语言服务查不到时回退代码图谱的名字搜索。
+ */
 async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, context: ProjectToolContext) {
   if (input.target) {
     const target = await resolveCodeSymbolReference(input.target, context)
     const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
     const symbol = await locate(target, context)
     const detail = symbol as ProjectSymbol & { bodyRange?: ProjectSymbol['range']; statementRange?: ProjectSymbol['range'] }
-    const source = await readProjectSource({ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine], maxChars: 20_000 }, context)
+    const source = await readProjectSource({ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine], maxChars: ProjectTuning.codeQuery.symbolSourceChars }, context)
     if (source.files.some((file) => file.revision !== before.snapshot.revision))
       throw new ProjectError('BASE_REVISION_MISMATCH', '符号解析期间文件发生变化，声明范围与源码不属于同一版本。', { path: target.path }, '重新查询该符号详情。')
     return envelope(input, { source: symbol.adapterId, symbols: await symbolRows([{ ...symbol, line: symbol.range.startLine }], context) }, {
@@ -166,7 +182,7 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
   if (input.exact && input.query) items = items.filter((item) => item.name === input.query)
   if (isEmpty(items) && input.query && !input.exportedOnly) {
     try {
-      const graph = await query({ action: 'search_symbols', query: input.query, kind: input.kinds?.length === 1 ? input.kinds[0] : undefined, limit: Math.min(50, input.limit ?? 30) }, context)
+      const graph = await query({ action: 'search_symbols', query: input.query, kind: input.kinds?.length === 1 ? input.kinds[0] : undefined, limit: Math.min(ProjectTuning.codeQuery.graphCandidates, input.limit ?? ProjectTuning.codeQuery.defaultResults) }, context)
       items = graphRows(graph).filter((item) =>
         isString(item.name) && item.name.toLocaleLowerCase('en-US').includes(input.query!.toLocaleLowerCase('en-US')) &&
         (!input.path || (isString(item.path) && (sameCodePath(context.project.getRootPath(), item.path, input.path) || item.path.startsWith(`${input.path.replace(/\/$/, '')}/`)))) &&
@@ -181,13 +197,17 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
   return envelope(input, rest, { symbols: await symbolRows(items, context) })
 }
 
+/**
+ * relations 动作：calls 查调用方与被调方，types 查类型层级，related 查相关节点，按 direction 与 depth 从目标节点展开并封顶；
+ * 后端给不出边的方向时如实说明，关系后端没启用时返回空关系加降级说明与能力目录。
+ */
 async function relations(input: Extract<ProjectCodeInput, { action: 'relations' }>, context: ProjectToolContext) {
   try {
     const target = await graphTarget(input.target, context)
     if (input.kind === 'calls') {
       const parts: RecordValue = {}
-      if (input.direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? 30)
-      if (input.direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? 30)
+      if (input.direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectTuning.codeQuery.defaultResults)
+      if (input.direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectTuning.codeQuery.defaultResults)
       return envelope(input, { ...parts, truncated: Object.values(parts).some((part) => record(part).truncated), sources: Object.values(parts).map((part) => ({ backend: record(part).source ?? 'codegraph' })) })
     }
     const result = await query(input.kind === 'types' ? { action: 'type_hierarchy', nodeId: target.nodeId } : { action: 'explore', nodeIds: [target.nodeId] }, context)
@@ -204,9 +224,9 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
         frontier = new Set([...next].filter((id) => !selected.has(id)))
         for (const id of frontier) selected.add(id)
       }
-      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? 30), { direction: input.direction })
+      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? ProjectTuning.codeQuery.defaultResults), { direction: input.direction })
     }
-    return envelope(input, boundRelations(result, input.limit ?? 30), { requestedDirection: input.direction, degraded: [
+    return envelope(input, boundRelations(result, input.limit ?? ProjectTuning.codeQuery.defaultResults), { requestedDirection: input.direction, degraded: [
       ...(isString(result.degraded) ? [result.degraded] : []),
       ...(input.direction === 'both' ? [] : ['当前图后端未提供可验证的边方向，返回双向关系；没有把未分类节点伪装成指定方向。']),
     ] })
@@ -280,7 +300,7 @@ export async function analyzeProjectCode(input: ProjectCodeAnalysisInput, contex
       break
     }
     case 'cycles': request = { action: 'find_cycles', maxFiles: input.maxFiles }; break
-    case 'deadcode': request = { action: 'find_dead_code', limit: input.limit ?? 30 }; break
+    case 'deadcode': request = { action: 'find_dead_code', limit: input.limit ?? ProjectTuning.codeQuery.defaultResults }; break
     case 'routing': request = { action: 'routing_manifest', framework: input.framework }; break
   }
   return envelope(input, await query(request, context))

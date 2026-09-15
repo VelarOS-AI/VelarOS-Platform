@@ -18,7 +18,7 @@ import {
   ProjectCapability,
   type ProjectCapabilityService,
 } from '../src/exports/index'
-import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectEditOperationSchema } from '../src/utils/edit-intent'
 
 function captureService(
   capture: (tokenId: string, service: object) => void,

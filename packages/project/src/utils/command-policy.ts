@@ -1,14 +1,11 @@
+/**
+ * 命令判定：执行前判断一条 shell 命令是否只读、是否危险、是否该转入后台，生成确认文案。
+ * 与 system 空间的同名判定逐条一致，仓库层的 tests/capabilities/command-danger-parity.test.ts 核对两边对同一批命令给出同一个结论。
+ */
+
 import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-export interface CommandExecutionPlan {
-  isReadOnly: boolean
-  shouldRequestConfirmation: boolean
-  shouldStartInBackground: boolean
-  reason: Nullable<string>
-  isDangerous: boolean
-  dangerousReason: Nullable<string>
-  ports: number[]
-}
+import type { CommandExecutionPlan, ShellInvocation } from '../types/commands.js'
 
 const readOnlyCommands = new Set([
   'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',
@@ -107,12 +104,14 @@ const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
   /\bicacls\b(?=[^&|;\r\n]*\/grant\b)(?=[^&|;\r\n]*\/t\b)/i,
 ]
 
+/** 按空白把一段命令切成词，引号里的空白不切，并去掉包住整词或词里一段的引号。 */
 function tokenize(command: string): string[] {
   return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)?.map((token) =>
     token.replace(/^(['"])(.*)\1$/, '$2').replace(/(['"])(.*?)\1/g, '$2')
   ) ?? []
 }
 
+/** 这个词是不是把取值连写在一起的 git 全局选项（-Cdir、-ckey=value、--git-dir=… 等）。 */
 function hasInlineGitGlobalOptionValue(token: string): boolean {
   if (token.startsWith('-C') && token.length > 2) return true
   if (token.startsWith('-c') && token.length > 2 && token.includes('=')) return true
@@ -121,6 +120,7 @@ function hasInlineGitGlobalOptionValue(token: string): boolean {
   )
 }
 
+/** 跳过 git 的全局选项（连同它们的取值）找到子命令的位置；遇到认不出的选项或没有子命令时返回 -1。 */
 function findGitSubcommandIndex(args: readonly string[]): number {
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index]
@@ -202,12 +202,6 @@ const PosixRemoveOptionCluster = /^-[dfiprvwx]+$/i
 
 /** cmd.exe 开关串：`/s`、`/S`、`/s/q`、`/a:h`。`/tmp/s` 这类路径每段不止一个字母，不是开关。 */
 const CmdSwitchToken = /^(?:\/[a-z](?::[a-z-]*)?)+$/i
-
-/** 命令位置上的一次调用：规范化后的命令名与它在本段内的实参。 */
-interface ShellInvocation {
-  name: string
-  args: string[]
-}
 
 /**
  * 命令词的规范名：去掉路径前缀（`/bin/rm`、`C:\tools\rm.exe`，也去掉绕过别名的 `\rm` 的反斜杠）与
@@ -497,6 +491,7 @@ function describeDangerousCommand(command: string): Nullable<string> {
   return null
 }
 
+/** 找出命令里写到的端口号（--port、-p 后面的数字、冒号后面的数字），去重，只留不超过 65535 的。 */
 function extractPorts(command: string): number[] {
   const ports = new Set<number>()
   for (const match of command.matchAll(/(?:--port(?:=|\s+)|(?:^|\s)-p\s+|:)(\d{2,5})\b/g)) {
@@ -736,6 +731,10 @@ function hasMutatingGitArguments(subcommand: string, args: readonly string[]): b
   })
 }
 
+/**
+ * 判断整条命令是不是只读：整条没有换行、重定向、子 shell、命令替换与变量展开、后台符，每一段都是只读白名单里的命令，
+ * 没有提权、没有会改掉命令行为的前缀与参数；git 只认只读子命令，sed 只认不写盘、不执行命令的脚本。认不出的一律按会写处理。
+ */
 export function isShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
   if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
@@ -768,10 +767,12 @@ export function isShellCommandReadOnly(command: string): boolean {
   })
 }
 
+/** 判断命令可能改项目：不是只读的就算。 */
 export function isShellCommandLikelyMutating(command: string): boolean {
   return !isShellCommandReadOnly(command)
 }
 
+/** 给一条命令做执行前分类：是否只读、是否危险及原因、是否该转入后台及原因、是否要用户确认，以及命令里写到的端口；空命令什么都不是。 */
 export function analyzeCommandExecution(command: string): CommandExecutionPlan {
   const trimmed = command.trim()
   if (!trimmed) return {
@@ -800,6 +801,7 @@ export function analyzeCommandExecution(command: string): CommandExecutionPlan {
   }
 }
 
+/** 判断一次命令调用能不能和别的调用并行：命令是字符串、没要求后台、没禁止并行，而且只读、不危险、不用确认、不转后台。 */
 export function isParallelCommandExecutionSafe(input: {
   command?: unknown
   background?: unknown
@@ -815,6 +817,7 @@ export function isParallelCommandExecutionSafe(input: {
 
 export const isParallelCommandSafe = isParallelCommandExecutionSafe
 
+/** 生成执行前给用户看的确认文案：危险命令写明风险与原因，长驻命令写明会驻留、怎么终止；带上可能占用的端口，末尾问是否继续。 */
 export function buildBackgroundCommandConfirmationMessage(
   command: string,
   plan: CommandExecutionPlan,

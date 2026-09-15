@@ -15,10 +15,14 @@ import type { ProjectCodeQuery } from '../../src/types/project'
 import { resolveProjectEditTarget, saveProjectEditTarget } from '../../src/utils/agent/edit-target'
 import { registerProjectFileContext, snapshotFromRead } from '../../src/utils/agent/file-context'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../src/utils/agent/kernel-port'
-import { type ProjectEditOperationsSchema, type ProjectModelEditInput, ProjectModelEditSchema } from '../../src/utils/schemas/edit-intent'
+import { type ProjectEditOperationsSchema, ProjectModelEditSchema } from '../../src/utils/edit-intent'
 import { defineProjectTool } from '../../src/utils/tool'
 
 import { ProjectCodeQuerySchema } from './code-query-schema'
+
+/** 第 1 版 project:edit 的入参：按 schema 解析之前的形状。 */
+type ProjectModelEditInput = z.input<typeof ProjectModelEditSchema>
+
 // 旧版工具有几个和现行工具同名：定义旧版时会覆盖全局示例表里现行工具的示例。先记下现行的，文件末尾还原，别的测试读到的永远是现行示例。
 const CurrentToolExamples = new Map(Object.keys(projectTools).map((name) => [name, DefaultToolContractExampleRegistry.get(name)]))
 

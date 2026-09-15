@@ -2,15 +2,12 @@ import { isUndefined } from '@velaros-ai/core'
 
 import type { Matcher, MatcherCompiler } from '../types/files.js'
 
-/** 单个进程内最多保留的 glob 编译结果数量，避免用户提供的 pattern 令缓存无界增长。 */
-export const MatcherCacheCapacity = 256;
-
 /**
  * 创建固定容量的 LRU matcher 缓存。命中项会被移到队尾，超限时淘汰最久未使用项。
  */
 export function createMatcherCache(capacity: number, compile: MatcherCompiler): MatcherCompiler {
   if (!Number.isInteger(capacity) || capacity < 1) {
-    throw new RangeError("Matcher cache capacity must be a positive integer");
+    throw new RangeError("匹配器缓存的容量必须是正整数。");
   }
 
   const cache = new Map<string, Matcher>();

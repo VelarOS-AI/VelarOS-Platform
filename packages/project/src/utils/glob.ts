@@ -1,16 +1,20 @@
 import picomatch from "picomatch";
 
-import { createMatcherCache, MatcherCacheCapacity } from "./matcher-cache.js";
+import { createMatcherCache } from "./matcher-cache.js";
 import { normalizeRel } from "./path.js";
+import { ProjectTuning } from "./tuning.js";
 
-const getMatcher = createMatcherCache(MatcherCacheCapacity, (pattern) =>
+/** 按 pattern 缓存编译好的 picomatch 匹配器（匹配点开头的文件、区分大小写），容量见 ProjectTuning.glob.matcherCacheEntries。 */
+const getMatcher = createMatcherCache(ProjectTuning.glob.matcherCacheEntries, (pattern) =>
   picomatch(pattern, { dot: true, nocase: false }),
 );
 
+/** pattern 里有没有通配特殊字符（* ? [ ] { } ! ( )）。 */
 function hasGlobMagic(pattern: string): boolean {
   return /[*?[\]{}!()]/.test(pattern);
 }
 
+/** 形如 dir/** 且 dir 部分不含通配符时返回 dir，按目录前缀匹配；否则返回 null。 */
 function directoryGlobBase(pattern: string): Nullable<string> {
   if (!pattern.endsWith("/**")) return null;
   const base = pattern.slice(0, -3);

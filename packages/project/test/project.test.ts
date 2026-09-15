@@ -8,7 +8,7 @@ import { ProjectToolNames } from '../src/contract/constants'
 import type { EditOperation } from '../src/exports/index'
 import { createProjectKernel } from '../src/exports/index'
 import { FileProjectChangeFeed } from '../src/impl/persistence/FileProjectChangeFeed.js'
-import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectEditOperationSchema } from '../src/utils/edit-intent'
 
 describe('Project capability', () => {
   test('publishes only canonical project tool ids', () => {

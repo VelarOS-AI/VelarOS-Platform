@@ -71,7 +71,7 @@ export type ProjectSandboxInput = {
 export type ProjectCodeTarget = { symbolRef: string } | { path: string; symbol: string; container?: string }
 
 /** 代码查询共用的范围：语言、工作目录、条数上限、扩展名与目录深度。 */
-type ProjectCodeScope = {
+export type ProjectCodeScope = {
   language?: string
   cwd?: string
   limit?: number

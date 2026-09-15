@@ -1,3 +1,7 @@
+/**
+ * 旧编辑协议留下的编辑目标（selection: 引用）：读到完整行的窗口时签发，replace_selection 凭它定位要替换的行。现在只有测试里的旧工具还在用。
+ */
+
 import { createHash } from 'node:crypto'
 
 import { isNotUndefined } from '@velaros-ai/core'
@@ -56,6 +60,7 @@ export async function saveProjectEditTarget(
   return ref
 }
 
+/** 把 selection: 引用和新行换成一条 replace_lines 编辑：引用不可用或属于别的工作区时拒绝。 */
 export async function resolveProjectEditTarget(
   context: ProjectToolContext,
   input: { selectionRef: string; newLines: string[] }
@@ -65,16 +70,16 @@ export async function resolveProjectEditTarget(
     !context.contextPayloadStore ||
     !context.sessionId
   )
-    throw new AppError('VALIDATION', 'Use an editTarget returned by project:read')
+    throw new AppError('VALIDATION', '请使用 project:read 返回的 editTarget。')
   const record = await context.contextPayloadStore.findByHash(
     context.sessionId,
     input.selectionRef.slice('selection:'.length)
   )
   if (!record || record.toolName !== ToolName)
-    throw new AppError('VALIDATION', 'Edit target is unavailable; read the intended lines again')
+    throw new AppError('VALIDATION', '编辑目标不可用；请重新读取要改的行。')
   const target = JSON.parse(record.serializedResult) as EditTarget
   if (target.kind !== 'project-edit-target' || target.root !== context.project.getRootPath())
-    throw new AppError('PERMISSION', 'Edit target belongs to another workspace')
+    throw new AppError('PERMISSION', '编辑目标属于另一个工作区。')
   return {
     type: 'replace_lines' as const,
     path: target.path,
