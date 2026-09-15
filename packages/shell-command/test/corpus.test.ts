@@ -1,13 +1,11 @@
 /**
- * 跨包一致性：命令判定已经抽成公共包 @velaros-ai/shell-command（system 用它），project 还持有自己的一份，迁过去之前两份必须一致。
- * 同一条命令在两边必须得到同一个结论，否则同一条删除命令会在一个空间里问用户、在另一个空间里静默执行。
- * project 改用公共包之后，这份测试随之删除，语料并进公共包的验收。
+ * 判定语料：危险命令、日常命令、只读白名单的绕过写法与真正只读的写法。原来是 system 与 project 两份判定的仓库级一致性语料，
+ * 两个空间改用本包之后，它们就是这条判定规则自己的回归语料。
  */
+
 import { describe, expect, test } from 'bun:test'
 
-// 直接取判定所在的文件：project 的入口正在重排，判定本身一直在这里。
-import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/utils/command-policy'
-import { shellCommandPolicy as systemCommandPolicy } from '../../packages/shell-command/src/exports/index'
+import { shellCommandPolicy } from '../src/exports/index'
 
 const DangerousCommands = [
   'dd of=/dev/disk2 if=/dev/zero bs=1m',
@@ -136,32 +134,20 @@ const ReadOnlyCommands = [
   'cat notes.txt | sed -n 2p',
 ]
 
-describe('命令危险判定在两个空间一致', () => {
-  test('同一条危险命令在 system 与 project 空间得到同一个判定与同一条理由', () => {
+describe('判定语料', () => {
+  test('危险命令一律判危险并给出理由', () => {
     for (const command of DangerousCommands) {
-      const project = analyzeProjectCommand(command)
-      const system = systemCommandPolicy.analyze(command)
-      expect({ command, isDangerous: system.isDangerous }).toEqual({ command, isDangerous: true })
-      expect({ command, reason: system.dangerousReason }).toEqual({ command, reason: project.dangerousReason })
-      expect(project.isDangerous).toBe(true)
+      const plan = shellCommandPolicy.analyze(command)
+      expect({ command, isDangerous: plan.isDangerous, hasReason: !!plan.dangerousReason }).toEqual({ command, isDangerous: true, hasReason: true })
     }
   })
 
-  test('只读白名单的绕过写法在两个空间都判非只读，真正只读的写法两边都判只读', () => {
-    for (const command of ReadOnlyBypassCommands) {
-      expect({ command, project: analyzeProjectCommand(command).isReadOnly, system: systemCommandPolicy.isReadOnly(command) })
-        .toEqual({ command, project: false, system: false })
-    }
-    for (const command of ReadOnlyCommands) {
-      expect({ command, project: analyzeProjectCommand(command).isReadOnly, system: systemCommandPolicy.isReadOnly(command) })
-        .toEqual({ command, project: true, system: true })
-    }
+  test('只读白名单的绕过写法判非只读，真正只读的写法判只读', () => {
+    for (const command of ReadOnlyBypassCommands) expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: false })
+    for (const command of ReadOnlyCommands) expect({ command, readOnly: shellCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: true })
   })
 
-  test('同一条日常命令在两个空间都不被打扰', () => {
-    for (const command of RoutineCommands) {
-      expect({ command, project: analyzeProjectCommand(command).isDangerous, system: systemCommandPolicy.analyze(command).isDangerous })
-        .toEqual({ command, project: false, system: false })
-    }
+  test('日常命令不打扰用户', () => {
+    for (const command of RoutineCommands) expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({ command, isDangerous: false })
   })
 })

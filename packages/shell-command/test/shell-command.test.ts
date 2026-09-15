@@ -28,3 +28,183 @@ describe('并发判定', () => {
     expect(shellCommandPolicy.isParallelSafe({ command: 42, parallel: true })).toBe(false)
   })
 })
+
+// 下面几组语料来自 project 空间原来那份判定的测试（两个空间现在共用这一份判定）。
+describe('project 空间的原有语料', () => {
+  test('finds git subcommands after global options and fails closed for unknown forms', () => {
+    expect(shellCommandPolicy.isReadOnly('git -C repo status')).toBe(true)
+    // 任何 -c 都不算只读：值可能就是要执行的程序，判据不区分 key。
+    expect(shellCommandPolicy.isReadOnly('git -c core.fileMode=false log -1')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git --git-dir repo/.git status')).toBe(true)
+    expect(shellCommandPolicy.isReadOnly('git --git-dir=repo/.git status')).toBe(true)
+    expect(shellCommandPolicy.isReadOnly('git -C --output=repo status')).toBe(true)
+    expect(shellCommandPolicy.isReadOnly('git -C repo checkout main')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git --git-dir=repo/.git clean -fd')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git branch -D obsolete')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git config --set core.fileMode false')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git diff --output=changes.patch')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git log --output history.txt')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git show --output=commit.txt HEAD')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git --future-option status')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git future-command')).toBe(false)
+    expect(shellCommandPolicy.isReadOnly('git -C')).toBe(false)
+    expect(shellCommandPolicy.isParallelSafe({
+      command: 'git -C repo checkout main',
+      parallel: true,
+    }, { optIn: false })).toBe(false)
+  })
+
+  // 删整个文件夹恢复不了，不论带不带 -f 都要确认；删单个文件是日常操作，不打扰用户。
+  test('treats every recursive removal as dangerous and explains it deletes a whole folder', () => {
+    for (const command of [
+      'rm -r ./directory',
+      'rm -R ./directory',
+      'rm --recursive ./directory',
+      'rm --rec ./directory',
+      'rm -r -f ./victim',
+      'rm -f -r ./victim',
+      'rm --recursive --force ./victim',
+      'rm -r --force ./victim',
+      'RM -RF /',
+      '/bin/RM -Rf /',
+      'RM --RECURSIVE --FORCE /',
+      'sudo rm -r /tmp/cache',
+      'ls | xargs rm -r',
+      'git rm -rf ./directory',
+      'rm ./directory -Recurse',
+      // BSD/macOS rm 的 -x、-P、-W 也能和 -r 写进同一簇。
+      'rm -rfx ./directory',
+      'rm -Rx ./directory',
+      'rm -rP ./directory',
+      'rm -xr ./directory',
+      'rm -rW ./directory',
+      // 包在子 shell、命令替换、解释器与前缀命令里的递归删除照样执行。
+      "sh -c 'rm -rf ./directory'",
+      'bash -lc "cd build && rm -r out"',
+      '(rm -r ./directory)',
+      'echo $(rm -r ./directory)',
+      '\\rm -r ./directory',
+      'rm.exe -r ./directory',
+      'timeout 10 rm -r ./directory',
+      'env CI=1 rm -r ./directory',
+      'eval "rm -r ./directory"',
+      'find . -name node_modules -exec rm -rf {} +',
+    ]) {
+      const plan = shellCommandPolicy.analyze(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.shouldRequestConfirmation).toBe(true)
+      expect(plan.dangerousReason).toContain('递归删除整个文件夹')
+    }
+
+    for (const command of [
+      'rm ./file',
+      'rm -f ./file',
+      'rm -v src/f.ts',
+      'rm docs/s.md',
+      'rm ./file -Force',
+      'git rm -r --cached ./directory',
+      'git rm -r ./directory',
+      // 只有命令位置上的 rm 才是删除命令：包管理器、容器的 rm 子命令与文本里的 rm 都不算。
+      'pnpm rm -r lodash',
+      'docker rm -f web',
+      'echo rm -r ./directory',
+      'grep -r "rm -rf" .',
+      'rm -Recurse:$false ./directory',
+      // 簇里混进 rm 不认识的字母时 rm 以 illegal option 退出，一个文件都不删。
+      'rm -rfz ./directory',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).isDangerous).toBe(false)
+    }
+  })
+
+  test('treats Windows recursive removal forms as dangerous but single-file deletes as routine', () => {
+    for (const command of [
+      'Remove-Item -Recurse -Force build',
+      'Remove-Item build -Recurse',
+      'Remove-Item build -Recurse:$true',
+      'ri build -r',
+      'rd /s /q build',
+      'RMDIR /S build',
+      'rmdir/s/q build',
+      'del /s /q *.tmp',
+      'cmd /c "rd /s /q build"',
+      'powershell -NoProfile -Command "Remove-Item build -Recurse"',
+      'Get-ChildItem build | ForEach-Object { Remove-Item $_ -Recurse }',
+    ]) {
+      const plan = shellCommandPolicy.analyze(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.dangerousReason).toContain('递归删除整个文件夹')
+    }
+
+    for (const command of [
+      'Remove-Item .\\notes.txt',
+      'Remove-Item .\\notes.txt -Force',
+      'del /f notes.txt',
+      'del docs/s.md',
+      'del docs/a/s.md',
+      'rd build',
+      'git branch --del -r origin/obsolete',
+    ]) {
+      expect(shellCommandPolicy.analyze(command).isDangerous).toBe(false)
+    }
+    expect(shellCommandPolicy.analyze('Remove-Item HKLM:\\Software\\Demo').isDangerous).toBe(true)
+  })
+
+  // 与项目写入同一条线——能不能恢复：丢掉从没进过 Git 的工作区改动、未跟踪文件或 stash 的要先问；
+  // 切分支、合并、只动索引的形态都能找回，照常执行。
+  test('treats Git calls that discard uncommitted work as dangerous', () => {
+    for (const [command, reason] of [
+      ['git reset --hard', '未提交的改动会永久丢失'],
+      ['git -C repo reset --hard HEAD~1', '未提交的改动会永久丢失'],
+      ['git reset --merge ORIG_HEAD', '未提交的改动会永久丢失'],
+      ['git checkout -- src/app.ts', '未提交的改动会永久丢失'],
+      ['git checkout HEAD -- .', '未提交的改动会永久丢失'],
+      ['git checkout .', '未提交的改动会永久丢失'],
+      ['git checkout -f main', '未提交的改动会永久丢失'],
+      ['git switch --discard-changes main', '未提交的改动会永久丢失'],
+      ['git restore src/app.ts', '未提交的改动会永久丢失'],
+      ['git restore --staged --worktree src/app.ts', '未提交的改动会永久丢失'],
+      ['git clean -fdx', '未被 Git 跟踪的文件'],
+      ['cd repo && git clean -f', '未被 Git 跟踪的文件'],
+      ['git stash drop', 'stash'],
+      ['git stash clear', 'stash'],
+      ['find . -name "*.log" -delete', '整个目录树'],
+    ] as const) {
+      const plan = shellCommandPolicy.analyze(command)
+      expect({ command, isDangerous: plan.isDangerous }).toEqual({ command, isDangerous: true })
+      expect(plan.dangerousReason).toContain(reason)
+    }
+
+    for (const command of [
+      'git reset',
+      'git reset --soft HEAD~1',
+      'git reset -q HEAD -- src/app.ts',
+      'git reset --keep HEAD~1',
+      'git restore --staged src/app.ts',
+      'git checkout main',
+      'git checkout -b feature/x',
+      'git switch main',
+      'git clean -n',
+      'git clean --dry-run -d',
+      'git stash',
+      'git stash pop',
+      'git merge main',
+      'git rebase main',
+      'git rm -rf --cached build',
+      'find . -name "*.log"',
+    ]) {
+      expect({ command, isDangerous: shellCommandPolicy.analyze(command).isDangerous }).toEqual({ command, isDangerous: false })
+    }
+  })
+
+  // cmd.exe 的 /q 只在目标是文件夹或通配符时才起作用（删单个文件本来就不提示），字面上又分不出
+  // 目录名与文件名，所以 del/erase 带 /q 一律先问。
+  test('treats quiet cmd deletes as bulk deletes that need confirmation', () => {
+    for (const command of ['del /q build', 'del /f /q notes.txt', 'erase /Q *.*', 'del/q build']) {
+      const plan = shellCommandPolicy.analyze(command)
+      expect(plan.isDangerous).toBe(true)
+      expect(plan.dangerousReason).toContain('安静模式')
+    }
+    expect(shellCommandPolicy.analyze('rd /q build').isDangerous).toBe(false)
+  })
+})

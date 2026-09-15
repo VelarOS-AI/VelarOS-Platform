@@ -49,3 +49,7 @@ Desktop、Workbench、Termel 为了 `analyzeCommandExecution`、`isShellCommandR
 
 第二个公共件：演练沙箱的数据形状（`SandboxRecord`、`SandboxDiff`、`SandboxApplyOptions` 等九个）、公开上限 `RehearsalSandboxLimits`、落回审批的操作身份 `SandboxApplyOperationKind`，以及 `rehearsalSandboxRules.prepareApply`——只认不截断的完整差量、点名了没变化的路径在问用户之前就拒绝、条数与敏感路径按完整三列算、审批的操作身份带差量指纹。system 已改用它（`SystemSandbox*` 九个类型与 `SystemSandboxLimits` 删除，宿主端口直接用公共类型）；project 迁过来时，它那份「确认用截断差量、落回全落」的同类缺陷随之消失。镜像、差量、落回的引擎暂留 system（二期再议）。
 
+## Addendum（2026-09-16）：project 迁入
+
+project 改用两个公共件：命令判定、危险命令审批请求走 `@velaros-ai/shell-command`（project 那份判定与兜底正则删除，仓库级命令一致性测试删除，语料并进公共包的测试）；沙箱数据、上限与落回规则走 `@velaros-ai/rehearsal-sandbox`（`ProjectSandbox*` 九个镜像类型与 `ProjectSandboxLimits` 删除，`ProjectSandboxPort` 扩展 `RehearsalSandboxHostPort`，落回前要完整差量并带指纹）。
+

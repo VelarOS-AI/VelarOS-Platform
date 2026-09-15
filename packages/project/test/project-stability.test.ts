@@ -264,18 +264,11 @@ describe('Project stability contracts', () => {
         failure = error
       }
 
+      // 线上入参不合法是内核边界的校验失败：和 system、office 一样报 VALIDATION，带出字段路径；项目领域错误（执行里抛的 ProjectError）才翻成带 projectError 的 AppError。
       expect(failure).toBeInstanceOf(AppError)
-      expect(failure).toMatchObject({
-        code: 'INVALID_INPUT',
-        context: {
-          projectError: {
-            name: 'ProjectError',
-            reason: 'INVALID_INPUT',
-            details: { detail: expect.any(String) },
-            suggestedNextAction: '请根据工具 schema 修正参数后重试。',
-          },
-        },
-      })
+      expect(failure).toMatchObject({ code: 'VALIDATION' })
+      expect((failure as Error).message).toContain('项目能力的入参不合法')
+      expect((failure as Error).message).toContain('operations')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

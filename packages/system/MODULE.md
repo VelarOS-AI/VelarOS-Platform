@@ -76,7 +76,7 @@
 
 运行时要宿主给的东西全部列在上一节的注入面里，由 `contract/requires.ts` 定义。
 
-不依赖 `@velaros-ai/project`，两边互不引用。命令判定在公共包 `@velaros-ai/shell-command`；project 迁过去之前，两份判定是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着。
+不依赖 `@velaros-ai/project`，两边互不引用。命令判定在公共包 `@velaros-ai/shell-command`，沙箱契约与落回规则在 `@velaros-ai/rehearsal-sandbox`，两个空间用的是同一份。
 
 ## 状态归谁
 

@@ -163,33 +163,7 @@ export interface ProjectAuthorizationDecision {
   authorizationScope?: ProjectMutationAuthorizationScope
 }
 
-// ── 演练沙箱（与 @velaros-ai/system 的形状一致，两边互不引用；仓库层有镜像一致性测试） ──
-
-/** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 */
-export type ProjectSandboxIgnoredMode = 'link' | 'copy' | 'skip'
-
-/** 建沙箱的请求：source 是工具解析好的项目内绝对路径；network 为 false 时镜像里的命令连不上网。 */
-export interface ProjectSandboxCreateRequest {
-  source: string
-  network: boolean
-  ignored: ProjectSandboxIgnoredMode
-}
-
-/** 一个沙箱：id 就是目录名，root 是镜像根，source 是被镜像的项目目录。 */
-export interface ProjectSandboxRecord {
-  id: string
-  root: string
-  source: string
-  createdAt: number
-  network: boolean
-  ignored: ProjectSandboxIgnoredMode
-  fileCount: number
-  bytes: number
-  /** 链接到真实目录的忽略目录（相对路径）。 */
-  linkedDirectories: string[]
-  /** 源目录是 git 仓库：镜像里的 .git 已把推送地址改掉。 */
-  git: boolean
-}
+// ── 演练沙箱（数据形状在 @velaros-ai/rehearsal-sandbox，这里只有项目空间独有的镜像里跑命令） ──
 
 /** 在镜像里跑一条命令：宿主把它约束在镜像根之内。 */
 export interface ProjectSandboxRunOptions {
@@ -197,54 +171,6 @@ export interface ProjectSandboxRunOptions {
   command: string
   timeoutMs?: number
   maxOutputChars?: number
-}
-
-/** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条（默认 200），删除列不受限。 */
-export interface ProjectSandboxDiffOptions {
-  sandboxId: string
-  maxFiles?: number
-}
-
-/** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
-export interface ProjectSandboxTextDiff {
-  path: string
-  diff: string
-  truncated: boolean
-}
-
-/** 镜像相对创建时的变化：三列相对路径（删除列永远完整），文本差量有界；gitChanged 表示 .git 里有东西变了。 */
-export interface ProjectSandboxDiff {
-  sandboxId: string
-  source: string
-  created: string[]
-  modified: string[]
-  deleted: string[]
-  truncated: boolean
-  gitChanged: boolean
-  textDiffs: ProjectSandboxTextDiff[]
-  omittedDiffs: number
-  note?: string
-}
-
-/** 落回项目的选项：paths 只落这些相对路径，不给就全部。 */
-export interface ProjectSandboxApplyOptions {
-  sandboxId: string
-  paths?: string[]
-}
-
-/** 落回的结果：三列是真正写进项目的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 */
-export interface ProjectSandboxApplyResult {
-  sandboxId: string
-  created: string[]
-  modified: string[]
-  deleted: string[]
-  skippedGit: boolean
-}
-
-/** 丢弃的结果：沙箱本来就不在时 removed 为 false。 */
-export interface ProjectSandboxDiscardResult {
-  sandboxId: string
-  removed: boolean
 }
 
 // ── 宿主代码查询（ProjectToolApi.queryCode 收到的查询） ─────────────────

@@ -8,18 +8,20 @@
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCapabilitySchema, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { createToolCallableOperations } from '@velaros-ai/agent/tool-contract'
 import { isNotUndefined, isUndefined, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
+import { shellCommandPolicy } from '@velaros-ai/shell-command'
 
-import { ProjectChangeLimits, ProjectCodeAnalysisModId, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectSandboxLimits, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
+import { ProjectChangeLimits, ProjectCodeAnalysisModId, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
 import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectCodeAnalysisContribution, ProjectSpace, ProjectToolCollection } from '../contract/provides.js'
 import type { CreateProjectKernelModuleOptions, CreateProjectKernelOptions, ProjectToolContext } from '../contract/requires.js'
 import type { ProjectChangeStep, ProjectEditInput, ProjectFileInput } from '../types/editing.js'
 import type { ProjectChangeInput, ProjectCodeAnalysisInput, ProjectCodeInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
 import { ProjectSourceInstructions } from '../utils/agent/source-window.js'
-import { isParallelCommandExecutionSafe } from '../utils/command-policy.js'
-import { createProjectCallableOperations, defineProjectTool, hasExactlyOneSource } from '../utils/tool.js'
+import { defineProjectTool, hasExactlyOneSource, toProjectCapabilityError } from '../utils/tool.js'
 
 import { createProjectKernel } from './kernel/LocalProjectKernel.js'
 import { projectChangeOperations } from './operations/ProjectChangeOperations.js'
@@ -140,6 +142,7 @@ const readTool = defineProjectTool<ProjectReadInput>({
   category: 'project-files',
   role: 'inspect',
   summary: '读取带版本的源码行，拿到编辑时用的 fileRef。',
+  suitable: ['读项目里的源码、配置、文档，拿到编辑要用的 fileRef；一个文件的一段，或一批文件各一段。'],
   usage: [
     ProjectSourceInstructions,
     `用 path 加 range（单个行号或 [首行,末行]）、files（每项各自的 range，最多 ${ProjectFileLimits.readFiles} 个文件）或返回的 continuation 三选一。maxChars 是这次调用所有文件共用的字符预算。`,
@@ -172,6 +175,7 @@ const listTool = defineProjectTool<ProjectListInput>({
   category: 'project-files',
   role: 'inspect',
   summary: '列出项目文件和目录，支持路径、glob、深度及稳定分页。',
+  suitable: ['看项目的目录结构、按 glob 找文件、翻大目录的下一页。'],
   protocol: ['include/exclude 相对 path 匹配，也接受项目根相对路径；续页直接传 cursor。'],
   examples: [{ path: 'src', recursive: true, limit: 100 }],
   schema: z.strictObject({
@@ -199,6 +203,7 @@ const searchTool = defineProjectTool<ProjectSearchInput>({
   category: 'project-files',
   role: 'inspect',
   summary: '按字面文本或正则搜索，返回可直接用于编辑的带版本源码窗口。',
+  suitable: ['按名字、字面文本或正则在项目里找代码位置；命中直接带可编辑的源码窗口。'],
   usage: [
     ProjectSourceInstructions,
     'regex=false 时按字面匹配，| 没有特殊含义。只有显示出来的源码窗口带可编辑的 fileRef；只有定位信息的命中要先 read。',
@@ -241,6 +246,7 @@ const fileTool = defineProjectTool<ProjectFileInput>({
   category: 'project-changes',
   role: 'edit',
   summary: '通过事务创建、整体覆盖、移动、删除项目文件，或批量转换文件的磁盘编码。',
+  suitable: ['新建文件、整份替换、移动或删除文件，或者统一一批文件的磁盘编码与换行。'],
   usage: [
     'actions 中 create 传 path/text；overwrite 传 fileRef/text；move 传 fileRef/to；delete 传 fileRef。create 拒绝覆盖已有路径。',
     'recode 传 paths 与可选 encoding（默认 utf-8）、bom、newline：框架探测原编码并按目标格式重写字节，Unicode 正文不变，已是目标格式的文件跳过；读取与编辑永远只处理文本，不需要也不接受编码参数。',
@@ -271,6 +277,7 @@ const editTool = defineProjectTool<ProjectEditInput>({
   category: 'project-changes',
   role: 'edit',
   summary: '按已读版本精确替换或插入源码；多个文件作为同一事务校验和提交。',
+  suitable: ['改一个或几个文件里的几处源码：替换、插入、删除几行或几段。'],
   usage: [
     '每文件传 fileRef 和 edits。range 为单行数字或 [首行,末行]；match 是范围内唯一的原文片段。只给 range 操作完整行，只给 match 在已显示区域中定位。',
     'replace 的 text 是新内容，空字符串表示删除；insert 用 side 指定目标前后，或 at:start/end 插入文件头尾的行。所有编辑使用同一输入版本的坐标。',
@@ -314,6 +321,7 @@ const changeTool = defineProjectTool<ProjectChangeInput>({
   category: 'project-changes',
   role: 'edit',
   summary: '组合文件操作与源码编辑为一个事务，查看或撤销变更回执。',
+  suitable: ['要把文件动作和源码编辑合成一个事务（比如移动文件并改掉引用），或者查看、撤销之前的一次改动。'],
   usage: [
     'apply 的 steps 按顺序使用 file.actions 或 edit.files。fileRef 固定读取版本；sourceRef 跟随计划中此前的移动和修改；path 只引用计划创建的文件。',
     'inspect/undo 只传 changeRef；undo 遇到外部修改会拒绝覆盖。普通 edit/file 已自动提交，不需要另行调用 apply。',
@@ -436,6 +444,7 @@ export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToo
     category: 'development-code',
     role: 'inspect',
     summary: '按需查询代码路径追踪、依赖环、未使用代码候选和框架路由。',
+    suitable: ['要追两个符号之间的调用路径、找依赖环、找没用到的代码候选或列出框架路由的时候。'],
     usage: ['trace 的 from/to 使用符号引用或 {path,symbol}。deadcode 返回候选，删除之前必须核验动态入口。'],
     notes: ['由宿主提供图后端时加载；查询能力与覆盖以实际回执为准。'],
     examples: [{ action: 'cycles' }, { action: 'deadcode', limit: 20 }],
@@ -464,6 +473,7 @@ const runTool = defineProjectTool<ProjectRunInput>({
   category: 'project-execution',
   role: 'execute',
   summary: '在项目边界内运行可取消、可审计且支持后台任务的命令。',
+  suitable: ['在项目里跑构建、测试、lint、脚本和包管理命令，或者起开发服务器。'],
   protocol: [
     '生成命令前读取宿主报告的实际 shell.kind/name。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
     'Git Bash/POSIX 使用 command -v、$NAME；PowerShell 使用 Get-Command、$env:NAME；CMD 使用 where、%NAME%。刷新环境后按当前 shell 重新生成命令；失败先诊断退出码和输出，避免重复执行副作用。',
@@ -479,7 +489,7 @@ const runTool = defineProjectTool<ProjectRunInput>({
   permissions: ['process:exec'],
   capabilities: ProjectExecutionCapability,
   exposure: ProjectToolExposure.run,
-  isConcurrencySafe: (input) => isParallelCommandExecutionSafe(input),
+  isConcurrencySafe: (input) => shellCommandPolicy.isParallelSafe(input, { optIn: false }),
   execute: (input, ctx) => projectExecutionOperations.run(input, ctx),
 })
 
@@ -511,12 +521,12 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
     source: z.string().min(1).optional().describe('create：要镜像的项目内目录，相对项目根；不传就是整个项目。'),
     network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
     ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
-    sandboxId: z.string().min(1).max(ProjectSandboxLimits.idChars).optional().describe('run / diff / apply / discard：create 返回的沙箱 id。'),
+    sandboxId: z.string().min(1).max(RehearsalSandboxLimits.idChars).optional().describe('run / diff / apply / discard：create 返回的沙箱 id。'),
     command: z.string().min(1).optional().describe('run：在镜像根里执行的 shell 命令。'),
     timeoutMs: z.number().int().positive().max(ProjectCommandLimits.timeoutMs).optional().describe('run：超时毫秒数。'),
     maxOutputChars: z.number().int().positive().max(ProjectCommandLimits.outputChars).optional().describe('run：最多返回多少字符的输出。'),
-    paths: z.array(z.string().min(1)).max(ProjectSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
-    maxFiles: z.number().int().positive().max(ProjectSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${ProjectSandboxLimits.diffFiles}；删除列永远完整。`),
+    paths: z.array(z.string().min(1)).max(RehearsalSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
+    maxFiles: z.number().int().positive().max(RehearsalSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${RehearsalSandboxLimits.diffFiles}；删除列永远完整。`),
   }),
   permissions: ['fs:read', 'fs:write', 'process:exec'],
   capabilities: ProjectExecutionCapability,
@@ -706,7 +716,7 @@ export function createProjectKernelModule(options: CreateProjectKernelModuleOpti
       isolation: 'in-process',
     },
     activate(context) {
-      const callable = createKernelCallableCapability(createProjectCallableOperations(projectTools, options.resolveContext))
+      const callable = createKernelCallableCapability(createToolCallableOperations(projectTools, options.resolveContext, { label: '项目', mapError: toProjectCapabilityError }))
       context.registerService(ProjectCapability, Object.freeze({ ...callable, tools: Object.freeze({ ...projectTools }) }))
     },
   })

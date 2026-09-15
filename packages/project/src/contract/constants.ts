@@ -199,18 +199,6 @@ export const ProjectCommandLimits = Object.freeze({
   outputChars: 50_000,
 })
 
-/** project:sandbox 的公开上限（和 system:sandbox 一致）。 */
-export const ProjectSandboxLimits = Object.freeze({
-  /** 沙箱 id 最长多少字符。 */
-  idChars: 64,
-  /** apply 一次最多点名几条路径。 */
-  applyPaths: 500,
-  /** diff 的新增与修改各列最多列多少条（maxFiles 的上限）。 */
-  diffFilesMax: 2000,
-  /** diff 不给 maxFiles 时各列列多少条。 */
-  diffFiles: 200,
-})
-
 /** 变更记录与有限事务面的公开上限。 */
 export const ProjectTransactionLimits = Object.freeze({
   /** 列变更记录时不给 limit 列几条。 */

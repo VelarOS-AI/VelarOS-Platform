@@ -113,6 +113,7 @@ const projectRead = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '读取项目根目录内的一个或多个文本文件，并返回修订版本与分页信息。',
+  suitable: ['第 1 版：读项目文件的一段。'],
   usage: [
     'contentFormat=line-numbered 时，content 每行的 N| 前缀是行号标注，不属于源码；replace_lines 直接使用这些行号，replace_text 的 oldText 不包含标注。',
     'maxChars 是本次调用内所有文件共享的总字符预算；批量读取会公平分配并回收未使用额度。',
@@ -193,6 +194,7 @@ const projectSearch = defineProjectTool<{
   category: 'project-files',
   role: 'inspect',
   summary: '在项目文件正文中执行有界文本或正则搜索。',
+  suitable: ['第 1 版：在项目里按文本搜索。'],
   usage: [
     'regex=false（默认）时 query 按字面匹配，| 不表示「或」；多选一或模式匹配请设 regex=true。',
   ],
@@ -383,6 +385,7 @@ const projectRollback = defineProjectTool<{ transactionId: string }>({
   category: 'project-changes',
   role: 'edit',
   summary: '撤销由 project:edit 创建并已应用的项目事务。',
+  suitable: ['第 1 版：按事务号撤销一次改动。'],
   examples: [{ transactionId: 'transaction-id-from-project-edit' }],
   schema: z.object({ transactionId: z.string().min(1) }),
   permissions: ['fs:read', 'fs:write'],

@@ -1,14 +1,12 @@
 /**
- * 演练沙箱在 system 与 project 两个空间的镜像一致性：两个包互不知道对方，各自持有一份工具与数据形状，
- * 这里从仓库层核对两份入参 schema 对同样的输入给出同样的裁决（project 多一个 run 动作，因为项目工具出不了项目边界），
- * 以及记录、差量、落回结果三种数据形状可以互相赋值。
+ * 演练沙箱在 system 与 project 两个空间的工具入参一致性：数据形状、上限与落回规则已经是公共包 @velaros-ai/rehearsal-sandbox，
+ * 两个工具的 schema 形状相同、文案按空间不同，各持一份；这里从仓库层核对两份 schema 对同样的输入给出同样的裁决
+ * （project 多一个 run 动作，因为项目工具出不了项目边界）。
  */
 
 import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
-import type { ProjectSandboxApplyResult, ProjectSandboxDiff, ProjectSandboxRecord } from '../../packages/project/src/types/project'
-import type { SandboxApplyResult, SandboxDiff, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { systemTools } from '../../packages/system/src/exports/index'
 
 const system = systemTools['system:sandbox']!
@@ -40,16 +38,4 @@ describe('sandbox contract parity across spaces', () => {
     expect(accepts(system, { action: 'diff', sandboxId: '20260915-183000-3fa2c1', command: 'bun test' })).toBe(false)
   })
 
-  test('the record, diff and apply result shapes are mutually assignable', () => {
-    const record: SandboxRecord = { id: 'x', root: '/r', source: '/s', createdAt: 0, network: false, ignored: 'link', fileCount: 0, bytes: 0, linkedDirectories: [], git: false }
-    const projectRecord: ProjectSandboxRecord = record
-    const systemRecord: SandboxRecord = projectRecord
-    const diff: SandboxDiff = { sandboxId: 'x', source: '/s', created: [], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0 }
-    const projectDiff: ProjectSandboxDiff = diff
-    const systemDiff: SandboxDiff = projectDiff
-    const applied: SandboxApplyResult = { sandboxId: 'x', created: [], modified: [], deleted: [], skippedGit: false }
-    const projectApplied: ProjectSandboxApplyResult = applied
-    const systemApplied: SandboxApplyResult = projectApplied
-    expect([systemRecord.id, systemDiff.sandboxId, systemApplied.sandboxId]).toEqual(['x', 'x', 'x'])
-  })
 })

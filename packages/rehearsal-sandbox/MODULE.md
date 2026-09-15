@@ -29,7 +29,7 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 | `.` | Node 宿主与渲染进程 | 落回规则、它用到的数据 |
 | `./contracts` | 任何进程，含浏览器 | 常量表与可移植数据 |
 
-**注入面**在 `contract/requires.ts`：`RehearsalSandboxHostPort`，宿主的演练沙箱实现（建镜像、看差量、落回、丢弃）。本包自己不调它，它是两个空间共用的端口形状：system 的宿主端口 `SystemToolSystemApi` 扩展它，project 的沙箱端口迁过来后也扩展它；本机实现是 `@velaros-ai/system` 的本地内核。
+**注入面**在 `contract/requires.ts`：`RehearsalSandboxHostPort`，宿主的演练沙箱实现（建镜像、看差量、落回、丢弃）。本包自己不调它，它是两个空间共用的端口形状：system 的宿主端口 `SystemToolSystemApi` 与 project 的沙箱端口 `ProjectSandboxPort` 都扩展它；本机实现是 `@velaros-ai/system` 的本地内核。
 
 ## 骨干链路
 

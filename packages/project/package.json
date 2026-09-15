@@ -44,6 +44,8 @@
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/rehearsal-sandbox": "workspace:*",
+    "@velaros-ai/shell-command": "workspace:*",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
     "iconv-lite": "^0.7.2",

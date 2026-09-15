@@ -1,19 +1,17 @@
 /**
  * 定义项目工具与挂进内核的辅助：defineProjectTool 把工具说明、schema、权限与 execute 组装成运行时规格，编辑类工具接入入参复用（只在工具文件里调用）；
- * createProjectCallableOperations 把工具集合变成内核能力的可调用操作表，每次调用先严格解析入参、再向宿主解析上下文。
+ * 只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 agent 的 createToolCallableOperations，这里只给领域错误的翻译。
  */
 
-import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { defineToolRuntimeSpec, resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
-import { isFalse, isPlainObject, isUndefined } from '@velaros-ai/core'
+import { isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
 
 import { ProjectToolContract } from '../contract/constants.js'
-import type { ProjectToolCollection, VelaTool } from '../contract/provides.js'
-import type { ProjectToolContext, ProjectToolContextResolver } from '../contract/requires.js'
+import type { VelaTool } from '../contract/provides.js'
+import type { ProjectToolContext } from '../contract/requires.js'
 
 import { ProjectError, toErrorObject } from './errors.js'
 
@@ -24,7 +22,7 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
   category: ToolCategoryId
   role: 'inspect' | 'edit' | 'execute'
   summary: string
-  suitable?: readonly [string, ...string[]]
+  suitable: readonly [string, ...string[]]
   forbidden?: readonly [string, ...string[]]
   protocol?: readonly [string, ...string[]]
   usage?: readonly [string, ...string[]]
@@ -58,12 +56,12 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     category,
     role,
     summary,
-    suitable: suitable ?? ['需要完成该工具职责所描述的项目操作。'],
-    forbidden: forbidden ?? ['目标不属于当前项目边界。'],
-    protocol: protocol ?? ['只使用当前项目上下文解析路径和执行操作。'],
-    usage: usage ?? ['参数必须来自当前请求或前序工具结果。'],
+    suitable,
+    forbidden,
+    protocol,
+    usage,
     examples,
-    notes: notes ?? ['返回值是当前操作的权威结果。'],
+    notes,
     ...tool,
     inputContractVersion,
   })
@@ -77,56 +75,10 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
   return Object.freeze({ ...defined, schema: withToolInputReuse(tool.schema), execute })
 }
 
-/** 把项目领域错误转成内核能力的 AppError：码与文字照搬，原错误的结构化详情放进 context.projectError。 */
-function projectCapabilityError(error: ProjectError): AppError {
+/** 挂进内核时的错误翻译：项目领域错误转成内核能力的 AppError，码与文字照搬，原错误的结构化详情放进 context.projectError；别的错误原样交出。 */
+export function toProjectCapabilityError(error: unknown): unknown {
+  if (!(error instanceof ProjectError)) return error
   return new AppError(error.reason, error.message, error, { projectError: toErrorObject(error) })
-}
-
-/** 内核调用方给的入参不合法：说明哪一处不对，让调用方按工具 schema 修正。 */
-function invalidProjectInput(detail: string): AppError {
-  return projectCapabilityError(new ProjectError('INVALID_INPUT', `项目能力的入参不合法：${detail}`, { detail }, '请根据工具 schema 修正参数后重试。'))
-}
-
-/** 按工具的 schema 严格解析内核调用方给的入参（对象 schema 一律拒收未知字段）；不合法就报出每一处问题。 */
-function parseProjectToolInput(tool: VelaTool, input: unknown): Record<string, unknown> {
-  if (!isPlainObject(input)) throw invalidProjectInput('入参必须是对象')
-  const schema = tool.schema instanceof z.ZodObject ? tool.schema.strict() : tool.schema
-  const parsed = schema.safeParse(input)
-  if (!parsed.success) {
-    throw invalidProjectInput(parsed.error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`).join('; '))
-  }
-  return parsed.data
-}
-
-/** 把工具集合变成内核能力的可调用操作表：按工具名调用，先向宿主解析上下文、核对工具可用，再严格解析入参执行；领域错误转成 AppError。 */
-export function createProjectCallableOperations(
-  tools: ProjectToolCollection,
-  resolveContext: ProjectToolContextResolver,
-): Readonly<Record<string, KernelCallableCapabilityOperation>> {
-  const operations: Record<string, KernelCallableCapabilityOperation> = {}
-  for (const [fallbackName, candidate] of Object.entries(tools)) {
-    const tool = candidate as VelaTool
-    const operation = tool.name ?? fallbackName
-    operations[operation] = {
-      metadata: {
-        permissions: [...new Set(tool.permissions)],
-        reason: tool.capabilities?.reason ?? `调用项目工具 ${operation}。`,
-      },
-      async invoke(scope, input, signal) {
-        const context = await resolveContext(scope, signal)
-        const resolvedContext: ProjectToolContext = { ...context, abortSignal: signal }
-        if (isFalse(tool.isAvailable?.(resolvedContext))) throw new AppError('UNAVAILABLE', `项目能力 ${operation} 在解析出的上下文里不可用。`)
-        signal.throwIfAborted()
-        try {
-          return await tool.execute(parseProjectToolInput(tool, input), resolvedContext)
-        } catch (error) {
-          if (error instanceof ProjectError) throw projectCapabilityError(error)
-          throw error
-        }
-      },
-    }
-  }
-  return operations
 }
 
 /** project:change 计划里一个文件的来源只能写一种：fileRef、sourceRef、path 恰好给了一个。 */

@@ -10,6 +10,10 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **project 迁入两个公共件，修掉三个缺陷（09-16 03:50，ADR 0008 附录）。** ① 沙箱落回：原来确认用的是截断到 2000 条的差量、落回却全部落，也不核对确认之后镜像有没有再变；现在向宿主要完整差量（`diffSandbox({ maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })`），确认文案按完整三列算，`applySandbox` 带上差量指纹。**宿主契约变化**：`ProjectSandboxPort` 改为扩展 `RehearsalSandboxHostPort`，`diffSandbox` 要认 `textDiffs`、差量要带 `fingerprint`，`applySandbox` 要认 `fingerprint`（Desktop 用系统本地内核实现时这些已经支持）；`ProjectSandbox*` 九个数据类型改从 `@velaros-ai/rehearsal-sandbox/contracts` 取。② 经内核按名调用 project 工具时，原来先解析宿主上下文、后校验入参（和它自己的注释相反），现在先校验；入参不合法报 `VALIDATION`（和 system、office 一样），不再伪装成项目领域的 `INVALID_INPUT`。③ 沙箱 source 写 `..cache` 这类以 `..` 开头的项目内目录不再被误拒。
+- **project:run 的判定改用公共判定，行为有两处变化（09-16 03:50）。** project 原来那份只读判定多一道兜底正则：命令里出现 delete、exec、remove、write、okdir 这几个词就判「会改项目」，所以 `grep -rn delete src` 这类只读命令也要过项目修改授权、不能并发；公共判定按参数逐条否决，这类命令现在判只读。危险命令确认文案在递归删除时多一句「如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回」（ADR 0004 的承诺，system 早就有）。
+- **project 工具的「适用」一节不再是占位句（09-16 03:50）。** `defineProjectTool` 原来给没写的说明节塞通用句（「需要完成该工具职责所描述的项目操作。」「目标不属于当前项目边界。」等五句），它们原样进了 read、list、search、file、edit、change、run、code-analysis 八个工具的提示词。现在只写真有内容的节：这八个工具各补了一句真正的适用场景，其余占位句删掉。提示词审核指纹要等 agent 第 1 步提交后在干净工作区重算（指纹也登记了 agent 源文件）。
+
 - **project 正式纳入门禁（09-16 03:10）。** 模块卡片、12 条不变量（验收 10 条全经根入口测试）齐了，登记表去掉「迁移中」，门禁与 system 一样零条。
 - **project 注入面与产品面收窄（09-16 03:10）。** 工具从来不调、内核从来不读的成员删掉：`AgentProjectKernelPort` 的 `resolveTarget`、`fixTransaction`、`validate`、`diff`（领域内核 `ProjectKernel` 上照旧有，宿主直接调内核不受影响）；`ProjectCodeIntelligenceHost.available`（内核只看 `isProjectEnabled`）；`CreateProjectKernelOptions.metadata`；`SandboxProvider` 与 `ProjectProviders.sandbox`（全仓和两个产品没有一个插件用）。`ProjectKernel` 去掉 `createTaskContext`、`getJournal`（全仓与 Desktop、Workbench 零调用）。影响：宿主实现这些端口时可以少写几个成员；Desktop 代码智能后端上的 `available` 字段多写着也无妨。
 - **project 模型看得到的 14 条报错与回执改成中文（09-16 03:10）。** fileRef、续读引用、历史快照授权、文件上下文登记、编辑目标、引用存储不可用等，原文与新文逐条见提交 25393627 的说明；另有 ripgrep 超时诊断改中文（project:search 不转发它，直接调内核的宿主看得到）。命令、路径、错误码、字段名没动。

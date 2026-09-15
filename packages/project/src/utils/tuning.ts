@@ -55,11 +55,6 @@ export const ProjectTuning = Object.freeze({
     /** symbols 带 target 查详情时附带的声明源码最多多少字符。 */
     symbolSourceChars: 20_000,
   }),
-  /** 演练沙箱的落回确认（utils/agent/sandbox.ts）。 */
-  sandbox: Object.freeze({
-    /** 落回确认文案里新增、覆盖、删除每一列最多列出多少条路径。 */
-    confirmationPreviewItems: 20,
-  }),
   /** glob 匹配（utils/glob.ts）。 */
   glob: Object.freeze({
     /** 编译好的 glob 匹配器最多缓存多少个，超过从最久没用的淘汰；pattern 来自模型与用户，缓存不能无界增长。 */

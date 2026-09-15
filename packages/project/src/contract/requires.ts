@@ -17,6 +17,7 @@ import type {
   FileContextCarrier,
 } from '@velaros-ai/agent/tool-contract'
 import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
 import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
@@ -34,13 +35,6 @@ import type {
   ProjectCommandResult,
   ProjectMutationAuthorizationInput,
   ProjectRunCommandOptions,
-  ProjectSandboxApplyOptions,
-  ProjectSandboxApplyResult,
-  ProjectSandboxCreateRequest,
-  ProjectSandboxDiff,
-  ProjectSandboxDiffOptions,
-  ProjectSandboxDiscardResult,
-  ProjectSandboxRecord,
   ProjectSandboxRunOptions,
 } from '../types/project.js'
 import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, RedactionInput, RedactionResult } from '../types/provider.js'
@@ -465,23 +459,13 @@ export interface ProjectToolApi {
 }
 
 /**
- * 演练沙箱端口：把项目目录镜像到临时区，镜像里跑的命令被宿主约束在镜像根之内，跑完能看差量、能把文件变化落回项目、能整个丢弃。
- * 项目工具出不了项目边界，所以在镜像里跑命令也经这个端口（runInSandbox），不走 project:run。
+ * 演练沙箱端口：公共沙箱端口 `RehearsalSandboxHostPort`（建镜像、看差量、落回、丢弃）加上在镜像里跑命令。镜像里跑的命令被宿主约束在镜像根之内。
+ * 项目工具出不了项目边界，所以在镜像里跑命令也经这个端口（runInSandbox），不走 project:run。落回前工具向宿主要不截断的完整差量（`maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false`），
+ * 确认之后把差量指纹随 applySandbox 交回，宿主据此发现确认之后镜像又变了。
  */
-export interface ProjectSandboxPort {
-  /** 建沙箱：source 已经是项目内的绝对路径；没有约束后端时宿主拒绝，不留目录。 */
-  createSandbox: (options: ProjectSandboxCreateRequest) => Promise<ProjectSandboxRecord>
+export interface ProjectSandboxPort extends RehearsalSandboxHostPort {
   /** 在镜像根里跑一条命令，约束钉在镜像根，写到项目会失败；危险命令已由工具向用户确认过，abortSignal 触发时尽快停下。 */
   runInSandbox: (options: ProjectSandboxRunOptions, abortSignal?: AbortSignal) => Promise<ProjectCommandResult>
-  /**
-   * 镜像相对创建时的变化：新增、修改、删除三列（删除列永远完整，另两列最多 maxFiles 条，不给时按 `ProjectSandboxLimits.diffFiles`），
-   * 文本文件附有界的差量，.git 里的变化只汇总成 gitChanged。
-   */
-  diffSandbox: (options: ProjectSandboxDiffOptions) => Promise<ProjectSandboxDiff>
-  /** 把镜像里的文件变化落回项目：源文件自建沙箱以来变过整批不落；.git 永远不落。授权与确认由工具在调用前完成。 */
-  applySandbox: (options: ProjectSandboxApplyOptions) => Promise<ProjectSandboxApplyResult>
-  /** 删掉镜像；路径不在沙箱基目录之下时宿主拒绝，沙箱本来就不在时 removed 为 false。 */
-  discardSandbox: (sandboxId: string) => Promise<ProjectSandboxDiscardResult>
 }
 
 /**

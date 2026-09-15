@@ -67,13 +67,15 @@
 | `project:code` | 执行门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
 | `project:code-analysis` | 宿主有代码图后端时单独登记 → 执行门读锁 → trace、cycles、deadcode、routing 翻译成代码索引类查询交给宿主 → 附来源与覆盖 |
 | `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 |
-| `project:sandbox` | create 只镜像项目之内的目录；run 在镜像里跑（危险命令照样确认）；diff 看变化；apply 先过修改授权与用户确认再让宿主落回；discard 删镜像 |
+| `project:sandbox` | create 只镜像项目之内的目录；run 在镜像里跑（危险命令照样确认）；diff 看变化；apply 向宿主要不截断的完整差量，`rehearsalSandboxRules.prepareApply` 核对并给出确认请求，过修改授权与用户确认后连同差量指纹交给宿主落回；discard 删镜像 |
 
 ## 依赖什么
 
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
 - `@velaros-ai/kernel` 的 `contracts/abi`：能力令牌、内核模块定义、可调用能力服务。
-- `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径（peer）：工具运行时规格、mod 清单、审批端口、文件上下文协调器、入参复用。
+- `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径（peer）：工具运行时规格、mod 清单、审批端口、文件上下文协调器、入参复用、挂进内核时的可调用操作表。
+- `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求。
+- `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、公开上限、宿主沙箱端口形状，落回前的核对与确认请求。
 - `zod`（入参 schema）、`typescript`（JS/TS 解析）、`iconv-lite`（GB18030）、`picomatch`（glob）、`diff`（差量）、`execa`（子进程）。
 - 不读环境变量。
 
