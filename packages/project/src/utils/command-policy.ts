@@ -141,10 +141,6 @@ function findGitSubcommandIndex(args: readonly string[]): number {
   return -1
 }
 
-function hasMutatingGitArguments(args: readonly string[]): boolean {
-  return args.some((argument) => argument === '--output' || argument.startsWith('--output='))
-}
-
 /** 判断一个 git 全局选项能不能让 git 去执行别的程序：`-c key=value`、`--config-env`、`--exec-path`、`-p` / `--paginate` 都能（pager、diff.external、fsmonitor 这类配置就是命令）。 */
 function isExecutableGitGlobalOption(argument: string): boolean {
   return argument === '-c' || (argument.startsWith('-c') && argument.includes('='))
@@ -510,13 +506,246 @@ function extractPorts(command: string): number[] {
   return [...ports]
 }
 
+/**
+ * 白名单命令里仍然能改盘或执行别的程序的参数形态，与 system 空间的同名表逐条一致（仓库层一致性测试守着）。
+ * sed 的脚本本身就能写盘和执行命令，单独按 isReadOnlySedInvocation 整段解析。
+ */
+const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = {
+  find: [/^-(?:delete|exec|execdir|ok|okdir|fls|fprint|fprint0|fprintf)$/iu],
+  // `rg --pre cmd` 对每个文件执行 cmd，`--hostname-bin cmd` 执行 cmd 取主机名。
+  rg: [/^--pre(?:=.*)?$/u, /^--hostname-bin(?:=.*)?$/u],
+  // `tree -o file` / `--output` 把目录树写进文件，短选项可以连写（`-ao file`）；`-R` 在每层目录里再生成一份 00Tree.html。
+  tree: [/^-[^-]*[oR]/u, /^--output(?:=.*)?$/u],
+}
+
+/** 前缀命令里能自己写盘或执行别的程序的选项：env 的 -S / --split-string 把一段文本拆开当命令执行，time 的 -o / --output 把计时写进文件。 */
+const mutatingPrefixOptions: Readonly<Record<string, readonly RegExp[]>> = {
+  env: [/^-[^-]*S/u, /^--split-string(?:=.*)?$/u],
+  time: [/^-[^-]*o/u, /^--output(?:=.*)?$/u],
+}
+
+/**
+ * 只读判定专用：命令位置上有没有能改掉白名单命令行为的前缀写法。环境变量赋值（`LD_PRELOAD=…`、`GIT_EXTERNAL_DIFF=…`、
+ * `RIPGREP_CONFIG_PATH=…`，也包括 `env NAME=value`）能让白名单命令去执行别的程序，前缀命令的 env -S、time -o 也一样，出现就不算只读。
+ */
+function hasMutatingPrefix(tokens: readonly string[]): boolean {
+  let index = 0
+  while (index < tokens.length) {
+    const token = tokens[index] ?? ''
+    if (/^[A-Za-z_]\w*=/.test(token)) return true
+    if (ShellReservedWords.has(token)) {
+      index += 1
+      continue
+    }
+    const name = commandName(token)
+    if (!CommandPrefixes.has(name)) return false
+    const next = skipPrefixArguments(name, tokens, index + 1)
+    const vetoes = mutatingPrefixOptions[name] ?? []
+    if (tokens.slice(index + 1, next).some((argument) => vetoes.some((pattern) => pattern.test(argument)))) return true
+    index = next
+  }
+  return false
+}
+
+/** sed 只读时允许的短选项簇：-n 不自动打印、-E / -r 扩展正则、-s 各文件分开、-u 不缓冲、-z 按 NUL 分行；-i 就地改写、-f 从文件读脚本等都不在内。 */
+const SedReadOnlyOptionCluster = /^-[nErsuz]+$/
+
+/** sed 只读时允许的长选项。 */
+const SedReadOnlyLongOptions = new Set(['--quiet', '--silent', '--regexp-extended', '--separate', '--unbuffered', '--null-data', '--posix', '--debug', '--sandbox'])
+
+/** sed 脚本里不写盘、不执行命令的单字母指令；l、q、Q 后面可以跟一个数字。 */
+const SedReadOnlyCommands = new Set(['=', 'p', 'P', 'd', 'D', 'n', 'N', 'g', 'G', 'h', 'H', 'x', 'z', 'l', 'q', 'Q'])
+
+/** 能当 sed 分隔符、而且各家 sed 切法都一样的字符：不是空白、反斜杠、方括号、字母和数字。 */
+function isSedDelimiter(char: string): boolean {
+  return char.length === 1 && !/[\s\\[\]A-Za-z0-9]/u.test(char)
+}
+
+/**
+ * 一段 sed 脚本是否只由不写盘、不执行命令的指令组成：地址（行号、first~step、$、/正则/、\c正则c，区间、+N、~N 与 !）后面只许
+ * = p P d D n N g G h H x z l q Q、{ }、s///（标志只许 g p i I m M 与数字）、y///；w、W、r、R、e、a、i、c、b、t、: 等一律不认。
+ * 正则里的方括号表达式不许含分隔符、[ 与反斜杠：各家 sed 对这种写法切得不一样，认不准就按会写处理。
+ */
+function isReadOnlySedScript(script: string): boolean {
+  let index = 0
+  let depth = 0
+  const peek = (): string => script[index] ?? ''
+  const isDigit = (): boolean => /^[0-9]$/u.test(peek())
+  const skipDigits = (): void => {
+    while (isDigit()) index += 1
+  }
+  const skipBlanks = (): void => {
+    while (peek() === ' ' || peek() === '\t') index += 1
+  }
+  // 读到分隔符为止（index 停在分隔符之后）；正则里的方括号表达式整段跳过，里面出现分隔符、[ 或反斜杠就认不准。
+  const readDelimited = (delimiter: string, isRegex: boolean): boolean => {
+    while (index < script.length) {
+      const char = peek()
+      if (char === '\\') {
+        index += 2
+        continue
+      }
+      if (char === delimiter) {
+        index += 1
+        return true
+      }
+      if (isRegex && char === '[') {
+        index += 1
+        if (peek() === '^') index += 1
+        if (peek() === ']') index += 1
+        while (index < script.length && peek() !== ']') {
+          if (peek() === delimiter || peek() === '[' || peek() === '\\') return false
+          index += 1
+        }
+        if (peek() !== ']') return false
+      }
+      index += 1
+    }
+    return false
+  }
+  // 读一个地址；没有地址时不动 index。
+  const readAddress = (): boolean => {
+    if (isDigit()) {
+      skipDigits()
+      if (peek() !== '~') return true
+      index += 1
+      if (!isDigit()) return false
+      skipDigits()
+      return true
+    }
+    if (peek() === '$') {
+      index += 1
+      return true
+    }
+    if (peek() !== '/' && peek() !== '\\') return true
+    if (peek() === '\\') index += 1
+    const delimiter = peek()
+    if (!isSedDelimiter(delimiter)) return false
+    index += 1
+    if (!readDelimited(delimiter, true)) return false
+    while (peek() === 'I' || peek() === 'M') index += 1
+    return true
+  }
+  while (true) {
+    while (peek() === ' ' || peek() === '\t' || peek() === ';') index += 1
+    if (index >= script.length) return depth === 0
+    const start = index
+    if (!readAddress()) return false
+    const hasAddress = index > start
+    skipBlanks()
+    if (hasAddress && peek() === ',') {
+      index += 1
+      skipBlanks()
+      if (peek() === '+' || peek() === '~') {
+        index += 1
+        if (!isDigit()) return false
+        skipDigits()
+      } else {
+        const second = index
+        if (!readAddress() || index === second) return false
+      }
+      skipBlanks()
+    }
+    if (hasAddress && peek() === '!') {
+      index += 1
+      skipBlanks()
+    }
+    const command = peek()
+    index += 1
+    if (command === '{') {
+      depth += 1
+      continue
+    }
+    if (command === '}') {
+      if (hasAddress || depth === 0) return false
+      depth -= 1
+    } else if (command === 's' || command === 'y') {
+      const delimiter = peek()
+      if (!isSedDelimiter(delimiter)) return false
+      index += 1
+      if (!readDelimited(delimiter, command === 's') || !readDelimited(delimiter, false)) return false
+      if (command === 's') {
+        while (/^[gpiImM0-9]$/u.test(peek())) index += 1
+      }
+    } else if (SedReadOnlyCommands.has(command)) {
+      if (command === 'l' || command === 'q' || command === 'Q') {
+        skipBlanks()
+        skipDigits()
+      }
+    } else {
+      return false
+    }
+    skipBlanks()
+    if (!isEmpty(peek()) && peek() !== ';' && peek() !== '}') return false
+  }
+}
+
+/**
+ * 判断 sed 这一次调用在任何输入下都不写盘、不执行命令：选项只许上面几个（-i 就地改写、-f 从文件读脚本都算会写），
+ * 每段脚本（-e、--expression 给的，或者没有它们时的第一个操作数）都要过 isReadOnlySedScript；认不出的一律按会写处理。
+ */
+function isReadOnlySedInvocation(args: readonly string[]): boolean {
+  const scripts: string[] = []
+  const operands: string[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index] ?? ''
+    if (argument === '--') {
+      operands.push(...args.slice(index + 1))
+      break
+    }
+    if (argument === '-' || !argument.startsWith('-')) {
+      operands.push(argument)
+      continue
+    }
+    // --expression 与短选项簇里的 e：取值连写在后面（--expression=p、-e'p'、-ne'p'），没连写就取下一个词。
+    const expression = /^--expression(?:=(.*))?$/su.exec(argument) ?? /^-[nErsuz]*e(.*)$/su.exec(argument)
+    if (expression) {
+      let script = expression[1]
+      if (!script) {
+        index += 1
+        script = args[index]
+      }
+      if (!isString(script)) return false
+      scripts.push(script)
+      continue
+    }
+    if (!SedReadOnlyOptionCluster.test(argument) && !SedReadOnlyLongOptions.has(argument)) return false
+  }
+  if (isEmpty(scripts)) {
+    const script = operands[0]
+    if (!isString(script)) return false
+    scripts.push(script)
+  }
+  return scripts.every((script) => isReadOnlySedScript(script))
+}
+
+/**
+ * 判断只读 git 子命令的实参里有没有会写文件或执行别的程序的选项：任何子命令的 --output；grep 的 -O / --open-files-in-pager
+ * （拿匹配到的文件去开 pager，pager 就是一条命令）；ls-remote 的 -u / --upload-pack / --exec（在本机执行给定的程序）。长选项按 git 的唯一前缀缩写认。
+ */
+function hasMutatingGitArguments(subcommand: string, args: readonly string[]): boolean {
+  const abbreviates = (argument: string, option: string, minimumLength: number): boolean => {
+    const name = argument.split('=', 1)[0] ?? ''
+    return name.length >= minimumLength && option.startsWith(name)
+  }
+  return args.some((argument) => {
+    if (argument === '--output' || argument.startsWith('--output=')) return true
+    if (subcommand === 'grep') return /^-[^-]*O/u.test(argument) || abbreviates(argument, '--open-files-in-pager', 4)
+    if (subcommand === 'ls-remote') return /^-[^-]*u/u.test(argument) || abbreviates(argument, '--upload-pack', 3) || abbreviates(argument, '--exec', 5)
+    return false
+  })
+}
+
 export function isShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
   if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
   return trimmed.split(/&&|\|\||;|\|/).every((segment) => {
     // env、xargs 这类前缀命令后面才是真正要跑的程序，按它判断；前缀本身在只读白名单里也不能放行。提权的一律不算只读。
     if (/(?:^|\s)(?:sudo|doas|runas)\b/i.test(segment)) return false
-    const invocation = readInvocation(tokenize(segment.trim()))
+    const tokens = tokenize(segment.trim())
+    // 环境变量赋值、env -S、time -o 这类前缀写法能改掉白名单命令的行为，出现就不算只读。
+    if (hasMutatingPrefix(tokens)) return false
+    const invocation = readInvocation(tokens)
     if (!invocation) return false
     const executable = invocation.name.toLowerCase()
     if (!readOnlyCommands.has(executable)) return false
@@ -529,12 +758,12 @@ export function isShellCommandReadOnly(command: string): boolean {
       const subcommand = args[subcommandIndex]
       return !!subcommand
         && readOnlyGitCommands.has(subcommand)
-        && !hasMutatingGitArguments(args.slice(subcommandIndex + 1))
+        && !hasMutatingGitArguments(subcommand, args.slice(subcommandIndex + 1))
     }
-    // sed 的 -i 就地改写、脚本里的 w/W 命令和 s///w 标志都写盘，拿不准一律算写。
-    if (executable === 'sed' && invocation.args.some((argument) => /^-[^-]*i|^--in-place|(?:^|[;{}\n/])\s*[wW]\s+\S/u.test(argument))) return false
-    // `tree -o file` 把目录树写进文件。
-    if (executable === 'tree' && invocation.args.some((argument) => argument === '-o' || argument.startsWith('--output'))) return false
+    // sed 的脚本本身就能写盘（w、W、s///w）和执行命令（e），整段解析，认不出的一律算写。
+    if (executable === 'sed' && !isReadOnlySedInvocation(invocation.args)) return false
+    const vetoes = mutatingArgumentsByCommand[executable]
+    if (vetoes && invocation.args.some((argument) => vetoes.some((pattern) => pattern.test(argument)))) return false
     return !/\b(?:delete|exec|okdir|remove|write)\b/i.test(segment)
   })
 }

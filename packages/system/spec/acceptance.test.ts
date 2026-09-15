@@ -80,6 +80,45 @@ describe('命令安全门', () => {
     })).toBe(false)
   })
 
+  // 这些写法都在本机实测过会执行别的程序或写文件（rg --pre rm 把搜到的文件全删了），却曾被判成只读、可并发、可无人值守放行。
+  test('INV-2 参数、前缀和环境变量能让白名单命令执行别的程序或写文件，一律判非只读', () => {
+    for (const command of [
+      'rg --pre rm foo .',
+      'rg --hostname-bin=touch foo .',
+      'git grep -Otouch foo',
+      'git grep --open-files-in-pager=touch foo',
+      "git ls-remote --upload-pack='touch x' .",
+      "git -C . ls-remote -u 'touch x' .",
+      "git ls-remote --exec='touch x' .",
+      "env -S'rm -rf x'",
+      "env --split-string='rm -rf x'",
+      "env -S'rm -rf x' cat file",
+      'env time -o /tmp/out cat /etc/hosts',
+      'time --output=/tmp/out cat file',
+      'LD_PRELOAD=/tmp/evil.so cat file',
+      "GIT_EXTERNAL_DIFF='rm -rf x' git diff",
+      'env GIT_EXTERNAL_DIFF=x git diff',
+      'RIPGREP_CONFIG_PATH=/tmp/rgrc rg foo',
+      "sed -n '1w /tmp/out' file",
+      "sed 's/a/b/gw /tmp/out' file",
+      "sed -e'w /tmp/out' file",
+      "sed --expression='w /tmp/out' file",
+      "sed 's/.*/touch x/e' file",
+      "sed '1e touch x' file",
+      'sed -f script.sed file',
+      // 方括号里的分隔符各家 sed 切法不一样，认不准就按会写处理。
+      "sed 's/[/x/w out]/y/' file",
+      'tree -R -H . -L 1',
+      'tree -ao out.txt',
+    ]) {
+      expect({ command, readOnly: systemCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: false })
+    }
+    // 只读的 sed 写法照样判只读，不因为收紧而全部掉出去。
+    for (const command of ["sed -n '/start/,/end/p' notes.txt", "sed -E 's/[0-9]+/N/g' notes.txt", "sed '/x/!d' notes.txt", 'sed -n -e 2p -e 4p notes.txt', 'rg -n TODO src', 'git grep -n TODO', 'time -p ls']) {
+      expect({ command, readOnly: systemCommandPolicy.isReadOnly(command) }).toEqual({ command, readOnly: true })
+    }
+  })
+
   // 删整个文件夹恢复不了，不论带不带 -f 都要确认；删单个文件是日常操作，不打扰用户。
   test('INV-3 递归删除一律判危险并说明删的是整个文件夹，删单个文件不打扰', () => {
     for (const command of [

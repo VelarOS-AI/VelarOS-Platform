@@ -75,7 +75,7 @@
 
 运行时要宿主给的东西全部列在上一节的注入面里，由 `contract/requires.ts` 定义。
 
-不依赖 `@velaros-ai/project`，两边互不引用。两个包各有一份命令危险判定；它们是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着，它经本包的 `systemCommandPolicy` 取判定，不属于本模块。
+不依赖 `@velaros-ai/project`，两边互不引用。两个包各有一份命令危险判定与只读判定；它们是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着（危险命令、日常命令、只读白名单的绕过写法三份语料），它经本包的 `systemCommandPolicy` 取判定，不属于本模块。
 
 ## 状态归谁
 
