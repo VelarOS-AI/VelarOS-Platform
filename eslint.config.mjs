@@ -71,6 +71,7 @@ const Domains = [
       'packages/document-renderer/**',
       'packages/system/**',
       'packages/project/**',
+      'tests/capabilities/**',
     ],
   },
   {

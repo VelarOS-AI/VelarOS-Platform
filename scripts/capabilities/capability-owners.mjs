@@ -61,10 +61,11 @@ export const CapabilityOwners = [
       {
         directory: 'system',
         name: '@velaros-ai/system',
-        entrySubpaths: ['.', './files', './execution', './processes', './desktop', './composition', './platform-compatibility', './contracts'],
+        entrySubpaths: ['.', './contracts', './platform-compatibility', './shared-resources'],
         sourceRoots: [''],
         electronRoots: [],
         schemaExports: ['systemTools'],
+        schemaEntry: 'dist/exports/index.js',
       },
     ],
   },

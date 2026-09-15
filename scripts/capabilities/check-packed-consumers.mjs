@@ -157,15 +157,15 @@ Object.assign(globalThis, { __velarosBrowserContractsBrowserGate: {
       source: `import * as SystemContracts from '@velaros-ai/system/contracts'
 import type {
   SystemBackgroundTaskRecord,
-  SystemDefaultEditorId,
   SystemEnvironmentInspection,
   SystemOverview,
   SystemRuntimePlatform,
+  SystemShellKind,
 } from '@velaros-ai/system/contracts'
 
 export interface SystemContractsTypeFixture {
   backgroundTask: SystemBackgroundTaskRecord
-  defaultEditor: SystemDefaultEditorId
+  shellKind: SystemShellKind
   environment: SystemEnvironmentInspection
   overview: SystemOverview
   platform: SystemRuntimePlatform

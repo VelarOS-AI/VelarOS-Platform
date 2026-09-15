@@ -2,9 +2,10 @@ import { win32 } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { SystemPlatformCompatibility,SystemShellUnavailableError } from '../src/SystemPlatformCompatibility'
-import { parseOpenPortEntries, parseProcessRows } from '../src/SystemProcessParsers'
-import { resolveSystemShell } from '../src/SystemShell'
+import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
+import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
+import { parseOpenPortEntries, parseProcessRows } from '../src/utils/system-info.js'
 
 describe('SystemPlatformCompatibility', () => {
   test('parses the native Windows netstat listener format', () => {
@@ -210,7 +211,7 @@ describe('Windows Git Bash resolution', () => {
     [{ LOCALAPPDATA: 'C:\\Users\\中文 用户\\AppData\\Local' }, 'C:\\Users\\中文 用户\\AppData\\Local\\Git'],
   ] as const)('discovers a Git for Windows installation using %j', (env, root) => {
     const { isFile } = filesystem(root)
-    const resolved = resolveSystemShell({ platform: 'win32', env, isFile })
+    const resolved = systemShellResolver.resolve({ platform: 'win32', env, isFile })
     expect(resolved.shellPath).toBe(win32.join(root, 'bin', 'bash.exe'))
   })
 
@@ -225,7 +226,7 @@ describe('Windows Git Bash resolution', () => {
       ENV: 'C:\\custom-startup.sh',
       KEEP_THIS: '中文',
     }
-    const resolved = resolveSystemShell({ platform: 'win32', env, isFile })
+    const resolved = systemShellResolver.resolve({ platform: 'win32', env, isFile })
     expect(resolved.shellPath).toBe(`${root}\\bin\\bash.exe`)
     expect(resolved.env.PATH?.split(';')).toEqual([
       `${root}\\usr\\bin`, `${root}\\mingw64\\bin`, `${root}\\bin`, `${root}\\cmd`,
@@ -247,11 +248,11 @@ describe('Windows Git Bash resolution', () => {
   test('accepts an explicit Git Bash executable and diagnoses an unavailable pinned selection', () => {
     const root = 'D:\\Tools\\PortableGit'
     const { isFile } = filesystem(root, 'C:\\Program Files\\Git')
-    expect(resolveSystemShell({
+    expect(systemShellResolver.resolve({
       platform: 'win32', env: { VELAROS_GIT_BASH: `${root}\\usr\\bin\\bash.exe` }, isFile,
     }).shellPath).toBe(`${root}\\usr\\bin\\bash.exe`)
     for (const shellPath of ['bash.exe', '.\\Git\\bin\\bash.exe', 'C:\\Windows\\System32\\bash.exe', `${root}\\bin\\sh.exe`]) {
-      expect(() => resolveSystemShell({
+      expect(() => systemShellResolver.resolve({
         platform: 'win32', env: { VELAROS_SHELL_PATH: shellPath }, isFile,
       })).toThrow(SystemShellUnavailableError)
     }
@@ -261,27 +262,27 @@ describe('Windows Git Bash resolution', () => {
     const root = 'C:\\Program Files\\Git'
     const { files, isFile } = filesystem(root)
     files.add('c:\\windows\\system32\\bash.exe')
-    expect(resolveSystemShell({ platform: 'win32', env: { PATH: 'C:\\Windows\\System32' }, isFile })
+    expect(systemShellResolver.resolve({ platform: 'win32', env: { PATH: 'C:\\Windows\\System32' }, isFile })
       .shellPath).toBe(`${root}\\bin\\bash.exe`)
     files.delete('c:\\program files\\git\\usr\\bin\\msys-2.0.dll')
-    expect(() => resolveSystemShell({ platform: 'win32', env: { PATH: 'C:\\Windows\\System32' }, isFile }))
+    expect(() => systemShellResolver.resolve({ platform: 'win32', env: { PATH: 'C:\\Windows\\System32' }, isFile }))
       .toThrow('Install Git for Windows')
   })
 
   test('missing Git can be installed and retried without restarting the process', () => {
     const { files, isFile } = filesystem()
     const options = { platform: 'win32' as const, env: {}, isFile }
-    expect(() => resolveSystemShell(options)).toThrow('No working command shell')
+    expect(() => systemShellResolver.resolve(options)).toThrow('No working command shell')
     for (const file of filesystem('C:\\Program Files\\Git').files) files.add(file)
-    expect(resolveSystemShell(options).shellPath).toBe('C:\\Program Files\\Git\\bin\\bash.exe')
+    expect(systemShellResolver.resolve(options).shellPath).toBe('C:\\Program Files\\Git\\bin\\bash.exe')
     files.clear()
-    expect(() => resolveSystemShell(options)).toThrow(SystemShellUnavailableError)
+    expect(() => systemShellResolver.resolve(options)).toThrow(SystemShellUnavailableError)
   })
 
   test('keeps POSIX shell selection and environment unchanged', () => {
     const env = { SHELL: '/bin/zsh', LANG: 'zh_CN.UTF-8', PATH: '/usr/bin:/bin' }
-    expect(resolveSystemShell({ platform: 'darwin', env })).toMatchObject({ shellPath: '/bin/zsh', env })
-    expect(resolveSystemShell({ platform: 'linux', env, shellPath: '/bin/bash' }))
+    expect(systemShellResolver.resolve({ platform: 'darwin', env })).toMatchObject({ shellPath: '/bin/zsh', env })
+    expect(systemShellResolver.resolve({ platform: 'linux', env, shellPath: '/bin/bash' }))
       .toMatchObject({ shellPath: '/bin/bash', env })
   })
 })

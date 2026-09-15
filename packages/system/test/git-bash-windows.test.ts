@@ -5,20 +5,22 @@ import { join, win32 } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { LocalSystemKernel } from '../src/kernel/LocalSystemKernel'
-import { SystemPlatformCompatibility,SystemShellUnavailableError } from '../src/SystemPlatformCompatibility'
-import { buildSystemOwnedProcessSpec } from '../src/SystemProcessHost'
-import { buildSystemNativeCommandSpec, resolveSystemShell, resolveSystemShellReady } from '../src/SystemShell'
+import { LocalSystemKernel } from '../src/impl/LocalSystemKernel'
+import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
+import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
+import { buildSystemOwnedProcessSpec } from '../src/utils/process.js'
+import { buildSystemNativeCommandSpec } from '../src/utils/shell.js'
 
 function hasGitBash(): boolean {
   if (process.platform !== 'win32') return false
-  try { return resolveSystemShell().kind === 'git-bash' } catch { return false }
+  try { return systemShellResolver.resolve().kind === 'git-bash' } catch { return false }
 }
 
 test.skipIf(!hasGitBash())(
   'runs Git Bash tools and native Node with a Unicode Windows cwd and literal arguments',
   async () => {
-    const resolved = resolveSystemShell()
+    const resolved = systemShellResolver.resolve()
     expect(resolved.shellPath.toLowerCase()).toMatch(/\\bin\\bash\.exe$/)
     const cwd = mkdtempSync(join(tmpdir(), 'VelarOS Git Bash 中文 '))
     try {
@@ -75,14 +77,14 @@ test.skipIf(process.platform !== 'win32')(
       const shim = join(shimDir, '中文 tool.cmd')
       writeFileSync(shim, '@echo off\r\nnode "%~dp0..\\..\\argv.cjs" %*\r\n', 'utf8')
       const windowsRoot = process.env.SystemRoot || 'C:\\Windows'
-      const selected = await resolveSystemShellReady()
+      const selected = await systemShellResolver.resolveReady()
       const candidates = [...new Set([
         selected.shellPath,
         join(windowsRoot, 'System32', 'cmd.exe'),
         join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
         join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe'),
       ])].filter(existsSync)
-      const shells = await Promise.all(candidates.map((shellPath) => resolveSystemShellReady({ shellPath })))
+      const shells = await Promise.all(candidates.map((shellPath) => systemShellResolver.resolveReady({ shellPath })))
       for (const shell of shells) {
         const platform = new SystemPlatformCompatibility()
         const shellSpec = platform.getShellCommandSpec(`node.exe ${platform.quoteShellArg(script, shell)}`, shell)
@@ -119,8 +121,8 @@ test.skipIf(process.platform !== 'win32')(
     const root = mkdtempSync(join(tmpdir(), 'VelarOS missing Git 中文 '))
     try {
       const env = { ...process.env, VELAROS_SHELL_PATH: join(root, 'bin', 'bash.exe') }
-      expect(() => resolveSystemShell({ env })).toThrow(SystemShellUnavailableError)
-      expect(() => resolveSystemShell({ env })).toThrow('Install Git for Windows')
+      expect(() => systemShellResolver.resolve({ env })).toThrow(SystemShellUnavailableError)
+      expect(() => systemShellResolver.resolve({ env })).toThrow('Install Git for Windows')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

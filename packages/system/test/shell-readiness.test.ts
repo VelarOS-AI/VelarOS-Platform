@@ -3,11 +3,10 @@ import { win32 } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { SystemPlatformCompatibility, SystemShellUnavailableError } from '../src/SystemPlatformCompatibility'
-import {
-  buildSystemNativeCommandSpec, describeSystemNativeCommand, refreshWindowsEnvironment,
-  resolveSystemCommand, resolveSystemShell, resolveSystemShellReady,
-} from '../src/SystemShell'
+import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
+import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
+import { buildSystemNativeCommandSpec, describeSystemNativeCommand } from '../src/utils/shell.js'
 
 const gitRoot = 'C:\\Program Files\\Git'
 const bash = `${gitRoot}\\bin\\bash.exe`
@@ -30,7 +29,7 @@ describe('Windows shell readiness and fallback', () => {
     [[powershell, cmd], 'powershell'],
     [[cmd], 'cmd'],
   ] as const)('selects the first installed shell from %j', (paths, kind) => {
-    const shell = resolveSystemShell({ platform: 'win32', env: {}, isFile: installed(...paths) })
+    const shell = systemShellResolver.resolve({ platform: 'win32', env: {}, isFile: installed(...paths) })
     expect(shell.kind).toBe(kind)
     expect(shell.env.VELAROS_SHELL_KIND).toBe(kind)
     expect(shell.env.VELAROS_SHELL_PATH).toBe(shell.shellPath)
@@ -40,7 +39,7 @@ describe('Windows shell readiness and fallback', () => {
   test('falls through failed preflight probes and pins the successful shell for command generation', async () => {
     const checked: string[] = []
     const options = { platform: 'win32' as const, env: {}, isFile: installed(bash, pwsh, powershell, cmd) }
-    const shell = await resolveSystemShellReady({
+    const shell = await systemShellResolver.resolveReady({
       ...options,
       probe: async (candidate) => {
         checked.push(candidate.kind)
@@ -50,21 +49,21 @@ describe('Windows shell readiness and fallback', () => {
     expect(checked).toEqual(['git-bash', 'pwsh', 'powershell'])
     expect(shell.readiness).toBe('ready')
     expect(shell.version).toBe('5.1')
-    expect(resolveSystemShell({ ...options, env: shell.env }).shellPath).toBe(powershell)
+    expect(systemShellResolver.resolve({ ...options, env: shell.env }).shellPath).toBe(powershell)
     expect(new SystemPlatformCompatibility({ platform: 'win32' }).getShellCommandSpec('Write-Output ready', shell).file)
       .toBe(powershell)
   })
 
   test('an invalid Git override still permits available Windows shells; unavailable pinned selection asks to refresh', () => {
     const isFile = installed(cmd)
-    expect(resolveSystemShell({ platform: 'win32', env: { VELAROS_GIT_BASH: 'C:\\bad\\bash.exe' }, isFile }).kind)
+    expect(systemShellResolver.resolve({ platform: 'win32', env: { VELAROS_GIT_BASH: 'C:\\bad\\bash.exe' }, isFile }).kind)
       .toBe('cmd')
-    expect(() => resolveSystemShell({ platform: 'win32', env: { VELAROS_SHELL_PATH: bash }, isFile }))
+    expect(() => systemShellResolver.resolve({ platform: 'win32', env: { VELAROS_SHELL_PATH: bash }, isFile }))
       .toThrow(SystemShellUnavailableError)
   })
 
   test('all failed preflights produce an actionable result without running a user command', async () => {
-    await expect(resolveSystemShellReady({
+    await expect(systemShellResolver.resolveReady({
       platform: 'win32', env: {}, isFile: installed(cmd),
       probe: async () => ({ ready: false, reason: 'blocked executable' }),
     })).rejects.toThrow('Install Git for Windows')
@@ -88,7 +87,7 @@ describe('Windows shell readiness and fallback', () => {
   })
 
   test('native argv and environment overrides retain literal values without MSYS conversion', () => {
-    const shell = resolveSystemShell({ platform: 'win32', env: { PATH: 'C:\\original' }, isFile: installed(bash) })
+    const shell = systemShellResolver.resolve({ platform: 'win32', env: { PATH: 'C:\\original' }, isFile: installed(bash) })
     const args = ['/container/path', '--value=/a:/b', '中文🙂 "double" %PATH% ! &', 'C:\\trailing\\']
     const plan = buildSystemNativeCommandSpec({ file: 'C:\\Tools\\node.exe', args, env: { Path: 'C:\\override' } }, shell)
     expect(plan.file).toBe('C:\\Tools\\node.exe')
@@ -103,12 +102,12 @@ describe('Windows shell readiness and fallback', () => {
   })
 
   test('CMD builtin availability uses the selected shell', async () => {
-    const shell = resolveSystemShell({ platform: 'win32', env: {}, isFile: installed(cmd) })
-    expect(await resolveSystemCommand('dir', shell)).toMatchObject({ available: true, kind: 'builtin', path: 'dir' })
+    const shell = systemShellResolver.resolve({ platform: 'win32', env: {}, isFile: installed(cmd) })
+    expect(await systemShellResolver.resolveCommand('dir', shell)).toMatchObject({ available: true, kind: 'builtin', path: 'dir' })
   })
 
   test.skipIf(process.platform === 'win32')('POSIX readiness and native execution preserve exact argv and exit code', async () => {
-    const shell = await resolveSystemShellReady({ platform: 'linux', env: { PATH: '/usr/bin:/bin', SHELL: '/bin/bash' } })
+    const shell = await systemShellResolver.resolveReady({ platform: 'linux', env: { PATH: '/usr/bin:/bin', SHELL: '/bin/bash' } })
     const args = ['/container/path', '中文🙂 %PATH% "quotes"']
     const plan = buildSystemNativeCommandSpec({
       file: process.execPath, args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)));process.exitCode=7', ...args],
@@ -116,7 +115,7 @@ describe('Windows shell readiness and fallback', () => {
     const result = spawnSync(plan.file, plan.args, { env: plan.env, encoding: 'utf8' })
     expect(result.status).toBe(7)
     expect(JSON.parse(result.stdout)).toEqual(args)
-    const refreshed = await refreshWindowsEnvironment(shell.env, 'linux')
+    const refreshed = await systemShellResolver.refreshWindowsEnvironment(shell.env, 'linux')
     expect(refreshed.env.VELAROS_SHELL_PATH).toBeUndefined()
     expect(refreshed.revision).toHaveLength(16)
   })

@@ -106,10 +106,10 @@
         "./packages/office/src/*"
       ],
       "@velaros-ai/system": [
-        "./packages/system/src/index.ts"
+        "./packages/system/src/exports/index.ts"
       ],
       "@velaros-ai/system/*": [
-        "./packages/system/src/*"
+        "./packages/system/src/exports/*"
       ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"

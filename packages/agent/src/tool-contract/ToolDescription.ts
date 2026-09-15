@@ -8,11 +8,11 @@ type NonEmptyDescriptionItems = readonly [string, ...string[]]
 interface StructuredToolDescriptionSpec {
   description: string
   suitable: NonEmptyDescriptionItems
-  forbidden: NonEmptyDescriptionItems
+  forbidden?: NonEmptyDescriptionItems
   protocol?: NonEmptyDescriptionItems
-  usage: NonEmptyDescriptionItems
-  examples: NonEmptyDescriptionItems
-  notes: NonEmptyDescriptionItems
+  usage?: NonEmptyDescriptionItems
+  examples?: NonEmptyDescriptionItems
+  notes?: NonEmptyDescriptionItems
 }
 
 interface StructuredToolDescriptionParts {
@@ -50,15 +50,10 @@ const StructuredToolDescriptionSectionOrder: ReadonlyMap<string, number> = new M
   StructuredToolDescriptionSections.map((section, index) => [section, index])
 )
 
-const RequiredListSections: ReadonlySet<string> = new Set([
-  '适合',
-  '禁止',
-  '用法',
-  '示例',
-  '注意',
-])
+/** 只有「适合」必须有；其余分节按需写，没参数的工具不用硬凑用法和示例。 */
+const RequiredListSections: ReadonlySet<string> = new Set(['适合'])
 
-const OptionalToolListSections: ReadonlySet<string> = new Set(['强制流程'])
+const OptionalToolListSections: ReadonlySet<string> = new Set(['禁止', '强制流程', '用法', '示例', '注意'])
 
 const StructuredParameterDescriptionSections = ['描述', '取值', '用法', '注意'] as const
 
@@ -182,11 +177,11 @@ function renderToolDescription(spec: StructuredToolDescriptionSpec): string {
   const sections = [
     `描述：${description}`,
     renderListSection('适合', spec.suitable),
-    renderListSection('禁止', spec.forbidden),
+    spec.forbidden ? renderListSection('禁止', spec.forbidden) : null,
     spec.protocol ? renderListSection('强制流程', spec.protocol) : null,
-    renderListSection('用法', spec.usage),
-    renderListSection('示例', spec.examples),
-    renderListSection('注意', spec.notes),
+    spec.usage ? renderListSection('用法', spec.usage) : null,
+    spec.examples ? renderListSection('示例', spec.examples) : null,
+    spec.notes ? renderListSection('注意', spec.notes) : null,
   ].filter((section): section is string => Boolean(section))
 
   return sections.join('\n\n')

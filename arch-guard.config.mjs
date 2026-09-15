@@ -89,6 +89,8 @@ export default defineConfig({
       '**/mocks/**',
       '**/test/**',
       '**/tests/**',
+      // 模块验收测试（人的领地，见 docs/architecture/module-ownership.md）与 test/ 同档，不套运行时规则。
+      '**/spec/**',
       '**/__tests__/**',
       '**/examples/**',
       '**/scripts/**',

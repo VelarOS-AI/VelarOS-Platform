@@ -78,8 +78,11 @@ const PortableContracts = [
     packageDirectory: "system",
     packageName: "@velaros-ai/system",
     exportKey: "./contracts",
-    contractsFile: "src/contracts.ts",
-    modules: new Set(["./SystemContracts.js", "./system-tool-names.js"]),
+    contractsFile: "src/exports/contracts.ts",
+    // 可移植入口只许转发可移植数据文件；它零依赖，错误码与环境变量表也在里面（见 packages/system/MODULE.md）。
+    modules: new Set([
+      "../contract/system.js",
+    ]),
   },
 ];
 

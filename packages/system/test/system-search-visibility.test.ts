@@ -8,11 +8,8 @@ import {
   test,
 } from 'bun:test'
 
-import { createSystemSearchIgnorePolicy } from '../src/atomic/SystemSearchIgnorePolicy'
-import {
-  shouldSkipSystemSearchEntry,
-  shouldSkipSystemSearchProtectedDirectory,
-} from '../src/atomic/SystemSearchVisibility'
+import { GitIgnoreSystemSearchPolicy } from '../src/impl/GitIgnoreSystemSearchPolicy.js'
+import { shouldSkipSystemSearchEntry, shouldSkipSystemSearchProtectedDirectory } from '../src/utils/search.js'
 
 describe('System search visibility', () => {
   test('owns generic search filtering without Workspace imports', () => {
@@ -53,12 +50,12 @@ describe('System search visibility', () => {
         ['ignored/', '*.log', '!important.log'].join('\n'),
       )
 
-      const policy = await createSystemSearchIgnorePolicy(rootPath)
+      const policy = new GitIgnoreSystemSearchPolicy(rootPath)
       expect(await policy.shouldSkip(join(rootPath, 'ignored'), true)).toBe(true)
       expect(await policy.shouldSkip(join(rootPath, 'debug.log'), false)).toBe(true)
       expect(await policy.shouldSkip(join(rootPath, 'important.log'), false)).toBe(false)
 
-      const unrestrictedPolicy = await createSystemSearchIgnorePolicy(rootPath, {
+      const unrestrictedPolicy = new GitIgnoreSystemSearchPolicy(rootPath, {
         unrestricted: true,
       })
       expect(await unrestrictedPolicy.shouldSkip(join(rootPath, 'ignored'), true)).toBe(false)

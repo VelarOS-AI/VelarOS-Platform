@@ -12,44 +12,24 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./files": {
-      "types": "./dist/files.d.ts",
-      "import": "./dist/files.js"
-    },
-    "./execution": {
-      "types": "./dist/execution.d.ts",
-      "import": "./dist/execution.js"
-    },
-    "./processes": {
-      "types": "./dist/processes.d.ts",
-      "import": "./dist/processes.js"
-    },
-    "./desktop": {
-      "types": "./dist/desktop.d.ts",
-      "import": "./dist/desktop.js"
-    },
-    "./composition": {
-      "types": "./dist/composition/index.d.ts",
-      "import": "./dist/composition/index.js"
-    },
-    "./platform-compatibility": {
-      "types": "./dist/SystemPlatformCompatibility.d.ts",
-      "import": "./dist/SystemPlatformCompatibility.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
     "./contracts": {
-      "types": "./dist/contracts.d.ts",
-      "import": "./dist/contracts.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
+    },
+    "./platform-compatibility": {
+      "types": "./dist/exports/platform-compatibility.d.ts",
+      "import": "./dist/exports/platform-compatibility.js"
     },
     "./shared-resources": {
-      "types": "./dist/VelarOSSharedResourceStore.d.ts",
-      "import": "./dist/VelarOSSharedResourceStore.js"
+      "types": "./dist/exports/shared-resources.d.ts",
+      "import": "./dist/exports/shared-resources.js"
     }
   },
   "files": [
@@ -65,12 +45,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/system.test.ts test/command-danger-parity.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/shell-readiness.test.ts test/git-bash-windows.test.ts test/process-host.test.ts test/process-lifecycle.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/shell-readiness.test.ts test/git-bash-windows.test.ts test/process-host.test.ts test/process-lifecycle.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system"
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "pdf-lib": "1.17.1",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

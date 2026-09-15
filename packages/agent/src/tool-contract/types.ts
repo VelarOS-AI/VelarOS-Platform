@@ -17,15 +17,19 @@ export type NonEmptyToolContractList<T = string> = readonly [T, ...T[]]
 /** 工具角色，统一别名到 core types 的 ToolRole（单一事实源，避免重复联合）。 */
 export type ToolContractRole = ToolRole
 
+/**
+ * 工具的模型面描述。只有摘要与适用场景必填；禁止、强制流程、用法、示例、注意按需写，不写就不渲染那一节。
+ * 没有参数的工具不用硬凑用法和示例。
+ */
 export interface ToolContractDescriptionSpec {
   role: ToolContractRole
   summary: string
   suitable: NonEmptyToolContractList
-  forbidden: NonEmptyToolContractList
+  forbidden?: NonEmptyToolContractList
   protocol?: NonEmptyToolContractList
-  usage: NonEmptyToolContractList
-  examples: NonEmptyToolContractList<Record<string, unknown>>
-  notes: NonEmptyToolContractList
+  usage?: NonEmptyToolContractList
+  examples?: NonEmptyToolContractList<Record<string, unknown>>
+  notes?: NonEmptyToolContractList
   /**
    * companion skill 的 id（对应 `skills-market/<id>.md`）——工具是调用面，这个 id 指向用法面。
    *
@@ -198,5 +202,5 @@ export interface ToolContractSpec<
 > {
   descriptionSpec: ToolContractDescriptionSpec
   description: string
-  examples: NonEmptyToolContractList<Record<string, unknown>>
+  examples?: NonEmptyToolContractList<Record<string, unknown>>
 }

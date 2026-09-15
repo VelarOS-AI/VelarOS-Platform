@@ -1,0 +1,537 @@
+/**
+ * 系统空间的六个模型面工具。每个工具的全部信息面（摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义）
+ * 和 execute 里的执行链路都在这里，按文件、执行两类排列；文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
+ * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。
+ * 列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
+ * 这是人最先看的文件，改了要在差量报告里点名。
+ */
+
+import { z } from 'zod'
+
+import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { createApprovalOperationKey, createManualApprovalOptions, renderParameterDescription as parameterDescription, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
+import { isEmpty, optionalWhen } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
+import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+
+import type { SystemToolCategoryId } from '../contract/system.js'
+import { SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/system.js'
+import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../interface/provides.js'
+import type { CreateSystemKernelModuleOptions } from '../interface/requires.js'
+import { buildBackgroundCommandConfirmationMessage, isParallelCommandExecutionSafe } from '../utils/command-policy.js'
+import { exposeCommandOutputWindow } from '../utils/command-result.js'
+import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.js'
+
+import { systemCommandPolicy } from './SystemCommandPolicy.js'
+import { systemFileOperations } from './SystemFileOperations.js'
+
+// ── 文件：读文本、看图片与 PDF、写 ──────────────────────────
+
+/**
+ * system:read —— 读文本文件。
+ *
+ * 链路：按字符取一段，连同它的 range 和版本号一起返回；传 version 就读改动前留下的旧版本。
+ */
+const readTool = defineSystemTool<{
+  path: string
+  offset?: number
+  maxChars?: number
+  version?: string
+}>({
+  name: SystemToolNames.read,
+  role: 'inspect',
+  summary: '读文本文件，按字符取一段并返回它的 range 和版本号。',
+  suitable: ['看日志、配置、脚本、临时文件等文本。'],
+  forbidden: ['图片和 PDF 用 system:view；列目录、搜文本用 system:run。'],
+  usage: ['传 path，默认一次读到上限，没读完时把返回的 range.end 当 offset 接着读。', '结果里的 version 是这份内容的版本号；传 version 可以读回某次改动前的旧内容。'],
+  examples: [{ path: '~/build.log' }],
+  notes: ['其他二进制文件读不了。'],
+  schema: z.object({
+    path: z.string().min(1).describe(parameterDescription({ description: '文件路径，支持 ~。' })),
+    offset: z.number().int().nonnegative().optional().describe(parameterDescription({ description: '从第几个字符开始读，默认 0。' })),
+    maxChars: z.number().int().positive().max(200_000).optional().describe(parameterDescription({ description: '最多返回多少字符，默认也是上限 200000。' })),
+    version: z.string().min(1).optional().describe(parameterDescription({ description: '读改动前留下的某个版本，版本号来自 read 或 edit 的结果。' })),
+  }),
+  permissions: ['fs:read'],
+  capabilities: {
+    effectKind: 'read',
+    readScopes: ['any'],
+    filesystem: { read: 'any', write: 'none' },
+    canReadArbitrarySource: true,
+    concurrency: 'safe',
+    reason: 'system text file read primitive',
+  },
+  isConcurrencySafe: () => true,
+  execute: async (input) => systemFileOperations.read(input),
+})
+
+/**
+ * system:view —— 看图片或 PDF。
+ *
+ * 链路：图片整张作为模型可见的内容块交给模型，和用户上传一样 → PDF 抽出 page 那一页交给模型，附上总页数。
+ */
+const viewTool = defineSystemTool<{
+  path: string
+  page?: number
+}>({
+  name: SystemToolNames.view,
+  role: 'inspect',
+  summary: '看图片或 PDF：图片整张交给模型，PDF 一次一页。',
+  suitable: ['看截图、照片、图表等图片的内容。', '逐页看 PDF。'],
+  forbidden: ['文本文件用 system:read。'],
+  usage: ['传 path；PDF 传 page 指定看第几页，不传就是第 1 页，结果里的 pageCount 是总页数。'],
+  examples: [{ path: '~/Desktop/screenshot.png' }, { path: '~/Downloads/report.pdf', page: 2 }],
+  notes: ['图片最大 5 MB，超过先用 system:run 缩小。'],
+  schema: z.object({
+    path: z.string().min(1).describe(parameterDescription({ description: '图片或 PDF 的路径，支持 ~。' })),
+    page: z.number().int().positive().optional().describe(parameterDescription({ description: 'PDF 看第几页，从 1 起，默认 1。' })),
+  }),
+  permissions: ['fs:read'],
+  capabilities: {
+    effectKind: 'read',
+    readScopes: ['any'],
+    filesystem: { read: 'any', write: 'none' },
+    canReadArbitrarySource: true,
+    concurrency: 'safe',
+    reason: 'system image and document view primitive',
+  },
+  isConcurrencySafe: () => true,
+  execute: async (input) => systemFileOperations.view(input),
+})
+
+/**
+ * system:edit —— 写文件：整个写入，或替换一段。
+ *
+ * 链路：敏感路径先向用户确认 → 改动前把原内容留成一个版本 → 只给 newText 就整个写入（不存在则新建） → 给了 range 就只在 read 读到的这段里改，并把改后的新内容和新版本号一起交回；oldText 多处匹配时返回锚点让它二次确认 → restore 回滚到留下的版本。保留编码与换行风格。
+ */
+const editTool = defineSystemTool<{
+  path: string
+  newText?: string
+  oldText?: string
+  range?: { offset: number; end: number }
+  restore?: string
+}>({
+  name: SystemToolNames.edit,
+  role: 'edit',
+  summary: '写文件：只给 newText 就整个写入；加 range 就把 read 读到的那段换成 newText；再加 oldText 就只换这段里的那一处；只给 restore 就回滚到那个版本。改完返回那段的新内容和新版本号，不用再读。',
+  suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的某一段。'],
+  forbidden: ['复制、移动、删除、改权限用 system:run。'],
+  usage: ['先用 system:read 读到要改的那段，把返回的 range 原样传回来，oldText 和原文一字不差；只在这段里找，不给 range 不做匹配。', 'oldText 匹配到多处时文件不会动，会返回每处的锚点；选一个把它的 range 传回来再调一次。', '只给 range 不给 oldText，就是把这段整个换成 newText。', '改错了用 restore 传结果里的 previousVersion 回滚；想先看旧内容就用 system:read 传 version。'],
+  examples: [
+    { path: '~/notes/todo.md', newText: '- 买牛奶\n' },
+    { path: '~/.zshrc', range: { offset: 0, end: 1200 }, oldText: 'export EDITOR=vim', newText: 'export EDITOR=code' },
+  ],
+  notes: ['写系统敏感路径会先向用户确认。'],
+  schema: z.object({
+    path: z.string().min(1).describe(parameterDescription({ description: '文件路径，支持 ~。' })),
+    newText: z.string().optional().describe(parameterDescription({ description: '要写进去的文本；回滚时不用给。' })),
+    oldText: z.string().optional().describe(parameterDescription({ description: '要换掉的原文，只在 range 里找、必须只出现一次；不给就整段或整个文件写入。' })),
+    range: z.object({
+      offset: z.number().int().nonnegative().describe(parameterDescription({ description: '起点字符位置。' })),
+      end: z.number().int().nonnegative().describe(parameterDescription({ description: '终点字符位置，不含。' })),
+    }).optional().describe(parameterDescription({ description: 'system:read 返回的 range，只在这段里改；给了 oldText 就必须给。' })),
+    restore: z.string().min(1).optional().describe(parameterDescription({ description: '回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。' })),
+  }),
+  permissions: ['fs:read', 'fs:write'],
+  capabilities: {
+    effectKind: 'write',
+    readScopes: ['any'],
+    writeScopes: ['any'],
+    filesystem: { read: 'any', write: 'any' },
+    canReadArbitrarySource: true,
+    concurrency: 'unsafe',
+    reason: 'system file write primitive',
+  },
+  isConcurrencySafe: () => false,
+  execute: async (input, ctx) => systemFileOperations.edit(input, ctx),
+})
+
+// ── 执行：跑命令、刷新环境 ──────────────────────────────────
+
+/**
+ * system:run —— 在宿主已检测并报告的系统 shell 中执行命令。
+ *
+ * 骨干链路（execute 里按序号对应）：
+ *   ① 执行前分类：只读？危险？该丢后台？
+ *   ② 决定前台还是后台：显式 background 永远优先，只有省略时才由命令形态推断
+ *   ③ 审批：危险命令高风险、手动、不可按类记忆；长驻服务只是低风险的体验型确认
+ *   ④ 交给宿主执行（LocalSystemKernel 或产品壳注入的实现），真正的授权门在宿主的 ApprovalPort
+ *   ⑤ 整形：输出窗口与召回续接；转入后台的命令补上端口、理由与状态续接
+ */
+const runTool = defineSystemTool<{
+  command: string
+  cwd?: string
+  timeoutMs?: number
+  background?: boolean
+  maxOutputChars?: number
+  parallel?: boolean
+  allowRepeat?: boolean
+}>({
+  name: SystemToolNames.run,
+  role: 'execute',
+  summary: '在宿主已检测并报告的系统 shell 中执行命令。',
+  suitable: [
+    '执行系统诊断、跨目录探测、工具安装后检查或本地脚本。',
+    '处理没有专用 primitive 的系统文件操作，例如复制、移动、删除、归档、解压、权限检查或修改。',
+    '列目录、搜文本、看进程和端口、终止进程：POSIX 用 ls / find / grep 或 rg / ps / lsof / kill；PowerShell 用 Get-ChildItem / Select-String / Get-Process / netstat / Stop-Process；CMD 用 dir / findstr / tasklist / netstat / taskkill。',
+    '打开文件或网址、在文件管理器里定位、启动本地应用：macOS 用 open、open -R、open -a；Windows 用 start、explorer /select,；Linux 用 xdg-open。',
+  ],
+  forbidden: ['不要执行危险写命令、长期服务或重复命令，除非已有用户意图或确认。'],
+  protocol: [
+    '不传 cwd 时用宿主给的默认目录。',
+    '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
+    '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
+    '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
+    '长期服务传 background=true；危险命令会走确认流程。后台命令状态只用返回的 backgroundProcess.statusContinuation 查询，不要使用 job:*。',
+    '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
+    '需要完整日志或后台命令输出时直接执行 outputContinuation.tool/args；不要用 job:*，也不要把内部 logPath 当普通系统文件直接读取。',
+  ],
+  usage: [
+    '传 command；需要特定目录时传 cwd。',
+    '系统路径上的复制、移动、删除、归档、解压、chmod 或 stat 使用本工具；先用 ls / find 和 system:read 缩小目标范围。',
+    '停后台任务时执行 system:list-tasks 条目里的 terminateCommand，强制停用 forceTerminateCommand；不要自己拼 pid。',
+  ],
+  examples: [{ command: 'git --version', maxOutputChars: 2000 }],
+  notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令。'],
+  schema: z.object({
+    command: z.string().min(1).describe(parameterDescription({ description: '要执行的 shell 命令。' })),
+    cwd: z.string().optional().describe(parameterDescription({ description: '可选系统工作目录。' })),
+    timeoutMs: z.number().int().positive().max(600000).optional().describe(parameterDescription({ description: '命令超时时间，单位毫秒。' })),
+    background: z.boolean().optional().describe(parameterDescription({ description: '是否后台启动命令。' })),
+    maxOutputChars: z.number().int().positive().max(50000).optional().describe(parameterDescription({ description: 'stdout/stderr 返回字符上限。' })),
+    parallel: z.boolean().optional().describe(parameterDescription({ description: '是否声明命令可并发。' })),
+    allowRepeat: z.boolean().optional().describe(parameterDescription({ description: '是否允许重复运行同一命令。' })),
+  }),
+  permissions: ['process:exec'],
+  capabilities: {
+    effectKind: 'execute',
+    readScopes: ['system'],
+    writeScopes: ['system'],
+    filesystem: { read: 'system', write: 'system' },
+    process: { execution: 'input-dependent' },
+    concurrency: 'input-dependent',
+    reason: 'system shell command execution',
+  },
+  isConcurrencySafe: isParallelCommandExecutionSafe,
+  execute: async ({ command, cwd, timeoutMs, background, maxOutputChars }, ctx) => {
+    ctx.abortSignal.throwIfAborted()
+
+    // ① 执行前分类
+    const plan = systemCommandPolicy.analyze(command)
+    const commandCwd = ctx.system.resolveCommandCwd?.(cwd) ?? cwd
+
+    // ② 前台还是后台
+    const shouldRunInBackground = background ?? plan.shouldStartInBackground
+    if (shouldRunInBackground && !ctx.system.canStartBackgroundCommands()) {
+      throw new AppError('PERMISSION', '当前未允许模型启动长期运行的命令。')
+    }
+
+    // ③ 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
+    //    只有 requireManualApproval 能让宿主在任何档位都弹卡。
+    if (plan.shouldRequestConfirmation) {
+      await ctx.approval.awaitConfirmation(
+        buildBackgroundCommandConfirmationMessage(
+          command,
+          plan,
+          cwd ?? '系统运行环境',
+          shouldRunInBackground
+        ),
+        ctx.abortSignal,
+        plan.isDangerous
+          ? createManualApprovalOptions({
+              approvalRisk: 'high',
+              riskScope: 'system-command:dangerous',
+              operation: {
+                key: createApprovalOperationKey('shell-command', { command: command.trim(), cwd: commandCwd, background: shouldRunInBackground }),
+                label: command,
+                target: commandCwd,
+              },
+            })
+          : { approvalRisk: 'low' }
+      )
+    }
+
+    // ④ 交给宿主执行
+    const result = await ctx.system.runCommand(
+      command,
+      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, maxOutputChars },
+      plan.isDangerous,
+      ctx.abortSignal
+    )
+
+    // ⑤ 整形
+    if (!result.backgroundProcess) return exposeCommandOutputWindow(result)
+    return {
+      ...exposeCommandOutputWindow(result),
+      backgroundProcess: {
+        ...result.backgroundProcess,
+        ports: plan.ports,
+        reason: plan.reason,
+        autoStarted: plan.shouldStartInBackground && !background,
+        statusContinuation: result.backgroundProcess.taskId
+          ? { tool: SystemToolNames.listTasks, args: { taskId: result.backgroundProcess.taskId } }
+          : result.backgroundProcess.statusContinuation,
+      },
+    }
+  },
+})
+
+/**
+ * system:refresh-environment —— 刷新登录 shell 环境缓存，常在刚安装 CLI 或 PATH 变化后使用。
+ *
+ * 链路：宿主允许刷新才继续 → 由宿主重新加载 PATH 与环境变量。
+ */
+const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
+  name: SystemToolNames.refreshEnvironment,
+  role: 'control',
+  summary: '刷新登录 shell 环境缓存。',
+  suitable: [
+      '刚安装 CLI、修改 shell 配置或发现 PATH 中缺少命令后重新加载环境。',
+      '需要让后续系统命令看到最新 PATH 和环境变量。',
+    ],
+  forbidden: [
+      '不要把它当作命令存在性检查；检查命令可用性用 bash 工具（Windows 用 where，macOS/Linux 用 command -v）。',
+      '不要在宿主环境未允许刷新 shell 时反复调用。',
+    ],
+  protocol: [
+      '先确认缺失命令或 PATH 变化，再刷新 shell 环境。',
+      '刷新后用 bash 工具按宿主 shell 语法验证目标命令是否可见。',
+    ],
+  usage: ['不用传参数。'],
+  examples: [{}],
+  notes: ['刷新结果取决于宿主 system provider；不保证修改用户 shell 配置文件。'],
+  // 没有参数就不校验：传了什么都不报错，只在结果里提醒一句。
+  schema: z.record(z.string(), z.unknown()),
+  permissions: [],
+  capabilities: {
+    effectKind: 'write',
+    readScopes: ['system'],
+    writeScopes: ['system'],
+    filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: false,
+    concurrency: 'unsafe',
+    reason: 'refresh host shell environment cache',
+  },
+  isConcurrencySafe: () => false,
+  execute: async (input, ctx) => {
+    // 部分宿主环境不允许主动刷新登录 shell，需要显式阻止。
+    if (!ctx.system.canRefreshShellEnvironment()) {
+      throw new AppError('PERMISSION', '当前未允许模型主动刷新 shell 环境。')
+    }
+
+    // 由 system provider 重新加载 PATH 和 shell 环境变量。传了参数不报错，只提醒一句。
+    const refreshed = await ctx.system.refreshShellEnvironment()
+    return isEmpty(Object.keys(input)) ? refreshed : { ...refreshed, note: '这个工具不需要参数，传来的内容已忽略。' }
+  },
+})
+
+// ── 后台任务：列出 run 启动的后台任务 ────────────────────────
+
+/**
+ * system:list-tasks —— 列出当前产品启动过的后台任务，用于追踪 dev server / watch 命令是否还活着。
+ *
+ * 链路：给了 taskId 就精确查那一条，否则按 limit / onlyRunning 列表 → 附上 count 做轻量摘要。
+ */
+const listTasksTool = defineSystemTool<{
+  limit?: number
+  onlyRunning?: boolean
+  taskId?: string
+}>({
+  name: SystemToolNames.listTasks,
+  role: 'inspect',
+  summary: '列出后台任务。',
+  suitable: ['查 dev server、watcher 或长任务状态。'],
+  forbidden: ['不要查系统全部进程。'],
+  usage: ['传 taskId 精确查询 system:run 返回的后台任务；或传 limit/onlyRunning 查看任务列表。'],
+  examples: [
+    // 全部后台任务（含已结束）
+    {},
+    // 只看还在运行的
+    { onlyRunning: true },
+    // 精确查询 system:run 返回的后台任务
+    { taskId: 'task-abc123' },
+  ],
+  notes: ['只返回产品记录；不要把 system:run 的 taskId 交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
+  schema: z.object({
+    limit: z.number().int().positive().max(100).optional().describe(
+      parameterDescription({
+        description: '最多返回数量。',
+      })
+    ),
+    onlyRunning: z.boolean().optional().describe(
+      parameterDescription({
+        description: '是否只返回运行中任务。',
+      })
+    ),
+    taskId: z.string().min(1).max(120).optional().describe(
+      parameterDescription({
+        description: '精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。',
+      })
+    ),
+  }),
+  permissions: [],
+  capabilities: {
+    effectKind: 'read',
+    readScopes: ['system'],
+    filesystem: { read: 'none', write: 'none' },
+    canReadArbitrarySource: false,
+    concurrency: 'safe',
+    reason: 'managed system background task inspection',
+  },
+  isConcurrencySafe: () => true,
+  execute: async ({ limit, onlyRunning, taskId }, ctx) => {
+    // onlyRunning 可过滤掉已结束的历史任务。
+    const tasks = await ctx.system.listBackgroundTasks({
+      limit: taskId ? undefined : limit,
+      onlyRunning,
+      taskId,
+    })
+
+    return {
+      // count 给调用方提供轻量摘要。
+      count: tasks.length,
+      tasks,
+    }
+  },
+})
+
+// ── 工具集合：按职责类别分组 ────────────────────────────────────
+
+/**
+ * 工具集合的装配：六个工具按两个职责类别分组。
+ *
+ * 每个工具的定义（提示词、schema、权限、链路）在上面；这里只决定谁属于哪一类、以及全量集合长什么样。
+ * 类别 id 与 `contract/system.ts` 里的表一致。
+ */
+
+const systemFileTools = structureToolDescriptionsForCategory({
+  [SystemToolNames.read]: readTool,
+  [SystemToolNames.view]: viewTool,
+  [SystemToolNames.edit]: editTool,
+}, 'system-files')
+
+const systemExecutionTools = structureToolDescriptionsForCategory({
+  [SystemToolNames.run]: runTool,
+  [SystemToolNames.refreshEnvironment]: refreshEnvironmentTool,
+  [SystemToolNames.listTasks]: listTasksTool,
+}, 'system-execution')
+
+/** 系统空间的十个模型面工具，按工具名索引。 */
+export const systemTools: SystemToolCollection = Object.freeze({
+  ...systemFileTools,
+  ...systemExecutionTools,
+})
+
+// ── 作为官方内置 mod 挂进产品 ──────────────────────────────
+
+/**
+ * 系统空间的常驻工具：读—看—改—跑这条主回路，找文件也走 run。
+ *
+ * 后台任务、环境刷新是排障与收尾场景，留在 loadable 由 `tooling:map` 按名换入。
+ */
+const SystemResidentToolNames = new Set<string>([
+  SystemToolNames.read,
+  SystemToolNames.view,
+  SystemToolNames.edit,
+  SystemToolNames.run,
+])
+
+const SystemToolCategories = Object.freeze({
+  'system-files': Object.freeze<ToolCategoryDefinition>({
+    id: 'system-files',
+    label: 'System files',
+    description: '显式系统路径下的有界文件操作。',
+    toolOs: { domain: 'system', defaultState: 'resident' },
+  }),
+  'system-execution': Object.freeze<ToolCategoryDefinition>({
+    id: 'system-execution',
+    label: 'System execution',
+    description: '受治理的系统命令与后台任务。',
+    toolOs: { domain: 'system', defaultState: 'resident' },
+  }),
+} satisfies Record<SystemToolCategoryId, ToolCategoryDefinition>)
+
+/** 系统空间 mod 的清单，按上游 `AgentModManifest` 契约校验。 */
+const SystemAgentModManifest = Object.freeze<AgentModManifest>({
+  id: SystemModId,
+  version: '1.0.0',
+  publisher: 'VelarOS',
+  displayName: 'VelarOS System',
+  description: '系统空间的文件与执行职责包。',
+  manifestSchemaVersion: 1,
+  engines: { velaros: '*', agent: '*' },
+  trust: 'bundled-official',
+  requiredAxes: ['tools', 'toolCategories', 'spaces'],
+  contributes: {
+    toolCategories: Object.values(SystemToolCategories).map((category, order) => ({
+      id: category.id,
+      label: category.label,
+      description: category.description,
+      order: 10 + order,
+    })),
+    tools: Object.values(SystemToolNames).map((name) => ({
+      name,
+      categoryId: SystemToolCategoryByName[name],
+      availableInSpaces: [SystemSpaceId],
+      residentInSpaces: optionalWhen(SystemResidentToolNames.has(name), [SystemSpaceId]),
+    })),
+    // 只声明**真被消费**的那几格（身份策略 / 绑定能力 / 职责类别）。空间的文案、图标、
+    // 顺序与 surface 分档权威在产品壳的枚举表，manifest 里再写一份没有读者。
+    spaces: [{
+      id: SystemSpaceId,
+      identityStrategy: 'ordinal',
+      boundCapabilityIds: [SystemModId],
+      toolCategoryIds: Object.keys(SystemToolCategories),
+    }],
+  },
+})
+
+/** 创建系统空间作为官方内置 mod 的定义，产品壳的 mod 加载器按它挂载系统空间。 */
+export function createSystemBundledModDefinition(): SystemBundledModDefinition {
+  return Object.freeze({
+    id: SystemModId,
+    specifier: `bundled:${SystemModId}`,
+    defaultEnabled: true,
+    manifest: SystemAgentModManifest,
+    bindings: Object.freeze({ tools: systemTools, toolCategories: SystemToolCategories }),
+  })
+}
+
+// ── 作为能力服务挂进 VelarOS 内核 ──────────────────────
+
+/** 系统能力服务在内核里的身份令牌，宿主按它取到注入的系统工具集合。 */
+export const SystemCapability: CapabilityToken<SystemCapabilityService> =
+  createCapabilityToken<SystemCapabilityService>(SystemModId)
+
+/** 创建系统空间的内核模块：激活时把十个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
+export function createSystemKernelModule(
+  options: CreateSystemKernelModuleOptions = {},
+): KernelModuleDefinition {
+  return defineKernelModule({
+    manifest: {
+      id: SystemModId,
+      version: '1.0.0',
+      apiVersion: KernelModuleApiVersion,
+      provides: [SystemCapability],
+      requires: [],
+      optionalRequires: [],
+      permissions: [
+        'fs:read',
+        'fs:write',
+        'process:exec',
+      ],
+      isolation: 'in-process',
+    },
+    activate(context) {
+      const callable = createKernelCallableCapability(
+        createSystemCallableOperations(systemTools, options.resolveContext),
+      )
+      const service: SystemCapabilityService = Object.freeze({
+        ...callable,
+        tools: Object.freeze({ ...systemTools }),
+      })
+      context.registerService(SystemCapability, service)
+    },
+  })
+}

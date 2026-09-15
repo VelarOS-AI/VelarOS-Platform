@@ -2,13 +2,23 @@ import { execFile, spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 import { expect, test } from 'bun:test'
 
-import { SystemPlatformCompatibility } from '../src/SystemPlatformCompatibility'
-import { buildSystemOwnedProcessSpec, getSystemProcessHostPath } from '../src/SystemProcessHost'
-import { buildSystemNativeCommandSpec, resolveSystemShellReady } from '../src/SystemShell'
+import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
+import { buildSystemOwnedProcessSpec, getSystemProcessHostPath } from '../src/utils/process.js'
+import { buildSystemNativeCommandSpec } from '../src/utils/shell.js'
+
+test('looks for the packaged native host under the package root', () => {
+  // 进程宿主按自身文件位置找 native/；源码与编译产物目录深度一致，这里用源码核对即可覆盖 dist。
+  const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const probed: string[] = []
+  getSystemProcessHostPath({ platform: 'win32', env: {}, isFile: (path) => { probed.push(path); return false } })
+  expect(probed).toContain(join(packageRoot, 'native', `win32-${process.arch}`, 'velaros-process-host.exe'))
+})
 
 test('process ownership fallback reports its actual cleanup capability', () => {
   const spec = { file: 'tool.exe', args: ['中文', '/foo'] }
@@ -57,7 +67,7 @@ windowsTest('native host preserves CMD Unicode output and batch shim literal arg
   expect(host).not.toBeNull()
   const cwd = await mkdtemp(join(tmpdir(), 'velaros-cmd-中文 '))
   try {
-    const shell = await resolveSystemShellReady({
+    const shell = await systemShellResolver.resolveReady({
       shellPath: join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe'),
       env: { ...process.env, VELAROS_PROCESS_HOST: host! },
     })

@@ -8,6 +8,7 @@ This directory is the authoritative documentation entry point for VelarOS Platfo
 | --- | --- |
 | [Platform boundaries](architecture/platform-boundaries.md) | Deciding whether behavior belongs to Platform, a host, or a product |
 | [Repository topology](architecture/repository-topology.md) | Adding a package, changing a dependency direction, or working across domains |
+| [Module ownership](architecture/module-ownership.md) | Finding the single tool file a person reviews; the provides/requires/internal interface files and the data-only contracts; how exports are controlled by the public interfaces; the flat one-class-per-file impl and its layering; documented utils; onboarding a package |
 | [Runtime assurance and observability](architecture/runtime-assurance.md) | Inspecting composition, model requests, or process confinement without changing authority |
 | [Engineering standard](engineering/code-standard.md) | Writing or reviewing code, tests, comments, generated artifacts, or documentation |
 | [Decision records](decisions/README.md) | Changing public protocols, storage, permissions, package ownership, or compatibility policy |

@@ -1,21 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  CapabilityToken,
-  KernelModuleActivateContext,
-} from '@velaros-ai/kernel/contracts/abi'
-
+import { captureService } from '../spec/support'
+import type { SystemBackgroundTaskRecord } from '../src/exports/contracts'
 import {
   createSystemKernelModule,
-  SystemCapability,
   type SystemCapabilityService,
-  SystemToolCategoryByName,
   type SystemToolContext,
-  systemTools,
-} from '../src'
-import { createSystemBundledModDefinition } from '../src/composition'
-import { LocalSystemKernel } from '../src/kernel/LocalSystemKernel'
-import type { SystemBackgroundTaskRecord, SystemCommandResult } from '../src/SystemContracts'
+} from '../src/exports/index'
+import { LocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 
 function createLargeProcessKernel() {
   const kernel = new LocalSystemKernel({ cwd: '/tmp', platform: 'darwin' })
@@ -30,20 +22,21 @@ function createLargeProcessKernel() {
     `p${1000 + index}\ncnode\nn127.0.0.1:${4000 + index}\nTST=LISTEN`).join('\n')
   const internals = kernel as unknown as {
     runPlatformCommand: (spec: { file: string }) => Promise<{ stdout: string; stderr: string }>
-    backgroundTasks: Map<string, SystemBackgroundTaskRecord>
-    resolveBackgroundTaskStatus: () => 'running'
+    commands: {
+      tasks: Map<string, SystemBackgroundTaskRecord>
+      resolveTaskStatus: () => 'running'
+    }
   }
   internals.runPlatformCommand = async (spec) => ({
     stdout: spec.file === 'ps' ? processRows : portRows,
     stderr: '',
   })
-  internals.resolveBackgroundTaskStatus = () => 'running'
+  internals.commands.resolveTaskStatus = () => 'running'
   for (let index = 0; index < 60; index += 1) {
-    internals.backgroundTasks.set(`task-${index}`, {
+    internals.commands.tasks.set(`task-${index}`, {
       id: `task-${index}`,
       runId: `run-${index}`,
       sessionId: null,
-      scope: 'system',
       command: index >= 56 ? `bun ${'x'.repeat(900)} TaRgEtMaRkEr-${index}` : `bun unrelated-${index}`,
       cwd: '/tmp',
       pid: 1000 + index,
@@ -64,52 +57,7 @@ function createLargeProcessKernel() {
   return kernel
 }
 
-function captureService(
-  capture: (tokenId: string, service: object) => void,
-): KernelModuleActivateContext {
-  return {
-    registerService<TService extends object>(
-      token: CapabilityToken<TService>,
-      service: TService,
-    ) {
-      capture(token.id, service)
-      return { dispose() {} }
-    },
-  } as unknown as KernelModuleActivateContext
-}
-
 describe('System Kernel module', () => {
-  test('preserves UTF-8 characters split across pipe chunks and the child exit code', async () => {
-    const kernel = new LocalSystemKernel({ cwd: process.cwd() })
-    const text = '中文🙂'
-    const result = await kernel.runCommand('fixture', { nativeCommand: { file: process.execPath, args: ['-e', `
-      const bytes = Buffer.from(${JSON.stringify(text)});
-      let offset = 0;
-      const timer = setInterval(() => {
-        const byte = bytes.subarray(offset, ++offset);
-        process.stdout.write(byte);
-        process.stderr.write(byte);
-        if (offset === bytes.length) {
-          clearInterval(timer);
-          process.exitCode = 7;
-        }
-      }, 10);
-    `] }, timeoutMs: 3_000 })
-
-    expect(result.stdout).toBe(text)
-    expect(result.stderr).toBe(text)
-    expect(result.exitCode).toBe(7)
-    expect(result.success).toBe(false)
-    expect(result.timedOut).toBe(false)
-    expect(result.capture?.decodeErrors).toBe(0)
-    expect(result.verification).toEqual({
-      kind: 'unknown',
-      status: 'failed',
-      issues: [`stdout:\n${text}`, `stderr:\n${text}`],
-    })
-    expect(result.shell).toBeDefined()
-    expect(result.shell).not.toHaveProperty('env')
-  })
 
   test('gives noninteractive commands stdin EOF without waiting for the command timeout', async () => {
     const kernel = new LocalSystemKernel({ cwd: process.cwd() })
@@ -238,8 +186,8 @@ describe('System Kernel module', () => {
   test('does not spawn a command cancelled during asynchronous preparation', async () => {
     const kernel = new LocalSystemKernel({ cwd: process.cwd() })
     const controller = new AbortController()
-    const internals = kernel as unknown as { buildCommandSpawnSpec: () => Promise<unknown> }
-    internals.buildCommandSpawnSpec = async () => {
+    const internals = kernel as unknown as { commands: { prepare: () => Promise<unknown> } }
+    internals.commands.prepare = async () => {
       controller.abort()
       return { spec: { file: 'must-not-run', args: [] }, env: {}, evidence: {}, ownership: {} }
     }
@@ -256,123 +204,13 @@ describe('System Kernel module', () => {
       nativeCommand: { file: process.execPath, args: ['-e', 'process.exit(7)'] }, background: true,
     })
     const executions = (kernel as unknown as {
-      backgroundExecutions: Map<string, { completion: Promise<unknown> }>
-    }).backgroundExecutions
+      commands: { executions: Map<string, { completion: Promise<unknown> }> }
+    }).commands.executions
     await executions.get(started.backgroundProcess!.taskId)!.completion
     const [task] = await kernel.listBackgroundTasks({ taskId: started.backgroundProcess!.taskId })
     expect(task!.status).toBe('exited')
     expect(task!.exitCode).toBe(7)
     await kernel.dispose()
-  })
-
-  test('declares authoritative capability effects for every system tool', () => {
-    const expectedEffects = {
-      'system:read': 'read',
-      'system:write': 'write',
-      'system:edit': 'write',
-      'system:list': 'read',
-      'system:search': 'read',
-      'system:run': 'execute',
-      'system:refresh-environment': 'write',
-      'system:processes': 'read',
-      'system:list-tasks': 'read',
-      'system:terminate-task': 'execute',
-      'system:open': 'external',
-    } as const
-
-    expect(Object.keys(systemTools)).toEqual(Object.keys(expectedEffects))
-    for (const [name, effectKind] of Object.entries(expectedEffects)) {
-      const tool = systemTools[name as keyof typeof systemTools]
-      expect(tool.capabilities?.effectKind).toBe(effectKind)
-      expect(tool.readOnly).toBe(effectKind === 'read')
-      expect(tool.capabilities?.reason).toBeTruthy()
-      if (effectKind !== 'read') expect(tool.capabilities?.writeScopes?.length).toBeGreaterThan(0)
-    }
-  })
-
-  test('keeps every tool in one concrete responsibility category', () => {
-    expect(SystemToolCategoryByName).toEqual({
-      'system:read': 'system-files',
-      'system:write': 'system-files',
-      'system:edit': 'system-files',
-      'system:list': 'system-files',
-      'system:search': 'system-files',
-      'system:run': 'system-execution',
-      'system:refresh-environment': 'system-execution',
-      'system:processes': 'system-processes',
-      'system:list-tasks': 'system-processes',
-      'system:terminate-task': 'system-processes',
-      'system:open': 'system-desktop',
-    })
-  })
-
-  test('registers the precise canonical tool collection', async () => {
-    let service: SystemCapabilityService | undefined
-    const module = createSystemKernelModule()
-    await module.activate(captureService((tokenId, registered) => {
-      expect(tokenId).toBe(SystemCapability.id)
-      service = registered as SystemCapabilityService
-    }))
-
-    expect(module.manifest.id).toBe('velaros.system')
-    expect(Object.keys(service?.tools ?? {})).toEqual([
-      'system:read',
-      'system:write',
-      'system:edit',
-      'system:list',
-      'system:search',
-      'system:run',
-      'system:refresh-environment',
-      'system:processes',
-      'system:list-tasks',
-      'system:terminate-task',
-      'system:open',
-    ])
-    expect(service?.getOperationMetadata('system:list-tasks')).toBeUndefined()
-    expect(service?.tools['system:edit']?.description).toContain('保留已有文件的权限位')
-    expect(service?.tools['system:run']?.description).toContain('复制、移动、删除、归档、解压')
-    expect(service?.tools['system:run']?.description).toContain('Git Bash/POSIX')
-    expect(module.manifest.permissions).not.toContain('*')
-  })
-
-  test('keeps the system main loop resident without pinning the whole domain', () => {
-    const tools = createSystemBundledModDefinition().manifest.contributes.tools
-    // 找—读—改—跑常驻；进程 / 后台任务 / 环境刷新是排障场景，走 tooling:map 按名换入。
-    expect(
-      tools.flatMap((tool) => (tool.residentInSpaces?.includes('system') ? [tool.name] : [])),
-    ).toEqual([
-      'system:read',
-      'system:write',
-      'system:edit',
-      'system:list',
-      'system:search',
-      'system:run',
-    ])
-  })
-
-  test('uses strict schemas before resolving a host context', async () => {
-    let service: SystemCapabilityService | undefined
-    let resolverCalls = 0
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) => {
-        resolverCalls += 1
-        return {
-          abortSignal: signal,
-          system: { listBackgroundTasks: async () => [] },
-        } as unknown as SystemToolContext
-      },
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    await expect(service?.invoke(
-      'system:list-tasks',
-      undefined,
-      { unexpected: true },
-      new AbortController().signal,
-    )).rejects.toThrow('System capability input is invalid')
-    expect(resolverCalls).toBe(0)
   })
 
   test('queries a managed system task by the exact id returned from system:run', async () => {
@@ -409,115 +247,6 @@ describe('System Kernel module', () => {
     expect(result).toEqual({ count: 0, tasks: [] })
   })
 
-  test('filters against the full command while returning a bounded process summary by default', async () => {
-    let service: SystemCapabilityService | undefined
-    const longCommand = `electron ${'x'.repeat(900)} tail-marker --flag=value`
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            listProcesses: async () => [{
-              pid: 101,
-              ppid: 1,
-              name: 'Electron',
-              command: longCommand,
-              cwd: null,
-              startTime: null,
-              user: 'tester',
-              cpuPercent: 1,
-              memoryBytes: 1024,
-              status: 'running',
-            }],
-          },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    const compact = (await service?.invoke(
-      'system:processes',
-      undefined,
-      { include: ['processes'], filter: 'tail-marker', limit: 5 },
-      new AbortController().signal,
-    )) as { processes: { count: number; items: Array<Record<string, unknown>> } }
-    const full = (await service?.invoke(
-      'system:processes',
-      undefined,
-      { include: ['processes'], filter: 'tail-marker', limit: 5, includeFullCommand: true },
-      new AbortController().signal,
-    )) as { processes: { count: number; items: Array<Record<string, unknown>> } }
-
-    expect(compact.processes.count).toBe(1)
-    expect(compact.processes.items[0]?.commandTruncated).toBe(true)
-    expect(compact.processes.items[0]?.commandChars).toBe(longCommand.length)
-    expect(String(compact.processes.items[0]?.command)).toContain('tail-marker')
-    expect(String(compact.processes.items[0]?.command).length).toBeLessThan(longCommand.length)
-    expect(full.processes.items[0]?.command).toBe(longCommand)
-    expect(full.processes.items[0]?.commandTruncated).toBeUndefined()
-  })
-
-  test('filters background task commands before applying the per-category limit', async () => {
-    let service: SystemCapabilityService | undefined
-    let receivedLimit: number | undefined = -1
-    let receivedFilter: string | undefined
-    const task = (id: string, command: string) => ({
-      id,
-      runId: id,
-      sessionId: null,
-      scope: 'system' as const,
-      command,
-      cwd: '/tmp',
-      pid: 100,
-      logPath: null,
-      ports: [],
-      reason: null,
-      terminateCommand: null,
-      forceTerminateCommand: null,
-      fallbackTerminateCommand: null,
-      requested: true,
-      autoStarted: false,
-      startedAt: 1,
-      updatedAt: 1,
-      status: 'running' as const,
-      recentOutput: null,
-    })
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            listBackgroundTasks: async ({ limit, filter }: { limit?: number; filter?: string }) => {
-              receivedLimit = limit
-              receivedFilter = filter
-              return [
-                task('unrelated', 'bun run unrelated-watch'),
-                task('target', 'bun run velaros-dev-server'),
-              ].slice(0, limit)
-            },
-          },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    const result = (await service?.invoke(
-      'system:processes',
-      undefined,
-      { include: ['tasks'], filter: '  VELAROS-DEV  ', limit: 1 },
-      new AbortController().signal,
-    )) as { tasks: { count: number; items: Array<{ id: string; command: string }> } }
-
-    expect(receivedLimit).toBe(50)
-    expect(receivedFilter).toBe('velaros-dev')
-    expect(result.tasks).toEqual({
-      count: 1,
-      items: [expect.objectContaining({ id: 'target', command: 'bun run velaros-dev-server' })],
-    })
-  })
-
   test.each(['listProcesses', 'listOpenPorts', 'listBackgroundTasks'] as const)(
     'filters the full local kernel %s collection before its result limit',
     async (method) => {
@@ -531,148 +260,4 @@ describe('System Kernel module', () => {
     },
   )
 
-  test('passes process filters through the kernel before its default 50-record window', async () => {
-    const kernel = createLargeProcessKernel()
-    const result = await systemTools['system:processes'].execute({
-      filter: '  TARGETMARKER ',
-      limit: 2,
-    }, { system: kernel } as SystemToolContext) as Record<string, { count: number; items: Array<{ pid: number }> }>
-    for (const category of ['processes', 'ports', 'tasks']) {
-      expect(result[category].count).toBe(2)
-      expect(result[category].items.map((item) => item.pid)).toEqual([1056, 1057])
-    }
-  })
-
-  test('bounds each process category to 50 when a provider ignores the default limit', async () => {
-    const kernel = createLargeProcessKernel()
-    const system = {
-      listProcesses: () => kernel.listProcesses({ limit: 60 }),
-      listOpenPorts: () => kernel.listOpenPorts({ limit: 60 }),
-      listBackgroundTasks: () => kernel.listBackgroundTasks({ limit: 60 }),
-    }
-    const result = await systemTools['system:processes'].execute({}, { system } as unknown as SystemToolContext) as Record<string, { count: number }>
-    for (const category of ['processes', 'ports', 'tasks']) {
-      expect(result[category].count).toBe(50)
-    }
-  })
-
-  test('exposes an authoritative tail window and a session-log continuation for truncated output', async () => {
-    let service: SystemCapabilityService | undefined
-    const commandResult: SystemCommandResult = {
-      command: 'printf lots',
-      cwd: '/tmp',
-      exitCode: 0,
-      signal: null,
-      stdout: 'last line\n',
-      stderr: '',
-      logPath: '/tmp/vela-system-command-123.log',
-      durationMs: 10,
-      timedOut: false,
-      aborted: false,
-      truncated: true,
-      success: true,
-      verification: { kind: 'unknown', status: 'unknown', issues: [] },
-    }
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            runCommand: async () => commandResult,
-            canStartBackgroundCommands: () => true,
-          },
-          approval: { awaitConfirmation: async () => undefined },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    const result = (await service?.invoke(
-      'system:run',
-      undefined,
-      { command: 'printf lots', maxOutputChars: 100 },
-      new AbortController().signal,
-    )) as SystemCommandResult
-
-    expect(result.outputWindow).toEqual({
-      retained: 'tail',
-      complete: false,
-      endPreserved: true,
-    })
-    expect(result.outputContinuation).toEqual({
-      kind: 'session-terminal-log',
-      query: 'vela-system-command-123.log',
-      tool: 'context:recall',
-      args: { query: 'vela-system-command-123.log', kind: 'terminal' },
-    })
-  })
-
-  test('returns executable continuations for a managed background command', async () => {
-    let service: SystemCapabilityService | undefined
-    const commandResult: SystemCommandResult = {
-      command: 'printf ready',
-      cwd: '/tmp',
-      exitCode: null,
-      signal: null,
-      stdout: '',
-      stderr: '',
-      durationMs: 5,
-      timedOut: false,
-      aborted: false,
-      truncated: false,
-      success: true,
-      backgroundProcess: {
-        taskId: 'task-background-123',
-        sessionId: 'session-1',
-        pid: 123,
-        logPath: '/tmp/vela-system-command-background.log',
-        ports: [],
-        reason: null,
-        terminateCommand: null,
-        forceTerminateCommand: null,
-        fallbackTerminateCommand: null,
-        requested: true,
-        autoStarted: false,
-      },
-      verification: { kind: 'unknown', status: 'unknown', issues: [] },
-    }
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            runCommand: async () => commandResult,
-            canStartBackgroundCommands: () => true,
-          },
-          approval: { awaitConfirmation: async () => undefined },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    const result = (await service?.invoke(
-      'system:run',
-      undefined,
-      { command: 'printf ready', background: true },
-      new AbortController().signal,
-    )) as SystemCommandResult
-
-    expect(result.outputWindow).toEqual({
-      retained: 'tail',
-      complete: false,
-      endPreserved: true,
-    })
-    expect(result.outputContinuation).toEqual({
-      kind: 'session-terminal-log',
-      query: 'vela-system-command-background.log',
-      tool: 'context:recall',
-      args: { query: 'vela-system-command-background.log', kind: 'terminal' },
-    })
-    expect(result.backgroundProcess?.statusContinuation).toEqual({
-      tool: 'system:list-tasks',
-      args: { taskId: 'task-background-123' },
-    })
-  })
 })

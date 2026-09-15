@@ -2,27 +2,23 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import {
-  resolveVelarOSSharedAccountRoot,
-  resolveVelarOSSharedDataRoot,
-  resolveVelarOSSharedResourcesRoot,
-} from '../src/VelarOSSharedResourceStore'
+import { velarosSharedResources } from '../src/exports/shared-resources.js'
 
 describe('VelarOS shared resource store', () => {
   test('resolves the stable organization root on supported platform families', () => {
-    expect(resolveVelarOSSharedDataRoot({
+    expect(velarosSharedResources.dataRoot({
       platform: 'darwin',
       env: {},
       homeDirectory: '/Users/example',
     })).toBe(join('/Users/example', 'Library', 'Application Support', 'VelarOS'))
 
-    expect(resolveVelarOSSharedDataRoot({
+    expect(velarosSharedResources.dataRoot({
       platform: 'win32',
       env: { LOCALAPPDATA: 'C:\\Users\\example\\AppData\\Local' },
       homeDirectory: 'C:\\Users\\example',
     })).toBe(join('C:\\Users\\example\\AppData\\Local', 'VelarOS'))
 
-    expect(resolveVelarOSSharedDataRoot({
+    expect(velarosSharedResources.dataRoot({
       platform: 'linux',
       env: { XDG_DATA_HOME: '/home/example/.data' },
       homeDirectory: '/home/example',
@@ -30,7 +26,7 @@ describe('VelarOS shared resource store', () => {
   })
 
   test('places reusable products under shared/resources and honors an override', () => {
-    expect(resolveVelarOSSharedResourcesRoot({
+    expect(velarosSharedResources.resourcesRoot({
       platform: 'linux',
       env: { VELAROS_SHARED_DATA_ROOT: '/portable/VelarOS' },
       homeDirectory: '/ignored',
@@ -38,7 +34,7 @@ describe('VelarOS shared resource store', () => {
   })
 
   test('places product-family account sessions under a versioned shared root', () => {
-    expect(resolveVelarOSSharedAccountRoot({
+    expect(velarosSharedResources.accountRoot({
       platform: 'linux',
       env: { VELAROS_SHARED_DATA_ROOT: '/portable/VelarOS' },
       homeDirectory: '/ignored',

@@ -4,8 +4,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../../project/src/agent/Project.tool'
 import type { ProjectToolContext } from '../../project/src/agent/Types'
-import { systemPrimitiveTools } from '../../system/src/Primitive.tool'
-import type { SystemToolContext } from '../../system/src/Types'
+import { systemTools } from '../../system/src/impl/SystemTools'
+import type { SystemToolContext } from '../../system/src/interface/requires'
 import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
 import type { ApprovalPort } from '../src/tool-contract/approval'
 import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
@@ -34,10 +34,8 @@ function tools(approved: boolean) {
     system: {
       resolveCommandCwd: (cwd) => resolve(workspaceRoot, cwd ?? '.'),
       canStartBackgroundCommands: () => true, runCommand: run,
-      globalSearch: unused, listProcesses: unused, listOpenPorts: unused,
-      listBackgroundTasks: unused, terminateBackgroundTask: unused,
-      refreshShellEnvironment: unused, openPath: unused, revealPath: unused,
-      openApplication: unused, canRefreshShellEnvironment: () => false,
+      listBackgroundTasks: unused,
+      refreshShellEnvironment: unused, canRefreshShellEnvironment: () => false,
     },
   }
   const project: ProjectToolContext = {
@@ -56,7 +54,7 @@ function tools(approved: boolean) {
 describe('shared tool operation identity', () => {
   test('changing from system run to project run cannot repeat a rejected command', async () => {
     const h = tools(false)
-    await expect(systemPrimitiveTools['system:run'].execute({ command: 'rm -rf ./dist' }, h.system))
+    await expect(systemTools['system:run'].execute({ command: 'rm -rf ./dist' }, h.system))
       .rejects.toMatchObject({ code: 'EXECUTION_DENIED' })
     expect(await projectTools['project:run'].execute({ command: 'rm -rf ./dist' }, h.project))
       .toMatchObject({ approved: false, message: 'use a backup' })
@@ -66,7 +64,7 @@ describe('shared tool operation identity', () => {
 
   test('an approved dangerous command is asked again, even from another tool', async () => {
     const h = tools(true)
-    await systemPrimitiveTools['system:run'].execute({ command: 'rm -rf ./dist' }, h.system)
+    await systemTools['system:run'].execute({ command: 'rm -rf ./dist' }, h.system)
     await projectTools['project:run'].execute({ command: 'rm -rf ./dist' }, h.project)
     expect(h.cards()).toBe(2)
     expect(h.runs()).toBe(2)

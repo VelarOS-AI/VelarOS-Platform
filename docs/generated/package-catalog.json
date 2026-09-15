@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.29",
+      "version": "0.6.30",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -132,13 +132,8 @@
       "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
       "exportSubpaths": [
         ".",
-        "./composition",
         "./contracts",
-        "./desktop",
-        "./execution",
-        "./files",
         "./platform-compatibility",
-        "./processes",
         "./shared-resources"
       ],
       "repositoryDirectory": "packages/system"

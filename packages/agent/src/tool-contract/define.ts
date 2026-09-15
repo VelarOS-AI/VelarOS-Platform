@@ -101,7 +101,7 @@ function withUsageSkillNote(
   usageSkillId: LooseOptional<string>
 ): ToolContractDescriptionSpec['notes'] {
   if (!isPresent(usageSkillId)) return notes
-  return [...notes, renderUsageSkillNote(usageSkillId)] as ToolContractDescriptionSpec['notes']
+  return [...(notes ?? []), renderUsageSkillNote(usageSkillId)] as ToolContractDescriptionSpec['notes']
 }
 
 function buildToolContractDescription(
@@ -110,7 +110,7 @@ function buildToolContractDescription(
   spec: ToolContractDescriptionSpec,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
 ): string {
-  examples.set(name, spec.examples)
+  examples.set(name, spec.examples ?? [])
   const description = structureToolDescriptionForModel({
     categoryId,
     description: spec.summary,
@@ -118,7 +118,7 @@ function buildToolContractDescription(
     forbidden: spec.forbidden,
     protocol: spec.protocol,
     usage: spec.usage,
-    examples: renderToolExampleInputs(spec.examples),
+    examples: spec.examples ? renderToolExampleInputs(spec.examples) : undefined,
     notes: withUsageSkillNote(spec.notes, spec.usageSkillId),
   })
   // 描述从不压缩，所以两道闸只能在写下来的那一刻拦；这里是全部工具（含 surface）描述的唯一构造点。
@@ -133,7 +133,7 @@ function defineToolContract<TInput extends Record<string, unknown>, TContext = u
 ): ToolContractSpec<TInput, TContext> {
   assertCanonicalToolId(input.name)
   const descriptionSpec = pickToolDescriptionSpec(input)
-  validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
+  validateToolContractExamples(input.name, input.schema, descriptionSpec.examples ?? [])
   return {
     name: input.name,
     category: input.category,
@@ -182,7 +182,7 @@ function buildToolRuntimeSurfaces<TInput extends Record<string, unknown>, TConte
       if (!isPresent(surface)) return [profile, surface]
 
       const surfaceName = `${input.name}.${profile}`
-      validateToolContractExamples(surfaceName, surface.schema, surface.examples)
+      validateToolContractExamples(surfaceName, surface.schema, surface.examples ?? [])
       return [
         profile,
         {
@@ -211,7 +211,7 @@ function defineToolRuntimeSpec<
 ): ToolContractRuntimeSpec<TInput, TContext, TResult, TPermission> {
   assertCanonicalToolId(input.name)
   const descriptionSpec = pickToolDescriptionSpec(input)
-  validateToolContractExamples(input.name, input.schema, descriptionSpec.examples)
+  validateToolContractExamples(input.name, input.schema, descriptionSpec.examples ?? [])
 
   const surfaces = buildToolRuntimeSurfaces<TInput, TContext>(
     input,
