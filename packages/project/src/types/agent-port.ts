@@ -6,16 +6,6 @@ export interface AgentProjectCommandToolRequirement {
   reason?: string
 }
 
-export interface AgentProjectDiagnostic {
-  severity: 'info' | 'warning' | 'error'
-  message: string
-  path?: string
-  line?: number
-  column?: number
-  source?: string
-  data?: unknown
-}
-
 export interface AgentProjectPreparedPatch {
   /** 提交快照归档使用内核实际补丁内容，避免写入后重读时外部变更吞掉中间版本。 */
   oldContent?: string
@@ -54,32 +44,6 @@ export interface AgentProjectApplyResult {
   rebasedFiles?: string[]
   gitTrackedFiles?: string[]
   gitUntrackedFiles?: string[]
-}
-
-export interface AgentProjectValidationResult {
-  ok: boolean
-  diagnostics: AgentProjectDiagnostic[]
-  checks: Array<{
-    id: string
-    ok: boolean
-    diagnostics?: AgentProjectDiagnostic[]
-    metadata?: unknown
-  }>
-  toolRequirements?: AgentProjectCommandToolRequirement[]
-}
-
-export interface AgentProjectFixResult {
-  ok: boolean
-  changed: boolean
-  transactionId: string
-  changedFiles: string[]
-  fixes: Array<{
-    path: string
-    content: string
-    source: string
-  }>
-  diagnostics: AgentProjectDiagnostic[]
-  toolRequirements?: AgentProjectCommandToolRequirement[]
 }
 
 export interface AgentProjectFileSnapshot {
@@ -165,23 +129,6 @@ export interface AgentProjectSearchHit {
   }
   snippet?: string
 }
-
-export interface AgentProjectDiffResult {
-  diff: string
-  changedFiles: string[]
-  changedLines: number
-}
-
-export type AgentProjectResolveTargetResult =
-  | {
-      status: 'resolved'
-      target: {
-        range?: { startLine?: number; endLine?: number }
-      }
-    }
-  | {
-      status: 'ambiguous' | 'not_found'
-    }
 
 export interface AgentProjectReadRequest {
   path: string | string[]

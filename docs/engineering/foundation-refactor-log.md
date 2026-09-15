@@ -10,6 +10,10 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **project 正式纳入门禁（09-16 03:10）。** 模块卡片、12 条不变量（验收 10 条全经根入口测试）齐了，登记表去掉「迁移中」，门禁与 system 一样零条。
+- **project 注入面与产品面收窄（09-16 03:10）。** 工具从来不调、内核从来不读的成员删掉：`AgentProjectKernelPort` 的 `resolveTarget`、`fixTransaction`、`validate`、`diff`（领域内核 `ProjectKernel` 上照旧有，宿主直接调内核不受影响）；`ProjectCodeIntelligenceHost.available`（内核只看 `isProjectEnabled`）；`CreateProjectKernelOptions.metadata`；`SandboxProvider` 与 `ProjectProviders.sandbox`（全仓和两个产品没有一个插件用）。`ProjectKernel` 去掉 `createTaskContext`、`getJournal`（全仓与 Desktop、Workbench 零调用）。影响：宿主实现这些端口时可以少写几个成员；Desktop 代码智能后端上的 `available` 字段多写着也无妨。
+- **project 模型看得到的 14 条报错与回执改成中文（09-16 03:10）。** fileRef、续读引用、历史快照授权、文件上下文登记、编辑目标、引用存储不可用等，原文与新文逐条见提交 25393627 的说明；另有 ripgrep 超时诊断改中文（project:search 不转发它，直接调内核的宿主看得到）。命令、路径、错误码、字段名没动。
+
 - **project 事务状态文件无效时的报错改成中文（09-16 02:10）。** `Invalid project transaction state: …` → `事务状态文件无效：…`；冒号后面的具体原因（`transaction status/appliedAt mismatch` 这类）暂保持英文，因为它们同时写进 `details.stateValidationFailure`、测试按字串匹配，下一轮连同字段一起改。
 
 - **新包 `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、上限与「确认的就是要落的」落回规则抽成公共件（09-16 01:50，ADR 0008 附录）。** system 已改用它：`@velaros-ai/system` 不再导出 `SystemSandbox*` 九个数据类型和 `SystemSandboxLimits`，宿主改从 `@velaros-ai/rehearsal-sandbox/contracts` 取 `SandboxRecord`、`SandboxDiff`、`RehearsalSandboxLimits` 等（字段完全一样）。模型与用户看到的没有变化（system 的确认文案原样搬过去，末句参数化）。project 迁过来时顺带修掉它「确认用截断差量、落回却全落」的缺陷。
@@ -45,6 +49,11 @@
 | 09-15 20:05 | 其他包的工具面按 system 的判据简化：别的工具替代得了、只剩仪式感的才删；模型没用过但有独特能力的不删 | 用户要求简化工具面；判据沿用已定的 system 做法 |
 | 09-15 21:00 | 旧版工具不直接连测试一起删，而是挪进 test/support 当驱动器 | 6 个测试文件借旧版工具测真行为，改写成第 2 版 fileRef 流程成本高；挪走后生产面干净、覆盖不丢，以后可以逐个改写 |
 | 09-15 21:00 | ProjectError 暂留、挪进 utils/errors.ts，门禁允许 utils 放只有字段的错误类 | 190 处抛出、agent 的纠错逻辑读它的字段，一并换成 AppError 牵连太大；是否统一成 AppError 另行评估 |
+| 09-16 03:10 | 删掉 project 的命令校验器与 prettier/eslint 修复器及其预设（CommandValidator、PrettierFixer、EslintFixer、command-checks） | 自 80c8e7de（8 月把 validationPlugin 入口删掉）起没有任何入口能用到，一个半月没人发现；要找回就从那个提交之前取 |
+| 09-16 03:10 | 删掉 `createFileFilterProvider`、`createAllowAllPolicyProvider` 与路径包含判断的三个旧函数 | 全仓与两个产品零引用（Desktop 仍 import 那三个路径函数，但根入口早已不导出，属于产品层重构时的接线；第三步会在 platform 提供统一的路径包含判断） |
+| 09-16 03:10 | 只有测试在用的第 1 版协议（`utils/edit-intent.ts`、`utils/agent/edit-target.ts`、`EditTarget`）挪进 `test/support` | 生产包里不留只为旧测试服务的代码，测试照旧用它们驱动内核 |
+| 09-16 03:10 | 模型入参的 `ProjectCodeScope` 与宿主查询的 `ProjectCodeLanguageScope` 合成一个 `ProjectCodeScope`（放在可移植数据里） | 字段一模一样，一个概念两个名字 |
+| 09-16 03:10 | 登记为 project 复查轮的待办：utils 里的模块级可变状态（`file-refs` 没有载荷存储时的进程内兜底、glob 与 JS/TS 解析的记忆化缓存）；门禁收紧「utils 不存状态」 | fileRef 兜底存储是有语义的状态，改法牵涉整个 Agent 适配层；记忆化缓存不改变结果，门禁收紧时要给它留口子 |
 | 09-16 02:10 | project 事务状态文件的格式上限（Maximum*）归为可调参数进 `ProjectTuning.persistence`，并写明「不能小于内核保留的事务数」 | 它们跟着内核的事务保留数与宿主策略走，不是对外承诺；格式版本号属于格式规则，留在校验旁边 |
 | 09-16 02:10 | 删掉 `PluginRegistrySink`，插件登记表直接收 `ProjectPluginContext` | 两者形状一模一样，一个概念两个名字 |
 | 09-16 01:30 | 门禁加「迁移中」状态与 `--only`/`--list`：迁移中的包照查照报条数、不计入失败；每个包的 ✓ 不再被前面包的失败吞掉 | project（以及之后的 agent）改造期间就能登记、看燃尽，登记表不用一直挂在工作区里不提交 |
@@ -66,6 +75,6 @@
 ## 进度
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
-- [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（工具面 8d7513e、入口 bc93fd0、错误码 1ea639d，实现层四路并行中）；project 复查修 bug
+- [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug
 - [ ] ③ 公共逻辑抽取
 - [ ] 其余包：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol

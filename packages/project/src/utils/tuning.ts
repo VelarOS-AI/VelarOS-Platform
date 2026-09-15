@@ -155,6 +155,23 @@ export const ProjectTuning = Object.freeze({
     evidenceWindowLines: 5,
     /** 证据包的新鲜窗口最多读多少字节。 */
     evidenceWindowBytes: 80_000,
+    /** 证据包给「往前 / 往后接着读」的建议时，至少建议读几行。 */
+    evidenceSuggestedReadLines: 20,
+    /** 回退搜索（没有 ripgrep 时逐文件扫）每个文件最多留几处命中的上限。 */
+    fallbackHitsPerFileMax: 120,
+    /** 回退搜索每个文件至少留几处命中（maxResults 很小时也不少于它）。 */
+    fallbackHitsPerFileMin: 24,
+  }),
+  /** ripgrep 搜索（utils/files/ripgrep.ts）。 */
+  ripgrep: Object.freeze({
+    /** 一次搜索最多返回几处命中，调用方给得再多也按它截。 */
+    maxResults: 500,
+    /** 每处命中的片段最多多少字符（也是传给 rg 的 --max-columns）。 */
+    snippetChars: 400,
+    /** 每个文件最多几处命中（--max-count 的上限）。 */
+    perFileMatches: 400,
+    /** rg 用几个线程。 */
+    threads: 4,
   }),
   /** 编辑定位失败时回给模型的线索（utils/editing 与 JS/TS 补丁策略）：候选几个、摘录多长、模糊定位的门槛；全都有上限，不把整个文件塞回上下文。 */
   editing: Object.freeze({
@@ -207,14 +224,5 @@ export const ProjectTuning = Object.freeze({
   encoding: Object.freeze({
     /** 判定编码时留多少字节的文件头：BOM 与无 BOM 的 UTF-16（按 NUL 字节的奇偶分布）只看这一段。 */
     headBytes: 8 * 1024,
-  }),
-  /** 插件里的外部命令检查（impl/plugins）：prettier、eslint、tsc 当校验器或修复器跑时的超时，毫秒。 */
-  plugins: Object.freeze({
-    /** prettier 检查与按文件格式化。 */
-    prettierTimeoutMs: 60_000,
-    /** eslint 检查与按文件自动修复。 */
-    eslintTimeoutMs: 60_000,
-    /** tsc --noEmit 类型检查。 */
-    tscTimeoutMs: 120_000,
   }),
 })

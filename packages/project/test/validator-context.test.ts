@@ -2,12 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import { ProjectPolicyDefaults } from '../src/contract/constants'
 import type { ProjectProviders, ProjectValidator } from '../src/contract/requires.js'
-import { CommandValidator } from '../src/impl/plugins/CommandValidator'
 import { PostconditionValidator } from '../src/impl/plugins/PostconditionValidator'
 import { ScopeValidator } from '../src/impl/plugins/ScopeValidator'
 import { TypeScriptSyntaxValidator } from '../src/impl/plugins/TypeScriptSyntaxValidator'
 import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
-import type { CommandRunInput } from '../src/types/provider'
 import type { ProjectValidationContext, ProjectValidationTransaction } from '../src/types/validation'
 import { createCorePolicy } from '../src/utils/kernel/policy'
 
@@ -99,35 +97,6 @@ describe('ProjectValidationContext', () => {
       expect.stringContaining('受保护文件'),
     ])
     expect(postcondition.ok).toBe(true)
-  })
-
-  test('command validators use the required command provider from the shared context', async () => {
-    const calls: CommandRunInput[] = []
-    const validationContext = context({
-      providers: {
-        command: {
-          run: async (input) => {
-            calls.push(input)
-            return { exitCode: 0, stdout: 'ok', stderr: '' }
-          },
-        },
-      },
-    })
-    const validator = new CommandValidator({
-      id: 'external.custom',
-      command: 'custom-check',
-      args: ['--verify'],
-    })
-
-    const result = await validator.validate({}, validationContext)
-
-    expect(result.ok).toBe(true)
-    expect(calls).toEqual([{
-      command: 'custom-check',
-      args: ['--verify'],
-      cwd: '/workspace',
-      timeoutMs: undefined,
-    }])
   })
 
   test('TypeScript validator derives paths from the shared transaction view', async () => {

@@ -81,11 +81,10 @@ import type {
   ProjectValidator,
 } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
-import type { AuditEvent } from '../../types/audit.js'
 import type { BatchInput, BatchMetrics, BatchResult } from '../../types/batch.js'
 import type { ProjectChangeLifecycle, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
 import type { DiffResult, ProjectStatus } from '../../types/common.js'
-import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
+import type { BuildEvidencePackInput, EvidencePack } from '../../types/context.js'
 import type {
   AmendEditInput,
   ApplyEditInput,
@@ -184,8 +183,6 @@ export interface ProjectKernel {
   listSymbols(path: string): Promise<ProjectSymbol[]>
   /** 把路径、符号或文本线索解析成可复用的目标，之后的编辑可以按 targetId 引用；多个候选返回 ambiguous，找不到返回 not_found。 */
   resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
-  /** 给一次任务建上下文，补上 taskId 和创建时间。 */
-  createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext
   /** 按目标或路径范围建证据包：目标附近的新鲜窗口加前后续读建议。 */
   buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
   /** 把编辑意图准备成事务：生成补丁、diff 与风险等级，不碰磁盘；版本已变、规模超出策略预算、改到受保护或生成的文件时拒绝。 */
@@ -208,8 +205,6 @@ export interface ProjectKernel {
   getTransaction(transactionId: string): StoredTransaction | undefined
   /** 内核状态快照：事务数、目标数、审计事件数、锁、插件、适配器、校验器与批处理指标。 */
   status(): Promise<ProjectStatus>
-  /** 内存审计日志里还保留着的事件（超过上限的旧事件已被淘汰）。 */
-  getJournal(): AuditEvent[]
   /** 按依赖图与并发上限跑一批内核操作；atomic 的批次失败时回滚本批已应用的事务。 */
   runBatch(input: BatchInput): Promise<BatchResult>
   /** 注册监听内核生命周期事件的 hook。 */
@@ -1332,11 +1327,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     }
   }
 
-  /** 返回当前 journal 事件列表。 */
-  public getJournal(): AuditEvent[] {
-    return this.journal.list()
-  }
-
   /** 读取实际稳定生命周期，包括已验证、已应用和已回滚的事务。 */
   public getTransaction(idValue: string): StoredTransaction | undefined {
     return this.transactionRepository.get(idValue)
@@ -1401,10 +1391,6 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   public async resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult> {
     return this.queries.resolveTarget(input)
-  }
-
-  public createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext {
-    return this.queries.createTaskContext(input)
   }
 
   public async buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack> {

@@ -52,7 +52,6 @@ export function validationProvidersView(
     fileFilter: readonlyProvider(providers.fileFilter),
     logger: readonlyProvider(providers.logger),
     policy: readonlyProvider(providers.policy),
-    sandbox: readonlyProvider(providers.sandbox),
     secretRedaction: readonlyProvider(providers.secretRedaction),
     telemetry: readonlyProvider(providers.telemetry),
   })

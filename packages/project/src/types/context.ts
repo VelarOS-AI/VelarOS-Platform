@@ -21,18 +21,6 @@ export interface BuildEvidenceToolInput {
   metadata?: Record<string, unknown>;
 }
 
-/** 随 evidence 和编辑决策一起传递的用户任务元数据。 */
-export interface TaskContext {
-  taskId: string;
-  /** 任务的人类可读简述；随 evidence 记录，便于追溯上下文。 */
-  description?: string;
-  goal: string;
-  userConstraints: string[];
-  successCriteria: string[];
-  riskLevel: "low" | "medium" | "high";
-  createdAt: number;
-}
-
 export interface EvidencePack {
   evidenceId: string;
   task?: EvidenceTaskInput;

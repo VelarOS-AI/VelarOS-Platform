@@ -53,13 +53,6 @@ export interface RipgrepSearchResult {
   toolRequirements?: CommandToolRequirement[]
 }
 
-export interface ProjectPathPlatform {
-  isAbsolute(path: string): boolean
-  relative(from: string, to: string): string
-  resolve(...paths: string[]): string
-  sep: string
-}
-
 /** 文本切片以及继续有界读取所需的元数据。 */
 export interface ByteLimitedContent {
   content: string

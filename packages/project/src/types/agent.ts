@@ -51,11 +51,3 @@ export interface ProjectFileContextCarrier extends FileContextCarrier {
 
 export interface DiffHunk { oldStart: number; oldLines: number; newStart: number; newLines: number }
 
-export interface EditTarget {
-  kind: 'project-edit-target'
-  root: string
-  path: string
-  revision: string
-  startLine: number
-  endLine: number
-}

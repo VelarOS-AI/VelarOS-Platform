@@ -19,7 +19,7 @@ import type {
 import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
-import type { AgentProjectApplyResult, AgentProjectDiffResult,AgentProjectFixResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectResolveTargetResult, AgentProjectSearchResult, AgentProjectStoredTransaction, AgentProjectValidationResult } from '../types/agent-port.js'
+import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
 import type { ProjectChangeRecord,ProjectChangeRecordInput } from '../types/change-feed.js'
 import type { ApplyEditInput, PreparedPatch, PrepareEditInput, RollbackInput, RollbackResult } from '../types/edit.js'
 import type { FixInput, FixResult,ProjectFixContext } from '../types/fix.js'
@@ -100,8 +100,6 @@ export interface AgentProjectKernelPort {
   search(input: SearchInput): Promise<AgentProjectSearchResult>
   /** 列一个文件里的符号（名字、种类、容器、范围）：宿主的代码智能对这个项目启用时先问它，出错或没结果再用本地适配器解析。project:code 凭它核对目标符号的声明位置。 */
   listSymbols(path: string): Promise<ProjectSymbol[]>
-  /** 把路径加符号或文本线索解析成可复用的编辑目标：唯一时 resolved 并带范围，多个候选时 ambiguous，找不到时 not_found。项目工具目前不调它。 */
-  resolveTarget(input: ResolveTargetInput): Promise<AgentProjectResolveTargetResult>
   /**
    * 按编辑意图准备一个事务：算出每个文件的补丁、差量、改动行数与风险，不碰磁盘。baseRevisions 对不上抛 BASE_REVISION_MISMATCH；超出事务规模、
    * 碰到受保护或生成文件、定位不到或不唯一时抛对应的错误码。返回的 transactionId 交给 applyEdit 提交，或交给 discardTransaction 丢弃。
@@ -116,22 +114,16 @@ export interface AgentProjectKernelPort {
   getTransaction(
     transactionId: string
   ): AgentProjectStoredTransaction | undefined
-  /** 在一个未提交事务的暂存内容上跑已登记的修复器（checks 挑修复器、paths 限定文件、最多 maxPasses 轮），把真实改动并进事务；修复器自己出错记进诊断，不抛。项目工具目前不调它。 */
-  fixTransaction(input: FixInput): Promise<AgentProjectFixResult>
   /**
    * 提交一个事务：先跑校验（不过抛 VALIDATION_FAILED），再过写入授权与审批，锁住改动的文件后写盘；文件在准备之后被外部改过时先试着 rebase，
    * 接不上抛 BASE_REVISION_MISMATCH。多个文件要么全部写入、要么全部还原；新建的文件在 git 仓库里挂上 intent-to-add。返回每个文件提交前后的 revision。
    */
   applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
-  /** 在事务的暂存内容上（不给事务号时在当前工作区上）跑选中的校验器与适配器检查，返回是否通过、诊断和每项检查的结果；不改文件。项目工具目前不调它。 */
-  validate(input: ValidateInput): Promise<AgentProjectValidationResult>
   /**
    * 撤销一个已提交的事务：先核对每个文件仍是提交后的样子（被外部改过就抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖），再逆序写回原文、删掉事务新建的文件，
    * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。project:change 的 undo 调它。
    */
   rollback(input: RollbackInput): Promise<RollbackResult>
-  /** 一个事务（不给事务号时是内核里的全部事务）的合并差量、改动文件与改动行数；事务号不存在抛 INVALID_INPUT。项目工具目前不调它。 */
-  diff(input?: { transactionId?: string }): Promise<AgentProjectDiffResult>
   /** 内核的状态：项目根（绝对路径）与已登记的校验器 id。工具凭 root 核对当前工作区没有换。 */
   status(): Promise<{ root: string; validators: string[] }>
 }
@@ -307,8 +299,6 @@ export interface ApprovalProvider {
 
 /** 代码智能后端（例如宿主的 CodeGraph 索引）：给了而且对当前项目启用时，内核列符号、按符号名解析目标都先问它，出错或没结果再回退本地适配器。 */
 export interface ProjectCodeIntelligenceHost {
-  /** 后端当前是否可用；本包目前不读这一项，用不用它只看 isProjectEnabled。 */
-  readonly available: boolean;
   /** 这个项目根是否启用了代码智能；返回 false 时内核完全不问这个后端。 */
   isProjectEnabled(projectRoot: string): boolean;
   /** 列一个文件（path 相对项目根）里的符号，行列从 1 起算（和项目里的行号一致）；抛错或返回空时内核改用本地适配器解析。 */
@@ -376,12 +366,6 @@ export interface TelemetryProvider {
   emit?(event: { name: string; properties?: Record<string, any>; timestamp?: number }): void | Promise<void>;
 }
 
-/** 临时根目录后端，给校验器、修复器这类插件用；内核自己不调它，只经校验与修复上下文的 providers 转交。 */
-export interface SandboxProvider {
-  /** 为 root 这个目录建一个隔离的工作根（可附原因），返回新根的路径和用完后清理用的 dispose。 */
-  create?(input: { root: string; reason?: string }): Promise<{ root: string; dispose?: () => Promise<void> | void }> | { root: string; dispose?: () => Promise<void> | void };
-}
-
 /** 内核的可选宿主能力，建内核时经 `CreateProjectKernelOptions.providers` 一次给齐；每一项都可以不给，不给时按各项说的缺省处理。 */
 export interface ProjectProviders {
   /** 动态策略：读、搜索、编辑、提交之前问它放不放行；不给就只按 corePolicy 的静态规则。 */
@@ -400,8 +384,6 @@ export interface ProjectProviders {
   command?: CommandProvider;
   /** 遥测；不给就不发。 */
   telemetry?: TelemetryProvider;
-  /** 给插件用的临时根目录后端；内核自己不用。 */
-  sandbox?: SandboxProvider;
   /** 可选代码智能后端（由宿主注入，例如 CodeGraph MCP）：列符号、按符号名解析目标时先问它；不给就只用本地适配器。 */
   codeIntelligence?: ProjectCodeIntelligenceHost;
 }
@@ -423,8 +405,6 @@ export interface CreateProjectKernelOptions {
    * 不装时适配器和补丁策略全靠 plugins 提供，否则编辑一律报 NOT_SUPPORTED。
    */
   includeBuiltinPlugins?: boolean
-  /** 宿主附带的元数据；内核目前不读它。 */
-  metadata?: Record<string, any>
   /** 宿主持有写端；内核每次事务状态变化写一条，编辑器等消费者只能从 kernel.changeFeed 读取。不给就用内存版，进程退出即丢。 */
   changeFeed?: ProjectChangeFeedWriter
   /**

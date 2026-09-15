@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
 import type { ReplaceLinesOperation } from '../src/types/edit'
-import { ProjectEditOperationSchema } from '../src/utils/edit-intent'
 
+import { ProjectEditOperationSchema } from './support/edit-intent-schema'
 import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 let root = ''

@@ -7,9 +7,18 @@ import { createHash } from 'node:crypto'
 import { isNotUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ProjectToolContext } from '../../contract/requires'
-import type { EditTarget } from '../../types/agent.js'
-import type { AgentProjectReadResult } from '../../types/agent-port.js'
+import type { ProjectToolContext } from '../../src/contract/requires'
+import type { AgentProjectReadResult } from '../../src/types/agent-port.js'
+
+/** 第 1 版编辑目标：读过的一段行，按内容哈希存进会话载荷，旧版 project:edit 凭它定位。 */
+interface EditTarget {
+  kind: 'project-edit-target'
+  root: string
+  path: string
+  revision: string
+  startLine: number
+  endLine: number
+}
 
 
 const ToolName = '__project_edit_target__'

@@ -12,13 +12,13 @@ import { projectChangeOperations } from '../../src/impl/operations/ProjectChange
 import { projectExecutionGate } from '../../src/impl/operations/ProjectExecutionGate'
 import { projectTools } from '../../src/impl/ProjectTools'
 import type { ProjectCodeQuery } from '../../src/types/project'
-import { resolveProjectEditTarget, saveProjectEditTarget } from '../../src/utils/agent/edit-target'
 import { registerProjectFileContext, snapshotFromRead } from '../../src/utils/agent/file-context'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../src/utils/agent/kernel-port'
-import { type ProjectEditOperationsSchema, ProjectModelEditSchema } from '../../src/utils/edit-intent'
 import { defineProjectTool } from '../../src/utils/tool'
 
 import { ProjectCodeQuerySchema } from './code-query-schema'
+import { type ProjectEditOperationsSchema, ProjectModelEditSchema } from './edit-intent-schema'
+import { resolveProjectEditTarget, saveProjectEditTarget } from './edit-target'
 
 /** 第 1 版 project:edit 的入参：按 schema 解析之前的形状。 */
 type ProjectModelEditInput = z.input<typeof ProjectModelEditSchema>

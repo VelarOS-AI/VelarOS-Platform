@@ -51,7 +51,6 @@ export type {
   ProjectToolContext,
   ProjectToolContextResolver,
   ProjectValidator,
-  SandboxProvider,
   SecretRedactionProvider,
   TelemetryProvider,
 } from '../contract/requires.js'
@@ -59,12 +58,11 @@ export type {
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
 export type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol, SymbolInfo } from '../types/adapter.js'
 export type { ProjectApprovalContext, ProjectFileContextCarrier } from '../types/agent.js'
-export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectDiagnostic, AgentProjectDiffResult, AgentProjectFileSnapshot, AgentProjectFixResult, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadContinuation, AgentProjectReadResult, AgentProjectResolveTargetResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction, AgentProjectValidationResult } from '../types/agent-port.js'
-export type { AuditEvent } from '../types/audit.js'
+export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectFileSnapshot, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadContinuation, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
 export type { BatchConflict, BatchInput, BatchMetrics, BatchResult, BatchTask, BatchTaskOperation, BatchTaskResult } from '../types/batch.js'
 export type { FileProjectChangeFeedOptions, ProjectChangeLifecycle, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput, ProjectChangeRevision } from '../types/change-feed.js'
 export type { Diagnostic, DiffResult, JsonValue, ProjectStatus, Range, RiskLevel, TrustLabel, TrustLevel, TrustSource } from '../types/common.js'
-export type { BuildEvidencePackInput, BuildEvidenceToolInput, EvidencePack, EvidenceTargetInput, EvidenceTaskInput, TaskContext } from '../types/context.js'
+export type { BuildEvidencePackInput, BuildEvidenceToolInput, EvidencePack, EvidenceTargetInput, EvidenceTaskInput } from '../types/context.js'
 export type { AddImportOperation, AmendEditInput, AppendTextOperation, ApplyEditInput, ApplyResult, CreateFileOperation, CustomEditOperation, DeleteFileOperation, DeleteTextOperation, EditConstraints, EditIntent, EditOperation, InsertAfterSymbolOperation, InsertAroundSymbolOperation, InsertBeforeSymbolOperation, InsertTextAtAnchorOperation, InsertTextOperation, JsonPatchOperation, PreparedPatch, PreparedTransaction, PrepareEditInput, PrependTextOperation, RemoveImportOperation, RenameFileOperation, ReplaceContentOperation, ReplaceLinesOperation, ReplaceSymbolOperation, ReplaceTextOperation, RollbackInput, RollbackResult } from '../types/edit.js'
 export type { FixFileContent, FixInput, FixResult, ProjectFixContext } from '../types/fix.js'
 export type { HookContext, HookEvent } from '../types/hook.js'

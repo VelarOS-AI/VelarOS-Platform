@@ -11,7 +11,7 @@ import {
 
 import type { FileAdapter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
-import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
+import type { BuildEvidencePackInput, EvidencePack } from '../../types/context.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
 import type { HookEvent } from '../../types/hook.js'
 import type {
@@ -61,8 +61,6 @@ export interface ProjectQueriesApi {
   listSymbols(path: string): Promise<ProjectSymbol[]>
   /** 把路径、符号或文本线索解析成可复用的目标；解析到的目标记下来，之后按 targetId 引用。多个候选时返回 ambiguous，找不到返回 not_found。 */
   resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
-  /** 给一次任务建上下文：补上唯一的 taskId 和创建时间。 */
-  createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext
   /** 按目标或路径范围建证据包：带目标附近的新鲜窗口（经脱敏）和前后续读建议，再交给宿主的上下文提供者补充、清洗。 */
   buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
   /** 内存里现存的目标个数（内核状态快照用）。 */
@@ -338,7 +336,7 @@ export class ProjectQueries implements ProjectQueriesApi {
     selectedFiles?: string[],
   ): Promise<{ hits: SearchHit[]; scannedFiles: number; truncated: boolean }> {
     const files = selectedFiles ?? await this.searchFilePaths(processed)
-    const perFileCap = Math.min(120, Math.max(maxResults * 2, 24))
+    const perFileCap = Math.min(ProjectTuning.queries.fallbackHitsPerFileMax, Math.max(maxResults * 2, ProjectTuning.queries.fallbackHitsPerFileMin))
     const hits: SearchHit[] = []
     let scannedFiles = 0
     let stoppedEarly = false
@@ -548,11 +546,6 @@ export class ProjectQueries implements ProjectQueriesApi {
     return { status: 'not_found', reason: '没有 adapter 能解析该目标' }
   }
 
-  /** 为一次任务创建带唯一 id 和时间戳的上下文。 */
-  public createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext {
-    return { ...input, taskId: id('task'), createdAt: Date.now() }
-  }
-
   /** 基于目标或路径范围构建可引用的证据包。 */
   public async buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack> {
     const evidenceId = id('evidence')
@@ -594,7 +587,7 @@ export class ProjectQueries implements ProjectQueriesApi {
         suggestedReads.push({
           path: read.snapshot.path,
           range: {
-            startLine: Math.max(1, contextRange.startLine - Math.max(before, 20)),
+            startLine: Math.max(1, contextRange.startLine - Math.max(before, ProjectTuning.queries.evidenceSuggestedReadLines)),
             endLine: contextRange.startLine - 1,
           },
           reason: 'before-context',
@@ -605,7 +598,7 @@ export class ProjectQueries implements ProjectQueriesApi {
           path: read.snapshot.path,
           range: {
             startLine: contextRange.endLine + 1,
-            endLine: contextRange.endLine + Math.max(after, 20),
+            endLine: contextRange.endLine + Math.max(after, ProjectTuning.queries.evidenceSuggestedReadLines),
           },
           reason: 'after-context',
         })

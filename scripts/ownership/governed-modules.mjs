@@ -68,7 +68,6 @@ export const GovernedModules = [
   {
     directory: 'project',
     name: '@velaros-ai/project',
-    status: 'migrating',
     toolsFile: 'src/impl/ProjectTools.ts',
     contract: 'src/contract',
     types: 'src/types',

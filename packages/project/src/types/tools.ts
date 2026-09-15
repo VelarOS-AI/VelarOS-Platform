@@ -4,6 +4,7 @@
  */
 
 import type { ProjectChangeStep, ProjectLineRange } from './editing.js'
+import type { ProjectCodeScope } from './project.js'
 
 /** project:read 的入参：path（可带 range）、files（每项各自的 range）、continuation 三选一；maxChars 是这次调用所有文件共用的字符预算。 */
 export type ProjectReadInput = {
@@ -69,15 +70,6 @@ export type ProjectSandboxInput = {
 
 /** 代码查询的目标符号：前一次查询返回的 symbolRef，或者文件路径加符号名（可带容器名区分同名符号）。 */
 export type ProjectCodeTarget = { symbolRef: string } | { path: string; symbol: string; container?: string }
-
-/** 代码查询共用的范围：语言、工作目录、条数上限、扩展名与目录深度。 */
-export type ProjectCodeScope = {
-  language?: string
-  cwd?: string
-  limit?: number
-  extensions?: string[]
-  maxDepth?: number
-}
 
 /** project:code 的入参：symbols、references、dependencies（incoming / outgoing）、relations、impact、diagnostics 六类动作。 */
 export type ProjectCodeInput =

@@ -9,8 +9,8 @@ import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNu
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
-import type { ProjectCodeQuery } from '../../types/project.js'
-import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeScope, ProjectCodeTarget } from '../../types/tools.js'
+import type { ProjectCodeQuery, ProjectCodeScope } from '../../types/project.js'
+import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../types/tools.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 

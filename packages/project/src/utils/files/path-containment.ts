@@ -1,12 +1,9 @@
 /**
- * 路径约束：路径在不在项目根里。词法判断给宿主与工具算相对路径；FileStore 的准入门还要沿符号链接解析，挡住经软链逃出工作区。
+ * 路径约束：FileStore 的准入门沿符号链接解析路径，挡住经软链逃出工作区。
  */
 import { realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 
-import { isEmpty, isNotNull } from '@velaros-ai/core'
-
-import type { ProjectPathPlatform } from '../../types/files.js'
 import { ProjectError } from '../errors.js'
 import { isInsideRoot } from '../path.js'
 
@@ -47,39 +44,4 @@ export async function assertConfinedToRoot(
     { inputPath },
     '该路径或其祖先通过符号链接指向当前工作区外部。请切换到目标包的真实工作区，或只检查当前工作区源码；不要改搜该路径的父目录。',
   )
-}
-
-const defaultPlatform: ProjectPathPlatform = { isAbsolute, relative, resolve, sep }
-
-/** 候选路径在项目根里时返回相对根的路径（根本身是 '.'），不在返回 null；只按字面判断，不解析符号链接。 */
-export function getRelativePathInsideProjectRoot(
-  rootPath: string,
-  candidatePath: string,
-  platform: ProjectPathPlatform = defaultPlatform,
-): Nullable<string> {
-  const relativePath = platform.relative(
-    platform.resolve(rootPath),
-    platform.resolve(candidatePath),
-  )
-  const inside =
-    isEmpty(relativePath) ||
-    relativePath === '.' ||
-    (relativePath !== '..' &&
-      !relativePath.startsWith(`..${platform.sep}`) &&
-      !platform.isAbsolute(relativePath))
-  return inside ? relativePath || '.' : null
-}
-
-/** 候选路径在不在项目根里（按字面判断）。 */
-export function isPathInsideProjectRoot(
-  rootPath: string,
-  candidatePath: string,
-  platform?: ProjectPathPlatform,
-): boolean {
-  return isNotNull(getRelativePathInsideProjectRoot(rootPath, candidatePath, platform))
-}
-
-/** 把相对路径里的反斜杠换成 /，各平台写法一致。 */
-export function toPortableProjectRelativePath(relativePath: string): string {
-  return relativePath.replace(/\\/g, '/')
 }

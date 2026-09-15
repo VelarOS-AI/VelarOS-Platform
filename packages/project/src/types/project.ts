@@ -251,8 +251,8 @@ export interface ProjectSandboxDiscardResult {
 // project:code 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
 // 其余是代码索引类动作，宿主有代码图谱时执行。缺省值已经填好，数字已经钳在范围之内。
 
-/** 语言服务类动作共用的范围：语言、工作目录、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。 */
-export interface ProjectCodeLanguageScope {
+/** 代码查询共用的范围：语言、工作目录、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。模型的 project:code 入参与宿主收到的语言服务查询共用它。 */
+export interface ProjectCodeScope {
   language?: string
   cwd?: string
   limit?: number
@@ -279,7 +279,7 @@ export type ProjectCodeIndexQuery =
   | { action: 'index_status' }
 
 /** 语言服务类查询：找符号、列导出、看一个文件引了谁、看谁引了它、找引用、诊断、符号改动的影响面。 */
-export type ProjectCodeLanguageQuery = ProjectCodeLanguageScope & (
+export type ProjectCodeLanguageQuery = ProjectCodeScope & (
   | { action: 'find_symbols'; query?: string; path?: string; exportedOnly?: boolean; kinds?: string[]; exact?: boolean }
   | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
   | { action: 'find_imports'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean }

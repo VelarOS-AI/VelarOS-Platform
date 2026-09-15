@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
 import type { EditIntent } from '../src/types/edit'
-import { ProjectModelEditSchema } from '../src/utils/edit-intent'
+
+import { ProjectModelEditSchema } from './support/edit-intent-schema'
 
 let root = ''
 beforeEach(async () => {

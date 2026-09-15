@@ -3,6 +3,7 @@ import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/co
 import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../../types/files.js'
 import type { SearchHit } from '../../types/io.js'
 import { matchesAny } from '../glob.js'
+import { ProjectTuning } from '../tuning.js'
 
 /** 整理 glob 名单：去掉首尾空白、空项和重复，保留原来的顺序。 */
 function normalizeGlobList(values: readonly string[]): string[] {
@@ -35,7 +36,7 @@ function buildRipgrepTimeoutDiagnostic(timeoutMs: number): string {
   return `ripgrep 搜索超过 ${timeoutMs} 毫秒超时，返回的命中可能不完整；请缩小 root、include 或 query，或调大项目的 ripgrep 超时后重试。`
 }
 
-/** 解析 `rg --json` 的输出：只取 match 行，列号从 UTF-8 字节位置换算成 UTF-16 坐标，片段截到 400 字符，满 maxResults 即止。 */
+/** 解析 `rg --json` 的输出：只取 match 行，列号从 UTF-8 字节位置换算成 UTF-16 坐标，片段截到可调的字符数，满 maxResults 即止。 */
 export function parseRipgrepJsonLines(stdout: string, maxResults: number, filterPath?: (path: string) => boolean): SearchHit[] {
   const hits: SearchHit[] = []
   for (const line of stdout.split(/\r?\n/)) {
@@ -67,7 +68,7 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number, filter
       endCol = Math.max(startCol, bytes.subarray(0, end).toString('utf8').length + 1)
     }
 
-    const snippet = (lineText ?? '').replace(/\r?\n$/, '').slice(0, 400)
+    const snippet = (lineText ?? '').replace(/\r?\n$/, '').slice(0, ProjectTuning.ripgrep.snippetChars)
     hits.push({
       path,
       revision: '',
@@ -92,8 +93,8 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number, filter
  * 退出码 1 表示没有命中（空结果列表）。
  */
 export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<RipgrepSearchResult> {
-  const maxResults = Math.min(Math.max(1, ctx.maxResults), 500)
-  const args: string[] = ['--json', '--max-columns', '400', '--threads', '4', '--hidden', '--max-filesize', String(ctx.policy.maxSearchFileSizeBytes)]
+  const maxResults = Math.min(Math.max(1, ctx.maxResults), ProjectTuning.ripgrep.maxResults)
+  const args: string[] = ['--json', '--max-columns', String(ProjectTuning.ripgrep.snippetChars), '--threads', String(ProjectTuning.ripgrep.threads), '--hidden', '--max-filesize', String(ctx.policy.maxSearchFileSizeBytes)]
   if (isFalse(ctx.excludeGitignored)) args.push('--no-ignore')
 
   for (const g of normalizeGlobList(ctx.include ?? [])) {
@@ -111,7 +112,7 @@ export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<Ripg
   if (!ctx.regex) args.push('--fixed-strings')
   if (!isTrue(ctx.caseSensitive)) args.push('--ignore-case')
 
-  args.push('--max-count', String(Math.min(400, maxResults * 8)))
+  args.push('--max-count', String(Math.min(ProjectTuning.ripgrep.perFileMatches, maxResults * 8)))
 
   const pattern = ctx.query
   args.push('--', pattern)
