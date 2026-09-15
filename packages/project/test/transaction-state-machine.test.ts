@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ProjectTransactionCommandTable, TransactionStateMachine } from '../src/impl/transactions/TransactionStateMachine'
+import { TransactionStateMachine } from '../src/impl/transactions/TransactionStateMachine'
 import type {
   ProjectTransactionStatus,
   StoredTransaction,
 } from '../src/types/transaction'
 import type { ProjectTransactionCommand } from '../src/types/transaction.js'
 import { ProjectError } from '../src/utils/errors'
+import { ProjectTransactionCommandTable } from '../src/utils/transactions/transaction-lifecycle.js'
 
 const StableStatuses = [
   'prepared',

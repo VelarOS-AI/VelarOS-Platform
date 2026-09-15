@@ -1,3 +1,7 @@
+/**
+ * 补丁携带的文件属性（权限位、文本编码）：路径被删掉后重建、重命名到新路径时，靠补丁记下的属性还原，不依赖磁盘上还有没有原文件。
+ */
+
 import { isNumber } from '@velaros-ai/core'
 
 import type { PreparedPatch } from '../../types/edit.js'
@@ -25,6 +29,7 @@ export function patchTargetEncoding(patch: PreparedPatch): Optional<ProjectTextE
   return isProjectTextEncoding(metadata.targetEncoding) ? metadata.targetEncoding : undefined
 }
 
+/** 把文件属性（权限位、文本编码）记进补丁的 metadata，返回新补丁。 */
 export function withPatchFileAttributes(
   patch: PreparedPatch,
   attributes: FileAttributes,

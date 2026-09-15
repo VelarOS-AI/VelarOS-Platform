@@ -1,13 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  isCreatePatch,
-  isDeletePatch,
-  stagedContentAfter,
-  TransactionOverlay,
-  withoutStagedOffsets,
-} from '../src/impl/transactions/TransactionOverlay'
+import { TransactionOverlay } from '../src/impl/transactions/TransactionOverlay'
 import type { PreparedPatch } from '../src/types/edit'
+import { isCreatePatch, isDeletePatch, stagedContentAfter, withoutStagedOffsets } from '../src/utils/transactions/patch-chain.js'
 
 function patch(
   patchId: string,

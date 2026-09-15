@@ -1,29 +1,43 @@
+/**
+ * 校验器登记表：`ValidatorRegistry`。接口 `ValidatorRegistryApi` 在本文件的类上方。
+ */
+
 import { isEmpty, isUndefined, optionalWhen } from '@velaros-ai/core'
 
 import type { ProjectValidator } from '../../contract/requires.js'
 import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
+import { isSelectedValidator } from '../../utils/checks.js'
+import { ProjectTuning } from '../../utils/tuning.js'
 
-function isSelectedValidator(validator: ProjectValidator, checks?: readonly string[]): boolean {
-  if (!checks || isEmpty(checks)) return true
-  return [validator.id, ...(validator.checkIds ?? [])].some((id) => checks.includes(id))
+/**
+ * 管理 project validator（插件经 registerValidator 登记），把多个校验器的结果合并成一次 validate 输出。
+ * 声明了 cacheKey 的 validator，完全通过的结果按依赖指纹缓存复用（每个 validator 的条数与单份大小有上限，见 ProjectTuning.transactions）。
+ * 实例由内核持有，一个内核一份。
+ */
+export interface ValidatorRegistryApi {
+  /** 登记一个可参与 validate 流程的 validator；按登记顺序运行。 */
+  register(validator: ProjectValidator): void
+  /** 已登记的 validator 号，按登记顺序。 */
+  listIds(): string[]
+  /**
+   * 依次运行被本次 checks 选中且 canValidate 为真的 validator，每个 validator 各记一项检查，汇总诊断与工具需求；
+   * ok 要求每项检查通过且没有 error 级诊断。命中缓存的检查在 metadata 里标 reused。validator 抛出的错误原样抛出。
+   */
+  validate(input: ValidateInput, context: ProjectValidationContext): Promise<ValidationResult>
 }
 
-/** 管理 project validator，并把多个校验器结果合并为一次 validate 输出。 */
-export class ValidatorRegistry {
+export class ValidatorRegistry implements ValidatorRegistryApi {
   private validators: ProjectValidator[] = []
   private readonly cache = new WeakMap<ProjectValidator, Map<string, ValidationResult>>()
 
-  /** 注册一个可参与 validate 流程的 validator。 */
   public register(validator: ProjectValidator): void {
     this.validators.push(validator)
   }
 
-  /** 返回当前已注册的 validator id。 */
   public listIds(): string[] {
     return this.validators.map((v) => v.id)
   }
 
-  /** 执行符合输入条件的 validator，并汇总诊断、检查项和工具需求。 */
   public async validate(
     input: ValidateInput,
     context: ProjectValidationContext
@@ -63,10 +77,10 @@ export class ValidatorRegistry {
           result.ok &&
           result.checks.every((check) => check.ok) &&
           !result.diagnostics.some((diagnostic) => diagnostic.severity === 'error') &&
-          JSON.stringify(result).length <= 256_000
+          JSON.stringify(result).length <= ProjectTuning.transactions.validationCacheResultChars
         ) {
           entries.set(cacheKey, structuredClone(result))
-          while (entries.size > 128) entries.delete(entries.keys().next().value!)
+          while (entries.size > ProjectTuning.transactions.validationCacheEntries) entries.delete(entries.keys().next().value!)
         }
         checks.push({
           id: validator.id,

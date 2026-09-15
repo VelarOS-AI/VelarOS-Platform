@@ -1,15 +1,15 @@
+/**
+ * 事务失败回执：模型看得到的失败错误都在这里构造——没写入的结论、revision 冲突、编辑失败后的回读建议、校验诊断信封。
+ * 回执带几条诊断、每条多长由 `ProjectTuning.transactions` 管。
+ */
+
 import { isEmpty, isPlainObject, isPresent, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { Diagnostic } from '../../types/common.js'
 import type { ValidationResult } from '../../types/validation.js'
 import { ProjectError, RevisionMismatchSuggestedNextAction } from '../errors.js'
-
-// 失败信封只携带模型定位问题所需的诊断：前几条足以指路，其余只报总数。
-const MaxReportedDiagnostics = 10
-// 命令型 validator 会把整段 stdout/stderr 塞进一条诊断，信封里按字符截断。
-const MaxDiagnosticMessageChars = 2000
-const MaxHeadlineChars = 200
+import { ProjectTuning } from '../tuning.js'
 
 /**
  * 写盘开始之前失败：原错误照旧抛出，只补上「没有写入」的结论。Agent 边界据此把失败记为 not-applied，
@@ -22,10 +22,12 @@ export function withNotAppliedOutcome(error: unknown): Error {
   return new AppError(failure.code, failure.message, error, { ...failure.context, executionOutcome: 'not-applied' })
 }
 
+/** 把错误补上「没有写入」的结论后抛出（写盘开始之前的失败用）。 */
 export function rethrowNotApplied(error: unknown): never {
   throw withNotAppliedOutcome(error)
 }
 
+/** 构造 BASE_REVISION_MISMATCH：文件或目标的 revision 已变化，带统一的「先重读再重做」建议。 */
 export function revisionMismatch(message: string, details: any): ProjectError {
   return new ProjectError(
     'BASE_REVISION_MISMATCH',
@@ -35,6 +37,24 @@ export function revisionMismatch(message: string, details: any): ProjectError {
   )
 }
 
+/** 编辑失败后的回读建议：知道出错行时只读附近几行。 */
+export function recoveryRead(path: string, line: Optional<number>) {
+  const maxChars = ProjectTuning.transactions.recoveryReadMaxChars
+  if (!line) return { tool: 'project:read', input: { path, maxChars } }
+  return {
+    tool: 'project:read',
+    input: {
+      path,
+      range: {
+        startLine: Math.max(1, line - ProjectTuning.transactions.recoveryReadLinesBefore),
+        endLine: line + ProjectTuning.transactions.recoveryReadLinesAfter,
+      },
+      maxChars,
+    },
+  }
+}
+
+/** 超过 maximum 个字符就截断并补一个省略号。 */
 export function truncateText(text: string, maximum: number): string {
   return text.length > maximum ? `${text.slice(0, maximum)}…` : text
 }
@@ -73,13 +93,13 @@ export function diagnosticsEnvelope(diagnostics: readonly Diagnostic[]): {
   const location = [first.path, first.line, optionalWhen(isPresent(first.line), first.column)]
     .filter(isPresent)
     .join(':')
-  const firstLine = truncateText(first.message.split('\n')[0].trim(), MaxHeadlineChars)
+  const firstLine = truncateText(first.message.split('\n')[0].trim(), ProjectTuning.transactions.headlineChars)
   return {
     headline: `${isEmpty(location) ? '' : `${location} `}${firstLine}（共 ${ordered.length} 条）`,
     details: {
-      diagnostics: ordered.slice(0, MaxReportedDiagnostics).map((diagnostic) => ({
+      diagnostics: ordered.slice(0, ProjectTuning.transactions.reportedDiagnostics).map((diagnostic) => ({
         ...diagnostic,
-        message: truncateText(diagnostic.message, MaxDiagnosticMessageChars),
+        message: truncateText(diagnostic.message, ProjectTuning.transactions.diagnosticMessageChars),
       })),
       diagnosticCount: ordered.length,
     },

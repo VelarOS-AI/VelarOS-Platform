@@ -126,6 +126,7 @@ export type { StoredTransaction } from '../../types/transaction.js'
 import type { CreateProjectKernelOptions, FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectValidator } from '../../contract/requires.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import { projectChangePatches } from '../../utils/transactions/change-records.js'
+import { isCreatePatch, isDeletePatch, stagedContentAfter } from '../../utils/transactions/patch-chain.js'
 import {
   canRevertToOriginal,
   createsMissingFile,
@@ -137,7 +138,7 @@ import { ProjectQueries } from '../files/ProjectQueries.js'
 import { MemoryProjectChangeFeed } from '../persistence/MemoryProjectChangeFeed.js'
 import { LockManager } from '../transactions/LockManager.js'
 import { TransactionCoordinator } from '../transactions/TransactionCoordinator.js'
-import { isCreatePatch, isDeletePatch, stagedContentAfter, TransactionOverlay } from '../transactions/TransactionOverlay.js'
+import { TransactionOverlay } from '../transactions/TransactionOverlay.js'
 import { TransactionProjectionRepository } from '../transactions/TransactionProjectionRepository.js'
 import { TransactionRecovery } from '../transactions/TransactionRecovery.js'
 import { TransactionRepository } from '../transactions/TransactionRepository.js'

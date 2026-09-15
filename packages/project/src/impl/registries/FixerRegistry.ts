@@ -1,77 +1,39 @@
-import { isEmpty,isNonBlankString, optionalWhen } from '@velaros-ai/core'
+/**
+ * 修复器登记表：`FixerRegistry`。接口 `FixerRegistryApi` 在本文件的类上方。
+ */
+
+import { isEmpty } from '@velaros-ai/core'
 
 import type { ProjectFixer } from '../../contract/requires.js'
 import type { FixInput, FixResult, ProjectFixContext } from '../../types/fix.js'
-import { toErrorObject } from '../../utils/errors.js'
+import { emptyFixResult, fixerErrorResult, mergeFixResults } from '../../utils/checks.js'
 
-function emptyResult(transactionId: string): FixResult {
-  return {
-    ok: true,
-    changed: false,
-    transactionId,
-    changedFiles: [],
-    fixes: [],
-    diagnostics: [],
-  }
+/** 管理事务修复器（插件经 registerFixer 登记），按请求的检查范围依次尝试修复暂存变更。实例由内核持有，一个内核一份。 */
+export interface FixerRegistryApi {
+  /** 登记一个可参与事务修复的 fixer；按登记顺序运行。 */
+  register(fixer: ProjectFixer): void
+  /** 已登记的 fixer 号，按登记顺序。 */
+  listIds(): string[]
+  /**
+   * 对事务依次运行被 checks 选中（没给 checks 时全部）且 canFix 为真的 fixer，合并它们的修复、诊断与工具需求。
+   * 某个 fixer 的 canFix 或 fix 抛错不中断其余 fixer，记成一条 error 诊断、结果不通过。
+   */
+  fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult>
 }
 
-function fixerErrorResult(
-  transactionId: string,
-  fixerId: string,
-  phase: string,
-  error: any
-): FixResult {
-  const errorObject = toErrorObject(error)
-  const message =
-    isNonBlankString(errorObject.message)
-      ? errorObject.message
-      : `Fixer ${fixerId} 在 ${phase} 阶段失败。`
-  return {
-    ok: false,
-    changed: false,
-    transactionId,
-    changedFiles: [],
-    fixes: [],
-    diagnostics: [
-      {
-        severity: 'error',
-        source: `${fixerId}.${phase}`,
-        message,
-        data: errorObject,
-      },
-    ],
-  }
-}
-
-function mergeFixResults(current: FixResult, next: FixResult, transactionId: string): FixResult {
-  return {
-    ok: current.ok && next.ok,
-    changed: current.changed || next.changed,
-    transactionId,
-    changedFiles: [...new Set([...current.changedFiles, ...next.changedFiles])],
-    fixes: [...current.fixes, ...next.fixes],
-    diagnostics: [...current.diagnostics, ...next.diagnostics],
-    toolRequirements: optionalWhen([...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])].length, ([...(current.toolRequirements ?? []), ...(next.toolRequirements ?? [])])),
-  }
-}
-
-/** 管理事务修复器，并按请求的检查范围依次尝试修复暂存变更。 */
-export class FixerRegistry {
+export class FixerRegistry implements FixerRegistryApi {
   private fixers: ProjectFixer[] = []
 
-  /** 注册一个可参与事务修复的 fixer。 */
   public register(fixer: ProjectFixer): void {
     this.fixers.push(fixer)
   }
 
-  /** 返回当前已注册的 fixer id。 */
   public listIds(): string[] {
     return this.fixers.map((fixer) => fixer.id)
   }
 
-  /** 对指定事务运行匹配的 fixer，并合并修复结果与诊断信息。 */
   public async fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult> {
-    let result = emptyResult(input.transactionId)
+    let result = emptyFixResult(input.transactionId)
     for (const fixer of this.fixers) {
       if (input.checks && !isEmpty(input.checks) && !input.checks.includes(fixer.id)) continue
       let canFix = false

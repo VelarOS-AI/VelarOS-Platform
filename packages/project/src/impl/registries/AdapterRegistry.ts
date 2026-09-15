@@ -1,24 +1,34 @@
+/**
+ * 文件适配器登记表：`AdapterRegistry`。接口 `AdapterRegistryApi` 在本文件的类上方。
+ */
+
 import type { FileAdapter, FileAdapterFactory } from '../../contract/requires.js'
 import type { FileSnapshot } from "../../types/snapshot.js";
 
-/** 管理文件 adapter factory，并按 priority 创建适合某个 snapshot 的 adapter。 */
-export class AdapterRegistry {
+/** 管理文件 adapter 工厂（插件经 registerAdapterFactory 登记），为一个快照按 priority 创建能处理它的 adapter。实例由内核持有，一个内核一份。 */
+export interface AdapterRegistryApi {
+  /** 登记一个文件 adapter 工厂；同一个工厂号只登记第一次。 */
+  register(factory: FileAdapterFactory): void;
+  /** 已登记的工厂号，按登记顺序。 */
+  listFactoryIds(): string[];
+  /** 为快照创建所有 canHandle 为真的工厂给出的 adapter，priority 高的排前面；kernel 原样交给工厂。工厂抛出的错误原样抛出。 */
+  createAdapters(snapshot: FileSnapshot, kernel: any): Promise<FileAdapter[]>;
+}
+
+export class AdapterRegistry implements AdapterRegistryApi {
   private factories: FileAdapterFactory[] = [];
   private factoryIds = new Set<string>();
 
-  /** 注册一个文件适配器工厂。 */
   public register(factory: FileAdapterFactory): void {
     if (this.factoryIds.has(factory.id)) return;
     this.factoryIds.add(factory.id);
     this.factories.push(factory);
   }
 
-  /** 返回当前已注册的文件适配器工厂 id。 */
   public listFactoryIds(): string[] {
     return this.factories.map((f) => f.id);
   }
 
-  /** 为指定 snapshot 创建可处理它的适配器，并按优先级排序。 */
   public async createAdapters(snapshot: FileSnapshot, kernel: any): Promise<FileAdapter[]> {
     const adapters: FileAdapter[] = [];
     for (const factory of this.factories) {

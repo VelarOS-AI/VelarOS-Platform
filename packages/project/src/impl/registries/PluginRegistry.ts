@@ -1,22 +1,26 @@
-import type { FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectPluginContext, ProjectValidator } from '../../contract/requires.js'
+/**
+ * 插件登记表：`PluginRegistry`。接口 `PluginRegistryApi` 在本文件的类上方。
+ * 插件拿到的注册入口就是注入面的 `ProjectPluginContext`，由内核实现。
+ */
 
-/** plugin 安装时可写入的注册入口，由 Project 实例实现。 */
-export interface PluginRegistrySink {
-  registerAdapterFactory(factory: FileAdapterFactory): void;
-  registerPatchStrategy(strategy: PatchStrategy): void;
-  registerValidator(validator: ProjectValidator): void;
-  registerFixer(fixer: ProjectFixer): void;
-  registerHook(hook: ProjectHook): void;
-  registerPipelineStage(stage: PipelineStage): void;
+import type { ProjectPlugin, ProjectPluginContext } from '../../contract/requires.js'
+
+/** 负责安装 plugin，把 plugin setup 里登记的能力接入内核的各个登记表。实例由内核持有，一个内核一份。 */
+export interface PluginRegistryApi {
+  /**
+   * 安装一个插件：同名插件只装一次。插件的 setup 只拿到从 sink 上绑定下来的六个注册函数，碰不到内核本身；
+   * setup 抛错时插件不算装上（之后可以重装），错误原样抛出。
+   */
+  install(plugin: ProjectPlugin, sink: ProjectPluginContext): Promise<void>;
+  /** 已装上的插件（拷贝的数组），按安装顺序。 */
+  list(): ProjectPlugin[];
 }
 
-/** 负责安装 plugin，并把 plugin setup 中注册的能力接入内核 registry。 */
-export class PluginRegistry {
+export class PluginRegistry implements PluginRegistryApi {
   private plugins: ProjectPlugin[] = [];
   private pluginNames = new Set<string>();
 
-  /** 安装一个插件，并把插件注册的能力写入目标 registry。 */
-  public async install(plugin: ProjectPlugin, sink: PluginRegistrySink): Promise<void> {
+  public async install(plugin: ProjectPlugin, sink: ProjectPluginContext): Promise<void> {
     if (this.pluginNames.has(plugin.name)) return;
     this.pluginNames.add(plugin.name);
     // 只暴露绑定过的注册函数，避免 plugin 直接依赖 Project 具体实现。
@@ -37,7 +41,6 @@ export class PluginRegistry {
     }
   }
 
-  /** 返回已安装插件的快照列表。 */
   public list(): ProjectPlugin[] {
     return [...this.plugins];
   }

@@ -1,3 +1,8 @@
+/**
+ * 事务暂存视图：`TransactionOverlay`。接口 `TransactionOverlayApi` 与注入回调 `TransactionOverlayDependencies` 在本文件的类上方。
+ * 把事务的补丁按顺序重放成「内存里的未来文件内容」，供 validator、fixer 在写盘前看到暂存态；补丁链的判定在 `utils/transactions/patch-chain.ts`。
+ */
+
 import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
@@ -7,7 +12,9 @@ import type { PreparedPatch } from '../../types/edit.js'
 import type { FileAttributes } from '../../types/snapshot.js'
 import type { StagedFileContent, TransactionContentOverlay } from '../../types/transaction.js'
 import { patchFileAttributes } from '../../utils/transactions/patch-attributes.js'
+import { isCreatePatch, stagedContentAfter, withoutStagedOffsets } from '../../utils/transactions/patch-chain.js'
 
+/** 暂存视图要内核注入的两个回调：语言感知的补丁重新推导，与工作区读取。 */
 export interface TransactionOverlayDependencies {
   /** 基于前一补丁产出的暂存正文重新推导后继补丁；无法安全推导时返回 null。 */
   readonly rebasePatchAgainstContent: (
@@ -18,40 +25,29 @@ export interface TransactionOverlayDependencies {
   readonly readWorkspaceFile: (path: string) => Promise<string | undefined>
 }
 
-/** 删除类补丁写下后让路径在事务视图中变为不存在。 */
-export function isDeletePatch(patch: PreparedPatch): boolean {
-  const operation = patch.metadata?.op
-  return operation === 'delete_file' || operation === 'rename_file_delete'
-}
-
-/** 新建类补丁整文件写入，不依赖该路径此前的暂存正文。 */
-export function isCreatePatch(patch: PreparedPatch): boolean {
-  const operation = patch.metadata?.op
-  return operation === 'create_file' || operation === 'rename_file_create'
-}
-
-/** 补丁写下之后该路径的事务视图；null 与存在但为空的字符串必须严格区分。 */
-export function stagedContentAfter(patch: PreparedPatch): StagedFileContent {
-  return isDeletePatch(patch) ? null : (patch.newContent ?? '')
-}
-
-/**
- * 后继补丁的策略坐标属于事务中间态，不再对应事务前原文。移除这些坐标，使跨事务冲突检测
- * 保守地退回同文件冲突，而不是把真实重叠误判为不相交。
- */
-export function withoutStagedOffsets(patch: PreparedPatch): PreparedPatch {
-  if (!patch.metadata) return patch
-  const { startOffset: _startOffset, endOffset: _endOffset, ...metadata } = patch.metadata
-  return { ...patch, metadata }
-}
-
 /**
  * 事务补丁的纯暂存视图。
  *
- * 组件只负责补丁顺序语义与读取覆盖，不查询事务仓库、不执行文件 IO，也不决定 rebase 策略。
- * Kernel 注入的两个回调保留工作区读取与语言感知补丁推导边界。
+ * 只负责补丁顺序语义与读取覆盖，不查询事务仓库、不执行文件 IO，也不决定 rebase 策略；
+ * 内核注入的两个回调保留工作区读取与语言感知补丁推导边界。实例由内核持有，一个内核一份。
  */
-export class TransactionOverlay {
+export interface TransactionOverlayApi {
+  /**
+   * 把同一路径的后继补丁衔接到前一补丁的产出（staged）上：新建补丁直接重建路径，原样返回；前一补丁删掉了文件的返回 null；
+   * 补丁原文正好等于暂存正文时原样返回；否则请内核基于暂存正文重新推导，推导不出返回 null，推导出的补丁去掉失效的策略坐标。
+   * 重新推导抛出的错误原样抛出。
+   */
+  chainPatch(patch: PreparedPatch, staged: StagedFileContent): Promise<Nullable<PreparedPatch>>
+  /**
+   * 按补丁顺序构造事务的未来内容：每个路径的暂存正文（null 表示已删除）和文件属性。
+   * 某个路径衔接失败或重放抛错时记一条 core.transaction-replay 诊断，继续检查其余路径，不抛出。
+   */
+  build(patches?: readonly PreparedPatch[]): Promise<TransactionContentOverlay>
+  /** 造一个读文件函数：暂存内容优先，暂存为删除（null）读成 undefined 而不回退磁盘，没暂存的路径读工作区当前正文。 */
+  createReader(contentByPath: ReadonlyMap<string, StagedFileContent>): (path: string) => Promise<string | undefined>
+}
+
+export class TransactionOverlay implements TransactionOverlayApi {
   public constructor(private readonly dependencies: TransactionOverlayDependencies) {}
 
   /**

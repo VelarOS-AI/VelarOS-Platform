@@ -1,29 +1,49 @@
-// 域：进程内路径写锁——串行化「路径集合重叠」的事务写入与回滚。
-//
-// ## 并发模型与不变量（改这里会破什么）
-//  - **锁是进程内的，粒度是相对路径**：它防的是同一个 Project 内核上并发跑的两个事务互相
-//    覆盖；**不防**外部编辑器/其它进程——那一层由 base revision 检查兜。指望它做跨进程互斥会
-//    得到一个假的安全感。
-//  - **公平（FIFO），不是抢占**：`canGrant` 除了看路径是否已被占，还要看**排在自己前面的等待者
-//    有没有路径重叠**。少了这一步，一个反复申请小路径集的事务能无限插队，让改大范围的事务饿死。
-//  - **`drainQueue` 一轮里授一个就重扫**：授锁会改变后续项的可授状态（前驱出队后原本被前驱
-//    挡住的项可能变得可授），所以是 `while(progressed)` 而不是一次线性扫。
-//  - **空路径集直接返回一个未登记的锁**：它不进 `locks`，`unlock` 对它是 no-op。这样调用方
-//    （applyEdit/rollback）不必为"事务没改任何文件"写分支。
-//  - **没有超时**：`lock()` 的 Promise 只在被授予时 resolve。调用方**必须** try/finally 解锁，
-//    否则同路径的后续事务永久挂起。刻意不加超时——超时释放意味着两个事务同时写同一文件，
-//    那是比挂起更坏的失败方向（静默数据损坏 vs 可观测的卡住）。
+/**
+ * 进程内路径写锁：`LockManager`。接口 `LockManagerApi` 在本文件的类上方。
+ *
+ * 串行化「路径集合重叠」的事务写入与回滚。
+ *
+ * 并发模型与不变量（改这里会破什么）：
+ *  - **锁是进程内的，粒度是相对路径**：它防的是同一个 Project 内核上并发跑的两个事务互相
+ *    覆盖；**不防**外部编辑器/其它进程——那一层由 base revision 检查兜。指望它做跨进程互斥会
+ *    得到一个假的安全感。
+ *  - **公平（FIFO），不是抢占**：`canGrant` 除了看路径是否已被占，还要看**排在自己前面的等待者
+ *    有没有路径重叠**。少了这一步，一个反复申请小路径集的事务能无限插队，让改大范围的事务饿死。
+ *  - **`drainQueue` 一轮里授一个就重扫**：授锁会改变后续项的可授状态（前驱出队后原本被前驱
+ *    挡住的项可能变得可授），所以是 `while(progressed)` 而不是一次线性扫。
+ *  - **空路径集直接返回一个未登记的锁**：它不进 `locks`，`unlock` 对它是 no-op。这样调用方
+ *    （applyEdit/rollback）不必为"事务没改任何文件"写分支。
+ *  - **没有超时**：`lock()` 的 Promise 只在被授予时 resolve。调用方**必须** try/finally 解锁，
+ *    否则同路径的后续事务永久挂起。刻意不加超时——超时释放意味着两个事务同时写同一文件，
+ *    那是比挂起更坏的失败方向（静默数据损坏 vs 可观测的卡住）。
+ */
+
 import { isEmpty } from '@velaros-ai/core'
 
-import type { PendingProjectLock,ProjectLock } from '../../types/transaction.js'
+import type { PendingProjectLock, ProjectLock } from '../../types/transaction.js'
 import { id } from '../../utils/id.js'
 
-/** 公平路径锁队列，用于串行化重叠写入和回滚。 */
-export class LockManager {
+/**
+ * 公平路径锁队列，用于串行化重叠写入和回滚：申请的路径与已授予的锁、或排在前面的等待者重叠时排队，按先来后到放行。
+ * 锁没有超时，拿到锁的一方必须在 finally 里解锁。实例由内核持有，一个内核一份。
+ */
+export interface LockManagerApi {
+  /** 为一组相对路径申请写锁（去重排序后登记，owner 记是谁拿的）；有重叠时排队，授予时才兑现。空路径集直接返回一个不登记的锁。 */
+  lock(paths: string[], owner: string): Promise<ProjectLock>
+  /** 释放指定锁并推进等待队列；锁号不存在时什么都不做。 */
+  unlock(lockId: string): Promise<void>
+  /** 这个路径此刻是不是被锁着。 */
+  isLocked(path: string): boolean
+  /** 当前全部已锁定的路径。 */
+  list(): string[]
+  /** 等待队列里涉及的全部路径（去重）。 */
+  queued(): string[]
+}
+
+export class LockManager implements LockManagerApi {
   private readonly locks = new Map<string, ProjectLock>()
   private readonly queue: PendingProjectLock[] = []
 
-  /** 为一组路径申请写锁；与已有锁重叠时会排队等待。 */
   public async lock(paths: string[], owner: string): Promise<ProjectLock> {
     const normalized = [...new Set(paths)].sort()
     const lock: ProjectLock = {
@@ -40,7 +60,6 @@ export class LockManager {
     })
   }
 
-  /** 释放指定锁，并尝试推进后续等待队列。 */
   public async unlock(lockId: string): Promise<void> {
     for (const [path, lock] of [...this.locks.entries()]) {
       if (lock.lockId === lockId) this.locks.delete(path)
@@ -48,17 +67,14 @@ export class LockManager {
     this.drainQueue()
   }
 
-  /** 判断指定路径当前是否被锁定。 */
   public isLocked(path: string): boolean {
     return this.locks.has(path)
   }
 
-  /** 返回当前所有已锁定路径。 */
   public list(): string[] {
     return [...this.locks.keys()]
   }
 
-  /** 返回等待队列中涉及的路径集合。 */
   public queued(): string[] {
     return [...new Set(this.queue.flatMap((entry) => entry.lock.paths))]
   }
@@ -86,16 +102,12 @@ export class LockManager {
       if (this.locks.has(path)) return false
     }
 
+    const requested = new Set(entry.lock.paths)
     for (let index = 0; index < queueIndex; index += 1) {
       // 前面排队的重叠请求即使尚未授锁，也保留优先级。
-      if (hasPathOverlap(this.queue[index].lock.paths, entry.lock.paths)) return false
+      if (this.queue[index].lock.paths.some((path) => requested.has(path))) return false
     }
 
     return true
   }
-}
-
-function hasPathOverlap(left: string[], right: string[]): boolean {
-  const rightSet = new Set(right)
-  return left.some((path) => rightSet.has(path))
 }

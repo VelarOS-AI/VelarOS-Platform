@@ -22,8 +22,8 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
     this.changes.set(change.transactionId, cloneChange(change))
   }
 
-  /** 把一条新记录落到持久层；内存版什么都不做。 */
-  protected abstract persist(change: ProjectChangeRecord): void
+  /** 把一条新记录落到持久层；落盘的子类实现它，只在内存里的子类不实现。 */
+  protected persist?(change: ProjectChangeRecord): void
 
   public record(input: ProjectChangeRecordInput): ProjectChangeRecord {
     const change: ProjectChangeRecord = cloneChange({
@@ -31,7 +31,7 @@ export abstract class BaseProjectChangeFeed implements ProjectChangeFeedWriter {
       sequence: this.lastSequence + 1,
       updatedAt: Date.now(),
     })
-    this.persist(change)
+    this.persist?.(change)
     this.hydrate(change)
     const published = cloneChange(change)
     for (const listener of this.listeners) listener(cloneChange(published))

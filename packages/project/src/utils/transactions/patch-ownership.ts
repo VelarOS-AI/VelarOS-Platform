@@ -1,9 +1,15 @@
+/**
+ * 补丁与原文的归属：撤销一个补丁是删掉文件还是写回原文、能不能完整撤销，以及局部编辑是不是读到了真原文。
+ * 回滚预检、风险分级与 Desktop 的预览缓存按同一条判据回答。
+ */
+
 import { isString, isTrue } from '@velaros-ai/core'
 
-import { isCreatePatch, isDeletePatch } from '../../impl/transactions/TransactionOverlay.js'
 import type { PreparedPatch } from '../../types/edit.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { ProjectError } from '../errors.js'
+
+import { isCreatePatch, isDeletePatch } from './patch-chain.js'
 
 /**
  * 补丁写入前该路径不存在，撤销它就是删除文件。覆盖既有文件的 `create_file` 同样整文件写入，

@@ -1,13 +1,18 @@
+/**
+ * 事务恢复计划：apply、rollback 写盘前落下的恢复点——每个改动路径的原状态和本事务可能留下的状态，恢复时据此判断当前内容归不归本事务。
+ */
+
 import { isEmpty, isString } from '@velaros-ai/core'
 
-import { isDeletePatch } from '../../impl/transactions/TransactionOverlay.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ApplyRestoreState, ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionRestoreEntry,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
 import { ProjectError } from '../errors.js'
 
 import { bytePatchFor } from './byte-plan.js'
+import { isDeletePatch } from './patch-chain.js'
 import { createsMissingFile } from './patch-ownership.js'
 
+/** 本事务按 kind 方向写某个路径时会依次留下的状态：apply 取写后正文、删除补丁留下不存在，rollback 取原文、撤销新建留下不存在；带字节计划里对应的字节。 */
 export function transactionOwnedStates(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
@@ -33,6 +38,10 @@ export function transactionOwnedStates(
   return states
 }
 
+/**
+ * 为 apply 或 rollback 建落盘的恢复计划：每个改动路径的原状态（存在的带原文、原字节、编码、权限）和本事务可能留下的状态。
+ * 有路径捕获不到可还原的原文、或找不到本事务留下的状态，抛 PATCH_APPLY_ERROR。
+ */
 export function durableRestorePlan(
   tx: StoredTransaction,
   kind: ProjectTransactionPendingOperation['kind'],
@@ -70,6 +79,7 @@ export function durableRestorePlan(
   return plan
 }
 
+/** 快照是不是这个状态：都不存在算对上；存在的要是非目录、非二进制且正文完全相同。 */
 export function fileStateMatches(
   snapshot: FileSnapshot,
   state: ProjectTransactionFileState,

@@ -1,6 +1,9 @@
+/**
+ * 事务字节计划：每个补丁写前、写后的确切字节。apply 按它原样写、写前按它预检，rollback 按它写回原字节，不经过重新编码。
+ */
+
 import { isString, isUndefined } from "@velaros-ai/core";
 
-import { isDeletePatch } from "../../impl/transactions/TransactionOverlay.js";
 import type { PreparedPatch } from "../../types/edit.js";
 import type { StoredTransaction, TransactionBytePatch, TransactionBytePlan } from "../../types/transaction.js";
 import { ProjectError } from "../errors.js";
@@ -15,7 +18,13 @@ import {
   encodePreservingProjectBytes,
 } from "./byte-codec.js";
 import { patchFileAttributes, patchTargetEncoding } from "./patch-attributes.js";
+import { isDeletePatch } from "./patch-chain.js";
 
+/**
+ * 按写盘前捕获的原字节（originals，路径 → 字节）为事务准备字节计划：同一路径的补丁依次接在前一补丁的写后字节上，
+ * 写后字节保留原文件编码与没改动片段的原字节（编码转换补丁按目标编码整体重编码）；unavailable 里的路径原字节取不到，标 beforeUnavailable。
+ * 原文在准备期间变了抛 CONFLICT_WITH_EXTERNAL_EDIT，原文件无法无损解码抛 NOT_SUPPORTED，目标字节无法无损回读抛 INVALID_INPUT。
+ */
 export function prepareTransactionBytePlan(
   transaction: StoredTransaction,
   originals: ReadonlyMap<string, Uint8Array | undefined>,
@@ -105,6 +114,7 @@ const BytePlanIndexes = new WeakMap<
   ReadonlyMap<string, TransactionBytePatch>
 >();
 
+/** 在字节计划里找某个补丁的那一项（按路径与补丁号，索引按计划对象缓存）；没有计划或找不到返回 undefined。 */
 export function bytePatchFor(
   plan: Optional<TransactionBytePlan>,
   patch: PreparedPatch,
@@ -120,6 +130,7 @@ export function bytePatchFor(
   return index.get(`${patch.path}\0${patch.patchId}`);
 }
 
+/** 按方向取一个补丁的字节：apply 是写前 → 写后，rollback 反过来；都解回字节。 */
 export function plannedBytes(
   patch: TransactionBytePatch,
   kind: "apply" | "rollback",

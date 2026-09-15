@@ -1,3 +1,7 @@
+/**
+ * 事务原字节的编解码：按原文件编码写回时尽量保留没改动片段的原字节，比较字节，解码落盘的 base64 字节。
+ */
+
 import { diffChars } from "diff";
 
 import { isUndefined } from "@velaros-ai/core";
@@ -8,6 +12,7 @@ import {
   decodeProjectTextBuffer,
   encodeProjectTextBuffer,
 } from "../text.js";
+import { ProjectTuning } from "../tuning.js";
 
 /** GB18030 的别名字节可能对应同一字符；有界差异定位到的未改片段复用原字节。 */
 export function encodePreservingProjectBytes(
@@ -36,8 +41,8 @@ export function encodePreservingProjectBytes(
   if (byte !== original.length || unit !== before.length)
     throw new ProjectError("INVALID_INPUT", "原始字节与文本坐标不一致。");
   const changes = diffChars(before, after, {
-    maxEditLength: 4096,
-    timeout: 50,
+    maxEditLength: ProjectTuning.transactions.byteDiffMaxEditLength,
+    timeout: ProjectTuning.transactions.byteDiffTimeoutMs,
   });
   const parts: Buffer[] = [];
   let from = 0;
@@ -95,6 +100,7 @@ export function encodePreservingProjectBytes(
   return result;
 }
 
+/** 两段字节是否完全相同；都缺席算相同，只有一边缺席算不同。 */
 export function bytesEqual(first?: Uint8Array, second?: Uint8Array): boolean {
   return isUndefined(first)
     ? isUndefined(second)
@@ -103,6 +109,7 @@ export function bytesEqual(first?: Uint8Array, second?: Uint8Array): boolean {
         first.every((byte, index) => byte === second[index]);
 }
 
+/** 把落盘的 base64 原字节解回字节；缺席返回 undefined。 */
 export function decodeStoredBytes(value?: string): Buffer | undefined {
   return isUndefined(value) ? undefined : Buffer.from(value, "base64");
 }

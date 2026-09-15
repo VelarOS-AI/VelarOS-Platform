@@ -1,14 +1,18 @@
+/**
+ * 事务规划：`TransactionPlanner`。接口 `TransactionPlannerApi`、注入回调 `TransactionPlannerDependencies` 与准备选项 `TransactionPlannerPrepareOptions` 在本文件的类上方。
+ * 把编辑意图按版本化快照变成补丁，汇总事务的净变化与风险，守住事务规模与受保护文件；不写盘、不持有事务仓库。
+ */
+
 import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOptional } from '@velaros-ai/core'
 
 import type { FileAdapter, PatchStrategy } from '../../contract/requires.js'
 import type { RiskLevel } from '../../types/common.js'
-import type { ReplaceLinesOperation } from '../../types/edit.js'
 import type {
   EditIntent,
-  EditOperation,
   PreparedPatch,
   PreparedTransaction,
   PrepareEditInput,
+  ReplaceLinesOperation,
 } from '../../types/edit.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
@@ -24,56 +28,89 @@ import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
 import { toAbs, toRel } from '../../utils/path.js'
 import { assertWellFormedProjectText, countChangedLines } from '../../utils/text.js'
+import { operationPath, withIntentMetadata } from '../../utils/transactions/edit-intents.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
+import { stagedContentAfter, withoutStagedOffsets } from '../../utils/transactions/patch-chain.js'
 import { assertEditsReadOriginal, canRevertToOriginal } from '../../utils/transactions/patch-ownership.js'
-import { revisionMismatch } from '../../utils/transactions/transaction-errors.js'
+import { recoveryRead, revisionMismatch } from '../../utils/transactions/transaction-errors.js'
 
-import { stagedContentAfter, withoutStagedOffsets } from './TransactionOverlay.js'
-interface TransactionPlannerDependencies {
+/** 规划要内核注入的东西：根目录、策略、读快照的文件端口，以及补全快照、查目标、跑输入管线、造 adapter、选补丁策略的回调。 */
+export interface TransactionPlannerDependencies {
+  /** 项目根目录的绝对路径；路径进事务前按它规范成根相对形式。 */
   readonly root: string
+  /** 内核策略：revision 检查、事务规模上限、受保护与生成文件名单都从这里读。 */
   readonly policy: CorePolicy
+  /** 读文件快照的端口（带不带正文由第二个参数决定）。 */
   readonly store: Pick<ProjectFileAccess, 'snapshot'>
+  /** 给快照补上 adapter 等信息后返回。 */
   readonly enrichSnapshot: (snapshot: FileSnapshot) => Promise<FileSnapshot>
+  /** 按 targetId 取之前解析好的目标；没给或找不到返回 undefined。 */
   readonly getTarget: (targetId?: string) => ResolvedTarget | undefined
+  /** 让 prepare 输入先过插件登记的 prepare.input 管线。 */
   readonly transform: (input: PrepareEditInput) => Promise<PrepareEditInput>
+  /** 为一个文件快照创建能处理它的 adapter，按优先级排好。 */
   readonly createAdapters: (snapshot: FileSnapshot) => Promise<FileAdapter[]>
+  /** 选第一个能处理这条意图的补丁策略；没有能处理的抛 NOT_SUPPORTED。 */
   readonly selectStrategy: (input: PatchStrategyInput) => PatchStrategy
 }
 
+/** 准备事务时的选项：amend 用它从已暂存事务的重放结果起步。 */
+export interface TransactionPlannerPrepareOptions {
+  /** 已暂存的路径正文（null 表示已删除）；后续操作基于它生成补丁，同一路径的补丁首尾相接。 */
+  contentOverlay?: Map<string, StagedFileContent>
+  /** 已暂存路径的文件属性（权限、编码），与 contentOverlay 配套。 */
+  attributeOverlay?: Map<string, FileAttributes>
+  /** 为 'none' 时去掉每个补丁的 baseRevision：应用时不再按磁盘 revision 核对这些补丁。 */
+  forcePatchBaseRevision?: 'none'
+}
+
 /**
- * 取出编辑原语作用的文件路径。`rename_file` 用 `from`/`to` 而非 `path`；符号类与 `custom`
- * 原语本身不带路径，靠 `targetId` 反查——所以这里返回缺席是正常路径，不是错误。
+ * 根据版本化快照把编辑意图变成补丁；不持有事务仓库，不写文件。实例由内核持有，一个内核一份。
+ *
+ * 预期内的失败都抛 ProjectError：revision 已变化抛 BASE_REVISION_MISMATCH，超出事务规模抛 SCOPE_VIOLATION，
+ * 碰受保护文件抛 PROTECTED_FILE，碰生成文件抛 GENERATED_FILE；单个操作失败时消息前缀「第 N 个编辑操作失败」，
+ * details 带操作序号、路径、stage: 'prepare'、written: false 与回读建议 recovery。adapter、补丁策略抛出的其他错误原样抛出。
  */
-/** 编辑失败后的回读建议：知道出错行时只读附近几行。 */
-function recoveryRead(path: string, line: Optional<number>) {
-  if (!line) return { tool: 'project:read', input: { path, maxChars: 12000 } }
-  return {
-    tool: 'project:read',
-    input: { path, range: { startLine: Math.max(1, line - 3), endLine: line + 6 }, maxChars: 12000 },
-  }
+export interface TransactionPlannerApi {
+  /** 用给定正文（和文件属性）造该路径的暂存快照：revision 带 staged: 前缀，编码按 UTF-8 记。 */
+  snapshotWithContent(pathValue: string, content: string, attributes?: FileAttributes): Promise<FileSnapshot>
+  /**
+   * 准备一个事务：输入先过 prepare.input 管线；每条操作按顺序生成补丁（文件 adapter 优先，其次补丁策略），
+   * 同一路径的补丁首尾相接；首次触碰的路径核对 base revision；最后汇总净变化并核对事务规模。
+   * 返回 status 为 prepared 的事务（带新事务号和基准快照），不写盘、不入库。
+   */
+  prepareTransaction(input: PrepareEditInput, options?: TransactionPlannerPrepareOptions): Promise<PreparedTransaction>
+  /**
+   * 汇总补丁的净变化：同一文件的多个补丁按「事务前 → 最终内容」重算一份 diff（单补丁文件沿用补丁自带的 diff），
+   * 算出改动文件、改动行数与风险；单个文件改动行数超过策略上限抛 SCOPE_VIOLATION。
+   */
+  summarizePatches(patches: readonly PreparedPatch[]): Pick<PreparedTransaction, 'changedFiles' | 'diff' | 'changedLines' | 'risk'>
+  /** 事务规模与受保护、生成文件的唯一判定点：prepare 与 amend 都走它，超出文件数或行数上限、碰受保护或生成文件都抛出。 */
+  assertScopeWithinPolicy(changedFiles: readonly string[], changedLines: number): void
+  /**
+   * 用最新快照重放补丁记下的原始意图，得到接在新内容上的补丁（保留补丁号，metadata 记下 rebase 来源）。
+   * 只有文本定位类操作能重放；目标不是可读文本文件、重放出多个补丁或换了路径、重放失败都返回 null，不抛出。
+   */
+  tryRebasePatch(patchValue: PreparedPatch, currentSnapshot: FileSnapshot): Promise<Nullable<PreparedPatch>>
 }
 
-function operationPath(operation: EditOperation): string | undefined {
-  if (operation.type === 'rename_file') return operation.from
-  return 'path' in operation ? operation.path : undefined
-}
+export class TransactionPlanner implements TransactionPlannerApi {
+  /** 能在 apply 队列里对最新内容重放的操作：都靠文本、锚点或符号定位，不依赖事务前的行号坐标。 */
+  private static readonly QueueRebaseFriendlyOperations: ReadonlySet<string> = new Set([
+    'replace_text',
+    'delete_text',
+    'replace_symbol',
+    'insert_before_symbol',
+    'insert_after_symbol',
+    'insert_around_symbol',
+    'add_import',
+    'remove_import',
+    'append_text',
+    'prepend_text',
+    'insert_text_at_anchor',
+  ])
 
-const QueueRebaseFriendlyOperations = new Set<string>([
-  'replace_text',
-  'delete_text',
-  'replace_symbol',
-  'insert_before_symbol',
-  'insert_after_symbol',
-  'insert_around_symbol',
-  'add_import',
-  'remove_import',
-  'append_text',
-  'prepend_text',
-  'insert_text_at_anchor',
-])
-/** 根据版本化快照生成补丁；不持有事务仓储，不写文件。 */
-export class TransactionPlanner {
-  constructor(private readonly dependencies: TransactionPlannerDependencies) {}
+  public constructor(private readonly dependencies: TransactionPlannerDependencies) {}
 
   /**
    * 事务视角下某路径的当前快照：本事务已暂存的内容优先（`null` 读成不存在），首次触碰才读磁盘。
@@ -151,12 +188,7 @@ export class TransactionPlanner {
 
   public async prepareTransaction(
     input: PrepareEditInput,
-    options: {
-      contentOverlay?: Map<string, StagedFileContent>
-      attributeOverlay?: Map<string, FileAttributes>
-      forcePatchBaseRevision?: 'none'
-      store?: boolean
-    } = {},
+    options: TransactionPlannerPrepareOptions = {},
   ): Promise<PreparedTransaction> {
     // 从文件系统角度看，prepare 只生成补丁预览，不写盘。
     const processed = await this.dependencies.transform(input)
@@ -344,7 +376,7 @@ export class TransactionPlanner {
           stagedByPath.set(patchValue.path, stagedContentAfter(patchValue))
           attributesByPath.set(patchValue.path, patchFileAttributes(patchValue))
         }
-        patches.push(...this.withIntentMetadata(chainedPatches, intent))
+        patches.push(...withIntentMetadata(chainedPatches, intent))
       } catch (error) {
         if (!(error instanceof ProjectError)) throw error
         const path = operationPath(intent.operation)
@@ -495,23 +527,6 @@ export class TransactionPlanner {
     }
   }
 
-  private withIntentMetadata(patches: PreparedPatch[], intent: EditIntent): PreparedPatch[] {
-    return patches.map((patchValue) => ({
-      ...patchValue,
-      metadata: {
-        ...(patchValue.metadata ?? {}),
-        // 编译后的编辑固定于原版本。补丁已存储修改前后的完整源码，
-        // 此处仅保留审计元数据，避免在每份持久化回执中重复正文。
-        ...(intent.operation.type === 'replace_content'
-          ? { intentOperationType: intent.operation.type }
-          : { intentOperation: intent.operation }),
-        intentConstraints: intent.constraints,
-        intentReason: intent.reason,
-        intentTargetId: intent.targetId,
-      },
-    }))
-  }
-
   public async tryRebasePatch(
     patchValue: PreparedPatch,
     currentSnapshot: FileSnapshot,
@@ -525,7 +540,7 @@ export class TransactionPlanner {
         }
       | undefined
     const operation = metadata?.intentOperation
-    if (!operation || !QueueRebaseFriendlyOperations.has(operation.type)) return null
+    if (!operation || !TransactionPlanner.QueueRebaseFriendlyOperations.has(operation.type)) return null
     if (!currentSnapshot.exists || currentSnapshot.isDirectory || currentSnapshot.isBinary)
       return null
 

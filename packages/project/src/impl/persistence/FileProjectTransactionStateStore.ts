@@ -1,3 +1,8 @@
+/**
+ * 事务状态文件：`FileProjectTransactionStateStore`。接口 `FileProjectTransactionStateStoreApi` 与构造参数 `FileProjectTransactionStateStoreOptions` 在本文件的类上方。
+ * 状态的格式版本与逐项校验在 `utils/transactions/transaction-state.ts`，防护上限在 `ProjectTuning.persistence`。
+ */
+
 import { randomUUID } from 'node:crypto'
 import {
   closeSync,
@@ -15,303 +20,51 @@ import {
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-import {
-  isArray,
-  isBoolean,
-  isFiniteNumber,
-  isNumber,
-  isRecord,
-  isString,
-  isTrue,
-  isUndefined,
-  toOptional,
-} from '@velaros-ai/core'
+import { isUndefined, toOptional } from '@velaros-ai/core'
 
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
-import type { ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
-import { ProjectError } from '../../utils/errors.js'
-import { decodeProjectTextBuffer } from '../../utils/text.js'
-import { isProjectTextEncoding } from '../../utils/text.js'
-import { createsMissingFile } from '../../utils/transactions/patch-ownership.js'
-import { isDeletePatch } from '../transactions/TransactionOverlay.js'
+import type { ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot, StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
+import { assertTransactionStateSize, assertTransactionStateSnapshot, cloneTransactionState, invalidTransactionState, TransactionStateFormatVersions } from '../../utils/transactions/transaction-state.js'
 
-const StateFormatVersion = 2
-const MaximumStateBytes = 256 * 1024 * 1024
-const MaximumTransactions = 1000
-const MaximumPatchesPerTransaction = 10_000
-const MaximumChangedFilesPerTransaction = 10_000
-const MaximumContentBytes = 16 * 1024 * 1024
-const MaximumIdentifierBytes = 512
-const MaximumPathBytes = 16 * 1024
-
+/** 事务状态文件的构造参数。 */
 export interface FileProjectTransactionStateStoreOptions {
-  /** Host-owned path outside the project tree. */
+  /** 状态文件路径：宿主私有、在项目目录树之外。 */
   readonly path: string
-  /** Canonical project root this state is allowed to control. */
+  /** 这份状态允许管的项目根（规范化后的绝对路径）；读回的状态根目录对不上就拒绝加载。 */
   readonly root: string
 }
 
-function fail(message: string): never {
-  throw new ProjectError(
-    'TRANSACTION_RECOVERY_CONFLICT',
-    `Invalid project transaction state: ${message}`,
-    { stateValidationFailure: message },
-    '请保全事务状态文件和项目目录，不要删除或重写任一侧；先确认损坏来源再人工恢复。',
-  )
-}
-
-function boundedString(value: unknown, maximum: number, label: string): asserts value is string {
-  if (!isString(value) || new TextEncoder().encode(value).byteLength > maximum) fail(label)
-}
-
-function optionalBoundedString(value: unknown, maximum: number, label: string): void {
-  if (!isUndefined(value)) boundedString(value, maximum, label)
-}
-
-function isRisk(value: unknown): boolean {
-  return value === 'low' || value === 'medium' || value === 'high'
-}
-
-function assertStringArray(
-  value: unknown,
-  maximum: number,
-  label: string,
-): asserts value is string[] {
-  if (!isArray(value) || value.length > maximum) fail(label)
-  for (const item of value) boundedString(item, MaximumPathBytes, label)
-}
-
-function assertPatch(value: unknown): void {
-  if (!isRecord(value)) fail('patch must be an object')
-  boundedString(value.patchId, MaximumIdentifierBytes, 'patch id')
-  boundedString(value.strategyId, MaximumIdentifierBytes, 'patch strategy id')
-  boundedString(value.path, MaximumPathBytes, 'patch path')
-  optionalBoundedString(value.baseRevision, MaximumIdentifierBytes, 'patch base revision')
-  optionalBoundedString(value.oldContent, MaximumContentBytes, 'patch old content')
-  optionalBoundedString(value.newContent, MaximumContentBytes, 'patch new content')
-  boundedString(value.diff, MaximumContentBytes, 'patch diff')
-  if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0)
-    fail('patch changed lines')
-  if (!isRisk(value.risk)) fail('patch risk')
-  if (!isUndefined(value.metadata) && !isRecord(value.metadata)) fail('patch metadata')
-  if (isRecord(value.metadata)) assertOptionalFileMode(value.metadata.fileMode)
-}
-
-function assertOptionalFileMode(value: unknown): void {
-  if (!isUndefined(value) && (!isNumber(value) || !Number.isInteger(value) || value < 0 || value > 0o777)) fail('file mode')
-}
-
-function assertFileSnapshot(value: unknown): void {
-  if (!isRecord(value)) fail('base snapshot must be an object')
-  boundedString(value.path, MaximumPathBytes, 'base snapshot path')
-  boundedString(value.revision, MaximumIdentifierBytes, 'base snapshot revision')
-  if (!isBoolean(value.exists) || !isBoolean(value.isDirectory) || !isBoolean(value.isBinary)) {
-    fail('base snapshot flags')
-  }
-  optionalBoundedString(value.content, MaximumContentBytes, 'base snapshot content')
-  assertOptionalFileMode(value.mode)
-}
-
-function assertStoredTransaction(value: unknown): asserts value is StoredTransaction {
-  if (!isRecord(value)) fail('transaction must be an object')
-  boundedString(value.transactionId, MaximumIdentifierBytes, 'transaction id')
-  if (!['prepared', 'validated', 'applied', 'rolled_back'].includes(String(value.status)))
-    fail('transaction status')
-  if (!isArray(value.patches) || value.patches.length > MaximumPatchesPerTransaction)
-    fail('transaction patches')
-  for (const patch of value.patches) assertPatch(patch)
-  assertStringArray(
-    value.changedFiles,
-    MaximumChangedFilesPerTransaction,
-    'transaction changed files',
-  )
-  boundedString(value.diff, MaximumContentBytes, 'transaction diff')
-  if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0)
-    fail('transaction changed lines')
-  if (!isRisk(value.risk)) fail('transaction risk')
-  if (!isFiniteNumber(value.createdAt)) fail('transaction createdAt')
-  if (!isUndefined(value.appliedAt) && !isFiniteNumber(value.appliedAt)) {
-    fail('transaction appliedAt')
-  }
-  const hasAppliedAt = !isUndefined(value.appliedAt)
-  const expectsAppliedAt = value.status === 'applied' || value.status === 'rolled_back'
-  if (hasAppliedAt !== expectsAppliedAt) fail('transaction status/appliedAt mismatch')
-  if (
-    !isArray(value.baseSnapshots) ||
-    value.baseSnapshots.length > MaximumChangedFilesPerTransaction
-  ) {
-    fail('transaction base snapshots')
-  }
-  for (const snapshot of value.baseSnapshots) assertFileSnapshot(snapshot)
-}
-
-function assertProjection(value: unknown): asserts value is ProjectChangeRecordInput {
-  if (!isRecord(value)) fail('change projection must be an object')
-  boundedString(value.transactionId, MaximumIdentifierBytes, 'projection transaction id')
-  if (
-    ![
-      'prepared',
-      'amended',
-      'validated',
-      'validation_failed',
-      'applied',
-      'rolled_back',
-      'discarded',
-    ].includes(String(value.lifecycle))
-  ) {
-    fail('projection lifecycle')
-  }
-  optionalBoundedString(value.reason, MaximumContentBytes, 'projection reason')
-  if (!isArray(value.intents) || value.intents.length > MaximumPatchesPerTransaction)
-    fail('projection intents')
-  if (!isArray(value.patches) || value.patches.length > MaximumPatchesPerTransaction)
-    fail('projection patches')
-  assertStringArray(
-    value.changedFiles,
-    MaximumChangedFilesPerTransaction,
-    'projection changed files',
-  )
-  boundedString(value.diff, MaximumContentBytes, 'projection diff')
-  if (!Number.isSafeInteger(value.changedLines) || (value.changedLines as number) < 0)
-    fail('projection changed lines')
-  if (!isRisk(value.risk)) fail('projection risk')
-  if (!isArray(value.revisions) || value.revisions.length > MaximumChangedFilesPerTransaction)
-    fail('projection revisions')
-  if (!isFiniteNumber(value.createdAt)) fail('projection createdAt')
-  if (!isUndefined(value.appliedAt) && !isFiniteNumber(value.appliedAt)) {
-    fail('projection appliedAt')
-  }
-}
-
-function assertFileState(
-  value: unknown,
-  label: string,
-): asserts value is ProjectTransactionFileState {
-  if (!isRecord(value) || !isBoolean(value.exists)) fail(label)
-  optionalBoundedString(value.content, MaximumContentBytes, label)
-  assertStoredBytes(value.bytes, value.content)
-  if (value.exists && !isString(value.content)) fail(label)
-  if (!value.exists && (!isUndefined(value.content) || !isUndefined(value.bytes))) fail(label)
-}
-
-function assertStoredBytes(value: unknown, content: unknown): void {
-  if (isUndefined(value)) return
-  boundedString(value, Math.ceil(MaximumContentBytes / 3) * 4, 'raw bytes size')
-  const bytes = Buffer.from(value, 'base64')
-  if (bytes.toString('base64') !== value || decodeProjectTextBuffer(bytes) !== content) fail('raw bytes do not match text')
-}
-
-function assertBytePlans(value: unknown, transactions: ReadonlyMap<string, StoredTransaction>): void {
-  if (isUndefined(value)) return
-  if (!isArray(value) || value.length > MaximumTransactions) fail('byte plans')
-  const seen = new Set<string>()
-  for (const plan of value) {
-    if (!isRecord(plan) || !isString(plan.transactionId) || seen.has(plan.transactionId)) fail('byte plan identity')
-    seen.add(plan.transactionId)
-    const transaction = transactions.get(plan.transactionId)
-    if (!transaction || !isArray(plan.patches) || plan.patches.length !== transaction.patches.length) fail('byte plan transaction')
-    const previous = new Map<string, string | undefined>()
-    for (const [index, entry] of plan.patches.entries()) {
-      const patch = transaction.patches[index]!
-      if (!isRecord(entry) || entry.patchId !== patch.patchId || entry.path !== patch.path) fail('byte plan patch')
-      const unavailable = isTrue(entry.beforeUnavailable)
-      if (!isUndefined(entry.beforeUnavailable) && !unavailable) fail('byte plan unavailable marker')
-      if (unavailable && (createsMissingFile(patch) || isString(patch.oldContent) || !isUndefined(entry.before))) fail('byte plan unavailable original')
-      if (!unavailable && createsMissingFile(patch) === !isUndefined(entry.before)) fail('byte plan before presence')
-      if (isDeletePatch(patch) === !isUndefined(entry.after)) fail('byte plan after presence')
-      if (previous.has(patch.path) && (unavailable || previous.get(patch.path) !== entry.before)) fail('byte plan chain')
-      previous.set(patch.path, entry.after as string | undefined)
-      assertStoredBytes(entry.before, patch.oldContent ?? '')
-      assertStoredBytes(entry.after, patch.newContent ?? '')
-    }
-  }
-}
-
-function assertPending(value: unknown): asserts value is ProjectTransactionPendingOperation {
-  if (!isRecord(value)) fail('pending operation')
-  if (value.kind !== 'apply' && value.kind !== 'rollback') fail('pending operation kind')
-  boundedString(value.transactionId, MaximumIdentifierBytes, 'pending transaction id')
-  if (!['prepared', 'validated', 'applied', 'rolled_back'].includes(String(value.previousStatus))) {
-    fail('pending previous status')
-  }
-  if (!isArray(value.restore) || value.restore.length > MaximumChangedFilesPerTransaction)
-    fail('pending restore plan')
-  const restorePaths = new Set<string>()
-  for (const entry of value.restore) {
-    assertFileState(entry, 'pending restore entry')
-    assertOptionalFileMode((entry as { mode?: unknown }).mode)
-    const encoding = (entry as { encoding?: unknown }).encoding
-    if (!isUndefined(encoding) && !isProjectTextEncoding(encoding)) fail('pending restore encoding')
-    const pathValue = (entry as { path?: unknown }).path
-    boundedString(pathValue, MaximumPathBytes, 'pending restore path')
-    if (restorePaths.has(pathValue)) fail('duplicate pending restore path')
-    restorePaths.add(pathValue)
-    const ownedStates = (entry as { ownedStates?: unknown }).ownedStates
-    if (
-      !isArray(ownedStates) ||
-      ownedStates.length === 0 ||
-      ownedStates.length > MaximumPatchesPerTransaction
-    ) {
-      fail('pending owned states')
-    }
-    for (const state of ownedStates) assertFileState(state, 'pending owned state')
-  }
-}
-
-function assertSnapshot(
-  value: unknown,
-  root: string,
-): asserts value is ProjectTransactionStateSnapshot {
-  if (!isRecord(value)) fail('root object')
-  if (value.formatVersion !== 1 && value.formatVersion !== StateFormatVersion) fail('format version')
-  if (value.formatVersion === 1 && !isUndefined(value.bytePlans)) fail('byte plans require state version 2')
-  if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) fail('revision')
-  if (value.root !== root) fail('project root mismatch')
-  if (!isArray(value.transactions) || value.transactions.length > MaximumTransactions)
-    fail('transactions')
-  const transactionsById = new Map<string, StoredTransaction>()
-  for (const transaction of value.transactions) {
-    assertStoredTransaction(transaction)
-    if (transactionsById.has(transaction.transactionId)) fail('duplicate transaction id')
-    transactionsById.set(transaction.transactionId, transaction)
-  }
-  assertBytePlans(value.bytePlans, transactionsById)
-  if (!isArray(value.projections) || value.projections.length > MaximumTransactions)
-    fail('projections')
-  const projectionIds = new Set<string>()
-  for (const projection of value.projections) {
-    assertProjection(projection)
-    if (projectionIds.has(projection.transactionId)) fail('duplicate projection transaction id')
-    projectionIds.add(projection.transactionId)
-  }
-  const pending = value.pending
-  if (!isUndefined(pending)) assertPending(pending)
-
-  if (pending) {
-    const transaction = transactionsById.get(pending.transactionId)
-    if (!transaction) fail('pending transaction is missing')
-    if (transaction.status !== pending.previousStatus) fail('pending transaction status mismatch')
-    const changedFiles = new Set(transaction.changedFiles)
-    if (
-      pending.restore.length !== changedFiles.size ||
-      pending.restore.some((entry) => !changedFiles.has(entry.path))
-    ) {
-      fail('pending restore paths do not match transaction')
-    }
-  }
-}
-
-function cloneSnapshot(value: ProjectTransactionStateSnapshot): ProjectTransactionStateSnapshot {
-  return JSON.parse(JSON.stringify(value)) as ProjectTransactionStateSnapshot
-}
-
 /**
- * One host-owned, atomically replaced transaction snapshot. Project files and
- * this snapshot are not one filesystem transaction; `pending.restore` is the
- * durable write-ahead boundary that makes an interrupted apply/rollback
- * recoverable on the next owner start.
+ * 宿主私有、整份原子替换的事务状态：内存事务、变更投影、字节计划与未完成操作的恢复点，内核重启后据此恢复。
+ *
+ * 项目文件与这份状态不在同一个文件系统事务里；`pending.restore` 是先落盘的恢复边界，apply、rollback 中途被打断后，
+ * 下一次持有者启动时据此恢复。读回和写入都逐项校验，任何一项不合规抛 TRANSACTION_RECOVERY_CONFLICT（按状态文件损坏处理）。
+ * 实例由内核在宿主给了 transactionStatePath 时创建，一个内核一份。
  */
-export class FileProjectTransactionStateStore {
+export interface FileProjectTransactionStateStoreApi {
+  /** 状态文件的绝对路径。 */
+  readonly path: string
+  /** 这份状态绑定的项目根（绝对路径）。 */
+  readonly root: string
+  /** 当前状态的深拷贝（文件不存在时是 revision 0 的空状态）。 */
+  snapshot(): ProjectTransactionStateSnapshot
+  /**
+   * 写入下一版状态（revision 加一，按现行格式版本）：先校验整份状态与大小上限，再原子替换文件（临时文件 fsync 后改名，POSIX 上再刷父目录），
+   * 返回写后状态的深拷贝。校验不过抛 TRANSACTION_RECOVERY_CONFLICT，写盘失败原样抛出，两种情况文件都保持原样。
+   */
+  commit(input: {
+    readonly transactions: readonly StoredTransaction[]
+    readonly projections: readonly ProjectChangeRecordInput[]
+    readonly pending?: ProjectTransactionPendingOperation
+    readonly bytePlans?: readonly TransactionBytePlan[]
+  }): ProjectTransactionStateSnapshot
+}
+
+export class FileProjectTransactionStateStore implements FileProjectTransactionStateStoreApi {
+  /** 状态文件所在目录的权限：只有宿主用户能进。 */
+  private static readonly DirectoryMode = 0o700
+  /** 状态文件的权限：只有宿主用户能读写。 */
+  private static readonly FileMode = 0o600
   public readonly path: string
   public readonly root: string
   private current: ProjectTransactionStateSnapshot
@@ -319,13 +72,13 @@ export class FileProjectTransactionStateStore {
   public constructor(options: FileProjectTransactionStateStoreOptions) {
     this.path = resolve(options.path)
     this.root = resolve(options.root)
-    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
+    mkdirSync(dirname(this.path), { recursive: true, mode: FileProjectTransactionStateStore.DirectoryMode })
     this.current = this.load()
   }
 
   private empty(): ProjectTransactionStateSnapshot {
     return {
-      formatVersion: StateFormatVersion,
+      formatVersion: TransactionStateFormatVersions.current,
       revision: 0,
       root: this.root,
       transactions: [],
@@ -336,15 +89,15 @@ export class FileProjectTransactionStateStore {
   private load(): ProjectTransactionStateSnapshot {
     if (!existsSync(this.path)) return this.empty()
     const metadata = lstatSync(this.path)
-    if (!metadata.isFile() || metadata.isSymbolicLink()) fail('state path must be a regular file')
-    if (statSync(this.path).size > MaximumStateBytes) fail('state file exceeds 256 MiB')
+    if (!metadata.isFile() || metadata.isSymbolicLink()) invalidTransactionState('state path must be a regular file')
+    assertTransactionStateSize(statSync(this.path).size)
     const parsed: unknown = JSON.parse(readFileSync(this.path, 'utf8'))
-    assertSnapshot(parsed, this.root)
-    return cloneSnapshot(parsed)
+    assertTransactionStateSnapshot(parsed, this.root)
+    return cloneTransactionState(parsed)
   }
 
   public snapshot(): ProjectTransactionStateSnapshot {
-    return cloneSnapshot(this.current)
+    return cloneTransactionState(this.current)
   }
 
   public commit(input: {
@@ -354,7 +107,7 @@ export class FileProjectTransactionStateStore {
     readonly bytePlans?: readonly TransactionBytePlan[]
   }): ProjectTransactionStateSnapshot {
     const next: ProjectTransactionStateSnapshot = {
-      formatVersion: StateFormatVersion,
+      formatVersion: TransactionStateFormatVersions.current,
       revision: this.current.revision + 1,
       root: this.root,
       transactions: input.transactions,
@@ -363,12 +116,11 @@ export class FileProjectTransactionStateStore {
       bytePlans: input.bytePlans,
     }
     const source = JSON.stringify(next)
-    if (new TextEncoder().encode(source).byteLength > MaximumStateBytes)
-      fail('state file exceeds 256 MiB')
+    assertTransactionStateSize(new TextEncoder().encode(source).byteLength)
     const parsed: unknown = JSON.parse(source)
-    assertSnapshot(parsed, this.root)
+    assertTransactionStateSnapshot(parsed, this.root)
     this.writeAtomic(source)
-    this.current = cloneSnapshot(parsed)
+    this.current = cloneTransactionState(parsed)
     return this.snapshot()
   }
 
@@ -380,7 +132,7 @@ export class FileProjectTransactionStateStore {
       descriptor = openSync(
         temporaryPath,
         constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
-        0o600,
+        FileProjectTransactionStateStore.FileMode,
       )
       writeFileSync(descriptor, source, 'utf8')
       fsyncSync(descriptor)
