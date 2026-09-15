@@ -3,7 +3,7 @@
  * 登记每个沙箱和它专属的命令执行器（约束钉死在镜像根），镜像、清单、差量、落回的纯函数在 `utils/sandbox.ts`。
  */
 
-import { lstat, mkdir, rm, stat } from 'node:fs/promises'
+import { lstat, mkdir, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
 import { isEmpty, isPresent, Log } from '@velaros-ai/core'
@@ -17,7 +17,7 @@ import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandbox
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { isPathInsideRoot, realPathForSafety } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
-import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, selectSandboxChanges, stampOfEntry } from '../utils/sandbox.js'
+import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, selectSandboxChanges, stampOfEntry } from '../utils/sandbox.js'
 
 import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
@@ -146,7 +146,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
       log.info('sandbox created', { id, source: realSource, files: record.fileCount, bytes: record.bytes })
       return record
     } catch (error) {
-      await rm(directory, { recursive: true, force: true })
+      await removeSandboxDirectory(directory)
       throw error
     }
   }
@@ -177,14 +177,12 @@ export class SystemSandboxes implements SystemSandboxesApi {
   public async discard(sandboxId: string): Promise<SystemSandboxDiscardResult> {
     // 递归删除只许删基目录下面正好一层、不是符号链接的沙箱目录：核对不过就拒绝，这是整仓误删事故的直接教训。
     const real = await sandboxDirectoryOf(this.baseDir, sandboxId)
-    const entry = this.entries.get(sandboxId)
-    if (entry) {
-      await entry.runner.dispose()
-      this.entries.delete(sandboxId)
-    }
+    // 先停掉镜像里还在跑的进程再删；删成功了才注销，删不掉时沙箱照样登记着，还能再丢一次。
+    await this.entries.get(sandboxId)?.runner.dispose()
     const existing = await stat(real).catch(() => null)
+    if (existing) await removeSandboxDirectory(real)
+    this.entries.delete(sandboxId)
     if (!existing) return { sandboxId, removed: false }
-    await rm(real, { recursive: true, force: true })
     log.info('sandbox discarded', { id: sandboxId })
     return { sandboxId, removed: true }
   }

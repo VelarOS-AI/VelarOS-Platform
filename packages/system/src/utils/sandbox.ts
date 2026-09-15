@@ -113,7 +113,8 @@ async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boo
 }
 
 /**
- * 递归镜像源目录到镜像根：文件按写时复制（不支持的文件系统退回普通复制），忽略的目录按 ignored 处理，忽略的文件不复制。
+ * 递归镜像源目录到镜像根：文件按写时复制（不支持的文件系统退回普通复制），忽略的目录按 ignored 处理（copy 时连里面的东西整个复制过来），
+ * 忽略目录之外被忽略的文件不复制。源目录里主人不可写的目录先按可写建出来、拷完再改回原来的权限位。
  * 返回两张印记表：files 是源目录里每个文件与符号链接的印记，mirror 是镜像里每个条目（含链接过去的忽略目录）的印记；
  * 另外给出镜像里每个仓库的配置文件（剪推送用），以及没放进镜像的 `.git` 链接文件——它们指向源目录外的真实仓库，放进来镜像里的 git 就会直接读写那个仓库。
  */
@@ -133,9 +134,12 @@ export async function mirrorTree(
   const detachedGitLinks: string[] = []
   let bytes = 0
   let count = 0
-  const pending: string[] = ['']
+  // 待遍历的目录；insideCopiedIgnored 为真表示它在 ignored=copy 整个复制过来的忽略目录里，里面的东西不再按 gitignore 跳过。
+  const pending: Array<{ relative: string; insideCopiedIgnored: boolean }> = [{ relative: '', insideCopiedIgnored: false }]
+  // 源目录里主人不可写的目录：先建成可写的好往里拷，全部拷完再改回原来的权限位。
+  const lockedDirectories: Array<{ path: string; mode: number }> = []
   while (!isEmpty(pending)) {
-    const relative = pending.pop()!
+    const { relative, insideCopiedIgnored } = pending.pop()!
     const entries = await readdir(join(source, relative), { withFileTypes: true })
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))
     for (const entry of entries) {
@@ -143,7 +147,7 @@ export async function mirrorTree(
       const sourcePath = join(source, relativePath)
       const mirrorPath = join(root, relativePath)
       const stats = await lstat(sourcePath)
-      const ignored = await options.shouldSkip(sourcePath, entry.isDirectory())
+      const ignored = !insideCopiedIgnored && await options.shouldSkip(sourcePath, entry.isDirectory())
       if (entry.isSymbolicLink()) {
         if (ignored) continue
         const target = await readlink(sourcePath)
@@ -163,8 +167,10 @@ export async function mirrorTree(
             continue
           }
         }
-        await mkdir(mirrorPath, { mode: stats.mode & 0o777 })
-        pending.push(relativePath)
+        const mode = stats.mode & 0o777
+        await mkdir(mirrorPath, { mode: mode | 0o700 })
+        if ((mode & 0o700) !== 0o700) lockedDirectories.push({ path: mirrorPath, mode })
+        pending.push({ relative: relativePath, insideCopiedIgnored: insideCopiedIgnored || ignored })
         continue
       }
       if (!entry.isFile() || ignored) continue
@@ -174,8 +180,8 @@ export async function mirrorTree(
       }
       count += 1
       bytes += stats.size
-      if (count > options.limits.files) throw new AppError('VALIDATION', `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录，或者加 .gitignore 让构建产物不进镜像`)
-      if (bytes > options.limits.bytes) throw new AppError('VALIDATION', `源目录超过 ${options.limits.bytes} 字节；换一个小一点的目录，或者加 .gitignore 让构建产物不进镜像`)
+      if (count > options.limits.files) throw new AppError('VALIDATION', `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录、加 .gitignore 让构建产物不进镜像，或者 ignored 别用 copy`)
+      if (bytes > options.limits.bytes) throw new AppError('VALIDATION', `源目录超过 ${options.limits.bytes} 字节；换一个小一点的目录、加 .gitignore 让构建产物不进镜像，或者 ignored 别用 copy`)
       await copyFile(sourcePath, mirrorPath, constants.COPYFILE_FICLONE)
       await chmod(mirrorPath, stats.mode & 0o777)
       files[relativePath] = stampOfEntry(stats)
@@ -183,7 +189,30 @@ export async function mirrorTree(
       if (isGitConfigPath(relativePath)) gitConfigs.push(relativePath)
     }
   }
+  for (const { path, mode } of lockedDirectories.reverse()) await chmod(path, mode)
   return { files, mirror, bytes, linkedDirectories, gitConfigs, detachedGitLinks }
+}
+
+/**
+ * 递归删除一个已经核对过的沙箱目录：先直接删；碰到主人不可写的目录（go 模块缓存、镜像里 chmod -R a-w 过的）删不掉时，
+ * 把整棵树里的目录都改成主人可读写可进（不跟随符号链接）再删一次。
+ */
+export async function removeSandboxDirectory(directory: string): Promise<void> {
+  try {
+    await rm(directory, { recursive: true, force: true })
+    return
+  } catch (error) {
+    const code = readErrnoCode(error)
+    if (code !== 'EACCES' && code !== 'EPERM') throw error
+  }
+  const pending = [directory]
+  while (!isEmpty(pending)) {
+    const current = pending.pop()!
+    await chmod(current, 0o700).catch(() => null)
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) if (entry.isDirectory()) pending.push(join(current, entry.name))
+  }
+  await rm(directory, { recursive: true, force: true })
 }
 
 /** 遍历一棵树得到每个文件与符号链接的印记，不跟随符号链接（链接过去的忽略目录因此不会被翻）。 */

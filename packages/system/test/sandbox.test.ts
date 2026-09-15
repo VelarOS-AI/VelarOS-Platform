@@ -118,6 +118,57 @@ describe('rehearsal sandbox', () => {
     }
   })
 
+  test.skipIf(!canConfine)('ignored=copy copies what is inside the ignored directories, while ignored files outside them still stay out', async () => {
+    const source = await makeSource()
+    await mkdir(join(source, 'node_modules', 'dep', 'lib'), { recursive: true })
+    await writeFile(join(source, 'node_modules', 'dep', 'lib', 'deep.js'), 'deep\n')
+    await writeFile(join(source, '.gitignore'), 'node_modules\n.env\n')
+    await writeFile(join(source, '.env'), 'SECRET=1\n')
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({ ignored: 'copy' })
+    try {
+      expect(record.linkedDirectories).toEqual([])
+      expect((await lstat(join(record.root, 'node_modules'))).isSymbolicLink()).toBe(false)
+      expect(await readFile(join(record.root, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('module.exports = 1\n')
+      expect(await readFile(join(record.root, 'node_modules', 'dep', 'lib', 'deep.js'), 'utf8')).toBe('deep\n')
+      expect(existsSync(join(record.root, '.env'))).toBe(false)
+      // 复制过来的依赖在镜像里能改（在镜像里重新构建要用）。
+      const patched = await kernel.runCommand('printf patched > node_modules/dep/index.js', { cwd: record.root })
+      expect(patched.exitCode).toBe(0)
+      expect(await readFile(join(source, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('module.exports = 1\n')
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('read-only directories mirror with their permissions, and a mirror the script made read-only can still be discarded', async () => {
+    const source = await makeSource()
+    await mkdir(join(source, 'vendor'))
+    await writeFile(join(source, 'vendor', 'pinned.txt'), 'pinned\n')
+    await chmod(join(source, 'vendor'), 0o555)
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      expect(await readFile(join(record.root, 'vendor', 'pinned.txt'), 'utf8')).toBe('pinned\n')
+      expect(((await stat(join(record.root, 'vendor'))).mode & 0o777).toString(8)).toBe('555')
+      const locked = await kernel.runCommand('mkdir -p cache/pkg && printf x > cache/pkg/f && chmod -R a-w cache', { cwd: record.root })
+      expect(locked.exitCode).toBe(0)
+      expect(await kernel.discardSandbox(record.id)).toMatchObject({ removed: true })
+      expect(existsSync(join(sandboxBaseDirectory(), record.id))).toBe(false)
+      expect(kernel.listSandboxes()).toEqual([])
+      sandboxId = ''
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await chmod(join(source, 'vendor'), 0o755)
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
   test.skipIf(!canConfine)('commands in the sandbox write inside it, cannot touch the source or the linked dependencies, and use a sandbox-local temp dir', async () => {
     const source = await makeSource()
     const kernel = createLocalSystemKernel({ cwd: source })
