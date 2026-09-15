@@ -130,7 +130,7 @@ export interface ProjectRecodeReceipt {
   unchanged: string[]
 }
 
-/** Coordinates always refer to the immutable source supplied by the resolver. */
+/** 行号或连续闭区间；坐标总是指向 resolver 提供的那份不可变原文。 */
 export type ProjectLineRange = number | readonly [number] | readonly [number, number]
 
 export interface ProjectVisibleCoverage {
@@ -185,7 +185,7 @@ export interface ProjectFileInput {
   actions: readonly ProjectFileAction[]
 }
 
-/** sourceRef follows a file identity through prior plan steps; path names a plan-created file. */
+/** sourceRef 跟随文件身份穿过此前的计划步骤；path 只指本计划新建的文件。 */
 export type ProjectPlanSource = { fileRef: string } | { sourceRef: string } | { path: string }
 export type ProjectPlanFileAction =
   | { op: 'create'; path: string; text: string }
@@ -203,7 +203,7 @@ export interface ProjectChangeApplyInput {
   steps: readonly ProjectChangeStep[]
 }
 
-/** readPath observes destination existence, and returns a revision even for an absent path. */
+/** readPath 观察目标路径存不存在，路径不存在时也返回一个 revision。 */
 export interface ProjectPlannerPath {
   path: string
   revision: string

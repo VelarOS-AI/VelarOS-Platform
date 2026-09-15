@@ -24,13 +24,13 @@ export type EditOperation =
   | JsonPatchOperation
   | CustomEditOperation;
 
-/** Internal planner output. Source equality is checked again while preparing the transaction. */
+/** 编辑计划编译器的内部产物；准备事务时会再核一次原文是否相同。 */
 export interface ReplaceContentOperation {
   type: 'replace_content';
   path: string;
   expectedContent: string;
   content: string;
-  /** Explicit file overwrite is distinct from a compiled local edit for audit and approval. */
+  /** 显式的整体覆盖和编译出来的局部编辑分开记，审计与审批按它区分。 */
   mode?: 'edit' | 'overwrite' | 'guard' | 'recode';
   /** mode=recode 时的目标磁盘编码；正文之外的字节表示由事务字节计划按它重建。 */
   targetEncoding?: ProjectTextEncoding;

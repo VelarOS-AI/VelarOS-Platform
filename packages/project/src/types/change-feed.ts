@@ -38,11 +38,10 @@ export interface ProjectChangePatch {
 }
 
 /**
- * Latest durable projection of one governed project transaction.
+ * 一个受治理项目事务的最新落盘投影。
  *
- * It intentionally omits old/new full file contents and arbitrary transaction
- * metadata. Consumers receive typed intents, reviewable patches and revisions;
- * secrets or host-only bookkeeping do not become an accidental evidence copy.
+ * 有意不带新旧全文和任意的事务元数据：消费方拿到的是有类型的意图、可审阅的补丁和版本，
+ * 密钥或宿主私有的记账不会意外变成一份证据副本。
  */
 export interface ProjectChangeRecord {
   readonly transactionId: string
