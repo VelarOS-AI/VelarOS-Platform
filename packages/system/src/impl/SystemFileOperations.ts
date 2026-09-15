@@ -7,7 +7,7 @@ import { mkdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isArray, isEmpty, isPresent, Log } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isNull, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditProblem, SystemEditResult, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
@@ -72,7 +72,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     let exhaustedAt: Nullable<number> = null
     for (const [index, file] of input.files.entries()) {
       try {
-        if (remaining <= 0 && exhaustedAt === null) exhaustedAt = index
+        if (remaining <= 0 && isNull(exhaustedAt)) exhaustedAt = index
         const result = await this.readOne(file, remaining, ctx)
         remaining -= result.content.length
         files.push(result)
@@ -85,7 +85,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     }
     if (failures.length === input.files.length) throw failures[0]
     const result: SystemReadResult = { files }
-    if (exhaustedAt !== null) result.note = `一次调用最多 ${SystemFileLimits.readChars} 字符，预算在第 ${exhaustedAt + 1} 个文件之前用完，从它起只带位置没有内容；把各自的 range.end 当 offset 再读一次。`
+    if (isNotNull(exhaustedAt)) result.note = `一次调用最多 ${SystemFileLimits.readChars} 字符，预算在第 ${exhaustedAt + 1} 个文件之前用完，从它起只带位置没有内容；把各自的 range.end 当 offset 再读一次。`
     return result
   }
 

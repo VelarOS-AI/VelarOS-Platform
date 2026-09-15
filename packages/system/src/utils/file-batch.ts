@@ -2,7 +2,7 @@
  * 读、看、写都是一批文件：核对一批的条数，造读和看的失败条目，造写的整批失败。
  */
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { SystemEditFailureDetails, SystemEditProblem, SystemFileFailure } from '../contract/files.js'
@@ -38,13 +38,13 @@ export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): A
 }
 
 /** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */
-export function staleProblem(expected: string | undefined, current: Nullable<string>): Nullable<Pick<SystemEditProblem, 'reason' | 'message' | 'currentVersion'>> {
+export function staleProblem(expected: Optional<string>, current: Nullable<string>): Nullable<Pick<SystemEditProblem, 'reason' | 'message' | 'currentVersion'>> {
   if (!isPresent(expected) || expected === current) return null
   return {
     reason: 'stale',
     message: current
       ? `the file changed since version ${expected}; it is now ${current}, read it again before editing`
       : `version ${expected} was given but the file does not exist`,
-    ...(current ? { currentVersion: current } : {}),
+    currentVersion: toOptional(current),
   }
 }
