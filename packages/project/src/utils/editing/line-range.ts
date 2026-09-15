@@ -3,6 +3,7 @@ import { isArray, isNumber, isUndefined } from '@velaros-ai/core'
 import type { ProjectLineRange } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 
+/** 把行范围写法（51、[51]、[42,45]）核对后换成起止行，首尾行都包含在内；写法不合法时拒绝。 */
 export function normalizeProjectLineRange(range: ProjectLineRange): readonly [number, number] {
   const values: readonly number[] = isNumber(range) ? [range] : range
   if (

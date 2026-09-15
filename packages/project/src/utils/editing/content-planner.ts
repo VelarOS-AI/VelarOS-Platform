@@ -3,6 +3,7 @@ import { ProjectError } from '../errors.js'
 
 import { selectProjectMutations } from './select.js'
 
+/** 核对同一原始版本上的拼接互不重叠：替换范围不能交叠，插入点不能落在替换内部；冲突时报出两边的编辑序号。 */
 function assertDisjoint(mutations: readonly ProjectResolvedMutation[], path: string): void {
   const replacements = mutations.filter((change) => change.kind === 'replace').sort((left, right) => left.start - right.start || left.end - right.end)
   for (let index = 1; index < replacements.length; index += 1) {
@@ -20,12 +21,13 @@ function assertDisjoint(mutations: readonly ProjectResolvedMutation[], path: str
   }
 }
 
-/** Resolve first, then splice once: every edit uses original coordinates, even in a large batch. */
+/** 先全部定位再一次拼接：同一文件的每项编辑都用原始坐标，批量再大也不会互相挪位。 */
 export function planProjectFileEdits(view: ProjectEditView, edits: readonly ProjectContentEdit[]): { content: string; mutations: readonly ProjectResolvedMutation[] } {
   const mutations = selectProjectMutations(view, edits)
   return { content: applyProjectMutations(view, mutations), mutations }
 }
 
+/** 按起点排序拼接；同一起点的插入排在替换之前，同类的保持原顺序。 */
 export function orderProjectMutations(mutations: readonly ProjectResolvedMutation[]): ProjectResolvedMutation[] {
   return mutations.map((mutation, order) => ({ mutation, order })).sort((left, right) =>
     left.mutation.start - right.mutation.start ||
@@ -33,7 +35,7 @@ export function orderProjectMutations(mutations: readonly ProjectResolvedMutatio
   ).map(({ mutation }) => mutation)
 }
 
-/** Groups may have different visible windows, but each mutation has already passed its own view's coverage check. */
+/** 把一组已定位的拼接落到原文上；各组的可见窗口可以不同，每项拼接都已按它自己那份视图核对过覆盖范围。 */
 export function applyProjectMutations(view: ProjectEditView, mutations: readonly ProjectResolvedMutation[]): string {
   assertDisjoint(mutations, view.path)
   const ordered = orderProjectMutations(mutations)

@@ -6,7 +6,7 @@ import * as ts from 'typescript'
 import { isEmpty, isFalse, isPresent, isTrue } from '@velaros-ai/core'
 
 import type { AddImportOperation, RemoveImportOperation } from '../../types/edit.js'
-import type { ImportBinding,ImportStyle, NamedSpec, SourceSplice } from '../../types/editing.js'
+import type { ImportBinding, ImportStyle, NamedSpec, SourceSplice } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { parseJsTs } from '../jsts-ast.js'
 
@@ -181,15 +181,18 @@ export function planRemoveImport(
   return removeBinding(sourceFile, holder.declaration, holder.binding)
 }
 
+/** 文件顶层的全部 import 声明，按出现顺序。 */
 function topLevelImports(sourceFile: ts.SourceFile): ts.ImportDeclaration[] {
   return sourceFile.statements.filter(ts.isImportDeclaration)
 }
 
+/** import 声明引的模块名（去掉引号）。 */
 function moduleOf(declaration: ts.ImportDeclaration): string {
   const specifier = declaration.moduleSpecifier
   return ts.isStringLiteral(specifier) ? specifier.text : specifier.getText()
 }
 
+/** 按模块定位的 import 操作必须给出模块名，缺了按入参错误拒绝。 */
 function requireModule(module: Optional<string>, operation: string): string {
   if (!isPresent(module))
     throw new ProjectError(
@@ -253,6 +256,7 @@ function importIdentity(declaration: ts.ImportDeclaration): string {
   ])
 }
 
+/** 解析一项 named 绑定写法（`a`、`a as b`、`type a`），不合法时拒绝。 */
 function parseNamedSpec(text: string): NamedSpec {
   const normalized = text.trim().replace(/\s+/g, ' ')
   const match = NamedSpecPattern.exec(normalized)
@@ -261,19 +265,23 @@ function parseNamedSpec(text: string): NamedSpec {
   return { imported, local: match[3] ?? imported, typeOnly: isPresent(match[1]), text: normalized }
 }
 
+/** named 绑定的判重键：导入名加本地名。 */
 function namedKey(imported: string, local: string): string {
   return `${imported} as ${local}`
 }
 
+/** 源码里一项 named 绑定的判重键。 */
 function elementKey(element: ts.ImportSpecifier): string {
   return namedKey((element.propertyName ?? element.name).text, element.name.text)
 }
 
+/** clause 里 `{ … }` 的各项绑定；不是 named 形式时为空。 */
 function namedElementsOf(clause: ts.ImportClause): readonly ts.ImportSpecifier[] {
   const bindings = clause.namedBindings
   return bindings && ts.isNamedImports(bindings) ? bindings.elements : []
 }
 
+/** clause 是 `* as ns` 形式时返回 ns。 */
 function namespaceNameOf(clause: ts.ImportClause): Optional<string> {
   const bindings = clause.namedBindings
   return bindings && ts.isNamespaceImport(bindings) ? bindings.name.text : undefined
@@ -284,6 +292,7 @@ function preferValueClause(clauses: ts.ImportClause[]): Optional<ts.ImportClause
   return clauses.find((clause) => !clause.isTypeOnly) ?? clauses[0]
 }
 
+/** 这项绑定是不是仅类型的：整条 `import type` 或行内 `type a`。 */
 function isTypeOnlyElement(clause: ts.ImportClause, element: ts.ImportSpecifier): boolean {
   return clause.isTypeOnly || element.isTypeOnly
 }
@@ -325,6 +334,7 @@ function canAbsorb(clause: ts.ImportClause, needsDefault: boolean): boolean {
   return !needsDefault || !clause.name
 }
 
+/** 把缺的 default 与 named 绑定并进同模块已有的 clause：default 补在最前，named 追加进 `{ … }`，没有 `{ … }` 时接在 default 后面。 */
 function mergeIntoClause(
   sourceFile: ts.SourceFile,
   clause: ts.ImportClause,
@@ -388,6 +398,7 @@ function insertIntoNamedImports(
   return splices
 }
 
+/** position 所在行的行首偏移。 */
 function lineStartOf(content: string, position: number): number {
   return content.lastIndexOf('\n', position - 1) + 1
 }
@@ -404,6 +415,7 @@ function combineSplices(content: string, splices: SourceSplice[]): SourceSplice 
   return { start: ordered[0].start, end: cursor, text }
 }
 
+/** 在一条 import 声明里按名字找绑定：先找 named（导入名优先于本地名），再找 default 与 namespace。 */
 function bindingOf(declaration: ts.ImportDeclaration, name: string): Optional<ImportBinding> {
   const clause = declaration.importClause
   if (!clause) return undefined
@@ -422,6 +434,7 @@ function bindingOf(declaration: ts.ImportDeclaration, name: string): Optional<Im
   return undefined
 }
 
+/** 删一个绑定的拼接：连同分隔逗号只删这一项；删完只剩空壳时删整条声明。 */
 function removeBinding(
   sourceFile: ts.SourceFile,
   declaration: ts.ImportDeclaration,
@@ -523,6 +536,7 @@ function importStyle(imports: ts.ImportDeclaration[]): ImportStyle {
   }
 }
 
+/** 按文件现有的引号与分号风格写出一条 import 语句；没有绑定时写成副作用 import。 */
 function renderImport(
   module: string,
   bindings: { defaultImport?: string; namespaceImport?: string; named?: NamedSpec[] },
@@ -540,6 +554,7 @@ function renderImport(
     : `import ${parts.join(', ')} from ${specifier}${style.semicolon}`
 }
 
+/** 文件用的换行写法：含 CRLF 就用 CRLF，否则 LF。 */
 function eolOf(content: string): string {
   return content.includes('\r\n') ? '\r\n' : '\n'
 }

@@ -6,8 +6,9 @@ import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core
 import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/files.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
+import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
-import { detectProjectTextEncoding, type ProjectTextEncoding,ProjectTextEncodingProbe } from '../text.js'
+import { createProjectTextEncodingProbe, detectProjectTextEncoding, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../text.js'
 
 import { readProjectTextChunks } from './text-stream.js'
 
@@ -322,7 +323,7 @@ export async function hashFileAndDetectBinary(
   const handle = await open(absPath, 'r')
   const hash = createHash('sha256')
   const chunk = new Uint8Array(ReadPrefixChunkBytes)
-  const probe = new ProjectTextEncodingProbe()
+  const probe = createProjectTextEncodingProbe()
 
   try {
     while (true) {
@@ -330,13 +331,13 @@ export async function hashFileAndDetectBinary(
       if (bytesRead === 0) break
       const view = chunk.subarray(0, bytesRead)
       hash.update(view)
-      probe.push(view)
+      pushProjectTextEncodingProbe(probe, view)
     }
   } finally {
     await handle.close()
   }
 
-  const textEncoding = probe.finish()
+  const textEncoding = finishProjectTextEncodingProbe(probe)
   return { hash: hash.digest('hex'), binary: !textEncoding, textEncoding }
 }
 

@@ -1,5 +1,6 @@
 import type * as ts from 'typescript'
 
+import type { EditIntent } from './edit.js'
 import type { ProjectTextEncoding } from './text.js'
 
 export type TextMismatchCause =
@@ -56,6 +57,19 @@ export interface SourceLine {
   end: number
   logicalStart: number
   newline: string
+}
+
+/**
+ * 一份源码的坐标索引：物理行表与把 CRLF 换成 LF 的逻辑正文，CRLF 算一个逻辑换行，其余字符都按原样计。
+ * 建好就不再变，由 utils/editing/source.ts 建立和查询；物理偏移是原文里的下标，逻辑偏移是逻辑正文里的下标。
+ */
+export interface ProjectSourceCoordinates {
+  /** 原文。 */
+  readonly content: string
+  /** 物理行表；末尾换行之后的空行也算一行。 */
+  readonly lines: readonly SourceLine[]
+  /** 把 CRLF 换成 LF 之后的逻辑正文。 */
+  readonly logical: string
 }
 
 export interface OffsetWindow { start: number; end: number }
@@ -128,6 +142,25 @@ export interface SourceSelection { identity: FileIdentity; view: ProjectEditView
 export interface ProjectRecodeReceipt {
   converted: Array<{ path: string; from: string; to: string }>
   unchanged: string[]
+}
+
+/**
+ * project:file 与 project:change 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。
+ * 只在一次编译里用，由 utils/editing/file-planner.ts 的函数推进；不读写磁盘，读取都经过 resolver。
+ */
+export interface ProjectFilePlanState {
+  /** 读当前文件视图、目标路径与完整正文的端口。 */
+  readonly resolver: ProjectPlannerResolver
+  /** 路径在计划里的文件身份；null 表示这个路径已在本计划里删除或移走。 */
+  readonly paths: Map<string, Nullable<FileIdentity>>
+  /** fileRef、sourceRef 绑定到的文件身份与它当前的视图。 */
+  readonly references: Map<string, SourceSelection>
+  /** 排好的事务操作，顺序就是执行顺序。 */
+  readonly operations: EditIntent[]
+  /** 每个涉及的路径在计划开始时的磁盘 revision。 */
+  readonly baseRevisions: Record<string, string>
+  /** recode 动作的回执。 */
+  readonly recode: ProjectRecodeReceipt
 }
 
 /** 行号或连续闭区间；坐标总是指向 resolver 提供的那份不可变原文。 */

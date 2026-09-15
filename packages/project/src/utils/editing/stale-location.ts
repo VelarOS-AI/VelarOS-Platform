@@ -1,12 +1,12 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import type { ProjectContentEdit, ProjectEditView } from '../../types/editing'
-import type { ProjectRelocatedEdit } from '../../types/editing.js'
+import type { ProjectContentEdit, ProjectEditView, ProjectRelocatedEdit } from '../../types/editing.js'
 
-import { normalizeProjectLineRange } from './line-range'
-import { selectProjectMutations } from './select'
-import { ProjectSourceCoordinates } from './source'
+import { normalizeProjectLineRange } from './line-range.js'
+import { selectProjectMutations } from './select.js'
+import { createProjectSourceCoordinates, sourceLineAt } from './source.js'
 
+/** text 在 content 里只出现一次时返回它的位置，没有或不止一处返回 -1。 */
 function uniqueIndex(content: string, text: string): number {
   if (!text) return -1
   const first = content.indexOf(text)
@@ -19,8 +19,8 @@ export function suggestProjectEditLocations(
   edits: readonly ProjectContentEdit[],
   current: string,
 ): ProjectRelocatedEdit[] | undefined {
-  const oldSource = new ProjectSourceCoordinates(previous.content)
-  const newSource = new ProjectSourceCoordinates(current)
+  const oldSource = createProjectSourceCoordinates(previous.content)
+  const newSource = createProjectSourceCoordinates(current)
   const candidates: ProjectRelocatedEdit[] = []
   for (const [editIndex, edit] of edits.entries()) {
     const selector = edit.op === 'insert' && !('at' in edit)
@@ -29,7 +29,7 @@ export function suggestProjectEditLocations(
     const target = selectProjectMutations(previous, [selector])[0]
     const [startLine, endLine] = !('at' in edit) && !isUndefined(edit.range)
       ? normalizeProjectLineRange(edit.range)
-      : [oldSource.lineAt(target.start), oldSource.lineAt(Math.max(target.start, target.end - 1))]
+      : [sourceLineAt(oldSource, target.start), sourceLineAt(oldSource, Math.max(target.start, target.end - 1))]
     const contextStart = oldSource.lines[Math.max(0, startLine - 2)].start
     const contextEnd = oldSource.lines[Math.min(oldSource.lines.length - 1, endLine)].end
     const original = previous.content.slice(contextStart, contextEnd)
@@ -42,8 +42,8 @@ export function suggestProjectEditLocations(
       const boundary = at + target.start - contextStart
       if (boundary !== (edit.at === 'start' ? 0 : current.length)) return undefined
     }
-    const first = newSource.lineAt(start)
-    const last = newSource.lineAt(Math.max(start, end - 1))
+    const first = sourceLineAt(newSource, start)
+    const last = sourceLineAt(newSource, Math.max(start, end - 1))
     candidates.push({ editIndex, range: first === last ? first : [first, last], unchanged: true })
   }
   return candidates

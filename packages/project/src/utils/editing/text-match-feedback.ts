@@ -9,16 +9,9 @@
 // 系统会自动放过的差异不能被报告成「第一处分歧」，否则模型会去修一行根本不用修的内容。
 import { isBlank, isEmpty, isPresent, optionalWhen, toNullable, truncate, unique } from '@velaros-ai/core'
 
-import type { CandidateStart,TextMatchLocation, TextMatchMissDiagnosis, TextMismatchCause } from '../../types/editing.js'
+import type { CandidateStart, TextMatchLocation, TextMatchMissDiagnosis, TextMismatchCause } from '../../types/editing.js'
 import { offsetToLine } from '../text.js'
-
-const MaxCandidateStarts = 200
-const MaxFuzzyAnchors = 8
-const MinFuzzyAnchorChars = 4
-const MinFragmentSimilarity = 0.75
-const MaxReportedMatches = 10
-const ExcerptChars = 160
-const MaxEnclosingLookbackLines = 200
+import { ProjectTuning } from '../tuning.js'
 
 // 差异归因按「逐级放宽」的顺序定义；只报告让两行相等所必需的那几级。
 // 前两级正是宽容匹配的口径，前三级是忽略缩进的宽松口径，全部五级用于找候选位置。
@@ -33,14 +26,17 @@ const MismatchNormalizers: ReadonlyArray<readonly [TextMismatchCause, (line: str
 const TolerantSteps = MismatchNormalizers.slice(0, 2)
 const LooseSteps = MismatchNormalizers.slice(0, 3)
 
+/** 按给定口径逐级规范化一行。 */
 function normalizeWith(steps: typeof MismatchNormalizers, line: string): string {
   return steps.reduce((value, [, step]) => step(value), line)
 }
 
+/** 去掉行尾的空格、制表符与 \r。 */
 function trimLineEnd(line: string): string {
   return line.replace(/[ \t\r]+$/, '')
 }
 
+/** 行尾空白（空格、制表符、\r）有多长。 */
 function trailingBlankLength(line: string): number {
   return line.length - trimLineEnd(line).length
 }
@@ -121,10 +117,11 @@ function alignedAnchorStarts(file: readonly string[], needle: readonly string[])
     .sort((left, right) => left.hits.length - right.hits.length)
     .flatMap(({ index, hits }) => hits.map((hit) => hit - index))
   return [...new Set(starts)]
-    .slice(0, MaxCandidateStarts)
+    .slice(0, ProjectTuning.editing.candidateStarts)
     .map((start) => ({ start, similarity: 1 }))
 }
 
+/** 数一段文本里每个字符二元组出现几次。 */
 function bigramCounts(text: string): Map<string, number> {
   const counts = new Map<string, number>()
   for (let index = 0; index < text.length - 1; index += 1) {
@@ -159,9 +156,9 @@ function fragmentSimilarity(
 function fuzzyAnchorStarts(file: readonly string[], needle: readonly string[]): CandidateStart[] {
   const anchors = needle
     .map((text, index) => ({ text, index }))
-    .filter((anchor) => anchor.text.length >= MinFuzzyAnchorChars)
+    .filter((anchor) => anchor.text.length >= ProjectTuning.editing.fuzzyAnchorMinChars)
     .sort((left, right) => right.text.length - left.text.length)
-    .slice(0, MaxFuzzyAnchors)
+    .slice(0, ProjectTuning.editing.fuzzyAnchors)
   const best = new Map<number, number>()
   for (const anchor of anchors) {
     const grams = bigramCounts(anchor.text)
@@ -169,14 +166,14 @@ function fuzzyAnchorStarts(file: readonly string[], needle: readonly string[]): 
       if (fileIndex < anchor.index) continue
       const similarity = fragmentSimilarity(grams, anchor.text.length, line)
       const start = fileIndex - anchor.index
-      if (similarity >= MinFragmentSimilarity && similarity > (best.get(start) ?? 0))
+      if (similarity >= ProjectTuning.editing.fuzzySimilarity && similarity > (best.get(start) ?? 0))
         best.set(start, similarity)
     }
   }
   return [...best]
     .map(([start, similarity]) => ({ start, similarity }))
     .sort((left, right) => right.similarity - left.similarity)
-    .slice(0, MaxCandidateStarts)
+    .slice(0, ProjectTuning.editing.candidateStarts)
 }
 
 /** 排名逐项比较：第一处不同的分量更大者胜出。 */
@@ -245,6 +242,7 @@ function mismatchCauses(
   return ['content']
 }
 
+/** 用中文描述一行的缩进：几个制表符加几个空格，没有缩进时写「无缩进」。 */
 function describeIndent(line: string): string {
   const indent = /^[ \t]*/.exec(line)?.[0] ?? ''
   const spaces = indent.replace(/\t/g, '').length
@@ -255,10 +253,12 @@ function describeIndent(line: string): string {
     .join('+')
 }
 
+/** 数一行里有几个反斜杠。 */
 function countBackslashes(line: string): number {
   return line.match(/\\/g)?.length ?? 0
 }
 
+/** 把一种差异原因写成给模型看的一句中文，缩进与反斜杠差异带上两边的具体数量。 */
 function causePhrase(cause: TextMismatchCause, expected: string, actual: Nullable<string>): string {
   switch (cause) {
     case 'line_ending':
@@ -282,11 +282,13 @@ function causePhrase(cause: TextMismatchCause, expected: string, actual: Nullabl
 
 /** 超长行只截取首个差异附近的窗口，保证单条线索有界。 */
 function excerptAround(line: string, focus: number): string {
-  if (line.length <= ExcerptChars) return line
-  const start = Math.max(0, Math.min(focus - ExcerptChars / 2, line.length - ExcerptChars))
-  return `${start > 0 ? '…' : ''}${line.slice(start, start + ExcerptChars)}${start + ExcerptChars < line.length ? '…' : ''}`
+  const limit = ProjectTuning.editing.mismatchExcerptChars
+  if (line.length <= limit) return line
+  const start = Math.max(0, Math.min(focus - limit / 2, line.length - limit))
+  return `${start > 0 ? '…' : ''}${line.slice(start, start + limit)}${start + limit < line.length ? '…' : ''}`
 }
 
+/** 两行去掉行首空白后，第一个不同字符的位置。 */
 function firstDifference(expected: string, actual: string): number {
   const left = expected.trimStart()
   const right = actual.trimStart()
@@ -428,23 +430,24 @@ export function locateTextMatches(
   indices: readonly number[],
 ): TextMatchLocation[] {
   const lines = content.split('\n')
-  return indices.slice(0, MaxReportedMatches).map((offset, position) => {
+  return indices.slice(0, ProjectTuning.editing.reportedMatches).map((offset, position) => {
     const line = offsetToLine(content, offset)
     return { occurrence: position + 1, line, within: enclosingLine(lines, line - 1) }
   })
 }
 
+/** 往上找第一条缩进更浅的非空行，当作这一行所属的外层；顶格的行没有外层。 */
 function enclosingLine(lines: readonly string[], lineIndex: number): Optional<string> {
   const indentOf = (line: string) => line.length - line.trimStart().length
   const indent = indentOf(lines[lineIndex] ?? '')
   if (indent === 0) return undefined
   for (
     let index = lineIndex - 1;
-    index >= Math.max(0, lineIndex - MaxEnclosingLookbackLines);
+    index >= Math.max(0, lineIndex - ProjectTuning.editing.enclosingLookbackLines);
     index -= 1
   ) {
     const line = lines[index]
-    if (!isBlank(line) && indentOf(line) < indent) return truncate(line.trim(), 100)
+    if (!isBlank(line) && indentOf(line) < indent) return truncate(line.trim(), ProjectTuning.editing.enclosingLineChars)
   }
   return undefined
 }

@@ -1,14 +1,15 @@
-import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation,ProjectVisibleCoverage } from '../../types/editing.js'
+import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation, ProjectVisibleCoverage } from '../../types/editing.js'
 
 import { orderProjectMutations } from './content-planner.js'
-import { ProjectSourceCoordinates } from './source.js'
+import { createProjectSourceCoordinates, sourceLineAt } from './source.js'
 
+/** 整份正文都可见时的覆盖范围：一个从头到尾、整行完整的窗口。 */
 export function completeProjectCoverage(content: string): ProjectVisibleCoverage[] {
-  const source = new ProjectSourceCoordinates(content)
+  const source = createProjectSourceCoordinates(content)
   return [{ startOffset: 0, endOffset: content.length, startLine: 1, endLine: source.lines.length, completeLines: true }]
 }
 
-/** Preserve knowledge of unchanged visible text and add only text generated in this plan. */
+/** 按本计划的拼接推进可见覆盖范围：没改动的可见原文照旧可见，再加上本计划自己写进去的文本，其余仍算没看过。 */
 export function advanceProjectCoverage(view: ProjectEditView, content: string, mutations: readonly ProjectResolvedMutation[]): ProjectVisibleCoverage[] {
   const ordered = orderProjectMutations(mutations)
   const known: PlannerCoverageWindow[] = []
@@ -37,11 +38,11 @@ export function advanceProjectCoverage(view: ProjectEditView, content: string, m
     if (previous && previous.end >= window.start) previous.end = Math.max(previous.end, window.end)
     else merged.push({ ...window })
   }
-  const source = new ProjectSourceCoordinates(content)
+  const source = createProjectSourceCoordinates(content)
   const coverage: ProjectVisibleCoverage[] = []
   for (const window of merged) {
-    const first = source.lineAt(window.start)
-    const last = source.lineAt(window.end)
+    const first = sourceLineAt(source, window.start)
+    const last = sourceLineAt(source, window.end)
     for (let number = first; number <= last; number += 1) {
       const line = source.lines[number - 1]
       const start = Math.max(window.start, line.start)

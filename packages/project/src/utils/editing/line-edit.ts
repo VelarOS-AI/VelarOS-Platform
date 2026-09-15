@@ -4,7 +4,7 @@ import type { ReplaceLinesOperation } from '../../types/edit.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { ProjectError } from '../errors.js'
 
-/** 只生成正文；授权、校验、磁盘提交与回滚仍由事务链执行。 */
+/** 核对一个 replace_lines 操作（revision、行号、每项单行）并算出它在原文里替换的区间与新文本；只生成正文，授权、校验、磁盘提交与回滚仍由事务链执行。 */
 function lineChange(
   snapshot: FileSnapshot,
   operation: ReplaceLinesOperation,
@@ -70,6 +70,7 @@ function lineChange(
   return { start, end, replacement }
 }
 
+/** 按一个 replace_lines 操作替换快照里的整行，返回新正文。 */
 export function replaceSnapshotLines(
   snapshot: FileSnapshot,
   operation: ReplaceLinesOperation,

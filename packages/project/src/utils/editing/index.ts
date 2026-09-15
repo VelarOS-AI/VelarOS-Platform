@@ -1,5 +1,0 @@
-export type * from '../../types/editing.js'
-export { planProjectFileEdits } from './content-planner.js'
-export { compileProjectEdit } from './edit-compiler.js'
-export { compileProjectChange, compileProjectFile } from './file-planner.js'
-export { normalizeProjectLineRange } from './line-range.js'

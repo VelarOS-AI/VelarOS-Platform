@@ -107,4 +107,65 @@ export const ProjectTuning = Object.freeze({
     /** 一条路径最多多少字节（UTF-8）。 */
     statePathBytes: 16 * 1024,
   }),
+  /** 编辑定位失败时回给模型的线索（utils/editing 与 JS/TS 补丁策略）：候选几个、摘录多长、模糊定位的门槛；全都有上限，不把整个文件塞回上下文。 */
+  editing: Object.freeze({
+    /** project:edit 的 match 零命中或多处命中时最多回几个候选；多处命中时也只收集这么多处精确匹配。 */
+    candidates: 8,
+    /** 每个候选最多带多少字符原文；更长的截断，也不再替它找能唯一定位的上下文。 */
+    candidateChars: 1_200,
+    /** 为让候选的 match 在可见区域里唯一，往两侧最多各扩多少字符上下文。 */
+    candidateContextChars: 120,
+    /** match 零命中时在可见区域里找相近原文最多扫多少字符；match 本身比这还长就不找。 */
+    similarScanChars: 16_000,
+    /** 按 symbol 定位遇到同名符号时，错误信息里列出几个候选。 */
+    symbolCandidates: 8,
+    /** oldText 零命中时最多比较多少个候选起点。 */
+    candidateStarts: 200,
+    /** 没有任何一行能对齐时，取最长的几条 oldText 行按片段相似度找候选。 */
+    fuzzyAnchors: 8,
+    /** 参与片段相似度的 oldText 行至少多少字符；更短的行太常见，不拿来找候选。 */
+    fuzzyAnchorMinChars: 4,
+    /** 片段相似度（0–1）至少多少才算候选。 */
+    fuzzySimilarity: 0.75,
+    /** 多处匹配时列出前几处的行号，其余只报总数。 */
+    reportedMatches: 10,
+    /** 首个分歧行的摘录最多多少字符；超长行以分歧处为中心截窗。 */
+    mismatchExcerptChars: 160,
+    /** 找匹配所属的外层行时最多往上看几行。 */
+    enclosingLookbackLines: 200,
+    /** 外层行的摘录最多多少字符。 */
+    enclosingLineChars: 100,
+  }),
+  /** 文件适配器（impl/adapters）：搜索没给 maxResults 时单个文件最多返回几处命中。 */
+  adapters: Object.freeze({
+    /** 纯文本 adapter 的文本搜索。 */
+    textHits: 20,
+    /** 通用代码 adapter（Python、Go、Rust 等按正则认符号）的符号搜索。 */
+    codeSymbolHits: 20,
+    /** JS/TS adapter 的 AST 符号搜索。 */
+    jsTsSymbolHits: 50,
+  }),
+  /** JS/TS 语言层（utils/jsts-ast.ts）：adapter、补丁策略与语法校验器共用的 AST 解析缓存和语法诊断。 */
+  jsTs: Object.freeze({
+    /** 解析结果按（路径、内容哈希）最多缓存多少份；超过从最久没用的淘汰。 */
+    cachedParses: 200,
+    /** 语法诊断里出错行的摘录最多多少字符；超长行以出错列为中心截窗。 */
+    syntaxExcerptChars: 160,
+    /** 一个文件的前几条语法诊断附带出错行前后几行的源码预览。 */
+    syntaxPreviewDiagnostics: 10,
+  }),
+  /** 文本编码判定（utils/text.ts）。 */
+  encoding: Object.freeze({
+    /** 判定编码时留多少字节的文件头：BOM 与无 BOM 的 UTF-16（按 NUL 字节的奇偶分布）只看这一段。 */
+    headBytes: 8 * 1024,
+  }),
+  /** 插件里的外部命令检查（impl/plugins）：prettier、eslint、tsc 当校验器或修复器跑时的超时，毫秒。 */
+  plugins: Object.freeze({
+    /** prettier 检查与按文件格式化。 */
+    prettierTimeoutMs: 60_000,
+    /** eslint 检查与按文件自动修复。 */
+    eslintTimeoutMs: 60_000,
+    /** tsc --noEmit 类型检查。 */
+    tscTimeoutMs: 120_000,
+  }),
 })

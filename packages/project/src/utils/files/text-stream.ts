@@ -1,22 +1,23 @@
 import { type FileHandle, open } from 'node:fs/promises'
 
+import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
-import { createProjectTextDecoder, type ProjectTextEncoding,ProjectTextEncodingProbe } from '../text.js'
+import { createProjectTextDecoder, createProjectTextEncodingProbe, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../text.js'
 
 const ChunkBytes = 64 * 1024
 
 /** 对同一文件句柄做常量内存的完整判定，避免长 ASCII 前缀掩盖后续旧编码字符。 */
 async function inspectEncoding(handle: FileHandle): Promise<ProjectTextEncoding> {
-  const probe = new ProjectTextEncodingProbe()
+  const probe = createProjectTextEncodingProbe()
   const bytes = new Uint8Array(ChunkBytes)
   let position = 0
   while (true) {
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, position)
     if (bytesRead === 0) break
-    probe.push(bytes.subarray(0, bytesRead))
+    pushProjectTextEncodingProbe(probe, bytes.subarray(0, bytesRead))
     position += bytesRead
   }
-  const encoding = probe.finish()
+  const encoding = finishProjectTextEncodingProbe(probe)
   if (!encoding) throw new ProjectError('NOT_SUPPORTED', '文件无法无损解码为项目文本。')
   return encoding
 }

@@ -1,14 +1,16 @@
 import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
-import type { OffsetWindow,ProjectContentEdit, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectResolvedMutation } from '../../types/editing.js'
+import { ProjectChangeLimits } from '../../contract/constants.js'
+import type { OffsetWindow, ProjectContentEdit, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectResolvedMutation } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { assertWellFormedProjectText } from '../text.js'
+import { ProjectTuning } from '../tuning.js'
 
 import { normalizeProjectLineRange } from './line-range.js'
 import { insertionLineText, replacementLineText } from './line-text.js'
 import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates } from './match-feedback.js'
 import { assertVisibleLines, intersectWindows, visibleWindows } from './selection-coverage.js'
-import { normalizePhysicalNewlines, ProjectSourceCoordinates } from './source.js'
+import { createProjectSourceCoordinates, logicalSourceOffset, normalizePhysicalNewlines, physicalSourceOffset, sourceNewlineAt } from './source.js'
 
 const CandidateNextAction = '请检查候选后用 reuse + changes 缩小 range 或修正 match；扩展 match 时，替换 text 也须保留候选 prefix/suffix。候选仅供确认，没有写入。'
 
@@ -31,9 +33,10 @@ function missingMatchGuidance(candidates: readonly ProjectMatchCandidate[], else
   }
 }
 
+/** 把一个文件的 edits 按原始坐标逐项定位成拼接：range 按整行、match 在可见区域里唯一匹配；定位不了时抛出带候选与下一步的错误。 */
 export function selectProjectMutations(view: ProjectEditView, edits: readonly ProjectContentEdit[]): ProjectResolvedMutation[] {
-  if (isEmpty(edits) || edits.length > 1000) throw new ProjectError('INVALID_INPUT', '每个文件需要 1–1000 项 edits。')
-  const source = new ProjectSourceCoordinates(view.content)
+  if (isEmpty(edits) || edits.length > ProjectChangeLimits.editsPerFile) throw new ProjectError('INVALID_INPUT', `每个文件需要 1–${ProjectChangeLimits.editsPerFile} 项 edits。`)
+  const source = createProjectSourceCoordinates(view.content)
   const allWindows = visibleWindows(view, source)
   return edits.map((edit, editIndex) => {
     try {
@@ -70,11 +73,11 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
         const matches: OffsetWindow[] = []
         let total = 0
         for (const window of windows) {
-          const from = source.logicalOffset(window.start)
-          const until = source.logicalOffset(window.end)
+          const from = logicalSourceOffset(source, window.start)
+          const until = logicalSourceOffset(source, window.end)
           for (let at = source.logical.indexOf(needle, from); at !== -1 && at + needle.length <= until; at = source.logical.indexOf(needle, at + 1)) {
             total += 1
-            if (matches.length < 8) matches.push({ start: source.physicalOffset(at), end: source.physicalOffset(at + needle.length) })
+            if (matches.length < ProjectTuning.editing.candidates) matches.push({ start: physicalSourceOffset(source, at), end: physicalSourceOffset(source, at + needle.length) })
           }
         }
         if (total !== 1) {
@@ -96,12 +99,12 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
       if (edit.op === 'replace') return {
         start, end, editIndex, kind: 'replace',
         text: characterSelection
-          ? normalizePhysicalNewlines(edit.text, source.newlineAt(start, end))
+          ? normalizePhysicalNewlines(edit.text, sourceNewlineAt(source, start, end))
           : replacementLineText(source, start, end, edit.text),
       }
       const offset = edit.side === 'before' ? start : end
       return { start: offset, end: offset, editIndex, kind: 'insert', text: characterSelection
-        ? normalizePhysicalNewlines(edit.text, source.newlineAt(start, end))
+        ? normalizePhysicalNewlines(edit.text, sourceNewlineAt(source, start, end))
         : insertionLineText(source, offset, edit.text) }
     } catch (error) {
       if (!(error instanceof ProjectError)) throw error

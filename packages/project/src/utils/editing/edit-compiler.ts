@@ -1,5 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
+import { ProjectChangeLimits } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'
 import type { ProjectEditInput, ProjectEditView, ProjectPlannerResolver, ProjectResolvedMutation } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
@@ -7,8 +8,9 @@ import { ProjectError } from '../errors.js'
 import { applyProjectMutations } from './content-planner.js'
 import { selectProjectMutations } from './select.js'
 
+/** 把 project:edit 编译成事务输入：同一文件的各组编辑必须基于同一原始版本，全部定位后每个文件出一条整段替换。 */
 export async function compileProjectEdit(input: ProjectEditInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
-  if (isEmpty(input.files) || input.files.length > 1000) throw new ProjectError('INVALID_INPUT', 'files 需要 1–1000 个文件分组。')
+  if (isEmpty(input.files) || input.files.length > ProjectChangeLimits.editFiles) throw new ProjectError('INVALID_INPUT', `files 需要 1–${ProjectChangeLimits.editFiles} 个文件分组。`)
   const operations: PrepareEditInput['operations'] = []
   const baseRevisions: Record<string, string> = {}
   const paths = new Map<string, { view: ProjectEditView; mutations: ProjectResolvedMutation[] }>()

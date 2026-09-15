@@ -6,10 +6,11 @@ import * as ts from 'typescript'
 import { isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
 
 import type { Diagnostic } from '../types/common.js'
-import type { JsTsAccessor, JsTsRange, JsTsSymbol, JsTsSymbolKind, JsTsSymbolQuery, OverloadableDeclaration,ParsedJsTs } from '../types/jsts.js'
+import type { JsTsAccessor, JsTsRange, JsTsSymbol, JsTsSymbolKind, JsTsSymbolQuery, OverloadableDeclaration, ParsedJsTs } from '../types/jsts.js'
 
 import { sha256 } from './hash.js'
 import { ext } from './path.js'
+import { ProjectTuning } from './tuning.js'
 
 const JsTsExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.mts', '.cts'])
 
@@ -22,18 +23,16 @@ const AccessorQueryKinds = new Map<string, JsTsAccessor>([
   ['setter', 'set'],
 ])
 
-/** 语法诊断摘录的最大长度；超长行只截取错误列附近的窗口。 */
-const MaxExcerptLength = 160
-
 // 解析结果按 (path, 内容哈希) 内容寻址缓存：resolve→prepare→validate 常对同一文件反复解析。
 // 内容寻址保证不会返回陈旧 AST；LRU 上限避免长会话常驻内存无界增长。结果只读消费。
-const MaxCachedParses = 200
 const parseCache = new Map<string, ParsedJsTs>()
 
+/** 按扩展名判断是不是 JS/TS 源文件。 */
 export function isJsTsPath(path: string): boolean {
   return JsTsExtensions.has(ext(path))
 }
 
+/** 按扩展名选 TypeScript 的解析方式（TS、TSX、JS、JSX）。 */
 function scriptKindForPath(path: string): ts.ScriptKind {
   switch (ext(path)) {
     case '.tsx':
@@ -49,6 +48,7 @@ function scriptKindForPath(path: string): ts.ScriptKind {
   }
 }
 
+/** 解析 JS/TS 源码，得到 AST、可寻址的符号与纯语法诊断；按（路径、内容哈希）走 LRU 缓存。 */
 export function parseJsTs(path: string, content: string): ParsedJsTs {
   const cacheKey = `${path}\u0000${sha256(content)}`
   const cached = parseCache.get(cacheKey)
@@ -66,7 +66,7 @@ export function parseJsTs(path: string, content: string): ParsedJsTs {
     diagnostics: (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.DiagnosticWithLocation[] }).parseDiagnostics ?? [],
   }
   parseCache.set(cacheKey, parsed)
-  while (parseCache.size > MaxCachedParses) {
+  while (parseCache.size > ProjectTuning.jsTs.cachedParses) {
     const oldest = parseCache.keys().next().value
     if (isUndefined(oldest)) break
     parseCache.delete(oldest)
@@ -93,6 +93,7 @@ export function selectJsTsSymbols(symbols: readonly JsTsSymbol[], query: JsTsSym
   return named.filter((symbol) => symbol.kind === 'method')
 }
 
+/** 解析源码后按 name / kind / container 选符号。 */
 export function findJsTsSymbols(content: string, path: string, query: JsTsSymbolQuery = {}): JsTsSymbol[] {
   return selectJsTsSymbols(parseJsTs(path, content).symbols, query)
 }
@@ -113,7 +114,7 @@ export function jsTsSyntaxDiagnostics(path: string, content: string, source: str
       data: {
         code: diagnostic.code,
         excerpt: lineExcerpt(sourceFile, line, character),
-        sourceContext: index < 10 ? syntaxSourceContext(sourceFile, line, character) : undefined,
+        sourceContext: index < ProjectTuning.jsTs.syntaxPreviewDiagnostics ? syntaxSourceContext(sourceFile, line, character) : undefined,
       },
     }
   })
@@ -128,13 +129,15 @@ function syntaxSourceContext(sourceFile: ts.SourceFile, line: number, character:
   return { lines, preview: true }
 }
 
+/** 取出一行源码的摘录；超长行只截取出错列附近的窗口，两端用省略号标出被截断。 */
 function lineExcerpt(sourceFile: ts.SourceFile, line: number, character: number): string {
+  const limit = ProjectTuning.jsTs.syntaxExcerptChars
   const lineStart = sourceFile.getPositionOfLineAndCharacter(line, 0)
   const text = sourceFile.text.slice(lineStart, sourceFile.getLineEndOfPosition(lineStart)).trimEnd()
-  if (text.length <= MaxExcerptLength) return text
+  if (text.length <= limit) return text
   // 超长行（压缩代码、长字符串）以错误列为中心截窗，两端用省略号标出被截断。
-  let from = Math.max(0, Math.min(character - MaxExcerptLength / 2, text.length - MaxExcerptLength))
-  let to = from + MaxExcerptLength
+  let from = Math.max(0, Math.min(character - limit / 2, text.length - limit))
+  let to = from + limit
   if (from > 0 && /[\uDC00-\uDFFF]/u.test(text[from])) from -= 1
   if (to < text.length && /[\uDC00-\uDFFF]/u.test(text[to])) to -= 1
   return `${from > 0 ? '…' : ''}${text.slice(from, to)}${to < text.length ? '…' : ''}`
@@ -306,14 +309,17 @@ function overloadGroupStart(node: OverloadableDeclaration, sourceFile: ts.Source
   return siblings[index].getStart(sourceFile)
 }
 
+/** 兄弟声明是不是同一重载组的：种类相同、名字相同。 */
 function isSameOverload(candidate: ts.Node, node: OverloadableDeclaration): candidate is OverloadableDeclaration {
   return candidate.kind === node.kind && overloadName(candidate as OverloadableDeclaration) === overloadName(node)
 }
 
+/** 重载组用来比对的名字；构造函数一律叫 constructor。 */
 function overloadName(node: OverloadableDeclaration): Optional<string> {
   return ts.isConstructorDeclaration(node) ? 'constructor' : node.name?.getText()
 }
 
+/** 和声明同处一层的兄弟节点：类成员、文件或块里的语句。 */
 function siblingDeclarations(node: ts.Node): readonly ts.Node[] {
   const parent = node.parent
   if (ts.isClassLike(parent)) return parent.members
@@ -321,20 +327,24 @@ function siblingDeclarations(node: ts.Node): readonly ts.Node[] {
   return [node]
 }
 
+/** 节点是不是会收普通变量的作用域：文件顶层或 namespace 块。 */
 function isDeclarationScope(node: ts.Node): boolean {
   return ts.isSourceFile(node) || ts.isModuleBlock(node)
 }
 
+/** 表达式是不是箭头函数或 function 表达式。 */
 function isFunctionExpressionLike(node: ts.Expression): node is ts.ArrowFunction | ts.FunctionExpression {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node)
 }
 
+/** 匿名的 export default 函数或类记作 default。 */
 function defaultExportName(node: ts.FunctionDeclaration | ts.ClassDeclaration): Optional<string> {
   return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
     ? 'default'
     : undefined
 }
 
+/** 类成员的名字：标识符、私有名、字符串与数字字面量取文本，计算属性名取表达式原文。 */
 function memberName(name: ts.PropertyName, sourceFile: ts.SourceFile): Optional<string> {
   if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name))
     return name.text
@@ -342,6 +352,7 @@ function memberName(name: ts.PropertyName, sourceFile: ts.SourceFile): Optional<
   return undefined
 }
 
+/** 声明带不带 export 修饰。 */
 function hasExportModifier(node: ts.Node): boolean {
   if (!ts.canHaveModifiers(node)) return false
   return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
@@ -372,6 +383,7 @@ function namespaceBlock(node: ts.ModuleDeclaration): Optional<ts.ModuleBlock> {
   return isPresent(body) && ts.isModuleBlock(body) ? body : undefined
 }
 
+/** 由 AST 偏移算出行列（都从 1 起）与偏移齐全的范围。 */
 function rangeOf(sourceFile: ts.SourceFile, start: number, end: number): JsTsRange {
   const from = sourceFile.getLineAndCharacterOfPosition(start)
   const to = sourceFile.getLineAndCharacterOfPosition(end)

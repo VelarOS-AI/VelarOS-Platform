@@ -9,7 +9,7 @@ import { compileProjectFile } from '../src/utils/editing/file-planner'
 import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
 import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readTextLineWindow } from '../src/utils/files/file-reader'
 import { readProjectTextFile } from '../src/utils/files/text-stream'
-import { detectProjectTextEncoding, encodeProjectTextBuffer, ProjectTextEncodingProbe } from '../src/utils/text'
+import { createProjectTextEncodingProbe, detectProjectTextEncoding, encodeProjectTextBuffer, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../src/utils/text'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-text-stream-')) })
@@ -20,9 +20,9 @@ const encodings = ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'u
 test.each(encodings)('complete and one-byte streaming probes agree for %s', (encoding) => {
   const original = 'long ascii source\r\n中文🙂e\u0301\\n\\uD800\r\n'
   const bytes = encodeProjectTextBuffer(original, encoding)
-  const probe = new ProjectTextEncodingProbe()
-  for (const byte of bytes) probe.push(Uint8Array.of(byte))
-  expect(probe.finish()).toBe(encoding)
+  const probe = createProjectTextEncodingProbe()
+  for (const byte of bytes) pushProjectTextEncodingProbe(probe, Uint8Array.of(byte))
+  expect(finishProjectTextEncodingProbe(probe)).toBe(encoding)
   expect(detectProjectTextEncoding(bytes)).toBe(encoding)
 })
 
