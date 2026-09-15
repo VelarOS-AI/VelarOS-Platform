@@ -116,7 +116,8 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
       if (type !== 'file') return false
       if (extensions.size > 0 && !extensions.has(extname(absolutePath).toLowerCase())) return false
       const stats = await lstat(absolutePath).catch(() => null)
-      if (!stats || stats.size > SystemTuning.search.fileBytes) return false
+      // 只读普通文件：命名管道这类读起来可能永远等不到数据。
+      if (!stats?.isFile() || stats.size > SystemTuning.search.fileBytes) return false
 
       abortSignal?.throwIfAborted()
       const textFile = await readSystemTextFile(absolutePath).catch(() => null)

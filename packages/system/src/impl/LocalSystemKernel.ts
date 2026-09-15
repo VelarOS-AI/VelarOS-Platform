@@ -15,7 +15,7 @@ import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/
 import type { ResolvedSystemShell } from '../types/commands.js'
 import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { runPlatformCommand } from '../utils/process.js'
-import { toShellDescriptor } from '../utils/shell.js'
+import { replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
 import {
   collectPortPids,
   metricLevel,
@@ -249,10 +249,8 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {
     // Windows 上重读用户与系统环境变量并写回本进程，之后起的子进程才看得到新装的命令；其他平台每条命令都经登录 shell 重读配置，这里只重新选 shell。
     const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
-    if (this.hostPlatform === 'win32' && refreshed.refreshed) {
-      for (const key of Object.keys(process.env)) if (!(key in refreshed.env)) delete process.env[key]
-      Object.assign(process.env, refreshed.env)
-    }
+    // 写回时宿主设的输入变量（VELAROS_SHELL_PATH 等）照留：刷新结果不带它们，直接按结果覆盖会把宿主指定的 shell 弄丢。
+    if (this.hostPlatform === 'win32' && refreshed.refreshed) replaceEnvironment(process.env, refreshed.env)
     const shell = await this.resolveShell()
     const result: SystemShellEnvironmentRefreshResult = {
       shell: shell.shellPath,

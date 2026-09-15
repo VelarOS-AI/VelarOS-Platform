@@ -7,7 +7,7 @@ import { createPlatform } from '@velaros-ai/platform'
 
 import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
 import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
-import { buildSystemNativeCommandSpec, describeSystemNativeCommand } from '../src/utils/shell.js'
+import { buildSystemNativeCommandSpec, describeSystemNativeCommand, detectSystemShells, replaceEnvironment } from '../src/utils/shell.js'
 
 const gitRoot = 'C:\\Program Files\\Git'
 const bash = `${gitRoot}\\bin\\bash.exe`
@@ -100,6 +100,16 @@ describe('Windows shell readiness and fallback', () => {
     expect(batch.file).toBe(cmd)
     expect(batch.windowsVerbatimArguments).toBe(true)
     expect(describeSystemNativeCommand({ file: plan.file, args })).toContain('"/container/path"')
+  })
+
+  test('writing a refreshed Windows environment back keeps the shell the host chose', () => {
+    const cmdPath = 'C:\\Windows\\System32\\cmd.exe'
+    // 刷新结果不带宿主设的输入变量；原来按结果整个覆盖，VELAROS_SHELL_PATH 被删，之后改用自动找到的 shell。
+    const hostEnv: NodeJS.ProcessEnv = { Path: 'C:\\old', VELAROS_SHELL_PATH: cmdPath, VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe', VELAROS_SHELL_KIND: 'cmd' }
+    replaceEnvironment(hostEnv, { PATH: 'C:\\Windows\\System32' })
+    expect(hostEnv).toEqual({ PATH: 'C:\\Windows\\System32', VELAROS_SHELL_PATH: cmdPath, VELAROS_GIT_BASH: 'C:\\Git\\bin\\bash.exe' })
+    const isFile = (path: string): boolean => /(?:cmd|powershell)\.exe$/i.test(path)
+    expect(detectSystemShells({ platform: 'win32', env: hostEnv, isFile })[0]?.shellPath).toBe(cmdPath)
   })
 
   test('CMD builtin availability uses the selected shell', async () => {

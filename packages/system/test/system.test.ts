@@ -662,6 +662,49 @@ describe('System capability', () => {
     }
   })
 
+  test('edits written into a CRLF file use CRLF, whether oldText matched as-is or only a range was given; LF files stay LF', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-crlf-'))
+    try {
+      // 单行 oldText 原样匹配得上、newText 却是多行：原来会把裸 LF 混进 CRLF 文件。
+      const matched = join(root, 'matched.txt')
+      await writeFile(matched, 'line1\r\nfoo();\r\nline3\r\n')
+      await editOne({ path: matched, edits: [{ range: { offset: 0, end: 21 }, oldText: 'foo();', newText: 'foo();\nbar();' }] })
+      expect(await readFile(matched, 'utf8')).toBe('line1\r\nfoo();\r\nbar();\r\nline3\r\n')
+      // 只给 range 的整段替换，那一段里没有换行：按整个文件的风格。
+      const ranged = join(root, 'ranged.txt')
+      await writeFile(ranged, 'line1\r\nfoo();\r\nline3\r\n')
+      await editOne({ path: ranged, edits: [{ range: { offset: 7, end: 13 }, newText: 'x();\ny();' }] })
+      expect(await readFile(ranged, 'utf8')).toBe('line1\r\nx();\r\ny();\r\nline3\r\n')
+      const lf = join(root, 'lf.txt')
+      await writeFile(lf, 'a\nb\n')
+      await editOne({ path: lf, edits: [{ range: { offset: 0, end: 1 }, newText: 'x\ny' }] })
+      expect(await readFile(lf, 'utf8')).toBe('x\ny\nb\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(process.platform === 'win32')('edit refuses pipes instead of hanging on them, and content search skips them', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-fifo-'))
+    try {
+      const pipe = join(root, 'pipe')
+      expect(spawnSync('mkfifo', [pipe]).status).toBe(0)
+      await writeFile(join(root, 'a.txt'), 'needle\n')
+      // 原来读命名管道会一直挂着，abort 也收不回。
+      const edited = await problemsOf(systemFileOperations.edit({ files: [{ path: pipe, edits: [{ range: { offset: 0, end: 0 }, newText: 'x' }] }] }, approvingContext))
+      expect(edited.problems[0]).toMatchObject({ reason: 'invalid' })
+      expect(String(edited.problems[0]?.message)).toContain('不是普通文件')
+      // 整个写入也不许把管道换成普通文件。
+      const replaced = await problemsOf(systemFileOperations.edit({ files: [{ path: pipe, newText: 'x' }] }, approvingContext))
+      expect(replaced.problems[0]).toMatchObject({ reason: 'invalid' })
+      expect((await lstat(pipe)).isFIFO()).toBe(true)
+      const found = await new SystemGlobalSearch({ platform: process.platform, homeDir: root }).search(root, { query: 'needle', mode: 'content' })
+      expect(found.matches?.map((match) => match.path)).toEqual(['a.txt'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('edit clamps a range end past the file, rejects a reversed range, adapts line endings within the range, and writes through dangling links', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-range-'))
     try {

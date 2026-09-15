@@ -17,7 +17,7 @@ import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, System
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
-import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
+import { adaptReplacementLineEndings, findOccurrences, lineEndingStyle, withLineEndingStyle } from '../utils/text.js'
 import {
   clampTextRange,
   currentFileVersion,
@@ -73,7 +73,8 @@ export interface SystemFileOperationsApi {
    * 匹配只在各自的 range 里做，不在整个文件里找。
    * 只给 restore：把文件回到那个版本；回滚前的内容也留成一个版本，回滚本身能再回滚。
    * 每次改动前把原内容留成一个版本，结果里给出新版本号和改动前的版本号；改了几处的结果还返回每处新文本前后各 200 字符的小段，盖住所有改动那段不超过 2 万字符时整段也给，不用再读一遍确认。
-   * 自动适配文件的换行风格，沿用原编码。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
+   * edits 里写进去的文本跟着原文的换行风格走（看那一段，那一段没有换行就看整个文件）：CRLF 文件里的裸 LF 换成 CRLF；newText 整个写入原样写。
+   * 沿用原编码。路径是管道、设备或套接字时不碰。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
    */
   edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult>
 }
@@ -208,6 +209,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (modes > 1) return problem('newText、edits、restore 只能用一种')
     const existing = await stat(target).catch(() => null)
     if (existing?.isDirectory()) return problem(`路径是目录，不是文件：${resolvedPath}`)
+    // 管道、设备、套接字：读它可能永远等不到数据（读命名管道会一直挂着），整个替换又会把它换成普通文件，一律不碰。
+    if (existing && !existing.isFile()) return problem(`路径不是普通文件（管道、设备或套接字），不能当文本改：${resolvedPath}`)
     const stamp = stampOf(existing)
     // 父路径已经存在却不是目录，写入注定失败，在计划期就报出来（缺失的父目录写的时候会补建）。
     const parentCode = await stat(dirname(target)).then((parent) => (parent.isDirectory() ? null : 'ENOTDIR')).catch((error: unknown) => readErrnoCode(error))
@@ -270,6 +273,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 system:run 去改。
     if (!encodeSystemTextContent(textFile.content, textFile.encoding).equals(textFile.buffer)) return problem(`文件里有不是合法 ${textFile.encoding} 文本的字节，改写会丢数据；用 system:run 改`)
     const content = textFile.content
+    const fileStyle = lineEndingStyle(content)
 
     // 每一处都在改动前的原文上定目标；多处匹配给锚点，找不到、重叠也都记下来，一次报完。
     const problems: SystemEditProblem[] = []
@@ -286,9 +290,12 @@ class SystemFileOperations implements SystemFileOperationsApi {
       }
       const scope = clampTextRange(content, change.range)
       scopes.push(scope)
-      if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: change.newText }); continue }
+      const scopeText = content.slice(scope.offset, scope.end)
+      // 写进去的新文本跟着原文的换行风格走：看这一段，这一段里没有换行就看整个文件。
+      const style = lineEndingStyle(scopeText) ?? fileStyle
+      if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: withLineEndingStyle(change.newText, style) }); continue }
       if (isEmpty(change.oldText)) { at('oldText 是空的；要整段替换就不给 oldText'); continue }
-      const replacement = adaptReplacementLineEndings(content.slice(scope.offset, scope.end), change.oldText, change.newText)
+      const replacement = adaptReplacementLineEndings(scopeText, change.oldText, change.newText, style)
       // 只需要知道唯一不唯一和前 SystemFailureLimits.listItems 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
       const matches = findOccurrences(content, replacement.oldText, scope, SystemFailureLimits.listItems + 1)
       if (isEmpty(matches)) { at(`在 range ${scope.offset}-${scope.end} 里没找到 oldText；重新读这一段`, { reason: 'not-found' }); continue }

@@ -9,6 +9,7 @@ import { Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
+import { SystemEnvironmentVariables } from '../contract/constants.js'
 import type { ResolvedSystemShell, ResolveSystemShellOptions } from '../types/commands.js'
 import type { SystemShellDescriptor, SystemShellKind, SystemShellRecommendation } from '../types/system.js'
 
@@ -22,6 +23,18 @@ const gitRecommendation: SystemShellRecommendation = {
   code: 'INSTALL_GIT_BASH',
   message: '推荐安装 Git for Windows，以获得 Git Bash 和一致的 Unix 命令工具。',
   url: 'https://git-scm.com/download/win',
+}
+
+/** 宿主设给本包的输入环境变量（登记表里 direction 为 input 的名字，大写）：刷新环境写回宿主进程时不能删。 */
+const HostInputVariableNames: ReadonlySet<string> = new Set(Object.values(SystemEnvironmentVariables).filter((variable) => variable.direction === 'input').map((variable) => variable.name))
+
+/**
+ * 把刷新后的环境写回宿主进程的环境：不在新环境里的键删掉，但宿主设给本包的输入变量（VELAROS_SHELL_PATH 这类，不在注册表里、
+ * 刷新结果里也不带）照留，否则刷新一次宿主指定的 shell 就丢了。Windows 的环境变量名不分大小写，按大写比。
+ */
+export function replaceEnvironment(target: NodeJS.ProcessEnv, next: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(target)) if (!(key in next) && !HostInputVariableNames.has(key.toUpperCase())) delete target[key]
+  Object.assign(target, next)
 }
 
 /** 判断路径是否是存在的普通文件；读不到时返回 false。 */

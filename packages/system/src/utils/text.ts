@@ -38,20 +38,34 @@ export function readBoundedOutputSince(
   return { text: buffer.slice(readFrom - retainedFrom), cursor: produced, droppedChars: 0 }
 }
 
-/** 文件用 CRLF 换行而替换文本用 LF 时，把替换前后的文本都换成 CRLF，保证能匹配上。 */
+/** 一段文本的换行风格：CRLF 比裸 LF 多就是 crlf，否则是 lf；一个换行都没有返回 null。 */
+export function lineEndingStyle(value: string): Nullable<'crlf' | 'lf'> {
+  const crlf = value.split('\r\n').length - 1
+  const lf = value.split('\n').length - 1 - crlf
+  if (crlf + lf === 0) return null
+  return crlf > lf ? 'crlf' : 'lf'
+}
+
+/** 按换行风格改写一段要写进去的文本：crlf 风格时里面的换行统一成 CRLF，其余原样返回。 */
+export function withLineEndingStyle(value: string, style: Nullable<'crlf' | 'lf'>): string {
+  return style === 'crlf' ? toCrlf(value) : value
+}
+
+/**
+ * 按原文的换行风格改写一处替换：oldText 在这段原文里原样找不到、换成 CRLF 才找得到时用 CRLF 版本；
+ * 原文以 CRLF 为主（style）或者 oldText 换成了 CRLF 时，newText 里的换行也统一成 CRLF，不在 CRLF 文件里混进裸 LF。
+ */
 export function adaptReplacementLineEndings(
   content: string,
   oldText: string,
-  newText: string
+  newText: string,
+  style: Nullable<'crlf' | 'lf'>
 ): { oldText: string; newText: string } {
-  if (content.includes(oldText) || !content.includes('\r\n')) return { oldText, newText }
-
   const oldTextWithCrlf = toCrlf(oldText)
-  if (!content.includes(oldTextWithCrlf)) return { oldText, newText }
-
+  const useCrlf = !content.includes(oldText) && content.includes('\r\n') && content.includes(oldTextWithCrlf)
   return {
-    oldText: oldTextWithCrlf,
-    newText: toCrlf(newText),
+    oldText: useCrlf ? oldTextWithCrlf : oldText,
+    newText: useCrlf ? toCrlf(newText) : withLineEndingStyle(newText, style),
   }
 }
 

@@ -41,7 +41,8 @@ export interface SystemShellResolverApi {
   resolveCommand(name: string, shell: ResolvedSystemShell): Promise<SystemEnvironmentCommandAvailability>
   /**
    * Windows 上重新读取用户和系统环境变量（用户装完软件不用重启应用），合并 PATH 并展开 %VAR%，返回新环境和它的指纹 revision。
-   * 其他平台原样返回；读取失败时 refreshed 为 false 并给出原因。返回的环境里去掉了本包自己写的 VELAROS_SHELL_* 标记。
+   * 其他平台原样返回；读取失败时 refreshed 为 false 并给出原因。返回的环境里去掉了本包自己写的 VELAROS_SHELL_* 标记；
+   * 宿主设的 VELAROS_SHELL_PATH 也不在其中，写回宿主进程时由 replaceEnvironment 照留。
    */
   refreshWindowsEnvironment(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): Promise<RefreshedWindowsEnvironment>
 }
