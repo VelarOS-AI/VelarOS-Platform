@@ -234,29 +234,30 @@ export interface ResolveSystemShellOptions extends ShellCommandSpecOptions {
 /**
  * 三个文件操作：读文本、看图片与 PDF、写。`system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
  *
- * 实现是 `SystemFileOperations`，整个进程只有一份（`systemFileOperations`）。路径都按用户输入规整：`~` 展开到家目录，相对路径相对家目录。
+ * 实现是 `SystemFileOperations`，整个进程只有一份（`systemFileOperations`）。路径都按用户输入规整：`~` 展开到家目录，相对路径相对宿主给 system:run 的默认目录（宿主没给就相对家目录）。读凭证文件（私钥、云凭证、口令库）前先向用户确认。
  * 位置一律按字符算，没有行的概念。读写都保留原文件的编码（UTF-8、带 BOM、UTF-16）；写先写临时文件再原子替换；写系统敏感路径前先向用户确认，被拒绝就不动。
  */
 export interface SystemFileOperationsApi {
   /**
    * 读文本文件，files 里每项一个，一个文件就一项，一批最多 20 项；返回与 files 一一对应的 files。
    * 每个文件按字符取一段：从 offset 起最多 maxChars 个（默认也是上限 20 万，尽量一次读完），返回这段的原文、它的 range 和内容的版本号，hasMore 时把 range.end 当下一次的 offset；不切开代理对。
-   * 一次调用总共最多返回 20 万字符，按顺序分给各文件，分完的文件只带位置不带内容。
-   * 给 version 就读改动前留下的那个版本，用来召回旧状态；版本只在内存里留最近几份，找不到算这个文件失败。
+   * 一次调用总共最多返回 20 万字符，按顺序分给各文件，分完的文件只带位置不带内容，结果的 note 说明从第几个起。
+   * 给 version 就读改动前留下的那个版本，用来召回旧状态；版本只在本次运行的内存里留最近几份，找不到算这个文件失败。
    * 图片算失败并指向 view，PDF 算失败并说明文档不在这里读；其他二进制文件、目录、设备文件、超过 20 MB 的文件也算失败。
    * 某个文件失败只把它那一项换成失败条目，其余文件照常返回；全部失败时整个调用报错。
    */
-  read(input: SystemReadInput): Promise<SystemReadResult>
+  read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult>
   /**
    * 看图片，files 每项一个，一个文件就一项，一批最多 10 项；返回与 files 一一对应的 files，每张图整张作为模型可见的内容块按同样的顺序放在 modelContent 里交给模型，效果和用户上传一样，每块前面一行文字说明是哪个文件。
    * 只认模型本来就认得的 PNG、JPEG、GIF、WebP，没有字符上限，只有 5 MB 的字节上限，超过算失败让调用方先缩小。
    * PDF 和其他文档不在这里看；文本文件、其他二进制文件、目录、设备文件、超过 20 MB 的文件算失败。某个文件失败只把它那一项换成失败条目，全部失败时整个调用报错。
    */
-  view(input: SystemViewInput): Promise<SystemViewResult>
+  view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult>
   /**
    * 写文件，files 每项一个，一个文件就一项，一批最多 20 项；返回与 files 一一对应的 files。每项三种改法只用一种：
    * 只给 newText：把它当整个文件写进去，不存在就新建（连同上级目录），存在就覆盖。
    * 给 edits：在 read 读到的范围里改这几处（一次最多 50 处），每处在自己的 range 里改：给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，空段就是插入。
+   * 每项可以带 read 返回的 version：给了就先核对文件现在还是这个版本，被改过就整批不写，问题里给出当前版本。
    * 一批全成或全不成：先把所有文件所有改动在改动前的原文上定下来，再逐个向用户确认敏感路径，最后按顺序写；定不下来或被拒就整批不写，
    * 抛出的错误 cause.details 里列出每个问题（第几个文件、第几处、原因；多处匹配带锚点，重叠标明另一处），context.executionOutcome 是 not-applied，调用方可以只改出问题的那一处再来一次。
    * 匹配只在各自的 range 里做，不在整个文件里找。

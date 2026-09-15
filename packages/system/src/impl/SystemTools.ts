@@ -48,13 +48,13 @@ const readTool = defineSystemTool<{
     '结果里的 version 是这份内容的版本号；传 version 可以读回某次改动前的旧内容。',
   ],
   examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: 200000 }] }],
-  notes: ['其他二进制文件读不了。'],
+  notes: ['其他二进制文件读不了。读私钥、云凭证这类文件会先向用户确认。'],
   schema: z.object({
     files: z.array(z.object({
-      path: z.string().min(1).describe('文件路径，支持 ~。'),
+      path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
       maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
-      version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果。'),
+      version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果；只有本次运行里 edit 留下的版本能召回。'),
     })).min(1).max(20).describe('要读的文件，每项一个，一次最多 20 个。'),
   }),
   permissions: ['fs:read'],
@@ -67,7 +67,7 @@ const readTool = defineSystemTool<{
     reason: 'system text file read primitive',
   },
   isConcurrencySafe: () => true,
-  execute: async (input) => systemFileOperations.read(input),
+  execute: async (input, ctx) => systemFileOperations.read(input, ctx),
 })
 
 /** system:view —— 看图片。 */
@@ -86,7 +86,7 @@ const viewTool = defineSystemTool<{
   notes: ['只认 PNG、JPEG、GIF、WebP，最大 5 MB；别的格式或太大的先用 system:run 转换、缩小。'],
   schema: z.object({
     files: z.array(z.object({
-      path: z.string().min(1).describe('图片路径，支持 ~。'),
+      path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
     })).min(1).max(10).describe('要看的图片，每项一张，一次最多 10 张。'),
   }),
   permissions: ['fs:read'],
@@ -99,7 +99,7 @@ const viewTool = defineSystemTool<{
     reason: 'system image view primitive',
   },
   isConcurrencySafe: () => true,
-  execute: async (input) => systemFileOperations.view(input),
+  execute: async (input, ctx) => systemFileOperations.view(input, ctx),
 })
 
 /** system:edit —— 写文件：整个写入、改几处、回滚。 */
@@ -113,6 +113,7 @@ const editTool = defineSystemTool<{
       newText: string
     }>
     restore?: string
+    version?: string
   }>
 }>({
   name: SystemToolNames.edit,
@@ -121,7 +122,7 @@ const editTool = defineSystemTool<{
   suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的一处或几处。', '一次改一批文件。'],
   forbidden: ['复制、移动、删除、改权限用 system:run。'],
   usage: [
-    '先用 system:read 读到要改的那段；edits 每项一处，把返回的 range 原样传回来，oldText 和原文一字不差，只在这段里找。同一个文件的几处放在一个 edits 里，各处不能重叠。',
+    '先用 system:read 读到要改的那段；edits 每项一处，把返回的 range 原样传回来，oldText 和原文一字不差，只在这段里找。同一个文件的几处放在一个 edits 里，各处不能重叠。把 read 返回的 version 一起传，文件在读之后被改过就不会误改。',
     '一批全成或全不成：任何一处定不下来就什么都不写，失败回执的 details.problems 列出每个问题是第几个文件第几处、什么原因，oldText 多处匹配时带每处的锚点。',
     '失败回执带 inputReuse 时，用 reuse + changes 只改出问题的那一处再调一次，比如 path 为 ["files", 0, "edits", 1, "range"] 设成选中锚点的 range，其余参数原样保留，不要整个重发。',
     'edits 里只给 range 不给 oldText，就是把这段整个换成 newText；range 是空段就是在那个位置插入。',
@@ -142,11 +143,11 @@ const editTool = defineSystemTool<{
       ],
     },
   ],
-  notes: ['写系统敏感路径会先向用户确认。'],
+  notes: ['写系统敏感路径会先向用户确认。改完之后 range 都以新内容为准，别再拿旧的 range 改同一个文件。'],
   inputReuse: true,
   schema: z.object({
     files: z.array(z.object({
-      path: z.string().min(1).describe('文件路径，支持 ~。'),
+      path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       newText: z.string().optional().describe('整个文件写入的内容，不存在就新建；改几处时不用给，改动写在 edits 里。'),
       edits: z.array(z.object({
         range: z.object({
@@ -157,6 +158,7 @@ const editTool = defineSystemTool<{
         newText: z.string().describe('换成的新文本。'),
       })).min(1).max(50).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
       restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。'),
+      version: z.string().min(1).optional().describe('read 返回的这个文件的版本号；给了就先核对文件没被改过，改过就整批不写并给出当前版本。'),
     })).min(1).max(20).describe('要写的文件，每项一个，一次最多 20 个；每项只用 newText、edits、restore 中的一种。'),
   }),
   permissions: ['fs:read', 'fs:write'],

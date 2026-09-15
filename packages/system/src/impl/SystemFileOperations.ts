@@ -14,8 +14,8 @@ import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, System
 import type { SystemFileHistoryApi, SystemFileOperationsApi } from '../interface/internal.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
-import { assertFileBatchSize, failureEntry, unresolvedEditFailure } from '../utils/file-batch.js'
-import { confirmSensitiveSystemMutation } from '../utils/file-safety.js'
+import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure } from '../utils/file-batch.js'
+import { confirmCredentialRead, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
 import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
 import {
@@ -63,15 +63,17 @@ class SystemFileOperations implements SystemFileOperationsApi {
     this.history = history
   }
 
-  public async read(input: SystemReadInput): Promise<SystemReadResult> {
+  public async read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult> {
     assertFileBatchSize(input.files.length, SystemFileLimits.readFiles, 'read')
     const files: SystemReadResult['files'] = []
     const failures: AppError[] = []
     // 一次调用总共最多 readChars 个字符：按顺序分给每个文件，分完后面的文件只带位置不带内容，hasMore 告诉调用方接着读。
     let remaining = SystemFileLimits.readChars
-    for (const file of input.files) {
+    let exhaustedAt: Nullable<number> = null
+    for (const [index, file] of input.files.entries()) {
       try {
-        const result = await this.readOne(file, remaining)
+        if (remaining <= 0 && exhaustedAt === null) exhaustedAt = index
+        const result = await this.readOne(file, remaining, ctx)
         remaining -= result.content.length
         files.push(result)
       } catch (error) {
@@ -82,17 +84,19 @@ class SystemFileOperations implements SystemFileOperationsApi {
       }
     }
     if (failures.length === input.files.length) throw failures[0]
-    return { files }
+    const result: SystemReadResult = { files }
+    if (exhaustedAt !== null) result.note = `一次调用最多 ${SystemFileLimits.readChars} 字符，预算在第 ${exhaustedAt + 1} 个文件之前用完，从它起只带位置没有内容；把各自的 range.end 当 offset 再读一次。`
+    return result
   }
 
-  public async view(input: SystemViewInput): Promise<SystemViewResult> {
+  public async view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult> {
     assertFileBatchSize(input.files.length, SystemFileLimits.viewFiles, 'view')
     const files: SystemViewResult['files'] = []
     const modelContent: SystemViewResult['modelContent'] = []
     const failures: AppError[] = []
     for (const [index, file] of input.files.entries()) {
       try {
-        const viewed = await this.viewOne(file)
+        const viewed = await this.viewOne(file, ctx)
         files.push(viewed.entry)
         modelContent.push({ type: 'text', text: `文件 ${index + 1}/${input.files.length}：${viewed.label}` }, viewed.part)
       } catch (error) {
@@ -113,7 +117,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const plans: EditPlan[] = []
     const problems: SystemEditProblem[] = []
     for (const [index, file] of input.files.entries()) {
-      const planned = await this.planOne(index, file)
+      const planned = await this.planOne(index, file, ctx)
       if (isArray(planned)) problems.push(...planned)
       else plans.push(planned)
     }
@@ -142,8 +146,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   /** 把一个文件的改法定下来但不写：返回写入计划，或者这个文件的问题清单。 */
-  private async planOne(index: number, file: SystemEditFileInput): Promise<EditPlan | SystemEditProblem[]> {
-    const resolvedPath = this.resolvePath(file.path)
+  private async planOne(index: number, file: SystemEditFileInput, ctx: SystemToolContext): Promise<EditPlan | SystemEditProblem[]> {
+    const resolvedPath = this.resolvePath(file.path, ctx)
     const problem = (message: string, extra: Partial<SystemEditProblem> = {}): SystemEditProblem[] => [{ file: index, path: resolvedPath, reason: 'invalid', message, ...extra }]
     const restoring = isPresent(file.restore)
     const wholeFile = isPresent(file.newText)
@@ -163,6 +167,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (isPresent(file.newText)) {
       if (file.newText.includes('\0')) return problem('newText contains binary data and cannot be written as text')
       const previous = existing?.isFile() ? await readSystemTextFile(resolvedPath).catch(() => null) : null
+      const stale = staleProblem(file.version, previous ? fileVersionOf(previous.buffer) : null)
+      if (stale) return problem(stale.message, stale)
       return { kind: 'write', index, path: resolvedPath, created: !existing, previous, newText: file.newText }
     }
 
@@ -172,6 +178,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (!existing) return problem(`file not found: ${resolvedPath}`, { reason: 'not-found' })
     const textFile = await readSystemTextFile(resolvedPath)
     if (textFile.buffer.byteLength > SystemFileLimits.editableBytes) return problem(`file is too large for edit: ${textFile.buffer.byteLength} bytes > ${SystemFileLimits.editableBytes} bytes`)
+    const stale = staleProblem(file.version, fileVersionOf(textFile.buffer))
+    if (stale) return problem(stale.message, stale)
     const content = textFile.content
 
     // 每一处都在改动前的原文上定目标；多处匹配给锚点，找不到、重叠也都记下来，一次报完。
@@ -257,8 +265,9 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   /** 读一个文件：按字符取一段，最多 remaining 个（还受文件自己的 maxChars 和总上限约束）；给 version 就读改动前留下的那个版本。 */
-  private async readOne(file: SystemReadFileInput, remaining: number): Promise<SystemReadFileResult> {
-    const resolvedPath = this.resolvePath(file.path)
+  private async readOne(file: SystemReadFileInput, remaining: number, ctx: SystemToolContext): Promise<SystemReadFileResult> {
+    const resolvedPath = this.resolvePath(file.path, ctx)
+    await confirmCredentialRead(ctx, resolvedPath)
     const maxChars = Math.max(0, Math.min(SystemFileLimits.readChars, file.maxChars ?? SystemFileLimits.readChars, remaining))
     if (isPresent(file.version)) {
       const snapshot = this.history.recall(resolvedPath, file.version)
@@ -276,8 +285,9 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
-  private async viewOne(file: SystemViewFileInput): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
-    const resolvedPath = this.resolvePath(file.path)
+  private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
+    const resolvedPath = this.resolvePath(file.path, ctx)
+    await confirmCredentialRead(ctx, resolvedPath)
     const buffer = await readBoundedFile(resolvedPath, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media?.kind !== 'image') {
@@ -295,10 +305,11 @@ class SystemFileOperations implements SystemFileOperationsApi {
     }
   }
 
-  /** 把用户输入的路径变成绝对路径：规整特殊空格与开头的 `@`，`~` 展开到家目录，相对路径相对家目录。 */
-  private resolvePath(path: string): string {
+  /** 把用户输入的路径变成绝对路径：规整特殊空格与开头的 `@`，`~` 展开到家目录，相对路径相对宿主给 system:run 的默认目录，宿主没给就相对家目录。 */
+  private resolvePath(path: string, ctx: SystemToolContext): string {
     const normalizedPath = this.platform.normalizeUserPathInput(path, homedir())
-    return isAbsolute(normalizedPath) ? resolve(normalizedPath) : resolve(homedir(), normalizedPath)
+    if (isAbsolute(normalizedPath)) return resolve(normalizedPath)
+    return resolve(ctx.system.resolveCommandCwd?.() ?? homedir(), normalizedPath)
   }
 }
 

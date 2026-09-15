@@ -13,7 +13,7 @@ export interface SystemTextRange {
   end: number
 }
 
-/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本。 */
+/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本（只有本次运行里 edit 留下的版本在）。 */
 export interface SystemReadFileInput {
   path: string
   offset?: number
@@ -46,9 +46,10 @@ export interface SystemFileFailure {
   }
 }
 
-/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败。 */
+/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算在某个文件用完时，note 说明从第几个文件起只带位置没有内容。 */
 export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
+  note?: string
 }
 
 /** 看一张图片。 */
@@ -104,12 +105,14 @@ export interface SystemTextEdit {
  * 改一个文件，三种改法各自一项、只用一种：
  * 只给 newText：把它当整个文件写进去，不存在就新建；给 edits：在 read 读到的范围里改这几处，各处不能重叠；只给 restore：回到改动前留下的那个版本。
  * 一批里所有文件所有改动先一起定下来再一起写，全成或全不成；某处的 oldText 在范围里匹配到多处时整批不写，失败回执里给出是第几处和每处的锚点，把选中锚点的 range 填回那一处就是二次确认。
+ * version 是 read 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
  */
 export interface SystemEditFileInput {
   path: string
   newText?: string
   edits?: SystemTextEdit[]
   restore?: string
+  version?: string
 }
 
 /** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 */
@@ -158,16 +161,17 @@ export interface SystemEditAnchor {
   context: string
 }
 
-/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出每处（最多 10 个），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处。 */
+/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出每处（最多 10 个），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处；文件被改过时 currentVersion 是它现在的版本。 */
 export interface SystemEditProblem {
   file: number
   path: string
-  reason: 'ambiguous' | 'not-found' | 'overlap' | 'invalid' | 'denied'
+  reason: 'ambiguous' | 'not-found' | 'overlap' | 'invalid' | 'denied' | 'stale'
   message: string
   edit?: number
   anchors?: SystemEditAnchor[]
   matchCount?: number
   with?: number
+  currentVersion?: string
 }
 
 /** edit 失败回执的 details：什么都没写（executionOutcome 固定是 not-applied，所以入参可以复用），problems 列出每个问题；用 reuse + changes 只改出问题的那一处再发。 */

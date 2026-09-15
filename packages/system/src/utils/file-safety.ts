@@ -1,5 +1,5 @@
 /**
- * 文件安全：判断路径是否在根目录内、是否属于系统敏感区，写入敏感路径前向用户要确认。
+ * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，写入敏感路径和读凭证之前向用户要确认。
  */
 
 import { homedir, tmpdir } from 'node:os'
@@ -144,6 +144,50 @@ export async function confirmSensitiveSystemMutation(
       operation: {
         key: createApprovalOperationKey('file-mutation', { path: resolvedPath }),
         label: '修改系统敏感文件',
+        target: resolvedPath,
+      },
+    }
+  )
+}
+
+/** 主目录下装凭证的目录：私钥、云服务凭证、密码库。 */
+const CredentialHomeDirectories = ['.ssh', '.aws', '.gnupg', '.kube', '.azure', '.docker', '.config/gcloud', 'Library/Keychains'] as const
+
+/** 按文件名认出的凭证文件。 */
+const CredentialFileNames = new Set(['.netrc', '.git-credentials', '.pypirc', '.npmrc', 'credentials', 'credentials.json', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'])
+
+/** 按扩展名认出的密钥与证书。 */
+const CredentialExtensions = new Set(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk'])
+
+/** 系统里装口令与私钥的路径。 */
+const CredentialSystemPaths = ['/etc/shadow', '/private/etc/shadow', '/etc/sudoers', '/private/etc/sudoers', '/etc/ssl/private', '/private/etc/ssl/private'] as const
+
+/** 判断一个路径是不是凭证文件：主目录下的凭证目录、常见凭证文件名、密钥与证书扩展名、系统口令文件。 */
+export function isCredentialPath(resolvedPath: string, options: SensitiveSystemMutationPathOptions = {}): boolean {
+  const platform = options.platform ?? process.platform
+  const paths = pathApi(platform)
+  const abs = paths.resolve(resolvedPath)
+  const name = paths.basename(abs)
+  if (CredentialFileNames.has(name) || CredentialExtensions.has(paths.extname(name).toLowerCase())) return true
+  if (platform !== 'win32' && isWithinAnyRoot(abs, CredentialSystemPaths, platform)) return true
+  const home = options.homeDir ?? homedir()
+  if (!home || !isPathInsideRoot(abs, home, platform)) return false
+  const relative = paths.relative(home, abs).split(paths.sep).join('/')
+  return CredentialHomeDirectories.some((directory) => relative === directory || relative.startsWith(`${directory}/`))
+}
+
+/** 读凭证文件前向用户要确认；没有审批通道的宿主会直接拒绝。 */
+export async function confirmCredentialRead(ctx: SystemToolContext, resolvedPath: string): Promise<void> {
+  if (!isCredentialPath(resolvedPath)) return
+  await ctx.approval.awaitConfirmation(
+    `即将读取凭证文件：\n${resolvedPath}\n\n该文件可能包含私钥、令牌或口令，读取后内容会进入模型上下文。确认继续？`,
+    ctx.abortSignal,
+    {
+      approvalRisk: 'high',
+      riskScope: 'system-read:credential',
+      operation: {
+        key: createApprovalOperationKey('file-read', { path: resolvedPath }),
+        label: '读取凭证文件',
         target: resolvedPath,
       },
     }

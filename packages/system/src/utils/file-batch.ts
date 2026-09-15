@@ -36,3 +36,15 @@ export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): A
   }
   return new AppError(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `${problems.length} problem(s) kept the edit from being applied; nothing was written. ${summary}`, cause, { executionOutcome: 'not-applied' })
 }
+
+/** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */
+export function staleProblem(expected: string | undefined, current: Nullable<string>): Nullable<Pick<SystemEditProblem, 'reason' | 'message' | 'currentVersion'>> {
+  if (!isPresent(expected) || expected === current) return null
+  return {
+    reason: 'stale',
+    message: current
+      ? `the file changed since version ${expected}; it is now ${current}, read it again before editing`
+      : `version ${expected} was given but the file does not exist`,
+    ...(current ? { currentVersion: current } : {}),
+  }
+}
