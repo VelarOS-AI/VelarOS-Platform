@@ -1,14 +1,15 @@
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isFalse, stringifyPretty } from '@velaros-ai/core'
+import { isFalse } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { BrowserPageScriptBuilder, buildBrowserPageSnapshotName } from '../core'
+import { buildBrowserPageSnapshotName } from '../core'
 import { buildBrowserScreenshotOptions } from '../core'
 
 import { BrowserControlCapability } from './Capabilities'
 import { createArtifactManager, requireActiveBrowserSite } from './Context'
+import { extractBrowserPageContent, extractBrowserTable } from './PageExtraction'
 import { defineBrowserTool } from './Types'
 
 const exportKindSchema = z.enum([
@@ -70,6 +71,7 @@ const browserExportPage = defineBrowserTool<{
   notes: [
     '产物默认写入 extracts/、artifacts/screenshots/、artifacts/exports/ 或 pages/。',
     'fetchable 媒体 URL 再用 browser:fetch_resource 下载。',
+    'kind=content/table 与 browser:extract 同源：返回 content（附 contentBoundary）或 headers/rows，默认写入 extracts/ 并追加 savedPath/savedRelativePath。',
   ],
   schema: z.object({
     kind: exportKindSchema.describe(
@@ -140,34 +142,19 @@ const browserExportPage = defineBrowserTool<{
     ctx.abortSignal.throwIfAborted()
     requireActiveBrowserSite(ctx)
     const context = ctx.browser.getContext()!
-    const scripts = new BrowserPageScriptBuilder()
 
     switch (args.kind) {
-      case 'content': {
-        const format = args.format ?? 'markdown'
-        const result = await ctx.browser.evaluateScript({
-          script: scripts.buildPageContentExtractionScript({
-            format,
+      case 'content':
+        return {
+          kind: args.kind,
+          ...(await extractBrowserPageContent(ctx, {
+            format: args.format ?? 'markdown',
             selector: args.selector,
             maxChars: 50_000,
-          }),
-          mode: 'expression',
-          timeoutMs: 15_000,
-        }) as { content?: string; truncated?: boolean; url?: string }
-        if (!isFalse(args.save) && result.content) {
-          const artifactFormat =
-            format === 'html' ? 'html' : format === 'markdown' ? 'markdown' : 'text'
-          const saved = await createArtifactManager(ctx).writeArtifact({
-            context,
-            kind: 'extract',
-            format: artifactFormat,
-            content: result.content,
+            save: !isFalse(args.save),
             name: args.name,
-          })
-          return { kind: args.kind, ...result, savedPath: saved.path, savedRelativePath: saved.relativePath }
+          })),
         }
-        return { kind: args.kind, ...result }
-      }
       case 'screenshot':
         return {
           kind: args.kind,
@@ -203,28 +190,17 @@ const browserExportPage = defineBrowserTool<{
         return { kind: args.kind, ...(await ctx.browser.listMediaSources({ limit: 120 })) }
       case 'resources':
         return { kind: args.kind, ...(await ctx.browser.listPageResources({ limit: 120 })) }
-      case 'table': {
-        const tableResult = await ctx.browser.evaluateScript({
-          script: scripts.buildTableExtractionScript({
+      case 'table':
+        return {
+          kind: args.kind,
+          ...(await extractBrowserTable(ctx, {
             selector: args.selector,
-            maxRows: args.maxRows ?? 200,
             tableIndex: args.tableIndex ?? 0,
-          }),
-          mode: 'expression',
-          timeoutMs: 10_000,
-        })
-        if (!isFalse(args.save)) {
-          const saved = await createArtifactManager(ctx).writeArtifact({
-            context,
-            kind: 'extract',
-            format: 'json',
-            content: `${stringifyPretty(tableResult)}\n`,
+            maxRows: args.maxRows ?? 200,
+            save: !isFalse(args.save),
             name: args.name,
-          })
-          return { kind: args.kind, ...tableResult, savedPath: saved.path, savedRelativePath: saved.relativePath }
+          })),
         }
-        return { kind: args.kind, ...tableResult }
-      }
       case 'snapshot': {
         const inspection = await ctx.browser.inspectPage({ maxTextChars: 20_000 })
         // 未指定名称时用时间戳唯一名(与截图一致),避免同页重复导出撞名硬报错。

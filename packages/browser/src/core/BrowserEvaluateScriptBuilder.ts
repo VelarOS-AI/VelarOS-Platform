@@ -31,6 +31,11 @@ function precheckBrowserInlineScriptSyntax(functionBody: string): Nullable<strin
 const BrowserEvaluateSimplifyMaxDepth = 8
 /** 单个对象最多取多少个键 / 数组最多取多少项。同样与函数体字面量绑定。 */
 const BrowserEvaluateSimplifyMaxEntries = 100
+/**
+ * `maxResultChars` 的钳制上界：结果 JSON 文本超过它时信封 `result` 置 null、`resultTruncated` 为 true。
+ * 需要完整取回大载荷的调用方（页面结构化提取）按这个上界申请，超出即失败。
+ */
+const BrowserEvaluateMaxResultChars = 200_000
 
 /**
  * 把页面里的 Element 压成可 JSON 化的描述。
@@ -162,7 +167,7 @@ class BrowserEvaluateScriptBuilder {
     const payload = JSON.stringify({
       mode,
       timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000),
-      maxResultChars: clampInteger(options.maxResultChars, 1, 200_000, 20_000),
+      maxResultChars: clampInteger(options.maxResultChars, 1, BrowserEvaluateMaxResultChars, 20_000),
     })
 
     // 页面返回值可能包含 DOM、Error、循环引用等，脚本内会先 simplify 再 JSON 化。
@@ -250,6 +255,7 @@ ${functionBody}
 }
 
 export {
+  BrowserEvaluateMaxResultChars,
   BrowserEvaluateScriptBuilder,
   BrowserEvaluateSimplifyMaxDepth,
   BrowserEvaluateSimplifyMaxEntries,
