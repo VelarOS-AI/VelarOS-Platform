@@ -84,7 +84,7 @@ describe('Windows shell readiness and fallback', () => {
     const quotedSpec = platform.getShellCommandSpec(quotedCommand, { shellPath: cmd })
     expect(quotedSpec.args.at(-1)).toBe(`"chcp 65001 >nul & ${quotedCommand}"`)
     expect(quotedSpec.windowsVerbatimArguments).toBe(true)
-    expect(() => platform.quoteShellArg('%PATH%', { kind: 'cmd' })).toThrow('native file + argv')
+    expect(() => platform.quoteShellArg('%PATH%', { kind: 'cmd' })).toThrow('原生 file + argv')
   })
 
   test('native argv and environment overrides retain literal values without MSYS conversion', () => {

@@ -27,6 +27,7 @@
 //      impl 的模块级只放日志与导出的实例，类里固定用的写成 private static readonly；impl 与 utils 里不许散写数字缺省值
 //      （模块级数字常量、`?? 数字`、参数缺省写数字、名字像超时/上限/缓冲的属性写数字；0 与 1 除外）；
 //      工具定义里的数字引常量表（示例与 1000、1024 这类单位换算除外），说明文字里不写两位以上的裸数字。
+//  13. 模型和用户看得到的文字用中文：报错文字与 message、suggestedNextAction、note 字段不许是纯英文句子。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { builtinModules } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
@@ -789,6 +790,40 @@ for (const module of GovernedModules) {
     for (const leaf of leaves) {
       if (![...referenced].some((chain) => leaf === chain || leaf.startsWith(`${chain}.`))) fail(`${label}: 可调参数 ${leaf} 没有人用；不用的删掉`)
     }
+  }
+
+  // ── 5c. 模型和用户看得到的文字用中文 ─────────────────────────────────
+  // 报错（new XxxError / super 的文字）与 message、suggestedNextAction、note 字段的文字不许是纯英文句子；命令、路径、错误码、字段名可以夹在中文里。
+  const EnglishSentence = /[A-Za-z]{2,}[\s,;:'()-]+[A-Za-z]{2,}[\s,;:'()-]+[A-Za-z]{2,}/u
+  const textsOf = (node) => {
+    if (!node) return []
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text]
+    if (ts.isTemplateExpression(node)) return [[node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' ')]
+    if (ts.isConditionalExpression(node)) return [...textsOf(node.whenTrue), ...textsOf(node.whenFalse)]
+    if (ts.isParenthesizedExpression(node)) return textsOf(node.expression)
+    if (ts.isBinaryExpression(node) && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) return textsOf(node.right)
+    return []
+  }
+  for (const file of sourceFiles.filter((path) => inside(path, implRoot) || inside(path, utilsRoot))) {
+    const sourceFile = parse(file)
+    const check = (node) => {
+      for (const text of textsOf(node)) {
+        if (ChinesePattern.test(text) || !EnglishSentence.test(text)) continue
+        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+        fail(`${label}: ${shortPath(file)}:${line + 1} 模型或用户看得到的文字是英文（「${text.replace(/\s+/gu, ' ').slice(0, 60)}」）；报错、失败说明、提示统一用中文，命令、路径、错误码、字段名保持原样`)
+      }
+    }
+    const visitTexts = (node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && /Error$/u.test(node.expression.text)) {
+        for (const argument of node.arguments ?? []) check(argument)
+      } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.SuperKeyword) {
+        for (const argument of node.arguments) check(argument)
+      } else if (ts.isPropertyAssignment(node) && /^(message|suggestedNextAction|note)$/u.test(node.name.getText(sourceFile))) {
+        check(node.initializer)
+      }
+      ts.forEachChild(node, visitTexts)
+    }
+    visitTexts(sourceFile)
   }
 
   // ── 6. 对外入口由接口控制 ───────────────────────────────────────────────
