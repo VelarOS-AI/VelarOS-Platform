@@ -518,6 +518,51 @@ describe('文件工具', () => {
     }
   })
 
+  test('INV-21 文本改动无损：GBK 文件按 GB18030 读、改、写回，字节仍是 GBK；认不出编码的字节与写不回原编码的新文本整批不写', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-encoding-'))
+    try {
+      // 中文注释\n 的 GBK 字节：以前会被当成 UTF-8 读成乱码，整个写入还会悄悄改存成 UTF-8。
+      const gbk = join(root, 'legacy.ini')
+      await writeFile(gbk, Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xd7, 0xa2, 0xca, 0xcd, 0x0a]))
+      const seen = await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<{ content: string; encoding: string; range: { offset: number; end: number } }> }
+      expect(seen.files[0]).toMatchObject({ content: '中文注释\n', encoding: 'gb18030' })
+      await edit.execute({ files: [{ path: gbk, edits: [{ range: seen.files[0]!.range, oldText: '注释', newText: '说明' }] }] }, approving)
+      expect(Buffer.from(await readFile(gbk)).equals(Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xcb, 0xb5, 0xc3, 0xf7, 0x0a]))).toBe(true)
+      await edit.execute({ files: [{ path: gbk, newText: '全部重写\n' }] }, approving)
+      expect((await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<Record<string, unknown>> }).files[0]).toMatchObject({ content: '全部重写\n', encoding: 'gb18030' })
+
+      // 既不是 UTF-8、UTF-16 也不是 GB18030 的字节按二进制处理：读报错，不读成替换字符；改整批不写。
+      const invalid = join(root, 'invalid.txt')
+      const bytes = Buffer.from([0x6f, 0x6b, 0x20, 0xff, 0x0a])
+      await writeFile(invalid, bytes)
+      expect((await failureOf(read.execute({ files: [{ path: invalid }] }, approving))).code).toBe('VALIDATION')
+      const refused = await failureOf(edit.execute({ files: [{ path: invalid, edits: [{ range: { offset: 0, end: 2 }, oldText: 'ok', newText: 'no' }] }] }, approving))
+      expect(refused.outcome).toBe('not-applied')
+      expect(Buffer.from(await readFile(invalid)).equals(bytes)).toBe(true)
+
+      // 新文本里有孤立代理项：写不成原编码，整批不写，不把它换成替换字符。
+      const plain = join(root, 'plain.txt')
+      const other = join(root, 'other.txt')
+      await writeFile(plain, 'alpha\n')
+      await writeFile(other, 'other\n')
+      const lone = await failureOf(edit.execute({ files: [
+        { path: plain, edits: [{ range: { offset: 0, end: 5 }, oldText: 'alpha', newText: 'beta' }] },
+        { path: join(root, 'new.txt'), newText: 'broken \uD800' },
+        { path: other, edits: [{ range: { offset: 0, end: 0 }, newText: 'x\uDC00' }] },
+      ] }, approving))
+      expect(lone.outcome).toBe('not-applied')
+      expect(lone.problems).toEqual([
+        expect.objectContaining({ file: 1, reason: 'invalid' }),
+        expect.objectContaining({ file: 2, edit: 0, reason: 'invalid' }),
+      ])
+      expect(await readFile(plain, 'utf8')).toBe('alpha\n')
+      expect(await readFile(other, 'utf8')).toBe('other\n')
+      expect(existsSync(join(root, 'new.txt'))).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('INV-22 一次 read 最多 20 万字符，预算用完后的文件不读盘也不问用户', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
     try {

@@ -36,7 +36,7 @@ INV-2（只读判定是白名单加整体否决）、INV-3（递归删除一律�
 | INV-17 | 输出窗口的 `endPreserved` 恒为 true，由类型钉死 | 类型 | `src/types/system.ts::SystemCommandOutputWindow` |
 | INV-19 | 写系统敏感路径与凭证文件前必须经审批端口确认，按解开符号链接后的真实路径判定；被拒整批不写，临时目录不打扰用户 | 测试 | `spec/acceptance.test.ts` |
 | INV-20 | `system:edit` 一批全成或全不成：任何一处定不下来、被拒或文件在核对后被改，什么都不写，并按 not-applied 报告每个问题 | 测试 | `spec/acceptance.test.ts` |
-| INV-21 | 文本改动无损：解码再编码得不到原字节的文件拒改，已有的二进制文件不许整个覆盖，符号链接写到它指向的文件、链接本身不变 | 测试 | `spec/acceptance.test.ts` |
+| INV-21 | 文本改动无损：只按认得出的编码（UTF-8、带 BOM、UTF-16、GB18030）严格解码，非法字节按二进制拒改、不读成替换字符；解码再编码得不到原字节的文件拒改，写不成原编码的新文本（孤立代理项、GB18030 表示不了的字符）整批不写；已有的二进制文件不许整个覆盖，符号链接写到它指向的文件、链接本身不变 | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 一次 `system:read` 最多 20 万字符：预算用完后的文件不读盘、不问用户，那一项是失败条目并在 note 里说明 | 测试 | `spec/acceptance.test.ts` |
 | INV-23 | 演练沙箱里的命令一律受进程约束：cwd 落在镜像根之内就只能写镜像和它自己的临时目录；没有约束后端的宿主建不出沙箱，不留没有约束的副本；清单读不出来时镜像根里的命令拒绝执行，不退回裸进程 | 测试 | `spec/acceptance.test.ts` |
 | INV-24 | 落回只写清单记过的文件：源目录里任何一处自建沙箱以来变过就整批不落，按 not-applied 报出冲突；任何一层的 `.git`（含嵌套仓库）永远不落 | 测试 | `spec/acceptance.test.ts` |

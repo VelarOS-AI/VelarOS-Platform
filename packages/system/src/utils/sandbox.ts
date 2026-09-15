@@ -11,10 +11,11 @@ import { dirname, join, posix, resolve, sep } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
 
-import { isEmpty, isFalse, isNull, isPresent } from '@velaros-ai/core'
+import { isEmpty, isFalse, isNull, isPresent, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
+import { textCodec, textFileIo } from '@velaros-ai/text-files'
 
 import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
@@ -22,7 +23,6 @@ import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSan
 
 import { isPathInsideRoot, realPathForSafety } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
-import { isBinaryBuffer, readFileHead } from './text-file.js'
 import { SystemTuning } from './tuning.js'
 
 /** 沙箱都放在临时区的这个基目录之下；删除前核对路径确实在它之下。 */
@@ -107,7 +107,7 @@ function isGitConfigPath(relativePath: string): boolean {
 
 /** 一个 `.git` 链接文件（内容是 `gitdir: <路径>`，git worktree 与子模块用它）指向的仓库目录是否落在 root 之外；不是链接文件返回 false。 */
 async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boolean> {
-  const head = await readFileHead(linkFile, SystemTuning.files.textSniffBytes).catch(() => null)
+  const head = await textFileIo.readHead(linkFile, SystemTuning.files.textSniffBytes).catch(() => null)
   const target = head ? /^gitdir:[ \t]*(.+?)[ \t]*\r?$/mu.exec(head.toString('utf8'))?.[1] : undefined
   if (!target) return false
   return !isPathInsideRoot(await realPathForSafety(resolve(dirname(linkFile), target)), root)
@@ -269,14 +269,12 @@ export async function disableGitPush(root: string, configPaths: readonly string[
   return changed
 }
 
-/** 读一个文件当文本（不像二进制且不超过上限）；不是就返回 null。 */
+/** 读一个文件当文本（按认出的编码严格解码，不超过上限）；二进制、认不出编码或太长就返回 null。 */
 async function readTextForDiff(path: string, maxChars: number): Promise<Nullable<string>> {
   const stats = await lstat(path).catch(() => null)
   if (!stats?.isFile() || stats.size > maxChars * 4) return null
-  const buffer = await readFile(path)
-  if (isBinaryBuffer(buffer)) return null
-  const text = buffer.toString('utf8')
-  return text.length > maxChars ? null : text
+  const text = textCodec.decode(await readFile(path))?.content
+  return isUndefined(text) || text.length > maxChars ? null : text
 }
 
 /** 渲染一个文本文件的统一差量并按字符预算截断。 */

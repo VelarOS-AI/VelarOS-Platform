@@ -1,23 +1,21 @@
 /**
- * 文本与媒体文件：识别编码、读文本文件、认出图片（和 PDF，只为把错误说清楚）、按字符取段。
+ * 文本与媒体文件：读文本文件、认出图片（和 PDF，只为把错误说清楚）、按字符取段、版本号与印记。
+ * 编码的识别、严格解码与按原编码写回在公共件 `@velaros-ai/text-files`；这里只把它的结论翻成本包的报错。
  */
 
 import { createHash } from 'node:crypto'
 import type { Stats } from 'node:fs'
-import { open, readFile, stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
+import { textCodec, textFileIo } from '@velaros-ai/text-files'
+import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
+import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
-import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange,SystemTextSlice } from '../types/files.js'
+import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../types/files.js'
 
 import { readErrnoCode } from './fs.js'
 import { SystemTuning } from './tuning.js'
-
-const UTF8_BOM = Buffer.from([0xEF, 0xBB, 0xBF])
-
-const UTF16LE_BOM = Buffer.from([0xFF, 0xFE])
-
-const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
 
 /** 从 stat 结果取文件印记（修改时间与大小）；不存在或不是普通文件时为 null。 */
 export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
@@ -29,18 +27,6 @@ export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
 export function stampProvesUnchanged(before: Nullable<SystemFileStamp>, now: Nullable<SystemFileStamp>): boolean {
   if (!before || !now) return false
   return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > SystemTuning.files.alwaysRehashBytes
-}
-
-/** 只读文件开头的一段字节（认编码、判二进制用），不把整个文件读进来。 */
-export async function readFileHead(resolvedPath: string, bytes: number): Promise<Buffer> {
-  const handle = await open(resolvedPath, 'r')
-  try {
-    const buffer = Buffer.alloc(bytes)
-    const { bytesRead } = await handle.read(buffer, 0, bytes, 0)
-    return buffer.subarray(0, bytesRead)
-  } finally {
-    await handle.close()
-  }
 }
 
 /** 文件现在的版本号：不存在或不是普通文件就是 null。 */
@@ -85,122 +71,33 @@ export async function readRawSystemFileBuffer(resolvedPath: string): Promise<Buf
   return contentBuffer
 }
 
-/** 识别字节的文本编码并解码；识别为二进制时报错，报错里提示图片和 PDF 走 read 也能看。 */
-export function decodeSystemTextBuffer(
-  buffer: Buffer,
-  resolvedPath = '<buffer>'
-): { content: string; encoding: SystemTextEncoding } {
-  const encoding = detectSystemTextEncoding(buffer)
-  if (!encoding) {
-    throw new AppError(
-      'VALIDATION',
-      `文件是二进制的，不能当文本读：${resolvedPath}（图片用 system:view 看，其他二进制文件读不了）`
-    )
-  }
-
-  return {
-    content: decodeSystemTextContent(buffer, encoding),
-    encoding,
-  }
+/** 识别字节的文本编码并严格解码；认不出（二进制、非法字节、认不出的编码）时报错，报错里提示图片用 system:view 看。 */
+export function decodeSystemTextBuffer(buffer: Buffer, resolvedPath = '<buffer>'): DecodedText {
+  const decoded = textCodec.decode(buffer)
+  if (!decoded) throw binaryTextError(resolvedPath)
+  return decoded
 }
 
-/** 按指定编码把文本编码成字节，需要时带上 BOM。 */
-export function encodeSystemTextContent(
-  content: string,
-  encoding: SystemTextEncoding
-): Buffer {
-  switch (encoding) {
-    case 'utf8-bom':
-      return Buffer.concat([UTF8_BOM, Buffer.from(content, 'utf-8')])
-    case 'utf16le':
-      return Buffer.concat([UTF16LE_BOM, Buffer.from(content, 'utf16le')])
-    case 'utf16be':
-      return Buffer.concat([UTF16BE_BOM, encodeUtf16Be(content)])
-    case 'utf16le-nobom':
-      return Buffer.from(content, 'utf16le')
-    case 'utf16be-nobom':
-      return encodeUtf16Be(content)
-    case 'utf8':
-      return Buffer.from(content, 'utf-8')
+/** 大文件整个覆盖前只读开头一段认编码（按「只看了开头」认，末尾被截断的字符不算错）；认不出按二进制报错。 */
+export async function readSystemTextEncodingFromHead(resolvedPath: string): Promise<TextEncoding> {
+  const encoding = textCodec.detect(await textFileIo.readHead(resolvedPath, SystemTuning.files.textSniffBytes), { partial: true })
+  if (!encoding) throw binaryTextError(resolvedPath)
+  return encoding
+}
+
+/** 解码再按原编码编回去，是不是正好得到原来的字节；编不回去（GB18030 表示不了的字符）也算不是。 */
+export function reencodesExactly(textFile: SystemTextFileContent): boolean {
+  try {
+    return textCodec.encode(textFile.content, textFile.encoding).equals(textFile.buffer)
+  } catch {
+    // arch-guard:silent-catch-ok 编不回去就是答案：这个文件改写会丢数据。
+    return false
   }
 }
 
-/** 判断字节像不像二进制：开头 SystemTuning.files.textSniffBytes 字节内出现 NUL 字节即视为二进制。 */
-export function isBinaryBuffer(buf: Buffer): boolean {
-  const checkLength = Math.min(buf.length, SystemTuning.files.textSniffBytes)
-  for (let i = 0; i < checkLength; i++) {
-    if (buf[i] === 0) return true
-  }
-  return false
-}
-
-/** 识别字节的文本编码（UTF-8、带 BOM 的 UTF-8、UTF-16 各种变体）；像二进制时返回 null。 */
-function detectSystemTextEncoding(buffer: Buffer): Nullable<SystemTextEncoding> {
-  if (buffer.subarray(0, UTF8_BOM.length).equals(UTF8_BOM)) return 'utf8-bom'
-  if (buffer.subarray(0, UTF16LE_BOM.length).equals(UTF16LE_BOM)) return 'utf16le'
-  if (buffer.subarray(0, UTF16BE_BOM.length).equals(UTF16BE_BOM)) return 'utf16be'
-
-  const utf16NoBom = detectUtf16NoBom(buffer)
-  if (utf16NoBom) return utf16NoBom
-
-  if (isBinaryBuffer(buffer)) return null
-  return 'utf8'
-}
-
-/** 按 NUL 字节的分布猜测无 BOM 的 UTF-16 字节序；猜不出返回 null。 */
-function detectUtf16NoBom(buffer: Buffer): Nullable<SystemTextEncoding> {
-  let checkLength = Math.min(buffer.length, SystemTuning.files.textSniffBytes)
-  checkLength -= checkLength % 2
-  if (checkLength < 16) return null
-
-  let evenNul = 0
-  let oddNul = 0
-  for (let index = 0; index < checkLength; index += 1) {
-    if (buffer[index] !== 0) continue
-    if (index % 2 === 0) {
-      evenNul += 1
-    } else {
-      oddNul += 1
-    }
-  }
-
-  const half = checkLength / 2
-  if (oddNul * 10 >= half * 3 && evenNul * 20 <= half) return 'utf16le-nobom'
-  if (evenNul * 10 >= half * 3 && oddNul * 20 <= half) return 'utf16be-nobom'
-  return null
-}
-
-/** 按已识别的编码把字节解码成文本。 */
-function decodeSystemTextContent(buffer: Buffer, encoding: SystemTextEncoding): string {
-  switch (encoding) {
-    case 'utf8-bom':
-      return buffer.subarray(UTF8_BOM.length).toString('utf-8')
-    case 'utf16le':
-      return buffer.subarray(UTF16LE_BOM.length).toString('utf16le')
-    case 'utf16be':
-      return decodeUtf16Be(buffer.subarray(UTF16BE_BOM.length))
-    case 'utf16le-nobom':
-      return buffer.toString('utf16le')
-    case 'utf16be-nobom':
-      return decodeUtf16Be(buffer)
-    case 'utf8':
-      return buffer.toString('utf-8')
-  }
-}
-
-/** 把 UTF-16 大端字节解码成文本。 */
-function decodeUtf16Be(buffer: Buffer): string {
-  const alignedLength = buffer.length - (buffer.length % 2)
-  const swapped = Buffer.from(buffer.subarray(0, alignedLength))
-  swapped.swap16()
-  return swapped.toString('utf16le')
-}
-
-/** 把文本编码成 UTF-16 大端字节。 */
-function encodeUtf16Be(content: string): Buffer {
-  const swapped = Buffer.from(content, 'utf16le')
-  swapped.swap16()
-  return swapped
+/** 认不出是文本时的报错：二进制文件读不了，图片用 system:view 看。 */
+function binaryTextError(resolvedPath: string): AppError {
+  return new AppError('VALIDATION', `文件是二进制的，不能当文本读：${resolvedPath}（图片用 system:view 看，其他二进制文件读不了）`)
 }
 
 /** 算出一份文件内容的版本号：字节的 SHA-1 前 12 位，内容一样版本号就一样。 */
@@ -251,13 +148,17 @@ export function sliceTextChars(content: string, offset: number, maxChars: number
   return { content: content.slice(range.offset, range.end), range }
 }
 
-/** 确认路径是普通文件且不超过 maxBytes，然后整个读进来；太大报错，让调用方用系统命令截取。 */
+/** 确认路径是普通文件，再在同一个句柄上有界读进来（读的途中变长了报外部修改）；超过 maxBytes 报错，让调用方用系统命令截取。 */
 export async function readBoundedFile(resolvedPath: string, maxBytes: number): Promise<Buffer> {
-  const size = await assertRegularFile(resolvedPath)
-  if (size > maxBytes) {
-    throw new AppError('VALIDATION', `文件太大，不能一次读进来：${size} 字节，上限 ${maxBytes} 字节；用 system:run 截取其中一段`)
-  }
-  return readRawSystemFileBuffer(resolvedPath)
+  await assertRegularFile(resolvedPath)
+  const buffer = await textFileIo.readBounded(resolvedPath, maxBytes).catch((err: unknown) => {
+    if (err instanceof AppError && err.code === TextFileErrorCodes.tooLarge) {
+      throw new AppError('VALIDATION', `文件太大，不能一次读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 system:run 截取其中一段`)
+    }
+    throw normalizeReadError(err, resolvedPath)
+  })
+  if (!buffer) throw new AppError('NOT_FOUND', `文件不存在：${resolvedPath}`)
+  return buffer
 }
 
 /** 把一份字节按文本解码后从 offset 起取最多 maxChars 个字符，连同范围与版本号一起组成读取结果。 */

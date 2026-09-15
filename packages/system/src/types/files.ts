@@ -1,9 +1,10 @@
 /**
- * 文件数据：读、看、写的输入与结果、文本编码，以及文件操作与搜索实现自己的工作类型（文本内容与切片、媒体类型、版本快照、gitignore 规则、敏感路径判定的环境、写入计划与印记）。
+ * 文件数据：读、看、写的输入与结果（文本编码用公共件 text-files 的 `TextEncoding`），以及文件操作与搜索实现自己的工作类型（文本内容与切片、媒体类型、版本快照、gitignore 规则、敏感路径判定的环境、写入计划与印记）。
  * 只放类型；后一部分只在包内用，公开签名不引用它们，所以不出包。
  */
 
 import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
+import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 /** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 */
 export interface SystemTextRange {
@@ -32,7 +33,7 @@ export interface SystemReadFileResult {
   range: SystemTextRange
   totalChars: number
   hasMore: boolean
-  encoding: SystemTextEncoding
+  encoding: TextEncoding
 }
 
 /** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 */
@@ -177,14 +178,6 @@ export interface SystemEditResult {
   files: SystemEditFileResult[]
 }
 
-export type SystemTextEncoding =
-  | 'utf8'
-  | 'utf8-bom'
-  | 'utf16le'
-  | 'utf16be'
-  | 'utf16le-nobom'
-  | 'utf16be-nobom'
-
 // ── 实现自己的工作类型，不出包 ─────────────────────────────────────
 
 /** 文件改动前留下的一个版本：版本号是内容的哈希，buffer 是当时的原始字节。 */
@@ -206,10 +199,9 @@ export interface SystemTextSlice {
   range: SystemTextRange
 }
 
-export interface SystemTextFileContent {
+/** 读进来的一个文本文件：原始字节，以及按认出的编码严格解出的正文。 */
+export interface SystemTextFileContent extends DecodedText {
   buffer: Buffer
-  content: string
-  encoding: SystemTextEncoding
 }
 
 export interface SystemSearchIgnorePolicyOptions {
@@ -255,9 +247,10 @@ export interface SystemFileStamp {
 
 /**
  * 一个文件定下来的写入计划：回滚、整个写入、或改几处。path 是按传入路径解析出的绝对路径，target 是解开符号链接后真正要写的文件，
- * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。整个写入时 previous 只在文件不超过可编辑上限时保留（留版本用），encoding 是写回用的编码。第一段只做计划，第二段照计划写。
+ * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。要写的字节在计划时就按原编码编好（bytes），编不成的在计划期就成了问题：
+ * 回滚带回滚后正文的字符数，整个写入时 previous 只在文件不超过可编辑上限时保留（留版本用），改几处时 updated 是改完的正文。第一段只做计划，第二段照计划写。
  */
 export type SystemEditPlan =
-  | { kind: 'restore'; index: number; path: string; target: string; current: Nullable<Buffer>; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
-  | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; encoding: SystemTextEncoding; newText: string; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
-  | { kind: 'edits'; index: number; path: string; target: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'restore'; index: number; path: string; target: string; current: Nullable<Buffer>; snapshot: { version: string; buffer: Buffer }; totalChars: number; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer }>; newText: string; bytes: Buffer; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'edits'; index: number; path: string; target: string; textFile: SystemTextFileContent; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; updated: string; bytes: Buffer; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }

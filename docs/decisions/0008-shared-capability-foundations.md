@@ -62,4 +62,5 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - 按块解码不用运行时 TextDecoder 的 GB18030 流式状态：Bun 1.3 的实现会把被块边界切开的字丢掉、末尾没凑齐的字节也不报错，本包自己把没凑齐的字节接到下一块；Node 与 Bun 结果一致。
 - 换行适配、行号偏移、文本匹配不进本包：两个空间的编辑语义不同，各自保留。
 - project 已改用它：`utils/files/atomic-writer.ts`、`private-byte-io.ts`、`text-stream.ts` 删除，`utils/text.ts` 的编码部分与 `byte-codec.ts` 的字节保留编码删除，`ProjectTextEncoding`、`ProjectTextEncodingProbe`、`ProjectExpectedBytes` 删除改用 `TextEncoding`、`ExpectedBytes`（根入口不再导出 `ProjectTextEncoding`，宿主改从 `@velaros-ai/text-files/contracts` 取 `TextEncoding`）；本包的码在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处翻成 `ProjectError`（notText、notRegular → NOT_SUPPORTED，lossy、invalidMode → INVALID_INPUT，externalEdit、tooLarge → CONFLICT_WITH_EXTERNAL_EDIT），按 `ProjectError` 分支的逻辑一处未改。
+- system 已改用它：`utils/text-file.ts` 的编码识别、编解码、BOM 与 UTF-16 处理、二进制判定、读文件头删除，`SystemTextEncoding` 删除改用 `TextEncoding`，`writeSystemFileAtomically` 改走 `textFileIo.writeBytes`（EACCES、EPERM 仍翻 PERMISSION，拒写的多硬链接文件翻 VALIDATION），有界读的超限翻回原来那句「用 system:run 截取」。随之而来的行为变化：GBK/GB18030 文件能读能改、整份写入不再悄悄改存成 UTF-8；非法 UTF-8 字节按二进制报错而不是读成替换字符；孤立代理项与多硬链接文件在计划期就拒绝（not-applied）；写入 fsync、已有文件权限位精确保留、新文件权限由 umask 定；极短的无 BOM UTF-16 能认出。
 

@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, link, lstat, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -194,6 +194,58 @@ describe('System capability', () => {
       expect(result.content).toBe('a\r\nb')
       expect(result.encoding).toBe('utf16le')
     } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('reads short UTF-16 without a BOM by the byte-order evidence instead of calling it binary', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-short-utf16-'))
+    const path = join(root, 'short.txt')
+    try {
+      await writeFile(path, Buffer.from('ok\n', 'utf16le'))
+      expect(await readOne({ path })).toMatchObject({ content: 'ok\n', encoding: 'utf16le-nobom' })
+      await editOne({ path, edits: [{ range: { offset: 0, end: 2 }, oldText: 'ok', newText: 'no' }] })
+      expect(Buffer.from(await readFile(path)).equals(Buffer.from('no\n', 'utf16le'))).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('edit refuses files with several hard links as not-applied, leaving every link intact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-hard-link-'))
+    try {
+      const source = join(root, 'source.conf')
+      const alias = join(root, 'alias.conf')
+      await writeFile(source, 'value = 1\n')
+      await link(source, alias)
+      for (const file of [{ path: alias, newText: 'value = 2\n' }, { path: source, edits: [{ range: { offset: 0, end: 10 }, oldText: '1', newText: '2' }] }]) {
+        const refused = await problemsOf(systemFileOperations.edit({ files: [file] }, approvingContext))
+        expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid', message: expect.stringContaining('硬链接') })
+      }
+      expect(await readFile(source, 'utf8')).toBe('value = 1\n')
+      expect(await readFile(alias, 'utf8')).toBe('value = 1\n')
+      expect((await stat(source)).nlink).toBe(2)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(process.platform === 'win32')('edit keeps an existing file mode exactly and lets umask decide the mode of a new file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-mode-'))
+    const mask = process.umask(0o077)
+    try {
+      const shared = join(root, 'shared.sh')
+      await writeFile(shared, 'echo one\n')
+      await chmod(shared, 0o777)
+      await editOne({ path: shared, edits: [{ range: { offset: 0, end: 9 }, oldText: 'one', newText: 'two' }] })
+      expect((await stat(shared)).mode & 0o777).toBe(0o777)
+      await editOne({ path: shared, newText: 'echo three\n' })
+      expect((await stat(shared)).mode & 0o777).toBe(0o777)
+      const fresh = join(root, 'fresh.txt')
+      await editOne({ path: fresh, newText: 'new\n' })
+      expect((await stat(fresh)).mode & 0o777).toBe(0o600)
+    } finally {
+      process.umask(mask)
       await rm(root, { recursive: true, force: true })
     }
   })

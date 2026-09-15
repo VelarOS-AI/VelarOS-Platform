@@ -2,12 +2,10 @@
  * 文件系统：读取错误码、原子写入文件。
  */
 
-import { stat } from 'node:fs/promises'
-
 import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { writeFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
-
+import { textFileIo } from '@velaros-ai/text-files'
+import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
 /** 读出 Node 文件系统错误的错误码字符串，如 ENOENT；认不出返回 null。 */
 export function readErrnoCode(error: unknown): Nullable<string> {
@@ -15,20 +13,23 @@ export function readErrnoCode(error: unknown): Nullable<string> {
   return isString(error.code) ? error.code : null
 }
 
-/** 原子地写入文件，保留已有文件的权限位；没有写权限时报权限错误。 */
+/**
+ * 原子地替换文件的全部字节（公共件 text-files：同目录临时文件写完 fsync 再改名，已有文件的权限位精确保留，新文件的权限由 umask 定）；
+ * 没有写权限时报权限错误；有多个硬链接或不是普通文件的路径拒写，说明改用 system:run。
+ */
 export async function writeSystemFileAtomically(
   resolvedPath: string,
   contentBuffer: Buffer
 ): Promise<void> {
-  const existing = await stat(resolvedPath).catch(() => null)
-  const mode = existing?.isFile() ? existing.mode & 0o777 : 0o644
-
   try {
-    await writeFileAtomically(resolvedPath, contentBuffer, { mode })
+    await textFileIo.writeBytes(resolvedPath, contentBuffer)
   } catch (err) {
     const code = readErrnoCode(err)
     if (code === 'EACCES' || code === 'EPERM') {
       throw new AppError('PERMISSION', `没有权限写这个文件：${resolvedPath}`)
+    }
+    if (err instanceof AppError && err.code === TextFileErrorCodes.notRegular) {
+      throw new AppError('VALIDATION', `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 system:run`)
     }
     throw err
   }

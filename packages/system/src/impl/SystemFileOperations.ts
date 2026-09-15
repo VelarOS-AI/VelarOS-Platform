@@ -10,10 +10,12 @@ import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from 
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
+import { textCodec } from '@velaros-ai/text-files'
+import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import { SystemFailureLimits, SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
@@ -21,15 +23,14 @@ import { adaptReplacementLineEndings, findOccurrences, lineEndingStyle, withLine
 import {
   clampTextRange,
   currentFileVersion,
-  decodeSystemTextBuffer,
   detectMediaType,
-  encodeSystemTextContent,
   fileVersionOf,
   readBoundedFile,
-  readFileHead,
   readRawSystemFileBuffer,
+  readSystemTextEncodingFromHead,
   readSystemTextFile,
   readTextWindow,
+  reencodesExactly,
   stampOf,
   stampProvesUnchanged,
 } from '../utils/text-file.js'
@@ -44,7 +45,7 @@ const log = Log.tag('SystemFileOperations')
  * 三个文件操作：读文本、看图片与 PDF、写。`system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
  *
  * 实现是 `SystemFileOperations`，整个进程只有一份（`systemFileOperations`）。路径都按用户输入规整：`~` 展开到家目录，相对路径相对宿主给 system:run 的默认目录（宿主没给就相对家目录）。读凭证文件（私钥、云凭证、口令库）前先向用户确认。
- * 位置一律按字符算，没有行的概念。读写都保留原文件的编码（UTF-8、带 BOM、UTF-16）；写先写临时文件再原子替换；写系统敏感路径前先向用户确认，被拒绝就不动。
+ * 位置一律按字符算，没有行的概念。读写都保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030），认不出编码或有非法字节的按二进制处理；写先写临时文件、fsync 后原子替换，权限位原样保留；写系统敏感路径前先向用户确认，被拒绝就不动。
  */
 export interface SystemFileOperationsApi {
   /**
@@ -74,7 +75,7 @@ export interface SystemFileOperationsApi {
    * 只给 restore：把文件回到那个版本；回滚前的内容也留成一个版本，回滚本身能再回滚。
    * 每次改动前把原内容留成一个版本，结果里给出新版本号和改动前的版本号；改了几处的结果还返回每处新文本前后各 200 字符的小段，盖住所有改动那段不超过 2 万字符时整段也给，不用再读一遍确认。
    * edits 里写进去的文本跟着原文的换行风格走（看那一段，那一段没有换行就看整个文件）：CRLF 文件里的裸 LF 换成 CRLF；newText 整个写入原样写。
-   * 沿用原编码。路径是管道、设备或套接字时不碰。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
+   * 沿用原编码，写不成原编码的新文本（孤立代理项、GB18030 表示不了的字符）整批不写。路径是管道、设备或套接字，或者文件有多个硬链接（原子替换会让它和其余链接分家）时不碰。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
    */
   edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult>
 }
@@ -211,6 +212,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (existing?.isDirectory()) return problem(`路径是目录，不是文件：${resolvedPath}`)
     // 管道、设备、套接字：读它可能永远等不到数据（读命名管道会一直挂着），整个替换又会把它换成普通文件，一律不碰。
     if (existing && !existing.isFile()) return problem(`路径不是普通文件（管道、设备或套接字），不能当文本改：${resolvedPath}`)
+    // 原子替换是写一个新文件再改名：多个硬链接的文件换完就和其余链接分家了，一律不碰。
+    if (existing && existing.nlink > 1) return problem(`文件有 ${existing.nlink} 个硬链接，原子替换会让它和其余链接分家，不能在这里改：${resolvedPath}；用 system:run 改`)
     const stamp = stampOf(existing)
     // 父路径已经存在却不是目录，写入注定失败，在计划期就报出来（缺失的父目录写的时候会补建）。
     const parentCode = await stat(dirname(target)).then((parent) => (parent.isDirectory() ? null : 'ENOTDIR')).catch((error: unknown) => readErrnoCode(error))
@@ -219,19 +222,22 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (isPresent(file.restore)) {
       const snapshot = this.history.recall(target, file.restore)
       if (!snapshot) return problem(`历史里没有版本 ${file.restore}：只有本次运行里改动前留下的最近几份，而且只在内存里`, { reason: 'not-found' })
+      // 回滚后的字符数在计划期就算好：认不出是文本的版本在这里就拒，不会写完了才报错。
+      const restored = textCodec.decode(snapshot.buffer)
+      if (!restored) return problem(`版本 ${file.restore} 不是能认出的文本（二进制、非法字节或认不出的编码），不能在这里回滚`)
       if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里回滚覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节`)
       const current = existing?.isFile() ? await readRawSystemFileBuffer(target) : null
       const baseVersion = current ? fileVersionOf(current) : null
       const stale = staleProblem(file.version, baseVersion)
       if (stale) return problem(stale.message, stale)
-      return { kind: 'restore', index, path: resolvedPath, target, current, snapshot, baseVersion, stamp }
+      return { kind: 'restore', index, path: resolvedPath, target, current, snapshot, totalChars: restored.content.length, baseVersion, stamp }
     }
 
     if (isPresent(file.newText)) {
       if (file.newText.includes('\0')) return problem('newText 里有 NUL 字节，是二进制数据，不能当文本写入')
       if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整个覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 system:run 替换`)
       let previous: Nullable<SystemTextFileContent> = null
-      let encoding: SystemTextEncoding = 'utf8'
+      let encoding: TextEncoding = 'utf8'
       if (existing?.isFile()) {
         // 已有的文件必须是文本才许整个覆盖：二进制文件被 newText 盖掉就没了，也留不下能回滚的版本。
         // 不超过可编辑上限的整个读进来留版本；更大的留不下版本，只读开头一段认编码、拒二进制。
@@ -240,7 +246,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
             previous = await readSystemTextFile(target)
             encoding = previous.encoding
           } else {
-            encoding = decodeSystemTextBuffer(await readFileHead(target, SystemTuning.files.textSniffBytes), target).encoding
+            encoding = await readSystemTextEncodingFromHead(target)
           }
         } catch (error) {
           const failure = AppError.from(error)
@@ -248,10 +254,17 @@ class SystemFileOperations implements SystemFileOperationsApi {
           return problem(`现有文件不能按文本重写（${failure.message}）；二进制文件用 system:run 替换`, { reason: failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
         }
       }
+      // 按原编码写不出来（孤立代理项、GB18030 表示不了的字符）就是这个文件的问题，整批不写，不静默换成替换字符或别的编码。
+      let bytes: Buffer
+      try {
+        bytes = textCodec.encode(file.newText, encoding)
+      } catch (error) {
+        return problem(`newText 不能按 ${encoding} 无损写进这个文件：${AppError.from(error).message}`)
+      }
       const baseVersion = previous ? fileVersionOf(previous.buffer) : existing?.isFile() ? await currentFileVersion(target) : null
       const stale = staleProblem(file.version, baseVersion)
       if (stale) return problem(stale.message, stale)
-      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, encoding, newText: file.newText, baseVersion, stamp }
+      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, newText: file.newText, bytes, baseVersion, stamp }
     }
 
     const edits = file.edits ?? []
@@ -271,7 +284,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const stale = staleProblem(file.version, baseVersion)
     if (stale) return problem(stale.message, stale)
     // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 system:run 去改。
-    if (!encodeSystemTextContent(textFile.content, textFile.encoding).equals(textFile.buffer)) return problem(`文件里有不是合法 ${textFile.encoding} 文本的字节，改写会丢数据；用 system:run 改`)
+    if (!reencodesExactly(textFile)) return problem(`文件里有按 ${textFile.encoding} 解码再编码得不到原样的字节，改写会连带改掉没动的地方；用 system:run 改`)
     const content = textFile.content
     const fileStyle = lineEndingStyle(content)
 
@@ -282,6 +295,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     for (const [edit, change] of edits.entries()) {
       const at = (message: string, extra: Partial<SystemEditProblem> = {}): void => { problems.push({ file: index, path: resolvedPath, reason: 'invalid', message, edit, ...extra }) }
       if (change.newText.includes('\0')) { at('newText 里有 NUL 字节，是二进制数据，不能当文本写入'); continue }
+      const lone = textCodec.findLoneSurrogate(change.newText)
+      if (lone) { at(`newText 在 UTF-16 offset ${lone.offset} 是不完整的 Unicode 字符（孤立代理项），写不进文件；重新构造完整的字符`); continue }
       if (change.range.end < change.range.offset) { at(`range ${change.range.offset}-${change.range.end} 是反的：end 不能小于 offset`); continue }
       // 起点已经落在文件外，说明位置来自过期的内容；终点越界只是读到的段比现在长，收进文件长度即可。
       if (change.range.offset > content.length) {
@@ -322,7 +337,18 @@ class SystemFileOperations implements SystemFileOperationsApi {
       if (overlapping) problems.push({ file: index, path: resolvedPath, reason: 'overlap', message: `edits[${before.edit}] 和 edits[${after.edit}] 重叠；合成一处`, edit: after.edit, with: before.edit })
     }
     if (!isEmpty(problems)) return problems
-    return { kind: 'edits', index, path: resolvedPath, target, textFile, ordered, scopes, baseVersion, stamp }
+    // 改完的正文与要写的字节在计划期就定下来：从后往前套用，前面的位置不受后面改动影响；按原编码写不出来就是这个文件的问题。
+    let updated = content
+    for (const target of [...ordered].reverse()) {
+      updated = updated.slice(0, target.range.offset) + target.newText + updated.slice(target.range.end)
+    }
+    let bytes: Buffer
+    try {
+      bytes = textCodec.encode(updated, textFile.encoding)
+    } catch (error) {
+      return problem(`改完的文本不能按 ${textFile.encoding} 无损写进这个文件：${AppError.from(error).message}`)
+    }
+    return { kind: 'edits', index, path: resolvedPath, target, textFile, ordered, scopes, updated, bytes, baseVersion, stamp }
   }
 
   /** 按计划写一个文件：一律写到 target（真实路径），改动前把原内容留成一个版本，版本历史也按真实路径记。 */
@@ -331,23 +357,15 @@ class SystemFileOperations implements SystemFileOperationsApi {
       const previousVersion = plan.current ? this.history.remember(plan.target, plan.current) : null
       await mkdir(dirname(plan.target), { recursive: true })
       await writeSystemFileAtomically(plan.target, plan.snapshot.buffer)
-      const restored = decodeSystemTextBuffer(plan.snapshot.buffer, plan.path)
-      return { path: plan.path, action: 'restored', version: plan.snapshot.version, previousVersion, bytes: plan.snapshot.buffer.byteLength, totalChars: restored.content.length }
+      return { path: plan.path, action: 'restored', version: plan.snapshot.version, previousVersion, bytes: plan.snapshot.buffer.byteLength, totalChars: plan.totalChars }
     }
     if (plan.kind === 'write') {
       const previousVersion = plan.previous ? this.history.remember(plan.target, plan.previous.buffer) : null
-      const buffer = encodeSystemTextContent(plan.newText, plan.encoding)
       await mkdir(dirname(plan.target), { recursive: true })
-      await writeSystemFileAtomically(plan.target, buffer)
-      return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(buffer), previousVersion, bytes: buffer.byteLength, totalChars: plan.newText.length }
+      await writeSystemFileAtomically(plan.target, plan.bytes)
+      return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(plan.bytes), previousVersion, bytes: plan.bytes.byteLength, totalChars: plan.newText.length }
     }
-    // 从后往前套用，前面的位置不受后面改动影响。
-    const content = plan.textFile.content
-    let updated = content
-    for (const target of [...plan.ordered].reverse()) {
-      updated = updated.slice(0, target.range.offset) + target.newText + updated.slice(target.range.end)
-    }
-    const buffer = encodeSystemTextContent(updated, plan.textFile.encoding)
+    const { updated, bytes: buffer } = plan
     const previousVersion = this.history.remember(plan.target, plan.textFile.buffer)
     await writeSystemFileAtomically(plan.target, buffer)
     // 改完每处都交回新文本前后各一小段；盖住所有改动那段（各处 range 的并集）不长时整段也给，位置按改动前后的长度差挪。
