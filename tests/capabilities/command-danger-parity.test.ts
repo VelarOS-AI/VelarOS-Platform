@@ -1,13 +1,13 @@
 /**
- * 跨包一致性：system 与 project 两个空间各有一份命令危险判定，两个包互不引用。
+ * 跨包一致性：命令判定已经抽成公共包 @velaros-ai/shell-command（system 用它），project 还持有自己的一份，迁过去之前两份必须一致。
  * 同一条命令在两边必须得到同一个结论，否则同一条删除命令会在一个空间里问用户、在另一个空间里静默执行。
- * 这条约束不属于任何一个包，所以放在仓库级；改任何一边的危险规则都要让这份语料在两边同时通过。
+ * project 改用公共包之后，这份测试随之删除，语料并进公共包的验收。
  */
 import { describe, expect, test } from 'bun:test'
 
 // 直接取判定所在的文件：project 的入口正在重排，判定本身一直在这里。
 import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/utils/command-policy'
-import { systemCommandPolicy } from '../../packages/system/src/exports/index'
+import { shellCommandPolicy as systemCommandPolicy } from '../../packages/shell-command/src/exports/index'
 
 const DangerousCommands = [
   'dd of=/dev/disk2 if=/dev/zero bs=1m',

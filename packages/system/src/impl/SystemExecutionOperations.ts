@@ -9,18 +9,16 @@ import { join } from 'node:path'
 import { createApprovalOperationKey, createManualApprovalOptions } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
+import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-command'
 
 import { SystemFailureLimits, SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
-import { buildBackgroundCommandConfirmationMessage } from '../utils/command-policy.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
 import { buildSandboxApplyConfirmationMessage, selectSandboxChanges } from '../utils/sandbox.js'
-
-import type { SystemCommandPolicyApi } from './SystemCommandPolicy.js'
-import { systemCommandPolicy } from './SystemCommandPolicy.js'
 
 /**
  * 两个执行操作：跑命令、演练沙箱。`system:run`、`system:sandbox` 各调一个方法。
@@ -44,7 +42,10 @@ export interface SystemExecutionOperationsApi {
 }
 
 export class SystemExecutionOperations implements SystemExecutionOperationsApi {
-  constructor(private readonly policy: SystemCommandPolicyApi) {}
+  constructor(
+    private readonly policy: ShellCommandPolicyApi,
+    private readonly approvals: ShellCommandApprovalApi,
+  ) {}
 
   public async run({ command, cwd, timeoutMs, background, interactive, maxOutputChars }: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult> {
     ctx.abortSignal.throwIfAborted()
@@ -59,21 +60,11 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     // 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
     //    只有 requireManualApproval 能让宿主在任何档位都弹卡。
     if (plan.shouldRequestConfirmation) {
-      await ctx.approval.awaitConfirmation(
-        buildBackgroundCommandConfirmationMessage(command, plan, cwd ?? '系统运行环境', shouldRunInBackground),
-        ctx.abortSignal,
-        plan.isDangerous
-          ? createManualApprovalOptions({
-              approvalRisk: 'high',
-              riskScope: 'system-command:dangerous',
-              operation: {
-                key: createApprovalOperationKey('shell-command', { command: command.trim(), cwd: commandCwd, background: shouldRunInBackground }),
-                label: command,
-                target: commandCwd,
-              },
-            })
-          : { approvalRisk: 'low' }
-      )
+      const scopeLabel = cwd ?? '系统运行环境'
+      const request = plan.isDangerous
+        ? this.approvals.dangerous({ command, plan, cwd: commandCwd, background: shouldRunInBackground, scopeLabel, riskScope: 'system-command:dangerous' })
+        : { message: this.policy.confirmationMessage(command, plan, scopeLabel, shouldRunInBackground), options: { approvalRisk: 'low' as const } }
+      await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     }
 
     // 交给宿主执行
@@ -147,4 +138,4 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
 }
 
 /** 整个进程唯一的执行操作；system:run 与 system:sandbox 的 execute 交给它。 */
-export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(systemCommandPolicy)
+export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval)

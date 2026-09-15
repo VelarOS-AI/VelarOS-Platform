@@ -10,6 +10,11 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **新包 `@velaros-ai/shell-command`：命令判定从 system 抽出来，新开「能力公共件」一域（09-16 00:50，ADR 0008）。** 只读、危险、长驻判定，并发判定，确认文案，危险命令的审批请求（操作身份跨工具一致）都在这一个包里；system 已改用它，project 在实现层整理完之后迁过来。影响：`@velaros-ai/system` 不再导出 `systemCommandPolicy`、`SystemCommandPolicyApi`、`SystemCommandExecutionPlan`；Desktop、Workbench、Termel 的命令判定改从新包取（对照表在 ADR 0008）。模型看到的没有变化（system 的判定原样搬过去）。**要你拍板的两件事留着没动**：project:run 要不要像 system:run 一样对长驻命令（`npm run dev` 这类）弹低风险确认；危险命令被拒时 system 抛错、project 返回结构化拒绝，要不要统一。
+- **仓库里两个测试的假路径改成 `/Users/example`（09-16 00:50）。** `check:public-readiness` 把 `/Users/someone`、`/Users/mac` 这类路径当开发者本机路径拦下（system 修复代理新加的用例和一个 UI 渲染测试），只改测试数据。
+
+- **project 的错误原因做成合同常量表，删掉六个从没出现过的码；宿主端口去掉 codeAnalysisAvailable（09-16 00:10）。** `ProjectErrorCodes`（14 个码，每个写明含义）进 `@velaros-ai/project/contracts`，宿主按码分支有了单一出处。`LOW_CONFIDENCE_TARGET`、`ANCHOR_MISMATCH`、`PATCH_PARSE_ERROR`、`POSTCONDITION_FAILED`、`FORMATTER_CHANGED_TOO_MUCH`、`TEST_FAILED` 全仓没有一处产生、也没有一处判断，删了（合同不该承诺永远不会出现的码）。`ProjectToolApi.codeAnalysisAvailable` 工具从来不调，只有 Desktop 自己在 manifest 里调它当可用性判断；可用性本来就由宿主传给 `createProjectCodeAnalysisTools(isAvailable)` 的回调决定，端口上这一项多余。影响：Desktop 那行 `context.project.codeAnalysisAvailable?.()` 要改成宿主自己的判断。
+
 - **project 的入口收成两个，公开面按「包自己用得上」重划（09-15 23:40）。** 和 system 一样只剩 `@velaros-ai/project`（Node 宿主）与 `@velaros-ai/project/contracts`（可移植数据）；`/files`、`/changes`、`/execution`、`/runtime`、`/agent`、`/composition`、`/kernel`、`/transaction-controller` 都删了。产品（Desktop、Workbench）要跟着改 import，对照如下：
   - 换了形状的：`registerProjectFileContext(ctx)` → `projectFileContext.register(ctx)`（返回是否登记上）；`installProjectApprovalProvider` / `withProjectApproval` → `projectApprovalBridge.install(kernel)` / `.run(ctx, action)`；`new FileProjectChangeFeed({ path })` → `createFileProjectChangeFeed({ path })`；有限事务面的接口改名 `ProjectTransactionControllerApi`（工厂名不变）；`isProjectCodeLanguageQuery` → 常量表 `ProjectCodeLanguageActions`；`PROJECT_PACKAGE_VERSION` → `ProjectPackageVersion`。`createProjectKernel`、`typescriptPlugin`、`createSecretRedactionProvider`、`createProjectSpace`、`projectTools` 等从根入口取。
   - 不再导出、等第三步抽公共包的：命令判定（`analyzeCommandExecution`、`isShellCommandLikelyMutating`、`buildBackgroundCommandConfirmationMessage` 等）将进新包 `@velaros-ai/shell-command`；路径包含判断（`isPathInsideProjectRoot` 等）将进 platform。
@@ -34,6 +39,12 @@
 | 09-15 20:05 | 其他包的工具面按 system 的判据简化：别的工具替代得了、只剩仪式感的才删；模型没用过但有独特能力的不删 | 用户要求简化工具面；判据沿用已定的 system 做法 |
 | 09-15 21:00 | 旧版工具不直接连测试一起删，而是挪进 test/support 当驱动器 | 6 个测试文件借旧版工具测真行为，改写成第 2 版 fileRef 流程成本高；挪走后生产面干净、覆盖不丢，以后可以逐个改写 |
 | 09-15 21:00 | ProjectError 暂留、挪进 utils/errors.ts，门禁允许 utils 放只有字段的错误类 | 190 处抛出、agent 的纠错逻辑读它的字段，一并换成 AppError 牵连太大；是否统一成 AppError 另行评估 |
+| 09-16 00:50 | 公共件单独成域 `foundations`，不进 core、不进 platform、不登记进能力归属表 | core 要零依赖无领域语义，platform 按 ADR 0005 不判断命令危险；公共件被多个能力空间依赖，登记成能力 owner 会被判跨 owner |
+| 09-16 00:50 | shell-command 的判定取 system 那份，project 的兜底正则迁移时删掉 | system 那份逐参数否决、没有误报，确认文案带 ADR 0004 承诺的仓库提醒；兜底正则把 `grep -rn delete src` 判成要修改授权 |
+| 09-16 00:50 | 并发判定参数化（optIn），不在这次统一两个空间的缺省 | system:run 的 schema 有 parallel 字段、要求显式声明；project:run 没有这个字段、只读即并发；统一与否是产品决定 |
+| 09-16 00:50 | 审批请求只出「文案 + 选项」，被拒语义留给空间 | system 被拒抛错、project 返回 skipped，两种都有测试钉着；公共包只保证操作身份一致 |
+| 09-16 00:10 | 门禁再放宽两处：utils 可以放只有字段、写了中文说明的错误类；宿主端口「工具真会调」的核对从工具文件出发沿相对 import 走到 impl 与 utils，端口字段名可登记 | ProjectError 被 utils 里上百处抛出，utils 又不许引 impl；project 的端口调用在 utils/agent 里，只看工具文件和它直接委托的类会误报「没人调」 |
+| 09-16 00:10 | project 实现层达标拆给四个并行子代理：内核与文件、事务与持久化、策略插件适配器、工具函数与合同文档；各自只改自己的目录，用临时索引提交 | 约 700 条门禁问题、互相之间多为纯机械工作；按目录切开冲突最少，共用索引的提交竞态用临时索引规避 |
 | 09-15 23:40 | 门禁放宽一条：合同文件可以 `import type` provides.ts 登记过的类上方接口 | 项目空间（`ProjectSpace.kernel`）要引用领域内核的接口；接口按规矩写在类上方，合同里只能引用它，不能搬走 |
 | 09-15 23:40 | 有限事务面和落盘变更记录保留并改成类加工厂，没有删 | 眼下产品没用，但它是给界面那一侧的最小权限面（拿不到内核），产品层重构接 IPC 时正用得上；实例上用 `#` 私有字段存内核，测试钉住「没有可枚举状态、只有五个方法」 |
 | 09-15 23:40 | 旧版工具驱动器定义完之后把全局示例表还原成现行工具的示例 | 旧版有三个工具和现行同名，定义时覆盖全局示例表，谁先加载决定别的测试读到哪版示例，全量跑时偶发失败 |
@@ -46,6 +57,6 @@
 ## 进度
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
-- [ ] ② system 复查修 bug、定为仓库标准；project 改造；project 复查修 bug
+- [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（工具面 8d7513e、入口 bc93fd0、错误码 1ea639d，实现层四路并行中）；project 复查修 bug
 - [ ] ③ 公共逻辑抽取
 - [ ] 其余包：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol

@@ -29,6 +29,9 @@
         "core",
         "platform"
       ],
+      "foundations": [
+        "shell-command"
+      ],
       "model": [
         "model"
       ],
@@ -140,12 +143,12 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.20.1",
-    "jszip": "^3.10.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+    "@velaros-ai/shell-command": "workspace:*",
     "@vitejs/plugin-react": "^6.0.5",
     "brace-expansion": "1.1.18",
     "chrome-devtools-frontend": "1.0.1652307",
@@ -158,6 +161,7 @@
     "eslint-plugin-unicorn": "^64.0.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.11.0",
+    "jszip": "^3.10.1",
     "nanoid": "3.3.18",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

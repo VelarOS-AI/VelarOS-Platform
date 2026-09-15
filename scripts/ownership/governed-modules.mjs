@@ -20,7 +20,8 @@
 //   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
 //   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
 //   environmentTable    可移植数据文件里登记环境变量的常量表名
-//   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁按工具文件核对
+//   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁从工具文件出发沿 import 核对
+//   hostPortField       工具上下文里放宿主端口的字段名（ctx.<字段>.方法），缺省 system
 //   layers          实现文件的分层（文件名），从上到下；上层可以引下层与同层，下层不许引上层；每个实现文件都要登记在某一层
 //   toolDefiner     定义工具的函数名；它只许在工具文件里被调用，保证工具定义一个不漏都在那里
 //   card            模块卡片（相对包根）
@@ -52,7 +53,7 @@ export const GovernedModules = [
       ['LocalSystemKernel.ts'],
       // 能力：命令、受管子进程、shell；文件操作与搜索
       [
-        'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemCommandPolicy.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
+        'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
         'SystemOutputDecoder.ts', 'SystemExecutionOperations.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
       ],
       // shell 错误类
@@ -78,6 +79,25 @@ export const GovernedModules = [
     layers: [
       // 兼容层与共享资源目录互不依赖
       ['PlatformCompatibility.ts', 'VelarOSSharedResources.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
+    directory: 'shell-command',
+    name: '@velaros-ai/shell-command',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'shell-command.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    exports: 'src/exports',
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    layers: [
+      // 命令策略与审批请求互不依赖
+      ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

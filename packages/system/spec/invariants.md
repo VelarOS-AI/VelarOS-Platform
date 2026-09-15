@@ -16,11 +16,10 @@
 文字档在模块卡片的健康栏里显示为「未验证」，不算通过。
 
 编号只增不重排。INV-1 曾是「与 project 空间判定一致」，那是跨包约束，不属于本模块，已移到仓库级 `tests/capabilities/command-danger-parity.test.ts`。
+INV-2（只读判定是白名单加整体否决）、INV-3（递归删除一律判危险）、INV-18（白名单必须严格）随命令策略移到 `@velaros-ai/shell-command`，那边的 INV-1、INV-2、INV-4；本包只留用它的方式（INV-4 审批形状、INV-29 并发）。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-2 | 只读判定是白名单加整体否决：白名单命令一旦带写盘或执行别的程序的参数（sed 脚本整段解析，认不出就算写）、前缀带环境变量赋值或 env -S / time -o、重定向、子 shell 或未知的 git 形态，整条判非只读；误判方向只允许"非只读" | 测试 | `spec/acceptance.test.ts` |
-| INV-3 | 递归删除整个目录一律判危险并要求确认，理由写明删的是整个文件夹；删单个文件是日常操作，不打扰用户 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 危险命令的审批是高风险、手动、不可按类记忆的确认，并标明精确命令；真正的授权门在宿主的 ApprovalPort | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 受约束的进程模式没有可用后端时失败关闭，拒绝执行而不是退回裸进程 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 约束证据如实上报：审批事实与约束事实分开记录，未受约束就写 `enforcement: none`，不冒充隔离 | 测试 | `spec/acceptance.test.ts` |
@@ -35,7 +34,6 @@
 | INV-15 | `nativeCommand` 只供宿主组合能力使用，永不出现在模型工具 schema 中 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 文件分工与对外边界不塌：全部工具定义在一个工具文件里；合同、类型、常量分开：合同只有产品面登记、注入面、常量表三个文件且接口的每个成员有中文说明，类型目录一个值都没有、公开数据不带函数成员；实现目录扁平、一类一文件、类实现接口且公开成员不超出接口、按登记分层引用；utils 只放带中文说明的函数与常量；对外入口只转发，导出的类型只来自公开接口与数据、导出的值只能是按公开接口标注的实例与工厂或契约常量表，类、utils 函数、内部接口不出包，导出的数据正好是公开签名用到的数据；环境变量全部登记；渲染进程可加载的入口不碰 Node 内置模块 | 门禁 | `check:module-ownership` |
 | INV-17 | 输出窗口的 `endPreserved` 恒为 true，由类型钉死 | 类型 | `src/types/system.ts::SystemCommandOutputWindow` |
-| INV-18 | 危险黑名单可以宽松，只读白名单必须严格：往白名单加命令要能证明任何参数组合下都不写盘 | 文字 | |
 | INV-19 | 写系统敏感路径与凭证文件前必须经审批端口确认，按解开符号链接后的真实路径判定；被拒整批不写，临时目录不打扰用户 | 测试 | `spec/acceptance.test.ts` |
 | INV-20 | `system:edit` 一批全成或全不成：任何一处定不下来、被拒或文件在核对后被改，什么都不写，并按 not-applied 报告每个问题 | 测试 | `spec/acceptance.test.ts` |
 | INV-21 | 文本改动无损：解码再编码得不到原字节的文件拒改，已有的二进制文件不许整个覆盖，符号链接写到它指向的文件、链接本身不变 | 测试 | `spec/acceptance.test.ts` |
@@ -46,3 +44,4 @@
 | INV-26 | 镜像仓库推不出去：镜像里每个仓库（含嵌套仓库、子模块）的每个远端都被改成无效的推送地址，节头写法（CRLF、大小写、尾随空白、旧式 `[remote.x]`）不影响；指向源目录外真实仓库的 `.git` 链接文件不进镜像；网络缺省切断 | 测试 | `spec/acceptance.test.ts` |
 | INV-27 | 落回只落用户确认过的那份差量：确认按完整差量计数、列出删除与覆盖、扫敏感路径，确认之后镜像又变过就整批不落（`SYSTEM_SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-29 | system:run 只在入参声明 `parallel: true`、命令只读、不转后台、无需确认时才与别的调用并发 | 测试 | `spec/acceptance.test.ts` |

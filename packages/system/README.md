@@ -5,7 +5,7 @@
 System 是 `@velaros-ai` 品牌下的系统空间包。对外只有两个入口，里面只有接口标注过的整件能力、宿主要注入的接口和数据，
 零件不出包（详见 [MODULE.md](./MODULE.md) 的「提供什么」）；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`：
 
-- `@velaros-ai/system`：Node 宿主用的全部公开面，包括七个工具、内置 mod、内核模块、本地内核、命令策略。
+- `@velaros-ai/system`：Node 宿主用的全部公开面，包括七个工具、内置 mod、内核模块、本地内核。命令判定在 `@velaros-ai/shell-command`。
 - `@velaros-ai/system/contracts`：可移植数据，浏览器也能用。
 
 模型工具使用 canonical `namespace:tool` 协议：

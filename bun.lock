@@ -37,6 +37,7 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+        "@velaros-ai/shell-command": "workspace:*",
         "@vitejs/plugin-react": "^6.0.5",
         "brace-expansion": "1.1.18",
         "chrome-devtools-frontend": "1.0.1652307",
@@ -327,6 +328,20 @@
         "@velaros-ai/agent": "workspace:^",
       },
     },
+    "packages/shell-command": {
+      "name": "@velaros-ai/shell-command",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
+      },
+      "peerDependencies": {
+        "@velaros-ai/agent": "workspace:^",
+      },
+    },
     "packages/surface-protocol": {
       "name": "@velaros-ai/surface-protocol",
       "version": "0.1.2",
@@ -345,6 +360,7 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
+        "@velaros-ai/shell-command": "workspace:*",
         "diff": "^8.0.4",
         "zod": "^4.3.6",
       },
@@ -1019,6 +1035,8 @@
     "@velaros-ai/platform": ["@velaros-ai/platform@workspace:packages/platform"],
 
     "@velaros-ai/project": ["@velaros-ai/project@workspace:packages/project"],
+
+    "@velaros-ai/shell-command": ["@velaros-ai/shell-command@workspace:packages/shell-command"],
 
     "@velaros-ai/surface-protocol": ["@velaros-ai/surface-protocol@workspace:packages/surface-protocol"],
 

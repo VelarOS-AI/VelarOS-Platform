@@ -1,16 +1,17 @@
 /**
  * 命令分类：执行前判断一条 shell 命令是否只读、是否危险、是否该转入后台。
  */
-import { isEmpty, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-import type { ShellInvocation, SystemCommandExecutionPlan } from '../types/commands.js'
+import type { ShellInvocation } from '../types/invocation.js'
+import type { ShellCommandPlan } from '../types/shell-command.js'
 
 
 const readOnlyCommands = new Set([
   'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',
   'pwd', 'rg', 'sed', 'stat', 'tail', 'tree', 'uname', 'wc', 'which', 'whoami',
   // Windows（cmd.exe / PowerShell）只读读法。可执行名在查表前已统一 toLowerCase()
-  // （见下方 isSystemShellCommandReadOnly），按小写登记即可；PowerShell 命令名本就
+  // （见下方 isShellCommandReadOnly），按小写登记即可；PowerShell 命令名本就
   // 不区分大小写。ls/cat/pwd 等 POSIX 名同时也是 PowerShell 内置别名，重合是有意的。
   'dir', 'type', 'findstr', 'where', 'gci', 'get-childitem', 'get-content', 'gc',
   'get-item', 'gi', 'select-string', 'sls', 'test-path',
@@ -712,7 +713,7 @@ function hasMutatingGitArguments(subcommand: string, args: readonly string[]): b
 }
 
 /** 判断一条 shell 命令在任何参数组合下都不会写盘：白名单命令加整体否决，拿不准一律判为非只读。 */
-export function isSystemShellCommandReadOnly(command: string): boolean {
+export function isShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
   if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
   return trimmed.split(/&&|\|\||;|\|/).every((segment) => {
@@ -743,7 +744,7 @@ export function isSystemShellCommandReadOnly(command: string): boolean {
 }
 
 /** 执行前给命令分类：是否只读、是否危险、是否该转入后台、是否要用户确认，以及可能占用的端口。 */
-export function analyzeCommandExecution(command: string): SystemCommandExecutionPlan {
+export function analyzeCommandExecution(command: string): ShellCommandPlan {
   const trimmed = command.trim()
   if (!trimmed) return {
     isReadOnly: false,
@@ -759,7 +760,7 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
       ? '该命令看起来会启动长期驻留的服务或监听进程。'
       : null
   return {
-    isReadOnly: isSystemShellCommandReadOnly(trimmed),
+    isReadOnly: isShellCommandReadOnly(trimmed),
     shouldRequestConfirmation: !!dangerousReason || !!reason,
     shouldStartInBackground: !!reason,
     reason,
@@ -769,13 +770,14 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
   }
 }
 
-/** 判断一次命令调用能否与其他调用并发：必须声明可并发、不转后台、只读且无需确认。 */
+/** 判断一次命令调用能否与其他调用并发：不转后台、只读且无需确认；optIn 为真时还要求入参显式声明 parallel: true，为假时只拒绝显式的 parallel: false。 */
 export function isParallelCommandExecutionSafe(input: {
   command?: unknown
   background?: unknown
   parallel?: unknown
-}): boolean {
-  if (!isTrue(input.parallel) || isTrue(input.background) || !isString(input.command)) return false
+}, optIn: boolean): boolean {
+  if (optIn ? !isTrue(input.parallel) : isFalse(input.parallel)) return false
+  if (isTrue(input.background) || !isString(input.command)) return false
   const plan = analyzeCommandExecution(input.command)
   return plan.isReadOnly && !plan.shouldRequestConfirmation && !plan.shouldStartInBackground
 }
@@ -784,7 +786,7 @@ export function isParallelCommandExecutionSafe(input: {
 /** 生成危险命令或长驻命令的确认文案，写明命令、理由、是否后台运行与可能占用的端口。 */
 export function buildBackgroundCommandConfirmationMessage(
   command: string,
-  plan: SystemCommandExecutionPlan,
+  plan: ShellCommandPlan,
   scopeLabel: string,
   willRunInBackground: boolean
 ): string {

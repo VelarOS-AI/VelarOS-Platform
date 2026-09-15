@@ -8,7 +8,6 @@ import { describe, expect, test } from 'bun:test'
 
 import type { SystemToolContext } from '../src/contract/requires.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
-import { systemCommandPolicy } from '../src/impl/SystemCommandPolicy.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { systemTools } from '../src/impl/SystemTools.js'
@@ -524,13 +523,13 @@ describe('System capability', () => {
       const write = await problemsOf(systemFileOperations.edit({ files: [{ path: alias, newText: 'clobbered\n' }] }, denying))
       expect(write.reason).toBe('SYSTEM_EDIT_DENIED')
       expect(await readFile(keyPath, 'utf8')).toContain('PRIVATE KEY')
-      expect(isCredentialPath('/Users/someone/.SSH/config', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/users/someone/.aws/config', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/Users/example/.SSH/config', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/users/example/.aws/config', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
       expect(isCredentialPath('/home/someone/.SSH/config', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
       expect(isCredentialPath('/home/someone/work/id_ed25519', { homeDir: '/home/someone', platform: 'linux' })).toBe(true)
       // 文件名那一半也按平台大小写规则比：macOS 上 ID_RSA、.NETRC 是同一个文件，Linux 上不是。
-      expect(isCredentialPath('/Users/someone/work/ID_RSA', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/Users/someone/.NETRC', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/Users/example/work/ID_RSA', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/Users/example/.NETRC', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
       expect(isCredentialPath('/home/someone/work/ID_RSA', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
 
       // 预算已经用完的文件根本不读盘：不问用户，也不把版本号、字符数交出去。
@@ -562,11 +561,11 @@ describe('System capability', () => {
   })
 
   test('sensitive-path judgement: macOS login items are caught after case folding, temp dirs never ask, Linux has no LaunchAgents', () => {
-    expect(isSensitiveSystemMutationPath('/Users/someone/Library/LaunchAgents/com.evil.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/Users/someone/Library/LaunchDaemons/com.evil.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/Users/someone/Library/Preferences/x.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/Users/example/Library/LaunchAgents/com.evil.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/Users/example/Library/LaunchDaemons/com.evil.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/Users/example/Library/Preferences/x.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
     expect(isSensitiveSystemMutationPath('/home/someone/Library/LaunchAgents/x', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
-    expect(isSensitiveSystemMutationPath('/private/var/folders/ab/T/velaros-x/note.txt', { homeDir: '/Users/someone', platform: 'darwin', tempDir: '/private/var/folders/ab/T' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/private/var/folders/ab/T/velaros-x/note.txt', { homeDir: '/Users/example', platform: 'darwin', tempDir: '/private/var/folders/ab/T' })).toBe(false)
   })
 
   test('edit works on the real file behind a link, refuses the same file twice in a batch, and stops asking after the first denial', async () => {
@@ -653,10 +652,6 @@ describe('System capability', () => {
       const complete = await search.search(root, { query: 'file', limit: 3 })
       expect(complete.count).toBe(3)
       expect(complete.truncated).toBe(false)
-      expect(systemCommandPolicy.isReadOnly('env')).toBe(true)
-      expect(systemCommandPolicy.isReadOnly('env -u FOO')).toBe(true)
-      expect(systemCommandPolicy.isReadOnly('time ls')).toBe(true)
-      expect(systemCommandPolicy.isReadOnly('env rm -rf x')).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -764,10 +759,10 @@ describe('System capability', () => {
   })
 
   test('sensitive-path judgement covers /Applications and files directly under the root', () => {
-    expect(isSensitiveSystemMutationPath('/Applications/Foo.app/Contents/MacOS/foo', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/velaros-root-file', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
-    expect(isSensitiveSystemMutationPath('/tmp/velaros-x/file', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
-    expect(isSensitiveSystemMutationPath('/Users/someone/Documents/notes.txt', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/Applications/Foo.app/Contents/MacOS/foo', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/velaros-root-file', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/tmp/velaros-x/file', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/Users/example/Documents/notes.txt', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
   })
 
   test('run and list-tasks hand the session id to the host port', async () => {

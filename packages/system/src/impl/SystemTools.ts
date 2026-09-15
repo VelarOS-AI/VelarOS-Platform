@@ -14,6 +14,7 @@ import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-con
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import { shellCommandPolicy } from '@velaros-ai/shell-command'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
 import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSandboxLimits, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
@@ -22,7 +23,6 @@ import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
 import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
 import type { SystemSandboxInput } from '../types/sandbox.js'
-import { isParallelCommandExecutionSafe } from '../utils/command-policy.js'
 import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.js'
 
 import { systemExecutionOperations } from './SystemExecutionOperations.js'
@@ -201,7 +201,7 @@ const runTool = defineSystemTool<SystemRunInput>({
     concurrency: 'input-dependent',
     reason: 'system shell command execution',
   },
-  isConcurrencySafe: isParallelCommandExecutionSafe,
+  isConcurrencySafe: (input) => shellCommandPolicy.isParallelSafe(input),
   execute: (input, ctx) => systemExecutionOperations.run(input, ctx),
 })
 

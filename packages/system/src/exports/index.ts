@@ -9,16 +9,14 @@
 // ── 子集入口 ────────────────────────────────────────────────────
 export * from './contracts.js'
 
-// ── 产品面：工具、内置 mod、内核挂载、本地内核、命令策略 ─────────
+// ── 产品面：工具、内置 mod、内核挂载、本地内核 ─────────
 export type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection, VelaTool } from '../contract/provides.js'
 export type { LocalSystemKernelApi } from '../impl/LocalSystemKernel.js'
 export { createLocalSystemKernel } from '../impl/LocalSystemKernel.js'
-export type { SystemCommandPolicyApi } from '../impl/SystemCommandPolicy.js'
-export { systemCommandPolicy } from '../impl/SystemCommandPolicy.js'
 export { createSystemBundledModDefinition, createSystemKernelModule, SystemCapability, systemTools } from '../impl/SystemTools.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────
 export type { CreateSystemKernelModuleOptions, LocalSystemKernelOptions, SystemProcessConfinementProvider, SystemToolContext, SystemToolContextResolver, SystemToolSystemApi } from '../contract/requires.js'
 
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
-export type { SystemCommandExecutionPlan, SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
+export type { SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'

@@ -178,6 +178,18 @@
       "repositoryDirectory": "packages/agent-lab"
     },
     {
+      "domain": "foundations",
+      "directory": "packages/shell-command",
+      "name": "@velaros-ai/shell-command",
+      "version": "0.1.0",
+      "description": "Shared semantics for an agent running a shell command: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text and the dangerous-command approval request.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/shell-command"
+    },
+    {
       "domain": "html-artifacts",
       "directory": "packages/html-artifacts",
       "name": "@velaros-ai/html-artifacts",

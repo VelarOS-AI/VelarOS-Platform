@@ -13,7 +13,6 @@ import type { SystemToolContext } from './requires.js'
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
 export type { LocalSystemKernelApi } from '../impl/LocalSystemKernel.js'
-export type { SystemCommandPolicyApi } from '../impl/SystemCommandPolicy.js'
 
 // ── 工具 ────────────────────────────────────────────────────────
 

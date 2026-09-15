@@ -52,7 +52,7 @@ function consoleToolCall(overrides: { acceptsInput?: boolean } = {}): ToolCallBl
     finishedAt: 1_200,
     result: {
       command: 'ssh deploy@example.com',
-      cwd: '/Users/mac/work',
+      cwd: '/Users/example/work',
       exitCode: null,
       signal: null,
       stdout: '',
@@ -144,7 +144,7 @@ void describe('控制台卡片', () => {
 
     const view = resolveConsoleView(consoleToolCall())
     assert.equal(view?.command, 'ssh deploy@example.com')
-    assert.equal(view?.cwd, '/Users/mac/work')
+    assert.equal(view?.cwd, '/Users/example/work')
     assert.equal(view?.session.taskId, 'task-console-1')
     assert.equal(view?.session.channel, 'pipe')
   })

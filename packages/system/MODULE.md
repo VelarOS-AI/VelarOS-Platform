@@ -23,7 +23,6 @@
 | `createSystemKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |
 | `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现，外加宿主界面要的搜索、进程、端口、终止任务，以及交互式任务控制台的写输入、读增量输出、发中断 |
-| `systemCommandPolicy` | `SystemCommandPolicyApi` | 执行前给命令分类，和 `system:run` 用同一份判定 |
 
 **注入面**，写在 `contract/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子：
 
@@ -71,11 +70,12 @@
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
 - `@velaros-ai/kernel` 的 `contracts/abi`：能力令牌、内核模块定义。
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径：工具运行时规格、mod 清单、审批端口类型、入参描述辅助。
+- `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求；system:run 与演练沙箱里的命令都经它。
 - `zod`：wire 面入参校验。
 
 运行时要宿主给的东西全部列在上一节的注入面里，由 `contract/requires.ts` 定义。
 
-不依赖 `@velaros-ai/project`，两边互不引用。两个包各有一份命令危险判定与只读判定；它们是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着（危险命令、日常命令、只读白名单的绕过写法三份语料），它经本包的 `systemCommandPolicy` 取判定，不属于本模块。
+不依赖 `@velaros-ai/project`，两边互不引用。命令判定在公共包 `@velaros-ai/shell-command`；project 迁过去之前，两份判定是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着。
 
 ## 状态归谁
 
@@ -108,8 +108,8 @@
 
 ## 不变量
 
-共 27 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束。
-按检验方式：测试 24 条、类型 1 条、门禁 1 条、文字 1 条。未验证 1 条（INV-18，只有文字，没有机器检验）。
+共 25 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束，INV-2、INV-3、INV-18 随命令判定移到 `@velaros-ai/shell-command`。
+按检验方式：测试 23 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -134,7 +134,7 @@ src/
 
 **合同、类型、常量分开。** `contract/` 是对外合同：provides 登记产品面、requires 定义注入面、constants 放约定的常量表。`types/` 只放类型，一个值都没有，按域分文件；出不出包不看文件，看合同的签名有没有用到。
 
-**常量分四处。** 对外承诺的（工具名、错误码、环境变量、写进工具说明与 schema 的上限）在 `contract/constants.ts`，每个数字一句说明，工具说明里的数字用模板字符串引它，改一处模型看到的跟着变。包内可调的（超时、缓冲、保留条数、缺省条数、阈值）都在 `utils/tuning.ts` 的 `SystemTuning`，按用途分组、每项一句说明，实现里不再散写数字缺省值。某个类里固定用的文案与名单写成那个类的 `private static readonly`。规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则留在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。跨包的同名常量不共享代码：system 与 project 的命令策略、沙箱契约各持一份，由仓库层的一致性测试守着。以上由门禁核对。
+**常量分四处。** 对外承诺的（工具名、错误码、环境变量、写进工具说明与 schema 的上限）在 `contract/constants.ts`，每个数字一句说明，工具说明里的数字用模板字符串引它，改一处模型看到的跟着变。包内可调的（超时、缓冲、保留条数、缺省条数、阈值）都在 `utils/tuning.ts` 的 `SystemTuning`，按用途分组、每项一句说明，实现里不再散写数字缺省值。某个类里固定用的文案与名单写成那个类的 `private static readonly`。规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则留在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。跨包相同的逻辑抽到按含义命名的公共包（命令判定在 `@velaros-ai/shell-command`）；还没抽出去的沙箱契约两边各持一份，由仓库层的一致性测试守着。以上由门禁核对。
 
 **文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。七个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 
@@ -144,7 +144,6 @@ src/
 | --- | --- | --- |
 | `SystemTools.ts` | 没有类 | 七个工具的定义、分组、内置 mod、内核挂载 |
 | `LocalSystemKernel.ts` | `LocalSystemKernelApi`（同文件，provides 登记），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
-| `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（同文件，provides 登记） | 执行前给命令分类的唯一出口 |
 | `SystemSandboxes.ts` | `SystemSandboxesApi`（同文件） | 演练沙箱登记表：镜像、差量、落回、丢弃，每个沙箱一个约束到镜像根的执行器 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
 | `SystemShellResolver.ts` | `SystemShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
