@@ -45,7 +45,7 @@ export async function assertInsideSandboxBase(path: string, base: string): Promi
   const real = await realPathForSafety(path)
   const realBase = await realPathForSafety(base)
   if (real !== realBase && !real.startsWith(realBase + sep)) {
-    throw new AppError('PERMISSION', `Refusing to touch ${path}: it is not inside the sandbox base directory ${base}`)
+    throw new AppError('PERMISSION', `拒绝操作 ${path}：它不在沙箱基目录 ${base} 之下`)
   }
   return real
 }
@@ -58,9 +58,9 @@ export function sandboxConfinementPolicy(root: string, temp: string, network: bo
 /** 读一个沙箱目录下的清单；读不到或形状不对就报 NOT_FOUND。镜像根永远按当前目录算，清单里的绝对路径只作记录。 */
 export async function readSandboxManifest(directory: string): Promise<SystemSandboxManifest> {
   const raw = await readFile(join(directory, 'manifest.json'), 'utf8').catch(() => null)
-  if (isNull(raw)) throw new AppError('NOT_FOUND', `No sandbox manifest under ${directory}; the sandbox was discarded or never created`)
+  if (isNull(raw)) throw new AppError('NOT_FOUND', `${directory} 下没有沙箱清单：这个沙箱已经丢弃，或者从来没建过`)
   const manifest = JSON.parse(raw) as SystemSandboxManifest
-  if (manifest.version !== 1 || !manifest.record || !manifest.files || !manifest.mirror) throw new AppError('NOT_FOUND', `Sandbox manifest under ${directory} is not readable`)
+  if (manifest.version !== 1 || !manifest.record || !manifest.files || !manifest.mirror) throw new AppError('NOT_FOUND', `${directory} 下的沙箱清单读不出来`)
   manifest.record.root = join(directory, 'tree')
   return manifest
 }
@@ -132,8 +132,8 @@ export async function mirrorTree(
       if (!entry.isFile() || ignored) continue
       count += 1
       bytes += stats.size
-      if (count > options.limits.files) throw new AppError('VALIDATION', `The source has more than ${options.limits.files} files; pick a smaller directory or add a .gitignore so build output is not mirrored`)
-      if (bytes > options.limits.bytes) throw new AppError('VALIDATION', `The source is larger than ${options.limits.bytes} bytes; pick a smaller directory or add a .gitignore so build output is not mirrored`)
+      if (count > options.limits.files) throw new AppError('VALIDATION', `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录，或者加 .gitignore 让构建产物不进镜像`)
+      if (bytes > options.limits.bytes) throw new AppError('VALIDATION', `源目录超过 ${options.limits.bytes} 字节；换一个小一点的目录，或者加 .gitignore 让构建产物不进镜像`)
       await copyFile(sourcePath, mirrorPath, constants.COPYFILE_FICLONE)
       await chmod(mirrorPath, stats.mode & 0o777)
       files[relativePath] = stampOfEntry(stats)
@@ -308,8 +308,8 @@ export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]
   const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: conflicts.slice(0, SystemFailureLimits.listItems) }
   return new AppError(
     'VALIDATION',
-    `${conflicts.length} file(s) in the source changed since the sandbox was created; nothing was written. ${conflicts.slice(0, SystemFailureLimits.listItems).map((conflict) => `${conflict.path}: ${conflict.message}`).join('; ')}`,
-    { reason: SystemErrorCodes.sandboxConflict, details, suggestedNextAction: 'Nothing was written. Re-create the sandbox from the current source, or apply only the paths that did not conflict.' },
+    `源目录里有 ${conflicts.length} 个文件自建沙箱以来变过，什么都没写。${conflicts.slice(0, SystemFailureLimits.listItems).map((conflict) => `${conflict.path}：${conflict.message}`).join('；')}`,
+    { reason: SystemErrorCodes.sandboxConflict, details, suggestedNextAction: '什么都没写。从现在的源目录重建沙箱，或者只落回没有冲突的路径。' },
     { executionOutcome: 'not-applied' }
   )
 }
@@ -317,11 +317,11 @@ export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]
 /** 核对一处变化落回时源目录的状态：改过、丢了、凭空出现都算冲突；没冲突返回 null。 */
 async function conflictOf(source: string, manifest: SystemSandboxManifest, path: string, kind: 'created' | 'modified' | 'deleted'): Promise<Nullable<SystemSandboxConflict>> {
   const stats = await lstat(join(source, path)).catch(() => null)
-  if (kind === 'created') return stats ? { path, reason: 'appeared', message: 'the source now has a file at this path that the sandbox did not mirror' } : null
+  if (kind === 'created') return stats ? { path, reason: 'appeared', message: '源目录里这个路径现在有文件，建沙箱时没有' } : null
   const before = manifest.files[path]
-  if (!stats) return { path, reason: 'missing', message: 'the source file is gone since the sandbox was created' }
+  if (!stats) return { path, reason: 'missing', message: '源文件在建沙箱之后被删了' }
   const link = stats.isSymbolicLink() ? await readlink(join(source, path)) : undefined
-  if (!before || !sameStamp(stampOfEntry(stats, link), before)) return { path, reason: 'changed', message: 'the source file changed since the sandbox was created; read it again before applying' }
+  if (!before || !sameStamp(stampOfEntry(stats, link), before)) return { path, reason: 'changed', message: '源文件在建沙箱之后被改过；看过再决定要不要落回' }
   return null
 }
 

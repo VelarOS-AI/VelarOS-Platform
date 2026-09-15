@@ -10,8 +10,8 @@ import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem,
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
 export function assertFileBatchSize(count: number, max: number, operation: string): void {
-  if (count < 1) throw new AppError('VALIDATION', `files is empty; give at least one file to ${operation}`)
-  if (count > max) throw new AppError('VALIDATION', `At most ${max} files per ${operation}; got ${count}, split the list`)
+  if (count < 1) throw new AppError('VALIDATION', `files 是空的；至少给一个文件`)
+  if (count > max) throw new AppError('VALIDATION', `${operation} 一次最多 ${max} 个文件，这里给了 ${count} 个；分几次调用`)
 }
 
 /** 一批里某个文件失败时的条目：路径照传入的原样，错误只留代码和说明。 */
@@ -30,9 +30,9 @@ export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): A
   const cause = {
     reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,
-    suggestedNextAction: 'Nothing was written. Fix only the listed places with reuse + changes (for example path ["files", 0, "edits", 1, "range"] set to the chosen anchor range) and call system:edit again; unchanged files and edits are kept as they were.',
+    suggestedNextAction: '什么都没写。用 reuse + changes 只改列出的那几处再调一次 system:edit（例如把 path ["files", 0, "edits", 1, "range"] 改成挑中的锚点 range），没列出的文件和改动原样保留。',
   }
-  return new AppError(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `${problems.length} problem(s) kept the edit from being applied; nothing was written. ${summary}`, cause, { executionOutcome: 'not-applied' })
+  return new AppError(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { executionOutcome: 'not-applied' })
 }
 
 /** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */
@@ -41,8 +41,8 @@ export function staleProblem(expected: Optional<string>, current: Nullable<strin
   return {
     reason: 'stale',
     message: current
-      ? `the file changed since version ${expected}; it is now ${current}, read it again before editing`
-      : `version ${expected} was given but the file does not exist`,
+      ? `文件在版本 ${expected} 之后被改过，现在是 ${current}；重新读一遍再改`
+      : `给了版本 ${expected}，但文件不存在`,
     currentVersion: toOptional(current),
   }
 }

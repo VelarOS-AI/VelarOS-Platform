@@ -69,7 +69,7 @@ class SystemShellResolver implements SystemShellResolverApi {
       try { health = await (options.probe ?? ((candidate, timeoutMs) => this.probe(candidate, timeoutMs)))(shell, options.timeoutMs ?? SystemTuning.shell.probeTimeoutMs) }
       catch (error) {
         log.debug('shell readiness probe failed', { shell: shell.shellPath, error })
-        health = { ready: false, reason: error instanceof Error ? error.message : 'Shell startup failed.' }
+        health = { ready: false, reason: error instanceof Error ? error.message : 'shell 启动失败。' }
       }
       if (!health.ready) { failures.push(`${shell.name}: ${health.reason || 'unavailable'}`); continue }
       return {
@@ -121,7 +121,7 @@ class SystemShellResolver implements SystemShellResolverApi {
       if (captured.exitCode === 0) {
         try {
           const source = JSON.parse(captured.stdout) as { machine: Record<string, string>; user: Record<string, string> }
-          if (!isPlainObject(source.machine) || !isPlainObject(source.user)) throw new Error('Invalid Windows environment snapshot.')
+          if (!isPlainObject(source.machine) || !isPlainObject(source.user)) throw new Error('读到的 Windows 环境变量快照格式不对。')
           const merged = { ...source.machine, ...source.user }
           const machinePath = readWindowsEnv(source.machine, 'PATH') ?? ''
           const userPath = readWindowsEnv(source.user, 'PATH') ?? ''
@@ -149,9 +149,9 @@ class SystemShellResolver implements SystemShellResolverApi {
           refreshed = true
         } catch (error) {
           log.warn('windows environment refresh failed', { error })
-          reason = error instanceof Error && error.message ? error.message : 'Invalid Windows environment snapshot.'
+          reason = error instanceof Error && error.message ? error.message : '读到的 Windows 环境变量快照格式不对。'
         }
-      } else reason = captured.timedOut ? 'Windows environment refresh timed out.' : captured.stderr || 'Windows environment refresh is unavailable.'
+      } else reason = captured.timedOut ? '重读 Windows 环境变量超时。' : captured.stderr || '这台机器上没法重读 Windows 环境变量。'
     }
     const revision = createHash('sha256').update(JSON.stringify(Object.entries(result).sort())).digest('hex').slice(0, 16)
     return { env: result, revision, refreshed, reason }
@@ -172,7 +172,7 @@ class SystemShellResolver implements SystemShellResolverApi {
     }
     return {
       ready,
-      reason: result.timedOut ? 'Shell readiness probe timed out.' : result.stderr || 'Shell UTF-8 readiness probe failed.',
+      reason: result.timedOut ? 'shell 自检超时。' : result.stderr || 'shell 的 UTF-8 自检没通过。',
     }
   }
 

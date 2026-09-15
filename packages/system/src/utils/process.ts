@@ -85,7 +85,7 @@ export function execBounded(file: string, args: string[], timeoutMs: number = Sy
       child.stdout?.destroy()
       child.stderr?.destroy()
       child.unref()
-      finish(new Error('Process control operation exceeded its deadline'))
+      finish(new Error('进程控制命令超过期限'))
     })
   })
 }
@@ -136,7 +136,7 @@ export function waitForSystemProcessSpawn(child: ChildProcess, timeoutMs: number
     }
     timers.after(timeoutMs, () => {
       cleanup()
-      reject(new Error('Process spawn acknowledgement timed out'))
+      reject(new Error('等子进程启动的确认超时'))
     })
     child.once('spawn', onSpawn)
     child.once('error', onError)

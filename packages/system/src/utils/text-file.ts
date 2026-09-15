@@ -68,13 +68,13 @@ export async function readRawSystemFileBuffer(resolvedPath: string): Promise<Buf
   } catch (err) {
     switch (readErrnoCode(err)) {
       case 'ENOENT': {
-        throw new AppError('NOT_FOUND', `File not found: ${resolvedPath}`)
+        throw new AppError('NOT_FOUND', `文件不存在：${resolvedPath}`)
       }
       case 'EACCES': {
-        throw new AppError('PERMISSION', `Permission denied reading file: ${resolvedPath}`)
+        throw new AppError('PERMISSION', `没有权限读这个文件：${resolvedPath}`)
       }
       case 'EISDIR': {
-        throw new AppError('VALIDATION', `Path is a directory, not a file: ${resolvedPath}`)
+        throw new AppError('VALIDATION', `路径是目录，不是文件：${resolvedPath}`)
       }
       default: {
         throw err
@@ -94,7 +94,7 @@ export function decodeSystemTextBuffer(
   if (!encoding) {
     throw new AppError(
       'VALIDATION',
-      `File is binary and cannot be read as text: ${resolvedPath} (images and PDFs are readable; other binaries are not)`
+      `文件是二进制的，不能当文本读：${resolvedPath}（图片用 system:view 看，其他二进制文件读不了）`
     )
   }
 
@@ -214,9 +214,9 @@ export async function assertRegularFile(resolvedPath: string): Promise<number> {
     const metadata = await stat(resolvedPath)
     if (metadata.isFile()) return metadata.size
     if (metadata.isDirectory()) {
-      throw new AppError('VALIDATION', `Path is a directory, not a file: ${resolvedPath}`)
+      throw new AppError('VALIDATION', `路径是目录，不是文件：${resolvedPath}`)
     }
-    throw new AppError('VALIDATION', `Path is not a regular file: ${resolvedPath}`)
+    throw new AppError('VALIDATION', `路径不是普通文件：${resolvedPath}`)
   } catch (err) {
     throw normalizeReadError(err, resolvedPath)
   }
@@ -255,7 +255,7 @@ export function sliceTextChars(content: string, offset: number, maxChars: number
 export async function readBoundedFile(resolvedPath: string, maxBytes: number): Promise<Buffer> {
   const size = await assertRegularFile(resolvedPath)
   if (size > maxBytes) {
-    throw new AppError('VALIDATION', `File is too large to read at once: ${size} bytes > ${maxBytes} bytes; take a part of it with system:run`)
+    throw new AppError('VALIDATION', `文件太大，不能一次读进来：${size} 字节，上限 ${maxBytes} 字节；用 system:run 截取其中一段`)
   }
   return readRawSystemFileBuffer(resolvedPath)
 }
@@ -281,12 +281,12 @@ function normalizeReadError(err: unknown, resolvedPath: string): Error {
 
   switch (readErrnoCode(err)) {
     case 'ENOENT':
-      return new AppError('NOT_FOUND', `File not found: ${resolvedPath}`)
+      return new AppError('NOT_FOUND', `文件不存在：${resolvedPath}`)
     case 'EACCES':
     case 'EPERM':
-      return new AppError('PERMISSION', `Permission denied reading file: ${resolvedPath}`)
+      return new AppError('PERMISSION', `没有权限读这个文件：${resolvedPath}`)
     case 'EISDIR':
-      return new AppError('VALIDATION', `Path is a directory, not a file: ${resolvedPath}`)
+      return new AppError('VALIDATION', `路径是目录，不是文件：${resolvedPath}`)
     default:
       return err instanceof Error ? err : new AppError('UNKNOWN', String(err))
   }

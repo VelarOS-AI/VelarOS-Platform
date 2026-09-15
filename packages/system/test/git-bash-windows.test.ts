@@ -123,7 +123,7 @@ test.skipIf(process.platform !== 'win32')(
     try {
       const env = { ...process.env, VELAROS_SHELL_PATH: join(root, 'bin', 'bash.exe') }
       expect(() => systemShellResolver.resolve({ env })).toThrow(SystemShellUnavailableError)
-      expect(() => systemShellResolver.resolve({ env })).toThrow('Install Git for Windows')
+      expect(() => systemShellResolver.resolve({ env })).toThrow('安装 Git for Windows')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

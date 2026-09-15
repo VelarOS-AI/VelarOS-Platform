@@ -67,7 +67,7 @@ describe('Windows shell readiness and fallback', () => {
     await expect(systemShellResolver.resolveReady({
       platform: 'win32', env: {}, isFile: installed(cmd),
       probe: async () => ({ ready: false, reason: 'blocked executable' }),
-    })).rejects.toThrow('Install Git for Windows')
+    })).rejects.toThrow('安装 Git for Windows')
   })
 
   test('PowerShell and CMD specs initialize encoding and retain their own command syntax', () => {

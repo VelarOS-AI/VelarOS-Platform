@@ -29,12 +29,12 @@ export function defineSystemTool<TInput extends Record<string, unknown>>(
 
 /** 生成「能力调用入参不合法」的错误。 */
 function invalidCapabilityInput(detail: string): AppError {
-  return new AppError('VALIDATION', `System capability input is invalid: ${detail}`)
+  return new AppError('VALIDATION', `系统能力的入参不合法：${detail}`)
 }
 
 /** 用工具的 schema 严格解析入参：未知字段直接拒绝，报错时带出字段路径。 */
 export function parseToolInput(tool: VelaTool, input: unknown): Record<string, unknown> {
-  if (!isPlainObject(input)) throw invalidCapabilityInput('expected an object payload')
+  if (!isPlainObject(input)) throw invalidCapabilityInput('入参必须是对象')
 
   const schema = tool.schema instanceof z.ZodObject
     ? tool.schema.strict()
@@ -68,7 +68,7 @@ export function createSystemCallableOperations(
       metadata: {
         permissions: [...new Set(tool.permissions)],
         reason: tool.capabilities?.reason
-          ?? `Invoke system tool operation "${operation}".`,
+          ?? `调用系统工具 ${operation}。`,
       },
       async invoke(scope, input, signal) {
         const parsed = parseToolInput(tool, input)
@@ -80,7 +80,7 @@ export function createSystemCallableOperations(
         if (isFalse(tool.isAvailable?.(toolContext))) {
           throw new AppError(
             'UNAVAILABLE',
-            `System capability operation "${operation}" is unavailable in the resolved context.`
+            `系统能力 ${operation} 在解析出的上下文里不可用。`
           )
         }
         signal.throwIfAborted()

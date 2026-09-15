@@ -28,7 +28,7 @@ export async function writeSystemFileAtomically(
   } catch (err) {
     const code = readErrnoCode(err)
     if (code === 'EACCES' || code === 'EPERM') {
-      throw new AppError('PERMISSION', `Permission denied writing file: ${resolvedPath}`)
+      throw new AppError('PERMISSION', `没有权限写这个文件：${resolvedPath}`)
     }
     throw err
   }

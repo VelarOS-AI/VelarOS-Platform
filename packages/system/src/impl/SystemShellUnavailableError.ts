@@ -5,12 +5,11 @@
 
 import { SystemErrorCodes } from '../contract/constants.js'
 
-/** 本机找不到任何能用的 shell。错误文本已是公开契约，消费者按其中的英文片段断言。 */
+/** 本机找不到任何能用的 shell。外面按错误码 SYSTEM_SHELL_UNAVAILABLE 判断，不按文本。 */
 export class SystemShellUnavailableError extends Error {
   public readonly code = SystemErrorCodes.shellUnavailable
   constructor(detail = '') {
-    // @arch-guard:suspend code-style/require-chinese-comments 理由：该兼容错误文本已成为公开契约，现有消费者按英文片段断言。
-    super(`No working command shell is available. ${detail} Install Git for Windows from https://git-scm.com/download/win and refresh the command environment.`)
+    super(`找不到能用的命令 shell${detail ? `（${detail.trim()}）` : ''}。在 Windows 上安装 Git for Windows（https://git-scm.com/download/win），再刷新命令环境。`)
     this.name = 'SystemShellUnavailableError'
   }
 }

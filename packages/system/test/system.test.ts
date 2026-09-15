@@ -186,8 +186,8 @@ describe('System capability', () => {
 
       const pdfPath = join(root, 'report.pdf')
       await writeFile(pdfPath, Buffer.from('%PDF-1.4\n%fake\n'))
-      await expect(viewAll({ files: [{ path: pdfPath }] })).rejects.toThrow('only shows images')
-      await expect(readAll({ files: [{ path: pdfPath }] })).rejects.toThrow('not text')
+      await expect(viewAll({ files: [{ path: pdfPath }] })).rejects.toThrow('这个工具只看图片')
+      await expect(readAll({ files: [{ path: pdfPath }] })).rejects.toThrow('不是文本')
       const textPath = join(root, 'plain.txt')
       await writeFile(textPath, 'hello')
       await expect(viewAll({ files: [{ path: textPath }] })).rejects.toThrow('system:read')
@@ -199,7 +199,7 @@ describe('System capability', () => {
       expect(batch.files.map((entry) => ('error' in entry ? entry.error.code : entry.mediaType))).toEqual(['image/png', 'NOT_FOUND', 'image/png'])
       expect(batch.modelContent.map((part) => part.type)).toEqual(['text', 'image-data', 'text', 'image-data'])
       expect(batch.modelContent[2]).toEqual({ type: 'text', text: `文件 3/3：${secondPath}` })
-      await expect(viewAll({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] })).rejects.toThrow('not found')
+      await expect(viewAll({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] })).rejects.toThrow('不存在')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -224,10 +224,10 @@ describe('System capability', () => {
 
       const mixed = await readAll({ files: [{ path: smallPath }, { path: join(root, 'missing.txt') }] })
       expect(entryOf(mixed, 0).content).toBe('small')
-      expect(mixed.files[1]).toEqual({ path: join(root, 'missing.txt'), error: { code: 'NOT_FOUND', message: expect.stringContaining('not found') } })
-      await expect(readAll({ files: [{ path: join(root, 'x.txt') }, { path: join(root, 'y.txt') }] })).rejects.toThrow('not found')
-      await expect(readAll({ files: [] })).rejects.toThrow('files is empty')
-      await expect(readAll({ files: Array.from({ length: 21 }, () => ({ path: smallPath })) })).rejects.toThrow('At most 20 files')
+      expect(mixed.files[1]).toEqual({ path: join(root, 'missing.txt'), error: { code: 'NOT_FOUND', message: expect.stringContaining('不存在') } })
+      await expect(readAll({ files: [{ path: join(root, 'x.txt') }, { path: join(root, 'y.txt') }] })).rejects.toThrow('不存在')
+      await expect(readAll({ files: [] })).rejects.toThrow('files 是空的')
+      await expect(readAll({ files: Array.from({ length: 21 }, () => ({ path: smallPath })) })).rejects.toThrow('一次最多 20 个文件')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -262,12 +262,12 @@ describe('System capability', () => {
   test('rejects directories, other binaries and device files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-reject-'))
     try {
-      await expect(readAll({ files: [{ path: root }] })).rejects.toThrow('is a directory')
+      await expect(readAll({ files: [{ path: root }] })).rejects.toThrow('路径是目录')
       const binaryPath = join(root, 'blob.bin')
       await writeFile(binaryPath, Buffer.from([0x00, 0x01, 0x02, 0xff]))
-      await expect(readAll({ files: [{ path: binaryPath }] })).rejects.toThrow('binary')
+      await expect(readAll({ files: [{ path: binaryPath }] })).rejects.toThrow('二进制')
       if (process.platform !== 'win32') {
-        await expect(readAll({ files: [{ path: '/dev/null' }] })).rejects.toThrow('not a regular file')
+        await expect(readAll({ files: [{ path: '/dev/null' }] })).rejects.toThrow('不是普通文件')
       }
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -319,7 +319,7 @@ describe('System capability', () => {
       const recalled = await readOne({ path, version: written.version })
       expect(recalled.content).toBe('name = "a"\nport = 80\nport = 80\n')
       expect(recalled.version).toBe(written.version)
-      await expect(readAll({ files: [{ path, version: 'nope' }] })).rejects.toThrow('not in history')
+      await expect(readAll({ files: [{ path, version: 'nope' }] })).rejects.toThrow('历史里没有')
 
       const window = await readOne({ path, offset: 12, maxChars: 10 })
       expect(window.content).toBe('port = 80\n')
@@ -343,9 +343,9 @@ describe('System capability', () => {
       expect(restored).toMatchObject({ action: 'restored', version: written.version, previousVersion: overwritten.version })
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
       expect((await problemsOf(editOne({ path, restore: 'nope' }))).problems[0]).toMatchObject({ reason: 'not-found' })
-      await expect(editOne({ path, restore: written.version, newText: 'x' })).rejects.toThrow('each go alone')
-      await expect(editOne({ path })).rejects.toThrow('give newText')
-      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }] })).rejects.toThrow('not found within range')
+      await expect(editOne({ path, restore: written.version, newText: 'x' })).rejects.toThrow('只能用一种')
+      await expect(editOne({ path })).rejects.toThrow('给 newText')
+      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }] })).rejects.toThrow('里没找到 oldText')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -410,7 +410,7 @@ describe('System capability', () => {
       const applied = await systemFileOperations.edit({ files: [{ path: a, version: fresh.version, newText: 'fine\n' }] }, approvingContext)
       expect(applied.files[0]).toMatchObject({ action: 'written' })
 
-      await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files is empty')
+      await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files 是空的')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -455,12 +455,12 @@ describe('System capability', () => {
 
       // 同一批里同一个文件出现两次：整批不写。
       const duplicated = await problemsOf(systemFileOperations.edit({ files: [{ path, newText: 'x\n' }, { path, newText: 'y\n' }] }, approvingContext))
-      expect(duplicated.problems[0]).toMatchObject({ file: 1, reason: 'invalid', message: expect.stringContaining('more than once') })
+      expect(duplicated.problems[0]).toMatchObject({ file: 1, reason: 'invalid', message: expect.stringContaining('出现了不止一次') })
       expect(await readFile(path, 'utf8')).toBe('two\n')
 
       // range 的起点落在文件外：不静默追加，按 stale 报（终点越界只是钳到文件末尾）。
       const outside = await problemsOf(editOne({ path, edits: [{ range: { offset: 5000, end: 5010 }, newText: 'APPENDED' }] }))
-      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('read it again') })
+      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('重新读一遍') })
       expect(await readFile(path, 'utf8')).toBe('two\n')
 
       // 重叠出现也算多处：'aaa' 里找 'aa' 有两处。
@@ -589,7 +589,7 @@ describe('System capability', () => {
       await writeFile(many, 'a'.repeat(5_000))
       const ambiguous = await problemsOf(systemFileOperations.edit({ files: [{ path: many, edits: [{ range: { offset: 0, end: 5_000 }, oldText: 'aa', newText: 'b' }] }] }, approvingContext))
       expect(ambiguous.problems[0]).toMatchObject({ reason: 'ambiguous', matchCount: 11 })
-      expect(String(ambiguous.problems[0]!.message)).toContain('at least 11')
+      expect(String(ambiguous.problems[0]!.message)).toContain('至少匹配到 11 处')
       expect(findOccurrences('aaaa', 'aa', { offset: 0, end: 4 }, 2)).toEqual([0, 1])
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -677,7 +677,7 @@ describe('System capability', () => {
       const big = join(root, 'big.txt')
       await writeFile(big, 'x'.repeat(3 * 1024 * 1024))
       const tooBigToEdit = await problemsOf(systemFileOperations.edit({ files: [{ path: big, edits: [{ range: { offset: 0, end: 1 }, newText: 'y' }] }] }, approvingContext))
-      expect(String(tooBigToEdit.problems[0]!.message)).toContain('too large for edit')
+      expect(String(tooBigToEdit.problems[0]!.message)).toContain('不能用 edits 改')
       const rewritten = await editOne({ path: big, newText: 'small again\n' })
       expect(rewritten).toMatchObject({ action: 'written', previousVersion: null })
       expect(await readFile(big, 'utf8')).toBe('small again\n')
@@ -685,7 +685,7 @@ describe('System capability', () => {
       const huge = join(root, 'huge.txt')
       await writeFile(huge, Buffer.alloc(21 * 1024 * 1024, 0x61))
       const refused = await problemsOf(systemFileOperations.edit({ files: [{ path: huge, newText: 'nope' }] }, approvingContext))
-      expect(String(refused.problems[0]!.message)).toContain('too large to overwrite')
+      expect(String(refused.problems[0]!.message)).toContain('不能在这里整个覆盖')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

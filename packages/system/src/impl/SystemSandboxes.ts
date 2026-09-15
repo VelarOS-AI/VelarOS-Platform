@@ -97,14 +97,14 @@ export class SystemSandboxes implements SystemSandboxesApi {
   }
 
   public async create(source: string, options: { network: boolean; ignored: SystemSandboxIgnoredMode }): Promise<SystemSandboxRecord> {
-    if (this.entries.size >= SystemSandboxLimits.sandboxes) throw new AppError('VALIDATION', `At most ${SystemSandboxLimits.sandboxes} sandboxes at a time; discard one first`)
+    if (this.entries.size >= SystemSandboxLimits.sandboxes) throw new AppError('VALIDATION', `同时最多 ${SystemSandboxLimits.sandboxes} 个沙箱；先 discard 一个`)
     const realSource = await realPathForSafety(source)
     const sourceStats = await stat(realSource).catch(() => null)
-    if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `Sandbox source is not a directory: ${source}`)
+    if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `沙箱的源不是目录：${source}`)
     await mkdir(this.baseDir, { recursive: true, mode: 0o700 })
     const realBase = await realPathForSafety(this.baseDir)
-    if (realSource === realBase || realSource.startsWith(realBase + sep)) throw new AppError('VALIDATION', 'The sandbox source cannot be inside the sandbox base directory')
-    if (realBase.startsWith(realSource + sep)) throw new AppError('VALIDATION', 'The sandbox source contains the sandbox base directory; pick a narrower directory')
+    if (realSource === realBase || realSource.startsWith(realBase + sep)) throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
+    if (realBase.startsWith(realSource + sep)) throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
 
     const id = newSandboxId()
     const directory = join(this.baseDir, id)
@@ -154,7 +154,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const manifest = await readSandboxManifest(entry.directory)
     const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: SystemSandboxLimits.files })
     const selection = selectSandboxChanges(changes, options.paths)
-    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `These paths did not change in the sandbox: ${selection.unknown.slice(0, SystemFailureLimits.listItems).join(', ')}`)
+    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SystemFailureLimits.listItems).join('、')}`)
     const applied = await applyMirrorChanges(manifest, selection)
     log.info('sandbox applied', { id: entry.record.id, created: applied.created.length, modified: applied.modified.length, deleted: applied.deleted.length })
     // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。
@@ -162,7 +162,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
   }
 
   public async discard(sandboxId: string): Promise<SystemSandboxDiscardResult> {
-    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `Not a sandbox id: ${sandboxId}`)
+    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
     const directory = join(this.baseDir, sandboxId)
     // 递归删除只许删基目录之下的东西：路径核对不过就拒绝，这是整仓误删事故的直接教训。
     const real = await assertInsideSandboxBase(directory, this.baseDir)
@@ -221,7 +221,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
   private async resolveEntry(sandboxId: string): Promise<SystemSandboxesEntry> {
     const registered = this.entries.get(sandboxId)
     if (registered) return registered
-    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `Not a sandbox id: ${sandboxId}`)
+    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
     const directory = join(this.baseDir, sandboxId)
     await assertInsideSandboxBase(directory, this.baseDir)
     const manifest = await readSandboxManifest(directory)

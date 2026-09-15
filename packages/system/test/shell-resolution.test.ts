@@ -106,13 +106,13 @@ describe('Windows Git Bash resolution', () => {
       .shellPath).toBe(`${root}\\bin\\bash.exe`)
     files.delete('c:\\program files\\git\\usr\\bin\\msys-2.0.dll')
     expect(() => systemShellResolver.resolve({ platform: 'win32', env: { PATH: 'C:\\Windows\\System32' }, isFile }))
-      .toThrow('Install Git for Windows')
+      .toThrow('安装 Git for Windows')
   })
 
   test('missing Git can be installed and retried without restarting the process', () => {
     const { files, isFile } = filesystem()
     const options = { platform: 'win32' as const, env: {}, isFile }
-    expect(() => systemShellResolver.resolve(options)).toThrow('No working command shell')
+    expect(() => systemShellResolver.resolve(options)).toThrow('找不到能用的命令 shell')
     for (const file of filesystem('C:\\Program Files\\Git').files) files.add(file)
     expect(systemShellResolver.resolve(options).shellPath).toBe('C:\\Program Files\\Git\\bin\\bash.exe')
     files.clear()

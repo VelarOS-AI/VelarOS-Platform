@@ -54,7 +54,7 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
     abortSignal?.throwIfAborted()
     const rootStats = await lstat(rootPath).catch(() => null)
     if (!rootStats) {
-      throw new AppError('NOT_FOUND', `Search root not found: ${rootPath}`)
+      throw new AppError('NOT_FOUND', `搜索的根目录不存在：${rootPath}`)
     }
     return options.mode === 'content'
       ? this.searchContent(rootPath, options, abortSignal)

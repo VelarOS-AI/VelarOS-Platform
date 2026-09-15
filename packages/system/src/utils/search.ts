@@ -20,7 +20,7 @@ export function buildLineMatcher(input: { pattern: string; regex?: boolean; case
       expression = new RegExp(input.pattern, flags)
     } catch (err) {
       const message = AppError.getMessage(err)
-      throw new AppError('VALIDATION', `Invalid regex pattern: ${message}`)
+      throw new AppError('VALIDATION', `正则写得不对：${message}`)
     }
     return (line) => {
       const starts: number[] = []

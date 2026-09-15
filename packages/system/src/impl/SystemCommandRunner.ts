@@ -317,7 +317,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
         status: result.cleanupIncomplete ? 'failed' : truncated ? 'truncated' : 'complete',
         encoding: 'utf-8', totalBytes, storedBytes, omittedBytes: Math.max(0, totalBytes - storedBytes),
         decodeErrors: decoders.stdout.decodeErrors + decoders.stderr.decodeErrors,
-        error: optionalWhen(result.cleanupIncomplete, 'Process output drain did not complete before its deadline'),
+        error: optionalWhen(result.cleanupIncomplete, '到期限时进程的输出还没收完'),
       }
       return { ...result, ...output, confinement: prepared.evidence, truncated, capture }
     })

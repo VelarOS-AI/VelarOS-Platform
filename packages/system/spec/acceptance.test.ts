@@ -258,7 +258,7 @@ describe('工具面', () => {
       undefined,
       { unexpected: true },
       new AbortController().signal,
-    )).rejects.toThrow('System capability input is invalid')
+    )).rejects.toThrow('系统能力的入参不合法')
     expect(resolverCalls).toBe(0)
   })
 
