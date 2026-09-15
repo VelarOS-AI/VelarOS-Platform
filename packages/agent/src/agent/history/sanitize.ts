@@ -44,6 +44,8 @@ interface ModelMessageSanitizationResult {
 
 interface ModelMessageSanitizationOptions {
   skipToolResultBudget?: boolean
+  /** 本次发送刻意展示完整参数的调用（紧接失败的那一次决策）；结构清洗不再把它们压回省略形态。 */
+  preserveToolCallInputIds?: ReadonlySet<string>
 }
 
 interface AssistantToolCallNameCandidate {
@@ -1070,6 +1072,7 @@ function sanitizeModelContentArray(
     }
 
     if (isToolCallPart(part)) {
+      if (options.preserveToolCallInputIds?.has(part.toolCallId)) return [part]
       const result = sanitizeToolCallPart(part)
       changed = changed || result.changed
       return [result.part]

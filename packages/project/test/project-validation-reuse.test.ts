@@ -130,7 +130,12 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
     const value = JSON.parse(part.output.value)
     return wrapped ? JSON.parse(value.excerpt) : value
   }
-  const shown = shownFailure((await compile()).messages)
+  const failedCallInput = (messages: any[]) => messages.flatMap((message) => Array.isArray(message.content) ? message.content : [])
+    .find((entry) => entry.type === 'tool-call' && entry.toolCallId === 'failed-candidate').input
+  const firstSend = await compile()
+  // 紧接失败的那一次决策看得到被复用的完整原参数，不必先召回正文才能判断改范围还是改正文。
+  expect(failedCallInput(firstSend.messages)).toEqual(input)
+  const shown = shownFailure(firstSend.messages)
   expect(shown.details.recovery).toMatchObject({ kind: 'project-edit-validation', coordinateSpace: 'candidate', applied: false })
   expect(shown.details.recovery.windows.length).toBeGreaterThan(0)
   for (const window of shown.details.recovery.windows) {
@@ -157,8 +162,12 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
   await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, {
     collectAll: async () => [completed], getTerminalError: () => undefined,
   })
-  expect(shownFailure((await compile()).messages).details.recovery).toMatchObject({ kind: 'project-edit-validation', status: 'archived' })
-  expect(shownFailure((await compile()).messages).details.recovery.windows).toBeUndefined()
+  const laterSend = await compile()
+  expect(shownFailure(laterSend.messages).details.recovery).toMatchObject({ kind: 'project-edit-validation', status: 'archived' })
+  expect(shownFailure(laterSend.messages).details.recovery.windows).toBeUndefined()
+  // 越过下一次决策后，失败调用的参数回到省略形态，大段正文不再常驻上下文。
+  expect(failedCallInput(laterSend.messages).__historyInputOmissions).toBeDefined()
+  expect(JSON.stringify(failedCallInput(laterSend.messages))).not.toContain('字面转义')
   expect(JSON.stringify(history[2])).toBe(originalFailure)
 })
 

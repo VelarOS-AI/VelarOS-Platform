@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined, Log } from '@velaros-ai/core'
+import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextPayloadStore } from '../../agent/context/ContextPayloadStore'
@@ -180,6 +180,27 @@ export async function saveToolAttemptOutcome(
   metrics?: { requestedChars: number; effectiveChars: number; reused: boolean }
 ): Promise<void> {
   await put(context, callId, 'outcome', { kind: 'tool-attempt-outcome', outcome, metrics })
+}
+
+/**
+ * 读取已证实未提交的失败调用所保存的完整参数（复用调用保存的是解析后的有效参数）。结果未定、仍在执行
+ * 或已完成的调用返回 undefined：它们不能被复用，也就不需要为下一次决策展示原参数。
+ */
+export async function readReusableAttemptInput(
+  store: ContextPayloadStore,
+  sessionId: string,
+  callId: string
+): Promise<Optional<Record<string, unknown>>> {
+  const [saved, settled] = await Promise.all([
+    store.findByHash(sessionId, await key(callId, 'input')),
+    store.findByHash(sessionId, await key(callId, 'outcome')),
+  ])
+  if (saved?.toolName !== InputToolName || settled?.toolName !== OutcomeToolName) return undefined
+  const original = JSON.parse(saved.serializedResult) as AttemptInput
+  const outcome = JSON.parse(settled.serializedResult) as { kind: string; outcome: ToolAttemptOutcome }
+  if (original.kind !== 'tool-attempt-input' || outcome.kind !== 'tool-attempt-outcome' || outcome.outcome !== 'not-applied')
+    return undefined
+  return optionalWhen(isPlainObject, original.args)
 }
 
 /**

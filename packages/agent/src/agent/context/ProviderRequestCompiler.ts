@@ -115,6 +115,8 @@ export interface CompileProviderRequestInput {
   providerTools?: readonly ProviderToolDefinitionSnapshotInput[]
   providerToolChoice?: unknown
   toolPayloadRefsByToolCallId?: Record<string, string>
+  /** 发送路径为紧接失败的那一次决策还原了完整参数的调用；编译期结构自愈不再压缩它们。 */
+  preserveToolCallInputIds?: ReadonlySet<string>
   /** 超长 user 正文的内容哈希 → 持久 payloadRef；准入信封用它跨进程精确召回。 */
   userTextPayloadRefsByHash?: Readonly<Record<string, string>>
   retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
@@ -248,7 +250,10 @@ export class ProviderRequestCompiler {
     const at = Date.now()
 
     // stage ①：编译前结构自愈（孤儿 tool-result 会永久锁死会话，这条是救命逻辑）。
-    const sanitizedMessages = applyHistoryStructureRepair(input.messages, { log: true })
+    const sanitizedMessages = applyHistoryStructureRepair(input.messages, {
+      log: true,
+      preserveToolCallInputIds: input.preserveToolCallInputIds,
+    })
     assertValidModelHistory(sanitizedMessages, { phase: 'compile', turn: null })
 
     // 账本单口：摄入 → 轮边界治理 → 确定性投影。
@@ -422,7 +427,8 @@ export class ProviderRequestCompiler {
     const projectedMessages = applySendTransportDecorations(projection.messages, input)
     const tailBlocks = this.buildTailBlocks(input, { session, window }, projection.stats)
     const canonicalMessages = applyHistoryStructureRepair(
-      [...projectedMessages, ...retainedMessages, ...tailBlocks], { log: false }
+      [...projectedMessages, ...retainedMessages, ...tailBlocks],
+      { log: false, preserveToolCallInputIds: input.preserveToolCallInputIds }
     )
     return {
       projectedMessages,

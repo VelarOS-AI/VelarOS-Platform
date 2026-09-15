@@ -87,14 +87,25 @@ function buildInterruptedToolResultMessage(
  *  - 回放不安全的 assistant 消息 → 丢弃；
  *  - 缺结果的 tool-call 组 → 能回填就补「被中断」占位结果，不能回填就整组移除。
  */
-function repairHistoryStructure(history: ModelMessage[]): HistorySanitizationResult {
+interface HistoryStructureRepairOptions {
+  /** 本次发送刻意展示完整参数的调用；结构自愈不压缩它们的参数。 */
+  preserveToolCallInputIds?: ReadonlySet<string>
+}
+
+function repairHistoryStructure(
+  history: ModelMessage[],
+  options: HistoryStructureRepairOptions = {}
+): HistorySanitizationResult {
   const sanitized: ModelMessage[] = []
   let removedMessages = 0
   let changedMessages = 0
   const issues: HistorySanitizationIssue[] = []
   let stableLength = 0
   const pushSanitized = (message: ModelMessage): void => {
-    const result = sanitizeModelMessage(message, { skipToolResultBudget: true })
+    const result = sanitizeModelMessage(message, {
+      skipToolResultBudget: true,
+      preserveToolCallInputIds: options.preserveToolCallInputIds,
+    })
     if (result.changed) {
       changedMessages += 1
     }
@@ -210,10 +221,16 @@ function repairHistoryStructure(history: ModelMessage[]): HistorySanitizationRes
  * provider 编译前的历史结构自愈：清理流中止/异常留下的孤儿 tool-result 与不完整
  * tool-call 组，避免一次损坏永久锁死会话（每次 send 都被 assertValidModelHistory 拦下）。
  */
-function repairHistoryStructureForProvider(history: ModelMessage[]): HistorySanitizationResult {
+function repairHistoryStructureForProvider(
+  history: ModelMessage[],
+  options: HistoryStructureRepairOptions = {}
+): HistorySanitizationResult {
   let identityChangedMessages = 0
   const identitySanitized = history.map((message) => {
-    const result = sanitizeModelMessage(message, { skipToolResultBudget: true })
+    const result = sanitizeModelMessage(message, {
+      skipToolResultBudget: true,
+      preserveToolCallInputIds: options.preserveToolCallInputIds,
+    })
     if (result.changed) identityChangedMessages += 1
     return result.message
   })
@@ -221,7 +238,7 @@ function repairHistoryStructureForProvider(history: ModelMessage[]): HistorySani
   // 再走结构修复处理「整条无前驱的 tool 消息」和「缺结果的 tool-call 组」（回填/移除）。
   const stripped = stripOrphanToolResultParts(identitySanitized)
   const base = stripped.changedMessages > 0 ? stripped.history : identitySanitized
-  const sanitized = repairHistoryStructure(base)
+  const sanitized = repairHistoryStructure(base, options)
   const changedMessages =
     identityChangedMessages + stripped.changedMessages + sanitized.changedMessages
   if (changedMessages === sanitized.changedMessages) return sanitized

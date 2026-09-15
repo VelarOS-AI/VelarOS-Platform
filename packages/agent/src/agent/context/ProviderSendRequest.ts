@@ -2,7 +2,11 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
-import { projectTransientRecoveryHistory } from '../../tools/recovery/TransientRecoveryProjection'
+import { readReusableAttemptInput } from '../../tools/recovery/ToolInputReuse'
+import {
+  projectTransientRecoveryHistory,
+  restoreReusableInputsForNextDecision,
+} from '../../tools/recovery/TransientRecoveryProjection'
 import {
   type AgentHistoryToolContext,
   sanitizeHistoryForProvider,
@@ -104,7 +108,16 @@ export async function compileProviderSendRequest(
   const fileTokenBudget = Math.max(0, Math.min(fixedEstimate.usableContextWindow * 0.15,
     fixedEstimate.usableContextWindow - fixedEstimate.estimatedTokens))
   let fileChars = Math.min(32_000, Math.floor(fileTokenBudget * 3))
-  const recoveryHistory = projectTransientRecoveryHistory(sanitizedHistoryMessages)
+  // 失败回执与被复用的原参数只陪紧接着的那一次决策；attempt 记录与工具执行共用同一会话的存储。
+  const attemptStore = input.toolContext?.contextPayloadStore ?? input.payloadStore
+  const attemptSessionId = input.toolContext?.sessionId ?? input.sessionId
+  const recovery = await restoreReusableInputsForNextDecision(
+    projectTransientRecoveryHistory(sanitizedHistoryMessages),
+    async (toolCallId) => attemptStore
+      ? readReusableAttemptInput(attemptStore, attemptSessionId, toolCallId)
+      : undefined,
+  )
+  const recoveryHistory = recovery.messages
   let fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars)
   // 与最终发送门共用分词尺；源码预算是总输入容量的一部分，最后仍由编译器统一准入。
   while (fileChars > 0 && estimateProviderRequestUsage(measurementInput,
@@ -132,6 +145,7 @@ export async function compileProviderSendRequest(
     ...input,
     messages: undecoratedMessages,
     tailBlocks: [...(input.tailBlocks ?? []), ...fileProjection.tail],
+    preserveToolCallInputIds: recovery.restoredToolCallIds,
     applySendTransportDecorations: true,
     toolPayloadRefsByToolCallId,
     userTextPayloadRefsByHash,

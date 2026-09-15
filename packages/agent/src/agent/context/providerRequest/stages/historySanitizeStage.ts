@@ -20,9 +20,11 @@ const log = logRuntime.tag('ProviderRequestCompiler')
  */
 export function applyHistoryStructureRepair(
   messages: ModelMessage[],
-  options: { log: boolean }
+  options: { log: boolean; preserveToolCallInputIds?: ReadonlySet<string> }
 ): ModelMessage[] {
-  const repair = repairHistoryStructureForProvider(messages)
+  const repair = repairHistoryStructureForProvider(messages, {
+    preserveToolCallInputIds: options.preserveToolCallInputIds,
+  })
   if (repair.removedMessages === 0 && repair.changedMessages === 0) return messages
 
   if (options.log) {
