@@ -38,7 +38,7 @@ export async function openRegularFile(path: string): Promise<FileHandle> {
   } finally {
     if (!regular) await handle.close()
   }
-  if (!regular) throw new AppError(TextFileErrorCodes.notRegular, `不是普通文件（目录、管道或设备），不能当文本读写：${path}`, undefined, { path })
+  if (!regular) throw new AppError(TextFileErrorCodes.notRegular, '不是普通文件（目录、管道或设备），不能当文本读写。', undefined, { path })
   return handle
 }
 
@@ -51,7 +51,7 @@ export async function readBoundedBytes(path: string, maxBytes: number): Promise<
   if (!handle) return undefined
   try {
     const { size } = await handle.stat()
-    if (size > maxBytes) throw new AppError(TextFileErrorCodes.tooLarge, `文件字节长度 ${size} 超过上限 ${maxBytes}：${path}`, undefined, { path, size, maxBytes })
+    if (size > maxBytes) throw new AppError(TextFileErrorCodes.tooLarge, `文件字节长度 ${size} 超过上限 ${maxBytes}。`, undefined, { path, size, maxBytes })
     // 多要一个字节：读得到第 size + 1 个字节，说明文件在读的过程中变长了。
     const bytes = Buffer.alloc(size + 1)
     let offset = 0
@@ -60,7 +60,7 @@ export async function readBoundedBytes(path: string, maxBytes: number): Promise<
       if (bytesRead === 0) break
       offset += bytesRead
     }
-    if (offset > size) throw new AppError(TextFileErrorCodes.externalEdit, `文件在读取期间变长了，已被外部修改：${path}`, undefined, { path })
+    if (offset > size) throw new AppError(TextFileErrorCodes.externalEdit, '文件在读取期间变长了，已被外部修改。', undefined, { path })
     return bytes.subarray(0, offset)
   } finally {
     await handle.close()

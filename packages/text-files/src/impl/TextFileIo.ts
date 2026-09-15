@@ -81,7 +81,7 @@ export class TextFileIo implements TextFileIoApi {
     const handle = await openRegularFile(path)
     try {
       const known = encoding ?? await this.inspect(handle)
-      if (!known) throw new AppError(TextFileErrorCodes.notText, `文件无法无损解码为文本：${path}`, undefined, { path })
+      if (!known) throw new AppError(TextFileErrorCodes.notText, '文件无法无损解码为文本。', undefined, { path })
       const decoder = this.codec.createDecoder(known)
       const source = { path, encoding: known }
       const chunk = new Uint8Array(TextFileTuning.stream.chunkBytes)
@@ -128,7 +128,7 @@ export class TextFileIo implements TextFileIoApi {
     const handle = await openRegularFile(path)
     try {
       const encoding = await this.inspect(handle)
-      if (!encoding) throw new AppError(TextFileErrorCodes.notText, `现有文件无法无损解码，拒绝文本覆盖：${path}`, undefined, { path })
+      if (!encoding) throw new AppError(TextFileErrorCodes.notText, '现有文件无法无损解码，拒绝文本覆盖。', undefined, { path })
       return encoding
     } finally {
       await handle.close()

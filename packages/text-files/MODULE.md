@@ -66,7 +66,7 @@ system 空间（`system:read`、`system:edit`、沙箱差量）与 project 空�
 
 ## 失败语义
 
-- 失败一律抛 `AppError`，`code` 是 `TextFileErrorCodes` 的码，`context` 带 path 与细节（lossy 带 offset 与 codeUnit，tooLarge 带 size 与 maxBytes）；调用方按码翻成自己的错误，文字已经是中文。
+- 失败一律抛 `AppError`，`code` 是 `TextFileErrorCodes` 的码，`context` 带 path 与细节（lossy 带 offset 与 codeUnit，tooLarge 带 size 与 maxBytes）；文字是中文、不拼路径（两个空间写路径的方式不同，调用方自己加）；调用方按码翻成自己的错误。
 - 文件系统自己的 errno 错误（ENOENT、EACCES、EPERM 这类）原样抛出，不包。
 - `decode`、`detect` 认不出返回 null，不抛错；`readBounded` 文件不存在返回 undefined。
 - 写入失败时磁盘不动：编码失败、核对失败都发生在改名之前，临时文件一律删掉。

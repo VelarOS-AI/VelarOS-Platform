@@ -156,6 +156,6 @@ export function decodeStrictly(decode: () => string, source: { path: string; enc
   try {
     return decode()
   } catch (error) {
-    throw new AppError(TextFileErrorCodes.notText, `文件内容不是合法的 ${source.encoding} 文本，无法无损解码：${source.path}`, error, { ...source })
+    throw new AppError(TextFileErrorCodes.notText, `文件内容不是合法的 ${source.encoding} 文本，无法无损解码。`, error, { ...source })
   }
 }
