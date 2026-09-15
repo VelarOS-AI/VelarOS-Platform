@@ -4,14 +4,15 @@
 // 这里不拦编辑，只核对：
 //   1. 工具文件：全部工具定义都在登记的那一个文件里，定义工具的函数只在那里被调用（没有工具的包不登记 toolsFile / toolDefiner / hostPort）。
 //      工具文件只放定义：execute 只许简单的一两步（最多 ExecuteStatementLimit 条语句），实现多的交给 impl 里的类。
-//   2. types：扁平；只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
+//   2. types：只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
 //      可移植文件（types/<portable> 与 contract/constants.ts）不 import、不用 Node 类型，可移植数据不带函数成员。
 //   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
 //      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
-//   4. impl：扁平，一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
+//   4. impl：一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
 //      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：写在类上方（公开的在 provides.ts 登记，注入面的在 requires.ts；继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
-//      私有方法必须用到实例状态；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
-//   5. utils：扁平；只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、types 与合同。
+//      私有方法必须用到实例状态；类的属性不许直接挂导入的函数（测试钩子）；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
+//   5. utils：只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、types 与合同。
+//      分包：types、impl、utils 文件多时可以按域开子目录，每个子目录至少直接放 3 个源文件；分层可以按子目录登记（以 / 结尾）。
 //   6. 对外入口由合同控制：入口文件只有转发语句；导出的类型只能来自 provides、requires、公开的 types 文件、常量表派生的别名，或 provides 登记的类上方接口；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
@@ -62,6 +63,22 @@ function walkSources(directory) {
 function childDirectories(directory) {
   if (!existsSync(directory)) return []
   return readdirSync(directory).filter((entry) => statSync(join(directory, entry)).isDirectory())
+}
+
+/** 分包后每个子目录至少直接放几个源文件：一两个文件不值得单开目录。 */
+const MinFilesPerSubdirectory = 3
+
+/** 递归列出目录下的全部子目录（相对路径）。 */
+function nestedDirectories(directory, prefix = '') {
+  return childDirectories(directory).flatMap((name) => {
+    const relativePath = prefix ? `${prefix}/${name}` : name
+    return [relativePath, ...nestedDirectories(join(directory, name), relativePath)]
+  })
+}
+
+/** 目录下直接放着的 TypeScript 源文件数（不含 .d.ts，不算子目录里的）。 */
+function directSourceCount(directory) {
+  return readdirSync(directory).filter((entry) => extname(entry) === '.ts' && !entry.endsWith('.d.ts') && statSync(join(directory, entry)).isFile()).length
 }
 
 /** 工具文件里一个 execute 最多几条语句（含嵌套函数里的）；再多就算有实现，要搬进 impl 的类。 */
@@ -260,6 +277,15 @@ for (const module of GovernedModules) {
   const inside = (file, root) => file.startsWith(`${root}/`)
   const isPublicInterfaceFile = (file) => publicInterfacePaths.includes(file)
   const shortPath = (file) => relative(packageRoot, file)
+  // 分包：types、impl、utils 可以按域开子目录，每个子目录至少直接放 MinFilesPerSubdirectory 个源文件。
+  const checkSubdirectories = (root, what) => {
+    for (const directory of nestedDirectories(root)) {
+      const count = directSourceCount(join(root, directory))
+      if (count < MinFilesPerSubdirectory) {
+        fail(`${label}: ${relative(packageRoot, root)}/${directory}/ 只直接放了 ${count} 个源文件；${what}分包是为了把很多文件按域分开，每个子目录至少 ${MinFilesPerSubdirectory} 个文件，一两个文件的不要单开目录，也不要只套一层空目录`)
+      }
+    }
+  }
   const sourceFiles = walkSources(srcRoot)
 
   const program = ts.createProgram(sourceFiles, {
@@ -346,9 +372,7 @@ for (const module of GovernedModules) {
   }
 
   // ── 2. types：只放类型 ──────────────────────────────────────────────
-  for (const directory of childDirectories(typesRoot)) {
-    fail(`${label}: ${module.types}/${directory}/ 是子目录；类型文件扁平，不分子目录`)
-  }
+  checkSubdirectories(typesRoot, '类型')
   for (const path of [portablePath, constantsPath]) {
     if (!existsSync(path)) {
       fail(`${label}: 缺少可移植文件 ${shortPath(path)}`)
@@ -464,10 +488,8 @@ for (const module of GovernedModules) {
     }
   }
 
-  // ── 4. impl：扁平、一类一文件、类配接口、分层 ───────────────────────────
-  for (const directory of childDirectories(implRoot)) {
-    fail(`${label}: ${module.impl}/${directory}/ 是子目录；实现目录保持扁平，一个类一个文件直接放在 ${module.impl}/ 下`)
-  }
+  // ── 4. impl：一类一文件、类配接口、分层；文件多可以按域分子目录 ───────────────
+  checkSubdirectories(implRoot, '实现')
   const implFiles = sourceFiles.filter((path) => inside(path, implRoot))
   for (const file of implFiles) {
     const sourceFile = parse(file)
@@ -512,9 +534,11 @@ for (const module of GovernedModules) {
       }
     }
   }
+  // 分层登记：写文件相对 impl 的路径（扁平包就是文件名），或以 / 结尾的子目录（整个子目录都在这一层）。
   const layerOf = (file) => {
-    if (dirname(file) !== implRoot) return null
-    const index = module.layers.findIndex((layer) => layer.includes(basename(file)))
+    if (!inside(file, implRoot)) return null
+    const relativePath = relative(implRoot, file)
+    const index = module.layers.findIndex((layer) => layer.some((entry) => entry.endsWith('/') ? relativePath.startsWith(entry) : relativePath === entry))
     return index < 0 ? null : index
   }
   for (const file of implFiles) {
@@ -591,7 +615,7 @@ for (const module of GovernedModules) {
         const declarations = type.getSymbol()?.declarations ?? []
         const declaredHere = (declaration) => {
           const declaredIn = declaration.getSourceFile().fileName
-          return inside(declaredIn, implRoot) && basename(declaredIn) === basename(file)
+          return declaredIn === file
         }
         if (!declarations.some((declaration) => declaredHere(declaration) || inside(declaration.getSourceFile().fileName, contractRoot))) {
           fail(`${label}: ${shortPath(file)} 的类 ${className} 实现的 ${typeNode.getText(sourceFile)} 既不在本文件的类上方，也不在 ${module.contract}/ 里`)
@@ -613,6 +637,13 @@ for (const module of GovernedModules) {
         const memberName = member.name.getText(sourceFile)
         const flags = ts.getCombinedModifierFlags(member)
         const isPrivate = (flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) !== 0 || ts.isPrivateIdentifier(member.name)
+        if (ts.isPropertyDeclaration(member) && member.initializer && ts.isIdentifier(member.initializer)) {
+          const symbol = checker.getSymbolAtLocation(member.initializer)
+          const aliased = symbol && (symbol.flags & ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : null
+          if (aliased && (aliased.flags & ts.SymbolFlags.Function)) {
+            fail(`${label}: ${shortPath(file)} 的 ${className}.${memberName} 直接挂着导入的函数 ${member.initializer.text}；这是留给测试替换的钩子，注入只走 ${module.contract}/requires.ts，要测就直接测那个函数`)
+          }
+        }
         if (isPrivate) {
           const body = ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)
             ? member.body
@@ -634,9 +665,7 @@ for (const module of GovernedModules) {
   }
 
   // ── 5. utils ───────────────────────────────────────────────────────────
-  for (const directory of childDirectories(utilsRoot)) {
-    fail(`${label}: ${module.utils}/${directory}/ 是子目录；工具函数按类别分文件，目录保持扁平`)
-  }
+  checkSubdirectories(utilsRoot, '工具函数')
   for (const file of sourceFiles.filter((path) => inside(path, utilsRoot))) {
     const sourceFile = parse(file)
     const documentedFunctions = new Set()

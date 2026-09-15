@@ -21,6 +21,7 @@ import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
+import { selectBackgroundTasks } from '../utils/system-info.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
 import { SystemTuning } from '../utils/tuning.js'
 
@@ -140,20 +141,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       status: this.resolveTaskStatus(task),
       updatedAt: Date.now(),
     }))
-    const sessionIds = new Set(options.sessionIds ?? [])
-    const filter = options.filter?.trim().toLowerCase()
-
-    return tasks
-      .sort((a, b) => b.startedAt - a.startedAt)
-      .filter((task) => {
-        if (filter && !task.command.toLowerCase().includes(filter)) return false
-        if (options.taskId && task.id !== options.taskId) return false
-        if (options.sessionId && task.sessionId !== options.sessionId) return false
-        if (sessionIds.size > 0 && (!task.sessionId || !sessionIds.has(task.sessionId))) return false
-        if (options.onlyRunning && task.status !== 'running') return false
-        return true
-      })
-      .slice(0, options.limit ?? SystemTuning.command.taskListItems)
+    return selectBackgroundTasks(tasks, options)
   }
 
   public async terminateTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {

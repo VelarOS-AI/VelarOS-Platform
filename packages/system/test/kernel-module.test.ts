@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 
 import { captureService } from '../spec/support'
-import type { SystemBackgroundTaskRecord } from '../src/exports/contracts'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../src/exports/contracts'
 import {
   createSystemKernelModule,
   type SystemCapabilityService,
   type SystemToolContext,
 } from '../src/exports/index'
 import { LocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+import { collectPortPids, parseOpenPortEntries, parseProcessRows, selectBackgroundTasks, selectOpenPorts, selectSystemProcesses } from '../src/utils/system-info.js'
 
-function createLargeProcessKernel() {
-  const kernel = new LocalSystemKernel({ cwd: '/tmp', platform: 'darwin' })
+/** 60 条进程、60 个端口、60 个后台任务，只有 pid 1056～1059 命中过滤词；过滤词大小写各异、前后带空格。 */
+function largeCollections() {
   const processRows = Array.from({ length: 60 }, (_, index) => {
     const name = index === 56 ? 'TargetMarker' : 'node'
     const command = index >= 57
@@ -20,41 +21,35 @@ function createLargeProcessKernel() {
   }).join('\n')
   const portRows = Array.from({ length: 60 }, (_, index) =>
     `p${1000 + index}\ncnode\nn127.0.0.1:${4000 + index}\nTST=LISTEN`).join('\n')
-  const internals = kernel as unknown as {
-    runPlatformCommand: (spec: { file: string }) => Promise<{ stdout: string; stderr: string }>
-    commands: {
-      tasks: Map<string, SystemBackgroundTaskRecord>
-      resolveTaskStatus: () => 'running'
-    }
+  const tasks: SystemBackgroundTaskRecord[] = Array.from({ length: 60 }, (_, index) => ({
+    id: `task-${index}`,
+    runId: `run-${index}`,
+    sessionId: null,
+    command: index >= 56 ? `bun ${'x'.repeat(900)} TaRgEtMaRkEr-${index}` : `bun unrelated-${index}`,
+    cwd: '/tmp',
+    pid: 1000 + index,
+    logPath: null,
+    ports: [],
+    reason: null,
+    terminateCommand: null,
+    forceTerminateCommand: null,
+    fallbackTerminateCommand: null,
+    requested: true,
+    autoStarted: false,
+    startedAt: 1,
+    updatedAt: 1,
+    status: 'running',
+    recentOutput: null,
+  }))
+  const processes = (options: SystemProcessQueryOptions): SystemProcessInfo[] => selectSystemProcesses(parseProcessRows(processRows, 'darwin'), options)
+  const ports = (options: SystemOpenPortQueryOptions): SystemOpenPortInfo[] => {
+    const entries = parseOpenPortEntries(portRows, 'darwin')
+    const pids = collectPortPids(entries)
+    const owners = processes({ pids, limit: pids.length })
+    return selectOpenPorts(entries, new Map(owners.map((owner) => [owner.pid, owner])), options)
   }
-  internals.runPlatformCommand = async (spec) => ({
-    stdout: spec.file === 'ps' ? processRows : portRows,
-    stderr: '',
-  })
-  internals.commands.resolveTaskStatus = () => 'running'
-  for (let index = 0; index < 60; index += 1) {
-    internals.commands.tasks.set(`task-${index}`, {
-      id: `task-${index}`,
-      runId: `run-${index}`,
-      sessionId: null,
-      command: index >= 56 ? `bun ${'x'.repeat(900)} TaRgEtMaRkEr-${index}` : `bun unrelated-${index}`,
-      cwd: '/tmp',
-      pid: 1000 + index,
-      logPath: null,
-      ports: [],
-      reason: null,
-      terminateCommand: null,
-      forceTerminateCommand: null,
-      fallbackTerminateCommand: null,
-      requested: true,
-      autoStarted: false,
-      startedAt: 1,
-      updatedAt: 1,
-      status: 'running',
-      recentOutput: null,
-    })
-  }
-  return kernel
+  const backgroundTasks = (options: SystemBackgroundTaskQueryOptions): SystemBackgroundTaskRecord[] => selectBackgroundTasks(tasks, options)
+  return { processes, ports, backgroundTasks }
 }
 
 describe('System Kernel module', () => {
@@ -247,15 +242,15 @@ describe('System Kernel module', () => {
     expect(result).toEqual({ count: 0, tasks: [] })
   })
 
-  test.each(['listProcesses', 'listOpenPorts', 'listBackgroundTasks'] as const)(
-    'filters the full local kernel %s collection before its result limit',
-    async (method) => {
-      const kernel = createLargeProcessKernel()
-      expect(await kernel[method]()).toHaveLength(50)
-      const allMatches = await kernel[method]({ filter: ' targetmarker ' })
+  test.each(['processes', 'ports', 'backgroundTasks'] as const)(
+    'filters the full %s collection before its result limit',
+    (collection) => {
+      const select = largeCollections()[collection] as (options: { filter?: string; limit?: number }) => Array<{ pid: Nullable<number> }>
+      expect(select({})).toHaveLength(50)
+      const allMatches = select({ filter: ' targetmarker ' })
       expect(allMatches).toHaveLength(4)
       expect(allMatches.map((item) => item.pid)).toEqual([1056, 1057, 1058, 1059])
-      const limited = await kernel[method]({ filter: ' TaRgEtMaRkEr ', limit: 2 })
+      const limited = select({ filter: ' TaRgEtMaRkEr ', limit: 2 })
       expect(limited.map((item) => item.pid)).toEqual([1056, 1057])
     },
   )

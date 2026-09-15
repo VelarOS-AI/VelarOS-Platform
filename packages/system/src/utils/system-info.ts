@@ -1,5 +1,5 @@
 /**
- * 系统信息：解析各平台进程、端口、CPU、磁盘、交换区命令的输出，按查询条件筛选进程与端口，给指标定告警级别。
+ * 系统信息：解析各平台进程、端口、CPU、磁盘、交换区命令的输出，按查询条件筛选进程、端口与后台任务（一律先过滤再截断），给指标定告警级别。
  */
 
 import { basename } from 'node:path'
@@ -7,9 +7,26 @@ import { basename } from 'node:path'
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
-import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
 
 import { SystemTuning } from './tuning.js'
+
+/** 按查询条件筛选后台任务，最新启动的在前：过滤词（命令行里不区分大小写的包含）、任务 id、会话、会话集合、只看运行中；先过滤再截断，最多 limit 条。 */
+export function selectBackgroundTasks(tasks: readonly SystemBackgroundTaskRecord[], options: SystemBackgroundTaskQueryOptions): SystemBackgroundTaskRecord[] {
+  const sessionIds = new Set(options.sessionIds ?? [])
+  const filter = options.filter?.trim().toLowerCase()
+  return [...tasks]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .filter((task) => {
+      if (filter && !task.command.toLowerCase().includes(filter)) return false
+      if (options.taskId && task.id !== options.taskId) return false
+      if (options.sessionId && task.sessionId !== options.sessionId) return false
+      if (sessionIds.size > 0 && (!task.sessionId || !sessionIds.has(task.sessionId))) return false
+      if (options.onlyRunning && task.status !== 'running') return false
+      return true
+    })
+    .slice(0, options.limit ?? SystemTuning.command.taskListItems)
+}
 
 /** 把进程行转成对外的进程信息，再按查询条件筛选：过滤词、pid、名字、命令行片段、用户、只看当前用户、CPU 与内存下限；最多 limit 条（默认 50）。 */
 export function selectSystemProcesses(rows: ParsedProcessRow[], options: SystemProcessQueryOptions): SystemProcessInfo[] {

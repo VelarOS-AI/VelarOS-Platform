@@ -98,8 +98,6 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   private readonly commands: SystemCommandRunnerApi
   private readonly search: SystemGlobalSearchApi
   private readonly sandboxes: SystemSandboxesApi
-  /** 跑平台命令（ps、lsof、netstat 等）读进程、端口和指标。做成字段是为了测试能换成假输出。 */
-  private readonly runPlatformCommand = runPlatformCommand
 
   constructor(options: LocalSystemKernelOptions) {
     const root = resolve(options.cwd)
@@ -209,7 +207,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const commandSpec = this.platformTools.getProcessListCommandSpec()
     if (!commandSpec) return []
 
-    const output = await this.runPlatformCommand(commandSpec)
+    const output = await runPlatformCommand(commandSpec)
     return selectSystemProcesses(parseProcessRows(output.stdout, this.hostPlatform), options)
   }
 
@@ -217,7 +215,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const commandSpec = this.platformTools.getOpenPortInspectionCommandSpec()
     if (!commandSpec) return []
 
-    const output = await this.runPlatformCommand(commandSpec, { tolerateLsofEmptyResult: true })
+    const output = await runPlatformCommand(commandSpec, { tolerateLsofEmptyResult: true })
     const entries = parseOpenPortEntries(output.stdout, this.hostPlatform)
     const pids = collectPortPids(entries)
     const owners = isEmpty(pids)
@@ -326,7 +324,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   ): Promise<Nullable<T>> {
     if (!commandSpec) return null
     try {
-      const output = await this.runPlatformCommand(commandSpec)
+      const output = await runPlatformCommand(commandSpec)
       return parse(output.stdout, this.hostPlatform)
     } catch (error) {
       log.debug(`failed to read local kernel ${label}`, { error })
