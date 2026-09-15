@@ -1,6 +1,6 @@
 /**
  * 本地内核：`LocalSystemKernel`，宿主端口 `ctx.system` 在本机上的实现。接口见 `interface/provides.ts` 的 `LocalSystemKernelApi`。
- * 它只做转接：命令、后台任务与交互式任务的控制台交给命令执行器，搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
+ * 它只做转接：命令、后台任务与交互式任务的控制台交给命令执行器，演练沙箱交给沙箱登记表（cwd 落在镜像根内的命令走沙箱专属执行器），搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
  */
 
 import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'node:os'
@@ -32,6 +32,13 @@ import type {
   SystemProcessInfo,
   SystemProcessQueryOptions,
   SystemRunCommandOptions,
+  SystemSandboxApplyOptions,
+  SystemSandboxApplyResult,
+  SystemSandboxCreateOptions,
+  SystemSandboxDiff,
+  SystemSandboxDiffOptions,
+  SystemSandboxDiscardResult,
+  SystemSandboxRecord,
   SystemShellEnvironmentRefreshResult,
 } from '../contract/system.js'
 import type { LocalSystemKernelApi } from '../interface/provides.js'
@@ -55,6 +62,8 @@ import { SystemCommandRunner } from './SystemCommandRunner.js'
 import type { SystemGlobalSearchApi } from './SystemGlobalSearch.js'
 import { SystemGlobalSearch } from './SystemGlobalSearch.js'
 import { systemProcessManager } from './SystemProcessManager.js'
+import type { SystemSandboxesApi } from './SystemSandboxes.js'
+import { SystemSandboxes } from './SystemSandboxes.js'
 import type { SystemShellResolverApi } from './SystemShellResolver.js'
 import { systemShellResolver } from './SystemShellResolver.js'
 
@@ -73,6 +82,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   private readonly shells: SystemShellResolverApi = systemShellResolver
   private readonly commands: SystemCommandRunnerApi
   private readonly search: SystemGlobalSearchApi
+  private readonly sandboxes: SystemSandboxesApi
   /** 跑平台命令（ps、lsof、netstat 等）读进程、端口和指标。做成字段是为了测试能换成假输出。 */
   private readonly runPlatformCommand = runPlatformCommand
 
@@ -98,6 +108,13 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
       processes: systemProcessManager,
     })
     this.search = new SystemGlobalSearch({ platform: this.hostPlatform, homeDir: this.homeDir })
+    this.sandboxes = new SystemSandboxes({
+      platform: this.hostPlatform,
+      platformTools: this.platformTools,
+      confinementProvider: confinement.provider,
+      shells: this.shells,
+      processes: systemProcessManager,
+    })
   }
 
   public async inspectEnvironment(commands: string[] = []): Promise<SystemEnvironmentInspection> {
@@ -195,23 +212,24 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   }
 
   public async listBackgroundTasks(options: SystemBackgroundTaskQueryOptions = {}): Promise<SystemBackgroundTaskRecord[]> {
-    return this.commands.listTasks(options)
+    const tasks = [this.commands, ...this.sandboxes.runners()].flatMap((runner) => runner.listTasks(options))
+    return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? 50)
   }
 
   public terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {
-    return this.commands.terminateTask(request)
+    return this.runnerOwning(request.taskId).terminateTask(request)
   }
 
   public writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult> {
-    return this.commands.writeConsoleInput(request)
+    return this.runnerOwning(request.taskId).writeConsoleInput(request)
   }
 
   public readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk> {
-    return this.commands.readConsoleOutput(request)
+    return this.runnerOwning(request.taskId).readConsoleOutput(request)
   }
 
   public interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult> {
-    return this.commands.interruptConsole(request)
+    return this.runnerOwning(request.taskId).interruptConsole(request)
   }
 
   public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {
@@ -239,7 +257,9 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     _allowDangerous = false,
     abortSignal?: AbortSignal
   ): Promise<SystemCommandResult> {
-    return this.commands.run(command, this.resolvePath(options.cwd), options, abortSignal)
+    const cwd = this.resolvePath(options.cwd)
+    // cwd 落在某个沙箱根之内，就交给那个沙箱专属的执行器：约束钉死在镜像根，写不到源目录。
+    return this.sandboxes.runnerFor(cwd).then((runner) => (runner ?? this.commands).run(command, cwd, options, abortSignal))
   }
 
   public resolvePath(path?: string): string {
@@ -248,8 +268,34 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
   }
 
-  public dispose(): Promise<void> {
-    return this.commands.dispose()
+  public createSandbox(options: SystemSandboxCreateOptions = {}): Promise<SystemSandboxRecord> {
+    return this.sandboxes.create(this.resolvePath(options.source), { network: !!options.network, ignored: options.ignored ?? 'link' })
+  }
+
+  public diffSandbox(options: SystemSandboxDiffOptions): Promise<SystemSandboxDiff> {
+    return this.sandboxes.diff(options)
+  }
+
+  public applySandbox(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult> {
+    return this.sandboxes.apply(options)
+  }
+
+  public discardSandbox(sandboxId: string): Promise<SystemSandboxDiscardResult> {
+    return this.sandboxes.discard(sandboxId)
+  }
+
+  public listSandboxes(): SystemSandboxRecord[] {
+    return this.sandboxes.list()
+  }
+
+  public async dispose(): Promise<void> {
+    await this.sandboxes.dispose()
+    await this.commands.dispose()
+  }
+
+  /** 哪个执行器登记着这条任务：沙箱执行器里都找不到就交给主执行器，它会按自己的规则报不存在。 */
+  private runnerOwning(taskId: string): SystemCommandRunnerApi {
+    return this.sandboxes.runners().find((runner) => !isEmpty(runner.listTasks({ taskId }))) ?? this.commands
   }
 
   /** 选出本机经过自检、真能工作的 shell。 */

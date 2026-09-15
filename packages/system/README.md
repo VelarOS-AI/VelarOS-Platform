@@ -1,11 +1,11 @@
 # @velaros-ai/system
 
-> 六个工具都在 [src/impl/SystemTools.ts](./src/impl/SystemTools.ts)；模块卡片见 [MODULE.md](./MODULE.md)。本文是操作手册。
+> 七个工具都在 [src/impl/SystemTools.ts](./src/impl/SystemTools.ts)；模块卡片见 [MODULE.md](./MODULE.md)。本文是操作手册。
 
 System 是 `@velaros-ai` 品牌下的系统空间包。对外只有两个入口，里面只有接口标注过的整件能力、宿主要注入的接口和数据，
 零件不出包（详见 [MODULE.md](./MODULE.md) 的「提供什么」）；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`：
 
-- `@velaros-ai/system`：Node 宿主用的全部公开面，包括六个工具、内置 mod、内核模块、本地内核、命令策略。
+- `@velaros-ai/system`：Node 宿主用的全部公开面，包括七个工具、内置 mod、内核模块、本地内核、命令策略。
 - `@velaros-ai/system/contracts`：可移植数据，浏览器也能用。
 
 模型工具使用 canonical `namespace:tool` 协议：
@@ -17,7 +17,10 @@ system:edit
 system:run
 system:refresh-environment
 system:list-tasks
+system:sandbox
 ```
+
+复杂迁移、批量改写、删目录的脚本先走演练沙箱：`system:sandbox create` 把目录镜像到临时区，脚本用 `system:edit` 写进镜像、用 `system:run` 传 `cwd=镜像根` 跑——镜像里的命令被进程约束钉在镜像内，写到源目录会直接失败；`diff` 看变了什么，`apply` 经用户确认后落回源目录（源文件变过整批不落），`discard` 丢弃。见 ADR 0006。
 
 只留 `system:run` 替代不了的：读和写把文件内容和精确匹配绕开 shell 引号，并过敏感路径审批（整个文件的重写并在 `system:edit` 里）；看图片要把内容当图交给模型（PDF 与其他文档归别的 mod）；
 后台任务表只在本包；刷新环境要把 Windows 上重读到的环境变量写回宿主进程，子进程做不到。能由普通命令稳定完成的操作直接用 `system:run`：

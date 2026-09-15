@@ -1,16 +1,19 @@
 /**
- * 系统空间的六个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义
+ * 系统空间的七个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义
  * 和 execute 都在定义里，上方不再另写一遍；按文件、执行两类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
- * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。PDF 与其他文档归别的 mod。
+ * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程，演练沙箱要把命令钉在镜像里。PDF 与其他文档归别的 mod。
  * 读、看、写都是 files 每项一个文件，一个文件就一项。列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
+
+import { join } from 'node:path'
 
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { createApprovalOperationKey, createManualApprovalOptions, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isNull, optionalWhen } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 
@@ -20,6 +23,8 @@ import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCol
 import type { CreateSystemKernelModuleOptions } from '../interface/requires.js'
 import { buildBackgroundCommandConfirmationMessage, isParallelCommandExecutionSafe } from '../utils/command-policy.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
+import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
+import { buildSandboxApplyConfirmationMessage, selectSandboxChanges } from '../utils/sandbox.js'
 import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.js'
 
 import { systemCommandPolicy } from './SystemCommandPolicy.js'
@@ -386,10 +391,97 @@ const listTasksTool = defineSystemTool<{
   },
 })
 
+// ── 演练沙箱：把目录镜像到临时区，脚本先在镜像里跑 ────────────
+
+/** system:sandbox —— 演练沙箱：建镜像、看差量、落回、丢弃。 */
+const sandboxTool = defineSystemTool<{
+  action: 'create' | 'diff' | 'apply' | 'discard'
+  source?: string
+  network?: boolean
+  ignored?: 'link' | 'copy' | 'skip'
+  sandboxId?: string
+  paths?: string[]
+  maxFiles?: number
+}>({
+  name: SystemToolNames.sandbox,
+  role: 'edit',
+  summary: '演练沙箱：把一个目录镜像到临时区，脚本先在镜像里跑（写不到镜像外），diff 看变了什么，确认后 apply 落回源目录。',
+  suitable: ['要一次改很多文件、删目录、跑迁移或批处理脚本之前，先在镜像里跑一遍看结果。', '拿不准一段脚本会不会误删误改的时候。'],
+  forbidden: ['改一两个文件直接用 system:edit；只读命令直接用 system:run。', '不要把镜像里的结果当成已经发生：落回之前源目录一个字节都没变。'],
+  usage: [
+    'create 返回 root（镜像根）：把脚本用 system:edit 写进 root，用 system:run 传 cwd=root 跑；镜像里的命令只能写镜像和它自己的临时目录，写到源目录会直接失败，所以脚本里算错的路径在这里只会报错。',
+    'diff 看新增、修改、删除三列和文本差量；不对就改脚本再跑，镜像随便糟蹋。',
+    'apply 把文件变化落回源目录，会先向用户确认并列出删除与覆盖；源文件在这期间被别人改过就整批不落。git 历史的变化不落回，要在真实目录重放那几条 git 命令。',
+    '用完 discard。gitignore 忽略的目录（node_modules 等）缺省是指向真实目录的链接，脚本能用依赖但写不进去；要在镜像里重新构建就 create 时传 ignored=copy。',
+  ],
+  examples: [
+    { action: 'create', source: '~/projects/app' },
+    { action: 'diff', sandboxId: '20260915-183000-3fa2c1' },
+    { action: 'apply', sandboxId: '20260915-183000-3fa2c1' },
+    { action: 'discard', sandboxId: '20260915-183000-3fa2c1' },
+  ],
+  notes: ['镜像里的命令连不上网，除非 create 时传 network=true；镜像仓库推不出去。没有进程约束后端的机器上建不出沙箱。'],
+  schema: z.strictObject({
+    action: z.enum(['create', 'diff', 'apply', 'discard']).describe('create 建沙箱；diff 看镜像相对创建时的变化；apply 把变化落回源目录（会向用户确认）；discard 删掉镜像。'),
+    source: z.string().min(1).optional().describe('create：要镜像的目录，支持 ~；不传就是 system:run 的默认目录。'),
+    network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
+    ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
+    sandboxId: z.string().min(1).max(64).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
+    paths: z.array(z.string().min(1)).max(500).optional().describe('apply：只落这些相对路径；不传就全部。'),
+    maxFiles: z.number().int().positive().max(2000).optional().describe('diff：新增与修改各列最多列多少条，默认 200；删除列永远完整。'),
+  }),
+  permissions: ['fs:read', 'fs:write'],
+  capabilities: {
+    effectKind: 'write',
+    readScopes: ['any'],
+    writeScopes: ['any'],
+    filesystem: { read: 'any', write: 'any' },
+    canReadArbitrarySource: true,
+    concurrency: 'unsafe',
+    reason: 'rehearsal sandbox lifecycle',
+  },
+  isConcurrencySafe: () => false,
+  execute: async (input, ctx) => {
+    const sandboxId = input.sandboxId ?? ''
+    if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} needs the sandboxId that create returned`)
+    if (input.action === 'create') {
+      const record = await ctx.system.createSandbox({ source: input.source, network: input.network, ignored: input.ignored })
+      return {
+        ...record,
+        note: `镜像根是 ${record.root}：脚本用 system:edit 写进去，system:run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。`,
+      }
+    }
+    if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
+    if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
+
+    // 落回：先算差量，把删除、覆盖、敏感路径都摆给用户看，确认了才写。
+    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: 2000 })
+    const selection = selectSandboxChanges(changes, input.paths)
+    if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
+    const targets = [...selection.created, ...selection.modified, ...selection.deleted].map((path) => join(changes.source, path))
+    const sensitive = targets.filter((path) => isSensitiveSystemMutationPath(path) || isCredentialPath(path))
+    await ctx.approval.awaitConfirmation(
+      buildSandboxApplyConfirmationMessage(changes.source, selection, sensitive),
+      ctx.abortSignal,
+      createManualApprovalOptions({
+        approvalRisk: 'high',
+        riskScope: 'system-sandbox:apply',
+        operation: {
+          key: createApprovalOperationKey('sandbox-apply', { sandboxId, created: selection.created.length, modified: selection.modified.length, deleted: selection.deleted.length }),
+          label: `把演练沙箱的改动落回 ${changes.source}`,
+          target: changes.source,
+        },
+      })
+    )
+    const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths })
+    return isNull(input.paths) || !input.paths ? applied : { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` }
+  },
+})
+
 // ── 工具集合：按职责类别分组 ────────────────────────────────────
 
 /**
- * 工具集合的装配：六个工具按两个职责类别分组。
+ * 工具集合的装配：七个工具按两个职责类别分组。
  *
  * 每个工具的定义（提示词、schema、权限、execute）在上面；这里只决定谁属于哪一类、以及全量集合长什么样。
  * 类别 id 与 `contract/system.ts` 里的表一致。
@@ -405,9 +497,10 @@ const systemExecutionTools = structureToolDescriptionsForCategory({
   [SystemToolNames.run]: runTool,
   [SystemToolNames.refreshEnvironment]: refreshEnvironmentTool,
   [SystemToolNames.listTasks]: listTasksTool,
+  [SystemToolNames.sandbox]: sandboxTool,
 }, 'system-execution')
 
-/** 系统空间的六个模型面工具，按工具名索引。 */
+/** 系统空间的七个模型面工具，按工具名索引。 */
 export const systemTools: SystemToolCollection = Object.freeze({
   ...systemFileTools,
   ...systemExecutionTools,
@@ -494,7 +587,7 @@ export function createSystemBundledModDefinition(): SystemBundledModDefinition {
 export const SystemCapability: CapabilityToken<SystemCapabilityService> =
   createCapabilityToken<SystemCapabilityService>(SystemModId)
 
-/** 创建系统空间的内核模块：激活时把六个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
+/** 创建系统空间的内核模块：激活时把七个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
 export function createSystemKernelModule(
   options: CreateSystemKernelModuleOptions = {},
 ): KernelModuleDefinition {

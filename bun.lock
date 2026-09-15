@@ -345,6 +345,7 @@
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
+        "diff": "^8.0.4",
         "zod": "^4.3.6",
       },
       "devDependencies": {

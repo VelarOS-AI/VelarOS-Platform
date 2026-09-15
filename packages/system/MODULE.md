@@ -1,7 +1,7 @@
 # @velaros-ai/system 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 六个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/interface/` 的三个文件和各实现文件类上方的接口，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
+> 七个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/interface/` 的三个文件和各实现文件类上方的接口，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
 > 门禁：`bun run check:module-ownership`。
 
 ## 这是什么
@@ -18,7 +18,7 @@
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `systemTools` | `SystemToolCollection`，元素是 `VelaTool` | 六个模型面工具 |
+| `systemTools` | `SystemToolCollection`，元素是 `VelaTool` | 七个模型面工具 |
 | `createSystemBundledModDefinition` | `SystemBundledModDefinition` | 系统空间作为官方内置 mod 的定义 |
 | `createSystemKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |
@@ -29,7 +29,7 @@
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调工具时给。端口只有四个方法，每个都有工具在调，门禁核对 |
+| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调工具时给。端口只有八个方法（路径解析、后台任务、刷新环境、跑命令，以及演练沙箱的建、看差量、落回、丢弃），每个都有工具在调，门禁核对 |
 | `SystemToolContextResolver`，放在 `CreateSystemKernelModuleOptions` 里 | 挂进内核且要按名调用时必须 | 创建内核模块时给 |
 | `LocalSystemKernelOptions` | 用本地内核时必须 | 创建本地内核时给 |
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
@@ -44,13 +44,13 @@
 | `.` | Node 宿主 | 三个面的全部 |
 | `./contracts` | 任何进程，含浏览器 | 可移植数据 |
 
-模型面的六个工具是本模块的主产品。它们都在 `src/impl/SystemTools.ts`，按文件、执行两类排列，每个工具的定义就是模型看到的全部信息面：一句话摘要、适用与禁用场景、协议、用法、示例、参数说明、权限、能力声明、审批语义，以及 execute 里的执行链路。schema 由 `check:capabilities-schemas` 冻结。
+模型面的七个工具是本模块的主产品。它们都在 `src/impl/SystemTools.ts`，按文件、执行两类排列，每个工具的定义就是模型看到的全部信息面：一句话摘要、适用与禁用场景、协议、用法、示例、参数说明、权限、能力声明、审批语义，以及 execute 里的执行链路。schema 由 `check:capabilities-schemas` 冻结。
 
 截至 2026-09-15，Desktop 和 Workbench 还在用收口前的入口和零件，要随下一次升级迁到上面这三个面上。
 
 ## 骨干链路
 
-六个工具都在 `SystemTools.ts`，每个工具定义上方是它的说明。下表每条链路是该工具 execute 的样子，箭头右边是类的方法或宿主端口 `ctx.system`。
+七个工具都在 `SystemTools.ts`，每个工具定义上方是它的说明。下表每条链路是该工具 execute 的样子，箭头右边是类的方法或宿主端口 `ctx.system`。
 
 | 工具 | 链路 |
 | --- | --- |
@@ -60,8 +60,9 @@
 | `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
 | `system:refresh-environment` | Windows 上重读用户与系统环境变量写回宿主进程 → 重新选定并自检 shell → 返回 shell 描述与 revision |
 | `system:list-tasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
+| `system:sandbox` | create：源目录解开链接后镜像到临时区（写时复制；gitignore 忽略的目录链接过去、忽略的文件不复制）→ 先探测约束后端，没有就拒绝、不留目录 → 剪断镜像仓库的推送 → 清单落盘、登记专属执行器，之后 cwd 落在镜像根内的 `system:run` 一律约束到镜像根 → diff：扫描镜像印记对比清单，新增、修改、删除三列加有界文本差量，.git 只汇总 → apply：先算差量、向用户确认（列出删除、覆盖与敏感路径）→ 逐个核对源文件自建沙箱以来没变过，冲突整批不落 → 新建、覆盖、删除写回，.git 不落 → discard：核对路径在基目录之下再递归删除 |
 
-六个工具按两个类别分组、作为内置 mod 挂进产品、作为能力服务挂进内核，也在 `SystemTools.ts` 的末尾；挂进内核后每次调用先严格解析入参，再向宿主解析上下文。
+七个工具按两个类别分组、作为内置 mod 挂进产品、作为能力服务挂进内核，也在 `SystemTools.ts` 的末尾；挂进内核后每次调用先严格解析入参，再向宿主解析上下文。
 
 宿主侧的第二段链路（`system:run` 的 ④ 里面发生的事）：本地内核解析 cwd，交给命令执行器 `SystemCommandRunner.run` → 选 shell（宿主给了 nativeCommand 就走原生 argv，否则按实际 shell 语法）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步做什么见 `src/impl/SystemCommandRunner.ts` 类上方的 `SystemCommandRunnerApi` 的说明。
 
@@ -80,6 +81,7 @@
 
 - **后台任务表**：每个本地内核持有一个命令执行器，任务表归它私有，在内存里，随内核 `dispose()` 结束；只保留结尾的输出窗口（后台任务最近 4000 字符），不落日志文件；宿主自己留了会话终端日志（`logPath`）时结果里才有召回续接。已结束的任务只留最近 200 条。
 - **交互式任务的控制台缓冲**：和任务表一起归命令执行器，在内存里，每个控制台留最近 10 万字符，更早的输出被挤掉时读取方会拿到 `droppedChars`；随 `dispose()` 清空。
+- **演练沙箱登记表**：本地内核持有一份（`SystemSandboxes`），每个沙箱一条记录和一个约束到镜像根的专属执行器；镜像与清单在临时区 `velaros-sandbox/<id>/` 下，内核重启后按清单重新登记；`dispose()` 只停进程，不删镜像，用户可能还要看差量。
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执，供状态查询和 pid 身份核对。
 - **文件版本历史**：文件操作持有一份，只在内存里，每个文件留最近 10 份改动前的内容、单份不超过 2 MB、总量不超过 64 MB；随进程消失，持久化的本地历史是宿主的事。
 - **shell 选择**：不缓存，每次运行前重新自检。`system:refresh-environment` 在 Windows 上重读用户与系统环境变量写回本进程并给出新的 `revision`，其他平台只重新选 shell。
@@ -101,11 +103,12 @@
 - **危险命令没有审批通道就拒绝。** 审批事实与约束事实分开记录，谁也不能冒充谁。
 - **输出过长不是错误。** 截尾、标记 `truncated`、给出可执行的召回续接。
 - 完整错误码语义见 `src/contract/system.ts` 末尾的 `SystemErrorCodes`；外面按错误码判断，不按错误类。
+- 演练沙箱：没有约束后端建不出（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`）；落回时源文件自建沙箱以来变过整批不落（`SYSTEM_SANDBOX_CONFLICT`，not-applied，cause.details.conflicts 列出每处）；丢弃时 id 不合形状或路径不在基目录之下拒绝。
 
 ## 不变量
 
-共 21 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束。
-按检验方式：测试 18 条、类型 1 条、门禁 1 条、文字 1 条。未验证 1 条（INV-18，只有文字，没有机器检验）。
+共 25 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束。
+按检验方式：测试 22 条、类型 1 条、门禁 1 条、文字 1 条。未验证 1 条（INV-18，只有文字，没有机器检验）。
 
 ## 非目标
 
@@ -122,7 +125,7 @@ src/
   interface/    接口：provides 是产品面，requires 是注入面，internal 是不属于某个类的内部接口（utils 函数的选项、工具定义的入参）；每个方法都有中文说明
                 包内部类的接口不在这里：写在类文件里、紧挨在类的上方
   contract/     数据：字段、类型、常量表，不含任何函数和方法；命令规格与 shell 种类这类平台数据来自 `@velaros-ai/platform`
-  impl/         扁平：SystemTools.ts 放六个工具，其余一个类一个文件，文件名就是类名
+  impl/         扁平：SystemTools.ts 放七个工具，其余一个类一个文件，文件名就是类名
   utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明
   exports/      两个对外入口，只转发，package.json 的 exports 指向这里
 ```
@@ -131,15 +134,16 @@ src/
 
 **接口与数据分开。** `interface/` 放行为：谁能做什么，每个方法做什么、返回什么、什么时候失败。`contract/` 放数据：流过边界的东西长什么样，里面不许出现函数类型和方法。带回调或注入对象的选项算行为，放 `interface/`。
 
-**文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。六个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
+**文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。七个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 
 **类与接口。** 每个类实现一个接口：公开接口在 `interface/provides.ts`，包内部类的接口写在类文件里、紧挨在类的上方，一起导出。类的公开方法只能是接口里的方法；私有方法只放用得到实例状态、没法提出去的公共逻辑，用不到的一律进 utils。整个进程只需要一份的类，文件末尾给出那一份，对外的那几份按公开接口标注类型。继承 `Error` 的错误类没有方法，不写接口，也不出包，外面按错误码判断。
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| `SystemTools.ts` | 没有类 | 六个工具的定义、分组、内置 mod、内核挂载 |
+| `SystemTools.ts` | 没有类 | 七个工具的定义、分组、内置 mod、内核挂载 |
 | `LocalSystemKernel.ts` | `LocalSystemKernelApi`（provides），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
 | `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（provides） | 执行前给命令分类的唯一出口 |
+| `SystemSandboxes.ts` | `SystemSandboxesApi`（同文件） | 演练沙箱登记表：镜像、差量、落回、丢弃，每个沙箱一个约束到镜像根的执行器 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
 | `SystemShellResolver.ts` | `SystemShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（同文件） | 受管子进程登记表 |

@@ -1,0 +1,190 @@
+import { existsSync } from 'node:fs'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { describe, expect, test } from 'bun:test'
+
+import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+import { systemTools } from '../src/impl/SystemTools.js'
+import type { LocalSystemKernelApi } from '../src/interface/provides.js'
+import type { SystemToolContext } from '../src/interface/requires.js'
+import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory, selectSandboxChanges } from '../src/utils/sandbox.js'
+
+/** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑命令的用例。 */
+const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
+  || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
+
+/** 造一个像项目的源目录：有 .gitignore、被忽略的 node_modules、一个假的 .git/config。 */
+async function makeSource(): Promise<string> {
+  const source = await mkdtemp(join(tmpdir(), 'velaros-sandbox-source-'))
+  await mkdir(join(source, 'src'))
+  await mkdir(join(source, 'node_modules', 'dep'), { recursive: true })
+  await mkdir(join(source, '.git'))
+  await writeFile(join(source, '.gitignore'), 'node_modules\n')
+  await writeFile(join(source, 'src', 'a.txt'), 'alpha\nbeta\n')
+  await writeFile(join(source, 'README.md'), '# demo\n')
+  await writeFile(join(source, 'node_modules', 'dep', 'index.js'), 'module.exports = 1\n')
+  await writeFile(join(source, '.git', 'config'), '[core]\n\tbare = false\n[remote "origin"]\n\turl = git@github.com:example/demo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n')
+  return source
+}
+
+/** 工具上下文：宿主端口就是本地内核，审批按给定的方式回答。 */
+function contextFor(kernel: LocalSystemKernelApi, approve: boolean): SystemToolContext {
+  return {
+    abortSignal: new AbortController().signal,
+    approval: {
+      requestApproval: async () => ({ approved: true }),
+      awaitConfirmation: async () => { if (!approve) throw new Error('user said no') },
+    },
+    system: kernel,
+  } as unknown as SystemToolContext
+}
+
+const sandboxTool = systemTools['system:sandbox']!
+
+describe('rehearsal sandbox', () => {
+  test('sandbox ids and the base-directory guard keep deletes inside the sandbox area', async () => {
+    expect(isSandboxId('20260915-183000-3fa2c1')).toBe(true)
+    expect(isSandboxId('../../etc')).toBe(false)
+    expect(isSandboxId('20260915-183000-3fa2c1/../..')).toBe(false)
+    const base = sandboxBaseDirectory()
+    await expect(assertInsideSandboxBase('/etc', base)).rejects.toMatchObject({ code: 'PERMISSION' })
+    await expect(assertInsideSandboxBase(join(base, '..', 'elsewhere'), base)).rejects.toMatchObject({ code: 'PERMISSION' })
+    expect(selectSandboxChanges({ created: ['a'], modified: ['b'], deleted: ['c'] }, ['./b', 'zzz'])).toEqual({ created: [], modified: ['b'], deleted: [], unknown: ['zzz'] })
+  })
+
+  test('create refuses when there is no confinement backend and leaves no directory behind', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source, platform: 'freebsd' })
+    try {
+      const before = existsSync(sandboxBaseDirectory()) ? (await import('node:fs/promises')).readdir(sandboxBaseDirectory()) : Promise.resolve([])
+      await expect(kernel.createSandbox({})).rejects.toMatchObject({ code: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE' })
+      const after = existsSync(sandboxBaseDirectory()) ? await (await import('node:fs/promises')).readdir(sandboxBaseDirectory()) : []
+      expect(after.length).toBe((await before).length)
+    } finally {
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('create mirrors the source with copy-on-write, links ignored directories, and cuts git push', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const created = await sandboxTool.execute({ action: 'create' }, contextFor(kernel, true)) as { id: string; root: string; source: string; fileCount: number; linkedDirectories: string[]; git: boolean; network: boolean }
+      sandboxId = created.id
+      expect(isSandboxId(created.id)).toBe(true)
+      expect(created.root.startsWith(sandboxBaseDirectory())).toBe(true)
+      expect(created.linkedDirectories).toEqual(['node_modules'])
+      expect(created.git).toBe(true)
+      expect(created.network).toBe(false)
+      expect(created.fileCount).toBe(4)
+      expect(await readFile(join(created.root, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
+      expect((await lstat(join(created.root, 'node_modules'))).isSymbolicLink()).toBe(true)
+      expect(await readFile(join(created.root, '.git', 'config'), 'utf8')).toContain('pushurl = DISABLED-BY-VELAROS-SANDBOX')
+      expect(kernel.listSandboxes().map((record) => record.id)).toEqual([created.id])
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('commands in the sandbox write inside it, cannot touch the source or the linked dependencies, and use a sandbox-local temp dir', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({})
+    try {
+      const inside = await kernel.runCommand('printf hi > inside.txt && printf "$TMPDIR"', { cwd: record.root })
+      expect(inside.exitCode).toBe(0)
+      expect(inside.stdout.startsWith(join(sandboxBaseDirectory(), record.id))).toBe(true)
+      expect(await readFile(join(record.root, 'inside.txt'), 'utf8')).toBe('hi')
+
+      const outside = await kernel.runCommand(`printf clobbered > "${join(source, 'src', 'a.txt')}"`, { cwd: record.root })
+      expect(outside.exitCode).not.toBe(0)
+      expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
+
+      const throughLink = await kernel.runCommand('printf evil > node_modules/dep/evil.js', { cwd: record.root })
+      expect(throughLink.exitCode).not.toBe(0)
+      expect(existsSync(join(source, 'node_modules', 'dep', 'evil.js'))).toBe(false)
+
+      const removeSource = await kernel.runCommand(`rm -rf "${source}"`, { cwd: record.root })
+      expect(removeSource.exitCode).not.toBe(0)
+      expect(existsSync(join(source, 'README.md'))).toBe(true)
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('diff lists created, modified and deleted files with text diffs; apply asks, writes back, and refuses conflicts', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({})
+    try {
+      await writeFile(join(record.root, 'src', 'a.txt'), 'ALPHA\nbeta\n')
+      await writeFile(join(record.root, 'src', 'new.txt'), 'fresh\n')
+      await rm(join(record.root, 'README.md'))
+      await writeFile(join(record.root, '.git', 'HEAD'), 'ref: refs/heads/rehearsal\n')
+
+      const changes = await sandboxTool.execute({ action: 'diff', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; modified: string[]; deleted: string[]; gitChanged: boolean; textDiffs: Array<{ path: string; diff: string }>; source: string }
+      expect(changes).toMatchObject({ created: ['src/new.txt'], modified: ['src/a.txt'], deleted: ['README.md'], gitChanged: true, source: await realpath(source) })
+      expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('-alpha')
+      expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('+ALPHA')
+
+      // 拒绝确认：什么都不落。
+      await expect(sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, false))).rejects.toThrow('user said no')
+      expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
+      expect(existsSync(join(source, 'README.md'))).toBe(true)
+
+      // 批准：三列都落回，.git 不落。
+      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; modified: string[]; deleted: string[]; skippedGit: boolean }
+      expect(applied).toMatchObject({ created: ['src/new.txt'], modified: ['src/a.txt'], deleted: ['README.md'], skippedGit: true })
+      expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('ALPHA\nbeta\n')
+      expect(await readFile(join(source, 'src', 'new.txt'), 'utf8')).toBe('fresh\n')
+      expect(existsSync(join(source, 'README.md'))).toBe(false)
+      expect(existsSync(join(source, '.git', 'HEAD'))).toBe(false)
+
+      // 源文件自建沙箱以来变过（刚才落回去的就算）：再落就冲突，整批不落。
+      await writeFile(join(record.root, 'src', 'a.txt'), 'ALPHA\nBETA\n')
+      const conflict = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)).then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string; details?: { conflicts?: Array<{ path: string; reason: string }> } } })
+      expect(conflict?.context?.executionOutcome).toBe('not-applied')
+      expect(conflict?.cause?.reason).toBe('SYSTEM_SANDBOX_CONFLICT')
+      // 上一次落回之后源目录整体都变了：新建的文件算凭空出现、改过的算变过、删掉的算丢了，全部列出来。
+      expect(conflict?.cause?.details?.conflicts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'src/a.txt', reason: 'changed' }),
+        expect.objectContaining({ path: 'src/new.txt', reason: 'appeared' }),
+        expect.objectContaining({ path: 'README.md', reason: 'missing' }),
+      ]))
+      expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('ALPHA\nbeta\n')
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('a sandbox root survives a kernel restart: another kernel still confines commands there, and discard removes it', async () => {
+    const source = await makeSource()
+    const first = createLocalSystemKernel({ cwd: source })
+    const record = await first.createSandbox({ network: false })
+    await first.dispose()
+    const second = createLocalSystemKernel({ cwd: source })
+    try {
+      const outside = await second.runCommand(`printf clobbered > "${join(source, 'README.md')}"`, { cwd: record.root })
+      expect(outside.exitCode).not.toBe(0)
+      expect(await readFile(join(source, 'README.md'), 'utf8')).toBe('# demo\n')
+      const discarded = await sandboxTool.execute({ action: 'discard', sandboxId: record.id }, contextFor(second, true)) as { removed: boolean }
+      expect(discarded.removed).toBe(true)
+      expect(existsSync(record.root)).toBe(false)
+      expect(await second.discardSandbox(record.id)).toMatchObject({ removed: false })
+      await expect(second.discardSandbox('../../etc')).rejects.toMatchObject({ code: 'VALIDATION' })
+    } finally {
+      await second.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+})

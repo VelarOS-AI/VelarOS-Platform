@@ -15,6 +15,7 @@ import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 
 import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../contract/commands.js'
 import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../contract/system.js'
+import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord } from '../contract/system.js'
 
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
 
@@ -67,6 +68,17 @@ export interface SystemToolSystemApi {
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
   ) => Promise<SystemCommandResult>
+  /**
+   * 建演练沙箱：把 source（缺省默认工作目录）镜像到临时区，返回沙箱记录；之后 cwd 落在镜像根之内的 runCommand 一律受约束、写不到镜像外。
+   * 没有约束后端时拒绝（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`），不留目录。
+   */
+  createSandbox: (options?: SystemSandboxCreateOptions) => Promise<SystemSandboxRecord>
+  /** 镜像相对创建时的变化：新增、修改、删除三列，文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
+  diffSandbox: (options: SystemSandboxDiffOptions) => Promise<SystemSandboxDiff>
+  /** 把镜像里的文件变化落回源目录：先核对源文件自建沙箱以来没变过，冲突整批不落并抛错；.git 永远不落。审批由工具在调用前完成。 */
+  applySandbox: (options: SystemSandboxApplyOptions) => Promise<SystemSandboxApplyResult>
+  /** 删掉镜像；路径不在沙箱基目录之下就拒绝，沙箱本来就不在时 removed 为 false。 */
+  discardSandbox: (sandboxId: string) => Promise<SystemSandboxDiscardResult>
 }
 
 // ── 挂进内核 ────────────────────────────────────────────────────

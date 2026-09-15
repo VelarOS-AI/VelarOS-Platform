@@ -5,7 +5,8 @@
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
  */
 
-import { lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -26,6 +27,7 @@ import {
 } from '../src/exports/index'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../src/utils/confinement.js'
+import { assertInsideSandboxBase, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
 import { captureService, fakeChild } from './support'
 
@@ -279,6 +281,7 @@ describe('工具面', () => {
       'system:run': 'execute',
       'system:refresh-environment': 'write',
       'system:list-tasks': 'read',
+      'system:sandbox': 'write',
     } as const
 
     expect(Object.keys(systemTools)).toEqual(Object.keys(expectedEffects))
@@ -299,6 +302,7 @@ describe('工具面', () => {
       'system:run': 'system-execution',
       'system:refresh-environment': 'system-execution',
       'system:list-tasks': 'system-execution',
+      'system:sandbox': 'system-execution',
     })
   })
 
@@ -331,6 +335,7 @@ describe('工具面', () => {
       'system:run',
       'system:refresh-environment',
       'system:list-tasks',
+      'system:sandbox',
     ])
     expect(service?.getOperationMetadata('system:list-tasks')).toBeUndefined()
     expect(service?.tools['system:edit']?.description).toContain('oldText')
@@ -634,6 +639,93 @@ describe('文件工具', () => {
       expect(result.note).toContain('从第 2 个文件起没有读')
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('演练沙箱', () => {
+  const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
+    || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
+
+  /** 一个带假 .git 的源目录。 */
+  async function makeSource(): Promise<string> {
+    const source = await mkdtemp(join(tmpdir(), 'velaros-inv-sandbox-'))
+    await mkdir(join(source, '.git'))
+    await writeFile(join(source, '.git', 'config'), '[remote "origin"]\n\turl = git@github.com:example/demo.git\n')
+    await writeFile(join(source, 'a.txt'), 'alpha\n')
+    return source
+  }
+
+  test.skipIf(!canConfine)('INV-23 沙箱里的命令一律受约束：写镜像外失败；没有约束后端就建不出沙箱', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      const outside = await kernel.runCommand(`printf clobbered > "${join(source, 'a.txt')}"`, { cwd: record.root })
+      expect(outside.exitCode).not.toBe(0)
+      expect(await readFile(join(source, 'a.txt'), 'utf8')).toBe('alpha\n')
+      const inside = await kernel.runCommand('printf ok > b.txt', { cwd: record.root })
+      expect(inside.exitCode).toBe(0)
+      const unconfinable = createLocalSystemKernel({ cwd: source, platform: 'freebsd' })
+      await expect(unconfinable.createSandbox({})).rejects.toMatchObject({ code: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE' })
+      await unconfinable.dispose()
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-24 落回只写清单记过的文件，源目录变过就整批不落', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      await writeFile(join(record.root, 'a.txt'), 'ALPHA\n')
+      await writeFile(join(record.root, 'b.txt'), 'beta\n')
+      await writeFile(join(source, 'a.txt'), 'changed outside\n')
+      const failure = await kernel.applySandbox({ sandboxId }).then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string } })
+      expect(failure?.context?.executionOutcome).toBe('not-applied')
+      expect(await readFile(join(source, 'a.txt'), 'utf8')).toBe('changed outside\n')
+      expect(existsSync(join(source, 'b.txt'))).toBe(false)
+      const applied = await kernel.applySandbox({ sandboxId, paths: ['b.txt'] })
+      expect(applied.created).toEqual(['b.txt'])
+      expect(await readFile(join(source, 'b.txt'), 'utf8')).toBe('beta\n')
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-25 丢弃只删沙箱基目录之下的东西，别的路径一律拒绝', async () => {
+    const base = sandboxBaseDirectory()
+    await expect(assertInsideSandboxBase('/etc', base)).rejects.toMatchObject({ code: 'PERMISSION' })
+    await expect(assertInsideSandboxBase(join(base, '..'), base)).rejects.toMatchObject({ code: 'PERMISSION' })
+    const kernel = createLocalSystemKernel({ cwd: tmpdir() })
+    await expect(kernel.discardSandbox('../../etc')).rejects.toMatchObject({ code: 'VALIDATION' })
+    await expect(kernel.discardSandbox('20260101-000000-zzzzzz/..')).rejects.toMatchObject({ code: 'VALIDATION' })
+    await kernel.dispose()
+  })
+
+  test.skipIf(!canConfine)('INV-26 镜像仓库推不出去：每个远端的推送地址都被改掉', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      expect(record.git).toBe(true)
+      expect(await readFile(join(record.root, '.git', 'config'), 'utf8')).toContain('pushurl = DISABLED-BY-VELAROS-SANDBOX')
+      expect(await readFile(join(source, '.git', 'config'), 'utf8')).not.toContain('pushurl')
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
     }
   })
 })

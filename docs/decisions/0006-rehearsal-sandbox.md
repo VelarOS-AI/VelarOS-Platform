@@ -1,6 +1,6 @@
 # 0006: 演练沙箱——脚本先在受约束的镜像里跑，看过差量再落到真实目录
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-09-15
 - Owners: `@velaros-ai/system` 工具面；第二阶段扩到 `@velaros-ai/project`
 

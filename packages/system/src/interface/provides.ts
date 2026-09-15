@@ -12,7 +12,7 @@ import type { SystemCommandExecutionPlan } from '../contract/commands.js'
 import type { SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../contract/system.js'
 import type { SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest } from '../contract/system.js'
 import type { SystemModId, SystemToolCategoryId, SystemToolName } from '../contract/system.js'
-import type { SystemEnvironmentInspection, SystemMetricsSnapshot } from '../contract/system.js'
+import type { SystemEnvironmentInspection, SystemMetricsSnapshot, SystemSandboxRecord } from '../contract/system.js'
 
 import type { SystemToolContext, SystemToolSystemApi } from './requires.js'
 
@@ -23,7 +23,7 @@ export type VelaTool<TInput extends Record<string, unknown> = Record<string, unk
   ToolContractRuntimeSpec<TInput, SystemToolContext, unknown, ToolPermission>
 
 /**
- * 系统空间的六个模型面工具，按工具名索引，实例是 `systemTools`。
+ * 系统空间的七个模型面工具，按工具名索引，实例是 `systemTools`。
  * 集合层面不区分各工具的入参类型：宿主拿模型给的入参先用该工具的 schema 严格校验，再调它的 execute。
  */
 
@@ -44,7 +44,7 @@ export interface SystemBundledModDefinition {
   readonly manifest: AgentModManifest
   /** 清单里声明的东西对应的实物。 */
   readonly bindings: {
-    /** 六个工具。 */
+    /** 七个工具。 */
     readonly tools: SystemToolCollection
     /** 两个工具类别：文件、执行。 */
     readonly toolCategories: Readonly<Record<SystemToolCategoryId, ToolCategoryDefinition>>
@@ -56,7 +56,7 @@ export interface SystemBundledModDefinition {
  * 宿主通过内核按工具名调用系统工具；每次调用先用 schema 严格解析入参，再向宿主解析一次上下文。
  */
 export interface SystemCapabilityService extends KernelCallableCapabilityService {
-  /** 六个工具的只读视图，给只想读工具说明的宿主用。 */
+  /** 七个工具的只读视图，给只想读工具说明的宿主用。 */
   readonly tools: SystemToolCollection
 }
 
@@ -67,7 +67,7 @@ export interface SystemCapabilityService extends KernelCallableCapabilityService
  *
  * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，
  * 进程、端口、指标跑平台命令读出来。相对路径都相对构造时给的 cwd，`~` 展开到家目录。
- * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十个方法：环境检查、指标、释放，
+ * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十一个方法：环境检查、指标、释放、沙箱列表，
  * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
  * 这些方法都没有工具在调（模型改用 `system:run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
@@ -84,6 +84,8 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi {
   listProcesses(options?: SystemProcessQueryOptions): Promise<SystemProcessInfo[]>
   /** 列出正在监听的 TCP 端口和占用它们的进程，可按端口、端口范围、进程筛选，最多 limit 条（默认 50）。 */
   listOpenPorts(options?: SystemOpenPortQueryOptions): Promise<SystemOpenPortInfo[]>
+  /** 登记着的演练沙箱，给宿主界面列沙箱、展示差量用。 */
+  listSandboxes(): SystemSandboxRecord[]
   /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回终止前后的状态。 */
   terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
   /**

@@ -50,7 +50,7 @@ export const GovernedModules = [
       ['LocalSystemKernel.ts'],
       // 能力：命令、受管子进程、shell；文件操作与搜索
       [
-        'SystemCommandRunner.ts', 'SystemCommandPolicy.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
+        'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemCommandPolicy.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
         'SystemOutputDecoder.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
       ],
       // shell 错误类

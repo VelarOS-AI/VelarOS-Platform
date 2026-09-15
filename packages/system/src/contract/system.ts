@@ -12,7 +12,7 @@
  * 工具定义、mod 清单、内核模块注册都从这里取名字，不允许在别处再写一遍字符串。
  */
 
-/** 六个系统工具的 canonical 名字。 */
+/** 七个系统工具的 canonical 名字。 */
 const SystemToolNames = Object.freeze({
   read: 'system:read',
   view: 'system:view',
@@ -20,6 +20,7 @@ const SystemToolNames = Object.freeze({
   run: 'system:run',
   refreshEnvironment: 'system:refresh-environment',
   listTasks: 'system:list-tasks',
+  sandbox: 'system:sandbox',
 } as const)
 
 type SystemToolName = (typeof SystemToolNames)[keyof typeof SystemToolNames]
@@ -32,6 +33,7 @@ const SystemToolCategoryByName = Object.freeze({
   [SystemToolNames.run]: 'system-execution',
   [SystemToolNames.refreshEnvironment]: 'system-execution',
   [SystemToolNames.listTasks]: 'system-execution',
+  [SystemToolNames.sandbox]: 'system-execution',
 } as const)
 
 type SystemToolCategoryId = (typeof SystemToolCategoryByName)[SystemToolName]
@@ -618,9 +620,87 @@ export const SystemErrorCodes = Object.freeze({
   editUnresolved: 'SYSTEM_EDIT_UNRESOLVED',
   /** system:edit 里有文件的写入被用户拒绝：什么都没写。 */
   editDenied: 'SYSTEM_EDIT_DENIED',
+  /** system:sandbox 落回时源目录里的文件自建沙箱以来变过：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
+  sandboxConflict: 'SYSTEM_SANDBOX_CONFLICT',
 } as const)
 
 export type SystemErrorCode = (typeof SystemErrorCodes)[keyof typeof SystemErrorCodes]
+
+// ── 演练沙箱 ────────────────────────────────────────────────────
+
+/** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 */
+export type SystemSandboxIgnoredMode = 'link' | 'copy' | 'skip'
+
+/** 建沙箱的选项：源目录缺省是默认工作目录；network 缺省 false，镜像里的命令连不上网。 */
+export interface SystemSandboxCreateOptions {
+  source?: string
+  network?: boolean
+  ignored?: SystemSandboxIgnoredMode
+}
+
+/** 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 */
+export interface SystemSandboxRecord {
+  id: string
+  root: string
+  source: string
+  createdAt: number
+  network: boolean
+  ignored: SystemSandboxIgnoredMode
+  fileCount: number
+  bytes: number
+  /** 链接到真实目录的忽略目录（相对路径）。 */
+  linkedDirectories: string[]
+  /** 源目录是 git 仓库：镜像里的 .git 已把推送地址改掉。 */
+  git: boolean
+}
+
+/** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条（默认 200），删除列不受限。 */
+export interface SystemSandboxDiffOptions {
+  sandboxId: string
+  maxFiles?: number
+}
+
+/** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
+export interface SystemSandboxTextDiff {
+  path: string
+  diff: string
+  truncated: boolean
+}
+
+/** 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 */
+export interface SystemSandboxDiff {
+  sandboxId: string
+  source: string
+  created: string[]
+  modified: string[]
+  deleted: string[]
+  truncated: boolean
+  gitChanged: boolean
+  textDiffs: SystemSandboxTextDiff[]
+  omittedDiffs: number
+  note?: string
+}
+
+/** 落回源目录的选项：paths 只落这些相对路径，不给就全部。 */
+export interface SystemSandboxApplyOptions {
+  sandboxId: string
+  paths?: string[]
+}
+
+/** 落回的结果：三列是真正写进源目录的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 */
+export interface SystemSandboxApplyResult {
+  sandboxId: string
+  created: string[]
+  modified: string[]
+  deleted: string[]
+  skippedGit: boolean
+}
+
+/** 丢弃的结果：沙箱本来就不在时 removed 为 false。 */
+export interface SystemSandboxDiscardResult {
+  sandboxId: string
+  removed: boolean
+}
 
 // ── 环境变量 ────────────────────────────────────────────────────
 

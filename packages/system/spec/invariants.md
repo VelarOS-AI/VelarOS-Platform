@@ -31,7 +31,7 @@
 | INV-11 | 管道分块不会打碎 UTF-8 字符，子进程退出码原样透传，shell 描述符里不带 `env` | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 超时或取消后进程管理最终收敛：终止信号无人响应、close 永不到达时也在期限内结束，并如实标记清理未完成 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 常驻工具只有读、看、改、跑四个；后台任务、环境刷新按需装入 | 测试 | `spec/acceptance.test.ts` |
-| INV-14 | 内核模块注册精确的六个工具，权限清单不含通配 | 测试 | `spec/acceptance.test.ts` |
+| INV-14 | 内核模块注册精确的七个工具，权限清单不含通配 | 测试 | `spec/acceptance.test.ts` |
 | INV-15 | `nativeCommand` 只供宿主组合能力使用，永不出现在模型工具 schema 中 | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 文件分工与对外边界不塌：全部工具定义在一个工具文件里；接口与数据分开，接口只有产品面、注入面、内部三个文件且每个成员有中文说明，数据里不含函数；实现目录扁平、一类一文件、类实现接口且公开成员不超出接口、按登记分层引用；utils 只放带中文说明的函数与常量；对外入口只转发，导出的类型只来自公开接口与数据、导出的值只能是按公开接口标注的实例与工厂或契约常量表，类、utils 函数、内部接口不出包，导出的数据正好是公开签名用到的数据；环境变量全部登记；渲染进程可加载的入口不碰 Node 内置模块 | 门禁 | `check:module-ownership` |
 | INV-17 | 输出窗口的 `endPreserved` 恒为 true，由类型钉死 | 类型 | `src/contract/system.ts::SystemCommandOutputWindow` |
@@ -40,3 +40,7 @@
 | INV-20 | `system:edit` 一批全成或全不成：任何一处定不下来、被拒或文件在核对后被改，什么都不写，并按 not-applied 报告每个问题 | 测试 | `spec/acceptance.test.ts` |
 | INV-21 | 文本改动无损：解码再编码得不到原字节的文件拒改，已有的二进制文件不许整个覆盖，符号链接写到它指向的文件、链接本身不变 | 测试 | `spec/acceptance.test.ts` |
 | INV-22 | 一次 `system:read` 最多 20 万字符：预算用完后的文件不读盘、不问用户，那一项是失败条目并在 note 里说明 | 测试 | `spec/acceptance.test.ts` |
+| INV-23 | 演练沙箱里的命令一律受进程约束：cwd 落在镜像根之内就只能写镜像和它自己的临时目录；没有约束后端的宿主建不出沙箱，不留没有约束的副本 | 测试 | `spec/acceptance.test.ts` |
+| INV-24 | 落回只写清单记过的文件：源目录里任何一处自建沙箱以来变过就整批不落，按 not-applied 报出冲突；`.git` 永远不落 | 测试 | `spec/acceptance.test.ts` |
+| INV-25 | 丢弃沙箱只删沙箱基目录之下的目录：id 不合形状或路径解开链接后不在基目录之下，一律拒绝 | 测试 | `spec/acceptance.test.ts` |
+| INV-26 | 镜像仓库推不出去：镜像里 `.git` 的每个远端都被改成无效的推送地址，网络缺省切断 | 测试 | `spec/acceptance.test.ts` |

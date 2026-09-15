@@ -111,6 +111,10 @@ export interface SystemCommandRunnerOptions {
   shells: SystemShellResolverApi
   /** 登记和管理子进程用。 */
   processes: SystemProcessManagerApi
+  /** 约束里当作临时目录放行的路径；缺省是系统临时目录。沙箱执行器用它把可写的临时区收进沙箱。 */
+  confinementTempDir?: string
+  /** 每条命令额外带上的环境变量，盖过 shell 自己的；沙箱执行器用它把 TMPDIR 指进沙箱。 */
+  extraEnv?: Readonly<Record<string, string>>
 }
 
 export class SystemCommandRunner implements SystemCommandRunnerApi {
@@ -281,18 +285,19 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     command: string,
     nativeCommand: LooseOptional<SystemRunCommandOptions['nativeCommand']>
   ): Promise<PreparedSystemCommand> {
-    const { platform, platformTools, confinement, confinementProvider, shells } = this.options
+    const { platform, platformTools, confinement, confinementProvider, confinementTempDir, extraEnv, shells } = this.options
     const shell = await shells.resolveReady({ platform, env: process.env })
     const commandSpec = nativeCommand ? buildSystemNativeCommandSpec(nativeCommand, shell)
       : { ...platformTools.getShellCommandSpec(command, shell), env: shell.env }
+    const env = { ...commandSpec.env, ...extraEnv }
     const confined = buildSystemProcessConfinementSpawnSpec(
       { spec: commandSpec, policy: confinement },
-      { platform, env: commandSpec.env, provider: confinementProvider, tempDir: tmpdir() }
+      { platform, env, provider: confinementProvider, tempDir: confinementTempDir ?? tmpdir() }
     )
-    const owned = buildSystemOwnedProcessSpec(confined.spec, { platform, env: commandSpec.env })
+    const owned = buildSystemOwnedProcessSpec(confined.spec, { platform, env })
     return {
       spec: owned.spec,
-      env: commandSpec.env,
+      env,
       evidence: confined.evidence,
       ownership: owned.ownership,
       shell: toShellDescriptor(shell),
