@@ -1,8 +1,8 @@
 /**
  * 系统空间的六个模型面工具。每个工具的全部信息面（摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义）
- * 和 execute 里的执行链路都在这里，按文件、执行两类排列；文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
- * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。读、看、写都是 files 每项一个文件，一个文件就一项。
- * 列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
+ * 和它的 execute 都在这里，按文件、执行两类排列；文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
+ * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。
+ * 读、看、写都是 files 每项一个文件，一个文件就一项。列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
 
@@ -29,9 +29,13 @@ import { systemFileOperations } from './SystemFileOperations.js'
 // ── 文件：读文本、看图片与 PDF、写（都是 files 每项一个；PDF 多页；写可以一次改几处）──────────────────────────
 
 /**
- * system:read —— 读文本文件，files 每项一个。
+ * system:read —— 读文本文件。
  *
- * 链路：每个文件按字符取一段，连同它的 range 和版本号一起返回；一次调用总共最多 20 万字符，按顺序分给各文件；传 version 就读改动前留下的旧版本；某个文件读不了只标记它那一项。
+ * files 每项一个文件，一个文件就一项，一批最多 20 个。每个文件按字符取一段，返回这段原文、它在文件里的 range、总字符数、
+ * 是否还有后文，以及这份内容的版本号；默认一次读到上限，没读完时把 range.end 当下一次的 offset 接着读。一次调用总共最多
+ * 返回 20 万字符，按顺序分给各文件。传 version 就读改动前留下的旧版本，这是召回旧状态的办法。识别 UTF-8、BOM 和 UTF-16。
+ * 某个文件读不了（不存在、是目录、二进制、图片或 PDF）只把它那一项换成 error，其他文件照常；全部读不了才整体报错。
+ * 图片和 PDF 用 system:view；列目录、搜文本用 system:run。
  */
 const readTool = defineSystemTool<{
   files: Array<{
@@ -75,9 +79,12 @@ const readTool = defineSystemTool<{
 })
 
 /**
- * system:view —— 看图片或 PDF，files 每项一个。
+ * system:view —— 看图片或 PDF。
  *
- * 链路：图片整张作为模型可见的内容块交给模型，和用户上传一样 → PDF 把 pages 这几页抽成一份文档交给模型，附上总页数 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。
+ * files 每项一个文件，一批最多 10 个。图片（PNG、JPEG、GIF、WebP）整张作为模型可见的内容块交给模型，效果和用户上传一样，
+ * 没有字符上限，只有 5 MB 的字节上限。PDF 用 pages 指定看哪几页（从 1 起，默认第 1 页，一次最多 20 页），这几页抽成一份
+ * 文档交给模型，结果里给出实际抽出的 pages 和总页数 pageCount。内容块放在结果的 modelContent 里，按 files 的顺序排，
+ * 每块前面一行文字写明是哪个文件。某个文件看不了只把它那一项换成 error，全部看不了才整体报错。文本文件用 system:read。
  */
 const viewTool = defineSystemTool<{
   files: Array<{
@@ -116,9 +123,15 @@ const viewTool = defineSystemTool<{
 })
 
 /**
- * system:edit —— 写文件，files 每项一个：整个写入、改几处或回滚。
+ * system:edit —— 写文件：整个写入、改几处、回滚。
  *
- * 链路：先把一批里每个文件的每一处在原文上定下来，什么都不写；定不下来就整批失败，回执的 details.problems 列出第几个文件第几处出了什么问题（多处匹配带锚点），入参可复用，只改那一处再发 → 敏感路径逐个向用户确认 → 按顺序写：改动前把原内容留成一个版本；newText 整个写入（不存在则新建），edits 从后往前一起套用并把盖住所有改动那段的新内容交回，restore 回滚到留下的版本。保留编码与换行风格。
+ * files 每项一个文件，一批最多 20 个，每项三种改法只用一种：只给 newText 就整个写入，不存在则新建；给 edits 就在文件里
+ * 改几处，每处在 read 返回的 range 里改，给 oldText 只换这段里唯一的那一处，不给就把整段换成 newText，空段就是插入；
+ * 只给 restore 就回到改动前留下的那个版本。
+ * 一批全成或全不成：先把所有文件所有改动在原文上定下来，再逐个向用户确认敏感路径，最后按顺序写。任何一处定不下来
+ * （找不到、多处匹配、重叠、被拒）就什么都不写，失败回执列出每个问题是第几个文件第几处、什么原因，多处匹配带每处的锚点；
+ * 入参可复用，下一次用 reuse + changes 只改出问题的那一处。每次改动前把原内容留成一个版本，结果带新旧版本号；
+ * 改了几处的结果还带盖住所有改动那段的新内容和新位置，不用再读。保留原文件的编码和换行风格。
  */
 const editTool = defineSystemTool<{
   files: Array<{
@@ -195,12 +208,10 @@ const editTool = defineSystemTool<{
 /**
  * system:run —— 在宿主已检测并报告的系统 shell 中执行命令。
  *
- * 骨干链路（execute 里按序号对应）：
- *   ① 执行前分类：只读？危险？该丢后台？
- *   ② 决定前台还是后台：显式 background 永远优先，只有省略时才由命令形态推断
- *   ③ 审批：危险命令高风险、手动、不可按类记忆；长驻服务只是低风险的体验型确认
- *   ④ 交给宿主执行（LocalSystemKernel 或产品壳注入的实现），真正的授权门在宿主的 ApprovalPort
- *   ⑤ 整形：输出窗口与召回续接；转入后台的命令补上端口、理由与状态续接
+ * 执行前先给命令分类：只读、危险、还是该丢到后台。前台还是后台以显式的 background 为准，省略时才按命令形态推断。
+ * 危险命令（递归删除等）每次都要用户亲自确认，高风险、不可按类记忆；长驻服务只是低风险的体验型确认。真正的执行交给宿主
+ * （本地内核或产品壳注入的实现），授权门在宿主的 ApprovalPort。结果里的输出窗口固定保留结尾，截断时给出召回续接；
+ * 转入后台的命令补上端口、理由和状态续接，停它就执行条目里的 terminateCommand。cwd 只影响本次命令；实际 shell 由宿主平台决定。
  */
 const runTool = defineSystemTool<{
   command: string
@@ -260,17 +271,17 @@ const runTool = defineSystemTool<{
   execute: async ({ command, cwd, timeoutMs, background, maxOutputChars }, ctx) => {
     ctx.abortSignal.throwIfAborted()
 
-    // ① 执行前分类
+    // 执行前分类
     const plan = systemCommandPolicy.analyze(command)
     const commandCwd = ctx.system.resolveCommandCwd?.(cwd) ?? cwd
 
-    // ② 前台还是后台
+    // 前台还是后台
     const shouldRunInBackground = background ?? plan.shouldStartInBackground
     if (shouldRunInBackground && !ctx.system.canStartBackgroundCommands()) {
       throw new AppError('PERMISSION', '当前未允许模型启动长期运行的命令。')
     }
 
-    // ③ 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
+    // 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
     //    只有 requireManualApproval 能让宿主在任何档位都弹卡。
     if (plan.shouldRequestConfirmation) {
       await ctx.approval.awaitConfirmation(
@@ -295,7 +306,7 @@ const runTool = defineSystemTool<{
       )
     }
 
-    // ④ 交给宿主执行
+    // 交给宿主执行
     const result = await ctx.system.runCommand(
       command,
       { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, maxOutputChars },
@@ -303,7 +314,7 @@ const runTool = defineSystemTool<{
       ctx.abortSignal
     )
 
-    // ⑤ 整形
+    // 整形
     if (!result.backgroundProcess) return exposeCommandOutputWindow(result)
     return {
       ...exposeCommandOutputWindow(result),
@@ -321,9 +332,10 @@ const runTool = defineSystemTool<{
 })
 
 /**
- * system:refresh-environment —— 刷新登录 shell 环境缓存，常在刚安装 CLI 或 PATH 变化后使用。
+ * system:refresh-environment —— 刷新宿主进程的 shell 环境。
  *
- * 链路：宿主允许刷新才继续 → 由宿主重新加载 PATH 与环境变量。
+ * 刚安装了 CLI、PATH 或环境变量变了之后用：由宿主重新加载 PATH 和环境变量，返回新的环境报告；宿主不允许模型主动刷新时报错。
+ * 不需要参数，传了也只在结果里提醒一句。改的是宿主进程自己的环境，子进程做不到，所以单独一个工具。
  */
 const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
   name: SystemToolNames.refreshEnvironment,
@@ -370,9 +382,10 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
 // ── 后台任务：列出 run 启动的后台任务 ────────────────────────
 
 /**
- * system:list-tasks —— 列出当前产品启动过的后台任务，用于追踪 dev server / watch 命令是否还活着。
+ * system:list-tasks —— 列出本产品启动过的后台任务。
  *
- * 链路：给了 taskId 就精确查那一条，否则按 limit / onlyRunning 列表 → 附上 count 做轻量摘要。
+ * 用来看 dev server、watch 这类命令是否还活着：给 taskId 就精确查那一条，否则按 limit 和 onlyRunning 列表，结果附 count。
+ * 条目里带 terminateCommand 和 forceTerminateCommand，要停就交给 system:run 执行，不要自己拼 pid。后台任务表只在本包，命令看不到。
  */
 const listTasksTool = defineSystemTool<{
   limit?: number
@@ -430,7 +443,7 @@ const listTasksTool = defineSystemTool<{
 /**
  * 工具集合的装配：六个工具按两个职责类别分组。
  *
- * 每个工具的定义（提示词、schema、权限、链路）在上面；这里只决定谁属于哪一类、以及全量集合长什么样。
+ * 每个工具的定义（提示词、schema、权限、execute）在上面；这里只决定谁属于哪一类、以及全量集合长什么样。
  * 类别 id 与 `contract/system.ts` 里的表一致。
  */
 
