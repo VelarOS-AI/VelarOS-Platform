@@ -40,7 +40,7 @@ const readTool = defineSystemTool<{
   name: SystemToolNames.read,
   role: 'inspect',
   summary: '读文本文件：files 每项一个文件，按字符取一段，返回它的 range 和版本号。',
-  suitable: ['看日志、配置、脚本、临时文件等文本。', '一次读一批相关的文件。'],
+  suitable: ['看日志、配置、脚本、临时文件等文本，一个或一批。'],
   forbidden: ['图片用 system:view；PDF 和其他文档不在这里读；列目录、搜文本用 system:run。'],
   usage: [
     '只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读，一次调用总共最多 200000 字符。',
@@ -211,12 +211,12 @@ const runTool = defineSystemTool<{
   notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令。'],
   schema: z.object({
     command: z.string().min(1).describe('要执行的 shell 命令。'),
-    cwd: z.string().optional().describe('可选系统工作目录。'),
+    cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
     timeoutMs: z.number().int().positive().max(600000).optional().describe('命令超时时间，单位毫秒。'),
-    background: z.boolean().optional().describe('是否后台启动命令。'),
+    background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
     maxOutputChars: z.number().int().positive().max(50000).optional().describe('stdout/stderr 返回字符上限。'),
-    parallel: z.boolean().optional().describe('是否声明命令可并发。'),
-    allowRepeat: z.boolean().optional().describe('是否允许重复运行同一命令。'),
+    parallel: z.boolean().optional().describe('命令只读、可以和别的命令同时跑时传 true，调度器会并发执行。'),
+    allowRepeat: z.boolean().optional().describe('要故意再跑一遍完全相同的命令时传 true，否则同样的调用会被拦。'),
   }),
   permissions: ['process:exec'],
   capabilities: {
@@ -297,10 +297,7 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
   name: SystemToolNames.refreshEnvironment,
   role: 'control',
   summary: '刷新登录 shell 环境缓存。',
-  suitable: [
-      '刚安装 CLI、修改 shell 配置或发现 PATH 中缺少命令后重新加载环境。',
-      '需要让后续系统命令看到最新 PATH 和环境变量。',
-    ],
+  suitable: ['刚安装 CLI、改了 shell 配置或发现 PATH 里缺命令时重新加载环境，让后续命令看到最新的 PATH 和环境变量。'],
   forbidden: [
       '不要把它当作命令存在性检查；检查命令可用性用 system:run（Windows 用 where，macOS/Linux 用 command -v）。',
       '不要在宿主环境未允许刷新 shell 时反复调用。',
@@ -308,7 +305,7 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
   protocol: [
       '先确认缺失命令或 PATH 变化，再刷新；刷新后用 system:run 按宿主 shell 语法验证目标命令是否可见。',
     ],
-  notes: ['刷新结果取决于宿主 system provider；不保证修改用户 shell 配置文件。'],
+  notes: ['只重新加载宿主进程的环境，不会改用户的 shell 配置文件。'],
   // 没有参数就不校验：传了什么都不报错，只在结果里提醒一句。
   schema: z.record(z.string(), z.unknown()),
   permissions: [],
