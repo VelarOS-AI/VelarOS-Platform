@@ -38,6 +38,8 @@ const DefaultCommandTimeoutMs = 120_000
 const DefaultOutputChars = 50_000
 /** 后台任务记录里保留的最近输出字符数。 */
 const BackgroundRecentOutputChars = 4_000
+/** 已结束的后台任务最多留多少条，超过从最早结束的删起，进程句柄一起释放。 */
+const MaxFinishedTasks = 200
 const log = Log.tag('SystemCommandRunner')
 
 /** 准备好的一条命令：可以直接 spawn 的规格和环境，外加约束、归属、shell 三份证据。 */
@@ -94,6 +96,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const filter = options.filter?.trim().toLowerCase()
 
     return tasks
+      .sort((a, b) => b.startedAt - a.startedAt)
       .filter((task) => {
         if (filter && !task.command.toLowerCase().includes(filter)) return false
         if (options.taskId && task.id !== options.taskId) return false
@@ -298,8 +301,20 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       this.tasks.set(taskId, { ...task, status: result.cleanupIncomplete ? 'unknown' : 'exited',
         recentOutput, exitCode: result.exitCode, signal: result.signal,
         cleanupIncomplete: result.cleanupIncomplete, finishedAt: Date.now(), updatedAt: Date.now() })
+      this.pruneFinishedTasks()
     }).catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
     return backgroundProcess
+  }
+
+  /** 已结束的任务只留最近 MaxFinishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
+  private pruneFinishedTasks(): void {
+    const finished = [...this.tasks.values()]
+      .filter((task) => task.status !== 'running')
+      .sort((a, b) => (a.finishedAt ?? a.updatedAt) - (b.finishedAt ?? b.updatedAt))
+    for (const task of finished.slice(0, Math.max(0, finished.length - MaxFinishedTasks))) {
+      this.tasks.delete(task.id)
+      this.executions.delete(task.id)
+    }
   }
 
   /** 后台任务此刻的状态：受管进程还在就看它是否退出、收尾是否完整；已经不在登记里时看任务有没有记下结束时间。 */

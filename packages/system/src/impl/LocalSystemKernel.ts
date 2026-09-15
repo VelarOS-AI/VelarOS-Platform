@@ -221,6 +221,10 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return this.commands.run(command, this.resolvePath(options.cwd ?? this.workingDirectory), options, abortSignal)
   }
 
+  public resolveCommandCwd(cwd?: string): string {
+    return this.resolvePath(cwd ?? this.workingDirectory)
+  }
+
   public canRefreshShellEnvironment(): boolean {
     return true
   }

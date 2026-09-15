@@ -49,8 +49,8 @@ const gitGlobalOptionsWithInlineValue = [
  */
 const mutatingArgumentsByCommand: Readonly<Record<string, readonly RegExp[]>> = {
   find: [/^-(?:delete|exec|execdir|ok|okdir|fls|fprint|fprint0|fprintf)$/iu],
-  // `-i` / `-i.bak` / `-ni` / `--in-place[=SUFFIX]` 都是就地改写。
-  sed: [/^-[^-]*i/u, /^--in-place(?:=.*)?$/u],
+  // `-i` / `-i.bak` / `-ni` / `--in-place[=SUFFIX]` 都是就地改写；脚本里的 `w file` / `W file` 命令和 `s///w file` 标志也写盘，拿不准一律算写。
+  sed: [/^-[^-]*i/u, /^--in-place(?:=.*)?$/u, /(?:^|[;{}\n/])\s*[wW]\s+\S/u],
 }
 
 /** 递归删除的危险理由：点明删的是整个文件夹，用户确认时知道自己在批准什么。 */
@@ -118,7 +118,7 @@ const windowsPrivilegedMutationPatterns: readonly RegExp[] = [
 /** 把命令文本按空白切成词，引号里的空格不切，并去掉外层引号。 */
 function tokenize(command: string): string[] {
   return command.match(/(?:[^\s"'`]+|"[^"]*"|'[^']*')+/g)?.map((token) =>
-    token.replace(/^(['"])(.*)\1$/, '$2')
+    token.replace(/^(['"])(.*)\1$/, '$2').replace(/(['"])(.*?)\1/g, '$2')
   ) ?? []
 }
 
@@ -408,6 +408,33 @@ function describeInvocationDanger(command: string): Nullable<string> {
   return null
 }
 
+/** 本身就是长驻服务的程序名。 */
+const LongRunningCommands = new Set(['vite', 'webpack-dev-server', 'webpack-serve', 'nodemon', 'serve', 'http-server', 'live-server', 'browser-sync', 'json-server', 'ngrok', 'caddy', 'nginx', 'redis-server', 'mongod', 'postgres', 'mysqld'])
+
+/** 包管理器与脚本运行器：后面跟 dev / serve / start / watch（或 run 再跟这几个）才算长驻。 */
+const ScriptRunners = new Set(['npm', 'pnpm', 'yarn', 'bun', 'bunx', 'npx', 'deno', 'cargo', 'make'])
+
+/** 常见框架 CLI：后面跟 dev / serve / start 才算长驻。 */
+const FrameworkCommands = new Set(['next', 'nuxt', 'astro', 'remix', 'gatsby', 'expo', 'ng', 'vue-cli-service', 'react-scripts', 'rails', 'flask', 'uvicorn', 'gunicorn', 'php'])
+
+const ServiceSubcommands = new Set(['dev', 'serve', 'server', 'start', 'watch', 'preview', 's'])
+
+/** 一条命令是不是会长期驻留：只看命令名和子命令的位置，不在整条文本里找 dev、start 这种词（`cat dev`、`ls start` 不算）；末尾裸 `&` 也算。 */
+function looksLikeLongRunningService(command: string): boolean {
+  if (/(^|[^&])&\s*$/.test(command)) return true
+  return command.split(CommandSegmentSeparator).some((segment) => {
+    const invocation = readInvocation(tokenize(segment.trim()))
+    if (!invocation) return false
+    const name = invocation.name.toLowerCase()
+    const words = invocation.args.filter((argument) => !argument.startsWith('-')).map((argument) => argument.toLowerCase())
+    if (LongRunningCommands.has(name)) return true
+    if (name === 'python' || name === 'python3') return invocation.args[0] === '-m' && invocation.args[1] === 'http.server'
+    if (ScriptRunners.has(name)) return ServiceSubcommands.has(words[0] ?? '') || (words[0] === 'run' && ServiceSubcommands.has(words[1] ?? ''))
+    if (FrameworkCommands.has(name)) return ServiceSubcommands.has(words[0] ?? '') || (name === 'php' && invocation.args.includes('-S'))
+    return false
+  })
+}
+
 /** 给出整条命令的危险理由：删除类按词法判定，其余破坏性与提权命令按通用规则判定；不危险返回 null。 */
 function describeDangerousCommand(command: string): Nullable<string> {
   const invocationReason = describeInvocationDanger(command)
@@ -440,12 +467,13 @@ export function isSystemShellCommandReadOnly(command: string): boolean {
   const trimmed = command.trim()
   if (!trimmed || /[\r\n><`$()]|(^|[^&])&([^&]|$)/.test(trimmed)) return false
   return trimmed.split(/&&|\|\||;|\|/).every((segment) => {
-    const tokens = tokenize(segment.trim())
-    const executableIndex = tokens.findIndex((token) => !/^[A-Za-z_]\w*=/.test(token))
-    if (executableIndex < 0) return false
-    const executable = tokens[executableIndex]?.split('/').at(-1)?.toLowerCase()
-    if (!executable || !readOnlyCommands.has(executable)) return false
-    const args = tokens.slice(executableIndex + 1)
+    // env、xargs 这类前缀命令后面才是真正要跑的程序，按它判断；前缀本身在只读白名单里也不能放行。提权的一律不算只读。
+    if (/(?:^|\s)(?:sudo|doas|runas)\b/i.test(segment)) return false
+    const invocation = readInvocation(tokenize(segment.trim()))
+    if (!invocation) return false
+    const executable = invocation.name.toLowerCase()
+    if (!readOnlyCommands.has(executable)) return false
+    const args = invocation.args
     if (executable === 'git') {
       const subcommandIndex = findGitSubcommandIndex(args)
       if (subcommandIndex < 0) return false
@@ -472,8 +500,7 @@ export function analyzeCommandExecution(command: string): SystemCommandExecution
     ports: [],
   }
   const dangerousReason = describeDangerousCommand(trimmed)
-  const reason =
-    /(?:^|\s)(?:dev|serve|server|watch|start)(?:\s|$)|\b(?:vite|webpack-dev-server|next\s+dev)\b|(^|[^&])&\s*$/i.test(trimmed)
+  const reason = looksLikeLongRunningService(trimmed)
       ? '该命令看起来会启动长期驻留的服务或监听进程。'
       : null
   return {

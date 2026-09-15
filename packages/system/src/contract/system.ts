@@ -179,8 +179,8 @@ export interface SystemCommandOutputCapture {
 /**
  * 一次命令执行的完整结果。
  *
- * `success` 只看退出码为 0 且没有超时、没有被取消；`truncated` 为 true 时
- * `outputWindow` 与 `outputContinuation` 一定同时给出。
+ * `success` 只看退出码为 0 且没有超时、没有被取消。`outputWindow` 一定给出；
+ * `outputContinuation` 只在宿主留了会话终端日志（`logPath`）时才有，本地内核不落日志文件，只保留结尾窗口。
  */
 export interface SystemCommandResult {
   command: string

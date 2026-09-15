@@ -200,7 +200,7 @@ const runTool = defineSystemTool<{
     '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
     '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
     '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
-    '长期服务传 background=true；危险命令会走确认流程。后台命令的状态和完整输出只用返回的 statusContinuation、outputContinuation 查，不要用 job:*，也不要把内部 logPath 当普通文件读。',
+    '长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取完整输出，没有就只有结尾窗口。不要用 job:*，也不要把内部 logPath 当普通文件读。',
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
   ],
   usage: [
@@ -347,7 +347,7 @@ const listTasksTool = defineSystemTool<{
   summary: '列出后台任务。',
   suitable: ['查 dev server、watcher 或长任务状态。'],
   forbidden: ['看系统全部进程和端口用 system:run 跑 ps / lsof；这里只有本产品启动的后台任务。'],
-  usage: ['传 taskId 精确查询 system:run 返回的后台任务；或传 limit/onlyRunning 查看任务列表。'],
+  usage: ['传 taskId 精确查询 system:run 返回的后台任务；或传 limit/onlyRunning 看列表，最新启动的在前。'],
   examples: [
     // 全部后台任务（含已结束）
     {},
