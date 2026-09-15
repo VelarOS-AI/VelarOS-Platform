@@ -14,10 +14,11 @@ import { createToolCallableOperations, structureToolDescriptionsForCategory } fr
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
-import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSandboxLimits, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
+import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
 import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../contract/provides.js'
 import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
@@ -317,9 +318,9 @@ const sandboxTool = defineSystemTool<SystemSandboxInput>({
     source: z.string().min(1).optional().describe('create：要镜像的目录，支持 ~；不传就是 system:run 的默认目录。'),
     network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
     ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
-    sandboxId: z.string().min(1).max(SystemSandboxLimits.idChars).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
-    paths: z.array(z.string().min(1)).max(SystemSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
-    maxFiles: z.number().int().positive().max(SystemSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${SystemSandboxLimits.diffFiles}；删除列永远完整。`),
+    sandboxId: z.string().min(1).max(RehearsalSandboxLimits.idChars).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
+    paths: z.array(z.string().min(1)).max(RehearsalSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
+    maxFiles: z.number().int().positive().max(RehearsalSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${RehearsalSandboxLimits.diffFiles}；删除列永远完整。`),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: {

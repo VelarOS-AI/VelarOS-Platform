@@ -5,13 +5,14 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { SystemSandboxLimits } from '../src/contract/constants.js'
+import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
+
 import type { SystemToolContext } from '../src/contract/requires.js'
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemTools } from '../src/impl/SystemTools.js'
 import { isPathInsideRoot } from '../src/utils/file-safety.js'
-import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory, selectSandboxChanges } from '../src/utils/sandbox.js'
+import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑命令的用例。 */
 const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
@@ -65,7 +66,6 @@ describe('rehearsal sandbox', () => {
     const base = sandboxBaseDirectory()
     await expect(assertInsideSandboxBase('/etc', base)).rejects.toMatchObject({ code: 'PERMISSION' })
     await expect(assertInsideSandboxBase(join(base, '..', 'elsewhere'), base)).rejects.toMatchObject({ code: 'PERMISSION' })
-    expect(selectSandboxChanges({ created: ['a'], modified: ['b'], deleted: ['c'] }, ['./b', 'zzz'])).toEqual({ created: [], modified: ['b'], deleted: [], unknown: ['zzz'] })
   })
 
   test('a filesystem root as the source is refused before anything is mirrored; containment is right for roots that end in a separator', async () => {
@@ -249,7 +249,7 @@ describe('rehearsal sandbox', () => {
     const kernel = createLocalSystemKernel({ cwd: source })
     const record = await kernel.createSandbox({})
     try {
-      const count = SystemSandboxLimits.diffFilesMax + 100
+      const count = RehearsalSandboxLimits.diffFilesMax + 100
       await mkdir(join(record.root, 'many'))
       for (let index = 0; index < count; index += 1) await writeFile(join(record.root, 'many', `f${index}.txt`), 'x')
       const messages: string[] = []

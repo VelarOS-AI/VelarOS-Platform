@@ -2,7 +2,7 @@
  * 演练沙箱：system:sandbox 的入参与结果，以及实现自己的工作类型（镜像清单与文件印记、落回时的冲突与失败回执）。只在包内用，不出包；对外的沙箱数据在 `system.ts`。
  */
 
-import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxDiscardResult, SystemSandboxIgnoredMode, SystemSandboxRecord } from './system.js'
+import type { SandboxApplyResult, SandboxDiff, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 /** 镜像里一个文件的印记：大小、修改时间、权限位；符号链接记它指向哪。 */
 export interface SystemSandboxFileStamp {
@@ -21,7 +21,7 @@ export type SystemSandboxStampTable = Record<string, SystemSandboxFileStamp>
  */
 export interface SystemSandboxManifest {
   version: 1
-  record: SystemSandboxRecord
+  record: SandboxRecord
   files: SystemSandboxStampTable
   mirror: SystemSandboxStampTable
 }
@@ -46,21 +46,21 @@ export type SystemSandboxInput = {
   action: 'create' | 'diff' | 'apply' | 'discard'
   source?: string
   network?: boolean
-  ignored?: SystemSandboxIgnoredMode
+  ignored?: SandboxIgnoredMode
   sandboxId?: string
   paths?: string[]
   maxFiles?: number
 }
 
 /** 建好沙箱的回执：沙箱记录加一句怎么用镜像的提醒。 */
-export interface SystemSandboxCreated extends SystemSandboxRecord {
+export interface SystemSandboxCreated extends SandboxRecord {
   note: string
 }
 
 /** 落回的回执：真正落回的三列；什么都没落或只落了指定路径时 note 说明。 */
-export interface SystemSandboxApplied extends SystemSandboxApplyResult {
+export interface SystemSandboxApplied extends SandboxApplyResult {
   note?: string
 }
 
 /** system:sandbox 的结果：create、diff、apply、discard 各自的回执。 */
-export type SystemSandboxResult = SystemSandboxCreated | SystemSandboxDiff | SystemSandboxApplied | SystemSandboxDiscardResult
+export type SystemSandboxResult = SystemSandboxCreated | SandboxDiff | SystemSandboxApplied | SandboxDiscardResult

@@ -1,0 +1,63 @@
+{
+  "name": "@velaros-ai/rehearsal-sandbox",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Shared contract and rules for the rehearsal sandbox: mirror, run, diff, apply data shapes, public limits, and the pre-apply check that confirms exactly what will be written back.",
+  "license": "Apache-2.0",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/rehearsal-sandbox#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/rehearsal-sandbox"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/rehearsal-sandbox.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/rehearsal-sandbox"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

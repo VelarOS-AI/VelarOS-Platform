@@ -34,7 +34,7 @@
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
 | 环境变量，全部登记在 `SystemEnvironmentVariables` | 可选 | 四个输入变量由宿主设，三个标记变量由本包写给子进程 |
 
-**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemCommandLimits`、`SystemSandboxLimits`、`SystemFailureLimits`（工具说明与 schema 里的数字都引它们），以及经宿主端口流动的全部数据结构。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
+**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemCommandLimits`、`SystemFailureLimits`（工具说明与 schema 里的数字都引它们），以及经宿主端口流动的数据结构。演练沙箱的数据形状与上限在公共包 `@velaros-ai/rehearsal-sandbox/contracts`（`SandboxRecord`、`SandboxDiff`、`RehearsalSandboxLimits` 等），宿主端口直接用它们。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
 
 两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
@@ -71,6 +71,7 @@
 - `@velaros-ai/kernel` 的 `contracts/abi`：能力令牌、内核模块定义。
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径：工具运行时规格、mod 清单、审批端口类型、入参描述辅助。
 - `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求；system:run 与演练沙箱里的命令都经它。
+- `@velaros-ai/rehearsal-sandbox`：演练沙箱的数据形状、公开上限，落回前的核对与确认请求（确认的就是要落的）；镜像、差量、落回的引擎仍在本包。
 - `zod`：wire 面入参校验。
 
 运行时要宿主给的东西全部列在上一节的注入面里，由 `contract/requires.ts` 定义。
@@ -134,7 +135,7 @@ src/
 
 **合同、类型、常量分开。** `contract/` 是对外合同：provides 登记产品面、requires 定义注入面、constants 放约定的常量表。`types/` 只放类型，一个值都没有，按域分文件；出不出包不看文件，看合同的签名有没有用到。
 
-**常量分四处。** 对外承诺的（工具名、错误码、环境变量、写进工具说明与 schema 的上限）在 `contract/constants.ts`，每个数字一句说明，工具说明里的数字用模板字符串引它，改一处模型看到的跟着变。包内可调的（超时、缓冲、保留条数、缺省条数、阈值）都在 `utils/tuning.ts` 的 `SystemTuning`，按用途分组、每项一句说明，实现里不再散写数字缺省值。某个类里固定用的文案与名单写成那个类的 `private static readonly`。规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则留在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。跨包相同的逻辑抽到按含义命名的公共包（命令判定在 `@velaros-ai/shell-command`）；还没抽出去的沙箱契约两边各持一份，由仓库层的一致性测试守着。以上由门禁核对。
+**常量分四处。** 对外承诺的（工具名、错误码、环境变量、写进工具说明与 schema 的上限）在 `contract/constants.ts`，每个数字一句说明，工具说明里的数字用模板字符串引它，改一处模型看到的跟着变。包内可调的（超时、缓冲、保留条数、缺省条数、阈值）都在 `utils/tuning.ts` 的 `SystemTuning`，按用途分组、每项一句说明，实现里不再散写数字缺省值。某个类里固定用的文案与名单写成那个类的 `private static readonly`。规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则留在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。跨包相同的逻辑抽到按含义命名的公共包（命令判定在 `@velaros-ai/shell-command`）；沙箱契约在 `@velaros-ai/rehearsal-sandbox`；两个工具的入参 schema 形状相同、文案按空间不同，各持一份，由仓库层的一致性测试守着。以上由门禁核对。
 
 **文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。七个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 

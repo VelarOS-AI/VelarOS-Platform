@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.30",
+      "version": "0.6.31",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -176,6 +176,18 @@
         "./workload"
       ],
       "repositoryDirectory": "packages/agent-lab"
+    },
+    {
+      "domain": "foundations",
+      "directory": "packages/rehearsal-sandbox",
+      "name": "@velaros-ai/rehearsal-sandbox",
+      "version": "0.1.0",
+      "description": "Shared contract and rules for the rehearsal sandbox: mirror, run, diff, apply data shapes, public limits, and the pre-apply check that confirms exactly what will be written back.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/rehearsal-sandbox"
     },
     {
       "domain": "foundations",

@@ -84,6 +84,12 @@
       "@velaros-ai/platform/*": [
         "./packages/platform/src/exports/*"
       ],
+      "@velaros-ai/rehearsal-sandbox": [
+        "./packages/rehearsal-sandbox/src/exports/index.ts"
+      ],
+      "@velaros-ai/rehearsal-sandbox/*": [
+        "./packages/rehearsal-sandbox/src/exports/*"
+      ],
       "@velaros-ai/shell-command": [
         "./packages/shell-command/src/exports/index.ts"
       ],

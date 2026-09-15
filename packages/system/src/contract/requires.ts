@@ -12,9 +12,11 @@
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
+import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord,SystemShellEnvironmentRefreshResult } from '../types/system.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
 
@@ -41,8 +43,9 @@ export interface SystemToolContext {
  * 本包的本地实现是 `LocalSystemKernel`。产品壳（如 Desktop 的 SystemContextTypes）用 `extends` 追加宿主专属能力，
  * 例如通知、安装建议；这些扩展不进通用端口。
  * 端口里只有工具真会调的方法，门禁按工具文件核对；宿主自己的界面要的搜索、进程、端口、终止任务在本地内核的接口上。
+ * 演练沙箱那四个方法是公共沙箱端口 `RehearsalSandboxHostPort` 的形状，这里重申是为了写清系统空间自己的约束。
  */
-export interface SystemToolSystemApi {
+export interface SystemToolSystemApi extends RehearsalSandboxHostPort {
   /**
    * 把用户给的路径解析成绝对路径：`~` 与 `~/…` 展开到宿主的家目录，相对路径相对宿主的默认工作目录；不给路径就返回默认工作目录。
    * 文件工具的路径和 system:run 的 cwd 都经它解析，审批看到的目标和实际操作的目标因此一致。
@@ -71,13 +74,13 @@ export interface SystemToolSystemApi {
    * 建演练沙箱：把 source（缺省默认工作目录）镜像到临时区，返回沙箱记录；之后 cwd 落在镜像根之内的 runCommand 一律受约束、写不到镜像外。
    * 没有约束后端时拒绝（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`），不留目录。
    */
-  createSandbox: (options?: SystemSandboxCreateOptions) => Promise<SystemSandboxRecord>
+  createSandbox: (options?: SandboxCreateOptions) => Promise<SandboxRecord>
   /** 镜像相对创建时的变化：新增、修改、删除三列，文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
-  diffSandbox: (options: SystemSandboxDiffOptions) => Promise<SystemSandboxDiff>
+  diffSandbox: (options: SandboxDiffOptions) => Promise<SandboxDiff>
   /** 把镜像里的文件变化落回源目录：先核对源文件自建沙箱以来没变过，冲突整批不落并抛错；.git 永远不落。审批由工具在调用前完成。 */
-  applySandbox: (options: SystemSandboxApplyOptions) => Promise<SystemSandboxApplyResult>
+  applySandbox: (options: SandboxApplyOptions) => Promise<SandboxApplyResult>
   /** 删掉镜像；路径不在沙箱基目录之下就拒绝，沙箱本来就不在时 removed 为 false。 */
-  discardSandbox: (sandboxId: string) => Promise<SystemSandboxDiscardResult>
+  discardSandbox: (sandboxId: string) => Promise<SandboxDiscardResult>
 }
 
 // ── 挂进内核 ────────────────────────────────────────────────────

@@ -131,6 +131,25 @@ export const GovernedModules = [
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
+  {
+    directory: 'rehearsal-sandbox',
+    name: '@velaros-ai/rehearsal-sandbox',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'rehearsal-sandbox.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    layers: [
+      ['RehearsalSandboxRules.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */

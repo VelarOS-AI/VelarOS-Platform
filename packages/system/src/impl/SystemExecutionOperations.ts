@@ -6,19 +6,19 @@
 
 import { join } from 'node:path'
 
-import { createApprovalOperationKey, createManualApprovalOptions } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, toNullable } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { RehearsalSandboxRulesApi } from '@velaros-ai/rehearsal-sandbox'
+import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
 import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-command'
 
-import { SystemFailureLimits, SystemToolNames } from '../contract/constants.js'
+import { SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
-import { buildSandboxApplyConfirmationMessage, selectSandboxChanges } from '../utils/sandbox.js'
 
 /**
  * 两个执行操作：跑命令、演练沙箱。`system:run`、`system:sandbox` 各调一个方法。
@@ -45,6 +45,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
   constructor(
     private readonly policy: ShellCommandPolicyApi,
     private readonly approvals: ShellCommandApprovalApi,
+    private readonly sandboxRules: RehearsalSandboxRulesApi,
   ) {}
 
   public async run({ command, cwd, timeoutMs, background, interactive, maxOutputChars }: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult> {
@@ -109,28 +110,18 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
     if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
 
-    // 落回：先算完整差量（不截断、不附文本差量），把删除、覆盖、敏感路径都摆给用户看，确认了才写。
-    // 条数、敏感路径都按完整的三列算；确认时的差量指纹交给宿主，镜像在确认之后又变过就整批不落。
+    // 落回：先算完整差量（不截断、不附文本差量），核对与确认请求交给公共规则：条数、敏感路径都按完整的三列算，确认时的差量指纹交给宿主，镜像在确认之后又变过就整批不落。
     const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
-    if (changes.truncated) throw new AppError('VALIDATION', '宿主给的差量被截断了，没法对着完整的改动向用户确认，什么都没写。')
-    const selection = selectSandboxChanges(changes, input.paths)
-    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化，什么都没写：${selection.unknown.slice(0, SystemFailureLimits.listItems).join('、')}`)
-    if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
-    const targets = [...selection.created, ...selection.modified, ...selection.deleted].map((path) => join(changes.source, path))
-    const sensitive = targets.filter((path) => isSensitiveSystemMutationPath(path) || isCredentialPath(path))
-    await ctx.approval.awaitConfirmation(
-      buildSandboxApplyConfirmationMessage(changes.source, selection, sensitive),
-      ctx.abortSignal,
-      createManualApprovalOptions({
-        approvalRisk: 'high',
-        riskScope: 'system-sandbox:apply',
-        operation: {
-          key: createApprovalOperationKey('sandbox-apply', { sandboxId, fingerprint: toNullable(changes.fingerprint), created: selection.created.length, modified: selection.modified.length, deleted: selection.deleted.length }),
-          label: `把演练沙箱的改动落回 ${changes.source}`,
-          target: changes.source,
-        },
-      })
-    )
+    const request = this.sandboxRules.prepareApply({
+      diff: changes,
+      paths: input.paths,
+      targetLabel: changes.source,
+      closingNote: '删除和覆盖无法撤销；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。',
+      riskScope: 'system-sandbox:apply',
+      isSensitive: (path) => isSensitiveSystemMutationPath(join(changes.source, path)) || isCredentialPath(join(changes.source, path)),
+    })
+    if (!request) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
+    await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths, fingerprint: changes.fingerprint })
     // 宿主的回执原样不动，note 放进新对象里。
     return input.paths ? { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` } : applied
@@ -138,4 +129,4 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
 }
 
 /** 整个进程唯一的执行操作；system:run 与 system:sandbox 的 execute 交给它。 */
-export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval)
+export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval, rehearsalSandboxRules)

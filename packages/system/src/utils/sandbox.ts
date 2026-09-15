@@ -13,11 +13,12 @@ import { createTwoFilesPatch } from 'diff'
 
 import { isEmpty, isFalse, isNull, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
+import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 
-import { SystemErrorCodes, SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
+import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
-import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../types/system.js'
 
 import { isPathInsideRoot, realPathForSafety } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
@@ -122,7 +123,7 @@ export async function mirrorTree(
   source: string,
   root: string,
   options: {
-    ignored: SystemSandboxIgnoredMode
+    ignored: SandboxIgnoredMode
     shouldSkip: (absolutePath: string, isDirectory: boolean) => Promise<boolean>
     limits: { files: number; bytes: number }
   }
@@ -279,7 +280,7 @@ async function readTextForDiff(path: string, maxChars: number): Promise<Nullable
 }
 
 /** 渲染一个文本文件的统一差量并按字符预算截断。 */
-export function renderTextDiff(path: string, oldText: string, newText: string, maxChars: number): SystemSandboxTextDiff {
+export function renderTextDiff(path: string, oldText: string, newText: string, maxChars: number): SandboxTextDiff {
   const diff = createTwoFilesPatch(path, path, oldText, newText, '', '', { context: 3 })
   return diff.length > maxChars ? { path, diff: diff.slice(0, maxChars), truncated: true } : { path, diff, truncated: false }
 }
@@ -293,7 +294,7 @@ export async function diffMirror(
   manifest: SystemSandboxManifest,
   current: SystemSandboxStampTable,
   options: { maxFiles: number; textDiffs?: boolean }
-): Promise<Omit<SystemSandboxDiff, 'sandboxId' | 'source'>> {
+): Promise<Omit<SandboxDiff, 'sandboxId' | 'source'>> {
   const { root, source } = manifest.record
   const created: string[] = []
   const modified: string[] = []
@@ -332,13 +333,13 @@ export async function diffMirror(
     .update(JSON.stringify({ created: created.map((path) => [path, current[path]]), modified: modified.map((path) => [path, current[path]]), deleted }))
     .digest('hex')
     .slice(0, 16)
-  const textDiffs: SystemSandboxTextDiff[] = []
+  const textDiffs: SandboxTextDiff[] = []
   let omittedDiffs = 0
-  let budget = SystemSandboxLimits.diffTotalChars
+  let budget = RehearsalSandboxLimits.diffTotalChars
   const candidates = isFalse(options.textDiffs) ? [] : [...modified.slice(0, options.maxFiles), ...created.slice(0, options.maxFiles)]
   for (const path of candidates) {
-    if (budget <= 0 || textDiffs.length >= SystemSandboxLimits.textDiffs) { omittedDiffs += 1; continue }
-    const after = await readTextForDiff(join(root, path), SystemSandboxLimits.diffFileChars)
+    if (budget <= 0 || textDiffs.length >= RehearsalSandboxLimits.textDiffs) { omittedDiffs += 1; continue }
+    const after = await readTextForDiff(join(root, path), RehearsalSandboxLimits.diffFileChars)
     if (isNull(after)) { omittedDiffs += 1; continue }
     let before = ''
     if (path in manifest.mirror) {
@@ -346,15 +347,15 @@ export async function diffMirror(
       const sourceStats = await lstat(join(source, path)).catch(() => null)
       const sourceBefore = manifest.files[path]
       if (!sourceStats?.isFile() || !sourceBefore || !sameStamp(stampOfEntry(sourceStats), sourceBefore)) { omittedDiffs += 1; continue }
-      const baseline = await readTextForDiff(join(source, path), SystemSandboxLimits.diffFileChars)
+      const baseline = await readTextForDiff(join(source, path), RehearsalSandboxLimits.diffFileChars)
       if (isNull(baseline)) { omittedDiffs += 1; continue }
       before = baseline
     }
-    const rendered = renderTextDiff(path, before, after, Math.min(SystemSandboxLimits.diffFileChars, budget))
+    const rendered = renderTextDiff(path, before, after, Math.min(RehearsalSandboxLimits.diffFileChars, budget))
     budget -= rendered.diff.length
     textDiffs.push(rendered)
   }
-  const result: Omit<SystemSandboxDiff, 'sandboxId' | 'source'> = {
+  const result: Omit<SandboxDiff, 'sandboxId' | 'source'> = {
     created: created.slice(0, options.maxFiles),
     modified: modified.slice(0, options.maxFiles),
     deleted,
@@ -366,35 +367,6 @@ export async function diffMirror(
   }
   if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；用 system:read 直接看镜像里的文件。`
   return result
-}
-
-/** 按调用方给的相对路径筛选三列；不给就全部。给了但三列里都没有的路径原样返回在 unknown 里。 */
-export function selectSandboxChanges(
-  changes: Pick<SystemSandboxDiff, 'created' | 'modified' | 'deleted'>,
-  paths: LooseOptional<readonly string[]>
-): { created: string[]; modified: string[]; deleted: string[]; unknown: string[] } {
-  if (!paths || isEmpty(paths)) return { created: [...changes.created], modified: [...changes.modified], deleted: [...changes.deleted], unknown: [] }
-  const wanted = new Set(paths.map((path) => path.replace(/\\/g, '/').replace(/^\.\//, '')))
-  const pick = (list: readonly string[]): string[] => list.filter((path) => wanted.has(path))
-  const known = new Set([...changes.created, ...changes.modified, ...changes.deleted])
-  return { created: pick(changes.created), modified: pick(changes.modified), deleted: pick(changes.deleted), unknown: [...wanted].filter((path) => !known.has(path)) }
-}
-
-/** 生成落回源目录前给用户看的确认文案：三列的条数、前几条路径，以及其中的系统敏感路径与凭证文件。 */
-export function buildSandboxApplyConfirmationMessage(
-  source: string,
-  selection: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] },
-  sensitivePaths: readonly string[]
-): string {
-  const shown = SystemTuning.sandbox.confirmationPreviewItems
-  const preview = (list: readonly string[]): string => list.slice(0, shown).join('、') + (list.length > shown ? ` 等 ${list.length} 个` : '')
-  const lines = [`即将把演练沙箱里的改动落回 ${source}：新增 ${selection.created.length} 个、覆盖 ${selection.modified.length} 个、删除 ${selection.deleted.length} 个文件。`]
-  if (!isEmpty(selection.deleted)) lines.push(`删除：${preview(selection.deleted)}`)
-  if (!isEmpty(selection.modified)) lines.push(`覆盖：${preview(selection.modified)}`)
-  if (!isEmpty(selection.created)) lines.push(`新增：${preview(selection.created)}`)
-  if (!isEmpty(sensitivePaths)) lines.push(`其中是系统敏感路径或凭证文件的：${preview(sensitivePaths)}`)
-  lines.push('删除和覆盖无法撤销；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。')
-  return lines.join('\n')
 }
 
 /** 落回时整批不落的错误：什么都没写，cause.details.conflicts 列出每处冲突，context.executionOutcome 是 not-applied。 */
@@ -494,7 +466,7 @@ function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppErr
 export async function applyMirrorChanges(
   manifest: SystemSandboxManifest,
   selection: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] }
-): Promise<Omit<SystemSandboxApplyResult, 'sandboxId'>> {
+): Promise<Omit<SandboxApplyResult, 'sandboxId'>> {
   const { root, source } = manifest.record
   const outside = (list: readonly string[]): string[] => list.filter((path) => !isGitInternalPath(path))
   const created = outside(selection.created)

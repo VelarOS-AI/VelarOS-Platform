@@ -44,3 +44,8 @@ Desktop、Workbench、Termel 为了 `analyzeCommandExecution`、`isShellCommandR
 ## Consequences
 
 后续的公共件（rehearsal-sandbox、text-files、path-rules）进同一个域；`module-ownership.md` 里「跨包同名常量不共享代码、各持一份」那句改为「抽成公共包，抽不出去的才镜像」。
+
+## Addendum（2026-09-16）：`@velaros-ai/rehearsal-sandbox`
+
+第二个公共件：演练沙箱的数据形状（`SandboxRecord`、`SandboxDiff`、`SandboxApplyOptions` 等九个）、公开上限 `RehearsalSandboxLimits`、落回审批的操作身份 `SandboxApplyOperationKind`，以及 `rehearsalSandboxRules.prepareApply`——只认不截断的完整差量、点名了没变化的路径在问用户之前就拒绝、条数与敏感路径按完整三列算、审批的操作身份带差量指纹。system 已改用它（`SystemSandbox*` 九个类型与 `SystemSandboxLimits` 删除，宿主端口直接用公共类型）；project 迁过来时，它那份「确认用截断差量、落回全落」的同类缺陷随之消失。镜像、差量、落回的引擎暂留 system（二期再议）。
+

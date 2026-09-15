@@ -72,6 +72,7 @@ const Domains = [
       'packages/system/**',
       'packages/platform/**',
       'packages/shell-command/**',
+      'packages/rehearsal-sandbox/**',
       'packages/project/**',
       'tests/capabilities/**',
     ],

@@ -148,30 +148,6 @@ export const SystemCommandLimits = Object.freeze({
   taskIdChars: 120,
 })
 
-/** 沙箱的上限；sandbox 工具的说明与 schema 直接引用这里。 */
-export const SystemSandboxLimits = Object.freeze({
-  /** 一个内核同时最多几个沙箱。 */
-  sandboxes: 5,
-  /** 源目录最多多少个文件，再多建不出。 */
-  files: 200_000,
-  /** 源目录最多多少字节，再多建不出。 */
-  bytes: 2 * 1024 * 1024 * 1024,
-  /** diff 新增与修改两列缺省各列多少条。 */
-  diffFiles: 200,
-  /** diff 新增与修改两列最多各列多少条；apply 前向用户确认用的是不截断的完整差量，不受它限制。 */
-  diffFilesMax: 2000,
-  /** 一次 diff 最多附多少个文本差量。 */
-  textDiffs: 200,
-  /** 单个文本差量最多多少字符。 */
-  diffFileChars: 200_000,
-  /** 一次 diff 的文本差量总共最多多少字符。 */
-  diffTotalChars: 2_000_000,
-  /** apply 一次最多指定多少个路径。 */
-  applyPaths: 500,
-  /** 沙箱 id 最长多少字符。 */
-  idChars: 64,
-})
-
 /** 失败回执的上限：agent 工具契约约定失败回执里每个列表最多列几项，本包各工具都按它截。 */
 export const SystemFailureLimits = Object.freeze({
   /** 失败回执里每个列表最多列几项：edit 的问题清单与多处匹配的锚点、沙箱落回的冲突与没有变化的路径。 */

@@ -136,9 +136,4 @@ export const SystemTuning = Object.freeze({
     /** 按内容搜没给 maxResultsPerFile 时每个文件最多几条。 */
     resultsPerFile: 5,
   }),
-  /** 演练沙箱：落回确认。 */
-  sandbox: Object.freeze({
-    /** 落回确认文案里新增、覆盖、删除每一列最多列出多少条路径。 */
-    confirmationPreviewItems: 20,
-  }),
 })

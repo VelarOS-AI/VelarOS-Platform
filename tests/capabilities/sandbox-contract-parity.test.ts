@@ -8,7 +8,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
 import type { ProjectSandboxApplyResult, ProjectSandboxDiff, ProjectSandboxRecord } from '../../packages/project/src/types/project'
-import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxRecord } from '../../packages/system/src/exports/index'
+import type { SandboxApplyResult, SandboxDiff, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { systemTools } from '../../packages/system/src/exports/index'
 
 const system = systemTools['system:sandbox']!
@@ -41,15 +41,15 @@ describe('sandbox contract parity across spaces', () => {
   })
 
   test('the record, diff and apply result shapes are mutually assignable', () => {
-    const record: SystemSandboxRecord = { id: 'x', root: '/r', source: '/s', createdAt: 0, network: false, ignored: 'link', fileCount: 0, bytes: 0, linkedDirectories: [], git: false }
+    const record: SandboxRecord = { id: 'x', root: '/r', source: '/s', createdAt: 0, network: false, ignored: 'link', fileCount: 0, bytes: 0, linkedDirectories: [], git: false }
     const projectRecord: ProjectSandboxRecord = record
-    const systemRecord: SystemSandboxRecord = projectRecord
-    const diff: SystemSandboxDiff = { sandboxId: 'x', source: '/s', created: [], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0 }
+    const systemRecord: SandboxRecord = projectRecord
+    const diff: SandboxDiff = { sandboxId: 'x', source: '/s', created: [], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0 }
     const projectDiff: ProjectSandboxDiff = diff
-    const systemDiff: SystemSandboxDiff = projectDiff
-    const applied: SystemSandboxApplyResult = { sandboxId: 'x', created: [], modified: [], deleted: [], skippedGit: false }
+    const systemDiff: SandboxDiff = projectDiff
+    const applied: SandboxApplyResult = { sandboxId: 'x', created: [], modified: [], deleted: [], skippedGit: false }
     const projectApplied: ProjectSandboxApplyResult = applied
-    const systemApplied: SystemSandboxApplyResult = projectApplied
+    const systemApplied: SandboxApplyResult = projectApplied
     expect([systemRecord.id, systemDiff.sandboxId, systemApplied.sandboxId]).toEqual(['x', 'x', 'x'])
   })
 })

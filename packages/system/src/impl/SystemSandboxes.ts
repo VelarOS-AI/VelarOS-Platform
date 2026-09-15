@@ -9,15 +9,17 @@ import { join, relative, sep } from 'node:path'
 import { isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
+import type { SandboxApplyOptions, SandboxApplyResult, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 
-import { SystemErrorCodes, SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
+import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { SystemSandboxManifest } from '../types/sandbox.js'
-import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxIgnoredMode, SystemSandboxRecord } from '../types/system.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { isPathInsideRoot, realPathForSafety } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
-import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, selectSandboxChanges, stampOfEntry } from '../utils/sandbox.js'
+import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
 
 import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
@@ -40,19 +42,19 @@ export interface SystemSandboxesApi {
    * 先探测约束后端，没有就抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE` 并不留目录。源目录不能在基目录之内，基目录也不能在源目录之内（源是 `/` 也算）；
    * 最多同时 5 个沙箱。
    */
-  create(source: string, options: { network: boolean; ignored: SystemSandboxIgnoredMode }): Promise<SystemSandboxRecord>
+  create(source: string, options: { network: boolean; ignored: SandboxIgnoredMode }): Promise<SandboxRecord>
   /** 镜像相对创建时的变化：新增、修改、删除三列（删除列永远完整），文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
-  diff(options: SystemSandboxDiffOptions): Promise<SystemSandboxDiff>
+  diff(options: SandboxDiffOptions): Promise<SandboxDiff>
   /**
    * 把镜像里的文件变化落回源目录：给了确认时的差量指纹就先核对，镜像在确认之后又变过整批不落（SYSTEM_SANDBOX_CHANGED）；
    * 再核对每一处在源目录里自镜像以来没被改过、上级路径不是符号链接，任何冲突整批不落并抛错（cause.details.conflicts）；
    * 内容先暂存再挪到位，暂存不全什么都不落，挪到位途中失败在 context.applied 里点名已落回的路径。.git 永远不落。审批由工具在调用前完成。
    */
-  apply(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult>
+  apply(options: SandboxApplyOptions): Promise<SandboxApplyResult>
   /** 删掉镜像并注销：路径不在基目录之下就拒绝；沙箱不存在时 removed 为 false。 */
-  discard(sandboxId: string): Promise<SystemSandboxDiscardResult>
+  discard(sandboxId: string): Promise<SandboxDiscardResult>
   /** 登记着的沙箱。 */
-  list(): SystemSandboxRecord[]
+  list(): SandboxRecord[]
   /**
    * cwd 落在哪个沙箱根之内，就返回那个沙箱的专属执行器（内核重启后从清单重新登记）；不在任何沙箱里返回 null。
    * cwd 落在某个沙箱的镜像根里、清单却读不出来时抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`，不退回裸进程。
@@ -83,7 +85,7 @@ export interface SystemSandboxesOptions {
 /** 登记表里的一项：沙箱记录、清单所在目录和专属执行器。 */
 export interface SystemSandboxesEntry {
   /** 沙箱记录。 */
-  record: SystemSandboxRecord
+  record: SandboxRecord
   /** 沙箱目录（清单、镜像根、沙箱自己的临时目录都在里面）。 */
   directory: string
   /** 镜像根解开符号链接后的真实路径，判断 cwd 在不在沙箱里用它比。 */
@@ -103,8 +105,8 @@ export class SystemSandboxes implements SystemSandboxesApi {
     this.baseDir = options.baseDir ?? sandboxBaseDirectory()
   }
 
-  public async create(source: string, options: { network: boolean; ignored: SystemSandboxIgnoredMode }): Promise<SystemSandboxRecord> {
-    if (this.entries.size >= SystemSandboxLimits.sandboxes) throw new AppError('VALIDATION', `同时最多 ${SystemSandboxLimits.sandboxes} 个沙箱；先 discard 一个`)
+  public async create(source: string, options: { network: boolean; ignored: SandboxIgnoredMode }): Promise<SandboxRecord> {
+    if (this.entries.size >= RehearsalSandboxLimits.sandboxes) throw new AppError('VALIDATION', `同时最多 ${RehearsalSandboxLimits.sandboxes} 个沙箱；先 discard 一个`)
     const realSource = await realPathForSafety(source)
     const sourceStats = await stat(realSource).catch(() => null)
     if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `沙箱的源不是目录：${source}`)
@@ -130,11 +132,11 @@ export class SystemSandboxes implements SystemSandboxesApi {
       const mirrored = await mirrorTree(realSource, root, {
         ignored: options.ignored,
         shouldSkip: (absolutePath, isDirectory) => ignorePolicy.shouldSkip(absolutePath, isDirectory),
-        limits: { files: SystemSandboxLimits.files, bytes: SystemSandboxLimits.bytes },
+        limits: { files: RehearsalSandboxLimits.files, bytes: RehearsalSandboxLimits.bytes },
       })
       // 剪断镜像里每个仓库的推送；改过的配置文件在清单里记改完的印记，刚建好的沙箱差量才是干净的。
       for (const path of await disableGitPush(root, mirrored.gitConfigs)) mirrored.mirror[path] = stampOfEntry(await lstat(join(root, path)))
-      const record: SystemSandboxRecord = {
+      const record: SandboxRecord = {
         id, root, source: realSource, createdAt: Date.now(), network: options.network, ignored: options.ignored,
         fileCount: Object.keys(mirrored.files).length, bytes: mirrored.bytes, linkedDirectories: mirrored.linkedDirectories,
         git: mirrored.gitConfigs.includes('.git/config'), detachedGitLinks: mirrored.detachedGitLinks,
@@ -151,22 +153,22 @@ export class SystemSandboxes implements SystemSandboxesApi {
     }
   }
 
-  public async diff(options: SystemSandboxDiffOptions): Promise<SystemSandboxDiff> {
+  public async diff(options: SandboxDiffOptions): Promise<SandboxDiff> {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     const current = await scanTree(entry.record.root)
-    const changes = await diffMirror(manifest, current, { maxFiles: options.maxFiles ?? SystemSandboxLimits.diffFiles, textDiffs: options.textDiffs })
+    const changes = await diffMirror(manifest, current, { maxFiles: options.maxFiles ?? RehearsalSandboxLimits.diffFiles, textDiffs: options.textDiffs })
     return { sandboxId: entry.record.id, source: entry.record.source, ...changes }
   }
 
-  public async apply(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult> {
+  public async apply(options: SandboxApplyOptions): Promise<SandboxApplyResult> {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     // 落回永远按完整差量算，不截断、不附文本差量。
     const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
     // 用户确认时看到的差量和现在的对不上（确认之后镜像又被改过）：整批不落，让调用方重新 diff、重新确认。
     if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceConfirmation()
-    const selection = selectSandboxChanges(changes, options.paths)
+    const selection = rehearsalSandboxRules.select(changes, options.paths)
     if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SystemFailureLimits.listItems).join('、')}`)
     const applied = await applyMirrorChanges(manifest, selection)
     log.info('sandbox applied', { id: entry.record.id, created: applied.created.length, modified: applied.modified.length, deleted: applied.deleted.length })
@@ -174,7 +176,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     return { sandboxId: entry.record.id, ...applied, skippedGit: applied.skippedGit || changes.gitChanged }
   }
 
-  public async discard(sandboxId: string): Promise<SystemSandboxDiscardResult> {
+  public async discard(sandboxId: string): Promise<SandboxDiscardResult> {
     // 递归删除只许删基目录下面正好一层、不是符号链接的沙箱目录：核对不过就拒绝，这是整仓误删事故的直接教训。
     const real = await sandboxDirectoryOf(this.baseDir, sandboxId)
     // 先停掉镜像里还在跑的进程再删；删成功了才注销，删不掉时沙箱照样登记着，还能再丢一次。
@@ -187,7 +189,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     return { sandboxId, removed: true }
   }
 
-  public list(): SystemSandboxRecord[] {
+  public list(): SandboxRecord[] {
     return [...this.entries.values()].map((entry) => entry.record)
   }
 

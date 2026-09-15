@@ -10,10 +10,11 @@ import { isEmpty, Log, toNullable } from '@velaros-ai/core'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
 import type { ResolvedSystemShell } from '../types/commands.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord, SystemShellEnvironmentRefreshResult } from '../types/system.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { runPlatformCommand } from '../utils/process.js'
 import { replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
 import {
@@ -69,7 +70,7 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi {
   /** 列出正在监听的 TCP 端口和占用它们的进程，可按端口、端口范围、进程筛选，最多 limit 条（默认 50）。 */
   listOpenPorts(options?: SystemOpenPortQueryOptions): Promise<SystemOpenPortInfo[]>
   /** 登记着的演练沙箱，给宿主界面列沙箱、展示差量用。 */
-  listSandboxes(): SystemSandboxRecord[]
+  listSandboxes(): SandboxRecord[]
   /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回终止前后的状态。 */
   terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
   /**
@@ -280,23 +281,23 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
   }
 
-  public createSandbox(options: SystemSandboxCreateOptions = {}): Promise<SystemSandboxRecord> {
+  public createSandbox(options: SandboxCreateOptions = {}): Promise<SandboxRecord> {
     return this.sandboxes.create(this.resolvePath(options.source), { network: !!options.network, ignored: options.ignored ?? 'link' })
   }
 
-  public diffSandbox(options: SystemSandboxDiffOptions): Promise<SystemSandboxDiff> {
+  public diffSandbox(options: SandboxDiffOptions): Promise<SandboxDiff> {
     return this.sandboxes.diff(options)
   }
 
-  public applySandbox(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult> {
+  public applySandbox(options: SandboxApplyOptions): Promise<SandboxApplyResult> {
     return this.sandboxes.apply(options)
   }
 
-  public discardSandbox(sandboxId: string): Promise<SystemSandboxDiscardResult> {
+  public discardSandbox(sandboxId: string): Promise<SandboxDiscardResult> {
     return this.sandboxes.discard(sandboxId)
   }
 
-  public listSandboxes(): SystemSandboxRecord[] {
+  public listSandboxes(): SandboxRecord[] {
     return this.sandboxes.list()
   }
 
