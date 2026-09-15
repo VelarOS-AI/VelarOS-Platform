@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { defineToolRuntimeSpec, resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
-import { isFalse, isPlainObject } from '@velaros-ai/core'
+import { isFalse, isPlainObject, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
 
@@ -127,4 +127,9 @@ export function createProjectCallableOperations(
     }
   }
   return operations
+}
+
+/** project:change 计划里一个文件的来源只能写一种：fileRef、sourceRef、path 恰好给了一个。 */
+export function hasExactlyOneSource(value: { fileRef?: string; sourceRef?: string; path?: string }): boolean {
+  return [value.fileRef, value.sourceRef, value.path].filter((item) => !isUndefined(item)).length === 1
 }

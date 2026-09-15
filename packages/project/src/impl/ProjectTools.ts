@@ -19,7 +19,7 @@ import type { ProjectChangeStep, ProjectEditInput, ProjectFileInput } from '../t
 import type { ProjectChangeInput, ProjectCodeAnalysisInput, ProjectCodeInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
 import { ProjectSourceInstructions } from '../utils/agent/source-window.js'
 import { isParallelCommandExecutionSafe } from '../utils/command-policy.js'
-import { createProjectCallableOperations, defineProjectTool } from '../utils/tool.js'
+import { createProjectCallableOperations, defineProjectTool, hasExactlyOneSource } from '../utils/tool.js'
 
 import { createProjectKernel } from './kernel/LocalProjectKernel.js'
 import { projectChangeOperations } from './operations/ProjectChangeOperations.js'
@@ -109,8 +109,6 @@ const PlanSource = {
   sourceRef: ProjectFileRefSchema.optional().describe('原样复制原 fileRef；跟随此前计划步骤的移动和修改。'),
   path: z.string().min(1).optional().describe('仅引用本计划创建的文件。'),
 }
-const hasExactlyOneSource = (value: { fileRef?: string; sourceRef?: string; path?: string }): boolean =>
-  [value.fileRef, value.sourceRef, value.path].filter((item) => !isUndefined(item)).length === 1
 const OneSourceMessage = '仅填写 fileRef、sourceRef、path 之一。'
 const ProjectPlanFileActionSchema = z.union([
   z.strictObject({ op: z.literal('create'), path: z.string().min(1), text: z.string() }),

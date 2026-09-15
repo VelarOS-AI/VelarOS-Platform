@@ -10,6 +10,8 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **project 事务状态文件无效时的报错改成中文（09-16 02:10）。** `Invalid project transaction state: …` → `事务状态文件无效：…`；冒号后面的具体原因（`transaction status/appliedAt mismatch` 这类）暂保持英文，因为它们同时写进 `details.stateValidationFailure`、测试按字串匹配，下一轮连同字段一起改。
+
 - **新包 `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、上限与「确认的就是要落的」落回规则抽成公共件（09-16 01:50，ADR 0008 附录）。** system 已改用它：`@velaros-ai/system` 不再导出 `SystemSandbox*` 九个数据类型和 `SystemSandboxLimits`，宿主改从 `@velaros-ai/rehearsal-sandbox/contracts` 取 `SandboxRecord`、`SandboxDiff`、`RehearsalSandboxLimits` 等（字段完全一样）。模型与用户看到的没有变化（system 的确认文案原样搬过去，末句参数化）。project 迁过来时顺带修掉它「确认用截断差量、落回却全落」的缺陷。
 
 - **工具集合挂进内核的那段逻辑收进 `@velaros-ai/agent/tool-contract`，office 的报错跟着变成中文（09-16 01:10）。** `parseToolWireInput`、`createToolCallableOperations` 取代 system、office 各自的一份（project 那份在它整理完后换）：先严格解析入参、再向宿主解析上下文（坏入参不会触发宿主解析）、核可用、核取消、执行，工具抛的错可交给 `mapError` 翻译。影响：office 经内核调用时的报错从英文（`Office capability input is invalid` 等）变成「办公能力的入参不合法：…」这类中文；system 的文字不变。agent 升 0.6.31，公开 API 基线按只增不减重绑（基线在这之前就已落后 6 个声明，一并绑上）。
@@ -43,6 +45,8 @@
 | 09-15 20:05 | 其他包的工具面按 system 的判据简化：别的工具替代得了、只剩仪式感的才删；模型没用过但有独特能力的不删 | 用户要求简化工具面；判据沿用已定的 system 做法 |
 | 09-15 21:00 | 旧版工具不直接连测试一起删，而是挪进 test/support 当驱动器 | 6 个测试文件借旧版工具测真行为，改写成第 2 版 fileRef 流程成本高；挪走后生产面干净、覆盖不丢，以后可以逐个改写 |
 | 09-15 21:00 | ProjectError 暂留、挪进 utils/errors.ts，门禁允许 utils 放只有字段的错误类 | 190 处抛出、agent 的纠错逻辑读它的字段，一并换成 AppError 牵连太大；是否统一成 AppError 另行评估 |
+| 09-16 02:10 | project 事务状态文件的格式上限（Maximum*）归为可调参数进 `ProjectTuning.persistence`，并写明「不能小于内核保留的事务数」 | 它们跟着内核的事务保留数与宿主策略走，不是对外承诺；格式版本号属于格式规则，留在校验旁边 |
+| 09-16 02:10 | 删掉 `PluginRegistrySink`，插件登记表直接收 `ProjectPluginContext` | 两者形状一模一样，一个概念两个名字 |
 | 09-16 01:30 | 门禁加「迁移中」状态与 `--only`/`--list`：迁移中的包照查照报条数、不计入失败；每个包的 ✓ 不再被前面包的失败吞掉 | project（以及之后的 agent）改造期间就能登记、看燃尽，登记表不用一直挂在工作区里不提交 |
 | 09-16 00:50 | 公共件单独成域 `foundations`，不进 core、不进 platform、不登记进能力归属表 | core 要零依赖无领域语义，platform 按 ADR 0005 不判断命令危险；公共件被多个能力空间依赖，登记成能力 owner 会被判跨 owner |
 | 09-16 00:50 | shell-command 的判定取 system 那份，project 的兜底正则迁移时删掉 | system 那份逐参数否决、没有误报，确认文案带 ADR 0004 承诺的仓库提醒；兜底正则把 `grep -rn delete src` 判成要修改授权 |
