@@ -9,7 +9,7 @@
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
-import { createApprovalOperationKey, createManualApprovalOptions, renderParameterDescription as parameterDescription, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
+import { createApprovalOperationKey, createManualApprovalOptions, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
@@ -48,10 +48,10 @@ const readTool = defineSystemTool<{
   examples: [{ path: '~/build.log' }],
   notes: ['其他二进制文件读不了。'],
   schema: z.object({
-    path: z.string().min(1).describe(parameterDescription({ description: '文件路径，支持 ~。' })),
-    offset: z.number().int().nonnegative().optional().describe(parameterDescription({ description: '从第几个字符开始读，默认 0。' })),
-    maxChars: z.number().int().positive().max(200_000).optional().describe(parameterDescription({ description: '最多返回多少字符，默认也是上限 200000。' })),
-    version: z.string().min(1).optional().describe(parameterDescription({ description: '读改动前留下的某个版本，版本号来自 read 或 edit 的结果。' })),
+    path: z.string().min(1).describe('文件路径，支持 ~。'),
+    offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
+    maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
+    version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果。'),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -84,8 +84,8 @@ const viewTool = defineSystemTool<{
   examples: [{ path: '~/Desktop/screenshot.png' }, { path: '~/Downloads/report.pdf', page: 2 }],
   notes: ['图片最大 5 MB，超过先用 system:run 缩小。'],
   schema: z.object({
-    path: z.string().min(1).describe(parameterDescription({ description: '图片或 PDF 的路径，支持 ~。' })),
-    page: z.number().int().positive().optional().describe(parameterDescription({ description: 'PDF 看第几页，从 1 起，默认 1。' })),
+    path: z.string().min(1).describe('图片或 PDF 的路径，支持 ~。'),
+    page: z.number().int().positive().optional().describe('PDF 看第几页，从 1 起，默认 1。'),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -124,14 +124,14 @@ const editTool = defineSystemTool<{
   ],
   notes: ['写系统敏感路径会先向用户确认。'],
   schema: z.object({
-    path: z.string().min(1).describe(parameterDescription({ description: '文件路径，支持 ~。' })),
-    newText: z.string().optional().describe(parameterDescription({ description: '要写进去的文本；回滚时不用给。' })),
-    oldText: z.string().optional().describe(parameterDescription({ description: '要换掉的原文，只在 range 里找、必须只出现一次；不给就整段或整个文件写入。' })),
+    path: z.string().min(1).describe('文件路径，支持 ~。'),
+    newText: z.string().optional().describe('要写进去的文本；回滚时不用给。'),
+    oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就整段或整个文件写入。'),
     range: z.object({
-      offset: z.number().int().nonnegative().describe(parameterDescription({ description: '起点字符位置。' })),
-      end: z.number().int().nonnegative().describe(parameterDescription({ description: '终点字符位置，不含。' })),
-    }).optional().describe(parameterDescription({ description: 'system:read 返回的 range，只在这段里改；给了 oldText 就必须给。' })),
-    restore: z.string().min(1).optional().describe(parameterDescription({ description: '回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。' })),
+      offset: z.number().int().nonnegative().describe('起点字符位置。'),
+      end: z.number().int().nonnegative().describe('终点字符位置，不含。'),
+    }).optional().describe('system:read 返回的 range，只在这段里改；给了 oldText 就必须给。'),
+    restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。'),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: {
@@ -195,13 +195,13 @@ const runTool = defineSystemTool<{
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
   notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令。'],
   schema: z.object({
-    command: z.string().min(1).describe(parameterDescription({ description: '要执行的 shell 命令。' })),
-    cwd: z.string().optional().describe(parameterDescription({ description: '可选系统工作目录。' })),
-    timeoutMs: z.number().int().positive().max(600000).optional().describe(parameterDescription({ description: '命令超时时间，单位毫秒。' })),
-    background: z.boolean().optional().describe(parameterDescription({ description: '是否后台启动命令。' })),
-    maxOutputChars: z.number().int().positive().max(50000).optional().describe(parameterDescription({ description: 'stdout/stderr 返回字符上限。' })),
-    parallel: z.boolean().optional().describe(parameterDescription({ description: '是否声明命令可并发。' })),
-    allowRepeat: z.boolean().optional().describe(parameterDescription({ description: '是否允许重复运行同一命令。' })),
+    command: z.string().min(1).describe('要执行的 shell 命令。'),
+    cwd: z.string().optional().describe('可选系统工作目录。'),
+    timeoutMs: z.number().int().positive().max(600000).optional().describe('命令超时时间，单位毫秒。'),
+    background: z.boolean().optional().describe('是否后台启动命令。'),
+    maxOutputChars: z.number().int().positive().max(50000).optional().describe('stdout/stderr 返回字符上限。'),
+    parallel: z.boolean().optional().describe('是否声明命令可并发。'),
+    allowRepeat: z.boolean().optional().describe('是否允许重复运行同一命令。'),
   }),
   permissions: ['process:exec'],
   capabilities: {
@@ -298,8 +298,6 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
       '先确认缺失命令或 PATH 变化，再刷新 shell 环境。',
       '刷新后用 bash 工具按宿主 shell 语法验证目标命令是否可见。',
     ],
-  usage: ['不用传参数。'],
-  examples: [{}],
   notes: ['刷新结果取决于宿主 system provider；不保证修改用户 shell 配置文件。'],
   // 没有参数就不校验：传了什么都不报错，只在结果里提醒一句。
   schema: z.record(z.string(), z.unknown()),
@@ -354,21 +352,9 @@ const listTasksTool = defineSystemTool<{
   ],
   notes: ['只返回产品记录；不要把 system:run 的 taskId 交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
   schema: z.object({
-    limit: z.number().int().positive().max(100).optional().describe(
-      parameterDescription({
-        description: '最多返回数量。',
-      })
-    ),
-    onlyRunning: z.boolean().optional().describe(
-      parameterDescription({
-        description: '是否只返回运行中任务。',
-      })
-    ),
-    taskId: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。',
-      })
-    ),
+    limit: z.number().int().positive().max(100).optional().describe('最多返回数量。'),
+    onlyRunning: z.boolean().optional().describe('是否只返回运行中任务。'),
+    taskId: z.string().min(1).max(120).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
   }),
   permissions: [],
   capabilities: {
