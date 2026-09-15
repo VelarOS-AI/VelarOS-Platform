@@ -83,12 +83,15 @@ describe('System capability', () => {
       { platform: 'linux', bubblewrapPath: '/bwrap', bubblewrapAvailable: true }
     )
 
+    // Seatbelt 只拦得住本进程的文件写，系统服务代办的事（open 按路径启动的应用、钥匙串）拦不全，证据如实报 partial。
     expect(mac.evidence).toMatchObject({
       mode: 'workspace-write',
-      enforcement: 'full',
+      enforcement: 'partial',
       backend: 'seatbelt',
-      reason: 'enforced',
+      reason: 'enforced-file-writes-only',
     })
+    expect(mac.profile).toContain('(deny mach-lookup (global-name "com.apple.cfprefsd.daemon") (global-name "com.apple.cfprefsd.agent"))')
+    expect(mac.profile).toContain('(deny appleevent-send)')
     expect(mac.evidence.writableRoots).toContain(process.cwd())
     expect(mac.evidence.writableRoots).toHaveLength(2)
     expect(mac.spec.file).toBe('/sandbox-exec')
@@ -131,6 +134,32 @@ describe('System capability', () => {
       } finally {
         await rm(root, { recursive: true, force: true })
         await rm(outside, { recursive: true, force: true })
+      }
+    }
+  )
+
+  test.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))(
+    'Seatbelt blocks preference writes relayed through cfprefsd while ordinary tools keep working',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'velaros-seatbelt-prefs-'))
+      const domain = `com.velaros.test.seatbelt-${process.pid}-${Date.now()}`
+      const confined = (command: string) => {
+        const built = buildSystemProcessConfinementSpawnSpec(
+          { spec: { file: '/bin/sh', args: ['-c', command] }, policy: { mode: 'workspace-write', workspaceRoot: root } },
+          { platform: 'darwin', tempDir: root }
+        )
+        return spawnSync(built.spec.file, built.spec.args, { cwd: root, encoding: 'utf8' })
+      }
+      try {
+        // 直接写 ~/Library/Preferences 本来就被拦；经 cfprefsd 代写（defaults write）原来能写到写根之外，现在也拦住。
+        expect(confined(`/usr/bin/defaults write ${domain} escaped -string yes`).status).not.toBe(0)
+        expect(spawnSync('/usr/bin/defaults', ['read', domain]).status).not.toBe(0)
+        // 平常的工具照常能用：git 在写根里建库、提交。
+        if (Bun.which('git')) expect(confined('git init -q repo && cd repo && echo hi > a && git add a && git -c user.email=a@b -c user.name=a commit -qm i').status).toBe(0)
+      } finally {
+        spawnSync('/usr/bin/defaults', ['delete', domain])
+        await rm(join(homedir(), 'Library', 'Preferences', `${domain}.plist`), { force: true })
+        await rm(root, { recursive: true, force: true })
       }
     }
   )

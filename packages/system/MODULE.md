@@ -99,6 +99,7 @@
 ## 失败语义
 
 - **默认失败关闭。** 找不到可用 shell 抛 `SYSTEM_SHELL_UNAVAILABLE`；受约束模式没有后端抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`，不退回裸进程。
+- **macOS 的约束只管得住文件写，证据如实报 `enforcement: partial`。** Seatbelt 拦住本进程与子进程写到写根之外，也堵上了经 cfprefsd 代写偏好设置、发 Apple 事件让别的应用代办这两条路；其余由系统服务代办的事（`open` 按路径启动的应用、钥匙串经 securityd 写入）拦不全。需要绝对边界的调用方不能把 partial 当 full。
 - **命令本身失败不是模块错误。** 退出码、超时、取消都如实进 `SystemCommandResult`，`success` 为 false，`verification` 摘要输出末尾。
 - **危险命令没有审批通道就拒绝。** 审批事实与约束事实分开记录，谁也不能冒充谁。
 - **输出过长不是错误。** 截尾、标记 `truncated`、给出可执行的召回续接。

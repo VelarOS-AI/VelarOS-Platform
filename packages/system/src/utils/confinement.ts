@@ -79,7 +79,11 @@ function quoteSeatbeltString(value: string): string {
   return `"${value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`)}"`
 }
 
-/** 生成 macOS Seatbelt 沙箱配置：默认禁止写文件，只放行批准的写根，按需切断网络。 */
+/**
+ * 生成 macOS Seatbelt 沙箱配置：默认禁止写文件，只放行批准的写根，按需切断网络；再堵上两条让别人代写的路：
+ * 偏好设置经 cfprefsd 代写（`defaults write` 实测能写到写根之外），以及发 Apple 事件让别的应用代办。
+ * Seatbelt 管不到其余系统服务代办的事（open 按路径启动的应用、钥匙串经 securityd 写入），所以约束证据报 partial。
+ */
 export function buildSystemSeatbeltProfile(
   policy: SystemProcessConfinementPolicy,
   options: Pick<SystemProcessConfinementBuildOptions, 'tempDir'> = {}
@@ -89,6 +93,8 @@ export function buildSystemSeatbeltProfile(
     '(allow default)',
     '(deny file-write*)',
     `(allow file-write* (literal ${quoteSeatbeltString('/dev/null')}))`,
+    `(deny mach-lookup (global-name ${quoteSeatbeltString('com.apple.cfprefsd.daemon')}) (global-name ${quoteSeatbeltString('com.apple.cfprefsd.agent')}))`,
+    '(deny appleevent-send)',
   ]
   const roots = uniqueRoots(policy, options.tempDir)
   if (!isEmpty(roots)) {
@@ -151,14 +157,15 @@ function assertProviderResult(
   return result
 }
 
-/** 生成一份「约束已生效」的证据记录。 */
+/** 生成一份「约束已生效」的证据记录；只约束得住一部分副作用的后端传 partial 和说明它管到哪里的 reason。 */
 function enforcedEvidence(
   mode: SystemProcessConfinementMode,
   backend: SystemProcessConfinementBackend,
   writableRoots: string[],
-  enforcement: SystemProcessConfinementEnforcement = 'full'
+  enforcement: SystemProcessConfinementEnforcement = 'full',
+  reason = 'enforced'
 ): SystemProcessConfinementEvidence {
-  return { mode, backend, enforcement, reason: 'enforced', writableRoots }
+  return { mode, backend, enforcement, reason, writableRoots }
 }
 
 /** 把一条命令包进同机进程约束，返回实际启动规格与约束证据；受约束模式没有可用后端时拒绝执行，不退回裸进程。 */
@@ -200,7 +207,8 @@ export function buildSystemProcessConfinementSpawnSpec(
         file: executable,
         args: ['-p', profile, '--', request.spec.file, ...request.spec.args],
       },
-      evidence: enforcedEvidence(policy.mode, 'seatbelt', uniqueRoots(policy, options.tempDir)),
+      // 本进程与子进程的文件写全拦得住，系统服务代办的事拦不全（见 buildSystemSeatbeltProfile），如实报 partial。
+      evidence: enforcedEvidence(policy.mode, 'seatbelt', uniqueRoots(policy, options.tempDir), 'partial', 'enforced-file-writes-only'),
       profile,
     }
   }
