@@ -112,15 +112,7 @@
       "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
       "exportSubpaths": [
         ".",
-        "./agent",
-        "./changes",
-        "./composition",
-        "./contracts",
-        "./execution",
-        "./files",
-        "./kernel",
-        "./runtime",
-        "./transaction-controller"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/project"
     },

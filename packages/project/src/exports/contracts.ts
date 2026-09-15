@@ -1,18 +1,6 @@
-/** 供渲染进程、Worker、RPC 与测试共用的可移植项目空间契约。 */
-export type { ProjectToolName } from '../contract/constants.js'
-export { ProjectToolNames } from '../contract/constants.js'
-export { isProjectRootSource, ProjectRootSource } from '../impl/kernel/root-source.js'
+/**
+ * 可移植数据入口（`@velaros-ai/project/contracts`）：常量表（工具与 mod 身份、工具排位、各工具上限、宿主代码查询的语言服务动作）
+ * 和经过宿主端口流动的数据类型。没有任何 Node 依赖，浏览器、渲染进程都能 import。宿主端口本身是注入面，从根入口取。
+ */
+export * from '../contract/constants.js'
 export type * from '../types/project.js'
-export type { ProjectCodeAnalysisInput, ProjectCodeInput } from '../types/tools.js'
-export type {
-  ProjectCodeIndexQuery,
-  ProjectCodeLanguageAction,
-  ProjectCodeLanguageQuery,
-  ProjectCodeQuery,
-  ProjectCodeQueryInput,
-} from '../utils/schemas/code-query.js'
-export {
-  isProjectCodeLanguageQuery,
-  ProjectCodeLanguageActions,
-  ProjectCodeQuerySchema,
-} from '../utils/schemas/code-query.js'

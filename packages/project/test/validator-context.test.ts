@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { ProjectProviders, ProjectValidator } from '../src/contract/requires.js'
-import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/defaults'
+import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults'
 import { postconditionValidator, scopeValidator } from '../src/impl/plugins/builtin-validators'
 import { commandValidator } from '../src/impl/plugins/command-validators'
 import { typescriptSyntaxValidator } from '../src/impl/plugins/typescript-validators'

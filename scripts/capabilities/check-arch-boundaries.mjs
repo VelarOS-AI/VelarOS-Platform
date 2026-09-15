@@ -44,10 +44,7 @@ const PortableContracts = [
     exportKey: "./contracts",
     contractsFile: "src/exports/contracts.ts",
     modules: new Set([
-      "../utils/schemas/code-query.js",
-      "../types/tools.js",
       "../types/project.js",
-      "../impl/kernel/root-source.js",
       "../contract/constants.js",
     ]),
   },
@@ -478,10 +475,10 @@ for (const expected of CapabilityPackages) {
     }
     if (
       expected.directory === "development" &&
-      importsRuntimeSpecifier(source, "@velaros-ai/project/agent")
+      importsRuntimeSpecifier(source, "@velaros-ai/project")
     ) {
       fail(
-        `${expected.name}: lightweight language reads must not load the Project Agent runtime barrel in ${relative(packageRoot, path)}`,
+        `${expected.name}: lightweight language reads must not load the Project root entry at runtime (types only; values from @velaros-ai/project/contracts) in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {
@@ -546,7 +543,7 @@ requirePublicTypeContracts(
   "src/exports/index.ts",
   "src/exports/contracts.ts",
   "src/types/project.ts",
-  ["ProjectGitRemoteActionOptions", "ProjectRootEntry"],
+  ["ProjectCommandResult", "ProjectCodeQuery"],
 );
 requirePublicTypeContracts(
   "office",

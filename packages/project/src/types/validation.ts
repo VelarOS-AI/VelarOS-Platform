@@ -15,7 +15,7 @@ export type ProjectValidationPolicy = Omit<
   readonly writeDeny: readonly string[];
 };
 
-type ReadonlyProvider<Provider> = Provider extends object
+export type ReadonlyProvider<Provider> = Provider extends object
   ? Readonly<Provider>
   : Provider;
 

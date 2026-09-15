@@ -19,41 +19,9 @@
       "types": "./dist/exports/index.d.ts",
       "import": "./dist/exports/index.js"
     },
-    "./files": {
-      "types": "./dist/exports/files.d.ts",
-      "import": "./dist/exports/files.js"
-    },
-    "./changes": {
-      "types": "./dist/exports/changes.d.ts",
-      "import": "./dist/exports/changes.js"
-    },
-    "./execution": {
-      "types": "./dist/exports/execution.d.ts",
-      "import": "./dist/exports/execution.js"
-    },
-    "./runtime": {
-      "types": "./dist/exports/runtime.d.ts",
-      "import": "./dist/exports/runtime.js"
-    },
-    "./agent": {
-      "types": "./dist/exports/agent.d.ts",
-      "import": "./dist/exports/agent.js"
-    },
-    "./composition": {
-      "types": "./dist/exports/composition.d.ts",
-      "import": "./dist/exports/composition.js"
-    },
     "./contracts": {
       "types": "./dist/exports/contracts.d.ts",
       "import": "./dist/exports/contracts.js"
-    },
-    "./kernel": {
-      "types": "./dist/exports/kernel.d.ts",
-      "import": "./dist/exports/kernel.js"
-    },
-    "./transaction-controller": {
-      "types": "./dist/exports/transaction-controller.d.ts",
-      "import": "./dist/exports/transaction-controller.js"
     }
   },
   "files": [

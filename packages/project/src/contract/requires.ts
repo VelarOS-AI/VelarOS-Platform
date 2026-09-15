@@ -18,6 +18,7 @@ import type { PipelineContext } from '../types/pipeline.js'
 import type { ApprovalRequest,CorePolicy, PolicyDecision, PolicyDecisionInput } from '../types/policy.js'
 import type {
   ProjectAuthorizationDecision,
+  ProjectCodeQuery,
   ProjectCommandResult,
   ProjectMutationAuthorizationInput,
   ProjectRunCommandOptions,
@@ -34,7 +35,6 @@ import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntellig
 import type { FileSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
 import type { ProjectValidationContext,ValidateInput, ValidationResult } from '../types/validation.js'
-import type { ProjectCodeQuery } from '../utils/schemas/code-query.js'
 
 import type { ProjectChangeFeed } from './provides.js'
 
@@ -248,7 +248,6 @@ export interface CreateProjectKernelOptions {
   transactionStatePath?: string
 }
 
-export type { ProjectAuthorizationDecision }
 
 export interface ProjectToolApi {
   getRootPath: () => string
@@ -295,5 +294,4 @@ export interface ProjectToolContext extends FileContextCarrier {
   approval: ApprovalPort
 }
 
-export type ToolContext = ProjectToolContext
 

@@ -4,18 +4,15 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { ProjectTransactionController } from '../src/contract/provides.js'
-import { createProjectTransactionController } from '../src/exports/transaction-controller'
+import type { ProjectChangeFeedWriter } from '../src/contract/requires'
 import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
-import {
-  FileProjectChangeFeed,
-  MemoryProjectChangeFeed,
-  type ProjectChangeFeedWriter,
-} from '../src/impl/persistence/change-feed'
+import { createProjectTransactionController, type ProjectTransactionControllerApi } from '../src/impl/kernel/ProjectTransactionController'
+import { FileProjectChangeFeed } from '../src/impl/persistence/FileProjectChangeFeed.js'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { MemoryProjectChangeFeed } from '../src/impl/persistence/MemoryProjectChangeFeed.js'
 
 interface DurableHarness {
-  readonly controller: ProjectTransactionController
+  readonly controller: ProjectTransactionControllerApi
   readonly feed: FileProjectChangeFeed
 }
 
@@ -95,7 +92,9 @@ describe('durable project transaction controller', () => {
 
       let reopened = await openDurableHarness(root, statePath, feedPath)
       feed = reopened.feed
-      expect(Object.keys(reopened.controller).sort()).toEqual([
+      // 有限事务面：实例上没有可枚举的状态（拿不到内核），能调的只有这五个方法。
+      expect(Object.keys(reopened.controller)).toEqual([])
+      expect(Object.getOwnPropertyNames(Object.getPrototypeOf(reopened.controller)).filter((name) => name !== 'constructor').sort()).toEqual([
         'apply',
         'get',
         'list',

@@ -1,16 +1,15 @@
 # @velaros-ai/project
 
-Project 是 `@velaros-ai` 的项目空间聚合包，统一项目根内的读取、编辑、事务、代码查询与命令执行：
+Project 是 `@velaros-ai` 的项目空间包，统一项目根内的读取、编辑、事务、代码查询与命令执行。只有两个入口：
 
-- `@velaros-ai/project/files`：有界读取、列举、正文搜索与路径约束。
-- `@velaros-ai/project/changes`：多文件事务、修订防护、预览、回滚与审计钩子。
-- `@velaros-ai/project/execution`：项目边界内的可取消、可审计命令执行策略。
-- `project:code`：符号、引用候选、依赖、关系、影响与诊断；宿主提供语言服务和可选 CodeGraph 后端。
-- `@velaros-ai/project/transaction-controller`：给 Desktop/Editor 的有限事务面；只有
-  `list/get/subscribe/apply/rollback`，不暴露项目根、状态路径、provider 或 prepare 能力。
+- `@velaros-ai/project`：给 Node 宿主。产品面（九个模型工具、内置 mod 定义、项目空间、内核模块、领域内核
+  `createProjectKernel`、有限事务面、落盘变更记录、审批桥、文件上下文登记）、注入面（宿主端口、provider、插件扩展点）
+  以及它们用到的数据类型。
+- `@velaros-ai/project/contracts`：可移植数据，浏览器和渲染进程也能用。常量表（工具与 mod 身份、各工具上限、宿主代码查询的
+  语言服务动作）和经过宿主端口流动的数据类型。
 
-宿主通过 `@velaros-ai/project/composition` 创建能力实例，通过
-`@velaros-ai/project/agent` 注入模型工具。默认提供六个工具，另外两个按任务通过能力目录加载：
+宿主用 `createProjectSpace` 或 `createProjectBundledModDefinition` 挂载项目空间，工具上下文里注入 `ProjectToolApi`。
+默认提供六个工具，另外三个按任务通过能力目录加载：
 
 ```text
 project:read
@@ -82,7 +81,6 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 `nextOffset`，它采用归档原文坐标，不能按显示正文长度推算。
 
 SDK `prepareEdit` 保持 `operations: [{ operation }]`，用于插件意图、约束和审计。
-旧模型合同由 `legacyProjectTools` 显式提供；历史输入迁移要求可信作用域及未落盘证明。
 
 默认事务预算为 100 个文件、每文件净变更 20,000 行、每事务净变更 50,000 行；宿主可通过
 `corePolicy` 收紧或扩大。准备失败返回操作序号、阶段和读取恢复参数，任何准备失败都不写盘。
@@ -93,36 +91,22 @@ SDK 读取的 `maxBytes` 按逻辑 UTF-8 字节计费，CRLF 计一个换行；�
 
 工具示例、schema 描述与实际提示词组装由[模型指导同步检查](../../docs/engineering/project-model-guidance-audit.md)约束，协议变更需要同步审核并通过测试。
 
-## 内部职责
+## 内部结构
 
-| 目录 | 职责 |
-| --- | --- |
-| `types` | 公共领域类型与文件访问端口 |
-| `runtime` | Kernel 组装、策略、生命周期与事务提交协调 |
-| `files` | 有界读取、发现、搜索、Git 索引及原子文件 IO |
-| `editing` | 可见范围选择、固定坐标编译、定位恢复 |
-| `file-operations` | 文件动作计划 |
-| `context` | 版本与可见范围绑定的引用 |
-| `compatibility` | 旧合同与历史参数迁移 |
-| `edits` | SDK 编辑合同与纯补丁策略 |
-| `transactions` | 规划、暂存视图、验证、状态机、锁与恢复 |
-| `persistence` | 事务日志、change feed 与审计存储 |
-| `execution` | 命令行为策略 |
-| `agent/contracts`、`agent/tools` | 模型协议、工具编排与宿主端口适配 |
-
-公共导出路径保持稳定。架构门禁禁止文件、编辑、事务服务反向依赖 Kernel 组装和 Agent。
+按仓库标准（`docs/architecture/module-ownership.md`）分五层：`contract/`（产品面、注入面、常量表）、`types/`（只有类型，
+`types/project.ts` 是可移植数据）、`impl/`（一类一文件；`ProjectTools.ts` 是九个工具的定义，`operations/` 是工具背后的执行类，
+`kernel/` 是领域内核，`plugins/`、`transactions/`、`files/`、`strategies/`、`adapters/`、`registries/`、`persistence/` 依次往下）、
+`utils/`（纯函数与可调参数）、`exports/`（两个入口，只转发）。架构门禁禁止文件、编辑、事务服务反向依赖内核组装和 Agent 适配层。
 
 ## 可恢复事务与 Desktop 边界
 
 需要跨进程重启继续 apply/rollback 的宿主，应把状态和 ChangeFeed 放在宿主私有目录，
-并把有限 controller 交给 UI transport；路径只在 host 侧出现：
+并把有限事务面（只有 `list/get/subscribe/apply/rollback`，拿不到项目根、状态路径、provider）交给 UI transport；路径只在 host 侧出现：
 
 ```ts
-import { FileProjectChangeFeed } from '@velaros-ai/project/changes'
-import { createProjectKernel } from '@velaros-ai/project/runtime'
-import { createProjectTransactionController } from '@velaros-ai/project/transaction-controller'
+import { createFileProjectChangeFeed, createProjectKernel, createProjectTransactionController } from '@velaros-ai/project'
 
-const changeFeed = new FileProjectChangeFeed({ path: hostOwnedChangeFeedPath })
+const changeFeed = createFileProjectChangeFeed({ path: hostOwnedChangeFeedPath })
 const project = await createProjectKernel({
   root: authorizedProjectRoot,
   changeFeed,

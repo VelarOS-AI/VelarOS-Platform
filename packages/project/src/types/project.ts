@@ -1,5 +1,13 @@
+/**
+ * 可移植数据：经过宿主端口（`ProjectToolApi`、`ProjectSandboxPort`）流动的数据形状，以及宿主实现代码查询要认的查询形状。
+ * 不 import 任何东西（只从常量表 import type），不带函数，浏览器和渲染进程都能用；从 `@velaros-ai/project/contracts` 取。
+ */
 
-/** Install request emitted by a Project command adapter without owning a System implementation. */
+import type { ProjectCodeLanguageActions } from '../contract/constants.js'
+
+// ── 命令 ──────────────────────────────────────────────────────────
+
+/** 缺命令时给用户的一个替代做法：id 与三段中英文案（按钮标签、说明、填进输入框的草稿）。 */
 export interface ProjectToolInstallAlternative {
   id: string
   label: {
@@ -16,6 +24,7 @@ export interface ProjectToolInstallAlternative {
   }
 }
 
+/** 命令因为缺工具失败时附带的安装建议：缺的是哪个命令、哪个包、能不能一键安装、由哪次命令触发，以及替代做法。 */
 export interface ProjectToolInstallSuggestion {
   id: string
   toolId: string
@@ -33,6 +42,7 @@ export interface ProjectToolInstallSuggestion {
   alternatives?: ProjectToolInstallAlternative[]
 }
 
+/** 会话风险确认自动批准了一次项目修改时，给界面显示的一条记录：改的是哪条路径、为什么放行、什么时候。 */
 export interface ProjectAutoApprovalNotice {
   id: string
   path: string
@@ -42,281 +52,7 @@ export interface ProjectAutoApprovalNotice {
   approvedAt: number
 }
 
-export interface ProjectAutoApprovalNoticeBlock {
-  type: 'project-auto-approval'
-  notice: ProjectAutoApprovalNotice
-}
-
-export interface ProjectRootEntry {
-  path: string
-  active: boolean
-  exists: boolean
-  removable: boolean
-  /** 根目录的来源；目前只有项目根（'project'）。 */
-  source: 'project'
-}
-
-export interface ProjectFileEntry {
-  path: string
-  type: 'file' | 'directory'
-}
-
-export interface ProjectListOptions {
-  path?: string
-  include?: string[]
-  exclude?: string[]
-  excludeGitignored?: boolean
-  recursive?: boolean
-  maxDepth?: number
-  limit?: number
-}
-
-export interface ProjectFindFilesOptions {
-  query?: string
-  path?: string
-  include?: string[]
-  exclude?: string[]
-  excludeGitignored?: boolean
-  glob?: string
-  limit?: number
-  maxDepth?: number
-  entryTypes?: Array<ProjectFileEntry['type']>
-  pathMatchMode?: ProjectPathMatchMode
-  extensions?: string[]
-}
-
-export type ProjectPathMatchMode = 'contains' | 'exact' | 'fuzzy'
-
-export interface ProjectReadFileResult {
-  path: string
-  content: string
-  totalLines: number
-  startLine: number
-  endLine: number
-  totalChars: number
-  returnedChars: number
-  truncated: boolean
-  hasMore?: boolean
-  remainingLines?: number
-  nextStartLine?: LooseOptional<number>
-}
-
-export interface ProjectSearchMatch {
-  path: string
-  line: number
-  column: number
-  excerpt: string
-}
-
-export interface ProjectSearchOptions {
-  query: string
-  path?: string
-  limit?: number
-  caseSensitive?: boolean
-  regex?: boolean
-  glob?: string
-  exclude?: string[]
-  excludeGitignored?: boolean
-  contextLines?: number
-  extensions?: string[]
-  maxResultsPerFile?: number
-}
-
-export type ProjectCodeSymbolKind =
-  | 'class'
-  | 'enum'
-  | 'export'
-  | 'function'
-  | 'interface'
-  | 'type'
-  | 'variable'
-
-export interface ProjectCodeSymbol {
-  path: string
-  name: string
-  kind: ProjectCodeSymbolKind
-  line: number
-  column: number
-  exported: boolean
-}
-
-export interface ProjectFindSymbolsOptions {
-  query?: string
-  path?: string
-  limit?: number
-  exportedOnly?: boolean
-  kinds?: ProjectCodeSymbolKind[]
-  extensions?: string[]
-}
-
-export interface ProjectFindReferencesOptions {
-  symbol: string
-  path?: string
-  limit?: number
-  exactWord?: boolean
-  extensions?: string[]
-}
-
-export type ProjectImportKind = 'dynamic-import' | 'export-from' | 'import' | 'require'
-
-export interface ProjectImportRecord {
-  path: string
-  line: number
-  column: number
-  kind: ProjectImportKind
-  specifier: string
-  isRelative: boolean
-}
-
-export interface ProjectFindImportsOptions {
-  path: string
-  includeExternal?: boolean
-}
-
-export interface ProjectFindImportersOptions {
-  targetPath: string
-  path?: string
-  limit?: number
-  extensions?: string[]
-}
-
-export interface ProjectWriteFileResult {
-  path: string
-  bytes: number
-  created: boolean
-  changed: boolean
-  message?: string
-  change?: LooseOptional<ProjectFileChangeDescriptor>
-}
-
-export interface ProjectWriteFileOptions {
-  overwrite?: boolean
-}
-
-export interface ProjectFileChangeDescriptor {
-  changeId: string
-  path: string
-  created: boolean
-  /** 本次变更新增的行数（仅对文本文件有效，二进制文件为 0）*/
-  added: number
-  /** 本次变更删除的行数（仅对文本文件有效，二进制文件为 0）*/
-  removed: number
-}
-
-export interface ProjectDeleteFileResult {
-  path: string
-  deleted: true
-}
-
-export interface ProjectMoveFileResult {
-  fromPath: string
-  toPath: string
-  overwritten: boolean
-}
-
-export interface ProjectApplyPatchOptions {
-  dryRun?: boolean
-}
-
-export type ProjectApplyPatchFileAction = 'added' | 'deleted' | 'moved' | 'updated'
-
-export interface ProjectApplyPatchFileResult {
-  path: string
-  action: ProjectApplyPatchFileAction
-  operations: number
-  replacements: number
-  toPath?: string
-  bytes: number
-  changed: boolean
-  change?: LooseOptional<ProjectFileChangeDescriptor>
-}
-
-export interface ProjectApplyPatchResult extends ProjectWriteFileResult {
-  operations: number
-  replacements: number
-  dryRun: boolean
-  changed: boolean
-  files?: ProjectApplyPatchFileResult[]
-}
-
-export interface ProjectReplaceTextOptions {
-  path: string
-  search: string
-  replace: string
-  replaceAll?: boolean
-  dryRun?: boolean
-}
-
-export interface ProjectReplaceTextResult extends ProjectWriteFileResult {
-  replacements: number
-  dryRun: boolean
-  changed: boolean
-}
-
-export interface ProjectReplaceLinesOptions {
-  path: string
-  startLine: number
-  endLine: number
-  content: string
-  dryRun?: boolean
-}
-
-export interface ProjectReplaceLinesResult extends ProjectWriteFileResult {
-  startLine: number
-  endLine: number
-  dryRun: boolean
-  changed: boolean
-}
-
-export interface ProjectBatchReplaceTextEdit {
-  kind: 'replace_text'
-  path: string
-  search: string
-  replace: string
-  replaceAll?: boolean
-}
-
-export interface ProjectBatchReplaceLinesEdit {
-  kind: 'replace_lines'
-  path: string
-  startLine: number
-  endLine: number
-  content: string
-}
-
-export interface ProjectBatchExactTextEdit {
-  kind: 'exact_text'
-  path: string
-  oldText: string
-  newText: string
-}
-
-export type ProjectBatchEdit =
-  | ProjectBatchReplaceTextEdit
-  | ProjectBatchReplaceLinesEdit
-  | ProjectBatchExactTextEdit
-
-export interface ProjectApplyEditsOptions {
-  edits: ProjectBatchEdit[]
-  dryRun?: boolean
-}
-
-export interface ProjectApplyEditsFileResult {
-  path: string
-  edits: number
-  replacements: number
-  bytes: number
-  changed: boolean
-  change?: LooseOptional<ProjectFileChangeDescriptor>
-}
-
-export interface ProjectApplyEditsResult {
-  dryRun: boolean
-  editCount: number
-  changedFiles: number
-  files: ProjectApplyEditsFileResult[]
-}
-
+/** 宿主 runCommand 的选项：工作目录、超时、是否后台、输出上限，以及发起命令的会话。 */
 export interface ProjectRunCommandOptions {
   cwd?: string
   timeoutMs?: number
@@ -325,6 +61,7 @@ export interface ProjectRunCommandOptions {
   sessionId?: string
 }
 
+/** 后台命令起来之后宿主报告的进程事实：任务号、进程号、日志、占用端口，以及结束它的命令。 */
 export interface ProjectBackgroundProcessInfo {
   taskId: Nullable<string>
   sessionId: Nullable<string>
@@ -350,6 +87,7 @@ export interface ProjectCommandOutputCapture {
   error?: string
 }
 
+/** 一条命令跑完的结果：退出码与信号、输出、耗时、是否超时或中止、输出是否截断，按命令类型归纳的验证结论，缺工具时的安装建议。 */
 export interface ProjectCommandResult {
   command: string
   cwd: string
@@ -371,157 +109,20 @@ export interface ProjectCommandResult {
   systemToolSuggestion?: LooseOptional<ProjectToolInstallSuggestion>
 }
 
+/** 命令属于哪类验证：构建、代码检查、测试、类型检查，认不出是 unknown。 */
 export type ProjectVerificationKind = 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
 
+/** 验证命令的结论：通过、失败、超时、中止，判断不了是 unknown。 */
 export type ProjectVerificationStatus = 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
 
+/** 按命令类型从输出里归纳的验证结论与问题清单。 */
 export interface ProjectVerificationSummary {
   kind: ProjectVerificationKind
   status: ProjectVerificationStatus
   issues: string[]
 }
 
-export type ProjectPackageManager = 'bun' | 'npm' | 'pnpm' | 'unknown' | 'yarn'
-
-export interface ProjectScript {
-  name: string
-  command: string
-}
-
-export type ProjectKind =
-  | 'cpp'
-  | 'go'
-  | 'java'
-  | 'javascript'
-  | 'make'
-  | 'php'
-  | 'python'
-  | 'ruby'
-  | 'rust'
-  | 'unknown'
-
-export interface ProjectMarker {
-  path: string
-  kind: ProjectKind | 'container' | 'task-runner'
-  label: string
-}
-
-export interface ProjectInfo {
-  name: Nullable<string>
-  version: Nullable<string>
-  packageManager: Nullable<string>
-  framework: Nullable<string>
-  language: string
-  scripts: string[]
-  hasTests: boolean
-  hasBuild: boolean
-  hasLint: boolean
-  hasTypeCheck: boolean
-}
-
-export interface ProjectGitFileStatusEntry {
-  path: string
-  originalPath?: string
-  indexStatus: string
-  workTreeStatus: string
-}
-
-export interface ProjectGitStatusResult {
-  branch: Nullable<string>
-  upstream: Nullable<string>
-  ahead: number
-  behind: number
-  isClean: boolean
-  changedFiles: number
-  stagedFiles: number
-  unstagedFiles: number
-  untrackedFiles: number
-  entries: ProjectGitFileStatusEntry[]
-}
-
-export interface ProjectGitBranch {
-  name: string
-  current: boolean
-  upstream: Nullable<string>
-  /** 本地分支或远程跟踪引用；旧调用方未提供时按本地分支处理。 */
-  kind?: 'local' | 'remote'
-  /** 最近一次提交时间，用于让分支菜单保持稳定、常用分支优先。 */
-  lastCommitAt?: number
-}
-
-export interface ProjectGitLogEntry {
-  sha: string
-  shortSha: string
-  subject: string
-  authorName: string
-  authorEmail: Nullable<string>
-  authoredAt: number
-  refs: string[]
-}
-
-export interface ProjectGitLogOptions {
-  branch?: string
-  limit?: number
-  /** 限定为某个文件的历史（`git log --follow -- <path>`），用于「查看 Git 历史」。 */
-  path?: string
-}
-
-export interface ProjectGitLineStats {
-  additions: number
-  deletions: number
-  changedFiles: number
-  binaryFiles: number
-}
-
-export interface ProjectGitCommitResult {
-  commitSha: string
-  message: string
-  changedFiles: number
-  lineStats: ProjectGitLineStats
-}
-
-export type ProjectGitRemoteAction = 'fetch' | 'update' | 'upload'
-
-export type ProjectGitFileAction = 'discard' | 'stage' | 'unstage'
-
-export interface ProjectGitRemoteActionOptions {
-  githubToken?: string
-  privateKeyPath?: string
-  sshKeyPath?: string
-}
-
-export interface ProjectGitRemoteActionResult {
-  action: ProjectGitRemoteAction
-  branch: string
-  upstream: Nullable<string>
-  output: string
-}
-
-export interface ProjectGitFileActionResult {
-  action: ProjectGitFileAction
-  path: string
-  status: ProjectGitStatusResult
-}
-
-export interface ProjectGitRestoreResult {
-  commitSha: string
-  changedFiles: number
-}
-
-export interface ProjectGitDiffOptions {
-  commitSha?: string
-  staged?: boolean
-  path?: string
-  originalPath?: string
-  maxChars?: number
-}
-
-export interface ProjectGitDiffResult {
-  scope: 'commit' | 'working' | 'staged'
-  path?: string
-  diff: string
-  truncated: boolean
-}
+// ── 项目修改授权 ──────────────────────────────────────────────────
 
 /** 项目写操作授权请求；这是全仓唯一权威定义。 */
 export interface ProjectMutationAuthorizationInput {
@@ -645,3 +246,51 @@ export interface ProjectSandboxDiscardResult {
   sandboxId: string
   removed: boolean
 }
+
+// ── 宿主代码查询（ProjectToolApi.queryCode 收到的查询） ─────────────────
+// project:code 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
+// 其余是代码索引类动作，宿主有代码图谱时执行。缺省值已经填好，数字已经钳在范围之内。
+
+/** 语言服务类动作共用的范围：语言、工作目录、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。 */
+export interface ProjectCodeLanguageScope {
+  language?: string
+  cwd?: string
+  limit?: number
+  extensions?: string[]
+  maxDepth?: number
+}
+
+/** 代码索引类查询：按名字搜符号、按任务收集上下文、展开节点、追调用链、看影响面、找环与死代码、路由清单、建索引与看索引状态。 */
+export type ProjectCodeIndexQuery =
+  | { action: 'search_symbols'; query: string; kind?: string; limit: number }
+  | { action: 'build_context'; task: string; maxNodes: number }
+  | { action: 'explore'; nodeIds: string[] }
+  | { action: 'trace'; fromSymbol: string; toSymbol: string }
+  | { action: 'read_node'; nodeId: string }
+  | { action: 'callers'; nodeId: string; depth: number }
+  | { action: 'callees'; nodeId: string; depth: number }
+  | { action: 'impact'; nodeId: string; depth: number }
+  | { action: 'type_hierarchy'; nodeId: string }
+  | { action: 'file_dependencies'; path: string }
+  | { action: 'find_cycles'; maxFiles?: number }
+  | { action: 'find_dead_code'; limit: number }
+  | { action: 'routing_manifest'; framework?: string }
+  | { action: 'build_index'; force: boolean }
+  | { action: 'index_status' }
+
+/** 语言服务类查询：找符号、列导出、看一个文件引了谁、看谁引了它、找引用、诊断、符号改动的影响面。 */
+export type ProjectCodeLanguageQuery = ProjectCodeLanguageScope & (
+  | { action: 'find_symbols'; query?: string; path?: string; exportedOnly?: boolean; kinds?: string[]; exact?: boolean }
+  | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
+  | { action: 'find_imports'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean }
+  | { action: 'find_importers'; targetPath?: string; specifier?: string; path?: string; includeReExports?: boolean }
+  | { action: 'find_references'; symbol: string; path?: string; exactWord?: boolean }
+  | { action: 'language_diagnostics'; path: string }
+  | { action: 'analyze_symbol_impact'; symbol: string; path?: string; declarationPath?: string; kinds?: string[] }
+)
+
+/** 语言服务类动作的名字，和常量表 `ProjectCodeLanguageActions` 一一对应。 */
+export type ProjectCodeLanguageAction = (typeof ProjectCodeLanguageActions)[number]
+
+/** 宿主 queryCode 收到的一条查询：语言服务类或代码索引类。 */
+export type ProjectCodeQuery = ProjectCodeLanguageQuery | ProjectCodeIndexQuery

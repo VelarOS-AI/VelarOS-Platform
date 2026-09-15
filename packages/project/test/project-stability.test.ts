@@ -17,8 +17,8 @@ import {
   createProjectKernelModule,
   ProjectCapability,
   type ProjectCapabilityService,
-  ProjectEditOperationSchema,
 } from '../src/exports/index'
+import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
 
 function captureService(
   capture: (tokenId: string, service: object) => void,

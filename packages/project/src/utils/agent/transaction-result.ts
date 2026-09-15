@@ -1,8 +1,8 @@
 import { isString, isTrue } from '@velaros-ai/core'
 
-import type { ProjectAuthorizationDecision } from '../../contract/requires.js'
 import type { PathEffect } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
+import type { ProjectAuthorizationDecision } from '../../types/project.js'
 import { ProjectError } from '../errors.js'
 
 

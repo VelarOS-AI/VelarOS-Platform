@@ -5,6 +5,12 @@
 import type { RiskLevel } from './common.js'
 import type { EditIntent } from './edit.js'
 
+/** 落盘变更记录的选项。 */
+export interface FileProjectChangeFeedOptions {
+  /** 记录文件的路径；放在宿主私有目录，不要放进项目树。 */
+  readonly path: string
+}
+
 export type ProjectChangeLifecycle =
   | 'prepared'
   | 'amended'

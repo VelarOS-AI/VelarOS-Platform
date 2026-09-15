@@ -12,8 +12,8 @@ import { isNotUndefined, isUndefined, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 
-import { ProjectModId, ProjectSpaceId, ProjectToolNames } from '../contract/constants.js'
-import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectSpace, ProjectToolCollection } from '../contract/provides.js'
+import { ProjectChangeLimits, ProjectCodeAnalysisModId, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectSandboxLimits, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
+import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectCodeAnalysisContribution, ProjectSpace, ProjectToolCollection } from '../contract/provides.js'
 import type { CreateProjectKernelModuleOptions, CreateProjectKernelOptions, ProjectToolContext } from '../contract/requires.js'
 import type { ProjectChangeStep, ProjectEditInput, ProjectFileInput } from '../types/editing.js'
 import type { ProjectChangeInput, ProjectCodeAnalysisInput, ProjectCodeInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
@@ -21,7 +21,6 @@ import { ProjectSourceInstructions } from '../utils/agent/source-window.js'
 import { isParallelCommandExecutionSafe } from '../utils/command-policy.js'
 import { createProjectCallableOperations, defineProjectTool } from '../utils/tool.js'
 
-import { PROJECT_PACKAGE_VERSION } from './kernel/defaults.js'
 import { createProjectKernel } from './kernel/LocalProjectKernel.js'
 import { projectChangeOperations } from './operations/ProjectChangeOperations.js'
 import { projectCodeOperations } from './operations/ProjectCodeOperations.js'
@@ -98,7 +97,7 @@ const ProjectContentEditSchema = z.union([
 /** recode 只改磁盘字节表示，不改 Unicode 正文；模型读写文本时永远不接触编码。 */
 const ProjectRecodeActionSchema = z.strictObject({
   op: z.literal('recode'),
-  paths: z.array(z.string().min(1)).min(1).max(1000),
+  paths: z.array(z.string().min(1)).min(1).max(ProjectChangeLimits.recodePaths),
   encoding: z.enum(['utf-8', 'utf-16le', 'utf-16be', 'gb18030']).optional().describe('目标字符编码，默认 utf-8。'),
   bom: z.boolean().optional().describe('是否写入 BOM，默认不写；gb18030 不支持。'),
   newline: z.enum(['lf', 'crlf']).optional().describe('统一物理换行；省略则保留各文件原换行。'),
@@ -130,9 +129,9 @@ const ProjectCodeTargetSchema = z.union([
 const CodeScope = {
   language: z.string().min(1).optional(),
   cwd: z.string().min(1).optional(),
-  limit: z.number().int().positive().max(200).optional(),
-  extensions: z.array(z.string().min(1)).max(20).optional(),
-  maxDepth: z.number().int().nonnegative().max(16).optional(),
+  limit: z.number().int().positive().max(ProjectCodeLimits.results).optional(),
+  extensions: z.array(z.string().min(1)).max(ProjectCodeLimits.extensions).optional(),
+  maxDepth: z.number().int().nonnegative().max(ProjectCodeLimits.scanDepth).optional(),
 }
 
 // ── 读取：读源码、列文件、搜源码 ─────────────────────────────────────────
@@ -145,15 +144,15 @@ const readTool = defineProjectTool<ProjectReadInput>({
   summary: '读取带版本的源码行，拿到编辑时用的 fileRef。',
   usage: [
     ProjectSourceInstructions,
-    '用 path 加 range（51 或 [42,45]）、files（每项各自的 range）或返回的 continuation 三选一。maxChars 是这次调用所有文件共用的字符预算。',
+    `用 path 加 range（单个行号或 [首行,末行]）、files（每项各自的 range，最多 ${ProjectFileLimits.readFiles} 个文件）或返回的 continuation 三选一。maxChars 是这次调用所有文件共用的字符预算。`,
   ],
   examples: [{ files: [{ path: 'src/service.ts', range: [42, 60] }, { path: 'src/types.ts', range: 20 }] }],
   schema: z.strictObject({
     path: z.string().min(1).optional(),
     range: ProjectLineRangeSchema.optional(),
-    files: z.array(z.strictObject({ path: z.string().min(1), range: ProjectLineRangeSchema.optional() })).min(1).max(20).optional(),
+    files: z.array(z.strictObject({ path: z.string().min(1), range: ProjectLineRangeSchema.optional() })).min(1).max(ProjectFileLimits.readFiles).optional(),
     continuation: z.string().startsWith('read-page:').optional(),
-    maxChars: z.number().int().positive().max(500_000).optional(),
+    maxChars: z.number().int().positive().max(ProjectFileLimits.readChars).optional(),
   }).superRefine((input, context) => {
     if ([input.path, input.files, input.continuation].filter(isNotUndefined).length !== 1)
       context.addIssue({ code: 'custom', message: 'path、files、continuation 只能选一个。' })
@@ -164,7 +163,7 @@ const readTool = defineProjectTool<ProjectReadInput>({
   }),
   permissions: ['fs:read'],
   capabilities: ProjectReadCapability,
-  exposure: { tier: 'common', rank: 10 },
+  exposure: ProjectToolExposure.read,
   isConcurrencySafe: () => true,
   execute: (input, ctx) => projectFileOperations.read(input, ctx),
 })
@@ -179,11 +178,11 @@ const listTool = defineProjectTool<ProjectListInput>({
   examples: [{ path: 'src', recursive: true, limit: 100 }],
   schema: z.strictObject({
     path: z.string().optional(),
-    include: z.array(z.string().min(1)).max(20).optional(),
-    exclude: z.array(z.string().min(1)).max(20).optional(),
+    include: z.array(z.string().min(1)).max(ProjectFileLimits.patterns).optional(),
+    exclude: z.array(z.string().min(1)).max(ProjectFileLimits.patterns).optional(),
     recursive: z.boolean().optional().default(false),
-    maxDepth: z.number().int().nonnegative().max(30).optional(),
-    limit: z.number().int().positive().max(2_000).optional().default(200),
+    maxDepth: z.number().int().nonnegative().max(ProjectFileLimits.listDepth).optional(),
+    limit: z.number().int().positive().max(ProjectFileLimits.listPage).optional().default(ProjectFileLimits.listPageDefault),
     cursor: z.string().min(1).optional().describe('直接使用上一页返回的 cursor；其余查询条件由游标保存。'),
   }).superRefine((input, context) => {
     if (input.cursor && (isNotUndefined(input.path) || input.include || input.exclude || isNotUndefined(input.maxDepth) || input.recursive))
@@ -191,7 +190,7 @@ const listTool = defineProjectTool<ProjectListInput>({
   }),
   permissions: ['fs:read'],
   capabilities: ProjectReadCapability,
-  exposure: { tier: 'common', rank: 20 },
+  exposure: ProjectToolExposure.list,
   isConcurrencySafe: () => true,
   execute: (input, ctx) => projectFileOperations.list(input, ctx),
 })
@@ -211,16 +210,16 @@ const searchTool = defineProjectTool<ProjectSearchInput>({
   schema: z.strictObject({
     query: z.string().min(1),
     path: z.string().optional(),
-    include: z.array(z.string().min(1)).max(20).optional(),
-    exclude: z.array(z.string().min(1)).max(20).optional(),
+    include: z.array(z.string().min(1)).max(ProjectFileLimits.patterns).optional(),
+    exclude: z.array(z.string().min(1)).max(ProjectFileLimits.patterns).optional(),
     regex: z.boolean().optional(),
     caseSensitive: z.boolean().optional(),
-    limit: z.number().int().positive().max(100).optional(),
-    contextLines: z.number().int().nonnegative().max(10).optional(),
+    limit: z.number().int().positive().max(ProjectFileLimits.searchHits).optional(),
+    contextLines: z.number().int().nonnegative().max(ProjectFileLimits.searchContextLines).optional(),
   }),
   permissions: ['fs:read'],
   capabilities: ProjectReadCapability,
-  exposure: { tier: 'common', rank: 30 },
+  exposure: ProjectToolExposure.search,
   isConcurrencySafe: () => true,
   execute: (input, ctx) => projectFileOperations.search(input, ctx),
 })
@@ -229,14 +228,14 @@ const searchTool = defineProjectTool<ProjectSearchInput>({
 
 /** project:file 的入参：actions 按顺序执行，每项是 create、overwrite、move、delete、recode 之一。 */
 export const ProjectFileSchema = z.strictObject({
-    actions: z.array(z.discriminatedUnion('op', [
-      z.strictObject({ op: z.literal('create'), path: z.string().min(1), text: z.string() }),
-      z.strictObject({ op: z.literal('overwrite'), fileRef: ProjectFileRefSchema, text: z.string() }),
-      z.strictObject({ op: z.literal('move'), fileRef: ProjectFileRefSchema, to: z.string().min(1) }),
-      z.strictObject({ op: z.literal('delete'), fileRef: ProjectFileRefSchema }),
-      ProjectRecodeActionSchema,
-    ])).min(1).max(1000),
-  })
+  actions: z.array(z.discriminatedUnion('op', [
+    z.strictObject({ op: z.literal('create'), path: z.string().min(1), text: z.string() }),
+    z.strictObject({ op: z.literal('overwrite'), fileRef: ProjectFileRefSchema, text: z.string() }),
+    z.strictObject({ op: z.literal('move'), fileRef: ProjectFileRefSchema, to: z.string().min(1) }),
+    z.strictObject({ op: z.literal('delete'), fileRef: ProjectFileRefSchema }),
+    ProjectRecodeActionSchema,
+  ])).min(1).max(ProjectChangeLimits.fileActions),
+})
 
 /** project:file —— 创建、覆盖、移动、删除文件，或批量转换磁盘编码。 */
 const fileTool = defineProjectTool<ProjectFileInput>({
@@ -255,18 +254,18 @@ const fileTool = defineProjectTool<ProjectFileInput>({
   schema: ProjectFileSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
-  exposure: { tier: 'common', rank: 40 },
+  exposure: ProjectToolExposure.file,
   isConcurrencySafe: () => false,
   execute: (input, ctx) => projectChangeOperations.file(input, ctx),
 })
 
 /** project:edit 的入参：files 每项一个文件，凭 fileRef 定位，edits 是这个文件里的几处编辑。 */
 export const ProjectEditSchema = z.strictObject({
-    files: z.array(z.strictObject({
-      fileRef: ProjectFileRefSchema,
-      edits: z.array(ProjectContentEditSchema).min(1).max(1000),
-    })).min(1).max(1000),
-  })
+  files: z.array(z.strictObject({
+    fileRef: ProjectFileRefSchema,
+    edits: z.array(ProjectContentEditSchema).min(1).max(ProjectChangeLimits.editsPerFile),
+  })).min(1).max(ProjectChangeLimits.editFiles),
+})
 
 /** project:edit —— 按已读版本精确替换或插入源码。 */
 const editTool = defineProjectTool<ProjectEditInput>({
@@ -288,27 +287,28 @@ const editTool = defineProjectTool<ProjectEditInput>({
   schema: ProjectEditSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
-  exposure: { tier: 'common', rank: 50 },
+  exposure: ProjectToolExposure.edit,
   isConcurrencySafe: () => false,
   execute: (input, ctx) => projectChangeOperations.edit(input, ctx),
 })
 
 /** project:change 的入参：apply 带 steps（按顺序的文件动作或编辑），inspect、undo 带 changeRef。 */
 export const ProjectChangeSchema = z.strictObject({
-    action: z.enum(['apply', 'inspect', 'undo']),
-    steps: z.array(z.discriminatedUnion('tool', [
-      z.strictObject({ tool: z.literal('file'), actions: z.array(ProjectPlanFileActionSchema).min(1).max(1000) }),
-      z.strictObject({
-        tool: z.literal('edit'),
-        files: z.array(z.strictObject({ ...PlanSource, edits: z.array(ProjectContentEditSchema).min(1).max(1000) })
-          .refine(hasExactlyOneSource, OneSourceMessage)).min(1).max(1000),
-      }),
-    ]) as z.ZodType<ProjectChangeStep>).min(1).max(1000).optional(),
-    changeRef: ProjectChangeRefSchema.optional(),
-  }).superRefine((value, context) => {
-    if (value.action === 'apply' ? !value.steps || !isUndefined(value.changeRef) : !value.changeRef || !isUndefined(value.steps))
-      context.addIssue({ code: 'custom', message: 'apply 仅填写 steps；inspect/undo 仅填写 changeRef。' })
-  })
+  action: z.enum(['apply', 'inspect', 'undo']),
+  // 来源互斥关系由 hasExactlyOneSource 校验；Zod 无法从该校验自动推导联合类型，这里按 ProjectChangeStep 标注。
+  steps: z.array(z.discriminatedUnion('tool', [
+    z.strictObject({ tool: z.literal('file'), actions: z.array(ProjectPlanFileActionSchema).min(1).max(ProjectChangeLimits.fileActions) }),
+    z.strictObject({
+      tool: z.literal('edit'),
+      files: z.array(z.strictObject({ ...PlanSource, edits: z.array(ProjectContentEditSchema).min(1).max(ProjectChangeLimits.editsPerFile) })
+        .refine(hasExactlyOneSource, OneSourceMessage)).min(1).max(ProjectChangeLimits.editFiles),
+    }),
+  ]) as z.ZodType<ProjectChangeStep>).min(1).max(ProjectChangeLimits.steps).optional(),
+  changeRef: ProjectChangeRefSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.action === 'apply' ? !value.steps || !isUndefined(value.changeRef) : !value.changeRef || !isUndefined(value.steps))
+    context.addIssue({ code: 'custom', message: 'apply 仅填写 steps；inspect/undo 仅填写 changeRef。' })
+})
 
 /** project:change —— 组合文件动作与编辑为一个事务，查看或撤销变更。 */
 const changeTool = defineProjectTool<ProjectChangeInput>({
@@ -323,11 +323,10 @@ const changeTool = defineProjectTool<ProjectChangeInput>({
   ],
   examples: [{ action: 'inspect', changeRef: '<changeRef>' }],
   notes: ['示例是参数模板；<changeRef> 必须替换为实际 edit/file/change 回执中的 changeRef。'],
-  // 来源互斥关系由 hasExactlyOneSource 校验；Zod 无法从该校验自动推导联合类型，这里按 ProjectChangeStep 标注。
   schema: ProjectChangeSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
-  exposure: { tier: 'situational', rank: 20 },
+  exposure: ProjectToolExposure.change,
   isConcurrencySafe: (input) => input.action === 'inspect',
   execute: (input, ctx) => projectChangeOperations.change(input, ctx),
 })
@@ -360,7 +359,7 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
       ...CodeScope,
       query: z.string().min(1).optional(),
       path: z.string().min(1).optional(),
-      kinds: z.array(z.string().min(1)).max(12).optional(),
+      kinds: z.array(z.string().min(1)).max(ProjectCodeLimits.kinds).optional(),
       exact: z.boolean().optional(),
       exportedOnly: z.boolean().optional(),
       includeReExports: z.boolean().optional(),
@@ -410,21 +409,21 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
       target: ProjectCodeTargetSchema,
       kind: z.enum(['calls', 'types', 'related']),
       direction: z.enum(['incoming', 'outgoing', 'both']).optional().default('both'),
-      depth: z.number().int().positive().max(5).optional().default(2),
+      depth: z.number().int().positive().max(ProjectCodeLimits.relationDepth).optional().default(ProjectCodeLimits.relationDepthDefault),
     }),
     z.strictObject({
       action: z.literal('impact'),
       ...CodeScope,
       target: ProjectCodeTargetSchema,
       path: z.string().min(1).optional(),
-      kinds: z.array(z.string().min(1)).max(12).optional(),
-      depth: z.number().int().positive().max(5).optional().default(2),
+      kinds: z.array(z.string().min(1)).max(ProjectCodeLimits.kinds).optional(),
+      depth: z.number().int().positive().max(ProjectCodeLimits.relationDepth).optional().default(ProjectCodeLimits.relationDepthDefault),
     }),
     z.strictObject({ action: z.literal('diagnostics'), ...CodeScope, path: z.string().min(1) }),
   ]),
   permissions: ['fs:read'],
   capabilities: ProjectReadCapability,
-  exposure: { tier: 'situational', rank: 30 },
+  exposure: ProjectToolExposure.code,
   isConcurrencySafe: () => true,
   execute: (input, ctx) => projectCodeOperations.code(input, ctx),
 })
@@ -435,7 +434,7 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
  */
 export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToolContext) => boolean): ProjectToolCollection {
   const analysisTool = defineProjectTool<ProjectCodeAnalysisInput>({
-    name: 'project:code-analysis',
+    name: ProjectCodeAnalysisToolName,
     category: 'development-code',
     role: 'inspect',
     summary: '按需查询代码路径追踪、依赖环、未使用代码候选和框架路由。',
@@ -444,19 +443,19 @@ export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToo
     examples: [{ action: 'cycles' }, { action: 'deadcode', limit: 20 }],
     schema: z.discriminatedUnion('action', [
       z.strictObject({ action: z.literal('trace'), from: ProjectCodeTargetSchema, to: ProjectCodeTargetSchema }),
-      z.strictObject({ action: z.literal('cycles'), maxFiles: z.number().int().min(10).max(120).optional() }),
-      z.strictObject({ action: z.literal('deadcode'), limit: z.number().int().positive().max(80).optional() }),
+      z.strictObject({ action: z.literal('cycles'), maxFiles: z.number().int().min(ProjectCodeLimits.cycleFilesMin).max(ProjectCodeLimits.cycleFiles).optional() }),
+      z.strictObject({ action: z.literal('deadcode'), limit: z.number().int().positive().max(ProjectCodeLimits.deadCodeCandidates).optional() }),
       z.strictObject({ action: z.literal('routing'), framework: z.string().min(1).optional() }),
     ]),
     permissions: ['fs:read'],
     capabilities: ProjectReadCapability,
-    exposure: { tier: 'situational', rank: 40 },
+    exposure: ProjectToolExposure.codeAnalysis,
     hideWhenUnavailable: true,
     isAvailable,
     isConcurrencySafe: () => true,
     execute: (input, ctx) => projectCodeOperations.codeAnalysis(input, ctx),
   })
-  return Object.freeze({ 'project:code-analysis': analysisTool })
+  return Object.freeze({ [ProjectCodeAnalysisToolName]: analysisTool })
 }
 
 // ── 执行：跑命令、演练沙箱 ─────────────────────────────────────────────────
@@ -475,13 +474,13 @@ const runTool = defineProjectTool<ProjectRunInput>({
   schema: z.strictObject({
     command: z.string().min(1),
     cwd: z.string().optional().describe('当前项目内的工作目录，可用相对路径或绝对路径；省略时使用当前项目目录。不能用它切换到项目之外。'),
-    timeoutMs: z.number().int().positive().max(600_000).optional(),
+    timeoutMs: z.number().int().positive().max(ProjectCommandLimits.timeoutMs).optional().describe('命令超时时间，单位毫秒。'),
     background: z.boolean().optional(),
-    maxOutputChars: z.number().int().positive().max(50_000).optional(),
+    maxOutputChars: z.number().int().positive().max(ProjectCommandLimits.outputChars).optional().describe('stdout/stderr 返回字符上限。'),
   }),
   permissions: ['process:exec'],
   capabilities: ProjectExecutionCapability,
-  exposure: { tier: 'common', rank: 50 },
+  exposure: ProjectToolExposure.run,
   isConcurrencySafe: (input) => isParallelCommandExecutionSafe(input),
   execute: (input, ctx) => projectExecutionOperations.run(input, ctx),
 })
@@ -514,16 +513,16 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
     source: z.string().min(1).optional().describe('create：要镜像的项目内目录，相对项目根；不传就是整个项目。'),
     network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
     ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
-    sandboxId: z.string().min(1).max(64).optional().describe('run / diff / apply / discard：create 返回的沙箱 id。'),
+    sandboxId: z.string().min(1).max(ProjectSandboxLimits.idChars).optional().describe('run / diff / apply / discard：create 返回的沙箱 id。'),
     command: z.string().min(1).optional().describe('run：在镜像根里执行的 shell 命令。'),
-    timeoutMs: z.number().int().positive().max(600_000).optional().describe('run：超时毫秒数。'),
-    maxOutputChars: z.number().int().positive().max(50_000).optional().describe('run：最多返回多少字符的输出。'),
-    paths: z.array(z.string().min(1)).max(500).optional().describe('apply：只落这些相对路径；不传就全部。'),
-    maxFiles: z.number().int().positive().max(2000).optional().describe('diff：新增与修改各列最多列多少条，默认 200；删除列永远完整。'),
+    timeoutMs: z.number().int().positive().max(ProjectCommandLimits.timeoutMs).optional().describe('run：超时毫秒数。'),
+    maxOutputChars: z.number().int().positive().max(ProjectCommandLimits.outputChars).optional().describe('run：最多返回多少字符的输出。'),
+    paths: z.array(z.string().min(1)).max(ProjectSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
+    maxFiles: z.number().int().positive().max(ProjectSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${ProjectSandboxLimits.diffFiles}；删除列永远完整。`),
   }),
   permissions: ['fs:read', 'fs:write', 'process:exec'],
   capabilities: ProjectExecutionCapability,
-  exposure: { tier: 'common', rank: 60 },
+  exposure: ProjectToolExposure.sandbox,
   hideWhenUnavailable: true,
   isAvailable: (context) => !!context.project.sandbox,
   isConcurrencySafe: () => false,
@@ -621,7 +620,7 @@ const ProjectCategoryTools = Object.freeze({
 /** 项目空间 mod 的清单，按上游 `AgentModManifest` 契约校验。 */
 const ProjectAgentModManifest = Object.freeze<AgentModManifest>({
   id: ProjectModId,
-  version: PROJECT_PACKAGE_VERSION,
+  version: ProjectPackageVersion,
   publisher: 'VelarOS',
   displayName: 'VelarOS Project',
   description: '项目空间的文件、代码理解、变更与执行职责包。',
@@ -665,24 +664,27 @@ export function createProjectBundledModDefinition(): ProjectBundledModDefinition
   })
 }
 
+/** 代码图分析扩展的清单：只声明工具这一个能力轴，project:code-analysis 只在项目空间里可用。 */
+const ProjectCodeAnalysisManifest = Object.freeze<AgentModManifest>({
+  id: ProjectCodeAnalysisModId,
+  version: ProjectPackageVersion,
+  publisher: 'VelarOS',
+  displayName: 'Project code analysis',
+  description: '按需代码图分析扩展。',
+  manifestSchemaVersion: 1,
+  engines: { velaros: '*', agent: '*' },
+  trust: 'bundled-official',
+  requiredAxes: ['tools'],
+  contributes: { tools: [{ name: ProjectCodeAnalysisToolName, categoryId: 'development-code', availableInSpaces: [ProjectSpaceId] }] },
+})
+
 /** 创建可选的代码图分析扩展：只贡献 project:code-analysis，宿主给出可用性判断后单独挂载。 */
-export function createProjectCodeAnalysisContribution(isAvailable: (context: ProjectToolContext) => boolean) {
+export function createProjectCodeAnalysisContribution(isAvailable: (context: ProjectToolContext) => boolean): ProjectCodeAnalysisContribution {
   return Object.freeze({
-    id: 'velaros.project.code-analysis',
-    version: PROJECT_PACKAGE_VERSION,
-    manifest: {
-      id: 'velaros.project.code-analysis',
-      version: PROJECT_PACKAGE_VERSION,
-      publisher: 'VelarOS',
-      displayName: 'Project code analysis',
-      description: '按需代码图分析扩展。',
-      manifestSchemaVersion: 1,
-      engines: { velaros: '*', agent: '*' },
-      trust: 'bundled-official',
-      requiredAxes: ['tools'],
-      contributes: { tools: [{ name: 'project:code-analysis', categoryId: 'development-code', availableInSpaces: ['project'] }] },
-    },
-    bindings: { tools: createProjectCodeAnalysisTools(isAvailable) },
+    id: ProjectCodeAnalysisModId,
+    version: ProjectPackageVersion,
+    manifest: ProjectCodeAnalysisManifest,
+    bindings: Object.freeze({ tools: createProjectCodeAnalysisTools(isAvailable) }),
   })
 }
 
@@ -697,7 +699,7 @@ export function createProjectKernelModule(options: CreateProjectKernelModuleOpti
   return defineKernelModule({
     manifest: {
       id: ProjectModId,
-      version: PROJECT_PACKAGE_VERSION,
+      version: ProjectPackageVersion,
       apiVersion: KernelModuleApiVersion,
       provides: [ProjectCapability],
       requires: [],

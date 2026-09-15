@@ -96,6 +96,13 @@ function isReference(node) {
 /** 收集一段语法树里引用到的全部名字，并区分是否只出现在类型位置。 */
 function collectIdentifiers(node, into = new Map()) {
   const visit = (child, inType) => {
+    // 类的 extends 引用的是值（运行时的父类），不能当类型位置；它的类型实参才是类型位置。
+    if (ts.isExpressionWithTypeArguments(child) && ts.isHeritageClause(child.parent) && child.parent.token === ts.SyntaxKind.ExtendsKeyword
+      && (ts.isClassDeclaration(child.parent.parent) || ts.isClassExpression(child.parent.parent))) {
+      visit(child.expression, inType)
+      for (const argument of child.typeArguments ?? []) visit(argument, true)
+      return
+    }
     const typeContext = inType || ts.isTypeNode(child) || ts.isHeritageClause(child) && child.token === ts.SyntaxKind.ImplementsKeyword
     if (ts.isIdentifier(child) && isReference(child)) {
       const previous = into.get(child.text)

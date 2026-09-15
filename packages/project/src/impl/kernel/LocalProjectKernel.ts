@@ -68,8 +68,11 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ProjectChangeFeed } from '../../contract/provides.js'
+import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { BatchInput, BatchMetrics, BatchResult } from '../../types/batch.js'
+import type { ProjectChangeLifecycle, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
 import type { DiffResult, ProjectStatus } from '../../types/common.js'
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
 import type {
@@ -104,15 +107,6 @@ import { ProjectError } from '../../utils/errors.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
 import { diagnosticsEnvelope } from '../../utils/transactions/transaction-errors.js'
 import { type AuditEvent, AuditJournal } from '../persistence/AuditJournal.js'
-import {
-  MemoryProjectChangeFeed,
-  type ProjectChangeFeed,
-  type ProjectChangeFeedWriter,
-  type ProjectChangeLifecycle,
-  projectChangePatches,
-  type ProjectChangeRecordInput,
-  type ProjectChangeRevision,
-} from '../persistence/change-feed.js'
 import { FileProjectTransactionStateStore } from '../persistence/FileProjectTransactionStateStore.js'
 import { corePlugin } from '../plugins/core-plugin.js'
 import { AdapterRegistry } from '../registries/AdapterRegistry.js'
@@ -131,6 +125,7 @@ export type { StoredTransaction } from '../../types/transaction.js'
 
 import type { CreateProjectKernelOptions, FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectValidator } from '../../contract/requires.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
+import { projectChangePatches } from '../../utils/transactions/change-records.js'
 import {
   canRevertToOriginal,
   createsMissingFile,
@@ -139,6 +134,7 @@ import { rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOu
 import { FileStore } from '../files/FileStore.js'
 import { ProjectGitIndex } from '../files/ProjectGitIndex.js'
 import { ProjectQueries } from '../files/ProjectQueries.js'
+import { MemoryProjectChangeFeed } from '../persistence/MemoryProjectChangeFeed.js'
 import { LockManager } from '../transactions/LockManager.js'
 import { TransactionCoordinator } from '../transactions/TransactionCoordinator.js'
 import { isCreatePatch, isDeletePatch, stagedContentAfter, TransactionOverlay } from '../transactions/TransactionOverlay.js'
@@ -148,7 +144,7 @@ import { TransactionRepository } from '../transactions/TransactionRepository.js'
 import { TransactionStateMachine } from '../transactions/TransactionStateMachine.js'
 import { TransactionValidation } from '../transactions/TransactionValidation.js'
 
-import { DEFAULT_CORE_POLICY } from './defaults.js'
+import { DEFAULT_CORE_POLICY } from './policy-defaults.js'
 
 /** Project Agent 与 Kernel capability 共用的项目内核接口。 */
 export interface ProjectKernel {

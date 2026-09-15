@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { isProjectCodeLanguageQuery } from '@velaros-ai/project/contracts'
-import { createProjectKernel } from '@velaros-ai/project/runtime'
+import { createProjectKernel } from '@velaros-ai/project'
+import { ProjectCodeLanguageActions } from '@velaros-ai/project/contracts'
 
 import {
   createProjectCodeQuery,
@@ -28,8 +28,8 @@ describe('@velaros-ai/development', () => {
       queryCode({ action: 'index_status' }, {} as never)
     ).resolves.toEqual({ source: 'codegraph', action: 'index_status' })
     expect(calls).toEqual(['index_status'])
-    expect(isProjectCodeLanguageQuery({ action: 'find_symbols' })).toBe(true)
-    expect(isProjectCodeLanguageQuery({ action: 'build_index', force: true })).toBe(false)
+    expect(ProjectCodeLanguageActions).toContain('find_symbols')
+    expect(ProjectCodeLanguageActions).not.toContain('build_index' as never)
   })
 
   test('keeps the built-in tool alive when CodeGraph is unavailable', async () => {

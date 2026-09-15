@@ -85,28 +85,28 @@ Object.assign(globalThis, { __velarosComputerContractsBrowserGate: {
     {
       bundleName: 'project-contracts',
       source: `import {
-  isProjectRootSource,
-  ProjectRootSource,
+  ProjectCodeLanguageActions,
+  ProjectFileLimits,
+  ProjectSpaceId,
   ProjectToolNames,
   type ProjectBackgroundProcessInfo,
+  type ProjectCodeQuery,
   type ProjectCommandResult,
-  type ProjectGitBranch,
-  type ProjectReadFileResult,
-  type ProjectRootEntry,
+  type ProjectSandboxDiff,
 } from '@velaros-ai/project/contracts'
 
 export interface ProjectContractsTypeFixture {
-  root: ProjectRootEntry
-  branch: ProjectGitBranch
   backgroundProcess: ProjectBackgroundProcessInfo
   commandResult: ProjectCommandResult
-  readResult: ProjectReadFileResult
+  sandboxDiff: ProjectSandboxDiff
+  codeQuery: ProjectCodeQuery
 }
 
 Object.assign(globalThis, { __velarosProjectContractsBrowserGate: {
-  ProjectRootSource,
+  ProjectCodeLanguageActions,
+  ProjectFileLimits,
+  ProjectSpaceId,
   ProjectToolNames,
-  isProjectRootSource,
 } })
 `,
     },

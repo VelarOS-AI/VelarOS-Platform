@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import type { ProjectCodeQuery } from '../../src/types/project'
+
 const languageQueryFields = {
   language: z.string().optional(),
   cwd: z.string().optional(),
@@ -9,12 +11,10 @@ const languageQueryFields = {
 }
 
 /**
- * Project SDK 与旧模型代码查询的兼容 action 契约。
- *
- * 语言服务 action 由内置运行时直接执行；索引/图谱 action 在 CodeGraph 资源可用时由其增强。
- * 当前模型工具由 project-code-contracts.ts 提供，适配层把新请求映射到此合同。
+ * 宿主代码查询（`ProjectToolApi.queryCode` 收到的 `ProjectCodeQuery`）的可执行规格：测试用它核对本包翻译出来的查询都合规，
+ * 旧版 query-code 驱动器也拿它当入参 schema。包里不导出它，形状的权威是 types/project.ts 里的类型。
  */
-const ProjectCodeQuerySchema = z.discriminatedUnion('action', [
+export const ProjectCodeQuerySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('search_symbols'),
     query: z.string().min(1),
@@ -109,38 +109,4 @@ const ProjectCodeQuerySchema = z.discriminatedUnion('action', [
     declarationPath: z.string().optional(),
     kinds: z.array(z.string().min(1)).max(12).optional(),
   }),
-])
-
-type ProjectCodeQueryInput = z.input<typeof ProjectCodeQuerySchema>
-type ProjectCodeQuery = z.output<typeof ProjectCodeQuerySchema>
-
-const ProjectCodeLanguageActions = [
-  'find_symbols',
-  'list_exports',
-  'find_imports',
-  'find_importers',
-  'find_references',
-  'language_diagnostics',
-  'analyze_symbol_impact',
-] as const
-
-type ProjectCodeLanguageAction = (typeof ProjectCodeLanguageActions)[number]
-type ProjectCodeLanguageQuery = Extract<ProjectCodeQuery, { action: ProjectCodeLanguageAction }>
-type ProjectCodeIndexQuery = Exclude<ProjectCodeQuery, ProjectCodeLanguageQuery>
-
-const ProjectCodeLanguageActionSet = new Set<string>(ProjectCodeLanguageActions)
-
-function isProjectCodeLanguageQuery(
-  input: ProjectCodeQuery
-): input is ProjectCodeLanguageQuery {
-  return ProjectCodeLanguageActionSet.has(input.action)
-}
-
-export { isProjectCodeLanguageQuery,ProjectCodeLanguageActions, ProjectCodeQuerySchema }
-export type {
-  ProjectCodeIndexQuery,
-  ProjectCodeLanguageAction,
-  ProjectCodeLanguageQuery,
-  ProjectCodeQuery,
-  ProjectCodeQueryInput,
-}
+]) satisfies z.ZodType<ProjectCodeQuery>

@@ -4,18 +4,24 @@
  */
 import { z } from 'zod'
 
+import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
 
 import type { ProjectToolCollection } from '../../src/contract/provides.js'
 import { projectChangeOperations } from '../../src/impl/operations/ProjectChangeOperations'
 import { projectExecutionGate } from '../../src/impl/operations/ProjectExecutionGate'
 import { projectTools } from '../../src/impl/ProjectTools'
+import type { ProjectCodeQuery } from '../../src/types/project'
 import { resolveProjectEditTarget, saveProjectEditTarget } from '../../src/utils/agent/edit-target'
 import { registerProjectFileContext, snapshotFromRead } from '../../src/utils/agent/file-context'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../src/utils/agent/kernel-port'
-import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../../src/utils/schemas/code-query'
 import { type ProjectEditOperationsSchema, type ProjectModelEditInput, ProjectModelEditSchema } from '../../src/utils/schemas/edit-intent'
 import { defineProjectTool } from '../../src/utils/tool'
+
+import { ProjectCodeQuerySchema } from './code-query-schema'
+// 旧版工具有几个和现行工具同名：定义旧版时会覆盖全局示例表里现行工具的示例。先记下现行的，文件末尾还原，别的测试读到的永远是现行示例。
+const CurrentToolExamples = new Map(Object.keys(projectTools).map((name) => [name, DefaultToolContractExampleRegistry.get(name)]))
+
 /** 第 1 版工具名；只在测试里用。 */
 export const LegacyProjectToolNames = Object.freeze({
   read: 'project:read',
@@ -447,3 +453,5 @@ export const legacyProjectTools: ProjectToolCollection = Object.freeze({
   [ProjectToolNames.run]: projectTools['project:run']!,
 })
 export { ProjectWriteModeSchema as LegacyProjectWriteModeSchema }
+
+for (const [name, examples] of CurrentToolExamples) if (examples) DefaultToolContractExampleRegistry.set(name, examples)

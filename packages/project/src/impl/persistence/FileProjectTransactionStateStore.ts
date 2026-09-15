@@ -27,14 +27,13 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
+import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 import type { ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
 import { ProjectError } from '../../utils/errors.js'
 import { decodeProjectTextBuffer } from '../../utils/text.js'
 import { isProjectTextEncoding } from '../../utils/text.js'
 import { createsMissingFile } from '../../utils/transactions/patch-ownership.js'
 import { isDeletePatch } from '../transactions/TransactionOverlay.js'
-
-import type { ProjectChangeRecordInput } from './change-feed.js'
 
 const StateFormatVersion = 2
 const MaximumStateBytes = 256 * 1024 * 1024

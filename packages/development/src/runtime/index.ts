@@ -1,8 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
-import type { ProjectToolContext } from '@velaros-ai/project/agent'
+import type { ProjectToolContext } from '@velaros-ai/project'
 import {
-  isProjectCodeLanguageQuery,
   type ProjectCodeIndexQuery,
+  ProjectCodeLanguageActions,
   type ProjectCodeLanguageQuery,
   type ProjectCodeQuery,
 } from '@velaros-ai/project/contracts'
@@ -61,6 +61,13 @@ async function executeProjectCodeLanguageQuery(
       )
     }
   }
+}
+
+const LanguageActions: ReadonlySet<string> = new Set(ProjectCodeLanguageActions)
+
+/** 宿主代码查询里由语言服务执行的那一类（其余属于代码索引）。 */
+function isProjectCodeLanguageQuery(input: ProjectCodeQuery): input is ProjectCodeLanguageQuery {
+  return LanguageActions.has(input.action)
 }
 
 function createProjectCodeQuery(

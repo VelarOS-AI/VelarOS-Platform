@@ -70,9 +70,9 @@
     }
   ],
   "fingerprints": {
-    "project": "a58ae80f4f514924bf8443b37f4e1d8a3e89660986a387ab802e981117d0ce65",
+    "project": "a72232a3ba5afab3d27c90350c778365560c1d43fee09c6eb5c8a2da1cbc0db9",
     "agent": "8dfec8a29d419d74238eb513b9340ded15032935308153d988c6e9aa9b9da74d",
-    "documents": "03b2e430c1151262636eb6a5d8e7689c19bfa5a7e04372dfe75a7233a79763f4"
+    "documents": "2499ce85709cadb38b7c3d9c516ecc88d13029447248223c26ec5a101740f16e"
   },
   "sourceArtifacts": [
     {
@@ -149,11 +149,11 @@
     },
     {
       "path": "packages/project/README.md",
-      "fingerprint": "d18d840c28eaa69d13dfc53583ad78d61e842bf01ad2a675b0fa8aceedd0d54a"
+      "fingerprint": "cc8a9be16646a9934c01b0c6c0edbc5b1726119f8413dc9b6ea652561a07ae07"
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "845a2e90e1bc534cc251eba795d317fa539197957994eda545c2f31b9f84f248"
+      "fingerprint": "9078fdb33fac51ae15c491993ecb6128385570fbca07f159ec1b00fb1e78e9b6"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectApprovalBridge.ts",
@@ -176,12 +176,16 @@
       "fingerprint": "1678b7e2bd4ba6214722cd98334be7761bcd5f231c58b7cce3a2433b7d6086a6"
     },
     {
+      "path": "packages/project/src/impl/operations/ProjectFileContext.ts",
+      "fingerprint": "6a0fccf3dcf0f45aa7cd88f9cde0170192f90f84f7a78e273e24ecb1353cbc5f"
+    },
+    {
       "path": "packages/project/src/impl/operations/ProjectFileOperations.ts",
       "fingerprint": "65f0730a2b582b69eeeee337b0068854edf072da9c19ad950434cab8f0a1904a"
     },
     {
       "path": "packages/project/src/utils/agent/code-query.ts",
-      "fingerprint": "f4de1ccef4d3c7be632519389cf811943cbe08098496b8a2146c6c3f1269ef9b"
+      "fingerprint": "9d5c268c331cd71bf86ae6d241c5780f12e942a9ab961b31191e77ccf5a820b5"
     },
     {
       "path": "packages/project/src/utils/agent/edit-recovery.ts",
@@ -229,11 +233,7 @@
     },
     {
       "path": "packages/project/src/utils/agent/transaction-result.ts",
-      "fingerprint": "8760de8d8a71f69e1afd57c4ea0593611a49fa4832d22eed3608a471d8787c5c"
-    },
-    {
-      "path": "packages/project/src/utils/schemas/code-query.ts",
-      "fingerprint": "9383f0f16528665f6ced7bf2d5305e30007ddc1f5de9cce934413f5d85960cb9"
+      "fingerprint": "a6686edd0e9520d5db487cb4a6c1109db5d73841ed594765285f1217a3dafd3a"
     },
     {
       "path": "packages/project/src/utils/schemas/edit-intent.ts",

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { CommandProvider, FileAdapter,ProjectProviders } from '../src/contract/requires.js'
-import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/defaults'
+import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults'
 import { TransactionValidation } from '../src/impl/transactions/TransactionValidation'
 import type { Diagnostic } from '../src/types/common'
 import type { FileSnapshot } from '../src/types/snapshot'

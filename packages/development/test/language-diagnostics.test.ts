@@ -5,8 +5,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import * as ts from 'typescript'
 
-import { typescriptPlugin } from '@velaros-ai/project/changes'
-import { createProjectKernel } from '@velaros-ai/project/runtime'
+import { createProjectKernel, typescriptPlugin } from '@velaros-ai/project'
 
 import {
   configureTypeScriptLibraryDirectory,

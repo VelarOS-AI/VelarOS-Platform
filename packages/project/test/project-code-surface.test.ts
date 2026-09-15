@@ -15,7 +15,7 @@ import { createProjectCodeAnalysisTools, projectTools } from '../src/impl/Projec
 
 const ProjectCodeSchema = projectTools['project:code']!.schema
 const ProjectCodeAnalysisSchema = createProjectCodeAnalysisTools(() => true)['project:code-analysis']!.schema
-import type { ProjectCodeQuery } from '../src/utils/schemas/code-query'
+import type { ProjectCodeQuery } from '../src/types/project'
 
 let root: string
 beforeEach(async () => {

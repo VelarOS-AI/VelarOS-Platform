@@ -7,7 +7,7 @@
 //   2. types：只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
 //      可移植文件（types/<portable> 与 contract/constants.ts）不 import、不用 Node 类型，可移植数据不带函数成员。
 //   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
-//      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
+//      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口（合同里的接口要用登记过的接口时可以 import type 它）；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
 //   4. impl：一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
 //      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：写在类上方（公开的在 provides.ts 登记，注入面的在 requires.ts；继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
 //      私有方法必须用到实例状态；类的属性不许直接挂导入的函数（测试钩子）；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
@@ -417,6 +417,7 @@ for (const module of GovernedModules) {
   }
   if (!existsSync(providesPath)) fail(`${label}: 缺少产品面文件 ${shortPath(providesPath)}`)
   const providesRegistered = new Map() // 类上方接口的声明 → 登记它的名字
+  const contractImports = [] // 合同文件从 contract、types 以外的地方 import 的语句，登记表建完再核对
   for (const file of publicInterfacePaths) {
     const sourceFile = parse(file)
     for (const statement of sourceFile.statements) {
@@ -452,8 +453,17 @@ for (const module of GovernedModules) {
       const target = resolveRelativeImport(file, specifier)
       if (!target) continue
       if (ts.isExportDeclaration(statement)) continue
-      if (!inside(target, contractRoot) && !inside(target, typesRoot)) fail(`${label}: 合同文件 ${shortPath(file)} 引用了 ${shortPath(target)}；合同只引合同与 types`)
+      if (inside(target, contractRoot) || inside(target, typesRoot)) continue
+      contractImports.push({ file, statement, target })
     }
+  }
+  // 合同里的接口可以用 provides.ts 登记过的类上方接口（比如项目空间带着内核）：只许 import type 登记过的那几个名字。
+  for (const { file, statement, target } of contractImports) {
+    const names = ts.isImportDeclaration(statement) && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
+      ? statement.importClause.namedBindings.elements.map((element) => (element.propertyName ?? element.name).text)
+      : []
+    const registered = names.length > 0 && !statement.importClause?.name && names.every((name) => providesRegistered.has(`${target}::${name}`))
+    if (!registered) fail(`${label}: 合同文件 ${shortPath(file)} 引用了 ${shortPath(target)}；合同只引合同、types 与 provides.ts 登记过的类上方接口`)
   }
   if (existsSync(constantsPath)) {
     const sourceFile = parse(constantsPath)

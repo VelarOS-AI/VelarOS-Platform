@@ -314,15 +314,15 @@ const ForbiddenInternalDependencies = [
 if (manifest.name !== '@velaros-ai/project') {
   fail(`package name must be @velaros-ai/project, got ${manifest.name}`)
 }
-// 断言「版本单源」而不是钉死某个字面量版本号：`PROJECT_PACKAGE_VERSION` 会被写进 kernel
+// 断言「版本单源」而不是钉死某个字面量版本号：`ProjectPackageVersion` 会被写进 kernel
 // module manifest 与全部内置插件的 version 字段，与 package.json 漂移时，宿主看到的是一个
 // 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
 // 1.2.5），红成常态的门等于没有门。
-const versionConstantSource = readFileSync(resolve(SourceRoot, 'impl/kernel/defaults.ts'), 'utf8')
-const versionConstant = /PROJECT_PACKAGE_VERSION\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
+const versionConstantSource = readFileSync(resolve(SourceRoot, 'contract/constants.ts'), 'utf8')
+const versionConstant = /ProjectPackageVersion\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
 if (versionConstant !== manifest.version) {
   fail(
-    `PROJECT_PACKAGE_VERSION (${versionConstant ?? 'not found'}) must match package.json version (${manifest.version})`,
+    `ProjectPackageVersion (${versionConstant ?? 'not found'}) must match package.json version (${manifest.version})`,
   )
 }
 if (manifest.repository?.url !== rootManifest.repository?.url) {
@@ -331,11 +331,8 @@ if (manifest.repository?.url !== rootManifest.repository?.url) {
 if (manifest.repository?.directory !== 'packages/project') {
   fail('repository.directory must be packages/project')
 }
-if (
-  manifest.exports?.['./agent']?.import !== './dist/exports/agent.js'
-  || manifest.exports?.['./agent']?.types !== './dist/exports/agent.d.ts'
-) {
-  fail('@velaros-ai/project/agent must expose the integrated Agent adapter')
+if (JSON.stringify(Object.keys(manifest.exports ?? {})) !== JSON.stringify(['.', './contracts'])) {
+  fail('@velaros-ai/project 只有两个入口：根入口给 Node 宿主，./contracts 是可移植数据')
 }
 if (manifest.peerDependencies?.['@velaros-ai/agent'] !== 'workspace:^') {
   fail('@velaros-ai/project must use the host-owned @velaros-ai/agent peer')

@@ -1,5 +1,5 @@
 import { isEmpty, isPresent, optionalWhenLazy, toNullable } from '@velaros-ai/core'
-import type { AgentProjectKernelPort } from '@velaros-ai/project/agent'
+import type { AgentProjectKernelPort } from '@velaros-ai/project'
 
 /** Source inspection consumes no project mutation, execution, or approval capability. */
 export type LanguageReadPort = Pick<AgentProjectKernelPort, 'listFiles' | 'read' | 'listSymbols'>

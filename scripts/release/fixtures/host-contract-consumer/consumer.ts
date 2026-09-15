@@ -8,11 +8,10 @@ import { ModelRequestClient } from '@velaros-ai/model'
 import { executeProjectCodeLanguageQuery, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development/runtime'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
 import { ComputerOperationMetadata, ComputerToolOperations, type ComputerOperation } from '@velaros-ai/computer/contracts'
-import { registerProjectFileContext } from '@velaros-ai/project/agent'
+import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
 
-declare const projectContext: Parameters<typeof registerProjectFileContext>[0]
-const fileContext: ReturnType<typeof fileContextFor> = registerProjectFileContext(projectContext)
-void fileContext?.currentViews()
+declare const projectContext: ProjectFileContextCarrier
+if (projectFileContext.register(projectContext)) void fileContextFor(projectContext)?.currentViews()
 
 declare const source: LanguageReadPort
 const languageContext: LanguageToolContext = {

@@ -6,7 +6,9 @@ import { describe, expect, test } from 'bun:test'
 
 import { ProjectToolNames } from '../src/contract/constants'
 import type { EditOperation } from '../src/exports/index'
-import { createProjectKernel, FileProjectChangeFeed, ProjectEditOperationSchema } from '../src/exports/index'
+import { createProjectKernel } from '../src/exports/index'
+import { FileProjectChangeFeed } from '../src/impl/persistence/FileProjectChangeFeed.js'
+import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
 
 describe('Project capability', () => {
   test('publishes only canonical project tool ids', () => {

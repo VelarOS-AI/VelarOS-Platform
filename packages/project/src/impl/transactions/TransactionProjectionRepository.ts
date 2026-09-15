@@ -1,4 +1,4 @@
-import type { ProjectChangeRecordInput } from '../persistence/change-feed.js'
+import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 
 export interface TransactionProjectionRepositoryOptions {
   readonly maxProjections: number
